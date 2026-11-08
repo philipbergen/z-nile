@@ -6,6 +6,7 @@
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local provenance = require("@znile/engine/provenance")
+local trail = require("@znile/engine/trail")
 local t = require("@tests/lib/t")
 
 local OPUS = "agent:claude-opus-5-5 effort high"
@@ -129,15 +130,13 @@ return t.spec("c0263 ticket provenance", function(it)
 		local rows, why = provenance.parse(one :: string)
 		t.expect(why).toBe(nil)
 		t.expect(#(rows :: { any })).toBe(1)
-		t.expect((rows :: { any })[1].n).toBe(1)
 		t.expect((rows :: { any })[1].event).toBe("approved")
 		t.expect((rows :: { any })[1].actor).toBe("human:Ann")
-		-- render is the form record writes: parse then render is the identity
+		-- render is the form record writes: parse then render is the identity, and rows carry no number
 		t.expect(provenance.render("c0010", rows :: { any })).toBe(one)
+		t.expect((string.find(one :: string, "| 1 |", 1, true))).toBe(nil)
 		local two = provenance.record(one, "c0010", "unblocked", OPUS, "block=design-gap", "2026-11-08 11:00") :: string
-		local both = provenance.parse(two) :: { any }
-		t.expect(#both).toBe(2)
-		t.expect(both[2].n).toBe(2)
+		t.expect(#(provenance.parse(two) :: { any })).toBe(2)
 		-- a separator or a newline in a detail cannot split a row
 		local messy = provenance.record(two, "c0010", "confirmed", "human:Ann", "said=\"a | b\nc\"", now) :: string
 		t.expect(#(provenance.parse(messy) :: { any })).toBe(3)
@@ -146,19 +145,32 @@ return t.spec("c0263 ticket provenance", function(it)
 		t.expect((provenance.record(two, "c0010", "invented", "human:Ann", "", now))).toBe(nil)
 		t.expect((provenance.record(two, "c0010", "unblocked", "somebody", "", now))).toBe(nil)
 		t.expect((provenance.record(two, "c0010", "unblocked", "human:Ann (from git)", "", now))).toBe(nil)
-		-- the parser refuses what it would otherwise take as the last one
-		local twice = (string.gsub(two, "| 2 |", "| 1 |", 1))
-		t.expect((provenance.parse(twice))).toBe(nil)
+		-- the parser refuses what it would otherwise misread
 		local unknownEvent = (string.gsub(two, "| unblocked |", "| made-up |", 1))
 		t.expect((provenance.parse(unknownEvent))).toBe(nil)
 		t.expect((provenance.parse("not a record"))).toBe(nil)
-		-- append-only: the same rows plus at least one more; nothing edited, removed or renumbered
+		-- append-only: the old rows unchanged and in place, at least one more; nothing edited, removed or reordered
 		t.expect(provenance.appendOnly(one, two, "c0010")).toBe(nil)
 		t.expect(provenance.appendOnly(nil, one, "c0010")).toBe(nil)
 		t.expect(provenance.appendOnly(two, one, "c0010") ~= nil).toBe(true) -- a row removed
 		t.expect(provenance.appendOnly(two, two, "c0010") ~= nil).toBe(true) -- nothing appended
 		t.expect(provenance.appendOnly(one, (string.gsub(two, "human:Ann", "human:Eve", 1)), "c0010") ~= nil).toBe(true)
 		t.expect(provenance.appendOnly(one, two, "c0011") ~= nil).toBe(true) -- another item's record
+		t.expect(provenance.appendOnly(nil, "garbage", "c0010") ~= nil).toBe(true) -- a create that does not parse
+		-- union: two sides that each appended to the same base keep both rows, base first, no row twice
+		local ours = provenance.record(one, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:30") :: string
+		local theirs = provenance.record(one, "c0010", "unblocked", "human:Bee", "", "2026-11-08 10:35") :: string
+		local united = provenance.union(one :: string, ours, theirs)
+		local urows = provenance.parse(united) :: { any }
+		t.expect(#urows).toBe(3)
+		t.expect(urows[1].event).toBe("approved")
+		t.expect(urows[2].event).toBe("rafted")
+		t.expect(urows[3].event).toBe("unblocked")
+		t.expect(provenance.union(one :: string, ours, ours)).toBe(ours) -- the same append on both sides is one row
+		t.expect(provenance.union(nil :: any, ours, theirs) ~= nil).toBe(true) -- both sides created it
+		-- a record is not a document: trail must not count it as the item's life
+		t.expect(trail.isDoc("provenance.md")).toBe(false)
+		t.expect(trail.isDoc("c0010.md")).toBe(true)
 	end)
 
 	it("the approval check", function()
@@ -186,97 +198,99 @@ return t.spec("c0263 ticket provenance", function(it)
 		local DOC = "z-nile/.tracker/issues/c0010/c0010.md"
 		local DONE = "z-nile/.tracker/issues/done/c0010/c0010.md"
 		local trailer = "x\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\n"
-		local function commit(when: string, author: string, subject: string, body: string, added: { [string]: { string } }?, adds: { [string]: boolean }?)
+		local n = 0
+		local function commit(day: number, author: string, subject: string, body: string, status: string, path: string)
+			n += 1
 			return {
-				sha = subject,
-				when = when,
+				sha = `sha{n}`,
+				time = 1790000000 + day * 86400,
+				subject = subject,
+				status = status,
+				path = path,
+				order = n,
+				doc = true,
 				author = author,
 				email = `{author}@example.invalid`,
-				subject = subject,
 				body = body,
-				added = added or {},
-				adds = adds or {},
 			}
 		end
-		local log = {
-			commit("2026-10-01 09:00", "Ann", "tracker: new c0010 alpha", "", { [DOC] = { "raft: " } }, { [DOC] = true }),
-			commit("2026-10-02 09:00", "Dee", "tracker: c0010 preparing", "", { [DOC] = { "status: preparing-a-b-c" } }),
-			commit("2026-10-03 09:00", "Dee", "tracker: c0010 new", "", { [DOC] = { "status: new-a-b-c" } }),
-			commit("2026-10-04 09:00", "Bob", "tracker: raft R0010 demo", "x\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n", { [DOC] = { "raft: R0010" } }),
-			commit("2026-10-05 09:00", "Gus", "tracker: unfold c0010", "", { [DOC] = { "raft: " } }),
-			commit("2026-10-06 09:00", "Fay", "tracker: raft R0011 again", "", { [DOC] = { "raft: R0011" } }),
-			-- the move to done/ re-adds the same raft: line (no renames): not a rafter
-			commit("2026-10-07 09:00", "Cy", "R0011: demo (#1)", trailer, { [DONE] = { "raft: R0011", "status: done" } }, { [DONE] = true }),
+		-- the item's life, newest first (what trail.read returns)
+		local life = {
+			commit(7, "Cy", "R0011: demo (#1)", trailer, "A", DONE),
+			commit(6, "Fay", "tracker: raft R0011 again", "", "M", DOC),
+			commit(5, "Gus", "tracker: unfold c0010", "", "M", DOC),
+			commit(4, "Bob", "tracker: raft R0010 demo", "x\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n", "M", DOC),
+			commit(3, "Dee", "tracker: c0010 new", "", "M", DOC),
+			commit(2, "Dee", "tracker: c0010 preparing", "", "M", DOC),
+			commit(1, "Ann", "tracker: new c0010 alpha", "", "A", DOC),
 		}
 		local people: { [string]: boolean } = {}
-		for _, c in log do
+		for _, c in life do
 			people[c.email] = true
 		end
-		local d = provenance.select(log, "c0010", "done", "R0011", people)
+		local d = provenance.select(life, "c0010", "done", "R0011", people)
 		t.expect(d.idea.actor).toBe("human:Ann (from git)")
-		-- a status commit is an entry of its own, with its author; the capture is not one
-		t.expect(#d.statuses).toBe(3)
+		-- a status commit is an entry of its own, oldest first, with its author; the capture is not one
+		t.expect(#d.statuses).toBe(2)
 		t.expect(d.statuses[1].event).toBe("status:preparing")
 		t.expect(d.statuses[1].actor).toBe("human:Dee (from git)")
-		t.expect(d.statuses[3].event).toBe("status:new")
-		-- the newest commit that set raft: to its current value, not the first and not the move to done/
+		t.expect(d.statuses[2].event).toBe("status:new")
+		-- the rafting commit of the CURRENT raft, not the first rafting and not the move to done/
 		t.expect(d.rafted.actor).toBe("human:Fay (from git)")
 		t.expect(d.rafted.detail).toBe("raft=R0011")
+		-- the delivery is the commit that first added the document under done/
 		t.expect(d.delivered.actor).toBe("agent:claude-sonnet-5-5 effort unknown (from git)")
 		-- an unfolded item (raft: empty) has no rafter, and a backlog item no delivery
-		local open = provenance.select(log, "c0010", "backlog", "", people)
+		local open = provenance.select({ life[5], life[6], life[7] }, "c0010", "backlog", "", people)
 		t.expect(open.rafted).toBe(nil)
 		t.expect(open.delivered).toBe(nil)
-		-- another item's commits are not this item's
-		t.expect(provenance.select(log, "c0099", "backlog", "", people).idea).toBe(nil)
-		-- merge: stored rows win over a derived fallback of the same event; rows and entries come out oldest first
+		-- merge: a stored row wins over a derived fallback of its event; oldest first by the commits' dates
 		local rows = provenance.parse(
 			provenance.record(
-				provenance.record(nil, "c0010", "rafted", OPUS, "raft=R0011", "2026-10-06 09:30") :: string,
+				provenance.record(nil, "c0010", "rafted", OPUS, "raft=R0011", "2026-11-05 12:00") :: string,
 				"c0010",
 				"approved",
 				"human:Ann",
 				"design=aaaaaaaaaaaa",
-				"2026-10-05 12:00"
+				"2026-11-04 12:00"
 			) :: string
 		) :: { any }
-		local merged = provenance.merge(d, rows)
+		local merged = provenance.merge(d, rows, "claude-opus-5-5-high")
 		local events: { string } = {}
 		for _, e in merged do
 			table.insert(events, `{e.event}:{e.source}`)
 		end
-		t.expect(events).toEqual({
-			"idea:git",
-			"status:preparing:git",
-			"status:new:git",
-			"approved:record",
-			"rafted:record",
-			"delivered:git",
-		})
-		-- a rafted row exists, so the derived rafter is not repeated; the record's actor is the live one
+		t.expect(events[1]).toBe("idea:git")
+		t.expect(events[#events]).toBe("delivered:git")
+		t.expect(table.find(events, "rafted:record") ~= nil).toBe(true)
+		t.expect(table.find(events, "approved:record") ~= nil).toBe(true)
+		-- the derived rafter is not repeated beside the stored row
+		local rafted = 0
 		for _, e in merged do
 			if e.event == "rafted" then
+				rafted += 1
 				t.expect(e.actor).toBe(OPUS)
 			end
+			if e.event == "delivered" then
+				t.expect(string.find(e.detail, "worker=claude-opus-5-5-high", 1, true) ~= nil).toBe(true)
+			end
 		end
-		-- the log text parses into those commits (one pass)
-		local text = "@@C abc\031Ann\031ann@example.invalid\0312026-10-01 09:00\031tracker: c0010 new\031body line\n"
-			.. "diff --git a/" .. DOC .. " b/" .. DOC .. "\nnew file mode 100644\n+++ b/" .. DOC .. "\n+raft: R0010\n"
-		local parsed = provenance.parseLog(text)
-		t.expect(#parsed).toBe(1)
-		t.expect(parsed[1].author).toBe("Ann")
-		t.expect(parsed[1].email).toBe("ann@example.invalid")
-		t.expect(parsed[1].subject).toBe("tracker: c0010 new")
-		t.expect(parsed[1].adds[DOC]).toBe(true)
-		t.expect(parsed[1].added[DOC]).toEqual({ "raft: R0010" })
+		t.expect(rafted).toBe(1)
+		-- the worker comes from a spend row: the model column today, host and CLI once c0254 adds them
+		t.expect(provenance.workerOf({ model = "claude-opus-5-5-high" })).toBe("claude-opus-5-5-high")
+		t.expect(provenance.workerOf({ model = "claude-opus-5-5-high", host = "h1", cli = "claude" })).toBe("h1/claude/claude-opus-5-5-high")
+		t.expect(provenance.workerOf({})).toBe(nil)
+		t.expect(provenance.workerOf(nil)).toBe(nil)
 	end)
 
 	it("audit", function()
 		local good = provenance.record(nil, "c0010", "approved", "human:Ann", "design=aaaaaaaaaaaa", "2026-11-08 10:00") :: string
 		t.expect(provenance.problems("z-nile/.tracker/issues/c0010/provenance.md", good)).toEqual({})
 		t.expect(#provenance.problems("z-nile/.tracker/issues/c0010/provenance.md", "garbage")).toBe(1)
-		t.expect(#provenance.problems("z-nile/.tracker/rafts/R0010/provenance.md", good)).toBe(1) -- a raft has none
-		t.expect(#provenance.problems("z-nile/.tracker/issues/c0011/provenance.md", good)).toBe(1) -- names another id
+		-- a raft may have one (c0250 blocks whole rafts); a header that names another id may not
+		local raft = provenance.record(nil, "R0010", "unblocked", "human:Ann", "block=needs-decision", "2026-11-08 10:00") :: string
+		t.expect(provenance.problems("z-nile/.tracker/rafts/R0010/provenance.md", raft)).toEqual({})
+		t.expect(#provenance.problems("z-nile/.tracker/issues/c0011/provenance.md", good)).toBe(1)
 	end)
 
 	it("docs", function()

@@ -166,13 +166,18 @@ return t.spec("c0263 the record's writes", function(it)
 		for _, id in { "c0011", "c0012" } do
 			local rec = localRecord(W2, id)
 			t.expect(#rows(rec, "rafted")).toBe(1)
-			t.expect(has(rec, `| rafted | {SONNET} | raft={rid}`)).toBe(true)
+			t.expect(has(rec, `| rafted | {SONNET} | raft={rid}; via=dispatch:raft-plan |`)).toBe(true)
 		end
 		t.expect(fs.isFile(`{W2}/{RAFTS}/{rid}/provenance.md`)).toBe(false)
 		trOk(W2, { "status", rid, "new" }, { ZN_ACTOR = OPUS })
+		-- the worktree held a committed rafted row and main got an unblocked row: the engine's merge unioned the file
 		for _, id in { "c0011", "c0012" } do
 			t.expect(#rows(onOrigin(`{ISSUES}/{id}/provenance.md`), "unblocked")).toBe(1)
+			local merged = localRecord(W2, id)
+			t.expect(#rows(merged, "rafted")).toBe(1)
+			t.expect(#rows(merged, "unblocked")).toBe(1)
 		end
+		t.expect(fixture.git(W2, { "status", "--porcelain" })).toBe("")
 		t.expect(onOrigin(`{RAFTS}/{rid}/provenance.md`)).toBe("")
 		trOk(W2, { "audit" })
 		-- release gives a rafting claim back without a row
@@ -197,7 +202,7 @@ return t.spec("c0263 the record's writes", function(it)
 	end)
 
 	it(
-		"./zn record publishes the events other tickets will call, refuses the rest, and the validator refuses an edited row",
+		"./zn record publishes the events other tickets will call and refuses the rest",
 		function()
 			land(W3)
 			local before = tip()
@@ -222,30 +227,23 @@ return t.spec("c0263 the record's writes", function(it)
 				t.expect(tr(W1, args).ok).toBe(false)
 				t.expect(tip()).toBe(mark)
 			end
-			-- a row edited in the worktree is not an append: the published file is refused
-				local p = `{W1}/{ISSUES}/c0011/provenance.md`
-			fixture.git(W1, { "merge", "-q", "--no-edit", "origin/main" })
-			fs.writeFile(p, (string.gsub(fs.readFile(p), "human:Ann", "human:Eve", 1)))
-			fixture.git(W1, { "add", "-A" })
-			fixture.git(W1, { "commit", "-q", "-m", "edit a row" })
-			local edited = tr(W1, { "record", "c0011", "confirmed", "--actor", "human:Ann" })
-			t.expect(edited.ok).toBe(false)
-			t.expect(has(edited.stderr, "provenance.md")).toBe(true)
-			t.expect(tip()).toBe(mark)
 		end
 	)
 
-	it("audit refuses a malformed record and a record in a raft's folder, and names the file", function()
+	it("audit refuses a malformed record and a header naming another id, and accepts one in a raft's folder", function()
 		local p = `{W4}/{ISSUES}/c0050/provenance.md`
 		fs.writeFile(p, "not a record\n")
 		local bad = tr(W4, { "audit" })
 		t.expect(bad.ok).toBe(false)
 		t.expect(has(bad.stdout .. bad.stderr, "provenance")).toBe(true)
+		fs.writeFile(p, "# Provenance: c0099\n\n| when | event | actor | detail |\n|---|---|---|---|\n")
+		local other = tr(W4, { "audit" })
+		t.expect(other.ok).toBe(false)
+		t.expect(has(other.stdout .. other.stderr, "c0099")).toBe(true)
 		fs.removeFile(p)
-		fs.writeFile(`{W4}/{RAFTS}/R0130/provenance.md`, "# Provenance: R0130\n")
-		local onRaft = tr(W4, { "audit" })
-		t.expect(onRaft.ok).toBe(false)
-		t.expect(has(onRaft.stdout .. onRaft.stderr, "provenance")).toBe(true)
+		-- a raft's own record (c0250 blocks whole rafts) is fine
+		fs.writeFile(`{W4}/{RAFTS}/R0130/provenance.md`, "# Provenance: R0130\n\n| when | event | actor | detail |\n|---|---|---|---|\n")
+		trOk(W4, { "audit" })
 		fs.removeFile(`{W4}/{RAFTS}/R0130/provenance.md`)
 		trOk(W4, { "audit" })
 	end)

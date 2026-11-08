@@ -28,3 +28,22 @@
 - design-review-002 F9: z-design/prove-specs-pass-on-a-prototype
 - design-review-002 F10: z-design/spec-design-correspondence
 - note review 002 candidates (a run that stops at the first missing key proves only the steps before it; a slot is safe only if both neighbours are lines no flow edits): z-design/prove-specs-pass-on-a-prototype, z-design/design-the-execution-window
+- design-review-003 F1: z-design/one-file-two-write-channels, z-design/prove-specs-pass-on-a-prototype
+- design-review-003 F2: z-design/confirm-overrides-with-a-suite-run
+- design-review-003 F3: z-design/never-narrow-captured-scope
+- design-review-003 F4: zz-test/time-order-sets-fixture-dates
+- design-review-003 F5: zz-test/kill-mutants-where-the-value-is-built
+- design-review-003 F6: z-design/spec-design-correspondence
+- design-review-003 F7: z-design/never-narrow-captured-scope
+- design-review-003 F8: zz-arch/refusals-are-gate-checks
+- design-review-003 F9: z-design/restated-rules-move-together
+- design-review-003 F10: z-design/live-defaults-checked-in-their-session
+- design-review-003 F11: zz-test/refusals-tested-on-both-sides
+- design-review-003 F12: zz-arch/one-reader-per-format
+- design-review-003 F13: z-design/spec-design-correspondence
+- design-review-003 F14: z-design/required-steps-on-every-path
+- design-review-003 F15: zz-test/guard-needs-its-own-case
+- design-review-003 F16: z-design/prove-specs-pass-on-a-prototype
+- design-review-003 F17: z-design/new-rules-migrate-existing-work
+- design-review-003 F18: z-design/required-steps-on-every-path
+- design-review-003 F19: z-design/restated-rules-move-together

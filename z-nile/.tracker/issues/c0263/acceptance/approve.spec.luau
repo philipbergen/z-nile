@@ -72,10 +72,15 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 			[".gitignore"] = ".cache/\n.worktree/\n.DS_Store\n",
 			["pickman/.tracker/architecture.md"] = "# Architecture\n",
 		}
-		for _, id in { "c0010", "c0011", "c0012", "c0013" } do
+		for _, id in { "c0010", "c0011", "c0012", "c0013", "c0014" } do
 			seed[`{ISSUES}/{id}/{id}.md`] = draft(id)
 			seed[`{ISSUES}/{id}/check.sh`] = CHECK
 		end
+		-- c0015 was prepared before approvals existed (no record); R0110 is a landed prepared raft to fold into
+		seed[`{ISSUES}/c0015/c0015.md`] = "---\nid: c0015\ntype: chore\ntitle: c0015\nslug: c0015\nraft: \ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-10-20\nsize: 300\nstatus: prepared-quiet-copper-falcon\n---\n\n# c0015\n"
+		seed[`{ISSUES}/c0015/check.sh`] = CHECK
+		seed["pickman/.tracker/rafts/R0110/R0110.md"] = "---\nid: R0110\ntype: chore\ntitle: Landed\nslug: landed\nsingle: false\nissues: []\ndesign: ready\ncreated: 2026-10-20\nstatus: prepared-quiet-copper-falcon\n---\n\n# R0110\n\n## Theme\nLanded.\n\n## Order & dependencies\nBy id.\n\n## Risks & rollback\n"
+		seed["pickman/.tracker/rafts/R0110/check.sh"] = CHECK
 		f = trackerfix.new(NAME, seed)
 		W1 = trackerfix.trOk(f, f.main, { "worktree", "prep-a" })
 		W2 = trackerfix.trOk(f, f.main, { "worktree", "prep-b" })
@@ -111,49 +116,64 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 		end
 	)
 
-	it(
-		"approve refuses what a worker, the main checkout, an undesigned issue or an agent without the user's words would pass",
-		function()
-			ready(W1, "c0011")
-			local mark = fixture.git(W1, { "rev-parse", "HEAD" })
-			local function refused(args: { string }, extra: { [string]: string }?, cwd: string?)
-				local r = tr(cwd or W1, args, extra)
-				t.expect(r.ok).toBe(false)
-				t.expect(fixture.git(W1, { "rev-parse", "HEAD" })).toBe(mark)
-				t.expect(has(record(W1, "c0011"), "approved")).toBe(false)
-				return r
+	it("approve refuses a worker, the main checkout, an unclaimed issue, an undesigned one, no identity and an agent without the user's words, each for its own reason", function()
+		ready(W1, "c0011")
+		local mark = fixture.git(W1, { "rev-parse", "HEAD" })
+		local function refused(args: { string }, why: string, extra: { [string]: string }?, cwd: string?)
+			local r = tr(cwd or W1, args, extra)
+			t.expect(r.ok).toBe(false)
+			if not has(r.stderr, why) then
+				error(`{table.concat(args, " ")}: stderr lacks "{why}": {r.stderr}`, 2)
 			end
-			-- a dispatched worker cannot approve
-			t.expect(has(refused({ "approve", "c0011" }, { ZN_DISPATCH = "1" }).stderr, "dispatch"))
-				.toBe(true)
-			-- the main checkout is read-only
-			refused({ "approve", "c0011" }, nil, f.main)
-			-- an issue that is not being designed (a draft design, then nothing claimed)
-			trOk(W2, { "status", "c0012", "preparing" })
-			local undesigned = tr(W2, { "approve", "c0012" })
-			t.expect(undesigned.ok).toBe(false)
-			t.expect(has(undesigned.stderr, "design: ready")).toBe(true)
-			local unclaimed = tr(W2, { "approve", "c0013" })
-			t.expect(unclaimed.ok).toBe(false)
-			-- an agent session carries the user's git identity, so the user's words are required
-			local noWords = refused({ "approve", "c0011" }, { CLAUDECODE = "1", CLAUDE_EFFORT = "high" })
-			t.expect(has(noWords.stderr, "--said")).toBe(true)
-			refused({ "approve", "c0011", "--said", "" }, { CLAUDECODE = "1" })
-			-- with the words it records the human, the agent that ran it, and the words
-			trOk(
-				W1,
-				{ "approve", "c0011", "--said", "yes, approved | go ahead" },
-				{ CLAUDECODE = "1", CLAUDE_EFFORT = "high", ZN_ACTOR = OPUS }
-			)
-			local rec = record(W1, "c0011")
-			t.expect(has(rec, `| approved | {ME} |`)).toBe(true)
-			t.expect(has(rec, `via={OPUS}`)).toBe(true)
-			t.expect(has(rec, 'said="yes, approved / go ahead"')).toBe(true)
+			t.expect(fixture.git(W1, { "rev-parse", "HEAD" })).toBe(mark)
+			t.expect(has(record(W1, "c0011"), "approved")).toBe(false)
 		end
-	)
+		refused({ "approve", "c0011" }, "dispatch", { ZN_DISPATCH = "1" })
+		refused({ "approve", "c0011" }, "worktree", nil, f.main)
+		-- an issue claimed but with a draft design, and an issue not claimed at all (its design set by hand)
+		trOk(W2, { "status", "c0012", "preparing" })
+		local undesigned = tr(W2, { "approve", "c0012" })
+		t.expect(undesigned.ok).toBe(false)
+		t.expect(has(undesigned.stderr, "design: ready")).toBe(true)
+		setLine(`{W2}/{ISSUES}/c0013/c0013.md`, "design", "ready")
+		local unclaimed = tr(W2, { "approve", "c0013" })
+		t.expect(unclaimed.ok).toBe(false)
+		t.expect(has(unclaimed.stderr, "preparing")).toBe(true)
+		-- no git identity: the human cannot be named
+		refused(
+			{ "approve", "c0011" },
+			"identity",
+			{ GIT_AUTHOR_NAME = "", GIT_AUTHOR_EMAIL = "", GIT_COMMITTER_NAME = "", GIT_COMMITTER_EMAIL = "" }
+		)
+		-- an agent session carries the user's git identity, so the user's words are required
+		refused({ "approve", "c0011" }, "--said", { CLAUDECODE = "1", CLAUDE_EFFORT = "high" })
+		refused({ "approve", "c0011", "--said", "" }, "--said", { CLAUDECODE = "1" })
+		-- with the words it records the human, the agent that ran it, and the words
+		trOk(W1, { "approve", "c0011", "--said", "yes, approved | go ahead" }, { CLAUDECODE = "1", CLAUDE_EFFORT = "high", ZN_ACTOR = OPUS })
+		local rec = record(W1, "c0011")
+		t.expect(has(rec, `| approved | {ME} |`)).toBe(true)
+		t.expect(has(rec, `via={OPUS}`)).toBe(true)
+		t.expect(has(rec, 'said="yes, approved / go ahead"')).toBe(true)
+	end)
 
-	it("a redesign makes the approval stale, and a fresh approval makes it current again", function()
+	it("a redesign makes the approval stale, a stop with no edit keeps it, and a fresh approval makes it current", function()
 		local doc = `{W1}/{ISSUES}/c0011/c0011.md`
+		local function landIt()
+			fixture.git(W1, { "add", "-A" })
+			fixture.git(W1, { "commit", "-q", "-m", "wip" })
+			fixture.git(W1, { "fetch", "-q", "origin" })
+			fixture.git(W1, { "merge", "-q", "--no-edit", "origin/main" })
+			fixture.git(W1, { "push", "-q", "origin", "HEAD:main" })
+		end
+		-- prepared with a current approval, landed
+		trOk(W1, { "status", "c0011", "prepared" })
+		landIt()
+		-- a stop gives it back (prepared -> preparing) and nothing changes: the approval still covers it
+		trOk(W1, { "status", "c0011", "preparing" })
+		trOk(W1, { "status", "c0011", "prepared" })
+		landIt()
+		-- a redesign after a stop: the approval is stale
+		trOk(W1, { "status", "c0011", "preparing" })
 		fs.writeFile(doc, fs.readFile(doc) .. "\nA changed rule.\n")
 		fixture.git(W1, { "add", "-A" })
 		fixture.git(W1, { "commit", "-q", "-m", "redesign" })
@@ -161,28 +181,53 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 		t.expect(stale.ok).toBe(false)
 		t.expect(has(stale.stderr, "redesigned since its approval")).toBe(true)
 		t.expect(has(stale.stderr, "./zn approve c0011")).toBe(true)
+		-- so is an edit to the sequestered check.sh, on its own
+		fs.writeFile(doc, (string.gsub(fs.readFile(doc), "\nA changed rule%.\n", "")))
+		fs.writeFile(`{W1}/{ISSUES}/c0011/check.sh`, CHECK .. "# edited\n")
+		t.expect(tr(W1, { "status", "c0011", "prepared" }).ok).toBe(false)
+		fs.writeFile(`{W1}/{ISSUES}/c0011/check.sh`, CHECK)
+		fs.writeFile(doc, fs.readFile(doc) .. "\nA changed rule.\n")
 		trOk(W1, { "approve", "c0011", "--said", "still fine" }, { CLAUDECODE = "1" })
 		trOk(W1, { "status", "c0011", "prepared" })
-		-- two approval rows now; the newest is the one that counts
+		-- the approvals stack: two rows now, the newest counts
 		local _, n = string.gsub(record(W1, "c0011"), "| approved |", "")
 		t.expect(n).toBe(2)
-		-- an edit to the sequestered check.sh is a redesign too
-		trOk(W2, { "status", "c0012", "new" })
-		ready(W2, "c0012")
-		trOk(W2, { "approve", "c0012" })
-		fs.writeFile(`{W2}/{ISSUES}/c0012/check.sh`, CHECK .. "# edited\n")
-		t.expect(tr(W2, { "status", "c0012", "prepared" }).ok).toBe(false)
+	end)
+
+	it("the other doors are shut too: fold refuses an issue prepared by a hand-edited status after a redesign", function()
+		-- c0014: approved, prepared and landed, then redesigned and its status line left prepared by hand (the bypass)
+		ready(W2, "c0014")
+		trOk(W2, { "approve", "c0014" })
+		trOk(W2, { "status", "c0014", "prepared" })
+		local function landIt()
+			fixture.git(W2, { "add", "-A" })
+			fixture.git(W2, { "commit", "-q", "-m", "wip" })
+			fixture.git(W2, { "fetch", "-q", "origin" })
+			fixture.git(W2, { "merge", "-q", "--no-edit", "origin/main" })
+			fixture.git(W2, { "push", "-q", "origin", "HEAD:main" })
+		end
+		landIt()
+		local doc = `{W2}/{ISSUES}/c0014/c0014.md`
+		fs.writeFile(doc, fs.readFile(doc) .. "\nRedesigned without approval.\n")
+		landIt()
+		local refused = tr(W2, { "fold", "R0110", "c0014" })
+		t.expect(refused.ok).toBe(false)
+		t.expect(has(refused.stderr, "approval")).toBe(true)
+		t.expect(has(refused.stderr, "c0014")).toBe(true)
+		-- an issue prepared before approvals existed (no record at all) is let through
+		local ok = tr(W2, { "fold", "R0110", "c0015" })
+		if not ok.ok then
+			error(ok.stderr .. ok.stdout)
+		end
 	end)
 
 	it("a raft's move refuses each issue it moves that has no current approval", function()
 		-- new raft merges origin/main after its claim, so the worktree must be clean
 		fixture.git(W2, { "add", "-A" })
-		fixture.git(W2, { "commit", "-q", "-m", "wip" })
+		fixture.git(W2, { "commit", "-q", "--allow-empty", "-m", "wip" })
 		local out = trOk(W2, { "new", "raft", "chore", "pair", "c0013", "--project", "pickman" })
 		local rid = string.match(out, "(R%d+)") :: string
-		for _, id in { "c0013" } do
-			setLine(`{W2}/{ISSUES}/{id}/{id}.md`, "design", "ready")
-		end
+		setLine(`{W2}/{ISSUES}/c0013/c0013.md`, "design", "ready")
 		setLine(`{W2}/pickman/.tracker/rafts/{rid}/{rid}.md`, "design", "ready")
 		local refused = tr(W2, { "status", rid, "prepared" })
 		t.expect(refused.ok).toBe(false)

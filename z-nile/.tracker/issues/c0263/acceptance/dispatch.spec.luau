@@ -39,6 +39,10 @@ runtime = "claude-cli"
 max_tokens = 5000
 ]]
 
+local function HEADER(id: string): string
+	return `# Provenance: {id}\n\n| when | event | actor | detail |\n|---|---|---|---|\n`
+end
+
 local h: fakecli.Harness
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
@@ -73,6 +77,10 @@ return t.spec("c0263 provenance through the dispatcher", function(it)
 			["pickman/.tracker/issues/c0096/c0096.md"] = prepared("c0096", "rafted-thing"),
 			["pickman/.tracker/issues/c0096/check.sh"] = "lune run tests/run -- pickman/.tracker/issues/c0096/acceptance/a.spec.luau\n",
 			["pickman/.tracker/issues/c0096/.models.toml"] = '[dispatch]\nauto_merge = ["raft"]\n',
+			-- the prep PR's approval is already on main when the rafting PR appends its row
+			["pickman/.tracker/issues/c0096/provenance.md"] = HEADER("c0096") .. "| 2026-11-08 09:00 | approved | human:Ann | design=aaaaaaaaaaaa |\n",
+			["pickman/.tracker/issues/c0021/c0021.md"] = trackerfix.stub("c0021", "third-thing", "new-quiet-copper-falcon"),
+			["pickman/.tracker/issues/c0021/.models.toml"] = "[dispatch]\nauto_merge = []\n",
 			["pickman/.tracker/issues/c0091/c0091.md"] = prepared("c0091", "member-thing"),
 			["pickman/.tracker/issues/c0091/check.sh"] = "lune run tests/run -- pickman/.tracker/issues/c0091/acceptance/a.spec.luau\n",
 		})
@@ -108,9 +116,19 @@ return t.spec("c0263 provenance through the dispatcher", function(it)
 		fakecli.mode(h, "claude", "claim")
 		local r = zn({ "dispatch", "c0020" })
 		t.expect(r.code).toBe(4)
-		t.expect(has(r.stdout, "waits for the user")).toBe(true)
 		t.expect(has(r.stdout, "./zn approve c0020")).toBe(true)
 		t.expect(has(fakecli.log(h), "realgh pr merge 7")).toBe(false)
+		-- with prep absent from auto_merge (an item-level []) the reason is the old one, and the suffix is still there
+		local sha21 = fakecli.pullRequest(h, 8, { ["pickman/.tracker/issues/c0021/x.md"] = "notes\n" })
+		fs.writeFile(
+			`{h.fakes}/pr-prep-third-thing.json`,
+			`\{"number":8,"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[\{"conclusion":"SUCCESS"\}],"headRefOid":"{sha21}"\}`
+		)
+		local r21 = zn({ "dispatch", "c0021" })
+		t.expect(r21.code).toBe(4)
+		t.expect(has(r21.stdout, "#8 waits for a merge")).toBe(true)
+		t.expect(has(r21.stdout, "./zn approve c0021")).toBe(true)
+		t.expect(has(fakecli.log(h), "realgh pr merge 8")).toBe(false)
 		-- a step that runs `./zn approve` is refused: the dispatched worker has no human behind it
 		local approve = zn({ "approve", "c0020", "--said", "go" }, { ZN_DISPATCH = "1" })
 		t.expect(approve.ok).toBe(false)
@@ -129,9 +147,13 @@ return t.spec("c0263 provenance through the dispatcher", function(it)
 		local function rafted(doc: string): string
 			return (string.gsub(doc, "\nraft: \n", "\nraft: R0050\n", 1))
 		end
-		local function record(id: string, event: string, extra: string?): string
-			return "# Provenance: " .. id .. "\n\n| # | when | event | actor | detail |\n|---|---|---|---|---|\n"
-				.. `| 1 | 2026-11-08 10:00 | {event} | agent:claude-sonnet-5-5 effort high | raft=R0050 |\n` .. (extra or "")
+		local ACTOR = "agent:claude-sonnet-5-5 effort high"
+		local p96, p91 = "pickman/.tracker/issues/c0096/provenance.md", "pickman/.tracker/issues/c0091/provenance.md"
+		-- the rows a rafting PR may add: its own, appended to what main already holds
+		local function appended(path: string, id: string, event: string): string
+			local old = fixture.exec(h.f.origin, "git", { "show", `main:{path}` })
+			local row = `| 2026-11-08 10:00 | {event} | {ACTOR} | raft=R0050 |\n`
+			return (if old.ok then old.stdout else HEADER(id)) .. row
 		end
 		local raftDocText = "---\nid: R0050\nslug: a-raft\ntitle: a raft\nissues: [c0096, c0091]\n---\n"
 		local function gate(n: number, rec96: string, rec91: string, more: { [string]: string }?): fixture.Result
@@ -152,11 +174,19 @@ return t.spec("c0263 provenance through the dispatcher", function(it)
 		end
 		-- refused: a delivered row (not a rafting PR's), an approval, a second file beside the record
 		local cases: { { r96: string, r91: string, more: { [string]: string }? } } = {
-			{ r96 = record("c0096", "delivered"), r91 = record("c0091", "rafted") },
-			{ r96 = record("c0096", "rafted"), r91 = record("c0091", "approved") },
+			-- a delivered row is not a rafting PR's
+			{ r96 = appended(p96, "c0096", "delivered"), r91 = appended(p91, "c0091", "rafted") },
+			-- nor is an approval
+			{ r96 = appended(p96, "c0096", "rafted"), r91 = appended(p91, "c0091", "approved") },
+			-- the prep PR's approved row, already on main, edited
 			{
-				r96 = record("c0096", "rafted"),
-				r91 = record("c0091", "rafted"),
+				r96 = (string.gsub(appended(p96, "c0096", "rafted"), "human:Ann", "human:Eve", 1)),
+				r91 = appended(p91, "c0091", "rafted"),
+			},
+			-- a second file beside the record
+			{
+				r96 = appended(p96, "c0096", "rafted"),
+				r91 = appended(p91, "c0091", "rafted"),
 				more = { ["pickman/.tracker/issues/c0091/notes.md"] = "x\n" },
 			},
 		}
@@ -173,8 +203,8 @@ return t.spec("c0263 provenance through the dispatcher", function(it)
 			["pickman/.tracker/rafts/R0050/R0050.md"] = raftDocText,
 			[c96] = rafted(onMain(c96)),
 			[c91] = rafted(onMain(c91)),
-			["pickman/.tracker/issues/c0096/provenance.md"] = record("c0096", "rafted"),
-			["pickman/.tracker/issues/c0091/provenance.md"] = record("c0091", "rafted"),
+			[p96] = appended(p96, "c0096", "rafted"),
+			[p91] = appended(p91, "c0091", "rafted"),
 		})
 		fs.writeFile(`{h.fakes}/pr-raft-c0096.json`, prJson(50, sha))
 		local r = zn({ "dispatch", "c0096" })

@@ -20,7 +20,7 @@ check "AC4: ./zn approve records the human, the design hash and the user's words
 check "AC5: status prepared is refused until the newest approval matches the design, a redesign makes it stale, and a raft's move needs each issue it moves approved" \
   lune run tests/run -- "$A/approve.spec.luau" "$A/provenance.spec.luau"
 check "AC6: unblocked, rafted and delivered rows are appended per ticket by the commands that make the events, ./zn record takes the other tickets' events, and the publish, rafting and capture guards let only appended rows through" \
-  lune run tests/run -- "$A/record.spec.luau" "$A/lifecycle.spec.luau" "$A/dispatch.spec.luau" "$A/provenance.spec.luau"
+  lune run tests/run -- "$A/record.spec.luau" "$A/lifecycle.spec.luau" "$A/dispatch.spec.luau" "$A/publish.spec.luau" "$A/provenance.spec.luau"
 check "AC7: the dispatcher never passes the prep gate, a worker cannot approve, and each attempt of a step has ZN_ACTOR from its own spec" \
   lune run tests/run -- "$A/dispatch.spec.luau"
 check "AC8: who merges the derived entries and the record, oldest first, the record winning over a git fallback, with one pure per-item commit selector" \
