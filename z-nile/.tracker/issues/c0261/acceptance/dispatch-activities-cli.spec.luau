@@ -1,0 +1,153 @@
+--!strict
+-- c0261: `./zn dispatch zz-review --mode design [--final]` starts the CLI with the model of the activity it runs (the
+-- round on the way cheap, the final round expensive through the zz-review fallback), writes the row with that model,
+-- refuses a final stream review, and `--dry-run` names the activity. Fake CLIs (@tests/lib/fakecli), fixture under
+-- .cache/c0261-dispatch.
+local fakecli = require("@tests/lib/fakecli")
+local fixture = require("@tests/lib/fixture")
+local fs = require("@lune/fs")
+local process = require("@lune/process")
+local t = require("@tests/lib/t")
+local dispatch = require("@znile/engine/dispatch")
+local trackerfix = require("@tests/lib/trackerfix")
+
+local MODELS = [[
+order = ["claude"]
+
+[dispatch]
+stall_seconds = 5
+tool_seconds = 8
+
+[z-design.claude]
+model = "claude-sonnet-5"
+rank = 2
+runtime = "claude-cli"
+max_tokens = 5000
+
+[zz-review.claude]
+model = "claude-opus-5-5"
+rank = 4
+runtime = "claude-cli"
+max_tokens = 5000
+
+[zz-review-design.claude]
+model = "claude-sonnet-5"
+rank = 2
+runtime = "claude-cli"
+max_tokens = 5000
+]]
+
+local h: fakecli.Harness
+local function has(text: string, needle: string): boolean
+	return string.find(text, needle, 1, true) ~= nil
+end
+local function znIn(dir: string, args: { string }): fixture.Result
+	local argv = { "scripts/tracker.sh" }
+	for _, a in args do
+		table.insert(argv, a)
+	end
+	return fixture.exec(dir, "bash", argv, {
+		env = {
+			FAKE_DIR = h.fakes,
+			PATH = `{h.bin}:{process.env.PATH}`,
+			ZN_AGENT_TOKEN_FILE = h.token,
+			ZN_WATERMARK_DIR = `{h.f.base}/watermark`,
+			GH_TOKEN = "the-users-token",
+		},
+	})
+end
+local function reviewer()
+	fs.writeFile(
+		`{h.fakes}/script.sh`,
+		`sleep 1; printf '# Review\\n\\nVerdict: approve\\n' > "$ZN_DISPATCH_DIR/review.md"\n`
+	)
+end
+local function lastRow(id: string): any
+	local rows = fakecli.rows(h, id)
+	return rows and rows[#rows]
+end
+
+return t.spec("c0261 ./zn dispatch picks the model of the activity", function(it)
+	it("sets up a tracker with the activity tables and a worktree for the issue", function()
+		h = fakecli.new("c0261-dispatch", {
+			[".models.toml"] = MODELS,
+			["pickman/.tracker/issues/c0010/c0010.md"] = trackerfix.stub("c0010", "first-thing", "new-quiet-copper-falcon"),
+		})
+		local r = fakecli.zn(h, { "dispatch", "z-design", "c0010" })
+		if not r.ok then
+			error(r.stdout .. r.stderr)
+		end
+	end)
+
+	it("a round on the way starts the cheap model and records it; --final starts the expensive one (AC10)", function()
+		local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
+		fakecli.clear(h)
+		fakecli.mode(h, "claude.zz-review", "script")
+		reviewer()
+		local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "design" })
+		if not r.ok then
+			error(r.stdout .. r.stderr)
+		end
+		t.expect(has(fakecli.log(h), "--model claude-sonnet-5")).toBe(true)
+		t.expect(has(fakecli.log(h), "--model claude-opus-5-5")).toBe(false)
+		t.expect(lastRow("c0010").model).toBe("claude-sonnet-5")
+		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
+		fakecli.clear(h)
+		fakecli.mode(h, "claude.zz-review", "script")
+		reviewer()
+		local f = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "design", "--final" })
+		if not f.ok then
+			error(f.stdout .. f.stderr)
+		end
+		t.expect(has(fakecli.log(h), "--model claude-opus-5-5")).toBe(true)
+		t.expect(lastRow("c0010").model).toBe("claude-opus-5-5")
+		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
+	end)
+
+	it("a code review with no table of its own, and a raft review, take the expensive model (AC10)", function()
+		local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
+		fakecli.clear(h)
+		fakecli.mode(h, "claude.zz-review", "script")
+		reviewer()
+		local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
+		if not r.ok then
+			error(r.stdout .. r.stderr)
+		end
+		t.expect(has(fakecli.log(h), "--model claude-opus-5-5")).toBe(true)
+		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/review-001.md`)
+	end)
+
+	it("a final stream review is refused and starts no CLI; --dry-run names the activity (AC10)", function()
+		local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
+		fakecli.clear(h)
+		local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "stream", "--final" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stdout .. r.stderr, "stream")).toBe(true)
+		t.expect(has(fakecli.log(h), "step=zz-review")).toBe(false)
+		local d = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "design", "--final", "--dry-run" })
+		t.expect(has(d.stdout, "activity=zz-review-design-final")).toBe(true)
+		t.expect(has(d.stdout, "model=claude-opus-5-5")).toBe(true)
+	end)
+
+	-- the poll itself, run for real against a fake gh (the runner's `./zn run --time` wrapper is cut off: it only bounds)
+	it("the wait command exits 0 when the condition holds and 2 when it cannot hold, against a fake gh (AC4)", function()
+		fs.writeFile(
+			`{h.bin}/gh`,
+			'#!/bin/bash\ncase "$*" in\n "pr view"*) echo "$FAKE_STATE";;\n "pr checks"*) echo "$FAKE_OUT"; exit ${FAKE_RC:-0};;\nesac\n'
+		)
+		process.exec("chmod", { "+x", `{h.bin}/gh` })
+		local function run(what: string, env: { [string]: string }): number
+			local command: string = (dispatch :: any).waitCommand(what, 42, 60)
+			local inner = string.match(command, "%-%- (bash %-c .*)$") :: string
+			local e = { PATH = `{h.bin}:{process.env.PATH}` }
+			for k, v in env do
+				e[k] = v
+			end
+			return fixture.exec(h.f.main, "bash", { "-c", inner }, { env = e }).code
+		end
+		t.expect(run("merged", { FAKE_STATE = "MERGED" })).toBe(0)
+		t.expect(run("merged", { FAKE_STATE = "CLOSED" })).toBe(2)
+		t.expect(run("checks", { FAKE_RC = "0", FAKE_OUT = "all passed" })).toBe(0)
+		t.expect(run("checks", { FAKE_RC = "1", FAKE_OUT = "build failed" })).toBe(2)
+	end)
+end)

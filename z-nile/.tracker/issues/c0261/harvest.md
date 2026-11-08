@@ -1,0 +1,15 @@
+# Harvest: c0261
+- design-review-001 F1: z-design/override-search-every-require-spelling, z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F2: one-off: a poll loop's clock, exits and tool timeout are specific to this step (the gist, "a bound is a limit, not a duration", is in the issue's Design)
+- design-review-001 F3: z-design/never-narrow-captured-scope
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: z-design/never-narrow-captured-scope
+- design-review-001 F7: one-off: a guard over the tier vocabulary, which the user then removed
+- design-review-001 F8: zz-test/pin-call-site-arguments
+- design-review-001 F9: one-off: exact model names pinned at check time is this issue's own call
+- design-review-001 F10: z-design/quote-other-preps-before-promising
+- design-review-001 F11: z-design/decided-guesses-rewrite-their-body
+- design-review-001 F12: z-design/restated-rules-move-together
+- design-review-001 F13: z-design/spec-design-correspondence
+- design-review-001 F14: one-off: a probe recorded without the command that ran it

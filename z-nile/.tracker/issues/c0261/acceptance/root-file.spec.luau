@@ -1,69 +1,103 @@
 --!strict
--- c0261 AC9 to AC11: the committed root .models.toml defines the three tiers per CLI by real model names, every step's
--- table references one, and each step resolves to the right model: authoring and the way cheap, a final review
--- sharp, waiting on the wait tier. Reads the real file.
+-- c0261: the committed root .models.toml gives every activity of the dispatcher a real model on every CLI: the work on
+-- the way and the rounds on the way cheap, every final review expensive, the wait step the cheapest. The rules are
+-- pinned by the gate; the exact model names are pinned only where ZN_C0261_EXACT is set (this issue's check.sh lines,
+-- so a model upgrade needs no override of a promoted spec). Reads the real file.
 local fs = require("@lune/fs")
+local dispatch = require("@znile/engine/dispatch")
 local models = require("@znile/engine/models")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 local m = models :: any -- the API this issue adds, reached through `any` until the code exists (promote-check)
 
 local TOP = (
-	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+	string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
 )
+local EXACT = process.env.ZN_C0261_EXACT ~= nil
 local function layers(): { models.Layer }
 	return { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
 end
--- tier -> cli -> the id a spend row records (the capture: grok and agent cheap 4.6 high, sharp 4.7 xhigh; claude
--- Sonnet, Opus, Haiku; agent's wait Composer; grok's wait is the design's choice, grok-4.5 at low, for the user's veto)
+-- the activities the dispatcher runs: its model steps, and each review mode's rounds
+local function activities(): { string }
+	local out: { [string]: boolean } = {}
+	for name, s in dispatch.STEPS do
+		if s.kind == "model" then
+			out[name] = true
+		end
+	end
+	for mode in dispatch.REVIEW_MODES do
+		local d = dispatch :: any
+		out[d.activityOf("zz-review", mode, false)] = true
+		if mode == "design" or mode == "code" then
+			out[d.activityOf("zz-review", mode, true)] = true
+		end
+	end
+	local list = {}
+	for a in out do
+		table.insert(list, a)
+	end
+	table.sort(list)
+	return list
+end
+-- on the way (cheap), final review (expensive), waiting (cheapest)
+local WAY = { ["z-ticket"] = true, ["z-design"] = true, ["z-raft"] = true, ["z-run"] = true, ["zz-review-design"] = true, ["zz-review-code"] = true, ["zz-review-stream"] = true } :: { [string]: boolean }
 local IDS = {
-	cheap = { claude = "claude-sonnet-5", grok = "grok-4.6-high", agent = "cursor-grok-4.6-high" },
-	sharp = { claude = "claude-opus-5-5", grok = "grok-4.7-xhigh", agent = "grok-4.7-xhigh" },
+	way = { claude = "claude-sonnet-5", grok = "grok-4.6-high", agent = "cursor-grok-4.6-high" },
+	final = { claude = "claude-opus-5-5", grok = "grok-4.7-xhigh", agent = "grok-4.7-xhigh" },
 	wait = { claude = "claude-haiku-5-5", grok = "grok-4.5-low", agent = "composer-2.5" },
 } :: { [string]: { [string]: string } }
-local RANK = { cheap = 2, sharp = 4, wait = 1 } :: { [string]: number }
-local STEPS = { ["z-ticket"] = "cheap", ["z-design"] = "cheap", ["z-raft"] = "cheap", ["z-run"] = "cheap", ["zz-review"] = "cheap", ["z-wait"] = "wait" } :: { [string]: string }
+local function classOf(a: string): string
+	return if a == "z-wait" then "wait" elseif WAY[a] then "way" else "final"
+end
 
-return t.spec("c0261 root .models.toml tiers", function(it)
-	it("each CLI has a cheap, a sharp and a wait model with its rank (AC9)", function()
-		for tier, byCli in IDS do
+return t.spec("c0261 root .models.toml per activity", function(it)
+	it("every activity resolves on every CLI, and no table names an activity the dispatcher does not run (rule)", function()
+		local known: { [string]: boolean } = { ["zz-review"] = true }
+		for _, a in activities() do
+			known[a] = true
+			local r = m.resolveActivity(layers(), a)
 			for _, cli in models.CLIS do
-				local r = m.resolve(layers(), "z-design", tier)
-				t.expect(models.id(r.specs[cli])).toBe(byCli[cli])
-				t.expect(r.specs[cli].rank).toBe(RANK[tier])
+				t.expect(r.specs[cli] ~= nil).toBe(true)
+			end
+		end
+		for skill in layers()[1].skills do
+			t.expect(`{skill} known={known[skill] == true}`).toBe(`{skill} known=true`)
+		end
+	end)
+
+	it("every final review resolves to a model that obeys the review rule, and ranks above the rounds on the way (rule)", function()
+		for _, a in activities() do
+			local r = m.resolveActivity(layers(), a)
+			local way = m.resolveActivity(layers(), "z-design")
+			for _, cli in models.CLIS do
+				if classOf(a) == "final" then
+					t.expect(r.specs[cli].rank > way.specs[cli].rank).toBe(true)
+					t.expect(models.reviewRule("zz-review", r.specs[cli])).toBe(nil)
+				end
 			end
 		end
 	end)
 
-	it("every step's table references a tier and pins no model, and its default tier is the step's (AC10)", function()
-		local file = layers()[1]
-		for skill, tier in STEPS do
-			local resolved = models.resolve(layers(), skill)
+	it("the wait step is the cheapest activity on every CLI (rule)", function()
+		local w = m.resolveActivity(layers(), "z-wait")
+		for _, a in activities() do
+			local r = m.resolveActivity(layers(), a)
 			for _, cli in models.CLIS do
-				local fields: { [string]: any } = file.skills[skill][cli]
-				t.expect(`{skill}.{cli} model pinned={fields.model ~= nil}`).toBe(`{skill}.{cli} model pinned=false`)
-				t.expect(`{skill}.{cli} tier={tostring(fields.tier)}`).toBe(`{skill}.{cli} tier={tier}`)
-				t.expect(models.id(resolved.specs[cli])).toBe(IDS[tier][cli])
+				if a ~= "z-wait" then
+					t.expect(w.specs[cli].rank < r.specs[cli].rank).toBe(true)
+				end
 			end
 		end
 	end)
 
-	it("a final review resolves sharp and a middle round cheap, on every CLI (AC10)", function()
-		local sharp = m.resolve(layers(), "zz-review", "sharp")
-		local cheap = models.resolve(layers(), "zz-review")
-		for _, cli in models.CLIS do
-			t.expect(models.id(sharp.specs[cli])).toBe(IDS.sharp[cli])
-			t.expect(models.id(cheap.specs[cli])).toBe(IDS.cheap[cli])
-		end
-	end)
-
-	it("every tier model is a real name, never an alias (AC11)", function()
-		for _, byCli in IDS do
-			for _, cli in models.CLIS do
-				local id = byCli[cli]
+	it("every model is a real name, never an alias (rule)", function()
+		for skill, byCli in layers()[1].skills do
+			for cli, f in byCli do
+				local id: string = f.model
 				local real = string.match(id, "^claude%-%a+%-%d[%w%-]*$") or string.match(id, "^[%a%-]*grok%-%d[%d%.]*[%w%-]*$")
 					or string.match(id, "^composer%-%d[%d%.]*$")
-				t.expect(`{id} real={real ~= nil}`).toBe(`{id} real=true`)
+				t.expect(`{skill}.{cli} {id} real={real ~= nil}`).toBe(`{skill}.{cli} {id} real=true`)
 				for _, alias in { "latest", "default", "auto" } do
 					t.expect((string.find(id, alias, 1, true))).toBe(nil)
 				end
@@ -71,8 +105,22 @@ return t.spec("c0261 root .models.toml tiers", function(it)
 		end
 	end)
 
-	it("the wait tier's agent step stops by calls and minutes like every agent table (AC10)", function()
-		local r = models.resolve(layers(), "z-wait")
-		t.expect(r.specs.agent.maxCalls ~= nil and r.specs.agent.maxMinutes ~= nil).toBe(true)
+	it("no activity table carries the words tier, cheap or sharp: the file says models and activities only (rule)", function()
+		local text = fs.readFile(`{TOP}/.models.toml`)
+		for _, w in { "tier", "[tiers" } do
+			t.expect((string.find(text, w, 1, true))).toBe(nil)
+		end
+	end)
+
+	it("the exact model of each activity on each CLI is the decided one (exact names, check time only)", function()
+		if not EXACT then
+			return
+		end
+		for _, a in activities() do
+			local r = m.resolveActivity(layers(), a)
+			for _, cli in models.CLIS do
+				t.expect(`{a}.{cli} {models.id(r.specs[cli])}`).toBe(`{a}.{cli} {IDS[classOf(a)][cli]}`)
+			end
+		end
 	end)
 end)

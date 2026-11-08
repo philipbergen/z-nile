@@ -1,11 +1,13 @@
 --!strict
--- c0261 AC12: every place that says who runs what says it in tiers, in the words the Design fixes: zz-rules' Dispatch,
--- zz-review, z-design, zz-execute, AGENTS.md, the README and the .models.toml header.
+-- c0261: every place that says who runs what says it per activity, in the words the Design fixes: zz-rules' Dispatch,
+-- the review and authoring skills (the final round procedure), AGENTS.md, the README and the .models.toml header.
+-- The exact model names live only in .models.toml (root-file.spec pins them at check time).
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
 local TOP = (
-	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+	string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
 )
 local function read(path: string): string
 	return fs.readFile(`{TOP}/{path}`)
@@ -33,46 +35,55 @@ local function bullet(text: string, head: string): string
 end
 
 return t.spec("c0261 docs", function(it)
-	it("zz-rules Dispatch has the Model tiers bullet with every CLI's three models (AC12)", function()
-		local b = bullet(skill("zz-rules"), "- **Model tiers.**")
+	it("zz-rules Dispatch has the Models per activity bullet, with no new vocabulary (rule)", function()
+		local b = bullet(skill("zz-rules"), "- **Models per activity.**")
 		for _, w in {
-			"`[tiers.<cli>.<tier>]`", "`tier = \"cheap\"`", "cheap", "sharp", "wait", "`--final`", "never aliases",
-			"`claude-sonnet-5`", "`claude-opus-5-5`", "`claude-haiku-5-5`",
-			"`grok-4.6` at high", "`grok-4.7` at xhigh", "`grok-4.5` at low",
-			"`cursor-grok-4.6-high`", "`grok-4.7-xhigh`", "`composer-2.5`",
-			"`z-wait`", "nothing expensive orchestrates or waits", "records the tier",
+			"`[<activity>.<cli>]`", "real model names", "never aliases", "`z-wait`", "`--final`", "`zz-review`",
+			"`zz-review-design`", "`zz-review-design-final`", "`zz-review-code`", "`zz-review-stream`", "`z-design`", "`z-ticket`",
+			"falls back to `zz-review`", "./zn metrics", "by model",
 		} do
-			at(b, w, "zz-rules Model tiers")
+			at(b, w, "zz-rules Models per activity")
+		end
+		for _, w in { "tier", "cheap tier", "sharp tier" } do
+			absent(b, w, "zz-rules Models per activity")
 		end
 	end)
 
-	it("who reviews is said in tiers, and the old Opus-only rule is gone from the skills (AC12)", function()
+	it("who reviews is said per activity: the final round is the expensive one, the rounds on the way are not (rule)", function()
 		for _, name in { "z-design", "z-raft", "zz-execute", "zz-review" } do
-			at(skill(name), "the sharp tier", name)
+			at(skill(name), "the final round", name)
 			absent(skill(name), "Opus through `claude` or `agent`, any grok model at `xhigh` through `grok`", name)
 		end
 		at(skill("z-design"), "`./zn dispatch zz-review <id> --mode design --final`", "z-design")
 		at(skill("zz-execute"), "`./zn dispatch zz-review <R-id> --mode code --final`", "zz-execute")
-		at(skill("z-raft"), "`./zn dispatch zz-review <R-id> --mode raft --final`", "z-raft")
+		at(skill("z-raft"), "`./zn dispatch zz-review <R-id> --mode raft`", "z-raft")
 		at(skill("zz-review"), "`--final`", "zz-review")
 		at(skill("zz-review"), "a stream review is never final", "zz-review")
 	end)
 
-	it("the round rule names the final round: cheap while the rule says go on, one sharp round to stop (AC12)", function()
-		local d = skill("z-design")
-		at(d, "the round after which this rule runs no further round", "z-design")
-		at(d, "run it sharp: `--final`", "z-design")
-		at(skill("zz-execute"), "run it sharp: `--final`", "zz-execute")
+	it("the round rule names which round is final, round 5 included (rule)", function()
+		for _, name in { "z-design", "zz-execute" } do
+			local s = skill(name)
+			at(s, "round 5 is always final", name)
+			at(s, "the first final round on, every round is final", name)
+		end
 	end)
 
-	it("AGENTS.md, the README and the .models.toml header say tiers (AC12)", function()
+	it("stream reviews and Phase 2B no longer say the stream review runs on the review model of the CLI (rule)", function()
+		absent(skill("zz-review"), "on the review model of the CLI", "zz-review")
+		absent(skill("zz-execute"), "on the review model of the CLI", "zz-execute")
+		at(skill("zz-review"), "a stream review runs on the model `zz-review-stream` names", "zz-review")
+	end)
+
+	it("AGENTS.md, the README and the .models.toml header say it per activity (rule)", function()
 		at(read("AGENTS.md"), "final-round reviewers", "AGENTS.md")
 		absent(read("AGENTS.md"), "which the skills pin to Opus 5.5", "AGENTS.md")
 		local readme = read("z-nile/README.md")
-		at(bullet(readme, "- **`.models.toml`.**"), "tiers", "README")
+		at(bullet(readme, "- **`.models.toml`.**"), "Models per activity", "README")
+		absent(readme, "round one Opus through `claude` or `agent`", "README")
 		local text = read(".models.toml")
 		local head = string.sub(text, 1, string.find(text, "\n[dispatch]", 1, true) or 1)
-		for _, w in { "cheap", "sharp", "wait", "real model names" } do
+		for _, w in { "per activity", "real model names", "final review", "z-wait" } do
 			at(head, w, ".models.toml header")
 		end
 	end)

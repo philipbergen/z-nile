@@ -7,23 +7,20 @@ source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to t
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0261"
 
-# Work outside `check` is limited to running a spec through `tests/run`, `./zn members` and other cheap reads.
-# A spec file holds the cases of several criteria; each label names the cases it is about, and a failing case of
-# another criterion in the same file fails that file's checks too (the files are split by concern to keep that rare).
-check "AC1: a per-skill table takes model, effort and rank from the tier it names, and a call can name the tier" lune run tests/run -- "$A/tiers-models.spec.luau"
-check "AC2: a table that sets its own model keeps it, a file without tiers resolves as before, a closer file replaces only the keys it sets" lune run tests/run -- "$A/tiers-models.spec.luau"
-check "AC3: tier errors name the file and the key, and a tier entry must be a real model name" lune run tests/run -- "$A/tiers-models.spec.luau"
-check "AC4: the sharp tier is Opus on claude and grok at xhigh on grok and agent; the pin rule of a zz-review table stays" lune run tests/run -- "$A/tiers-models.spec.luau"
-check "AC5: a review round runs cheap and only the final round, the idea review and the full-force review run sharp; a stream is never final" lune run tests/run -- "$A/dispatch-tiers.spec.luau"
-check "AC6: authoring steps are cheap and no step that authors or orchestrates is sharp" lune run tests/run -- "$A/dispatch-tiers.spec.luau"
-check "AC7: z-wait is a wait-tier model step with a bounded, one-condition poll command and a prompt that does nothing else" lune run tests/run -- "$A/dispatch-tiers.spec.luau"
-check "AC8: spend records the tier beside the model in an eleventh column that older ledgers do without" lune run tests/run -- "$A/ledger-tier.spec.luau"
-check "AC9: the root .models.toml defines cheap, sharp and wait for claude, grok and agent by the decided real names and ranks" lune run tests/run -- "$A/root-file.spec.luau"
-check "AC10: every step's table references a tier and pins no model, and a final review resolves sharp where a middle round resolves cheap" lune run tests/run -- "$A/root-file.spec.luau"
-check "AC11: every tier model is a real name, never an alias" lune run tests/run -- "$A/root-file.spec.luau"
-check "AC12: zz-rules, the review and design skills, AGENTS.md, the README and the .models.toml header say it in tiers" lune run tests/run -- "$A/docs.spec.luau"
-# every promoted spec that names .models.toml or reads the dispatcher's texts, except the cases this issue overrides
-# (Overrides in the issue: the c0117 docs case about who reviews, rewritten by the executor in its raft)
-check "AC13: the promoted z-nile specs that name .models.toml, the dispatcher or the ledger still pass" bash -c "specs=\$(git grep -lE 'models\\.toml|engine/(dispatch|dispatcher|models|ledger)' -- tests/acceptance tests/tooling | grep '\\.spec\\.luau\$' | grep -v '/c0261/') && [[ -n \$specs ]] && lune run tests/run -- \$specs"
+# A spec file holds the cases of several criteria; each label names what it is about. The exact model names are pinned
+# only on the lines that set ZN_C0261_EXACT (check and `done`), never in the promoted specs the gate runs.
+check "AC1: each activity has its own table in .models.toml, a closer file replaces only the keys it sets, and an unnamed review activity falls back to zz-review" lune run tests/run -- "$A/models-activities.spec.luau"
+check "AC2: the final reviews obey the review rule (Opus on claude, grok at xhigh or Opus on agent), the rounds on the way take any model, a plain zz-review pin keeps c0117's rule" lune run tests/run -- "$A/models-activities.spec.luau"
+check "AC3: a review round is its own activity, --final names the final round's, a stream is never final, the raft review is always final, every mode names its activity" lune run tests/run -- "$A/dispatch-activities.spec.luau"
+check "AC4: z-wait is a model step whose poll is a loop with its own clock and exits 0, 2 and 3, and whose prompt runs only that command" lune run tests/run -- "$A/dispatch-activities.spec.luau"
+check "AC5: a gate that only waits for green CI starts z-wait once per head, and never for a draft, a human's merge or the run gate" lune run tests/run -- "$A/dispatch-activities.spec.luau"
+check "AC6: spend rows sum per model (ledger.byModel) and ./zn metrics prints the by-model table" lune run tests/run -- "$A/ledger-model.spec.luau"
+check "AC7: the root .models.toml gives every activity a model on every CLI, finals above the rounds on the way, z-wait the cheapest, no alias, no tier vocabulary" lune run tests/run -- "$A/root-file.spec.luau"
+check "AC8: the exact model of each activity on each CLI is the decided one" env ZN_C0261_EXACT=1 lune run tests/run -- "$A/root-file.spec.luau"
+check "AC9: zz-rules, the review and authoring skills, AGENTS.md, the README and the .models.toml header say it per activity, with the final-round procedure" lune run tests/run -- "$A/docs.spec.luau"
+check "AC10: ./zn dispatch zz-review starts the model of the activity (round cheap, --final expensive), refuses a final stream, and --dry-run names the activity" lune run tests/run -- "$A/dispatch-activities-cli.spec.luau"
+# every promoted spec that reads .models.toml or the dispatcher, models or ledger modules (both alias spellings), except
+# the cases this issue overrides (see Overrides: the executor rewrites them in its raft)
+check "AC11: the promoted z-nile specs that name .models.toml, or require the dispatcher, models or ledger, still pass" bash -c "specs=\$(git grep -lE 'models\\.toml|(engine|scripts/tracker)/(dispatch|dispatcher|models|ledger)' -- tests/acceptance tests/tooling | grep '\\.spec\\.luau\$' | grep -v '/c0261/') && [[ -n \$specs ]] && lune run tests/run -- \$specs"
 
 finish
