@@ -8,6 +8,7 @@
 | 4 | 2026-11-08 05:28 | design-review-004 (tokens not visible to the reviewer) | 0 | 0 | 15.0 | spend | design-review | 0 |
 | 5 | 2026-11-08 05:48 | design-review-005 | 0 | 0 | 14.0 | spend | design-review | 211640 |
 | 6 | 2026-11-08 05:50 | estimated prep time (answering time excluded), user-directed redesign included | 1170 | 1 | 240.0 | spend | prep |  |
+| 7 | 2026-11-08 08:04 | design-review-006 | 0 | 0 | 14.0 | spend | design-review | 224204 |
 
-**Total:** +1170 / -1 lines, 312.0 agent-minutes, 919711 tokens over 6 records
-<!-- totals: added=1170 removed=1 minutes=312.0 records=6 tokens=919711 -->
+**Total:** +1170 / -1 lines, 326.0 agent-minutes, 1143915 tokens over 7 records
+<!-- totals: added=1170 removed=1 minutes=326.0 records=7 tokens=1143915 -->
