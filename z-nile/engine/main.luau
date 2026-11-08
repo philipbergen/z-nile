@@ -18,6 +18,7 @@ local projects = require("./projects")
 local publish = require("./publish")
 local raftcheck = require("./raftcheck")
 local raftplan = require("./raftplan")
+local provenance = require("./provenance")
 local reapLib = require("./reap")
 local sh = require("../lib/sh")
 local skillsLib = require("./skills")
@@ -78,6 +79,8 @@ usage: ./zn <command> ...
          [--model <id>]                         stage all, record spend, commit, push
   spend <id> --phase capture|prep|design-review|deliver --time <minutes> [--tokens <n>] [--model <id>]
          [--note <text>]                        append one phase's rows to origin/main; changes nothing here
+  record <id> unblocked|confirmed|ranked [--actor <actor>] [--detail <k=v>]
+                                                append one row to the item's provenance.md on origin/main (c0263)
   dispatch <id> [--dry-run]                     run the chain on an item from its tracker state (ticket, design, raft,
                                                 ready, run), stopping at a merge gate, questions.md or a failure
   dispatch new "<description>" [--project <name>] [--dry-run]
@@ -327,16 +330,76 @@ local function docPath(paths: { string }, id: string): string?
 	return nil
 end
 
+-- c0263: a merge of `ref` into this worktree in which a conflict confined to `provenance.md` files is resolved by
+-- `provenance.union` of the stage-1/2/3 blobs, and any other conflict aborts the merge (no MERGE_HEAD, the tree as it
+-- was). A record added in an item folder that `ref` moved (`ready` to active/, `done` to done/) is git's
+-- `CONFLICT (file location)`: `merge.directoryRenames=true` makes git move it with the folder, so it meets the other
+-- side's record at the new path as one add/add content conflict, which the union finishes. Returns the failure text.
+local function mergeRef(ref: string): (boolean, string)
+	local r = sh.run("git", { "-c", "merge.directoryRenames=true", "merge", "--no-edit", ref })
+	if r.ok then
+		return true, ""
+	end
+	local listed = sh.run("git", { "diff", "--name-only", "--diff-filter=U" }).stdout
+	local files: { string } = {}
+	local other = false
+	for f in string.gmatch(listed, "[^\n]+") do
+		if string.match(f, "/provenance%.md$") then
+			table.insert(files, f)
+		else
+			other = true
+		end
+	end
+	if other or #files == 0 then
+		sh.run("git", { "merge", "--abort" })
+		return false, r.stderr .. r.stdout
+	end
+	for _, f in files do
+		local function stage(n: number): string?
+			local shown = sh.run("git", { "show", `:{n}:{f}` })
+			return if shown.ok then shown.stdout else nil
+		end
+		local ours, theirs = stage(2), stage(3)
+		if not ours or not theirs or not provenance.parse(ours) or not provenance.parse(theirs) then
+			sh.run("git", { "merge", "--abort" })
+			return false, `{f}: a side of the merge is not a valid record (or was deleted)\n{r.stderr}{r.stdout}`
+		end
+		fs.writeFile(f, provenance.union(stage(1), ours, theirs))
+		sh.must("git", { "add", f })
+	end
+	local c = sh.run("git", { "commit", "--no-edit", "-q" })
+	if not c.ok then
+		sh.run("git", { "merge", "--abort" })
+		return false, c.stderr .. c.stdout
+	end
+	return true, ""
+end
+
 -- Brings what was just published into this worktree. A conflicting merge is aborted, so the tree is
 -- left as it was and `./zn sync` can be run again after resolving by hand.
 local function mergeOrigin()
-	local r = sh.run("git", { "merge", "--no-edit", "origin/main" })
-	if not r.ok then
-		sh.run("git", { "merge", "--abort" })
+	local ok, why = mergeRef("origin/main")
+	if not ok then
 		fail(
-			`published, but merging origin/main failed (merge aborted): {r.stderr}{r.stdout}\nresolve it with: git merge origin/main`
+			`published, but merging origin/main failed (merge aborted): {why}\nresolve it with: git merge origin/main`
 		)
 	end
+end
+
+-- The live actor of a command that records: --actor, then ZN_ACTOR, then an agent-session hint, then the git name.
+local function liveActor(opts: { [string]: { string } }?): string
+	local flagList = if opts then opts["--actor"] else nil
+	local ident = sh.run("git", { "var", "GIT_AUTHOR_IDENT" })
+	local name = if ident.ok then string.match(ident.stdout, "^(.-) <") else nil
+	local hint = {
+		agent = (process.env.CLAUDECODE or "") ~= "" or (process.env.AI_AGENT or "") ~= "",
+		effort = process.env.CLAUDE_EFFORT,
+	}
+	local actor, why = provenance.resolve(if flagList then flagList[1] else nil, process.env.ZN_ACTOR, hint, name)
+	if not actor then
+		fail(why or "not an actor")
+	end
+	return actor :: string
 end
 
 -- Real entropy, folded into 31 bits: Lune's math.randomseed saturates larger seeds, so seeding with
@@ -1654,10 +1717,9 @@ local function raftingStart(what: string)
 		fail(`working tree is not clean: commit first ({what} merges origin/main before and after it claims)`)
 	end
 	refuseStale()
-	local r = sh.run("git", { "merge", "--no-edit", "origin/main" })
-	if not r.ok then
-		sh.run("git", { "merge", "--abort" })
-		fail(`{what}: merging origin/main failed (merge aborted): {r.stderr}{r.stdout}`)
+	local ok, why = mergeRef("origin/main")
+	if not ok then
+		fail(`{what}: merging origin/main failed (merge aborted): {why}`)
 	end
 end
 
@@ -2287,11 +2349,10 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 		-- one origin/main per try: the merge, the scope, the commit's parent and the race test all name this sha, so
 		-- a push elsewhere during the gate (or a later fetch) can never become the parent of a tree it isn't in
 		local base = sh.git({ "rev-parse", "--verify", "origin/main^{commit}" })
-		local merged = sh.run("git", { "merge", "--no-edit", base })
-		if not merged.ok then
-			sh.run("git", { "merge", "--abort" })
+		local merged, why = mergeRef(base)
+		if not merged then
 			fail(
-				`merging origin/main failed (merge aborted): {merged.stderr}{merged.stdout}\nresolve it with: git merge origin/main, then run land again`
+				`merging origin/main failed (merge aborted): {why}\nresolve it with: git merge origin/main, then run land again`
 			)
 		end
 		refuseStale()
@@ -5019,6 +5080,45 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
 		`metrics: {issue.id} spend.md on origin/main and in the working tree have diverged; skipped\n`
 	)
 	return nil
+end
+
+-- c0263: `record <id> <event> [--actor A] [--detail k=v]` publishes one row of an item's provenance.md for the
+-- events other tickets call (unblocked, confirmed, ranked), built from origin/main's file. An active item takes
+-- unblocked only (the validator).
+function cmd.record(pos: { string }, opts: { [string]: { string } })
+	refuseInMainCheckout("record")
+	if not publishing() then
+		fail("record needs an origin remote (PICKMAN_PUBLISH=0 disables it)")
+	end
+	local id, event = pos[1], pos[2]
+	if not id or not event or not (store.isIssueId(id) or store.isRaftId(id)) then
+		fail(`usage: record <id> <{table.concat(provenance.PUBLISHED, "|")}> [--actor <actor>] [--detail <k=v>]`)
+	end
+	if not table.find(provenance.PUBLISHED, event) then
+		fail(`record publishes {table.concat(provenance.PUBLISHED, ", ")} only, not {event}: the other events are written by their own commands`)
+	end
+	local actor = liveActor(opts)
+	local detail = if opts["--detail"] then opts["--detail"][1] else ""
+	local when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string
+	refuseStale()
+	local r = published(publish.commit(".", function(paths, read)
+		local doc = docPath(paths, id)
+		if not doc then
+			return `{id} is not on origin/main`
+		end
+		local rec = string.gsub(doc, "[^/]+$", "provenance.md")
+		local text, why = provenance.record(read(rec), id, event, actor, detail, when)
+		if not text then
+			return why or "not a record"
+		end
+		return { { path = rec, content = text } }
+	end, function()
+		return `tracker: {id} record {event}`
+	end))
+	if not r.ok then
+		fail(r.reason or "publish failed")
+	end
+	mergeOrigin()
 end
 
 function cmd.spend(pos: { string }, opts: { [string]: { string } })
