@@ -1,127 +1,107 @@
 --!strict
--- c0260 AC4: the review record of an issue's capture/ folder, judged by capturecheck over
--- texts. One valid folder, then one case per rule with the plausible wrong folder that rule must refuse.
+-- c0260 AC4: the idea review's record in the issue document: each raw review has its `### Round N` block with every
+-- finding answered, and the Confirmation (or the unattended pair of lines) names the last round. judged by
+-- capturecheck over texts.
 local capturecheck = require("@znile/engine/capturecheck")
 local t = require("@tests/lib/t")
 
-local ASK = [[
-# Ask for c0900
-
-## Verbatim ask
-make the ghosts scarrier, thx
-
-## Interview
-### Q1
-Question: Scarier how: look, sound or speed?
-Options: look | sound | speed | free text
-Answer: sound, mostly. Maybe look too
-
-### Q2
-Question: Which ghost?
-Options: all | Blinky | free text
-Answer: all of them
-
-## Confirmation
-Confirmed (user, 2026-11-07) after idea-review-002: "yes, that is it"
-]]
-
-local REVIEW =
-	"# Review 001: c0900 (idea mode)\nInputs: ask.md\n\n### F1 [high] a claim\nWhere: Problem\n\n### F2 [low] another\n"
-local REFUTE = "- F1: fixed: the Problem now says sound\n- F2: refuted: the ask says all of them\n"
-
-local function folder(): { [string]: string }
-	return {
-		["idea-review-001.md"] = REVIEW,
-		["idea-refute-001.md"] = REFUTE,
-		["idea-review-002.md"] = "# Review 002: c0900 (idea mode)\n\nVerdict: approve\n",
-		["idea-refute-002.md"] = "",
-	}
+local function doc(interview: string, confirmation: string, answers: string?): string
+	return table.concat({
+		"---\nid: c0900\n---\n\n## Problem\nP\n\n## Ask (verbatim)\n### Message 2026-11-07\n```\nmore ghosts\n```\n",
+		"\n## Interview\n" .. interview .. "\n",
+		"\n## Idea\nMore ghosts.\n\n## Idea review\n### Round 1\n" .. (answers or "- F1: fixed: x\n- F2: refuted: y\n"),
+		"\n## Confirmation\n" .. confirmation .. "\n\n## Design\n",
+	})
 end
-
-local function problems(ask: string, files: { [string]: string }?): string
-	return table.concat(capturecheck.check(ask, files or folder()), "\n")
+local Q = "### Q1\nQuestion: how many?\nOptions: 1 | 2\nAnswer: 2\n"
+local NONE = "None: unattended, nobody could be asked\n"
+local CONFIRMED = 'Confirmed (user, 2026-11-07) after round 1: "yes"'
+local UNCONFIRMED = "Unconfirmed (unattended, 2026-11-07) after round 1: the dispatch was started with this ask"
+local REVIEWS = { ["idea-review-001.md"] = "# R\n\n### F1 [high] a\n\n### F2 [low] b\n" }
+local function problems(d: string, reviews: { [string]: string }?): string
+	return table.concat(capturecheck.check(d, reviews or REVIEWS), "\n")
 end
 local function has(text: string, part: string): boolean
 	return string.find(text, part, 1, true) ~= nil
 end
--- `ask` with `from` replaced by `to` once; errors when `from` is not in it, so a case cannot silently test nothing
-local function swap(from: string, to: string): string
-	local a, b = string.find(ASK, from, 1, true)
-	if not a then
-		error(`ASK has no {from}`, 0)
-	end
-	return string.sub(ASK, 1, a - 1) .. to .. string.sub(ASK, (b :: number) + 1)
-end
 
-return t.spec("c0260 the capture folder's review record", function(it)
-	it("AC4: every review round has its refute file and every finding an answer of the three kinds", function()
-		local files = folder()
-		files["idea-refute-001.md"] = "- F1: fixed: the Problem now says sound\n"
-		t.expect(has(problems(ASK, files), "finding F2 of idea-review-001.md has no answer line")).toBe(true)
-		files = folder()
-		files["idea-refute-001.md"] = nil
-		t.expect(has(problems(ASK, files), "idea-refute-001.md is missing")).toBe(true)
-		files = folder()
-		files["idea-refute-001.md"] = "- F1: fixed: x\n- F2: maybe: y\n"
-		t.expect(has(problems(ASK, files), 'answered "maybe"')).toBe(true)
-		files = folder()
-		files["idea-refute-001.md"] = "- F1: fixed: x\n- F2: refuted: y\n- F3: fixed: z\n"
-		t.expect(has(problems(ASK, files), "answers F3, which idea-review-001.md does not have")).toBe(true)
-		files = folder()
-		files["idea-refute-001.md"] = "- F1: fixed:\n- F2: ask: which sound?\n"
-		t.expect(has(problems(ASK, files), "F1 has an empty answer")).toBe(true)
-		t.expect(has(problems(ASK, files), "F2")).toBe(false)
+return t.spec("c0260 the idea review's record", function(it)
+	it("AC4: a reviewed idea confirmed by the user passes", function()
+		t.expect(problems(doc(Q, CONFIRMED))).toBe("")
 	end)
 
-	it("AC4: a capture with no idea review, or a gap in the rounds, is refused", function()
-		t.expect(has(problems(ASK, {}), "the idea was never reviewed")).toBe(true)
-		local files = folder()
-		files["idea-review-001.md"] = nil
-		files["idea-refute-001.md"] = nil
-		t.expect(has(problems(ASK, files), "idea-review-001.md is missing")).toBe(true)
+	it("AC4: every raw review has its Round block and every finding an answer of the three kinds", function()
+		t.expect(
+			has(problems(doc(Q, CONFIRMED, "- F1: fixed: x\n")), "finding F2 of idea-review-001.md has no answer line")
+		)
+			.toBe(true)
+		t.expect(has(problems(doc(Q, CONFIRMED, "- F1: fixed: x\n- F2: maybe: y\n")), 'answered "maybe"')).toBe(true)
+		t.expect(has(problems(doc(Q, CONFIRMED, "- F1: fixed: x\n- F2: refuted: y\n- F3: fixed: z\n")), "answers F3"))
+			.toBe(true)
+		t.expect(has(problems(doc(Q, CONFIRMED, "- F1: fixed:\n- F2: refuted: y\n")), "F1 has an empty answer"))
+			.toBe(true)
+		local two = { ["idea-review-001.md"] = REVIEWS["idea-review-001.md"], ["idea-review-002.md"] = "# R2\n" }
+		t.expect(has(problems(doc(Q, CONFIRMED), two), 'no "### Round 2" block')).toBe(true)
 	end)
 
-	it("AC4: the confirmation is one line of the exact form that names the last review round", function()
+	it("AC4: an idea that was never reviewed, or a gap in the rounds, is refused", function()
+		t.expect(has(problems(doc(Q, CONFIRMED), {}), "the idea was never reviewed")).toBe(true)
 		t.expect(
-			has(
-				problems(swap("after idea-review-002", "after idea-review-001")),
-				"but the last round is idea-review-002"
-			)
+			has(problems(doc(Q, CONFIRMED), { ["idea-review-002.md"] = "# R\n" }), "idea-review-001.md is missing")
 		)
 			.toBe(true)
-		t.expect(has(problems(swap("Confirmed (user,", "Confirmed (bot,")), "Confirmation must read")).toBe(true)
-		t.expect(has(problems(swap('"yes, that is it"', "")), "Confirmation must read")).toBe(true)
-		t.expect(has(problems(swap("2026-11-07", "7 Nov")), "Confirmation must read")).toBe(true)
-		t.expect(
-			has(problems(swap("\n## Confirmation\n", "\n## Confirmation\nthe user said yes\n")), "must be one line")
-		)
+	end)
+
+	it("AC4: the confirmation names the last review round, and is in the exact form", function()
+		t.expect(has(problems(doc(Q, 'Confirmed (user, 2026-11-07) after round 2: "yes"')), "but the last round is 1"))
 			.toBe(true)
-		t.expect(has(problems(swap("\n## Confirmation\n", "\n## Confirmation\n\n")), "must be one line")).toBe(false) -- blank lines are fine
+		t.expect(has(problems(doc(Q, 'Confirmed (user, 7 Nov) after round 1: "yes"')), "Confirmation lines read"))
+			.toBe(true)
+		t.expect(has(problems(doc(Q, "the user said yes")), "Confirmation lines read")).toBe(true)
+		t.expect(has(problems(doc(Q, "")), "holds one line")).toBe(true)
 	end)
 
 	it(
-		"AC4: an `ask:` answer is kept only while the confirmation is unattended; once the user answered it, it is rewritten",
+		"AC4: a dispatched capture ends Unconfirmed (unattended) and may be confirmed later by a distinct line",
 		function()
-			local files = folder()
-			files["idea-refute-001.md"] = "- F1: ask: which sound?\n- F2: refuted: y\n"
-			t.expect(has(problems(ASK, files), "answer is open")).toBe(true)
-			local unattended = string.gsub(ASK, "### Q1.-\n## Confirmation", "None: unattended\n\n## Confirmation")
-			unattended = string.gsub(
-				unattended,
-				'Confirmed %(user, 2026%-11%-07%) after idea%-review%-002: "yes, that is it"',
-				"Confirmed (unattended, 2026-11-07) after idea-review-002: started by the user"
-			)
-			t.expect(problems(unattended, files)).toBe("")
-			files["idea-refute-001.md"] = "- F1: fixed: asked as Q1\n- F2: refuted: y\n"
-			t.expect(problems(ASK, files)).toBe("")
+			t.expect(problems(doc(NONE, UNCONFIRMED))).toBe("")
+			t.expect(problems(doc(NONE .. Q, UNCONFIRMED .. "\n" .. CONFIRMED))).toBe("")
+			t.expect(capturecheck.unconfirmed(doc(NONE, UNCONFIRMED))).toBe(true)
+			t.expect(capturecheck.unconfirmed(doc(NONE .. Q, UNCONFIRMED .. "\n" .. CONFIRMED))).toBe(false)
 		end
 	)
 
-	it("AC4: a refute that answers a finding the review lacks, or leaves an answer empty, is refused", function()
-		local files = folder()
-		files["idea-refute-001.md"] = "- F1: fixed: x\n- F2: refuted: y\n- F3: fixed: z\n"
-		t.expect(has(problems(ASK, files), "answers F3")).toBe(true)
-		files["idea-refute-001.md"] = "- F1: fixed:\n- F2: refuted: y\n"
-		t.expect(has(problems(ASK, files), "F1 has an empty answer")).toBe(true)
+	it("AC4: the unattended and user forms cannot be mixed", function()
+		t.expect(has(problems(doc(Q, UNCONFIRMED)), "needs the Interview to begin `None: unattended`")).toBe(true)
+		t.expect(
+			has(problems(doc(NONE, "Confirmed (unattended, 2026-11-07) after round 1: ok")), "cannot be unattended")
+		)
+			.toBe(true)
+		t.expect(has(problems(doc(NONE, CONFIRMED)), "nobody was asked")).toBe(true)
+		t.expect(has(problems(doc(NONE .. Q, CONFIRMED .. "\n" .. UNCONFIRMED)), "comes first")).toBe(true)
+		t.expect(has(problems(doc(NONE .. Q, UNCONFIRMED .. "\n" .. UNCONFIRMED)), "Confirmed")).toBe(true)
+	end)
+
+	it(
+		"AC4: an `ask:` answer stays only while Unconfirmed; once confirmed it is rewritten as asked-as-Qn of an existing Q",
+		function()
+			local ask = "- F1: ask: which sound?\n- F2: refuted: y\n"
+			t.expect(problems(doc(NONE, UNCONFIRMED, ask))).toBe("")
+			t.expect(has(problems(doc(NONE .. Q, UNCONFIRMED .. "\n" .. CONFIRMED, ask)), "answer is open")).toBe(true)
+			local fixed = "- F1: fixed: asked as Q1\n- F2: refuted: y\n"
+			t.expect(problems(doc(NONE .. Q, UNCONFIRMED .. "\n" .. CONFIRMED, fixed))).toBe("")
+			local missing = "- F1: fixed: asked as Q9\n- F2: refuted: y\n"
+			t.expect(has(problems(doc(NONE .. Q, UNCONFIRMED .. "\n" .. CONFIRMED, missing)), "no Q9")).toBe(true)
+		end
+	)
+
+	it("AC4: the verbatim ask only grows: messages may be appended, nothing already there may change", function()
+		local old = doc(Q, CONFIRMED)
+		local appended =
+			string.gsub(old, "more ghosts\n```\n", "more ghosts\n```\n### Message 2026-11-08\n```\nand a map\n```\n", 1)
+		t.expect(capturecheck.askOnlyGrows(old, appended)).toBe(true)
+		t.expect(capturecheck.askOnlyGrows(old, old)).toBe(true)
+		t.expect(capturecheck.askOnlyGrows(old, (string.gsub(old, "more ghosts", "fewer ghosts")))).toBe(false)
+		t.expect(capturecheck.askOnlyGrows("## Problem\nold\n", old)).toBe(true) -- no ask before: any is fine
 	end)
 end)

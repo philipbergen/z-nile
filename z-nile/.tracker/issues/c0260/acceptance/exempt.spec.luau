@@ -1,0 +1,58 @@
+--!strict
+-- c0260 AC9: a ticket an agent filed from its own finding is exempt from the user's capture record, by a marker the
+-- check reads (`## Filed by (agent)` with a Source line and a Scope decision line in the Problem); a ticket that has
+-- a user ask cannot claim the exemption. capturecheck over texts.
+local capturecheck = require("@znile/engine/capturecheck")
+local t = require("@tests/lib/t")
+
+local SCOPE =
+	"Scope decision (user, 2026-11-08): agent-filed tickets are exempt from the ask, interview, idea review and confirmation (c0260)\n"
+local function agent(problem: string?, filed: string?, extra: string?): string
+	return table.concat({
+		"---\nid: c0901\n---\n\n## Problem\n" .. (problem or ("A lesson.\n" .. SCOPE)) .. "\n",
+		"## Filed by (agent)\n" .. (filed or "Source: design-review-002 F4 of c0260\n") .. "\n",
+		extra or "",
+		"## Design\n",
+	})
+end
+local function problems(d: string): string
+	return table.concat(capturecheck.check(d, {}), "\n")
+end
+local function has(text: string, part: string): boolean
+	return string.find(text, part, 1, true) ~= nil
+end
+
+return t.spec("c0260 an agent-filed ticket is exempt, and only that", function(it)
+	it(
+		"AC9: a ticket filed by an agent with a source and a scope decision passes, and is recognised as agent",
+		function()
+			t.expect(problems(agent())).toBe("")
+			t.expect(capturecheck.kind(agent())).toBe("agent")
+		end
+	)
+
+	it("AC9: the marker needs a Source line and the Scope decision line", function()
+		t.expect(has(problems(agent(nil, "no source here\n")), "needs a `Source:")).toBe(true)
+		t.expect(has(problems(agent("A lesson.\n")), "Scope decision (user, YYYY-MM-DD)")).toBe(true)
+		t.expect(has(problems(agent("A lesson.\nScope decision: yes\n")), "Scope decision (user, YYYY-MM-DD)"))
+			.toBe(true)
+	end)
+
+	it("AC9: a ticket that has a user ask (or any capture section) cannot also claim the exemption", function()
+		for _, section in
+			{
+				"## Ask (verbatim)\n### Message 2026-11-07\n```\nhi\n```\n\n",
+				"## Interview\nNone: x\n\n",
+				"## Idea\nx\n\n",
+				"## Confirmation\nx\n\n",
+			}
+		do
+			t.expect(has(problems(agent(nil, nil, section)), "cannot also carry a user's capture record")).toBe(true)
+		end
+	end)
+
+	it("AC9: free text in the Problem is not the marker", function()
+		local text = "---\nid: c0902\n---\n\n## Problem\nFiled by an agent from a review. " .. SCOPE .. "\n"
+		t.expect(capturecheck.kind(text)).toBe("none")
+	end)
+end)

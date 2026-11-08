@@ -1,7 +1,7 @@
 --!strict
--- c0260: `./zn audit` checks an issue's capture/ folder with capturecheck, reads only the folder it is told (an issue
--- with no capture/ is not checked: every issue before c0260), and names the folder in each problem it reports.
--- Fixture under this home's .cache/c0260-audit.
+-- c0260 AC3: `./zn audit` checks an issue's capture record with capturecheck (the sections of its document and the raw
+-- reviews in capture/), checks none where an issue has no capture section (every issue before c0260), ignores a hidden
+-- file, and refuses a designed issue that is still Unconfirmed (unattended). Fixture under .cache/c0260-audit.
 local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -10,11 +10,18 @@ local t = require("@tests/lib/t")
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
 local base = `{here}/.cache/c0260-audit`
-
-local ASK = "# Ask for c0900\n\n## Verbatim ask\nmore ghosts\n\n## Interview\nNone: the ask was complete\n\n## Confirmation\n"
-	.. 'Confirmed (user, 2026-11-07) after idea-review-001: "yes"\n'
 local ITEM = "pickman/.tracker/issues/c0900"
 
+local function front(design: string): string
+	return `---\nid: c0900\ntype: chore\ntitle: C\nslug: c\ndesign: {design}\nstatus: new-a-b-c\n---\n\n# c0900: C\n\n## Problem\nP\n\n`
+end
+local RECORD = "## Ask (verbatim)\n### Message 2026-11-07\n```\nmore ghosts\n```\n\n## Interview\nINTERVIEW\n\n## Idea\nMore ghosts.\n\n"
+	.. "## Idea review\n### Round 1\n- F1: ask: how many?\n\n## Confirmation\nCONFIRMATION\n\n## Design\n"
+local CONFIRMED = 'Confirmed (user, 2026-11-07) after round 1: "yes"'
+local UNCONFIRMED = "Unconfirmed (unattended, 2026-11-07) after round 1: the dispatch was started with this ask"
+local function record(interview: string, confirmation: string): string
+	return (string.gsub(string.gsub(RECORD, "INTERVIEW", interview), "CONFIRMATION", confirmation))
+end
 local function write(rel: string, text: string)
 	fs.writeDir(string.match(`{base}/{rel}`, "^(.*)/[^/]+$") :: string)
 	fs.writeFile(`{base}/{rel}`, text)
@@ -38,78 +45,58 @@ end
 local function has(text: string, part: string): boolean
 	return string.find(text, part, 1, true) ~= nil
 end
+local REVIEW = "# Review 001\n\n### F1 [low] x\n"
 
-return t.spec("c0260 audit checks the capture folder", function(it)
-	it("an issue with no capture/ folder is not checked, and a complete one passes", function()
+return t.spec("c0260 audit checks the capture record", function(it)
+	it("an issue with no capture section is not checked, and a complete record passes", function()
 		if fs.isDir(base) then
 			fs.removeDir(base)
 		end
 		fs.writeDir(base)
 		engine.copy(root, base)
 		engine.roots(base)
-		write(
-			`{ITEM}/c0900.md`,
-			"---\nid: c0900\ntype: chore\ntitle: C\nslug: c\ndesign: draft\nstatus: new-a-b-c\n---\n"
-		)
+		write(`{ITEM}/c0900.md`, front("draft") .. "## Design\n")
 		t.expect(captureLines(audit())).toBe("")
-		write(`{ITEM}/capture/ask.md`, ASK)
-		write(`{ITEM}/capture/idea-review-001.md`, "# Review 001\n\nVerdict: approve\n")
-		write(`{ITEM}/capture/idea-refute-001.md`, "")
+		write(`{ITEM}/c0900.md`, front("draft") .. record("None: unattended, nobody could be asked", UNCONFIRMED))
+		write(`{ITEM}/capture/idea-review-001.md`, REVIEW)
 		t.expect(captureLines(audit())).toBe("")
 	end)
 
-	it("a malformed ask.md is an error at the item's capture folder, and the audit counts it", function()
+	it("a malformed record is an error at the document, and the audit counts it", function()
 		local before = errors(audit())
-		write(`{ITEM}/capture/ask.md`, (string.gsub(ASK, "more ghosts", "")))
+		write(`{ITEM}/c0900.md`, front("draft") .. record("None:", UNCONFIRMED))
 		local out = audit()
-		t.expect(has(captureLines(out), "error capture")).toBe(true)
-		t.expect(has(captureLines(out), "Verbatim ask is empty")).toBe(true)
-		t.expect(errors(out)).toBe(before + 1) -- exactly one more: this problem
-		write(`{ITEM}/capture/ask.md`, ASK)
+		t.expect(has(captureLines(out), "needs the reason")).toBe(true)
+		t.expect(errors(out) > before).toBe(true)
 	end)
 
-	it("a capture/ with no ask.md, or with a file that is not a capture file, is an error", function()
-		fs.removeFile(`{base}/{ITEM}/capture/ask.md`)
-		t.expect(has(captureLines(audit()), "capture/ has no ask.md")).toBe(true)
-		write(`{ITEM}/capture/ask.md`, ASK)
+	it("a file in capture/ that is not a raw idea review is an error; a hidden file is not", function()
+		write(`{ITEM}/c0900.md`, front("draft") .. record("None: unattended, nobody could be asked", UNCONFIRMED))
+		write(`{ITEM}/capture/.DS_Store`, "junk")
+		t.expect(captureLines(audit())).toBe("")
 		write(`{ITEM}/capture/notes.md`, "mine\n")
 		t.expect(has(captureLines(audit()), "notes.md is not a capture file")).toBe(true)
 		fs.removeFile(`{base}/{ITEM}/capture/notes.md`)
 		t.expect(captureLines(audit())).toBe("")
 	end)
 
-	it("a review round the confirmation does not name is an error", function()
-		write(`{ITEM}/capture/idea-review-002.md`, "# Review 002\n")
-		write(`{ITEM}/capture/idea-refute-002.md`, "")
-		t.expect(has(captureLines(audit()), "but the last round is idea-review-002")).toBe(true)
-		fs.removeFile(`{base}/{ITEM}/capture/idea-review-002.md`)
-		fs.removeFile(`{base}/{ITEM}/capture/idea-refute-002.md`)
-	end)
-
-	it(
-		"a hidden file (a Finder's .DS_Store) is no capture file; a designed issue that is still unattended is an error",
-		function()
-			write(`{ITEM}/capture/.DS_Store`, "junk")
-			t.expect(captureLines(audit())).toBe("")
-			fs.removeFile(`{base}/{ITEM}/capture/.DS_Store`)
-			write(`{ITEM}/capture/idea-review-002.md`, "# Review 002\n")
-			write(`{ITEM}/capture/idea-refute-002.md`, "")
-			local unattended = (string.gsub(ASK, "None: the ask was complete", "None: unattended"))
-			unattended = (
+	it("a designed issue whose last confirmation is still Unconfirmed is an error until the user confirms", function()
+		local unattended = front("reviewed") .. record("None: unattended, nobody could be asked", UNCONFIRMED)
+		write(`{ITEM}/c0900.md`, unattended)
+		t.expect(has(captureLines(audit()), "still Unconfirmed")).toBe(true)
+		local confirmed = front("reviewed")
+			.. (
 				string.gsub(
-					unattended,
-					'Confirmed %(user, 2026%-11%-07%) after idea%-review%-001: "yes"',
-					"Confirmed (unattended, 2026-11-07) after idea-review-002: started by the user"
+					record(
+						"None: unattended, nobody could be asked\n### Q1\nQuestion: how many?\nOptions: 1 | 2\nAnswer: 2",
+						UNCONFIRMED .. "\n" .. CONFIRMED
+					),
+					"%- F1: ask: how many%?",
+					"- F1: fixed: asked as Q1"
 				)
 			)
-			write(`{ITEM}/capture/ask.md`, unattended)
-			t.expect(captureLines(audit())).toBe("") -- a draft may be unattended
-			write(
-				`{ITEM}/c0900.md`,
-				"---\nid: c0900\ntype: chore\ntitle: C\nslug: c\ndesign: ready\nstatus: prepared-a-b-c\n---\n"
-			)
-			t.expect(has(captureLines(audit()), "still unattended")).toBe(true)
-			fs.removeDir(base)
-		end
-	)
+		write(`{ITEM}/c0900.md`, confirmed)
+		t.expect(captureLines(audit())).toBe("")
+		fs.removeDir(base)
+	end)
 end)

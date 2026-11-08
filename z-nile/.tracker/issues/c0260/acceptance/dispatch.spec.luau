@@ -23,6 +23,19 @@ rank = 4
 runtime = "claude-cli"
 max_tokens = 5000
 
+[z-ticket-review.claude]
+model = "fake-ticket-review-model"
+rank = 4
+runtime = "claude-cli"
+max_tokens = 5000
+
+[z-ticket-review.grok]
+model = "fake-grok-ticket-review"
+effort = "high"
+rank = 4
+runtime = "grok-cli"
+max_tokens = 5000
+
 [zz-review.grok]
 model = "grok-4.7"
 effort = "xhigh"
@@ -79,6 +92,7 @@ return t.spec("c0260 the idea review is a dispatched review mode", function(it)
 			local m = dispatch.REVIEW_MODES.idea
 			t.expect(m ~= nil and m.phase or "").toBe("capture")
 			t.expect(m ~= nil and m.lessons or "").toBe("design")
+			t.expect(m ~= nil and m.activity or "").toBe("z-ticket-review") -- the model comes from the activity's table
 			t.expect(dispatch.phaseOf("zz-review", "idea")).toBe("capture")
 			t.expect(dispatch.phaseOf("zz-review", "design")).toBe("design-review") -- the other modes keep their phase
 			local prompt = dispatch.prompt({
@@ -124,7 +138,8 @@ return t.spec("c0260 the idea review is a dispatched review mode", function(it)
 			row = row[#row]
 			t.expect(row.subject).toBe("idea-review-001")
 			t.expect(row.phase).toBe("capture")
-			t.expect(row.model).toBe("claude-opus-5-5")
+			-- the model is the one .models.toml names for the activity z-ticket-review, not zz-review's (no tier asserted)
+			t.expect(row.model).toBe("fake-ticket-review-model")
 			local again = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "idea" })
 			if not again.ok then
 				error(again.stdout .. again.stderr)
@@ -138,6 +153,8 @@ return t.spec("c0260 the idea review is a dispatched review mode", function(it)
 				error(design.stdout .. design.stderr)
 			end
 			t.expect(names(`{wt}/{ISSUE}`, "design-review-")).toEqual({ "design-review-001.md" })
+			local drow = fakecli.rows(h, "c0010") :: any
+			t.expect(drow[#drow].model).toBe("claude-opus-5-5") -- a design review still resolves zz-review's table
 			t.expect(names(`{wt}/{ISSUE}/capture`, "")).toEqual({ "idea-review-001.md", "idea-review-002.md" })
 		end
 	)
