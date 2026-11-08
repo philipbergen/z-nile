@@ -59,4 +59,4 @@
 - design-review-006 F6: z-design/quote-other-preps-before-promising
 - design-review-006 F7: z-design/specify-every-named-artifact
 - design-review-006 F8: z-design/restated-rules-move-together
-- note review 006's candidates: for every refusal case add one where the accepted kind passes through the same command (z-design/spec-design-correspondence); depends_on does not enforce order inside a raft, so an Override of another item's sequestered pin needs that item done first by some other means (z-design/run-the-other-rafts-specs); a marker's grammar is checked by every reader, not only the command that writes it (z-design/exemption-markers-refuse-omission)
+- note review 006's candidates (a positive case beside every refusal; depends_on does not order work inside a raft; every reader checks a marker's grammar): z-design/spec-design-correspondence, z-design/run-the-other-rafts-specs, z-design/exemption-markers-refuse-omission
