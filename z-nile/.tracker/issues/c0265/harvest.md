@@ -116,3 +116,10 @@
 - design-review-013 F9: zz-test/stand-ins-answer-only-named-arguments
 - design-review-013 F10: z-design/restated-rules-move-together
 - design-review-013 F11: z-design/accepted-risks-checked-and-decided
+- design-review-014 F1: zz-arch/automatic-effects-have-an-end-and-a-subject-check, z-design/liveness-names-held-not-worked-states
+- design-review-014 F2: z-design/spec-design-correspondence
+- design-review-014 F3: z-design/required-steps-on-every-path
+- design-review-014 F4: zz-arch/automatic-effects-have-an-end-and-a-subject-check
+- design-review-014 F5: z-design/restated-rules-move-together
+- design-review-014 F6: z-design/reasoned-rows-claim-testable-reasons
+- design-review-014 F7: one-off: small wording and edge gaps listed in the review
