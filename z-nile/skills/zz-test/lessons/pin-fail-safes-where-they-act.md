@@ -13,3 +13,5 @@ A pure rule can say "unknown means hold", while the function that feeds it turns
 R0047 design review 005 F2: the same two fail-safes were applied again in the takeover's owner check (`ownerHolds`), and there neither had a case: a live waiter's takeover could be removed.
 
 Every entry point, not just the first (R0052 code review 001 F2): the start-of-run guards ran in `dispatch <id>` but not in `dispatch retry`, the command every stop message tells the user to run. List every entry point that starts the guarded work and pin the guard in each with a case.
+
+Note (c0246 round 8 review): a "the tool refused" branch keyed on a non-zero exit also catches "the tool could not run" when it is reached through a shim (rokit exits 1 when the pinned version is missing). Check: does the failure branch tell refusal from absence (a `--version` probe), and is it pinned by a stub on `PATH` in a child process?
