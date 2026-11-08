@@ -26,8 +26,8 @@ local skillsLib = require("./skills")
 local spend = require("./spend")
 local statusLib = require("./status")
 local stdio = require("@lune/stdio")
-local task = require("@lune/task")
 local store = require("./store")
+local task = require("@lune/task")
 local trailLib = require("./trail")
 
 -- a space name as the union ids expects: the callers only ever hold "issue" or "raft"
@@ -1417,9 +1417,20 @@ end
 
 -- A network call of the heartbeat, bounded: it runs in a process group of its own that is killed after ZN_NET_SECONDS
 -- (spec runs only; 10 s otherwise), which counts as unreadable. Always `<cmd> <subcommand> ...` from the checkout.
-local BOUND = [[use POSIX ":sys_wait_h"; my $n = shift; my $pid = fork(); if (!$pid) { setpgrp(0,0); exec(@ARGV) or exit 127 } my $t = time + $n; while (1) { my $k = waitpid($pid, WNOHANG); if ($k == $pid) { exit($? & 127 ? 128 + ($? & 127) : $? >> 8) } if (time >= $t) { kill "KILL", -$pid; waitpid($pid, 0); exit 124 } select(undef, undef, undef, 0.05) }]]
+local BOUND =
+	[[use POSIX ":sys_wait_h"; my $n = shift; my $pid = fork(); if (!$pid) { setpgrp(0,0); exec(@ARGV) or exit 127 } my $t = time + $n; while (1) { my $k = waitpid($pid, WNOHANG); if ($k == $pid) { exit($? & 127 ? 128 + ($? & 127) : $? >> 8) } if (time >= $t) { kill "KILL", -$pid; waitpid($pid, 0); exit 124 } select(undef, undef, undef, 0.05) }]]
+-- Whether this process runs inside a spec or a fenced check (the guards' answer, asked once): the only runs that honour
+-- ZN_NOW, ZN_BEAT_EVERY and ZN_NET_SECONDS.
+local specRunCache: boolean? = nil
+local function specRun(): boolean
+	if specRunCache == nil then
+		specRunCache = checking()
+	end
+	return specRunCache == true
+end
+
 local function netRun(cmdName: string, args: { string }): sh.Result
-	local secs = heartbeat.setting(process.env, "ZN_NET_SECONDS", 10)
+	local secs = heartbeat.setting(process.env, "ZN_NET_SECONDS", 10, specRun())
 	local a = { "-e", BOUND, tostring(secs), cmdName }
 	for _, x in args do
 		table.insert(a, x)
@@ -1432,7 +1443,7 @@ local function netRun(cmdName: string, args: { string }): sh.Result
 end
 
 local function hbNow(): number
-	return heartbeat.clock(process.env, os.time())
+	return heartbeat.clock(process.env, os.time(), specRun())
 end
 
 -- Every heartbeat branch on origin: one fetch into refs/zn/hb-seen, then one listing. Beats, the problems (a branch that
@@ -1442,7 +1453,8 @@ local function readBeats(): ({ heartbeat.Beat }, { string }, string?)
 	if not f.ok then
 		return {}, {}, sh.trim(f.stderr .. f.stdout)
 	end
-	local l = sh.run("git", { "for-each-ref", "--format=%(refname) %(objectname) %(subject)", "refs/zn/hb-seen/" })
+	local l =
+		sh.run("git", { "for-each-ref", "--format=%(refname) %(objectname) %(subject)", "refs/zn/hb-seen/" })
 	if not l.ok then
 		return {}, {}, sh.trim(l.stderr)
 	end
@@ -1450,7 +1462,10 @@ local function readBeats(): ({ heartbeat.Beat }, { string }, string?)
 	for line in string.gmatch(l.stdout, "[^\n]+") do
 		local ref, sha, subject = string.match(line, "^refs/zn/hb%-seen/(%S+) (%x+) ?(.*)$")
 		if ref then
-			table.insert(entries, { ref = heartbeat.PREFIX .. ref, sha = sha, subject = subject })
+			table.insert(
+				entries,
+				{ ref = heartbeat.PREFIX .. ref, sha = sha :: string, subject = subject :: string }
+			)
 		end
 	end
 	local beats, problems = heartbeat.parse(entries)
@@ -1474,7 +1489,7 @@ local function claimsOf(paths: { string }, withSince: boolean): { heartbeat.Clai
 			local front = frontOf(sh.git({ "show", `origin/main:{p}` }))
 			local st = statusLib.effective(front, stateOfPath(p))
 			if (st == "preparing" or st == "active") and statusLib.phrase(front.status) then
-				local stamp = front.status
+				local held = front.status
 				local match = { fid }
 				if store.isRaftId(fid) and front.issues then
 					for m in string.gmatch(front.issues, "%a%d%d%d%d") do
@@ -1485,11 +1500,13 @@ local function claimsOf(paths: { string }, withSince: boolean): { heartbeat.Clai
 				if withSince then
 					local r = sh.run(
 						"git",
-						{ "log", "-1", "--format=%ct", `-Sstatus: {stamp}`, "origin/main", "--", p }
+						{ "log", "-1", "--format=%ct", `-Sstatus: {held}`, "origin/main", "--", p }
 					)
 					since = if r.ok then tonumber(sh.trim(r.stdout)) else nil
 				end
-				table.insert(out, { id = fid, state = st, stamp = stamp, since = since, match = match })
+				local claim: heartbeat.Claim =
+					{ id = fid, state = st, stamp = held, since = since, match = match }
+				table.insert(out, claim)
 			end
 		end
 	end
@@ -1498,11 +1515,14 @@ end
 
 -- The open pull requests (title and head branch), or nil and why. Asked only when some claim is stale.
 local function readPrs(): ({ heartbeat.Pr }?, string?)
-	local r = netRun("gh", { "pr", "list", "--state", "open", "--json", "title,headRefName", "--limit", "200" })
+	local r =
+		netRun("gh", { "pr", "list", "--state", "open", "--json", "title,headRefName", "--limit", "200" })
 	if not r.ok then
 		return nil, sh.trim(r.stderr .. r.stdout)
 	end
-	local ok, data = pcall(serde.decode, "json", r.stdout)
+	local ok, data = pcall(function()
+		return serde.decode("json", r.stdout)
+	end)
 	if not ok or type(data) ~= "table" then
 		return nil, "gh did not answer with a list"
 	end
@@ -1580,7 +1600,7 @@ end
 
 -- Pushes one beat for `stamp`: the plan's branch write (with its lease) and its best-effort deletions. Returns nil when
 -- written (or already newer), else the text to say and whether it means the claim was lost (taken over or ended).
-local function beatOnce(id: string, stamp: string): (string?, boolean)
+local function beatOnce(id: string, held: string): (string?, boolean)
 	for attempt = 1, 2 do
 		-- the beats first, then main: a branch seen was seen before the claimed set was read, so a taker's branch
 		-- (younger than anything read here) is never judged unclaimed
@@ -1594,7 +1614,7 @@ local function beatOnce(id: string, stamp: string): (string?, boolean)
 			claimed[c.stamp] = true
 		end
 		local now = hbNow()
-		local plan = heartbeat.plan(stamp, now, beats, claimed, now)
+		local plan = heartbeat.plan(held, now, beats, claimed, now)
 		for _, d in plan.delete do
 			sh.run("git", { "push", "-q", "origin", `--force-with-lease={d.ref}:{d.lease}`, `:{d.ref}` })
 		end
@@ -1620,12 +1640,13 @@ local function beatOnce(id: string, stamp: string): (string?, boolean)
 			return sh.trim(c.stderr), false
 		end
 		local sha = sh.trim(c.stdout)
-		local r = netRun("git", { "push", "-q", `--force-with-lease={w.ref}:{w.lease}`, "origin", `{sha}:{w.ref}` })
+		local r =
+			netRun("git", { "push", "-q", `--force-with-lease={w.ref}:{w.lease}`, "origin", `{sha}:{w.ref}` })
 		if r.ok then
 			if w.lease == "" then
 				-- create-only: a takeover may have landed between the main read and the branch read
 				local again = claimStampOf(originPaths(), id)
-				if again ~= stamp then
+				if again ~= held then
 					sh.run("git", { "push", "-q", "origin", `--force-with-lease={w.ref}:{sha}`, `:{w.ref}` })
 					return lostText(id, again), true
 				end
@@ -1639,7 +1660,7 @@ local function beatOnce(id: string, stamp: string): (string?, boolean)
 		if err2 then
 			return err2, false
 		end
-		local verdict = heartbeat.rejected(stamp, nowStamp, seen)
+		local verdict = heartbeat.rejected(held, nowStamp, seen)
 		if verdict.action == "lost" then
 			return lostText(id, nowStamp), true
 		end
@@ -1670,11 +1691,11 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 			fail(`beat --watch must run as ./zn run --time 3600 -- ./zn beat {id} --watch`)
 		end
 	end
-	local stamp, why = claimStampOf(originPaths(), id)
-	if not stamp then
+	local current, why = claimStampOf(originPaths(), id)
+	if not current then
 		fail(`beat: {why}`)
 	end
-	local startStamp = stamp :: string
+	local startStamp = current :: string
 	if not watch then
 		local msg, lost = beatOnce(id, startStamp)
 		if msg then
@@ -1682,14 +1703,15 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 		end
 		return
 	end
-	local every = heartbeat.setting(process.env, "ZN_BEAT_EVERY", heartbeat.INTERVAL)
+	local every = heartbeat.setting(process.env, "ZN_BEAT_EVERY", heartbeat.INTERVAL, specRun())
 	while true do
 		local ok, paths = pcall(originPaths)
 		local here: string? = nil
 		if ok then
 			here = claimStampOf(paths :: { string }, id)
 		end
-		local act = heartbeat.watch(startStamp, if ok then here else startStamp, os.time(), deadline :: number, every)
+		local act =
+			heartbeat.watch(startStamp, if ok then here else startStamp, os.time(), deadline :: number, every)
 		if act == "stop-restamped" then
 			print(lostText(id, here))
 			return

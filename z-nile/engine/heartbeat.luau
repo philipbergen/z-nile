@@ -46,20 +46,26 @@ function heartbeat.parse(entries: { Entry }): ({ Beat }, { string })
 	return beats, problems
 end
 
--- The clock: ZN_NOW only inside a spec run (the runner's marker is "1").
-function heartbeat.clock(env: { [string]: string? }, real: number): number
+-- The clock: ZN_NOW only inside a spec run (`specRun` is the guards' own answer, asked by the engine edge: this module
+-- names no guard variable).
+function heartbeat.clock(env: { [string]: string? }, real: number, specRun: boolean): number
 	local forced = env.ZN_NOW
-	if env.PICKMAN_FENCE_SPECS == "1" and forced ~= nil and tonumber(forced) ~= nil then
+	if specRun and forced ~= nil and tonumber(forced) ~= nil then
 		return tonumber(forced) :: number
 	end
 	return real
 end
 
 -- A tuning setting (ZN_BEAT_EVERY, ZN_NET_SECONDS): honoured only inside a spec run, and only a positive whole number.
-function heartbeat.setting(env: { [string]: string? }, name: string, default: number): number
+function heartbeat.setting(
+	env: { [string]: string? },
+	name: string,
+	default: number,
+	specRun: boolean
+): number
 	local raw = env[name]
 	local n = if raw ~= nil then tonumber(raw) else nil
-	if env.PICKMAN_FENCE_SPECS == "1" and n ~= nil and n >= 1 and n == math.floor(n) then
+	if specRun and n ~= nil and n >= 1 and n == math.floor(n) then
 		return n
 	end
 	return default
