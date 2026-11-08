@@ -1,0 +1,10 @@
+# Refute 017 (c0265): discard-and-recover round 3 (the final round of that count) answered at the user's request, another round follows
+
+- F1 (high): fixed: the branch-based lookup is restricted to the `<name>` family (`.worktree/<name>`, `.worktree/<name>-<n>`, skipping discarded ones); any other path keeps today's refusal; the Regression guard names c0005/worktree.spec as kept; discard.spec asserts `worktree main` is still refused.
+- F2: fixed: the by-id form resolves the id to a branch (a non-discarded claim holder, else `prep-<slug>`/the raft branch) and then runs the by-name steps, fresh check included; discarded worktrees are never candidates; no worktree on the host: created and marked fresh. Cases: by-id with no worktree (c0020), a by-id second taker refused as fresh (twice), the by-id second takeover.
+- F3: stated: a lookup whose family holds only discarded worktrees creates the next numbered name (the `ws-<issue>` streams, a copy removed by hand); the dispatcher resolves every worktree through the lookup; the raft/stream fixture is too costly here and the row says so.
+- F4: fixed: `--item` is accepted only for the item's own branch; the Landing-day sentence is corrected; a case refuses `prep-plain --item c0010`.
+- F5: fixed: the upstream is unset "when it has one" and the assertion moved to the copy that had one; a fresh-expiry case (the prep-c0020 copy after 2 STALE); a `tracker-claim` fallback (the stamp file removed first); a main-adoption case in beat.spec; the suffix line `{ "prep-xy-1" } → "prep-x-1"` now fails for a wrong implementation.
+- F6: fixed: a row for each rule named.
+- F7: fixed: `reap` is exempt from the discard guard; a case in discard.spec.
+- F8: fixed: `release` among the commands that end memory; `nextSuffix` in the signature block and how `taken` is built; 21 pure cases; AC6 greps `--takeover` in z-raft too; the landing-day beat needs `--adopt`; the note lists `git log --oneline` subjects; the suspended dispatcher is intended and said.

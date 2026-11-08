@@ -63,6 +63,7 @@ return t.spec("c0265 discarded worktrees", function(it)
 		function()
 			h = fakecli.new("c0265-discard", {
 				[`{P}/c0010/c0010.md`] = trackerfix.stub("c0010", "c0010", "new-a-b-c"),
+				[`{P}/c0020/c0020.md`] = trackerfix.stub("c0020", "c0020", "preparing-lucky-violet-heron"), -- claimed, no worktree on this host
 			})
 			fs.writeFile(`{h.bin}/gh`, GH)
 			process.exec("chmod", { "+x", `{h.bin}/gh` })
@@ -87,6 +88,14 @@ return t.spec("c0265 discarded worktrees", function(it)
 		t.expect(fs.isDir(dir(`{NAME}-1`))).toBe(false)
 		must(zn(h.f.main, { "worktree", "prep-fresh", "--takeover" }, LATE), "no worktree to take over")
 		t.expect(fs.isDir(dir("prep-fresh"))).toBe(true)
+		-- by id, with no worktree holding the claim: prep-<slug> is created, marked fresh; a second taker is refused
+		local byId = zn(h.f.main, { "worktree", "--takeover", "c0020" }, LATE)
+		must(byId, "by-id takeover with no worktree")
+		t.expect(trim(byId.stdout)).toBe(dir("prep-c0020"))
+		t.expect(fs.isFile(`{dir("prep-c0020")}/.cache/fresh`)).toBe(true)
+		local twice = zn(h.f.main, { "worktree", "--takeover", "c0020" }, LATE)
+		t.expect(twice.ok).toBe(false)
+		t.expect(has(twice.stderr, "fresh")).toBe(true)
 	end)
 
 	it(
@@ -109,6 +118,12 @@ return t.spec("c0265 discarded worktrees", function(it)
 			local none = zn(h.f.main, { "worktree", "prep-plain", "--takeover" }, LATE)
 			t.expect(none.ok).toBe(false)
 			t.expect(has(none.stderr, "--item")).toBe(true)
+			-- --item is accepted only for the item's own branch: prep-plain is an unrelated worktree with no claim
+			local unrelated =
+				zn(h.f.main, { "worktree", "prep-plain", "--takeover", "--item", "c0010" }, LATE)
+			t.expect(unrelated.ok).toBe(false)
+			t.expect(has(unrelated.stderr, "prep-plain")).toBe(true)
+			t.expect(branchOf(dir("prep-plain"))).toBe("prep-plain")
 			t.expect(fs.isDir(dir(`{NAME}-1`))).toBe(false)
 			t.expect(branchOf(dir(NAME))).toBe(NAME)
 		end
@@ -118,6 +133,8 @@ return t.spec("c0265 discarded worktrees", function(it)
 		"a lost claim's worktree is marked discarded and a numbered copy continues the pushed branch",
 		function()
 			local pushed = originTip()
+			-- the claim memory of a worktree made before this lands is only tracker-claim-<id>
+			fs.removeFile(`{dir(NAME)}/.cache/tracker-stamp-c0010`)
 			local r = zn(h.f.main, { "worktree", NAME, "--takeover" }, LATE)
 			must(r, "takeover")
 			t.expect(trim(r.stdout)).toBe(dir(`{NAME}-1`)) -- the taker works in the numbered copy
@@ -131,9 +148,6 @@ return t.spec("c0265 discarded worktrees", function(it)
 			t.expect(fs.isFile(`{dir(NAME)}/pickman/dirty.txt`)).toBe(true)
 			t.expect(fs.isFile(`{dir(NAME)}/pickman/unpushed.txt`)).toBe(true)
 			t.expect(has(r.stderr, `discarded worktree: {dir(NAME)}`)).toBe(true)
-			local upstream =
-				fixture.exec(h.f.main, "git", { "config", "--get", `branch.{NAME}-discarded-1.remote` })
-			t.expect(trim(upstream.stdout)).toBe("") -- no upstream: a bare push from the discarded worktree cannot move the PR head
 			t.expect(has(r.stderr, "dirty.txt")).toBe(true)
 			t.expect(has(r.stderr, "unpushed work")).toBe(true)
 			-- a plain lookup finds the copy, never the discarded worktree
@@ -142,6 +156,13 @@ return t.spec("c0265 discarded worktrees", function(it)
 			local second = zn(h.f.main, { "worktree", NAME, "--takeover" }, LATE)
 			t.expect(second.ok).toBe(false)
 			t.expect(has(second.stderr, "fresh")).toBe(true)
+			local byIdTwice = zn(h.f.main, { "worktree", "--takeover", "c0010" }, LATE)
+			t.expect(byIdTwice.ok).toBe(false)
+			t.expect(has(byIdTwice.stderr, "fresh")).toBe(true)
+			-- the lookup keeps its old refusal for a branch checked out elsewhere (c0005): `worktree main` is still refused
+			local main = zn(h.f.main, { "worktree", "main" })
+			t.expect(main.ok).toBe(false)
+			t.expect(has(main.stderr, "already used by worktree at")).toBe(true)
 		end
 	)
 
@@ -158,6 +179,9 @@ return t.spec("c0265 discarded worktrees", function(it)
 				t.expect(has(r.stderr, "pick up something new")).toBe(true)
 			end
 			t.expect(fs.isFile(`{old}/.cache/discarded`)).toBe(true)
+			-- cleanup is not refused: the session-end reaper of a session in this directory still runs
+			local reap = zn(old, { "reap", "--quiet" }, LATE + 5)
+			t.expect(has(reap.stderr, "was discarded")).toBe(false)
 		end
 	)
 
@@ -185,6 +209,16 @@ return t.spec("c0265 discarded worktrees", function(it)
 			t.expect(told.ok).toBe(false)
 			t.expect(has(told.stderr, "was discarded")).toBe(true)
 			t.expect(trim(must(zn(h.f.main, { "worktree", NAME }), "worktree"))).toBe(dir(`{NAME}-2`))
+			-- the copy had an upstream (origin/prep-hello): the discarded branch has none, so a bare push cannot move the PR head
+			local upstream =
+				fixture.exec(h.f.main, "git", { "config", "--get", `branch.{NAME}-discarded-2.remote` })
+			t.expect(trim(upstream.stdout)).toBe("")
 		end
 	)
+
+	it("a fresh copy whose taker never claimed can be taken over after the limit", function()
+		local r = zn(h.f.main, { "worktree", "--takeover", "c0020" }, LATE + 2 * STALE)
+		must(r, "takeover of a stale fresh copy")
+		t.expect(trim(r.stdout)).toBe(dir("prep-c0020-1"))
+	end)
 end)

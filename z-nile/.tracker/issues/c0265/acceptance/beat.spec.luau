@@ -285,4 +285,20 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 			)
 		end
 	)
+
+	it("a main-checkout adoption writes no memory, so a re-claim does not make it refuse", function()
+		must(zn(h.f.main, { "beat", "c0095", "--adopt" }, T0 + 1600), "main adopts c0095")
+		t.expect(fs.isFile(`{h.f.main}/.cache/tracker-stamp-c0095`)).toBe(false)
+		local first = stampOf("c0095", `{P}/c0095/c0095.md`)
+		must(zn(wt, { "status", "c0095", "new" }, T0 + 1700), "give c0095 back")
+		must(zn(wt, { "status", "c0095", "preparing" }, T0 + 1800), "claim c0095 again")
+		local second = stampOf("c0095", `{P}/c0095/c0095.md`)
+		t.expect(second ~= first).toBe(true)
+		must(zn(h.f.main, { "beat", "c0095", "--adopt" }, T0 + 1900), "main adopts the new claim")
+		local found = false
+		for _, b in beats() do
+			found = found or (b.stamp == second and b.epoch == T0 + 1900)
+		end
+		t.expect(found).toBe(true)
+	end)
 end)

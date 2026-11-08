@@ -151,3 +151,4 @@
 - design-review-017 F6: z-design/reasoned-rows-claim-testable-reasons
 - design-review-017 F7: zz-arch/every-command-effects-name-the-check-flows
 - design-review-017 F8: one-off: leftovers listed in the review
+- note c0265 prep (review 017): a guard that refuses every command in a checkout must exempt the cleanup that runs there (reap, hooks), and a lookup made to find copies must keep every refusal the old lookup had (c0005): zz-arch/every-command-effects-name-the-check-flows

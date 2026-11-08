@@ -326,6 +326,6 @@ return t.spec("c0265 heartbeat rules", function(it)
 		t.expect(heartbeat.nextSuffix("R0010", {})).toBe("R0010-1")
 		t.expect(heartbeat.nextSuffix("R0010", { "R0010", "R0010-1" })).toBe("R0010-2")
 		t.expect(heartbeat.nextSuffix("R0010", { "R0010-1", "R0010-3" })).toBe("R0010-2") -- the smallest free
-		t.expect(heartbeat.nextSuffix("prep-x", { "prep-x-1", "prep-xy-1" })).toBe("prep-x-2") -- another name's suffix is not ours
+		t.expect(heartbeat.nextSuffix("prep-x", { "prep-xy-1" })).toBe("prep-x-1") -- another name's suffix is not ours
 	end)
 end)

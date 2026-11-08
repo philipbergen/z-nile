@@ -18,7 +18,7 @@ Replays. All runs were from z-nile, with the prototype copied to `engine/heartbe
   - race: 1/5
 - `./zn promote-check c0265`: OK. `bash -n check.sh`: clean.
 - `git hash-object` gives `6fd10bdf…` for proofs/dispatch and `5ae72235…` for proofs/race. Both equal the hashes AC4 and AC5 pin.
-- E8: the 53 files E8 names (c0116, c0053, c0117, c0115, c0120, c0005 and the four tooling globs) do count 53. I re-ran them on the unchanged engine as a count check: see the last line of this review. The scratch edit itself is not recorded, so it cannot be replayed.
+- E8: the 53 files E8 names (c0116, c0053, c0117, c0115, c0120, c0005 and the four tooling globs) do count 53. On the unchanged engine they give 478 cases in 53 files (477 passed; the 1 failure is `./zn run` stopping lune at its CPU limit). Those are E8's totals. The scratch edit itself is not recorded, so it cannot be replayed.
 - Git fixture under `.cache/rev017` (deleted afterwards), output below. It shows that a branch made by `cmd.worktree`'s `--no-track` path and pushed with an explicit refspec has no upstream, and that `git branch --unset-upstream` then exits 128:
   ```
   remote after --no-track: []
@@ -190,6 +190,6 @@ Lesson candidates (for the lead):
 - zz-arch: "a guard that refuses every command in a checkout must exempt the cleanup that runs there (`reap`, hooks)". Check: "which commands do the hooks run in this checkout, and does the guard let them through?"
 - z-design: "a lookup made to find copies must keep every refusal the old lookup had". Check: "which promoted spec asserts the old lookup's refusal (`already used by worktree`)?"
 
-E8 count check (the 53 files on the unchanged engine): see below.
+E8 count check: on the unchanged engine, the 53 files ran 477 passed and 1 failed, with `./zn run --time 900` stopping lune at its CPU limit (1923 s used), so the one failure is the run being stopped, not a spec. That is 478 cases in 53 files, the totals E8 records, so its count is plausible. The scratch edit itself cannot be replayed.
 
 Verdict: changes
