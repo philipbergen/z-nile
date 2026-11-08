@@ -12,3 +12,11 @@ Answers design-review-003.md (round 2 of the redesign). Answered here: F1, F2, F
 - F9: fixed in part: zz-rules Steps, `dispatch.luau`'s unknown-step text, the README dispatcher bullet and the `main.luau` usage text are reworded (docs cases pin the first and the README); the README line 65 was reworded earlier; the search for each mechanism (`model steps`, `merge gate`, `round one`) is the next round's to paste.
 - F10: fixed: c0175 is named in the Chore checklist with the rule it inherits.
 - F11: not answered yet.
+
+## Later answers (after the user's answers of 2026-11-08)
+
+- F3: not fully answered, and said plainly: the chain's running of `z-wait` (the fake-`gh` JSON harness of control-cli.spec exists) and the command-level cases for `status prepared` and `done` are listed with named cases in the Design and Implementation steps as the executor's tests first, marked `reasoned` in the table; the pure halves (gate verdicts, the wait loop against a fake `gh`, `parsePr`, `finalround`) are sequestered. The reviewer should judge those rows by reading.
+- F5: fixed: `Pr.mergeState` and `Pr.failed` come from `parsePr`; the gate waits for `checks` when not green and not failed, for `mergeable` when green and GitHub is still computing, never for a failed check, a conflict, a draft, a carry; the poll treats a single transient `gh` error as not a failure (three in a row are); spec cases and run mutants for each.
+- F6: answered as an experiment: E7 (the executor measures the wait step's per-turn cost against its cap; the classifier refused the probe session here), with the fallback of a larger cap.
+- F11: fixed in z-design (the answering line passes `--model <your model id>`, docs case); z-raft's answering line and zz-execute's author lines are the executor's one-word edits listed in the Design.
+- Also answered here: the agent fallback list (`fallback` in the table, `models.tries`, `models.available`; the first choice stays Opus so c0117's review-rule case and "who reviews" case do not change); "Commands refuse" (`finalround`, AC11).

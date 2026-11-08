@@ -8,8 +8,9 @@ local t = require("@tests/lib/t")
 
 local m = models :: any -- the API this issue adds, reached through `any` until the code exists (promote-check)
 
-local function table_(activity: string, cli: string, model: string, effort: string?, rank: number): string
+local function table_(activity: string, cli: string, model: string, effort: string?, rank: number, fallback: string?): string
 	return `[{activity}.{cli}]\nmodel = "{model}"\n`
+		.. (if fallback then `fallback = {fallback}\n` else "")
 		.. (if effort then `effort = "{effort}"\n` else "")
 		.. `rank = {rank}\nruntime = "{models.RUNTIMES[cli][1]}"\nmax_tokens = 100\n`
 		.. (if cli == "agent" then "max_calls = 9\nmax_minutes = 9\n" else "")
@@ -24,7 +25,7 @@ end
 local function sharp(activity: string): string
 	return table_(activity, "claude", "claude-opus-5-5", nil, 4)
 		.. table_(activity, "grok", "grok-4.7", "xhigh", 4)
-		.. table_(activity, "agent", "grok-4.7-xhigh", nil, 4)
+		.. table_(activity, "agent", "claude-opus-5-5-high", nil, 4, '["kimi-k3-high", "grok-4.7-xhigh"]')
 end
 local function layer(text: string, path: string?): models.Layer
 	return models.parse(text, path or ".models.toml")
@@ -40,6 +41,12 @@ local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
 end
 
+local function bad_fallback(list: string): string
+	return errorOf(function()
+		models.resolve({ layer(ORDER .. table_("zz-review", "agent", "claude-opus-5-5-high", nil, 4, list)) }, "zz-review")
+	end)
+end
+
 return t.spec("c0261 a model per activity", function(it)
 	it("an activity resolves its own table: the middle round cheap, the final round expensive (AC1)", function()
 		local file = ORDER .. cheap("zz-review-design") .. sharp("zz-review-design-final")
@@ -48,7 +55,7 @@ return t.spec("c0261 a model per activity", function(it)
 		t.expect(models.id(mid.specs.claude)).toBe("claude-sonnet-5")
 		t.expect(models.id(mid.specs.grok)).toBe("grok-4.6-high")
 		t.expect(models.id(fin.specs.claude)).toBe("claude-opus-5-5")
-		t.expect(models.id(fin.specs.agent)).toBe("grok-4.7-xhigh")
+		t.expect(models.id(fin.specs.agent)).toBe("claude-opus-5-5-high")
 		t.expect(fin.specs.grok.rank).toBe(4)
 		t.expect(fin.skill).toBe("zz-review-design-final")
 	end)
@@ -71,20 +78,55 @@ return t.spec("c0261 a model per activity", function(it)
 		t.expect(r.specs.claude.rank).toBe(2)
 	end)
 
-	it("a final review obeys the review rule: Opus on claude, Opus or a grok at xhigh on agent, grok at xhigh on grok (AC2)", function()
-		local function bad(activity: string, cli: string, model: string, effort: string?): string
+	it("a final review obeys the review rule: Opus on claude and first on agent, grok at xhigh on grok (AC2)", function()
+		local function bad(activity: string, cli: string, model: string, effort: string?, fb: string?): string
 			return errorOf(function()
-				m.resolveActivity({ layer(ORDER .. table_(activity, cli, model, effort, 4)) }, activity)
+				m.resolveActivity({ layer(ORDER .. table_(activity, cli, model, effort, 4, fb)) }, activity)
 			end)
 		end
 		t.expect(has(bad("zz-review-design-final", "claude", "claude-sonnet-5"), "Opus")).toBe(true)
 		t.expect(has(bad("zz-review-code-final", "grok", "grok-4.7", "high"), "xhigh")).toBe(true)
-		t.expect(has(bad("zz-review-idea", "agent", "cursor-grok-4.6-high"), "xhigh")).toBe(true)
+		t.expect(has(bad("zz-review-idea", "agent", "cursor-grok-4.6-high"), "Opus")).toBe(true)
+		t.expect(has(bad("zz-review-raft", "agent", "grok-4.7-xhigh"), "first")).toBe(true) -- c0117's agent case, unchanged
 		t.expect(has(bad("zz-review-raft", "claude", "claude-haiku-5-5"), "Opus")).toBe(true)
 		for _, a in { "zz-review-design-final", "zz-review-code-final", "zz-review-raft", "zz-review-idea", "zz-review-final" } do
-			t.expect(m.resolveActivity({ layer(ORDER .. table_(a, "agent", "grok-4.7-xhigh", nil, 4)) }, a) ~= nil).toBe(true)
-			t.expect(m.resolveActivity({ layer(ORDER .. table_(a, "agent", "claude-opus-5-5-high", nil, 4)) }, a) ~= nil).toBe(true)
+			local ok = m.resolveActivity({ layer(ORDER .. table_(a, "agent", "claude-opus-5-5-high", nil, 4, '["kimi-k3-high", "grok-4.7-xhigh"]')) }, a)
+			t.expect(ok ~= nil).toBe(true)
 		end
+	end)
+
+	it("agent's final reviews name their fallbacks in order, and only Opus, kimi or grok at xhigh may be one (AC2)", function()
+		t.expect(has(bad_fallback('["claude-sonnet-5"]'), "fallback")).toBe(true)
+		t.expect(has(bad_fallback('["kimi-k3-high", "gpt-5.5-high"]'), "gpt-5.5-high")).toBe(true)
+		t.expect(has(bad_fallback('[]'), "list of model ids")).toBe(true)
+	end)
+
+	it("tries lists a CLI's model, then its fallbacks on the same runtime and budget, before the next CLI (AC1)", function()
+		local file = ORDER .. sharp("zz-review")
+		local r = models.resolve({ layer(file) }, "zz-review")
+		local ids = {}
+		for _, spec in models.tries(r) do
+			table.insert(ids, `{spec.cli}:{models.id(spec)}`)
+		end
+		t.expect(ids).toEqual({
+			"claude:claude-opus-5-5",
+			"grok:grok-4.7-xhigh",
+			"agent:claude-opus-5-5-high",
+			"agent:kimi-k3-high",
+			"agent:grok-4.7-xhigh",
+		})
+		local alt = models.tries(r)[4]
+		t.expect(alt.runtime).toBe("cursor-cli")
+		t.expect(alt.maxCalls).toBe(9)
+		t.expect((alt :: any).fallback).toBe(nil)
+	end)
+
+	it("a try is available when its CLI lists the model, and always when the CLI has no list (AC1)", function()
+		local r = models.resolve({ layer(ORDER .. sharp("zz-review")) }, "zz-review")
+		local opus = models.tries(r)[3]
+		t.expect(m.available(opus, { "claude-opus-5-5-high", "kimi-k3-high" })).toBe(true)
+		t.expect(m.available(opus, { "kimi-k3-high" })).toBe(false)
+		t.expect(m.available(opus, nil)).toBe(true)
 	end)
 
 	it("the rounds on the way and the other commands take any model (AC2)", function()

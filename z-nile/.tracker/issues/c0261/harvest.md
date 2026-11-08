@@ -36,3 +36,4 @@
 - design-review-003 F9: z-design/restated-rules-move-together
 - design-review-003 F10: z-design/quote-other-preps-before-promising
 - design-review-003 F11: z-design/restated-rules-move-together
+- note the user's answers of 2026-11-08 (agent's ordered list, "Commands refuse"), the first changing the review rule's agent clause, the second adding AC11: z-design/never-narrow-captured-scope, z-design/decided-guesses-rewrite-their-body

@@ -52,7 +52,9 @@ return t.spec("c0261 docs", function(it)
 	it("who reviews is said per activity: the final round is the expensive one, the rounds on the way are not (rule)", function()
 		for _, name in { "z-design", "z-raft", "zz-execute", "zz-review" } do
 			at(skill(name), "the final round", name)
-			absent(skill(name), "Opus through `claude` or `agent`, any grok model at `xhigh` through `grok`", name)
+			-- c0117's sentence stays true and is extended: Opus first on claude and agent, and the fallbacks
+			at(skill(name), "Opus through `claude` or `agent`, any grok model at `xhigh` through `grok`", name)
+			at(skill(name), "agent falls back to a kimi model, then grok at xhigh, when Opus is not listed", name)
 		end
 		at(skill("z-design"), "`./zn dispatch zz-review <id> --mode design --final`", "z-design")
 		at(skill("zz-execute"), "`./zn dispatch zz-review <R-id> --mode code --final`", "zz-execute")
@@ -74,6 +76,7 @@ return t.spec("c0261 docs", function(it)
 
 	it("the interactive spend lines record the reviewer's model, and zz-rules and zz-execute still never say to wait for green CI (rule)", function()
 		at(skill("z-design"), "--model <reviewer model id> --note design-review-NNN", "z-design")
+		at(skill("z-design"), "--model <your model id> --note design-refute-NNN", "z-design")
 		at(skill("z-raft"), "--model <reviewer model id> --note design-review-NNN", "z-raft")
 		for _, name in { "zz-rules", "zz-execute" } do
 			absent(skill(name), "green CI", name) -- c0172's pin: a merge does not wait for an Actions result
@@ -96,6 +99,8 @@ return t.spec("c0261 docs", function(it)
 
 	it("AGENTS.md, the README and the .models.toml header say it per activity (rule)", function()
 		at(read("AGENTS.md"), "final-round reviewers", "AGENTS.md")
+		at(read("AGENTS.md"), "A lead you start by hand (`/z-run`, `/z-design`) runs on the cheap model of its activity, and hands every final review to a `--final` round.", "AGENTS.md")
+		at(read("AGENTS.md"), "Opus 5.5 first on claude and agent (agent falls back to a kimi model, then grok-4.7-xhigh)", "AGENTS.md")
 		absent(read("AGENTS.md"), "which the skills pin to Opus 5.5", "AGENTS.md")
 		local readme = read("z-nile/README.md")
 		at(bullet(readme, "- **`.models.toml`.**"), "Models per activity", "README")
@@ -117,5 +122,11 @@ return t.spec("c0261 docs", function(it)
 		at(skill("zz-rules"), "`z-run`, `z-wait` and `zz-review`", "zz-rules Steps")
 		at(read("z-nile/README.md"), "it waits on the cheap `z-wait` step and then merges", "README")
 		absent(read("z-nile/README.md"), "It stops at a merge gate, at a step's", "README")
+	end)
+
+	it("the commands that refuse are documented where an author reads them (rule)", function()
+		at(skill("zz-rules"), "`./zn status <id> prepared` and `./zn done` refuse unless the last design review round, or the last code review round, was recorded on a final-review model", "zz-rules")
+		at(skill("z-design"), "`./zn status <id> prepared` refuses unless that last round was recorded on a final-review model", "z-design")
+		at(skill("zz-execute"), "`./zn done` refuses unless the last review round was recorded on a final-review model", "zz-execute")
 	end)
 end)

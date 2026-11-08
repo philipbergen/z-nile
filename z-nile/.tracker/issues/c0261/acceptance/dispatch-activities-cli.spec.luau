@@ -131,7 +131,7 @@ return t.spec("c0261 ./zn dispatch picks the model of the activity", function(it
 	end)
 
 	-- the poll itself, run for real against a fake gh that counts its calls and answers a sequence of exit codes (the
-	-- runner's `./zn run --time` wrapper is cut off: it only bounds). every = 0 and seconds = 1 keep it fast.
+	-- runner's `./zn run --time` wrapper is cut off: it only bounds). every = 0 and a deadline of 2 to 4 seconds keep it quick.
 	it("the wait command re-polls while checks are pending, ends 0 when they pass, 2 when one fails, 3 when time runs out (AC4)", function()
 		fs.writeFile(
 			`{h.bin}/gh`,
@@ -139,9 +139,10 @@ return t.spec("c0261 ./zn dispatch picks the model of the activity", function(it
 		)
 		process.exec("chmod", { "+x", `{h.bin}/gh` })
 		local count = `{h.f.base}/gh-count`
-		local function run(what: string, env: { [string]: string }): (number, number)
+		local function run(what: string, env: { [string]: string }, seconds: number?): (number, number)
 			fs.writeFile(count, "0")
-			local command: string = (dispatch :: any).waitCommand(what, 42, 1, 0)
+			-- a deadline of a few seconds, so a loaded machine cannot end a poll before its second call
+			local command: string = (dispatch :: any).waitCommand(what, 42, seconds or 4, 0)
 			local inner = string.match(command, "%-%- (bash %-c .*)$") :: string
 			local e = { PATH = `{h.bin}:{process.env.PATH}`, FAKE_COUNT = count }
 			for k, v in env do
@@ -150,7 +151,7 @@ return t.spec("c0261 ./zn dispatch picks the model of the activity", function(it
 			local code = fixture.exec(h.f.main, "bash", { "-c", inner }, { env = e }).code
 			return code, tonumber(fs.readFile(count)) :: number
 		end
-		local code, calls = run("checks", { FAKE_SEQ = "8", FAKE_OUT = "pending" })
+		local code, calls = run("checks", { FAKE_SEQ = "8", FAKE_OUT = "pending" }, 2)
 		t.expect(code).toBe(3) -- pending until the deadline is "ran out", not "failed"
 		t.expect(calls > 1).toBe(true) -- and it polled more than once
 		code, calls = run("checks", { FAKE_SEQ = "8 0", FAKE_OUT = "x" })
@@ -159,7 +160,11 @@ return t.spec("c0261 ./zn dispatch picks the model of the activity", function(it
 		code = run("checks", { FAKE_SEQ = "1 0", FAKE_OUT = "no checks reported on the branch" })
 		t.expect(code).toBe(0)
 		code = run("checks", { FAKE_SEQ = "1", FAKE_OUT = "build failed" })
-		t.expect(code).toBe(2)
+		t.expect(code).toBe(2) -- the same unexplained failure three times in a row
+		code = run("checks", { FAKE_SEQ = "1 8 1 0", FAKE_OUT = "gh: network error" })
+		t.expect(code).toBe(0) -- a transient error between good polls is not a failed check
+		code = run("checks", { FAKE_SEQ = "1 1 0", FAKE_OUT = "gh: network error" })
+		t.expect(code).toBe(0)
 		t.expect((run("merged", { FAKE_STATE = "MERGED" }))).toBe(0)
 		t.expect((run("merged", { FAKE_STATE = "CLOSED" }))).toBe(2)
 		t.expect((run("merged", { FAKE_STATE = "OPEN" }))).toBe(3)
@@ -177,5 +182,13 @@ return t.spec("c0261 ./zn dispatch picks the model of the activity", function(it
 		t.expect(pr("UNKNOWN").mergeable).toBe(false)
 		t.expect(pr("UNKNOWN").conflicting).toBe(false)
 		t.expect(pr(nil).conflicting).toBe(false)
+		t.expect(pr("UNKNOWN").mergeState).toBe("UNKNOWN")
+		t.expect(pr("MERGEABLE").mergeState).toBe("MERGEABLE")
+		local function rollup(entries: string): any
+			return dispatcher.parsePr(`\{"number":7,"state":"OPEN","isDraft":false,"headRefOid":"abc","mergeable":"MERGEABLE","statusCheckRollup":[{entries}]\}`)
+		end
+		t.expect(rollup('\{"conclusion":"FAILURE"\}').failed).toBe(true)
+		t.expect(rollup('\{"conclusion":"SUCCESS"\},\{"state":"PENDING"\}').failed).toBe(false)
+		t.expect(rollup('\{"conclusion":"SUCCESS"\},\{"state":"PENDING"\}').green).toBe(false)
 	end)
 end)
