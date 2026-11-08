@@ -1,0 +1,4 @@
+# Answers to design-review-005 (c0247)
+- F1: fixed: AC8 pins the whole block from the title through step 0 (`block_exact` in check.sh): the paragraph as the Design's text, step 0 as the merge base's with the one phrase added (refused when the base no longer has the phrase). Mutants M35 to M39 (an exemption inside, on the next line, on the previous line, a comment wrapper, in step 0's tail) all fail AC8 and nothing else; M29 and M3 still fail as before. The contradiction elsewhere in the file is a `reasoned` row (a whole-file pin would go red on a raft mate's edit). The lesson gains the whole-block rule. consequences: none beyond AC8's relabel.
+- F2: fixed: E1 records M1 to M39 and 8/8; step 3 says 8/8.
+- F3: fixed: OC1 rejects once with a correction, then approves with each approve choice the user uses, and checks there is no second restatement.

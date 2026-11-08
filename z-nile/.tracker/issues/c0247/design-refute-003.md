@@ -1,0 +1,5 @@
+# Answers to design-review-003 (c0247)
+- F1: fixed: the paragraph opens its environment rules with "Under `./zn dispatch` (`ZN_DISPATCH=1`), on any CLI, never use plan mode and never only print: write the restatement as the question in `$ZN_DISPATCH_DIR/questions.md` and stop.", then "Otherwise, in Claude Code, ..."; AC2 pins both sentences and asserts the dispatch sentence comes first (mutants M25, M26). E4 (`claude -p` probe) ran and was inconclusive, and the exclusive branch makes it moot. Lesson `z-design/most-specific-environment-first`. consequences: none.
+- F2: fixed: 46 specs, about 2.5 minutes, in check.sh and the Design.
+- F3: fixed: c0117/R0052 and c0165 are described as landed, c0250's `escalation.md` is named as a later Override of the pinned `questions.md` sentence, and the zz-test lesson's check and How to apply use the name pattern, not `-lF` on paths.
+- F4: fixed: "or if the user declines plan mode, print the restatement" and the plan file ends with "Next: capture with the z-ticket skill, steps 0 to 6; build nothing." (AC2, M27, M28). consequences: none.
