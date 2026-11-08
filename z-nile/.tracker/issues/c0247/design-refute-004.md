@@ -1,0 +1,6 @@
+# Answers to design-review-004 (c0247)
+- F1: fixed: the promoted spec pins the three environment sentences, their order and their adjacency inside the paragraph (AC2); check.sh AC8 pins the paragraph line byte for byte and its place right before step 0 (sequestered, so a later issue may reword it); mutants M29 to M31 and M35 (reorder, insertion, move, a new exemption) fail it. The lesson's How to apply is corrected. consequences: AC8 is a new criterion.
+- F2: fixed without a new dependency: the dispatch sentence no longer names a file ("ask it the way the dispatcher's prompt tells you to ask the user a question"), so c0250's `escalation.md` needs no Override and no ordering with c0247; the user's decision (restate through the dispatcher's question channel) stands, and the Design says `questions.md` today. c0256 still waits for `dispatch retry`. consequences: none.
+- F3: fixed: E5 (this session): `EnterPlanMode` was only a deferred tool and needed ToolSearch, so the sentence says "offered (or listed as a deferred tool: load it with ToolSearch)" (M32).
+- F4: fixed: when already in plan mode the paragraph leaves its plan alone and prints the restatement (M33).
+- F5: fixed: time, Test plan names, AC2 text, check.sh labels, the c0239 sentence (its AC8 is sequestered; z-raft keeps the two rafts apart), and a row and mutant (M34) for the stub sentence.
