@@ -17,11 +17,11 @@ check "AC3: the model has a tab per project, columns, bands, done times and ages
   lune run tests/run -- "$A/model.spec.luau"
 check "AC4: the page opens on the first project's Board; the done window, bands, range, card pane, project tabs, search, #project, arrows and znBoard.load work" \
   lune run tests/run -- "$A/page.spec.luau"
-check "AC5: the zz-rules board row and the README say what the board does" \
+check "AC5: the zz-rules board row, the README and the board spec's declared inputs say and do what the board needs" \
   lune run tests/run -- "$A/docs.spec.luau"
 check "AC6: the real tracker's board has every registered project and every issue on one column of its project" \
   lune run tests/run -- "$A/real.spec.luau"
-check "AC7: the old navigation, Stats, the CLI and the main checkout's refresh stay (promoted board specs, overridden where they assumed the page opens on Rafts)" \
+check "AC7: the old navigation, Stats, the CLI and the main checkout's refresh stay (promoted board specs, overridden where named)" \
   lune run tests/run -- tests/acceptance/c0042/cli.spec.luau tests/acceptance/c0042/model.spec.luau \
   tests/acceptance/c0042/page.spec.luau tests/acceptance/c0042/smoke.spec.luau tests/acceptance/c0042/vendor.spec.luau \
   tests/acceptance/c0107/keep.spec.luau tests/acceptance/c0107/label.spec.luau tests/acceptance/c0107/page.spec.luau \
@@ -33,9 +33,8 @@ check "AC8: metrics counts review rounds by the board's rule, and the README pic
   lune run tests/run -- "$A/metrics.spec.luau" tests/tooling/metrics-rounds.spec.luau tests/acceptance/c0043/rounds.spec.luau \
   tests/acceptance/c0111/metrics-lessons.spec.luau tests/acceptance/c0116/issue-design.spec.luau \
   tests/acceptance/c0116/retired.spec.luau tests/acceptance/c0115/readme.spec.luau
-check "AC9: the eight overridden specs are exactly the reviewed overrides (the prototype's text, pinned by sha, no edit tolerated)" \
-  bash -c 'git -C "$1" cat-file -e "$2^{commit}" && git -C "$1" diff --exit-code "$2" -- "${@:3}"' _ "$ZN_ROOT" 6043e33f1ea44d306097d7b745e876de9337e58c \
-  z-nile/tests/acceptance/c0042/model.spec.luau z-nile/tests/acceptance/c0042/smoke.spec.luau z-nile/tests/acceptance/c0107/keep.spec.luau z-nile/tests/acceptance/c0107/page.spec.luau z-nile/tests/acceptance/c0107/views.spec.luau z-nile/tests/acceptance/c0115/readme.spec.luau z-nile/tests/acceptance/c0172/narrowed.spec.luau z-nile/tests/tooling/board.spec.luau
-check "AC10: real.spec and the board spec declare their inputs (every blob and HEAD)" \
-  bash -c 'grep -qxF -e "$(printf "tests/acceptance/c0118/real.spec.luau\t*")" tests/inputs.tsv && grep -qxF -e "$(printf "tests/tooling/board.spec.luau\t*")" tests/inputs.tsv'
+check "AC9: each of the eight overridden specs is main's file plus the reviewed hunks and nothing else (three-way, fails closed)" \
+  bash "$A/overrides.sh"
+check "AC10: real.spec declares every blob and HEAD as its input (c0165)" \
+  awk -F '\t' '$1 == "tests/acceptance/c0118/real.spec.luau" && $2 == "*" { n++ } END { exit n != 1 }' tests/inputs.tsv
 finish

@@ -114,7 +114,7 @@ end
 local function node(page: string, hash: string): any
 	local ok, r = pcall(process.exec, "node", { `{DIR}/harness.js`, page, hash })
 	if not ok then
-		error(`node is required for this spec (preinstalled on GitHub runners): {r}`)
+		error(`node is required for this spec: {r}`)
 	end
 	if not r.ok then
 		error(r.stderr)

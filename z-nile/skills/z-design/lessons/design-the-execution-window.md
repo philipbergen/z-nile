@@ -15,3 +15,5 @@ R0051 design review 003 F1: while the prep sat between rounds the user captured 
 R0051 design review 005 F1: f0110 depends on d0151, whose fix lands in the adapters f0110's specs load through stubs; d0151's prep can't see f0110's unpromoted specs, so R0051's Order now has the readying lead merge main into the prototype and re-run the specs and mutants before `ready`, and send R0051 back to z-design if a spec must change.
 
 **Note** (f0146 design review 001 F4): "whichever of two issues lands second adds it" names no owner and no check. Give a shared piece one owner, a `depends_on` that orders the two, and an acceptance case in the owner.
+
+**Also:** c0118 design review 013 F2: when a design accepts "if main changes file X before the raft, re-prep", search the open items and PRs that change X (`git grep` over `*/.tracker/issues` outside `done/`, `gh pr list`) and name them (c0239 changes another row of `c0172/narrowed.spec`, a file c0118's override pin read whole). A compare of a file to one frozen commit is the form to avoid; compare it to main's file plus the reviewed hunks.
