@@ -146,55 +146,6 @@ return t.spec("c0265 real-time proofs", function(it)
 		end
 	end)
 
-	it("sets up claims, a prepared raft to fold into, a checked item, and the shim", function()
-		h = fakecli.new("c0265-race", {
-			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
-			["pickman/.tracker/architecture.md"] = "# architecture\n",
-			[`{P}/c0070/c0070.md`] = issue("c0070", "new-a-b-c"),
-			[`{P}/c0080/c0080.md`] = issue("c0080", "new-a-b-c"),
-			[`{P}/c0085/c0085.md`] = issue("c0085", "new-a-b-c"),
-			[`{P}/c0090/c0090.md`] = issue("c0090", "new-a-b-c"),
-			-- c0090's check runs while a beat must arrive: it polls origin for a beat dated two seconds into the run
-			[`{P}/c0090/check.sh`] = table.concat({
-				"#!/usr/bin/env bash",
-				"start=$(date +%s); i=0",
-				"while [ $i -lt 15 ]; do",
-				"  for r in $(git ls-remote origin \"refs/zn/hb/*\" | awk '{print $2}'); do",
-				'    case "$r" in *"$STAMP"/*) [ "${r##*/}" -ge $((start+2)) ] && { echo seen > "$FAKE_DIR/check-beat"; exit 0; } ;; esac',
-				"  done",
-				"  sleep 1; i=$((i+1))",
-				"done",
-				"exit 1",
-				"",
-			}, "\n"),
-			[`{P}/c0095/c0095.md`] = issue("c0095", "prepared-quiet-copper-falcon", "ready"),
-			[`{P}/c0095/check.sh`] = CHECK,
-			[`{P}/c0096/c0096.md`] = issue("c0096", "prepared-quiet-copper-falcon", "ready", "R0030"),
-			[`{P}/c0096/check.sh`] = CHECK,
-			["pickman/.tracker/rafts/R0030/R0030.md"] = `---\nid: R0030\ntype: chore\ntitle: Fold\nslug: fold\nsingle: false\nissues: [c0096]\ndesign: ready\ncreated: 2026-10-06\nstatus: prepared-quiet-copper-falcon\n---\n\n# R0030\n`,
-			["pickman/.tracker/rafts/R0030/check.sh"] = CHECK,
-		})
-		fs.writeFile(`{h.bin}/gh`, GH)
-		process.exec("chmod", { "+x", `{h.bin}/gh` })
-		local real = string.match(fs.readFile(`{h.bin}/git`), 'exec "([^"]+)" "%$@"')
-			or error("no real git in the shim")
-		fs.writeFile(
-			`{h.bin}/git`,
-			(
-				string.gsub(
-					fs.readFile(`{h.bin}/git`),
-					"^#!/bin/sh\n",
-					"#!/bin/sh\nREAL_GIT='" .. real .. "'; export REAL_GIT\n" .. string.sub(SHIM, 11),
-					1
-				)
-			)
-		)
-		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-race" }), "worktree"), "%s+$", ""))
-		for _, id in { "c0070", "c0080", "c0085", "c0090" } do
-			must(zn(wt, { "status", id, "preparing" }), `claim {id}`)
-		end
-	end)
-
 	it("beat --watch says a failed tick and keeps beating", function()
 		local stamp = stampOf(`{P}/c0080/c0080.md`)
 		local started = os.time()

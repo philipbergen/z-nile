@@ -15,6 +15,7 @@ local trackerfix = require("@tests/lib/trackerfix")
 
 local h: fakecli.Harness
 local wt, wt2 = "", "" -- two worktrees of the fixture: two terminals
+local raftId = "" -- the rafting claim `new raft` made in wt
 local T0 = os.time()
 local STALE = heartbeat.STALE
 -- a moment when everything claimed at about T0 is stale, whatever the seconds the fixture took to build
@@ -49,6 +50,9 @@ end
 local function stampOf(path: string): string
 	local text = fixture.git(h.f.origin, { "show", `main:{path}` })
 	return string.match(text, "\nstatus: ([%a%-]+)\n") or error(`{path} has no status on origin`)
+end
+local function subjectOf(path: string): string
+	return fixture.git(h.f.origin, { "log", "-1", "--format=%s", "main", "--", path })
 end
 local function beatRefs(): { string }
 	local out = {}
@@ -176,6 +180,19 @@ return t.spec("c0265 lost work", function(it)
 		t.expect(has(lineOf(listing, "c0040"), "[parked]")).toBe(true)
 	end)
 
+	it(
+		"the board marks lost and parked work and lists lost work first; no mark while claims are fresh",
+		function()
+			local out = ".cache/board-lost.html"
+			must(zn(h.f.main, { "board", "--out", out, "-O" }, LATE), "board")
+			local html = fs.readFile(`{h.f.main}/{out}`)
+			t.expect(has(html, '"heartbeat"')).toBe(true) -- the model carries each verdict
+			t.expect(has(html, "lost 45m")).toBe(true) -- c0010: silent 2700 s since its beat at T0
+			must(zn(h.f.main, { "board", "--out", out, "-O" }, T0 + 60), "board while fresh")
+			t.expect(has(fs.readFile(`{h.f.main}/{out}`), '"heartbeat"')).toBe(false)
+		end
+	)
+
 	it("a beat revives a lost claim", function()
 		must(zn(h.f.main, { "beat", "c0010" }, LATE), "beat of a lost claim")
 		t.expect(has(zn(h.f.main, { "lost" }, LATE + STALE).stdout, "c0010")).toBe(false)
@@ -202,6 +219,22 @@ return t.spec("c0265 lost work", function(it)
 		t.expect(list.ok).toBe(true) -- the list prints as it always did
 		t.expect(has(list.stderr, "heartbeats unreadable")).toBe(true)
 		t.expect(has(list.stdout, "[lost")).toBe(false)
+		fs.removeFile(`{h.fakes}/lsfail`)
+	end)
+
+	it("a failed beat attempt is not retried inside the interval", function()
+		local function calls(): number
+			local text = if fs.isFile(`{h.fakes}/lscalls`) then fs.readFile(`{h.fakes}/lscalls`) else ""
+			return #string.gsub(text, "[^x]", "")
+		end
+		fs.writeFile(`{h.fakes}/lsfail`, "1")
+		local due = LATE + 4 * STALE
+		local before = calls()
+		must(zn(wt, { "lessons", "--tags" }, due), "lessons in the worktree") -- entries are due: one failed attempt each
+		local first = calls()
+		t.expect(first > before).toBe(true)
+		must(zn(wt, { "lessons", "--tags" }, due + 10), "lessons again, inside the interval")
+		t.expect(calls()).toBe(first) -- the failed attempt advanced the entries: nothing more is tried
 		fs.removeFile(`{h.fakes}/lsfail`)
 	end)
 
@@ -245,6 +278,8 @@ return t.spec("c0265 lost work", function(it)
 			must(zn(wt2, { "status", "c0010", "preparing" }, at), "takeover of a lost claim")
 			local after = stampOf(`{P}/c0010/c0010.md`)
 			t.expect(after ~= before).toBe(true)
+			-- the takeover is recorded in the claim commit's subject: who it took the claim from
+			t.expect(subjectOf(`{P}/c0010/c0010.md`)).toBe(`tracker: c0010 preparing (takes over {before})`)
 			local stamps = stampsWithBeats()
 			t.expect(table.find(stamps, after) ~= nil).toBe(true)
 			t.expect(table.find(stamps, before)).toBe(nil)
@@ -255,20 +290,15 @@ return t.spec("c0265 lost work", function(it)
 		local at = LATE + 9 * STALE
 		local listing = must(zn(h.f.main, { "status" }, at), "status")
 		local rid = string.match(listing, "(R%d+) preparing") or error("no rafting claim in the status list")
+		raftId = rid
 		local doc = `pickman/.tracker/rafts/{rid}/{rid}.md`
 		local before = stampOf(doc)
 		must(zn(wt2, { "status", rid, "preparing" }, at), "takeover of a rafting claim")
 		local after = stampOf(doc)
 		t.expect(after ~= before).toBe(true)
 		t.expect(stampOf(`{P}/c0030/c0030.md`)).toBe(after)
+		t.expect(subjectOf(doc)).toBe(`tracker: {rid} preparing (takes over {before})`)
 		t.expect(table.find(stampsWithBeats(), after) ~= nil).toBe(true)
-		-- the old rafting claimant (wt made it with `new raft`) is refused its carried move: new raft recorded its stamp
-		local rdoc = `{wt}/pickman/.tracker/rafts/{rid}/{rid}.md`
-		must(zn(wt, { "sync" }, at), "sync")
-		fs.writeFile(rdoc, (string.gsub(fs.readFile(rdoc), "design: draft", "design: ready")))
-		local old = zn(wt, { "status", rid, "prepared" }, at)
-		t.expect(old.ok).toBe(false)
-		t.expect(has(old.stderr, "taken over")).toBe(true)
 		-- the taker holds the stamp but not the rafting ownership: release needs --force, as after any status R preparing
 		local rel = zn(wt2, { "release", rid }, at)
 		t.expect(rel.ok).toBe(false)
@@ -291,12 +321,20 @@ return t.spec("c0265 lost work", function(it)
 		-- the first command the old claimant runs tells it, once, and drops its entry (the stamp check comes first)
 		local sync = zn(wt, { "sync" }, at)
 		must(sync, "sync")
-		t.expect(has(sync.stderr, "taken over")).toBe(true)
+		t.expect(has(sync.stderr, "c0010's claim was taken over")).toBe(true)
+		t.expect(has(sync.stderr, `{raftId}'s claim was taken over`)).toBe(true) -- the rafting claim too, by the same sync
 		t.expect(fs.isFile(`{wt}/.cache/tracker-beats/c0010`)).toBe(false)
 		fs.writeFile(doc, (string.gsub(fs.readFile(doc), "design: draft", "design: ready")))
 		local r = zn(wt, { "status", "c0010", "prepared" }, at)
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "taken over")).toBe(true)
+		-- the old rafting claimant (wt made it with `new raft`) is refused its carried move too. The stamp-record check
+		-- runs before setStatus' member design check, so c0030 left at design: draft does not change the answer
+		local rdoc = `{wt}/pickman/.tracker/rafts/{raftId}/{raftId}.md`
+		fs.writeFile(rdoc, (string.gsub(fs.readFile(rdoc), "design: draft", "design: ready")))
+		local oldRaft = zn(wt, { "status", raftId, "prepared" }, at)
+		t.expect(oldRaft.ok).toBe(false)
+		t.expect(has(oldRaft.stderr, "taken over")).toBe(true)
 		-- an interval later its autobeat sees another stamp on origin: it drops the entry and writes no beat
 		local taken = stampOf(`{P}/c0010/c0010.md`)
 		local before = #beatRefs()
