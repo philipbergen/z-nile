@@ -14,6 +14,7 @@
 | 10 | 2026-11-08 08:58 | design-refute-008 answering | 0 | 0 | 5.0 | spend | design-review |  |
 | 11 | 2026-11-08 09:10 | design-review-009 | 0 | 0 | 13.0 | spend | design-review | 187930 |
 | 12 | 2026-11-08 09:27 | design-review-010 | 0 | 0 | 11.0 | spend | design-review | 173885 |
+| 13 | 2026-11-08 09:44 | design-review-011 | 0 | 0 | 12.0 | spend | design-review | 201483 |
 
-**Total:** +1170 / -1 lines, 380.0 agent-minutes, 1935229 tokens over 12 records
-<!-- totals: added=1170 removed=1 minutes=380.0 records=12 tokens=1935229 -->
+**Total:** +1170 / -1 lines, 392.0 agent-minutes, 2136712 tokens over 13 records
+<!-- totals: added=1170 removed=1 minutes=392.0 records=13 tokens=2136712 -->
