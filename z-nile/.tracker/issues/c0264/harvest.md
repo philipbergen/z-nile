@@ -1,0 +1,17 @@
+# Harvest: c0264
+- design-review-001 F1: zz-test/criterion-fails-on-todays-file
+- design-review-001 F2: z-design/exact-checks-compare-against-the-merge-base
+- design-review-001 F3: z-design/never-narrow-captured-scope
+- design-review-001 F4: z-design/restated-rules-move-together
+- design-review-001 F5: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F6: z-design/quote-other-preps-before-promising
+- design-review-001 F7: one-off: a wording that said reviews stay as they are, against the model tiers another issue sets
+- design-review-002 F1: zz-test/pin-expected-text-not-documents
+- design-review-002 F2: zz-test/no-change-claims-check-behaviour-not-the-raft-diff
+- design-review-002 F3: z-design/restated-rules-move-together
+- design-review-002 F4: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-002 F5: one-off: spec header comments left describing the removed design
+- design-review-002 F6: zz-review/lists-paste-their-search
+- design-review-003 F1: z-design/spec-design-correspondence
+- design-review-003 F2: z-design/restated-rules-move-together
+- design-review-003 F3: z-design/status-labels-need-a-tracker-fact

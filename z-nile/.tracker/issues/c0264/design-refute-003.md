@@ -1,0 +1,4 @@
+# Answers to design-review-003 (c0264)
+- F1: fixed: check.sh AC1's label is now c0264.md's AC1 ("the first '##' section and ... follows it at once"); consequences: none (placement after the opening account stays held by AC4 for this delivery and by c0115 and c0183 afterwards).
+- F2: fixed: "AC5 runs" and "the twelve specs"; `grep AC6\|eight` finds only c0259's own AC6 in E2; consequences: none.
+- F3: fixed: the last line of the section is plain words: "How it should work, below, labels each part as exists, designed or captured; where its plans have a worker design, how they meet this aim is the user's open question."; the Design block, check.sh's heredoc and readme.patch agree (AC3 and AC4 run on the prototype, 5/5); consequences: the README now points at an open question the user answers, and option (c) in the Design describes exactly that.

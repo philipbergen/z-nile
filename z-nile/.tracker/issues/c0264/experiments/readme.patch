@@ -1,0 +1,19 @@
+diff --git a/z-nile/README.md b/z-nile/README.md
+index f76ef60b..2cd3cd6a 100644
+--- a/z-nile/README.md
++++ b/z-nile/README.md
+@@ -22,6 +22,14 @@ flowchart LR
+ 
+ z-nile is the tooling that tracks, designs, gates and delivers the work of every project in this repository. A game is a project: pickman is one, in `pickman/`. The arcade adds five more (c0183): the shared library `arcade`, the start place `portal`, and the games `snake`, `invaders` and `asteroids`, each in its own folder. z-nile belongs to no game.
+ 
++## Intent
++z-nile is built so that people spend their time on ideas and designs, and workers do the rest, cheaply until the last step and sharply at it.
++- **Humans at the idea and the design.** A person has the idea, settles what is asked and approves the design: `z-ticket` captures it, `z-design` sharpens it into a prepared issue and its design review. Nothing is designed past a person's ask.
++- **Workers from the raft to the merge.** Workers carry a prepared issue's raft to its merge: raft, ready, run, review, gate, merge. They stop and escalate only when blocked (Escalation to the human), and a person comes back only for that.
++- **Cheap on the way, sharp at the end.** The steps on the way run on cheap models; the final review, the one that decides whether the work merges, runs on the sharpest model. Rigor does not move: the checks, the gate and the review rounds still run.
++
++This section is the aim and carries no status label. How it should work, below, labels each part as exists, designed or captured; where its plans have a worker design, how they meet this aim is the user's open question.
++
+ ## How it should work
+ Status labels, on every sub-section below and every roadmap row (*captured* is this section's word for an issue that exists as a draft): **exists** (built and on `main`), **designed** (its issue's Design is ready, not built), **captured** (an issue exists as a draft with no design yet). Nothing below is described as built unless it is labelled *exists*. A feature's PR changes its own roadmap row and every label that names it. Older notes in this file written "(cNNNN, planned)" predate these labels and mean not built.
+ 
