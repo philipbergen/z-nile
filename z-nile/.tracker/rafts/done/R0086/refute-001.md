@@ -1,0 +1,2 @@
+- F1: fixed (this commit): the Verification log now has E2, E6 and the c0194 handshake entries; consequences: none beyond the wording (checked: `./zn check c0239` still 8/8).
+- F2: deferred c0269: the case titles live in promoted specs that AC8 lets change only by named substitutions; renaming them rides with c0241's requote of the `c0074/done-gate` digest.

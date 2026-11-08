@@ -6,7 +6,7 @@ This prompt is complete. It contains the work items ({{ISSUE_IDS}}), their execu
 
 ## Goal state (the only definition of done)
 - `./zn done {{RAFT_ID}}` succeeds. That command:
-  - runs `{{RAFT_ID}}`'s `check.sh`, which covers the full repo gate plus every issue's `check.sh`;
+  - runs `{{RAFT_ID}}`'s `check.sh`, which covers the project's affected gate plus every issue's `check.sh`;
   - verifies that the adversarial review is resolved;
   - moves the items to `done/`;
   - marks the single PR ready for review.
@@ -24,7 +24,7 @@ This prompt is complete. It contains the work items ({{ISSUE_IDS}}), their execu
 ## Environment
 - **Never edit the main checkout.** You work only in the raft's worktree under `.worktree/`.
 - Tools are pinned in `rokit.toml` and live in `~/.rokit/bin`. If any are missing, see `SETUP.md`.
-- Iterate with `z-nile/check.sh --affected`. The full gate is `z-nile/check.sh --full`.
+- Iterate with `z-nile/check.sh --affected`. The full gate runs once, at the merge.
 - Run one item's acceptance checks with `./zn check <id>`.
 
 ## Workstreams plan

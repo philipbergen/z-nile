@@ -13,3 +13,5 @@ A design that ships the result of an audit (declared inputs, an allow-list) free
 **Also:** c0165 design review 008 F1/F2: the exclusions were keyed to the audited blob but the declared specs were not, so c0184's rewrite of five declared specs would have passed; and the reviewed lists sat in a folder the executor may edit.
 
 **Also:** c0165 design review 009 F2: an audit chosen by a text search over each spec's own lines misses one-line wrapper specs and reads made in helper modules; cover every spec path (a `nohit` line keyed by path for the ones the search does not match) so a new spec file turns the check red until someone reads it.
+
+**Also:** c0118 design review 012 F2: a re-prep on a moved main reruns every gate rule main gained since the first prep, not only the audits the first prep shipped (c0165's declared inputs landed between c0118's two preps: its new `real.spec` read every project's tracker and declared nothing). Check: which gate rules landed between the first prep's base and the re-prep's, and does the design meet each?
