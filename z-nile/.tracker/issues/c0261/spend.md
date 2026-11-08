@@ -14,6 +14,11 @@
 | 10 | 2026-11-08 09:06 | design-refute-004 | 0 | 0 | 90.0 | spend | design-review |  |  |
 | 11 | 2026-11-08 09:21 | design-review-005 | 0 | 0 | 11.0 | spend | design-review |  | claude-opus-5-5 |
 | 12 | 2026-11-08 09:32 | design-refute-005 | 0 | 0 | 120.0 | spend | design-review |  |  |
+| 13 | 2026-11-08 09:46 | design-review-006 | 0 | 0 | 13.0 | spend | design-review |  | claude-opus-5-5 |
+| 14 | 2026-11-08 09:46 | design-refute-006 | 0 | 0 | 45.0 | spend | design-review |  |  |
+| 15 | 2026-11-08 17:15 | design-refute-006 | 0 | 0 | 100.0 | spend | design-review |  |  |
+| 16 | 2026-11-08 17:26 | design-review-007 | 0 | 0 | 12.0 | spend | design-review |  | claude-opus-5-5 |
+| 17 | 2026-11-08 17:27 | design-refute-007 | 0 | 0 | 30.0 | spend | design-review |  |  |
 
-**Total:** +0 / -0 lines, 437.3 agent-minutes, 205527 tokens over 12 records
-<!-- totals: added=0 removed=0 minutes=437.3 records=12 tokens=205527 -->
+**Total:** +0 / -0 lines, 637.3 agent-minutes, 205527 tokens over 17 records
+<!-- totals: added=0 removed=0 minutes=637.3 records=17 tokens=205527 -->
