@@ -18,3 +18,20 @@
 - design-review-001 F18: one-off: record line detail
 - design-review-001 F19: one-off: wording
 - design-review-001 F20: one-off: refuted, review files embed ids today
+- design-review-002 F1: z-design/judged-text-comes-from-the-base
+- design-review-002 F2: z-design/never-narrow-captured-scope
+- design-review-002 F3: z-design/judged-text-comes-from-the-base
+- design-review-002 F4: z-design/results-land-on-every-path
+- design-review-002 F5: one-off: Touched source for the patch
+- design-review-002 F6: one-off: approve rule
+- design-review-002 F7: z-design/declare-what-full-runs-covered
+- design-review-002 F8: one-off: refuted on the user's decision
+- design-review-002 F9: z-design/probe-free-cli-lines-in-prep
+- design-review-002 F10: one-off: bootstrap for the raft that adds its own mode
+- design-review-002 F11: z-design/probe-free-cli-lines-in-prep
+- design-review-002 F12: one-off: observed step placement
+- design-review-002 F13: zz-test/each-fail-closed-rule-has-its-own-input
+- design-review-002 F14: one-off: mutant wording
+- design-review-002 F15: zz-rules/exhaustive-lists-name-new-things
+- design-review-002 F16: one-off: base path of a moved document
+- note reviewer candidate: a rule that reads from the base needs a route for items the branch creates (emergent members): z-design/judged-text-comes-from-the-base

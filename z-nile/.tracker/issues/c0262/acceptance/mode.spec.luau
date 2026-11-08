@@ -19,11 +19,10 @@ local function prompt(mode: string, worktree: string): string
 end
 
 return t.spec("c0262 AC3 the final mode of the dispatcher", function(it)
-	it("AC3: final is a zz-review mode that reads no lessons, records as a code review and is the sharp tier", function()
+	it("AC3: final is a zz-review mode that reads no lessons and records as a code review", function()
 		t.expect(dispatch.phaseOf("zz-review", "final")).toBe("code-review")
 		local m = (dispatch.REVIEW_MODES :: any).final
 		t.expect(m ~= nil).toBe(true)
-		t.expect(m.tier).toBe("sharp")
 		local ok, e = pcall(dispatch.phaseOf, "zz-review", "finale")
 		t.expect(ok).toBe(false)
 		t.expect(has(tostring(e), "final")).toBe(true)
@@ -39,6 +38,7 @@ return t.spec("c0262 AC3 the final mode of the dispatcher", function(it)
 		t.expect(has(p, "./zn lessons")).toBe(false)
 		t.expect(has(p, "z-nile/")).toBe(false)
 		t.expect(has(p, "Never edit the main checkout")).toBe(false)
+		t.expect(has(p, "write only `/x/.cache/dispatch/c0010/review.md`")).toBe(true)
 	end)
 
 	it("AC3: the other modes' prompts are unchanged: their lessons lines, skill path and worktree", function()

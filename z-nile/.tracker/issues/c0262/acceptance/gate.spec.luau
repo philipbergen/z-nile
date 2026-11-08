@@ -81,6 +81,25 @@ return t.spec("c0262 AC2 the gate ./zn done applies to final reviews", function(
 		t.expect(finalreview.verdict("no verdict")).toBe(nil)
 	end)
 
+	it("AC2: an approve that carries a medium finding is refused too, one with only lows passes", function()
+		local med = problem("2026-11-08", {
+			["final-review-c0010-001.md"] = review("approve", "### F1 [low] a\n\n### F2 [medium] b\n"),
+			["final-review-c0011-001.md"] = review("approve"),
+		})
+		t.expect(med ~= nil and has(med :: string, "medium")).toBe(true)
+		local lows = problem("2026-11-08", {
+			["final-review-c0010-001.md"] = review("approve", "### F1 [low] a\n"),
+			["final-review-c0011-001.md"] = review("approve"),
+		})
+		t.expect(lows).toBe(nil)
+	end)
+
+	it("AC2: Verdict is read at a line start only, and two Verdict lines refuse", function()
+		t.expect(finalreview.verdict("quoted: Verdict: approve in prose\nVerdict: changes\n")).toBe("changes")
+		t.expect(finalreview.verdict("Verdict: approve\nVerdict: approve\n")).toBe(nil)
+		t.expect(finalreview.verdict("see Verdict: approve\n")).toBe(nil)
+	end)
+
 	it("AC2: an approve that still carries a high finding is refused, and prose about [high] is not a finding", function()
 		local p = problem("2026-11-08", {
 			["final-review-c0010-001.md"] = review("approve", "### F1 [low] a\n\n### F2 [high] off course\n"),

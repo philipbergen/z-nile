@@ -17,7 +17,7 @@ check "AC3: final is a zz-review mode: a prompt that works in the view folder fr
 	lune run tests/run -- "$A/mode.spec.luau"
 check "AC4: a final review's findings are harvestable, its files are not item documents, and one leaf module owns the names" \
 	lune run tests/run -- "$A/harvest.spec.luau"
-check "AC5: full force: the final mode is the sharp tier and the zz-review table is the strongest each CLI has" \
+check "AC5: full force: the final review resolves through the zz-review table and the review rule that binds it (Opus; grok at xhigh)" \
 	lune run tests/run -- "$A/strong.spec.luau"
 check "AC6: zz-review, zz-execute and zz-rules state the final review and that a failed one is BLOCKED" \
 	lune run tests/run -- "$A/skills.spec.luau"

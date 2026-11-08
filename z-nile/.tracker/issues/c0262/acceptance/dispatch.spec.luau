@@ -97,9 +97,16 @@ return t.spec("c0262 AC8 the dispatcher runs a final review in the view and land
 		t.expect(has(line, "--phase code-review")).toBe(true)
 		t.expect(has(line, "--issue c0010")).toBe(true)
 		t.expect(has(line, "--model claude-opus-5-5")).toBe(true)
-		-- the second round is numbered 002
+		-- the second round is numbered 002, built in a fresh view from round 2's tree
+		local cwd1 = string.gsub(fs.readFile(`{h.fakes}/cwd`), "%s+$", "")
+		fs.writeFile(`{wt}/pickman/src/foo.luau`, "return 'foo two'\n")
+		fixture.git(wt, { "add", "-A" })
+		fixture.git(wt, { "-c", "user.name=e2e", "-c", "user.email=e2e@example.invalid", "commit", "-qm", "work 2" })
 		local again = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "final" })
 		t.expect(again.ok).toBe(true)
+		local cwd2 = string.gsub(fs.readFile(`{h.fakes}/cwd`), "%s+$", "")
+		t.expect(cwd2 == cwd1).toBe(false)
+		t.expect(has(fs.readFile(`{h.fakes}/patch`), "foo two")).toBe(true)
 		t.expect(fs.isFile(`{wt}/pickman/.tracker/rafts/active/R0010/final-review-c0010-002.md`)).toBe(true)
 	end)
 

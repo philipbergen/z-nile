@@ -1,35 +1,27 @@
 --!strict
--- c0262 AC5: "full force": the final review runs on the strongest model the CLI has. A checked proxy: the final mode is
--- the sharp tier, and the zz-review table of the repository's own .models.toml (the one table the final mode reads
--- until c0261's sharp tier names another) follows the review rule and ranks at least every other step on each CLI.
+-- c0262 AC5: "full force": the final review names concrete models by the existing review rule (models.reviewRule: Opus
+-- through claude and agent, a grok model at xhigh through grok), with no alias and no tier of its own. A checked proxy:
+-- the final mode resolves through the zz-review table, whose rule still refuses any weaker model.
 local dispatch = require("@znile/engine/dispatch")
-local fs = require("@lune/fs")
-local process = require("@lune/process")
-local serde = require("@lune/serde")
+local models = require("@znile/engine/models")
 local t = require("@tests/lib/t")
 
-local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local function spec(cli: string, model: string, effort: string?): models.Spec
+	return { cli = cli, model = model, effort = effort, rank = 4, runtime = "x", maxTokens = 1 } :: any
+end
 
-return t.spec("c0262 AC5 the final review runs on the strongest model", function(it)
-	it("AC5: the final mode is the sharp tier, the review model of each CLI, and no other step outranks it", function()
-		t.expect(((dispatch.REVIEW_MODES :: any).final or {}).tier).toBe("sharp")
-		local cfg: any = serde.decode("toml", fs.readFile(`{TOP}/.models.toml`))
-		local seen = 0
-		for _, cli in { "claude", "grok", "agent" } do
-			local review = cfg["zz-review"][cli]
-			t.expect(review ~= nil).toBe(true)
-			if cli == "grok" then
-				t.expect(string.match(review.model, "^grok%-") ~= nil and review.effort == "xhigh").toBe(true)
-			else
-				t.expect(string.match(review.model, "^claude%-opus%-") ~= nil).toBe(true)
-			end
-			for step, tables in cfg do
-				if type(tables) == "table" and step ~= "zz-review" and type(tables[cli]) == "table" then
-					t.expect((tables[cli].rank :: number) <= (review.rank :: number)).toBe(true)
-					seen += 1
-				end
-			end
+return t.spec("c0262 AC5 the final review runs on the review model of the CLI", function(it)
+	it("AC5: the final mode takes its model from the zz-review table, like every review mode", function()
+		for _, mode in { "design", "raft", "code", "stream", "final" } do
+			t.expect((dispatch :: any).modelSkillOf("zz-review", mode)).toBe("zz-review")
 		end
-		t.expect(seen > 0).toBe(true)
+	end)
+
+	it("AC5: the review rule the final mode is bound to: Opus or a grok model at xhigh, nothing weaker", function()
+		t.expect(models.reviewRule("zz-review", spec("claude", "claude-opus-5-5"))).toBe(nil)
+		t.expect(models.reviewRule("zz-review", spec("agent", "claude-opus-5-5-high"))).toBe(nil)
+		t.expect(models.reviewRule("zz-review", spec("grok", "grok-4.7", "xhigh"))).toBe(nil)
+		t.expect(models.reviewRule("zz-review", spec("claude", "claude-sonnet-5")) ~= nil).toBe(true)
+		t.expect(models.reviewRule("zz-review", spec("grok", "grok-4.7", "high")) ~= nil).toBe(true)
 	end)
 end)

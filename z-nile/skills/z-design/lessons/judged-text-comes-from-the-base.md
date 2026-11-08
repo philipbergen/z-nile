@@ -9,3 +9,5 @@ A review that compares a result with a text the author can rewrite proves nothin
 **Why:** c0262 design review 001 F3: the first draft of the final review's limited view read `design.md` and the decision lines from the document on the branch, and its diff left out tracker folders, so a Design edited during execution was approved against itself.
 
 **How to apply:** read the judged texts with `git show <base>:<path>`, show the branch's edits to them as their own patch, label lines added on the branch as claims to check, and refuse when the base lacks the document.
+
+**Also:** c0262 design review 002 F1: "read from the base, refuse when missing" deadlocked the gate for an emergent member, which exists only on the branch. Give items the branch creates their own route (accept them when their document says so, labelled), and take the gate's membership from one trusted place.

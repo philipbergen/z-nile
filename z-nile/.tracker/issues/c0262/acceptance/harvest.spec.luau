@@ -18,6 +18,7 @@ return t.spec("c0262 AC4 a final review's findings are harvested; one leaf modul
 		t.expect(#bad).toBe(1)
 		t.expect(trail.isDoc("final-review-c0010-001.md")).toBe(false)
 		t.expect(trail.isDoc("final-review-c0010-002.md")).toBe(false)
+		t.expect(trail.isDoc("final-refute-c0010-001.md")).toBe(false)
 		t.expect(trail.isDoc("R0099.md")).toBe(true)
 		t.expect(trail.isDoc("stream-review-c0010-001.md")).toBe(false)
 	end)

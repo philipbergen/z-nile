@@ -99,7 +99,16 @@ return t.spec("c0262 final-view and done, driven for real", function(it)
 		write(`{RAFT}/review-001.md`, REVIEW_OK)
 		write("notes/alpha/a.txt", "alpha work\n")
 		write("notes/beta/b.txt", "someone else's work\n")
-		edit("pickman/.tracker/issues/f0010/f0010.md", "## Problem\n", "## Problem\nP-edited-on-the-branch\n")
+		edit("pickman/.tracker/issues/active/f0010/f0010.md", "## Problem\n", "## Problem\nP-edited-on-the-branch\n")
+		-- the executor's own words, a Touched line dropped on the branch, a change no member claims, an emergent member
+		edit("pickman/.tracker/issues/active/f0010/f0010.md", "## Verification log\n", "## Verification log\nVLOG-MARKER\n")
+		edit("pickman/.tracker/issues/active/f0010/f0010.md", "%- `notes/alpha`\n", "")
+		write("notes/gamma/g.txt", "nobody claims this\n")
+		write(
+			"pickman/.tracker/issues/active/f0011/f0011.md",
+			"---\nid: f0011\ntype: feature\ntitle: emergent\nslug: emergent\nraft: R0010\ndepends_on: []\nemergent: true\ndesign: ready\ncreated: 2026-11-09\nstatus: active-x-y-z\n---\n\n# f0011\n\n## Problem\nfiled during execution\n\n### Touched modules\n- `notes/delta`\n"
+		)
+		write("notes/delta/d.txt", "emergent work\n")
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "work" })
 	end)
@@ -119,6 +128,15 @@ return t.spec("c0262 final-view and done, driven for real", function(it)
 		t.expect(has(patch, "notes/alpha/a.txt")).toBe(true)
 		t.expect(has(patch, "notes/beta/b.txt")).toBe(false)
 		t.expect(has(patch, "f0010.md")).toBe(false)
+		-- Touched is read from the base: the line dropped on the branch does not drop the file; notes/gamma is claimed by
+		-- no member, so it rides in unclaimed.patch and the README lists it
+		t.expect(has(patch, "notes/gamma")).toBe(false)
+		t.expect(has(fs.readFile(`{OUT}/unclaimed.patch`), "notes/gamma/g.txt")).toBe(true)
+		t.expect(has(fs.readFile(`{OUT}/README.md`), "notes/gamma/g.txt")).toBe(true)
+		-- the executor's own words are in no file of the view, the design-changes patch included
+		for _, name in { "design.md", "design-changes.patch", "ask.md", "README.md" } do
+			t.expect(has(fs.readFile(`{OUT}/{name}`), "VLOG-MARKER")).toBe(false)
+		end
 		t.expect(has(fs.readFile(`{OUT}/skill.md`), "Final mode")).toBe(true)
 		for _, name in fs.readDir(OUT) do
 			for _, bad in { "review", "refute", "harvest", "spend", "prompt" } do
@@ -127,6 +145,21 @@ return t.spec("c0262 final-view and done, driven for real", function(it)
 		end
 		fs.removeDir(OUT)
 		t.expect(git({ "status", "--porcelain" })).toBe(before)
+	end)
+
+	it("AC7: an emergent member (only on the branch) gets a view with its design from HEAD; a non-emergent one is refused", function()
+		local r = view({ "f0011", "--out", OUT, "--base", "main" })
+		if not r.ok then
+			error(r.stderr .. r.stdout)
+		end
+		t.expect(has(fs.readFile(`{OUT}/README.md`), "written during execution")).toBe(true)
+		t.expect(has(fs.readFile(`{OUT}/design.md`), "filed during execution")).toBe(true)
+		t.expect(has(fs.readFile(`{OUT}/implementation.patch`), "notes/delta/d.txt")).toBe(true)
+		fs.removeDir(OUT)
+		edit("pickman/.tracker/issues/active/f0011/f0011.md", "emergent: true", "emergent: false")
+		t.expect(view({ "f0011", "--out", OUT, "--base", "main" }).ok).toBe(false)
+		t.expect(fs.isDir(OUT)).toBe(false)
+		edit("pickman/.tracker/issues/active/f0011/f0011.md", "emergent: false", "emergent: true")
 	end)
 
 	it("AC7: a busy folder, an unknown issue and an empty diff are refused, and nothing is written", function()

@@ -42,6 +42,7 @@ local function view(over: { [string]: any }?): { [string]: string }
 		designChanges = "",
 		check = 'check "AC1: Foo exists" true',
 		diff = "diff --git a/src/Foo.luau b/src/Foo.luau\n+local Foo = {}",
+		unclaimed = "",
 		skill = "# Adversarial review\nFinal mode ... Verdict: approve | changes ... Off course:",
 	}
 	local extra: { [string]: any } = over or {}
@@ -66,6 +67,7 @@ return t.spec("c0262 AC1 the final review's limited view", function(it)
 			"design.md",
 			"implementation.patch",
 			"skill.md",
+			"unclaimed.patch",
 		})
 		local v = view()
 		t.expect(has(v["ask.md"], "CAPTURED ASK: make Foo")).toBe(true)
@@ -114,6 +116,35 @@ return t.spec("c0262 AC1 the final review's limited view", function(it)
 		local alone = view()["README.md"]
 		t.expect(has(alone, "c0011")).toBe(false)
 		t.expect(has(alone, "emergent")).toBe(false)
+	end)
+
+	it("AC1: the README lists changes no member's Touched modules claim, and they ride in unclaimed.patch", function()
+		local v = view({ unclaimed = "diff --git a/notes/gamma/g.txt b/notes/gamma/g.txt\n+g", unclaimedPaths = { "notes/gamma/g.txt" } })
+		t.expect(has(v["README.md"], "notes/gamma/g.txt")).toBe(true)
+		t.expect(has(v["README.md"], "no design calls for")).toBe(true)
+		t.expect(has(v["unclaimed.patch"], "+g")).toBe(true)
+		t.expect(has(view()["README.md"], "no design calls for")).toBe(false)
+	end)
+
+	it("AC1: a member that exists only on the branch (emergent) has its whole design from HEAD, and the README says so", function()
+		local r = view({ designSource = "head", emergent = true })["README.md"]
+		t.expect(has(r, "written during execution")).toBe(true)
+		t.expect(has(view()["README.md"], "written during execution")).toBe(false)
+	end)
+
+	it("AC1: a base skill without a Final mode is replaced by HEAD's, and the README says so", function()
+		local base = view({ skill = "# Adversarial review (no final mode here)" })
+		t.expect(has(base["skill.md"], "no final mode here")).toBe(false)
+		t.expect(has(base["skill.md"], "Off course:")).toBe(true)
+		t.expect(has(base["README.md"], "skill.md comes from the branch")).toBe(true)
+		t.expect(has(view()["README.md"], "skill.md comes from the branch")).toBe(false)
+	end)
+
+	it("AC1: design edits are stripped of the Verification log and the status and raft lines on both sides", function()
+		local d = finalreview.designText(DOC)
+		t.expect(has(d, "Verification log")).toBe(false)
+		local cut = finalreview.designText(DOC .. "\nmore log\n")
+		t.expect(cut).toBe(d)
 	end)
 
 	it("AC1: an empty implementation diff refuses to build a view", function()
