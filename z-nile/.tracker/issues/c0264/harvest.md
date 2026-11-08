@@ -39,3 +39,7 @@
 - design-review-008 F1: z-design/restated-rules-move-together
 - design-review-008 F2: z-design/spec-design-correspondence
 - design-review-008 F3: one-off: harvest mapping slip repeated
+- design-review-009 F1: z-design/never-narrow-captured-scope
+- design-review-009 F2: z-design/quote-other-preps-before-promising
+- design-review-009 F3: z-design/status-labels-need-a-tracker-fact
+- design-review-009 F4: z-design/restated-rules-move-together
