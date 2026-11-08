@@ -49,3 +49,10 @@
 - design-review-004 F10: z-design/restated-rules-move-together
 - design-review-004 F11: one-off: a refusal text that named the design spend line for a code round
 - design-review-004 F12: one-off: bookkeeping slips
+- design-review-005 F1: z-design/specify-every-named-artifact
+- design-review-005 F2: z-design/reasoned-rows-claim-testable-reasons, z-design/spec-design-correspondence
+- design-review-005 F3: z-design/new-rules-migrate-existing-work
+- design-review-005 F4: z-design/spec-design-correspondence
+- design-review-005 F5: z-design/accepted-risks-checked-and-decided
+- design-review-005 F6: z-design/spec-design-correspondence
+- design-review-005 F7: z-design/restated-rules-move-together
