@@ -77,7 +77,7 @@ local PINNED = {
 		"z-nile",
 		"c0120",
 		"docs.spec.luau",
-		"d56347352d2dea63cc8e7c524c1723ec06a4b5b2a9a55923d2a44aa29b4bfe1c",
+		"ea2a905152d0c139829583ef3359892bdb9688041b85e0df0e8fe0a1c7f3d6f0",
 	},
 	{
 		"pickman",

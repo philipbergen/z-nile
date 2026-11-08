@@ -274,6 +274,31 @@ function sel.affected(ctx: Context, changed: { string }, only: string?): { strin
 	return out
 end
 
+-- The project a change set is confined to (c0239, the stop hook's scope), or "ALL". A project's name only when (1) the
+-- selection is not "ALL", (2) it holds a spec, (3) every selected spec lies in that one project's home, and (4) every
+-- changed path lies under that project's home (its tracker root is inside it). Anything else is "ALL": a gate scoped
+-- to a project is never narrower than the unscoped one.
+function sel.scope(ctx: Context, changed: { string }): string
+	local picked = sel.affected(ctx, changed)
+	if picked == "ALL" or #(picked :: { string }) == 0 then
+		return "ALL"
+	end
+	local name: string? = nil
+	for _, spec in picked :: { string } do
+		local p = projectOf(ctx.rules, spec)
+		if p == nil or (name ~= nil and p ~= name) then
+			return "ALL"
+		end
+		name = p
+	end
+	for _, path in changed do
+		if projectOf(ctx.rules, path) ~= name then
+			return "ALL"
+		end
+	end
+	return name :: string
+end
+
 -- the root list graph.build is given for a set of rules: each home's src and tests
 function sel.graphRoots(rules: Rules): { string }
 	local roots: { string } = {}

@@ -274,3 +274,12 @@ tests/acceptance/c0185/selector.spec.luau	*
 tests/tooling/dispatch-texts.spec.luau	.models.toml
 tests/acceptance/c0117/models.spec.luau	.models.toml
 tests/acceptance/c0117/docs.spec.luau	AGENTS.md
+tests/acceptance/c0239/docs.spec.luau	z-nile/skills/zz-test/SKILL.md
+tests/acceptance/c0239/docs.spec.luau	z-nile/skills/zz-execute/SKILL.md
+tests/acceptance/c0239/docs.spec.luau	z-nile/skills/zz-rules/SKILL.md
+tests/acceptance/c0239/docs.spec.luau	z-nile/skills/zz-review/SKILL.md
+tests/acceptance/c0239/docs.spec.luau	z-nile/templates/prompt.md
+tests/acceptance/c0239/docs.spec.luau	z-nile/templates/raft/check.sh
+tests/acceptance/c0239/docs.spec.luau	SETUP.md
+tests/acceptance/c0239/done.spec.luau	z-nile/engine/main.luau
+tests/acceptance/c0239/land.spec.luau	z-nile/engine/main.luau
