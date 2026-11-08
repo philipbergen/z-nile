@@ -105,3 +105,14 @@
 - design-review-012 F8: z-design/accepted-risks-checked-and-decided
 - design-review-012 F9: one-off: a shared local ref namespace; fails safe
 - design-review-012 F10: z-design/reasoned-rows-claim-testable-reasons
+- design-review-013 F1: zz-test/background-seeds-meet-later-assertions
+- design-review-013 F2: zz-test/background-seeds-meet-later-assertions
+- design-review-013 F3: z-design/spec-design-correspondence
+- design-review-013 F4: zz-arch/automatic-effects-have-an-end-and-a-subject-check
+- design-review-013 F5: z-design/reasoned-rows-claim-testable-reasons
+- design-review-013 F6: z-design/accepted-risks-checked-and-decided
+- design-review-013 F7: z-design/required-steps-on-every-path
+- design-review-013 F8: z-design/confirm-overrides-with-a-suite-run
+- design-review-013 F9: zz-test/stand-ins-answer-only-named-arguments
+- design-review-013 F10: z-design/restated-rules-move-together
+- design-review-013 F11: z-design/accepted-risks-checked-and-decided

@@ -5,5 +5,5 @@
 - F3: fixed: the commands that end a claim drop its branch (give-back and stop pinned; ready and done reasoned), pruning is the backstop for merges; a lost claim's branch is kept until its takeover.
 - F4: fixed: one lease rule in the pure `plan` (remembered sha, else sha seen, else create-only); one entry format `<stamp> <epoch> <sha>`; a create-only write re-reads `main` and deletes what it created if the stamp changed; edge.spec pins that with a shim armed on the branch read.
 - F5: fixed: no classification of failures; any failed write is followed by a re-read and `heartbeat.rejected`, a second failure is a failed tick; prune deletes are separate best-effort pushes.
-- F6: fixed: E8 re-run with the first beat as a branch push: 265 passed, 0 failed, 27 files.
+- F6: fixed: E8 on the branch design: withdrawn, that run never applied its scratch edit; see design-refute-013 F8 for the real run (478 passed, 0 failed, 53 files).
 - F7-F10: fixed: AC1 text, dispatch.spec's trivial assertion removed (the proof is re-pinned), the E5 record, the alternatives table (the wrapper allows `gh pr edit` and a notes push; the rejections stand on "no PR yet" and "no lease"), the shared `hb-seen` contention sentence, the unkillable mutant dropped.

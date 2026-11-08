@@ -80,6 +80,7 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 			[`{P}/c0010/c0010.md`] = issue("c0010", "new-a-b-c"),
 			[`{P}/c0020/c0020.md`] = issue("c0020", "new-a-b-c"),
 			[`{P}/c0030/c0030.md`] = issue("c0030", "new-a-b-c"),
+			[`{P}/c0095/c0095.md`] = issue("c0095", "new-a-b-c"),
 			[`{P}/c0040/c0040.md`] = issue("c0040", "prepared-quiet-copper-falcon", "ready", "R0010"),
 			[`{P}/c0040/check.sh`] = CHECK,
 			["pickman/.tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "c0040"),
@@ -257,28 +258,29 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 	it(
 		"a checkout that does not hold the claim refuses a bare beat, and the dispatcher's form is bound to the stamp it read",
 		function()
-			local stamp = stampOf("c0010", `{P}/c0010/c0010.md`)
+			must(zn(wt, { "status", "c0095", "preparing" }, T0 + 1400), "claim c0095 in the worktree")
+			local stamp = stampOf("c0095", `{P}/c0095/c0095.md`)
 			local before = beats()
-			-- the main checkout holds no claim memory for c0010: a bare beat would adopt whatever stamp origin has
-			local bare = zn(h.f.main, { "beat", "c0010" }, T0 + 1500)
+			-- the main checkout never adopted c0095, so it holds no claim memory for it: a bare beat would adopt whatever stamp origin has
+			local bare = zn(h.f.main, { "beat", "c0095" }, T0 + 1500)
 			t.expect(bare.ok).toBe(false)
 			t.expect(has(bare.stderr, "does not hold")).toBe(true)
 			t.expect(has(bare.stderr, "--adopt")).toBe(true)
 			-- the dispatcher's form names the stamp it read at the step's start; a restamped item is refused, not beaten
 			local stale = zn(
 				h.f.main,
-				{ "beat", "c0010", "--adopt", "--stamp", "preparing-silver-otter-quiet" },
+				{ "beat", "c0095", "--adopt", "--stamp", "preparing-silver-otter-quiet" },
 				T0 + 1500
 			)
 			t.expect(stale.ok).toBe(false)
-			t.expect(has(stale.stderr, `c0010's claim was taken over (now {stamp})`)).toBe(true)
+			t.expect(has(stale.stderr, `c0095's claim was taken over (now {stamp})`)).toBe(true)
 			t.expect(#beats()).toBe(#before)
 			for i, b in beats() do
 				t.expect(b.sha).toBe(before[i].sha) -- nothing was written
 			end
 			-- and with the right stamp it beats
 			must(
-				zn(h.f.main, { "beat", "c0010", "--adopt", "--stamp", stamp }, T0 + 1500),
+				zn(h.f.main, { "beat", "c0095", "--adopt", "--stamp", stamp }, T0 + 1500),
 				"the dispatcher's form"
 			)
 		end

@@ -472,6 +472,10 @@ return t.spec("c0265 lost work", function(it)
 		local comeBack = zn(wt, { "beat", "c0010" }, at)
 		t.expect(comeBack.ok).toBe(false)
 		t.expect(has(comeBack.stderr, "c0010's claim was taken over")).toBe(true)
+		-- an adoption never overrides a remembered different stamp: --adopt in the old owner's own checkout is told too
+		local adopt = zn(wt, { "beat", "c0010", "--adopt" }, at)
+		t.expect(adopt.ok).toBe(false)
+		t.expect(has(adopt.stderr, "c0010's claim was taken over")).toBe(true)
 		local loop = zn(
 			wt,
 			{ "beat", "c0010", "--watch" },
@@ -516,6 +520,7 @@ return t.spec("c0265 lost work", function(it)
 		"a lost readied raft is taken over by stop and ready: the old branch goes, a fresh active stamp and branch come, and the stop records the lost stamp",
 		function()
 			local at = LATE + 14 * STALE
+			fs.writeFile(`{h.fakes}/prs.json`, "[]") -- no pull request names R0010 any more
 			local doc = "pickman/.tracker/rafts/active/R0010/R0010.md"
 			local old = stampOf(doc)
 			t.expect(tipOf(old) ~= "").toBe(true)

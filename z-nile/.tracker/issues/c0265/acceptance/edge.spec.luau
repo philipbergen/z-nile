@@ -94,7 +94,7 @@ if [ "$1" = push ]; then
         "$REAL_GIT" -C "$o" add -A; "$REAL_GIT" -C "$o" -c user.name=race -c user.email=race@example.invalid commit -q -m restamp
         "$REAL_GIT" -C "$o" push -q origin HEAD:main
       fi ;;
-    *:refs/heads/hb/*)
+    *":refs/heads/hb/$FAKE_OLDSTAMP"*)
       if [ -f "$FAKE_DIR/racebeat" ]; then rm -f "$FAKE_DIR/racebeat"; takeover; fi ;;
   esac
 fi
