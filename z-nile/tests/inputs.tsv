@@ -156,6 +156,7 @@ tests/acceptance/c0116/retired.spec.luau	pickman/.tracker/rafts/
 tests/acceptance/c0116/retired.spec.luau	pickman/skills/
 tests/acceptance/c0116/retired.spec.luau	z-nile/.tracker/issues/
 tests/acceptance/c0116/retired.spec.luau	z-nile/.tracker/rafts/
+tests/acceptance/c0118/real.spec.luau	*
 tests/acceptance/c0119/scope-lessons.spec.luau	pickman/.tracker/issues/
 tests/acceptance/c0119/scope-lessons.spec.luau	pickman/.tracker/rafts/
 tests/acceptance/c0119/scope-lessons.spec.luau	pickman/skills/
@@ -241,10 +242,7 @@ tests/acceptance/c0191/docs.spec.luau	pickman/skills/pickman-test/SKILL.md
 tests/acceptance/c0191/runner-cpu.spec.luau	.gitignore
 tests/meta/architecture.spec.luau	z-nile/tests/
 tests/tooling/affected.spec.luau	z-nile/tests/fixtures/graph/
-tests/tooling/board.spec.luau	pickman/.tracker/issues/
-tests/tooling/board.spec.luau	pickman/.tracker/rafts/
-tests/tooling/board.spec.luau	z-nile/.tracker/issues/
-tests/tooling/board.spec.luau	z-nile/.tracker/rafts/
+tests/tooling/board.spec.luau	*
 tests/tooling/fence-inherited-env.spec.luau	.gitignore
 tests/tooling/fence-inherited-env.spec.luau	pickman/.luaurc
 tests/tooling/fence-inherited-env.spec.luau	pickman/tests/lib/renamed.luau
