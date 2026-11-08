@@ -9,3 +9,5 @@ A full gate run before review used to catch every spec whose inputs the selector
 **Why:** c0165 design review 002 F2. Two cases showed it. A new pickman Logic file didn't select `pickman/tests/meta/architecture.spec`, which walks all of `src/`. A pickman spec change didn't select `repo-fence.spec`, which scans `pickman/`. The audit then found 278 declarations to ship, and 21 specs needing an always-run entry because they clone the real HEAD or read history.
 
 **How to apply:** audit every spec for reads outside its closure and its forcing rules. Paste the searches, ship the declarations (folder entries for walks, `*` for git state), pin the list in `check.sh`, and add a rule that new specs declare theirs.
+
+**Also:** c0118 design review 013 F3: measure every spec the answer gives `*` (a specs that reads every project and takes over 2 s idle gets a line per registered project and a case that keeps the set complete, c0165's R73 form); the answer had timed only the cheaper of two specs.
