@@ -21,14 +21,14 @@ check "AC5: the zz-rules board row and the README say what the board does" \
   lune run tests/run -- "$A/docs.spec.luau"
 check "AC6: the real tracker's board has every registered project and every issue on one column of its project" \
   lune run tests/run -- "$A/real.spec.luau"
-check "AC7: the old navigation, Stats, the CLI, the artifact workflow and the main checkout's refresh stay (promoted board specs, overridden where they assumed the page opens on Rafts)" \
+check "AC7: the old navigation, Stats, the CLI and the main checkout's refresh stay (promoted board specs, overridden where they assumed the page opens on Rafts)" \
   lune run tests/run -- tests/acceptance/c0042/cli.spec.luau tests/acceptance/c0042/model.spec.luau \
   tests/acceptance/c0042/page.spec.luau tests/acceptance/c0042/smoke.spec.luau tests/acceptance/c0042/vendor.spec.luau \
   tests/acceptance/c0107/keep.spec.luau tests/acceptance/c0107/label.spec.luau tests/acceptance/c0107/page.spec.luau \
   tests/acceptance/c0107/views.spec.luau tests/acceptance/c0073/board-stats.spec.luau tests/acceptance/c0073/chart.spec.luau \
   tests/acceptance/c0073/history.spec.luau tests/acceptance/c0073/stats.spec.luau tests/acceptance/c0057/open.spec.luau \
   tests/acceptance/c0048/board-docs.spec.luau tests/acceptance/c0048/board-workflow.spec.luau \
-  tests/acceptance/c0070/board-refresh.spec.luau tests/tooling/board.spec.luau
+  tests/acceptance/c0070/board-refresh.spec.luau tests/acceptance/c0172/narrowed.spec.luau tests/tooling/board.spec.luau
 check "AC8: metrics counts review rounds by the board's rule, and the README picture spec (overridden) stays green" \
   lune run tests/run -- "$A/metrics.spec.luau" tests/tooling/metrics-rounds.spec.luau tests/acceptance/c0043/rounds.spec.luau \
   tests/acceptance/c0111/metrics-lessons.spec.luau tests/acceptance/c0116/issue-design.spec.luau \

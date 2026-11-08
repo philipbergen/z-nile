@@ -1,6 +1,6 @@
 --!strict
 -- c0118 AC5: the zz-rules board row and the README say what the new board does, in the Design's words, and the old
--- row's pinned words stay (the views, the artifact, -O).
+-- row's pinned words stay (the views, -O; the artifact left with c0172).
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 
@@ -49,13 +49,12 @@ return t.spec("c0118 board docs", function(it)
 		end
 	end)
 
-	it("the old row's words stay: the views, Stats, the artifact and -O", function()
+	it("the old row's words stay: the views, Stats and -O", function()
 		local row = boardRow()
 		for _, phrase in
 			{
 				"Views Rafts and Issues",
 				"not a third view",
-				"tracker-board",
 				"unless `-O`",
 				"`./zn board [--out PATH] [-O]`",
 			}
