@@ -243,6 +243,20 @@ function heartbeat.rejected(
 	return { action = "create", lease = "" }
 end
 
+-- The next free name for a discarded worktree or its branch: `name-1`, `name-2`, ... the smallest suffix no taken name uses
+-- (taken: every directory and local branch name that exists).
+function heartbeat.nextSuffix(name: string, taken: { string }): string
+	local used: { [string]: boolean } = {}
+	for _, t in taken do
+		used[t] = true
+	end
+	local n = 1
+	while used[`{name}-{n}`] do
+		n += 1
+	end
+	return `{name}-{n}`
+end
+
 -- A takeover needs an explicit lost verdict judged for the stamp origin still holds.
 function heartbeat.canTakeOver(kind: string, judgedStamp: string, originStamp: string): boolean
 	return kind == "lost" and judgedStamp == originStamp
