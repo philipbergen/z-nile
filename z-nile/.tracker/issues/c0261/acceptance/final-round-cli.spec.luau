@@ -102,4 +102,23 @@ return t.spec("c0261 status prepared refuses a last design round not on a final-
 		designReady(`{gdir}/{gid}.md`)
 		trackerfix.trOk(g, wg, { "status", gid, "prepared" })
 	end)
+
+	it("an issue with no design review round at all is refused when the rule binds (AC11)", function()
+		local f = trackerfix.new("c0261-final-round-d", nil)
+		fs.writeFile(`{f.main}/.models.toml`, MODELS)
+		fixture.git(f.main, { "add", "-A" })
+		fixture.git(f.main, { "commit", "-q", "-m", "models" })
+		fixture.git(f.main, { "push", "-q", "origin", "HEAD:main" })
+		local wt = trackerfix.trOk(f, f.main, { "worktree", "prep-solo" })
+		trackerfix.trOk(f, wt, { "sync" })
+		local id = string.match(
+			trackerfix.trOk(f, wt, { "new", "issue", "c", "solo-thing", "--project", "pickman" }),
+			"(c%d+)"
+		) :: string
+		trackerfix.trOk(f, wt, { "status", id, "preparing" })
+		designReady(`{wt}/pickman/.tracker/issues/{id}/{id}.md`)
+		local r = trackerfix.tr(f, wt, { "status", id, "prepared" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stdout .. r.stderr, "has no design review round")).toBe(true)
+	end)
 end)

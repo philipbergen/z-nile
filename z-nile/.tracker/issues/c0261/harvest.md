@@ -56,3 +56,4 @@
 - design-review-005 F5: z-design/accepted-risks-checked-and-decided
 - design-review-005 F6: z-design/spec-design-correspondence
 - design-review-005 F7: z-design/restated-rules-move-together
+- note design-review-005 answered in design-refute-005.md (the coordinator's defaults for the kimi kinds, the raft subject prefix, the rows-keyed cutoff): z-design/specify-every-named-artifact, z-design/new-rules-migrate-existing-work
