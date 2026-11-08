@@ -60,3 +60,8 @@
 - design-review-006 F7: z-design/specify-every-named-artifact
 - design-review-006 F8: z-design/restated-rules-move-together
 - note review 006's candidates (a positive case beside every refusal; depends_on does not order work inside a raft; every reader checks a marker's grammar): z-design/spec-design-correspondence, z-design/run-the-other-rafts-specs, z-design/exemption-markers-refuse-omission
+- design-review-007 F1: z-design/spec-design-correspondence
+- design-review-007 F2: z-design/spec-design-correspondence
+- design-review-007 F3: z-design/exemption-markers-refuse-omission
+- design-review-007 F4: z-design/instructions-runnable-where-they-run
+- design-review-007 F5: z-design/restated-rules-move-together
