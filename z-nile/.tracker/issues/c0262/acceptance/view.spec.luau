@@ -34,42 +34,55 @@ local DOC = table.concat({
 	"",
 }, "\n")
 
-local function view(): { [string]: string }
-	return finalreview.view({
+local function view(over: { [string]: any }?): { [string]: string }
+	local input: { [string]: any } = {
 		id = "c0010",
 		ask = "CAPTURED ASK: make Foo",
 		doc = DOC,
-		check = "check \"AC1: Foo exists\" true",
+		designChanges = "",
+		check = 'check "AC1: Foo exists" true',
 		diff = "diff --git a/src/Foo.luau b/src/Foo.luau\n+local Foo = {}",
-	})
+		skill = "# Adversarial review\nFinal mode ... Verdict: approve | changes ... Off course:",
+	}
+	for k, v in over or {} do
+		input[k] = v
+	end
+	return finalreview.view(input :: any)
 end
 
 return t.spec("c0262 AC1 the final review's limited view", function(it)
-	it("AC1: the view is the ask, the design, the check and the implementation, and nothing of the execution", function()
-		local v = view()
+	it("AC1: the view holds the ask, the design, the design's branch edits, the check, the skill and the diff, and nothing else", function()
 		local names = {}
-		for name in v do
+		for name in view() do
 			table.insert(names, name)
 		end
 		table.sort(names)
-		t.expect(names).toEqual({ "README.md", "ask.md", "check.sh", "design.md", "implementation.patch" })
+		t.expect(names).toEqual({
+			"README.md",
+			"ask.md",
+			"check.sh",
+			"design-changes.patch",
+			"design.md",
+			"implementation.patch",
+			"skill.md",
+		})
+		local v = view()
 		t.expect(has(v["ask.md"], "CAPTURED ASK: make Foo")).toBe(true)
 		t.expect(has(v["design.md"], "Add a Foo module.")).toBe(true)
-		t.expect(has(v["design.md"], "AC1: Foo exists.")).toBe(true)
 		t.expect(has(v["implementation.patch"], "+local Foo = {}")).toBe(true)
-		t.expect(has(v["check.sh"], "AC1")).toBe(true)
+		t.expect(has(v["skill.md"], "Off course:")).toBe(true)
 	end)
 
-	it("AC1: the issue's acceptance specs ride in the view under acceptance/", function()
-		local v = finalreview.view({
-			id = "c0010",
-			ask = "a",
-			doc = DOC,
-			check = "c",
-			diff = "d",
+	it("AC1: acceptance specs ride under acceptance/, and design edits made on the branch ride as claims to check", function()
+		local v = view({
 			acceptance = { ["foo.spec.luau"] = "-- spec text" },
+			designChanges = "+Scope decision (user, 2026-11-09): \"skip it\"",
 		})
 		t.expect(v["acceptance/foo.spec.luau"]).toBe("-- spec text")
+		t.expect(has(v["design-changes.patch"], "Scope decision (user, 2026-11-09)")).toBe(true)
+		-- the README says a line added on the branch is a claim, not a decision
+		t.expect(has(v["README.md"], "claim")).toBe(true)
+		t.expect(has(v["README.md"], "design-changes.patch")).toBe(true)
 	end)
 
 	it("AC1: the design drops the execution's own words (Verification log, status and raft lines)", function()
@@ -81,23 +94,45 @@ return t.spec("c0262 AC1 the final review's limited view", function(it)
 		t.expect(has(d, "id: c0010")).toBe(true)
 	end)
 
-	it("AC1: the README of the view names the three comparisons and sends findings to the Off course line", function()
+	it("AC1: the README names the comparisons, the skill and the Off course tag, and never a repository path", function()
 		local r = view()["README.md"]
-		t.expect(has(r, "ask.md")).toBe(true)
-		t.expect(has(r, "design.md")).toBe(true)
-		t.expect(has(r, "implementation.patch")).toBe(true)
-		t.expect(has(r, "Off course:")).toBe(true)
+		for _, word in { "ask.md", "design.md", "implementation.patch", "skill.md", "Off course:" } do
+			t.expect(has(r, word)).toBe(true)
+		end
+		t.expect(has(r, "z-nile/")).toBe(false)
 	end)
 
-	it("AC1: the diff is limited to the issue's Touched modules and never takes tracker folders", function()
-		local specs = finalreview.pathspecs({ "z-nile/engine/finalreview.luau", "z-nile/skills/zz-review" })
+	it("AC1: the README names the other members whose Touched modules overlap, and marks an emergent member", function()
+		local r = view({
+			others = { { id = "c0011", paths = { "z-nile/engine/main.luau" } } },
+			emergent = true,
+		})["README.md"]
+		t.expect(has(r, "c0011")).toBe(true)
+		t.expect(has(r, "z-nile/engine/main.luau")).toBe(true)
+		t.expect(has(r, "emergent")).toBe(true)
+		local alone = view()["README.md"]
+		t.expect(has(alone, "c0011")).toBe(false)
+		t.expect(has(alone, "emergent")).toBe(false)
+	end)
+
+	it("AC1: an empty implementation diff refuses to build a view", function()
+		local ok, e = pcall(view, { diff = "" })
+		t.expect(ok).toBe(false)
+		t.expect(has(tostring(e), "empty")).toBe(true)
+	end)
+
+	it("AC1: the diff is limited to the Touched modules and excludes only the raft's and the issue's own folders", function()
+		local specs = finalreview.pathspecs(
+			{ "z-nile/engine/finalreview.luau", "pickman/.tracker/architecture.md" },
+			{ "z-nile/.tracker/rafts/active/R0099", "z-nile/.tracker/issues/active/c0010" }
+		)
 		t.expect(specs[1]).toBe("z-nile/engine/finalreview.luau")
-		t.expect(specs[2]).toBe("z-nile/skills/zz-review")
-		local joined = table.concat(specs, " ")
-		t.expect(has(joined, ":(exclude,glob)**/.tracker/**")).toBe(true)
-		-- an issue with no Touched modules gets the whole branch minus the tracker, never an empty diff
-		local whole = finalreview.pathspecs(nil)
-		t.expect(whole[1]).toBe(".")
-		t.expect(has(table.concat(whole, " "), ":(exclude,glob)**/.tracker/**")).toBe(true)
+		t.expect(specs[2]).toBe("pickman/.tracker/architecture.md")
+		t.expect(specs[3]).toBe(":(exclude)z-nile/.tracker/rafts/active/R0099")
+		t.expect(specs[4]).toBe(":(exclude)z-nile/.tracker/issues/active/c0010")
+		t.expect(#specs).toBe(4)
+		-- an issue with no Touched modules gets the whole branch minus those two folders
+		local whole = finalreview.pathspecs(nil, { "a/raft", "a/issue" })
+		t.expect(whole).toEqual({ ".", ":(exclude)a/raft", ":(exclude)a/issue" })
 	end)
 end)

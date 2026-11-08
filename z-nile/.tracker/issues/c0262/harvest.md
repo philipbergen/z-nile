@@ -1,0 +1,20 @@
+- design-review-001 F1: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F2: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F3: z-design/judged-text-comes-from-the-base
+- design-review-001 F4: z-design/touched-paths-exist
+- design-review-001 F5: z-design/results-land-on-every-path
+- design-review-001 F6: z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F7: zz-test/new-commands-run-in-a-copy
+- design-review-001 F8: z-design/never-narrow-captured-scope
+- design-review-001 F9: one-off: moot by the user's decision (a failed final review goes BLOCKED)
+- design-review-001 F10: z-design/quote-other-preps-before-promising
+- design-review-001 F11: zz-arch/guards-trust-only-origin
+- design-review-001 F12: zz-test/each-fail-closed-rule-has-its-own-input
+- design-review-001 F13: one-off: moot by the user's decision (no cap)
+- design-review-001 F14: one-off: wording of the view's README
+- design-review-001 F15: zz-arch/one-reader-per-format
+- design-review-001 F16: one-off: emergent members
+- design-review-001 F17: z-design/probe-free-cli-lines-in-prep
+- design-review-001 F18: one-off: record line detail
+- design-review-001 F19: one-off: wording
+- design-review-001 F20: one-off: refuted, review files embed ids today
