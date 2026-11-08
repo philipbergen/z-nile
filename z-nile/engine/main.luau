@@ -598,7 +598,13 @@ local function freshStamp(state: string): string
 		if taken == nil then
 			fail(`cannot check a claim stamp against origin/main: {err}`)
 		end
-		return taken == true
+		if taken then
+			return true
+		end
+		-- c0265: a stamp is the lease's identity, so a value with a heartbeat branch (a young ended claim) is taken too;
+		-- where the branches cannot be read the draw stands, as origin/main alone decides then
+		local hb = sh.run("git", { "ls-remote", "--heads", "origin", `refs/heads/hb/{v}` })
+		return hb.ok and sh.trim(hb.stdout) ~= ""
 	end)
 	return value or fail("could not draw a claim stamp that origin/main does not already carry")
 end
@@ -1523,8 +1529,11 @@ local function readPrs(): ({ heartbeat.Pr }?, string?)
 	local ok, data = pcall(function()
 		return serde.decode("json", r.stdout)
 	end)
-	if not ok or type(data) ~= "table" then
+	if not ok or type(data) ~= "table" or (next(data :: any) ~= nil and (data :: any)[1] == nil) then
 		return nil, "gh did not answer with a list"
+	end
+	if #(data :: { any }) >= 200 then
+		return nil, "gh listed 200 pull requests: there may be more than it shows"
 	end
 	local out: { heartbeat.Pr } = {}
 	for _, e in data :: { any } do
@@ -1598,7 +1607,30 @@ local function lostText(id: string, now: string?): string
 	return if now then `{id}'s claim was taken over (now {now})` else `{id}'s claim ended`
 end
 
--- Pushes one beat for `stamp`: the plan's branch write (with its lease) and its best-effort deletions. Returns nil when
+-- origin/main's paths for a beat: the fetch is bounded like every network call of the heartbeat. Paths, or nil and why.
+local function beatPaths(): ({ string }?, string?)
+	local f = netRun("git", { "fetch", "-q", "origin", "main" })
+	if not f.ok then
+		return nil, sh.trim(f.stderr .. f.stdout)
+	end
+	local ok, paths = originTree()
+	if not ok then
+		return nil, `cannot read origin/main's project roots ({projects.FILE})`
+	end
+	return paths, nil
+end
+
+-- The stamp `id` holds on origin/main now: (stamp, nil), (nil, nil) when it is no longer a claim, (nil, why) unreadable.
+local function stampNow(id: string): (string?, string?)
+	local paths, err = beatPaths()
+	if not paths then
+		return nil, err
+	end
+	local current = claimStampOf(paths, id)
+	return current, nil
+end
+
+-- Pushes one beat for `held`: the plan's branch write (with its lease) and its best-effort deletions. Returns nil when
 -- written (or already newer), else the text to say and whether it means the claim was lost (taken over or ended).
 local function beatOnce(id: string, held: string): (string?, boolean)
 	for attempt = 1, 2 do
@@ -1608,7 +1640,10 @@ local function beatOnce(id: string, held: string): (string?, boolean)
 		if err then
 			return err, false
 		end
-		local paths = originPaths()
+		local paths, perr = beatPaths()
+		if not paths then
+			return perr, false
+		end
 		local claimed: { [string]: boolean } = {}
 		for _, c in claimsOf(paths, false) do
 			claimed[c.stamp] = true
@@ -1616,7 +1651,8 @@ local function beatOnce(id: string, held: string): (string?, boolean)
 		local now = hbNow()
 		local plan = heartbeat.plan(held, now, beats, claimed, now)
 		for _, d in plan.delete do
-			sh.run("git", { "push", "-q", "origin", `--force-with-lease={d.ref}:{d.lease}`, `:{d.ref}` })
+			-- best effort: a refused or hung prune never fails the beat
+			netRun("git", { "push", "-q", "origin", `--force-with-lease={d.ref}:{d.lease}`, `:{d.ref}` })
 		end
 		local w = plan.write
 		if w == nil then
@@ -1624,18 +1660,9 @@ local function beatOnce(id: string, held: string): (string?, boolean)
 		end
 		local tree = sh.git({ "rev-parse", "origin/main^{tree}" })
 		local tip = sh.git({ "rev-parse", "origin/main" })
-		local c = sh.run("git", {
-			"-c",
-			"user.name=zn-beat",
-			"-c",
-			"user.email=zn-beat@example.invalid",
-			"commit-tree",
-			tree,
-			"-p",
-			tip,
-			"-m",
-			w.subject,
-		})
+		-- authored by the checkout's own identity: a commit made for the real origin is never a fixture-looking one
+		-- (the spec runner's tripwire reads a new ref authored @example.invalid as a fixture leak)
+		local c = sh.run("git", { "commit-tree", tree, "-p", tip, "-m", w.subject })
 		if not c.ok then
 			return sh.trim(c.stderr), false
 		end
@@ -1645,9 +1672,12 @@ local function beatOnce(id: string, held: string): (string?, boolean)
 		if r.ok then
 			if w.lease == "" then
 				-- create-only: a takeover may have landed between the main read and the branch read
-				local again = claimStampOf(originPaths(), id)
+				local again, why = stampNow(id)
+				if why then
+					return why, false
+				end
 				if again ~= held then
-					sh.run("git", { "push", "-q", "origin", `--force-with-lease={w.ref}:{sha}`, `:{w.ref}` })
+					netRun("git", { "push", "-q", "origin", `--force-with-lease={w.ref}:{sha}`, `:{w.ref}` })
 					return lostText(id, again), true
 				end
 			end
@@ -1655,7 +1685,10 @@ local function beatOnce(id: string, held: string): (string?, boolean)
 		end
 		local msg = sh.trim(r.stderr .. r.stdout)
 		-- a rejected write: re-read, and learn whether the claim is still this one's
-		local nowStamp = claimStampOf(originPaths(), id)
+		local nowStamp, why = stampNow(id)
+		if why then
+			return why, false
+		end
 		local seen, _, err2 = readBeats()
 		if err2 then
 			return err2, false
@@ -1691,7 +1724,11 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 			fail(`beat --watch must run as ./zn run --time 3600 -- ./zn beat {id} --watch`)
 		end
 	end
-	local current, why = claimStampOf(originPaths(), id)
+	local first, perr = beatPaths()
+	if not first then
+		fail(`beat: {id}: {perr}`)
+	end
+	local current, why = claimStampOf(first :: { string }, id)
 	if not current then
 		fail(`beat: {why}`)
 	end
@@ -1705,13 +1742,15 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 	end
 	local every = heartbeat.setting(process.env, "ZN_BEAT_EVERY", heartbeat.INTERVAL, specRun())
 	while true do
-		local ok, paths = pcall(originPaths)
-		local here: string? = nil
-		if ok then
-			here = claimStampOf(paths :: { string }, id)
-		end
-		local act =
-			heartbeat.watch(startStamp, if ok then here else startStamp, os.time(), deadline :: number, every)
+		local here, unreadable = stampNow(id)
+		-- an unreadable main is a failed tick, not a restamp
+		local act = heartbeat.watch(
+			startStamp,
+			if unreadable then startStamp else here,
+			os.time(),
+			deadline :: number,
+			every
+		)
 		if act == "stop-restamped" then
 			print(lostText(id, here))
 			return
@@ -1719,11 +1758,13 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 			print(`beat: {id}: stopping before its bound`)
 			return
 		end
-		if not ok then
-			stdio.ewrite(`beat: {id}: {tostring(paths)}\n`)
+		if unreadable then
+			stdio.ewrite(`beat: {id}: {unreadable}\n`)
 		else
-			local msg, lost = beatOnce(id, startStamp)
-			if msg and lost then
+			local ok, msg, lost = pcall(beatOnce, id, startStamp)
+			if not ok then
+				stdio.ewrite(`beat: {id}: {tostring(msg)}\n`)
+			elseif msg and lost then
 				print(msg)
 				return
 			elseif msg then
@@ -1788,7 +1829,7 @@ local function setStatus(id: string, to: string)
 				table.insert(targets, m)
 			end
 		end
-		local value = stamp(to)
+		local value = if to == "preparing" then freshStamp(to) else stamp(to)
 		local changes: { publish.Change } = {}
 		local rafted = false -- c0116: a member that was prepared on origin (z-raft grouped it)
 		local originHashes: { [string]: string? } = {} -- c0116 (review 002 F1, 003 F1): each member's record on origin
@@ -2001,7 +2042,7 @@ function cmd.status(pos: { string })
 				return `{l.text} [lost {silentMinutes(v)}m]`
 			elseif v.kind == "parked" then
 				return `{l.text} [parked]`
-			elseif v.kind == "stale" then
+			elseif v.kind == "stale" or v.kind == "unknown" then
 				return `{l.text} [stale?]`
 			end
 			return l.text
