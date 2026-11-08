@@ -17,6 +17,7 @@
 | 13 | 2026-11-08 03:44 | design-review-007 | 0 | 0 | 8.0 | spend | design-review | 137000 |
 | 14 | 2026-11-08 03:44 | design-refute-007 | 0 | 0 | 6.0 | spend | design-review |  |
 | 15 | 2026-11-08 20:19 | round 8 redesign: rojo-driven check | 0 | 0 | 45.0 | spend | design-review |  |
+| 16 | 2026-11-08 20:34 | design-review-008 | 0 | 0 | 25.0 | spend | design-review | 144000 |
 
-**Total:** +0 / -0 lines, 188.0 agent-minutes, 913000 tokens over 15 records
-<!-- totals: added=0 removed=0 minutes=188.0 records=15 tokens=913000 -->
+**Total:** +0 / -0 lines, 213.0 agent-minutes, 1057000 tokens over 16 records
+<!-- totals: added=0 removed=0 minutes=213.0 records=16 tokens=1057000 -->
