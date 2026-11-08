@@ -37,10 +37,10 @@ return t.spec("c0261 the last round ran a final-review model", function(it)
 	end)
 
 	it("the kinds of final-review model are defined once, per CLI family, and matched by shape (AC11)", function()
-		for _, id in { "claude-opus-5-5", "claude-opus-5-5-high", "claude-opus-6-0", "claude-opus-9-9-max", "kimi-k3-high", "kimi-k3-max", "grok-4.7-xhigh", "grok-5-xhigh", "grok-4.9-xhigh", "grok-code-fast-1-xhigh", "grok-5-pro-xhigh" } do
+		for _, id in { "claude-opus-5-5", "claude-opus-5-5-high", "claude-opus-6-0", "claude-opus-9-9-max", "kimi-k3-high", "kimi-k3-max", "kimi-k3.1-pro-high", "k3.1-pro-high", "k3.1-pro-max", "k3-256k-high", "k3-256k-max", "grok-4.7-xhigh", "grok-5-xhigh", "grok-4.9-xhigh", "grok-code-fast-1-xhigh", "grok-5-pro-xhigh" } do
 			t.expect(`{id}={m.isFinalModel(id)}`).toBe(`{id}=true`) -- a new Opus id, kimi-k3 or grok at xhigh still passes
 		end
-		for _, id in { "claude-sonnet-5-5-high", "claude-haiku-5-5", "grok-4.7-high", "grok-4.7-low", "grok-5-pro-high", "grok-4.7-xhigh-fast", "grok-4.6-high", "kimi-k3-low", "kimi-k2.7-code", "composer-2.5", "cursor-grok-4.6-high", "gpt-5.5-high", "opus" } do
+		for _, id in { "claude-sonnet-5-5-high", "claude-haiku-5-5", "grok-4.7-high", "grok-4.7-low", "grok-5-pro-high", "grok-4.7-xhigh-fast", "grok-4.6-high", "kimi-k3-low", "kimi-k2.7-code", "k3.1-pro-low", "k3-256k-low", "k3-high", "kimi-for-coding-high", "kimi-for-coding-low", "kimi-for-coding-max", "kimi-k3.1-pro-low", "composer-2.5", "cursor-grok-4.6-high", "gpt-5.5-high", "opus" } do
 			t.expect(`{id}={m.isFinalModel(id)}`).toBe(`{id}=false`)
 		end
 	end)
@@ -56,7 +56,7 @@ return t.spec("c0261 the last round ran a final-review model", function(it)
 			local r = refusal(DESIGN, { row("design-review-002", id) }) :: string
 			t.expect(has(r, "design-review-002")).toBe(true)
 			t.expect(has(r, `model {id}`)).toBe(true)
-			t.expect(has(r, "any Opus, kimi-k3-high or kimi-k3-max, any grok model at xhigh")).toBe(true)
+			t.expect(has(r, "any Opus, kimi k3.1-pro or k3-256k at high or max")).toBe(true)
 			t.expect(has(r, "--final")).toBe(true)
 		end
 		t.expect(has(refusal(DESIGN, { row("design-review-002", nil) }) :: string, "no model")).toBe(true)

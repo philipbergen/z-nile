@@ -66,3 +66,4 @@
 - design-review-007 F2: z-design/new-rules-migrate-existing-work
 - design-review-007 F3: zz-test/pin-fail-safes-where-they-act
 - design-review-007 F4: z-design/restated-rules-move-together
+- note the user's veto answers of 2026-11-08 (z-design off the cheap model, the kimi family, accept the blocking wait, c0252 builds the run PR merge) applied in design-refute-008.md: z-design/decided-guesses-rewrite-their-body, z-design/never-narrow-captured-scope

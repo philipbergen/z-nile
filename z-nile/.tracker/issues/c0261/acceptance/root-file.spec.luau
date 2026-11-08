@@ -41,14 +41,15 @@ local function activities(): { string }
 	return list
 end
 -- on the way (cheap), final review (expensive), waiting (cheapest)
-local WAY = { ["z-ticket"] = true, ["z-design"] = true, ["z-raft"] = true, ["z-run"] = true, ["zz-review-design"] = true, ["zz-review-code"] = true, ["zz-review-stream"] = true } :: { [string]: boolean }
+local WAY = { ["z-ticket"] = true, ["z-raft"] = true, ["z-run"] = true, ["zz-review-design"] = true, ["zz-review-code"] = true, ["zz-review-stream"] = true } :: { [string]: boolean }
 local IDS = {
 	way = { claude = "claude-sonnet-5-5-high", grok = "grok-4.6-high", agent = "cursor-grok-4.6-high" },
 	final = { claude = "claude-opus-5-5", grok = "grok-4.7-xhigh", agent = "claude-opus-5-5-high" },
+	author = { claude = "claude-opus-5-5-medium", grok = "grok-4.7-high", agent = "grok-4.7-high" }, -- z-design: not cheap (the user, 2026-11-08)
 	wait = { claude = "claude-haiku-5-5", grok = "grok-4.5-low", agent = "composer-2.5" },
 } :: { [string]: { [string]: string } }
 local function classOf(a: string): string
-	return if a == "z-wait" then "wait" elseif WAY[a] then "way" else "final"
+	return if a == "z-wait" then "wait" elseif a == "z-design" then "author" elseif WAY[a] then "way" else "final"
 end
 
 return t.spec("c0261 root .models.toml per activity", function(it)
@@ -73,7 +74,7 @@ return t.spec("c0261 root .models.toml per activity", function(it)
 				if classOf(a) == "final" then
 					t.expect(models.reviewRule("zz-review", r.specs[cli])).toBe(nil)
 					for _, other in activities() do
-						if classOf(other) == "way" then
+						if classOf(other) ~= "final" then
 							t.expect(r.specs[cli].rank > m.resolveActivity(layers(), other).specs[cli].rank).toBe(true)
 						end
 					end

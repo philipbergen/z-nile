@@ -141,7 +141,7 @@ return t.spec("c0261 docs", function(it)
 	end)
 
 	it("the final-review kinds are defined once: the docs name them, not exact ids (rule)", function()
-		at(skill("zz-rules"), "any Opus, kimi-k3-high or kimi-k3-max, any grok model at xhigh", "zz-rules")
+		at(skill("zz-rules"), "any Opus, kimi k3.1-pro or k3-256k at high or max", "zz-rules")
 		at(skill("zz-rules"), "an issue with no design review round at all is refused too", "zz-rules")
 		at(skill("zz-rules"), "`<R-id>: design-review-NNN`", "zz-rules")
 		at(skill("z-raft"), "under the subject `<R-id>: design-review-NNN`", "z-raft")
