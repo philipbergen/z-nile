@@ -95,7 +95,14 @@ if [ "$1" = push ]; then
         "$REAL_GIT" -C "$o" push -q origin HEAD:main
       fi ;;
     *":refs/heads/hb/$FAKE_OLDSTAMP"*)
-      if [ -f "$FAKE_DIR/racebeat" ]; then rm -f "$FAKE_DIR/racebeat"; takeover; fi ;;
+      if [ -f "$FAKE_DIR/racebeat" ]; then rm -f "$FAKE_DIR/racebeat"; takeover; fi
+      if [ -f "$FAKE_DIR/cobeat" ]; then
+        rm -f "$FAKE_DIR/cobeat"
+        # a co-beater of the SAME claim replaces the branch just before this push: a harmless lease rejection
+        o="$FAKE_OTHER"; tree=$("$REAL_GIT" -C "$o" rev-parse "HEAD^{tree}")
+        new=$("$REAL_GIT" -C "$o" -c user.name=race -c user.email=race@example.invalid commit-tree "$tree" -p HEAD -m "hb $FAKE_OLDSTAMP 7")
+        "$REAL_GIT" -C "$o" push -q -f origin "$new:refs/heads/hb/$FAKE_OLDSTAMP"
+      fi ;;
   esac
 fi
 ]]
@@ -108,6 +115,7 @@ return t.spec("c0265 takeover race and fold", function(it)
 			[`{P}/c0070/c0070.md`] = issue("c0070", "new-a-b-c"),
 			[`{P}/c0071/c0071.md`] = issue("c0071", "new-a-b-c"),
 			[`{P}/c0072/c0072.md`] = issue("c0072", "new-a-b-c"),
+			[`{P}/c0073/c0073.md`] = issue("c0073", "new-a-b-c"),
 			[`{P}/c0095/c0095.md`] = issue("c0095", "prepared-quiet-copper-falcon", "ready"),
 			[`{P}/c0095/check.sh`] = CHECK,
 			[`{P}/c0096/c0096.md`] = issue("c0096", "prepared-quiet-copper-falcon", "ready", "R0030"),
@@ -135,6 +143,7 @@ return t.spec("c0265 takeover race and fold", function(it)
 		must(zn(wt, { "status", "c0070", "preparing" }), "claim c0070")
 		must(zn(wt, { "status", "c0071", "preparing" }), "claim c0071")
 		must(zn(wt, { "status", "c0072", "preparing" }), "claim c0072")
+		must(zn(wt, { "status", "c0073", "preparing" }), "claim c0073")
 	end)
 
 	it("a takeover that meets a claim restamped between its verdict and its publish is refused", function()
@@ -187,6 +196,16 @@ return t.spec("c0265 takeover race and fold", function(it)
 		t.expect(tipOf(old)).toBe("") -- what it created was deleted again
 		t.expect(tipOf(new) ~= "").toBe(true) -- the taker's branch stands
 		t.expect(epochs(new)).toEqual({ 1 })
+	end)
+
+	it("a lease rejection caused by a co-beater of the same claim retries silently and succeeds", function()
+		local stamp = stampOf(`{P}/c0073/c0073.md`)
+		fs.writeFile(`{h.fakes}/cobeat`, "1")
+		local due = os.time() + 1000
+		local told = zn(wt, { "lessons", "--tags" }, { ZN_NOW = tostring(due), FAKE_OLDSTAMP = stamp })
+		t.expect(told.ok).toBe(true)
+		t.expect(has(told.stderr, "beat: c0073")).toBe(false) -- a "stale info" rejection is not worth saying
+		t.expect(epochs(stamp)).toEqual({ due }) -- and the retry wrote this beat over the co-beater's
 	end)
 
 	it("fold beats for the raft it claims", function()

@@ -18,12 +18,11 @@ check "AC6: the usage text, zz-rules, the skills and the README name the heartbe
   set -e
   g() { grep -qF -e "$1" "$2" || { echo "missing in $2: $1" >&2; exit 1; }; }
   R="$ZN_ROOT/z-nile"
-  for c in "  beat <id>" "  lost "; do g "$c" "$R/engine/main.luau"; done
+  for c in "  beat <id>" "  lost " "--takeover"; do g "$c" "$R/engine/main.luau"; done
   for w in "refs/heads/hb/" "./zn beat" "./zn lost" "parked"; do g "$w" "$R/skills/zz-rules/SKILL.md"; done
   g "--takeover" "$R/skills/z-design/SKILL.md"; g "--takeover" "$R/skills/z-run/SKILL.md"; g "--adopt" "$R/skills/z-run/SKILL.md"
   for s in z-design z-raft z-run zz-execute; do g "./zn beat" "$R/skills/$s/SKILL.md"; g "--time 3600" "$R/skills/$s/SKILL.md"; done
   for s in z-design z-raft z-run; do g "./zn lost" "$R/skills/$s/SKILL.md"; done
-  g "--from origin/prep-" "$R/skills/z-design/SKILL.md"
   g "re-adopt" "$R/skills/z-run/SKILL.md"
   sed -n "/^### Order/,/^### /p" "$R/README.md" | grep -qF "./zn lost" || { echo "README Order does not name ./zn lost" >&2; exit 1; }
   grep -qF "NTP" "$ZN_ROOT/SETUP.md" || { echo "SETUP.md does not name NTP" >&2; exit 1; }
@@ -31,6 +30,6 @@ check "AC6: the usage text, zz-rules, the skills and the README name the heartbe
   grep -qE "^\| .* \| c0265 \| exists \|" "$R/README.md" || { echo "README roadmap has no c0265 exists row" >&2; exit 1; }
 '
 
-check "AC7: taking over a lost claim discards the old worker's worktree and recovers its work: the old worktree is moved aside as <name>-<n> (smallest free number) with its branch renamed, a fresh worktree at the original name continues the pushed branch (the PR head is untouched), the dirty files and unpushed commits are listed and kept, a live claim cannot be taken over this way, and the old process is told it was discarded by every command, the beat included" lune run tests/run -- "$A/discard.spec.luau"
+check "AC7: taking over a lost claim discards the old worker's worktree and recovers its work: the old worktree stays at its path marked discarded with its branch renamed, a numbered copy <name>-<n> (smallest free number) on the original branch name continues the pushed branch (the PR head is untouched), the dirty files and unpushed commits are listed and kept, a plain worktree lookup finds the copy, a live, parked, unreadable or claim-less worktree and a fresh copy cannot be taken over this way, and the old process is told it was discarded by every command, the beat included" lune run tests/run -- "$A/discard.spec.luau"
 
 finish

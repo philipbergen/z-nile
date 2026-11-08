@@ -123,3 +123,14 @@
 - design-review-014 F5: z-design/restated-rules-move-together
 - design-review-014 F6: z-design/reasoned-rows-claim-testable-reasons
 - design-review-014 F7: one-off: small wording and edge gaps listed in the review
+- design-review-015 F1: zz-arch/automatic-effects-have-an-end-and-a-subject-check, z-design/accepted-risks-checked-and-decided
+- design-review-015 F2: z-design/claim-memory-rules-list-every-claim-path
+- design-review-015 F3: z-design/spec-design-correspondence
+- design-review-015 F4: zz-test/seed-every-enumerated-case
+- design-review-015 F5: z-design/required-steps-on-every-path
+- design-review-015 F6: z-design/trace-every-way-code-runs
+- design-review-015 F7: zz-test/seed-every-enumerated-case
+- design-review-015 F8: zz-test/refusals-tested-on-both-sides
+- design-review-015 F9: z-design/restated-rules-move-together
+- design-review-015 F10: z-design/reasoned-rows-claim-testable-reasons
+- design-review-015 F11: one-off: small gaps listed in the review
