@@ -33,4 +33,9 @@ check "AC8: metrics counts review rounds by the board's rule, and the README pic
   lune run tests/run -- "$A/metrics.spec.luau" tests/tooling/metrics-rounds.spec.luau tests/acceptance/c0043/rounds.spec.luau \
   tests/acceptance/c0111/metrics-lessons.spec.luau tests/acceptance/c0116/issue-design.spec.luau \
   tests/acceptance/c0116/retired.spec.luau tests/acceptance/c0115/readme.spec.luau
+check "AC9: the eight overridden specs are exactly the reviewed overrides (the prototype's text, pinned by sha, no edit tolerated)" \
+  bash -c 'git -C "$1" cat-file -e "$2^{commit}" && git -C "$1" diff --exit-code "$2" -- "${@:3}"' _ "$ZN_ROOT" 6043e33f1ea44d306097d7b745e876de9337e58c \
+  z-nile/tests/acceptance/c0042/model.spec.luau z-nile/tests/acceptance/c0042/smoke.spec.luau z-nile/tests/acceptance/c0107/keep.spec.luau z-nile/tests/acceptance/c0107/page.spec.luau z-nile/tests/acceptance/c0107/views.spec.luau z-nile/tests/acceptance/c0115/readme.spec.luau z-nile/tests/acceptance/c0172/narrowed.spec.luau z-nile/tests/tooling/board.spec.luau
+check "AC10: real.spec and the board spec declare their inputs (every blob and HEAD)" \
+  bash -c 'grep -qxF -e "$(printf "tests/acceptance/c0118/real.spec.luau\t*")" tests/inputs.tsv && grep -qxF -e "$(printf "tests/tooling/board.spec.luau\t*")" tests/inputs.tsv'
 finish

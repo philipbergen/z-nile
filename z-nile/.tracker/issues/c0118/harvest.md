@@ -30,3 +30,7 @@
 - design-review-010 F2: z-design/design-the-execution-window, z-design/watch-steps-name-their-base
 - design-review-010 F3: z-design/instructions-runnable-where-they-run, z-design/watch-steps-name-their-base
 - design-review-011 F1: z-design/watch-steps-name-their-base
+- design-review-012 F1: zz-test/narrowing-pins-the-whole-file
+- design-review-012 F2: z-design/declare-what-full-runs-covered, z-design/rerun-shipped-audits-at-execution
+- design-review-012 F3: z-design/restated-rules-move-together
+- design-review-012 F4: one-off: c0249's future override of the banding case is recorded in Maintainability; no rule to learn
