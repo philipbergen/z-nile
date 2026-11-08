@@ -102,7 +102,7 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		refused("not a record\n", `{RAFT}/provenance.md`, "provenance.md")
 		-- another item's header
 		refused(one("c0099"), `{RAFT}/provenance.md`, "provenance.md")
-		-- active/: the record is recorded on the raft's branch
+		-- active/: the item's files change on the raft's branch, but a block is published (c0250): unblocked rows only
 		refused(one("c0020"), `{ACTIVE}/provenance.md`, "active")
 		-- no document beside it
 		refused(one("c0030"), "pickman/.tracker/issues/c0030/provenance.md", "c0030")
@@ -111,6 +111,9 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		t.expect(publish.commit(work, function()
 			return { { path = `{ISSUE}/provenance.md`, content = more } }
 		end, "tracker: record").ok).toBe(true)
+		t.expect(publish.commit(work, function()
+			return { { path = `{ACTIVE}/provenance.md`, content = header("c0020") .. row("unblocked", "human:Bee", "block=red-gate") } }
+		end, "tracker: record active").ok).toBe(true)
 		local raft = header("R0010") .. row("unblocked", "human:Bee", "block=needs-decision")
 		t.expect(publish.commit(work, function()
 			return { { path = `{RAFT}/provenance.md`, content = raft } }

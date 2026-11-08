@@ -136,7 +136,9 @@ return t.spec("c0263 who and the board", function(it)
 		local out = r.stdout
 		t.expect(has(out, "idea  human:Ann (from git)")).toBe(true)
 		t.expect(has(out, "status:preparing  human:Dee (from git)")).toBe(true)
-		t.expect(has(out, "status:new  human:Dee (from git)")).toBe(true)
+		-- a `tracker: c0010 new` commit is the unblock (once, never also a status line), and no row is stored for it
+		t.expect(has(out, "unblocked  human:Dee (from git)")).toBe(true)
+		t.expect(has(out, "status:new")).toBe(false)
 		-- the stored approval is the human's and its design hash; the stored rafted row beats the git rafter (Fay)
 		t.expect(has(out, "approved  human:Ann")).toBe(true)
 		t.expect(has(out, "design=aaaaaaaaaaaa")).toBe(true)
@@ -146,6 +148,8 @@ return t.spec("c0263 who and the board", function(it)
 		-- the ticket's spend rows
 		t.expect(has(out, "delivered  agent:claude-sonnet-5-5 effort unknown (from git)")).toBe(true)
 		t.expect(has(out, "worker=claude-opus-5-5-high")).toBe(true)
+		-- and who merged it is a derived entry of its own
+		t.expect(has(out, "merged  agent:claude-sonnet-5-5 effort unknown (from git)")).toBe(true)
 		-- oldest first, by the dates the fixture set
 		local order: { string } = {}
 		for line in string.gmatch(out, "[^\n]+") do
@@ -154,7 +158,7 @@ return t.spec("c0263 who and the board", function(it)
 				table.insert(order, event)
 			end
 		end
-		t.expect(order).toEqual({ "idea", "status:preparing", "status:new", "approved", "rafted", "delivered" })
+		t.expect(order).toEqual({ "idea", "status:preparing", "unblocked", "approved", "rafted", "delivered", "merged" })
 		-- it reads and writes nothing
 		t.expect(git(W, { "status", "--porcelain" })).toBe(before)
 	end)
@@ -172,7 +176,7 @@ return t.spec("c0263 who and the board", function(it)
 		t.expect(r.ok).toBe(true)
 		t.expect(has(r.stdout, "idea  human:Yan (from git)")).toBe(true)
 		t.expect(has(r.stdout, "Zoe")).toBe(false)
-		t.expect(has(r.stdout, "status:new")).toBe(false)
+		t.expect(has(r.stdout, "unblocked")).toBe(false)
 	end)
 
 	it("the board model carries the same entries as who, and the item view writes a Provenance section", function()
@@ -206,7 +210,7 @@ return t.spec("c0263 who and the board", function(it)
 		for _, e in item.provenance do
 			table.insert(events, e.event)
 		end
-		t.expect(events).toEqual({ "idea", "status:preparing", "status:new", "approved", "rafted", "delivered" })
+		t.expect(events).toEqual({ "idea", "status:preparing", "unblocked", "approved", "rafted", "delivered", "merged" })
 		-- the view's script (outside the JSON) writes the section
 		local script = string.gsub(html, '<script type="application/json" id="board%-data">.-</script>', "")
 		t.expect(has(script, "Provenance")).toBe(true)

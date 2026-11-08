@@ -79,6 +79,12 @@ return t.spec("c0263 provenance through the dispatcher", function(it)
 			["pickman/.tracker/issues/c0096/.models.toml"] = '[dispatch]\nauto_merge = ["raft"]\n',
 			-- the prep PR's approval is already on main when the rafting PR appends its row
 			["pickman/.tracker/issues/c0096/provenance.md"] = HEADER("c0096") .. "| 2026-11-08 09:00 | approved | human:Ann | design=aaaaaaaaaaaa |\n",
+			["pickman/.tracker/issues/c0022/c0022.md"] = (string.gsub(
+				prepared("c0022", "scripted-thing"),
+				"created: ",
+				"size: 300\ncreated: ",
+				1
+			)),
 			["pickman/.tracker/issues/c0021/c0021.md"] = trackerfix.stub("c0021", "third-thing", "new-quiet-copper-falcon"),
 			["pickman/.tracker/issues/c0021/.models.toml"] = "[dispatch]\nauto_merge = []\n",
 			["pickman/.tracker/issues/c0091/c0091.md"] = prepared("c0091", "member-thing"),
@@ -211,5 +217,15 @@ return t.spec("c0263 provenance through the dispatcher", function(it)
 		if not has(fakecli.log(h), `realgh pr merge 50 --squash --match-head-commit {sha}`) then
 			error(`PR #50 did not merge\n{r.stdout}{r.stderr}`)
 		end
+	end)
+	it("a script step records the user who started the pipeline and the step it ran under", function()
+		fakecli.clear(h)
+		-- the chain meets a prepared, raftless issue: raft-plan --apply (a script step) rafts it in raft-c0022
+		fakecli.mode(h, "claude", "ok")
+		zn({ "dispatch", "c0022" })
+		local path = `{h.f.main}/.worktree/raft-c0022/pickman/.tracker/issues/c0022/provenance.md`
+		t.expect(fs.isFile(path)).toBe(true)
+		local rec = fs.readFile(path)
+		t.expect(string.match(rec, "| rafted | human:c0263%-dispatch | raft=R%d+; via=dispatch:raft%-plan |") ~= nil).toBe(true)
 	end)
 end)

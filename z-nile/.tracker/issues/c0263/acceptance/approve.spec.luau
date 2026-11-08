@@ -72,15 +72,31 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 			[".gitignore"] = ".cache/\n.worktree/\n.DS_Store\n",
 			["pickman/.tracker/architecture.md"] = "# Architecture\n",
 		}
-		for _, id in { "c0010", "c0011", "c0012", "c0013", "c0014" } do
+		for _, id in { "c0010", "c0011", "c0012", "c0013" } do
 			seed[`{ISSUES}/{id}/{id}.md`] = draft(id)
 			seed[`{ISSUES}/{id}/check.sh`] = CHECK
 		end
-		-- c0015 was prepared before approvals existed (no record); R0110 is a landed prepared raft to fold into
-		seed[`{ISSUES}/c0015/c0015.md`] = "---\nid: c0015\ntype: chore\ntitle: c0015\nslug: c0015\nraft: \ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-10-20\nsize: 300\nstatus: prepared-quiet-copper-falcon\n---\n\n# c0015\n"
-		seed[`{ISSUES}/c0015/check.sh`] = CHECK
-		seed["pickman/.tracker/rafts/R0110/R0110.md"] = "---\nid: R0110\ntype: chore\ntitle: Landed\nslug: landed\nsingle: false\nissues: []\ndesign: ready\ncreated: 2026-10-20\nstatus: prepared-quiet-copper-falcon\n---\n\n# R0110\n\n## Theme\nLanded.\n\n## Order & dependencies\nBy id.\n\n## Risks & rollback\n"
+		-- c0014 and c0016 were approved once and redesigned since (the approval covers another hash); c0015 was prepared
+		-- before approvals existed (no record at all); R0110 is a landed prepared raft to fold into, R0120 one holding c0016
+		local function prepared(id: string, raft: string): string
+			return `---\nid: {id}\ntype: chore\ntitle: {id}\nslug: {id}\nraft: {raft}\ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-10-20\nsize: 300\nstatus: prepared-quiet-copper-falcon\n---\n\n# {id}\n`
+		end
+		local function stale(id: string): string
+			return `# Provenance: {id}\n\n| when | event | actor | detail |\n|---|---|---|---|\n| 2026-10-21 10:00 | approved | human:Ann | design=000000000000 |\n`
+		end
+		local function raftOf(id: string, issues: string): string
+			return `---\nid: {id}\ntype: chore\ntitle: Landed\nslug: landed\nsingle: false\nissues: [{issues}]\ndesign: ready\ncreated: 2026-10-20\nstatus: prepared-quiet-copper-falcon\n---\n\n# {id}\n\n## Theme\nLanded.\n\n## Order & dependencies\nBy id.\n\n## Risks & rollback\n`
+		end
+		for _, id in { "c0014", "c0015", "c0016" } do
+			seed[`{ISSUES}/{id}/{id}.md`] = prepared(id, if id == "c0016" then "R0120" else "")
+			seed[`{ISSUES}/{id}/check.sh`] = CHECK
+		end
+		seed[`{ISSUES}/c0014/provenance.md`] = stale("c0014")
+		seed[`{ISSUES}/c0016/provenance.md`] = stale("c0016")
+		seed["pickman/.tracker/rafts/R0110/R0110.md"] = raftOf("R0110", "")
 		seed["pickman/.tracker/rafts/R0110/check.sh"] = CHECK
+		seed["pickman/.tracker/rafts/R0120/R0120.md"] = raftOf("R0120", "c0016")
+		seed["pickman/.tracker/rafts/R0120/check.sh"] = CHECK
 		f = trackerfix.new(NAME, seed)
 		W1 = trackerfix.trOk(f, f.main, { "worktree", "prep-a" })
 		W2 = trackerfix.trOk(f, f.main, { "worktree", "prep-b" })
@@ -139,6 +155,10 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 		local unclaimed = tr(W2, { "approve", "c0013" })
 		t.expect(unclaimed.ok).toBe(false)
 		t.expect(has(unclaimed.stderr, "preparing")).toBe(true)
+		-- a change outside the issue's folder is not the approval's to commit
+		fs.writeFile(`{W1}/stray.txt`, "x\n")
+		refused({ "approve", "c0011" }, "outside")
+		fs.removeFile(`{W1}/stray.txt`)
 		-- no git identity: the human cannot be named
 		refused(
 			{ "approve", "c0011" },
@@ -194,27 +214,42 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 		t.expect(n).toBe(2)
 	end)
 
-	it("the other doors are shut too: fold refuses an issue prepared by a hand-edited status after a redesign", function()
-		-- c0014: approved, prepared and landed, then redesigned and its status line left prepared by hand (the bypass)
-		ready(W2, "c0014")
-		trOk(W2, { "approve", "c0014" })
-		trOk(W2, { "status", "c0014", "prepared" })
-		local function landIt()
-			fixture.git(W2, { "add", "-A" })
-			fixture.git(W2, { "commit", "-q", "-m", "wip" })
-			fixture.git(W2, { "fetch", "-q", "origin" })
-			fixture.git(W2, { "merge", "-q", "--no-edit", "origin/main" })
-			fixture.git(W2, { "push", "-q", "origin", "HEAD:main" })
+	it("the other doors are shut too: fold, new raft, ready and raft-plan refuse a stale approval, audit warns, and a prepared issue with no record passes", function()
+		local function tip(): string
+			return fixture.git(f.origin, { "rev-parse", "main" })
 		end
-		landIt()
-		local doc = `{W2}/{ISSUES}/c0014/c0014.md`
-		fs.writeFile(doc, fs.readFile(doc) .. "\nRedesigned without approval.\n")
-		landIt()
-		local refused = tr(W2, { "fold", "R0110", "c0014" })
-		t.expect(refused.ok).toBe(false)
-		t.expect(has(refused.stderr, "approval")).toBe(true)
-		t.expect(has(refused.stderr, "c0014")).toBe(true)
-		-- an issue prepared before approvals existed (no record at all) is let through
+		local function onOrigin(path: string): string
+			return fixture.git(f.origin, { "show", `main:{path}` })
+		end
+		-- fold and new raft merge origin/main, so the worktree must be clean
+		fixture.git(W2, { "add", "-A" })
+		fixture.git(W2, { "commit", "-q", "--allow-empty", "-m", "wip" })
+		local before = tip()
+		-- audit: a warning naming the issue and its approval, exit 0
+		local audit = tr(W2, { "audit" })
+		t.expect(audit.ok).toBe(true)
+		t.expect(has(audit.stdout .. audit.stderr, "c0014")).toBe(true)
+		t.expect(has(audit.stdout .. audit.stderr, "approval")).toBe(true)
+		-- each door refuses before it publishes anything
+		local fold = tr(W2, { "fold", "R0110", "c0014" })
+		t.expect(fold.ok).toBe(false)
+		t.expect(has(fold.stderr, "c0014")).toBe(true)
+		t.expect(has(fold.stderr, "approval")).toBe(true)
+		local raft = tr(W2, { "new", "raft", "chore", "x", "c0014", "--project", "pickman" })
+		t.expect(raft.ok).toBe(false)
+		t.expect(has(raft.stderr, "approval")).toBe(true)
+		local ready = tr(f.main, { "ready", "R0120" })
+		t.expect(ready.ok).toBe(false)
+		t.expect(has(ready.stderr, "c0016")).toBe(true)
+		t.expect(has(ready.stderr, "approval")).toBe(true)
+		t.expect(tip()).toBe(before)
+		t.expect(string.match(onOrigin("pickman/.tracker/rafts/R0110/R0110.md"), "\nstatus: prepared%-")).toBe("\nstatus: prepared-")
+		-- raft-plan skips it and plans the rest, applying nothing half-way
+		local plan = tr(W2, { "raft-plan" })
+		t.expect(plan.ok).toBe(true)
+		t.expect(has(plan.stdout, "skip c0014")).toBe(true)
+		t.expect(has(plan.stdout, "fold R0110 c0014")).toBe(false)
+		-- an issue prepared before approvals existed (no record at all) is let through: today's rule, open question 3
 		local ok = tr(W2, { "fold", "R0110", "c0015" })
 		if not ok.ok then
 			error(ok.stderr .. ok.stdout)
@@ -229,6 +264,9 @@ return t.spec("c0263 approve and the refusal of prepared", function(it)
 		local rid = string.match(out, "(R%d+)") :: string
 		setLine(`{W2}/{ISSUES}/c0013/c0013.md`, "design", "ready")
 		setLine(`{W2}/pickman/.tracker/rafts/{rid}/{rid}.md`, "design", "ready")
+		-- approve commits the issue's folder only: the raft's own edit is committed first
+		fixture.git(W2, { "add", `pickman/.tracker/rafts/{rid}` })
+		fixture.git(W2, { "commit", "-q", "-m", "raft design ready" })
 		local refused = tr(W2, { "status", rid, "prepared" })
 		t.expect(refused.ok).toBe(false)
 		t.expect(has(refused.stderr, "c0013")).toBe(true)

@@ -47,3 +47,24 @@
 - design-review-003 F17: z-design/new-rules-migrate-existing-work
 - design-review-003 F18: z-design/required-steps-on-every-path
 - design-review-003 F19: z-design/restated-rules-move-together
+- design-review-004 F1: zz-test/time-order-sets-fixture-dates
+- design-review-004 F2: z-design/restated-rules-move-together
+- design-review-004 F3: zz-test/kill-mutants-where-the-value-is-built
+- design-review-004 F4: z-design/spec-design-correspondence
+- design-review-004 F5: z-design/prove-specs-pass-on-a-prototype
+- design-review-004 F6: zz-arch/refusals-are-gate-checks
+- design-review-004 F7: z-design/spec-design-correspondence
+- design-review-004 F8: z-design/new-refusals-reach-every-caller
+- design-review-004 F9: z-design/specify-every-named-artifact
+- design-review-004 F10: z-design/specify-every-named-artifact
+- design-review-004 F11: z-design/specify-every-named-artifact
+- design-review-004 F12: z-design/specify-every-named-artifact
+- design-review-004 F13: z-design/required-steps-on-every-path
+- design-review-004 F14: z-design/confirm-overrides-with-a-suite-run
+- design-review-004 F15: z-design/restated-rules-move-together
+- design-review-004 F16: z-design/specify-every-named-artifact
+- design-review-004 F17: zz-arch/guard-no-is-explicit
+- design-review-004 F18: one-off: the merger was already in git, so the question was avoidable and became a derived entry
+- design-review-004 F19: z-design/specify-every-named-artifact
+- design-review-004 F20: z-design/restated-rules-move-together
+- note review 004 candidates (grep the specs for every name a refute says is gone; one pass must mean one parse; a grandfather rule needs a fact fixed at merge): z-design/restated-rules-move-together, z-design/specify-every-named-artifact, zz-arch/refusals-are-gate-checks

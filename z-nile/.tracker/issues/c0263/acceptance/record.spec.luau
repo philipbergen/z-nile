@@ -159,7 +159,7 @@ return t.spec("c0263 the record's writes", function(it)
 		local out = trOk(
 			W2,
 			{ "new", "raft", "chore", "pair", "c0011", "c0012", "--project", "pickman" },
-			{ ZN_ACTOR = SONNET }
+			{ ZN_ACTOR = SONNET, ZN_VIA = "dispatch:raft-plan" }
 		)
 		local rid = string.match(out, "(R%d+)") :: string
 		-- the old-flow raft claimed two new drafts; each got a rafted row, one per ticket, in the worktree
@@ -183,6 +183,9 @@ return t.spec("c0263 the record's writes", function(it)
 		-- release gives a rafting claim back without a row
 		local second = trOk(W3, { "new", "raft", "chore", "solo", "c0013", "--project", "pickman" })
 		local rid2 = string.match(second, "(R%d+)") :: string
+		-- no ZN_VIA, no via=
+		t.expect(has(localRecord(W3, "c0013"), "| rafted |")).toBe(true)
+		t.expect(has(localRecord(W3, "c0013"), "via=")).toBe(false)
 		trOk(W3, { "release", rid2, "--force" })
 		t.expect(onOrigin(`{ISSUES}/c0013/provenance.md`)).toBe("")
 	end)

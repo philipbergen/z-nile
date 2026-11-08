@@ -1,6 +1,6 @@
 --!strict
 -- c0263 AC6 (offline path): a `rafted` row from the offline `new raft` and from an emergent `new issue --raft`, and a
--- `delivered` row from `done` on every member of a two-member raft (with the worker when ZN_WORKER names one), in a
+-- `delivered` row from `done` on every member of a two-member raft, in a
 -- throwaway clone with no remote (so every move is local), like c0001's lifecycle spec. The published paths are
 -- record.spec.luau.
 local clone = require("@tests/lib/clone")
@@ -74,7 +74,7 @@ local function count(path: string, event: string): number
 end
 
 return t.spec("c0263 the offline lifecycle stamps provenance", function(it)
-	it("offline new raft stamps every member's rafted_by", function()
+	it("offline new raft appends a rafted row for every member", function()
 		if fs.isDir(dir) then
 			fs.removeDir(dir)
 		end
@@ -108,7 +108,7 @@ return t.spec("c0263 the offline lifecycle stamps provenance", function(it)
 		end
 	end)
 
-	it("an emergent issue in an active raft is stamped rafted_by, and done stamps delivered_by on every member", function()
+	it("an emergent issue in an active raft gets a rafted row, and done appends a delivered row to every member", function()
 		for _, id in { "f0010", "f0020" } do
 			edit(`{ISSUES}/{id}/{id}.md`, "design: draft", "design: ready")
 			edit(`{ISSUES}/{id}/{id}.md`, "### Touched modules\n", `### Touched modules\n- \`notes/{id}\`\n`)
@@ -131,12 +131,13 @@ return t.spec("c0263 the offline lifecycle stamps provenance", function(it)
 		write(`{RAFTS}/active/R0010/review-001.md`, "# Review 001\n\n### F1 [low] x\nEvidence: y\n\nVerdict: approve\n")
 		write(`{RAFTS}/active/R0010/refute-001.md`, "- F1: refuted: by design\n")
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit review")
-		must(tr({ "done", "R0010" }, { ZN_ACTOR = OPUS, ZN_WORKER = "host1/claude/opus" }), "done")
-		-- one row per member, riding the raft PR into done/, with the actor and the raft; the worker when one is named
+		must(tr({ "done", "R0010" }, { ZN_ACTOR = OPUS }), "done")
+		-- one row per member, riding the raft PR into done/, with the actor and the raft
 		for _, id in { "f0010", "f0020", eid } do
 			local p = `{ISSUES}/done/{id}/provenance.md`
 			t.expect(count(p, "delivered")).toBe(1)
-			t.expect(has(p, `| delivered | {OPUS} | raft=R0010; worker=host1/claude/opus`)).toBe(true)
+			t.expect(has(p, `| delivered | {OPUS} | raft=R0010 |`)).toBe(true)
+			t.expect(has(p, "worker=")).toBe(false) -- the worker is read from spend rows by who, never stored
 		end
 		-- the rafted rows survived the move
 		t.expect(count(`{ISSUES}/done/f0010/provenance.md`, "rafted")).toBe(1)
