@@ -1,13 +1,12 @@
 --!strict
 -- c0118 AC5: the zz-rules board row and the README say what the new board does, in the Design's words, and the old
--- row's pinned words stay (the views, the artifact, -O).
+-- row's pinned words stay (the views, -O; the artifact left with c0172).
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 
 -- the spec runs from its project's home: the checkout's own files are read from the top (c0120)
-local TOP = (
-	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
-)
+local process = require("@lune/process")
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
 local function boardRow(): string
 	local row = ""
@@ -49,13 +48,12 @@ return t.spec("c0118 board docs", function(it)
 		end
 	end)
 
-	it("the old row's words stay: the views, Stats, the artifact and -O", function()
+	it("the old row's words stay: the views, Stats and -O", function()
 		local row = boardRow()
 		for _, phrase in
 			{
 				"Views Rafts and Issues",
 				"not a third view",
-				"tracker-board",
 				"unless `-O`",
 				"`./zn board [--out PATH] [-O]`",
 			}
@@ -72,4 +70,40 @@ return t.spec("c0118 board docs", function(it)
 		t.expect(has(text, "new board c0118, planned")).toBe(false)
 		t.expect(has(text, "`./zn board --serve` (c0121, planned) serves the same page live")).toBe(true)
 	end)
+
+	-- design review 013 F3: the board spec builds the page from every project's tracker and takes over 2 s, so it keeps
+	-- a line per registered project (c0165's rule); registering a project without its lines turns this red.
+	it(
+		"the board spec declares both tracker folders of every registered project, the registry and the map",
+		function()
+			local reg = process.exec("lune", { "run", "z-nile/roots", "--", "--projects" }, { cwd = TOP })
+			t.expect(reg.ok).toBe(true)
+			local have: { [string]: boolean } = {}
+			for line in string.gmatch(fs.readFile(`{TOP}/z-nile/tests/inputs.tsv`), "[^\n]+") do
+				have[line] = true
+			end
+			local missing: { string } = {}
+			local projects = 0
+			for line in string.gmatch(reg.stdout, "[^\n]+") do
+				local trackerRoot = string.match(line, "^[^\t]+\t[^\t]+\t([^\t]+)$")
+				if trackerRoot then
+					projects += 1
+					for _, kind in { "issues/", "rafts/" } do
+						local want = `tests/tooling/board.spec.luau\t{trackerRoot}/{kind}`
+						if not have[want] then
+							table.insert(missing, want)
+						end
+					end
+				end
+			end
+			for _, file in { "z-nile/projects.toml", "z-nile/compaction.txt" } do
+				local want = `tests/tooling/board.spec.luau\t{file}`
+				if not have[want] then
+					table.insert(missing, want)
+				end
+			end
+			t.expect(projects > 1).toBe(true)
+			t.expect(table.concat(missing, "\n")).toBe("")
+		end
+	)
 end)

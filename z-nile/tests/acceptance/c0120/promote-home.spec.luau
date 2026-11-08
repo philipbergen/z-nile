@@ -127,7 +127,7 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 		t.expect(
 			string.find(
 				raftCheck,
-				'check "RC0: project gate passes (full)" "$ZN_ROOT/z-nile/check.sh" --project pickman --full',
+				'check "RC0: project gate passes (affected)" "$ZN_ROOT/z-nile/check.sh" --project pickman --affected',
 				1,
 				true
 			) ~= nil

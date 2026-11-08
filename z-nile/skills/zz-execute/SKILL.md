@@ -11,8 +11,7 @@ Output: one PR, taken out of draft by `./zn done R0010`, then merged by you (Pha
 Work through the phases in order and don't skip any. Wherever you are unsure, the zz-rules, zz-arch and zz-test skills, and your project's own skills (`pickman-arch` and `pickman-test` for pickman), are binding.
 
 ## Phase 0: Claim (in the first minutes)
-1. Work in the raft's worktree: `cd "$(./zn worktree R0010)"` (zz-rules skill, Worktrees), then run `./zn sync` there (a reused worktree may be behind). A new worktree branches from a freshly fetched `origin/main`. Never switch branches in the main checkout, and run everything below from this directory. Confirm `z-nile/check.sh --full` passes here.
-   - **If main is red, stop.** Report it; don't fix main inside this raft.
+1. Work in the raft's worktree: `cd "$(./zn worktree R0010)"` (zz-rules skill, Worktrees), then run `./zn sync` there (a reused worktree may be behind). A new worktree branches from a freshly fetched `origin/main`. Never switch branches in the main checkout, and run everything below from this directory. Phase 0 runs no gate and reads no CI result: a red `main` first shows at the merge.
 2. `./zn start R0010`. The claim was made by z-ready: the raft and its members are already in `active/` on `origin/main`, so `start` only creates the branch (if the worktree isn't already on it), makes an empty `tracker: start` commit, pushes, and opens a **draft** PR. If it refuses with `run ./zn sync first`, sync and retry. A raft that was never readied (a legacy start) is claimed and moved by `start` itself; if a step after that claim fails, see the zz-rules skill, Sync and claim, A failed start.
 3. Read the raft document, then every issue document and `check.sh`, in the raft's order.
    - Write down, for yourself, which files each issue touches.
@@ -65,14 +64,14 @@ Use this when `./zn workstreams <R-id>` ends with `parallel: yes` (the prompt em
 When the steps below pass, post a PR comment with the RC results.
 
 1. `bash "$(./zn find R0010)/check.sh"`. Every RC line must PASS.
-2. Double-check that `z-nile/check.sh --full` passes as well (every project: the raft's RC0 runs only its own project's gate, c0120), and that `./zn promote-check R0010` passes. It dry-runs the move of the acceptance specs into the project's `tests/acceptance/`. If it fails because of a sequestered spec, stop and escalate now, not at `done`.
-3. **Gate speed**: record the **gate wall time** and the `slowest:` specs from a `z-nile/check.sh --full` run in each issue's Verification log. If a stage or spec dominates or the time regressed, fix it or file the chore, per the zz-test skill's Speed section.
+2. Double-check that `z-nile/check.sh --affected` passes as well (every project: the raft's RC0 runs only its own project's gate, c0120), and that `./zn promote-check R0010` passes. It dry-runs the move of the acceptance specs into the project's `tests/acceptance/`. If it fails because of a sequestered spec, stop and escalate now, not at `done`.
+3. **Gate speed** moves to Phase 6 step 1: the wall time and the `slowest:` specs of the merge's full gate go in the final report and its PR comment, never into a tracked file.
 4. **Sequestration check**: `git fetch origin main && git diff --find-renames=100% --name-status origin/main...HEAD -- 'tracker/**/check.sh' 'tracker/**/acceptance/**' '*/.tracker/**/check.sh' '*/.tracker/**/acceptance/**'` must list nothing except `R100` renames (a raft started the legacy way moves its items on the branch). The three-dot form separates what this branch changed from what `main` brought in, so other terminals' new stubs are not false positives.
 
 ## Phase 4: Adversarial code review (a clean reviewer)
 The PR is the visible record of the work. Push and post a PR comment (`gh pr comment --body-file -`) at each step below, so a human watching sees the review start, its findings, and how they were answered. Never hold review state locally. If a push or `gh` call fails, retry once, then carry on and mention the failure in your next comment; don't block on it. `./zn commit` skips the push when there is no upstream, so check that `git status -sb` shows no `ahead`.
 
-1. **Before launching**: commit any pending work with `./zn commit` so the reviewer sees exactly what the PR shows. Run `z-nile/check.sh --full` and read the whole lint summary (the `errors`/`warnings` lines, never just the last line); a red gate is fixed before a reviewer is launched. Then post the comment `Review NNN started at <short sha> (code mode)`.
+1. **Before launching**: commit any pending work with `./zn commit` so the reviewer sees exactly what the PR shows. Run `z-nile/check.sh --affected` and read the whole lint summary (the `errors`/`warnings` lines, never just the last line); a red gate is fixed before a reviewer is launched. Then post the comment `Review NNN started at <short sha> (code mode)`.
 2. Start a **clean** reviewer. It has none of your context and gets only these inputs:
    - the `zz-review` skill (code mode);
    - `git fetch origin main && git diff origin/main...HEAD` (the local `main` isn't kept current);
@@ -99,14 +98,14 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 
 ## Phase 5: Done
 1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit with `./zn commit --phase deliver`.
-2. `git fetch origin main` and merge it into the branch now (renumber colliding IDs, rerun `z-nile/check.sh --full`, commit with `./zn commit --phase deliver`), so the PR is up to date before `done` and nothing needs changing after it.
+2. `git fetch origin main` and merge it into the branch now (renumber colliding IDs, rerun `z-nile/check.sh --affected`, commit with `./zn commit --phase deliver`), so the PR is up to date before `done` and nothing needs changing after it.
 3. **Confirm the harvest**: first harvest anything `./zn lessons --uncovered R0010` still lists, as Phase 4 step 5 says. That includes the design reviews of a raft prepped before lessons existed, which are harvested here by you. Then `./zn lessons --uncovered R0010` and `./zn lessons --check` must pass. Commit with `./zn commit --phase deliver`.
 4. `./zn done R0010`. It re-verifies everything, marks the PR ready, then moves the items to `done/` and pushes the done commit.
 5. Post a PR comment `Ready to merge at <short sha>` (no final report yet).
 
 ## Phase 6: Merge and clean up
 Under `./zn dispatch` (headless) the run ends at Phase 5's `Ready to merge` comment: the merge of the run's PR is a human's gate, and the dispatcher records the run's spend after it. Skip this phase.
-1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the zz-rules skill holds (the local full gate, `z-nile/check.sh --full`, in a clone of the exact head whose parent directories are not a checkout of this repo, and mergeable). If one can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED.
+1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the zz-rules skill holds (the local full gate, `z-nile/check.sh --full`, in a clone of the exact head whose parent directories are not a checkout of this repo, and mergeable). Record the **gate wall time** and the `slowest:` specs of the merge's full gate in the final report and its PR comment. If the merge's full gate fails, post a `BLOCKED:` comment naming the failing specs and stop with the PR ready and unmerged; in the raft worktree at the PR head, for each failing spec that `lune run z-nile/affected -- --base $(git merge-base origin/main HEAD)` does not list (every spec counts as listed when it prints `ALL`), file a graph-miss chore (zz-test, Graph miss) and say so in the comment, unless the spec also fails on `origin/main` (then it is a red `main`: say that instead). If another condition can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED.
 2. After the merge and before the final report, `./zn spend R0010 --phase deliver --time <minutes from done to merged>`.
 3. Write the final report (below), with the merge commit sha. Post it as a comment on the merged PR (`gh pr comment <pr> --body-file -`) *before* cleanup, since cleanup removes your worktree.
 4. Follow Landing a change, step 4, in the zz-rules skill, last: the one chained command that updates the root's `main` (`"<root>/zn" sync`, which also rebuilds its board), removes this raft's worktree and deletes the local branch (it removes your own working directory, so nothing runs after it). Post no further commits to the branch. Then give the same report in your reply.

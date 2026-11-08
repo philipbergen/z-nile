@@ -4171,7 +4171,7 @@ function cmd.done(pos: { string })
 		end
 	end
 	if gateLib.doneGate(process.env) == "promoted" then
-		print("done: inside a spec run, so the full gate is skipped; checking the promoted specs")
+		print("done: inside a spec run, so the gate is skipped; checking the promoted specs")
 		if #promoted > 0 then
 			print("\n=== promoted acceptance specs: type check + meta + run")
 			if not promotedChecksAll(raft, promoted, true) then
@@ -4180,10 +4180,10 @@ function cmd.done(pos: { string })
 			end
 		end
 	else
-		print("\n=== full gate on the done tree")
-		if not sh.stream("bash", { "z-nile/check.sh", "--full" }) then
+		print("\n=== affected gate on the done tree")
+		if not sh.stream("bash", { "z-nile/check.sh", "--affected" }) then
 			rollback()
-			fail("the full gate fails on the done tree (rolled back); fix and retry done")
+			fail("the affected gate fails on the done tree (rolled back); fix and retry done")
 		end
 	end
 	-- Mark the PR ready before the final push: CI skips drafts, so the push below is what gets tested.

@@ -4,6 +4,7 @@
 -- shared SQLite db, keyed by a fingerprint of everything a spec can read.
 --   lune run z-nile/specs -- run --project <name> [--fresh] [--all | -- <spec path relative to the home>...]
 --   lune run z-nile/specs -- digest --mode <affected|full> --projects <a,b> [--base REF]   -- the whole-gate digest
+--   lune run z-nile/specs -- scope                         -- the one project the change set is confined to, or ALL (c0239)
 --   lune run z-nile/specs -- gate-check --digest D        -- exit 0 and the stored report when that gate passed
 --   lune run z-nile/specs -- gate-record --digest D --mode M --projects P --summary FILE
 -- It runs unjailed (check.sh does), so it alone writes the db; the runner's jail denies specs every write outside the
@@ -460,6 +461,21 @@ local function digestCommand()
 	process.exit(0)
 end
 
+-- c0239: the project the whole change set (the branch against its base, uncommitted and untracked files: what the
+-- affected gate selects from) is confined to, or ALL. Prints that and nothing else; any unreadable fact is ALL.
+local function scopeCommand()
+	local ok, answer = pcall(function(): string
+		local reg = loadRegistry()
+		local ctx = context.build(reg)
+		if ctx == nil then
+			return "ALL"
+		end
+		return select.scope(ctx, changes.files(nil))
+	end)
+	print(if ok then answer else "ALL")
+	process.exit(0)
+end
+
 local function openDb(): resultsdb.Db?
 	local path = workspace.dbPath(ROOT)
 	if path == nil then
@@ -526,10 +542,12 @@ if command == "run" then
 	runCommand()
 elseif command == "digest" then
 	digestCommand()
+elseif command == "scope" then
+	scopeCommand()
 elseif command == "gate-check" then
 	gateCheckCommand()
 elseif command == "gate-record" then
 	gateRecordCommand()
 else
-	fail("usage: specs run|digest|gate-check|gate-record (see the file's header)")
+	fail("usage: specs run|digest|scope|gate-check|gate-record (see the file's header)")
 end

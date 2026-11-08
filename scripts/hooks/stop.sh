@@ -42,8 +42,15 @@ fi
 # scripts/check.sh is the gate in a tree from before c0114 and its forwarder after: this hook runs from the main
 # checkout against any worktree, so it calls the path both have (design review 001 F2); the forwarder-removal raft
 # switches it to z-nile/check.sh
-if ! out=$(scripts/check.sh --affected 2>&1); then
-  echo "scripts/check.sh --affected failed; fix before finishing:" >&2
+# c0239: when the gate's whole change set is confined to one project, gate that project; every other answer (ALL, any
+# other output, an empty one, a failure even after a name, a tree with no z-nile/specs) runs the unscoped gate.
+scope_args=()
+if [[ -f z-nile/specs.luau ]] && scope=$(lune run z-nile/specs -- scope 2>/dev/null) &&
+  [[ $scope =~ ^[A-Za-z0-9_-]+$ && $scope != ALL ]]; then
+  scope_args=(--project "$scope")
+fi
+if ! out=$(scripts/check.sh --affected "${scope_args[@]}" 2>&1); then
+  echo "scripts/check.sh --affected ${scope_args[*]} failed; fix before finishing:" >&2
   echo "$out" | grep -v -e '^\[INFO\]' -e '^\[WARN\]' | tail -n 40 >&2
   exit 2
 fi
