@@ -43,7 +43,7 @@ local function view(over: { [string]: any }?): { [string]: string }
 		check = 'check "AC1: Foo exists" true',
 		diff = "diff --git a/src/Foo.luau b/src/Foo.luau\n+local Foo = {}",
 		unclaimed = "",
-		skill = "# Adversarial review\nFinal mode ... Verdict: approve | changes ... Off course:",
+		skill = "# Adversarial review\nFinal mode ... Verdict: on-course | off-course ... Gap:",
 	}
 	local extra: { [string]: any } = over or {}
 	for k, v in extra do
@@ -73,7 +73,7 @@ return t.spec("c0262 AC1 the final review's limited view", function(it)
 		t.expect(has(v["ask.md"], "CAPTURED ASK: make Foo")).toBe(true)
 		t.expect(has(v["design.md"], "Add a Foo module.")).toBe(true)
 		t.expect(has(v["implementation.patch"], "+local Foo = {}")).toBe(true)
-		t.expect(has(v["skill.md"], "Off course:")).toBe(true)
+		t.expect(has(v["skill.md"], "Gap:")).toBe(true)
 	end)
 
 	it("AC1: acceptance specs ride under acceptance/, and design edits made on the branch ride as claims to check", function()
@@ -88,6 +88,18 @@ return t.spec("c0262 AC1 the final review's limited view", function(it)
 		t.expect(has(v["README.md"], "design-changes.patch")).toBe(true)
 	end)
 
+	it("AC1: the ask is c0260's verbatim ask, interview and confirmed idea when the ticket has them, else the capture", function()
+		local withAsk = DOC .. "\n## Ask (verbatim)\nthe user's own words\n\n## Interview\nQ: why? A: because\n\n## Idea\nthe clean idea\n\n## Idea review\nthe idea reviewer's trail\n"
+		local a = finalreview.askOf(withAsk, "CAPTURE TEXT")
+		t.expect(has(a, "the user's own words")).toBe(true)
+		t.expect(has(a, "Q: why? A: because")).toBe(true)
+		t.expect(has(a, "the clean idea")).toBe(true)
+		t.expect(has(a, "the idea reviewer's trail")).toBe(false)
+		t.expect(has(a, "CAPTURE TEXT")).toBe(false)
+		local old = finalreview.askOf(DOC, "CAPTURE TEXT")
+		t.expect(has(old, "CAPTURE TEXT")).toBe(true)
+	end)
+
 	it("AC1: the design drops the execution's own words (Verification log, status and raft lines)", function()
 		local d = view()["design.md"]
 		t.expect(has(d, "Verification log")).toBe(false)
@@ -99,7 +111,7 @@ return t.spec("c0262 AC1 the final review's limited view", function(it)
 
 	it("AC1: the README names the comparisons, the skill and the Off course tag, and never a repository path", function()
 		local r = view()["README.md"]
-		for _, word in { "ask.md", "design.md", "implementation.patch", "skill.md", "Off course:" } do
+		for _, word in { "ask.md", "design.md", "implementation.patch", "skill.md", "Gap:" } do
 			t.expect(has(r, word)).toBe(true)
 		end
 		t.expect(has(r, "z-nile/")).toBe(false)
@@ -135,7 +147,7 @@ return t.spec("c0262 AC1 the final review's limited view", function(it)
 	it("AC1: a base skill without a Final mode is replaced by HEAD's, and the README says so", function()
 		local base = view({ skill = "# Adversarial review (no final mode here)" })
 		t.expect(has(base["skill.md"], "no final mode here")).toBe(false)
-		t.expect(has(base["skill.md"], "Off course:")).toBe(true)
+		t.expect(has(base["skill.md"], "Gap:")).toBe(true)
 		t.expect(has(base["README.md"], "skill.md comes from the branch")).toBe(true)
 		t.expect(has(view()["README.md"], "skill.md comes from the branch")).toBe(false)
 	end)

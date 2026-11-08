@@ -1,5 +1,6 @@
 --!strict
 -- c0262 AC2: the rule `./zn done` applies to a raft's final reviews, and the exemption of rafts that predate it. Pure: z-nile/engine/finalreview.luau.
+-- The reviews of a ticket are the final-review-NNN.md files of its own folder: `reviews` maps member -> file name -> text.
 local finalreview = require("@znile/engine/finalreview")
 local t = require("@tests/lib/t")
 
@@ -10,7 +11,9 @@ end
 local function review(verdict: string, findings: string?): string
 	return `# Review 001: c0010 (final mode)\nInputs: view\n\n{findings or ""}\nVerdict: {verdict}\n`
 end
-local function problem(created: string, reviews: { [string]: string }, grouped: boolean?): string?
+local GAP = "### F1 [high] the design misses the idea\nGap: design\n"
+local IMPL = "### F1 [high] the implementation misses the design\nGap: implementation\n"
+local function problem(created: string, reviews: { [string]: { [string]: string } }, grouped: boolean?): string?
 	return finalreview.problem({
 		raft = "R0099",
 		created = created,
@@ -19,111 +22,114 @@ local function problem(created: string, reviews: { [string]: string }, grouped: 
 		reviews = reviews,
 	})
 end
+local OK = { ["final-review-001.md"] = review("on-course") }
 
 return t.spec("c0262 AC2 the gate ./zn done applies to final reviews", function(it)
-	it("AC2: done passes only when every member's newest final review is an approve", function()
-		local ok = {
-			["final-review-c0010-001.md"] = review("approve"),
-			["final-review-c0011-001.md"] = review("approve"),
-		}
-		t.expect(problem("2026-11-08", ok)).toBe(nil)
+	it("AC2: done passes only when every member's newest final review is on-course", function()
+		t.expect(problem("2026-11-08", { c0010 = OK, c0011 = OK })).toBe(nil)
 	end)
 
 	it("AC2: a member with no final review is named, with the command that makes it", function()
-		local p = problem("2026-11-08", { ["final-review-c0010-001.md"] = review("approve") })
+		local p = problem("2026-11-08", { c0010 = OK })
 		t.expect(p ~= nil and has(p :: string, "c0011") and has(p :: string, "--mode final")).toBe(true)
 	end)
 
-	it("AC2: a review that did not approve is BLOCKED for the user, with its file named", function()
+	it("AC2: a first off-course verdict is a redo, routed by its gap: design goes back to z-design, implementation rebuilds the layer", function()
+		local d = problem("2026-11-08", { c0010 = { ["final-review-001.md"] = review("off-course", GAP) }, c0011 = OK })
+		t.expect(d ~= nil and has(d :: string, "c0010") and has(d :: string, "REDO") and has(d :: string, "z-design")).toBe(true)
+		t.expect(has(d :: string, "BLOCKED")).toBe(false)
+		local i = problem("2026-11-08", { c0010 = { ["final-review-001.md"] = review("off-course", IMPL) }, c0011 = OK })
+		t.expect(i ~= nil and has(i :: string, "REDO") and has(i :: string, "rebuild")).toBe(true)
+		t.expect(has(i :: string, "z-design")).toBe(false)
+	end)
+
+	it("AC2: a second off-course verdict blocks the ticket for the human, whatever the gaps", function()
 		local p = problem("2026-11-08", {
-			["final-review-c0010-001.md"] = review("changes", "### F1 [medium] off course\nOff course: implementation\n"),
-			["final-review-c0011-001.md"] = review("approve"),
+			c0010 = {
+				["final-review-001.md"] = review("off-course", GAP),
+				["final-review-002.md"] = review("off-course", IMPL),
+			},
+			c0011 = OK,
 		})
-		t.expect(p ~= nil and has(p :: string, "final-review-c0010-001.md") and has(p :: string, "BLOCKED")).toBe(true)
+		t.expect(p ~= nil and has(p :: string, "BLOCKED") and has(p :: string, "c0010") and has(p :: string, "human")).toBe(true)
+		t.expect(has(p :: string, "REDO")).toBe(false)
 	end)
 
-	it("AC2: an author's answer file never clears it: only a newer approving round does", function()
-		local blocked = problem("2026-11-08", {
-			["final-review-c0010-001.md"] = review("changes", "### F1 [medium] x\n"),
-			["final-refute-c0010-001.md"] = "- F1: fixed abc123: done; consequences: none\n",
-			["final-review-c0011-001.md"] = review("approve"),
+	it("AC2: only a newer on-course round clears it (rounds read by number); an author's answer file clears nothing", function()
+		local cleared = problem("2026-11-08", {
+			c0010 = {
+				["final-review-001.md"] = review("off-course", GAP),
+				["final-review-002.md"] = review("on-course"),
+			},
+			c0011 = OK,
 		})
-		t.expect(blocked ~= nil).toBe(true)
-		local ok = {
-			["final-review-c0010-001.md"] = review("changes", "### F1 [medium] x\n"),
-			["final-review-c0010-002.md"] = review("approve"),
-			["final-review-c0011-001.md"] = review("approve"),
-		}
-		t.expect(problem("2026-11-08", ok)).toBe(nil)
-		-- a later changes is not cleared by an earlier approve, and rounds are read by number, not by name order
-		local bad = {
-			["final-review-c0010-001.md"] = review("approve"),
-			["final-review-c0010-002.md"] = review("changes", "### F1 [medium] x\n"),
-			["final-review-c0011-001.md"] = review("approve"),
-		}
-		t.expect(problem("2026-11-08", bad) ~= nil).toBe(true)
-		local ten = {
-			["final-review-c0010-009.md"] = review("changes", "### F1 [medium] x\n"),
-			["final-review-c0010-010.md"] = review("approve"),
-			["final-review-c0011-001.md"] = review("approve"),
-		}
-		t.expect(problem("2026-11-08", ten)).toBe(nil)
+		t.expect(cleared).toBe(nil)
+		local answered = problem("2026-11-08", {
+			c0010 = {
+				["final-review-001.md"] = review("off-course", IMPL),
+				["final-refute-001.md"] = "- F1: fixed abc123: done; consequences: none\n",
+			},
+			c0011 = OK,
+		})
+		t.expect(answered ~= nil).toBe(true)
+		local later = problem("2026-11-08", {
+			c0010 = { ["final-review-001.md"] = review("on-course"), ["final-review-002.md"] = review("off-course", GAP) },
+			c0011 = OK,
+		})
+		t.expect(later ~= nil and has(later :: string, "REDO")).toBe(true)
+		local ten = problem("2026-11-08", {
+			c0010 = {
+				["final-review-001.md"] = review("off-course", GAP),
+				["final-review-009.md"] = review("off-course", GAP),
+				["final-review-010.md"] = review("on-course"),
+			},
+			c0011 = OK,
+		})
+		t.expect(ten).toBe(nil)
 	end)
 
-	it("AC2: a newest round with no Verdict line is refused, and Verdict: Approve reads like approve", function()
-		local none = problem("2026-11-08", {
-			["final-review-c0010-001.md"] = "# Review\nno verdict here\n",
-			["final-review-c0011-001.md"] = review("approve"),
-		})
+	it("AC2: a newest round with no Verdict line is refused; the verdict is read at a line start, once", function()
+		local none = problem("2026-11-08", { c0010 = { ["final-review-001.md"] = "# Review\nnothing\n" }, c0011 = OK })
 		t.expect(none ~= nil and has(none :: string, "c0010")).toBe(true)
-		t.expect(finalreview.verdict("Verdict: Approve\n")).toBe("approve")
-		t.expect(finalreview.verdict("Verdict: changes requested\n")).toBe("changes")
-		t.expect(finalreview.verdict("no verdict")).toBe(nil)
+		t.expect(finalreview.verdict("Verdict: On-Course\n")).toBe("on-course")
+		t.expect(finalreview.verdict("Verdict: off-course\n")).toBe("off-course")
+		t.expect(finalreview.verdict("Verdict: approve\n")).toBe(nil)
+		t.expect(finalreview.verdict("quoted: Verdict: on-course in prose\nVerdict: off-course\n")).toBe("off-course")
+		t.expect(finalreview.verdict("Verdict: on-course\nVerdict: on-course\n")).toBe(nil)
+		t.expect(finalreview.verdict("see Verdict: on-course\n")).toBe(nil)
 	end)
 
-	it("AC2: an approve that carries a medium finding is refused too, one with only lows passes", function()
-		local med = problem("2026-11-08", {
-			["final-review-c0010-001.md"] = review("approve", "### F1 [low] a\n\n### F2 [medium] b\n"),
-			["final-review-c0011-001.md"] = review("approve"),
-		})
-		t.expect(med ~= nil and has(med :: string, "medium")).toBe(true)
-		local lows = problem("2026-11-08", {
-			["final-review-c0010-001.md"] = review("approve", "### F1 [low] a\n"),
-			["final-review-c0011-001.md"] = review("approve"),
-		})
-		t.expect(lows).toBe(nil)
-	end)
-
-	it("AC2: Verdict is read at a line start only, and two Verdict lines refuse", function()
-		t.expect(finalreview.verdict("quoted: Verdict: approve in prose\nVerdict: changes\n")).toBe("changes")
-		t.expect(finalreview.verdict("Verdict: approve\nVerdict: approve\n")).toBe(nil)
-		t.expect(finalreview.verdict("see Verdict: approve\n")).toBe(nil)
-	end)
-
-	it("AC2: an approve that still carries a high finding is refused, and prose about [high] is not a finding", function()
-		local p = problem("2026-11-08", {
-			["final-review-c0010-001.md"] = review("approve", "### F1 [low] a\n\n### F2 [high] off course\n"),
-			["final-review-c0011-001.md"] = review("approve"),
-		})
-		t.expect(p ~= nil and has(p :: string, "c0010")).toBe(true)
-		local fine = problem("2026-11-08", {
-			["final-review-c0010-001.md"] = review("approve", "No [high] finding was found.\n"),
-			["final-review-c0011-001.md"] = review("approve"),
-		})
-		t.expect(fine).toBe(nil)
+	it("AC2: an on-course verdict that still names a high or medium gap is refused, a low one passes, prose is not a gap", function()
+		for _, sev in { "high", "medium" } do
+			local p = problem("2026-11-08", {
+				c0010 = { ["final-review-001.md"] = review("on-course", `### F1 [low] a\n\n### F2 [{sev}] gap\n`) },
+				c0011 = OK,
+			})
+			t.expect(p ~= nil and has(p :: string, "c0010")).toBe(true)
+		end
+		t.expect(problem("2026-11-08", {
+			c0010 = { ["final-review-001.md"] = review("on-course", "### F1 [low] a\n") },
+			c0011 = OK,
+		})).toBe(nil)
+		t.expect(problem("2026-11-08", {
+			c0010 = { ["final-review-001.md"] = review("on-course", "No [high] gap was found.\n") },
+			c0011 = OK,
+		})).toBe(nil)
 		local f = finalreview.findings("### F1 [low] a\n### F2 [High] b\n### F3 c\n")
 		t.expect(#f).toBe(3)
 		t.expect(f[2].severity).toBe("high")
 		t.expect(f[3].severity).toBe(nil)
 	end)
 
-	it("AC2: a file that is not a numbered final round of a member is ignored", function()
+	it("AC2: a file that is not a numbered final review of the ticket is ignored", function()
 		local p = problem("2026-11-08", {
-			["final-review-c0010-001.md"] = review("approve"),
-			["final-review-c0011-001.md"] = review("changes"),
-			["final-review-c0011-002.md.bak"] = review("approve"),
-			["stream-review-c0011-001.md"] = review("approve"),
-			["review-001.md"] = review("approve"),
+			c0010 = OK,
+			c0011 = {
+				["final-review-001.md"] = review("off-course", GAP),
+				["final-review-002.md.bak"] = review("on-course"),
+				["design-review-001.md"] = review("on-course"),
+				["review-001.md"] = review("on-course"),
+			},
 		})
 		t.expect(p ~= nil and has(p :: string, "c0011")).toBe(true)
 	end)
@@ -138,18 +144,7 @@ return t.spec("c0262 AC2 the gate ./zn done applies to final reviews", function(
 	it("AC2: a raft created before the cutoff day is exempt, one created on it is not, an unreadable day is not", function()
 		t.expect(finalreview.exempt("2026-11-07", true)).toBe(true)
 		t.expect(finalreview.exempt("2026-11-08", true)).toBe(false)
-		t.expect(problem("2026-11-07", {})).toBe(nil)
-		t.expect(problem("2026-11-08", {}) ~= nil).toBe(true)
 		t.expect(finalreview.exempt("", true)).toBe(false)
 		t.expect(finalreview.exempt("soon", true)).toBe(false)
-	end)
-
-	it("AC2: nothing reads a round count: the fifth non-approving round is BLOCKED like the first", function()
-		local p = problem("2026-11-08", {
-			["final-review-c0010-005.md"] = review("changes"),
-			["final-review-c0011-001.md"] = review("approve"),
-		})
-		t.expect(p ~= nil and has(p :: string, "BLOCKED")).toBe(true)
-		t.expect((finalreview :: any).MAX_ROUNDS).toBe(nil)
 	end)
 end)

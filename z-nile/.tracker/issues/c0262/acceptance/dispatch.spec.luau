@@ -1,7 +1,7 @@
 --!strict
 -- c0262 AC8: `./zn dispatch zz-review <issue> --mode final` run for real with a fake CLI in a fixture (tests/lib/fakecli):
 -- the CLI starts in the view folder under the state folder (not the worktree), finds the five kinds of file there, the
--- review lands in the raft's folder as final-review-<issue>-001.md, and the record: line carries the issue. The old
+-- review lands in the ticket's own folder as final-review-001.md, and the record: line carries the issue. The old
 -- modes still land where they did (the code review in the issue's folder).
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
@@ -63,7 +63,7 @@ return t.spec("c0262 AC8 the dispatcher runs a final review in the view and land
 		fixture.git(wt, { "-c", "user.name=e2e", "-c", "user.email=e2e@example.invalid", "commit", "-qm", "work" })
 	end)
 
-	it("AC8: the CLI starts in <state>/view with the view's files, and the review lands as final-review-c0010-001.md", function()
+	it("AC8: the CLI starts in <state>/view-<n> with the view's files, and the review lands as final-review-001.md", function()
 		fakecli.clear(h)
 		fakecli.mode(h, "claude.zz-review", "script")
 		fs.writeFile(
@@ -72,7 +72,7 @@ return t.spec("c0262 AC8 the dispatcher runs a final review in the view and land
 				'pwd -P > "$FAKE_DIR/cwd"',
 				'ls > "$FAKE_DIR/files"',
 				'cp implementation.patch "$FAKE_DIR/patch" 2>/dev/null',
-				`printf '# Review\\n\\nVerdict: approve\\n' > "$ZN_DISPATCH_DIR/review.md"`,
+				`printf '# Review\\n\\nVerdict: on-course\\n' > "$ZN_DISPATCH_DIR/review.md"`,
 				"",
 			}, "\n")
 		)
@@ -81,7 +81,7 @@ return t.spec("c0262 AC8 the dispatcher runs a final review in the view and land
 			error(r.stdout .. r.stderr)
 		end
 		local cwd = string.gsub(fs.readFile(`{h.fakes}/cwd`), "%s+$", "")
-		t.expect(string.sub(cwd, -5)).toBe("/view")
+		t.expect(string.match(cwd, "/view%-%d+$") ~= nil).toBe(true)
 		t.expect(has(cwd, "/.cache/dispatch/")).toBe(true)
 		t.expect(cwd == wt).toBe(false)
 		local files = fs.readFile(`{h.fakes}/files`)
@@ -90,8 +90,8 @@ return t.spec("c0262 AC8 the dispatcher runs a final review in the view and land
 		end
 		local patch = fs.readFile(`{h.fakes}/patch`)
 		t.expect(has(patch, "foo.luau") and not has(patch, "bar.luau")).toBe(true)
-		t.expect(fs.isFile(`{wt}/pickman/.tracker/rafts/active/R0010/final-review-c0010-001.md`)).toBe(true)
-		t.expect(fs.isFile(`{wt}/pickman/.tracker/issues/active/c0010/final-review-001.md`)).toBe(false)
+		t.expect(fs.isFile(`{wt}/pickman/.tracker/issues/active/c0010/final-review-001.md`)).toBe(true)
+		t.expect(fs.isFile(`{wt}/pickman/.tracker/rafts/active/R0010/final-review-001.md`)).toBe(false)
 		local line = string.match(r.stdout, "record: [^\n]+") or ""
 		t.expect(has(line, '-m "c0010: final-review-001"')).toBe(true)
 		t.expect(has(line, "--phase code-review")).toBe(true)
@@ -107,7 +107,7 @@ return t.spec("c0262 AC8 the dispatcher runs a final review in the view and land
 		local cwd2 = string.gsub(fs.readFile(`{h.fakes}/cwd`), "%s+$", "")
 		t.expect(cwd2 == cwd1).toBe(false)
 		t.expect(has(fs.readFile(`{h.fakes}/patch`), "foo two")).toBe(true)
-		t.expect(fs.isFile(`{wt}/pickman/.tracker/rafts/active/R0010/final-review-c0010-002.md`)).toBe(true)
+		t.expect(fs.isFile(`{wt}/pickman/.tracker/issues/active/c0010/final-review-002.md`)).toBe(true)
 	end)
 
 	it("AC8: a code review still lands in the issue's folder and runs in the worktree", function()
@@ -115,7 +115,7 @@ return t.spec("c0262 AC8 the dispatcher runs a final review in the view and land
 		fakecli.mode(h, "claude.zz-review", "script")
 		fs.writeFile(
 			`{h.fakes}/script.sh`,
-			`pwd -P > "$FAKE_DIR/cwd"; printf '# Review\\n\\nVerdict: approve\\n' > "$ZN_DISPATCH_DIR/review.md"\n`
+			`pwd -P > "$FAKE_DIR/cwd"; printf '# Review\\n\\nVerdict: on-course\\n' > "$ZN_DISPATCH_DIR/review.md"\n`
 		)
 		local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
 		t.expect(r.ok).toBe(true)

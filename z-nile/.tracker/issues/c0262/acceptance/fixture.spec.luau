@@ -2,7 +2,8 @@
 -- c0262 AC7, AC7: `./zn final-view` and `./zn done` driven for real in a throwaway clone under the home's .cache (no
 -- remote, so the base is the local main). AC7: the view reads the design from the base, the diff is the issue's Touched
 -- modules, and a busy folder, an unknown issue and an empty diff are refused. AC7: done refuses a grouped raft whose
--- member has no approving final review (also when the branch drops the raft's grouped line), and passes with one.
+-- member has no on-course final review (a first off-course verdict is a REDO, a second BLOCKED for the human, also when the
+-- branch drops the raft's grouped line), and passes with one.
 local cleanup = require("@tests/lib/cleanup")
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
@@ -19,8 +20,9 @@ local OUT = `{work}/.cache/final-view-out`
 local TRIVIAL_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
 	.. 'check "RC1: fixture" true\nfinish\n'
 local REVIEW_OK = "# Review 001\n\nVerdict: approve\n"
-local FINAL_NO = "# Review 001: f0010 (final mode)\n\n### F1 [medium] off course\nOff course: implementation\n\nVerdict: changes\n"
-local FINAL_OK = "# Review 002: f0010 (final mode)\n\nVerdict: approve\n"
+local FINAL_NO = "# Review 001: f0010 (final mode)\n\n### F1 [high] the implementation misses the design\nGap: implementation\n\nVerdict: off-course\n"
+local FINAL_OK = "# Review 003: f0010 (final mode)\n\nVerdict: on-course\n"
+local TICKET = "pickman/.tracker/issues/active/f0010"
 local RAFT = "pickman/.tracker/rafts/active/R0010"
 
 local function must(r: Result, what: string): string
@@ -182,19 +184,28 @@ return t.spec("c0262 final-view and done, driven for real", function(it)
 		t.expect(fs.isDir(`{work}/{RAFT}`)).toBe(true)
 	end)
 
-	it("AC7: done refuses a review that did not approve (BLOCKED), also when the branch drops the grouped line", function()
-		write(`{RAFT}/final-review-f0010-001.md`, FINAL_NO)
+	it("AC7: done sends a first off-course verdict back (REDO), also when the branch drops the grouped line", function()
+		write(`{TICKET}/final-review-001.md`, FINAL_NO)
 		edit("pickman/.tracker/rafts/active/R0010/R0010.md", "\ngrouped:[^\n]*", "")
 		must(tr({ "commit", "-m", "final review 1 and a dropped grouped line", "--time", "1" }), "commit")
 		local r = tr({ "done", "R0010" })
 		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr, "final-review-f0010-001.md") and has(r.stderr, "BLOCKED")).toBe(true)
+		t.expect(has(r.stderr, "f0010") and has(r.stderr, "REDO") and not has(r.stderr, "BLOCKED")).toBe(true)
 		t.expect(fs.isDir(`{work}/{RAFT}`)).toBe(true)
 	end)
 
-	it("AC7: a newer approving round clears it and done finishes", function()
-		write(`{RAFT}/final-review-f0010-002.md`, FINAL_OK)
+	it("AC7: a second off-course verdict blocks the ticket for the human", function()
+		write(`{TICKET}/final-review-002.md`, FINAL_NO)
 		must(tr({ "commit", "-m", "final review 2", "--time", "1" }), "commit")
+		local r = tr({ "done", "R0010" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "BLOCKED") and has(r.stderr, "human")).toBe(true)
+		t.expect(fs.isDir(`{work}/{RAFT}`)).toBe(true)
+	end)
+
+	it("AC7: a newer on-course round clears it and done finishes", function()
+		write(`{TICKET}/final-review-003.md`, FINAL_OK)
+		must(tr({ "commit", "-m", "final review 3", "--time", "1" }), "commit")
 		local r = tr({ "done", "R0010" })
 		if not r.ok then
 			error(r.stderr .. r.stdout)
