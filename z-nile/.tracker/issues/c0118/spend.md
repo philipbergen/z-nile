@@ -21,6 +21,7 @@
 | 17 | 2026-11-05 00:54 | land: sync with main, lessons merge, prepared | 1676 | 5 | 10.0 | spend | prep |  |  |
 | 18 | 2026-11-08 03:01 | design-review-012 | 0 | 0 | 16.0 | spend | design-review | 189662 | claude-opus-5-5 |
 | 19 | 2026-11-08 03:01 | design-review-013 | 0 | 0 | 16.0 | spend | design-review | 234311 | claude-opus-5-5 |
+| 20 | 2026-11-08 03:02 | design-review-014 | 0 | 0 | 19.0 | spend | design-review | 238734 | claude-opus-5-5 |
 
-**Total:** +1676 / -5 lines, 243.4 agent-minutes, 620243 tokens over 19 records
-<!-- totals: added=1676 removed=5 minutes=243.4 records=19 tokens=620243 -->
+**Total:** +1676 / -5 lines, 262.4 agent-minutes, 858977 tokens over 20 records
+<!-- totals: added=1676 removed=5 minutes=262.4 records=20 tokens=858977 -->
