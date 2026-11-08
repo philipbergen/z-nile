@@ -90,3 +90,6 @@
 - design-review-009 F4: z-design/restated-rules-move-together
 - design-review-009 F5: z-design/prove-specs-pass-on-a-prototype
 - note c0265 prep round 10: a proof only check.sh runs is protected only if check.sh pins it: z-design/spec-design-correspondence
+- design-review-010 F1: z-design/confirm-overrides-with-a-suite-run, zz-arch/guard-no-is-explicit
+- design-review-010 F2: z-design/restated-rules-move-together
+- design-review-010 F3: one-off: the round-9 lesson candidate was mapped to an existing lesson and not yet written as a note
