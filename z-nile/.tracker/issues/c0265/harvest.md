@@ -89,6 +89,9 @@
 - design-review-009 F3: z-design/reasoned-rows-claim-testable-reasons
 - design-review-009 F4: z-design/restated-rules-move-together
 - design-review-009 F5: z-design/prove-specs-pass-on-a-prototype
-- design-review-010 F1: z-design/confirm-overrides-with-a-suite-run, zz-arch/guard-no-is-explicit
+- design-review-010 F1: z-design/prove-specs-pass-on-a-prototype, zz-arch/guard-no-is-explicit
 - design-review-010 F2: z-design/restated-rules-move-together
 - design-review-010 F3: z-design/proofs-run-only-by-check-are-pinned
+- design-review-011 F1: z-design/run-the-other-rafts-specs
+- design-review-011 F2: zz-arch/every-command-effects-name-the-check-flows
+- design-review-011 F3: z-design/prove-specs-pass-on-a-prototype

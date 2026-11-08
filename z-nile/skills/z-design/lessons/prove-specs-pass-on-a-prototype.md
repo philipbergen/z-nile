@@ -28,3 +28,5 @@ Run the `done` command itself too, not only a hand-made move: it leaves its move
 **Note** (f0146 design review 001 F5): a user rule changed a document row the specs pin after the prototype ran, and the record still said 6/6. Rerun the prototype after every spec change, including wording changes from a decision, and update the record's numbers.
 
 c0172 design review 001 F4: E2 recorded the full gate red on `classified.spec`, and implementation step 4 still said the gate passes. A later step that says a run passed has to match the result the experiment recorded.
+
+**Note** (c0265 design review 010 F1): read a replay's failures, not only their count. The replay of a case added in a refute failed on `listing.ok`, and the reason was that `status` already refuses in that situation; a count of "failed as expected" hid it. For each failing case, check that it fails on the line the feature adds, not on a premise about today's engine.

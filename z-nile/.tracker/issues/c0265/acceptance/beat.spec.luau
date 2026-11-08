@@ -84,6 +84,18 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 		})
 		fs.writeFile(`{h.bin}/gh`, '#!/bin/sh\n[ "$1" = pr ] && [ "$2" = list ] && echo "[]"\nexit 0\n')
 		process.exec("chmod", { "+x", `{h.bin}/gh` })
+		-- a counting shim: every network call a command makes (fetch, ls-remote, push) is logged in <fakes>/netcalls
+		fs.writeFile(
+			`{h.bin}/git`,
+			(
+				string.gsub(
+					fs.readFile(`{h.bin}/git`),
+					"^#!/bin/sh\n",
+					'#!/bin/sh\ncase "$1" in fetch|ls-remote|push) echo x >> "$FAKE_DIR/netcalls";; esac\n',
+					1
+				)
+			)
+		)
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-beat" }), "worktree"), "%s+$", ""))
 	end)
 
@@ -190,6 +202,11 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 		local entry = `{wt}/.cache/tracker-beats/c0010`
 		local before = #beats()
 		local entryBefore = fs.readFile(entry)
+		local function net(): number
+			local text = if fs.isFile(`{h.fakes}/netcalls`) then fs.readFile(`{h.fakes}/netcalls`) else ""
+			return #string.gsub(text, "[^x]", "")
+		end
+		local netBefore = net()
 		-- the fence's own spelling: the canonical git common directory, appended to what the runner already lists
 		local common = string.gsub(
 			fixture.git(h.f.main, { "rev-parse", "--path-format=absolute", "--git-common-dir" }),
@@ -209,6 +226,9 @@ return t.spec("c0265 a beat is a ref outside main", function(it)
 		t.expect(explicit.ok).toBe(false)
 		t.expect(has(explicit.stderr, "protected")).toBe(true)
 		t.expect(#beats()).toBe(before)
+		-- every heartbeat path asks the guard before its first network call: neither the autobeat nor the explicit
+		-- beat fetched, listed or pushed anything
+		t.expect(net()).toBe(netBefore)
 	end)
 
 	it("--watch refuses to run without a numeric bound (outside ./zn run)", function()
