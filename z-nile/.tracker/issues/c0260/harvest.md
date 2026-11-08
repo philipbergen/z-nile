@@ -43,3 +43,11 @@
 - design-review-004 F8: z-design/never-narrow-captured-scope
 - design-review-004 F9: z-design/spec-design-correspondence
 - note review 004's candidates: an identity a rule reads from history must survive renumbering, compaction, merge landings and shallow clones, or the rule reads a mark stored in the item: z-design/exemption-markers-refuse-omission
+- design-review-005 F1: z-design/new-refusals-reach-every-caller
+- design-review-005 F2: z-design/user-words-parsers-accept-anything
+- design-review-005 F3: z-design/restated-rules-move-together
+- design-review-005 F4: z-design/restated-rules-move-together
+- design-review-005 F5: z-design/spec-design-correspondence
+- design-review-005 F6: z-design/quote-other-preps-before-promising
+- design-review-005 F7: z-design/restated-rules-move-together
+- note review 005's candidates: search for every writer of the state a gate protects, not only the callers of the gated command: z-design/new-refusals-reach-every-caller

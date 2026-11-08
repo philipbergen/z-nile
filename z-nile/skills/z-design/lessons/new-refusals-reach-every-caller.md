@@ -9,3 +9,5 @@ A command that gains a refusal is also run by other code that derives its argume
 **Why:** c0135 design review 001 F2: `new issue` and `new raft` began refusing a used slug, while `raft-plan --apply` builds `new raft <first issue's slug>` for each planned raft. A raft that keeps an old slug (emptied, retired, done) would have stopped a plan after its earlier rafts were made.
 
 **How to apply:** search for every producer of the command's arguments (`git grep` for the command's name and its argv shape) and give each the same rule from the same function, deciding the whole batch before anything runs (here: `raftplan.commands` picks a free slug for every planned raft).
+
+c0260 design review 005 F1: search for every writer of the state a gate protects (here, every place that writes a `preparing` stamp: `status` and `new raft`), not only the callers of the gated command.
