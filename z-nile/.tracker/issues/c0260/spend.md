@@ -9,6 +9,7 @@
 | 5 | 2026-11-08 09:47 | design-refute-003 | 0 | 0 | 150.0 | spend | design-review |  |  |
 | 6 | 2026-11-08 10:13 | design-review-004 | 0 | 0 | 11.5 | spend | design-review | 209553 | claude-opus-5-5 |
 | 7 | 2026-11-08 10:14 | design-refute-004 | 0 | 0 | 200.0 | spend | design-review |  |  |
+| 8 | 2026-11-08 10:25 | design-review-005 | 0 | 0 | 10.5 | spend | design-review | 192189 | claude-opus-5-5 |
 
-**Total:** +0 / -0 lines, 472.0 agent-minutes, 843377 tokens over 7 records
-<!-- totals: added=0 removed=0 minutes=472.0 records=7 tokens=843377 -->
+**Total:** +0 / -0 lines, 482.5 agent-minutes, 1035566 tokens over 8 records
+<!-- totals: added=0 removed=0 minutes=482.5 records=8 tokens=1035566 -->
