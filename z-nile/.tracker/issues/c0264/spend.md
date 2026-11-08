@@ -16,6 +16,7 @@
 | 12 | 2026-11-08 04:25 | prep | 156 | 3 | 45.0 | spend | prep |  |  |
 | 13 | 2026-11-08 04:29 | design-refute-003 | 0 | 0 | 15.0 | spend | design-review |  |  |
 | 14 | 2026-11-08 04:33 | design-review-004 | 0 | 0 | 8.0 | spend | design-review |  | claude-opus-5-5 |
+| 15 | 2026-11-08 04:33 | design-review-004-tokens | 0 | 0 | 0.0 | spend | design-review | 111789 | claude-opus-5-5 |
 
-**Total:** +156 / -3 lines, 179.0 agent-minutes, 306388 tokens over 14 records
-<!-- totals: added=156 removed=3 minutes=179.0 records=14 tokens=306388 -->
+**Total:** +156 / -3 lines, 179.0 agent-minutes, 418177 tokens over 15 records
+<!-- totals: added=156 removed=3 minutes=179.0 records=15 tokens=418177 -->
