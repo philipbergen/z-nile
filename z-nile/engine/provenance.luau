@@ -30,7 +30,9 @@ function provenance.agent(model: string, effort: string?): string
 end
 
 local function stripSuffix(value: string): string
-	return string.match(value, "^(.*) %(from git%)$") or string.match(value, "^(.*) %(from git, first add%)$") or value
+	return string.match(value, "^(.*) %(from git%)$")
+		or string.match(value, "^(.*) %(from git, first add%)$")
+		or value
 end
 
 local function liveForm(value: string): boolean
@@ -177,7 +179,13 @@ function provenance.appendOnly(old: string?, new: string, id: string): string?
 		end
 		for i, r in o do
 			local m = n[i]
-			if not m or m.when ~= r.when or m.event ~= r.event or m.actor ~= r.actor or m.detail ~= r.detail then
+			if
+				not m
+				or m.when ~= r.when
+				or m.event ~= r.event
+				or m.actor ~= r.actor
+				or m.detail ~= r.detail
+			then
 				return `row {i} differs from origin/main: rows are only appended`
 			end
 		end
@@ -209,7 +217,9 @@ end
 -- branch's (`theirs`, origin/main's) new rows, then ours' new rows minus theirs' taken as a multiset. After a merge
 -- origin/main's record is still a prefix of ours, which a gate that compares them needs.
 function provenance.union(base: string?, ours: string, theirs: string): string
-	local id = string.match(ours, "^# Provenance: (%S+)") or string.match(theirs, "^# Provenance: (%S+)") or "?"
+	local id = string.match(ours, "^# Provenance: (%S+)")
+		or string.match(theirs, "^# Provenance: (%S+)")
+		or "?"
 	local b: { Row } = if base then (provenance.parse(base)) or {} else {}
 	local o: { Row } = (provenance.parse(ours)) or {}
 	local t: { Row } = (provenance.parse(theirs)) or {}

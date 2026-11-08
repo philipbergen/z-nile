@@ -12,7 +12,6 @@ local trail = require("@znile/engine/trail")
 local OPUS = "agent:claude-opus-5-5 effort high"
 
 return t.spec("c0263 the provenance record", function(it)
-
 	it("grammar and resolution", function()
 		for _, ok in
 			{
@@ -167,9 +166,11 @@ return t.spec("c0263 the provenance record", function(it)
 		t.expect(provenance.appendOnly(nil, "garbage", "c0010") ~= nil).toBe(true) -- a create that does not parse
 		-- the publish rule: append-only, and every new row's event is one `./zn record` may publish (the allowed list)
 		t.expect(provenance.publishProblem(one, two, "c0010", provenance.PUBLISHED)).toBe(nil)
-		t.expect(provenance.publishProblem(nil, one :: string, "c0010", provenance.PUBLISHED) ~= nil).toBe(true) -- approved
+		t.expect(provenance.publishProblem(nil, one :: string, "c0010", provenance.PUBLISHED) ~= nil)
+			.toBe(true) -- approved
 		t.expect(provenance.publishProblem(one, two, "c0010", { "confirmed" }) ~= nil).toBe(true) -- not in this list
-		t.expect(provenance.publishProblem(two, one :: string, "c0010", provenance.PUBLISHED) ~= nil).toBe(true)
+		t.expect(provenance.publishProblem(two, one :: string, "c0010", provenance.PUBLISHED) ~= nil)
+			.toBe(true)
 
 		-- union: two sides that each appended to the same base keep both rows, base first, no row twice
 		local ours =

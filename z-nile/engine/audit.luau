@@ -3,9 +3,9 @@
 -- malformed tree (which store.find refuses) can still be described. See c0880.
 local fs = require("@lune/fs")
 local ids = require("./ids")
-local provenance = require("./provenance")
 local process = require("@lune/process")
 local projects = require("./projects")
+local provenance = require("./provenance")
 
 export type Level = "error" | "warning"
 export type Problem = { level: Level, code: string, path: string, message: string }

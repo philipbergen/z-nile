@@ -15,10 +15,10 @@ local lessonsLib = require("./lessons")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
+local provenance = require("./provenance")
 local publish = require("./publish")
 local raftcheck = require("./raftcheck")
 local raftplan = require("./raftplan")
-local provenance = require("./provenance")
 local reapLib = require("./reap")
 local sh = require("../lib/sh")
 local skillsLib = require("./skills")
@@ -362,7 +362,8 @@ local function mergeRef(ref: string): (boolean, string)
 		local ours, theirs = stage(2), stage(3)
 		if not ours or not theirs or not provenance.parse(ours) or not provenance.parse(theirs) then
 			sh.run("git", { "merge", "--abort" })
-			return false, `{f}: a side of the merge is not a valid record (or was deleted)\n{r.stderr}{r.stdout}`
+			return false,
+				`{f}: a side of the merge is not a valid record (or was deleted)\n{r.stderr}{r.stdout}`
 		end
 		fs.writeFile(f, provenance.union(stage(1), ours, theirs))
 		sh.must("git", { "add", f })
@@ -395,7 +396,8 @@ local function liveActor(opts: { [string]: { string } }?): string
 		agent = (process.env.CLAUDECODE or "") ~= "" or (process.env.AI_AGENT or "") ~= "",
 		effort = process.env.CLAUDE_EFFORT,
 	}
-	local actor, why = provenance.resolve(if flagList then flagList[1] else nil, process.env.ZN_ACTOR, hint, name)
+	local actor, why =
+		provenance.resolve(if flagList then flagList[1] else nil, process.env.ZN_ACTOR, hint, name)
 	if not actor then
 		fail(why or "not an actor")
 	end
@@ -5092,10 +5094,14 @@ function cmd.record(pos: { string }, opts: { [string]: { string } })
 	end
 	local id, event = pos[1], pos[2]
 	if not id or not event or not (store.isIssueId(id) or store.isRaftId(id)) then
-		fail(`usage: record <id> <{table.concat(provenance.PUBLISHED, "|")}> [--actor <actor>] [--detail <k=v>]`)
+		fail(
+			`usage: record <id> <{table.concat(provenance.PUBLISHED, "|")}> [--actor <actor>] [--detail <k=v>]`
+		)
 	end
 	if not table.find(provenance.PUBLISHED, event) then
-		fail(`record publishes {table.concat(provenance.PUBLISHED, ", ")} only, not {event}: the other events are written by their own commands`)
+		fail(
+			`record publishes {table.concat(provenance.PUBLISHED, ", ")} only, not {event}: the other events are written by their own commands`
+		)
 	end
 	local actor = liveActor(opts)
 	local detail = if opts["--detail"] then opts["--detail"][1] else ""

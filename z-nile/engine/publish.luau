@@ -4,10 +4,10 @@
 local broker = require("./broker")
 local ids = require("./ids")
 local ledger = require("./ledger")
-local provenance = require("./provenance")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
+local provenance = require("./provenance")
 local task = require("@lune/task")
 
 local publish = {}
@@ -117,7 +117,10 @@ function publish.allowed(path: string, roots: { string }, counter: string?): boo
 		return false
 	end
 	-- an issue's spend.md and an item's provenance.md are published append-only; a raft's summary stays on its branch
-	return rel == `{id}.md` or rel == "check.sh" or rel == "provenance.md" or (isIssue(id) and rel == "spend.md")
+	return rel == `{id}.md`
+		or rel == "check.sh"
+		or rel == "provenance.md"
+		or (isIssue(id) and rel == "spend.md")
 end
 
 -- The directory of an item file: `path` without its `/<rel>`.
@@ -456,7 +459,9 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 					return fail(`{c.path}: no {pid}.md beside it on origin/main`)
 				end
 				-- an active item takes `unblocked` rows only (a worker blocks while it holds a raft)
-				local allowed = if string.find(c.path, "/active/", 1, true) then { "unblocked" } else provenance.PUBLISHED
+				local allowed = if string.find(c.path, "/active/", 1, true)
+					then { "unblocked" }
+					else provenance.PUBLISHED
 				local reason = provenance.publishProblem(existing, c.content, pid, allowed)
 				if reason then
 					return fail(`{c.path}: {reason}`)

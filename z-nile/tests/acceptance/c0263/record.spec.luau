@@ -11,9 +11,6 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local NAME = "c0263-record"
-local ME = `human:{NAME}`
-local SONNET = "agent:claude-sonnet-5-5 effort high"
-local OPUS = "agent:claude-opus-5-5 effort high"
 local PREPARED = "prepared-quiet-copper-falcon"
 local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
 	.. 'check "AC1: ok" true\nfinish\n'
@@ -70,16 +67,6 @@ local function rows(text: string, event: string): { string }
 		end
 	end
 	return out
-end
-local function localRecord(wt: string, id: string): string
-	local p = `{wt}/{ISSUES}/{id}/provenance.md`
-	return if fs.isFile(p) then fs.readFile(p) else ""
-end
-local function land(wt: string)
-	fixture.git(wt, { "fetch", "-q", "origin" })
-	fixture.git(wt, { "merge", "-q", "--no-edit", "origin/main" })
-	fixture.git(wt, { "push", "-q", "origin", "HEAD:main" })
-	fixture.git(f.main, { "pull", "-q", "origin", "main" })
 end
 
 return t.spec("c0263 the record's writes", function(it)
@@ -139,8 +126,17 @@ return t.spec("c0263 the record's writes", function(it)
 		t.expect(has(rec, '| confirmed | human:Ann | said="yes"')).toBe(true)
 		t.expect(fixture.git(f.origin, { "diff", "--name-only", before, "main" }))
 			.toBe(`{ISSUES}/c0011/provenance.md`)
+		-- a published append is built from origin/main's file, never from the worktree's: a row only this worktree holds
+		-- (committed here, not published) does not leak to main, and the merge afterwards unites it with main's
+		trOk(W1, { "sync" })
+		local rec = `{W1}/{ISSUES}/c0011/provenance.md`
+		fs.writeFile(rec, fs.readFile(rec) .. "| 2026-11-08 09:00 | ranked | human:Zed | rank=9 |\n")
+		fixture.git(W1, { "add", "-A" })
+		fixture.git(W1, { "commit", "-q", "-m", "a row only this worktree holds" })
 		trOk(W1, { "record", "c0011", "ranked", "--detail", "rank=3" })
+		t.expect(has(onOrigin(`{ISSUES}/c0011/provenance.md`), "human:Zed")).toBe(false)
 		t.expect(#rows(onOrigin(`{ISSUES}/c0011/provenance.md`), "ranked")).toBe(1)
+		t.expect(#rows(fs.readFile(rec), "ranked")).toBe(2)
 		-- the closed list, the actor grammar, and the events another command writes
 		local mark = tip()
 		for _, args in
@@ -285,35 +281,41 @@ return t.spec("c0263 the record's writes", function(it)
 		t.expect((bee :: number) < (ann :: number)).toBe(true)
 	end)
 
-	it("a record only our side added follows the folder the other side moved (git's file location conflict)", function()
-		local rec = `{W6}/{ISSUES}/c0012/provenance.md`
-		local head = "# Provenance: c0012\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
-		fs.writeFile(rec, head .. "| 2026-11-08 10:00 | ranked | human:Ann | rank=1 |\n")
-		fixture.git(W6, { "add", "-A" })
-		fixture.git(W6, { "commit", "-q", "-m", "our row" })
-		fixture.git(f.other, { "pull", "-q", "origin", "main" })
-		fixture.git(f.other, { "mv", `{ISSUES}/c0012`, `{ISSUES}/active/c0012` })
-		fixture.git(f.other, { "commit", "-q", "-m", "tracker: ready R0156" })
-		fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
-		trOk(W6, { "sync" })
-		t.expect(fs.isDir(`{W6}/{ISSUES}/c0012`)).toBe(false)
-		t.expect(#rows(fs.readFile(`{W6}/{ISSUES}/active/c0012/provenance.md`), "ranked")).toBe(1)
-		t.expect(fs.isFile(`{W6}/{ISSUES}/active/c0012/check.sh`)).toBe(true)
-		t.expect(fixture.git(W6, { "status", "--porcelain" })).toBe("")
-	end)
-	it("land merges origin/main with the same union: a united record is land's scope refusal, never a failed merge", function()
-		local rec = `{W7}/{ISSUES}/c0013/provenance.md`
-		local head = "# Provenance: c0013\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
-		fs.writeFile(rec, head .. "| 2026-11-08 10:00 | ranked | human:Ann | rank=1 |\n")
-		fixture.git(W7, { "add", "-A" })
-		fixture.git(W7, { "commit", "-q", "-m", "our row" })
-		trOk(W1, { "record", "c0013", "ranked", "--actor", "human:Bee", "--detail", "rank=2" })
-		local landed = tr(W7, { "land" }, { PICKMAN_LAND_GATE = "true" })
-		t.expect(landed.ok).toBe(false)
-		local out = landed.stderr .. landed.stdout
-		t.expect(has(out, "merging origin/main failed")).toBe(false)
-		t.expect(has(out, "provenance.md")).toBe(true) -- the scope refusal names the record
-		t.expect(#rows(fs.readFile(rec), "ranked")).toBe(2)
-		t.expect(fixture.exec(W7, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
-	end)
+	it(
+		"a record only our side added follows the folder the other side moved (git's file location conflict)",
+		function()
+			local rec = `{W6}/{ISSUES}/c0012/provenance.md`
+			local head = "# Provenance: c0012\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
+			fs.writeFile(rec, head .. "| 2026-11-08 10:00 | ranked | human:Ann | rank=1 |\n")
+			fixture.git(W6, { "add", "-A" })
+			fixture.git(W6, { "commit", "-q", "-m", "our row" })
+			fixture.git(f.other, { "pull", "-q", "origin", "main" })
+			fixture.git(f.other, { "mv", `{ISSUES}/c0012`, `{ISSUES}/active/c0012` })
+			fixture.git(f.other, { "commit", "-q", "-m", "tracker: ready R0156" })
+			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+			trOk(W6, { "sync" })
+			t.expect(fs.isDir(`{W6}/{ISSUES}/c0012`)).toBe(false)
+			t.expect(#rows(fs.readFile(`{W6}/{ISSUES}/active/c0012/provenance.md`), "ranked")).toBe(1)
+			t.expect(fs.isFile(`{W6}/{ISSUES}/active/c0012/check.sh`)).toBe(true)
+			t.expect(fixture.git(W6, { "status", "--porcelain" })).toBe("")
+		end
+	)
+	it(
+		"land merges origin/main with the same union: a united record is land's scope refusal, never a failed merge",
+		function()
+			local rec = `{W7}/{ISSUES}/c0013/provenance.md`
+			local head = "# Provenance: c0013\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
+			fs.writeFile(rec, head .. "| 2026-11-08 10:00 | ranked | human:Ann | rank=1 |\n")
+			fixture.git(W7, { "add", "-A" })
+			fixture.git(W7, { "commit", "-q", "-m", "our row" })
+			trOk(W1, { "record", "c0013", "ranked", "--actor", "human:Bee", "--detail", "rank=2" })
+			local landed = tr(W7, { "land" }, { PICKMAN_LAND_GATE = "true" })
+			t.expect(landed.ok).toBe(false)
+			local out = landed.stderr .. landed.stdout
+			t.expect(has(out, "merging origin/main failed")).toBe(false)
+			t.expect(has(out, "provenance.md")).toBe(true) -- the scope refusal names the record
+			t.expect(#rows(fs.readFile(rec), "ranked")).toBe(2)
+			t.expect(fixture.exec(W7, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
+		end
+	)
 end)
