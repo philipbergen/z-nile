@@ -29,3 +29,16 @@
 - design-review-002 F11: z-design/accepted-risks-checked-and-decided
 - design-review-002 F12: z-design/instructions-runnable-where-they-run
 - note f0265 prep: the user reversed Q4 ("flatline") after round 2 had reviewed the "heartless" reading, and the capture was rewritten on an unlanded branch (c0265) with a new wording ("pushed to main"): z-design/never-narrow-captured-scope
+- design-review-003 F1: z-design/claim-memory-rules-list-every-claim-path, z-design/confirm-overrides-with-a-suite-run
+- design-review-003 F2: zz-arch/every-command-effects-name-the-check-flows
+- design-review-003 F3: zz-arch/guard-no-is-explicit
+- design-review-003 F4: zz-test/pin-fail-safes-where-they-act
+- design-review-003 F5: z-design/reasoned-rows-claim-testable-reasons
+- design-review-003 F6: z-design/spec-design-correspondence
+- design-review-003 F7: z-design/required-steps-on-every-path
+- design-review-003 F8: z-design/design-the-execution-window
+- design-review-003 F9: z-design/restated-rules-move-together
+- design-review-003 F10: zz-test/pin-fail-safes-where-they-act
+- design-review-003 F11: zz-arch/children-need-a-lifeline
+- design-review-003 F12: zz-test/specs-set-host-markers-explicitly
+- design-review-003 F13: z-design/reasoned-rows-claim-testable-reasons

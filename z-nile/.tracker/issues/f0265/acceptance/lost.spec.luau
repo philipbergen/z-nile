@@ -156,6 +156,10 @@ return t.spec("f0265 lost work", function(it)
 		fs.writeFile(`{h.f.main}/.cache/dispatch/c0010/questions.md`, "## Q1\nWhich scope?\n")
 		t.expect(has(lineOf(zn(h.f.main, { "status" }, LATE).stdout, "c0010"), "[parked]")).toBe(true)
 		t.expect(has(zn(h.f.main, { "lost" }, LATE).stdout, "c0010")).toBe(false)
+		-- a takeover runs in a worktree, but the run state is the main checkout's: it parks there too
+		local parkedTake = zn(wt2, { "status", "c0010", "preparing" }, LATE)
+		t.expect(parkedTake.ok).toBe(false)
+		t.expect(has(parkedTake.stderr, "parked")).toBe(true)
 		fs.removeFile(`{h.f.main}/.cache/dispatch/c0010/questions.md`)
 	end)
 
@@ -254,9 +258,12 @@ return t.spec("f0265 lost work", function(it)
 		local bad = zn(wt2, { "status", "c0010", "preparing" }, at)
 		t.expect(bad.ok).toBe(false)
 		t.expect(has(bad.stderr, "refs/zn/hb/garbage")).toBe(true)
-		local still = zn(h.f.main, { "lost" }, at) -- the lost claim is still listed, the ref named
-		t.expect(has(still.stdout, "c0010")).toBe(true)
+		-- a malformed ref makes every stale claim unknown, everywhere, and the message says how to clear it
+		t.expect(has(bad.stderr, "git push origin :refs/zn/hb/garbage")).toBe(true)
+		local still = zn(h.f.main, { "lost" }, at)
+		t.expect(has(still.stdout, "c0010")).toBe(false)
 		t.expect(has(still.stderr, "refs/zn/hb/garbage")).toBe(true)
+		t.expect(has(lineOf(zn(h.f.main, { "status" }, at).stdout, "c0010"), "[stale?]")).toBe(true)
 		fixture.git(h.f.other, { "push", "-q", "origin", ":refs/zn/hb/garbage" })
 	end)
 
@@ -287,6 +294,16 @@ return t.spec("f0265 lost work", function(it)
 		t.expect(table.find(stampsWithBeats(), after) ~= nil).toBe(true)
 	end)
 
+	it(
+		"the taker's own carried move passes, because a takeover records the new stamp in its checkout",
+		function()
+			local doc = `{wt2}/{P}/c0010/c0010.md`
+			must(zn(wt2, { "sync" }, LATE + 9 * STALE), "sync")
+			fs.writeFile(doc, (string.gsub(fs.readFile(doc), "design: draft", "design: ready")))
+			must(zn(wt2, { "status", "c0010", "prepared" }, LATE + 9 * STALE), "the taker's carried move")
+		end
+	)
+
 	it("the old claimant's carried move is refused, and its worktree stops beating what it lost", function()
 		local at = LATE + 9 * STALE
 		local doc = `{wt}/{P}/c0010/c0010.md`
@@ -297,9 +314,15 @@ return t.spec("f0265 lost work", function(it)
 		t.expect(has(r.stderr, "taken over")).toBe(true)
 		-- an interval later its autobeat sees another stamp on origin: it drops the entry and writes no beat
 		local taken = stampOf(`{P}/c0010/c0010.md`)
-		must(zn(wt, { "lessons", "--check" }, at + 2 * STALE), "a command in the old worktree")
+		local before = #beatRefs()
+		local told = zn(wt, { "lessons", "--check" }, at + 2 * STALE)
+		t.expect(told.ok).toBe(true)
+		t.expect(has(told.stderr, "taken over")).toBe(true) -- the old claimant is told, once
+		t.expect(fs.isFile(`{wt}/.cache/tracker-beats/c0010`)).toBe(false) -- and its entry is gone
+		t.expect(#beatRefs()).toBe(before) -- no beat of either stamp
 		for _, ref in beatRefs() do
 			t.expect(ref == `refs/zn/hb/{taken}/{at + 2 * STALE}`).toBe(false)
 		end
+		t.expect(has(zn(wt, { "lessons", "--check" }, at + 4 * STALE).stderr, "taken over")).toBe(false)
 	end)
 end)

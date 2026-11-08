@@ -232,4 +232,28 @@ return t.spec("f0265 heartbeat rules", function(it)
 		t.expect(heartbeat.watch(A, A, NOW + 95, NOW + 100, 5)).toBe("stop-bound")
 		t.expect(heartbeat.watch(A, A, NOW + 94, NOW + 100, 5)).toBe("beat")
 	end)
+
+	it("tuning settings are honoured only inside a spec run, and only as positive whole numbers", function()
+		local inside = { PICKMAN_FENCE_SPECS = "1", ZN_BEAT_EVERY = "1" }
+		t.expect(heartbeat.setting(inside, "ZN_BEAT_EVERY", 300)).toBe(1)
+		t.expect(heartbeat.setting({ ZN_BEAT_EVERY = "1" }, "ZN_BEAT_EVERY", 300)).toBe(300)
+		t.expect(heartbeat.setting({ PICKMAN_FENCE_SPECS = "", ZN_BEAT_EVERY = "1" }, "ZN_BEAT_EVERY", 300))
+			.toBe(300)
+		for _, bad in { "0", "-3", "1.5", "soon", "" } do
+			t.expect(
+				heartbeat.setting({ PICKMAN_FENCE_SPECS = "1", ZN_NET_SECONDS = bad }, "ZN_NET_SECONDS", 10)
+			)
+				.toBe(10)
+		end
+	end)
+
+	it("an automatic heartbeat call is never made from a checkout the fence protects", function()
+		local real = "/repo/.git:/other/.git"
+		t.expect(heartbeat.autoAllowed({ PICKMAN_FENCE_REAL_GIT = real }, "/repo/.git")).toBe(false)
+		t.expect(heartbeat.autoAllowed({ PICKMAN_FENCE_REAL_GIT = real }, "/other/.git")).toBe(false)
+		t.expect(heartbeat.autoAllowed({ PICKMAN_FENCE_REAL_GIT = real }, "/repo/.cache/fixture/main/.git"))
+			.toBe(true) -- a fixture
+		t.expect(heartbeat.autoAllowed({}, "/repo/.git")).toBe(true) -- no fence: an agent's own command
+		t.expect(heartbeat.autoAllowed({ PICKMAN_FENCE_REAL_GIT = "" }, "/repo/.git")).toBe(true)
+	end)
 end)
