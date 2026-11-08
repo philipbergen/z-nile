@@ -52,21 +52,6 @@ function heartbeat.setting(env: { [string]: string? }, name: string, default: nu
 	return default
 end
 
--- An automatic heartbeat call is never made from a checkout the fence protects (a check.sh or spec flow in the real
--- repository): `commonDir` is the engine's git common directory, `PICKMAN_FENCE_REAL_GIT` the fence's colon list.
-function heartbeat.autoAllowed(env: { [string]: string? }, commonDir: string): boolean
-	local real = env.PICKMAN_FENCE_REAL_GIT
-	if real == nil or real == "" then
-		return true
-	end
-	for dir in string.gmatch(real, "[^:]+") do
-		if dir == commonDir then
-			return false
-		end
-	end
-	return true
-end
-
 -- live | stale, from the newest sign of life: the newest usable beat, else the moment the claim landed.
 function heartbeat.judge(claims: { Claim }, beats: { Beat }, now: number, stale: number?): { Verdict }
 	local limit = stale or heartbeat.STALE

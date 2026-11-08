@@ -22,7 +22,7 @@ local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
 end
 local function zn(cwd: string, args: { string }, now: number?, extra: { [string]: string }?): fixture.Result
-	local env: { [string]: string } = {}
+	local env: { [string]: string } = { FAKE_DIR = h.fakes, PATH = `{h.bin}:{process.env.PATH}` }
 	if now then
 		env.ZN_NOW = tostring(now)
 	end
@@ -82,6 +82,8 @@ return t.spec("f0265 a beat is a ref outside main", function(it)
 			-- a finished raft's issue keeps the claim stamp it was worked under (about 30 do on the real tracker)
 			[`{P}/done/c0060/c0060.md`] = issue("c0060", "active-brisk-amber-otter"),
 		})
+		fs.writeFile(`{h.bin}/gh`, '#!/bin/sh\n[ "$1" = pr ] && [ "$2" = list ] && echo "[]"\nexit 0\n')
+		process.exec("chmod", { "+x", `{h.bin}/gh` })
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "f0265-beat" }), "worktree"), "%s+$", ""))
 	end)
 
@@ -152,7 +154,7 @@ return t.spec("f0265 a beat is a ref outside main", function(it)
 		t.expect(mine()).toEqual({ T0 + 1000 })
 	end)
 
-	it("a beat never deletes the young beat of a claim this checkout has not fetched yet", function()
+	it("a beat keeps another terminal's fresh beat of a claim it has not fetched", function()
 		-- another terminal claims c0030 and beats; this checkout has not fetched since
 		trackerfix.elsewhere(h.f, {
 			[`{P}/c0030/c0030.md`] = issue("c0030", "preparing-sunny-heron-lynx"),
@@ -184,23 +186,33 @@ return t.spec("f0265 a beat is a ref outside main", function(it)
 		t.expect(found).toBe(true)
 	end)
 
-	it("--watch refuses without a bound, and under ./zn run beats until just before it", function()
-		local refused = zn(wt, { "beat", "c0010", "--watch" }, nil, { ZN_BOUNDED_DEADLINE = "" })
-		t.expect(refused.ok).toBe(false)
-		t.expect(has(refused.stderr, "./zn run")).toBe(true)
+	it("a nested ./zn in a protected checkout never beats", function()
 		local stamp = stampOf("c0010", `{P}/c0010/c0010.md`)
-		local started = os.time()
-		local r = zn(wt, { "beat", "c0010", "--watch" }, nil, {
-			ZN_BOUNDED_DEADLINE = tostring(started + 6),
-			ZN_BEAT_EVERY = "1",
-		})
-		t.expect(r.ok).toBe(true) -- it stops itself before the bound kills it
+		local before = #beats()
 		local newest = 0
 		for _, b in beats() do
-			if b.stamp == stamp and b.epoch <= os.time() then -- real-clock beats of this claim only
+			if b.stamp == stamp then
 				newest = math.max(newest, b.epoch)
 			end
 		end
-		t.expect(newest >= started + 2).toBe(true)
+		local common = `{h.f.main}/.git/.` -- the fixture's git directory, spelled another way
+		must(
+			zn(wt, { "lessons", "--tags" }, T0 + 9000, { PICKMAN_FENCE_REAL_GIT = common }),
+			"a nested command"
+		)
+		local after = 0
+		for _, b in beats() do
+			if b.stamp == stamp then
+				after = math.max(after, b.epoch)
+			end
+		end
+		t.expect(after).toBe(newest)
+		t.expect(#beats()).toBe(before)
+	end)
+
+	it("--watch refuses to run without a numeric bound (outside ./zn run)", function()
+		local refused = zn(wt, { "beat", "c0010", "--watch" }, nil, { ZN_BOUNDED_DEADLINE = "" })
+		t.expect(refused.ok).toBe(false)
+		t.expect(has(refused.stderr, "./zn run")).toBe(true)
 	end)
 end)

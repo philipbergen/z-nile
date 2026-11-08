@@ -42,3 +42,14 @@
 - design-review-003 F11: zz-arch/children-need-a-lifeline
 - design-review-003 F12: zz-test/specs-set-host-markers-explicitly
 - design-review-003 F13: z-design/reasoned-rows-claim-testable-reasons
+- design-review-004 F1: z-design/walk-refute-added-cases-against-the-order-of-effects, z-design/prove-specs-pass-on-a-prototype
+- design-review-004 F2: zz-arch/one-fact-per-checkout-memory-file, z-design/confirm-overrides-with-a-suite-run
+- design-review-004 F3: zz-arch/one-reader-per-format, zz-arch/guard-no-is-explicit
+- design-review-004 F4: z-design/trace-every-way-code-runs
+- design-review-004 F5: zz-test/specs-never-burn-real-resources
+- design-review-004 F6: z-design/spec-design-correspondence
+- design-review-004 F7: z-design/restated-rules-move-together
+- design-review-004 F8: z-design/spec-design-correspondence
+- design-review-004 F9: zz-test/specs-set-host-markers-explicitly
+- design-review-004 F10: zz-test/stand-ins-answer-only-named-arguments
+- design-review-004 F11: one-off: the c0114 classified gate failure comes from f0263/f0265 being filed as features in z-nile's root; the reviewer's evidence for the user's rename decision, not a design defect of this issue

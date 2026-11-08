@@ -69,9 +69,13 @@ local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --sho
 local GH = '#!/bin/sh\n[ "$1" = pr ] && [ "$2" = list ] && echo "[]"\nexit 0\n'
 -- the shim acts on one push at a time, each armed by a marker file it removes first (answers only what it names)
 local SHIM = [[#!/bin/sh
+if [ "$1" = ls-remote ]; then
+  echo x >> "$FAKE_DIR/lscalls"
+  [ -f "$FAKE_DIR/lshang" ] && sleep 30
+fi
 if [ "$1" = push ]; then
   case "$*" in
-    *refs/heads/main*)
+    *:refs/heads/main*)
       if [ -f "$FAKE_DIR/race" ]; then
         rm -f "$FAKE_DIR/race"
         o="$FAKE_OTHER"; f="$o/pickman/.tracker/issues/c0070/c0070.md"
@@ -80,7 +84,7 @@ if [ "$1" = push ]; then
         "$REAL_GIT" -C "$o" add -A; "$REAL_GIT" -C "$o" -c user.name=race -c user.email=race@example.invalid commit -q -m restamp
         "$REAL_GIT" -C "$o" push -q origin HEAD:main
       fi ;;
-    *refs/zn/hb*)
+    *:refs/zn/hb/*)
       if [ -f "$FAKE_DIR/pushfail" ]; then rm -f "$FAKE_DIR/pushfail"; echo "fatal: fake beat push failure" >&2; exit 1; fi
       if [ -f "$FAKE_DIR/restamp" ]; then
         rm -f "$FAKE_DIR/restamp"
@@ -197,4 +201,46 @@ return t.spec("f0265 races and long commands", function(it)
 		t.expect(string.sub(stamp, 1, 10)).toBe("preparing-")
 		t.expect(#epochs(stamp)).toBe(1)
 	end)
+
+	it(
+		"a hung remote is bounded: status returns, warns, and a failed beat attempt is not retried inside the interval",
+		function()
+			fs.writeFile(`{h.fakes}/lshang`, "1")
+			local started = os.time()
+			local r = zn(
+				h.f.main,
+				{ "status" },
+				{ ZN_NOW = tostring(os.time() + 5 * STALE), ZN_NET_SECONDS = "1" }
+			)
+			t.expect(r.ok).toBe(true)
+			t.expect(os.time() - started < 20).toBe(true)
+			t.expect(has(r.stderr, "heartbeats unreadable")).toBe(true)
+			-- in a worktree that holds claims, a command that judges nothing makes one failed attempt per claim and no more
+			local function calls(): number
+				local text = if fs.isFile(`{h.fakes}/lscalls`) then fs.readFile(`{h.fakes}/lscalls`) else ""
+				return #string.gsub(text, "[^x]", "")
+			end
+			local before = calls()
+			must(
+				zn(
+					wt,
+					{ "lessons", "--tags" },
+					{ ZN_NOW = tostring(os.time() + 6 * STALE), ZN_NET_SECONDS = "1" }
+				),
+				"lessons in the worktree"
+			)
+			local first = calls()
+			t.expect(first > before).toBe(true)
+			must(
+				zn(
+					wt,
+					{ "lessons", "--tags" },
+					{ ZN_NOW = tostring(os.time() + 6 * STALE + 10), ZN_NET_SECONDS = "1" }
+				),
+				"lessons again"
+			)
+			t.expect(calls()).toBe(first) -- inside the interval: no new attempt
+			fs.removeFile(`{h.fakes}/lshang`)
+		end
+	)
 end)

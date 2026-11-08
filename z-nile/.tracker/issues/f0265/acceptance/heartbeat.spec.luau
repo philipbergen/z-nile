@@ -246,14 +246,4 @@ return t.spec("f0265 heartbeat rules", function(it)
 				.toBe(10)
 		end
 	end)
-
-	it("an automatic heartbeat call is never made from a checkout the fence protects", function()
-		local real = "/repo/.git:/other/.git"
-		t.expect(heartbeat.autoAllowed({ PICKMAN_FENCE_REAL_GIT = real }, "/repo/.git")).toBe(false)
-		t.expect(heartbeat.autoAllowed({ PICKMAN_FENCE_REAL_GIT = real }, "/other/.git")).toBe(false)
-		t.expect(heartbeat.autoAllowed({ PICKMAN_FENCE_REAL_GIT = real }, "/repo/.cache/fixture/main/.git"))
-			.toBe(true) -- a fixture
-		t.expect(heartbeat.autoAllowed({}, "/repo/.git")).toBe(true) -- no fence: an agent's own command
-		t.expect(heartbeat.autoAllowed({ PICKMAN_FENCE_REAL_GIT = "" }, "/repo/.git")).toBe(true)
-	end)
 end)

@@ -205,36 +205,6 @@ return t.spec("f0265 lost work", function(it)
 		fs.removeFile(`{h.fakes}/lsfail`)
 	end)
 
-	it(
-		"a hung remote is bounded: status returns, warns, and a failed beat attempt is not retried inside the interval",
-		function()
-			fs.writeFile(`{h.fakes}/lshang`, "1")
-			local started = os.time()
-			local r = zn(h.f.main, { "status" }, LATE + 5 * STALE, { ZN_NET_SECONDS = "1" })
-			t.expect(r.ok).toBe(true)
-			t.expect(os.time() - started < 20).toBe(true)
-			t.expect(has(r.stderr, "heartbeats unreadable")).toBe(true)
-			-- in a worktree that holds claims, a command that judges nothing makes one failed attempt per claim and no more
-			local function calls(): number
-				local text = if fs.isFile(`{h.fakes}/lscalls`) then fs.readFile(`{h.fakes}/lscalls`) else ""
-				return #string.gsub(text, "[^x]", "")
-			end
-			local before = calls()
-			must(
-				zn(wt, { "lessons", "--check" }, LATE + 6 * STALE, { ZN_NET_SECONDS = "1" }),
-				"lessons in the worktree"
-			)
-			local first = calls()
-			t.expect(first > before).toBe(true)
-			must(
-				zn(wt, { "lessons", "--check" }, LATE + 6 * STALE + 10, { ZN_NET_SECONDS = "1" }),
-				"lessons again"
-			)
-			t.expect(calls()).toBe(first) -- inside the interval: no new attempt
-			fs.removeFile(`{h.fakes}/lshang`)
-		end
-	)
-
 	it("a takeover is refused for a live claim, a parked one, and whenever the answer is unknown", function()
 		must(zn(h.f.main, { "beat", "c0010" }, LATE + 6 * STALE), "keep c0010 alive")
 		local live = zn(wt2, { "status", "c0010", "preparing" }, LATE + 6 * STALE + 10)
@@ -292,6 +262,10 @@ return t.spec("f0265 lost work", function(it)
 		t.expect(after ~= before).toBe(true)
 		t.expect(stampOf(`{P}/c0030/c0030.md`)).toBe(after)
 		t.expect(table.find(stampsWithBeats(), after) ~= nil).toBe(true)
+		-- the taker holds the stamp but not the rafting ownership: release needs --force, as after any status R preparing
+		local rel = zn(wt2, { "release", rid }, at)
+		t.expect(rel.ok).toBe(false)
+		t.expect(has(rel.stderr, "not this checkout's")).toBe(true)
 	end)
 
 	it(
@@ -307,7 +281,11 @@ return t.spec("f0265 lost work", function(it)
 	it("the old claimant's carried move is refused, and its worktree stops beating what it lost", function()
 		local at = LATE + 9 * STALE
 		local doc = `{wt}/{P}/c0010/c0010.md`
-		must(zn(wt, { "sync" }, at), "sync")
+		-- the first command the old claimant runs tells it, once, and drops its entry (the stamp check comes first)
+		local sync = zn(wt, { "sync" }, at)
+		must(sync, "sync")
+		t.expect(has(sync.stderr, "taken over")).toBe(true)
+		t.expect(fs.isFile(`{wt}/.cache/tracker-beats/c0010`)).toBe(false)
 		fs.writeFile(doc, (string.gsub(fs.readFile(doc), "design: draft", "design: ready")))
 		local r = zn(wt, { "status", "c0010", "prepared" }, at)
 		t.expect(r.ok).toBe(false)
@@ -315,14 +293,13 @@ return t.spec("f0265 lost work", function(it)
 		-- an interval later its autobeat sees another stamp on origin: it drops the entry and writes no beat
 		local taken = stampOf(`{P}/c0010/c0010.md`)
 		local before = #beatRefs()
-		local told = zn(wt, { "lessons", "--check" }, at + 2 * STALE)
+		local told = zn(wt, { "lessons", "--tags" }, at + 2 * STALE)
 		t.expect(told.ok).toBe(true)
-		t.expect(has(told.stderr, "taken over")).toBe(true) -- the old claimant is told, once
-		t.expect(fs.isFile(`{wt}/.cache/tracker-beats/c0010`)).toBe(false) -- and its entry is gone
+		t.expect(has(told.stderr, "c0010's claim was taken over")).toBe(false) -- told once, by the first command
 		t.expect(#beatRefs()).toBe(before) -- no beat of either stamp
 		for _, ref in beatRefs() do
 			t.expect(ref == `refs/zn/hb/{taken}/{at + 2 * STALE}`).toBe(false)
 		end
-		t.expect(has(zn(wt, { "lessons", "--check" }, at + 4 * STALE).stderr, "taken over")).toBe(false)
+		t.expect(#beatRefs()).toBe(before)
 	end)
 end)
