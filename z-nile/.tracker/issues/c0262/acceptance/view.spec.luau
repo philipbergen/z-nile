@@ -44,7 +44,8 @@ local function view(over: { [string]: any }?): { [string]: string }
 		diff = "diff --git a/src/Foo.luau b/src/Foo.luau\n+local Foo = {}",
 		skill = "# Adversarial review\nFinal mode ... Verdict: approve | changes ... Off course:",
 	}
-	for k, v in over or {} do
+	local extra: { [string]: any } = over or {}
+	for k, v in extra do
 		input[k] = v
 	end
 	return finalreview.view(input :: any)

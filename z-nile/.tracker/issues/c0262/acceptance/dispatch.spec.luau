@@ -112,7 +112,7 @@ return t.spec("c0262 AC8 the dispatcher runs a final review in the view and land
 		)
 		local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
 		t.expect(r.ok).toBe(true)
-		t.expect(string.gsub(fs.readFile(`{h.fakes}/cwd`), "%s+$", "")).toBe(wt)
+		t.expect((string.gsub(fs.readFile(`{h.fakes}/cwd`), "%s+$", ""))).toBe(wt)
 		t.expect(fs.isFile(`{wt}/pickman/.tracker/issues/active/c0010/review-001.md`)).toBe(true)
 	end)
 end)

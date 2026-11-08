@@ -24,7 +24,7 @@ return t.spec("c0262 AC4 a final review's findings are harvested; one leaf modul
 
 	it("AC4: finalreview is a leaf (it requires nothing) and lessons and trail use its name test", function()
 		local src = fs.readFile(`{TOP}/z-nile/engine/finalreview.luau`)
-		t.expect(string.find(src, "require(", 1, true)).toBe(nil)
+		t.expect((string.find(src, "require(", 1, true))).toBe(nil)
 		for _, f in { "lessons", "trail" } do
 			local text = fs.readFile(`{TOP}/z-nile/engine/{f}.luau`)
 			t.expect(string.find(text, 'require("./finalreview")', 1, true) ~= nil).toBe(true)

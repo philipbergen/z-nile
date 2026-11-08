@@ -42,7 +42,7 @@ return t.spec("c0262 AC3 the final mode of the dispatcher", function(it)
 	end)
 
 	it("AC3: the other modes' prompts are unchanged: their lessons lines, skill path and worktree", function()
-		local want = { design = "design", raft = "design", code = "build", stream = "build" }
+		local want: { [string]: string } = { design = "design", raft = "design", code = "build", stream = "build" }
 		for mode, lessons in want do
 			local p = prompt(mode, "/x/.worktree/R0001")
 			t.expect(has(p, `./zn lessons --when {lessons} --full`)).toBe(true)
