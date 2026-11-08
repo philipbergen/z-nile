@@ -1,0 +1,18 @@
+# Harvest: f0265
+- design-review-001 F1: z-design/liveness-names-held-not-worked-states
+- design-review-001 F2: zz-test/background-seeds-meet-later-assertions, z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F3: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F4: zz-test/seed-every-enumerated-case
+- design-review-001 F5: z-design/instructions-runnable-where-they-run
+- design-review-001 F6: z-design/spec-design-correspondence, zz-arch/children-need-a-lifeline
+- design-review-001 F7: zz-test/pin-fail-safes-where-they-act
+- design-review-001 F8: zz-arch/lock-reads-live-state
+- design-review-001 F9: z-design/new-refusals-reach-every-caller
+- design-review-001 F10: zz-test/kill-mutants-where-the-value-is-built
+- design-review-001 F11: zz-test/criterion-fails-on-todays-file
+- design-review-001 F12: zz-arch/lock-reads-live-state
+- design-review-001 F13: z-design/accepted-risks-checked-and-decided
+- design-review-001 F14: z-design/accepted-risks-checked-and-decided
+- design-review-001 F15: z-design/status-labels-need-a-tracker-fact
+- design-review-001 F16: z-design/specify-every-named-artifact
+- design-review-001 F17: one-off: experiment commands and the prototype were not recorded in the draft

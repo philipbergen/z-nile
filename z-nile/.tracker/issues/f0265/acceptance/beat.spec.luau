@@ -1,11 +1,18 @@
 --!strict
 -- f0265: a beat is a ref (refs/zn/hb/<claim stamp>/<epoch>) pushed to origin outside main: a claim writes the first
--- one, `beat` writes the next from any checkout and deletes the older, `ready` beats for the raft it claims, and `beat`
--- refuses what nobody claims. Time is ZN_NOW (epoch seconds), so no case waits. Fixture under .cache/f0265-beat.
+-- one, `beat` writes the next from any checkout and deletes the older (never a young beat of a claim this checkout has
+-- not fetched), `ready` and `new raft` beat for the raft they claim, any ./zn command in a worktree that holds a claim
+-- beats it once an interval has passed, `--watch` runs only under ./zn run and ends before its bound, and `beat`
+-- refuses what nobody claims, done items included. Time is ZN_NOW (epoch seconds), so no case waits. Fixture under .cache/f0265-beat.
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
+local fs = require("@lune/fs")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
+
+-- the checkout's top: specs run in their home (c0120)
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
 local h: fakecli.Harness
 local wt = "" -- a worktree of the fixture
@@ -45,8 +52,9 @@ local function stampOf(id: string, path: string): string
 	local text = fixture.git(h.f.origin, { "show", `main:{path}` })
 	return string.match(text, "\nstatus: ([%a%-]+)\n") or error(`{id} has no status on origin`)
 end
-local function issue(id: string, status: string, design: string?): string
-	return (string.gsub(trackerfix.stub(id, id, status), "design: draft", `design: {design or "draft"}`))
+local function issue(id: string, status: string, design: string?, raft: string?): string
+	local doc = string.gsub(trackerfix.stub(id, id, status), "design: draft", `design: {design or "draft"}`)
+	return (string.gsub(doc, "\nraft: \n", `\nraft: {raft or ""}\n`, 1))
 end
 local function raftDoc(id: string, issues: string): string
 	return `---\nid: {id}\ntype: chore\ntitle: Beat\nslug: beat\nsingle: false\nissues: [{issues}]\ndesign: ready\ncreated: 2026-10-06\nstatus: prepared-quiet-copper-falcon\n---\n\n# {id}\n`
@@ -58,16 +66,18 @@ local P = "pickman/.tracker/issues"
 return t.spec("f0265 a beat is a ref outside main", function(it)
 	it("sets up a tracker with new issues, a prepared raft and a claimed issue with fake CLIs", function()
 		h = fakecli.new("f0265-beat", {
-			[".gitignore"] = ".cache/\n.worktree/\nprompt.md\n",
+			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
 			["pickman/.tracker/architecture.md"] = "# architecture\n",
 			[`{P}/c0010/c0010.md`] = issue("c0010", "new-a-b-c"),
 			[`{P}/c0020/c0020.md`] = issue("c0020", "new-a-b-c"),
 			[`{P}/c0030/c0030.md`] = issue("c0030", "new-a-b-c"),
-			[`{P}/c0040/c0040.md`] = issue("c0040", "prepared-quiet-copper-falcon", "ready"),
+			[`{P}/c0040/c0040.md`] = issue("c0040", "prepared-quiet-copper-falcon", "ready", "R0010"),
 			[`{P}/c0040/check.sh`] = CHECK,
 			["pickman/.tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "c0040"),
 			["pickman/.tracker/rafts/R0010/check.sh"] = CHECK,
 			[`{P}/c0050/c0050.md`] = issue("c0050", "preparing-lucky-violet-heron"),
+			-- a finished raft's issue keeps the claim stamp it was worked under (about 30 do on the real tracker)
+			[`{P}/done/c0060/c0060.md`] = issue("c0060", "active-brisk-amber-otter"),
 		})
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "f0265-beat" }), "worktree"), "%s+$", ""))
 	end)
@@ -98,12 +108,13 @@ return t.spec("f0265 a beat is a ref outside main", function(it)
 	end)
 
 	it("beat refuses what nobody claims, naming the item and the rule", function()
-		for _, id in { "c0020", "c0040", "c9999" } do
+		for _, id in { "c0020", "c0040", "c0060", "c9999" } do
 			local r = zn(h.f.main, { "beat", id }, T0)
 			t.expect(r.ok).toBe(false)
 			t.expect(has(r.stderr, id)).toBe(true)
 		end
 		t.expect(has(zn(h.f.main, { "beat", "c0020" }, T0).stderr, "no claim")).toBe(true)
+		t.expect(has(zn(h.f.main, { "beat", "c0060" }, T0).stderr, "done")).toBe(true) -- its stored status is active-…
 		t.expect(#beats()).toBe(1)
 	end)
 
@@ -116,5 +127,67 @@ return t.spec("f0265 a beat is a ref outside main", function(it)
 		end
 		t.expect(found).toBe(true)
 		t.expect(string.sub(stamp, 1, 7)).toBe("active-")
+	end)
+
+	it("any ./zn command in a worktree that holds a claim beats it once an interval has passed", function()
+		must(zn(wt, { "status", "c0010" }, T0 + 1000), "status in the worktree") -- last beat from here: T0
+		local newest = 0
+		for _, b in beats() do
+			newest = math.max(newest, b.epoch)
+		end
+		t.expect(newest).toBe(T0 + 1000)
+		must(zn(wt, { "status", "c0010" }, T0 + 1100), "status again, inside the interval")
+		t.expect(#beats()).toBe(1)
+		t.expect(beats()[1].epoch).toBe(T0 + 1000) -- no second push inside the interval
+	end)
+
+	it("a beat never deletes the young beat of a claim this checkout has not fetched yet", function()
+		-- another terminal claims c0030 and beats; this checkout has not fetched since
+		trackerfix.elsewhere(h.f, {
+			[`{P}/c0030/c0030.md`] = issue("c0030", "preparing-sunny-heron-lynx"),
+		}, "other claims c0030")
+		fixture.git(
+			h.f.other,
+			{ "push", "-q", "origin", `HEAD:refs/zn/hb/preparing-sunny-heron-lynx/{T0 + 1150}` }
+		)
+		must(zn(h.f.main, { "beat", "c0010" }, T0 + 1200), "beat in a checkout that has not fetched")
+		local found = false
+		for _, b in beats() do
+			found = found or b.stamp == "preparing-sunny-heron-lynx"
+		end
+		t.expect(found).toBe(true)
+	end)
+
+	it("new raft beats for the raft it claims", function()
+		must(
+			zn(wt, { "new", "raft", "chore", "beatraft", "c0020", "--project", "pickman" }, T0 + 1300),
+			"new raft"
+		)
+		local listing = zn(h.f.main, { "status" }, T0 + 1300).stdout
+		local rid = string.match(listing, "(R%d+) preparing") or error("no new raft in the status list")
+		local stamp = stampOf(rid, `pickman/.tracker/rafts/{rid}/{rid}.md`)
+		local found = false
+		for _, b in beats() do
+			found = found or (b.stamp == stamp and b.epoch == T0 + 1300)
+		end
+		t.expect(found).toBe(true)
+	end)
+
+	it("--watch refuses to run outside ./zn run, and under it ends before its bound after beating", function()
+		local refused = zn(wt, { "beat", "c0010", "--watch" }, nil)
+		t.expect(refused.ok).toBe(false)
+		t.expect(has(refused.stderr, "./zn run")).toBe(true)
+		local started = os.time()
+		local r = fixture.exec(wt, "bash", { "scripts/tracker.sh", "beat", "c0010", "--watch" }, {
+			env = { ZN_BOUNDED_DEADLINE = tostring(started + 5), ZN_BEAT_EVERY = "1" },
+		})
+		t.expect(r.ok).toBe(true) -- it stops itself before the bound kills it
+		local newest = 0
+		for _, b in beats() do
+			if has(b.stamp, "") then
+				newest = math.max(newest, b.epoch)
+			end
+		end
+		t.expect(newest >= started + 2).toBe(true)
 	end)
 end)

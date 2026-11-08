@@ -1,7 +1,19 @@
-# Refute 001 (f0265): round 1 not yet answered
+# Refute 001 (f0265): round 1 answered after the user's decisions (2026-11-07)
 
-Prep stopped after round 1 because the findings need the user first. Not yet fixed in the documents or specs:
-- F1 (parked claims read lost): needs the user (Q5 below).
-- F9 (takeover: adopt or discard the old branch, rafting claim takeover): needs the user (Q6).
-- F14 (clock-skew risk weakens a guard; ZN_NOW honoured only in checks): needs the user (Q7).
-- F2, F3, F4, F5, F6, F7, F8, F10, F11, F12, F15, F16, F17: accepted as written in design-review-001.md; to be fixed in the next prep pass (specs: lost.spec ordering assertions, beat.spec raft membership, done-item cases, autobeat from any ./zn command because bounded.pl caps --time at 3600, fetch before beat plus STALE grace, freshStamp for issue claims).
+- F1: fixed: parked claims are in the model (user: "a"). A stale claim is lost only when the open pull requests (one lazy `gh pr list`) were read and none names the item or a raft member by whole id; a `questions.md` in the dispatcher's run state parks too; unread means `[stale?]`, never lost. `heartbeat.settle`/`parkedBy`, `lost.spec` cases. Consequences: a gh dependency only when a claim is stale; cross-host `questions.md` is not visible (the gate case is covered by its PR); the takeover refuses a parked claim.
+- F2: fixed: `lost.spec` rewritten: assertions are on the case's own item (c0010's line is first and tagged), the never-beaten c0050 is `[no beat]` and never lost (user: "heartless"), c0060 (done) never listed. Run against the E5 prototype module: fixture setup passes, every case fails on an assertion; consequences: none.
+- F3: fixed: c0040 carries `raft: R0010`; `ready` runs in the fixture (E7); consequences: the case needs `.gitignore` from the repository (the template `prompt.md` must not be ignored).
+- F4: fixed: one definition of a claim (state `preparing`/`active` by folder, stored stamp; `done/` and `retired/` never); `beat.spec` seeds a done item with `active-…` and expects a refusal naming "done"; `lost.spec` seeds one with an old beat and expects it never listed; `plan`'s claimed set excludes it, so its beat is pruned after the grace. Consequences: none beyond the added seeds.
+- F5: fixed: the loop is `./zn run --time 3600` (the cap), and every `./zn` command (except `beat`, `run`, `reap`, READ_ONLY ones) beats an item whose throttle file (`.cache/tracker-beats/<id>`) is an interval old; case in `beat.spec`; AC5 greps `--time 3600`. Consequences: a new best-effort beat on most commands, throttled locally so it costs no network inside the interval.
+- F6: fixed: `--watch` refuses unless `ZN_BOUNDED_DEADLINE` is set and ends before its bound (case); `new raft` beat case; `commit` is covered by the automatic beat (no special case); `fold`/`recombine`/`status <R> preparing` are `reasoned` rows (their fixtures need prepared rafts); boundcmd needs no change because the engine refuses.
+- F7: fixed: takeover refuses on unreadable beats, unreadable pull requests and any malformed beat ref (naming it); `lost`/`status` still print; probes use `refs/zn/probe/…`; cases with a git shim failing only `ls-remote`, a failing fake gh and a pushed `refs/zn/hb/garbage`.
+- F8: fixed: `beat` fetches first; `plan` deletes unclaimed stamps' beats only when older than STALE; case with an unfetched young beat.
+- F9: fixed (decisions pending): the old claimant's carried `status prepared` is refused after a takeover (case); a taker continues from `origin/prep-<slug>` when it exists; a lost rafting claim is taken over by `status <R-id> preparing`. Q6 unanswered by the user: kept as the recommendation, listed for veto. Consequences: the new refusal reaches `setStatus`'s carried path only.
+- F10: fixed: `dispatch.spec`'s step polls (bounded, 15 s) until origin holds a beat dated two seconds after the step began and writes a marker; a beat only before or after never satisfies it.
+- F11: fixed: AC5 reads the README's Order section for `./zn lost`, the roadmap row `| f0265 | exists |`, `--time 3600` and `./zn beat` in z-design, z-raft, z-run and zz-execute; the z-ready bullet is dropped (it has no lost claim to act on).
+- F12: fixed: issue claims and takeovers draw with `freshStamp("preparing")`; row `reasoned` (the draw's retry is `status-fresh.spec`'s).
+- F13: fixed: Q3 compared (variables, PR comments, branch is dropped for visibility) with experiments; Q2 accepted by the user; the z-ready bullet dropped.
+- F14: fixed: `ZN_NOW`/`ZN_BEAT_EVERY` honoured only with `PICKMAN_FENCE_SPECS=1` (case); the skew risk is listed as pending the user (Q7).
+- F15: fixed: the roadmap row says `exists`.
+- F16: fixed: `lost` prints one line per item (`<id> <state> <minutes>m`, floored; a raft's members their own lines); dispatcher failures other than a refusal are written once per step; the line form is pinned by a regex in `lost.spec`.
+- F17: fixed: experiment commands are recorded, the prototype is kept as `experiments/heartbeat.proto.luau`.

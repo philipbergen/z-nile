@@ -9,21 +9,20 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-check "AC1: the pure rules: a beat is the ref refs/zn/hb/<claim stamp>/<epoch>, a claim is lost only after strictly more than the stale limit, a claim nobody beat is silent since it landed, lost work is ordered first and longest silent first, and a new beat deletes only the older beats of its stamp and of unclaimed stamps" lune run tests/run -- "$A/heartbeat.spec.luau"
-check "AC2: a claim, ready and beat each write the beat as a ref outside main (main gets only the claim, no file changes, no branch), beat works from the main checkout, and it refuses what nobody claims" lune run tests/run -- "$A/beat.spec.luau"
-check "AC3: lost and status say which claims are lost and list them first, a beat revives one, a claim nobody beat turns lost from its landing, an unreadable origin marks nothing lost, and status refuses a live claim and takes over a lost one" lune run tests/run -- "$A/lost.spec.luau"
-check "AC4: a model step the dispatcher runs on a claimed item beats for it while the step works" lune run tests/run -- "$A/dispatch.spec.luau"
-check "AC5: the usage text, the skills and the README name the heartbeat, the beat and lost commands and the lost-first pick" bash -c '
+check "AC1: the pure rules: a beat is the ref refs/zn/hb/<claim stamp>/<epoch>; a claim is stale only strictly past 900 s and a never-beaten claim is no-beat, never stale; a stale claim is lost only when the pull requests were read and none names it, parked when one does, and stays unknown when they could not be read; lost work is ordered first and longest silent first; and a new beat deletes only the older beats of its stamp and long-unclaimed ones" lune run tests/run -- "$A/heartbeat.spec.luau"
+check "AC2: a claim, ready, new raft, any ./zn command in a claimed worktree (once an interval has passed) and beat each write the beat as a ref outside main (main gets only the claim, no file changes, no branch), beat works from the main checkout, never deletes a young beat of an unfetched claim, refuses what nobody claims (done items included), and --watch runs only under ./zn run and ends before its bound" lune run tests/run -- "$A/beat.spec.luau"
+check "AC3: lost and status say which claims are lost and list them first, tag parked, no-beat and unconfirmed ones without calling them lost, a beat revives one, unreadable beats or pull requests and malformed beat refs make nothing lost and refuse a takeover, a lost claim is taken over with a fresh stamp and the old claimant's carried move is refused, and ZN_NOW is ignored outside a spec run" lune run tests/run -- "$A/lost.spec.luau"
+check "AC4: a model step the dispatcher runs on a claimed item beats for it while the step works (not only before or after)" lune run tests/run -- "$A/dispatch.spec.luau"
+check "AC5: the usage text, zz-rules, the skills and the README name the heartbeat: beat and lost commands, the loop under ./zn run --time 3600, and lost work before rank in the README's Order section" bash -c '
   set -e
   g() { grep -qF -e "$1" "$2" || { echo "missing in $2: $1" >&2; exit 1; }; }
-  for c in "  beat <id>" "  lost "; do g "$c" "$ZN_ROOT"/z-nile/engine/main.luau; done
-  g "refs/zn/hb/" "$ZN_ROOT"/z-nile/skills/zz-rules/SKILL.md
-  g "./zn beat" "$ZN_ROOT"/z-nile/skills/zz-rules/SKILL.md
-  g "./zn lost" "$ZN_ROOT"/z-nile/skills/zz-rules/SKILL.md
-  for s in z-design z-run zz-execute; do g "./zn beat" "$ZN_ROOT/z-nile/skills/$s/SKILL.md"; done
-  g "./zn lost" "$ZN_ROOT"/z-nile/skills/z-design/SKILL.md
-  g "f0265" "$ZN_ROOT"/z-nile/README.md
-  g "lost" "$ZN_ROOT"/z-nile/README.md
+  R="$ZN_ROOT/z-nile"
+  for c in "  beat <id>" "  lost "; do g "$c" "$R/engine/main.luau"; done
+  for w in "refs/zn/hb/" "./zn beat" "./zn lost" "parked"; do g "$w" "$R/skills/zz-rules/SKILL.md"; done
+  for s in z-design z-raft z-run zz-execute; do g "./zn beat" "$R/skills/$s/SKILL.md"; g "--time 3600" "$R/skills/$s/SKILL.md"; done
+  g "./zn lost" "$R/skills/z-design/SKILL.md"
+  sed -n "/^### Order/,/^### /p" "$R/README.md" | grep -qF "./zn lost" || { echo "README Order does not name ./zn lost" >&2; exit 1; }
+  grep -qE "^\| .* \| f0265 \| exists \|" "$R/README.md" || { echo "README roadmap has no f0265 exists row" >&2; exit 1; }
 '
 
 finish
