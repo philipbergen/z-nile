@@ -16,6 +16,7 @@
 | 12 | 2026-11-06 05:54 | prep | 527 | 3 | 120.0 | spend | prep |  |
 | 13 | 2026-11-08 02:15 | prep | 1 | 1 | 15.0 | spend | prep |  |
 | 14 | 2026-11-08 18:40 | c0239: affected gate for done, scoped stop hook, gate-by-step wording | 188 | 41 | 40.0 | raft | build |  |
+| 15 | 2026-11-08 18:50 | c0239: verification log | 0 | 0 | 3.0 | raft | build |  |
 
-**Total:** +716 / -45 lines, 396.0 agent-minutes, 1177234 tokens over 14 records
-<!-- totals: added=716 removed=45 minutes=396.0 records=14 tokens=1177234 -->
+**Total:** +716 / -45 lines, 399.0 agent-minutes, 1177234 tokens over 15 records
+<!-- totals: added=716 removed=45 minutes=399.0 records=15 tokens=1177234 -->
