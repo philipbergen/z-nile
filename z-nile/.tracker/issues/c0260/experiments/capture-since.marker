@@ -1,1 +1,1 @@
-Issues made after the commit that added this file carry a capture record (c0260).
+Issues made after the commit that added this file carry `capture: required` and need a capture record (c0260).

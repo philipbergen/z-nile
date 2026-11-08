@@ -90,17 +90,20 @@ return t.spec("c0260 z-ticket describes the interview, the review and the confir
 		end
 	)
 
-	it("AC1: the ask is kept verbatim and dated, the interview keeps every question and answer in order", function()
-		local s = steps()
-		t.expect(has(s["0a"], "every message")).toBe(true)
-		t.expect(has(s["0a"], "### Message YYYY-MM-DD")).toBe(true)
-		t.expect(has(s["0a"], "never edited")).toBe(true)
-		t.expect(has(s["0b"], "hallenge the idea")).toBe(true)
-		t.expect(has(s["0b"], "**every** question")).toBe(true)
-		t.expect(has(s["0b"], "in order")).toBe(true)
-		t.expect(has(s["0b"], "own words")).toBe(true)
-		t.expect(has(s["0b"], "AskUserQuestion")).toBe(true)
-	end)
+	it(
+		"AC1: the ask is kept verbatim and dated, the interview keeps every question and answer in order",
+		function()
+			local s = steps()
+			t.expect(has(s["0a"], "every message")).toBe(true)
+			t.expect(has(s["0a"], "### Message YYYY-MM-DD")).toBe(true)
+			t.expect(has(s["0a"], "never edited")).toBe(true)
+			t.expect(has(s["0b"], "hallenge the idea")).toBe(true)
+			t.expect(has(s["0b"], "**every** question")).toBe(true)
+			t.expect(has(s["0b"], "in order")).toBe(true)
+			t.expect(has(s["0b"], "own words")).toBe(true)
+			t.expect(has(s["0b"], "AskUserQuestion")).toBe(true)
+		end
+	)
 
 	it(
 		"AC1: the review is a clean reviewer on the z-ticket-review activity's model, seeing three sections, answered before the user sees the idea",
@@ -152,14 +155,23 @@ return t.spec("c0260 z-ticket describes the interview, the review and the confir
 		end
 	)
 
-	it("AC1: the restatement and its approval are Q1, the plan-mode messages are copied into the ask", function()
-		local s = steps()
-		t.expect(has(s["0b"], "`### Q1`")).toBe(true)
-		t.expect(has(s["0b"], "the restatement as shown")).toBe(true)
-		t.expect(has(s["0b"], "dispatch retry")).toBe(true)
-		t.expect(has(s["0a"], "plan file")).toBe(true)
-		t.expect(has(s["0a"], "each dated")).toBe(true)
-	end)
+	it(
+		"AC1: the restatement and its approval are Q1, the plan-mode messages are copied into the ask",
+		function()
+			local s = steps()
+			t.expect(has(s["0b"], "`### Q1`")).toBe(true)
+			t.expect(has(s["0b"], "the restatement as shown")).toBe(true)
+			t.expect(has(s["0b"], "dispatch retry")).toBe(true)
+			t.expect(has(s["0a"], "plan file")).toBe(true)
+			t.expect(
+				has(
+					SKILL,
+					"write the user's messages of this request to the plan file first, verbatim and each dated, under the heading `Ask (verbatim)`"
+				)
+			).toBe(true) -- c0260's reword of c0247's plan-file sentence (its pin)
+			t.expect(has(s["0a"], "each dated")).toBe(true)
+		end
+	)
 
 	it("AC1: every `step N` reference in z-ticket and zz-review names a step that exists", function()
 		local labels: { [string]: boolean } = {}
@@ -184,7 +196,9 @@ return t.spec("c0260 z-ticket describes the interview, the review and the confir
 					local path = `{ROOT}/{dir}/skills/{skill}/SKILL.md`
 					if fs.isFile(path) then
 						local text = fs.readFile(path)
-						if string.find(text, "new issue c lesson-<slug> --project z-nile --desc", 1, true) then
+						if
+							string.find(text, "new issue c lesson-<slug> --project z-nile --desc", 1, true)
+						then
 							table.insert(bad, path)
 						end
 					end
@@ -192,10 +206,15 @@ return t.spec("c0260 z-ticket describes the interview, the review and the confir
 			end
 			t.expect(table.concat(bad, "\n")).toBe("")
 			local rules = fs.readFile(`{ROOT}/z-nile/skills/zz-rules/SKILL.md`)
-			t.expect(has(rules, "--filed-by <source>")).toBe(true)
+			t.expect(has(rules, '--filed-by "<source>"')).toBe(true)
 			t.expect(has(rules, "review:<item id>/<review file> F<n>")).toBe(true)
 			t.expect(has(rules, "lesson:<skill>/<slug>")).toBe(true)
 			t.expect(has(rules, "agent:<item id>/<slug>")).toBe(true)
 		end
 	)
+
+	it("AC9: a marked stub with no record is continued on its id, and the refusal says so", function()
+		t.expect(has(SKILL, "**A marked stub with no record yet**")).toBe(true)
+		t.expect(has(SKILL, "run steps 0a to 4b against that id")).toBe(true)
+	end)
 end)

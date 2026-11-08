@@ -44,13 +44,17 @@ return t.spec("c0260 zz-review has an idea mode", function(it)
 				t.expect(has(idea, key)).toBe(true)
 			end
 			t.expect(has(idea, "Never prescribe a cut")).toBe(true)
+			t.expect(has(idea, "the user answered only the questions in `## Interview`")).toBe(true)
 		end
 	)
 
-	it("AC7: the mode is named in Who reviews and Output file, with the activity whose model it runs on", function()
-		t.expect(has(Z, "`--mode idea`")).toBe(true)
-		t.expect(has(Z, "`idea-review-NNN.md`")).toBe(true)
-		t.expect(has(Z, "z-ticket-review")).toBe(true)
-		t.expect(has(Z, "`## Idea review`")).toBe(true) -- the author's answers live in the document
-	end)
+	it(
+		"AC7: the mode is named in Who reviews and Output file, with the activity whose model it runs on",
+		function()
+			t.expect(has(Z, "`--mode idea`")).toBe(true)
+			t.expect(has(Z, "`idea-review-NNN.md`")).toBe(true)
+			t.expect(has(Z, "z-ticket-review")).toBe(true)
+			t.expect(has(Z, "`## Idea review`")).toBe(true) -- the author's answers live in the document
+		end
+	)
 end)

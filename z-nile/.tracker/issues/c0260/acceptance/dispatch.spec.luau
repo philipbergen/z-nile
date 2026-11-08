@@ -111,6 +111,7 @@ return t.spec("c0260 the idea review is a dispatched review mode", function(it)
 			t.expect(has(prompt, "--skill z-ticket")).toBe(true)
 			t.expect(has(prompt, "`## Ask (verbatim)`, `## Interview` and `## Idea`")).toBe(true) -- the reviewer sees the three sections
 			t.expect(has(prompt, "do not read its Problem")).toBe(true)
+			t.expect(has(prompt, "The user answered only the questions in `## Interview`")).toBe(true) -- true of every round, attended or not
 			t.expect(has(prompt, "`/s/review.md`")).toBe(true)
 		end
 	)
@@ -147,7 +148,8 @@ return t.spec("c0260 the idea review is a dispatched review mode", function(it)
 			if not again.ok then
 				error(again.stdout .. again.stderr)
 			end
-			t.expect(names(`{wt}/{ISSUE}/capture`, "")).toEqual({ "idea-review-001.md", "idea-review-002.md" })
+			t.expect(names(`{wt}/{ISSUE}/capture`, ""))
+				.toEqual({ "idea-review-001.md", "idea-review-002.md" })
 			t.expect(names(`{wt}/{ISSUE}`, "design-review-")).toEqual({})
 			t.expect(names(`{wt}/{ISSUE}`, "idea-")).toEqual({})
 			-- a design review in the same worktree still lands beside the document, numbered on its own
@@ -158,7 +160,8 @@ return t.spec("c0260 the idea review is a dispatched review mode", function(it)
 			t.expect(names(`{wt}/{ISSUE}`, "design-review-")).toEqual({ "design-review-001.md" })
 			local drow = fakecli.rows(h, "c0010") :: any
 			t.expect(drow[#drow].model).toBe("claude-opus-5-5") -- a design review still resolves zz-review's table
-			t.expect(names(`{wt}/{ISSUE}/capture`, "")).toEqual({ "idea-review-001.md", "idea-review-002.md" })
+			t.expect(names(`{wt}/{ISSUE}/capture`, ""))
+				.toEqual({ "idea-review-001.md", "idea-review-002.md" })
 		end
 	)
 
@@ -184,10 +187,14 @@ return t.spec("c0260 the idea review is a dispatched review mode", function(it)
 					maxTokens = 1,
 				} :: any
 			end
-			t.expect(models.reviewRule("z-ticket-review", spec("claude", "claude-opus-fake-ticket", nil))).toBe(nil)
-			t.expect(models.reviewRule("z-ticket-review", spec("grok", "grok-fake-ticket", "xhigh"))).toBe(nil)
-			t.expect(models.reviewRule("z-ticket-review", spec("claude", "claude-sonnet-fake", nil)) ~= nil).toBe(true)
-			t.expect(models.reviewRule("z-ticket-review", spec("grok", "grok-fake-ticket", "high")) ~= nil).toBe(true)
+			t.expect(models.reviewRule("z-ticket-review", spec("claude", "claude-opus-fake-ticket", nil)))
+				.toBe(nil)
+			t.expect(models.reviewRule("z-ticket-review", spec("grok", "grok-fake-ticket", "xhigh")))
+				.toBe(nil)
+			t.expect(models.reviewRule("z-ticket-review", spec("claude", "claude-sonnet-fake", nil)) ~= nil)
+				.toBe(true)
+			t.expect(models.reviewRule("z-ticket-review", spec("grok", "grok-fake-ticket", "high")) ~= nil)
+				.toBe(true)
 			t.expect(models.reviewRule("z-ticket", spec("claude", "claude-sonnet-fake", nil))).toBe(nil) -- other activities are not reviews
 		end
 	)

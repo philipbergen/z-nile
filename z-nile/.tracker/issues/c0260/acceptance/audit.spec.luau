@@ -19,7 +19,8 @@ end
 local RECORD = "## Ask (verbatim)\n### Message 2026-11-07\n```\nmore ghosts\n```\n\n## Interview\nINTERVIEW\n\n## Idea\nMore ghosts.\n\n"
 	.. "## Idea review\n### Round 1\n- F1: ask: how many?\n\n## Confirmation\nCONFIRMATION\n\n## Design\n"
 local CONFIRMED = 'Confirmed (user, 2026-11-07) after round 1: "yes"'
-local UNCONFIRMED = "Unconfirmed (unattended, 2026-11-07) after round 1: the dispatch was started with this ask"
+local UNCONFIRMED =
+	"Unconfirmed (unattended, 2026-11-07) after round 1: the dispatch was started with this ask"
 local function record(interview: string, confirmation: string): string
 	return (string.gsub(string.gsub(RECORD, "INTERVIEW", interview), "CONFIRMATION", confirmation))
 end
@@ -81,23 +82,26 @@ return t.spec("c0260 audit checks the capture record", function(it)
 		t.expect(captureLines(audit())).toBe("")
 	end)
 
-	it("a designed issue whose last confirmation is still Unconfirmed is an error until the user confirms", function()
-		local unattended = front("reviewed") .. record(Q1TEXT, UNCONFIRMED)
-		write(`{ITEM}/c0900.md`, unattended)
-		t.expect(has(captureLines(audit()), "still Unconfirmed")).toBe(true)
-		local confirmed = front("reviewed")
-			.. (
-				string.gsub(
-					record(
-						Q1TEXT .. "\n### Q2\nQuestion: how many?\nOptions: 1 | 2\nAnswer: 2",
-						UNCONFIRMED .. "\n" .. CONFIRMED
-					),
-					"%- F1: ask: how many%?",
-					"- F1: fixed: asked as Q2"
+	it(
+		"a designed issue whose last confirmation is still Unconfirmed is an error until the user confirms",
+		function()
+			local unattended = front("reviewed") .. record(Q1TEXT, UNCONFIRMED)
+			write(`{ITEM}/c0900.md`, unattended)
+			t.expect(has(captureLines(audit()), "still Unconfirmed")).toBe(true)
+			local confirmed = front("reviewed")
+				.. (
+					string.gsub(
+						record(
+							Q1TEXT .. "\n### Q2\nQuestion: how many?\nOptions: 1 | 2\nAnswer: 2",
+							UNCONFIRMED .. "\n" .. CONFIRMED
+						),
+						"%- F1: ask: how many%?",
+						"- F1: fixed: asked as Q2"
+					)
 				)
-			)
-		write(`{ITEM}/c0900.md`, confirmed)
-		t.expect(captureLines(audit())).toBe("")
-		fs.removeDir(base)
-	end)
+			write(`{ITEM}/c0900.md`, confirmed)
+			t.expect(captureLines(audit())).toBe("")
+			fs.removeDir(base)
+		end
+	)
 end)
