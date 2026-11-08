@@ -1,7 +1,7 @@
 --!strict
--- f0265: real-time proofs, run once by check.sh and never promoted (a spec waits for nothing): `beat --watch` says a
+-- c0265: real-time proofs, run once by check.sh and never promoted (a spec waits for nothing): `beat --watch` says a
 -- failed tick and keeps beating, stops when its claim is restamped, a long `check` beats while it runs, and a hung
--- remote is bounded. Fixture under .cache/f0265-race.
+-- remote is bounded. Fixture under .cache/c0265-race.
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -96,9 +96,9 @@ if [ "$1" = push ]; then
 fi
 ]]
 
-return t.spec("f0265 real-time proofs", function(it)
+return t.spec("c0265 real-time proofs", function(it)
 	it("sets up claims, a prepared raft to fold into, a checked item, and the shim", function()
-		h = fakecli.new("f0265-race", {
+		h = fakecli.new("c0265-race", {
 			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
 			["pickman/.tracker/architecture.md"] = "# architecture\n",
 			[`{P}/c0070/c0070.md`] = issue("c0070", "new-a-b-c"),
@@ -140,14 +140,14 @@ return t.spec("f0265 real-time proofs", function(it)
 				)
 			)
 		)
-		wt = (string.gsub(must(zn(h.f.main, { "worktree", "f0265-race" }), "worktree"), "%s+$", ""))
+		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-race" }), "worktree"), "%s+$", ""))
 		for _, id in { "c0070", "c0080", "c0085", "c0090" } do
 			must(zn(wt, { "status", id, "preparing" }), `claim {id}`)
 		end
 	end)
 
 	it("sets up claims, a prepared raft to fold into, a checked item, and the shim", function()
-		h = fakecli.new("f0265-race", {
+		h = fakecli.new("c0265-race", {
 			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
 			["pickman/.tracker/architecture.md"] = "# architecture\n",
 			[`{P}/c0070/c0070.md`] = issue("c0070", "new-a-b-c"),
@@ -189,7 +189,7 @@ return t.spec("f0265 real-time proofs", function(it)
 				)
 			)
 		)
-		wt = (string.gsub(must(zn(h.f.main, { "worktree", "f0265-race" }), "worktree"), "%s+$", ""))
+		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-race" }), "worktree"), "%s+$", ""))
 		for _, id in { "c0070", "c0080", "c0085", "c0090" } do
 			must(zn(wt, { "status", id, "preparing" }), `claim {id}`)
 		end

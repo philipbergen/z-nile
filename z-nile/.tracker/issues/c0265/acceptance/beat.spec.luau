@@ -1,9 +1,9 @@
 --!strict
--- f0265: a beat is a ref (refs/zn/hb/<claim stamp>/<epoch>) pushed to origin outside main: a claim writes the first
+-- c0265: a beat is a ref (refs/zn/hb/<claim stamp>/<epoch>) pushed to origin outside main: a claim writes the first
 -- one, `beat` writes the next from any checkout and deletes the older (never a young beat of a claim this checkout has
 -- not fetched), `ready` and `new raft` beat for the raft they claim, any ./zn command in a worktree that holds a claim
 -- beats it once an interval has passed, `--watch` runs only under ./zn run and ends before its bound, and `beat`
--- refuses what nobody claims, done items included. Time is ZN_NOW (epoch seconds), so no case waits. Fixture under .cache/f0265-beat.
+-- refuses what nobody claims, done items included. Time is ZN_NOW (epoch seconds), so no case waits. Fixture under .cache/c0265-beat.
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -66,9 +66,9 @@ local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --sho
 	.. 'check "AC1: ok" true\nfinish\n'
 local P = "pickman/.tracker/issues"
 
-return t.spec("f0265 a beat is a ref outside main", function(it)
+return t.spec("c0265 a beat is a ref outside main", function(it)
 	it("sets up a tracker with new issues, a prepared raft and a claimed issue with fake CLIs", function()
-		h = fakecli.new("f0265-beat", {
+		h = fakecli.new("c0265-beat", {
 			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
 			["pickman/.tracker/architecture.md"] = "# architecture\n",
 			[`{P}/c0010/c0010.md`] = issue("c0010", "new-a-b-c"),
@@ -84,7 +84,7 @@ return t.spec("f0265 a beat is a ref outside main", function(it)
 		})
 		fs.writeFile(`{h.bin}/gh`, '#!/bin/sh\n[ "$1" = pr ] && [ "$2" = list ] && echo "[]"\nexit 0\n')
 		process.exec("chmod", { "+x", `{h.bin}/gh` })
-		wt = (string.gsub(must(zn(h.f.main, { "worktree", "f0265-beat" }), "worktree"), "%s+$", ""))
+		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-beat" }), "worktree"), "%s+$", ""))
 	end)
 
 	it("a claim writes the first beat as a ref, and main only gets the claim", function()

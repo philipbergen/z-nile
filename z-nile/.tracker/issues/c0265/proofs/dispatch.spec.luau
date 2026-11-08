@@ -1,6 +1,6 @@
 --!strict
--- f0265: a model step the dispatcher runs on a claimed item beats for it while the step works (ZN_BEAT_EVERY=1 makes the
--- interval one second), with the fake CLIs of @tests/lib/fakecli. Fixture under .cache/f0265-dispatch.
+-- c0265: a model step the dispatcher runs on a claimed item beats for it while the step works (ZN_BEAT_EVERY=1 makes the
+-- interval one second), with the fake CLIs of @tests/lib/fakecli. Fixture under .cache/c0265-dispatch.
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -32,9 +32,9 @@ local function epochs(): { number }
 	return out
 end
 
-return t.spec("f0265 the dispatcher beats", function(it)
+return t.spec("c0265 the dispatcher beats", function(it)
 	it("sets up a claimed issue and the fake CLIs", function()
-		h = fakecli.new("f0265-dispatch", {
+		h = fakecli.new("c0265-dispatch", {
 			[".models.toml"] = MODELS,
 			["pickman/.tracker/issues/c0050/c0050.md"] = trackerfix.stub("c0050", "claimed", STAMP),
 		})

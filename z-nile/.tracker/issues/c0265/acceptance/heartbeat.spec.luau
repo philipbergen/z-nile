@@ -1,5 +1,5 @@
 --!strict
--- f0265: the heartbeat's pure rules (z-nile/engine/heartbeat.luau): the ref a beat is written as, which refs are
+-- c0265: the heartbeat's pure rules (z-nile/engine/heartbeat.luau): the ref a beat is written as, which refs are
 -- beats, when a claim is stale, how parked and unknown claims settle, the order lost work is picked in, which PRs park
 -- a claim, and which refs a new beat deletes. No I/O, no clock: every case passes `now`.
 local heartbeat = require("@znile/engine/heartbeat")
@@ -31,7 +31,7 @@ local function kinds(vs: { heartbeat.Verdict }): { string }
 	return out
 end
 
-return t.spec("f0265 heartbeat rules", function(it)
+return t.spec("c0265 heartbeat rules", function(it)
 	it("a beat is the ref refs/zn/hb/<stamp>/<epoch>, and parse reads it back", function()
 		local name = heartbeat.refName(A, NOW)
 		t.expect(name).toBe(`refs/zn/hb/{A}/{NOW}`)

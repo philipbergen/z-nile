@@ -1,4 +1,4 @@
-# Harvest: f0265
+# Harvest: c0265
 - design-review-001 F1: z-design/liveness-names-held-not-worked-states
 - design-review-001 F2: zz-test/background-seeds-meet-later-assertions, z-design/prove-specs-pass-on-a-prototype
 - design-review-001 F3: z-design/prove-specs-pass-on-a-prototype
@@ -28,7 +28,7 @@
 - design-review-002 F10: zz-test/kill-mutants-where-the-value-is-built
 - design-review-002 F11: z-design/accepted-risks-checked-and-decided
 - design-review-002 F12: z-design/instructions-runnable-where-they-run
-- note f0265 prep: the user reversed Q4 ("flatline") after round 2 had reviewed the "heartless" reading, and the capture was rewritten on an unlanded branch (c0265) with a new wording ("pushed to main"): z-design/never-narrow-captured-scope
+- note c0265 prep: the user reversed Q4 ("flatline") after round 2 had reviewed the "heartless" reading, and the capture was rewritten on an unlanded branch (c0265) with a new wording ("pushed to main"): z-design/never-narrow-captured-scope
 - design-review-003 F1: z-design/claim-memory-rules-list-every-claim-path, z-design/confirm-overrides-with-a-suite-run
 - design-review-003 F2: zz-arch/every-command-effects-name-the-check-flows
 - design-review-003 F3: zz-arch/guard-no-is-explicit
@@ -52,7 +52,7 @@
 - design-review-004 F8: z-design/spec-design-correspondence
 - design-review-004 F9: zz-test/specs-set-host-markers-explicitly
 - design-review-004 F10: zz-test/stand-ins-answer-only-named-arguments
-- design-review-004 F11: one-off: the c0114 classified gate failure comes from f0263/f0265 being filed as features in z-nile's root; the reviewer's evidence for the user's rename decision, not a design defect of this issue
+- design-review-004 F11: one-off: the c0114 classified gate failure comes from f0263/c0265 being filed as features in z-nile's root; the reviewer's evidence for the user's rename decision, not a design defect of this issue
 - design-review-005 F1: zz-test/seed-guard-inputs-in-the-producers-spelling, z-design/prove-specs-pass-on-a-prototype
 - design-review-005 F2: z-design/claim-memory-rules-list-every-claim-path
 - design-review-005 F3: zz-test/proofs-hold-only-the-cases-that-wait

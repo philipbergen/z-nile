@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Acceptance checks for f0265. SEQUESTERED: never edit during execution.
+# Acceptance checks for c0265. SEQUESTERED: never edit during execution.
 # One `check "ACn: ..."` per Checked acceptance criterion, in the same order as the issue doc.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # physical: tests/run strips the physical cwd
 source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to the item's project home
-# sequestered specs: here before `./zn done`, promoted to its project's tests/acceptance/f0265 after it
+# sequestered specs: here before `./zn done`, promoted to its project's tests/acceptance/c0265 after it
 A="$HERE/acceptance"
-[[ -d $A ]] || A="$PWD/tests/acceptance/f0265"
+[[ -d $A ]] || A="$PWD/tests/acceptance/c0265"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
@@ -23,7 +23,7 @@ check "AC6: the usage text, zz-rules, the skills and the README name the heartbe
   for s in z-design z-raft z-run zz-execute; do g "./zn beat" "$R/skills/$s/SKILL.md"; g "--time 3600" "$R/skills/$s/SKILL.md"; done
   for s in z-design z-raft z-run; do g "./zn lost" "$R/skills/$s/SKILL.md"; done
   sed -n "/^### Order/,/^### /p" "$R/README.md" | grep -qF "./zn lost" || { echo "README Order does not name ./zn lost" >&2; exit 1; }
-  grep -qE "^\| .* \| f0265 \| exists \|" "$R/README.md" || { echo "README roadmap has no f0265 exists row" >&2; exit 1; }
+  grep -qE "^\| .* \| c0265 \| exists \|" "$R/README.md" || { echo "README roadmap has no c0265 exists row" >&2; exit 1; }
 '
 
 finish

@@ -1,7 +1,7 @@
 --!strict
--- f0265: what a blocking fixture can force with a `git` shim that acts on one named push: a takeover that meets a claim
+-- c0265: what a blocking fixture can force with a `git` shim that acts on one named push: a takeover that meets a claim
 -- restamped between its verdict and its publish is refused, and `fold` beats for the raft it claims. Instant cases.
--- Fixture under .cache/f0265-edge.
+-- Fixture under .cache/c0265-edge.
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -90,9 +90,9 @@ if [ "$1" = push ]; then
 fi
 ]]
 
-return t.spec("f0265 takeover race and fold", function(it)
+return t.spec("c0265 takeover race and fold", function(it)
 	it("sets up claims, a prepared raft to fold into, a checked item, and the shim", function()
-		h = fakecli.new("f0265-edge", {
+		h = fakecli.new("c0265-edge", {
 			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
 			["pickman/.tracker/architecture.md"] = "# architecture\n",
 			[`{P}/c0070/c0070.md`] = issue("c0070", "new-a-b-c"),
@@ -134,8 +134,8 @@ return t.spec("f0265 takeover race and fold", function(it)
 				)
 			)
 		)
-		wt = (string.gsub(must(zn(h.f.main, { "worktree", "f0265-edge" }), "worktree"), "%s+$", ""))
-		wt2 = (string.gsub(must(zn(h.f.main, { "worktree", "f0265-edge2" }), "worktree"), "%s+$", ""))
+		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-edge" }), "worktree"), "%s+$", ""))
+		wt2 = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-edge2" }), "worktree"), "%s+$", ""))
 		for _, id in { "c0070", "c0080", "c0085", "c0090" } do
 			must(zn(wt, { "status", id, "preparing" }), `claim {id}`)
 		end

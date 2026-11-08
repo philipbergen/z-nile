@@ -1,10 +1,10 @@
 --!strict
--- f0265: a claim whose newest sign of life (its newest beat, else the moment it landed) is older than the stale limit is
+-- c0265: a claim whose newest sign of life (its newest beat, else the moment it landed) is older than the stale limit is
 -- stale; the open pull requests then decide: one that names the item (or anything holding its stamp) parks it, none
 -- makes it lost. `lost` and `status` say so and list lost work first. Whatever cannot be read (the beats, the pull
 -- requests, a malformed beat ref, a hung remote) makes nothing lost and refuses a takeover. A lost preparing claim,
 -- an issue's or a raft's, is taken over by `status <id> preparing`; the old claimant's carried move is then refused and
--- its worktree stops beating. Time is ZN_NOW (honoured only inside a spec run). Fixture under .cache/f0265-lost.
+-- its worktree stops beating. Time is ZN_NOW (honoured only inside a spec run). Fixture under .cache/c0265-lost.
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -92,9 +92,9 @@ if [ "$1" = ls-remote ]; then
 fi
 ]]
 
-return t.spec("f0265 lost work", function(it)
+return t.spec("c0265 lost work", function(it)
 	it("sets up claimable issues, a never-beaten claim, a done one, a prepared raft and the fakes", function()
-		h = fakecli.new("f0265-lost", {
+		h = fakecli.new("c0265-lost", {
 			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
 			["pickman/.tracker/architecture.md"] = "# architecture\n",
 			[`{P}/c0010/c0010.md`] = issue("c0010", "new-a-b-c"),
@@ -111,8 +111,8 @@ return t.spec("f0265 lost work", function(it)
 		process.exec("chmod", { "+x", `{h.bin}/gh` })
 		local real = fs.readFile(`{h.bin}/git`)
 		fs.writeFile(`{h.bin}/git`, (string.gsub(real, "^#!/bin/sh\n", SHIM, 1)))
-		wt = (string.gsub(must(zn(h.f.main, { "worktree", "f0265-lost" }), "worktree"), "%s+$", ""))
-		wt2 = (string.gsub(must(zn(h.f.main, { "worktree", "f0265-lost2" }), "worktree"), "%s+$", ""))
+		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-lost" }), "worktree"), "%s+$", ""))
+		wt2 = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-lost2" }), "worktree"), "%s+$", ""))
 		must(zn(wt, { "status", "c0010", "preparing" }, T0), "claim c0010")
 		must(zn(wt, { "status", "c0020", "preparing" }, T0), "claim c0020")
 		must(zn(wt, { "new", "raft", "chore", "lostraft", "c0030", "--project", "pickman" }, T0), "new raft")
