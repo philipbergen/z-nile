@@ -9,3 +9,5 @@
 - design-review-002 F2: z-design/mutant-ids-match-the-runner
 - design-review-003 F1: z-design/status-labels-need-a-tracker-fact
 - design-review-003 F2: z-design/restated-rules-move-together
+- design-review-004 F1: z-design/quote-other-preps-before-promising
+- design-review-004 F2: z-design/mutant-ids-match-the-runner

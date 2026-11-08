@@ -64,7 +64,7 @@ flowchart LR
 - **The only shared thing is `origin/main` and GitHub.** No daemon, no queue server. A worker on another machine needs a clone, its CLIs and a bot credential; the engineer sees it work on the board. *captured* (c0254)
 
 ### The idea stage
-z-ticket challenges an idea before anything is designed. *captured* (c0260), on top of the confirmation of intent, *designed* (c0247).
+z-ticket challenges an idea before anything is designed. *captured* (c0260). It builds on c0247, which has z-ticket confirm intent before it creates a ticket.
 - The ticket keeps the person's ask verbatim, every message of it, dated, and every question z-ticket asked with its answer, in order.
 - From all of that z-ticket writes a clean, fully formed idea, and a clean adversarial reviewer on a sharp model checks that it says what the person said: nothing dropped, added or bent.
 - The person confirms the idea as it then stands. Only a confirmed idea goes to z-design, which works as it does today: a design, acceptance tests as code, reviews back and forth.
@@ -147,7 +147,6 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | board, a tab per project | c0118 | designed |
 | remote runtimes (`claude-cloud`, `grok-bot`, `cursor-app`) | c0142 | captured |
 | `agy`, `kimi` and `deepseek` as CLIs | c0175 | captured |
-| z-ticket confirms intent | c0247 | designed |
 | a raft delivered as a stacked PR set, one layer per issue, each finished before the next | c0248 | captured |
 | `rank`, `./zn rank`, `./zn next`, lost first | c0249 | captured |
 | `blocked`, `escalation.md`, `./zn resolve` | c0250 | captured |

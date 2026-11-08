@@ -3,16 +3,20 @@
 # correct variant must pass it. Run from the prep worktree's root, through ./zn run (it writes z-nile/README.md and
 # restores it from git on exit and on INT/TERM, so a stopped run leaves no mutant behind).
 set -u
+ONLY=("$@") # mutant ids to run; none means all
 D=z-nile/.tracker/issues/c0264/experiments/README.draft.md
 restore() { git checkout -q z-nile/README.md; }
 trap restore EXIT
 trap 'restore; exit 130' INT TERM
 apply() { perl -0pe "$1" "$D" >z-nile/README.md; ! cmp -s "$D" z-nile/README.md; }
+want() { [[ ${#ONLY[@]} -eq 0 ]] && return 0; local w; for w in "${ONLY[@]}"; do [[ $w == "$1" ]] && return 0; done; return 1; }
 run() { # <name> <criterion> <perl substitution>: a mutant
+	want "$1" || return 0
 	apply "$3" || { echo "BROKEN $1: the edit did not apply"; return; }
 	if ./zn check c0264 2>&1 | grep -q "^FAIL  $2:"; then echo "killed $1 ($2)"; else echo "SURVIVED $1 ($2)"; fi
 }
 ok() { # <name> <criterion> <perl substitution>: a correct variant
+	want "$1" || return 0
 	apply "$3" || { echo "BROKEN $1: the edit did not apply"; return; }
 	if ./zn check c0264 2>&1 | grep -q "^PASS  $2:"; then echo "passes $1 ($2)"; else echo "REFUSED $1 ($2)"; fi
 }

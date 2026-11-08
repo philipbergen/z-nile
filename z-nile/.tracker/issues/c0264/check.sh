@@ -27,7 +27,6 @@ Two ends, one stack|c0253
 Two ends, one stack|c0117
 Two ends, one stack|c0254
 The idea stage|c0260
-The idea stage|c0247
 The worker|c0253
 The worker|c0175
 Order|c0249
@@ -49,7 +48,6 @@ ROWS='c0117
 c0118
 c0142
 c0175
-c0247
 c0248
 c0249
 c0250
