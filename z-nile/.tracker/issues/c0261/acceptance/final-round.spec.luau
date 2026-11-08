@@ -1,6 +1,6 @@
 --!strict
 -- c0261 ("Commands refuse", the user, 2026-11-08): `./zn status <id> prepared` and `./zn done` refuse unless the last
--- design / code review round was recorded on a final-review model, judged by KIND of model (any Opus, any kimi-k3, any
+-- design / code review round was recorded on a final-review model, judged by KIND of model (any Opus, kimi-k3-high or kimi-k3-max, any
 -- grok model at xhigh), never by exact id. Pure: engine/finalround over file names, spend rows and times.
 local finalround = require("@znile/engine/finalround")
 local ledger = require("@znile/engine/ledger")

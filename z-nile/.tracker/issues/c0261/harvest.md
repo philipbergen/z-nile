@@ -61,3 +61,4 @@
 - design-review-006 F2: zz-test/pin-call-site-arguments
 - design-review-006 F3: z-design/spec-design-correspondence
 - design-review-006 F4: z-design/restated-rules-move-together
+- note the user's answer "Build it now, one more round" to design-review-006 F1 (built: the raft-mode row written from the author's worktree), and the reviewer's closing-note edits: z-design/results-land-on-every-path

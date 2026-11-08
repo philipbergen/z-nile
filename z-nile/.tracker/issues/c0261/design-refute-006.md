@@ -6,3 +6,8 @@ Answers design-review-006.md (round 5 of the redesign, the final round). It hold
 - F2: fixed: two command cases in `final-round-cli.spec` (a model-less round dated 2020-01-01 passes, one dated 2099-01-01 is refused "no model"; the rows are committed to origin through `trackerfix.elsewhere`); the mutants "always enforced" and "arguments of `enforced` swapped" ran and die.
 - F3: fixed: the grok kind is `^grok%-.+%-xhigh$` for both families (a `grok-5-pro-xhigh` and `grok-code-fast-1-xhigh` pass; `grok-5-pro-high` and `grok-4.7-xhigh-fast` fail); whether Cursor-hosted `cursor-grok-…-xhigh` counts is a veto item (default: it does not).
 - F4: fixed: "there is no row"; the raft refusal names `--mode raft` and `./zn spend <R-id>`; AC2's text and its label; the kimi texts; the raft cutoff: a raft's `firstWhen` is over its members' rows, so a raft grouped after the landing from members prepped before it is exempt (transitional, lenient; stated here).
+
+## Update after the user's answer ("Build it now, one more round")
+
+- F1: fixed: the dispatcher's `record` writes a raft-mode review's row from the author's worktree and never also keeps it pending; `final-round-newraft.spec` (command) and `final-round-dispatch-raft.spec` (fakecli) are sequestered, with run mutants; the raft's own round is no longer an escalated path.
+- F4 (remaining): the Design now states that the raft cutoff takes the members' earliest review row, so a raft grouped after the landing from members prepped before it is exempt.
