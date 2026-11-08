@@ -19,4 +19,7 @@ check "AC7: zz-review has the idea mode: three sections seen, dropped, added and
 check "AC8: z-design, zz-rules and the README restate the new flow" lune run tests/run -- "$A/skills-restated.spec.luau"
 check "AC9: an agent-filed ticket is exempt only through the marker section, and a ticket with a user ask cannot claim it" lune run tests/run -- "$A/exempt.spec.luau"
 
+check "AC10: an issue made after the capture record landed is refused at the claim and at reviewed|ready unless it has the record or the marker; the cut-over is read from git's history, never from a date, and an unreadable history fails closed" bash -c 'lune run tests/run -- "$0/cut.spec.luau" "$0/claim.spec.luau"' "$A"
+check "AC11: ./zn new issue --filed-by writes the exemption marker and refuses an empty, free-text or user source; every skill's lesson line passes it" bash -c 'lune run tests/run -- "$0/claim.spec.luau" "$0/exempt.spec.luau"' "$A"
+
 finish

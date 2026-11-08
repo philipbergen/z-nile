@@ -13,3 +13,23 @@
 - design-review-001 F13: z-design/spec-design-correspondence
 - design-review-001 F14: one-off: two sentences of the same step disagreed
 - note review 001's second candidate (a new review step copies every launch form the existing review steps allow): z-design/instructions-runnable-where-they-run
+- design-review-003 F1: z-design/spec-design-correspondence
+- design-review-003 F2: z-design/exemption-markers-refuse-omission
+- design-review-003 F3: z-design/restated-rules-move-together
+- design-review-003 F4: z-design/prototype-includes-the-prepared-dependency
+- design-review-003 F5: z-design/never-narrow-captured-scope
+- design-review-003 F6: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-003 F7: z-design/restated-rules-move-together
+- design-review-003 F8: z-design/instructions-runnable-where-they-run
+- design-review-003 F9: z-design/user-words-parsers-accept-anything
+- design-review-003 F10: z-design/user-words-parsers-accept-anything
+- design-review-003 F11: one-off: two prompt sentences untested; recorded as reasoned rows
+- design-review-003 F12: z-design/spec-design-correspondence
+- design-review-002 F1: z-design/instructions-runnable-where-they-run
+- design-review-002 F2: z-design/never-narrow-captured-scope
+- design-review-002 F3: z-design/run-the-other-rafts-specs
+- design-review-002 F4: z-design/spec-design-correspondence
+- design-review-002 F5: z-design/accepted-risks-checked-and-decided
+- design-review-002 F6: z-design/spec-design-correspondence
+- design-review-002 F7: z-design/user-words-parsers-accept-anything
+- design-review-002 F8: z-design/restated-rules-move-together

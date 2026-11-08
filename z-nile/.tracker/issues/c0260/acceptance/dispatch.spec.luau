@@ -6,6 +6,7 @@ local dispatch = require("@znile/engine/dispatch")
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local models = require("@znile/engine/models")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
@@ -24,14 +25,14 @@ runtime = "claude-cli"
 max_tokens = 5000
 
 [z-ticket-review.claude]
-model = "fake-ticket-review-model"
+model = "claude-opus-fake-ticket"
 rank = 4
 runtime = "claude-cli"
 max_tokens = 5000
 
 [z-ticket-review.grok]
-model = "fake-grok-ticket-review"
-effort = "high"
+model = "grok-fake-ticket"
+effort = "xhigh"
 rank = 4
 runtime = "grok-cli"
 max_tokens = 5000
@@ -108,6 +109,8 @@ return t.spec("c0260 the idea review is a dispatched review mode", function(it)
 			t.expect(has(prompt, "design-review-NNN")).toBe(false)
 			t.expect(has(prompt, "--when design")).toBe(false) -- the design lessons are about designs, not ideas
 			t.expect(has(prompt, "--skill z-ticket")).toBe(true)
+			t.expect(has(prompt, "`## Ask (verbatim)`, `## Interview` and `## Idea`")).toBe(true) -- the reviewer sees the three sections
+			t.expect(has(prompt, "do not read its Problem")).toBe(true)
 			t.expect(has(prompt, "`/s/review.md`")).toBe(true)
 		end
 	)
@@ -139,7 +142,7 @@ return t.spec("c0260 the idea review is a dispatched review mode", function(it)
 			t.expect(row.subject).toBe("idea-review-001")
 			t.expect(row.phase).toBe("capture")
 			-- the model is the one .models.toml names for the activity z-ticket-review, not zz-review's (no tier asserted)
-			t.expect(row.model).toBe("fake-ticket-review-model")
+			t.expect(row.model).toBe("claude-opus-fake-ticket")
 			local again = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "idea" })
 			if not again.ok then
 				error(again.stdout .. again.stderr)
@@ -167,4 +170,25 @@ return t.spec("c0260 the idea review is a dispatched review mode", function(it)
 		t.expect(has(r.stderr .. r.stdout, "idea")).toBe(true) -- the message lists the modes, idea among them
 		t.expect(fakecli.log(h)).toBe("")
 	end)
+
+	it(
+		"AC5: the idea review's activity table is under the review-model rule: Opus through claude, a grok model at xhigh",
+		function()
+			local function spec(cli: string, model: string, effort: string?): models.Spec
+				return {
+					cli = cli,
+					model = model,
+					effort = effort,
+					rank = 4,
+					runtime = "x",
+					maxTokens = 1,
+				} :: any
+			end
+			t.expect(models.reviewRule("z-ticket-review", spec("claude", "claude-opus-fake-ticket", nil))).toBe(nil)
+			t.expect(models.reviewRule("z-ticket-review", spec("grok", "grok-fake-ticket", "xhigh"))).toBe(nil)
+			t.expect(models.reviewRule("z-ticket-review", spec("claude", "claude-sonnet-fake", nil)) ~= nil).toBe(true)
+			t.expect(models.reviewRule("z-ticket-review", spec("grok", "grok-fake-ticket", "high")) ~= nil).toBe(true)
+			t.expect(models.reviewRule("z-ticket", spec("claude", "claude-sonnet-fake", nil))).toBe(nil) -- other activities are not reviews
+		end
+	)
 end)

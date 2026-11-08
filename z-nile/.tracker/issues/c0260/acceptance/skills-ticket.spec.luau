@@ -90,17 +90,20 @@ return t.spec("c0260 z-ticket describes the interview, the review and the confir
 		end
 	)
 
-	it("AC1: the ask is kept verbatim and dated, the interview keeps every question and answer in order", function()
-		local s = steps()
-		t.expect(has(s["0a"], "every message")).toBe(true)
-		t.expect(has(s["0a"], "### Message YYYY-MM-DD")).toBe(true)
-		t.expect(has(s["0a"], "never edited")).toBe(true)
-		t.expect(has(s["0b"], "Challenge")).toBe(true)
-		t.expect(has(s["0b"], "**every** question")).toBe(true)
-		t.expect(has(s["0b"], "in order")).toBe(true)
-		t.expect(has(s["0b"], "own words")).toBe(true)
-		t.expect(has(s["0b"], "AskUserQuestion")).toBe(true)
-	end)
+	it(
+		"AC1: the ask is kept verbatim and dated, the interview keeps every question and answer in order",
+		function()
+			local s = steps()
+			t.expect(has(s["0a"], "every message")).toBe(true)
+			t.expect(has(s["0a"], "### Message YYYY-MM-DD")).toBe(true)
+			t.expect(has(s["0a"], "never edited")).toBe(true)
+			t.expect(has(s["0b"], "hallenge the idea")).toBe(true)
+			t.expect(has(s["0b"], "**every** question")).toBe(true)
+			t.expect(has(s["0b"], "in order")).toBe(true)
+			t.expect(has(s["0b"], "own words")).toBe(true)
+			t.expect(has(s["0b"], "AskUserQuestion")).toBe(true)
+		end
+	)
 
 	it(
 		"AC1: the review is a clean reviewer on the z-ticket-review activity's model, seeing three sections, answered before the user sees the idea",
@@ -134,7 +137,7 @@ return t.spec("c0260 z-ticket describes the interview, the review and the confir
 			local h = section("A capture under the dispatcher")
 			t.expect(has(h, "Keep headless, confirm later")).toBe(true)
 			t.expect(has(h, "does not stop for the user")).toBe(true)
-			t.expect(has(h, "None: unattended")).toBe(true)
+			t.expect(has(h, "`### Q1`")).toBe(true) -- the restatement and its reply are the interview a dispatched capture holds
 			t.expect(has(h, "Unconfirmed (unattended")).toBe(true)
 			t.expect(has(h, "you never write `Confirmed`")).toBe(true)
 			t.expect(has(h, "z-design confirms with the user before it designs")).toBe(true)
@@ -149,6 +152,57 @@ return t.spec("c0260 z-ticket describes the interview, the review and the confir
 			t.expect(has(r, "Source:")).toBe(true)
 			t.expect(has(r, "Scope decision (user, 2026-11-08)")).toBe(true)
 			t.expect(has(r, "cannot claim the exemption")).toBe(true)
+		end
+	)
+
+	it(
+		"AC1: the restatement and its approval are Q1, the plan-mode messages are copied into the ask",
+		function()
+			local s = steps()
+			t.expect(has(s["0b"], "`### Q1`")).toBe(true)
+			t.expect(has(s["0b"], "the restatement as shown")).toBe(true)
+			t.expect(has(s["0b"], "dispatch retry")).toBe(true)
+			t.expect(has(s["0a"], "plan file")).toBe(true)
+			t.expect(has(s["0a"], "each dated")).toBe(true)
+		end
+	)
+
+	it("AC1: every `step N` reference in z-ticket and zz-review names a step that exists", function()
+		local labels: { [string]: boolean } = {}
+		for label in string.gmatch(SKILL, "\n(%d+%l?)%. ") do
+			labels[label] = true
+		end
+		for ref in string.gmatch(SKILL, "[%(%s]step (%d+%l?)[%s%),.;:]") do
+			t.expect(labels[ref] == true).toBe(true)
+		end
+		local review = fs.readFile(`{ROOT}/z-nile/skills/zz-review/SKILL.md`)
+		for ref in string.gmatch(review, "z%-ticket step (%d+%l?)") do
+			t.expect(labels[ref] == true).toBe(true)
+		end
+	end)
+
+	it(
+		"AC9: every skill's lesson-filing line passes --filed-by <source>, and the source is explained once in zz-rules",
+		function()
+			local bad = {}
+			for _, dir in { "z-nile", "pickman", "arcade", "portal", "snake", "invaders", "asteroids" } do
+				for _, skill in fs.readDir(`{ROOT}/{dir}/skills`) do
+					local path = `{ROOT}/{dir}/skills/{skill}/SKILL.md`
+					if fs.isFile(path) then
+						local text = fs.readFile(path)
+						if
+							string.find(text, "new issue c lesson-<slug> --project z-nile --desc", 1, true)
+						then
+							table.insert(bad, path)
+						end
+					end
+				end
+			end
+			t.expect(table.concat(bad, "\n")).toBe("")
+			local rules = fs.readFile(`{ROOT}/z-nile/skills/zz-rules/SKILL.md`)
+			t.expect(has(rules, "--filed-by <source>")).toBe(true)
+			t.expect(has(rules, "review:<item id>/<review file> F<n>")).toBe(true)
+			t.expect(has(rules, "lesson:<skill>/<slug>")).toBe(true)
 		end
 	)
 end)
