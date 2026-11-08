@@ -25,6 +25,7 @@
 | 21 | 2026-11-08 03:02 | design-review-015 | 0 | 0 | 13.0 | spend | design-review | 207302 | claude-opus-5-5 |
 | 22 | 2026-11-08 20:08 | c0118: carry the board per project from proto2-c0118 (6bb217fb) | 1245 | 95 | 20.0 | focus | build |  |  |
 | 23 | 2026-11-08 20:29 | c0118: verification log | 0 | 0 | 5.0 | focus | build |  |  |
+| 24 | 2026-11-08 21:09 | c0118: code review 001 fixes (chart size and units, problems on the page, one round rule) | 164 | 13 | 40.0 | focus | code-review |  |  |
 
-**Total:** +2921 / -100 lines, 300.4 agent-minutes, 1066279 tokens over 23 records
-<!-- totals: added=2921 removed=100 minutes=300.4 records=23 tokens=1066279 -->
+**Total:** +3085 / -113 lines, 340.4 agent-minutes, 1066279 tokens over 24 records
+<!-- totals: added=3085 removed=113 minutes=340.4 records=24 tokens=1066279 -->

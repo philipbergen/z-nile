@@ -100,6 +100,9 @@ ul.links { margin: 0; padding-left: 20px; }
 .card .id { font-family: ui-monospace, monospace; color: var(--mut); font-size: 12px; }
 .note { color: var(--mut); font-size: 12px; }
 #charts { margin-top: 16px; }
+#charts .chart-fig { display: block; }
+#charts .chart { width: 100%; max-width: 640px; }
+#problems { margin: 8px 0; }
 dl.run { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
 dl.run dt { color: var(--mut); }
 dl.run dd { margin: 0; }
@@ -114,7 +117,7 @@ dl.run dd { margin: 0; }
 <input id="search" placeholder="Jump to an id (press /)" autocomplete="off" spellcheck="false">
 </header>
 <section id="stats" hidden>{{STATS}}</section>
-<main><nav id="projects" aria-label="Projects"></nav><section id="board" hidden><div id="board-controls"><label>Done cards from the last <select id="window"></select></label><label>Charts over <select id="range"></select></label><span id="as-of" class="note"></span></div><div id="columns"></div><div id="charts"></div></section><ul id="list"></ul><section id="pane"></section></main>
+<main><nav id="projects" aria-label="Projects"></nav><section id="board" hidden><div id="board-controls"><label>Done cards from the last <select id="window"></select></label><label>Charts over <select id="range"></select></label><span id="as-of" class="note"></span></div><div id="problems"></div><div id="columns"></div><div id="charts"></div></section><ul id="list"></ul><section id="pane"></section></main>
 <script type="application/json" id="board-data">{{DATA}}</script>
 <script>
 (function () {
@@ -126,7 +129,7 @@ dl.run dd { margin: 0; }
   var COLUMNS = ["ticket", "design", "raft", "ready", "run", "done"];
   var COLUMN_LABEL = { ticket: "Ticket", design: "Design", raft: "Raft", ready: "Ready", run: "Run", done: "Done" };
   var search = $("search"), list = $("list"), pane = $("pane");
-  var boardEl = $("board"), projectsEl = $("projects"), columnsEl = $("columns"), chartsEl = $("charts");
+  var boardEl = $("board"), projectsEl = $("projects"), columnsEl = $("columns"), chartsEl = $("charts"), problemsEl = $("problems");
   var windowEl = $("window"), rangeEl = $("range"), asOfEl = $("as-of");
   var byId, issueById, projectNames;
   function index() {
@@ -206,11 +209,17 @@ dl.run dd { margin: 0; }
       html += '<div class="col" data-column="' + c + '"><h3>' + COLUMN_LABEL[c] + ' <span class="n">' + count + "</span></h3>" + body + "</div>";
     });
     columnsEl.innerHTML = html;
+    if (problemsEl) {
+      var pr = model.problems || [];
+      problemsEl.innerHTML = pr.length
+        ? '<p class="note" data-problems="' + pr.length + '">' + pr.length + (pr.length === 1 ? " file could not be read: " : " files could not be read: ") + pr.map(esc).join("; ") + "</p>"
+        : "";
+    }
     if (chartsEl) {
       var ch = model.charts[project];
       chartsEl.innerHTML = ch && ch.rounds[range]
-        ? '<figure class="chart-fig" data-chart="rounds">' + ch.rounds[range] + "<figcaption>Review rounds by week</figcaption></figure>" +
-          '<figure class="chart-fig" data-chart="tokens">' + ch.tokens[range] + "<figcaption>Review tokens by model</figcaption></figure>"
+        ? '<figure class="chart-fig" data-chart="rounds">' + ch.rounds[range] + "<figcaption>Review rounds by week" + ((ch.captions && ch.captions.rounds[range]) || "") + "</figcaption></figure>" +
+          '<figure class="chart-fig" data-chart="tokens">' + ch.tokens[range] + "<figcaption>Review tokens by model" + ((ch.captions && ch.captions.tokens[range]) || "") + "</figcaption></figure>"
         : '<p class="note">no as-of time: no charts</p>';
       if (!model.history && ch && ch.rounds[range]) chartsEl.innerHTML += '<p class="note">history unavailable (shallow or no git): landings dated from spend rows</p>';
     }

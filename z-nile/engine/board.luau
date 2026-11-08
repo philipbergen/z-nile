@@ -91,7 +91,11 @@ export type Facts = {
 	worktrees: { { path: string, branch: string } },
 	dispatch: { [string]: Dispatch },
 }
-export type ProjectCharts = { rounds: { [string]: string }, tokens: { [string]: string } }
+export type ProjectCharts = {
+	rounds: { [string]: string },
+	tokens: { [string]: string },
+	captions: { rounds: { [string]: string }, tokens: { [string]: string } },
+}
 export type Model = {
 	rafts: { Raft }, -- sorted by id
 	issues: { Issue }, -- sorted by id
@@ -737,14 +741,13 @@ local function spendOf(rows: { ledger.Row }): Spend
 	return out
 end
 
+-- Every file path of the folder: which of them are review rounds is `boardview.rounds`' alone (c0118 §6, review 001 F3).
 local function reviewFiles(dir: string, into: { string })
 	if not fs.isDir(dir) then
 		return
 	end
 	for _, name in fs.readDir(dir) do
-		if string.match(name, "^design%-review%-%d+%.md$") or string.match(name, "^review%-%d+%.md$") then
-			table.insert(into, `{dir}/{name}`)
-		end
+		table.insert(into, `{dir}/{name}`)
 	end
 end
 
@@ -767,13 +770,20 @@ local function retiredOf(base: string): { { id: string, dir: string, keeper: str
 	return out
 end
 
-local function chartSvg(id: string, title: string, rawUnit: string, raw: boardview.Weekly): string
+-- The svg and the caption that names what the picture cannot show by itself (review 001 F1): the unit the axis was scaled
+-- to, and the series when there is only one (the chart draws a legend from two).
+local function chartSvg(id: string, title: string, rawUnit: string, raw: boardview.Weekly): (string, string)
 	local w, unit = boardview.scaled(raw, rawUnit)
 	local series: { chart.Series } = {}
 	for _, s in w.series do
 		table.insert(series, { key = s.key, label = s.label, values = s.values })
 	end
-	return chart.svg(series, { id = id, title = title, unit = unit, labels = w.labels, kind = "stacked" })
+	local caption = if unit == "rounds" then "" else `, {unit}`
+	if #series == 1 then
+		caption ..= `: {series[1].label}`
+	end
+	return chart.svg(series, { id = id, title = title, unit = unit, labels = w.labels, kind = "stacked" }),
+		caption
 end
 
 local function sortById(list: { Raw })
@@ -1135,16 +1145,16 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 				end
 			end
 		end
-		local pc: ProjectCharts = { rounds = {}, tokens = {} }
+		local pc: ProjectCharts = { rounds = {}, tokens = {}, captions = { rounds = {}, tokens = {} } }
 		for _, range in boardview.RANGES do
 			if facts.asOf then
-				pc.rounds[range.key] = chartSvg(
+				pc.rounds[range.key], pc.captions.rounds[range.key] = chartSvg(
 					`{p.name}/rounds/{range.key}`,
 					"Review rounds by week (rafts landed that week)",
 					"rounds",
 					boardview.roundsByWeek(landed, facts.asOf, range.days)
 				)
-				pc.tokens[range.key] = chartSvg(
+				pc.tokens[range.key], pc.captions.tokens[range.key] = chartSvg(
 					`{p.name}/tokens/{range.key}`,
 					"Review tokens by model (design-review and code-review)",
 					"tokens",
