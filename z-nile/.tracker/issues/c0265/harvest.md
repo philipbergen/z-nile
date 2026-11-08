@@ -60,3 +60,13 @@
 - design-review-005 F5: zz-rules/exhaustive-lists-name-new-things
 - design-review-005 F6: z-design/restated-rules-move-together
 - design-review-005 F7: zz-arch/guard-no-is-explicit
+- design-review-006 F1: z-design/walk-refute-added-cases-against-the-order-of-effects
+- design-review-006 F2: z-design/never-narrow-captured-scope
+- design-review-006 F3: z-design/never-narrow-captured-scope, z-design/spec-design-correspondence
+- design-review-006 F4: z-design/spec-design-correspondence
+- design-review-006 F5: z-design/confirm-overrides-with-a-suite-run
+- design-review-006 F6: z-design/restated-rules-move-together
+- design-review-006 F7: zz-test/proofs-hold-only-the-cases-that-wait
+- design-review-006 F8: one-off: duplicated fixture setup left over from splitting a spec
+- design-review-006 F9: z-design/restated-rules-move-together
+- design-review-006 F10: zz-arch/guard-no-is-explicit
