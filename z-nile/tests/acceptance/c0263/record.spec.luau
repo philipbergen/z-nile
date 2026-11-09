@@ -194,7 +194,8 @@ return t.spec("c0263 the record's writes", function(it)
 		trOk(W1, { "record", "c0011", "confirmed", "--actor", "human:Ann", "--detail", 'said="yes"' })
 		local rec = onOrigin(`{ISSUES}/c0011/provenance.md`)
 		t.expect(has(rec, '| confirmed | human:Ann | said="yes"')).toBe(true)
-		t.expect(fixture.git(f.origin, { "diff", "--name-only", before, "main" })).toBe(`{ISSUES}/c0011/provenance.md`)
+		t.expect(fixture.git(f.origin, { "diff", "--name-only", before, "main" }))
+			.toBe(`{ISSUES}/c0011/provenance.md`)
 		-- a published append is built from origin/main's file, never from the worktree's: a row only this worktree holds
 		-- (committed here, not published) does not leak to main, and the merge afterwards unites it with main's
 		trOk(W1, { "sync" })
@@ -246,7 +247,9 @@ return t.spec("c0263 the record's writes", function(it)
 		end
 		-- a given actor that is not a live form refuses, whatever else the environment says
 		local held = tip()
-		for _, badEnv in { { ZN_ACTOR = "none" }, { ZN_ACTOR = "unknown" }, { ZN_ACTOR = "robot:x", CLAUDECODE = "1" } } do
+		for _, badEnv in
+			{ { ZN_ACTOR = "none" }, { ZN_ACTOR = "unknown" }, { ZN_ACTOR = "robot:x", CLAUDECODE = "1" } }
+		do
 			t.expect(tr(W1, { "record", "c0011", "ranked" }, badEnv).ok).toBe(false)
 			t.expect(tip()).toBe(held)
 		end
@@ -275,39 +278,56 @@ return t.spec("c0263 the record's writes", function(it)
 		t.expect(fixture.git(f.main, { "rev-parse", "HEAD" })).toBe(mainHead)
 	end)
 
-	it("./zn record reaches a raft's record and an active item's, and takes unblocked rows only there", function()
-		trOk(W1, { "record", "R0130", "unblocked", "--actor", "human:Ann", "--detail", "block=needs-decision" })
-		t.expect(has(onOrigin(`{RAFTS}/R0130/provenance.md`), "| unblocked | human:Ann | block=needs-decision |"))
-			.toBe(true)
-		trOk(W1, { "record", "c0090", "unblocked", "--actor", "human:Ann", "--detail", "block=red-gate" })
-		t.expect(has(onOrigin(`{ISSUES}/active/c0090/provenance.md`), "| unblocked | human:Ann | block=red-gate |"))
-			.toBe(true)
-		-- an active raft (a whole-raft block, c0250) takes unblocked rows and nothing else; a done item's record is
-		-- written in a pull request
-		trOk(W1, { "record", "R0150", "unblocked", "--actor", "human:Ann", "--detail", "block=raft" })
-		t.expect(has(onOrigin(`{RAFTS}/active/R0150/provenance.md`), "| unblocked | human:Ann | block=raft |"))
-			.toBe(true)
-		local mark = tip()
-		for _, args in
-			{
-				{ "record", "c0090", "confirmed", "--actor", "human:Ann" },
-				{ "record", "R0150", "confirmed", "--actor", "human:Ann" },
-				{ "record", "R0150", "ranked", "--actor", "human:Ann" },
-				{ "record", "c0100", "unblocked", "--actor", "human:Ann" },
-				{ "record", "c0100", "confirmed", "--actor", "human:Ann" },
-			}
-		do
-			local r = tr(W1, args)
-			t.expect(r.ok).toBe(false)
+	it(
+		"./zn record reaches a raft's record and an active item's, and takes unblocked rows only there",
+		function()
+			trOk(
+				W1,
+				{ "record", "R0130", "unblocked", "--actor", "human:Ann", "--detail", "block=needs-decision" }
+			)
 			t.expect(
 				has(
-					r.stderr .. r.stdout,
-					`record refuses {args[2]}: it is {if args[2] == "c0100" then "done" else "active"}`
+					onOrigin(`{RAFTS}/R0130/provenance.md`),
+					"| unblocked | human:Ann | block=needs-decision |"
+				)
+			)
+				.toBe(true)
+			trOk(W1, { "record", "c0090", "unblocked", "--actor", "human:Ann", "--detail", "block=red-gate" })
+			t.expect(
+				has(
+					onOrigin(`{ISSUES}/active/c0090/provenance.md`),
+					"| unblocked | human:Ann | block=red-gate |"
 				)
 			).toBe(true)
-			t.expect(tip()).toBe(mark)
+			-- an active raft (a whole-raft block, c0250) takes unblocked rows and nothing else; a done item's record is
+			-- written in a pull request
+			trOk(W1, { "record", "R0150", "unblocked", "--actor", "human:Ann", "--detail", "block=raft" })
+			t.expect(
+				has(onOrigin(`{RAFTS}/active/R0150/provenance.md`), "| unblocked | human:Ann | block=raft |")
+			)
+				.toBe(true)
+			local mark = tip()
+			for _, args in
+				{
+					{ "record", "c0090", "confirmed", "--actor", "human:Ann" },
+					{ "record", "R0150", "confirmed", "--actor", "human:Ann" },
+					{ "record", "R0150", "ranked", "--actor", "human:Ann" },
+					{ "record", "c0100", "unblocked", "--actor", "human:Ann" },
+					{ "record", "c0100", "confirmed", "--actor", "human:Ann" },
+				}
+			do
+				local r = tr(W1, args)
+				t.expect(r.ok).toBe(false)
+				t.expect(
+					has(
+						r.stderr .. r.stdout,
+						`record refuses {args[2]}: it is {if args[2] == "c0100" then "done" else "active"}`
+					)
+				).toBe(true)
+				t.expect(tip()).toBe(mark)
+			end
 		end
-	end)
+	)
 
 	it("a conflict outside provenance.md aborts the merge and leaves the tree as it was", function()
 		local doc = `{W4}/{ISSUES}/c0050/c0050.md`
@@ -381,43 +401,46 @@ return t.spec("c0263 the record's writes", function(it)
 		end
 	)
 
-	it("audit refuses a malformed record and a header naming another id, and accepts one in a raft's folder", function()
-		local p = `{W4}/{ISSUES}/c0050/provenance.md`
-		fs.writeFile(p, "not a record\n")
-		local bad = tr(W4, { "audit" })
-		t.expect(bad.ok).toBe(false)
-		t.expect(has(bad.stdout .. bad.stderr, "provenance")).toBe(true)
-		fs.writeFile(p, "# Provenance: c0099\n\n| when | event | actor | detail |\n|---|---|---|---|\n")
-		local other = tr(W4, { "audit" })
-		t.expect(other.ok).toBe(false)
-		t.expect(has(other.stdout .. other.stderr, "c0099")).toBe(true)
-		fs.removeFile(p)
-		-- a raft's own record (c0250 blocks whole rafts) is fine
-		fs.writeFile(
-			`{W4}/{RAFTS}/R0130/provenance.md`,
-			"# Provenance: R0130\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
-		)
-		trOk(W4, { "audit" })
-		fs.removeFile(`{W4}/{RAFTS}/R0130/provenance.md`)
-		trOk(W4, { "audit" })
-		-- a malformed record is found wherever the item is: a backlog raft, an active raft, an active issue, a done issue
-		for _, where in
-			{
-				`{RAFTS}/R0130`,
-				`{RAFTS}/active/R0150`,
-				`{ISSUES}/active/c0090`,
-				`{ISSUES}/done/c0100`,
-			}
-		do
-			local stray = `{W4}/{where}/provenance.md`
-			fs.writeFile(stray, "not a record\n")
-			local r = tr(W4, { "audit" })
-			t.expect(r.ok).toBe(false)
-			t.expect(has(r.stdout .. r.stderr, "provenance")).toBe(true)
-			fs.removeFile(stray)
+	it(
+		"audit refuses a malformed record and a header naming another id, and accepts one in a raft's folder",
+		function()
+			local p = `{W4}/{ISSUES}/c0050/provenance.md`
+			fs.writeFile(p, "not a record\n")
+			local bad = tr(W4, { "audit" })
+			t.expect(bad.ok).toBe(false)
+			t.expect(has(bad.stdout .. bad.stderr, "provenance")).toBe(true)
+			fs.writeFile(p, "# Provenance: c0099\n\n| when | event | actor | detail |\n|---|---|---|---|\n")
+			local other = tr(W4, { "audit" })
+			t.expect(other.ok).toBe(false)
+			t.expect(has(other.stdout .. other.stderr, "c0099")).toBe(true)
+			fs.removeFile(p)
+			-- a raft's own record (c0250 blocks whole rafts) is fine
+			fs.writeFile(
+				`{W4}/{RAFTS}/R0130/provenance.md`,
+				"# Provenance: R0130\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
+			)
+			trOk(W4, { "audit" })
+			fs.removeFile(`{W4}/{RAFTS}/R0130/provenance.md`)
+			trOk(W4, { "audit" })
+			-- a malformed record is found wherever the item is: a backlog raft, an active raft, an active issue, a done issue
+			for _, where in
+				{
+					`{RAFTS}/R0130`,
+					`{RAFTS}/active/R0150`,
+					`{ISSUES}/active/c0090`,
+					`{ISSUES}/done/c0100`,
+				}
+			do
+				local stray = `{W4}/{where}/provenance.md`
+				fs.writeFile(stray, "not a record\n")
+				local r = tr(W4, { "audit" })
+				t.expect(r.ok).toBe(false)
+				t.expect(has(r.stdout .. r.stderr, "provenance")).toBe(true)
+				fs.removeFile(stray)
+			end
+			trOk(W4, { "audit" })
 		end
-		trOk(W4, { "audit" })
-	end)
+	)
 	it("fold's merge of origin/main unions the record too", function()
 		local rec = `{W3}/{ISSUES}/c0040/provenance.md`
 		local head = "# Provenance: c0040\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
@@ -432,22 +455,25 @@ return t.spec("c0263 the record's writes", function(it)
 		t.expect((bee :: number) < (ann :: number)).toBe(true)
 	end)
 
-	it("a record only our side added follows the folder the other side moved (git's file location conflict)", function()
-		local rec = `{W6}/{ISSUES}/c0012/provenance.md`
-		local head = "# Provenance: c0012\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
-		fs.writeFile(rec, head .. "| 2026-11-08 10:00 | ranked | human:Ann | rank=1 |\n")
-		fixture.git(W6, { "add", "-A" })
-		fixture.git(W6, { "commit", "-q", "-m", "our row" })
-		fixture.git(f.other, { "pull", "-q", "origin", "main" })
-		fixture.git(f.other, { "mv", `{ISSUES}/c0012`, `{ISSUES}/active/c0012` })
-		fixture.git(f.other, { "commit", "-q", "-m", "tracker: ready R0156" })
-		fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
-		trOk(W6, { "sync" })
-		t.expect(fs.isDir(`{W6}/{ISSUES}/c0012`)).toBe(false)
-		t.expect(#rows(fs.readFile(`{W6}/{ISSUES}/active/c0012/provenance.md`), "ranked")).toBe(1)
-		t.expect(fs.isFile(`{W6}/{ISSUES}/active/c0012/check.sh`)).toBe(true)
-		t.expect(fixture.git(W6, { "status", "--porcelain" })).toBe("")
-	end)
+	it(
+		"a record only our side added follows the folder the other side moved (git's file location conflict)",
+		function()
+			local rec = `{W6}/{ISSUES}/c0012/provenance.md`
+			local head = "# Provenance: c0012\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
+			fs.writeFile(rec, head .. "| 2026-11-08 10:00 | ranked | human:Ann | rank=1 |\n")
+			fixture.git(W6, { "add", "-A" })
+			fixture.git(W6, { "commit", "-q", "-m", "our row" })
+			fixture.git(f.other, { "pull", "-q", "origin", "main" })
+			fixture.git(f.other, { "mv", `{ISSUES}/c0012`, `{ISSUES}/active/c0012` })
+			fixture.git(f.other, { "commit", "-q", "-m", "tracker: ready R0156" })
+			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+			trOk(W6, { "sync" })
+			t.expect(fs.isDir(`{W6}/{ISSUES}/c0012`)).toBe(false)
+			t.expect(#rows(fs.readFile(`{W6}/{ISSUES}/active/c0012/provenance.md`), "ranked")).toBe(1)
+			t.expect(fs.isFile(`{W6}/{ISSUES}/active/c0012/check.sh`)).toBe(true)
+			t.expect(fixture.git(W6, { "status", "--porcelain" })).toBe("")
+		end
+	)
 	it(
 		"land merges origin/main with the same union: a united record is land's scope refusal, never a failed merge",
 		function()
@@ -466,37 +492,41 @@ return t.spec("c0263 the record's writes", function(it)
 			t.expect(fixture.exec(W7, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
 		end
 	)
-	it("a sync that cannot unite the record aborts and says so: an unparsable side, an edited old row", function()
-		local rec = `{W8}/{ISSUES}/c0010/provenance.md`
-		local function stateOf(): string
-			return fixture.git(W8, { "rev-parse", "HEAD" }) .. fixture.git(W8, { "status", "--porcelain" })
+	it(
+		"a sync that cannot unite the record aborts and says so: an unparsable side, an edited old row",
+		function()
+			local rec = `{W8}/{ISSUES}/c0010/provenance.md`
+			local function stateOf(): string
+				return fixture.git(W8, { "rev-parse", "HEAD" })
+					.. fixture.git(W8, { "status", "--porcelain" })
+			end
+			-- our side commits a record that does not parse; main publishes one
+			fs.writeFile(rec, "garbage\n")
+			fixture.git(W8, { "add", "-A" })
+			fixture.git(W8, { "commit", "-q", "-m", "a record that does not parse" })
+			trOk(W1, { "record", "c0010", "ranked", "--actor", "human:Bee", "--detail", "rank=1" })
+			local before = stateOf()
+			local r = tr(W8, { "sync" })
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr .. r.stdout, "c0010/provenance.md")).toBe(true)
+			t.expect(fixture.exec(W8, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
+			t.expect(stateOf()).toBe(before)
+			-- our side edited a row both sides share: the union would revert the edit, so the sync stops
+			fixture.git(W8, { "reset", "-q", "--hard", "HEAD~1" })
+			trOk(W8, { "sync" })
+			t.expect(has(fs.readFile(rec), "human:Bee")).toBe(true)
+			fs.writeFile(rec, (string.gsub(fs.readFile(rec), "human:Bee", "human:Eve")))
+			fixture.git(W8, { "add", "-A" })
+			fixture.git(W8, { "commit", "-q", "-m", "an edited row" })
+			trOk(W1, { "record", "c0010", "ranked", "--actor", "human:Cy", "--detail", "rank=2" })
+			local again = stateOf()
+			local r2 = tr(W8, { "sync" })
+			t.expect(r2.ok).toBe(false)
+			t.expect(has(r2.stderr .. r2.stdout, "row 1")).toBe(true)
+			t.expect(fixture.exec(W8, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
+			t.expect(stateOf()).toBe(again)
 		end
-		-- our side commits a record that does not parse; main publishes one
-		fs.writeFile(rec, "garbage\n")
-		fixture.git(W8, { "add", "-A" })
-		fixture.git(W8, { "commit", "-q", "-m", "a record that does not parse" })
-		trOk(W1, { "record", "c0010", "ranked", "--actor", "human:Bee", "--detail", "rank=1" })
-		local before = stateOf()
-		local r = tr(W8, { "sync" })
-		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr .. r.stdout, "c0010/provenance.md")).toBe(true)
-		t.expect(fixture.exec(W8, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
-		t.expect(stateOf()).toBe(before)
-		-- our side edited a row both sides share: the union would revert the edit, so the sync stops
-		fixture.git(W8, { "reset", "-q", "--hard", "HEAD~1" })
-		trOk(W8, { "sync" })
-		t.expect(has(fs.readFile(rec), "human:Bee")).toBe(true)
-		fs.writeFile(rec, (string.gsub(fs.readFile(rec), "human:Bee", "human:Eve")))
-		fixture.git(W8, { "add", "-A" })
-		fixture.git(W8, { "commit", "-q", "-m", "an edited row" })
-		trOk(W1, { "record", "c0010", "ranked", "--actor", "human:Cy", "--detail", "rank=2" })
-		local again = stateOf()
-		local r2 = tr(W8, { "sync" })
-		t.expect(r2.ok).toBe(false)
-		t.expect(has(r2.stderr .. r2.stdout, "row 1")).toBe(true)
-		t.expect(fixture.exec(W8, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
-		t.expect(stateOf()).toBe(again)
-	end)
+	)
 
 	it("any other file added in a folder the other side moved stops the sync (as it always did)", function()
 		local review = `{W9}/{ISSUES}/c0014/design-review-001.md`
@@ -557,13 +587,16 @@ return t.spec("c0263 the record's writes", function(it)
 		fixture.git(wt, { "commit", "-q", "-m", `our row {who}` })
 	end
 
-	it("our side moved the folder to done/ and main published a row into the active item's record (UA)", function()
-		fixture.git(W10, { "mv", `{ISSUES}/active/c0090`, `{ISSUES}/done/c0090` })
-		fixture.git(W10, { "commit", "-q", "-m", "our move: done" })
-		trOk(W1, { "record", "c0090", "unblocked", "--actor", "human:Main", "--detail", "block=ua" })
-		trOk(W10, { "sync" })
-		oneRecordBeside(W10, `{ISSUES}/done/c0090/c0090.md`, { "human:Ann", "human:Main" })
-	end)
+	it(
+		"our side moved the folder to done/ and main published a row into the active item's record (UA)",
+		function()
+			fixture.git(W10, { "mv", `{ISSUES}/active/c0090`, `{ISSUES}/done/c0090` })
+			fixture.git(W10, { "commit", "-q", "-m", "our move: done" })
+			trOk(W1, { "record", "c0090", "unblocked", "--actor", "human:Main", "--detail", "block=ua" })
+			trOk(W10, { "sync" })
+			oneRecordBeside(W10, `{ISSUES}/done/c0090/c0090.md`, { "human:Ann", "human:Main" })
+		end
+	)
 
 	it("our side moved the folder to done/ and appended; main published a row (DU)", function()
 		trOk(W1, { "record", "c0015", "ranked", "--actor", "human:Base", "--detail", "rank=0" })
@@ -662,72 +695,87 @@ return t.spec("c0263 the record's writes", function(it)
 		fixture.git(root, { "commit", "-q", "-m", `renumber {from} to {to}` })
 	end
 
-	it("main renumbered an item both sides appended to: the sync stops, naming the id and remap (i)", function()
-		trackerfix.elsewhere(f, { [atRecord("c0021", "")] = rec("c0021", "Base") }, "base record c0021")
-		trOk(W14, { "sync" })
-		fs.writeFile(`{W14}/{atRecord("c0021", "")}`, rec("c0021", "Base", "Ours"))
-		fixture.git(W14, { "add", "-A" })
-		fixture.git(W14, { "commit", "-q", "-m", "our row" })
-		fixture.git(f.other, { "pull", "-q", "origin", "main" })
-		renumber(f.other, "c0021", "c0031", "| 2026-11-08 10:00 | ranked | human:Main | rank=1 |\n")
-		fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
-		guarded(W14, "c0021", { "c0021", "./zn remap" })
-	end)
+	it(
+		"main renumbered an item both sides appended to: the sync stops, naming the id and remap (i)",
+		function()
+			trackerfix.elsewhere(f, { [atRecord("c0021", "")] = rec("c0021", "Base") }, "base record c0021")
+			trOk(W14, { "sync" })
+			fs.writeFile(`{W14}/{atRecord("c0021", "")}`, rec("c0021", "Base", "Ours"))
+			fixture.git(W14, { "add", "-A" })
+			fixture.git(W14, { "commit", "-q", "-m", "our row" })
+			fixture.git(f.other, { "pull", "-q", "origin", "main" })
+			renumber(f.other, "c0021", "c0031", "| 2026-11-08 10:00 | ranked | human:Main | rank=1 |\n")
+			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+			guarded(W14, "c0021", { "c0021", "./zn remap" })
+		end
+	)
 
-	it("a record we added in a folder main renumbered stops the sync with the missing document named (ii)", function()
-		fs.writeFile(`{W15}/{atRecord("c0022", "")}`, rec("c0022", "Ours"))
-		fixture.git(W15, { "add", "-A" })
-		fixture.git(W15, { "commit", "-q", "-m", "our record" })
-		fixture.git(f.other, { "pull", "-q", "origin", "main" })
-		renumber(f.other, "c0022", "c0032")
-		fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
-		guarded(W15, "c0022", { "c0022", "no document" })
-	end)
+	it(
+		"a record we added in a folder main renumbered stops the sync with the missing document named (ii)",
+		function()
+			fs.writeFile(`{W15}/{atRecord("c0022", "")}`, rec("c0022", "Ours"))
+			fixture.git(W15, { "add", "-A" })
+			fixture.git(W15, { "commit", "-q", "-m", "our record" })
+			fixture.git(f.other, { "pull", "-q", "origin", "main" })
+			renumber(f.other, "c0022", "c0032")
+			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+			guarded(W15, "c0022", { "c0022", "no document" })
+		end
+	)
 
-	it("git pairs our row with another item's near-identical record: the row stays with its own item (iii)", function()
-		trackerfix.elsewhere(f, { [atRecord("c0023", "")] = rec("c0023", "Shared") }, "base record c0023")
-		trOk(W16, { "sync" })
-		fs.writeFile(`{W16}/{atRecord("c0023", "")}`, rec("c0023", "Shared", "Ours"))
-		fixture.git(W16, { "add", "-A" })
-		fixture.git(W16, { "commit", "-q", "-m", "our row" })
-		-- main: three more rows in c0023's record, a new record for c0024 holding the one shared row, c0023 readied
-		trackerfix.elsewhere(f, {
-			[atRecord("c0023", "")] = rec("c0023", "Shared", "M1", "M2", "M3"),
-			[atRecord("c0024", "")] = rec("c0024", "Shared"),
-		}, "main rows")
-		fixture.git(f.other, { "mv", `{ISSUES}/c0023`, `{ISSUES}/active/c0023` })
-		fixture.git(f.other, { "commit", "-q", "-m", "tracker: ready R0159" })
-		fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
-		trOk(W16, { "sync" })
-		oneRecordBeside(
-			W16,
-			`{ISSUES}/active/c0023/c0023.md`,
-			{ "human:Shared", "human:M1", "human:M2", "human:M3", "human:Ours" }
-		)
-		-- the other item's record is exactly what main wrote
-		t.expect(fs.readFile(`{W16}/{atRecord("c0024", "")}`)).toBe(rec("c0024", "Shared"))
-	end)
+	it(
+		"git pairs our row with another item's near-identical record: the row stays with its own item (iii)",
+		function()
+			trackerfix.elsewhere(f, { [atRecord("c0023", "")] = rec("c0023", "Shared") }, "base record c0023")
+			trOk(W16, { "sync" })
+			fs.writeFile(`{W16}/{atRecord("c0023", "")}`, rec("c0023", "Shared", "Ours"))
+			fixture.git(W16, { "add", "-A" })
+			fixture.git(W16, { "commit", "-q", "-m", "our row" })
+			-- main: three more rows in c0023's record, a new record for c0024 holding the one shared row, c0023 readied
+			trackerfix.elsewhere(f, {
+				[atRecord("c0023", "")] = rec("c0023", "Shared", "M1", "M2", "M3"),
+				[atRecord("c0024", "")] = rec("c0024", "Shared"),
+			}, "main rows")
+			fixture.git(f.other, { "mv", `{ISSUES}/c0023`, `{ISSUES}/active/c0023` })
+			fixture.git(f.other, { "commit", "-q", "-m", "tracker: ready R0159" })
+			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+			trOk(W16, { "sync" })
+			oneRecordBeside(
+				W16,
+				`{ISSUES}/active/c0023/c0023.md`,
+				{ "human:Shared", "human:M1", "human:M2", "human:M3", "human:Ours" }
+			)
+			-- the other item's record is exactly what main wrote
+			t.expect(fs.readFile(`{W16}/{atRecord("c0024", "")}`)).toBe(rec("c0024", "Shared"))
+		end
+	)
 
-	it("our side renumbered an item both sides appended to: the sync stops, naming the id and remap (iv)", function()
-		trackerfix.elsewhere(f, { [atRecord("c0025", "")] = rec("c0025", "Base") }, "base record c0025")
-		trOk(W17, { "sync" })
-		renumber(W17, "c0025", "c0035", "| 2026-11-08 10:00 | ranked | human:Ours | rank=1 |\n")
-		trackerfix.elsewhere(f, { [atRecord("c0025", "")] = rec("c0025", "Base", "Main") }, "main row")
-		guarded(W17, "c0025", { "c0025", "./zn remap" })
-	end)
+	it(
+		"our side renumbered an item both sides appended to: the sync stops, naming the id and remap (iv)",
+		function()
+			trackerfix.elsewhere(f, { [atRecord("c0025", "")] = rec("c0025", "Base") }, "base record c0025")
+			trOk(W17, { "sync" })
+			renumber(W17, "c0025", "c0035", "| 2026-11-08 10:00 | ranked | human:Ours | rank=1 |\n")
+			trackerfix.elsewhere(f, { [atRecord("c0025", "")] = rec("c0025", "Base", "Main") }, "main row")
+			guarded(W17, "c0025", { "c0025", "./zn remap" })
+		end
+	)
 
-	it("main deleted the item's folder while we appended to its record: the sync stops naming the item", function()
-		trackerfix.elsewhere(f, { [atRecord("c0026", "")] = rec("c0026", "Base") }, "base record c0026")
-		trOk(W18, { "sync" })
-		fs.writeFile(`{W18}/{atRecord("c0026", "")}`, rec("c0026", "Base", "Ours"))
-		fixture.git(W18, { "add", "-A" })
-		fixture.git(W18, { "commit", "-q", "-m", "our row" })
-		fixture.git(f.other, { "pull", "-q", "origin", "main" })
-		fixture.git(f.other, { "rm", "-rq", `{ISSUES}/c0026` })
-		fixture.git(f.other, { "commit", "-q", "-m", "main removed c0026" })
-		fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
-		guarded(W18, "c0026", { "c0026" })
-	end)
+	it(
+		"main deleted the item's folder while we appended to its record: the sync stops naming the item",
+		function()
+			trackerfix.elsewhere(f, { [atRecord("c0026", "")] = rec("c0026", "Base") }, "base record c0026")
+			trOk(W18, { "sync" })
+			fs.writeFile(`{W18}/{atRecord("c0026", "")}`, rec("c0026", "Base", "Ours"))
+			fixture.git(W18, { "add", "-A" })
+			fixture.git(W18, { "commit", "-q", "-m", "our row" })
+			fixture.git(f.other, { "pull", "-q", "origin", "main" })
+			fixture.git(f.other, { "rm", "-rq", `{ISSUES}/c0026` })
+			fixture.git(f.other, { "commit", "-q", "-m", "main removed c0026" })
+			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+			guarded(W18, "c0026", { "c0026" })
+		end
+	)
 
 	it("a commit with the item's record in two places stops the sync naming both paths", function()
 		trackerfix.elsewhere(f, { [atRecord("c0027", "")] = rec("c0027", "Base") }, "base record c0027")
@@ -752,17 +800,20 @@ return t.spec("c0263 the record's writes", function(it)
 		trackerfix.elsewhere(f, { [atRecord("c0028", "")] = rec("c0028", "Base", "Main") }, "main row")
 		guarded(W20, "c0028", { "c0028", "document in two places" })
 	end)
-	it("a raft's record follows its folder to done/ like an issue's does (c0250 blocks whole rafts)", function()
-		fixture.git(W26, { "mv", `{RAFTS}/active/R0150`, `{RAFTS}/done/R0150` })
-		fixture.git(W26, { "commit", "-q", "-m", "our move: done" })
-		trOk(W1, { "record", "R0150", "unblocked", "--actor", "human:RaftMain", "--detail", "block=p5" })
-		trOk(W26, { "sync" })
-		t.expect(fs.isDir(`{W26}/{RAFTS}/active/R0150`)).toBe(false)
-		local text = fs.readFile(`{W26}/{RAFTS}/done/R0150/provenance.md`)
-		t.expect(has(text, "human:RaftMain")).toBe(true)
-		t.expect(has(text, "# Provenance: R0150")).toBe(true)
-		t.expect(has(trOk(W26, { "find", "R0150" }), `{RAFTS}/done/R0150`)).toBe(true)
-	end)
+	it(
+		"a raft's record follows its folder to done/ like an issue's does (c0250 blocks whole rafts)",
+		function()
+			fixture.git(W26, { "mv", `{RAFTS}/active/R0150`, `{RAFTS}/done/R0150` })
+			fixture.git(W26, { "commit", "-q", "-m", "our move: done" })
+			trOk(W1, { "record", "R0150", "unblocked", "--actor", "human:RaftMain", "--detail", "block=p5" })
+			trOk(W26, { "sync" })
+			t.expect(fs.isDir(`{W26}/{RAFTS}/active/R0150`)).toBe(false)
+			local text = fs.readFile(`{W26}/{RAFTS}/done/R0150/provenance.md`)
+			t.expect(has(text, "human:RaftMain")).toBe(true)
+			t.expect(has(text, "# Provenance: R0150")).toBe(true)
+			t.expect(has(trOk(W26, { "find", "R0150" }), `{RAFTS}/done/R0150`)).toBe(true)
+		end
+	)
 
 	it(
 		"a compaction on main reused an id and our row would land in the other item: the sync stops, naming remap (v)",
@@ -787,63 +838,77 @@ return t.spec("c0263 the record's writes", function(it)
 		end
 	)
 
-	it("the same compaction with no record changed on our side merges: every record is main's (vi)", function()
-		trackerfix.elsewhere(f, {
-			[atRecord("c0043", "")] = rec("c0043", "Shared"),
-			[atRecord("c0044", "")] = rec("c0044", "Shared"),
-		}, "base records c0043 and c0044")
-		trOk(W22, { "sync" })
-		local arch = `{W22}/pickman/.tracker/architecture.md`
-		fs.writeFile(arch, fs.readFile(arch) .. "a line we added\n")
-		fixture.git(W22, { "add", "-A" })
-		fixture.git(W22, { "commit", "-q", "-m", "our change outside the records" })
-		fixture.git(f.other, { "pull", "-q", "origin", "main" })
-		fixture.git(f.other, { "rm", "-rq", `{ISSUES}/c0043` })
-		renumber(f.other, "c0044", "c0043")
-		fs.writeFile(`{f.other}/z-nile/compaction.txt`, "c0044 c0043\n")
-		fixture.git(f.other, { "add", "-A" })
-		fixture.git(f.other, { "commit", "-q", "-m", "tracker: compact ids" })
-		fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
-		trOk(W22, { "sync" })
-		t.expect(fs.readFile(`{W22}/{atRecord("c0043", "")}`)).toBe(rec("c0043", "Shared"))
-		t.expect(fs.isDir(`{W22}/{ISSUES}/c0044`)).toBe(false)
-		t.expect(has(fs.readFile(arch), "a line we added")).toBe(true)
-	end)
+	it(
+		"the same compaction with no record changed on our side merges: every record is main's (vi)",
+		function()
+			trackerfix.elsewhere(f, {
+				[atRecord("c0043", "")] = rec("c0043", "Shared"),
+				[atRecord("c0044", "")] = rec("c0044", "Shared"),
+			}, "base records c0043 and c0044")
+			trOk(W22, { "sync" })
+			local arch = `{W22}/pickman/.tracker/architecture.md`
+			fs.writeFile(arch, fs.readFile(arch) .. "a line we added\n")
+			fixture.git(W22, { "add", "-A" })
+			fixture.git(W22, { "commit", "-q", "-m", "our change outside the records" })
+			fixture.git(f.other, { "pull", "-q", "origin", "main" })
+			fixture.git(f.other, { "rm", "-rq", `{ISSUES}/c0043` })
+			renumber(f.other, "c0044", "c0043")
+			fs.writeFile(`{f.other}/z-nile/compaction.txt`, "c0044 c0043\n")
+			fixture.git(f.other, { "add", "-A" })
+			fixture.git(f.other, { "commit", "-q", "-m", "tracker: compact ids" })
+			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+			trOk(W22, { "sync" })
+			t.expect(fs.readFile(`{W22}/{atRecord("c0043", "")}`)).toBe(rec("c0043", "Shared"))
+			t.expect(fs.isDir(`{W22}/{ISSUES}/c0044`)).toBe(false)
+			t.expect(has(fs.readFile(arch), "a line we added")).toBe(true)
+		end
+	)
 
-	it("a merge of another branch in progress is not ours: the sync refuses and leaves it as it was (vii)", function()
-		fixture.git(W23, { "checkout", "-q", "-b", "side" })
-		fs.writeFile(`{W23}/side.txt`, "side\n")
-		fixture.git(W23, { "add", "-A" })
-		fixture.git(W23, { "commit", "-q", "-m", "side work" })
-		local sideHead = fixture.git(W23, { "rev-parse", "HEAD" })
-		fixture.git(W23, { "checkout", "-q", "-" })
-		fs.writeFile(`{W23}/ours.txt`, "ours\n")
-		fixture.git(W23, { "add", "-A" })
-		fixture.git(W23, { "commit", "-q", "-m", "our work" })
-		fixture.git(W23, { "merge", "-q", "--no-commit", "--no-ff", "side" })
-		trackerfix.elsewhere(f, { ["pickman/.tracker/notes-vii.md"] = "main moves on\n" }, "main moves on")
-		local r = tr(W23, { "sync" })
-		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr .. r.stdout, "another branch is in progress")).toBe(true)
-		t.expect(fixture.git(W23, { "rev-parse", "MERGE_HEAD" })).toBe(sideHead)
-		t.expect(fs.isFile(`{W23}/side.txt`)).toBe(true)
-		fixture.git(W23, { "merge", "--abort" })
-	end)
+	it(
+		"a merge of another branch in progress is not ours: the sync refuses and leaves it as it was (vii)",
+		function()
+			fixture.git(W23, { "checkout", "-q", "-b", "side" })
+			fs.writeFile(`{W23}/side.txt`, "side\n")
+			fixture.git(W23, { "add", "-A" })
+			fixture.git(W23, { "commit", "-q", "-m", "side work" })
+			local sideHead = fixture.git(W23, { "rev-parse", "HEAD" })
+			fixture.git(W23, { "checkout", "-q", "-" })
+			fs.writeFile(`{W23}/ours.txt`, "ours\n")
+			fixture.git(W23, { "add", "-A" })
+			fixture.git(W23, { "commit", "-q", "-m", "our work" })
+			fixture.git(W23, { "merge", "-q", "--no-commit", "--no-ff", "side" })
+			trackerfix.elsewhere(
+				f,
+				{ ["pickman/.tracker/notes-vii.md"] = "main moves on\n" },
+				"main moves on"
+			)
+			local r = tr(W23, { "sync" })
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr .. r.stdout, "another branch is in progress")).toBe(true)
+			t.expect(fixture.git(W23, { "rev-parse", "MERGE_HEAD" })).toBe(sideHead)
+			t.expect(fs.isFile(`{W23}/side.txt`)).toBe(true)
+			fixture.git(W23, { "merge", "--abort" })
+		end
+	)
 
-	it("a hand merge of origin/main with only the records left conflicted is finished by the sync (viii)", function()
-		trackerfix.elsewhere(f, { [atRecord("c0045", "")] = rec("c0045", "Base") }, "base record c0045")
-		trOk(W24, { "sync" })
-		fs.writeFile(`{W24}/{atRecord("c0045", "")}`, rec("c0045", "Base", "Ours"))
-		fixture.git(W24, { "add", "-A" })
-		fixture.git(W24, { "commit", "-q", "-m", "our row" })
-		trackerfix.elsewhere(f, { [atRecord("c0045", "")] = rec("c0045", "Base", "Main") }, "main row")
-		fixture.git(W24, { "fetch", "-q", "origin" })
-		t.expect(fixture.exec(W24, "git", { "merge", "--no-commit", "--no-edit", "origin/main" }).ok).toBe(false)
-		trOk(W24, { "sync" })
-		t.expect(fs.readFile(`{W24}/{atRecord("c0045", "")}`)).toBe(rec("c0045", "Base", "Main", "Ours"))
-		t.expect(fixture.exec(W24, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
-		t.expect(fixture.git(W24, { "status", "--porcelain" })).toBe("")
-	end)
+	it(
+		"a hand merge of origin/main with only the records left conflicted is finished by the sync (viii)",
+		function()
+			trackerfix.elsewhere(f, { [atRecord("c0045", "")] = rec("c0045", "Base") }, "base record c0045")
+			trOk(W24, { "sync" })
+			fs.writeFile(`{W24}/{atRecord("c0045", "")}`, rec("c0045", "Base", "Ours"))
+			fixture.git(W24, { "add", "-A" })
+			fixture.git(W24, { "commit", "-q", "-m", "our row" })
+			trackerfix.elsewhere(f, { [atRecord("c0045", "")] = rec("c0045", "Base", "Main") }, "main row")
+			fixture.git(W24, { "fetch", "-q", "origin" })
+			t.expect(fixture.exec(W24, "git", { "merge", "--no-commit", "--no-edit", "origin/main" }).ok)
+				.toBe(false)
+			trOk(W24, { "sync" })
+			t.expect(fs.readFile(`{W24}/{atRecord("c0045", "")}`)).toBe(rec("c0045", "Base", "Main", "Ours"))
+			t.expect(fixture.exec(W24, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
+			t.expect(fixture.git(W24, { "status", "--porcelain" })).toBe("")
+		end
+	)
 
 	it(
 		"a provenance.md in an id-named folder inside an item's folder is not that id's record (the layout publish and audit use)",
@@ -869,7 +934,8 @@ return t.spec("c0263 the record's writes", function(it)
 			fixture.git(W27, { "commit", "-q", "-m", "we rewrote the shared row" })
 			trackerfix.elsewhere(f, { [atRecord("c0048", "")] = rec("c0048", "Base", "Main") }, "main row")
 			fixture.git(W27, { "fetch", "-q", "origin" })
-			t.expect(fixture.exec(W27, "git", { "merge", "--no-commit", "--no-edit", "origin/main" }).ok).toBe(false)
+			t.expect(fixture.exec(W27, "git", { "merge", "--no-commit", "--no-edit", "origin/main" }).ok)
+				.toBe(false)
 			local r = tr(W27, { "sync" })
 			t.expect(r.ok).toBe(false)
 			t.expect(has(r.stderr .. r.stdout, "row 1")).toBe(true)
