@@ -1,11 +1,11 @@
 ---
-title: Read back every scripted edit of the prototype
+title: Read back every prototype edit before explaining a survivor
 when: design
-tags: [prototype, edits, experiments]
-check: After each scripted edit of the prototype, was the changed place read back, or a spec case run that fails if the edit did not apply?
+tags: [mutation, prototype, experiments]
+check: Does each mutation edit refuse a pattern that occurs more than once, and was a surviving mutant read back in the fixture's copy of the code (the pattern it changed, the lines around it) before its survival was explained?
 ---
-A scripted replace that does not match changes nothing and says nothing. A formatter that reflows the prototype between edits makes the next literal replace miss.
+A first-match replace changed the wrong branch of a file (`runner.luau` line 141, the start-time check, instead of the run loop's marker branch at line 237); the mutant survived, and the survival was written up as "another path in the engine" until the next review read the fixture's copy.
 
-**Why:** c0194 prep: a replace in the prototype's command line (print the sweep's report) did not apply after the formatter reflowed that code. The sweep deleted trees silently, and no spec case noticed until a reviewer ran it (design review 001 F4).
+**Why:** c0279 design review 003 F1.
 
-**How to apply:** assert the pattern is present before replacing (`assert old in text`), read the lines back after, and give the behaviour a case that fails without the edit.
+**How to apply:** make the mutation helper assert that the pattern occurs exactly once (or give the line), print the changed hunk, and look at the fixture's copy of the changed file before writing a word about why a mutant survived.

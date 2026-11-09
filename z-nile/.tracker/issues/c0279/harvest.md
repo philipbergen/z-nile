@@ -15,3 +15,9 @@
 - design-review-002 F5: zz-review/sequestration-reference-not-a-ref
 - design-review-002 F6: one-off: harvest mappings corrected
 - design-review-002 F7: one-off: record nits (logs, wording), fixed in the issue
+- design-review-003 F1: z-design/read-back-every-prototype-edit
+- design-review-003 F2: z-design/never-narrow-captured-scope
+- design-review-003 F3: z-design/restated-rules-move-together
+- design-review-003 F4: z-design/spec-design-correspondence
+- design-review-003 F5: z-design/required-steps-on-every-path
+- design-review-003 F6: zz-arch/children-need-a-lifeline
