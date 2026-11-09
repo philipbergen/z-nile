@@ -37,7 +37,7 @@ local function raftDoc(id: string, issues: string): string
 end
 
 local f: trackerfix.Fixture
-local W1, W3, W4, W5, W6, W7, W8, W9, W10, W11, W12 = "", "", "", "", "", "", "", "", "", "", ""
+local W1, W3, W4, W5, W6, W7, W8, W9, W10, W11, W12, W13 = "", "", "", "", "", "", "", "", "", "", "", ""
 
 local function env(extra: { [string]: string }?): { [string]: string }
 	local out: { [string]: string } = table.clone(HUMAN)
@@ -85,7 +85,7 @@ return t.spec("c0263 the record's writes", function(it)
 			-- the counter a published tree has: audit reads it
 			["z-nile/next"] = "issue 5000 quiet-copper-falcon\nraft 5000 quiet-copper-falcon\n",
 		}
-		for _, id in { "c0010", "c0011", "c0012", "c0013", "c0014", "c0015", "c0016", "c0019" } do
+		for _, id in { "c0010", "c0011", "c0012", "c0013", "c0014", "c0015", "c0016", "c0017", "c0019" } do
 			seed[`{ISSUES}/{id}/{id}.md`] = draft(id)
 			seed[`{ISSUES}/{id}/check.sh`] = CHECK
 		end
@@ -141,6 +141,7 @@ return t.spec("c0263 the record's writes", function(it)
 		W10 = trackerfix.trOk(f, f.main, { "worktree", "raft-j" })
 		W11 = trackerfix.trOk(f, f.main, { "worktree", "raft-k" })
 		W12 = trackerfix.trOk(f, f.main, { "worktree", "raft-l" })
+		W13 = trackerfix.trOk(f, f.main, { "worktree", "raft-m" })
 		W9 = trackerfix.trOk(f, f.main, { "worktree", "raft-i" })
 		-- the fixture audits clean before any of this, so a refusal below is the record's
 		trOk(W1, { "audit" })
@@ -551,4 +552,18 @@ return t.spec("c0263 the record's writes", function(it)
 			)
 		end
 	)
+	it("a record one side deleted and the other changed stops the sync, with the tree as it was", function()
+		trOk(W1, { "record", "c0017", "ranked", "--actor", "human:Base", "--detail", "rank=0" })
+		trOk(W13, { "sync" })
+		fixture.git(W13, { "rm", "-q", `{ISSUES}/c0017/provenance.md` })
+		fixture.git(W13, { "commit", "-q", "-m", "we deleted the record" })
+		trOk(W1, { "record", "c0017", "ranked", "--actor", "human:Main", "--detail", "rank=1" })
+		local before = fixture.git(W13, { "rev-parse", "HEAD" })
+		local r = tr(W13, { "sync" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr .. r.stdout, "deleted the record")).toBe(true)
+		t.expect(fixture.exec(W13, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
+		t.expect(fixture.git(W13, { "rev-parse", "HEAD" })).toBe(before)
+		t.expect(fixture.git(W13, { "status", "--porcelain" })).toBe("")
+	end)
 end)
