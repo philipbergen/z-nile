@@ -1673,7 +1673,7 @@ local function beatOnce(id: string, held: string): (string?, boolean)
 		if w == nil then
 			return nil, false
 		end
-		local tree = sh.git({ "rev-parse", `{at}^{tree}` })
+		local tree = sh.git({ "rev-parse", `{at}^\{tree}` })
 		local tip = at
 		-- authored by the checkout's own identity: a commit made for the real origin is never a fixture-looking one
 		-- (the spec runner's tripwire reads a new ref authored @example.invalid as a fixture leak)
