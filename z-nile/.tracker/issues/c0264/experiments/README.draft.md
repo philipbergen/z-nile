@@ -81,7 +81,7 @@ A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent`
 ### Order
 Tickets have no order today. They should: every issue and raft gets a `rank:` (integer, lower first; not the `rank` of `.models.toml`, where a higher one wins). *captured* (c0249)
 - An unset `rank:` is the lowest rank, and equal or unset ranks fall back to the ticket number, so the order is always stable.
-- Lost work comes first: anything in progress whose heartbeat is stale comes before anything not yet started, whatever its rank, even when a person started it without changing its rank. *captured* (c0265)
+- Lost work comes first: anything in progress whose heartbeat is stale (`./zn lost` lists it) comes before anything not yet started, whatever its rank, even when a person started it without changing its rank. *captured* (c0265)
 - The next item is the first in that order whose `depends_on` are all done, which is not blocked, and whose status is claimable. `depends_on` is a hard constraint; `rank` only orders what is free, so the order works around a blocked item without changing any rank.
 - z-ticket and z-design append by default. You move things with `./zn rank <id> top|after <id>|unset`. z-raft asks for a raft's rank when it makes the raft, and unset is a valid answer: with no one to answer, the rank stays unset. A raft takes the best rank of its members. The board shows the stack in order.
 - The board shows lost, parked and stale claims, lost first. *captured* (c0276)
@@ -89,9 +89,9 @@ Tickets have no order today. They should: every issue and raft gets a `rank:` (i
 
 ### Claiming across hosts
 A worker claims an item by landing the status change on `origin/main`, as `status <id> preparing` and z-ready already do. The push is the lock: a lost race means taking the next item. Each step runs in its own worktree under `.worktree/` on the worker's host. The worker's identity (host, CLI, model) goes on its spend rows. *captured* (c0254) (the claim itself *exists*)
-- A worker that holds an item beats a heartbeat on it every 5 minutes, as a commit on a heartbeat branch, not on `main`; the branch is deleted when the heartbeat drops or the task completes. An item in progress whose heartbeat is stale is lost, and the next worker resumes it. *captured* (c0265)
+- A worker that holds an item beats a heartbeat on it every 5 minutes, as a commit on a heartbeat branch, not on `main`; the branch is deleted when the heartbeat drops or the task completes. An item in progress whose heartbeat is stale is lost. *captured* (c0265)
 - Agents keep their claims alive without remembering to beat: the claim paths, every `./zn` command in a worktree, long commands and the dispatcher beat. *captured* (c0275)
-- A lost claim is taken over as a normal claim and recorded, and its old owner is refused and told: the takeover deletes the old heartbeat branch and creates a new one, so a worker that comes back learns it lost the claim. *captured* (c0274)
+- A lost claim is taken over by the next worker as a normal claim, which resumes it and is recorded, and its old owner is refused and told: the takeover deletes the old heartbeat branch and creates a new one, so a worker that comes back learns it lost the claim. *captured* (c0274)
 - A takeover discards the old worker's worktree, and a numbered copy recovers its work: the old worker's work is kept, and a numbered copy of it continues the work. *captured* (c0277)
 
 ### Autonomous delivery
@@ -135,8 +135,9 @@ A worker never guesses past a wall; it escalates formally. *captured* (c0250)
 
 ### Provenance
 Every ticket says who did what to it.
-- The record is kept on the ticket and appended by `./zn record`; what git already knows is read from git and never stored. Who confirmed the idea and who set its rank are recorded in it. *captured* (c0263)
-- `./zn who <id>` prints a ticket's history, oldest first: whose idea it was (the author of the ticket's capture commit), each status change, the merge, and the worker of each delivered layer, read from the ticket's spend rows. *captured* (c0280)
+- The record is kept on the ticket and appended by `./zn record`. *captured* (c0263)
+- The record is meant to hold who confirmed the idea and who set its rank as well, as c0263's capture lists them. *captured* (c0263)
+- `./zn who <id>` prints a ticket's history, oldest first: whose idea it was (the author of the ticket's capture commit), each status change, the merge, and the worker of each delivered layer, read from the ticket's spend rows; what git already knows is read from git and never stored. *captured* (c0280)
 - The record gets a row, with its actor, when a ticket is unblocked, rafted or delivered. *captured* (c0282)
 - Design approval is an explicit step by a person before `prepared`: `./zn approve <id>` records the person, the design hash and their words, and `prepared` is refused until it has run. *captured* (c0283)
 - The board shows each ticket's provenance, the same entries `./zn who` prints. *captured* (c0284)

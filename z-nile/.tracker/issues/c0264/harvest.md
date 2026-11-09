@@ -26,3 +26,8 @@
 - design-review-007 F4: one-off: a prep path written for the prep location
 - design-review-007 F5: z-design/spec-design-correspondence
 - note re-check the tracker for splits of every labelled id after each merge of main, and back a landing-order claim with a real merge and its conflict count: z-design/quote-other-preps-before-promising
+- design-review-008 F1: z-design/quote-other-preps-before-promising
+- design-review-008 F2: z-design/status-labels-need-a-tracker-fact
+- design-review-008 F3: z-design/restated-rules-move-together
+- design-review-008 F4: zz-test/promoted-specs-pin-rules-not-sets
+- note a landing-order scenario is built from the other issue's real text (its prototype or patch, sha recorded), never from an edit the author writes; after a split, check every clause of each sentence that keeps the parent's label: z-design/quote-other-preps-before-promising, z-design/status-labels-need-a-tracker-fact

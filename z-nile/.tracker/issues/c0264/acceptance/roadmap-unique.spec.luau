@@ -30,7 +30,7 @@ return t.spec("c0264 the Roadmap has one row per issue", function(it)
 		local seen: { [string]: boolean } = {}
 		local rows = 0
 		for _, line in roadmap() do
-			local id = string.match(line, "^| .* | ([cdf]%d%d%d%d) | %a+ |$")
+			local id = string.match(line, "^| .* | ([cdf]%d%d%d%d) | %a+ | *$")
 			if id then
 				rows += 1
 				if seen[id] then

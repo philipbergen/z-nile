@@ -63,6 +63,7 @@ Reviews by different models|c0117
 The full-force review|c0262
 Escalation to the human|c0250
 Provenance|c0263
+Provenance|c0263
 Provenance|c0280
 Provenance|c0282
 Provenance|c0283
@@ -151,7 +152,7 @@ check "AC6: the README states the rules of the worker model, and names no tiers,
 	'so the order works around a blocked item without changing any rank' \
 	'even when a person started it without changing its rank' 'It runs on an expensive model in a fresh context' \
 	'It sees no design reviews, refutes, harvests, PR comments or worker notes' 'It keeps one context for the whole raft' 'limited view' 'stayed on course' 'Off course means a redo' \
-	'An unset `rank:` is the lowest rank' 'fall back to the ticket number' 'Lost work comes first' 'every 5 minutes' \
+	'An unset `rank:` is the lowest rank' 'fall back to the ticket number' 'Lost work comes' 'every 5 minutes' \
 	'z-raft asks for a raft' 'drag and drop' 'whose idea it was (the author of the ticket'"'"'s capture commit)' 'when a ticket is unblocked, rafted or delivered' 'Design approval is an explicit step by a person before `prepared`' \
 	'each ticket is worked to completion before the next is picked up, by the same worker' \
 	'once a person has approved its design' \
