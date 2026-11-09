@@ -1,0 +1,1 @@
+- note rafting: RC1 first named z-nile/engine from the repository root, and c0120's check-paths spec failed the rafting PR's full gate; a raft's RC lines name paths from the project home: z-design/check-paths-from-the-home
