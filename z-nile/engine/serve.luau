@@ -212,12 +212,13 @@ end
 -- by branch name. A branch with several PRs keeps an open (or draft) one over a merged or closed one, then the highest
 -- number, whatever the order gh lists them in; a PR from another repository (a fork whose branch has the same name) is
 -- skipped. nil when it is not that JSON.
-function serve.parsePrs(out: string): { [string]: { pr: Pr, checks: Checks } }?
+export type PrEntry = { pr: Pr, checks: Checks, title: string }
+function serve.parsePrs(out: string): { [string]: PrEntry }?
 	local ok, decoded = pcall(serde.decode, "json" :: "json", out)
 	if not ok or type(decoded) ~= "table" then
 		return nil
 	end
-	local byBranch: { [string]: { pr: Pr, checks: Checks } } = {}
+	local byBranch: { [string]: PrEntry } = {}
 	local function rank(pr: Pr): number
 		return (if pr.state == "open" or pr.state == "draft" then 1e9 else 0) + pr.number
 	end
@@ -238,6 +239,7 @@ function serve.parsePrs(out: string): { [string]: { pr: Pr, checks: Checks } }?
 					state = summary(p.statusCheckRollup),
 					url = if p.url then `{p.url}/checks` else nil,
 				},
+				title = tostring(p.title or ""),
 			}
 			local held = byBranch[p.headRefName]
 			if not held or rank(entry.pr) > rank(held.pr) then
@@ -259,7 +261,7 @@ serve.GH_ARGS = {
 	"--limit",
 	"200",
 	"--json",
-	"number,headRefName,state,isDraft,url,statusCheckRollup,isCrossRepository",
+	"number,headRefName,title,state,isDraft,url,statusCheckRollup,isCrossRepository",
 }
 function serve.effects(
 	top: string,
@@ -358,7 +360,7 @@ function serve.start(o: Options): Server
 		{ model = nil, key = nil, at = -math.huge }
 	local gh: {
 		at: number,
-		data: { [string]: { pr: Pr, checks: Checks } }?,
+		data: { [string]: PrEntry }?,
 		err: string?,
 		busy: boolean,
 		version: number,
@@ -369,6 +371,7 @@ function serve.start(o: Options): Server
 	-- 001 F2: the encoding was 0.235 s of CPU per poll, and `./zn` stops its engine at 1800 s of CPU); the per-poll `live`
 	-- block (token, checks age, stale flag) is small and spliced in
 	local built = 0
+	local laidFor: string? = nil -- the generation the issues' own PRs were laid on for
 	local encoded: { gen: string?, model: string, stats: string } = { gen = nil, model = "", stats = "" }
 
 	-- `gh` runs in a task of its own, never on the request path, at most once per TTL (F8)
@@ -414,6 +417,28 @@ function serve.start(o: Options): Server
 			local hit = if data and r.branch then data[r.branch] else nil
 			r.pr = if hit then hit.pr else nil
 			r.checks = if hit then hit.checks else nil
+		end
+		-- an issue's own PR: the newest open or draft PR whose title names the issue (its prep PR, `tracker: prep c0121
+		-- ...`); a merged or closed one never hides its raft's. Laid on once per generation (the PR list is searched).
+		if laidFor ~= gen then
+			laidFor = gen
+			for _, i in m.issues do
+				local best: PrEntry? = nil
+				if data then
+					local needle = `[^%w]{i.id}[^%w]`
+					for _, e in data do
+						if
+							(e.pr.state == "open" or e.pr.state == "draft")
+							and string.find(` {e.title} `, needle) ~= nil
+							and (best == nil or e.pr.number > best.pr.number)
+						then
+							best = e
+						end
+					end
+				end
+				i.pr = if best then best.pr else nil
+				i.checks = if best then best.checks else nil
+			end
 		end
 		m.live = {
 			token = token,
