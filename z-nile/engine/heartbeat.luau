@@ -71,15 +71,26 @@ function heartbeat.setting(
 	return default
 end
 
--- live | stale | unknown, from the newest sign of life: the newest usable beat, else the moment the claim landed.
-function heartbeat.judge(claims: { Claim }, beats: { Beat }, now: number, stale: number?): { Verdict }
+-- live | stale | unknown | nobeat, from the newest sign of life: the newest usable beat, else the moment the claim landed.
+-- `landed` is the epoch the heartbeat itself landed on main (nil: no such rule): a claim made at or before it that has
+-- never beaten is `nobeat`, not stale (the user's "older claims never read lost until they beat once"); every claim made
+-- after it is flatlined as before.
+function heartbeat.judge(
+	claims: { Claim },
+	beats: { Beat },
+	now: number,
+	stale: number?,
+	landed: number?
+): { Verdict }
 	local limit = stale or heartbeat.STALE
 	local out: { Verdict } = {}
 	for _, c in claims do
 		local last: number? = c.since
+		local beaten = false
 		for _, b in beats do
 			if b.stamp == c.stamp and b.epoch <= now + heartbeat.SKEW then
 				last = math.max(last or b.epoch, b.epoch)
+				beaten = true
 			end
 		end
 		if last == nil then
@@ -87,13 +98,11 @@ function heartbeat.judge(claims: { Claim }, beats: { Beat }, now: number, stale:
 			table.insert(out, { id = c.id, state = c.state, stamp = c.stamp, silent = 0, kind = "unknown" })
 		else
 			local silent = math.max(0, now - last)
-			table.insert(out, {
-				id = c.id,
-				state = c.state,
-				stamp = c.stamp,
-				silent = silent,
-				kind = if silent > limit then "stale" else "live",
-			})
+			local kind = if silent > limit then "stale" else "live"
+			if kind == "stale" and not beaten and landed ~= nil and c.since ~= nil and c.since <= landed then
+				kind = "nobeat"
+			end
+			table.insert(out, { id = c.id, state = c.state, stamp = c.stamp, silent = silent, kind = kind })
 		end
 	end
 	return out
@@ -198,7 +207,8 @@ function heartbeat.plan(
 			table.insert(delete, { ref = b.ref, lease = b.sha })
 		end
 	end
-	if existing ~= nil and existing.epoch >= epoch then
+	-- a branch dated past the skew allowance is not "newer": judge ignores it too, so a beat replaces it
+	if existing ~= nil and existing.epoch >= epoch and existing.epoch <= now + heartbeat.SKEW then
 		return { write = nil, delete = delete }
 	end
 	return {
