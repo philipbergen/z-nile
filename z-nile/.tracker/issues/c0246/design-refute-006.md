@@ -1,0 +1,3 @@
+- F1: fixed: the walk is now `loadedFrom`, one walk returning nested, link or nil; a link out of the home at any depth reached through links ends it with "link" and gets the existing `holds a link out of the home` line; two fixtures (a link out one folder down a link, and directly), mutants M27 (`find -L`), M28, M30 run and killed; consequences: the old `find -type l` scan is replaced by the walk's answer, c0184's pinned lines unchanged (the suite passes).
+- F2: fixed: `type(decoded) == "table"` guards the `syncRules` read; a case with files decoding to 5, true and null; M29 run and killed; consequences: none.
+- F3: fixed: the doc's AC5, the spec header (AC1-AC6) and the implementation-step numbering match check.sh; consequences: none.

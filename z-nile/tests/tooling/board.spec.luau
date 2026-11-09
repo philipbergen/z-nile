@@ -34,7 +34,7 @@ function el(id) {
     focus() {}, blur() {}, select() {}, scrollIntoView() {}, getAttribute: () => null, closest: () => null };
 }
 const els = {};
-["tab-rafts", "tab-issues", "search", "list", "pane", "board-data"].forEach(i => (els[i] = el(i)));
+["tab-rafts", "tab-issues", "search", "list", "pane", "board-data", "columns"].forEach(i => (els[i] = el(i)));
 els["board-data"].textContent = scripts.find(x => /id="board-data"/.test(x[1]))[2];
 const doc = el("document");
 const sandbox = { document: { getElementById: i => els[i] || null, querySelector: () => null, addEventListener: doc.addEventListener },
@@ -43,13 +43,14 @@ const sandbox = { document: { getElementById: i => els[i] || null, querySelector
 sandbox.window = sandbox; sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 for (const x of scripts) if (!/json/.test(x[1])) vm.runInContext(x[2], sandbox);
+if (!hash) els["tab-rafts"].dispatch("click", {}); // c0118: the page opens on Board; these cases read the Rafts pane
 const key = (k, extra) => { const ev = Object.assign({ key: k, target: {}, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } }, extra); doc.dispatch("keydown", ev); return ev.defaultPrevented; };
-const out = { listBefore: els.list.innerHTML };
+const out = { listBefore: els.list.innerHTML + els.columns.innerHTML };
 if (query) { els.search.value = query; els.search.dispatch("keydown", { key: "Enter", target: els.search }); }
 out.miss = els.search.classList.contains("miss");
 out.metaPrevented = key("ArrowLeft", { metaKey: true });
 out.altPrevented = key("ArrowLeft", { altKey: true });
-out.list = els.list.innerHTML; out.pane = els.pane.innerHTML;
+out.list = els.list.innerHTML + els.columns.innerHTML; out.pane = els.pane.innerHTML;
 console.log(JSON.stringify(out));
 ]==]
 
@@ -89,7 +90,7 @@ return t.spec("board unit", function(it)
 			issues = { ready = {}, ["not"] = {}, done = {} },
 		})
 		t.expect(m.home).toEqual({})
-		t.expect(m.initialView).toBe("rafts")
+		t.expect(m.initialView).toBe("board")
 		local raw = m :: any
 		t.expect(raw.tabs).toBe(nil)
 		t.expect(raw.initialTab).toBe(nil)
