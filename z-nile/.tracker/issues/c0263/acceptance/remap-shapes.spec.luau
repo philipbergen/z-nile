@@ -164,7 +164,7 @@ return t.spec("c0263 remap settles records by id", function(it)
 			t.expect(fs.isDir(`{a}/{ISSUES}/c0010`)).toBe(false)
 			t.expect(fs.isDir(`{a}/{ISSUES}/c0001`)).toBe(false)
 			t.expect(git(a, { "status", "--porcelain" })).toBe("")
-			t.expect(trOk(a, { "audit" }) ~= nil).toBe(true)
+			trOk(a, { "audit" }) -- the remapped tree audits clean (trOk raises otherwise)
 		end
 	)
 

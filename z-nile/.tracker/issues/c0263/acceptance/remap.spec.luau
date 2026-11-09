@@ -2,7 +2,7 @@
 -- c0263: `./zn remap` unites an item record both sides appended (the c0081 remap fixture plus a record on each side).
 -- c0870: `tracker.sh remap` brings a branch that was in flight during a compaction onto the new ids: it applies
 -- origin/main's z-nile/compaction.txt to the branch, numbers the branch's own unmapped items from origin's counter,
--- commits, then merges origin/main itself against the remapped merge base. Fixture under .cache/c0870-remap.
+-- commits, then merges origin/main itself against the remapped merge base. Fixture under .cache/c0263-remap.
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")

@@ -349,16 +349,29 @@ return t.spec("c0263 the provenance record", function(it)
 		t.expect(why3 ~= nil).toBe(true)
 	end)
 
-	it("a merge across a compaction is refused when both sides changed records", function()
-		t.expect(provenance.compactionProblem(nil, "c0042 c0041\n", true, true) ~= nil).toBe(true)
-		t.expect(provenance.compactionProblem("a\n", "b\n", true, true) ~= nil).toBe(true)
-		t.expect(provenance.compactionProblem(nil, "c0042 c0041\n", false, true)).toBe(nil) -- ours changed none
-		t.expect(provenance.compactionProblem(nil, "c0042 c0041\n", true, false)).toBe(nil)
-		t.expect(provenance.compactionProblem("same\n", "same\n", true, true)).toBe(nil) -- one numbering
-		t.expect(provenance.compactionProblem(nil, nil, true, true)).toBe(nil)
-		local why = provenance.compactionProblem(nil, "x\n", true, true) :: string
-		t.expect(string.find(why, "./zn remap", 1, true) ~= nil).toBe(true)
-	end)
+	it(
+		"a merge across a compaction is refused when the sides number items differently and a record changed",
+		function()
+			local stop = provenance.compactionProblem
+			-- theirs compacted (their map differs from the base's): a record changed on our side stops, none changed does not
+			t.expect(stop(nil, nil, "c0042 c0041\n", true, false) ~= nil).toBe(true) -- a stale branch's record
+			t.expect(stop(nil, nil, "c0042 c0041\n", true, true) ~= nil).toBe(true)
+			t.expect(stop(nil, nil, "c0042 c0041\n", false, true)).toBe(nil) -- ours changed none
+			t.expect(stop("a\n", nil, "b\n", false, false)).toBe(nil)
+			-- ours compacted: a record changed on their side stops, none changed does not
+			t.expect(stop(nil, "c0042 c0041\n", nil, false, true) ~= nil).toBe(true) -- the compaction's own branch
+			t.expect(stop(nil, "c0042 c0041\n", nil, true, false)).toBe(nil)
+			-- both compacted, possibly differently: any changed record stops
+			t.expect(stop("a\n", "b\n", "c\n", true, false) ~= nil).toBe(true)
+			t.expect(stop("a\n", "b\n", "c\n", false, true) ~= nil).toBe(true)
+			t.expect(stop("a\n", "b\n", "c\n", false, false)).toBe(nil)
+			-- one numbering on both sides: nothing to stop
+			t.expect(stop("same\n", "same\n", "same\n", true, true)).toBe(nil)
+			t.expect(stop(nil, nil, nil, true, true)).toBe(nil)
+			local why = stop(nil, nil, "x\n", true, true) :: string
+			t.expect(string.find(why, "./zn remap", 1, true) ~= nil).toBe(true)
+		end
+	)
 
 	it("locate finds an item's record by its id in a listing of one commit", function()
 		local listing = {
