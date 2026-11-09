@@ -5137,9 +5137,9 @@ function cmd.record(pos: { string }, opts: { [string]: { string } })
 		end
 		-- backlog: unblocked, confirmed, ranked; active (an issue or a raft): unblocked; done: written in a PR
 		if string.find(doc, "/done/", 1, true) then
-			return `{id} is done: a done item's record is written in a pull request, never published`
+			return `record refuses {id}: it is done, and a done item's record is written in a pull request, never published`
 		elseif string.find(doc, "/active/", 1, true) and event ~= "unblocked" then
-			return `{id} is active: only an unblocked row is published for it, not {event}`
+			return `record refuses {id}: it is active, and only an unblocked row is published for it, not {event}`
 		end
 		local rec = string.gsub(doc, "[^/]+$", "provenance.md")
 		local text, why = provenance.record(read(rec), id, event, actor, detail, when)

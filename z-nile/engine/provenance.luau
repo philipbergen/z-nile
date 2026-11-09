@@ -108,9 +108,8 @@ end
 -- cell), one final newline. Anything else refuses, naming the line: no line is skipped, so a malformed or
 -- hand-formatted line can never be dropped by a merge that re-renders the rows.
 function provenance.parse(text: string): ({ Row }?, string?)
-	if string.sub(text, -1) ~= "\n" then
-		return nil, "the file does not end with a newline"
-	end
+	-- the final newline is the end of the last line: a file without it loses one character of its last line, which then
+	-- is not a row (or not the separator), and a second newline leaves an empty line, which is not a row either
 	local lines = string.split(string.sub(text, 1, -2), "\n")
 	if not string.match(lines[1] or "", "^# Provenance: %S+$") then
 		return nil, "line 1 is not `# Provenance: <id>`"
