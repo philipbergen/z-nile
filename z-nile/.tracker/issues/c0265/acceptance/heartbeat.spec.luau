@@ -216,6 +216,7 @@ return t.spec("c0265 heartbeat rules", function(it)
 				beat(B, NOW - 300), -- another live claim
 				beat(C, NOW - heartbeat.STALE - 1), -- its claim is gone, and has been for longer than the limit
 				beat(D, NOW - 60), -- unclaimed here, but young: this checkout may simply not have fetched its claim yet
+				beat("preparing-mild-mild-mild", NOW - 600), -- unclaimed, older than an interval but inside the limit: kept
 				beat("preparing-sunny-heron-lynx", NOW - 5000), -- a LOST claim: still claimed, so its branch is kept as evidence
 			}
 			local plan = heartbeat.plan(
@@ -284,5 +285,52 @@ return t.spec("c0265 heartbeat rules", function(it)
 		for _, bad in { "0", "-3", "1.5", "soon", "" } do
 			t.expect(heartbeat.setting({ ZN_NET_SECONDS = bad }, "ZN_NET_SECONDS", 10, true)).toBe(10)
 		end
+	end)
+
+	it(
+		"a claim made at or before the heartbeat's landing that never beat is nobeat, not lost, until it beats once",
+		function()
+			local LANDED = NOW - 50000
+			local old = claim("c0010", A, LANDED - 10) -- made before the landing
+			local atLanding = claim("c0020", C, LANDED) -- the landing's own second counts as before
+			local after = claim("c0030", D, LANDED + 1) -- made after: flatlined as ever
+			local vs = heartbeat.judge({ old, atLanding, after }, {}, NOW, nil, LANDED)
+			t.expect(kinds(vs)).toEqual({ "c0010=nobeat", "c0020=nobeat", "c0030=stale" })
+			t.expect(kinds(heartbeat.settle(vs, {})))
+				.toEqual({ "c0010=nobeat", "c0020=nobeat", "c0030=lost" })
+			-- once it has beaten, the ordinary rules apply to it, even a stale beat
+			t.expect(kinds(heartbeat.judge({ old }, { beat(A, NOW - 5000) }, NOW, nil, LANDED)))
+				.toEqual({ "c0010=stale" })
+			t.expect(kinds(heartbeat.judge({ old }, { beat(A, NOW - 5) }, NOW, nil, LANDED)))
+				.toEqual({ "c0010=live" })
+			-- no landing rule given: every beatless claim is flatlined
+			t.expect(kinds(heartbeat.judge({ old }, {}, NOW, nil, nil))).toEqual({ "c0010=stale" })
+			-- an unreadable landing time of the claim is unknown, as before
+			local blind = heartbeat.judge(
+				{ { id = "c0040", state = "preparing", stamp = B, match = { "c0040" } } },
+				{},
+				NOW,
+				nil,
+				LANDED
+			)
+			t.expect(kinds(blind)).toEqual({ "c0040=unknown" })
+		end
+	)
+
+	it("a branch dated past the skew allowance does not stop a beat: it is replaced", function()
+		local far = beat(A, NOW + heartbeat.SKEW + 1000)
+		local plan = heartbeat.plan(A, NOW, { far }, { [A] = true }, NOW)
+		t.expect(plan.write ~= nil).toBe(true)
+		t.expect(if plan.write then plan.write.lease else "").toBe(far.sha)
+		-- one inside the allowance is still "not backwards"
+		t.expect(heartbeat.plan(A, NOW, { beat(A, NOW + 5) }, { [A] = true }, NOW).write).toBe(nil)
+	end)
+
+	it("a pull request parks an id only when it stands alone on both sides", function()
+		local parked = heartbeat.parkedBy(
+			{ { title = "xc0010", head = "ac0010" }, { title = "c0010y", head = "b" } },
+			{ claim("c0010", A) }
+		)
+		t.expect(parked.c0010).toBe(nil)
 	end)
 end)

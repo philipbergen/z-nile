@@ -73,8 +73,12 @@ Two commands and four markers, each refusal naming the item and the rule; no age
 
 ## Pure code left out of the core layer
 
-The core `heartbeat.plan` has no `remembered` argument. The lease rule with a remembered sha (the throttle entry `<stamp> <epoch> <sha>`) is `plan(stamp, epoch, beats, claimed, now, remembered?)` in `../heartbeat.proto.luau`, with its case in `heartbeat.cases.luau`. The core `heartbeat.clock` and `heartbeat.setting` take a `specRun: boolean` (the guards answer `checking()`; the engine and specs must not name the guards variables: tooling/repo-fence bans them), unlike the prototype file.
+The core `heartbeat.plan` has no `remembered` argument. The lease rule with a remembered sha (the throttle entry `<stamp> <epoch> <sha>`) is `plan(stamp, epoch, beats, claimed, now, remembered?)` in `../heartbeat.monolith.proto.txt`, with its case in `heartbeat.cases.luau`. The core `heartbeat.clock` and `heartbeat.setting` take a `specRun: boolean` (the guards answer `checking()`; the engine and specs must not name the guards variables: tooling/repo-fence bans them), unlike the prototype file.
 
 ## Lesson from the core prototype
 
 `tooling/repo-fence.spec` bans the guards variable names (`PICKMAN_FENCE_`, `PICKMAN_TEST_FENCE`, ...) in engine files and specs. The engine asks `checking()` (the guards' own answer) and passes a boolean to pure functions; a spec makes a checkout "protected" by appending `pickman_guarded() { echo guarded; }` to the fixture's own `z-nile/lib/fence.sh` and restoring it (see c0265 `acceptance/beat.spec.luau`, the protected-checkout case). Run `z-nile/check.sh --affected` on your prototype before review 1: the first gate run on the core caught this.
+
+## The envelope (c0265 experiments/envelope.patch)
+
+c0265 proves its five spec files on the bare prototype and on `experiments/envelope.patch` (the later layers captured effects in their plainest form: a claim path beats and remembers its stamp, every command in a worktree beats the claims it holds, a bare beat from a checkout that holds no claim is refused, a verdict read after a publish). This layer's prep applies the patch to its own prototype, replaces the stub of its own layer with the real code, and reruns c0265's five specs: they must stay green, and a case of this layer that makes them red is this layer's to fix (sequestered specs are not edited during execution).

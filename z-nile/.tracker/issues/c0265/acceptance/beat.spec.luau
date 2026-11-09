@@ -126,10 +126,8 @@ return t.spec("c0265 a beat is a branch outside main", function(it)
 			local main = fixture.git(h.f.origin, { "rev-parse", "main" })
 			local stamp = stampOf(`{P}/c0010/c0010.md`)
 			must(zn(wt, { "beat", "c0010" }, T0 + 300), "beat")
-			local list = beats()
-			t.expect(#list).toBe(1)
-			t.expect(list[1].stamp).toBe(stamp)
-			t.expect(list[1].epoch).toBe(T0 + 300)
+			-- per stamp, never a count of every branch: a later layer beats the other claims too
+			t.expect(epochsOf(stamp)).toEqual({ T0 + 300 })
 			local tip = `refs/heads/hb/{stamp}`
 			t.expect(fixture.git(h.f.origin, { "rev-parse", tip .. "^{tree}" }))
 				.toBe(fixture.git(h.f.origin, { "rev-parse", "main^{tree}" }))
@@ -151,16 +149,25 @@ return t.spec("c0265 a beat is a branch outside main", function(it)
 	it("a second beat, from a worktree, replaces the commit: one branch per claim", function()
 		must(zn(wt, { "beat", "c0010" }, T0 + 600), "beat in the worktree")
 		local stamp = stampOf(`{P}/c0010/c0010.md`)
-		t.expect(epochsOf(stamp)).toEqual({ T0 + 600 })
-		t.expect(#beats()).toBe(1)
+		t.expect(epochsOf(stamp)).toEqual({ T0 + 600 }) -- one branch per claim, its commit replaced
 		-- the same second, or an older one, is not written again (never backwards)
-		local sha = beats()[1].sha
+		local function shaOf(): string
+			for _, b in beats() do
+				if b.stamp == stamp then
+					return b.sha
+				end
+			end
+			return ""
+		end
+		local sha = shaOf()
 		must(zn(wt, { "beat", "c0010" }, T0 + 600), "beat in the same second")
 		must(zn(wt, { "beat", "c0010" }, T0 + 500), "beat in an earlier second")
-		t.expect(beats()[1].sha).toBe(sha)
+		t.expect(shaOf()).toBe(sha)
 	end)
 
-	it("beat refuses what nobody claims, naming the item and the rule", function()
+	it("beat refuses what nobody claims, naming the item and the rule, and writes nothing", function()
+		local before =
+			fixture.git(h.f.origin, { "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads/hb/" })
 		for _, id in { "c0020", "c0040", "c0060", "c9999" } do
 			local r = zn(wt, { "beat", id }, T0)
 			t.expect(r.ok).toBe(false)
@@ -168,7 +175,10 @@ return t.spec("c0265 a beat is a branch outside main", function(it)
 		end
 		t.expect(has(zn(wt, { "beat", "c0020" }, T0).stderr, "no claim")).toBe(true)
 		t.expect(has(zn(wt, { "beat", "c0060" }, T0).stderr, "done")).toBe(true) -- its stored status is active-…
-		t.expect(#beats()).toBe(1)
+		t.expect(
+			fixture.git(h.f.origin, { "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads/hb/" })
+		)
+			.toBe(before)
 	end)
 
 	it("beat finds no claim in a raft recombine retired, whatever stamp it kept", function()
@@ -183,13 +193,16 @@ return t.spec("c0265 a beat is a branch outside main", function(it)
 		t.expect(has(r.stderr, "origin remote")).toBe(true)
 	end)
 
-	it("a beat keeps another terminal's fresh beat of a claim it has not fetched", function()
+	it("a beat leaves another claim's branch alone", function()
 		-- another terminal claims c0030 and beats; this checkout has not fetched since
 		trackerfix.elsewhere(h.f, {
 			[`{P}/c0030/c0030.md`] = issue("c0030", "preparing-sunny-heron-lynx"),
 		}, "other claims c0030")
 		pushBeat("preparing-sunny-heron-lynx", T0 + 1150)
-		must(zn(wt, { "beat", "c0010" }, T0 + 1200), "beat in a checkout that has not fetched")
+		must(
+			zn(wt, { "beat", "c0010" }, T0 + 1200),
+			"beat while another terminal's claim is newer than this checkout's last fetch"
+		)
 		t.expect(epochsOf("preparing-sunny-heron-lynx")).toEqual({ T0 + 1150 })
 	end)
 
@@ -198,6 +211,7 @@ return t.spec("c0265 a beat is a branch outside main", function(it)
 		function()
 			pushBeat("preparing-gone-gone-gone", T0 - 5000) -- its claim ended long ago
 			pushBeat("preparing-fresh-fresh-fresh", T0 + 1190) -- unclaimed here, but young: may simply not be fetched
+			pushBeat("preparing-mild-mild-mild", T0 + 700) -- unclaimed, 600 s old: older than an interval, inside the limit
 			local lostClaim = stampOf(`{P}/c0050/c0050.md`)
 			pushBeat(lostClaim, T0 - 5000) -- a LOST claim: still claimed, so its old branch stays as evidence
 			-- a refused prune never fails the beat
@@ -209,6 +223,7 @@ return t.spec("c0265 a beat is a branch outside main", function(it)
 			must(zn(wt, { "beat", "c0010" }, T0 + 1400), "beat")
 			t.expect(epochsOf("preparing-gone-gone-gone")).toEqual({})
 			t.expect(epochsOf("preparing-fresh-fresh-fresh")).toEqual({ T0 + 1190 })
+			t.expect(epochsOf("preparing-mild-mild-mild")).toEqual({ T0 + 700 }) -- the grace is the 900 s limit, not the interval
 			t.expect(epochsOf(lostClaim)).toEqual({ T0 - 5000 })
 		end
 	)

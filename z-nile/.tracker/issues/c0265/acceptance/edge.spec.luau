@@ -11,7 +11,7 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local h: fakecli.Harness
-local wt = ""
+local wt, wt2 = "", ""
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local P = "pickman/.tracker/issues"
 
@@ -77,6 +77,9 @@ takeover() {
     "$REAL_GIT" -C "$o" push -q origin "$new:refs/heads/hb/$FAKE_NEWSTAMP"
   fi
 }
+if [ "$1" = push ] && [ -f "$FAKE_DIR/hbpushfail" ]; then
+  case "$*" in *":refs/heads/hb/"*) echo "fatal: fake first-beat refusal" >&2; exit 1;; esac
+fi
 if [ "$1" = push ]; then
   case "$*" in
     *":refs/heads/hb/$FAKE_OLDSTAMP"*)
@@ -119,7 +122,14 @@ return t.spec("c0265 beat races", function(it)
 		)
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-edge" }), "worktree"), "%s+$", ""))
 		must(zn(wt, { "status", "c0071", "preparing" }), "claim c0071")
-		must(zn(wt, { "status", "c0072", "preparing" }), "claim c0072")
+		-- whatever a later layer does at a claim, c0072's branch is never written there (a refused first beat never
+		-- fails the claim), so its first write below is create-only
+		-- in a worktree of its own that runs no other command: a later layer beats the claims a worktree holds at each of
+		-- its commands, and the beat command itself is the one that does not
+		wt2 = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-edge2" }), "worktree"), "%s+$", ""))
+		fs.writeFile(`{h.fakes}/hbpushfail`, "1")
+		must(zn(wt2, { "status", "c0072", "preparing" }), "claim c0072")
+		fs.removeFile(`{h.fakes}/hbpushfail`)
 		must(zn(wt, { "status", "c0073", "preparing" }), "claim c0073")
 		-- each claim has a beat on origin: the branch a later beat replaces with a lease
 		for _, id in { "c0071", "c0073" } do
@@ -155,10 +165,11 @@ return t.spec("c0265 beat races", function(it)
 	it("a create-only beat that races a takeover deletes what it created and reports the loss", function()
 		local old = stampOf(`{P}/c0072/c0072.md`)
 		local new = "preparing-silver-otter-quiet"
+		t.expect(tipOf(old)).toBe("") -- the premise, checked: c0072 has no branch
 		-- c0072 was never beaten: its write is create-only. The takeover lands between the beat's reads and its push,
 		-- so the write succeeds; the re-read of main shows another stamp and the beat deletes what it created
 		fs.writeFile(`{h.fakes}/racebeat`, "1")
-		local r = zn(wt, { "beat", "c0072" }, {
+		local r = zn(wt2, { "beat", "c0072" }, {
 			ZN_NOW = tostring(os.time() + 1000),
 			FAKE_ITEM = "c0072",
 			FAKE_OLDSTAMP = old,

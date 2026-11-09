@@ -69,8 +69,16 @@ heartbeat.rejected(stamp, originStamp, beats): { action, lease?, why? } -- after
 
 ## Pure code left out of the core layer
 
-`takeoverPlan` and `canTakeOver` (and the E5-proven mutants for them) are in `../heartbeat.proto.luau`; add them to `z-nile/engine/heartbeat.luau` here, with their `heartbeat.spec` cases from `heartbeat.cases.luau`.
+`takeoverPlan` and `canTakeOver` (and the E5-proven mutants for them) are in `../heartbeat.monolith.proto.txt`; add them to `z-nile/engine/heartbeat.luau` here, with their `heartbeat.spec` cases from `heartbeat.cases.luau`.
 
 ## Lesson from the core prototype
 
 `tooling/repo-fence.spec` bans the guards variable names (`PICKMAN_FENCE_`, `PICKMAN_TEST_FENCE`, ...) in engine files and specs. The engine asks `checking()` (the guards' own answer) and passes a boolean to pure functions; a spec makes a checkout "protected" by appending `pickman_guarded() { echo guarded; }` to the fixture's own `z-nile/lib/fence.sh` and restoring it (see c0265 `acceptance/beat.spec.luau`, the protected-checkout case). Run `z-nile/check.sh --affected` on your prototype before review 1: the first gate run on the core caught this.
+
+## Decided with the user (2026-11-08), for this issue to write into its own rules
+
+"Older claims never read lost until they beat once": a claim made before the heartbeat landed shows `[no beat]` (c0265 `heartbeat.judge` kind `nobeat`), is never in `./zn lost`, and **the takeover must refuse it** until it has beaten once (or a person releases it); `canTakeOver` already needs kind `lost`, so a `nobeat` claim is refused, but the refusal needs its own text (`<id> has never beaten: not lost, no takeover`) and a case here. c0265 pins only the verdict.
+
+## The envelope (c0265 experiments/envelope.patch)
+
+c0265 proves its five spec files on the bare prototype and on `experiments/envelope.patch` (the later layers captured effects in their plainest form: a claim path beats and remembers its stamp, every command in a worktree beats the claims it holds, a bare beat from a checkout that holds no claim is refused, a verdict read after a publish). This layer's prep applies the patch to its own prototype, replaces the stub of its own layer with the real code, and reruns c0265's five specs: they must stay green, and a case of this layer that makes them red is this layer's to fix (sequestered specs are not edited during execution).
