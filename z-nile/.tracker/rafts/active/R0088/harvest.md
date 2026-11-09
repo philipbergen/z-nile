@@ -5,3 +5,5 @@
 - review-002 F3: one-off: one branch of the library-node test was unpinned and absent from the Rules table
 - review-002 F4: one-off: a spec title promised a refusal case its body did not check
 - review-003 F1: zz-arch/joined-keys-forbid-their-separator
+- review-004 F1: zz-arch/joined-keys-forbid-their-separator
+- review-004 F2: one-off: a Rules row kept naming a mutant on a clause the previous round retired

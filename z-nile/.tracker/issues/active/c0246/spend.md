@@ -32,6 +32,7 @@
 | 28 | 2026-11-09 17:46 | c0246: review-003 F1: the library node is a (name, class) path under a DataModel root | 51 | 26 | 30.0 | focus | code-review |  |  |
 | 29 | 2026-11-09 17:49 | R0088: refute-003, harvest, deviation recorded | 2 | 0 | 15.0 | focus | code-review |  |  |
 | 30 | 2026-11-09 17:58 | R0088: review-004 | 0 | 0 | 30.0 | focus | code-review |  | claude-opus-5-5 |
+| 31 | 2026-11-09 17:59 | c0246: review-004 F1 reason in the message, F2 row and log; refute-004 | 15 | 1 | 20.0 | focus | code-review |  |  |
 
-**Total:** +875 / -65 lines, 696.0 agent-minutes, 1057000 tokens over 30 records
-<!-- totals: added=875 removed=65 minutes=696.0 records=30 tokens=1057000 -->
+**Total:** +890 / -66 lines, 716.0 agent-minutes, 1057000 tokens over 31 records
+<!-- totals: added=890 removed=66 minutes=716.0 records=31 tokens=1057000 -->

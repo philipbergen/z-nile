@@ -100,21 +100,25 @@ return t.spec("c0246 the home rule fails closed on what Rojo prints", function(i
 				'{ "$className": "DataModel", "ServerStorage": { "$className": "ReplicatedFirst", "Arcade": { "$path": "../arcade/src/server" } } }'
 			)
 			t.expect(#lines(first, "default.project.json makes Rojo put")).toBe(1)
+			t.expect(#lines(first, "its first node is a ReplicatedFirst named ServerStorage")).toBe(1)
 			-- a Folder named ServerStorage is not the service either
 			local folder = serverUnder(
 				'{ "$className": "DataModel", "ServerStorage": { "$className": "Folder", "Arcade": { "$path": "../arcade/src/server" } } }'
 			)
 			t.expect(#lines(folder, "default.project.json makes Rojo put")).toBe(1)
+			t.expect(#lines(folder, "its first node is a Folder named ServerStorage")).toBe(1)
 			-- a root that is not the DataModel is not a place's tree
 			local root = serverUnder(
 				'{ "$className": "Folder", "ServerStorage": { "$className": "ServerStorage", "Arcade": { "$path": "../arcade/src/server" } } }'
 			)
 			t.expect(#lines(root, "default.project.json makes Rojo put")).toBe(1)
+			t.expect(#lines(root, "the root is a Folder, not a DataModel")).toBe(1)
 			-- one key spelled "ServerStorage/Arcade" is one node of that name, not a child of the service
 			local slash = serverUnder(
 				'{ "$className": "DataModel", "ServerStorage/Arcade": { "$path": "../arcade/src/server" } }'
 			)
 			t.expect(#lines(slash, "default.project.json makes Rojo put")).toBe(1)
+			t.expect(#lines(slash, "its first node is a Folder named ServerStorage/Arcade")).toBe(1)
 			fs.removeDir(BASE)
 		end
 	)
