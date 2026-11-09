@@ -15,6 +15,7 @@
 | 11 | 2026-11-09 07:01 | design-review-005 | 0 | 0 | 13.0 | spend | design-review | 224050 |
 | 12 | 2026-11-09 07:01 | design-refute-005 | 0 | 0 | 12.0 | spend | design-review |  |
 | 13 | 2026-11-09 07:01 | prep | 296 | 1 | 120.0 | spend | prep |  |
+| 14 | 2026-11-09 08:22 | c0279: apply the reviewed fake and spec changes | 34 | 16 | 25.0 | raft | build |  |
 
-**Total:** +510 / -2 lines, 524.0 agent-minutes, 1229159 tokens over 13 records
-<!-- totals: added=510 removed=2 minutes=524.0 records=13 tokens=1229159 -->
+**Total:** +544 / -18 lines, 549.0 agent-minutes, 1229159 tokens over 14 records
+<!-- totals: added=544 removed=18 minutes=549.0 records=14 tokens=1229159 -->
