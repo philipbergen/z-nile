@@ -33,6 +33,7 @@
 | 29 | 2026-11-09 17:49 | R0088: refute-003, harvest, deviation recorded | 2 | 0 | 15.0 | focus | code-review |  |  |
 | 30 | 2026-11-09 17:58 | R0088: review-004 | 0 | 0 | 30.0 | focus | code-review |  | claude-opus-5-5 |
 | 31 | 2026-11-09 17:59 | c0246: review-004 F1 reason in the message, F2 row and log; refute-004 | 15 | 1 | 20.0 | focus | code-review |  |  |
+| 32 | 2026-11-09 18:01 | R0088: addressed during execution | 0 | 0 | 5.0 | focus | deliver |  |  |
 
-**Total:** +890 / -66 lines, 716.0 agent-minutes, 1057000 tokens over 31 records
-<!-- totals: added=890 removed=66 minutes=716.0 records=31 tokens=1057000 -->
+**Total:** +890 / -66 lines, 721.0 agent-minutes, 1057000 tokens over 32 records
+<!-- totals: added=890 removed=66 minutes=721.0 records=32 tokens=1057000 -->
