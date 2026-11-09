@@ -34,6 +34,7 @@
 | 30 | 2026-11-09 17:58 | R0088: review-004 | 0 | 0 | 30.0 | focus | code-review |  | claude-opus-5-5 |
 | 31 | 2026-11-09 17:59 | c0246: review-004 F1 reason in the message, F2 row and log; refute-004 | 15 | 1 | 20.0 | focus | code-review |  |  |
 | 32 | 2026-11-09 18:01 | R0088: addressed during execution | 0 | 0 | 5.0 | focus | deliver |  |  |
+| 33 | 2026-11-09 18:02 | c0246: rename the shadowing local in the misplaced-library message | 2 | 2 | 3.0 | focus | code-review |  |  |
 
-**Total:** +890 / -66 lines, 721.0 agent-minutes, 1057000 tokens over 32 records
-<!-- totals: added=890 removed=66 minutes=721.0 records=32 tokens=1057000 -->
+**Total:** +892 / -68 lines, 724.0 agent-minutes, 1057000 tokens over 33 records
+<!-- totals: added=892 removed=68 minutes=724.0 records=33 tokens=1057000 -->

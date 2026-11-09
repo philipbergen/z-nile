@@ -328,7 +328,7 @@ function home.problems(top: string, reg: Registry, only: string?): ({ string }, 
 								misplaced += 1
 								if misplaced == 1 then
 									-- say which part of the node's identity differs (review 004 F1), the name alone reads the same
-									local why = if r.rootClass ~= "DataModel"
+									local reason = if r.rootClass ~= "DataModel"
 										then `the root is a {r.rootClass}, not a DataModel`
 										elseif #sg < 2 then `it sits directly under the root`
 										elseif
@@ -337,7 +337,7 @@ function home.problems(top: string, reg: Registry, only: string?): ({ string }, 
 										else `its second node is named {sg[2].name}`
 									bad(
 										h,
-										`{name} makes Rojo put {r.file} at {r.instance} ({why}), which is not the library's node ({at})`
+										`{name} makes Rojo put {r.file} at {r.instance} ({reason}), which is not the library's node ({at})`
 									)
 								end
 							end
