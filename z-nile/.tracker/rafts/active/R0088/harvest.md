@@ -1,0 +1,2 @@
+- review-001 F1: z-design/reasoned-rows-claim-testable-reasons
+- review-001 F2: zz-execute/deviations-none-covers-every-reword-the-design-names
