@@ -126,6 +126,8 @@ vm.createContext(sandbox);
 for (const s of scripts) if (!/type="application\/json"/.test(s[1])) { loadingAt = s.index; vm.runInContext(s[2], sandbox); }
 loadingAt = -1;
 doc.dispatch("DOMContentLoaded", { target: doc, preventDefault() {} });
+// c0118: the page opens on the Board view; these cases drive the Rafts and Issues lists, so they open Rafts first
+if (!hash) els["tab-rafts"].dispatch("click", { target: els["tab-rafts"], preventDefault() {} });
 function key(k, target) {
   const ev = { key: k, target: target || body, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
   if (target) target.dispatch("keydown", ev);
@@ -157,8 +159,10 @@ if (mode === "walk") {
   expect(/Second/.test(pane()), "the first issue is selected");
   key("ArrowLeft");
   expect(/Beta/.test(pane()) && /R0020/.test(list()), "ArrowLeft returns to Rafts");
+  key("ArrowLeft"); // c0118: Board sits before Rafts
   key("ArrowLeft");
   expect(/data-id="f0020"/.test(list()) && !/data-id="R0020"/.test(list()), "ArrowLeft wraps to Issues");
+  key("ArrowRight");
   key("ArrowRight");
   expect(/R0020/.test(list()), "ArrowRight wraps to Rafts");
   expect(key("/") === true, "/ calls preventDefault, so the / is not typed into the field");

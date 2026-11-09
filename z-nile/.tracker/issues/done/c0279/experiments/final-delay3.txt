@@ -1,0 +1,2 @@
+25 passed, 0 failed, 1 spec files
+sweeper: stopped 1 process(es) the specs left running
