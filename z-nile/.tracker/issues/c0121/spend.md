@@ -10,6 +10,7 @@
 | 6 | 2026-10-26 14:46 | design-review-005 | 0 | 0 | 20.0 | spend | design-review |  |
 | 7 | 2026-11-05 02:54 | land: sync with main after c0118, lessons merge, prepared | 1447 | 5 | 10.0 | spend | prep |  |
 | 8 | 2026-11-09 04:10 | design-review-006 | 0 | 0 | 21.0 | spend | design-review | 210000 |
+| 9 | 2026-11-09 04:11 | design-refute-006 | 0 | 0 | 30.0 | spend | design-review |  |
 
-**Total:** +1447 / -5 lines, 141.0 agent-minutes, 210000 tokens over 8 records
-<!-- totals: added=1447 removed=5 minutes=141.0 records=8 tokens=210000 -->
+**Total:** +1447 / -5 lines, 171.0 agent-minutes, 210000 tokens over 9 records
+<!-- totals: added=1447 removed=5 minutes=171.0 records=9 tokens=210000 -->
