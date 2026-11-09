@@ -57,7 +57,13 @@ local GH_JSON = [[
  {"number":14,"headRefName":"prep-idle","title":"tracker: prep f0025 Idle member","state":"OPEN","isDraft":true,
   "url":"https://example.invalid/pr/14","statusCheckRollup":[]},
  {"number":16,"headRefName":"capture-loose","title":"tracker: new c0099 Loose, held until f0021 and f0022 land","state":"OPEN",
-  "isDraft":false,"url":"https://example.invalid/pr/16","statusCheckRollup":[]}]
+  "isDraft":false,"url":"https://example.invalid/pr/16","statusCheckRollup":[]},
+ {"number":18,"headRefName":"R0020-reviewed","title":"tracker: raft R0020 f0022 Reviewed","state":"OPEN","isDraft":false,
+  "url":"https://example.invalid/pr/18","statusCheckRollup":[]},
+ {"number":19,"headRefName":"prep-idle-try","title":"tracker: prep f0025 an earlier try","state":"CLOSED","isDraft":false,
+  "url":"https://example.invalid/pr/19","statusCheckRollup":[]},
+ {"number":20,"headRefName":"prep-weird","title":"tracker: prep xf0021 Weird","state":"OPEN","isDraft":false,
+  "url":"https://example.invalid/pr/20","statusCheckRollup":[]}]
 ]]
 
 -- the stubs and what they saw
@@ -67,6 +73,7 @@ local opened: { string } = {}
 local ghCalls = 0
 local ghFails = false
 local ghBody = GH_JSON -- what gh prints; a case swaps it
+local lateWorktree = false -- a worktree that appears after the server started
 local hashDelay = 0 -- engineHash yields when set, as process.exec does
 local ghDelay = 2 -- gh yields, as process.exec does (long enough that a loaded machine still sees it in flight)
 local builds = 0
@@ -117,6 +124,11 @@ local function start()
 					worktrees = {
 						{ path = `{ROOT}/wt/R0020`, branch = "R0020-alpha" },
 						{ path = `{ROOT}/wt/idle`, branch = "prep-idle" },
+						table.unpack(
+							if lateWorktree
+								then { { path = `{ROOT}/wt/loose`, branch = "capture-loose" } }
+								else {}
+						),
 					},
 					-- c0117's run state: R0020's chain runs, and f0021's moved on to it; R0030 failed; c0099 has none
 					dispatch = {
@@ -391,10 +403,30 @@ return t.spec("c0121 board server", function(it)
 			-- the id named later in a title is not the PR's own: c0099's capture PR names f0021 and f0022 after its own id
 			t.expect(issues.c0099.pr.number).toBe(16)
 			t.expect(issues.f0021.pr.number).toBe(15)
-			t.expect(issues.f0022.pr).toBe(nil)
+			t.expect(issues.f0022.pr).toBe(nil) -- a rafting PR (#18) names its raft first, then f0022: no card takes it
+			-- a closed PR (#19) never counts, and an id inside a longer word (#20, `xf0021`) is not f0021's
+			t.expect(issues.f0025.pr.number).toBe(14)
+			t.expect(issues.f0021.pr.number).toBe(15)
+			t.expect(issues.c0099.worktree).toBe(nil) -- its branch has no worktree yet
 			t.expect(byId(s.model.rafts).R0020.pr.number).toBe(7)
 		end
 	)
+
+	it("a worktree that appears after the server started is on its issue's card at the next build", function()
+		state()
+		task.wait(0.1)
+		t.expect(byId(state().model.issues).c0099.worktree).toBe(nil)
+		lateWorktree = true
+		key ..= "w"
+		clock += 1
+		local ok, err = pcall(function()
+			t.expect(byId(state().model.issues).c0099.worktree).toBe(`{ROOT}/wt/loose`)
+		end)
+		lateWorktree = false
+		if not ok then
+			error(err, 0)
+		end
+	end)
 
 	it("an issue's PR survives a rebuild, goes when gh fails and comes back with its answer", function()
 		local savedDelay = ghDelay

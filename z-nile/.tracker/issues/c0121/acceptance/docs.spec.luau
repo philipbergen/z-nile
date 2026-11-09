@@ -49,6 +49,7 @@ return t.spec("c0121 docs", function(it)
 				'says "server is out of date: restart" when the engine changed since start',
 				"stop and retry (`./zn dispatch stop|retry <id>`) and open (the PR, else the worktree)",
 				"retry keeps the card's own id and answers 409 for a card that never ran",
+				"An issue card shows its own PR and checks (the newest open or draft PR whose title's first tracker id is the issue's) and its prep worktree before its raft's.",
 				"It refuses a foreign Host or Origin, any OPTIONS, a request without the token, an action that is not a JSON POST, and an id the model lacks.",
 				"PR and checks are live only on the served board (c0121)",
 				"Views Rafts and Issues",

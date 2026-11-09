@@ -179,6 +179,7 @@ return t.spec("c0121 served page", function(it)
 					if r.id == "R0020" then
 						r.pr = { number = 7, url = "https://example.invalid/pr/7", state = "draft" }
 						r.checks = { state = "passing" }
+						r.worktree = "/w/R0020"
 					end
 				end
 				for _, i in m.issues do
@@ -285,7 +286,8 @@ return t.spec("c0121 served page", function(it)
 			t.expect(has(shown.pane, 'href="https://example.invalid/pr/12">#12</a> open, checks failing'))
 				.toBe(true)
 			t.expect(has(shown.pane, "checks passing")).toBe(false) -- the raft's checks never ride on the issue's own PR
-			t.expect(has(shown.pane, "/w/prep-runs")).toBe(true) -- the worktree of the issue's own PR
+			t.expect(has(shown.pane, "/w/prep-runs")).toBe(true)
+			t.expect(has(shown.pane, "/w/R0020")).toBe(false) -- the issue's own worktree, not its raft's -- the worktree of the issue's own PR
 			t.expect(has(shown.pane, "#7")).toBe(false)
 			t.expect(
 				has(shown.paneAfterRetry, "retry: 409 refused: nothing to retry for f0021: it has never run")
