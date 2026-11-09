@@ -106,3 +106,6 @@ provenance.problems(path: string, text: string): { string }      -- audit
 ## AC8
 
 - AC8: `provenance.merge` orders the derived and stored entries oldest first (by the commits' dates; a derived entry before a stored one in the same minute), lets a stored row win over a git fallback of its event, appends the worker read from spend rows, and `provenance.select` takes the oldest commit at which `raft:` became the current value and stayed so (not a ready, a restamp or the move to `done/`; none when `raft:` is empty), prints a `tracker: <id> new` commit as `unblocked` only, and gives a `merged` entry for the `done/` commit.
+
+## Note from c0263 review 008
+c0263 lands `provenance.parse` as an exact grammar (no skipped lines): the derivations read rows only through it.

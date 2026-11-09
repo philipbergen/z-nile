@@ -106,3 +106,14 @@
 - design-review-007 F6: z-design/restated-rules-move-together
 - design-review-007 F7: z-design/accepted-risks-checked-and-decided
 - note review 007 candidates (two views of one history read by one function; a rollback case seeds each prior state; an append-only spec edits every cell): z-design/one-reader-for-equal-views, zz-test/rollback-cases-seed-each-prior-state, zz-test/refusals-tested-on-both-sides
+- design-review-008 F1: zz-test/kill-mutants-where-the-value-is-built
+- design-review-008 F2: zz-arch/parsers-refuse-ambiguity
+- design-review-008 F3: zz-test/pin-fail-safes-where-they-act
+- design-review-008 F4: z-design/restated-rules-move-together
+- design-review-008 F5: zz-arch/item-rules-scoped-to-their-call
+- design-review-008 F6: zz-test/seed-every-enumerated-case
+- design-review-008 F7: zz-test/guard-needs-its-own-case
+- design-review-008 F8: z-design/confirm-overrides-with-a-suite-run
+- design-review-008 F9: z-design/in-flight-bases-pin-their-source
+- design-review-008 F10: zz-test/no-vacuous-pass
+- note review 008 candidate (a fail-safe the caller enforces belongs in the pure function's return so a pure case pins it; a refusal that lives only in an adapter needs a case that reaches it with that input): zz-test/pin-fail-safes-where-they-act

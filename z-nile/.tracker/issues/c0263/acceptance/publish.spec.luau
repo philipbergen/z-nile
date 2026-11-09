@@ -58,7 +58,13 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		identity(`{base}/seed`)
 		engine.registry(`{base}/seed`)
 		for dir, id in
-			{ [ISSUE] = "c0010", [RAFT] = "R0010", [ACTIVE] = "c0020", [ACTIVE_RAFT] = "R0020", [DONE] = "c0030" }
+			{
+				[ISSUE] = "c0010",
+				[RAFT] = "R0010",
+				[ACTIVE] = "c0020",
+				[ACTIVE_RAFT] = "R0020",
+				[DONE] = "c0030",
+			}
 		do
 			fs.writeDir(`{base}/seed/{dir}`)
 			fs.writeFile(`{base}/seed/{dir}/{id}.md`, doc(id))
@@ -80,7 +86,9 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		do
 			t.expect(publish.allowed(ok, { "pickman/.tracker" })).toBe(true)
 		end
-		for _, bad in { "pickman/.tracker/provenance.md", `{ISSUE}/sub/provenance.md`, `{ISSUE}/provenance.txt` } do
+		for _, bad in
+			{ "pickman/.tracker/provenance.md", `{ISSUE}/sub/provenance.md`, `{ISSUE}/provenance.txt` }
+		do
 			t.expect(publish.allowed(bad, { "pickman/.tracker" })).toBe(false)
 		end
 	end)

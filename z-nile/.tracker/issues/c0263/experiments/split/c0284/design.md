@@ -23,3 +23,6 @@ Everything below is the c0263 prep text (design-review rounds 003-007), moved he
 ## Implementation step 6
 
 6. `board.luau`: the history read once in `build`, passed into `collect` after R0083's `facts`, the `provenance` field and the view section (AC9); merge c0265's and R0083's `board.luau` change if they landed first.
+
+## Note from c0263 review 008
+The shared reader of c0280 is c0280's; the board must call it. A done item holds its record in `done/`.

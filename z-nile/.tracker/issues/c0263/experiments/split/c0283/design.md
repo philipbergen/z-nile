@@ -104,3 +104,6 @@ Overrides (c0263 is a chore, so it changes each in its own raft, with the narrow
 ## AC13
 
 - AC13: `./zn provenance freeze` writes `z-nile/provenance-exempt.txt` with each prepared backlog issue and its design hash (no draft, no active issue), refuses the main checkout and a list already on the base; with the list on the base `audit` passes a listed issue at its listed design, errors on it once redone, and errors on an unlisted prepared issue with no approval.
+
+## Note from c0263 review 008 (F1)
+c0263 lands `provenance.hint(env)`, the one definition of an agent session (`CLAUDECODE`, `AI_AGENT` or `ZN_DISPATCH` set and non-empty). `approve` must refuse by calling that function, not by its own variable test. It is on `proto-c0263-raft` (9f543fbc); `experiments/proto.patch` has it.
