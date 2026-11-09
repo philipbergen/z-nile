@@ -50,3 +50,7 @@
 - note R0084 code review 001 F1 (a retry on a card that never ran starts its whole chain): zz-review/delegated-commands-on-an-unseen-id
 - note R0084 code review 001 F2 (the model was encoded on every poll, against the 1800 s CPU limit): zz-arch/per-poll-work-meets-the-cpu-limit
 - note R0084 code review 001 F3 (a javascript: link in a document runs in the served page): zz-arch/links-in-rendered-documents-keep-a-scheme-allow-list
+- design-review-011 F1: zz-arch/links-in-rendered-documents-keep-a-scheme-allow-list
+- design-review-011 F2: zz-arch/per-poll-work-meets-the-cpu-limit
+- design-review-011 F3: zz-arch/per-poll-work-meets-the-cpu-limit
+- design-review-011 F4: z-design/restated-rules-move-together

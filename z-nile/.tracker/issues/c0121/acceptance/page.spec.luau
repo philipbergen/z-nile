@@ -25,10 +25,31 @@ local function item(path: string, front: { string }, body: string?)
 		"---\nid: " .. id .. "\n" .. table.concat(front, "\n") .. "\n---\n\n# " .. id .. "\n" .. (body or "")
 	)
 end
--- links in an item's document: a script link, a data link, one with control characters inside its scheme, a safe web
--- link, a relative one and a mail one (code review 001 F3)
-local LINKS = "\n[script](javascript:alert(1)) [data](data:text/html,x) [tabbed](java\tscript:alert(2)) "
-	.. "[web](https://example.invalid/x) [rel](docs/x.md) [mail](mailto:a@example.invalid)\n"
+-- links in an item's document (code review 001 F3 of R0084, design review 011 F1): script, data, case, vbscript and file
+-- schemes, entity-encoded schemes (`jav&#x61;script:`, `&#106;avascript:`, `javascript&colon;`, `java&#9;script:`), an
+-- angle-bracket destination holding a tab, a reference-style link with an entity, then the safe ones: web (with `&` in its
+-- query), relative, mail and an anchor
+local LINKS = "\n[script](javascript:alert(1)) [data](data:text/html,x) [upper](JaVaScRiPt:alert(1)) [vb](vbscript:x) "
+	.. "[file](file:///etc/passwd) [ent](jav&#x61;script:alert(1)) [ent2](&#106;avascript:alert(1)) "
+	.. "[colon](javascript&colon;alert(1)) [ent3](java&#9;script:alert(1)) [angle](<java\tscript:alert(2)>) [ref][r] "
+	.. "[web](https://example.invalid/x?a=1&b=2) [rel](docs/x.md) [mail](mailto:a@example.invalid) [anchor](#id)\n\n"
+	.. "[r]: jav&#x61;script:alert(3)\n"
+
+-- what a browser makes of an href attribute's text: entities decoded, then the characters it ignores inside a scheme removed
+local NAMED =
+	{ amp = "&", lt = "<", gt = ">", quot = '"', apos = "'", colon = ":", Tab = "\t", NewLine = "\n" }
+local function decoded(attr: string): string
+	local out = string.gsub(attr, "&#[xX](%x+);", function(h)
+		return utf8.char(tonumber(h, 16) :: number)
+	end)
+	out = string.gsub(out, "&#(%d+);", function(d)
+		return utf8.char(tonumber(d) :: number)
+	end)
+	out = string.gsub(out, "&(%a+);", function(name)
+		return NAMED[name]
+	end)
+	return (string.gsub(out, "[%c ]", ""))
+end
 
 -- The fake DOM and the stubs. Never literal require text: the repo scanner would read it.
 local HARNESS = [==[
@@ -186,19 +207,30 @@ return t.spec("c0121 served page", function(it)
 	)
 
 	it(
-		"a document's link keeps only a safe scheme: javascript:, data: and a disguised scheme render as text",
+		"a document's link keeps only a safe scheme: every other scheme, entity-encoded or not, renders as text",
 		function()
 			local pane = shown.pane
-			t.expect(has(pane, 'href="javascript:')).toBe(false)
-			t.expect(has(pane, 'href="data:')).toBe(false)
-			t.expect(string.find(pane, 'href="[^"]*[Jj][Aa][Vv][Aa][^"]*[Ss][Cc][Rr][Ii][Pp][Tt]:') == nil)
-				.toBe(true)
-			for _, word in { "script", "data", "tabbed" } do
+			local hrefs = {}
+			for attr in string.gmatch(pane, 'href="([^"]*)"') do
+				table.insert(hrefs, attr)
+				local real = decoded(attr) -- what the browser would navigate to
+				local scheme = string.match(real, "^(%a[%w%+%.%-]*):")
+				if scheme ~= nil then
+					local low = string.lower(scheme)
+					t.expect(low == "http" or low == "https" or low == "mailto").toBe(true)
+				end
+			end
+			for _, word in
+				{ "script", "data", "upper", "vb", "file", "ent", "ent2", "colon", "ent3", "angle", "ref" }
+			do
 				t.expect(has(pane, word)).toBe(true) -- the link text stays
 			end
-			t.expect(has(pane, 'href="https://example.invalid/x"')).toBe(true)
-			t.expect(has(pane, 'href="docs/x.md"')).toBe(true)
-			t.expect(has(pane, 'href="mailto:a@example.invalid"')).toBe(true)
+				-- the safe ones keep their href, escaped exactly once
+			local joined = "\n" .. table.concat(hrefs, "\n") .. "\n"
+			t.expect(has(joined, "\nhttps://example.invalid/x?a=1&amp;b=2\n")).toBe(true)
+			t.expect(has(joined, "\ndocs/x.md\n")).toBe(true)
+			t.expect(has(joined, "\nmailto:a@example.invalid\n")).toBe(true)
+			t.expect(has(joined, "\n#id\n")).toBe(true)
 		end
 	)
 

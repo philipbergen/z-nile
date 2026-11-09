@@ -54,6 +54,8 @@ local runs: { { string } } = {}
 local opened: { string } = {}
 local ghCalls = 0
 local ghFails = false
+local ghBody = GH_JSON -- what gh prints; a case swaps it
+local hashDelay = 0 -- engineHash yields when set, as process.exec does
 local ghDelay = 2 -- gh yields, as process.exec does (long enough that a loaded machine still sees it in flight)
 local builds = 0
 local key = "k1"
@@ -91,7 +93,7 @@ local function start()
 				if ghFails then
 					return nil, "gh: not logged in"
 				end
-				return GH_JSON, nil
+				return ghBody, nil
 			end,
 			now = function(): number
 				return clock
@@ -131,6 +133,9 @@ local function start()
 				return key
 			end,
 			engineHash = function(): string?
+				if hashDelay > 0 then
+					task.wait(hashDelay)
+				end
 				return hash
 			end,
 		})
@@ -400,6 +405,70 @@ return t.spec("c0121 board server", function(it)
 			error(err, 0)
 		end
 		t.expect(models).toBe(1)
+	end)
+
+	it(
+		"a gh answer that lands while a request waits on the engine hash is served by the next poll (no stale PRs)",
+		function()
+			-- the request lays the old PRs on the model, then yields on engineHash; gh answers in that window with a new PR
+			-- number; the next poll must show it (a generation read after the yield would label the old JSON as the new one)
+			local shown = byId(state().model.rafts).R0020.pr.number
+			t.expect(shown).toBe(7)
+			ghBody = (string.gsub(GH_JSON, '"number":7', '"number":9'))
+			clock += 31
+			local savedDelay = ghDelay
+			ghDelay = 0.02
+			hashDelay = 0.3
+			local ok, err = pcall(function()
+				local a = state() -- gh is asked, answers during this request's wait: the body is the old PRs
+				local b = state() -- the next poll shows the new answer
+				t.expect(byId(a.model.rafts).R0020.pr.number == 7 or byId(a.model.rafts).R0020.pr.number == 9)
+					.toBe(true)
+				t.expect(byId(b.model.rafts).R0020.pr.number).toBe(9)
+			end)
+			ghBody, ghDelay, hashDelay = GH_JSON, savedDelay, 0
+			if not ok then
+				error(err, 0)
+			end
+		end
+	)
+
+	it("a gh answer that repeats the last one costs no new encoding", function()
+		local savedDelay = ghDelay
+		ghDelay = 0.02
+		clock += 31
+		state() -- gh is asked (its output may differ from the case before's)
+		task.wait(0.2)
+		state() -- settled on this answer
+		local board: any = require("@znile/engine/board")
+		local real = board.encode
+		local models = 0
+		local inside = false
+		board.encode = function(v: any): string
+			local top = not inside and type(v) == "table" and v.rafts ~= nil and v.issues ~= nil
+			if top then
+				models += 1
+				inside = true
+			end
+			local out = real(v)
+			if top then
+				inside = false
+			end
+			return out
+		end
+		local calls = ghCalls
+		local ok, err = pcall(function()
+			clock += 31
+			state() -- gh is asked again
+			task.wait(0.2)
+			state() -- and answers with the same PRs
+			t.expect(ghCalls).toBe(calls + 1)
+		end)
+		board.encode, ghDelay = real, savedDelay
+		if not ok then
+			error(err, 0)
+		end
+		t.expect(models).toBe(0)
 	end)
 
 	it("a failing gh still gives 200, with checks unavailable", function()
