@@ -18,8 +18,8 @@ local MODELS = [[
 order = ["claude", "grok", "agent"]
 
 [dispatch]
-stall_seconds = 2
-tool_seconds = 8
+stall_seconds = 120
+tool_seconds = 240
 
 [z-design.claude]
 model = "claude-opus-5-5"
@@ -140,16 +140,26 @@ local function lastRow(id: string): any
 	local rows = fakecli.rows(h, id)
 	return rows and rows[#rows]
 end
--- a bounded wait for a file a fake's grandchild would write, so its absence means it was killed
-local function absentAfter(path: string, seconds: number): boolean
-	local waited = 0
-	while waited < seconds do
-		if fs.isFile(path) then
+-- a bounded wait for a process to be gone: it ends the moment the process is, and runs long only when it never dies.
+-- Gone means `kill -0` says "No such process": any other failure (a permission, a missing kill) is not a death. The
+-- bound is wall-clock (os.time), so the polling commands' own cost under load is inside it, and the grandchild's
+-- sleep (an hour) is far past any bound.
+local function deadWithin(pid: string, seconds: number): boolean
+	local started = os.time()
+	while true do
+		local r = process.exec("kill", { "-0", pid })
+		if not r.ok and string.find(r.stderr, "No such process", 1, true) then
+			return true
+		end
+		if os.time() - started >= seconds then
 			return false
 		end
-		waited += task.wait(0.1)
+		task.wait(0.1)
 	end
-	return not fs.isFile(path)
+end
+-- the pid a fake's grandchild wrote before the step was killed
+local function grandchildPid(name: string): string
+	return (string.gsub(fs.readFile(`{h.fakes}/{name}.pid`), "%s+", ""))
 end
 
 return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
@@ -161,6 +171,8 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			["pickman/.tracker/issues/c0020/.models.toml"] = "[z-design.claude]\nmax_tokens = 1000\n",
 			["pickman/.tracker/issues/c0030/c0030.md"] = issue("c0030", "third-thing"),
 			["pickman/.tracker/issues/c0040/c0040.md"] = issue("c0040", "fourth-thing"),
+			-- the one issue whose cases test a stall keeps short limits (10 s, which a starved machine does not reach, against the fakes' 12 s quiet tool call and 20 s silences); every other case stalls only if it really does
+			["pickman/.tracker/issues/c0040/.models.toml"] = "[dispatch]\nstall_seconds = 10\ntool_seconds = 30\n",
 			["pickman/.tracker/issues/c0050/c0050.md"] = issue("c0050", "fifth-thing"),
 			["pickman/.tracker/issues/c0050/.models.toml"] = 'order = ["agent"]\n',
 			["pickman/.tracker/issues/c0060/c0060.md"] = issue("c0060", "sixth-thing"),
@@ -647,7 +659,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(s.outcome).toBe("cap")
 		t.expect(s.history[#s.history].tokens > 5000).toBe(true)
 		t.expect(has(log(), "grok step=")).toBe(false)
-		t.expect(absentAfter(`{h.fakes}/grandchild-cap`, 3)).toBe(true)
+		t.expect(deadWithin(grandchildPid("grandchild-cap"), 60)).toBe(true)
 		t.expect(lastRow("c0030").tokens > 5000).toBe(true)
 	end)
 
@@ -678,7 +690,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(r.ok).toBe(true)
 		local s = state("c0040")
 		t.expect(s.outcome).toBe("ok")
-		-- the step took over three seconds of wall time, yet the dispatcher's row records 0 minutes (the user's G13)
+		-- the step took over twelve seconds of wall time, yet the dispatcher's row records 0 minutes (the user's G13)
 		t.expect(s.history[#s.history].minutes > 0).toBe(true)
 		t.expect(lastRow("c0040").minutes).toBe(0)
 	end)
@@ -689,7 +701,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		local r = zn({ "dispatch", "z-design", "c0060" }, { FAKE_STOP = "c0060" })
 		t.expect(r.ok).toBe(false)
 		t.expect(state("c0060").outcome).toBe("stopped")
-		t.expect(absentAfter(`{h.fakes}/grandchild-stop`, 3)).toBe(true)
+		t.expect(deadWithin(grandchildPid("grandchild-stop"), 60)).toBe(true)
 		mode("claude", "ok")
 		local retry = zn({ "dispatch", "retry", "c0060" })
 		t.expect(retry.ok).toBe(true)
