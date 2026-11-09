@@ -330,18 +330,20 @@ local function docPath(paths: { string }, id: string): string?
 	return nil
 end
 
--- c0263: a merge of `ref` into this worktree in which a conflict confined to `provenance.md` files is resolved by
--- `provenance.union` of the item's record in HEAD, in `ref` and at the merge base (each found by the item's id, wherever
--- that commit keeps the item's folder), written beside the item's document in the merge, with every other path of the
--- id's record removed. Any other conflict, a side that is not a valid extension of the base, or a record deleted on one
--- side aborts the merge (no MERGE_HEAD, the tree as it was). Returns the
--- failure text.
+-- c0263: a merge of `ref` into this worktree that unites the item records both sides appended to. The merge is made
+-- with `--no-commit`; then every record either side changed since the merge base is settled by the item's id, never by
+-- git's pairing of files (git pairs small, templated records across ids and across folder moves): the record of each
+-- changed id is read from HEAD, from `ref` and from the base wherever each commit keeps the item's folder, settled by
+-- `provenance.settle` (unchanged on one side: the other side's; changed on both: the union; changed on one side and
+-- absent on the other, or a side that did not only append: stop), written beside the item's document in the merge, and
+-- every other path of that id's record removed with `git rm -f`. Any other conflict stops the merge too; a stop aborts
+-- it (no MERGE_HEAD, the tree as it was), as does any error in this function. Returns the failure text.
 local function mergeRef(ref: string): (boolean, string)
-	local r = sh.run("git", { "merge", "--no-edit", ref })
-	if r.ok then
-		return true, ""
-	end
+	local r = sh.run("git", { "merge", "--no-commit", "--no-edit", ref })
 	local detail = r.stderr .. r.stdout
+	if not sh.run("git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok then
+		return r.ok, if r.ok then "" else detail -- up to date, fast-forwarded, or git refused to start
+	end
 	local function abort(why: string): (boolean, string)
 		sh.run("git", { "merge", "--abort" })
 		return false, why
@@ -353,96 +355,104 @@ local function mergeRef(ref: string): (boolean, string)
 		end
 		return out
 	end
-	-- Only records may be unmerged. Each is found by its item id, wherever each commit keeps the item's folder: git's
-	-- stage shapes for a record depend on which side moved the folder and on its rename heuristics.
-	local ids: { string } = {}
-	local seen: { [string]: boolean } = {}
-	for _, line in lines({ "ls-files", "-u" }) do
-		local path = string.match(line, "^%d+ %x+ %d\t(.+)$")
-		local id = if path then string.match(path, "/([fdcR]%d%d%d%d)/provenance%.md$") else nil
-		if not id then
-			return abort(detail)
+	local ran, done, why = pcall(function(): (boolean, string)
+		local ids: { string } = {}
+		local seen: { [string]: boolean } = {}
+		local function note(path: string): boolean
+			local id = string.match(path, "/([fdcR]%d%d%d%d)/provenance%.md$")
+			if id and not seen[id] then
+				seen[id] = true
+				table.insert(ids, id)
+			end
+			return id ~= nil
 		end
-		if not seen[id] then
-			seen[id] = true
-			table.insert(ids, id)
+		local unmerged = false
+		for _, line in lines({ "ls-files", "-u" }) do
+			unmerged = true
+			local path = string.match(line, "^%d+ %x+ %d\t(.+)$")
+			if not path or not note(path) then
+				return false, detail -- a conflict outside the records
+			end
 		end
-	end
-	if #ids == 0 then
-		return abort(detail)
-	end
-	table.sort(ids)
-	local base = sh.trim(sh.run("git", { "merge-base", "HEAD", "MERGE_HEAD" }).stdout)
-	local trees: { [string]: { string } } = {}
-	for _, commit in { "HEAD", "MERGE_HEAD", base } do
-		trees[commit] = lines({ "ls-tree", "-r", "--name-only", commit })
-	end
-	local function recordAt(commit: string, id: string): (string?, string?)
-		local path, why = provenance.locate(trees[commit], id)
-		if why then
-			return nil, why
+		local base = sh.trim(sh.run("git", { "merge-base", "HEAD", "MERGE_HEAD" }).stdout)
+		for _, side in { "HEAD", "MERGE_HEAD" } do
+			for _, path in lines({ "diff", "--name-only", "--no-renames", base, side }) do
+				note(path)
+			end
 		end
-		if not path then
-			return nil, nil
-		end
-		return sh.run("git", { "show", `{commit}:{path}` }).stdout, nil
-	end
-	for _, id in ids do
-		local ours, ownWhy = recordAt("HEAD", id)
-		local theirs, theirWhy = recordAt("MERGE_HEAD", id)
-		local common, commonWhy = recordAt(base, id)
-		local why = ownWhy or theirWhy or commonWhy
-		if why then
-			return abort(`{why}\n{detail}`)
-		end
-		-- the merged index: the item's one document, and so the one place its record goes
-		local docFolder: string? = nil
-		local index = lines({ "ls-files" })
-		for _, path in index do
-			local folder = string.match(path, `^(.*/{id})/{id}%.md$`)
-			if folder then
-				if docFolder then
-					return abort(`{id} has its document in two places\n{detail}`)
+		table.sort(ids)
+		if #ids > 0 then
+			local trees: { [string]: { string } } = {}
+			for _, commit in { "HEAD", "MERGE_HEAD", base } do
+				trees[commit] = lines({ "ls-tree", "-r", "--name-only", commit })
+			end
+			local function recordAt(commit: string, id: string): (string?, string?)
+				local path, locateWhy = provenance.locate(trees[commit], id)
+				if locateWhy then
+					return nil, locateWhy
 				end
-				docFolder = folder
+				if not path then
+					return nil, nil
+				end
+				return sh.run("git", { "show", `{commit}:{path}` }).stdout, nil
 			end
-		end
-		if not docFolder then
-			return abort(`{id}: the merge has no document for the record\n{detail}`)
-		end
-		local united: string? = nil
-		if ours and theirs then
-			united, why = provenance.union(common, ours, theirs)
-		else
-			-- one side has the record: it is the result, unless the other side deleted it (the base had it)
-			local only = ours or theirs
-			if common or not only then
-				return abort(`{id}: a side of the merge deleted the record\n{detail}`)
-			end
-			if provenance.parse(only) then
-				united = only
-			else
-				why = "the record does not parse"
-			end
-		end
-		if not united then
-			return abort(`{id}: {why}\n{detail}`)
-		end
-		local target = `{docFolder}/provenance.md`
-		fs.writeFile(target, united)
-		sh.must("git", { "add", "--", target })
-		for _, path in index do
-			if path ~= target and string.match(path, `/{id}/provenance%.md$`) then
-				sh.run("git", { "rm", "-q", "-f", "--cached", "--ignore-unmatch", "--", path })
-				if fs.isFile(path) then
-					fs.removeFile(path)
+			for _, id in ids do
+				local ours, ownWhy = recordAt("HEAD", id)
+				local theirs, theirWhy = recordAt("MERGE_HEAD", id)
+				local common, commonWhy = recordAt(base, id)
+				if ownWhy or theirWhy or commonWhy then
+					return false, `{ownWhy or theirWhy or commonWhy}\n{detail}`
+				end
+				local action, text, problem = provenance.settle(common, ours, theirs)
+				if not action then
+					return false, `{id}: {problem}\n{detail}`
+				end
+				local index = lines({ "ls-files" })
+				local target: string? = nil
+				if action == "write" then
+					local folder: string? = nil
+					for _, path in index do
+						local found = string.match(path, `^(.*/{id})/{id}%.md$`)
+						if found then
+							if folder then
+								return false, `{id} has its document in two places\n{detail}`
+							end
+							folder = found
+						end
+					end
+					if not folder then
+						return false,
+							`{id}: the merge has no document for its record (the item was removed or its id changed)\n{detail}`
+					end
+					target = `{folder}/provenance.md`
+					fs.writeFile(target :: string, text :: string)
+					sh.must("git", { "add", "--", target :: string })
+				elseif action == "keep" and unmerged then
+					return false, `{id}: left unmerged by git and unchanged by either side\n{detail}`
+				end
+				if action ~= "keep" then
+					for _, path in index do
+						if path ~= target and string.match(path, `/{id}/provenance%.md$`) then
+							sh.must("git", { "rm", "-q", "-f", "--ignore-unmatch", "--", path })
+						end
+					end
 				end
 			end
 		end
+		if #lines({ "ls-files", "-u" }) > 0 then
+			return false, detail
+		end
+		local c = sh.run("git", { "commit", "--no-edit", "-q" })
+		if not c.ok then
+			return false, c.stderr .. c.stdout
+		end
+		return true, ""
+	end)
+	if not ran then
+		return abort(`the merge stopped on an error: {done}`)
 	end
-	local c = sh.run("git", { "commit", "--no-edit", "-q" })
-	if not c.ok then
-		return abort(c.stderr .. c.stdout)
+	if not done then
+		return abort(why :: string)
 	end
 	return true, ""
 end
@@ -3159,6 +3169,61 @@ function cmd.compact(_: { string }, opts: { [string]: { string } })
 	end
 end
 
+-- c0263: the tree `git merge-tree` wrote for remap, with every conflicted `provenance.md` replaced by the union of its
+-- three stages (`mt` is the merge-tree output: the tree id, the conflicted-file lines "<mode> <sha> <stage>\t<path>", a
+-- blank line, then messages). Nil when anything else conflicts or a record cannot be united. The tree is built in the
+-- worktree's index (clean after the remap commit) and the worktree is reset to HEAD afterwards.
+local function uniteRemapRecords(mt: string, tree: string): string?
+	local stages: { [string]: { [number]: string } } = {}
+	local order: { string } = {}
+	local seenBlank = false
+	local first = true
+	for line in string.gmatch(mt .. "\n", "([^\n]*)\n") do
+		if first then
+			first = false
+		elseif line == "" then
+			break
+		else
+			local sha, stage, path = string.match(line, "^%d+ (%x+) (%d)\t(.+)$")
+			if not sha or not path or not string.match(path, "/provenance%.md$") then
+				return nil
+			end
+			if not stages[path] then
+				stages[path] = {}
+				table.insert(order, path)
+			end
+			stages[path][tonumber(stage) :: number] = sha
+		end
+	end
+	seenBlank = #order > 0
+	if not seenBlank then
+		return nil
+	end
+	table.sort(order)
+	local ok, built = pcall(function(): string?
+		sh.must("git", { "read-tree", "--reset", "-u", tree })
+		for _, path in order do
+			local function blob(n: number): string?
+				local sha = stages[path][n]
+				return if sha then sh.run("git", { "cat-file", "blob", sha }).stdout else nil
+			end
+			local ours, theirs = blob(2), blob(3)
+			if not ours or not theirs then
+				return nil
+			end
+			local united = provenance.union(blob(1), ours, theirs)
+			if not united then
+				return nil
+			end
+			fs.writeFile(path, united)
+			sh.must("git", { "add", "--", path })
+		end
+		return sh.trim(sh.must("git", { "write-tree" }))
+	end)
+	sh.run("git", { "reset", "--quiet", "--hard", "HEAD" })
+	return if ok then built else nil
+end
+
 -- `remap`: a branch that was in flight during a compaction takes the new ids (c0870): origin/main's map, plus numbers
 -- from origin's counter for the branch's own items, then one commit. Merge origin/main afterwards.
 function cmd.remap()
@@ -3306,12 +3371,18 @@ function cmd.remap()
 		)
 	end
 	local mt = sh.run("git", { "merge-tree", `--merge-base={baseTree}`, "HEAD", "origin/main" }) -- writes a tree (two commits)
-	if not mt.ok then
-		fail(
-			`remap committed, but merging origin/main conflicts: git merge origin/main and resolve\n{mt.stdout}`
-		)
-	end
 	local tree = string.match(mt.stdout, "^(%x+)") :: string
+	if not mt.ok then
+		-- c0263: a conflict confined to item records both sides appended to is united (the conflicted-file info lists
+		-- each stage's blob); any other conflict stops, as it always did
+		local united = if tree then uniteRemapRecords(mt.stdout, tree) else nil
+		if not united then
+			fail(
+				`remap committed, but merging origin/main conflicts: git merge origin/main and resolve (a provenance.md both sides appended: keep the common rows, then origin/main's new rows, then yours)\n{mt.stdout}`
+			)
+		end
+		tree = united
+	end
 	local merge = sh.git({
 		"commit-tree",
 		tree,

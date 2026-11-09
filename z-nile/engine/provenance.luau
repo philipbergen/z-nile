@@ -296,6 +296,44 @@ function provenance.union(base: string?, ours: string, theirs: string): (string?
 	return provenance.render(id, out), nil
 end
 
+-- What a merge of two branches does with one item's record, by its text on each side and at the merge base (nil: the
+-- item has no record there). Returns the action and the text to write:
+--   "keep"   neither side changed it;
+--   "write"  the text to put beside the item's document (one side changed it, or both did and the union holds);
+--   "remove" the side that changed it deleted it;
+--   nil, nil, why   the merge must stop: a side did not only append, a record does not parse, or one side changed it
+--   and the other no longer has a record under that id (a renumber or a compaction changed the id: `./zn remap`).
+function provenance.settle(common: string?, ours: string?, theirs: string?): (string?, string?, string?)
+	local changedOurs, changedTheirs = ours ~= common, theirs ~= common
+	local function take(text: string?): (string?, string?, string?)
+		if text == nil then
+			return "remove", nil, nil
+		end
+		local _, why = provenance.parse(text)
+		if why then
+			return nil, nil, `the record does not parse ({why})`
+		end
+		return "write", text, nil
+	end
+	if not changedOurs and not changedTheirs then
+		return "keep", nil, nil
+	elseif changedOurs and not changedTheirs then
+		return take(ours)
+	elseif changedTheirs and not changedOurs then
+		return take(theirs)
+	end
+	if ours == nil or theirs == nil then
+		return nil,
+			nil,
+			"one side changed the record and the other has none under this id (an id changed: after a compaction run ./zn remap, after a renumber merge by hand)"
+	end
+	local united, why = provenance.union(common, ours, theirs)
+	if not united then
+		return nil, nil, why
+	end
+	return "write", united, nil
+end
+
 -- The path of the record of item `id` among `paths` (a `git ls-tree -r --name-only` listing of one commit): the
 -- `provenance.md` in the folder `<...>/<id>/`. Returns nil when the commit holds none, and nil and why when it holds
 -- more than one (the item's folder in two places: not decided here).

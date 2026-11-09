@@ -82,15 +82,13 @@ return t.spec("c0263 the provenance record", function(it)
 		t.expect(provenance.hint({ ZN_DISPATCH = "1" }).agent).toBe(true)
 		t.expect(provenance.hint({ CURSOR_AGENT = "1" }).agent).toBe(true) -- the `agent` CLI marks its shells so
 		t.expect(provenance.hint({ GROK_SESSION_ID = "s" }).agent).toBe(true) -- the `grok` CLI sets this in its tool shells
-		t.expect(
-			provenance.hint({
-				CLAUDECODE = "",
-				AI_AGENT = "",
-				CURSOR_AGENT = "",
-				GROK_SESSION_ID = "",
-				ZN_DISPATCH = "",
-			}).agent
-		).toBe(false)
+		t.expect(provenance.hint({
+			CLAUDECODE = "",
+			AI_AGENT = "",
+			CURSOR_AGENT = "",
+			GROK_SESSION_ID = "",
+			ZN_DISPATCH = "",
+		}).agent).toBe(false)
 		t.expect(provenance.hint({}).agent).toBe(false)
 		-- flag, then env, then the session hint, then the git name
 		local none = { agent = false, effort = nil }
@@ -117,7 +115,8 @@ return t.spec("c0263 the provenance record", function(it)
 
 	it("the record", function()
 		local now = "2026-11-08 10:00"
-		local one = provenance.record(nil, "c0010", "approved", "human:Ann", 'design=1a2b3c4d5e6f; said="yes"', now)
+		local one =
+			provenance.record(nil, "c0010", "approved", "human:Ann", 'design=1a2b3c4d5e6f; said="yes"', now)
 		t.expect(one ~= nil).toBe(true)
 		local rows, why = provenance.parse(one :: string)
 		t.expect(why).toBe(nil)
@@ -127,10 +126,12 @@ return t.spec("c0263 the provenance record", function(it)
 		-- render is the form record writes: parse then render is the identity, and rows carry no number
 		t.expect(provenance.render("c0010", rows :: { any })).toBe(one)
 		t.expect((string.find(one :: string, "| 1 |", 1, true))).toBe(nil)
-		local two = provenance.record(one, "c0010", "unblocked", OPUS, "block=design-gap", "2026-11-08 11:00") :: string
+		local two =
+			provenance.record(one, "c0010", "unblocked", OPUS, "block=design-gap", "2026-11-08 11:00") :: string
 		t.expect(#(provenance.parse(two) :: { any })).toBe(2)
 		-- a separator or a newline in a detail cannot split a row
-		local messy = provenance.record(two, "c0010", "confirmed", "human:Ann", 'said="a | b\nc"', now) :: string
+		local messy =
+			provenance.record(two, "c0010", "confirmed", "human:Ann", 'said="a | b\nc"', now) :: string
 		t.expect(#(provenance.parse(messy) :: { any })).toBe(3)
 		t.expect(string.find(messy, "a / b c", 1, true) ~= nil).toBe(true)
 		-- the closed event list and the stored grammar
@@ -192,26 +193,37 @@ return t.spec("c0263 the provenance record", function(it)
 		t.expect(provenance.publishProblem(two, swapped, "c0010", provenance.PUBLISHED) ~= nil).toBe(true)
 		t.expect(provenance.appendOnly(two, two, "c0010") ~= nil).toBe(true) -- nothing appended
 		-- every cell of an old row is pinned: the actor, the detail (a stale approval made current) and the when
-		t.expect(provenance.appendOnly(one, (string.gsub(two, "human:Ann", "human:Eve", 1)), "c0010") ~= nil).toBe(true)
+		t.expect(provenance.appendOnly(one, (string.gsub(two, "human:Ann", "human:Eve", 1)), "c0010") ~= nil)
+			.toBe(true)
 		t.expect(
-			provenance.appendOnly(one, (string.gsub(two, "design=1a2b3c4d5e6f", "design=ffffffffffff", 1)), "c0010")
-				~= nil
+			provenance.appendOnly(
+				one,
+				(string.gsub(two, "design=1a2b3c4d5e6f", "design=ffffffffffff", 1)),
+				"c0010"
+			) ~= nil
 		).toBe(true)
 		t.expect(
-			provenance.appendOnly(one, (string.gsub(two, "2026%-11%-08 10:00", "2026-11-08 10:01", 1)), "c0010") ~= nil
-		)
-			.toBe(true)
+			provenance.appendOnly(
+				one,
+				(string.gsub(two, "2026%-11%-08 10:00", "2026-11-08 10:01", 1)),
+				"c0010"
+			) ~= nil
+		).toBe(true)
 		t.expect(provenance.appendOnly(one, two, "c0011") ~= nil).toBe(true) -- another item's record
 		t.expect(provenance.appendOnly(nil, "garbage", "c0010") ~= nil).toBe(true) -- a create that does not parse
 		-- the publish rule: append-only, and every new row's event is one `./zn record` may publish (the allowed list)
 		t.expect(provenance.publishProblem(one, two, "c0010", provenance.PUBLISHED)).toBe(nil)
-		t.expect(provenance.publishProblem(nil, one :: string, "c0010", provenance.PUBLISHED) ~= nil).toBe(true) -- approved
+		t.expect(provenance.publishProblem(nil, one :: string, "c0010", provenance.PUBLISHED) ~= nil)
+			.toBe(true) -- approved
 		t.expect(provenance.publishProblem(one, two, "c0010", { "confirmed" }) ~= nil).toBe(true) -- not in this list
-		t.expect(provenance.publishProblem(two, one :: string, "c0010", provenance.PUBLISHED) ~= nil).toBe(true)
+		t.expect(provenance.publishProblem(two, one :: string, "c0010", provenance.PUBLISHED) ~= nil)
+			.toBe(true)
 
 		-- union: two sides that each appended to the same base keep both rows, base first, no row twice
-		local ours = provenance.record(one, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:30") :: string
-		local theirs = provenance.record(one, "c0010", "unblocked", "human:Bee", "", "2026-11-08 10:35") :: string
+		local ours =
+			provenance.record(one, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:30") :: string
+		local theirs =
+			provenance.record(one, "c0010", "unblocked", "human:Bee", "", "2026-11-08 10:35") :: string
 		local united = provenance.union(one :: string, ours, theirs) :: string
 		local urows = provenance.parse(united) :: { any }
 		t.expect(#urows).toBe(3)
@@ -231,15 +243,20 @@ return t.spec("c0263 the provenance record", function(it)
 			'design=1a2b3c4d5e6f; said="yes"',
 			"2026-11-08 10:00"
 		) :: string
-		local oursR = provenance.record(twice, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:30") :: string
-		local theirsR = provenance.record(twice, "c0010", "ranked", "human:Bee", "rank=3", "2026-11-08 10:35") :: string
+		local oursR =
+			provenance.record(twice, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:30") :: string
+		local theirsR =
+			provenance.record(twice, "c0010", "ranked", "human:Bee", "rank=3", "2026-11-08 10:35") :: string
 		local unitedR = provenance.union(twice, oursR, theirsR) :: string
 		t.expect(#(provenance.parse(unitedR) :: { any })).toBe(4)
 		t.expect(provenance.appendOnly(theirsR, unitedR, "c0010")).toBe(nil)
 		-- the same row appended on both sides is once, with ours' extra row after it
-		local sameRow = provenance.record(one, "c0010", "ranked", "human:Bee", "rank=3", "2026-11-08 10:35") :: string
-		local oursPlus = provenance.record(sameRow, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:40") :: string
-		local unitedS = provenance.parse(provenance.union(one :: string, oursPlus, sameRow) :: string) :: { any }
+		local sameRow =
+			provenance.record(one, "c0010", "ranked", "human:Bee", "rank=3", "2026-11-08 10:35") :: string
+		local oursPlus =
+			provenance.record(sameRow, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:40") :: string
+		local unitedS =
+			provenance.parse(provenance.union(one :: string, oursPlus, sameRow) :: string) :: { any }
 		t.expect(#unitedS).toBe(3)
 		t.expect(unitedS[2].event).toBe("ranked")
 		t.expect(unitedS[3].event).toBe("rafted")
@@ -253,7 +270,11 @@ return t.spec("c0263 the provenance record", function(it)
 		end
 		for _, counts in { { 2, 1 }, { 1, 2 }, { 2, 2 } } do
 			local u = provenance.parse(
-				provenance.union(one :: string, withX(one :: string, counts[1]), withX(one :: string, counts[2])) :: string
+				provenance.union(
+					one :: string,
+					withX(one :: string, counts[1]),
+					withX(one :: string, counts[2])
+				) :: string
 			) :: { any }
 			t.expect(#u).toBe(1 + math.max(counts[1], counts[2]))
 		end
@@ -285,6 +306,46 @@ return t.spec("c0263 the provenance record", function(it)
 		t.expect(trail.isDoc("c0010.md")).toBe(true)
 	end)
 
+	it("settle decides what a merge does with one item's record", function()
+		local one = provenance.record(nil, "c0010", "ranked", "human:Ann", "", "2026-11-08 10:00") :: string
+		local ours = provenance.record(one, "c0010", "ranked", "human:Ours", "", "2026-11-08 11:00") :: string
+		local theirs =
+			provenance.record(one, "c0010", "ranked", "human:Main", "", "2026-11-08 12:00") :: string
+		-- neither side changed it; one side changed it (the other side's text, absence included)
+		t.expect((provenance.settle(one, one, one))).toBe("keep")
+		t.expect((provenance.settle(nil, nil, nil))).toBe("keep")
+		local action, text = provenance.settle(one, ours, one)
+		t.expect(action).toBe("write")
+		t.expect(text).toBe(ours)
+		action, text = provenance.settle(one, one, theirs)
+		t.expect(action).toBe("write")
+		t.expect(text).toBe(theirs)
+		t.expect((provenance.settle(nil, ours, nil))).toBe("write") -- a record only we added
+		t.expect((provenance.settle(one, nil, one))).toBe("remove") -- a record only we deleted
+		t.expect((provenance.settle(one, one, nil))).toBe("remove")
+		-- both changed: the union, main's rows first; the same change on both sides is one change
+		action, text = provenance.settle(one, ours, theirs)
+		t.expect(action).toBe("write")
+		t.expect(text).toBe(provenance.union(one, ours, theirs))
+		t.expect(select(2, provenance.settle(one, ours, ours))).toBe(ours)
+		-- changed on one side and absent on the other: stop, naming remap (an id changed)
+		for _, args in { { one, ours, nil }, { one, nil, theirs }, { nil, ours, theirs } } do
+			if args[1] == nil and args[2] and args[3] then
+				continue -- both created it: a union, not a stop
+			end
+			local a, _, why = provenance.settle(args[1], args[2], args[3])
+			t.expect(a).toBe(nil)
+			t.expect(string.find(why or "", "./zn remap", 1, true) ~= nil).toBe(true)
+		end
+		-- a side that did not only append, and a record that does not parse, stop too
+		local a2, _, why2 = provenance.settle(one, (string.gsub(ours, "human:Ann", "human:Eve", 1)), theirs)
+		t.expect(a2).toBe(nil)
+		t.expect(why2 ~= nil).toBe(true)
+		local a3, _, why3 = provenance.settle(one, "garbage\n", one)
+		t.expect(a3).toBe(nil)
+		t.expect(why3 ~= nil).toBe(true)
+	end)
+
 	it("locate finds an item's record by its id in a listing of one commit", function()
 		local listing = {
 			"pickman/.tracker/issues/c0019/c0019.md",
@@ -293,20 +354,29 @@ return t.spec("c0263 the provenance record", function(it)
 			"pickman/.tracker/issues/active/c0020/provenance.md",
 		}
 		t.expect((provenance.locate(listing, "c0019"))).toBe("pickman/.tracker/issues/c0019/provenance.md")
-		t.expect((provenance.locate(listing, "c0020"))).toBe("pickman/.tracker/issues/active/c0020/provenance.md")
+		t.expect((provenance.locate(listing, "c0020")))
+			.toBe("pickman/.tracker/issues/active/c0020/provenance.md")
 		t.expect((provenance.locate(listing, "c0021"))).toBe(nil)
 		t.expect((provenance.locate({ "c0019/provenance.md" }, "c0019"))).toBe("c0019/provenance.md")
 		-- the same id in two places is not decided here
-		local both =
-			{ "pickman/.tracker/issues/c0019/provenance.md", "pickman/.tracker/issues/active/c0019/provenance.md" }
+		local both = {
+			"pickman/.tracker/issues/c0019/provenance.md",
+			"pickman/.tracker/issues/active/c0019/provenance.md",
+		}
 		local path, why = provenance.locate(both, "c0019")
 		t.expect(path).toBe(nil)
 		t.expect(why ~= nil).toBe(true)
 	end)
 
 	it("audit", function()
-		local good =
-			provenance.record(nil, "c0010", "approved", "human:Ann", "design=aaaaaaaaaaaa", "2026-11-08 10:00") :: string
+		local good = provenance.record(
+			nil,
+			"c0010",
+			"approved",
+			"human:Ann",
+			"design=aaaaaaaaaaaa",
+			"2026-11-08 10:00"
+		) :: string
 		t.expect(provenance.problems("z-nile/.tracker/issues/c0010/provenance.md", good)).toEqual({})
 		t.expect(#provenance.problems("z-nile/.tracker/issues/c0010/provenance.md", "garbage")).toBe(1)
 		-- an empty file is not a record (refused, not read as no rows)
@@ -346,9 +416,10 @@ return t.spec("c0263 the provenance record", function(it)
 			"ZN_DISPATCH",
 			"CURSOR_AGENT",
 			"GROK_SESSION_ID",
-			"merge by hand"
+			"merge by hand",
+			"`remap` unites a record both sides appended"
 		)
-		has("z-nile/skills/zz-execute/SKILL.md", "./zn sync")
+		has("z-nile/skills/zz-execute/SKILL.md", "unites a `provenance.md` both sides appended")
 		has("z-nile/README.md", "provenance")
 	end)
 end)
