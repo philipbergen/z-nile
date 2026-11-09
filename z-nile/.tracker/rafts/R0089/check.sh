@@ -13,6 +13,6 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0089
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: the raft changes nothing under z-nile/engine/" bash -c 'base=$(git -C "$1" merge-base HEAD origin/main) && out=$(git -C "$1" diff --name-only "$base" -- z-nile/engine) && echo "engine paths changed: ${out:-none}" && [ -z "$out" ]' _ "$ZN_ROOT"
 
 finish
