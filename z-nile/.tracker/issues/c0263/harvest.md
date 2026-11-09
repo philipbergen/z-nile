@@ -117,3 +117,10 @@
 - design-review-008 F9: z-design/in-flight-bases-pin-their-source
 - design-review-008 F10: zz-test/no-vacuous-pass
 - note review 008 candidate (a fail-safe the caller enforces belongs in the pure function's return so a pure case pins it; a refusal that lives only in an adapter needs a case that reaches it with that input): zz-test/pin-fail-safes-where-they-act
+- design-review-009 F1: z-design/histories-checked-against-a-real-life
+- design-review-009 F2: zz-test/refusals-tested-on-both-sides
+- design-review-009 F3: z-design/instructions-runnable-where-they-run
+- design-review-009 F4: z-design/live-defaults-checked-in-their-session
+- design-review-009 F5: z-design/spec-design-correspondence
+- design-review-009 F6: z-design/mutant-ids-match-the-runner
+- note review 009 candidates (a merge rule keyed on git's per-path stage shapes inherits its rename heuristics; find the thing by its identity and move the folder on each side in the cases; a replaced instruction is run on the failure it answers): z-design/histories-checked-against-a-real-life, z-design/instructions-runnable-where-they-run

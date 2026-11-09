@@ -39,7 +39,7 @@ index 7e05c8ac..db923ac2 100644
  	if okReg then
  		for _, p in audit.leftovers(root, found, reg :: projects.Registry) do
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 98bffee9..fab74580 100644
+index 98bffee9..61d7a583 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -15,6 +15,7 @@ local lessonsLib = require("./lessons")
@@ -59,69 +59,119 @@ index 98bffee9..fab74580 100644
    dispatch <id> [--dry-run]                     run the chain on an item from its tracker state (ticket, design, raft,
                                                  ready, run), stopping at a merge gate, questions.md or a failure
    dispatch new "<description>" [--project <name>] [--dry-run]
-@@ -327,18 +330,103 @@ local function docPath(paths: { string }, id: string): string?
+@@ -327,18 +330,155 @@ local function docPath(paths: { string }, id: string): string?
  	return nil
  end
  
 +-- c0263: a merge of `ref` into this worktree in which a conflict confined to `provenance.md` files is resolved by
-+-- `provenance.union` of the stage-1/2/3 blobs, and any other conflict, or a side that is not a valid extension of the
-+-- common record, aborts the merge (no MERGE_HEAD, the tree as it was). A record added in an item folder that `ref`
-+-- moved (`ready` to active/, `done` to done/) is git's `CONFLICT (file location)`: git leaves it at the new path with
-+-- only our stage (taken as it is) or, when `ref` added one too, with both (united). The same conflict for any other
-+-- file aborts, as it always did. Returns the failure text.
++-- `provenance.union` of the item's record in HEAD, in `ref` and at the merge base (each found by the item's id, wherever
++-- that commit keeps the item's folder), written beside the item's document in the merge, with every other path of the
++-- id's record removed. Any other conflict, a side that is not a valid extension of the base, or a record deleted on one
++-- side aborts the merge (no MERGE_HEAD, the tree as it was). Returns the
++-- failure text.
 +local function mergeRef(ref: string): (boolean, string)
 +	local r = sh.run("git", { "merge", "--no-edit", ref })
 +	if r.ok then
 +		return true, ""
 +	end
++	local detail = r.stderr .. r.stdout
 +	local function abort(why: string): (boolean, string)
 +		sh.run("git", { "merge", "--abort" })
 +		return false, why
 +	end
-+	-- the unmerged paths and their stages (`git ls-files -u`: "<mode> <sha> <stage>\t<path>")
-+	local stages: { [string]: { [number]: boolean } } = {}
-+	for line in string.gmatch(sh.run("git", { "ls-files", "-u" }).stdout, "[^\n]+") do
-+		local stage, path = string.match(line, "^%d+ %x+ (%d)\t(.+)$")
-+		if stage and path then
-+			stages[path] = stages[path] or {}
-+			stages[path][tonumber(stage) :: number] = true
++	local function lines(args: { string }): { string }
++		local out: { string } = {}
++		for line in string.gmatch(sh.run("git", args).stdout, "[^\n]+") do
++			table.insert(out, line)
++		end
++		return out
++	end
++	-- Only records may be unmerged. Each is found by its item id, wherever each commit keeps the item's folder: git's
++	-- stage shapes for a record depend on which side moved the folder and on its rename heuristics.
++	local ids: { string } = {}
++	local seen: { [string]: boolean } = {}
++	for _, line in lines({ "ls-files", "-u" }) do
++		local path = string.match(line, "^%d+ %x+ %d\t(.+)$")
++		local id = if path then string.match(path, "/([fdcR]%d%d%d%d)/provenance%.md$") else nil
++		if not id then
++			return abort(detail)
++		end
++		if not seen[id] then
++			seen[id] = true
++			table.insert(ids, id)
 +		end
 +	end
-+	local files: { string } = {}
-+	for path in stages do
-+		if not string.match(path, "/provenance%.md$") then
-+			return abort(r.stderr .. r.stdout)
-+		end
-+		table.insert(files, path)
++	if #ids == 0 then
++		return abort(detail)
 +	end
-+	if #files == 0 then
-+		return abort(r.stderr .. r.stdout)
++	table.sort(ids)
++	local base = sh.trim(sh.run("git", { "merge-base", "HEAD", "MERGE_HEAD" }).stdout)
++	local trees: { [string]: { string } } = {}
++	for _, commit in { "HEAD", "MERGE_HEAD", base } do
++		trees[commit] = lines({ "ls-tree", "-r", "--name-only", commit })
 +	end
-+	table.sort(files)
-+	for _, f in files do
-+		local function stage(n: number): string?
-+			local shown = sh.run("git", { "show", `:{n}:{f}` })
-+			return if shown.ok then shown.stdout else nil
++	local function recordAt(commit: string, id: string): (string?, string?)
++		local path, why = provenance.locate(trees[commit], id)
++		if why then
++			return nil, why
 +		end
-+		local ours, theirs = stage(2), stage(3)
-+		if not ours then
-+			return abort(`{f}: our side deleted the record\n{r.stderr}{r.stdout}`)
++		if not path then
++			return nil, nil
 +		end
-+		local united: string? = ours -- a record only our side added (git moved the folder: `CONFLICT (file location)`)
-+		local why: string? = nil
-+		if theirs then
-+			united, why = provenance.union(stage(1), ours, theirs)
-+		elseif stages[f][1] or stages[f][3] then
-+			return abort(`{f}: origin/main deleted the record\n{r.stderr}{r.stdout}`)
-+		elseif not provenance.parse(ours) then
-+			united = nil
-+			why = "our version does not parse"
++		return sh.run("git", { "show", `{commit}:{path}` }).stdout, nil
++	end
++	for _, id in ids do
++		local ours, ownWhy = recordAt("HEAD", id)
++		local theirs, theirWhy = recordAt("MERGE_HEAD", id)
++		local common, commonWhy = recordAt(base, id)
++		local why = ownWhy or theirWhy or commonWhy
++		if why then
++			return abort(`{why}\n{detail}`)
++		end
++		-- the merged index: the item's one document, and so the one place its record goes
++		local docFolder: string? = nil
++		local index = lines({ "ls-files" })
++		for _, path in index do
++			local folder = string.match(path, `^(.*/{id})/{id}%.md$`)
++			if folder then
++				if docFolder then
++					return abort(`{id} has its document in two places\n{detail}`)
++				end
++				docFolder = folder
++			end
++		end
++		if not docFolder then
++			return abort(`{id}: the merge has no document for the record\n{detail}`)
++		end
++		local united: string? = nil
++		if ours and theirs then
++			united, why = provenance.union(common, ours, theirs)
++		else
++			-- one side has the record: it is the result, unless the other side deleted it (the base had it)
++			local only = ours or theirs
++			if common or not only then
++				return abort(`{id}: a side of the merge deleted the record\n{detail}`)
++			end
++			if provenance.parse(only) then
++				united = only
++			else
++				why = "the record does not parse"
++			end
 +		end
 +		if not united then
-+			return abort(`{f}: {why}\n{r.stderr}{r.stdout}`)
++			return abort(`{id}: {why}\n{detail}`)
 +		end
-+		fs.writeFile(f, united)
-+		sh.must("git", { "add", f })
++		local target = `{docFolder}/provenance.md`
++		fs.writeFile(target, united)
++		sh.must("git", { "add", "--", target })
++		for _, path in index do
++			if path ~= target and string.match(path, `/{id}/provenance%.md$`) then
++				sh.run("git", { "rm", "-q", "-f", "--cached", "--ignore-unmatch", "--", path })
++				if fs.isFile(path) then
++					fs.removeFile(path)
++				end
++			end
++		end
 +	end
 +	local c = sh.run("git", { "commit", "--no-edit", "-q" })
 +	if not c.ok then
@@ -140,7 +190,7 @@ index 98bffee9..fab74580 100644
 +	if not ok then
  		fail(
 -			`published, but merging origin/main failed (merge aborted): {r.stderr}{r.stdout}\nresolve it with: git merge origin/main`
-+			`published, but merging origin/main failed (merge aborted): {why}\nresolve what it names, then run ./zn sync (it unites provenance.md by itself)`
++			`merging origin/main failed (merge aborted; anything this command published is already on origin/main): {why}\nmerge by hand: git merge origin/main, resolve every conflict (for provenance.md keep the common rows, then origin/main's new rows, then yours, no row twice), commit; ./zn sync does it for the record alone`
  		)
  	end
  end
@@ -153,6 +203,8 @@ index 98bffee9..fab74580 100644
 +	local hint = provenance.hint({
 +		CLAUDECODE = process.env.CLAUDECODE,
 +		AI_AGENT = process.env.AI_AGENT,
++		CURSOR_AGENT = process.env.CURSOR_AGENT,
++		GROK_SESSION_ID = process.env.GROK_SESSION_ID,
 +		ZN_DISPATCH = process.env.ZN_DISPATCH,
 +		CLAUDE_EFFORT = process.env.CLAUDE_EFFORT,
 +	})
@@ -167,7 +219,7 @@ index 98bffee9..fab74580 100644
  -- Real entropy, folded into 31 bits: Lune's math.randomseed saturates larger seeds, so seeding with
  -- os.time() plus os.clock() (seconds since boot) gave every process the same stamp.
  local function entropy(): number
-@@ -1654,10 +1742,9 @@ local function raftingStart(what: string)
+@@ -1654,10 +1794,9 @@ local function raftingStart(what: string)
  		fail(`working tree is not clean: commit first ({what} merges origin/main before and after it claims)`)
  	end
  	refuseStale()
@@ -181,7 +233,7 @@ index 98bffee9..fab74580 100644
  	end
  end
  
-@@ -2287,11 +2374,10 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
+@@ -2287,11 +2426,10 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
  		-- one origin/main per try: the merge, the scope, the commit's parent and the race test all name this sha, so
  		-- a push elsewhere during the gate (or a later fetch) can never become the parent of a tree it isn't in
  		local base = sh.git({ "rev-parse", "--verify", "origin/main^{commit}" })
@@ -192,20 +244,20 @@ index 98bffee9..fab74580 100644
 +		if not merged then
  			fail(
 -				`merging origin/main failed (merge aborted): {merged.stderr}{merged.stdout}\nresolve it with: git merge origin/main, then run land again`
-+				`merging origin/main failed (merge aborted): {why}\nresolve what it names, then run ./zn sync and land again`
++				`merging origin/main failed (merge aborted): {why}\nmerge by hand: git merge origin/main, resolve every conflict (for provenance.md keep the common rows, then origin/main's new rows, then yours, no row twice), commit, then run land again`
  			)
  		end
  		refuseStale()
-@@ -3374,7 +3460,7 @@ function cmd.start(pos: { string })
+@@ -3374,7 +3512,7 @@ function cmd.start(pos: { string })
  				local found = store.find(dep)
  				if not found or found.state ~= "done" then
  					fail(
 -						`{m.id} depends on {dep}, which is {if found then found.state else "unknown"} as this branch sees it: it must be done first. If it has merged, git merge origin/main and retry; never edit depends_on to get past this`
-+						`{m.id} depends on {dep}, which is {if found then found.state else "unknown"} as this branch sees it: it must be done first. If it has merged, run ./zn sync and retry; never edit depends_on to get past this`
++						`{m.id} depends on {dep}, which is {if found then found.state else "unknown"} as this branch sees it: it must be done first. If it has merged, run ./zn sync (or merge origin/main by hand) and retry; never edit depends_on to get past this`
  					)
  				end
  			end
-@@ -5021,6 +5107,55 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
+@@ -5021,6 +5159,55 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
  	return nil
  end
  
@@ -263,10 +315,10 @@ index 98bffee9..fab74580 100644
  	if not publishing() then
 diff --git a/z-nile/engine/provenance.luau b/z-nile/engine/provenance.luau
 new file mode 100644
-index 00000000..7ed43ec3
+index 00000000..5ca44469
 --- /dev/null
 +++ b/z-nile/engine/provenance.luau
-@@ -0,0 +1,311 @@
+@@ -0,0 +1,331 @@
 +--!strict
 +-- c0263: the record of who decided what on a ticket. `provenance.md` in an item's folder, append-only rows
 +-- `| when | event | actor | detail |` with no row numbers (so two appends merge). Pure over texts: the callers read the
@@ -326,7 +378,7 @@ index 00000000..7ed43ec3
 +end
 +
 +-- The agent-session hint from an environment (a table of the variables the caller read): a session is an agent's when
-+-- `CLAUDECODE`, `AI_AGENT` or `ZN_DISPATCH` (a dispatched step) is set and non-empty; its effort is `CLAUDE_EFFORT`.
++-- `CLAUDECODE` (Claude Code), `AI_AGENT`, `CURSOR_AGENT` (the `agent` CLI), `GROK_SESSION_ID` (the `grok` CLI) or `ZN_DISPATCH` (a dispatched step) is set and non-empty; its effort is `CLAUDE_EFFORT`.
 +-- One definition for every layer: c0283's refusal of `approve` calls this function.
 +function provenance.hint(env: { [string]: string? }): Hint
 +	local function set(name: string): boolean
@@ -334,7 +386,9 @@ index 00000000..7ed43ec3
 +		return v ~= nil and v ~= ""
 +	end
 +	return {
-+		agent = set("CLAUDECODE") or set("AI_AGENT") or set("ZN_DISPATCH"),
++		agent = set("CLAUDECODE") or set("AI_AGENT") or set("CURSOR_AGENT") or set("GROK_SESSION_ID") or set(
++			"ZN_DISPATCH"
++		),
 +		effort = env.CLAUDE_EFFORT,
 +	}
 +end
@@ -535,7 +589,7 @@ index 00000000..7ed43ec3
 +	local badO, badT = extends(b, o), extends(b, t)
 +	if badO then
 +		return nil,
-+			`our version changed or removed row {badO} of the shared one: rows are only appended; restore it, then sync again`
++			`our version changed or removed row {badO} of the shared one: rows are only appended: restore the row, or merge by hand if you meant it (a renumber, for one; zz-rules, Provenance)`
 +	end
 +	if badT then
 +		return nil, `origin/main's version changed or removed row {badT} of the shared one`
@@ -561,6 +615,24 @@ index 00000000..7ed43ec3
 +		end
 +	end
 +	return provenance.render(id, out), nil
++end
++
++-- The path of the record of item `id` among `paths` (a `git ls-tree -r --name-only` listing of one commit): the
++-- `provenance.md` in the folder `<...>/<id>/`. Returns nil when the commit holds none, and nil and why when it holds
++-- more than one (the item's folder in two places: not decided here).
++function provenance.locate(paths: { string }, id: string): (string?, string?)
++	local found: string? = nil
++	for _, path in paths do
++		local folder = string.match(path, `(.*/{id})/provenance%.md$`)
++			or string.match(path, `^({id})/provenance%.md$`)
++		if folder then
++			if found then
++				return nil, `{id} has a record in two places ({found} and {path})`
++			end
++			found = path
++		end
++	end
++	return found, nil
 +end
 +
 +-- audit: what is wrong with the record at `path` (in an item's folder, named by that folder's id)
@@ -649,8 +721,21 @@ index 3b027518..65619e9f 100644
  		return false
  	end
  	for _, pattern in
+diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
+index 9044a2b8..f397652a 100644
+--- a/z-nile/skills/zz-execute/SKILL.md
++++ b/z-nile/skills/zz-execute/SKILL.md
+@@ -98,7 +98,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
+ 
+ ## Phase 5: Done
+ 1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit with `./zn commit --phase deliver`.
+-2. `git fetch origin main` and merge it into the branch now (renumber colliding IDs, rerun `z-nile/check.sh --affected`, commit with `./zn commit --phase deliver`), so the PR is up to date before `done` and nothing needs changing after it.
++2. run `./zn sync` (it fetches and merges `origin/main`, and unites a `provenance.md` both sides appended) to bring `origin/main` into the branch now (renumber colliding IDs, rerun `z-nile/check.sh --affected`, commit with `./zn commit --phase deliver`), so the PR is up to date before `done` and nothing needs changing after it.
+ 3. **Confirm the harvest**: first harvest anything `./zn lessons --uncovered R0010` still lists, as Phase 4 step 5 says. That includes the design reviews of a raft prepped before lessons existed, which are harvested here by you. Then `./zn lessons --uncovered R0010` and `./zn lessons --check` must pass. Commit with `./zn commit --phase deliver`.
+ 4. `./zn done R0010`. It re-verifies everything, marks the PR ready, then moves the items to `done/` and pushes the done commit.
+ 5. Post a PR comment `Ready to merge at <short sha>` (no final report yet).
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index a06b3331..15a61ca5 100644
+index a06b3331..e495bfeb 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -32,6 +32,7 @@ Each item is a directory named by its ID:
@@ -661,12 +746,30 @@ index a06b3331..15a61ca5 100644
  ```
  
  - **Skills**: z-nile's skills live in `z-nile/skills/<name>/SKILL.md`, a project's own in `<project>/skills/<name>/SKILL.md` (its name in `z-nile/projects.toml`: `pickman/skills/`). The harnesses find them through `.claude/skills/<name>`, a committed relative link to the real folder (`../../z-nile/skills/<name>`), which `./zn skills` writes and `./zn skills --check` (in the gate) checks: one link per skill, nothing else in `.claude/skills/`. Names are unique across the repository and equal the `name:` in the skill's frontmatter. A project's skill may name one other skill in `extends:`, the skill whose rules it defers to (`snake-arch` extends `pickman-arch`): a raft's prompt inlines it after the project's own skills, and `./zn skills` refuses a name that is no other skill. The `z-` (pipeline) and `zz-` (called from inside a step) prefixes are z-nile's alone: a project's skill is named `<project>-…`, and `./zn skills` refuses any other. Git can't add a path through a link, so every tool, spec, Touched path and edit uses the real folder, never `.claude/skills/<name>/…`.
+@@ -74,7 +75,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ |---|---|---|
+ | ready | `./zn ready <R-id\|issue-id>` | main checkout only, on a clean `main`, with an origin (z-ready skill). Checks the raft and every member are `design: ready` with a `check.sh` that has a check, and that every `depends_on` outside the raft is `done`. Claims the raft, publishes one tracker-only commit that moves it and its members to `active/` on `origin/main` (every `check.sh` item path rewritten), pulls the main checkout, and writes the ignored `<root>/rafts/active/<R-id>/prompt.md` (it inlines the project's `<root>/architecture.md`, pickman's map; a project without one gets a line saying so). On an active raft it regenerates the prompt and makes no commit. |
+ | stop | `./zn stop <R-id>` | main checkout only, on a clean `main`, with an origin (z-stop skill). It gives back exactly the issues that carry the raft's own claim stamp (`ready` and `start` stamp the raft and every issue they claim with one `active-…` value); an issue only listed in `issues:`, or one filed naming the raft after the claim, is never touched (the latter is named in a warning). Every claim stamp is new on `origin/main` (redrawn until no item carries it), and a raft with no `active-…` stamp is refused, to be given back by hand. Gives back a readied raft: publishes one tracker-only commit that moves it and its members from `active/` back to the backlog, stamped `prepared-…` (every `check.sh` item path rewritten back), removes `prompt.md`, pulls the main checkout, and names the raft's branch and PR, which it leaves as they are. A raft claimed by the legacy `start` (backlog, status `active`) gets a status-only publish and no move. A member in `done/` refuses. |
+-| start | `./zn start R0010` | clean tree required. A readied raft (in `active/` on `origin/main`): creates the branch, makes an empty `tracker: start` commit, pushes, and opens a **draft** PR; it claims and moves nothing. A backlog raft (legacy): checks members are `design: ready` and every `depends_on` of a member that isn't a member of the raft is `done` on `origin/main` (an unknown id is refused too); if `start` refuses, merge `origin/main` and retry, never edit `depends_on` or move items to get past it: stop and report. It then claims, creates the branch, moves the raft and its members to `active/`, commits, pushes, and opens a **draft** PR. A worktree made before `ready` is told to `sync` first. Do this first, so the in-progress claim is visible right away. |
++| start | `./zn start R0010` | clean tree required. A readied raft (in `active/` on `origin/main`): creates the branch, makes an empty `tracker: start` commit, pushes, and opens a **draft** PR; it claims and moves nothing. A backlog raft (legacy): checks members are `design: ready` and every `depends_on` of a member that isn't a member of the raft is `done` on `origin/main` (an unknown id is refused too); if `start` refuses, run `./zn sync` and retry, never edit `depends_on` or move items to get past it: stop and report. It then claims, creates the branch, moves the raft and its members to `active/`, commits, pushes, and opens a **draft** PR. A worktree made before `ready` is told to `sync` first. Do this first, so the in-progress claim is visible right away. |
+ | worktree | `./zn worktree <R-id\|name>` | creates or reuses `<repo>/.worktree/<R-id\|name>` on its own branch from a freshly fetched `origin/main` and prints its path. A raft's worktree is `.worktree/R0010` (branch `R0010-<slug>`); any other is `.worktree/<name>`. Refuses a done raft, and a branch that is checked out elsewhere. For a named worktree, `--from <ref>` cuts the new branch from that ref instead of `origin/main` (used for workstream streams: `./zn worktree ws-<issue> --from <raft branch>`). |
+ | workstreams | `./zn workstreams <R-id>` | read-only plan for parallel execution (zz-execute Phase 2B): issues in waves from `depends_on` and overlapping Touched modules, and a last line `parallel: yes (wave k: …)` or `parallel: no` |
+ | board | `./zn board [--out PATH] [-O]` | writes the whole tracker as one self-contained HTML page, `.cache/board.html` by default (gitignored; the main checkout's copy is rebuilt after every tracker push to `origin/main` and every `sync` there, so reload the tab; elsewhere regenerate to refresh). Views Rafts and Issues, each split into Ready, Not ready and Done (a backlog raft is Ready only when its design is ready and its effective status is prepared; a readied raft is Ready; blocked rafts stay listed). A raft's shown type comes from its issues (one type, or mix). A row with a next command has a copy button. Cursor keys, `/` then an id to jump to it, and each item's document and dependencies rendered with the vendored marked. Then it opens the page in the default browser unless `-O` is given (`-O` only writes it, as the specs do; `--open`, the old opt-in, is still accepted and is the default). The board is the local page; GitHub Actions does not build it. Stats (a Stats button, not a third view) charts opened, closed, net, minutes and lines added and removed for the month, quarter and year, by all, feature, defect and chore, plus the defect and chore ratios and mean days in state; Table shows the same numbers with units. Without history (a shallow clone or no git) closed counts and time in state are omitted. |
+@@ -109,7 +110,7 @@ The agent that delivered the change merges its own PR once the evidence is in. D
+ 1. **For a raft**, `./zn done` succeeded: the latest review round is resolved and the raft's `check.sh` passed. The PR is ready, not draft, and has no unresolved `BLOCKED:` comment. The results of the most recent review are already on the PR as a comment (zz-execute Phase 4). Only a *significant* finding in the final round's `review-NNN.md` (any high, or a failed Judged criterion) blocks the merge and engages the human; mediums and lows become follow-up issues (zz-execute Phase 4 step 7).
+ 2. `z-nile/check.sh --full` passes on the final head, run by you, in a clone outside this repo. `dir=$(mktemp -d)` only when that directory's parent directories are not a checkout of this repo; if `$TMPDIR` is inside this checkout, stop. Then `git clone --no-hardlinks --no-checkout` of this checkout into `$dir`, `git remote remove origin`, and `git checkout --detach` the exact head. Spawn the gate there with `PICKMAN_FENCE_REAL_GIT` set to the real repository's git directory appended to whatever the process inherited (`${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}` plus `git rev-parse --path-format=absolute --git-common-dir` of this checkout). That is the local full gate. That is the verification. A merge does not read GitHub Actions. `./zn done`'s gate in the raft worktree is the raft's own gate and is not this check. A red full gate here is BLOCKED: zz-execute Phase 6 step 1 says what to post and file.
+ 3. In `$dir/pickman`, on the detached head from step 2 (`git checkout --detach`), `lune run scripts/cicd` passes. Run it as `../zn run --time 1800 -- lune run scripts/cicd` from `$dir/pickman`, where the clone's `zn` is `../zn` (a bare `lune run` of it is refused by the PreToolUse hook: it runs the minutes-long runtime suites). It reads `~/.config/pickman/cicd.toml`, reserves the CICD places, publishes them, and runs both runtime suites. A missing file, a lease held by someone else, a publish failure, or a runtime failure stops the merge. This command is not part of `z-nile/check.sh --full`.
+-4. `gh pr view <pr> --json mergeable,mergeStateStatus` shows `MERGEABLE` and `CLEAN` (`UNKNOWN` is GitHub still computing it right after `done`: re-poll for up to a minute before deciding); any other state (`BEHIND`, `BLOCKED`, `UNSTABLE`, `DIRTY`) is not mergeable. `done` is preceded by a merge of `origin/main` (zz-execute Phase 5), so this should hold. If `main` moved since, and the merge is a clean one, merge `origin/main` in with plain `git` (`./zn commit` needs an active raft, and `done` has moved it), repeat step 2 (rerun `z-nile/check.sh --full` in that clone) and step 3 (`lune run scripts/cicd`, wrapped as there), push, and repeat this step. If it conflicts, or it needs anything beyond renumbering colliding IDs (`renumber` per Conflicts), post `BLOCKED:` and stop: a finished PR gets no unreviewed code changes.
++4. `gh pr view <pr> --json mergeable,mergeStateStatus` shows `MERGEABLE` and `CLEAN` (`UNKNOWN` is GitHub still computing it right after `done`: re-poll for up to a minute before deciding); any other state (`BEHIND`, `BLOCKED`, `UNSTABLE`, `DIRTY`) is not mergeable. `done` is preceded by a merge of `origin/main` (zz-execute Phase 5), so this should hold. If `main` moved since, and the merge is a clean one, merge `origin/main` in with `./zn sync` (`./zn commit` needs an active raft, and `done` has moved it), repeat step 2 (rerun `z-nile/check.sh --full` in that clone) and step 3 (`lune run scripts/cicd`, wrapped as there), push, and repeat this step. If it conflicts, or it needs anything beyond renumbering colliding IDs (`renumber` per Conflicts), post `BLOCKED:` and stop: a finished PR gets no unreviewed code changes.
+ 5. The human hasn't said to hold.
+ 
+ Then `gh pr merge <pr> --squash --subject "<raft>: <title> (#<pr>)" --body $'<summary>\n\n<the Co-Authored-By line from your commit instructions>'` (the `$'...'` form makes the newlines real, so the trailer is a trailer). Get the merge sha with `gh pr view <pr> --json mergeCommit -q .mergeCommit.oid`. Then follow Landing a change, step 4. `main` may have no branch protection (R0063 removed the `gate` check), so these conditions are the only gate: you enforce them. The ruleset c0117 §8 describes (a pull request required, updates restricted to the bypass list, the user the only bypass) is the user's to add, and until then the server stops nothing. The conditions are still yours to check, because your credentials are the admin's; a dispatched agent's are not (Dispatch, the agent credential). Never use `--admin`, and never merge on a red or missing local full gate, a red or missing `lune run scripts/cicd`, an unresolved review, or a stop condition. If any condition can't be met, leave the PR as it is, post a `BLOCKED:` comment saying which, and stop.
 @@ -119,6 +120,9 @@ Observed criteria (human Studio playtests) do not block the merge. Put them in t
  ## The PR is the visible record
  The draft PR opened by `start` stays the live log of the raft. Every `./zn commit` pushes. In addition, comment on the PR (`gh pr comment`) when: a review starts (with the sha), a review file lands (verdict and findings by severity), a review is answered (the refute lines), an issue finishes, and on any `BLOCKED:` stop. Never sit on unpushed work, and never leave review files uncommitted. See zz-execute Phase 4.
  
 +## Provenance
-+`provenance.md` (in an issue's or a raft's folder) is the one record of what git cannot tell: rows `| when | event | actor | detail |`, no row numbers, appended and never edited (`./zn audit` checks it). The events are `approved`, `unblocked`, `confirmed`, `ranked`, `rafted` and `delivered`; `./zn record <id> unblocked|confirmed|ranked [--actor A] [--detail k=v]` publishes the first three (the tickets that make those events call it; an active item takes `unblocked` only), and the others are written by their own commands in a pull request. The **actor** is `human:<git name>` or `agent:<model> effort <level>`: `--actor`, else `ZN_ACTOR` (the dispatcher sets it), else `agent:unknown effort <CLAUDE_EFFORT>` when `CLAUDECODE`, `AI_AGENT` or `ZN_DISPATCH` (a dispatched step) is set and non-empty, else the git name. A published append is built from `origin/main`'s file. Two writers (a published row on `main`, a row in your PR) are united by the engine's own merges of `origin/main` (`./zn sync`, `land`, `fold`/`recombine`): never merge `origin/main` with plain `git merge`, which stops on the record. A record added in a folder `origin/main` moved (`ready`, `done`) follows the folder; any other file added there stops the merge, naming it. A sync stops too when a side edited or removed an old row. `remap` merges on its own and does not unite a record both sides appended: resolve that one by hand. `./zn record` publishes `unblocked`, `confirmed` and `ranked` for a backlog item, `unblocked` only for an active one, nothing for a done one.
++`provenance.md` (in an issue's or a raft's folder) is the one record of what git cannot tell: a header, the table header and one row per event, `| when | event | actor | detail |`, no row numbers, appended and never edited (`./zn audit` checks it; the file is exactly that grammar and a stray line is an error). The events are `approved`, `unblocked`, `confirmed`, `ranked`, `rafted` and `delivered`. `./zn record <id> unblocked|confirmed|ranked [--actor A] [--detail k=v]` publishes `unblocked`, `confirmed` and `ranked` for a backlog issue or raft (the tickets that make those events call it), `unblocked` only for an active one and nothing for a done one; the other events are written by their own commands in a pull request. The **actor** is `human:<git name>` or `agent:<model> effort <level>`: `--actor`, else `ZN_ACTOR` (the dispatcher sets it), else `agent:unknown effort <CLAUDE_EFFORT>` when `CLAUDECODE`, `AI_AGENT`, `CURSOR_AGENT` (the `agent` CLI), `GROK_SESSION_ID` (the `grok` CLI) or `ZN_DISPATCH` (a dispatched step) is set and non-empty, else the git name. A published append is built from `origin/main`'s file. **Merging.** Two writers (a published row on `main`, a row in your PR) are united by the engine's own merges of `origin/main`: merge with `./zn sync` (and `land`, `fold`, `recombine`, which merge for you), and let it unite the record, wherever the item's folder moved. When it stops, it names why and nothing is left half merged; for a conflict in another file, a record that does not parse or a side that edited an old row, merge by hand with `git merge origin/main`, resolve every conflict, and take a conflicted `provenance.md` as the common rows, then `origin/main`'s new rows, then yours (no row twice), keeping every old row as it was; after a `renumber`, also rename its header. `remap` merges on its own and does not unite a record both sides appended: resolve that one by hand the same way.
 +
  ## Spend (best effort, automatic)
  Rows are only ever appended. A row has nine columns: when, commit, +lines, -lines, minutes, attribution, phase and tokens, and a tenth, model, once any row of the file records the model that spent its tokens (`--model <id>` on `spend` and `commit`; a file with no such row keeps nine columns, and a row with no model leaves the cell empty). The phase is one of `capture`, `prep`, `design-review`, `build`, `code-review` or `deliver`.
