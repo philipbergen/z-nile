@@ -23,6 +23,15 @@
 | 19 | 2026-11-08 03:01 | design-review-013 | 0 | 0 | 16.0 | spend | design-review | 234311 | claude-opus-5-5 |
 | 20 | 2026-11-08 03:02 | design-review-014 | 0 | 0 | 19.0 | spend | design-review | 238734 | claude-opus-5-5 |
 | 21 | 2026-11-08 03:02 | design-review-015 | 0 | 0 | 13.0 | spend | design-review | 207302 | claude-opus-5-5 |
+| 22 | 2026-11-08 20:08 | c0118: carry the board per project from proto2-c0118 (6bb217fb) | 1245 | 95 | 20.0 | focus | build |  |  |
+| 23 | 2026-11-08 20:29 | c0118: verification log | 0 | 0 | 5.0 | focus | build |  |  |
+| 24 | 2026-11-08 21:09 | c0118: code review 001 fixes (chart size and units, problems on the page, one round rule) | 164 | 13 | 40.0 | focus | code-review |  |  |
+| 25 | 2026-11-08 22:12 | c0118: code review 002 answers (page fixes driven through the node fake DOM, stronger round-rule pin) | 130 | 24 | 30.0 | focus | code-review |  |  |
+| 26 | 2026-11-08 22:58 | c0118: code review 003 answers (problems note escaped, deviations line; the spy pin is c0281) | 4 | 1 | 25.0 | focus | code-review | 150000 | claude-opus-5-5 |
+| 27 | 2026-11-08 22:59 | c0118: harvest note format | 0 | 0 | 1.0 | focus | code-review |  |  |
+| 28 | 2026-11-08 23:08 | R0083: final verification log and addressed during execution | 0 | 0 | 5.0 | focus | deliver |  |  |
+| 29 | 2026-11-09 00:27 | tracker: done R0083 | 0 | 0 | 45.0 | raft | deliver |  |  |
+| 30 | 2026-11-09 00:36 | deliver | 0 | 0 | 60.0 | spend | deliver |  |  |
 
-**Total:** +1676 / -5 lines, 275.4 agent-minutes, 1066279 tokens over 21 records
-<!-- totals: added=1676 removed=5 minutes=275.4 records=21 tokens=1066279 -->
+**Total:** +3219 / -138 lines, 506.4 agent-minutes, 1216279 tokens over 30 records
+<!-- totals: added=3219 removed=138 minutes=506.4 records=30 tokens=1216279 -->

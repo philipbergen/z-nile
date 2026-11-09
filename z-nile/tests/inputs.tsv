@@ -156,6 +156,7 @@ tests/acceptance/c0116/retired.spec.luau	pickman/.tracker/rafts/
 tests/acceptance/c0116/retired.spec.luau	pickman/skills/
 tests/acceptance/c0116/retired.spec.luau	z-nile/.tracker/issues/
 tests/acceptance/c0116/retired.spec.luau	z-nile/.tracker/rafts/
+tests/acceptance/c0118/real.spec.luau	*
 tests/acceptance/c0119/scope-lessons.spec.luau	pickman/.tracker/issues/
 tests/acceptance/c0119/scope-lessons.spec.luau	pickman/.tracker/rafts/
 tests/acceptance/c0119/scope-lessons.spec.luau	pickman/skills/
@@ -245,6 +246,18 @@ tests/tooling/board.spec.luau	pickman/.tracker/issues/
 tests/tooling/board.spec.luau	pickman/.tracker/rafts/
 tests/tooling/board.spec.luau	z-nile/.tracker/issues/
 tests/tooling/board.spec.luau	z-nile/.tracker/rafts/
+tests/tooling/board.spec.luau	arcade/.tracker/issues/
+tests/tooling/board.spec.luau	arcade/.tracker/rafts/
+tests/tooling/board.spec.luau	portal/.tracker/issues/
+tests/tooling/board.spec.luau	portal/.tracker/rafts/
+tests/tooling/board.spec.luau	snake/.tracker/issues/
+tests/tooling/board.spec.luau	snake/.tracker/rafts/
+tests/tooling/board.spec.luau	invaders/.tracker/issues/
+tests/tooling/board.spec.luau	invaders/.tracker/rafts/
+tests/tooling/board.spec.luau	asteroids/.tracker/issues/
+tests/tooling/board.spec.luau	asteroids/.tracker/rafts/
+tests/tooling/board.spec.luau	z-nile/projects.toml
+tests/tooling/board.spec.luau	z-nile/compaction.txt
 tests/tooling/fence-inherited-env.spec.luau	.gitignore
 tests/tooling/fence-inherited-env.spec.luau	pickman/.luaurc
 tests/tooling/fence-inherited-env.spec.luau	pickman/tests/lib/renamed.luau
