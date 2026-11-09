@@ -35,18 +35,27 @@ bad=0
 for f in "${FILES[@]}"; do
 	cmp -s "$TMP/$f" "$TOP/$f" || { echo "AC7: differs from the merge base plus the reviewed hunks: $f" >&2; bad=1; }
 done
-# and it changes no other promoted or tooling spec (design review 006 F2): its changes since the merge base, in the working
-# tree, under the promoted specs and the tooling specs list only the reviewed file and c0121's own promoted folder
-while IFS= read -r f; do
-	case "$f" in
-	z-nile/tests/acceptance/c0118/docs.spec.luau | z-nile/tests/acceptance/c0121/*) ;;
-	*)
-		echo "AC7: changes a promoted or tooling spec it does not own: $f" >&2
-		bad=1
-		;;
-	esac
-done < <({
-	git -C "$TOP" diff --name-only "$BASE" -- z-nile/tests/acceptance z-nile/tests/tooling
-	git -C "$TOP" ls-files -o --exclude-standard -- z-nile/tests/acceptance z-nile/tests/tooling
-} | sort -u)
+# and it changes no other test file (design review 006 F2, 007 F2): its changes since the merge base, in the working tree,
+# under every project's tests/ list only the two files c0121 owns, each modified in place with its mode unchanged; no
+# rename shows as only its destination (--no-renames), nothing is new or untracked (c0121's promoted folder does not exist
+# until `done`), and a git failure is red. The reads go into variables, so a failing git is not an empty list.
+OWNED=(
+	z-nile/tests/acceptance/c0118/docs.spec.luau
+	z-nile/tests/lib/cachepaths.luau
+)
+RAW="$(git -C "$TOP" diff --no-renames --raw "$BASE" -- ':(glob)*/tests/**')" || { echo "AC7: git diff against the merge base failed" >&2; exit 1; }
+NEW="$(git -C "$TOP" ls-files -o --exclude-standard -- ':(glob)*/tests/**')" || { echo "AC7: git ls-files failed" >&2; exit 1; }
+if [[ -n $NEW ]]; then
+	echo "AC7: untracked files under tests/ (c0121 adds none before done): $NEW" >&2
+	bad=1
+fi
+while IFS=$'\t' read -r meta f; do
+	[[ -n $meta ]] || continue
+	owned=0
+	for o in "${OWNED[@]}"; do [[ $f == "$o" ]] && owned=1; done
+	read -r om nm _ _ st <<<"${meta#:}"
+	if [[ $owned == 1 && $st == M && $om == "$nm" ]]; then continue; fi
+	echo "AC7: changes a test file it does not own, or not in place ($st $om $nm): $f" >&2
+	bad=1
+done <<<"$RAW"
 exit $bad

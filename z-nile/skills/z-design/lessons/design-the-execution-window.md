@@ -21,3 +21,5 @@ R0051 design review 005 F1: f0110 depends on d0151, whose fix lands in the adapt
 **Also:** c0118 design review 015 F1: a check that a file is exactly "base plus these hunks" forbids any other member of the same raft from changing that file; the design names the prepared items that do (search `*/.tracker/issues` outside `done/` for each pinned path) and keeps them out of the raft.
 
 **Note (c0121 design review 006 F1):** a conflict rule that names "our hunks" by hand is narrower than what `git apply -3` itself allows: the list missed the `require` it gave as its own example. Check: is the allowed set the carried diff's own hunk list (with a rule for resolving it and a stop condition), or a hand-written list of names that a replay can contradict?
+
+**Note (c0121 design review 007 F1):** a step's verification command written into the design must be run, at the pinned base and on `origin/main`, before its expected output is stated. c0121's contract grep never matched (`now()` broke its pattern), so the step would have stopped on an unchanged dispatcher. Ask: did I run each command a step tells the executor to run, and does the design paste its output?
