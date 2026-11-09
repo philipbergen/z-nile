@@ -4,3 +4,4 @@
 - review-002 F2: zz-execute/refute-claims-appear-in-the-diff
 - review-002 F3: one-off: one branch of the library-node test was unpinned and absent from the Rules table
 - review-002 F4: one-off: a spec title promised a refusal case its body did not check
+- review-003 F1: zz-arch/joined-keys-forbid-their-separator
