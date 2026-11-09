@@ -15,6 +15,7 @@
 | 11 | 2026-11-09 05:42 | c0269: rename the stale done-gate titles to the affected gate | 6 | 5 | 10.0 | focus | build |  |  |
 | 12 | 2026-11-09 05:57 | c0269: verification log | 0 | 0 | 3.0 | focus | build |  |  |
 | 13 | 2026-11-09 06:04 | R0087: review-001 | 0 | 0 | 20.0 | focus | code-review | 120000 | claude-opus-5-5 |
+| 14 | 2026-11-09 06:04 | R0087: addressed section | 0 | 0 | 2.0 | focus | deliver |  |  |
 
-**Total:** +265 / -8 lines, 395.0 agent-minutes, 658384 tokens over 13 records
-<!-- totals: added=265 removed=8 minutes=395.0 records=13 tokens=658384 -->
+**Total:** +265 / -8 lines, 397.0 agent-minutes, 658384 tokens over 14 records
+<!-- totals: added=265 removed=8 minutes=397.0 records=14 tokens=658384 -->
