@@ -1,0 +1,22 @@
+- design-review-001 F1: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F2: z-design/pins-name-who-reprep-goes-first
+- design-review-001 F3: z-design/dependent-specs-sequence-the-preps
+- design-review-001 F4: zz-test/narrowing-pins-the-whole-file
+- design-review-001 F5: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F6: z-design/exact-checks-compare-against-the-merge-base
+- design-review-001 F7: zz-test/pin-expected-text-not-documents
+- design-review-002 F1: z-design/check-paths-from-the-home
+- design-review-002 F2: z-design/prep-experiments-run-in-standalone-clones
+- design-review-002 F3: z-design/exact-checks-compare-against-the-merge-base
+- design-review-002 F4: one-off: a red check printed nothing; the check now names the missing text
+- design-review-002 F5: zz-test/absence-scans-cover-every-form
+- design-review-002 F6: one-off: my edit removed E3 while replacing E2
+- design-review-002 F7: z-design/dependent-specs-sequence-the-preps
+- design-review-003 F1: z-design/prep-experiments-run-in-standalone-clones
+- design-review-003 F2: z-design/prep-experiments-run-in-standalone-clones
+- design-review-003 F3: z-design/exact-checks-compare-against-the-merge-base
+- design-review-003 F4: zz-test/absence-scans-cover-every-form
+- design-review-003 F5: one-off: E2 still described the previous M10
+- design-review-004 F1: z-design/exact-checks-compare-against-the-merge-base
+- design-review-004 F2: zz-test/absence-scans-cover-every-form
+- design-review-004 F3: one-off: an edit split a sentence and dropped its subject
