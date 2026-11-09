@@ -31,6 +31,7 @@
 | 27 | 2026-11-08 22:59 | c0118: harvest note format | 0 | 0 | 1.0 | focus | code-review |  |  |
 | 28 | 2026-11-08 23:08 | R0083: final verification log and addressed during execution | 0 | 0 | 5.0 | focus | deliver |  |  |
 | 29 | 2026-11-09 00:27 | tracker: done R0083 | 0 | 0 | 45.0 | raft | deliver |  |  |
+| 30 | 2026-11-09 00:36 | deliver | 0 | 0 | 60.0 | spend | deliver |  |  |
 
-**Total:** +3219 / -138 lines, 446.4 agent-minutes, 1216279 tokens over 29 records
-<!-- totals: added=3219 removed=138 minutes=446.4 records=29 tokens=1216279 -->
+**Total:** +3219 / -138 lines, 506.4 agent-minutes, 1216279 tokens over 30 records
+<!-- totals: added=3219 removed=138 minutes=506.4 records=30 tokens=1216279 -->
