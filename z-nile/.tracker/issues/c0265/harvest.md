@@ -174,3 +174,12 @@
 - design-review-019 F9: one-off: a probe name the core's own parser calls malformed
 - design-review-019 F10: zz-arch/guard-no-is-explicit
 - design-review-019 F11: z-design/spec-design-correspondence
+- design-review-020 F1: z-design/bottom-layer-pins-only-what-upper-layers-keep
+- design-review-020 F2: z-design/prove-specs-pass-on-a-prototype
+- design-review-020 F3: z-design/restated-rules-move-together
+- design-review-020 F4: z-design/instructions-runnable-where-they-run
+- design-review-020 F5: z-design/design-the-execution-window
+- design-review-020 F6: z-design/new-rules-migrate-existing-work
+- design-review-020 F7: z-design/spec-design-correspondence
+- design-review-020 F8: zz-arch/guard-no-is-explicit
+- note round 2 candidate: an absolute count of a shared resource after commands is an absence assertion; prove early-layer cases on stubs of the later layers' effects: z-design/bottom-layer-pins-only-what-upper-layers-keep
