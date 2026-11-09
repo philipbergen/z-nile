@@ -32,3 +32,5 @@ c0172 design review 002 F1: that clone, made with `git clone` of the local check
 **Also:** f0148 design review 002 F3, F4: round 1 changed Behaviour 5 but left the Edge cases' "the lobby stores the best instead", and game-design.md kept "(1 until f0148)" twice.
 
 **Also:** f0148 design review 003 F3: round 2 bounded the lobby's write at 5 s, which made "a later arrival without a new pick starts on level 1" false when the write lands after the claim; the sentence was swept in round 3.
+
+**Also:** c0279 design review 004 F4: a late user decision changed a value (the stall cases' limit from 2 s to 10 s); the Design's general claims that the old value supported ("none longer", "no added cost", "holds under any load", the Test plan's three modes, the size) stayed. After a late decision, grep for every claim the old value supported, not just for the number.

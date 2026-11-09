@@ -21,9 +21,10 @@ need "cap case proves the kill by the pid" "$SPEC" 'deadWithin(grandchildPid("gr
 need "only 'No such process' is a death" "$SPEC" 'No such process'
 need "stall limit only a real stall reaches" "$SPEC" 'stall_seconds = 120'
 need "the one issue that tests a stall has 10 s, a limit starvation does not reach" "$SPEC" '[dispatch]\nstall_seconds = 10\ntool_seconds = 30\n'
-# FAKE_DELAY is the first command of every CLI fake, before its first output
+# FAKE_DELAY is the first command of every CLI fake, before its first output; unset, it spawns nothing (a builtin test)
 first=$(awk '/"#!\/bin\/sh",/ {f=1; next} f && !/^[[:space:]]*--/ {print; exit}' "$FAKE")
-[[ $first == *'sleep ${FAKE_DELAY:-0}'* ]] || { echo "MISSING (every CLI fake): FAKE_DELAY as the first command after the shebang"; fail=1; }
+want_first='[[[ -z "${FAKE_DELAY:-}" ] || sleep "$FAKE_DELAY"]],'
+[[ "$(sed 's/^[[:space:]]*//' <<<"$first")" == "$want_first" ]] || { echo "DIFFERS (every CLI fake): the first command after the shebang is not the FAKE_DELAY line (it spawns nothing when unset)"; fail=1; }
 
 stop=$(mode stop)
 cap=$(mode cap)
