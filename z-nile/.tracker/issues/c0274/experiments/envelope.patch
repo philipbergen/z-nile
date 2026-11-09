@@ -1,0 +1,71 @@
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index cb3812c4..1a4ca27e 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -6711,7 +6711,66 @@ if not READ_ONLY[name :: string] then
+ end
+ local rest = table.move(args, 2, #args, 1, {})
+ local pos, opts = flags(rest)
++-- ENVELOPE (scratch, never landed): c0275 and c0276's captured effects in their plainest correct form, so this layer's
++-- sequestered specs are proven to hold on the final raft tree. c0275: a claim path (status <id> preparing, ready) beats at
++-- once, and every command in a worktree beats the claims its memory holds (no throttle). c0276: the board's verdicts are
++-- read after a publish. Variant A: the old owner is told on stdout by the autobeat. Variant B: a worktree whose remembered
++-- stamp differs from main's refuses every command but run, reap and beat (c0277's discard guard).
++local function envelopeDiffers(id: string): boolean
++	local f = `.cache/tracker-stamp-{id}`
++	if not fs.isFile(f) then
++		return false
++	end
++	local paths = beatPaths()
++	if not paths then
++		return false
++	end
++	local cur = claimStampOf(paths, id)
++	return cur ~= sh.trim(fs.readFile(f))
++end
++local function envelopeId(id: string)
++	if guarded(true) or not publishing() then
++		return
++	end
++	pcall(function()
++		local paths = beatPaths()
++		local held = if paths then claimStampOf(paths, id) else nil
++		if held then
++			beatOnce(id, held)
++		end
++	end)
++end
++local function envelopeHeld(): { string }
++	local out: { string } = {}
++	if fs.isDir(".cache") then
++		for _, f in fs.readDir(".cache") do
++			local id = string.match(f, "^tracker%-stamp%-(.+)$") or string.match(f, "^tracker%-claim%-(.+)$")
++			if id then
++				table.insert(out, id)
++			end
++		end
++	end
++	return out
++end
++local envelopeActive = not READ_ONLY[name :: string]
++	and name ~= "beat"
++	and name ~= "run"
++	and name ~= "reap"
++	and sh.git({ "rev-parse", "--show-toplevel" }) ~= mainRoot()
++if envelopeActive then
++	for _, id in envelopeHeld() do
++		envelopeId(id)
++	end
++end
+ local ok, err = pcall(handler, pos, opts)
+ if not ok then
+ 	fail(`tracker {name}: {err}`)
+ end
++if (name == "status" and pos[2] == "preparing" and pos[1]) or name == "ready" then
++	envelopeId(pos[1] :: string)
++	if not guarded(true) and publishing() then
++		pcall(function()
++			judgeAll(originPaths())
++		end)
++	end
++end
