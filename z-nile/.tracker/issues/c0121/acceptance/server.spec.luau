@@ -132,6 +132,10 @@ local function start()
 			keyOf = function(): string
 				return key
 			end,
+			-- Stats as a function of the build, so a case can tell a kept answer from a recomputed one
+			statsHtml = function(_m: any): string
+				return `<p>stats of build {builds}</p>`
+			end,
 			engineHash = function(): string?
 				if hashDelay > 0 then
 					task.wait(hashDelay)
@@ -209,6 +213,10 @@ return t.spec("c0121 board server", function(it)
 			{ "type: feature", "title: Reviewed", "raft: R0020", "status: active-a-b-c" }
 		)
 		item("z-nile/.tracker/issues/c0099", { "type: chore", "title: Loose", "raft:" })
+		item(
+			"z-nile/.tracker/issues/active/f0025",
+			{ "type: feature", "title: Idle member", "raft: R0020", "status: active-a-b-c" }
+		)
 		write(
 			"wt/R0020/z-nile/.tracker/issues/active/f0021/spend.md",
 			"# Spend: f0021 x\n\n| # | when | commit | +lines | -lines | minutes | attribution | phase | tokens | model |\n"
@@ -306,6 +314,11 @@ return t.spec("c0121 board server", function(it)
 			t.expect(r.statusCode).toBe(409)
 			t.expect(string.find(r.body, "nothing to retry for c0099", 1, true) ~= nil).toBe(true)
 			t.expect(#runs).toBe(before)
+			-- a member of a raft that runs, with no state of its own: its raft's state does not make it retryable
+			local member = action('{"action":"retry","id":"f0025"}')
+			t.expect(member.statusCode).toBe(409)
+			t.expect(string.find(member.body, "nothing to retry for f0025", 1, true) ~= nil).toBe(true)
+			t.expect(#runs).toBe(before)
 		end
 	)
 
@@ -397,8 +410,10 @@ return t.spec("c0121 board server", function(it)
 				t.expect(#s.model.rafts).toBe(#a.model.rafts)
 			end
 			t.expect(b.model.rafts).toEqual(a.model.rafts)
+			t.expect(b.statsHtml).toBe(a.statsHtml) -- kept with the model between builds
 			key = "k-encode"
-			state() -- a build of the model: encoded again
+			local d = state() -- a build of the model: encoded again, with its Stats
+			t.expect(d.statsHtml ~= a.statsHtml).toBe(true)
 		end)
 		board.encode = real
 		if not ok then

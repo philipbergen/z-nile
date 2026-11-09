@@ -58,3 +58,6 @@
 - design-review-012 F2: zz-test/seed-every-enumerated-case
 - design-review-012 F3: one-off: a lifetime figure timed with os.clock (wall time under load) instead of the process's CPU; the design now says which it is
 - design-review-012 F4: z-design/restated-rules-move-together
+- design-review-013 F1: zz-test/seed-every-enumerated-case
+- design-review-013 F2: zz-test/seed-every-enumerated-case
+- design-review-013 F3: z-design/restated-rules-move-together

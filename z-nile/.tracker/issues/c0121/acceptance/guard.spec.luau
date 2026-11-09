@@ -35,6 +35,7 @@ local MODEL: any = {
 		f0022 = "f0022",
 		f0031 = "f0031",
 		f0023 = "f0023",
+		f0025 = "f0025",
 		f0024 = "f0024",
 		c0099 = "c0099",
 	},
@@ -48,6 +49,7 @@ local MODEL: any = {
 		{ id = "R0030", worktree = "/w/R0030" },
 	} :: { any },
 	issues = {
+		{ id = "f0025", raft = "R0020" }, -- a member of a raft that has a run state, with none of its own
 		{
 			id = "f0021",
 			raft = "R0020",
@@ -227,6 +229,11 @@ return t.spec("c0121 server rules", function(it)
 			t.expect(plan).toBe(nil)
 			t.expect(code).toBe(409)
 			t.expect(why).toBe("nothing to retry for c0099: it has never run")
+			-- the card's own state decides: a member whose raft runs, and a raft with no state whose member has one, are refused
+			local _, _, memberCode = serve.plan(MODEL, "retry", "f0025")
+			t.expect(memberCode).toBe(409)
+			local _, _, raftCode = serve.plan(MODEL, "retry", "R0030")
+			t.expect(raftCode).toBe(409)
 			-- a card with a run state of any outcome is retried (its own id)
 			t.expect((serve.plan(MODEL, "retry", "f0023")))
 				.toEqual({ kind = "run", args = { "dispatch", "retry", "f0023" }, wait = false })
