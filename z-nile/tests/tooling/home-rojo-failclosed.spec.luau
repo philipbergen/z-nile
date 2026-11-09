@@ -80,33 +80,39 @@ return t.spec("c0246 the home rule fails closed on what Rojo prints", function(i
 		fs.removeDir(BASE)
 	end)
 
-	it("a node named with a / is reported, since its instance path would read as a child (review 002 F1)", function()
-		pong()
-		put(
-			"pong/default.project.json",
-			'{ "name": "pong", "tree": { "$className": "DataModel", "ServerStorage/Arcade": { "$path": "src/a" } } }'
-		)
-		local reg = projects.parse(REG)
-		local found = home.problems(BASE, reg :: projects.Registry)
-		t.expect(#lines(found, "default.project.json: a node is named ServerStorage/Arcade")).toBe(1)
-		-- a name without a slash gets no such line
-		pong()
-		t.expect(#lines(home.problems(BASE, reg :: projects.Registry), "a node is named")).toBe(0)
-		fs.removeDir(BASE)
-	end)
+	it(
+		"a node named with a / is reported, since its instance path would read as a child (review 002 F1)",
+		function()
+			pong()
+			put(
+				"pong/default.project.json",
+				'{ "name": "pong", "tree": { "$className": "DataModel", "ServerStorage/Arcade": { "$path": "src/a" } } }'
+			)
+			local reg = projects.parse(REG)
+			local found = home.problems(BASE, reg :: projects.Registry)
+			t.expect(#lines(found, "default.project.json: a node is named ServerStorage/Arcade")).toBe(1)
+			-- a name without a slash gets no such line
+			pong()
+			t.expect(#lines(home.problems(BASE, reg :: projects.Registry), "a node is named")).toBe(0)
+			fs.removeDir(BASE)
+		end
+	)
 
-	it("a library folder whose own file sits exactly at the library's node is not misplaced (review 002 F3)", function()
-		pong()
-		-- arcade/src/shared/init.luau makes Rojo's ReplicatedStorage/Arcade a module whose file IS the node, not below it
-		put("arcade/src/shared/init.luau", "return 1")
-		put(
-			"pong/default.project.json",
-			'{ "name": "pong", "tree": { "$className": "DataModel", "ReplicatedStorage": { "$className": "ReplicatedStorage", "Arcade": { "$path": "../arcade/src/shared" } } } }'
-		)
-		local reg = projects.parse(REG)
-		local found = home.problems(BASE, reg :: projects.Registry)
-		t.expect(#lines(found, "makes Rojo put")).toBe(0)
-		t.expect(#lines(found, "makes Rojo read")).toBe(0)
-		fs.removeDir(BASE)
-	end)
+	it(
+		"a library folder whose own file sits exactly at the library's node is not misplaced (review 002 F3)",
+		function()
+			pong()
+			-- arcade/src/shared/init.luau makes Rojo's ReplicatedStorage/Arcade a module whose file IS the node, not below it
+			put("arcade/src/shared/init.luau", "return 1")
+			put(
+				"pong/default.project.json",
+				'{ "name": "pong", "tree": { "$className": "DataModel", "ReplicatedStorage": { "$className": "ReplicatedStorage", "Arcade": { "$path": "../arcade/src/shared" } } } }'
+			)
+			local reg = projects.parse(REG)
+			local found = home.problems(BASE, reg :: projects.Registry)
+			t.expect(#lines(found, "makes Rojo put")).toBe(0)
+			t.expect(#lines(found, "makes Rojo read")).toBe(0)
+			fs.removeDir(BASE)
+		end
+	)
 end)

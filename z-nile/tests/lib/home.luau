@@ -103,7 +103,8 @@ local function rojoReads(dir: string, name: string): ({ Read }?, string?)
 	end
 	collect(map, "")
 	if slashed then
-		return nil, `a node is named {slashed}: a name with a / cannot be told from a child, so what Rojo puts where is not judged`
+		return nil,
+			`a node is named {slashed}: a name with a / cannot be told from a child, so what Rojo puts where is not judged`
 	end
 	return reads, nil
 end

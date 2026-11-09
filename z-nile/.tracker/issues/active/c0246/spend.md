@@ -27,6 +27,7 @@
 | 23 | 2026-11-09 16:01 | c0246: review-001 F1 fail-closed spec, F2 comments | 87 | 4 | 20.0 | focus | code-review |  |  |
 | 24 | 2026-11-09 16:01 | R0088: refute-001, harvest, lessons | 13 | 0 | 10.0 | focus | code-review |  |  |
 | 25 | 2026-11-09 17:23 | R0088: review-002 | 0 | 0 | 70.0 | focus | code-review |  | claude-opus-5-5 |
+| 26 | 2026-11-09 17:36 | c0246: review-002 F1 slash names, F2 doc, F3 F4 cases; refute-002, harvest, lessons | 58 | 29 | 35.0 | focus | code-review |  |  |
 
-**Total:** +764 / -10 lines, 541.0 agent-minutes, 1057000 tokens over 25 records
-<!-- totals: added=764 removed=10 minutes=541.0 records=25 tokens=1057000 -->
+**Total:** +822 / -39 lines, 576.0 agent-minutes, 1057000 tokens over 26 records
+<!-- totals: added=822 removed=39 minutes=576.0 records=26 tokens=1057000 -->
