@@ -1,5 +1,5 @@
 --!strict
--- c0800: `tracker.sh done` runs the full gate on the final tree (acceptance specs promoted, raft and members moved
+-- c0800: `tracker.sh done` runs the affected gate on the final tree (acceptance specs promoted, raft and members moved
 -- to done/) before it commits, and rolls everything back when the gate fails. Inside a spec run it doesn't (the
 -- fixture specs that drive done clone tests/, so a gate there would run them again) unless PICKMAN_DONE_GATE=1
 -- adds it, as here, where the gate is a stub; it then checks the promoted specs instead. Driven in a throwaway clone (no origin, so no gh) whose z-nile/check.sh is a stub that records
@@ -112,7 +112,7 @@ local function log(): string
 	return if fs.isFile(gateLog) then fs.readFile(gateLog) else ""
 end
 
-return t.spec("c0800 done runs the full gate after promotion", function(it)
+return t.spec("c0800 done runs the affected gate after promotion", function(it)
 	it("sets up a clone with a prepared raft, started and reviewed, and a stub gate", function()
 		if fs.isDir(base) then
 			fs.removeDir(base)
@@ -210,7 +210,7 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 		end
 	)
 
-	it("done runs the full gate on the promoted, moved tree, then commits", function()
+	it("done runs the affected gate on the promoted, moved tree, then commits", function()
 		fresh()
 		local r = done(true, 0)
 		if not r.ok then
@@ -228,7 +228,7 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 		t.expect(fs.isDir(`{work}/{TR}/rafts/done/R0010`)).toBe(true) -- c0120 override: pickman's raft on the fixtures' layout (see TR)
 	end)
 
-	it("the gate decision: full, unless inside a spec run without the switch", function()
+	it("the gate decision: affected, unless inside a spec run without the switch", function()
 		-- the branch an agent's real `tracker.sh done` takes (neither variable set) can't be driven from inside this
 		-- spec run without dropping its guards, so the decision is a pure function, tested here with plain tables
 		t.expect(gate.doneGate({})).toBe("affected")
