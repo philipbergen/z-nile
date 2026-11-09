@@ -54,3 +54,7 @@
 - design-review-011 F2: zz-arch/per-poll-work-meets-the-cpu-limit
 - design-review-011 F3: zz-arch/per-poll-work-meets-the-cpu-limit
 - design-review-011 F4: z-design/restated-rules-move-together
+- design-review-012 F1: zz-arch/links-in-rendered-documents-keep-a-scheme-allow-list
+- design-review-012 F2: zz-test/seed-every-enumerated-case
+- design-review-012 F3: one-off: a lifetime figure timed with os.clock (wall time under load) instead of the process's CPU; the design now says which it is
+- design-review-012 F4: z-design/restated-rules-move-together

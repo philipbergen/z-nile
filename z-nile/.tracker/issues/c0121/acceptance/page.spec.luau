@@ -32,7 +32,8 @@ end
 local LINKS = "\n[script](javascript:alert(1)) [data](data:text/html,x) [upper](JaVaScRiPt:alert(1)) [vb](vbscript:x) "
 	.. "[file](file:///etc/passwd) [ent](jav&#x61;script:alert(1)) [ent2](&#106;avascript:alert(1)) "
 	.. "[colon](javascript&colon;alert(1)) [ent3](java&#9;script:alert(1)) [angle](<java\tscript:alert(2)>) [ref][r] "
-	.. "[web](https://example.invalid/x?a=1&b=2) [rel](docs/x.md) [mail](mailto:a@example.invalid) [anchor](#id)\n\n"
+	.. "[web](https://example.invalid/x?a=1&b=2) [rel](docs/x.md) [mail](mailto:a@example.invalid) [anchor](#id) "
+	.. '[titled](https://ok.example "x\\" onmouseover=\\"alert(1)")\n\n'
 	.. "[r]: jav&#x61;script:alert(3)\n"
 
 -- what a browser makes of an href attribute's text: entities decoded, then the characters it ignores inside a scheme removed
@@ -231,6 +232,18 @@ return t.spec("c0121 served page", function(it)
 			t.expect(has(joined, "\ndocs/x.md\n")).toBe(true)
 			t.expect(has(joined, "\nmailto:a@example.invalid\n")).toBe(true)
 			t.expect(has(joined, "\n#id\n")).toBe(true)
+			-- a quote in a link title must not open an attribute: no anchor carries an event handler (design review 012 F1)
+			for tag in string.gmatch(pane, "<a ([^>]*)>") do
+				local rest = string.gsub(tag, '%s*[%w%-]+="[^"]*"', function(attr)
+					local name = string.match(attr, "^%s*([%w%-]+)=")
+					if string.sub(name :: string, 1, 2) == "on" then
+						error(`an anchor carries the attribute {name}`)
+					end
+					return ""
+				end)
+				t.expect(string.find(rest, "%S") == nil).toBe(true) -- nothing but quoted attributes
+			end
+			t.expect(has(pane, 'title="x&quot;')).toBe(true) -- the title is there, its quote escaped
 		end
 	)
 

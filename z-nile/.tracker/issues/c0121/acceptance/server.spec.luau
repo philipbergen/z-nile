@@ -471,6 +471,46 @@ return t.spec("c0121 board server", function(it)
 		t.expect(models).toBe(0)
 	end)
 
+	it(
+		"gh failing, then answering again, is shown by the next poll without a rebuild of the model",
+		function()
+			local savedDelay = ghDelay
+			ghDelay = 0.02
+			local function settled()
+				key ..= "x" -- a build at this clock: no periodic rebuild can be what the next polls show
+				clock += 1
+				state()
+				task.wait(0.1)
+			end
+			local ok, err = pcall(function()
+				settled()
+				local b0 = builds
+				ghFails = true
+				clock += 31
+				state() -- gh is asked and fails
+				task.wait(0.2)
+				local failed = state()
+				t.expect(builds).toBe(b0)
+				t.expect(failed.model.live.checks).toBe("unavailable")
+				t.expect(byId(failed.model.rafts).R0020.pr).toBe(nil)
+				ghFails = false
+				settled() -- a build at this clock again: 62 s of fake time would let the periodic rebuild show the answer
+				local b1 = builds
+				clock += 31
+				state() -- gh is asked again and answers
+				task.wait(0.2)
+				local back = state()
+				t.expect(builds).toBe(b1)
+				t.expect(back.model.live.checks).toBe("ok")
+				t.expect(byId(back.model.rafts).R0020.pr ~= nil).toBe(true)
+			end)
+			ghFails, ghDelay = false, savedDelay
+			if not ok then
+				error(err, 0)
+			end
+		end
+	)
+
 	it("a failing gh still gives 200, with checks unavailable", function()
 		ghFails = true
 		clock += 31
