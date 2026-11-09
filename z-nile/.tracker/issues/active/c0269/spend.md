@@ -13,6 +13,7 @@
 | 9 | 2026-11-08 23:24 | prep | 259 | 3 | 100.0 | spend | prep |  |
 | 10 | 2026-11-09 03:18 | prep | 0 | 0 | 15.0 | spend | prep |  |
 | 11 | 2026-11-09 05:42 | c0269: rename the stale done-gate titles to the affected gate | 6 | 5 | 10.0 | focus | build |  |
+| 12 | 2026-11-09 05:57 | c0269: verification log | 0 | 0 | 3.0 | focus | build |  |
 
-**Total:** +265 / -8 lines, 372.0 agent-minutes, 538384 tokens over 11 records
-<!-- totals: added=265 removed=8 minutes=372.0 records=11 tokens=538384 -->
+**Total:** +265 / -8 lines, 375.0 agent-minutes, 538384 tokens over 12 records
+<!-- totals: added=265 removed=8 minutes=375.0 records=12 tokens=538384 -->
