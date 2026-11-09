@@ -3381,7 +3381,7 @@ function cmd.remap()
 				`remap committed, but merging origin/main conflicts: git merge origin/main and resolve (a provenance.md both sides appended: keep the common rows, then origin/main's new rows, then yours)\n{mt.stdout}`
 			)
 		end
-		tree = united
+		tree = united :: string
 	end
 	local merge = sh.git({
 		"commit-tree",

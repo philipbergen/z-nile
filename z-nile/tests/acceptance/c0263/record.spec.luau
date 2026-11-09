@@ -203,26 +203,25 @@ return t.spec("c0263 the record's writes", function(it)
 			return string.match(last, "^| [%d%-]+ [%d:]+ | %S+ | (.-) | ") or ""
 		end
 		local GROK = "agent:grok-4-7 effort xhigh"
-		for _, case in
+		local sources: { { env: { [string]: string }, args: { string }, want: string } } = {
 			{
-				{
-					env = { CLAUDECODE = "1", CLAUDE_EFFORT = "high" },
-					args = {},
-					want = "agent:unknown effort high",
-				},
-				{ env = { AI_AGENT = "x" }, args = {}, want = "agent:unknown effort unknown" },
-				{ env = { ZN_DISPATCH = "1" }, args = {}, want = "agent:unknown effort unknown" },
-				{ env = { CURSOR_AGENT = "1" }, args = {}, want = "agent:unknown effort unknown" },
-				{ env = { GROK_SESSION_ID = "s" }, args = {}, want = "agent:unknown effort unknown" },
-				{
-					env = { ZN_ACTOR = GROK, CLAUDECODE = "1", CLAUDE_EFFORT = "low" },
-					args = {},
-					want = GROK,
-				},
-				{ env = { ZN_ACTOR = GROK }, args = { "--actor", "human:Ann" }, want = "human:Ann" },
-				{ env = {}, args = {}, want = ME },
-			}
-		do
+				env = { CLAUDECODE = "1", CLAUDE_EFFORT = "high" },
+				args = {},
+				want = "agent:unknown effort high",
+			},
+			{ env = { AI_AGENT = "x" }, args = {}, want = "agent:unknown effort unknown" },
+			{ env = { ZN_DISPATCH = "1" }, args = {}, want = "agent:unknown effort unknown" },
+			{ env = { CURSOR_AGENT = "1" }, args = {}, want = "agent:unknown effort unknown" },
+			{ env = { GROK_SESSION_ID = "s" }, args = {}, want = "agent:unknown effort unknown" },
+			{
+				env = { ZN_ACTOR = GROK, CLAUDECODE = "1", CLAUDE_EFFORT = "low" },
+				args = {},
+				want = GROK,
+			},
+			{ env = { ZN_ACTOR = GROK }, args = { "--actor", "human:Ann" }, want = "human:Ann" },
+			{ env = {}, args = {}, want = ME },
+		}
+		for _, case in sources do
 			local args = { "record", "c0011", "ranked" }
 			for _, a in case.args do
 				table.insert(args, a)
@@ -232,10 +231,10 @@ return t.spec("c0263 the record's writes", function(it)
 		end
 		-- a given actor that is not a live form refuses, whatever else the environment says
 		local held = tip()
-		for _, env in
+		for _, badEnv in
 			{ { ZN_ACTOR = "none" }, { ZN_ACTOR = "unknown" }, { ZN_ACTOR = "robot:x", CLAUDECODE = "1" } }
 		do
-			t.expect(tr(W1, { "record", "c0011", "ranked" }, env).ok).toBe(false)
+			t.expect(tr(W1, { "record", "c0011", "ranked" }, badEnv).ok).toBe(false)
 			t.expect(tip()).toBe(held)
 		end
 		-- the closed list, the actor grammar, and the events another command writes
@@ -416,12 +415,12 @@ return t.spec("c0263 the record's writes", function(it)
 					`{ISSUES}/done/c0100`,
 				}
 			do
-				local bad = `{W4}/{where}/provenance.md`
-				fs.writeFile(bad, "not a record\n")
+				local stray = `{W4}/{where}/provenance.md`
+				fs.writeFile(stray, "not a record\n")
 				local r = tr(W4, { "audit" })
 				t.expect(r.ok).toBe(false)
 				t.expect(has(r.stdout .. r.stderr, "provenance")).toBe(true)
-				fs.removeFile(bad)
+				fs.removeFile(stray)
 			end
 			trOk(W4, { "audit" })
 		end
@@ -606,18 +605,15 @@ return t.spec("c0263 the record's writes", function(it)
 			trOk(W12, { "sync" })
 			appendRow(W12, `{ISSUES}/c0016/provenance.md`, "Ours")
 			for i = 1, 3 do
-				trOk(
-					W1,
-					{
-						"record",
-						"c0016",
-						"ranked",
-						"--actor",
-						`human:Main{string.rep("x", i)}`,
-						"--detail",
-						`rank={i}`,
-					}
-				)
+				trOk(W1, {
+					"record",
+					"c0016",
+					"ranked",
+					"--actor",
+					`human:Main{string.rep("x", i)}`,
+					"--detail",
+					`rank={i}`,
+				})
 			end
 			fixture.git(f.other, { "pull", "-q", "origin", "main" })
 			fixture.git(f.other, { "mv", `{ISSUES}/c0016`, `{ISSUES}/active/c0016` })

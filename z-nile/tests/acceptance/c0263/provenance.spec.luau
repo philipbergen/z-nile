@@ -294,9 +294,9 @@ return t.spec("c0263 the provenance record", function(it)
 		local edited = (string.gsub(ours, "human:Ann", "human:Eve", 1))
 		local gone = provenance.render("c0010", { (provenance.parse(ours) :: { any })[2] })
 		for _, bad in { edited, gone, "garbage" } do
-			local text, why = provenance.union(one :: string, bad, theirs)
+			local text, reason = provenance.union(one :: string, bad, theirs)
 			t.expect(text).toBe(nil)
-			t.expect(why ~= nil).toBe(true)
+			t.expect(reason ~= nil).toBe(true)
 			local text2, why2 = provenance.union(one :: string, ours, bad)
 			t.expect(text2).toBe(nil)
 			t.expect(why2 ~= nil).toBe(true)
@@ -326,14 +326,16 @@ return t.spec("c0263 the provenance record", function(it)
 		-- both changed: the union, main's rows first; the same change on both sides is one change
 		action, text = provenance.settle(one, ours, theirs)
 		t.expect(action).toBe("write")
-		t.expect(text).toBe(provenance.union(one, ours, theirs))
-		t.expect(select(2, provenance.settle(one, ours, ours))).toBe(ours)
+		t.expect(text).toBe((provenance.union(one, ours, theirs)))
+		local _, same = provenance.settle(one, ours, ours)
+		t.expect(same).toBe(ours)
 		-- changed on one side and absent on the other: stop, naming remap (an id changed)
-		for _, args in { { one, ours, nil }, { one, nil, theirs }, { nil, ours, theirs } } do
-			if args[1] == nil and args[2] and args[3] then
-				continue -- both created it: a union, not a stop
-			end
-			local a, _, why = provenance.settle(args[1], args[2], args[3])
+		local stops: { { common: string?, ours: string?, theirs: string? } } = {
+			{ common = one, ours = ours, theirs = nil },
+			{ common = one, ours = nil, theirs = theirs },
+		}
+		for _, args in stops do
+			local a, _, why = provenance.settle(args.common, args.ours, args.theirs)
 			t.expect(a).toBe(nil)
 			t.expect(string.find(why or "", "./zn remap", 1, true) ~= nil).toBe(true)
 		end
