@@ -11,29 +11,19 @@ A="$HERE/acceptance"
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: the actor grammar, one model-id spelling, the live inputs and the resolution order (flag, env, agent session, git name) hold" \
   lune run tests/run -- "$A/provenance.spec.luau"
-check "AC2: a Co-Authored-By trailer becomes a normalised agent actor, and a trailer whose email is a commit author's is a person" \
+check "AC2: provenance.md rows are unnumbered, in a closed event list, parsed strictly, appended only, and two writers' rows are united base, main, ours" \
   lune run tests/run -- "$A/provenance.spec.luau"
-check "AC3: ./zn who prints the idea's author from the capture commit and each status change's author from git, for old items too, and writes nothing" \
-  lune run tests/run -- "$A/who.spec.luau" "$A/provenance.spec.luau"
-check "AC4: ./zn approve records the human and the design hash as the human's commit in a plain session and is refused in every agent session or dispatched step, and refuses the main checkout, no identity, an issue not preparing, a design not ready and changes outside the folder" \
-  lune run tests/run -- "$A/approve.spec.luau"
-check "AC5: status prepared is refused until the newest approval matches the design (also after a redesign and under ZN_DISPATCH), a raft's move needs each issue it moves approved, and fold, new raft, ready, raft-plan and audit hold every prepared issue to an approval or the frozen list" \
-  lune run tests/run -- "$A/approve.spec.luau" "$A/provenance.spec.luau"
-check "AC6: unblocked, rafted and delivered rows are appended per ticket by the commands that make the events, ./zn record takes the other tickets' events, the engine's merge unions the record, and the publish validator and the rafting gate let only appended rows through" \
-  lune run tests/run -- "$A/record.spec.luau" "$A/lifecycle.spec.luau" "$A/dispatch.spec.luau" "$A/publish.spec.luau" "$A/provenance.spec.luau"
-check "AC7: the dispatcher never passes the prep gate, a worker cannot approve, and each attempt of a step has ZN_ACTOR from its own spec" \
-  lune run tests/run -- "$A/dispatch.spec.luau"
-check "AC8: who merges the derived entries and the record, oldest first, the record winning over a git fallback, with one pure per-item commit selector" \
-  lune run tests/run -- "$A/who.spec.luau" "$A/provenance.spec.luau"
-check "AC9: the board page lists an item's provenance in its view" \
-  lune run tests/run -- "$A/who.spec.luau"
-check "AC10: ./zn audit refuses a malformed record, an unknown event, a bad actor and a header naming another id, accepts absence and a raft's record, and warns on a stale approval" \
-  lune run tests/run -- "$A/record.spec.luau" "$A/approve.spec.luau" "$A/provenance.spec.luau"
-check "AC11: zz-rules, z-design, z-raft, zz-execute and the README document approve, who, record, the actor options and the session variables" \
+check "AC3: ./zn record publishes unblocked, confirmed and ranked rows from origin/main's file on a backlog item, a raft and (unblocked only) an active item, and refuses the rest" \
+  lune run tests/run -- "$A/record.spec.luau"
+check "AC4: the publish validator lets a provenance.md through only as a create or an append of published events, and refuses everything else naming the file" \
+  lune run tests/run -- "$A/publish.spec.luau"
+check "AC5: ./zn audit refuses a malformed record, an unknown event, a bad actor and a header naming another id, accepts absence and a raft's record" \
+  lune run tests/run -- "$A/record.spec.luau" "$A/provenance.spec.luau"
+check "AC6: the engine's merges of origin/main (sync, fold, land) unite a conflict confined to provenance.md, abort on any other, and a record added where the other side moved the folder follows the folder" \
+  lune run tests/run -- "$A/record.spec.luau"
+check "AC7: zz-rules and the README document provenance.md, ./zn record, the actor options, the session variables and the union through ./zn sync" \
   lune run tests/run -- "$A/provenance.spec.luau"
-check "AC13: ./zn provenance freeze writes the frozen list once from the prepared backlog issues and audit holds listed and unlisted issues to it" \
-  lune run tests/run -- "$A/freeze.spec.luau" "$A/provenance.spec.luau"
-check "AC12: the real tree audits and lessons-checks clean and the promoted specs this issue does not override stay green" \
-  bash -c '"$ZN_ROOT/zn" audit && "$ZN_ROOT/zn" lessons --check && lune run tests/run -- tests/acceptance/c0072/land.spec.luau tests/acceptance/c0073/board-stats.spec.luau tests/acceptance/c0081/publish-guard.spec.luau tests/acceptance/c0053/publish.spec.luau tests/acceptance/c0116/plan.spec.luau'
+check "AC8: the real tree audits and lessons-checks clean and the promoted specs this layer does not override stay green" \
+  bash -c '"$ZN_ROOT/zn" audit && "$ZN_ROOT/zn" lessons --check && lune run tests/run -- tests/acceptance/c0072/land.spec.luau tests/acceptance/c0081/publish-guard.spec.luau tests/acceptance/c0053/publish.spec.luau tests/acceptance/c0084/spend-command.spec.luau'
 
 finish

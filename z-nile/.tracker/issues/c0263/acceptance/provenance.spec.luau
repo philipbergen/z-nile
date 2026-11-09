@@ -1,8 +1,8 @@
 --!strict
--- c0263 AC1, AC2, AC3, AC4 (pure parts), AC6, AC10: ticket provenance, the pure rules. The actor grammar and its
--- resolution, the trailer and commit actors, the record (rows, append-only, the closed event list), the approval check
--- against the design hash, the per-item selector over the git log and the merge `who` prints, and the documentation.
--- Everything here is text in, text out.
+-- c0263 AC1, AC4, AC5: the record's pure rules. The actor grammar and its resolution, the record (rows, append-only,
+-- the closed event list, the publish rule's event check, the union of two writers), audit's check and the
+-- documentation. Everything here is text in, text out. (The derivations from git are c0280's, the approval check is
+-- c0283's.)
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local provenance = require("@znile/engine/provenance")
@@ -11,7 +11,7 @@ local trail = require("@znile/engine/trail")
 
 local OPUS = "agent:claude-opus-5-5 effort high"
 
-return t.spec("c0263 ticket provenance", function(it)
+return t.spec("c0263 the provenance record", function(it)
 	it("grammar and resolution", function()
 		for _, ok in
 			{
@@ -98,34 +98,6 @@ return t.spec("c0263 ticket provenance", function(it)
 		end
 	end)
 
-	it("trailers and commits", function()
-		t.expect(provenance.fromTrailer("Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"))
-			.toBe("agent:claude-opus-5-5 effort unknown (from git)")
-		t.expect(provenance.fromTrailer("Co-authored-by: Grok 4.7 <noreply@x.ai>"))
-			.toBe("agent:grok-4-7 effort unknown (from git)")
-		t.expect(provenance.fromTrailer("Signed-off-by: Phil <p@x>")).toBe(nil)
-		-- every commit author's email in the log: a trailer with one of these is a person
-		local people = { ["p@x"] = true, ["philip.bergen@me.com"] = true }
-		local sonnet = "Claude Sonnet 5.5 <noreply@anthropic.com>"
-		t.expect(provenance.fromCommit("Phil", { sonnet }, people))
-			.toBe("agent:claude-sonnet-5-5 effort unknown (from git)")
-		t.expect(provenance.fromCommit("Phil", {}, people)).toBe("human:Phil (from git)")
-		-- a trailer whose email is a commit author's elsewhere is a person, whatever name the commit's author has
-		t.expect(provenance.fromCommit("Phil", { "Philip Bergen <philip.bergen@me.com>" }, people))
-			.toBe("human:Phil (from git)")
-		-- a person's trailer beside an agent's: the agent
-		t.expect(
-			provenance.fromCommit(
-				"Phil",
-				{ "Philip Bergen <p@x>", "Claude Opus 5.5 <noreply@anthropic.com>" },
-				people
-			)
-		).toBe("agent:claude-opus-5-5 effort unknown (from git)")
-		-- the last agent trailer wins
-		t.expect(provenance.fromCommit("Phil", { "Claude Opus 5.5 <a@anthropic.com>", sonnet }, people))
-			.toBe("agent:claude-sonnet-5-5 effort unknown (from git)")
-	end)
-
 	it("the record", function()
 		local now = "2026-11-08 10:00"
 		local one =
@@ -192,6 +164,14 @@ return t.spec("c0263 ticket provenance", function(it)
 		).toBe(true)
 		t.expect(provenance.appendOnly(one, two, "c0011") ~= nil).toBe(true) -- another item's record
 		t.expect(provenance.appendOnly(nil, "garbage", "c0010") ~= nil).toBe(true) -- a create that does not parse
+		-- the publish rule: append-only, and every new row's event is one `./zn record` may publish (the allowed list)
+		t.expect(provenance.publishProblem(one, two, "c0010", provenance.PUBLISHED)).toBe(nil)
+		t.expect(provenance.publishProblem(nil, one :: string, "c0010", provenance.PUBLISHED) ~= nil)
+			.toBe(true) -- approved
+		t.expect(provenance.publishProblem(one, two, "c0010", { "confirmed" }) ~= nil).toBe(true) -- not in this list
+		t.expect(provenance.publishProblem(two, one :: string, "c0010", provenance.PUBLISHED) ~= nil)
+			.toBe(true)
+
 		-- union: two sides that each appended to the same base keep both rows, base first, no row twice
 		local ours =
 			provenance.record(one, "c0010", "rafted", OPUS, "raft=R0010", "2026-11-08 10:30") :: string
@@ -238,283 +218,6 @@ return t.spec("c0263 ticket provenance", function(it)
 		t.expect(trail.isDoc("c0010.md")).toBe(true)
 	end)
 
-	it("the approval check", function()
-		local function rows(text: string?): { any }
-			return (provenance.parse(text :: string) or {}) :: { any }
-		end
-		local none = provenance.record(nil, "c0010", "unblocked", OPUS, "", "2026-11-08 09:00") :: string
-		t.expect((provenance.approval(rows(none), "aaaaaaaaaaaa"))).toBe("none")
-		local one = provenance.record(
-			none,
-			"c0010",
-			"approved",
-			"human:Ann",
-			'design=aaaaaaaaaaaa; said="ok"',
-			"2026-11-08 10:00"
-		) :: string
-		t.expect((provenance.approval(rows(one), "aaaaaaaaaaaa"))).toBe("current")
-		-- a redesign changes the hash: stale, and it says what the approval covered
-		local state, old = provenance.approval(rows(one), "bbbbbbbbbbbb")
-		t.expect(state).toBe("stale")
-		t.expect(old).toBe("aaaaaaaaaaaa")
-		-- the newest approval decides, not the first and not a match anywhere in the history
-		local two = provenance.record(
-			one,
-			"c0010",
-			"approved",
-			"human:Ann",
-			"design=bbbbbbbbbbbb",
-			"2026-11-08 11:00"
-		) :: string
-		t.expect((provenance.approval(rows(two), "bbbbbbbbbbbb"))).toBe("current")
-		t.expect((provenance.approval(rows(two), "aaaaaaaaaaaa"))).toBe("stale")
-		-- a row without a design hash approves nothing
-		local bare =
-			provenance.record(nil, "c0010", "approved", "human:Ann", 'said="ok"', "2026-11-08 10:00") :: string
-		t.expect((provenance.approval(rows(bare), "aaaaaaaaaaaa"))).toBe("stale")
-	end)
-
-	it("the frozen list", function()
-		local list = provenance.exemptParse("# comment\nc0260 1a2b3c4d5e6f\nf0010 aaaaaaaaaaaa\n")
-		t.expect(list).toEqual({ c0260 = "1a2b3c4d5e6f", f0010 = "aaaaaaaaaaaa" })
-		-- no file on the base: the rule is not in force (nil), not an empty list
-		t.expect((provenance.exemptParse(nil))).toBe(nil)
-		-- a malformed or repeated line is refused, not skipped
-		for _, bad in
-			{ "c0260\n", "c0260 nothex\n", "c0260 aaaaaaaaaaaa\nc0260 bbbbbbbbbbbb\n", "stray text\n" }
-		do
-			local got, why = provenance.exemptParse(bad)
-			t.expect(got).toBe(nil)
-			t.expect(why ~= nil).toBe(true)
-		end
-		-- render then parse is the identity, sorted, with the two comment lines first
-		local rendered = provenance.exemptRender({ c0260 = "1a2b3c4d5e6f", c0010 = "aaaaaaaaaaaa" })
-		t.expect(string.sub(rendered, 1, 1)).toBe("#")
-		t.expect((provenance.exemptParse(rendered)))
-			.toEqual({ c0260 = "1a2b3c4d5e6f", c0010 = "aaaaaaaaaaaa" })
-		-- the doors: not in force without a list; a current approval passes; a listed issue passes only at its listed design
-		local none = {} :: { provenance.Row }
-		local current = provenance.parse(
-			provenance.record(
-				nil,
-				"c0010",
-				"approved",
-				"human:Ann",
-				"design=cccccccccccc",
-				"2026-11-08 10:00"
-			) :: string
-		) :: { provenance.Row }
-		t.expect(provenance.approvalProblem("c0010", "cccccccccccc", none, nil)).toBe(nil)
-		t.expect(provenance.approvalProblem("c0010", "cccccccccccc", current, {})).toBe(nil)
-		t.expect(provenance.approvalProblem("c0010", "dddddddddddd", none, { c0010 = "dddddddddddd" }))
-			.toBe(nil)
-		t.expect(
-			string.find(
-				provenance.approvalProblem("c0010", "eeeeeeeeeeee", none, { c0010 = "dddddddddddd" }) :: string,
-				"redesigned since the freeze",
-				1,
-				true
-			) ~= nil
-		).toBe(true)
-		t.expect(
-			string.find(
-				provenance.approvalProblem("c0011", "dddddddddddd", none, { c0010 = "dddddddddddd" }) :: string,
-				"without an approval",
-				1,
-				true
-			) ~= nil
-		).toBe(true)
-		t.expect(
-			string.find(
-				provenance.approvalProblem("c0010", "dddddddddddd", current, {}) :: string,
-				"no longer covers",
-				1,
-				true
-			) ~= nil
-		).toBe(true)
-		-- a listed issue with a stale approval at the listed design still passes (the list is its approval until it changes)
-		t.expect(provenance.approvalProblem("c0010", "dddddddddddd", current, { c0010 = "dddddddddddd" }))
-			.toBe(nil)
-	end)
-
-	it("derive and merge", function()
-		local DOC = "z-nile/.tracker/issues/c0010/c0010.md"
-		local DONE = "z-nile/.tracker/issues/done/c0010/c0010.md"
-		local sonnet = { "Claude Sonnet 5.5 <noreply@anthropic.com>" }
-		local opus = { "Claude Opus 5.5 <noreply@anthropic.com>" }
-		local n = 0
-		local raftAt: { [string]: string } = {}
-		-- 1790000000 is 2026-09-21 14:13:20 UTC; `day` counts from there; `raft` is the document's raft: after the commit
-		local function commit(
-			day: number,
-			author: string,
-			subject: string,
-			trailers: { string },
-			status: string,
-			path: string,
-			raft: string?
-		): trail.Commit
-			n += 1
-			local sha = `sha{n}`
-			if raft ~= nil then
-				raftAt[sha] = raft
-			end
-			return {
-				sha = sha,
-				time = 1790000000 + day * 86400,
-				subject = subject,
-				status = status,
-				path = path,
-				order = n,
-				doc = true,
-				id = "c0010",
-				author = author,
-				email = `{author}@example.invalid`,
-				trailers = trailers,
-			}
-		end
-		local ACTIVE = "z-nile/.tracker/issues/active/c0010/c0010.md"
-		local function sameSha(c: trail.Commit, status: string, path: string): trail.Commit
-			local other = table.clone(c)
-			other.status = status
-			other.path = path
-			other.order += 1
-			return other
-		end
-		-- the item's life, newest first (what trail.read returns): 09-22 capture, 09-23 preparing, 09-24 new, 09-25 a
-		-- rafting into R0011 (Bob), 09-26 unfold, 09-27 raft R0011 again (Fay), 09-28 ready (moves backlog -> active),
-		-- 09-29 a restamp, 09-30 the move to done/ (a delete of the active path and an add of the done path in one commit)
-		local done = commit(9, "Cy", "R0011: demo (#1)", sonnet, "A", DONE, "R0011")
-		local life = {
-			done,
-			sameSha(done, "D", ACTIVE),
-			commit(8, "Ida", "tracker: R0011 prepared", {}, "M", ACTIVE, "R0011"),
-			commit(7, "Hal", "tracker: ready R0011 demo", {}, "A", ACTIVE, "R0011"),
-			commit(6, "Fay", "tracker: raft R0011 again", {}, "M", DOC, "R0011"),
-			commit(5, "Gus", "tracker: unfold c0010", {}, "M", DOC, ""),
-			commit(4, "Bob", "tracker: prep R0010-R0011 rafts for c0010 (#12)", opus, "M", DOC, "R0011"),
-			commit(3, "Dee", "tracker: c0010 new", {}, "M", DOC, ""),
-			commit(2, "Dee", "tracker: c0010 preparing", {}, "M", DOC, ""),
-			commit(1, "Ann", "tracker: new c0010 alpha", {}, "A", DOC, ""),
-		}
-		local people: { [string]: boolean } = {}
-		for _, c in life do
-			people[c.email or ""] = true
-		end
-		local d = provenance.select(life, "c0010", "done", "R0011", people, raftAt)
-		t.expect((d.idea :: provenance.Entry).actor).toBe("human:Ann (from git)")
-		-- a status commit is an entry of its own with its author; a `new` commit is the unblock; the capture is neither
-		t.expect(#d.statuses).toBe(1)
-		t.expect(d.statuses[1].event).toBe("status:preparing")
-		t.expect(d.statuses[1].actor).toBe("human:Dee (from git)")
-		t.expect(#d.unblocked).toBe(1)
-		t.expect(d.unblocked[1].actor).toBe("human:Dee (from git)")
-		-- the rafter is whoever made `raft:` the current value and it stayed so: Fay (09-27), not Bob (09-25, undone by the
-		-- unfold), not the ready, the restamp or the move to done/ that kept the value
-		t.expect((d.rafted :: provenance.Entry).actor).toBe("human:Fay (from git)")
-		t.expect((d.rafted :: provenance.Entry).detail).toBe("raft=R0011")
-		-- the delivery is the commit that first added the document under done/, and it is also the merge
-		t.expect((d.delivered :: provenance.Entry).actor)
-			.toBe("agent:claude-sonnet-5-5 effort unknown (from git)")
-		-- who merged is the commit's author, trailers ignored (a squash is authored by the user with the agent as co-author)
-		t.expect((d.merged :: provenance.Entry).actor).toBe("human:Cy (from git)")
-		-- an unfolded item (raft: empty) has no rafter, and a backlog item no delivery or merge
-		local open = provenance.select({ life[8], life[9], life[10] }, "c0010", "backlog", "", people, raftAt)
-		t.expect(open.rafted).toBe(nil)
-		t.expect(open.delivered).toBe(nil)
-		t.expect(open.merged).toBe(nil)
-		-- a `new` commit that also changed the item's record is covered by its stored row; any other prints as derived
-		local give = commit(8, "Eli", "tracker: c0010 new", {}, "M", DOC)
-		local rec = table.clone(give)
-		rec.path = "z-nile/.tracker/issues/c0010/provenance.md"
-		rec.order += 1
-		t.expect(
-			#provenance.select({ give, rec, life[10] }, "c0010", "backlog", "", people, raftAt).unblocked
-		)
-			.toBe(0)
-		t.expect(#provenance.select({ give, life[10] }, "c0010", "backlog", "", people, raftAt).unblocked)
-			.toBe(1)
-		-- an idea taken from a first add (no commit names the item) says so
-		local weak = provenance.select(
-			{ commit(1, "Zed", "tracker: rename things", {}, "A", DOC) },
-			"c0010",
-			"backlog",
-			"",
-			people,
-			{}
-		)
-		t.expect((weak.idea :: provenance.Entry).actor).toBe("human:Zed (from git, first add)")
-		t.expect((d.idea :: provenance.Entry).actor).toBe("human:Ann (from git)")
-		-- merge: a stored row wins over a derived fallback of its event; oldest first by date, a derived entry before a
-		-- stored one in the same minute. The stored dates fall inside the derived range (09-22 14:13 .. 09-28 14:13).
-		local text = provenance.record(
-			nil,
-			"c0010",
-			"confirmed",
-			"human:Ann",
-			'said="yes"',
-			"2026-09-22 14:13"
-		) :: string
-		text = provenance.record(
-			text,
-			"c0010",
-			"approved",
-			"human:Ann",
-			"design=aaaaaaaaaaaa",
-			"2026-09-24 20:00"
-		) :: string
-		text = provenance.record(text, "c0010", "rafted", OPUS, "raft=R0011", "2026-09-27 15:00") :: string
-		local rows = provenance.parse(text) :: { provenance.Row }
-		local merged = provenance.merge(d, rows, "claude-opus-5-5-high")
-		local events: { string } = {}
-		for _, e in merged do
-			table.insert(events, `{e.event}:{e.source}`)
-		end
-		t.expect(events).toEqual({
-			"idea:git",
-			"confirmed:record", -- the same minute as the idea: derived first, then stored
-			"status:preparing:git",
-			"unblocked:git",
-			"approved:record",
-			"rafted:record", -- the stored row; Fay's derived rafting is not repeated
-			"delivered:git",
-			"merged:git",
-		})
-		for _, e in merged do
-			if e.event == "rafted" then
-				t.expect(e.actor).toBe(OPUS)
-			end
-			if e.event == "delivered" then
-				t.expect(string.find(e.detail, "worker=claude-opus-5-5-high", 1, true) ~= nil).toBe(true)
-			end
-		end
-		-- the worker comes from a spend row: the model column today, host and CLI once c0254 adds them
-		t.expect(provenance.workerOf({ model = "claude-opus-5-5-high" })).toBe("claude-opus-5-5-high")
-		t.expect(provenance.workerOf({ model = "claude-opus-5-5-high", host = "h1", cli = "claude" }))
-			.toBe("h1/claude/claude-opus-5-5-high")
-		t.expect(provenance.workerOf({})).toBe(nil)
-		t.expect(provenance.workerOf(nil)).toBe(nil)
-	end)
-
-	it("trail log", function()
-		-- the log format: a header, three tagged lines, then the change lines; a trailer value can look like anything
-		local log = "@@abc123 1790000000 tracker: c0010 new\n@ADee\n@Edee@example.invalid\n@TClaude Opus 5.5 <noreply@anthropic.com>\31M\tpath <x>\n"
-			.. "M\tz-nile/.tracker/issues/c0010/c0010.md\n"
-			.. "A\tz-nile/.tracker/issues/c0010/provenance.md\n"
-		local commits = trail.parse(log, { "z-nile/.tracker/issues/c0010" }, function(_: string): boolean
-			return true
-		end)
-		-- provenance.md is not the item's document
-		t.expect(#commits).toBe(2)
-		t.expect(commits[1].author).toBe("Dee")
-		t.expect(commits[1].email).toBe("dee@example.invalid")
-		t.expect(commits[1].subject).toBe("tracker: c0010 new")
-		t.expect(commits[1].doc).toBe(true)
-		t.expect(commits[2].doc).toBe(false)
-		t.expect(#(commits[1].trailers :: { string })).toBe(2)
-		t.expect((commits[1].trailers :: { string })[2]).toBe("M\tpath <x>")
-	end)
-
 	it("audit", function()
 		local good = provenance.record(
 			nil,
@@ -552,16 +255,12 @@ return t.spec("c0263 ticket provenance", function(it)
 		has(
 			"z-nile/skills/zz-rules/SKILL.md",
 			"provenance.md",
-			"./zn approve",
-			"./zn who",
 			"./zn record",
 			"ZN_ACTOR",
 			"--actor",
-			"CLAUDECODE"
+			"CLAUDECODE",
+			"./zn sync"
 		)
-		has("z-nile/skills/z-design/SKILL.md", "./zn approve", "then run `./zn status <id> prepared`")
-		has("z-nile/skills/z-raft/SKILL.md", "--actor")
-		has("z-nile/skills/zz-execute/SKILL.md", "--actor")
 		has("z-nile/README.md", "provenance")
 	end)
 end)
