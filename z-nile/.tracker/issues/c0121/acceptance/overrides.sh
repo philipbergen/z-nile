@@ -36,12 +36,15 @@ for f in "${FILES[@]}"; do
 	cmp -s "$TMP/$f" "$TOP/$f" || { echo "AC7: differs from the merge base plus the reviewed hunks: $f" >&2; bad=1; }
 done
 # and it changes no other test file (design review 006 F2, 007 F2): its changes since the merge base, in the working tree,
-# under every project's tests/ list only the two files c0121 owns, each modified in place with its mode unchanged; no
+# under every project's tests/ list only the three files c0121 owns, each modified in place with its mode unchanged; no
 # rename shows as only its destination (--no-renames), nothing is new or untracked (c0121's promoted folder does not exist
 # until `done`), and a git failure is red. The reads go into variables, so a failing git is not an empty list.
+# loops.luau is c0193's registry of unproven loops (R0072, not landed when this was written): if it has landed, the lint
+# asks for one entry for serve.luau's retry wait, an in-place addition that is c0121's own (design review 008 F1)
 OWNED=(
 	z-nile/tests/acceptance/c0118/docs.spec.luau
 	z-nile/tests/lib/cachepaths.luau
+	z-nile/tests/lib/loops.luau
 )
 RAW="$(git -C "$TOP" diff --no-renames --raw "$BASE" -- ':(glob)*/tests/**')" || { echo "AC7: git diff against the merge base failed" >&2; exit 1; }
 NEW="$(git -C "$TOP" ls-files -o --exclude-standard -- ':(glob)*/tests/**')" || { echo "AC7: git ls-files failed" >&2; exit 1; }

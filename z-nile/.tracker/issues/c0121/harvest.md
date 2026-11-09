@@ -34,3 +34,8 @@
 - design-review-007 F3: z-design/design-the-execution-window
 - design-review-007 F4: z-design/design-the-execution-window
 - design-review-007 F5: z-design/restated-rules-move-together
+- design-review-008 F1: z-design/design-the-execution-window
+- design-review-008 F2: z-design/design-the-execution-window
+- design-review-008 F3: z-design/design-the-execution-window
+- design-review-008 F4: one-off: deliberately hiding a committed edit from git's working-tree view is the branch author falsifying git, the accepted "detect, not prevent" limit of c0118's AC9
+- design-review-008 F5: z-design/restated-rules-move-together
