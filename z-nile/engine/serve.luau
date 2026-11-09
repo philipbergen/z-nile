@@ -126,7 +126,8 @@ local function dispatchOf(m: board.Model, id: string): board.Dispatch?
 	return nil
 end
 
--- An action on a card as a plan, or why not and its status (409 for a Stop with nothing running, else 400).
+-- An action on a card as a plan, or why not and its status (409 for a Stop with nothing running or a Retry of a card that
+-- never ran, else 400).
 function serve.plan(m: board.Model, action: string, id: string): (Plan?, string?, number?)
 	if type(id) ~= "string" or m.home[id] == nil then
 		return nil, `unknown id {tostring(id)}`, 400
@@ -148,6 +149,11 @@ function serve.plan(m: board.Model, action: string, id: string): (Plan?, string?
 		end
 		return { kind = "run", args = { "dispatch", "stop", target }, wait = true }, nil
 	elseif action == "retry" then
+		-- only a card the dispatcher has a run state for: `./zn dispatch retry` on an id with none starts the item's whole
+		-- headless chain, which is a start and not a retry (code review 001 F1, the user's rule G9)
+		if dispatchOf(m, id) == nil then
+			return nil, `nothing to retry for {id}: it has never run`, 409
+		end
 		return { kind = "run", args = { "dispatch", "retry", id }, wait = false }, nil
 	elseif action ~= "open" then
 		return nil, `unknown action {tostring(action)}`
@@ -350,8 +356,19 @@ function serve.start(o: Options): Server
 
 	local cache: { model: board.Model?, key: string?, at: number } =
 		{ model = nil, key = nil, at = -math.huge }
-	local gh: { at: number, data: { [string]: { pr: Pr, checks: Checks } }?, err: string?, busy: boolean } =
-		{ at = -math.huge, data = nil, err = nil, busy = false }
+	local gh: {
+		at: number,
+		data: { [string]: { pr: Pr, checks: Checks } }?,
+		err: string?,
+		busy: boolean,
+		version: number,
+	} =
+		{ at = -math.huge, data = nil, err = nil, busy = false, version = 0 }
+	-- the model's JSON and its Stats, encoded once per build of the model and per answer of gh, not per poll (code review
+	-- 001 F2: the encoding was 0.235 s of CPU per poll, and `./zn` stops its engine at 1800 s of CPU); the per-poll `live`
+	-- block (token, checks age, stale flag) is small and spliced in
+	local built = 0
+	local encoded: { gen: string?, model: string, stats: string } = { gen = nil, model = "", stats = "" }
 
 	-- `gh` runs in a task of its own, never on the request path, at most once per TTL (F8)
 	local function refreshGh()
@@ -368,6 +385,7 @@ function serve.start(o: Options): Server
 			else
 				gh.data, gh.err = nil, if not ok then tostring(out) else (why or "gh gave no PR list")
 			end
+			gh.version += 1
 			gh.busy = false
 		end)
 	end
@@ -379,6 +397,7 @@ function serve.start(o: Options): Server
 			facts.asOf = o.now()
 			facts.worktreeSpend = true
 			cache.model, cache.key, cache.at = collect(o.root, facts), key, o.now()
+			built += 1
 		end
 		local m = cache.model :: board.Model
 		local data = gh.data
@@ -448,7 +467,22 @@ function serve.start(o: Options): Server
 		elseif req.path == "/api/state" then
 			refreshGh()
 			local m = model()
-			return json(200, { model = m, statsHtml = statsOf(m) })
+			local live = m.live
+			local gen = `{built}.{gh.version}`
+			if encoded.gen ~= gen then
+				m.live = nil
+				encoded.model = board.encode(m)
+				encoded.stats = board.encode(statsOf(m))
+				encoded.gen = gen
+				m.live = live
+			end
+			-- the model's JSON is an object: its closing brace is replaced by the live block and the object's end
+			local head = string.sub(encoded.model, 1, -2)
+			return {
+				status = 200,
+				headers = { ["Content-Type"] = "application/json" },
+				body = `\{"model":{head},"live":{board.encode(live)}\},"statsHtml":{encoded.stats}\}`,
+			}
 		end
 		return act(req)
 	end

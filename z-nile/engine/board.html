@@ -151,7 +151,18 @@ dl.run dd { margin: 0; }
   // Lookups keyed by typed or document text must not see Object.prototype ("constructor", "__proto__").
   function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
   // Raw HTML in a document is shown as text, except comments (the templates' hints), which stay hidden.
-  marked.use({ renderer: { html: function (t) { return /^\s*<!--/.test(t.text) ? "" : esc(t.text); } } });
+  // A link in an item's document keeps only a safe target: no scheme (relative, #id), http, https or mailto; any other
+  // scheme (javascript:, data:, vbscript:) renders as its text, because on the served page a script link could read the
+  // session token and post the actions (c0121 code review 001 F3). Returning false falls back to marked's own link.
+  marked.use({ renderer: {
+    html: function (t) { return /^\s*<!--/.test(t.text) ? "" : esc(t.text); },
+    link: function (t) {
+      var href = String(t.href || "").replace(/[\u0000-\u0020\u007f-\u009f]/g, "");
+      var scheme = /^([a-z][a-z0-9+.\-]*):/i.exec(href);
+      if (!scheme || /^(https?|mailto)$/i.test(scheme[1])) return false;
+      return this.parser.parseInline(t.tokens);
+    }
+  } });
 
   function esc(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
