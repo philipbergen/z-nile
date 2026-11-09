@@ -56,6 +56,20 @@ function provenance.isValid(value: string): boolean
 	return base == "unknown" or liveForm(base)
 end
 
+-- The agent-session hint from an environment (a table of the variables the caller read): a session is an agent's when
+-- `CLAUDECODE`, `AI_AGENT` or `ZN_DISPATCH` (a dispatched step) is set and non-empty; its effort is `CLAUDE_EFFORT`.
+-- One definition for every layer: c0283's refusal of `approve` calls this function.
+function provenance.hint(env: { [string]: string? }): Hint
+	local function set(name: string): boolean
+		local v = env[name]
+		return v ~= nil and v ~= ""
+	end
+	return {
+		agent = set("CLAUDECODE") or set("AI_AGENT") or set("ZN_DISPATCH"),
+		effort = env.CLAUDE_EFFORT,
+	}
+end
+
 -- flag, then env, then an agent-session hint, then the git name; a given value that is not a live form refuses
 function provenance.resolve(flag: string?, env: string?, hint: Hint, gitName: string?): (string?, string?)
 	for _, given in { flag, env } do
@@ -89,40 +103,42 @@ local function known(event: string): boolean
 	return table.find(provenance.EVENTS, event) ~= nil
 end
 
--- The rows of a record, or nil and why. Refuses (never skips) a row that is not `| when | event | actor | detail |`
--- with a known event and a valid actor, and a file with no header.
+-- The rows of a record, or nil and why. The file is exactly its grammar: line 1 `# Provenance: <id>`, line 2 empty,
+-- line 3 the table header, line 4 its separator, then one row per line of exactly four cells (a `|` cannot be in a
+-- cell), one final newline. Anything else refuses, naming the line: no line is skipped, so a malformed or
+-- hand-formatted line can never be dropped by a merge that re-renders the rows.
 function provenance.parse(text: string): ({ Row }?, string?)
-	local header = string.match(text, "^# Provenance: (%S+)\n")
-	if not header then
-		return nil, "no `# Provenance: <id>` header"
+	if string.sub(text, -1) ~= "\n" then
+		return nil, "the file does not end with a newline"
+	end
+	local lines = string.split(string.sub(text, 1, -2), "\n")
+	if not string.match(lines[1] or "", "^# Provenance: %S+$") then
+		return nil, "line 1 is not `# Provenance: <id>`"
+	end
+	if lines[2] ~= "" then
+		return nil, "line 2 is not empty"
+	end
+	if lines[3] ~= "| when | event | actor | detail |" then
+		return nil, "line 3 is not the table header"
+	end
+	if lines[4] ~= "|---|---|---|---|" then
+		return nil, "line 4 is not the table separator"
 	end
 	local rows: { Row } = {}
-	local seenHead = false
-	for line in string.gmatch(text, "[^\n]+") do
-		if string.sub(line, 1, 1) ~= "|" then
-			continue
+	for n = 5, #lines do
+		local line = lines[n]
+		local when, event, actor, detail =
+			string.match(line, "^| (%d%d%d%d%-%d%d%-%d%d %d%d:%d%d) | (%S+) | ([^|]-) | ([^|]*) |$")
+		if not when or not event or not actor or not detail then
+			return nil, `line {n} is not a four-cell row: {line}`
 		end
-		if line == "| when | event | actor | detail |" then
-			seenHead = true
-		elseif line == "|---|---|---|---|" then
-			continue
-		else
-			local when, event, actor, detail =
-				string.match(line, "^| (%d%d%d%d%-%d%d%-%d%d %d%d:%d%d) | (%S+) | (.-) | (.*) |$")
-			if not when or not event or not actor or not detail then
-				return nil, `bad row: {line}`
-			end
-			if not known(event) then
-				return nil, `unknown event {event}`
-			end
-			if not provenance.isValid(actor) then
-				return nil, `bad actor {actor}`
-			end
-			table.insert(rows, { when = when, event = event, actor = actor, detail = detail })
+		if not known(event) then
+			return nil, `line {n}: unknown event {event}`
 		end
-	end
-	if not seenHead then
-		return nil, "no table header"
+		if not provenance.isValid(actor) then
+			return nil, `line {n}: bad actor {actor}`
+		end
+		table.insert(rows, { when = when, event = event, actor = actor, detail = detail })
 	end
 	return rows, nil
 end
@@ -213,16 +229,49 @@ function provenance.publishProblem(old: string?, new: string, id: string, allowe
 	return nil
 end
 
+-- Whether `side`'s rows begin with all of `base`'s, cell for cell and in place.
+local function extends(base: { Row }, side: { Row }): number?
+	for i, r in base do
+		local m = side[i]
+		if not m or m.when ~= r.when or m.event ~= r.event or m.actor ~= r.actor or m.detail ~= r.detail then
+			return i
+		end
+	end
+	return nil
+end
+
 -- Two writers' records merged (the engine's merge of origin/main): the base's rows as they were, then the target
 -- branch's (`theirs`, origin/main's) new rows, then ours' new rows minus theirs' taken as a multiset. After a merge
--- origin/main's record is still a prefix of ours, which a gate that compares them needs.
-function provenance.union(base: string?, ours: string, theirs: string): string
+-- origin/main's record is still a prefix of ours, which a gate that compares them needs. Refuses (nil and why) a side
+-- that does not parse or does not extend the base: a merge must never revert an edit or drop a removed row silently.
+function provenance.union(base: string?, ours: string, theirs: string): (string?, string?)
 	local id = string.match(ours, "^# Provenance: (%S+)")
 		or string.match(theirs, "^# Provenance: (%S+)")
 		or "?"
-	local b: { Row } = if base then (provenance.parse(base)) or {} else {}
-	local o: { Row } = (provenance.parse(ours)) or {}
-	local t: { Row } = (provenance.parse(theirs)) or {}
+	local b: { Row } = {}
+	if base then
+		local parsed, why = provenance.parse(base)
+		if not parsed then
+			return nil, `the common version does not parse ({why})`
+		end
+		b = parsed
+	end
+	local o, ownWhy = provenance.parse(ours)
+	if not o then
+		return nil, `our version does not parse ({ownWhy})`
+	end
+	local t, theirWhy = provenance.parse(theirs)
+	if not t then
+		return nil, `origin/main's version does not parse ({theirWhy})`
+	end
+	local badO, badT = extends(b, o), extends(b, t)
+	if badO then
+		return nil,
+			`our version changed or removed row {badO} of the shared one: rows are only appended; restore it, then sync again`
+	end
+	if badT then
+		return nil, `origin/main's version changed or removed row {badT} of the shared one`
+	end
 	local function key(r: Row): string
 		return `{r.when}|{r.event}|{r.actor}|{r.detail}`
 	end
@@ -243,7 +292,7 @@ function provenance.union(base: string?, ours: string, theirs: string): string
 			table.insert(out, o[i])
 		end
 	end
-	return provenance.render(id, out)
+	return provenance.render(id, out), nil
 end
 
 -- audit: what is wrong with the record at `path` (in an item's folder, named by that folder's id)

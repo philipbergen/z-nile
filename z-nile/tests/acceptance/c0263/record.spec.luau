@@ -1,5 +1,5 @@
 --!strict
--- c0263 AC3, AC4, AC5: the record's writes, in worktrees of a trackerfix fixture with a bare origin. `./zn record`
+-- c0263 AC3, AC5, AC6: the record's writes, in worktrees of a trackerfix fixture with a bare origin. `./zn record`
 -- publishes a row for the tickets that will call it (a raft's record and an active item's too, with the events each
 -- may take) and refuses the rest; the engine's merges of origin/main (sync, fold's, land's) union a conflict confined
 -- to provenance.md and abort on any other; a record added where the other side moved the folder (ready) follows the
@@ -14,6 +14,7 @@ local NAME = "c0263-record"
 local PREPARED = "prepared-quiet-copper-falcon"
 local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
 	.. 'check "AC1: ok" true\nfinish\n'
+local ME = `human:{NAME}`
 local ISSUES, RAFTS = "pickman/.tracker/issues", "pickman/.tracker/rafts"
 local HUMAN: { [string]: string } =
 	{ CLAUDECODE = "", AI_AGENT = "", CLAUDE_EFFORT = "", ZN_ACTOR = "", ZN_DISPATCH = "" }
@@ -29,7 +30,7 @@ local function raftDoc(id: string, issues: string): string
 end
 
 local f: trackerfix.Fixture
-local W1, W3, W4, W5, W6, W7 = "", "", "", "", "", ""
+local W1, W3, W4, W5, W6, W7, W8, W9 = "", "", "", "", "", "", "", ""
 
 local function env(extra: { [string]: string }?): { [string]: string }
 	local out: { [string]: string } = table.clone(HUMAN)
@@ -77,7 +78,7 @@ return t.spec("c0263 the record's writes", function(it)
 			-- the counter a published tree has: audit reads it
 			["z-nile/next"] = "issue 5000 quiet-copper-falcon\nraft 5000 quiet-copper-falcon\n",
 		}
-		for _, id in { "c0010", "c0011", "c0012", "c0013", "c0019" } do
+		for _, id in { "c0010", "c0011", "c0012", "c0013", "c0014", "c0019" } do
 			seed[`{ISSUES}/{id}/{id}.md`] = draft(id)
 			seed[`{ISSUES}/{id}/check.sh`] = CHECK
 		end
@@ -104,6 +105,15 @@ return t.spec("c0263 the record's writes", function(it)
 			)
 		)
 		seed[`{RAFTS}/active/R0150/check.sh`] = CHECK
+		-- a done issue: its record is written in a pull request, never published
+		seed[`{ISSUES}/done/c0100/c0100.md`] = (
+			string.gsub(
+				issue("c0100", ""),
+				"status: prepared%-quiet%-copper%-falcon",
+				"status: done-quiet-copper-falcon"
+			)
+		)
+		seed[`{ISSUES}/done/c0100/check.sh`] = CHECK
 		for _, r in { { "R0110", "" }, { "R0130", "c0050" }, { "R0140", "c0070" } } do
 			seed[`{RAFTS}/{r[1]}/{r[1]}.md`] = raftDoc(r[1], r[2])
 			seed[`{RAFTS}/{r[1]}/check.sh`] = CHECK
@@ -115,6 +125,8 @@ return t.spec("c0263 the record's writes", function(it)
 		W5 = trackerfix.trOk(f, f.main, { "worktree", "raft-e" })
 		W6 = trackerfix.trOk(f, f.main, { "worktree", "raft-f" })
 		W7 = trackerfix.trOk(f, f.main, { "worktree", "capture-g" })
+		W8 = trackerfix.trOk(f, f.main, { "worktree", "raft-h" })
+		W9 = trackerfix.trOk(f, f.main, { "worktree", "raft-i" })
 		-- the fixture audits clean before any of this, so a refusal below is the record's
 		trOk(W1, { "audit" })
 	end)
@@ -136,6 +148,39 @@ return t.spec("c0263 the record's writes", function(it)
 		t.expect(has(onOrigin(`{ISSUES}/c0011/provenance.md`), "human:Zed")).toBe(false)
 		t.expect(#rows(onOrigin(`{ISSUES}/c0011/provenance.md`), "ranked")).toBe(1)
 		t.expect(#rows(fs.readFile(mine), "ranked")).toBe(2)
+		-- who is recorded, per source: each value differs from every other source's, so a command that reads the wrong
+		-- one (or none) shows. The last row of the record is the one just published.
+		local function lastActor(): string
+			local last = ""
+			for line in string.gmatch(onOrigin(`{ISSUES}/c0011/provenance.md`), "[^\n]+") do
+				last = line
+			end
+			return string.match(last, "^| [%d%-]+ [%d:]+ | %S+ | (.-) | ") or ""
+		end
+		local GROK = "agent:grok-4-7 effort xhigh"
+		for _, case in
+			{
+				{ env = { CLAUDECODE = "1", CLAUDE_EFFORT = "high" }, args = {}, want = "agent:unknown effort high" },
+				{ env = { AI_AGENT = "x" }, args = {}, want = "agent:unknown effort unknown" },
+				{ env = { ZN_DISPATCH = "1" }, args = {}, want = "agent:unknown effort unknown" },
+				{ env = { ZN_ACTOR = GROK, CLAUDECODE = "1", CLAUDE_EFFORT = "low" }, args = {}, want = GROK },
+				{ env = { ZN_ACTOR = GROK }, args = { "--actor", "human:Ann" }, want = "human:Ann" },
+				{ env = {}, args = {}, want = ME },
+			}
+		do
+			local args = { "record", "c0011", "ranked" }
+			for _, a in case.args do
+				table.insert(args, a)
+			end
+			trOk(W1, args, case.env)
+			t.expect(lastActor()).toBe(case.want)
+		end
+		-- a given actor that is not a live form refuses, whatever else the environment says
+		local held = tip()
+		for _, env in { { ZN_ACTOR = "none" }, { ZN_ACTOR = "unknown" }, { ZN_ACTOR = "robot:x", CLAUDECODE = "1" } } do
+			t.expect(tr(W1, { "record", "c0011", "ranked" }, env).ok).toBe(false)
+			t.expect(tip()).toBe(held)
+		end
 		-- the closed list, the actor grammar, and the events another command writes
 		local mark = tip()
 		for _, args in
@@ -153,6 +198,12 @@ return t.spec("c0263 the record's writes", function(it)
 		-- the command refuses an event another command writes by itself, before the publisher is asked
 		local refused = tr(W1, { "record", "c0011", "approved" })
 		t.expect(has(refused.stderr .. refused.stdout, "written by their own commands")).toBe(true)
+		-- never in the main checkout (only ever fast-forwarded), and never offline
+		local mainHead = fixture.git(f.main, { "rev-parse", "HEAD" })
+		t.expect(tr(f.main, { "record", "c0011", "ranked" }).ok).toBe(false)
+		t.expect(tr(W1, { "record", "c0011", "ranked" }, { PICKMAN_PUBLISH = "0" }).ok).toBe(false)
+		t.expect(tip()).toBe(mark)
+		t.expect(fixture.git(f.main, { "rev-parse", "HEAD" })).toBe(mainHead)
 	end)
 
 	it("./zn record reaches a raft's record and an active item's, and takes unblocked rows only there", function()
@@ -162,9 +213,26 @@ return t.spec("c0263 the record's writes", function(it)
 		trOk(W1, { "record", "c0090", "unblocked", "--actor", "human:Ann", "--detail", "block=red-gate" })
 		t.expect(has(onOrigin(`{ISSUES}/active/c0090/provenance.md`), "| unblocked | human:Ann | block=red-gate |"))
 			.toBe(true)
+		-- an active raft (a whole-raft block, c0250) takes unblocked rows and nothing else; a done item's record is
+		-- written in a pull request
+		trOk(W1, { "record", "R0150", "unblocked", "--actor", "human:Ann", "--detail", "block=raft" })
+		t.expect(has(onOrigin(`{RAFTS}/active/R0150/provenance.md`), "| unblocked | human:Ann | block=raft |"))
+			.toBe(true)
 		local mark = tip()
-		t.expect(tr(W1, { "record", "c0090", "confirmed", "--actor", "human:Ann" }).ok).toBe(false)
-		t.expect(tip()).toBe(mark)
+		for _, args in
+			{
+				{ "record", "c0090", "confirmed", "--actor", "human:Ann" },
+				{ "record", "R0150", "confirmed", "--actor", "human:Ann" },
+				{ "record", "R0150", "ranked", "--actor", "human:Ann" },
+				{ "record", "c0100", "unblocked", "--actor", "human:Ann" },
+				{ "record", "c0100", "confirmed", "--actor", "human:Ann" },
+			}
+		do
+			local r = tr(W1, args)
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr .. r.stdout, if args[2] == "c0100" then "done" else "active")).toBe(true)
+			t.expect(tip()).toBe(mark)
+		end
 	end)
 
 	it("a conflict outside provenance.md aborts the merge and leaves the tree as it was", function()
@@ -186,6 +254,7 @@ return t.spec("c0263 the record's writes", function(it)
 		local r = tr(W4, { "sync" })
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr .. r.stdout, "c0050.md")).toBe(true)
+		t.expect(has(r.stderr .. r.stdout, "git merge origin/main")).toBe(false)
 		t.expect(fixture.exec(W4, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
 		t.expect(fixture.git(W4, { "rev-parse", "HEAD" })).toBe(before)
 		t.expect(fixture.git(W4, { "status", "--porcelain" })).toBe("")
@@ -227,6 +296,11 @@ return t.spec("c0263 the record's writes", function(it)
 			local united = fs.readFile(`{W5}/{ISSUES}/active/c0019/provenance.md`)
 			t.expect(#rows(united, "unblocked")).toBe(1)
 			t.expect(#rows(united, "rafted")).toBe(1)
+			-- main's row first, then ours
+			t.expect(
+				(string.find(united, "| unblocked |", 1, true) :: number)
+					< string.find(united, "| rafted |", 1, true) :: number
+			).toBe(true)
 			t.expect(fixture.git(W5, { "status", "--porcelain" })).toBe("")
 		end
 	)
@@ -249,6 +323,23 @@ return t.spec("c0263 the record's writes", function(it)
 		)
 		trOk(W4, { "audit" })
 		fs.removeFile(`{W4}/{RAFTS}/R0130/provenance.md`)
+		trOk(W4, { "audit" })
+		-- a malformed record is found wherever the item is: a backlog raft, an active raft, an active issue, a done issue
+		for _, where in
+			{
+				`{RAFTS}/R0130`,
+				`{RAFTS}/active/R0150`,
+				`{ISSUES}/active/c0090`,
+				`{ISSUES}/done/c0100`,
+			}
+		do
+			local bad = `{W4}/{where}/provenance.md`
+			fs.writeFile(bad, "not a record\n")
+			local r = tr(W4, { "audit" })
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stdout .. r.stderr, "provenance")).toBe(true)
+			fs.removeFile(bad)
+		end
 		trOk(W4, { "audit" })
 	end)
 	it("fold's merge of origin/main unions the record too", function()
@@ -297,6 +388,59 @@ return t.spec("c0263 the record's writes", function(it)
 			t.expect(has(out, "provenance.md")).toBe(true) -- the scope refusal names the record
 			t.expect(#rows(fs.readFile(rec), "ranked")).toBe(2)
 			t.expect(fixture.exec(W7, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
+		end
+	)
+	it("a sync that cannot unite the record aborts and says so: an unparsable side, an edited old row", function()
+		local rec = `{W8}/{ISSUES}/c0010/provenance.md`
+		local function stateOf(): string
+			return fixture.git(W8, { "rev-parse", "HEAD" }) .. fixture.git(W8, { "status", "--porcelain" })
+		end
+		-- our side commits a record that does not parse; main publishes one
+		fs.writeFile(rec, "garbage\n")
+		fixture.git(W8, { "add", "-A" })
+		fixture.git(W8, { "commit", "-q", "-m", "a record that does not parse" })
+		trOk(W1, { "record", "c0010", "ranked", "--actor", "human:Bee", "--detail", "rank=1" })
+		local before = stateOf()
+		local r = tr(W8, { "sync" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr .. r.stdout, "c0010/provenance.md")).toBe(true)
+		t.expect(fixture.exec(W8, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
+		t.expect(stateOf()).toBe(before)
+		-- our side edited a row both sides share: the union would revert the edit, so the sync stops
+		fixture.git(W8, { "reset", "-q", "--hard", "HEAD~1" })
+		trOk(W8, { "sync" })
+		t.expect(has(fs.readFile(rec), "human:Bee")).toBe(true)
+		fs.writeFile(rec, (string.gsub(fs.readFile(rec), "human:Bee", "human:Eve")))
+		fixture.git(W8, { "add", "-A" })
+		fixture.git(W8, { "commit", "-q", "-m", "an edited row" })
+		trOk(W1, { "record", "c0010", "ranked", "--actor", "human:Cy", "--detail", "rank=2" })
+		local again = stateOf()
+		local r2 = tr(W8, { "sync" })
+		t.expect(r2.ok).toBe(false)
+		t.expect(has(r2.stderr .. r2.stdout, "row 1")).toBe(true)
+		t.expect(fixture.exec(W8, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
+		t.expect(stateOf()).toBe(again)
+	end)
+
+	it(
+		"any other file added in a folder the other side moved stops the sync, naming the folder (as it always did)",
+		function()
+			local review = `{W9}/{ISSUES}/c0014/design-review-001.md`
+			fs.writeFile(review, "# review\n")
+			fixture.git(W9, { "add", "-A" })
+			fixture.git(W9, { "commit", "-q", "-m", "our review file" })
+			fixture.git(f.other, { "pull", "-q", "origin", "main" })
+			fixture.git(f.other, { "mv", `{ISSUES}/c0014`, `{ISSUES}/active/c0014` })
+			fixture.git(f.other, { "commit", "-q", "-m", "tracker: ready R0157" })
+			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+			local before = fixture.git(W9, { "rev-parse", "HEAD" })
+			local r = tr(W9, { "sync" })
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr .. r.stdout, "c0014")).toBe(true) -- git names the folder it cannot place the file in
+			t.expect(fixture.exec(W9, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
+			t.expect(fixture.git(W9, { "rev-parse", "HEAD" })).toBe(before)
+			t.expect(fs.isFile(review)).toBe(true)
+			t.expect(fixture.git(W9, { "status", "--porcelain" })).toBe("")
 		end
 	)
 end)

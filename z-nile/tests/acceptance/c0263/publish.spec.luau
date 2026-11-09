@@ -1,8 +1,8 @@
 --!strict
--- c0263 AC6: the publish validator's provenance.md branch, through publish.commit with crafted changes (the way
+-- c0263 AC4: the publish validator's provenance.md branch, through publish.commit with crafted changes (the way
 -- c0053's publish spec drives it for documents). A record may be created or appended to in a backlog folder, an issue's
--- or a raft's; an edited, removed or reordered row, a create that does not parse, a record in active/ and a record with
--- no document beside it are refused, naming the file.
+-- or a raft's (an active item's takes unblocked rows only, a done item's none); an edited, removed or reordered row, a
+-- create that does not parse and a record with no document beside it are refused, naming the file.
 local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -33,6 +33,8 @@ end
 local ISSUE = "pickman/.tracker/issues/c0010"
 local RAFT = "pickman/.tracker/rafts/R0010"
 local ACTIVE = "pickman/.tracker/issues/active/c0020"
+local ACTIVE_RAFT = "pickman/.tracker/rafts/active/R0020"
+local DONE = "pickman/.tracker/issues/done/c0030"
 local function doc(id: string): string
 	return `---\nid: {id}\ntype: chore\ntitle: {id}\nslug: {id}\nstatus: new-a-b-c\n---\n\n# {id}\n`
 end
@@ -55,7 +57,9 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		git(`{base}/seed`, { "init", "-q", "-b", "main" })
 		identity(`{base}/seed`)
 		engine.registry(`{base}/seed`)
-		for dir, id in { [ISSUE] = "c0010", [RAFT] = "R0010", [ACTIVE] = "c0020" } do
+		for dir, id in
+			{ [ISSUE] = "c0010", [RAFT] = "R0010", [ACTIVE] = "c0020", [ACTIVE_RAFT] = "R0020", [DONE] = "c0030" }
+		do
 			fs.writeDir(`{base}/seed/{dir}`)
 			fs.writeFile(`{base}/seed/{dir}/{id}.md`, doc(id))
 		end
@@ -76,9 +80,7 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		do
 			t.expect(publish.allowed(ok, { "pickman/.tracker" })).toBe(true)
 		end
-		for _, bad in
-			{ "pickman/.tracker/provenance.md", `{ISSUE}/sub/provenance.md`, `{ISSUE}/provenance.txt` }
-		do
+		for _, bad in { "pickman/.tracker/provenance.md", `{ISSUE}/sub/provenance.md`, `{ISSUE}/provenance.txt` } do
 			t.expect(publish.allowed(bad, { "pickman/.tracker" })).toBe(false)
 		end
 	end)
@@ -103,7 +105,7 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		end
 		-- an edited row
 		refused((string.gsub(first, "human:Ann", "human:Eve")), nil, "provenance.md")
-		-- a stale approval made current by rewriting its design hash, with a legitimate row appended after it
+		-- an old row's detail rewritten, with a legitimate row appended after it
 		refused(
 			(string.gsub(first, 'said="yes"', 'said="no"')) .. row("ranked", "human:Bee", "rank=3"),
 			nil,
@@ -120,7 +122,10 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		-- active/: the item's files change on the raft's branch, but a block is published (c0250): unblocked rows only
 		refused(one("c0020"), `{ACTIVE}/provenance.md`, "active")
 		-- no document beside it
-		refused(one("c0030"), "pickman/.tracker/issues/c0030/provenance.md", "c0030")
+		refused(one("c0031"), "pickman/.tracker/issues/c0031/provenance.md", "c0031")
+		-- an active raft takes unblocked rows only, and a done item none (its record is written in a pull request)
+		refused(header("R0020") .. row("confirmed", "human:Ann", ""), `{ACTIVE_RAFT}/provenance.md`, "active")
+		refused(header("c0030") .. row("unblocked", "human:Ann", ""), `{DONE}/provenance.md`, "done")
 		-- a published record takes the published events only: an approval, a rafting or a delivery is written in a PR
 		for _, ev in { "approved", "rafted", "delivered" } do
 			refused(first .. row(ev, "human:Bee", "raft=R0010"), nil, ev)

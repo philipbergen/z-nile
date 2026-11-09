@@ -458,6 +458,11 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 				if not onOrigin[doc] then
 					return fail(`{c.path}: no {pid}.md beside it on origin/main`)
 				end
+				if string.find(c.path, "/done/", 1, true) then
+					return fail(
+						`{c.path}: a done item's record is written in a pull request, never published`
+					)
+				end
 				-- an active item takes `unblocked` rows only (a worker blocks while it holds a raft)
 				local allowed = if string.find(c.path, "/active/", 1, true)
 					then { "unblocked" }
