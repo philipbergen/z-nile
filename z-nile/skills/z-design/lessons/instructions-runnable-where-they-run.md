@@ -21,3 +21,5 @@ Every "ask the user" in a step a dispatcher can run needs its headless reading (
 f0126 design review 008 F3: step 1 ran f0126's touch specs "first", on dependency code without any f0126 code, where 10 of 13 cases must fail, and also said to stop on any failure.
 
 Run the replacement instruction on the failure it answers (c0263 design review 009 F3): a text changed from "resolve it with git merge" to "run ./zn sync" looped, because the sync that aborted left nothing to resolve; after the abort, can the user do what the text says, and does the next command then succeed?
+
+Whose operation it is (c0263 design review 013 F1): a stop message in a helper that can be called while the user's own git operation is in progress must give the advice that fits that operation: "commit or stash" is right for a merge the helper started and aborts, and wrong for the user's hand merge (a commit keeps git's wrong pairing, a stash discards the merge); in each state that reaches a stop message, follow the advice and check the next command.

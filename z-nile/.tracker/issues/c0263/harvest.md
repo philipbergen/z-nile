@@ -142,7 +142,7 @@
 - design-review-011 F9: z-design/restated-rules-move-together
 - note review 011 candidates (settling two commits by id needs the same numbering; a helper that finishes or aborts a git operation first checks it started it; when a mechanism is replaced its other copies are replaced too): zz-rules/item-history-spans-moves-and-compaction, zz-arch/guard-no-is-explicit, z-design/restated-rules-move-together
 - design-review-012 F1: z-design/instructions-runnable-where-they-run
-- design-review-012 F2: zz-arch/item-rules-scoped-to-their-call
+- design-review-012 F2: zz-arch/merge-helpers-write-only-what-changed
 - design-review-012 F3: z-design/histories-checked-against-a-real-life
 - design-review-012 F4: zz-rules/item-history-spans-moves-and-compaction
 - design-review-012 F5: zz-test/guard-needs-its-own-case
@@ -150,3 +150,10 @@
 - design-review-012 F7: zz-test/no-vacuous-pass
 - design-review-012 F8: zz-arch/guards-trust-only-origin
 - note review 012 candidates (a helper that finishes a user's half-done git operation must still work when the ref moves in between; a merge helper writes only what changed and refuses paths with uncommitted edits; a guard on "both sides changed X" asks which side uses which numbering): z-design/instructions-runnable-where-they-run, zz-arch/item-rules-scoped-to-their-call, zz-rules/item-history-spans-moves-and-compaction
+- design-review-013 F1: z-design/instructions-runnable-where-they-run
+- design-review-013 F2: zz-test/guard-needs-its-own-case
+- design-review-013 F3: zz-arch/guard-no-is-explicit
+- design-review-013 F4: z-design/mutant-ids-match-the-runner
+- design-review-013 F5: z-design/restated-rules-move-together
+- design-review-013 F6: z-design/restated-rules-move-together
+- note review 013 candidates (a helper's advice depends on whose git operation is in progress; a guard's position in an if-chain is a rule): z-design/instructions-runnable-where-they-run, zz-arch/guard-no-is-explicit

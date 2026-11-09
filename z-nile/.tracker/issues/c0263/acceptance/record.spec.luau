@@ -37,7 +37,10 @@ local function raftDoc(id: string, issues: string): string
 end
 
 local f: trackerfix.Fixture
-local W1, W3, W4, W5, W6, W7, W8, W9, W10, W11, W12, W13, W14, W15, W16, W17, W18, W19, W20, W21, W22, W23, W24, W25, W26, W27, W28, W29, W30, W31, W32, W33, W34 =
+local W1, W3, W4, W5, W6, W7, W8, W9, W10, W11, W12, W13, W14, W15, W16, W17, W18, W19, W20, W21, W22, W23, W24, W25, W26, W27, W28, W29, W30, W31, W32, W33, W34, W35, W36, W37 =
+	"",
+	"",
+	"",
 	"",
 	"",
 	"",
@@ -150,6 +153,9 @@ return t.spec("c0263 the record's writes", function(it)
 				"c0053",
 				"c0054",
 				"c0055",
+				"c0056",
+				"c0057",
+				"c0058",
 			}
 		do
 			seed[`{ISSUES}/{id}/{id}.md`] = draft(id)
@@ -230,6 +236,9 @@ return t.spec("c0263 the record's writes", function(it)
 		W31 = trackerfix.trOk(f, f.main, { "worktree", "raft-ae" })
 		W33 = trackerfix.trOk(f, f.main, { "worktree", "raft-af" })
 		W34 = trackerfix.trOk(f, f.main, { "worktree", "raft-ah" })
+		W35 = trackerfix.trOk(f, f.main, { "worktree", "raft-ai" })
+		W36 = trackerfix.trOk(f, f.main, { "worktree", "raft-aj" })
+		W37 = trackerfix.trOk(f, f.main, { "worktree", "raft-ak" })
 		W9 = trackerfix.trOk(f, f.main, { "worktree", "raft-i" })
 		-- the fixture audits clean before any of this, so a refusal below is the record's
 		trOk(W1, { "audit" })
@@ -948,6 +957,9 @@ return t.spec("c0263 the record's writes", function(it)
 			t.expect(r.ok).toBe(false)
 			t.expect(has(r.stderr .. r.stdout, "uncommitted changes")).toBe(true)
 			t.expect(has(r.stderr .. r.stdout, "merge aborted")).toBe(false)
+			-- the advice is for the user's own merge: keep it with git add, or drop the edit; never a stash (it would discard the merge)
+			t.expect(has(r.stderr .. r.stdout, "git add the path")).toBe(true)
+			t.expect(has(r.stderr .. r.stdout, "commit or stash")).toBe(false)
 			t.expect(fixture.exec(W34, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(true)
 			t.expect(has(fs.readFile(other), "human:Scribble")).toBe(true)
 			fixture.git(W34, { "checkout", "--", atRecord("c0055", "") })
@@ -955,6 +967,90 @@ return t.spec("c0263 the record's writes", function(it)
 		end
 	)
 
+	it("a record git left untracked in a hand merge is not overwritten by the sync (xvi)", function()
+		trackerfix.elsewhere(f, { [atRecord("c0056", "")] = rec("c0056", "Shared") }, "base record c0056")
+		trOk(W35, { "sync" })
+		fs.writeFile(`{W35}/{atRecord("c0056", "")}`, rec("c0056", "Shared", "Ours"))
+		fixture.git(W35, { "add", "-A" })
+		fixture.git(W35, { "commit", "-q", "-m", "our row" })
+		trackerfix.elsewhere(f, {
+			[atRecord("c0056", "")] = rec("c0056", "Shared", "M1", "M2", "M3"),
+			[atRecord("c0057", "")] = rec("c0057", "Shared"),
+		}, "main rows")
+		fixture.git(f.other, { "mv", `{ISSUES}/c0056`, `{ISSUES}/active/c0056` })
+		fixture.git(f.other, { "commit", "-q", "-m", "tracker: ready R0162" })
+		fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+		fixture.git(W35, { "fetch", "-q", "origin" })
+		t.expect(fixture.exec(W35, "git", { "merge", "--no-commit", "--no-edit", "origin/main" }).ok)
+			.toBe(true)
+		-- the user takes the moved record out of the index but keeps the file: it is untracked, and we would write there
+		local moved = atRecord("c0056", "active/")
+		fixture.git(W35, { "rm", "--cached", "-q", "--", moved })
+		local r = tr(W35, { "sync" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr .. r.stdout, "uncommitted changes")).toBe(true)
+		t.expect(fixture.exec(W35, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(true)
+		t.expect(fs.isFile(`{W35}/{moved}`)).toBe(true)
+		fs.removeFile(`{W35}/{moved}`)
+		fixture.git(W35, { "merge", "--abort" })
+	end)
+
+	it(
+		"a hand merge is finished and committed, and the newest origin/main then stops on another file: only that merge is aborted (xviii)",
+		function()
+			trackerfix.elsewhere(f, { [atRecord("c0058", "")] = rec("c0058", "Base") }, "base record c0058")
+			trOk(W37, { "sync" })
+			local arch = `{W37}/pickman/.tracker/architecture.md`
+			fs.writeFile(arch, "# Architecture\nours changed this line\n")
+			fs.writeFile(`{W37}/{atRecord("c0058", "")}`, rec("c0058", "Base", "Ours"))
+			fixture.git(W37, { "add", "-A" })
+			fixture.git(W37, { "commit", "-q", "-m", "our row and our edit" })
+			trackerfix.elsewhere(f, { [atRecord("c0058", "")] = rec("c0058", "Base", "Main") }, "main row")
+			fixture.git(W37, { "fetch", "-q", "origin" })
+			t.expect(fixture.exec(W37, "git", { "merge", "--no-commit", "--no-edit", "origin/main" }).ok)
+				.toBe(false)
+			-- main then edits the same line of another file
+			trackerfix.elsewhere(
+				f,
+				{ ["pickman/.tracker/architecture.md"] = "# Architecture\nmain changed this line\n" },
+				"main edit"
+			)
+			local r = tr(W37, { "sync" })
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr .. r.stdout, "your merge was finished and committed")).toBe(true)
+			t.expect(has(r.stderr .. r.stdout, "merge aborted")).toBe(true)
+			t.expect(fixture.exec(W37, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
+			-- the hand merge is in the history, with the united record
+			t.expect(fixture.exec(W37, "git", { "rev-parse", "-q", "--verify", "HEAD^2" }).ok).toBe(true)
+			t.expect(fs.readFile(`{W37}/{atRecord("c0058", "")}`)).toBe(rec("c0058", "Base", "Main", "Ours"))
+			t.expect(fixture.git(W37, { "status", "--porcelain" })).toBe("")
+		end
+	)
+
+	it("a revert in progress is not ours: the sync refuses and leaves it as it was (xvii)", function()
+		local f1 = `{W36}/revert-me.txt`
+		for _, text in { "a\n", "b\n", "c\n" } do
+			fs.writeFile(f1, text)
+			fixture.git(W36, { "add", "-A" })
+			fixture.git(W36, { "commit", "-q", "-m", `revert-me {text}` })
+		end
+		local second = fixture.git(W36, { "rev-parse", "HEAD~1" })
+		t.expect(fixture.exec(W36, "git", { "revert", "--no-edit", second }).ok).toBe(false) -- conflicts, REVERT_HEAD stays
+		fs.writeFile(f1, "c\n")
+		fixture.git(W36, { "add", "-A" })
+		trackerfix.elsewhere(f, { ["pickman/.tracker/notes-xvii.md"] = "main moves on\n" }, "main moves on")
+		local mark = fixture.git(W36, { "rev-parse", "HEAD" })
+		local r = tr(W36, { "sync" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr .. r.stdout, "revert")).toBe(true)
+		t.expect(has(r.stderr .. r.stdout, "nothing was aborted")).toBe(true)
+		t.expect(fixture.git(W36, { "rev-parse", "HEAD" })).toBe(mark)
+		t.expect(fixture.exec(W36, "git", { "rev-parse", "-q", "--verify", "REVERT_HEAD" }).ok).toBe(true)
+		fixture.git(W36, { "revert", "--abort" })
+	end)
+
+	-- (v) and (vi) push a compaction map to main for every case after them: a later case whose worktree changes a record
+	-- before it syncs would stop on the compaction guard instead of testing its own shape, so such cases come before (v)
 	it(
 		"a compaction on main reused an id and our row would land in the other item: the sync stops, naming remap (v)",
 		function()
@@ -1044,6 +1140,16 @@ return t.spec("c0263 the record's writes", function(it)
 		t.expect(fixture.git(W33, { "rev-parse", "HEAD" })).toBe(mark)
 		t.expect(fs.isDir(fixture.git(W33, { "rev-parse", "--absolute-git-dir" }) .. "/rebase-merge"))
 			.toBe(true)
+		-- a hand merge of origin/main inside the rebase: the rebase refusal wins over finishing the merge
+		trackerfix.elsewhere(f, { ["pickman/.tracker/notes-xiv.md"] = "main moves on\n" }, "main moves on")
+		fixture.git(W33, { "fetch", "-q", "origin" })
+		t.expect(fixture.exec(W33, "git", { "merge", "--no-commit", "--no-edit", "origin/main" }).ok)
+			.toBe(true)
+		local inside = tr(W33, { "sync" })
+		t.expect(inside.ok).toBe(false)
+		t.expect(has(inside.stderr .. inside.stdout, "rebase")).toBe(true)
+		t.expect(fixture.exec(W33, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(true)
+		fixture.git(W33, { "merge", "--abort" })
 		fixture.git(W33, { "rebase", "--abort" })
 	end)
 
@@ -1068,6 +1174,7 @@ return t.spec("c0263 the record's writes", function(it)
 			local r = tr(W23, { "sync" })
 			t.expect(r.ok).toBe(false)
 			t.expect(has(r.stderr .. r.stdout, "another branch is in progress")).toBe(true)
+			t.expect(has(r.stderr .. r.stdout, "nothing was aborted")).toBe(true)
 			t.expect(fixture.git(W23, { "rev-parse", "MERGE_HEAD" })).toBe(sideHead)
 			t.expect(fs.isFile(`{W23}/side.txt`)).toBe(true)
 			fixture.git(W23, { "merge", "--abort" })
