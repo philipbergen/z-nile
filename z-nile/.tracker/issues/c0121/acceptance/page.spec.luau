@@ -184,7 +184,8 @@ return t.spec("c0121 served page", function(it)
 				for _, i in m.issues do
 					if i.id == "f0021" then
 						i.pr = { number = 12, url = "https://example.invalid/pr/12", state = "open" }
-						i.worktree = "/w/prep-runs" -- an own PR with no checks of its own: the raft's are not shown beside it
+						i.checks = { state = "failing" }
+						i.worktree = "/w/prep-runs"
 					end
 				end
 			end
@@ -281,7 +282,8 @@ return t.spec("c0121 served page", function(it)
 	it(
 		"a served issue card shows its own PR and checks before its raft's, and Retry's 409 is shown like any answer",
 		function()
-			t.expect(has(shown.pane, 'href="https://example.invalid/pr/12">#12</a> open')).toBe(true)
+			t.expect(has(shown.pane, 'href="https://example.invalid/pr/12">#12</a> open, checks failing'))
+				.toBe(true)
 			t.expect(has(shown.pane, "checks passing")).toBe(false) -- the raft's checks never ride on the issue's own PR
 			t.expect(has(shown.pane, "/w/prep-runs")).toBe(true) -- the worktree of the issue's own PR
 			t.expect(has(shown.pane, "#7")).toBe(false)
