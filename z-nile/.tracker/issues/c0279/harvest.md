@@ -2,9 +2,16 @@
 - design-review-001 F2: z-design/never-narrow-captured-scope
 - design-review-001 F3: zz-test/fake-keepalive-must-not-end-the-step-itself
 - design-review-001 F4: zz-test/narrowing-pins-the-whole-file
-- design-review-001 F5: zz-test/new-commands-run-in-a-copy
+- design-review-001 F5: zz-test/kill-mutants-where-the-value-is-built
 - design-review-001 F6: zz-test/promoted-specs-pin-rules-not-sets
-- design-review-001 F7: one-off: sleep margin (120 s hold against a 60 s bound), see Design
+- design-review-001 F7: zz-test/hold-on-markers-not-sleeps
 - design-review-001 F8: z-design/required-steps-on-every-path
-- design-review-001 F9: z-design/spec-design-correspondence
+- design-review-001 F9: z-design/prove-specs-pass-on-a-prototype
 - design-review-001 F10: one-off: a capture decision for the coordinator, named in the report
+- design-review-002 F1: z-design/never-narrow-captured-scope
+- design-review-002 F2: zz-test/hold-on-markers-not-sleeps
+- design-review-002 F3: z-design/spec-design-correspondence
+- design-review-002 F4: zz-test/source-pins-name-what-the-design-names
+- design-review-002 F5: zz-review/sequestration-reference-not-a-ref
+- design-review-002 F6: one-off: harvest mappings corrected
+- design-review-002 F7: one-off: record nits (logs, wording), fixed in the issue

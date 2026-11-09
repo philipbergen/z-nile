@@ -7,32 +7,36 @@ diff --git a/z-nile/tests/acceptance/c0117/dispatch-cli.spec.luau b/z-nile/tests
  [dispatch]
 -stall_seconds = 2
 -tool_seconds = 8
-+stall_seconds = 60
-+tool_seconds = 120
++stall_seconds = 120
++tool_seconds = 240
  
  [z-design.claude]
  model = "claude-opus-5-5"
-@@ -140,16 +140,24 @@ local function lastRow(id: string): any
+@@ -140,16 +140,26 @@ local function lastRow(id: string): any
  	local rows = fakecli.rows(h, id)
  	return rows and rows[#rows]
  end
 --- a bounded wait for a file a fake's grandchild would write, so its absence means it was killed
 -local function absentAfter(path: string, seconds: number): boolean
-+-- a bounded wait for a process to be gone: it ends the moment the process is, and runs long only when it never dies.
-+-- Gone means `kill -0` says "No such process": any other failure (a permission, a missing kill) is not a death.
-+local function deadWithin(pid: string, seconds: number): boolean
- 	local waited = 0
+-	local waited = 0
 -	while waited < seconds do
 -		if fs.isFile(path) then
++-- a bounded wait for a process to be gone: it ends the moment the process is, and runs long only when it never dies.
++-- Gone means `kill -0` says "No such process": any other failure (a permission, a missing kill) is not a death. The
++-- bound is wall-clock (os.time), so the polling commands' own cost under load is inside it, and the grandchild's
++-- sleep (an hour) is far past any bound.
++local function deadWithin(pid: string, seconds: number): boolean
++	local started = os.time()
 +	while true do
 +		local r = process.exec("kill", { "-0", pid })
 +		if not r.ok and string.find(r.stderr, "No such process", 1, true) then
 +			return true
 +		end
-+		if waited >= seconds then
++		if os.time() - started >= seconds then
  			return false
  		end
- 		waited += task.wait(0.1)
+-		waited += task.wait(0.1)
++		task.wait(0.1)
  	end
 -	return not fs.isFile(path)
 +end
@@ -42,7 +46,7 @@ diff --git a/z-nile/tests/acceptance/c0117/dispatch-cli.spec.luau b/z-nile/tests
  end
  
  return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
-@@ -161,6 +169,8 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
+@@ -161,6 +171,8 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
  			["pickman/.tracker/issues/c0020/.models.toml"] = "[z-design.claude]\nmax_tokens = 1000\n",
  			["pickman/.tracker/issues/c0030/c0030.md"] = issue("c0030", "third-thing"),
  			["pickman/.tracker/issues/c0040/c0040.md"] = issue("c0040", "fourth-thing"),
@@ -51,7 +55,7 @@ diff --git a/z-nile/tests/acceptance/c0117/dispatch-cli.spec.luau b/z-nile/tests
  			["pickman/.tracker/issues/c0050/c0050.md"] = issue("c0050", "fifth-thing"),
  			["pickman/.tracker/issues/c0050/.models.toml"] = 'order = ["agent"]\n',
  			["pickman/.tracker/issues/c0060/c0060.md"] = issue("c0060", "sixth-thing"),
-@@ -647,7 +657,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
+@@ -647,7 +659,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
  		t.expect(s.outcome).toBe("cap")
  		t.expect(s.history[#s.history].tokens > 5000).toBe(true)
  		t.expect(has(log(), "grok step=")).toBe(false)
@@ -60,7 +64,7 @@ diff --git a/z-nile/tests/acceptance/c0117/dispatch-cli.spec.luau b/z-nile/tests
  		t.expect(lastRow("c0030").tokens > 5000).toBe(true)
  	end)
  
-@@ -689,7 +699,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
+@@ -689,7 +701,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
  		local r = zn({ "dispatch", "z-design", "c0060" }, { FAKE_STOP = "c0060" })
  		t.expect(r.ok).toBe(false)
  		t.expect(state("c0060").outcome).toBe("stopped")

@@ -19,7 +19,7 @@ absent "no wall-clock wait on a file the grandchild would touch" "$SPEC" "absent
 need "stop case proves the kill by the pid" "$SPEC" 'deadWithin(grandchildPid("grandchild-stop"), 60)'
 need "cap case proves the kill by the pid" "$SPEC" 'deadWithin(grandchildPid("grandchild-cap"), 60)'
 need "only 'No such process' is a death" "$SPEC" 'No such process'
-need "stall limit only a real stall reaches" "$SPEC" 'stall_seconds = 60'
+need "stall limit only a real stall reaches" "$SPEC" 'stall_seconds = 120'
 need "the one issue that tests a stall keeps 2 s" "$SPEC" '[dispatch]\nstall_seconds = 2\ntool_seconds = 30\n'
 
 stop=$(mode stop)
@@ -28,12 +28,21 @@ push=$(mode push)
 for pair in "stop:$stop" "cap:$cap"; do
   name=${pair%%:*}; line=${pair#*:}
   [[ $line == *"grandchild-$name.pid"* ]] || { echo "MISSING ($name fake): the pid file"; fail=1; }
-  [[ $line == *"exec sleep 120"* ]] || { echo "MISSING ($name fake): a grandchild that outlives any wait"; fail=1; }
+  [[ $line == *"exec sleep 3600"* ]] || { echo "MISSING ($name fake): a grandchild that outlives any wait"; fail=1; }
   [[ $line == *"sleep 2; touch"* ]] && { echo "PRESENT ($name fake): the 2 s touch"; fail=1; }
 done
 [[ $stop == *'FAKE_DELAY'* ]] || { echo "MISSING (stop fake): FAKE_DELAY"; fail=1; }
-[[ $stop == *'sleep 120 ;;'* ]] || { echo "MISSING (stop fake): the silent hold after the stop"; fail=1; }
+[[ $stop == *'sleep 3600 ;;'* ]] || { echo "MISSING (stop fake): the silent hold after the stop"; fail=1; }
 [[ $stop == *'while :; do echo'* ]] && { echo "PRESENT (stop fake): a heartbeat would hide a stop that kills nothing"; fail=1; }
 n=$(grep -o 'FAKE_DELAY' <<<"$push" | wc -l)
 [[ $n -ge 2 ]] || { echo "MISSING (push fake): FAKE_DELAY before git and before gh"; fail=1; }
+# the three entries, whole: the rules above are the readable part, this is the exact text (comments included), so a
+# reordered delay, a `while true` heartbeat or a pid written with the wrong `$$` all fail
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+for m in stop cap push; do
+  want=$(grep -F -e "$m: " "$here/fakecli-modes.expected" | head -n 1 | sed "s/^$m: //")
+  if [[ "$(mode "$m")" != "$want" ]]; then
+    echo "DIFFERS ($m fake): not the reviewed text (acceptance/fakecli-modes.expected)"; fail=1
+  fi
+done
 exit $fail

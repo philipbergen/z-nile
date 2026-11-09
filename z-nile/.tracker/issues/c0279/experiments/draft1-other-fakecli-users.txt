@@ -1,0 +1,4 @@
+slowest: tests/acceptance/c0117/control-cli.spec.luau 440.4s, tests/tooling/dispatch-guards.spec.luau 263.2s, tests/tooling/repo-fence.spec.luau 3.4s
+41 passed, 0 failed, 3 spec files
+
+[exited with code 0]
