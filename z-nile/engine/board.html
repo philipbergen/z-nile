@@ -73,31 +73,75 @@ ul.links { margin: 0; padding-left: 20px; }
 .ser-chore { fill: var(--ser-chore); stroke: var(--ser-chore); }
 .ser-net { fill: var(--ser-net); stroke: var(--ser-net); }
 .line { fill: none; stroke-width: 2px; }
+/* c0118: project tabs, the six columns, raft bands, cards and the two review charts */
+:root { --ser-design: #7c3aed; --ser-code: #2a78d6; --ser-m1: #2a78d6; --ser-m2: #eb6834; --ser-m3: #1baf7a; --ser-m4: #7c3aed; --ser-m5: #d6a12a; --ser-m6: #d6336c; --ser-m7: #0e9fb5; --ser-m8: #6b8e23; --ser-other: #8b95a1; --ser-unrecorded: #c4c9d0; --band: #f5f7fa; }
+@media (prefers-color-scheme: dark) {
+  :root { --ser-design: #9b6cf0; --ser-code: #3987e5; --ser-m1: #3987e5; --ser-m2: #d95926; --ser-m3: #199e70; --ser-m4: #9b6cf0; --ser-m5: #c99520; --ser-m6: #e0507f; --ser-m7: #22b3c9; --ser-m8: #8fb34a; --ser-other: #76808b; --ser-unrecorded: #4a5058; --band: #1c1f23; }
+}
+.ser-design { fill: var(--ser-design); stroke: var(--ser-design); }
+.ser-code { fill: var(--ser-code); stroke: var(--ser-code); }
+.ser-m1 { fill: var(--ser-m1); } .ser-m2 { fill: var(--ser-m2); } .ser-m3 { fill: var(--ser-m3); } .ser-m4 { fill: var(--ser-m4); }
+.ser-m5 { fill: var(--ser-m5); } .ser-m6 { fill: var(--ser-m6); } .ser-m7 { fill: var(--ser-m7); } .ser-m8 { fill: var(--ser-m8); }
+.ser-other { fill: var(--ser-other); } .ser-unrecorded { fill: var(--ser-unrecorded); }
+#projects { display: flex; flex-direction: column; gap: 2px; padding: 8px 4px; border-right: 1px solid var(--line); min-width: 8em; overflow-y: auto; }
+#projects button { font: inherit; color: inherit; background: none; border: none; border-radius: 6px; padding: 4px 10px; text-align: left; cursor: pointer; }
+#projects button.on { background: var(--sel); font-weight: 600; }
+#board { flex: 2; overflow: auto; padding: 8px 12px; min-width: 0; }
+#board:not([hidden]) ~ #pane { flex: 0 0 30em; max-width: 30em; }
+#board[hidden], #list[hidden] { display: none; }
+#board-controls { display: flex; gap: 16px; align-items: center; margin-bottom: 8px; color: var(--mut); flex-wrap: wrap; }
+#board-controls select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+#columns { display: grid; grid-template-columns: repeat(6, minmax(9em, 1fr)); gap: 8px; }
+.col h3 { margin: 0 0 6px; }
+.band { background: var(--band); border: 1px solid var(--line); border-radius: 8px; padding: 4px; margin-bottom: 6px; }
+.band .raft { font-size: 11px; color: var(--mut); padding: 0 4px 2px; }
+.card { display: block; width: 100%; text-align: left; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; margin: 2px 0; cursor: pointer; }
+.card.sel { outline: 2px solid #2563eb; }
+.card .id { font-family: ui-monospace, monospace; color: var(--mut); font-size: 12px; }
+.note { color: var(--mut); font-size: 12px; }
+#charts { margin-top: 16px; }
+#charts .chart-fig { display: block; }
+#charts .chart { width: 100%; max-width: 640px; }
+#problems { margin: 8px 0; }
+dl.run { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
+dl.run dt { color: var(--mut); }
+dl.run dd { margin: 0; }
 </style>
 <script>{{MARKED}}</script>
 </head>
 <body>
 <header>
 <h1>pickman tracker</h1>
-<nav><button id="tab-rafts">Rafts</button><button id="tab-issues">Issues</button></nav>
+<nav><button id="tab-board">Board</button><button id="tab-rafts">Rafts</button><button id="tab-issues">Issues</button></nav>
 <button id="stats-toggle" type="button">Stats</button>
 <input id="search" placeholder="Jump to an id (press /)" autocomplete="off" spellcheck="false">
 </header>
 <section id="stats" hidden>{{STATS}}</section>
-<main><ul id="list"></ul><section id="pane"></section></main>
+<main><nav id="projects" aria-label="Projects"></nav><section id="board" hidden><div id="board-controls"><label>Done cards from the last <select id="window"></select></label><label>Charts over <select id="range"></select></label><span id="as-of" class="note"></span></div><div id="problems"></div><div id="columns"></div><div id="charts"></div></section><ul id="list"></ul><section id="pane"></section></main>
 <script type="application/json" id="board-data">{{DATA}}</script>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var model = JSON.parse($("board-data").textContent);
-  var VIEWS = ["rafts", "issues"];
+  var VIEWS = ["board", "rafts", "issues"];
   var GROUPS = ["ready", "not", "done"];
   var GROUP_LABEL = { ready: "Ready", not: "Not ready", done: "Done" };
+  var COLUMNS = ["ticket", "design", "raft", "ready", "run", "done"];
+  var COLUMN_LABEL = { ticket: "Ticket", design: "Design", raft: "Raft", ready: "Ready", run: "Run", done: "Done" };
   var search = $("search"), list = $("list"), pane = $("pane");
-  var byId = {}, issueById = {};
-  model.rafts.forEach(function (r) { byId[r.id] = r; });
-  model.issues.forEach(function (i) { issueById[i.id] = i; });
+  var boardEl = $("board"), projectsEl = $("projects"), columnsEl = $("columns"), chartsEl = $("charts"), problemsEl = $("problems");
+  var windowEl = $("window"), rangeEl = $("range"), asOfEl = $("as-of");
+  var byId, issueById, projectNames;
+  function index() {
+    byId = {}; issueById = {}; projectNames = {};
+    model.rafts.forEach(function (r) { byId[r.id] = r; });
+    model.issues.forEach(function (i) { issueById[i.id] = i; });
+    model.projects.forEach(function (p) { projectNames[p.name] = true; });
+  }
+  index();
   var view = model.initialView, sel = -1;
+  var project = model.projects.length ? model.projects[0].name : "";
+  var windowSec = model.window, range = model.range;
 
   // Lookups keyed by typed or document text must not see Object.prototype ("constructor", "__proto__").
   function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
@@ -116,21 +160,83 @@ ul.links { margin: 0; padding-left: 20px; }
     if (!ids.length) return "";
     return "<h3>" + title + '</h3><ul class="links">' + ids.map(function (id) { return "<li>" + idLink(id) + "</li>"; }).join("") + "</ul>";
   }
-
-  function idsOf(name) {
+  function itemOf(id) { return has(byId, id) ? byId[id] : issueById[id]; }
+  function inProject(id) { var it = itemOf(id); return !!it && it.project === project; }
+  // The done window: a done card shows while its age (seconds before the page's asOf) is at most the window.
+  function shown(issue) { return issue.column !== "done" || (issue.age !== undefined && issue.age !== null && issue.age <= windowSec); }
+  function bandsOf(column) { return (model.columns[project] && model.columns[project][column]) || []; }
+  function boardIds() {
     var out = [];
-    GROUPS.forEach(function (g) { model.views[name][g].forEach(function (id) { out.push(id); }); });
+    COLUMNS.forEach(function (c) {
+      bandsOf(c).forEach(function (b) { b.ids.forEach(function (id) { if (shown(issueById[id])) out.push(id); }); });
+    });
     return out;
   }
-  function itemOf(id) { return has(byId, id) ? byId[id] : issueById[id]; }
+  function idsOf(name) {
+    if (name === "board") return boardIds();
+    var out = [];
+    GROUPS.forEach(function (g) { model.views[name][g].forEach(function (id) { if (inProject(id)) out.push(id); }); });
+    return out;
+  }
+  function span(sec) { return sec % 86400 === 0 ? sec / 86400 + (sec === 86400 ? " day" : " days") : sec / 3600 + (sec === 3600 ? " hour" : " hours"); }
+
+  function renderProjects() {
+    if (!projectsEl) return;
+    projectsEl.innerHTML = model.projects.map(function (p) {
+      return '<button type="button" data-project="' + esc(p.name) + '"' + (p.name === project ? ' class="on"' : "") + ">" + esc(p.name) + "</button>";
+    }).join("");
+  }
+
+  function card(id, n) {
+    var i = issueById[id];
+    return '<button type="button" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '"><span class="id">' + esc(id) +
+      '</span> <span class="type t-' + esc(i.label) + '">' + esc(i.label) + "</span><br>" + esc(i.title) + "</button>";
+  }
+  function renderBoard() {
+    if (!columnsEl) return;
+    var html = "", n = 0;
+    COLUMNS.forEach(function (c) {
+      var body = "", count = 0;
+      bandsOf(c).forEach(function (b) {
+        var cards = "";
+        b.ids.forEach(function (id) { if (shown(issueById[id])) { cards += card(id, n); n++; count++; } });
+        if (!cards) return;
+        var head = b.raft ? '<div class="raft">' + idLink(b.raft) + "</div>" : "";
+        body += '<div class="band"' + (b.raft ? ' data-raft="' + esc(b.raft) + '"' : "") + ">" + head + cards + "</div>";
+      });
+      if (c === "done" && model.asOf === undefined) body += '<p class="note">no as-of time: done cards have no age</p>';
+      else if (c === "done" && !model.history) body += '<p class="note">history unavailable (shallow or no git): done times from spend rows</p>';
+      html += '<div class="col" data-column="' + c + '"><h3>' + COLUMN_LABEL[c] + ' <span class="n">' + count + "</span></h3>" + body + "</div>";
+    });
+    columnsEl.innerHTML = html;
+    if (problemsEl) {
+      var pr = model.problems || [];
+      problemsEl.innerHTML = pr.length
+        ? '<p class="note" data-problems="' + pr.length + '">' + pr.length + (pr.length === 1 ? " file could not be read: " : " files could not be read: ") + pr.map(esc).join("; ") + "</p>"
+        : "";
+    }
+    if (chartsEl) {
+      var ch = model.charts[project];
+      chartsEl.innerHTML = ch && ch.rounds[range]
+        ? '<figure class="chart-fig" data-chart="rounds">' + ch.rounds[range] + "<figcaption>Review rounds by week" + ((ch.captions && ch.captions.rounds[range]) || "") + "</figcaption></figure>" +
+          '<figure class="chart-fig" data-chart="tokens">' + ch.tokens[range] + "<figcaption>Review tokens by model" + ((ch.captions && ch.captions.tokens[range]) || "") + "</figcaption></figure>"
+        : '<p class="note">no as-of time: no charts</p>';
+      if (!model.history && ch && ch.rounds[range]) chartsEl.innerHTML += '<p class="note">history unavailable (shallow or no git): landings dated from spend rows</p>';
+    }
+    if (asOfEl) asOfEl.innerHTML = model.asOf !== undefined ? "as of " + esc(new Date(model.asOf * 1000).toISOString().slice(0, 16).replace("T", " ")) + " UTC" : "";
+  }
 
   function renderList() {
-    VIEWS.forEach(function (v) { $("tab-" + v).classList.toggle("on", v === view); });
+    VIEWS.forEach(function (v) { var b = $("tab-" + v); if (b) b.classList.toggle("on", v === view); });
+    renderProjects();
+    if (boardEl) { if (view === "board") boardEl.removeAttribute("hidden"); else boardEl.setAttribute("hidden", ""); }
+    if (list.setAttribute && list.removeAttribute) { if (view === "board") list.setAttribute("hidden", ""); else list.removeAttribute("hidden"); }
+    if (view === "board") { renderBoard(); return; }
     var ids = idsOf(view);
     if (!ids.length) { list.innerHTML = '<li class="empty">Nothing here</li>'; return; }
     var html = "", n = 0;
     GROUPS.forEach(function (g) {
-      var groupIds = model.views[view][g];
+      var groupIds = model.views[view][g].filter(inProject);
       if (!groupIds.length) return;
       html += '<li class="group">' + GROUP_LABEL[g] + "</li>";
       groupIds.forEach(function (id) {
@@ -149,6 +255,56 @@ ul.links { margin: 0; padding-left: 20px; }
     if (row) row.scrollIntoView({ block: "nearest" });
   }
 
+  function dl(rows) {
+    var h = "";
+    rows.forEach(function (r) { if (r[1] !== "") h += "<dt>" + esc(r[0]) + "</dt><dd>" + r[1] + "</dd>"; });
+    return h ? '<dl class="run">' + h + "</dl>" : "";
+  }
+  function spendText(s) {
+    return esc(s.minutes + " min, " + s.tokens + " tokens, +" + s.added + "/-" + s.removed + " lines");
+  }
+  function dispatchText(d) {
+    return d ? esc(d.step + " " + d.outcome + (d.model ? " on " + d.model : "") + (d.questions ? ", waiting for answers (questions.md)" : "")) : "";
+  }
+  var LIVE = '<span class="note">live on the served board (<code>zn board --serve</code>, c0121)</span>';
+  // PR and checks: c0121's served page fills `pr` and `checks`; the static page has neither and says where they are.
+  function prText(it) {
+    if (!it || (!it.pr && !it.checks)) return LIVE;
+    var h = it.pr ? '<a href="' + esc(it.pr.url) + '">#' + esc(it.pr.number) + "</a> " + esc(it.pr.state) : "";
+    if (it.checks) h += (h ? ", checks " : "checks ") + esc(it.checks.state);
+    return h;
+  }
+  // The card's run details: column, model, spend, and for its raft the branch and worktree; PR and checks are live.
+  function runOfIssue(issue) {
+    var raft = issue.raft && has(byId, issue.raft) ? byId[issue.raft] : null;
+    return "<h3>Run</h3>" + dl([
+      ["column", esc(COLUMN_LABEL[issue.column])],
+      ["model", esc(issue.spend.models.join(", ") || (issue.dispatch && issue.dispatch.model) || "unrecorded")],
+      ["spend", spendText(issue.spend)],
+      ["dispatch", dispatchText(issue.dispatch)],
+      ["branch", raft && raft.branch ? esc(raft.branch) : ""],
+      ["worktree", raft && raft.worktree ? esc(raft.worktree) : ""],
+      ["PR and checks", prText({ pr: issue.pr || (raft && raft.pr), checks: issue.checks || (raft && raft.checks) })],
+    ]);
+  }
+  function runOfRaft(r) {
+    var models = {}, total = { minutes: 0, tokens: 0, added: 0, removed: 0 };
+    r.issues.forEach(function (iid) {
+      var s = issueById[iid].spend;
+      s.models.forEach(function (m) { models[m] = true; });
+      total.minutes = Math.round((total.minutes + s.minutes) * 10) / 10; total.tokens += s.tokens; total.added += s.added; total.removed += s.removed;
+    });
+    return "<h3>Run</h3>" + dl([
+      ["model", esc(Object.keys(models).sort().join(", ") || (r.dispatch && r.dispatch.model) || "unrecorded")],
+      ["spend", spendText(total)],
+      ["review rounds", esc(r.rounds.design + " design, " + r.rounds.code + " code")],
+      ["dispatch", dispatchText(r.dispatch)],
+      ["branch", r.branch ? esc(r.branch) : ""],
+      ["worktree", r.worktree ? esc(r.worktree) : ""],
+      ["PR and checks", prText(r)],
+    ]);
+  }
+
   function renderIssue(issue) {
     var meta = [];
     if (issue.label) meta.push(issue.label);
@@ -156,6 +312,7 @@ ul.links { margin: 0; padding-left: 20px; }
     var h = '<h2><span class="id">' + esc(issue.id) + "</span> " + esc(issue.title) + " " + badge(issue.stage) + "</h2>" +
       '<p class="meta">' + esc(meta.join(" · ")) + "</p>";
     if (issue.raft) h += "<p>Raft " + idLink(issue.raft) + "</p>";
+    h += runOfIssue(issue);
     h += group("Depends on", issue.dependsOn) + group("Dependents", issue.dependents);
     if (issue.body) h += '<h3>Document</h3><div class="md">' + marked.parse(issue.body) + "</div>";
     pane.innerHTML = h;
@@ -178,6 +335,7 @@ ul.links { margin: 0; padding-left: 20px; }
         return "<li>" + idLink(iid) + "</li>";
       }).join("") + "</ul>";
     }
+    h += runOfRaft(r);
     if (r.body) h += '<h3>Document</h3><div class="md">' + marked.parse(r.body) + "</div>";
     pane.innerHTML = h;
     pane.scrollTop = 0;
@@ -195,12 +353,24 @@ ul.links { margin: 0; padding-left: 20px; }
     sel = -1;
     if (idsOf(view).length) select(0); else { renderList(); renderPane(null); }
   }
+  function setProject(name) {
+    project = name;
+    sel = -1;
+  }
 
   function go(raw) {
-    var q = String(raw).trim();
-    q = q.charAt(0).toUpperCase() === "R" ? "R" + q.slice(1) : q.toLowerCase();
-    if (!has(model.home, q)) return false;
-    view = has(byId, q) ? "rafts" : "issues";
+    var text = String(raw).trim();
+    var q = text.charAt(0).toUpperCase() === "R" ? "R" + text.slice(1) : text.toLowerCase();
+    if (!has(model.home, q)) {
+      var name = text.toLowerCase();
+      if (!has(projectNames, name)) return false;
+      setProject(name);
+      switchView(view);
+      try { history.replaceState(null, "", "#" + name); } catch (e) { /* file:// quirks */ }
+      return true;
+    }
+    project = itemOf(q).project;
+    if (!(view === "board" && boardIds().indexOf(q) >= 0)) view = has(byId, q) ? "rafts" : "issues";
     sel = idsOf(view).indexOf(q);
     renderList();
     renderPane(q);
@@ -222,7 +392,32 @@ ul.links { margin: 0; padding-left: 20px; }
     if (e.key === "Escape") search.blur();
     else if (e.key === "Enter" && search.value.trim()) search.classList.toggle("miss", !go(search.value));
   });
-  VIEWS.forEach(function (v) { $("tab-" + v).addEventListener("click", function () { switchView(v); }); });
+  VIEWS.forEach(function (v) { var b = $("tab-" + v); if (b) b.addEventListener("click", function () { switchView(v); }); });
+  if (projectsEl) projectsEl.addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-project]");
+    if (!b) return;
+    setProject(b.getAttribute("data-project"));
+    switchView(view);
+    try { history.replaceState(null, "", "#" + project); } catch (err) { /* file:// quirks */ }
+  });
+  if (columnsEl) columnsEl.addEventListener("click", function (e) {
+    var a = e.target.closest("a.jump");
+    if (a) { e.preventDefault(); go(a.getAttribute("data-id")); return; }
+    var c = e.target.closest("button.card");
+    if (c) select(boardIds().indexOf(c.getAttribute("data-id")));
+  });
+  if (windowEl) {
+    windowEl.innerHTML = model.windows.map(function (w) {
+      return '<option value="' + w + '"' + (w === windowSec ? " selected" : "") + ">" + span(w) + "</option>";
+    }).join("");
+    windowEl.addEventListener("change", function () { windowSec = Number(windowEl.value); sel = -1; renderList(); });
+  }
+  if (rangeEl) {
+    rangeEl.innerHTML = model.ranges.map(function (r) {
+      return '<option value="' + esc(r.key) + '"' + (r.key === range ? " selected" : "") + ">" + esc(r.label) + "</option>";
+    }).join("");
+    rangeEl.addEventListener("change", function () { range = rangeEl.value; renderList(); });
+  }
   list.addEventListener("click", function (e) {
     var copy = e.target.closest("button.copy");
     if (copy) {
@@ -245,6 +440,22 @@ ul.links { margin: 0; padding-left: 20px; }
     search.classList.remove("miss");
     go(a.getAttribute("data-id"));
   });
+  // c0121's seam: the served page (zn board --serve) polls for a new model, and the new Stats section's HTML, and hands
+  // them here. The view, the project (unless it is gone), the selected item, the done window and the range stay; the
+  // static page never calls it.
+  if (typeof window !== "undefined") window.znBoard = {
+    load: function (next, statsHtml) {
+      var current = idsOf(view)[sel];
+      var stats = $("stats");
+      if (statsHtml !== undefined && stats) stats.innerHTML = statsHtml;
+      model = next;
+      index();
+      if (!has(projectNames, project)) project = model.projects.length ? model.projects[0].name : "";
+      sel = current ? idsOf(view).indexOf(current) : -1;
+      renderList();
+      if (sel >= 0) renderPane(current);
+    },
+  };
 
   // Stats is reached only through $("stats"); the old DOM stubs have no such element and no querySelectorAll.
   var statsRoot = $("stats");
