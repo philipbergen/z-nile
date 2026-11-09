@@ -89,6 +89,7 @@ return t.spec("c0265 a beat is a branch outside main", function(it)
 			[`{P}/c0010/c0010.md`] = issue("c0010", "new-a-b-c"),
 			[`{P}/c0020/c0020.md`] = issue("c0020", "new-a-b-c"),
 			[`{P}/c0030/c0030.md`] = issue("c0030", "new-a-b-c"),
+			[`{P}/c0090/c0090.md`] = issue("c0090", "new-a-b-c"),
 			[`{P}/c0040/c0040.md`] = issue("c0040", "prepared-quiet-copper-falcon", "ready", "R0010"),
 			[`{P}/c0040/check.sh`] = CHECK,
 			["pickman/.tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "c0040"),
@@ -109,6 +110,7 @@ return t.spec("c0265 a beat is a branch outside main", function(it)
 					fs.readFile(`{h.bin}/git`),
 					"^#!/bin/sh\n",
 					'#!/bin/sh\ncase "$1" in fetch|ls-remote|push) echo x >> "$FAKE_DIR/netcalls";; esac\n'
+						.. 'if [ "$1" = ls-remote ]; then echo l >> "$FAKE_DIR/lscount"; if [ -f "$FAKE_DIR/lstaken" ]; then rm -f "$FAKE_DIR/lstaken"; echo "0000000000000000000000000000000000000001	refs/heads/hb/taken"; exit 0; fi; fi\n'
 						.. 'if [ "$1" = push ] && [ -f "$FAKE_DIR/prunefail" ]; then case "$*" in *":refs/heads/hb/preparing-gone-gone-gone"*) echo "fatal: fake prune refusal" >&2; exit 1;; esac; fi\n',
 					1
 				)
@@ -251,5 +253,18 @@ return t.spec("c0265 a beat is a branch outside main", function(it)
 		local refused = zn(wt, { "beat", "c0010", "--watch" }, nil, { ZN_BOUNDED_DEADLINE = "" })
 		t.expect(refused.ok).toBe(false)
 		t.expect(has(refused.stderr, "./zn run")).toBe(true)
+	end)
+
+	it("a drawn claim stamp that already has a heartbeat branch is refused and drawn again", function()
+		-- the git stand-in answers the first branch lookup of a drawn stamp as taken: nothing waits for a real collision
+		local function lookups(): number
+			local text = if fs.isFile(`{h.fakes}/lscount`) then fs.readFile(`{h.fakes}/lscount`) else ""
+			return #string.gsub(text, "[^l]", "")
+		end
+		local before = lookups()
+		fs.writeFile(`{h.fakes}/lstaken`, "1")
+		must(zn(wt, { "status", "c0090", "preparing" }, T0 + 2000), "claim c0090")
+		t.expect(lookups() - before).toBe(2) -- the first value was refused, the second stood
+		t.expect(string.sub(stampOf(`{P}/c0090/c0090.md`), 1, 10)).toBe("preparing-")
 	end)
 end)

@@ -63,9 +63,12 @@ return t.spec("c0265 heartbeat rules", function(it)
 				{ ref = `refs/heads/hb/{A}`, sha = "2", subject = `hb {C} {NOW}` }, -- the subject names another stamp
 				{ ref = `refs/heads/hb/{A}`, sha = "3", subject = `hb {A} soon` },
 				{ ref = "refs/heads/prep-x", sha = "4", subject = "work" },
+				{ ref = "refs/heads/hb/preparing-a-b", sha = "5", subject = "hb preparing-a-b 1" }, -- two words, not three
+				{ ref = "refs/heads/hb/preparing-a-b-c-d", sha = "6", subject = "hb preparing-a-b-c-d 1" }, -- four
+				{ ref = "refs/heads/hb/waiting-a-b-c", sha = "7", subject = "hb waiting-a-b-c 1" }, -- not a claim state
 			})
 			t.expect(#beats).toBe(0)
-			t.expect(#problems).toBe(3)
+			t.expect(#problems).toBe(6)
 			for _, p in problems do
 				t.expect(string.find(p, "git push origin :refs/heads/hb/", 1, true) ~= nil).toBe(true)
 			end

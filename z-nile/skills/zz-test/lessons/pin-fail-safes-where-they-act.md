@@ -13,3 +13,5 @@ A pure rule can say "unknown means hold", while the function that feeds it turns
 R0047 design review 005 F2: the same two fail-safes were applied again in the takeover's owner check (`ownerHolds`), and there neither had a case: a live waiter's takeover could be removed.
 
 Every entry point, not just the first (R0052 code review 001 F2): the start-of-run guards ran in `dispatch <id>` but not in `dispatch retry`, the command every stop message tells the user to run. List every entry point that starts the guarded work and pin the guard in each with a case.
+
+**Note** (c0265 design review 023 F1): a read the design makes lazy ("only when X") is a fail-safe too. Pin it with a case where X is false and the source it skips fails, so an eager read turns into a spurious "unreadable" and a failed command. Check: for each "read only when" rule, does a case make the skipped source fail while the condition is false?

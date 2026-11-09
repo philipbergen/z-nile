@@ -11,3 +11,5 @@ check: For each Rules and mutants row marked `reasoned`, is its stated reason (w
 **How to apply:** before marking a row `reasoned`, try for a few minutes to observe the mutant through the frame, the events and a seed search; write down what was tried. If it can be observed, write the case; if not, say exactly why, so the reviewer can check the claim.
 
 **Also:** f0147 design review 005 F2: the eaten ghost's carry was called observable only after a full eyes run; flipping the ghost back to blue by hand, as the neighbouring cases do, observed it in five lines.
+
+**Note** (c0265 design review 023 F2): "a collision cannot be observed" is rarely true: a stand-in can answer the collision check as taken, so no case waits for a real collision. Check: can a stand-in answer, as taken, the check the row says cannot fire?

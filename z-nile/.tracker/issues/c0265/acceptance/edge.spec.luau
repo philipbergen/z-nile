@@ -11,7 +11,7 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local h: fakecli.Harness
-local wt, wt2, wt3 = "", "", ""
+local wt, wt2, wt3, wt4 = "", "", "", ""
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local P = "pickman/.tracker/issues"
 
@@ -90,6 +90,9 @@ takeover() {
     "$REAL_GIT" -C "$o" push -q origin "$new:refs/heads/hb/$FAKE_NEWSTAMP"
   fi
 }
+if [ "$1" = fetch ] && [ -f "$FAKE_DIR/raceread" ]; then
+  case "$*" in *hb-seen*) rm -f "$FAKE_DIR/raceread"; takeover;; esac
+fi
 if [ "$1" = push ] && [ -f "$FAKE_DIR/hbpushfail" ]; then
   case "$*" in *":refs/heads/hb/"*) echo "fatal: fake first-beat refusal" >&2; exit 1;; esac
 fi
@@ -117,6 +120,7 @@ return t.spec("c0265 beat races", function(it)
 			[`{P}/c0071/c0071.md`] = issue("c0071", "new-a-b-c"),
 			[`{P}/c0072/c0072.md`] = issue("c0072", "new-a-b-c"),
 			[`{P}/c0073/c0073.md`] = issue("c0073", "new-a-b-c"),
+			[`{P}/c0074/c0074.md`] = issue("c0074", "new-a-b-c"),
 		})
 		fs.writeFile(`{h.bin}/gh`, GH)
 		process.exec("chmod", { "+x", `{h.bin}/gh` })
@@ -150,6 +154,9 @@ return t.spec("c0265 beat races", function(it)
 		-- each claim has a beat on origin: the branch a later beat replaces with a lease
 		must(zn(wt3, { "beat", "c0071" }, { ZN_NOW = tostring(os.time()) }), "first beat of c0071")
 		must(zn(wt, { "beat", "c0073" }, { ZN_NOW = tostring(os.time()) }), "first beat of c0073")
+		wt4 = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-edge4" }), "worktree"), "%s+$", ""))
+		must(zn(wt4, { "status", "c0074", "preparing" }), "claim c0074")
+		must(zn(wt4, { "beat", "c0074" }, { ZN_NOW = tostring(os.time()) }), "first beat of c0074")
 	end)
 
 	it(
@@ -223,6 +230,27 @@ return t.spec("c0265 beat races", function(it)
 			t.expect(fixture.git(h.f.origin, { "rev-parse", ref .. "^{tree}" }))
 				.toBe(fixture.git(h.f.origin, { "rev-parse", ref .. "^^{tree}" }))
 			t.expect(has(zn(h.f.main, { "busy", "z-nile", "pickman" }).stdout, "hb/")).toBe(false)
+		end
+	)
+
+	it(
+		"the beats are read before main: a takeover during the read does not get its fresh branch pruned",
+		function()
+			local old = stampOf(`{P}/c0074/c0074.md`)
+			local new = "preparing-quiet-lucky-heron"
+			t.expect(tipOf(old) ~= "").toBe(true)
+			fs.writeFile(`{h.fakes}/raceread`, "1")
+			local r = zn(wt4, { "beat", "c0074" }, {
+				ZN_NOW = tostring(os.time() + 1000),
+				FAKE_ITEM = "c0074",
+				FAKE_OLDSTAMP = old,
+				FAKE_NEWSTAMP = new,
+			})
+			t.expect(r.ok).toBe(false) -- it learns it lost the claim
+			t.expect(has(r.stderr, `c0074's claim was taken over (now {new})`)).toBe(true)
+			-- the taker's branch (an old epoch, as the shim writes it) was not judged unclaimed and pruned
+			t.expect(tipOf(new) ~= "").toBe(true)
+			t.expect(tipOf(old)).toBe("")
 		end
 	)
 end)

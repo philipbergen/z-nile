@@ -80,7 +80,8 @@ local SHIM = [[#!/bin/sh
 if [ "$1" = push ] && [ -f "$FAKE_DIR/hbpushfail" ]; then case "$*" in *":refs/heads/hb/"*) echo "fatal: fake first-beat refusal" >&2; exit 1;; esac; fi
 if [ "$1" = log ] && [ -f "$FAKE_DIR/landingpin" ]; then case "$*" in *--first-parent*-1*engine/heartbeat.luau*) echo 4102444800; exit 0;; esac; fi
 if [ "$1" = log ] && [ -f "$FAKE_DIR/nolanding" ]; then case "$*" in *engine/heartbeat.luau*) echo "fatal: fake log failure" >&2; exit 128;; esac; fi
-if [ "$1" = log ] && [ -f "$FAKE_DIR/nolog" ]; then echo "fatal: fake log failure" >&2; exit 128; fi
+if [ "$1" = log ] && [ -f "$FAKE_DIR/nolog" ]; then case "$*" in *-Sstatus*) echo "fatal: fake log failure" >&2; exit 128;; esac; fi
+if [ "$1" = fetch ] && [ -f "$FAKE_DIR/lockmain" ]; then case "$*" in *"origin main"*) rm -f "$FAKE_DIR/lockmain"; echo "error: cannot lock ref 'refs/remotes/origin/main': is at a but expected b" >&2; exit 1;; esac; fi
 if [ "$1" = fetch ]; then echo f >> "$FAKE_DIR/fetchcalls"; fi
 if [ "$1" = fetch ]; then
   case "$*" in
@@ -151,7 +152,13 @@ return t.spec("c0265 lost work", function(it)
 		pushBeat("active-brisk-amber-otter", T0 - 99999)
 	end)
 
-	it("nothing is lost while the claims are fresh", function()
+	it("nothing is lost while the claims are fresh, and the pull requests are not even read", function()
+		-- gh fails, but no claim is stale, so no source that could fail is asked
+		fs.writeFile(`{h.fakes}/ghfail`, "1")
+		local fresh = zn(h.f.main, { "lost" }, T0 + 60)
+		t.expect(fresh.ok).toBe(true)
+		t.expect(fresh.stderr).toBe("")
+		fs.removeFile(`{h.fakes}/ghfail`)
 		t.expect(zn(h.f.main, { "lost" }, T0 + 60).stdout).toBe("")
 		t.expect(zn(h.f.main, { "lost" }, T0 + STALE).stdout).toBe("")
 		t.expect(has(zn(h.f.main, { "status" }, T0 + STALE).stdout, "[lost")).toBe(false)
@@ -327,6 +334,7 @@ return t.spec("c0265 lost work", function(it)
 			local at = LATE + 9 * STALE
 			fixture.git(h.f.other, { "push", "-q", "origin", "HEAD:refs/heads/hb/garbage" })
 			local still = zn(h.f.main, { "lost" }, at)
+			t.expect(still.ok).toBe(true) -- claims it cannot confirm are not an error
 			t.expect(has(still.stdout, "c0010")).toBe(false)
 			t.expect(has(still.stderr, "refs/heads/hb/garbage")).toBe(true)
 			t.expect(has(still.stderr, "git push origin :refs/heads/hb/garbage")).toBe(true)
@@ -357,6 +365,12 @@ return t.spec("c0265 lost work", function(it)
 			fs.writeFile(`{h.fakes}/lockonce`, "1")
 			must(zn(wt, { "beat", "c0010" }, at), "beat through a locked read")
 			t.expect(has(zn(h.f.main, { "lost" }, at).stdout, "c0010")).toBe(false) -- it landed
+			-- the same for the fetch of main the beat makes
+			local later = at + 3 * STALE
+			fs.writeFile(`{h.fakes}/lockmain`, "1")
+			must(zn(wt, { "beat", "c0010" }, later), "beat through a locked fetch of main")
+			t.expect(fs.isFile(`{h.fakes}/lockmain`)).toBe(false)
+			t.expect(has(zn(h.f.main, { "lost" }, later).stdout, "c0010")).toBe(false)
 		end
 	)
 

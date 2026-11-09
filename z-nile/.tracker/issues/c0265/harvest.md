@@ -195,3 +195,9 @@
 - design-review-022 F4: z-design/spec-design-correspondence
 - design-review-022 F5: one-off: load-sensitive bounds in a real-time proof
 - design-review-022 F6: z-design/restated-rules-move-together
+- design-review-023 F1: zz-test/pin-fail-safes-where-they-act
+- design-review-023 F2: z-design/reasoned-rows-claim-testable-reasons
+- design-review-023 F3: z-design/spec-design-correspondence
+- design-review-023 F4: z-design/spec-design-correspondence
+- design-review-023 F5: one-off: hang markers close to the proof's limits and an undeclared local
+- design-review-023 F6: z-design/restated-rules-move-together

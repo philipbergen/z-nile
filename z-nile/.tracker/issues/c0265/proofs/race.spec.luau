@@ -11,7 +11,7 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local h: fakecli.Harness
-local wt = ""
+local wt, wtB = "", "" -- wt keeps its claims; wtB makes c0085 and runs nothing after it is restamped
 local STALE = heartbeat.STALE
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local P = "pickman/.tracker/issues"
@@ -64,16 +64,16 @@ local function issue(id: string, status: string, design: string?, raft: string?)
 	return (string.gsub(doc, "\nraft: \n", `\nraft: {raft or ""}\n`, 1))
 end
 local GH =
-	'#!/bin/sh\nif [ "$1" = pr ] && [ "$2" = list ]; then\n  [ -f "$FAKE_DIR/ghhang" ] && sleep 30\n  echo "[]"\nfi\nexit 0\n'
+	'#!/bin/sh\nif [ "$1" = pr ] && [ "$2" = list ]; then\n  [ -f "$FAKE_DIR/ghhang" ] && sleep 120\n  echo "[]"\nfi\nexit 0\n'
 -- the shim acts on one push at a time, each armed by a marker file it removes first (answers only what it names)
 local SHIM = [[#!/bin/sh
 if [ "$1" = fetch ]; then
   case "$*" in
     *hb-seen*)
       echo x >> "$FAKE_DIR/lscalls"
-      [ -f "$FAKE_DIR/lshang" ] && sleep 30 ;;
+      [ -f "$FAKE_DIR/lshang" ] && sleep 120 ;;
     *"origin main"*)
-      [ -f "$FAKE_DIR/mainhang" ] && sleep 30
+      [ -f "$FAKE_DIR/mainhang" ] && sleep 120
       if [ -f "$FAKE_DIR/mainfail" ]; then
         read skip fail < "$FAKE_DIR/mainfail"
         if [ "$skip" -gt 0 ]; then echo "$((skip-1)) $fail" > "$FAKE_DIR/mainfail"
@@ -84,7 +84,7 @@ fi
 if [ "$1" = push ]; then
   case "$*" in
     *:refs/heads/hb/*)
-      [ -f "$FAKE_DIR/pushhang" ] && sleep 30
+      [ -f "$FAKE_DIR/pushhang" ] && sleep 120
       if [ -f "$FAKE_DIR/pushfail" ]; then
         n=$(cat "$FAKE_DIR/pushfail")
         if [ "$n" -gt 0 ]; then echo $((n-1)) > "$FAKE_DIR/pushfail"; echo "fatal: fake beat push failure" >&2; exit 1; fi
@@ -213,7 +213,7 @@ return t.spec("c0265 real-time proofs", function(it)
 		fs.removeFile(`{h.fakes}/mainhang`)
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "timed out after 2 s")).toBe(true) -- the limit it was given, not the 10 s default
-		t.expect(os.time() - started < 25).toBe(true) -- the hang is 30 s
+		t.expect(os.time() - started < 60).toBe(true) -- the hang is 120 s
 	end)
 
 	it("a hung push of a beat ends at the net limit and says so", function()
@@ -223,7 +223,7 @@ return t.spec("c0265 real-time proofs", function(it)
 		fs.removeFile(`{h.fakes}/pushhang`)
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "timed out after 2 s")).toBe(true)
-		t.expect(os.time() - started < 25).toBe(true) -- the hang is 30 s
+		t.expect(os.time() - started < 60).toBe(true) -- the hang is 120 s
 	end)
 
 	it(
@@ -236,7 +236,7 @@ return t.spec("c0265 real-time proofs", function(it)
 			t.expect(r.ok).toBe(false)
 			t.expect(r.stdout).toBe("")
 			t.expect(has(r.stderr, "pull requests unreadable: timed out after 2 s")).toBe(true)
-			t.expect(os.time() - started < 25).toBe(true)
+			t.expect(os.time() - started < 60).toBe(true)
 		end
 	)
 end)
