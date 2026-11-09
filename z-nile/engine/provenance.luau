@@ -337,17 +337,24 @@ function provenance.settle(common: string?, ours: string?, theirs: string?): (st
 	return "write", united, nil
 end
 
--- Whether a merge crosses a compaction: the two sides number items by different maps (`z-nile/compaction.txt`, nil for
--- none), so an id may name another item on the other side, and each side changed a record. Settling by id would then
--- put a row into the wrong item. Returns the reason to stop, or nil.
+-- Whether a merge crosses a compaction: a side whose numbering of items differs from the merge base's (`z-nile/compaction.txt`,
+-- nil for none) has reused ids, so an id may name another item on the other side. Settling by id would then put a
+-- record, or a row, into the wrong item. Stops when one side compacted and the other side changed a record, and when
+-- both sides compacted (their numberings may differ) and any record changed. Returns the reason to stop, or nil.
 function provenance.compactionProblem(
+	baseMap: string?,
 	oursMap: string?,
 	theirsMap: string?,
 	oursChanged: boolean,
 	theirsChanged: boolean
 ): string?
-	if (oursMap or "") ~= (theirsMap or "") and oursChanged and theirsChanged then
-		return "the merge crosses a compaction (the two sides number items differently) and both sides changed records: run ./zn remap (on the compaction's own branch, compact again on the current origin/main)"
+	local oursCompacted, theirsCompacted =
+		(oursMap or "") ~= (baseMap or ""), (theirsMap or "") ~= (baseMap or "")
+	local crossing = (oursCompacted and theirsChanged)
+		or (theirsCompacted and oursChanged)
+		or (oursCompacted and theirsCompacted and (oursChanged or theirsChanged))
+	if crossing then
+		return "the merge crosses a compaction (a side numbers items differently from the merge base) and a record changed on the other side: run ./zn remap (on the compaction's own branch, compact again on the current origin/main)"
 	end
 	return nil
 end

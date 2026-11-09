@@ -340,9 +340,24 @@ local function gitLines(args: { string }): { string }
 	return out
 end
 
+-- `publish.itemPath` for reading: the layout publish and audit use, plus a retired raft's folder (`rafts/retired/<R-id>/`:
+-- `recombine` moves a raft there on its branch while its record may still be published into). Publishing into a retired
+-- raft stays refused by `publish.allowed`, which does not use this.
+local function itemPathOf(path: string): (string?, string?)
+	local id, rel = publish.itemPath(path)
+	if id then
+		return id, rel
+	end
+	local plain, swapped = string.gsub(path, "/rafts/retired/", "/rafts/", 1)
+	if swapped == 1 then
+		return publish.itemPath(plain)
+	end
+	return nil, nil
+end
+
 -- the id of the item whose record `path` is (the item's own folder under a project root, like publish and audit), or nil
 local function recordIdOf(path: string): string?
-	local id, rel = publish.itemPath(path)
+	local id, rel = itemPathOf(path)
 	return if rel == "provenance.md" then id else nil
 end
 
@@ -417,7 +432,7 @@ local function planRecords(
 		if action == "write" then
 			for _, path in merged do
 				local found = string.match(path, `^(.*/{id})/{id}%.md$`)
-				if found and select(2, publish.itemPath(path)) == `{id}.md` then
+				if found and select(2, itemPathOf(path)) == `{id}.md` then
 					if folder then
 						return nil, `{id} has its document in two places`
 					end
@@ -435,26 +450,152 @@ local function planRecords(
 	return plans, nil
 end
 
+-- The way through a merge that stopped on a conflict outside the records.
+local HAND =
+	"merge by hand: git merge origin/main, resolve every conflict except provenance.md (leave the records to the engine), git add the files, then run ./zn sync again: it finishes that merge, uniting the records"
+
 -- A merge of `ref` into this worktree that unites the item records both sides appended to. The merge is made with
 -- `--no-commit`; then every record either side changed since the merge base is settled by item id (planRecords): the
--- record goes beside the item's document in the merge, every other path of that id's record is removed with
--- `git rm -f`, and the merge is committed with the message git prepared. A stop aborts the merge (no MERGE_HEAD, the
--- tree as it was), as does any error: the body runs in a `pcall`. Refused first: a merge of another branch, a
--- cherry-pick, a revert or a rebase in progress (not ours to finish or abort); a merge of this very `ref` already in
--- progress (a hand merge that has only records left) is finished, and never aborted. Returns the failure text.
-local function mergeRef(ref: string): (boolean, string)
+-- record goes beside the item's document in the merge (written through the index, and never over a path with
+-- uncommitted changes), every other path of that id's record is removed with `git rm -f`, and the merge is committed
+-- with the message git prepared. A stop aborts the merge we started (no MERGE_HEAD, the tree as it was), as does any
+-- error: the body runs in a `pcall`. Refused first: a merge of a branch `ref` does not contain, a cherry-pick, a
+-- revert or a rebase in progress (not ours to finish or abort). A merge in progress of `ref` or of an older commit of it
+-- (a hand merge that has only records left) is finished first, never aborted, and then `ref` is merged on top.
+-- Returns whether it merged, the failure text, and whether it aborted a merge.
+local function mergeRef(ref: string): (boolean, string, boolean)
 	local function inProgress(name: string): boolean
 		return sh.run("git", { "rev-parse", "-q", "--verify", name }).ok
 	end
 	local target = sh.trim(sh.run("git", { "rev-parse", "-q", "--verify", ref .. "^{commit}" }).stdout)
 	local gitDir = sh.trim(sh.run("git", { "rev-parse", "--absolute-git-dir" }).stdout)
-	local resumed = false
-	if inProgress("MERGE_HEAD") then
-		if target == "" or sh.trim(sh.run("git", { "rev-parse", "MERGE_HEAD" }).stdout) ~= target then
-			return false,
-				"a merge of another branch is in progress: finish it (git merge --continue) or abort it (git merge --abort), then run this again"
+	-- settle the records of the merge in progress and commit it; `ours` says whether we started it (a stop aborts it)
+	local function settleAndCommit(detail: string, ours: boolean): (boolean, string)
+		local function abort(why: string): (boolean, string)
+			if ours then
+				sh.run("git", { "merge", "--abort" })
+			end
+			return false, why
 		end
-		resumed = true
+		local ran, done, why = pcall(function(): (boolean, string)
+			local unmerged: { [string]: boolean } = {}
+			local unmergedIds: { string } = {}
+			for _, line in gitLines({ "ls-files", "-u" }) do
+				local path = string.match(line, "^%d+ %x+ %d\t(.+)$")
+				local id = if path then recordIdOf(path) else nil
+				if not path or not id then
+					return false, `{detail}\n{HAND}` -- a conflict outside the records
+				end
+				unmerged[path] = true
+				if not table.find(unmergedIds, id) then
+					table.insert(unmergedIds, id)
+				end
+			end
+			local base = sh.trim(sh.run("git", { "merge-base", "HEAD", "MERGE_HEAD" }).stdout)
+			local ids, oursChanged, theirsChanged = changedRecordIds(base, "HEAD", "MERGE_HEAD")
+			for _, id in unmergedIds do
+				if not table.find(ids, id) then
+					table.insert(ids, id)
+				end
+			end
+			if #ids > 0 then
+				-- ids mean the same item only while both sides number items alike: a compaction on one side reuses them
+				local function mapAt(commit: string): string?
+					local shown = sh.run("git", { "show", `{commit}:{idsLib.MAP_FILE}` })
+					return if shown.ok then shown.stdout else nil
+				end
+				local crossing = provenance.compactionProblem(
+					mapAt(base),
+					mapAt("HEAD"),
+					mapAt("MERGE_HEAD"),
+					oursChanged,
+					theirsChanged
+				)
+				if crossing then
+					return false, `{crossing}\n{detail}`
+				end
+				local index = gitLines({ "ls-files" })
+				local plans, problem = planRecords(ids, "HEAD", "MERGE_HEAD", base, index)
+				if not plans then
+					return false, `{problem}\n{detail}`
+				end
+				-- never over uncommitted work: a path the merge did not leave unmerged must match the index
+				local function dirty(path: string): boolean
+					if unmerged[path] then
+						return false
+					end
+					local tracked = sh.run("git", { "ls-files", "--error-unmatch", "--", path }).ok
+					if not tracked then
+						return fs.isFile(path)
+					end
+					return not sh.run("git", { "diff", "--quiet", "--", path }).ok
+				end
+				for _, plan in plans do
+					local dest: string? = nil
+					if plan.action == "write" then
+						dest = `{plan.folder}/provenance.md`
+						local hashed = sh.run("git", { "hash-object", "-w", "--stdin" }, plan.text)
+						if not hashed.ok then
+							error(hashed.stderr, 0)
+						end
+						local blob = sh.trim(hashed.stdout)
+						local current = sh.run("git", { "rev-parse", "-q", "--verify", `:{dest}` })
+						if not (current.ok and sh.trim(current.stdout) == blob) then
+							if dirty(dest :: string) then
+								return false,
+									`{dest} has uncommitted changes the merge would overwrite: commit or stash them first\n{detail}`
+							end
+							sh.must("git", { "update-index", "--add", "--cacheinfo", `100644,{blob},{dest}` })
+							sh.must("git", { "checkout-index", "-f", "--", dest :: string })
+						end
+					end
+					if plan.action ~= "keep" then
+						for _, path in recordPaths(index) do
+							if path ~= dest and recordIdOf(path) == plan.id then
+								if dirty(path) then
+									return false,
+										`{path} has uncommitted changes the merge would remove: commit or stash them first\n{detail}`
+								end
+								sh.must("git", { "rm", "-q", "-f", "--ignore-unmatch", "--", path })
+							end
+						end
+					end
+				end
+			end
+			if #gitLines({ "ls-files", "-u" }) > 0 then
+				return false, detail
+			end
+			local c = sh.run("git", { "commit", "--no-edit", "-q" })
+			if not c.ok then
+				return false, c.stderr .. c.stdout
+			end
+			return true, ""
+		end)
+		if not ran then
+			return abort(`the merge stopped on an error: {done}`)
+		end
+		if not done then
+			return abort(why :: string)
+		end
+		return true, ""
+	end
+	local finished = ""
+	if inProgress("MERGE_HEAD") then
+		local head = sh.trim(sh.run("git", { "rev-parse", "MERGE_HEAD" }).stdout)
+		if target == "" or not sh.run("git", { "merge-base", "--is-ancestor", head, target }).ok then
+			return false,
+				"a merge of another branch is in progress: finish it (git merge --continue) or abort it (git merge --abort), then run this again",
+				false
+		end
+		-- a hand merge of origin/main, or of an older commit of it: finish it, then merge the newer tip on top
+		local ok, why = settleAndCommit(
+			`origin/main is being merged by hand: every conflict except provenance.md must be resolved and added first`,
+			false
+		)
+		if not ok then
+			return false, why, false
+		end
+		finished = "your merge was finished and committed; "
 	elseif
 		inProgress("CHERRY_PICK_HEAD")
 		or inProgress("REVERT_HEAD")
@@ -462,103 +603,28 @@ local function mergeRef(ref: string): (boolean, string)
 		or fs.isDir(`{gitDir}/rebase-apply`)
 	then
 		return false,
-			"a cherry-pick, a revert or a rebase is in progress: finish or abort it, then run this again"
+			"a cherry-pick, a revert or a rebase is in progress: finish or abort it, then run this again",
+			false
 	end
-	local detail = ""
-	if not resumed then
-		local r = sh.run("git", { "merge", "--no-commit", "--no-edit", ref })
-		detail = r.stderr .. r.stdout
-		if not inProgress("MERGE_HEAD") then
-			return r.ok, if r.ok then "" else detail -- up to date, fast-forwarded, or git refused to start
-		end
-	else
-		detail =
-			`{ref} is being merged by hand: every conflict except provenance.md must be resolved and added first`
+	local r = sh.run("git", { "merge", "--no-commit", "--no-edit", ref })
+	local detail = r.stderr .. r.stdout
+	if not inProgress("MERGE_HEAD") then
+		return r.ok, if r.ok then "" else detail, false -- up to date, fast-forwarded, or git refused to start
 	end
-	local function abort(why: string): (boolean, string)
-		if not resumed then
-			sh.run("git", { "merge", "--abort" })
-		end
-		return false, why
+	local ok, why = settleAndCommit(detail, true)
+	if not ok then
+		return false, finished .. why, true
 	end
-	local ran, done, why = pcall(function(): (boolean, string)
-		local unmerged: { [string]: boolean } = {}
-		local unmergedIds: { string } = {}
-		for _, line in gitLines({ "ls-files", "-u" }) do
-			local path = string.match(line, "^%d+ %x+ %d\t(.+)$")
-			local id = if path then recordIdOf(path) else nil
-			if not id then
-				return false, detail -- a conflict outside the records
-			end
-			if not unmerged[id] then
-				unmerged[id] = true
-				table.insert(unmergedIds, id)
-			end
-		end
-		local base = sh.trim(sh.run("git", { "merge-base", "HEAD", "MERGE_HEAD" }).stdout)
-		local ids, oursChanged, theirsChanged = changedRecordIds(base, "HEAD", "MERGE_HEAD")
-		for _, id in unmergedIds do
-			if not table.find(ids, id) then
-				table.insert(ids, id)
-			end
-		end
-		if #ids > 0 then
-			-- ids mean the same item only while both sides number items alike: a compaction on one side reuses them
-			local function mapAt(commit: string): string?
-				local shown = sh.run("git", { "show", `{commit}:{idsLib.MAP_FILE}` })
-				return if shown.ok then shown.stdout else nil
-			end
-			local crossing =
-				provenance.compactionProblem(mapAt("HEAD"), mapAt("MERGE_HEAD"), oursChanged, theirsChanged)
-			if crossing then
-				return false, `{crossing}\n{detail}`
-			end
-			local index = gitLines({ "ls-files" })
-			local plans, problem = planRecords(ids, "HEAD", "MERGE_HEAD", base, index)
-			if not plans then
-				return false, `{problem}\n{detail}`
-			end
-			for _, plan in plans do
-				local dest: string? = nil
-				if plan.action == "write" then
-					dest = `{plan.folder}/provenance.md`
-					fs.writeFile(dest :: string, plan.text :: string)
-					sh.must("git", { "add", "--", dest :: string })
-				end
-				if plan.action ~= "keep" then
-					for _, path in recordPaths(index) do
-						if path ~= dest and recordIdOf(path) == plan.id then
-							sh.must("git", { "rm", "-q", "-f", "--ignore-unmatch", "--", path })
-						end
-					end
-				end
-			end
-		end
-		if #gitLines({ "ls-files", "-u" }) > 0 then
-			return false, detail
-		end
-		local c = sh.run("git", { "commit", "--no-edit", "-q" })
-		if not c.ok then
-			return false, c.stderr .. c.stdout
-		end
-		return true, ""
-	end)
-	if not ran then
-		return abort(`the merge stopped on an error: {done}`)
-	end
-	if not done then
-		return abort(why :: string)
-	end
-	return true, ""
+	return true, "", false
 end
 
--- Brings what was just published into this worktree. A conflicting merge is aborted, so the tree is
--- left as it was and `./zn sync` can be run again after resolving by hand.
+-- Brings what was just published into this worktree. A merge that stops is aborted (the tree is left as it was) or
+-- refused (nothing was started): the message says which, and the way through.
 local function mergeOrigin()
-	local ok, why = mergeRef("origin/main")
+	local ok, why, aborted = mergeRef("origin/main")
 	if not ok then
 		fail(
-			`merging origin/main failed (merge aborted; anything this command published is already on origin/main): {why}\nmerge by hand: git merge origin/main, resolve every conflict except provenance.md (leave the records to the engine), git add the files, then run ./zn sync again: it finishes that merge, uniting the records`
+			`merging origin/main failed{if aborted then " (merge aborted)" else ""}; anything this command published is already on origin/main: {why}`
 		)
 	end
 end
@@ -1899,9 +1965,9 @@ local function raftingStart(what: string)
 		fail(`working tree is not clean: commit first ({what} merges origin/main before and after it claims)`)
 	end
 	refuseStale()
-	local ok, why = mergeRef("origin/main")
+	local ok, why, aborted = mergeRef("origin/main")
 	if not ok then
-		fail(`{what}: merging origin/main failed (merge aborted): {why}`)
+		fail(`{what}: merging origin/main failed{if aborted then " (merge aborted)" else ""}: {why}`)
 	end
 end
 
@@ -2531,10 +2597,10 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 		-- one origin/main per try: the merge, the scope, the commit's parent and the race test all name this sha, so
 		-- a push elsewhere during the gate (or a later fetch) can never become the parent of a tree it isn't in
 		local base = sh.git({ "rev-parse", "--verify", "origin/main^{commit}" })
-		local merged, why = mergeRef(base)
+		local merged, why, aborted = mergeRef(base)
 		if not merged then
 			fail(
-				`merging origin/main failed (merge aborted): {why}\nmerge by hand: git merge origin/main, resolve every conflict except provenance.md (leave the records to the engine), git add the files, then run ./zn sync, then land again`
+				`merging origin/main failed{if aborted then " (merge aborted)" else ""}: {why}\nthen run land again`
 			)
 		end
 		refuseStale()
