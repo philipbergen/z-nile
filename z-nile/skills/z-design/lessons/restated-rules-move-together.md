@@ -36,3 +36,6 @@ c0172 design review 002 F1: that clone, made with `git clone` of the local check
 c0263 design review 006 F1, F9: a refute that says a spec was changed must paste the grep showing the changed line; two specs asserted opposite things about `merged` after a refute claimed one was fixed.
 
 When a mechanism is replaced, its other copies are replaced too (c0263 design review 011 F2): round 3 moved the sync to settling records by item id, and remap kept the retired by-path rule; list every place that merges the same file and give them one routine.
+**Also:** c0279 design review 004 F4: a late user decision changed a value (the stall cases' limit from 2 s to 10 s); the Design's general claims that the old value supported ("none longer", "no added cost", "holds under any load", the Test plan's three modes, the size) stayed. After a late decision, grep for every claim the old value supported, not just for the number.
+
+**Also:** c0279 design review 005 F1: a `fixed:` answer to a finding whose evidence is a list must answer each bullet on its own line; round 4 F5 listed ten stale places, four stayed, and the refute said "fixed". Check: for each evidence bullet, can the refute point to the changed line (from a grep rerun after the edit), or say why it stays?

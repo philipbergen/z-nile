@@ -29,6 +29,8 @@
 | 25 | 2026-11-09 05:25 | design-review-021 | 0 | 0 | 28.0 | spend | design-review | 327165 | opus |
 | 26 | 2026-11-09 05:25 | design-refute-021 | 0 | 0 | 60.0 | spend | design-review |  |  |
 | 27 | 2026-11-09 05:26 | prep | 4941 | 2 | 420.0 | spend | prep |  |  |
+| 28 | 2026-11-09 06:58 | design-review-022 | 0 | 0 | 39.0 | spend | design-review | 346274 | opus |
+| 29 | 2026-11-09 06:58 | design-refute-022 | 0 | 0 | 120.0 | spend | design-review |  |  |
 
-**Total:** +6111 / -3 lines, 1296.0 agent-minutes, 4522886 tokens over 27 records
-<!-- totals: added=6111 removed=3 minutes=1296.0 records=27 tokens=4522886 -->
+**Total:** +6111 / -3 lines, 1455.0 agent-minutes, 4869160 tokens over 29 records
+<!-- totals: added=6111 removed=3 minutes=1455.0 records=29 tokens=4869160 -->
