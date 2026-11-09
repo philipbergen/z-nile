@@ -472,6 +472,15 @@ local function mergeRef(ref: string): (boolean, string, boolean)
 	local gitDir = sh.trim(sh.run("git", { "rev-parse", "--absolute-git-dir" }).stdout)
 	-- settle the records of the merge in progress and commit it; `ours` says whether we started it (a stop aborts it)
 	local function settleAndCommit(detail: string, ours: boolean): (boolean, string)
+		-- the advice depends on whose merge this is: ours is aborted by a stop (commit or stash and sync again); the
+		-- user's own hand merge stays in progress (git add what they want kept, or git checkout it, then sync again;
+		-- a stash would discard the merge)
+		local way = if ours
+			then "commit or stash them first, then run ./zn sync again"
+			else "git add the path to keep it as it is, or git checkout -- it to drop the edit (not git stash: it would discard your merge), then run ./zn sync again"
+		local outside = if ours
+			then HAND
+			else "resolve every conflict except provenance.md, git add the files, then run ./zn sync again: it finishes this merge, uniting the records"
 		local function abort(why: string): (boolean, string)
 			if ours then
 				sh.run("git", { "merge", "--abort" })
@@ -485,7 +494,7 @@ local function mergeRef(ref: string): (boolean, string, boolean)
 				local path = string.match(line, "^%d+ %x+ %d\t(.+)$")
 				local id = if path then recordIdOf(path) else nil
 				if not path or not id then
-					return false, `{detail}\n{HAND}` -- a conflict outside the records
+					return false, `{detail}\n{outside}` -- a conflict outside the records
 				end
 				unmerged[path] = true
 				if not table.find(unmergedIds, id) then
@@ -547,7 +556,7 @@ local function mergeRef(ref: string): (boolean, string, boolean)
 						if not (current.ok and sh.trim(current.stdout) == blob) then
 							if dirty(dest :: string) then
 								return false,
-									`{dest} has uncommitted changes the merge would overwrite: commit or stash them first\n{detail}`
+									`{dest} has uncommitted changes the merge would overwrite: {way}\n{detail}`
 							end
 							table.insert(writes, { dest = dest :: string, blob = blob })
 						end
@@ -557,7 +566,7 @@ local function mergeRef(ref: string): (boolean, string, boolean)
 							if path ~= dest and recordIdOf(path) == plan.id then
 								if dirty(path) then
 									return false,
-										`{path} has uncommitted changes the merge would remove: commit or stash them first\n{detail}`
+										`{path} has uncommitted changes the merge would remove: {way}\n{detail}`
 								end
 								table.insert(removals, path)
 							end
@@ -593,11 +602,22 @@ local function mergeRef(ref: string): (boolean, string, boolean)
 		return true, ""
 	end
 	local finished = ""
+	-- a cherry-pick, a revert or a rebase in progress wins over everything, a hand merge inside it included
+	if
+		inProgress("CHERRY_PICK_HEAD")
+		or inProgress("REVERT_HEAD")
+		or fs.isDir(`{gitDir}/rebase-merge`)
+		or fs.isDir(`{gitDir}/rebase-apply`)
+	then
+		return false,
+			"a cherry-pick, a revert or a rebase is in progress (nothing was aborted): finish or abort it, then run this again",
+			false
+	end
 	if inProgress("MERGE_HEAD") then
 		local head = sh.trim(sh.run("git", { "rev-parse", "MERGE_HEAD" }).stdout)
 		if target == "" or not sh.run("git", { "merge-base", "--is-ancestor", head, target }).ok then
 			return false,
-				"a merge of another branch is in progress: finish it (git merge --continue) or abort it (git merge --abort), then run this again",
+				"a merge of another branch is in progress (nothing was aborted): finish it (git merge --continue) or abort it (git merge --abort), then run this again",
 				false
 		end
 		-- a hand merge of origin/main, or of an older commit of it: finish it, then merge the newer tip on top
@@ -609,20 +629,11 @@ local function mergeRef(ref: string): (boolean, string, boolean)
 			return false, why, false
 		end
 		finished = "your merge was finished and committed; "
-	elseif
-		inProgress("CHERRY_PICK_HEAD")
-		or inProgress("REVERT_HEAD")
-		or fs.isDir(`{gitDir}/rebase-merge`)
-		or fs.isDir(`{gitDir}/rebase-apply`)
-	then
-		return false,
-			"a cherry-pick, a revert or a rebase is in progress: finish or abort it, then run this again",
-			false
 	end
 	local r = sh.run("git", { "merge", "--no-commit", "--no-edit", ref })
 	local detail = r.stderr .. r.stdout
 	if not inProgress("MERGE_HEAD") then
-		return r.ok, if r.ok then "" else detail, false -- up to date, fast-forwarded, or git refused to start
+		return r.ok, if r.ok then "" else finished .. detail, false -- up to date, fast-forwarded, or git refused to start
 	end
 	local ok, why = settleAndCommit(detail, true)
 	if not ok then
@@ -637,7 +648,7 @@ local function mergeOrigin()
 	local ok, why, aborted = mergeRef("origin/main")
 	if not ok then
 		fail(
-			`merging origin/main failed{if aborted then " (merge aborted)" else ""}; anything this command published is already on origin/main: {why}`
+			`merging origin/main failed{if aborted then " (merge aborted)" else " (nothing was aborted)"}; anything this command published is already on origin/main: {why}`
 		)
 	end
 end
@@ -1980,7 +1991,11 @@ local function raftingStart(what: string)
 	refuseStale()
 	local ok, why, aborted = mergeRef("origin/main")
 	if not ok then
-		fail(`{what}: merging origin/main failed{if aborted then " (merge aborted)" else ""}: {why}`)
+		fail(
+			`{what}: merging origin/main failed{if aborted
+				then " (merge aborted)"
+				else " (nothing was aborted)"}: {why}`
+		)
 	end
 end
 
@@ -2613,7 +2628,7 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 		local merged, why, aborted = mergeRef(base)
 		if not merged then
 			fail(
-				`merging origin/main failed{if aborted then " (merge aborted)" else ""}: {why}\nthen run land again`
+				`merging origin/main failed{if aborted then " (merge aborted)" else " (nothing was aborted)"}: {why}\nthen run land again`
 			)
 		end
 		refuseStale()
