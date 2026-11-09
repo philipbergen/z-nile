@@ -531,6 +531,9 @@ local function mergeRef(ref: string): (boolean, string, boolean)
 					end
 					return not sh.run("git", { "diff", "--quiet", "--", path }).ok
 				end
+				-- first decide every write and removal and check them all, then apply: a stop leaves the tree as it was
+				local writes: { { dest: string, blob: string } } = {}
+				local removals: { string } = {}
 				for _, plan in plans do
 					local dest: string? = nil
 					if plan.action == "write" then
@@ -546,8 +549,7 @@ local function mergeRef(ref: string): (boolean, string, boolean)
 								return false,
 									`{dest} has uncommitted changes the merge would overwrite: commit or stash them first\n{detail}`
 							end
-							sh.must("git", { "update-index", "--add", "--cacheinfo", `100644,{blob},{dest}` })
-							sh.must("git", { "checkout-index", "-f", "--", dest :: string })
+							table.insert(writes, { dest = dest :: string, blob = blob })
 						end
 					end
 					if plan.action ~= "keep" then
@@ -557,10 +559,20 @@ local function mergeRef(ref: string): (boolean, string, boolean)
 									return false,
 										`{path} has uncommitted changes the merge would remove: commit or stash them first\n{detail}`
 								end
-								sh.must("git", { "rm", "-q", "-f", "--ignore-unmatch", "--", path })
+								table.insert(removals, path)
 							end
 						end
 					end
+				end
+				for _, write in writes do
+					sh.must(
+						"git",
+						{ "update-index", "--add", "--cacheinfo", `100644,{write.blob},{write.dest}` }
+					)
+					sh.must("git", { "checkout-index", "-f", "--", write.dest })
+				end
+				for _, path in removals do
+					sh.must("git", { "rm", "-q", "-f", "--ignore-unmatch", "--", path })
 				end
 			end
 			if #gitLines({ "ls-files", "-u" }) > 0 then
