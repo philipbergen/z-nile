@@ -163,3 +163,14 @@
 - design-review-018 F9: z-design/restated-rules-move-together
 - note the monolithic c0265 ran 18 design-review rounds (3.5 M tokens) without converging, only its pure module prototyped, the engine edge and about 2,300 lines of fixture specs never run: z-design/prove-specs-pass-on-a-prototype
 - note size: 640 from round 1 to round 18 while the design grew to six interlocking mechanisms and the specs tripled, split only after 18 rounds by the user: z-design/size-is-re-estimated-when-scope-grows
+- design-review-019 F1: zz-arch/commits-for-the-real-origin-are-never-fixture-looking
+- design-review-019 F2: z-design/bottom-layer-pins-only-what-upper-layers-keep, z-design/no-check-red-between-steps
+- design-review-019 F3: z-design/design-the-execution-window
+- design-review-019 F4: z-design/spec-design-correspondence
+- design-review-019 F5: zz-test/seed-every-enumerated-case
+- design-review-019 F6: z-design/spec-design-correspondence
+- design-review-019 F7: zz-rules/exhaustive-lists-name-new-things
+- design-review-019 F8: one-off: a claim stamp drawn without the freshness check the other claim paths use
+- design-review-019 F9: one-off: a probe name the core's own parser calls malformed
+- design-review-019 F10: zz-arch/guard-no-is-explicit
+- design-review-019 F11: z-design/spec-design-correspondence

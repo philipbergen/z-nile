@@ -76,6 +76,7 @@ exit 0
 -- the git shim: the heartbeat read (a fetch of the hb branches into refs/zn/hb-seen) fails (lsfail) or hangs (lshang) and
 -- is counted in <fakes>/lscalls; every fetch is counted in <fakes>/fetchcalls
 local SHIM = [[#!/bin/sh
+if [ "$1" = log ] && [ -f "$FAKE_DIR/nolog" ]; then echo "fatal: fake log failure" >&2; exit 128; fi
 if [ "$1" = fetch ]; then echo f >> "$FAKE_DIR/fetchcalls"; fi
 if [ "$1" = fetch ]; then
   case "$*" in
@@ -101,6 +102,8 @@ return t.spec("c0265 lost work", function(it)
 			["pickman/.tracker/rafts/R0010/check.sh"] = CHECK,
 			[`{P}/c0050/c0050.md`] = issue("c0050", "preparing-lucky-violet-heron"), -- claimed before beats existed
 			[`{P}/done/c0060/c0060.md`] = issue("c0060", "active-brisk-amber-otter"), -- keeps its claim stamp
+			-- a raft recombine retired keeps the stamp it was claimed with: never a claim, whatever its silence
+			["pickman/.tracker/rafts/retired/R0099/R0099.md"] = "---\nid: R0099\ntype: chore\ntitle: Gone\nslug: gone\nsingle: false\nissues: []\ndesign: draft\ncreated: 2026-10-06\nstatus: preparing-quiet-copper-falcon\n---\n\n# R0099\n",
 		})
 		fs.writeFile(`{h.bin}/gh`, GH)
 		process.exec("chmod", { "+x", `{h.bin}/gh` })
@@ -170,6 +173,44 @@ return t.spec("c0265 lost work", function(it)
 		t.expect(has(lineOf(listing, "c0040"), "[parked]")).toBe(true)
 	end)
 
+	it("a raft recombine retired is never a claim: no line in lost, no marker in status", function()
+		local at = LATE + 3 * STALE
+		t.expect(has(zn(h.f.main, { "lost" }, at).stdout, "R0099")).toBe(false)
+		local line = lineOf(zn(h.f.main, { "status" }, at).stdout, "R0099")
+		t.expect(has(line, "[")).toBe(false)
+	end)
+
+	it(
+		"a claim whose landing time cannot be read and that never beat is unconfirmed: [stale?], not lost",
+		function()
+			local at = LATE + 3 * STALE
+			fs.writeFile(`{h.fakes}/nolog`, "1")
+			local lost = zn(h.f.main, { "lost" }, at)
+			local listing = zn(h.f.main, { "status" }, at)
+			fs.removeFile(`{h.fakes}/nolog`)
+			t.expect(has(lost.stdout, "c0050")).toBe(false)
+			t.expect(has(lost.stdout, "c0020")).toBe(false)
+			t.expect(has(lineOf(listing.stdout, "c0050"), "[stale?]")).toBe(true)
+		end
+	)
+
+	it("an unreadable pull request list is never read as complete: 200 entries or not a list", function()
+		local saved = fs.readFile(`{h.fakes}/prs.json`)
+		local entries = {}
+		for i = 1, 200 do
+			table.insert(entries, `\{"title":"x {i}","headRefName":"b{i}"}`)
+		end
+		fs.writeFile(`{h.fakes}/prs.json`, `[{table.concat(entries, ",")}]`)
+		local full = zn(h.f.main, { "lost" }, LATE)
+		t.expect(full.ok).toBe(false)
+		t.expect(has(full.stderr, "pull requests unreadable")).toBe(true)
+		fs.writeFile(`{h.fakes}/prs.json`, '{"message":"rate limited"}')
+		local obj = zn(h.f.main, { "lost" }, LATE)
+		t.expect(obj.ok).toBe(false)
+		t.expect(has(obj.stderr, "pull requests unreadable")).toBe(true)
+		fs.writeFile(`{h.fakes}/prs.json`, saved)
+	end)
+
 	it("a protected checkout reads no remote: status refuses before any fetch, lost says so", function()
 		local function calls(): number
 			local text = if fs.isFile(`{h.fakes}/lscalls`) then fs.readFile(`{h.fakes}/lscalls`) else ""
@@ -199,7 +240,7 @@ return t.spec("c0265 lost work", function(it)
 	end)
 
 	it("a beat revives a lost claim", function()
-		must(zn(h.f.main, { "beat", "c0010" }, LATE), "beat of a lost claim")
+		must(zn(wt, { "beat", "c0010" }, LATE), "beat of a lost claim")
 		t.expect(has(zn(h.f.main, { "lost" }, LATE + STALE).stdout, "c0010")).toBe(false)
 		t.expect(has(zn(h.f.main, { "lost" }, LATE + STALE + 1).stdout, "c0010")).toBe(true)
 	end)

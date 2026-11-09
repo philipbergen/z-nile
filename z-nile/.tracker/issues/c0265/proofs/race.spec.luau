@@ -71,6 +71,13 @@ if [ "$1" = fetch ]; then
     *hb-seen*)
       echo x >> "$FAKE_DIR/lscalls"
       [ -f "$FAKE_DIR/lshang" ] && sleep 30 ;;
+    *"origin main"*)
+      [ -f "$FAKE_DIR/mainhang" ] && sleep 30
+      if [ -f "$FAKE_DIR/mainfail" ]; then
+        read skip fail < "$FAKE_DIR/mainfail"
+        if [ "$skip" -gt 0 ]; then echo "$((skip-1)) $fail" > "$FAKE_DIR/mainfail"
+        elif [ "$fail" -gt 0 ]; then echo "0 $((fail-1))" > "$FAKE_DIR/mainfail"; echo "fatal: fake main fetch failure" >&2; exit 1; fi
+      fi ;;
   esac
 fi
 if [ "$1" = push ]; then
@@ -178,4 +185,32 @@ return t.spec("c0265 real-time proofs", function(it)
 			t.expect(has(list.stderr, "heartbeats unreadable")).toBe(true)
 		end
 	)
+
+	it(
+		"one failed fetch of main inside a --watch tick is said and the loop beats at the next tick",
+		function()
+			local stamp = stampOf(`{P}/c0080/c0080.md`)
+			local started = os.time()
+			fs.writeFile(`{h.fakes}/mainfail`, "1 1") -- the command's own first look passes, the first tick's look fails
+			local r = zn(
+				wt,
+				{ "beat", "c0080", "--watch" },
+				{ ZN_BOUNDED_DEADLINE = tostring(started + 12), ZN_BEAT_EVERY = "1" }
+			)
+			fs.removeFile(`{h.fakes}/mainfail`)
+			t.expect(r.ok).toBe(true)
+			t.expect(has(r.stderr, "fake main fetch failure")).toBe(true)
+			t.expect(newest(stamp) >= started + 2).toBe(true) -- a later tick beat
+		end
+	)
+
+	it("a hung fetch of main inside beat ends at the net limit and says so", function()
+		fs.writeFile(`{h.fakes}/mainhang`, "1")
+		local started = os.time()
+		local r = zn(wt, { "beat", "c0080" }, { ZN_NET_SECONDS = "2" })
+		fs.removeFile(`{h.fakes}/mainhang`)
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "timed out after 2 s")).toBe(true) -- the limit it was given, not the 10 s default
+		t.expect(os.time() - started < 25).toBe(true) -- the hang is 30 s
+	end)
 end)

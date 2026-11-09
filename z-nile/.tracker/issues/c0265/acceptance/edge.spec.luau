@@ -158,7 +158,7 @@ return t.spec("c0265 beat races", function(it)
 		-- c0072 was never beaten: its write is create-only. The takeover lands between the beat's reads and its push,
 		-- so the write succeeds; the re-read of main shows another stamp and the beat deletes what it created
 		fs.writeFile(`{h.fakes}/racebeat`, "1")
-		local r = zn(h.f.main, { "beat", "c0072" }, {
+		local r = zn(wt, { "beat", "c0072" }, {
 			ZN_NOW = tostring(os.time() + 1000),
 			FAKE_ITEM = "c0072",
 			FAKE_OLDSTAMP = old,

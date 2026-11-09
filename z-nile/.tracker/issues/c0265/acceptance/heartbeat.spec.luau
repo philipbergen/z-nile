@@ -216,8 +216,15 @@ return t.spec("c0265 heartbeat rules", function(it)
 				beat(B, NOW - 300), -- another live claim
 				beat(C, NOW - heartbeat.STALE - 1), -- its claim is gone, and has been for longer than the limit
 				beat(D, NOW - 60), -- unclaimed here, but young: this checkout may simply not have fetched its claim yet
+				beat("preparing-sunny-heron-lynx", NOW - 5000), -- a LOST claim: still claimed, so its branch is kept as evidence
 			}
-			local plan = heartbeat.plan(A, NOW, beats, { [A] = true, [B] = true }, NOW)
+			local plan = heartbeat.plan(
+				A,
+				NOW,
+				beats,
+				{ [A] = true, [B] = true, ["preparing-sunny-heron-lynx"] = true },
+				NOW
+			)
 			t.expect(plan.delete)
 				.toEqual({ { ref = heartbeat.branch(C), lease = `sha-{C}-{NOW - heartbeat.STALE - 1}` } })
 		end
