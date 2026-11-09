@@ -48,6 +48,14 @@ OWNED=(
 )
 RAW="$(git -C "$TOP" diff --no-renames --raw "$BASE" -- ':(glob)*/tests/**')" || { echo "AC7: git diff against the merge base failed" >&2; exit 1; }
 NEW="$(git -C "$TOP" ls-files -o --exclude-standard -- ':(glob)*/tests/**')" || { echo "AC7: git ls-files failed" >&2; exit 1; }
+# a committed change hidden from the working tree (assume-unchanged, skip-worktree) is refused: git marks such entries in
+# `ls-files -v` with a lowercase letter or S (design review 009 F3)
+FLAGS="$(git -C "$TOP" ls-files -v -- ':(glob)*/tests/**')" || { echo "AC7: git ls-files -v failed" >&2; exit 1; }
+HIDDEN="$(grep -E '^[a-zS] ' <<<"$FLAGS" || true)"
+if [[ -n $HIDDEN ]]; then
+	echo "AC7: test files hidden from git's working-tree view (assume-unchanged or skip-worktree): $HIDDEN" >&2
+	bad=1
+fi
 if [[ -n $NEW ]]; then
 	echo "AC7: untracked files under tests/ (c0121 adds none before done): $NEW" >&2
 	bad=1
