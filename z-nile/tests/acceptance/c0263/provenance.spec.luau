@@ -400,7 +400,7 @@ return t.spec("c0263 the provenance record", function(it)
 			"CURSOR_AGENT",
 			"GROK_SESSION_ID",
 			"merge by hand",
-			"`remap` unites a record both sides appended"
+			"`remap` settles the records the same way"
 		)
 		has("z-nile/skills/zz-execute/SKILL.md", "unites a `provenance.md` both sides appended")
 		has("z-nile/README.md", "provenance")
