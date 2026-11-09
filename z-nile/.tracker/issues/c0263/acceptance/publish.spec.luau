@@ -86,7 +86,9 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		do
 			t.expect(publish.allowed(ok, { "pickman/.tracker" })).toBe(true)
 		end
-		for _, bad in { "pickman/.tracker/provenance.md", `{ISSUE}/sub/provenance.md`, `{ISSUE}/provenance.txt` } do
+		for _, bad in
+			{ "pickman/.tracker/provenance.md", `{ISSUE}/sub/provenance.md`, `{ISSUE}/provenance.txt` }
+		do
 			t.expect(publish.allowed(bad, { "pickman/.tracker" })).toBe(false)
 		end
 	end)

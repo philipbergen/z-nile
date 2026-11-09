@@ -39,7 +39,7 @@ index 7e05c8ac..db923ac2 100644
  	if okReg then
  		for _, p in audit.leftovers(root, found, reg :: projects.Registry) do
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 98bffee9..61d7a583 100644
+index 98bffee9..86991cc1 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -15,6 +15,7 @@ local lessonsLib = require("./lessons")
@@ -59,22 +59,24 @@ index 98bffee9..61d7a583 100644
    dispatch <id> [--dry-run]                     run the chain on an item from its tracker state (ticket, design, raft,
                                                  ready, run), stopping at a merge gate, questions.md or a failure
    dispatch new "<description>" [--project <name>] [--dry-run]
-@@ -327,18 +330,155 @@ local function docPath(paths: { string }, id: string): string?
+@@ -327,18 +330,165 @@ local function docPath(paths: { string }, id: string): string?
  	return nil
  end
  
-+-- c0263: a merge of `ref` into this worktree in which a conflict confined to `provenance.md` files is resolved by
-+-- `provenance.union` of the item's record in HEAD, in `ref` and at the merge base (each found by the item's id, wherever
-+-- that commit keeps the item's folder), written beside the item's document in the merge, with every other path of the
-+-- id's record removed. Any other conflict, a side that is not a valid extension of the base, or a record deleted on one
-+-- side aborts the merge (no MERGE_HEAD, the tree as it was). Returns the
-+-- failure text.
++-- c0263: a merge of `ref` into this worktree that unites the item records both sides appended to. The merge is made
++-- with `--no-commit`; then every record either side changed since the merge base is settled by the item's id, never by
++-- git's pairing of files (git pairs small, templated records across ids and across folder moves): the record of each
++-- changed id is read from HEAD, from `ref` and from the base wherever each commit keeps the item's folder, settled by
++-- `provenance.settle` (unchanged on one side: the other side's; changed on both: the union; changed on one side and
++-- absent on the other, or a side that did not only append: stop), written beside the item's document in the merge, and
++-- every other path of that id's record removed with `git rm -f`. Any other conflict stops the merge too; a stop aborts
++-- it (no MERGE_HEAD, the tree as it was), as does any error in this function. Returns the failure text.
 +local function mergeRef(ref: string): (boolean, string)
-+	local r = sh.run("git", { "merge", "--no-edit", ref })
-+	if r.ok then
-+		return true, ""
-+	end
++	local r = sh.run("git", { "merge", "--no-commit", "--no-edit", ref })
 +	local detail = r.stderr .. r.stdout
++	if not sh.run("git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok then
++		return r.ok, if r.ok then "" else detail -- up to date, fast-forwarded, or git refused to start
++	end
 +	local function abort(why: string): (boolean, string)
 +		sh.run("git", { "merge", "--abort" })
 +		return false, why
@@ -86,96 +88,104 @@ index 98bffee9..61d7a583 100644
 +		end
 +		return out
 +	end
-+	-- Only records may be unmerged. Each is found by its item id, wherever each commit keeps the item's folder: git's
-+	-- stage shapes for a record depend on which side moved the folder and on its rename heuristics.
-+	local ids: { string } = {}
-+	local seen: { [string]: boolean } = {}
-+	for _, line in lines({ "ls-files", "-u" }) do
-+		local path = string.match(line, "^%d+ %x+ %d\t(.+)$")
-+		local id = if path then string.match(path, "/([fdcR]%d%d%d%d)/provenance%.md$") else nil
-+		if not id then
-+			return abort(detail)
++	local ran, done, why = pcall(function(): (boolean, string)
++		local ids: { string } = {}
++		local seen: { [string]: boolean } = {}
++		local function note(path: string): boolean
++			local id = string.match(path, "/([fdcR]%d%d%d%d)/provenance%.md$")
++			if id and not seen[id] then
++				seen[id] = true
++				table.insert(ids, id)
++			end
++			return id ~= nil
 +		end
-+		if not seen[id] then
-+			seen[id] = true
-+			table.insert(ids, id)
++		local unmerged = false
++		for _, line in lines({ "ls-files", "-u" }) do
++			unmerged = true
++			local path = string.match(line, "^%d+ %x+ %d\t(.+)$")
++			if not path or not note(path) then
++				return false, detail -- a conflict outside the records
++			end
 +		end
-+	end
-+	if #ids == 0 then
-+		return abort(detail)
-+	end
-+	table.sort(ids)
-+	local base = sh.trim(sh.run("git", { "merge-base", "HEAD", "MERGE_HEAD" }).stdout)
-+	local trees: { [string]: { string } } = {}
-+	for _, commit in { "HEAD", "MERGE_HEAD", base } do
-+		trees[commit] = lines({ "ls-tree", "-r", "--name-only", commit })
-+	end
-+	local function recordAt(commit: string, id: string): (string?, string?)
-+		local path, why = provenance.locate(trees[commit], id)
-+		if why then
-+			return nil, why
++		local base = sh.trim(sh.run("git", { "merge-base", "HEAD", "MERGE_HEAD" }).stdout)
++		for _, side in { "HEAD", "MERGE_HEAD" } do
++			for _, path in lines({ "diff", "--name-only", "--no-renames", base, side }) do
++				note(path)
++			end
 +		end
-+		if not path then
-+			return nil, nil
-+		end
-+		return sh.run("git", { "show", `{commit}:{path}` }).stdout, nil
-+	end
-+	for _, id in ids do
-+		local ours, ownWhy = recordAt("HEAD", id)
-+		local theirs, theirWhy = recordAt("MERGE_HEAD", id)
-+		local common, commonWhy = recordAt(base, id)
-+		local why = ownWhy or theirWhy or commonWhy
-+		if why then
-+			return abort(`{why}\n{detail}`)
-+		end
-+		-- the merged index: the item's one document, and so the one place its record goes
-+		local docFolder: string? = nil
-+		local index = lines({ "ls-files" })
-+		for _, path in index do
-+			local folder = string.match(path, `^(.*/{id})/{id}%.md$`)
-+			if folder then
-+				if docFolder then
-+					return abort(`{id} has its document in two places\n{detail}`)
++		table.sort(ids)
++		if #ids > 0 then
++			local trees: { [string]: { string } } = {}
++			for _, commit in { "HEAD", "MERGE_HEAD", base } do
++				trees[commit] = lines({ "ls-tree", "-r", "--name-only", commit })
++			end
++			local function recordAt(commit: string, id: string): (string?, string?)
++				local path, locateWhy = provenance.locate(trees[commit], id)
++				if locateWhy then
++					return nil, locateWhy
 +				end
-+				docFolder = folder
++				if not path then
++					return nil, nil
++				end
++				return sh.run("git", { "show", `{commit}:{path}` }).stdout, nil
 +			end
-+		end
-+		if not docFolder then
-+			return abort(`{id}: the merge has no document for the record\n{detail}`)
-+		end
-+		local united: string? = nil
-+		if ours and theirs then
-+			united, why = provenance.union(common, ours, theirs)
-+		else
-+			-- one side has the record: it is the result, unless the other side deleted it (the base had it)
-+			local only = ours or theirs
-+			if common or not only then
-+				return abort(`{id}: a side of the merge deleted the record\n{detail}`)
-+			end
-+			if provenance.parse(only) then
-+				united = only
-+			else
-+				why = "the record does not parse"
-+			end
-+		end
-+		if not united then
-+			return abort(`{id}: {why}\n{detail}`)
-+		end
-+		local target = `{docFolder}/provenance.md`
-+		fs.writeFile(target, united)
-+		sh.must("git", { "add", "--", target })
-+		for _, path in index do
-+			if path ~= target and string.match(path, `/{id}/provenance%.md$`) then
-+				sh.run("git", { "rm", "-q", "-f", "--cached", "--ignore-unmatch", "--", path })
-+				if fs.isFile(path) then
-+					fs.removeFile(path)
++			for _, id in ids do
++				local ours, ownWhy = recordAt("HEAD", id)
++				local theirs, theirWhy = recordAt("MERGE_HEAD", id)
++				local common, commonWhy = recordAt(base, id)
++				if ownWhy or theirWhy or commonWhy then
++					return false, `{ownWhy or theirWhy or commonWhy}\n{detail}`
++				end
++				local action, text, problem = provenance.settle(common, ours, theirs)
++				if not action then
++					return false, `{id}: {problem}\n{detail}`
++				end
++				local index = lines({ "ls-files" })
++				local target: string? = nil
++				if action == "write" then
++					local folder: string? = nil
++					for _, path in index do
++						local found = string.match(path, `^(.*/{id})/{id}%.md$`)
++						if found then
++							if folder then
++								return false, `{id} has its document in two places\n{detail}`
++							end
++							folder = found
++						end
++					end
++					if not folder then
++						return false,
++							`{id}: the merge has no document for its record (the item was removed or its id changed)\n{detail}`
++					end
++					target = `{folder}/provenance.md`
++					fs.writeFile(target :: string, text :: string)
++					sh.must("git", { "add", "--", target :: string })
++				elseif action == "keep" and unmerged then
++					return false, `{id}: left unmerged by git and unchanged by either side\n{detail}`
++				end
++				if action ~= "keep" then
++					for _, path in index do
++						if path ~= target and string.match(path, `/{id}/provenance%.md$`) then
++							sh.must("git", { "rm", "-q", "-f", "--ignore-unmatch", "--", path })
++						end
++					end
 +				end
 +			end
 +		end
++		if #lines({ "ls-files", "-u" }) > 0 then
++			return false, detail
++		end
++		local c = sh.run("git", { "commit", "--no-edit", "-q" })
++		if not c.ok then
++			return false, c.stderr .. c.stdout
++		end
++		return true, ""
++	end)
++	if not ran then
++		return abort(`the merge stopped on an error: {done}`)
 +	end
-+	local c = sh.run("git", { "commit", "--no-edit", "-q" })
-+	if not c.ok then
-+		return abort(c.stderr .. c.stdout)
++	if not done then
++		return abort(why :: string)
 +	end
 +	return true, ""
 +end
@@ -219,7 +229,7 @@ index 98bffee9..61d7a583 100644
  -- Real entropy, folded into 31 bits: Lune's math.randomseed saturates larger seeds, so seeding with
  -- os.time() plus os.clock() (seconds since boot) gave every process the same stamp.
  local function entropy(): number
-@@ -1654,10 +1794,9 @@ local function raftingStart(what: string)
+@@ -1654,10 +1804,9 @@ local function raftingStart(what: string)
  		fail(`working tree is not clean: commit first ({what} merges origin/main before and after it claims)`)
  	end
  	refuseStale()
@@ -233,7 +243,7 @@ index 98bffee9..61d7a583 100644
  	end
  end
  
-@@ -2287,11 +2426,10 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
+@@ -2287,11 +2436,10 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
  		-- one origin/main per try: the merge, the scope, the commit's parent and the race test all name this sha, so
  		-- a push elsewhere during the gate (or a later fetch) can never become the parent of a tree it isn't in
  		local base = sh.git({ "rev-parse", "--verify", "origin/main^{commit}" })
@@ -248,7 +258,92 @@ index 98bffee9..61d7a583 100644
  			)
  		end
  		refuseStale()
-@@ -3374,7 +3512,7 @@ function cmd.start(pos: { string })
+@@ -3021,6 +3169,61 @@ function cmd.compact(_: { string }, opts: { [string]: { string } })
+ 	end
+ end
+ 
++-- c0263: the tree `git merge-tree` wrote for remap, with every conflicted `provenance.md` replaced by the union of its
++-- three stages (`mt` is the merge-tree output: the tree id, the conflicted-file lines "<mode> <sha> <stage>\t<path>", a
++-- blank line, then messages). Nil when anything else conflicts or a record cannot be united. The tree is built in the
++-- worktree's index (clean after the remap commit) and the worktree is reset to HEAD afterwards.
++local function uniteRemapRecords(mt: string, tree: string): string?
++	local stages: { [string]: { [number]: string } } = {}
++	local order: { string } = {}
++	local seenBlank = false
++	local first = true
++	for line in string.gmatch(mt .. "\n", "([^\n]*)\n") do
++		if first then
++			first = false
++		elseif line == "" then
++			break
++		else
++			local sha, stage, path = string.match(line, "^%d+ (%x+) (%d)\t(.+)$")
++			if not sha or not path or not string.match(path, "/provenance%.md$") then
++				return nil
++			end
++			if not stages[path] then
++				stages[path] = {}
++				table.insert(order, path)
++			end
++			stages[path][tonumber(stage) :: number] = sha
++		end
++	end
++	seenBlank = #order > 0
++	if not seenBlank then
++		return nil
++	end
++	table.sort(order)
++	local ok, built = pcall(function(): string?
++		sh.must("git", { "read-tree", "--reset", "-u", tree })
++		for _, path in order do
++			local function blob(n: number): string?
++				local sha = stages[path][n]
++				return if sha then sh.run("git", { "cat-file", "blob", sha }).stdout else nil
++			end
++			local ours, theirs = blob(2), blob(3)
++			if not ours or not theirs then
++				return nil
++			end
++			local united = provenance.union(blob(1), ours, theirs)
++			if not united then
++				return nil
++			end
++			fs.writeFile(path, united)
++			sh.must("git", { "add", "--", path })
++		end
++		return sh.trim(sh.must("git", { "write-tree" }))
++	end)
++	sh.run("git", { "reset", "--quiet", "--hard", "HEAD" })
++	return if ok then built else nil
++end
++
+ -- `remap`: a branch that was in flight during a compaction takes the new ids (c0870): origin/main's map, plus numbers
+ -- from origin's counter for the branch's own items, then one commit. Merge origin/main afterwards.
+ function cmd.remap()
+@@ -3168,12 +3371,18 @@ function cmd.remap()
+ 		)
+ 	end
+ 	local mt = sh.run("git", { "merge-tree", `--merge-base={baseTree}`, "HEAD", "origin/main" }) -- writes a tree (two commits)
++	local tree = string.match(mt.stdout, "^(%x+)") :: string
+ 	if not mt.ok then
+-		fail(
+-			`remap committed, but merging origin/main conflicts: git merge origin/main and resolve\n{mt.stdout}`
+-		)
++		-- c0263: a conflict confined to item records both sides appended to is united (the conflicted-file info lists
++		-- each stage's blob); any other conflict stops, as it always did
++		local united = if tree then uniteRemapRecords(mt.stdout, tree) else nil
++		if not united then
++			fail(
++				`remap committed, but merging origin/main conflicts: git merge origin/main and resolve (a provenance.md both sides appended: keep the common rows, then origin/main's new rows, then yours)\n{mt.stdout}`
++			)
++		end
++		tree = united :: string
+ 	end
+-	local tree = string.match(mt.stdout, "^(%x+)") :: string
+ 	local merge = sh.git({
+ 		"commit-tree",
+ 		tree,
+@@ -3374,7 +3583,7 @@ function cmd.start(pos: { string })
  				local found = store.find(dep)
  				if not found or found.state ~= "done" then
  					fail(
@@ -257,7 +352,7 @@ index 98bffee9..61d7a583 100644
  					)
  				end
  			end
-@@ -5021,6 +5159,55 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
+@@ -5021,6 +5230,55 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
  	return nil
  end
  
@@ -315,10 +410,10 @@ index 98bffee9..61d7a583 100644
  	if not publishing() then
 diff --git a/z-nile/engine/provenance.luau b/z-nile/engine/provenance.luau
 new file mode 100644
-index 00000000..5ca44469
+index 00000000..d99fed5d
 --- /dev/null
 +++ b/z-nile/engine/provenance.luau
-@@ -0,0 +1,331 @@
+@@ -0,0 +1,369 @@
 +--!strict
 +-- c0263: the record of who decided what on a ticket. `provenance.md` in an item's folder, append-only rows
 +-- `| when | event | actor | detail |` with no row numbers (so two appends merge). Pure over texts: the callers read the
@@ -617,6 +712,44 @@ index 00000000..5ca44469
 +	return provenance.render(id, out), nil
 +end
 +
++-- What a merge of two branches does with one item's record, by its text on each side and at the merge base (nil: the
++-- item has no record there). Returns the action and the text to write:
++--   "keep"   neither side changed it;
++--   "write"  the text to put beside the item's document (one side changed it, or both did and the union holds);
++--   "remove" the side that changed it deleted it;
++--   nil, nil, why   the merge must stop: a side did not only append, a record does not parse, or one side changed it
++--   and the other no longer has a record under that id (a renumber or a compaction changed the id: `./zn remap`).
++function provenance.settle(common: string?, ours: string?, theirs: string?): (string?, string?, string?)
++	local changedOurs, changedTheirs = ours ~= common, theirs ~= common
++	local function take(text: string?): (string?, string?, string?)
++		if text == nil then
++			return "remove", nil, nil
++		end
++		local _, why = provenance.parse(text)
++		if why then
++			return nil, nil, `the record does not parse ({why})`
++		end
++		return "write", text, nil
++	end
++	if not changedOurs and not changedTheirs then
++		return "keep", nil, nil
++	elseif changedOurs and not changedTheirs then
++		return take(ours)
++	elseif changedTheirs and not changedOurs then
++		return take(theirs)
++	end
++	if ours == nil or theirs == nil then
++		return nil,
++			nil,
++			"one side changed the record and the other has none under this id (an id changed: after a compaction run ./zn remap, after a renumber merge by hand)"
++	end
++	local united, why = provenance.union(common, ours, theirs)
++	if not united then
++		return nil, nil, why
++	end
++	return "write", united, nil
++end
++
 +-- The path of the record of item `id` among `paths` (a `git ls-tree -r --name-only` listing of one commit): the
 +-- `provenance.md` in the folder `<...>/<id>/`. Returns nil when the commit holds none, and nil and why when it holds
 +-- more than one (the item's folder in two places: not decided here).
@@ -735,7 +868,7 @@ index 9044a2b8..f397652a 100644
  4. `./zn done R0010`. It re-verifies everything, marks the PR ready, then moves the items to `done/` and pushes the done commit.
  5. Post a PR comment `Ready to merge at <short sha>` (no final report yet).
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index a06b3331..e495bfeb 100644
+index a06b3331..5386492a 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -32,6 +32,7 @@ Each item is a directory named by its ID:
@@ -769,7 +902,7 @@ index a06b3331..e495bfeb 100644
  The draft PR opened by `start` stays the live log of the raft. Every `./zn commit` pushes. In addition, comment on the PR (`gh pr comment`) when: a review starts (with the sha), a review file lands (verdict and findings by severity), a review is answered (the refute lines), an issue finishes, and on any `BLOCKED:` stop. Never sit on unpushed work, and never leave review files uncommitted. See zz-execute Phase 4.
  
 +## Provenance
-+`provenance.md` (in an issue's or a raft's folder) is the one record of what git cannot tell: a header, the table header and one row per event, `| when | event | actor | detail |`, no row numbers, appended and never edited (`./zn audit` checks it; the file is exactly that grammar and a stray line is an error). The events are `approved`, `unblocked`, `confirmed`, `ranked`, `rafted` and `delivered`. `./zn record <id> unblocked|confirmed|ranked [--actor A] [--detail k=v]` publishes `unblocked`, `confirmed` and `ranked` for a backlog issue or raft (the tickets that make those events call it), `unblocked` only for an active one and nothing for a done one; the other events are written by their own commands in a pull request. The **actor** is `human:<git name>` or `agent:<model> effort <level>`: `--actor`, else `ZN_ACTOR` (the dispatcher sets it), else `agent:unknown effort <CLAUDE_EFFORT>` when `CLAUDECODE`, `AI_AGENT`, `CURSOR_AGENT` (the `agent` CLI), `GROK_SESSION_ID` (the `grok` CLI) or `ZN_DISPATCH` (a dispatched step) is set and non-empty, else the git name. A published append is built from `origin/main`'s file. **Merging.** Two writers (a published row on `main`, a row in your PR) are united by the engine's own merges of `origin/main`: merge with `./zn sync` (and `land`, `fold`, `recombine`, which merge for you), and let it unite the record, wherever the item's folder moved. When it stops, it names why and nothing is left half merged; for a conflict in another file, a record that does not parse or a side that edited an old row, merge by hand with `git merge origin/main`, resolve every conflict, and take a conflicted `provenance.md` as the common rows, then `origin/main`'s new rows, then yours (no row twice), keeping every old row as it was; after a `renumber`, also rename its header. `remap` merges on its own and does not unite a record both sides appended: resolve that one by hand the same way.
++`provenance.md` (in an issue's or a raft's folder) is the one record of what git cannot tell: a header, the table header and one row per event, `| when | event | actor | detail |`, no row numbers, appended and never edited (`./zn audit` checks it; the file is exactly that grammar and a stray line is an error). The events are `approved`, `unblocked`, `confirmed`, `ranked`, `rafted` and `delivered`. `./zn record <id> unblocked|confirmed|ranked [--actor A] [--detail k=v]` publishes `unblocked`, `confirmed` and `ranked` for a backlog issue or raft (the tickets that make those events call it), `unblocked` only for an active one and nothing for a done one; the other events are written by their own commands in a pull request. The **actor** is `human:<git name>` or `agent:<model> effort <level>`: `--actor`, else `ZN_ACTOR` (the dispatcher sets it), else `agent:unknown effort <CLAUDE_EFFORT>` when `CLAUDECODE`, `AI_AGENT`, `CURSOR_AGENT` (the `agent` CLI), `GROK_SESSION_ID` (the `grok` CLI) or `ZN_DISPATCH` (a dispatched step) is set and non-empty, else the git name. A published append is built from `origin/main`'s file. **Merging.** Two writers (a published row on `main`, a row in your PR) are united by the engine's own merges of `origin/main`: merge with `./zn sync` (the commands that merge for you do the same: `land`, `fold`, `recombine`, `new raft` and every command that publishes, which merges `origin/main` afterwards), and let it unite the record, wherever the item's folder moved. When it stops, it names why and nothing is left half merged; for a conflict in another file, a record that does not parse or a side that edited an old row, merge by hand with `git merge origin/main`, resolve every conflict, and take a conflicted `provenance.md` as the common rows, then `origin/main`'s new rows, then yours (no row twice), keeping every old row as it was; after a `renumber`, also rename its header. `remap` unites a record both sides appended the same way. An id changed on one side (a `renumber`, or a compaction: run `./zn remap`) stops the sync, naming the id; merge that item by hand as above, under its new id.
 +
  ## Spend (best effort, automatic)
  Rows are only ever appended. A row has nine columns: when, commit, +lines, -lines, minutes, attribution, phase and tokens, and a tenth, model, once any row of the file records the model that spent its tokens (`--model <id>` on `spend` and `commit`; a file with no such row keeps nine columns, and a row with no model leaves the cell empty). The phase is one of `capture`, `prep`, `design-review`, `build`, `code-review` or `deliver`.

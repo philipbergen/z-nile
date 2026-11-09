@@ -5,6 +5,7 @@ Z = P + '/z-nile'
 PV = 'tests/acceptance/c0263/provenance.spec.luau'
 RC = 'tests/acceptance/c0263/record.spec.luau'
 PB = 'tests/acceptance/c0263/publish.spec.luau'
+RM = 'tests/acceptance/c0263/remap.spec.luau'
 PLAIN = '(function() local r = sh.run("git", { "merge", "--no-edit", %s }) if not r.ok then sh.run("git", { "merge", "--abort" }) end return r.ok, r.stderr end)()'
 M = [
     ('isValid accepts any agent:', 'engine/provenance.luau', 'agent:[%l%d%-]+ effort %w+$") ~= nil\nend\n\n-- the form', 'agent:") ~= nil\nend\n\n-- the form', PV),
@@ -45,10 +46,6 @@ M = [
     ('record: active takes any event (command)', 'engine/main.luau', 'elseif string.find(doc, "/active/", 1, true) and event ~= "unblocked" then', 'elseif false then', RC),
     ('record: main checkout allowed', 'engine/main.luau', '\trefuseInMainCheckout("record")\n', '', RC),
     ('record: offline allowed', 'engine/main.luau', '\tif not publishing() then\n\t\tfail("record needs an origin remote', '\tif false then\n\t\tfail("record needs an origin remote', RC),
-    ('merge: no union (abort on provenance)', 'engine/main.luau', '\ttable.sort(ids)\n', '\tdo\n\t\treturn abort(detail)\n\tend\n', RC),
-    ('merge: every conflict kept ours', 'engine/main.luau', '\t\tif not id then\n\t\t\treturn abort(detail)\n\t\tend', '\t\tif not id then\n\t\t\tif path then\n\t\t\t\tsh.run("git", { "checkout", "--ours", path })\n\t\t\t\tsh.must("git", { "add", path })\n\t\t\tend\n\t\t\tcontinue\n\t\tend', RC),
-    ('merge: refusal of a bad union ignored', 'engine/main.luau', '\t\t\tunited, why = provenance.union(common, ours, theirs)\n', '\t\t\tunited, why = provenance.union(common, ours, theirs)\n\t\t\tunited = united or ours\n', RC),
-    ('merge: directoryRenames moves every file', 'engine/main.luau', 'sh.run("git", { "merge", "--no-edit", ref })', 'sh.run("git", { "-c", "merge.directoryRenames=true", "merge", "--no-edit", ref })', RC),
     ('land plain merge', 'engine/main.luau', 'mergeRef(base)', PLAIN % 'base', RC),
     ('fold plain merge', 'engine/main.luau', 'local ok, why = mergeRef("origin/main")\n\tif not ok then\n\t\tfail(`{what}:', 'local ok, why = ' + PLAIN % '"origin/main"' + '\n\tif not ok then\n\t\tfail(`{what}:', RC),
     ('sync plain merge', 'engine/main.luau', 'local ok, why = mergeRef("origin/main")\n\tif not ok then\n\t\tfail(\n', 'local ok, why = ' + PLAIN % '"origin/main"' + '\n\tif not ok then\n\t\tfail(\n', RC),
@@ -60,10 +57,22 @@ M = [
     ('hint ignores GROK_SESSION_ID', 'engine/provenance.luau', ' or set("GROK_SESSION_ID")', '', PV),
     ('liveActor ignores CURSOR_AGENT', 'engine/main.luau', '\t\tCURSOR_AGENT = process.env.CURSOR_AGENT,\n', '', RC),
     ('liveActor ignores GROK_SESSION_ID', 'engine/main.luau', '\t\tGROK_SESSION_ID = process.env.GROK_SESSION_ID,\n', '', RC),
+    ('merge: no union (both changed aborts)', 'engine/provenance.luau', '\tlocal united, why = provenance.union(common, ours, theirs)\n', '\tlocal united, why = nil, "no union"\n', PV),
+    ('merge: refusal of a bad union ignored', 'engine/provenance.luau', '\tlocal united, why = provenance.union(common, ours, theirs)\n\tif not united then\n\t\treturn nil, nil, why\n\tend\n', '\tlocal united = provenance.union(common, ours, theirs) or ours\n', PV),
+    ('merge: one-sided record aborts', 'engine/provenance.luau', '\telseif changedOurs and not changedTheirs then\n\t\treturn take(ours)', '\telseif changedOurs and not changedTheirs then\n\t\treturn nil, nil, "one-sided"', PV),
+    ('merge: a deleted record is resurrected', 'engine/provenance.luau', '\t\tif text == nil then\n\t\t\treturn "remove", nil, nil', '\t\tif text == nil then\n\t\t\treturn "keep", nil, nil', PV),
+    ('merge: a record changed on one side and absent on the other is taken as one-sided', 'engine/provenance.luau', '\tif ours == nil or theirs == nil then\n\t\treturn nil,', '\tif ours == nil or theirs == nil then\n\t\treturn take(ours or theirs)\n\tend\n\tif false then\n\t\treturn nil,', RC),
+    ('merge: examines only unmerged ids', 'engine/main.luau', '\t\t\t\tnote(path)\n', '', RC),
+    ('merge: a clean merge skips the records', 'engine/main.luau', '\t\tif #ids > 0 then\n', '\t\tif #ids > 0 and unmerged then\n', RC),
+    ('merge: every conflict kept ours', 'engine/main.luau', '\t\t\tif not path or not note(path) then\n\t\t\t\treturn false, detail -- a conflict outside the records\n\t\t\tend', '\t\t\tif path and not note(path) then\n\t\t\t\tsh.run("git", { "checkout", "--ours", path })\n\t\t\t\tsh.must("git", { "add", path })\n\t\t\tend', RC),
     ('merge: stale old path kept', 'engine/main.luau', 'if path ~= target and string.match(path, `/{id}/provenance%.md$`) then', 'if false then', RC),
-    ('merge: one-sided record aborts', 'engine/main.luau', 'if common or not only then', 'if true then', RC),
-    ('merge: a deleted record is resurrected', 'engine/main.luau', 'if common or not only then', 'if not only then', RC),
-    ('merge: record written at the old path', 'engine/main.luau', 'local target = `{docFolder}/provenance.md`', 'local target = (ours and provenance.locate(trees["HEAD"], id)) or `{docFolder}/provenance.md`', RC),
+    ('merge: stale record unlinked, folder kept', 'engine/main.luau', 'sh.must("git", { "rm", "-q", "-f", "--ignore-unmatch", "--", path })', 'sh.run("git", { "rm", "-q", "-f", "--cached", "--ignore-unmatch", "--", path })\n\t\t\t\t\t\t\tif fs.isFile(path) then\n\t\t\t\t\t\t\t\tfs.removeFile(path)\n\t\t\t\t\t\t\tend', RC),
+    ('merge: record written at the old path', 'engine/main.luau', 'target = `{folder}/provenance.md`', 'target = (provenance.locate(trees["HEAD"], id)) or `{folder}/provenance.md`', RC),
+    ('merge: ignores locate refusal', 'engine/main.luau', 'if ownWhy or theirWhy or commonWhy then', 'if false then', RC),
+    ('merge: no-document stop removed', 'engine/main.luau', '\t\t\t\t\tif not folder then\n', '\t\t\t\t\tif false then\n', RC),
+    ('merge: directoryRenames moves every file', 'engine/main.luau', '{ "merge", "--no-commit", "--no-edit", ref }', '{ "-c", "merge.directoryRenames=true", "merge", "--no-commit", "--no-edit", ref }', RC),
+    ('remap skips the union', 'engine/main.luau', 'local united = if tree then uniteRemapRecords(mt.stdout, tree) else nil', 'local united = nil', RM),
+    ('docs: zz-execute step 2 reverted', 'skills/zz-execute/SKILL.md', 'run `./zn sync` (it fetches and merges `origin/main`, and unites a `provenance.md` both sides appended) to bring `origin/main` into the branch now', '`git fetch origin main` and merge it into the branch now', PV),
 ]
 only = sys.argv[1:]
 for name, f, old, new, spec in M:

@@ -19,8 +19,8 @@ check "AC4: the publish validator lets a provenance.md through only as a create 
   lune run tests/run -- "$A/publish.spec.luau"
 check "AC5: ./zn audit refuses a malformed record, an unknown event, a bad actor and a header naming another id, accepts absence and a raft's record" \
   lune run tests/run -- "$A/record.spec.luau" "$A/provenance.spec.luau"
-check "AC6: the engine's merges of origin/main (sync, fold, land) unite a conflict confined to records (found by the item, whichever side moved its folder), abort on any other, and a record added where the other side moved the folder follows the folder" \
-  lune run tests/run -- "$A/record.spec.luau"
+check "AC6: the engine's merges of origin/main (sync, fold, land, and remap's own) settle each changed record by its item id, unite what both sides appended, stop on an id change and on any other conflict, and a record follows its folder whichever side moved it" \
+  lune run tests/run -- "$A/record.spec.luau" "$A/remap.spec.luau" "$A/provenance.spec.luau"
 check "AC7: zz-rules and the README document provenance.md, ./zn record, the actor options, the session variables and the union through ./zn sync" \
   lune run tests/run -- "$A/provenance.spec.luau"
 check "AC8: the real tree audits and lessons-checks clean and the promoted specs this layer does not override stay green" \
