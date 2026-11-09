@@ -151,6 +151,9 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
 	},
+	["z-nile/engine/serve.luau"] = {
+		["local home = `{root}/.cache/dispatch`"] = "c0121: the board server reads the dispatcher's state files' change times for its model key; nothing is written",
+	},
 	["z-nile/engine/board.luau"] = {
 		["local home = `{dir}/.cache/dispatch`"] = "c0118: the board reads the dispatcher's run state (state.json, questions.md) to show it on a card; nothing is written",
 	},
