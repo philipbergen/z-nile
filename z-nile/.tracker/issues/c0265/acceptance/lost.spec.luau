@@ -118,6 +118,20 @@ return t.spec("c0265 lost work", function(it)
 		fs.writeFile(`{h.fakes}/hbpushfail`, "1")
 		must(zn(wt3, { "status", "c0075", "preparing" }, T0), "claim c0075")
 		fs.removeFile(`{h.fakes}/hbpushfail`)
+		-- the premise of the flatline cases: c0075 was made in a later second than the seed commit, the fixture's "landing"
+		local claimedAt = tonumber(
+			fixture.git(h.f.origin, { "log", "-1", "--format=%ct", "main", "--", `{P}/c0075/c0075.md` })
+		)
+		local landedAt = tonumber(fixture.git(h.f.origin, {
+			"log",
+			"-1",
+			"--format=%ct",
+			"--diff-filter=A",
+			"main",
+			"--",
+			"z-nile/engine/heartbeat.luau",
+		}))
+		t.expect((claimedAt :: number) > (landedAt :: number)).toBe(true)
 		must(zn(wt, { "status", "c0010", "preparing" }, T0), "claim c0010")
 		must(zn(wt, { "status", "c0020", "preparing" }, T0), "claim c0020")
 		must(zn(wt, { "new", "raft", "chore", "lostraft", "c0030", "--project", "pickman" }, T0), "new raft")

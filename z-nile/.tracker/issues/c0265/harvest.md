@@ -183,3 +183,9 @@
 - design-review-020 F7: z-design/spec-design-correspondence
 - design-review-020 F8: zz-arch/guard-no-is-explicit
 - note round 2 candidate: an absolute count of a shared resource after commands is an absence assertion; prove early-layer cases on stubs of the later layers' effects: z-design/bottom-layer-pins-only-what-upper-layers-keep
+- design-review-021 F1: zz-arch/commits-for-the-real-origin-are-never-fixture-looking
+- design-review-021 F2: z-design/bottom-layer-pins-only-what-upper-layers-keep
+- design-review-021 F3: z-design/bottom-layer-pins-only-what-upper-layers-keep
+- design-review-021 F4: z-design/design-the-execution-window
+- design-review-021 F5: z-design/restated-rules-move-together
+- design-review-021 F6: z-design/restated-rules-move-together

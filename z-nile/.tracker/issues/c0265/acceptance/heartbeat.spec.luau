@@ -333,4 +333,16 @@ return t.spec("c0265 heartbeat rules", function(it)
 		)
 		t.expect(parked.c0010).toBe(nil)
 	end)
+
+	it(
+		"the heartbeat's landing is read on main's first-parent line, newest add, not at a PR branch's commit",
+		function()
+			local args = heartbeat.landingArgs()
+			t.expect(table.find(args, "--first-parent") ~= nil).toBe(true) -- a merge-commit PR is read at the merge
+			t.expect(table.find(args, "--diff-filter=A") ~= nil).toBe(true)
+			t.expect(table.find(args, "-1") ~= nil).toBe(true) -- the newest add: a revert and a re-land restart it
+			t.expect(args[#args]).toBe("z-nile/engine/heartbeat.luau")
+			t.expect(table.find(args, "origin/main") ~= nil).toBe(true)
+		end
+	)
 end)
