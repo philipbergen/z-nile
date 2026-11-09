@@ -20,7 +20,10 @@ need "stop case proves the kill by the pid" "$SPEC" 'deadWithin(grandchildPid("g
 need "cap case proves the kill by the pid" "$SPEC" 'deadWithin(grandchildPid("grandchild-cap"), 60)'
 need "only 'No such process' is a death" "$SPEC" 'No such process'
 need "stall limit only a real stall reaches" "$SPEC" 'stall_seconds = 120'
-need "the one issue that tests a stall keeps 2 s" "$SPEC" '[dispatch]\nstall_seconds = 2\ntool_seconds = 30\n'
+need "the one issue that tests a stall has 10 s, a limit starvation does not reach" "$SPEC" '[dispatch]\nstall_seconds = 10\ntool_seconds = 30\n'
+# FAKE_DELAY is the first command of every CLI fake, before its first output
+first=$(awk '/"#!\/bin\/sh",/ {f=1; next} f && !/^[[:space:]]*--/ {print; exit}' "$FAKE")
+[[ $first == *'sleep ${FAKE_DELAY:-0}'* ]] || { echo "MISSING (every CLI fake): FAKE_DELAY as the first command after the shebang"; fail=1; }
 
 stop=$(mode stop)
 cap=$(mode cap)
@@ -39,7 +42,7 @@ n=$(grep -o 'FAKE_DELAY' <<<"$push" | wc -l)
 # the three entries, whole: the rules above are the readable part, this is the exact text of each entry's code, so a
 # reordered delay, a `while true` heartbeat or a pid written with the wrong `$$` all fail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
-for m in stop cap push; do
+for m in stop cap push tool; do
   want=$(grep -F -e "$m: " "$here/fakecli-modes.expected" | head -n 1 | sed "s/^$m: //")
   if [[ "$(mode "$m")" != "$want" ]]; then
     echo "DIFFERS ($m fake): not the reviewed text (acceptance/fakecli-modes.expected)"; fail=1

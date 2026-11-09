@@ -50,8 +50,8 @@ diff --git a/z-nile/tests/acceptance/c0117/dispatch-cli.spec.luau b/z-nile/tests
  			["pickman/.tracker/issues/c0020/.models.toml"] = "[z-design.claude]\nmax_tokens = 1000\n",
  			["pickman/.tracker/issues/c0030/c0030.md"] = issue("c0030", "third-thing"),
  			["pickman/.tracker/issues/c0040/c0040.md"] = issue("c0040", "fourth-thing"),
-+			-- the one issue whose cases test a stall keeps the short limits; every other case stalls only if it really does
-+			["pickman/.tracker/issues/c0040/.models.toml"] = "[dispatch]\nstall_seconds = 2\ntool_seconds = 30\n",
++			-- the one issue whose cases test a stall keeps short limits (10 s, which a starved machine does not reach, against the fakes' 12 s quiet tool call and 20 s silences); every other case stalls only if it really does
++			["pickman/.tracker/issues/c0040/.models.toml"] = "[dispatch]\nstall_seconds = 10\ntool_seconds = 30\n",
  			["pickman/.tracker/issues/c0050/c0050.md"] = issue("c0050", "fifth-thing"),
  			["pickman/.tracker/issues/c0050/.models.toml"] = 'order = ["agent"]\n',
  			["pickman/.tracker/issues/c0060/c0060.md"] = issue("c0060", "sixth-thing"),
@@ -64,6 +64,15 @@ diff --git a/z-nile/tests/acceptance/c0117/dispatch-cli.spec.luau b/z-nile/tests
  		t.expect(lastRow("c0030").tokens > 5000).toBe(true)
  	end)
  
+@@ -678,7 +690,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
+ 		t.expect(r.ok).toBe(true)
+ 		local s = state("c0040")
+ 		t.expect(s.outcome).toBe("ok")
+-		-- the step took over three seconds of wall time, yet the dispatcher's row records 0 minutes (the user's G13)
++		-- the step took over twelve seconds of wall time, yet the dispatcher's row records 0 minutes (the user's G13)
+ 		t.expect(s.history[#s.history].minutes > 0).toBe(true)
+ 		t.expect(lastRow("c0040").minutes).toBe(0)
+ 	end)
 @@ -689,7 +701,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
  		local r = zn({ "dispatch", "z-design", "c0060" }, { FAKE_STOP = "c0060" })
  		t.expect(r.ok).toBe(false)
