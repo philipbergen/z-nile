@@ -88,15 +88,23 @@ local function rojoReads(dir: string, name: string): ({ Read }?, string?)
 		return nil, "rojo sourcemap printed no JSON"
 	end
 	local reads: { Read } = {}
+	local slashed: string? = nil
 	local function collect(node: any, path: string)
 		for _, file in node.filePaths or {} do
 			table.insert(reads, { file = file, instance = path })
 		end
 		for _, child in node.children or {} do
+			-- Rojo accepts a key such as "ServerStorage/Arcade": its instance path would read as a child of a service
+			if slashed == nil and string.find(child.name, "/", 1, true) then
+				slashed = child.name
+			end
 			collect(child, if path == "" then child.name else `{path}/{child.name}`)
 		end
 	end
 	collect(map, "")
+	if slashed then
+		return nil, `a node is named {slashed}: a name with a / cannot be told from a child, so what Rojo puts where is not judged`
+	end
 	return reads, nil
 end
 
