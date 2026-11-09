@@ -322,6 +322,9 @@ function provenance.settle(common: string?, ours: string?, theirs: string?): (st
 	elseif changedTheirs and not changedOurs then
 		return take(theirs)
 	end
+	if ours == nil and theirs == nil then
+		return "remove", nil, nil -- both sides deleted it
+	end
 	if ours == nil or theirs == nil then
 		return nil,
 			nil,
@@ -332,6 +335,21 @@ function provenance.settle(common: string?, ours: string?, theirs: string?): (st
 		return nil, nil, why
 	end
 	return "write", united, nil
+end
+
+-- Whether a merge crosses a compaction: the two sides number items by different maps (`z-nile/compaction.txt`, nil for
+-- none), so an id may name another item on the other side, and each side changed a record. Settling by id would then
+-- put a row into the wrong item. Returns the reason to stop, or nil.
+function provenance.compactionProblem(
+	oursMap: string?,
+	theirsMap: string?,
+	oursChanged: boolean,
+	theirsChanged: boolean
+): string?
+	if (oursMap or "") ~= (theirsMap or "") and oursChanged and theirsChanged then
+		return "the merge crosses a compaction (the two sides number items differently) and both sides changed records: run ./zn remap (on the compaction's own branch, compact again on the current origin/main)"
+	end
+	return nil
 end
 
 -- The path of the record of item `id` among `paths` (a `git ls-tree -r --name-only` listing of one commit): the

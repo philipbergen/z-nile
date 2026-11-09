@@ -101,24 +101,16 @@ return t.spec("c0263 remap unites records", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		fs.writeFile(
 			`{branch}/pickman/.tracker/issues/f0020/f0020.md`,
-			fs.readFile(`{branch}/pickman/.tracker/issues/f0020/f0020.md`)
-				.. "Appended on the branch for f0020.\n"
+			fs.readFile(`{branch}/pickman/.tracker/issues/f0020/f0020.md`) .. "Appended on the branch for f0020.\n"
 		)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		t.expect(
-			trOk(branch, { "new", "issue", "c", "mine", "--project", "pickman" }, { PICKMAN_PUBLISH = "0" })
-		)
+		t.expect(trOk(branch, { "new", "issue", "c", "mine", "--project", "pickman" }, { PICKMAN_PUBLISH = "0" }))
 			.toBe("pickman/.tracker/issues/c0041/c0041.md")
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		t.expect(
-			trOk(branch, { "new", "issue", "c", "also", "--project", "pickman" }, { PICKMAN_PUBLISH = "0" })
-		)
+		t.expect(trOk(branch, { "new", "issue", "c", "also", "--project", "pickman" }, { PICKMAN_PUBLISH = "0" }))
 			.toBe("pickman/.tracker/issues/c0042/c0042.md")
 		local ourRecord = `{branch}/pickman/.tracker/issues/c0010/provenance.md`
-		fs.writeFile(
-			ourRecord,
-			fs.readFile(ourRecord) .. "| 2026-11-08 10:00 | ranked | human:Ours | rank=2 |\n"
-		)
+		fs.writeFile(ourRecord, fs.readFile(ourRecord) .. "| 2026-11-08 10:00 | ranked | human:Ours | rank=2 |\n")
 		git(branch, { "add", "-A" })
 		git(branch, { "commit", "-q", "-m", "branch work" })
 		git(branch, { "push", "-q", "-u", "origin", "prep-y" })
@@ -208,11 +200,9 @@ return t.spec("c0263 remap unites records", function(it)
 		t.expect(has(c1, "See c0001 and f0002.")).toBe(true)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(
-			has(
-				fs.readFile(`{branch}/pickman/.tracker/issues/f0002/f0002.md`),
-				"Appended on the branch for f0002."
-			)
-		).toBe(true)
+			has(fs.readFile(`{branch}/pickman/.tracker/issues/f0002/f0002.md`), "Appended on the branch for f0002.")
+		)
+			.toBe(true)
 		t.expect(fs.isDir(`{branch}/pickman/.tracker/issues/c0010`)).toBe(false)
 		t.expect(fs.isDir(`{branch}/pickman/.tracker/rafts/R0030`)).toBe(false)
 		t.expect(fs.isFile(`{branch}/{ids.MAP_FILE}`)).toBe(true)
