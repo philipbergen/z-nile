@@ -1,7 +1,7 @@
 --!strict
 -- c0860: `tracker.sh done` refuses a latest refute file whose "fixed" answer doesn't say what the fix could break
 -- ("; consequences: ..."), naming the finding; refuted answers need none. Driven in a throwaway clone (no origin,
--- so no gh), inside this spec run (so done skips the full gate, c0800); each case starts from the same commit,
+-- so no gh), inside this spec run (so done skips the gate, c0800); each case starts from the same commit,
 -- a started raft with a two-finding review.
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")

@@ -24,3 +24,26 @@
 - design-review-005 F2: zz-test/seed-every-enumerated-case, z-design/spec-design-correspondence
 - design-review-005 F3: z-design/instructions-runnable-where-they-run, z-design/watch-steps-name-their-base
 - design-review-005 F4: z-design/design-the-execution-window
+- design-review-006 F1: z-design/design-the-execution-window
+- design-review-006 F2: z-design/exact-checks-compare-against-the-merge-base
+- design-review-006 F3: z-design/spec-design-correspondence
+- design-review-006 F4: z-design/restated-rules-move-together
+- design-review-006 F5: z-design/design-the-execution-window
+- design-review-007 F1: z-design/design-the-execution-window
+- design-review-007 F2: z-design/exact-checks-compare-against-the-merge-base, zz-test/nothing-lost-compares-sets
+- design-review-007 F3: z-design/design-the-execution-window
+- design-review-007 F4: z-design/design-the-execution-window
+- design-review-007 F5: z-design/restated-rules-move-together
+- design-review-008 F1: z-design/design-the-execution-window
+- design-review-008 F2: z-design/design-the-execution-window
+- design-review-008 F3: z-design/design-the-execution-window
+- design-review-008 F4: one-off: deliberately hiding a committed edit from git's working-tree view is the branch author falsifying git, the accepted "detect, not prevent" limit of c0118's AC9
+- design-review-008 F5: z-design/restated-rules-move-together
+- design-review-009 F1: z-design/exact-checks-compare-against-the-merge-base
+- design-review-009 F2: z-design/restated-rules-move-together
+- design-review-009 F3: z-design/exact-checks-compare-against-the-merge-base
+- design-review-009 F4: z-design/restated-rules-move-together
+- design-review-009 F5: z-design/design-the-execution-window
+- design-review-010 F1: z-design/design-the-execution-window
+- design-review-010 F2: z-design/exact-checks-compare-against-the-merge-base
+- design-review-010 F3: z-design/restated-rules-move-together
