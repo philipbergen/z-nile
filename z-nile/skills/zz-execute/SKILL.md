@@ -98,7 +98,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
 
 ## Phase 5: Done
 1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit with `./zn commit --phase deliver`.
-2. `git fetch origin main` and merge it into the branch now (renumber colliding IDs, rerun `z-nile/check.sh --affected`, commit with `./zn commit --phase deliver`), so the PR is up to date before `done` and nothing needs changing after it.
+2. run `./zn sync` (it fetches and merges `origin/main`, and unites a `provenance.md` both sides appended) to bring `origin/main` into the branch now (renumber colliding IDs, rerun `z-nile/check.sh --affected`, commit with `./zn commit --phase deliver`), so the PR is up to date before `done` and nothing needs changing after it.
 3. **Confirm the harvest**: first harvest anything `./zn lessons --uncovered R0010` still lists, as Phase 4 step 5 says. That includes the design reviews of a raft prepped before lessons existed, which are harvested here by you. Then `./zn lessons --uncovered R0010` and `./zn lessons --check` must pass. Commit with `./zn commit --phase deliver`.
 4. `./zn done R0010`. It re-verifies everything, marks the PR ready, then moves the items to `done/` and pushes the done commit.
 5. Post a PR comment `Ready to merge at <short sha>` (no final report yet).

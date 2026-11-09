@@ -57,7 +57,7 @@ function provenance.isValid(value: string): boolean
 end
 
 -- The agent-session hint from an environment (a table of the variables the caller read): a session is an agent's when
--- `CLAUDECODE`, `AI_AGENT` or `ZN_DISPATCH` (a dispatched step) is set and non-empty; its effort is `CLAUDE_EFFORT`.
+-- `CLAUDECODE` (Claude Code), `AI_AGENT`, `CURSOR_AGENT` (the `agent` CLI), `GROK_SESSION_ID` (the `grok` CLI) or `ZN_DISPATCH` (a dispatched step) is set and non-empty; its effort is `CLAUDE_EFFORT`.
 -- One definition for every layer: c0283's refusal of `approve` calls this function.
 function provenance.hint(env: { [string]: string? }): Hint
 	local function set(name: string): boolean
@@ -65,7 +65,9 @@ function provenance.hint(env: { [string]: string? }): Hint
 		return v ~= nil and v ~= ""
 	end
 	return {
-		agent = set("CLAUDECODE") or set("AI_AGENT") or set("ZN_DISPATCH"),
+		agent = set("CLAUDECODE") or set("AI_AGENT") or set("CURSOR_AGENT") or set("GROK_SESSION_ID") or set(
+			"ZN_DISPATCH"
+		),
 		effort = env.CLAUDE_EFFORT,
 	}
 end
@@ -266,7 +268,7 @@ function provenance.union(base: string?, ours: string, theirs: string): (string?
 	local badO, badT = extends(b, o), extends(b, t)
 	if badO then
 		return nil,
-			`our version changed or removed row {badO} of the shared one: rows are only appended; restore it, then sync again`
+			`our version changed or removed row {badO} of the shared one: rows are only appended: restore the row, or merge by hand if you meant it (a renumber, for one; zz-rules, Provenance)`
 	end
 	if badT then
 		return nil, `origin/main's version changed or removed row {badT} of the shared one`
@@ -292,6 +294,24 @@ function provenance.union(base: string?, ours: string, theirs: string): (string?
 		end
 	end
 	return provenance.render(id, out), nil
+end
+
+-- The path of the record of item `id` among `paths` (a `git ls-tree -r --name-only` listing of one commit): the
+-- `provenance.md` in the folder `<...>/<id>/`. Returns nil when the commit holds none, and nil and why when it holds
+-- more than one (the item's folder in two places: not decided here).
+function provenance.locate(paths: { string }, id: string): (string?, string?)
+	local found: string? = nil
+	for _, path in paths do
+		local folder = string.match(path, `(.*/{id})/provenance%.md$`)
+			or string.match(path, `^({id})/provenance%.md$`)
+		if folder then
+			if found then
+				return nil, `{id} has a record in two places ({found} and {path})`
+			end
+			found = path
+		end
+	end
+	return found, nil
 end
 
 -- audit: what is wrong with the record at `path` (in an item's folder, named by that folder's id)

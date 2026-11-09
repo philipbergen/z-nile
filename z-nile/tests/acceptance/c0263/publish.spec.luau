@@ -86,9 +86,7 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		do
 			t.expect(publish.allowed(ok, { "pickman/.tracker" })).toBe(true)
 		end
-		for _, bad in
-			{ "pickman/.tracker/provenance.md", `{ISSUE}/sub/provenance.md`, `{ISSUE}/provenance.txt` }
-		do
+		for _, bad in { "pickman/.tracker/provenance.md", `{ISSUE}/sub/provenance.md`, `{ISSUE}/provenance.txt` } do
 			t.expect(publish.allowed(bad, { "pickman/.tracker" })).toBe(false)
 		end
 	end)
@@ -148,6 +146,18 @@ return t.spec("c0263 publish and provenance.md", function(it)
 		t.expect(publish.commit(work, function()
 			return { { path = `{ISSUE}/provenance.md`, content = more } }
 		end, "tracker: record").ok).toBe(true)
+		-- origin now holds two rows: a publish that swaps them and appends a third is a reorder, and is refused
+		local swapped = header("c0010")
+			.. row("ranked", "human:Bee", "rank=3")
+			.. row("confirmed", "human:Ann", 'said="yes"')
+			.. row("ranked", "human:Cy", "rank=4")
+		before = git(origin, { "rev-parse", "main" })
+		local reordered = publish.commit(work, function()
+			return { { path = `{ISSUE}/provenance.md`, content = swapped } }
+		end, "tracker: bad reorder")
+		t.expect(reordered.ok).toBe(false)
+		t.expect(string.find(reordered.reason or "", "provenance.md", 1, true) ~= nil).toBe(true)
+		t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
 		t.expect(publish.commit(work, function()
 			return {
 				{
