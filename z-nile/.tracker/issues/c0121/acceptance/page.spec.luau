@@ -225,7 +225,7 @@ return t.spec("c0121 served page", function(it)
 			do
 				t.expect(has(pane, word)).toBe(true) -- the link text stays
 			end
-				-- the safe ones keep their href, escaped exactly once
+			-- the safe ones keep their href, escaped exactly once
 			local joined = "\n" .. table.concat(hrefs, "\n") .. "\n"
 			t.expect(has(joined, "\nhttps://example.invalid/x?a=1&amp;b=2\n")).toBe(true)
 			t.expect(has(joined, "\ndocs/x.md\n")).toBe(true)
