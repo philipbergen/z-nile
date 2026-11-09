@@ -136,7 +136,7 @@ A worker never guesses past a wall; it escalates formally. *captured* (c0250)
 ### Provenance
 Every ticket says who did what to it.
 - The record is kept on the ticket and appended by `./zn record`. *captured* (c0263)
-- The record is meant to hold who confirmed the idea and who set its rank as well, as c0263's capture lists them. *captured* (c0263)
+- The record holds who confirmed the idea and who set the rank as well: c0260 writes the first row and c0249 the second, through the record's small API. *captured* (c0263)
 - `./zn who <id>` prints a ticket's history, oldest first: whose idea it was (the author of the ticket's capture commit), each status change, the merge, and the worker of each delivered layer, read from the ticket's spend rows; what git already knows is read from git and never stored. *captured* (c0280)
 - The record gets a row, with its actor, when a ticket is unblocked, rafted or delivered. *captured* (c0282)
 - Design approval is an explicit step by a person before `prepared`: `./zn approve <id>` records the person, the design hash and their words, and `prepared` is refused until it has run. *captured* (c0283)
