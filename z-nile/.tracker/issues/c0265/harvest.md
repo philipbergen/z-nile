@@ -183,9 +183,15 @@
 - design-review-020 F7: z-design/spec-design-correspondence
 - design-review-020 F8: zz-arch/guard-no-is-explicit
 - note round 2 candidate: an absolute count of a shared resource after commands is an absence assertion; prove early-layer cases on stubs of the later layers' effects: z-design/bottom-layer-pins-only-what-upper-layers-keep
-- design-review-021 F1: zz-arch/commits-for-the-real-origin-are-never-fixture-looking
+- design-review-021 F1: zz-arch/history-tests-survive-squash
 - design-review-021 F2: z-design/bottom-layer-pins-only-what-upper-layers-keep
 - design-review-021 F3: z-design/bottom-layer-pins-only-what-upper-layers-keep
 - design-review-021 F4: z-design/design-the-execution-window
 - design-review-021 F5: z-design/restated-rules-move-together
 - design-review-021 F6: z-design/restated-rules-move-together
+- design-review-022 F1: z-design/bottom-layer-pins-only-what-upper-layers-keep, z-design/mutation-runner-runs-correct-variants
+- design-review-022 F2: zz-test/pin-call-site-arguments
+- design-review-022 F3: zz-arch/read-paired-facts-at-one-moment, zz-arch/lock-reads-live-state
+- design-review-022 F4: z-design/spec-design-correspondence
+- design-review-022 F5: one-off: load-sensitive bounds in a real-time proof
+- design-review-022 F6: z-design/restated-rules-move-together

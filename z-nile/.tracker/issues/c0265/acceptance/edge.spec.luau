@@ -11,7 +11,7 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local h: fakecli.Harness
-local wt, wt2 = "", ""
+local wt, wt2, wt3 = "", "", ""
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local P = "pickman/.tracker/issues"
 
@@ -61,6 +61,19 @@ end
 local GH = '#!/bin/sh\n[ "$1" = pr ] && [ "$2" = list ] && echo "[]"\nexit 0\n'
 -- the shim acts on one push at a time, each armed by a marker file it removes first (answers only what it names)
 local SHIM = [[#!/bin/sh
+# main moves forward (another worktree fetches it) right after the first read of origin/main
+if [ "$1" = rev-parse ] && [ -f "$FAKE_DIR/movemain" ]; then
+  case "$2" in origin/main*)
+    rm -f "$FAKE_DIR/movemain"
+    real=$("$REAL_GIT" rev-parse "$2")
+    o="$FAKE_OTHER"; "$REAL_GIT" -C "$o" pull -q origin main
+    echo moved >> "$o/pickman/.tracker/architecture.md"
+    "$REAL_GIT" -C "$o" add -A; "$REAL_GIT" -C "$o" -c user.name=race -c user.email=race@example.invalid commit -q -m moved
+    "$REAL_GIT" -C "$o" push -q origin HEAD:main
+    "$REAL_GIT" fetch -q origin main
+    echo "$real"; exit 0;;
+  esac
+fi
 # another terminal takes $FAKE_ITEM's claim over: it restamps the item on main and, in one atomic push, deletes the old
 # owner's branch and creates its own
 takeover() {
@@ -121,7 +134,10 @@ return t.spec("c0265 beat races", function(it)
 			)
 		)
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-edge" }), "worktree"), "%s+$", ""))
-		must(zn(wt, { "status", "c0071", "preparing" }), "claim c0071")
+		-- c0071 is taken over below: its worktree runs nothing after that, so no case depends on what a checkout does once
+		-- its claim was taken (that is the later layers' to decide)
+		wt3 = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-edge3" }), "worktree"), "%s+$", ""))
+		must(zn(wt3, { "status", "c0071", "preparing" }), "claim c0071")
 		-- whatever a later layer does at a claim, c0072's branch is never written there (a refused first beat never
 		-- fails the claim), so its first write below is create-only
 		-- in a worktree of its own that runs no other command: a later layer beats the claims a worktree holds at each of
@@ -132,9 +148,8 @@ return t.spec("c0265 beat races", function(it)
 		fs.removeFile(`{h.fakes}/hbpushfail`)
 		must(zn(wt, { "status", "c0073", "preparing" }), "claim c0073")
 		-- each claim has a beat on origin: the branch a later beat replaces with a lease
-		for _, id in { "c0071", "c0073" } do
-			must(zn(wt, { "beat", id }, { ZN_NOW = tostring(os.time()) }), `first beat of {id}`)
-		end
+		must(zn(wt3, { "beat", "c0071" }, { ZN_NOW = tostring(os.time()) }), "first beat of c0071")
+		must(zn(wt, { "beat", "c0073" }, { ZN_NOW = tostring(os.time()) }), "first beat of c0073")
 	end)
 
 	it(
@@ -145,7 +160,7 @@ return t.spec("c0265 beat races", function(it)
 			t.expect(tipOf(old) ~= "").toBe(true) -- the first beat made its branch: the next beat replaces it with a lease
 			fs.writeFile(`{h.fakes}/racebeat`, "1")
 			fs.writeFile(`{h.fakes}/oldpushes`, "")
-			local told = zn(wt, { "beat", "c0071" }, {
+			local told = zn(wt3, { "beat", "c0071" }, {
 				ZN_NOW = tostring(os.time() + 1000),
 				FAKE_ITEM = "c0071",
 				FAKE_OLDSTAMP = old,
@@ -191,4 +206,23 @@ return t.spec("c0265 beat races", function(it)
 		t.expect(has(told.stderr, "beat: c0073")).toBe(false) -- a "stale info" rejection is not worth saying
 		t.expect(epochs(stamp)).toEqual({ due }) -- and the retry wrote this beat over the co-beater's
 	end)
+
+	it(
+		"a beat names one main for its whole attempt: a sibling fetching main forward meanwhile does not split it",
+		function()
+			local stamp = stampOf(`{P}/c0073/c0073.md`)
+			fs.writeFile(`{h.fakes}/movemain`, "1")
+			must(
+				zn(wt, { "beat", "c0073" }, { ZN_NOW = tostring(os.time() + 3000) }),
+				"beat while main moves"
+			)
+			t.expect(fs.isFile(`{h.fakes}/movemain`)).toBe(false) -- main did move during the beat
+			local ref = `refs/heads/hb/{stamp}`
+			-- the beat commit's tree is its parent's tree: a tree of one main under the tip of another would make
+			-- ./zn busy list the beat as a branch changing a project root
+			t.expect(fixture.git(h.f.origin, { "rev-parse", ref .. "^{tree}" }))
+				.toBe(fixture.git(h.f.origin, { "rev-parse", ref .. "^^{tree}" }))
+			t.expect(has(zn(h.f.main, { "busy", "z-nile", "pickman" }).stdout, "hb/")).toBe(false)
+		end
+	)
 end)

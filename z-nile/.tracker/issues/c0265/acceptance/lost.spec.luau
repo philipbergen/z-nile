@@ -73,10 +73,12 @@ if [ "$1" = pr ] && [ "$2" = list ]; then
 fi
 exit 0
 ]]
--- the git shim: the heartbeat read (a fetch of the hb branches into refs/zn/hb-seen) fails (lsfail) or hangs (lshang) and
+-- the git shim: the heartbeat read (a fetch of the hb branches into refs/zn/hb-seen) fails (lsfail), fails once on a ref
+-- lock a sibling worktree holds (lockonce), and
 -- is counted in <fakes>/lscalls; every fetch is counted in <fakes>/fetchcalls
 local SHIM = [[#!/bin/sh
 if [ "$1" = push ] && [ -f "$FAKE_DIR/hbpushfail" ]; then case "$*" in *":refs/heads/hb/"*) echo "fatal: fake first-beat refusal" >&2; exit 1;; esac; fi
+if [ "$1" = log ] && [ -f "$FAKE_DIR/landingpin" ]; then case "$*" in *--first-parent*-1*engine/heartbeat.luau*) echo 4102444800; exit 0;; esac; fi
 if [ "$1" = log ] && [ -f "$FAKE_DIR/nolanding" ]; then case "$*" in *engine/heartbeat.luau*) echo "fatal: fake log failure" >&2; exit 128;; esac; fi
 if [ "$1" = log ] && [ -f "$FAKE_DIR/nolog" ]; then echo "fatal: fake log failure" >&2; exit 128; fi
 if [ "$1" = fetch ]; then echo f >> "$FAKE_DIR/fetchcalls"; fi
@@ -85,7 +87,7 @@ if [ "$1" = fetch ]; then
     *hb-seen*)
       echo x >> "$FAKE_DIR/lscalls"
       [ -f "$FAKE_DIR/lsfail" ] && { echo "fatal: fake heartbeat read failure" >&2; exit 128; }
-      [ -f "$FAKE_DIR/lshang" ] && sleep 30 ;;
+      if [ -f "$FAKE_DIR/lockonce" ]; then rm -f "$FAKE_DIR/lockonce"; echo "error: cannot lock ref 'refs/zn/hb-seen/x': is at a but expected b" >&2; exit 1; fi ;;
   esac
 fi
 ]]
@@ -139,7 +141,7 @@ return t.spec("c0265 lost work", function(it)
 		-- c0010 beats once more, so it is silent for less time than c0030 (never beaten) although its id is lower:
 		-- silence order and id order differ, which pins "longest silent first". c0050 was claimed in the seed commit,
 		-- the same second the heartbeat "landed": it is older than the landing and never beaten, so it reads [no beat]
-		pushBeat(stampOf(`{P}/c0010/c0010.md`), T0 + 600)
+		pushBeat(stampOf(`{P}/c0010/c0010.md`), T0 + 570)
 		-- a raft recombine retired keeps the stamp it was claimed with: never a claim, whatever its silence. Added after the
 		-- seed, so it is made after the heartbeat "landed" (the seed): were it a claim it would be lost
 		trackerfix.elsewhere(h.f, {
@@ -161,11 +163,12 @@ return t.spec("c0265 lost work", function(it)
 			'[{"title":"tracker: prep c0020 Something","headRefName":"prep-something"}]'
 		)
 		local lost = must(zn(h.f.main, { "lost" }, LATE), "lost")
-		-- one line: id, state, minutes floored; c0010's last beat is the T0 + 600 one, so 2100 s = 35 m at LATE
+		-- one line: id, state, minutes floored; c0010's last beat is the T0 + 570 one, so 2130 s = 35.5 m at LATE: floored to 35 (rounded up would say 36)
 		t.expect(has(lost, "c0010 preparing 35m\n")).toBe(true)
+		t.expect(has(lost, "c0040 active")).toBe(true) -- a raft's members each get their own line
 		t.expect(has(lost, "c0075 preparing")).toBe(true) -- never beaten, made after the landing: silent since it landed (flatline)
 		t.expect((string.find(lost, "c0030 ", 1, true) or 0) < (string.find(lost, "c0010 ", 1, true) or 0))
-			.toBe(true) -- longest silent first, against id order (c0030 is silent since its claim, c0010 since T0 + 600)
+			.toBe(true) -- longest silent first, against id order (c0030 is silent since its claim, c0010 since T0 + 570)
 		t.expect(has(lost, "c0050")).toBe(false) -- made before the landing, never beaten: [no beat], not lost
 		t.expect(has(lost, "R0010 active")).toBe(true) -- readied and not started
 		t.expect(has(lost, "c0020")).toBe(false) -- a pull request names it
@@ -340,5 +343,32 @@ return t.spec("c0265 lost work", function(it)
 		local lost = zn(h.f.main, { "lost" }, at).stdout
 		t.expect(has(lost, "c0050 preparing")).toBe(true)
 		t.expect(has(lineOf(zn(h.f.main, { "status" }, at).stdout, "c0050"), "[lost ")).toBe(true)
+	end)
+
+	it(
+		"a ref lock a sibling worktree holds for the heartbeat read is retried once: lost and beat still answer",
+		function()
+			local at = LATE + 14 * STALE
+			fs.writeFile(`{h.fakes}/lockonce`, "1")
+			local lost = zn(h.f.main, { "lost" }, at)
+			t.expect(lost.ok).toBe(true)
+			t.expect(has(lost.stdout, "c0010")).toBe(true)
+			t.expect(fs.isFile(`{h.fakes}/lockonce`)).toBe(false) -- the first read took the failure, the retry the answer
+			fs.writeFile(`{h.fakes}/lockonce`, "1")
+			must(zn(wt, { "beat", "c0010" }, at), "beat through a locked read")
+			t.expect(has(zn(h.f.main, { "lost" }, at).stdout, "c0010")).toBe(false) -- it landed
+		end
+	)
+
+	it("the landing is read with the arguments heartbeat.landingArgs() names", function()
+		local at = LATE + 3 * STALE
+		-- the shim answers a late landing only to a read naming --first-parent and -1 on the module; any other read of
+		-- it falls through to git, whose answer is the seed's second
+		fs.writeFile(`{h.fakes}/landingpin`, "1")
+		local lost = zn(h.f.main, { "lost" }, at)
+		local listing = zn(h.f.main, { "status" }, at)
+		fs.removeFile(`{h.fakes}/landingpin`)
+		t.expect(has(lost.stdout, "c0075")).toBe(false)
+		t.expect(has(lineOf(listing.stdout, "c0075"), "[no beat]")).toBe(true)
 	end)
 end)

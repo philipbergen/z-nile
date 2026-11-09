@@ -63,7 +63,8 @@ local function issue(id: string, status: string, design: string?, raft: string?)
 	local doc = string.gsub(trackerfix.stub(id, id, status), "design: draft", `design: {design or "draft"}`)
 	return (string.gsub(doc, "\nraft: \n", `\nraft: {raft or ""}\n`, 1))
 end
-local GH = '#!/bin/sh\n[ "$1" = pr ] && [ "$2" = list ] && echo "[]"\nexit 0\n'
+local GH =
+	'#!/bin/sh\nif [ "$1" = pr ] && [ "$2" = list ]; then\n  [ -f "$FAKE_DIR/ghhang" ] && sleep 30\n  echo "[]"\nfi\nexit 0\n'
 -- the shim acts on one push at a time, each armed by a marker file it removes first (answers only what it names)
 local SHIM = [[#!/bin/sh
 if [ "$1" = fetch ]; then
@@ -83,6 +84,7 @@ fi
 if [ "$1" = push ]; then
   case "$*" in
     *:refs/heads/hb/*)
+      [ -f "$FAKE_DIR/pushhang" ] && sleep 30
       if [ -f "$FAKE_DIR/pushfail" ]; then
         n=$(cat "$FAKE_DIR/pushfail")
         if [ "$n" -gt 0 ]; then echo $((n-1)) > "$FAKE_DIR/pushfail"; echo "fatal: fake beat push failure" >&2; exit 1; fi
@@ -123,9 +125,9 @@ return t.spec("c0265 real-time proofs", function(it)
 			)
 		)
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-race" }), "worktree"), "%s+$", ""))
-		for _, id in { "c0080", "c0085" } do
-			must(zn(wt, { "status", id, "preparing" }), `claim {id}`)
-		end
+		wtB = (string.gsub(must(zn(h.f.main, { "worktree", "c0265-race-b" }), "worktree"), "%s+$", ""))
+		must(zn(wt, { "status", "c0080", "preparing" }), "claim c0080")
+		must(zn(wtB, { "status", "c0085", "preparing" }), "claim c0085")
 	end)
 
 	it("beat --watch says a failed tick and keeps beating", function()
@@ -135,24 +137,24 @@ return t.spec("c0265 real-time proofs", function(it)
 		local r = zn(
 			wt,
 			{ "beat", "c0080", "--watch" },
-			{ ZN_BOUNDED_DEADLINE = tostring(started + 10), ZN_BEAT_EVERY = "1" }
+			{ ZN_BOUNDED_DEADLINE = tostring(started + 30), ZN_BEAT_EVERY = "1" }
 		)
 		t.expect(r.ok).toBe(true)
 		-- said by the try itself and again by the tick that gave up: twice
 		local _, said = string.gsub(r.stderr, "fake beat push failure", "")
 		t.expect(said).toBe(2)
-		t.expect(os.time() - started < 40).toBe(true) -- it stopped itself near its bound (started + 10), however slow a tick on a loaded host
+		t.expect(os.time() - started < 60).toBe(true) -- it stopped itself near its bound (started + 30), however slow a tick on a loaded host
 		t.expect(newest(stamp) >= started + 2).toBe(true) -- a later tick beat
 		t.expect(newest(stamp) <= os.time()).toBe(true)
 	end)
 
 	it("beat --watch stops, saying why, when its claim is restamped", function()
 		-- the claim already has its branch, so a beat to it succeeds and only the loop's own look at main can notice
-		must(zn(wt, { "beat", "c0085" }), "the first beat of c0085")
+		must(zn(wtB, { "beat", "c0085" }), "the first beat of c0085")
 		local started = os.time()
 		fs.writeFile(`{h.fakes}/restamp`, "1")
 		local r = zn(
-			wt,
+			wtB,
 			{ "beat", "c0085", "--watch" },
 			{ ZN_BOUNDED_DEADLINE = tostring(started + 90), ZN_BEAT_EVERY = "1" }
 		)
@@ -195,7 +197,7 @@ return t.spec("c0265 real-time proofs", function(it)
 			local r = zn(
 				wt,
 				{ "beat", "c0080", "--watch" },
-				{ ZN_BOUNDED_DEADLINE = tostring(started + 12), ZN_BEAT_EVERY = "1" }
+				{ ZN_BOUNDED_DEADLINE = tostring(started + 30), ZN_BEAT_EVERY = "1" }
 			)
 			fs.removeFile(`{h.fakes}/mainfail`)
 			t.expect(r.ok).toBe(true)
@@ -213,4 +215,28 @@ return t.spec("c0265 real-time proofs", function(it)
 		t.expect(has(r.stderr, "timed out after 2 s")).toBe(true) -- the limit it was given, not the 10 s default
 		t.expect(os.time() - started < 25).toBe(true) -- the hang is 30 s
 	end)
+
+	it("a hung push of a beat ends at the net limit and says so", function()
+		fs.writeFile(`{h.fakes}/pushhang`, "1")
+		local started = os.time()
+		local r = zn(wt, { "beat", "c0080" }, { ZN_NET_SECONDS = "2", ZN_NOW = tostring(os.time() + 2000) })
+		fs.removeFile(`{h.fakes}/pushhang`)
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "timed out after 2 s")).toBe(true)
+		t.expect(os.time() - started < 25).toBe(true) -- the hang is 30 s
+	end)
+
+	it(
+		"a hung gh is bounded: lost says the pull requests are unreadable and nothing is called lost",
+		function()
+			fs.writeFile(`{h.fakes}/ghhang`, "1")
+			local started = os.time()
+			local r = zn(wt, { "lost" }, { ZN_NET_SECONDS = "2", ZN_NOW = tostring(os.time() + 20 * STALE) })
+			fs.removeFile(`{h.fakes}/ghhang`)
+			t.expect(r.ok).toBe(false)
+			t.expect(r.stdout).toBe("")
+			t.expect(has(r.stderr, "pull requests unreadable: timed out after 2 s")).toBe(true)
+			t.expect(os.time() - started < 25).toBe(true)
+		end
+	)
 end)
