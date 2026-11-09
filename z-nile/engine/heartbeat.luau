@@ -108,6 +108,22 @@ function heartbeat.judge(
 	return out
 end
 
+-- The git arguments that read the epoch the heartbeat landed on main: the newest commit on main's first-parent line
+-- that added this module. A merge-commit PR would otherwise return the time of the PR branch's own commit (before the
+-- merge), and claims made while the raft ran would read as made after the landing.
+function heartbeat.landingArgs(): { string }
+	return {
+		"log",
+		"--first-parent",
+		"--diff-filter=A",
+		"--format=%ct",
+		"-1",
+		"origin/main",
+		"--",
+		"z-nile/engine/heartbeat.luau",
+	}
+end
+
 function heartbeat.settle(vs: { Verdict }, parked: { [string]: boolean }?): { Verdict }
 	local out: { Verdict } = {}
 	for _, v in vs do

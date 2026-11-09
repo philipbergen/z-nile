@@ -1536,21 +1536,12 @@ local function readPrs(): ({ heartbeat.Pr }?, string?)
 	return out, nil
 end
 
--- The epoch the heartbeat landed on origin/main: the commit that first added its pure module (a squash merge keeps one,
--- and compaction renumbers items, not engine files). Unreadable: math.huge, so a claim that never beat is never lost for
+-- The epoch the heartbeat landed on origin/main: the newest first-parent commit that added its pure module (heartbeat.landingArgs;
+-- a squash merge keeps one, a merge commit is read at the merge, and compaction renumbers items, not engine files). Unreadable: math.huge, so a claim that never beat is never lost for
 -- lack of it. A claim made at or before it reads `nobeat` until it beats once (the user's decision, 2026-11-08).
 local function landingEpoch(): number
-	local r = sh.run(
-		"git",
-		{ "log", "--diff-filter=A", "--format=%ct", "origin/main", "--", "z-nile/engine/heartbeat.luau" }
-	)
-	local last: number? = nil
-	if r.ok then
-		for line in string.gmatch(r.stdout, "%d+") do
-			last = tonumber(line)
-		end
-	end
-	return last or math.huge
+	local r = sh.run("git", heartbeat.landingArgs())
+	return (if r.ok then tonumber(string.match(r.stdout, "%d+")) else nil) or math.huge
 end
 
 type Judged = {
