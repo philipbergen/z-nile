@@ -124,8 +124,7 @@ return t.spec("c0263 the record's writes", function(it)
 		trOk(W1, { "record", "c0011", "confirmed", "--actor", "human:Ann", "--detail", 'said="yes"' })
 		local rec = onOrigin(`{ISSUES}/c0011/provenance.md`)
 		t.expect(has(rec, '| confirmed | human:Ann | said="yes"')).toBe(true)
-		t.expect(fixture.git(f.origin, { "diff", "--name-only", before, "main" }))
-			.toBe(`{ISSUES}/c0011/provenance.md`)
+		t.expect(fixture.git(f.origin, { "diff", "--name-only", before, "main" })).toBe(`{ISSUES}/c0011/provenance.md`)
 		-- a published append is built from origin/main's file, never from the worktree's: a row only this worktree holds
 		-- (committed here, not published) does not leak to main, and the merge afterwards unites it with main's
 		trOk(W1, { "sync" })
@@ -151,34 +150,22 @@ return t.spec("c0263 the record's writes", function(it)
 			t.expect(tr(W1, args).ok).toBe(false)
 			t.expect(tip()).toBe(mark)
 		end
+		-- the command refuses an event another command writes by itself, before the publisher is asked
+		local refused = tr(W1, { "record", "c0011", "approved" })
+		t.expect(has(refused.stderr .. refused.stdout, "written by their own commands")).toBe(true)
 	end)
 
-	it(
-		"./zn record reaches a raft's record and an active item's, and takes unblocked rows only there",
-		function()
-			trOk(
-				W1,
-				{ "record", "R0130", "unblocked", "--actor", "human:Ann", "--detail", "block=needs-decision" }
-			)
-			t.expect(
-				has(
-					onOrigin(`{RAFTS}/R0130/provenance.md`),
-					"| unblocked | human:Ann | block=needs-decision |"
-				)
-			)
-				.toBe(true)
-			trOk(W1, { "record", "c0090", "unblocked", "--actor", "human:Ann", "--detail", "block=red-gate" })
-			t.expect(
-				has(
-					onOrigin(`{ISSUES}/active/c0090/provenance.md`),
-					"| unblocked | human:Ann | block=red-gate |"
-				)
-			).toBe(true)
-			local mark = tip()
-			t.expect(tr(W1, { "record", "c0090", "confirmed", "--actor", "human:Ann" }).ok).toBe(false)
-			t.expect(tip()).toBe(mark)
-		end
-	)
+	it("./zn record reaches a raft's record and an active item's, and takes unblocked rows only there", function()
+		trOk(W1, { "record", "R0130", "unblocked", "--actor", "human:Ann", "--detail", "block=needs-decision" })
+		t.expect(has(onOrigin(`{RAFTS}/R0130/provenance.md`), "| unblocked | human:Ann | block=needs-decision |"))
+			.toBe(true)
+		trOk(W1, { "record", "c0090", "unblocked", "--actor", "human:Ann", "--detail", "block=red-gate" })
+		t.expect(has(onOrigin(`{ISSUES}/active/c0090/provenance.md`), "| unblocked | human:Ann | block=red-gate |"))
+			.toBe(true)
+		local mark = tip()
+		t.expect(tr(W1, { "record", "c0090", "confirmed", "--actor", "human:Ann" }).ok).toBe(false)
+		t.expect(tip()).toBe(mark)
+	end)
 
 	it("a conflict outside provenance.md aborts the merge and leaves the tree as it was", function()
 		local doc = `{W4}/{ISSUES}/c0050/c0050.md`
@@ -244,29 +231,26 @@ return t.spec("c0263 the record's writes", function(it)
 		end
 	)
 
-	it(
-		"audit refuses a malformed record and a header naming another id, and accepts one in a raft's folder",
-		function()
-			local p = `{W4}/{ISSUES}/c0050/provenance.md`
-			fs.writeFile(p, "not a record\n")
-			local bad = tr(W4, { "audit" })
-			t.expect(bad.ok).toBe(false)
-			t.expect(has(bad.stdout .. bad.stderr, "provenance")).toBe(true)
-			fs.writeFile(p, "# Provenance: c0099\n\n| when | event | actor | detail |\n|---|---|---|---|\n")
-			local other = tr(W4, { "audit" })
-			t.expect(other.ok).toBe(false)
-			t.expect(has(other.stdout .. other.stderr, "c0099")).toBe(true)
-			fs.removeFile(p)
-			-- a raft's own record (c0250 blocks whole rafts) is fine
-			fs.writeFile(
-				`{W4}/{RAFTS}/R0130/provenance.md`,
-				"# Provenance: R0130\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
-			)
-			trOk(W4, { "audit" })
-			fs.removeFile(`{W4}/{RAFTS}/R0130/provenance.md`)
-			trOk(W4, { "audit" })
-		end
-	)
+	it("audit refuses a malformed record and a header naming another id, and accepts one in a raft's folder", function()
+		local p = `{W4}/{ISSUES}/c0050/provenance.md`
+		fs.writeFile(p, "not a record\n")
+		local bad = tr(W4, { "audit" })
+		t.expect(bad.ok).toBe(false)
+		t.expect(has(bad.stdout .. bad.stderr, "provenance")).toBe(true)
+		fs.writeFile(p, "# Provenance: c0099\n\n| when | event | actor | detail |\n|---|---|---|---|\n")
+		local other = tr(W4, { "audit" })
+		t.expect(other.ok).toBe(false)
+		t.expect(has(other.stdout .. other.stderr, "c0099")).toBe(true)
+		fs.removeFile(p)
+		-- a raft's own record (c0250 blocks whole rafts) is fine
+		fs.writeFile(
+			`{W4}/{RAFTS}/R0130/provenance.md`,
+			"# Provenance: R0130\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
+		)
+		trOk(W4, { "audit" })
+		fs.removeFile(`{W4}/{RAFTS}/R0130/provenance.md`)
+		trOk(W4, { "audit" })
+	end)
 	it("fold's merge of origin/main unions the record too", function()
 		local rec = `{W3}/{ISSUES}/c0040/provenance.md`
 		local head = "# Provenance: c0040\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
@@ -281,25 +265,22 @@ return t.spec("c0263 the record's writes", function(it)
 		t.expect((bee :: number) < (ann :: number)).toBe(true)
 	end)
 
-	it(
-		"a record only our side added follows the folder the other side moved (git's file location conflict)",
-		function()
-			local rec = `{W6}/{ISSUES}/c0012/provenance.md`
-			local head = "# Provenance: c0012\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
-			fs.writeFile(rec, head .. "| 2026-11-08 10:00 | ranked | human:Ann | rank=1 |\n")
-			fixture.git(W6, { "add", "-A" })
-			fixture.git(W6, { "commit", "-q", "-m", "our row" })
-			fixture.git(f.other, { "pull", "-q", "origin", "main" })
-			fixture.git(f.other, { "mv", `{ISSUES}/c0012`, `{ISSUES}/active/c0012` })
-			fixture.git(f.other, { "commit", "-q", "-m", "tracker: ready R0156" })
-			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
-			trOk(W6, { "sync" })
-			t.expect(fs.isDir(`{W6}/{ISSUES}/c0012`)).toBe(false)
-			t.expect(#rows(fs.readFile(`{W6}/{ISSUES}/active/c0012/provenance.md`), "ranked")).toBe(1)
-			t.expect(fs.isFile(`{W6}/{ISSUES}/active/c0012/check.sh`)).toBe(true)
-			t.expect(fixture.git(W6, { "status", "--porcelain" })).toBe("")
-		end
-	)
+	it("a record only our side added follows the folder the other side moved (git's file location conflict)", function()
+		local rec = `{W6}/{ISSUES}/c0012/provenance.md`
+		local head = "# Provenance: c0012\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
+		fs.writeFile(rec, head .. "| 2026-11-08 10:00 | ranked | human:Ann | rank=1 |\n")
+		fixture.git(W6, { "add", "-A" })
+		fixture.git(W6, { "commit", "-q", "-m", "our row" })
+		fixture.git(f.other, { "pull", "-q", "origin", "main" })
+		fixture.git(f.other, { "mv", `{ISSUES}/c0012`, `{ISSUES}/active/c0012` })
+		fixture.git(f.other, { "commit", "-q", "-m", "tracker: ready R0156" })
+		fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+		trOk(W6, { "sync" })
+		t.expect(fs.isDir(`{W6}/{ISSUES}/c0012`)).toBe(false)
+		t.expect(#rows(fs.readFile(`{W6}/{ISSUES}/active/c0012/provenance.md`), "ranked")).toBe(1)
+		t.expect(fs.isFile(`{W6}/{ISSUES}/active/c0012/check.sh`)).toBe(true)
+		t.expect(fixture.git(W6, { "status", "--porcelain" })).toBe("")
+	end)
 	it(
 		"land merges origin/main with the same union: a united record is land's scope refusal, never a failed merge",
 		function()
