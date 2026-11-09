@@ -24,6 +24,7 @@
 | 20 | 2026-11-09 15:25 | c0246: graph.unreadable and the Rojo-driven home check | 190 | 5 | 20.0 | focus | build |  |  |
 | 21 | 2026-11-09 15:25 | c0246: verification log | 0 | 0 | 3.0 | focus | build |  |  |
 | 22 | 2026-11-09 15:42 | R0088: review-001 | 0 | 0 | 15.0 | focus | code-review |  | claude-opus-5-5 |
+| 23 | 2026-11-09 16:01 | c0246: review-001 F1 fail-closed spec, F2 comments | 87 | 4 | 20.0 | focus | code-review |  |  |
 
-**Total:** +664 / -6 lines, 441.0 agent-minutes, 1057000 tokens over 22 records
-<!-- totals: added=664 removed=6 minutes=441.0 records=22 tokens=1057000 -->
+**Total:** +751 / -10 lines, 461.0 agent-minutes, 1057000 tokens over 23 records
+<!-- totals: added=751 removed=10 minutes=461.0 records=23 tokens=1057000 -->

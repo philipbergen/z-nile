@@ -194,9 +194,10 @@ local function describe(value: any): string
 	return article(value)
 end
 
--- Every "$path" of a Rojo project and the instance path of the node that maps it, in both of Rojo's forms (a string, or the
--- `optional` string of a table), at any depth, the tree node itself included (instance ""). The one walker of a project's
--- mappings (c0185): gameRoots, placeInputs and the home rule all read them through here.
+-- Every "$path" of a Rojo project and the instance path of the node that maps it, in the two forms it reads (a string, or the
+-- `optional` string of a table), at any depth, the tree node itself included (instance ""). Rojo 7.7.1 also builds a
+-- one-element array, which the reader deliberately does not read: `bad` collects it (graph.unreadable) so the home rule names it.
+-- The one walker of a project's mappings (c0185): gameRoots, placeInputs and the home rule all read them through here.
 local function walkMappings(node: any, prefix: { string }, out: { GameRoot }, bad: { Unreadable }?)
 	local path = node["$path"]
 	if type(path) == "table" and type((path :: any).optional) == "string" then
@@ -622,7 +623,7 @@ end
 -- `*.project.json` in the home, and every "$path" any of them maps resolved against the home, so `../arcade/src/shared`
 -- from `snake/` is `arcade/src/shared`. `home` is "" for the current folder or "<dir>/". A home with no project file
 -- gets the legacy answer (its src/ and the two project files c0120 named), the conservative one. A project file
--- that is not JSON with a tree is an error naming it (projectsIn): the selection can't be made without it, and the build refuses it too.
+-- that is not JSON with a tree is an error naming it (projectsIn): the selection can't be made without it (Rojo may still build what Lune's decoder refuses, such as a commented file: the home rule's `maps no $path` line is its answer).
 function graph.placeInputs(home: string): { string }
 	local dir = if home == "" then "." else string.sub(home, 1, -2)
 	local found = projectsIn(dir)
