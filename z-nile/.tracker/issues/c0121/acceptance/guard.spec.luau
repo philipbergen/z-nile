@@ -221,6 +221,19 @@ return t.spec("c0121 server rules", function(it)
 	end)
 
 	it(
+		"retry on a card that never ran plans nothing and answers 409: a retry would start its whole chain",
+		function()
+			local plan, why, code = serve.plan(MODEL, "retry", "c0099")
+			t.expect(plan).toBe(nil)
+			t.expect(code).toBe(409)
+			t.expect(why).toBe("nothing to retry for c0099: it has never run")
+			-- a card with a run state of any outcome is retried (its own id)
+			t.expect((serve.plan(MODEL, "retry", "f0023")))
+				.toEqual({ kind = "run", args = { "dispatch", "retry", "f0023" }, wait = false })
+		end
+	)
+
+	it(
 		"refuses an unknown id, an id with shell text, a non-string id and an unknown action, naming why",
 		function()
 			local p1, why1 = serve.plan(MODEL, "stop", "R9999")

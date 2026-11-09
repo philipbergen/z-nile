@@ -18,13 +18,17 @@ local function write(path: string, text: string)
 	fs.writeDir(string.match(full, "^(.*)/[^/]+$") :: string)
 	fs.writeFile(full, text)
 end
-local function item(path: string, front: { string })
+local function item(path: string, front: { string }, body: string?)
 	local id = string.match(path, "([^/]+)$") :: string
 	write(
 		`{path}/{id}.md`,
-		"---\nid: " .. id .. "\n" .. table.concat(front, "\n") .. "\n---\n\n# " .. id .. "\n"
+		"---\nid: " .. id .. "\n" .. table.concat(front, "\n") .. "\n---\n\n# " .. id .. "\n" .. (body or "")
 	)
 end
+-- links in an item's document: a script link, a data link, one with control characters inside its scheme, a safe web
+-- link, a relative one and a mail one (code review 001 F3)
+local LINKS = "\n[script](javascript:alert(1)) [data](data:text/html,x) [tabbed](java\tscript:alert(2)) "
+	.. "[web](https://example.invalid/x) [rel](docs/x.md) [mail](mailto:a@example.invalid)\n"
 
 -- The fake DOM and the stubs. Never literal require text: the repo scanner would read it.
 local HARNESS = [==[
@@ -120,7 +124,8 @@ return t.spec("c0121 served page", function(it)
 		)
 		item(
 			"z-nile/.tracker/issues/active/f0021",
-			{ "type: feature", "title: Runs", "raft: R0020", "status: active-a-b-c" }
+			{ "type: feature", "title: Runs", "raft: R0020", "status: active-a-b-c" },
+			LINKS
 		)
 		local facts: any = {
 			asOf = 1792800000,
@@ -177,6 +182,23 @@ return t.spec("c0121 served page", function(it)
 		function()
 			t.expect(has(shown.liveAfterPoll, "server is out of date: restart")).toBe(true)
 			t.expect(has(shown.liveAfterFail, "the server did not answer")).toBe(true)
+		end
+	)
+
+	it(
+		"a document's link keeps only a safe scheme: javascript:, data: and a disguised scheme render as text",
+		function()
+			local pane = shown.pane
+			t.expect(has(pane, 'href="javascript:')).toBe(false)
+			t.expect(has(pane, 'href="data:')).toBe(false)
+			t.expect(string.find(pane, 'href="[^"]*[Jj][Aa][Vv][Aa][^"]*[Ss][Cc][Rr][Ii][Pp][Tt]:') == nil)
+				.toBe(true)
+			for _, word in { "script", "data", "tabbed" } do
+				t.expect(has(pane, word)).toBe(true) -- the link text stays
+			end
+			t.expect(has(pane, 'href="https://example.invalid/x"')).toBe(true)
+			t.expect(has(pane, 'href="docs/x.md"')).toBe(true)
+			t.expect(has(pane, 'href="mailto:a@example.invalid"')).toBe(true)
 		end
 	)
 

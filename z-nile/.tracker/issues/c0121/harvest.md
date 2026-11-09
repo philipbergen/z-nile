@@ -47,3 +47,6 @@
 - design-review-010 F1: z-design/design-the-execution-window
 - design-review-010 F2: z-design/exact-checks-compare-against-the-merge-base
 - design-review-010 F3: z-design/restated-rules-move-together
+- note R0084 code review 001 F1 (a retry on a card that never ran starts its whole chain): zz-review/delegated-commands-on-an-unseen-id
+- note R0084 code review 001 F2 (the model was encoded on every poll, against the 1800 s CPU limit): zz-arch/per-poll-work-meets-the-cpu-limit
+- note R0084 code review 001 F3 (a javascript: link in a document runs in the served page): zz-arch/links-in-rendered-documents-keep-a-scheme-allow-list

@@ -101,7 +101,7 @@ local function start()
 					asOf = nil,
 					refs = { { name = "origin/R0020-alpha", at = clock } },
 					worktrees = { { path = `{ROOT}/wt/R0020`, branch = "R0020-alpha" } },
-					-- c0117's run state: R0020's chain runs, and f0021's moved on to it; c0099 has none
+					-- c0117's run state: R0020's chain runs, and f0021's moved on to it; R0030 failed; c0099 has none
 					dispatch = {
 						R0020 = { step = "z-run", outcome = "running", model = "m", questions = false },
 						f0021 = {
@@ -118,6 +118,8 @@ local function start()
 							questions = false,
 							follows = "R0020",
 						},
+						-- a raft whose run stopped on a held lock: it has a state, so a retry reaches the dispatcher
+						R0030 = { step = "z-run", outcome = "failed", model = "m", questions = false },
 					},
 				}
 			end,
@@ -292,6 +294,17 @@ return t.spec("c0121 board server", function(it)
 	end)
 
 	it(
+		"retry on a card that never ran answers 409 and runs nothing (it would start the item's whole chain)",
+		function()
+			local before = #runs
+			local r = action('{"action":"retry","id":"c0099"}')
+			t.expect(r.statusCode).toBe(409)
+			t.expect(string.find(r.body, "nothing to retry for c0099", 1, true) ~= nil).toBe(true)
+			t.expect(#runs).toBe(before)
+		end
+	)
+
+	it(
 		"stop on a member stops its raft's run, and stop on a card with nothing running answers 409 and runs nothing",
 		function()
 			local before = #runs
@@ -348,6 +361,45 @@ return t.spec("c0121 board server", function(it)
 		clock += 61
 		state()
 		t.expect(builds).toBe(before + 2)
+	end)
+
+	it("encodes the model once per build of it and per answer of gh, not per poll (the CPU limit)", function()
+		state()
+		task.wait(0.1)
+		state() -- warm: the build and gh's answer have both moved the generation
+		local board: any = require("@znile/engine/board")
+		local real = board.encode
+		local models = 0
+		local inside = false -- encode calls itself for nested values: count the outermost call only
+		board.encode = function(v: any): string
+			local top = not inside and type(v) == "table" and v.rafts ~= nil and v.issues ~= nil
+			if top then
+				models += 1
+				inside = true
+			end
+			local out = real(v)
+			if top then
+				inside = false
+			end
+			return out
+		end
+		local ok, err = pcall(function()
+			local a, b, c = state(), state(), state()
+			-- every poll still carries the current live block and Stats, and the same model
+			for _, s in { a, b, c } do
+				t.expect(s.model.live.token).toBe(TOKEN)
+				t.expect(type(s.statsHtml)).toBe("string")
+				t.expect(#s.model.rafts).toBe(#a.model.rafts)
+			end
+			t.expect(b.model.rafts).toEqual(a.model.rafts)
+			key = "k-encode"
+			state() -- a build of the model: encoded again
+		end)
+		board.encode = real
+		if not ok then
+			error(err, 0)
+		end
+		t.expect(models).toBe(1)
 	end)
 
 	it("a failing gh still gives 200, with checks unavailable", function()
