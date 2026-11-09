@@ -262,8 +262,12 @@ return t.spec("c0263 the record's writes", function(it)
 			do
 				local r = tr(W1, args)
 				t.expect(r.ok).toBe(false)
-				t.expect(has(r.stderr .. r.stdout, if args[2] == "c0100" then "done" else "active"))
-					.toBe(true)
+				t.expect(
+					has(
+						r.stderr .. r.stdout,
+						`record refuses {args[2]}: it is {if args[2] == "c0100" then "done" else "active"}`
+					)
+				).toBe(true)
 				t.expect(tip()).toBe(mark)
 			end
 		end
@@ -466,25 +470,22 @@ return t.spec("c0263 the record's writes", function(it)
 		end
 	)
 
-	it(
-		"any other file added in a folder the other side moved stops the sync, naming the folder (as it always did)",
-		function()
-			local review = `{W9}/{ISSUES}/c0014/design-review-001.md`
-			fs.writeFile(review, "# review\n")
-			fixture.git(W9, { "add", "-A" })
-			fixture.git(W9, { "commit", "-q", "-m", "our review file" })
-			fixture.git(f.other, { "pull", "-q", "origin", "main" })
-			fixture.git(f.other, { "mv", `{ISSUES}/c0014`, `{ISSUES}/active/c0014` })
-			fixture.git(f.other, { "commit", "-q", "-m", "tracker: ready R0157" })
-			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
-			local before = fixture.git(W9, { "rev-parse", "HEAD" })
-			local r = tr(W9, { "sync" })
-			t.expect(r.ok).toBe(false)
-			t.expect(has(r.stderr .. r.stdout, "c0014")).toBe(true) -- git names the folder it cannot place the file in
-			t.expect(fixture.exec(W9, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
-			t.expect(fixture.git(W9, { "rev-parse", "HEAD" })).toBe(before)
-			t.expect(fs.isFile(review)).toBe(true)
-			t.expect(fixture.git(W9, { "status", "--porcelain" })).toBe("")
-		end
-	)
+	it("any other file added in a folder the other side moved stops the sync (as it always did)", function()
+		local review = `{W9}/{ISSUES}/c0014/design-review-001.md`
+		fs.writeFile(review, "# review\n")
+		fixture.git(W9, { "add", "-A" })
+		fixture.git(W9, { "commit", "-q", "-m", "our review file" })
+		fixture.git(f.other, { "pull", "-q", "origin", "main" })
+		fixture.git(f.other, { "mv", `{ISSUES}/c0014`, `{ISSUES}/active/c0014` })
+		fixture.git(f.other, { "commit", "-q", "-m", "tracker: ready R0157" })
+		fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+		local before = fixture.git(W9, { "rev-parse", "HEAD" })
+		local r = tr(W9, { "sync" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr .. r.stdout, "c0014")).toBe(true) -- git names the folder it cannot place the file in
+		t.expect(fixture.exec(W9, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
+		t.expect(fixture.git(W9, { "rev-parse", "HEAD" })).toBe(before)
+		t.expect(fs.isFile(review)).toBe(true)
+		t.expect(fixture.git(W9, { "status", "--porcelain" })).toBe("")
+	end)
 end)
