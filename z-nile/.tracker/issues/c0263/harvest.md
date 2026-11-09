@@ -131,3 +131,13 @@
 - design-review-010 F5: zz-test/no-vacuous-pass
 - design-review-010 F6: z-design/restated-rules-move-together
 - note review 010 candidates (a merge helper acting only on what git reports conflicted trusts git's pairing of small templated files; a removal during a merge must remove the folder it empties and the case must read the disk like the engine): z-design/histories-checked-against-a-real-life, z-design/spec-design-correspondence
+- design-review-011 F1: zz-rules/item-history-spans-moves-and-compaction
+- design-review-011 F2: z-design/restated-rules-move-together
+- design-review-011 F3: zz-test/guard-needs-its-own-case
+- design-review-011 F4: zz-arch/guard-no-is-explicit
+- design-review-011 F5: zz-arch/item-rules-scoped-to-their-call
+- design-review-011 F6: zz-test/seed-every-enumerated-case
+- design-review-011 F7: z-design/specify-every-named-artifact
+- design-review-011 F8: zz-test/no-vacuous-pass
+- design-review-011 F9: z-design/restated-rules-move-together
+- note review 011 candidates (settling two commits by id needs the same numbering; a helper that finishes or aborts a git operation first checks it started it; when a mechanism is replaced its other copies are replaced too): zz-rules/item-history-spans-moves-and-compaction, zz-arch/guard-no-is-explicit, z-design/restated-rules-move-together

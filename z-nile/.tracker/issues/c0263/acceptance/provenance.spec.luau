@@ -329,6 +329,7 @@ return t.spec("c0263 the provenance record", function(it)
 		t.expect(text).toBe((provenance.union(one, ours, theirs)))
 		local _, same = provenance.settle(one, ours, ours)
 		t.expect(same).toBe(ours)
+		t.expect((provenance.settle(one, nil, nil))).toBe("remove") -- both sides deleted it
 		-- changed on one side and absent on the other: stop, naming remap (an id changed)
 		local stops: { { common: string?, ours: string?, theirs: string? } } = {
 			{ common = one, ours = ours, theirs = nil },
@@ -346,6 +347,17 @@ return t.spec("c0263 the provenance record", function(it)
 		local a3, _, why3 = provenance.settle(one, "garbage\n", one)
 		t.expect(a3).toBe(nil)
 		t.expect(why3 ~= nil).toBe(true)
+	end)
+
+	it("a merge across a compaction is refused when both sides changed records", function()
+		t.expect(provenance.compactionProblem(nil, "c0042 c0041\n", true, true) ~= nil).toBe(true)
+		t.expect(provenance.compactionProblem("a\n", "b\n", true, true) ~= nil).toBe(true)
+		t.expect(provenance.compactionProblem(nil, "c0042 c0041\n", false, true)).toBe(nil) -- ours changed none
+		t.expect(provenance.compactionProblem(nil, "c0042 c0041\n", true, false)).toBe(nil)
+		t.expect(provenance.compactionProblem("same\n", "same\n", true, true)).toBe(nil) -- one numbering
+		t.expect(provenance.compactionProblem(nil, nil, true, true)).toBe(nil)
+		local why = provenance.compactionProblem(nil, "x\n", true, true) :: string
+		t.expect(string.find(why, "./zn remap", 1, true) ~= nil).toBe(true)
 	end)
 
 	it("locate finds an item's record by its id in a listing of one commit", function()
@@ -419,7 +431,7 @@ return t.spec("c0263 the provenance record", function(it)
 			"CURSOR_AGENT",
 			"GROK_SESSION_ID",
 			"merge by hand",
-			"`remap` unites a record both sides appended"
+			"`remap` settles the records the same way"
 		)
 		has("z-nile/skills/zz-execute/SKILL.md", "unites a `provenance.md` both sides appended")
 		has("z-nile/README.md", "provenance")

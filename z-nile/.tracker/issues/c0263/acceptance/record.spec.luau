@@ -37,8 +37,8 @@ local function raftDoc(id: string, issues: string): string
 end
 
 local f: trackerfix.Fixture
-local W1, W3, W4, W5, W6, W7, W8, W9, W10, W11, W12, W13, W14, W15, W16, W17, W18, W19, W20 =
-	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""
+local W1, W3, W4, W5, W6, W7, W8, W9, W10, W11, W12, W13, W14, W15, W16, W17, W18, W19, W20, W21, W22, W23, W24, W25, W26, W27 =
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""
 
 local function env(extra: { [string]: string }?): { [string]: string }
 	local out: { [string]: string } = table.clone(HUMAN)
@@ -105,6 +105,13 @@ return t.spec("c0263 the record's writes", function(it)
 				"c0026",
 				"c0027",
 				"c0028",
+				"c0041",
+				"c0042",
+				"c0043",
+				"c0044",
+				"c0045",
+				"c0047",
+				"c0048",
 			}
 		do
 			seed[`{ISSUES}/{id}/{id}.md`] = draft(id)
@@ -170,6 +177,13 @@ return t.spec("c0263 the record's writes", function(it)
 		W18 = trackerfix.trOk(f, f.main, { "worktree", "raft-r" })
 		W19 = trackerfix.trOk(f, f.main, { "worktree", "raft-s" })
 		W20 = trackerfix.trOk(f, f.main, { "worktree", "raft-t" })
+		W21 = trackerfix.trOk(f, f.main, { "worktree", "raft-u" })
+		W22 = trackerfix.trOk(f, f.main, { "worktree", "raft-v" })
+		W23 = trackerfix.trOk(f, f.main, { "worktree", "raft-w" })
+		W24 = trackerfix.trOk(f, f.main, { "worktree", "raft-x" })
+		W25 = trackerfix.trOk(f, f.main, { "worktree", "raft-y" })
+		W26 = trackerfix.trOk(f, f.main, { "worktree", "raft-z" })
+		W27 = trackerfix.trOk(f, f.main, { "worktree", "raft-aa" })
 		W9 = trackerfix.trOk(f, f.main, { "worktree", "raft-i" })
 		-- the fixture audits clean before any of this, so a refusal below is the record's
 		trOk(W1, { "audit" })
@@ -226,7 +240,9 @@ return t.spec("c0263 the record's writes", function(it)
 			for _, a in case.args do
 				table.insert(args, a)
 			end
+			local had = #rows(onOrigin(`{ISSUES}/c0011/provenance.md`), "ranked")
 			trOk(W1, args, case.env)
+			t.expect(#rows(onOrigin(`{ISSUES}/c0011/provenance.md`), "ranked")).toBe(had + 1)
 			t.expect(lastActor()).toBe(case.want)
 		end
 		-- a given actor that is not a live form refuses, whatever else the environment says
@@ -334,7 +350,7 @@ return t.spec("c0263 the record's writes", function(it)
 		t.expect(has(r.stderr .. r.stdout, "c0050.md")).toBe(true)
 		-- the abort says how to go on by hand: merge origin/main, and the record's order
 		t.expect(has(r.stderr .. r.stdout, "git merge origin/main")).toBe(true)
-		t.expect(has(r.stderr .. r.stdout, "origin/main's new rows")).toBe(true)
+		t.expect(has(r.stderr .. r.stdout, "leave the records to the engine")).toBe(true)
 		t.expect(fixture.exec(W4, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
 		t.expect(fixture.git(W4, { "rev-parse", "HEAD" })).toBe(before)
 		t.expect(fixture.git(W4, { "status", "--porcelain" })).toBe("")
@@ -784,4 +800,150 @@ return t.spec("c0263 the record's writes", function(it)
 		trackerfix.elsewhere(f, { [atRecord("c0028", "")] = rec("c0028", "Base", "Main") }, "main row")
 		guarded(W20, "c0028", { "c0028", "document in two places" })
 	end)
+	it(
+		"a raft's record follows its folder to done/ like an issue's does (c0250 blocks whole rafts)",
+		function()
+			fixture.git(W26, { "mv", `{RAFTS}/active/R0150`, `{RAFTS}/done/R0150` })
+			fixture.git(W26, { "commit", "-q", "-m", "our move: done" })
+			trOk(W1, { "record", "R0150", "unblocked", "--actor", "human:RaftMain", "--detail", "block=p5" })
+			trOk(W26, { "sync" })
+			t.expect(fs.isDir(`{W26}/{RAFTS}/active/R0150`)).toBe(false)
+			local text = fs.readFile(`{W26}/{RAFTS}/done/R0150/provenance.md`)
+			t.expect(has(text, "human:RaftMain")).toBe(true)
+			t.expect(has(text, "# Provenance: R0150")).toBe(true)
+			t.expect(has(trOk(W26, { "find", "R0150" }), `{RAFTS}/done/R0150`)).toBe(true)
+		end
+	)
+
+	it(
+		"a compaction on main reused an id and our row would land in the other item: the sync stops, naming remap (v)",
+		function()
+			trackerfix.elsewhere(f, {
+				[atRecord("c0041", "")] = rec("c0041", "Shared"),
+				[atRecord("c0042", "")] = rec("c0042", "Shared"),
+			}, "base records c0041 and c0042")
+			trOk(W21, { "sync" })
+			fs.writeFile(`{W21}/{atRecord("c0041", "")}`, rec("c0041", "Shared", "Ours"))
+			fixture.git(W21, { "add", "-A" })
+			fixture.git(W21, { "commit", "-q", "-m", "our row for c0041" })
+			-- main compacts: c0041 goes, c0042 becomes c0041 (its record, rewritten, is byte for byte c0041's base record)
+			fixture.git(f.other, { "pull", "-q", "origin", "main" })
+			fixture.git(f.other, { "rm", "-rq", `{ISSUES}/c0041` })
+			renumber(f.other, "c0042", "c0041")
+			fs.writeFile(`{f.other}/z-nile/compaction.txt`, "c0042 c0041\n")
+			fixture.git(f.other, { "add", "-A" })
+			fixture.git(f.other, { "commit", "-q", "-m", "tracker: compact ids" })
+			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+			guarded(W21, "c0041", { "crosses a compaction", "./zn remap" })
+		end
+	)
+
+	it(
+		"the same compaction with no record changed on our side merges: every record is main's (vi)",
+		function()
+			trackerfix.elsewhere(f, {
+				[atRecord("c0043", "")] = rec("c0043", "Shared"),
+				[atRecord("c0044", "")] = rec("c0044", "Shared"),
+			}, "base records c0043 and c0044")
+			trOk(W22, { "sync" })
+			local arch = `{W22}/pickman/.tracker/architecture.md`
+			fs.writeFile(arch, fs.readFile(arch) .. "a line we added\n")
+			fixture.git(W22, { "add", "-A" })
+			fixture.git(W22, { "commit", "-q", "-m", "our change outside the records" })
+			fixture.git(f.other, { "pull", "-q", "origin", "main" })
+			fixture.git(f.other, { "rm", "-rq", `{ISSUES}/c0043` })
+			renumber(f.other, "c0044", "c0043")
+			fs.writeFile(`{f.other}/z-nile/compaction.txt`, "c0044 c0043\n")
+			fixture.git(f.other, { "add", "-A" })
+			fixture.git(f.other, { "commit", "-q", "-m", "tracker: compact ids" })
+			fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+			trOk(W22, { "sync" })
+			t.expect(fs.readFile(`{W22}/{atRecord("c0043", "")}`)).toBe(rec("c0043", "Shared"))
+			t.expect(fs.isDir(`{W22}/{ISSUES}/c0044`)).toBe(false)
+			t.expect(has(fs.readFile(arch), "a line we added")).toBe(true)
+		end
+	)
+
+	it(
+		"a merge of another branch in progress is not ours: the sync refuses and leaves it as it was (vii)",
+		function()
+			fixture.git(W23, { "checkout", "-q", "-b", "side" })
+			fs.writeFile(`{W23}/side.txt`, "side\n")
+			fixture.git(W23, { "add", "-A" })
+			fixture.git(W23, { "commit", "-q", "-m", "side work" })
+			local sideHead = fixture.git(W23, { "rev-parse", "HEAD" })
+			fixture.git(W23, { "checkout", "-q", "-" })
+			fs.writeFile(`{W23}/ours.txt`, "ours\n")
+			fixture.git(W23, { "add", "-A" })
+			fixture.git(W23, { "commit", "-q", "-m", "our work" })
+			fixture.git(W23, { "merge", "-q", "--no-commit", "--no-ff", "side" })
+			trackerfix.elsewhere(
+				f,
+				{ ["pickman/.tracker/notes-vii.md"] = "main moves on\n" },
+				"main moves on"
+			)
+			local r = tr(W23, { "sync" })
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr .. r.stdout, "another branch is in progress")).toBe(true)
+			t.expect(fixture.git(W23, { "rev-parse", "MERGE_HEAD" })).toBe(sideHead)
+			t.expect(fs.isFile(`{W23}/side.txt`)).toBe(true)
+			fixture.git(W23, { "merge", "--abort" })
+		end
+	)
+
+	it(
+		"a hand merge of origin/main with only the records left conflicted is finished by the sync (viii)",
+		function()
+			trackerfix.elsewhere(f, { [atRecord("c0045", "")] = rec("c0045", "Base") }, "base record c0045")
+			trOk(W24, { "sync" })
+			fs.writeFile(`{W24}/{atRecord("c0045", "")}`, rec("c0045", "Base", "Ours"))
+			fixture.git(W24, { "add", "-A" })
+			fixture.git(W24, { "commit", "-q", "-m", "our row" })
+			trackerfix.elsewhere(f, { [atRecord("c0045", "")] = rec("c0045", "Base", "Main") }, "main row")
+			fixture.git(W24, { "fetch", "-q", "origin" })
+			t.expect(fixture.exec(W24, "git", { "merge", "--no-commit", "--no-edit", "origin/main" }).ok)
+				.toBe(false)
+			trOk(W24, { "sync" })
+			t.expect(fs.readFile(`{W24}/{atRecord("c0045", "")}`)).toBe(rec("c0045", "Base", "Main", "Ours"))
+			t.expect(fixture.exec(W24, "git", { "rev-parse", "-q", "--verify", "MERGE_HEAD" }).ok).toBe(false)
+			t.expect(fixture.git(W24, { "status", "--porcelain" })).toBe("")
+		end
+	)
+
+	it(
+		"a provenance.md in an id-named folder inside an item's folder is not that id's record (the layout publish and audit use)",
+		function()
+			local sample = `{ISSUES}/c0046/experiments/split/c0047/provenance.md`
+			fs.writeDir(`{W25}/{ISSUES}/c0046/experiments/split/c0047`)
+			fs.writeFile(`{W25}/{sample}`, rec("c0047", "Sample"))
+			fixture.git(W25, { "add", "-A" })
+			fixture.git(W25, { "commit", "-q", "-m", "a hand-off sample" })
+			trackerfix.elsewhere(f, { [atRecord("c0047", "")] = rec("c0047", "Real") }, "the real record")
+			trOk(W25, { "sync" })
+			t.expect(fs.readFile(`{W25}/{sample}`)).toBe(rec("c0047", "Sample"))
+			t.expect(fs.readFile(`{W25}/{atRecord("c0047", "")}`)).toBe(rec("c0047", "Real"))
+		end
+	)
+	it(
+		"a hand merge of origin/main that the engine cannot finish is left as the user had it (never aborted)",
+		function()
+			trackerfix.elsewhere(f, { [atRecord("c0048", "")] = rec("c0048", "Base") }, "base record c0048")
+			trOk(W27, { "sync" })
+			fs.writeFile(`{W27}/{atRecord("c0048", "")}`, rec("c0048", "Eve"))
+			fixture.git(W27, { "add", "-A" })
+			fixture.git(W27, { "commit", "-q", "-m", "we rewrote the shared row" })
+			trackerfix.elsewhere(f, { [atRecord("c0048", "")] = rec("c0048", "Base", "Main") }, "main row")
+			fixture.git(W27, { "fetch", "-q", "origin" })
+			t.expect(fixture.exec(W27, "git", { "merge", "--no-commit", "--no-edit", "origin/main" }).ok)
+				.toBe(false)
+			local r = tr(W27, { "sync" })
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr .. r.stdout, "row 1")).toBe(true)
+			-- the user's merge is still in progress, on origin/main, with the record still conflicted
+			t.expect(fixture.git(W27, { "rev-parse", "MERGE_HEAD" }))
+				.toBe(fixture.git(W27, { "rev-parse", "origin/main" }))
+			t.expect(fixture.git(W27, { "ls-files", "-u" }) ~= "").toBe(true)
+			fixture.git(W27, { "merge", "--abort" })
+		end
+	)
 end)

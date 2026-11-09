@@ -34,3 +34,5 @@ c0172 design review 002 F1: that clone, made with `git clone` of the local check
 **Also:** f0148 design review 003 F3: round 2 bounded the lobby's write at 5 s, which made "a later arrival without a new pick starts on level 1" false when the write lands after the claim; the sentence was swept in round 3.
 
 c0263 design review 006 F1, F9: a refute that says a spec was changed must paste the grep showing the changed line; two specs asserted opposite things about `merged` after a refute claimed one was fixed.
+
+When a mechanism is replaced, its other copies are replaced too (c0263 design review 011 F2): round 3 moved the sync to settling records by item id, and remap kept the retired by-path rule; list every place that merges the same file and give them one routine.
