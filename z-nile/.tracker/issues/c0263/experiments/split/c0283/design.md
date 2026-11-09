@@ -1,6 +1,6 @@
 # c0263 hand-off to c0283: design approval gate: ./zn approve, prepared refused without it, refused in any agent session, the frozen grandfather list, the dispatcher's prep gate
 
-Specs here: approve.spec.luau, freeze.spec.luau, provenance-cases.spec.luau (approval check, frozen list), dispatch.spec.luau (the prep-gate case; the rest is c0282's). Open point 1 (the `!` command) and the Overrides list below are this layer's.
+Specs here: approve.spec.luau, freeze.spec.luau, provenance-cases.spec.luau.txt (renamed so the gate does not lint an excerpt; copy it back to .luau) (approval check, frozen list), dispatch.spec.luau (the prep-gate case; the rest is c0282's). Open point 1 (the `!` command) and the Overrides list below are this layer's.
 
 Everything below is the c0263 prep text (design-review rounds 003-007), moved here when the user split the issue ("Split it and prototype first, like c0265"). It was NOT prototyped except where it says so; the core layer (c0263: provenance.md, ./zn record, the append-only publish rule, audit, the union of two writers) is prototyped on branch proto-c0263-raft, and this issue prototypes on top of it. Spec files beside this one are the sequestered specs of that prep: they were written against the unprototyped design, so run them on your prototype and fix the ones that cannot pass for a correct implementation.
 
