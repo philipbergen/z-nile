@@ -44,8 +44,14 @@ local function item(path: string, front: { string })
 end
 
 local GH_JSON = [[
-[{"number":7,"headRefName":"R0020-alpha","state":"OPEN","isDraft":true,"url":"https://example.invalid/pr/7",
-  "statusCheckRollup":[{"conclusion":"SUCCESS"}]}]
+[{"number":7,"headRefName":"R0020-alpha","title":"R0020: Running","state":"OPEN","isDraft":true,"url":"https://example.invalid/pr/7",
+  "statusCheckRollup":[{"conclusion":"SUCCESS"}]},
+ {"number":12,"headRefName":"prep-runs","title":"tracker: prep f0021 Runs","state":"OPEN","isDraft":false,
+  "url":"https://example.invalid/pr/12","statusCheckRollup":[{"conclusion":"FAILURE"}]},
+ {"number":11,"headRefName":"prep-reviewed","title":"tracker: prep f0022 Reviewed","state":"MERGED","isDraft":false,
+  "url":"https://example.invalid/pr/11","statusCheckRollup":[{"conclusion":"SUCCESS"}]},
+ {"number":13,"headRefName":"prep-other","title":"tracker: prep f00210 Other","state":"OPEN","isDraft":false,
+  "url":"https://example.invalid/pr/13","statusCheckRollup":[]}]
 ]]
 
 -- the stubs and what they saw
@@ -131,10 +137,6 @@ local function start()
 			end,
 			keyOf = function(): string
 				return key
-			end,
-			-- Stats as a function of the build, so a case can tell a kept answer from a recomputed one
-			statsHtml = function(_m: any): string
-				return `<p>stats of build {builds}</p>`
 			end,
 			engineHash = function(): string?
 				if hashDelay > 0 then
@@ -332,6 +334,10 @@ return t.spec("c0121 board server", function(it)
 			local own = action('{"action":"stop","id":"f0022"}') -- its own step runs: its own id, not the raft's
 			t.expect(own.statusCode).toBe(200)
 			t.expect(runs[#runs]).toEqual({ "dispatch", "stop", "f0022" })
+			local before2 = #runs
+			local member = action('{"action":"stop","id":"f0025"}') -- no state of its own: nothing to stop, though its raft runs
+			t.expect(member.statusCode).toBe(409)
+			t.expect(#runs).toBe(before2)
 			local idle = action('{"action":"stop","id":"c0099"}')
 			t.expect(idle.statusCode).toBe(409)
 			t.expect(string.find(idle.body, "nothing is running for c0099", 1, true) ~= nil).toBe(true)
@@ -350,16 +356,38 @@ return t.spec("c0121 board server", function(it)
 		t.expect(s2.model.live.checks).toBe("ok")
 		t.expect(s1.model.live.token).toBe(TOKEN)
 		t.expect(type(s2.statsHtml)).toBe("string")
+		t.expect(string.find(s2.statsHtml, "history unavailable", 1, true) ~= nil).toBe(true) -- the real Stats, not a stand-in
 		clock += 31
 		state()
 		t.expect(ghCalls).toBe(2)
 	end)
 
+	it(
+		"an issue's own open prep PR is on its card; a merged one, or one for a longer id, never is",
+		function()
+			state()
+			task.wait(0.1)
+			local s = state()
+			local issues = byId(s.model.issues)
+			t.expect(issues.f0021.pr)
+				.toEqual({ number = 12, url = "https://example.invalid/pr/12", state = "open" })
+			t.expect(issues.f0021.checks.state).toBe("failing")
+			t.expect(issues.f0022.pr).toBe(nil) -- its prep PR (11) is merged: the raft's stays the card's PR
+			t.expect(issues.c0099.pr).toBe(nil) -- f00210's PR is not f0021's, nor c0099's
+			t.expect(byId(s.model.rafts).R0020.pr.number).toBe(7)
+		end
+	)
+
 	it("open opens the card's PR, and refuses an item with nothing to open", function()
+		state()
+		task.wait(0.1)
+		state() -- the PR lists are laid on
 		t.expect(action('{"action":"open","id":"f0021"}').statusCode).toBe(200)
-		t.expect(opened).toEqual({ "https://example.invalid/pr/7" })
+		t.expect(opened).toEqual({ "https://example.invalid/pr/12" }) -- its own open PR before its raft's
+		t.expect(action('{"action":"open","id":"f0022"}').statusCode).toBe(200)
+		t.expect(opened[2]).toBe("https://example.invalid/pr/7") -- a merged prep PR never hides the raft's
 		t.expect(action('{"action":"open","id":"c0099"}').statusCode).toBe(400)
-		t.expect(#opened).toBe(1)
+		t.expect(#opened).toBe(2)
 	end)
 
 	it("reads a launched raft's member spend from its worktree", function()
@@ -411,6 +439,11 @@ return t.spec("c0121 board server", function(it)
 			end
 			t.expect(b.model.rafts).toEqual(a.model.rafts)
 			t.expect(b.statsHtml).toBe(a.statsHtml) -- kept with the model between builds
+			-- a new issue changes what the Stats count at the next build
+			write(
+				"z-nile/.tracker/issues/c0097/c0097.md",
+				"---\nid: c0097\ntype: chore\ntitle: New\nraft:\ncreated: 2026-11-02\nstatus: new\n---\n\n# c0097\n"
+			)
 			key = "k-encode"
 			local d = state() -- a build of the model: encoded again, with its Stats
 			t.expect(d.statsHtml ~= a.statsHtml).toBe(true)

@@ -34,7 +34,17 @@ local LINKS = "\n[script](javascript:alert(1)) [data](data:text/html,x) [upper](
 	.. "[colon](javascript&colon;alert(1)) [ent3](java&#9;script:alert(1)) [angle](<java\tscript:alert(2)>) [ref][r] "
 	.. "[web](https://example.invalid/x?a=1&b=2) [rel](docs/x.md) [mail](mailto:a@example.invalid) [anchor](#id) "
 	.. '[titled](https://ok.example "x\\" onmouseover=\\"alert(1)")\n\n'
-	.. "[r]: jav&#x61;script:alert(3)\n"
+	.. '[q](https://a.example/"onmouseover="alert(1)) \n\n[r]: jav&#x61;script:alert(3)\n'
+
+-- the same dangerous schemes behind each character a browser trims from the start of a URL (spaces and C0 controls), in an
+-- angle-bracket destination (design review 014 F1)
+local GENERATED = ""
+for _, scheme in { "javascript", "data", "vbscript" } do
+	for i, prefix in { " ", "\1", "\31", "\t" } do
+		GENERATED ..= `[g{scheme}{i}](<{prefix}{scheme}:x>) `
+	end
+end
+LINKS ..= GENERATED .. "\n"
 
 -- what a browser makes of an href attribute's text: entities decoded, then the characters it ignores inside a scheme removed
 local NAMED =
@@ -81,6 +91,8 @@ function fetchStub(u, opts) {
   fetches.push({ url: u, method: (opts && opts.method) || "GET", headers: (opts && opts.headers) || {}, body: (opts && opts.body) || null });
   if (failNext) return Promise.reject(new Error("down"));
   if (u === "/api/state") return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ model: next, statsHtml: "<p>s</p>" }) });
+  if (opts && opts.body && JSON.parse(opts.body).action === "retry")
+    return Promise.resolve({ ok: false, status: 409, text: () => Promise.resolve("refused: nothing to retry for f0021: it has never run") });
   return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('{"ok":true,"output":"stopped"}') });
 }
 const sandbox = { document: { getElementById: i => els[i] || null, querySelector: () => null, addEventListener: doc.addEventListener },
@@ -99,6 +111,9 @@ const tick = () => new Promise(r => setTimeout(r, 0));
   els.pane.dispatch("click", { target: target("button.act", { "data-act": "stop", "data-id": "f0021" }), preventDefault() {} });
   await tick(); await tick(); await tick();
   out.paneAfter = els.pane.innerHTML;
+  els.pane.dispatch("click", { target: target("button.act", { "data-act": "retry", "data-id": "f0021" }), preventDefault() {} });
+  await tick(); await tick(); await tick();
+  out.paneAfterRetry = els.pane.innerHTML;
   if (intervals.length) {
     intervals[0].fn();
     await tick(); await tick(); await tick();
@@ -158,6 +173,20 @@ return t.spec("c0121 served page", function(it)
 		local function liveModel(checks: string, stale: boolean): any
 			local m: any = board.collect(nil, DIR, facts)
 			m.live = { token = "t0k", poll = 5, checks = checks, checksAge = 3, stale = stale }
+			if checks == "ok" then
+				-- the raft has a PR, and the issue its own open prep PR, which the card shows first (G11)
+				for _, r in m.rafts do
+					if r.id == "R0020" then
+						r.pr = { number = 7, url = "https://example.invalid/pr/7", state = "draft" }
+					end
+				end
+				for _, i in m.issues do
+					if i.id == "f0021" then
+						i.pr = { number = 12, url = "https://example.invalid/pr/12", state = "open" }
+						i.checks = { state = "failing" }
+					end
+				end
+			end
 			return m
 		end
 		-- the spec runs from its project's home: the vendored file is read from the checkout's top (c0120)
@@ -232,6 +261,7 @@ return t.spec("c0121 served page", function(it)
 			t.expect(has(joined, "\ndocs/x.md\n")).toBe(true)
 			t.expect(has(joined, "\nmailto:a@example.invalid\n")).toBe(true)
 			t.expect(has(joined, "\n#id\n")).toBe(true)
+			t.expect(has(joined, "\nhttps://a.example/&quot;onmouseover=&quot;alert(1)\n")).toBe(true) -- a quote in an href is escaped
 			-- a quote in a link title must not open an attribute: no anchor carries an event handler (design review 012 F1)
 			for tag in string.gmatch(pane, "<a ([^>]*)>") do
 				local rest = string.gsub(tag, '%s*[%w%-]+="[^"]*"', function(attr)
@@ -244,6 +274,19 @@ return t.spec("c0121 served page", function(it)
 				t.expect(string.find(rest, "%S") == nil).toBe(true) -- nothing but quoted attributes
 			end
 			t.expect(has(pane, 'title="x&quot;')).toBe(true) -- the title is there, its quote escaped
+		end
+	)
+
+	it(
+		"a served issue card shows its own PR and checks before its raft's, and Retry's 409 is shown like any answer",
+		function()
+			t.expect(has(shown.pane, 'href="https://example.invalid/pr/12">#12</a> open, checks failing'))
+				.toBe(true)
+			t.expect(has(shown.pane, "#7")).toBe(false)
+			t.expect(
+				has(shown.paneAfterRetry, "retry: 409 refused: nothing to retry for f0021: it has never run")
+			)
+				.toBe(true)
 		end
 	)
 
