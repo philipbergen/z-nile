@@ -1478,20 +1478,14 @@ local function readBeats(): ({ heartbeat.Beat }, { string }, string?)
 	return beats, problems, nil
 end
 
--- What a claim is: an item on origin/main, not done or retired, whose effective state is preparing or active and whose
+-- What a claim is: an item on origin/main (publish.allowed does not see a retired raft's folder), not done, whose effective state is preparing or active and whose
 -- stored status carries a stamp. `since` (the epoch the stamp landed) only when asked: it costs a git log per claim.
 local function claimsOf(paths: { string }, withSince: boolean): { heartbeat.Claim }
 	local roots = originRoots() or fail(`origin/main has no readable {projects.FILE}`)
 	local out: { heartbeat.Claim } = {}
 	for _, p in paths do
 		local fid, file = string.match(p, "/([fdcR]%d%d%d%d)/([^/]+)$")
-		if
-			fid
-			and file == `{fid}.md`
-			and publish.allowed(p, roots)
-			and stateOfPath(p) ~= "done"
-			and not string.find(p, "/retired/", 1, true)
-		then
+		if fid and file == `{fid}.md` and publish.allowed(p, roots) and stateOfPath(p) ~= "done" then
 			local front = frontOf(sh.git({ "show", `origin/main:{p}` }))
 			local st = statusLib.effective(front, stateOfPath(p))
 			if (st == "preparing" or st == "active") and statusLib.phrase(front.status) then
