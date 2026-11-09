@@ -27,4 +27,7 @@ check "AC6: c0118's board, its page and docs (overridden where it said planned) 
   "$P18/model.spec.luau" "$P18/page.spec.luau" "$P18/docs.spec.luau" \
   "$P18/real.spec.luau" tests/acceptance/c0042/smoke.spec.luau tests/acceptance/c0107/page.spec.luau \
   tests/tooling/board.spec.luau tests/tooling/tracker-guarded.spec.luau
+echo "AC7 reads origin's main from: $(git ls-remote --get-url origin)" # the URL it will resolve (a redirect is detected here, not prevented)
+check "AC7: c0118's docs.spec is the merge base's file plus the one reviewed hunk and nothing else (fails closed)" \
+  bash "$A/overrides.sh"
 finish
