@@ -208,11 +208,16 @@ local function summary(rollup: any): string
 	return if pending then "pending" else "passing"
 end
 
--- `gh pr list --json number,headRefName,state,isDraft,url,statusCheckRollup,isCrossRepository` output as PR and checks
+-- `gh pr list --json number,headRefName,title,state,isDraft,url,statusCheckRollup,isCrossRepository` output as PR and checks
 -- by branch name. A branch with several PRs keeps an open (or draft) one over a merged or closed one, then the highest
 -- number, whatever the order gh lists them in; a PR from another repository (a fork whose branch has the same name) is
 -- skipped. nil when it is not that JSON.
-export type PrEntry = { pr: Pr, checks: Checks, title: string }
+-- The tracker id a PR title starts with (the repo's conventions put the PR's own item first: `tracker: prep c0121 ...`,
+-- `R0083: ...`), or nil. An id named later in a title ("held until c0248") is not the PR's own.
+function serve.firstId(title: string): string?
+	return string.match(title, "%f[%w][cfdR]%d%d%d%d+%f[%W]")
+end
+export type PrEntry = { pr: Pr, checks: Checks, title: string, branch: string }
 function serve.parsePrs(out: string): { [string]: PrEntry }?
 	local ok, decoded = pcall(serde.decode, "json" :: "json", out)
 	if not ok or type(decoded) ~= "table" then
@@ -240,6 +245,7 @@ function serve.parsePrs(out: string): { [string]: PrEntry }?
 					url = if p.url then `{p.url}/checks` else nil,
 				},
 				title = tostring(p.title or ""),
+				branch = p.headRefName,
 			}
 			local held = byBranch[p.headRefName]
 			if not held or rank(entry.pr) > rank(held.pr) then
@@ -356,8 +362,8 @@ function serve.start(o: Options): Server
 	local startHash = engineHash()
 	local statsOf = o.statsHtml or board.statsHtml
 
-	local cache: { model: board.Model?, key: string?, at: number } =
-		{ model = nil, key = nil, at = -math.huge }
+	local cache: { model: board.Model?, key: string?, at: number, worktrees: { [string]: string } } =
+		{ model = nil, key = nil, at = -math.huge, worktrees = {} }
 	local gh: {
 		at: number,
 		data: { [string]: PrEntry }?,
@@ -408,6 +414,10 @@ function serve.start(o: Options): Server
 			facts.asOf = o.now()
 			facts.worktreeSpend = true
 			cache.model, cache.key, cache.at = collect(o.root, facts), key, o.now()
+			cache.worktrees = {}
+			for _, w in facts.worktrees do
+				cache.worktrees[w.branch] = w.path
+			end
 			built += 1
 		end
 		local m = cache.model :: board.Model
@@ -418,18 +428,18 @@ function serve.start(o: Options): Server
 			r.pr = if hit then hit.pr else nil
 			r.checks = if hit then hit.checks else nil
 		end
-		-- an issue's own PR: the newest open or draft PR whose title names the issue (its prep PR, `tracker: prep c0121
-		-- ...`); a merged or closed one never hides its raft's. Laid on once per generation (the PR list is searched).
+		-- an issue's own PR: the newest open or draft PR whose title starts with the issue's id (its prep PR, `tracker: prep
+		-- c0121 ...`), with its checks and the worktree of its branch; a merged or closed one never hides its raft's. Laid
+		-- on once per generation (the PR list is searched).
 		if laidFor ~= gen then
 			laidFor = gen
 			for _, i in m.issues do
 				local best: PrEntry? = nil
 				if data then
-					local needle = `[^%w]{i.id}[^%w]`
 					for _, e in data do
 						if
 							(e.pr.state == "open" or e.pr.state == "draft")
-							and string.find(` {e.title} `, needle) ~= nil
+							and serve.firstId(e.title) == i.id
 							and (best == nil or e.pr.number > best.pr.number)
 						then
 							best = e
@@ -438,6 +448,7 @@ function serve.start(o: Options): Server
 				end
 				i.pr = if best then best.pr else nil
 				i.checks = if best then best.checks else nil
+				i.worktree = if best then cache.worktrees[best.branch] else nil
 			end
 		end
 		m.live = {

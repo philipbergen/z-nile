@@ -154,7 +154,8 @@ dl.run dd { margin: 0; }
   // A link in an item's document is written by this renderer, never by marked's: the href is escaped, so the attribute holds
   // exactly the string tested (marked writes `jav&#x61;script:` unescaped, and a browser decodes it to `javascript:`), and
   // it is kept only when it has no scheme (relative, #id) or the scheme is http, https or mailto, after the control
-  // characters and spaces a browser ignores inside a scheme are stripped. Any other scheme (javascript:, data:, vbscript:,
+  // characters and spaces are stripped from the whole href (a browser ignores tab and newline anywhere in a URL and trims
+  // C0 controls and spaces from its start). Any other scheme (javascript:, data:, vbscript:,
   // file:) renders as the link's text, because on the served page a script link could read the session token and post the
   // actions (c0121 code review 001 F3 of R0084, design review 011 F1).
   marked.use({ renderer: {
@@ -306,8 +307,9 @@ dl.run dd { margin: 0; }
       ["spend", spendText(issue.spend)],
       ["dispatch", dispatchText(issue.dispatch)],
       ["branch", raft && raft.branch ? esc(raft.branch) : ""],
-      ["worktree", raft && raft.worktree ? esc(raft.worktree) : ""],
-      ["PR and checks", prText({ pr: issue.pr || (raft && raft.pr), checks: issue.checks || (raft && raft.checks) })],
+      ["worktree", issue.worktree ? esc(issue.worktree) : raft && raft.worktree ? esc(raft.worktree) : ""],
+      // the issue's own PR and its checks together, or else its raft's together (never one of each)
+      ["PR and checks", prText(issue.pr || issue.checks ? issue : raft)],
     ]) + actions(issue.id);
   }
   // c0121: on the served page, a card has the only three actions, sent to the server with the session token.

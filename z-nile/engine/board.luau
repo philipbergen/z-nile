@@ -79,6 +79,7 @@ export type Issue = {
 	dispatch: Dispatch?,
 	pr: Pr?, -- c0121's, as on Raft
 	checks: Checks?,
+	worktree: string?, -- c0121's: the worktree of its own PR's branch (a prep worktree), nil otherwise
 }
 export type Project = { name: string, root: string }
 -- What the board knows besides the tracker documents (c0118), all read locally: the instant the page is as of (HEAD's
