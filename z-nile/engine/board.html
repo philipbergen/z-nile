@@ -308,8 +308,7 @@ dl.run dd { margin: 0; }
       ["dispatch", dispatchText(issue.dispatch)],
       ["branch", raft && raft.branch ? esc(raft.branch) : ""],
       ["worktree", issue.worktree ? esc(issue.worktree) : raft && raft.worktree ? esc(raft.worktree) : ""],
-      // the issue's own PR and its checks together, or else its raft's together (never one of each)
-      ["PR and checks", prText(issue.pr || issue.checks ? issue : raft)],
+      ["PR and checks", prText({ pr: issue.pr || (raft && raft.pr), checks: issue.checks || (raft && raft.checks) })],
     ]) + actions(issue.id);
   }
   // c0121: on the served page, a card has the only three actions, sent to the server with the session token.
