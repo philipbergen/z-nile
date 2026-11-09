@@ -24,3 +24,8 @@
 - design-review-005 F2: zz-test/seed-every-enumerated-case, z-design/spec-design-correspondence
 - design-review-005 F3: z-design/instructions-runnable-where-they-run, z-design/watch-steps-name-their-base
 - design-review-005 F4: z-design/design-the-execution-window
+- design-review-006 F1: z-design/design-the-execution-window
+- design-review-006 F2: z-design/exact-checks-compare-against-the-merge-base
+- design-review-006 F3: z-design/spec-design-correspondence
+- design-review-006 F4: z-design/restated-rules-move-together
+- design-review-006 F5: z-design/design-the-execution-window

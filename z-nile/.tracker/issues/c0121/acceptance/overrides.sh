@@ -35,4 +35,18 @@ bad=0
 for f in "${FILES[@]}"; do
 	cmp -s "$TMP/$f" "$TOP/$f" || { echo "AC7: differs from the merge base plus the reviewed hunks: $f" >&2; bad=1; }
 done
+# and it changes no other promoted or tooling spec (design review 006 F2): its changes since the merge base, in the working
+# tree, under the promoted specs and the tooling specs list only the reviewed file and c0121's own promoted folder
+while IFS= read -r f; do
+	case "$f" in
+	z-nile/tests/acceptance/c0118/docs.spec.luau | z-nile/tests/acceptance/c0121/*) ;;
+	*)
+		echo "AC7: changes a promoted or tooling spec it does not own: $f" >&2
+		bad=1
+		;;
+	esac
+done < <({
+	git -C "$TOP" diff --name-only "$BASE" -- z-nile/tests/acceptance z-nile/tests/tooling
+	git -C "$TOP" ls-files -o --exclude-standard -- z-nile/tests/acceptance z-nile/tests/tooling
+} | sort -u)
 exit $bad
