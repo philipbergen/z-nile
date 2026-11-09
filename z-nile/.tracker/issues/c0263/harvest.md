@@ -124,3 +124,10 @@
 - design-review-009 F5: z-design/spec-design-correspondence
 - design-review-009 F6: z-design/mutant-ids-match-the-runner
 - note review 009 candidates (a merge rule keyed on git's per-path stage shapes inherits its rename heuristics; find the thing by its identity and move the folder on each side in the cases; a replaced instruction is run on the failure it answers): z-design/histories-checked-against-a-real-life, z-design/instructions-runnable-where-they-run
+- design-review-010 F1: z-design/spec-design-correspondence
+- design-review-010 F2: z-design/histories-checked-against-a-real-life
+- design-review-010 F3: z-design/never-narrow-captured-scope
+- design-review-010 F4: zz-test/guard-needs-its-own-case
+- design-review-010 F5: zz-test/no-vacuous-pass
+- design-review-010 F6: z-design/restated-rules-move-together
+- note review 010 candidates (a merge helper acting only on what git reports conflicted trusts git's pairing of small templated files; a removal during a merge must remove the folder it empties and the case must read the disk like the engine): z-design/histories-checked-against-a-real-life, z-design/spec-design-correspondence
