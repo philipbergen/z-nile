@@ -362,8 +362,9 @@ function serve.start(o: Options): Server
 		err: string?,
 		busy: boolean,
 		version: number,
+		sig: string?,
 	} =
-		{ at = -math.huge, data = nil, err = nil, busy = false, version = 0 }
+		{ at = -math.huge, data = nil, err = nil, busy = false, version = 0, sig = nil }
 	-- the model's JSON and its Stats, encoded once per build of the model and per answer of gh, not per poll (code review
 	-- 001 F2: the encoding was 0.235 s of CPU per poll, and `./zn` stops its engine at 1800 s of CPU); the per-poll `live`
 	-- block (token, checks age, stale flag) is small and spliced in
@@ -385,12 +386,19 @@ function serve.start(o: Options): Server
 			else
 				gh.data, gh.err = nil, if not ok then tostring(out) else (why or "gh gave no PR list")
 			end
-			gh.version += 1
+			-- the version moves only when gh's answer changed (the same PRs again need no new encoding)
+			local sig = if parsed then out :: string else `err:{gh.err}`
+			if sig ~= gh.sig then
+				gh.sig = sig
+				gh.version += 1
+			end
 			gh.busy = false
 		end)
 	end
 
-	local function model(): board.Model
+	-- the model with the PRs and live block laid on, and the generation its data belongs to: read in the same step as the
+	-- data it labels (engineHash yields, and a gh answer landing in that wait must not be labelled onto the old data)
+	local function model(): (board.Model, string)
 		local key = keyOf()
 		if not cache.model or key ~= cache.key or o.now() - cache.at >= serve.REBUILD then
 			local facts = factsOf(o.root)
@@ -401,6 +409,7 @@ function serve.start(o: Options): Server
 		end
 		local m = cache.model :: board.Model
 		local data = gh.data
+		local gen = `{built}.{gh.version}`
 		for _, r in m.rafts do
 			local hit = if data and r.branch then data[r.branch] else nil
 			r.pr = if hit then hit.pr else nil
@@ -413,7 +422,7 @@ function serve.start(o: Options): Server
 			checksAge = if gh.data or gh.err then math.max(0, o.now() - gh.at) else nil,
 			stale = engineHash() ~= startHash,
 		}
-		return m
+		return m, gen
 	end
 
 	local function act(req: Request): Response
@@ -466,9 +475,8 @@ function serve.start(o: Options): Server
 			}
 		elseif req.path == "/api/state" then
 			refreshGh()
-			local m = model()
+			local m, gen = model()
 			local live = m.live
-			local gen = `{built}.{gh.version}`
 			if encoded.gen ~= gen then
 				m.live = nil
 				encoded.model = board.encode(m)
