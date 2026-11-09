@@ -1,0 +1,3 @@
+- F1: fixed: Implementation step 4 now says to run `git fetch origin main` immediately before `./zn done` (a red "fetch origin main first" is cleared by that fetch and a rerun); `narrow.py` is unchanged; consequences: the step rides into the raft's prompt through the issue document; none otherwise.
+- F2: fixed: the Design, the check.sh label and the spec header now say "in a title, a comment or a string, also wrapped across comment lines" and that a phrase built by concatenation is out of reach; consequences: none.
+- F3: fixed: the sentence is split so that `narrow.py` is the subject again; consequences: none.
