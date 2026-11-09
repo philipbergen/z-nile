@@ -12,6 +12,7 @@
 | 8 | 2026-11-08 22:58 | design-refute-004 | 0 | 0 | 8.0 | spend | design-review |  |
 | 9 | 2026-11-08 23:24 | prep | 259 | 3 | 100.0 | spend | prep |  |
 | 10 | 2026-11-09 03:18 | prep | 0 | 0 | 15.0 | spend | prep |  |
+| 11 | 2026-11-09 05:42 | c0269: rename the stale done-gate titles to the affected gate | 6 | 5 | 10.0 | focus | build |  |
 
-**Total:** +259 / -3 lines, 362.0 agent-minutes, 538384 tokens over 10 records
-<!-- totals: added=259 removed=3 minutes=362.0 records=10 tokens=538384 -->
+**Total:** +265 / -8 lines, 372.0 agent-minutes, 538384 tokens over 11 records
+<!-- totals: added=265 removed=8 minutes=372.0 records=11 tokens=538384 -->
