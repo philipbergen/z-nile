@@ -82,3 +82,7 @@ heartbeat.rejected(stamp, originStamp, beats): { action, lease?, why? } -- after
 ## The envelope (c0265 experiments/envelope.patch)
 
 c0265 proves its five spec files on the bare prototype and on `experiments/envelope.patch` (the later layers captured effects in their plainest form: a claim path beats and remembers its stamp, every command in a worktree beats the claims it holds, a bare beat from a checkout that holds no claim is refused, a verdict read after a publish). This layer's prep applies the patch to its own prototype, replaces the stub of its own layer with the real code, and reruns c0265's five specs: they must stay green, and a case of this layer that makes them red is this layer's to fix (sequestered specs are not edited during execution).
+
+## Dependency to add in this issue's prep
+
+c0253 (the `./zn work` loop) takes "lost work first" and so needs the takeover: this prep adds c0274 to c0253's `depends_on` (c0265 does not edit c0253).
