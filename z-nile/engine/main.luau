@@ -333,8 +333,8 @@ end
 -- c0263: a merge of `ref` into this worktree in which a conflict confined to `provenance.md` files is resolved by
 -- `provenance.union` of the item's record in HEAD, in `ref` and at the merge base (each found by the item's id, wherever
 -- that commit keeps the item's folder), written beside the item's document in the merge, with every other path of the
--- id's record removed. Any other conflict, a side that is not a valid extension of the base, a record deleted on one
--- side, or a record whose header names another id aborts the merge (no MERGE_HEAD, the tree as it was). Returns the
+-- id's record removed. Any other conflict, a side that is not a valid extension of the base, or a record deleted on one
+-- side aborts the merge (no MERGE_HEAD, the tree as it was). Returns the
 -- failure text.
 local function mergeRef(ref: string): (boolean, string)
 	local r = sh.run("git", { "merge", "--no-edit", ref })
@@ -427,9 +427,6 @@ local function mergeRef(ref: string): (boolean, string)
 		end
 		if not united then
 			return abort(`{id}: {why}\n{detail}`)
-		end
-		if string.match(united, "^# Provenance: (%S+)") ~= id then
-			return abort(`{id}: the record's header names another id (a renumber?): merge by hand\n{detail}`)
 		end
 		local target = `{docFolder}/provenance.md`
 		fs.writeFile(target, united)
