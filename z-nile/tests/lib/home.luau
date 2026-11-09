@@ -77,7 +77,8 @@ end
 -- and the instance path below the root node, "/"-joined), or nil and why: nil with no reason when Rojo refuses the file
 -- (its build refuses it too, so nothing is read; "rojo cannot be run" is told apart by `rojo --version` in `problems`),
 -- nil with a reason when its answer cannot be read (c0246: the rule then fails closed).
-type Read = { file: string, instance: string }
+type Seg = { name: string, class: string }
+type Read = { file: string, instance: string, segs: { Seg }, rootClass: string }
 local function rojoReads(dir: string, name: string): ({ Read }?, string?)
 	local ran, res = pcall(process.exec, "rojo", { "sourcemap", "--include-non-scripts", `{dir}/{name}` })
 	if not ran or not res.ok then
@@ -87,25 +88,21 @@ local function rojoReads(dir: string, name: string): ({ Read }?, string?)
 	if not decoded or type(map) ~= "table" then
 		return nil, "rojo sourcemap printed no JSON"
 	end
+	-- a node's identity is its path of (name, class) pairs under the root's class, never its joined names alone: a key
+	-- "ServerStorage/Arcade", or a ReplicatedFirst named "ServerStorage", spells the allowed node but is not it (review 002 F1, 003 F1)
 	local reads: { Read } = {}
-	local slashed: string? = nil
-	local function collect(node: any, path: string)
+	local rootClass = if type(map.className) == "string" then map.className else ""
+	local function collect(node: any, path: string, segs: { Seg })
 		for _, file in node.filePaths or {} do
-			table.insert(reads, { file = file, instance = path })
+			table.insert(reads, { file = file, instance = path, segs = segs, rootClass = rootClass })
 		end
 		for _, child in node.children or {} do
-			-- Rojo accepts a key such as "ServerStorage/Arcade": its instance path would read as a child of a service
-			if slashed == nil and string.find(child.name, "/", 1, true) then
-				slashed = child.name
-			end
-			collect(child, if path == "" then child.name else `{path}/{child.name}`)
+			local below = table.clone(segs)
+			table.insert(below, { name = child.name, class = child.className })
+			collect(child, if path == "" then child.name else `{path}/{child.name}`, below)
 		end
 	end
-	collect(map, "")
-	if slashed then
-		return nil,
-			`a node is named {slashed}: a name with a / cannot be told from a child, so what Rojo puts where is not judged`
-	end
+	collect(map, "", {})
 	return reads, nil
 end
 
@@ -320,7 +317,14 @@ function home.problems(top: string, reg: Registry, only: string?): ({ string }, 
 							-- a library file is judged by where Rojo puts it, not only where it comes from: the server folder
 							-- must never reach a client, however a link or a syncRules project got it into the place
 							local at = lib.node
-							if r.instance ~= at and string.sub(r.instance, 1, #at + 1) ~= at .. "/" then
+							local service, leaf = string.match(at, "^([^/]+)/(.+)$")
+							local sg = r.segs
+							local fine = r.rootClass == "DataModel"
+								and #sg >= 2
+								and sg[1].name == service
+								and sg[1].class == service
+								and sg[2].name == leaf
+							if not fine then
 								misplaced += 1
 								if misplaced == 1 then
 									bad(

@@ -80,20 +80,41 @@ return t.spec("c0246 the home rule fails closed on what Rojo prints", function(i
 		fs.removeDir(BASE)
 	end)
 
+	-- the library's server folder mapped by `tree`, in a fixture home `pong`; the problems the home rule reports
+	local function serverUnder(tree: string): { string }
+		pong()
+		put("arcade/src/server/S.luau", "return 1")
+		put("pong/default.project.json", `\{ "name": "pong", "tree": {tree} \}`)
+		return home.problems(BASE, projects.parse(REG) :: projects.Registry)
+	end
+
+	-- a node's identity is its (name, class) path under the root's class, not its joined names (review 002 F1, 003 F1)
 	it(
-		"a node named with a / is reported, since its instance path would read as a child (review 002 F1)",
+		"the library's server folder is accepted only at a ServerStorage service named Arcade under a DataModel",
 		function()
-			pong()
-			put(
-				"pong/default.project.json",
-				'{ "name": "pong", "tree": { "$className": "DataModel", "ServerStorage/Arcade": { "$path": "src/a" } } }'
+			local SERVICE =
+				'"$className": "DataModel", "ServerStorage": { "$className": "ServerStorage", "Arcade": { "$path": "../arcade/src/server" } }'
+			t.expect(#lines(serverUnder(`\{ {SERVICE} \}`), "makes Rojo put")).toBe(0)
+			-- a ReplicatedFirst named ServerStorage spells the node and replicates the server code to every client
+			local first = serverUnder(
+				'{ "$className": "DataModel", "ServerStorage": { "$className": "ReplicatedFirst", "Arcade": { "$path": "../arcade/src/server" } } }'
 			)
-			local reg = projects.parse(REG)
-			local found = home.problems(BASE, reg :: projects.Registry)
-			t.expect(#lines(found, "default.project.json: a node is named ServerStorage/Arcade")).toBe(1)
-			-- a name without a slash gets no such line
-			pong()
-			t.expect(#lines(home.problems(BASE, reg :: projects.Registry), "a node is named")).toBe(0)
+			t.expect(#lines(first, "default.project.json makes Rojo put")).toBe(1)
+			-- a Folder named ServerStorage is not the service either
+			local folder = serverUnder(
+				'{ "$className": "DataModel", "ServerStorage": { "$className": "Folder", "Arcade": { "$path": "../arcade/src/server" } } }'
+			)
+			t.expect(#lines(folder, "default.project.json makes Rojo put")).toBe(1)
+			-- a root that is not the DataModel is not a place's tree
+			local root = serverUnder(
+				'{ "$className": "Folder", "ServerStorage": { "$className": "ServerStorage", "Arcade": { "$path": "../arcade/src/server" } } }'
+			)
+			t.expect(#lines(root, "default.project.json makes Rojo put")).toBe(1)
+			-- one key spelled "ServerStorage/Arcade" is one node of that name, not a child of the service
+			local slash = serverUnder(
+				'{ "$className": "DataModel", "ServerStorage/Arcade": { "$path": "../arcade/src/server" } }'
+			)
+			t.expect(#lines(slash, "default.project.json makes Rojo put")).toBe(1)
 			fs.removeDir(BASE)
 		end
 	)
