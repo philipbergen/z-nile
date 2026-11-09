@@ -1,0 +1,4 @@
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: dispatch stop kills the running step's group, and retry reruns the same step
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:702: expected true, got false
+24 passed, 1 failed, 1 spec files
+sweeper: stopped 1 process(es) the specs left running

@@ -9,9 +9,12 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-check "AC1: the stop case and the fakes it runs wait for nothing on the wall clock" lune run tests/run -- "$A/no-wall-clock.spec.luau"
-# a slow machine, simulated: the fakes wait 3 s (over stall_seconds = 2 and over the old 3 s wait for the grandchild)
-# before the stop and before the push, and every case of the dispatch spec still passes
+check "AC1: the stop and cap cases prove the kill by the grandchild's pid, the stall limit only a real stall reaches, the fakes hold" bash "$A/pins.sh"
+# a slow machine, simulated: the stop and the push wait 3 s (over the old stall limit of 2 s and the old 3 s wait)
+# inside the step before their slow work, and every case of the dispatch spec still passes
 check "AC2: with the fakes delayed 3 s the whole dispatch spec passes" env FAKE_DELAY=3 lune run tests/run -- tests/acceptance/c0117/dispatch-cli.spec.luau
+# the promoted spec changes by exactly the reviewed hunks (zz-test, narrowing-pins-the-whole-file): its diff from the
+# branch's merge base with origin/main, less git's index line, is the golden diff
+check "AC3: the dispatch-cli spec differs from main by exactly the reviewed diff" bash -c 'diff <(git diff "$(git merge-base HEAD origin/main)" -- tests/acceptance/c0117/dispatch-cli.spec.luau | grep -v "^index ") "$1"' _ "$A/dispatch-cli.spec.expected.diff"
 
 finish

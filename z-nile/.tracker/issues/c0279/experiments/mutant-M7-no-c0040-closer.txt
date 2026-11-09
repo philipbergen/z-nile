@@ -1,0 +1,3 @@
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: a stall after the CLI's own wait message is quota; after the model's words, or none, it is a stall
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:669: expected true, got false
+24 passed, 1 failed, 1 spec files
