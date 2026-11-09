@@ -10,8 +10,8 @@ A="$HERE/acceptance"
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 check "AC1: the stop and cap cases prove the kill by the grandchild's pid, the stall limit only a real stall reaches, the fakes hold" bash "$A/pins.sh"
-# a slow machine, simulated: the stop and the push wait 3 s (over the old stall limit of 2 s and the old 3 s wait)
-# inside the step before their slow work, and every case of the dispatch spec still passes
+# a slow machine, simulated: every CLI fake waits 3 s before its first output, and the stop and the push wait 3 s more
+# inside the step before their slow work; every case of the dispatch spec still passes
 check "AC2: with the fakes delayed 3 s the whole dispatch spec passes" env FAKE_DELAY=3 lune run tests/run -- tests/acceptance/c0117/dispatch-cli.spec.luau
 # the promoted spec is exactly the reviewed text (zz-test, narrowing-pins-the-whole-file): its blob is the reviewed blob,
 # and its diff from the branch's merge base with origin/main (less git's index line) is the golden diff, the readable

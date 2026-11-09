@@ -296,3 +296,4 @@ tests/acceptance/c0239/docs.spec.luau	z-nile/templates/raft/check.sh
 tests/acceptance/c0239/docs.spec.luau	SETUP.md
 tests/acceptance/c0239/done.spec.luau	z-nile/engine/main.luau
 tests/acceptance/c0239/land.spec.luau	z-nile/engine/main.luau
+tests/acceptance/c0269/titles.spec.luau	z-nile/tests/

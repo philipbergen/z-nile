@@ -1,0 +1,3 @@
+- F1: fixed: a commented project file joins the AC3 "only unreadable" case, which expects its `maps no $path` line; M13 (`if ok and ...`) run and killed; the Design states the fail-closed line and rewords the stale graph.luau comment; consequences: one Rules row.
+- F2: fixed: Non-goals no longer claim more than `*.project.json`; `*.project.jsonc` is outside this issue's scope and goes to the user at hand-off as a possible separate chore; consequences: none (nothing narrowed: the capture never named it).
+- F3: fixed: Rules row for the tree node (M14 run and killed); consequences: none.

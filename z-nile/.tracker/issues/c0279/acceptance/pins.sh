@@ -40,7 +40,7 @@ done
 [[ $stop == *'while :; do echo'* ]] && { echo "PRESENT (stop fake): a heartbeat would hide a stop that kills nothing"; fail=1; }
 n=$(grep -o 'FAKE_DELAY' <<<"$push" | wc -l)
 [[ $n -ge 2 ]] || { echo "MISSING (push fake): FAKE_DELAY before git and before gh"; fail=1; }
-# the three entries, whole: the rules above are the readable part, this is the exact text of each entry's code, so a
+# the four entries (stop, cap, push, tool), whole: the rules above are the readable part, this is the exact text of each entry's code, so a
 # reordered delay, a `while true` heartbeat or a pid written with the wrong `$$` all fail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 for m in stop cap push tool; do

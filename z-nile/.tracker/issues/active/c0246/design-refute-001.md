@@ -1,0 +1,6 @@
+- F1: fixed: added the `A`, `A-`, `A/Z` fixture, which no parent-first walk can order; mutant M11 (no sort) run and killed; consequences: one Rules row and one test-plan case, handled.
+- F2: fixed: the nested-node row now cites the case with nested nodes. (The first case also kills M3, since its nodes sit below the tree node, but the row names the case aimed at it.); consequences: none.
+- F3: fixed: the Design names `pickman/scripts/lib/beta.luau` `rewrite` and why it stays unchanged; consequences: none.
+- F4: fixed: parameter type is `{ Unreadable }?` and the walker comment is reworded in the Design; consequences: none.
+- F5: fixed: the vacuous prefix loop is gone; a nested `P/Deep` node is pinned by its whole instance path, mutant M12 (leaf name only) run and killed; consequences: one Rules row.
+- F6: fixed: AC4's real-tree half is dropped (c0184/homes.spec asserts no problems on the real tree, run by AC5); consequences: AC4 is the README pin only.
