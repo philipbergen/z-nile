@@ -21,6 +21,13 @@
 | 17 | 2026-11-09 04:56 | design-refute-009 | 0 | 0 | 150.0 | spend | design-review |  |
 | 18 | 2026-11-09 05:20 | design-review-010 | 0 | 0 | 23.0 | spend | design-review | 283024 |
 | 19 | 2026-11-09 06:21 | design-refute-010 | 0 | 0 | 240.0 | spend | design-review |  |
+| 20 | 2026-11-09 07:51 | design-review-011 | 0 | 0 | 28.0 | spend | design-review | 310155 |
+| 21 | 2026-11-09 07:51 | design-refute-011 | 0 | 0 | 300.0 | spend | design-review |  |
+| 22 | 2026-11-09 15:39 | design-review-012 | 0 | 0 | 23.0 | spend | design-review | 306323 |
+| 23 | 2026-11-09 16:48 | design-refute-012 | 0 | 0 | 330.0 | spend | design-review |  |
+| 24 | 2026-11-09 17:45 | design-review-013 | 0 | 0 | 20.0 | spend | design-review | 305656 |
+| 25 | 2026-11-09 17:45 | design-refute-013 | 0 | 0 | 300.0 | spend | design-review |  |
+| 26 | 2026-11-09 17:45 | prep | 6423 | 1 | 900.0 | spend | prep |  |
 
-**Total:** +2348 / -1 lines, 1961.4 agent-minutes, 2859618 tokens over 19 records
-<!-- totals: added=2348 removed=1 minutes=1961.4 records=19 tokens=2859618 -->
+**Total:** +8771 / -2 lines, 3862.4 agent-minutes, 3781752 tokens over 26 records
+<!-- totals: added=8771 removed=2 minutes=3862.4 records=26 tokens=3781752 -->

@@ -19,6 +19,19 @@
 | 15 | 2026-11-09 04:56 | design-refute-009 | 0 | 0 | 25.0 | spend | design-review |  |
 | 16 | 2026-11-09 05:07 | design-review-010 | 0 | 0 | 9.0 | spend | design-review | 120000 |
 | 17 | 2026-11-09 05:07 | design-refute-010 | 0 | 0 | 20.0 | spend | design-review |  |
+| 18 | 2026-11-09 06:45 | prep | 0 | 0 | 120.0 | spend | prep |  |
+| 19 | 2026-11-09 07:04 | design-review-011 | 0 | 0 | 13.0 | spend | design-review | 150000 |
+| 20 | 2026-11-09 07:04 | design-refute-011 | 0 | 0 | 60.0 | spend | design-review |  |
+| 21 | 2026-11-09 07:24 | design-review-012 | 0 | 0 | 15.0 | spend | design-review | 150000 |
+| 22 | 2026-11-09 07:24 | design-refute-012 | 0 | 0 | 45.0 | spend | design-review |  |
+| 23 | 2026-11-09 07:41 | design-review-013 | 0 | 0 | 14.0 | spend | design-review | 150000 |
+| 24 | 2026-11-09 07:41 | design-refute-013 | 0 | 0 | 40.0 | spend | design-review |  |
+| 25 | 2026-11-09 15:18 | design-review-014 | 0 | 0 | 16.0 | spend | design-review | 200000 |
+| 26 | 2026-11-09 15:18 | design-refute-014 | 0 | 0 | 120.0 | spend | design-review |  |
+| 27 | 2026-11-09 15:52 | design-review-015 | 0 | 0 | 55.0 | spend | design-review | 190000 |
+| 28 | 2026-11-09 15:59 | design-refute-015 | 0 | 0 | 150.0 | spend | design-review |  |
+| 29 | 2026-11-09 23:45 | design-review-016 | 0 | 0 | 70.0 | spend | design-review | 175000 |
+| 30 | 2026-11-09 23:46 | design-refute-016 | 0 | 0 | 90.0 | spend | design-review |  |
 
-**Total:** +1447 / -5 lines, 323.0 agent-minutes, 940000 tokens over 17 records
-<!-- totals: added=1447 removed=5 minutes=323.0 records=17 tokens=940000 -->
+**Total:** +1447 / -5 lines, 1131.0 agent-minutes, 1955000 tokens over 30 records
+<!-- totals: added=1447 removed=5 minutes=1131.0 records=30 tokens=1955000 -->
