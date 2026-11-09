@@ -17,6 +17,7 @@
 | 13 | 2026-11-09 07:01 | prep | 296 | 1 | 120.0 | spend | prep |  |  |
 | 14 | 2026-11-09 08:22 | c0279: apply the reviewed fake and spec changes | 34 | 16 | 25.0 | raft | build |  |  |
 | 15 | 2026-11-09 08:41 | R0089: review-001 | 0 | 0 | 10.0 | raft | code-review | 200468 | opus |
+| 16 | 2026-11-09 08:41 | R0089: merge main, final log | 0 | 0 | 0.1 | raft | deliver |  |  |
 
-**Total:** +544 / -18 lines, 559.0 agent-minutes, 1429627 tokens over 15 records
-<!-- totals: added=544 removed=18 minutes=559.0 records=15 tokens=1429627 -->
+**Total:** +544 / -18 lines, 559.1 agent-minutes, 1429627 tokens over 16 records
+<!-- totals: added=544 removed=18 minutes=559.1 records=16 tokens=1429627 -->
