@@ -1,0 +1,32 @@
+# Harvest: c0276
+- design-review-001 F1: z-design/no-open-question-in-a-reviewed-design, z-design/quote-other-preps-before-promising
+- design-review-001 F2: zz-test/seed-every-enumerated-case
+- design-review-001 F3: z-design/spec-design-correspondence, zz-test/pin-fail-safes-where-they-act
+- design-review-001 F4: z-design/measure-paths-fixtures-take
+- design-review-001 F5: one-off: a grep word already present before the change
+- design-review-001 F6: z-design/prove-specs-pass-on-a-prototype
+- note the c0265 hand-off said to run z-nile/check.sh --affected on the prototype before review 1; the first run came after round 1 and found format, selene and type errors (a Verdict record type with extra fields is not a subtype in Luau, the c0265 hand-off .cases files fail format and lint): z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F1: z-design/every-claim-kind-on-the-default-view, zz-test/seed-every-enumerated-case
+- design-review-002 F2: z-design/no-open-question-in-a-reviewed-design
+- design-review-002 F3: zz-test/pin-fail-safes-where-they-act
+- design-review-002 F4: z-design/measure-paths-fixtures-take
+- design-review-002 F5: z-design/spec-design-correspondence
+- design-review-002 F6: zz-test/no-vacuous-pass
+- design-review-002 F7: z-design/restated-rules-move-together
+- design-review-002 F8: z-design/quote-other-preps-before-promising
+- design-review-002 F9: z-design/measure-paths-fixtures-take
+- design-review-003 F1: zz-test/seed-every-enumerated-case
+- design-review-003 F2: zz-test/seed-every-enumerated-case
+- design-review-003 F3: one-off: a colour token with a dark value, nothing a rule would have caught earlier
+- design-review-003 F4: z-design/quote-other-preps-before-promising
+- design-review-003 F5: z-design/restated-rules-move-together
+- design-review-004 F1: zz-test/pin-fail-safes-where-they-act, z-design/spec-design-correspondence
+- design-review-004 F2: zz-test/pin-fail-safes-where-they-act
+- design-review-004 F3: z-design/shared-file-older-engines-write
+- design-review-004 F4: z-design/spec-design-correspondence
+- design-review-004 F5: z-design/no-open-question-in-a-reviewed-design
+- design-review-005 F1: zz-test/no-vacuous-pass
+- design-review-005 F2: zz-test/pin-fail-safes-where-they-act
+- design-review-005 F3: zz-test/pin-fail-safes-where-they-act
+- design-review-005 F4: one-off: a hidden section holding the note, found by reading the template
+- design-review-005 F5: z-design/restated-rules-move-together
