@@ -22,6 +22,7 @@
 | 18 | 2026-11-08 20:56 | prep | 474 | 1 | 150.0 | spend | prep |  |
 | 19 | 2026-11-09 06:23 | design-review | 0 | 0 | 10.0 | spend | design-review |  |
 | 20 | 2026-11-09 15:25 | c0246: graph.unreadable and the Rojo-driven home check | 190 | 5 | 20.0 | focus | build |  |
+| 21 | 2026-11-09 15:25 | c0246: verification log | 0 | 0 | 3.0 | focus | build |  |
 
-**Total:** +664 / -6 lines, 423.0 agent-minutes, 1057000 tokens over 20 records
-<!-- totals: added=664 removed=6 minutes=423.0 records=20 tokens=1057000 -->
+**Total:** +664 / -6 lines, 426.0 agent-minutes, 1057000 tokens over 21 records
+<!-- totals: added=664 removed=6 minutes=426.0 records=21 tokens=1057000 -->
