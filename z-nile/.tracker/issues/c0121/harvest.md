@@ -44,3 +44,6 @@
 - design-review-009 F3: z-design/exact-checks-compare-against-the-merge-base
 - design-review-009 F4: z-design/restated-rules-move-together
 - design-review-009 F5: z-design/design-the-execution-window
+- design-review-010 F1: z-design/design-the-execution-window
+- design-review-010 F2: z-design/exact-checks-compare-against-the-merge-base
+- design-review-010 F3: z-design/restated-rules-move-together

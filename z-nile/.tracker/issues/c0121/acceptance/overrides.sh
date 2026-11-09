@@ -5,6 +5,10 @@
 # not local = red). It trusts the origin it resolves: a url.*.insteadOf or remote set-url feeds it any main (detect, not
 # prevent), so check.sh prints the resolved URL beside the verdict.
 set -euo pipefail
+# The trust boundary (design review 010 F2): this check trusts this machine's git, as it trusts the origin it resolves
+# (detect, not prevent). A local `git replace` is not honoured, but nothing else a branch's author can do to the local git
+# is chased here: the PR's diff on GitHub and the code review (which reads `git diff origin/main...HEAD`) are the backstop.
+export GIT_NO_REPLACE_OBJECTS=1
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 TOP="$(git -C "$HERE" rev-parse --show-toplevel)"
 TIP="${1:-$(git -C "$TOP" ls-remote origin refs/heads/main | cut -f1)}"
@@ -41,6 +45,9 @@ done
 # until `done`), and a git failure is red. The reads go into variables, so a failing git is not an empty list.
 # loops.luau is c0193's registry of unproven loops (R0072, not landed when this was written): if it has landed, the lint
 # asks for one entry for serve.luau's retry wait, an in-place addition that is c0121's own (design review 008 F1)
+# New unsequestered specs the raft itself writes (zz-execute Phase 2, and a code review's "missing test" findings) are
+# `z-nile/tests/tooling/serve-*.spec.luau` (design review 010 F1): added, regular files, nothing else is new
+is_own_new() { [[ $1 == z-nile/tests/tooling/serve-*.spec.luau ]]; }
 OWNED=(
 	z-nile/tests/acceptance/c0118/docs.spec.luau
 	z-nile/tests/lib/cachepaths.luau
@@ -56,16 +63,19 @@ if [[ -n $HIDDEN ]]; then
 	echo "AC7: test files hidden from git's working-tree view (assume-unchanged or skip-worktree): $HIDDEN" >&2
 	bad=1
 fi
-if [[ -n $NEW ]]; then
-	echo "AC7: untracked files under tests/ (c0121 adds none before done): $NEW" >&2
+while IFS= read -r f; do
+	[[ -n $f ]] || continue
+	is_own_new "$f" && continue
+	echo "AC7: untracked file under tests/ that c0121 does not own: $f" >&2
 	bad=1
-fi
+done <<<"$NEW"
 while IFS=$'\t' read -r meta f; do
 	[[ -n $meta ]] || continue
 	owned=0
 	for o in "${OWNED[@]}"; do [[ $f == "$o" ]] && owned=1; done
 	read -r om nm _ _ st <<<"${meta#:}"
 	if [[ $owned == 1 && $st == M && $om == "$nm" ]]; then continue; fi
+	if is_own_new "$f" && [[ $st == A && $nm == 100644 ]]; then continue; fi
 	echo "AC7: changes a test file it does not own, or not in place ($st $om $nm): $f" >&2
 	bad=1
 done <<<"$RAW"
