@@ -1449,6 +1449,17 @@ local function netRun(cmdName: string, args: { string }): sh.Result
 	return r
 end
 
+-- netRun, retried once after a second when a sibling checkout holds the lock of a ref both fetch into (the refs under
+-- refs/remotes/origin and refs/zn/hb-seen are shared by every worktree); a second failure is the answer.
+local function netRetry(cmdName: string, args: { string }): sh.Result
+	local r = netRun(cmdName, args)
+	if not r.ok and string.find(r.stderr, "cannot lock ref", 1, true) then
+		task.wait(1)
+		return netRun(cmdName, args)
+	end
+	return r
+end
+
 local function hbNow(): number
 	return heartbeat.clock(process.env, os.time(), specRun())
 end
@@ -1456,7 +1467,7 @@ end
 -- Every heartbeat branch on origin: one fetch into refs/zn/hb-seen, then one listing. Beats, the problems (a branch that
 -- is not a beat, with its cure), and an error when the branches could not be read.
 local function readBeats(): ({ heartbeat.Beat }, { string }, string?)
-	local f = netRun("git", { "fetch", "-q", "--prune", "origin", "+refs/heads/hb/*:refs/zn/hb-seen/*" })
+	local f = netRetry("git", { "fetch", "-q", "--prune", "origin", "+refs/heads/hb/*:refs/zn/hb-seen/*" })
 	if not f.ok then
 		return {}, {}, sh.trim(f.stderr .. f.stdout)
 	end
@@ -1481,13 +1492,14 @@ end
 
 -- What a claim is: an item on origin/main (publish.allowed does not see a retired raft's folder), not done, whose effective state is preparing or active and whose
 -- stored status carries a stamp. `since` (the epoch the stamp landed) only when asked: it costs a git log per claim.
-local function claimsOf(paths: { string }, withSince: boolean): { heartbeat.Claim }
+local function claimsOf(paths: { string }, withSince: boolean, at: string?): { heartbeat.Claim }
+	local ref = at or "origin/main"
 	local roots = originRoots() or fail(`origin/main has no readable {projects.FILE}`)
 	local out: { heartbeat.Claim } = {}
 	for _, p in paths do
 		local fid, file = string.match(p, "/([fdcR]%d%d%d%d)/([^/]+)$")
 		if fid and file == `{fid}.md` and publish.allowed(p, roots) and stateOfPath(p) ~= "done" then
-			local front = frontOf(sh.git({ "show", `origin/main:{p}` }))
+			local front = frontOf(sh.git({ "show", `{ref}:{p}` }))
 			local st = statusLib.effective(front, stateOfPath(p))
 			if (st == "preparing" or st == "active") and statusLib.phrase(front.status) then
 				local held = front.status
@@ -1499,10 +1511,7 @@ local function claimsOf(paths: { string }, withSince: boolean): { heartbeat.Clai
 				end
 				local since: number? = nil
 				if withSince then
-					local r = sh.run(
-						"git",
-						{ "log", "-1", "--format=%ct", `-Sstatus: {held}`, "origin/main", "--", p }
-					)
+					local r = sh.run("git", { "log", "-1", "--format=%ct", `-Sstatus: {held}`, ref, "--", p })
 					since = if r.ok then tonumber(sh.trim(r.stdout)) else nil
 				end
 				local claim: heartbeat.Claim =
@@ -1612,7 +1621,7 @@ end
 
 -- origin/main's paths for a beat: the fetch is bounded like every network call of the heartbeat. Paths, or nil and why.
 local function beatPaths(): ({ string }?, string?)
-	local f = netRun("git", { "fetch", "-q", "origin", "main" })
+	local f = netRetry("git", { "fetch", "-q", "origin", "main" })
 	if not f.ok then
 		return nil, sh.trim(f.stderr .. f.stdout)
 	end
@@ -1647,8 +1656,11 @@ local function beatOnce(id: string, held: string): (string?, boolean)
 		if not paths then
 			return perr, false
 		end
+		-- one main for the whole attempt: the claimed set and the beat commit's tree and parent all name this sha (sibling
+		-- worktrees share origin/main and may fetch it forward at any moment)
+		local at = sh.git({ "rev-parse", "origin/main" })
 		local claimed: { [string]: boolean } = {}
-		for _, c in claimsOf(paths, false) do
+		for _, c in claimsOf(paths, false, at) do
 			claimed[c.stamp] = true
 		end
 		local now = hbNow()
@@ -1661,8 +1673,8 @@ local function beatOnce(id: string, held: string): (string?, boolean)
 		if w == nil then
 			return nil, false
 		end
-		local tree = sh.git({ "rev-parse", "origin/main^{tree}" })
-		local tip = sh.git({ "rev-parse", "origin/main" })
+		local tree = sh.git({ "rev-parse", `{at}^{tree}` })
+		local tip = at
 		-- authored by the checkout's own identity: a commit made for the real origin is never a fixture-looking one
 		-- (the spec runner's tripwire reads a new ref authored @example.invalid as a fixture leak)
 		local c = sh.run("git", { "commit-tree", tree, "-p", tip, "-m", w.subject })
