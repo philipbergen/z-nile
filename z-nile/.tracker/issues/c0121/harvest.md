@@ -67,3 +67,8 @@
 - design-review-014 F4: zz-test/seed-every-enumerated-case
 - design-review-014 F5: zz-test/seed-every-enumerated-case
 - design-review-014 F6: z-design/restated-rules-move-together
+- design-review-015 F1: z-design/never-narrow-captured-scope
+- design-review-015 F2: z-design/never-narrow-captured-scope
+- design-review-015 F3: zz-test/seed-every-enumerated-case
+- design-review-015 F4: z-design/restated-rules-move-together
+- note design-review-015 lesson candidate (a rule that matches free text people write, PR titles or commit subjects, is run once against today's real corpus before it is specified): z-design/prove-specs-pass-on-a-prototype

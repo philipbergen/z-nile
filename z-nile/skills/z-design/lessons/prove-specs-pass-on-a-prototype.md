@@ -28,3 +28,5 @@ Run the `done` command itself too, not only a hand-made move: it leaves its move
 **Note** (f0146 design review 001 F5): a user rule changed a document row the specs pin after the prototype ran, and the record still said 6/6. Rerun the prototype after every spec change, including wording changes from a decision, and update the record's numbers.
 
 c0172 design review 001 F4: E2 recorded the full gate red on `classified.spec`, and implementation step 4 still said the gate passes. A later step that says a run passed has to match the result the experiment recorded.
+
+**Note (c0121 design review 015 F1):** a rule that matches free text people write (PR titles, commit subjects, branch names) is run once against today's real corpus (`gh pr list` output here) before it is specified, and the false matches it finds go into the fixture. c0121's "a title that names the issue" put 4 wrong PRs on 13 real cards; "a title that starts with the issue's id" got all 9 open prep PRs right. Ask: what does this rule say about the last 200 real items, and which of them does it get wrong?

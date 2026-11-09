@@ -48,10 +48,16 @@ local GH_JSON = [[
   "statusCheckRollup":[{"conclusion":"SUCCESS"}]},
  {"number":12,"headRefName":"prep-runs","title":"tracker: prep f0021 Runs","state":"OPEN","isDraft":false,
   "url":"https://example.invalid/pr/12","statusCheckRollup":[{"conclusion":"FAILURE"}]},
+ {"number":15,"headRefName":"prep-runs-again","title":"tracker: prep f0021 Runs again","state":"OPEN","isDraft":false,
+  "url":"https://example.invalid/pr/15","statusCheckRollup":[{"conclusion":"SUCCESS"}]},
  {"number":11,"headRefName":"prep-reviewed","title":"tracker: prep f0022 Reviewed","state":"MERGED","isDraft":false,
   "url":"https://example.invalid/pr/11","statusCheckRollup":[{"conclusion":"SUCCESS"}]},
- {"number":13,"headRefName":"prep-other","title":"tracker: prep f00210 Other","state":"OPEN","isDraft":false,
-  "url":"https://example.invalid/pr/13","statusCheckRollup":[]}]
+ {"number":17,"headRefName":"prep-other","title":"tracker: prep f00210 Other","state":"OPEN","isDraft":false,
+  "url":"https://example.invalid/pr/17","statusCheckRollup":[]},
+ {"number":14,"headRefName":"prep-idle","title":"tracker: prep f0025 Idle member","state":"OPEN","isDraft":true,
+  "url":"https://example.invalid/pr/14","statusCheckRollup":[]},
+ {"number":16,"headRefName":"capture-loose","title":"tracker: new c0099 Loose, held until f0021 and f0022 land","state":"OPEN",
+  "isDraft":false,"url":"https://example.invalid/pr/16","statusCheckRollup":[]}]
 ]]
 
 -- the stubs and what they saw
@@ -108,7 +114,10 @@ local function start()
 				return {
 					asOf = nil,
 					refs = { { name = "origin/R0020-alpha", at = clock } },
-					worktrees = { { path = `{ROOT}/wt/R0020`, branch = "R0020-alpha" } },
+					worktrees = {
+						{ path = `{ROOT}/wt/R0020`, branch = "R0020-alpha" },
+						{ path = `{ROOT}/wt/idle`, branch = "prep-idle" },
+					},
 					-- c0117's run state: R0020's chain runs, and f0021's moved on to it; R0030 failed; c0099 has none
 					dispatch = {
 						R0020 = { step = "z-run", outcome = "running", model = "m", questions = false },
@@ -215,6 +224,7 @@ return t.spec("c0121 board server", function(it)
 			{ "type: feature", "title: Reviewed", "raft: R0020", "status: active-a-b-c" }
 		)
 		item("z-nile/.tracker/issues/c0099", { "type: chore", "title: Loose", "raft:" })
+		item("z-nile/.tracker/issues/c0098", { "type: chore", "title: Loose without a PR", "raft:" })
 		item(
 			"z-nile/.tracker/issues/active/f0025",
 			{ "type: feature", "title: Idle member", "raft: R0020", "status: active-a-b-c" }
@@ -363,30 +373,72 @@ return t.spec("c0121 board server", function(it)
 	end)
 
 	it(
-		"an issue's own open prep PR is on its card; a merged one, or one for a longer id, never is",
+		"an issue's own PR is the newest open or draft one whose title starts with its id, with its checks and its branch's worktree",
 		function()
 			state()
 			task.wait(0.1)
 			local s = state()
 			local issues = byId(s.model.issues)
+			-- two open prep PRs: the newest; checks are that PR's, not the older one's
 			t.expect(issues.f0021.pr)
-				.toEqual({ number = 12, url = "https://example.invalid/pr/12", state = "open" })
-			t.expect(issues.f0021.checks.state).toBe("failing")
+				.toEqual({ number = 15, url = "https://example.invalid/pr/15", state = "open" })
+			t.expect(issues.f0021.checks.state).toBe("passing")
 			t.expect(issues.f0022.pr).toBe(nil) -- its prep PR (11) is merged: the raft's stays the card's PR
-			t.expect(issues.c0099.pr).toBe(nil) -- f00210's PR is not f0021's, nor c0099's
+			-- a draft counts, and the worktree of its branch is the card's
+			t.expect(issues.f0025.pr)
+				.toEqual({ number = 14, url = "https://example.invalid/pr/14", state = "draft" })
+			t.expect(issues.f0025.worktree).toBe(`{ROOT}/wt/idle`)
+			-- the id named later in a title is not the PR's own: c0099's capture PR names f0021 and f0022 after its own id
+			t.expect(issues.c0099.pr.number).toBe(16)
+			t.expect(issues.f0021.pr.number).toBe(15)
+			t.expect(issues.f0022.pr).toBe(nil)
 			t.expect(byId(s.model.rafts).R0020.pr.number).toBe(7)
 		end
 	)
+
+	it("an issue's PR survives a rebuild, goes when gh fails and comes back with its answer", function()
+		local savedDelay = ghDelay
+		ghDelay = 0.02
+		local function settled()
+			key ..= "z"
+			clock += 1
+			state()
+			task.wait(0.1)
+		end
+		local ok, err = pcall(function()
+			settled()
+			t.expect(byId(state().model.issues).f0025.pr.number).toBe(14)
+			settled() -- a rebuild with the same gh data
+			t.expect(byId(state().model.issues).f0025.pr.number).toBe(14)
+			ghFails = true
+			clock += 31
+			state()
+			task.wait(0.2)
+			local failed = byId(state().model.issues).f0025
+			t.expect(failed.pr).toBe(nil)
+			t.expect(failed.worktree).toBe(nil)
+			ghFails = false
+			settled()
+			clock += 31
+			state()
+			task.wait(0.2)
+			t.expect(byId(state().model.issues).f0025.pr.number).toBe(14)
+		end)
+		ghFails, ghDelay = false, savedDelay
+		if not ok then
+			error(err, 0)
+		end
+	end)
 
 	it("open opens the card's PR, and refuses an item with nothing to open", function()
 		state()
 		task.wait(0.1)
 		state() -- the PR lists are laid on
 		t.expect(action('{"action":"open","id":"f0021"}').statusCode).toBe(200)
-		t.expect(opened).toEqual({ "https://example.invalid/pr/12" }) -- its own open PR before its raft's
+		t.expect(opened).toEqual({ "https://example.invalid/pr/15" }) -- its own newest open PR before its raft's
 		t.expect(action('{"action":"open","id":"f0022"}').statusCode).toBe(200)
 		t.expect(opened[2]).toBe("https://example.invalid/pr/7") -- a merged prep PR never hides the raft's
-		t.expect(action('{"action":"open","id":"c0099"}').statusCode).toBe(400)
+		t.expect(action('{"action":"open","id":"c0098"}').statusCode).toBe(400)
 		t.expect(#opened).toBe(2)
 	end)
 
