@@ -11,3 +11,5 @@ check: Does every path a check.sh builds from `./zn find` or `./zn members` outp
 **How to apply:** use `$PWD/$(…zn find <id>)` (or the path as printed); run the raft's `check.sh` in prep with the specs still sequestered, the way `done` runs it.
 
 **Also:** c0118 design review 013 F1: a check.sh line written while answering a round (with `git -C "$ZN_ROOT"` and top-relative `z-nile/…` pathspecs, and a `\t*` word) turned c0120's `check-paths.spec` red, so the prep alone broke z-nile's full gate; the full gate that was cited had run on the prototype, whose check.sh did not hold the line. Check: after any check.sh edit in a round, was the gate run with that check.sh in the tree (main + prep + apply), and are the paths home-relative?
+
+**Also:** c0269 design review 002 F1: a check line added while answering a review round (`cd "$ZN_ROOT" && ./zn find …`) passed `./zn check` and `promote-check`, which run before the move, and failed `c0120/finished.spec` once the item sat under `done/`. Before the last round closes, run `z-nile/check.sh --affected` on a standalone clone that simulates `done` (item moved, specs promoted), not on one where the specs were only copied.
