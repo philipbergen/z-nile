@@ -126,7 +126,8 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 					[[--platform=standard --ignore='**/.tracker/**' --ignore='**/.cache/**' "${LUNE_DIRS[@]}"]]
 				)
 			).toBe(true)
-			local plan = process.exec("bash", { "z-nile/check.sh", "--plan" }, { cwd = root })
+			-- the layout plan is the full one: an affected plan narrows to the projects this branch changed
+			local plan = process.exec("bash", { "z-nile/check.sh", "--full", "--plan" }, { cwd = root })
 			local line = string.match(plan.stdout, "types %(Lune%): ([^\n]*)") or ""
 			-- c0120 override: the root has no tests/ (z-nile's moved into z-nile/)
 			for _, d in { "scripts", "z-nile", "pickman/tests", "pickman/scripts" } do

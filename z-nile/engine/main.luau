@@ -2293,9 +2293,9 @@ local function captureScope(diff: string, base: string): string?
 			return `not a capture change: {path} changes its status line (./zn status moves it)`
 		end
 	end
-	for _, spend in spends do
-		if not captured[spend.id] then
-			return `not a capture change: {spend.path} (a capture's spend.md belongs to an issue document this land changes)`
+	for _, entry in spends do
+		if not captured[entry.id] then
+			return `not a capture change: {entry.path} (a capture's spend.md belongs to an issue document this land changes)`
 		end
 	end
 	if not seen then
