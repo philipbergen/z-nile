@@ -69,10 +69,14 @@ end
 local reviewed = ""
 
 -- every case starts from the reviewed commit, then answers the review with `lines` and runs done
-local function answer(lines: { string }): Result
+local function answer(lines: { string }, ruling: string?): Result
 	git({ "reset", "-q", "--hard", reviewed })
 	-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
 	write("pickman/.tracker/rafts/active/R0010/refute-001.md", table.concat(lines, "\n") .. "\n")
+	if ruling then
+		local doc = "pickman/.tracker/rafts/active/R0010/R0010.md"
+		write(doc, fs.readFile(`{work}/{doc}`) .. "\n" .. ruling)
+	end
 	must(tr({ "commit", "-m", "refute 001", "--time", "1" }), "commit refute")
 	return tr({ "done", "R0010" })
 end
@@ -155,11 +159,22 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 		t.expect(has(r.stderr, "consequences")).toBe(true)
 	end)
 
-	it("fixed answers with consequences, and refuted answers without, get past the review check", function()
-		local r = answer({
+	it("a refuted high waits for a ruling, and needs no consequences line", function()
+		local open = answer({
 			"- F1: fixed abc: tidied; consequences: none",
 			"- F2: refuted: the design text says so",
 		})
+		t.expect(open.ok).toBe(false)
+		t.expect(has(open.stderr, "open to the human")).toBe(true)
+		t.expect(has(open.stderr, "F2")).toBe(true)
+		t.expect(has(open.stderr, "consequences")).toBe(false)
+		local r = answer(
+			{
+				"- F1: fixed abc: tidied; consequences: none",
+				"- F2: refuted: the design text says so",
+			},
+			"## Open to the human\n- F2: a big thing. Answer: the design text says so. Decision: accept the refutation.\n  Ruled (user, 2026-11-10): accepted.\n"
+		)
 		if not r.ok then
 			error(r.stderr .. r.stdout)
 		end

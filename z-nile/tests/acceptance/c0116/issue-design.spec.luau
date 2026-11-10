@@ -79,7 +79,7 @@ return t.spec("c0116 z-design designs one issue with no raft; its reviews roll u
 			"--note",
 			"design-review-001",
 		})
-		local spent = fixture.git(f.origin, { "show", `main:pickman/.tracker/issues/{id}/spend.md` })
+		local spent = fs.readFile(`{dir}/spend.md`)
 		t.expect(has(spent, "| design-review-001 | 0 | 0 | 4.0 |")).toBe(true)
 		-- design ready, then the carried move: nothing published, the local document prepared, raft: still empty
 		local path = `{dir}/{id}.md`

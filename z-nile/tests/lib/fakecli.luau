@@ -325,9 +325,14 @@ function fakecli.state(h: Harness, id: string, sub: string?): any
 	return serde.decode("json", fs.readFile(`{dir}/state.json`))
 end
 
--- The rows of an issue's spend.md on origin/main, or nil.
+-- The rows of an issue's spend.md on the dispatcher's branch. `./zn spend` commits there and pushes nothing, so the
+-- row is not on origin/main until that branch lands.
 function fakecli.rows(h: Harness, id: string): { ledger.Row }?
-	local r = fixture.exec(h.f.origin, "git", { "show", `main:pickman/.tracker/issues/{id}/spend.md` })
+	local wt = fixture.physical(`{h.f.main}/.worktree/zn-dispatch`)
+	if not wt then
+		return nil
+	end
+	local r = fixture.exec(wt, "git", { "show", `HEAD:pickman/.tracker/issues/{id}/spend.md` })
 	if not r.ok then
 		return nil
 	end

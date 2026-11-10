@@ -147,7 +147,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture 
 - At the end of a session (SessionEnd, `scripts/hooks/session-end.sh`): `./zn reap --session-end` stops what the session left running.
 
 ## Lessons
-Before you start, read this skill's lessons: `./zn lessons --skill zz-test --full`. Each is a mistake made before, with the question that catches it.
+Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
 
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.

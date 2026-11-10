@@ -491,17 +491,19 @@ return t.spec("tracker ready", function(it)
 		for _, needle in
 			{
 				"Marker Readied.",
-				"Marker Alpha.",
-				"Marker Beta.",
-				"-- c0010 acceptance marker",
 				-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-				"pickman/.tracker/issues/active/c0010/acceptance/a.spec.luau",
+				"pickman/.tracker/issues/active/c0010/c0010.md",
+				"pickman/.tracker/issues/active/c0010/acceptance/",
 				"parallel:",
 				"R0010",
 			}
 		do
 			t.expect(has(prompt, needle)).toBe(true)
 		end
+		-- issue bodies, acceptance spec text and check.sh bodies are paths, not pasted
+		t.expect(has(prompt, "Marker Alpha.")).toBe(false)
+		t.expect(has(prompt, "Marker Beta.")).toBe(false)
+		t.expect(has(prompt, "-- c0010 acceptance marker")).toBe(false)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 		t.expect(has(prompt, "test -f pickman/.tracker/issues/c0010/acceptance")).toBe(false) -- the rewritten check.sh is inlined
 		t.expect(fs.isFile(`{cap}/pickman/.tracker/rafts/active/R0010/prompt.md`)).toBe(false)

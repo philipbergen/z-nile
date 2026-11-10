@@ -255,6 +255,12 @@ return t.spec("tracker lifecycle", function(it)
 			"pickman/.tracker/rafts/active/R0010/refute-001.md",
 			"- F1: fixed abc: done; consequences: none\n- F2: refuted: by design\n"
 		)
+		local raftDoc = "pickman/.tracker/rafts/active/R0010/R0010.md"
+		write(
+			raftDoc,
+			read(raftDoc)
+				.. "\n## Open to the human\n- F2: other. Answer: by design. Decision: accept.\n  Ruled (user, 2026-11-10): accepted.\n"
+		)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local good = read("pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau")
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
