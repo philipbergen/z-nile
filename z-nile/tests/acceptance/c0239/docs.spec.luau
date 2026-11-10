@@ -22,17 +22,14 @@ local function unsays(rel: string, line: string)
 end
 
 return t.spec("c0239 gate by step wording", function(it)
-	it("AC1: zz-test holds the rule table and the stop hook line", function()
+	it("AC1: zz-test holds the rule table and no stop hook line", function()
 		local f = "z-nile/skills/zz-test/SKILL.md"
 		says(
 			f,
 			"**Gate by step**: the full gate runs once, at the merge; every step before it runs `--affected`, `./zn done` included."
 		)
 		says(f, "`land`, `setup.sh` and the merge's clean clone run `--full` fresh.")
-		says(
-			f,
-			"On stop: the project-scoped affected gate (`--affected --project <name>`) runs when `z-nile/specs scope` names one project, and the unscoped affected gate runs for every other answer"
-		)
+		unsays(f, "On stop:")
 		unsays(f, '(`"$ZN_ROOT/z-nile/check.sh" --project <project> --full`)')
 	end)
 

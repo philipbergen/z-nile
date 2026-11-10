@@ -227,18 +227,35 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 		local function sel(paths: { string }, only: string?): any
 			return select.affected(ctx, paths, only)
 		end
-		-- SHARED_FULL forces every project, with or without --project
-		for _, p in
-			{ "z-nile/lib/graph.luau", "z-nile/tests/run.luau", "z-nile/tests/lib/t.luau", "zn", ".luaurc" }
-		do
+		-- root infrastructure forces every project; tooling infrastructure forces z-nile alone
+		for _, p in { "zn", ".luaurc" } do
 			t.expect(sel({ p }, nil)).toBe("ALL")
 			t.expect(sel({ p }, "pickman")).toBe("ALL")
 			t.expect(sel({ p }, "z-nile")).toBe("ALL")
 		end
-		-- the rest of z-nile/ forces z-nile's run only
-		t.expect(sel({ "z-nile/engine/main.luau" }, "z-nile")).toBe("ALL")
-		t.expect(sel({ "z-nile/engine/main.luau" }, "pickman")).toEqual({})
-		t.expect(sel({ "z-nile/engine/main.luau" }, nil)).toBe("ALL")
+		for _, p in
+			{
+				"z-nile/lib/graph.luau",
+				"z-nile/tests/run.luau",
+				"z-nile/tests/lib/t.luau",
+				"z-nile/engine/main.luau",
+			}
+		do
+			t.expect(sel({ p }, nil)).toBe("ALL")
+			t.expect(sel({ p }, "pickman")).toEqual({})
+			t.expect(sel({ p }, "z-nile")).toBe("ALL")
+		end
+		-- documentation and skills force no suite; declared inputs and require edges still apply
+		for _, p in
+			{
+				"z-nile/engine/design.md",
+				"z-nile/skills/zz-test/SKILL.md",
+				"z-nile/skills/zz-test/lessons/x.txt",
+			}
+		do
+			t.expect(sel({ p }, nil)).toEqual({})
+			t.expect(sel({ p }, "z-nile")).toEqual({})
+		end
 		-- HOME_FULL forces that home's run
 		t.expect(sel({ "pickman/tests/meta/architecture.spec.luau" }, "pickman")).toBe("ALL")
 		t.expect(sel({ "pickman/tests/meta/architecture.spec.luau" }, "z-nile")).toEqual({})
@@ -378,7 +395,7 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 			.toEqual({ "pickman/.tracker/issues/done/f0031/acceptance/" })
 	end)
 
-	it("AC9: a * entry (always run) parses, and makes every path an input of its spec alone", function()
+	it("AC9: a * entry parses, and makes every same-suite path an input of its spec alone", function()
 		local inputs, err = select.parseInputs("tests/unit/Maze.spec.luau\t*\n", "pickman/")
 		t.expect(err).toBe(nil)
 		t.expect((inputs :: select.Inputs)[MAZE_SPEC]).toEqual({ "*" })
@@ -388,12 +405,13 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 				"AGENTS.md",
 				"pickman/.tracker/issues/f0001/f0001.md",
 				"pickman/.tracker/issues/f0001/spend.md",
-				"z-nile/engine/main.luau",
 			}
 		do
 			t.expect(select.isInput(ctx, MAZE_SPEC, p)).toBe(true)
-			t.expect(select.isInput(ctx, GHOST_SPEC, p) == false or p == "z-nile/engine/main.luau").toBe(true)
+			t.expect(select.isInput(ctx, GHOST_SPEC, p)).toBe(false)
 		end
+		t.expect(select.isInput(ctx, MAZE_SPEC, "z-nile/engine/main.luau")).toBe(false)
+		t.expect(select.isInput(ctx, TOOL_SPEC, MAZE)).toBe(false)
 	end)
 
 	it("AC2: a spec with a ref: entry is selected by an empty change set, and no other spec is", function()
@@ -409,6 +427,8 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 		t.expect(select.affected(declared, { "AGENTS.md" }, "z-nile")).toEqual({})
 		-- without --project the path is repository-relative, like every other answer
 		t.expect(select.affected(declared, {}, nil)).toEqual({ GHOST_SPEC })
+		t.expect(select.affected(declared, { "pickman/unrelated.luau" }, nil)).toEqual({ GHOST_SPEC })
+		t.expect(select.affected(declared, { "z-nile/skills/zz-test/SKILL.md" }, nil)).toEqual({})
 	end)
 
 	it("AC2: HEAD moves a * spec, unrelated refs do not, and a declared ref moves its spec", function()

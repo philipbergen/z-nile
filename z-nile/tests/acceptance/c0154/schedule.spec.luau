@@ -1,5 +1,5 @@
 --!strict
--- c0154: the spec runner schedules files slowest first from the durations it recorded, and reports exactly as before.
+-- c0154: the spec runner schedules files slowest first from the durations it recorded, and reports as each file finishes.
 -- The pure rules (z-nile/tests/lib/schedule.luau) are checked on fixed inputs, the gain on the 177 durations of a real
 -- z-nile run (2026-10-25: path order 213.5 s, slowest first 162.6 s, on 8 lanes), and the runner itself on a copy under
 -- .cache/c0154-runner. The runner cases never compare measured times: the record they schedule by is written by hand,
@@ -251,7 +251,7 @@ return t.spec("c0154 the runner schedules slowest first", function(it)
 		end
 	)
 
-	it("reports in path order whatever order the files ran and finished in", function()
+	it("reports as each file finishes rather than in path order", function()
 		for _, n in fs.readDir(`{home}/tests`) do
 			if string.match(n, "%.spec%.luau$") then
 				fs.removeFile(`{home}/tests/{n}`)
@@ -266,7 +266,7 @@ return t.spec("c0154 the runner schedules slowest first", function(it)
 		local i1 = string.find(out, "FAIL tests/f1.spec.luau", 1, true)
 		local i2 = string.find(out, "FAIL tests/f2.spec.luau", 1, true)
 		t.expect(i1 ~= nil and i2 ~= nil).toBe(true)
-		t.expect((i1 :: number) < (i2 :: number)).toBe(true)
+		t.expect((i2 :: number) < (i1 :: number)).toBe(true)
 		t.expect((string.find(out, "0 passed, 2 failed, 2 spec files", 1, true)) ~= nil).toBe(true)
 	end)
 end)

@@ -3,6 +3,7 @@
 -- through `lune run tests/run` in the project's home (the runner keeps its jail and guards), and keeps results in the
 -- shared SQLite db, keyed by a fingerprint of everything a spec can read.
 --   lune run z-nile/specs -- run --project <name> [--fresh] [--all | -- <spec path relative to the home>...]
+--     --slow selects only z-nile's measured slow tier; without it, the slow tier is excluded
 --   lune run z-nile/specs -- digest --mode <affected|full> --projects <a,b> [--base REF]   -- the whole-gate digest
 --   lune run z-nile/specs -- scope                         -- the one project the change set is confined to, or ALL (c0239)
 --   lune run z-nile/specs -- gate-check --digest D        -- exit 0 and the stored report when that gate passed
@@ -21,6 +22,7 @@ local resultsdb = require("./lib/resultsdb")
 local reuseplan = require("./lib/reuseplan")
 local select = require("./lib/select")
 local serde = require("@lune/serde")
+local slow = require("./tests/lib/slow")
 local stdio = require("@lune/stdio")
 local workspace = require("./lib/workspace")
 
@@ -134,7 +136,7 @@ end
 -- ---------------------------------------------------------------------------------------------------- run
 local function runCommand()
 	local project: string? = nil
-	local fresh, all = false, false
+	local fresh, all, slowOnly = false, false, false
 	local files: { string } = {}
 	local i = 1
 	local afterDashes = false
@@ -151,6 +153,8 @@ local function runCommand()
 			fresh = true
 		elseif a == "--all" then
 			all = true
+		elseif a == "--slow" then
+			slowOnly = true
 		else
 			fail(`unknown argument {a}`)
 		end
@@ -170,6 +174,14 @@ local function runCommand()
 			table.insert(files, string.sub(p, #(if home == "." then "./" else home .. "/") + 1))
 		end
 	end
+	local tiers = if project == "z-nile" then slow.load(ROOT) else {}
+	local selected: { string } = {}
+	for _, f in files do
+		if (tiers[f] ~= nil) == slowOnly then
+			table.insert(selected, f)
+		end
+	end
+	files = selected
 	table.sort(files)
 
 	-- reuse
