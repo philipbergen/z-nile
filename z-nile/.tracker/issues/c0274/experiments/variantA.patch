@@ -1,8 +1,8 @@
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index cb3812c4..8393f666 100644
+index b5612edc..8ddacbb4 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
-@@ -6711,7 +6711,70 @@ if not READ_ONLY[name :: string] then
+@@ -6764,7 +6764,70 @@ if not READ_ONLY[name :: string] then
  end
  local rest = table.move(args, 2, #args, 1, {})
  local pos, opts = flags(rest)

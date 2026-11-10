@@ -6,7 +6,7 @@ Runs: a scratch bare clone of this repository and a clone of it at `origin/proto
 - The eight files on the bare prototype: plan 5, memory 10, takeover 10, c0265's heartbeat 21, beat 11, edge 6, lost 15 and race 8, all passing.
 - A probe spec (P1 to P6, quoted below) in the clone's `z-nile/tests/probe-r2/`.
 - One mutant (F2).
-- The 73 promoted specs that drive `status`, `release`, `stop`, `done`, `beat`, `fold`, `unfold`, `recombine`, `ready` or `start` (`grep -rlE '"(status|release|stop|done|beat|fold|unfold|recombine|ready|start)"' tests/acceptance tests/tooling`): RESULT.
+- The 73 promoted specs that drive `status`, `release`, `stop`, `done`, `beat`, `fold`, `unfold`, `recombine`, `ready` or `start` (`grep -rlE '"(status|release|stop|done|beat|fold|unfold|recombine|ready|start)"' tests/acceptance tests/tooling`): 675 passed, 0 failed in 73 files. So the round-1 changes (the give-back refusal, the `done` drop, the stop subject, `--replace`) redden none of them, and `Overrides: none` holds for this set. I did not rerun the other 175 z-nile files.
 Not findings:
 - **The give-back refusal and `new raft`, `fold` and `recombine`.** None of them restamps an issue this checkout claimed itself: `new raft` takes `new` or `prepared` issues only (main.luau:1310), and `fold` and `recombine` take prepared issues and prepared or new rafts, without restamping members. So no per-issue memory goes stale through them; the one stale path is F5.
 - **"An issue whose stamp a raft holds."** A single-issue raft correctly redirects its issue to itself. Retired rafts are not on publishable paths. A done raft never carries a live `preparing-` stamp. The one gap is a recombine's other raft (F3).

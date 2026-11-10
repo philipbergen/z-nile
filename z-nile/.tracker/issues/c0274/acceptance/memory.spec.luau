@@ -75,6 +75,7 @@ return t.spec("c0274 a checkout beats only the claim it made", function(it)
 			[`{P}/c0030/c0030.md`] = issue("c0030", "new-a-b-c"),
 			[`{P}/c0095/c0095.md`] = issue("c0095", "new-a-b-c"),
 			[`{P}/c0090/c0090.md`] = issue("c0090", "new-a-b-c"),
+			[`{P}/c0070/c0070.md`] = issue("c0070", "new-a-b-c"),
 			[`{P}/c0040/c0040.md`] = issue("c0040", "prepared-quiet-copper-falcon", "ready", "R0010"),
 			[`{P}/c0040/check.sh`] = CHECK,
 			["pickman/.tracker/rafts/R0010/R0010.md"] = `---\nid: R0010\ntype: chore\ntitle: Mem\nslug: mem\nsingle: false\nissues: [c0040]\ndesign: ready\ncreated: 2026-10-06\nstatus: prepared-quiet-copper-falcon\n---\n\n# R0010\n`,
@@ -265,5 +266,25 @@ return t.spec("c0274 a checkout beats only the claim it made", function(it)
 		t.expect(memory(wt, rid) ~= nil).toBe(true)
 		must(zn(wt, { "release", rid }, T0 + 1700), "release")
 		t.expect(memory(wt, rid)).toBe(nil)
+	end)
+
+	it("a raft given back ends both memory files, so its giver is never told it was taken over", function()
+		must(
+			zn(wt, { "new", "raft", "chore", "gbraft", "c0070", "--project", "pickman" }, T0 + 1800),
+			"new raft"
+		)
+		local listing = must(zn(h.f.main, { "status" }, T0 + 1800), "status")
+		local rid = string.match(listing, "(R%d+) preparing") or error("no rafting claim")
+		t.expect(fs.isFile(`{wt}/.cache/tracker-stamp-{rid}`)).toBe(true)
+		t.expect(fs.isFile(`{wt}/.cache/tracker-claim-{rid}`)).toBe(true)
+		must(zn(wt, { "status", rid, "new" }, T0 + 1810), "give the raft back")
+		t.expect(fs.isFile(`{wt}/.cache/tracker-stamp-{rid}`)).toBe(false)
+		t.expect(fs.isFile(`{wt}/.cache/tracker-claim-{rid}`)).toBe(false)
+		-- another terminal claims it; the giver's bare beat is refused as a checkout that holds no claim
+		must(zn(wt2, { "status", rid, "preparing" }, T0 + 1820), "another terminal claims the raft")
+		local late = zn(wt, { "beat", rid }, T0 + 1830)
+		t.expect(late.ok).toBe(false)
+		t.expect(has(late.stderr, "does not hold")).toBe(true)
+		t.expect(has(late.stderr, "taken over")).toBe(false)
 	end)
 end)

@@ -20,3 +20,8 @@
 - design-review-002 F7: zz-test/pin-call-site-arguments
 - design-review-002 F8: one-off: the swap's create-only lease depends on the sibling's placement of its first beat
 - design-review-002 F9: z-design/refusing-memory-names-how-its-owner-gets-back-in
+- design-review-003 F1: z-design/refusing-memory-names-how-its-owner-gets-back-in
+- design-review-003 F2: zz-test/seed-every-enumerated-case
+- design-review-003 F3: z-design/restated-rules-move-together
+- design-review-003 F4: z-design/quote-other-preps-before-promising
+- design-review-003 F5: z-design/reasoned-rows-claim-testable-reasons
