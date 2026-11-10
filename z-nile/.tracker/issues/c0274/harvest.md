@@ -25,3 +25,9 @@
 - design-review-003 F3: z-design/restated-rules-move-together
 - design-review-003 F4: z-design/quote-other-preps-before-promising
 - design-review-003 F5: z-design/reasoned-rows-claim-testable-reasons
+- design-review-004 F1: z-design/refusing-memory-names-how-its-owner-gets-back-in
+- design-review-004 F2: z-design/refusing-memory-names-how-its-owner-gets-back-in
+- design-review-004 F3: z-design/restated-rules-move-together
+- design-review-004 F4: z-design/spec-design-correspondence
+- design-review-004 F5: one-off: a refusal hint that names a give-back of a claim that may be live
+- design-review-004 F6: one-off: a stray empty experiments file and a claim that every case is instant
