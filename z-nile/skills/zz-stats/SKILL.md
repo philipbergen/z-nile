@@ -24,7 +24,7 @@ description: Report cost per issue (agent active time, lines) and the rework rat
 4. **Caveat**: spend is best effort. Minutes come from `--time` when the agent knew them, and otherwise from commit gaps capped at 45 minutes. Tokens are best effort too: an agent that does not know them leaves `--tokens` out, and that cell stays empty and sums as 0. Say so if precision matters to the question.
 
 ## Lessons
-Before you start, read this skill's lessons: `./zn lessons --skill zz-stats --full`. Each is a mistake made before, with the question that catches it.
+Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
 
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.

@@ -247,7 +247,8 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			t.expect(has(l, "--output-format stream-json --verbose --model claude-opus-5-5")).toBe(true)
 			t.expect(has(l, "--permission-mode bypassPermissions --permission-prompts none")).toBe(true)
 			t.expect(has(l, "`z-nile/skills/z-design/SKILL.md`")).toBe(true)
-			t.expect(has(l, "`./zn lessons --when design --full`")).toBe(true)
+			t.expect(has(l, "Search with `./zn lessons <terms>`")).toBe(true)
+			t.expect(has(l, "lessons --when design --full")).toBe(false)
 			local main = fixture.physical(h.f.main) :: string
 			t.expect(has(l, `dir={main}/.cache/dispatch/c0010\n`)).toBe(true)
 			t.expect(has(l, `path0={main}/z-nile/bin\n`)).toBe(true)
@@ -416,7 +417,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 	end
 
 	it(
-		"a stream review: the dispatcher numbers its review.md into the raft's folder, the line names it and the issue, and round 2 is given round 1's files",
+		"a stream review: the dispatcher numbers its review.md into the raft's folder, and a second one is refused",
 		function()
 			fakecli.clear(h)
 			mode("claude.zz-review", "script")
@@ -452,13 +453,10 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			local main = fixture.physical(h.f.main) :: string
 			t.expect(has(l1, `{main}/.worktree/ws-c0010`)).toBe(true)
 			t.expect(has(l1, "previous round")).toBe(false)
-			if not r2.ok then
-				error(r2.stdout .. r2.stderr)
-			end
-			t.expect(two).toEqual({ "stream-review-c0010-001.md", "stream-review-c0010-002.md" })
-			t.expect(has(recordLines(r2.stdout)[1], '-m "c0010: stream-review-002"')).toBe(true)
-			t.expect(has(l2, "stream-review-c0010-001.md")).toBe(true)
-			t.expect(has(l2, "stream-refute-c0010-001.md")).toBe(true)
+			t.expect(r2.ok).toBe(false)
+			t.expect(has(r2.stdout .. r2.stderr, "there is no second round")).toBe(true)
+			t.expect(two).toEqual({ "stream-review-c0010-001.md" })
+			t.expect(has(l2, "previous round")).toBe(false)
 		end
 	)
 
@@ -721,8 +719,8 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(has(l, "merge=1")).toBe(true)
 		t.expect(has(l, "realgh pr merge")).toBe(false)
 		t.expect(fixture.exec(h.f.origin, "git", { "cat-file", "-e", "main:notes.txt" }).ok).toBe(false)
-		-- only the dispatcher's own spend row reached main
-		t.expect(fixture.git(h.f.origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
+		-- the agent's push was refused, and spend commits on the dispatcher's branch without pushing
+		t.expect(fixture.git(h.f.origin, { "rev-list", "--count", `{before}..main` })).toBe("0")
 	end)
 
 	it("inside a check, refuses a CLI whose real path is not under .cache, before it starts", function()

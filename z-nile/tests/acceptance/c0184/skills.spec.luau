@@ -111,7 +111,7 @@ return t.spec("c0184 a skill's extends", function(it)
 	)
 
 	it(
-		"AC6: the prompt of a raft in a project whose skill extends another carries that skill and its lessons",
+		"AC6: the prompt of a raft in a project whose skill extends another names that skill and its base",
 		function()
 			-- a third project, snake, whose skill extends a pickman skill: the fixture's registry names it (trackerfix seeds
 			-- last), and `ready` renders the raft's prompt with the real engine
@@ -134,15 +134,18 @@ return t.spec("c0184 a skill's extends", function(it)
 			local prompt = fs.readFile(`{f.main}/snake/.tracker/rafts/active/R0030/prompt.md`)
 			local order: { string } = {}
 			local from = string.find(prompt, "\n## Skills", 1, true) :: number
-			for path in string.gmatch(string.sub(prompt, from), '<file path="([^"]+)">') do
-				table.insert(order, path)
+			for path in string.gmatch(string.sub(prompt, from), "`([^`]+)`") do
+				if string.find(path, "/SKILL.md", 1, true) then
+					table.insert(order, path)
+				end
 			end
 			-- z-nile's five, then snake's own, then the base: pickman-play, once, and not pickman's other skill
 			t.expect(order[#order - 1]).toBe("snake/skills/snake-arch/SKILL.md")
 			t.expect(order[#order]).toBe("pickman/skills/pickman-play/SKILL.md")
 			t.expect(#order).toBe(7)
-			t.expect(string.find(prompt, "pickman-play/feel", 1, true) ~= nil).toBe(true) -- the base's lessons come with it
-			t.expect(string.find(prompt, "pickman-other/other", 1, true) == nil).toBe(true) -- another pickman skill's do not
+			t.expect(string.find(prompt, "PLAY-RULES", 1, true) == nil).toBe(true) -- the skill is named, not pasted
+			t.expect(string.find(prompt, "pickman-play/feel", 1, true) == nil).toBe(true) -- lessons are not listed
+			t.expect(string.find(prompt, "pickman-other", 1, true) == nil).toBe(true) -- another pickman skill is not named
 			fs.removeDir(`{HERE}/.cache/c0184-prompt`)
 		end
 	)

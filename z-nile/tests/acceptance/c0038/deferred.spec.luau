@@ -236,7 +236,14 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 		t.expect((string.find(mixed.stderr, "c0999", 1, true))).toBe(nil)
 	end)
 
-	it("finishes when medium and low findings are deferred", function()
+	it("finishes when medium and low findings are deferred and a refuted high is ruled", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+		local doc = "pickman/.tracker/rafts/active/R0010/R0010.md"
+		write(
+			doc,
+			fs.readFile(`{work}/{doc}`)
+				.. "\n## Open to the human\n- F1: a high finding. Answer: the reviewer misread the spec. Decision: accept.\n  Ruled (user, 2026-11-10): accepted.\n"
+		)
 		local r = attempt({
 			"- F1: refuted: the reviewer misread the spec (test: x)",
 			"- F2: deferred c0020: needs its own design",

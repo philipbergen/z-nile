@@ -81,14 +81,10 @@ return t.spec("c0117 docs", function(it)
 		-- design review 008 F1, F2: the dispatcher lands a dispatched review; round 2's inputs are the files in the raft
 		at(
 			zr,
-			"Under `./zn dispatch`, the reviewer writes its review to `$ZN_DISPATCH_DIR/review.md` (its own state folder), and the dispatcher numbers it into the raft's folder as `stream-review-<issue>-NNN.md`",
+			"Under `./zn dispatch`, the reviewer writes its review to `$ZN_DISPATCH_DIR/review.md` (its own state folder), and the dispatcher numbers it into the raft's folder as `stream-review-<issue>-001.md`",
 			"zz-review Stream mode"
 		)
-		at(
-			zr,
-			"Under `./zn dispatch`, from round 2 read the previous `stream-review-<issue>-NNN.md` and `stream-refute-<issue>-NNN.md` in the raft's folder of your worktree",
-			"zz-review Stream mode"
-		)
+		at(zr, "One round: do not read a previous stream review as a second pass.", "zz-review Stream mode")
 		at(
 			zr,
 			"An interactive subagent returns the review markdown and writes no file",
@@ -291,17 +287,17 @@ return t.spec("c0117 docs", function(it)
 		end
 	end)
 
-	-- the user's G9, 2026-10-25: "Keep pasting skills": the raft's prompt keeps the skills, the architecture map and the
-	-- lessons index inlined (a cheap guarantee that every rule is in the context), as before c0117
-	it("the raft's prompt template keeps pasting the skills and the architecture map", function()
+	-- the prompt names each file and pastes none of them (step 1.3)
+	it("the raft's prompt template names skills and the architecture path and pastes neither", function()
 		local p = read("z-nile/templates/prompt.md")
-		at(p, "## Skills (verbatim from z-nile/skills/", "prompt.md")
+		at(p, "## Skills", "prompt.md")
 		at(p, "{{SKILLS}}", "prompt.md")
 		at(p, "{{ARCHITECTURE}}", "prompt.md")
-		at(p, "{{LESSONS}}", "prompt.md")
-		at(p, "1. **Follow the `zz-execute` skill below, step by step.**", "prompt.md")
+		at(p, "None of their text is in this prompt.", "prompt.md")
+		at(p, "1. **Follow `z-nile/skills/zz-execute/SKILL.md` step by step.**", "prompt.md")
+		absent(p, "{{LESSONS}}", "prompt.md")
 		absent(p, "{{LESSONS_COMMAND}}", "prompt.md")
-		absent(p, "nothing is pasted here", "prompt.md")
-		at(p, "## Work items (verbatim from {{ROOT}}/)", "prompt.md")
+		absent(p, "## Skills (verbatim", "prompt.md")
+		absent(p, "## Work items (verbatim from {{ROOT}}/)", "prompt.md")
 	end)
 end)

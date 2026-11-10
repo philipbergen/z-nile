@@ -19,6 +19,7 @@ local cred = require("./credential")
 local dispatch = require("./dispatch")
 local fs = require("@lune/fs")
 local models = require("./models")
+local openlist = require("./openlist")
 local process = require("@lune/process")
 local projects = require("./projects")
 local raftcheck = require("./raftcheck")
@@ -823,25 +824,14 @@ function dispatcher.modelStep(
 		end
 		promptPath = out
 	end
-	-- a stream review's raft folder (repository-relative) and, from round 2, the previous round's files
+	-- a stream review's raft folder (repository-relative). One round: a second file is refused where the review lands.
 	local streamDir: string? = nil
-	local previous: { string }? = nil
 	if step == "zz-review" and mode == "stream" and id ~= "" then
 		local raftId = store.readFront(store.get(id).doc).raft
 		if not raftId or raftId == "" then
 			error(`{id} has no raft: a stream review lands in its raft's folder`, 0)
 		end
-		local dir = store.get(raftId).dir
-		streamDir = dir
-		local _, lastReview = lastRound(`{cwd}/{dir}`, `stream-review-{id}-`)
-		local _, lastRefute = lastRound(`{cwd}/{dir}`, `stream-refute-{id}-`)
-		if lastReview then
-			local list = { `{dir}/{lastReview}` }
-			if lastRefute then
-				table.insert(list, `{dir}/{lastRefute}`)
-			end
-			previous = list
-		end
+		streamDir = store.get(raftId).dir
 	end
 	local prompt = dispatch.prompt({
 		step = step,
@@ -852,7 +842,6 @@ function dispatcher.modelStep(
 		stateDir = stateDir,
 		promptPath = promptPath,
 		streamWorktree = if streamDir then `{ctx.mainRoot()}/.worktree/ws-{id}` else nil,
-		previous = previous,
 		description = opts["--description"] and opts["--description"][1],
 		project = project,
 	})
@@ -1121,10 +1110,29 @@ function dispatcher.modelStep(
 		local l = land :: Landing
 		if fs.isFile(landing) then
 			local last = lastRound(`{cwd}/{l.dir}`, l.prefix)
-			local name = string.format("%s%03d.md", l.prefix, last + 1)
-			fs.move(landing, `{cwd}/{l.dir}/{name}`)
-			reviewNote = string.format("%s%03d", l.note, last + 1)
-			print(`dispatch: the review is {l.dir}/{name}`)
+			if last >= 1 then
+				-- one round. Historical files stay where they are; a new one is not added.
+				outcome = "failed"
+				pcall(fs.removeFile, landing)
+				local why: Attempt = {
+					step = step :: string,
+					cli = "",
+					runtime = "",
+					model = "",
+					outcome = "failed",
+					detail = `{l.dir} already has {l.prefix}{string.format("%03d", last)}.md: one round, then the author answers it; there is no second round`,
+					tokens = 0,
+					minutes = 0,
+				}
+				table.insert(attempts, why)
+				table.insert(st.history, why)
+				stdio.ewrite(`dispatch: {why.detail}\n`)
+			else
+				local name = string.format("%s%03d.md", l.prefix, last + 1)
+				fs.move(landing, `{cwd}/{l.dir}/{name}`)
+				reviewNote = string.format("%s%03d", l.note, last + 1)
+				print(`dispatch: the review is {l.dir}/{name}`)
+			end
 		else
 			outcome = "failed"
 			local why: Attempt = {
@@ -1651,6 +1659,10 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 			end
 		end
 	end
+	local openHuman: { string } = {}
+	if st.worktree and o and fs.isFile(`{st.worktree}/{o.path}`) then
+		openHuman = openlist.pending(fs.readFile(`{st.worktree}/{o.path}`))
+	end
 	local pr: dispatch.Pr? = nil
 	if o then
 		local branch: string? = nil
@@ -1694,6 +1706,7 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 		localRaft = localRaft,
 		pr = pr,
 		questions = fs.isFile(`{st.dir}/questions.md`),
+		openHuman = openHuman,
 		last = last,
 		uncovered = uncovered,
 		autoMerge = settings.autoMerge,

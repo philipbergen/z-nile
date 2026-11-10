@@ -13,6 +13,7 @@ local gateLib = require("./gate")
 local idsLib = require("./ids")
 local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
+local openlist = require("./openlist")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
@@ -1428,6 +1429,36 @@ end
 
 -- Publishes `to` for `id` (and, for a raft, its members) on origin/main and brings it into this checkout. Shared by
 -- `status` and by `stop`'s give-back of a legacy-started raft.
+-- The latest `<prefix>-NNN.md` in a folder (design-review or review), or 0 when there is none.
+local function latestRound(dir: string, prefix: string): number
+	local best = 0
+	if not fs.isDir(dir) then
+		return 0
+	end
+	for _, name in fs.readDir(dir) do
+		local pattern = "^" .. prefix .. "%-(%d+)%.md$"
+		local found = string.match(name, pattern)
+		local n = if typeof(found) == "string" then tonumber(found) else nil
+		if n and n > best then
+			best = n
+		end
+	end
+	return best
+end
+
+-- What the one design review still leaves for the human, or nil when there is no review or the list is ruled.
+local function designOpen(item: store.Item): string?
+	local n = latestRound(item.dir, "design-review")
+	if n == 0 then
+		return nil
+	end
+	local num = string.format("%03d", n)
+	local review = fs.readFile(`{item.dir}/design-review-{num}.md`)
+	local refutePath = `{item.dir}/design-refute-{num}.md`
+	local refute = if fs.isFile(refutePath) then fs.readFile(refutePath) else ""
+	return openlist.problem(review, refute, fs.readFile(item.doc))
+end
+
 local function setStatus(id: string, to: string)
 	local moved: { { id: string, from: string } } = {}
 	local carried = false
@@ -1521,10 +1552,15 @@ local function setStatus(id: string, to: string)
 				return `{t} is {cur} on origin/main: claim it first with ./zn status {t} preparing`
 			end
 			if carried then
-				-- the move to `prepared` ties the two fields together: designs are ready first
+				-- the move to `prepared` ties the two fields together: designs are ready first, and the one
+				-- review's open list is empty or ruled (a refutation or an unclosed high waits for the human)
 				local localItem = store.get(t)
 				if store.readFront(localItem.doc).design ~= "ready" then
 					return `{t} is not design: ready: set it (z-design) before status {id} prepared`
+				end
+				local gap = designOpen(localItem)
+				if gap then
+					return `{t}: {gap}`
 				end
 			end
 			if
@@ -4142,6 +4178,11 @@ local function reviewProblem(raft: store.Item): string?
 	if #invalid > 0 then
 		return `refute-{num}.md: {table.concat(invalid, "; ")}`
 	end
+	-- one round: a refuted finding, an unclosed high, or a failed Judged criterion waits for the human
+	local gap = openlist.problem(review, refute, fs.readFile(raft.doc))
+	if gap then
+		return `review-{num}.md {gap}`
+	end
 	return nil
 end
 
@@ -4270,24 +4311,6 @@ local function parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
 		end
 	end
 	return out
-end
-
--- The prompt's Lessons section: the index of the build and both lessons (c0111).
--- Only the lessons of z-nile's skills, of the raft's own project's and of the skills those extend (c0115, c0184): another
--- project's are left out.
-local function buildLessons(project: string?): string
-	local tree = lessonsLib.load(".")
-	local sources = lessonsLib.sources(tree.items)
-	local mine = {}
-	local bases = skillsLib.bases((skillsLib.plan((skillsLib.load(".")))), project)
-	for _, l in parsedLessons(tree) do
-		local owner = tree.owners and tree.owners[l.skill]
-		if not owner or owner == skillsLib.ZNILE or owner == project or bases[l.skill] then
-			table.insert(mine, l)
-		end
-	end
-	local text = lessonsLib.index(lessonsLib.select(mine, sources, { when = "build" }), sources)
-	return (string.gsub(text, "\n$", ""))
 end
 
 local LESSONS_USAGE = "usage: ./zn lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]\n"
@@ -4479,12 +4502,11 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 	end
 end
 
--- The raft's project's architecture map (c0120): `<root>/architecture.md`, pickman's in pickman/.tracker/; a project
--- without one (z-nile) gets a line saying so.
+-- The raft's project's architecture map (c0120): the path, not the text. A project without one (z-nile) gets a line saying so.
 local function architectureOf(raft: store.Item): string
 	local path = `{raft.root}/architecture.md`
 	return if fs.isFile(path)
-		then fs.readFile(path)
+		then `Read \`{path}\` before you change a dependency.`
 		else `({raft.root} has no architecture.md: this project has none)`
 end
 
@@ -4498,52 +4520,86 @@ local function projectOfRoot(root: string): string?
 	return p and p.name
 end
 
--- The SKILL.md files a raft's prompt inlines (c0115, c0184): skills.inlined over the skills found.
-local function inlinedSkills(project: string?): { string }
+-- The SKILL.md files a raft's prompt names (c0115, c0184): skills.inlined over the skills found. The prompt
+-- gives the path and when to read it; it pastes none of the text.
+local function namedSkills(project: string?): { string }
 	return skillsLib.inlined((skillsLib.plan((skillsLib.load(".")))), project)
 end
 
--- The execution prompt of a raft: the template with the documents, check.sh files, sequestered specs, skills,
--- architecture map and workstream plan filled in.
-local function renderPrompt(raft: store.Item): string
-	local function section(path: string): string
-		return `\n<file path="{path}">\n{fs.readFile(path)}\n</file>\n`
-	end
-	local items = section(raft.doc) .. section(`{raft.dir}/check.sh`)
-	local ids = {}
-	for _, m in store.members(raft.id) do
-		table.insert(ids, m.id)
-		items ..= section(m.doc) .. section(`{m.dir}/check.sh`)
-		-- the sequestered acceptance specs are the executor's contract; inline them verbatim
-		local acc = `{m.dir}/acceptance`
-		if fs.isDir(acc) then
-			local names = fs.readDir(acc)
-			table.sort(names)
-			for _, name in names do
-				items ..= section(`{acc}/{name}`)
-			end
+local SKILL_WHEN: { [string]: string } = {
+	["zz-execute"] = "Read it first and follow it step by step. It is the protocol.",
+	["zz-rules"] = "Read it before creating, moving, committing or finishing tracked work.",
+	["zz-arch"] = "Read it before designing or writing tooling code.",
+	["zz-test"] = "Read it before writing a spec or running the gate.",
+	["zz-review"] = "Read it before the adversarial review, and give it to the reviewer.",
+}
+
+local function skillLine(path: string): string
+	local name = string.match(path, "([^/]+)/SKILL%.md$") or path
+	local when = SKILL_WHEN[name]
+	if not when then
+		if string.match(name, "%-arch$") then
+			when = "Read it before designing or writing that project's code."
+		elseif string.match(name, "%-test$") then
+			when = "Read it before writing that project's specs."
+		else
+			when = "Read it before the work it governs."
 		end
 	end
-	-- z-nile's step skills, then every skill of the raft's own project, each from its real folder (c0115)
+	return `- \`{path}\` — {when}`
+end
+
+-- One `## ` section of a raft document, without the heading. Missing sections are named, not invented.
+local function raftSection(text: string, heading: string): string
+	local hay = "\n" .. text
+	local mark = "\n## " .. heading
+	local s = string.find(hay, mark, 1, true)
+	if not s then
+		return `(no ## {heading} section)`
+	end
+	local body = s + #mark
+	local nxt = string.find(hay, "\n## ", body, true)
+	local chunk = if nxt then string.sub(hay, body, nxt - 1) else string.sub(hay, body)
+	return (string.gsub(chunk, "^%s*(.-)%s*$", "%1"))
+end
+
+-- The execution prompt of a raft: theme, order and interfaces inline; every other file named by path.
+local function renderPrompt(raft: store.Item): string
+	local ids = {}
+	local issues = {}
+	for _, m in store.members(raft.id) do
+		table.insert(ids, m.id)
+		local issueTitle = store.readFront(m.doc).title or m.id
+		local acc = `{m.dir}/acceptance`
+		local accNote = if fs.isDir(acc) then `, acceptance \`{acc}/\`` else ""
+		table.insert(
+			issues,
+			`- {m.id} {issueTitle}: document \`{m.doc}\`, checks \`{m.dir}/check.sh\`{accNote}`
+		)
+	end
 	local project = projectOfRoot(raft.root)
-	local skills = ""
-	for _, path in inlinedSkills(project) do
-		skills ..= section(path)
+	local skills = {}
+	for _, path in namedSkills(project) do
+		table.insert(skills, skillLine(path))
 	end
 	local plan, _, planError = workstreamPlan(raft)
 	local planText = if planError then `plan unavailable: {planError}\nparallel: no` else plan
+	local raftDoc = fs.readFile(raft.doc)
 	local text = render(`{TEMPLATES}/prompt.md`, {
 		RAFT_ID = raft.id,
 		RAFT_TITLE = store.readFront(raft.doc).title or raft.slug,
 		RAFT_TYPE = store.typeOf(raft),
 		ISSUE_IDS = table.concat(ids, ", "),
-		ITEMS = items,
-		SKILLS = skills,
+		ISSUES = table.concat(issues, "\n"),
+		SKILLS = table.concat(skills, "\n"),
 		ARCHITECTURE = architectureOf(raft),
 		ARCHITECTURE_PATH = `{raft.root}/architecture.md`,
-		ROOT = raft.root,
+		RAFT_DOC = raft.doc,
+		RAFT_CHECK = `{raft.dir}/check.sh`,
+		THEME = raftSection(raftDoc, "Theme"),
+		ORDER = raftSection(raftDoc, "Order & dependencies"),
+		INTERFACES = raftSection(raftDoc, "Whole-raft design"),
 		WORKSTREAMS = planText,
-		LESSONS = buildLessons(project),
 		PROJECT = project or raft.root,
 	})
 	for _, m in store.members(raft.id) do
@@ -4709,6 +4765,10 @@ function cmd.ready(pos: { string })
 		for _, it in everyone do
 			if store.readFront(it.doc).design ~= "ready" then
 				fail(`{it.id} is not design: ready (run z-design first)`)
+			end
+			local gap = designOpen(it)
+			if gap then
+				fail(`{it.id}: {gap}`)
 			end
 			local check = `{it.dir}/check.sh`
 			if not fs.isFile(check) or not hasCheckLine(fs.readFile(check)) then
