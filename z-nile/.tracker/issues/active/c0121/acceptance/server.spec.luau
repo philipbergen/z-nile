@@ -44,8 +44,26 @@ local function item(path: string, front: { string })
 end
 
 local GH_JSON = [[
-[{"number":7,"headRefName":"R0020-alpha","state":"OPEN","isDraft":true,"url":"https://example.invalid/pr/7",
-  "statusCheckRollup":[{"conclusion":"SUCCESS"}]}]
+[{"number":7,"headRefName":"R0020-alpha","title":"R0020: Running","state":"OPEN","isDraft":true,"url":"https://example.invalid/pr/7",
+  "statusCheckRollup":[{"conclusion":"SUCCESS"}]},
+ {"number":12,"headRefName":"prep-runs","title":"tracker: prep f0021 Runs","state":"OPEN","isDraft":false,
+  "url":"https://example.invalid/pr/12","statusCheckRollup":[{"conclusion":"FAILURE"}]},
+ {"number":15,"headRefName":"prep-runs-again","title":"tracker: prep f0021 Runs again","state":"OPEN","isDraft":false,
+  "url":"https://example.invalid/pr/15","statusCheckRollup":[{"conclusion":"SUCCESS"}]},
+ {"number":11,"headRefName":"prep-reviewed","title":"tracker: prep f0022 Reviewed","state":"MERGED","isDraft":false,
+  "url":"https://example.invalid/pr/11","statusCheckRollup":[{"conclusion":"SUCCESS"}]},
+ {"number":17,"headRefName":"prep-other","title":"tracker: prep f00210 Other","state":"OPEN","isDraft":false,
+  "url":"https://example.invalid/pr/17","statusCheckRollup":[]},
+ {"number":14,"headRefName":"prep-idle","title":"tracker: prep f0025 Idle member","state":"OPEN","isDraft":true,
+  "url":"https://example.invalid/pr/14","statusCheckRollup":[]},
+ {"number":16,"headRefName":"capture-loose","title":"tracker: new c0099 Loose, held until f0021 and f0022 land","state":"OPEN",
+  "isDraft":false,"url":"https://example.invalid/pr/16","statusCheckRollup":[]},
+ {"number":18,"headRefName":"R0020-reviewed","title":"tracker: raft R0020 f0022 Reviewed","state":"OPEN","isDraft":false,
+  "url":"https://example.invalid/pr/18","statusCheckRollup":[]},
+ {"number":19,"headRefName":"prep-idle-try","title":"tracker: prep f0025 an earlier try","state":"CLOSED","isDraft":false,
+  "url":"https://example.invalid/pr/19","statusCheckRollup":[]},
+ {"number":20,"headRefName":"prep-weird","title":"tracker: prep xf0021 Weird","state":"OPEN","isDraft":false,
+  "url":"https://example.invalid/pr/20","statusCheckRollup":[]}]
 ]]
 
 -- the stubs and what they saw
@@ -54,6 +72,9 @@ local runs: { { string } } = {}
 local opened: { string } = {}
 local ghCalls = 0
 local ghFails = false
+local ghBody = GH_JSON -- what gh prints; a case swaps it
+local lateWorktree = false -- a worktree that appears after the server started
+local hashDelay = 0 -- engineHash yields when set, as process.exec does
 local ghDelay = 2 -- gh yields, as process.exec does (long enough that a loaded machine still sees it in flight)
 local builds = 0
 local key = "k1"
@@ -91,7 +112,7 @@ local function start()
 				if ghFails then
 					return nil, "gh: not logged in"
 				end
-				return GH_JSON, nil
+				return ghBody, nil
 			end,
 			now = function(): number
 				return clock
@@ -100,8 +121,16 @@ local function start()
 				return {
 					asOf = nil,
 					refs = { { name = "origin/R0020-alpha", at = clock } },
-					worktrees = { { path = `{ROOT}/wt/R0020`, branch = "R0020-alpha" } },
-					-- c0117's run state: R0020's chain runs, and f0021's moved on to it; c0099 has none
+					worktrees = {
+						{ path = `{ROOT}/wt/R0020`, branch = "R0020-alpha" },
+						{ path = `{ROOT}/wt/idle`, branch = "prep-idle" },
+						table.unpack(
+							if lateWorktree
+								then { { path = `{ROOT}/wt/loose`, branch = "capture-loose" } }
+								else {}
+						),
+					},
+					-- c0117's run state: R0020's chain runs, and f0021's moved on to it; R0030 failed; c0099 has none
 					dispatch = {
 						R0020 = { step = "z-run", outcome = "running", model = "m", questions = false },
 						f0021 = {
@@ -118,6 +147,8 @@ local function start()
 							questions = false,
 							follows = "R0020",
 						},
+						-- a raft whose run stopped on a held lock: it has a state, so a retry reaches the dispatcher
+						R0030 = { step = "z-run", outcome = "failed", model = "m", questions = false },
 					},
 				}
 			end,
@@ -129,6 +160,9 @@ local function start()
 				return key
 			end,
 			engineHash = function(): string?
+				if hashDelay > 0 then
+					task.wait(hashDelay)
+				end
 				return hash
 			end,
 		})
@@ -202,6 +236,11 @@ return t.spec("c0121 board server", function(it)
 			{ "type: feature", "title: Reviewed", "raft: R0020", "status: active-a-b-c" }
 		)
 		item("z-nile/.tracker/issues/c0099", { "type: chore", "title: Loose", "raft:" })
+		item("z-nile/.tracker/issues/c0098", { "type: chore", "title: Loose without a PR", "raft:" })
+		item(
+			"z-nile/.tracker/issues/active/f0025",
+			{ "type: feature", "title: Idle member", "raft: R0020", "status: active-a-b-c" }
+		)
 		write(
 			"wt/R0020/z-nile/.tracker/issues/active/f0021/spend.md",
 			"# Spend: f0021 x\n\n| # | when | commit | +lines | -lines | minutes | attribution | phase | tokens | model |\n"
@@ -292,6 +331,22 @@ return t.spec("c0121 board server", function(it)
 	end)
 
 	it(
+		"retry on a card that never ran answers 409 and runs nothing (it would start the item's whole chain)",
+		function()
+			local before = #runs
+			local r = action('{"action":"retry","id":"c0099"}')
+			t.expect(r.statusCode).toBe(409)
+			t.expect(string.find(r.body, "nothing to retry for c0099", 1, true) ~= nil).toBe(true)
+			t.expect(#runs).toBe(before)
+			-- a member of a raft that runs, with no state of its own: its raft's state does not make it retryable
+			local member = action('{"action":"retry","id":"f0025"}')
+			t.expect(member.statusCode).toBe(409)
+			t.expect(string.find(member.body, "nothing to retry for f0025", 1, true) ~= nil).toBe(true)
+			t.expect(#runs).toBe(before)
+		end
+	)
+
+	it(
 		"stop on a member stops its raft's run, and stop on a card with nothing running answers 409 and runs nothing",
 		function()
 			local before = #runs
@@ -301,6 +356,10 @@ return t.spec("c0121 board server", function(it)
 			local own = action('{"action":"stop","id":"f0022"}') -- its own step runs: its own id, not the raft's
 			t.expect(own.statusCode).toBe(200)
 			t.expect(runs[#runs]).toEqual({ "dispatch", "stop", "f0022" })
+			local before2 = #runs
+			local member = action('{"action":"stop","id":"f0025"}') -- no state of its own: nothing to stop, though its raft runs
+			t.expect(member.statusCode).toBe(409)
+			t.expect(#runs).toBe(before2)
 			local idle = action('{"action":"stop","id":"c0099"}')
 			t.expect(idle.statusCode).toBe(409)
 			t.expect(string.find(idle.body, "nothing is running for c0099", 1, true) ~= nil).toBe(true)
@@ -319,16 +378,100 @@ return t.spec("c0121 board server", function(it)
 		t.expect(s2.model.live.checks).toBe("ok")
 		t.expect(s1.model.live.token).toBe(TOKEN)
 		t.expect(type(s2.statsHtml)).toBe("string")
+		t.expect(string.find(s2.statsHtml, "history unavailable", 1, true) ~= nil).toBe(true) -- the real Stats, not a stand-in
 		clock += 31
 		state()
 		t.expect(ghCalls).toBe(2)
 	end)
 
+	it(
+		"an issue's own PR is the newest open or draft one whose title starts with its id, with its checks and its branch's worktree",
+		function()
+			state()
+			task.wait(0.1)
+			local s = state()
+			local issues = byId(s.model.issues)
+			-- two open prep PRs: the newest; checks are that PR's, not the older one's
+			t.expect(issues.f0021.pr)
+				.toEqual({ number = 15, url = "https://example.invalid/pr/15", state = "open" })
+			t.expect(issues.f0021.checks.state).toBe("passing")
+			t.expect(issues.f0022.pr).toBe(nil) -- its prep PR (11) is merged: the raft's stays the card's PR
+			-- a draft counts, and the worktree of its branch is the card's
+			t.expect(issues.f0025.pr)
+				.toEqual({ number = 14, url = "https://example.invalid/pr/14", state = "draft" })
+			t.expect(issues.f0025.worktree).toBe(`{ROOT}/wt/idle`)
+			-- the id named later in a title is not the PR's own: c0099's capture PR names f0021 and f0022 after its own id
+			t.expect(issues.c0099.pr.number).toBe(16)
+			t.expect(issues.f0021.pr.number).toBe(15)
+			t.expect(issues.f0022.pr).toBe(nil) -- a rafting PR (#18) names its raft first, then f0022: no card takes it
+			-- a closed PR (#19) never counts, and an id inside a longer word (#20, `xf0021`) is not f0021's
+			t.expect(issues.f0025.pr.number).toBe(14)
+			t.expect(issues.f0021.pr.number).toBe(15)
+			t.expect(issues.c0099.worktree).toBe(nil) -- its branch has no worktree yet
+			t.expect(byId(s.model.rafts).R0020.pr.number).toBe(7)
+		end
+	)
+
+	it("a worktree that appears after the server started is on its issue's card at the next build", function()
+		state()
+		task.wait(0.1)
+		t.expect(byId(state().model.issues).c0099.worktree).toBe(nil)
+		lateWorktree = true
+		key ..= "w"
+		clock += 1
+		local ok, err = pcall(function()
+			t.expect(byId(state().model.issues).c0099.worktree).toBe(`{ROOT}/wt/loose`)
+		end)
+		lateWorktree = false
+		if not ok then
+			error(err, 0)
+		end
+	end)
+
+	it("an issue's PR survives a rebuild, goes when gh fails and comes back with its answer", function()
+		local savedDelay = ghDelay
+		ghDelay = 0.02
+		local function settled()
+			key ..= "z"
+			clock += 1
+			state()
+			task.wait(0.1)
+		end
+		local ok, err = pcall(function()
+			settled()
+			t.expect(byId(state().model.issues).f0025.pr.number).toBe(14)
+			settled() -- a rebuild with the same gh data
+			t.expect(byId(state().model.issues).f0025.pr.number).toBe(14)
+			ghFails = true
+			clock += 31
+			state()
+			task.wait(0.2)
+			local failed = byId(state().model.issues).f0025
+			t.expect(failed.pr).toBe(nil)
+			t.expect(failed.worktree).toBe(nil)
+			ghFails = false
+			settled()
+			clock += 31
+			state()
+			task.wait(0.2)
+			t.expect(byId(state().model.issues).f0025.pr.number).toBe(14)
+		end)
+		ghFails, ghDelay = false, savedDelay
+		if not ok then
+			error(err, 0)
+		end
+	end)
+
 	it("open opens the card's PR, and refuses an item with nothing to open", function()
+		state()
+		task.wait(0.1)
+		state() -- the PR lists are laid on
 		t.expect(action('{"action":"open","id":"f0021"}').statusCode).toBe(200)
-		t.expect(opened).toEqual({ "https://example.invalid/pr/7" })
-		t.expect(action('{"action":"open","id":"c0099"}').statusCode).toBe(400)
-		t.expect(#opened).toBe(1)
+		t.expect(opened).toEqual({ "https://example.invalid/pr/15" }) -- its own newest open PR before its raft's
+		t.expect(action('{"action":"open","id":"f0022"}').statusCode).toBe(200)
+		t.expect(opened[2]).toBe("https://example.invalid/pr/7") -- a merged prep PR never hides the raft's
+		t.expect(action('{"action":"open","id":"c0098"}').statusCode).toBe(400)
+		t.expect(#opened).toBe(2)
 	end)
 
 	it("reads a launched raft's member spend from its worktree", function()
@@ -349,6 +492,156 @@ return t.spec("c0121 board server", function(it)
 		state()
 		t.expect(builds).toBe(before + 2)
 	end)
+
+	it("encodes the model once per build of it and per answer of gh, not per poll (the CPU limit)", function()
+		state()
+		task.wait(0.1)
+		state() -- warm: the build and gh's answer have both moved the generation
+		local board: any = require("@znile/engine/board")
+		local real = board.encode
+		local models = 0
+		local inside = false -- encode calls itself for nested values: count the outermost call only
+		board.encode = function(v: any): string
+			local top = not inside and type(v) == "table" and v.rafts ~= nil and v.issues ~= nil
+			if top then
+				models += 1
+				inside = true
+			end
+			local out = real(v)
+			if top then
+				inside = false
+			end
+			return out
+		end
+		local ok, err = pcall(function()
+			local a, b, c = state(), state(), state()
+			-- every poll still carries the current live block and Stats, and the same model
+			for _, s in { a, b, c } do
+				t.expect(s.model.live.token).toBe(TOKEN)
+				t.expect(type(s.statsHtml)).toBe("string")
+				t.expect(#s.model.rafts).toBe(#a.model.rafts)
+			end
+			t.expect(b.model.rafts).toEqual(a.model.rafts)
+			t.expect(b.statsHtml).toBe(a.statsHtml) -- kept with the model between builds
+			-- a new issue changes what the Stats count at the next build
+			write(
+				"z-nile/.tracker/issues/c0097/c0097.md",
+				"---\nid: c0097\ntype: chore\ntitle: New\nraft:\ncreated: 2026-11-02\nstatus: new\n---\n\n# c0097\n"
+			)
+			key = "k-encode"
+			local d = state() -- a build of the model: encoded again, with its Stats
+			t.expect(d.statsHtml ~= a.statsHtml).toBe(true)
+		end)
+		board.encode = real
+		if not ok then
+			error(err, 0)
+		end
+		t.expect(models).toBe(1)
+	end)
+
+	it(
+		"a gh answer that lands while a request waits on the engine hash is served by the next poll (no stale PRs)",
+		function()
+			-- the request lays the old PRs on the model, then yields on engineHash; gh answers in that window with a new PR
+			-- number; the next poll must show it (a generation read after the yield would label the old JSON as the new one)
+			local shown = byId(state().model.rafts).R0020.pr.number
+			t.expect(shown).toBe(7)
+			ghBody = (string.gsub(GH_JSON, '"number":7', '"number":9'))
+			clock += 31
+			local savedDelay = ghDelay
+			ghDelay = 0.02
+			hashDelay = 0.3
+			local ok, err = pcall(function()
+				local a = state() -- gh is asked, answers during this request's wait: the body is the old PRs
+				local b = state() -- the next poll shows the new answer
+				t.expect(byId(a.model.rafts).R0020.pr.number == 7 or byId(a.model.rafts).R0020.pr.number == 9)
+					.toBe(true)
+				t.expect(byId(b.model.rafts).R0020.pr.number).toBe(9)
+			end)
+			ghBody, ghDelay, hashDelay = GH_JSON, savedDelay, 0
+			if not ok then
+				error(err, 0)
+			end
+		end
+	)
+
+	it("a gh answer that repeats the last one costs no new encoding", function()
+		local savedDelay = ghDelay
+		ghDelay = 0.02
+		clock += 31
+		state() -- gh is asked (its output may differ from the case before's)
+		task.wait(0.2)
+		state() -- settled on this answer
+		local board: any = require("@znile/engine/board")
+		local real = board.encode
+		local models = 0
+		local inside = false
+		board.encode = function(v: any): string
+			local top = not inside and type(v) == "table" and v.rafts ~= nil and v.issues ~= nil
+			if top then
+				models += 1
+				inside = true
+			end
+			local out = real(v)
+			if top then
+				inside = false
+			end
+			return out
+		end
+		local calls = ghCalls
+		local ok, err = pcall(function()
+			clock += 31
+			state() -- gh is asked again
+			task.wait(0.2)
+			state() -- and answers with the same PRs
+			t.expect(ghCalls).toBe(calls + 1)
+		end)
+		board.encode, ghDelay = real, savedDelay
+		if not ok then
+			error(err, 0)
+		end
+		t.expect(models).toBe(0)
+	end)
+
+	it(
+		"gh failing, then answering again, is shown by the next poll without a rebuild of the model",
+		function()
+			local savedDelay = ghDelay
+			ghDelay = 0.02
+			local function settled()
+				key ..= "x" -- a build at this clock: no periodic rebuild can be what the next polls show
+				clock += 1
+				state()
+				task.wait(0.1)
+			end
+			local ok, err = pcall(function()
+				settled()
+				local b0 = builds
+				ghFails = true
+				clock += 31
+				state() -- gh is asked and fails
+				task.wait(0.2)
+				local failed = state()
+				t.expect(builds).toBe(b0)
+				t.expect(failed.model.live.checks).toBe("unavailable")
+				t.expect(byId(failed.model.rafts).R0020.pr).toBe(nil)
+				ghFails = false
+				settled() -- a build at this clock again: 62 s of fake time would let the periodic rebuild show the answer
+				local b1 = builds
+				clock += 31
+				state() -- gh is asked again and answers
+				task.wait(0.2)
+				local back = state()
+				t.expect(builds).toBe(b1)
+				t.expect(back.model.live.checks).toBe("ok")
+				t.expect(byId(back.model.rafts).R0020.pr ~= nil).toBe(true)
+			end)
+			ghFails, ghDelay = false, savedDelay
+			if not ok then
+				error(err, 0)
+			end
+		end
+	)
 
 	it("a failing gh still gives 200, with checks unavailable", function()
 		ghFails = true

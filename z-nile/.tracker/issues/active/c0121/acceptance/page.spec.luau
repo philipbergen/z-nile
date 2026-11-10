@@ -18,12 +18,48 @@ local function write(path: string, text: string)
 	fs.writeDir(string.match(full, "^(.*)/[^/]+$") :: string)
 	fs.writeFile(full, text)
 end
-local function item(path: string, front: { string })
+local function item(path: string, front: { string }, body: string?)
 	local id = string.match(path, "([^/]+)$") :: string
 	write(
 		`{path}/{id}.md`,
-		"---\nid: " .. id .. "\n" .. table.concat(front, "\n") .. "\n---\n\n# " .. id .. "\n"
+		"---\nid: " .. id .. "\n" .. table.concat(front, "\n") .. "\n---\n\n# " .. id .. "\n" .. (body or "")
 	)
+end
+-- links in an item's document (code review 001 F3 of R0084, design review 011 F1): script, data, case, vbscript and file
+-- schemes, entity-encoded schemes (`jav&#x61;script:`, `&#106;avascript:`, `javascript&colon;`, `java&#9;script:`), an
+-- angle-bracket destination holding a tab, a reference-style link with an entity, then the safe ones: web (with `&` in its
+-- query), relative, mail and an anchor
+local LINKS = "\n[script](javascript:alert(1)) [data](data:text/html,x) [upper](JaVaScRiPt:alert(1)) [vb](vbscript:x) "
+	.. "[file](file:///etc/passwd) [ent](jav&#x61;script:alert(1)) [ent2](&#106;avascript:alert(1)) "
+	.. "[colon](javascript&colon;alert(1)) [ent3](java&#9;script:alert(1)) [angle](<java\tscript:alert(2)>) [ref][r] "
+	.. "[web](https://example.invalid/x?a=1&b=2) [rel](docs/x.md) [mail](mailto:a@example.invalid) [anchor](#id) "
+	.. '[titled](https://ok.example "x\\" onmouseover=\\"alert(1)")\n\n'
+	.. '[q](https://a.example/"onmouseover="alert(1)) \n\n[r]: jav&#x61;script:alert(3)\n'
+
+-- the same dangerous schemes behind each character a browser trims from the start of a URL (spaces and C0 controls), in an
+-- angle-bracket destination (design review 014 F1)
+local GENERATED = ""
+for _, scheme in { "javascript", "data", "vbscript" } do
+	for i, prefix in { " ", "\1", "\31", "\t" } do
+		GENERATED ..= `[g{scheme}{i}](<{prefix}{scheme}:x>) `
+	end
+end
+LINKS ..= GENERATED .. "\n"
+
+-- what a browser makes of an href attribute's text: entities decoded, then the characters it ignores inside a scheme removed
+local NAMED =
+	{ amp = "&", lt = "<", gt = ">", quot = '"', apos = "'", colon = ":", Tab = "\t", NewLine = "\n" }
+local function decoded(attr: string): string
+	local out = string.gsub(attr, "&#[xX](%x+);", function(h)
+		return utf8.char(tonumber(h, 16) :: number)
+	end)
+	out = string.gsub(out, "&#(%d+);", function(d)
+		return utf8.char(tonumber(d) :: number)
+	end)
+	out = string.gsub(out, "&(%a+);", function(name)
+		return NAMED[name]
+	end)
+	return (string.gsub(out, "[%c ]", ""))
 end
 
 -- The fake DOM and the stubs. Never literal require text: the repo scanner would read it.
@@ -55,6 +91,8 @@ function fetchStub(u, opts) {
   fetches.push({ url: u, method: (opts && opts.method) || "GET", headers: (opts && opts.headers) || {}, body: (opts && opts.body) || null });
   if (failNext) return Promise.reject(new Error("down"));
   if (u === "/api/state") return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ model: next, statsHtml: "<p>s</p>" }) });
+  if (opts && opts.body && JSON.parse(opts.body).action === "retry")
+    return Promise.resolve({ ok: false, status: 409, text: () => Promise.resolve("refused: nothing to retry for f0021: it has never run") });
   return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('{"ok":true,"output":"stopped"}') });
 }
 const sandbox = { document: { getElementById: i => els[i] || null, querySelector: () => null, addEventListener: doc.addEventListener },
@@ -73,6 +111,9 @@ const tick = () => new Promise(r => setTimeout(r, 0));
   els.pane.dispatch("click", { target: target("button.act", { "data-act": "stop", "data-id": "f0021" }), preventDefault() {} });
   await tick(); await tick(); await tick();
   out.paneAfter = els.pane.innerHTML;
+  els.pane.dispatch("click", { target: target("button.act", { "data-act": "retry", "data-id": "f0021" }), preventDefault() {} });
+  await tick(); await tick(); await tick();
+  out.paneAfterRetry = els.pane.innerHTML;
   if (intervals.length) {
     intervals[0].fn();
     await tick(); await tick(); await tick();
@@ -120,7 +161,8 @@ return t.spec("c0121 served page", function(it)
 		)
 		item(
 			"z-nile/.tracker/issues/active/f0021",
-			{ "type: feature", "title: Runs", "raft: R0020", "status: active-a-b-c" }
+			{ "type: feature", "title: Runs", "raft: R0020", "status: active-a-b-c" },
+			LINKS
 		)
 		local facts: any = {
 			asOf = 1792800000,
@@ -131,6 +173,23 @@ return t.spec("c0121 served page", function(it)
 		local function liveModel(checks: string, stale: boolean): any
 			local m: any = board.collect(nil, DIR, facts)
 			m.live = { token = "t0k", poll = 5, checks = checks, checksAge = 3, stale = stale }
+			if checks == "ok" then
+				-- the raft has a PR, and the issue its own open prep PR, which the card shows first (G11)
+				for _, r in m.rafts do
+					if r.id == "R0020" then
+						r.pr = { number = 7, url = "https://example.invalid/pr/7", state = "draft" }
+						r.checks = { state = "passing" }
+						r.worktree = "/w/R0020"
+					end
+				end
+				for _, i in m.issues do
+					if i.id == "f0021" then
+						i.pr = { number = 12, url = "https://example.invalid/pr/12", state = "open" }
+						i.checks = { state = "failing" }
+						i.worktree = "/w/prep-runs"
+					end
+				end
+			end
 			return m
 		end
 		-- the spec runs from its project's home: the vendored file is read from the checkout's top (c0120)
@@ -177,6 +236,63 @@ return t.spec("c0121 served page", function(it)
 		function()
 			t.expect(has(shown.liveAfterPoll, "server is out of date: restart")).toBe(true)
 			t.expect(has(shown.liveAfterFail, "the server did not answer")).toBe(true)
+		end
+	)
+
+	it(
+		"a document's link keeps only a safe scheme: every other scheme, entity-encoded or not, renders as text",
+		function()
+			local pane = shown.pane
+			local hrefs = {}
+			for attr in string.gmatch(pane, 'href="([^"]*)"') do
+				table.insert(hrefs, attr)
+				local real = decoded(attr) -- what the browser would navigate to
+				local scheme = string.match(real, "^(%a[%w%+%.%-]*):")
+				if scheme ~= nil then
+					local low = string.lower(scheme)
+					t.expect(low == "http" or low == "https" or low == "mailto").toBe(true)
+				end
+			end
+			for _, word in
+				{ "script", "data", "upper", "vb", "file", "ent", "ent2", "colon", "ent3", "angle", "ref" }
+			do
+				t.expect(has(pane, word)).toBe(true) -- the link text stays
+			end
+			-- the safe ones keep their href, escaped exactly once
+			local joined = "\n" .. table.concat(hrefs, "\n") .. "\n"
+			t.expect(has(joined, "\nhttps://example.invalid/x?a=1&amp;b=2\n")).toBe(true)
+			t.expect(has(joined, "\ndocs/x.md\n")).toBe(true)
+			t.expect(has(joined, "\nmailto:a@example.invalid\n")).toBe(true)
+			t.expect(has(joined, "\n#id\n")).toBe(true)
+			t.expect(has(joined, "\nhttps://a.example/&quot;onmouseover=&quot;alert(1)\n")).toBe(true) -- a quote in an href is escaped
+			-- a quote in a link title must not open an attribute: no anchor carries an event handler (design review 012 F1)
+			for tag in string.gmatch(pane, "<a ([^>]*)>") do
+				local rest = string.gsub(tag, '%s*[%w%-]+="[^"]*"', function(attr)
+					local name = string.match(attr, "^%s*([%w%-]+)=")
+					if string.sub(name :: string, 1, 2) == "on" then
+						error(`an anchor carries the attribute {name}`)
+					end
+					return ""
+				end)
+				t.expect(string.find(rest, "%S") == nil).toBe(true) -- nothing but quoted attributes
+			end
+			t.expect(has(pane, 'title="x&quot;')).toBe(true) -- the title is there, its quote escaped
+		end
+	)
+
+	it(
+		"a served issue card shows its own PR and checks before its raft's, and Retry's 409 is shown like any answer",
+		function()
+			t.expect(has(shown.pane, 'href="https://example.invalid/pr/12">#12</a> open, checks failing'))
+				.toBe(true)
+			t.expect(has(shown.pane, "checks passing")).toBe(false) -- the raft's checks never ride on the issue's own PR
+			t.expect(has(shown.pane, "/w/prep-runs")).toBe(true)
+			t.expect(has(shown.pane, "/w/R0020")).toBe(false) -- the issue's own worktree, not its raft's -- the worktree of the issue's own PR
+			t.expect(has(shown.pane, "#7")).toBe(false)
+			t.expect(
+				has(shown.paneAfterRetry, "retry: 409 refused: nothing to retry for f0021: it has never run")
+			)
+				.toBe(true)
 		end
 	)
 
