@@ -2204,9 +2204,10 @@ function cmd.sync(_: { string }, opts: { [string]: { string } })
 	print(`synced to {sh.git({ "rev-parse", "--short", "origin/main" })}`)
 end
 
--- What a capture may change, from `git diff --name-status --no-renames origin/main HEAD`: only edits (M) to backlog
+-- What a capture may change, from `git diff --name-status --no-renames origin/main HEAD`: edits (M) to backlog
 -- issue documents `<root>/issues/<ID>/<ID>.md`, under a root of `base`'s registry (c0114), that say `design: draft` on
--- both sides, with the status line unchanged.
+-- both sides, with the status line unchanged, and an added or edited `spend.md` in that same issue's folder (the
+-- capture row committed on the branch before land). A spend.md whose issue document this land does not change is refused.
 -- Returns the first refusal (naming the path), or nil.
 -- The frontmatter keys in order, or nil when one repeats: frontOf reads the last copy of a key, store.withFront
 -- rewrites the first, so a document with two is refused rather than read two ways.
@@ -2235,6 +2236,8 @@ local function captureScope(diff: string, base: string): string?
 	end
 	local roots = projects.roots(reg :: projects.Registry)
 	local seen = false
+	local captured: { [string]: boolean } = {}
+	local spends: { { id: string, path: string } } = {}
 	for line in string.gmatch(diff, "[^\n]+") do
 		seen = true
 		local kind, path = string.match(line, "^(%a)\t(.+)$")
@@ -2242,6 +2245,15 @@ local function captureScope(diff: string, base: string): string?
 			return `cannot read the diff line "{line}"`
 		end
 		local root, rest = projects.rootOf(path, roots)
+		local spendId = if root and rest then string.match(rest, "^issues/([^/]+)/spend%.md$") else nil
+		if spendId and store.isIssueId(spendId) and (kind == "A" or kind == "M") then
+			local mode = sh.run("git", { "ls-tree", "HEAD", "--", path })
+			if not mode.ok or string.sub(mode.stdout, 1, 7) ~= "100644 " then
+				return `not a capture change: {path} must stay a plain file (mode 100644)`
+			end
+			table.insert(spends, { id = spendId, path = path })
+			continue
+		end
 		local a, b = nil, nil
 		if root and rest then
 			a, b = string.match(rest, "^issues/([^/]+)/([^/]+)%.md$")
@@ -2249,6 +2261,7 @@ local function captureScope(diff: string, base: string): string?
 		if kind ~= "M" or not a or a ~= b or not store.isIssueId(a) then
 			return `not a capture change: {kind} {path} (a capture changes only backlog issue documents; land that through a pull request)`
 		end
+		captured[a] = true
 		local theirs = sh.run("git", { "show", `{base}:{path}` })
 		local mine = sh.run("git", { "show", `HEAD:{path}` })
 		if not theirs.ok or not mine.ok then
@@ -2278,6 +2291,11 @@ local function captureScope(diff: string, base: string): string?
 		end
 		if was.status ~= now.status then
 			return `not a capture change: {path} changes its status line (./zn status moves it)`
+		end
+	end
+	for _, spend in spends do
+		if not captured[spend.id] then
+			return `not a capture change: {spend.path} (a capture's spend.md belongs to an issue document this land changes)`
 		end
 	end
 	if not seen then

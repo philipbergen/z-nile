@@ -114,6 +114,20 @@ return t.spec("tracker land", function(it)
 		end
 	)
 
+	it("land pushes the captured issue's spend.md in that same commit, and no other spend.md", function()
+		local wt, id = capture("capture-spend", "spender")
+		write(`{wt}/pickman/.tracker/issues/{id}/spend.md`, "# spend\n")
+		git(wt, { "add", "pickman/.tracker" })
+		git(wt, { "commit", "-q", "-m", `tracker: spend {id} capture` })
+		local before = tip()
+		trOk(wt, { "land" })
+		t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
+		local names = git(origin, { "diff", "--name-only", before, "main" })
+		t.expect(has(names, `pickman/.tracker/issues/{id}/{id}.md`)).toBe(true)
+		t.expect(has(names, `pickman/.tracker/issues/{id}/spend.md`)).toBe(true)
+		t.expect(git(origin, { "show", `main:pickman/.tracker/issues/{id}/spend.md` })).toBe("# spend")
+	end)
+
 	it("land does not move the main checkout; sync does", function()
 		t.expect(git(main, { "rev-parse", "HEAD" }) ~= tip()).toBe(true)
 		t.expect(git(main, { "status", "--porcelain" })).toBe("")
@@ -187,6 +201,9 @@ return t.spec("tracker land", function(it)
 		end
 		local alpha =
 			string.match(git(origin, { "log", "--format=%s", "main" }), "tracker: new (c%d+) alpha") :: string
+		refused(function() -- another issue's spend.md, whose document this land does not change
+			write(`{wt}/pickman/.tracker/issues/{alpha}/spend.md`, "not this capture\n")
+		end, `pickman/.tracker/issues/{alpha}/spend.md`)
 		refused(function() -- a deletion
 			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			fs.removeFile(`{wt}/pickman/.tracker/issues/{alpha}/{alpha}.md`)

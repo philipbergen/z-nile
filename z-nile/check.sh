@@ -81,13 +81,6 @@ picked() { # picked <name>: is the project in this run?
   for w in "${wanted[@]}"; do [[ $w == "$1" ]] && return 0; done
   return 1
 }
-# Nothing changed, so nothing is checked. A clean tree is a pass; it does not walk every project's stages.
-if [[ -n $narrow && ${#wanted[@]} -eq 0 ]]; then
-  echo "no project changed"
-  [[ -n $plan ]] && exit 0
-  printf '\nGATE PASSED (%s)\n' "$mode"
-  exit 0
-fi
 
 [[ -n $plan ]] || ./zn reap --auto || true
 source z-nile/lib/par.sh
@@ -133,6 +126,13 @@ source z-nile/lib/fence.sh
 # each home's check*.rbxl), and before --plan (they only read): a symlinked or bad .cache, which an unjailed spec could
 # leave, refuses (code review 004 F3, 005 F3). The set is fence.sh's (pickman_fence_all, code review 005 F2).
 pickman_fence_all "$(pwd -P)" refusals || exit 1
+# Nothing changed, so nothing is checked. The fence above still ran: a symlinked .cache refuses even a no-op plan.
+if [[ -n $narrow && ${#wanted[@]} -eq 0 ]]; then
+  echo "no project changed"
+  [[ -n $plan ]] && exit 0
+  printf '\nGATE PASSED (%s)\n' "$mode"
+  exit 0
+fi
 if [[ -n $plan ]]; then
   printf 'format: %s\n' "${LUAU_DIRS[*]-}"
   printf 'lint: %s\n' "${LUAU_DIRS[*]-}"
