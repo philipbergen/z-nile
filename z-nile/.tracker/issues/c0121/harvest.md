@@ -47,3 +47,31 @@
 - design-review-010 F1: z-design/design-the-execution-window
 - design-review-010 F2: z-design/exact-checks-compare-against-the-merge-base
 - design-review-010 F3: z-design/restated-rules-move-together
+- note R0084 code review 001 F1 (a retry on a card that never ran starts its whole chain): zz-review/delegated-commands-on-an-unseen-id
+- note R0084 code review 001 F2 (the model was encoded on every poll, against the 1800 s CPU limit): zz-arch/per-poll-work-meets-the-cpu-limit
+- note R0084 code review 001 F3 (a javascript: link in a document runs in the served page): zz-arch/links-in-rendered-documents-keep-a-scheme-allow-list
+- design-review-011 F1: zz-arch/links-in-rendered-documents-keep-a-scheme-allow-list
+- design-review-011 F2: zz-arch/per-poll-work-meets-the-cpu-limit
+- design-review-011 F3: zz-arch/per-poll-work-meets-the-cpu-limit
+- design-review-011 F4: z-design/restated-rules-move-together
+- design-review-012 F1: zz-arch/links-in-rendered-documents-keep-a-scheme-allow-list
+- design-review-012 F2: zz-test/seed-every-enumerated-case
+- design-review-012 F3: one-off: a lifetime figure timed with os.clock (wall time under load) instead of the process's CPU; the design now says which it is
+- design-review-012 F4: z-design/restated-rules-move-together
+- design-review-013 F1: zz-test/seed-every-enumerated-case
+- design-review-013 F2: zz-test/seed-every-enumerated-case
+- design-review-013 F3: z-design/restated-rules-move-together
+- design-review-014 F1: zz-test/seed-every-enumerated-case
+- design-review-014 F2: z-design/never-narrow-captured-scope
+- design-review-014 F3: zz-test/seed-every-enumerated-case
+- design-review-014 F4: zz-test/seed-every-enumerated-case
+- design-review-014 F5: zz-test/seed-every-enumerated-case
+- design-review-014 F6: z-design/restated-rules-move-together
+- design-review-015 F1: z-design/prove-specs-pass-on-a-prototype
+- design-review-015 F2: z-design/never-narrow-captured-scope
+- design-review-015 F3: zz-test/seed-every-enumerated-case
+- design-review-015 F4: z-design/restated-rules-move-together
+- note design-review-015 lesson candidate (a rule that matches free text people write, PR titles or commit subjects, is run once against today's real corpus before it is specified): z-design/prove-specs-pass-on-a-prototype
+- design-review-016 F1: z-design/prove-specs-pass-on-a-prototype, zz-test/seed-every-enumerated-case
+- design-review-016 F2: zz-test/seed-every-enumerated-case
+- design-review-016 F3: z-design/restated-rules-move-together
