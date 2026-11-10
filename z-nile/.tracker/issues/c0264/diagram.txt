@@ -1,0 +1,24 @@
+```mermaid
+flowchart LR
+  subgraph eng["engineer end: any AI CLI, interactive"]
+    direction TB
+    cap["z-ticket: interview, idea, idea review, confirm"]
+    des["z-design: design, acceptance tests, reviews, approve"]
+    res["resolve blocks: ./zn resolve"]
+    cap --> des
+  end
+  stack[("ranked stack on origin: tickets, rafts and state on main, heartbeats on branches")]
+  subgraph wrk["worker end: any AI CLI running z-work"]
+    direction TB
+    loop["claim the top raft: lost first, then rank"]
+    layer["one ticket at a time: build, review, full-force review, merge"]
+    loop --> layer
+  end
+  eng --> stack
+  stack --> loop
+  layer -->|"raft merged: clear context"| loop
+  layer -. blocked .-> esc["escalation.md, status blocked"]
+  esc -->|"raft released: clear context"| loop
+  esc --> res
+  res --> stack
+```
