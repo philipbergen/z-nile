@@ -35,6 +35,7 @@ local MODEL: any = {
 		f0022 = "f0022",
 		f0031 = "f0031",
 		f0023 = "f0023",
+		f0025 = "f0025",
 		f0024 = "f0024",
 		c0099 = "c0099",
 	},
@@ -48,6 +49,7 @@ local MODEL: any = {
 		{ id = "R0030", worktree = "/w/R0030" },
 	} :: { any },
 	issues = {
+		{ id = "f0025", raft = "R0020" }, -- a member of a raft that has a run state, with none of its own
 		{
 			id = "f0021",
 			raft = "R0020",
@@ -216,9 +218,31 @@ return t.spec("c0121 server rules", function(it)
 		t.expect(plan).toBe(nil)
 		t.expect(string.find(why :: string, "nothing is running for c0099", 1, true) ~= nil).toBe(true)
 		t.expect(code).toBe(409)
+		-- a member of a raft that runs, with no state of its own, has nothing of its own to stop (design review 014 F5)
+		local memberPlan, _, memberCode = serve.plan(MODEL, "stop", "f0025")
+		t.expect(memberPlan).toBe(nil)
+		t.expect(memberCode).toBe(409)
 		local _, _, unknown = serve.plan(MODEL, "stop", "R9999")
 		t.expect(unknown == nil or unknown == 400).toBe(true)
 	end)
+
+	it(
+		"retry on a card that never ran plans nothing and answers 409: a retry would start its whole chain",
+		function()
+			local plan, why, code = serve.plan(MODEL, "retry", "c0099")
+			t.expect(plan).toBe(nil)
+			t.expect(code).toBe(409)
+			t.expect(why).toBe("nothing to retry for c0099: it has never run")
+			-- the card's own state decides: a member whose raft runs, and a raft with no state whose member has one, are refused
+			local _, _, memberCode = serve.plan(MODEL, "retry", "f0025")
+			t.expect(memberCode).toBe(409)
+			local _, _, raftCode = serve.plan(MODEL, "retry", "R0030")
+			t.expect(raftCode).toBe(409)
+			-- a card with a run state of any outcome is retried (its own id)
+			t.expect((serve.plan(MODEL, "retry", "f0023")))
+				.toEqual({ kind = "run", args = { "dispatch", "retry", "f0023" }, wait = false })
+		end
+	)
 
 	it(
 		"refuses an unknown id, an id with shell text, a non-string id and an unknown action, naming why",
@@ -249,7 +273,7 @@ return t.spec("c0121 server rules", function(it)
 
 	it("reads gh pr list: drafts, and checks as passing, failing, pending or none", function()
 		local prs = serve.parsePrs([[
-[{"number":7,"headRefName":"R0020-alpha","state":"OPEN","isDraft":true,"url":"https://example.invalid/pr/7",
+[{"number":7,"headRefName":"R0020-alpha","title":"R0020: Alpha","state":"OPEN","isDraft":true,"url":"https://example.invalid/pr/7",
   "statusCheckRollup":[{"conclusion":"SUCCESS"},{"state":"SUCCESS"}]},
  {"number":8,"headRefName":"R0030-beta","state":"OPEN","isDraft":false,"url":"u8",
   "statusCheckRollup":[{"conclusion":"SUCCESS"},{"conclusion":"FAILURE"}]},
@@ -261,6 +285,8 @@ return t.spec("c0121 server rules", function(it)
 		t.expect(prs["R0020-alpha"].pr)
 			.toEqual({ number = 7, url = "https://example.invalid/pr/7", state = "draft" })
 		t.expect(prs["R0020-alpha"].checks.state).toBe("passing")
+		t.expect(prs["R0020-alpha"].title).toBe("R0020: Alpha")
+		t.expect(prs["R0030-beta"].title).toBe("") -- a PR without a title keeps an empty one
 		t.expect(prs["R0030-beta"].pr.state).toBe("open")
 		t.expect(prs["R0030-beta"].checks.state).toBe("failing")
 		t.expect(prs["R0040-gamma"].pr.state).toBe("merged")
@@ -338,7 +364,7 @@ return t.spec("c0121 server rules", function(it)
 					"--limit",
 					"200",
 					"--json",
-					"number,headRefName,state,isDraft,url,statusCheckRollup,isCrossRepository",
+					"number,headRefName,title,state,isDraft,url,statusCheckRollup,isCrossRepository",
 				},
 				cwd = "/top",
 			})
