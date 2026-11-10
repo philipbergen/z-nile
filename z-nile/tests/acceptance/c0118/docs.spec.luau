@@ -68,7 +68,7 @@ return t.spec("c0118 board docs", function(it)
 		local text = fs.readFile(`{TOP}/z-nile/README.md`)
 		t.expect(has(text, 'board["board: ./zn board, a tab per project"]')).toBe(true)
 		t.expect(has(text, "new board c0118, planned")).toBe(false)
-		t.expect(has(text, "`./zn board --serve` (c0121, planned) serves the same page live")).toBe(true)
+		t.expect(has(text, "`./zn board --serve` (c0121) serves the same page live")).toBe(true)
 	end)
 
 	-- design review 013 F3: the board spec builds the page from every project's tracker and takes over 2 s, so it keeps

@@ -106,12 +106,17 @@ ul.links { margin: 0; padding-left: 20px; }
 dl.run { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
 dl.run dt { color: var(--mut); }
 dl.run dd { margin: 0; }
+/* c0121: the served page's status line and action buttons */
+#live { font-size: 12px; }
+#live.stale { color: #d33; font-weight: 600; }
+.acts button { font: inherit; color: inherit; background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px; margin-right: 6px; cursor: pointer; }
 </style>
 <script>{{MARKED}}</script>
 </head>
 <body>
 <header>
 <h1>pickman tracker</h1>
+<div id="live" class="note" hidden></div>
 <nav><button id="tab-board">Board</button><button id="tab-rafts">Rafts</button><button id="tab-issues">Issues</button></nav>
 <button id="stats-toggle" type="button">Stats</button>
 <input id="search" placeholder="Jump to an id (press /)" autocomplete="off" spellcheck="false">
@@ -146,7 +151,23 @@ dl.run dd { margin: 0; }
   // Lookups keyed by typed or document text must not see Object.prototype ("constructor", "__proto__").
   function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
   // Raw HTML in a document is shown as text, except comments (the templates' hints), which stay hidden.
-  marked.use({ renderer: { html: function (t) { return /^\s*<!--/.test(t.text) ? "" : esc(t.text); } } });
+  // A link in an item's document is written by this renderer, never by marked's: the href is escaped, so the attribute holds
+  // exactly the string tested (marked writes `jav&#x61;script:` unescaped, and a browser decodes it to `javascript:`), and
+  // it is kept only when it has no scheme (relative, #id) or the scheme is http, https or mailto, after the control
+  // characters and spaces are stripped from the whole href (a browser ignores tab and newline anywhere in a URL and trims
+  // C0 controls and spaces from its start). Any other scheme (javascript:, data:, vbscript:,
+  // file:) renders as the link's text, because on the served page a script link could read the session token and post the
+  // actions (c0121 code review 001 F3 of R0084, design review 011 F1).
+  marked.use({ renderer: {
+    html: function (t) { return /^\s*<!--/.test(t.text) ? "" : esc(t.text); },
+    link: function (t) {
+      var inner = this.parser.parseInline(t.tokens);
+      var href = String(t.href || "").replace(/[\u0000-\u0020\u007f-\u009f]/g, "");
+      var scheme = /^([a-z][a-z0-9+.\-]*):/i.exec(href);
+      if (scheme && !/^(https?|mailto)$/i.test(scheme[1])) return inner;
+      return '<a href="' + esc(t.href) + '"' + (t.title ? ' title="' + esc(t.title) + '"' : "") + ">" + inner + "</a>";
+    }
+  } });
 
   function esc(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -269,7 +290,10 @@ dl.run dd { margin: 0; }
   var LIVE = '<span class="note">live on the served board (<code>zn board --serve</code>, c0121)</span>';
   // PR and checks: c0121's served page fills `pr` and `checks`; the static page has neither and says where they are.
   function prText(it) {
-    if (!it || (!it.pr && !it.checks)) return LIVE;
+    if (!it || (!it.pr && !it.checks)) {
+      if (!model.live) return LIVE;
+      return model.live.checks === "unavailable" ? "checks unavailable" : model.live.checks === "loading" ? "checks loading" : "no PR";
+    }
     var h = it.pr ? '<a href="' + esc(it.pr.url) + '">#' + esc(it.pr.number) + "</a> " + esc(it.pr.state) : "";
     if (it.checks) h += (h ? ", checks " : "checks ") + esc(it.checks.state);
     return h;
@@ -283,9 +307,23 @@ dl.run dd { margin: 0; }
       ["spend", spendText(issue.spend)],
       ["dispatch", dispatchText(issue.dispatch)],
       ["branch", raft && raft.branch ? esc(raft.branch) : ""],
-      ["worktree", raft && raft.worktree ? esc(raft.worktree) : ""],
+      ["worktree", issue.worktree ? esc(issue.worktree) : raft && raft.worktree ? esc(raft.worktree) : ""],
       ["PR and checks", prText({ pr: issue.pr || (raft && raft.pr), checks: issue.checks || (raft && raft.checks) })],
-    ]);
+    ]) + actions(issue.id);
+  }
+  // c0121: on the served page, a card has the only three actions, sent to the server with the session token.
+  var actResult = {};
+  function actions(id) {
+    if (!model.live) return "";
+    var b = function (act, label) { return '<button type="button" class="act" data-act="' + act + '" data-id="' + esc(id) + '">' + label + "</button>"; };
+    return '<p class="acts">' + b("stop", "Stop") + b("retry", "Retry") + b("open", "Open") +
+      (has(actResult, id) ? ' <span class="note">' + esc(actResult[id]) + "</span>" : "") + "</p>";
+  }
+  function act(action, id) {
+    if (typeof fetch !== "function" || !model.live) return; // the static page has no actions
+    fetch("/api/action", { method: "POST", headers: { "Content-Type": "application/json", "X-Zn-Token": model.live.token }, body: JSON.stringify({ action: action, id: id }) })
+      .then(function (r) { return r.text().then(function (t) { return action + ": " + r.status + " " + t; }); })
+      .then(function (msg) { actResult[id] = msg; renderPane(id); }, function () { actResult[id] = action + ": the server did not answer"; renderPane(id); });
   }
   function runOfRaft(r) {
     var models = {}, total = { minutes: 0, tokens: 0, added: 0, removed: 0 };
@@ -302,7 +340,7 @@ dl.run dd { margin: 0; }
       ["branch", r.branch ? esc(r.branch) : ""],
       ["worktree", r.worktree ? esc(r.worktree) : ""],
       ["PR and checks", prText(r)],
-    ]);
+    ]) + actions(r.id);
   }
 
   function renderIssue(issue) {
@@ -434,6 +472,8 @@ dl.run dd { margin: 0; }
     if (row) select(idsOf(view).indexOf(row.getAttribute("data-id")));
   });
   pane.addEventListener("click", function (e) {
+    var btn = e.target.closest("button.act");
+    if (btn) { act(btn.getAttribute("data-act"), btn.getAttribute("data-id")); return; }
     var a = e.target.closest("a.jump");
     if (!a) return;
     e.preventDefault();
@@ -497,6 +537,32 @@ dl.run dd { margin: 0; }
   var start = "";
   try { start = decodeURIComponent(location.hash.slice(1)); } catch (e) { /* malformed: no match */ }
   if (!(start && go(start))) switchView(view);
+
+  // c0121: the served page polls /api/state with its token and hands each model to znBoard.load; the static page has no
+  // model.live and never polls.
+  var liveEl = $("live");
+  function showLive(note) {
+    if (!liveEl || !model.live) return;
+    var l = model.live;
+    var parts = [l.stale ? "server is out of date: restart" : "live"];
+    if (l.checks === "unavailable") parts.push("checks unavailable");
+    else if (l.checks === "loading") parts.push("checks loading");
+    else if (l.checksAge !== undefined) parts.push("checks " + l.checksAge + " s old");
+    if (note) parts.push(note);
+    liveEl.innerHTML = esc(parts.join(" · "));
+    liveEl.classList.toggle("stale", !!l.stale);
+    liveEl.removeAttribute("hidden");
+  }
+  function poll() {
+    var token = model.live.token;
+    fetch("/api/state", { headers: { "X-Zn-Token": token } })
+      .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then(function (d) { window.znBoard.load(d.model, d.statsHtml); showLive(); }, function () { showLive("the server did not answer"); });
+  }
+  if (model.live && typeof fetch === "function" && typeof setInterval === "function") {
+    showLive();
+    setInterval(poll, model.live.poll * 1000);
+  }
 })();
 </script>
 </body>
