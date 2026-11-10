@@ -64,7 +64,7 @@ local PINNED = {
 		"z-nile",
 		"c0114",
 		"gate-cover.spec.luau",
-		"b199ac5ab755e266756324cf36bc258cd79aafcc6912541481c72f143d80b411",
+		"d50ac08c74e5d094a718c26addee52bd9afc7152938fd34a279a45f197028982",
 	},
 	{
 		"z-nile",

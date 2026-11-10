@@ -5,6 +5,8 @@
 --   lune run z-nile/affected -- <file> ...      -- explicit changed files
 --   ... --project <name>                         -- that project's specs only, relative to its home (c0120)
 --   ... --graph-only                             -- read no tests/inputs.tsv (c0165)
+--   ... --static                                 -- print the projects whose static stages the change affects
+--                                                -- ("ALL", or one name per line), not the specs
 -- Prints one spec path per line (repo-relative; home-relative with --project), or the single line "ALL" when a full
 -- run is required. Prints nothing if no spec is affected.
 
@@ -18,6 +20,7 @@ local stdio = require("@lune/stdio")
 local base: string? = nil
 local only: string? = nil
 local graphOnly = false
+local staticOnly = false
 local explicit: { string } = {}
 local i = 1
 while i <= #process.args do
@@ -27,6 +30,8 @@ while i <= #process.args do
 		i += 1
 	elseif a == "--graph-only" then
 		graphOnly = true
+	elseif a == "--static" then
+		staticOnly = true
 	elseif a == "--project" then
 		only = process.args[i + 1]
 		i += 1
@@ -43,6 +48,17 @@ if only and not projects.named(reg, only) then
 end
 local rules = sel.rules(reg)
 local files = if #explicit > 0 then explicit else changes.files(base)
+if staticOnly then
+	local answer = sel.staticProjects(rules, files)
+	if answer == "ALL" then
+		print("ALL")
+	else
+		for _, name in answer :: { string } do
+			print(name)
+		end
+	end
+	process.exit(0)
+end
 local result: { string } | "ALL" = "ALL"
 if not sel.forcedAll(rules, files, only) then
 	-- the graph is read only when no forcing path decided the answer

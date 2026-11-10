@@ -235,8 +235,18 @@ local function runConcurrently()
 	local passed, failed = 0, 0
 	local function report(o: Outcome)
 		local lines = {}
+		-- the child's own timing, printed before the summary: the parent's clock includes the wait for a shared lane
+		local own: number? = nil
 		for line in string.gmatch(o.stdout, "[^\n]+") do
-			table.insert(lines, line)
+			local s = string.match(line, "^seconds (%d+%.%d+)$")
+			if s then
+				own = tonumber(s)
+			else
+				table.insert(lines, line)
+			end
+		end
+		if own ~= nil then
+			o.seconds = own
 		end
 		local last = lines[#lines]
 		local p, f = string.match(last or "", "^(%d+) passed, (%d+) failed, 1 spec files$")
@@ -283,12 +293,11 @@ local function runConcurrently()
 						table.insert(args, a)
 					end
 				end
-				local ok, r = pcall(
-					process.exec,
-					command,
-					args,
-					if part then { env = { PICKMAN_RESULTS = part } } else nil
-				)
+				local env: { [string]: string } = { PICKMAN_REPORT_SECONDS = "1" }
+				if part then
+					env.PICKMAN_RESULTS = part
+				end
+				local ok, r = pcall(process.exec, command, args, { env = env })
 				local outcome = {
 					file = file,
 					seconds = os.clock() - started,
@@ -426,6 +435,10 @@ if resultsFile then
 	writeResults(resultsFile, results)
 end
 
+-- the coordinator asks for this so its duration is the spec's own run, not the wait for a shared lane
+if process.env.PICKMAN_REPORT_SECONDS == "1" and #results == 1 then
+	print(string.format("seconds %.3f", results[1].seconds))
+end
 print(`{passed} passed, {failed} failed, {#files} spec files`)
 process.exit(if failed == 0 then 0 else 1)
 -- a project home requires this file as its own runner (pickman/tests/run.luau, c0120); a module returns one value

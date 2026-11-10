@@ -28,7 +28,7 @@ return t.spec("c0165 reuse wording", function(it)
 		)
 		says(
 			f,
-			"**Declared inputs**: a spec that reads files or git state outside its requires declares them in its home's `tests/inputs.tsv`, one `<spec>\\t<file, folder/, *, or ref:refs/...>` line each; `*` covers every blob plus HEAD and `ref:` adds one named ref. A path under a project root is allowed only below it, never the root itself or a `spend.md`. A spec that reads the files of every registered project (it loops the registry, itself or through a spec, wrapper or helper it runs) declares `*`, or, when it takes over 2 s idle, a line for each registered project; registering a project adds those lines."
+			"**Declared inputs**: a spec that reads files or git state outside its requires declares them in its home's `tests/inputs.tsv`, one `<spec>\\t<file, folder/, *, or ref:refs/...>` line each; `*` covers every blob and `ref:` adds one named ref. A `*` spec is not hashed against HEAD: a commit that changes none of those blobs does not invalidate it. A path under a project root is allowed only below it, never the root itself or a `spend.md`. A spec that reads the files of every registered project (it loops the registry, itself or through a spec, wrapper or helper it runs) declares `*`, or, when it takes over 2 s idle, a line for each registered project; registering a project adds those lines."
 		)
 		says(
 			f,

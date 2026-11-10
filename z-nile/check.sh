@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # The repo gate (c0114: z-nile's), one per project (c0120). See z-nile/skills/zz-test/SKILL.md.
-#   z-nile/check.sh [--project <name>]... [--affected [--base REF] [--fresh] | --full | --slow]
+#   z-nile/check.sh [--project <name>]... [--affected [--base REF] [--fresh] | --full | --slow | --static]
 #   z-nile/check.sh [--project <name>]... --plan   # print what each stage reads, run nothing, write nothing
 # --slow runs only z-nile's measured slow tier, fresh (z-nile alone unless --project names another set).
-# With no --project it runs every project of z-nile/projects.toml (`./zn done`, `./zn land`); each --project adds
-# one (pickman/check.sh is `--project pickman`). A project's specs run from its home, which z-nile/roots gives
+# With no --project an affected or full run starts from every project of z-nile/projects.toml.
+# An affected run and `--static` then keep only the projects whose files changed.
+# `./zn done` runs the affected gate; `./zn land` runs `--static` (`./zn done`, `./zn land`).
+# Each --project adds one (pickman/check.sh is `--project pickman`). A project's specs run from its home, which z-nile/roots gives
 # (`--projects`): z-nile/ for z-nile, pickman/ for pickman (the root belongs to no project).
 # Static stages run concurrently (z-nile/lib/par.sh); any failure fails the gate before the tests.
 set -euo pipefail
@@ -19,6 +21,7 @@ wanted=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --full) mode=full ;;
+    --static) mode=static ;;
     --slow) mode=slow ;;
     --plan) plan=1 ;;
     --affected) mode=affected ;;
@@ -30,8 +33,8 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 if [[ $mode == slow && ${#wanted[@]} -eq 0 ]]; then wanted=(z-nile); fi
-if [[ -n $fresh && $mode == full ]]; then
-  echo "check.sh: unknown or conflicting flags: --fresh is an affected flag, not for --full" >&2
+if [[ -n $fresh && $mode != affected ]]; then
+  echo "check.sh: unknown or conflicting flags: --fresh is an affected flag, not for --$mode" >&2
   exit 2
 fi
 
@@ -55,7 +58,24 @@ if [[ ${#wanted[@]} -gt 0 ]]; then
     [[ -n $found ]] || { echo "check.sh: no project $w in z-nile/projects.toml" >&2; exit 2; }
   done
 fi
+narrow= # set: an empty wanted list means no project, not every project
+# An affected or static run with no --project keeps the projects whose files changed. A path that forces every
+# project (zn, scripts/, the root configs) keeps them all. --full and an explicit --project are not narrowed.
+if [[ $mode == affected || $mode == static ]] && [[ ${#wanted[@]} -eq 0 ]]; then
+  static_out=$(lune run z-nile/affected -- --static ${base_args[@]+"${base_args[@]}"}) || {
+    echo "check.sh: could not read which projects changed" >&2
+    exit 1
+  }
+  if [[ "$static_out" != ALL ]]; then
+    narrow=1
+    wanted=()
+    while IFS= read -r line; do
+      [[ -n $line ]] && wanted+=("$line")
+    done < <(printf '%s\n' "$static_out")
+  fi
+fi
 picked() { # picked <name>: is the project in this run?
+  [[ -n $narrow && ${#wanted[@]} -eq 0 ]] && return 1
   [[ ${#wanted[@]} -eq 0 ]] && return 0
   local w
   for w in "${wanted[@]}"; do [[ $w == "$1" ]] && return 0; done
@@ -106,13 +126,20 @@ source z-nile/lib/fence.sh
 # each home's check*.rbxl), and before --plan (they only read): a symlinked or bad .cache, which an unjailed spec could
 # leave, refuses (code review 004 F3, 005 F3). The set is fence.sh's (pickman_fence_all, code review 005 F2).
 pickman_fence_all "$(pwd -P)" refusals || exit 1
+# Nothing changed, so nothing is checked. The fence above still ran: a symlinked .cache refuses even a no-op plan.
+if [[ -n $narrow && ${#wanted[@]} -eq 0 ]]; then
+  echo "no project changed"
+  [[ -n $plan ]] && exit 0
+  printf '\nGATE PASSED (%s)\n' "$mode"
+  exit 0
+fi
 if [[ -n $plan ]]; then
   printf 'format: %s\n' "${LUAU_DIRS[*]-}"
   printf 'lint: %s\n' "${LUAU_DIRS[*]-}"
   for h in ${srcs[@]+"${srcs[@]}"}; do printf 'types (Roblox): %ssrc, from %s\n' "$(prefix "$h")" "$h"; done
   printf 'types (Lune): %s\n' "${LUNE_DIRS[*]-}"
   for e in ${places[@]+"${places[@]}"}; do printf 'build: %s\n' "${e#*|}"; done
-  [[ -d z-nile/skills ]] && printf 'skills: %s\n' .claude/skills
+  { [[ $mode == full ]] || picked z-nile; } && [[ -d z-nile/skills ]] && printf 'skills: %s\n' .claude/skills
   for i in "${!names[@]}"; do
     picked "${names[$i]}" || continue
     [[ -d $(prefix "${homes[$i]}")tests ]] && printf 'specs: %s, from %s\n' "${names[$i]}" "${homes[$i]}"
@@ -212,11 +239,20 @@ for e in ${places[@]+"${places[@]}"}; do
   [[ $stem == default ]] || out="$(prefix "$h").cache/check-$stem.rbxl"
   par_start "build (rojo $f)" build_place "$out" rojo build "$f"
 done
-# the skill links (c0115): one committed relative link in .claude/skills per skill folder, every project's
-[[ -d z-nile/skills ]] && par_start "skills (./zn skills --check)" ./zn skills --check
+# the skill links (c0115): one committed relative link in .claude/skills per skill folder. A full run checks them;
+# an affected or static run checks them when z-nile's files changed (a game-only change does not).
+if [[ -d z-nile/skills ]] && { [[ $mode == full ]] || picked z-nile; }; then
+  par_start "skills (./zn skills --check)" ./zn skills --check
+fi
 report=$(mktemp "${TMPDIR:-/tmp}/gate-report.XXXXXX")
 par_wait >"$report" || { cat "$report"; exit 1; }
 cat "$report"
+# A capture (`./zn land`) checks the static stages of the projects it touched and stops. It does not run specs.
+if [[ $mode == static ]]; then
+  printf '\ngate wall time: %ss\n' "$(par_elapsed "$gate_start" "$(par_now)")"
+  printf '\nGATE PASSED (static)\n'
+  exit 0
+fi
 [[ $mode == affected ]] || rm -f "$report"
 
 # The specs: each project's from its home (its runner, its .cache, its lock), so one project's never see another's.

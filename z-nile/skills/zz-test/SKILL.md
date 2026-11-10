@@ -9,24 +9,27 @@ description: How z-nile tests and gates every project - the gate and its modes, 
 | command | use |
 |---|---|
 | `z-nile/check.sh` / `--affected` | while iterating: format, lint, types for src (Roblox definitions) and tests/scripts (Lune definitions), rojo build, and **only the affected specs** |
-| `z-nile/check.sh --full` | every project's gate, every spec outside the measured slow tier. Used by `land` and `setup.sh`, and by the merge's clean clone |
+| `z-nile/check.sh --full` | every project's gate, every spec outside the measured slow tier. Used by `setup.sh`, and by the clean clone when a pull request that changes a game is merged |
 | `z-nile/check.sh --slow` | z-nile's measured slow tier only, fresh; not part of the affected or full gates |
 | `z-nile/check.sh --affected --fresh` | the affected gate without reuse |
 | `pickman/check.sh [--full]` / `z-nile/check.sh --project <name>` | one project's gate: its static stages and its specs alone (each project has its own gate; no `--project` runs every project's). A home's `scripts/check.sh` runs that project's gate (c0120): `pickman/scripts/check.sh` pickman's, `z-nile/scripts/check.sh` z-nile's. The local full gate runs every project (`z-nile/check.sh --full` with no `--project`). GitHub Actions does not run it. |
+| `z-nile/check.sh --static` | the static stages of the projects whose files changed, and no specs. `./zn land` runs it |
 | `z-nile/check.sh --plan` | print what each stage reads for each project, and run nothing |
 | `lune run tests/run -- <spec files>` | specific specs, from the project's home: `z-nile/` for z-nile's, `pickman/` for pickman's (`cd pickman && lune run tests/run -- tests/unit/Maze`). The runner refuses any other folder: the repository root belongs to no project |
 | `lune run z-nile/affected -- [--base REF] [files…]` | show which specs a change selects (`ALL` = full run) |
 | `./zn check <id>` | an item's acceptance checks |
 | `lune run tests/run -- --jobs N` / `PICKMAN_JOBS=N` | spec concurrency (default `min(max(cpus,2),8)`; `1` is serial, a bad value exits 2) |
 
-**Gate by step**: the full gate runs once, at the merge; every step before it runs `--affected`, `./zn done` included. `land`, `setup.sh` and the merge's clean clone run `--full` fresh.
+**Gate by step**: a game pull request's full gate runs once, at the merge; a tooling pull request's merge runs `--affected` on the branch. Every step before the merge runs `--affected`, `./zn done` included. `setup.sh` runs `--full` fresh. `land` runs `--static`. A game pull request's merge runs `--full` in a clean clone; a tooling pull request's merge runs `--affected` on the branch.
 
 | step | gate |
 |---|---|
 | zz-execute Phase 0 | none (a red `main` first shows at the merge) |
 | Phase 2 iterations, stream checks, the raft's RC0, Phase 3, Phase 4 step 1, zz-review code mode, Phase 5 step 2, the pre-PR gate | `--affected` (RC0 scoped `--project <project>`) |
 | `./zn done` | `--affected` on the done tree |
-| `./zn land`, `setup.sh`, zz-rules Merging steps 2 and 4 (the clean clone) | `--full`, every fast-tier spec, fresh |
+| `./zn land` | `--static`, the projects the capture changed |
+| `setup.sh`, zz-rules Merging for a game pull request (the clean clone) | `--full`, every fast-tier spec, fresh |
+| zz-rules Merging for a tooling pull request | `--affected` on the branch |
 | a red merge gate | BLOCKED: failing specs named, a graph-miss chore for each spec the affected selection did not list |
 
 ## Spec layout (`*.spec.luau`)
@@ -52,7 +55,7 @@ The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThr
 - **Full run**: changes to the shared runner and harness (`z-nile/tests/run.luau`, `z-nile/tests/lib`) or z-nile's libraries (`z-nile/lib/`) force z-nile's suite only; `./zn`, the root's `scripts/` and root config files (`.luaurc`, `rokit.toml`, `selene.toml`, `stylua.toml`) remain shared infrastructure and force every project. A change to a project's own `tests/lib`, `tests/run.luau`, `tests/meta`, `scripts/`, `.luaurc` or any `*.project.json` (under its home) forces that project's, and any other code change under `z-nile/` (the engine, the gate) z-nile's. Documentation, skills and lessons under `z-nile/` force no suite by themselves; declared inputs, graph edges and same-suite `*` declarations still select the specs that read them. Game-only changes select no z-nile specs, and tooling-only changes select no game specs. A change at an old place (the root's `tests/`, `tracker/`, `src/`, the root's project files) forces z-nile's, whose old-roots check then fails. A spec that loads a home's place (it requires the home's `tests/lib/place.luau`) is selected for every change to what the place is built from: the home's project files and every `$path` they map, so a change under `arcade/src/` selects the place specs of every game that maps the library, and the unit specs that require it through `@arcade` follow from their requires. Verify an arcade change against its dependents with `z-nile/check.sh --affected` (every project), not `arcade/check.sh --affected` (the library's own specs). `lune run z-nile/affected -- --project <name>` prints one project's selection, relative to its home.
 - **Reliability** depends on the architecture rules: literal requires, and features used only through `init`. `tests/meta` enforces those rules.
 - **Reuse**: in an affected run, a spec file whose fingerprint (its own content, everything it can reach, the tools and the gate mode) already passed is skipped and reported `reused <spec>`, and a whole affected gate that passed on the same content is skipped with its stored static report. `--fresh` reuses nothing and `--full` runs every fast-tier spec. Passes are kept in `.claude/.znile_tests.sqlite`; deleting it only costs reruns.
-- **Declared inputs**: a spec that reads files or git state outside its requires declares them in its home's `tests/inputs.tsv`, one `<spec>\t<file, folder/, *, or ref:refs/...>` line each; `*` covers every blob plus HEAD and `ref:` adds one named ref. A path under a project root is allowed only below it, never the root itself or a `spend.md`. A spec that reads the files of every registered project (it loops the registry, itself or through a spec, wrapper or helper it runs) declares `*`, or, when it takes over 2 s idle, a line for each registered project; registering a project adds those lines.
+- **Declared inputs**: a spec that reads files or git state outside its requires declares them in its home's `tests/inputs.tsv`, one `<spec>\t<file, folder/, *, or ref:refs/...>` line each; `*` covers every blob and `ref:` adds one named ref. A `*` spec is not hashed against HEAD: a commit that changes none of those blobs does not invalidate it. A path under a project root is allowed only below it, never the root itself or a `spend.md`. A spec that reads the files of every registered project (it loops the registry, itself or through a spec, wrapper or helper it runs) declares `*`, or, when it takes over 2 s idle, a line for each registered project; registering a project adds those lines.
 - **Graph miss**: a spec fails under `--full` but wasn't selected for the same diff. That's a selector bug. File it as a chore, since CI and test bugs are always chores: `./zn new issue c affected-graph-miss-… --project z-nile`.
 
 ## Acceptance checks (`check.sh`)

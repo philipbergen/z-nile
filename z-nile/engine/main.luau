@@ -485,49 +485,93 @@ local function refuseStale()
 	end
 end
 
+-- The item directory a tracker path lives in (`<root>/(issues|rafts)/[active/|done/]<id>`), or nil when `path`
+-- is not a file of an item. `roots` includes retired roots, so a root that just left the registry is still swept.
+local function itemDirOf(path: string, roots: { string }): string?
+	local top, rest = projects.rootOf(path, roots)
+	if not top or not rest then
+		return nil
+	end
+	local kind, tail = string.match(rest, "^(issues)/(.*)$")
+	if not kind then
+		kind, tail = string.match(rest, "^(rafts)/(.*)$")
+	end
+	if not kind or not tail then
+		return nil
+	end
+	local a, b = string.match(tail, "^([^/]+)/([^/]+)")
+	if not a or not b then
+		return nil
+	end
+	local id, state = a, ""
+	if a == "active" or a == "done" then
+		id, state = b, `{a}/`
+	end
+	local isId = if kind == "rafts" then store.isRaftId(id) else store.isIssueId(id)
+	if not isId then
+		return nil
+	end
+	return `{top}/{kind}/{state}{id}`
+end
+
 -- A pull that moves an item directory away leaves its ignored and untracked files behind (a raft's prompt.md, a
--- Finder .DS_Store): the main checkout would then hold one id in two directories. Every item directory under `root`
--- with nothing tracked at HEAD loses its ignored files and is removed; untracked files that are not ignored are kept,
--- and named in a warning. Run after every pull or fast-forward in the main checkout.
-local function sweepStale(root: string)
+-- Finder .DS_Store): the main checkout would then hold one id in two directories. Only the item directories the
+-- commits from `old` to `new` deleted a file from are looked at (`git diff-tree`), never one `ls-tree` per item.
+-- A directory with nothing tracked at HEAD loses its ignored files and is removed; untracked files that are not
+-- ignored are kept, and named in a warning. Run after every pull or fast-forward in the main checkout.
+local function sweepStale(root: string, old: string, new: string)
+	if old == new then
+		return
+	end
 	-- every root the pulled registry names, retired ones too: a root move leaves the old folders behind (c0114)
 	local ok, reg = pcall(projects.load, root, true)
 	if not ok then
 		fail(`sweep: {reg}`) -- never guess which folders hold items (c0114)
 	end
+	local diff = sh.run("git", {
+		"-C",
+		root,
+		"diff-tree",
+		"-r",
+		"--name-status",
+		"--no-renames",
+		old,
+		new,
+	})
+	if not diff.ok then
+		fail(`sweep: {sh.trim(diff.stderr)}`)
+	end
 	local roots: { string } = projects.allRoots(reg :: projects.Registry)
-	for _, top in roots do
-		for _, kind in { "issues", "rafts" } do
-			for _, state in { "", "active/", "done/" } do
-				local rel = `{top}/{kind}/{state}`
-				local base = `{root}/{rel}`
-				if not fs.isDir(base) then
-					continue
-				end
-				for _, name in fs.readDir(base) do
-					local isId = if kind == "rafts" then store.isRaftId(name) else store.isIssueId(name)
-					if not isId or not fs.isDir(`{base}{name}`) then
-						continue
-					end
-					local dir = `{rel}{name}`
-					-- a directory with anything tracked at HEAD is a live item (a readied raft, or an item mid-edit)
-					local tracked =
-						sh.run("git", { "-C", root, "ls-tree", "-r", "--name-only", "HEAD", "--", dir })
-					if tracked.ok and sh.trim(tracked.stdout) == "" then
-						-- only ignored files (a prompt.md, Finder litter): untracked work is never deleted, only named
-						sh.run("git", { "-C", root, "clean", "-ffdXq", "--", dir })
-						local left = if fs.isDir(`{base}{name}`) then fs.readDir(`{base}{name}`) else {}
-						if fs.isDir(`{base}{name}`) and #left == 0 then
-							fs.removeDir(`{base}{name}`)
-						elseif #left > 0 then
-							stdio.ewrite(
-								`warning: {dir} is no longer tracked but holds untracked files ({table.concat(
-									left,
-									", "
-								)}); move them and remove it, or ./zn will see {name} twice\n`
-							)
-						end
-					end
+	local seen: { [string]: boolean } = {}
+	for line in string.gmatch(diff.stdout, "[^\n]+") do
+		local kind, path = string.match(line, "^(%u+)\t(.+)$")
+		-- a move is a deletion and an addition (--no-renames); only the path that left can leave a stale folder
+		if kind == "D" and path then
+			local dir = itemDirOf(path, roots)
+			if dir then
+				seen[dir] = true
+			end
+		end
+	end
+	for dir in seen do
+		local base = `{root}/{dir}`
+		if fs.isDir(base) then
+			-- a directory with anything tracked at HEAD is a live item (a readied raft, or an item mid-edit)
+			local tracked = sh.run("git", { "-C", root, "ls-tree", "-r", "--name-only", "HEAD", "--", dir })
+			if tracked.ok and sh.trim(tracked.stdout) == "" then
+				-- only ignored files (a prompt.md, Finder litter): untracked work is never deleted, only named
+				sh.run("git", { "-C", root, "clean", "-ffdXq", "--", dir })
+				local left = if fs.isDir(base) then fs.readDir(base) else {}
+				if fs.isDir(base) and #left == 0 then
+					fs.removeDir(base)
+				elseif #left > 0 then
+					local name = string.match(dir, "([^/]+)$") or dir
+					stdio.ewrite(
+						`warning: {dir} is no longer tracked but holds untracked files ({table.concat(
+							left,
+							", "
+						)}); move them and remove it, or ./zn will see {name} twice\n`
+					)
 				end
 			end
 		end
@@ -549,33 +593,9 @@ local function buildBoard(root: string)
 	end
 end
 
--- After origin/main moved: bring the main checkout up to it and rewrite its .cache/board.html. Never fails the caller:
--- each problem is one `warning: board: …` line on stderr.
-local function refreshBoard()
-	local root = mainRoot()
-	local branch = sh.trim(sh.run("git", { "-C", root, "branch", "--show-current" }).stdout)
-	if branch == "main" then
-		local m = sh.run("git", { "-C", root, "merge", "--ff-only", "--quiet", "origin/main" })
-		if m.ok then
-			sweepStale(root)
-		else
-			local first = string.match(sh.trim(m.stderr .. m.stdout), "^[^\n]*") or ""
-			stdio.ewrite(`warning: board: the main checkout was not updated ({first})\n`)
-		end
-	else
-		stdio.ewrite(
-			`warning: board: the main checkout is on {if branch == "" then "a detached HEAD" else branch}, not main; not updated\n`
-		)
-	end
-	buildBoard(root)
-end
-
--- Every publish.commit call site goes through this: it fails like before on a refusal, and refreshes the board when a
--- commit was pushed (r.sha set). It returns r unchanged.
+-- Every publish.commit call site goes through this. A publish pushes and does nothing else: it does not fast-forward
+-- the main checkout, sweep it, or rebuild the board. `./zn sync` fast-forwards and sweeps; `./zn board` builds the page.
 local function published(r: publish.Result): publish.Result
-	if r.ok and r.sha then
-		refreshBoard()
-	end
 	return r
 end
 
@@ -2173,8 +2193,9 @@ function cmd.sync(_: { string }, opts: { [string]: { string } })
 	sh.git({ "fetch", "--quiet", "origin", "main" })
 	if not opts["--fetch"] then
 		if sh.git({ "rev-parse", "--show-toplevel" }) == mainRoot() then
+			local before = sh.git({ "rev-parse", "HEAD" })
 			sh.git({ "pull", "--quiet", "--ff-only" })
-			sweepStale(mainRoot())
+			sweepStale(mainRoot(), before, sh.git({ "rev-parse", "HEAD" }))
 			buildBoard(mainRoot())
 		else
 			mergeOrigin()
@@ -2183,9 +2204,10 @@ function cmd.sync(_: { string }, opts: { [string]: { string } })
 	print(`synced to {sh.git({ "rev-parse", "--short", "origin/main" })}`)
 end
 
--- What a capture may change, from `git diff --name-status --no-renames origin/main HEAD`: only edits (M) to backlog
+-- What a capture may change, from `git diff --name-status --no-renames origin/main HEAD`: edits (M) to backlog
 -- issue documents `<root>/issues/<ID>/<ID>.md`, under a root of `base`'s registry (c0114), that say `design: draft` on
--- both sides, with the status line unchanged.
+-- both sides, with the status line unchanged, and an added or edited `spend.md` in that same issue's folder (the
+-- capture row committed on the branch before land). A spend.md whose issue document this land does not change is refused.
 -- Returns the first refusal (naming the path), or nil.
 -- The frontmatter keys in order, or nil when one repeats: frontOf reads the last copy of a key, store.withFront
 -- rewrites the first, so a document with two is refused rather than read two ways.
@@ -2214,6 +2236,8 @@ local function captureScope(diff: string, base: string): string?
 	end
 	local roots = projects.roots(reg :: projects.Registry)
 	local seen = false
+	local captured: { [string]: boolean } = {}
+	local spends: { { id: string, path: string } } = {}
 	for line in string.gmatch(diff, "[^\n]+") do
 		seen = true
 		local kind, path = string.match(line, "^(%a)\t(.+)$")
@@ -2221,6 +2245,15 @@ local function captureScope(diff: string, base: string): string?
 			return `cannot read the diff line "{line}"`
 		end
 		local root, rest = projects.rootOf(path, roots)
+		local spendId = if root and rest then string.match(rest, "^issues/([^/]+)/spend%.md$") else nil
+		if spendId and store.isIssueId(spendId) and (kind == "A" or kind == "M") then
+			local mode = sh.run("git", { "ls-tree", "HEAD", "--", path })
+			if not mode.ok or string.sub(mode.stdout, 1, 7) ~= "100644 " then
+				return `not a capture change: {path} must stay a plain file (mode 100644)`
+			end
+			table.insert(spends, { id = spendId, path = path })
+			continue
+		end
 		local a, b = nil, nil
 		if root and rest then
 			a, b = string.match(rest, "^issues/([^/]+)/([^/]+)%.md$")
@@ -2228,6 +2261,7 @@ local function captureScope(diff: string, base: string): string?
 		if kind ~= "M" or not a or a ~= b or not store.isIssueId(a) then
 			return `not a capture change: {kind} {path} (a capture changes only backlog issue documents; land that through a pull request)`
 		end
+		captured[a] = true
 		local theirs = sh.run("git", { "show", `{base}:{path}` })
 		local mine = sh.run("git", { "show", `HEAD:{path}` })
 		if not theirs.ok or not mine.ok then
@@ -2259,14 +2293,20 @@ local function captureScope(diff: string, base: string): string?
 			return `not a capture change: {path} changes its status line (./zn status moves it)`
 		end
 	end
+	for _, entry in spends do
+		if not captured[entry.id] then
+			return `not a capture change: {entry.path} (a capture's spend.md belongs to an issue document this land changes)`
+		end
+	end
 	if not seen then
 		return "nothing to land: this branch has no change against origin/main"
 	end
 	return nil
 end
 
--- c0072: lands a capture without a pull request. Merge origin/main, check the scope, run the gate, push one commit
--- made on top of origin/main (never a force), and retry a lost race (up to 3 tries).
+-- c0072: lands a capture without a pull request. Merge origin/main, check the scope, run the static stages (not the
+-- full gate: a capture is a draft backlog document), push one commit made on top of origin/main (never a force).
+-- A lost push race merges the new main and retries the push, not the gate (up to 3 tries).
 function cmd.land(_: { string }, opts: { [string]: { string } })
 	local branch = sh.trim(sh.run("git", { "branch", "--show-current" }).stdout)
 	if string.sub(branch, 1, 8) ~= "capture-" then
@@ -2281,13 +2321,9 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 	local root = sh.git({ "rev-parse", "--show-toplevel" })
 	local raw = process.env.PICKMAN_LAND_GATE
 	local override = if raw and string.match(raw, "%S") then raw else nil
-	local gate = override or "z-nile/check.sh --full"
+	local gate = override or "z-nile/check.sh --static"
 	local given = opts["-m"]
-	for _ = 1, 3 do
-		sh.git({ "fetch", "--quiet", "origin", "main" })
-		-- one origin/main per try: the merge, the scope, the commit's parent and the race test all name this sha, so
-		-- a push elsewhere during the gate (or a later fetch) can never become the parent of a tree it isn't in
-		local base = sh.git({ "rev-parse", "--verify", "origin/main^{commit}" })
+	local function take(base: string)
 		local merged = sh.run("git", { "merge", "--no-edit", base })
 		if not merged.ok then
 			sh.run("git", { "merge", "--abort" })
@@ -2301,18 +2337,25 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 		if refusal then
 			fail(refusal)
 		end
-		print(`gate: {gate}{if override then " (gate overridden: PICKMAN_LAND_GATE)" else ""}`)
-		if not sh.stream("bash", { "-c", gate }) then
-			fail("the gate failed: nothing was pushed")
-		end
-		local parent = base
-		local message = if given and given[1] and given[1] ~= "" then given[1] else nil
-		if not message then
-			local subjects = sh.git({ "log", "--reverse", "--no-merges", "--format=%s", `{base}..HEAD` })
-			local bodies = sh.git({ "log", "--reverse", "--no-merges", "--format=%b", `{base}..HEAD` })
-			local subject = string.match(subjects, "^[^\n]*") or "tracker: capture"
-			message = if bodies ~= "" then `{subject}\n\n{bodies}` else subject
-		end
+	end
+	sh.git({ "fetch", "--quiet", "origin", "main" })
+	-- the merge, the scope and the first push all name this sha, so a push during the gate cannot become the
+	-- parent of a tree it isn't in
+	local base = sh.git({ "rev-parse", "--verify", "origin/main^{commit}" })
+	take(base)
+	print(`gate: {gate}{if override then " (gate overridden: PICKMAN_LAND_GATE)" else ""}`)
+	if not sh.stream("bash", { "-c", gate }) then
+		fail("the gate failed: nothing was pushed")
+	end
+	local message = if given and given[1] and given[1] ~= "" then given[1] else nil
+	if not message then
+		local subjects = sh.git({ "log", "--reverse", "--no-merges", "--format=%s", `{base}..HEAD` })
+		local bodies = sh.git({ "log", "--reverse", "--no-merges", "--format=%b", `{base}..HEAD` })
+		local subject = string.match(subjects, "^[^\n]*") or "tracker: capture"
+		message = if bodies ~= "" then `{subject}\n\n{bodies}` else subject
+	end
+	local parent = base
+	for _ = 1, 3 do
 		local sha = sh.git({ "commit-tree", "HEAD^{tree}", "-p", parent, "-m", message :: string })
 		local pushed: sh.Result
 		if process.env.ZN_PUBLISH_BROKER and process.env.ZN_PUBLISH_BROKER ~= "" then
@@ -2330,7 +2373,6 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 		if pushed.ok then
 			sh.git({ "reset", "--hard", "--quiet", sha })
 			sh.run("git", { "fetch", "--quiet", "origin", "main" })
-			refreshBoard()
 			local suffix = if override then " (gate overridden)" else ""
 			print(
 				`landed {sha} on main; remove this worktree: git -C {mainRoot()} worktree remove {root} && git -C {mainRoot()} branch -D {branch}{suffix}`
@@ -2338,10 +2380,13 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 			return
 		end
 		sh.run("git", { "fetch", "--quiet", "origin", "main" })
-		if sh.git({ "rev-parse", "--verify", "origin/main^{commit}" }) == parent then
+		local now = sh.git({ "rev-parse", "--verify", "origin/main^{commit}" })
+		if now == parent then
 			fail(`the push failed (origin/main did not move): {pushed.stderr}{pushed.stdout}`)
 		end
-		-- origin/main moved: a lost race; sync, scope and gate again
+		-- origin/main moved: merge it and push again. The gate already passed; it is not run again.
+		take(now)
+		parent = now
 	end
 	fail("lost the race to main 3 times: run land again")
 end
@@ -4579,14 +4624,16 @@ local function mainCheckoutGuards(name: string)
 	end
 end
 
--- Fast-forwards the main checkout to origin/main and sweeps what the pull left behind. A string is the failure.
+-- Fast-forwards the main checkout to origin/main and sweeps the item folders that fast-forward moved. A string is
+-- the failure. It does not rebuild the board (`./zn board`).
 local function pullMain(): string?
+	local before = sh.git({ "rev-parse", "HEAD" })
 	sh.git({ "fetch", "--quiet", "origin", "main" })
 	local r = sh.run("git", { "pull", "--ff-only", "--quiet" })
 	if not r.ok then
 		return sh.trim(r.stderr .. r.stdout)
 	end
-	sweepStale(mainRoot())
+	sweepStale(mainRoot(), before, sh.git({ "rev-parse", "HEAD" }))
 	return nil
 end
 
@@ -5023,7 +5070,11 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
 end
 
 function cmd.spend(pos: { string }, opts: { [string]: { string } })
-	refuseInMainCheckout("spend")
+	if hasOrigin() and inMainCheckout() then
+		fail(
+			"spend writes its row on the work branch: run it in that worktree (./zn worktree <id>), not the main checkout"
+		)
+	end
 	if not publishing() then
 		fail(
 			"spend needs an origin remote (PICKMAN_PUBLISH=0 disables it); inside a raft, record with ./zn commit --phase"
@@ -5133,52 +5184,91 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 		end
 		return `{target} was readied before its {phase} spend was recorded: record nothing and report it`
 	end
+	-- The row is committed on this branch and pushed nowhere. It reaches main with the branch (a pull request, or
+	-- `./zn land` when the commit is already in the capture tree). An item that is active on origin/main is still
+	-- refused: inside a raft, `./zn commit --phase` records it.
 	refuseStale()
-	local r = published(publish.commit(".", function(paths, read)
+	if publishing() then
+		local fetched = sh.run("git", { "fetch", "-q", "origin", "main" })
+		if not fetched.ok then
+			fail("could not fetch origin/main: " .. sh.trim(fetched.stderr))
+		end
+		local readable, pathsOnOrigin = originTree()
+		if not readable then
+			fail("could not read origin/main")
+		end
+		local function originText(doc: string): string?
+			local shown = sh.run("git", { "show", `origin/main:{doc}` })
+			return if shown.ok then shown.stdout else nil
+		end
 		if store.isRaftId(id) then
-			local doc = docPath(paths, id)
-			local text = if doc then read(doc) else nil
-			if not doc or not text then
-				return `{id} is not on origin/main`
-			end
-			if activeThere(doc, text) then
-				return activeReason(id)
+			local doc = docPath(pathsOnOrigin, id)
+			local text = if doc then originText(doc) else nil
+			if doc and text and activeThere(doc, text) then
+				fail(activeReason(id))
 			end
 		end
-		local changes: { publish.Change } = {}
 		for _, share in kept do
-			local doc = docPath(paths, share.id)
-			local text = if doc then read(doc) else nil
+			local doc = docPath(pathsOnOrigin, share.id)
+			local text = if doc then originText(doc) else nil
 			if not doc or not text then
-				return `{share.id} is not on origin/main`
+				fail(`{share.id} is not on origin/main`)
 			end
-			if activeThere(doc, text) then
-				return activeReason(share.id)
+			if activeThere(doc :: string, text :: string) then
+				fail(activeReason(share.id))
 			end
-			local dir = string.sub(doc, 1, #doc - #share.id - 4) -- ".../<ID>/<ID>.md" -> ".../<ID>"
-			local spendPath = `{dir}/spend.md`
-			local row: ledger.Row = {
-				when = when,
-				subject = note,
-				added = share.added,
-				removed = share.removed,
-				minutes = share.minutes,
-				how = share.how,
-				phase = phase,
-				tokens = share.tokens,
-				model = model,
-			}
-			local itemTitle = frontOf(text).title or share.id
-			local okAppend, content = pcall(ledger.append, read(spendPath), share.id, itemTitle, row)
-			if not okAppend then
-				return tostring(content)
+			local localItem = store.find(share.id)
+			if not localItem then
+				fail(`{share.id} is not in this checkout: run ./zn sync first`)
 			end
-			table.insert(changes, { path = spendPath, content = content :: string })
+			if stateOfPath(doc :: string) ~= (localItem :: store.Item).state then
+				fail(
+					`{share.id} is {stateOfPath(doc :: string)} on origin/main and {(localItem :: store.Item).state} in this checkout: run ./zn sync first`
+				)
+			end
 		end
-		return changes
-	end, `tracker: spend {id} {phase}`))
-	if not r.ok then
-		fail(r.reason or "publish failed")
+	end
+	local wrote: { string } = {}
+	for _, share in kept do
+		local item = store.find(share.id)
+		if not item then
+			fail(`{share.id} is not in this checkout: run ./zn sync first`)
+		end
+		local here = item :: store.Item
+		local spendPath = `{here.dir}/spend.md`
+		local row: ledger.Row = {
+			when = when,
+			subject = note,
+			added = share.added,
+			removed = share.removed,
+			minutes = share.minutes,
+			how = share.how,
+			phase = phase,
+			tokens = share.tokens,
+			model = model,
+		}
+		local itemTitle = store.readFront(here.doc).title or share.id
+		local existing = if fs.isFile(spendPath) then fs.readFile(spendPath) else nil
+		local okAppend, content = pcall(ledger.append, existing, share.id, itemTitle, row)
+		if not okAppend then
+			fail(tostring(content))
+		end
+		fs.writeFile(spendPath, content :: string)
+		table.insert(wrote, spendPath)
+	end
+	local addArgs = { "add", "--" }
+	local commitArgs = { "commit", "-q", "--only", "-m", `tracker: spend {id} {phase}`, "--" }
+	for _, path in wrote do
+		table.insert(addArgs, path)
+		table.insert(commitArgs, path)
+	end
+	local added = sh.run("git", addArgs)
+	if not added.ok then
+		fail(`spend: could not stage the row: {sh.trim(added.stderr)}`)
+	end
+	local committed = sh.run("git", commitArgs)
+	if not committed.ok then
+		fail(`spend: could not commit the row: {sh.trim(committed.stderr .. committed.stdout)}`)
 	end
 	for _, share in kept do
 		local tok = if share.tokens ~= nil then ` {share.tokens} tokens` else ""
@@ -5194,9 +5284,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			)
 		)
 	end
-	if r.sha then
-		print(r.sha)
-	end
+	print(sh.git({ "rev-parse", "HEAD" }))
 end
 
 -- the earliest commit time (unix seconds) that added any of `paths` (a file's homes before and after a move); nil
