@@ -63,7 +63,10 @@ return t.spec("c0261 a dispatched raft review of a new raft is recorded at once"
 		end
 		local wt = trackerfix.trOk(h.f, h.f.main, { "worktree", "prep-raft" })
 		must(znIn(wt, { "sync" }))
-		local rid = string.match(must(znIn(wt, { "new", "raft", "chore", "pair", "c0011", "c0012", "--project", "pickman" })), "(R%d+)") :: string
+		local rid = string.match(
+			must(znIn(wt, { "new", "raft", "chore", "pair", "c0011", "c0012", "--project", "pickman" })),
+			"(R%d+)"
+		) :: string
 		fakecli.clear(h)
 		fakecli.mode(h, "claude.zz-review", "script")
 		fs.writeFile(

@@ -16,8 +16,15 @@ local function write(path: string, text: string)
 end
 local function row(subject: string, model: string?, tokens: number, minutes: number): ledger.Row
 	return {
-		when = "2026-11-08 10:00", subject = subject, added = 0, removed = 0, minutes = minutes, how = "x",
-		phase = "design-review", tokens = tokens, model = model,
+		when = "2026-11-08 10:00",
+		subject = subject,
+		added = 0,
+		removed = 0,
+		minutes = minutes,
+		how = "x",
+		phase = "design-review",
+		tokens = tokens,
+		model = model,
 	}
 end
 local function has(text: string, line: string): boolean
@@ -25,39 +32,58 @@ local function has(text: string, line: string): boolean
 end
 
 return t.spec("c0261 metrics shows the cost per model", function(it)
-	it("prints a by-model table: tokens, minutes and rows per model id, none for a row that records no model", function()
-		if fs.isDir(SB) then
-			fs.removeDir(SB)
+	it(
+		"prints a by-model table: tokens, minutes and rows per model id, none for a row that records no model",
+		function()
+			if fs.isDir(SB) then
+				fs.removeDir(SB)
+			end
+			fs.writeDir(SB)
+			engine.copy(".", SB)
+			fs.copy(`{engine.TOP}/.luaurc`, `{SB}/.luaurc`)
+			fs.copy(`{engine.TOP}/rokit.toml`, `{SB}/rokit.toml`)
+			local tr = `{SB}/pickman/.tracker`
+			write(
+				`{tr}/issues/c0960/c0960.md`,
+				"---\nid: c0960\ntype: chore\ntitle: c0960\nslug: c0960\nraft: \n---\n\n# c0960\n"
+			)
+			write(
+				`{tr}/issues/c0960/spend.md`,
+				ledger.render("c0960", "c0960", {
+					row("design-review-001", "claude-sonnet-5-5-high", 100, 1),
+					row("design-review-002", "claude-opus-5-5", 50, 2),
+					row("design-review-003", nil, 7, 3),
+				})
+			)
+			write(
+				`{tr}/issues/c0961/c0961.md`,
+				"---\nid: c0961\ntype: chore\ntitle: c0961\nslug: c0961\nraft: \n---\n\n# c0961\n"
+			)
+			write(
+				`{tr}/issues/c0961/spend.md`,
+				ledger.render(
+					"c0961",
+					"c0961",
+					{ row("design-review-001", "claude-sonnet-5-5-high", 20, 1.5) }
+				)
+			)
+			local r = process.exec("scripts/tracker.sh", { "metrics" }, { cwd = SB })
+			local out = r.stdout
+			local ok = r.ok
+			if fs.isDir(SB) then
+				fs.removeDir(SB)
+			end
+			if not ok then
+				error(r.stderr .. out)
+			end
+			t.expect(has(out, "| model | tokens | minutes | rows |")).toBe(true)
+			t.expect(has(out, "| claude-sonnet-5-5-high | 120 | 2.5 | 2 |")).toBe(true)
+			t.expect(has(out, "| claude-opus-5-5 | 50 | 2.0 | 1 |")).toBe(true)
+			t.expect(has(out, "| none | 7 | 3.0 | 1 |")).toBe(true)
+			-- last: after the rework lines, so no earlier table changes shape
+			local at = string.find(out, "| model | tokens | minutes | rows |", 1, true) :: number
+			local rework = string.find(out, "by agent time:", 1, true) :: number
+			t.expect(at > rework).toBe(true)
 		end
-		fs.writeDir(SB)
-		engine.copy(".", SB)
-		fs.copy(`{engine.TOP}/.luaurc`, `{SB}/.luaurc`)
-		fs.copy(`{engine.TOP}/rokit.toml`, `{SB}/rokit.toml`)
-		local tr = `{SB}/pickman/.tracker`
-		write(`{tr}/issues/c0960/c0960.md`, "---\nid: c0960\ntype: chore\ntitle: c0960\nslug: c0960\nraft: \n---\n\n# c0960\n")
-		write(`{tr}/issues/c0960/spend.md`, ledger.render("c0960", "c0960", {
-			row("design-review-001", "claude-sonnet-5-5-high", 100, 1),
-			row("design-review-002", "claude-opus-5-5", 50, 2),
-			row("design-review-003", nil, 7, 3),
-		}))
-		write(`{tr}/issues/c0961/c0961.md`, "---\nid: c0961\ntype: chore\ntitle: c0961\nslug: c0961\nraft: \n---\n\n# c0961\n")
-		write(`{tr}/issues/c0961/spend.md`, ledger.render("c0961", "c0961", { row("design-review-001", "claude-sonnet-5-5-high", 20, 1.5) }))
-		local r = process.exec("scripts/tracker.sh", { "metrics" }, { cwd = SB })
-		local out = r.stdout
-		local ok = r.ok
-		if fs.isDir(SB) then
-			fs.removeDir(SB)
-		end
-		if not ok then
-			error(r.stderr .. out)
-		end
-		t.expect(has(out, "| model | tokens | minutes | rows |")).toBe(true)
-		t.expect(has(out, "| claude-sonnet-5-5-high | 120 | 2.5 | 2 |")).toBe(true)
-		t.expect(has(out, "| claude-opus-5-5 | 50 | 2.0 | 1 |")).toBe(true)
-		t.expect(has(out, "| none | 7 | 3.0 | 1 |")).toBe(true)
-		-- last: after the rework lines, so no earlier table changes shape
-		local at = string.find(out, "| model | tokens | minutes | rows |", 1, true) :: number
-		local rework = string.find(out, "by agent time:", 1, true) :: number
-		t.expect(at > rework).toBe(true)
-	end)
+	)
 end)
