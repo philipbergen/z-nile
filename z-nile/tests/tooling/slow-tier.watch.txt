@@ -1,4 +1,9 @@
-.claude/settings.json
 z-nile/check.sh
 z-nile/lib/select.luau
 z-nile/specs.luau
+z-nile/tests/inputs.tsv
+z-nile/tests/lib/fence.luau
+z-nile/tests/lib/slow.luau
+z-nile/tests/lib/t.luau
+z-nile/tests/run.luau
+z-nile/tests/slow.tsv

@@ -1,2 +1,3 @@
 pickman/tests/lib/place.luau
 pickman/tests/lib/t.luau
+pickman/tests/meta/tiers.luau

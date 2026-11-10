@@ -28,6 +28,7 @@ return t.spec("c0165 inputs, live output and always-run specs", function(it)
 							{ writes = { path = `{d}/pickman/src/C.luau`, text = "return { value = 2 }\\n" } }
 						)
 					)
+					write(`{d}/pickman/tests/unit/aa_edit.watch.txt`, "pickman/src/A.luau\n")
 				end,
 			})
 			-- one job, path order: aa_edit rewrites C.luau to value 2, then cdep loads C and passes only with value 2

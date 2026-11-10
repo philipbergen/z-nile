@@ -18,3 +18,8 @@ z-nile/engine/trackerstate.luau
 z-nile/engine/wrap.luau
 z-nile/engine/wrapper.luau
 z-nile/lib/fence.sh
+z-nile/tests/inputs.tsv
+z-nile/tests/lib/cachepaths.luau
+z-nile/tests/lib/fakecli.luau
+z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/t.luau

@@ -1,8 +1,8 @@
-pickman/check.sh
 z-nile/check.sh
 z-nile/engine/board.luau
 z-nile/engine/lessons.luau
 z-nile/engine/main.luau
+z-nile/engine/projects.luau
 z-nile/engine/publish.luau
 z-nile/engine/skills.luau
 z-nile/engine/trail.luau
@@ -10,4 +10,10 @@ z-nile/lib/ac.sh
 z-nile/lib/fence.sh
 z-nile/lib/git-hooks/pre-push
 z-nile/lib/git-hooks/reference-transaction
+z-nile/tests/lib/cachepaths.luau
+z-nile/tests/lib/engine.luau
+z-nile/tests/lib/fence.luau
+z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/t.luau
+z-nile/tests/lib/trackerfix.luau
 zn

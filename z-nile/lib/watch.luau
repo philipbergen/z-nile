@@ -38,7 +38,8 @@ function watch.fileFor(spec: string): string
 	return spec .. ".watch.txt"
 end
 
--- A source file a watch list may name. Tracker documents, documentation, skills, lessons and tests are not.
+-- A source file a watch list may name. Tracker documents, documentation, skills and lessons are not.
+-- A spec and a watch file are not. Every other file under tests/ is: helpers, the runner, fixtures.
 function watch.isSource(path: string): boolean
 	if path == "" or string.sub(path, 1, 1) == "/" then
 		return false
@@ -55,16 +56,52 @@ function watch.isSource(path: string): boolean
 	if string.find(path, "/lessons/", 1, true) or string.sub(path, 1, 8) == "lessons/" then
 		return false
 	end
-	if string.find(path, "/tests/", 1, true) or string.sub(path, 1, 6) == "tests/" then
-		return false
-	end
 	if string.sub(path, -10) == ".spec.luau" or watch.isWatch(path) then
 		return false
 	end
-	if path == "z-nile/next" or path == "z-nile/compaction.txt" then
+	if path == "z-nile/next" or path == "z-nile/compaction.txt" or path == "z-nile/watch-passed" then
 		return false
 	end
 	return true
+end
+
+-- Files every run depends on and no spec requires. A spec whose text names one watches it.
+-- A change to one of them runs those specs, never every spec.
+function watch.sharedPins(): { string }
+	return {
+		"z-nile/tests/run.luau",
+		"z-nile/check.sh",
+		"zn",
+		"rokit.toml",
+		"stylua.toml",
+		"selene.toml",
+	}
+end
+
+local GAME_HOME: { [string]: boolean } = {
+	arcade = true,
+	pickman = true,
+	portal = true,
+	snake = true,
+	invaders = true,
+	asteroids = true,
+}
+
+-- A tooling spec keeps tooling paths. A game or library spec keeps game and library paths.
+-- A squash that touched both suites does not bind one suite's specs to the other's files.
+function watch.forSuite(spec: string, paths: { string }): { string }
+	local tooling = string.sub(spec, 1, 7) == "z-nile/" or string.sub(spec, 1, 6) == "tests/"
+	local out: { string } = {}
+	for _, p in paths do
+		local home = string.match(p, "^([^/]+)/") or ""
+		local keep = if tooling
+			then home == "" or home == "z-nile" or home == "scripts" or string.sub(p, 1, 8) == ".github/"
+			else GAME_HOME[home] == true
+		if keep then
+			table.insert(out, p)
+		end
+	end
+	return watch.unique(out)
 end
 
 function watch.sourceOf(paths: { string }): { string }
@@ -339,6 +376,9 @@ local function bind(
 		table.insert(problems, `{file}: {err}`)
 		return
 	end
+	if #paths == 0 then
+		table.insert(problems, `{file} is empty`)
+	end
 	for _, p in paths do
 		if not reader.isFile(p) then
 			table.insert(problems, `{file}: {p} does not exist`)
@@ -349,7 +389,13 @@ local function bind(
 	end
 end
 
-local function walk(reader: Reader, dir: string, watches: { [string]: { string } }, problems: { string })
+local function walk(
+	reader: Reader,
+	dir: string,
+	watches: { [string]: { string } },
+	problems: { string },
+	seen: { string }
+)
 	if not reader.isDir(dir) then
 		return
 	end
@@ -371,7 +417,9 @@ local function walk(reader: Reader, dir: string, watches: { [string]: { string }
 	for _, name in names do
 		local child = `{dir}/{name}`
 		if reader.isDir(child) then
-			walk(reader, child, watches, problems)
+			walk(reader, child, watches, problems, seen)
+		elseif string.sub(name, -10) == ".spec.luau" then
+			table.insert(seen, child)
 		elseif string.sub(name, -10) == ".watch.txt" then
 			local spec = string.sub(child, 1, #child - 10) .. ".spec.luau"
 			if reader.isFile(spec) then
@@ -382,10 +430,17 @@ local function walk(reader: Reader, dir: string, watches: { [string]: { string }
 end
 
 -- Watch bindings under one home (`prefix` is "" or "pickman/"), and every problem in those files.
+-- A spec with no watch file, and a watch file with an empty list, are problems: the path is named.
 function watch.collect(reader: Reader, prefix: string): ({ [string]: { string } }, { string })
 	local watches: { [string]: { string } } = {}
 	local problems: { string } = {}
-	walk(reader, `{prefix}tests`, watches, problems)
+	local seen: { string } = {}
+	walk(reader, `{prefix}tests`, watches, problems, seen)
+	for _, spec in seen do
+		if watches[spec] == nil then
+			table.insert(problems, `{spec} has no watch file`)
+		end
+	end
 	return watches, problems
 end
 

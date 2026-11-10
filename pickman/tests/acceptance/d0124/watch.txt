@@ -6,3 +6,6 @@ pickman/src/server/Ranks.luau
 pickman/src/shared/Logic/Flow/init.luau
 pickman/src/shared/Logic/Hiscores/init.luau
 pickman/src/shared/Logic/Lobby/init.luau
+pickman/src/shared/Logic/Pad/init.luau
+pickman/src/shared/Logic/Travel/init.luau
+pickman/tests/lib/t.luau

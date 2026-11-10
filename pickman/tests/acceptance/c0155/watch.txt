@@ -1,3 +1,4 @@
 pickman/src/shared/Logic/Pad/init.luau
 pickman/src/shared/Logic/Touch/init.luau
 pickman/tests/lib/t.luau
+pickman/tests/meta/tiers.luau

@@ -2,3 +2,5 @@ pickman/src/client/Camera.luau
 pickman/src/client/Pads.luau
 pickman/src/client/Sticks.luau
 pickman/src/shared/Logic/Pad/init.luau
+pickman/tests/lib/place.luau
+pickman/tests/lib/t.luau

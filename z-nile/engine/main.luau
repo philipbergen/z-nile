@@ -92,8 +92,9 @@ usage: ./zn <command> ...
   done <R-id>                                   verify checks + review resolution, move to done, ready PR (commit is deliver)
                                                 and write each issue's tests/acceptance/<id>/watch.txt
   watch-bootstrap                               write every spec's watch file from the commit that added it (once)
-  watch-net                                     after ./zn land, from the main checkout: run every project's fast suite
-                                                on current main and commit a missed test's files onto branch watch-net
+  watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
+  watch-net                                     run every project's fast suite on current main and push a missed test's
+                                                files onto main (also started by land and by watch-kick)
   worktree <R-id|name>                          create or reuse .worktree/<R-id|name> from origin/main; print its path
   worktree-prune                                remove worktrees of rafts that are done on main
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
@@ -2418,6 +2419,13 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 			print(
 				`landed {sha} on main; remove this worktree: git -C {mainRoot()} worktree remove {root} && git -C {mainRoot()} branch -D {branch}{suffix}`
 			)
+			local kickErr: any = nil
+			local kicked = xpcall(watchcmd.kick, function(e)
+				kickErr = e
+			end)
+			if not kicked then
+				stdio.ewrite(`watch-net: not started ({kickErr})\n`)
+			end
 			return
 		end
 		sh.run("git", { "fetch", "--quiet", "origin", "main" })
@@ -6120,7 +6128,12 @@ cmd["watch-bootstrap"] = function()
 	watchcmd.bootstrap()
 end
 
--- After a landing, from the main checkout. It edits `.worktree/watch-net`, never this checkout's files.
+-- Returns at once. The net runs under ./zn run and writes .cache/watch-net.log in this checkout.
+cmd["watch-kick"] = function()
+	watchcmd.kick()
+end
+
+-- Edits `.worktree/watch-net`, never this checkout's files, and pushes a repair onto main.
 cmd["watch-net"] = function()
 	watchcmd.net()
 end

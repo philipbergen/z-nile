@@ -16,3 +16,4 @@ pickman/src/shared/Logic/Picks/init.luau
 pickman/src/shared/Logic/Session/init.luau
 pickman/src/shared/Logic/Touch/init.luau
 pickman/src/shared/Logic/View/init.luau
+pickman/tests/lib/t.luau

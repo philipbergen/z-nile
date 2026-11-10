@@ -150,6 +150,12 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['local out = given or ".cache/board.html"'] = `the board page, written with sh.writeReplacing: {RENAMED}`,
 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
+		["watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)"] = "usage text: the net's log path",
+	},
+	["z-nile/engine/watchcmd.luau"] = {
+		["'cd \"$1\" && ./zn run --time 3600 -- ./zn watch-net > .cache/watch-net.log 2>&1 &',"] = "starts the net in the background; the log is this checkout's .cache, which the fence already guards",
+		["fs.writeDir(`{root}/.cache`)"] = "the folder itself (fs.writeDir of an existing folder writes nothing)",
+		['print("watch-net: started, log at .cache/watch-net.log")'] = "a message naming the log",
 	},
 	["z-nile/engine/board.luau"] = {
 		["local home = `{dir}/.cache/dispatch`"] = "c0118: the board reads the dispatcher's run state (state.json, questions.md) to show it on a card; nothing is written",

@@ -1,4 +1,14 @@
 pickman/src/client/Controls.luau
 pickman/src/client/HudView.luau
 pickman/src/client/Main.client.luau
+pickman/src/shared/Logic/Blaster/init.luau
+pickman/src/shared/Logic/Ghosts/init.luau
+pickman/src/shared/Logic/Hop/init.luau
+pickman/src/shared/Logic/Hud/init.luau
+pickman/src/shared/Logic/Maze/init.luau
+pickman/src/shared/Logic/Movement/init.luau
+pickman/src/shared/Logic/Session/init.luau
 pickman/src/shared/Logic/Touch/init.luau
+pickman/src/shared/Logic/View/init.luau
+pickman/tests/lib/place.luau
+pickman/tests/lib/t.luau

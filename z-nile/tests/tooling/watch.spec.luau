@@ -21,7 +21,7 @@ return t.spec("the watch map", function(it)
 		t.expect(string.find(abs :: string, "repository-relative", 1, true) ~= nil).toBe(true)
 	end)
 
-	it("leaves out tracker files, docs, skills, lessons and tests", function()
+	it("leaves out tracker files, docs, skills, lessons, specs and watch files", function()
 		t.expect(watch.sourceOf({
 			"pickman/src/A.luau",
 			"pickman/.tracker/issues/f0001/f0001.md",
@@ -30,8 +30,59 @@ return t.spec("the watch map", function(it)
 			"README.md",
 			"pickman/tests/unit/a.spec.luau",
 			"pickman/tests/unit/a.watch.txt",
+			"pickman/tests/lib/t.luau",
+			"z-nile/tests/run.luau",
 			"z-nile/check.sh",
-		})).toEqual({ "pickman/src/A.luau", "z-nile/check.sh" })
+			"z-nile/watch-passed",
+		})).toEqual({
+			"pickman/src/A.luau",
+			"pickman/tests/lib/t.luau",
+			"z-nile/check.sh",
+			"z-nile/tests/run.luau",
+		})
+	end)
+
+	it("keeps a tooling spec on tooling paths and a game spec on game and library paths", function()
+		local mixed = { "pickman/src/A.luau", "arcade/src/B.luau", "z-nile/lib/watch.luau", "zn" }
+		t.expect(watch.forSuite("z-nile/tests/tooling/a.spec.luau", mixed)).toEqual({
+			"z-nile/lib/watch.luau",
+			"zn",
+		})
+		t.expect(watch.forSuite("pickman/tests/unit/a.spec.luau", mixed)).toEqual({
+			"arcade/src/B.luau",
+			"pickman/src/A.luau",
+		})
+	end)
+
+	it("names a spec with no watch file and an empty watch file", function()
+		local files: { [string]: string } = {
+			["pickman/tests/unit/bare.spec.luau"] = "return {}\n",
+			["pickman/tests/unit/empty.spec.luau"] = "return {}\n",
+			["pickman/tests/unit/empty.watch.txt"] = "",
+		}
+		local dirs: { [string]: { string } } = {
+			["pickman/tests"] = { "unit" },
+			["pickman/tests/unit"] = { "bare.spec.luau", "empty.spec.luau", "empty.watch.txt" },
+		}
+		local reader: watch.Reader = {
+			isDir = function(p: string): boolean
+				return dirs[p] ~= nil
+			end,
+			isFile = function(p: string): boolean
+				return files[p] ~= nil
+			end,
+			readDir = function(p: string): { string }
+				return dirs[p] or {}
+			end,
+			readFile = function(p: string): string
+				return files[p] or ""
+			end,
+		}
+		local _, problems = watch.collect(reader, "pickman/")
+		t.expect(problems).toEqual({
+			"pickman/tests/unit/empty.watch.txt is empty",
+			"pickman/tests/unit/bare.spec.luau has no watch file",
+		})
 	end)
 
 	it("selects the spec that watches a path, the spec a change edits, and no other", function()

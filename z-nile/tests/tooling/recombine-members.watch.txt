@@ -3,3 +3,7 @@ z-nile/engine/claims.luau
 z-nile/engine/lessons.luau
 z-nile/engine/main.luau
 z-nile/engine/raftplan.luau
+z-nile/tests/lib/engine.luau
+z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/t.luau
+z-nile/tests/lib/trackerfix.luau

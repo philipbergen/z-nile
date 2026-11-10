@@ -1,4 +1,3 @@
-.luaurc
 arcade/.luaurc
 arcade/check.sh
 arcade/default.project.json
@@ -7,6 +6,9 @@ arcade/src/server/.gitkeep
 arcade/src/shared/Info.luau
 arcade/src/shared/Logic/.gitkeep
 arcade/stylua.toml
+arcade/tests/lib/renamed.luau
+arcade/tests/lib/t.luau
+arcade/tests/run.luau
 asteroids/.luaurc
 asteroids/check.sh
 asteroids/default.project.json
@@ -15,6 +17,9 @@ asteroids/src/client/Main.client.luau
 asteroids/src/server/Main.server.luau
 asteroids/src/shared/Logic/.gitkeep
 asteroids/stylua.toml
+asteroids/tests/lib/renamed.luau
+asteroids/tests/lib/t.luau
+asteroids/tests/run.luau
 invaders/.luaurc
 invaders/check.sh
 invaders/default.project.json
@@ -23,6 +28,9 @@ invaders/src/client/Main.client.luau
 invaders/src/server/Main.server.luau
 invaders/src/shared/Logic/.gitkeep
 invaders/stylua.toml
+invaders/tests/lib/renamed.luau
+invaders/tests/lib/t.luau
+invaders/tests/run.luau
 portal/.luaurc
 portal/check.sh
 portal/default.project.json
@@ -31,6 +39,9 @@ portal/src/client/Main.client.luau
 portal/src/server/Main.server.luau
 portal/src/shared/Logic/.gitkeep
 portal/stylua.toml
+portal/tests/lib/renamed.luau
+portal/tests/lib/t.luau
+portal/tests/run.luau
 snake/.luaurc
 snake/check.sh
 snake/default.project.json
@@ -39,7 +50,6 @@ snake/src/client/Main.client.luau
 snake/src/server/Main.server.luau
 snake/src/shared/Logic/.gitkeep
 snake/stylua.toml
-z-nile/engine/boundcmd.luau
-z-nile/engine/main.luau
-z-nile/engine/skills.luau
-z-nile/guard-bash.luau
+snake/tests/lib/renamed.luau
+snake/tests/lib/t.luau
+snake/tests/run.luau

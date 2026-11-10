@@ -58,36 +58,178 @@ local function raftLog(): string
 	return sh.git(args)
 end
 
--- Writes each member's watch.txt from the source files its commits changed, and stages it so a failed
--- `done` (git reset --hard) drops it. A source commit that does not name exactly one member gives every
--- member the raft's whole source list.
+local addingCommit: (string) -> string?
+local resolvedRequires: (string, string) -> { string }
+
+local function memberIdsOf(members: { Member }): { string }
+	local ids_: { string } = {}
+	for _, m in members do
+		table.insert(ids_, m.id)
+	end
+	return ids_
+end
+
+local function readList(file: string): { string }
+	if not fs.isFile(file) then
+		return {}
+	end
+	local parsed, err = watch.parse(fs.readFile(file))
+	if not parsed then
+		fail(`watch: {file}: {err}`)
+	end
+	return parsed :: { string }
+end
+
+-- Stages a non-empty list. An empty list is never written: a spec with nothing to watch fails the gate.
+local function stageList(file: string, paths: { string }): boolean
+	if #paths == 0 then
+		return false
+	end
+	local parent = string.match(file, "^(.*)/[^/]+$")
+	if parent then
+		fs.writeDir(parent)
+	end
+	fs.writeFile(file, watch.render(paths))
+	sh.git({ "add", "--", file })
+	return true
+end
+
+local function specsIn(dir: string): { string }
+	local out: { string } = {}
+	if not fs.isDir(dir) then
+		return out
+	end
+	for _, name in fs.readDir(dir) do
+		if string.sub(name, -10) == ".spec.luau" then
+			table.insert(out, `{dir}/{name}`)
+		end
+	end
+	table.sort(out)
+	return out
+end
+
+local function union(a: { string }, b: { string }): { string }
+	local all: { string } = {}
+	for _, p in a do
+		table.insert(all, p)
+	end
+	for _, p in b do
+		table.insert(all, p)
+	end
+	return watch.unique(all)
+end
+
+-- Writes each member's watch.txt from the source files its commits changed, and a sidecar for every
+-- spec those commits added or edited outside an acceptance folder. Stages them so a failed `done`
+-- (git reset --hard) drops them. A source commit that does not name exactly one member gives every
+-- member the raft's whole source list. A ticket whose commits changed no source file watches the
+-- files its specs require. An empty list is never written.
 function watchcmd.capture(members: { Member })
-	local per, shared = watch.assign(
-		watch.parseLog(raftLog()),
-		(function(): { string }
-			local ids_: { string } = {}
-			for _, m in members do
-				table.insert(ids_, m.id)
-			end
-			return ids_
-		end)()
-	)
+	local commits = watch.parseLog(raftLog())
+	local ids_ = memberIdsOf(members)
+	local per, shared = watch.assign(commits, ids_)
 	if shared then
 		print(
 			"watch: a source commit does not name exactly one issue, so every issue gets the raft's source list"
 		)
 	end
-	for _, m in members do
-		if fs.isDir(m.dest) then
-			local paths = per[m.id] or {}
-			local file = `{m.dest}/watch.txt`
-			fs.writeFile(file, watch.render(paths))
-			sh.git({ "add", "--", file })
-			if #paths == 0 then
-				print(`watch: {m.id} lists no source files ({file})`)
-			else
-				print(`watch: {m.id} {file} ({#paths})`)
+	local member: { [string]: boolean } = {}
+	for _, id in ids_ do
+		member[id] = true
+	end
+	local function raftList(): { string }
+		local all: { string } = {}
+		for _, id in ids_ do
+			local paths: { string } = per[id] or {}
+			for _, p in paths do
+				table.insert(all, p)
 			end
+		end
+		return watch.unique(all)
+	end
+	-- The issue whose commit added the spec, or nil when that cannot be told.
+	local function issueOf(spec: string): string?
+		local added = addingCommit(spec)
+		if not added then
+			return nil
+		end
+		local shown = sh.run("git", { "log", "-1", "--format=%B", added })
+		if not shown.ok then
+			return nil
+		end
+		local named: { string } = {}
+		for _, id in watch.issueIds(shown.stdout) do
+			if member[id] then
+				table.insert(named, id)
+			end
+		end
+		if #named == 1 then
+			return named[1]
+		end
+		return nil
+	end
+	local function listFor(issueId: string?): { string }
+		if shared or not issueId then
+			return raftList()
+		end
+		return per[issueId] or raftList()
+	end
+	local function withRequires(spec: string, paths: { string }): { string }
+		local kept = watch.forSuite(spec, paths)
+		if #kept > 0 or not fs.isFile(spec) then
+			return kept
+		end
+		return watch.forSuite(spec, resolvedRequires(spec, fs.readFile(spec)))
+	end
+	for _, m in members do
+		local specs = specsIn(m.dest)
+		if #specs > 0 then
+			local paths = withRequires(specs[1], listFor(m.id))
+			if #paths == 0 then
+				local req: { string } = {}
+				for _, spec in specs do
+					if fs.isFile(spec) then
+						for _, p in resolvedRequires(spec, fs.readFile(spec)) do
+							table.insert(req, p)
+						end
+					end
+				end
+				paths = watch.forSuite(specs[1], req)
+			end
+			local file = `{m.dest}/watch.txt`
+			if stageList(file, paths) then
+				print(`watch: {m.id} {file} ({#paths})`)
+			else
+				print(`watch: {m.id} lists no source files and its specs require none ({file})`)
+			end
+		end
+	end
+	local seen: { [string]: boolean } = {}
+	local specs: { string } = {}
+	for _, c in commits do
+		for _, f in c.files do
+			local underTests = string.find(f, "/tests/", 1, true) or string.sub(f, 1, 6) == "tests/"
+			if
+				string.sub(f, -10) == ".spec.luau"
+				and underTests
+				and not string.find(f, "/tests/acceptance/", 1, true)
+			then
+				if not seen[f] then
+					seen[f] = true
+					table.insert(specs, f)
+				end
+			end
+		end
+	end
+	table.sort(specs)
+	for _, spec in specs do
+		local paths = union(readList(watch.fileFor(spec)), listFor(issueOf(spec)))
+		paths = withRequires(spec, paths)
+		local file = watch.fileFor(spec)
+		if stageList(file, paths) then
+			print(`watch: {spec} {file} ({#paths})`)
+		else
+			print(`watch: {spec} lists no source files and requires none ({file})`)
 		end
 	end
 end
@@ -132,7 +274,7 @@ function watchcmd.upkeep()
 	end
 end
 
-local function addingCommit(spec: string): string?
+function addingCommit(spec: string): string?
 	local r = sh.run("git", { "log", "--diff-filter=A", "--pretty=%H", "-1", "--", spec })
 	if not r.ok then
 		return nil
@@ -165,7 +307,7 @@ local function keepResolved(path: string, spec: string): boolean
 	return string.find(path, "/tests/lib/", 1, true) ~= nil or string.sub(path, -14) == "/tests/run.luau"
 end
 
-local function resolvedRequires(spec: string, text: string): { string }
+function resolvedRequires(spec: string, text: string): { string }
 	local out: { string } = {}
 	for _, req in watch.requirePaths(text) do
 		local path = graph.resolve(spec, req)
@@ -251,23 +393,56 @@ function watchcmd.bootstrap()
 			end
 			return out
 		end
+		local function mentions(text: string, pin: string): boolean
+			local from = 1
+			while true do
+				local at = string.find(text, pin, from, true)
+				if not at then
+					return false
+				end
+				local before = if at == 1 then "" else string.sub(text, at - 1, at - 1)
+				local after = string.sub(text, at + #pin, at + #pin)
+				local function edge(ch: string): boolean
+					return ch == "" or string.match(ch, "[%w%._%-/]") == nil
+				end
+				if edge(before) and edge(after) then
+					return true
+				end
+				from = at + 1
+			end
+		end
 		local sources: { string } = {}
 		local stage = "history"
 		local added = addingCommit(spec)
 		if added then
-			sources = present(watch.sourceOf(commitFiles(added)))
+			sources = watch.forSuite(spec, present(watch.sourceOf(commitFiles(added))))
 		end
 		if #sources == 0 then
-			sources = present(watch.sourceOf(laterFiles(spec)))
+			sources = watch.forSuite(spec, present(watch.sourceOf(laterFiles(spec))))
 			stage = "later"
 		end
-		if #sources == 0 and fs.isFile(spec) then
-			sources = resolvedRequires(spec, fs.readFile(spec))
-			stage = "require"
-		end
-		if #sources == 0 and fs.isFile(spec) then
-			sources = literalSources(spec, fs.readFile(spec))
-			stage = "literal"
+		if fs.isFile(spec) then
+			local text = fs.readFile(spec)
+			local reqs = watch.forSuite(spec, resolvedRequires(spec, text))
+			if #reqs > 0 then
+				if #sources == 0 then
+					stage = "require"
+				end
+				sources = union(sources, reqs)
+			end
+			if #sources == 0 then
+				sources = watch.forSuite(spec, literalSources(spec, text))
+				if #sources > 0 then
+					stage = "literal"
+				end
+			end
+			local pins: { string } = {}
+			for _, pin in watch.sharedPins() do
+				if mentions(text, pin) and fs.isFile(pin) then
+					table.insert(pins, pin)
+				end
+			end
+			sources = union(sources, watch.forSuite(spec, pins))
 		end
 		if #sources == 0 then
 			emptyOwn += 1
@@ -301,6 +476,9 @@ function watchcmd.bootstrap()
 					print(`watch-bootstrap: {spec} still has an empty list`)
 				end
 			end
+		end
+		if #paths == 0 then
+			continue
 		end
 		local parent = string.match(file, "^(.*)/[^/]+$")
 		if parent then
@@ -360,34 +538,52 @@ local function ensureWorktree(): string
 		gitAt(WT, { "rebase", "--abort" })
 		fail(`watch-net: rebase onto origin/main failed: {rerr}`)
 	end
-	local remote = gitAt(WT, { "rev-parse", "--verify", "--quiet", "refs/remotes/origin/watch-net" })
-	if remote then
-		local onto, _, oerr = gitAt(WT, { "rebase", "--quiet", "origin/watch-net" })
-		if not onto then
-			gitAt(WT, { "rebase", "--abort" })
-			fail(`watch-net: rebase onto origin/watch-net failed: {oerr}`)
-		end
-	end
 	return WT
 end
 
--- The landing is origin/main. A previous repair on this branch is not a landing.
-local function tipChange(dir: string): ({ string }, string)
+local PASSED = "z-nile/watch-passed"
+
+-- The commit the net last passed on, recorded in the tree. Absent until the first passing run.
+local function passedAt(dir: string): string?
+	local abs = `{dir}/{PASSED}`
+	if not fs.isFile(abs) then
+		return nil
+	end
+	local sha = sh.trim(fs.readFile(abs))
+	if not string.match(sha, "^%x+$") then
+		return nil
+	end
+	local ok, full = gitAt(dir, { "rev-parse", "--verify", "--quiet", sha })
+	if not ok or full == "" then
+		return nil
+	end
+	return full
+end
+
+-- Source files changed since the last passing commit. With no record yet, the last 30 commits:
+-- a first run has no earlier pass to stop at.
+local function sincePassed(dir: string): ({ string }, string)
 	local head = mustAt(dir, { "rev-parse", "origin/main" })
+	local base = passedAt(dir)
+	if base then
+		if base == head then
+			return {}, head
+		end
+		return watch.sourceOf(linesOf(mustAt(dir, { "diff", "--name-only", base, head }))), head
+	end
+	local sources: { string } = {}
 	local cur = head
 	for _ = 1, 30 do
 		local ok, parent = gitAt(dir, { "rev-parse", "--verify", "--quiet", `{cur}^1` })
 		if not ok or parent == "" then
 			break
 		end
-		local diff = mustAt(dir, { "diff", "--name-only", parent, cur })
-		local sources = watch.sourceOf(linesOf(diff))
-		if #sources > 0 then
-			return sources, cur
+		for _, s in watch.sourceOf(linesOf(mustAt(dir, { "diff", "--name-only", parent, cur }))) do
+			table.insert(sources, s)
 		end
 		cur = parent
 	end
-	return {}, head
+	return watch.unique(sources), head
 end
 
 local function resolveSpec(dir: string, path: string): string?
@@ -540,7 +736,7 @@ local function writeDefect(dir: string, spec: string, commit: string, sources: {
 end
 
 local function applyRepairs(dir: string, output: string): boolean
-	local sources, commit = tipChange(dir)
+	local landed, commit = sincePassed(dir)
 	local changed = false
 	for _, raw in watch.failingSpecs(output) do
 		local spec = resolveSpec(dir, raw)
@@ -548,6 +744,7 @@ local function applyRepairs(dir: string, output: string): boolean
 			stdio.ewrite(`watch-net: FAIL line names no spec: {raw}\n`)
 			continue
 		end
+		local sources = watch.forSuite(spec, landed)
 		if #sources == 0 then
 			stdio.ewrite(`watch-net: {spec} failed and the landed commits change no source file\n`)
 			continue
@@ -561,47 +758,69 @@ local function applyRepairs(dir: string, output: string): boolean
 	return changed
 end
 
-local function commitRepair(dir: string)
+local function commitRepair(dir: string, message: string)
 	mustAt(dir, { "add", "-A" })
-	local ok, _, err = gitAt(dir, { "commit", "-q", "-m", "watch-net: extend the map for a missed failure" })
+	local ok, _, err = gitAt(dir, { "commit", "-q", "-m", message })
 	if not ok then
 		fail(`watch-net: commit failed: {err}`)
 	end
 end
 
-local function pushRepair(dir: string): boolean
-	local ok = gitAt(dir, { "push", "-q", "origin", "HEAD:watch-net" })
-	if ok then
+-- The repair reaches main the way a tracker commit does: one commit on top of origin/main, never a force.
+-- A rejected push rebases onto the new main and pushes again; an empty result means the other machine landed it.
+local function pushMain(dir: string): boolean
+	local function once(): boolean
+		local ok = gitAt(dir, { "push", "-q", "origin", "HEAD:refs/heads/main" })
+		return ok
+	end
+	if once() then
 		return true
 	end
-	local pulled, _, err = gitAt(dir, { "pull", "--rebase", "-q", "origin", "watch-net" })
-	if not pulled then
-		gitAt(dir, { "rebase", "--abort" })
-		local hard, _, herr = gitAt(dir, { "reset", "--hard", "-q", "origin/watch-net" })
-		if not hard then
-			fail(`watch-net: could not take origin/watch-net: {herr}\n{err}`)
-		end
+	local fetched = gitAt(dir, { "fetch", "--quiet", "origin", "main" })
+	if not fetched then
 		return false
 	end
-	local ahead = mustAt(dir, { "rev-list", "--count", "origin/watch-net..HEAD" })
+	local rebased = gitAt(dir, { "rebase", "--quiet", "origin/main" })
+	if not rebased then
+		gitAt(dir, { "rebase", "--abort" })
+		return false
+	end
+	local ahead = mustAt(dir, { "rev-list", "--count", "origin/main..HEAD" })
 	if ahead == "0" then
 		return true
 	end
-	local again = gitAt(dir, { "push", "-q", "origin", "HEAD:watch-net" })
-	return again
+	return once()
 end
 
--- After `./zn land`, from the main checkout. Runs every project's fast suite on current main, in
--- `.worktree/watch-net`, and commits any repair onto the `watch-net` branch. A second machine rebases;
--- when the repair is already there it finds nothing to do. This blocks no merge.
+local function recordPass(dir: string, head: string, sources: { string })
+	local recorded = passedAt(dir)
+	if recorded == head then
+		print("watch-net: nothing to do")
+		return
+	end
+	if recorded and #sources == 0 then
+		print("watch-net: nothing to do")
+		return
+	end
+	fs.writeFile(`{dir}/{PASSED}`, head .. "\n")
+	commitRepair(dir, "watch-net: the suite passed")
+	if not pushMain(dir) then
+		fail("watch-net: could not record the passing commit on main")
+	end
+	print("watch-net: pushed main")
+end
+
+-- Runs every project's fast suite on current main, in `.worktree/watch-net`, and pushes a repair onto
+-- main. The files it adds are the source files changed since `z-nile/watch-passed` (the last commit the
+-- suite passed on). A second machine rebases; when the repair is already on main it finds nothing to do.
 function watchcmd.net()
-	print("watch-net: start this after ./zn land, from the main checkout. It does not block a merge.")
 	local dir = ensureWorktree()
 	print(`watch-net: fast suite of every project in {dir}`)
 	local ran = process.exec("bash", { "z-nile/check.sh", "--full" }, { cwd = dir })
 	local output = ran.stdout .. "\n" .. ran.stderr
+	local sources, head = sincePassed(dir)
 	if ran.ok then
-		print("watch-net: nothing to do")
+		recordPass(dir, head, sources)
 		return
 	end
 	if #watch.failingSpecs(output) == 0 then
@@ -612,9 +831,9 @@ function watchcmd.net()
 		print("watch-net: nothing to do")
 		return
 	end
-	commitRepair(dir)
-	if pushRepair(dir) then
-		print("watch-net: pushed watch-net")
+	commitRepair(dir, "watch-net: extend the map for a missed failure")
+	if pushMain(dir) then
+		print("watch-net: pushed main")
 		return
 	end
 	-- the other machine landed first: re-apply against its tree, which is now HEAD
@@ -622,11 +841,34 @@ function watchcmd.net()
 		print("watch-net: nothing to do")
 		return
 	end
-	commitRepair(dir)
-	if not pushRepair(dir) then
+	commitRepair(dir, "watch-net: extend the map for a missed failure")
+	if not pushMain(dir) then
 		fail("watch-net: push rejected twice")
 	end
-	print("watch-net: pushed watch-net")
+	print("watch-net: pushed main")
+end
+
+-- Starts the net after a landing and returns at once. The run is bounded by `./zn run` and writes
+-- `.cache/watch-net.log` in the checkout that started it. A failure to start is reported and does not
+-- fail the command that asked. The spec runner sets PICKMAN_WATCH_NET=off so a fixture land does not
+-- start a suite; a real landing leaves it unset.
+function watchcmd.kick()
+	if process.env.PICKMAN_WATCH_NET == "off" then
+		return
+	end
+	local root = sh.git({ "rev-parse", "--show-toplevel" })
+	fs.writeDir(`{root}/.cache`)
+	local started = process.exec("bash", {
+		"-c",
+		'cd "$1" && ./zn run --time 3600 -- ./zn watch-net > .cache/watch-net.log 2>&1 &',
+		"watch-net",
+		root,
+	})
+	if not started.ok then
+		stdio.ewrite(`watch-net: not started: {started.stderr}\n`)
+		return
+	end
+	print("watch-net: started, log at .cache/watch-net.log")
 end
 
 return watchcmd

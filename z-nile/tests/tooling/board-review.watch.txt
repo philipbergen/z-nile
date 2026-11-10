@@ -3,3 +3,9 @@ z-nile/engine/board.luau
 z-nile/engine/boardview.luau
 z-nile/engine/history.luau
 z-nile/engine/main.luau
+z-nile/engine/stats.luau
+z-nile/tests/acceptance/c0118/overrides.patch
+z-nile/tests/acceptance/c0118/overrides.sh
+z-nile/tests/inputs.tsv
+z-nile/tests/lib/cachepaths.luau
+z-nile/tests/lib/t.luau
