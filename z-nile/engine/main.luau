@@ -2,6 +2,7 @@
 -- Tracker CLI. Run through ./zn at the repository root (c0114). See z-nile/skills/zz-rules/SKILL.md.
 local audit = require("./audit")
 local board = require("./board")
+local boardview = require("./boardview")
 local brokerLib = require("./broker")
 local claimsLib = require("./claims")
 local compactLib = require("./compact")
@@ -4171,7 +4172,7 @@ function cmd.done(pos: { string })
 		end
 	end
 	if gateLib.doneGate(process.env) == "promoted" then
-		print("done: inside a spec run, so the full gate is skipped; checking the promoted specs")
+		print("done: inside a spec run, so the gate is skipped; checking the promoted specs")
 		if #promoted > 0 then
 			print("\n=== promoted acceptance specs: type check + meta + run")
 			if not promotedChecksAll(raft, promoted, true) then
@@ -4180,10 +4181,10 @@ function cmd.done(pos: { string })
 			end
 		end
 	else
-		print("\n=== full gate on the done tree")
-		if not sh.stream("bash", { "z-nile/check.sh", "--full" }) then
+		print("\n=== affected gate on the done tree")
+		if not sh.stream("bash", { "z-nile/check.sh", "--affected" }) then
 			rollback()
-			fail("the full gate fails on the done tree (rolled back); fix and retry done")
+			fail("the affected gate fails on the done tree (rolled back); fix and retry done")
 		end
 	end
 	-- Mark the PR ready before the final push: CI skips drafts, so the push below is what gets tested.
@@ -5222,13 +5223,13 @@ end
 -- metrics over lessons (c0111): findings per lesson tag, and design rounds before and after lessons existed
 -- c0116: the design-review-NNN.md files in one item's folder.
 local function designRoundsIn(dir: string): number
-	local n = 0
+	-- c0118: counted by boardview.rounds, the one rule the board's chart uses too
+	local paths: { string } = {}
 	for _, name in fs.readDir(dir) do
-		if string.match(name, "^design%-review%-%d+%.md$") then
-			n += 1
-		end
+		table.insert(paths, `{dir}/{name}`)
 	end
-	return n
+	local design = boardview.rounds(paths)
+	return design
 end
 
 -- A raft's design rounds: z-design's reviews live on each issue and z-raft's coherence review on the raft, so they
@@ -5557,12 +5558,12 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 			else "classic"
 	end
 	local function codeRounds(dir: string): number
-		local code = 0
+		-- c0118: counted by boardview.rounds, the one rule the board's chart uses too
+		local paths: { string } = {}
 		for _, name in fs.readDir(dir) do
-			if string.match(name, "^review%-%d+%.md$") then
-				code += 1
-			end
+			table.insert(paths, `{dir}/{name}`)
 		end
+		local _, code = boardview.rounds(paths)
 		return code
 	end
 	for _, raft in store.all("raft") do

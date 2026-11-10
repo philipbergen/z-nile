@@ -1,0 +1,33 @@
+# Spend: c0263 Ticket provenance
+
+| # | when | commit | +lines | -lines | minutes | attribution | phase | tokens |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 2026-11-08 04:40 | design-review-001 | 0 | 0 | 14.0 | spend | design-review | 232757 |
+| 2 | 2026-11-08 18:20 | design-review-002 | 0 | 0 | 12.5 | spend | design-review | 222759 |
+| 3 | 2026-11-08 19:23 | design-review-003 | 0 | 0 | 23.7 | spend | design-review | 298518 |
+| 4 | 2026-11-08 19:23 | design-refute-003 | 0 | 0 | 75.0 | spend | design-review |  |
+| 5 | 2026-11-08 19:50 | design-review-004 | 0 | 0 | 17.7 | spend | design-review | 295622 |
+| 6 | 2026-11-08 19:50 | design-refute-004 | 0 | 0 | 80.0 | spend | design-review |  |
+| 7 | 2026-11-08 20:26 | design-review-005 | 0 | 0 | 21.5 | spend | design-review | 321989 |
+| 8 | 2026-11-08 20:26 | design-refute-005 | 0 | 0 | 150.0 | spend | design-review |  |
+| 9 | 2026-11-08 21:04 | design-review-006 | 0 | 0 | 28.0 | spend | design-review | 259196 |
+| 10 | 2026-11-08 21:04 | design-refute-006 | 0 | 0 | 120.0 | spend | design-review |  |
+| 11 | 2026-11-08 22:15 | design-review-007 | 0 | 0 | 58.0 | spend | design-review | 320291 |
+| 12 | 2026-11-08 22:15 | design-refute-007 | 0 | 0 | 180.0 | spend | design-review |  |
+| 13 | 2026-11-08 22:50 | prep | 2348 | 1 | 600.0 | spend | prep |  |
+| 14 | 2026-11-09 03:58 | design-review-008 | 0 | 0 | 21.0 | spend | design-review | 284056 |
+| 15 | 2026-11-09 03:58 | design-refute-008 | 0 | 0 | 120.0 | spend | design-review |  |
+| 16 | 2026-11-09 04:56 | design-review-009 | 0 | 0 | 27.0 | spend | design-review | 341406 |
+| 17 | 2026-11-09 04:56 | design-refute-009 | 0 | 0 | 150.0 | spend | design-review |  |
+| 18 | 2026-11-09 05:20 | design-review-010 | 0 | 0 | 23.0 | spend | design-review | 283024 |
+| 19 | 2026-11-09 06:21 | design-refute-010 | 0 | 0 | 240.0 | spend | design-review |  |
+| 20 | 2026-11-09 07:51 | design-review-011 | 0 | 0 | 28.0 | spend | design-review | 310155 |
+| 21 | 2026-11-09 07:51 | design-refute-011 | 0 | 0 | 300.0 | spend | design-review |  |
+| 22 | 2026-11-09 15:39 | design-review-012 | 0 | 0 | 23.0 | spend | design-review | 306323 |
+| 23 | 2026-11-09 16:48 | design-refute-012 | 0 | 0 | 330.0 | spend | design-review |  |
+| 24 | 2026-11-09 17:45 | design-review-013 | 0 | 0 | 20.0 | spend | design-review | 305656 |
+| 25 | 2026-11-09 17:45 | design-refute-013 | 0 | 0 | 300.0 | spend | design-review |  |
+| 26 | 2026-11-09 17:45 | prep | 6423 | 1 | 900.0 | spend | prep |  |
+
+**Total:** +8771 / -2 lines, 3862.4 agent-minutes, 3781752 tokens over 26 records
+<!-- totals: added=8771 removed=2 minutes=3862.4 records=26 tokens=3781752 -->

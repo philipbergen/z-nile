@@ -18,6 +18,30 @@
 | 14 | 2026-11-08 04:33 | design-review-004 | 0 | 0 | 8.0 | spend | design-review |  | claude-opus-5-5 |
 | 15 | 2026-11-08 04:33 | design-review-004-tokens | 0 | 0 | 0.0 | spend | design-review | 111789 | claude-opus-5-5 |
 | 16 | 2026-11-08 04:37 | design-refute-004 | 0 | 0 | 12.0 | spend | design-review |  |  |
+| 17 | 2026-11-08 04:47 | design-review-004 | 0 | 0 | 9.0 | spend | design-review |  |  |
+| 18 | 2026-11-08 04:47 | design-refute-004 | 0 | 0 | 8.0 | spend | design-review |  |  |
+| 19 | 2026-11-08 05:07 | design-review-005 | 0 | 0 | 12.0 | spend | design-review |  |  |
+| 20 | 2026-11-08 05:07 | design-refute-005 | 0 | 0 | 25.0 | spend | design-review |  |  |
+| 21 | 2026-11-08 05:19 | design-review-006 | 0 | 0 | 10.0 | spend | design-review |  |  |
+| 22 | 2026-11-08 05:19 | design-refute-006 | 0 | 0 | 20.0 | spend | design-review |  |  |
+| 23 | 2026-11-08 05:30 | design-review-007 | 0 | 0 | 10.0 | spend | design-review |  |  |
+| 24 | 2026-11-08 05:30 | design-refute-007 | 0 | 0 | 12.0 | spend | design-review |  |  |
+| 25 | 2026-11-08 05:37 | design-review-008 | 0 | 0 | 9.0 | spend | design-review |  |  |
+| 26 | 2026-11-08 05:37 | design-refute-008 | 0 | 0 | 12.0 | spend | design-review |  |  |
+| 27 | 2026-11-08 05:40 | prep | 400 | 3 | 80.0 | spend | prep |  |  |
+| 28 | 2026-11-08 06:16 | design-review-009 | 0 | 0 | 8.0 | spend | design-review |  |  |
+| 29 | 2026-11-08 06:17 | design-refute-009 | 0 | 0 | 12.0 | spend | design-review |  |  |
+| 30 | 2026-11-08 22:01 | design-review-005 | 0 | 0 | 11.0 | spend | design-review |  |  |
+| 31 | 2026-11-08 22:02 | design-refute-005 | 0 | 0 | 20.0 | spend | design-review |  |  |
+| 32 | 2026-11-08 22:24 | design-review-006 | 0 | 0 | 11.0 | spend | design-review |  |  |
+| 33 | 2026-11-08 22:25 | design-refute-006 | 0 | 0 | 25.0 | spend | design-review |  |  |
+| 34 | 2026-11-08 22:44 | design-review-007 | 0 | 0 | 12.0 | spend | design-review |  |  |
+| 35 | 2026-11-08 22:44 | design-refute-007 | 0 | 0 | 20.0 | spend | design-review |  |  |
+| 36 | 2026-11-08 22:45 | prep | 805 | 4 | 150.0 | spend | prep |  |  |
+| 37 | 2026-11-09 00:09 | design-review-008 | 0 | 0 | 18.0 | spend | design-review |  |  |
+| 38 | 2026-11-09 00:10 | design-refute-008 | 0 | 0 | 25.0 | spend | design-review |  |  |
+| 39 | 2026-11-09 00:10 | prep | 907 | 4 | 120.0 | spend | prep |  |  |
+| 40 | 2026-11-09 03:14 | prep | 907 | 4 | 30.0 | spend | prep |  |  |
 
-**Total:** +156 / -3 lines, 191.0 agent-minutes, 418177 tokens over 16 records
-<!-- totals: added=156 removed=3 minutes=191.0 records=16 tokens=418177 -->
+**Total:** +3175 / -18 lines, 860.0 agent-minutes, 418177 tokens over 40 records
+<!-- totals: added=3175 removed=18 minutes=860.0 records=40 tokens=418177 -->

@@ -1,0 +1,11 @@
+# Answers to design-review-001 (c0279)
+- F1: fixed: measured first (E1b: the fake's startup is 0.04 s of the 2 s window, so the first-line fix is dropped); the stall limit becomes one only a real stall reaches (root 60 s, c0040's closer 2 s), by construction; AC2 delays the very phases (stop, git push, gh) and M2 shows the old limit failing them; consequences: the stall cases keep a startup exposure (E5, Non-goals), c0040's closer file is pinned (AC1, M7) and the fixture comment says why.
+- F2: fixed: the cap case joins the stop case (pid and `deadWithin`, M4); the tool case keeps its stall-limit role but its tool limit rises to 30 s; census in E1; consequences: the cap fake waits (bounded) for the pid file before its heavy lines.
+- F3: fixed: no heartbeat in the stop fake; after the stop it goes silent and holds 120 s; M1 (the stop replaced by `true`) fails `stalled`; consequences: the hold is ended by the kill or by the 60 s stall limit.
+- F4: fixed: AC3 pins the whole spec by its diff from the merge base; `deadWithin` counts only "No such process"; step 0 checks the base blob; consequences: M5 and M6 are killed by AC3; main changing the file first means a re-prep.
+- F5: fixed: FAKE_DELAY sits before `git push` and before `gh` in the push fake and before the stop (no heartbeat to hide behind); M2 is the unfixed limit under it; E4b corrected: AC2 is a guard, AC1 and AC3 are what fail before.
+- F6: fixed: the text pins are `acceptance/pins.sh`, run by check.sh only, never promoted; no pin requires the old preamble.
+- F7: refuted as a defect, recorded: the grandchild's `sleep 120` outlives the 60 s bound; a sleep cannot run short under load, and the fake's pid wait is bounded at 60 s; the Design states the margin.
+- F8: fixed: `design: draft` until ready; the lessons pass is in Unknowns & experiments, before round 2.
+- F9: fixed: E1 recounted from the logs (3 stop failures, not 2; the first fallthrough run also had a stop failure), logs saved in `experiments/`.
+- F10: left to the coordinator: the orphan case in control-cli is another file, named in E5 and the report.

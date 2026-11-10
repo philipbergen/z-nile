@@ -457,6 +457,6 @@ return t.spec("c0120 checks run from their project's home", function(it)
 			{ "new", "raft", "chore", "rc-tool", id, "--single", "--project", "z-nile" }
 		)
 		local check = fs.readFile(`{wt}/{(string.gsub(raft, "[^/]+%.md$", "check.sh"))}`)
-		t.expect(has(check, '"$ZN_ROOT/z-nile/check.sh" --project z-nile --full')).toBe(true)
+		t.expect(has(check, '"$ZN_ROOT/z-nile/check.sh" --project z-nile --affected')).toBe(true)
 	end)
 end)

@@ -39,7 +39,7 @@ z-nile/setup.sh
 - **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start Claude in the main checkout and run `/z-run R0010`, which enters the raft's worktree; every job starts in a worktree directory inside the repo, never outside it. The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone outside the repo that is not a worktree. After a PR merges, the agent removes its worktree; `./zn worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
 
 ## CI
-Verification is local. `z-nile/check.sh --full` runs every project's gate on the machine that lands or merges (`./zn land`, `./zn done`, and zz-rules Merging). GitHub Actions does not run it, and a merge does not wait for an Actions result. Specs run from a project's home (`cd pickman && lune run tests/run`, `cd z-nile && lune run tests/run`), never from the root.
+Verification is local. `z-nile/check.sh --full` runs every project's gate on the machine that lands or merges (`./zn land` and zz-rules Merging; `./zn done` runs the affected gate). GitHub Actions does not run it, and a merge does not wait for an Actions result. Specs run from a project's home (`cd pickman && lune run tests/run`, `cd z-nile && lune run tests/run`), never from the root.
 
 ## Troubleshooting
 | symptom | fix |

@@ -1,5 +1,5 @@
 --!strict
--- c0800: `tracker.sh done` runs the full gate on the final tree (acceptance specs promoted, raft and members moved
+-- c0800: `tracker.sh done` runs the affected gate on the final tree (acceptance specs promoted, raft and members moved
 -- to done/) before it commits, and rolls everything back when the gate fails. Inside a spec run it doesn't (the
 -- fixture specs that drive done clone tests/, so a gate there would run them again) unless PICKMAN_DONE_GATE=1
 -- adds it, as here, where the gate is a stub; it then checks the promoted specs instead. Driven in a throwaway clone (no origin, so no gh) whose z-nile/check.sh is a stub that records
@@ -112,7 +112,7 @@ local function log(): string
 	return if fs.isFile(gateLog) then fs.readFile(gateLog) else ""
 end
 
-return t.spec("c0800 done runs the full gate after promotion", function(it)
+return t.spec("c0800 done runs the affected gate after promotion", function(it)
 	it("sets up a clone with a prepared raft, started and reviewed, and a stub gate", function()
 		if fs.isDir(base) then
 			fs.removeDir(base)
@@ -179,8 +179,8 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 		fresh()
 		local r = done(true, 1)
 		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr, "full gate fails")).toBe(true)
-		t.expect(has(log(), "args: --full")).toBe(true) -- it did run, and failed
+		t.expect(has(r.stderr, "affected gate fails")).toBe(true)
+		t.expect(has(log(), "args: --affected")).toBe(true) -- it did run, and failed
 		t.expect(git({ "rev-parse", "HEAD" })).toBe(reviewed)
 		t.expect(git({ "status", "--porcelain" })).toBe("")
 		-- c0120 override: pickman's raft on the fixtures' layout (see TR)
@@ -204,13 +204,13 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 				error(r.stderr .. r.stdout)
 			end
 			t.expect(log()).toBe("")
-			t.expect(has(r.stdout .. r.stderr, "full gate is skipped")).toBe(true)
+			t.expect(has(r.stdout .. r.stderr, "gate is skipped")).toBe(true)
 			t.expect(fs.isFile(`{work}/{PROMOTED}`)).toBe(true) -- c0120 override: pickman's raft on the fixtures' layout (see TR)
 			t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
 		end
 	)
 
-	it("done runs the full gate on the promoted, moved tree, then commits", function()
+	it("done runs the affected gate on the promoted, moved tree, then commits", function()
 		fresh()
 		local r = done(true, 0)
 		if not r.ok then
@@ -219,7 +219,7 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 		local seen = log()
 		local _, runs = string.gsub(seen, "args:", "")
 		t.expect(runs).toBe(1)
-		t.expect(has(seen, "args: --full")).toBe(true)
+		t.expect(has(seen, "args: --affected")).toBe(true)
 		t.expect(has(seen, "promoted: yes")).toBe(true)
 		t.expect(has(seen, "raft: done")).toBe(true)
 		t.expect(has(seen, "issue: done")).toBe(true)
@@ -228,14 +228,14 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 		t.expect(fs.isDir(`{work}/{TR}/rafts/done/R0010`)).toBe(true) -- c0120 override: pickman's raft on the fixtures' layout (see TR)
 	end)
 
-	it("the gate decision: full, unless inside a spec run without the switch", function()
+	it("the gate decision: affected, unless inside a spec run without the switch", function()
 		-- the branch an agent's real `tracker.sh done` takes (neither variable set) can't be driven from inside this
 		-- spec run without dropping its guards, so the decision is a pure function, tested here with plain tables
-		t.expect(gate.doneGate({})).toBe("full")
+		t.expect(gate.doneGate({})).toBe("affected")
 		t.expect(gate.doneGate({ PICKMAN_FENCE_SPECS = "1" })).toBe("promoted")
-		t.expect(gate.doneGate({ PICKMAN_FENCE_SPECS = "1", PICKMAN_DONE_GATE = "1" })).toBe("full")
-		t.expect(gate.doneGate({ PICKMAN_DONE_GATE = "1" })).toBe("full")
-		t.expect(gate.doneGate({ PICKMAN_FENCE_SPECS = "", PICKMAN_DONE_GATE = "" })).toBe("full")
+		t.expect(gate.doneGate({ PICKMAN_FENCE_SPECS = "1", PICKMAN_DONE_GATE = "1" })).toBe("affected")
+		t.expect(gate.doneGate({ PICKMAN_DONE_GATE = "1" })).toBe("affected")
+		t.expect(gate.doneGate({ PICKMAN_FENCE_SPECS = "", PICKMAN_DONE_GATE = "" })).toBe("affected")
 		-- and done decides through it, reading nothing else
 		local main = fs.readFile(`{root}/z-nile/engine/main.luau`)
 		t.expect(string.find(main, "doneGate(process.env)", 1, true) ~= nil).toBe(true)
