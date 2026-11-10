@@ -3,8 +3,8 @@
 -- filesystem root down to the file's folder, a nearer alias replacing a farther one, targets relative to their own
 -- .luaurc and kept above the current folder ("../"). @game resolves through the project file of the file's own
 -- project, and each home's place library stands for its src/ and project files. The selector picks per project
--- (`--project <name>`, paths relative to the home): the shared runner, harness and libraries force every project's full
--- run, a project's own harness its own, the rest of z-nile/ z-nile's, an old place (the root's tests/, tracker/, src/)
+-- (`--project <name>`, paths relative to the home): root infrastructure forces every project's full run, tooling
+-- infrastructure z-nile's, a project's own harness its own, the rest of z-nile/ z-nile's, an old place (the root's tests/, tracker/, src/)
 -- z-nile's, and a .tracker/ document nothing. These specs run from z-nile/: the graph is seen from there (paths into
 -- pickman/ start with ../), and the selector runs from the checkout's top, as the gate runs it.
 -- Fixtures under .cache/c0120-graph (this home's).
@@ -161,16 +161,16 @@ return t.spec("c0120 the graph and the selector know the homes", function(it)
 	end)
 
 	it(
-		"the shared runner and harness run every project; a home's own harness its own; z-nile/ and old places z-nile's",
+		"tooling infrastructure runs z-nile alone; root infrastructure every project; a home's own harness its own",
 		function()
 			local function both(path: string): string
 				local _, p = affected({ "--project", "pickman", path })
 				local _, z = affected({ "--project", "z-nile", path })
 				return `{p}|{z}`
 			end
-			t.expect(both("z-nile/tests/lib/t.luau")).toBe("ALL\n|ALL\n")
-			t.expect(both("z-nile/tests/run.luau")).toBe("ALL\n|ALL\n")
-			t.expect(both("z-nile/lib/graph.luau")).toBe("ALL\n|ALL\n")
+			t.expect(both("z-nile/tests/lib/t.luau")).toBe("|ALL\n")
+			t.expect(both("z-nile/tests/run.luau")).toBe("|ALL\n")
+			t.expect(both("z-nile/lib/graph.luau")).toBe("|ALL\n")
 			t.expect(both("scripts/tracker/ids.luau")).toBe("ALL\n|ALL\n")
 			t.expect(both(".luaurc")).toBe("ALL\n|ALL\n")
 			t.expect(both("z-nile/engine/projects.luau")).toBe("|ALL\n")

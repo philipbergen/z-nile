@@ -6,13 +6,14 @@
 --   --jobs N / PICKMAN_JOBS=N     -- run spec files in N concurrent workers (default min(max(cpus, 2), 8);
 --                                    1 or a single file runs in-process). --jobs wins over the environment.
 -- Lanes take the files with no recorded duration first, then the recorded ones slowest first (c0154), from
--- .cache/spec-durations.tsv in the home, which every concurrent run updates; the report stays in path order.
--- Exits non-zero if any case fails or any spec fails to load.
+-- .cache/spec-durations.tsv in the home, which every concurrent run updates. Each result prints as its file finishes;
+-- all runners for this user share eight machine-wide worker lanes. Exits non-zero if any case fails or a spec can't load.
 
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local schedule = require("./lib/schedule")
 local serde = require("@lune/serde")
+local slow = require("./lib/slow")
 local stdio = require("@lune/stdio")
 local task = require("@lune/task")
 
@@ -177,7 +178,14 @@ else
 end
 local fullRun = #files == 0
 if fullRun then
-	collect("tests", files)
+	local all: { string } = {}
+	collect("tests", all)
+	local tiers = if HOME == "z-nile" then slow.load(ROOT) else {}
+	for _, f in all do
+		if tiers[f] == nil then
+			table.insert(files, f)
+		end
+	end
 end
 table.sort(files)
 
@@ -224,6 +232,37 @@ end
 -- Coordinator: `jobs` lanes pull the next file in schedule order and run it as a one-file, one-job runner process.
 local function runConcurrently()
 	local outcomes: { Outcome } = {}
+	local passed, failed = 0, 0
+	local function report(o: Outcome)
+		local lines = {}
+		for line in string.gmatch(o.stdout, "[^\n]+") do
+			table.insert(lines, line)
+		end
+		local last = lines[#lines]
+		local p, f = string.match(last or "", "^(%d+) passed, (%d+) failed, 1 spec files$")
+		if p ~= nil and f ~= nil and not (o.code ~= 0 and tonumber(f) == 0) then
+			passed += tonumber(p) :: number
+			failed += tonumber(f) :: number
+			table.remove(lines)
+			if #lines > 0 then
+				print(table.concat(lines, "\n"))
+			end
+			print(`{if tonumber(f) == 0 then "PASS" else "FAIL"} {o.file}: {p} passed, {f} failed`)
+		else
+			failed += 1
+			local all = {}
+			for line in string.gmatch(o.stdout .. o.stderr, "[^\n]+") do
+				table.insert(all, line)
+			end
+			local tail = table.concat(all, "\n", math.max(1, #all - 24), #all)
+			print(`FAIL {o.file}: worker exited with code {o.code}` .. if tail ~= "" then `\n{tail}` else "")
+			o.stderr = ""
+		end
+		if o.stderr ~= "" then
+			stdio.ewrite(o.stderr)
+		end
+	end
+
 	local resultsFile = resultsPath()
 	local queue = schedule.order(files, recorded())
 	local nextIndex, running = 1, math.min(jobs, #files)
@@ -235,19 +274,30 @@ local function runConcurrently()
 				local file = files[index]
 				local started = os.clock()
 				local part = if resultsFile then `{resultsFile}.{index}` else nil
+				local command, args = "lune", { "run", "tests/run", "--", "--jobs", "1", file }
+				local lanes = process.env.PICKMAN_WORKER_LANES
+				if lanes ~= nil and lanes ~= "" then
+					command = "perl"
+					args = { "-e", fenceLib.WORKER_LANE, lanes, "lune" }
+					for _, a in { "run", "tests/run", "--", "--jobs", "1", file } do
+						table.insert(args, a)
+					end
+				end
 				local ok, r = pcall(
 					process.exec,
-					"lune",
-					{ "run", "tests/run", "--", "--jobs", "1", file },
+					command,
+					args,
 					if part then { env = { PICKMAN_RESULTS = part } } else nil
 				)
-				outcomes[index] = {
+				local outcome = {
 					file = file,
 					seconds = os.clock() - started,
 					code = if ok then r.code else -1,
 					stdout = if ok then r.stdout else "",
 					stderr = if ok then r.stderr else tostring(r),
 				}
+				outcomes[index] = outcome
+				report(outcome)
 			end
 			running -= 1
 		end)
@@ -315,37 +365,6 @@ local function runConcurrently()
 			})
 		end
 		writeResults(resultsFile, merged)
-	end
-
-	-- merge in sorted file order, never in finish order
-	local passed, failed = 0, 0
-	for _, o in outcomes do
-		local lines = {}
-		for line in string.gmatch(o.stdout, "[^\n]+") do
-			table.insert(lines, line)
-		end
-		local last = lines[#lines]
-		local p, f = string.match(last or "", "^(%d+) passed, (%d+) failed, 1 spec files$")
-		if p ~= nil and f ~= nil and not (o.code ~= 0 and tonumber(f) == 0) then
-			passed += tonumber(p) :: number
-			failed += tonumber(f) :: number
-			table.remove(lines)
-			if #lines > 0 then
-				print(table.concat(lines, "\n"))
-			end
-		else
-			failed += 1
-			local all = {}
-			for line in string.gmatch(o.stdout .. o.stderr, "[^\n]+") do
-				table.insert(all, line)
-			end
-			local tail = table.concat(all, "\n", math.max(1, #all - 24), #all)
-			print(`FAIL {o.file}: worker exited with code {o.code}` .. if tail ~= "" then `\n{tail}` else "")
-			o.stderr = ""
-		end
-		if o.stderr ~= "" then
-			stdio.ewrite(o.stderr)
-		end
 	end
 
 	local bySpeed = table.clone(outcomes)

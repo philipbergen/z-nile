@@ -69,11 +69,19 @@ return t.spec("c0239 select.scope", function(it)
 			["pickman/tests/unit/a.spec.luau"] = { "z-nile/tests/shared.txt" },
 			["z-nile/tests/tooling/z.spec.luau"] = { "z-nile/tests/shared.txt" },
 		})
-		t.expect(sel.scope(shared, { "z-nile/tests/shared.txt" })).toBe("ALL")
+		t.expect(sel.scope(shared, { "z-nile/tests/shared.txt" })).toBe("z-nile")
 	end)
 
-	it("AC6: a * declaration selects every project's spec, so ALL", function()
-		t.expect(sel.scope(ctx({ ["snake/tests/unit/s.spec.luau"] = { "*" } }), { "pickman/src/A.luau" }))
-			.toBe("ALL")
+	it("AC6: suite isolation beats a * declaration in another suite", function()
+		t.expect(sel.scope(ctx({ ["snake/tests/unit/s.spec.luau"] = { "*" } }), { "z-nile/tests/note.txt" }))
+			.toBe("ALL") -- z-nile's change selects no spec, so scope stays ALL
+		local starred = ctx({
+			["pickman/tests/unit/a.spec.luau"] = { "*" },
+			["z-nile/tests/tooling/z.spec.luau"] = { "*" },
+		})
+		t.expect(sel.affected(starred, { "pickman/src/A.luau" }))
+			.toEqual({ "pickman/tests/unit/a.spec.luau" })
+		t.expect(sel.affected(starred, { "z-nile/tests/note.txt" }))
+			.toEqual({ "z-nile/tests/tooling/z.spec.luau" })
 	end)
 end)

@@ -2,12 +2,10 @@
 -- c0114 AC8: the gate covers z-nile/ as it covered scripts/: a change there selects every spec (a .tracker/ document
 -- selects none, like tracker/), the format stage reads z-nile/.tracker/ (stylua skips hidden folders unless named), the
 -- types stage reads z-nile/ but not its sequestered specs, the repository-fence scan reads ./zn, z-nile/ and every
--- root's check.sh (not their unpromoted specs), the reviewed .cache list covers z-nile/, the stop hook gates z-nile/
--- changes, and CI runs the moved bootstrap and skips tracker-only pushes to every root. Fixtures under
--- .cache/c0114-gate.
+-- root's check.sh (not their unpromoted specs), the reviewed .cache list covers z-nile/, and CI runs the moved
+-- bootstrap and skips tracker-only pushes to every root. Fixtures under .cache/c0114-gate.
 local cachepaths = require("@tests/lib/cachepaths")
 local deploylist = require("@tests/lib/deploylist")
-local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
@@ -203,60 +201,6 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 				.toBe(false)
 		end
 	end)
-
-	it(
-		"the stop hook gates a change under src/, tests/ or z-nile/ (no project root's documents), through scripts/check.sh",
-		function()
-			-- a tree with a stub gate at scripts/check.sh that records its call: the path both sides of the move have
-			local function tree(name: string, withRoots: boolean): string
-				local dir = `{base}/hook-{name}`
-				if fs.isDir(dir) then
-					fs.removeDir(dir)
-				end
-				fs.writeDir(dir)
-				t.expect(process.exec("git", { "init", "-q", "-b", "main", dir }).ok).toBe(true)
-				fixture.git(dir, { "config", "user.name", "c0114-gate" })
-				fixture.git(dir, { "config", "user.email", "c0114-gate@example.invalid" })
-				write(
-					`{dir}/scripts/check.sh`,
-					'#!/usr/bin/env bash\necho "$@" >> "$(dirname "$0")/../gate.log"\n'
-				)
-				process.exec("chmod", { "+x", `{dir}/scripts/check.sh` })
-				if withRoots then
-					copy(dir, { "z-nile/roots.luau", "z-nile/engine/projects.luau", "z-nile/projects.toml" })
-				end
-				write(`{dir}/readme`, "x\n")
-				fixture.git(dir, { "add", "-A" })
-				fixture.git(dir, { "commit", "-q", "-m", "base" })
-				return dir
-			end
-			local function stop(dir: string): (boolean, boolean)
-				local r = fixture.exec(
-					dir,
-					"bash",
-					{ `{root}/scripts/hooks/stop.sh` },
-					{ stdin = '{"cwd": "' .. dir .. '"}' }
-				)
-				local ran = fs.isFile(`{dir}/gate.log`)
-				if ran then
-					fs.removeFile(`{dir}/gate.log`)
-				end
-				return r.ok, ran
-			end
-			local now = tree("now", true)
-			write(`{now}/z-nile/.tracker/issues/c0001/c0001.md`, "doc\n")
-			t.expect({ stop(now) }).toEqual({ true, false }) -- a project root's document alone: no gate
-			-- code whose path merely contains a root's name is not under the root: tests/lib/tracker/ is gated
-			write(`{now}/tests/lib/tracker/x.luau`, "--!strict\nreturn 1\n")
-			t.expect({ stop(now) }).toEqual({ true, true })
-			write(`{now}/z-nile/engine/x.luau`, "--!strict\nreturn 1\n")
-			t.expect({ stop(now) }).toEqual({ true, true }) -- the engine: the gate runs
-			-- a tree from before c0114 (no z-nile/): the same hook runs that tree's own gate
-			local old = tree("old", false)
-			write(`{old}/src/x.luau`, "--!strict\nreturn 1\n")
-			t.expect({ stop(old) }).toEqual({ true, true })
-		end
-	)
 
 	it(
 		-- c0183 override: the case also needs each root in deploy.yml (below), so the name says so

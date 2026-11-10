@@ -90,10 +90,6 @@ local function editJson(file: string): string
 	return '{"tool_input":{"file_path":"' .. file .. '"}}'
 end
 
-local function stopJson(cwd: string): string
-	return '{"cwd":"' .. cwd .. '","stop_hook_active":false}'
-end
-
 local function countWorktrees(): number
 	local _, n = string.gsub(git(main, { "worktree", "list", "--porcelain" }), "worktree ", "")
 	return n
@@ -468,26 +464,5 @@ return t.spec("worktrees", function(it)
 		fs.removeDir(dir)
 		-- linted from the hook's own repo it would fail; outside a repo there is nothing to lint
 		t.expect(r.code).toBe(0)
-	end)
-
-	it("stop hook gates the session's cwd worktree", function()
-		local hook = `{main}/scripts/hooks/stop.sh`
-		-- c0120 override: the game's src/ is pickman/src/
-		fs.writeFile(`{wt2}/pickman/src/shared/Broken.luau`, "--!strict\nlocal = \n")
-		local inWorktree = run(main, "bash", { hook }, stopJson(wt2))
-		local inMain = run(main, "bash", { hook }, stopJson(main))
-		-- c0120 override: pickman's files live in pickman/ (its home)
-		fs.removeFile(`{wt2}/pickman/src/shared/Broken.luau`)
-		t.expect(inWorktree.code).toBe(2)
-		t.expect(inMain.code).toBe(0)
-	end)
-
-	it("stop hook gates the worktree root when cwd is a subdirectory", function()
-		local hook = `{main}/scripts/hooks/stop.sh`
-		-- c0120 override: pickman's files live in pickman/ (its home)
-		fs.writeFile(`{wt2}/pickman/src/shared/Broken.luau`, "--!strict\nlocal = \n")
-		local fromSubdir = run(main, "bash", { hook }, stopJson(`{wt2}/pickman/src/shared`))
-		fs.removeFile(`{wt2}/pickman/src/shared/Broken.luau`)
-		t.expect(fromSubdir.code).toBe(2)
 	end)
 end)

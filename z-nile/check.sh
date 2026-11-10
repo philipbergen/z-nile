@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The repo gate (c0114: z-nile's), one per project (c0120). See z-nile/skills/zz-test/SKILL.md.
-#   z-nile/check.sh [--project <name>]... [--affected [--base REF] [--fresh] | --full]
+#   z-nile/check.sh [--project <name>]... [--affected [--base REF] [--fresh] | --full | --slow]
 #   z-nile/check.sh [--project <name>]... --plan   # print what each stage reads, run nothing, write nothing
+# --slow runs only z-nile's measured slow tier, fresh (z-nile alone unless --project names another set).
 # With no --project it runs every project of z-nile/projects.toml (`./zn done`, `./zn land`); each --project adds
 # one (pickman/check.sh is `--project pickman`). A project's specs run from its home, which z-nile/roots gives
 # (`--projects`): z-nile/ for z-nile, pickman/ for pickman (the root belongs to no project).
@@ -18,6 +19,7 @@ wanted=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --full) mode=full ;;
+    --slow) mode=slow ;;
     --plan) plan=1 ;;
     --affected) mode=affected ;;
     --fresh) fresh=1 ;;
@@ -27,6 +29,7 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+if [[ $mode == slow && ${#wanted[@]} -eq 0 ]]; then wanted=(z-nile); fi
 if [[ -n $fresh && $mode == full ]]; then
   echo "check.sh: unknown or conflicting flags: --fresh is an affected flag, not for --full" >&2
   exit 2
@@ -233,6 +236,8 @@ for i in "${!names[@]}"; do
   stage "tests ($mode): $n"
   if [[ $mode == full ]]; then
     run_specs "$h"
+  elif [[ $mode == slow ]]; then
+    lune run z-nile/specs -- run --project "$n" --fresh --slow --all
   else
     selection=$(lune run z-nile/affected -- --project "$n" ${base_args[@]+"${base_args[@]}"})
     if [[ -z $selection ]]; then

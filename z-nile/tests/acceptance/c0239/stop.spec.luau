@@ -1,9 +1,8 @@
 --!strict
--- c0239 AC6 and AC7. `z-nile/specs scope` takes no paths: it reads the change set the affected gate itself selects
+-- c0239 AC6. `z-nile/specs scope` takes no paths: it reads the change set the affected gate itself selects
 -- from (the branch against its base, plus uncommitted and untracked files) and prints one project name only when the
 -- selector's answer for that whole set is a non-empty selection inside that project, every changed path lies under
--- that project's home or tracker root, and nothing forces a full run; otherwise ALL. The stop hook runs the scoped
--- gate for exactly one project name (and exit 0) and the unscoped gate for every other answer.
+-- that project's home or tracker root, and nothing forces a full run; otherwise ALL.
 -- Fixtures: c0165's gatefix (a repository under .cache with a tiny pickman home). Everything a case's change set must
 -- not see (the stub gate, declared inputs) goes into the fixture's base commit through `setup` (design review 003 F2,
 -- zz-test/case-change-set-in-the-base-commit); a case writes only what it changes, by appending to a file that exists
@@ -78,32 +77,7 @@ local function scope(dir: string, changed: { string }): (boolean, string)
 	return r.ok, gatefix.trim(r.stdout)
 end
 
--- the fixture's hook against the stub gate; returns the stub's logged arguments ("" when the hook ran no gate).
--- `stub` replaces z-nile/specs.luau (committed first): the answer then comes from the stub, so only the hook's
--- parsing of an answer is under test
-local function hook(dir: string, changed: { string }, stub: string?): string
-	if stub ~= nil then
-		gatefix.write(`{dir}/z-nile/specs.luau`, stub)
-		commit(dir, "stub scope")
-	end
-	for _, p in changed do
-		touch(dir, p)
-	end
-	process.exec("bash", { `{dir}/scripts/hooks/stop.sh` }, {
-		cwd = dir,
-		env = gatefix.env(dir),
-		stdin = `\{"cwd":"{dir}"}`,
-	})
-	local log = ""
-	if fs.isFile(`{dir}/gate.log`) then
-		log = fs.readFile(`{dir}/gate.log`)
-		fs.removeFile(`{dir}/gate.log`)
-	end
-	reset(dir)
-	return gatefix.trim(log)
-end
-
-return t.spec("c0239 the stop hook's scope", function(it)
+return t.spec("c0239 the scope command", function(it)
 	it("AC6: with nothing changed, scope answers ALL (the fixture's change set starts empty)", function()
 		local dir = fixture("empty")
 		local ok, out = scope(dir, {})
@@ -133,47 +107,41 @@ return t.spec("c0239 the stop hook's scope", function(it)
 		expectScope({ "pickman/src/A.luau" }, "ALL")
 	end)
 
-	it("AC6: a spec that declares an input outside its project makes the answer ALL", function()
+	it("AC6: a declared input in the other suite does not cross suite isolation", function()
 		local dir = fixture("declared", function(d: string)
-			-- a z-nile spec declares a pickman file as an input: the selection spans two projects
+			-- a z-nile spec declares a pickman file as an input: a game change still selects no tooling spec
 			gatefix.write(`{d}/z-nile/tests/inputs.tsv`, "tests/unit/zdecl.spec.luau\tpickman/src/A.luau\n")
 			gatefix.write(`{d}/z-nile/tests/unit/zdecl.spec.luau`, "--!strict\nreturn {}\n")
 		end)
 		local ok, out = scope(dir, { "pickman/src/A.luau" })
 		t.expect(ok).toBe(true)
-		t.expect(out).toBe("ALL")
+		t.expect(out).toBe("pickman")
 	end)
 
-	it(
-		"AC6: rule 3: neither the first nor the last project may win when two projects' specs are selected",
-		function()
-			local dir = fixture("rule3", function(d: string)
-				-- the same non-spec file under z-nile/tests is an input of a pickman spec and of a z-nile spec
-				gatefix.write(`{d}/z-nile/tests/shared.txt`, "x\n")
-				gatefix.write(
-					`{d}/z-nile/tests/inputs.tsv`,
-					"tests/unit/zdecl.spec.luau\tz-nile/tests/shared.txt\n"
-				)
-				gatefix.write(`{d}/z-nile/tests/unit/zdecl.spec.luau`, "--!strict\nreturn {}\n")
-				gatefix.write(
-					`{d}/pickman/tests/inputs.tsv`,
-					"tests/unit/a.spec.luau\tz-nile/tests/shared.txt\n"
-				)
-			end)
-			local ok, out = scope(dir, { "z-nile/tests/shared.txt" })
-			t.expect(ok).toBe(true)
-			t.expect(out).toBe("ALL")
-		end
-	)
+	it("AC6: a declared input in the other suite does not cross suite isolation", function()
+		local dir = fixture("rule3", function(d: string)
+			-- the same non-spec file under z-nile/tests is an input of a pickman spec and of a z-nile spec
+			gatefix.write(`{d}/z-nile/tests/shared.txt`, "x\n")
+			gatefix.write(
+				`{d}/z-nile/tests/inputs.tsv`,
+				"tests/unit/zdecl.spec.luau\tz-nile/tests/shared.txt\n"
+			)
+			gatefix.write(`{d}/z-nile/tests/unit/zdecl.spec.luau`, "--!strict\nreturn {}\n")
+			gatefix.write(`{d}/pickman/tests/inputs.tsv`, "tests/unit/a.spec.luau\tz-nile/tests/shared.txt\n")
+		end)
+		local ok, out = scope(dir, { "z-nile/tests/shared.txt" })
+		t.expect(ok).toBe(true)
+		t.expect(out).toBe("z-nile")
+	end)
 
-	it("AC6: a * declaration selects its spec for every change, so the answer is ALL", function()
+	it("AC6: a * declaration in the tooling suite is not selected by a game change", function()
 		local dir = fixture("star", function(d: string)
 			gatefix.write(`{d}/z-nile/tests/inputs.tsv`, "tests/unit/zstar.spec.luau\t*\n")
 			gatefix.write(`{d}/z-nile/tests/unit/zstar.spec.luau`, "--!strict\nreturn {}\n")
 		end)
 		local ok, out = scope(dir, { "pickman/src/A.luau" })
 		t.expect(ok).toBe(true)
-		t.expect(out).toBe("ALL")
+		t.expect(out).toBe("pickman")
 	end)
 
 	it(
@@ -191,31 +159,6 @@ return t.spec("c0239 the stop hook's scope", function(it)
 			expectScope({ "pickman/src/A.luau", "z-nile/.tracker/notes.md" }, "ALL")
 			-- the project's own tracker root is allowed
 			expectScope({ "pickman/src/A.luau", "pickman/.tracker/notes.md" }, "pickman")
-			t.expect(hook(dir, { "pickman/src/A.luau", "SETUP.md" })).toBe("--affected")
 		end
 	)
-
-	it(
-		"AC7: the hook runs the scoped gate for one project and the unscoped gate for the real ALL answers",
-		function()
-			local dir = fixture("hook")
-			t.expect(hook(dir, { "pickman/src/A.luau" })).toBe("--affected --project pickman")
-			t.expect(hook(dir, { "z-nile/lib/changed.luau" })).toBe("--affected")
-			-- the hook triggers on the gated path, and scope sees the whole change set, scripts/other.sh included
-			t.expect(hook(dir, { "pickman/src/A.luau", "scripts/other.sh" })).toBe("--affected")
-			-- a change the hook's trigger ignores runs no gate at all
-			t.expect(hook(dir, { "scripts/other.sh" })).toBe("")
-		end
-	)
-
-	it("AC7: an answer the hook cannot use, or a failing scope, runs the unscoped gate", function()
-		local dir = fixture("answers")
-		local change = { "pickman/src/A.luau" }
-		t.expect(hook(dir, change, 'print("ok? maybe")\n')).toBe("--affected") -- not a project name
-		t.expect(hook(dir, change, "print()\n")).toBe("--affected") -- empty
-		t.expect(hook(dir, change, 'error("boom")\n')).toBe("--affected") -- a crash
-		t.expect(hook(dir, change, 'print("ALL")\n')).toBe("--affected")
-		t.expect(hook(dir, change, 'print("pickman")\nerror("late failure")\n')).toBe("--affected") -- a name, then exit 1
-		t.expect(hook(dir, change, 'print("pickman")\n')).toBe("--affected --project pickman") -- the same name, exit 0
-	end)
 end)

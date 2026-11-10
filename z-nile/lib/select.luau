@@ -18,14 +18,10 @@ export type Context = {
 	places: { [string]: { string } }, -- home prefix -> its place inputs (graph.placeInputs, read by context.luau)
 }
 
--- Changes to these paths can affect every spec of every project, so they force a full run: the shared runner
--- (z-nile/tests/run.luau) and harness (z-nile/tests/lib/), z-nile's libraries (the fence, the graph, the shell helpers),
--- ./zn, the root's scripts/ (c0114's shims, which belong to no project) and the root configs (c0120). Every project
--- root holds tracker documents, which select nothing.
+-- Changes to these root paths can affect every spec of every project, so they force a full run: ./zn, the root's
+-- scripts/ (c0114's shims, which belong to no project) and the root configs (c0120). Tooling paths force z-nile alone.
+-- Every project root holds tracker documents, which select nothing.
 local SHARED_FULL = {
-	"^z%-nile/tests/lib/",
-	"^z%-nile/tests/run%.luau$",
-	"^z%-nile/lib/",
 	"^zn$",
 	"^scripts/",
 	"^%.luaurc$",
@@ -97,7 +93,12 @@ function sel.forces(rules: Rules, path: string): ("all" | string)?
 				return h.name
 			end
 		end
-		if h.name == TOOLING and not string.match(path, "^z%-nile/tests/") then
+		if
+			h.name == TOOLING
+			and not string.match(path, "^z%-nile/tests/")
+			and not string.match(path, "^z%-nile/skills/")
+			and not string.match(path, "^z%-nile/.*%.md$")
+		then
 			return h.name
 		end
 	end
@@ -179,15 +180,23 @@ local function underRoot(rules: Rules, path: string): string?
 	return nil
 end
 
+local function otherSuite(rules: Rules, spec: string, path: string): boolean
+	local a, b = projectOf(rules, spec), projectOf(rules, path)
+	return a ~= nil and b ~= nil and (a == TOOLING) ~= (b == TOOLING)
+end
+
 -- Whether a change to `path` can change spec S's result: the one predicate of selection and of fingerprints.
 function sel.isInput(ctx: Context, spec: string, path: string): boolean
+	local rules = ctx.rules
+	if otherSuite(rules, spec, path) then
+		return false
+	end
 	local entries: { string } = ctx.inputs[spec] or {}
 	for _, e in entries do
 		if e == "*" then
 			return true
 		end
 	end
-	local rules = ctx.rules
 	-- a tracker document is an input only through an entry that itself names a path under the same root
 	local root = underRoot(rules, path)
 	if root then
@@ -240,16 +249,28 @@ end
 
 -- The specs a set of changed paths reaches, or "ALL" when a full run is required. `only` limits the answer to one
 -- project's specs, relative to its home. A spec with a `ref:` entry of the project asked for (every project's without
--- `only`) is always selected: selection is stateless and can't see a ref move, so its fingerprint decides.
+-- `only`) is selected unless the change set is confined to the other suite: selection is stateless and can't see a ref
+-- move, so its fingerprint decides.
 function sel.affected(ctx: Context, changed: { string }, only: string?): { string } | "ALL"
 	if sel.forcedAll(ctx.rules, changed, only) then
 		return "ALL"
+	end
+	local tooling, games = false, false
+	for _, path in changed do
+		local p = projectOf(ctx.rules, path)
+		tooling = tooling or p == TOOLING or p == nil
+		games = games or p ~= TOOLING
 	end
 	local out: { string } = {}
 	for _, file in ctx.graph.files do
 		if isSpec(file) then
 			local h = homeOf(ctx.rules.homes, file)
-			if only == nil or (h and h.name == only) then
+			local separated = h ~= nil
+				and (
+					(tooling and not games and h.name ~= TOOLING)
+					or (games and not tooling and h.name == TOOLING)
+				)
+			if not separated and (only == nil or (h and h.name == only)) then
 				local hit = false
 				for _, e in (ctx.inputs[file] :: { string }?) or ({} :: { string }) do
 					if isRefEntry(e) then

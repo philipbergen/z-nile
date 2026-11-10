@@ -24,7 +24,7 @@ return t.spec("c0165 reuse wording", function(it)
 		says(f, "| `z-nile/check.sh --affected --fresh` | the affected gate without reuse |")
 		says(
 			f,
-			"**Reuse**: in an affected run, a spec file whose fingerprint (its own content, everything it can reach, the tools and the gate mode) already passed is skipped and reported `reused <spec>`, and a whole affected gate that passed on the same content is skipped with its stored static report. `--fresh` reuses nothing and `--full` runs every spec. Passes are kept in `.claude/.znile_tests.sqlite`; deleting it only costs reruns."
+			"**Reuse**: in an affected run, a spec file whose fingerprint (its own content, everything it can reach, the tools and the gate mode) already passed is skipped and reported `reused <spec>`, and a whole affected gate that passed on the same content is skipped with its stored static report. `--fresh` reuses nothing and `--full` runs every fast-tier spec. Passes are kept in `.claude/.znile_tests.sqlite`; deleting it only costs reruns."
 		)
 		says(
 			f,
