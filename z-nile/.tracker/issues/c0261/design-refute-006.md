@@ -1,0 +1,13 @@
+# Design refute 006: c0261
+
+Answers design-review-006.md (round 5 of the redesign, the final round). It holds a high (F1), which only a final round may hold: it goes to the user, whatever is answered here.
+
+- F1: NOT fixed; escalated to the user. The reviewer's defect is real and found by a probe: the dispatcher's `record` writes a raft-mode review's row from its `zn-dispatch` worktree, where a new raft's members are not known, so the row stays pending and `status <R-id> prepared` refuses every new multi-issue raft under `./zn dispatch`. The fix is designed (record a raft-mode review's row from the author's worktree, never also from `flush`, keep `zn-dispatch` for the other modes; a main-checkout start runs in the rafting worktree or says the row stays pending) and its two cases are named in the Design (a command case after `new raft`; a dispatcher case with the fake reviewer), but not built or sequestered here. The user chooses: have it built before ready (one more re-prep round), or accept it as the executor's first fix with those two cases.
+- F2: fixed: two command cases in `final-round-cli.spec` (a model-less round dated 2020-01-01 passes, one dated 2099-01-01 is refused "no model"; the rows are committed to origin through `trackerfix.elsewhere`); the mutants "always enforced" and "arguments of `enforced` swapped" ran and die.
+- F3: fixed: the grok kind is `^grok%-.+%-xhigh$` for both families (a `grok-5-pro-xhigh` and `grok-code-fast-1-xhigh` pass; `grok-5-pro-high` and `grok-4.7-xhigh-fast` fail); whether Cursor-hosted `cursor-grok-…-xhigh` counts is a veto item (default: it does not).
+- F4: fixed: "there is no row"; the raft refusal names `--mode raft` and `./zn spend <R-id>`; AC2's text and its label; the kimi texts; the raft cutoff: a raft's `firstWhen` is over its members' rows, so a raft grouped after the landing from members prepped before it is exempt (transitional, lenient; stated here).
+
+## Update after the user's answer ("Build it now, one more round")
+
+- F1: fixed: the dispatcher's `record` writes a raft-mode review's row from the author's worktree and never also keeps it pending; `final-round-newraft.spec` (command) and `final-round-dispatch-raft.spec` (fakecli) are sequestered, with run mutants; the raft's own round is no longer an escalated path.
+- F4 (remaining): the Design now states that the raft cutoff takes the members' earliest review row, so a raft grouped after the landing from members prepped before it is exempt.
