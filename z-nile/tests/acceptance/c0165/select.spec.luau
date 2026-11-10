@@ -431,37 +431,38 @@ return t.spec("c0165 one rule for selection and fingerprints", function(it)
 		t.expect(select.affected(declared, { "z-nile/skills/zz-test/SKILL.md" }, nil)).toEqual({})
 	end)
 
-	it("AC2: HEAD moves a * spec, unrelated refs do not, and a declared ref moves its spec", function()
-		local starred =
-			ctxWith(select.parseInputs("tests/unit/Maze.spec.luau\t*\n", "pickman/") :: select.Inputs)
-		local declared = ctxWith(
-			select.parseInputs("tests/unit/Ghost.spec.luau\tref:refs/remotes/origin/main\n", "pickman/") :: select.Inputs
-		)
-		local plain = ctxWith({})
-		local blobs = tree()
-		local movedHead: fingerprint.GitState = { head = string.rep("2", 40), refs = GIT.refs }
-		local movedRef: fingerprint.GitState = {
-			head = GIT.head,
-			refs = { ["refs/heads/main"] = string.rep("3", 40) },
-		}
-		t.expect(
-			of(starred, MAZE_SPEC, blobs, TOOLS, "affected", movedHead)
-				~= of(starred, MAZE_SPEC, blobs, TOOLS, "affected")
-		).toBe(true)
-		t.expect(of(starred, MAZE_SPEC, blobs, TOOLS, "affected", movedRef))
-			.toBe(of(starred, MAZE_SPEC, blobs, TOOLS, "affected"))
-		t.expect(of(plain, GHOST_SPEC, blobs, TOOLS, "affected", movedHead))
-			.toBe(of(plain, GHOST_SPEC, blobs, TOOLS, "affected"))
-		t.expect(fingerprint.refs(declared, GHOST_SPEC)).toEqual({ "refs/remotes/origin/main" })
-		local withRef = table.clone(GIT)
-		withRef.refs = { ["refs/remotes/origin/main"] = string.rep("4", 40) }
-		local movedDeclared = table.clone(withRef)
-		movedDeclared.refs = { ["refs/remotes/origin/main"] = string.rep("5", 40) }
-		t.expect(
-			of(declared, GHOST_SPEC, blobs, TOOLS, "affected", movedDeclared)
-				~= of(declared, GHOST_SPEC, blobs, TOOLS, "affected", withRef)
-		).toBe(true)
-	end)
+	it(
+		"AC2: HEAD does not move a * spec, unrelated refs do not, and a declared ref moves its spec",
+		function()
+			local starred =
+				ctxWith(select.parseInputs("tests/unit/Maze.spec.luau\t*\n", "pickman/") :: select.Inputs)
+			local declared = ctxWith(
+				select.parseInputs("tests/unit/Ghost.spec.luau\tref:refs/remotes/origin/main\n", "pickman/") :: select.Inputs
+			)
+			local plain = ctxWith({})
+			local blobs = tree()
+			local movedHead: fingerprint.GitState = { head = string.rep("2", 40), refs = GIT.refs }
+			local movedRef: fingerprint.GitState = {
+				head = GIT.head,
+				refs = { ["refs/heads/main"] = string.rep("3", 40) },
+			}
+			t.expect(of(starred, MAZE_SPEC, blobs, TOOLS, "affected", movedHead))
+				.toBe(of(starred, MAZE_SPEC, blobs, TOOLS, "affected"))
+			t.expect(of(starred, MAZE_SPEC, blobs, TOOLS, "affected", movedRef))
+				.toBe(of(starred, MAZE_SPEC, blobs, TOOLS, "affected"))
+			t.expect(of(plain, GHOST_SPEC, blobs, TOOLS, "affected", movedHead))
+				.toBe(of(plain, GHOST_SPEC, blobs, TOOLS, "affected"))
+			t.expect(fingerprint.refs(declared, GHOST_SPEC)).toEqual({ "refs/remotes/origin/main" })
+			local withRef = table.clone(GIT)
+			withRef.refs = { ["refs/remotes/origin/main"] = string.rep("4", 40) }
+			local movedDeclared = table.clone(withRef)
+			movedDeclared.refs = { ["refs/remotes/origin/main"] = string.rep("5", 40) }
+			t.expect(
+				of(declared, GHOST_SPEC, blobs, TOOLS, "affected", movedDeclared)
+					~= of(declared, GHOST_SPEC, blobs, TOOLS, "affected", withRef)
+			).toBe(true)
+		end
+	)
 
 	it("AC9: one malformed line refuses the whole file, naming its line", function()
 		local good = "tests/unit/Maze.spec.luau\tpickman/tests/fixtures/data/levels.json\n"

@@ -1,6 +1,6 @@
 --!strict
 -- c0084: `tracker.sh spend` records a phase's spend (capture, prep, design-review, deliver) outside an active raft. It
--- publishes appended rows to the item's spend.md on origin/main and changes nothing in the checkout it runs in.
+-- commits appended rows to the item's spend.md on the current branch and pushes nothing to origin/main.
 -- Fixture under .cache/c0084-spend: a seed with this tree's tooling, a bare origin, a main clone, a second clone, and
 -- a prep worktree made by `tracker.sh worktree`. Ids come from `new issue` and `new raft`, never from literals.
 local engine = require("@tests/lib/engine")
@@ -57,16 +57,25 @@ local function onOrigin(path: string): any
 	end
 	return l
 end
-local function last(path: string): any
-	local l = onOrigin(path)
-	return l.rows[#l.rows]
-end
-local function changed(before: string): string
-	return git(origin, { "diff", "--name-only", before, "main" })
-end
-
+-- `./zn spend` commits on the branch it runs in. The row is read there, not from origin.
+-- Declared before the helpers that close over it: a local's scope starts at its declaration.
 local prep = ""
 local a, b, raft = "", "", ""
+local function onBranch(path: string): any
+	local text = git(prep, { "show", `HEAD:{path}` }) .. "\n"
+	local l, err = ledger.parse(text)
+	if not l then
+		error(`{path} on the branch does not parse: {err}`, 2)
+	end
+	return l
+end
+local function last(path: string): any
+	local l = onBranch(path)
+	return l.rows[#l.rows]
+end
+local function branchChanged(before: string): string
+	return git(prep, { "diff", "--name-only", before, "HEAD" })
+end
 
 return t.spec("tracker spend", function(it)
 	it("sets up an origin, a main checkout, a second clone and a prep worktree with a raft of two", function()
@@ -117,46 +126,42 @@ return t.spec("tracker spend", function(it)
 		t.expect(has(git(origin, { "show", `main:pickman/.tracker/rafts/{raft}/{raft}.md` }), a)).toBe(true)
 	end)
 
-	it(
-		"publishes one capture row to the issue's spend.md on origin/main, and changes nothing here",
-		function()
-			local before, head = tip(), git(prep, { "rev-parse", "HEAD" })
-			local out = trOk(prep, {
-				"spend",
-				a,
-				"--phase",
-				"capture",
-				"--time",
-				"4",
-				"--tokens",
-				"1200",
-				"--note",
-				"captured alpha",
-			})
-			t.expect(has(out, a)).toBe(true)
-			t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-			t.expect(changed(before)).toBe(`pickman/.tracker/issues/{a}/spend.md`)
-			local l = onOrigin(`pickman/.tracker/issues/{a}/spend.md`)
-			t.expect(#l.rows).toBe(1)
-			t.expect(l.id).toBe(a)
-			t.expect(l.rows[1].phase).toBe("capture")
-			t.expect(l.rows[1].minutes).toBe(4)
-			t.expect(l.rows[1].tokens).toBe(1200)
-			t.expect(l.rows[1].added).toBe(0)
-			t.expect(l.rows[1].subject).toBe("captured alpha")
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-			local text = git(origin, { "show", `main:pickman/.tracker/issues/{a}/spend.md` }) .. "\n"
-			t.expect(ledger.appendOnly(nil, text, a)).toBe(nil) -- the ledger's own form
-			t.expect(git(prep, { "rev-parse", "HEAD" })).toBe(head)
-			t.expect(git(prep, { "status", "--porcelain" })).toBe("")
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-			t.expect(fs.isFile(`{prep}/pickman/.tracker/issues/{a}/spend.md`)).toBe(false)
-		end
-	)
+	it("commits one capture row on the branch and pushes nothing to origin/main", function()
+		local before, head = tip(), git(prep, { "rev-parse", "HEAD" })
+		local out = trOk(prep, {
+			"spend",
+			a,
+			"--phase",
+			"capture",
+			"--time",
+			"4",
+			"--tokens",
+			"1200",
+			"--note",
+			"captured alpha",
+		})
+		t.expect(has(out, a)).toBe(true)
+		t.expect(tip()).toBe(before)
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		t.expect(branchChanged(head)).toBe(`pickman/.tracker/issues/{a}/spend.md`)
+		local l = onBranch(`pickman/.tracker/issues/{a}/spend.md`)
+		t.expect(#l.rows).toBe(1)
+		t.expect(l.id).toBe(a)
+		t.expect(l.rows[1].phase).toBe("capture")
+		t.expect(l.rows[1].minutes).toBe(4)
+		t.expect(l.rows[1].tokens).toBe(1200)
+		t.expect(l.rows[1].added).toBe(0)
+		t.expect(l.rows[1].subject).toBe("captured alpha")
+		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+		local text = git(prep, { "show", `HEAD:pickman/.tracker/issues/{a}/spend.md` }) .. "\n"
+		t.expect(ledger.appendOnly(nil, text, a)).toBe(nil) -- the ledger's own form
+		t.expect(git(prep, { "rev-parse", "HEAD" }) ~= head).toBe(true)
+		t.expect(git(prep, { "status", "--porcelain" })).toBe("")
+		t.expect(fs.isFile(`{prep}/pickman/.tracker/issues/{a}/spend.md`)).toBe(true)
+	end)
 
 	it("splits a raft's row over its members in one commit: minutes near, tokens exactly", function()
-		local before = tip()
+		local before, head = tip(), git(prep, { "rev-parse", "HEAD" })
 		trOk(prep, {
 			"spend",
 			raft,
@@ -169,8 +174,8 @@ return t.spec("tracker spend", function(it)
 			"--note",
 			"design-review-001",
 		})
-		t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
-		local names = string.split(changed(before), "\n")
+		t.expect(tip()).toBe(before)
+		local names = string.split(branchChanged(head), "\n")
 		table.sort(names)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 		local want = { `pickman/.tracker/issues/{a}/spend.md`, `pickman/.tracker/issues/{b}/spend.md` }
@@ -185,7 +190,7 @@ return t.spec("tracker spend", function(it)
 		t.expect((ra.tokens or 0) + (rb.tokens or 0)).toBe(3001)
 		t.expect(ra.added + rb.added).toBe(0)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		t.expect(#onOrigin(`pickman/.tracker/issues/{a}/spend.md`).rows).toBe(2) -- the capture row is kept
+		t.expect(#onBranch(`pickman/.tracker/issues/{a}/spend.md`).rows).toBe(2) -- the capture row is kept
 	end)
 
 	it(
@@ -307,6 +312,10 @@ return t.spec("tracker spend", function(it)
 	)
 
 	it("records deliver on a done item, in its done directory", function()
+		-- earlier spends committed ledgers on this branch; origin has since moved those directories.
+		-- This case starts from origin's tree.
+		git(prep, { "fetch", "-q", "origin", "main" })
+		git(prep, { "reset", "--hard", "-q", "origin/main" })
 		local g = string.match(
 			trOk(prep, { "new", "issue", "c", "gamma", "--desc", "Gamma.", "--project", "pickman" }),
 			"(c%d%d%d%d)"
@@ -316,14 +325,18 @@ return t.spec("tracker spend", function(it)
 		git(other, { "mv", `pickman/.tracker/issues/{g}`, `pickman/.tracker/issues/done/{g}` })
 		git(other, { "commit", "-q", "-m", "gamma done" })
 		git(other, { "push", "-q", "origin", "HEAD:main" })
-		local before = tip()
+		trOk(prep, { "sync" })
+		local before, head = tip(), git(prep, { "rev-parse", "HEAD" })
 		trOk(prep, { "spend", g, "--phase", "deliver", "--time", "3" })
+		t.expect(tip()).toBe(before)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		t.expect(changed(before)).toBe(`pickman/.tracker/issues/done/{g}/spend.md`)
+		t.expect(branchChanged(head)).toBe(`pickman/.tracker/issues/done/{g}/spend.md`)
 		t.expect(last(`pickman/.tracker/issues/done/{g}/spend.md`).phase).toBe("deliver")
 	end)
 
 	it("keeps an existing ledger's rows and title, reading seven-cell rows as build", function()
+		git(prep, { "fetch", "-q", "origin", "main" })
+		git(prep, { "reset", "--hard", "-q", "origin/main" })
 		local d = string.match(
 			trOk(prep, { "new", "issue", "c", "delta", "--desc", "Delta.", "--project", "pickman" }),
 			"(c%d%d%d%d)"
@@ -339,16 +352,19 @@ return t.spec("tracker spend", function(it)
 		git(other, { "add", "-A" })
 		git(other, { "commit", "-q", "-m", "old ledger" })
 		git(other, { "push", "-q", "origin", "HEAD:main" })
+		trOk(prep, { "sync" })
+		local before = tip()
 		trOk(prep, { "spend", d, "--phase", "prep", "--time", "2" })
+		t.expect(tip()).toBe(before)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		local l = onOrigin(`pickman/.tracker/issues/{d}/spend.md`)
+		local l = onBranch(`pickman/.tracker/issues/{d}/spend.md`)
 		t.expect(l.title).toBe("Delta as it was")
 		t.expect(#l.rows).toBe(2)
 		t.expect(l.rows[1].phase).toBe("build")
 		t.expect(l.rows[1].added).toBe(66)
 		t.expect(l.rows[2].phase).toBe("prep")
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		local text = git(origin, { "show", `main:pickman/.tracker/issues/{d}/spend.md` }) .. "\n"
+		local text = git(prep, { "show", `HEAD:pickman/.tracker/issues/{d}/spend.md` }) .. "\n"
 		t.expect(ledger.appendOnly(old, text, d)).toBe(nil)
 	end)
 
@@ -471,9 +487,15 @@ return t.spec("tracker spend", function(it)
 		do
 			git(other, { "update-index", "--chmod=+x", p })
 		end
+		-- c0961's ledger is placed on main here. `./zn spend` commits on a branch and does not publish it.
+		write(
+			`{other}/pickman/.tracker/issues/c0961/spend.md`,
+			"# Spend: c0961 c0961\n\n| # | when | commit | +lines | -lines | minutes | attribution |\n"
+				.. "|---|---|---|---|---|---|---|\n| 1 | 2026-09-29 03:16 | old | 1 | 0 | 1.0 | focus |\n"
+		)
+		git(other, { "add", "-A" })
 		git(other, { "commit", "-q", "-m", "prepared R0961" })
 		git(other, { "push", "-q", "origin", "HEAD:main" })
-		trOk(prep, { "spend", "c0961", "--phase", "capture", "--time", "1" })
 		local before: { [string]: string } = {}
 		for _, id in { "c0961", "c0962" } do
 			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)

@@ -65,30 +65,37 @@ return t.spec("c0165 inputs, live output and always-run specs", function(it)
 		t.expect(count(ran(dir), "bhold")).toBe(1)
 	end)
 
-	it("AC5: a * entry selects on any change, ignores unrelated refs and reruns after HEAD moves", function()
-		local dir = gatefix.make(base, "always", {
-			setup = function(d: string)
-				write(`{d}/pickman/tests/inputs.tsv`, "# extra inputs per spec\ntests/unit/b.spec.luau\t*\n")
-			end,
-		})
-		t.expect(gatefix.affected(dir, { "pickman/.tracker/issues/f0009/f0009.md" }))
-			.toBe("tests/unit/b.spec.luau")
-		t.expect(gatefix.affected(dir, { "AGENTS.md" })).toBe("tests/unit/b.spec.luau")
-		local one = { "--", "tests/unit/b.spec.luau" }
-		local ok1, _ = gatefix.specs(dir, one)
-		local ok2, out2 = gatefix.specs(dir, one)
-		t.expect(ok1 and ok2).toBe(true)
-		t.expect(count(ran(dir), "b")).toBe(1)
-		t.expect(has(out2, "reused tests/unit/b.spec.luau")).toBe(true)
-		fixture.git(dir, { "update-ref", "refs/heads/unrelated", "HEAD" })
-		local ok3, out3 = gatefix.specs(dir, one)
-		t.expect(ok3).toBe(true)
-		t.expect(has(out3, "reused tests/unit/b.spec.luau")).toBe(true)
-		fixture.git(dir, { "commit", "-q", "--allow-empty", "-m", "move HEAD" })
-		local ok4, _ = gatefix.specs(dir, one)
-		t.expect(ok4).toBe(true)
-		t.expect(count(ran(dir), "b")).toBe(2)
-	end)
+	it(
+		"AC5: a * entry selects on any change, ignores unrelated refs and does not rerun when only HEAD moves",
+		function()
+			local dir = gatefix.make(base, "always", {
+				setup = function(d: string)
+					write(
+						`{d}/pickman/tests/inputs.tsv`,
+						"# extra inputs per spec\ntests/unit/b.spec.luau\t*\n"
+					)
+				end,
+			})
+			t.expect(gatefix.affected(dir, { "pickman/.tracker/issues/f0009/f0009.md" }))
+				.toBe("tests/unit/b.spec.luau")
+			t.expect(gatefix.affected(dir, { "AGENTS.md" })).toBe("tests/unit/b.spec.luau")
+			local one = { "--", "tests/unit/b.spec.luau" }
+			local ok1, _ = gatefix.specs(dir, one)
+			local ok2, out2 = gatefix.specs(dir, one)
+			t.expect(ok1 and ok2).toBe(true)
+			t.expect(count(ran(dir), "b")).toBe(1)
+			t.expect(has(out2, "reused tests/unit/b.spec.luau")).toBe(true)
+			fixture.git(dir, { "update-ref", "refs/heads/unrelated", "HEAD" })
+			local ok3, out3 = gatefix.specs(dir, one)
+			t.expect(ok3).toBe(true)
+			t.expect(has(out3, "reused tests/unit/b.spec.luau")).toBe(true)
+			fixture.git(dir, { "commit", "-q", "--allow-empty", "-m", "move HEAD" })
+			local ok4, out4 = gatefix.specs(dir, one)
+			t.expect(ok4).toBe(true)
+			t.expect(has(out4, "reused tests/unit/b.spec.luau")).toBe(true)
+			t.expect(count(ran(dir), "b")).toBe(1)
+		end
+	)
 
 	it(
 		"AC5: a declared folder entry selects its spec for a file added there later, and changes its fingerprint",

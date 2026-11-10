@@ -26,9 +26,12 @@ return t.spec("c0239 gate by step wording", function(it)
 		local f = "z-nile/skills/zz-test/SKILL.md"
 		says(
 			f,
-			"**Gate by step**: the full gate runs once, at the merge; every step before it runs `--affected`, `./zn done` included."
+			"**Gate by step**: a game pull request's full gate runs once, at the merge; a tooling pull request's merge runs `--affected` on the branch. Every step before the merge runs `--affected`, `./zn done` included."
 		)
-		says(f, "`land`, `setup.sh` and the merge's clean clone run `--full` fresh.")
+		says(
+			f,
+			"`land` runs `--static`. A game pull request's merge runs `--full` in a clean clone; a tooling pull request's merge runs `--affected` on the branch."
+		)
 		unsays(f, "On stop:")
 		unsays(f, '(`"$ZN_ROOT/z-nile/check.sh" --project <project> --full`)')
 	end)
@@ -37,7 +40,7 @@ return t.spec("c0239 gate by step wording", function(it)
 		local rules = "z-nile/skills/zz-rules/SKILL.md"
 		says(rules, "runs the affected gate (`z-nile/check.sh --affected`) on that tree")
 		unsays(rules, "runs the full gate (`z-nile/check.sh --full`) on that tree")
-		says("SETUP.md", "(`./zn land` and zz-rules Merging; `./zn done` runs the affected gate)")
+		says("SETUP.md", "`./zn done` runs the affected gate; `./zn land` runs `--static`.")
 		unsays("SETUP.md", "(`./zn land`, `./zn done`, and zz-rules Merging)")
 		unsays(
 			"z-nile/skills/zz-review/SKILL.md",
@@ -111,18 +114,18 @@ return t.spec("c0239 gate by step wording", function(it)
 			says(ex, "rerun `z-nile/check.sh --affected`, commit with `./zn commit --phase deliver`")
 			says(
 				ex,
-				"Record the **gate wall time** and the `slowest:` specs of the merge's full gate in the final report and its PR comment"
+				"Record the **gate wall time** and the `slowest:` specs of the merge's gate in the final report and its PR comment"
 			)
 			says(ex, "the local full gate, `z-nile/check.sh --full`, in a clone of the exact head")
 			-- a red merge gate (user decision, 2026-11-04): BLOCKED, the failing specs, a graph-miss chore for a spec the
 			-- affected selection of the PR's changes does not list, and stop with the PR ready and unmerged
 			says(
 				ex,
-				"If the merge's full gate fails, post a `BLOCKED:` comment naming the failing specs and stop with the PR ready and unmerged; in the raft worktree at the PR head, for each failing spec that `lune run z-nile/affected -- --base $(git merge-base origin/main HEAD)` does not list (every spec counts as listed when it prints `ALL`), file a graph-miss chore (zz-test, Graph miss) and say so in the comment, unless the spec also fails on `origin/main` (then it is a red `main`: say that instead)."
+				"If the merge's gate fails, post a `BLOCKED:` comment naming the failing specs and stop with the PR ready and unmerged; in the raft worktree at the PR head, for each failing spec that `lune run z-nile/affected -- --base $(git merge-base origin/main HEAD)` does not list (every spec counts as listed when it prints `ALL`), file a graph-miss chore (zz-test, Graph miss) and say so in the comment, unless the spec also fails on `origin/main` (then it is a red `main`: say that instead)."
 			)
 			local rules = "z-nile/skills/zz-rules/SKILL.md"
-			says(rules, "2. `z-nile/check.sh --full` passes on the final head, run by you, in a clone")
-			says(rules, "rerun `z-nile/check.sh --full`") -- c0172/merge.spec keeps pinning this phrase; the two clone-clause pins above stop at the clause c0194 rewrites
+			says(rules, "A pull request that changes only tooling")
+			says(rules, "rerun `z-nile/check.sh --full`") -- c0172/merge.spec keeps pinning this phrase; the game path still reruns the full gate
 			says(
 				rules,
 				"A red full gate here is BLOCKED: zz-execute Phase 6 step 1 says what to post and file."

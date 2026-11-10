@@ -2,7 +2,7 @@
 # Exit criteria for {{ID}}. SEQUESTERED: never edit during execution.
 # Runs the raft's project gate, every member issue's check.sh, then raft-level end-to-end checks.
 # ac.sh runs this from the raft's project home (pickman/, z-nile/); $ZN_ROOT is the repository root. The project's gate
-# proves that project alone; the merger's `z-nile/check.sh --full` covers the others (c0120).
+# proves that project alone; a game pull request's merger runs `z-nile/check.sh --full`, which covers the others (c0120).
 source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
 
 check "RC0: project gate passes (affected)" "$ZN_ROOT/z-nile/check.sh" --project {{PROJECT}} --affected

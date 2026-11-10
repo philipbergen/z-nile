@@ -134,6 +134,35 @@ function sel.forcedAll(rules: Rules, changed: { string }, only: string?): boolea
 	return false
 end
 
+-- The projects whose static stages a change set can affect: "ALL" when a path forces every project, otherwise the
+-- projects whose home holds a changed path (a tracker document lives in its project's home, so it names that project).
+-- An empty change set names none. Order is sorted.
+function sel.staticProjects(rules: Rules, changed: { string }): { string } | "ALL"
+	local names: { [string]: boolean } = {}
+	local order: { string } = {}
+	local function add(name: string)
+		if not names[name] then
+			names[name] = true
+			table.insert(order, name)
+		end
+	end
+	for _, path in changed do
+		if sel.forces(rules, path) == "all" then
+			return "ALL"
+		end
+		local h = homeOf(rules.homes, path)
+		if h and h.prefix ~= "" then
+			add(h.name)
+		end
+		local forced = sel.forces(rules, path)
+		if type(forced) == "string" then
+			add(forced)
+		end
+	end
+	table.sort(order)
+	return order
+end
+
 local PLACE_LIB = "tests/lib/place.luau"
 
 local function underAny(f: string, list: { string }): boolean

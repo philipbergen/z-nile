@@ -83,7 +83,7 @@ return t.spec("c0117 the spend row's model cell", function(it)
 		t.expect(ledger.appendOnly(old, ledger.append(old, "c0010", "T", row(nil, 1)), "c0010")).toBe(nil)
 	end)
 
-	it("spend --model records the model on the published row", function()
+	it("spend --model records the model on the branch's row", function()
 		local f = trackerfix.new("c0117-ledger-spend", {
 			["pickman/.tracker/issues/c0010/c0010.md"] = trackerfix.stub(
 				"c0010",
@@ -104,7 +104,7 @@ return t.spec("c0117 the spend row's model cell", function(it)
 			"--model",
 			"claude-opus-5-5-high",
 		})
-		local text = fixture.git(f.origin, { "show", "main:pickman/.tracker/issues/c0010/spend.md" }) .. "\n"
+		local text = fixture.git(w, { "show", "HEAD:pickman/.tracker/issues/c0010/spend.md" }) .. "\n"
 		local l = ledger.parse(text) :: ledger.Ledger
 		t.expect(l.rows[#l.rows].model).toBe("claude-opus-5-5-high")
 		t.expect(l.rows[#l.rows].tokens).toBe(123)
@@ -118,7 +118,7 @@ return t.spec("c0117 the spend row's model cell", function(it)
 		-- without --model the cell stays empty
 		trackerfix.trOk(f, w, { "spend", "c0010", "--phase", "capture", "--time", "1", "--tokens", "4" })
 		local again = ledger.parse(
-			fixture.git(f.origin, { "show", "main:pickman/.tracker/issues/c0010/spend.md" }) .. "\n"
+			fixture.git(w, { "show", "HEAD:pickman/.tracker/issues/c0010/spend.md" }) .. "\n"
 		) :: ledger.Ledger
 		t.expect(again.rows[#again.rows].model).toBe(nil)
 	end)

@@ -43,15 +43,6 @@ while args[1] == "--" do
 end
 local command = table.remove(args, 1)
 
-local function trim(s: string): string
-	return (string.gsub(s, "%s+$", ""))
-end
-
-local function git(argv: { string }): string?
-	local r = process.exec("git", argv, { cwd = ROOT })
-	return if r.ok then trim(r.stdout) else nil
-end
-
 local function collect(dir: string, out: { string })
 	for _, name in fs.readDir(dir) do
 		local path = `{dir}/{name}`
@@ -382,15 +373,14 @@ local function runCommand()
 end
 
 -- ---------------------------------------------------------------------------------------------------- digest
--- The digest of a whole affected gate: the projects it covers, the base it compares with, each project's selection, the
--- tools, every file's blob and, when the selection holds a `*` spec, HEAD; always the union of the selected specs' declared refs.
+-- The digest of a whole affected gate: the projects it covers, each project's selection, the tools and every file's
+-- blob; always the union of the selected specs' declared refs. Not main's sha and not HEAD.
 local function digestOf(mode: string, names: { string }, base: string?): string?
 	local reg = loadRegistry()
 	local state = readState(reg)
 	if state == nil then
 		return nil
 	end
-	local starred = false
 	local refSet: { [string]: boolean } = {}
 	local changed = changes.files(base)
 	local selected: { string } = {} -- the selection itself (review 005 F1): it reads the merge-base and HEAD's tree too
@@ -417,11 +407,6 @@ local function digestOf(mode: string, names: { string }, base: string?): string?
 			end
 		end
 		for _, spec in specs do
-			for _, e in (state.ctx.inputs[spec] :: { string }?) or ({} :: { string }) do
-				if e == "*" then
-					starred = true
-				end
-			end
 			for _, ref in fingerprint.refs(state.ctx, spec) do
 				refSet[ref] = true
 			end
@@ -436,10 +421,7 @@ local function digestOf(mode: string, names: { string }, base: string?): string?
 	if gitState == nil then
 		return nil
 	end
-	local baseRef = base
-		or (if git({ "rev-parse", "--verify", "-q", "origin/main" }) ~= nil then "origin/main" else "main")
-	local extra =
-		fingerprint.digestExtra(mode, names, git({ "rev-parse", baseRef }) or "?", starred, gitState, refs)
+	local extra = fingerprint.digestExtra(mode, names, gitState, refs)
 	for _, line in selected do
 		table.insert(extra, line)
 	end
