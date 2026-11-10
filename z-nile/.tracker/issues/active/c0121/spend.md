@@ -32,6 +32,7 @@
 | 28 | 2026-11-09 15:59 | design-refute-015 | 0 | 0 | 150.0 | spend | design-review |  |
 | 29 | 2026-11-09 23:45 | design-review-016 | 0 | 0 | 70.0 | spend | design-review | 175000 |
 | 30 | 2026-11-09 23:46 | design-refute-016 | 0 | 0 | 90.0 | spend | design-review |  |
+| 31 | 2026-11-10 00:15 | c0121: carry the board server from proto2-c0121 (52edf050) | 711 | 11 | 20.0 | focus | build |  |
 
-**Total:** +1447 / -5 lines, 1131.0 agent-minutes, 1955000 tokens over 30 records
-<!-- totals: added=1447 removed=5 minutes=1131.0 records=30 tokens=1955000 -->
+**Total:** +2158 / -16 lines, 1151.0 agent-minutes, 1955000 tokens over 31 records
+<!-- totals: added=2158 removed=16 minutes=1151.0 records=31 tokens=1955000 -->

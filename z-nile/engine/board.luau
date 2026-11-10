@@ -52,7 +52,7 @@ export type Pr = { number: number, url: string, state: string }
 export type Checks = { state: string, url: string? }
 -- The dispatcher's run state for an id (c0117's .cache/dispatch/<id>/state.json): its step, outcome and model, and
 -- whether it waits for answers in questions.md.
-export type Dispatch = { step: string, outcome: string, model: string, questions: boolean }
+export type Dispatch = { step: string, outcome: string, model: string, questions: boolean, follows: string? }
 export type Spend = { minutes: number, tokens: number, added: number, removed: number, models: { string } }
 export type Issue = {
 	id: string,
@@ -79,6 +79,7 @@ export type Issue = {
 	dispatch: Dispatch?,
 	pr: Pr?, -- c0121's, as on Raft
 	checks: Checks?,
+	worktree: string?, -- c0121's: the worktree of its own PR's branch (a prep worktree), nil otherwise
 }
 export type Project = { name: string, root: string }
 -- What the board knows besides the tracker documents (c0118), all read locally: the instant the page is as of (HEAD's
@@ -90,7 +91,10 @@ export type Facts = {
 	refs: { Ref },
 	worktrees: { { path: string, branch: string } },
 	dispatch: { [string]: Dispatch },
+	worktreeSpend: boolean?, -- c0121: read a launched raft's members' spend.md from its worktree (live rows)
 }
+-- c0121: the served page's live settings; nil in the static page.
+export type Live = { token: string, poll: number, checks: string, checksAge: number?, stale: boolean }
 export type ProjectCharts = {
 	rounds: { [string]: string },
 	tokens: { [string]: string },
@@ -113,6 +117,7 @@ export type Model = {
 	ranges: { { key: string, label: string } },
 	range: string,
 	problems: { string }, -- files the board could not read (a spend.md that does not parse)
+	live: Live?, -- c0121: set by the server only
 }
 
 board.MARKED_PATH = "z-nile/vendor/marked.umd.js"
@@ -474,7 +479,14 @@ local function durationsTable(durations: { [string]: stats.ByType }): string
 end
 
 -- One line: the acceptance spec matches the stats section and the tables div without crossing a newline.
-local function statsHtml(s: stats.Stats): string
+local statsHtml: (s: stats.Stats) -> string
+
+-- c0121: the Stats section of a model, as board.render draws it (the server sends it with each polled model).
+function board.statsHtml(m: Model): string
+	return statsHtml(m.stats)
+end
+
+function statsHtml(s: stats.Stats): string
 	local parts: { string } = {}
 	if not s.history then
 		table.insert(
@@ -687,6 +699,10 @@ function board.readFacts(dir: string): Facts
 						outcome = if type(st.outcome) == "string" then st.outcome else "",
 						model = if type(st.model) == "string" then st.model else "",
 						questions = fs.isFile(`{home}/{name}/questions.md`),
+						-- the raft an issue's chain moved on to (c0117's follow; c0121's Stop acts on it)
+						follows = if type(st.follows) == "string" and store.isRaftId(st.follows)
+							then st.follows
+							else nil,
 					}
 				end
 			end
@@ -824,6 +840,10 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		end
 	end
 	local doneAt: { [string]: number } = if hist and hist.doneAt then hist.doneAt else {}
+	local registryRoot: { [string]: string } = {}
+	for _, src in sourceList do
+		registryRoot[src.name] = src.root
+	end
 	local worktreeOf: { [string]: string } = {}
 	for _, w in facts.worktrees do
 		worktreeOf[w.branch] = w.path
@@ -1028,6 +1048,22 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	end
 	for _, issue in issues do
 		home[issue.id] = issue.id
+	end
+
+	-- c0121: on the served page, a launched raft's members show the spend rows in its worktree, where build and code
+	-- review rows sit until the merge (programme review F8); a member with no spend.md there keeps main's
+	if facts.worktreeSpend then
+		for _, issue in issues do
+			local raft = if issue.raft then raftById[issue.raft] else nil
+			local wt = if raft then raft.worktree else nil
+			local rootRel = registryRoot[issue.project]
+			if wt and rootRel then
+				local path = `{wt}/{rootRel}/issues/active/{issue.id}/spend.md`
+				if fs.isFile(path) then
+					issue.spend = spendOf(spendRows(path, problems))
+				end
+			end
+		end
 	end
 
 	-- c0118: a done item that history leaves undated (a compaction ended its dated life, or there is no history: a
