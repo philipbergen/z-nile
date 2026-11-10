@@ -121,7 +121,7 @@ return t.spec("c0239 gate by step wording", function(it)
 			-- affected selection of the PR's changes does not list, and stop with the PR ready and unmerged
 			says(
 				ex,
-				"If the merge's gate fails, post a `BLOCKED:` comment naming the failing specs and stop with the PR ready and unmerged; in the raft worktree at the PR head, for each failing spec that `lune run z-nile/affected -- --base $(git merge-base origin/main HEAD)` does not list (every spec counts as listed when it prints `ALL`), file a graph-miss chore (zz-test, Graph miss) and say so in the comment, unless the spec also fails on `origin/main` (then it is a red `main`: say that instead)."
+				"If the merge's gate fails, post a `BLOCKED:` comment naming the failing specs and stop with the PR ready and unmerged; in the raft worktree at the PR head, for each failing spec that `lune run z-nile/affected -- --base $(git merge-base origin/main HEAD)` does not list, file a watch-miss chore (zz-test, Watch miss) and say so in the comment, unless the spec also fails on `origin/main` (then it is a red `main`: say that instead)."
 			)
 			local rules = "z-nile/skills/zz-rules/SKILL.md"
 			says(rules, "A pull request that changes only tooling")

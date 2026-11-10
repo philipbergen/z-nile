@@ -145,47 +145,43 @@ return t.spec("c0120 the graph and the selector know the homes", function(it)
 		t.expect(sel({ "pickman/srcx/y.luau" })).toEqual({})
 	end)
 
-	it("--project selects one project's specs, relative to its home", function()
+	it("--project selects one project's specs, relative to its home, and never every spec", function()
 		local ok, out = affected({ "--project", "pickman", "pickman/src/shared/Logic/Maze/init.luau" })
 		t.expect(ok).toBe(true)
 		local got = lines(out)
-		t.expect(table.find(got, "tests/unit/Maze/maze.spec.luau") ~= nil).toBe(true)
+		t.expect(table.find(got, "ALL") == nil).toBe(true)
 		for _, l in got do
 			t.expect(string.sub(l, 1, 8) == "pickman/").toBe(false)
 			t.expect(fs.isFile(`{TOP}/pickman/{l}`)).toBe(true)
 		end
-		local _, znile = affected({ "--project", "z-nile", "pickman/src/shared/Logic/Maze/init.luau" })
+		local _, znile = affected({ "--project", "z-nile", "z-nile/skills/zz-test/SKILL.md" })
 		t.expect(znile).toBe("")
-		local _, all = affected({ "pickman/src/shared/Logic/Maze/init.luau" })
-		t.expect(table.find(lines(all), "pickman/tests/unit/Maze/maze.spec.luau") ~= nil).toBe(true)
 	end)
 
-	it(
-		"tooling infrastructure runs z-nile alone; root infrastructure every project; a home's own harness its own",
-		function()
-			local function both(path: string): string
-				local _, p = affected({ "--project", "pickman", path })
-				local _, z = affected({ "--project", "z-nile", path })
-				return `{p}|{z}`
-			end
-			t.expect(both("z-nile/tests/lib/t.luau")).toBe("|ALL\n")
-			t.expect(both("z-nile/tests/run.luau")).toBe("|ALL\n")
-			t.expect(both("z-nile/lib/graph.luau")).toBe("|ALL\n")
-			t.expect(both("scripts/tracker/ids.luau")).toBe("ALL\n|ALL\n")
-			t.expect(both(".luaurc")).toBe("ALL\n|ALL\n")
-			t.expect(both("z-nile/engine/projects.luau")).toBe("|ALL\n")
-			t.expect(both("z-nile/check.sh")).toBe("|ALL\n")
-			t.expect(both("pickman/tests/lib/sim.luau")).toBe("ALL\n|")
-			t.expect(both("pickman/.luaurc")).toBe("ALL\n|")
-			t.expect(both("pickman/scripts/lib/beta.luau")).toBe("ALL\n|")
-			t.expect(both("z-nile/tests/meta/architecture.spec.luau")).toBe("|ALL\n")
-			t.expect(both("tests/x.spec.luau")).toBe("|ALL\n")
-			t.expect(both("tracker/issues/f0001/f0001.md")).toBe("|ALL\n")
-			t.expect(both("src/shared/Logic/Maze/init.luau")).toBe("|ALL\n")
-			t.expect(both("pickman/.tracker/issues/f0001/f0001.md")).toBe("|")
-			t.expect(both("z-nile/.tracker/issues/c0001/c0001.md")).toBe("|")
+	it("a skill, a tracker document and an old root select no spec, and never ALL", function()
+		local function both(path: string): string
+			local _, p = affected({ "--project", "pickman", path })
+			local _, z = affected({ "--project", "z-nile", path })
+			return `{p}|{z}`
 		end
-	)
+		t.expect(both("z-nile/skills/zz-test/SKILL.md")).toBe("|")
+		t.expect(both("pickman/.tracker/issues/f0001/f0001.md")).toBe("|")
+		t.expect(both("z-nile/.tracker/issues/c0001/c0001.md")).toBe("|")
+		for _, path in
+			{
+				"z-nile/lib/graph.luau",
+				"z-nile/engine/projects.luau",
+				"z-nile/check.sh",
+				"scripts/tracker/ids.luau",
+				".luaurc",
+				"pickman/tests/lib/sim.luau",
+				"tracker/issues/f0001/f0001.md",
+			}
+		do
+			local _, out = affected({ path })
+			t.expect((string.find(out, "ALL", 1, true))).toBe(nil)
+		end
+	end)
 
 	it("an unknown project is refused", function()
 		local ok, out = affected({ "--project", "nope", "README.md" })

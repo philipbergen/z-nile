@@ -65,44 +65,28 @@ return t.spec("c0165 inputs, live output and always-run specs", function(it)
 		t.expect(count(ran(dir), "bhold")).toBe(1)
 	end)
 
-	it(
-		"AC5: a * entry selects on any change, ignores unrelated refs and does not rerun when only HEAD moves",
-		function()
-			local dir = gatefix.make(base, "always", {
-				setup = function(d: string)
-					write(
-						`{d}/pickman/tests/inputs.tsv`,
-						"# extra inputs per spec\ntests/unit/b.spec.luau\t*\n"
-					)
-				end,
-			})
-			t.expect(gatefix.affected(dir, { "pickman/.tracker/issues/f0009/f0009.md" }))
-				.toBe("tests/unit/b.spec.luau")
-			t.expect(gatefix.affected(dir, { "AGENTS.md" })).toBe("tests/unit/b.spec.luau")
-			local one = { "--", "tests/unit/b.spec.luau" }
-			local ok1, _ = gatefix.specs(dir, one)
-			local ok2, out2 = gatefix.specs(dir, one)
-			t.expect(ok1 and ok2).toBe(true)
-			t.expect(count(ran(dir), "b")).toBe(1)
-			t.expect(has(out2, "reused tests/unit/b.spec.luau")).toBe(true)
-			fixture.git(dir, { "update-ref", "refs/heads/unrelated", "HEAD" })
-			local ok3, out3 = gatefix.specs(dir, one)
-			t.expect(ok3).toBe(true)
-			t.expect(has(out3, "reused tests/unit/b.spec.luau")).toBe(true)
-			fixture.git(dir, { "commit", "-q", "--allow-empty", "-m", "move HEAD" })
-			local ok4, out4 = gatefix.specs(dir, one)
-			t.expect(ok4).toBe(true)
-			t.expect(has(out4, "reused tests/unit/b.spec.luau")).toBe(true)
-			t.expect(count(ran(dir), "b")).toBe(1)
-		end
-	)
+	it("AC5: a tracker file selects nothing, and a watched file's unchanged bytes are reused", function()
+		local dir = gatefix.make(base, "always")
+		t.expect(gatefix.affected(dir, { "pickman/.tracker/issues/f0009/f0009.md" })).toBe("")
+		t.expect(gatefix.affected(dir, { "pickman/src/B.luau" })).toBe("tests/unit/b.spec.luau")
+		local one = { "--", "tests/unit/b.spec.luau" }
+		local ok1, _ = gatefix.specs(dir, one)
+		local ok2, out2 = gatefix.specs(dir, one)
+		t.expect(ok1 and ok2).toBe(true)
+		t.expect(count(ran(dir), "b")).toBe(1)
+		t.expect(has(out2, "reused tests/unit/b.spec.luau")).toBe(true)
+		fixture.git(dir, { "commit", "-q", "--allow-empty", "-m", "move HEAD" })
+		local ok4, out4 = gatefix.specs(dir, one)
+		t.expect(ok4).toBe(true)
+		t.expect(has(out4, "reused tests/unit/b.spec.luau")).toBe(true)
+		t.expect(count(ran(dir), "b")).toBe(1)
+	end)
 
 	it(
-		"AC5: a declared folder entry selects its spec for a file added there later, and changes its fingerprint",
+		"AC5: a watched file changes the fingerprint; a file the watch list does not name does not select it",
 		function()
 			local dir = gatefix.make(base, "folder", {
 				setup = function(d: string)
-					-- a scanner: reads every file under data/ as text (no require edge), declared by a folder entry
 					write(
 						`{d}/pickman/tests/unit/scan.spec.luau`,
 						"--!strict\n"
@@ -115,13 +99,10 @@ return t.spec("c0165 inputs, live output and always-run specs", function(it)
 							.. 'return t.spec("scan", function(it)\n'
 							.. '\tit("runs", function()\n'
 							.. `\t\tprocess.exec("sh", \{ "-c", 'echo scan >> "$1"', "_", "{d}/ran.log" })\n`
-							.. '\t\tfor _, name in fs.readDir("data") do t.expect(fs.readFile("data/" .. name)).toBe("ok\\n") end\n'
+							.. '\t\tt.expect(fs.readFile("data/x.txt")).toBe("ok\\n")\n'
 							.. "\tend)\nend)\n"
 					)
-					write(
-						`{d}/pickman/tests/inputs.tsv`,
-						"# extra inputs per spec\ntests/unit/scan.spec.luau\tpickman/data/\n"
-					)
+					write(`{d}/pickman/tests/unit/scan.watch.txt`, "pickman/data/x.txt\n")
 				end,
 			})
 			local scan = { "--", "tests/unit/scan.spec.luau" }
@@ -130,9 +111,11 @@ return t.spec("c0165 inputs, live output and always-run specs", function(it)
 			local ok2, out2 = gatefix.specs(dir, scan)
 			t.expect(ok2).toBe(true)
 			t.expect(has(out2, "reused tests/unit/scan.spec.luau")).toBe(true)
-			-- a new file under the declared folder: the bare selector picks the scanner, and its pass is not reused
 			write(`{dir}/pickman/data/new.txt`, "bad\n")
-			t.expect(gatefix.affected(dir, { "pickman/data/new.txt" })).toBe("tests/unit/scan.spec.luau")
+			t.expect(gatefix.affected(dir, { "pickman/data/new.txt" })).toBe("")
+			write(`{dir}/pickman/data/x.txt`, "bad\n")
+			t.expect(gatefix.affected(dir, { "pickman/data/x.txt" }))
+				.toBe("tests/unit/scan.spec.luau\ntests/unit/text.spec.luau")
 			local ok3, _ = gatefix.specs(dir, scan)
 			t.expect(ok3).toBe(false)
 			t.expect(count(ran(dir), "scan")).toBe(2)

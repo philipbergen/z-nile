@@ -255,6 +255,12 @@ if [[ $mode == static ]]; then
 fi
 [[ $mode == affected ]] || rm -f "$report"
 
+# A watch file that names a missing path, or that does not parse, fails the gate in every mode that runs specs.
+if ! lune run z-nile/watch-check; then
+  echo "watch-check failed" >&2
+  exit 1
+fi
+
 # The specs: each project's from its home (its runner, its .cache, its lock), so one project's never see another's.
 run_specs() { # run_specs <home> [spec paths relative to the home]
   local h=$1
@@ -279,8 +285,8 @@ for i in "${!names[@]}"; do
     if [[ -z $selection ]]; then
       echo "no specs affected"
     elif [[ $selection == ALL ]]; then
-      echo "infrastructure changed: running all specs"
-      lune run z-nile/specs -- run --project "$n" ${fresh:+--fresh} --all
+      echo "check.sh: affected printed ALL; a change never falls back to every spec" >&2
+      exit 1
     else
       echo "$selection"
       # shellcheck disable=SC2086

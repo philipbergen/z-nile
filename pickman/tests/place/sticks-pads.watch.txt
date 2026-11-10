@@ -1,0 +1,4 @@
+pickman/src/client/Camera.luau
+pickman/src/client/Pads.luau
+pickman/src/client/Sticks.luau
+pickman/src/shared/Logic/Pad/init.luau

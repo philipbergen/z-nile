@@ -118,20 +118,19 @@ return t.spec("c0239 the scope command", function(it)
 		t.expect(out).toBe("pickman")
 	end)
 
-	it("AC6: a declared input in the other suite does not cross suite isolation", function()
+	it("AC6: a path named by two projects' watch files is ALL", function()
 		local dir = fixture("rule3", function(d: string)
-			-- the same non-spec file under z-nile/tests is an input of a pickman spec and of a z-nile spec
 			gatefix.write(`{d}/z-nile/tests/shared.txt`, "x\n")
-			gatefix.write(
-				`{d}/z-nile/tests/inputs.tsv`,
-				"tests/unit/zdecl.spec.luau\tz-nile/tests/shared.txt\n"
-			)
 			gatefix.write(`{d}/z-nile/tests/unit/zdecl.spec.luau`, "--!strict\nreturn {}\n")
-			gatefix.write(`{d}/pickman/tests/inputs.tsv`, "tests/unit/a.spec.luau\tz-nile/tests/shared.txt\n")
+			gatefix.write(`{d}/z-nile/tests/unit/zdecl.watch.txt`, "z-nile/tests/shared.txt\n")
+			gatefix.write(
+				`{d}/pickman/tests/unit/a.watch.txt`,
+				"pickman/src/A.luau\nz-nile/tests/shared.txt\n"
+			)
 		end)
 		local ok, out = scope(dir, { "z-nile/tests/shared.txt" })
 		t.expect(ok).toBe(true)
-		t.expect(out).toBe("z-nile")
+		t.expect(out).toBe("ALL")
 	end)
 
 	it("AC6: a * declaration in the tooling suite is not selected by a game change", function()

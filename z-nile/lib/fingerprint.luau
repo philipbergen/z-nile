@@ -1,7 +1,8 @@
 --!strict
 -- A spec's fingerprint and the content digest of a whole gate (c0165). Pure: the caller reads the blob map (every
 -- file present, tracked or not), the tools line and git's state; nothing here touches the disk.
--- One predicate, select.isInput, decides what enters a spec's fingerprint and what the selector picks.
+-- One predicate, select.isInput, decides what enters a spec's fingerprint and what the selector picks:
+-- the spec, its watch file, and the paths that file names.
 
 local select = require("./select")
 local serde = require("@lune/serde")

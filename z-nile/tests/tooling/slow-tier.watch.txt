@@ -1,0 +1,4 @@
+.claude/settings.json
+z-nile/check.sh
+z-nile/lib/select.luau
+z-nile/specs.luau

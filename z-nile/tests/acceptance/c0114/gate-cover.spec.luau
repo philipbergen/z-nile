@@ -53,27 +53,23 @@ local function luauDirs(cwd: string?): { string }
 end
 
 return t.spec("c0114 the gate covers z-nile/", function(it)
-	it(
-		"a change under z-nile/ or to ./zn selects every spec; a tracker document under any root selects none",
-		function()
-			for _, p in
-				{
-					"z-nile/engine/main.luau",
-					"z-nile/lib/fence.sh",
-					"z-nile/check.sh",
-					"z-nile/projects.toml",
-					"zn",
-				}
-			do
-				t.expect(affected(p)).toBe("ALL\n")
-			end
-			t.expect(affected("z-nile/.tracker/issues/c0001/c0001.md")).toBe("")
-			-- c0120 override: pickman's root is pickman/.tracker; tracker/ is retired, and a file there again runs
-			-- everything, so the old-roots spec reports it
-			t.expect(affected("pickman/.tracker/issues/c0001/c0001.md")).toBe("")
-			t.expect(affected("tracker/issues/c0001/c0001.md")).toBe("ALL\n")
+	it("a tracker document selects no spec, and a tooling path is never every spec", function()
+		for _, p in
+			{
+				"z-nile/engine/main.luau",
+				"z-nile/lib/fence.sh",
+				"z-nile/check.sh",
+				"z-nile/projects.toml",
+				"zn",
+			}
+		do
+			t.expect((string.find(affected(p), "ALL", 1, true))).toBe(nil)
 		end
-	)
+		t.expect(affected("z-nile/.tracker/issues/c0001/c0001.md")).toBe("")
+		t.expect(affected("pickman/.tracker/issues/c0001/c0001.md")).toBe("")
+		t.expect(affected("z-nile/skills/zz-test/SKILL.md")).toBe("")
+		t.expect((string.find(affected("tracker/issues/c0001/c0001.md"), "ALL", 1, true))).toBe(nil)
+	end)
 
 	it(
 		"the format stage checks z-nile/ and z-nile/.tracker/, which stylua skips unless it is named",

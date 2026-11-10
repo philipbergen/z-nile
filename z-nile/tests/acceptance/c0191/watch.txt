@@ -1,0 +1,11 @@
+.claude/settings.json
+scripts/hooks/pre-bash.sh
+scripts/hooks/session-end.sh
+z-nile/check.sh
+z-nile/engine/boundcmd.luau
+z-nile/engine/main.luau
+z-nile/engine/reap.luau
+z-nile/guard-bash.luau
+z-nile/lib/bounded.pl
+z-nile/lib/cpu.sh
+zn

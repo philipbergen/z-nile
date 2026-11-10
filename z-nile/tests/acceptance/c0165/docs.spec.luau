@@ -24,12 +24,10 @@ return t.spec("c0165 reuse wording", function(it)
 		says(f, "| `z-nile/check.sh --affected --fresh` | the affected gate without reuse |")
 		says(
 			f,
-			"**Reuse**: in an affected run, a spec file whose fingerprint (its own content, everything it can reach, the tools and the gate mode) already passed is skipped and reported `reused <spec>`, and a whole affected gate that passed on the same content is skipped with its stored static report. `--fresh` reuses nothing and `--full` runs every fast-tier spec. Passes are kept in `.claude/.znile_tests.sqlite`; deleting it only costs reruns."
+			"**Reuse**: in an affected run, a spec file whose fingerprint (its own content, its watch file, the paths that file names, the tools and the gate mode) already passed is skipped and reported `reused <spec>`, and a whole affected gate that passed on the same content is skipped with its stored static report. `--fresh` reuses nothing and `--full` runs every fast-tier spec. Passes are kept in `.claude/.znile_tests.sqlite`; deleting it only costs reruns."
 		)
-		says(
-			f,
-			"**Declared inputs**: a spec that reads files or git state outside its requires declares them in its home's `tests/inputs.tsv`, one `<spec>\\t<file, folder/, *, or ref:refs/...>` line each; `*` covers every blob and `ref:` adds one named ref. A `*` spec is not hashed against HEAD: a commit that changes none of those blobs does not invalidate it. A path under a project root is allowed only below it, never the root itself or a `spend.md`. A spec that reads the files of every registered project (it loops the registry, itself or through a spec, wrapper or helper it runs) declares `*`, or, when it takes over 2 s idle, a line for each registered project; registering a project adds those lines."
-		)
+		says(f, "Nothing falls back to every spec.")
+		says(f, "A tracker file, a skill, a lesson or a document selects nothing.")
 		says(
 			f,
 			"the gate's results db (`.claude/.znile_tests.sqlite` in the main checkout, written by `z-nile/specs` outside the jail)"

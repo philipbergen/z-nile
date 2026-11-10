@@ -1,0 +1,4 @@
+pickman/src/client/Controls.luau
+pickman/src/client/HudView.luau
+pickman/src/client/Main.client.luau
+pickman/src/shared/Logic/Touch/init.luau
