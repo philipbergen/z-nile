@@ -815,10 +815,15 @@ end
 -- suite passed on). A second machine rebases; when the repair is already on main it finds nothing to do.
 function watchcmd.net()
 	local dir = ensureWorktree()
+	local sources, head = sincePassed(dir)
+	if passedAt(dir) and #sources == 0 then
+		-- a capture or other tracker-only landing: no source file changed since the last pass, so no suite runs
+		print("watch-net: nothing to do")
+		return
+	end
 	print(`watch-net: fast suite of every project in {dir}`)
 	local ran = process.exec("bash", { "z-nile/check.sh", "--full" }, { cwd = dir })
 	local output = ran.stdout .. "\n" .. ran.stderr
-	local sources, head = sincePassed(dir)
 	if ran.ok then
 		recordPass(dir, head, sources)
 		return
