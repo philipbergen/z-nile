@@ -1,18 +1,18 @@
 ---
 name: zz-execute
-description: The execution protocol for one raft, followed from inside z-run (or from a raft's prompt) - one branch, one PR, experiments first, tests first, spend-tracked commits, adversarial code review, done. Use when executing a raft you were handed.
+description: The execution protocol for one raft, followed from inside z-run (or from a raft's prompt) - one layer per ticket, experiments first, tests first, spend-tracked commits, adversarial code review, done. Use when executing a raft you were handed.
 ---
 
 # Execute a raft
 
 Input: a raft ID (`R0010`) whose issues are `design: ready`, readied by z-ready and launched by z-run (or handed to you as its prompt).
-Output: one PR, taken out of draft by `./zn done R0010`, then merged by you (Phase 6).
+Output: one layer per ticket. `./zn finish <issue>` makes that layer one commit; `./zn done R0010` lands the stack.
 
 Work through the phases in order and don't skip any. Wherever you are unsure, the zz-rules, zz-arch and zz-test skills, and your project's own skills (`pickman-arch` and `pickman-test` for pickman), are binding.
 
 ## Phase 0: Claim (in the first minutes)
 1. Work in the raft's worktree: `cd "$(./zn worktree R0010)"` (zz-rules skill, Worktrees), then run `./zn sync` there (a reused worktree may be behind). A new worktree branches from a freshly fetched `origin/main`. Never switch branches in the main checkout, and run everything below from this directory. Phase 0 runs no gate and reads no CI result: a red `main` first shows at the merge.
-2. `./zn start R0010`. The claim was made by z-ready: the raft and its members are already in `active/` on `origin/main`, so `start` only creates the branch (if the worktree isn't already on it), makes an empty `tracker: start` commit, pushes, and opens a **draft** PR. If it refuses with `run ./zn sync first`, sync and retry. A raft that was never readied (a legacy start) is claimed and moved by `start` itself; if a step after that claim fails, see the zz-rules skill, Sync and claim, A failed start.
+2. `./zn start R0010`. It opens the next layer (branch `R0010/1/c0010`, an empty commit, a draft PR on the layer below). You are on one ticket: this layer, the layer below, and this ticket's checks. `./zn finish <issue>` when they are green; `./zn start` again opens the next layer. If it refuses with `run ./zn sync first`, sync and retry.
 3. Read the raft document, then every issue document and `check.sh`, in the raft's order.
    - Write down, for yourself, which files each issue touches.
 

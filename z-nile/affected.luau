@@ -8,7 +8,9 @@
 --                                                -- ("ALL", or one name per line), not the specs
 -- Prints one spec path per line (repo-relative; home-relative with --project). Prints nothing when no watch
 -- file names a changed path. Never prints "ALL": a full run is --full, not a fallback.
--- On a raft branch (R####-…), a change that includes a source file also selects that raft's acceptance specs.
+-- On a layer branch (R0010/1/c0010), a change that includes a source file selects that ticket's
+-- acceptance specs when the ticket has no watch file yet, and only when one of its watch files names
+-- the path once the watches exist. On an old raft branch (R####-…), a source change selects that raft's.
 
 local changes = require("./lib/changed")
 local context = require("./lib/context")
@@ -16,6 +18,7 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 local projects = require("./engine/projects")
 local sel = require("./lib/select")
+local stack = require("./engine/stack")
 local stdio = require("@lune/stdio")
 local store = require("./engine/store")
 local watch = require("./lib/watch")
@@ -82,24 +85,65 @@ local function currentSpecs(changed: { string }): { string }
 	if not branch.ok then
 		return {}
 	end
-	local raftId = string.match(trim(branch.stdout), "^(R%d%d%d%d)%-")
+	local name = trim(branch.stdout)
+	local out: { string } = {}
+	local function addDir(dir: string)
+		if not fs.isDir(dir) then
+			return
+		end
+		for _, specName in fs.readDir(dir) do
+			if string.sub(specName, -10) == ".spec.luau" then
+				table.insert(out, `{dir}/{specName}`)
+			end
+		end
+	end
+	-- A watch file that exists decides. No watch file yet means the ticket is still being written.
+	local function watches(dir: string): (boolean, boolean)
+		if not fs.isDir(dir) then
+			return false, false
+		end
+		local any = false
+		local hit = false
+		for _, specName in fs.readDir(dir) do
+			if specName == "watch.txt" or string.sub(specName, -10) == ".watch.txt" then
+				any = true
+				local text = fs.readFile(`{dir}/{specName}`)
+				for _, f in changed do
+					if string.find("\n" .. text, "\n" .. f .. "\n", 1, true) then
+						hit = true
+					end
+				end
+			end
+		end
+		return any, hit
+	end
+	local layer = stack.parse(name)
+	if layer then
+		local m = store.find(layer.issue)
+		if not m then
+			return {}
+		end
+		local dirs = { projects.promotedDir(reg, m.root, m.id), `{m.dir}/acceptance` }
+		local any, hit = false, false
+		for _, dir in dirs do
+			local saw, named = watches(dir)
+			any = any or saw
+			hit = hit or named
+		end
+		if not any or hit then
+			for _, dir in dirs do
+				addDir(dir)
+			end
+		end
+		return out
+	end
+	local raftId = string.match(name, "^(R%d%d%d%d)%-")
 	if not raftId then
 		return {}
 	end
 	local raft = store.find(raftId)
 	if not raft or raft.kind ~= "raft" then
 		return {}
-	end
-	local out: { string } = {}
-	local function addDir(dir: string)
-		if not fs.isDir(dir) then
-			return
-		end
-		for _, name in fs.readDir(dir) do
-			if string.sub(name, -10) == ".spec.luau" then
-				table.insert(out, `{dir}/{name}`)
-			end
-		end
 	end
 	for _, m in store.members(raftId) do
 		addDir(projects.promotedDir(reg, m.root, m.id))

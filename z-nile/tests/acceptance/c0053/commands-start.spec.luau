@@ -130,7 +130,8 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
 		-- the earlier worktree and branch go away: the raft is prepared on origin again
 		git(main, { "worktree", "remove", "--force", `{base}/main/.worktree/R0001` })
 		git(main, { "branch", "-D", "R0001-demo" })
-		git(origin, { "branch", "-D", "R0001-demo" })
+		git(main, { "branch", "-D", "R0001/1/c0240" })
+		git(origin, { "branch", "-D", "R0001/1/c0240" })
 		trOk(main, { "sync" })
 		local wt = trOk(main, { "worktree", "resume-r" })
 		-- a local commit edits the raft's status line, so merging origin's claim conflicts and start dies after it

@@ -181,6 +181,7 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 	end)
 
 	it("done moves the specs into pickman/tests/acceptance/<id> and runs them from pickman/", function()
+		must(tr({ "finish", "f0010" }), "finish")
 		local r = tr({ "done", "R0010" })
 		if not r.ok then
 			error(r.stderr .. r.stdout)
@@ -191,7 +192,7 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 		t.expect(fs.isDir(`{work}/pickman/.tracker/rafts/done/R0010`)).toBe(true)
 		-- the promoted spec ran (it only passes from pickman/)
 		t.expect(string.find(r.stdout, "passed, 0 failed", 1, true) ~= nil).toBe(true)
-		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
+		t.expect(git({ "log", "-1", "--format=%s" })).toBe("R0010: bind f0010")
 		local promoted =
 			git({ "show", "--name-status", "--format=", "HEAD", "--", "pickman/tests/acceptance" })
 		t.expect(string.find(promoted, "pickman/" .. ACC .. "f0010/alpha.spec.luau", 1, true) ~= nil)

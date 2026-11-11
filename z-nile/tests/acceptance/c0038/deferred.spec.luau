@@ -60,6 +60,7 @@ local function attempt(answers: { string }, review: string?): Result
 	write("pickman/.tracker/rafts/active/R0010/review-001.md", review or REVIEW)
 	write("pickman/.tracker/rafts/active/R0010/refute-001.md", table.concat(answers, "\n") .. "\n")
 	must(tr({ "commit", "-m", "round", "--time", "1" }), "commit")
+	must(tr({ "finish", "f0010" }), "finish")
 	return tr({ "done", "R0010" })
 end
 
@@ -255,7 +256,7 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
 		t.expect(fs.isDir(`{work}/pickman/.tracker/rafts/done/R0010`)).toBe(true)
 		t.expect(fs.isDir(`{work}/pickman/.tracker/issues/done/f0010`)).toBe(true)
-		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
+		t.expect(git({ "log", "-1", "--format=%s" })).toBe("R0010: bind f0010")
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isDir(`{work}/pickman/.tracker/issues/c0020`)).toBe(true) -- the follow-up is still in the backlog
 	end)

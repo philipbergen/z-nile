@@ -1,6 +1,6 @@
 ---
 name: z-ready
-description: Ready a raft for execution, which claims it, moves it and its issues to `active/` on origin/main with their `check.sh` paths rewritten, and writes the self-contained prompt to `<root>/rafts/active/<R-id>/prompt.md` (beside the raft, in its project root) for any agent (Opus, Grok, ...) to deliver as one PR. An issue with no raft goes to z-raft first. Also used to regenerate the prompt. Use for "ready a raft", "ready R0010", "/z-ready".
+description: Ready a raft for execution, which claims it, moves it and its issues to `active/` on origin/main with their `check.sh` paths rewritten, and writes the self-contained prompt to `<root>/rafts/active/<R-id>/prompt.md` (beside the raft, in its project root) for any agent (Opus, Grok, ...) to deliver one layer per ticket. An issue with no raft goes to z-raft first. Also used to regenerate the prompt. Use for "ready a raft", "ready R0010", "/z-ready".
 ---
 
 # Ready a raft

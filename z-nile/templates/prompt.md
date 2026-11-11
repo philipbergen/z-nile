@@ -9,13 +9,13 @@ This prompt names the files. It does not paste them. Open each path when the lin
   - runs `{{RAFT_ID}}`'s `check.sh`, which covers the project's affected gate plus every issue's `check.sh`;
   - verifies that the adversarial review is resolved;
   - moves the items to `done/`;
-  - marks the single PR ready for review.
+  - lands the stack as one `--no-ff` merge, one commit per ticket.
 - Every Judged criterion has a passing ruling in the latest review.
 - Your final report (format is in the protocol) lists the Observed steps the human must perform in Studio.
 
 ## Hard rules
 1. **Follow `z-nile/skills/zz-execute/SKILL.md` step by step.** Read it first. It is the protocol.
-2. **Work only in the raft's worktree.** Your first action is `cd "$(./zn worktree {{RAFT_ID}})"` (skip it if your working directory already is that worktree), and you never edit the main checkout. The worktree lives under `.worktree/` inside the repo. **One raft branch and one PR for this whole prompt** (in Phase 2B, temporary stream branches feed it and are deleted). `./zn start {{RAFT_ID}}` creates the branch and the draft PR; the raft is already claimed and in `active/`. Commit only with `./zn commit` (in Phase 2B, stream branches are committed with plain git; the raft branch only with `./zn commit`).
+2. **Work only in the raft's worktree.** Your first action is `cd "$(./zn worktree {{RAFT_ID}})"` (skip it if your working directory already is that worktree), and you never edit the main checkout. The worktree lives under `.worktree/` inside the repo. **One layer per ticket.** `./zn start {{RAFT_ID}}` opens the next layer and its draft PR, based on the layer below. You are on one ticket: this layer, the layer below, and that ticket's checks. `./zn finish <issue>` when they are green. Commit only with `./zn commit`.
 3. **Never edit** any `check.sh`, `{{ARCHITECTURE_PATH}}` (unless the raft design says so), or an acceptance spec named in a check. If one of them is wrong, stop and escalate as the protocol describes.
 4. **Experiments come before any production code.** If an experiment fails and has no fallback, stop.
 5. **Tests come first** for each issue. Watch them fail for the right reason, then implement.

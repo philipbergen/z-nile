@@ -1,8 +1,8 @@
 --!strict
--- c0070 AC1: `tracker.sh done` marks the PR ready before its final push, so that CI (which skips
--- drafts) runs on the final head. Driven for real in a throwaway clone whose origin is a local bare
--- repository under a `github.com` path (so `done` takes its GitHub branch), with a fake `gh` that
--- records the branch head on origin at the moment `gh pr ready` is called.
+-- c0070 AC1: `tracker.sh done` retargets each layer pull request onto main before it pushes the
+-- binding commit, so GitHub can mark the layers merged. Driven for real in a throwaway clone whose
+-- origin is a local bare repository under a `github.com` path, with a fake `gh` that records the
+-- layer head on origin at the moment `gh pr edit --base main` is called.
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -141,8 +141,8 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		fs.writeDir(bare)
 		must(process.exec("git", { "init", "-q", "--bare", bare }), "init bare")
 		git({ "remote", "add", "origin", bare })
-		git({ "push", "-q", "-u", "origin", "R0010-demo" })
-		t.expect(git({ "rev-parse", "HEAD" })).toBe(git({ "rev-parse", "origin/R0010-demo" }))
+		git({ "push", "-q", "-u", "origin", "R0010/1/f0010" })
+		t.expect(git({ "rev-parse", "HEAD" })).toBe(git({ "rev-parse", "origin/R0010/1/f0010" }))
 	end)
 
 	local function installGh()
@@ -153,7 +153,8 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 				"#!/bin/sh",
 				'echo "$*" >> "$GH_LOG"',
 				'case "$1 $2" in',
-				'  "pr ready")',
+				'  "pr list") echo 1 ;;',
+				'  "pr edit")',
 				'    if [ -n "$GH_FAIL_READY" ]; then echo "gh: boom" >&2; exit 1; fi',
 				'    git --git-dir="$GH_BARE" rev-parse "refs/heads/$GH_BRANCH" > "$GH_READY_HEAD" ;;',
 				'  "pr view") echo "body" ;;',
@@ -170,7 +171,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 			PATH = `{bin}:{process.env.PATH or ""}`,
 			GH_LOG = `{base}/gh.log`,
 			GH_BARE = bare,
-			GH_BRANCH = "R0010-demo",
+			GH_BRANCH = "R0010/1/f0010",
 			GH_READY_HEAD = `{base}/ready-head`,
 			GH_FAIL_READY = if failReady then "1" else "",
 		})
@@ -204,6 +205,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 				.. '("@tests/lib/t")\n\nreturn t.spec("bad", function(it)\n\tit("fails", function()\n\t\tt.expect(1).toBe(2)\n\tend)\nend)\n'
 		)
 		must(tr({ "commit", "-m", "failing spec", "--time", "1" }), "commit")
+		must(tr({ "finish", "f0010" }), "finish")
 		local promoted = done(false)
 		t.expect(promoted.ok).toBe(false)
 		t.expect(string.find(promoted.stderr, "promoted acceptance specs fail", 1, true) ~= nil).toBe(true)
@@ -216,12 +218,13 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		must(tr({ "commit", "-m", "drop the failing spec", "--time", "1" }), "commit")
 	end)
 
-	it("rolls back and stays active when gh cannot mark the PR ready", function()
+	it("rolls back and stays active when the layer pull request cannot be retargeted", function()
 		installGh()
+		must(tr({ "finish", "f0010" }), "finish")
 		local before = git({ "rev-parse", "HEAD" })
 		local r = done(true)
 		t.expect(r.ok).toBe(false)
-		t.expect(string.find(r.stderr, "ready", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(r.stderr, "retarget", 1, true) ~= nil).toBe(true)
 		t.expect(git({ "rev-parse", "HEAD" })).toBe(before)
 		t.expect(git({ "status", "--porcelain" })).toBe("")
 		-- c0120 override: the items are pickman's, in pickman/.tracker; its promoted specs in pickman/tests/acceptance
@@ -230,7 +233,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		t.expect(fs.isFile(`{work}/pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau`))
 			.toBe(true)
 		t.expect(fs.isDir(`{work}/pickman/tests/acceptance/f0010`)).toBe(false) -- the promotion was undone
-		t.expect(git({ "rev-parse", "origin/R0010-demo" })).toBe(before) -- nothing was pushed
+		t.expect(git({ "rev-parse", "origin/R0010/1/f0010" })).toBe(before) -- nothing was pushed
 	end)
 
 	it("marks the PR ready while origin still has the previous head, then pushes the done commit", function()
@@ -238,6 +241,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- c0120 override: the items are pickman's, in pickman/.tracker; its promoted specs in pickman/tests/acceptance
 		fs.removeFile(`{work}/pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau`)
 		must(tr({ "commit", "-m", "no acceptance spec", "--time", "1" }), "commit")
+		must(tr({ "finish", "f0010" }), "finish")
 		local before = git({ "rev-parse", "HEAD" })
 		local r = done(false)
 		if not r.ok then
@@ -245,18 +249,15 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		end
 		local after = git({ "rev-parse", "HEAD" })
 		t.expect(after ~= before).toBe(true)
-		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
+		t.expect(git({ "log", "-1", "--format=%s" })).toBe("R0010: bind f0010")
 		-- c0120 override: pickman's files live in pickman/ (its home)
 		t.expect(fs.isDir(`{work}/pickman/tests/acceptance/f0010`)).toBe(false) -- nothing was promoted
-		-- gh was asked to mark the PR ready, and to edit its body with the spend summary
+		-- gh was asked to retarget the layer onto main before the binding commit was pushed
 		local log = fs.readFile(`{base}/gh.log`)
-		t.expect(string.find(log, "pr ready", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(log, "pr edit", 1, true) ~= nil).toBe(true)
-		-- at that moment origin had the previous head: the done commit was not pushed yet
-		local atReady = (string.gsub(fs.readFile(`{base}/ready-head`), "%s+$", ""))
-		t.expect(atReady).toBe(before)
-		-- and afterwards origin has the final head, which is what CI must test
-		t.expect(must(fixture.exec(bare, "git", { "rev-parse", "refs/heads/R0010-demo" }), "origin head"))
+		t.expect(string.find(log, "pr edit 1 --base main", 1, true) ~= nil).toBe(true)
+		local atEdit = (string.gsub(fs.readFile(`{base}/ready-head`), "%s+$", ""))
+		t.expect(atEdit).toBe(before)
+		t.expect(must(fixture.exec(bare, "git", { "rev-parse", "refs/heads/main" }), "origin main"))
 			.toBe(after)
 	end)
 

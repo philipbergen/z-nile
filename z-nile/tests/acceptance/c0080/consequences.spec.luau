@@ -78,6 +78,7 @@ local function answer(lines: { string }, ruling: string?): Result
 		write(doc, fs.readFile(`{work}/{doc}`) .. "\n" .. ruling)
 	end
 	must(tr({ "commit", "-m", "refute 001", "--time", "1" }), "commit refute")
+	must(tr({ "finish", "f0010" }), "finish")
 	return tr({ "done", "R0010" })
 end
 
@@ -178,7 +179,7 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 		if not r.ok then
 			error(r.stderr .. r.stdout)
 		end
-		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
+		t.expect(git({ "log", "-1", "--format=%s" })).toBe("R0010: bind f0010")
 	end)
 
 	it("cleans up", function()
