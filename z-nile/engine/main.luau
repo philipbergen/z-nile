@@ -4030,9 +4030,12 @@ local function recordAndCommit(
 	local trailers: { string } = {}
 	local foldHomes: { [string]: string } = {}
 	local extraRows: { [string]: { ledger.Row } } = {}
+	local keptAny = false
 	for _, share in shares do
-		-- a share with tokens is kept even when it moved no lines and took no measurable time. An explicit
-		-- code-review or deliver phase is kept too: the phase is the record, and the minutes are no longer typed.
+		-- The ticket is folded whether or not this commit adds a line-count row. A build share that moved no
+		-- lines is still not given a row of its own.
+		local issue = store.get(share.id)
+		foldHomes[share.id] = issue.dir
 		if
 			phase == "build"
 			and share.added + share.removed == 0
@@ -4041,7 +4044,7 @@ local function recordAndCommit(
 		then
 			continue
 		end
-		local issue = store.get(share.id)
+		keptAny = true
 		local row: ledger.Row = {
 			when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string,
 			subject = message,
@@ -4060,7 +4063,6 @@ local function recordAndCommit(
 			extraRows[share.id] = list
 		end
 		table.insert(list, row)
-		foldHomes[share.id] = issue.dir
 		local trailer =
 			string.format("Issue: %s +%d/-%d %.1fm", share.id, share.added, share.removed, share.minutes)
 		if phase ~= "build" then
@@ -4077,7 +4079,7 @@ local function recordAndCommit(
 	local top = sh.git({ "rev-parse", "--show-toplevel" })
 	local planned = costrow.plan(top, foldHomes, extraRows, false)
 	local folded = costrow.writeFiles(planned)
-	if next(foldHomes) and #folded == 0 then
+	if keptAny and #folded == 0 then
 		fail("could not write the measured row")
 	end
 	spend.writeRaft(raft)
