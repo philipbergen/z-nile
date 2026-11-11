@@ -15,6 +15,7 @@
 local adapters = require("./adapters")
 local audit = require("./audit")
 local broker = require("./broker")
+local buffer = require("./buffer")
 local costrow = require("./costrow")
 local cred = require("./credential")
 local dispatch = require("./dispatch")
@@ -372,56 +373,58 @@ end
 -- pending for the next legal point (a run's rows after its merge). Minutes (the user's G13, 2026-10-25, "Dispatcher row
 -- 0 min", read with "Yes, reviewers keep minutes"): an author step's rows record 0, since its skill records its own;
 -- a review's rows record the attempt's wall minutes, since no skill records a reviewer's. A code or stream review's
--- spend is one printed `record:` line for the author's `./zn commit`, and the measured row written into the
--- author's tree (uncommitted, so it rides with the review file). Tokens are the attempts summed, under the model
--- of the attempt that did the review (the last that spent tokens). The dispatch branch is not given this row.
-local function measuredArgs(row: Row): { string }
-	local args = {
-		"record",
-		"--id",
-		row.id,
-		"--phase",
-		row.phase,
-		"--subject",
-		row.note,
-		"--tokens",
-		tostring(row.tokens),
+-- spend is one printed `record:` line for the author's `./zn commit`, and one line in the author's measure
+-- buffer (the author's commit folds it). Tokens are the attempts summed, under the model of the attempt that
+-- did the review (the last that spent tokens). The dispatch branch is not given this row.
+local function rowLine(root: string, row: Row): buffer.Line
+	local branch, head = costrow.branchOf(root)
+	local flags: { string } = {}
+	if not row.wall then
+		table.insert(flags, "wall")
+		table.insert(flags, "ai")
+	end
+	if not row.cpu then
+		table.insert(flags, "cpu")
+	end
+	return {
+		ms = 0,
+		kind = "row",
+		phase = row.phase,
+		subject = row.note,
+		wall = row.wall,
+		cpu = row.cpu,
+		ai = row.wall,
+		tokens = row.tokens,
+		model = if row.model ~= "" then row.model else nil,
+		unmeasured = if #flags > 0 then table.concat(flags, ",") else nil,
+		id = row.id,
+		branch = branch,
+		head = head,
 	}
-	if row.model ~= "" then
-		table.insert(args, "--model")
-		table.insert(args, row.model)
-	end
-	if row.wall then
-		table.insert(args, "--wall")
-		table.insert(args, string.format("%.3f", row.wall))
-		table.insert(args, "--ai")
-		table.insert(args, string.format("%.3f", row.wall))
-	else
-		table.insert(args, "--unmeasured")
-		table.insert(args, "wall")
-		table.insert(args, "--unmeasured")
-		table.insert(args, "ai")
-	end
-	if row.cpu then
-		table.insert(args, "--cpu")
-		table.insert(args, string.format("%.3f", row.cpu))
-	else
-		table.insert(args, "--unmeasured")
-		table.insert(args, "cpu")
-	end
-	return args
 end
 
--- Writes the measured row on the dispatcher's branch and commits that file alone.
+-- Folds the measured row into the dispatcher's branch and commits that file alone.
 local function publishMeasured(ctx: Ctx, row: Row): (boolean, string, string)
 	local wt = worktree(ctx, "zn-dispatch")
 	zn(wt, { "sync" }, true)
-	local ok, out, err = zn(wt, measuredArgs(row), true)
-	if not ok then
-		return false, out, err
+	local dir = costrow.locate(wt, row.id)
+	if not dir then
+		return false, "", `no folder for {row.id}`
 	end
+	if not costrow.append(wt, rowLine(wt, row)) then
+		return false, "", "could not buffer the row"
+	end
+	local homes: { [string]: string } = {}
+	homes[row.id] = dir
+	local planned = costrow.plan(wt, homes, nil, false)
+	local paths = costrow.writeFiles(planned)
+	if #paths == 0 then
+		return false, "", "no row"
+	end
+	local out = paths[1]
 	local added = git(wt, { "add", "--", out })
 	if not added then
+		costrow.restore(planned)
 		return false, out, "could not stage the row"
 	end
 	local committed, cerr = git(wt, {
@@ -434,8 +437,10 @@ local function publishMeasured(ctx: Ctx, row: Row): (boolean, string, string)
 		out,
 	})
 	if not committed then
+		costrow.restore(planned)
 		return false, out, cerr
 	end
+	costrow.writeBuffer(wt, planned)
 	return true, out, ""
 end
 
@@ -483,11 +488,11 @@ local function record(
 			if not sawCpu then
 				table.insert(flags, "cpu")
 			end
-			-- Uncommitted, in the tree the author commits from. The dispatch branch is left alone.
-			costrow.write({
-				root = cwd,
-				id = id,
-				dir = costrow.dirFor(cwd, id),
+			-- In the author's measure buffer. Their commit folds it. The dispatch branch is left alone.
+			local branch, head = costrow.branchOf(cwd)
+			costrow.append(cwd, {
+				ms = 0,
+				kind = "row",
 				phase = phase,
 				subject = note,
 				tokens = tokens,
@@ -496,6 +501,9 @@ local function record(
 				cpu = if sawCpu then cpu else nil,
 				ai = if sawWall then wall else nil,
 				unmeasured = if #flags > 0 then table.concat(flags, ",") else nil,
+				id = id,
+				branch = branch,
+				head = head,
 			})
 		end
 		return

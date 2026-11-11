@@ -4,6 +4,7 @@
 -- --time and --tokens are accepted and ignored. An existing spend.md is left as it was.
 -- Fixture under .cache/c0084-spend: a seed with this tree's tooling, a bare origin, a main clone, a second clone, and
 -- a prep worktree made by `tracker.sh worktree`. Ids come from `new issue` and `new raft`, never from literals.
+local buffer = require("@znile/engine/buffer")
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -68,7 +69,8 @@ local function onBranch(path: string): any
 	local listed = git(prep, { "ls-tree", "-r", "--name-only", "HEAD", "--", dir })
 	local files: { string } = {}
 	for file in string.gmatch(listed .. "\n", "([^\n]*)\n") do
-		local measured = string.find(file, "/spend.d/", 1, true) ~= nil and string.sub(file, -3) == ".md"
+		local measured = string.find(file, "/spend.d/", 1, true) ~= nil
+			and (string.sub(file, -4) == ".tsv" or string.sub(file, -3) == ".md")
 		if file == path or measured then
 			table.insert(files, file)
 		end
@@ -85,16 +87,30 @@ local function onBranch(path: string): any
 	for _, file in files do
 		do
 			local text = git(prep, { "show", `HEAD:{file}` }) .. "\n"
-			local l, err = ledger.parse(text)
-			if not l then
-				error(`{file} on the branch does not parse: {err}`, 2)
-			end
-			saw = true
-			if l.id ~= "" and id == "" then
-				id, title = l.id, l.title
-			end
-			for _, row in l.rows do
-				table.insert(rows, row)
+			if string.sub(file, -4) == ".tsv" then
+				local parsed, err = buffer.parseTsv(text)
+				if not parsed then
+					error(`{file} on the branch does not parse: {err}`, 2)
+				end
+				saw = true
+				if id == "" then
+					id = string.match(file, "/([fdcR]%d%d%d%d)/") or ""
+				end
+				for _, row in parsed do
+					table.insert(rows, row)
+				end
+			else
+				local l, err = ledger.parse(text)
+				if not l then
+					error(`{file} on the branch does not parse: {err}`, 2)
+				end
+				saw = true
+				if l.id ~= "" and id == "" then
+					id, title = l.id, l.title
+				end
+				for _, row in l.rows do
+					table.insert(rows, row)
+				end
 			end
 		end
 	end
@@ -190,7 +206,9 @@ return t.spec("tracker spend", function(it)
 		t.expect(l.rows[1].subject).toBe("captured alpha")
 		local file = string.match(branchChanged(head), "[^\n]+") :: string
 		local text = git(prep, { "show", `HEAD:{file}` }) .. "\n"
-		t.expect(ledger.appendOnly(nil, text, a)).toBe(nil) -- the ledger's own form
+		local parsed = buffer.parseTsv(text)
+		t.expect(parsed ~= nil).toBe(true)
+		t.expect((parsed :: { any })[1].phase).toBe("capture")
 		t.expect(git(prep, { "rev-parse", "HEAD" }) ~= head).toBe(true)
 		t.expect(git(prep, { "status", "--porcelain" })).toBe("")
 		t.expect(fs.isDir(`{prep}/pickman/.tracker/issues/{a}/spend.d`)).toBe(true)
@@ -405,7 +423,9 @@ return t.spec("tracker spend", function(it)
 			git(prep, { "ls-tree", "-r", "--name-only", "HEAD", "--", `pickman/.tracker/issues/{d}/spend.d` }),
 			"[^\n]+"
 		) :: string
-		t.expect(ledger.appendOnly(nil, git(prep, { "show", `HEAD:{added}` }) .. "\n", d)).toBe(nil)
+		local addedRows = buffer.parseTsv(git(prep, { "show", `HEAD:{added}` }) .. "\n")
+		t.expect(addedRows ~= nil).toBe(true)
+		t.expect((addedRows :: { any })[1].phase).toBe("prep")
 	end)
 
 	it("the publisher takes only appended rows for an issue's spend.md, and never a raft's", function()

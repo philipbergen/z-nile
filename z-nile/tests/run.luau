@@ -69,15 +69,29 @@ if listMode ~= nil and listMode ~= "" then
 end
 
 -- One measurement for a spec run the gate did not already wrap. The child sees ZN_MEASURED and runs the suite.
+-- The line is appended by bounded.pl; this process does not start another one, and it writes no tracked path.
 if process.env.ZN_MEASURED ~= "1" then
-	local report = `/tmp/zn-specs-{string.gsub(tostring(os.clock()), "%.", "")}.txt`
+	local n = 0
+	for _, a in process.args do
+		if string.sub(a, -10) == ".spec.luau" then
+			n += 1
+		end
+	end
+	local subject = if n == 0 then "suite" elseif n == 1 then "1 spec" else `{n} specs`
+	local branch = process.exec("git", { "-C", ROOT, "rev-parse", "--abbrev-ref", "HEAD" })
+	local head = process.exec("git", { "-C", ROOT, "rev-parse", "HEAD" })
+	local name = if branch.ok then string.match(branch.stdout, "%S+") or "" else ""
+	if name == "HEAD" then
+		name = ""
+	end
+	local sha = if head.ok then string.match(head.stdout, "%S+") or "" else ""
 	local args = {
 		`{ROOT}/z-nile/lib/bounded.pl`,
-		"--report",
-		report,
 		"--time",
 		"3600",
 		"--",
+		"env",
+		"ZN_MEASURED=1",
 		"lune",
 		"run",
 		"tests/run",
@@ -86,21 +100,17 @@ if process.env.ZN_MEASURED ~= "1" then
 	for _, a in process.args do
 		table.insert(args, a)
 	end
-	local ran = process.exec("perl", args, { env = { ZN_MEASURED = "1" } })
-	pcall(function()
-		process.exec("lune", {
-			"run",
-			`{ROOT}/z-nile/record`,
-			"--",
-			"--phase",
-			"test",
-			"--report",
-			report,
-			"--subject",
-			"specs",
-		})
-	end)
-	pcall(fs.removeFile, report)
+	local ran = process.exec("perl", args, {
+		env = {
+			ZN_TOP = ROOT,
+			ZN_MEASURE_BUFFER = "1",
+			ZN_MEASURE_KIND = "test",
+			ZN_MEASURE_PHASE = "test",
+			ZN_MEASURE_SUBJECT = subject,
+			ZN_MEASURE_BRANCH = name,
+			ZN_MEASURE_HEAD = sha,
+		},
+	})
 	process.exit(ran.code)
 end
 

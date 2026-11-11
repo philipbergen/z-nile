@@ -138,8 +138,20 @@ while (1) {
 my $st = $?;
 my ( $cu, $cs ) = ( times )[ 2, 3 ];
 znmeasure::write( $report, $t0 );
-if ( $ENV{ZN_RUN_RECORD} && !$ENV{ZN_MEASURED} && defined $report && ( $ENV{ZN_TOP} // '' ) ne '' ) {
-    system( 'lune', 'run', 'z-nile/record', '--', '--phase', 'other', '--report', $report, '--subject', 'run' );
+# One append, in this process. ZN_MEASURED means a measurement is already wrapped around this one.
+if ( ( $ENV{ZN_MEASURE_BUFFER} // '' ) ne ''
+    && ( $ENV{ZN_MEASURED} // '' ) eq ''
+    && ( $ENV{ZN_TOP} // '' ) ne '' )
+{
+    eval {
+        znmeasure::buffer(
+            $ENV{ZN_TOP}, $t0,
+            $ENV{ZN_MEASURE_KIND}    // 'run',
+            $ENV{ZN_MEASURE_PHASE}   // 'other',
+            $ENV{ZN_MEASURE_SUBJECT} // 'run',
+        );
+        1;
+    };
 }
 
 # whatever is left in the group, the watchdog included

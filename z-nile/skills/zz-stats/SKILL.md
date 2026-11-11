@@ -20,7 +20,7 @@ description: Report cost per issue (agent active time, lines) and the rework rat
    - Review rounds: compare design rounds between `classic` and `second-order` rafts, and say whether the second-order ones need fewer. Treat backlog and active rafts as incomplete: they may have rounds to come.
    - Patterns: a design area that keeps producing defects, criteria that let defects through, or experiments that should have been run.
    - Suggest concrete process changes, for example a new review checklist item, a meta spec, or a stronger acceptance proxy. Offer to file them as chores.
-3. **Don't commit the report.** It's computed on demand, which avoids merge conflicts. The source of truth is each issue's `spend.md`.
+3. **Don't commit the report.** It's computed on demand, which avoids merge conflicts. The source of truth is each issue's `spend.md` (typed rows) and `spend.d/<writer>.tsv` (measured rows).
 4. **Caveat**: measured columns (wall, cpu, ai, test, tokens) are what the tool recorded. `reported` is typed minutes from older rows, kept apart from measured time. A cell the tool could not read says `unmeasured` and is not a guess. An old row with no measured cells still sums its typed minutes as reported.
 
 ## Lessons

@@ -4,6 +4,7 @@
 -- `<fakes>/<cli>`, else `ok`. Each logs how it was started to `<fakes>/log`. No real CLI and no network: a spec puts
 -- the fakes first on PATH, under its own .cache folder, and the dispatcher refuses any CLI outside .cache in a check.
 -- The tracker fixture under them is @tests/lib/trackerfix's.
+local buffer = require("@znile/engine/buffer")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ledger = require("@znile/engine/ledger")
@@ -339,6 +340,15 @@ function fakecli.rows(h: Harness, id: string): { ledger.Row }?
 		if not r.ok then
 			return
 		end
+		if string.sub(path, -4) == ".tsv" then
+			local parsed = buffer.parseTsv(r.stdout .. "\n")
+			if parsed then
+				for _, row in parsed do
+					table.insert(rows, row)
+				end
+			end
+			return
+		end
 		local parsed = ledger.parse(r.stdout .. "\n")
 		if parsed then
 			for _, row in parsed.rows do
@@ -351,7 +361,7 @@ function fakecli.rows(h: Harness, id: string): { ledger.Row }?
 	if listed.ok then
 		local files: { string } = {}
 		for file in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
-			if string.sub(file, -3) == ".md" then
+			if string.sub(file, -4) == ".tsv" or string.sub(file, -3) == ".md" then
 				table.insert(files, file)
 			end
 		end

@@ -4,6 +4,7 @@
 -- tests/acceptance/ specs, which are prep work). Minutes are explicit (--time) or the
 -- wall-clock since the previous commit, capped to absorb idle gaps; multi-issue commits split
 -- minutes in proportion to lines added.
+local costrow = require("./costrow")
 local fs = require("@lune/fs")
 local ledger = require("./ledger")
 local projects = require("./projects")
@@ -248,7 +249,7 @@ function spend.appendRow(issue: store.Item, share: Share, subject: string, phase
 	fs.writeFile(path, ledger.append(existing, issue.id, title, row))
 end
 
--- spend.md plus every spend.d file. Measured rows are their own files; the summary counts both.
+-- spend.md plus every spend.d file. Measured rows are appended to one TSV per writer; an older markdown file still counts.
 local function rowsIn(dir: string): { ledger.Row }
 	local rows: { ledger.Row } = {}
 	local path = `{dir}/spend.md`
@@ -261,22 +262,8 @@ local function rowsIn(dir: string): { ledger.Row }
 			table.insert(rows, row)
 		end
 	end
-	local folder = `{dir}/spend.d`
-	if fs.isDir(folder) then
-		local names = fs.readDir(folder)
-		table.sort(names)
-		for _, name in names do
-			if string.sub(name, -3) == ".md" then
-				local file = `{folder}/{name}`
-				local parsed, err = ledger.parse(fs.readFile(file))
-				if not parsed then
-					error(`{file} does not parse: {err}`, 0)
-				end
-				for _, row in parsed.rows do
-					table.insert(rows, row)
-				end
-			end
-		end
+	for _, row in costrow.readMeasured(dir) do
+		table.insert(rows, row)
 	end
 	return rows
 end

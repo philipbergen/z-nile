@@ -4,6 +4,7 @@ local audit = require("./audit")
 local board = require("./board")
 local boardview = require("./boardview")
 local brokerLib = require("./broker")
+local buffer = require("./buffer")
 local claimsLib = require("./claims")
 local compactLib = require("./compact")
 local costrow = require("./costrow")
@@ -2295,6 +2296,10 @@ local function captureScope(diff: string, base: string): string?
 		end
 		local root, rest = projects.rootOf(path, roots)
 		local spendId = if root and rest then string.match(rest, "^issues/([^/]+)/spend%.md$") else nil
+		local tsvId = if root and rest
+			then string.match(rest, "^issues/([^/]+)/spend%.d/[%w._%-]+%.tsv$")
+			else nil
+		spendId = spendId or tsvId
 		if spendId and store.isIssueId(spendId) and (kind == "A" or kind == "M") then
 			local mode = sh.run("git", { "ls-tree", "HEAD", "--", path })
 			if not mode.ok or string.sub(mode.stdout, 1, 7) ~= "100644 " then
@@ -2344,7 +2349,7 @@ local function captureScope(diff: string, base: string): string?
 	end
 	for _, entry in spends do
 		if not captured[entry.id] then
-			return `not a capture change: {entry.path} (a capture's spend.md belongs to an issue document this land changes)`
+			return `not a capture change: {entry.path} (a capture's spend record belongs to an issue document this land changes)`
 		end
 	end
 	if not seen then
@@ -2396,6 +2401,42 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 	if not sh.stream("bash", { "-c", gate }) then
 		fail("the gate failed: nothing was pushed")
 	end
+	-- The gate appended its row to the cache. Fold it into the landed tree without an extra commit on the branch.
+	local names = sh.git({ "diff", "--name-only", base, "HEAD" })
+	local homes: { [string]: string } = {}
+	for path in string.gmatch(names, "[^\n]+") do
+		local id = string.match(path, "/issues/([fdc]%d%d%d%d)/[fdc]%d%d%d%d%.md$")
+		if id then
+			local item = store.find(id)
+			if item then
+				homes[id] = item.dir
+			end
+		end
+	end
+	local planned: costrow.Planned? = nil
+	local foldedPaths: { string } = {}
+	local plannedOk, plannedOrErr = pcall(costrow.plan, root, homes, nil, false)
+	if plannedOk then
+		local ready = plannedOrErr :: costrow.Planned
+		planned = ready
+		local wroteOk, wrote = pcall(costrow.writeFiles, ready)
+		if wroteOk and wrote then
+			foldedPaths = wrote
+		else
+			planned = nil
+		end
+	end
+	local function treeNow(): string
+		if #foldedPaths == 0 then
+			return sh.git({ "rev-parse", "HEAD^{tree}" })
+		end
+		local args = { "add", "--" }
+		for _, path in foldedPaths do
+			table.insert(args, path)
+		end
+		sh.git(args)
+		return sh.git({ "write-tree" })
+	end
 	local message = if given and given[1] and given[1] ~= "" then given[1] else nil
 	if not message then
 		local subjects = sh.git({ "log", "--reverse", "--no-merges", "--format=%s", `{base}..HEAD` })
@@ -2405,7 +2446,8 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 	end
 	local parent = base
 	for _ = 1, 3 do
-		local sha = sh.git({ "commit-tree", "HEAD^{tree}", "-p", parent, "-m", message :: string })
+		local tree = treeNow()
+		local sha = sh.git({ "commit-tree", tree, "-p", parent, "-m", message :: string })
 		local pushed: sh.Result
 		if process.env.ZN_PUBLISH_BROKER and process.env.ZN_PUBLISH_BROKER ~= "" then
 			-- inside a dispatched step the agent's credential can't push to main: the dispatcher pushes it (c0117)
@@ -2420,6 +2462,9 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 			pushed = sh.run("git", { "push", "origin", `{sha}:refs/heads/main` })
 		end
 		if pushed.ok then
+			if planned then
+				pcall(costrow.writeBuffer, root, planned)
+			end
 			sh.git({ "reset", "--hard", "--quiet", sha })
 			sh.run("git", { "fetch", "--quiet", "origin", "main" })
 			local suffix = if override then " (gate overridden)" else ""
@@ -2438,11 +2483,23 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 		sh.run("git", { "fetch", "--quiet", "origin", "main" })
 		local now = sh.git({ "rev-parse", "--verify", "origin/main^{commit}" })
 		if now == parent then
+			if planned then
+				pcall(costrow.restore, planned)
+				pcall(function()
+					sh.git({ "reset", "--quiet" })
+				end)
+			end
 			fail(`the push failed (origin/main did not move): {pushed.stderr}{pushed.stdout}`)
 		end
 		-- origin/main moved: merge it and push again. The gate already passed; it is not run again.
 		take(now)
 		parent = now
+	end
+	if planned then
+		pcall(costrow.restore, planned)
+		pcall(function()
+			sh.git({ "reset", "--quiet" })
+		end)
 	end
 	fail("lost the race to main 3 times: run land again")
 end
@@ -3971,6 +4028,8 @@ local function recordAndCommit(
 	local minutes = explicitMinutes or 0
 	local shares = spend.attribute(issues, spend.stagedStats(isDone), minutes, how, tokens)
 	local trailers: { string } = {}
+	local foldHomes: { [string]: string } = {}
+	local extraRows: { [string]: { ledger.Row } } = {}
 	for _, share in shares do
 		-- a share with tokens is kept even when it moved no lines and took no measurable time. An explicit
 		-- code-review or deliver phase is kept too: the phase is the record, and the minutes are no longer typed.
@@ -3983,17 +4042,25 @@ local function recordAndCommit(
 			continue
 		end
 		local issue = store.get(share.id)
-		costrow.write({
-			root = issue.dir,
-			id = share.id,
-			dir = issue.dir,
-			phase = phase :: string,
+		local row: ledger.Row = {
+			when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string,
 			subject = message,
 			added = share.added,
 			removed = share.removed,
+			minutes = 0,
+			how = "measured",
+			phase = phase :: string,
+			tokens = nil,
 			model = model,
 			unmeasured = "tokens,wall,cpu,ai",
-		})
+		}
+		local list = extraRows[share.id]
+		if not list then
+			list = {}
+			extraRows[share.id] = list
+		end
+		table.insert(list, row)
+		foldHomes[share.id] = issue.dir
 		local trailer =
 			string.format("Issue: %s +%d/-%d %.1fm", share.id, share.added, share.removed, share.minutes)
 		if phase ~= "build" then
@@ -4007,6 +4074,12 @@ local function recordAndCommit(
 		end
 		table.insert(trailers, trailer)
 	end
+	local top = sh.git({ "rev-parse", "--show-toplevel" })
+	local planned = costrow.plan(top, foldHomes, extraRows, false)
+	local folded = costrow.writeFiles(planned)
+	if next(foldHomes) and #folded == 0 then
+		fail("could not write the measured row")
+	end
 	spend.writeRaft(raft)
 	for _, r in store.roots() do
 		if fs.isDir(r) then
@@ -4014,7 +4087,14 @@ local function recordAndCommit(
 		end
 	end
 	watchcmd.upkeep()
-	sh.git({ "commit", "--quiet", "-m", message, "-m", table.concat(trailers, "\n") })
+	local committed, commitErr = pcall(function()
+		sh.git({ "commit", "--quiet", "-m", message, "-m", table.concat(trailers, "\n") })
+	end)
+	if not committed then
+		pcall(costrow.restore, planned)
+		error(commitErr, 0)
+	end
+	costrow.writeBuffer(top, planned)
 	print(`committed: {message}\n  {table.concat(trailers, "\n  ")}`)
 	push()
 end
@@ -5131,21 +5211,8 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
 		if not rows then
 			return nil
 		end
-		local folder = `{issue.dir}/spend.d`
-		if not fs.isDir(folder) then
-			return rows
-		end
-		local names = fs.readDir(folder)
-		table.sort(names)
-		for _, name in names do
-			if string.sub(name, -3) == ".md" then
-				local parsed = ledger.parse(fs.readFile(`{folder}/{name}`))
-				if parsed then
-					for _, row in parsed.rows do
-						table.insert(rows, row)
-					end
-				end
-			end
+		for _, row in costrow.readMeasured(issue.dir) do
+			table.insert(rows, row)
 		end
 		return rows
 	end
@@ -5371,74 +5438,116 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			end
 		end
 	end
-	local wrote: { string } = {}
+	local top = sh.git({ "rev-parse", "--show-toplevel" })
+	local branch, head = costrow.branchOf(top)
+	if opts["--begin"] then
+		local began = costrow.append(top, {
+			ms = 0,
+			kind = "begin",
+			phase = phase,
+			subject = note,
+			id = id,
+			branch = branch,
+			head = head,
+		})
+		if not began then
+			fail("spend: could not record the stage start")
+		end
+		for _, share in kept do
+			print(string.format("%s %s +%d/-%d began", share.id, phase, share.added, share.removed))
+		end
+		return
+	end
+	local ai: number? = nil
+	local tok: number? = nil
+	local modelId = model
+	local noteText = note
+	local openCells = "ai,tokens"
+	local buf = ""
+	local bufPath = costrow.bufferFile(top)
+	if fs.isFile(bufPath) then
+		buf = fs.readFile(bufPath)
+	end
+	local since: buffer.Line? = nil
+	for _, line in buffer.parse(buf) do
+		if line.kind == "begin" and line.phase == phase then
+			local match = line.id == id
+			if not match and line.id == "" then
+				match = (line.branch ~= "" and line.branch == branch)
+					or (line.branch == "" and line.head ~= "" and line.head == head)
+			end
+			if match then
+				since = line
+			end
+		end
+	end
+	if since then
+		local sec = math.floor(since.ms / 1000)
+		local stamped = (os.date("!%Y-%m-%dT%H:%M:%S", sec) :: string) .. ".000Z"
+		local untilIso = (os.date("!%Y-%m-%dT%H:%M:%S") :: string) .. ".999Z"
+		local sinceUnix = sessions.unix(stamped) or 0
+		local untilUnix = sessions.unix(untilIso) or sinceUnix
+		local readOk, reading = pcall(sessionread.span, process.cwd, stamped, sinceUnix, untilIso, untilUnix)
+		if readOk and reading then
+			local got = reading :: any
+			ai = got.ai
+			tok = got.tokens
+			if got.model then
+				modelId = got.model
+			end
+			if type(got.note) == "string" and got.note ~= "" then
+				noteText = `{note} {got.note}`
+			end
+			openCells = if type(got.unmeasured) == "string" then got.unmeasured else ""
+		end
+	end
+	local homes: { [string]: string } = {}
+	local extra: { [string]: { ledger.Row } } = {}
+	local memberIds: { string } = {}
+	for _, share in kept do
+		table.insert(memberIds, share.id)
+	end
+	table.sort(memberIds)
+	local primary = memberIds[1]
 	for _, share in kept do
 		local item = store.find(share.id)
 		if not item then
 			fail(`{share.id} is not in this checkout: run ./zn sync first`)
 		end
 		local here = item :: store.Item
-		local stagePath = `{here.dir}/stage.txt`
-		if opts["--begin"] then
-			local iso = (os.date("!%Y-%m-%dT%H:%M:%S") :: string) .. ".000Z"
-			fs.writeFile(stagePath, `{phase} {iso}\n`)
-			table.insert(wrote, stagePath)
-			continue
+		homes[share.id] = here.dir
+		local useAi, useTok = ai, tok
+		local cellFlags = openCells
+		if share.id ~= primary then
+			useAi, useTok = nil, nil
+			cellFlags = buffer.flags(`{cellFlags},tokens,ai`) or "tokens,ai"
 		end
-		local ai: number? = nil
-		local tok: number? = nil
-		local modelId = model
-		local noteText = note
-		local openCells = "ai,tokens"
-		local removedStage = false
-		if fs.isFile(stagePath) then
-			local stamped = string.match(fs.readFile(stagePath), `^{phase} (%S+)`)
-			if stamped then
-				local untilIso = (os.date("!%Y-%m-%dT%H:%M:%S") :: string) .. ".999Z"
-				local sinceUnix = sessions.unix(stamped) or 0
-				local untilUnix = sessions.unix(untilIso) or sinceUnix
-				local readOk, reading =
-					pcall(sessionread.span, process.cwd, stamped, sinceUnix, untilIso, untilUnix)
-				if readOk and reading then
-					local got = reading :: any
-					ai = got.ai
-					tok = got.tokens
-					if got.model then
-						modelId = got.model
-					end
-					if type(got.note) == "string" and got.note ~= "" then
-						noteText = `{note} {got.note}`
-					end
-					openCells = if type(got.unmeasured) == "string" then got.unmeasured else ""
-				end
-				fs.removeFile(stagePath)
-				removedStage = true
-			end
+		extra[share.id] = {
+			{
+				when = when,
+				subject = noteText,
+				added = share.added,
+				removed = share.removed,
+				minutes = 0,
+				how = "measured",
+				phase = phase,
+				tokens = useTok,
+				model = modelId,
+				ai = useAi,
+				unmeasured = if cellFlags ~= "" then cellFlags else nil,
+			},
+		}
+	end
+	if store.isRaftId(id) then
+		local raft = store.find(id)
+		if raft then
+			homes[id] = raft.dir
 		end
-		local path, werr = costrow.write({
-			root = process.env.ZN_TOP or ".",
-			id = share.id,
-			phase = phase,
-			subject = noteText,
-			dir = here.dir,
-			when = when,
-			added = share.added,
-			removed = share.removed,
-			tokens = tok,
-			ai = ai,
-			model = modelId,
-			unmeasured = if openCells ~= "" then openCells else nil,
-		})
-		if not path then
-			fail(`spend: {werr}`)
-		end
-		table.insert(wrote, path :: string)
-		if removedStage then
-			local listed = sh.run("git", { "ls-files", "--", stagePath })
-			if listed.ok and sh.trim(listed.stdout) ~= "" then
-				table.insert(wrote, stagePath)
-			end
-		end
+	end
+	local planned = costrow.plan(top, homes, extra, true)
+	local wrote = costrow.writeFiles(planned)
+	if #wrote == 0 then
+		fail("spend: could not write the measured row")
 	end
 	local addArgs = { "add", "--" }
 	local commitArgs = { "commit", "-q", "--only", "-m", `tracker: spend {id} {phase}`, "--" }
@@ -5448,15 +5557,17 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	end
 	local added = sh.run("git", addArgs)
 	if not added.ok then
+		costrow.restore(planned)
 		fail(`spend: could not stage the row: {sh.trim(added.stderr)}`)
 	end
 	local committed = sh.run("git", commitArgs)
 	if not committed.ok then
+		costrow.restore(planned)
 		fail(`spend: could not commit the row: {sh.trim(committed.stderr .. committed.stdout)}`)
 	end
+	costrow.writeBuffer(top, planned)
 	for _, share in kept do
-		local mark = if opts["--begin"] then "began" else "measured"
-		print(string.format("%s %s +%d/-%d %s", share.id, phase, share.added, share.removed, mark))
+		print(string.format("%s %s +%d/-%d measured", share.id, phase, share.added, share.removed))
 	end
 	print(sh.git({ "rev-parse", "HEAD" }))
 end
@@ -5685,26 +5796,28 @@ function cmd.record(_pos: { string }, opts: { [string]: { string } })
 	if phase == "test" and test == nil then
 		test = wall
 	end
-	local path, err = costrow.write({
-		root = root,
-		id = optStr(opts, "--id") or costrow.owner(root),
+	local branch, head = costrow.branchOf(root)
+	local kind = if phase == "test" then "test" elseif phase == "other" then "run" else "row"
+	local appended = costrow.append(root, {
+		ms = 0,
+		kind = kind,
 		phase = phase,
 		subject = optStr(opts, "--subject") or "measured",
-		dir = process.env.ZN_MEASURE_DIR,
 		wall = wall,
 		cpu = cpu,
 		ai = optNum(opts, "--ai"),
 		test = test,
 		tokens = optNum(opts, "--tokens"),
 		model = optStr(opts, "--model"),
-		added = optNum(opts, "--added") or 0,
-		removed = optNum(opts, "--removed") or 0,
 		unmeasured = if #missing > 0 then table.concat(missing, ",") else nil,
+		id = optStr(opts, "--id") or "",
+		branch = branch,
+		head = head,
 	})
-	if not path then
-		fail(`record: {err}`)
+	if not appended then
+		fail("record: could not append the measurement")
 	end
-	print(path)
+	print(costrow.bufferFile(root))
 end
 
 local function showSeconds(n: number, open: boolean): string

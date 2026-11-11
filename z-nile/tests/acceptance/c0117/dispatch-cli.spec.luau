@@ -292,7 +292,8 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			t.expect(lines[1])
 				.toBe('record: ./zn commit -m "c0010: review-001" --phase code-review --model claude-opus-5-5')
 			t.expect(#(fakecli.rows(h, "c0010") or {})).toBe(before) -- the row is in the author's tree, not the dispatch branch
-			t.expect(fs.isDir(`{wt}/pickman/.tracker/issues/c0010/spend.d`)).toBe(true)
+			t.expect(string.find(fs.readFile(`{wt}/.cache/measure.tsv`), "code-review", 1, true) ~= nil)
+				.toBe(true)
 			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/review-001.md`)
 			-- quota on claude, the review on grok: still one line, the model that wrote the review
 			fakecli.clear(h)

@@ -3,6 +3,7 @@
 -- review rounds, deliver for the delivery commits) and optional tokens; `done` records its own commit as deliver,
 -- and the raft's summary shows each phase. Fixture under .cache/c0084-commit: a repository with this tree's tooling
 -- and no remote, so start and done stay local (as in c0001's lifecycle spec). Ids come from the commands' output.
+local buffer = require("@znile/engine/buffer")
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -73,7 +74,15 @@ local function rows(path: string): { any }
 		local names = fs.readDir(folder)
 		table.sort(names)
 		for _, name in names do
-			if string.sub(name, -3) == ".md" then
+			if string.sub(name, -4) == ".tsv" then
+				local parsed, err = buffer.parseTsv(fs.readFile(`{folder}/{name}`))
+				if not parsed then
+					error(`{folder}/{name} does not parse: {err}`, 2)
+				end
+				for _, row in parsed do
+					table.insert(out, row)
+				end
+			elseif string.sub(name, -3) == ".md" then
 				take(`{folder}/{name}`)
 			end
 		end

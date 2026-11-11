@@ -1,7 +1,7 @@
 --!strict
--- Records one measurement from a report file the supervised runner wrote. Exit 0 on success. A failure is printed
--- and is a non-zero exit; the caller that measured a command ignores it (`|| true`), so a row that cannot be written
--- never fails that command.
+-- Appends one measurement to the checkout's cache. Exit 0 on success. A failure is printed and is a non-zero
+-- exit; the caller that measured a command ignores it, so a row that cannot be written never fails that command.
+-- The gate, a spec run and ./zn run append from the runner itself and do not start this.
 local costrow = require("./engine/costrow")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -13,14 +13,13 @@ local root = process.env.ZN_TOP or process.cwd
 local phase = "test"
 local report: string? = nil
 local subject = "measured"
-local id: string? = nil
+local id = ""
 local model: string? = nil
 local tokens: number? = nil
 local wall: number? = nil
 local cpu: number? = nil
 local ai: number? = nil
 local test: number? = nil
-local added, removed = 0, 0
 local readSessions = false
 local sinceIso: string? = nil
 local extraFlags: { string } = {}
@@ -53,10 +52,6 @@ while i <= #args do
 		ai = tonumber(take())
 	elseif a == "--test" then
 		test = tonumber(take())
-	elseif a == "--added" then
-		added = tonumber(take()) or 0
-	elseif a == "--removed" then
-		removed = tonumber(take()) or 0
 	elseif a == "--since" then
 		sinceIso = take()
 		readSessions = true
@@ -120,29 +115,26 @@ if readSessions then
 		table.insert(flags, "tokens")
 	end
 end
-local who = id or costrow.owner(root)
-local dir = process.env.ZN_MEASURE_DIR
-if dir == "" then
-	dir = nil
-end
-local path, err = costrow.write({
-	root = root,
-	id = who,
+local branch, head = costrow.branchOf(root)
+local kind = if phase == "test" then "test" elseif phase == "other" then "run" else "row"
+local appended = costrow.append(root, {
+	ms = 0,
+	kind = kind,
 	phase = phase,
 	subject = subject,
-	dir = dir,
 	wall = wall,
 	cpu = cpu,
 	ai = ai,
 	test = test,
 	tokens = tokens,
 	model = model,
-	added = added,
-	removed = removed,
 	unmeasured = if #flags > 0 then table.concat(flags, ",") else nil,
+	id = id,
+	branch = branch,
+	head = head,
 })
-if not path then
-	stdio.ewrite(`record: {err}\n`)
+if not appended then
+	stdio.ewrite("record: could not append the measurement\n")
 	process.exit(1)
 end
-print(path)
+print(costrow.bufferFile(root))

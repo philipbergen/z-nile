@@ -1,6 +1,7 @@
 --!strict
 -- Measured cost: the report line, the transcript readers, and spend rows old and new. A measured row lives in its
 -- own file; an old spend.md's typed minutes stay reported, apart from wall, cpu, ai and test.
+local buffer = require("@znile/engine/buffer")
 local costrow = require("@znile/engine/costrow")
 local fs = require("@lune/fs")
 local ledger = require("@znile/engine/ledger")
@@ -73,40 +74,91 @@ return t.spec("measured cost", function(it)
 		t.expect(both.tokens).toBe(9)
 	end)
 
-	it("keeps two row files for one ticket, the way a merge of two checkouts does", function()
-		local dir = `.cache/measure-spec-{string.gsub(tostring(os.clock()), "%.", "")}`
-		fs.writeDir(dir)
-		local first = costrow.write({
-			root = ".",
-			id = "branch-a",
-			phase = "test",
-			subject = "one",
-			dir = dir,
-			wall = 1,
-			cpu = 0.1,
-			test = 1,
-		})
-		local second = costrow.write({
-			root = ".",
-			id = "branch-a",
-			phase = "build",
-			subject = "two",
-			dir = dir,
-			wall = 2,
-			cpu = 0.2,
-		})
-		t.expect(first ~= nil).toBe(true)
-		t.expect(second ~= nil).toBe(true)
-		t.expect(first ~= second).toBe(true)
-		local rows: { ledger.Row } = {}
-		for _, name in fs.readDir(`{dir}/spend.d`) do
-			local doc = ledger.parse(fs.readFile(`{dir}/spend.d/{name}`))
-			t.expect(doc ~= nil).toBe(true)
-			for _, row in (doc :: any).rows do
-				table.insert(rows, row)
-			end
+	it("folds runs of one stage into one row and leaves another ticket's line", function()
+		local function line(
+			ms: number,
+			kind: string,
+			phase: string,
+			subject: string,
+			wall: number,
+			id: string
+		): buffer.Line
+			return {
+				ms = ms,
+				kind = kind,
+				phase = phase,
+				subject = subject,
+				wall = wall,
+				cpu = wall / 10,
+				test = if phase == "test" then wall else nil,
+				id = id,
+				branch = "capture-a",
+				head = "abc",
+			}
 		end
-		t.expect(#rows).toBe(2)
+		local lines = {
+			line(1_000, "run", "other", "run", 1, ""),
+			line(2_000, "run", "other", "run", 2, ""),
+			line(3_000, "run", "other", "run", 3, ""),
+			line(4_000, "test", "test", "affected", 10, ""),
+			line(5_000, "test", "test", "affected", 1, "c0099"),
+		}
+		local folded = buffer.fold(lines, { "c0010" }, "capture-a", "abc", 6_000, false)
+		local rows = folded.rows["c0010"]
+		t.expect(rows ~= nil).toBe(true)
+		local got = rows :: { ledger.Row }
+		t.expect(#got).toBe(2)
+		t.expect(got[1].phase).toBe("test")
+		t.expect(got[1].subject).toBe("affected")
+		t.expect(got[1].test).toBe(10)
+		t.expect(got[2].phase).toBe("other")
+		t.expect(got[2].subject).toBe("3 runs")
+		t.expect(got[2].wall).toBe(6)
+		t.expect(got[2].unmeasured).toBe("tokens,ai")
+		t.expect(#folded.kept).toBe(1)
+		t.expect(folded.kept[1].id).toBe("c0099")
+		local detached = buffer.fold({
+			{
+				ms = 1_000,
+				kind = "run",
+				phase = "other",
+				subject = "run",
+				wall = 1,
+				cpu = 0.1,
+				id = "",
+				branch = "",
+				head = "deadbeef",
+			},
+		}, { "c0010" }, "", "deadbeef", 2_000, false)
+		t.expect(detached.rows["c0010"] ~= nil).toBe(true)
+		t.expect(#detached.kept).toBe(0)
+		local elsewhere = buffer.fold({
+			{
+				ms = 1_000,
+				kind = "run",
+				phase = "other",
+				subject = "run",
+				wall = 1,
+				cpu = 0.1,
+				id = "",
+				branch = "",
+				head = "deadbeef",
+			},
+		}, { "c0010" }, "main", "other", 2_000, false)
+		t.expect(elsewhere.rows["c0010"]).toBe(nil)
+		t.expect(#elsewhere.kept).toBe(1)
+		local aged = buffer.fold({
+			line(1, "run", "other", "run", 1, ""),
+		}, { "c0010" }, "capture-a", "abc", buffer.AGE_MS + 100, false)
+		t.expect(aged.rows["c0010"]).toBe(nil)
+		t.expect(#aged.kept).toBe(0)
+		local a = buffer.appendTsv(nil, { got[1] })
+		local b = buffer.appendTsv(nil, { got[2] })
+		t.expect(string.sub(a, 1, #buffer.HEADER)).toBe(buffer.HEADER)
+		t.expect(a ~= b).toBe(true)
+		local parsed = buffer.parseTsv(a)
+		t.expect(parsed ~= nil).toBe(true)
+		t.expect(#(parsed :: { ledger.Row })).toBe(1)
 	end)
 
 	it("reads claude usage and grok turns, and leaves a cursor transcript unmeasured", function()

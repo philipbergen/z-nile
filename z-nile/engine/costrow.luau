@@ -1,8 +1,9 @@
 --!strict
--- Writes one measured row as its own file under `<item>/spend.d/`. Two checkouts appending for the same ticket
--- create different files, so a merge keeps both and neither side rewrites a shared file. spend.md stays the readable
--- ledger of reported rows; the reader assembles it with these files.
+-- Measurements land in the checkout's `.cache/measure.tsv` (one appended line, gitignored). A tool commit
+-- folds the lines for its tickets into `spend.d/<writer>.tsv`: one file per machine and checkout, one row
+-- per line, runs of one stage collapsed. Nothing a check or a probe does writes a tracked path.
 local DateTime = require("@lune/datetime")
+local buffer = require("./buffer")
 local fs = require("@lune/fs")
 local ledger = require("./ledger")
 local process = require("@lune/process")
@@ -11,25 +12,8 @@ local store = require("./store")
 
 local costrow = {}
 
-local seq = 0
-
-export type Write = {
-	root: string,
-	id: string,
-	phase: string,
-	subject: string,
-	dir: string?,
-	when: string?,
-	wall: number?,
-	cpu: number?,
-	ai: number?,
-	test: number?,
-	tokens: number?,
-	model: string?,
-	added: number?,
-	removed: number?,
-	unmeasured: string?,
-}
+export type PlannedFile = { path: string, text: string, previous: string? }
+export type Planned = { files: { PlannedFile }, bufferText: string, bufferPrevious: string? }
 
 function costrow.report(text: string): (number?, number?)
 	local wall = tonumber(string.match(text, "wall=([%d%.%-]+)"))
@@ -37,101 +21,215 @@ function costrow.report(text: string): (number?, number?)
 	return wall, cpu
 end
 
-local function slug(s: string): string
-	return (string.gsub(s, "[^%w._%-]", "-"))
+function costrow.bufferFile(root: string): string
+	local path = `{root}/.cache/measure.tsv`
+	return path
 end
 
-function costrow.dirFor(root: string, id: string): string
-	if string.match(id, "^[fdcR]%d%d%d%d$") then
-		local ok, reg = pcall(projects.load, root)
-		if ok then
-			local kind = if string.sub(id, 1, 1) == "R" then "raft" else "issue"
-			for _, rel in projects.roots(reg) do
-				local base = if rel == "." then root else `{root}/{rel}`
-				for _, state in { "backlog", "active", "done" } do
-					local dir = store.dirFor(kind, state :: store.State, id, base)
-					if fs.isDir(dir) then
-						return dir
-					end
-				end
+function costrow.locate(root: string, id: string): string?
+	if not string.match(id, "^[fdcR]%d%d%d%d$") then
+		return nil
+	end
+	local ok, reg = pcall(projects.load, root)
+	if not ok then
+		return nil
+	end
+	local kind = if string.sub(id, 1, 1) == "R" then "raft" else "issue"
+	for _, rel in projects.roots(reg) do
+		local base = if rel == "." then root else `{root}/{rel}`
+		for _, state in { "backlog", "active", "done" } do
+			local dir = store.dirFor(kind, state :: store.State, id, base)
+			if fs.isDir(dir) then
+				return dir
 			end
 		end
 	end
-	return `{root}/z-nile/.tracker/measures/{slug(id)}`
+	return nil
 end
 
-function costrow.owner(root: string): string
-	local forced = process.env.ZN_MEASURE_ID
-	if forced and forced ~= "" then
-		return forced
+function costrow.branchOf(root: string): (string, string)
+	local branch = process.exec("git", { "rev-parse", "--abbrev-ref", "HEAD" }, { cwd = root })
+	local head = process.exec("git", { "rev-parse", "HEAD" }, { cwd = root })
+	local name = if branch.ok then string.match(branch.stdout, "%S+") or "" else ""
+	if name == "HEAD" then
+		name = ""
 	end
-	local focus = `{root}/.cache/tracker-focus`
-	if fs.isFile(focus) then
-		local id = string.match(fs.readFile(focus), "%S+")
-		if id and id ~= "" then
-			return id
+	local sha = if head.ok then string.match(head.stdout, "%S+") or "" else ""
+	return name, sha
+end
+
+function costrow.writer(root: string): string
+	local host = process.exec("hostname", {})
+	local name = if host.ok then string.match(host.stdout, "%S+") or "host" else "host"
+	name = (string.gsub(string.lower(name), "[^%w._%-]", "-"))
+	local sum = 0
+	for i = 1, #root do
+		sum = (sum * 33 + (string.byte(root, i) :: number)) % 4294967296
+	end
+	return `{name}-{string.format("%08x", sum)}`
+end
+
+function costrow.append(root: string, line: buffer.Line): boolean
+	if line.ms == 0 then
+		line.ms = DateTime.now().unixTimestampMillis
+	end
+	local ran = process.exec("perl", {
+		"-e",
+		"require $ARGV[0]; znmeasure::append($ARGV[1], $ARGV[2]);",
+		`{root}/z-nile/lib/measure.pl`,
+		root,
+		buffer.render(line),
+	})
+	return ran.ok
+end
+
+local function readFile(path: string): string?
+	if fs.isFile(path) then
+		return fs.readFile(path)
+	end
+	return nil
+end
+
+function costrow.plan(
+	root: string,
+	homes: { [string]: string },
+	extra: { [string]: { ledger.Row } }?,
+	takeBegins: boolean
+): Planned
+	local path = costrow.bufferFile(root)
+	local previous = readFile(path)
+	local lines = buffer.parse(previous or "")
+	local branch, head = costrow.branchOf(root)
+	local ids: { string } = {}
+	for id in homes do
+		table.insert(ids, id)
+	end
+	local folded = buffer.fold(lines, ids, branch, head, DateTime.now().unixTimestampMillis, takeBegins)
+	local byId: { [string]: { ledger.Row } } = folded.rows
+	if extra then
+		for id, more in extra do
+			local list = byId[id]
+			if not list then
+				list = {}
+				byId[id] = list
+			end
+			for _, row in more do
+				table.insert(list, row)
+			end
 		end
 	end
-	local branch = process.exec("git", { "rev-parse", "--abbrev-ref", "HEAD" }, { cwd = root })
-	local name = if branch.ok then string.match(branch.stdout, "%S+") else nil
-	if name and name ~= "" and name ~= "HEAD" then
-		return name
+	local writer = costrow.writer(root)
+	local files: { PlannedFile } = {}
+	for id, list in byId do
+		local dir = homes[id]
+		if dir and #list > 0 and string.sub(id, 1, 1) ~= "R" then
+			local file = `{dir}/spend.d/{writer}.tsv`
+			local had = readFile(file)
+			table.insert(files, { path = file, text = buffer.appendTsv(had, list), previous = had })
+		end
 	end
-	return "unknown"
+	table.sort(files, function(a: PlannedFile, b: PlannedFile): boolean
+		return a.path < b.path
+	end)
+	return { files = files, bufferText = buffer.renderLines(folded.kept), bufferPrevious = previous }
 end
 
--- The path written, or nil and the reason. A failure here is the caller's to ignore: measuring never fails the
--- command it measured.
-function costrow.write(w: Write): (string?, string?)
-	if not ledger.isPhase(w.phase) then
-		return nil, `unknown phase {w.phase}`
+local function parentOf(path: string): string
+	return (string.match(path, "^(.*)/[^/]+$")) or "."
+end
+
+function costrow.writeFiles(planned: Planned): { string }
+	local paths: { string } = {}
+	for _, file in planned.files do
+		fs.writeDir(parentOf(file.path))
+		fs.writeFile(file.path, file.text)
+		table.insert(paths, file.path)
 	end
-	if w.model and not ledger.isModel(w.model) then
-		return nil, `not a model id: {w.model}`
+	return paths
+end
+
+function costrow.writeBuffer(root: string, planned: Planned)
+	local path = costrow.bufferFile(root)
+	local text = planned.bufferText
+	local current = readFile(path)
+	local previous = planned.bufferPrevious
+	if previous and current and string.sub(current, 1, #previous) == previous and #current > #previous then
+		text ..= string.sub(current, #previous + 1)
 	end
-	local dir = w.dir or costrow.dirFor(w.root, w.id)
-	local made, err = pcall(fs.writeDir, `{dir}/spend.d`)
-	if not made then
-		return nil, tostring(err)
+	if text == "" then
+		if fs.isFile(path) then
+			fs.removeFile(path)
+		end
+		return
 	end
-	-- The second, the fraction, the pid and a random salt, and a bump when that name is already there.
-	-- Two spends in one second (one process, or two machines) each get their own file.
-	seq += 1
-	local pid = tonumber(tostring((process :: any).pid)) or 0
-	-- Wall-clock milliseconds, not os.clock: each ./zn spend is a new process, and os.clock starts near 0,
-	-- so a later row could sort before an earlier one. The salt only separates two writes in the same millisecond.
-	local ms = DateTime.now().unixTimestampMillis
-	local stamp = os.date("!%Y%m%dT%H%M%SZ", math.floor(ms / 1000)) :: string
-	local frac = string.format("%03d", ms % 1000)
-	local salt = string.format("%04x", math.random(0, 0xffff))
-	local path = `{dir}/spend.d/{stamp}-{frac}-{pid}-{seq}-{salt}.md`
-	while fs.isFile(path) do
-		seq += 1
-		salt = string.format("%04x", math.random(0, 0xffff))
-		path = `{dir}/spend.d/{stamp}-{frac}-{pid}-{seq}-{salt}.md`
+	fs.writeDir(parentOf(path))
+	fs.writeFile(path, text)
+end
+
+function costrow.restore(planned: Planned)
+	for _, file in planned.files do
+		if file.previous == nil then
+			if fs.isFile(file.path) then
+				fs.removeFile(file.path)
+			end
+		else
+			fs.writeFile(file.path, file.previous)
+		end
 	end
-	local row: ledger.Row = {
-		when = w.when or (os.date("!%Y-%m-%d %H:%M") :: string),
-		subject = w.subject,
-		added = w.added or 0,
-		removed = w.removed or 0,
-		minutes = 0,
-		how = "measured",
-		phase = w.phase,
-		tokens = w.tokens,
-		model = w.model,
-		wall = w.wall,
-		cpu = w.cpu,
-		ai = w.ai,
-		test = w.test,
-		unmeasured = w.unmeasured,
-	}
-	local text = ledger.render(w.id, w.id, { row })
-	local wrote, werr = pcall(fs.writeFile, path, text)
-	if not wrote then
-		return nil, tostring(werr)
+end
+
+function costrow.place(
+	root: string,
+	homes: { [string]: string },
+	extra: { [string]: { ledger.Row } }?,
+	takeBegins: boolean
+): { string }
+	local ok, planned = pcall(costrow.plan, root, homes, extra, takeBegins)
+	if not ok or not planned then
+		return {}
 	end
-	return path, nil
+	local wrote, paths = pcall(costrow.writeFiles, planned)
+	if not wrote or not paths then
+		pcall(costrow.restore, planned)
+		return {}
+	end
+	local kept = pcall(costrow.writeBuffer, root, planned)
+	if not kept then
+		pcall(costrow.restore, planned)
+		return {}
+	end
+	return paths
+end
+
+function costrow.readMeasured(dir: string): { ledger.Row }
+	local rows: { ledger.Row } = {}
+	local folder = `{dir}/spend.d`
+	if not fs.isDir(folder) then
+		return rows
+	end
+	local names = fs.readDir(folder)
+	table.sort(names)
+	for _, name in names do
+		local file = `{folder}/{name}`
+		if string.sub(name, -4) == ".tsv" then
+			local parsed, err = buffer.parseTsv(fs.readFile(file))
+			if not parsed then
+				error(`{file} does not parse: {err}`, 0)
+			end
+			for _, row in parsed do
+				table.insert(rows, row)
+			end
+		elseif string.sub(name, -3) == ".md" then
+			local parsed, err = ledger.parse(fs.readFile(file))
+			if not parsed then
+				error(`{file} does not parse: {err}`, 0)
+			end
+			for _, row in parsed.rows do
+				table.insert(rows, row)
+			end
+		end
+	end
+	return rows
 end
 
 return costrow
