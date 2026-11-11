@@ -15,6 +15,7 @@ local dispatcherLib = require("./dispatcher")
 local fs = require("@lune/fs")
 local gateLib = require("./gate")
 local idsLib = require("./ids")
+local layergit = require("./layergit")
 local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
 local openlist = require("./openlist")
@@ -30,6 +31,7 @@ local sessions = require("./sessions")
 local sh = require("../lib/sh")
 local skillsLib = require("./skills")
 local spend = require("./spend")
+local stack = require("./stack")
 local statusLib = require("./status")
 local stdio = require("@lune/stdio")
 local store = require("./store")
@@ -82,7 +84,11 @@ usage: ./zn <command> ...
   ready <R-id|issue-id>                         claim the raft, move it to active/ on origin/main, write <root>/rafts/active/<R>/prompt.md
   stop <R-id>                                   give back a readied or started raft: move it out of active/ on origin/main, remove its prompt
   stop <issue>                                  give back one active issue whose raft is retired, missing or empty
-  start <R-id>                                  branch, empty commit, push, draft PR (a readied raft; a backlog raft is claimed and moved)
+  start <R-id>                                  open the next layer: branch R0010/1/c0010, claim commit, draft PR on the layer below
+  finish <issue-id>                             make that layer one commit ("<issue>: <title>") once its checks are green,
+                                                and write that ticket's watch files from the layer's own diff
+  restack <R-id>                                rebase each layer onto the one below; stop at the first conflict or red check
+  stack <R-id>                                  print the layers, from git (read-only)
   focus <issue-id>                              attribute following commits to this issue
   commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>]
                                                 stage all, record spend, commit, push. --time and --tokens are ignored
@@ -98,13 +104,12 @@ usage: ./zn <command> ...
                                                 run one step: a model step on .models.toml's CLIs, a script step itself
   dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
   dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
-  done <R-id>                                   verify checks + review resolution, move to done, ready PR (commit is deliver)
-                                                and write each issue's tests/acceptance/<id>/watch.txt
+  done <R-id>                                   land the stack: one --no-ff merge onto main, one binding commit (refuses an unfinished layer)
   watch-bootstrap                               write every spec's watch file from the commit that added it (once)
   watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
   watch-net                                     run every project's fast suite on current main and push a missed test's
                                                 files onto main (also started by land and by watch-kick)
-  worktree <R-id|name>                          create or reuse .worktree/<R-id|name> from origin/main; print its path
+  worktree <R-id|name>                          create or reuse .worktree/<R-id|name>: a raft's is detached until a layer exists, then on that layer
   worktree-prune                                remove worktrees of rafts that are done on main
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
@@ -384,6 +389,10 @@ local function currentRaft(): store.Item?
 	local branch = sh.git({ "branch", "--show-current" })
 	for _, r in store.all("raft") do
 		if r.state == "active" and raftBranch(r) == branch then
+			return r
+		end
+		local layer = stack.parse(branch)
+		if r.state == "active" and layer and layer.raft == r.id then
 			return r
 		end
 	end
@@ -3470,13 +3479,15 @@ function cmd.migrate()
 	end
 end
 
--- Pushes the raft's branch and opens its draft PR (when the origin is on GitHub): the end of every start.
+-- Pushes the layer and opens its draft PR (when the origin is on GitHub): the end of every start.
 local function pushAndOpenPr(
 	raft: store.Item,
 	members: { store.Item },
 	branch: string,
 	ftitle: string,
-	reuse: boolean?
+	reuse: boolean?,
+	base: string?,
+	prTitle: string?
 )
 	if hasOrigin() then
 		sh.git({ "push", "--quiet", "-u", "origin", branch })
@@ -3503,8 +3514,21 @@ local function pushAndOpenPr(
 			print(`draft PR (already open): {existing}`)
 			return
 		end
-		local url =
-			sh.must("gh", { "pr", "create", "--draft", "--title", `{raft.id}: {ftitle}`, "--body", body })
+		local heading = prTitle or `{raft.id}: {ftitle}`
+		local create = {
+			"pr",
+			"create",
+			"--draft",
+			"--base",
+			base or "main",
+			"--head",
+			branch,
+			"--title",
+			heading,
+			"--body",
+			body,
+		}
+		local url = sh.must("gh", create)
 		print(`draft PR: {url}`)
 	else
 		print("no origin remote: skipped push and draft PR")
@@ -3534,19 +3558,20 @@ function cmd.start(pos: { string })
 				fail(`{raft.id} is not readied on origin/main: run ./zn ready {raft.id} in the main checkout`)
 			end
 		end
-		local branch = raftBranch(raft)
-		if sh.git({ "branch", "--show-current" }) ~= branch then
+		local issue, _, branch, startAt, prBase = layergit.startLayer(raft)
+		if startAt ~= "" then
 			refuseInMainCheckout("start")
-			if sh.run("git", { "rev-parse", "--verify", "--quiet", `refs/heads/{branch}` }).ok then
-				fail(`branch {branch} already exists: switch to it and run start there`)
+			if layergit.shaOf(`refs/heads/{branch}`) or layergit.shaOf(`refs/remotes/origin/{branch}`) then
+				fail(`{issue.id} is claimed on {branch}`)
 			end
-			sh.git({ "switch", "-c", branch })
+			sh.git({ "switch", "-c", branch, startAt })
+			local ftitle = store.readFront(raft.doc).title or raft.slug
+			sh.git({ "commit", "--quiet", "--allow-empty", "-m", `tracker: start {raft.id} {ftitle}` })
 		end
 		local members = store.members(raft.id)
 		local ftitle = store.readFront(raft.doc).title or raft.slug
-		sh.git({ "commit", "--quiet", "--allow-empty", "-m", `tracker: start {raft.id} {ftitle}` })
 		print(`on branch {branch}; {raft.id} and {#members} issue(s) are active`)
-		pushAndOpenPr(raft, members, branch, ftitle, true)
+		pushAndOpenPr(raft, members, branch, ftitle, true, prBase, `{issue.id}: {layergit.issueTitle(issue)}`)
 		return
 	end
 	if raft.state ~= "backlog" then
@@ -3587,13 +3612,14 @@ function cmd.start(pos: { string })
 			end
 		end
 	end
-	local branch = raftBranch(raft)
+	local issue, _, branch, startAt, prBase = layergit.startLayer(raft)
+	local prTitle = `{issue.id}: {layergit.issueTitle(issue)}`
 	-- every local precondition first: a refusal after the claim would leave origin saying `active`
-	local onBranch = sh.git({ "branch", "--show-current" }) == branch
+	local onBranch = startAt == "" or sh.git({ "branch", "--show-current" }) == branch
 	if not onBranch then
 		refuseInMainCheckout("start")
-		if sh.run("git", { "rev-parse", "--verify", "--quiet", `refs/heads/{branch}` }).ok then
-			fail(`branch {branch} already exists: switch to it and run start there`)
+		if layergit.shaOf(`refs/heads/{branch}`) or layergit.shaOf(`refs/remotes/origin/{branch}`) then
+			fail(`{issue.id} is claimed on {branch}`)
 		end
 	end
 	if publishing() then
@@ -3663,7 +3689,7 @@ function cmd.start(pos: { string })
 		members = store.members(raft.id)
 	end
 	if not onBranch then
-		sh.git({ "switch", "-c", branch })
+		sh.git({ "switch", "-c", branch, startAt })
 	end
 	raft = move(raft, "active")
 	for _, m in members do
@@ -3672,7 +3698,267 @@ function cmd.start(pos: { string })
 	local ftitle = store.readFront(raft.doc).title or raft.slug
 	sh.git({ "commit", "--quiet", "-m", `tracker: start {raft.id} {ftitle}` })
 	print(`on branch {branch}; {raft.id} and {#members} issue(s) are active`)
-	pushAndOpenPr(raft, members, branch, ftitle)
+	pushAndOpenPr(raft, members, branch, ftitle, nil, prBase, prTitle)
+end
+
+-- One commit for the layer the working tree is on. Worker commits stay until this.
+function cmd.finish(pos: { string })
+	local id = pos[1] or fail("usage: finish <issue-id>")
+	if sh.git({ "status", "--porcelain" }) ~= "" then
+		fail("commit everything first (./zn commit); finish needs a clean tree")
+	end
+	local issue = store.get(id)
+	if issue.kind ~= "issue" then
+		fail(`{id} is not an issue`)
+	end
+	local branch = sh.git({ "branch", "--show-current" })
+	local parsed = stack.parse(branch)
+	if not parsed or parsed.issue ~= id then
+		fail(`finish {id} on its layer branch (this is {branch})`)
+	end
+	local layer = parsed :: stack.Layer
+	if hasOrigin() then
+		sh.git({ "fetch", "--quiet", "origin" })
+	end
+	local raft = store.get(layer.raft)
+	local issues = layergit.orderedMembers(raft)
+	local base = layergit.mainTip()
+	if layer.position > 1 then
+		local below = issues[layer.position - 1]
+		if not below then
+			fail(`{raft.id} has no issue at layer {layer.position - 1}`)
+		end
+		local belowName = stack.branch(raft.id, layer.position - 1, below.id)
+		base = layergit.layerTip({
+			raft = raft.id,
+			position = layer.position - 1,
+			issue = below.id,
+			name = belowName,
+		}) or fail(`{belowName} does not exist: finish the layer below first`)
+	end
+	if not sh.run("git", { "merge-base", "--is-ancestor", base, "HEAD" }).ok then
+		fail(`{branch} is not based on the layer below: ./zn restack {raft.id}`)
+	end
+	local onMain = sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{approval.file(issue)}` }).ok
+	local drift = approval.refusal(".", issue, onMain)
+	if drift then
+		fail(drift)
+	end
+	if not runCheck(issue) then
+		fail(`{id} check.sh failed; not finished`)
+	end
+	local paths = layergit.diffPaths(base)
+	if #paths == 0 then
+		fail(`{id}: nothing to finish`)
+	end
+	watchcmd.capture({ id = id, dest = `{issue.dir}/acceptance` }, paths)
+	if gateLib.doneGate(process.env) == "promoted" then
+		print("finish: inside a spec run, so the affected specs are skipped")
+	else
+		-- The same path the affected gate uses: one project's home per selection. tests/run from the
+		-- repository root is not a project's home, so it refuses every spec.
+		local reg = projects.load(".")
+		for _, project in reg.projects do
+			local argv = { "run", "z-nile/affected", "--", "--project", project.name }
+			for _, path in paths do
+				table.insert(argv, path)
+			end
+			local listed = sh.run("lune", argv)
+			if not listed.ok then
+				fail(`affected failed: {listed.stderr}`)
+			end
+			local specs: { string } = {}
+			for line in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
+				if line ~= "" then
+					table.insert(specs, line)
+				end
+			end
+			if #specs > 0 then
+				local run = { "run", "z-nile/specs", "--", "run", "--project", project.name, "--" }
+				for _, spec in specs do
+					table.insert(run, spec)
+				end
+				if not sh.stream("lune", run) then
+					fail(`{id}: a spec the watch map selects is red`)
+				end
+			end
+		end
+	end
+	local saved = sh.git({ "rev-parse", "HEAD" })
+	sh.git({ "reset", "--soft", base })
+	sh.git({ "add", "-A" })
+	if sh.git({ "diff", "--cached", "--name-only" }) == "" then
+		sh.git({ "reset", "--hard", saved })
+		fail(`{id}: nothing to finish`)
+	end
+	local message = stack.finishSubject(id, layergit.issueTitle(issue))
+	sh.git({ "commit", "--quiet", "-m", message })
+	if hasOrigin() then
+		if not stack.owns(branch, raft.id) then
+			fail(`{branch} is not a layer of {raft.id}`)
+		end
+		local remote = layergit.shaOf(`origin/{branch}`)
+		if remote then
+			sh.git({
+				"push",
+				"--quiet",
+				`--force-with-lease=refs/heads/{branch}:{remote}`,
+				"origin",
+				branch,
+			})
+		else
+			sh.git({ "push", "--quiet", "-u", "origin", branch })
+		end
+	end
+	print(`finished {branch}: {message}`)
+end
+
+-- Rebase every layer onto the tip below it. A conflict or a red check.sh stops at that layer.
+function cmd.restack(pos: { string })
+	local raft = store.get(pos[1] or fail("usage: restack <R-id>"))
+	if raft.kind ~= "raft" then
+		fail(`{raft.id} is not a raft`)
+	end
+	if sh.git({ "status", "--porcelain" }) ~= "" then
+		fail("working tree is not clean")
+	end
+	if hasOrigin() then
+		sh.git({ "fetch", "--quiet", "origin" })
+	end
+	local why = layergit.oldShapeRefusal(raft)
+	if why then
+		fail(why)
+	end
+	local layers = layergit.layersOf(raft.id)
+	if #layers == 0 then
+		fail(`{raft.id} has no layers`)
+	end
+	local back = sh.git({ "branch", "--show-current" })
+	local below = layergit.mainTip()
+	local moved = false
+	for _, layer in layers do
+		local onto = if layer.position == 1 then layergit.mainTip() else below
+		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
+		if stack.alreadyStacked(sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok) then
+			below = tip
+			continue
+		end
+		local fork = sh.run("git", { "merge-base", tip, onto })
+		if not fork.ok then
+			fail(`restack stopped at {layer.name}: no common base`)
+		end
+		local tipSubject = sh.trim(sh.git({ "log", "-1", "--format=%s", tip }))
+		local tipParent = sh.trim(sh.git({ "rev-parse", `{tip}^` }))
+		local parentInLower = sh.run("git", { "merge-base", "--is-ancestor", tipParent, onto }).ok
+		local raw = sh.git({
+			"log",
+			"--reverse",
+			"--format=%s%x00%P",
+			`{sh.trim(fork.stdout)}..{tip}`,
+		})
+		local rows: { stack.CommitRow } = {}
+		for subject, parents in string.gmatch(raw .. "\n", "(.-)%z(.-)\n") do
+			local text = if type(parents) == "string" then parents else ""
+			local matched = string.match(text, "%S+")
+			local parent: string = if type(matched) == "string" then matched else ""
+			table.insert(
+				rows,
+				{ subject = if type(subject) == "string" then subject else "", parent = parent }
+			)
+		end
+		local upstream = stack.rebaseUpstream(
+			layer.issue,
+			raft.id,
+			tipSubject,
+			tipParent,
+			parentInLower,
+			rows
+		) or sh.trim(fork.stdout)
+		layergit.checkoutLayer(layer)
+		sh.git({ "reset", "--hard", tip })
+		local before = tip
+		local rebasing = sh.run("git", { "rebase", "--onto", onto, upstream, layer.name })
+		if not rebasing.ok then
+			sh.run("git", { "rebase", "--abort" })
+			if back ~= "" then
+				sh.git({ "switch", "--quiet", back })
+			end
+			fail(`restack stopped at {layer.name}: conflict\n{rebasing.stderr}`)
+		end
+		local issue = store.find(layer.issue)
+		if not issue or not runCheck(issue) then
+			sh.git({ "reset", "--hard", before })
+			if back ~= "" then
+				sh.git({ "switch", "--quiet", back })
+			end
+			fail(`restack stopped at {layer.name}: {layer.issue} check.sh failed`)
+		end
+		if hasOrigin() then
+			if not stack.owns(layer.name, raft.id) then
+				fail(`{layer.name} is not a layer of {raft.id}`)
+			end
+			local remote = layergit.shaOf(`origin/{layer.name}`) or before
+			sh.git({
+				"push",
+				"--quiet",
+				`--force-with-lease=refs/heads/{layer.name}:{remote}`,
+				"origin",
+				layer.name,
+			})
+		end
+		below = sh.git({ "rev-parse", "HEAD" })
+		moved = true
+	end
+	if back ~= "" and sh.git({ "branch", "--show-current" }) ~= back then
+		sh.git({ "switch", "--quiet", back })
+	end
+	if moved then
+		print(`restacked {raft.id}`)
+	else
+		print(`{raft.id} is already stacked`)
+	end
+end
+
+-- What another clone can see: the layers, from git, after a fetch. No local file is the authority.
+function cmd.stack(pos: { string })
+	local raftId = pos[1] or fail("usage: stack <R-id>")
+	if hasOrigin() then
+		local fetched = sh.run("git", { "fetch", "--quiet", "origin" })
+		if not fetched.ok then
+			fail(`stack: fetch failed: {sh.trim(fetched.stderr)}`)
+		end
+	end
+	local raft = store.find(raftId) or fail(`{raftId} is not in this tree`)
+	if raft.kind ~= "raft" then
+		fail(`{raftId} is not a raft`)
+	end
+	local issues = layergit.orderedMembers(raft)
+	local have: { [number]: stack.Layer } = {}
+	for _, layer in layergit.layersOf(raftId) do
+		have[layer.position] = layer
+	end
+	local below = layergit.shaOf("origin/main") or layergit.shaOf("main") or ""
+	local rows: { stack.Row } = {}
+	for i, issue in issues do
+		local name = stack.branch(raftId, i, issue.id)
+		local layer = have[i]
+		local state = "missing"
+		local sha = "-"
+		if layer then
+			local tip = layergit.layerTip(layer) or ""
+			sha = if tip == "" then "-" else string.sub(tip, 1, 12)
+			if tip ~= "" and below ~= "" and layergit.layerFinished(layer, below) then
+				state = "finished"
+			else
+				state = "claimed"
+			end
+			if tip ~= "" then
+				below = tip
+			end
+		end
+		table.insert(rows, { position = i, name = name, issue = issue.id, state = state, sha = sha })
+	end
+	print(stack.render(raftId, rows))
 end
 
 -- The backticked paths on the bulleted lines of an issue's "### Touched modules" section, or nil when
@@ -3898,7 +4184,8 @@ end
 
 function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 	local target = pos[1] or fail("usage: worktree <R-id|name>")
-	local branch: string
+	local branch: string? = nil
+	local detach = false
 	local dirName: string
 	if string.match(target, "^R%d%d%d%d$") then
 		local missing = `{target} is not in this tree; if it was just merged, run {mainRoot()}/zn sync`
@@ -3906,7 +4193,15 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 		if raft.state == "done" then
 			fail(`{target} is done`)
 		end
-		branch, dirName = raftBranch(raft), target
+		dirName = target
+		-- A raft worktree is on its latest layer, or on no branch until start opens one.
+		-- It does not create the old R####-<slug> branch.
+		local layers = layergit.layersOf(raft.id)
+		if #layers > 0 then
+			branch = layers[#layers].name
+		else
+			detach = true
+		end
 	elseif string.match(target, "^[fdc]%d%d%d%d$") then
 		fail("give a raft id or a name")
 	elseif #target <= 60 and string.match(target, "^[a-z][a-z0-9%-]*$") then
@@ -3933,11 +4228,17 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 		if w.path == path then
 			print(path)
 			return
-		elseif w.branch == branch then
+		elseif branch and w.branch == branch then
 			fail(`{branch} is already used by worktree at {w.path}`)
 		end
 	end
-	if sh.run("git", { "show-ref", "--verify", "--quiet", `refs/heads/{branch}` }).ok then
+	local base = from
+		or if sh.run("git", { "show-ref", "--verify", "--quiet", "refs/remotes/origin/main" }).ok
+			then "origin/main"
+			else "main"
+	if detach then
+		sh.git({ "worktree", "add", "--detach", path, base })
+	elseif branch and sh.run("git", { "show-ref", "--verify", "--quiet", `refs/heads/{branch}` }).ok then
 		local track = sh.git({ "for-each-ref", "--format=%(upstream:track)", `refs/heads/{branch}` })
 		if track == "[gone]" then
 			stdio.ewrite(
@@ -3945,16 +4246,14 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 			)
 		end
 		sh.git({ "worktree", "add", path, branch })
-	elseif sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok then
+	elseif
+		branch and sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok
+	then
 		sh.git({ "branch", "--track", branch, `origin/{branch}` })
 		sh.git({ "worktree", "add", path, branch })
 	else
-		local base = from
-			or if sh.run("git", { "show-ref", "--verify", "--quiet", "refs/remotes/origin/main" }).ok
-				then "origin/main"
-				else "main"
 		-- --no-track: a bare `git push` must not target origin/main before start or landing sets the upstream
-		sh.git({ "worktree", "add", "--no-track", "-b", branch, path, base })
+		sh.git({ "worktree", "add", "--no-track", "-b", branch :: string, path, base })
 	end
 	print(path)
 end
@@ -4095,7 +4394,7 @@ local function recordAndCommit(
 		keptAny = true
 		local row: ledger.Row = {
 			when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string,
-			subject = message,
+			subject = string.match(message, "^[^\n]*") or message,
 			added = share.added,
 			removed = share.removed,
 			minutes = 0,
@@ -4357,6 +4656,30 @@ function cmd.done(pos: { string })
 	if sh.git({ "status", "--porcelain" }) ~= "" then
 		fail("commit everything first (./zn commit); done needs a clean tree")
 	end
+	local whyOld = layergit.oldShapeRefusal(raft)
+	if whyOld then
+		fail(whyOld)
+	end
+	if hasOrigin() then
+		sh.git({ "fetch", "--quiet", "origin" })
+	end
+	local issues = layergit.orderedMembers(raft)
+	local layers = layergit.layersOf(raft.id)
+	if #layers == 0 then
+		fail(`{raft.id} has no layers: ./zn start {raft.id}`)
+	end
+	-- The commit that will be merged is the published top layer. The working tree has to be that
+	-- commit before any check reads it: a lower layer, or a top layer behind origin, is a different tree.
+	local topLayer = layers[#layers]
+	local land = layergit.layerTip(topLayer) or fail(`{topLayer.name} has no tip`)
+	local here = sh.git({ "rev-parse", "HEAD" })
+	local hereName = sh.git({ "branch", "--show-current" })
+	if hereName == "" then
+		hereName = "detached HEAD"
+	end
+	if here ~= land then
+		fail(`{hereName} is {here} and {topLayer.name} is {land}: done checks the commit it lands`)
+	end
 	local problem = reviewProblem(raft)
 	if problem then
 		fail(problem)
@@ -4373,6 +4696,47 @@ function cmd.done(pos: { string })
 			fail(drift)
 		end
 	end
+	local verdict = layergit.reviewVerdict(raft)
+	if not verdict then
+		fail(`{raft.id} has no Verdict line: a verdict nobody wrote is not recorded`)
+	end
+	if #layers ~= #issues then
+		fail(`{raft.id} has {#layers} layer(s) for {#issues} issue(s)`)
+	end
+	local onto = layergit.mainTip()
+	for i, layer in layers do
+		if layer.position ~= i or layer.issue ~= issues[i].id then
+			fail(`{raft.id} layer {i} is {layer.name}, expected {issues[i].id}`)
+		end
+		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
+		if not sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok then
+			fail(`{layer.name} is not stacked on the layer below: ./zn restack {raft.id}`)
+		end
+		if not layergit.layerFinished(layer, onto) then
+			fail(`{layer.issue} is not finished: ./zn finish {layer.issue}`)
+		end
+		onto = tip
+	end
+	local bindIds: { string } = {}
+	for _, issue in issues do
+		table.insert(bindIds, issue.id)
+	end
+	local layerBranch = sh.git({ "branch", "--show-current" })
+	local baseRef = if layergit.shaOf("origin/main")
+		then "origin/main"
+		elseif layergit.shaOf("main") then "main"
+		else layergit.mainTip()
+	sh.git({ "switch", "--detach", baseRef })
+	local top = topLayer.name
+	local merged = sh.run("git", { "merge", "--no-ff", "--no-commit", land })
+	if not merged.ok then
+		sh.run("git", { "merge", "--abort" })
+		if layerBranch ~= "" then
+			sh.git({ "switch", "--quiet", layerBranch })
+		end
+		fail(`{top} does not merge onto main: {sh.trim(merged.stderr)}`)
+	end
+	local bound = false
 	-- Promote sequestered acceptance specs into the permanent suite, then prove they still pass
 	-- there (type check + structural meta spec + the specs themselves). Roll back on failure.
 	local promoted: { string } = {}
@@ -4398,7 +4762,14 @@ function cmd.done(pos: { string })
 	end
 	table.insert(movedDirs, store.dirFor(raft.kind, "done", raft.id, raft.root))
 	local function rollback()
-		sh.git({ "reset", "-q", "--hard", "HEAD" })
+		if bound then
+			sh.git({ "reset", "--hard", layerBranch })
+		else
+			sh.run("git", { "merge", "--abort" })
+		end
+		if layerBranch ~= "" then
+			sh.run("git", { "switch", "--quiet", layerBranch })
+		end
 		-- git removes the folders it empties; if one is left, store.find would see a duplicate id
 		for _, dir in movedDirs do
 			if fs.isDir(dir) and #fs.readDir(dir) == 0 then
@@ -4428,11 +4799,8 @@ function cmd.done(pos: { string })
 			end
 		end
 	end
-	local caps: { watchcmd.Member } = {}
-	for _, m in members do
-		table.insert(caps, { id = m.id, dest = promotedDir(m) })
-	end
-	watchcmd.capture(caps)
+	-- finish already wrote each layer's watch from that layer's own files. Capturing again, from the
+	-- merge, would give every ticket the whole stack: a finish commit's subject is not an Issue: trailer.
 	if gateLib.doneGate(process.env) == "promoted" then
 		print("done: inside a spec run, so the gate is skipped; checking the promoted specs")
 		if #promoted > 0 then
@@ -4449,25 +4817,112 @@ function cmd.done(pos: { string })
 			fail("the affected gate fails on the done tree (rolled back); fix and retry done")
 		end
 	end
-	-- Mark the PR ready before the final push: CI skips drafts, so the push below is what gets tested.
-	if hasUpstream() and onGitHub() then
-		-- pcall: process.exec throws when gh can't be spawned at all (not on PATH)
-		local ok, r = pcall(sh.run, "gh", { "pr", "ready" })
-		if not (ok and r.ok) then
-			rollback()
-			fail("could not mark the PR ready (rolled back); fix gh and retry done")
-		end
-	end
 	if fs.isFile(FOCUS_FILE) then
 		fs.removeFile(FOCUS_FILE)
 	end
-	recordAndCommit(raft, `tracker: done {raft.id}`, {}, nil, true, "deliver")
-	if hasUpstream() and onGitHub() then
-		local summary = fs.readFile(`{raft.dir}/spend.md`)
-		local body = sh.must("gh", { "pr", "view", "--json", "body", "-q", ".body" })
-		sh.must("gh", { "pr", "edit", "--body", body .. "\n\n" .. summary })
-		print("PR marked ready for review")
+	local committed, commitErr = pcall(function()
+		recordAndCommit(
+			raft,
+			stack.bindMessage(raft.id, bindIds, verdict :: string),
+			{},
+			nil,
+			true,
+			"deliver"
+		)
+	end)
+	if not committed then
+		rollback()
+		fail(`binding commit failed (rolled back): {commitErr}`)
 	end
+	bound = true
+	-- Remember each pull request's base, retarget it to main, and put that base back if the push fails.
+	-- GitHub marks a pull request merged when its head is reachable from its base; base main does that
+	-- once the binding commit is on main. Retargeting first and then failing the push would leave the
+	-- pull request pointing at main while main does not have the commit.
+	local retargeted: { { number: string, base: string, layer: string } } = {}
+	local function restoreBases()
+		local unrestored: { string } = {}
+		for _, row in retargeted do
+			if row.base ~= "main" then
+				local back = sh.run("gh", { "pr", "edit", row.number, "--base", row.base })
+				if not back.ok then
+					table.insert(unrestored, row.layer)
+				end
+			end
+		end
+		return unrestored
+	end
+	if onGitHub() then
+		for _, layer in layers do
+			local listed = sh.run("gh", {
+				"pr",
+				"list",
+				"--head",
+				layer.name,
+				"--state",
+				"open",
+				"--json",
+				"number",
+				"-q",
+				".[0].number",
+			})
+			local number = if listed.ok then sh.trim(listed.stdout) else ""
+			if number ~= "" and number ~= "null" then
+				local viewed = sh.run("gh", {
+					"pr",
+					"view",
+					number,
+					"--json",
+					"baseRefName",
+					"-q",
+					".baseRefName",
+				})
+				local oldBase = if viewed.ok then sh.trim(viewed.stdout) else ""
+				if oldBase == "" then
+					rollback()
+					fail(`could not read the pull request base for {layer.name} (rolled back)`)
+				end
+				local edited = sh.run("gh", { "pr", "edit", number, "--base", "main" })
+				if not edited.ok then
+					local unrestored = restoreBases()
+					rollback()
+					local extra = if #unrestored > 0
+						then `; could not put back {table.concat(unrestored, ", ")}`
+						else ""
+					fail(`could not retarget the pull request for {layer.name} (rolled back){extra}`)
+				end
+				table.insert(retargeted, { number = number, base = oldBase, layer = layer.name })
+			end
+		end
+	end
+	if hasOrigin() then
+		-- HEAD is detached, so the destination has to be a full ref. This is the binding commit on main.
+		local pushed = sh.run("git", { "push", "--quiet", "origin", "HEAD:refs/heads/main" })
+		if not pushed.ok then
+			local unrestored = restoreBases()
+			rollback()
+			local extra = if #unrestored > 0
+				then `; could not put back {table.concat(unrestored, ", ")}`
+				else ""
+			fail(`could not push the binding commit to main (rolled back){extra}: {sh.trim(pushed.stderr)}`)
+		end
+	end
+	if sh.run("git", { "branch", "-f", "main", "HEAD" }).ok then
+		sh.git({ "switch", "--quiet", "main" })
+	else
+		-- main is checked out in the main checkout. Fast-forward that checkout; this one stays on the commit.
+		local root = mainRoot()
+		local before = sh.git({ "-C", root, "rev-parse", "HEAD" })
+		local pulled = sh.run("git", { "-C", root, "pull", "--ff-only", "--quiet" })
+		if pulled.ok then
+			sweepStale(root, before, sh.git({ "-C", root, "rev-parse", "HEAD" }))
+		else
+			stdio.ewrite(
+				`landed on origin/main, but pulling the main checkout failed: {sh.trim(pulled.stderr)}\n`
+			)
+		end
+	end
+	print(`landed {raft.id}`)
 end
 
 -- The parsed lessons of a loaded tree; a lesson that fails to parse is left out and named on stderr.
@@ -5281,16 +5736,28 @@ function cmd.stop(pos: { string })
 	if fs.isFile(claimFile(raft.id)) then
 		fs.removeFile(claimFile(raft.id))
 	end
-	local branch = raftBranch(raft)
 	sh.run("git", { "fetch", "--quiet", "--prune", "origin" })
-	local exists = sh.run("git", { "show-ref", "--verify", "--quiet", `refs/heads/{branch}` }).ok
-		or sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok
+	local layers = layergit.layersOf(raft.id)
+	local branch = if #layers > 0 then layers[#layers].name else raftBranch(raft)
+	local exists = false
+	if #layers > 0 then
+		exists = true
+		local names: { string } = {}
+		for _, layer in layers do
+			table.insert(names, layer.name)
+		end
+		branch = table.concat(names, ", ")
+	else
+		exists = sh.run("git", { "show-ref", "--verify", "--quiet", `refs/heads/{branch}` }).ok
+			or sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok
+	end
 	if exists then
 		local pr = "its pull request, if any"
+		local head = if #layers > 0 then layers[1].name else branch
 		if onGitHub() then
 			local g = sh.run(
 				"gh",
-				{ "pr", "list", "--head", branch, "--state", "open", "--json", "url", "-q", ".[0].url" }
+				{ "pr", "list", "--head", head, "--state", "open", "--json", "url", "-q", ".[0].url" }
 			)
 			local url = if g.ok then sh.trim(g.stdout) else ""
 			if url ~= "" and url ~= "null" then
@@ -6791,6 +7258,7 @@ local READ_ONLY: { [string]: boolean } = {
 	board = true,
 	workstreams = true,
 	["promote-check"] = true,
+	stack = true,
 	stamp = true,
 }
 if not READ_ONLY[name :: string] then

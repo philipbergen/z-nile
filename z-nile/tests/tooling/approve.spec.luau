@@ -196,27 +196,32 @@ return t.spec("human approval freezes the contract", function(it)
 		local rewritten = fs.readFile(`{f.main}/{active}/check.sh`)
 		t.expect(has(rewritten, `{ROOT}/issues/active/{ID}/check.sh`)).toBe(true)
 
-		fs.writeFile(`{f.main}/{ROOT}/rafts/active/{RAFT}/review-001.md`, "Verdict: approve\n")
-		local flipped = fs.readFile(`{f.main}/{active}/acceptance/hold.spec.luau`)
+		-- done checks the published layer tip, so the contract change has to be that commit
+		local layer = (string.gsub(zn(f.main, { "worktree", RAFT }).stdout, "%s+$", ""))
+		local started = zn(layer, { "start", RAFT })
+		if not started.ok then
+			error(say(started))
+		end
+		fs.writeFile(`{layer}/{ROOT}/rafts/active/{RAFT}/review-001.md`, "Verdict: approve\n")
+		local flipped = fs.readFile(`{layer}/{active}/acceptance/hold.spec.luau`)
 		fs.writeFile(
-			`{f.main}/{active}/acceptance/hold.spec.luau`,
+			`{layer}/{active}/acceptance/hold.spec.luau`,
 			(string.gsub(flipped, "toBe%(true%)", "toBe(false)", 1))
 		)
-		commit(f.main, "review, then one byte")
-		local done = zn(f.main, { "done", RAFT })
+		commit(layer, "review, then one byte")
+		fixture.git(layer, { "push", "-q" })
+		local done = zn(layer, { "done", RAFT })
 		t.expect(done.ok).toBe(false)
 		t.expect(has(say(done), "hold.spec.luau")).toBe(true)
 		t.expect(has(say(done), "rolled back")).toBe(false)
 
 		-- deleting the approval is not a way past it: ready published one, so done still asks for it
-		local record = fs.readFile(`{f.main}/{active}/approval.md`)
-		fs.removeFile(`{f.main}/{active}/approval.md`)
-		commit(f.main, "the approval deleted")
-		local dropped = zn(f.main, { "done", RAFT })
+		fs.removeFile(`{layer}/{active}/approval.md`)
+		commit(layer, "the approval deleted")
+		fixture.git(layer, { "push", "-q" })
+		local dropped = zn(layer, { "done", RAFT })
 		t.expect(dropped.ok).toBe(false)
 		t.expect(has(say(dropped), `{ID} has no approval`)).toBe(true)
-		fs.writeFile(`{f.main}/{active}/approval.md`, record)
-		commit(f.main, "the approval restored")
 
 		fs.writeFile(`{f.main}/{active}/acceptance/hold.spec.luau`, flipped)
 		fs.writeFile(
