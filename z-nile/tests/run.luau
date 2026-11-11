@@ -101,6 +101,8 @@ if process.env.ZN_MEASURED ~= "1" then
 		table.insert(args, a)
 	end
 	local ran = process.exec("perl", args, {
+		-- the suite prints as it runs: without this the wrapper swallows every result line
+		stdio = "inherit",
 		env = {
 			ZN_TOP = ROOT,
 			ZN_MEASURE_BUFFER = "1",

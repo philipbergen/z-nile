@@ -1,5 +1,6 @@
 --!strict
 -- Tracker CLI. Run through ./zn at the repository root (c0114). See z-nile/skills/zz-rules/SKILL.md.
+local approval = require("./approval")
 local audit = require("./audit")
 local board = require("./board")
 local boardview = require("./boardview")
@@ -7,6 +8,7 @@ local brokerLib = require("./broker")
 local buffer = require("./buffer")
 local claimsLib = require("./claims")
 local compactLib = require("./compact")
+local contract = require("./contract")
 local costrow = require("./costrow")
 local dispatchLib = require("./dispatch")
 local dispatcherLib = require("./dispatcher")
@@ -76,6 +78,7 @@ usage: ./zn <command> ...
   compact [--force]                             renumber every item from 0001 (a fresh worktree on origin/main)
   remap                                         bring a branch from before a compaction onto the new ids
   migrate                                       rename legacy-named documents to <ID>.md (adds slug: to the frontmatter)
+  approve <issue-id> [--check]                 record the human's approval of the issue's contract, or say whether it still holds
   ready <R-id|issue-id>                         claim the raft, move it to active/ on origin/main, write <root>/rafts/active/<R>/prompt.md
   stop <R-id>                                   give back a readied or started raft: move it out of active/ on origin/main, remove its prompt
   stop <issue>                                  give back one active issue whose raft is retired, missing or empty
@@ -107,7 +110,7 @@ usage: ./zn <command> ...
   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
   capture <id>                                  print the item's document as captured (read-only)
-  metrics [--include-active]                    cost per issue and rework %
+  metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
   lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]
@@ -2358,6 +2361,47 @@ local function captureScope(diff: string, base: string): string?
 	return nil
 end
 
+-- An issue the landed diff touches, that already has an approval, whose contract no longer matches.
+-- An issue with no approval.md is left alone (a capture, or an item prepared before approval).
+local function approvedDrift(base: string): string?
+	local names = sh.git({ "diff", "--name-only", base, "HEAD" })
+	local seen: { [string]: boolean } = {}
+	for path in string.gmatch(names, "[^\n]+") do
+		local id = string.match(path, "/issues/active/([fdc]%d%d%d%d)/")
+			or string.match(path, "/issues/done/([fdc]%d%d%d%d)/")
+			or string.match(path, "/issues/([fdc]%d%d%d%d)/")
+			or string.match(path, "/tests/acceptance/([fdc]%d%d%d%d)/")
+		if id then
+			seen[id] = true
+		end
+	end
+	local ids = {}
+	for id in seen do
+		table.insert(ids, id)
+	end
+	table.sort(ids)
+	for _, id in ids do
+		-- A deleted document leaves the directory (check.sh remains) and store.find throws. That is
+		-- captureScope's refusal, which names the path; the approval check has nothing left to read.
+		local ok, found = pcall(store.find, id)
+		if not ok then
+			local why = tostring(found)
+			if string.find(why, "has no ", 1, true) then
+				continue
+			end
+			return why
+		end
+		local item = found :: store.Item?
+		if item and item.kind == "issue" then
+			local problem = approval.refusal(".", item, false)
+			if problem then
+				return problem
+			end
+		end
+	end
+	return nil
+end
+
 -- c0072: lands a capture without a pull request. Merge origin/main, check the scope, run the static stages (not the
 -- full gate: a capture is a draft backlog document), push one commit made on top of origin/main (never a force).
 -- A lost push race merges the new main and retries the push, not the gate (up to 3 tries).
@@ -2386,6 +2430,10 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 			)
 		end
 		refuseStale()
+		local drift = approvedDrift(base)
+		if drift then
+			fail(drift)
+		end
 		local diff = sh.must("git", { "diff", "--name-status", "--no-renames", base, "HEAD" })
 		local refusal = captureScope(diff, base)
 		if refusal then
@@ -4316,6 +4364,15 @@ function cmd.done(pos: { string })
 	if not runCheck(raft) then
 		fail(`{raft.id} check.sh failed; not done`)
 	end
+	for _, m in store.members(raft.id) do
+		-- An approval `ready` published stays required: deleting approval.md on the branch is not a way
+		-- past the check. An item readied before approval has none on origin/main and is left alone.
+		local onMain = sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{approval.file(m)}` }).ok
+		local drift = approval.refusal(".", m, onMain)
+		if drift then
+			fail(drift)
+		end
+	end
 	-- Promote sequestered acceptance specs into the permanent suite, then prove they still pass
 	-- there (type check + structural meta spec + the specs themselves). Roll back on failure.
 	local promoted: { string } = {}
@@ -4812,6 +4869,123 @@ local function pullMain(): string?
 	return nil
 end
 
+-- A controlling terminal. Lune's own stdin is not a tty even when `./zn` was started on one (a child
+-- cannot inherit it), so this opens /dev/tty. `./zn` also refuses when its own stdin is not a terminal.
+local function stdinIsTerminal(): boolean
+	local r = process.exec("perl", {
+		"-e",
+		"open(my $f, q{<}, q{/dev/tty}) or exit 1; exit(-t $f ? 0 : 1)",
+	})
+	return r.ok
+end
+
+local function contractDirty(paths: { string }): string?
+	local args = { "status", "--porcelain", "--" }
+	for _, path in paths do
+		table.insert(args, path)
+	end
+	local out = sh.git(args)
+	local line = string.match(out, "^([^\n]+)")
+	if not line or line == "" then
+		return nil
+	end
+	return line
+end
+
+-- `approve <issue-id>` records the contract hash in the issue's approval.md and commits only that file.
+-- `--check` reads: it says whether the latest row still matches, and which part changed.
+function cmd.approve(pos: { string }, opts: { [string]: { string } })
+	for k in opts do
+		if k ~= "--check" then
+			fail(`usage: approve <issue-id> [--check] (unknown option {k})`)
+		end
+	end
+	if #pos ~= 1 then
+		fail("usage: approve <issue-id> [--check]")
+	end
+	local id = pos[1]
+	local onlyCheck = opts["--check"] ~= nil
+	if not onlyCheck then
+		local dispatched = process.env.ZN_DISPATCH
+		if dispatched and dispatched ~= "" then
+			fail(
+				`{id}: approve is refused while ZN_DISPATCH is set. Run ./zn approve {id} yourself, in a terminal, in this worktree.`
+			)
+		end
+		if not stdinIsTerminal() then
+			local where = sh.git({ "rev-parse", "--show-toplevel" })
+			fail(
+				`{id}: approve is refused without a terminal on stdin. Run ./zn approve {id} yourself, in a terminal, in this worktree ({where}).`
+			)
+		end
+		refuseInMainCheckout("approve")
+	end
+	local item = store.get(id)
+	if item.kind ~= "issue" then
+		fail(`approve takes an issue ({id} is a {item.kind})`)
+	end
+	if onlyCheck then
+		local found, err = approval.verdict(".", item)
+		if not found then
+			fail(`{id}: {err}`)
+		end
+		local verdict: approval.Verdict = found :: approval.Verdict
+		if verdict.state == "none" then
+			fail(`{id} has no approval`)
+		end
+		if verdict.state == "bad" then
+			fail(`{id}: {approval.file(item)} does not parse: {verdict.err}`)
+		end
+		if verdict.state == "changed" then
+			fail(
+				`{id}'s contract changed since approval: {table.concat(verdict.changed, ", ")}. Run ./zn approve {id} again.`
+			)
+		end
+		local row = verdict.row :: contract.Row
+		print(`{id} approved {row.hash} at {row.when} by {row.who}`)
+		return
+	end
+	local front = store.readFront(item.doc)
+	if front.design ~= "ready" then
+		fail(`{id} is not design: ready`)
+	end
+	local pending = openlist.pending(fs.readFile(item.doc))
+	if #pending > 0 then
+		fail(
+			`{id} has an unruled open-list bullet ({table.concat(pending, ", ")}): rule each under ## Open to the human, then ./zn approve {id}`
+		)
+	end
+	local check = `{item.dir}/check.sh`
+	if not fs.isFile(check) then
+		fail(`{id} has no check.sh`)
+	end
+	local named = sh.run("git", { "config", "--get", "user.name" })
+	local who = if named.ok then contract.who(sh.trim(named.stdout)) else ""
+	if who == "" then
+		fail("approve needs a git identity (git config user.name)")
+	end
+	local _, paths, collectErr = approval.collect(".", item)
+	if collectErr then
+		fail(`{id}: {collectErr}`)
+	end
+	local dirty = contractDirty(paths)
+	if dirty then
+		fail(`{id}: commit the contract first ({dirty}), then ./zn approve {id}`)
+	end
+	local when = os.date("!%Y-%m-%dT%H:%M:%SZ") :: string
+	local text, aerr = approval.append(".", item, who, when)
+	if not text then
+		fail(`{id}: {aerr}`)
+	end
+	local path = approval.file(item)
+	sh.writeReplacing(path, text :: string)
+	sh.git({ "add", "--", path })
+	sh.git({ "commit", "-q", "-m", `tracker: approve {id}`, "--", path })
+	local rows = contract.parse(text :: string)
+	local hash = if rows then rows[#rows].hash else ""
+	print(`approved {id} {hash}`)
+end
+
 -- `ready <R-id|issue-id>`: claims a prepared raft, moves it and its members to active/ on origin/main (one tracker-only
 -- commit, check.sh paths rewritten), pulls the main checkout and writes the ignored prompt.md. On a raft that is
 -- already active it only regenerates the prompt.
@@ -4904,6 +5078,12 @@ function cmd.ready(pos: { string })
 						)
 					end
 				end
+			end
+		end
+		for _, m in members do
+			local problem = approval.refusal(".", m, true)
+			if problem then
+				fail(problem)
 			end
 		end
 		local all = { raft.id }
@@ -6126,6 +6306,13 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 						cost.n
 					)
 				)
+			end
+		end
+		if item and item.kind == "issue" then
+			print(approval.summary(item))
+		elseif item and item.kind == "raft" then
+			for _, member in store.members(item.id) do
+				print(approval.summary(member))
 			end
 		end
 	end

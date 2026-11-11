@@ -33,6 +33,26 @@ esac
 export ZN_TOP="$top" ZN_CWD="${rel#/}"
 cd "$top"
 export PATH="$HOME/.rokit/bin:$PATH"
+# approve is the human's, in a terminal. --check only reads, so a pipe may run it. The engine repeats the
+# dispatch check; this one is the stdin test, which a child process cannot see.
+if [[ ${1:-} == approve ]]; then
+  checking=0
+  for arg in "$@"; do
+    [[ $arg == --check ]] && checking=1
+  done
+  if [[ $checking == 0 ]]; then
+    id="${2:-<issue-id>}"
+    [[ $id == --* ]] && id="<issue-id>"
+    if [[ -n ${ZN_DISPATCH:-} ]]; then
+      echo "$id: approve is refused while ZN_DISPATCH is set. Run ./zn approve $id yourself, in a terminal, in this worktree." >&2
+      exit 1
+    fi
+    if [[ ! -t 0 ]]; then
+      echo "$id: approve is refused without a terminal on stdin. Run ./zn approve $id yourself, in a terminal, in this worktree ($top)." >&2
+      exit 1
+    fi
+  fi
+fi
 # the engine's own CPU limit (c0191), ZN_ENGINE_CPU seconds (default 1800): what an engine command spends is its own
 # CPU, not its children's (the gate, git), and a loop in it ends in half an hour instead of never. It only lowers the
 # limit the caller has, so the spec runner's 1200 s stays what it asks for

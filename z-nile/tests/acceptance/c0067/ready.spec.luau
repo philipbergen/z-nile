@@ -7,6 +7,7 @@ local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -292,6 +293,7 @@ return t.spec("tracker ready", function(it)
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 		write(seed, "pickman/.tracker/issues/c0110/check.sh", simpleCheck("c0110", "issues", ""), true)
+		seal.stamp(seed, "t")
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-q", "-m", "seed" })
 		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
@@ -396,7 +398,7 @@ return t.spec("tracker ready", function(it)
 					table.insert(moving, p)
 				end
 			end
-			t.expect(#moving).toBe(8)
+			t.expect(#moving).toBe(10) -- the eight item files, plus each member's approval.md
 			-- untracked litter in directories the move empties: the pull leaves them, the sweep removes them
 			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			fs.writeFile(`{main}/pickman/.tracker/issues/c0010/.DS_Store`, "finder")
@@ -409,7 +411,7 @@ return t.spec("tracker ready", function(it)
 			t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
 			local changed =
 				string.split(git(origin, { "diff", "--name-only", "--no-renames", before, "main" }), "\n")
-			t.expect(#changed).toBe(16)
+			t.expect(#changed).toBe(20) -- each moved file leaves backlog and arrives under active/, approval.md included
 			for _, p in moving do
 				-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 				local dest = (string.gsub(p, "^pickman/%.tracker/(%a+)/", "pickman/.tracker/%1/active/"))
