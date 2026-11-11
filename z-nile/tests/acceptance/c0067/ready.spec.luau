@@ -532,7 +532,7 @@ return t.spec("tracker ready", function(it)
 		local r = tr(early, { "start", "R0060" })
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stderr, "sync")).toBe(true)
-		t.expect(git(early, { "branch", "--show-current" })).toBe("R0060-cyclic")
+		t.expect(git(early, { "branch", "--show-current" })).toBe("")
 		t.expect(git(early, { "log", "-1", "--format=%s" })).toBe("seed")
 	end)
 

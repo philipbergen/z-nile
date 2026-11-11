@@ -186,6 +186,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 			"# Review 001\n\n### F1 [low] an open finding\nEvidence: x\n\nVerdict: changes requested\n"
 		)
 		must(tr({ "commit", "-m", "unresolved review", "--time", "1" }), "commit")
+		git({ "push", "-q" })
 		local r = done(false)
 		t.expect(r.ok).toBe(false)
 		t.expect(string.find(r.stderr, "F1", 1, true) ~= nil).toBe(true)
@@ -251,7 +252,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		t.expect(after ~= before).toBe(true)
 		t.expect(git({ "log", "-1", "--format=%s" })).toBe("R0010: bind f0010")
 		-- c0120 override: pickman's files live in pickman/ (its home)
-		t.expect(fs.isDir(`{work}/pickman/tests/acceptance/f0010`)).toBe(false) -- nothing was promoted
+		t.expect(fs.isFile(`{work}/pickman/tests/acceptance/f0010/alpha.spec.luau`)).toBe(false)
 		-- gh was asked to retarget the layer onto main before the binding commit was pushed
 		local log = fs.readFile(`{base}/gh.log`)
 		t.expect(string.find(log, "pr edit 1 --base main", 1, true) ~= nil).toBe(true)

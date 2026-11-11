@@ -129,7 +129,6 @@ return t.spec("tracker commands publish state to origin/main (start)", function(
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		-- the earlier worktree and branch go away: the raft is prepared on origin again
 		git(main, { "worktree", "remove", "--force", `{base}/main/.worktree/R0001` })
-		git(main, { "branch", "-D", "R0001-demo" })
 		git(main, { "branch", "-D", "R0001/1/c0240" })
 		git(origin, { "branch", "-D", "R0001/1/c0240" })
 		trOk(main, { "sync" })

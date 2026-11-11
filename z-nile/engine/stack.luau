@@ -17,9 +17,14 @@
 --   read:     ./zn stack <R-id>
 --             one row per layer, from git: "<position> <branch> <issue> <finished|claimed|missing> <sha>"
 --   land:     ./zn done <R-id>
---             git merge --no-ff of the top layer into main. The merge commit's message is
+--             The checkout must be the published top-layer commit (the one that is merged).
+--             git merge --no-ff of that commit into main. The merge commit's message is
 --             "<raft>: bind <id>, <id>\n\nVerdict: <word>\n"
---             then gh pr edit <number> --base main, then git push origin HEAD:refs/heads/main
+--             <word> is the review file's Verdict line. No review file, and a review with no
+--             Verdict line, both refuse: a verdict nobody wrote is not recorded.
+--             gh pr view <n> --json baseRefName -q .baseRefName, then gh pr edit <n> --base main,
+--             then git push origin HEAD:refs/heads/main. A failed push runs
+--             gh pr edit <n> --base <the base just read> so the pull request is left where it was.
 
 local stack = {}
 

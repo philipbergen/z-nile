@@ -235,7 +235,8 @@ function layergit.checkoutLayer(layer: stack.Layer)
 	end
 end
 
-function layergit.reviewVerdict(raft: store.Item): string
+-- The review file's Verdict word, or nil when nobody wrote one. Never a default of approve.
+function layergit.reviewVerdict(raft: store.Item): string?
 	local latest = 0
 	for _, name in fs.readDir(raft.dir) do
 		local n = tonumber(string.match(name, "^review%-(%d+)%.md$"))
@@ -244,10 +245,10 @@ function layergit.reviewVerdict(raft: store.Item): string
 		end
 	end
 	if latest == 0 then
-		return "approve"
+		return nil
 	end
 	local review = "\n" .. fs.readFile(`{raft.dir}/review-{string.format("%03d", latest)}.md`)
-	return string.match(review, "\n[Vv]erdict:%s*(%a+)") or "approve"
+	return string.match(review, "\n[Vv]erdict:%s*(%a+)")
 end
 
 return layergit

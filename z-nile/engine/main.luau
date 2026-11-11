@@ -36,7 +36,6 @@ local statusLib = require("./status")
 local stdio = require("@lune/stdio")
 local store = require("./store")
 local trailLib = require("./trail")
-local watch = require("../lib/watch")
 local watchcmd = require("./watchcmd")
 
 -- a space name as the union ids expects: the callers only ever hold "issue" or "raft"
@@ -86,7 +85,8 @@ usage: ./zn <command> ...
   stop <R-id>                                   give back a readied or started raft: move it out of active/ on origin/main, remove its prompt
   stop <issue>                                  give back one active issue whose raft is retired, missing or empty
   start <R-id>                                  open the next layer: branch R0010/1/c0010, claim commit, draft PR on the layer below
-  finish <issue-id>                             make that layer one commit ("<issue>: <title>") once its checks are green
+  finish <issue-id>                             make that layer one commit ("<issue>: <title>") once its checks are green,
+                                                and write that ticket's watch files from the layer's own diff
   restack <R-id>                                rebase each layer onto the one below; stop at the first conflict or red check
   stack <R-id>                                  print the layers, from git (read-only)
   focus <issue-id>                              attribute following commits to this issue
@@ -105,12 +105,11 @@ usage: ./zn <command> ...
   dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
   dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
   done <R-id>                                   land the stack: one --no-ff merge onto main, one binding commit (refuses an unfinished layer)
-                                                and write each issue's tests/acceptance/<id>/watch.txt
   watch-bootstrap                               write every spec's watch file from the commit that added it (once)
   watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
   watch-net                                     run every project's fast suite on current main and push a missed test's
                                                 files onto main (also started by land and by watch-kick)
-  worktree <R-id|name>                          create or reuse .worktree/<R-id|name> from origin/main; print its path
+  worktree <R-id|name>                          create or reuse .worktree/<R-id|name>: a raft's is detached until a layer exists, then on that layer
   worktree-prune                                remove worktrees of rafts that are done on main
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
@@ -3752,49 +3751,37 @@ function cmd.finish(pos: { string })
 	if #paths == 0 then
 		fail(`{id}: nothing to finish`)
 	end
-	local sources: { string } = {}
-	for _, path in paths do
-		if watch.isSource(path) then
-			table.insert(sources, path)
-		end
-	end
-	table.sort(sources)
-	if #sources > 0 then
-		local text = watch.render(sources)
-		local acc = `{issue.dir}/acceptance`
-		if fs.isDir(acc) then
-			sh.writeReplacing(`{acc}/watch.txt`, text)
-			for _, name in fs.readDir(acc) do
-				if string.sub(name, -10) == ".spec.luau" then
-					sh.writeReplacing(watch.fileFor(`{acc}/{name}`), text)
-				end
-			end
-		end
-		for _, path in paths do
-			local underTests = string.find(path, "/tests/", 1, true) ~= nil
-				or string.sub(path, 1, 6) == "tests/"
-			local acceptance = string.find(path, "/tests/acceptance/", 1, true) ~= nil
-				or string.find(path, "/acceptance/", 1, true) ~= nil
-			if string.sub(path, -10) == ".spec.luau" and underTests and not acceptance then
-				sh.writeReplacing(watch.fileFor(path), text)
-			end
-		end
-	end
+	watchcmd.capture({ id = id, dest = `{issue.dir}/acceptance` }, paths)
 	if gateLib.doneGate(process.env) == "promoted" then
 		print("finish: inside a spec run, so the affected specs are skipped")
-	elseif #sources > 0 then
-		local listed = sh.run("lune", { "run", "z-nile/affected", "--", table.unpack(sources) })
-		if not listed.ok then
-			fail(`affected failed: {listed.stderr}`)
-		end
-		local specs: { string } = {}
-		for line in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
-			if line ~= "" then
-				table.insert(specs, line)
+	else
+		-- The same path the affected gate uses: one project's home per selection. tests/run from the
+		-- repository root is not a project's home, so it refuses every spec.
+		local reg = projects.load(".")
+		for _, project in reg.projects do
+			local argv = { "run", "z-nile/affected", "--", "--project", project.name }
+			for _, path in paths do
+				table.insert(argv, path)
 			end
-		end
-		if #specs > 0 and not sh.stream("lune", { "run", "z-nile/tests/run", "--", table.unpack(specs) }) then
-			fail(`{id}: a spec the watch map selects is red`)
+			local listed = sh.run("lune", argv)
+			if not listed.ok then
+				fail(`affected failed: {listed.stderr}`)
+			end
+			local specs: { string } = {}
+			for line in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
+				if line ~= "" then
+					table.insert(specs, line)
+				end
+			end
+			if #specs > 0 then
+				local run = { "run", "z-nile/specs", "--", "run", "--project", project.name, "--" }
+				for _, spec in specs do
+					table.insert(run, spec)
+				end
+				if not sh.stream("lune", run) then
+					fail(`{id}: a spec the watch map selects is red`)
+				end
+			end
 		end
 	end
 	local saved = sh.git({ "rev-parse", "HEAD" })
@@ -4197,7 +4184,8 @@ end
 
 function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 	local target = pos[1] or fail("usage: worktree <R-id|name>")
-	local branch: string
+	local branch: string? = nil
+	local detach = false
 	local dirName: string
 	if string.match(target, "^R%d%d%d%d$") then
 		local missing = `{target} is not in this tree; if it was just merged, run {mainRoot()}/zn sync`
@@ -4205,7 +4193,15 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 		if raft.state == "done" then
 			fail(`{target} is done`)
 		end
-		branch, dirName = raftBranch(raft), target
+		dirName = target
+		-- A raft worktree is on its latest layer, or on no branch until start opens one.
+		-- It does not create the old R####-<slug> branch.
+		local layers = layergit.layersOf(raft.id)
+		if #layers > 0 then
+			branch = layers[#layers].name
+		else
+			detach = true
+		end
 	elseif string.match(target, "^[fdc]%d%d%d%d$") then
 		fail("give a raft id or a name")
 	elseif #target <= 60 and string.match(target, "^[a-z][a-z0-9%-]*$") then
@@ -4232,11 +4228,17 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 		if w.path == path then
 			print(path)
 			return
-		elseif w.branch == branch then
+		elseif branch and w.branch == branch then
 			fail(`{branch} is already used by worktree at {w.path}`)
 		end
 	end
-	if sh.run("git", { "show-ref", "--verify", "--quiet", `refs/heads/{branch}` }).ok then
+	local base = from
+		or if sh.run("git", { "show-ref", "--verify", "--quiet", "refs/remotes/origin/main" }).ok
+			then "origin/main"
+			else "main"
+	if detach then
+		sh.git({ "worktree", "add", "--detach", path, base })
+	elseif branch and sh.run("git", { "show-ref", "--verify", "--quiet", `refs/heads/{branch}` }).ok then
 		local track = sh.git({ "for-each-ref", "--format=%(upstream:track)", `refs/heads/{branch}` })
 		if track == "[gone]" then
 			stdio.ewrite(
@@ -4244,16 +4246,14 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 			)
 		end
 		sh.git({ "worktree", "add", path, branch })
-	elseif sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok then
+	elseif
+		branch and sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok
+	then
 		sh.git({ "branch", "--track", branch, `origin/{branch}` })
 		sh.git({ "worktree", "add", path, branch })
 	else
-		local base = from
-			or if sh.run("git", { "show-ref", "--verify", "--quiet", "refs/remotes/origin/main" }).ok
-				then "origin/main"
-				else "main"
 		-- --no-track: a bare `git push` must not target origin/main before start or landing sets the upstream
-		sh.git({ "worktree", "add", "--no-track", "-b", branch, path, base })
+		sh.git({ "worktree", "add", "--no-track", "-b", branch :: string, path, base })
 	end
 	print(path)
 end
@@ -4656,6 +4656,30 @@ function cmd.done(pos: { string })
 	if sh.git({ "status", "--porcelain" }) ~= "" then
 		fail("commit everything first (./zn commit); done needs a clean tree")
 	end
+	local whyOld = layergit.oldShapeRefusal(raft)
+	if whyOld then
+		fail(whyOld)
+	end
+	if hasOrigin() then
+		sh.git({ "fetch", "--quiet", "origin" })
+	end
+	local issues = layergit.orderedMembers(raft)
+	local layers = layergit.layersOf(raft.id)
+	if #layers == 0 then
+		fail(`{raft.id} has no layers: ./zn start {raft.id}`)
+	end
+	-- The commit that will be merged is the published top layer. The working tree has to be that
+	-- commit before any check reads it: a lower layer, or a top layer behind origin, is a different tree.
+	local topLayer = layers[#layers]
+	local land = layergit.layerTip(topLayer) or fail(`{topLayer.name} has no tip`)
+	local here = sh.git({ "rev-parse", "HEAD" })
+	local hereName = sh.git({ "branch", "--show-current" })
+	if hereName == "" then
+		hereName = "detached HEAD"
+	end
+	if here ~= land then
+		fail(`{hereName} is {here} and {topLayer.name} is {land}: done checks the commit it lands`)
+	end
 	local problem = reviewProblem(raft)
 	if problem then
 		fail(problem)
@@ -4673,17 +4697,8 @@ function cmd.done(pos: { string })
 		end
 	end
 	local verdict = layergit.reviewVerdict(raft)
-	local whyOld = layergit.oldShapeRefusal(raft)
-	if whyOld then
-		fail(whyOld)
-	end
-	if hasOrigin() then
-		sh.git({ "fetch", "--quiet", "origin" })
-	end
-	local issues = layergit.orderedMembers(raft)
-	local layers = layergit.layersOf(raft.id)
-	if #layers == 0 then
-		fail(`{raft.id} has no layers: ./zn start {raft.id}`)
+	if not verdict then
+		fail(`{raft.id} has no Verdict line: a verdict nobody wrote is not recorded`)
 	end
 	if #layers ~= #issues then
 		fail(`{raft.id} has {#layers} layer(s) for {#issues} issue(s)`)
@@ -4712,8 +4727,8 @@ function cmd.done(pos: { string })
 		elseif layergit.shaOf("main") then "main"
 		else layergit.mainTip()
 	sh.git({ "switch", "--detach", baseRef })
-	local top = layers[#layers].name
-	local merged = sh.run("git", { "merge", "--no-ff", "--no-commit", top })
+	local top = topLayer.name
+	local merged = sh.run("git", { "merge", "--no-ff", "--no-commit", land })
 	if not merged.ok then
 		sh.run("git", { "merge", "--abort" })
 		if layerBranch ~= "" then
@@ -4806,15 +4821,37 @@ function cmd.done(pos: { string })
 		fs.removeFile(FOCUS_FILE)
 	end
 	local committed, commitErr = pcall(function()
-		recordAndCommit(raft, stack.bindMessage(raft.id, bindIds, verdict), {}, nil, true, "deliver")
+		recordAndCommit(
+			raft,
+			stack.bindMessage(raft.id, bindIds, verdict :: string),
+			{},
+			nil,
+			true,
+			"deliver"
+		)
 	end)
 	if not committed then
 		rollback()
 		fail(`binding commit failed (rolled back): {commitErr}`)
 	end
 	bound = true
-	-- Retarget before the push, so a refusal leaves main unpushed. GitHub marks a pull request merged
-	-- when its head is reachable from its base; after the binding commit is on main, base main does that.
+	-- Remember each pull request's base, retarget it to main, and put that base back if the push fails.
+	-- GitHub marks a pull request merged when its head is reachable from its base; base main does that
+	-- once the binding commit is on main. Retargeting first and then failing the push would leave the
+	-- pull request pointing at main while main does not have the commit.
+	local retargeted: { { number: string, base: string, layer: string } } = {}
+	local function restoreBases()
+		local unrestored: { string } = {}
+		for _, row in retargeted do
+			if row.base ~= "main" then
+				local back = sh.run("gh", { "pr", "edit", row.number, "--base", row.base })
+				if not back.ok then
+					table.insert(unrestored, row.layer)
+				end
+			end
+		end
+		return unrestored
+	end
 	if onGitHub() then
 		for _, layer in layers do
 			local listed = sh.run("gh", {
@@ -4831,11 +4868,30 @@ function cmd.done(pos: { string })
 			})
 			local number = if listed.ok then sh.trim(listed.stdout) else ""
 			if number ~= "" and number ~= "null" then
+				local viewed = sh.run("gh", {
+					"pr",
+					"view",
+					number,
+					"--json",
+					"baseRefName",
+					"-q",
+					".baseRefName",
+				})
+				local oldBase = if viewed.ok then sh.trim(viewed.stdout) else ""
+				if oldBase == "" then
+					rollback()
+					fail(`could not read the pull request base for {layer.name} (rolled back)`)
+				end
 				local edited = sh.run("gh", { "pr", "edit", number, "--base", "main" })
 				if not edited.ok then
+					local unrestored = restoreBases()
 					rollback()
-					fail(`could not retarget the pull request for {layer.name} (rolled back)`)
+					local extra = if #unrestored > 0
+						then `; could not put back {table.concat(unrestored, ", ")}`
+						else ""
+					fail(`could not retarget the pull request for {layer.name} (rolled back){extra}`)
 				end
+				table.insert(retargeted, { number = number, base = oldBase, layer = layer.name })
 			end
 		end
 	end
@@ -4843,8 +4899,12 @@ function cmd.done(pos: { string })
 		-- HEAD is detached, so the destination has to be a full ref. This is the binding commit on main.
 		local pushed = sh.run("git", { "push", "--quiet", "origin", "HEAD:refs/heads/main" })
 		if not pushed.ok then
+			local unrestored = restoreBases()
 			rollback()
-			fail(`could not push the binding commit to main (rolled back): {sh.trim(pushed.stderr)}`)
+			local extra = if #unrestored > 0
+				then `; could not put back {table.concat(unrestored, ", ")}`
+				else ""
+			fail(`could not push the binding commit to main (rolled back){extra}: {sh.trim(pushed.stderr)}`)
 		end
 	end
 	if sh.run("git", { "branch", "-f", "main", "HEAD" }).ok then
