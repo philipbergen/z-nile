@@ -167,6 +167,9 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['return if at then string.sub(here, 1, at + 7) else here .. ".cache/"'] = "the same prefix; nothing is written",
 		["`refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
 	},
+	["z-nile/engine/costrow.luau"] = {
+		["local path = `{root}/.cache/measure.tsv`"] = "the checkout's measure buffer; gitignored, appended by a gate, a spec run or ./zn run, and folded into a ticket only by commit, spend, done or land",
+	},
 	["z-nile/engine/history.luau"] = {
 		["local path = `{dir}/.cache/tracker-history.json`"] = `parsed git history for the current HEAD, read back on the next build and {RENAMED}`,
 	},

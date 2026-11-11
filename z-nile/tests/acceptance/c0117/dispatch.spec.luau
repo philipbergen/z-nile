@@ -171,7 +171,7 @@ return t.spec("c0117 dispatch rules", function(it)
 		t.expect(has(p, "`/w/.worktree/prep-x`")).toBe(true)
 		t.expect(has(p, "`/w/.cache/dispatch/c0010/questions.md`")).toBe(true)
 		t.expect(has(p, "Never merge a pull request and never push to main")).toBe(true)
-		t.expect(has(p, "without --tokens")).toBe(true)
+		t.expect(has(p, "Do not pass --time or --tokens")).toBe(true)
 		-- no line of the skill itself
 		local skill = fs.readFile(`{TOP}/z-nile/skills/z-design/SKILL.md`)
 		t.expect(has(p, string.match(skill, "\n(The goal is[^\n]+)") :: string)).toBe(false)

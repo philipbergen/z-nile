@@ -8,7 +8,21 @@ set -euo pipefail
 if [[ ${1:-} == run ]]; then
   shift
   export PATH="$HOME/.rokit/bin:$PATH"
-  exec perl "$(cd "$(dirname "$0")" && pwd -P)/z-nile/lib/bounded.pl" "$@"
+  export ZN_TOP="$(cd "$(dirname "$0")" && pwd -P)"
+  # A run already inside a measurement (the gate, a spec run) records nothing of its own.
+  if [[ -z "${ZN_MEASURED:-}" ]]; then
+    export ZN_MEASURE_BUFFER=1
+    export ZN_MEASURE_KIND=run
+    export ZN_MEASURE_PHASE=other
+    export ZN_MEASURE_SUBJECT=run
+    ZN_MEASURE_BRANCH="$(git -C "$ZN_TOP" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    ZN_MEASURE_HEAD="$(git -C "$ZN_TOP" rev-parse HEAD 2>/dev/null || true)"
+    if [[ "$ZN_MEASURE_BRANCH" == "HEAD" ]]; then ZN_MEASURE_BRANCH=""; fi
+    export ZN_MEASURE_BRANCH ZN_MEASURE_HEAD
+  else
+    unset ZN_MEASURE_BUFFER
+  fi
+  exec perl "$ZN_TOP/z-nile/lib/bounded.pl" "$@"
 fi
 top="$(cd "$(dirname "$0")" && pwd -P)"
 here="$(pwd -P)"

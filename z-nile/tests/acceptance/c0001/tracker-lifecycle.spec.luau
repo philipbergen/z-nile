@@ -1,6 +1,7 @@
 --!strict
 -- c0010 AC1: the tracker CLI lifecycle works end to end, driven for real in a throwaway clone
 -- of the committed HEAD (no remote, so start/done skip push and gh).
+local buffer = require("@znile/engine/buffer")
 local clone = require("@tests/lib/clone")
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
@@ -214,13 +215,20 @@ return t.spec("tracker lifecycle", function(it)
 		end
 		t.expect(added).toBe(8)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		local a = read("pickman/.tracker/issues/active/f0010/spend.md")
-		local g = read("pickman/.tracker/issues/active/f0031/spend.md")
-		t.expect(string.match(a, "totals: added=(%d+)")).toBe("5")
-		t.expect(string.match(g, "totals: added=(%d+)")).toBe("3")
-		t.expect(string.match(a, "minutes=([%d%.]+)")).toBe("5.0")
-		t.expect(string.match(g, "minutes=([%d%.]+)")).toBe("3.0")
-		t.expect(string.find(git({ "log", "-1", "--format=%B" }), "Issue: f0010 +5/-0 5.0m", 1, true) ~= nil)
+		local function measured(id: string): string
+			local folder = `{dir}/pickman/.tracker/issues/active/{id}/spend.d`
+			local names = fs.readDir(folder)
+			table.sort(names)
+			return fs.readFile(`{folder}/{names[#names]}`)
+		end
+		local a = buffer.parseTsv(measured("f0010"))
+		local g = buffer.parseTsv(measured("f0031"))
+		t.expect(a ~= nil and g ~= nil).toBe(true)
+		t.expect((a :: { any })[1].added).toBe(5)
+		t.expect((g :: { any })[1].added).toBe(3)
+		t.expect((a :: { any })[1].minutes).toBe(0)
+		t.expect((g :: { any })[1].minutes).toBe(0)
+		t.expect(string.find(git({ "log", "-1", "--format=%B" }), "Issue: f0010 +5/-0 0.0m", 1, true) ~= nil)
 			.toBe(true)
 	end)
 

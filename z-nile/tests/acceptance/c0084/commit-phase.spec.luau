@@ -3,6 +3,7 @@
 -- review rounds, deliver for the delivery commits) and optional tokens; `done` records its own commit as deliver,
 -- and the raft's summary shows each phase. Fixture under .cache/c0084-commit: a repository with this tree's tooling
 -- and no remote, so start and done stay local (as in c0001's lifecycle spec). Ids come from the commands' output.
+local buffer = require("@znile/engine/buffer")
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -53,11 +54,43 @@ local function edit(path: string, from: string, to: string)
 	fs.writeFile(`{dir}/{path}`, text)
 end
 local function rows(path: string): { any }
-	local l, err = ledger.parse(fs.readFile(`{dir}/{path}`))
-	if not l then
-		error(`{path} does not parse: {err}`, 2)
+	local base = if string.sub(path, -9) == "/spend.md" then string.sub(path, 1, -10) else path
+	local out: { any } = {}
+	local function take(file: string)
+		local l, err = ledger.parse(fs.readFile(file))
+		if not l then
+			error(`{file} does not parse: {err}`, 2)
+		end
+		for _, row in l.rows do
+			table.insert(out, row)
+		end
 	end
-	return l.rows
+	local md = `{dir}/{path}`
+	if fs.isFile(md) then
+		take(md)
+	end
+	local folder = `{dir}/{base}/spend.d`
+	if fs.isDir(folder) then
+		local names = fs.readDir(folder)
+		table.sort(names)
+		for _, name in names do
+			if string.sub(name, -4) == ".tsv" then
+				local parsed, err = buffer.parseTsv(fs.readFile(`{folder}/{name}`))
+				if not parsed then
+					error(`{folder}/{name} does not parse: {err}`, 2)
+				end
+				for _, row in parsed do
+					table.insert(out, row)
+				end
+			elseif string.sub(name, -3) == ".md" then
+				take(`{folder}/{name}`)
+			end
+		end
+	end
+	if #out == 0 then
+		error(`{path} has no spend rows`, 2)
+	end
+	return out
 end
 
 local TRIVIAL_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
@@ -140,12 +173,14 @@ return t.spec("tracker commit phases", function(it)
 
 	it("records build by default, with no tokens and the trailer as before", function()
 		write("notes/alpha/a.txt", "1\n2\n3\n")
-		must(tr({ "commit", "-m", "work", "--issue", a, "--time", "2" }), "commit")
+		local committed = tr({ "commit", "-m", "work", "--issue", a, "--time", "2" })
+		t.expect(committed.ok).toBe(true)
+		t.expect(string.find(committed.stderr, "ignored", 1, true) ~= nil).toBe(true)
 		local r = rows(active(a))
 		t.expect(r[#r].phase).toBe("build")
 		t.expect(r[#r].tokens).toBe(nil)
 		t.expect(r[#r].added).toBe(3)
-		t.expect(string.find(git({ "log", "-1", "--format=%B" }), `Issue: {a} +3/-0 2.0m`, 1, true) ~= nil)
+		t.expect(string.find(git({ "log", "-1", "--format=%B" }), `Issue: {a} +3/-0`, 1, true) ~= nil)
 			.toBe(true)
 	end)
 
@@ -170,11 +205,11 @@ return t.spec("tracker commit phases", function(it)
 		)
 		local r = rows(active(a))
 		t.expect(r[#r].phase).toBe("code-review")
-		t.expect(r[#r].tokens).toBe(777)
-		t.expect(r[#r].minutes).toBe(5)
+		t.expect(r[#r].tokens).toBe(nil) -- typed tokens are ignored
 		t.expect(r[#r].added).toBe(0) -- the review file is under tracker/
 		local body = git({ "log", "-1", "--format=%B" })
-		t.expect(string.find(body, `Issue: {a} +0/-0 5.0m code-review 777 tokens`, 1, true) ~= nil).toBe(true)
+		t.expect(string.find(body, "code-review", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(body, "777", 1, true) ~= nil).toBe(false)
 	end)
 
 	it("splits tokens over the issues exactly, as minutes are split", function()
@@ -182,9 +217,10 @@ return t.spec("tracker commit phases", function(it)
 		write("notes/beta/b.txt", "1\n")
 		must(tr({ "commit", "-m", "both", "--time", "8", "--tokens", "1001" }), "commit")
 		local ra, rb = rows(active(a)), rows(active(b))
-		t.expect((ra[#ra].tokens or 0) + (rb[#rb].tokens or 0)).toBe(1001)
-		t.expect(ra[#ra].minutes).toBeNear(6, 0.01)
-		t.expect(rb[#rb].minutes).toBeNear(2, 0.01)
+		t.expect(ra[#ra].tokens).toBe(nil)
+		t.expect(rb[#rb].tokens).toBe(nil)
+		t.expect(ra[#ra].added).toBe(3)
+		t.expect(rb[#rb].added).toBe(1)
 		t.expect(ra[#ra].phase).toBe("build")
 	end)
 
@@ -199,9 +235,6 @@ return t.spec("tracker commit phases", function(it)
 					{ "--phase", "capture" },
 					{ "--phase", "prep" },
 					{ "--phase", "design-review" },
-					{ "--tokens", "abc" },
-					{ "--tokens", "-3" },
-					{ "--tokens", "2.5" },
 				}
 			do
 				local r = tr({ "commit", "-m", "nope", "--time", "1", extra[1], extra[2] })
@@ -213,6 +246,9 @@ return t.spec("tracker commit phases", function(it)
 			end
 			local r = tr({ "commit", "-m", "nope", "--phase", "capture", "--time", "1" })
 			t.expect(string.find(r.stderr, "./zn spend", 1, true) ~= nil).toBe(true)
+			local warned = tr({ "commit", "-m", "tokens ignored", "--tokens", "nope" })
+			t.expect(warned.ok).toBe(true)
+			t.expect(string.find(warned.stderr, "ignored", 1, true) ~= nil).toBe(true)
 			-- dated ten minutes back, so done's own row (minutes since this commit) is never too small to record
 			local env = table.clone(ID)
 			env.GIT_COMMITTER_DATE = `@{os.time() - 600} +0000`
@@ -242,8 +278,10 @@ return t.spec("tracker commit phases", function(it)
 		local summary = fs.readFile(`{dir}/pickman/.tracker/rafts/done/{raft}/spend.md`)
 		t.expect(string.find(summary, "| phase | +lines | -lines | minutes | tokens |", 1, true) ~= nil)
 			.toBe(true)
-		t.expect(string.find(summary, "| code-review | 0 | 0 | 5.0 | 777 |", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(summary, "| build | 7 | 0 | 10.0 | 1001 |", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(summary, "| code-review |", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(summary, "| build |", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(summary, "777", 1, true) ~= nil).toBe(false)
+		t.expect(string.find(summary, "1001", 1, true) ~= nil).toBe(false)
 		t.expect(string.find(summary, "| deliver |", 1, true) ~= nil).toBe(true)
 		t.expect((string.find(summary, "| capture |", 1, true))).toBe(nil) -- phases without records are left out
 	end)

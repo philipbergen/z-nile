@@ -10,6 +10,31 @@
 # (`--projects`): z-nile/ for z-nile, pickman/ for pickman (the root belongs to no project).
 # Static stages run concurrently (z-nile/lib/par.sh); any failure fails the gate before the tests.
 set -euo pipefail
+# One measurement for the whole gate, appended to the checkout's cache. The inner run sees ZN_MEASURED and does
+# not measure again. A row that cannot be written does not fail the gate, and nothing under a tracked path is written.
+if [[ -z "${ZN_MEASURED:-}" ]]; then
+  root="$(cd "$(dirname "$0")/.." && pwd -P)"
+  mode=affected
+  for a in "$@"; do
+    case "$a" in
+      --full|--slow|--static|--plan) mode="${a#--}" ;;
+    esac
+  done
+  export ZN_TOP="$root"
+  export ZN_MEASURE_BUFFER=1
+  export ZN_MEASURE_KIND=test
+  export ZN_MEASURE_PHASE=test
+  export ZN_MEASURE_SUBJECT="$mode"
+  ZN_MEASURE_BRANCH="$(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  ZN_MEASURE_HEAD="$(git -C "$root" rev-parse HEAD 2>/dev/null || true)"
+  if [[ "$ZN_MEASURE_BRANCH" == "HEAD" ]]; then ZN_MEASURE_BRANCH=""; fi
+  export ZN_MEASURE_BRANCH ZN_MEASURE_HEAD
+  set +e
+  perl "$root/z-nile/lib/bounded.pl" --time 3600 -- env ZN_MEASURED=1 "$0" "$@"
+  code=$?
+  set -e
+  exit "$code"
+fi
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.rokit/bin:$PATH"
 

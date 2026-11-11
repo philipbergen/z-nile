@@ -4,6 +4,7 @@
 -- `<fakes>/<cli>`, else `ok`. Each logs how it was started to `<fakes>/log`. No real CLI and no network: a spec puts
 -- the fakes first on PATH, under its own .cache folder, and the dispatcher refuses any CLI outside .cache in a check.
 -- The tracker fixture under them is @tests/lib/trackerfix's.
+local buffer = require("@znile/engine/buffer")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ledger = require("@znile/engine/ledger")
@@ -332,11 +333,47 @@ function fakecli.rows(h: Harness, id: string): { ledger.Row }?
 	if not wt then
 		return nil
 	end
-	local r = fixture.exec(wt, "git", { "show", `HEAD:pickman/.tracker/issues/{id}/spend.md` })
-	if not r.ok then
+	local dir = `pickman/.tracker/issues/{id}`
+	local rows: { ledger.Row } = {}
+	local function take(path: string)
+		local r = fixture.exec(wt, "git", { "show", `HEAD:{path}` })
+		if not r.ok then
+			return
+		end
+		if string.sub(path, -4) == ".tsv" then
+			local parsed = buffer.parseTsv(r.stdout .. "\n")
+			if parsed then
+				for _, row in parsed do
+					table.insert(rows, row)
+				end
+			end
+			return
+		end
+		local parsed = ledger.parse(r.stdout .. "\n")
+		if parsed then
+			for _, row in parsed.rows do
+				table.insert(rows, row)
+			end
+		end
+	end
+	take(`{dir}/spend.md`)
+	local listed = fixture.exec(wt, "git", { "ls-tree", "-r", "--name-only", "HEAD", "--", `{dir}/spend.d` })
+	if listed.ok then
+		local files: { string } = {}
+		for file in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
+			if string.sub(file, -4) == ".tsv" or string.sub(file, -3) == ".md" then
+				table.insert(files, file)
+			end
+		end
+		table.sort(files)
+		for _, file in files do
+			take(file)
+		end
+	end
+	if #rows == 0 then
 		return nil
 	end
-	return (ledger.parse(r.stdout .. "\n") :: ledger.Ledger).rows
+	return rows
 end
 
 return fakecli
