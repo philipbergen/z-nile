@@ -208,6 +208,16 @@ return t.spec("human approval freezes the contract", function(it)
 		t.expect(has(say(done), "hold.spec.luau")).toBe(true)
 		t.expect(has(say(done), "rolled back")).toBe(false)
 
+		-- deleting the approval is not a way past it: ready published one, so done still asks for it
+		local record = fs.readFile(`{f.main}/{active}/approval.md`)
+		fs.removeFile(`{f.main}/{active}/approval.md`)
+		commit(f.main, "the approval deleted")
+		local dropped = zn(f.main, { "done", RAFT })
+		t.expect(dropped.ok).toBe(false)
+		t.expect(has(say(dropped), `{ID} has no approval`)).toBe(true)
+		fs.writeFile(`{f.main}/{active}/approval.md`, record)
+		commit(f.main, "the approval restored")
+
 		fs.writeFile(`{f.main}/{active}/acceptance/hold.spec.luau`, flipped)
 		fs.writeFile(
 			`{f.main}/{active}/check.sh`,

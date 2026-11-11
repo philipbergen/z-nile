@@ -4365,7 +4365,10 @@ function cmd.done(pos: { string })
 		fail(`{raft.id} check.sh failed; not done`)
 	end
 	for _, m in store.members(raft.id) do
-		local drift = approval.refusal(".", m, false)
+		-- An approval `ready` published stays required: deleting approval.md on the branch is not a way
+		-- past the check. An item readied before approval has none on origin/main and is left alone.
+		local onMain = sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{approval.file(m)}` }).ok
+		local drift = approval.refusal(".", m, onMain)
 		if drift then
 			fail(drift)
 		end
