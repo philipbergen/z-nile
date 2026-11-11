@@ -28,6 +28,7 @@ local statusLib = require("./status")
 local stdio = require("@lune/stdio")
 local store = require("./store")
 local trailLib = require("./trail")
+local watchcmd = require("./watchcmd")
 
 -- a space name as the union ids expects: the callers only ever hold "issue" or "raft"
 local function asSpace(s: string): idsLib.Space
@@ -89,6 +90,11 @@ usage: ./zn <command> ...
   dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
   dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
   done <R-id>                                   verify checks + review resolution, move to done, ready PR (commit is deliver)
+                                                and write each issue's tests/acceptance/<id>/watch.txt
+  watch-bootstrap                               write every spec's watch file from the commit that added it (once)
+  watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
+  watch-net                                     run every project's fast suite on current main and push a missed test's
+                                                files onto main (also started by land and by watch-kick)
   worktree <R-id|name>                          create or reuse .worktree/<R-id|name> from origin/main; print its path
   worktree-prune                                remove worktrees of rafts that are done on main
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
@@ -2413,6 +2419,13 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 			print(
 				`landed {sha} on main; remove this worktree: git -C {mainRoot()} worktree remove {root} && git -C {mainRoot()} branch -D {branch}{suffix}`
 			)
+			local kickErr: any = nil
+			local kicked = xpcall(watchcmd.kick, function(e)
+				kickErr = e
+			end)
+			if not kicked then
+				stdio.ewrite(`watch-net: not started ({kickErr})\n`)
+			end
 			return
 		end
 		sh.run("git", { "fetch", "--quiet", "origin", "main" })
@@ -3974,6 +3987,7 @@ local function recordAndCommit(
 			sh.git({ "add", "-A", r })
 		end
 	end
+	watchcmd.upkeep()
 	sh.git({ "commit", "--quiet", "-m", message, "-m", table.concat(trailers, "\n") })
 	print(`committed: {message}\n  {table.concat(trailers, "\n  ")}`)
 	push()
@@ -4257,6 +4271,11 @@ function cmd.done(pos: { string })
 			end
 		end
 	end
+	local caps: { watchcmd.Member } = {}
+	for _, m in members do
+		table.insert(caps, { id = m.id, dest = promotedDir(m) })
+	end
+	watchcmd.capture(caps)
 	if gateLib.doneGate(process.env) == "promoted" then
 		print("done: inside a spec run, so the gate is skipped; checking the promoted specs")
 		if #promoted > 0 then
@@ -6105,6 +6124,20 @@ end
 
 -- `reap` is also what `sync` and the gate run (`--auto`): quiet unless it stops something, a no-op inside a check run
 -- (the guards protect this repository there), and never a reason for the caller to fail.
+cmd["watch-bootstrap"] = function()
+	watchcmd.bootstrap()
+end
+
+-- Returns at once. The net runs under ./zn run and writes .cache/watch-net.log in this checkout.
+cmd["watch-kick"] = function()
+	watchcmd.kick()
+end
+
+-- Edits `.worktree/watch-net`, never this checkout's files, and pushes a repair onto main.
+cmd["watch-net"] = function()
+	watchcmd.net()
+end
+
 function cmd.reap(_: { string }, opts: { [string]: { string } })
 	if opts["--auto"] == nil then
 		if reapRun(opts) then

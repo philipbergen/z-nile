@@ -1736,6 +1736,8 @@ local function merge(ctx: Ctx, st: State, pr: number, head: string): boolean
 		table.insert(st.merged, pr)
 		save(st)
 		zn(ctx.mainRoot(), { "sync" }, true)
+		-- the net repairs main after the landing; it returns at once and does not decide this merge
+		zn(ctx.mainRoot(), { "watch-kick" }, true)
 	end
 	return r.ok
 end

@@ -396,10 +396,10 @@ local function digestOf(mode: string, names: { string }, base: string?): string?
 		end
 		local prefix = prefixOf(homeOf(reg, name))
 		if sel == "ALL" then
-			for _, f in state.ctx.graph.files do
-				if string.match(f, "%.spec%.luau$") and string.sub(f, 1, #prefix) == prefix then
-					table.insert(specs, f)
-				end
+			local home = homeOf(reg, name)
+			local dir = if home == "." then "tests" else `{home}/tests`
+			if fs.isDir(dir) then
+				collect(dir, specs)
 			end
 		else
 			for _, f in sel :: { string } do

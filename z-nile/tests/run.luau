@@ -293,7 +293,11 @@ local function runConcurrently()
 						table.insert(args, a)
 					end
 				end
-				local env: { [string]: string } = { PICKMAN_REPORT_SECONDS = "1" }
+				local env: { [string]: string } = {
+					PICKMAN_REPORT_SECONDS = "1",
+					-- a fixture's ./zn land must not start the net
+					PICKMAN_WATCH_NET = "off",
+				}
 				if part then
 					env.PICKMAN_RESULTS = part
 				end

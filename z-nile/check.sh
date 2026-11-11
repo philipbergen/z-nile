@@ -178,7 +178,8 @@ report=
 if [[ $mode == affected ]]; then
   export PICKMAN_GATE_PID=$$
   pnames=()
-  for i in "${!names[@]}"; do picked "${names[$i]}" && pnames+=("${names[$i]}"); done
+  # The digest covers every project's specs: the map can select a spec in a project whose files did not change.
+  for i in "${!names[@]}"; do pnames+=("${names[$i]}"); done
   proj_csv=$(IFS=,; echo "${pnames[*]}")
   trap 'for i in "${!homes[@]}"; do rm -f "$(prefix "${homes[$i]}").cache/spec-norecord-$$"; done; [[ -z $report ]] || rm -f "$report"' EXIT
   digest=$(lune run z-nile/specs -- digest --mode affected --projects "$proj_csv" ${base_args[@]+"${base_args[@]}"} 2>/dev/null) || digest=
@@ -255,7 +256,15 @@ if [[ $mode == static ]]; then
 fi
 [[ $mode == affected ]] || rm -f "$report"
 
+# A watch file that names a missing path, or that does not parse, fails the gate in every mode that runs specs.
+if ! lune run z-nile/watch-check; then
+  echo "watch-check failed" >&2
+  exit 1
+fi
+
 # The specs: each project's from its home (its runner, its .cache, its lock), so one project's never see another's.
+# Affected mode runs every spec the map lists, in whichever project it lives. Project narrowing stays on the
+# static stages above.
 run_specs() { # run_specs <home> [spec paths relative to the home]
   local h=$1
   shift
@@ -266,7 +275,9 @@ run_specs() { # run_specs <home> [spec paths relative to the home]
   fi
 }
 for i in "${!names[@]}"; do
-  picked "${names[$i]}" || continue
+  if [[ $mode != affected ]]; then
+    picked "${names[$i]}" || continue
+  fi
   n=${names[$i]} h=${homes[$i]}
   [[ -d $(prefix "$h")tests ]] || { stage "tests ($mode): $n has no tests/"; continue; }
   stage "tests ($mode): $n"
@@ -279,8 +290,8 @@ for i in "${!names[@]}"; do
     if [[ -z $selection ]]; then
       echo "no specs affected"
     elif [[ $selection == ALL ]]; then
-      echo "infrastructure changed: running all specs"
-      lune run z-nile/specs -- run --project "$n" ${fresh:+--fresh} --all
+      echo "check.sh: affected printed ALL; a change never falls back to every spec" >&2
+      exit 1
     else
       echo "$selection"
       # shellcheck disable=SC2086

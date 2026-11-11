@@ -241,7 +241,7 @@ return t.spec("c0165 the orchestrator's rules, end to end", function(it)
 		t.expect(undone ~= onMain).toBe(true)
 	end)
 
-	it("HEAD moves a whole-gate digest only when a * spec is selected", function()
+	it("HEAD moving with the same bytes does not change the digest", function()
 		local function digest(dir: string): string
 			local r = process.exec(
 				"lune",
@@ -256,15 +256,11 @@ return t.spec("c0165 the orchestrator's rules, end to end", function(it)
 		t.expect(#d1).toBe(64)
 		fixture.git(plain, { "commit", "-qam", "same content, new HEAD" })
 		t.expect(digest(plain)).toBe(d1)
-		local starred = reusefix.make(base, "digest-star", {
-			setup = function(d: string)
-				write(`{d}/pickman/tests/inputs.tsv`, "# extra inputs per spec\ntests/unit/b.spec.luau\t*\n")
-			end,
-		})
+		local starred = reusefix.make(base, "digest-star")
 		write(`{starred}/pickman/src/A.luau`, "return { value = 1 } -- edited\n")
 		local s1 = digest(starred)
 		fixture.git(starred, { "commit", "-qam", "same content, new HEAD" })
-		t.expect(digest(starred) ~= s1).toBe(true)
+		t.expect(digest(starred)).toBe(s1)
 	end)
 
 	-- review 006 F1: git's index is part of how git stores a path

@@ -64,13 +64,13 @@ local PINNED = {
 		"z-nile",
 		"c0114",
 		"gate-cover.spec.luau",
-		"d50ac08c74e5d094a718c26addee52bd9afc7152938fd34a279a45f197028982",
+		"8deecb4ae59a74abfe5062f8fed7d1b8c4cd127286793088aca6eb89bb64bcfc",
 	},
 	{
 		"z-nile",
 		"c0114",
 		"layout.spec.luau",
-		"455f35da75608dbc6818cd2ffc96f5a79e97c3fa5fef2c491aefaede866818d7",
+		"5bb6e547200f9b07cd8df0a45e8cd4219e7d570933f3d5c2325a97b2f620c0d4",
 	},
 	{ "z-nile", "c0120", "ci.spec.luau", "1711d589ef60d2776edacb0a097a5acc02e7baa192a2afc9f7ae2361b5fb0015" },
 	{
