@@ -10,6 +10,20 @@
 # (`--projects`): z-nile/ for z-nile, pickman/ for pickman (the root belongs to no project).
 # Static stages run concurrently (z-nile/lib/par.sh); any failure fails the gate before the tests.
 set -euo pipefail
+# One measurement for the whole gate. The inner run sees ZN_MEASURED and does not measure again. A row that cannot
+# be written does not fail the gate.
+if [[ -z "${ZN_MEASURED:-}" ]]; then
+  export ZN_MEASURED=1
+  root="$(cd "$(dirname "$0")/.." && pwd)"
+  report="$(mktemp "${TMPDIR:-/tmp}/zn-measure.XXXXXX")"
+  set +e
+  perl "$root/z-nile/lib/bounded.pl" --report "$report" --time 3600 -- "$0" "$@"
+  code=$?
+  set -e
+  (cd "$root" && lune run z-nile/record -- --phase test --report "$report" --subject gate) || true
+  rm -f "$report"
+  exit "$code"
+fi
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.rokit/bin:$PATH"
 

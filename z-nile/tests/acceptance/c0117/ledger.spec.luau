@@ -104,10 +104,26 @@ return t.spec("c0117 the spend row's model cell", function(it)
 			"--model",
 			"claude-opus-5-5-high",
 		})
-		local text = fixture.git(w, { "show", "HEAD:pickman/.tracker/issues/c0010/spend.md" }) .. "\n"
-		local l = ledger.parse(text) :: ledger.Ledger
+		local function latest(work: string): string
+			local listed = fixture.git(work, {
+				"ls-tree",
+				"-r",
+				"--name-only",
+				"HEAD",
+				"--",
+				"pickman/.tracker/issues/c0010/spend.d",
+			})
+			local last = ""
+			for file in string.gmatch(listed .. "\n", "([^\n]*)\n") do
+				if string.sub(file, -3) == ".md" and file > last then
+					last = file
+				end
+			end
+			return fixture.git(work, { "show", `HEAD:{last}` }) .. "\n"
+		end
+		local l = ledger.parse(latest(w)) :: ledger.Ledger
 		t.expect(l.rows[#l.rows].model).toBe("claude-opus-5-5-high")
-		t.expect(l.rows[#l.rows].tokens).toBe(123)
+		t.expect(l.rows[#l.rows].tokens).toBe(nil)
 		local r = trackerfix.tr(
 			f,
 			w,
@@ -117,9 +133,7 @@ return t.spec("c0117 the spend row's model cell", function(it)
 		t.expect(has(r.stderr, "--model takes one model id")).toBe(true)
 		-- without --model the cell stays empty
 		trackerfix.trOk(f, w, { "spend", "c0010", "--phase", "capture", "--time", "1", "--tokens", "4" })
-		local again = ledger.parse(
-			fixture.git(w, { "show", "HEAD:pickman/.tracker/issues/c0010/spend.md" }) .. "\n"
-		) :: ledger.Ledger
+		local again = ledger.parse(latest(w)) :: ledger.Ledger
 		t.expect(again.rows[#again.rows].model).toBe(nil)
 	end)
 
@@ -178,10 +192,12 @@ return t.spec("c0117 the spend row's model cell", function(it)
 			"--model",
 			"claude-opus-5-5",
 		})
-		local l =
-			ledger.parse(fs.readFile(`{dir}/pickman/.tracker/issues/active/{a}/spend.md`)) :: ledger.Ledger
+		local folder = `{dir}/pickman/.tracker/issues/active/{a}/spend.d`
+		local names = fs.readDir(folder)
+		table.sort(names)
+		local l = ledger.parse(fs.readFile(`{folder}/{names[#names]}`)) :: ledger.Ledger
 		t.expect(l.rows[#l.rows].model).toBe("claude-opus-5-5")
-		t.expect(l.rows[#l.rows].tokens).toBe(77)
+		t.expect(l.rows[#l.rows].tokens).toBe(nil)
 		local bad = run({ "commit", "-m", "x", "--model", "a|b" })
 		t.expect(bad.ok).toBe(false)
 		t.expect(has(bad.stderr, "--model takes one model id")).toBe(true)

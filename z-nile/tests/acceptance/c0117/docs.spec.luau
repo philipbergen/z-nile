@@ -48,7 +48,7 @@ return t.spec("c0117 docs", function(it)
 			at(h, "Never `git push` to `main` and never merge a pull request", name)
 			at(h, "the dispatcher pushes that tracker state to `main` for you", name)
 			at(h, "with the agent's own GitHub credential", name)
-			at(h, "without `--tokens` for your own session", name)
+			at(h, "Do not pass `--time` or `--tokens`", name)
 			at(h, "`./zn dispatch zz-review <id> --mode <design|raft|code|stream>`", name)
 			at(h, "give that one command a two-hour timeout", name)
 			if first then
@@ -99,7 +99,7 @@ return t.spec("c0117 docs", function(it)
 		at(skill("z-raft"), "As soon as a subagent reviewer returns", "z-raft")
 		at(
 			skill("z-raft"),
-			"Either way, record your answering time: `./zn spend <R-id> --phase design-review --time <minutes>`",
+			"Mark your own answering span with `./zn spend <R-id> --phase design-review --begin`",
 			"z-raft"
 		) -- design review 008 F4
 		local ze = skill("zz-execute")

@@ -22,17 +22,24 @@ my $LIB = dirname( abs_path($0) );    # z-nile/lib: cpu.sh, the one place a CPU 
 $SIG{CHLD} = 'DEFAULT';               # an ignored SIGCHLD (inherited) would make every waitpid fail
 
 sub usage {
-    print STDERR "bounded: $_[0]\nusage: ./zn run [--time S] [--cpu S] [--] <command> [args...]"
+    print STDERR "bounded: $_[0]\nusage: ./zn run [--time S] [--cpu S] [--report FILE] [--] <command> [args...]"
       . " (S: whole seconds, --time 1..$MAX_TIME, default $DEFAULT_TIME)\n";
     exit 2;
 }
 
 -d $LIB && -f "$LIB/cpu.sh"
   or do { print STDERR "bounded: $LIB/cpu.sh is missing: bounded.pl needs it beside it (the one place a CPU limit is lowered)\n"; exit 2 };
-my ( $time, $cpu );
+my ( $time, $cpu, $report );
 while ( @ARGV && $ARGV[0] =~ /^-/ ) {
     my $o = shift @ARGV;
     last if $o eq '--';
+    if ( $o eq '--report' ) {
+        my $path = shift @ARGV;
+        usage("--report needs a path") unless defined $path && $path ne '';
+        usage("--report given twice")  if defined $report;
+        $report = $path;
+        next;
+    }
     usage("unknown option $o") unless $o eq '--time' || $o eq '--cpu';
     my $v = shift @ARGV;
     usage("$o needs a whole number of seconds") unless defined $v && $v =~ /^[0-9]+$/;
@@ -61,6 +68,13 @@ if ( $inherited =~ /^[0-9]+\z/ && $inherited < $cpu ) {
 
 my $origppid = getppid();    # the process that started this one: its death stops the command too
 my $deadline = time + $time;
+require "$LIB/measure.pl";
+# `./zn run` records itself when nothing else is already measuring this process (the gate sets ZN_MEASURED).
+if ( $ENV{ZN_RUN_RECORD} && !$ENV{ZN_MEASURED} && !defined $report ) {
+    my $dir = $ENV{TMPDIR} // '/tmp';
+    $report = "$dir/zn-run-$$.txt";
+}
+my $t0 = znmeasure::now();
 pipe( my $r, my $w ) or die "bounded: pipe: $!\n";
 my $pid = fork;
 die "bounded: fork: $!\n" unless defined $pid;
@@ -123,6 +137,10 @@ while (1) {
 }
 my $st = $?;
 my ( $cu, $cs ) = ( times )[ 2, 3 ];
+znmeasure::write( $report, $t0 );
+if ( $ENV{ZN_RUN_RECORD} && !$ENV{ZN_MEASURED} && defined $report && ( $ENV{ZN_TOP} // '' ) ne '' ) {
+    system( 'lune', 'run', 'z-nile/record', '--', '--phase', 'other', '--report', $report, '--subject', 'run' );
+}
 
 # whatever is left in the group, the watchdog included
 kill 'KILL', -$pid;

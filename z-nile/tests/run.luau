@@ -68,6 +68,42 @@ if listMode ~= nil and listMode ~= "" then
 	process.exit(1)
 end
 
+-- One measurement for a spec run the gate did not already wrap. The child sees ZN_MEASURED and runs the suite.
+if process.env.ZN_MEASURED ~= "1" then
+	local report = `/tmp/zn-specs-{string.gsub(tostring(os.clock()), "%.", "")}.txt`
+	local args = {
+		`{ROOT}/z-nile/lib/bounded.pl`,
+		"--report",
+		report,
+		"--time",
+		"3600",
+		"--",
+		"lune",
+		"run",
+		"tests/run",
+		"--",
+	}
+	for _, a in process.args do
+		table.insert(args, a)
+	end
+	local ran = process.exec("perl", args, { env = { ZN_MEASURED = "1" } })
+	pcall(function()
+		process.exec("lune", {
+			"run",
+			`{ROOT}/z-nile/record`,
+			"--",
+			"--phase",
+			"test",
+			"--report",
+			report,
+			"--subject",
+			"specs",
+		})
+	end)
+	pcall(fs.removeFile, report)
+	process.exit(ran.code)
+end
+
 -- Guard the repository this runs in (the fence module, fence.luau in tests' lib folder): lock, fence and ref guard,
 -- tripwire. This call stays alone on its line: c0660's check removes exactly that line to run specs unguarded.
 require("./lib/fence").enter()
@@ -295,8 +331,9 @@ local function runConcurrently()
 				end
 				local env: { [string]: string } = {
 					PICKMAN_REPORT_SECONDS = "1",
-					-- a fixture's ./zn land must not start the net
+					-- a fixture's ./zn land must not start the net, and a worker does not measure itself
 					PICKMAN_WATCH_NET = "off",
+					ZN_MEASURED = "1",
 				}
 				if part then
 					env.PICKMAN_RESULTS = part

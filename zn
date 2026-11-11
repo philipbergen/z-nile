@@ -8,7 +8,9 @@ set -euo pipefail
 if [[ ${1:-} == run ]]; then
   shift
   export PATH="$HOME/.rokit/bin:$PATH"
-  exec perl "$(cd "$(dirname "$0")" && pwd -P)/z-nile/lib/bounded.pl" "$@"
+  export ZN_TOP="$(cd "$(dirname "$0")" && pwd -P)"
+  export ZN_RUN_RECORD=1
+  exec perl "$ZN_TOP/z-nile/lib/bounded.pl" "$@"
 fi
 top="$(cd "$(dirname "$0")" && pwd -P)"
 here="$(pwd -P)"

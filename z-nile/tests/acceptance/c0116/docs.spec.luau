@@ -45,7 +45,7 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 			w
 		)
 		at(s, "It writes `design-review-001.md` in the issue's folder", w)
-		at(s, "`./zn spend <id> --phase design-review --time <reviewer minutes>", w)
+		at(s, "`./zn spend <id> --phase design-review --note design-review-NNN`", w)
 		at(s, "to `harvest.md` in the issue's folder", w)
 		at(s, "`./zn promote-check <id>`", w)
 		at(s, "`./zn lessons --uncovered <id>`", w)
@@ -58,7 +58,7 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 			"An issue already in a raft is redesigned through its raft: the claim refuses it until z-raft takes it out (`./zn unfold <R-id> <id>`).",
 			w
 		)
-		at(s, "`./zn spend <id> --phase prep --time", w)
+		at(s, "`./zn spend <id> --phase prep`", w)
 		at(s, "- **Next step**: `/z-raft` (it groups prepared issues), then `/z-ready <R-id>`.", w)
 	end)
 

@@ -15,6 +15,7 @@
 local adapters = require("./adapters")
 local audit = require("./audit")
 local broker = require("./broker")
+local costrow = require("./costrow")
 local cred = require("./credential")
 local dispatch = require("./dispatch")
 local fs = require("@lune/fs")
@@ -53,8 +54,19 @@ export type Attempt = {
 	detail: string,
 	tokens: number,
 	minutes: number,
+	wall: number?,
+	cpu: number?,
 }
-export type Row = { id: string, phase: string, tokens: number, model: string, minutes: number, note: string }
+export type Row = {
+	id: string,
+	phase: string,
+	tokens: number,
+	model: string,
+	minutes: number,
+	note: string,
+	wall: number?,
+	cpu: number?,
+}
 export type State = {
 	id: string,
 	watermark: string?, -- the watermark as this item's last run left it (the mirror: review 003 F2)
@@ -360,11 +372,73 @@ end
 -- pending for the next legal point (a run's rows after its merge). Minutes (the user's G13, 2026-10-25, "Dispatcher row
 -- 0 min", read with "Yes, reviewers keep minutes"): an author step's rows record 0, since its skill records its own;
 -- a review's rows record the attempt's wall minutes, since no skill records a reviewer's. A code or stream review's
--- spend is one printed `record:` line for the author's `./zn commit` (it rides with the review file): the attempts'
--- tokens and minutes summed, under the model of the attempt that did the review (the last that spent tokens).
-local function roundTenth(x: number): number
-	return math.floor(x * 10 + 0.5) / 10
+-- spend is one printed `record:` line for the author's `./zn commit`, and the measured row written into the
+-- author's tree (uncommitted, so it rides with the review file). Tokens are the attempts summed, under the model
+-- of the attempt that did the review (the last that spent tokens). The dispatch branch is not given this row.
+local function measuredArgs(row: Row): { string }
+	local args = {
+		"record",
+		"--id",
+		row.id,
+		"--phase",
+		row.phase,
+		"--subject",
+		row.note,
+		"--tokens",
+		tostring(row.tokens),
+	}
+	if row.model ~= "" then
+		table.insert(args, "--model")
+		table.insert(args, row.model)
+	end
+	if row.wall then
+		table.insert(args, "--wall")
+		table.insert(args, string.format("%.3f", row.wall))
+		table.insert(args, "--ai")
+		table.insert(args, string.format("%.3f", row.wall))
+	else
+		table.insert(args, "--unmeasured")
+		table.insert(args, "wall")
+		table.insert(args, "--unmeasured")
+		table.insert(args, "ai")
+	end
+	if row.cpu then
+		table.insert(args, "--cpu")
+		table.insert(args, string.format("%.3f", row.cpu))
+	else
+		table.insert(args, "--unmeasured")
+		table.insert(args, "cpu")
+	end
+	return args
 end
+
+-- Writes the measured row on the dispatcher's branch and commits that file alone.
+local function publishMeasured(ctx: Ctx, row: Row): (boolean, string, string)
+	local wt = worktree(ctx, "zn-dispatch")
+	zn(wt, { "sync" }, true)
+	local ok, out, err = zn(wt, measuredArgs(row), true)
+	if not ok then
+		return false, out, err
+	end
+	local added = git(wt, { "add", "--", out })
+	if not added then
+		return false, out, "could not stage the row"
+	end
+	local committed, cerr = git(wt, {
+		"commit",
+		"-q",
+		"--only",
+		"-m",
+		`tracker: spend {row.id} {row.phase}`,
+		"--",
+		out,
+	})
+	if not committed then
+		return false, out, cerr
+	end
+	return true, out, ""
+end
+
 local function record(
 	ctx: Ctx,
 	st: State,
@@ -373,23 +447,56 @@ local function record(
 	attempts: { Attempt },
 	note: string,
 	reviewer: boolean,
-	stream: boolean
+	stream: boolean,
+	cwd: string
 )
 	if phase == "code-review" then
-		local tokens, minutes, model = 0, 0, nil :: string?
+		local model = nil :: string?
+		local tokens = 0
+		local wall, cpu = 0, 0
+		local sawWall, sawCpu = false, false
 		for _, a in attempts do
+			tokens += a.tokens
 			if a.tokens > 0 then
-				tokens += a.tokens
-				minutes += a.minutes
 				model = a.model
+			end
+			if a.wall then
+				wall += a.wall
+				sawWall = true
+			end
+			if a.cpu then
+				cpu += a.cpu
+				sawCpu = true
 			end
 		end
 		if model then
 			print(
-				`record: ./zn commit -m "{id}: {note}" --phase code-review --time {roundTenth(minutes)} --tokens {tokens} --model {model}{if stream
+				`record: ./zn commit -m "{id}: {note}" --phase code-review --model {model}{if stream
 					then ` --issue {id}`
 					else ""}`
 			)
+			local flags: { string } = {}
+			if not sawWall then
+				table.insert(flags, "wall")
+				table.insert(flags, "ai")
+			end
+			if not sawCpu then
+				table.insert(flags, "cpu")
+			end
+			-- Uncommitted, in the tree the author commits from. The dispatch branch is left alone.
+			costrow.write({
+				root = cwd,
+				id = id,
+				dir = costrow.dirFor(cwd, id),
+				phase = phase,
+				subject = note,
+				tokens = tokens,
+				model = model,
+				wall = if sawWall then wall else nil,
+				cpu = if sawCpu then cpu else nil,
+				ai = if sawWall then wall else nil,
+				unmeasured = if #flags > 0 then table.concat(flags, ",") else nil,
+			})
 		end
 		return
 	end
@@ -402,27 +509,14 @@ local function record(
 				model = a.model,
 				minutes = if reviewer then a.minutes else 0,
 				note = note,
+				wall = a.wall,
+				cpu = a.cpu,
 			}
 			local origin = ctx.origin(id)
 			if phase == "deliver" or (origin and origin.state ~= "backlog") then
 				table.insert(st.pending, row)
 			else
-				local wt = worktree(ctx, "zn-dispatch")
-				zn(wt, { "sync" }, true)
-				local ok, out, err = zn(wt, {
-					"spend",
-					id,
-					"--phase",
-					phase,
-					"--time",
-					tostring(row.minutes),
-					"--tokens",
-					tostring(a.tokens),
-					"--model",
-					a.model,
-					"--note",
-					note,
-				}, true)
+				local ok, out, err = publishMeasured(ctx, row)
 				if ok then
 					print(`spend: {id} {phase} {a.tokens} tokens {a.model}`)
 				else
@@ -450,22 +544,7 @@ local function flush(ctx: Ctx, st: State)
 				or (row.phase ~= "deliver" and origin.state == "backlog")
 			)
 		if ready then
-			local wt = worktree(ctx, "zn-dispatch")
-			zn(wt, { "sync" }, true)
-			local ok, out, err = zn(wt, {
-				"spend",
-				row.id,
-				"--phase",
-				row.phase,
-				"--time",
-				tostring(row.minutes),
-				"--tokens",
-				tostring(row.tokens),
-				"--model",
-				row.model,
-				"--note",
-				row.note,
-			}, true)
+			local ok, out, err = publishMeasured(ctx, row)
 			if ok then
 				print(`spend: {row.id} {row.phase} {row.tokens} tokens {row.model} (pending, now written)`)
 			else
@@ -1031,6 +1110,8 @@ function dispatcher.modelStep(
 			detail = detail,
 			tokens = result.tokens,
 			minutes = minutesSince(t0),
+			wall = result.wall,
+			cpu = result.cpu,
 		})
 		print(`dispatch: {step} on {spec.cli}: {outcomeNow} ({detail}), {result.tokens} tokens`)
 		outcome = outcomeNow
@@ -1160,7 +1241,8 @@ function dispatcher.modelStep(
 			attempts,
 			note,
 			step == "zz-review",
-			mode == "stream"
+			mode == "stream",
+			cwd
 		)
 	end
 	st.outcome = outcome

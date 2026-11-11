@@ -332,11 +332,38 @@ function fakecli.rows(h: Harness, id: string): { ledger.Row }?
 	if not wt then
 		return nil
 	end
-	local r = fixture.exec(wt, "git", { "show", `HEAD:pickman/.tracker/issues/{id}/spend.md` })
-	if not r.ok then
+	local dir = `pickman/.tracker/issues/{id}`
+	local rows: { ledger.Row } = {}
+	local function take(path: string)
+		local r = fixture.exec(wt, "git", { "show", `HEAD:{path}` })
+		if not r.ok then
+			return
+		end
+		local parsed = ledger.parse(r.stdout .. "\n")
+		if parsed then
+			for _, row in parsed.rows do
+				table.insert(rows, row)
+			end
+		end
+	end
+	take(`{dir}/spend.md`)
+	local listed = fixture.exec(wt, "git", { "ls-tree", "-r", "--name-only", "HEAD", "--", `{dir}/spend.d` })
+	if listed.ok then
+		local files: { string } = {}
+		for file in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
+			if string.sub(file, -3) == ".md" then
+				table.insert(files, file)
+			end
+		end
+		table.sort(files)
+		for _, file in files do
+			take(file)
+		end
+	end
+	if #rows == 0 then
 		return nil
 	end
-	return (ledger.parse(r.stdout .. "\n") :: ledger.Ledger).rows
+	return rows
 end
 
 return fakecli

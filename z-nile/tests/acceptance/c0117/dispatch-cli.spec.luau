@@ -289,15 +289,10 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			end
 			local lines = recordLines(r.stdout)
 			t.expect(#lines).toBe(1)
-			local minutes = tonumber(
-				string.match(
-					lines[1],
-					'^record: %./zn commit %-m "c0010: review%-001" %-%-phase code%-review %-%-time ([%d%.]+) %-%-tokens 123 %-%-model claude%-opus%-5%-5$'
-				)
-			)
-			t.expect(minutes ~= nil).toBe(true)
-			t.expect((minutes :: number) > 0).toBe(true)
-			t.expect(#(fakecli.rows(h, "c0010") or {})).toBe(before) -- the author's commit records it, not the dispatcher
+			t.expect(lines[1])
+				.toBe('record: ./zn commit -m "c0010: review-001" --phase code-review --model claude-opus-5-5')
+			t.expect(#(fakecli.rows(h, "c0010") or {})).toBe(before) -- the row is in the author's tree, not the dispatch branch
+			t.expect(fs.isDir(`{wt}/pickman/.tracker/issues/c0010/spend.d`)).toBe(true)
 			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/review-001.md`)
 			-- quota on claude, the review on grok: still one line, the model that wrote the review
 			fakecli.clear(h)
@@ -312,11 +307,11 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			end
 			local two = recordLines(q.stdout)
 			t.expect(#two).toBe(1)
-			t.expect(has(two[1], "--tokens 249 --model grok-4.7-xhigh")).toBe(true) -- 42 + 207, the reviewing model
+			t.expect(has(two[1], "--model grok-4.7-xhigh")).toBe(true) -- the reviewing model
+			t.expect(has(two[1], "--tokens")).toBe(false)
 			local hist = state("c0010").history
-			local spent = hist[#hist - 1].minutes + hist[#hist].minutes
 			t.expect(hist[#hist - 1].tokens).toBe(42)
-			t.expect(has(two[1], `--time {math.floor(spent * 10 + 0.5) / 10} --tokens`)).toBe(true)
+			t.expect(hist[#hist - 1].tokens + hist[#hist].tokens).toBe(249)
 			t.expect(has(two[1], '-m "c0010: review-001"')).toBe(true)
 			t.expect(reviewNames(`{wt}/pickman/.tracker/issues/c0010`, "review-"))
 				.toEqual({ "review-001.md" })
@@ -338,7 +333,9 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(row.subject).toBe("design-review-001")
 		t.expect(row.phase).toBe("design-review")
 		t.expect(row.model).toBe("claude-opus-5-5")
-		t.expect(row.minutes > 0).toBe(true)
+		t.expect(row.minutes).toBe(0)
+		t.expect((row.wall or 0) > 0).toBe(true)
+		t.expect(row.tokens).toBe(123)
 		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
 		-- a fallthrough whose first attempt wrote a review: one file, numbered once, from the reviewing model
 		fakecli.clear(h)
@@ -442,12 +439,9 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			t.expect(one).toEqual({ "stream-review-c0010-001.md" })
 			local lines = recordLines(r.stdout)
 			t.expect(#lines).toBe(1)
-			t.expect(
-				string.match(
-					lines[1],
-					'^record: %./zn commit %-m "c0010: stream%-review%-001" %-%-phase code%-review %-%-time [%d%.]+ %-%-tokens 123 %-%-model claude%-opus%-5%-5 %-%-issue c0010$'
-				) ~= nil
-			).toBe(true)
+			t.expect(lines[1]).toBe(
+				'record: ./zn commit -m "c0010: stream-review-001" --phase code-review --model claude-opus-5-5 --issue c0010'
+			)
 			t.expect(#(fakecli.rows(h, "c0010") or {})).toBe(before)
 			-- the prompt names the stream's own worktree (the call site's argument, design review 008 F3)
 			local main = fixture.physical(h.f.main) :: string
@@ -478,7 +472,11 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			local lines = recordLines(r.stdout)
 			t.expect(#lines).toBe(1)
 			t.expect(has(lines[1], '-m "c0010: dispatch zz-review"')).toBe(true)
-			t.expect(has(lines[1], "--tokens 123")).toBe(true)
+			t.expect(has(lines[1], "--model")).toBe(true)
+			t.expect(has(lines[1], "--tokens")).toBe(false)
+			local hist = state("c0010").history
+			t.expect(hist[#hist].tokens).toBe(0)
+			t.expect(hist[#hist - 1].tokens).toBe(123)
 		end
 	)
 
@@ -502,7 +500,8 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			local lines = recordLines(r.stdout)
 			t.expect(#lines).toBe(1)
 			t.expect(has(lines[1], '-m "c0010: stream-review-001"')).toBe(true)
-			t.expect(has(lines[1], "--tokens 249 --model grok-4.7-xhigh")).toBe(true)
+			t.expect(has(lines[1], "--model grok-4.7-xhigh")).toBe(true)
+			t.expect(has(lines[1], "--tokens")).toBe(false)
 			t.expect(fs.isFile(`{h.f.main}/.cache/dispatch/c0010/review-attempt-1.md`)).toBe(true)
 		end
 	)

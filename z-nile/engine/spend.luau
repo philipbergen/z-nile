@@ -248,6 +248,39 @@ function spend.appendRow(issue: store.Item, share: Share, subject: string, phase
 	fs.writeFile(path, ledger.append(existing, issue.id, title, row))
 end
 
+-- spend.md plus every spend.d file. Measured rows are their own files; the summary counts both.
+local function rowsIn(dir: string): { ledger.Row }
+	local rows: { ledger.Row } = {}
+	local path = `{dir}/spend.md`
+	if fs.isFile(path) then
+		local parsed, err = ledger.parse(fs.readFile(path))
+		if not parsed then
+			error(`{path} does not parse: {err}`, 0)
+		end
+		for _, row in parsed.rows do
+			table.insert(rows, row)
+		end
+	end
+	local folder = `{dir}/spend.d`
+	if fs.isDir(folder) then
+		local names = fs.readDir(folder)
+		table.sort(names)
+		for _, name in names do
+			if string.sub(name, -3) == ".md" then
+				local file = `{folder}/{name}`
+				local parsed, err = ledger.parse(fs.readFile(file))
+				if not parsed then
+					error(`{file} does not parse: {err}`, 0)
+				end
+				for _, row in parsed.rows do
+					table.insert(rows, row)
+				end
+			end
+		end
+	end
+	return rows
+end
+
 -- Raft spend.md: a summary over every issue that names this raft (members and emergent), plus each
 -- phase that has records. A snapshot written by commit and done; metrics reads the members.
 function spend.writeRaft(raft: store.Item)
@@ -259,15 +292,7 @@ function spend.writeRaft(raft: store.Item)
 	}
 	local all: { ledger.Row } = {}
 	for _, issue in store.members(raft.id) do
-		local path = `{issue.dir}/spend.md`
-		local rows: { ledger.Row } = {}
-		if fs.isFile(path) then
-			local parsed, err = ledger.parse(fs.readFile(path))
-			if not parsed then
-				error(`{path} does not parse: {err}`, 0)
-			end
-			rows = parsed.rows
-		end
+		local rows = rowsIn(issue.dir)
 		local t = ledger.sum(rows)
 		local emergent = store.readFront(issue.doc).emergent == "true"
 		table.insert(

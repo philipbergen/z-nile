@@ -214,13 +214,19 @@ return t.spec("tracker lifecycle", function(it)
 		end
 		t.expect(added).toBe(8)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		local a = read("pickman/.tracker/issues/active/f0010/spend.md")
-		local g = read("pickman/.tracker/issues/active/f0031/spend.md")
+		local function measured(id: string): string
+			local folder = `{dir}/pickman/.tracker/issues/active/{id}/spend.d`
+			local names = fs.readDir(folder)
+			table.sort(names)
+			return fs.readFile(`{folder}/{names[#names]}`)
+		end
+		local a = measured("f0010")
+		local g = measured("f0031")
 		t.expect(string.match(a, "totals: added=(%d+)")).toBe("5")
 		t.expect(string.match(g, "totals: added=(%d+)")).toBe("3")
-		t.expect(string.match(a, "minutes=([%d%.]+)")).toBe("5.0")
-		t.expect(string.match(g, "minutes=([%d%.]+)")).toBe("3.0")
-		t.expect(string.find(git({ "log", "-1", "--format=%B" }), "Issue: f0010 +5/-0 5.0m", 1, true) ~= nil)
+		t.expect(string.match(a, "minutes=([%d%.]+)")).toBe("0.0")
+		t.expect(string.match(g, "minutes=([%d%.]+)")).toBe("0.0")
+		t.expect(string.find(git({ "log", "-1", "--format=%B" }), "Issue: f0010 +5/-0 0.0m", 1, true) ~= nil)
 			.toBe(true)
 	end)
 

@@ -144,7 +144,7 @@ function dispatch.prompt(p: PromptInput): string
 		`Work only in \`{p.worktree}\`: it is your working directory. Never edit the main checkout.`,
 		`Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`{p.stateDir}/questions.md\`, one \`## Q<n>\` heading per question with the options and what each costs, and stop. A review that leaves a refutation or an unclosed high is not a guess: write \`## Open to the human\` in the item's document, one bullet per finding (\`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>\`), do not rule on it yourself, and stop.`,
 		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse.",
-		"Record your own spend as the skill says, without --tokens for this session: the dispatcher records this session's tokens and model.",
+		"Do not pass --time or --tokens. The dispatcher records this session's wall, CPU, tokens and model.",
 	}
 	return table.concat(lines, "\n") .. "\n"
 end
