@@ -11,6 +11,7 @@ local fs = require("@lune/fs")
 local ledger = require("@scripts/tracker/ledger")
 local process = require("@lune/process")
 local publish = require("@scripts/tracker/publish")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -559,6 +560,7 @@ return t.spec("tracker spend", function(it)
 			"# Spend: c0961 c0961\n\n| # | when | commit | +lines | -lines | minutes | attribution |\n"
 				.. "|---|---|---|---|---|---|---|\n| 1 | 2026-09-29 03:16 | old | 1 | 0 | 1.0 | focus |\n"
 		)
+		seal.stamp(other, "t")
 		git(other, { "add", "-A" })
 		git(other, { "commit", "-q", "-m", "prepared R0961" })
 		git(other, { "push", "-q", "origin", "HEAD:main" })
