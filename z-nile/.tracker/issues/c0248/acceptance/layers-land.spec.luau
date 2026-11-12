@@ -54,7 +54,8 @@ local function renderedTemplate(): string
 		if string.match(line, '^check "RC0: project gate') then
 			line = 'check "RC0: project gate passes (affected)" true'
 		elseif string.match(line, "^source ") then
-			line = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"'
+			line =
+				'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"'
 		elseif string.match(line, "^check .RC0: acceptance specs will survive promotion") then
 			-- the fixture has no pickman/tests to type check; promote-check's scoping is shown by its own line below
 			line = 'check "RC0: acceptance specs will survive promotion into tests/" true'
@@ -150,7 +151,8 @@ local function finishSha(dir: string, issueId: string): string
 end
 
 local function patchOf(dir: string, sha: string): string
-	local r = fixture.exec(dir, "bash", { "-c", `git show --format= --no-color {sha} | git patch-id --stable` })
+	local r =
+		fixture.exec(dir, "bash", { "-c", `git show --format= --no-color {sha} | git patch-id --stable` })
 	return string.match(r.stdout, "^(%x+)") :: string
 end
 
@@ -250,7 +252,9 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			for raft, ids in rafts do
 				seed[`pickman/.tracker/rafts/{raft}/{raft}.md`] =
 					raftDoc(raft, string.lower(raft), table.concat(ids, ", "), table.concat(ids, "\n"))
-				seed[`pickman/.tracker/rafts/{raft}/check.sh`] = if raft == "R0060" then renderedTemplate() else CHECK
+				seed[`pickman/.tracker/rafts/{raft}/check.sh`] = if raft == "R0060"
+					then renderedTemplate()
+					else CHECK
 				for _, id in ids do
 					seed[`pickman/.tracker/issues/{id}/{id}.md`] = issue(id, `title {id}`, raft)
 					-- the third member of R0060 is green only while its mark exists: it passes its own finish and fails a done
@@ -281,8 +285,12 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			local doc = `pickman/.tracker/rafts/active/R0070/R0070.md`
 			local text = fs.readFile(`{f.other}/{doc}`)
 			t.expect(has(text, "\nlayers: reviewed\n")).toBe(true)
-			t.expect(has(fs.readFile(`{f.other}/pickman/.tracker/rafts/active/R0010/R0010.md`), "\nlayers: reviewed\n"))
-				.toBe(true)
+			t.expect(
+				has(
+					fs.readFile(`{f.other}/pickman/.tracker/rafts/active/R0010/R0010.md`),
+					"\nlayers: reviewed\n"
+				)
+			).toBe(true)
 			trackerfix.elsewhere(
 				f,
 				{ [doc] = (string.gsub(text, "layers: reviewed\n", "")) },
@@ -321,9 +329,14 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(git(wt, { "log", "-1", "--format=%s" })).toBe("tracker: review c0010")
 			t.expect(git(wt, { "status", "--porcelain" })).toBe("")
 			-- a file that already carries a stamp keeps it
-			write(wt, `{issueDir(wt, "c0010")}/refute-001.md`, `# Refute\n\nCommit: {OLDER}\nPatch: {OTHER_PATCH}\n`)
+			write(
+				wt,
+				`{issueDir(wt, "c0010")}/refute-001.md`,
+				`# Refute\n\nCommit: {OLDER}\nPatch: {OTHER_PATCH}\n`
+			)
 			zn(wt, { "commit", "-m", "tracker: refute c0010" })
-			t.expect(has(fs.readFile(`{wt}/{issueDir(wt, "c0010")}/refute-001.md`), `Commit: {OLDER}\n`)).toBe(true)
+			t.expect(has(fs.readFile(`{wt}/{issueDir(wt, "c0010")}/refute-001.md`), `Commit: {OLDER}\n`))
+				.toBe(true)
 			git(wt, { "reset", "-q", "--hard", "HEAD~1" })
 			git(wt, { "push", "-q", "--force-with-lease", "origin", "R0010/1/c0010" })
 		end
@@ -386,7 +399,8 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(has(skeleton, "c0030:")).toBe(false)
 			t.expect(znTry(wt, { "trace", "R0010", "--through", "c0020", "--check" }).ok).toBe(false) -- no trace yet
 			seal.trace(wt, "R0010", "c0020")
-			t.expect(has(zn(wt, { "trace", "R0010", "--through", "c0020", "--check" }), "ok: R0010")).toBe(true)
+			t.expect(has(zn(wt, { "trace", "R0010", "--through", "c0020", "--check" }), "ok: R0010"))
+				.toBe(true)
 			-- the trace and review are over the two layers; a done without --through wants a third
 			t.expect(znTry(wt, { "done", "R0010" }).ok).toBe(false)
 			t.expect(git(f.main, { "rev-parse", "origin/main" })).toBe(before)
@@ -446,7 +460,8 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(has(seen, "3 R0010/3/c0030 c0030 claimed")).toBe(true)
 			local refusedHere = znTry(wt, { "done", "R0010" })
 			t.expect(refusedHere.ok).toBe(false)
-			t.expect(has(refusedHere.stderr, "R0010/3/c0030 is not based on main: ./zn restack R0010")).toBe(true)
+			t.expect(has(refusedHere.stderr, "R0010/3/c0030 is not based on main: ./zn restack R0010"))
+				.toBe(true)
 			-- restack moves layer 3 onto main: new commits, the same patch, so the review stays current
 			local oldSha = finishSha(wt, "c0030")
 			local patch = patchOf(wt, oldSha)
@@ -480,7 +495,9 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			).toBe(true)
 			t.expect(has(bind2, "c0010")).toBe(false)
 			local landedTree = tree()
-			for _, name in { "R0010.md", "final-review-001.md", "final-review-002.md", "trace-001.md", "trace-002.md" } do
+			for _, name in
+				{ "R0010.md", "final-review-001.md", "final-review-002.md", "trace-001.md", "trace-002.md" }
+			do
 				t.expect(has(landedTree, `pickman/.tracker/rafts/done/R0010/{name}`)).toBe(true)
 			end
 			t.expect(has(landedTree, "pickman/.tracker/rafts/active/R0010/")).toBe(false)
@@ -501,16 +518,19 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(has(bodyStart1, "## Order")).toBe(true)
 			t.expect(has(bodyStart1, "c0010\nc0020\nc0030")).toBe(true)
 			t.expect(has(bodyStart1, "## Stack")).toBe(true)
-			t.expect(has(bodyStart1, "| 1 (this layer) | c0010 | `R0010/1/c0010` | #11 | claimed |")).toBe(true)
+			t.expect(has(bodyStart1, "| 1 (this layer) | c0010 | `R0010/1/c0010` | #11 | claimed |"))
+				.toBe(true)
 			-- rewritten by finish
-			t.expect(has(bodyAfterFinish1, "| 1 (this layer) | c0010 | `R0010/1/c0010` | #11 | finished |")).toBe(true)
+			t.expect(has(bodyAfterFinish1, "| 1 (this layer) | c0010 | `R0010/1/c0010` | #11 | finished |"))
+				.toBe(true)
 			t.expect(has(bodyAfterFinish1, "| 2 | c0020 | `R0010/2/c0020` | - | missing |")).toBe(true)
 			-- rewritten by the start of layer 2, on layer 1's PR
 			t.expect(has(bodyAfterStart2, "| 2 | c0020 | `R0010/2/c0020` | #12 | claimed |")).toBe(true)
 			-- rewritten by done for the layer that goes on: the landed layers show as landed, this one is marked
 			t.expect(has(bodyAfterBind1, "| 1 | c0010 | `R0010/1/c0010` | - | landed |")).toBe(true)
 			t.expect(has(bodyAfterBind1, "| 2 | c0020 | `R0010/2/c0020` | - | landed |")).toBe(true)
-			t.expect(has(bodyAfterBind1, "| 3 (this layer) | c0030 | `R0010/3/c0030` | #13 | claimed |")).toBe(true) -- it waits for its restack onto main
+			t.expect(has(bodyAfterBind1, "| 3 (this layer) | c0030 | `R0010/3/c0030` | #13 | claimed |"))
+				.toBe(true) -- it waits for its restack onto main
 			-- the refresh is an edit with the body on standard input; restack's and the failing edit's are in AC8's case
 			t.expect(has(fs.readFile(log), "pr edit 13 --body-file -")).toBe(true)
 		end
@@ -758,7 +778,8 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			local before = git(f.main, { "rev-parse", "origin/main" })
 			local refused = znTry(wt, { "done", "R0060" })
 			t.expect(refused.ok).toBe(false)
-			t.expect(has(refused.stdout .. refused.stderr, "FAIL  RC0: c0160 acceptance checks pass")).toBe(true)
+			t.expect(has(refused.stdout .. refused.stderr, "FAIL  RC0: c0160 acceptance checks pass"))
+				.toBe(true)
 			t.expect(has(refused.stdout, "SKIP RC1")).toBe(false)
 			t.expect(fs.isFile(`{wt}/.cache/rc1-ran`)).toBe(true)
 			t.expect(git(f.main, { "rev-parse", "origin/main" })).toBe(before)
@@ -837,8 +858,12 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(has(readied, "pickman/.tracker/issues/active/c0210/c0210.md")).toBe(true)
 			t.expect(has(readied, "pickman/.tracker/issues/done/c0200/c0200.md")).toBe(true)
 			t.expect(has(readied, "pickman/.tracker/issues/active/c0200/")).toBe(false)
-			t.expect(has(fs.readFile(`{f.other}/pickman/.tracker/rafts/active/R0090/R0090.md`), "\nlayers: reviewed\n"))
-				.toBe(true)
+			t.expect(
+				has(
+					fs.readFile(`{f.other}/pickman/.tracker/rafts/active/R0090/R0090.md`),
+					"\nlayers: reviewed\n"
+				)
+			).toBe(true)
 			-- start resumes above the landed layer: cut from main, its PR on main
 			git(wt, { "switch", "-q", "R0090/1/c0200" })
 			zn(wt, { "sync" })
@@ -866,7 +891,9 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 		zn(wt, { "finish", "c0180" })
 		t.expect(has(stackText(wt, "R0070"), "c0170 finished")).toBe(true)
 		-- the per-landing rules name themselves in the refusal
-		for _, args in { { "done", "R0070", "--through", "c0170" }, { "trace", "R0070", "--through", "c0170" } } do
+		for _, args in
+			{ { "done", "R0070", "--through", "c0170" }, { "trace", "R0070", "--through", "c0170" } }
+		do
 			local refused = znTry(wt, args)
 			t.expect(refused.ok).toBe(false)
 			t.expect(has(refused.stderr, "layers: reviewed")).toBe(true)
