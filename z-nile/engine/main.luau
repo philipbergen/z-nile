@@ -5358,6 +5358,16 @@ end
 hb.DISCARDED = heartbeat.DISCARDED
 hb.FRESH = heartbeat.FRESH
 
+-- Creates `path` holding `text` only when it does not exist yet: the text is written beside it and hard-linked in, which
+-- fails when the path is taken, so two takers never both own one marker. false when the path exists.
+function hb.claimFile(path: string, text: string): boolean
+	local tmp = `{path}.new-{math.random(1, 1000000000)}`
+	sh.writeReplacing(tmp, text)
+	local r = sh.run("ln", { tmp, path })
+	pcall(fs.removeFile, tmp)
+	return r.ok
+end
+
 -- Makes a worktree's .cache folder (fs.writeDir of an existing folder writes nothing).
 function hb.homeDir(path: string)
 	fs.writeDir(`{path}/.cache`)
@@ -5686,15 +5696,18 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 	-- the marker first: from here on the old process is told, whatever fails next; it is removed again on a failure
 	local marker = `{old.path}/{hb.DISCARDED}`
 	hb.homeDir(old.path)
-	sh.writeReplacing(marker, text)
-	local moved = false
+	if not hb.claimFile(marker, text) then
+		fail(
+			`worktree --takeover {old.name}: it is being discarded, or already was, by another takeover: nothing moved`
+		)
+	end
+	-- a failure undoes exactly what this process did, never a step another takeover made
+	local kept, moved = false, false
 	local function undo(msg: string): never
 		if moved then
 			sh.run("git", { "worktree", "move", discardedPath, old.path })
 		end
-		if
-			renamed ~= "" and sh.run("git", { "show-ref", "--verify", "--quiet", `refs/heads/{renamed}` }).ok
-		then
+		if kept then
 			if oldBranch ~= "" then
 				sh.run("git", { "branch", "-m", renamed, oldBranch })
 			else
@@ -5712,6 +5725,7 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 		if not r.ok then
 			undo(`worktree --takeover {old.name}: cannot keep {renamed}: {sh.trim(r.stderr)}`)
 		end
+		kept = true
 		-- a bare `git push` from the discarded worktree must not move the PR's head
 		if sh.run("git", { "config", "--get", `branch.{renamed}.remote` }).ok then
 			sh.run("git", { "branch", "--unset-upstream", renamed })

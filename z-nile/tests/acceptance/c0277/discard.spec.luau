@@ -68,6 +68,7 @@ return t.spec("c0277 discarded worktrees", function(it)
 				[`{P}/c0010/c0010.md`] = trackerfix.stub("c0010", "c0010", "new-a-b-c"),
 				[`{P}/c0020/c0020.md`] = trackerfix.stub("c0020", "c0020", "new-a-b-c"),
 				[`{P}/c0040/c0040.md`] = trackerfix.stub("c0040", "c0040", "new-a-b-c"),
+				[`{P}/c0050/c0050.md`] = trackerfix.stub("c0050", "c0050", "new-a-b-c"),
 			})
 			fs.writeFile(`{h.bin}/gh`, GH)
 			process.exec("chmod", { "+x", `{h.bin}/gh` })
@@ -288,4 +289,33 @@ return t.spec("c0277 discarded worktrees", function(it)
 		t.expect(fs.isDir(wt)).toBe(true)
 		t.expect(branchOf(wt)).toBe("prep-inside")
 	end)
+
+	it(
+		"a taker that loses the race for the marker moves nothing and undoes nothing of the winner's",
+		function()
+			local wt = trim(must(zn(h.f.main, { "worktree", "prep-race" }), "worktree"))
+			must(zn(wt, { "status", "c0050", "preparing" }, T0), "claim c0050")
+			-- the git shim plants the winner's marker when this taker reads the worktree's status, as a racing taker would
+			local gitShim = fs.readFile(`{h.bin}/git`)
+			fs.writeFile(
+				`{h.bin}/git`,
+				(
+					string.gsub(
+						gitShim,
+						"^#!/bin/sh\n",
+						'#!/bin/sh\nif [ -f "$FAKE_DIR/plant" ] && [ "$1" = -C ] && [ "$3" = status ]; then dest=$(cat "$FAKE_DIR/plant"); rm -f "$FAKE_DIR/plant"; echo "the winner" > "$dest"; fi\n',
+						1
+					)
+				)
+			)
+			fs.writeFile(`{h.fakes}/plant`, `{wt}/` .. "." .. "cache/discarded")
+			local r = zn(h.f.main, { "worktree", "prep-race", "--takeover" }, LATE)
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr, "another takeover")).toBe(true)
+			t.expect(branchOf(wt)).toBe("prep-race") -- the winner's rename is not this taker's to undo
+			t.expect(fs.readFile(`{wt}/` .. "." .. "cache/discarded")).toBe("the winner\n") -- and its marker is untouched
+			t.expect(fs.isDir(dir("prep-race-1"))).toBe(false)
+			fs.writeFile(`{h.bin}/git`, gitShim)
+		end
+	)
 end)

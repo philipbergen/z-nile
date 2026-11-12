@@ -42,6 +42,7 @@ return t.spec("c0277 discarded worktree rules", function(it)
 			t.expect(heartbeat.suffixOf("R0010", "R0010")).toBe(0)
 			t.expect(heartbeat.suffixOf("R0010", "R0010-12")).toBe(12)
 			t.expect(heartbeat.suffixOf("R0010", "R0010-x")).toBe(nil)
+			t.expect(heartbeat.suffixOf("R0010", "R0010-0")).toBe(nil) -- numbers start at 1; -0 is not the bare name
 			t.expect(heartbeat.suffixOf("R0010", "R00100")).toBe(nil)
 			t.expect(heartbeat.suffixOf("prep.x", "prep-x-1")).toBe(nil) -- a name is a name, not a pattern
 			local names = { "prep-x", "prep-x-1", "prep-x-2" }
@@ -158,6 +159,11 @@ return t.spec("c0277 discarded worktree rules", function(it)
 		t.expect(string.find(heartbeat.discardedText(text), "was discarded", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(heartbeat.discardedText("junk"), "was discarded", 1, true) ~= nil).toBe(true)
 		t.expect(heartbeat.discardParse("junk")).toBe(nil)
+		-- a header with one key missing is damaged, whichever key (the reader refuses every omission)
+		for _, key in { "copy", "branch", "base", "items", "since" } do
+			local cut = string.gsub(text, "\n" .. key .. ": [^\n]*", "", 1)
+			t.expect(heartbeat.discardParse(cut)).toBe(nil)
+		end
 		t.expect(heartbeat.discardParse("discarded worktree: /x\n\nbody")).toBe(nil) -- a header with keys missing
 	end)
 
