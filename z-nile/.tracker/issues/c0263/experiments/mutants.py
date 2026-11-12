@@ -8,6 +8,7 @@ import sys
 P = '/Users/philipbergen/code/pickman/.worktree/proto-c0263-mut'
 Z = P + '/z-nile'
 A = 'tests/acceptance/c0263/'
+RK = A + 'restack.spec.luau'
 PV, RC, PB, RM, RS = A + 'provenance.spec.luau', A + 'record.spec.luau', A + 'publish.spec.luau', A + 'remap.spec.luau', A + 'remap-shapes.spec.luau'
 PLAIN = '(function() local r = sh.run("git", { "merge", "--no-edit", %s }) if not r.ok then sh.run("git", { "merge", "--abort" }) end return r.ok, r.stderr end)()'
 MREC = 'engine/mergerecords.luau'
@@ -54,13 +55,13 @@ M = [
     ('validator: no document beside', PUB, 'if not onOrigin[doc] then\n\t\t\t\t\treturn fail(`{c.path}: no {pid}.md', 'if false then\n\t\t\t\t\treturn fail(`{c.path}: no {pid}.md', PB),
     ('record built from worktree file', MAIN, 'provenance.record(read(rec), id,', 'provenance.record(if fs.isFile(rec) then fs.readFile(rec) else nil, id,', RC),
     ('record accepts any event (command)', MAIN, 'if not table.find(provenance.PUBLISHED, event) then', 'if false then', RC),
-    ('record: done item (command)', MAIN, 'if string.find(doc, "/done/", 1, true) then\n\t\t\treturn `record refuses', 'if false then\n\t\t\treturn `record refuses', RC),
+    ('record: done item (command)', MAIN, 'if string.find(doc, "/done/", 1, true) then\n\t\t\t\treturn `record refuses', 'if false then\n\t\t\t\treturn `record refuses', RC),
     ('record: active takes any event (command)', MAIN, 'elseif string.find(doc, "/active/", 1, true) and event ~= "unblocked" then', 'elseif false then', RC),
     ('record: main checkout allowed', MAIN, '\trefuseInMainCheckout("provenance record")\n', '', RC),
-    ('record: offline allowed', MAIN, '\tif not publishing() then\n\t\tfail("provenance record needs an origin remote', '\tif false then\n\t\tfail("provenance record needs an origin remote', RC),
+    ('record: offline allowed', MAIN, '\t\tif not publishing() then\n\t\t\tfail("provenance record needs an origin remote', '\t\tif false then\n\t\t\tfail("provenance record needs an origin remote', RC),
     # settle (pure)
-    ('merge: no union (both changed aborts)', PRV, '\tlocal united, why = provenance.union(common, ours, theirs)\n', '\tlocal united, why = nil, "no union"\n', PV),
-    ('merge: refusal of a bad union ignored', PRV, '\tlocal united, why = provenance.union(common, ours, theirs)\n\tif not united then\n\t\treturn nil, nil, why\n\tend\n', '\tlocal united = provenance.union(common, ours, theirs) or ours\n', PV),
+    ('merge: no union (both changed aborts)', PRV, '\tlocal united, why = provenance.union(shared, ours, theirs)\n', '\tlocal united, why = nil, "no union"\n', PV),
+    ('merge: refusal of a bad union ignored', PRV, '\tlocal united, why = provenance.union(shared, ours, theirs)\n\tif not united then\n\t\treturn nil, nil, why\n\tend\n', '\tlocal united = provenance.union(shared, ours, theirs) or ours\n', PV),
     ('merge: one-sided record aborts', PRV, '\telseif changedOurs and not changedTheirs then\n\t\treturn take(ours)', '\telseif changedOurs and not changedTheirs then\n\t\treturn nil, nil, "one-sided"', PV),
     ('merge: a deleted record is resurrected', PRV, '\t\tif text == nil then\n\t\t\treturn "remove", nil, nil', '\t\tif text == nil then\n\t\t\treturn "keep", nil, nil', PV),
     ('merge: a record changed on one side and absent on the other is taken as one-sided', PRV, '\tif ours == nil or theirs == nil then\n\t\treturn nil,', '\tif ours == nil or theirs == nil then\n\t\treturn take(ours or theirs)\n\tend\n\tif false then\n\t\treturn nil,', RC),
@@ -69,7 +70,7 @@ M = [
     ('merge: settles across a compaction', MREC, '\t\t\tif crossing then', '\t\t\tif false then', RC),
     ('merge: examines only unmerged ids', MREC, 'for _, path in gitLines({ "diff", "--name-only", "--no-renames", base, side }) do', 'for _, path in {} :: { string } do', RC),
     ('merge: stale old path kept', MREC, 'if path ~= dest and recordIdOf(path) == plan.id then', 'if false then', RC),
-    ('merge: stale record unlinked, folder kept', MREC, 'sh.must("git", { "rm", "-q", "-f", "--ignore-unmatch", "--", path })', 'sh.run("git", { "rm", "-q", "-f", "--cached", "--ignore-unmatch", "--", path })\n\t\t\t\t\t\t\tif fs.isFile(path) then\n\t\t\t\t\t\t\t\tfs.removeFile(path)\n\t\t\t\t\t\t\tend', RC),
+    ('merge: stale record unlinked, folder kept', MREC, 'for _, path in removals do\n\t\t\t\t\tsh.must("git", { "rm", "-q", "-f", "--ignore-unmatch", "--", path })', 'for _, path in removals do\n\t\t\t\t\tsh.run("git", { "rm", "-q", "-f", "--cached", "--ignore-unmatch", "--", path })\n\t\t\t\t\tif fs.isFile(path) then\n\t\t\t\t\t\tfs.removeFile(path)\n\t\t\t\t\tend', RC),
     ('merge: ignores locate refusal', MREC, 'if ownWhy or theirWhy or commonWhy then', 'if false then', RC),
     ('merge: no-document stop removed', MREC, 'if not folder then', 'if false then', RC),
     ('merge: directoryRenames moves every file', MREC, '{ "merge", "--no-commit", "--no-edit", ref }', '{ "-c", "merge.directoryRenames=true", "merge", "--no-commit", "--no-edit", ref }', RC),
@@ -77,7 +78,7 @@ M = [
     ('merge: ignores raft records', MREC, 'return if rel == "provenance.md" then id else nil', 'return if rel == "provenance.md" and string.sub(id, 1, 1) ~= "R" then id else nil', RC),
     ('land plain merge', MAIN, 'mergeRef(base)', PLAIN % 'base', RC),
     ('merge: a clean merge skips the records', MREC, 'if #ids > 0 then', 'if #ids > 0 and next(unmerged) ~= nil then', RC),
-    ('merge: every conflict kept ours', MREC, 'if not path or not id then', 'if path and not id then\n\t\t\t\t\tsh.run("git", { "checkout", "--ours", path })\n\t\t\t\t\tsh.must("git", { "add", path })\n\t\t\t\tend\n\t\t\t\tif false then', RC),
+    ('merge: every conflict kept ours', MREC, 'if not path or not id then\n\t\t\t\t\treturn false, `{detail}', 'if path and not id then\n\t\t\t\t\tsh.run("git", { "checkout", "--ours", path })\n\t\t\t\t\tsh.must("git", { "add", path })\n\t\t\t\tend\n\t\t\t\tif false then\n\t\t\t\t\treturn false, `{detail}', RC),
     ('merge: record written at the old path', MREC, 'dest = `{plan.folder}/provenance.md`\n', 'dest = `{plan.folder}/provenance.md`\n\t\t\t\t\tfor _, path in recordPaths(index) do\n\t\t\t\t\t\tif recordIdOf(path) == plan.id then\n\t\t\t\t\t\t\tdest = path\n\t\t\t\t\t\tend\n\t\t\t\t\tend\n', RC),
     ('merge: takes over any merge in progress', MREC, 'if target == "" or not sh.run("git", { "merge-base", "--is-ancestor", head, target }).ok then', 'if false then', RC),
     ('merge: resumed only when MERGE_HEAD equals ref', MREC, 'not sh.run("git", { "merge-base", "--is-ancestor", head, target }).ok', 'head ~= target', RC),
@@ -100,6 +101,19 @@ M = [
     ('remap settles only conflicted paths', MREC, 'local ids = changedRecordIds(baseTree, "HEAD", "origin/main")', 'local ids: { string } = {}', RS),
     ('remap drops the base stage', MREC, 'local plans = planRecords(ids, "HEAD", "origin/main", baseTree, merged)', 'local plans = planRecords(ids, "HEAD", "origin/main", "4b825dc642cb6eb9a060e54bf8d69288fbee4904", merged)', RS),
     ('remap accepts a non-record conflict beside a record', MREC, '\t\t\tif not id then\n\t\t\t\treturn nil\n\t\t\tend', '\t\t\tif not id then\n\t\t\t\tcontinue\n\t\t\tend', RS),
+    # restack (R1)
+    ('restack: records not settled', MAIN, 'local settled, reason = mergerecords.settleRebaseStop()', 'local settled, reason = false, "no settling"', RK),
+    ('restack: stops after the first settled commit', MAIN, 'rebasing = sh.run("git", { "-c", "core.editor=true", "rebase", "--continue" })', 'break', RK),
+    ('restack: reason not reported', MAIN, 'stoppedWhy = reason\n\t\t\t\tbreak', 'break', RK),
+    ('rebase settle: swapped sides', MREC, 'provenance.settle(text(id, 1, paths), text(id, 3, paths), text(id, 2, paths), true)', 'provenance.settle(text(id, 1, paths), text(id, 2, paths), text(id, 3, paths), true)', RK),
+    ('rebase settle: any conflict accepted', MREC, 'if not path or not id then\n\t\t\treturn false, `{path or line} is not an item record`\n\t\tend', 'if not path or not id then\n\t\t\tcontinue\n\t\tend', RK),
+    ('rebase settle: written at the onto side path', MREC, 'plan.dest = paths[3] or paths[2] or paths[1]', 'plan.dest = paths[2] or paths[3] or paths[1]', RK),
+    ('rebase settle: the other path kept', MREC, '\t\t\tif path ~= plan.dest then\n\t\t\t\tsh.must("git", { "rm", "-q", "-f", "--ignore-unmatch", "--", path })\n\t\t\tend', '', RK),
+    ('rebase settle: a missing side taken', MREC, 'if not action then\n\t\t\treturn false, `{id}: {why}`\n\t\tend', 'if not action then\n\t\t\taction, united = "write", text(3, paths) or text(2, paths)\n\t\tend', RK),
+    ('rebase settle: replay prefix not trimmed', PRV, 'local shared = if replay then provenance.sharedPrefix(common, theirs) else common', 'local shared = common', RK),
+    ('rebase settle: prefix trims nothing', PRV, '\t\tif not m or m.when ~= r.when or m.event ~= r.event or m.actor ~= r.actor or m.detail ~= r.detail then\n\t\t\tbreak', '\t\tif false then\n\t\t\tbreak', RK),
+    ('rebase settle: stage 0 record ignored', MREC, 'if id and byId[id] and stage == "0" then', 'if false then', RK),
+    ('rebase settle: stage 0 taken as main\'s only', MREC, 'if byId[id][3] == nil and at("REBASE_HEAD") then', 'if false then', RK),
     # docs
     ('docs: README names the old command', 'README.md', '`./zn provenance record`, checked', '`./zn record`, checked', PV),
 ]
