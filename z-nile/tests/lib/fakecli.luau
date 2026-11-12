@@ -69,7 +69,7 @@ function fakecli.script(cli: string): string
 		"stall) echo 'thinking'; sleep 20 ;;",
 		-- a cursor stream with no model_call_id at all: four turns, then quiet (the call cap can't be trusted)
 		[[noids) for c in 1 2 3 4; do echo '{"type":"thinking","subtype":"delta"}'; echo '{"type":"tool_call","subtype":"started","call_id":"x'$c'"}'; echo '{"type":"tool_call","subtype":"completed","call_id":"x'$c'"}'; done; sleep 20 ;;]],
-		-- a detached process pushes code to main after the step has ended (the watermark's to catch at the next run)
+		-- a detached process pushes code to main after the step has ended (a later run accepts main as it is)
 		[[late) git fetch -q origin main; git checkout -q -B late FETCH_HEAD; echo late > late.lua; git add late.lua; git -c user.name=c0117-fake -c user.email=c0117-fake@example.invalid commit -q -m late; perl -e 'setpgrp(0,0); exec @ARGV' sh -c "sleep 1; \"$ZN_REAL_GIT\" push -q origin HEAD:main" > /dev/null 2>&1 < /dev/null & ]]
 			.. OK.claude
 			.. " ;;",
@@ -162,7 +162,7 @@ function fakecli.new(name: string, seed: { [string]: string }): Harness
 		table.concat({
 			"#!/bin/sh",
 			'echo "realgh $*" >> "$FAKE_DIR/log"',
-			-- `api …/commits/<sha>/pulls` prints <fakes>/pulls-<sha>.json, else [] (the watermark's PR rule)
+			-- `api …/commits/<sha>/pulls` prints <fakes>/pulls-<sha>.json, else [] (a pull request merged into main)
 			'if [ "$1" = api ]; then sha=$(printf "%s" "$2" | sed -n "s#.*/commits/\\([0-9a-f]*\\)/pulls#\\1#p"); cat "$FAKE_DIR/pulls-$sha.json" 2>/dev/null || echo "[]"; exit 0; fi',
 			-- `pr view <n> --json mergeCommit` prints what gh prints: the squash commit `pr merge` made, or null (not merged)
 			'if [ "$1" = pr ] && [ "$2" = view ] && [ "$5" = mergeCommit ] && [ "$#" = 5 ]; then if [ -f "$FAKE_DIR/mergecommit-$3" ]; then echo "{\\"mergeCommit\\":{\\"oid\\":\\"$(cat "$FAKE_DIR/mergecommit-$3")\\"}}"; else echo "{\\"mergeCommit\\":null}"; fi; exit 0; fi',
@@ -201,9 +201,6 @@ function fakecli.new(name: string, seed: { [string]: string }): Harness
 	local token = `{f.base}/agent-token`
 	fs.writeFile(token, "fake-agent-token\n")
 	local h = { f = f, bin = bin, fakes = fakes, token = token }
-	-- the user's first vet: no run trusts a missing watermark (review 003 F2)
-	local vet = fakecli.zn(h, { "dispatch", "vet" })
-	assert(vet.ok, `dispatch vet failed in the fixture: {vet.stdout}{vet.stderr}`)
 	fakecli.clear(h)
 	return h
 end
@@ -306,8 +303,6 @@ function fakecli.zn(h: Harness, args: { string }, extra: { [string]: string }?):
 		FAKE_DIR = h.fakes,
 		PATH = `{h.bin}:{process.env.PATH}`,
 		ZN_AGENT_TOKEN_FILE = h.token,
-		-- the watermark lives outside the repository; in a spec, in the fixture's own folder (the jail closes $HOME)
-		ZN_WATERMARK_DIR = `{h.f.base}/watermark`,
 		GH_TOKEN = "the-users-token",
 	}
 	local more: { [string]: string } = extra or {}
