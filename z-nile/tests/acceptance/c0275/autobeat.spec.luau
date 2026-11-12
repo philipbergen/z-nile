@@ -70,6 +70,16 @@ local function refCount(): number
 	local _, n = string.gsub(fixture.git(h.f.origin, { "for-each-ref", "refs/heads/hb/" }), "\n", "")
 	return n
 end
+local function hbPushes(): number
+	local text = if fs.isFile(`{h.fakes}/hbpushes`) then fs.readFile(`{h.fakes}/hbpushes`) else ""
+	return #string.gsub(text, "[^p]", "")
+end
+-- another terminal's beat: a commit with main's tree and tip as parent, force-pushed as the stamp's branch
+local function pushBeat(stamp: string, epoch: number)
+	local tree = fixture.git(h.f.other, { "rev-parse", "HEAD^{tree}" })
+	local sha = fixture.git(h.f.other, { "commit-tree", tree, "-p", "HEAD", "-m", `hb {stamp} {epoch}` })
+	fixture.git(h.f.other, { "push", "-q", "-f", "origin", `{sha}:refs/heads/hb/{stamp}` })
+end
 local function net(): number
 	local text = if fs.isFile(`{h.fakes}/netcalls`) then fs.readFile(`{h.fakes}/netcalls`) else ""
 	return #string.gsub(text, "[^x]", "")
@@ -94,6 +104,7 @@ local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --sho
 	.. 'check "AC1: ok" true\nfinish\n'
 -- every network call is counted; a marker file makes the pushes of heartbeat branches fail
 local SHIM = '#!/bin/sh\ncase "$1" in fetch|ls-remote|push) echo x >> "$FAKE_DIR/netcalls";; esac\n'
+	.. 'if [ "$1" = push ]; then case "$*" in *":refs/heads/hb/"*) echo p >> "$FAKE_DIR/hbpushes";; esac; fi\n'
 	.. 'if [ "$1" = push ] && [ -f "$FAKE_DIR/hbfail" ]; then case "$*" in *":refs/heads/hb/"*) echo "fatal: fake beat refusal" >&2; exit 1;; esac; fi\n'
 
 return t.spec("c0275 automatic beats", function(it)
@@ -188,6 +199,20 @@ return t.spec("c0275 automatic beats", function(it)
 			must(zn(h.f.main, { "status", "c0010" }, T0 + 5000), "status in the main checkout")
 			t.expect(epochsOf(stamp)).toEqual({ T0 + 1000 })
 			t.expect(markOf(wt, "c0010")).toBe(`{stamp} {T0 + 1000} {tipOf(stamp)}`)
+		end
+	)
+
+	it(
+		"a beat leases on the sha its worktree last wrote: a co-beater's newer beat is rejected once and retried",
+		function()
+			local stamp = stampOf(`{P}/c0010/c0010.md`)
+			local last = epochsOf(stamp)[1]
+			pushBeat(stamp, last + 50) -- another terminal beats the same claim; this worktree has not fetched it
+			local before = hbPushes()
+			must(zn(wt, { "lessons", "--tags" }, last + EVERY + 100), "a command when the claim is due")
+			t.expect(hbPushes() - before).toBe(2) -- the lease on its own sha was rejected, the retry on the sha it saw landed
+			t.expect(epochsOf(stamp)).toEqual({ last + EVERY + 100 })
+			t.expect(markOf(wt, "c0010")).toBe(`{stamp} {last + EVERY + 100} {tipOf(stamp)}`)
 		end
 	)
 
@@ -374,7 +399,8 @@ return t.spec("c0275 automatic beats", function(it)
 		must(r, "stop R0010")
 		-- the verdict was read from the branch before it went: the claim was lost for the minutes it was quiet
 		local subject = fixture.git(h.f.origin, { "log", "-1", "--format=%s", "main" })
-		t.expect(has(subject, `(claim {stamp}, lost `)).toBe(true)
+		-- R0010 last beat at T0 + 7050 (the adoption), and the verdict is read at T0 + 9000: 1950 s silent
+		t.expect(has(subject, `(claim {stamp}, lost 32m)`)).toBe(true)
 		t.expect(tipOf(stamp)).toBe("")
 	end)
 end)
