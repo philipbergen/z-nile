@@ -7,6 +7,7 @@ local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -134,6 +135,7 @@ return t.spec("tracker lifecycle", function(it)
 	end)
 
 	it("start refuses issues that are not design: ready", function()
+		seal.prep(dir)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep draft" })
 		local r = tr({ "start", "R0010" })
@@ -239,12 +241,12 @@ return t.spec("tracker lifecycle", function(it)
 
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
-			"pickman/.tracker/rafts/active/R0010/review-001.md",
-			"# Review 001\n\n### F1 [medium] thing\nEvidence: x\n\n### F2 [low] other\nEvidence: y\n\nVerdict: changes\n"
+			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
+			"# Final Review 001\n\n### F1 [medium] thing\nEvidence: x\n\n### F2 [low] other\nEvidence: y\n\nVerdict: changes\n"
 		)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
-			"pickman/.tracker/rafts/active/R0010/refute-001.md",
+			"pickman/.tracker/rafts/active/R0010/final-refute-001.md",
 			"- F1: fixed abc: done; consequences: none\n"
 		)
 		local dirty = tr({ "done", "R0010" })
@@ -260,7 +262,7 @@ return t.spec("tracker lifecycle", function(it)
 	it("done rolls back when a promoted acceptance spec fails", function()
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
-			"pickman/.tracker/rafts/active/R0010/refute-001.md",
+			"pickman/.tracker/rafts/active/R0010/final-refute-001.md",
 			"- F1: fixed abc: done; consequences: none\n- F2: refuted: by design\n"
 		)
 		local raftDoc = "pickman/.tracker/rafts/active/R0010/R0010.md"
@@ -283,6 +285,7 @@ return t.spec("tracker lifecycle", function(it)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "f0031 work" })
 		must(tr({ "finish", "f0031" }), "finish f0031")
+		seal.trace(dir, "R0010")
 		local head = git({ "rev-parse", "HEAD" })
 		local r = tr({ "done", "R0010" })
 		t.expect(r.ok).toBe(false)
@@ -296,6 +299,7 @@ return t.spec("tracker lifecycle", function(it)
 		write("pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau", good)
 		must(tr({ "commit", "-m", "fix acceptance fixture", "--time", "1" }), "commit")
 		must(tr({ "finish", "f0031" }), "finish the fix")
+		seal.trace(dir, "R0010")
 	end)
 
 	it("done promotes acceptance specs and finishes", function()

@@ -54,11 +54,18 @@ function trail.isDoc(name: string): boolean
 	if string.sub(name, -3) ~= ".md" or string.find(name, "/", 1, true) then
 		return false
 	end
-	if name == "spend.md" or name == "harvest.md" or name == "prompt.md" then
+	if name == "spend.md" or name == "harvest.md" or name == "prompt.md" or name == "trace.md" then
 		return false
 	end
 	for _, pattern in
-		{ "^design%-review%-%d+%.md$", "^review%-%d+%.md$", "^design%-refute%-%d+%.md$", "^refute%-%d+%.md$" }
+		{
+			"^design%-review%-%d+%.md$",
+			"^review%-%d+%.md$",
+			"^final%-review%-%d+%.md$",
+			"^design%-refute%-%d+%.md$",
+			"^refute%-%d+%.md$",
+			"^final%-refute%-%d+%.md$",
+		}
 	do
 		if string.match(name, pattern) then
 			return false

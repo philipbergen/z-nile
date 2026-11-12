@@ -89,6 +89,7 @@ usage: ./zn <command> ...
                                                 and write that ticket's watch files from the layer's own diff
   restack <R-id>                                rebase each layer onto the one below; stop at the first conflict or red check
   stack <R-id>                                  print the layers, from git (read-only)
+  trace <R-id> [--check]                        print the final review's traceability table skeleton, or verify trace.md
   focus <issue-id>                              attribute following commits to this issue
   commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>]
                                                 stage all, record spend, commit, push. --time and --tokens are ignored
@@ -3752,6 +3753,8 @@ function cmd.finish(pos: { string })
 		fail(`{id}: nothing to finish`)
 	end
 	watchcmd.capture({ id = id, dest = `{issue.dir}/acceptance` }, paths)
+	local resultsOut = `{issue.dir}/results.txt`
+	sh.writeReplacing(resultsOut, "")
 	if gateLib.doneGate(process.env) == "promoted" then
 		print("finish: inside a spec run, so the affected specs are skipped")
 	else
@@ -3765,6 +3768,7 @@ function cmd.finish(pos: { string })
 			end
 			local listed = sh.run("lune", argv)
 			if not listed.ok then
+				pcall(fs.removeFile, resultsOut)
 				fail(`affected failed: {listed.stderr}`)
 			end
 			local specs: { string } = {}
@@ -3774,11 +3778,22 @@ function cmd.finish(pos: { string })
 				end
 			end
 			if #specs > 0 then
-				local run = { "run", "z-nile/specs", "--", "run", "--project", project.name, "--" }
+				local run = {
+					"run",
+					"z-nile/specs",
+					"--",
+					"run",
+					"--project",
+					project.name,
+					"--out",
+					resultsOut,
+					"--",
+				}
 				for _, spec in specs do
 					table.insert(run, spec)
 				end
 				if not sh.stream("lune", run) then
+					pcall(fs.removeFile, resultsOut)
 					fail(`{id}: a spec the watch map selects is red`)
 				end
 			end
@@ -4579,29 +4594,41 @@ cmd["promote-check"] = function(pos: { string })
 end
 
 -- Latest review round must be resolved: verdict approve, or a same-numbered refute file that
--- answers every finding id with "fixed", "refuted" or a valid "deferred <id>: <why>".
+-- answers every finding id with "fixed", "refuted" or a valid "deferred <id>: <why>", or a human
+-- ruling under ## Open to the human in the raft's document.
 local function reviewProblem(raft: store.Item): string?
-	local latest = 0
-	for _, name in fs.readDir(raft.dir) do
-		local n = tonumber(string.match(name, "^review%-(%d+)%.md$"))
-		if n and n > latest then
-			latest = n
-		end
-	end
+	local reviewPrefix, refutePrefix, latest = layergit.latestReview(raft)
 	if latest == 0 then
-		return "no review-NNN.md: run the adversarial code review first"
+		return "no final-review-NNN.md (no review-NNN.md may stand in for the final review): run the final review first"
 	end
 	local num = string.format("%03d", latest)
-	local review = "\n" .. fs.readFile(`{raft.dir}/review-{num}.md`)
+	local reviewName = `{reviewPrefix}-{num}.md`
+	local refuteName = `{refutePrefix}-{num}.md`
+	local review = "\n" .. fs.readFile(`{raft.dir}/{reviewName}`)
 	local verdict = string.match(review, "\n[Vv]erdict:%s*(%a+)")
 	if verdict == "approve" then
 		return nil
 	end
-	local refutePath = `{raft.dir}/refute-{num}.md`
+	local raftDoc = if fs.isFile(raft.doc) then fs.readFile(raft.doc) else ""
+	local humanSection = string.match("\n" .. raftDoc, "\n## Open to the human\n(.-)\n## ")
+		or string.match("\n" .. raftDoc, "\n## Open to the human\n(.*)$")
+		or ""
+	local inHuman: { [string]: boolean } = {}
+	for fid in string.gmatch("\n" .. humanSection, "\n%- (F%d+):") do
+		inHuman[fid] = true
+	end
+	local pendingSet: { [string]: boolean } = {}
+	for _, fid in openlist.pending(raftDoc) do
+		pendingSet[fid] = true
+	end
+
+	local refutePath = `{raft.dir}/{refuteName}`
 	local refute = "\n" .. (if fs.isFile(refutePath) then fs.readFile(refutePath) else "")
 	local missing = {}
 	local invalid = {}
+	local findingCount = 0
 	for id, rest in string.gmatch(review, "\n###%s+(F%d+)([^\n]*)") do
+		findingCount += 1
 		local line = string.match(refute, `\n%-%s+{id}:%s*([^\n]*)`)
 		if line and string.find(line, "^fixed") then
 			if not string.find(line, "consequences:%s*%S", 6) then
@@ -4615,7 +4642,13 @@ local function reviewProblem(raft: store.Item): string?
 		if line and string.find(line, "^refuted") then
 			continue
 		end
+		if inHuman[id] and not pendingSet[id] then
+			continue
+		end
 		if not line or not (line == "deferred" or string.find(line, "^deferred%s")) then
+			if inHuman[id] and pendingSet[id] then
+				continue
+			end
 			table.insert(missing, id)
 			continue
 		end
@@ -4634,17 +4667,277 @@ local function reviewProblem(raft: store.Item): string?
 		end
 	end
 	if #missing > 0 then
-		return `review-{num}.md findings not answered in refute-{num}.md: {table.concat(missing, ", ")}`
+		return `{reviewName} findings not answered in {refuteName}: {table.concat(missing, ", ")}`
 	end
 	if #invalid > 0 then
-		return `refute-{num}.md: {table.concat(invalid, "; ")}`
+		return `{refuteName}: {table.concat(invalid, "; ")}`
 	end
 	-- one round: a refuted finding, an unclosed high, or a failed Judged criterion waits for the human
-	local gap = openlist.problem(review, refute, fs.readFile(raft.doc))
+	local gap = openlist.problem(review, refute, raftDoc)
 	if gap then
-		return `review-{num}.md {gap}`
+		return `{reviewName} {gap}`
+	end
+	if verdict ~= nil and findingCount == 0 and #openlist.judgedFails(review) == 0 then
+		return `{reviewName} Verdict is {verdict}, not approve`
 	end
 	return nil
+end
+
+local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { string }
+	local trace = require("./trace")
+	local watch = require("../lib/watch")
+
+	local function diffNamesBetween(base: string, tip: string): { string }
+		local names = sh.git({ "diff", "--name-only", base, tip })
+		local out: { string } = {}
+		for path in string.gmatch(names .. "\n", "([^\n]*)\n") do
+			if path ~= "" then
+				table.insert(out, path)
+			end
+		end
+		return out
+	end
+
+	local function gitFileTextAt(atCommit: string, path: string): string?
+		local shown = sh.run("git", { "show", `{atCommit}:{path}` })
+		if shown.ok then
+			return shown.stdout
+		end
+		return nil
+	end
+
+	local function fileTextAt(atCommit: string, path: string, useWorktree: boolean): string?
+		if useWorktree and fs.isFile(path) then
+			return fs.readFile(path)
+		end
+		return gitFileTextAt(atCommit, path)
+	end
+
+	local function capturedDocText(issue: store.Item, atCommit: string): string
+		local head = if sh.run("git", { "rev-parse", "--verify", "-q", "origin/main" }).ok
+			then "origin/main"
+			else atCommit
+		local commits, _ = trailLib.read("issues", issue.id, trailLib.isDoc, head)
+		local found = if commits then (trailLib.capture(commits)) else nil
+		if found then
+			local shown = sh.run("git", { "show", `{found.sha}:{found.path}` })
+			if shown.ok then
+				return shown.stdout
+			end
+		end
+		return fileTextAt(atCommit, issue.doc, sh.git({ "rev-parse", "HEAD" }) == atCommit) or ""
+	end
+
+	local function buildTraceIssueDocs(issues: { store.Item }, atCommit: string): { trace.IssueDoc }
+		local useWorktree = sh.git({ "rev-parse", "HEAD" }) == atCommit
+		local out: { trace.IssueDoc } = {}
+		for _, issue in issues do
+			local checkPath = `{issue.dir}/check.sh`
+			local resultsPath = `{issue.dir}/results.txt`
+			local docText = fileTextAt(atCommit, issue.doc, useWorktree) or ""
+			local checkText = gitFileTextAt(atCommit, checkPath)
+			local resultsText = gitFileTextAt(atCommit, resultsPath)
+			local captured = capturedDocText(issue, atCommit)
+			table.insert(out, {
+				id = issue.id,
+				docPath = issue.doc,
+				checkPath = checkPath,
+				dirPath = issue.dir,
+				home = homeOf(issue),
+				capturedText = if captured ~= "" then captured else docText,
+				docText = docText,
+				checkText = checkText,
+				resultsPath = resultsPath,
+				resultsText = resultsText,
+			})
+		end
+		return out
+	end
+
+	local function localOrOriginTip(layer: stack.Layer): string?
+		local loc = layergit.shaOf(layer.name)
+		local rem = layergit.shaOf(`origin/{layer.name}`)
+		if loc and rem then
+			if sh.run("git", { "merge-base", "--is-ancestor", rem, loc }).ok then
+				return loc
+			end
+			return rem
+		end
+		return loc or rem
+	end
+
+	local function collectLayerCommits(base: string, tip: string): { trace.LayerCommit }
+		local raw = sh.git({ "log", "--reverse", "--format=%H%x09%P%x09%s", `{base}..{tip}` })
+		local out: { trace.LayerCommit } = {}
+		for line in string.gmatch(raw .. "\n", "([^\n]+)\n") do
+			local sha, parents, subject = string.match(line, "^(%x+)\t([^\t]*)\t(.*)$")
+			if sha then
+				local firstParent = string.match(parents or "", "^(%x+)") or ""
+				local changed = sh.git({ "diff-tree", "--no-commit-id", "--name-only", "-r", sha })
+				local files: { string } = {}
+				for path in string.gmatch(changed .. "\n", "([^\n]+)\n") do
+					if path ~= "" then
+						table.insert(files, path)
+					end
+				end
+				table.insert(out, {
+					sha = sha,
+					parent = firstParent,
+					subject = subject or "",
+					files = files,
+				})
+			end
+		end
+		return out
+	end
+
+	local issues = layergit.orderedMembers(raft)
+	local layers = layergit.layersOf(raft.id)
+	if printSkeletonOnly then
+		if #layers == 0 then
+			fail(`{raft.id} has no layers: ./zn start {raft.id}`)
+		end
+		if #layers ~= #issues then
+			fail(`{raft.id} has {#layers} layer(s) for {#issues} issue(s)`)
+		end
+		local baseTip = layergit.mainTip()
+		local onto = baseTip
+		local topFinishSha = ""
+		local topTip = ""
+		for i, layer in layers do
+			if layer.position ~= i or layer.issue ~= issues[i].id then
+				fail(`{raft.id} layer {i} is {layer.name}, expected {issues[i].id}`)
+			end
+			local tip = localOrOriginTip(layer) or fail(`{layer.name} has no tip`)
+			if not sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok then
+				fail(`{layer.name} is not stacked on the layer below: ./zn restack {raft.id}`)
+			end
+			local finishSha = layergit.layerFinishSha(layer, onto, tip)
+			if not finishSha then
+				fail(`{layer.issue} is not finished: ./zn finish {layer.issue}`)
+			end
+			if i == #layers then
+				topFinishSha = finishSha :: string
+				topTip = tip
+			end
+			onto = tip
+		end
+		local issueDocs = buildTraceIssueDocs(issues, topTip)
+		local changedSources = watch.sourceOf(diffNamesBetween(baseTip, topTip))
+		local claims, claimErrors = trace.deriveClaims(issueDocs)
+		if #claimErrors > 0 then
+			fail(table.concat(claimErrors, "\n"))
+		end
+		stdio.write(trace.skeleton(raft.id, topFinishSha, claims, changedSources))
+		return {}
+	end
+
+	if #layers == 0 then
+		return { `{raft.id} has no layers: ./zn start {raft.id}` }
+	end
+	local topLayer = layers[#layers]
+	local topTip = localOrOriginTip(topLayer)
+	if not topTip then
+		return { `{topLayer.name} has no tip` }
+	end
+	local useWorktree = sh.git({ "rev-parse", "HEAD" }) == topTip
+	local tracePath = `{raft.dir}/trace.md`
+	local tableText = fileTextAt(topTip, tracePath, useWorktree)
+	if tableText == nil then
+		return { `no {tracePath}: run ./zn trace {raft.id} and fill the table` }
+	end
+
+	local baseTip = layergit.mainTip()
+	local onto = baseTip
+	local layerHistories: { trace.LayerHistory } = {}
+	for _, layer in layers do
+		local tip = localOrOriginTip(layer)
+		local stacked = if tip ~= nil
+			then sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok
+			else false
+		local commits: { trace.LayerCommit } = if tip ~= nil and stacked
+			then collectLayerCommits(onto, tip)
+			else {}
+		local issueItem = store.find(layer.issue)
+		local layerTitle = if issueItem then layergit.issueTitle(issueItem) else layer.issue
+		table.insert(layerHistories, {
+			name = layer.name,
+			issue = layer.issue,
+			title = layerTitle,
+			base = onto,
+			tip = tip,
+			stackedOnBelow = stacked,
+			commits = commits,
+		})
+		if tip ~= nil then
+			onto = tip
+		end
+	end
+
+	local issueDocs = buildTraceIssueDocs(issues, topTip)
+	local diffList = diffNamesBetween(baseTip, topTip)
+	local changedSources = watch.sourceOf(diffList)
+
+	local candidatePaths: { [string]: boolean } = {}
+	for _, idoc in issueDocs do
+		candidatePaths[idoc.docPath] = true
+		candidatePaths[idoc.checkPath] = true
+	end
+	for _, src in changedSources do
+		candidatePaths[src] = true
+	end
+	for refPath in string.gmatch(tableText, "([A-Za-z0-9_./%-]+):%d+") do
+		candidatePaths[refPath] = true
+	end
+
+	local filesAtCommit: { [string]: trace.FileMeta } = {}
+	for path in candidatePaths do
+		local text = gitFileTextAt(topTip, path)
+		if text ~= nil then
+			filesAtCommit[path] = { lines = trace.splitLines(text) }
+		end
+	end
+
+	local raftDocText = fileTextAt(topTip, raft.doc, useWorktree) or ""
+	return trace.check({
+		raftId = raft.id,
+		raftDir = raft.dir,
+		tableText = tableText,
+		layers = layerHistories,
+		issues = issueDocs,
+		raftDocText = raftDocText,
+		changedSources = changedSources,
+		filesAtCommit = filesAtCommit,
+	})
+end
+
+function cmd.trace(pos: { string }, opts: { [string]: { string } })
+	for k in opts do
+		if k ~= "--check" then
+			fail(`usage: trace <R-id> [--check] (unknown option {k})`)
+		end
+	end
+	if #pos ~= 1 then
+		fail("usage: trace <R-id> [--check]")
+	end
+	local raftId = pos[1]
+	if hasOrigin() then
+		sh.run("git", { "fetch", "--quiet", "origin" })
+	end
+	local raft = store.get(raftId)
+	if raft.kind ~= "raft" then
+		fail(`{raft.id} is not a raft`)
+	end
+	if opts["--check"] then
+		local findings = traceProblems(raft)
+		if #findings > 0 then
+			stdio.ewrite(table.concat(findings, "\n") .. "\n")
+			process.exit(1)
+		end
+		print(`ok: {raft.id}`)
+		return
+	end
+	traceProblems(raft, true)
 end
 
 function cmd.done(pos: { string })
@@ -4716,6 +5009,10 @@ function cmd.done(pos: { string })
 			fail(`{layer.issue} is not finished: ./zn finish {layer.issue}`)
 		end
 		onto = tip
+	end
+	local traceFindings = traceProblems(raft)
+	if #traceFindings > 0 then
+		fail(`{raft.id} trace --check failed:\n{table.concat(traceFindings, "\n")}`)
 	end
 	local bindIds: { string } = {}
 	for _, issue in issues do
@@ -4820,10 +5117,11 @@ function cmd.done(pos: { string })
 	if fs.isFile(FOCUS_FILE) then
 		fs.removeFile(FOCUS_FILE)
 	end
+	local doneTracePath = `{store.dirFor("raft", "done", raft.id, raft.root)}/trace.md`
 	local committed, commitErr = pcall(function()
 		recordAndCommit(
 			raft,
-			stack.bindMessage(raft.id, bindIds, verdict :: string),
+			stack.bindMessage(raft.id, bindIds, verdict :: string, doneTracePath),
 			{},
 			nil,
 			true,
@@ -7260,6 +7558,7 @@ local READ_ONLY: { [string]: boolean } = {
 	["promote-check"] = true,
 	stack = true,
 	stamp = true,
+	trace = true,
 }
 if not READ_ONLY[name :: string] then
 	guardRepoRoot()

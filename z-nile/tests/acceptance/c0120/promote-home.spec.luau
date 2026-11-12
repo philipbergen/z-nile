@@ -11,6 +11,7 @@ local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
 -- a promoted-spec path in two parts, so a compaction never rewrites this spec's own test data
@@ -143,6 +144,7 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 		write("pickman/.tracker/issues/f0010/acceptance/alpha.spec.luau", ALPHA)
 		write("pickman/.tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
 		write("pickman/.tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
+		seal.prep(work)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")
@@ -182,6 +184,7 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 
 	it("done moves the specs into pickman/tests/acceptance/<id> and runs them from pickman/", function()
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.trace(work, "R0010")
 		local r = tr({ "done", "R0010" })
 		if not r.ok then
 			error(r.stderr .. r.stdout)

@@ -7,7 +7,7 @@ local t = require("@tests/lib/t")
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
 return t.spec("the measured slow-tier manifest", function(it)
-	it("names 61 existing z-nile specs with their recorded seconds", function()
+	it("names 62 existing z-nile specs with their recorded seconds", function()
 		local tiers = slow.load(root)
 		local count = 0
 		for path, seconds in tiers do
@@ -16,7 +16,7 @@ return t.spec("the measured slow-tier manifest", function(it)
 			t.expect(fs.isFile(`{root}/z-nile/{path}`)).toBe(true)
 			t.expect(seconds > 0).toBe(true)
 		end
-		t.expect(count).toBe(61)
+		t.expect(count).toBe(62)
 	end)
 
 	it("has at least the 25 slowest recorded specs", function()

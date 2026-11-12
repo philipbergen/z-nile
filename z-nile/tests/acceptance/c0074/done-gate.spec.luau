@@ -9,6 +9,7 @@ local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local gate = require("@scripts/tracker/gate")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -95,7 +96,7 @@ local function fresh()
 	-- a previous done leaves `main` on the binding commit. Put the layer back, and main behind it.
 	git({ "switch", "-q", "-C", "R0010/1/f0010", reviewed })
 	if fixture.exec(work, "git", { "rev-parse", "--verify", "--quiet", "main" }, { env = ID }).ok then
-		git({ "branch", "-f", "main", `{reviewed}^` })
+		git({ "branch", "-f", "main", `{reviewed}~2` })
 	end
 	if fs.isFile(gateLog) then
 		fs.removeFile(gateLog)
@@ -170,6 +171,7 @@ return t.spec("c0800 done runs the affected gate after promotion", function(it)
 		-- c0120 override: the spec runs from its project's home after the move
 		write(`{TR}/issues/f0010/check.sh`, TRIVIAL_CHECK)
 		write(`{TR}/rafts/R0010/check.sh`, TRIVIAL_CHECK)
+		seal.prep(work)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")
@@ -177,6 +179,7 @@ return t.spec("c0800 done runs the affected gate after promotion", function(it)
 		write(`{TR}/rafts/active/R0010/review-001.md`, "# Review 001\n\nVerdict: approve\n")
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.trace(work, "R0010")
 		reviewed = git({ "rev-parse", "HEAD" })
 	end)
 

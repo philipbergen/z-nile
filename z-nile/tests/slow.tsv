@@ -55,6 +55,7 @@
 24.795	tests/acceptance/c0154/schedule.spec.luau
 24.023	tests/acceptance/c0049/parallel-runner.spec.luau
 23.543	tests/acceptance/c0117/trackerstate.spec.luau
+13.800	tests/tooling/trace-land.spec.luau
 5.428	tests/acceptance/c0191/bounded.spec.luau
 1.891	tests/acceptance/c0076/sweeper.spec.luau
 1.152	tests/acceptance/c0079/watchdog.spec.luau
