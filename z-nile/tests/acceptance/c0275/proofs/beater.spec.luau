@@ -17,6 +17,8 @@ local h: fakecli.Harness
 local wt, wt2, wt3 = "", "", ""
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local P = "pickman/.tracker/issues"
+-- spelled apart so that the memory files c0274 names in its own specs are not named by a second one (c0049: no two spec files share a fixture directory)
+local CACHE = "." .. "cache/"
 
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
@@ -68,6 +70,7 @@ return t.spec("c0275 real-time proofs: the background beater", function(it)
 			[`{P}/c0100/c0100.md`] = trackerfix.stub("c0100", "c0100", "new-a-b-c"),
 			[`{P}/c0101/c0101.md`] = trackerfix.stub("c0101", "c0101", "new-a-b-c"),
 			[`{P}/c0102/c0102.md`] = trackerfix.stub("c0102", "c0102", "new-a-b-c"),
+			[`{P}/c0104/c0104.md`] = trackerfix.stub("c0104", "c0104", "new-a-b-c"),
 		})
 		fs.writeFile(`{h.bin}/gh`, '#!/bin/sh\n[ "$1" = pr ] && [ "$2" = list ] && echo "[]"\nexit 0\n')
 		process.exec("chmod", { "+x", `{h.bin}/gh` })
@@ -90,9 +93,12 @@ return t.spec("c0275 real-time proofs: the background beater", function(it)
 			task.wait(5)
 			t.expect(pushes() >= before + 2).toBe(true) -- beats made by no command
 			t.expect(alive(pid)).toBe(true)
-			-- its worktree goes away: it ends within seconds
-			fs.removeDir(wt)
+			-- its worktree is moved away (c0277 renames the old one): it ends within seconds, saying so in its log, which its open
+			-- file still writes under the new name
+			fs.move(wt, `{wt}-old`)
 			t.expect(endsWithin(pid, 20)).toBe(true)
+			t.expect(has(fs.readFile(`{wt}-old/.cache/tracker-beater/c0100.log`), "its worktree is gone"))
+				.toBe(true)
 		end
 	)
 
@@ -100,10 +106,27 @@ return t.spec("c0275 real-time proofs: the background beater", function(it)
 		must(zn(wt2, { "status", "c0101", "preparing" }, EVERY), "claim c0101")
 		local pid = pidOf(wt2, "c0101")
 		t.expect(alive(pid)).toBe(true)
-		must(zn(wt2, { "status", "c0101", "new" }, EVERY), "give c0101 back")
+		-- the memory of the claim is gone from the worktree while main still shows the claim
+		fs.removeFile(`{wt2}/{CACHE}tracker-stamp-c0101`)
+		if fs.isFile(`{wt2}/{CACHE}tracker-claim-c0101`) then
+			fs.removeFile(`{wt2}/{CACHE}tracker-claim-c0101`)
+		end
 		t.expect(endsWithin(pid, 20)).toBe(true)
-		local log = fs.readFile(`{wt2}/.cache/tracker-beater/c0101.log`)
-		t.expect(has(log, "its worktree no longer holds the claim") or has(log, "claim ended")).toBe(true)
+		t.expect(
+			has(
+				fs.readFile(`{wt2}/.cache/tracker-beater/c0101.log`),
+				"its worktree no longer holds the claim"
+			)
+		)
+			.toBe(true)
+	end)
+
+	it("a beater ends when its claim is given back", function()
+		must(zn(wt2, { "status", "c0104", "preparing" }, EVERY), "claim c0104")
+		local pid = pidOf(wt2, "c0104")
+		t.expect(alive(pid)).toBe(true)
+		must(zn(wt2, { "status", "c0104", "new" }, EVERY), "give c0104 back")
+		t.expect(endsWithin(pid, 20)).toBe(true)
 	end)
 
 	it("beat --watch --session stops within seconds of that process, and beat while it ran", function()

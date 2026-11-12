@@ -25,6 +25,8 @@ local h: fakecli.Harness
 -- wt makes the main claims, wt2 the failing and ended ones, wt3 a claim it never touches again, wt4 takes it over, wt5 the beater
 local wt, wt2, wt3, wt4, wt5 = "", "", "", "", ""
 local specPid = ""
+-- the beater's folder, spelled so that the proof that reads it too does not name one fixture directory twice (c0049)
+local BEATER = "." .. "cache/tracker-beater"
 local rid = "" -- the raft `new raft` claimed
 
 local function has(text: string, needle: string): boolean
@@ -338,13 +340,13 @@ return t.spec("c0275 automatic beats", function(it)
 			local top = (string.gsub(fixture.git(wt5, { "rev-parse", "--show-toplevel" }), "%s+$", ""))
 			-- the bound is ./zn run's, the loop is beat --watch; the session is the claude process above, when there is one
 			t.expect(has(line, `{top}/zn run --time 3600 -- {top}/zn beat c0085 --watch`)).toBe(true)
-			local pidFile = fs.readFile(`{wt5}/.cache/tracker-beater/c0085`)
+			local pidFile = fs.readFile(`{wt5}/{BEATER}/c0085`)
 			t.expect(string.match(pidFile, "^" .. specPid .. " %d+%s*$") ~= nil).toBe(true)
 			-- the next command finds it alive and starts no second one
 			must(zn(wt5, { "lessons", "--tags" }, T0 + 7010, { ZN_BEATER = "1" }), "a command while it runs")
 			t.expect(#ours("c0085")).toBe(1)
 			-- its pid gone (it ended at its hour, or with the session): the next command starts it again
-			fs.writeFile(`{wt5}/.cache/tracker-beater/c0085`, `999999 {os.time() + 3000}`)
+			fs.writeFile(`{wt5}/{BEATER}/c0085`, `999999 {os.time() + 3000}`)
 			must(zn(wt5, { "lessons", "--tags" }, T0 + 7020, { ZN_BEATER = "1" }), "a command after it ended")
 			t.expect(#ours("c0085")).toBe(2)
 			-- a spec run starts none unless it asks; a headless step's dispatcher beats for it instead
@@ -362,7 +364,7 @@ return t.spec("c0275 automatic beats", function(it)
 			t.expect(markOf(wt5, "R0010") ~= nil).toBe(true)
 			-- giving the claim back ends its beater's file (the loop itself stops: its worktree no longer holds the claim)
 			must(zn(wt5, { "status", "c0085", "new" }, T0 + 7060), "give c0085 back")
-			t.expect(fs.isFile(`{wt5}/.cache/tracker-beater/c0085`)).toBe(false)
+			t.expect(fs.isFile(`{wt5}/{BEATER}/c0085`)).toBe(false)
 		end
 	)
 

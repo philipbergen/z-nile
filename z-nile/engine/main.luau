@@ -1949,7 +1949,7 @@ function hb.sessionPid(): number?
 	local chain: { { pid: number, command: string } } = {}
 	local at = tonumber(sh.trim(sh.run("sh", { "-c", "echo $PPID" }).stdout))
 	while at ~= nil and at > 1 and #chain < 24 do
-		local r = sh.run("ps", { "-o", "ppid=,command=", "-p", tostring(at) })
+		local r = sh.run("env", { "LC_ALL=C", "ps", "-o", "ppid=,command=", "-p", tostring(at) })
 		local ppid, command = string.match(sh.trim(r.stdout), "^(%d+)%s+(.*)$")
 		if not r.ok or ppid == nil or command == nil then
 			break
@@ -2163,8 +2163,8 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 		if msg then
 			fail(if lost then msg else `beat: {id}: {msg}`)
 		end
-		-- c0275: an adoption in a worktree makes it the holder, so its claim gets a beater like a claim it made
-		if adopt and named == nil and not inMainCheckout() then
+		-- c0275: a beat from a worktree that holds the claim (an adoption included) gives it a beater, like a claim it made
+		if named == nil and not inMainCheckout() then
 			pcall(hb.ensureBeater, id)
 		end
 		return
