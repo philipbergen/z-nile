@@ -27,6 +27,7 @@ local wt, wt2, wt3, wt4, wt5 = "", "", "", "", ""
 local specPid = ""
 -- the beater's folder, spelled so that the proof that reads it too does not name one fixture directory twice (c0049)
 local BEATER = "." .. "cache/tracker-beater"
+local MARKS = "." .. "cache/tracker-beats"
 local rid = "" -- the raft `new raft` claimed
 
 local function has(text: string, needle: string): boolean
@@ -198,6 +199,9 @@ return t.spec("c0275 automatic beats", function(it)
 			)
 			t.expect(net()).toBe(before)
 			-- the main checkout holds no work: a command there beats nothing, however old the last beat
+			-- even a mark planted there (a copy of the worktree's) is never read: the main checkout holds no work
+			fs.writeDir(`{h.f.main}/{MARKS}`)
+			fs.writeFile(`{h.f.main}/{MARKS}/c0010`, markOf(wt, "c0010") :: string)
 			must(zn(h.f.main, { "status", "c0010" }, T0 + 5000), "status in the main checkout")
 			t.expect(epochsOf(stamp)).toEqual({ T0 + 1000 })
 			t.expect(markOf(wt, "c0010")).toBe(`{stamp} {T0 + 1000} {tipOf(stamp)}`)
@@ -261,6 +265,9 @@ return t.spec("c0275 automatic beats", function(it)
 			fs.removeFile(`{h.fakes}/hbfail`)
 			t.expect(r.ok).toBe(true)
 			t.expect(has(r.stderr, "beat: c0075:")).toBe(true) -- said, with the item named
+			-- said by the attempt itself and again by the report of the first beat: twice
+			local _, said = string.gsub(r.stderr, "fake beat refusal", "")
+			t.expect(said).toBe(2)
 			local stamp = stampOf(`{P}/c0075/c0075.md`)
 			t.expect(string.sub(stamp, 1, 10)).toBe("preparing-")
 			t.expect(epochsOf(stamp)).toEqual({}) -- no beat landed
@@ -294,7 +301,10 @@ return t.spec("c0275 automatic beats", function(it)
 			-- another checkout, which remembers nothing about c0070, gives it back
 			must(zn(wt, { "status", "c0070", "new" }, T0 + 5100), "give c0070 back")
 			t.expect(tipOf(stamp)).toBe("") -- giving the claim back deleted its heartbeat branch
+			local pushed = hbPushes()
 			local told = zn(wt2, { "lessons", "--tags" }, T0 + 5100 + EVERY)
+			-- an ended claim is not beaten (not even a branch created and deleted again): only c0075, still held, is
+			t.expect(hbPushes() - pushed).toBe(1)
 			t.expect(told.ok).toBe(true)
 			t.expect(has(told.stderr, "c0070's claim ended")).toBe(true)
 			t.expect(has(told.stderr, "c0070's claim was taken over")).toBe(false)

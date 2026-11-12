@@ -1880,10 +1880,11 @@ function hb.markIds(): { string }
 	return out
 end
 
--- Whether an automatic beat may run here at all: the same answer every heartbeat path asks (one reader of the fence, and
--- it fails closed: a nested `./zn` in a check or spec flow of the real repository never fetches or pushes).
+-- Whether an automatic beat may run here at all: the same answer every heartbeat path asks. `publishing()` is the engine's
+-- own fence answer (it is false in a checkout a check protects), one reader that fails closed: a nested `./zn` in a check
+-- or spec flow of the real repository never fetches or pushes.
 function hb.mayBeat(): boolean
-	return publishing() and not guarded(true)
+	return publishing()
 end
 
 -- One beat attempt for the stamp `held` of `id`, with the worktree's mark: it leases on the sha it last wrote and records

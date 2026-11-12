@@ -40,12 +40,12 @@ end
 local function issue(id: string, status: string): string
 	return trackerfix.stub(id, id, status)
 end
--- the check waits (up to 20 s) for a push of a heartbeat branch made after it began: a command that beats only before or
--- after never satisfies it
+-- the check waits (up to 20 s) for two pushes of heartbeat branches after the count it is given: the command's own beat before
+-- its handler is one, so only a tick while the check runs is the second
 local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
 	.. 'check "AC1: a beat lands while this check runs" bash -c \'i=0; while [ $i -lt 20 ]; do '
 	.. 'n=$(wc -l < "$FAKE_DIR/beatpush" 2>/dev/null || echo 0); '
-	.. 'if [ "${n// /}" -gt "$BEFORE" ]; then echo seen > "$FAKE_DIR/check-beat"; exit 0; fi; '
+	.. 'if [ "${n// /}" -gt "$((BEFORE+1))" ]; then echo seen > "$FAKE_DIR/check-beat"; exit 0; fi; '
 	.. "sleep 1; i=$((i+1)); done; exit 1'\nfinish\n"
 local SHIM = '#!/bin/sh\nif [ "$1" = push ]; then case "$*" in *":refs/heads/hb/"*) echo p >> "$FAKE_DIR/beatpush";; esac; fi\n'
 	.. 'if [ "$1" = fetch ]; then case "$*" in *hb-seen*) echo x >> "$FAKE_DIR/lscalls"; [ -f "$FAKE_DIR/lshang" ] && sleep 120;; esac; fi\n'
