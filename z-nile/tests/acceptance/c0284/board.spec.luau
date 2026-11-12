@@ -578,6 +578,7 @@ console.log(JSON.stringify({ pane: els.pane.innerHTML }));
 			for line in string.gmatch(told.stdout, "[^\n]+") do
 				table.insert(lines, line)
 			end
+			t.expect(find(data, id).provenance ~= nil).toBe(true)
 			t.expect(linesOf(find(data, id).provenance)).toEqual(lines)
 		end
 	end)
