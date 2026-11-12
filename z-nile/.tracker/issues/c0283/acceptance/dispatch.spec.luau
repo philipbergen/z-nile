@@ -1,5 +1,5 @@
 --!strict
--- c0283 AC7: the dispatcher's prep gate never merges, whatever auto_merge says, every prep stop keeps its reason and gains
+-- c0283 AC4: the dispatcher's prep gate never merges, whatever auto_merge says, every prep stop keeps its reason and gains
 -- the approve suffix, a gate that no condition fails says the PR waits for the user, and a dispatched worker cannot
 -- approve. Fake CLIs and a fixture under .cache (tests/lib/fakecli), as c0117's guards.
 local fakecli = require("@tests/lib/fakecli")
@@ -9,32 +9,45 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local MODELS = [[
-order = ["claude", "grok"]
-
 [dispatch]
 auto_merge = ["prep"]
 stall_seconds = 3
 
-[z-design.claude]
-model = "claude-opus-5-5"
-effort = "high"
-rank = 3
-runtime = "claude-cli"
-max_tokens = 5000
-
-[z-design.grok]
+[fallback.grok]
 model = "grok-4.7"
-effort = "medium"
-rank = 3
 runtime = "grok-cli"
-max_tokens = 5000
 
-[zz-review.claude]
+[fallback.agent]
 model = "claude-opus-5-5"
-effort = "high"
-rank = 4
+runtime = "cursor-cli"
+max_calls = 2
+max_minutes = 60
+
+[roles.idea]
+model = "claude-sonnet-5"
+cli = "claude"
 runtime = "claude-cli"
+rank = 2
 max_tokens = 5000
+fallbacks = []
+
+[roles.design]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 5000
+effort = "high"
+fallbacks = ["grok", "agent"]
+
+[roles.design-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+effort = "xhigh"
+fallbacks = ["grok"]
 ]]
 
 local h: fakecli.Harness
@@ -59,6 +72,16 @@ return t.spec("c0283 the dispatcher's prep gate", function(it)
 				"new-quiet-copper-falcon"
 			),
 			["pickman/.tracker/issues/c0021/.models.toml"] = "[dispatch]\nauto_merge = []\n",
+			["pickman/.tracker/issues/c0022/c0022.md"] = trackerfix.stub(
+				"c0022",
+				"fourth-thing",
+				"new-quiet-copper-falcon"
+			),
+			["pickman/.tracker/issues/c0023/c0023.md"] = trackerfix.stub(
+				"c0023",
+				"fifth-thing",
+				"new-quiet-copper-falcon"
+			),
 		})
 		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 	end)
@@ -77,7 +100,9 @@ return t.spec("c0283 the dispatcher's prep gate", function(it)
 		-- root .models.toml says auto_merge = ["prep"] and the chain still stops there
 		fakecli.mode(h, "claude", "claim")
 		local r = zn({ "dispatch", "c0020" })
-		t.expect(r.code).toBe(4)
+		if r.code ~= 4 then
+			error(`exit {r.code}: {r.stdout}{r.stderr}{fakecli.log(h)}`)
+		end
 		t.expect(has(r.stdout, "the prep PR #7 waits for the user's approval and merge")).toBe(true)
 		t.expect(has(r.stdout, "./zn approve c0020")).toBe(true)
 		t.expect(has(r.stdout, "./zn dispatch c0020 again")).toBe(true)
@@ -96,6 +121,43 @@ return t.spec("c0283 the dispatcher's prep gate", function(it)
 		-- a step that runs `./zn approve` is refused: the dispatched worker has no human behind it
 		local approve = zn({ "approve", "c0020" }, { ZN_DISPATCH = "1" })
 		t.expect(approve.ok).toBe(false)
-		t.expect(has(approve.stderr, "dispatch")).toBe(true)
+		t.expect(has(approve.stderr, "ZN_DISPATCH is set")).toBe(true)
 	end)
+
+	it(
+		"the suffix follows the reason: a carrying PR is not told to merge, a red one is told to resolve first",
+		function()
+			fakecli.clear(h)
+			fakecli.mode(h, "claude", "claim")
+			local function pr(n: number, files: { [string]: string }, ci: string): string
+				local sha = fakecli.pullRequest(h, n, files)
+				return `\{"number":{n},"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","statusCheckRollup":[\{"conclusion":"{ci}"\}],"headRefOid":"{sha}"\}`
+			end
+			-- a prep PR whose head carries code waits for a human's judgement: its reason is kept, and nothing says merge it
+			fs.writeFile(
+				`{h.fakes}/pr-prep-fourth-thing.json`,
+				pr(
+					9,
+					{ ["pickman/.tracker/issues/c0022/x.md"] = "x\n", ["src/x.lua"] = "return 1\n" },
+					"SUCCESS"
+				)
+			)
+			local carries = zn({ "dispatch", "c0022" })
+			t.expect(carries.code).toBe(4)
+			t.expect(has(carries.stdout, "src/x.lua")).toBe(true)
+			t.expect(has(carries.stdout, "merge it yourself")).toBe(false)
+			-- red CI: the user is told to resolve that first
+			fs.writeFile(
+				`{h.fakes}/pr-prep-fifth-thing.json`,
+				pr(10, { ["pickman/.tracker/issues/c0023/x.md"] = "x\n" }, "FAILURE")
+			)
+			local red = zn({ "dispatch", "c0023" })
+			t.expect(red.code).toBe(4)
+			t.expect(has(red.stdout, "waits for green CI")).toBe(true)
+			t.expect(has(red.stdout, "when that is resolved, approve the design with ./zn approve c0023"))
+				.toBe(true)
+			t.expect(has(fakecli.log(h), "realgh pr merge 9")).toBe(false)
+			t.expect(has(fakecli.log(h), "realgh pr merge 10")).toBe(false)
+		end
+	)
 end)

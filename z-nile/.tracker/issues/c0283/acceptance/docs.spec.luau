@@ -1,6 +1,6 @@
 --!strict
--- c0283 AC7: the texts that restate the approval rules agree with the engine: zz-rules (Design approval and the
--- dispatcher paragraph), z-design step 5, the README, AGENTS.md, the root .models.toml and ./zn's usage.
+-- c0283 AC5: the texts that restate the rules agree with the engine: zz-rules (the approve row, Landing step 3 and the
+-- dispatcher paragraph), z-design (steps 5 and 6), the README, AGENTS.md and the root .models.toml.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -18,61 +18,60 @@ local function lacks(path: string, needles: { string }): { string }
 	end
 	return out
 end
+-- the needles of `needles` that `path` still holds
+local function holds(path: string, needles: { string }): { string }
+	local text = fs.readFile(`{top}/{path}`)
+	local out: { string } = {}
+	for _, needle in needles do
+		if string.find(text, needle, 1, true) then
+			table.insert(out, needle)
+		end
+	end
+	return out
+end
 
 return t.spec("c0283 the texts", function(it)
-	it("zz-rules documents the approval, the doors, the frozen list and the prep gate", function()
+	it("zz-rules documents the agent-session refusal, the row and the prep gate", function()
 		t.expect(lacks("z-nile/skills/zz-rules/SKILL.md", {
-			"## Design approval",
-			"`./zn approve <id>`",
-			"design=<hash>",
-			"**It is refused in any agent session**",
-			"in a terminal of their own",
-			"has no current approval",
-			"was redesigned since its approval",
-			"refuses under `ZN_DISPATCH`",
-			"`fold`, `new raft` and `ready` refuse",
-			"`unapproved-prepared`",
-			"`z-nile/provenance-exempt.txt`",
-			"`./zn provenance freeze`",
-			"with no list on `origin/main` the doors enforce nothing",
-			"a `prep` gate never merges",
+			"**never in an agent session**",
+			"a terminal does not help when `CLAUDECODE`, `AI_AGENT`, `CURSOR_AGENT` or `GROK_SESSION_ID` is set",
+			"appends `approved | human:<git name> | design=<first 12 hex of that hash>` to the issue's `provenance.md`",
+			"in the same `tracker: approve` commit",
+			"It records no words.",
+			"only a `raft` gate (a `prep` gate never merges)",
 			"the prep PR #<n> waits for the user's approval and merge",
 			"`auto_merge` keeps accepting `prep` as a name, with no effect",
-			'`--said "<their words>"`',
-			"has changes that are not committed",
-			"`exempt-list-gone`",
-			"`./zn provenance freeze --check`",
-			"Before merging a prep PR, merge `origin/main`, rerun `./zn status <id> prepared`",
+			"when that is resolved, approve the design with ./zn approve <id>",
+			"a prep PR carries only its issue's folder and skill lessons",
+			"run `./zn sync` in the prep worktree: it unites the records",
+			"a prep PR waits for the user, who approves the design (`./zn approve`) and merges it",
 		})).toEqual({})
-		-- the sentences that said the dispatcher passes the prep gate are gone
-		local zz = fs.readFile(`{top}/z-nile/skills/zz-rules/SKILL.md`)
-		t.expect((string.find(zz, "passes the prep and rafting gates itself", 1, true))).toBe(nil)
-		t.expect((string.find(zz, "passes a `prep` or `raft` gate itself", 1, true))).toBe(nil)
-		local zd = fs.readFile(`{top}/z-nile/skills/z-design/SKILL.md`)
-		t.expect((string.find(zd, "the dispatcher passes the gate (the user started it)", 1, true))).toBe(nil)
+		t.expect(holds("z-nile/skills/zz-rules/SKILL.md", {
+			"passes the prep and rafting gates itself",
+			"passes a `prep` or `raft` gate itself",
+		})).toEqual({})
 	end)
 
-	it("z-design step 5 says who approves and in what order", function()
+	it("z-design, the README and AGENTS.md say a human approves and an agent never does", function()
 		t.expect(lacks("z-nile/skills/z-design/SKILL.md", {
-			"**The design is approved by a human, never by you or the reviewer**",
-			"`./zn approve <id>` in a terminal of their own",
-			"**then run `./zn status <id> prepared`**",
-			"needs a fresh `./zn approve`",
-			"it never runs `approve` or `status prepared`",
+			"in a terminal of their own in this worktree (it is refused in any agent session, a `!` command included)",
+			"the dispatcher stops at the prep gate for the user, who approves the design",
 		})).toEqual({})
-	end)
-
-	it("the README, AGENTS.md, .models.toml and the usage restate it", function()
+		t.expect(
+			holds(
+				"z-nile/skills/z-design/SKILL.md",
+				{ "the dispatcher passes the gate (the user started it)" }
+			)
+		)
+			.toEqual({})
 		t.expect(lacks("z-nile/README.md", { "**Design approval** (c0283)", "refused in any agent session" }))
 			.toEqual({})
 		t.expect(lacks("AGENTS.md", { "**Design approval:**", "never try to" })).toEqual({})
+	end)
+
+	it("the root .models.toml no longer lists prep as a merge gate", function()
 		local models = fs.readFile(`{top}/.models.toml`)
 		t.expect(string.find(models, 'auto_merge = ["raft"]', 1, true) ~= nil).toBe(true)
-		t.expect(
-			string.find(models, '"prep"', 1, true) ~= nil
-				and string.find(models, 'auto_merge = ["prep"', 1, true) ~= nil
-		).toBe(false)
-		t.expect(lacks("z-nile/engine/main.luau", { "  approve <id>  ", "  provenance freeze [--check]  " }))
-			.toEqual({})
+		t.expect((string.find(models, 'auto_merge = ["prep"', 1, true))).toBe(nil)
 	end)
 end)
