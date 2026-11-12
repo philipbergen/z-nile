@@ -25,8 +25,11 @@ local SPEC = "--!strict\n"
 	.. "\tend)\n"
 	.. "end)\n"
 
-local function doc(design: string): string
-	return `---\nid: {ID}\ntype: chore\ntitle: Hold\nslug: hold\nraft: \ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-11-10\nstatus: preparing-quiet-copper-falcon\n---\n\n# {ID}\n\n## Problem\nThe gate cannot see an approval.\n\n## Solution\nRecord a hash.\n\n## Design\n{design}\n\n## Acceptance criteria\nThe hash is checked.\n\n## Test plan\nSpecs cover the gates.\n`
+local function doc(design: string, ready: boolean?): string
+	return `---\nid: {ID}\ntype: chore\ntitle: Hold\nslug: hold\nraft: \ndepends_on: []\nemergent: false\ndesign: {if ready
+			== false
+		then "draft"
+		else "ready"}\ncreated: 2026-11-10\nstatus: preparing-quiet-copper-falcon\n---\n\n# {ID}\n\n## Problem\nThe gate cannot see an approval.\n\n## Solution\nRecord a hash.\n\n## Design\n{design}\n\n## Acceptance criteria\nThe hash is checked.\n\n## Test plan\nSpecs cover the gates.\n`
 end
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
@@ -67,12 +70,14 @@ return t.spec("c0283 approve in an agent session and the provenance row", functi
 
 	it("sets up a designed issue in a worktree", function()
 		f = trackerfix.new(NAME, {
-			[`{ISSUE}/{ID}.md`] = doc("Hash the contract."),
+			[`{ISSUE}/{ID}.md`] = doc("Hash the contract.", false), -- a ready seed would carry an approval (trackerfix seals it)
 			[`{ISSUE}/check.sh`] = CHECK,
 			[`{ISSUE}/acceptance/hold.spec.luau`] = SPEC,
 		})
 		wt = `{f.base}/wt`
 		fixture.git(f.main, { "worktree", "add", "-q", "-b", "prep-c0001", wt, "HEAD" })
+		fs.writeFile(`{wt}/{ISSUE}/{ID}.md`, doc("Hash the contract."))
+		commit("design ready")
 	end)
 
 	it("is refused in an agent session even with a terminal, and writes and commits nothing", function()
@@ -98,7 +103,9 @@ return t.spec("c0283 approve in an agent session and the provenance row", functi
 		t.expect(has(say(dispatched), "ZN_DISPATCH is set")).toBe(true)
 		t.expect(head()).toBe(before)
 		t.expect(fs.isFile(`{wt}/{ISSUE}/approval.md`)).toBe(false)
-		t.expect(fs.isFile(`{wt}/{ISSUE}/provenance.md`)).toBe(false)
+		if fs.isFile(`{wt}/{ISSUE}/provenance.md`) then
+			error(`provenance.md exists: {fs.readFile(`{wt}/{ISSUE}/provenance.md`)}`)
+		end
 	end)
 
 	it(
@@ -115,17 +122,14 @@ return t.spec("c0283 approve in an agent session and the provenance row", functi
 			t.expect(files).toBe(`{ISSUE}/approval.md\n{ISSUE}/provenance.md`)
 			local lines = rows("provenance.md")
 			t.expect(#lines).toBe(4) -- the title, the table header, the separator and one row (gmatch skips the blank line)
-			t.expect(
-				string.match(
-					lines[4],
-					`^| %d%d%d%d%-%d%d%-%d%d %d%d:%d%d | approved | human:{NAME} | contract={string.sub(
-						hash,
-						1,
-						12
-					)} |$`
-				) ~= nil
-			).toBe(true)
-			t.expect(fixture.git(wt, { "status", "--porcelain" })).toBe("")
+			t.expect(string.match(lines[4], "^| %d%d%d%d%-%d%d%-%d%d %d%d:%d%d | approved | ") ~= nil)
+				.toBe(true)
+			t.expect(has(lines[4], ` | approved | human:{NAME} | contract={string.sub(hash, 1, 12)} |`))
+				.toBe(true)
+			local dirty = fixture.git(wt, { "status", "--porcelain" })
+			if dirty ~= "" then
+				error(`dirty after approve: {dirty}`)
+			end
 		end
 	)
 

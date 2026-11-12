@@ -9,32 +9,45 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local MODELS = [[
-order = ["claude", "grok"]
-
 [dispatch]
 auto_merge = ["prep"]
 stall_seconds = 3
 
-[z-design.claude]
-model = "claude-opus-5-5"
-effort = "high"
-rank = 3
-runtime = "claude-cli"
-max_tokens = 5000
-
-[z-design.grok]
+[fallback.grok]
 model = "grok-4.7"
-effort = "medium"
-rank = 3
 runtime = "grok-cli"
-max_tokens = 5000
 
-[zz-review.claude]
+[fallback.agent]
 model = "claude-opus-5-5"
-effort = "high"
-rank = 4
+runtime = "cursor-cli"
+max_calls = 2
+max_minutes = 60
+
+[roles.idea]
+model = "claude-sonnet-5"
+cli = "claude"
 runtime = "claude-cli"
+rank = 2
 max_tokens = 5000
+fallbacks = []
+
+[roles.design]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 5000
+effort = "high"
+fallbacks = ["grok", "agent"]
+
+[roles.design-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+effort = "xhigh"
+fallbacks = ["grok"]
 ]]
 
 local h: fakecli.Harness
@@ -77,7 +90,9 @@ return t.spec("c0283 the dispatcher's prep gate", function(it)
 		-- root .models.toml says auto_merge = ["prep"] and the chain still stops there
 		fakecli.mode(h, "claude", "claim")
 		local r = zn({ "dispatch", "c0020" })
-		t.expect(r.code).toBe(4)
+		if r.code ~= 4 then
+			error(`exit {r.code}: {r.stdout}{r.stderr}{fakecli.log(h)}`)
+		end
 		t.expect(has(r.stdout, "the prep PR #7 waits for the user's approval and merge")).toBe(true)
 		t.expect(has(r.stdout, "./zn approve c0020")).toBe(true)
 		t.expect(has(r.stdout, "./zn dispatch c0020 again")).toBe(true)
