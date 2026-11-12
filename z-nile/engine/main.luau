@@ -3,6 +3,7 @@
 local approval = require("./approval")
 local audit = require("./audit")
 local board = require("./board")
+local boardview = require("./boardview")
 local buffer = require("./buffer")
 local contract = require("./contract")
 local costrow = require("./costrow")
@@ -7698,12 +7699,12 @@ end
 -- metrics over lessons (c0111): findings per lesson tag, and design rounds before and after lessons existed
 -- c0116: the design-review-NNN.md files in one item's folder.
 local function designRoundsIn(dir: string): number
-	-- c0118: counted by require("./boardview").rounds, the one rule the board's chart uses too
+	-- c0118: counted by boardview.rounds, the one rule the board's chart uses too
 	local paths: { string } = {}
 	for _, name in fs.readDir(dir) do
 		table.insert(paths, `{dir}/{name}`)
 	end
-	local design = require("./boardview").rounds(paths)
+	local design = boardview.rounds(paths)
 	return design
 end
 
@@ -8400,12 +8401,12 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 			else "classic"
 	end
 	local function codeRounds(dir: string): number
-		-- c0118: counted by require("./boardview").rounds, the one rule the board's chart uses too
+		-- c0118: counted by boardview.rounds, the one rule the board's chart uses too
 		local paths: { string } = {}
 		for _, name in fs.readDir(dir) do
 			table.insert(paths, `{dir}/{name}`)
 		end
-		local _, code = require("./boardview").rounds(paths)
+		local _, code = boardview.rounds(paths)
 		return code
 	end
 	for _, raft in store.all("raft") do
