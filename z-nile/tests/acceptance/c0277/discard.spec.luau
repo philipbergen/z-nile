@@ -279,4 +279,13 @@ return t.spec("c0277 discarded worktrees", function(it)
 			t.expect(fs.isDir(dir(NAME))).toBe(false)
 		end
 	)
+
+	it("the discard is run from another checkout, never from the worktree it discards", function()
+		local wt = trim(must(zn(h.f.main, { "worktree", "prep-inside" }), "worktree"))
+		local r = zn(wt, { "worktree", "prep-inside", "--takeover" }, LATE)
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "run it from another checkout")).toBe(true)
+		t.expect(fs.isDir(wt)).toBe(true)
+		t.expect(branchOf(wt)).toBe("prep-inside")
+	end)
 end)

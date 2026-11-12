@@ -5604,6 +5604,11 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 			)
 		end
 	end
+	if sh.trim(sh.run("git", { "rev-parse", "--show-toplevel" }).stdout) == old.path then
+		fail(
+			`worktree --takeover {old.name}: run it from another checkout (the main checkout, or the taker's own worktree), not from the worktree it discards`
+		)
+	end
 	-- the claims it takes over: the ones the worktree remembers, the item the target names, and --item for its own branch
 	local ids = cm.ids(old.path)
 	local function add(x: string)
