@@ -86,26 +86,45 @@ function who.fronts(commits: { trail.Commit }, dir: string?): { [string]: proven
 end
 
 -- Sets `sideTrailers` on every merge commit of `life`: the Co-Authored-By values of its second parent (the top layer of
--- a `--no-ff` landing, which `./zn finish` committed with the agent's trailer). One `git log -1` per merge.
+-- a `--no-ff` landing, which `./zn finish` committed with the agent's trailer). ONE `git log --no-walk` reads the
+-- second parents of every merge (c0284: a board of many items, and a history that gains a landing per raft, still
+-- cost one process).
 function who.sideTrailers(life: { trail.Commit }, dir: string?)
+	local want: { string } = {}
+	local seen: { [string]: boolean } = {}
+	for _, c in life do
+		local parents = c.parents or {}
+		if #parents >= 2 and c.sideTrailers == nil and not seen[parents[2]] then
+			seen[parents[2]] = true
+			table.insert(want, parents[2])
+		end
+	end
+	if #want == 0 then
+		return
+	end
+	local r = process.exec("git", {
+		"log",
+		"--no-walk=unsorted",
+		"--stdin",
+		"--format=@@%H%n%(trailers:key=Co-Authored-By,valueonly,unfold,separator=%x1f)",
+	}, { cwd = dir, stdio = { stdin = table.concat(want, "\n") .. "\n" } })
+	local bySha: { [string]: { string } } = {}
+	local current: { string }? = nil
+	for line in string.gmatch(if r.ok then r.stdout else "", "[^\n]+") do
+		local sha = string.match(line, "^@@(%x+)$")
+		if sha then
+			current = {}
+			bySha[sha] = current
+		elseif current then
+			for value in string.gmatch(line, "[^\31]+") do
+				table.insert(current, value)
+			end
+		end
+	end
 	for _, c in life do
 		local parents = c.parents or {}
 		if #parents >= 2 and c.sideTrailers == nil then
-			local values: { string } = {}
-			local text = git({
-				"log",
-				"-1",
-				"--format=%(trailers:key=Co-Authored-By,valueonly,unfold,separator=%x1f)",
-				parents[2],
-			}, dir) or ""
-			for value in string.gmatch(text, "[^\31\n]+") do
-				table.insert(values, value)
-			end
-			for _, other in life do
-				if other.sha == c.sha then
-					other.sideTrailers = values
-				end
-			end
+			c.sideTrailers = bySha[parents[2]] or {}
 		end
 	end
 end

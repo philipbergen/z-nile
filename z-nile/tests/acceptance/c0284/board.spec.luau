@@ -96,7 +96,7 @@ return t.spec("c0284 board provenance", function(it)
 		fs.writeFile(
 			`{dir}/{IDS}/c0010/provenance.md`,
 			"# Provenance: c0010\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
-				.. `| 2026-10-05 12:00 | approved | human:Ann | design=aaaaaaaaaaaa; said="ok" |\n`
+				.. `| 2026-10-05 12:00 | approved | human:Ann | design=aaaaaaaaaaaa; said="<b>x</b> & y" |\n`
 				.. `| 2026-10-06 09:30 | rafted | {OPUS} | raft=R0011 |\n`
 		)
 		-- the spend ledger: a deliver row with the model that spent it (c0254 will add host and CLI)
@@ -179,7 +179,10 @@ return t.spec("c0284 board provenance", function(it)
 		commit("Ann", "tracker: new c0060 zeta", "2026-10-22T09:00:00Z")
 		put("c0060", doc("c0060", "R0030", "prepared-a-b-c"))
 		local map = `{dir}/z-nile/compaction.txt`
-		fs.writeFile(map, (if fs.isFile(map) then fs.readFile(map) else "") .. "# c0280 fixture\n")
+		fs.writeFile(
+			map,
+			(if fs.isFile(map) then fs.readFile(map) else "") .. "# c0284 fixture\nc0960 c0060\n"
+		)
 		commit(
 			"Phil",
 			"tracker: compact ids (#64)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>",
@@ -215,6 +218,23 @@ return t.spec("c0284 board provenance", function(it)
 		fs.writeFile(`{dir}/{IDS}/done/c0070/c0070.md`, doc("c0070", "R0040", "done-a-b-c"))
 		git(dir, { "add", "-A" }, "Gus", "2026-10-29T09:00:00Z")
 		git(dir, { "commit", "-q", "-m", "R0040: bind c0070" }, "Gus", "2026-10-29T09:00:00Z")
+		-- c0075: a second `--no-ff` landing, its top layer carrying another agent's trailer (the second parents of both
+		-- merges are read in one process)
+		put("c0075", doc("c0075", "R0041", "prepared-a-b-c"))
+		commit("Ann", "tracker: new c0075 theta", "2026-10-29T10:00:00Z")
+		git(dir, { "checkout", "-q", "-b", "layer2" }, "Dev", "2026-10-29T10:30:00Z")
+		fs.writeFile(`{dir}/{IDS}/c0075/note.txt`, "work\n")
+		commit(
+			"Dev",
+			"c0075: theta\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>",
+			"2026-10-29T11:00:00Z"
+		)
+		git(dir, { "checkout", "-q", "main" }, "Gus", "2026-10-29T12:00:00Z")
+		git(dir, { "merge", "-q", "--no-ff", "--no-commit", "layer2" }, "Gus", "2026-10-29T12:00:00Z")
+		git(dir, { "mv", `{IDS}/c0075`, `{IDS}/done/c0075` }, "Gus", "2026-10-29T12:00:00Z")
+		fs.writeFile(`{dir}/{IDS}/done/c0075/c0075.md`, doc("c0075", "R0041", "done-a-b-c"))
+		git(dir, { "add", "-A" }, "Gus", "2026-10-29T12:00:00Z")
+		git(dir, { "commit", "-q", "-m", "R0041: bind c0075" }, "Gus", "2026-10-29T12:00:00Z")
 		-- R0020: a done raft whose spend.md is a roll-up of its issues, with a stored row
 		local raftDir = `{dir}/pickman/.tracker/rafts`
 		fs.writeDir(`{raftDir}/R0020`)
@@ -248,9 +268,20 @@ return t.spec("c0284 board provenance", function(it)
 			error(made.stdout .. made.stderr)
 		end
 		W = (string.gsub(made.stdout, "%s+$", ""))
+		-- unpublished commits of the worktree, never pushed: a status change of c0020, and c0080, an item that exists
+		-- here only (with a stored row). origin/main, the history `who` and the board read, holds neither.
+		fs.writeFile(`{W}/{IDS}/c0020/c0020.md`, doc("c0020", "", "preparing-w-w-w"))
+		fs.writeDir(`{W}/{IDS}/c0080`)
+		fs.writeFile(`{W}/{IDS}/c0080/c0080.md`, doc("c0080", "", "new-w-w-w"))
+		fs.writeFile(
+			`{W}/{IDS}/c0080/provenance.md`,
+			"# Provenance: c0080\n\n| when | event | actor | detail |\n|---|---|---|---|\n| 2026-10-31 09:00 | unblocked | human:Ann | block=x |\n"
+		)
+		git(W, { "add", "-A" }, "Wip", "2026-11-01T09:00:00Z")
+		git(W, { "commit", "-q", "-m", "tracker: c0020 preparing" }, "Wip", "2026-11-01T09:00:00Z")
 	end)
 
-	local IDS_ALL = { "c0010", "c0020", "c0030", "c0040", "c0050", "c0060", "c0070", "R0020" }
+	local IDS_ALL = { "c0010", "c0020", "c0030", "c0040", "c0050", "c0060", "c0070", "c0075", "R0020" }
 
 	-- the lines `who` prints for an item
 	local function whoLines(id: string): { string }
@@ -311,6 +342,15 @@ return t.spec("c0284 board provenance", function(it)
 				t.expect(item.provenance ~= nil).toBe(true)
 				t.expect(linesOf(item.provenance)).toEqual(whoLines(id))
 			end
+			-- an item that exists in the worktree only (c0080, committed there and never pushed) is not history: `who`
+			-- refuses it and the board shows its stored row alone; c0020's unpublished status change is not shown either
+			t.expect(zn(W, { "who", "c0080" }).ok).toBe(false)
+			t.expect(linesOf(find(data, "c0080").provenance)).toEqual({
+				"2026-10-31 09:00  unblocked  human:Ann  block=x  (record)",
+			})
+			for _, e in find(data, "c0020").provenance do
+				t.expect(e.event ~= "status:preparing").toBe(true)
+			end
 			-- the kinds of item are there, not only the plain life: a stored row, a cut life's mark, a `--no-ff` landing's
 			-- merge by the agent trailer of its second parent, and a raft's stored row
 			local sources: { [string]: string } = {}
@@ -341,37 +381,48 @@ return t.spec("c0284 board provenance", function(it)
 
 	it("the model reads the checkout it is given, not the folder it runs in", function()
 		local m = board.collect(nil, W)
-		for _, id in { "c0010", "c0060", "c0070" } do
-			local got: any = nil
-			for _, i in m.issues do
-				if i.id == id then
-					got = i.provenance
-				end
-			end
-			t.expect(got ~= nil).toBe(true)
-			t.expect(linesOf(got)).toEqual(whoLines(id))
+		local byId: { [string]: any } = {}
+		for _, i in m.issues do
+			byId[i.id] = i
+		end
+		for _, r in m.rafts do
+			byId[r.id] = r
+		end
+		for _, id in IDS_ALL do
+			t.expect(byId[id] ~= nil and byId[id].provenance ~= nil).toBe(true)
+			t.expect(linesOf(byId[id].provenance)).toEqual(whoLines(id))
 		end
 	end)
 
-	it("the history is read once for any number of items: one log of the mainline, one cat-file", function()
-		local trace = `{base}/trace.txt`
-		pageData({ GIT_TRACE = trace }, `{base}/board-trace.html`)
-		local text = fs.readFile(trace)
-		local logs, batches, singles = 0, 0, 0
-		for line in string.gmatch(text, "[^\n]+") do
-			if has(line, "built-in: git log -1") and has(line, "trailers") then
-				singles += 1
-			elseif has(line, "built-in: git log") and has(line, "--first-parent") then
-				logs += 1
-			elseif has(line, "built-in: git cat-file --batch") then
-				batches += 1
+	it(
+		"the history is read once for any number of items: one mainline log, one people log, one cuts log, one cat-file, one read of every merge's second parent",
+		function()
+			local trace = `{base}/trace.txt`
+			pageData({ GIT_TRACE = trace }, `{base}/board-trace.html`)
+			local text = fs.readFile(trace)
+			-- each process is matched by the arguments only it has, so another reader of `./zn board` (the heartbeat's
+			-- landing log, a stats read) is not counted
+			local seen = { mainline = 0, people = 0, cuts = 0, batch = 0, sides = 0, perMerge = 0 }
+			for line in string.gmatch(text, "[^\n]+") do
+				if has(line, "built-in: git log") then
+					if has(line, "%ct %s%n@A") then
+						seen.mainline += 1
+					elseif has(line, "--format=%ae") then
+						seen.people += 1
+					elseif has(line, "--diff-filter=AM") then
+						seen.cuts += 1
+					elseif has(line, "--no-walk") then
+						seen.sides += 1
+					elseif has(line, "log -1") and has(line, "trailers") then
+						seen.perMerge += 1
+					end
+				elseif has(line, "built-in: git cat-file --batch") then
+					seen.batch += 1
+				end
 			end
+			t.expect(seen).toEqual({ mainline = 1, people = 1, cuts = 1, batch = 1, sides = 1, perMerge = 0 })
 		end
-		t.expect(logs).toBe(1)
-		t.expect(batches).toBe(1)
-		-- the one `--no-ff` landing: one read of its second parent, however many items it moved
-		t.expect(singles).toBe(1)
-	end)
+	)
 
 	it(
 		"a record that does not parse is named, its item shows no provenance, the other items are unchanged",
@@ -412,6 +463,124 @@ return t.spec("c0284 board provenance", function(it)
 			t.expect(m.issues[2].provenance).toBe(nil)
 		end
 	)
+
+	-- the page's own script, run by node against a fake DOM (as c0118's page spec does): it opens on the item named by
+	-- the hash and the pane is read back
+	local HARNESS = [==[
+const load = m => module["req" + "uire"](m);
+const fs = load("fs"), vm = load("vm");
+const html = fs.readFileSync(process.argv[2], "utf8"), hash = process.argv[3] || "";
+const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
+const els = {};
+function el(id) {
+  const ls = {}, cl = new Set(), attrs = {};
+  return els[id] = { id, innerHTML: "", textContent: "", value: "", scrollTop: 0,
+    classList: { add: c => cl.add(c), remove: c => cl.delete(c), contains: c => cl.has(c),
+      toggle: (c, f) => { const on = f === undefined ? !cl.has(c) : !!f; on ? cl.add(c) : cl.delete(c); return on; } },
+    addEventListener: (t, f) => (ls[t] = ls[t] || []).push(f), dispatch: (t, e) => (ls[t] || []).forEach(f => f(e)),
+    setAttribute: (n, v) => (attrs[n] = String(v)), removeAttribute: n => delete attrs[n], hasAttribute: n => n in attrs,
+    getAttribute: n => (n in attrs ? attrs[n] : null), focus() {}, blur() {}, select() {}, scrollIntoView() {},
+    querySelectorAll: () => [] };
+}
+["tab-board", "tab-rafts", "tab-issues", "search", "projects", "board", "columns", "charts", "window", "range", "as-of",
+ "list", "pane", "board-data", "stats"].forEach(el);
+els.board.setAttribute("hidden", "");
+els["board-data"].textContent = scripts.find(s => /id="board-data"/.test(s[1]))[2];
+const doc = el("document");
+const sandbox = { document: { getElementById: i => els[i] || null, querySelector: () => null, addEventListener: doc.addEventListener },
+  location: { hash }, history: { replaceState: (a, b, h) => (sandbox.location.hash = h) }, navigator: {},
+  console, JSON, Math, String, Array, Object, Number, Date, decodeURIComponent, encodeURIComponent };
+sandbox.window = sandbox; sandbox.globalThis = sandbox;
+vm.createContext(sandbox);
+for (const s of scripts) if (!/type="application\/json"/.test(s[1])) vm.runInContext(s[2], sandbox);
+console.log(JSON.stringify({ pane: els.pane.innerHTML }));
+]==]
+	local function paneOf(page: string, hash: string): string
+		fs.writeFile(`{base}/harness.js`, HARNESS)
+		local ok, r = pcall(process.exec, "node", { `{base}/harness.js`, page, hash })
+		if not ok then
+			error(`node is required for this spec: {r}`)
+		end
+		if not r.ok then
+			error(r.stderr)
+		end
+		return (serde.decode("json", r.stdout) :: any).pane
+	end
+
+	it(
+		"the item view writes the entries as rows in the model's order, escapes every cell, and draws nothing for an item without any",
+		function()
+			local data = pageData(nil, `{base}/board-node.html`)
+			for _, id in { "c0010", "R0020", "c0080" } do
+				local pane = paneOf(`{base}/board-node.html`, `#{id}`)
+				t.expect(has(pane, "<h3>Provenance</h3>")).toBe(true)
+				local events: { string } = {}
+				for event in string.gmatch(pane, "<tr><td>[^<]*</td><td>([^<]*)</td>") do
+					table.insert(events, event)
+				end
+				local want: { string } = {}
+				for _, e in find(data, id).provenance do
+					table.insert(want, e.event)
+				end
+				t.expect(events).toEqual(want)
+			end
+			-- the stored detail holds markup and an ampersand: it is text in the pane
+			local pane = paneOf(`{base}/board-node.html`, "#c0010")
+			t.expect(has(pane, "said=&quot;&lt;b&gt;x&lt;/b&gt; &amp; y&quot;")).toBe(true)
+			t.expect(has(pane, "<b>x</b>")).toBe(false)
+			-- an item the model gives no provenance shows no section: c0020's record does not parse
+			local path = `{W}/{IDS}/c0020/provenance.md`
+			fs.writeFile(path, "not a record\n")
+			pageData(nil, `{base}/board-node-bad.html`)
+			fs.removeFile(path)
+			t.expect(has(paneOf(`{base}/board-node-bad.html`, "#c0020"), "Provenance")).toBe(false)
+		end
+	)
+
+	it(
+		"an issue whose spend.md does not parse shows no provenance, as who refuses it, and is named once",
+		function()
+			local path = `{W}/{IDS}/c0040/spend.md`
+			fs.writeFile(path, "# Spend: c0040 x\n\n| 1 | only | three |\n")
+			local data = pageData(nil, `{base}/board-spend.html`)
+			fs.removeFile(path)
+			local named = 0
+			for _, p in (data :: any).problems do
+				if has(p, `{IDS}/c0040/spend.md does not parse`) then
+					named += 1
+				end
+			end
+			t.expect(named).toBe(1)
+			t.expect(find(data, "c0040").provenance).toBe(nil)
+			t.expect(linesOf(find(data, "c0010").provenance)).toEqual(whoLines("c0010"))
+		end
+	)
+
+	it("a shallow clone shows what who prints for it, the truncated log read the same way", function()
+		local clone = `{base}/shallow`
+		local r = fixture.exec(dir, "git", { "clone", "-q", "--depth", "3", `file://{origin}`, clone })
+		if not r.ok then
+			error(r.stdout .. r.stderr)
+		end
+		local out = `{base}/board-shallow.html`
+		local built = zn(clone, { "board", "-O", "--out", out })
+		if not built.ok then
+			error(built.stdout .. built.stderr)
+		end
+		local html = fs.readFile(out)
+		local json = string.match(html, '<script type="application/json" id="board%-data">(.-)</script>')
+		local data = serde.decode("json", json :: string)
+		t.expect((data :: any).history).toBe(false)
+		for _, id in { "c0075", "R0020" } do
+			local told = zn(clone, { "who", id })
+			t.expect(told.ok).toBe(true)
+			local lines: { string } = {}
+			for line in string.gmatch(told.stdout, "[^\n]+") do
+				table.insert(lines, line)
+			end
+			t.expect(linesOf(find(data, id).provenance)).toEqual(lines)
+		end
+	end)
 
 	it("the buckets are the item folders", function()
 		local function c(sha: string, path: string): any
