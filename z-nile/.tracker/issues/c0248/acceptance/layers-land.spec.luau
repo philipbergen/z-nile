@@ -211,7 +211,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 				["pickman/.tracker/rafts/R0020/R0020.md"] = raftDoc("R0020", "pair", "c0040, c0050", "c0040\nc0050"),
 				["pickman/.tracker/rafts/R0030/R0030.md"] = raftDoc("R0030", "gap", "c0070, c0080", "c0070\nc0080"),
 			}
-			local rafts = {
+			local rafts: { [string]: { string } } = {
 				R0010 = { "c0010", "c0020", "c0030" },
 				R0020 = { "c0040", "c0050" },
 				R0030 = { "c0070", "c0080" },
@@ -229,7 +229,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			log, state = `{f.base}/gh.log`, `{f.base}/gh-state`
 			fs.writeDir(bin)
 			fs.writeDir(state)
-			local script = string.gsub(string.gsub(GH, "@LOG@", log), "@STATE@", state)
+			local script = (string.gsub((string.gsub(GH, "@LOG@", log)), "@STATE@", state))
 			fs.writeFile(`{bin}/gh`, script)
 			process.exec("chmod", { "+x", `{bin}/gh` })
 			env = { PATH = `{bin}:{process.env.PATH or ""}` }
