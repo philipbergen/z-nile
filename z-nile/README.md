@@ -96,6 +96,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | work heartbeat, `./zn beat`, `./zn lost` | c0265 | exists |
 | take over a lost claim (`status <id> preparing`, `beat --adopt`) | c0274 | exists |
 | automatic heartbeats (first beat, every command, long commands, the background beater, the dispatcher) | c0275 | exists |
+| discard and recover a worktree (`worktree --takeover`, numbered copies, the discard marker, the sweep) | c0277 | exists |
 | `.models.toml`, dispatcher, chain, quota fallback, bot credential | c0117 | designed |
 | board, a tab per project | c0118 | designed |
 | remote runtimes (`claude-cloud`, `grok-bot`, `cursor-app`) | c0142 | captured |

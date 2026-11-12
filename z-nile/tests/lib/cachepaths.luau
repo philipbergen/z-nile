@@ -148,12 +148,18 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["return `.cache/tracker-claim-{raftId}`"] = `the claim file, written with sh.writeReplacing: {RENAMED}`,
 		["return `.cache/tracker-stamp-{id}`"] = `c0274: the stamp this checkout remembers for a claim, written with sh.writeReplacing: {RENAMED}`,
 		['hb.MARKS = ".cache/tracker-beats"'] = `c0275: the throttle marks, one file per claim, written with sh.writeReplacing: {RENAMED}; the folder is made with fs.writeDir (an existing folder writes nothing)`,
+		["local cache = `{dir}/.cache`"] = "c0277: a read of another checkout's folder, to list the claims its memory holds; nothing is written",
+		["fs.writeDir(`{path}/.cache`)"] = "c0277: a worktree's folder itself (fs.writeDir of an existing folder writes nothing), before the marker or the fresh file is renamed in",
 		['hb.BEATER_DIR = ".cache/tracker-beater"'] = "c0275: the background beater's pid file and log, the pid file written with sh.writeReplacing (a rename), the log opened by the detached beater itself",
 		['fs.writeDir(".cache")'] = "the folder itself (fs.writeDir of an existing folder writes nothing)",
 		['local out = given or ".cache/board.html"'] = `the board page, written with sh.writeReplacing: {RENAMED}`,
 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
 		["watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)"] = "usage text: the net's log path",
+	},
+	["z-nile/engine/heartbeat.luau"] = {
+		['heartbeat.DISCARDED = ".cache/discarded"'] = "c0277: the marker a takeover leaves in the old worktree, written with sh.writeReplacing (a rename); every other command only reads it",
+		['heartbeat.FRESH = ".cache/fresh"'] = "c0277: the epoch a takeover made a copy, written with sh.writeReplacing (a rename), removed when the copy gets claim memory",
 	},
 	["z-nile/engine/watchcmd.luau"] = {
 		["'cd \"$1\" && ./zn run --time 3600 -- ./zn watch-net > .cache/watch-net.log 2>&1 &',"] = "starts the net in the background; the log is this checkout's .cache, which the fence already guards",

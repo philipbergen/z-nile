@@ -897,6 +897,14 @@ function dispatcher.claimBeat(ctx: Ctx, id: string, cwd: string, started: string
 		local said = false
 		while running do
 			local at = os.time()
+			if not fs.isDir(cwd) or fs.isFile(`{cwd}/{heartbeat.DISCARDED}`) then
+				-- c0277: a takeover discarded this step's worktree (renamed: its path is gone). Nothing beats from it, and
+				-- an empty memory would only make the beat fall back to the stamp the step started with
+				stdio.ewrite(
+					`dispatch: {id}: the step's worktree was discarded (the claim was taken over): not beating\n`
+				)
+				return
+			end
 			if heartbeat.due(last, at, every) then
 				last = at
 				local remembered = if ctx.memoryIn then ctx.memoryIn(cwd, id) else ""
