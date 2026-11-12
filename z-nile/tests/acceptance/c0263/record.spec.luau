@@ -246,7 +246,10 @@ return t.spec("c0263 the record's writes", function(it)
 
 	it("./zn record publishes the events other tickets will call and refuses the rest", function()
 		local before = tip()
-		trOk(W1, { "provenance", "record", "c0011", "confirmed", "--actor", "human:Ann", "--detail", 'said="yes"' })
+		trOk(
+			W1,
+			{ "provenance", "record", "c0011", "confirmed", "--actor", "human:Ann", "--detail", 'said="yes"' }
+		)
 		local rec = onOrigin(`{ISSUES}/c0011/provenance.md`)
 		t.expect(has(rec, '| confirmed | human:Ann | said="yes"')).toBe(true)
 		t.expect(fixture.git(f.origin, { "diff", "--name-only", before, "main" }))
@@ -328,7 +331,8 @@ return t.spec("c0263 the record's writes", function(it)
 		-- never in the main checkout (only ever fast-forwarded), and never offline
 		local mainHead = fixture.git(f.main, { "rev-parse", "HEAD" })
 		t.expect(tr(f.main, { "provenance", "record", "c0011", "ranked" }).ok).toBe(false)
-		t.expect(tr(W1, { "provenance", "record", "c0011", "ranked" }, { PICKMAN_PUBLISH = "0" }).ok).toBe(false)
+		t.expect(tr(W1, { "provenance", "record", "c0011", "ranked" }, { PICKMAN_PUBLISH = "0" }).ok)
+			.toBe(false)
 		t.expect(tip()).toBe(mark)
 		t.expect(fixture.git(f.main, { "rev-parse", "HEAD" })).toBe(mainHead)
 	end)
@@ -336,10 +340,16 @@ return t.spec("c0263 the record's writes", function(it)
 	it(
 		"./zn record reaches a raft's record and an active item's, and takes unblocked rows only there",
 		function()
-			trOk(
-				W1,
-				{ "provenance", "record", "R0130", "unblocked", "--actor", "human:Ann", "--detail", "block=needs-decision" }
-			)
+			trOk(W1, {
+				"provenance",
+				"record",
+				"R0130",
+				"unblocked",
+				"--actor",
+				"human:Ann",
+				"--detail",
+				"block=needs-decision",
+			})
 			t.expect(
 				has(
 					onOrigin(`{RAFTS}/R0130/provenance.md`),
@@ -347,7 +357,16 @@ return t.spec("c0263 the record's writes", function(it)
 				)
 			)
 				.toBe(true)
-			trOk(W1, { "provenance", "record", "c0090", "unblocked", "--actor", "human:Ann", "--detail", "block=red-gate" })
+			trOk(W1, {
+				"provenance",
+				"record",
+				"c0090",
+				"unblocked",
+				"--actor",
+				"human:Ann",
+				"--detail",
+				"block=red-gate",
+			})
 			t.expect(
 				has(
 					onOrigin(`{ISSUES}/active/c0090/provenance.md`),
@@ -356,7 +375,16 @@ return t.spec("c0263 the record's writes", function(it)
 			).toBe(true)
 			-- an active raft (a whole-raft block, c0250) takes unblocked rows and nothing else; a done item's record is
 			-- written in a pull request
-			trOk(W1, { "provenance", "record", "R0150", "unblocked", "--actor", "human:Ann", "--detail", "block=raft" })
+			trOk(W1, {
+				"provenance",
+				"record",
+				"R0150",
+				"unblocked",
+				"--actor",
+				"human:Ann",
+				"--detail",
+				"block=raft",
+			})
 			t.expect(
 				has(onOrigin(`{RAFTS}/active/R0150/provenance.md`), "| unblocked | human:Ann | block=raft |")
 			)
@@ -376,7 +404,7 @@ return t.spec("c0263 the record's writes", function(it)
 				t.expect(
 					has(
 						r.stderr .. r.stdout,
-						`record refuses {args[2]}: it is {if args[2] == "c0100" then "done" else "active"}`
+						`record refuses {args[3]}: it is {if args[3] == "c0100" then "done" else "active"}`
 					)
 				).toBe(true)
 				t.expect(tip()).toBe(mark)
@@ -537,7 +565,10 @@ return t.spec("c0263 the record's writes", function(it)
 			fs.writeFile(rec, head .. "| 2026-11-08 10:00 | ranked | human:Ann | rank=1 |\n")
 			fixture.git(W7, { "add", "-A" })
 			fixture.git(W7, { "commit", "-q", "-m", "our row" })
-			trOk(W1, { "provenance", "record", "c0013", "ranked", "--actor", "human:Bee", "--detail", "rank=2" })
+			trOk(
+				W1,
+				{ "provenance", "record", "c0013", "ranked", "--actor", "human:Bee", "--detail", "rank=2" }
+			)
 			local landed = tr(W7, { "land" }, { PICKMAN_LAND_GATE = "true" })
 			t.expect(landed.ok).toBe(false)
 			local out = landed.stderr .. landed.stdout
@@ -559,7 +590,10 @@ return t.spec("c0263 the record's writes", function(it)
 			fs.writeFile(rec, "garbage\n")
 			fixture.git(W8, { "add", "-A" })
 			fixture.git(W8, { "commit", "-q", "-m", "a record that does not parse" })
-			trOk(W1, { "provenance", "record", "c0010", "ranked", "--actor", "human:Bee", "--detail", "rank=1" })
+			trOk(
+				W1,
+				{ "provenance", "record", "c0010", "ranked", "--actor", "human:Bee", "--detail", "rank=1" }
+			)
 			local before = stateOf()
 			local r = tr(W8, { "sync" })
 			t.expect(r.ok).toBe(false)
@@ -573,7 +607,10 @@ return t.spec("c0263 the record's writes", function(it)
 			fs.writeFile(rec, (string.gsub(fs.readFile(rec), "human:Bee", "human:Eve")))
 			fixture.git(W8, { "add", "-A" })
 			fixture.git(W8, { "commit", "-q", "-m", "an edited row" })
-			trOk(W1, { "provenance", "record", "c0010", "ranked", "--actor", "human:Cy", "--detail", "rank=2" })
+			trOk(
+				W1,
+				{ "provenance", "record", "c0010", "ranked", "--actor", "human:Cy", "--detail", "rank=2" }
+			)
 			local again = stateOf()
 			local r2 = tr(W8, { "sync" })
 			t.expect(r2.ok).toBe(false)
@@ -647,7 +684,16 @@ return t.spec("c0263 the record's writes", function(it)
 		function()
 			fixture.git(W10, { "mv", `{ISSUES}/active/c0090`, `{ISSUES}/done/c0090` })
 			fixture.git(W10, { "commit", "-q", "-m", "our move: done" })
-			trOk(W1, { "provenance", "record", "c0090", "unblocked", "--actor", "human:Main", "--detail", "block=ua" })
+			trOk(W1, {
+				"provenance",
+				"record",
+				"c0090",
+				"unblocked",
+				"--actor",
+				"human:Main",
+				"--detail",
+				"block=ua",
+			})
 			trOk(W10, { "sync" })
 			oneRecordBeside(W10, `{ISSUES}/done/c0090/c0090.md`, { "human:Ann", "human:Main" })
 		end
@@ -672,11 +718,15 @@ return t.spec("c0263 the record's writes", function(it)
 	it(
 		"main published three rows and then moved the folder, after we appended one (UD, git loses the pairing)",
 		function()
-			trOk(W1, { "provenance", "record", "c0016", "ranked", "--actor", "human:Base", "--detail", "rank=0" })
+			trOk(
+				W1,
+				{ "provenance", "record", "c0016", "ranked", "--actor", "human:Base", "--detail", "rank=0" }
+			)
 			trOk(W12, { "sync" })
 			appendRow(W12, `{ISSUES}/c0016/provenance.md`, "Ours")
 			for i = 1, 3 do
 				trOk(W1, {
+					"provenance",
 					"record",
 					"c0016",
 					"ranked",
@@ -866,7 +916,16 @@ return t.spec("c0263 the record's writes", function(it)
 		function()
 			fixture.git(W26, { "mv", `{RAFTS}/active/R0150`, `{RAFTS}/done/R0150` })
 			fixture.git(W26, { "commit", "-q", "-m", "our move: done" })
-			trOk(W1, { "provenance", "record", "R0150", "unblocked", "--actor", "human:RaftMain", "--detail", "block=p5" })
+			trOk(W1, {
+				"provenance",
+				"record",
+				"R0150",
+				"unblocked",
+				"--actor",
+				"human:RaftMain",
+				"--detail",
+				"block=p5",
+			})
 			trOk(W26, { "sync" })
 			t.expect(fs.isDir(`{W26}/{RAFTS}/active/R0150`)).toBe(false)
 			local text = fs.readFile(`{W26}/{RAFTS}/done/R0150/provenance.md`)
@@ -915,12 +974,30 @@ return t.spec("c0263 the record's writes", function(it)
 	it(
 		"a raft our branch retired and main published a row into merges, the record in retired/ (xi)",
 		function()
-			trOk(W1, { "provenance", "record", "R0161", "unblocked", "--actor", "human:Base", "--detail", "block=base" })
+			trOk(W1, {
+				"provenance",
+				"record",
+				"R0161",
+				"unblocked",
+				"--actor",
+				"human:Base",
+				"--detail",
+				"block=base",
+			})
 			trOk(W30, { "sync" })
 			fs.writeDir(`{W30}/{RAFTS}/retired`)
 			fixture.git(W30, { "mv", `{RAFTS}/R0161`, `{RAFTS}/retired/R0161` })
 			fixture.git(W30, { "commit", "-q", "-m", "recombine retired R0161" })
-			trOk(W1, { "provenance", "record", "R0161", "unblocked", "--actor", "human:Main", "--detail", "block=main" })
+			trOk(W1, {
+				"provenance",
+				"record",
+				"R0161",
+				"unblocked",
+				"--actor",
+				"human:Main",
+				"--detail",
+				"block=main",
+			})
 			trOk(W30, { "sync" })
 			t.expect(fs.isDir(`{W30}/{RAFTS}/R0161`)).toBe(false)
 			local text = fs.readFile(`{W30}/{RAFTS}/retired/R0161/provenance.md`)
