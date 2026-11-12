@@ -1,0 +1,37 @@
+- design-review-001 F1: z-design/restated-rules-move-together
+- design-review-001 F2: z-design/quote-other-preps-before-promising
+- design-review-001 F3: z-design/slot-state-proven-by-two-runs
+- design-review-001 F4: zz-arch/writers-under-cache-replace-links
+- design-review-001 F5: zz-arch/guard-state-out-of-reach-or-checked
+- design-review-001 F6: z-design/results-land-on-every-path
+- design-review-001 F7: z-design/results-land-on-every-path
+- design-review-001 F8: z-design/results-land-on-every-path
+- design-review-001 F9: z-design/spec-design-correspondence
+- design-review-001 F10: one-off: the order of the retry's two writes (answer first, then the move) is this chore's own rule; the half state is pinned by its case
+- design-review-001 F11: zz-arch/read-cache-as-untrusted-input
+- design-review-002 F1: zz-arch/record-crash-states-when-entered
+- design-review-002 F2: zz-arch/writers-under-cache-replace-links
+- design-review-002 F3: z-design/results-land-on-every-path
+- design-review-002 F4: z-design/new-rules-migrate-existing-work
+- design-review-002 F5: z-design/restated-rules-move-together
+- design-review-002 F6: z-design/slot-state-proven-by-two-runs
+- design-review-002 F7: z-design/slot-state-proven-by-two-runs
+- design-review-002 F8: one-off: a flag's own move ran before the refusals that need no exchange; the refusal case now checks the folder is unchanged
+- design-review-002 F9: z-design/spec-design-correspondence
+- design-review-002 F10: zz-arch/read-cache-as-untrusted-input
+- design-review-002 F11: z-design/quote-other-preps-before-promising
+- design-review-003 F1: zz-arch/guards-count-only-this-runs-writes
+- design-review-003 F2: zz-arch/record-crash-states-when-entered
+- design-review-003 F3: z-design/spec-design-correspondence
+- design-review-003 F4: one-off: a prompt sentence told a step to treat its own question as the answer; wording now covers the "only your question" case and a case pins both clauses
+- design-review-003 F5: z-design/slot-state-proven-by-two-runs
+- design-review-003 F6: one-off: the size understated the prototype; re-estimated from the numstat
+- design-review-004 F1: z-design/exemption-needs-the-check-to-run
+- design-review-004 F2: zz-arch/guards-count-only-this-runs-writes
+- design-review-004 F3: zz-arch/record-crash-states-when-entered
+- design-review-004 F4: z-design/spec-design-correspondence
+- design-review-004 F5: z-design/spec-design-correspondence
+- design-review-005 F1: zz-arch/guards-count-only-this-runs-writes
+- design-review-005 F2: z-design/restated-rules-move-together
+- design-review-006 F1: z-design/exemption-needs-the-check-to-run
+- design-review-006 F2: zz-arch/one-reader-per-format

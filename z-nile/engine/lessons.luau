@@ -152,6 +152,7 @@ end
 local function isStem(stem: string): boolean
 	return string.match(stem, "^design%-review%-%d%d%d$") ~= nil
 		or string.match(stem, "^review%-%d%d%d$") ~= nil
+		or string.match(stem, "^final%-review%-%d%d%d$") ~= nil
 end
 
 function lessons.parseHarvest(item: string, text: string): ({ Entry }, { string })

@@ -176,8 +176,10 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 		at(raft, '"$ZN_ROOT/zn" promote-check {{ID}}', "raft check.sh")
 		at(read("z-nile/templates/issue/check.sh"), "# cds to the item's project home", "issue check.sh")
 		local prompt = read("z-nile/templates/prompt.md")
-		at(prompt, "## Architecture map ({{ARCHITECTURE_PATH}})", "prompt.md")
-		at(prompt, "## Work items (verbatim from {{ROOT}}/)", "prompt.md")
+		at(prompt, "## Architecture", "prompt.md")
+		at(prompt, "{{ARCHITECTURE}}", "prompt.md")
+		at(prompt, "{{ARCHITECTURE_PATH}}", "prompt.md")
+		at(prompt, "## Issues ({{ISSUE_IDS}})", "prompt.md")
 	end)
 
 	-- design review 005 F5: no ../zn settings entries (a settings entry is a prefix match, so `../zn` would allow it from

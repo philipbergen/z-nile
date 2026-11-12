@@ -1,0 +1,7 @@
+# Answers to design-review-004 (c0264)
+Both findings are fixed; none is refuted.
+
+- F1: fixed: c0247 no longer carries a label or a roadmap row. The idea stage reads "*captured* (c0260). It builds on c0247, which has z-ticket confirm intent before it creates a ticket." with c0247 named but unlabelled. The c0247 row is gone, and check.sh's label map and row list drop it. A label would go stale whichever order the two land in, because c0247's design, prepared on `main`, never touches the README. Without one, nothing is promised to c0247's prep and nothing goes stale. Existing work now gives the statuses as they are on `main`: c0247 prepared, c0118 preparing (a re-prep that owns the row c0259 gave it). Consequences: AC7's pinned map has one label and one row fewer. No rule, case or mutant is added (`label-moved` and the AC7 mutants run unchanged, all killed).
+- F2: fixed: E4's table and the Rules and mutants table name each mutant by its runner id. `mutants.sh <id>...` now runs only the named ids (none means all); run: `mutants.sh label-moved worker-rule-users-words` gives "killed label-moved (AC7)" and "passes worker-rule-users-words (AC5)". The full run after this round: 22 killed, 1 correct variant passes.
+
+Round count: this was round 4. Its answers changed only labels, wording, check.sh's pinned map (one entry fewer) and the experiment runner's command line, and added no rule, interface, state, spec case or Rules and mutants row. The round had no high finding, so it is minor, and z-design runs no round 5: this is the final round.
