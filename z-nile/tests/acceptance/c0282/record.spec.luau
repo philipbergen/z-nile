@@ -297,6 +297,21 @@ return t.spec("c0282 the lifecycle rows' writes", function(it)
 		t.expect(tip()).toBe(mark)
 		t.expect(fixture.git(W3, { "status", "--porcelain" })).toBe("")
 		fixture.git(W3, { "reset", "-q", "--hard", "HEAD~1" })
+		-- the same for a new raft over an issue whose record does not parse
+		local p13 = `{W1}/{ISSUES}/c0013/provenance.md`
+		fs.writeFile(p13, "not a record\n")
+		fixture.git(W1, { "add", "-A" })
+		fixture.git(W1, { "commit", "-q", "-m", "a hand edit of a record" })
+		local mark13 = tip()
+		local r13 = tr(
+			W1,
+			{ "new", "raft", "chore", "bad", "c0013", "--project", "pickman" },
+			{ ZN_ACTOR = OPUS }
+		)
+		t.expect(r13.ok).toBe(false)
+		t.expect(has(r13.stderr, "c0013/provenance.md: line")).toBe(true)
+		t.expect(tip()).toBe(mark13)
+		fixture.git(W1, { "reset", "-q", "--hard", "HEAD~1" })
 	end)
 
 	it("raft-plan --apply hands its --actor to every command it runs", function()

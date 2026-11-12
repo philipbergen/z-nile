@@ -1579,9 +1579,6 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 					if became == nil or became == "" or became == was then
 						return `it changes {path}, but not {pid}'s raft: line: a rafted row rides the PR that rafts the issue`
 					end
-					if not rafts[`{r}/{became}`] then
-						return `it changes {path} for raft {became}, which this PR does not carry`
-					end
 					local why = provenance.raftedProblem(old, new :: string, pid :: string, became)
 					if why then
 						return `it changes {path}: {why}`
