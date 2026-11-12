@@ -9,16 +9,16 @@ local trackerfix = require("@tests/lib/trackerfix")
 
 local STAMP = "preparing-lucky-violet-heron"
 local MODELS = [[
-order = ["claude"]
-
 [dispatch]
 stall_seconds = 10
 
-[z-design.claude]
+[roles.design]
 model = "claude-opus-5-5"
-rank = 3
+cli = "claude"
 runtime = "claude-cli"
+rank = 3
 max_tokens = 5000
+effort = "high"
 ]]
 
 local h: fakecli.Harness
