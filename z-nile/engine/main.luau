@@ -6850,9 +6850,7 @@ function cmd.who(pos: { string }, _opts: { [string]: { string } })
 		if not parsed then
 			fail(`who: {spendPath} does not parse ({err})`)
 		end
-		for _, r in (parsed :: ledger.Ledger).rows do
-			table.insert(spendRows, { phase = r.phase, model = r.model })
-		end
+		spendRows = whoLib.spend((parsed :: ledger.Ledger).rows)
 	end
 	local commits = life :: { trailLib.Commit }
 	local entries =

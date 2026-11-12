@@ -106,6 +106,9 @@ ul.links { margin: 0; padding-left: 20px; }
 dl.run { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
 dl.run dt { color: var(--mut); }
 dl.run dd { margin: 0; }
+table.prov { border-collapse: collapse; font-size: 13px; }
+table.prov td { padding: 1px 12px 1px 0; vertical-align: top; }
+table.prov td.mut { color: var(--mut); }
 </style>
 <script>{{MARKED}}</script>
 </head>
@@ -305,6 +308,15 @@ dl.run dd { margin: 0; }
     ]);
   }
 
+  // c0284: the entries ./zn who prints for the item, oldest first; nothing when the model carries none
+  function provenanceOf(it) {
+    if (!it.provenance || !it.provenance.length) return "";
+    return "<h3>Provenance</h3><table class=\"prov\"><tbody>" + it.provenance.map(function (e) {
+      return "<tr><td>" + esc(e.when) + "</td><td>" + esc(e.event) + "</td><td>" + esc(e.actor) + "</td><td>" + esc(e.detail) +
+        "</td><td class=\"mut\">" + esc(e.source) + "</td></tr>";
+    }).join("") + "</tbody></table>";
+  }
+
   function renderIssue(issue) {
     var meta = [];
     if (issue.label) meta.push(issue.label);
@@ -313,6 +325,7 @@ dl.run dd { margin: 0; }
       '<p class="meta">' + esc(meta.join(" · ")) + "</p>";
     if (issue.raft) h += "<p>Raft " + idLink(issue.raft) + "</p>";
     h += runOfIssue(issue);
+    h += provenanceOf(issue);
     h += group("Depends on", issue.dependsOn) + group("Dependents", issue.dependents);
     if (issue.body) h += '<h3>Document</h3><div class="md">' + marked.parse(issue.body) + "</div>";
     pane.innerHTML = h;
@@ -336,6 +349,7 @@ dl.run dd { margin: 0; }
       }).join("") + "</ul>";
     }
     h += runOfRaft(r);
+    h += provenanceOf(r);
     if (r.body) h += '<h3>Document</h3><div class="md">' + marked.parse(r.body) + "</div>";
     pane.innerHTML = h;
     pane.scrollTop = 0;

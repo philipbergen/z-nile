@@ -1,5 +1,6 @@
 --!strict
 -- The tracker board: reads the tracker tree into a model and renders it as one self-contained HTML page.
+local boardprov = require("./boardprov")
 local boardview = require("./boardview")
 local chart = require("./chart")
 local fs = require("@lune/fs")
@@ -12,6 +13,7 @@ local stack = require("./stack")
 local stats = require("./stats")
 local status = require("./status")
 local store = require("./store")
+local who = require("./who")
 
 local board = {}
 
@@ -47,6 +49,7 @@ export type Raft = {
 	dispatch: Dispatch?,
 	pr: Pr?, -- c0121 fills these on the served page; the static page leaves them nil
 	checks: Checks?,
+	provenance: { boardprov.Entry }?, -- c0284: the entries ./zn who prints for it; nil when it has none
 }
 -- Reserved for c0121's served page (live `gh` data); nil in every model c0118 builds.
 export type Pr = { number: number, url: string, state: string }
@@ -80,6 +83,7 @@ export type Issue = {
 	dispatch: Dispatch?,
 	pr: Pr?, -- c0121's, as on Raft
 	checks: Checks?,
+	provenance: { boardprov.Entry }?, -- c0284, as on Raft
 }
 export type Project = { name: string, root: string }
 -- What the board knows besides the tracker documents (c0118), all read locally: the instant the page is as of (HEAD's
@@ -1180,6 +1184,22 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	local ranges = {}
 	for _, range in boardview.RANGES do
 		table.insert(ranges, { key = range.key, label = range.label })
+	end
+	-- c0284: each item's provenance, the entries `./zn who` prints (boardprov reads the history once for all of them)
+	local items: { boardprov.Item } = {}
+	for _, i in rawIssues do
+		local rows = spendRows(spendPath(i.root, i.state, i.id), problems)
+		table.insert(items, { id = i.id, kind = "issue", dir = i.dir, spend = who.spend(rows) })
+	end
+	for _, r in rawRafts do
+		table.insert(items, { id = r.id, kind = "raft", dir = r.dir, spend = {} })
+	end
+	local entries = boardprov.read(items, if hist then checkoutDir else nil, problems)
+	for _, issue in issues do
+		issue.provenance = entries[issue.id]
+	end
+	for _, raft in rafts do
+		raft.provenance = entries[raft.id]
 	end
 	table.sort(problems)
 

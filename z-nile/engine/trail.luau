@@ -318,40 +318,47 @@ function trail.capture(commits: { Commit }): (Commit?, boolean)
 	return trail.oldestAdd(commits) or sorted[#sorted], false
 end
 
-local function git(args: { string }): string?
-	local r = process.exec("git", args)
+-- `dir` is the checkout git runs in (c0284: the board reads the checkout it was given); nil is the current folder.
+local function git(args: { string }, dir: string?): string?
+	local r = if dir then process.exec("git", args, { cwd = dir }) else process.exec("git", args)
 	return if r.ok then r.stdout else nil
 end
 
-local function changes(
-	args: { string },
-	dirs: { string },
-	want: (name: string) -> boolean,
-	firstParent: boolean
-): { Commit }
-	local argv = table.clone(args)
+-- The arguments of the log every reader of a trail runs (c0284: `read` and the board build it here): `head`'s history,
+-- the mainline only with `firstParent`, over `specs` (folders or files), in `trail.FORMAT` with the changed files.
+function trail.logArgs(head: string, specs: { string }, firstParent: boolean): { string }
+	local argv = { "log", head }
 	if firstParent then
 		table.insert(argv, "--first-parent")
 	end
 	for _, a in { "--no-renames", trail.FORMAT, "--name-status", "--" } do
 		table.insert(argv, a)
 	end
-	for _, d in dirs do
+	for _, d in specs do
 		table.insert(argv, d)
 	end
-	return trail.parse(git(argv) or "", dirs, want)
+	return argv
+end
+
+local function changes(
+	head: string,
+	dirs: { string },
+	want: (name: string) -> boolean,
+	firstParent: boolean
+): { Commit }
+	return trail.parse(git(trail.logArgs(head, dirs, firstParent)) or "", dirs, want)
 end
 
 -- The commits on `head` that changed a compaction map's content: added or modified, never only moved (`-M`, so the
 -- c0114 move of tracker/compaction.txt to z-nile/compaction.txt is a rename and no cut), each with the file it changed.
-function trail.cuts(head: string): { [string]: string }
+function trail.cuts(head: string, dir: string?): { [string]: string }
 	local args = { "log", "-M", "--diff-filter=AM", "--format=@@%H", "--name-only", head, "--" }
 	for _, f in ids.MAP_FILES do
 		table.insert(args, f)
 	end
 	local out: { [string]: string } = {}
 	local sha = ""
-	for line in string.gmatch(git(args) or "", "[^\n]+") do
+	for line in string.gmatch(git(args, dir) or "", "[^\n]+") do
 		local s = string.match(line, "^@@(%x+)$")
 		if s then
 			sha = s
@@ -433,7 +440,7 @@ function trail.read(
 		return trail.isDoc(name) or want(name)
 	end
 	local all =
-		changes({ "log", head }, trail.dirs(kind, id, within :: { string }), keep, firstParent == true)
+		changes(head, trail.dirs(kind, id, within :: { string }), keep, firstParent == true)
 	local out, cutNotes = trail.lifeOf(all, id, trail.cuts(head), want)
 	notes = cutNotes
 	return out, notes

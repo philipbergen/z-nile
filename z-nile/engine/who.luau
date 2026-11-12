@@ -6,15 +6,16 @@
 -- item's in the same process). The pure functions of provenance turn it into entries.
 local process = require("@lune/process")
 
+local ledger = require("./ledger")
 local provenance = require("./provenance")
-local sh = require("../lib/sh")
 local store = require("./store")
 local trail = require("./trail")
 
 local who = {}
 
-local function git(args: { string }): string?
-	local r = process.exec("git", args)
+-- `dir` is the checkout git runs in (c0284: the board reads the checkout it was given); nil is the current folder.
+local function git(args: { string }, dir: string?): string?
+	local r = if dir then process.exec("git", args, { cwd = dir }) else process.exec("git", args)
 	return if r.ok then r.stdout else nil
 end
 
@@ -25,17 +26,17 @@ end
 
 -- The history `who` reads: the published mainline (`origin/main`), else this checkout's `HEAD`. A worktree's own
 -- unpublished commits are not history yet, and a branch's `done` commit is no merge.
-function who.head(): string
-	return if process.exec("git", { "rev-parse", "--verify", "-q", "origin/main" }).ok
+function who.head(dir: string?): string
+	return if git({ "rev-parse", "--verify", "-q", "origin/main" }, dir) ~= nil
 		then "origin/main"
 		else "HEAD"
 end
 
 -- Every commit author's email on `head`, lower-cased: a person is whoever commits, so a Co-Authored-By trailer with one
 -- of these is a person's, not an agent's (E4). One `git log` for the whole history.
-function who.people(head: string): { [string]: boolean }
+function who.people(head: string, dir: string?): { [string]: boolean }
 	local out: { [string]: boolean } = {}
-	for email in string.gmatch(git({ "log", "--format=%ae", head }) or "", "[^\n]+") do
+	for email in string.gmatch(git({ "log", "--format=%ae", head }, dir) or "", "[^\n]+") do
 		out[string.lower(email)] = true
 	end
 	return out
@@ -43,7 +44,7 @@ end
 
 -- The document's status word and `raft:` after each of `commits`' document changes (an add or a modify; a delete has
 -- none), keyed `<sha>:<path>`, from one `git cat-file --batch` for all of them.
-function who.fronts(commits: { trail.Commit }): { [string]: provenance.Front }
+function who.fronts(commits: { trail.Commit }, dir: string?): { [string]: provenance.Front }
 	local specs: { string } = {}
 	local seen: { [string]: boolean } = {}
 	for _, c in commits do
@@ -62,7 +63,11 @@ function who.fronts(commits: { trail.Commit }): { [string]: provenance.Front }
 	if #specs == 0 then
 		return out
 	end
-	local r = sh.run("git", { "cat-file", "--batch" }, table.concat(specs, "\n") .. "\n")
+	local r = process.exec(
+		"git",
+		{ "cat-file", "--batch" },
+		{ cwd = dir, stdio = { stdin = table.concat(specs, "\n") .. "\n" } }
+	)
 	local text, pos = r.stdout, 1
 	for _, key in specs do
 		local eol = string.find(text, "\n", pos, true)
@@ -84,7 +89,7 @@ end
 
 -- Sets `sideTrailers` on every merge commit of `life`: the Co-Authored-By values of its second parent (the top layer of
 -- a `--no-ff` landing, which `./zn finish` committed with the agent's trailer). One `git log -1` per merge.
-function who.sideTrailers(life: { trail.Commit })
+function who.sideTrailers(life: { trail.Commit }, dir: string?)
 	for _, c in life do
 		local parents = c.parents or {}
 		if #parents >= 2 and c.sideTrailers == nil then
@@ -94,7 +99,7 @@ function who.sideTrailers(life: { trail.Commit })
 				"-1",
 				"--format=%(trailers:key=Co-Authored-By,valueonly,unfold,separator=%x1f)",
 				parents[2],
-			}) or ""
+			}, dir) or ""
 			for value in string.gmatch(text, "[^\31\n]+") do
 				table.insert(values, value)
 			end
@@ -134,6 +139,16 @@ function who.life(id: string, head: string): ({ trail.Commit }?, provenance.Mark
 	end
 	who.sideTrailers(commits)
 	return commits, who.mark(notes, trail.ambiguous(commits)), nil
+end
+
+-- The spend rows `provenance` reads the worker from (phase and the worker's columns that exist: the model today; c0254
+-- adds host and CLI here, once, for `who` and the board).
+function who.spend(rows: { ledger.Row }): { provenance.Spend }
+	local out: { provenance.Spend } = {}
+	for _, r in rows do
+		table.insert(out, { phase = r.phase, model = r.model })
+	end
+	return out
 end
 
 -- The history of one item as entries, oldest first: the git side from `life` (`who.life`'s answer), the stored `rows`
