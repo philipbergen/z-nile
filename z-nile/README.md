@@ -95,7 +95,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | `.models.toml`, dispatcher, chain, quota fallback, bot credential | c0117 | designed |
 | board, a tab per project | c0118 | designed |
 | remote runtimes (`claude-cloud`, `grok-bot`, `cursor-app`) | c0142 | captured |
-| a raft delivered as a stacked PR set, one layer per issue | c0248 | captured |
+| a raft delivered as a stacked PR set, one layer per issue | c0248 | exists |
 | `rank`, `./zn rank`, `./zn next` | c0249 | captured |
 | `blocked`, `escalation.md`, `./zn resolve` | c0250 | captured |
 | cross-model review pool, same-family fallback | c0251 | captured |
@@ -104,10 +104,10 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | workers on several hosts, worker identity in spend | c0254 | captured |
 | `./zn land` usage and a cheap retry | c0258 | captured |
 
-c0248 to c0254 are meant to be one raft once designed, delivered as a stacked PR set: layer 1 is c0248 on `main`, each next layer on the one below, in that order, merging bottom-up. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
+c0248 to c0254 are one raft (R-vision), delivered as a stacked PR set in that order: layer 1 is c0248 on `main`, each next layer on the one below, landed as one bind. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
 
 ### Stacked delivery
-The general model (*captured* (c0248); today a raft is one branch and one PR): a raft is delivered as a **stacked PR set**, one layer (a branch and a PR) per issue, in the raft's Order. Each layer is reviewed and gated on its own diff; layers merge bottom-up, each retargeted to `main` as the one below merges. A one-issue raft is a stack of one. A blocked layer stops the layers above it, not the ones below.
+A raft is delivered as a **stacked PR set**, one layer (a branch and a PR) per issue, in the raft's Order. One worker builds the layers one at a time, each complete (finished, green and reviewed) before the next starts. Each layer is reviewed and gated on its own diff. The stack lands as one `--no-ff` bind of its top layer, with one full gate on its top; a blocked layer stops the layers above it, and the green layers below it land now as a shorter bind (`./zn done <R-id> --through <issue>`). A one-issue raft is a stack of one. *exists*
 
 ## The five parts
 - **The tracker.** `./zn` at the repository root runs the engine in `z-nile/engine/`. Each project keeps its issues and rafts in its own root, `<project>/.tracker/` (z-nile's in `z-nile/.tracker/`), listed in `z-nile/projects.toml`. One counter, `z-nile/next`, numbers every project. The rules are in the zz-rules skill.

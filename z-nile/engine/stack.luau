@@ -15,11 +15,15 @@
 --             A rewritten lower commit rebases only this layer's own commits (the finish commit, or the
 --             commits after `tracker: start`), not the old lower commits still in this layer's history.
 --   read:     ./zn stack <R-id>
---             one row per layer, from git: "<position> <branch> <issue> <finished|claimed|missing> <sha>"
+--             one row per layer, from git: "<position> <branch> <issue> <landed|complete|finished|claimed|missing> <sha>"
+--             landed: the issue is in done/ on origin/main. complete: finished, and its review in the issue's folder is
+--             settled and current (completion.layer). ./zn start opens the next layer only when the one below is complete.
 --   land:     ./zn done <R-id>
 --             The checkout must be the published top-layer commit (the one that is merged).
 --             git merge --no-ff of that commit into main. The merge commit's message is
 --             "<raft>: bind <id>, <id>\n\nVerdict: <word>\nTrace: <trace-path>\n"
+--             ./zn done <R-id> --through <issue> lands the layers not yet landed up to that issue's, with the same message
+--             naming only those ids; the raft stays active until its last layer lands.
 --             <word> is the final review file's Verdict line. No review file, and a review with no
 --             Verdict line, both refuse: a verdict nobody wrote is not recorded.
 --             gh pr view <n> --json baseRefName -q .baseRefName, then gh pr edit <n> --base main,
@@ -30,7 +34,7 @@ local stack = {}
 
 export type Member = { id: string, dependsOn: { string } }
 export type Layer = { raft: string, position: number, issue: string, name: string }
-export type Row = { position: number, name: string, issue: string, state: string, sha: string }
+export type Row = { position: number, name: string, issue: string, state: string, sha: string, pr: string? }
 export type CommitRow = { subject: string, parent: string }
 
 function stack.branch(raftId: string, position: number, issueId: string): string
@@ -120,6 +124,96 @@ function stack.render(raftId: string, rows: { Row }): string
 		table.insert(lines, `{row.position} {row.name} {row.issue} {row.state} {row.sha}`)
 	end
 	return table.concat(lines, "\n")
+end
+
+-- The ids a bind lands: from the lowest layer not yet landed up to and including `through` (every layer not yet landed
+-- without it). An error names a `through` that is not a member or is already landed, a landed layer above one that
+-- is not (a gap), and a raft with nothing left to land.
+function stack.bindMembers(
+	ordered: { string },
+	landed: { [string]: boolean },
+	through: string?
+): ({ string }?, string?)
+	local seenUnlanded = false
+	for _, id in ordered do
+		if landed[id] then
+			if seenUnlanded then
+				return nil, `{id} is landed but a layer below it is not: the landed layers are not a prefix`
+			end
+		else
+			seenUnlanded = true
+		end
+	end
+	if through ~= nil then
+		local member = false
+		for _, id in ordered do
+			if id == through then
+				member = true
+			end
+		end
+		if not member then
+			return nil, `{through} is not a layer of this raft`
+		end
+		if landed[through] then
+			return nil, `{through} is already landed`
+		end
+	end
+	local out: { string } = {}
+	for _, id in ordered do
+		if not landed[id] then
+			table.insert(out, id)
+			if id == through then
+				break
+			end
+		end
+	end
+	if #out == 0 then
+		return nil, "every layer is already landed"
+	end
+	return out, nil
+end
+
+-- The first paragraph of a section's text, without HTML comments; "(none)" when it has none.
+function stack.firstParagraph(text: string): string
+	local clean = string.gsub(text, "<!%-%-.-%-%->", "")
+	clean = string.gsub(clean, "^%s+", "")
+	local para = string.match(clean, "^(.-)\n%s*\n") or clean
+	para = string.gsub(para, "%s+$", "")
+	return if para == "" then "(no Theme written)" else para
+end
+
+-- The body of each layer's pull request: the raft, its Theme and Order, and the stack with this layer marked.
+-- `theme` and `order` are the raft's texts as written; `rows` come from ./zn stack; `here` is this layer's position.
+function stack.prBody(input: {
+	raftId: string,
+	title: string,
+	theme: string,
+	order: string,
+	rows: { Row },
+	here: number,
+}): string
+	local lines = {
+		`Raft **{input.raftId}**: {input.title}`,
+		"",
+		input.theme,
+		"",
+		"## Order",
+		"",
+		input.order,
+		"",
+		"## Stack",
+		"",
+		"| position | issue | branch | PR | state |",
+		"|---|---|---|---|---|",
+	}
+	for _, row in input.rows do
+		local mark = if row.position == input.here then " (this layer)" else ""
+		table.insert(
+			lines,
+			`| {row.position}{mark} | {row.issue} | \`{row.name}\` | {row.pr or "-"} | {row.state} |`
+		)
+	end
+	return table.concat(lines, "\n") .. "\n"
 end
 
 local function memberSet(members: { Member }): { [string]: Member }

@@ -31,7 +31,7 @@ This prompt names the files. It does not paste them. Open each path when the lin
 ```
 {{WORKSTREAMS}}
 ```
-If it says `parallel: yes`, that work is another layer of this raft (`./zn stack`). `./zn finish` makes the layer you are on into one commit. Do not open a stream branch.
+If it says `parallel: yes`, that work runs as subagents committing on the layer you are on; the next layer starts only when this one is complete (finished, green and reviewed). `./zn finish` makes the layer you are on into one commit. Do not open a stream branch. If a layer blocks, the layers below it land with `./zn done {{RAFT_ID}} --through <issue>`.
 
 ## Architecture
 {{ARCHITECTURE}}

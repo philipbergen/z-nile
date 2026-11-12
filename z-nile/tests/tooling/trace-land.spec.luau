@@ -289,6 +289,7 @@ return t.spec(
 				t.expect(has(fin1, "passed")).toBe(true)
 				t.expect(git(wt, { "show", "HEAD:pickman/.tracker/issues/active/c0010/results.txt" }))
 					.toBe("pickman/tests/unit/alpha.spec.luau\n\tcomputes alpha")
+				require("@tests/lib/seal").layerReview(wt, "c0010") -- c0248: the layer is complete before the next one starts
 
 				-- Layer 2: c0020 (real spec run via PICKMAN_DONE_GATE=1 writes c0020/results.txt into the layer commit)
 				znOk({ "start", "R0010" }, fastDoneEnv)
@@ -301,8 +302,9 @@ return t.spec(
 				t.expect(has(fin2, "passed")).toBe(true)
 				t.expect(git(wt, { "show", "HEAD:pickman/.tracker/issues/active/c0020/results.txt" }))
 					.toBe("pickman/tests/unit/beta.spec.luau\n\tcomputes beta")
+				require("@tests/lib/seal").layerReview(wt, "c0020")
 
-				local topFinishSha = git(wt, { "rev-parse", "HEAD" })
+				local topFinishSha = git(wt, { "rev-parse", "HEAD~1" }) -- HEAD is the layer's review commit
 
 				-- 1. Skeleton printed by ./zn trace R0010
 				local skeleton = znOk({ "trace", "R0010" }, fastDoneEnv)
@@ -473,7 +475,10 @@ return t.spec(
 				t.expect(has(bindMsg, "R0010: bind c0010, c0020")).toBe(true)
 				t.expect(has(bindMsg, "Verdict: approve")).toBe(true)
 				t.expect(has(bindMsg, "Trace: pickman/.tracker/rafts/done/R0010/trace.md")).toBe(true)
-				local subjects = git(f.main, { "log", "-5", "--format=%s", "origin/main" })
+				local subjects = git(
+					f.main,
+					{ "log", "-5", "--format=%s", "--invert-grep", "--grep=^tracker: review", "origin/main" }
+				)
 				t.expect(subjects).toBe(table.concat({
 					"R0010: bind c0010, c0020",
 					"R0010: final-review-001",

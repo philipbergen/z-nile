@@ -260,4 +260,45 @@ function seal.trace(dir: string, raftId: string)
 	end
 end
 
+-- c0248: commits an approved layer review in `issueId`'s folder on the layer `dir` is on, naming that layer's finish
+-- commit, and pushes the layer when it is on origin. `./zn start` opens the
+-- next layer, and `./zn done` binds the layer, only once its review is settled.
+function seal.layerReview(dir: string, issueId: string)
+	local found = fixture.exec(dir, "bash", { "scripts/tracker.sh", "find", issueId })
+	if not found.ok then
+		error(`seal.layerReview find {issueId} failed: {found.stderr}`, 2)
+	end
+	local issueDir = (string.gsub(found.stdout, "%s+$", ""))
+	-- the layer's finish commit: the newest commit titled "<issue>: ..." (a review commit is "tracker: review <issue>")
+	local sha = ""
+	for line in string.gmatch(fixture.git(dir, { "log", "--format=%H%x09%s", "-60" }) .. "\n", "([^\n]*)\n") do
+		local commit, subject = string.match(line, "^(%x+)\t(.*)$")
+		if commit and subject and string.sub(subject, 1, #issueId + 2) == `{issueId}: ` then
+			sha = commit
+			break
+		end
+	end
+	if sha == "" then
+		error(`seal.layerReview: no finish commit for {issueId} in {dir}`, 2)
+	end
+	fs.writeFile(`{dir}/{issueDir}/review-001.md`, `# Review 001\n\nCommit: {sha}\nVerdict: approve\n`)
+	local commitEnv: { [string]: string }? = nil
+	if not fixture.exec(dir, "git", { "config", "user.email" }).ok then
+		commitEnv = {
+			GIT_AUTHOR_NAME = "fixture",
+			GIT_AUTHOR_EMAIL = "fixture@example.invalid",
+			GIT_COMMITTER_NAME = "fixture",
+			GIT_COMMITTER_EMAIL = "fixture@example.invalid",
+		}
+	end
+	fixture.git(dir, { "add", "-A", issueDir }, { env = commitEnv })
+	fixture.git(dir, { "commit", "-q", "-m", `tracker: review {issueId}` }, { env = commitEnv })
+	if fixture.exec(dir, "git", { "remote", "get-url", "origin" }).ok then
+		local branch = fixture.git(dir, { "branch", "--show-current" })
+		if branch ~= "" then
+			fixture.git(dir, { "push", "-q", "origin", branch }, { env = commitEnv })
+		end
+	end
+end
+
 return seal
