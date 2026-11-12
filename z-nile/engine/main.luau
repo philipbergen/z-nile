@@ -102,7 +102,7 @@ usage: ./zn <command> ...
                                                 ready, run), waiting at a gate for its checks and merging, stopping at a block, questions.md or a failure
   dispatch new "<description>" [--project <name>] [--dry-run]
                                                 capture a new issue (z-ticket) and run its chain
-  dispatch <step> <id> [--mode design|raft|final|code|stream] [--dry-run]
+  dispatch <step> <id> [--mode design|code|raft] [--dry-run]
                                                 run one step: a model step on .models.toml's CLIs, a script step itself
   dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
   dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
