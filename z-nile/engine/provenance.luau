@@ -6,6 +6,34 @@
 export type Hint = { agent: boolean, effort: string? }
 export type Row = { when: string, event: string, actor: string, detail: string }
 
+local trail = require("./trail")
+
+export type Commit = trail.Commit
+-- one line of `./zn who`: what git or the record says, with its source
+export type Entry = {
+	when: string,
+	event: string,
+	actor: string,
+	detail: string,
+	source: "git" | "record",
+	at: number?, -- a git entry's commit time in seconds (the order among derived entries)
+}
+-- the document's status word and `raft:` after a commit
+export type Front = { status: string, raft: string }
+-- the note a cut or ambiguous life carries (`capture` prints the same): its text, and whether the life starts at a cut
+export type Mark = { note: string, cut: boolean }
+-- what a ticket's life says by itself (c0280): each entry is read from git and never stored
+export type Derived = {
+	idea: Entry?,
+	statuses: { Entry },
+	unblocked: { Entry },
+	rafted: Entry?,
+	delivered: Entry?,
+	merged: Entry?,
+}
+-- a spend row, as far as the worker goes (the model column today; host and CLI once c0254 adds them)
+export type Spend = { phase: string, model: string?, host: string?, cli: string? }
+
 local provenance = {}
 
 -- every event a record may hold; the later layers (c0282, c0283) write rafted, delivered and approved
@@ -389,6 +417,335 @@ function provenance.problems(path: string, text: string): { string }
 		return { `{path}: the header names {header}, not {folderId}` }
 	end
 	return {}
+end
+
+-- ---------------------------------------------------------------------------------------------------------------
+-- c0280: what git says (the author of a capture, every change of the document's status word and who made it, the
+-- delivery, the merge) and the worker (the spend rows), merged with the record's rows. Everything here is text and data
+-- in, entries out.
+
+local function stamp(time: number): string
+	return os.date("!%Y-%m-%d %H:%M", time) :: string
+end
+
+-- "Name <email>" (a trailer's value): the name and the lower-cased email, either may be nil
+local function person(value: string): (string?, string?)
+	local name, email = string.match(value, "^%s*(.-)%s*<([^>]*)>%s*$")
+	if name == nil then
+		name = string.match(value, "^%s*(.-)%s*$")
+		email = nil
+	end
+	if name == "" then
+		name = nil
+	end
+	return name, if email and email ~= "" then string.lower(email) else nil
+end
+
+-- A `Co-Authored-By: Name <email>` trailer line as an agent actor read from git, nil for any other trailer, a name-less
+-- value, or (with `people`, every commit author's lower-cased email of the log) a value whose email is a commit
+-- author's: a person is whoever commits, so a co-author who is a person, under any name, is not an agent. A value with
+-- no email counts as an agent.
+function provenance.fromTrailer(trailer: string, people: { [string]: boolean }?): string?
+	local value = string.match(trailer, "^[Cc][Oo]%-[Aa][Uu][Tt][Hh][Oo][Rr][Ee][Dd]%-[Bb][Yy]:(.*)$")
+	if value == nil then
+		return nil
+	end
+	local name, email = person(value)
+	if name == nil or provenance.modelId(name) == "" then
+		return nil
+	end
+	if people ~= nil and email ~= nil and people[email] then
+		return nil
+	end
+	return `{provenance.agent(name, nil)} (from git)`
+end
+
+-- The agent of the last Co-Authored-By value (`values`, without the key) that is not a person's, else nil.
+function provenance.agentOf(values: { string }, people: { [string]: boolean }): string?
+	local agent: string? = nil
+	for _, value in values do
+		agent = provenance.fromTrailer(`Co-Authored-By: {value}`, people) or agent
+	end
+	return agent
+end
+
+-- A commit's actor: the agent of its trailers (agentOf), else the commit's author. Both read from git.
+function provenance.fromCommit(author: string, trailers: { string }, people: { [string]: boolean }): string
+	return provenance.agentOf(trailers, people) or `{provenance.human(author)} (from git)`
+end
+
+-- a commit's trailers, and those of its second parent when it is a merge (a `--no-ff` landing's top layer commit)
+local function allTrailers(c: Commit): { string }
+	local out: { string } = {}
+	local own: { string } = c.trailers or {}
+	local side: { string } = c.sideTrailers or {}
+	for _, v in own do
+		table.insert(out, v)
+	end
+	for _, v in side do
+		table.insert(out, v)
+	end
+	return out
+end
+
+local function actorOf(c: Commit, people: { [string]: boolean }): string
+	return provenance.fromCommit(c.author or "unknown", allTrailers(c), people)
+end
+
+local function isRecordPath(path: string): boolean
+	return string.match(path, "/provenance%.md$") ~= nil
+end
+
+-- the folder a document path is in: its state
+local function areaOf(path: string): string
+	if string.find(path, "/done/", 1, true) then
+		return "done"
+	elseif string.find(path, "/active/", 1, true) then
+		return "active"
+	end
+	return "backlog"
+end
+
+-- the document's status word: `prepared-marble-raging-otter` is `prepared`
+local function wordOf(status: string): string?
+	return string.match(status, "^([^%-%s]+)")
+end
+
+-- `life`: one item's commits, newest first, as `trail.read` returns them for the document and `provenance.md` (a
+-- record change has `doc` false or a record path). `fronts` is the document's status word and `raft:` after each
+-- commit, keyed `<sha>:<path>` (the added or modified path; a delete has none). `mark`: the commit that starts a cut life
+-- gives the idea alone, marked, and no rafter.
+function provenance.select(
+	life: { Commit },
+	id: string,
+	people: { [string]: boolean },
+	fronts: { [string]: Front },
+	mark: Mark
+): Derived
+	local out: Derived = { statuses = {}, unblocked = {} }
+	local records: { [string]: boolean } = {}
+	local rows: { Commit } = {}
+	for _, c in life do
+		if isRecordPath(c.path) then
+			records[c.sha] = true
+		elseif c.doc then
+			table.insert(rows, c)
+		end
+	end
+	-- the document's commits, oldest first, one step per sha (a move is a delete and an add of one sha); a commit
+	-- that only deletes a path of the document is no step
+	type Step = { c: Commit, front: Front?, area: string }
+	local steps: { Step } = {}
+	local seen: { [string]: boolean } = {}
+	for i = #life, 1, -1 do
+		local c = life[i]
+		if c.doc and not isRecordPath(c.path) and c.status ~= "D" and not seen[c.sha] then
+			seen[c.sha] = true
+			table.insert(steps, { c = c, front = fronts[`{c.sha}:{c.path}`], area = areaOf(c.path) })
+		end
+	end
+	local function entry(c: Commit, event: string, actor: string, detail: string): Entry
+		return {
+			when = stamp(c.time),
+			event = event,
+			actor = actor,
+			detail = detail,
+			source = "git",
+			at = c.time,
+		}
+	end
+	-- the idea: the capture commit's author; a trailer is never read for it
+	local capture, isCapture = trail.capture(rows)
+	if mark.cut and steps[1] then
+		capture, isCapture = steps[1].c, false
+	end
+	if capture and capture.author then
+		local how = if isCapture then "from git" else "from git, first add"
+		out.idea = entry(capture, "idea", `{provenance.human(capture.author)} ({how})`, mark.note)
+	end
+	-- every change of the status word, with the author of the commit that made it; a change to `new` by a
+	-- `tracker: <id> new` commit is the unblock (once per commit, covered by a record change in the same commit);
+	-- the commit that first brings the document into `done/` is the delivery, not a status change
+	local prevWord: string? = nil
+	local prevArea: string? = nil
+	for _, step in steps do
+		local word = if step.front then wordOf(step.front.status) else nil
+		local delivery = step.area == "done"
+			and prevArea ~= nil
+			and prevArea ~= "done"
+			and out.delivered == nil
+		if delivery then
+			local raft = if step.front then step.front.raft else ""
+			out.delivered =
+				entry(step.c, "delivered", actorOf(step.c, people), if raft ~= "" then `raft={raft}` else "")
+			out.merged =
+				entry(step.c, "merged", provenance.agentOf(allTrailers(step.c), people) or "unknown", "")
+		elseif word ~= nil and prevWord ~= nil and word ~= prevWord then
+			if word == "new" and string.match(step.c.subject, "^tracker: [fdcR]%d%d%d%d new$") then
+				if not records[step.c.sha] then
+					table.insert(out.unblocked, entry(step.c, "unblocked", actorOf(step.c, people), ""))
+				end
+			else
+				table.insert(out.statuses, entry(step.c, `status:{word}`, actorOf(step.c, people), ""))
+			end
+		end
+		if word ~= nil then
+			prevWord = word
+		end
+		prevArea = step.area
+	end
+	-- the rafter: the oldest commit at which `raft:` became the value it has now and stayed so
+	local current = ""
+	for i = #steps, 1, -1 do
+		if steps[i].front then
+			current = (steps[i].front :: Front).raft
+			break
+		end
+	end
+	if current ~= "" then
+		local start: Step? = nil
+		for _, step in steps do
+			if step.front then
+				if (step.front :: Front).raft == current then
+					start = start or step
+				else
+					start = nil
+				end
+			end
+		end
+		-- a run that reaches back to the commit that starts a cut life was made by an earlier life
+		if mark.cut and start == steps[1] then
+			start = nil
+		end
+		if start then
+			out.rafted =
+				entry((start :: Step).c, "rafted", actorOf((start :: Step).c, people), `raft={current}`)
+		end
+	end
+	return out
+end
+
+-- the `raft=` part of a detail, "" when it has none
+local function raftPart(detail: string): string
+	for part in string.gmatch(detail, "[^;]+") do
+		local value = string.match(part, "^%s*(raft=%S+)%s*$")
+		if value then
+			return value
+		end
+	end
+	return ""
+end
+
+-- true when a stored row of `event` stands for `entry` (a derived fallback): it names the same raft, or the entry
+-- names none
+local function stored(rows: { Row }, event: string, entry: Entry): boolean
+	local want = raftPart(entry.detail)
+	for _, r in rows do
+		if r.event == event and (want == "" or raftPart(r.detail) == want) then
+			return true
+		end
+	end
+	return false
+end
+
+local function withWorker(detail: string, worker: string?): string
+	if worker == nil then
+		return detail
+	end
+	return if detail == "" then `worker={worker}` else `{detail}; worker={worker}`
+end
+
+-- The derived entries and the stored rows as one list, oldest first. Derived entries order by their commits' time
+-- (to the second, then the order they came in); a stored row has only its minute, so against it the minute decides, a
+-- derived entry before a stored one in the same minute. A stored `rafted` or `delivered` row for the raft wins over the
+-- git fallback of its event; the worker joins every `delivered` entry as `worker=<…>`.
+function provenance.merge(derived: Derived, rows: { Row }, worker: string?): { Entry }
+	local list: { Entry } = {}
+	local function add(entry: Entry?)
+		if entry then
+			table.insert(list, table.clone(entry))
+		end
+	end
+	add(derived.idea)
+	for _, e in derived.statuses do
+		add(e)
+	end
+	for _, e in derived.unblocked do
+		add(e)
+	end
+	if derived.rafted and not stored(rows, "rafted", derived.rafted) then
+		add(derived.rafted)
+	end
+	if derived.delivered and not stored(rows, "delivered", derived.delivered) then
+		add(derived.delivered)
+	end
+	add(derived.merged)
+	local rank: { [Entry]: number } = {}
+	for i, e in list do
+		rank[e] = i
+	end
+	for i, r in rows do
+		local entry: Entry =
+			{ when = r.when, event = r.event, actor = r.actor, detail = r.detail, source = "record" }
+		rank[entry] = i
+		table.insert(list, entry)
+	end
+	for _, e in list do
+		if e.event == "delivered" then
+			e.detail = withWorker(e.detail, worker)
+		end
+	end
+	table.sort(list, function(a: Entry, b: Entry): boolean
+		if a.when ~= b.when then
+			return a.when < b.when
+		end
+		if a.source ~= b.source then
+			return a.source == "git"
+		end
+		if a.at ~= b.at and a.at ~= nil and b.at ~= nil then
+			return a.at < b.at
+		end
+		return rank[a] < rank[b]
+	end)
+	return list
+end
+
+-- The spend row that names the worker of a delivered ticket: the newest `deliver` row that has a model, else the
+-- newest `build` row that has one (`rows` in file order, oldest first).
+function provenance.workerRow(rows: { Spend }): Spend?
+	for _, phase in { "deliver", "build" } do
+		for i = #rows, 1, -1 do
+			local r = rows[i]
+			if r.phase == phase and r.model ~= nil and r.model ~= "" then
+				return r
+			end
+		end
+	end
+	return nil
+end
+
+-- A worker as one word: `host/cli/model` for the parts the row has (c0254 adds host and CLI), nil with none.
+function provenance.workerOf(row: { model: string?, host: string?, cli: string? }?): string?
+	if row == nil then
+		return nil
+	end
+	local parts: { string } = {}
+	for _, part in { row.host, row.cli, row.model } do
+		if part ~= nil and part ~= "" then
+			table.insert(parts, part)
+		end
+	end
+	return if #parts > 0 then table.concat(parts, "/") else nil
+end
+
+-- one line of `./zn who`: `<when>  <event>  <actor>  <detail>  (git | record)`, an empty detail left out
+function provenance.line(e: Entry): string
+	local parts = { e.when, e.event, e.actor }
+	if e.detail ~= "" then
+		table.insert(parts, e.detail)
+	end
+	table.insert(parts, `({e.source})`)
+	return table.concat(parts, "  ")
 end
 
 return provenance

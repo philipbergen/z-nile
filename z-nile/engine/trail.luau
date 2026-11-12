@@ -31,7 +31,21 @@ export type Commit = {
 	order: number,
 	doc: boolean,
 	id: string?,
+	-- c0280: who committed it (the author, not the committer), and the values of its Co-Authored-By trailers
+	author: string?,
+	email: string?,
+	trailers: { string }?,
+	-- the commit's parents (a merge has two), and the Co-Authored-By values of its second parent (set by `who`)
+	parents: { string }?,
+	sideTrailers: { string }?,
 }
+
+-- The log format every reader of a trail uses (c0280): a header line, then the author, the author's email and the
+-- Co-Authored-By values (separated by the unit separator, empty when none), each on a tagged line, then the changed
+-- files. No commit body is read, so a body line that looks like a change line can't misparse; a tagged line can't be
+-- a change line (`M\tpath`) or a header (`@@`).
+trail.FORMAT =
+	"--format=@@%H %ct %s%n@A%an%n@E%ae%n@P%P%n@T%(trailers:key=Co-Authored-By,valueonly,unfold,separator=%x1f)"
 
 local FOLDERS = { "", "active/", "done/" }
 
@@ -80,7 +94,7 @@ function trail.isDoc(name: string): boolean
 	return string.match(name, "^stream%-") == nil
 end
 
--- Parses `git log --no-renames --format=@@%H %ct %s --name-status`, keeping the changes to a file directly in one
+-- Parses `git log --no-renames <trail.FORMAT> --name-status`, keeping the changes to a file directly in one
 -- of `dirs` that `want` accepts by name. `order` counts from 1 in the log's own order (newest first).
 function trail.parse(log: string, dirs: { string }, want: (name: string) -> boolean): { Commit }
 	local inDir: { [string]: boolean } = {}
@@ -89,11 +103,32 @@ function trail.parse(log: string, dirs: { string }, want: (name: string) -> bool
 	end
 	local out: { Commit } = {}
 	local sha, time, subject = "", 0, ""
+	local author: string? = nil
+	local email: string? = nil
+	local trailers: { string }? = nil
+	local parents: { string }? = nil
 	local n = 0
 	for line in string.gmatch(log, "[^\n]+") do
 		local s, t, subj = string.match(line, "^@@(%x+) (%d+) ?(.*)$")
 		if s then
 			sha, time, subject = s, tonumber(t) :: number, subj :: string
+			author, email, trailers, parents = nil, nil, nil, nil
+		elseif string.sub(line, 1, 2) == "@A" then
+			author = string.sub(line, 3)
+		elseif string.sub(line, 1, 2) == "@E" then
+			email = string.sub(line, 3)
+		elseif string.sub(line, 1, 2) == "@P" then
+			local list: { string } = {}
+			for parent in string.gmatch(string.sub(line, 3), "%x+") do
+				table.insert(list, parent)
+			end
+			parents = list
+		elseif string.sub(line, 1, 2) == "@T" then
+			local values: { string } = {}
+			for value in string.gmatch(string.sub(line, 3), "[^\31]+") do
+				table.insert(values, value)
+			end
+			trailers = values
 		else
 			local status, path = string.match(line, "^(%u)%d*\t([^\t]+)$")
 			local dir, name = string.match(path or "", "^(.+)/([^/]+)$")
@@ -107,6 +142,10 @@ function trail.parse(log: string, dirs: { string }, want: (name: string) -> bool
 					path = path :: string,
 					order = n,
 					doc = trail.isDoc(name :: string),
+					author = author,
+					email = email,
+					trailers = trailers,
+					parents = parents,
 				})
 			end
 		end
@@ -288,10 +327,14 @@ local function changes(
 	args: { string },
 	dirs: { string },
 	want: (name: string) -> boolean,
-	id: string
+	id: string,
+	firstParent: boolean
 ): { Commit }
 	local argv = table.clone(args)
-	for _, a in { "--no-renames", "--format=@@%H %ct %s", "--name-status", "--" } do
+	if firstParent then
+		table.insert(argv, "--first-parent")
+	end
+	for _, a in { "--no-renames", trail.FORMAT, "--name-status", "--" } do
 		table.insert(argv, a)
 	end
 	for _, d in dirs do
@@ -324,17 +367,60 @@ function trail.cuts(head: string): { [string]: string }
 	return out
 end
 
+-- An item's last life out of all its commits (newest first or not): from the item's last appearance (`life`) or a later
+-- commit that changed a compaction map (`cuts`: sha -> map file, `trail.cuts`) and the document (`since`); the note
+-- names such a start. Pure: `read` and the board (c0284) both cut a life this way.
+function trail.cut(commits: { Commit }, cuts: { [string]: string }): ({ Commit }, { Cut })
+	local lived, start = trail.life(commits)
+	lived, start = trail.since(lived, start, function(c: Commit): boolean
+		return c.doc and cuts[c.sha] ~= nil
+	end)
+	local notes: { Cut } = {}
+	if start and cuts[start.sha] then
+		table.insert(notes, { sha = string.sub(start.sha, 1, 7), file = cuts[start.sha] })
+	end
+	return lived, notes
+end
+
+-- One item's life out of commits parsed from a log that may hold many items (the board's single read): the commits
+-- that touch this id's files, given the id, cut as `cut` cuts (`cuts` are the compaction commits that start this id's
+-- life; c0138 narrows them per id before the call), then only the files `want` accepts. Pure: `read` and the board both
+-- build a life this way, so the two cannot disagree.
+function trail.lifeOf(
+	commits: { Commit },
+	id: string,
+	cuts: { [string]: string },
+	want: (name: string) -> boolean
+): ({ Commit }, { Cut })
+	local mine: { Commit } = {}
+	for _, c in commits do
+		local copy = table.clone(c)
+		copy.id = id
+		table.insert(mine, copy)
+	end
+	local lived, notes = trail.cut(mine, cuts)
+	local out: { Commit } = {}
+	for _, c in lived do
+		if want(string.match(c.path, "[^/]+$") :: string) then
+			table.insert(out, c)
+		end
+	end
+	return out, notes
+end
+
 -- The item's commits on `head` under `id` that touch files `want` accepts, newest first: its last life, where a life
 -- starts at the item's last appearance (`life`) or at a later commit that changed a compaction map and its document
 -- (`since`). The second result lists such a start: its short sha and the map file it changed. The item's folders are
 -- under every root of `roots`, by default every root `head`'s registry names, retired ones included. Nil without git,
--- `head`, or a registry that parses.
+-- `head`, or a registry that parses. `firstParent` reads the mainline only (c0280: a merge commit then carries the
+-- diff against its first parent, so a `--no-ff` landing shows the move into `done/` it made).
 function trail.read(
 	kind: string,
 	id: string,
 	want: (name: string) -> boolean,
 	head: string,
-	roots: { string }?
+	roots: { string }?,
+	firstParent: boolean?
 ): ({ Commit }?, { Cut })
 	local notes: { Cut } = {}
 	if not git({ "rev-parse", "--verify", "-q", head }) then
@@ -348,24 +434,13 @@ function trail.read(
 		end
 		within = projects.allRoots(reg)
 	end
-	local cuts = trail.cuts(head)
 	local function keep(name: string): boolean
 		return trail.isDoc(name) or want(name)
 	end
-	local lived, start =
-		trail.life(changes({ "log", head }, trail.dirs(kind, id, within :: { string }), keep, id))
-	lived, start = trail.since(lived, start, function(c: Commit): boolean
-		return c.doc and cuts[c.sha] ~= nil
-	end)
-	if start and cuts[start.sha] then
-		table.insert(notes, { sha = string.sub(start.sha, 1, 7), file = cuts[start.sha] })
-	end
-	local out: { Commit } = {}
-	for _, c in lived do
-		if want(string.match(c.path, "[^/]+$") :: string) then
-			table.insert(out, c)
-		end
-	end
+	local all =
+		changes({ "log", head }, trail.dirs(kind, id, within :: { string }), keep, id, firstParent == true)
+	local out, cutNotes = trail.lifeOf(all, id, trail.cuts(head), want)
+	notes = cutNotes
 	return out, notes
 end
 
