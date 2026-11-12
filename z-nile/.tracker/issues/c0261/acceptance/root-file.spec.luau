@@ -1,6 +1,6 @@
 --!strict
 -- c0261: the committed root .models.toml gives every activity of the dispatcher a real model on every CLI: the work on
--- the way and the rounds on the way cheap, every final review expensive, the wait step the cheapest. The rules are
+-- the way, a layer's code review and the stream review cheap, every final review expensive, the wait step the cheapest. The rules are
 -- pinned by the gate; the exact model names are pinned only where ZN_C0261_EXACT is set (this issue's check.sh lines,
 -- so a model upgrade needs no override of a promoted spec). Reads the real file.
 local dispatch = require("@znile/engine/dispatch")
@@ -26,10 +26,7 @@ local function activities(): { string }
 	end
 	for mode in dispatch.REVIEW_MODES do
 		local d = dispatch :: any
-		out[d.activityOf("zz-review", mode, false)] = true
-		if mode == "design" or mode == "code" then
-			out[d.activityOf("zz-review", mode, true)] = true
-		end
+		out[d.activityOf("zz-review", mode)] = true
 	end
 	local list = {}
 	for a in out do
@@ -43,7 +40,6 @@ local WAY = {
 	["z-ticket"] = true,
 	["z-raft"] = true,
 	["z-run"] = true,
-	["zz-review-design"] = true,
 	["zz-review-code"] = true,
 	["zz-review-stream"] = true,
 } :: { [string]: boolean }
@@ -58,7 +54,8 @@ local function classOf(a: string): string
 		then "wait"
 		elseif a == "z-design" then "author"
 		elseif WAY[a] then "way"
-		else "final"
+		elseif m.isFinalActivity(a) then "final"
+		else error(`{a} is no class`)
 end
 
 return t.spec("c0261 root .models.toml per activity", function(it)
