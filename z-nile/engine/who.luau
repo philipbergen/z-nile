@@ -27,9 +27,7 @@ end
 -- The history `who` reads: the published mainline (`origin/main`), else this checkout's `HEAD`. A worktree's own
 -- unpublished commits are not history yet, and a branch's `done` commit is no merge.
 function who.head(dir: string?): string
-	return if git({ "rev-parse", "--verify", "-q", "origin/main" }, dir) ~= nil
-		then "origin/main"
-		else "HEAD"
+	return if git({ "rev-parse", "--verify", "-q", "origin/main" }, dir) ~= nil then "origin/main" else "HEAD"
 end
 
 -- Every commit author's email on `head`, lower-cased: a person is whoever commits, so a Co-Authored-By trailer with one

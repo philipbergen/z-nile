@@ -33,15 +33,6 @@ function boardprov.bucket(commits: { trail.Commit }): { [string]: { trail.Commit
 	return out
 end
 
-local function hasDoc(life: { trail.Commit }): boolean
-	for _, c in life do
-		if c.doc then
-			return true
-		end
-	end
-	return false
-end
-
 type Read = {
 	lives: { [string]: { trail.Commit } },
 	marks: { [string]: provenance.Mark },
@@ -49,8 +40,8 @@ type Read = {
 	fronts: { [string]: provenance.Front },
 }
 
--- The lives of `items` on the mainline of the checkout `dir`: nil without a registry or a log. Only an item with a
--- document in its life gets one (`who` refuses the rest as "no history").
+-- The lives of `items` on the mainline of the checkout `dir`: nil without a registry or a log. An item with no commit
+-- there gets none (`who` refuses it as "no history"; the board shows its stored rows alone).
 local function readLives(items: { Item }, dir: string): Read?
 	local head = who.head(dir)
 	local reg = projects.at(head, dir)
@@ -81,7 +72,7 @@ local function readLives(items: { Item }, dir: string): Read?
 	local all: { trail.Commit } = {}
 	for _, item in items do
 		local life, notes = trail.lifeOf(byId[item.id] or {}, item.id, cuts, who.want)
-		if hasDoc(life) then
+		if #life > 0 then
 			out.lives[item.id] = life
 			out.marks[item.id] = who.mark(notes, trail.ambiguous(life))
 			for _, c in life do

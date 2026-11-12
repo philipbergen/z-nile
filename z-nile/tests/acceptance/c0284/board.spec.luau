@@ -2,11 +2,11 @@
 -- c0284: the board shows each item's provenance, the same entries `./zn who` prints for it. The history is c0280's
 -- (copied: a promoted spec is never shared between tickets): distinct authors in a repository with a bare origin, a
 -- reused number, a compaction cut, a root move, a `--no-ff` landing with a trailer on its second parent, a raft.
+local board = require("@znile/engine/board")
+local boardprov = require("@znile/engine/boardprov")
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
-local board = require("@znile/engine/board")
-local boardprov = require("@znile/engine/boardprov")
 local ledger = require("@znile/engine/ledger")
 local process = require("@lune/process")
 local provenance = require("@znile/engine/provenance")
@@ -271,12 +271,12 @@ return t.spec("c0284 board provenance", function(it)
 		end
 		return out
 	end
-	local function pageData(env: { [string]: string }?, out: string): (any, string)
+	local function pageData(extra: { [string]: string }?, out: string): (any, string)
 		local r = fixture.exec(
 			W,
 			"bash",
 			{ "scripts/tracker.sh", "board", "-O", "--out", out },
-			{ env = env or {} }
+			{ env = extra or {} }
 		)
 		if not r.ok then
 			error(r.stdout .. r.stderr)
@@ -331,7 +331,8 @@ return t.spec("c0284 board provenance", function(it)
 			end
 			t.expect(stored).toBe("unblocked")
 			-- the view's script (outside the JSON) writes the section, for an issue and for a raft
-			local script = string.gsub(html, '<script type="application/json" id="board%-data">.-</script>', "")
+			local script =
+				string.gsub(html, '<script type="application/json" id="board%-data">.-</script>', "")
 			local _, calls = string.gsub(script, "provenanceOf%(", "")
 			t.expect(calls >= 3).toBe(true)
 			t.expect(has(script, "<h3>Provenance</h3>")).toBe(true)
@@ -372,37 +373,58 @@ return t.spec("c0284 board provenance", function(it)
 		t.expect(singles).toBe(1)
 	end)
 
-	it("a record that does not parse is named, its item shows no provenance, the other items are unchanged", function()
-		local path = `{W}/{IDS}/c0020/provenance.md`
-		fs.writeFile(path, "not a record\n")
-		local data = pageData(nil, `{base}/board-bad.html`)
-		fs.removeFile(path)
-		local named = false
-		for _, p in (data :: any).problems do
-			named = named or has(p, `{IDS}/c0020/provenance.md does not parse`)
+	it(
+		"a record that does not parse is named, its item shows no provenance, the other items are unchanged",
+		function()
+			local path = `{W}/{IDS}/c0020/provenance.md`
+			fs.writeFile(path, "not a record\n")
+			local data = pageData(nil, `{base}/board-bad.html`)
+			fs.removeFile(path)
+			local named = false
+			for _, p in (data :: any).problems do
+				named = named or has(p, `{IDS}/c0020/provenance.md does not parse`)
+			end
+			t.expect(named).toBe(true)
+			t.expect(find(data, "c0020").provenance).toBe(nil)
+			t.expect(linesOf(find(data, "c0010").provenance)).toEqual(whoLines("c0010"))
 		end
-		t.expect(named).toBe(true)
-		t.expect(find(data, "c0020").provenance).toBe(nil)
-		t.expect(linesOf(find(data, "c0010").provenance)).toEqual(whoLines("c0010"))
-	end)
+	)
 
-	it("a tree without git history shows the stored rows alone, and an item with none shows nothing", function()
-		local plain = `{base}/plain/tracker`
-		fs.writeDir(`{plain}/issues/c0001`)
-		fs.writeDir(`{plain}/issues/c0002`)
-		fs.writeFile(`{plain}/issues/c0001/c0001.md`, doc("c0001", "", "new-a-b-c"))
-		fs.writeFile(`{plain}/issues/c0002/c0002.md`, doc("c0002", "", "new-a-b-c"))
-		fs.writeFile(
-			`{plain}/issues/c0001/provenance.md`,
-			"# Provenance: c0001\n\n| when | event | actor | detail |\n|---|---|---|---|\n| 2026-10-05 12:00 | approved | human:Ann | design=aaaaaaaaaaaa |\n"
-		)
-		local m = board.collect(plain)
-		t.expect(m.history).toBe(false)
-		t.expect(m.issues[1].id).toBe("c0001")
-		t.expect(linesOf(m.issues[1].provenance)).toEqual({
-			"2026-10-05 12:00  approved  human:Ann  design=aaaaaaaaaaaa  (record)",
-		})
-		t.expect(m.issues[2].provenance).toBe(nil)
+	it(
+		"a tree without git history shows the stored rows alone, and an item with none shows nothing",
+		function()
+			local plain = `{base}/plain/tracker`
+			fs.writeDir(`{plain}/issues/c0001`)
+			fs.writeDir(`{plain}/issues/c0002`)
+			fs.writeFile(`{plain}/issues/c0001/c0001.md`, doc("c0001", "", "new-a-b-c"))
+			fs.writeFile(`{plain}/issues/c0002/c0002.md`, doc("c0002", "", "new-a-b-c"))
+			fs.writeFile(
+				`{plain}/issues/c0001/provenance.md`,
+				"# Provenance: c0001\n\n| when | event | actor | detail |\n|---|---|---|---|\n| 2026-10-05 12:00 | approved | human:Ann | design=aaaaaaaaaaaa |\n"
+			)
+			local m = board.collect(plain)
+			t.expect(m.history).toBe(false)
+			t.expect(m.issues[1].id).toBe("c0001")
+			t.expect(linesOf(m.issues[1].provenance)).toEqual({
+				"2026-10-05 12:00  approved  human:Ann  design=aaaaaaaaaaaa  (record)",
+			})
+			t.expect(m.issues[2].provenance).toBe(nil)
+		end
+	)
+
+	it("zz-rules and the README name the Provenance section", function()
+		t.expect(
+			has(
+				fs.readFile(`{root}/z-nile/skills/zz-rules/SKILL.md`),
+				"its Provenance (the entries `./zn who` prints for it"
+			)
+		).toBe(true)
+		t.expect(
+			has(
+				fs.readFile(`{root}/z-nile/README.md`),
+				"lists its Provenance, the same entries `./zn who` prints"
+			)
+		).toBe(true)
 	end)
 
 	it("the buckets are the item folders", function()

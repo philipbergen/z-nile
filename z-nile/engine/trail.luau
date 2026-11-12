@@ -439,8 +439,7 @@ function trail.read(
 	local function keep(name: string): boolean
 		return trail.isDoc(name) or want(name)
 	end
-	local all =
-		changes(head, trail.dirs(kind, id, within :: { string }), keep, firstParent == true)
+	local all = changes(head, trail.dirs(kind, id, within :: { string }), keep, firstParent == true)
 	local out, cutNotes = trail.lifeOf(all, id, trail.cuts(head), want)
 	notes = cutNotes
 	return out, notes
