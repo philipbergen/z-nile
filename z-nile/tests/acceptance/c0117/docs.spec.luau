@@ -162,8 +162,8 @@ return t.spec("c0117 docs", function(it)
 				"A `.models.toml` is never tracker state",
 				"judged per item",
 				"origin's URL as the run pinned it at its start",
-				"A missing watermark at a run's start is never trusted",
-				"The file is shared by every dispatcher of the repository",
+				"A run accepts `main` as it is when the process starts",
+				"No file under the home directory",
 				"another run's advance is never a trip",
 				"writes a heartbeat in its parent's state folder",
 				"`BASH_MAX_TIMEOUT_MS`",
@@ -175,10 +175,10 @@ return t.spec("c0117 docs", function(it)
 				"Not enforceable: the agent runs as the user",
 				"- **Tracker state from inside a step.**",
 				"- **Tracker state** has one definition",
-				'- **The watermark and the tripwire** (the user\'s "Persisted watermark", framed by "Keep same user, accept detection").',
-				"where a well-behaved step never writes, and detects if it changes",
+				'- **The tripwire** (the user\'s "Keep same user, accept detection").',
+				"before every step and after every step",
 				"and never prevents one",
-				"`./zn dispatch vet`",
+				"`./zn dispatch retry <id>`",
 				"--match-head-commit <head>`",
 				"never forced",
 				"stops as `cap-unknown`",
@@ -220,7 +220,7 @@ return t.spec("c0117 docs", function(it)
 		absent(readme, "(c0117, planned)", "the README")
 		at(readme, "- **The dispatcher.** `./zn dispatch <id>`", "the README")
 		at(readme, "none of them is a security boundary against a determined agent", "the README")
-		at(readme, "The watermark file is shared by every dispatcher of the repository", "the README")
+		at(readme, "A run accepts `main` as it is when it starts", "the README")
 		at(readme, "- **`.models.toml`.**", "the README")
 	end)
 

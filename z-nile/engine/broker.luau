@@ -91,7 +91,7 @@ end
 export type Origin = { fetch: string, push: string }
 
 -- The push itself, in the repository `root`: fetch `main` fresh from the pinned URL, refuse anything but a fast-forward
--- of it, refuse a history the watermark would refuse (each first-parent commit judged against its parent, by its
+-- of it, refuse a history that is not tracker state (each first-parent commit judged against its parent, by its
 -- parent's registry, sequestered: review 003 F10), then a plain push to the pinned push URL (never forced: a `main` that
 -- moved since the fetch refuses it, and the client rebuilds on it and asks again). `roots` reads the registry's roots at
 -- a ref.
