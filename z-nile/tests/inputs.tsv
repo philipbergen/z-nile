@@ -192,8 +192,6 @@ tests/acceptance/c0120/runner-home.spec.luau	pickman/tests/lib/renamed.luau
 tests/acceptance/c0120/runner-home.spec.luau	pickman/tests/lib/t.luau
 tests/acceptance/c0120/runner-home.spec.luau	pickman/tests/run.luau
 tests/acceptance/c0127/reuse.spec.luau	.gitignore
-tests/acceptance/c0165/docs.spec.luau	.gitignore
-tests/acceptance/c0165/docs.spec.luau	AGENTS.md
 tests/acceptance/c0172/cicd.spec.luau	pickman/.luaurc
 tests/acceptance/c0172/cicd.spec.luau	pickman/default.project.json
 tests/acceptance/c0172/cicd.spec.luau	pickman/lobby.project.json

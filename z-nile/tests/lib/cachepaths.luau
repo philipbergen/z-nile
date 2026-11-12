@@ -106,16 +106,8 @@ local ALLOWED: { [string]: { [string]: string } } = {
 	["z-nile/specs.luau"] = {
 		["local resultsFile = `{ROOT}/{prefix}.cache/spec-results-{fence.myPid()}.json`"] = "the run's results file, named for the orchestrator's pid; the runner (inside the jail) writes it, this reads and removes it, and the runner writes only a path below its own .cache (c0165)",
 		["pcall(fs.writeDir, `{ROOT}/{prefix}.cache`)"] = "the folder itself (fs.writeDir of an existing folder writes nothing)",
-		["return `{ROOT}/{prefixOf(home)}.cache/spec-norecord-{pid}`"] = "the no-record marker of one gate: an empty file the orchestrator writes when a run was not recorded, and the gate removes",
-	},
-	-- c0165: the reads of the checkout's facts
-	["z-nile/lib/workspace.luau"] = {
-		['and not string.find(path, "/.cache/", 1, true)'] = "a comparison of paths; writes nothing (a nested orchestrator's db must lie under .cache)",
-		["local types = `{root}/.cache/globalTypes.d.luau`"] = "a read: the hash of the downloaded Luau types, part of the tools line",
-		["return nil, `refusing a db outside .cache while a spec runs: {path}`"] = "a message",
 	},
 	["z-nile/check.sh"] = {
-		[ [=[trap 'for i in "${!homes[@]}"; do rm -f "$(prefix "${homes[$i]}").cache/spec-norecord-$$"; done; [[ -z $report ]] || rm -f "$report"' EXIT]=] ] = "removes the no-record marker this gate's orchestrator may have written (c0165): rm -f of a plain file, never a link target",
 		["luau-lsp analyze --base-luaurc=.luaurc --platform=standard --ignore='**/.tracker/**' --ignore='**/.cache/**' \"${LUNE_DIRS[@]}\""] = "an ignore pattern for the type check; writes nothing (c0120: a home's .cache holds fixtures' copies)",
 		["mkdir -p .cache"] = "the folder itself: the runner and fence.sh refuse a .cache that isn't a plain folder",
 		["find .cache -mindepth 1 -maxdepth 1 -type l -exec rm -f {} +"] = "unlinks top-level links, never follows one",
@@ -156,6 +148,10 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
 		["watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)"] = "usage text: the net's log path",
+		['local at = string.find(cwd, "/.cache/", 1, true)'] = "a prefix compared with a CLI's real path (only a fake under .cache starts inside a check); nothing is written",
+		['return if at then string.sub(cwd, 1, at + 7) else cwd .. ".cache/"'] = "the same prefix; nothing is written",
+		["return `refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
+		["stateDir = `.cache/idea-run/{id}/{phase}`,"] = "the idea stage's supervisor state for one attempt (pid, stdin, stop, measure); gitignored under this checkout's .cache, written by the runner the same way a dispatch step's state dir is",
 	},
 	["z-nile/engine/heartbeat.luau"] = {
 		['heartbeat.DISCARDED = ".cache/discarded"'] = "c0277: the marker a takeover leaves in the old worktree, written with sh.writeReplacing (a rename); every other command only reads it",
