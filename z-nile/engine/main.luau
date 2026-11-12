@@ -5921,11 +5921,10 @@ cmd["worktree-prune"] = function()
 	end
 	for _, w in worktrees() do
 		local name = if string.sub(w.path, 1, #prefix) == prefix then string.sub(w.path, #prefix + 1) else nil
-		if name and not string.find(name, "/", 1, true) then
+		-- c0277: a discarded worktree is judged by the sweep below, not by its name
+		if name and not string.find(name, "/", 1, true) and not fs.isFile(`{w.path}/{hb.DISCARDED}`) then
 			local family = string.match(name, "^(R%d%d%d%d)%-%d+$") or name -- c0277: R0010-1 is R0010's copy
-			if fs.isFile(`{w.path}/{hb.DISCARDED}`) then
-				-- a discarded worktree is judged by the sweep below, not by its name
-			elseif not string.match(family, "^R%d%d%d%d$") then
+			if not string.match(family, "^R%d%d%d%d$") then
 				print(`kept {w.path} (named worktree: remove it when its PR has merged)`)
 			elseif isDone(family) then
 				-- finished: the raft is in done/ on the base branch, whatever merge strategy landed it

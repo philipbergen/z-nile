@@ -552,10 +552,10 @@ function heartbeat.nextSuffix(base: string, taken: { string }): string
 end
 
 -- The family's current worktree: the highest suffix among the names not marked discarded; nil when none is left.
-function heartbeat.currentOf(base: string, names: { string }, discarded: { [string]: boolean }): string?
+function heartbeat.currentOf(base: string, members: { string }, discarded: { [string]: boolean }): string?
 	local best: string? = nil
 	local bestN = -1
-	for _, name in names do
+	for _, name in members do
 		local n = heartbeat.suffixOf(base, name)
 		if n and not discarded[name] and n > bestN then
 			best, bestN = name, n
