@@ -1468,6 +1468,7 @@ local function originPaths(): { string }
 	return paths
 end
 
+local hb = {} -- the heartbeat edge's functions, in one table: main.luau's chunk is near Luau's limit of 200 locals
 -- ---- the work heartbeat (c0265): the one place that reads and writes the heartbeat branches ----
 
 -- A network call of the heartbeat, bounded: it runs in a process group of its own that is killed after ZN_NET_SECONDS
@@ -1477,15 +1478,15 @@ local BOUND =
 -- Whether this process runs inside a spec or a fenced check (the guards' answer, asked once): the only runs that honour
 -- ZN_NOW, ZN_BEAT_EVERY and ZN_NET_SECONDS.
 local specRunCache: boolean? = nil
-local function specRun(): boolean
+function hb.specRun(): boolean
 	if specRunCache == nil then
 		specRunCache = checking()
 	end
 	return specRunCache == true
 end
 
-local function netRun(cmdName: string, args: { string }): sh.Result
-	local secs = heartbeat.setting(process.env, "ZN_NET_SECONDS", 10, specRun())
+function hb.netRun(cmdName: string, args: { string }): sh.Result
+	local secs = heartbeat.setting(process.env, "ZN_NET_SECONDS", 10, hb.specRun())
 	local a = { "-e", BOUND, tostring(secs), cmdName }
 	for _, x in args do
 		table.insert(a, x)
@@ -1497,25 +1498,25 @@ local function netRun(cmdName: string, args: { string }): sh.Result
 	return r
 end
 
--- netRun, retried once after a second when a sibling checkout holds the lock of a ref both fetch into (the refs under
+-- hb.netRun, retried once after a second when a sibling checkout holds the lock of a ref both fetch into (the refs under
 -- refs/remotes/origin and refs/zn/hb-seen are shared by every worktree); a second failure is the answer.
-local function netRetry(cmdName: string, args: { string }): sh.Result
-	local r = netRun(cmdName, args)
+function hb.netRetry(cmdName: string, args: { string }): sh.Result
+	local r = hb.netRun(cmdName, args)
 	if not r.ok and string.find(r.stderr, "cannot lock ref", 1, true) then
 		task.wait(1)
-		return netRun(cmdName, args)
+		return hb.netRun(cmdName, args)
 	end
 	return r
 end
 
-local function hbNow(): number
-	return heartbeat.clock(process.env, os.time(), specRun())
+function hb.hbNow(): number
+	return heartbeat.clock(process.env, os.time(), hb.specRun())
 end
 
 -- Every heartbeat branch on origin: one fetch into refs/zn/hb-seen, then one listing. Beats, the problems (a branch that
 -- is not a beat, with its cure), and an error when the branches could not be read.
-local function readBeats(): ({ heartbeat.Beat }, { string }, string?)
-	local f = netRetry("git", { "fetch", "-q", "--prune", "origin", "+refs/heads/hb/*:refs/zn/hb-seen/*" })
+function hb.readBeats(): ({ heartbeat.Beat }, { string }, string?)
+	local f = hb.netRetry("git", { "fetch", "-q", "--prune", "origin", "+refs/heads/hb/*:refs/zn/hb-seen/*" })
 	if not f.ok then
 		return {}, {}, sh.trim(f.stderr .. f.stdout)
 	end
@@ -1540,7 +1541,7 @@ end
 
 -- What a claim is: an item on origin/main (publish.allowed does not see a retired raft's folder), not done, whose effective state is preparing or active and whose
 -- stored status carries a stamp. `since` (the epoch the stamp landed) only when asked: it costs a git log per claim.
-local function claimsOf(paths: { string }, withSince: boolean, at: string?): { heartbeat.Claim }
+function hb.claimsOf(paths: { string }, withSince: boolean, at: string?): { heartbeat.Claim }
 	local ref = at or "origin/main"
 	local roots = originRoots() or fail(`origin/main has no readable {projects.FILE}`)
 	local out: { heartbeat.Claim } = {}
@@ -1572,9 +1573,9 @@ local function claimsOf(paths: { string }, withSince: boolean, at: string?): { h
 end
 
 -- The open pull requests (title and head branch), or nil and why. Asked only when some claim is stale.
-local function readPrs(): ({ heartbeat.Pr }?, string?)
+function hb.readPrs(): ({ heartbeat.Pr }?, string?)
 	local r =
-		netRun("gh", { "pr", "list", "--state", "open", "--json", "title,headRefName", "--limit", "200" })
+		hb.netRun("gh", { "pr", "list", "--state", "open", "--json", "title,headRefName", "--limit", "200" })
 	if not r.ok then
 		return nil, sh.trim(r.stderr .. r.stdout)
 	end
@@ -1597,7 +1598,7 @@ end
 -- The epoch the heartbeat landed on origin/main: the newest first-parent commit that added its pure module (heartbeat.landingArgs;
 -- a squash merge keeps one, a merge commit is read at the merge, and compaction renumbers items, not engine files). Unreadable: math.huge, so a claim that never beat is never lost for
 -- lack of it. A claim made at or before it reads `nobeat` until it beats once (the user's decision, 2026-11-08).
-local function landingEpoch(): number
+function hb.landingEpoch(): number
 	local r = sh.run("git", heartbeat.landingArgs())
 	return (if r.ok then tonumber(string.match(r.stdout, "%d+")) else nil) or math.huge
 end
@@ -1612,13 +1613,13 @@ type Judged = {
 -- The verdicts of every claim on origin/main (paths as originPaths returned them): judged from the beats, then settled
 -- (lost or parked) when the pull requests could be read. Whatever cannot be read leaves a stale claim stale: unknown is
 -- never lost.
-local function judgeAll(paths: { string }): Judged
-	local claims = claimsOf(paths, true)
-	local beats, problems, err = readBeats()
+function hb.judgeAll(paths: { string }): Judged
+	local claims = hb.claimsOf(paths, true)
+	local beats, problems, err = hb.readBeats()
 	if err then
 		return { verdicts = {}, problems = {}, beatsError = err }
 	end
-	local verdicts = heartbeat.judge(claims, beats, hbNow(), nil, landingEpoch())
+	local verdicts = heartbeat.judge(claims, beats, hb.hbNow(), nil, hb.landingEpoch())
 	local anyStale = false
 	for _, v in verdicts do
 		anyStale = anyStale or v.kind == "stale"
@@ -1626,7 +1627,7 @@ local function judgeAll(paths: { string }): Judged
 	if not anyStale or #problems > 0 then
 		return { verdicts = verdicts, problems = problems }
 	end
-	local prs, prsErr = readPrs()
+	local prs, prsErr = hb.readPrs()
 	if not prs then
 		return { verdicts = verdicts, problems = problems, prsError = prsErr }
 	end
@@ -1642,12 +1643,12 @@ local function judgeAll(paths: { string }): Judged
 	return { verdicts = heartbeat.settle(verdicts, parked), problems = problems }
 end
 
-local function silentMinutes(v: heartbeat.Verdict): number
+function hb.silentMinutes(v: heartbeat.Verdict): number
 	return math.floor(v.silent / 60)
 end
 
 -- The claim stamp origin/main shows for `id`, or nil and why it is not a claim.
-local function claimStampOf(paths: { string }, id: string): (string?, string)
+function hb.claimStampOf(paths: { string }, id: string): (string?, string)
 	local p = docPath(paths, id)
 	if not p then
 		return nil, `{id} is not on origin/main`
@@ -1663,13 +1664,13 @@ local function claimStampOf(paths: { string }, id: string): (string?, string)
 	return nil, `{id} is {st} on origin/main: no claim to beat (claim it with ./zn status {id} preparing)`
 end
 
-local function lostText(id: string, now: string?): string
+function hb.lostText(id: string, now: string?): string
 	return if now then `{id}'s claim was taken over (now {now})` else `{id}'s claim ended`
 end
 
 -- origin/main's paths for a beat: the fetch is bounded like every network call of the heartbeat. Paths, or nil and why.
-local function beatPaths(): ({ string }?, string?)
-	local f = netRetry("git", { "fetch", "-q", "origin", "main" })
+function hb.beatPaths(): ({ string }?, string?)
+	local f = hb.netRetry("git", { "fetch", "-q", "origin", "main" })
 	if not f.ok then
 		return nil, sh.trim(f.stderr .. f.stdout)
 	end
@@ -1681,26 +1682,26 @@ local function beatPaths(): ({ string }?, string?)
 end
 
 -- The stamp `id` holds on origin/main now: (stamp, nil), (nil, nil) when it is no longer a claim, (nil, why) unreadable.
-local function stampNow(id: string): (string?, string?)
-	local paths, err = beatPaths()
+function hb.stampNow(id: string): (string?, string?)
+	local paths, err = hb.beatPaths()
 	if not paths then
 		return nil, err
 	end
-	local current = claimStampOf(paths, id)
+	local current = hb.claimStampOf(paths, id)
 	return current, nil
 end
 
 -- Pushes one beat for `held`: the plan's branch write (with its lease) and its best-effort deletions. Returns nil when
 -- written (or already newer), else the text to say and whether it means the claim was lost (taken over or ended).
-local function beatOnce(id: string, held: string): (string?, boolean)
+function hb.beatOnce(id: string, held: string): (string?, boolean)
 	for attempt = 1, 2 do
 		-- the beats first, then main: a branch seen was seen before the claimed set was read, so a taker's branch
 		-- (younger than anything read here) is never judged unclaimed
-		local beats, _, err = readBeats()
+		local beats, _, err = hb.readBeats()
 		if err then
 			return err, false
 		end
-		local paths, perr = beatPaths()
+		local paths, perr = hb.beatPaths()
 		if not paths then
 			return perr, false
 		end
@@ -1708,14 +1709,14 @@ local function beatOnce(id: string, held: string): (string?, boolean)
 		-- worktrees share origin/main and may fetch it forward at any moment)
 		local at = sh.git({ "rev-parse", "origin/main" })
 		local claimed: { [string]: boolean } = {}
-		for _, c in claimsOf(paths, false, at) do
+		for _, c in hb.claimsOf(paths, false, at) do
 			claimed[c.stamp] = true
 		end
-		local now = hbNow()
+		local now = hb.hbNow()
 		local plan = heartbeat.plan(held, now, beats, claimed, now)
 		for _, d in plan.delete do
 			-- best effort: a refused or hung prune never fails the beat
-			netRun("git", { "push", "-q", "origin", `--force-with-lease={d.ref}:{d.lease}`, `:{d.ref}` })
+			hb.netRun("git", { "push", "-q", "origin", `--force-with-lease={d.ref}:{d.lease}`, `:{d.ref}` })
 		end
 		local w = plan.write
 		if w == nil then
@@ -1730,35 +1731,40 @@ local function beatOnce(id: string, held: string): (string?, boolean)
 			return sh.trim(c.stderr), false
 		end
 		local sha = sh.trim(c.stdout)
-		local r =
-			netRun("git", { "push", "-q", `--force-with-lease={w.ref}:{w.lease}`, "origin", `{sha}:{w.ref}` })
+		local r = hb.netRun(
+			"git",
+			{ "push", "-q", `--force-with-lease={w.ref}:{w.lease}`, "origin", `{sha}:{w.ref}` }
+		)
 		if r.ok then
 			if w.lease == "" then
 				-- create-only: a takeover may have landed between the main read and the branch read
-				local again, why = stampNow(id)
+				local again, why = hb.stampNow(id)
 				if why then
 					return why, false
 				end
 				if again ~= held then
-					netRun("git", { "push", "-q", "origin", `--force-with-lease={w.ref}:{sha}`, `:{w.ref}` })
-					return lostText(id, again), true
+					hb.netRun(
+						"git",
+						{ "push", "-q", "origin", `--force-with-lease={w.ref}:{sha}`, `:{w.ref}` }
+					)
+					return hb.lostText(id, again), true
 				end
 			end
 			return nil, false
 		end
 		local msg = sh.trim(r.stderr .. r.stdout)
 		-- a rejected write: re-read, and learn whether the claim is still this one's
-		local nowStamp, why = stampNow(id)
+		local nowStamp, why = hb.stampNow(id)
 		if why then
 			return why, false
 		end
-		local seen, _, err2 = readBeats()
+		local seen, _, err2 = hb.readBeats()
 		if err2 then
 			return err2, false
 		end
 		local verdict = heartbeat.rejected(held, nowStamp, seen)
 		if verdict.action == "lost" then
-			return lostText(id, nowStamp), true
+			return hb.lostText(id, nowStamp), true
 		end
 		if attempt == 2 then
 			return msg, false
@@ -1787,25 +1793,25 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 			fail(`beat --watch must run as ./zn run --time 3600 -- ./zn beat {id} --watch`)
 		end
 	end
-	local first, perr = beatPaths()
+	local first, perr = hb.beatPaths()
 	if not first then
 		fail(`beat: {id}: {perr}`)
 	end
-	local current, why = claimStampOf(first :: { string }, id)
+	local current, why = hb.claimStampOf(first :: { string }, id)
 	if not current then
 		fail(`beat: {why}`)
 	end
 	local startStamp = current :: string
 	if not watch then
-		local msg, lost = beatOnce(id, startStamp)
+		local msg, lost = hb.beatOnce(id, startStamp)
 		if msg then
 			fail(if lost then msg else `beat: {id}: {msg}`)
 		end
 		return
 	end
-	local every = heartbeat.setting(process.env, "ZN_BEAT_EVERY", heartbeat.INTERVAL, specRun())
+	local every = heartbeat.setting(process.env, "ZN_BEAT_EVERY", heartbeat.INTERVAL, hb.specRun())
 	while true do
-		local here, unreadable = stampNow(id)
+		local here, unreadable = hb.stampNow(id)
 		-- an unreadable main is a failed tick, not a restamp
 		local act = heartbeat.watch(
 			startStamp,
@@ -1815,7 +1821,7 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 			every
 		)
 		if act == "stop-restamped" then
-			print(lostText(id, here))
+			print(hb.lostText(id, here))
 			return
 		elseif act == "stop-bound" then
 			print(`beat: {id}: stopping before its bound`)
@@ -1824,7 +1830,7 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 		if unreadable then
 			stdio.ewrite(`beat: {id}: {unreadable}\n`)
 		else
-			local ok, msg, lost = pcall(beatOnce, id, startStamp)
+			local ok, msg, lost = pcall(hb.beatOnce, id, startStamp)
 			if not ok then
 				stdio.ewrite(`beat: {id}: {tostring(msg)}\n`)
 			elseif msg and lost then
@@ -1846,7 +1852,7 @@ function cmd.lost()
 	if not publishing() then
 		fail("lost needs an origin remote (PICKMAN_PUBLISH=0 disables it)")
 	end
-	local j = judgeAll(originPaths())
+	local j = hb.judgeAll(originPaths())
 	if j.beatsError then
 		stdio.ewrite(`lost: heartbeats unreadable: {j.beatsError}\n`)
 		process.exit(1)
@@ -1860,7 +1866,7 @@ function cmd.lost()
 	end
 	for _, v in heartbeat.order(j.verdicts) do
 		if v.kind == "lost" then
-			print(`{v.id} {v.state} {silentMinutes(v)}m`)
+			print(`{v.id} {v.state} {hb.silentMinutes(v)}m`)
 		end
 	end
 end
@@ -2115,7 +2121,7 @@ function cmd.status(pos: { string })
 			end
 		end
 		-- heartbeat markers (c0265): lost claims first, longest silent first; parked and unconfirmed ones tagged
-		local j = judgeAll(listed)
+		local j = hb.judgeAll(listed)
 		if j.beatsError then
 			stdio.ewrite("status: heartbeats unreadable\n")
 		end
@@ -2137,7 +2143,7 @@ function cmd.status(pos: { string })
 			if v == nil then
 				return l.text
 			elseif v.kind == "lost" then
-				return `{l.text} [lost {silentMinutes(v)}m]`
+				return `{l.text} [lost {hb.silentMinutes(v)}m]`
 			elseif v.kind == "parked" then
 				return `{l.text} [parked]`
 			elseif v.kind == "nobeat" then
