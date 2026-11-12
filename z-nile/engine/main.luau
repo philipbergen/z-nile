@@ -8176,7 +8176,71 @@ if not READ_ONLY[name :: string] then
 end
 local rest = table.move(args, 2, #args, 1, {})
 local pos, opts = flags(rest)
+-- ENVELOPE (c0265 E16, scratch): the captured effects of the later layers, in their plainest correct form, so the core's
+-- sequestered specs can be proven to hold on the final raft tree. c0274: a checkout remembers the stamp of a claim it made
+-- (.cache/tracker-stamp-<id>) and a bare beat from a checkout that made no claim is refused. c0275: a claim path beats at
+-- once, and every command in a worktree beats the claims it holds (no throttle). c0276: the board's verdicts are read
+-- after a publish.
+function hb.envelopeId(id: string, mine: boolean)
+	if guarded(true) or not publishing() then
+		return
+	end
+	pcall(function()
+		local paths = hb.beatPaths()
+		local held = if paths then hb.claimStampOf(paths, id) else nil
+		if held then
+			if mine then
+				fs.writeDir(".cache")
+				fs.writeFile(`.cache/tracker-stamp-{id}`, held)
+			end
+			hb.beatOnce(id, held)
+		end
+	end)
+end
+function hb.envelopeHeld(): { string }
+	local out: { string } = {}
+	if fs.isDir(".cache") then
+		for _, f in fs.readDir(".cache") do
+			local id = string.match(f, "^tracker%-stamp%-(.+)$") or string.match(f, "^tracker%-claim%-(.+)$")
+			if id then
+				table.insert(out, id)
+			end
+		end
+	end
+	return out
+end
+if
+	not READ_ONLY[name :: string]
+	and name ~= "beat"
+	and name ~= "run"
+	and name ~= "reap"
+	and sh.git({ "rev-parse", "--show-toplevel" }) ~= mainRoot()
+then
+	for _, id in hb.envelopeHeld() do
+		hb.envelopeId(id, false)
+	end
+end
+if name == "beat" and pos[1] and sh.git({ "rev-parse", "--show-toplevel" }) ~= nil then
+	local held = hb.envelopeHeld()
+	if
+		not table.find(held, pos[1])
+		and not guarded(true)
+		and publishing()
+		and select(1, hb.beatPaths()) ~= nil
+		and hb.claimStampOf(hb.beatPaths() :: { string }, pos[1])
+	then
+		fail(`beat: this checkout does not hold {pos[1]}'s claim (use --adopt to take it on)`)
+	end
+end
 local ok, err = pcall(handler, pos, opts)
 if not ok then
 	fail(`tracker {name}: {err}`)
+end
+if (name == "status" and pos[2] == "preparing" and pos[1]) or name == "ready" then
+	hb.envelopeId(pos[1] :: string, true)
+	if not guarded(true) and publishing() then
+		pcall(function()
+			hb.judgeAll(originPaths())
+		end)
+	end
 end
