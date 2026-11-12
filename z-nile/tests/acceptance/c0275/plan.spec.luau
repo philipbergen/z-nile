@@ -153,6 +153,23 @@ return t.spec("c0275 automatic beats' rules", function(it)
 			{ pid = 60, command = "/Applications/Terminal.app/Contents/MacOS/Terminal" },
 		}
 		t.expect(heartbeat.sessionPid(chain)).toBe(70)
+		-- the other CLIs the repository dispatches to
+		for _, program in
+			{
+				"/Users/me/.local/bin/grok",
+				"/Users/me/.kimi-code/bin/kimi",
+				"/Users/me/.local/bin/agent",
+				"cursor-agent",
+			}
+		do
+			t.expect(heartbeat.sessionPid({
+				chain[1],
+				chain[2],
+				{ pid = 71, command = `{program} --resume` },
+				chain[4],
+			})).toBe(71)
+		end
+		t.expect(heartbeat.sessionPid({ chain[1], { pid = 72, command = "/usr/local/bin/codex" } })).toBe(nil) -- not named in .models.toml
 		t.expect(heartbeat.sessionPid({ chain[1], chain[2], chain[4] })).toBe(nil)
 		t.expect(heartbeat.sessionPid({})).toBe(nil)
 	end)

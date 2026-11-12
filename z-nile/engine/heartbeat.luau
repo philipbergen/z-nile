@@ -438,11 +438,16 @@ function heartbeat.beaterRunning(text: string, now: number, alive: boolean): boo
 	return pid ~= nil and deadline ~= nil and alive and tonumber(deadline) :: number > now
 end
 
--- The session a beater is tied to: the nearest ancestor (nearest first) that is `claude`. Another CLI has none, and its
+-- The programs of the CLIs the repository dispatches to (`.models.toml`: claude-cli, grok-cli, kimi-cli, cursor-cli): a
+-- session is the nearest ancestor (nearest first) that runs one of them. `claude`, `grok` and `kimi` are native binaries of
+-- that name; the Cursor CLI is the `agent` command (`cursor-agent` is the same program) and its running process name has
+-- not been seen (no session of it was running when this was written). A program outside the list has no session, and its
 -- beater is bounded by its time and its worktree only.
+heartbeat.SESSIONS =
+	{ claude = true, grok = true, kimi = true, agent = true, ["cursor-agent"] = true } :: { [string]: boolean }
 function heartbeat.sessionPid(chain: { { pid: number, command: string } }): number?
 	for _, p in chain do
-		if reap.name(p.command) == "claude" then
+		if heartbeat.SESSIONS[reap.name(p.command)] then
 			return p.pid
 		end
 	end
