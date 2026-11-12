@@ -1,8 +1,8 @@
 --!strict
--- c0115 AC7: a raft's prompt inlines z-nile's step skills (zz-execute, zz-rules, zz-arch, zz-test, zz-review, in that
--- order) and then every skill of the raft's own project, each from its real folder, never through .claude/skills;
--- a z-nile raft gets no project skill, and another project's skills and lessons never reach it. Its Lessons section
--- lists the build lessons of z-nile's skills and the raft's project's only, and the prompt names the project.
+-- c0115 AC7: a raft's prompt names z-nile's step skills (zz-execute, zz-rules, zz-arch, zz-test, zz-review, in that
+-- order) and then every skill of the raft's own project, each from its real folder, never through .claude/skills,
+-- and pastes none of them. A z-nile raft gets no project skill, and another project's skills never reach it.
+-- The prompt names the project and does not carry a lessons index.
 -- Fixture under .cache/c0115-prompt (tests/lib/trackerfix): a pickman raft in tracker/ (the fixtures' layout,
 -- tests/lib/engine REGISTRY) and a z-nile raft in z-nile/.tracker, with a pickman skill and lessons on both sides.
 local engine = require("@tests/lib/engine")
@@ -41,11 +41,13 @@ local function section(prompt: string, from: string, to: string?): string
 	local b = if to then string.find(prompt, to, a :: number, true) else nil
 	return string.sub(prompt, a :: number, (b or 0) - 1)
 end
--- the paths of the inlined files, in order, from the Skills section
-local function inlined(prompt: string): { string }
+-- the skill paths the prompt names, in order, from the Skills section
+local function named(prompt: string): { string }
 	local out = {}
-	for path in string.gmatch(section(prompt, "\n## Skills"), '<file path="([^"]+)">') do
-		table.insert(out, path)
+	for path in string.gmatch(section(prompt, "\n## Skills"), "`([^`]+)`") do
+		if string.find(path, "/SKILL.md", 1, true) then
+			table.insert(out, path)
+		end
 	end
 	return out
 end
@@ -59,7 +61,7 @@ local function ready(id: string, root: string): string
 	return fs.readFile(`{f.main}/{root}/rafts/active/{id}/prompt.md`)
 end
 
-return t.spec("c0115 a prompt inlines z-nile's skills and its own project's", function(it)
+return t.spec("c0115 a prompt names z-nile's skills and its own project's", function(it)
 	it("sets up a pickman raft, a z-nile raft, a pickman skill and lessons in both projects", function()
 		f = trackerfix.new("c0115-prompt", {
 			[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
@@ -103,38 +105,37 @@ return t.spec("c0115 a prompt inlines z-nile's skills and its own project's", fu
 	)
 
 	it(
-		"a pickman raft gets z-nile's five skills in order, then pickman's, from their real folders",
+		"a pickman raft names z-nile's five skills in order, then pickman's, from their real folders",
 		function()
 			local prompt = ready("R0010", "pickman/.tracker")
-			local paths = inlined(prompt)
+			local paths = named(prompt)
 			local want = {}
 			for _, s in INLINED do
 				table.insert(want, `z-nile/skills/{s}/SKILL.md`)
 			end
 			table.insert(want, "pickman/skills/pickman-play/SKILL.md")
 			t.expect(paths).toEqual(want)
-			t.expect(has(prompt, "PLAY-RULES")).toBe(true)
+			t.expect(has(prompt, "PLAY-RULES")).toBe(false)
+			t.expect(has(prompt, "zz-test/pin")).toBe(false)
+			t.expect(has(prompt, "pickman-play/feel")).toBe(false)
 			t.expect(has(prompt, '<file path=".claude/')).toBe(false)
 			t.expect(has(prompt, "This raft is the pickman project's.")).toBe(true)
-			local lessons = section(prompt, "\n## Lessons", "\n## Work items")
-			t.expect(has(lessons, "zz-test/pin")).toBe(true)
-			t.expect(has(lessons, "pickman-play/feel")).toBe(true)
+			t.expect(has(prompt, "Search with `./zn lessons <terms>`")).toBe(true)
 			t.expect(has(prompt, "{{")).toBe(false)
 		end
 	)
 
-	it("a z-nile raft gets the same five and no project skill, nor pickman's lessons", function()
+	it("a z-nile raft names the same five and no project skill", function()
 		local prompt = ready("R0020", Z)
 		local want = {}
 		for _, s in INLINED do
 			table.insert(want, `z-nile/skills/{s}/SKILL.md`)
 		end
-		t.expect(inlined(prompt)).toEqual(want)
+		t.expect(named(prompt)).toEqual(want)
 		t.expect(has(prompt, "PLAY-RULES")).toBe(false)
+		t.expect(has(prompt, "pickman-play")).toBe(false)
+		t.expect(has(prompt, "zz-test/pin")).toBe(false)
 		t.expect(has(prompt, "This raft is the z-nile project's.")).toBe(true)
-		local lessons = section(prompt, "\n## Lessons", "\n## Work items")
-		t.expect(has(lessons, "zz-test/pin")).toBe(true)
-		t.expect(has(lessons, "pickman-play")).toBe(false)
 		t.expect(has(prompt, "{{")).toBe(false)
 	end)
 end)

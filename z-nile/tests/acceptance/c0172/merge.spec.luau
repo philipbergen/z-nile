@@ -89,7 +89,7 @@ return t.spec("c0172 local merge", function(it)
 		t.expect(
 			has(
 				text,
-				"The final check is `z-nile/check.sh --full` in a clone of the exact head whose parent directories are not a checkout of this repo."
+				"The final check for a pull request that changes a game is `z-nile/check.sh --full` in a clone of the exact head whose parent directories are not a checkout of this repo."
 			)
 		).toBe(true)
 		t.expect(has(text, "CI, which checks out the branch alone, is the final check")).toBe(false)
@@ -97,7 +97,8 @@ return t.spec("c0172 local merge", function(it)
 
 	it("the merging close refuses a missing local full gate", function()
 		local text = read("z-nile/skills/zz-rules/SKILL.md")
-		t.expect(has(text, "never merge on a red or missing local full gate")).toBe(true)
+		t.expect(has(text, "never merge on a red or missing gate for what the pull request changes"))
+			.toBe(true)
 		t.expect(has(text, "missing CI")).toBe(false)
 	end)
 
@@ -108,7 +109,10 @@ return t.spec("c0172 local merge", function(it)
 
 	it("a new raft's check says the merger's full gate covers the other project", function()
 		local text = read("z-nile/templates/raft/check.sh")
-		t.expect(has(text, "the merger's `z-nile/check.sh --full` covers the others")).toBe(true)
+		t.expect(
+			has(text, "a game pull request's merger runs `z-nile/check.sh --full`, which covers the others")
+		)
+			.toBe(true)
 		t.expect(has(text, "CI's job per project")).toBe(false)
 	end)
 

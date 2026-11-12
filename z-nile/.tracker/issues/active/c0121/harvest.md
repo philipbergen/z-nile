@@ -1,0 +1,77 @@
+# Harvest: c0121
+- design-review-001 F1: z-design/spec-design-correspondence
+- design-review-001 F2: zz-test/pin-call-site-arguments
+- design-review-001 F3: zz-arch/parsers-refuse-ambiguity
+- design-review-001 F4: one-off: a usage line inserted between another command's line and its continuation
+- design-review-001 F5: one-off: a catch-all pcall reported every start failure as the one failure it was written for
+- design-review-001 F6: one-off: a started child's immediate refusal was discarded; the server now waits briefly for it
+- design-review-001 F7: one-off: refusal cases that pass no port would serve and hang under a regression instead of failing
+- design-review-001 F8: zz-test/pin-call-site-arguments
+- design-review-002 F1: zz-test/pin-call-site-arguments
+- design-review-002 F2: zz-test/seed-every-enumerated-case
+- design-review-002 F3: z-design/restated-rules-move-together
+- design-review-003 F1: z-design/dependent-specs-sequence-the-preps
+- design-review-003 F2: z-design/watch-steps-name-their-base
+- design-review-003 F3: zz-arch/act-on-the-id-the-state-follows
+- design-review-003 F4: z-design/touched-paths-exist
+- design-review-003 F5: one-off: a wrong claim about how Lune reports a closed pipe, checked by a scratch run
+- design-review-003 F6: one-off: a stale PR description
+- design-review-004 F1: zz-arch/act-on-the-id-the-state-follows
+- design-review-004 F2: z-design/watch-steps-name-their-base
+- design-review-004 F3: zz-review/run-the-evidence-you-cite
+- design-review-004 F4: z-design/restated-rules-move-together
+- design-review-005 F1: z-design/watch-steps-name-their-base, zz-arch/history-tests-survive-squash, zz-review/run-the-evidence-you-cite
+- design-review-005 F2: zz-test/seed-every-enumerated-case, z-design/spec-design-correspondence
+- design-review-005 F3: z-design/instructions-runnable-where-they-run, z-design/watch-steps-name-their-base
+- design-review-005 F4: z-design/design-the-execution-window
+- design-review-006 F1: z-design/design-the-execution-window
+- design-review-006 F2: z-design/exact-checks-compare-against-the-merge-base
+- design-review-006 F3: z-design/spec-design-correspondence
+- design-review-006 F4: z-design/restated-rules-move-together
+- design-review-006 F5: z-design/design-the-execution-window
+- design-review-007 F1: z-design/design-the-execution-window
+- design-review-007 F2: z-design/exact-checks-compare-against-the-merge-base, zz-test/nothing-lost-compares-sets
+- design-review-007 F3: z-design/design-the-execution-window
+- design-review-007 F4: z-design/design-the-execution-window
+- design-review-007 F5: z-design/restated-rules-move-together
+- design-review-008 F1: z-design/design-the-execution-window
+- design-review-008 F2: z-design/design-the-execution-window
+- design-review-008 F3: z-design/design-the-execution-window
+- design-review-008 F4: one-off: deliberately hiding a committed edit from git's working-tree view is the branch author falsifying git, the accepted "detect, not prevent" limit of c0118's AC9
+- design-review-008 F5: z-design/restated-rules-move-together
+- design-review-009 F1: z-design/exact-checks-compare-against-the-merge-base
+- design-review-009 F2: z-design/restated-rules-move-together
+- design-review-009 F3: z-design/exact-checks-compare-against-the-merge-base
+- design-review-009 F4: z-design/restated-rules-move-together
+- design-review-009 F5: z-design/design-the-execution-window
+- design-review-010 F1: z-design/design-the-execution-window
+- design-review-010 F2: z-design/exact-checks-compare-against-the-merge-base
+- design-review-010 F3: z-design/restated-rules-move-together
+- note R0084 code review 001 F1 (a retry on a card that never ran starts its whole chain): zz-review/delegated-commands-on-an-unseen-id
+- note R0084 code review 001 F2 (the model was encoded on every poll, against the 1800 s CPU limit): zz-arch/per-poll-work-meets-the-cpu-limit
+- note R0084 code review 001 F3 (a javascript: link in a document runs in the served page): zz-arch/links-in-rendered-documents-keep-a-scheme-allow-list
+- design-review-011 F1: zz-arch/links-in-rendered-documents-keep-a-scheme-allow-list
+- design-review-011 F2: zz-arch/per-poll-work-meets-the-cpu-limit
+- design-review-011 F3: zz-arch/per-poll-work-meets-the-cpu-limit
+- design-review-011 F4: z-design/restated-rules-move-together
+- design-review-012 F1: zz-arch/links-in-rendered-documents-keep-a-scheme-allow-list
+- design-review-012 F2: zz-test/seed-every-enumerated-case
+- design-review-012 F3: one-off: a lifetime figure timed with os.clock (wall time under load) instead of the process's CPU; the design now says which it is
+- design-review-012 F4: z-design/restated-rules-move-together
+- design-review-013 F1: zz-test/seed-every-enumerated-case
+- design-review-013 F2: zz-test/seed-every-enumerated-case
+- design-review-013 F3: z-design/restated-rules-move-together
+- design-review-014 F1: zz-test/seed-every-enumerated-case
+- design-review-014 F2: z-design/never-narrow-captured-scope
+- design-review-014 F3: zz-test/seed-every-enumerated-case
+- design-review-014 F4: zz-test/seed-every-enumerated-case
+- design-review-014 F5: zz-test/seed-every-enumerated-case
+- design-review-014 F6: z-design/restated-rules-move-together
+- design-review-015 F1: z-design/prove-specs-pass-on-a-prototype
+- design-review-015 F2: z-design/never-narrow-captured-scope
+- design-review-015 F3: zz-test/seed-every-enumerated-case
+- design-review-015 F4: z-design/restated-rules-move-together
+- note design-review-015 lesson candidate (a rule that matches free text people write, PR titles or commit subjects, is run once against today's real corpus before it is specified): z-design/prove-specs-pass-on-a-prototype
+- design-review-016 F1: z-design/prove-specs-pass-on-a-prototype, zz-test/seed-every-enumerated-case
+- design-review-016 F2: zz-test/seed-every-enumerated-case
+- design-review-016 F3: z-design/restated-rules-move-together

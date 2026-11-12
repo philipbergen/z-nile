@@ -14,23 +14,36 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local MODELS = [[
-order = ["claude", "grok", "agent"]
-
 [dispatch]
 auto_merge = ["prep"]
 stall_seconds = 3
 
-[z-design.claude]
+[roles.design]
 model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
 rank = 3
-runtime = "claude-cli"
 max_tokens = 5000
+effort = "high"
+fallbacks = []
 
-[zz-review.claude]
+[roles.design-challenge]
 model = "claude-opus-5-5"
-rank = 4
+cli = "claude"
 runtime = "claude-cli"
+rank = 4
 max_tokens = 5000
+effort = "xhigh"
+fallbacks = []
+
+[roles.code-review]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+effort = "xhigh"
+fallbacks = []
 ]]
 
 local h: fakecli.Harness

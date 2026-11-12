@@ -6,13 +6,14 @@
 --   --jobs N / PICKMAN_JOBS=N     -- run spec files in N concurrent workers (default min(max(cpus, 2), 8);
 --                                    1 or a single file runs in-process). --jobs wins over the environment.
 -- Lanes take the files with no recorded duration first, then the recorded ones slowest first (c0154), from
--- .cache/spec-durations.tsv in the home, which every concurrent run updates; the report stays in path order.
--- Exits non-zero if any case fails or any spec fails to load.
+-- .cache/spec-durations.tsv in the home, which every concurrent run updates. Each result prints as its file finishes;
+-- all runners for this user share eight machine-wide worker lanes. Exits non-zero if any case fails or a spec can't load.
 
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local schedule = require("./lib/schedule")
 local serde = require("@lune/serde")
+local slow = require("./lib/slow")
 local stdio = require("@lune/stdio")
 local task = require("@lune/task")
 
@@ -65,6 +66,54 @@ local listMode = process.env.AC_LIST
 if listMode ~= nil and listMode ~= "" then
 	print("AC_LIST is set: specs are not run in list mode (unset it to run them)")
 	process.exit(1)
+end
+
+-- One measurement for a spec run the gate did not already wrap. The child sees ZN_MEASURED and runs the suite.
+-- The line is appended by bounded.pl; this process does not start another one, and it writes no tracked path.
+if process.env.ZN_MEASURED ~= "1" then
+	local n = 0
+	for _, a in process.args do
+		if string.sub(a, -10) == ".spec.luau" then
+			n += 1
+		end
+	end
+	local subject = if n == 0 then "suite" elseif n == 1 then "1 spec" else `{n} specs`
+	local branch = process.exec("git", { "-C", ROOT, "rev-parse", "--abbrev-ref", "HEAD" })
+	local head = process.exec("git", { "-C", ROOT, "rev-parse", "HEAD" })
+	local name = if branch.ok then string.match(branch.stdout, "%S+") or "" else ""
+	if name == "HEAD" then
+		name = ""
+	end
+	local sha = if head.ok then string.match(head.stdout, "%S+") or "" else ""
+	local args = {
+		`{ROOT}/z-nile/lib/bounded.pl`,
+		"--time",
+		"3600",
+		"--",
+		"env",
+		"ZN_MEASURED=1",
+		"lune",
+		"run",
+		"tests/run",
+		"--",
+	}
+	for _, a in process.args do
+		table.insert(args, a)
+	end
+	local ran = process.exec("perl", args, {
+		-- the suite prints as it runs: without this the wrapper swallows every result line
+		stdio = "inherit",
+		env = {
+			ZN_TOP = ROOT,
+			ZN_MEASURE_BUFFER = "1",
+			ZN_MEASURE_KIND = "test",
+			ZN_MEASURE_PHASE = "test",
+			ZN_MEASURE_SUBJECT = subject,
+			ZN_MEASURE_BRANCH = name,
+			ZN_MEASURE_HEAD = sha,
+		},
+	})
+	process.exit(ran.code)
 end
 
 -- Guard the repository this runs in (the fence module, fence.luau in tests' lib folder): lock, fence and ref guard,
@@ -177,7 +226,14 @@ else
 end
 local fullRun = #files == 0
 if fullRun then
-	collect("tests", files)
+	local all: { string } = {}
+	collect("tests", all)
+	local tiers = if HOME == "z-nile" then slow.load(ROOT) else {}
+	for _, f in all do
+		if tiers[f] == nil then
+			table.insert(files, f)
+		end
+	end
 end
 table.sort(files)
 
@@ -224,6 +280,47 @@ end
 -- Coordinator: `jobs` lanes pull the next file in schedule order and run it as a one-file, one-job runner process.
 local function runConcurrently()
 	local outcomes: { Outcome } = {}
+	local passed, failed = 0, 0
+	local function report(o: Outcome)
+		local lines = {}
+		-- the child's own timing, printed before the summary: the parent's clock includes the wait for a shared lane
+		local own: number? = nil
+		for line in string.gmatch(o.stdout, "[^\n]+") do
+			local s = string.match(line, "^seconds (%d+%.%d+)$")
+			if s then
+				own = tonumber(s)
+			else
+				table.insert(lines, line)
+			end
+		end
+		if own ~= nil then
+			o.seconds = own
+		end
+		local last = lines[#lines]
+		local p, f = string.match(last or "", "^(%d+) passed, (%d+) failed, 1 spec files$")
+		if p ~= nil and f ~= nil and not (o.code ~= 0 and tonumber(f) == 0) then
+			passed += tonumber(p) :: number
+			failed += tonumber(f) :: number
+			table.remove(lines)
+			if #lines > 0 then
+				print(table.concat(lines, "\n"))
+			end
+			print(`{if tonumber(f) == 0 then "PASS" else "FAIL"} {o.file}: {p} passed, {f} failed`)
+		else
+			failed += 1
+			local all = {}
+			for line in string.gmatch(o.stdout .. o.stderr, "[^\n]+") do
+				table.insert(all, line)
+			end
+			local tail = table.concat(all, "\n", math.max(1, #all - 24), #all)
+			print(`FAIL {o.file}: worker exited with code {o.code}` .. if tail ~= "" then `\n{tail}` else "")
+			o.stderr = ""
+		end
+		if o.stderr ~= "" then
+			stdio.ewrite(o.stderr)
+		end
+	end
+
 	local resultsFile = resultsPath()
 	local queue = schedule.order(files, recorded())
 	local nextIndex, running = 1, math.min(jobs, #files)
@@ -235,19 +332,34 @@ local function runConcurrently()
 				local file = files[index]
 				local started = os.clock()
 				local part = if resultsFile then `{resultsFile}.{index}` else nil
-				local ok, r = pcall(
-					process.exec,
-					"lune",
-					{ "run", "tests/run", "--", "--jobs", "1", file },
-					if part then { env = { PICKMAN_RESULTS = part } } else nil
-				)
-				outcomes[index] = {
+				local command, args = "lune", { "run", "tests/run", "--", "--jobs", "1", file }
+				local lanes = process.env.PICKMAN_WORKER_LANES
+				if lanes ~= nil and lanes ~= "" then
+					command = "perl"
+					args = { "-e", fenceLib.WORKER_LANE, lanes, "lune" }
+					for _, a in { "run", "tests/run", "--", "--jobs", "1", file } do
+						table.insert(args, a)
+					end
+				end
+				local env: { [string]: string } = {
+					PICKMAN_REPORT_SECONDS = "1",
+					-- a fixture's ./zn land must not start the net, and a worker does not measure itself
+					PICKMAN_WATCH_NET = "off",
+					ZN_MEASURED = "1",
+				}
+				if part then
+					env.PICKMAN_RESULTS = part
+				end
+				local ok, r = pcall(process.exec, command, args, { env = env })
+				local outcome = {
 					file = file,
 					seconds = os.clock() - started,
 					code = if ok then r.code else -1,
 					stdout = if ok then r.stdout else "",
 					stderr = if ok then r.stderr else tostring(r),
 				}
+				outcomes[index] = outcome
+				report(outcome)
 			end
 			running -= 1
 		end)
@@ -317,37 +429,6 @@ local function runConcurrently()
 		writeResults(resultsFile, merged)
 	end
 
-	-- merge in sorted file order, never in finish order
-	local passed, failed = 0, 0
-	for _, o in outcomes do
-		local lines = {}
-		for line in string.gmatch(o.stdout, "[^\n]+") do
-			table.insert(lines, line)
-		end
-		local last = lines[#lines]
-		local p, f = string.match(last or "", "^(%d+) passed, (%d+) failed, 1 spec files$")
-		if p ~= nil and f ~= nil and not (o.code ~= 0 and tonumber(f) == 0) then
-			passed += tonumber(p) :: number
-			failed += tonumber(f) :: number
-			table.remove(lines)
-			if #lines > 0 then
-				print(table.concat(lines, "\n"))
-			end
-		else
-			failed += 1
-			local all = {}
-			for line in string.gmatch(o.stdout .. o.stderr, "[^\n]+") do
-				table.insert(all, line)
-			end
-			local tail = table.concat(all, "\n", math.max(1, #all - 24), #all)
-			print(`FAIL {o.file}: worker exited with code {o.code}` .. if tail ~= "" then `\n{tail}` else "")
-			o.stderr = ""
-		end
-		if o.stderr ~= "" then
-			stdio.ewrite(o.stderr)
-		end
-	end
-
 	local bySpeed = table.clone(outcomes)
 	table.sort(bySpeed, function(a, b)
 		return a.seconds > b.seconds
@@ -407,6 +488,10 @@ if resultsFile then
 	writeResults(resultsFile, results)
 end
 
+-- the coordinator asks for this so its duration is the spec's own run, not the wait for a shared lane
+if process.env.PICKMAN_REPORT_SECONDS == "1" and #results == 1 then
+	print(string.format("seconds %.3f", results[1].seconds))
+end
 print(`{passed} passed, {failed} failed, {#files} spec files`)
 process.exit(if failed == 0 then 0 else 1)
 -- a project home requires this file as its own runner (pickman/tests/run.luau, c0120); a module returns one value
