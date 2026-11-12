@@ -1,6 +1,6 @@
 # c0263 hand-off to c0284: the board shows provenance, with c0280's shared reader
 
-Specs here: who.spec.luau (the last case, "the board model carries the same entries as who", is c0284's; the rest is c0280's). Depends on c0263 and c0280 (the shared reader).
+Specs here: who.spec.luau.txt (the last case, "the board model carries the same entries as who", is c0284's; the rest is c0280's). Depends on c0263 and c0280 (the shared reader).
 
 Everything below is the c0263 prep text (design-review rounds 003-007), moved here when the user split the issue ("Split it and prototype first, like c0265"). It was NOT prototyped except where it says so; the core layer (c0263: provenance.md, ./zn record, the append-only publish rule, audit, the union of two writers) is prototyped on branch proto-c0263-raft, and this issue prototypes on top of it. Spec files beside this one are the sequestered specs of that prep: they were written against the unprototyped design, so run them on your prototype and fix the ones that cannot pass for a correct implementation.
 

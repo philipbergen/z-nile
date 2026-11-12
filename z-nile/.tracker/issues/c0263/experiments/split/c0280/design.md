@@ -1,6 +1,6 @@
 # c0263 hand-off to c0280: ./zn who: derive the author, status changes, the merge and the worker from git and the spend rows
 
-Specs here: who.spec.luau (all cases but the board one, which is c0284's), provenance-cases.spec.luau.txt (renamed so the gate does not lint an excerpt; copy it back to .luau) (trailers and commits, derive and merge, trail log). Back-fill by deriving: old done and backlog items need no write.
+Specs here: who.spec.luau.txt (all cases but the board one, which is c0284's), provenance-cases.spec.luau.txt (all the specs here are `.luau.txt` so the gate does not run an excerpt; copy one back to `.luau` to use it) (trailers and commits, derive and merge, trail log). Back-fill by deriving: old done and backlog items need no write.
 
 Everything below is the c0263 prep text (design-review rounds 003-007), moved here when the user split the issue ("Split it and prototype first, like c0265"). It was NOT prototyped except where it says so; the core layer (c0263: provenance.md, ./zn record, the append-only publish rule, audit, the union of two writers) is prototyped on branch proto-c0263-raft, and this issue prototypes on top of it. Spec files beside this one are the sequestered specs of that prep: they were written against the unprototyped design, so run them on your prototype and fix the ones that cannot pass for a correct implementation.
 
