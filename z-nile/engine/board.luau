@@ -47,6 +47,8 @@ export type Raft = {
 	dispatch: Dispatch?,
 	pr: Pr?, -- c0121 fills these on the served page; the static page leaves them nil
 	checks: Checks?,
+	heartbeat: string?, -- c0276: "lost" | "parked" | "stale" | "nobeat" for a claim that is not live; nil otherwise
+	minutes: number?, -- c0276: minutes silent, floored; set with heartbeat
 }
 -- Reserved for c0121's served page (live `gh` data); nil in every model c0118 builds.
 export type Pr = { number: number, url: string, state: string }
@@ -80,7 +82,11 @@ export type Issue = {
 	dispatch: Dispatch?,
 	pr: Pr?, -- c0121's, as on Raft
 	checks: Checks?,
+	heartbeat: string?, -- c0276's, as on Raft
+	minutes: number?,
 }
+-- One claim's verdict as c0265's judge and settle return it (a heartbeat.Verdict satisfies it): this module needs no more.
+export type Verdict = { id: string, kind: string, silent: number }
 export type Project = { name: string, root: string }
 -- What the board knows besides the tracker documents (c0118), all read locally: the instant the page is as of (HEAD's
 -- commit time), the branches (refs/heads and refs/remotes/origin, short names, with each tip's commit time), the
@@ -114,6 +120,7 @@ export type Model = {
 	ranges: { { key: string, label: string } },
 	range: string,
 	problems: { string }, -- files the board could not read (a spend.md that does not parse)
+	notes: { string }?, -- c0276: why the lost-work marks are missing or weaker (a read that was tried and failed); absent otherwise
 }
 
 board.MARKED_PATH = "z-nile/vendor/marked.umd.js"
@@ -1203,6 +1210,77 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	}
 end
 
+-- The mark a verdict puts on a card: lost, parked, stale (unconfirmed or unknown: never lost) or nobeat (made before the
+-- heartbeat landed and never beaten); a live claim and any other kind carry none.
+local MARKS: { [string]: string } =
+	{ lost = "lost", parked = "parked", stale = "stale", unknown = "stale", nobeat = "nobeat" }
+
+-- c0276: the model with each claim's verdict on its card. A card whose verdict is not live gains `heartbeat` and
+-- `minutes` (silent minutes, floored); every other card is left exactly as it is. Lost work then comes first inside
+-- each bucket of `views.*` and each band of `columns`, longest silent first, the rest in the order they had. Pure: the
+-- model it is given is not changed; the verdicts come from the caller, which reads the remote (or reads nothing).
+function board.withVerdicts(m: Model, verdicts: { Verdict }): Model
+	local marks: { [string]: { heartbeat: string, minutes: number, silent: number } } = {}
+	for _, v in verdicts do
+		local mark = MARKS[v.kind]
+		if mark then
+			marks[v.id] = { heartbeat = mark, minutes = math.floor(v.silent / 60), silent = v.silent }
+		end
+	end
+	local function marked<T>(items: { T }): { T }
+		local out = {}
+		for _, item in items do
+			local copy = table.clone(item :: any)
+			local mark = marks[copy.id]
+			if mark then
+				copy.heartbeat, copy.minutes = mark.heartbeat, mark.minutes
+			end
+			table.insert(out, copy)
+		end
+		return out :: any
+	end
+	-- lost ids first, longest silent first (ties and the rest keep their order)
+	local function ordered(ids: { string }): { string }
+		local at: { [string]: number } = {}
+		for i, id in ids do
+			at[id] = i
+		end
+		local out = table.clone(ids)
+		table.sort(out, function(a: string, b: string): boolean
+			local am, bm = marks[a], marks[b]
+			local al, bl = am ~= nil and am.heartbeat == "lost", bm ~= nil and bm.heartbeat == "lost"
+			if al ~= bl then
+				return al
+			end
+			if al and am.silent ~= bm.silent then
+				return am.silent > bm.silent
+			end
+			return at[a] < at[b]
+		end)
+		return out
+	end
+	local out = table.clone(m)
+	out.rafts = marked(m.rafts)
+	out.issues = marked(m.issues)
+	local function groups(g: Groups): Groups
+		return { ready = ordered(g.ready), ["not"] = ordered(g["not"]), done = ordered(g.done) }
+	end
+	out.views = { rafts = groups(m.views.rafts), issues = groups(m.views.issues) }
+	local columns: { [string]: { [string]: { boardview.Band } } } = {}
+	for project, byColumn in m.columns do
+		columns[project] = {}
+		for columnName, bands in byColumn do
+			local list: { boardview.Band } = {}
+			for _, band in bands do
+				table.insert(list, { raft = band.raft, ids = ordered(band.ids) })
+			end
+			columns[project][columnName] = list
+		end
+	end
+	out.columns = columns
+	return out
+end
+
 local ESCAPES: { [string]: string } = {
 	['"'] = '\\"',
 	["\\"] = "\\\\",
@@ -1289,10 +1367,24 @@ end
 
 -- The page for the tracker under root (default: every project root of `checkout`, default "."), from the pinned
 -- marked.
-function board.build(root: string?, checkout: string?, facts: Facts?): string
+function board.build(
+	root: string?,
+	checkout: string?,
+	facts: Facts?,
+	verdicts: { Verdict }?,
+	notes: { string }?
+): string
 	local markedJs = fs.readFile(fromTop(board.MARKED_PATH))
 	board.checkMarked(markedJs)
-	return board.render(board.collect(root, checkout, facts), markedJs)
+	local model = board.collect(root, checkout, facts)
+	if verdicts then
+		model = board.withVerdicts(model, verdicts)
+	end
+	if notes and #notes > 0 then
+		model = table.clone(model)
+		model.notes = notes
+	end
+	return board.render(model, markedJs)
 end
 
 return board
