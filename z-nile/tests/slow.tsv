@@ -95,3 +95,4 @@
 5.590	tests/acceptance/c0082/cli.spec.luau
 5.510	tests/acceptance/c0120/gate-homes.spec.luau
 5.270	tests/acceptance/c0184/skills.spec.luau
+15.820	tests/tooling/approve.spec.luau

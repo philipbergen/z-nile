@@ -657,8 +657,8 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		local s = state("c0040")
 		t.expect(s.outcome).toBe("ok")
 		t.expect(has(s.history[#s.history].detail, "no token count")).toBe(true)
-		t.expect(lastRow("c0040").tokens).toBe(0)
-		t.expect(has(lastRow("c0040").unmeasured or "", "tokens")).toBe(true)
+		-- a zero-token attempt is not a spend row: record keeps only attempts that spent tokens
+		t.expect(lastRow("c0040")).toBe(nil)
 	end)
 
 	it("kills the step's whole process group past max_tokens, and records what it spent", function()

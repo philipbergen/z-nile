@@ -8,6 +8,8 @@
 --   --slow together with --exclude-slow is refused (exit 2) before the lock
 --   --jobs N / PICKMAN_JOBS=N                  -- N concurrent workers (default min(max(cpus, 2), 8);
 --                                               1 or a single file runs in-process). --jobs wins over the environment.
+--   --report-seconds                           -- a worker prints its own seconds before the summary. The
+--                                               coordinator passes it. A spec that starts the runner does not.
 -- Lanes take the files with no recorded duration first, then the recorded ones slowest first (c0154). The durations
 -- file is the contract in tests/lib/schedule.luau: <home>/.cache/spec-durations.tsv. A missing file orders by path.
 -- z-nile/tests/slow.tsv is a committed membership list in the same line grammar, not that hint. Each result prints
@@ -216,6 +218,7 @@ end
 local files: { string } = {}
 local flagJobs: number? = nil
 local slowOnly, excludeSlow = false, false
+local reportSeconds = false
 do
 	local args = process.args
 	local i = 1
@@ -231,6 +234,8 @@ do
 			slowOnly = true
 		elseif arg == "--exclude-slow" then
 			excludeSlow = true
+		elseif arg == "--report-seconds" then
+			reportSeconds = true
 		elseif arg ~= "--" then
 			-- accept absolute paths inside the repo (check.sh passes them)
 			if string.sub(arg, 1, #process.cwd) == process.cwd then
@@ -358,17 +363,17 @@ local function runConcurrently()
 				local file = files[index]
 				local started = os.clock()
 				local part = if resultsFile then `{resultsFile}.{index}` else nil
-				local command, args = "lune", { "run", "tests/run", "--", "--jobs", "1", file }
+				local command, args =
+					"lune", { "run", "tests/run", "--", "--jobs", "1", "--report-seconds", file }
 				local lanes = process.env.PICKMAN_WORKER_LANES
 				if lanes ~= nil and lanes ~= "" then
 					command = "perl"
 					args = { "-e", fenceLib.WORKER_LANE, lanes, "lune" }
-					for _, a in { "run", "tests/run", "--", "--jobs", "1", file } do
+					for _, a in { "run", "tests/run", "--", "--jobs", "1", "--report-seconds", file } do
 						table.insert(args, a)
 					end
 				end
 				local env: { [string]: string } = {
-					PICKMAN_REPORT_SECONDS = "1",
 					-- a fixture's ./zn land must not start the net, and a worker does not measure itself
 					PICKMAN_WATCH_NET = "off",
 					ZN_MEASURED = "1",
@@ -515,7 +520,7 @@ if resultsFile then
 end
 
 -- the coordinator asks for this so its duration is the spec's own run, not the wait for a shared lane
-if process.env.PICKMAN_REPORT_SECONDS == "1" and #results == 1 then
+if reportSeconds and #results == 1 then
 	print(string.format("seconds %.3f", results[1].seconds))
 end
 print(`{passed} passed, {failed} failed, {#files} spec files`)
