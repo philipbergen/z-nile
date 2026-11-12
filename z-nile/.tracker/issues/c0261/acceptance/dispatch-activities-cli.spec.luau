@@ -132,7 +132,7 @@ return t.spec("c0261 ./zn dispatch picks the model of the activity", function(it
 			end
 			t.expect(has(fakecli.log(h), "--model claude-opus-5-5")).toBe(true)
 			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/final-review-001.md`)
-			local want = {
+			local want: { [string]: { string } } = {
 				design = { "zz-review-design", "claude-opus-5-5" },
 				raft = { "zz-review-raft", "claude-opus-5-5" },
 				final = { "zz-review-final", "claude-opus-5-5" },
