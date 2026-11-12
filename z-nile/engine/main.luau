@@ -6283,7 +6283,7 @@ end
 
 -- c0263: `provenance <subcommand>`; today only `record`. (The helpers are inner functions: main.luau is at Luau's limit of
 -- 200 locals.)
-function cmd.provenance(pos: { string }, opts: { [string]: { string } })
+function cmd.provenance(positional: { string }, options: { [string]: { string } })
 	-- The live actor of a command that records: --actor, then ZN_ACTOR, then an agent-session hint, then the git name.
 	local function liveActor(opts: { [string]: { string } }?): string
 		local flagList = if opts then opts["--actor"] else nil
@@ -6354,15 +6354,15 @@ function cmd.provenance(pos: { string }, opts: { [string]: { string } })
 		mergeOrigin()
 	end
 
-	local sub = pos[1]
+	local sub = positional[1]
 	if sub ~= "record" then
 		fail("usage: provenance record <id> unblocked|confirmed|ranked [--actor <actor>] [--detail <k=v>]")
 	end
 	local rest: { string } = {}
-	for i = 2, #pos do
-		table.insert(rest, pos[i])
+	for i = 2, #positional do
+		table.insert(rest, positional[i])
 	end
-	recordRow(rest, opts)
+	recordRow(rest, options)
 end
 
 function cmd.spend(pos: { string }, opts: { [string]: { string } })
