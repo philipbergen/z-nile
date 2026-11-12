@@ -30,7 +30,6 @@ local CAPTURED =
 local f: trackerfix.Fixture
 local wt, wtMain = "", ""
 local env: { [string]: string } = {}
-local base: string = ""
 
 local function tr(dir: string, args: { string }): fixture.Result
 	return trackerfix.tr(f, dir, args, env)
@@ -104,7 +103,6 @@ return t.spec("restack unites the records of a rebase", function(it)
 		)
 		git(wt, { "merge", "-q", "--no-edit", "origin/main" })
 		git(wt, { "push", "-q", "-u", "origin", "R0010/1/c0010" })
-		base = git(wt, { "rev-parse", "HEAD" })
 	end)
 
 	it("main appends while a layer appends: restack unites both and goes on", function()

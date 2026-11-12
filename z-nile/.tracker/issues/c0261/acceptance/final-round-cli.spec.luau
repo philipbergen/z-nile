@@ -1,12 +1,13 @@
 --!strict
 -- c0261 ("Commands refuse"): `./zn status <id> prepared` refuses an item whose last design review round was recorded on
--- a model that is not of a final-review kind, and goes on once a row for that round is. The rows are origin/main's
--- (./zn spend publishes there; this worktree has no spend.md), the model is judged by kind (a new Opus id passes), and a
--- repository whose base has no root .models.toml holds no round to it. Fixture under .cache/c0261-final-round
+-- a model that is not of a final-review kind, and goes on once a row for that round is. The rows are this checkout's
+-- (./zn spend commits them in spend.d on the branch; a row the dispatcher published arrives with ./zn sync), the model
+-- is judged by kind (a new Opus id passes), and a repository whose base has no root .models.toml holds no round to it. Fixture under .cache/c0261-final-round
 -- (tests/lib/trackerfix): a clone with an origin, whose seed commit holds the engine, finalround.luau included.
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ledger = require("@znile/engine/ledger")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -51,10 +52,6 @@ return t.spec("c0261 status prepared refuses a last design round not on a final-
 					id,
 					"--phase",
 					"design-review",
-					"--time",
-					"4",
-					"--tokens",
-					"50",
 					"--model",
 					model,
 					"--note",
@@ -62,7 +59,7 @@ return t.spec("c0261 status prepared refuses a last design round not on a final-
 				})
 			end
 			spend("claude-sonnet-5-5-high")
-			t.expect(fs.isFile(`{dir}/spend.md`)).toBe(false) -- the row is on origin/main only: that is where the check reads
+			t.expect(fs.isDir(`{dir}/spend.d`)).toBe(true) -- the measured row is this branch's: that is where the check reads
 			local refused = trackerfix.tr(f, wt, { "status", id, "prepared" })
 			t.expect(refused.ok).toBe(false)
 			t.expect(has(refused.stdout .. refused.stderr, "design-review-001")).toBe(true)
@@ -99,10 +96,6 @@ return t.spec("c0261 status prepared refuses a last design round not on a final-
 				id,
 				"--phase",
 				"design-review",
-				"--time",
-				"4",
-				"--tokens",
-				"50",
 				"--note",
 				"design-review-001",
 			})
@@ -115,10 +108,6 @@ return t.spec("c0261 status prepared refuses a last design round not on a final-
 				id,
 				"--phase",
 				"design-review",
-				"--time",
-				"4",
-				"--tokens",
-				"50",
 				"--model",
 				"claude-opus-5-5",
 				"--note",
@@ -196,6 +185,11 @@ return t.spec("c0261 status prepared refuses a last design round not on a final-
 			local spendPath = `pickman/.tracker/issues/{id}/spend.md`
 			-- reviewed long before the rule landed, with no model recorded: not locked out
 			trackerfix.elsewhere(f, { [spendPath] = rowDated("2020-01-01 00:00") }, "old round")
+			-- the row is only on origin/main (the dispatcher published it): refused with the sync hint until ./zn sync
+			local unsynced = trackerfix.tr(f, wt, { "status", id, "prepared" })
+			t.expect(unsynced.ok).toBe(false)
+			t.expect(has(unsynced.stdout .. unsynced.stderr, "./zn sync")).toBe(true)
+			trackerfix.trOk(f, wt, { "sync" })
 			trackerfix.trOk(f, wt, { "status", id, "prepared" })
 		end
 	)
@@ -230,6 +224,147 @@ return t.spec("c0261 status prepared refuses a last design round not on a final-
 			} :: any,
 		})
 		trackerfix.elsewhere(f, { [`pickman/.tracker/issues/{id}/spend.md`] = text }, "new round")
+		trackerfix.trOk(f, wt, { "sync" })
+		local r = trackerfix.tr(f, wt, { "status", id, "prepared" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stdout .. r.stderr, "no model")).toBe(true)
+	end)
+
+	-- A prepared-ready issue c in a fresh fixture, its design round written, a fake HOME beside it.
+	local function measured(name: string, rewrite: ((f: trackerfix.Fixture) -> ())?)
+		local f = trackerfix.new(name, nil)
+		fs.writeFile(`{f.main}/.models.toml`, MODELS)
+		fixture.git(f.main, { "add", "-A" })
+		fixture.git(f.main, { "commit", "-q", "-m", "models" })
+		fixture.git(f.main, { "push", "-q", "origin", "HEAD:main" })
+		if rewrite then
+			rewrite(f)
+		end
+		local wt = trackerfix.trOk(f, f.main, { "worktree", "prep-solo" })
+		trackerfix.trOk(f, wt, { "sync" })
+		local id = string.match(
+			trackerfix.trOk(f, wt, { "new", "issue", "c", "solo-thing", "--project", "pickman" }),
+			"(c%d+)"
+		) :: string
+		trackerfix.trOk(f, wt, { "status", id, "preparing" })
+		local dir = `{wt}/pickman/.tracker/issues/{id}`
+		fs.writeFile(`{dir}/design-review-001.md`, REVIEW)
+		designReady(`{dir}/{id}.md`)
+		return f, wt, id, `{f.base}/home`
+	end
+	-- the span's transcript on claude-sonnet-5-5, in the fake HOME, written after --begin
+	local function sonnetSpan(
+		f: trackerfix.Fixture,
+		wt: string,
+		id: string,
+		home: string
+	): { [string]: string }
+		local env = { HOME = home }
+		fs.writeDir(home)
+		-- the tooling resolves lune through $HOME/.rokit: the fake HOME borrows the real one's
+		local real = process.env.HOME or ""
+		process.exec("ln", { "-s", `{real}/.rokit`, `{home}/.rokit` })
+		local begun = trackerfix.tr(f, wt, { "spend", id, "--phase", "design-review", "--begin" }, env)
+		if not begun.ok then
+			error(begun.stdout .. begun.stderr)
+		end
+		local ts = (os.date("!%Y-%m-%dT%H:%M:%S", os.time()) :: string) .. ".500Z"
+		-- Lune's process.cwd ends in a slash, so the engine looks in <cwd with / as ->- : the folder is written there
+		local folder = `{home}/.claude/projects/{string.gsub(wt, "/", "-")}-`
+		fs.writeDir(folder)
+		fs.writeFile(
+			`{folder}/s.jsonl`,
+			`\{"type":"user","timestamp":"{ts}"}\n`
+				.. `\{"type":"assistant","timestamp":"{ts}","message":\{"model":"claude-sonnet-5-5","usage":\{"input_tokens":2,"output_tokens":4}}}\n`
+		)
+		return env
+	end
+
+	it("a typed --model wins over the measured session model, and the move passes (AC11)", function()
+		local f, wt, id, home = measured("c0261-final-round-g")
+		local env = sonnetSpan(f, wt, id, home)
+		local wrote = trackerfix.tr(f, wt, {
+			"spend",
+			id,
+			"--phase",
+			"design-review",
+			"--model",
+			"claude-opus-5-5",
+			"--note",
+			"design-review-001",
+		}, env)
+		t.expect(wrote.ok).toBe(true)
+		trackerfix.trOk(f, wt, { "status", id, "prepared" })
+	end)
+
+	it("without --model the measured session model is recorded, and a Sonnet is refused (AC11)", function()
+		local f, wt, id, home = measured("c0261-final-round-h")
+		local env = sonnetSpan(f, wt, id, home)
+		local wrote = trackerfix.tr(
+			f,
+			wt,
+			{ "spend", id, "--phase", "design-review", "--note", "design-review-001" },
+			env
+		)
+		t.expect(wrote.ok).toBe(true)
+		local refused = trackerfix.tr(f, wt, { "status", id, "prepared" })
+		t.expect(refused.ok).toBe(false)
+		t.expect(has(refused.stdout .. refused.stderr, "model claude-sonnet-5-5")).toBe(true)
+	end)
+
+	-- finalround.luau added on a side branch at 2026-01-01, merged --no-ff into origin's main at 2026-06-01
+	local function mergedLate(name: string, rowWhen: string)
+		local function at(date: string): any
+			return { env = { GIT_AUTHOR_DATE = date, GIT_COMMITTER_DATE = date } }
+		end
+		local function rewrite(f: trackerfix.Fixture)
+			local path = "z-nile/engine/finalround.luau"
+			fixture.git(f.main, { "checkout", "-q", "--orphan", "late" })
+			fixture.git(f.main, { "rm", "-q", "--cached", path })
+			fixture.git(f.main, { "commit", "-q", "-m", "base" }, at("2025-12-01T00:00:00+0000"))
+			fixture.git(f.main, { "checkout", "-q", "-b", "side" })
+			fixture.git(f.main, { "add", path })
+			fixture.git(f.main, { "commit", "-q", "-m", "add finalround" }, at("2026-01-01T00:00:00+0000"))
+			fixture.git(f.main, { "checkout", "-q", "late" })
+			fixture.git(
+				f.main,
+				{ "merge", "-q", "--no-ff", "side", "-m", "merge side" },
+				at("2026-06-01T00:00:00+0000")
+			)
+			fixture.git(f.main, { "push", "-q", "-f", "origin", "late:main" })
+			fixture.git(f.main, { "branch", "-q", "-M", "main" })
+			fixture.git(f.other, { "fetch", "-q", "origin" })
+			fixture.git(f.other, { "reset", "-q", "--hard", "origin/main" })
+		end
+		local f, wt, id = measured(name, rewrite)
+		local text = ledger.render(id, id, {
+			{
+				when = rowWhen,
+				subject = "design-review-001",
+				added = 0,
+				removed = 0,
+				minutes = 1,
+				how = "x",
+				phase = "design-review",
+				tokens = 5,
+				model = nil,
+			} :: any,
+		})
+		trackerfix.elsewhere(f, { [`pickman/.tracker/issues/{id}/spend.md`] = text }, "the round")
+		trackerfix.trOk(f, wt, { "sync" })
+		return f, wt, id
+	end
+
+	it(
+		"the landing is the --no-ff merge onto main, not the layer commit: a row between them is not bound (AC11)",
+		function()
+			local f, wt, id = mergedLate("c0261-final-round-i", "2026-03-01 10:00")
+			trackerfix.trOk(f, wt, { "status", id, "prepared" })
+		end
+	)
+
+	it("a model-less round dated after the --no-ff merge is bound and refused (AC11)", function()
+		local f, wt, id = mergedLate("c0261-final-round-j", "2026-09-01 10:00")
 		local r = trackerfix.tr(f, wt, { "status", id, "prepared" })
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stdout .. r.stderr, "no model")).toBe(true)
