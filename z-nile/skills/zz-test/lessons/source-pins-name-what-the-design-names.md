@@ -15,3 +15,5 @@ A pin that finds the right call cannot tell whether its result is used. f0126 de
 f0126 design review 005 F2: two absence pins left beside the new behaviour cases (no `ClearAllChildren` in MazeView, no `UDim2.fromScale(0.5` in HudView) caught no mutant the behaviour cases missed and failed correct code; they were deleted.
 
 c0164 design reviews 002 and 003: when a behaviour case replaces a text pin, try a guard mutant on each field the case holds constant, against the case, the deleted pin and every kept spec; whatever only the deleted pin killed must be killed by the case.
+
+**Also:** c0284 design review 001 F2: a page case that removed the JSON and counted `provenanceOf(` and `<h3>Provenance</h3>` in the script passed with the cells unescaped (and would with a wrong key); the page's script can be run in node against the fake DOM that c0118's page spec uses, so assert on the pane it builds (rows, order, escaping, nothing without data).
