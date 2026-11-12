@@ -128,7 +128,7 @@ return t.spec("c0277 recovering a discarded worktree's work", function(it)
 			-- only the unpushed commit is offered: the pushed one is in the copy already
 			local offered = string.match(r.stderr, "unpushed commits.-\n(.-)uncommitted files") or ""
 			t.expect(string.find(offered, "%x+ unpushed work") ~= nil).toBe(true)
-			t.expect(string.find(offered, "%x+ pushed work")).toBe(nil)
+			t.expect((string.find(offered, "%x+ pushed work"))).toBe(nil)
 			-- uncommitted: both the edit of a tracked file and the untracked file stay, byte for byte, and are listed
 			t.expect(fs.readFile(`{old}/pickman/pushed.txt`)).toBe("pushed v2, edited and not committed\n")
 			t.expect(fs.readFile(`{old}/pickman/untracked.txt`)).toBe("never added\n")
