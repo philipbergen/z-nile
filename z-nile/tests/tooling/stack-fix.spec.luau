@@ -6,6 +6,7 @@
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -16,7 +17,7 @@ local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --sho
 	.. 'check "AC1: ok" true\nfinish\n'
 
 local function issue(id: string, title: string, raft: string): string
-	return `---\nid: {id}\ntype: chore\ntitle: {title}\nslug: {id}\nraft: {raft}\ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-10-06\nstatus: {PREPARED}\n---\n\n# {id}\n\none\n`
+	return `---\nid: {id}\ntype: chore\ntitle: {title}\nslug: {id}\nraft: {raft}\ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-10-06\nstatus: {PREPARED}\n---\n\n# {id}\n\n## Problem\n{id} problem.\n\n## Solution\n{id} solution.\n\n## Acceptance criteria\n- AC1: {id} acceptance criterion\n`
 end
 
 local function raftDoc(id: string, slug: string, issues: string, order: string): string
@@ -168,6 +169,7 @@ return t.spec("stack corrections", function(it)
 
 	it("a failed push puts the pull request bases back", function()
 		git(wt, { "switch", "-q", "R0010/2/c0020" })
+		seal.trace(wt, "R0010")
 		local bin, log = `{f.base}/bin`, `{f.base}/gh.log`
 		fs.writeFile(
 			`{bin}/gh`,
@@ -227,7 +229,11 @@ return t.spec("stack corrections", function(it)
 	it("a review with no Verdict line is not recorded as approve", function()
 		local bare = trackerfix.trOk(f, f.main, { "worktree", "R0030" })
 		zn(bare, { "start", "R0030" })
-		write(bare, "pickman/.tracker/rafts/active/R0030/review-001.md", "# Review 001\n\nNo ruling.\n")
+		write(
+			bare,
+			"pickman/.tracker/rafts/active/R0030/final-review-001.md",
+			"# Final Review 001\n\nNo ruling.\n"
+		)
 		write(bare, "pickman/src/delta.luau", "return {}\n")
 		git(bare, { "add", "-A" })
 		git(bare, { "commit", "-qm", "c0040 work" })

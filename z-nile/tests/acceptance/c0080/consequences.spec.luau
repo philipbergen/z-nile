@@ -7,6 +7,7 @@ local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -79,6 +80,7 @@ local function answer(lines: { string }, ruling: string?): Result
 	end
 	must(tr({ "commit", "-m", "refute 001", "--time", "1" }), "commit refute")
 	must(tr({ "finish", "f0010" }), "finish")
+	seal.trace(work, "R0010")
 	return tr({ "done", "R0010" })
 end
 
@@ -129,6 +131,7 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write("pickman/.tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
 		write("pickman/.tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
+		seal.prep(work)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")

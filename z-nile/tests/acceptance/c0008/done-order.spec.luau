@@ -7,6 +7,7 @@ local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -131,11 +132,15 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write("pickman/.tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
 		write("pickman/.tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
+		seal.prep(work)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		write("pickman/.tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
+		write(
+			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
+			"# Final Review 001\n\nVerdict: approve\n"
+		)
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
 		-- an origin whose URL contains github.com, and a pushed branch with an upstream
 		fs.writeDir(bare)
@@ -182,8 +187,8 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- c0120 override: the items are pickman's, in pickman/.tracker; its promoted specs in pickman/tests/acceptance
 		-- an unresolved review: one open finding and no answer to it
 		write(
-			"pickman/.tracker/rafts/active/R0010/review-001.md",
-			"# Review 001\n\n### F1 [low] an open finding\nEvidence: x\n\nVerdict: changes requested\n"
+			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
+			"# Final Review 001\n\n### F1 [low] an open finding\nEvidence: x\n\nVerdict: changes requested\n"
 		)
 		must(tr({ "commit", "-m", "unresolved review", "--time", "1" }), "commit")
 		git({ "push", "-q" })
@@ -194,7 +199,10 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		t.expect((string.find(log, "pr ready", 1, true))).toBe(nil)
 		-- restore the approving review for the cases that follow
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		write("pickman/.tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
+		write(
+			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
+			"# Final Review 001\n\nVerdict: approve\n"
+		)
 		must(tr({ "commit", "-m", "review approved", "--time", "1" }), "commit")
 		-- a promotion that fails is the last refusal before the ready call: done must refuse there too,
 		-- leave the tree as it was, and still not have called gh pr ready
@@ -207,6 +215,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		)
 		must(tr({ "commit", "-m", "failing spec", "--time", "1" }), "commit")
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.trace(work, "R0010")
 		local promoted = done(false)
 		t.expect(promoted.ok).toBe(false)
 		t.expect(string.find(promoted.stderr, "promoted acceptance specs fail", 1, true) ~= nil).toBe(true)
@@ -222,6 +231,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 	it("rolls back and stays active when the layer pull request cannot be retargeted", function()
 		installGh()
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.trace(work, "R0010")
 		local before = git({ "rev-parse", "HEAD" })
 		local r = done(true)
 		t.expect(r.ok).toBe(false)
@@ -243,6 +253,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		fs.removeFile(`{work}/pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau`)
 		must(tr({ "commit", "-m", "no acceptance spec", "--time", "1" }), "commit")
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.trace(work, "R0010")
 		local before = git({ "rev-parse", "HEAD" })
 		local r = done(false)
 		if not r.ok then

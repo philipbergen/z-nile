@@ -9,6 +9,7 @@ local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ledger = require("@scripts/tracker/ledger")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -164,6 +165,7 @@ return t.spec("tracker commit phases", function(it)
 		do
 			write(p, TRIVIAL_CHECK)
 		end
+		seal.prep(dir)
 		git({ "add", "-A" })
 		git({ "commit", "-q", "-m", "prep ready" })
 		must(tr({ "start", raft }), "start")
@@ -274,6 +276,7 @@ return t.spec("tracker commit phases", function(it)
 		write("notes/layer-b.txt", "b\n")
 		must(tr({ "commit", "-m", "layer b", "--time", "1" }), "commit b")
 		must(tr({ "finish", b }), "finish b")
+		seal.trace(dir, raft)
 		must(tr({ "done", raft }), "done")
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 		local ra = rows(`pickman/.tracker/issues/done/{a}/spend.md`)
