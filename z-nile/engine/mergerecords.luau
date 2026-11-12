@@ -418,18 +418,42 @@ local function settleRebaseStop(): (boolean, string)
 	if #order == 0 then
 		return false, "no conflict is left to settle"
 	end
-	local function text(stage: number, paths: { [number]: string }): string?
+	-- a record the replayed commit (or main) added or moved cleanly is not unmerged: it is at stage 0 under another path of
+	-- the same id, and counts as that side's version (the side whose commit has this very blob at that path)
+	local zero: { [string]: { [number]: boolean } } = {}
+	for _, line in gitLines({ "ls-files", "-s" }) do
+		local blob, stage, path = string.match(line, "^%d+ (%x+) (%d)\t(.+)$")
+		local id = if path then recordIdOf(path :: string) else nil
+		if id and byId[id] and stage == "0" then
+			local function at(rev: string): boolean
+				local r = sh.run("git", { "rev-parse", "-q", "--verify", `{rev}:{path :: string}` })
+				return r.ok and sh.trim(r.stdout) == blob
+			end
+			if byId[id][3] == nil and at("REBASE_HEAD") then
+				byId[id][3] = path :: string
+				zero[id] = zero[id] or {}
+				zero[id][3] = true
+			elseif byId[id][2] == nil and at("HEAD") then
+				byId[id][2] = path :: string
+				zero[id] = zero[id] or {}
+				zero[id][2] = true
+			end
+		end
+	end
+	local function text(id: string, stage: number, paths: { [number]: string }): string?
 		local path = paths[stage]
 		if not path then
 			return nil
 		end
-		local shown = sh.run("git", { "show", `:{stage}:{path}` })
+		local at = if zero[id] and zero[id][stage] then 0 else stage
+		local shown = sh.run("git", { "show", `:{at}:{path}` })
 		return if shown.ok then shown.stdout else nil
 	end
 	local plans: { { id: string, action: string, dest: string?, blob: string?, paths: { string } } } = {}
 	for _, id in order do
 		local paths = byId[id]
-		local action, united, why = provenance.settle(text(1, paths), text(3, paths), text(2, paths))
+		local action, united, why =
+			provenance.settle(text(id, 1, paths), text(id, 3, paths), text(id, 2, paths), true)
 		if not action then
 			return false, `{id}: {why}`
 		end

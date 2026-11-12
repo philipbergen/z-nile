@@ -127,9 +127,17 @@ return t.spec("restack unites the records of a rebase", function(it)
 	end)
 
 	it("a layer that moved the item's folder while main appended: the record follows the move", function()
+		-- one commit moves the folder and appends six rows: too different for git to pair the old record with the new one
+		-- (the old path is modified by main and deleted by the layer, the new one added: three stages on two paths)
 		git(wt, { "mv", `{ISSUES}/active/c0010`, `{ISSUES}/done/c0010` })
-		git(wt, { "commit", "-q", "-m", "layer move" })
-		appendRow(wt, `{ISSUES}/done/c0010/provenance.md`, "Moved")
+		local moved = `{wt}/{ISSUES}/done/c0010/provenance.md`
+		local more = fs.readFile(moved)
+		for _, who in { "Mva", "Mvb", "Mvc", "Mvd", "Mve", "Mvf" } do
+			more ..= `| 2026-11-08 11:00 | unblocked | human:{who} | by={who} |\n`
+		end
+		fs.writeFile(moved, more)
+		git(wt, { "add", "-A" })
+		git(wt, { "commit", "-q", "-m", "layer move and rows" })
 		git(wt, { "push", "-q" })
 		git(wtMain, { "pull", "-q", "origin", "main" })
 		zn(
@@ -140,8 +148,18 @@ return t.spec("restack unites the records of a rebase", function(it)
 		t.expect(has(out, "restacked R0010")).toBe(true)
 		clean(wt)
 		t.expect(fs.isFile(`{wt}/{layerRecord()}`)).toBe(false)
-		t.expect(rowsOf(fs.readFile(`{wt}/{ISSUES}/done/c0010/provenance.md`)))
-			.toEqual({ "human:Base", "human:Main", "human:Again", "human:Layer", "human:Moved" })
+		t.expect(rowsOf(fs.readFile(`{wt}/{ISSUES}/done/c0010/provenance.md`))).toEqual({
+			"human:Base",
+			"human:Main",
+			"human:Again",
+			"human:Layer",
+			"human:Mva",
+			"human:Mvb",
+			"human:Mvc",
+			"human:Mvd",
+			"human:Mve",
+			"human:Mvf",
+		})
 	end)
 
 	it("a conflict in a file beside the records still stops the restack, with the layer as it was", function()

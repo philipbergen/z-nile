@@ -296,6 +296,29 @@ function provenance.union(base: string?, ours: string, theirs: string): (string?
 	return provenance.render(id, out), nil
 end
 
+-- `common` cut to the rows `other` also begins with (nil stays nil; a version that does not parse is returned as it
+-- is, for the caller's parse to refuse).
+function provenance.sharedPrefix(common: string?, other: string): string?
+	if common == nil then
+		return nil
+	end
+	local c = provenance.parse(common)
+	local o = provenance.parse(other)
+	if not c or not o then
+		return common
+	end
+	local keep: { Row } = {}
+	for i, r in c do
+		local m = o[i]
+		if not m or m.when ~= r.when or m.event ~= r.event or m.actor ~= r.actor or m.detail ~= r.detail then
+			break
+		end
+		table.insert(keep, r)
+	end
+	local id = string.match(common, "^# Provenance: (%S+)") or "?"
+	return provenance.render(id, keep)
+end
+
 -- What a merge of two branches does with one item's record, by its text on each side and at the merge base (nil: the
 -- item has no record there). Returns the action and the text to write:
 --   "keep"   neither side changed it;
@@ -303,7 +326,12 @@ end
 --   "remove" the side that changed it deleted it;
 --   nil, nil, why   the merge must stop: a side did not only append, a record does not parse, or one side changed it
 --   and the other no longer has a record under that id (a renumber or a compaction changed the id: `./zn remap`).
-function provenance.settle(common: string?, ours: string?, theirs: string?): (string?, string?, string?)
+function provenance.settle(
+	common: string?,
+	ours: string?,
+	theirs: string?,
+	replay: boolean?
+): (string?, string?, string?)
 	local changedOurs, changedTheirs = ours ~= common, theirs ~= common
 	local function take(text: string?): (string?, string?, string?)
 		if text == nil then
@@ -330,7 +358,11 @@ function provenance.settle(common: string?, ours: string?, theirs: string?): (st
 			nil,
 			"one side changed the record and the other has none under this id (an id changed: after a compaction run ./zn remap, after a renumber merge by hand)"
 	end
-	local united, why = provenance.union(common, ours, theirs)
+	-- a rebase replays a layer's commits one by one onto main, so main's side already holds the rows of the commits
+	-- replayed before this one, after its own: it no longer extends the common version past those. Only the rows
+	-- both still begin with are shared; the others are united as rows, the multiset keeping each once
+	local shared = if replay then provenance.sharedPrefix(common, theirs) else common
+	local united, why = provenance.union(shared, ours, theirs)
 	if not united then
 		return nil, nil, why
 	end
