@@ -98,7 +98,6 @@ local function znIn(dir: string, args: { string }): fixture.Result
 			FAKE_DIR = h.fakes,
 			PATH = `{h.bin}:{process.env.PATH}`,
 			ZN_AGENT_TOKEN_FILE = h.token,
-			ZN_WATERMARK_DIR = `{h.f.base}/watermark`,
 			GH_TOKEN = "the-users-token",
 		},
 	})

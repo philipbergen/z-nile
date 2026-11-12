@@ -107,12 +107,11 @@ usage: ./zn <command> ...
   dispatch <step> <id> [--mode design|code|raft] [--dry-run]
                                                 run one step: a model step on .models.toml's CLIs, a script step itself
   dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
-  dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
   done <R-id>                                   land the stack: one --no-ff merge onto main, one binding commit (refuses an unfinished layer)
   watch-bootstrap                               write every spec's watch file from the commit that added it (once)
   watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
-  watch-net                                     run every project's fast suite on current main and push a missed test's
-                                                files onto main (also started by land and by watch-kick)
+  watch-net                                     run every project's fast suite on current main, then the slow tier,
+                                                and push a missed test's files or a slow-tier defect onto main
   worktree <R-id|name>                          create or reuse .worktree/<R-id|name>: a raft's is detached until a layer exists, then on that layer
   worktree-prune                                remove worktrees of rafts that are done on main
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
