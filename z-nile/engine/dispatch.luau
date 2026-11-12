@@ -216,7 +216,7 @@ function dispatch.isLesson(path: string): boolean
 end
 
 -- Whether GitHub's `commits/<sha>/pulls` answer names a pull request merged into main whose merge commit is `sha`
--- (the watermark's pull-request rule, G20; review 003 F6: into main only, never another branch).
+-- (a pull request merged into main, G20; review 003 F6: into main only, never another branch).
 function dispatch.prMergedFrom(text: string, sha: string): boolean
 	local ok, list = pcall(function()
 		return serde.decode("json", text)
@@ -293,13 +293,13 @@ function dispatch.next(f: Facts): Action
 	if f.last and f.last.outcome == "tripwire" and f.last.step == "merge-check" then
 		return stop(
 			dispatch.EXIT.tripwire,
-			`a gate merge did not land on the main it was judged against (state.json names it): look at main, then run ./zn dispatch vet and ./zn dispatch retry {f.id}: nothing else clears it`
+			`a gate merge did not land on the main it was judged against (state.json names it): look at main, then run ./zn dispatch retry {f.id}: nothing else clears it`
 		)
 	end
 	if f.last and f.last.outcome == "tripwire" then
 		return stop(
 			dispatch.EXIT.tripwire,
-			`{f.last.step} tripped the wire: main or the main checkout moved in a way the dispatcher did not make (state.json names it); a human looks first, then runs ./zn dispatch vet and ./zn dispatch retry {f.id}: nothing else clears it`
+			`{f.last.step} tripped the wire: main or the main checkout moved in a way the dispatcher did not make (state.json names it); a human looks first, then runs ./zn dispatch retry {f.id}: nothing else clears it`
 		)
 	end
 	if f.last and f.last.outcome ~= "ok" then
