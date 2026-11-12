@@ -1,18 +1,16 @@
 --!strict
--- c0185 AC2, AC3: the selector on the real tree, in rule form (every registered project with a place, never today's list).
--- Any Rojo project file of a home forces that home's full run; a change in the library's source selects the place spec of every
--- home that maps it, and, with --project, that home's alone. Read-only: it runs z-nile/affected from the checkout's top, as the
--- gate does, on named paths (a path need not exist to be a change).
+-- The watch map on the real tree. A path named by one watch file selects the specs that file covers and no
+-- other ticket's. A skill, a lesson and a tracker document select nothing. Never "ALL".
 local fs = require("@lune/fs")
-local home = require("@tests/lib/home")
 local process = require("@lune/process")
 local projects = require("@znile/engine/projects")
 local t = require("@tests/lib/t")
+local watch = require("@znile/lib/watch")
 
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
 local function affected(args: { string }): { string }
-	local argv = { "run", "z-nile/affected", "--", "--graph-only" }
+	local argv = { "run", "z-nile/affected", "--" }
 	for _, a in args do
 		table.insert(argv, a)
 	end
@@ -27,55 +25,73 @@ local function affected(args: { string }): { string }
 	return out
 end
 
--- the registered projects whose home has a place tier (tests/lib/place.luau), z-nile and the library apart
-local function placeHomes(): { projects.Project }
-	local out: { projects.Project } = {}
-	for _, p in projects.load(TOP).projects do
-		if p.name ~= "z-nile" and p.home ~= "." and fs.isFile(`{TOP}/{p.home}/tests/lib/place.luau`) then
-			table.insert(out, p)
-		end
-	end
-	return out
+local function reader(): watch.Reader
+	return {
+		isDir = function(path: string): boolean
+			return fs.isDir(`{TOP}/{path}`)
+		end,
+		isFile = function(path: string): boolean
+			return fs.isFile(`{TOP}/{path}`)
+		end,
+		readDir = function(path: string): { string }
+			return fs.readDir(`{TOP}/{path}`)
+		end,
+		readFile = function(path: string): string
+			return fs.readFile(`{TOP}/{path}`)
+		end,
+	}
 end
 
-return t.spec("c0185 the selector follows the library and every project file", function(it)
-	it("AC2: any Rojo project file of a home forces that home's full run, and none of another's", function()
-		local homes = placeHomes()
-		t.expect(#homes > 1).toBe(true)
-		for _, p in homes do
-			for _, file in { "default.project.json", "other.project.json", "lobby.project.json" } do
-				t.expect(affected({ "--project", p.name, `{p.home}/{file}` })).toEqual({ "ALL" })
+return t.spec("c0185 the watch map selects one ticket", function(it)
+	it("a path named by one watch file selects that file's specs and no other", function()
+		local bindings: { [string]: { string } } = {}
+		local r = reader()
+		for _, p in projects.load(TOP).projects do
+			if p.home ~= "." then
+				local found, problems = watch.collect(r, `{p.home}/`)
+				t.expect(table.concat(problems, "\n")).toBe("")
+				for spec, paths in found do
+					bindings[spec] = paths
+				end
 			end
 		end
-		-- (each of these builds the require graph, so they run for one home)
-		local first = homes[1]
-		-- a project file in a sub-folder is no place of the home; another project is not forced
-		t.expect(#affected({ "--project", first.name, `{first.home}/sub/x.project.json` })).toBe(0)
-		t.expect(affected({ "--project", "z-nile", `{first.home}/other.project.json` })).toEqual({})
+		local byPath: { [string]: { string } } = {}
+		for spec, paths in bindings do
+			for _, path in paths do
+				local list = byPath[path]
+				if not list then
+					list = {}
+					byPath[path] = list
+				end
+				table.insert(list, spec)
+			end
+		end
+		local chosen: string? = nil
+		local want: { string } = {}
+		for path, specs in byPath do
+			table.sort(specs)
+			local file = watch.fileFor(specs[1])
+			local sole = true
+			for _, spec in specs do
+				if watch.fileFor(spec) ~= file then
+					sole = false
+				end
+			end
+			if sole and fs.isFile(`{TOP}/{path}`) then
+				chosen = path
+				want = specs
+				break
+			end
+		end
+		t.expect(chosen ~= nil).toBe(true)
+		t.expect(affected({ chosen :: string })).toEqual(want)
 	end)
 
-	it("AC3: a change in the library's source selects the place spec of every home that maps it", function()
-		local library = home.LIBRARY_HOME
-		local all = affected({ `{library}/src/shared/Logic/Nope/init.luau` })
-		local server = affected({ `{library}/src/server/Nope.luau` })
-		local homes = placeHomes()
-		t.expect(#homes > 1).toBe(true)
-		for _, p in homes do
-			local spec = `{p.home}/tests/place/library.spec.luau`
-			t.expect(table.find(all, spec) ~= nil).toBe(true)
-			t.expect(table.find(server, spec) ~= nil).toBe(true)
-		end
-		-- --project: that home's selection alone, relative to its home
-		local first = homes[1]
-		local own = affected({ "--project", first.name, `{library}/src/shared/Logic/Nope/init.luau` })
-		t.expect(table.find(own, "tests/place/library.spec.luau") ~= nil).toBe(true)
-		for _, line in own do
-			t.expect(string.sub(line, 1, #first.home + 1) == `{first.home}/`).toBe(false)
-		end
-		-- a change in the library's tests is in no place
-		local tests = affected({ `{library}/tests/unit/Nope/nope.spec.luau` })
-		for _, p in homes do
-			t.expect(table.find(tests, `{p.home}/tests/place/library.spec.luau`) == nil).toBe(true)
-		end
+	it("a skill, a lesson and a tracker document select nothing, and a project file is not ALL", function()
+		t.expect(affected({ "z-nile/skills/zz-test/SKILL.md" })).toEqual({})
+		t.expect(affected({ "z-nile/skills/zz-test/lessons/no-such-lesson.md" })).toEqual({})
+		t.expect(affected({ "pickman/.tracker/issues/c0001/c0001.md" })).toEqual({})
+		local project = affected({ "pickman/default.project.json" })
+		t.expect(table.find(project, "ALL") == nil).toBe(true)
 	end)
 end)

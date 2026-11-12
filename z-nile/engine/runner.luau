@@ -9,6 +9,7 @@
 -- the specs' jail, and an flock can't be fooled by pid reuse). The adapter
 -- (adapters.luau) is pure; this is the one place that starts a model CLI.
 local adapters = require("./adapters")
+local costrow = require("./costrow")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local task = require("@lune/task")
@@ -33,12 +34,22 @@ export type Request = {
 }
 export type Identity = { pgid: number, lockFile: string }
 export type Outcome = "ok" | "failed" | "quota" | "cap" | "cap-unknown" | "stalled" | "stopped"
-export type Result = { outcome: Outcome, detail: string, tokens: number, final: number?, session: string? }
+export type Result = {
+	outcome: Outcome,
+	detail: string,
+	tokens: number,
+	final: number?,
+	session: string?,
+	wall: number?,
+	cpu: number?,
+}
 
 -- The supervisor: forks the CLI into a new group led by itself (its stdin from the stdin file), writes the group's id,
 -- then waits. Its own stdin is the lifeline: end of file means the dispatcher is gone, and the group is killed. When
 -- the CLI exits, what is left of its group is killed too, and the supervisor exits with the CLI's code.
 local SUPERVISOR = table.concat({
+	"my $zn_t0 = eval { require(($ENV{ZN_TOP} // '.') . '/z-nile/lib/measure.pl'); znmeasure::now() };",
+	"END { eval { znmeasure::write($ENV{ZN_MEASURE_FILE}, $zn_t0) if $zn_t0; } };",
 	"use POSIX ();",
 	"use Fcntl qw(:flock);",
 	"my ($pidfile, $infile, $lockfile) = (shift @ARGV, shift @ARGV, shift @ARGV);",
@@ -142,6 +153,11 @@ function runner.run(r: Request): Result
 		return { outcome = "stopped", detail = "stopped by ./zn dispatch stop before it started", tokens = 0 }
 	end
 	fs.writeFile(inFile, r.stdin or "")
+	local reportFile = `{r.stateDir}/measure.txt`
+	r.env["ZN_MEASURE_FILE"] = reportFile
+	if r.env["ZN_TOP"] == nil and process.env.ZN_TOP then
+		r.env["ZN_TOP"] = process.env.ZN_TOP :: string
+	end
 	local args = { "-e", SUPERVISOR, pidFile, inFile, lockFile }
 	for _, a in r.argv do
 		table.insert(args, a)
@@ -273,6 +289,10 @@ function runner.run(r: Request): Result
 	child.stdin:close()
 	local status = child:status()
 	local tokens = adapters.tokens(acc)
+	local wall, cpu = nil, nil
+	if fs.isFile(reportFile) then
+		wall, cpu = costrow.report(fs.readFile(reportFile))
+	end
 	if early then
 		return {
 			outcome = early :: Outcome,
@@ -280,6 +300,8 @@ function runner.run(r: Request): Result
 			tokens = tokens,
 			final = acc.final,
 			session = acc.session,
+			wall = wall,
+			cpu = cpu,
 		}
 	end
 	local outcome: Outcome, why = adapters.finish(acc, status.ok, stderrTail, r.adapter.runtime)
@@ -289,9 +311,19 @@ function runner.run(r: Request): Result
 			detail = "stopped by ./zn dispatch stop",
 			tokens = tokens,
 			final = acc.final,
+			wall = wall,
+			cpu = cpu,
 		}
 	end
-	return { outcome = outcome, detail = why, tokens = tokens, final = acc.final, session = acc.session }
+	return {
+		outcome = outcome,
+		detail = why,
+		tokens = tokens,
+		final = acc.final,
+		session = acc.session,
+		wall = wall,
+		cpu = cpu,
+	}
 end
 
 return runner

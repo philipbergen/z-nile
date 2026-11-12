@@ -9,7 +9,7 @@ description: Code structure rules for the portal (the experience's start place -
 The portal is the arcade's start place, in its home `portal/`: every path in this skill is relative to `portal/`, where its specs and `check.sh` files run (`portal/src/shared/Logic/...` in the repository). Its product decisions are `portal/.tracker/game-design.md` and binding; its map of features and their dependencies is `portal/.tracker/architecture.md`.
 
 ## The rules are pickman's
-Read `pickman/skills/pickman-arch/SKILL.md` first, and its lessons (`./zn lessons --skill pickman-arch --full`). Its Layout rows, Rules 1 to 8 and Design checklist are the portal's too, as written, with the changes below. The portal keeps no copy of them: a change to a rule is made there once and applies here, and a rule that must differ for the portal is stated in this skill instead. Pickman's examples (its maze, ghosts and lobby) are pickman's.
+Read `pickman/skills/pickman-arch/SKILL.md` first. Its Layout rows, Rules 1 to 8 and Design checklist are the portal's too, as written, with the changes below. The portal keeps no copy of them: a change to a rule is made there once and applies here, and a rule that must differ for the portal is stated in this skill instead. Pickman's examples (its maze, ghosts and lobby) are pickman's.
 
 ## Layout (Rojo: `default.project.json` is the start place)
 | path | Roblox location | contains |
@@ -33,7 +33,7 @@ Pickman's checklist, answered for the portal:
 - **Touched modules**: the exact paths, used for spend attribution and for choosing affected tests.
 
 ## Lessons
-Before you start, read this skill's lessons: `./zn lessons --skill portal-arch --full`. Each is a mistake made before, with the question that catches it.
+Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
 
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.

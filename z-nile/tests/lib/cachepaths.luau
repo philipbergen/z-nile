@@ -150,6 +150,16 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['local out = given or ".cache/board.html"'] = `the board page, written with sh.writeReplacing: {RENAMED}`,
 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
+		["watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)"] = "usage text: the net's log path",
+		['local at = string.find(cwd, "/.cache/", 1, true)'] = "a prefix compared with a CLI's real path (only a fake under .cache starts inside a check); nothing is written",
+		['return if at then string.sub(cwd, 1, at + 7) else cwd .. ".cache/"'] = "the same prefix; nothing is written",
+		["return `refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
+		["stateDir = `.cache/idea-run/{id}/{phase}`,"] = "the idea stage's supervisor state for one attempt (pid, stdin, stop, measure); gitignored under this checkout's .cache, written by the runner the same way a dispatch step's state dir is",
+	},
+	["z-nile/engine/watchcmd.luau"] = {
+		["'cd \"$1\" && ./zn run --time 3600 -- ./zn watch-net > .cache/watch-net.log 2>&1 &',"] = "starts the net in the background; the log is this checkout's .cache, which the fence already guards",
+		["fs.writeDir(`{root}/.cache`)"] = "the folder itself (fs.writeDir of an existing folder writes nothing)",
+		['print("watch-net: started, log at .cache/watch-net.log")'] = "a message naming the log",
 	},
 	["z-nile/engine/board.luau"] = {
 		["local home = `{dir}/.cache/dispatch`"] = "c0118: the board reads the dispatcher's run state (state.json, questions.md) to show it on a card; nothing is written",
@@ -160,6 +170,9 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['local at = string.find(here, "/.cache/", 1, true)'] = "a prefix compared with a CLI's real path (c0117: only a fake under .cache starts inside a check); nothing is written",
 		['return if at then string.sub(here, 1, at + 7) else here .. ".cache/"'] = "the same prefix; nothing is written",
 		["`refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
+	},
+	["z-nile/engine/costrow.luau"] = {
+		["local path = `{root}/.cache/measure.tsv`"] = "the checkout's measure buffer; gitignored, appended by a gate, a spec run or ./zn run, and folded into a ticket only by commit, spend, done or land",
 	},
 	["z-nile/engine/history.luau"] = {
 		["local path = `{dir}/.cache/tracker-history.json`"] = `parsed git history for the current HEAD, read back on the next build and {RENAMED}`,

@@ -1,11 +1,9 @@
 --!strict
--- c0184 AC4: the three places that named pickman's folders by hand take every home from the registry.
--- The stop hook gates a change under any registered home (and every change when the registry does not parse); the
--- reviewed .cache list covers every home's scripts/; the repository-fence scan reads every home's specs, scripts and
--- check.sh. Promoted: the cases use a third home, `snake`, that a fixture registry names, never today's seven.
+-- c0184 AC4: the places that named pickman's folders by hand take every home from the registry.
+-- The reviewed .cache list covers every home's scripts/; the repository-fence scan reads every home's specs, scripts
+-- and check.sh. Promoted: the cases use a third home, `snake`, that a fixture registry names, never today's seven.
 -- Fixtures under .cache/c0184-generic (this home's .cache); the real tree is read from its top.
 local cachepaths = require("@tests/lib/cachepaths")
-local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local projects = require("@znile/engine/projects")
@@ -37,76 +35,7 @@ local function fresh(name: string): string
 	return dir
 end
 
--- a fixture repository holding the registry readers, a stub gate at scripts/check.sh that records its call, and the
--- registry text `toml`; stop(dir) runs the real hook there and says whether the gate ran
-local function tree(name: string, toml: string?, roots: string?): string
-	local dir = fresh(name)
-	t.expect(process.exec("git", { "init", "-q", "-b", "main", dir }).ok).toBe(true)
-	fixture.git(dir, { "config", "user.name", "c0184-generic" })
-	fixture.git(dir, { "config", "user.email", "c0184-generic@example.invalid" })
-	write(`{dir}/scripts/check.sh`, '#!/usr/bin/env bash\necho "$@" >> "$(dirname "$0")/../gate.log"\n')
-	process.exec("chmod", { "+x", `{dir}/scripts/check.sh` })
-	if roots then
-		write(`{dir}/z-nile/roots.luau`, roots) -- a registry reader of another age
-	elseif toml then
-		copy(dir, { "z-nile/roots.luau", "z-nile/engine/projects.luau" })
-		write(`{dir}/z-nile/projects.toml`, toml)
-	end
-	write(`{dir}/readme`, "x\n")
-	fixture.git(dir, { "add", "-A" })
-	fixture.git(dir, { "commit", "-q", "-m", "base" })
-	return dir
-end
-local function gated(dir: string): boolean
-	fixture.exec(dir, "bash", { `{TOP}/scripts/hooks/stop.sh` }, { stdin = '{"cwd": "' .. dir .. '"}' })
-	local ran = fs.isFile(`{dir}/gate.log`)
-	if ran then
-		fs.removeFile(`{dir}/gate.log`)
-	end
-	return ran
-end
-
 return t.spec("c0184 the hand-named pickman folders come from the registry", function(it)
-	it("AC4: the stop hook gates a change under a third registered home, not its root's documents", function()
-		local dir = tree("hook", THREE)
-		write(`{dir}/snake/.tracker/issues/f0001/f0001.md`, "doc\n")
-		t.expect(gated(dir)).toBe(false) -- the third project's root alone: documents select no spec
-		write(`{dir}/snake/src/shared/X.luau`, "--!strict\nreturn 1\n")
-		t.expect(gated(dir)).toBe(true) -- its code: the gate runs
-		fs.removeDir(`{dir}/snake/src`)
-		write(`{dir}/pickman/src/shared/X.luau`, "--!strict\nreturn 1\n")
-		t.expect(gated(dir)).toBe(true) -- pickman's code still gates
-		fs.removeDir(`{dir}/pickman/src`)
-		write(`{dir}/elsewhere/x.luau`, "--!strict\nreturn 1\n")
-		t.expect(gated(dir)).toBe(false) -- a folder the registry does not name is no project's home
-		fs.removeDir(dir)
-	end)
-
-	it(
-		"AC4: a registry that does not parse gates every change, and a tree before c0114 keeps its folders",
-		function()
-			local broken = tree("hook-broken", "[[project]\nname = \n")
-			write(`{broken}/elsewhere/x.luau`, "--!strict\nreturn 1\n")
-			t.expect(gated(broken)).toBe(true) -- fail closed: the gate runs and reports the registry
-			fs.removeDir(broken)
-			local old = tree("hook-old", nil) -- no z-nile/roots.luau
-			write(`{old}/pickman/src/shared/X.luau`, "--!strict\nreturn 1\n")
-			t.expect(gated(old)).toBe(true)
-			fs.removeDir(`{old}/pickman/src`)
-			write(`{old}/snake/src/x.luau`, "--!strict\nreturn 1\n")
-			t.expect(gated(old)).toBe(false) -- it has no registry to name snake
-			fs.removeDir(old)
-		end
-	)
-
-	it("AC4: a registry reader that prints roots, not projects, gates every change", function()
-		-- z-nile/roots.luau of c0114's age ignores --projects and prints one root per line (here: tracker)
-		local dir = tree("hook-oldreader", THREE, '--!strict\nprint("tracker")\n')
-		write(`{dir}/elsewhere/x.luau`, "--!strict\nreturn 1\n")
-		t.expect(gated(dir)).toBe(true) -- it cannot name the homes, so no folder is exempt
-		fs.removeDir(dir)
-	end)
-
 	it(
 		"AC4: the reviewed .cache list covers scripts/, z-nile/ and every other registered home's scripts/",
 		function()
