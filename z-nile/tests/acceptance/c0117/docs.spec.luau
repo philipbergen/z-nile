@@ -114,7 +114,7 @@ return t.spec("c0117 docs", function(it)
 		)
 		local step3 = string.match(
 			ze,
-			"\n3%. The reviewer writes `review%-NNN%.md` in the raft directory[^\n]*"
+			"\n3%. The reviewer writes `review%-NNN%.md` in the issue's folder[^\n]*"
 		) or ""
 		at(
 			step3,
