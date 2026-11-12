@@ -39,12 +39,10 @@ local function paragraph(text: string, lead: string): string
 end
 
 return t.spec("c0119 scope rules in the skills", function(it)
-	it("make-issue says the Problem's outcomes are the scope prep may not narrow", function()
+	it("make-issue says the idea's outcomes are the scope prep may not narrow", function()
 		local doc = read(`{TOP}/z-nile/skills/z-ticket/SKILL.md`)
-		local line = string.match(doc, "\n%s*%- %*%*Problem%*%*:[^\n]*") :: string
-		t.expect(line ~= nil).toBe(true)
-		at(line, "never narrows, defers or drops an outcome without the user")
-		at(line, "every idea the user gives under Solution")
+		at(doc, "./zn idea <id> --text")
+		at(doc, "never narrows, defers or drops an outcome without the user")
 		-- the capture lookup relies on make-issue's commit subject
 		at(doc, 'git commit -m "tracker: new <id> <title>"')
 	end)
