@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# c0280 mutation check: python3 mutants.py [name ...]  (run through ./zn run --time N -- python3 ...)
-# Each mutant replaces one text in the prototype, runs the specs from z-nile's home, and restores the file.
+# c0280 mutation check: python3 mutants.py [name ...]  (run through ./zn run --time N -- python3 ... from z-nile's home)
+# Each mutant replaces one or more texts in the prototype, runs the specs from z-nile's home, and restores the files.
 import subprocess, sys, os
 
 HOME = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -10,30 +10,46 @@ PRO = "engine/provenance.luau"
 TRAIL = "engine/trail.luau"
 WHOM = "engine/who.luau"
 MAIN = "engine/main.luau"
+RULES = "skills/zz-rules/SKILL.md"
 
 M = []  # (name, file, old, new, specs)
+
+
 def m(name, f, old, new, specs):
     M.append((name, f, old, new, specs))
 
-m("fromTrailer key case-sensitive", PRO, '"^[Cc][Oo]%-[Aa][Uu][Tt][Hh][Oo][Rr][Ee][Dd]%-[Bb][Yy]:(.*)$"', '"^Co%-Authored%-By:(.*)$"', [CASES])
-m("fromTrailer any trailer", PRO, '"^[Cc][Oo]%-[Aa][Uu][Tt][Hh][Oo][Rr][Ee][Dd]%-[Bb][Yy]:(.*)$"', '"^[%w%-]+:(.*)$"', [CASES])
+
+KEY = '"^[Cc][Oo]%-[Aa][Uu][Tt][Hh][Oo][Rr][Ee][Dd]%-[Bb][Yy]:(.*)$"'
+m("fromTrailer key case-sensitive", PRO, KEY, '"^Co%-Authored%-By:(.*)$"', [CASES])
+m("fromTrailer any trailer", PRO, KEY, '"^[%w%-]+:(.*)$"', [CASES])
 m("fromTrailer model unnormalised", PRO, 'return `{provenance.agent(name, nil)} (from git)`', 'return `agent:{name} effort unknown (from git)`', [CASES])
-m("fromCommit people ignored", PRO, 'not (email and people[email])', 'true', [CASES])
+m("fromTrailer ignores people", PRO, 'if people ~= nil and email ~= nil and people[email] then', 'if false then', [CASES])
+m("fromTrailer emailless is a person", PRO, 'if people ~= nil and email ~= nil and people[email] then', 'if people ~= nil and (email == nil or people[email]) then', [CASES])
 m("person email not lower-cased", PRO, 'string.lower(email) else nil', 'email else nil', [WHO])
-m("fromCommit first agent wins", PRO, '			agent = `{provenance.agent(name, nil)} (from git)`\n', '			agent = agent or `{provenance.agent(name, nil)} (from git)`\n', [CASES])
-m("idea reads the trailer", PRO, 'actor = `{provenance.human(capture.author)} ({how})`', 'actor = provenance.fromCommit(capture.author, capture.trailers or {}, people)', [CASES, WHO])
+m("agentOf first agent wins", PRO, 'agent = provenance.fromTrailer(`Co-Authored-By: {value}`, people) or agent', 'agent = agent or provenance.fromTrailer(`Co-Authored-By: {value}`, people)', [CASES])
+m("idea reads the trailer", PRO, '`{provenance.human(capture.author)} ({how})`, mark.note)', 'actorOf(capture, people), mark.note)', [WHO])
 m("idea first add unmarked", PRO, 'local how = if isCapture then "from git" else "from git, first add"', 'local how = "from git"', [CASES])
-m("new counted as a status", PRO, 'if word == "new" then', 'if false then', [CASES])
-m("status of any subject", PRO, '`^tracker: {id} (%S+)$`', '"^tracker: %S+ (%S+)$"', [CASES])
-m("unblocked covered ignored", PRO, 'if not records[c.sha] then', 'if true then', [CASES])
-m("unblocked covered by any record", PRO, 'if not records[c.sha] then', 'if next(records) == nil then', [CASES, WHO])
-m("rafted first rafting kept", PRO, '				else\n					start = nil\n', '				else\n', [CASES])
-m("rafted newest commit", PRO, 'start = start or c\n', 'start = c\n', [CASES])
-m("delivered newest done add", PRO, '		for _, c in docs do\n			local added: Commit? = nil', '		for k = #docs, 1, -1 do\n			local c = docs[k]\n			local added: Commit? = nil', [CASES])
-m("delivered any change under done", PRO, 'r.status == "A" and string.find(r.path, marker, 1, true)', 'r.status ~= "D" and string.find(r.path, marker, 1, true)', [CASES])
-m("merged reads the trailer", PRO, 'actor = `{provenance.human(c.author or "unknown")} (from git)`,\n					detail = "",\n					source = "git",\n				}\n				break', 'actor = actorOf(c, people),\n					detail = "",\n					source = "git",\n				}\n				break', [CASES, WHO])
+m("cut life idea not its start", PRO, 'if mark.cut and steps[1] then', 'if false and steps[1] then', [CASES, WHO])
+m("idea mark dropped", PRO, '`{provenance.human(capture.author)} ({how})`, mark.note)', '`{provenance.human(capture.author)} ({how})`, "")', [CASES, WHO])
+m("restamp is a status change", PRO, 'elseif word ~= nil and prevWord ~= nil and word ~= prevWord then', 'elseif word ~= nil and prevWord ~= nil then', [CASES])
+m("first word is a status change", PRO, 'elseif word ~= nil and prevWord ~= nil and word ~= prevWord then', 'elseif word ~= nil and word ~= prevWord then', [CASES])
+m("release give-back is an unblock", PRO, 'if word == "new" and string.match(step.c.subject, "^tracker: [fdcR]%d%d%d%d new$") then', 'if word == "new" then', [CASES])
+m("unblock only by the item id", PRO, '"^tracker: [fdcR]%d%d%d%d new$"', '"^tracker: c0010 new$"', [CASES])
+m("no unblocked", PRO, 'if word == "new" and string.match(step.c.subject, "^tracker: [fdcR]%d%d%d%d new$") then', 'if false then', [CASES])
+m("unblocked covered ignored", PRO, 'if not records[step.c.sha] then', 'if true then', [CASES])
+m("unblocked covered by any record", PRO, 'if not records[step.c.sha] then', 'if next(records) == nil then', [CASES, WHO])
+m("rafted first rafting kept", PRO, '				else\n					start = nil\n				end\n			end\n		end\n		-- a run', '				end\n			end\n		end\n		-- a run', [CASES])
+m("rafted newest commit", PRO, 'start = start or step', 'start = step', [CASES])
+m("cut run attributed to the cut", PRO, 'if mark.cut and start == steps[1] then', 'if false then', [CASES])
+m("delivery without a previous area", PRO, '			and prevArea ~= nil\n', '', [CASES, WHO])
+m("a second arrival replaces the delivery", PRO, '			and out.delivered == nil\n', '', [CASES])
+m("a root move is a delivery", PRO, '			and prevArea ~= "done"\n', '', [CASES, WHO])
+m("a delete row read as the step", PRO, 'if c.doc and not isRecordPath(c.path) and c.status ~= "D" and not seen[c.sha] then', 'if c.doc and not isRecordPath(c.path) and not seen[c.sha] then', [CASES])
+m("merged names the author", PRO, 'provenance.agentOf(allTrailers(step.c), people) or "unknown"', 'actorOf(step.c, people)', [CASES, WHO])
+m("second parent trailers ignored", PRO, 'for _, v in side do', 'for _, v in {} :: { string } do', [CASES])
 m("merge newest first", PRO, 'return a.when < b.when', 'return a.when > b.when', [CASES])
 m("merge stored first on a tie", PRO, 'return a.source == "git"', 'return a.source == "record"', [CASES])
+m("merge derived by kind within a minute", PRO, 'if a.at ~= b.at and a.at ~= nil and b.at ~= nil then', 'if false then', [CASES])
 m("merge stored of any raft wins", PRO, '(want == "" or raftPart(r.detail) == want)', 'true', [CASES])
 m("merge derived always kept", PRO, 'if derived.rafted and not stored(rows, "rafted", derived.rafted) then', 'if derived.rafted then', [CASES, WHO])
 m("merge worker dropped", PRO, 'e.detail = withWorker(e.detail, worker)', 'e.detail = e.detail', [CASES])
@@ -46,24 +62,34 @@ m("trail: every trailer key", TRAIL, 'trailers:key=Co-Authored-By,valueonly', 't
 m("trail: author not read", TRAIL, 'author = string.sub(line, 3)', 'author = nil', [CASES, WHO])
 m("trail: unit separator lost", TRAIL, 'string.gmatch(string.sub(line, 3), "[^\\31]+")', 'string.gmatch(string.sub(line, 3), "[^\\n]+")', [CASES])
 m("trail: email not read", TRAIL, 'email = string.sub(line, 3)', 'email = nil', [CASES])
+m("trail: parents not read", TRAIL, 'parents = list', 'parents = nil', [CASES, WHO])
+m("trail: lifeOf leaves the id unset", TRAIL, '		copy.id = id\n', '', [WHO])
+m("trail: mainline not first-parent", TRAIL, 'changes({ "log", head }, trail.dirs(kind, id, within :: { string }), keep, id, firstParent == true)', 'changes({ "log", head }, trail.dirs(kind, id, within :: { string }), keep, id, false)', [WHO])
+m("cut ignores compaction cuts", TRAIL, 'return c.doc and cuts[c.sha] ~= nil', 'return false', [CASES, WHO])
+m("cut note dropped", TRAIL, 'table.insert(notes, { sha = string.sub(start.sha, 1, 7), file = cuts[start.sha] })', 'table.insert(notes, { sha = "", file = "" })', [CASES])
 m("people not lower-cased", WHOM, 'out[string.lower(email)] = true', 'out[email] = true', [WHO])
 m("people ignored", MAIN, 'whoLib.people(head)', '{}', [WHO])
-m("raft after each commit empty", WHOM, 'out[c.sha] = store.parseFront(text).raft or ""', 'out[c.sha] = ""', [WHO])
+m("people from the newest commit only", WHOM, 'git({ "log", "--format=%ae", head })', 'git({ "log", "-1", "--format=%ae", head })', [WHO])
+m("fronts ignored", MAIN, 'whoLib.fronts(commits)', '{}', [WHO])
 m("record not wanted", WHOM, 'return trail.isDoc(name) or name == "provenance.md"', 'return trail.isDoc(name)', [WHO])
-m("who: rows ignored", MAIN, '		rows = parsed :: { provenance.Row }\n	end\n	local spendRows', '		rows = {}\n	end\n	local spendRows', [WHO])
+m("head is this checkout", WHOM, '		then "origin/main"\n', '		then "HEAD"\n', [WHO])
+m("no history is accepted", WHOM, 'if commits == nil or not hasDoc then', 'if commits == nil then', [WHO])
+m("side trailers not read", WHOM, 'if #parents >= 2 and c.sideTrailers == nil then', 'if false then', [WHO])
+m("who: mark dropped", MAIN, 'whoLib.fronts(commits), mark)', 'whoLib.fronts(commits), { note = "", cut = false })', [WHO])
+m("who: rows ignored", MAIN, '		rows = parsed :: { provenance.Row }\n	end', '		rows = {}\n	end', [WHO])
 m("who: bad record skipped", MAIN, 'fail(`who: {recordPath}: {err}`)', 'rows = {}', [WHO])
 m("who: spend ignored", MAIN, 'for _, r in (parsed :: ledger.Ledger).rows do\n			table.insert(spendRows', 'for _, r in {} :: { ledger.Row } do\n			table.insert(spendRows', [WHO])
-m("who: raft ignored", MAIN, 'local raft = store.readFront(found.doc).raft or ""', 'local raft = ""', [WHO])
-m("who: state fixed", MAIN, '		found.state,\n		raft,', '		"backlog",\n		raft,', [WHO])
-m("delivered last change under done", PRO, ['		for _, c in docs do\n			local added: Commit? = nil', 'r.status == "A" and string.find(r.path, marker, 1, true)'], ['		for k = #docs, 1, -1 do\n			local c = docs[k]\n			local added: Commit? = nil', 'r.status ~= "D" and string.find(r.path, marker, 1, true)'], [CASES])
-m("cut ignores compaction cuts", TRAIL, 'return c.doc and cuts[c.sha] ~= nil', 'return false', [CASES])
-m("cut note dropped", TRAIL, 'table.insert(notes, { sha = string.sub(start.sha, 1, 7), file = cuts[start.sha] })', 'table.insert(notes, { sha = "", file = "" })', [CASES])
-m("docs: who row dropped from zz-rules", "skills/zz-rules/SKILL.md", "| who | `./zn who <id>` |", "| whom | `./zn whom <id>` |", [CASES])
+m("who: bad spend skipped", MAIN, 'fail(`who: {spendPath} does not parse ({err})`)', 'stdio.ewrite("")', [WHO])
+m("who: a raft's roll-up read as a ledger", MAIN, 'if found.kind == "issue" and fs.isFile(spendPath) then', 'if fs.isFile(spendPath) then', [WHO])
+m("who: raft kind fixed to issues", WHOM, 'local kind = if string.sub(id, 1, 1) == "R" then "rafts" else "issues"', 'local kind = "issues"', [WHO])
+m("docs: who row dropped from zz-rules", RULES, "| who | `./zn who <id>` |", "| whom | `./zn whom <id>` |", [CASES])
 m("docs: usage line dropped", MAIN, "  who <id>   ", "  whom <id>  ", [CASES])
 
+
 def run(specs):
-    r = subprocess.run(["lune", "run", "tests/run", "--"] + specs, cwd=HOME, capture_output=True, text=True, timeout=500)
+    r = subprocess.run(["lune", "run", "tests/run", "--"] + specs, cwd=HOME, capture_output=True, text=True, timeout=900)
     return r.returncode, r.stdout + r.stderr
+
 
 def main():
     want = sys.argv[1:]
@@ -72,26 +98,22 @@ def main():
             continue
         path = os.path.join(HOME, f)
         src = open(path).read()
-        pairs = list(zip(old, new)) if isinstance(old, list) else [(old, new)]
-        bad = [o for o, _ in pairs if src.count(o) != 1]
-        if bad:
-            print(f"ERROR   {name}: old text occurs {src.count(bad[0])} times")
+        if src.count(old) != 1:
+            print(f"ERROR   {name}: old text occurs {src.count(old)} times", flush=True)
             continue
-        mutated = src
-        for o, n in pairs:
-            mutated = mutated.replace(o, n, 1)
-        open(path, "w").write(mutated)
+        open(path, "w").write(src.replace(old, new, 1))
         try:
             verdict, detail = "SURVIVED", ""
             for spec in specs:
                 code, out = run([spec])
                 if code != 0:
-                    fails = [l for l in out.splitlines() if "FAIL" in l or "expected" in l or "error" in l.lower()]
-                    detail = " | ".join(x.strip()[-160:] for x in fails[:3])
+                    fails = [l for l in out.splitlines() if "FAIL" in l or "expected" in l]
+                    detail = " | ".join(x.strip()[-150:] for x in fails[:2])
                     verdict = "KILLED" if ("expected" in out or "toBe" in out or "FAIL" in out) else "ERRORED"
                     break
             print(f"{verdict:8}{name}: {detail}", flush=True)
         finally:
             open(path, "w").write(src)
+
 
 main()

@@ -140,10 +140,12 @@ return t.spec("c0280 who", function(it)
 		commit("Yan", "tracker: new c0030 second-life", "2026-10-11T09:00:00Z")
 		-- c0040: its capture commit does not name it (renumbered), and two give-backs: an old one with no record, and a
 		-- newer one whose commit also appends the stored row
-		put("c0040", doc("c0040", "", "new-a-b-c"))
+		put("c0040", doc("c0040", "", "preparing-a-b-c"))
 		commit("Rex", "tracker: rename ids (#9)", "2026-10-12T09:00:00Z")
 		put("c0040", doc("c0040", "", "new-b-b-b"))
 		commit("Dee", "tracker: c0040 new", "2026-10-13T09:00:00Z")
+		put("c0040", doc("c0040", "", "preparing-b-b-b"))
+		commit("Dee", "tracker: c0040 preparing", "2026-10-13T12:00:00Z")
 		put("c0040", doc("c0040", "", "new-c-c-c"))
 		fs.writeFile(
 			`{dir}/{IDS}/c0040/provenance.md`,
@@ -156,17 +158,84 @@ return t.spec("c0280 who", function(it)
 		commit("Ann", "tracker: new c0050 epsilon", "2026-10-15T09:00:00Z")
 		put("c0050", doc("c0050", "R0020", "prepared-a-b-c"))
 		-- a Signed-off-by trailer is no agent, and a Co-Authored-By whose email is a commit author's (Ann, in other
-		-- letters) is a person: the rafter stays Bob
+		-- letters; Eve, who only ever committed c0020) is a person: the rafter stays Bob
 		commit(
 			"Bob",
-			"tracker: raft R0020 epsilon\n\nSigned-off-by: Bob Jr <bobjr@elsewhere.invalid>\nCo-Authored-By: Ann <ANN@example.invalid>",
+			"tracker: raft R0020 epsilon\n\nSigned-off-by: Bob Jr <bobjr@elsewhere.invalid>\nCo-Authored-By: Ann <ANN@example.invalid>\nCo-Authored-By: Eve <eve@example.invalid>",
 			"2026-10-16T09:00:00Z"
 		)
 		fs.writeDir(`{dir}/{IDS}/active`)
 		git(dir, { "mv", `{IDS}/c0050`, `{IDS}/active/c0050` }, "Hal", "2026-10-17T09:00:00Z")
+		fs.writeFile(`{dir}/{IDS}/active/c0050/c0050.md`, doc("c0050", "R0020", "active-a-b-c"))
 		commit("Hal", "tracker: ready R0020 epsilon", "2026-10-17T09:00:00Z")
 		git(dir, { "mv", `{IDS}/active/c0050`, `{IDS}/done/c0050` }, "Cy", "2026-10-18T09:00:00Z")
 		commit("Cy", "R0020: epsilon (#3)", "2026-10-18T09:00:00Z")
+		-- c0060: a life cut at a compaction (one commit rewrites the document and the map), readied, delivered, and its done
+		-- folder moved to another root afterwards
+		put("c0060", doc("c0060", "", "new-a-b-c"))
+		commit("Ann", "tracker: new c0060 zeta", "2026-10-22T09:00:00Z")
+		put("c0060", doc("c0060", "R0030", "prepared-a-b-c"))
+		local map = `{dir}/z-nile/compaction.txt`
+		fs.writeFile(map, (if fs.isFile(map) then fs.readFile(map) else "") .. "# c0280 fixture\n")
+		commit(
+			"Phil",
+			"tracker: compact ids (#64)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>",
+			"2026-10-23T09:00:00Z"
+		)
+		git(dir, { "mv", `{IDS}/c0060`, `{IDS}/active/c0060` }, "Hal", "2026-10-24T09:00:00Z")
+		fs.writeFile(`{dir}/{IDS}/active/c0060/c0060.md`, doc("c0060", "R0030", "active-a-b-c"))
+		commit("Hal", "tracker: ready R0030 zeta", "2026-10-24T09:00:00Z")
+		git(dir, { "mv", `{IDS}/active/c0060`, `{IDS}/done/c0060` }, "Cy", "2026-10-25T09:00:00Z")
+		commit("Cy", "R0030: zeta (#4)", "2026-10-25T09:00:00Z")
+		fs.writeDir(`{dir}/z-nile/.tracker/issues/done`)
+		git(
+			dir,
+			{ "mv", `{IDS}/done/c0060`, "z-nile/.tracker/issues/done/c0060" },
+			"Rex",
+			"2026-10-26T09:00:00Z"
+		)
+		commit("Rex", "R0043: z-nile 2, the tracker moves into z-nile", "2026-10-26T09:00:00Z")
+		-- c0070: landed by a `--no-ff` merge whose top layer commit carries the agent's trailer and the merge commit
+		-- none; the merge commit is what brings the document into done/
+		put("c0070", doc("c0070", "R0040", "prepared-a-b-c"))
+		commit("Ann", "tracker: new c0070 eta", "2026-10-27T09:00:00Z")
+		git(dir, { "checkout", "-q", "-b", "layer" }, "Dev", "2026-10-28T09:00:00Z")
+		fs.writeFile(`{dir}/{IDS}/c0070/note.txt`, "work\n")
+		commit(
+			"Dev",
+			"c0070: eta\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>",
+			"2026-10-28T10:00:00Z"
+		)
+		git(dir, { "checkout", "-q", "main" }, "Gus", "2026-10-29T09:00:00Z")
+		git(dir, { "merge", "-q", "--no-ff", "--no-commit", "layer" }, "Gus", "2026-10-29T09:00:00Z")
+		git(dir, { "mv", `{IDS}/c0070`, `{IDS}/done/c0070` }, "Gus", "2026-10-29T09:00:00Z")
+		fs.writeFile(`{dir}/{IDS}/done/c0070/c0070.md`, doc("c0070", "R0040", "done-a-b-c"))
+		git(dir, { "add", "-A" }, "Gus", "2026-10-29T09:00:00Z")
+		git(dir, { "commit", "-q", "-m", "R0040: bind c0070" }, "Gus", "2026-10-29T09:00:00Z")
+		-- R0020: a done raft whose spend.md is a roll-up of its issues, with a stored row
+		local raftDir = `{dir}/pickman/.tracker/rafts`
+		fs.writeDir(`{raftDir}/R0020`)
+		fs.writeFile(
+			`{raftDir}/R0020/R0020.md`,
+			"---\nid: R0020\nslug: epsilon-raft\nstatus: active-a-b-c\n---\n\n# R0020\n"
+		)
+		commit("Raf", "tracker: new raft R0020 epsilon", "2026-10-30T09:00:00Z")
+		fs.writeDir(`{raftDir}/done`)
+		git(
+			dir,
+			{ "mv", `pickman/.tracker/rafts/R0020`, "pickman/.tracker/rafts/done/R0020" },
+			"Cy",
+			"2026-10-31T09:00:00Z"
+		)
+		fs.writeFile(
+			`{raftDir}/done/R0020/spend.md`,
+			"# Spend: R0020 epsilon\n\n| issue | type | emergent | +lines | -lines | minutes | tokens |\n|---|---|---|---|---|---|---|\n| c0050 | chore | no | 1 | 0 | 1.0 | 0 |\n"
+		)
+		fs.writeFile(
+			`{raftDir}/done/R0020/provenance.md`,
+			"# Provenance: R0020\n\n| when | event | actor | detail |\n|---|---|---|---|\n| 2026-10-30 12:00 | unblocked | human:Ann | block=x |\n"
+		)
+		commit("Cy", "R0020: epsilon (#3)", "2026-10-31T09:00:00Z")
 		process.exec("git", { "clone", "-q", "--bare", dir, origin })
 		git(dir, { "remote", "add", "origin", origin })
 		git(dir, { "fetch", "-q", "origin" })
@@ -190,6 +259,9 @@ return t.spec("c0280 who", function(it)
 			-- one line is `<when>  <event>  <actor>  <detail>  (<source>)`, the detail left out when empty
 			t.expect(has(out, "2026-10-01 09:00  idea  human:Ann (from git)  (git)\n")).toBe(true)
 			t.expect(has(out, "status:preparing  human:Dee (from git)")).toBe(true)
+			-- a status change by a commit that is not a `tracker: <id> <word>` publish (a prep PR's squash, with an agent
+			-- trailer) is read from the document's own status word
+			t.expect(has(out, "status:prepared  agent:claude-opus-5-5 effort unknown (from git)")).toBe(true)
 			-- a `tracker: c0010 new` commit is the unblock (once, never also a status line), and no row is stored for it
 			t.expect(has(out, "unblocked  human:Dee (from git)")).toBe(true)
 			t.expect(has(out, "status:new")).toBe(false)
@@ -202,8 +274,8 @@ return t.spec("c0280 who", function(it)
 			-- the ticket's spend rows
 			t.expect(has(out, "delivered  agent:claude-sonnet-5-5 effort unknown (from git)")).toBe(true)
 			t.expect(has(out, "worker=claude-opus-5-5-high")).toBe(true)
-			-- and who merged it is a derived entry of its own
-			t.expect(has(out, "merged  human:Cy (from git)")).toBe(true)
+			-- and the merge is a derived entry of its own: the same commit's agent trailer, the user's rule
+			t.expect(has(out, "merged  agent:claude-sonnet-5-5 effort unknown (from git)")).toBe(true)
 			-- oldest first, by the dates the fixture set
 			local order: { string } = {}
 			for line in string.gmatch(out, "[^\n]+") do
@@ -212,8 +284,16 @@ return t.spec("c0280 who", function(it)
 					table.insert(order, event)
 				end
 			end
-			t.expect(order)
-				.toEqual({ "idea", "status:preparing", "unblocked", "approved", "rafted", "delivered", "merged" })
+			t.expect(order).toEqual({
+				"idea",
+				"status:preparing",
+				"unblocked",
+				"status:prepared",
+				"approved",
+				"rafted",
+				"delivered",
+				"merged",
+			})
 			-- it reads and writes nothing
 			t.expect(git(W, { "status", "--porcelain" })).toBe(before)
 		end
@@ -249,7 +329,13 @@ return t.spec("c0280 who", function(it)
 			t.expect(has(r.stdout, "rafted  human:Bob (from git)  raft=R0020")).toBe(true)
 			t.expect(has(r.stdout, "rafted  human:Hal")).toBe(false)
 			t.expect(has(r.stdout, "rafted  human:Cy")).toBe(false)
-			t.expect(has(r.stdout, "merged  human:Cy (from git)")).toBe(true)
+			-- the readier's status change is read from the document (a move to active/ that set the word), and a landing
+			-- with no agent trailer has no merge actor
+			t.expect(has(r.stdout, "status:active  human:Hal (from git)")).toBe(true)
+			t.expect(has(r.stdout, "delivered  human:Cy (from git)  raft=R0020")).toBe(true)
+			t.expect(has(r.stdout, "merged  unknown  (git)")).toBe(true)
+			-- a trailer whose email is an author's elsewhere (Eve's only commits are another item's) is a person
+			t.expect(has(r.stdout, "agent:eve")).toBe(false)
 		end
 	)
 
@@ -259,6 +345,88 @@ return t.spec("c0280 who", function(it)
 		t.expect(has(r.stdout, "idea  human:Yan (from git)")).toBe(true)
 		t.expect(has(r.stdout, "Zoe")).toBe(false)
 		t.expect(has(r.stdout, "unblocked")).toBe(false)
+	end)
+
+	it(
+		"a life cut at a compaction says so, derives only the marked idea, and a later root move is no delivery",
+		function()
+			local r = zn(W, { "who", "c0060" })
+			t.expect(r.ok).toBe(true)
+			-- the commit that starts the followed history is the marked idea; nothing before it, no rafter from it
+			t.expect(has(r.stdout, "idea  human:Phil (from git, first add)  history before ")).toBe(true)
+			t.expect(has(r.stdout, "not followed: it changed z-nile/compaction.txt")).toBe(true)
+			t.expect(has(r.stdout, "human:Ann")).toBe(false)
+			t.expect(has(r.stdout, "rafted")).toBe(false)
+			t.expect(has(r.stdout, "status:active  human:Hal (from git)")).toBe(true)
+			-- the delivery is the first arrival in done/ (Cy), not the move into another root afterwards (Rex)
+			t.expect(has(r.stdout, "delivered  human:Cy (from git)  raft=R0030")).toBe(true)
+			t.expect(has(r.stdout, "Rex")).toBe(false)
+			local _, n = string.gsub(r.stdout, "delivered", "")
+			t.expect(n).toBe(1)
+		end
+	)
+
+	it(
+		"a --no-ff landing is the first-parent merge commit, with its second parent's agent trailer",
+		function()
+			local r = zn(W, { "who", "c0070" })
+			t.expect(r.ok).toBe(true)
+			t.expect(
+				has(
+					r.stdout,
+					"2026-10-29 09:00  delivered  agent:claude-opus-5-5 effort unknown (from git)  raft=R0040"
+				)
+			).toBe(true)
+			t.expect(
+				has(r.stdout, "2026-10-29 09:00  merged  agent:claude-opus-5-5 effort unknown (from git)")
+			)
+				.toBe(true)
+		end
+	)
+
+	it(
+		"a raft is answered from git and its record, and its roll-up spend.md is not read as a ledger",
+		function()
+			local r = zn(W, { "who", "R0020" })
+			if not r.ok then
+				error(r.stdout .. r.stderr)
+			end
+			t.expect(has(r.stdout, "idea  human:Raf (from git, first add)")).toBe(true)
+			t.expect(has(r.stdout, "unblocked  human:Ann  block=x  (record)")).toBe(true)
+			t.expect(has(r.stdout, "delivered  human:Cy (from git)")).toBe(true)
+			t.expect(has(r.stdout, "worker=")).toBe(false)
+		end
+	)
+
+	it("who reads the published history only, and an item with no published history is refused", function()
+		-- a commit this worktree has and origin/main lacks is not history yet
+		local doc20 = fs.readFile(`{W}/{IDS}/c0020/c0020.md`)
+		fs.writeFile(
+			`{W}/{IDS}/c0020/c0020.md`,
+			(string.gsub(doc20, "status: new%-a%-b%-c", "status: preparing-q-q-q"))
+		)
+		git(W, { "add", "-A" }, "Loc", "2026-11-01T09:00:00Z")
+		git(W, { "commit", "-q", "-m", "tracker: c0020 preparing" }, "Loc", "2026-11-01T09:00:00Z")
+		local local1 = zn(W, { "who", "c0020" })
+		git(W, { "reset", "-q", "--hard", "origin/main" })
+		t.expect(local1.ok).toBe(true)
+		t.expect(has(local1.stdout, "Loc")).toBe(false)
+		-- an item that only exists in the working tree
+		fs.writeDir(`{W}/{IDS}/c0099`)
+		fs.writeFile(`{W}/{IDS}/c0099/c0099.md`, doc("c0099", "", "new-a-b-c"))
+		local r = zn(W, { "who", "c0099" })
+		fs.removeDir(`{W}/{IDS}/c0099`)
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stdout .. r.stderr, "no history for c0099")).toBe(true)
+		t.expect(has(r.stdout, "idea")).toBe(false)
+	end)
+
+	it("a spend.md that does not parse is refused naming the file", function()
+		fs.writeFile(`{W}/{IDS}/c0020/spend.md`, "# Spend: c0020 beta\n\n| 1 | only | three |\n")
+		local r = zn(W, { "who", "c0020" })
+		fs.removeFile(`{W}/{IDS}/c0020/spend.md`)
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stdout .. r.stderr, "c0020/spend.md")).toBe(true)
 	end)
 
 	it("a record that does not parse is refused naming the file, and nothing is printed", function()

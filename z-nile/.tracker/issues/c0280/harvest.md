@@ -1,1 +1,12 @@
 # Harvest: c0280
+- design-review-001 F1: zz-arch/document-facts-from-the-document, z-design/spec-design-correspondence
+- design-review-001 F2: zz-rules/item-history-spans-moves-and-compaction, z-design/run-derived-answers-on-real-history, zz-test/equivalent-mutants-checked-on-real-history
+- design-review-001 F3: zz-test/seed-every-enumerated-case
+- design-review-001 F4: zz-arch/history-tests-survive-squash, z-design/run-derived-answers-on-real-history
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: z-design/quote-other-preps-before-promising
+- design-review-001 F7: z-design/mutation-runner-runs-correct-variants, z-design/quote-other-preps-before-promising
+- design-review-001 F8: z-design/spec-design-correspondence, zz-test/equivalent-mutants-checked-on-real-history
+- design-review-001 F9: zz-test/one-rule-one-function
+- design-review-001 F10: one-off: the probe of E1 ran through ./zn run (probe.sh), and the record now says so
+- note reviewer's candidate lessons (design-review-001): zz-arch/document-facts-from-the-document, z-design/run-derived-answers-on-real-history, zz-test/equivalent-mutants-checked-on-real-history
