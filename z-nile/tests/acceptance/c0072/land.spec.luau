@@ -114,9 +114,25 @@ return t.spec("tracker land", function(it)
 		end
 	)
 
-	it("land brings the main checkout up to origin/main", function()
-		t.expect(git(main, { "rev-parse", "HEAD" })).toBe(tip())
+	it("land pushes the captured issue's spend.md in that same commit, and no other spend.md", function()
+		local wt, id = capture("capture-spend", "spender")
+		write(`{wt}/pickman/.tracker/issues/{id}/spend.md`, "# spend\n")
+		git(wt, { "add", "pickman/.tracker" })
+		git(wt, { "commit", "-q", "-m", `tracker: spend {id} capture` })
+		local before = tip()
+		trOk(wt, { "land" })
+		t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
+		local names = git(origin, { "diff", "--name-only", before, "main" })
+		t.expect(has(names, `pickman/.tracker/issues/{id}/{id}.md`)).toBe(true)
+		t.expect(has(names, `pickman/.tracker/issues/{id}/spend.md`)).toBe(true)
+		t.expect(git(origin, { "show", `main:pickman/.tracker/issues/{id}/spend.md` })).toBe("# spend")
+	end)
+
+	it("land does not move the main checkout; sync does", function()
+		t.expect(git(main, { "rev-parse", "HEAD" }) ~= tip()).toBe(true)
 		t.expect(git(main, { "status", "--porcelain" })).toBe("")
+		trOk(main, { "sync" })
+		t.expect(git(main, { "rev-parse", "HEAD" })).toBe(tip())
 	end)
 
 	it("land merges what others pushed meanwhile, and the result is linear (one parent)", function()
@@ -185,6 +201,9 @@ return t.spec("tracker land", function(it)
 		end
 		local alpha =
 			string.match(git(origin, { "log", "--format=%s", "main" }), "tracker: new (c%d+) alpha") :: string
+		refused(function() -- another issue's spend.md, whose document this land does not change
+			write(`{wt}/pickman/.tracker/issues/{alpha}/spend.md`, "not this capture\n")
+		end, `pickman/.tracker/issues/{alpha}/spend.md`)
 		refused(function() -- a deletion
 			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 			fs.removeFile(`{wt}/pickman/.tracker/issues/{alpha}/{alpha}.md`)
@@ -280,8 +299,9 @@ return t.spec("tracker land", function(it)
 
 	it("land retries a lost race", function()
 		local wt, id = capture("capture-g", "zeta")
-		-- the gate runs between land's fetch and its push: on its first run it pushes from another clone, so the
-		-- first push is rejected and land must sync, gate again and push again. Reviewed exception to the fixture
+		-- the gate runs once, before the push: on that run it pushes from another clone, so the first push is
+		-- rejected and land merges and pushes again without running the gate. A second run of this script fails.
+		-- Reviewed exception to the fixture
 		-- rule: this gate script runs raw git, only in `other`, a fixture clone under this spec's .cache directory.
 		local marker = `{base}/raced`
 		local gate = `{base}/racing-gate`
@@ -289,7 +309,7 @@ return t.spec("tracker land", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
 			gate,
-			`#!/bin/bash\n[ -e "{marker}" ] && exit 0\ntouch "{marker}"\ncd "{other}" || exit 1\n`
+			`#!/bin/bash\n[ -e "{marker}" ] && exit 1\ntouch "{marker}"\ncd "{other}" || exit 1\n`
 				.. "git pull -q origin main && echo raced > pickman/.tracker/raced.txt && git add -A && "
 				.. "git commit -qm 'race' && git push -q origin HEAD:main\n",
 			true

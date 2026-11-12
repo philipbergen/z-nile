@@ -1,0 +1,73 @@
+- design-review-001 F1: z-design/never-narrow-captured-scope
+- design-review-001 F2: z-design/instructions-runnable-where-they-run
+- design-review-001 F3: z-design/user-words-parsers-accept-anything
+- design-review-001 F4: z-design/specify-every-named-artifact
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: z-design/accepted-risks-checked-and-decided
+- design-review-001 F7: z-design/restated-rules-move-together
+- design-review-001 F8: z-design/readings-from-text-not-disk
+- design-review-001 F9: z-design/design-the-execution-window
+- design-review-001 F10: one-off: a mode-specific lesson read; the prompt's lesson command is the only place
+- design-review-001 F11: z-design/probe-free-cli-lines-in-prep
+- design-review-001 F12: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F13: z-design/spec-design-correspondence
+- design-review-001 F14: one-off: two sentences of the same step disagreed
+- note review 001's second candidate (a new review step copies every launch form the existing review steps allow): z-design/instructions-runnable-where-they-run
+- design-review-003 F1: z-design/spec-design-correspondence
+- design-review-003 F2: z-design/exemption-markers-refuse-omission
+- design-review-003 F3: z-design/restated-rules-move-together
+- design-review-003 F4: z-design/prototype-includes-the-prepared-dependency
+- design-review-003 F5: z-design/never-narrow-captured-scope
+- design-review-003 F6: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-003 F7: z-design/restated-rules-move-together
+- design-review-003 F8: z-design/instructions-runnable-where-they-run
+- design-review-003 F9: z-design/user-words-parsers-accept-anything
+- design-review-003 F10: z-design/user-words-parsers-accept-anything
+- design-review-003 F11: one-off: two prompt sentences untested; recorded as reasoned rows
+- design-review-003 F12: z-design/spec-design-correspondence
+- design-review-002 F1: z-design/instructions-runnable-where-they-run
+- design-review-002 F2: z-design/never-narrow-captured-scope
+- design-review-002 F3: z-design/run-the-other-rafts-specs
+- design-review-002 F4: z-design/spec-design-correspondence
+- design-review-002 F5: z-design/accepted-risks-checked-and-decided
+- design-review-002 F6: z-design/spec-design-correspondence
+- design-review-002 F7: z-design/user-words-parsers-accept-anything
+- design-review-002 F8: z-design/restated-rules-move-together
+- design-review-004 F1: z-design/exemption-markers-refuse-omission
+- design-review-004 F2: z-design/never-narrow-captured-scope
+- design-review-004 F3: z-design/instructions-runnable-where-they-run
+- design-review-004 F4: z-design/run-the-other-rafts-specs
+- design-review-004 F5: z-design/quote-other-preps-before-promising
+- design-review-004 F6: z-design/new-refusals-reach-every-caller
+- design-review-004 F7: z-design/spec-design-correspondence
+- design-review-004 F8: z-design/never-narrow-captured-scope
+- design-review-004 F9: z-design/spec-design-correspondence
+- note review 004's candidates: an identity a rule reads from history must survive renumbering, compaction, merge landings and shallow clones, or the rule reads a mark stored in the item: z-design/exemption-markers-refuse-omission
+- design-review-005 F1: z-design/new-refusals-reach-every-caller
+- design-review-005 F2: z-design/user-words-parsers-accept-anything
+- design-review-005 F3: z-design/restated-rules-move-together
+- design-review-005 F4: z-design/restated-rules-move-together
+- design-review-005 F5: z-design/spec-design-correspondence
+- design-review-005 F6: z-design/quote-other-preps-before-promising
+- design-review-005 F7: z-design/restated-rules-move-together
+- note review 005's candidates: search for every writer of the state a gate protects, not only the callers of the gated command: z-design/new-refusals-reach-every-caller
+- design-review-006 F1: z-design/spec-design-correspondence
+- design-review-006 F2: z-design/run-the-other-rafts-specs
+- design-review-006 F3: z-design/exemption-markers-refuse-omission
+- design-review-006 F4: z-design/never-narrow-captured-scope
+- design-review-006 F5: z-design/touched-paths-exist
+- design-review-006 F6: z-design/quote-other-preps-before-promising
+- design-review-006 F7: z-design/specify-every-named-artifact
+- design-review-006 F8: z-design/restated-rules-move-together
+- note review 006's candidates (a positive case beside every refusal; depends_on does not order work inside a raft; every reader checks a marker's grammar): z-design/spec-design-correspondence, z-design/run-the-other-rafts-specs, z-design/exemption-markers-refuse-omission
+- design-review-007 F1: z-design/spec-design-correspondence
+- design-review-007 F2: z-design/spec-design-correspondence
+- design-review-007 F3: z-design/exemption-markers-refuse-omission
+- design-review-007 F4: z-design/instructions-runnable-where-they-run
+- design-review-007 F5: z-design/restated-rules-move-together
+- note review 007's candidates (a refute that says fixed pastes each grep's output; an audit rule on every tree needs everyday-state cases): z-design/restated-rules-move-together, z-design/spec-design-correspondence
+- design-review-008 F1: z-design/gates-call-the-checker
+- design-review-008 F2: z-design/spec-design-correspondence
+- design-review-008 F3: z-design/restated-rules-move-together
+- design-review-008 F4: z-design/spec-design-correspondence
+- design-review-008 F5: z-design/restated-rules-move-together

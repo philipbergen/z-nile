@@ -1,8 +1,8 @@
 --!strict
--- c0111 AC6: every skill reads its own lessons when it starts and ends with the same role-based paragraph on new
--- lessons (a subagent reports, a prep or raft lead writes, any other lead captures an issue); ticket-prep and
--- execute-raft harvest every round; review, tracker, ready-raft, metrics, AGENTS.md and the prompt template say what
--- c0111's Design specifies. Reads the real files; writes nothing.
+-- c0111 AC6: every skill ends with the same role-based paragraph on new lessons (a subagent reports, a prep or
+-- raft lead writes, any other lead captures an issue) and says to search lessons when one might cover the next step;
+-- ticket-prep and execute-raft harvest the review; review, tracker, ready-raft, metrics, AGENTS.md and the prompt
+-- template say what c0111's Design specifies. Reads the real files; writes nothing.
 local fs = require("@lune/fs")
 local projects = require("@znile/engine/projects")
 local skills = require("@znile/engine/skills")
@@ -56,49 +56,46 @@ local function at(text: string, phrase: string): number
 	return i
 end
 
-return t.spec("c0111 skills read lessons and route new ones by role", function(it)
-	it(
-		"every skill ends with the same Lessons paragraph, naming its own read command and the three roles",
-		function()
-			local first: string? = nil
-			local n = 0
-			for _, dir in skillDirs() do
-				local name = string.match(dir, "[^/]+$") :: string
-				local doc = `{TOP}/{dir}/SKILL.md`
-				if fs.isFile(doc) then
-					n += 1
-					local s = section(read(doc), "Lessons")
-					at(s, `./zn lessons --skill {name} --full`)
-					at(s, "- **A subagent** (")
-					at(s, "never writes a lesson file or runs `./zn new`")
-					at(
-						s,
-						"- **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md`"
-					)
-					at(s, "as `- note <what happened>: <lesson ids>`")
-					at(s, "- **Any other lead** (")
-					at(s, "./zn new issue c lesson-")
-					t.expect(string.find(s, "never writes a lesson file itself", 1, true) == nil).toBe(true)
-					local a, b = string.find(s, `--skill {name} `, 1, true)
-					local same = string.sub(s, 1, (a :: number) - 1)
-						.. "--skill <s> "
-						.. string.sub(s, (b :: number) + 1)
-					if first == nil then
-						first = same
-					else
-						t.expect(same).toBe(first) -- one paragraph, not eleven variants
-					end
+return t.spec("c0111 skills search lessons and route new ones by role", function(it)
+	it("every skill ends with the same Lessons paragraph and the three roles", function()
+		local first: string? = nil
+		local n = 0
+		for _, dir in skillDirs() do
+			local doc = `{TOP}/{dir}/SKILL.md`
+			if fs.isFile(doc) then
+				n += 1
+				local s = section(read(doc), "Lessons")
+				at(
+					s,
+					"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover."
+				)
+				t.expect(string.find(s, "--full", 1, true) == nil).toBe(true)
+				at(s, "- **A subagent** (")
+				at(s, "never writes a lesson file or runs `./zn new`")
+				at(
+					s,
+					"- **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md`"
+				)
+				at(s, "as `- note <what happened>: <lesson ids>`")
+				at(s, "- **Any other lead** (")
+				at(s, "./zn new issue c lesson-")
+				t.expect(string.find(s, "never writes a lesson file itself", 1, true) == nil).toBe(true)
+				if first == nil then
+					first = s
+				else
+					t.expect(s).toBe(first) -- one paragraph, not one variant per skill
 				end
 			end
-			t.expect(n >= 11).toBe(true)
 		end
-	)
+		t.expect(n >= 11).toBe(true)
+	end)
 
 	it(
-		"ticket-prep: the lessons pass before review, a harvest as each round is answered, a confirmation before prepared",
+		"ticket-prep: search lessons before the review, harvest the one answer, confirm before prepared",
 		function() -- c0116 override: z-design works on one issue, so its commands take <id>, not <R-id>
 			local s5 = section(read(`{TOP}/z-nile/skills/z-design/SKILL.md`), "5.")
-			t.expect(at(s5, "lessons --when design --full") < at(s5, "`design: reviewed`")).toBe(true)
+			t.expect(string.find(s5, "lessons --when design --full", 1, true) == nil).toBe(true)
+			t.expect(at(s5, "Search with `./zn lessons <terms>`") < at(s5, "`design: reviewed`")).toBe(true)
 			local three, four = at(s5, "\n3. "), at(s5, "\n4. ")
 			local harvest = at(s5, "harvest.md")
 			t.expect(harvest > three and harvest < four).toBe(true) -- in the answering step
@@ -125,7 +122,7 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 			at(p2b, "`- note ws-<issue>: <lesson ids>`")
 			at(p2b, "`- note stream-review-<issue>-NNN: <lesson ids>`")
 			local p4 = section(text, "Phase 4")
-			t.expect(at(p4, "harvest.md") < at(p4, "\n6. ")).toBe(true) -- before the re-review
+			t.expect(at(p4, "harvest.md") < at(p4, "\n6. ")).toBe(true) -- before the human, the one answer's harvest
 			local p5 = section(text, "Phase 5")
 			-- the confirmation harvests what is still uncovered (a raft prepped before lessons existed) before checking
 			t.expect(
@@ -141,9 +138,10 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 		local text = read(`{TOP}/z-nile/skills/zz-review/SKILL.md`)
 		local design = section(text, "Design mode")
 		at(design, "\n10. **Lessons**")
-		at(design, "lessons --when design --full")
-		at(design, "judge the lessons the author added since the last round")
-		at(section(text, "Code mode"), "lessons --when build")
+		at(design, "Search with `./zn lessons <terms>`")
+		t.expect(string.find(design, "lessons --when design --full", 1, true) == nil).toBe(true)
+		at(design, "judge the lessons the author added")
+		at(section(text, "Code mode"), "Search with `./zn lessons <terms>`")
 		local template = string.match(text, "```markdown\n(# Review NNN.-)```") :: string
 		t.expect(at(template, "\nLesson:") > at(template, "\nRecommendation:")).toBe(true)
 	end)
@@ -156,7 +154,7 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 			at(tracker, "harvest.md")
 			at(tracker, "`- note <text>: <lesson ids>`")
 			at(section(tracker, "Worktrees"), "`lessons`") -- it may run in the main checkout
-			at(read(`{TOP}/z-nile/skills/z-ready/SKILL.md`), "build lessons")
+			at(read(`{TOP}/z-nile/skills/z-ready/SKILL.md`), "Lessons are not listed")
 			at(read(`{TOP}/z-nile/skills/zz-stats/SKILL.md`), "./zn lessons")
 			-- c0120 override: the spec runs from its home: the checkout's files are read from the top
 			local agents = read(`{TOP}/AGENTS.md`)
@@ -165,9 +163,13 @@ return t.spec("c0111 skills read lessons and route new ones by role", function(i
 			at(agents, "capture a new lesson as an issue")
 			t.expect(string.find(agents, "records new ones when it finishes", 1, true) == nil).toBe(true)
 			local prompt = read(`{TOP}/z-nile/templates/prompt.md`) -- c0120 override: read from the checkout's top
-			local h = at(prompt, "\n## Lessons")
-			t.expect(h < at(prompt, "{{LESSONS}}")).toBe(true)
-			t.expect(at(prompt, "{{LESSONS}}") < at(prompt, "\n## Work items")).toBe(true)
+			at(
+				prompt,
+				"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover."
+			)
+			t.expect(string.find(prompt, "{{LESSONS}}", 1, true) == nil).toBe(true)
+			t.expect(string.find(prompt, "\n## Work items", 1, true) == nil).toBe(true)
+			t.expect(at(prompt, "\n## Skills") < at(prompt, "{{SKILLS}}")).toBe(true)
 		end
 	)
 end)

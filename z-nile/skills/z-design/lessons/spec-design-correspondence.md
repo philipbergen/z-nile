@@ -20,4 +20,9 @@ c0153 design review 002 F1, F2: `plain.roundTrip` "checks plain data, then compa
 
 c0180 design review 004 F1: a round added a field (`clean`/`edited`) to a record format and changed one case's hand-written line to `edited`, while another case still expected the other worktree to count that line; only a wrong, asymmetric reader passed both. When a round adds a field or rule to a format that existing cases write, re-read every case that writes or reads it, from each side (this worktree and a sibling).
 
+c0264 design review 005 F2 and 006 F2: vocabulary pins were chosen by what looked important, and rules the Design lists (expensive models on final reviews, the idea review, the order working around blocked items, lost work first even when a person started it, the full-force review fresh) had none; five mutants passed. Derive the pins from the Design's list of rules, one phrase and one deletion mutant each; and when a decision becomes "the text says no X", add a mutant that puts X back where the decision applies.
+
+c0260 design reviews 006 and 007: beside every refusal case add one where the accepted kind of document passes through the same command; an audit rule that runs on every tree needs a case where the everyday states pass clean (a fresh stub at draft, an agent-filed ticket, a finished item).
+
+**Also:** c0279 design review 002 F3: a Rules row's mutant has to die because of that row's rule: the row for the silent hold after a stop named a mutant (the stop replaced by `true`, no marker) that fails with or without the hold. Weaken the rule's mechanism (the hold from 120 s to 20 s) and check that the row's mutant then survives; if it still dies, it tests something else.
 Note (c0246 round 7): when a function's answer gains a value (a boolean becomes "nested" | "link" | nil), re-derive each row's mutant for the new value, and make a fixture that must stay clean assert no line at all, not only the absence of one line.

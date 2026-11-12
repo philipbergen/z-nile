@@ -60,15 +60,24 @@ return t.spec("c0185 the restated rules", function(it)
 				"and the same place tier: `tests/lib/place.luau` and `tests/place/library.spec.luau`",
 				"zz-test"
 			)
-			at(test, "`.luaurc` or any `*.project.json` (under its home) forces that project's", "zz-test")
+			at(
+				test,
+				"`.luaurc` or any `*.project.json` (under its home) selects a spec only when that spec's watch file names it",
+				"zz-test"
+			)
 			absent(
 				test,
 				"`.luaurc` or `default.project.json` (under its home) forces that project's",
 				"zz-test"
 			)
+			absent(
+				test,
+				"`.luaurc` or any `*.project.json` (under its home) forces that project's",
+				"zz-test"
+			)
 			at(
 				test,
-				"is selected for every change to what the place is built from: the home's project files and every `$path` they map",
+				"is selected when its watch file names what the place is built from: the home's project files and every `$path` they map",
 				"zz-test"
 			)
 			at(

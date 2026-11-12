@@ -74,7 +74,7 @@ local function run(args: { string }, results: string?): (number, string)
 	local r = process.exec("lune", argv, { cwd = home, env = env })
 	return r.code, r.stdout .. r.stderr
 end
--- the run's report without its timings (the slowest: line holds measured seconds)
+-- the run's report without its timings (the slowest: line holds measured seconds), normalized for finish order
 local function stable(out: string): string
 	local keep = {}
 	for line in string.gmatch(out, "[^\n]+") do
@@ -82,6 +82,7 @@ local function stable(out: string): string
 			table.insert(keep, line)
 		end
 	end
+	table.sort(keep)
 	return table.concat(keep, "\n")
 end
 type FileResult = {

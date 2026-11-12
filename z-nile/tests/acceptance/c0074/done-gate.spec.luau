@@ -1,5 +1,5 @@
 --!strict
--- c0800: `tracker.sh done` runs the full gate on the final tree (acceptance specs promoted, raft and members moved
+-- c0800: `tracker.sh done` runs the affected gate on the final tree (acceptance specs promoted, raft and members moved
 -- to done/) before it commits, and rolls everything back when the gate fails. Inside a spec run it doesn't (the
 -- fixture specs that drive done clone tests/, so a gate there would run them again) unless PICKMAN_DONE_GATE=1
 -- adds it, as here, where the gate is a stub; it then checks the promoted specs instead. Driven in a throwaway clone (no origin, so no gh) whose z-nile/check.sh is a stub that records
@@ -9,6 +9,7 @@ local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local gate = require("@scripts/tracker/gate")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -92,7 +93,11 @@ local reviewed = ""
 
 -- every case starts from the reviewed commit, with an empty gate log
 local function fresh()
-	git({ "reset", "-q", "--hard", reviewed })
+	-- a previous done leaves `main` on the binding commit. Put the layer back, and main behind it.
+	git({ "switch", "-q", "-C", "R0010/1/f0010", reviewed })
+	if fixture.exec(work, "git", { "rev-parse", "--verify", "--quiet", "main" }, { env = ID }).ok then
+		git({ "branch", "-f", "main", `{reviewed}~2` })
+	end
 	if fs.isFile(gateLog) then
 		fs.removeFile(gateLog)
 	end
@@ -112,7 +117,7 @@ local function log(): string
 	return if fs.isFile(gateLog) then fs.readFile(gateLog) else ""
 end
 
-return t.spec("c0800 done runs the full gate after promotion", function(it)
+return t.spec("c0800 done runs the affected gate after promotion", function(it)
 	it("sets up a clone with a prepared raft, started and reviewed, and a stub gate", function()
 		if fs.isDir(base) then
 			fs.removeDir(base)
@@ -166,12 +171,15 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 		-- c0120 override: the spec runs from its project's home after the move
 		write(`{TR}/issues/f0010/check.sh`, TRIVIAL_CHECK)
 		write(`{TR}/rafts/R0010/check.sh`, TRIVIAL_CHECK)
+		seal.prep(work)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")
 		-- c0120 override: the spec runs from its project's home after the move
 		write(`{TR}/rafts/active/R0010/review-001.md`, "# Review 001\n\nVerdict: approve\n")
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
+		must(tr({ "finish", "f0010" }), "finish")
+		seal.trace(work, "R0010")
 		reviewed = git({ "rev-parse", "HEAD" })
 	end)
 
@@ -206,11 +214,11 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 			t.expect(log()).toBe("")
 			t.expect(has(r.stdout .. r.stderr, "gate is skipped")).toBe(true)
 			t.expect(fs.isFile(`{work}/{PROMOTED}`)).toBe(true) -- c0120 override: pickman's raft on the fixtures' layout (see TR)
-			t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
+			t.expect(git({ "log", "-1", "--format=%s" })).toBe("R0010: bind f0010")
 		end
 	)
 
-	it("done runs the full gate on the promoted, moved tree, then commits", function()
+	it("done runs the affected gate on the promoted, moved tree, then commits", function()
 		fresh()
 		local r = done(true, 0)
 		if not r.ok then
@@ -223,12 +231,12 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
 		t.expect(has(seen, "promoted: yes")).toBe(true)
 		t.expect(has(seen, "raft: done")).toBe(true)
 		t.expect(has(seen, "issue: done")).toBe(true)
-		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
+		t.expect(git({ "log", "-1", "--format=%s" })).toBe("R0010: bind f0010")
 		t.expect(git({ "status", "--porcelain" })).toBe("")
 		t.expect(fs.isDir(`{work}/{TR}/rafts/done/R0010`)).toBe(true) -- c0120 override: pickman's raft on the fixtures' layout (see TR)
 	end)
 
-	it("the gate decision: full, unless inside a spec run without the switch", function()
+	it("the gate decision: affected, unless inside a spec run without the switch", function()
 		-- the branch an agent's real `tracker.sh done` takes (neither variable set) can't be driven from inside this
 		-- spec run without dropping its guards, so the decision is a pure function, tested here with plain tables
 		t.expect(gate.doneGate({})).toBe("affected")

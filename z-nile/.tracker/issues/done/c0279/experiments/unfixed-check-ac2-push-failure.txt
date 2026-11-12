@@ -1,0 +1,17 @@
+
+=== c0279 check.sh
+FAIL  AC1: the stop case and the fakes it runs wait for nothing on the wall clock
+      FAIL .tracker/issues/c0279/acceptance/no-wall-clock.spec.luau :: the stop case waits on the grandchild's death, not on a file it would touch
+           /Users/philipbergen/code/pickman/.worktree/prep-dispatch-stop-spec/z-nile/.tracker/issues/c0279/acceptance/no-wall-clock.spec:35: expected false, got true
+      FAIL .tracker/issues/c0279/acceptance/no-wall-clock.spec.luau :: the stop fake beats, records the grandchild's pid and leaves it alive for far longer than any wait
+           /Users/philipbergen/code/pickman/.worktree/prep-dispatch-stop-spec/z-nile/.tracker/issues/c0279/acceptance/no-wall-clock.spec:44: expected true, got false
+      FAIL .tracker/issues/c0279/acceptance/no-wall-clock.spec.luau :: the push fake beats too, so a slow git or gh cannot stall the step
+           /Users/philipbergen/code/pickman/.worktree/prep-dispatch-stop-spec/z-nile/.tracker/issues/c0279/acceptance/no-wall-clock.spec:52: expected true, got false
+      0 passed, 3 failed, 1 spec files
+FAIL  AC2: with the fakes delayed 3 s the whole dispatch spec passes
+      FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: an agent's git and gh refuse a code push to main and a merge, before the real gh runs
+           /Users/philipbergen/code/pickman/.worktree/prep-dispatch-stop-spec/z-nile/tests/acceptance/c0117/dispatch-cli.spec:705: expected true, got false
+      24 passed, 1 failed, 1 spec files
+---- 0/2 criteria passed
+
+[exited with code 0]

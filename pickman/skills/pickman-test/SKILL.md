@@ -69,7 +69,7 @@ t.expect(sim.firstTick(trace, "Bump")).toBe(6)
 **Choosing a tier**: anything driven through `@tests/lib/sim`, including whole-level simulations, goes in `tests/scenario/`. `tests/integration/ is for` cross-feature checks that don't step time. A spec of a `tests/lib` helper itself goes in `tests/helper/<helper>/`, never in `tests/unit/`; a spec driven through `@tests/lib/sim` stays in `tests/scenario/` (sim's own `harness.spec` there included). `tests/meta/architecture.spec.luau` enforces the helper tier's and the unit tier's helper rules on the files each require resolves to (`tests/meta/tiers.luau`): a unit spec loads no `tests/lib` helper but `@tests/lib/t` (c0170).
 
 ## Lessons
-Before you start, read this skill's lessons: `./zn lessons --skill pickman-test --full`. Each is a mistake made before, with the question that catches it.
+Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
 
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.

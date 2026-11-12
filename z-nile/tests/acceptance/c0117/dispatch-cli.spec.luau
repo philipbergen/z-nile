@@ -18,8 +18,8 @@ local MODELS = [[
 order = ["claude", "grok", "agent"]
 
 [dispatch]
-stall_seconds = 2
-tool_seconds = 8
+stall_seconds = 120
+tool_seconds = 240
 
 [z-design.claude]
 model = "claude-opus-5-5"
@@ -140,16 +140,26 @@ local function lastRow(id: string): any
 	local rows = fakecli.rows(h, id)
 	return rows and rows[#rows]
 end
--- a bounded wait for a file a fake's grandchild would write, so its absence means it was killed
-local function absentAfter(path: string, seconds: number): boolean
-	local waited = 0
-	while waited < seconds do
-		if fs.isFile(path) then
+-- a bounded wait for a process to be gone: it ends the moment the process is, and runs long only when it never dies.
+-- Gone means `kill -0` says "No such process": any other failure (a permission, a missing kill) is not a death. The
+-- bound is wall-clock (os.time), so the polling commands' own cost under load is inside it, and the grandchild's
+-- sleep (an hour) is far past any bound.
+local function deadWithin(pid: string, seconds: number): boolean
+	local started = os.time()
+	while true do
+		local r = process.exec("kill", { "-0", pid })
+		if not r.ok and string.find(r.stderr, "No such process", 1, true) then
+			return true
+		end
+		if os.time() - started >= seconds then
 			return false
 		end
-		waited += task.wait(0.1)
+		task.wait(0.1)
 	end
-	return not fs.isFile(path)
+end
+-- the pid a fake's grandchild wrote before the step was killed
+local function grandchildPid(name: string): string
+	return (string.gsub(fs.readFile(`{h.fakes}/{name}.pid`), "%s+", ""))
 end
 
 return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
@@ -161,6 +171,8 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			["pickman/.tracker/issues/c0020/.models.toml"] = "[z-design.claude]\nmax_tokens = 1000\n",
 			["pickman/.tracker/issues/c0030/c0030.md"] = issue("c0030", "third-thing"),
 			["pickman/.tracker/issues/c0040/c0040.md"] = issue("c0040", "fourth-thing"),
+			-- the one issue whose cases test a stall keeps short limits (10 s, which a starved machine does not reach, against the fakes' 12 s quiet tool call and 20 s silences); every other case stalls only if it really does
+			["pickman/.tracker/issues/c0040/.models.toml"] = "[dispatch]\nstall_seconds = 10\ntool_seconds = 30\n",
 			["pickman/.tracker/issues/c0050/c0050.md"] = issue("c0050", "fifth-thing"),
 			["pickman/.tracker/issues/c0050/.models.toml"] = 'order = ["agent"]\n',
 			["pickman/.tracker/issues/c0060/c0060.md"] = issue("c0060", "sixth-thing"),
@@ -235,7 +247,8 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			t.expect(has(l, "--output-format stream-json --verbose --model claude-opus-5-5")).toBe(true)
 			t.expect(has(l, "--permission-mode bypassPermissions --permission-prompts none")).toBe(true)
 			t.expect(has(l, "`z-nile/skills/z-design/SKILL.md`")).toBe(true)
-			t.expect(has(l, "`./zn lessons --when design --full`")).toBe(true)
+			t.expect(has(l, "Search with `./zn lessons <terms>`")).toBe(true)
+			t.expect(has(l, "lessons --when design --full")).toBe(false)
 			local main = fixture.physical(h.f.main) :: string
 			t.expect(has(l, `dir={main}/.cache/dispatch/c0010\n`)).toBe(true)
 			t.expect(has(l, `path0={main}/z-nile/bin\n`)).toBe(true)
@@ -276,15 +289,11 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			end
 			local lines = recordLines(r.stdout)
 			t.expect(#lines).toBe(1)
-			local minutes = tonumber(
-				string.match(
-					lines[1],
-					'^record: %./zn commit %-m "c0010: review%-001" %-%-phase code%-review %-%-time ([%d%.]+) %-%-tokens 123 %-%-model claude%-opus%-5%-5$'
-				)
-			)
-			t.expect(minutes ~= nil).toBe(true)
-			t.expect((minutes :: number) > 0).toBe(true)
-			t.expect(#(fakecli.rows(h, "c0010") or {})).toBe(before) -- the author's commit records it, not the dispatcher
+			t.expect(lines[1])
+				.toBe('record: ./zn commit -m "c0010: review-001" --phase code-review --model claude-opus-5-5')
+			t.expect(#(fakecli.rows(h, "c0010") or {})).toBe(before) -- the row is in the author's tree, not the dispatch branch
+			t.expect(string.find(fs.readFile(`{wt}/.cache/measure.tsv`), "code-review", 1, true) ~= nil)
+				.toBe(true)
 			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/review-001.md`)
 			-- quota on claude, the review on grok: still one line, the model that wrote the review
 			fakecli.clear(h)
@@ -299,11 +308,11 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			end
 			local two = recordLines(q.stdout)
 			t.expect(#two).toBe(1)
-			t.expect(has(two[1], "--tokens 249 --model grok-4.7-xhigh")).toBe(true) -- 42 + 207, the reviewing model
+			t.expect(has(two[1], "--model grok-4.7-xhigh")).toBe(true) -- the reviewing model
+			t.expect(has(two[1], "--tokens")).toBe(false)
 			local hist = state("c0010").history
-			local spent = hist[#hist - 1].minutes + hist[#hist].minutes
 			t.expect(hist[#hist - 1].tokens).toBe(42)
-			t.expect(has(two[1], `--time {math.floor(spent * 10 + 0.5) / 10} --tokens`)).toBe(true)
+			t.expect(hist[#hist - 1].tokens + hist[#hist].tokens).toBe(249)
 			t.expect(has(two[1], '-m "c0010: review-001"')).toBe(true)
 			t.expect(reviewNames(`{wt}/pickman/.tracker/issues/c0010`, "review-"))
 				.toEqual({ "review-001.md" })
@@ -325,7 +334,9 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(row.subject).toBe("design-review-001")
 		t.expect(row.phase).toBe("design-review")
 		t.expect(row.model).toBe("claude-opus-5-5")
-		t.expect(row.minutes > 0).toBe(true)
+		t.expect(row.minutes).toBe(0)
+		t.expect((row.wall or 0) > 0).toBe(true)
+		t.expect(row.tokens).toBe(123)
 		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
 		-- a fallthrough whose first attempt wrote a review: one file, numbered once, from the reviewing model
 		fakecli.clear(h)
@@ -404,7 +415,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 	end
 
 	it(
-		"a stream review: the dispatcher numbers its review.md into the raft's folder, the line names it and the issue, and round 2 is given round 1's files",
+		"a stream review: the dispatcher numbers its review.md into the raft's folder, and a second one is refused",
 		function()
 			fakecli.clear(h)
 			mode("claude.zz-review", "script")
@@ -429,24 +440,18 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			t.expect(one).toEqual({ "stream-review-c0010-001.md" })
 			local lines = recordLines(r.stdout)
 			t.expect(#lines).toBe(1)
-			t.expect(
-				string.match(
-					lines[1],
-					'^record: %./zn commit %-m "c0010: stream%-review%-001" %-%-phase code%-review %-%-time [%d%.]+ %-%-tokens 123 %-%-model claude%-opus%-5%-5 %-%-issue c0010$'
-				) ~= nil
-			).toBe(true)
+			t.expect(lines[1]).toBe(
+				'record: ./zn commit -m "c0010: stream-review-001" --phase code-review --model claude-opus-5-5 --issue c0010'
+			)
 			t.expect(#(fakecli.rows(h, "c0010") or {})).toBe(before)
 			-- the prompt names the stream's own worktree (the call site's argument, design review 008 F3)
 			local main = fixture.physical(h.f.main) :: string
 			t.expect(has(l1, `{main}/.worktree/ws-c0010`)).toBe(true)
 			t.expect(has(l1, "previous round")).toBe(false)
-			if not r2.ok then
-				error(r2.stdout .. r2.stderr)
-			end
-			t.expect(two).toEqual({ "stream-review-c0010-001.md", "stream-review-c0010-002.md" })
-			t.expect(has(recordLines(r2.stdout)[1], '-m "c0010: stream-review-002"')).toBe(true)
-			t.expect(has(l2, "stream-review-c0010-001.md")).toBe(true)
-			t.expect(has(l2, "stream-refute-c0010-001.md")).toBe(true)
+			t.expect(r2.ok).toBe(false)
+			t.expect(has(r2.stdout .. r2.stderr, "there is no second round")).toBe(true)
+			t.expect(two).toEqual({ "stream-review-c0010-001.md" })
+			t.expect(has(l2, "previous round")).toBe(false)
 		end
 	)
 
@@ -468,7 +473,11 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			local lines = recordLines(r.stdout)
 			t.expect(#lines).toBe(1)
 			t.expect(has(lines[1], '-m "c0010: dispatch zz-review"')).toBe(true)
-			t.expect(has(lines[1], "--tokens 123")).toBe(true)
+			t.expect(has(lines[1], "--model")).toBe(true)
+			t.expect(has(lines[1], "--tokens")).toBe(false)
+			local hist = state("c0010").history
+			t.expect(hist[#hist].tokens).toBe(0)
+			t.expect(hist[#hist - 1].tokens).toBe(123)
 		end
 	)
 
@@ -492,7 +501,8 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			local lines = recordLines(r.stdout)
 			t.expect(#lines).toBe(1)
 			t.expect(has(lines[1], '-m "c0010: stream-review-001"')).toBe(true)
-			t.expect(has(lines[1], "--tokens 249 --model grok-4.7-xhigh")).toBe(true)
+			t.expect(has(lines[1], "--model grok-4.7-xhigh")).toBe(true)
+			t.expect(has(lines[1], "--tokens")).toBe(false)
 			t.expect(fs.isFile(`{h.f.main}/.cache/dispatch/c0010/review-attempt-1.md`)).toBe(true)
 		end
 	)
@@ -647,7 +657,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(s.outcome).toBe("cap")
 		t.expect(s.history[#s.history].tokens > 5000).toBe(true)
 		t.expect(has(log(), "grok step=")).toBe(false)
-		t.expect(absentAfter(`{h.fakes}/grandchild-cap`, 3)).toBe(true)
+		t.expect(deadWithin(grandchildPid("grandchild-cap"), 60)).toBe(true)
 		t.expect(lastRow("c0030").tokens > 5000).toBe(true)
 	end)
 
@@ -678,7 +688,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(r.ok).toBe(true)
 		local s = state("c0040")
 		t.expect(s.outcome).toBe("ok")
-		-- the step took over three seconds of wall time, yet the dispatcher's row records 0 minutes (the user's G13)
+		-- the step took over twelve seconds of wall time, yet the dispatcher's row records 0 minutes (the user's G13)
 		t.expect(s.history[#s.history].minutes > 0).toBe(true)
 		t.expect(lastRow("c0040").minutes).toBe(0)
 	end)
@@ -689,7 +699,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		local r = zn({ "dispatch", "z-design", "c0060" }, { FAKE_STOP = "c0060" })
 		t.expect(r.ok).toBe(false)
 		t.expect(state("c0060").outcome).toBe("stopped")
-		t.expect(absentAfter(`{h.fakes}/grandchild-stop`, 3)).toBe(true)
+		t.expect(deadWithin(grandchildPid("grandchild-stop"), 60)).toBe(true)
 		mode("claude", "ok")
 		local retry = zn({ "dispatch", "retry", "c0060" })
 		t.expect(retry.ok).toBe(true)
@@ -709,8 +719,8 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(has(l, "merge=1")).toBe(true)
 		t.expect(has(l, "realgh pr merge")).toBe(false)
 		t.expect(fixture.exec(h.f.origin, "git", { "cat-file", "-e", "main:notes.txt" }).ok).toBe(false)
-		-- only the dispatcher's own spend row reached main
-		t.expect(fixture.git(h.f.origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
+		-- the agent's push was refused, and spend commits on the dispatcher's branch without pushing
+		t.expect(fixture.git(h.f.origin, { "rev-list", "--count", `{before}..main` })).toBe("0")
 	end)
 
 	it("inside a check, refuses a CLI whose real path is not under .cache, before it starts", function()

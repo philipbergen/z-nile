@@ -11,3 +11,5 @@ check: For each Rules and mutants row marked `reasoned`, is its stated reason (w
 **How to apply:** before marking a row `reasoned`, try for a few minutes to observe the mutant through the frame, the events and a seed search; write down what was tried. If it can be observed, write the case; if not, say exactly why, so the reviewer can check the claim.
 
 **Also:** f0147 design review 005 F2: the eaten ghost's carry was called observable only after a full eyes run; flipping the ghost back to blue by hand, as the neighbouring cases do, observed it in five lines.
+
+**Also:** c0246 design review 001 / R0088 code review 001 F1: row N15 said a file name with a newline cannot be made in a throwaway fixture; `fs.writeFile` makes one in a line, and the PATH stub the neighbouring case already used reached the other branch. Eight design rounds passed the reason unchallenged.
