@@ -60,8 +60,10 @@ usage: ./zn <command> ...
   release <R-id> [--force]                      give back a rafting claim: what carries its stamp goes back to
                                                 prepared (design ready) or new (z-raft)
   raft-plan [--apply]                           print z-raft's plan for every prepared, raftless issue (--apply runs it)
-  beat <id> [--watch]                           beat a claim: replace its heartbeat branch hb/<stamp> on origin (--watch: every
-                                                5 minutes, only under ./zn run --time S -- ./zn beat <id> --watch)
+  beat <id> [--watch] [--adopt] [--stamp S]             beat a claim: replace its heartbeat branch hb/<stamp> on origin (--watch: every
+                                                5 minutes, only under ./zn run --time S -- ./zn beat <id> --watch). A
+                                                checkout beats only the claim it made; --adopt takes on one it did not
+                                                (--stamp S: only while main still shows S)
   lost                                          list lost claims, longest silent first (a stale claim no pull request
                                                 names; status marks them too)
   status [<id>] [<to>]                          list statuses on origin/main, show one, or move one (new|preparing|prepared; ready claims active)
@@ -415,6 +417,41 @@ local function claimFile(raftId: string): string
 	return `.cache/tracker-claim-{raftId}`
 end
 
+-- c0274: the stamp of the claim THIS checkout works under, one file per item (a file of its own: tracker-claim-<id>
+-- keeps c0116's meaning, "this checkout owns the rafting claim"). Written by every claim publish and by an adoption in
+-- a worktree (never in the main checkout, which holds no work), read by the beat, the carried `prepared` and `done`
+-- to tell an old owner it lost the claim. It is dropped only by a claim-ending command run in this checkout, never by
+-- the observation that triggers a refusal (dropping it would let the old owner's next move through).
+local cm = {} -- c0274: the claim memory, in one table (main.luau is near Luau's limit of 200 locals)
+
+function cm.file(id: string): string
+	return `.cache/tracker-stamp-{id}`
+end
+
+function cm.remember(id: string, value: string)
+	fs.writeDir(".cache")
+	sh.writeReplacing(cm.file(id), value)
+end
+
+function cm.drop(id: string)
+	if fs.isFile(cm.file(id)) then
+		fs.removeFile(cm.file(id))
+	end
+	-- stampMemory falls back to the c0116 claim file, so ending the memory removes both
+	if fs.isFile(claimFile(id)) then
+		fs.removeFile(claimFile(id))
+	end
+end
+
+-- The stamp this checkout remembers for `id`, "" for none. A checkout that claimed before this existed holds only
+-- tracker-claim-<id> (the same stamp for the claims it made), which is read when the stamp file is absent.
+function cm.read(id: string): string
+	if fs.isFile(cm.file(id)) then
+		return sh.trim(fs.readFile(cm.file(id)))
+	end
+	return if fs.isFile(claimFile(id)) then sh.trim(fs.readFile(claimFile(id))) else ""
+end
+
 -- c0116: remembers a rafting claim (`new raft`, `fold`, `recombine`) in this checkout, so a re-run resumes it and
 -- `release` gives back only a claim it finds here.
 local function rememberClaim(raftId: string, value: string)
@@ -423,6 +460,7 @@ local function rememberClaim(raftId: string, value: string)
 		fs.writeDir(dir)
 	end
 	sh.writeReplacing(claimFile(raftId), value)
+	cm.remember(raftId, value)
 end
 
 -- c0116 (review 001 F2): where `recombine` keeps a retired raft's folder: beside the backlog, never a lifecycle folder.
@@ -858,6 +896,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--watch"
 			or a == "--begin"
 			or a == "--sessions"
+			or a == "--adopt"
 		then
 			opts[a] = { "true" }
 		elseif string.sub(a, 1, 1) == "-" then
@@ -1778,7 +1817,7 @@ function hb.beatOnce(id: string, held: string): (string?, boolean)
 end
 
 function cmd.beat(pos: { string }, opts: { [string]: { string } })
-	local id = pos[1] or fail("usage: beat <id> [--watch]")
+	local id = pos[1] or fail("usage: beat <id> [--watch] [--adopt] [--stamp <stamp>]")
 	if guarded(true) then
 		fail(`beat: not beating {id} from a protected checkout (a check run protects this repository)`)
 	end
@@ -1793,13 +1832,36 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 			fail(`beat --watch must run as ./zn run --time 3600 -- ./zn beat {id} --watch`)
 		end
 	end
+	local adopt = opts["--adopt"] ~= nil
+	local named = opts["--stamp"] and opts["--stamp"][1]
+	if named ~= nil and not adopt then
+		fail("beat: --stamp belongs to --adopt (the dispatcher's form)")
+	end
 	local first, perr = hb.beatPaths()
 	if not first then
 		fail(`beat: {id}: {perr}`)
 	end
+	-- an item that is not a claim is refused as such first, before any claim-memory refusal
 	local current, why = hb.claimStampOf(first :: { string }, id)
 	if not current then
 		fail(`beat: {why}`)
+	end
+	-- c0274: a beat is bound to the stamp its holder owns, never to whatever main shows now
+	local remembered = cm.read(id)
+	local held = heartbeat.holds(remembered, current)
+	if named ~= nil then
+		-- the dispatcher's form names the stamp it read at the step's start: a restamped item is refused, not beaten
+		if named ~= current then
+			fail(hb.lostText(id, current))
+		end
+	elseif held == "taken" then
+		fail(hb.lostText(id, current)) -- also for --adopt: an adoption never overrides a remembered different stamp
+	elseif held == "unheld" and not adopt then
+		fail(`beat: this checkout does not hold {id}'s claim (use --adopt to take it on)`)
+	end
+	-- a worktree that adopts remembers the claim; the main checkout holds no work, and the dispatcher's form writes none
+	if adopt and named == nil and held == "unheld" and not inMainCheckout() then
+		cm.remember(id, current :: string)
 	end
 	local startStamp = current :: string
 	if not watch then
@@ -1871,6 +1933,50 @@ function cmd.lost()
 	end
 end
 
+-- c0274: after a takeover published the new stamp, creates the taker's heartbeat branch and deletes the old owner's in
+-- ONE atomic push (the user: "the take over deletes the heartbeat branch and creates a new one, this would tell the
+-- process that it lost the ownership if it comes back around"). The old owner's lease is the sha read, so a beat that
+-- landed meanwhile fails the whole push: re-read and repeat once. A failure after that is said and the takeover stands
+-- (main shows the new stamp, so the old owner's stamp-bound beat is refused anyway; the pruner deletes the old branch).
+function hb.swapBranches(id: string, old: string, new: string)
+	local last = ""
+	for _ = 1, 2 do
+		local beats, _, err = hb.readBeats()
+		if err then
+			last = err
+			break
+		end
+		local at = sh.git({ "rev-parse", "origin/main" })
+		local now = hb.hbNow()
+		local plan = heartbeat.takeoverPlan(old, new, now, beats)
+		local w = plan.write :: { ref: string, subject: string, lease: string }
+		local c = sh.run(
+			"git",
+			{ "commit-tree", sh.git({ "rev-parse", `{at}^\{tree}` }), "-p", at, "-m", w.subject }
+		)
+		if not c.ok then
+			last = sh.trim(c.stderr)
+			break
+		end
+		local sha = sh.trim(c.stdout)
+		local args = { "push", "-q", "--atomic", `--force-with-lease={w.ref}:{w.lease}` }
+		for _, d in plan.delete do
+			table.insert(args, `--force-with-lease={d.ref}:{d.lease}`)
+		end
+		table.insert(args, "origin")
+		table.insert(args, `{sha}:{w.ref}`)
+		for _, d in plan.delete do
+			table.insert(args, `:{d.ref}`)
+		end
+		local r = hb.netRun("git", args)
+		if r.ok then
+			return
+		end
+		last = sh.trim(r.stderr .. r.stdout)
+	end
+	stdio.ewrite(`takeover: {id}: the heartbeat branch swap failed ({last}); the claim stands\n`)
+end
+
 -- Publishes `to` for `id` (and, for a raft, its members) on origin/main and brings it into this checkout. Shared by
 -- `status` and by `stop`'s give-back of a legacy-started raft.
 -- The latest `<prefix>-NNN.md` in a folder (design-review or review), or 0 when there is none.
@@ -1907,8 +2013,40 @@ local function setStatus(id: string, to: string)
 	local moved: { { id: string, from: string } } = {}
 	local carried = false
 	refuseStale()
+	-- c0274: a claim someone holds is taken over only when it is lost. The verdicts are judged here, once, before the
+	-- publish (they need the network), and only when the item is a stamped claim already; the publish re-checks the
+	-- stamp origin holds at that moment, because the push is the lock.
+	local judged: { [string]: heartbeat.Verdict } = {}
+	local judgedWhy: string? = nil
+	local takeover: { old: string }? = nil -- set by the publish when it takes a lost claim over
+	local claimValue = ""
+	local carrierRafts: { string } = {}
+	if to == "preparing" then
+		-- a failure to read anything leaves no verdict, and a claim that needs one is then refused with the reason
+		local ok, err = pcall(function()
+			local listed = hb.beatPaths() -- nil where origin/main's project roots cannot be read (a tree from before c0114)
+			local lp = if listed then docPath(listed, id) else nil
+			local lf = if lp then frontOf(sh.git({ "show", `origin/main:{lp}` })) else nil
+			if listed and lp and lf and string.match(lf.status or "", "^preparing%-") then
+				local j = hb.judgeAll(listed)
+				for _, v in j.verdicts do
+					judged[v.id] = v
+				end
+				judgedWhy = if j.beatsError
+					then `heartbeats unreadable: {j.beatsError}`
+					elseif j.problems[1] then j.problems[1]
+					elseif j.prsError then `pull requests unreadable: {j.prsError}`
+					else nil
+			end
+		end)
+		if not ok then
+			judgedWhy = tostring(err)
+		end
+	end
+	refuseStale()
 	local r = published(publish.commit(".", function(paths, read)
 		moved = {}
+		takeover = nil
 		local path = docPath(paths, id)
 		local text = path and read(path)
 		if not path or not text then
@@ -1917,6 +2055,39 @@ local function setStatus(id: string, to: string)
 		local front = frontOf(text)
 		local from = statusLib.effective(front, stateOfPath(path))
 		carried = statusLib.carriedByPr(from, to)
+		-- c0274 ("refuse"): the old claimant's carried move is refused once the claim's stamp has changed. It comes
+		-- before every other check (a raft move whose member is still design: draft is refused as taken over first)
+		-- the stamp this checkout remembers for `id`: its own, else (a member of a rafting claim) the memory of the raft on
+		-- origin that carries the same stamp, because the claim is the stamp
+		local function memoryOf(): string
+			local own = cm.read(id)
+			if own ~= "" or store.isRaftId(id) or not string.match(front.status or "", "^preparing%-") then
+				return own
+			end
+			for _, rid in idsOf(paths, "raft") do
+				local rp = docPath(paths, rid)
+				local rt = rp and read(rp)
+				if rt and frontOf(rt).status == front.status and cm.read(rid) ~= "" then
+					return cm.read(rid)
+				end
+			end
+			return ""
+		end
+		if carried then
+			local mem = memoryOf()
+			local at = if from == "preparing" and statusLib.phrase(front.status) then front.status else nil
+			local held = heartbeat.holds(mem, at)
+			if held == "taken" or held == "ended" then
+				return `{heartbeat.lostText(id, at)}: this checkout's work is no longer the claim's; stop here (./zn lost lists lost work to pick up)`
+			end
+		end
+		-- the old owner's late give-back is refused too: it would end the taker's live claim. Only a checkout with proof
+		-- that it lost the claim (a remembered different stamp) is refused; one that remembers nothing gives back as today
+		if not carried and to ~= "preparing" and string.match(front.status or "", "^preparing%-") then
+			if heartbeat.holds(memoryOf(), front.status) == "taken" then
+				return `{heartbeat.lostText(id, front.status)}: this checkout's claim is gone; do not give it back (./zn lost lists lost work to pick up)`
+			end
+		end
 		-- a carried move lands with the prep PR, so it follows the member list that PR will carry
 		local list = front.issues
 		if carried and store.isRaftId(id) then
@@ -1929,7 +2100,9 @@ local function setStatus(id: string, to: string)
 			end
 		end
 		local value = if to == "preparing" then freshStamp(to) else stamp(to)
+		claimValue = value
 		local changes: { publish.Change } = {}
+		local following = false
 		local rafted = false -- c0116: a member that was prepared on origin (z-raft grouped it)
 		local originHashes: { [string]: string? } = {} -- c0116 (review 002 F1, 003 F1): each member's record on origin
 		local groupedHere: { string } = {} -- c0116 (review 003 F5): prepared members this rafting grouped
@@ -1945,6 +2118,43 @@ local function setStatus(id: string, to: string)
 				return `{t} is readied (in active/): use ./zn stop {if raftId ~= "" then raftId else "<R-id>"}`
 			end
 			local cur = statusLib.effective(tf, stateOfPath(tp))
+			following = false
+			if cur == "preparing" and to == "preparing" and string.match(tf.status or "", "^preparing%-") then
+				if t == id and not store.isRaftId(id) then
+					-- an issue whose stamp a raft on origin also holds is taken over through that raft
+					for _, rid in idsOf(paths, "raft") do
+						local rp = docPath(paths, rid)
+						local rt = rp and read(rp)
+						if rt and frontOf(rt).status == tf.status then
+							return `{t} is preparing on origin/main: cannot move to preparing; {t} holds {rid}'s claim: take it over with ./zn status {rid} preparing`
+						end
+					end
+				end
+				if t == id then
+					local v = judged[t]
+					if v and v.stamp ~= tf.status then
+						return `{t} is preparing on origin/main: cannot move to preparing; {heartbeat.lostText(
+							t,
+							tf.status
+						)} since it was judged: read it again with ./zn lost`
+					elseif v and heartbeat.canTakeOver(v.kind, v.stamp, tf.status or "") then
+						takeover = { old = tf.status :: string }
+						following = true
+					else
+						local why = heartbeat.takeoverRefusal(
+							t,
+							if v then v.kind else "unknown",
+							if v then v.silent else 0,
+							judgedWhy
+						)
+						return `{t} is preparing on origin/main: cannot move to preparing; {why}`
+					end
+				elseif takeover and tf.status == takeover.old then
+					following = true -- a member of the lost rafting claim follows it
+				elseif takeover then
+					return `{t} is preparing on origin/main under a claim of its own ({tf.status}): take it over (./zn status {t} preparing, when ./zn lost lists it) or let its owner give it back, then ./zn status {id} preparing`
+				end
+			end
 			if t ~= id and carried and store.isRaftId(id) then
 				originHashes[t] =
 					raftplan.recordHash(t, treeFolderFiles(paths, read, string.sub(tp, 1, #tp - #t - 4)))
@@ -2009,7 +2219,8 @@ local function setStatus(id: string, to: string)
 			end
 			if
 				not (
-					statusLib.canMove(cur, to)
+					following
+					or statusLib.canMove(cur, to)
 					or statusLib.canClaim(cur, to, tf.status ~= nil, store.isRaftId(id))
 				)
 			then
@@ -2063,9 +2274,32 @@ local function setStatus(id: string, to: string)
 		if carried then
 			return {}
 		end
+		-- c0274: the claim is the stamp, not the raft id: every other backlog item that carries the old stamp (a
+		-- recombine's other raft, a member claimed with it) is restamped in the same commit, so there is one claim, one
+		-- branch and one swap. `release` gives back the same set
+		carrierRafts = {}
+		if takeover then
+			local restamped: { [string]: boolean } = {}
+			for _, ch in changes do
+				restamped[ch.path] = true
+			end
+			for _, cp in paths do
+				local cid, rel = publish.itemPath(cp)
+				if cid and rel == `{cid}.md` and not restamped[cp] and stateOfPath(cp) == "backlog" then
+					local ctext = read(cp)
+					if ctext and frontOf(ctext).status == takeover.old then
+						table.insert(changes, { path = cp, content = withFront(ctext, "status", value) })
+						if store.isRaftId(cid) then
+							table.insert(carrierRafts, cid)
+						end
+					end
+				end
+			end
+		end
 		return changes
 	end, function()
-		return `tracker: {id} {to}`
+		-- c0274: the takeover is recorded in the claim commit's subject (c0263), where git log shows it
+		return if takeover then `tracker: {id} {to} (takes over {takeover.old})` else `tracker: {id} {to}`
 	end))
 	if not r.ok then
 		fail(r.reason or "publish failed")
@@ -2076,6 +2310,25 @@ local function setStatus(id: string, to: string)
 			store.setFront(store.get(m.id).doc, "status", value)
 		end
 	else
+		-- c0274: every claim publish remembers its stamp here, and a takeover swaps the heartbeat branches, before the
+		-- merge of origin/main (which can fail and exit): both depend only on the published value. A taken-over rafting
+		-- claim makes the taker its c0116 owner too, so it can fold, unfold and release it; giving a claim back ends it
+		if to == "preparing" then
+			if takeover and store.isRaftId(id) then
+				rememberClaim(id, claimValue)
+				for _, rid in carrierRafts do
+					rememberClaim(rid, claimValue)
+				end
+			else
+				cm.remember(id, claimValue)
+			end
+		else
+			cm.drop(id)
+		end
+		local t = takeover
+		if t then
+			hb.swapBranches(id, t.old, claimValue)
+		end
 		mergeOrigin()
 		-- c0116: an issue claimed here is remembered, so this checkout's carried raft move may take it
 		if not store.isRaftId(id) then
@@ -2626,6 +2879,13 @@ function cmd.release(pos: { string }, opts: { [string]: { string } })
 	if not string.match(value, "^preparing%-") then
 		fail(`{raftId} has no rafting claim on origin/main (status: {if value ~= "" then value else "none"})`)
 	end
+	-- c0274: a checkout that remembers a different stamp for the raft lost the claim, and --force (the user's word that a
+	-- claim is abandoned) is not for it: it would end the taker's live claim
+	if heartbeat.holds(cm.read(raftId), value) == "taken" then
+		fail(
+			`{hb.lostText(raftId, value)}: this checkout's claim is gone; do not give it back (./zn lost lists lost work to pick up)`
+		)
+	end
 	local mine = rememberedClaim(raftId)
 	if mine ~= value and not opts["--force"] then
 		fail(
@@ -2692,6 +2952,7 @@ function cmd.release(pos: { string }, opts: { [string]: { string } })
 		if fs.isFile(claimFile(id)) then
 			fs.removeFile(claimFile(id))
 		end
+		cm.drop(id)
 	end
 	-- no merge: the branch is given up, and it may well conflict with origin/main (another rafting of its issues)
 	print(`released {table.concat(done, ", ")}`)
@@ -5412,6 +5673,21 @@ function cmd.done(pos: { string })
 	if raft.kind ~= "raft" or raft.state ~= "active" then
 		fail(`{raft.id} must be an active raft`)
 	end
+	-- c0274 ("refuse"): the old lead of a readied raft that was taken over (stop, then ready) is refused. Only the work
+	-- claim (active-…) this checkout adopted counts; where origin cannot be read there is nothing to compare
+	local workStamp = cm.read(raft.id)
+	if string.match(workStamp, "^active%-") and publishing() and not guarded(true) then
+		local paths = hb.beatPaths()
+		if paths then
+			local at = hb.claimStampOf(paths, raft.id)
+			local held = heartbeat.holds(workStamp, at)
+			if held == "taken" or held == "ended" then
+				fail(
+					`{hb.lostText(raft.id, at)}: this checkout's work is no longer the claim's; stop here (./zn lost lists lost work to pick up)`
+				)
+			end
+		end
+	end
 	if sh.git({ "status", "--porcelain" }) ~= "" then
 		fail("commit everything first (./zn commit); done needs a clean tree")
 	end
@@ -5599,6 +5875,7 @@ function cmd.done(pos: { string })
 		fail(`binding commit failed (rolled back): {commitErr}`)
 	end
 	bound = true
+	cm.drop(raft.id) -- the work claim ends with the raft: a finished worktree is never told it was taken over
 	-- Remember each pull request's base, retarget it to main, and put that base back if the push fails.
 	-- GitHub marks a pull request merged when its head is reachable from its base; base main does that
 	-- once the binding commit is on main. Retargeting first and then failing the push would leave the
@@ -6475,8 +6752,23 @@ function cmd.stop(pos: { string })
 	local function stillActive(id: string, now: string): string?
 		return if now == "active" then nil else `{id} is {now} on origin/main, not active: nothing to stop`
 	end
+	-- c0274: the subject records the claim that was given back and its verdict (live or parked, lost, unjudged), so a
+	-- takeover of a lost readied raft (stop, then ready) is traceable in git log. The verdict is a record only (the user:
+	-- "Drop in-place re-adoption"): it is read before the give-back and fails closed
+	local note = heartbeat.stopNote(claim, "unknown", 0)
+	local okJudge, judged = pcall(function()
+		return hb.judgeAll(originPaths())
+	end)
+	-- unreadable pull requests leave only the stale verdicts unsettled (a live one stays live); unreadable beats leave none
+	if okJudge and not (judged :: Judged).beatsError then
+		for _, v in (judged :: Judged).verdicts do
+			if v.id == raft.id and v.stamp == claim then
+				note = heartbeat.stopNote(claim, v.kind, v.silent)
+			end
+		end
+	end
 	if raft.state == "active" then
-		r = moveOnOrigin(all, "backlog", value, `tracker: stop {raft.id} {rtitle}`, stillActive)
+		r = moveOnOrigin(all, "backlog", value, `tracker: stop {raft.id} {rtitle} {note}`, stillActive)
 	else
 		-- a legacy start claimed in place (backlog, status active): a status-only give-back, no move
 		r = restampOnOrigin(all, value, `tracker: {raft.id} prepared`, stillActive)
@@ -6497,9 +6789,7 @@ function cmd.stop(pos: { string })
 	if failed then
 		fail(`stopped on origin/main, but pulling the main checkout failed: {failed}`)
 	end
-	if fs.isFile(claimFile(raft.id)) then
-		fs.removeFile(claimFile(raft.id))
-	end
+	cm.drop(raft.id) -- the stamp memory and the c0116 claim file
 	sh.run("git", { "fetch", "--quiet", "--prune", "origin" })
 	local layers = layergit.layersOf(raft.id)
 	local branch = if #layers > 0 then layers[#layers].name else raftBranch(raft)

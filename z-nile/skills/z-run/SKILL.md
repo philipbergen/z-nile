@@ -7,11 +7,11 @@ description: Launch a readied raft from the main checkout ("/z-run R0010") - rea
 
 Start the session in the main checkout, which stays on `main`. The skill takes a raft id `<R>`, readied by z-ready.
 
-0. **Lost work first.** Take a raft that `./zn lost` lists before one not yet started.
+0. **Lost work first.** Take a raft that `./zn lost` lists before one not yet started. A raft that `./zn lost` lists is taken over by `./zn stop <R-id>` then `./zn ready <R-id>` (the lost verdict is the "whose claim" check z-stop step 5 asks for: its exception for a raft `./zn lost` lists); continue from the raft branch and its pull request where they exist (z-stop step 4) in a worktree that holds no claim of the old lead's; a lead who stops and re-readies its own raft does the same, in a numbered copy.
 1. **Read the prompt.** Run `./zn prompt <R> --path`. If it fails, stop and report its message: the raft isn't readied (run `/z-ready <R>`), or the prompt is missing (run `/z-ready <R>` again to regenerate it). Never reconstruct a prompt by hand.
 2. Read the whole file at that path with the Read tool, in chunks if needed. Don't print it through Bash: the output would be truncated.
 3. **Enter the worktree.** The prompt's hard rule 2 says to run `cd "$(./zn worktree <R>)"` first. From then on, work only there, and give subagents absolute worktree paths. The hooks follow the session's current directory, so they act in the worktree.
-4. **Keep the claim alive.** Keep your claim alive while you work: start `./zn run --time 3600 -- ./zn beat <id> --watch` in the background (it beats every 5 minutes and stops by itself; start it again when it reports its bound), or run `./zn beat <id>` yourself at least every 15 minutes.
+4. **Keep the claim alive.** A worktree beats only a claim it holds, and `ready` made this one in the main checkout: run `./zn beat <R-id> --adopt` once here to take it on. Keep your claim alive while you work: start `./zn run --time 3600 -- ./zn beat <id> --watch` in the background (it beats every 5 minutes and stops by itself; start it again when it reports its bound), or run `./zn beat <id>` yourself at least every 15 minutes.
 5. **Hand off.** Follow the prompt as your instructions, from its first line: it names `z-nile/skills/zz-execute/SKILL.md` and tells you to read it first. That skill is the protocol you follow through `./zn done`, which lands the stack. The worktree is on one layer, or detached until `./zn start` checks that layer out. The prompt gives you one ticket at a time: the layer you are on, the layer below, and that ticket's tests. `./zn finish <issue>` makes the layer one commit; `./zn start` opens the next. Other agents (Grok, ...) get the same text from `./zn prompt <R>`.
 
 ## Headless (under `./zn dispatch`)

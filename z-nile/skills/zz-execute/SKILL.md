@@ -13,7 +13,7 @@ Work through the phases in order and don't skip any. Wherever you are unsure, th
 ## Phase 0: Claim (in the first minutes)
 1. Work in the raft's worktree: `cd "$(./zn worktree R0010)"` (zz-rules skill, Worktrees), then run `./zn sync` there (a reused worktree may be behind). A new raft worktree is detached at a freshly fetched `origin/main` until `./zn start` checks out the layer. There is no `R####-<slug>` branch. Never switch branches in the main checkout, and run everything below from this directory. Phase 0 runs no gate and reads no CI result: a red `main` first shows at the merge.
 2. `./zn start R0010`. It opens the next layer (branch `R0010/1/c0010`, an empty commit, a draft PR on the layer below). You are on one ticket: this layer, the layer below, and this ticket's checks. `./zn finish <issue>` when they are green; `./zn start` again opens the next layer. If it refuses with `run ./zn sync first`, sync and retry.
-2b. Keep your claim alive while you work: start `./zn run --time 3600 -- ./zn beat <id> --watch` in the background (it beats every 5 minutes and stops by itself; start it again when it reports its bound), or run `./zn beat <id>` yourself at least every 15 minutes.
+2b. Run `./zn beat <R-id> --adopt` once in this worktree (a worktree beats only a claim it holds, and `ready` made yours in the main checkout). Keep your claim alive while you work: start `./zn run --time 3600 -- ./zn beat <id> --watch` in the background (it beats every 5 minutes and stops by itself; start it again when it reports its bound), or run `./zn beat <id>` yourself at least every 15 minutes.
 3. Read the raft document, then every issue document and `check.sh`, in the raft's order.
    - Write down, for yourself, which files each issue touches.
 

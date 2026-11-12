@@ -274,4 +274,73 @@ function heartbeat.watch(
 	return "beat"
 end
 
+-- c0274. A takeover of a lost claim: create the taker's branch (create-only: a new stamp has none) and delete the old
+-- owner's, each with a lease on the sha seen, in ONE atomic push, so an old owner that beats meanwhile makes the whole
+-- push fail (the engine re-reads and repeats once) and one that beats afterwards finds its branch gone.
+function heartbeat.takeoverPlan(oldStamp: string, newStamp: string, epoch: number, beats: { Beat }): Push
+	local delete: { { ref: string, lease: string } } = {}
+	for _, b in beats do
+		if b.stamp == oldStamp then
+			table.insert(delete, { ref = b.ref, lease = b.sha })
+		end
+	end
+	return {
+		write = { ref = heartbeat.branch(newStamp), subject = heartbeat.subject(newStamp, epoch), lease = "" },
+		delete = delete,
+	}
+end
+
+-- Only an explicit lost verdict, judged for the stamp origin still holds at the moment of the publish, allows it
+-- (the push is the lock: a claim restamped since the verdict is someone else's now).
+function heartbeat.canTakeOver(kind: string, judgedStamp: string, originStamp: string): boolean
+	return kind == "lost" and judgedStamp == originStamp
+end
+
+-- Why a claim is not taken over, for the refusal that follows `<id> is preparing on origin/main: cannot move to
+-- preparing`. `kind` is the verdict (live, stale, parked, nobeat, lost, unknown), `silent` its seconds, `why` what made
+-- an unreadable verdict unreadable. A lost claim has no reason: it is taken over.
+function heartbeat.takeoverRefusal(id: string, kind: string, silent: number, why: string?): string
+	if kind == "live" then
+		return `claim alive: last heartbeat {math.floor(silent / 60)}m ago, limit {math.floor(
+			heartbeat.STALE / 60
+		)}m`
+	elseif kind == "parked" then
+		return "claim parked (an open pull request or a dispatcher waiting on questions.md names it)"
+	elseif kind == "nobeat" then
+		return `{id} has never beaten: not lost, no takeover`
+	end
+	return `no heartbeat verdict: {why or "the claim was made after it was judged, or origin/main could not be read"}`
+end
+
+-- Whom a claim stamp belongs to, from the stamp this checkout remembers for the item and the one origin/main shows:
+-- "held" (the same), "unheld" (this checkout remembers none), "taken" (origin shows another stamp), "ended" (origin
+-- shows no claim). The memory itself is never changed by what this answers.
+function heartbeat.holds(remembered: string?, originStamp: string?): string
+	if remembered == nil or remembered == "" then
+		return "unheld"
+	elseif originStamp == nil then
+		return "ended"
+	elseif originStamp == remembered then
+		return "held"
+	end
+	return "taken"
+end
+
+-- The text an old owner is told: its claim was taken over (naming the stamp now on main), or ended.
+function heartbeat.lostText(id: string, originStamp: string?): string
+	return if originStamp then `{id}'s claim was taken over (now {originStamp})` else `{id}'s claim ended`
+end
+
+-- c0274: `stop` records, in its commit subject, the verdict of the claim it gives back: `(claim S)` when the claim was live
+-- or parked, `(claim S, lost <n>m)` when it was lost, `(claim S, unjudged)` when no verdict could be read (a never-beaten
+-- claim included). It is a record in `git log`; nothing reads it back.
+function heartbeat.stopNote(stamp: string, kind: string, silent: number): string
+	if kind == "live" or kind == "parked" then
+		return `(claim {stamp})`
+	elseif kind == "lost" then
+		return `(claim {stamp}, lost {math.floor(silent / 60)}m)`
+	end
+	return `(claim {stamp}, unjudged)`
+end
+
 return heartbeat
