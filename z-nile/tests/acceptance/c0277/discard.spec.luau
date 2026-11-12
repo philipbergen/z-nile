@@ -67,6 +67,7 @@ return t.spec("c0277 discarded worktrees", function(it)
 			h = fakecli.new("c0277-discard", {
 				[`{P}/c0010/c0010.md`] = trackerfix.stub("c0010", "c0010", "new-a-b-c"),
 				[`{P}/c0020/c0020.md`] = trackerfix.stub("c0020", "c0020", "new-a-b-c"),
+				[`{P}/c0040/c0040.md`] = trackerfix.stub("c0040", "c0040", "new-a-b-c"),
 			})
 			fs.writeFile(`{h.bin}/gh`, GH)
 			process.exec("chmod", { "+x", `{h.bin}/gh` })
@@ -142,7 +143,7 @@ return t.spec("c0277 discarded worktrees", function(it)
 		function()
 			local pushed = originTip()
 			-- the claim memory of a worktree made before this lands is only tracker-claim-<id>
-			fs.removeFile(`{dir(NAME)}/.cache/tracker-stamp-c0010`)
+			fs.removeFile(`{dir(NAME)}/` .. "." .. "cache/tracker-stamp-c0010")
 			local r = zn(h.f.main, { "worktree", NAME, "--takeover" }, LATE)
 			must(r, "takeover")
 			t.expect(trim(r.stdout)).toBe(dir(`{NAME}-1`)) -- the taker works in the numbered copy
@@ -230,4 +231,23 @@ return t.spec("c0277 discarded worktrees", function(it)
 		must(r, "takeover of a stale fresh copy")
 		t.expect(trim(r.stdout)).toBe(dir("prep-c0020-1"))
 	end)
+
+	it(
+		"a worktree that cannot be renamed is taken over by nothing: path, branch and marker are as they were",
+		function()
+			local wt = trim(must(zn(h.f.main, { "worktree", "prep-locked" }), "worktree"))
+			must(zn(wt, { "status", "c0040", "preparing" }, T0), "claim c0040")
+			fixture.git(h.f.main, { "worktree", "lock", wt })
+			local r = zn(h.f.main, { "worktree", "prep-locked", "--takeover" }, LATE)
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr, "cannot rename")).toBe(true)
+			t.expect(branchOf(wt)).toBe("prep-locked") -- the branch gave its name back
+			t.expect(fs.isFile(`{wt}/.cache/discarded`)).toBe(false) -- the marker is gone again
+			t.expect(fs.isDir(dir("prep-locked-1"))).toBe(false) -- and no copy was made
+			fixture.git(h.f.main, { "worktree", "unlock", wt })
+			-- unlocked, the same takeover goes through
+			must(zn(h.f.main, { "worktree", "prep-locked", "--takeover" }, LATE), "takeover")
+			t.expect(fs.isDir(dir("prep-locked-discarded-1"))).toBe(true)
+		end
+	)
 end)

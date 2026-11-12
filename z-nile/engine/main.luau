@@ -5409,11 +5409,11 @@ function hb.worktreeTarget(target: string): (string?, boolean, string)
 		end
 		return nil, true, target
 	elseif string.match(target, "^[fdc]%d%d%d%d$") then
-		fail("give a raft id or a name")
+		return fail("give a raft id or a name")
 	elseif #target <= 60 and string.match(target, "^[a-z][a-z0-9%-]*$") then
 		return target, false, target
 	end
-	fail(`invalid worktree name: {target}`)
+	return fail(`invalid worktree name: {target}`)
 end
 
 -- Adds the worktree at `path`: detached at `base`, on the local branch when it exists, on a tracking branch of
@@ -5565,10 +5565,11 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 		end
 		-- ... else the worktree the work is done in: a prep's `prep-<slug>` (as the dispatcher names it), a raft's own
 		if base == nil then
-			base = if isRaft
+			local named = if isRaft
 				then target
 				else `prep-{(store.find(target) or fail(`{target} is not in this tree`)).slug}`
-			cur = current(base)
+			base = named
+			cur = current(named)
 		end
 	else
 		base = target
@@ -5697,7 +5698,7 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 			end
 		end
 		pcall(fs.removeFile, marker)
-		fail(msg)
+		return fail(msg)
 	end
 	if renamed ~= "" then
 		local r = if oldBranch ~= ""

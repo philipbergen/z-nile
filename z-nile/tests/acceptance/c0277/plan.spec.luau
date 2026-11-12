@@ -97,15 +97,14 @@ return t.spec("c0277 discarded worktree rules", function(it)
 		-- a claim named by --item for a worktree that remembers none
 		t.expect(heartbeat.discardRefusal({ { id = "c0010", remembered = "", current = A, verdict = lost } }))
 			.toBe(nil)
-		for kind, word in
-			{
-				live = "claim alive",
-				parked = "claim parked",
-				nobeat = "never beaten",
-				unknown = "no heartbeat verdict",
-				stale = "no heartbeat verdict",
-			}
-		do
+		local reasons: { [string]: string } = {
+			live = "claim alive",
+			parked = "claim parked",
+			nobeat = "never beaten",
+			unknown = "no heartbeat verdict",
+			stale = "no heartbeat verdict",
+		}
+		for kind, word in reasons do
 			local why = heartbeat.discardRefusal({
 				{ id = "c0010", remembered = A, current = A, verdict = verdict("c0010", A, kind, 60) },
 			}, "pull requests unreadable: x")
@@ -155,7 +154,7 @@ return t.spec("c0277 discarded worktree rules", function(it)
 			t.expect(string.find(text, needle, 1, true) ~= nil).toBe(true)
 		end
 		-- the refusal an old process reads is the body, and a damaged marker still refuses
-		t.expect(string.find(heartbeat.discardedText(text), "discarded worktree: /r", 1, true)).toBe(nil)
+		t.expect((string.find(heartbeat.discardedText(text), "discarded worktree: /r", 1, true))).toBe(nil)
 		t.expect(string.find(heartbeat.discardedText(text), "was discarded", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(heartbeat.discardedText("junk"), "was discarded", 1, true) ~= nil).toBe(true)
 		t.expect(heartbeat.discardParse("junk")).toBe(nil)
@@ -179,7 +178,7 @@ return t.spec("c0277 discarded worktree rules", function(it)
 			f.dirty = many
 			local cut = heartbeat.discardText(f)
 			t.expect(string.find(cut, "f20.txt", 1, true) ~= nil).toBe(true)
-			t.expect(string.find(cut, "f21.txt", 1, true)).toBe(nil)
+			t.expect((string.find(cut, "f21.txt", 1, true))).toBe(nil)
 			t.expect(string.find(cut, "and 5 more", 1, true) ~= nil).toBe(true)
 			local empty = heartbeat.discardText({
 				path = "/p",

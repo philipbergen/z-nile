@@ -722,7 +722,15 @@ function heartbeat.discardParse(text: string): Discard?
 	for id in string.gmatch(items, "%S+") do
 		table.insert(ids, id)
 	end
-	return { path = path, copy = copy, branch = branch, base = base, items = ids, since = since, body = body }
+	return {
+		path = path,
+		copy = copy,
+		branch = branch,
+		base = base,
+		items = ids,
+		since = since,
+		body = body or "",
+	}
 end
 
 -- What a command run in a discarded worktree is told (exit 1): the body of the marker.

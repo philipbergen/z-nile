@@ -16,6 +16,7 @@ local trackerfix = require("@tests/lib/trackerfix")
 local P = "pickman/.tracker/issues"
 local STAMP = "preparing-lucky-violet-heron"
 local MARKER = "." .. "cache/discarded"
+local BEATER = "." .. "cache/tracker-beater"
 local MODELS = [[
 order = ["claude"]
 
@@ -80,8 +81,7 @@ return t.spec("c0277 real-time proofs: nothing beats from a discarded worktree",
 		if not r.ok then
 			error(`claim failed: {r.stderr}{r.stdout}`)
 		end
-		local pid = string.match(fs.readFile(`{wt}/.cache/tracker-beater/c0100`), "^(%d+) %d+")
-			or error("no beater")
+		local pid = string.match(fs.readFile(`{wt}/{BEATER}/c0100`), "^(%d+) %d+") or error("no beater")
 		t.expect(alive(pid)).toBe(true)
 		task.wait(3)
 		local before = pushes()
@@ -102,7 +102,7 @@ return t.spec("c0277 real-time proofs: nothing beats from a discarded worktree",
 			})
 		)
 		t.expect(endsWithin(pid, 20)).toBe(true)
-		t.expect(has(fs.readFile(`{wt}/.cache/tracker-beater/c0100.log`), "was discarded")).toBe(true)
+		t.expect(has(fs.readFile(`{wt}/{BEATER}/c0100.log`), "was discarded")).toBe(true)
 		local after = pushes()
 		task.wait(3)
 		t.expect(pushes()).toBe(after) -- and nothing beats after it
