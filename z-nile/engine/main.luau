@@ -6841,7 +6841,7 @@ function cmd.who(pos: { string }, _opts: { [string]: { string } })
 	end
 	local commits = life :: { trailLib.Commit }
 	local entries =
-		whoLib.entries(commits, id, whoLib.people(head), rows, spendRows, whoLib.fronts(commits), mark)
+		whoLib.entries(commits, whoLib.people(head), rows, spendRows, whoLib.fronts(commits), mark)
 	for _, e in entries do
 		print(provenance.line(e))
 	end

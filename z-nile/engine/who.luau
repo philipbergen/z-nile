@@ -140,14 +140,13 @@ end
 -- and the spend rows `spend` (file order), `fronts` from `who.fronts` (for the board: one call for every item).
 function who.entries(
 	life: { trail.Commit },
-	id: string,
 	people: { [string]: boolean },
 	rows: { provenance.Row },
 	spend: { provenance.Spend },
 	fronts: { [string]: provenance.Front },
 	mark: provenance.Mark
 ): { provenance.Entry }
-	local derived = provenance.select(life, id, people, fronts, mark)
+	local derived = provenance.select(life, people, fronts, mark)
 	return provenance.merge(derived, rows, provenance.workerOf(provenance.workerRow(spend)))
 end
 

@@ -144,7 +144,7 @@ return t.spec("c0280 provenance from git", function(it)
 		for _, c in life do
 			people[c.email or ""] = true
 		end
-		local d = provenance.select(life, "c0010", people, fronts, NOMARK)
+		local d = provenance.select(life, people, fronts, NOMARK)
 		t.expect((d.idea :: provenance.Entry).actor).toBe("human:Ann (from git)")
 		-- every change of the status word is an entry with the author of the commit that made it (a squash with an
 		-- agent trailer is the agent's); a restamp (same word) is none; a move that also changes the word is one entry
@@ -173,14 +173,14 @@ return t.spec("c0280 provenance from git", function(it)
 			.toBe("agent:claude-sonnet-5-5 effort unknown (from git)")
 		-- a landing without an agent trailer: the delivery names the author, the merge no actor
 		local plain = commit(9, "Cy", "R0011: demo (#1)", {}, "A", DONE, "done", "R0011")
-		local landed = provenance.select({ plain, ready, capture }, "c0010", people, fronts, NOMARK)
+		local landed = provenance.select({ plain, ready, capture }, people, fronts, NOMARK)
 		t.expect((landed.delivered :: provenance.Entry).actor).toBe("human:Cy (from git)")
 		t.expect((landed.merged :: provenance.Entry).actor).toBe("unknown")
 		-- a `--no-ff` landing: the merge commit has no trailer, its second parent (the stack's top layer) does
 		local bound = commit(9, "Cy", "R0011: bind c0010", {}, "A", DONE, "done", "R0011")
 		bound.parents = { "p1", "p2" }
 		bound.sideTrailers = opus
-		local noff = provenance.select({ bound, ready, capture }, "c0010", people, fronts, NOMARK)
+		local noff = provenance.select({ bound, ready, capture }, people, fronts, NOMARK)
 		t.expect((noff.delivered :: provenance.Entry).actor)
 			.toBe("agent:claude-opus-5-5 effort unknown (from git)")
 		t.expect((noff.merged :: provenance.Entry).actor)
@@ -198,7 +198,6 @@ return t.spec("c0280 provenance from git", function(it)
 		)
 		local both = provenance.select(
 			{ moved, alsoRow(moved, "D", DONE, nil), done, alsoRow(done, "D", ACTIVE, nil), ready, capture },
-			"c0010",
 			people,
 			fronts,
 			NOMARK
@@ -206,7 +205,7 @@ return t.spec("c0280 provenance from git", function(it)
 		t.expect((both.delivered :: provenance.Entry).actor)
 			.toBe("agent:claude-sonnet-5-5 effort unknown (from git)")
 		-- no `raftAt` front, no rafter; with no fronts at all there are no status changes, and the idea stays
-		local blind = provenance.select(life, "c0010", people, {}, NOMARK)
+		local blind = provenance.select(life, people, {}, NOMARK)
 		t.expect(blind.rafted).toBe(nil)
 		t.expect(#blind.statuses).toBe(0)
 		t.expect((blind.idea :: provenance.Entry).actor).toBe("human:Ann (from git)")
@@ -216,22 +215,16 @@ return t.spec("c0280 provenance from git", function(it)
 			{ note = "history before aaaaaaa not followed: it changed z-nile/compaction.txt", cut = true }
 		local start = commit(20, "Phil", "tracker: compact ids (#64)", opus, "M", DOC, "prepared", "R0011")
 		local after = commit(21, "Hal", "tracker: ready R0011 demo", {}, "A", ACTIVE, "active", "R0011")
-		local cut =
-			provenance.select({ after, alsoRow(after, "D", DOC, nil), start }, "c0010", people, fronts, mark)
+		local cut = provenance.select({ after, alsoRow(after, "D", DOC, nil), start }, people, fronts, mark)
 		t.expect((cut.idea :: provenance.Entry).detail).toBe(mark.note)
 		t.expect((cut.idea :: provenance.Entry).actor).toBe("human:Phil (from git, first add)")
 		t.expect(cut.rafted).toBe(nil)
-		local uncut = provenance.select(
-			{ after, alsoRow(after, "D", DOC, nil), start },
-			"c0010",
-			people,
-			fronts,
-			NOMARK
-		)
+		local uncut =
+			provenance.select({ after, alsoRow(after, "D", DOC, nil), start }, people, fronts, NOMARK)
 		t.expect((uncut.rafted :: provenance.Entry).actor)
 			.toBe("agent:claude-opus-5-5 effort unknown (from git)")
 		local readd = commit(22, "Phil", "tracker: compact ids (#64)", opus, "A", DONE, "done", "R0011")
-		t.expect(provenance.select({ readd }, "c0010", people, fronts, mark).delivered).toBe(nil)
+		t.expect(provenance.select({ readd }, people, fronts, mark).delivered).toBe(nil)
 		-- a `release` give-back (preparing -> new, not by a `tracker: <id> new` commit) is a status change; a raft's
 		-- give-back `tracker: R0011 new` that changes this issue is the unblock; a commit that kept the word is nothing
 		local base = commit(30, "Ann", "tracker: new c0010 alpha", {}, "A", DOC, "preparing", "")
@@ -239,8 +232,7 @@ return t.spec("c0280 provenance from git", function(it)
 		local raftBack = commit(32, "Ray", "tracker: R0011 new", {}, "M", DOC, "preparing", "")
 		local raftNew = commit(33, "Ray", "tracker: R0011 new", {}, "M", DOC, "new", "")
 		local members = commit(34, "Mem", "tracker: R0065 members", {}, "M", DOC, "new", "")
-		local g =
-			provenance.select({ members, raftNew, raftBack, released, base }, "c0010", people, fronts, NOMARK)
+		local g = provenance.select({ members, raftNew, raftBack, released, base }, people, fronts, NOMARK)
 		local got: { string } = {}
 		for _, e in g.statuses do
 			table.insert(got, `{e.event}:{e.actor}`)
@@ -254,16 +246,11 @@ return t.spec("c0280 provenance from git", function(it)
 		local rec = table.clone(coverNew)
 		rec.path = REC
 		rec.order += 1
-		t.expect(
-			#provenance.select({ coverNew, rec, cover, base }, "c0010", people, fronts, NOMARK).unblocked
-		)
-			.toBe(0)
-		t.expect(#provenance.select({ coverNew, cover, base }, "c0010", people, fronts, NOMARK).unblocked)
-			.toBe(1)
+		t.expect(#provenance.select({ coverNew, rec, cover, base }, people, fronts, NOMARK).unblocked).toBe(0)
+		t.expect(#provenance.select({ coverNew, cover, base }, people, fronts, NOMARK).unblocked).toBe(1)
 		-- an idea taken from a first add (no commit names the item) says so
 		local weak = provenance.select(
 			{ commit(1, "Zed", "tracker: rename things", {}, "A", DOC, "new", "") },
-			"c0010",
 			people,
 			fronts,
 			NOMARK
@@ -280,7 +267,7 @@ return t.spec("c0280 provenance from git", function(it)
 		local s3 = at(40, commit(40, "Fay", "tracker: c0010 preparing", {}, "M", DOC, "preparing", ""))
 		local first = at(0, commit(40, "Ann", "tracker: new c0010 alpha", {}, "A", DOC, "new", ""))
 		first.time = m0 - 60
-		local sameMinute = provenance.select({ s3, s2, s1, first }, "c0010", people, fronts, NOMARK)
+		local sameMinute = provenance.select({ s3, s2, s1, first }, people, fronts, NOMARK)
 		local order: { string } = {}
 		for _, e in provenance.merge(sameMinute, {}, nil) do
 			table.insert(order, e.event)

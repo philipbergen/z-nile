@@ -517,7 +517,6 @@ end
 -- gives the idea alone, marked, and no rafter.
 function provenance.select(
 	life: { Commit },
-	id: string,
 	people: { [string]: boolean },
 	fronts: { [string]: Front },
 	mark: Mark
