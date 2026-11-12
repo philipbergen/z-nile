@@ -5686,7 +5686,9 @@ local function contractDirty(paths: { string }): string?
 	return line
 end
 
--- `approve <issue-id>` records the contract hash in the issue's approval.md and commits only that file.
+-- `approve <issue-id>` records the contract hash in the issue's approval.md and, beside it, the `approved` row of the
+-- issue's provenance.md (c0283), and commits those two files only. An agent session is refused (the zn wrapper answers a
+-- missing terminal first; this answers a terminal an agent holds).
 -- `--check` reads: it says whether the latest row still matches, and which part changed.
 function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	for k in opts do

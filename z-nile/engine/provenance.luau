@@ -75,7 +75,7 @@ end
 provenance.AGENT_VARS = { "CLAUDECODE", "AI_AGENT", "CURSOR_AGENT", "GROK_SESSION_ID", "ZN_DISPATCH" }
 
 -- c0283: the record of a design approval, written beside approval.md by `./zn approve`: the row `approved | human:<who> |
--- contract=<first 12 hex of the approval's hash>`. approval.md stays the authority (the full hash, its parts, who and when
+-- design=<first 12 hex of the approval's hash>`. approval.md stays the authority (the full hash, its parts, who and when
 -- to the second); the row puts the same approval in c0263's record, where `who` and the board read it. Returns the new
 -- record text, or nil and why (a name the record cannot hold, a record that does not parse).
 function provenance.approved(
@@ -89,7 +89,7 @@ function provenance.approved(
 	if not provenance.isLive(actor) then
 		return nil, `{actor} cannot be recorded (a name holds no | and no line break)`
 	end
-	return provenance.record(text, id, "approved", actor, `contract={string.sub(hash, 1, 12)}`, now)
+	return provenance.record(text, id, "approved", actor, `design={string.sub(hash, 1, 12)}`, now)
 end
 
 -- flag, then env, then an agent-session hint, then the git name; a given value that is not a live form refuses

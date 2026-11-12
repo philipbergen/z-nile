@@ -286,7 +286,7 @@ return t.spec("c0117 dispatch rules", function(it)
 		end
 	)
 
-	it("captures, designs, and waits at or passes the prep gate", function()
+	it("captures, designs, and waits at the prep gate", function()
 		t.expect(act(facts({ kind = "none", where = "none", status = "none", description = "words" })))
 			.toBe("step z-ticket ")
 		t.expect(act(facts({ kind = "none", where = "none", status = "none" }))).toBe("stop 1")

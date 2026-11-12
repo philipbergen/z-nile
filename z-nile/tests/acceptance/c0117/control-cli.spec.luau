@@ -729,7 +729,7 @@ G=$ZN_REAL_GIT
 	)
 
 	it(
-		"passes the prep gate only when the item's own walk allows it, and merges with the real gh itself",
+		"stops at the prep gate whatever the item's walk allows, and merges the rafting gate with the real gh itself",
 		function()
 			fakecli.clear(h)
 			-- a GitHub-looking origin, rewritten to the fixture's own (the chain asks the fake gh about PRs)

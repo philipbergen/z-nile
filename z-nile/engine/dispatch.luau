@@ -276,7 +276,17 @@ local function gate(f: Facts, name: string, pr: Pr): Action
 		elseif name == "prep" then `the prep PR #{pr.number} waits for the user's approval and merge`
 		else `the {name} PR #{pr.number} waits for a human: its head commit is unknown`
 	if name == "prep" then
-		why ..= `; approve the design with ./zn approve {f.id}, then merge it yourself and run ./zn dispatch {f.id} again`
+		-- c0283: what the user does depends on why the gate stopped. Nothing else holds the PR: approve and merge. Something
+		-- holds it back (a draft, red CI, a conflict): resolve that first. A judged refusal (code, another item's files)
+		-- is not mended by a merge, so no instruction to merge it.
+		local run = `./zn approve {f.id}, merge it yourself and run ./zn dispatch {f.id} again`
+		if carries then
+			why ..= "; a prep PR carries only its issue's folder and skill lessons"
+		elseif pr.draft or not pr.green or not pr.mergeable then
+			why ..= `; when that is resolved, approve the design with {run}`
+		else
+			why ..= `; approve the design with ./zn approve {f.id}, then merge it yourself and run ./zn dispatch {f.id} again`
+		end
 	end
 	return { kind = "stop", code = dispatch.EXIT.gate, gate = name, pr = pr.number, why = why }
 end

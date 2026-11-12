@@ -128,7 +128,7 @@ return t.spec("c0283 approve in an agent session and the provenance row", functi
 			t.expect(#lines).toBe(4) -- the title, the table header, the separator and one row (gmatch skips the blank line)
 			t.expect(string.match(lines[4], "^| %d%d%d%d%-%d%d%-%d%d %d%d:%d%d | approved | ") ~= nil)
 				.toBe(true)
-			t.expect(has(lines[4], ` | approved | human:{NAME} | contract={string.sub(hash, 1, 12)} |`))
+			t.expect(has(lines[4], ` | approved | human:{NAME} | design={string.sub(hash, 1, 12)} |`))
 				.toBe(true)
 			local dirty = fixture.git(wt, { "status", "--porcelain" })
 			if dirty ~= "" then
@@ -147,8 +147,8 @@ return t.spec("c0283 approve in an agent session and the provenance row", functi
 		local hash = string.match(r.stdout, `approved {ID} (%x+)`) :: string
 		local lines = rows("provenance.md")
 		t.expect(#lines).toBe(5)
-		t.expect(has(lines[5], `contract={string.sub(hash, 1, 12)} |`)).toBe(true)
-		t.expect(has(lines[4], `contract={string.sub(hash, 1, 12)} |`)).toBe(false)
+		t.expect(has(lines[5], `design={string.sub(hash, 1, 12)} |`)).toBe(true)
+		t.expect(has(lines[4], `design={string.sub(hash, 1, 12)} |`)).toBe(false)
 		local approvals = rows("approval.md")
 		t.expect(has(approvals[#approvals], hash)).toBe(true)
 	end)
@@ -161,10 +161,21 @@ return t.spec("c0283 approve in an agent session and the provenance row", functi
 			local before = head()
 			local approvals = fs.readFile(`{wt}/{ISSUE}/approval.md`)
 			local good = fs.readFile(`{wt}/{ISSUE}/provenance.md`)
-			fs.writeFile(`{wt}/{ISSUE}/provenance.md`, good .. "| stray\n")
+			-- a valid row appended and left uncommitted: only the dirty-record guard refuses it, and it names itself
+			local row = "| 2026-11-12 09:00 | unblocked | human:Ann | block=x |\n"
+			fs.writeFile(`{wt}/{ISSUE}/provenance.md`, good .. row)
 			local dirty = approve(nil)
 			t.expect(dirty.ok).toBe(false)
-			t.expect(has(say(dirty), "commit")).toBe(true)
+			t.expect(has(say(dirty), "provenance.md first")).toBe(true)
+			-- staged is dirty too
+			fixture.git(wt, { "add", `{ISSUE}/provenance.md` })
+			local staged = approve(nil)
+			t.expect(staged.ok).toBe(false)
+			t.expect(has(say(staged), "provenance.md first")).toBe(true)
+			t.expect(head()).toBe(before)
+			t.expect(fs.readFile(`{wt}/{ISSUE}/approval.md`)).toBe(approvals)
+			fixture.git(wt, { "reset", "-q", "--hard", before })
+			fs.writeFile(`{wt}/{ISSUE}/provenance.md`, good .. "| stray\n")
 			commit("junk in the record")
 			local junk = head()
 			local bad = approve(nil)
@@ -185,4 +196,21 @@ return t.spec("c0283 approve in an agent session and the provenance row", functi
 		t.expect(has(say(r), "contract changed since approval") or has(say(r), "approved ")).toBe(true)
 		t.expect(head()).toBe(before)
 	end)
+
+	it(
+		"a spec process never inherits the session's markers, so a plain approve passes inside an agent session",
+		function()
+			fs.writeFile(`{wt}/{ISSUE}/{ID}.md`, doc("A fourth design."))
+			commit("a fourth design")
+			local saved: { [string]: string? } =
+				{ ZN_DISPATCH = process.env.ZN_DISPATCH, CLAUDECODE = process.env.CLAUDECODE }
+			process.env.ZN_DISPATCH = "1"
+			process.env.CLAUDECODE = "1"
+			local ok, r = pcall(approve, nil)
+			process.env.ZN_DISPATCH = saved.ZN_DISPATCH or ""
+			process.env.CLAUDECODE = saved.CLAUDECODE or ""
+			t.expect(ok).toBe(true)
+			t.expect((r :: fixture.Result).ok).toBe(true)
+		end
+	)
 end)

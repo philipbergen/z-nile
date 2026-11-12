@@ -1,6 +1,6 @@
 --!strict
 -- c0283 AC1: the pure half. `provenance.approved` writes the approved row of a design approval (the human, and the first
--- 12 hex of approval.md's hash as `contract=`), and `provenance.hint` reads the one list of agent markers.
+-- 12 hex of approval.md's hash as `design=`), and `provenance.hint` reads the one list of agent markers.
 local provenance = require("@znile/engine/provenance")
 local t = require("@tests/lib/t")
 
@@ -15,7 +15,7 @@ return t.spec("c0283 the approved row", function(it)
 			when = "2026-11-12 09:00",
 			event = "approved",
 			actor = "human:Ann Lee",
-			detail = "contract=0123456789ab",
+			detail = "design=0123456789ab",
 		})
 		-- a later approval appends: the old row is kept as it was
 		local again = provenance.approved(
@@ -28,7 +28,7 @@ return t.spec("c0283 the approved row", function(it)
 		local both = provenance.parse(again) :: { provenance.Row }
 		t.expect(#both).toBe(2)
 		t.expect(both[1]).toEqual(rows[1])
-		t.expect(both[2].detail).toBe("contract=f123456789ab")
+		t.expect(both[2].detail).toBe("design=f123456789ab")
 		t.expect(provenance.appendOnly(text, again, "c0010")).toBe(nil)
 	end)
 

@@ -1,5 +1,5 @@
 --!strict
--- c0283 AC4: the texts that restate the rules agree with the engine: zz-rules (the approve row, Landing step 3 and the
+-- c0283 AC5: the texts that restate the rules agree with the engine: zz-rules (the approve row, Landing step 3 and the
 -- dispatcher paragraph), z-design (steps 5 and 6), the README, AGENTS.md and the root .models.toml.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -35,12 +35,15 @@ return t.spec("c0283 the texts", function(it)
 		t.expect(lacks("z-nile/skills/zz-rules/SKILL.md", {
 			"**never in an agent session**",
 			"a terminal does not help when `CLAUDECODE`, `AI_AGENT`, `CURSOR_AGENT` or `GROK_SESSION_ID` is set",
-			"appends `approved | human:<git name> | contract=<first 12 hex of that hash>` to the issue's `provenance.md`",
+			"appends `approved | human:<git name> | design=<first 12 hex of that hash>` to the issue's `provenance.md`",
 			"in the same `tracker: approve` commit",
 			"It records no words.",
 			"only a `raft` gate (a `prep` gate never merges)",
 			"the prep PR #<n> waits for the user's approval and merge",
 			"`auto_merge` keeps accepting `prep` as a name, with no effect",
+			"when that is resolved, approve the design with ./zn approve <id>",
+			"a prep PR carries only its issue's folder and skill lessons",
+			"run `./zn sync` in the prep worktree: it unites the records",
 			"a prep PR waits for the user, who approves the design (`./zn approve`) and merges it",
 		})).toEqual({})
 		t.expect(holds("z-nile/skills/zz-rules/SKILL.md", {
