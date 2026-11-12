@@ -80,6 +80,7 @@ local function answer(lines: { string }, ruling: string?): Result
 	end
 	must(tr({ "commit", "-m", "refute 001", "--time", "1" }), "commit refute")
 	must(tr({ "finish", "f0010" }), "finish")
+	seal.layerReview(work, "f0010") -- c0248: a layer is complete before the next starts or done binds it
 	seal.trace(work, "R0010")
 	return tr({ "done", "R0010" })
 end

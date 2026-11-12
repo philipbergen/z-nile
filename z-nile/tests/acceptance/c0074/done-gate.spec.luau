@@ -96,7 +96,7 @@ local function fresh()
 	-- a previous done leaves `main` on the binding commit. Put the layer back, and main behind it.
 	git({ "switch", "-q", "-C", "R0010/1/f0010", reviewed })
 	if fixture.exec(work, "git", { "rev-parse", "--verify", "--quiet", "main" }, { env = ID }).ok then
-		git({ "branch", "-f", "main", `{reviewed}~2` })
+		git({ "branch", "-f", "main", `{reviewed}~3` })
 	end
 	if fs.isFile(gateLog) then
 		fs.removeFile(gateLog)
@@ -179,6 +179,7 @@ return t.spec("c0800 done runs the affected gate after promotion", function(it)
 		write(`{TR}/rafts/active/R0010/review-001.md`, "# Review 001\n\nVerdict: approve\n")
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.layerReview(work, "f0010") -- c0248: a layer is complete before the next starts or done binds it
 		seal.trace(work, "R0010")
 		reviewed = git({ "rev-parse", "HEAD" })
 	end)

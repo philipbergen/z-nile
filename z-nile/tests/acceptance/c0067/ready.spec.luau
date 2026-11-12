@@ -617,6 +617,7 @@ return t.spec("tracker ready", function(it)
 		t.expect(fs.isFile(`{wt4}/pickman/.tracker/rafts/active/R0010/spend.md`)).toBe(false)
 		t.expect(fs.isFile(`{wt4}/pickman/.tracker/rafts/active/R0060/spend.md`)).toBe(false)
 		trOk(wt4, { "finish", "c0040" })
+		seal.layerReview(wt4, "c0040") -- c0248: a layer is complete before the next starts or done binds it
 		seal.trace(wt4, "R0040")
 		trOk(wt4, { "done", "R0040" })
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
