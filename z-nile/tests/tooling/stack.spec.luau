@@ -76,9 +76,19 @@ return t.spec("a raft stack's shape", function(it)
 		})).toBe("lower")
 	end)
 
-	it("the binding message names the raft, the tickets and the verdict", function()
+	it("the binding message names the raft, the tickets, the verdict and the trace table", function()
 		t.expect(stack.bindMessage("R0010", { "c0010", "c0020" }, "approve"))
-			.toBe("R0010: bind c0010, c0020\n\nVerdict: approve\n")
+			.toBe("R0010: bind c0010, c0020\n\nVerdict: approve\nTrace: R0010/trace.md\n")
+		t.expect(
+			stack.bindMessage(
+				"R0010",
+				{ "c0010", "c0020" },
+				"approve",
+				"pickman/.tracker/rafts/done/R0010/trace.md"
+			)
+		).toBe(
+			"R0010: bind c0010, c0020\n\nVerdict: approve\nTrace: pickman/.tracker/rafts/done/R0010/trace.md\n"
+		)
 		t.expect(stack.oldShapeMessage("R0010", "R0010-kept")).toBe(
 			"R0010 is an active raft in the old single-branch shape (R0010-kept) and is not migrated. It is being stopped separately."
 		)

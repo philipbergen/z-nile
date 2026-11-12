@@ -994,7 +994,10 @@ function dispatcher.modelStep(
 		if streamDir then
 			land = { dir = streamDir, prefix = `stream-review-{id}-`, note = "stream-review-" }
 		else
-			local prefix = if mode == "code" then "review-" else "design-review-"
+			local prefix = if mode == "code"
+				then "review-"
+				elseif mode == "final" then "final-review-"
+				else "design-review-"
 			land = { dir = store.get(id).dir, prefix = prefix, note = prefix }
 		end
 	end

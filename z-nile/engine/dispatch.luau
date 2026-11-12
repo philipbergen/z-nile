@@ -41,6 +41,7 @@ dispatch.REVIEW_MODES = {
 	code = { lessons = "build", phase = "code-review" },
 	-- a stream's review (z-run Phase 2B) under the dispatcher: the review model of the CLI, like a code review
 	stream = { lessons = "build", phase = "code-review" },
+	final = { lessons = "build", phase = "code-review" },
 } :: { [string]: { lessons: string, phase: string } }
 
 -- The step `name` is, or an error naming it: a skill read inside steps, a project's skill, or an unknown name.
@@ -80,7 +81,7 @@ function dispatch.lessonsOf(name: string, mode: string?): string
 	if name == "zz-review" then
 		local m = dispatch.REVIEW_MODES[mode or "design"]
 		if not m then
-			error(`zz-review has no mode {tostring(mode)} (design, raft, code, stream)`, 0)
+			error(`zz-review has no mode {tostring(mode)} (design, raft, code, stream, final)`, 0)
 		end
 		return m.lessons
 	end
@@ -128,6 +129,9 @@ function dispatch.prompt(p: PromptInput): string
 		-- the dispatcher numbers it into the raft's folder (design review 008 F1). One round: there is no later one.
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in stream mode. This is the one round. Read the stream's diff and run its checks in \`{p.streamWorktree or `.worktree/ws-{p.id}`}\` (read only there). Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into the raft's folder as \`stream-review-{p.id}-001.md\`.`
+	elseif p.step == "zz-review" and p.mode == "final" then
+		what =
+			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. Run \`./zn trace {p.id}\`, fill \`trace.md\` in {p.id}'s folder, verify it with \`./zn trace {p.id} --check\`, and write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.`
 	elseif p.step == "zz-review" then
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as that mode's file ({if p.mode

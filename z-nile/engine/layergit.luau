@@ -115,18 +115,91 @@ function layergit.issueTitle(item: store.Item): string
 	return store.readFront(item.doc).title or item.id
 end
 
--- True when the layer tip is exactly one "<issue>: <title>" commit whose parent is `base`.
-function layergit.layerFinished(layer: stack.Layer, base: string): boolean
-	local tip = layergit.layerTip(layer)
+function layergit.isPostFinishPath(path: string, raftId: string): boolean
+	if string.find(path, "/spend%.d/", 1, false) ~= nil then
+		return true
+	end
+	local raftDirPattern = `/rafts/active/{raftId}/([^/]+)$`
+	local name = string.match(path, raftDirPattern)
+	if name ~= nil then
+		if
+			name == "trace.md"
+			or name == `{raftId}.md`
+			or string.match(name, "^review%-%d+%.md$") ~= nil
+			or string.match(name, "^refute%-%d+%.md$") ~= nil
+			or string.match(name, "^final%-review%-%d+%.md$") ~= nil
+			or string.match(name, "^final%-refute%-%d+%.md$") ~= nil
+		then
+			return true
+		end
+	end
+	local issueDoc = string.match(path, "/issues/active/([fdc]%d%d%d%d)/([fdc]%d%d%d%d)%.md$")
+		or string.match(path, "/issues/([fdc]%d%d%d%d)/([fdc]%d%d%d%d)%.md$")
+	if issueDoc ~= nil then
+		return true
+	end
+	return false
+end
+
+-- Returns the SHA of the layer's "<issue>: <title>" commit on `base` when the layer is finished
+-- (either that commit is the tip, or commits above it touch only post-finish review/trace/ruling files).
+function layergit.layerFinishSha(layer: stack.Layer, base: string, overrideTip: string?): string?
+	local tip = overrideTip or layergit.layerTip(layer)
 	if not tip or base == "" then
-		return false
+		return nil
 	end
 	local count = tonumber(sh.trim(sh.git({ "rev-list", "--count", `{base}..{tip}` }))) or 0
-	local subject = sh.trim(sh.git({ "log", "-1", "--format=%s", tip }))
-	local parent = sh.trim(sh.git({ "rev-parse", `{tip}^` }))
+	if count == 0 then
+		return nil
+	end
 	local issue = store.find(layer.issue)
 	local title = if issue then layergit.issueTitle(issue) else layer.issue
-	return stack.finished(count, subject, parent, base, layer.issue, title)
+	if count == 1 then
+		local subject = sh.trim(sh.git({ "log", "-1", "--format=%s", tip }))
+		local parent = sh.trim(sh.git({ "rev-parse", `{tip}^` }))
+		if stack.finished(count, subject, parent, base, layer.issue, title) then
+			return tip
+		end
+		return nil
+	end
+	local raw = sh.git({ "log", "--reverse", "--format=%H%x09%P%x09%s", `{base}..{tip}` })
+	local commits: { { sha: string, parent: string, subject: string } } = {}
+	for line in string.gmatch(raw .. "\n", "([^\n]+)\n") do
+		local sha, parents, subject = string.match(line, "^(%x+)\t([^\t]*)\t(.*)$")
+		if sha then
+			local firstParent = string.match(parents or "", "^(%x+)") or ""
+			table.insert(commits, { sha = sha, parent = firstParent, subject = subject or "" })
+		end
+	end
+	if #commits == 0 then
+		return nil
+	end
+	local first = commits[1]
+	if not stack.finished(1, first.subject, first.parent, base, layer.issue, title) then
+		return nil
+	end
+	for i = 2, #commits do
+		local c = commits[i]
+		local changed = sh.git({ "diff-tree", "--no-commit-id", "--name-only", "-r", c.sha })
+		local fileCount = 0
+		for path in string.gmatch(changed .. "\n", "([^\n]+)\n") do
+			if path ~= "" then
+				fileCount += 1
+				if not layergit.isPostFinishPath(path, layer.raft) then
+					return nil
+				end
+			end
+		end
+		if fileCount == 0 then
+			return nil
+		end
+	end
+	return first.sha
+end
+
+-- True when the layer has its "<issue>: <title>" commit on `base` (plus optional review/trace commits).
+function layergit.layerFinished(layer: stack.Layer, base: string): boolean
+	return layergit.layerFinishSha(layer, base) ~= nil
 end
 
 -- origin carries the old single branch, and that branch is not merely the worktree branch sitting at main.
@@ -235,19 +308,34 @@ function layergit.checkoutLayer(layer: stack.Layer)
 	end
 end
 
--- The review file's Verdict word, or nil when nobody wrote one. Never a default of approve.
-function layergit.reviewVerdict(raft: store.Item): string?
-	local latest = 0
-	for _, name in fs.readDir(raft.dir) do
-		local n = tonumber(string.match(name, "^review%-(%d+)%.md$"))
-		if n and n > latest then
-			latest = n
+function layergit.latestReview(raft: store.Item): (string, string, number)
+	local finalLatest = 0
+	local reviewLatest = 0
+	if fs.isDir(raft.dir) then
+		for _, name in fs.readDir(raft.dir) do
+			local fn = tonumber(string.match(name, "^final%-review%-(%d+)%.md$"))
+			if fn and fn > finalLatest then
+				finalLatest = fn
+			end
+			local rn = tonumber(string.match(name, "^review%-(%d+)%.md$"))
+			if rn and rn > reviewLatest then
+				reviewLatest = rn
+			end
 		end
 	end
+	if finalLatest > 0 then
+		return "final-review", "final-refute", finalLatest
+	end
+	return "review", "refute", reviewLatest
+end
+
+-- The final review file's Verdict word, or nil when nobody wrote one. Never a default of approve.
+function layergit.reviewVerdict(raft: store.Item): string?
+	local reviewPrefix, _, latest = layergit.latestReview(raft)
 	if latest == 0 then
 		return nil
 	end
-	local review = "\n" .. fs.readFile(`{raft.dir}/review-{string.format("%03d", latest)}.md`)
+	local review = "\n" .. fs.readFile(`{raft.dir}/{reviewPrefix}-{string.format("%03d", latest)}.md`)
 	return string.match(review, "\n[Vv]erdict:%s*(%a+)")
 end
 

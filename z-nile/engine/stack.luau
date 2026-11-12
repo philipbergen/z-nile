@@ -19,8 +19,8 @@
 --   land:     ./zn done <R-id>
 --             The checkout must be the published top-layer commit (the one that is merged).
 --             git merge --no-ff of that commit into main. The merge commit's message is
---             "<raft>: bind <id>, <id>\n\nVerdict: <word>\n"
---             <word> is the review file's Verdict line. No review file, and a review with no
+--             "<raft>: bind <id>, <id>\n\nVerdict: <word>\nTrace: <trace-path>\n"
+--             <word> is the final review file's Verdict line. No review file, and a review with no
 --             Verdict line, both refuse: a verdict nobody wrote is not recorded.
 --             gh pr view <n> --json baseRefName -q .baseRefName, then gh pr edit <n> --base main,
 --             then git push origin HEAD:refs/heads/main. A failed push runs
@@ -74,8 +74,9 @@ function stack.finished(
 	return count == 1 and parent == base and subject == stack.finishSubject(issueId, title)
 end
 
-function stack.bindMessage(raftId: string, issueIds: { string }, verdict: string): string
-	return `{raftId}: bind {table.concat(issueIds, ", ")}\n\nVerdict: {verdict}\n`
+function stack.bindMessage(raftId: string, issueIds: { string }, verdict: string, tracePath: string?): string
+	local path = if tracePath ~= nil and tracePath ~= "" then tracePath else `{raftId}/trace.md`
+	return `{raftId}: bind {table.concat(issueIds, ", ")}\n\nVerdict: {verdict}\nTrace: {path}\n`
 end
 
 function stack.oldShapeMessage(raftId: string, branch: string): string
@@ -97,11 +98,15 @@ function stack.rebaseUpstream(
 	parentInLower: boolean,
 	rows: { CommitRow }
 ): string?
-	if string.sub(tipSubject, 1, #issue + 2) == `{issue}: ` and not parentInLower then
+	local finishPrefix = `{issue}: `
+	if string.sub(tipSubject, 1, #finishPrefix) == finishPrefix and not parentInLower then
 		return tipParent
 	end
 	local mark = `tracker: start {raftId}`
 	for _, row in rows do
+		if string.sub(row.subject, 1, #finishPrefix) == finishPrefix then
+			return row.parent
+		end
 		if string.sub(row.subject, 1, #mark) == mark then
 			return row.parent
 		end

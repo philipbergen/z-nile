@@ -7,6 +7,7 @@ local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -207,6 +208,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		)
 		must(tr({ "commit", "-m", "failing spec", "--time", "1" }), "commit")
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.trace(work, "R0010")
 		local promoted = done(false)
 		t.expect(promoted.ok).toBe(false)
 		t.expect(string.find(promoted.stderr, "promoted acceptance specs fail", 1, true) ~= nil).toBe(true)
@@ -222,6 +224,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 	it("rolls back and stays active when the layer pull request cannot be retargeted", function()
 		installGh()
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.trace(work, "R0010")
 		local before = git({ "rev-parse", "HEAD" })
 		local r = done(true)
 		t.expect(r.ok).toBe(false)
@@ -243,6 +246,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		fs.removeFile(`{work}/pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau`)
 		must(tr({ "commit", "-m", "no acceptance spec", "--time", "1" }), "commit")
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.trace(work, "R0010")
 		local before = git({ "rev-parse", "HEAD" })
 		local r = done(false)
 		if not r.ok then

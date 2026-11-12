@@ -7,6 +7,7 @@ local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -79,6 +80,7 @@ local function answer(lines: { string }, ruling: string?): Result
 	end
 	must(tr({ "commit", "-m", "refute 001", "--time", "1" }), "commit refute")
 	must(tr({ "finish", "f0010" }), "finish")
+	seal.trace(work, "R0010")
 	return tr({ "done", "R0010" })
 end
 

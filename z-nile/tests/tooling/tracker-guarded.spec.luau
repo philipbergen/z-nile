@@ -33,6 +33,7 @@ return t.spec("tracker commands that change a repository are guarded", function(
 			"promote-check",
 			"stack",
 			"stamp",
+			"trace",
 			"workstreams",
 		})
 	end)

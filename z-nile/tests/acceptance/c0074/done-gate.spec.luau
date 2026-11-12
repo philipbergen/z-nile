@@ -9,6 +9,7 @@ local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local gate = require("@scripts/tracker/gate")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -177,6 +178,7 @@ return t.spec("c0800 done runs the affected gate after promotion", function(it)
 		write(`{TR}/rafts/active/R0010/review-001.md`, "# Review 001\n\nVerdict: approve\n")
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.trace(work, "R0010")
 		reviewed = git({ "rev-parse", "HEAD" })
 	end)
 

@@ -6,6 +6,7 @@
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -168,6 +169,7 @@ return t.spec("stack corrections", function(it)
 
 	it("a failed push puts the pull request bases back", function()
 		git(wt, { "switch", "-q", "R0010/2/c0020" })
+		seal.trace(wt, "R0010")
 		local bin, log = `{f.base}/bin`, `{f.base}/gh.log`
 		fs.writeFile(
 			`{bin}/gh`,
