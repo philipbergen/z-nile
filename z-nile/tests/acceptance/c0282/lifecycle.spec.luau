@@ -157,7 +157,8 @@ return t.spec("c0282 the offline lifecycle stamps provenance", function(it)
 			must(tr({ "start", "R0010" }), "start")
 			-- a bad actor or a bad ZN_VIA refuses before the counter is pushed or a folder is made
 			local before = git({ "status", "--porcelain" })
-			for _, env in { { ZN_ACTOR = "robot:x" }, { ZN_VIA = "dispatch" } } do
+			local bads: { { [string]: string } } = { { ZN_ACTOR = "robot:x" }, { ZN_VIA = "dispatch" } }
+			for _, env in bads do
 				local refused =
 					tr({ "new", "issue", "d", "found", "--raft", "R0010", "--project", "pickman" }, env)
 				t.expect(refused.ok).toBe(false)
