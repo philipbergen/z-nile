@@ -224,7 +224,7 @@ end
 -- The newest review of a layer's issue, its refute and the issue document, read from the layer's tip tree.
 -- Returns review, refute, document, number (nil review when the folder holds none).
 function layergit.layerReview(
-	raft: store.Item,
+	_raft: store.Item,
 	layer: stack.Layer,
 	overrideTip: string?
 ): (string?, string?, string?, string?)

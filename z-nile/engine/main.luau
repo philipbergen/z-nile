@@ -3531,11 +3531,11 @@ local function refreshPrBodies(raft: store.Item)
 		local doc = fs.readFile(raft.doc)
 		local theme = stack.firstParagraph(layergit.raftSection(doc, "Theme"))
 		local order = layergit.raftSection(doc, "Order & dependencies")
-		local title = store.readFront(raft.doc).title or raft.slug
+		local raftTitle = store.readFront(raft.doc).title or raft.slug
 		for position, number in numbers do
 			local body = stack.prBody({
 				raftId = raft.id,
-				title = title,
+				title = raftTitle,
 				theme = theme,
 				order = order,
 				rows = rows,

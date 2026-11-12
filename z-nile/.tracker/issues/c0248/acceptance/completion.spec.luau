@@ -63,7 +63,8 @@ return t.spec("c0248 when a layer is complete", function(it)
 		t.expect(why ~= nil).toBe(true)
 		t.expect(has(why, "review")).toBe(true)
 		-- a refute alone is no review
-		t.expect(layer(nil, refute(FINISH, { "- F1: fixed abc1234; consequences: none" }), nil) ~= nil).toBe(true)
+		t.expect(layer(nil, refute(FINISH, { "- F1: fixed abc1234; consequences: none" }), nil) ~= nil)
+			.toBe(true)
 	end)
 
 	it("AC2: a review with no Verdict line is not complete", function()
@@ -103,32 +104,37 @@ return t.spec("c0248 when a layer is complete", function(it)
 			-- and the positives that each rule leaves open
 			local ruled = unruled .. "  Ruled (user, 2026-11-12): the refutation stands\n"
 			t.expect(layer(high, refutedHigh, ruled)).toBe(nil)
-			t.expect(layer(medium, refute(FINISH, { "- F1: fixed abc1234; consequences: none" }), nil)).toBe(nil)
+			t.expect(layer(medium, refute(FINISH, { "- F1: fixed abc1234; consequences: none" }), nil))
+				.toBe(nil)
 			t.expect(layer(medium, refute(FINISH, { "- F1: deferred c0099: later" }), nil)).toBe(nil)
 			-- a deferred finding must name a backlog issue
 			t.expect(layer(medium, refute(FINISH, { "- F1: deferred c0098: later" }), nil) ~= nil).toBe(true)
 		end
 	)
 
-	it("AC3: an approve with no findings naming the finish commit is complete; naming another commit is not", function()
-		t.expect(layer(review(FINISH, "approve", nil), nil, nil)).toBe(nil)
-		-- a short sha of seven digits or more names the same commit
-		t.expect(layer(review(string.sub(FINISH, 1, 7), "approve", nil), nil, nil)).toBe(nil)
-		local stale = layer(review(OLDER, "approve", nil), nil, nil)
-		t.expect(stale ~= nil).toBe(true)
-		-- the reason names both commits and what to do
-		t.expect(has(stale, string.sub(OLDER, 1, 7))).toBe(true)
-		t.expect(has(stale, string.sub(FINISH, 1, 7))).toBe(true)
-		t.expect(has(stale, "Commit:")).toBe(true)
-		-- six digits are too short to name a commit
-		t.expect(layer(review(string.sub(FINISH, 1, 6), "approve", nil), nil, nil) ~= nil).toBe(true)
-	end)
+	it(
+		"AC3: an approve with no findings naming the finish commit is complete; naming another commit is not",
+		function()
+			t.expect(layer(review(FINISH, "approve", nil), nil, nil)).toBe(nil)
+			-- a short sha of seven digits or more names the same commit
+			t.expect(layer(review(string.sub(FINISH, 1, 7), "approve", nil), nil, nil)).toBe(nil)
+			local stale = layer(review(OLDER, "approve", nil), nil, nil)
+			t.expect(stale ~= nil).toBe(true)
+			-- the reason names both commits and what to do
+			t.expect(has(stale, string.sub(OLDER, 1, 7))).toBe(true)
+			t.expect(has(stale, string.sub(FINISH, 1, 7))).toBe(true)
+			t.expect(has(stale, "Commit:")).toBe(true)
+			-- six digits are too short to name a commit
+			t.expect(layer(review(string.sub(FINISH, 1, 6), "approve", nil), nil, nil) ~= nil).toBe(true)
+		end
+	)
 
 	it(
 		"AC3: answered findings whose refute names the finish commit are complete; a refute naming an older commit is not",
 		function()
 			local changes = review(OLDER, "changes", { "### F1 [medium] a thing", "### F2 [low] another" })
-			local answers = { "- F1: fixed abc1234; consequences: none", "- F2: deferred c0099: a later issue" }
+			local answers =
+				{ "- F1: fixed abc1234; consequences: none", "- F2: deferred c0099: a later issue" }
 			-- the review named the commit it reviewed; the fixes produced a new finish commit that the refute names
 			t.expect(layer(changes, refute(FINISH, answers), nil)).toBe(nil)
 			local older = layer(changes, refute(OLDER, answers), nil)
@@ -138,7 +144,8 @@ return t.spec("c0248 when a layer is complete", function(it)
 			t.expect(layer(changes, refute(nil, answers), nil) ~= nil).toBe(true)
 			-- a review of the current commit needs no Commit line in its refute
 			local current = review(FINISH, "changes", { "### F1 [medium] a thing" })
-			t.expect(layer(current, refute(nil, { "- F1: fixed abc1234; consequences: none" }), nil)).toBe(nil)
+			t.expect(layer(current, refute(nil, { "- F1: fixed abc1234; consequences: none" }), nil))
+				.toBe(nil)
 		end
 	)
 
@@ -148,7 +155,8 @@ return t.spec("c0248 when a layer is complete", function(it)
 		t.expect(has(why, "Commit")).toBe(true)
 		-- not even a refute that names the finish commit stands in for the review's own Commit line
 		local changes = review(nil, "changes", { "### F1 [medium] a thing" })
-		t.expect(layer(changes, refute(FINISH, { "- F1: fixed abc1234; consequences: none" }), nil) ~= nil).toBe(true)
+		t.expect(layer(changes, refute(FINISH, { "- F1: fixed abc1234; consequences: none" }), nil) ~= nil)
+			.toBe(true)
 		-- a Commit line far down the file is not a header
 		local late = "# Review 001\n"
 			.. string.rep("\nsome text", 30)
@@ -157,7 +165,8 @@ return t.spec("c0248 when a layer is complete", function(it)
 			.. "\nVerdict: approve\n"
 		t.expect(layer(late, nil, nil) ~= nil).toBe(true)
 		-- an empty finish commit fails closed
-		t.expect(completion.layer({ finishSha = "", review = review(FINISH, "approve", nil) }) ~= nil).toBe(true)
+		t.expect(completion.layer({ finishSha = "", review = review(FINISH, "approve", nil) }) ~= nil)
+			.toBe(true)
 	end)
 
 	it("AC2: the final review rules are the same function (moved, not copied)", function()
