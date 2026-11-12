@@ -14,7 +14,7 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local h: fakecli.Harness
-local wt, wt2 = "", "" -- wt made the claims; wt2 holds none and publishes
+local wt = "" -- the worktree that made the claims
 local T0 = os.time()
 local STALE = heartbeat.STALE
 local LATE = T0 + 3 * STALE -- everything claimed at about T0 is stale then, whatever the seconds the fixture took
@@ -148,7 +148,6 @@ return t.spec("c0276 board shows lost work", function(it)
 		local real = fs.readFile(`{h.bin}/git`)
 		fs.writeFile(`{h.bin}/git`, (string.gsub(real, "^#!/bin/sh\n", SHIM, 1)))
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0276-board" }), "worktree"), "%s+$", ""))
-		wt2 = (string.gsub(must(zn(h.f.main, { "worktree", "c0276-pub" }), "worktree"), "%s+$", ""))
 		for _, id in { "c0010", "c0020", "c0030" } do
 			must(zn(wt, { "status", id, "preparing" }, T0), `claim {id}`)
 		end
@@ -163,6 +162,9 @@ return t.spec("c0276 board shows lost work", function(it)
 			`{h.fakes}/prs.json`,
 			'[{"title":"tracker: prep c0020 Something","headRefName":"prep-something"}]'
 		)
+		-- a publish no longer brings the main checkout up to date or rebuilds its board: sync does (and the board is built
+		-- from the checkout's own documents), so the claims reach the board through it
+		must(zn(h.f.main, { "sync" }, LATE), "sync")
 	end)
 
 	it(
@@ -227,24 +229,19 @@ return t.spec("c0276 board shows lost work", function(it)
 		pushBeat(stampOf("pickman/.tracker/rafts/R0020/R0020.md"), T0 + 200)
 	end)
 
-	it(
-		"the board every publish rebuilds, and the one a main-checkout sync rebuilds, carry the verdicts",
-		function()
-			fs.removeFile(`{h.f.main}/.cache/board.html`)
-			must(zn(wt2, { "status", "c0070", "preparing" }, LATE), "a publish")
-			t.expect(itemOf(boardModel(`{h.f.main}/.cache/board.html`), "c0010").heartbeat).toBe("lost")
-			fs.removeFile(`{h.f.main}/.cache/board.html`)
-			trackerfix.elsewhere(
-				h.f,
-				{ [`{P}/c0081/c0081.md`] = issue("c0081", "new-a-b-c") },
-				"another terminal's issue"
-			)
-			must(zn(h.f.main, { "sync" }, LATE), "sync")
-			local model = boardModel(`{h.f.main}/.cache/board.html`)
-			t.expect(itemOf(model, "c0081").title).toBe("c0081") -- the sync brought it in
-			t.expect(itemOf(model, "c0050").heartbeat).toBe("lost")
-		end
-	)
+	it("the board a main-checkout sync rebuilds carries the verdicts", function()
+		fs.removeFile(`{h.f.main}/.cache/board.html`)
+		trackerfix.elsewhere(
+			h.f,
+			{ [`{P}/c0081/c0081.md`] = issue("c0081", "new-a-b-c") },
+			"another terminal's issue"
+		)
+		must(zn(h.f.main, { "sync" }, LATE), "sync")
+		local model = boardModel(`{h.f.main}/.cache/board.html`)
+		t.expect(itemOf(model, "c0081").title).toBe("c0081") -- the sync brought it in
+		t.expect(itemOf(model, "c0050").heartbeat).toBe("lost")
+		t.expect(itemOf(model, "c0020").heartbeat).toBe("parked")
+	end)
 
 	it(
 		"unreadable pull requests leave stale claims stale (never lost), and the board still builds",
@@ -279,10 +276,10 @@ return t.spec("c0276 board shows lost work", function(it)
 				t.expect(i.heartbeat).toBe(nil)
 			end
 		end
-		-- and a publish whose rebuild cannot read them still publishes, and the page it rebuilds says why it has no marks
+		-- and a sync whose rebuild cannot read them still syncs, and the page it rebuilds says why it has no marks
 		fs.removeFile(`{h.f.main}/.cache/board.html`)
 		fs.writeFile(`{h.fakes}/lsfail`, "1")
-		local pub = zn(wt2, { "status", "c0080", "preparing" }, LATE)
+		local pub = zn(h.f.main, { "sync" }, LATE)
 		fs.removeFile(`{h.fakes}/lsfail`)
 		t.expect(pub.ok).toBe(true)
 		local rebuilt = boardModel(`{h.f.main}/.cache/board.html`)
@@ -347,29 +344,6 @@ return t.spec("c0276 board shows lost work", function(it)
 		t.expect(itemOf(model, "c0050").heartbeat).toBe("stale")
 	end)
 
-	it("the board a land rebuilds carries the verdicts too", function()
-		-- a capture worktree holds no claim, so no later layer beats or discards anything in it; its name is no numbered copy
-		local lw = (string.gsub(must(zn(h.f.main, { "worktree", "capture-c0276" }), "worktree"), "%s+$", ""))
-		local made = must(
-			zn(
-				lw,
-				{ "new", "issue", "c", "land-probe", "--desc", "First line.", "--project", "pickman" },
-				LATE
-			),
-			"new issue"
-		)
-		local id = string.match(made, "(c%d%d%d%d)") :: string
-		local doc = `{lw}/pickman/.tracker/issues/{id}/{id}.md`
-		fs.writeFile(doc, fs.readFile(doc) .. "\nMore.\n")
-		fixture.git(lw, { "add", "pickman/.tracker" })
-		fixture.git(lw, { "commit", "-q", "-m", `tracker: new {id} land-probe` })
-		fs.removeFile(`{h.f.main}/.cache/board.html`)
-		must(zn(lw, { "land" }, LATE, { PICKMAN_LAND_GATE = "true" }), "land")
-		local model = boardModel(`{h.f.main}/.cache/board.html`)
-		t.expect(itemOf(model, id).title ~= nil).toBe(true) -- the landed document is on the page
-		t.expect(itemOf(model, "c0010").heartbeat).toBe("lost")
-	end)
-
 	it("a rebuild after a sync does not fetch origin main a second time", function()
 		trackerfix.elsewhere(
 			h.f,
@@ -385,37 +359,6 @@ return t.spec("c0276 board shows lost work", function(it)
 			end
 		end
 		t.expect(mainFetches).toBe(1) -- sync's own; the rebuild trusts it
-	end)
-
-	it("a land does not fetch main again after its push for the rebuild", function()
-		local lw = (
-			string.gsub(must(zn(h.f.main, { "worktree", "capture-c0276-b" }), "worktree"), "%s+$", "")
-		)
-		local made = must(
-			zn(
-				lw,
-				{ "new", "issue", "c", "land-fetch", "--desc", "First line.", "--project", "pickman" },
-				LATE
-			),
-			"new issue"
-		)
-		local id = string.match(made, "(c%d%d%d%d)") :: string
-		local doc = `{lw}/pickman/.tracker/issues/{id}/{id}.md`
-		fs.writeFile(doc, fs.readFile(doc) .. "\nMore.\n")
-		fixture.git(lw, { "add", "pickman/.tracker" })
-		fixture.git(lw, { "commit", "-q", "-m", `tracker: new {id} land-fetch` })
-		fs.writeFile(`{h.fakes}/fetchlog`, "")
-		must(zn(lw, { "land" }, LATE, { PICKMAN_LAND_GATE = "true" }), "land")
-		local afterPush, mainFetches = false, 0
-		for line in string.gmatch(fs.readFile(`{h.fakes}/fetchlog`), "[^\n]+") do
-			if string.sub(line, 1, 4) == "push" and has(line, "refs/heads/main") then
-				afterPush = true
-			elseif afterPush and string.sub(line, 1, 5) == "fetch" and has(line, "main") then
-				mainFetches += 1 -- any spelling of main
-			end
-		end
-		t.expect(afterPush).toBe(true)
-		t.expect(mainFetches).toBe(1) -- land's own fetch after the push; the rebuild trusts it
 	end)
 
 	it("without an origin to publish to nothing is read and nothing is said", function()
