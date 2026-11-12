@@ -327,7 +327,6 @@ local function changes(
 	args: { string },
 	dirs: { string },
 	want: (name: string) -> boolean,
-	id: string,
 	firstParent: boolean
 ): { Commit }
 	local argv = table.clone(args)
@@ -340,11 +339,7 @@ local function changes(
 	for _, d in dirs do
 		table.insert(argv, d)
 	end
-	local out = trail.parse(git(argv) or "", dirs, want)
-	for _, c in out do
-		c.id = id
-	end
-	return out
+	return trail.parse(git(argv) or "", dirs, want)
 end
 
 -- The commits on `head` that changed a compaction map's content: added or modified, never only moved (`-M`, so the
@@ -438,7 +433,7 @@ function trail.read(
 		return trail.isDoc(name) or want(name)
 	end
 	local all =
-		changes({ "log", head }, trail.dirs(kind, id, within :: { string }), keep, id, firstParent == true)
+		changes({ "log", head }, trail.dirs(kind, id, within :: { string }), keep, firstParent == true)
 	local out, cutNotes = trail.lifeOf(all, id, trail.cuts(head), want)
 	notes = cutNotes
 	return out, notes

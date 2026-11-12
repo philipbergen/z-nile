@@ -225,6 +225,20 @@ return t.spec("c0280 provenance from git", function(it)
 			.toBe("agent:claude-opus-5-5 effort unknown (from git)")
 		local readd = commit(22, "Phil", "tracker: compact ids (#64)", opus, "A", DONE, "done", "R0011")
 		t.expect(provenance.select({ readd }, people, fronts, mark).delivered).toBe(nil)
+		-- nor is a later edit under done/ of a life that started there
+		local edit = commit(23, "Zed", "tracker: fix typo", {}, "M", DONE, "done", "R0011")
+		t.expect(provenance.select({ edit, readd }, people, fronts, mark).delivered).toBe(nil)
+		-- a reopened item delivered again: the delivery is the first arrival
+		local reopen = commit(24, "Hal", "tracker: reopen c0010", {}, "A", ACTIVE, "active", "R0011")
+		local again2 = commit(25, "Zed", "R0012: again (#9)", {}, "A", DONE, "done", "R0011")
+		local twice = provenance.select(
+			{ again2, reopen, alsoRow(reopen, "D", DONE, nil), done, ready, capture },
+			people,
+			fronts,
+			NOMARK
+		)
+		t.expect((twice.delivered :: provenance.Entry).actor)
+			.toBe("agent:claude-sonnet-5-5 effort unknown (from git)")
 		-- a `release` give-back (preparing -> new, not by a `tracker: <id> new` commit) is a status change; a raft's
 		-- give-back `tracker: R0011 new` that changes this issue is the unblock; a commit that kept the word is nothing
 		local base = commit(30, "Ann", "tracker: new c0010 alpha", {}, "A", DOC, "preparing", "")
