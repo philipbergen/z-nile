@@ -2600,8 +2600,9 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 					-- having made its issue and asked (code review 001 F1)
 					local aside: string? = nil
 					if waiting then
-						aside = freeName(dir, "questions-refused-", ".md", true)
-						fs.move(q, aside)
+						local name = freeName(dir, "questions-refused-", ".md", true)
+						fs.move(q, name)
+						aside = name
 					end
 					unlock(dir)
 					local note = if aside

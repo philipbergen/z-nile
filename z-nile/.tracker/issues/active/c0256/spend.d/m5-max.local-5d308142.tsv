@@ -50,3 +50,14 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-12 09:04	172 specs	0	0	test			240.497	1076.760		240.497	tokens,ai
 2026-11-12 16:01	2 specs	0	0	test			61.303	42.970		61.303	tokens,ai
 2026-11-12 16:01	c0256: review 001 F1, F2, F5: adoption joins the issue's state under its lock, caller-relative --answer-file, the ask-only prompt	418	5	code-review							tokens,wall,cpu,ai
+2026-11-12 16:02	1 spec	0	0	test			1.019	0.620		1.019	tokens,ai
+2026-11-12 16:02	1 spec	0	0	test			1.013	0.620		1.013	tokens,ai
+2026-11-12 16:04	1 spec	0	0	test			157.952	125.110		157.952	tokens,ai
+2026-11-12 16:05	1 spec	0	0	test			33.802	25.900		33.802	tokens,ai
+2026-11-12 16:06	1 spec	0	0	test			101.955	72.180		101.955	tokens,ai
+2026-11-12 16:07	1 spec	0	0	test			13.835	11.020		13.835	tokens,ai
+2026-11-12 16:09	4 specs	0	0	test			111.879	96.460		111.879	tokens,ai
+2026-11-12 16:10	176 specs	0	0	test			94.642	649.500		94.642	tokens,ai
+2026-11-12 16:10	1 spec	0	0	test			3.051	2.670		3.051	tokens,ai
+2026-11-12 16:11	static	0	0	test			5.922	51.170		5.922	tokens,ai
+2026-11-12 16:11	c0256: review 001 F1: the set-aside name is a string	9	2	code-review							tokens,wall,cpu,ai
