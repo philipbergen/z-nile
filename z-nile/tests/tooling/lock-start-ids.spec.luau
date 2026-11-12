@@ -215,8 +215,8 @@ return t.spec("R0047 lock start ids", function(it)
 				others += 1
 			end
 		end
-		-- the holder is judged on every step (about ten in 1 s), the waiting run's own id is read once
-		t.expect({ steps = holder >= 5, own = others }).toEqual({ steps = true, own = 1 })
+		-- the holder is judged during the clock-bounded wait; the waiting run's own id is read once
+		t.expect({ steps = holder >= 1, own = others }).toEqual({ steps = true, own = 1 })
 	end)
 
 	it("cleans up", function()

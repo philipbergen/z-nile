@@ -108,25 +108,21 @@ return t.spec("c0165 reuse rules beyond the sequestered specs", function(it)
 		t.expect(string.find(fence, name, 1, true) ~= nil).toBe(true)
 	end)
 
-	it("F3: HEAD is in a digest's extra only for a * selection; a declared ref always", function()
+	it("F3: a digest's extra holds the projects and declared refs, never HEAD or the base", function()
 		local git: fingerprint.GitState =
 			{ head = string.rep("1", 40), refs = { ["refs/heads/x"] = string.rep("2", 40) } }
-		local plain = fingerprint.digestExtra("affected", { "pickman" }, "b", false, git, {})
-		local starred = fingerprint.digestExtra("affected", { "pickman" }, "b", true, git, {})
+		local plain = fingerprint.digestExtra("affected", { "pickman" }, git, {})
 		t.expect(table.find(plain, `HEAD {git.head}`)).toBe(nil)
-		t.expect(table.find(starred, `HEAD {git.head}`) ~= nil).toBe(true)
+		t.expect(table.find(plain, "base b")).toBe(nil)
 		local withRef = fingerprint.digestExtra(
 			"affected",
 			{ "pickman" },
-			"b",
-			false,
 			git,
 			{ "refs/heads/x", "refs/heads/gone" }
 		)
 		t.expect(table.find(withRef, `refs/heads/x\t{git.refs["refs/heads/x"]}`) ~= nil).toBe(true)
 		t.expect(table.find(withRef, "refs/heads/gone\tMISSING") ~= nil).toBe(true)
-		-- the projects and the base are part of it
-		local two = table.concat(fingerprint.digestExtra("affected", { "a", "b" }, "b", false, git, {}), "|")
+		local two = table.concat(fingerprint.digestExtra("affected", { "a", "b" }, git, {}), "|")
 		t.expect(two ~= table.concat(plain, "|")).toBe(true)
 	end)
 

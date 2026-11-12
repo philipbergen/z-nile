@@ -108,15 +108,13 @@ export type PromptInput = {
 	stateDir: string, -- where questions.md goes
 	promptPath: string?, -- z-run: the raft's readied prompt.md
 	streamWorktree: string?, -- zz-review in stream mode: the stream's worktree (ws-<issue>), read only
-	previous: { string }?, -- zz-review in stream mode, from round 2: the previous round's review and refute files
 	description: string?, -- z-ticket: the user's words
 	project: string?, -- z-ticket: the project to capture into
 }
 
--- The prompt of a model step. It names the skill's file and the lessons command, which every CLI reads itself; no
--- skill text, architecture map or other issue is pasted (the user's "Name the files in the prompt").
+-- The prompt of a model step. It names the skill's file, which every CLI reads itself; no skill text,
+-- architecture map or other issue is pasted (the user's "Name the files in the prompt").
 function dispatch.prompt(p: PromptInput): string
-	local lessons = dispatch.lessonsOf(p.step, p.mode)
 	local what: string
 	if p.step == "z-ticket" then
 		what = `Read \`{p.skillPath}\` and follow it to capture this as one issue{if p.project
@@ -127,18 +125,9 @@ function dispatch.prompt(p: PromptInput): string
 			`Read \`{p.skillPath}\` and follow it for {p.id}: its input is the raft's prompt, \`{p.promptPath or `./zn prompt {p.id} --path`}\`; read the whole file first.`
 	elseif p.step == "zz-review" and p.mode == "stream" then
 		-- a dispatched run has no caller to return text to: the reviewer writes review.md in its own state folder and
-		-- the dispatcher numbers it into the raft's folder (design review 008 F1); from round 2 it reads round 1's files
-		local later = ""
-		if p.previous and #p.previous > 0 then
-			local named = {}
-			for _, f in p.previous :: { string } do
-				table.insert(named, `\`{f}\``)
-			end
-			later =
-				` This is a later round: first read the previous round's files, {table.concat(named, ", ")}.`
-		end
+		-- the dispatcher numbers it into the raft's folder (design review 008 F1). One round: there is no later one.
 		what =
-			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in stream mode. Read the stream's diff and run its checks in \`{p.streamWorktree or `.worktree/ws-{p.id}`}\` (read only there). Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into the raft's folder as \`stream-review-{p.id}-NNN.md\`.{later}`
+			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in stream mode. This is the one round. Read the stream's diff and run its checks in \`{p.streamWorktree or `.worktree/ws-{p.id}`}\` (read only there). Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into the raft's folder as \`stream-review-{p.id}-001.md\`.`
 	elseif p.step == "zz-review" then
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as that mode's file ({if p.mode
@@ -151,11 +140,11 @@ function dispatch.prompt(p: PromptInput): string
 	local lines = {
 		`You are running the z-nile step {p.step}{if p.id ~= "" then ` for {p.id}` else ""}, headless and unattended, under ./zn dispatch.`,
 		what,
-		`Before you start, run \`./zn lessons --when {lessons} --full\` and ask each lesson's check of your work.`,
+		"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
 		`Work only in \`{p.worktree}\`: it is your working directory. Never edit the main checkout.`,
-		`Nobody will answer a question. When a decision needs the user (a scope change, a final review round that goes to the user, a missing credential), write \`{p.stateDir}/questions.md\`, one \`## Q<n>\` heading per question with the options and what each costs, and stop.`,
+		`Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`{p.stateDir}/questions.md\`, one \`## Q<n>\` heading per question with the options and what each costs, and stop. A review that leaves a refutation or an unclosed high is not a guess: write \`## Open to the human\` in the item's document, one bullet per finding (\`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>\`), do not rule on it yourself, and stop.`,
 		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse.",
-		"Record your own spend as the skill says, without --tokens for this session: the dispatcher records this session's tokens and model.",
+		"Do not pass --time or --tokens. The dispatcher records this session's wall, CPU, tokens and model.",
 	}
 	return table.concat(lines, "\n") .. "\n"
 end
@@ -189,6 +178,7 @@ export type Facts = {
 	localRaft: string, -- the raft: line in the rafting worktree, when the dispatcher rafted it ("" when none)
 	pr: Pr?, -- the PR of the step that holds the item now (prep, rafting or run)
 	questions: boolean, -- the run state holds questions.md
+	openHuman: { string }, -- unruled ids under ## Open to the human in the step's worktree document
 	last: { step: string, outcome: string }?, -- the last step's outcome in the run state
 	uncovered: { string }, -- `./zn lessons --uncovered <id>` in the step's worktree, after a review step
 	autoMerge: { string },
@@ -288,6 +278,12 @@ function dispatch.next(f: Facts): Action
 		return stop(
 			dispatch.EXIT.user,
 			"needs the user: answer questions.md, then ./zn dispatch retry " .. f.id
+		)
+	end
+	if #f.openHuman > 0 then
+		return stop(
+			dispatch.EXIT.user,
+			`needs the user: {f.id} has {table.concat(f.openHuman, ", ")} under ## Open to the human with no ruling; rule on each in the document, then ./zn dispatch retry {f.id}`
 		)
 	end
 	if f.last and f.last.outcome == "tripwire" and f.last.step == "merge-check" then

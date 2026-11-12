@@ -9,7 +9,7 @@ description: Code structure rules for invaders's game (first-person Space Invade
 Invaders is a game of the arcade, in its home `invaders/`: every path in this skill is relative to `invaders/`, where its specs and `check.sh` files run (`invaders/src/shared/Logic/...` in the repository). Its product decisions are `invaders/.tracker/game-design.md` and binding; its map of features and their dependencies is `invaders/.tracker/architecture.md`.
 
 ## The rules are pickman's
-Read `pickman/skills/pickman-arch/SKILL.md` first, and its lessons (`./zn lessons --skill pickman-arch --full`). Its Layout rows, Rules 1 to 8 and Design checklist are invaders's too, as written, with the changes below. Invaders keeps no copy of them: a change to a rule is made there once and applies here, and a rule that must differ for invaders is stated in this skill instead. Pickman's examples (its maze, ghosts and lobby) are pickman's: the same rules apply to invaders's own features.
+Read `pickman/skills/pickman-arch/SKILL.md` first. Its Layout rows, Rules 1 to 8 and Design checklist are invaders's too, as written, with the changes below. Invaders keeps no copy of them: a change to a rule is made there once and applies here, and a rule that must differ for invaders is stated in this skill instead. Pickman's examples (its maze, ghosts and lobby) are pickman's: the same rules apply to invaders's own features.
 
 ## Layout (Rojo: `default.project.json` is the game place)
 | path | Roblox location | contains |
@@ -33,7 +33,7 @@ Pickman's checklist, answered for invaders:
 - **Touched modules**: the exact paths, used for spend attribution and for choosing affected tests.
 
 ## Lessons
-Before you start, read this skill's lessons: `./zn lessons --skill invaders-arch --full`. Each is a mistake made before, with the question that catches it.
+Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
 
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.

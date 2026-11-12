@@ -405,22 +405,22 @@ return t.spec("c0120 checks run from their project's home", function(it)
 	end)
 
 	it(
-		"a pickman raft's prompt inlines pickman's architecture map; a z-nile raft's says it has none",
+		"a pickman raft's prompt names pickman's architecture map; a z-nile raft's says it has none",
 		function()
 			local r = trackerfix.tr(f, f.main, { "ready", "R0010" })
 			if not r.ok then
 				error(r.stderr .. r.stdout)
 			end
 			local prompt = fs.readFile(at("pickman/.tracker/rafts/active/R0010/prompt.md"))
-			t.expect(has(prompt, "## Architecture map (pickman/.tracker/architecture.md)")).toBe(true)
-			t.expect(has(prompt, "ARCH-MARKER pickman's map")).toBe(true)
-			t.expect(has(prompt, "## Work items (verbatim from pickman/.tracker/)")).toBe(true)
+			t.expect(has(prompt, "Read `pickman/.tracker/architecture.md` before you change a dependency."))
+				.toBe(true)
+			t.expect(has(prompt, "ARCH-MARKER pickman's map")).toBe(false)
+			t.expect(has(prompt, "pickman/.tracker/issues/active/f0010/f0010.md")).toBe(true)
 			local z = trackerfix.tr(f, f.main, { "ready", "R0020" })
 			if not z.ok then
 				error(z.stderr .. z.stdout)
 			end
 			local zp = fs.readFile(at("z-nile/.tracker/rafts/active/R0020/prompt.md"))
-			t.expect(has(zp, "## Architecture map (z-nile/.tracker/architecture.md)")).toBe(true)
 			t.expect(has(zp, "(z-nile/.tracker has no architecture.md: this project has none)")).toBe(true)
 			t.expect(has(zp, "ARCH-MARKER")).toBe(false)
 			-- the prompts are ignored files: the main checkout stays clean

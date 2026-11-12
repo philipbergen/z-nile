@@ -1,6 +1,7 @@
 --!strict
 -- c0010 AC1: the tracker CLI lifecycle works end to end, driven for real in a throwaway clone
 -- of the committed HEAD (no remote, so start/done skip push and gh).
+local buffer = require("@znile/engine/buffer")
 local clone = require("@tests/lib/clone")
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
@@ -186,7 +187,7 @@ return t.spec("tracker lifecycle", function(it)
 		git({ "commit", "-qm", "prep ready" })
 		local before = tonumber(git({ "rev-list", "--count", "HEAD" })) :: number
 		must(tr({ "start", "R0010" }), "start")
-		t.expect(git({ "branch", "--show-current" })).toBe("R0010-demo")
+		t.expect(git({ "branch", "--show-current" })).toBe("R0010/1/f0010")
 		t.expect(tonumber(git({ "rev-list", "--count", "HEAD" }))).toBe(before + 1)
 		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: start R0010 Demo")
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
@@ -214,13 +215,20 @@ return t.spec("tracker lifecycle", function(it)
 		end
 		t.expect(added).toBe(8)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		local a = read("pickman/.tracker/issues/active/f0010/spend.md")
-		local g = read("pickman/.tracker/issues/active/f0031/spend.md")
-		t.expect(string.match(a, "totals: added=(%d+)")).toBe("5")
-		t.expect(string.match(g, "totals: added=(%d+)")).toBe("3")
-		t.expect(string.match(a, "minutes=([%d%.]+)")).toBe("5.0")
-		t.expect(string.match(g, "minutes=([%d%.]+)")).toBe("3.0")
-		t.expect(string.find(git({ "log", "-1", "--format=%B" }), "Issue: f0010 +5/-0 5.0m", 1, true) ~= nil)
+		local function measured(id: string): string
+			local folder = `{dir}/pickman/.tracker/issues/active/{id}/spend.d`
+			local names = fs.readDir(folder)
+			table.sort(names)
+			return fs.readFile(`{folder}/{names[#names]}`)
+		end
+		local a = buffer.parseTsv(measured("f0010"))
+		local g = buffer.parseTsv(measured("f0031"))
+		t.expect(a ~= nil and g ~= nil).toBe(true)
+		t.expect((a :: { any })[1].added).toBe(5)
+		t.expect((g :: { any })[1].added).toBe(3)
+		t.expect((a :: { any })[1].minutes).toBe(0)
+		t.expect((g :: { any })[1].minutes).toBe(0)
+		t.expect(string.find(git({ "log", "-1", "--format=%B" }), "Issue: f0010 +5/-0 0.0m", 1, true) ~= nil)
 			.toBe(true)
 	end)
 
@@ -255,6 +263,12 @@ return t.spec("tracker lifecycle", function(it)
 			"pickman/.tracker/rafts/active/R0010/refute-001.md",
 			"- F1: fixed abc: done; consequences: none\n- F2: refuted: by design\n"
 		)
+		local raftDoc = "pickman/.tracker/rafts/active/R0010/R0010.md"
+		write(
+			raftDoc,
+			read(raftDoc)
+				.. "\n## Open to the human\n- F2: other. Answer: by design. Decision: accept.\n  Ruled (user, 2026-11-10): accepted.\n"
+		)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		local good = read("pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau")
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
@@ -263,6 +277,12 @@ return t.spec("tracker lifecycle", function(it)
 			(string.gsub(good, "toBe%(1%)", "toBe(2)"))
 		)
 		must(tr({ "commit", "-m", "review 001 answered", "--time", "1" }), "commit")
+		must(tr({ "finish", "f0010" }), "finish f0010")
+		must(tr({ "start", "R0010" }), "start f0031")
+		write("notes/f0031.txt", "gamma\n")
+		git({ "add", "-A" })
+		git({ "commit", "-qm", "f0031 work" })
+		must(tr({ "finish", "f0031" }), "finish f0031")
 		local head = git({ "rev-parse", "HEAD" })
 		local r = tr({ "done", "R0010" })
 		t.expect(r.ok).toBe(false)
@@ -275,6 +295,7 @@ return t.spec("tracker lifecycle", function(it)
 			.toBe(true)
 		write("pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau", good)
 		must(tr({ "commit", "-m", "fix acceptance fixture", "--time", "1" }), "commit")
+		must(tr({ "finish", "f0031" }), "finish the fix")
 	end)
 
 	it("done promotes acceptance specs and finishes", function()
@@ -285,6 +306,6 @@ return t.spec("tracker lifecycle", function(it)
 		t.expect(fs.isFile(`{dir}/pickman/tests/acceptance/f0010/alpha.spec.luau`)).toBe(true)
 		t.expect(fs.isDir(`{dir}/pickman/.tracker/issues/done/f0010/acceptance`)).toBe(false)
 		t.expect(git({ "status", "--porcelain" })).toBe("")
-		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
+		t.expect(git({ "log", "-1", "--format=%s" })).toBe("R0010: bind f0010, f0031")
 	end)
 end)

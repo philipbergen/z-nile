@@ -60,6 +60,7 @@ local function attempt(answers: { string }, review: string?): Result
 	write("pickman/.tracker/rafts/active/R0010/review-001.md", review or REVIEW)
 	write("pickman/.tracker/rafts/active/R0010/refute-001.md", table.concat(answers, "\n") .. "\n")
 	must(tr({ "commit", "-m", "round", "--time", "1" }), "commit")
+	must(tr({ "finish", "f0010" }), "finish")
 	return tr({ "done", "R0010" })
 end
 
@@ -236,7 +237,14 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 		t.expect((string.find(mixed.stderr, "c0999", 1, true))).toBe(nil)
 	end)
 
-	it("finishes when medium and low findings are deferred", function()
+	it("finishes when medium and low findings are deferred and a refuted high is ruled", function()
+		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
+		local doc = "pickman/.tracker/rafts/active/R0010/R0010.md"
+		write(
+			doc,
+			fs.readFile(`{work}/{doc}`)
+				.. "\n## Open to the human\n- F1: a high finding. Answer: the reviewer misread the spec. Decision: accept.\n  Ruled (user, 2026-11-10): accepted.\n"
+		)
 		local r = attempt({
 			"- F1: refuted: the reviewer misread the spec (test: x)",
 			"- F2: deferred c0020: needs its own design",
@@ -248,7 +256,7 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
 		t.expect(fs.isDir(`{work}/pickman/.tracker/rafts/done/R0010`)).toBe(true)
 		t.expect(fs.isDir(`{work}/pickman/.tracker/issues/done/f0010`)).toBe(true)
-		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
+		t.expect(git({ "log", "-1", "--format=%s" })).toBe("R0010: bind f0010")
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isDir(`{work}/pickman/.tracker/issues/c0020`)).toBe(true) -- the follow-up is still in the backlog
 	end)
