@@ -8,6 +8,7 @@ local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -30,6 +31,15 @@ local OPUS = "agent:claude-opus-5-5 effort high"
 local TRIVIAL_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
 	.. 'check "RC1: fixture" true\nfinish\n'
 local ISSUES, RAFTS = "pickman/.tracker/issues", "pickman/.tracker/rafts"
+
+local REQ = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
+local function alpha(expected: number): string
+	return "--!strict\nlocal t = "
+		.. REQ
+		.. '("@tests/lib/t")\n\nreturn t.spec("alpha", function(it)\n\tit("holds", function()\n\t\tt.expect(1).toBe('
+		.. tostring(expected)
+		.. ")\n\tend)\nend)\n"
+end
 
 local function run(cmd: string, args: { string }, env: { [string]: string }?): Result
 	local all: { [string]: string } = table.clone(ID)
@@ -122,7 +132,7 @@ return t.spec("c0282 the offline lifecycle stamps provenance", function(it)
 	end)
 
 	it(
-		"an emergent issue in an active raft gets a rafted row, and done appends a delivered row to every member",
+		"start opens the stack, and an emergent issue made in the raft's worktree gets a rafted row",
 		function()
 			for _, id in { "f0010", "f0020" } do
 				edit(`{ISSUES}/{id}/{id}.md`, "design: draft", "design: ready")
@@ -135,6 +145,9 @@ return t.spec("c0282 the offline lifecycle stamps provenance", function(it)
 			end
 			edit(`{RAFTS}/R0010/R0010.md`, "design: draft", "design: ready")
 			write(`{RAFTS}/R0010/check.sh`, TRIVIAL_CHECK)
+			fs.writeDir(`{dir}/{ISSUES}/f0010/acceptance`)
+			write(`{ISSUES}/f0010/acceptance/alpha.spec.luau`, alpha(1))
+			seal.prep(dir)
 			git({ "add", "-A" })
 			git({ "commit", "-qm", "prep ready" })
 			must(tr({ "start", "R0010" }), "start")
@@ -146,58 +159,59 @@ return t.spec("c0282 the offline lifecycle stamps provenance", function(it)
 				"emergent"
 			)
 			local epath = string.match(emergent, "(%S+%.md)") :: string
-			local eid = string.match(epath, "(d%d+)") :: string
 			local eprov = `{string.match(epath, "^(.*)/[^/]+$")}/provenance.md`
 			t.expect(has(eprov, `| rafted | {OPUS} | raft=R0010`)).toBe(true)
-			write(`{string.match(epath, "^(.*)/[^/]+$")}/check.sh`, TRIVIAL_CHECK)
-			fs.writeDir(`{dir}/notes/f0010`)
-			write("notes/f0010/a.txt", "1\n")
-			must(tr({ "commit", "-m", "work", "--time", "1" }), "commit")
-			write(
-				`{RAFTS}/active/R0010/review-001.md`,
-				"# Review 001\n\n### F1 [low] x\nEvidence: y\n\nVerdict: approve\n"
-			)
-			write(`{RAFTS}/active/R0010/refute-001.md`, "- F1: refuted: by design\n")
-			must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit review")
-			-- a done that fails and rolls back leaves no delivered row (the rows are staged with the moves), and the retry
-			-- appends exactly one per member, including the members that had no record of their own yet
-			local REQ = "req" .. "uire"
-			local function alpha(expected: number): string
-				return "--!strict\nlocal t = "
-					.. REQ
-					.. '("@tests/lib/t")\n\nreturn t.spec("alpha", function(it)\n\tit("holds", function()\n\t\tt.expect(1).toBe('
-					.. tostring(expected)
-					.. ")\n\tend)\nend)\n"
-			end
-			-- f0020 is an old member with no record at all (a raft made before records existed): done creates its file
-			git({ "rm", "-q", `{ISSUES}/active/f0020/provenance.md` })
-			git({ "commit", "-qm", "an old member with no record" })
-			fs.writeDir(`{dir}/{ISSUES}/active/f0010/acceptance`)
+			t.expect(count(eprov, "rafted")).toBe(1)
+		end
+	)
+
+	it(
+		"done appends a delivered row to every member, staged with the moves; a failed done leaves none",
+		function()
+			-- the emergent issue was a probe of its row: its untracked folder goes, so the stack is the two members
+			git({ "reset", "-q", "--hard", "HEAD" })
+		git({ "clean", "-fdq", "--", ISSUES })
+			-- layer 1: f0010 with a failing promoted spec, as c0001 does
+			local good = alpha(1)
 			write(`{ISSUES}/active/f0010/acceptance/alpha.spec.luau`, alpha(2))
-			must(tr({ "commit", "-m", "a failing promoted spec", "--time", "1" }), "commit")
-			-- a bad actor refuses done before it moves anything
+			fs.writeDir(`{dir}/notes`)
+			write("notes/f0010.txt", "alpha\n")
+			must(tr({ "commit", "-m", "f0010 work with a failing promoted spec" }), "commit")
+			must(tr({ "finish", "f0010" }), "finish f0010")
+			must(tr({ "start", "R0010" }), "start f0020")
+			write("notes/f0020.txt", "gamma\n")
+			git({ "add", "-A" })
+			git({ "commit", "-qm", "f0020 work" })
+			must(tr({ "finish", "f0020" }), "finish f0020")
+			seal.trace(dir, "R0010")
+			-- a bad actor refuses before anything moves
 			local bad = tr({ "done", "R0010" }, { ZN_ACTOR = "robot:x" })
 			t.expect(bad.ok).toBe(false)
 			t.expect(string.find(bad.stderr .. bad.stdout, "not an actor", 1, true) ~= nil).toBe(true)
 			t.expect(fs.isDir(`{dir}/{ISSUES}/done/f0010`)).toBe(false)
 			t.expect(git({ "status", "--porcelain" })).toBe("")
+			-- f0020 is an old member with no record of its own: a failed done creates none, and rolls the rows back
 			local failed = tr({ "done", "R0010" }, { ZN_ACTOR = OPUS })
 			t.expect(failed.ok).toBe(false)
+			t.expect(string.find(failed.stderr .. failed.stdout, "rolled back", 1, true) ~= nil).toBe(true)
 			t.expect(has(`{ISSUES}/active/f0010/provenance.md`, "| delivered |")).toBe(false)
-			t.expect(fs.isFile(`{dir}/{ISSUES}/active/f0020/provenance.md`)).toBe(false) -- the created file is rolled back too
+			t.expect(fs.isFile(`{dir}/{ISSUES}/active/f0020/provenance.md`)).toBe(true)
+			t.expect(has(`{ISSUES}/active/f0020/provenance.md`, "| delivered |")).toBe(false)
 			t.expect(fs.isDir(`{dir}/{ISSUES}/done/f0010`)).toBe(false)
 			t.expect(git({ "status", "--porcelain" })).toBe("")
-			write(`{ISSUES}/active/f0010/acceptance/alpha.spec.luau`, alpha(1))
-			must(tr({ "commit", "-m", "the spec passes", "--time", "1" }), "commit")
+			-- the retry appends exactly one row per member
+			write(`{ISSUES}/active/f0010/acceptance/alpha.spec.luau`, good)
+			must(tr({ "commit", "-m", "the spec passes" }), "commit")
+			must(tr({ "finish", "f0020" }), "finish the fix")
+			seal.trace(dir, "R0010")
 			must(tr({ "done", "R0010" }, { ZN_ACTOR = OPUS }), "done")
-			-- one row per member, riding the raft PR into done/, with the actor and the raft
-			for _, id in { "f0010", "f0020", eid } do
+			for _, id in { "f0010", "f0020" } do
 				local p = `{ISSUES}/done/{id}/provenance.md`
 				t.expect(count(p, "delivered")).toBe(1)
 				t.expect(has(p, `| delivered | {OPUS} | raft=R0010 |`)).toBe(true)
-				t.expect(has(p, "worker=")).toBe(false) -- the worker is read from spend rows by who, never stored
+				t.expect(has(p, "worker=")).toBe(false) -- the worker is read from the spend rows by who, never stored
 			end
-			-- the raft itself is delivered by its members' rows, never by a record of its own
+			-- the raft is delivered by its members' rows, never by a record of its own
 			t.expect(fs.isFile(`{dir}/{RAFTS}/done/R0010/provenance.md`)).toBe(false)
 			-- the rafted rows survived the move
 			t.expect(count(`{ISSUES}/done/f0010/provenance.md`, "rafted")).toBe(1)

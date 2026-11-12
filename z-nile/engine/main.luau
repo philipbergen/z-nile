@@ -390,7 +390,8 @@ end
 
 -- c0282: who a lifecycle row names, and the dispatcher step a script step runs under (`ZN_VIA`): both read before the
 -- command changes anything, so a bad `--actor`, `ZN_ACTOR` or `ZN_VIA` refuses it whole.
-local function lifecycleWho(opts: { [string]: { string } }?): (string, string?)
+local lifecycle = {} -- one local for the three helpers: main.luau is at Luau's limit of 200 locals
+function lifecycle.who(opts: { [string]: { string } }?): (string, string?)
 	local actor = liveActor(opts)
 	if not provenance.isLive(actor) then
 		fail("no git identity to record: set user.name or pass --actor")
@@ -402,14 +403,14 @@ local function lifecycleWho(opts: { [string]: { string } }?): (string, string?)
 	return actor, via
 end
 
-local function recordNow(): string
+function lifecycle.now(): string
 	return os.date("!%Y-%m-%d %H:%M", os.time()) :: string
 end
 
 -- c0282: appends one row to the record in `dir` (an item's folder in this worktree) and stages it, so the commit the
 -- caller makes (a pull request carries it) holds the row with the change it records. The record is created when the
 -- folder has none.
-local function appendRow(dir: string, id: string, event: string, actor: string, detail: string)
+function lifecycle.append(dir: string, id: string, event: string, actor: string, detail: string)
 	local path = `{dir}/provenance.md`
 	local text, why = provenance.record(
 		if fs.isFile(path) then fs.readFile(path) else nil,
@@ -417,7 +418,7 @@ local function appendRow(dir: string, id: string, event: string, actor: string, 
 		event,
 		actor,
 		detail,
-		recordNow()
+		lifecycle.now()
 	)
 	if not text then
 		fail(`{path}: {why or "not a record"}`)
@@ -1209,7 +1210,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		-- c0282: an emergent issue is rafted from the start, so its `rafted` row names who made it
 		local actor: string?, via: string? = nil, nil
 		if raftId then
-			actor, via = lifecycleWho(opts)
+			actor, via = lifecycle.who(opts)
 		end
 		if state == "backlog" and publishing() then
 			local chosen = ""
@@ -1291,7 +1292,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/issue/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
 		if raftId and actor then
-			appendRow(dir, id, "rafted", actor, provenance.raftDetail(raftId, via))
+			lifecycle.append(dir, id, "rafted", actor, provenance.raftDetail(raftId, via))
 		end
 		print(`{dir}/{id}.md`)
 	elseif what == "raft" then
@@ -1307,7 +1308,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
 		end
 		-- c0282: each member gets a `rafted` row; who is read before anything is published
-		local actor, via = lifecycleWho(opts)
+		local actor, via = lifecycle.who(opts)
 		if publishing() then
 			if sh.git({ "status", "--porcelain" }) ~= "" then
 				fail(
@@ -1441,7 +1442,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				local item = store.get(id)
 				store.setFront(item.doc, "raft", chosen)
 				sh.git({ "add", item.doc })
-				appendRow(item.dir, id, "rafted", actor, provenance.raftDetail(chosen, via))
+				lifecycle.append(item.dir, id, "rafted", actor, provenance.raftDetail(chosen, via))
 				if statusLib.effective(frontOf(fs.readFile(item.doc)), item.state) == "prepared" then
 					table.insert(grouped, id)
 				end
@@ -1491,7 +1492,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		for _, m in members do
 			table.insert(ids, m.id)
 			store.setFront(m.doc, "raft", id)
-			appendRow(m.dir, m.id, "rafted", actor, provenance.raftDetail(id, via))
+			lifecycle.append(m.dir, m.id, "rafted", actor, provenance.raftDetail(id, via))
 		end
 		local vars = {
 			ID = id,
@@ -1564,7 +1565,7 @@ end
 
 local function setStatus(id: string, to: string, opts: { [string]: { string } }?)
 	-- c0282: a give-back (`status <id> new`) names who unblocked each issue it changes
-	local unblocker = if to == "new" then (lifecycleWho(opts)) else nil
+	local unblocker = if to == "new" then (lifecycle.who(opts)) else nil
 	local moved: { { id: string, from: string } } = {}
 	local carried = false
 	refuseStale()
@@ -1681,7 +1682,7 @@ local function setStatus(id: string, to: string, opts: { [string]: { string } }?
 			if unblocker and not store.isRaftId(t) then
 				-- c0282: the row is built from origin's file, in the same published commit as the status line
 				local rec = string.gsub(tp, "[^/]+$", "provenance.md")
-				local row, why = provenance.record(read(rec), t, "unblocked", unblocker, "", recordNow())
+				local row, why = provenance.record(read(rec), t, "unblocked", unblocker, "", lifecycle.now())
 				if not row then
 					return `{rec}: {why or "not a record"}`
 				end
@@ -1870,7 +1871,7 @@ function cmd.fold(pos: { string }, opts: { [string]: { string } })
 	if not raftId or not store.isRaftId(raftId) or #pos < 2 then
 		fail("usage: fold <R-id> <issue>...")
 	end
-	local actor, via = lifecycleWho(opts)
+	local actor, via = lifecycle.who(opts)
 	raftingStart("fold")
 	local raft = store.get(raftId)
 	if raft.kind ~= "raft" or raft.state ~= "backlog" then
@@ -1949,7 +1950,7 @@ function cmd.fold(pos: { string }, opts: { [string]: { string } })
 		local doc = item.doc
 		store.setFront(doc, "raft", raftId)
 		sh.git({ "add", doc })
-		appendRow(item.dir, id, "rafted", actor, provenance.raftDetail(raftId, via))
+		lifecycle.append(item.dir, id, "rafted", actor, provenance.raftDetail(raftId, via))
 		if not table.find(list, id) then
 			table.insert(list, id)
 		end
@@ -2080,7 +2081,7 @@ function cmd.recombine(pos: { string }, opts: { [string]: { string } })
 	if not (keeperId and otherId and store.isRaftId(keeperId) and store.isRaftId(otherId)) then
 		fail("usage: recombine <keeper R-id> <other R-id> [<issue>...]")
 	end
-	local actor, via = lifecycleWho(opts)
+	local actor, via = lifecycle.who(opts)
 	if keeperId == otherId then
 		fail("recombine needs two different rafts")
 	end
@@ -2184,7 +2185,7 @@ function cmd.recombine(pos: { string }, opts: { [string]: { string } })
 		local doc = item.doc
 		store.setFront(doc, "raft", keeperId)
 		sh.git({ "add", doc })
-		appendRow(item.dir, id, "rafted", actor, provenance.raftDetail(keeperId, via))
+		lifecycle.append(item.dir, id, "rafted", actor, provenance.raftDetail(keeperId, via))
 		if not table.find(list, id) then
 			table.insert(list, id)
 		end
@@ -5046,7 +5047,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 		fail(`{raft.id} must be an active raft`)
 	end
 	-- c0282: every member gets a `delivered` row naming who ran done; read before anything changes
-	local actor = lifecycleWho(opts)
+	local actor = lifecycle.who(opts)
 	if sh.git({ "status", "--porcelain" }) ~= "" then
 		fail("commit everything first (./zn commit); done needs a clean tree")
 	end
@@ -5186,7 +5187,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 	end
 	-- c0282: the rows are staged with the moves, so a rollback (git reset --hard) removes them and a retry appends once
 	for _, item in movedItems do
-		appendRow(item.dir, item.id, "delivered", actor, provenance.raftDetail(raft.id, nil))
+		lifecycle.append(item.dir, item.id, "delivered", actor, provenance.raftDetail(raft.id, nil))
 	end
 	raft = move(raft, "done")
 	table.insert(movedItems, raft)
