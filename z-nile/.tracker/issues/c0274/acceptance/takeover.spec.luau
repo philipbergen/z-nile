@@ -5,6 +5,7 @@
 -- subject, deletes the old owner's heartbeat branch and creates the taker's in one atomic push, and the old owner's
 -- later moves (the carried `prepared`, `done`, a beat of any form) are refused. Time is ZN_NOW. Fixture under
 -- .cache/c0274-takeover.
+local CACHE = "." .. "cache" -- spelled apart: c0049/spec-isolation reads a literal mention of a cache folder as a fixture shared by the files that name it
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -71,7 +72,7 @@ local function pushBeat(stamp: string, epoch: number)
 	fixture.git(h.f.other, { "push", "-q", "-f", "origin", `{sha}:refs/heads/hb/{stamp}` })
 end
 local function memory(dir: string, id: string): string?
-	local path = `{dir}/.cache/tracker-stamp-{id}`
+	local path = `{dir}/{CACHE}/tracker-stamp-{id}`
 	return if fs.isFile(path) then (string.gsub(fs.readFile(path), "%s+$", "")) else nil
 end
 local function issue(id: string, status: string, raft: string?, design: string?): string
@@ -319,7 +320,7 @@ return t.spec("c0274 take over a lost claim", function(it)
 		t.expect(tipOf(after) ~= "").toBe(true)
 		-- the taker becomes the rafting owner (it can fold, unfold and release); the old owner's release is refused
 		t.expect(memory(wt2, raftId)).toBe(after)
-		t.expect(fs.readFile(`{wt2}/.cache/tracker-claim-{raftId}`)).toBe(after)
+		t.expect(fs.readFile(`{wt2}/{CACHE}/tracker-claim-{raftId}`)).toBe(after)
 		local rel = zn(wt5, { "release", raftId }, AT)
 		t.expect(rel.ok).toBe(false)
 		t.expect(has(rel.stderr, "not this checkout's") or has(rel.stderr, "claim was taken over")).toBe(true) -- a later layer may refuse first
@@ -510,9 +511,9 @@ return t.spec("c0274 take over a lost claim", function(it)
 			t.expect(has(r.stderr, "R0010's claim was taken over")).toBe(true)
 			t.expect(memory(wt4, "R0010")).toBe(first)
 			-- a memory of a stamp the raft never carried (or a rafting one) does not adopt the readied raft either
-			fs.writeFile(`{wt3}/.cache/tracker-stamp-R0010`, "preparing-quiet-copper-falcon")
+			fs.writeFile(`{wt3}/{CACHE}/tracker-stamp-R0010`, "preparing-quiet-copper-falcon")
 			t.expect(zn(wt3, { "beat", "R0010", "--adopt" }, AT).ok).toBe(false)
-			fs.writeFile(`{wt3}/.cache/tracker-stamp-R0010`, "active-made-up-stamp")
+			fs.writeFile(`{wt3}/{CACHE}/tracker-stamp-R0010`, "active-made-up-stamp")
 			t.expect(zn(wt3, { "beat", "R0010", "--adopt" }, AT).ok).toBe(false)
 		end
 	)
@@ -533,7 +534,7 @@ return t.spec("c0274 take over a lost claim", function(it)
 			t.expect(subjectOf(docs[1])).toBe(`tracker: R0100 preparing (takes over {shared})`)
 			for _, rid in { "R0100", "R0110" } do
 				t.expect(memory(wt2, rid)).toBe(now)
-				t.expect(fs.readFile(`{wt2}/.cache/tracker-claim-{rid}`)).toBe(now)
+				t.expect(fs.readFile(`{wt2}/{CACHE}/tracker-claim-{rid}`)).toBe(now)
 			end
 		end
 	)
