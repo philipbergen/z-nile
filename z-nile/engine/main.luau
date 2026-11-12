@@ -102,7 +102,7 @@ usage: ./zn <command> ...
                                                 ready, run), waiting at a gate for its checks and merging, stopping at a block, questions.md or a failure
   dispatch new "<description>" [--project <name>] [--dry-run]
                                                 capture a new issue (z-ticket) and run its chain
-  dispatch <step> <id> [--mode design|code|raft] [--dry-run]
+  dispatch <step> <id> [--mode design|raft|final|code|stream] [--dry-run]
                                                 run one step: a model step on .models.toml's CLIs, a script step itself
   dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
   dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
@@ -1473,6 +1473,7 @@ local function finalRoundRefusal(
 	end
 	local landed = sh.run("git", {
 		"log",
+		"--first-parent",
 		"--diff-filter=A",
 		"--format=%ct",
 		"--reverse",
@@ -1487,7 +1488,7 @@ local function finalRoundRefusal(
 	if not rows then
 		return why
 	end
-	-- the landing as a UTC minute, comparable with the rows' own `when` (content, not commit times)
+	-- the landing (the first-parent commit that brought the file onto main: a --no-ff merge, not its layer commit) as a UTC minute, comparable with the rows' own `when` (content, not commit times)
 	local landedCt = tonumber(string.match(landed.stdout, "^(%d+)"))
 	local landedWhen = if landedCt then os.date("!%Y-%m-%d %H:%M", landedCt) else nil
 	local enforced = finalround.enforced(finalround.firstWhen(rows, kind), landedWhen)
@@ -6519,7 +6520,9 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			ai = got.ai
 			tok = got.tokens
 			modelId = spend.chooseModel(model, got.model)
-			if type(got.note) == "string" and got.note ~= "" then
+			-- a design round's subject stays exactly as written: the rule that the last round ran a final-review model
+			-- (finalround.luau) matches it, and the measure's note would turn "design-review-001" into another name
+			if phase ~= "design-review" and type(got.note) == "string" and got.note ~= "" then
 				noteText = `{note} {got.note}`
 			end
 			openCells = if type(got.unmeasured) == "string" then got.unmeasured else ""

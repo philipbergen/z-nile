@@ -227,6 +227,7 @@ return t.spec("c0261 docs", function(it)
 			at(rules, "`<R-id>: final-review-NNN`", "zz-rules")
 			at(rules, "a layer's `review-NNN.md` is not checked", "zz-rules")
 			at(rules, "which wins over the model the runner measures from the session", "zz-rules")
+		at(rules, "the rule guards against forgetting, not against a wrong id typed by the lead", "zz-rules")
 			at(skill("z-raft"), "under the subject `<R-id>: design-review-NNN`", "z-raft")
 		end
 	)

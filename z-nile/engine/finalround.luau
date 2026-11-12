@@ -140,7 +140,7 @@ function finalround.check(
 		.. stem
 		.. ") was not recorded on a final-review model: its spend row has "
 		.. what
-		.. "; a final round runs a model of a final-review kind (any Opus, kimi k3.1-pro or k3-256k at high or max (the agent CLI's kimi-k3-high and kimi-k3-max stand in), any grok model at xhigh; "
+		.. " (the model recorded on the row: typed with --model by the lead, or written by the dispatcher); a final round runs a model of a final-review kind (any Opus, kimi k3.1-pro or k3-256k at high or max (the agent CLI's kimi-k3-high and kimi-k3-max stand in), any grok model at xhigh; "
 		.. ".models.toml names them for zz-review in order of preference). Run it with ./zn dispatch zz-review "
 		.. owner
 		.. " --mode "

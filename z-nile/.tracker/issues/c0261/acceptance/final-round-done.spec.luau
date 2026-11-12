@@ -170,7 +170,7 @@ return t.spec("c0261 done refuses a final review not on a final-review model", f
 		-- the same round re-run on an Opus: done goes past this check (a later step may still stop it)
 		record("claude-opus-6-1")
 		local past = tr({ "done", "R0010" })
-		t.expect(string.find(past.stderr, "final-review model", 1, true) == nil).toBe(true)
+		t.expect((string.find(past.stderr, "final-review model", 1, true))).toBe(nil)
 	end)
 
 	it("cleans up", function()

@@ -8,7 +8,7 @@
 # max_tokens counts input + cache writes + output (cache reads are left out); the step is killed when it passes it.
 #
 # Models per activity (c0261): each command or activity of a command has its own table, `[<activity>.<cli>]`, naming
-# real model names (never aliases) and effort that CLI runs it with. The work on the way and the review rounds on the way run
+# real model names (never aliases) and effort that CLI runs it with. The work on the way, a layer's code review and a stream review run
 # cheap; every final review (the design review, the raft review, the final review of the whole stack, the idea review)
 # runs the expensive model; z-wait, which only babysits a poll, runs the cheapest. A table is added only where an activity
 # really runs a different model. The model cells are the user's (2026-11-08); the capture's names were examples. A
@@ -52,7 +52,7 @@ max_minutes = 240
 max_tokens = 300000
 
 # Authoring a design: not on the cheap model (the user, 2026-11-08: Opus 5.5 at medium on claude, grok-4.7 at high on grok and
-# agent); its review rounds are zz-review-design and, last, the final round.
+# agent); its design review is zz-review-design, which runs the expensive model.
 [z-design.claude]
 model = "claude-opus-5-5"
 effort = "medium"

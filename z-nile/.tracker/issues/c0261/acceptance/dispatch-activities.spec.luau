@@ -241,6 +241,37 @@ return t.spec("c0261 dispatcher activities", function(it)
 		end
 	)
 
+	it(
+		"the rafting gate waits like the prep gate: the step names the gate, the PR and what it waits for (AC5)",
+		function()
+			local raft = {
+				status = "prepared",
+				design = "ready",
+				localRaft = "R0050",
+				last = { step = "z-raft", outcome = "ok" },
+			}
+			local function at(over: { [string]: any }): any
+				local all = table.clone(raft) :: { [string]: any }
+				for k, v in over do
+					all[k] = v
+				end
+				return dispatch.next(facts(all))
+			end
+			local red: any = at({ pr = pr({ green = false }) })
+			t.expect(red.step).toBe("z-wait")
+			t.expect(red.gate).toBe("raft")
+			t.expect(red.pr).toBe(7)
+			t.expect(red.head).toBe("abc123")
+			t.expect(red.waitFor).toBe("checks")
+			local unknown: any = at({ pr = pr({ mergeable = false, mergeState = "UNKNOWN" }) })
+			t.expect(unknown.step).toBe("z-wait")
+			t.expect(unknown.waitFor).toBe("mergeable")
+			t.expect(at({ pr = pr({ green = false }), waitedHead = "abc123" }).code).toBe(4)
+			t.expect(at({ pr = pr({ green = false }), autoMerge = { "prep" } }).kind).toBe("stop") -- the gate is not the human's to skip
+			t.expect(at({ pr = pr() }).kind).toBe("merge")
+		end
+	)
+
 	it("the mergeable poll ends 0 when GitHub says MERGEABLE and 2 when CONFLICTING (AC4)", function()
 		local c: string = d.waitCommand("mergeable", 42, 600, 30)
 		t.expect(has(c, "gh pr view 42 --json mergeable")).toBe(true)

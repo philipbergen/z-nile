@@ -43,7 +43,7 @@ dispatch.REVIEW_MODES = {
 	code = { lessons = "build", phase = "code-review", activity = "zz-review-code" },
 	-- a stream's review (z-run Phase 2B) under the dispatcher: the model `zz-review-stream` names, cheap (c0261)
 	stream = { lessons = "build", phase = "code-review", activity = "zz-review-stream" },
-	-- the final review of the whole stack (zz-review --mode final): the expensive, bound round
+	-- the final review of the whole stack (zz-review --mode final): the expensive, bound review
 	final = { lessons = "build", phase = "code-review", activity = "zz-review-final" },
 } :: { [string]: { lessons: string, phase: string, activity: string } }
 
@@ -260,7 +260,7 @@ export type Action = {
 	pr: number?,
 	head: string?, -- a merge: the head commit it is pinned to
 	why: string?,
-	waitFor: string?, -- the wait step: "checks" or "merged"
+	waitFor: string?, -- the wait step: "checks" (the PR is not green), "mergeable" (green, GitHub still computing) or "merged"
 	code: number?, -- kind stop: 0 done, 1 failure, 3 needs the user, 4 a block or a gate left to a human (a draft, a conflict, a failed check, a PR a human must judge, the run PR until c0252)
 }
 

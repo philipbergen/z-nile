@@ -58,9 +58,20 @@ local function must(r: fixture.Result): fixture.Result
 	return r
 end
 return t.spec("c0261 the chain runs z-wait at a gate that waits for checks", function(it)
-	it("sets up three items with prep PRs that are not green", function()
+	it("sets up items with prep and rafting PRs", function()
 		h = fakecli.new("c0261-wait", {
 			[".models.toml"] = MODELS,
+			["pickman/.tracker/issues/c0082/c0082.md"] = trackerfix.stub(
+				"c0082",
+				"tenth-thing",
+				"new-quiet-copper-falcon"
+			),
+			["pickman/.tracker/issues/c0090/c0090.md"] = string.gsub(
+				trackerfix.stub("c0090", "rafted-thing", "prepared-quiet-copper-falcon"),
+				"design: draft",
+				"design: ready"
+			),
+			["pickman/.tracker/issues/c0090/.models.toml"] = '[dispatch]\nauto_merge = ["raft"]\n',
 			["pickman/.tracker/issues/c0070/c0070.md"] = trackerfix.stub(
 				"c0070",
 				"seventh-thing",
@@ -84,8 +95,8 @@ return t.spec("c0261 the chain runs z-wait at a gate that waits for checks", fun
 			`{h.bin}/claude`,
 			table.concat({
 				"#!/bin/sh",
-				'case "$*" in *"gh pr checks"*)',
-				'  { echo "claude step=z-wait"; echo "args=$*"; } >> "$FAKE_DIR/log"',
+				'case "$*" in *"gh pr "*)',
+				'  { echo "claude step=z-wait"; echo "cwd=$(pwd -P)"; echo "args=$*"; } >> "$FAKE_DIR/log"',
 				'  [ -f "$FAKE_DIR/wait.sh" ] && sh "$FAKE_DIR/wait.sh"',
 				'  [ -f "$FAKE_DIR/wait.fail" ] && { echo boom >&2; exit 1; } ;;',
 				"esac",
@@ -151,6 +162,53 @@ return t.spec("c0261 the chain runs z-wait at a gate that waits for checks", fun
 			t.expect(r.code).toBe(4)
 			t.expect(count(fakecli.log(h), "claude step=z-wait")).toBe(1)
 			t.expect(fakecli.state(h, "c0081").waitedHead).toBe(head)
+		end
+	)
+
+	it("a green PR whose merge state is still UNKNOWN waits for `mergeable`, then merges (AC5)", function()
+		fakecli.clear(h)
+		fakecli.mode(h, "claude.z-design", "claim")
+		local head = fakecli.pullRequest(h, 10, { ["pickman/.tracker/issues/c0082/x.md"] = "notes\n" })
+		local function json(state: string): string
+			return `\{"number":10,"state":"OPEN","isDraft":false,"mergeable":"{state}","statusCheckRollup":[\{"conclusion":"SUCCESS"\}],"headRefOid":"{head}"\}`
+		end
+		fs.writeFile(`{h.fakes}/pr-prep-tenth-thing.json`, json("UNKNOWN"))
+		fs.writeFile(
+			`{h.fakes}/wait.sh`,
+			`printf '%s' '{json("MERGEABLE")}' > "$FAKE_DIR/pr-prep-tenth-thing.json"\n`
+		)
+		must(fakecli.zn(h, { "dispatch", "c0082" }))
+		local log = fakecli.log(h)
+		t.expect(count(log, "claude step=z-wait")).toBe(1)
+		t.expect(has(log, "gh pr view 10 --json mergeable")).toBe(true) -- the poll is for the merge state, not the checks
+		t.expect(has(log, "gh pr checks 10")).toBe(false)
+		t.expect(has(log, `realgh pr merge 10 --squash --match-head-commit {head}`)).toBe(true)
+	end)
+
+	it(
+		"the rafting gate waits too: z-wait runs in the raft's worktree, and the green PR merges (AC5)",
+		function()
+			fakecli.clear(h)
+			local doc = fixture.git(h.f.origin, { "show", "main:pickman/.tracker/issues/c0090/c0090.md" })
+			local files = {
+				["pickman/.tracker/rafts/R0050/R0050.md"] = "---\nid: R0050\nslug: a-raft\ntitle: a raft\nissues: [c0090]\n---\n",
+				["pickman/.tracker/issues/c0090/c0090.md"] = (
+					string.gsub(doc, "\nraft: \n", "\nraft: R0050\n")
+				),
+			}
+			local head = fakecli.pullRequest(h, 11, files)
+			fs.writeFile(`{h.fakes}/pr-raft-c0090.json`, prJson(11, head, false))
+			fs.writeFile(
+				`{h.fakes}/wait.sh`,
+				`printf '%s' '{prJson(11, head, true)}' > "$FAKE_DIR/pr-raft-c0090.json"\n`
+			)
+			must(fakecli.zn(h, { "dispatch", "c0090" }))
+			local log = fakecli.log(h)
+			t.expect(count(log, "claude step=z-wait")).toBe(1)
+			t.expect(has(log, "/.worktree/raft-c0090\n")).toBe(true) -- the cwd of the wait
+			t.expect(has(log, "gh pr checks 11")).toBe(true)
+			t.expect(has(log, `realgh pr merge 11 --squash --match-head-commit {head}`)).toBe(true)
+			t.expect(fakecli.state(h, "c0090").waitedHead).toBe(head)
 		end
 	)
 end)

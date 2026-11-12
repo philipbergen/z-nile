@@ -266,21 +266,44 @@ function ledger.sum(rows: { Row }): Totals
 	return t
 end
 
-export type ModelTotals = { model: string, tokens: number, minutes: number, records: number }
--- Tokens, minutes and rows per model id, rows with no model under "none", the biggest spender (tokens) first (c0261).
+export type ModelTotals = {
+	model: string,
+	tokens: number,
+	aiMinutes: number, -- the measured AI time (ai seconds, else wall seconds) in minutes: what spend.d rows carry
+	typedMinutes: number, -- the typed minutes of the older rows (a measured row types none)
+	unmeasured: number, -- rows whose AI time the tool could not read
+	records: number,
+}
+-- Tokens, AI minutes, typed minutes and rows per model id, rows with no model under "none", the biggest spender (tokens)
+-- first (c0261). The cost helper `ledger.cost` sums each model's rows (tokens and typed minutes); the measured time is
+-- the row's ai seconds, falling back to its wall seconds.
 function ledger.byModel(rows: { Row }): { ModelTotals }
-	local by: { [string]: ModelTotals } = {}
+	local groups: { [string]: { Row } } = {}
 	for _, r in rows do
 		local k = r.model or "none"
-		local e = by[k] or { model = k, tokens = 0, minutes = 0, records = 0 }
-		e.tokens += r.tokens or 0
-		e.minutes += r.minutes
-		e.records += 1
-		by[k] = e
+		groups[k] = groups[k] or {}
+		table.insert(groups[k], r)
 	end
 	local out: { ModelTotals } = {}
-	for _, e in by do
-		table.insert(out, e)
+	for model, group in groups do
+		local c = ledger.cost(group)
+		local seconds, open = 0, 0
+		for _, r in group do
+			local s = r.ai or r.wall
+			if s ~= nil then
+				seconds += s
+			elseif hasFlag(r, "ai") then
+				open += 1
+			end
+		end
+		table.insert(out, {
+			model = model,
+			tokens = c.tokens,
+			aiMinutes = seconds / 60,
+			typedMinutes = c.reported,
+			unmeasured = open,
+			records = #group,
+		})
 	end
 	table.sort(out, function(a, b)
 		if a.tokens ~= b.tokens then
@@ -291,10 +314,23 @@ function ledger.byModel(rows: { Row }): { ModelTotals }
 	return out
 end
 
+-- The table `./zn metrics` prints last. A model whose AI time could not be read on some rows shows "+?" after what was
+-- read, and "unmeasured" when none was.
 function ledger.renderByModel(totals: { ModelTotals }): string
-	local lines = { "by model", "| model | tokens | minutes | rows |", "|---|---|---|---|" }
+	local lines = {
+		"by model",
+		"| model | tokens | ai minutes | typed minutes | rows |",
+		"|---|---|---|---|---|",
+	}
 	for _, e in totals do
-		table.insert(lines, string.format("| %s | %d | %.1f | %d |", e.model, e.tokens, e.minutes, e.records))
+		local ai = string.format("%.1f", e.aiMinutes)
+		if e.unmeasured > 0 then
+			ai = if e.aiMinutes == 0 then "unmeasured" else ai .. "+?"
+		end
+		table.insert(
+			lines,
+			string.format("| %s | %d | %s | %.1f | %d |", e.model, e.tokens, ai, e.typedMinutes, e.records)
+		)
 	end
 	return table.concat(lines, "\n") .. "\n"
 end

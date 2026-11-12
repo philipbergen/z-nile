@@ -3,6 +3,7 @@
 -- the author's worktree, so each member's spend rows there hold "<R-id>: design-review-NNN" with the reviewer's model
 -- (`./zn spend` commits on the author's branch and pushes nothing), once, with nothing pending for `flush` to write again. Fake CLIs (@tests/lib/fakecli), fixture
 -- under .cache/c0261-dispatch-raft.
+local buffer = require("@znile/engine/buffer")
 local costrow = require("@znile/engine/costrow")
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
@@ -72,9 +73,21 @@ return t.spec("c0261 a dispatched raft review of a new raft is recorded at once"
 		fakecli.mode(h, "claude.zz-review", "script")
 		fs.writeFile(
 			`{h.fakes}/script.sh`,
-			`sleep 1; printf '# Review\\n\\nVerdict: approve\\n' > "$ZN_DISPATCH_DIR/review.md"\n`
+			-- the reviewer looks at the author's measure buffer while it runs: the stage start must already be there
+			`cp "$PWD/.cache/measure.tsv" "$FAKE_DIR/during.tsv"; sleep 1; printf '# Review\\n\\nVerdict: approve\\n' > "$ZN_DISPATCH_DIR/review.md"\n`
 		)
-		must(znIn(wt, { "dispatch", "zz-review", rid, "--mode", "raft" }))
+		local run = znIn(wt, { "dispatch", "zz-review", rid, "--mode", "raft" })
+		must(run)
+		-- #294: the row is measured from a stage start the dispatcher marked before it launched the review, and the
+		-- spend call types no cost
+		local began = false
+		for _, line in buffer.parse(fs.readFile(`{h.fakes}/during.tsv`)) do
+			if line.kind == "begin" and line.phase == "design-review" and line.id == rid then
+				began = true
+			end
+		end
+		t.expect(began).toBe(true)
+		t.expect((string.find(run.stdout .. run.stderr, "are ignored", 1, true))).toBe(nil)
 		for _, id in { "c0011", "c0012" } do
 			-- `./zn spend` commits its row on the current branch and pushes nothing (#294): it is in the author's worktree,
 			-- once, and not on the dispatcher's own branch
@@ -88,7 +101,10 @@ return t.spec("c0261 a dispatched raft review of a new raft is recorded at once"
 			end
 			local n = 0
 			for _, r in rows do
-				if r.subject == `{rid}: design-review-001` then
+				-- a measured row may carry the runner's note after the subject ("… claude unmeasured")
+				local subject: string = r.subject
+				local want = `{rid}: design-review-001`
+				if subject == want or string.sub(subject, 1, #want + 1) == want .. " " then
 					n += 1
 					t.expect(r.model).toBe("claude-opus-5-5")
 					t.expect(r.phase).toBe("design-review")

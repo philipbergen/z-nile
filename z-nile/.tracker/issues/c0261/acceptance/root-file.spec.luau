@@ -54,7 +54,8 @@ local function classOf(a: string): string
 		then "wait"
 		elseif a == "z-design" then "author"
 		elseif WAY[a] then "way"
-		else "final"
+		elseif m.isFinalActivity(a) then "final"
+		else error(`{a} is no class`)
 end
 
 return t.spec("c0261 root .models.toml per activity", function(it)

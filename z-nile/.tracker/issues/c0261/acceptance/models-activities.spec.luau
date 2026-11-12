@@ -1,8 +1,7 @@
 --!strict
 -- c0261: each activity (a command, or a review mode's activity) has its own table in .models.toml,
 -- `[<activity>.<cli>]`, with the real model, its effort and its budget; a review activity the file does not name falls
--- back to the `zz-review` table; the final reviews (design, raft, final, idea) obey the review rule and a layer's code
--- review and the stream review do not.
+-- back to the `zz-review` table; every review activity but a layer's code review and the stream review obeys the review rule.
 -- Pure: models.parse, models.resolveActivity and models.reviewRule over layers built from text.
 local models = require("@znile/engine/models")
 local t = require("@tests/lib/t")
@@ -221,9 +220,8 @@ return t.spec("c0261 a model per activity", function(it)
 	end)
 
 	it(
-		"every final-review activity is named, and a layer's code review and the stream review are not among them (AC2)",
+		"every review activity is a final review but a layer's code review and the stream review: they are on the way (AC2)",
 		function()
-			local finals = m.FINAL_REVIEWS
 			for _, a in
 				{
 					"zz-review",
@@ -231,13 +229,34 @@ return t.spec("c0261 a model per activity", function(it)
 					"zz-review-raft",
 					"zz-review-final",
 					"zz-review-idea",
+					"zz-review-force", -- a mode added later is bound by default
 				}
 			do
-				t.expect(`{a}: {finals[a] == true}`).toBe(`{a}: true`)
+				t.expect(`{a}: {m.isFinalActivity(a)}`).toBe(`{a}: true`)
 			end
-			for _, a in { "zz-review-code", "zz-review-stream", "z-design", "z-run", "z-wait" } do
-				t.expect(`{a}: {finals[a] == true}`).toBe(`{a}: false`)
+			for _, a in { "zz-review-code", "zz-review-stream", "z-design", "z-run", "z-wait", "z-ticket" } do
+				t.expect(`{a}: {m.isFinalActivity(a)}`).toBe(`{a}: false`)
 			end
+			t.expect(m.ON_THE_WAY).toEqual({ "zz-review-code", "zz-review-stream" })
+		end
+	)
+
+	it(
+		"a new review activity is refused on a model that is not a final-review kind; code review is not (AC2)",
+		function()
+			local sonnet = table_("zz-review-force", "claude", "claude-sonnet-5", nil, 4)
+			t.expect(has(
+				errorOf(function()
+					m.resolveActivity({ layer(ORDER .. sonnet) }, "zz-review-force")
+				end),
+				"Opus"
+			)).toBe(true)
+			local code = table_("zz-review-code", "claude", "claude-sonnet-5", nil, 2)
+			t.expect(models.id(m.resolveActivity({ layer(ORDER .. code) }, "zz-review-code").specs.claude))
+				.toBe("claude-sonnet-5")
+			-- with no table of its own it falls back to the expensive zz-review
+			local r = m.resolveActivity({ layer(ORDER .. sharp("zz-review")) }, "zz-review-force")
+			t.expect(models.id(r.specs.claude)).toBe("claude-opus-5-5")
 		end
 	)
 

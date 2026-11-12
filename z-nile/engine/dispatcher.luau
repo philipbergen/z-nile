@@ -500,7 +500,7 @@ local function record(
 				ms = 0,
 				kind = "row",
 				phase = phase,
-				subject = note,
+				subject = `{id}: {note}`,
 				tokens = tokens,
 				model = model,
 				wall = if sawWall then wall else nil,
@@ -541,7 +541,7 @@ local function record(
 					a.model,
 					"--note",
 					note,
-				}, true)
+				})
 				if ok then
 					print(`spend: {id} {phase} {a.tokens} tokens {a.model}`)
 				else
@@ -911,7 +911,7 @@ local WAIT_EVERY = 30
 -- The models a CLI lists (c0261): `agent --list-models`, `grok models`; claude has no list. Read once per run, by the
 -- CLI's own binary (already resolved, and past the .cache fence). nil means "assume available": a CLI with no list, a
 -- failed or empty answer (one stderr line), a CLI that cannot run. The ids are the first word of each line that starts like
--- one; any other line (a JSON answer, a banner) is not a model.
+-- one (after a `-` or `*` bullet, when there is one); any other line (a JSON answer, a banner, a tip) is not a model.
 local modelLists: { [string]: { string }? | boolean } = {}
 local LIST_SECONDS = 40
 
@@ -922,8 +922,11 @@ function dispatcher.parseModelList(text: string): { string }
 	local out: { string } = {}
 	for line in string.gmatch(text, "[^\r\n]+") do
 		local clean = string.gsub(line, "\27%[[%d;]*m", "")
+		-- grok prints `  - grok-4.7` (and `  * grok-4.7-build-fast (default)`); agent prints `id - Description`
+		clean = string.gsub(clean, "^%s*[%-%*]%s+", "")
 		local id = string.match(clean, "^%s*([%w][%w%._%-]*)%s*$")
 			or string.match(clean, "^%s*([%w][%w%._%-]*)%s+%-%s")
+			or string.match(clean, "^%s*([%w][%w%._%-]*)%s+%(")
 		if id then
 			table.insert(out, id)
 		end
@@ -1108,6 +1111,14 @@ function dispatcher.modelStep(
 	local landing = `{stateDir}/review.md`
 	if land then
 		pcall(fs.removeFile, landing) -- a stale one from an earlier run is never this run's review
+	end
+	if step == "zz-review" and mode == "raft" and string.sub(id, 1, 1) == "R" then
+		-- the span the runner measures for this raft review folds into the members' rows when the row is written below
+		-- (#294: cost is measured from the stage start, not typed)
+		local began, bout, berr = zn(cwd, { "spend", id, "--phase", "design-review", "--begin" }, true)
+		if not began then
+			stdio.ewrite(`dispatch: could not mark the start of {id}'s raft review ({berr}{bout})\n`)
+		end
 	end
 	for _, spec in tries do
 		local adapter = adapters.get(spec.runtime)

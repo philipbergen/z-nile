@@ -57,10 +57,9 @@ return t.spec("c0261 metrics shows the cost per model", function(it)
 				})
 			)
 			-- a measured row lives in spend.d/<writer>.tsv, beside an older spend.md
-			write(
-				`{tr}/issues/c0960/spend.d/w1.tsv`,
-				buffer.appendTsv(nil, { row("design-review-004", "claude-opus-5-5", 5, 0) })
-			)
+			local measured = row("design-review-004", "claude-opus-5-5", 5, 0)
+			measured.ai = 120 -- two measured AI minutes, none typed
+			write(`{tr}/issues/c0960/spend.d/w1.tsv`, buffer.appendTsv(nil, { measured }))
 			write(
 				`{tr}/issues/c0961/c0961.md`,
 				"---\nid: c0961\ntype: chore\ntitle: c0961\nslug: c0961\nraft: \n---\n\n# c0961\n"
@@ -82,12 +81,13 @@ return t.spec("c0261 metrics shows the cost per model", function(it)
 			if not ok then
 				error(r.stderr .. out)
 			end
-			t.expect(has(out, "| model | tokens | minutes | rows |")).toBe(true)
-			t.expect(has(out, "| claude-sonnet-5-5-high | 120 | 2.5 | 2 |")).toBe(true)
-			t.expect(has(out, "| claude-opus-5-5 | 55 | 2.0 | 2 |")).toBe(true)
-			t.expect(has(out, "| none | 7 | 3.0 | 1 |")).toBe(true)
+			t.expect(has(out, "| model | tokens | ai minutes | typed minutes | rows |")).toBe(true)
+			t.expect(has(out, "| claude-sonnet-5-5-high | 120 | 0.0 | 2.5 | 2 |")).toBe(true)
+			t.expect(has(out, "| claude-opus-5-5 | 55 | 2.0 | 2.0 | 2 |")).toBe(true)
+			t.expect(has(out, "| none | 7 | 0.0 | 3.0 | 1 |")).toBe(true)
 			-- last: after the rework lines, so no earlier table changes shape
-			local at = string.find(out, "| model | tokens | minutes | rows |", 1, true) :: number
+			local at =
+				string.find(out, "| model | tokens | ai minutes | typed minutes | rows |", 1, true) :: number
 			local rework = string.find(out, "by agent time:", 1, true) :: number
 			t.expect(at > rework).toBe(true)
 		end

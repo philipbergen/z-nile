@@ -407,12 +407,13 @@ local function shapeOk(cli: string, id: string): boolean
 	return false
 end
 
--- The review rule binds the final reviews (models.FINAL_REVIEWS): a model of a final-review kind of its CLI. Through
+-- The review rule binds every review activity but the ones on the way (models.ON_THE_WAY): a model of a final-review
+-- kind of its CLI. Through
 -- `agent` the first choice is Opus (the user: Opus 5.5 high if available) and only its fallbacks may be a kimi-k3 or a
--- grok model at xhigh; a fallback is allowed through `agent` only, where the ids carry their effort. A round on the way
--- takes any model. Returns why a final-review spec breaks it, or nil.
+-- grok model at xhigh; a fallback is allowed through `agent` only, where the ids carry their effort. A layer's code
+-- review and a stream review take any model, and so does every other command. Returns why a review spec breaks it, or nil.
 function models.reviewRule(skill: string, spec: Spec): string?
-	if not models.FINAL_REVIEWS[skill] then
+	if not models.isFinalActivity(skill) then
 		return nil
 	end
 	local id = models.id(spec)
@@ -439,15 +440,19 @@ function models.reviewRule(skill: string, spec: Spec): string?
 	return nil
 end
 
--- The activities that are final reviews (c0261): the review rule binds them; the rounds on the way are free of it.
--- A plain `zz-review` table is the expensive base every review activity falls back to.
-models.FINAL_REVIEWS = {
-	["zz-review"] = true,
-	["zz-review-design"] = true,
-	["zz-review-raft"] = true,
-	["zz-review-idea"] = true,
-	["zz-review-final"] = true,
-} :: { [string]: boolean }
+-- The review activities that run on the way (c0261): a layer's code review (the final review of the whole stack follows
+-- it) and a stream review. Every other review activity (`zz-review` and each `zz-review-<x>`: design, raft, final, idea,
+-- and any mode added later) is a final review: expensive, and bound by the review rule by default. A plain `zz-review`
+-- table is the expensive base every review activity falls back to.
+models.ON_THE_WAY = { "zz-review-code", "zz-review-stream" } :: { string }
+
+-- Whether `activity` is a review activity the review rule binds.
+function models.isFinalActivity(activity: string): boolean
+	if activity ~= "zz-review" and string.sub(activity, 1, 10) ~= "zz-review-" then
+		return false
+	end
+	return table.find(models.ON_THE_WAY, activity) == nil
+end
 
 -- An activity's resolved spec: its own table when a file names one, else (a review activity) the zz-review table.
 function models.resolveActivity(layers: { Layer }, activity: string): Resolved
