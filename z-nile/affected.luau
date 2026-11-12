@@ -160,6 +160,14 @@ end
 local ctx = built :: sel.Context
 ctx.current = currentSpecs(files)
 local result = sel.affected(ctx, files, only)
+-- A deleted spec is a changed path, and the pure selector still names it. There is nothing to run.
+local homePrefix = ""
+if only then
+	local home = (projects.named(reg, only) :: any).home
+	homePrefix = if home == "." then "" else home .. "/"
+end
 for _, s in result :: { string } do
-	print(s)
+	if fs.isFile(`{homePrefix}{s}`) then
+		print(s)
+	end
 end
