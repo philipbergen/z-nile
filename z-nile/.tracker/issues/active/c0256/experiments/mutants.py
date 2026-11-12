@@ -63,7 +63,7 @@ SLOW = [
     ("C4", "a file answer is trimmed", DP, "got = fs.readFile(file[1])", "got = trim(fs.readFile(file[1]))", SPEC_U),
     ("C5", "an answer where no question waits is accepted", DP, "if answer and not waiting then", "if false then", SPEC_R),
     ("C6", "both answer flags are accepted", DP, "if text and file then", "if false then", SPEC_R),
-    ("C7", "a stop with questions is 'z-ticket made 0 issues'", DP, '\t\telseif asked and #made == 0 then', '\t\telseif false then', SPEC_C),
+    ("C7", "a stop with questions is 'z-ticket made 0 issues'", DP, '\t\tif asked and (zUnknown ~= nil or #made == 0) then', '\t\tif asked and zUnknown ~= nil then', SPEC_C),
     ("C8", "the capture's exchange is copied, not moved", DP, "fs.move(`{stateDir}/{exchange.DIR}`, `{st.dir}/{exchange.DIR}`)", "fs.copy(`{stateDir}/{exchange.DIR}`, `{st.dir}/{exchange.DIR}`)", SPEC_C),
     ("C9", "a dry run records the words", DP, 'if not opts["--dry-run"] then\n\t\t\t\tif fs.isFile(', "if true then\n\t\t\t\tif fs.isFile(", SPEC_C),
     ("C10", "the retry of a capture re-runs z-ticket with other words", DP, "ask = entries[1].body", 'ask = "other words"', SPEC_C),
@@ -216,9 +216,12 @@ def main():
         clone = tmp / "p"
         run(["git", "clone", "-q", "--no-hardlinks", str(SRC), str(clone)], cwd=tmp, check=True)
         run(["git", "remote", "remove", "origin"], cwd=clone, check=True)
-        r = run(["git", "apply", str(HERE / "prototype.patch")], cwd=clone)
-        if r.returncode != 0:
-            sys.exit(f"prototype.patch does not apply to {SRC}'s HEAD: {r.stderr}")
+        # in the raft the design is already implemented in HEAD: mutate that, not the prototype
+        built = (clone / EX).exists()
+        if not built:
+            r = run(["git", "apply", str(HERE / "prototype.patch")], cwd=clone)
+            if r.returncode != 0:
+                sys.exit(f"prototype.patch does not apply to {SRC}'s HEAD: {r.stderr}")
         dest = clone / "z-nile/.tracker/issues/c0256/acceptance"
         dest.mkdir(parents=True, exist_ok=True)
         for f in (ISSUE / "acceptance").glob("*.luau"):
@@ -232,7 +235,8 @@ def main():
         def pristine():
             run(["git", "checkout", "-q", "--", "z-nile/engine"], cwd=clone)
             run(["git", "clean", "-fq", "--", "z-nile/engine"], cwd=clone)
-            run(["git", "apply", str(HERE / "prototype.patch")], cwd=clone, check=True)
+            if not built:
+                run(["git", "apply", str(HERE / "prototype.patch")], cwd=clone, check=True)
 
         todo = []
         if WHICH in ("fast", "all"):
