@@ -44,12 +44,16 @@ return t.spec("c0283 approve in an agent session and the provenance row", functi
 	end
 	local function approve(env: { [string]: string }?, extra: { string }?): fixture.Result
 		local merged: { [string]: string } = { PATH = process.env.PATH or "", HOME = process.env.HOME or "" }
-		for k, v in env or {} do
-			merged[k] = v
+		if env then
+			for k, v in env do
+				merged[k] = v
+			end
 		end
 		local args = { "-q", "/dev/null", "./zn", "approve", ID }
-		for _, a in extra or {} do
-			table.insert(args, a)
+		if extra then
+			for _, a in extra do
+				table.insert(args, a)
+			end
 		end
 		return fixture.exec(wt, "script", args, { env = merged })
 	end
