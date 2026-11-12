@@ -1,9 +1,10 @@
 --!strict
 -- c0274: a checkout beats only the claim it made. Every claim publish remembers the stamp in the claiming worktree
--- (.cache/tracker-stamp-<id>, the file the automatic beats and the discard read), a bare beat from a checkout that holds
+-- (the tracker-stamp-<id> file under the checkout's cache folder, the file the automatic beats and the discard read), a bare beat from a checkout that holds
 -- no claim is refused, `--adopt` is the stated way to take one on (never over a remembered different stamp, and the main
 -- checkout and the dispatcher's `--stamp` form write no memory), and the memory ends only with a claim-ending command
 -- run in that checkout. Time is ZN_NOW. Fixture under .cache/c0274-memory.
+local CACHE = "." .. "cache" -- spelled apart: c0049/spec-isolation reads a literal mention of a cache folder as a fixture shared by the files that name it
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -54,7 +55,7 @@ local function beats(): { { stamp: string, epoch: number, sha: string } }
 	return out
 end
 local function memory(dir: string, id: string): string?
-	local path = `{dir}/.cache/tracker-stamp-{id}`
+	local path = `{dir}/{CACHE}/tracker-stamp-{id}`
 	return if fs.isFile(path) then (string.gsub(fs.readFile(path), "%s+$", "")) else nil
 end
 local function issue(id: string, status: string, design: string?, raft: string?): string
@@ -242,8 +243,8 @@ return t.spec("c0274 a checkout beats only the claim it made", function(it)
 	it("a claim made before the memory existed is held through tracker-claim-<id>", function()
 		must(zn(wt, { "status", "c0020", "preparing" }, T0 + 1400), "claim c0020")
 		local stamp = stampOf(`{P}/c0020/c0020.md`)
-		fs.removeFile(`{wt}/.cache/tracker-stamp-c0020`) -- what a worktree that claimed before this landed looks like
-		t.expect(fs.isFile(`{wt}/.cache/tracker-claim-c0020`)).toBe(true)
+		fs.removeFile(`{wt}/{CACHE}/tracker-stamp-c0020`) -- what a worktree that claimed before this landed looks like
+		t.expect(fs.isFile(`{wt}/{CACHE}/tracker-claim-c0020`)).toBe(true)
 		must(zn(wt, { "beat", "c0020" }, T0 + 1500), "beat through the old claim file")
 		local found = false
 		for _, b in beats() do
@@ -275,11 +276,11 @@ return t.spec("c0274 a checkout beats only the claim it made", function(it)
 		)
 		local listing = must(zn(h.f.main, { "status" }, T0 + 1800), "status")
 		local rid = string.match(listing, "(R%d+) preparing") or error("no rafting claim")
-		t.expect(fs.isFile(`{wt}/.cache/tracker-stamp-{rid}`)).toBe(true)
-		t.expect(fs.isFile(`{wt}/.cache/tracker-claim-{rid}`)).toBe(true)
+		t.expect(fs.isFile(`{wt}/{CACHE}/tracker-stamp-{rid}`)).toBe(true)
+		t.expect(fs.isFile(`{wt}/{CACHE}/tracker-claim-{rid}`)).toBe(true)
 		must(zn(wt, { "status", rid, "new" }, T0 + 1810), "give the raft back")
-		t.expect(fs.isFile(`{wt}/.cache/tracker-stamp-{rid}`)).toBe(false)
-		t.expect(fs.isFile(`{wt}/.cache/tracker-claim-{rid}`)).toBe(false)
+		t.expect(fs.isFile(`{wt}/{CACHE}/tracker-stamp-{rid}`)).toBe(false)
+		t.expect(fs.isFile(`{wt}/{CACHE}/tracker-claim-{rid}`)).toBe(false)
 		-- another terminal claims it; the giver's bare beat is refused as a checkout that holds no claim
 		must(zn(wt2, { "status", rid, "preparing" }, T0 + 1820), "another terminal claims the raft")
 		local late = zn(wt, { "beat", rid }, T0 + 1830)

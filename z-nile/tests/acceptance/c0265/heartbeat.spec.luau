@@ -348,4 +348,25 @@ return t.spec("c0265 heartbeat rules", function(it)
 			t.expect(table.find(args, "origin/main") ~= nil).toBe(true)
 		end
 	)
+
+	it(
+		"a stacked layer's pull request (head R0010/1/c0040) parks the raft and its members, which share a stamp",
+		function()
+			local raft = claim("R0010", B, nil, { "R0010", "c0040" })
+			local member = claim("c0040", B, nil, { "c0040" })
+			local other = claim("c0070", A)
+			local parked = heartbeat.parkedBy(
+				{ { title = "R0010/1: c0040 a ticket", head = "R0010/1/c0040" } },
+				{ raft, member, other }
+			)
+			t.expect(parked.R0010).toBe(true)
+			t.expect(parked.c0040).toBe(true)
+			t.expect(parked.c0070).toBe(nil)
+			-- the slash is a boundary, not part of an id
+			t.expect(
+				heartbeat.parkedBy({ { title = "x", head = "R00100/1/c00400" } }, { raft, member }).R0010
+			)
+				.toBe(nil)
+		end
+	)
 end)
