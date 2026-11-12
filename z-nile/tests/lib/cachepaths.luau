@@ -147,6 +147,8 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['local FOCUS_FILE = ".cache/tracker-focus"'] = `sh.writeReplacing: {RENAMED}`,
 		["return `.cache/tracker-claim-{raftId}`"] = `the claim file, written with sh.writeReplacing: {RENAMED}`,
 		["return `.cache/tracker-stamp-{id}`"] = `c0274: the stamp this checkout remembers for a claim, written with sh.writeReplacing: {RENAMED}`,
+		['hb.MARKS = ".cache/tracker-beats"'] = `c0275: the throttle marks, one file per claim, written with sh.writeReplacing: {RENAMED}; the folder is made with fs.writeDir (an existing folder writes nothing)`,
+		['hb.BEATER_DIR = ".cache/tracker-beater"'] = "c0275: the background beater's pid file and log, the pid file written with sh.writeReplacing (a rename), the log opened by the detached beater itself",
 		['fs.writeDir(".cache")'] = "the folder itself (fs.writeDir of an existing folder writes nothing)",
 		['local out = given or ".cache/board.html"'] = `the board page, written with sh.writeReplacing: {RENAMED}`,
 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",

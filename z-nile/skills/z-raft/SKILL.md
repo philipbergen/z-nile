@@ -22,7 +22,7 @@ Take `./zn lost` first: lost work comes before anything not yet started, and a l
 - **With arguments, it does what was asked**: which issues and rafts are grouped is the caller's choice, overriding the fold and surface rules and the cap. The tracker's rules always hold, because the commands enforce them: one type, backlog only, one project, and solo issues alone. So `z-raft c0001 c0002` is `./zn new raft <type> <slug> c0001 c0002 --project <name>`, `z-raft R0010 c0003` is `./zn fold R0010 c0003`, and `z-raft recombine R0010 R0020 [<issue>…]` is `./zn recombine R0010 R0020 [<issue>…]`.
 
 ## 2. Claim and group
-Keep your claim alive while you work: start `./zn run --time 3600 -- ./zn beat <id> --watch` in the background (it beats every 5 minutes and stops by itself; start it again when it reports its bound), or run `./zn beat <id>` yourself at least every 15 minutes.
+Your claim keeps itself alive, and you start nothing: the claim itself starts `./zn run --time 3600 -- ./zn beat <id> --watch` in the background (it stops when the session ends, when the worktree goes away, when the claim is taken over and at its hour), and every `./zn` command in this worktree beats the claim once per 5 minutes and starts that loop again if it ended. Run `./zn beat <id>` only to see why a beat is refused.
 Run the plan's commands in order (`./zn raft-plan --apply` runs them all), or the ones the arguments name:
 - `./zn new raft <type> <slug> <ids…> [--single] --project <name>` makes a raft of prepared issues: it publishes the raft with a fresh `preparing-…` stamp, leaves the issues' status as it is, and writes their `raft:` here.
 - `./zn fold <R-id> <ids…>` claims a prepared raft (its status only, published) and writes the issues' `raft:` and the raft's `issues:` here.

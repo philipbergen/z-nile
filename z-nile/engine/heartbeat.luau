@@ -1,5 +1,7 @@
 --!strict
 -- The work heartbeat's pure rules (c0265): no I/O, no clock. A claim is a lease proved by the branch hb/<claim stamp>.
+local reap = require("@znile/engine/reap")
+
 local heartbeat = {}
 export type Beat = { stamp: string, epoch: number, ref: string, sha: string }
 export type Entry = { ref: string, sha: string, subject: string } -- one per branch under the prefix, as the single read returns it
@@ -204,15 +206,17 @@ export type Push = {
 	delete: { { ref: string, lease: string } },
 }
 
--- One beat: replace the claim's branch (the lease is the sha seen, else "" to create only if absent); never go backwards
--- or repeat a second; delete the branches of stamps no claim holds once they are older than the limit (a young one may
--- be a claim this checkout has not fetched yet).
+-- One beat: replace the claim's branch; never go backwards or repeat a second; delete the branches of stamps no claim
+-- holds once they are older than the limit (a young one may be a claim this checkout has not fetched yet). The lease is
+-- one rule (c0275): the sha this checkout last wrote for the stamp (`remembered`, its throttle mark), else the sha seen,
+-- else "" (create only if absent). A remembered sha whose branch is gone is rejected, which `rejected` then reads.
 function heartbeat.plan(
 	stamp: string,
 	epoch: number,
 	beats: { Beat },
 	claimed: { [string]: boolean },
-	now: number
+	now: number,
+	remembered: string?
 ): Push
 	local existing: Beat? = nil
 	local delete: { { ref: string, lease: string } } = {}
@@ -231,7 +235,7 @@ function heartbeat.plan(
 		write = {
 			ref = heartbeat.branch(stamp),
 			subject = heartbeat.subject(stamp, epoch),
-			lease = if existing then existing.sha else "",
+			lease = remembered or (if existing then existing.sha else ""),
 		},
 		delete = delete,
 	}
@@ -257,16 +261,21 @@ function heartbeat.rejected(
 	return { action = "create", lease = "" }
 end
 
--- One tick of `beat --watch`: stop when the claim's stamp changed, or when the next tick would pass the bound.
+-- One tick of `beat --watch`: stop when the claim's stamp changed, when it has no place to beat from any more (`gone`: the
+-- session that started it ended or the worktree is gone, c0275), or when the next tick would pass the bound.
 function heartbeat.watch(
 	startStamp: string,
 	originStamp: string?,
 	now: number,
 	deadline: number,
-	every: number
+	every: number,
+	gone: string?
 ): string
 	if originStamp ~= startStamp then
 		return "stop-restamped"
+	end
+	if gone ~= nil then
+		return "stop-gone"
 	end
 	if now + every >= deadline then
 		return "stop-bound"
@@ -341,6 +350,146 @@ function heartbeat.stopNote(stamp: string, kind: string, silent: number): string
 		return `(claim {stamp}, lost {math.floor(silent / 60)}m)`
 	end
 	return `(claim {stamp}, unjudged)`
+end
+
+-- ---- c0275: automatic beats ----
+
+-- What a worktree remembers of its last beat for one claim (`.cache/tracker-beats/<id>`, `<stamp> <epoch> <sha>`): the
+-- throttle (one beat per interval) and the lease (the sha it wrote). The main checkout holds no work and writes none.
+export type Mark = { stamp: string, epoch: number, sha: string }
+
+function heartbeat.markText(m: Mark): string
+	return `{m.stamp} {m.epoch} {m.sha}`
+end
+
+-- nil for anything that is not a mark: a damaged file is read as no mark (the claim is then due, which only costs a beat)
+function heartbeat.markParse(text: string): Mark?
+	local stamp, epoch, sha = string.match(text, "^(%S+) (%d+) (%x*)%s*$")
+	if stamp == nil or epoch == nil or sha == nil then
+		return nil
+	end
+	return { stamp = stamp, epoch = tonumber(epoch) :: number, sha = sha }
+end
+
+-- Whether a beat is due: never made, a full `every` old, or dated past the skew allowance (a clock that went back).
+function heartbeat.due(last: number?, now: number, every: number): boolean
+	return last == nil or now - last >= every or last > now + heartbeat.SKEW
+end
+
+-- The mark after an attempt: a failed attempt advances the epoch too (a hung or offline remote costs one bounded attempt
+-- per interval) and keeps the sha it knew; a written beat records the sha it wrote.
+function heartbeat.markAfter(stamp: string, now: number, before: Mark?, wrote: string?): Mark
+	local sha = wrote or (if before and before.stamp == stamp then before.sha else "")
+	return { stamp = stamp, epoch = now, sha = sha }
+end
+
+-- The sha to lease on for `stamp`: the mark's, when the mark is for this stamp and records one.
+function heartbeat.leaseOf(m: Mark?, stamp: string): string?
+	if m ~= nil and m.stamp == stamp and m.sha ~= "" then
+		return m.sha
+	end
+	return nil
+end
+
+heartbeat.BEATER_SECONDS = 3600 -- the background beater's bound: `./zn run --time 3600` is the longest a command may run
+
+export type BeaterFacts = {
+	dispatched: boolean, -- ZN_DISPATCH: the dispatcher beats for a headless step, which starts no loop
+	main: boolean, -- the main checkout holds no work
+	guarded: boolean, -- a check protects this repository
+	running: boolean, -- a beater of this claim is alive and not past its bound
+	specRun: boolean,
+	forced: boolean, -- a spec asked for the real beater (ZN_BEATER=1; honoured only inside a spec run)
+}
+
+-- Whether a claim held in this worktree starts its background beater now: every held claim without a live beater, except
+-- where the dispatcher beats, the main checkout, a protected checkout, and (unless a spec asks) a spec run.
+function heartbeat.beaterStart(f: BeaterFacts): boolean
+	if f.dispatched or f.main or f.guarded or f.running then
+		return false
+	end
+	return not f.specRun or f.forced
+end
+
+-- The beater's command: `./zn run` is its bound, `beat --watch` its loop, `--session` the process whose end ends it.
+function heartbeat.beaterArgv(root: string, id: string, session: number?): { string }
+	local argv = {
+		`{root}/zn`,
+		"run",
+		"--time",
+		tostring(heartbeat.BEATER_SECONDS),
+		"--",
+		`{root}/zn`,
+		"beat",
+		id,
+		"--watch",
+	}
+	if session ~= nil then
+		table.insert(argv, "--session")
+		table.insert(argv, tostring(session))
+	end
+	return argv
+end
+
+-- `<pid> <deadline>`, the beater's own file; alive means the pid answers and the deadline has not passed.
+function heartbeat.beaterRunning(text: string, now: number, alive: boolean): boolean
+	local pid, deadline = string.match(text, "^(%d+) (%d+)%s*$")
+	return pid ~= nil and deadline ~= nil and alive and tonumber(deadline) :: number > now
+end
+
+-- The session a beater is tied to: the nearest ancestor (nearest first) that is `claude`. Another CLI has none, and its
+-- beater is bounded by its time and its worktree only.
+function heartbeat.sessionPid(chain: { { pid: number, command: string } }): number?
+	for _, p in chain do
+		if reap.name(p.command) == "claude" then
+			return p.pid
+		end
+	end
+	return nil
+end
+
+-- Why `beat --watch` has no place to beat from any more, or nil: its session ended, its worktree is gone, or the claim's
+-- memory in it ended (a claim-ending command ran there). c0277 adds its discard mark here.
+function heartbeat.gone(sessionAlive: boolean?, worktreeThere: boolean, memoryThere: boolean): string?
+	if sessionAlive == false then
+		return "its session ended"
+	elseif not worktreeThere then
+		return "its worktree is gone"
+	elseif not memoryThere then
+		return "its worktree no longer holds the claim"
+	end
+	return nil
+end
+
+-- The dispatcher's stamp for a step's item: the claim its step worktree remembers (a step that made its own claim), else
+-- the stamp main showed when the step started.
+function heartbeat.dispatchStamp(started: string?, remembered: string?): string?
+	if remembered ~= nil and remembered ~= "" then
+		return remembered
+	end
+	return started
+end
+
+-- The claim stamp in a document's status field, nil for anything that is not a live claim (preparing-… or active-…).
+function heartbeat.stampIn(status: string?): string?
+	local kind = if status then string.match(status, "^(%a+)%-%a+%-%a+%-%a+$") else nil
+	return if kind == "preparing" or kind == "active" then status else nil
+end
+
+-- What the dispatcher does with the answer of its `zn beat <id> --adopt --stamp <S>` child: "beat" (landed), "lost" (the
+-- claim was taken over or ended mid-step: stop beating and say so once), "none" (no claim yet: the step has not made its
+-- own: ignored) or "failed" (written once per step to the run's stderr).
+function heartbeat.dispatchOutcome(ok: boolean, stderr: string): string
+	if ok then
+		return "beat"
+	elseif
+		string.find(stderr, "claim was taken over", 1, true) or string.find(stderr, "claim ended", 1, true)
+	then
+		return "lost"
+	elseif string.find(stderr, "no claim to beat", 1, true) then
+		return "none"
+	end
+	return "failed"
 end
 
 return heartbeat

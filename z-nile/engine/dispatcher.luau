@@ -20,6 +20,7 @@ local costrow = require("./costrow")
 local cred = require("./credential")
 local dispatch = require("./dispatch")
 local fs = require("@lune/fs")
+local heartbeat = require("./heartbeat")
 local models = require("./models")
 local openlist = require("./openlist")
 local process = require("@lune/process")
@@ -45,6 +46,7 @@ export type Ctx = {
 	originIssueIds: () -> { string },
 	prView: (branch: string) -> string?, -- `gh pr view <branch> --json …`'s output, or nil
 	prMerged: (sha: string) -> boolean, -- `sha` is a pull request's merge commit on GitHub
+	memoryIn: ((dir: string, id: string) -> string)?, -- c0275: the claim stamp the checkout at `dir` remembers for `id`, "" for none
 }
 export type Attempt = {
 	step: string,
@@ -879,6 +881,51 @@ local function keepBeating(dir: string): () -> ()
 	end
 end
 
+-- c0275: while a model step works an item, the dispatcher beats for it, so a claim whose model thinks for minutes between
+-- two `./zn` commands never reads lost. Every INTERVAL one child (`zn beat <id> --adopt --stamp <S>` under `./zn run
+-- --time 60`, one at a time; a hung remote cannot stall the supervising loop because the child runs in a task of its own)
+-- beats the claim `S` the step's worktree remembers, else the one main showed when the step started. A claim restamped
+-- mid-step is refused by the child: the dispatcher stops beating and says so once. Returns the function that stops it.
+function dispatcher.claimBeat(ctx: Ctx, id: string, cwd: string, started: string?): () -> ()
+	local running = true
+	if id == "" then
+		return function() end
+	end
+	task.spawn(function()
+		local every = heartbeat.setting(process.env, "ZN_BEAT_EVERY", heartbeat.INTERVAL, ctx.checking())
+		local last: number? = nil
+		local said = false
+		while running do
+			local at = os.time()
+			if heartbeat.due(last, at, every) then
+				last = at
+				local remembered = if ctx.memoryIn then ctx.memoryIn(cwd, id) else ""
+				local s = heartbeat.dispatchStamp(started, remembered)
+				if s then
+					local root = ctx.mainRoot()
+					local ok, _, err = zn(
+						root,
+						{ "run", "--time", "60", "--", `{root}/zn`, "beat", id, "--adopt", "--stamp", s },
+						true
+					)
+					local outcome = heartbeat.dispatchOutcome(ok, err)
+					if outcome == "lost" then
+						stdio.ewrite(`dispatch: {err}: not beating {id} any more\n`)
+						return
+					elseif outcome == "failed" and not said then
+						said = true
+						stdio.ewrite(`dispatch: beat {id}: {err}\n`)
+					end
+				end
+			end
+			task.wait(1)
+		end
+	end)
+	return function()
+		running = false
+	end
+end
+
 function dispatcher.modelStep(
 	ctx: Ctx,
 	st: State,
@@ -1082,6 +1129,16 @@ function dispatcher.modelStep(
 			end
 			return ok, said
 		end
+		local startedStamp: string? = nil
+		if id ~= "" then
+			local found = pcall(function()
+				startedStamp = heartbeat.stampIn(store.readFront(store.get(id).doc).status)
+			end)
+			if not found then
+				startedStamp = nil
+			end
+		end
+		local stopClaimBeat = dispatcher.claimBeat(ctx, id, cwd, startedStamp)
 		local result = runner.run({
 			argv = argv,
 			cwd = cwd,
@@ -1107,6 +1164,7 @@ function dispatcher.modelStep(
 				end
 				else nil,
 		})
+		stopClaimBeat()
 		holdBeat() -- the review still lands and the spend is recorded: beat through it
 		local outcomeNow: string = result.outcome
 		local detail = result.detail
