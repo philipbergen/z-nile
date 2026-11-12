@@ -3,8 +3,7 @@
 -- the subject "<R-id>: design-review-NNN", so a member's own design-review-NNN row cannot stand in for the raft's round
 -- (finalround.luau); any other phase keeps the note as written. Fixture under .cache/c0261-final-round-raft
 -- (tests/lib/trackerfix): a prepared raft R0010 of c0011 and c0012.
-local fixture = require("@tests/lib/fixture")
-local ledger = require("@znile/engine/ledger")
+local spend = require("@znile/engine/spend")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -39,25 +38,15 @@ return t.spec("c0261 a raft's design round is recorded under its own subject", f
 				"R0010",
 				"--phase",
 				"design-review",
-				"--time",
-				"4",
-				"--tokens",
-				"50",
 				"--model",
 				"claude-opus-5-5",
 				"--note",
 				"design-review-001",
 			})
-			trackerfix.trOk(
-				f,
-				wt,
-				{ "spend", "R0010", "--phase", "prep", "--time", "2", "--note", "raft prep" }
-			)
+			trackerfix.trOk(f, wt, { "spend", "R0010", "--phase", "prep", "--note", "raft prep" })
 			for _, id in { "c0011", "c0012" } do
-				local text = fixture.git(f.origin, { "show", `main:pickman/.tracker/issues/{id}/spend.md` })
-				local l = ledger.parse(text) :: ledger.Ledger
 				local design, prep
-				for _, r in l.rows do
+				for _, r in spend.rowsIn(`{wt}/pickman/.tracker/issues/{id}`) do
 					if r.phase == "design-review" then
 						design = r
 					elseif r.phase == "prep" then
@@ -74,15 +63,11 @@ return t.spec("c0261 a raft's design round is recorded under its own subject", f
 				"c0011",
 				"--phase",
 				"design-review",
-				"--time",
-				"1",
 				"--note",
 				"design-review-001",
 			})
-			local own = ledger.parse(
-				fixture.git(f.origin, { "show", "main:pickman/.tracker/issues/c0011/spend.md" })
-			) :: ledger.Ledger
-			t.expect(own.rows[#own.rows].subject).toBe("design-review-001")
+			local own = spend.rowsIn(`{wt}/pickman/.tracker/issues/c0011`)
+			t.expect(own[#own].subject).toBe("design-review-001")
 		end
 	)
 end)

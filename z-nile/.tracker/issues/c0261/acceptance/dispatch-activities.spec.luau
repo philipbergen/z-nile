@@ -1,7 +1,7 @@
 --!strict
--- c0261: the activity a dispatched step runs: a review round in its mode, the final round with `--final`, a stream never
--- final, the raft, idea and full-force reviews always final; the waiting step and its poll; the chain waits for green
--- CI at a gate once per head. Pure: engine/dispatch.
+-- c0261: the activity a dispatched step runs: a review's by its mode (design, raft, final, code, stream; no --final);
+-- the waiting step and its poll; the chain waits for green CI at a gate once per head, and a z-wait that ended any way
+-- is not a failed chain. Pure: engine/dispatch.
 local dispatch = require("@znile/engine/dispatch")
 local t = require("@tests/lib/t")
 
@@ -19,44 +19,25 @@ local function has(text: string, needle: string): boolean
 end
 
 return t.spec("c0261 dispatcher activities", function(it)
-	it(
-		"a design or code review round is its own activity, and --final names the final round's (AC3)",
-		function()
-			t.expect(d.activityOf("zz-review", "design", false)).toBe("zz-review-design")
-			t.expect(d.activityOf("zz-review", "design", true)).toBe("zz-review-design-final")
-			t.expect(d.activityOf("zz-review", "code", false)).toBe("zz-review-code")
-			t.expect(d.activityOf("zz-review", "code", true)).toBe("zz-review-code-final")
-		end
-	)
-
-	it("the raft review is always final, the stream review never (AC3)", function()
-		t.expect(d.activityOf("zz-review", "raft", false)).toBe("zz-review-raft")
-		t.expect(d.activityOf("zz-review", "raft", true)).toBe("zz-review-raft")
-		t.expect(d.activityOf("zz-review", "stream", false)).toBe("zz-review-stream")
-		t.expect(has(
-			errorOf(function()
-				d.activityOf("zz-review", "stream", true)
-			end),
-			"stream"
-		)).toBe(true)
+	it("a review is the activity of its mode: design, raft, final, code, stream (AC3)", function()
+		t.expect(d.activityOf("zz-review", "design")).toBe("zz-review-design")
+		t.expect(d.activityOf("zz-review", "raft")).toBe("zz-review-raft")
+		t.expect(d.activityOf("zz-review", "final")).toBe("zz-review-final")
+		t.expect(d.activityOf("zz-review", "code")).toBe("zz-review-code")
+		t.expect(d.activityOf("zz-review", "stream")).toBe("zz-review-stream")
+		t.expect(d.activityOf("zz-review", nil)).toBe("zz-review-design") -- the default mode is design
 	end)
 
-	it(
-		"every review mode names its activity; the idea and full-force reviews are final ones whenever they exist (AC3)",
-		function()
-			for mode, entry in dispatch.REVIEW_MODES do
-				local e: any = entry
-				t.expect(`{mode}: {type(e.activity)}`).toBe(`{mode}: string`)
-			end
-			for _, mode in { "idea", "final" } do
-				if dispatch.REVIEW_MODES[mode] then
-					local a: string = d.activityOf("zz-review", mode, false)
-					t.expect(d.activityOf("zz-review", mode, true)).toBe(a)
-					t.expect(a).toBe(`zz-review-{mode}`)
-				end
-			end
+	it("every review mode names its activity, and the activities are distinct (AC3)", function()
+		local seen: { [string]: string } = {}
+		for mode, entry in dispatch.REVIEW_MODES do
+			local e: any = entry
+			t.expect(`{mode}: {type(e.activity)}`).toBe(`{mode}: string`)
+			t.expect(`{mode}: {tostring(seen[e.activity])}`).toBe(`{mode}: nil`)
+			seen[e.activity] = mode
+			t.expect(e.final).toBe(nil) -- there is no separate final round of a mode (no --final)
 		end
-	)
+	end)
 
 	it("the other commands are their own activity (AC3)", function()
 		for _, step in { "z-ticket", "z-design", "z-raft", "z-run", "z-wait" } do
@@ -134,6 +115,7 @@ return t.spec("c0261 dispatcher activities", function(it)
 			autoMerge = { "prep", "raft" },
 			description = nil,
 			waitedHead = nil,
+			openHuman = {},
 		}
 		for k, v in over do
 			f[k] = v
@@ -189,27 +171,22 @@ return t.spec("c0261 dispatcher activities", function(it)
 		end
 	)
 
-	it(
-		"a review mode with no activity of its own is zz-review-<mode>, final when it is a final review by nature (AC3)",
-		function()
-			local modes: any = dispatch.REVIEW_MODES
-			local had = modes.idea
-			modes.idea = { lessons = "design", phase = "design-review" }
-			local ok, a1, a2 = pcall(function()
-				return d.activityOf("zz-review", "idea", false), d.activityOf("zz-review", "idea", true)
-			end)
-			modes.idea = had
-			t.expect(ok).toBe(true)
-			t.expect(a1).toBe("zz-review-idea")
-			t.expect(a2).toBe("zz-review-idea")
-			modes.novel = { lessons = "design", phase = "design-review" }
-			local never = errorOf(function()
-				d.activityOf("zz-review", "novel", true)
-			end)
-			modes.novel = nil
-			t.expect(has(never, "never final")).toBe(true)
-		end
-	)
+	it("a review mode with no activity of its own is zz-review-<mode> (AC3)", function()
+		local modes: any = dispatch.REVIEW_MODES
+		modes.idea = { lessons = "design", phase = "design-review" }
+		local ok, a1 = pcall(function()
+			return d.activityOf("zz-review", "idea")
+		end)
+		modes.idea = nil
+		t.expect(ok).toBe(true)
+		t.expect(a1).toBe("zz-review-idea")
+		t.expect(has(
+			errorOf(function()
+				d.activityOf("zz-review", "novel")
+			end),
+			"no mode novel"
+		)).toBe(true)
+	end)
 
 	it(
 		"a gate waits for its checks only when a human has nothing to judge: not for a conflict, a carried change, an unknown head (AC5)",
@@ -245,6 +222,53 @@ return t.spec("c0261 dispatcher activities", function(it)
 			t.expect(has(red.why, "waits for green CI")).toBe(true)
 			local pending: any = dispatch.next(facts({ pr = pr({ green = false, failed = false }) }))
 			t.expect(pending.waitFor).toBe("checks")
+		end
+	)
+
+	it(
+		"a z-wait that ended any way is not a failed chain: the gate is read again, and any other failed step stops (AC5)",
+		function()
+			for _, outcome in { "failed", "cap", "stalled", "quota" } do
+				local a: any = dispatch.next(facts({
+					pr = pr({ green = false }),
+					waitedHead = "abc123",
+					last = { step = "z-wait", outcome = outcome },
+				}))
+				t.expect(`{outcome}: {a.kind} {a.code}`).toBe(`{outcome}: stop 4`) -- the gate's own stop, not exit 1
+			end
+			local other: any = dispatch.next(facts({ last = { step = "z-design", outcome = "failed" } }))
+			t.expect(other.code).toBe(1)
+		end
+	)
+
+	it(
+		"the rafting gate waits like the prep gate: the step names the gate, the PR and what it waits for (AC5)",
+		function()
+			local raft = {
+				status = "prepared",
+				design = "ready",
+				localRaft = "R0050",
+				last = { step = "z-raft", outcome = "ok" },
+			}
+			local function at(over: { [string]: any }): any
+				local all = table.clone(raft) :: { [string]: any }
+				for k, v in over do
+					all[k] = v
+				end
+				return dispatch.next(facts(all))
+			end
+			local red: any = at({ pr = pr({ green = false }) })
+			t.expect(red.step).toBe("z-wait")
+			t.expect(red.gate).toBe("raft")
+			t.expect(red.pr).toBe(7)
+			t.expect(red.head).toBe("abc123")
+			t.expect(red.waitFor).toBe("checks")
+			local unknown: any = at({ pr = pr({ mergeable = false, mergeState = "UNKNOWN" }) })
+			t.expect(unknown.step).toBe("z-wait")
+			t.expect(unknown.waitFor).toBe("mergeable")
+			t.expect(at({ pr = pr({ green = false }), waitedHead = "abc123" }).code).toBe(4)
+			t.expect(at({ pr = pr({ green = false }), autoMerge = { "prep" } }).kind).toBe("stop") -- the gate is not the human's to skip
+			t.expect(at({ pr = pr() }).kind).toBe("merge")
 		end
 	)
 

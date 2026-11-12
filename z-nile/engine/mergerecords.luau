@@ -395,7 +395,104 @@ local function settleRemapRecords(mt: string, tree: string, baseTree: string): s
 	return if ok then built else nil
 end
 
+-- c0263: `restack` stopped in a `git rebase` on conflicts. When every unmerged path is an item record, settle each by
+-- item id with the union `mergeRef` uses (common = stage 1; "ours" is the layer's side, the commit being replayed, stage 3;
+-- "theirs" is main's, the onto side, stage 2: the rows come out base, main, layer as in a merge), write the result where the replayed commit has the record (else where the onto side has it),
+-- and stage it. Returns true when nothing is left unmerged (the caller continues the rebase); false with the reason
+-- when a path is not a record or a record cannot be united (an id changed on one side), leaving the index as it was.
+local function settleRebaseStop(): (boolean, string)
+	local byId: { [string]: { [number]: string } } = {}
+	local order: { string } = {}
+	for _, line in gitLines({ "ls-files", "-u" }) do
+		local stage, path = string.match(line, "^%d+ %x+ (%d)\t(.+)$")
+		local id = if path then recordIdOf(path :: string) else nil
+		if not path or not id then
+			return false, `{path or line} is not an item record`
+		end
+		if not byId[id] then
+			byId[id] = {}
+			table.insert(order, id)
+		end
+		byId[id][tonumber(stage :: string) :: number] = path :: string
+	end
+	if #order == 0 then
+		return false, "no conflict is left to settle"
+	end
+	-- a record the replayed commit (or main) added or moved cleanly is not unmerged: it is at stage 0 under another path of
+	-- the same id, and counts as that side's version (the side whose commit has this very blob at that path)
+	local zero: { [string]: { [number]: boolean } } = {}
+	for _, line in gitLines({ "ls-files", "-s" }) do
+		local blob, stage, path = string.match(line, "^%d+ (%x+) (%d)\t(.+)$")
+		local id = if path then recordIdOf(path :: string) else nil
+		if id and byId[id] and stage == "0" then
+			local function at(rev: string): boolean
+				local r = sh.run("git", { "rev-parse", "-q", "--verify", `{rev}:{path :: string}` })
+				return r.ok and sh.trim(r.stdout) == blob
+			end
+			if byId[id][3] == nil and at("REBASE_HEAD") then
+				byId[id][3] = path :: string
+				zero[id] = zero[id] or {}
+				zero[id][3] = true
+			elseif byId[id][2] == nil and at("HEAD") then
+				byId[id][2] = path :: string
+				zero[id] = zero[id] or {}
+				zero[id][2] = true
+			end
+		end
+	end
+	local function text(id: string, stage: number, paths: { [number]: string }): string?
+		local path = paths[stage]
+		if not path then
+			return nil
+		end
+		local at = if zero[id] and zero[id][stage] then 0 else stage
+		local shown = sh.run("git", { "show", `:{at}:{path}` })
+		return if shown.ok then shown.stdout else nil
+	end
+	local plans: { { id: string, action: string, dest: string?, blob: string?, paths: { string } } } = {}
+	for _, id in order do
+		local paths = byId[id]
+		local action, united, why =
+			provenance.settle(text(id, 1, paths), text(id, 3, paths), text(id, 2, paths), true)
+		if not action then
+			return false, `{id}: {why}`
+		end
+		local all: { string } = {}
+		for _, stage in { 1, 2, 3 } do
+			if paths[stage] and not table.find(all, paths[stage]) then
+				table.insert(all, paths[stage])
+			end
+		end
+		local plan = { id = id, action = action, dest = nil :: string?, blob = nil :: string?, paths = all }
+		if action == "write" then
+			plan.dest = paths[3] or paths[2] or paths[1]
+			local hashed = sh.run("git", { "hash-object", "-w", "--stdin" }, united :: string)
+			if not hashed.ok then
+				return false, hashed.stderr
+			end
+			plan.blob = sh.trim(hashed.stdout)
+		end
+		table.insert(plans, plan)
+	end
+	for _, plan in plans do
+		for _, path in plan.paths do
+			if path ~= plan.dest then
+				sh.must("git", { "rm", "-q", "-f", "--ignore-unmatch", "--", path })
+			end
+		end
+		if plan.dest then
+			sh.must("git", { "update-index", "--add", "--cacheinfo", `100644,{plan.blob},{plan.dest}` })
+			sh.must("git", { "checkout-index", "-f", "--", plan.dest })
+		end
+	end
+	if #gitLines({ "ls-files", "-u" }) > 0 then
+		return false, "a conflict is left after the records were settled"
+	end
+	return true, ""
+end
+
 return {
 	mergeRef = mergeRef,
+	settleRebaseStop = settleRebaseStop,
 	settleRemapRecords = settleRemapRecords,
 }

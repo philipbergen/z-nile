@@ -1,6 +1,6 @@
 --!strict
 -- c0261 ("Commands refuse", the user, 2026-11-08): `./zn status <id> prepared` and `./zn done` refuse unless the last
--- design / code review round was recorded on a final-review model, judged by KIND of model (any Opus, kimi-k3-high or kimi-k3-max, any
+-- design review round and the raft's final review was recorded on a final-review model, judged by KIND of model (any Opus, kimi-k3-high or kimi-k3-max, any
 -- grok model at xhigh), never by exact id. Pure: engine/finalround over file names, spend rows and times.
 local finalround = require("@znile/engine/finalround")
 local ledger = require("@znile/engine/ledger")
@@ -52,12 +52,18 @@ return t.spec("c0261 the last round ran a final-review model", function(it)
 			local n, stem = fr.lastRound(DESIGN, "design")
 			t.expect(n).toBe(2)
 			t.expect(stem).toBe("design-review-002")
-			local c, cs = fr.lastRound(
-				{ "review-001.md", "review-003.md", "design-review-007.md", "stream-review-c1-010.md" },
-				"code"
-			)
+			local c, cs = fr.lastRound({
+				"review-009.md",
+				"final-review-001.md",
+				"final-review-003.md",
+				"final-refute-004.md",
+				"design-review-007.md",
+				"stream-review-c1-010.md",
+			}, "final")
 			t.expect(c).toBe(3)
-			t.expect(cs).toBe("review-003")
+			t.expect(cs).toBe("final-review-003")
+			-- a layer's review-NNN is not the final review
+			t.expect(fr.lastRound({ "review-001.md", "review-002.md" }, "final")).toBe(nil)
 			t.expect(fr.lastRound({ "c0010.md" }, "design")).toBe(nil)
 		end
 	)
@@ -130,7 +136,9 @@ return t.spec("c0261 the last round ran a final-review model", function(it)
 				t.expect(has(r, "design-review-002")).toBe(true)
 				t.expect(has(r, `model {id}`)).toBe(true)
 				t.expect(has(r, "any Opus, kimi k3.1-pro or k3-256k at high or max")).toBe(true)
-				t.expect(has(r, "--final")).toBe(true)
+				t.expect(has(r, "./zn dispatch zz-review c0010 --mode design")).toBe(true)
+				t.expect(has(r, "--final")).toBe(false)
+				t.expect(has(r, "./zn sync")).toBe(true)
 			end
 			t.expect(has(refusal(DESIGN, { row("design-review-002", nil) }) :: string, "no model")).toBe(true)
 			t.expect(has(refusal(DESIGN, {}) :: string, "there is no row")).toBe(true)
@@ -151,10 +159,10 @@ return t.spec("c0261 the last round ran a final-review model", function(it)
 	it(
 		"a round's row is matched exactly: its phase and its written subject, not a longer name that contains it (AC11)",
 		function()
-			local files = { "R0010.md", "review-001.md", "review-002.md" }
-			local cheapCode = row("R0010: review-002", "claude-sonnet-5-5-high", "code-review")
+			local files = { "R0010.md", "review-009.md", "final-review-001.md", "final-review-002.md" }
+			local cheapCode = row("R0010: final-review-002", "claude-sonnet-5-5-high", "code-review")
 			local function code(rows: { ledger.Row }): string?
-				return refusal(files, rows, "code", "R0010")
+				return refusal(files, rows, "final", "R0010")
 			end
 			-- a member's design-review row, a stream review and a later fixes commit with the same number are not the round
 			t.expect(code({ cheapCode, row("design-review-002", "claude-opus-5-5") }) ~= nil).toBe(true)
@@ -162,14 +170,18 @@ return t.spec("c0261 the last round ran a final-review model", function(it)
 				code({ cheapCode, row("c0011: stream-review-002", "claude-opus-5-5", "code-review") }) ~= nil
 			)
 				.toBe(true)
+			t.expect(code({ cheapCode, row("R0010: review-009", "claude-opus-5-5", "code-review") }) ~= nil)
+				.toBe(true) -- a layer's review row
 			t.expect(code({
-				row("R0010: review-002", "claude-opus-5-5", "code-review"),
-				row("R0010: review-002 fixes, refute-002", "claude-sonnet-5-5-high", "code-review"),
+				row("R0010: final-review-002", "claude-opus-5-5", "code-review"),
+				row("R0010: final-review-002 fixes, refute-002", "claude-sonnet-5-5-high", "code-review"),
 			})).toBe(nil)
 			-- a retry: any exact row on a final model is enough
-			t.expect(code({ cheapCode, row("R0010: review-002", "kimi-k3-high", "code-review") })).toBe(nil)
-			-- a code round's row has the code-review phase
-			t.expect(code({ row("R0010: review-002", "claude-opus-5-5", "design-review") }) ~= nil).toBe(true)
+			t.expect(code({ cheapCode, row("R0010: final-review-002", "kimi-k3-high", "code-review") }))
+				.toBe(nil)
+			-- the final round's row has the code-review phase
+			t.expect(code({ row("R0010: final-review-002", "claude-opus-5-5", "design-review") }) ~= nil)
+				.toBe(true)
 		end
 	)
 
@@ -177,28 +189,40 @@ return t.spec("c0261 the last round ran a final-review model", function(it)
 		t.expect(has(refusal(DESIGN, {}) :: string, "./zn spend c0010 --phase design-review")).toBe(true)
 		t.expect(
 			has(
-				refusal({ "review-001.md" }, {}, "code", "R0010") :: string,
-				'./zn commit -m "R0010: review-001" --phase code-review'
+				refusal({ "final-review-001.md" }, {}, "final", "R0010") :: string,
+				'./zn commit -m "R0010: final-review-001" --phase code-review --model <its model id>'
 			)
 		).toBe(true)
+		t.expect(has(refusal({ "final-review-001.md" }, {}, "final", "R0010") :: string, "--mode final"))
+			.toBe(true)
 	end)
 
-	it("a spend.md that does not parse is a refusal of its own, never no rows (AC11)", function()
-		local rows, why = fr.rowsOf({ "# Spend: c1 T\n\n| 1 | not a date | x |\n" })
+	it("a spend file that does not parse is a refusal of its own, never no rows (AC11)", function()
+		local function read(dir: string): { ledger.Row }
+			if dir == "bad" then
+				error("bad/spend.md does not parse: row 1", 0)
+			end
+			return { row("design-review-001", "claude-opus-5-5") }
+		end
+		local rows, why = fr.rowsOf({ "good", "bad" }, read)
 		t.expect(rows).toBe(nil)
 		t.expect(has(why :: string, "does not parse")).toBe(true)
-		local ok = fr.rowsOf({ ledger.render("c1", "T", { row("design-review-001", "claude-opus-5-5") }) })
-		t.expect(#(ok :: any)).toBe(1)
+		local ok = fr.rowsOf({ "good", "good" }, read)
+		t.expect(#(ok :: any)).toBe(2)
 	end)
 
-	it("a code round's row must be the raft's own: another raft's id is not the round (AC11)", function()
-		local files = { "review-002.md" }
-		local other = row("R0080: review-002", "claude-opus-5-5", "code-review")
-		t.expect(refusal(files, { other }, "code", "R0090") ~= nil).toBe(true)
+	it("a final round's row must be the raft's own: another raft's id is not the round (AC11)", function()
+		local files = { "final-review-002.md" }
+		local other = row("R0080: final-review-002", "claude-opus-5-5", "code-review")
+		t.expect(refusal(files, { other }, "final", "R0090") ~= nil).toBe(true)
 		t.expect(
-			refusal(files, { row("R0090: review-002", "claude-opus-5-5", "code-review") }, "code", "R0090")
-		)
-			.toBe(nil)
+			refusal(
+				files,
+				{ row("R0090: final-review-002", "claude-opus-5-5", "code-review") },
+				"final",
+				"R0090"
+			)
+		).toBe(nil)
 	end)
 
 	it(
@@ -217,6 +241,15 @@ return t.spec("c0261 the last round ran a final-review model", function(it)
 					"R0010"
 				)
 			).toBe(nil)
+			-- a longer subject that contains the raft's round name is not it
+			t.expect(
+				refusal(
+					files,
+					{ row("R0010: design-review-001 answers", "claude-opus-5-5") },
+					"design",
+					"R0010"
+				) ~= nil
+			).toBe(true)
 			-- and an issue's round is the plain subject, not a raft-prefixed one
 			t.expect(
 				refusal(files, { row("R0010: design-review-001", "claude-opus-5-5") }, "design", "c0011")
@@ -249,14 +282,15 @@ return t.spec("c0261 the last round ran a final-review model", function(it)
 			rows[2].when = "2026-11-04 10:00"
 			t.expect(fr.firstWhen(rows, "design")).toBe("2026-11-03 10:00")
 			t.expect(fr.firstWhen({}, "design")).toBe(nil)
-			t.expect(fr.firstWhen({ row("R1: review-001", "x", "code-review") }, "design")).toBe(nil)
+			t.expect(fr.firstWhen({ row("R1: final-review-001", "x", "code-review") }, "design")).toBe(nil)
 		end
 	)
 
 	it("a raft's refusal names the raft review mode, an issue's the design mode (AC11)", function()
 		local raft = refusal({ "design-review-001.md" }, {}, "design", "R0010") :: string
-		t.expect(has(raft, "--mode raft --final")).toBe(true)
+		t.expect(has(raft, "--mode raft")).toBe(true)
+		t.expect(has(raft, "--final")).toBe(false)
 		t.expect(has(raft, "./zn spend R0010 --phase design-review")).toBe(true)
-		t.expect(has(refusal(DESIGN, {}) :: string, "--mode design --final")).toBe(true)
+		t.expect(has(refusal(DESIGN, {}) :: string, "--mode design")).toBe(true)
 	end)
 end)

@@ -1,7 +1,7 @@
 --!strict
 -- The one reader of a select.Context: each home's watch files. Adapter: reads files. Shared by affected.luau and
--- specs.luau so that selection and fingerprints are made from the same facts. A watch file that does not parse, or
--- that names a missing path, fails the whole read (nil and a reason): the gate fails closed.
+-- specs.luau so selection is made from the same facts. A watch file that does not parse, or that names a missing
+-- path, fails the whole read (nil and a reason): the gate fails closed.
 
 local fs = require("@lune/fs")
 local graph = require("./graph")

@@ -21,6 +21,7 @@ local cred = require("./credential")
 local dispatch = require("./dispatch")
 local fs = require("@lune/fs")
 local models = require("./models")
+local modelstep = require("./modelstep")
 local openlist = require("./openlist")
 local process = require("@lune/process")
 local projects = require("./projects")
@@ -332,20 +333,23 @@ end
 
 -- The walk of `skill` for an item: an issue's own folder; a raft's members, strongest per CLI, ordered by the
 -- raft's own walk; z-ticket's, its project's home.
-function dispatcher.resolve(skill: string, id: string, project: string?): models.Resolved
+function dispatcher.resolve(skill: string, id: string, project: string?, mode: string?): models.Resolved
 	if id == "" then
 		local reg = projects.load(".")
 		local p = if project then projects.named(reg, project) else reg.projects[1]
 		if not p then
 			error(`no project {tostring(project)} in {projects.FILE}`, 0)
 		end
-		return models.resolve(walk((p :: projects.Project).home), skill)
+		return models.resolve(walk((p :: projects.Project).home), skill, mode)
 	end
 	local item = store.get(id)
 	if item.kind == "issue" then
-		return models.resolve(walk(item.dir), skill)
+		return models.resolve(walk(item.dir), skill, mode)
 	end
-	local own = models.resolve(walk(item.dir), skill)
+	local own = models.resolve(walk(item.dir), skill, mode)
+	if own.fromRoles then
+		return own
+	end
 	local members: { models.Resolved } = {}
 	for _, m in store.members(id) do
 		table.insert(members, models.resolve(walk(m.dir), skill))
@@ -386,6 +390,9 @@ local function rowLine(root: string, row: Row): buffer.Line
 	end
 	if not row.cpu then
 		table.insert(flags, "cpu")
+	end
+	if row.tokens == 0 then
+		table.insert(flags, "tokens")
 	end
 	return {
 		ms = 0,
@@ -883,7 +890,7 @@ function dispatcher.modelStep(
 ): string
 	local mode = opts["--mode"] and opts["--mode"][1]
 	local project = opts["--project"] and opts["--project"][1]
-	local resolved = dispatcher.resolve(step, id, project)
+	local resolved = dispatcher.resolve(step, id, project, mode)
 	local tries = models.tries(resolved)
 	local stateDir = st.dir
 	local cwd: string
@@ -1080,7 +1087,7 @@ function dispatcher.modelStep(
 			end
 			return ok, said
 		end
-		local result = runner.run({
+		local result = modelstep.launch({
 			argv = argv,
 			cwd = cwd,
 			env = env,
@@ -1136,7 +1143,8 @@ function dispatcher.modelStep(
 			pcall(fs.removeFile, aside)
 			fs.move(landing, aside)
 		end
-		if outcomeNow ~= "quota" then
+		-- a role's list moves on when the call fails, the CLI is missing, or the quota is gone
+		if outcomeNow ~= "quota" and not (resolved.fromRoles and outcomeNow == "failed") then
 			break
 		end
 	end
@@ -2287,7 +2295,7 @@ function dispatcher.oneStep(
 		if s.kind == "script" then
 			print(`run={table.concat(dispatch.scriptArgv(step, id), " ")}`)
 		else
-			for _, line in dispatch.describe(dispatcher.resolve(step, id, nil)) do
+			for _, line in dispatch.describe(dispatcher.resolve(step, id, nil, mode)) do
 				print(line)
 			end
 		end

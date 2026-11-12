@@ -111,6 +111,19 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 			t.expect(has(refused.stderr, cnew)).toBe(true)
 			t.expect(has(refused.stderr, `status {cnew} preparing`)).toBe(true)
 			t.expect(git(origin, { "rev-parse", "main" })).toBe(before)
+			-- the idea is challenged before design claims it
+			local ideaPath = `{cap}/pickman/.tracker/issues/{cnew}/{cnew}.md`
+			fs.writeFile(
+				ideaPath,
+				(string.gsub(fs.readFile(ideaPath), "idea: unchallenged", "idea: challenged", 1))
+			)
+			fs.writeFile(
+				`{cap}/pickman/.tracker/issues/{cnew}/idea-review-001.md`,
+				"# Idea review 001\n\n## Findings\n\nnone\n\n## Verdict\n\napprove\n"
+			)
+			git(cap, { "add", "-A" })
+			git(cap, { "commit", "-q", "-m", `tracker: idea {cnew}` })
+			git(cap, { "push", "-q", "origin", "HEAD:main" })
 			-- claim it, then drop zeta: the carried move reaches cnew and the raft only
 			trOk(cap, { "status", cnew, "preparing" })
 			-- claimed, but its design is still a draft: the move refuses, naming it (the raft's own design is ready)
