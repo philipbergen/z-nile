@@ -390,6 +390,9 @@ local function rowLine(root: string, row: Row): buffer.Line
 	if not row.cpu then
 		table.insert(flags, "cpu")
 	end
+	if row.tokens == 0 then
+		table.insert(flags, "tokens")
+	end
 	return {
 		ms = 0,
 		kind = "row",

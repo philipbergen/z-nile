@@ -8,5 +8,3 @@ sourcemap.json
 .worktree/
 /tracker/rafts/active/*/prompt.md
 /*/.tracker/rafts/active/*/prompt.md
-
-/.claude/.znile_tests.sqlite*

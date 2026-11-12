@@ -1,13 +1,18 @@
 --!strict
 -- Spec runner. Usage, from a project's home (c0120: every other home's `tests/run.luau`, `pickman/tests/run.luau`, is this
 -- runner, run there), which is then the folder specs run in and whose .cache holds their fixtures:
---   lune run tests/run            -- every tests/**/*.spec.luau under the current folder
---   lune run tests/run -- a b     -- only the listed spec files (paths relative to the current folder)
---   --jobs N / PICKMAN_JOBS=N     -- run spec files in N concurrent workers (default min(max(cpus, 2), 8);
---                                    1 or a single file runs in-process). --jobs wins over the environment.
--- Lanes take the files with no recorded duration first, then the recorded ones slowest first (c0154), from
--- .cache/spec-durations.tsv in the home, which every concurrent run updates. Each result prints as its file finishes;
--- all runners for this user share eight machine-wide worker lanes. Exits non-zero if any case fails or a spec can't load.
+--   lune run tests/run                         -- every fast-tier tests/**/*.spec.luau under the current folder
+--   lune run tests/run -- a b                  -- only the listed spec files (paths relative to the current folder)
+--   lune run tests/run -- --slow               -- only z-nile/tests/slow.tsv (other homes have no slow tier)
+--   lune run tests/run -- --exclude-slow a b   -- the listed files, minus that slow tier
+--   --slow together with --exclude-slow is refused (exit 2) before the lock
+--   --jobs N / PICKMAN_JOBS=N                  -- N concurrent workers (default min(max(cpus, 2), 8);
+--                                               1 or a single file runs in-process). --jobs wins over the environment.
+-- Lanes take the files with no recorded duration first, then the recorded ones slowest first (c0154). The durations
+-- file is the contract in tests/lib/schedule.luau: <home>/.cache/spec-durations.tsv. A missing file orders by path.
+-- z-nile/tests/slow.tsv is a committed membership list in the same line grammar, not that hint. Each result prints
+-- as its file finishes; all runners for this user share eight machine-wide worker lanes. Exits non-zero if any
+-- case fails or a spec can't load.
 
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -66,6 +71,23 @@ local listMode = process.env.AC_LIST
 if listMode ~= nil and listMode ~= "" then
 	print("AC_LIST is set: specs are not run in list mode (unset it to run them)")
 	process.exit(1)
+end
+
+-- Refused before the measurement wrapper and the lock, so a spec can ask and get the answer at once.
+do
+	local slowOnly, excludeSlow = false, false
+	for _, arg in process.args do
+		if arg == "--slow" then
+			slowOnly = true
+		elseif arg == "--exclude-slow" then
+			excludeSlow = true
+		end
+	end
+	if slowOnly and excludeSlow then
+		stdio.ewrite("usage: lune run tests/run [--jobs N] [--slow | --exclude-slow] [spec files]\n")
+		stdio.ewrite("--slow and --exclude-slow conflict\n")
+		process.exit(2)
+	end
 end
 
 -- One measurement for a spec run the gate did not already wrap. The child sees ZN_MEASURED and runs the suite.
@@ -167,7 +189,7 @@ if guard == nil or guard == "" or not fs.isFile(`{guard}/open`) then
 	process.exit(r.code)
 end
 
-local USAGE = "usage: lune run tests/run [--jobs N] [spec files]"
+local USAGE = "usage: lune run tests/run [--jobs N] [--slow | --exclude-slow] [spec files]"
 
 local function usageError(name: string)
 	stdio.ewrite(`{USAGE}\nbad value for {name}\n`)
@@ -193,6 +215,7 @@ end
 
 local files: { string } = {}
 local flagJobs: number? = nil
+local slowOnly, excludeSlow = false, false
 do
 	local args = process.args
 	local i = 1
@@ -204,6 +227,10 @@ do
 				usageError("--jobs")
 			end
 			flagJobs = parseJobs(args[i], "--jobs")
+		elseif arg == "--slow" then
+			slowOnly = true
+		elseif arg == "--exclude-slow" then
+			excludeSlow = true
 		elseif arg ~= "--" then
 			-- accept absolute paths inside the repo (check.sh passes them)
 			if string.sub(arg, 1, #process.cwd) == process.cwd then
@@ -224,16 +251,15 @@ else
 	end
 	jobs = parseJobs(env, "PICKMAN_JOBS") or math.min(math.max(cpuCount(), 2), 8)
 end
-local fullRun = #files == 0
-if fullRun then
+local tiers = if HOME == "z-nile" then slow.load(ROOT) else {}
+-- a fast full run (no paths, not --slow) is the one that may drop durations for specs that left the home
+local fastFull = #files == 0 and not slowOnly
+if #files == 0 then
 	local all: { string } = {}
 	collect("tests", all)
-	local tiers = if HOME == "z-nile" then slow.load(ROOT) else {}
-	for _, f in all do
-		if tiers[f] == nil then
-			table.insert(files, f)
-		end
-	end
+	files = slow.keep(all, tiers, if slowOnly then "slow" else "fast")
+elseif slowOnly or excludeSlow then
+	files = slow.keep(files, tiers, if slowOnly then "slow" else "fast")
 end
 table.sort(files)
 
@@ -384,7 +410,7 @@ local function runConcurrently()
 		if any then
 			-- a full run (no files named) knows every spec file of the home: lines for files gone since are dropped
 			local keep: { [string]: boolean }? = nil
-			if fullRun then
+			if fastFull then
 				local k: { [string]: boolean } = {}
 				for _, f in files do
 					k[f] = true
