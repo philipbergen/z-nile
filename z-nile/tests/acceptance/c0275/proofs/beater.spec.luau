@@ -14,7 +14,7 @@ local task = require("@lune/task")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local h: fakecli.Harness
-local wt, wt2, wt3 = "", "", ""
+local wt, wt2, wt3, wt4 = "", "", "", ""
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local P = "pickman/.tracker/issues"
 -- spelled apart so that the memory files c0274 names in its own specs are not named by a second one (c0049: no two spec files share a fixture directory)
@@ -54,6 +54,18 @@ local function endsWithin(pid: string, seconds: number): boolean
 	end
 	return not alive(pid)
 end
+-- waits (up to `seconds`) until the beater has pushed a beat of its own, which it makes once it is in its loop: a fact
+-- changed before that is refused at its start, not seen by the loop
+local function firstPush(after: number, seconds: number): boolean
+	local deadline = os.time() + seconds
+	while os.time() < deadline do
+		if pushes() > after then
+			return true
+		end
+		task.wait(0.5)
+	end
+	return pushes() > after
+end
 local function pidOf(dir: string, id: string): string
 	local text = fs.readFile(`{dir}/.cache/tracker-beater/{id}`)
 	return string.match(text, "^(%d+) %d+") or error(`no pid in {text}`)
@@ -71,6 +83,8 @@ return t.spec("c0275 real-time proofs: the background beater", function(it)
 			[`{P}/c0101/c0101.md`] = trackerfix.stub("c0101", "c0101", "new-a-b-c"),
 			[`{P}/c0102/c0102.md`] = trackerfix.stub("c0102", "c0102", "new-a-b-c"),
 			[`{P}/c0104/c0104.md`] = trackerfix.stub("c0104", "c0104", "new-a-b-c"),
+			[`{P}/c0104/c0104.md`] = trackerfix.stub("c0104", "c0104", "new-a-b-c"),
+			[`{P}/c0105/c0105.md`] = trackerfix.stub("c0105", "c0105", "new-a-b-c"),
 		})
 		fs.writeFile(`{h.bin}/gh`, '#!/bin/sh\n[ "$1" = pr ] && [ "$2" = list ] && echo "[]"\nexit 0\n')
 		process.exec("chmod", { "+x", `{h.bin}/gh` })
@@ -78,6 +92,7 @@ return t.spec("c0275 real-time proofs: the background beater", function(it)
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0275-beater" }), "worktree"), "%s+$", ""))
 		wt2 = (string.gsub(must(zn(h.f.main, { "worktree", "c0275-beater-2" }), "worktree"), "%s+$", ""))
 		wt3 = (string.gsub(must(zn(h.f.main, { "worktree", "c0275-beater-3" }), "worktree"), "%s+$", ""))
+		wt4 = (string.gsub(must(zn(h.f.main, { "worktree", "c0275-beater-4" }), "worktree"), "%s+$", ""))
 	end)
 
 	it(
@@ -103,7 +118,9 @@ return t.spec("c0275 real-time proofs: the background beater", function(it)
 	)
 
 	it("a beater ends, saying why, when its worktree no longer holds the claim", function()
+		local seen = pushes()
 		must(zn(wt2, { "status", "c0101", "preparing" }, EVERY), "claim c0101")
+		t.expect(firstPush(seen + 2, 30)).toBe(true) -- the claim's own first beat, then a tick of the beater's own
 		local pid = pidOf(wt2, "c0101")
 		t.expect(alive(pid)).toBe(true)
 		-- the memory of the claim is gone from the worktree while main still shows the claim
@@ -126,6 +143,14 @@ return t.spec("c0275 real-time proofs: the background beater", function(it)
 		local pid = pidOf(wt2, "c0104")
 		t.expect(alive(pid)).toBe(true)
 		must(zn(wt2, { "status", "c0104", "new" }, EVERY), "give c0104 back")
+		t.expect(endsWithin(pid, 20)).toBe(true)
+	end)
+
+	it("a beater ends when its worktree is removed", function()
+		must(zn(wt4, { "status", "c0105", "preparing" }, EVERY), "claim c0105")
+		local pid = pidOf(wt4, "c0105")
+		t.expect(alive(pid)).toBe(true)
+		fixture.git(h.f.main, { "worktree", "remove", "--force", wt4 })
 		t.expect(endsWithin(pid, 20)).toBe(true)
 	end)
 

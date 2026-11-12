@@ -21,6 +21,7 @@ local function facts(over: { [string]: any }?): heartbeat.BeaterFacts
 		main = false,
 		guarded = false,
 		running = false,
+		held = true,
 		specRun = false,
 		forced = false,
 	}
@@ -96,6 +97,8 @@ return t.spec("c0275 automatic beats' rules", function(it)
 			t.expect(heartbeat.beaterStart(facts({ main = true }))).toBe(false)
 			t.expect(heartbeat.beaterStart(facts({ guarded = true }))).toBe(false)
 			t.expect(heartbeat.beaterStart(facts({ running = true }))).toBe(false)
+			-- a worktree that no longer remembers the claim would have its beater refused at once, and again at every command
+			t.expect(heartbeat.beaterStart(facts({ held = false }))).toBe(false)
 			-- a spec run starts none unless the spec asks for the real one
 			t.expect(heartbeat.beaterStart(facts({ specRun = true }))).toBe(false)
 			t.expect(heartbeat.beaterStart(facts({ specRun = true, forced = true }))).toBe(true)
@@ -191,6 +194,13 @@ return t.spec("c0275 automatic beats' rules", function(it)
 			t.expect(heartbeat.stampIn(nil)).toBe(nil)
 		end
 	)
+
+	it("a claim whose kind changed is ended, not taken over", function()
+		t.expect(heartbeat.lostKind(A, nil)).toBe("ended")
+		t.expect(heartbeat.lostKind(A, "preparing-lucky-violet-heron")).toBe("taken")
+		t.expect(heartbeat.lostKind(A, B)).toBe("ended") -- a prep that ended normally, the item readied later
+		t.expect(heartbeat.lostKind(B, A)).toBe("ended")
+	end)
 
 	it("the child's answer is a beat, a lost claim, no claim yet, or a failure", function()
 		t.expect(heartbeat.dispatchOutcome(true, "")).toBe("beat")

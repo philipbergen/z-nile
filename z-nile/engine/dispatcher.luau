@@ -903,11 +903,16 @@ function dispatcher.claimBeat(ctx: Ctx, id: string, cwd: string, started: string
 				local s = heartbeat.dispatchStamp(started, remembered)
 				if s then
 					local root = ctx.mainRoot()
-					local ok, _, err = zn(
-						root,
+					-- ZN_MEASURED: a beat is not measured work of the claim (`./zn run` would add a line to the main checkout's buffer each time)
+					local r = process.exec(
+						`{root}/zn`,
 						{ "run", "--time", "60", "--", `{root}/zn`, "beat", id, "--adopt", "--stamp", s },
-						true
+						{
+							cwd = root,
+							env = { ZN_MEASURED = "1" },
+						}
 					)
+					local ok, err = r.ok, trim(r.stderr)
 					local outcome = heartbeat.dispatchOutcome(ok, err)
 					if outcome == "lost" then
 						stdio.ewrite(`dispatch: {err}: not beating {id} any more\n`)

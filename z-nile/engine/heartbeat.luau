@@ -398,6 +398,7 @@ export type BeaterFacts = {
 	main: boolean, -- the main checkout holds no work
 	guarded: boolean, -- a check protects this repository
 	running: boolean, -- a beater of this claim is alive and not past its bound
+	held: boolean, -- this worktree still remembers the claim (a beater started elsewhere would be refused at once)
 	specRun: boolean,
 	forced: boolean, -- a spec asked for the real beater (ZN_BEATER=1; honoured only inside a spec run)
 }
@@ -405,7 +406,7 @@ export type BeaterFacts = {
 -- Whether a claim held in this worktree starts its background beater now: every held claim without a live beater, except
 -- where the dispatcher beats, the main checkout, a protected checkout, and (unless a spec asks) a spec run.
 function heartbeat.beaterStart(f: BeaterFacts): boolean
-	if f.dispatched or f.main or f.guarded or f.running then
+	if f.dispatched or f.main or f.guarded or f.running or not f.held then
 		return false
 	end
 	return not f.specRun or f.forced
@@ -468,6 +469,17 @@ function heartbeat.dispatchStamp(started: string?, remembered: string?): string?
 		return remembered
 	end
 	return started
+end
+
+-- Whether the claim a worktree remembers as `stamp` was taken over ("taken") or ended ("ended") when `main` shows `current`:
+-- no claim is ended, and so is an item whose claim changed kind (a prep that ended normally, the item readied later).
+function heartbeat.lostKind(stamp: string, current: string?): string
+	if current == nil then
+		return "ended"
+	end
+	local before = string.match(stamp, "^(%a+)%-")
+	local now = string.match(current, "^(%a+)%-")
+	return if before ~= now then "ended" else "taken"
 end
 
 -- The claim stamp in a document's status field, nil for anything that is not a live claim (preparing-… or active-…).

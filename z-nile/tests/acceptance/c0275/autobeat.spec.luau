@@ -23,11 +23,12 @@ local LATE = T0 + 9000
 
 local h: fakecli.Harness
 -- wt makes the main claims, wt2 the failing and ended ones, wt3 a claim it never touches again, wt4 takes it over, wt5 the beater
-local wt, wt2, wt3, wt4, wt5 = "", "", "", "", ""
+local wt, wt2, wt3, wt4, wt5, wt6 = "", "", "", "", "", ""
 local specPid = ""
 -- the beater's folder, spelled so that the proof that reads it too does not name one fixture directory twice (c0049)
 local BEATER = "." .. "cache/tracker-beater"
 local MARKS = "." .. "cache/tracker-beats"
+local CACHE = "." .. "cache/"
 local rid = "" -- the raft `new raft` claimed
 
 local function has(text: string, needle: string): boolean
@@ -109,6 +110,8 @@ local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --sho
 local SHIM = '#!/bin/sh\ncase "$1" in fetch|ls-remote|push) echo x >> "$FAKE_DIR/netcalls";; esac\n'
 	.. 'if [ "$1" = push ]; then case "$*" in *":refs/heads/hb/"*) echo p >> "$FAKE_DIR/hbpushes";; esac; fi\n'
 	.. 'if [ "$1" = push ] && [ -f "$FAKE_DIR/hbfail" ]; then case "$*" in *":refs/heads/hb/"*) echo "fatal: fake beat refusal" >&2; exit 1;; esac; fi\n'
+	.. 'if [ "$1" = merge ] && [ -f "$FAKE_DIR/mergefail" ]; then case "$*" in *origin/main*) echo "fatal: fake merge refusal" >&2; exit 1;; esac; fi\n'
+	.. 'if [ "$1" = fetch ] && [ -f "$FAKE_DIR/lockfetch" ]; then rm -f "$FAKE_DIR/lockfetch"; echo "error: cannot lock ref refs/remotes/origin/main: fake" >&2; exit 1; fi\n'
 
 return t.spec("c0275 automatic beats", function(it)
 	it("sets up a tracker, a prepared raft to ready and one to fold into, worktrees and the shims", function()
@@ -126,6 +129,9 @@ return t.spec("c0275 automatic beats", function(it)
 			[`{P}/c0095/c0095.md`] = issue("c0095", "prepared-quiet-copper-falcon", "ready"),
 			[`{P}/c0095/check.sh`] = CHECK,
 			[`{P}/c0099/c0099.md`] = issue("c0099", "new-a-b-c"),
+			[`{P}/c0099/c0099.md`] = issue("c0099", "new-a-b-c"),
+			[`{P}/c0088/c0088.md`] = issue("c0088", "new-a-b-c"),
+			[`{P}/c0089/c0089.md`] = issue("c0089", "new-a-b-c"),
 			[`{P}/c0040/c0040.md`] = issue("c0040", "prepared-quiet-copper-falcon", "ready", "R0010"),
 			[`{P}/c0040/check.sh`] = CHECK,
 			["pickman/.tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "c0040"),
@@ -144,7 +150,7 @@ return t.spec("c0275 automatic beats", function(it)
 		fs.writeFile(`{h.fakes}/livepid`, specPid)
 		fs.writeFile(
 			`{h.bin}/perl`,
-			`#!/bin/sh\ncase "$2" in *setsid*) shift 2; echo "$*" >> "$FAKE_DIR/beater"; cat "$FAKE_DIR/livepid"; exit 0;; esac\nexec {perl} "$@"\n`
+			`#!/bin/sh\ncase "$2" in *setsid*) shift 2; echo "$* M=$ZN_MEASURED" >> "$FAKE_DIR/beater"; cat "$FAKE_DIR/livepid"; exit 0;; esac\nexec {perl} "$@"\n`
 		)
 		process.exec("chmod", { "+x", `{h.bin}/perl` })
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0275-auto" }), "worktree"), "%s+$", ""))
@@ -152,6 +158,7 @@ return t.spec("c0275 automatic beats", function(it)
 		wt3 = (string.gsub(must(zn(h.f.main, { "worktree", "c0275-auto-3" }), "worktree"), "%s+$", ""))
 		wt4 = (string.gsub(must(zn(h.f.main, { "worktree", "c0275-auto-4" }), "worktree"), "%s+$", ""))
 		wt5 = (string.gsub(must(zn(h.f.main, { "worktree", "c0275-auto-5" }), "worktree"), "%s+$", ""))
+		wt6 = (string.gsub(must(zn(h.f.main, { "worktree", "c0275-auto-6" }), "worktree"), "%s+$", ""))
 	end)
 
 	it(
@@ -201,10 +208,15 @@ return t.spec("c0275 automatic beats", function(it)
 			-- the main checkout holds no work: a command there beats nothing, however old the last beat
 			-- even a mark planted there (a copy of the worktree's) is never read: the main checkout holds no work
 			fs.writeDir(`{h.f.main}/{MARKS}`)
-			fs.writeFile(`{h.f.main}/{MARKS}/c0010`, markOf(wt, "c0010") :: string)
+			fs.writeFile(`{h.f.main}/{MARKS}/c0010`, `{stamp} {T0 + 1} deadbeef`) -- a lease that would be rejected if it were read
 			must(zn(h.f.main, { "status", "c0010" }, T0 + 5000), "status in the main checkout")
 			t.expect(epochsOf(stamp)).toEqual({ T0 + 1000 })
 			t.expect(markOf(wt, "c0010")).toBe(`{stamp} {T0 + 1000} {tipOf(stamp)}`)
+			-- a beat from the main checkout (an adoption writes no memory) does not read the planted mark as its lease
+			local pushed = hbPushes()
+			must(zn(h.f.main, { "beat", "c0010", "--adopt" }, T0 + 5001), "a beat from the main checkout")
+			t.expect(hbPushes() - pushed).toBe(1)
+			t.expect(markOf(h.f.main, "c0010")).toBe(`{stamp} {T0 + 1} deadbeef`)
 		end
 	)
 
@@ -241,6 +253,39 @@ return t.spec("c0275 automatic beats", function(it)
 		t.expect(markOf(wt, "R0030")).toBe(`{folded} {T0 + 1310} {tipOf(folded)}`)
 	end)
 
+	it("beat, reap and the read-only commands are never autobeat; any other command is", function()
+		local before = hbPushes()
+		-- three marks are due; none of these commands beats the others
+		zn(wt, { "members", "R0030" }, T0 + 1700)
+		zn(wt, { "reap", "--dry-run" }, T0 + 1700)
+		t.expect(hbPushes()).toBe(before)
+		must(zn(wt, { "beat", "c0010" }, T0 + 1700), "an explicit beat")
+		t.expect(hbPushes() - before).toBe(1) -- its own claim only
+	end)
+
+	it("a worktree that holds no claim pays nothing: no output and no network call", function()
+		local before = net()
+		local r = zn(wt6, { "lessons", "--tags" }, T0 + 9100)
+		t.expect(r.ok).toBe(true)
+		t.expect(r.stderr).toBe("")
+		t.expect(net()).toBe(before)
+	end)
+
+	it(
+		"the first beat is made before the merge that can fail, and a fetch that meets a ref lock is tried again",
+		function()
+			fs.writeFile(`{h.fakes}/mergefail`, "1")
+			local failed = zn(wt6, { "status", "c0088", "preparing" }, T0 + 9200)
+			fs.removeFile(`{h.fakes}/mergefail`)
+			t.expect(failed.ok).toBe(false) -- the merge of origin/main failed after the claim was published
+			t.expect(tipOf(stampOf(`{P}/c0088/c0088.md`)) ~= "").toBe(true) -- and the claim had its first beat
+			fs.writeFile(`{h.fakes}/lockfetch`, "1")
+			local locked = zn(wt6, { "status", "c0089", "preparing" }, T0 + 9300)
+			t.expect(locked.ok).toBe(true)
+			t.expect(fs.isFile(`{h.fakes}/lockfetch`)).toBe(false) -- the refused fetch was the command's own, and it was tried again
+		end
+	)
+
 	it("a nested ./zn in a protected checkout never beats, and does not touch its marks", function()
 		local before = refCount()
 		local mark = markOf(wt, "c0010")
@@ -252,6 +297,8 @@ return t.spec("c0275 automatic beats", function(it)
 		local nested = zn(wt, { "lessons", "--tags" }, T0 + 9000)
 		fs.writeFile(fence, original)
 		t.expect(nested.ok).toBe(true)
+		t.expect(nested.ok).toBe(true)
+		t.expect(has(nested.stderr, "not publishing")).toBe(false) -- a nested command that publishes nothing says nothing
 		t.expect(refCount()).toBe(before)
 		t.expect(markOf(wt, "c0010")).toBe(mark) -- not even a failed attempt: the mark is untouched
 		t.expect(net()).toBe(netBefore) -- nothing was fetched, listed or pushed first
@@ -348,6 +395,7 @@ return t.spec("c0275 automatic beats", function(it)
 			local line = ours("c0085")[1]
 				or error(`no beater was started: {claimed.stderr}{table.concat(starts(), "|")}`)
 			local top = (string.gsub(fixture.git(wt5, { "rev-parse", "--show-toplevel" }), "%s+$", ""))
+			t.expect(has(line, " M=1")).toBe(true) -- the beater is not measured work of the claim
 			-- the bound is ./zn run's, the loop is beat --watch; the session is the claude process above, when there is one
 			t.expect(has(line, `{top}/zn run --time 3600 -- {top}/zn beat c0085 --watch`)).toBe(true)
 			local pidFile = fs.readFile(`{wt5}/{BEATER}/c0085`)
@@ -359,6 +407,25 @@ return t.spec("c0275 automatic beats", function(it)
 			fs.writeFile(`{wt5}/{BEATER}/c0085`, `999999 {os.time() + 3000}`)
 			must(zn(wt5, { "lessons", "--tags" }, T0 + 7020, { ZN_BEATER = "1" }), "a command after it ended")
 			t.expect(#ours("c0085")).toBe(2)
+			-- a worktree that no longer remembers the claim starts no beater: it would be refused at once, at every command
+			local stampFile, claimFile =
+				`{wt5}/{CACHE}tracker-stamp-c0085`, `{wt5}/{CACHE}tracker-claim-c0085`
+			local kept = fs.readFile(stampFile)
+			local keptClaim = if fs.isFile(claimFile) then fs.readFile(claimFile) else nil
+			fs.removeFile(stampFile)
+			if keptClaim then
+				fs.removeFile(claimFile)
+			end
+			fs.writeFile(`{wt5}/{BEATER}/c0085`, `999999 {os.time() + 3000}`)
+			must(
+				zn(wt5, { "lessons", "--tags" }, T0 + 7025, { ZN_BEATER = "1" }),
+				"a command without the claim's memory"
+			)
+			t.expect(#ours("c0085")).toBe(2)
+			fs.writeFile(stampFile, kept)
+			if keptClaim then
+				fs.writeFile(claimFile, keptClaim)
+			end
 			-- a spec run starts none unless it asks; a headless step's dispatcher beats for it instead
 			must(zn(wt5, { "status", "c0086", "preparing" }, T0 + 7030), "claim c0086 in a spec run")
 			t.expect(#ours("c0086")).toBe(0)

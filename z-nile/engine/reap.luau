@@ -297,6 +297,12 @@ function reap.isBeater(command: string): boolean
 	return string.find(command, "bounded%.pl .-%-%- %S+/zn beat [%w%-]+ %-%-watch") ~= nil
 end
 
+-- The session pid a beater's command line carries (`--session <pid>`), nil for none (another CLI's, or unreadable).
+function reap.beaterSession(command: string): number?
+	local pid = string.match(command, "%-%-watch %-%-session (%d+)")
+	return if reap.isBeater(command) and pid then tonumber(pid) else nil
+end
+
 local function underBeater(p: Proc, byPid: { [number]: Proc }): boolean
 	local at: Proc? = p
 	local seen = 0
@@ -374,7 +380,12 @@ function reap.decide(procs: { Proc }, opts: Options): { Target }
 			and p.ppid == opts.under
 			and reap.isToolShell(p.command)
 			and (scoped or opts.sessionAnywhere)
-		if not scoped and not sessionShell then
+		-- a beater tied to the session that is ending (`/clear` ends a session and keeps its `claude` process, so the pid check
+		-- alone never stops it; c0275 design review F2)
+		local sessionBeater = opts.under ~= nil
+			and reap.beaterSession(p.command) == opts.under
+			and (scoped or opts.sessionAnywhere)
+		if not scoped and not sessionShell and not sessionBeater then
 			continue
 		end
 		local name = reap.name(p.command)
@@ -393,7 +404,7 @@ function reap.decide(procs: { Proc }, opts: Options): { Target }
 			)
 		then
 			why = `past its ./zn run deadline by {opts.now - stamp}s`
-		elseif sessionShell then
+		elseif sessionShell or sessionBeater then
 			why = "started by the session that is ending"
 		elseif
 			scoped

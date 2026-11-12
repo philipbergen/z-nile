@@ -79,6 +79,26 @@ return t.spec("c0275 the background beater is not a leak", function(it)
 		t.expect(pids(plain)).toEqual({ 100 })
 	end)
 
+	it("a session end stops the beaters tied to that session and no other", function()
+		local tied = p({ pid = 100, ppid = 1, command = BEATER })
+		local other = p({ pid = 110, ppid = 1, command = BEATER:gsub("%-%-session 77", "--session 78") })
+		local free = p({
+			pid = 120,
+			ppid = 1,
+			command = `perl {WT}/z-nile/lib/bounded.pl --time 3600 -- {WT}/zn beat c0011 --watch`,
+		})
+		local claude = p({ pid = 77, ppid = 1, command = "/Users/me/.local/bin/claude" })
+		-- /clear ends a session and keeps its claude process, so the beater's own pid check never fires: the reaper stops it
+		t.expect(pids({ claude, tied, other, free }, opts({ under = 77 }))).toEqual({ 100 })
+		t.expect(pids({ claude, tied, other, free })).toEqual({})
+		t.expect(reap.beaterSession(BEATER)).toBe(77)
+		t.expect(
+			reap.beaterSession(`perl {WT}/z-nile/lib/bounded.pl --time 3600 -- {WT}/zn beat c0011 --watch`)
+		)
+			.toBe(nil)
+		t.expect(reap.beaterSession("sleep 5 --watch --session 77")).toBe(nil)
+	end)
+
 	it(
 		"a beater past its deadline is stopped, as any marked process, and a session end stops what ran below its shell",
 		function()

@@ -315,9 +315,9 @@ local function checking(): boolean
 	return not (ok and r.ok and sh.trim(r.stdout) == "free")
 end
 
-local function publishing(): boolean
+local function publishing(quiet: boolean?): boolean
 	local v = process.env.PICKMAN_PUBLISH
-	return hasOrigin() and (v == nil or v == "" or v ~= "0") and not guarded()
+	return hasOrigin() and (v == nil or v == "" or v ~= "0") and not guarded(quiet)
 end
 
 local function frontOf(text: string): { [string]: string }
@@ -1884,21 +1884,31 @@ end
 -- own fence answer (it is false in a checkout a check protects), one reader that fails closed: a nested `./zn` in a check
 -- or spec flow of the real repository never fetches or pushes.
 function hb.mayBeat(): boolean
-	return publishing()
+	return publishing(true)
+end
+
+-- Whether this is the main checkout, asked once per process (it costs two git calls).
+hb.memo = {} :: { main: boolean? }
+function hb.inMain(): boolean
+	if hb.memo.main == nil then
+		hb.memo.main = inMainCheckout()
+	end
+	return hb.memo.main == true
 end
 
 -- One beat attempt for the stamp `held` of `id`, with the worktree's mark: it leases on the sha it last wrote and records
 -- the attempt, a failed one too (a hung or offline remote then costs one bounded attempt per interval). Returns the text
 -- to say and whether it means the claim was lost.
 function hb.attempt(id: string, held: string): (string?, boolean)
-	local before = hb.readMark(id)
+	local before = if inMainCheckout() then nil else hb.readMark(id) -- the main checkout holds no work and no mark
 	local ok, msg, lost, sha = pcall(hb.beatOnce, id, held, heartbeat.leaseOf(before, held))
 	if not ok then
 		return tostring(msg), false
 	end
 	if lost then
 		hb.dropMark(id)
-	else
+	elseif inMainCheckout() or cm.read(id) == held then
+		-- only while this worktree still holds the claim: a give-back that ran meanwhile is not undone by a late write
 		hb.writeMark(id, heartbeat.markAfter(held, hb.hbNow(), before, sha))
 	end
 	return msg, lost == true
@@ -1943,7 +1953,7 @@ end
 -- the process that becomes its parent only after it has been left to init) with its output in a log. It ends at its
 -- bound, when the claim is restamped, when its session ends and when its worktree goes away.
 hb.DAEMON =
-	[[use strict; use warnings; use POSIX qw(setsid); my ($dir, $log, @cmd) = @ARGV; my $orig = getppid(); my $pid = fork; die "fork: $!" unless defined $pid; if ($pid) { print "$pid\n"; exit 0 } setsid(); for (1 .. 100) { last if getppid() != $orig; select(undef, undef, undef, 0.05) } chdir $dir or exit 1; open STDIN, '<', '/dev/null'; open STDOUT, '>>', $log; open STDERR, '>&', \*STDOUT; exec @cmd or exit 127;]]
+	[[use strict; use warnings; use POSIX qw(setsid); my ($dir, $log, @cmd) = @ARGV; my $orig = $$; my $pid = fork; die "fork: $!" unless defined $pid; if ($pid) { print "$pid\n"; exit 0 } setsid(); my $left = 100; while ($left-- > 0 && getppid() == $orig) { select(undef, undef, undef, 0.05) } exit 1 if getppid() == $orig; chdir $dir or exit 1; open STDIN, '<', '/dev/null'; open STDOUT, '>>', $log; open STDERR, '>&', \*STDOUT; exec @cmd or exit 127;]]
 
 -- The nearest ancestor of this process that is the session's `claude`, nil for any other CLI.
 function hb.sessionPid(): number?
@@ -1976,6 +1986,7 @@ function hb.ensureBeater(id: string)
 		main = inMainCheckout(),
 		guarded = guarded(true),
 		running = running,
+		held = inMainCheckout() or cm.read(id) ~= "",
 		specRun = hb.specRun(),
 		forced = process.env.ZN_BEATER == "1",
 	})
@@ -1987,11 +1998,12 @@ function hb.ensureBeater(id: string)
 	local readable, session = pcall(hb.sessionPid)
 	local argv = heartbeat.beaterArgv(top, id, if readable then session else nil)
 	fs.writeDir(hb.BEATER_DIR)
-	local args = { "-e", hb.DAEMON, top, `{hb.BEATER_DIR}/{id}.log` }
+	-- ZN_MEASURED: the beater is not a measured piece of the claim's work (`./zn run` would add its hour to the ticket's spend)
+	local args = { "ZN_MEASURED=1", "perl", "-e", hb.DAEMON, top, `{hb.BEATER_DIR}/{id}.log` }
 	for _, a in argv do
 		table.insert(args, a)
 	end
-	local r = sh.run("perl", args)
+	local r = sh.run("env", args)
 	local pid = string.match(sh.trim(r.stdout), "^(%d+)$")
 	if r.ok and pid then
 		sh.writeReplacing(file, `{pid} {os.time() + heartbeat.BEATER_SECONDS}`)
@@ -2029,11 +2041,8 @@ end
 -- give-back), else beaten when due (and its beater started when none runs). One fetch of main for all of them. Never
 -- fails the caller; a long command calls it again at every interval while it runs.
 function hb.autobeat(): string?
-	if inMainCheckout() or not hb.mayBeat() then
-		return nil
-	end
-	local ids = hb.markIds()
-	if #ids == 0 then
+	local ids = hb.markIds() -- one folder read first: a worktree with no claim pays nothing more
+	if #ids == 0 or hb.inMain() or not hb.mayBeat() then
 		return nil
 	end
 	local now = hb.hbNow()
@@ -2064,7 +2073,9 @@ function hb.autobeat(): string?
 			local held = heartbeat.holds(mark.stamp, current)
 			if held == "taken" or held == "ended" then
 				hb.dropMark(id)
-				return `{hb.lostText(id, current)}{if current then ": stop working it" else ""}`
+				-- a prep that ended normally and an item later readied (preparing-… then active-…) is an ended claim, not a taken one
+				local told = if heartbeat.lostKind(mark.stamp, current) == "taken" then current else nil
+				return `{hb.lostText(id, told)}{if told then ": stop working it" else ""}`
 			end
 			local msg, lost = hb.attempt(id, mark.stamp)
 			return if msg == nil then nil elseif lost then msg else `beat: {id}: {msg}`
@@ -2081,7 +2092,7 @@ end
 -- c0275: the start and the end of a command's automatic beats (main.luau's last lines call them: the chunk is at Luau's
 -- limit of local registers, so no top-level local holds the ticker). `readOnly`: the command is on the READ_ONLY list.
 function hb.begin(name: string, readOnly: boolean)
-	if readOnly or name == "beat" or name == "run" or name == "reap" then
+	if readOnly or name == "beat" or name == "reap" then
 		return
 	end
 	local ok, why = pcall(hb.autobeat)
@@ -2175,12 +2186,14 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 	-- beats from (the claim's memory is there unless this is the main checkout, which holds none)
 	local session = if opts["--session"] then tonumber(opts["--session"][1]) else nil
 	local home = sh.git({ "rev-parse", "--show-toplevel" })
+	local isMain = hb.inMain() -- asked once: the loop looks at local facts every five seconds
 	local function goneNow(): string?
 		local alive: boolean? = nil
 		if session ~= nil then
 			alive = sh.run("kill", { "-0", tostring(session) }).ok
 		end
-		return heartbeat.gone(alive, fs.isDir(home), inMainCheckout() or cm.read(id, home) ~= "")
+		local there = fs.isDir(home)
+		return heartbeat.gone(alive, there, there and (isMain or cm.read(id, home) ~= ""))
 	end
 	while true do
 		local here, unreadable = hb.stampNow(id)
