@@ -1,6 +1,6 @@
 --!strict
 -- c0117 AC11: one definition of tracker state (design review 002 F1 to F3, F7), shared by the wrapper, the publish
--- broker, the tripwire and the watermark: git's raw diff with renames off and both sides' modes; only paths under a
+-- broker and the tripwire: git's raw diff with renames off and both sides' modes; only paths under a
 -- project root's folder (with the slash) or exactly z-nile/next, only regular files, no git configuration, and no
 -- change to a sequestered file but a move. The broker pushes only a fast-forward of a fresh main, never forced; two
 -- brokers racing on one folder never crash, each request is answered once, and a request bound to another run is
@@ -249,7 +249,7 @@ return t.spec("c0117 tracker state and the broker", function(it)
 	)
 
 	it(
-		"the broker refuses the decoy move, a .models.toml, a .GITATTRIBUTES, and a history the watermark would refuse",
+		"the broker refuses the decoy move, a .models.toml, a .GITATTRIBUTES, and a history that is not tracker state",
 		function()
 			fixture.git(repo, { "reset", "-q", "--hard", fixture.git(origin, { "rev-parse", "main" }) })
 			local start = fixture.git(repo, { "rev-parse", "HEAD" })
