@@ -5539,12 +5539,12 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 	local base: string? = nil
 	local cur: Wt? = nil
 	if id then
-		-- the worktree that holds the claim: the one whose memory names it (the one matching origin's stamp first) ...
+		-- the worktree that holds the claim: the one whose memory is the stamp origin shows ...
 		local origin = hb.claimStampOf(paths :: { string }, target)
 		for _, w in listed do
 			local mem = if w.discarded then "" else cm.read(target, w.path)
-			if mem ~= "" and (cur == nil or mem == origin) then
-				cur = w
+			if mem ~= "" and mem == origin then
+				cur = w -- a worktree that remembers another stamp holds nothing of this claim
 			end
 		end
 		if cur then

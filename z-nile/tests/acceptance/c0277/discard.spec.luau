@@ -119,6 +119,7 @@ return t.spec("c0277 discarded worktrees", function(it)
 			local blind = zn(h.f.main, { "worktree", NAME, "--takeover" }, LATE)
 			t.expect(blind.ok).toBe(false)
 			t.expect(has(blind.stderr, "no heartbeat verdict")).toBe(true)
+			t.expect(has(blind.stderr, "pull requests unreadable")).toBe(true) -- and says why it is unreadable
 			fs.removeFile(`{h.fakes}/ghfail`)
 			local young = zn(h.f.main, { "worktree", "prep-fresh", "--takeover" }, LATE) -- created by a takeover: a taker is starting in it
 			t.expect(young.ok).toBe(false)
@@ -248,6 +249,34 @@ return t.spec("c0277 discarded worktrees", function(it)
 			-- unlocked, the same takeover goes through
 			must(zn(h.f.main, { "worktree", "prep-locked", "--takeover" }, LATE), "takeover")
 			t.expect(fs.isDir(dir("prep-locked-discarded-1"))).toBe(true)
+		end
+	)
+
+	it(
+		"a worktree that remembers an older stamp of the claim is not the one by id; the one matching main is",
+		function()
+			-- a second worktree that still remembers c0010 under a stamp main no longer shows (nobody ran anything there since)
+			local ghost = trim(must(zn(h.f.main, { "worktree", "prep-ghost" }), "worktree"))
+			fs.writeDir(`{ghost}/` .. "." .. "cache")
+			fs.writeFile(`{ghost}/` .. "." .. "cache/tracker-stamp-c0010", "preparing-ghost-of-a-claim")
+			local holder = zn(h.f.main, { "worktree", "--takeover", "c0010" }, LATE + 12 * STALE)
+			must(holder, "by id")
+			-- it was the taker's copy that was taken over (and discarded), not the ghost
+			t.expect(trim(holder.stdout)).toBe(dir(`{NAME}-3`))
+			t.expect(branchOf(ghost)).toBe("prep-ghost")
+			t.expect(fs.isFile(`{gone(NAME, 3)}/` .. "." .. "cache/discarded")).toBe(true)
+		end
+	)
+
+	it(
+		"a family that has had a discard is not given its bare name again, even when its copy was removed by hand",
+		function()
+			local copy = dir(`{NAME}-3`)
+			fixture.git(h.f.main, { "worktree", "remove", "--force", copy })
+			fixture.git(h.f.main, { "branch", "-D", NAME }) -- the copy's branch goes too: nothing of the family is live
+			local again = trim(must(zn(h.f.main, { "worktree", NAME }), "worktree"))
+			t.expect(again).toBe(dir(`{NAME}-4`)) -- three discards numbered 1 to 3: the next free number, not the old bare name
+			t.expect(fs.isDir(dir(NAME))).toBe(false)
 		end
 	)
 end)
