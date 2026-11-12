@@ -14,7 +14,7 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local h: fakecli.Harness
-local wt, wt2 = "", "" -- wt made the claims; wt2 holds none and publishes
+local wt = "" -- the worktree that made the claims
 local T0 = os.time()
 local STALE = heartbeat.STALE
 local LATE = T0 + 3 * STALE -- everything claimed at about T0 is stale then, whatever the seconds the fixture took
@@ -148,7 +148,6 @@ return t.spec("c0276 board shows lost work", function(it)
 		local real = fs.readFile(`{h.bin}/git`)
 		fs.writeFile(`{h.bin}/git`, (string.gsub(real, "^#!/bin/sh\n", SHIM, 1)))
 		wt = (string.gsub(must(zn(h.f.main, { "worktree", "c0276-board" }), "worktree"), "%s+$", ""))
-		wt2 = (string.gsub(must(zn(h.f.main, { "worktree", "c0276-pub" }), "worktree"), "%s+$", ""))
 		for _, id in { "c0010", "c0020", "c0030" } do
 			must(zn(wt, { "status", id, "preparing" }, T0), `claim {id}`)
 		end
