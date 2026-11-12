@@ -1,13 +1,10 @@
-# Which model runs each model step (c0117). Files stack like .gitignore: a .models.toml closer to the work (a
-# project's home, an issue's folder) replaces only the keys it sets. A step about one issue reads that issue's walk; a
-# step about a raft takes, for each CLI, the strongest of its members' specs (higher rank, then larger max_tokens).
-# Only the CLIs below are supported, and nothing defaults: a skill no file names is an error. See zz-rules, Dispatch.
-#
-# The order, the models, the ranks and the caps below: decided with the user (c0117 G1, 2026-10-25: "Accept as written").
+# Which model runs each stage. Files stack like .gitignore: a .models.toml closer to the work replaces only
+# the keys it sets. A role names what belongs to the stage (model, cli, runtime, rank, max_tokens, effort,
+# fallbacks). A fallback names what belongs to the model (its id, its runtime, and anything only that CLI
+# needs). A try is the role's rank, cap and effort on that model. Nothing defaults.
 # max_tokens counts input + cache writes + output (cache reads are left out); the step is killed when it passes it.
-
-# The CLI priority order: the dispatcher moves down it only when a CLI fails on quota.
-order = ["claude", "grok", "agent"]
+# design-challenge names no author: the table gives it the same model as design, and naming the author would
+# drop that model. Raft-mode review uses the raft role for the same reason.
 
 [dispatch]
 # the merge gates the dispatcher passes itself when the PR is green and mergeable; the run's PR is always a human's.
@@ -18,140 +15,21 @@ stall_seconds = 300
 # the same limit while a tool call runs (a full gate is quiet for minutes)
 tool_seconds = 900
 
-[z-ticket.claude]
-model = "claude-fable-5-2"
-rank = 2
-runtime = "claude-cli"
-max_tokens = 300000
-
-[z-ticket.grok]
-model = "grok-4.7"
-effort = "medium"
-rank = 2
-runtime = "grok-cli"
-max_tokens = 300000
-
-[z-ticket.agent]
-model = "claude-sonnet-5-thinking-high"
-rank = 2
-runtime = "cursor-cli"
-# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
-max_calls = 200
-# and a wall-time ceiling, since a stream can hide its calls (fail closed)
-max_minutes = 240
-max_tokens = 300000
-
-[z-design.claude]
-model = "claude-opus-5-5"
-effort = "high"
-rank = 3
-runtime = "claude-cli"
-max_tokens = 3000000
-
-[z-design.grok]
-model = "grok-4.7"
-effort = "high"
-rank = 3
-runtime = "grok-cli"
-max_tokens = 3000000
-
-[z-design.agent]
-model = "claude-opus-5-5-high"
-rank = 3
-runtime = "cursor-cli"
-# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
-max_calls = 200
-# and a wall-time ceiling, since a stream can hide its calls (fail closed)
-max_minutes = 240
-max_tokens = 3000000
-
-[z-raft.claude]
-model = "claude-sonnet-5"
-rank = 2
-runtime = "claude-cli"
-max_tokens = 600000
-
-[z-raft.grok]
-model = "grok-4.7"
-effort = "medium"
-rank = 2
-runtime = "grok-cli"
-max_tokens = 600000
-
-[z-raft.agent]
-model = "claude-sonnet-5-thinking-high"
-rank = 2
-runtime = "cursor-cli"
-# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
-max_calls = 200
-# and a wall-time ceiling, since a stream can hide its calls (fail closed)
-max_minutes = 240
-max_tokens = 600000
-
-[z-run.claude]
-model = "claude-sonnet-5-5"
-effort = "high"
-rank = 3
-runtime = "claude-cli"
-max_tokens = 12000000
-
-[z-run.grok]
-model = "grok-4.7"
-effort = "high"
-rank = 3
-runtime = "grok-cli"
-max_tokens = 12000000
-
-[z-run.agent]
-model = "claude-opus-5-5-high"
-rank = 3
-runtime = "cursor-cli"
-# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
-max_calls = 200
-# and a wall-time ceiling, since a stream can hide its calls (fail closed)
-max_minutes = 240
-max_tokens = 12000000
-
-# The review model belongs to the CLI (the user's decision): Opus through claude or agent, any grok model at xhigh
-# through grok.
-[zz-review.claude]
-model = "claude-opus-5-5"
-rank = 4
-runtime = "claude-cli"
-max_tokens = 2000000
-
-[zz-review.grok]
-model = "grok-4.7"
-effort = "xhigh"
-rank = 4
-runtime = "grok-cli"
-max_tokens = 2000000
-
-[zz-review.agent]
-model = "claude-opus-5-5-high"
-rank = 4
-runtime = "cursor-cli"
-# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
-max_calls = 200
-# and a wall-time ceiling, since a stream can hide its calls (fail closed)
-max_minutes = 240
-max_tokens = 2000000
-
-# Roles. When a walk has the role, that role replaces the skill tables above. A closer file replaces only the keys
-# it sets. `author` drops that role's model from the tries: a challenge is never run by the model that wrote the text.
-# design-challenge names no author: the table gives it the same model as design, and that model is the one that runs.
 [fallback.kimi]
 model = "kimi-code-k3.1-pro"
 runtime = "kimi-cli"
-rank = 2
-max_tokens = 300000
 
 [fallback.grok]
 model = "grok-4.7"
 runtime = "grok-cli"
-effort = "high"
-rank = 2
-max_tokens = 300000
+
+[fallback.agent]
+model = "claude-opus-5-5"
+runtime = "cursor-cli"
+# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
+max_calls = 200
+# and a wall-time ceiling, since a stream can hide its calls (fail closed)
+max_minutes = 240
 
 [roles.idea]
 model = "claude-fable-5-2"
@@ -159,7 +37,8 @@ cli = "claude"
 runtime = "claude-cli"
 rank = 2
 max_tokens = 300000
-fallbacks = ["kimi", "grok"]
+effort = "medium"
+fallbacks = ["kimi", "grok", "agent"]
 
 [roles.idea-challenge]
 model = "claude-opus-5-5"
@@ -167,8 +46,9 @@ cli = "claude"
 runtime = "claude-cli"
 rank = 4
 max_tokens = 300000
+effort = "xhigh"
 author = "idea"
-fallbacks = ["kimi", "grok"]
+fallbacks = ["kimi", "grok", "agent"]
 
 [roles.design]
 model = "claude-opus-5-5"
@@ -176,7 +56,8 @@ cli = "claude"
 runtime = "claude-cli"
 rank = 4
 max_tokens = 3000000
-fallbacks = ["kimi", "grok"]
+effort = "high"
+fallbacks = ["kimi", "grok", "agent"]
 
 [roles.design-challenge]
 model = "claude-opus-5-5"
@@ -184,7 +65,8 @@ cli = "claude"
 runtime = "claude-cli"
 rank = 4
 max_tokens = 3000000
-fallbacks = ["kimi", "grok"]
+effort = "xhigh"
+fallbacks = ["kimi", "grok", "agent"]
 
 [roles.raft]
 model = "claude-opus-5-5"
@@ -192,7 +74,8 @@ cli = "claude"
 runtime = "claude-cli"
 rank = 3
 max_tokens = 3000000
-fallbacks = ["kimi", "grok"]
+effort = "high"
+fallbacks = ["kimi", "grok", "agent"]
 
 [roles.implementation]
 model = "claude-sonnet-5-5"
@@ -200,7 +83,8 @@ cli = "claude"
 runtime = "claude-cli"
 rank = 3
 max_tokens = 12000000
-fallbacks = ["kimi", "grok"]
+effort = "high"
+fallbacks = ["kimi", "grok", "agent"]
 
 [roles.code-review]
 model = "claude-opus-5-5"
@@ -208,8 +92,9 @@ cli = "claude"
 runtime = "claude-cli"
 rank = 4
 max_tokens = 2000000
+effort = "xhigh"
 author = "implementation"
-fallbacks = ["kimi", "grok"]
+fallbacks = ["kimi", "grok", "agent"]
 
 [roles.final-review]
 model = "claude-opus-5-5"
@@ -217,4 +102,5 @@ cli = "claude"
 runtime = "claude-cli"
 rank = 4
 max_tokens = 2000000
-fallbacks = ["kimi", "grok"]
+effort = "xhigh"
+fallbacks = ["kimi", "grok", "agent"]

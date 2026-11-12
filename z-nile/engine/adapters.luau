@@ -8,7 +8,8 @@
 -- assistant message, a `rate_limit_event` per call and a final `result` with `modelUsage`; `grok -p --output-format
 -- streaming-json` gives a `usage` line per model call and an `end` line with the total; `agent -p --output-format
 -- stream-json` gives usage only on its final `result` line, so its step is capped by model calls instead.
--- Kimi Code 2.5.2 (`kimi --help`): `kimi --auto -p <prompt> --output-format stream-json -m <model>`.
+-- Kimi Code 2.5.2 (`kimi --help`): `kimi -p <prompt> --output-format stream-json -m <model>`.
+-- `--auto` (Never Ask) cannot be combined with `--prompt`; `-p` is the non-interactive run.
 -- A session wire's `usage.record` counts inputOther + inputCacheCreation + output and leaves inputCacheRead out.
 -- The ledger id `kimi-code-<rest>` is the CLI's `kimi-code/<rest>`.
 local serde = require("@lune/serde")
@@ -416,7 +417,6 @@ local ADAPTERS: { [string]: Adapter } = {
 		argv = function(r: Request): { string }
 			return {
 				"kimi",
-				"--auto",
 				"-p",
 				r.prompt,
 				"--output-format",

@@ -1,14 +1,15 @@
 --!strict
--- .models.toml (c0117): which model runs each model step, on which CLI, and in which order the CLIs are tried.
+-- .models.toml (c0117): which model runs each stage, on which CLI, and which fallbacks follow it.
 -- The files stack like .gitignore: from the repository root down to the work, a closer file replaces only the keys
 -- it sets. Pure apart from `load`/`walk`, which read the files.
 --
--- Contract for the Python port. A file that has `[roles.<name>]` is the roles table. Each role names the
--- model and the CLI that run that stage, then `fallbacks`, an ordered list of CLI names. A fallback's model
--- is `[fallback.<cli>]`. A challenge role sets `author` to the role that wrote the text; a try whose model id
--- equals that author's is dropped, and an empty list fails at resolve. A role that names an unknown model or
--- CLI fails in `parse` (when the file is loaded), not when the stage runs. Skill tables (`[<skill>.<cli>]`)
--- remain for a file with no roles.
+-- Contract for the Python port. One shape. A role names what belongs to the stage: `model`, `cli`, `runtime`,
+-- `rank`, `max_tokens`, `effort`, and `fallbacks` (CLI names, in order). A fallback names what belongs to the
+-- model: `[fallback.<cli>]` has `model`, `runtime`, and anything only that CLI needs (`max_calls` and
+-- `max_minutes` for `agent`). A try is the role's rank, cap and effort on the fallback's model. A challenge
+-- role sets `author` to the role that wrote the text; a try whose model id equals that author's is dropped,
+-- and an empty list fails at resolve. A role or fallback that names an unknown model or CLI fails in `parse`
+-- (when the file is loaded), not when the stage runs. There is no `order` and no `[<skill>.<cli>]` table.
 --
 --   [roles.idea]
 --   model = "..."          -- a model id of `cli` (claude-…, grok-…, kimi-code-…, or the agent's id)
@@ -16,25 +17,21 @@
 --   runtime = "claude-cli"
 --   rank = 2
 --   max_tokens = 300000
---   fallbacks = ["kimi", "grok"]
+--   effort = "medium"      -- the stage's: the primary and every fallback try carry it
+--   fallbacks = ["kimi", "grok", "agent"]
 --   [roles.idea-challenge]
 --   author = "idea"        -- never run this role on the author's model
 --   [fallback.kimi]
 --   model = "..."
 --   runtime = "kimi-cli"
---   rank = 2
---   max_tokens = 300000
---
---   order = ["claude", "grok", "agent"]        -- the CLI priority when the file has no roles
---   [dispatch]                                 -- the dispatcher's settings
---   auto_merge = ["prep", "raft"]              -- merge gates the dispatcher may pass itself
---   stall_seconds = 300                        -- no output for this long kills the step
---   [z-design.claude]                          -- one table per skill and CLI, when the file has no roles
+--   [fallback.agent]
 --   model = "..."
---   effort = "high"                            -- optional
---   rank = 3
---   runtime = "claude-cli"
---   max_tokens = 3000000
+--   runtime = "cursor-cli"
+--   max_calls = 200
+--   max_minutes = 240
+--   [dispatch]
+--   auto_merge = ["prep", "raft"]
+--   stall_seconds = 300
 local fs = require("@lune/fs")
 local ledger = require("./ledger")
 local serde = require("@lune/serde")
@@ -88,12 +85,10 @@ export type Spec = {
 	maxMinutes: number?, -- its wall-time ceiling beside max_calls (review 003 F7: fail closed)
 }
 export type Settings = { autoMerge: { string }, stallSeconds: number, toolSeconds: number }
--- One parsed file: its order and settings when it sets them, and its skill tables (skill -> cli -> field -> value).
+-- One parsed file: its dispatch settings, its roles and its fallbacks.
 export type Layer = {
 	path: string,
-	order: { string }?,
 	settings: { [string]: any },
-	skills: { [string]: { [string]: { [string]: any } } },
 	roles: { [string]: { [string]: any } },
 	fallbacks: { [string]: { [string]: any } },
 }
@@ -135,26 +130,10 @@ function models.parse(text: string, path: string): Layer
 	if not ok then
 		error(`{path}: {firstLine(decoded)}`, 0)
 	end
-	local layer: Layer = { path = path, order = nil, settings = {}, skills = {}, roles = {}, fallbacks = {} }
+	local layer: Layer = { path = path, settings = {}, roles = {}, fallbacks = {} }
 	for key, value in decoded :: { [string]: any } do
 		if key == "order" then
-			if type(value) ~= "table" or #value == 0 then
-				error(`{path}: order is a list of CLIs ({list(models.CLIS)})`, 0)
-			end
-			local seen: { [string]: boolean } = {}
-			for _, cli in value do
-				if type(cli) ~= "string" or not isCli(cli) then
-					error(
-						`{path}: order names {tostring(cli)}, which is not a supported CLI ({list(models.CLIS)})`,
-						0
-					)
-				end
-				if seen[cli] then
-					error(`{path}: order names {cli} twice`, 0)
-				end
-				seen[cli] = true
-			end
-			layer.order = table.clone(value)
+			error(`{path}: order is gone; a role names its cli, then its fallbacks`, 0)
 		elseif key == "dispatch" then
 			if type(value) ~= "table" then
 				error(`{path}: [dispatch] is a table`, 0)
@@ -234,6 +213,11 @@ function models.parse(text: string, path: string): Layer
 						out.cli = v
 					elseif key == "fallback" and field == "cli" then
 						error(`{path}: fallback.{name}.cli is the table name, not a field`, 0)
+					elseif
+						key == "fallback"
+						and (field == "rank" or field == "max_tokens" or field == "effort")
+					then
+						error(`{path}: fallback.{name}.{field} belongs to the role, not the fallback`, 0)
 					else
 						local want = FIELDS[field]
 						if not want then
@@ -257,16 +241,6 @@ function models.parse(text: string, path: string): Layer
 							)
 						end
 						out[field] = v
-					end
-				end
-				local cliForModel = if key == "fallback" then name else out.cli
-				if out.model ~= nil and type(cliForModel) == "string" and isCli(cliForModel) then
-					local pattern = MODEL_OF_CLI[cliForModel]
-					if string.match(out.model, pattern) == nil then
-						error(
-							`{path}: {key}.{name}.model is {out.model}, not a model of cli {cliForModel}`,
-							0
-						)
 					end
 				end
 				if key == "roles" and out.cli ~= nil and not isCli(out.cli) then
@@ -303,54 +277,10 @@ function models.parse(text: string, path: string): Layer
 				end
 			end
 		else
-			if type(value) ~= "table" then
-				error(`{path}: {key} is a skill table ([{key}.<cli>])`, 0)
-			end
-			local clis: { [string]: { [string]: any } } = {}
-			for cli, fields in value do
-				if not isCli(cli) then
-					error(
-						`{path}: [{key}.{cli}]: {cli} is not a supported CLI ({list(models.CLIS)}); a CLI the file does not list is not supported`,
-						0
-					)
-				end
-				if type(fields) ~= "table" then
-					error(`{path}: [{key}.{cli}] is a table of fields`, 0)
-				end
-				local out: { [string]: any } = {}
-				for field, v in fields do
-					local want = FIELDS[field]
-					if not want then
-						error(
-							`{path}: {key}.{cli}.{field} is not a field (model, effort, rank, runtime, max_tokens, max_calls, max_minutes)`,
-							0
-						)
-					end
-					if want == "count" and not count(v) then
-						error(`{path}: {key}.{cli}.{field} is a whole number, at least 1`, 0)
-					elseif want == "string" and (type(v) ~= "string" or v == "") then
-						error(`{path}: {key}.{cli}.{field} is a non-empty string`, 0)
-					end
-					-- the id a spend row records is checked as the ledger checks it, one predicate (code review 001 F6)
-					if (field == "model" or field == "effort") and not ledger.isModel(v) then
-						error(
-							`{path}: {key}.{cli}.{field} is {v}, not a model id the ledger takes (letters, digits, '.', '_', '-')`,
-							0
-						)
-					end
-					if field == "runtime" and not table.find(models.RUNTIMES[cli], v) then
-						error(
-							`{path}: {key}.{cli}.runtime is {v}, not a runtime of {cli} ({list(
-								models.RUNTIMES[cli]
-							)})`,
-							0
-						)
-					end
-					out[field] = v
-				end
-				clis[cli] = out
-			end
-			layer.skills[key] = clis
+			error(
+				`{path}: [{key}] is not read (the file has roles, fallback and dispatch; skill tables are gone)`,
+				0
+			)
 		end
 	end
 	return layer
@@ -430,6 +360,9 @@ function models.roleFor(skill: string, mode: string?): string?
 		elseif mode == "final" then
 			return "final-review"
 		elseif mode == "raft" then
+			-- The raft and a review of it are both Opus in the owner's table, as design and
+			-- design-challenge are. A challenge role with author = "raft" would drop Opus and
+			-- the review would run a fallback, so the same-model stop is pointless here.
 			return "raft"
 		end
 		return "code-review"
@@ -443,15 +376,6 @@ function models.roleFor(skill: string, mode: string?): string?
 		["idea-challenge"] = "idea-challenge",
 	}
 	return named[skill]
-end
-
-function models.hasRole(layers: { Layer }, role: string): boolean
-	for _, layer in layers do
-		if layer.roles[role] ~= nil then
-			return true
-		end
-	end
-	return false
 end
 
 local function specFrom(cli: any, fields: { [string]: any }, path: string, label: string): Spec
@@ -473,6 +397,62 @@ local function specFrom(cli: any, fields: { [string]: any }, path: string, label
 		maxCalls = fields.max_calls,
 		maxMinutes = fields.max_minutes,
 	}
+end
+
+-- A fallback try: the model's id and runtime (and the CLI's own caps), the stage's rank, cap and effort.
+local function fallbackTry(
+	cli: string,
+	modelFields: { [string]: any },
+	stage: { [string]: any },
+	path: string,
+	label: string
+): Spec
+	if modelFields.model == nil or modelFields.runtime == nil then
+		error(`{path}: {label} has no model or runtime`, 0)
+	end
+	if stage.rank == nil or stage.max_tokens == nil then
+		error(`{path}: {label} has no rank or max_tokens from its role`, 0)
+	end
+	if models.CALL_CAPPED[cli] and modelFields.max_calls == nil then
+		error(
+			`{path}: {label} has no max_calls ({cli} reports no running token count, so its step stops after max_calls model calls; calls are not tokens: tune it)`,
+			0
+		)
+	end
+	if models.CALL_CAPPED[cli] and modelFields.max_minutes == nil then
+		error(
+			`{path}: {label} has no max_minutes ({cli}'s call count can miss calls, so its step also stops at a wall-time ceiling)`,
+			0
+		)
+	end
+	return {
+		cli = cli,
+		model = modelFields.model,
+		effort = stage.effort,
+		rank = stage.rank,
+		runtime = modelFields.runtime,
+		maxTokens = stage.max_tokens,
+		maxCalls = modelFields.max_calls,
+		maxMinutes = modelFields.max_minutes,
+	}
+end
+
+local function needsCallCap(spec: Spec, path: string, label: string)
+	if not models.CALL_CAPPED[spec.cli] then
+		return
+	end
+	if spec.maxCalls == nil then
+		error(
+			`{path}: {label} has no max_calls ({spec.cli} reports no running token count, so its step stops after max_calls model calls; calls are not tokens: tune it)`,
+			0
+		)
+	end
+	if spec.maxMinutes == nil then
+		error(
+			`{path}: {label} has no max_minutes ({spec.cli}'s call count can miss calls, so its step also stops at a wall-time ceiling)`,
+			0
+		)
+	end
 end
 
 -- The role on a walk. A closer file replaces only the keys it sets. The try order is the role's CLI, then its
@@ -502,7 +482,9 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
 	if not named then
 		error(`no {models.FILE} on the walk names role {role}`, 0)
 	end
-	local primary = specFrom(fields.cli, fields, layers[#layers].path, `roles.{role}`)
+	local where = layers[#layers].path
+	local primary = specFrom(fields.cli, fields, where, `roles.{role}`)
+	needsCallCap(primary, where, `roles.{role}`)
 	local order = { primary.cli }
 	local specs: { [string]: Spec } = { [primary.cli] = primary }
 	for _, cli in fields.fallbacks or {} do
@@ -511,7 +493,7 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
 			error(`{role}: fallback {cli} has no [fallback.{cli}] on the walk`, 0)
 		end
 		if specs[cli] == nil then
-			local spec = specFrom(cli, fb, layers[#layers].path, `fallback.{cli}`)
+			local spec = fallbackTry(cli, fb, fields, where, `fallback.{cli}`)
 			table.insert(order, cli)
 			specs[cli] = spec
 		end
@@ -534,96 +516,14 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
 	}
 end
 
--- The skill on a walk of layers: a closer layer replaces only the keys it sets (the order whole, each setting, each
--- field of each skill and CLI). When the walk names a role for the skill, that role is the table. Errors: no file
--- on the walk, no order, no CLI naming the skill, a spec missing a field, and the review rule (models.reviewRule).
+-- The role a step runs. A closer layer replaces only the keys it sets. Errors: no file on the walk, no role
+-- for the step, a spec missing a field.
 function models.resolve(layers: { Layer }, skill: string, mode: string?): Resolved
 	local role = models.roleFor(skill, mode)
-	if role and models.hasRole(layers, role) then
-		return models.resolveRole(layers, role)
+	if not role then
+		error(`{skill} is not a model step`, 0)
 	end
-	if #layers == 0 then
-		error(`no {models.FILE} on the walk: nothing defaults (add one at the repository root)`, 0)
-	end
-	local order: { string }? = nil
-	local settings = models.settings(layers)
-	local fields: { [string]: { [string]: any } } = {}
-	local named = false
-	for _, layer in layers do
-		if layer.order then
-			order = layer.order
-		end
-		local mine = layer.skills[skill]
-		if mine then
-			named = true
-			for cli, f in mine do
-				fields[cli] = fields[cli] or {}
-				for k, v in f do
-					fields[cli][k] = v
-				end
-			end
-		end
-	end
-	if not order then
-		error(`no order on the walk ({layers[1].path} and below): name the CLIs to try, top first`, 0)
-	end
-	if not named then
-		error(`no {models.FILE} on the walk names {skill}`, 0)
-	end
-	local specs: { [string]: Spec } = {}
-	for cli, f in fields do
-		for _, k in REQUIRED do
-			if f[k] == nil then
-				error(`{skill}.{cli}: no {k} (every model has model, rank, runtime and max_tokens)`, 0)
-			end
-		end
-		if models.CALL_CAPPED[cli] and f.max_calls == nil then
-			error(
-				`{skill}.{cli}: no max_calls ({cli} reports no running token count, so its step stops after max_calls model calls; calls are not tokens: tune it)`,
-				0
-			)
-		end
-		if models.CALL_CAPPED[cli] and f.max_minutes == nil then
-			error(
-				`{skill}.{cli}: no max_minutes ({cli}'s call count can miss calls, so its step also stops at a wall-time ceiling)`,
-				0
-			)
-		end
-		local spec: Spec = {
-			cli = cli,
-			model = f.model,
-			effort = f.effort,
-			rank = f.rank,
-			runtime = f.runtime,
-			maxTokens = f.max_tokens,
-			maxCalls = f.max_calls,
-			maxMinutes = f.max_minutes,
-		}
-		local why = models.reviewRule(skill, spec)
-		if why then
-			error(why, 0)
-		end
-		specs[cli] = spec
-	end
-	return { skill = skill, order = table.clone(order :: { string }), specs = specs, settings = settings }
-end
-
--- The review model belongs to the CLI (the user's decision): Opus through `claude` or `agent`, any grok model at xhigh
--- through `grok` (the user's G7, 2026-10-25: "Any grok at xhigh"). Returns why a zz-review spec breaks it, or nil.
-function models.reviewRule(skill: string, spec: Spec): string?
-	if skill ~= "zz-review" then
-		return nil
-	end
-	if spec.cli == "grok" then
-		if not string.match(spec.model, "^grok%-") or spec.effort ~= "xhigh" then
-			return `zz-review.grok: a review through grok runs a grok model at effort xhigh (grok-…-xhigh), not {models.id(
-				spec
-			)}`
-		end
-	elseif not string.match(spec.model, "^claude%-opus%-") then
-		return `zz-review.{spec.cli}: a review through {spec.cli} runs on Opus (claude-opus-…), not {spec.model}`
-	end
-	return nil
+	return models.resolveRole(layers, role)
 end
 
 -- The more powerful of the specs, whole: the higher rank, then the larger max_tokens; a tie keeps the first.

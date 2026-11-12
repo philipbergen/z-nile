@@ -15,7 +15,7 @@ You have no shared context with the author. Judge only what's in front of you:
 - in code mode, the diff.
 
 ## Who reviews
-A review runs on the role `.models.toml` names for the mode: `design-challenge` for design, `raft` for a raft, `code-review` for code and stream, `final-review` for the final review. `./zn dispatch zz-review <id> --mode design|raft|code|stream` (and `--mode final` on the finished stack) starts it from the author's worktree on that role. An interactive session starts its reviewer subagent on the same role's model. A challenge is never run by the model that wrote the text.
+A review runs on the role `.models.toml` names for the mode: `design-challenge` for design, `raft` for a raft, `code-review` for code and stream, `final-review` for the final review. `./zn dispatch zz-review <id> --mode design|raft|code|stream` (and `--mode final` on the finished stack) starts it from the author's worktree on that role. An interactive session starts its reviewer subagent on the same role's model. A challenge is never run by the model that wrote the text. `idea-challenge` names `author = "idea"` and `code-review` names `author = "implementation"`, so that model is dropped. `design-challenge` names no author, and raft-mode review uses the `raft` role: the owner's table gives both sides Opus, and naming the author would drop it.
 
 ## Idea challenge
 One short pass, before any design. `./zn idea` runs it. Judge only the Problem, the Solution and the Non-goals: is the problem real and stated as an outcome someone could check, is the solution the smallest that solves it, what is out of scope, what would make it wrong. Reply in this shape and nothing else:
@@ -28,7 +28,7 @@ One short pass, before any design. `./zn idea` runs it. Judge only the Problem, 
 approve
 ```
 
-`approve` when nothing is disputed. `revise` when a finding remains. Do not rewrite the idea. The command writes `idea-review-001.md` and leaves what is still disputed under `## Open to the human`.
+`approve` when nothing is disputed. `revise` when a finding remains. Do not rewrite the idea. The command writes `idea-review-001.md` from this reply, unchanged. An approval with no findings does not call the author again. Otherwise the author answers each finding by id in `idea-refute-001.md` (`revised`, or `disputed: <reason>`). A finding answered `revised` is closed. A finding disputed or not answered goes under `## Open to the human`.
 
 ## Output file
 - Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue); in raft mode, in the raft's folder. `./zn metrics` counts both and rolls an issue's rounds up to its raft through `raft:`.

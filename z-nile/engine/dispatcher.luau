@@ -21,6 +21,7 @@ local cred = require("./credential")
 local dispatch = require("./dispatch")
 local fs = require("@lune/fs")
 local models = require("./models")
+local modelstep = require("./modelstep")
 local openlist = require("./openlist")
 local process = require("@lune/process")
 local projects = require("./projects")
@@ -1079,7 +1080,7 @@ function dispatcher.modelStep(
 			end
 			return ok, said
 		end
-		local result = runner.run({
+		local result = modelstep.launch({
 			argv = argv,
 			cwd = cwd,
 			env = env,

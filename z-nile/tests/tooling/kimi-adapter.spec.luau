@@ -31,7 +31,8 @@ return t.spec("kimi-cli reads usage.record and leaves cache reads out", function
 			cwd = ".",
 			session = "s",
 		})
-		t.expect(table.find(argv, "--auto") ~= nil).toBe(true)
+		t.expect(table.find(argv, "-p") ~= nil).toBe(true)
+		t.expect(table.find(argv, "--auto") ~= nil).toBe(false)
 		t.expect(table.find(argv, "kimi-code/k3.1-pro") ~= nil).toBe(true)
 		t.expect(table.find(argv, "stream-json") ~= nil).toBe(true)
 	end)

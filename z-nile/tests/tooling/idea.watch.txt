@@ -2,6 +2,7 @@ z-nile/engine/adapters.luau
 z-nile/engine/idea.luau
 z-nile/engine/main.luau
 z-nile/engine/models.luau
+z-nile/engine/modelstep.luau
 z-nile/engine/openlist.luau
 z-nile/tests/lib/fixture.luau
 z-nile/tests/lib/t.luau

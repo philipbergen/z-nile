@@ -1,6 +1,5 @@
 --!strict
 -- Tracker CLI. Run through ./zn at the repository root (c0114). See z-nile/skills/zz-rules/SKILL.md.
-local adapters = require("./adapters")
 local approval = require("./approval")
 local audit = require("./audit")
 local board = require("./board")
@@ -21,6 +20,7 @@ local layergit = require("./layergit")
 local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
 local models = require("./models")
+local modelstep = require("./modelstep")
 local openlist = require("./openlist")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
@@ -6722,8 +6722,9 @@ function cmd.capture(pos: { string }, _opts: { [string]: { string } })
 	stdio.write(shown.stdout)
 end
 
--- idea <id> [--text <rough>]: the idea stage. The author drafts, the challenge role challenges once, the author
--- revises once. Files land in the working tree; the human commits them before design starts.
+-- idea <id> [--text <rough>]: the idea stage. The author drafts, the challenge role challenges once,
+-- and the author answers the findings when there are any. The three calls go through modelstep,
+-- the same supervised start the dispatcher uses. Files land in the working tree.
 function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	refuseInMainCheckout("idea")
 	local id = pos[1]
@@ -6738,125 +6739,127 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	local doc = fs.readFile(here.doc)
 	local rough = if opts["--text"] and opts["--text"][1] then opts["--text"][1] else doc
 	local layers = models.walk(".", here.dir)
-	local function attempt(
+	local calls = 0
+	local function physicalCache(): string
+		-- the outermost .cache this checkout lies in, else this checkout's own
+		local cwd = sh.trim(process.exec("pwd", { "-P" }).stdout) .. "/"
+		local at = string.find(cwd, "/.cache/", 1, true)
+		return if at then string.sub(cwd, 1, at + 7) else cwd .. ".cache/"
+	end
+	local function guard(bin: string): string?
+		if not checking() then
+			return nil
+		end
+		if string.sub(bin, 1, #physicalCache()) ~= physicalCache() then
+			local argv = { bin }
+			return `refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`
+		end
+		return nil
+	end
+	local function run(
 		resolved: models.Resolved,
 		prompt: string,
 		phase: string,
 		accept: (string) -> boolean
 	): (string, string)
-		local okTries, triesOrErr = pcall(function()
-			return models.tries(resolved)
-		end)
-		if not okTries then
-			fail(tostring(triesOrErr))
-		end
-		local tries = triesOrErr :: { models.Spec }
-		local why = "no model produced a usable answer"
-		for _, spec in tries do
-			local adapter = adapters.get(spec.runtime)
-			local session = (
-				string.gsub("xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx", "[xy]", function(c)
-					local n = if c == "x" then math.random(0, 15) else math.random(8, 11)
-					return string.format("%x", n)
-				end)
-			)
-			local argv = adapter.argv({
+		local okDrive, drivenOrErr = pcall(function()
+			return modelstep.drive({
+				resolved = resolved,
 				prompt = prompt,
-				model = spec.model,
-				effort = spec.effort,
 				cwd = process.cwd,
-				session = session,
+				stateDir = `.cache/idea-run/{id}/{phase}`,
+				path = process.env.PATH or "/usr/bin:/bin",
+				guard = guard,
+				accept = function(raw)
+					return accept(idea.prose(raw))
+				end,
 			})
-			local bin = table.remove(argv, 1) :: string
-			local t0 = os.clock()
-			local ran = process.exec(bin, argv)
-			local wall = os.clock() - t0
-			local acc = adapters.newAcc()
-			local function feed(blob: string)
-				for line in string.gmatch(blob .. "\n", "(.-)\n") do
-					if line ~= "" then
-						adapter.feed(acc, line)
-					end
-				end
+		end)
+		if not okDrive then
+			fail(tostring(drivenOrErr))
+		end
+		local driven = drivenOrErr :: modelstep.Driven
+		local branch, head = costrow.branchOf(".")
+		for _, a in driven.attempts do
+			calls += 1
+			local missing: { string } = {}
+			if not a.cpu then
+				table.insert(missing, "cpu")
 			end
-			feed(ran.stdout)
-			feed(ran.stderr)
-			local outcome, detail = adapters.finish(acc, ran.ok, ran.stderr, spec.runtime)
-			local tokens = adapters.tokens(acc)
-			local modelId = models.id(spec)
-			local missing = { "cpu" }
-			if tokens <= 0 then
+			if a.tokens <= 0 then
 				table.insert(missing, "tokens")
 			end
-			local branch, head = costrow.branchOf(".")
+			if not a.wall then
+				table.insert(missing, "wall")
+			end
 			costrow.append(".", {
 				ms = 0,
 				kind = "row",
 				phase = phase,
-				subject = `{id} {outcome}`,
-				wall = wall,
-				tokens = if tokens > 0 then tokens else nil,
-				model = modelId,
-				unmeasured = table.concat(missing, ","),
+				subject = `{id} {a.outcome}`,
+				wall = a.wall,
+				cpu = a.cpu,
+				tokens = if a.tokens > 0 then a.tokens else nil,
+				model = models.id(a.spec),
+				unmeasured = if #missing > 0 then table.concat(missing, ",") else nil,
 				id = id,
 				branch = branch,
 				head = head,
 			})
-			local shown = if tokens > 0 then tostring(tokens) else "unmeasured"
-			local note = if outcome == "ok" then "" else ` {detail}`
+			local shown = if a.tokens > 0 then tostring(a.tokens) else "unmeasured"
+			local cpuShown = if a.cpu then string.format("%.3f", a.cpu) else "unmeasured"
+			local wallShown = if a.wall then string.format("%.1f", a.wall) else "unmeasured"
+			local note = if a.outcome == "ok" then "" else ` {a.detail}`
 			print(
-				`idea: {phase} model {modelId} tokens {shown} wall {string.format("%.1f", wall)} {outcome}{note}`
+				`idea: {phase} model {models.id(a.spec)} tokens {shown} wall {wallShown} cpu {cpuShown} {a.outcome}{note}`
 			)
-			if outcome == "ok" then
-				local prose = idea.prose(ran.stdout)
-				if accept(prose) then
-					return prose, modelId
-				end
-				why = "the answer was not in the required shape"
-			else
-				why = detail
-			end
 		end
-		fail(`idea: {phase}: {why}`)
-		return "", ""
+		if driven.outcome ~= "ok" then
+			fail(`idea: {phase}: {driven.detail}`)
+			return "", ""
+		end
+		return idea.prose(driven.prose), driven.model
 	end
 	local drafted: idea.Draft? = nil
-	local prose, wrote = attempt(
-		models.resolve(layers, "idea"),
-		idea.authorPrompt(rough),
-		"idea",
-		function(text)
-			drafted = idea.parseDraft(text)
-			return drafted ~= nil
-		end
-	)
+	local prose, wrote = run(models.resolve(layers, "idea"), idea.authorPrompt(rough), "idea", function(text)
+		drafted = idea.parseDraft(text)
+		return drafted ~= nil
+	end)
 	local challenge = models.resolve(layers, "idea-challenge")
 	challenge.authorModel = wrote
-	local findings: { string } = {}
+	local findings: { idea.Finding } = {}
 	local verdict: string? = nil
-	attempt(challenge, idea.challengePrompt(prose), "idea-challenge", function(text)
+	run(challenge, idea.challengePrompt(prose), "idea-challenge", function(text)
 		local found, said = idea.parseReview(text)
 		findings = found
 		verdict = said
 		return said == "approve" or said == "revise"
 	end)
-	local revised: idea.Draft? = nil
-	attempt(models.resolve(layers, "idea"), idea.authorPrompt(rough, findings), "idea", function(text)
-		revised = idea.parseDraft(text)
-		return revised ~= nil
-	end)
-	local body = revised :: idea.Draft
-	if verdict == "revise" and #body.open == 0 and #findings > 0 then
-		body.open = findings
+	local body = drafted :: idea.Draft
+	local answers: { [string]: string } = {}
+	if not (verdict == "approve" and #findings == 0) then
+		local revised: idea.Draft? = nil
+		run(models.resolve(layers, "idea"), idea.answerPrompt(rough, findings), "idea", function(text)
+			revised = idea.parseDraft(text)
+			answers = idea.parseAnswers(text)
+			return revised ~= nil
+		end)
+		body = revised :: idea.Draft
 	end
-	local reviewVerdict = if #body.open == 0 then "approve" else "open"
-	fs.writeFile(here.doc, withFront(idea.apply(doc, body), "idea", "challenged"))
+	local openLines = idea.openLines(findings, answers)
 	local reviewPath = `{here.dir}/idea-review-001.md`
-	fs.writeFile(reviewPath, idea.reviewText(body.open, reviewVerdict))
+	fs.writeFile(here.doc, withFront(idea.apply(doc, body, openLines), "idea", "challenged"))
+	fs.writeFile(reviewPath, idea.reviewText(findings, verdict or "revise"))
+	local refutePath = `{here.dir}/idea-refute-001.md`
+	if #findings > 0 then
+		fs.writeFile(refutePath, idea.refuteText(findings, answers))
+		print(refutePath)
+	end
 	print(here.doc)
 	print(reviewPath)
+	print(`idea: calls {calls}`)
 	print(
-		`idea: verdict {reviewVerdict}; commit these and push them to origin/main before ./zn status {id} preparing`
+		`idea: verdict {verdict}; commit these and push them to origin/main before ./zn status {id} preparing`
 	)
 end
 

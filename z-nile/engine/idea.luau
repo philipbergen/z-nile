@@ -5,19 +5,27 @@
 -- Contract for the Python port:
 --
 --   ./zn idea <id> [--text <rough>]
---     Rewrites ticket <id>'s Problem, Solution and Non-goals as checkable outcomes,
---     writes <issue-dir>/idea-review-001.md, and leaves whatever is still disputed
---     under ## Open to the human. The author is the `idea` role; the one challenge
---     is the `idea-challenge` role; then the author revises once. `./zn capture <id>`
---     stays the read-only view of the captured document. `./zn new` only allocates
---     the shell (`idea: unchallenged`). There is no second way to write the idea.
+--     Rewrites ticket <id>'s Problem, Solution and Non-goals as checkable outcomes.
+--     The author is the `idea` role. The `idea-challenge` role challenges once.
+--     idea-review-001.md is that challenge, as the challenger wrote it. When it
+--     approves with no findings, the author is not called again. Otherwise the
+--     author answers each finding by id in idea-refute-001.md (`revised`, or
+--     `disputed: <reason>`). A finding answered `revised` is closed. A finding
+--     disputed or not answered goes under ## Open to the human. `./zn capture <id>`
+--     stays the read-only view. `./zn new` only allocates the shell
+--     (`idea: unchallenged`). There is no second way to write the idea.
 --
 --   idea-review-001.md
 --     # Idea review 001
 --     ## Findings
---     - F1: <what is still wrong, or "none">
+--     - F1: <the challenger's words, or "none">
 --     ## Verdict
---     approve | open
+--     approve | revise
+--
+--   idea-refute-001.md
+--     # Idea refute 001
+--     - F1: revised
+--     - F2: disputed: <why>
 --
 --   A ticket with no `idea:` frontmatter key was captured before this stage: design
 --   may start. `idea: unchallenged` (what `./zn new` writes) refuses until this
@@ -32,8 +40,9 @@ export type Draft = {
 	problem: { string },
 	solution: { string },
 	nonGoals: { string },
-	open: { string },
 }
+
+export type Finding = { id: string, text: string }
 
 local function trim(s: string): string
 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
@@ -105,7 +114,6 @@ function idea.parseDraft(text: string): (Draft?, string?)
 	local problem, badP = bullets(sectionBody(body, "Problem"))
 	local solution, badS = bullets(sectionBody(body, "Solution"))
 	local nonGoals, badN = bullets(sectionBody(body, "Non-goals"))
-	local openItems = bullets(sectionBody(body, "Open"))
 	if #problem == 0 then
 		return nil, "the draft has no checkable ## Problem sentence"
 	end
@@ -119,22 +127,69 @@ function idea.parseDraft(text: string): (Draft?, string?)
 		problem = problem,
 		solution = solution,
 		nonGoals = nonGoals,
-		open = openItems,
 	}, nil
 end
 
-function idea.parseReview(text: string): ({ string }, string?)
+function idea.parseReview(text: string): ({ Finding }, string?)
 	local body = text
 	if string.sub(body, 1, 1) ~= "\n" then
 		body = "\n" .. body
 	end
-	local findings = bullets(sectionBody(body, "Findings"))
+	local found: { Finding } = {}
+	local raw = sectionBody(body, "Findings")
+	if raw then
+		for line in string.gmatch(raw .. "\n", "(.-)\n") do
+			local item = trim((string.gsub(trim(line), "^[-*]%s+", "")))
+			if item ~= "" and item ~= "none" and item ~= "None" then
+				local id, rest = string.match(item, "^(F%d+):%s*(.+)$")
+				if id == nil or rest == nil or trim(rest) == "" then
+					return {}, nil
+				end
+				table.insert(found, { id = id, text = trim(rest) })
+			end
+		end
+	end
 	local verdictBody = sectionBody(body, "Verdict")
 	local verdict = if verdictBody then string.lower(trim(string.match(verdictBody, "[^\n]+") or "")) else nil
-	if verdict == "" then
+	if verdict ~= "approve" and verdict ~= "revise" then
 		verdict = nil
 	end
-	return findings, verdict
+	return found, verdict
+end
+
+-- id -> the words after `F1: ` (`revised`, or `disputed: ...`).
+function idea.parseAnswers(text: string): { [string]: string }
+	local body = text
+	if string.sub(body, 1, 1) ~= "\n" then
+		body = "\n" .. body
+	end
+	local out: { [string]: string } = {}
+	local raw = sectionBody(body, "Answers")
+	if not raw then
+		return out
+	end
+	for line in string.gmatch(raw .. "\n", "(.-)\n") do
+		local item = trim((string.gsub(trim(line), "^[-*]%s+", "")))
+		local id, rest = string.match(item, "^(F%d+):%s*(.+)$")
+		if id ~= nil and rest ~= nil and trim(rest) ~= "" then
+			out[id] = trim(rest)
+		end
+	end
+	return out
+end
+
+-- A finding answered `revised` is closed. One disputed, or not answered, is open.
+function idea.openLines(findings: { Finding }, answers: { [string]: string }): { string }
+	local lines: { string } = {}
+	for _, f in findings do
+		local ans = answers[f.id]
+		if ans == nil then
+			table.insert(lines, `- {f.id}: {f.text}`)
+		elseif string.match(ans, "^revised$") == nil then
+			table.insert(lines, `- {f.id}: {f.text} Answer: {ans}`)
+		end
+	end
+	return lines
 end
 
 local function bulletLines(items: { string }): string
@@ -162,28 +217,22 @@ local function replaceSection(md: string, heading: string, body: string): string
 	return string.sub(md, 1, restAt - 1) .. body .. tail
 end
 
--- Puts the draft into the ticket. Open items become `- F<n>:` under ## Open to the human.
-function idea.apply(doc: string, draft: Draft): string
+-- Puts the draft into the ticket. `openLines` are the challenger's findings still open, already `- F1: ...`.
+function idea.apply(doc: string, draft: Draft, openLines: { string }): string
 	local out = replaceSection(doc, "Problem", bulletLines(draft.problem))
 	out = replaceSection(out, "Solution", bulletLines(draft.solution))
 	out = replaceSection(out, "Non-goals", bulletLines(draft.nonGoals))
-	if #draft.open > 0 then
-		local lines = {}
-		for i, item in draft.open do
-			table.insert(lines, `- F{i}: {item}`)
-		end
-		out = replaceSection(out, "Open to the human", table.concat(lines, "\n") .. "\n")
-	end
-	return out
+	local openBody = if #openLines == 0 then "none\n" else table.concat(openLines, "\n") .. "\n"
+	return replaceSection(out, "Open to the human", openBody)
 end
 
-function idea.reviewText(findings: { string }, verdict: string): string
+function idea.reviewText(findings: { Finding }, verdict: string): string
 	local lines = { "# Idea review 001", "", "## Findings", "" }
 	if #findings == 0 then
 		table.insert(lines, "none")
 	else
-		for i, item in findings do
-			table.insert(lines, `- F{i}: {item}`)
+		for _, item in findings do
+			table.insert(lines, `- {item.id}: {item.text}`)
 		end
 	end
 	table.insert(lines, "")
@@ -194,15 +243,19 @@ function idea.reviewText(findings: { string }, verdict: string): string
 	return table.concat(lines, "\n")
 end
 
-function idea.authorPrompt(rough: string, findings: { string }?): string
-	local extra = ""
-	if findings and #findings > 0 then
-		extra = "\n\nThe challenge still disputes:\n"
-		for _, item in findings do
-			extra ..= `- {item}\n`
+function idea.refuteText(findings: { Finding }, answers: { [string]: string }): string
+	local lines = { "# Idea refute 001", "" }
+	for _, f in findings do
+		local ans = answers[f.id]
+		if ans then
+			table.insert(lines, `- {f.id}: {ans}`)
 		end
-		extra ..= "\nRevise the outcomes. Put anything you will not change under ## Open, one sentence each. Leave ## Open as none when nothing is disputed.\n"
 	end
+	table.insert(lines, "")
+	return table.concat(lines, "\n")
+end
+
+function idea.authorPrompt(rough: string): string
 	return [[Write the idea as checkable outcomes. Each bullet is one sentence a test or a reader could later find true or false. No design, no file names, no tasks.
 Reply in exactly this shape:
 
@@ -215,11 +268,34 @@ Reply in exactly this shape:
 ## Non-goals
 - <what this idea will not do, as one sentence.>
 
-## Open
-- none
-
 Rough idea:
-]] .. rough .. extra
+]] .. rough
+end
+
+function idea.answerPrompt(rough: string, findings: { Finding }): string
+	local list = ""
+	for _, f in findings do
+		list ..= `- {f.id}: {f.text}\n`
+	end
+	return [[Revise the idea and answer each finding by id. Reply in exactly this shape:
+
+## Problem
+- <one checkable sentence.>
+
+## Solution
+- <one checkable sentence.>
+
+## Non-goals
+- <one checkable sentence.>
+
+## Answers
+- F1: revised
+- F2: disputed: <why the finding is wrong, one sentence.>
+
+A line "revised" means the outcomes now meet that finding. A line "disputed:" means they do not. A finding with no line stays open for the human.
+
+Findings:
+]] .. list .. "\nRough idea:\n" .. rough
 end
 
 function idea.challengePrompt(doc: string): string

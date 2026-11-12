@@ -11,6 +11,7 @@ z-nile/engine/dispatcher.luau
 z-nile/engine/ledger.luau
 z-nile/engine/main.luau
 z-nile/engine/models.luau
+z-nile/engine/modelstep.luau
 z-nile/engine/paths.luau
 z-nile/engine/publish.luau
 z-nile/engine/raftcheck.luau

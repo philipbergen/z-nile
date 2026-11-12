@@ -149,6 +149,8 @@ return t.spec("c0111 an item's trail", function(it)
 				"review-002.md",
 				"design-refute-001.md",
 				"refute-003.md",
+				"idea-review-001.md",
+				"idea-refute-001.md",
 				"stream-review-c0010-001.md",
 				"check.sh",
 				"acceptance/notes.md",
