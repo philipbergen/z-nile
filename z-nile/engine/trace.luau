@@ -1,19 +1,22 @@
 --!strict
--- Final review traceability table (`<raft-dir>/trace.md`): pure claim
--- derivation, skeleton generation, table parser, and mechanical verification.
+-- Final review traceability table (`<raft-dir>/trace.md`) and recorded green
+-- spec results (`<issue-dir>/results.txt`): pure claim derivation, skeleton
+-- generation, table parser, stale decision, and mechanical verification.
 --
 -- Contract for the Python port:
 --
 -- 1. CLI:
 --    `./zn trace <R-id>`
 --      Prints the trace table skeleton for active raft `<R-id>` to stdout.
---      Requires every layer of `<R-id>` to be finished.
+--      Requires every layer of `<R-id>` to be finished and every ticket to
+--      have its required sections (`## Problem`, `## Solution`,
+--      `## Acceptance criteria`).
 --    `./zn trace <R-id> --check`
---      Reads `<raft-dir>/trace.md` from the top layer's commit (or working
---      tree when at the top layer's finished commit) and verifies it against
---      the finished stack. Prints `ok: <R-id>` and exits 0 when valid; prints
---      each failure (`row <row>, <cell>: <message>`) to stderr and exits 1
---      when any check fails.
+--      Reads `<raft-dir>/trace.md` and each ticket's `<issue-dir>/results.txt`
+--      from git at the top layer's commit and verifies the table against the
+--      finished stack. Prints `ok: <R-id>` and exits 0 when valid; prints each
+--      failure (`row <row>, <cell>: <message>`) to stderr and exits 1 when any
+--      check fails.
 --
 -- 2. Stable claim names (`deriveClaims`):
 --    For each member ticket `<id>` of the raft, in the raft's layer order:
@@ -25,15 +28,29 @@
 --    - `<id>:AC1`, `<id>:AC2`, ... : each criterion under
 --      `## Acceptance criteria` in `<id>.md` at the commit being landed
 --      (preserving explicit `AC<N>` numbers when written, else 1..N).
---    Fallback for minimal fixture tickets without those sections: `AC<N>`
---    check lines in `<id>/check.sh`, else the first body paragraph of
---    `<id>.md` as `<id>:P1`.
+--    Every ticket must have a captured `## Problem`, a captured `## Solution`,
+--    and `## Acceptance criteria`; a missing or empty section is a failure
+--    naming the ticket and the missing section (no vacuous fallback).
 --
--- 3. File format (`<raft-dir>/trace.md`):
+-- 3. Recorded green spec results (`<issue-dir>/results.txt`):
+--    `trace.renderResults` is the only serializer and `trace.parseResults` the
+--    only reader. `./zn finish <id>` asks `z-nile/specs.luau --out` to write the
+--    file, then commits it on the layer. `./zn trace <R-id> --check` reads it
+--    from git at the commit being landed:
+--    - Plain text, UTF-8, LF-separated.
+--    - Each spec that ran green is a line at column 1:
+--      `<repo-relative-spec-path>` (sorted lexicographically).
+--    - Immediately below each spec line, one tab-indented line per green test
+--      case in that spec: `\t<case-name>`.
+--    A spec cell in `trace.md` passes only when its spec path is listed in the
+--    ticket's `results.txt` at the commit being landed and its named case
+--    equals (`==`) one of that spec's recorded `\t<case-name>` lines.
+--
+-- 4. File format (`<raft-dir>/trace.md`) and commit rule:
 --    ```markdown
 --    # Trace: <R-id>
 --
---    Commit: <top-layer-finished-sha>
+--    Commit: <top-layer-finish-sha>
 --
 --    ## Claims
 --
@@ -47,9 +64,18 @@
 --    |---|---|
 --    | <repo-relative-source-path> | <id>:<key>, ... |
 --    ```
---    A claim deliberately not met writes `not met: "<ruling>"` in `design`
---    (with `test` and `code` empty or `-`), quoting a `Ruled (user, ...):`
---    line from `## Open to the human` in `<id>.md` or `<R-id>.md`.
+--    - `trace.md` and `final-review-NNN.md` (and optional `final-refute-NNN.md`)
+--      are committed on the top layer after its finish commit, in commits that
+--      touch only the raft's and tickets' tracker files.
+--    - `Commit:` names the top layer's finish commit (`<issue>: <title>`).
+--      Anything else added after the table, or any layer rewritten, makes the
+--      table stale.
+--    - A claim deliberately not met writes `not met: "<ruling>"` in `design`
+--      (with `test` and `code` empty or `-`), quoting a `Ruled (user, ...):`
+--      line from `## Open to the human` in `<id>.md` or `<R-id>.md`.
+--    - When the stack changed no source file (`## Source files` has no rows),
+--      a met claim's `code` cell must be the literal `none` (accepted only
+--      when the stack changed no source file).
 
 local trace = {}
 
@@ -70,6 +96,30 @@ export type IssueDoc = {
 	capturedText: string,
 	docText: string,
 	checkText: string?,
+	resultsPath: string?,
+	resultsText: string?,
+}
+
+export type RecordedSpec = {
+	spec: string,
+	cases: { string },
+}
+
+export type LayerCommit = {
+	sha: string,
+	parent: string,
+	subject: string,
+	files: { string },
+}
+
+export type LayerHistory = {
+	name: string,
+	issue: string,
+	title: string,
+	base: string,
+	tip: string?,
+	stackedOnBelow: boolean,
+	commits: { LayerCommit },
 }
 
 export type ClaimRow = {
@@ -96,23 +146,18 @@ export type FileMeta = {
 	lines: { string },
 }
 
-export type SpecResult = {
-	passed: boolean,
-	cases: { [string]: boolean }?,
-}
-
 export type CheckInput = {
+	raftId: string?,
+	raftDir: string?,
 	tableText: string,
-	expectedCommit: string,
+	expectedCommit: string?,
 	staleReason: string?,
+	layers: { LayerHistory }?,
 	issues: { IssueDoc },
 	raftDocText: string,
 	changedSources: { string },
-	changedFiles: { string }?,
-	changedSpecs: { [string]: boolean },
 	filesAtCommit: { [string]: FileMeta },
-	greenSpecs: { [string]: SpecResult },
-	finishedIssues: { [string]: boolean },
+	finishedIssues: { [string]: boolean }?,
 }
 
 local function trim(s: string): string
@@ -146,6 +191,54 @@ function trace.splitLines(text: string): { string }
 		pos = nl + 1
 	end
 	return out
+end
+
+function trace.renderResults(specs: { RecordedSpec }): string
+	local sorted = table.clone(specs)
+	table.sort(sorted, function(a, b)
+		return a.spec < b.spec
+	end)
+	local lines: { string } = {}
+	for _, entry in sorted do
+		table.insert(lines, entry.spec)
+		for _, c in entry.cases do
+			local clean = string.gsub(c, "[\r\n\t]+", " ")
+			table.insert(lines, "\t" .. clean)
+		end
+	end
+	if #lines == 0 then
+		return ""
+	end
+	return table.concat(lines, "\n") .. "\n"
+end
+
+function trace.parseResults(text: string): ({ [string]: { [string]: boolean } }?, string?)
+	local out: { [string]: { [string]: boolean } } = {}
+	local currentSpec: string? = nil
+	for lineNo, line in trace.splitLines(text) do
+		if line ~= "" then
+			if string.sub(line, 1, 1) == "\t" then
+				if currentSpec == nil then
+					return nil, `line {lineNo}: case line without a preceding spec path`
+				end
+				local caseName = string.sub(line, 2)
+				if caseName == "" then
+					return nil, `line {lineNo}: empty case name`
+				end
+				out[currentSpec][caseName] = true
+			else
+				local specPath = trim(line)
+				if specPath == "" then
+					continue
+				end
+				currentSpec = specPath
+				if out[specPath] == nil then
+					out[specPath] = {}
+				end
+			end
+		end
+	end
+	return out, nil
 end
 
 local function sectionBody(md: string, heading: string): string?
@@ -234,130 +327,288 @@ local function extractOutcomes(body: string?): { string }
 	return items
 end
 
-local function fallbackBodyItem(md: string): string?
-	local inFence = false
-	for _, raw in trace.splitLines(md) do
-		local trimmed = trim(raw)
-		if string.sub(trimmed, 1, 3) == "```" then
-			inFence = not inFence
-		elseif not inFence and trimmed ~= "" then
-			if string.sub(trimmed, 1, 1) ~= "#" and string.sub(trimmed, 1, 4) ~= "<!--" then
-				return normalizeInline(trimmed)
-			end
+-- The body of the first of `headings` the document has, for callers that build fixture tickets.
+function trace.extractSection(md: string, headings: { string }): string?
+	for _, heading in headings do
+		local body = sectionBody(md, heading)
+		if body ~= nil then
+			return body
 		end
 	end
 	return nil
 end
 
-local function extractCheckAcs(checkText: string?): { { key: string, text: string } }
-	local out: { { key: string, text: string } } = {}
-	if checkText == nil then
-		return out
-	end
-	local seen: { [string]: boolean } = {}
-	for _, line in trace.splitLines(checkText) do
-		local acNum, desc = string.match(line, 'check%s+"AC(%d+)[:%s%-]*(.-)"')
-		if acNum ~= nil then
-			local key = "AC" .. acNum
-			if not seen[key] then
-				seen[key] = true
-				local summary = normalizeInline(desc or "")
-				if summary == "" then
-					summary = key
-				end
-				table.insert(out, { key = key, text = summary })
-			end
-		end
-	end
-	return out
-end
+trace.extractOutcomes = extractOutcomes
+-- Acceptance criteria are read the same way as outcomes: one per bullet or paragraph.
+trace.extractAcs = extractOutcomes
 
-function trace.deriveClaims(issues: { IssueDoc }): { Claim }
+function trace.deriveClaims(issues: { IssueDoc }): ({ Claim }, { string })
 	local out: { Claim } = {}
+	local errors: { string } = {}
 	for _, issue in issues do
-		local issueClaims = 0
 		local captured = if issue.capturedText ~= "" then issue.capturedText else issue.docText
 		local problems = extractOutcomes(sectionBody(captured, "Problem"))
-		for i, text in problems do
-			local id = `{issue.id}:P{i}`
-			table.insert(out, {
-				id = id,
-				issue = issue.id,
-				kind = "P",
-				text = text,
-				rowLabel = `{id}: {text}`,
-			})
-			issueClaims += 1
+		if #problems == 0 then
+			table.insert(errors, `row {issue.id}, claim: ticket {issue.id} is missing captured ## Problem`)
+		else
+			for i, text in problems do
+				local id = `{issue.id}:P{i}`
+				table.insert(out, {
+					id = id,
+					issue = issue.id,
+					kind = "P",
+					text = text,
+					rowLabel = `{id}: {text}`,
+				})
+			end
 		end
 
 		local solutions = extractOutcomes(sectionBody(captured, "Solution"))
-		for i, text in solutions do
-			local id = `{issue.id}:S{i}`
-			table.insert(out, {
-				id = id,
-				issue = issue.id,
-				kind = "S",
-				text = text,
-				rowLabel = `{id}: {text}`,
-			})
-			issueClaims += 1
+		if #solutions == 0 then
+			table.insert(errors, `row {issue.id}, claim: ticket {issue.id} is missing captured ## Solution`)
+		else
+			for i, text in solutions do
+				local id = `{issue.id}:S{i}`
+				table.insert(out, {
+					id = id,
+					issue = issue.id,
+					kind = "S",
+					text = text,
+					rowLabel = `{id}: {text}`,
+				})
+			end
 		end
 
 		local acBody = sectionBody(issue.docText, "Acceptance criteria")
 			or sectionBody(captured, "Acceptance criteria")
 		local acItems = extractOutcomes(acBody)
-		local seenAc: { [string]: boolean } = {}
-		for i, item in acItems do
-			local explicitNum, rest = string.match(item, "^%*?%*?AC(%d+)%*?%*?%s*[:%-–—]?%s*(.*)$")
-			local key = if explicitNum ~= nil then `AC{explicitNum}` else `AC{i}`
-			if seenAc[key] then
-				key = `AC{i}`
-			end
-			seenAc[key] = true
-			local summary = if explicitNum ~= nil
-					and rest ~= nil
-					and trim(rest) ~= ""
-				then normalizeInline(rest)
-				else item
-			local id = `{issue.id}:{key}`
-			table.insert(out, {
-				id = id,
-				issue = issue.id,
-				kind = "AC",
-				text = summary,
-				rowLabel = `{id}: {summary}`,
-			})
-			issueClaims += 1
-		end
-
-		if issueClaims == 0 then
-			local checkAcs = extractCheckAcs(issue.checkText)
-			for _, item in checkAcs do
-				local id = `{issue.id}:{item.key}`
+		if #acItems == 0 then
+			table.insert(errors, `row {issue.id}, claim: ticket {issue.id} is missing ## Acceptance criteria`)
+		else
+			local seenAc: { [string]: boolean } = {}
+			for i, item in acItems do
+				local explicitNum, rest = string.match(item, "^%*?%*?AC(%d+)%*?%*?%s*[:%-–—]?%s*(.*)$")
+				local key = if explicitNum ~= nil then `AC{explicitNum}` else `AC{i}`
+				if seenAc[key] then
+					key = `AC{i}`
+				end
+				seenAc[key] = true
+				local summary = if explicitNum ~= nil
+						and rest ~= nil
+						and trim(rest) ~= ""
+					then normalizeInline(rest)
+					else item
+				local id = `{issue.id}:{key}`
 				table.insert(out, {
 					id = id,
 					issue = issue.id,
 					kind = "AC",
-					text = item.text,
-					rowLabel = `{id}: {item.text}`,
+					text = summary,
+					rowLabel = `{id}: {summary}`,
 				})
-				issueClaims += 1
 			end
 		end
+	end
+	return out, errors
+end
 
-		if issueClaims == 0 then
-			local bodyItem = fallbackBodyItem(captured) or fallbackBodyItem(issue.docText) or issue.id
-			local id = `{issue.id}:P1`
-			table.insert(out, {
-				id = id,
-				issue = issue.id,
-				kind = "P",
-				text = bodyItem,
-				rowLabel = `{id}: {bodyItem}`,
-			})
+local function isTrackerFileOf(path: string, raftId: string, raftDir: string, issues: { IssueDoc }): boolean
+	if string.find(path, "/spend%.d/", 1, false) ~= nil then
+		return true
+	end
+	local raftPrefix = raftDir .. "/"
+	if string.sub(path, 1, #raftPrefix) == raftPrefix then
+		local name = string.sub(path, #raftPrefix + 1)
+		if
+			name == "trace.md"
+			or name == `{raftId}.md`
+			or string.match(name, "^review%-%d+%.md$") ~= nil
+			or string.match(name, "^refute%-%d+%.md$") ~= nil
+			or string.match(name, "^final%-review%-%d+%.md$") ~= nil
+			or string.match(name, "^final%-refute%-%d+%.md$") ~= nil
+		then
+			return true
 		end
 	end
-	return out
+	for _, issue in issues do
+		if path == issue.docPath then
+			return true
+		end
+	end
+	return false
+end
+
+local function isAllowedAfterTrace(path: string, raftId: string, raftDir: string): boolean
+	if string.find(path, "/spend%.d/", 1, false) ~= nil then
+		return true
+	end
+	local raftPrefix = raftDir .. "/"
+	if string.sub(path, 1, #raftPrefix) == raftPrefix then
+		local name = string.sub(path, #raftPrefix + 1)
+		if
+			name == `{raftId}.md`
+			or string.match(name, "^final%-review%-%d+%.md$") ~= nil
+			or string.match(name, "^final%-refute%-%d+%.md$") ~= nil
+		then
+			return true
+		end
+	end
+	return false
+end
+
+-- Pure stale decision over the stack's layers and commits.
+-- Rule: `trace.md` and `final-review-NNN.md` are committed on the top layer after its finish commit,
+-- in commits that touch only the raft's and tickets' tracker files; `Commit:` names the top layer's
+-- finish commit; anything else added after the table, or any layer rewritten, makes it stale.
+function trace.staleReason(
+	raftId: string,
+	raftDir: string,
+	issues: { IssueDoc },
+	layers: { LayerHistory },
+	tableCommit: string?
+): (string?, { [string]: boolean }, string?)
+	local finishedIssues: { [string]: boolean } = {}
+	local topFinishSha: string? = nil
+
+	if #layers == 0 then
+		return `{raftId} has no layers: ./zn start {raftId}`, finishedIssues, nil
+	end
+	if #layers ~= #issues then
+		return `{raftId} has {#layers} layer(s) for {#issues} issue(s)`, finishedIssues, nil
+	end
+
+	local tracePath = `{raftDir}/trace.md`
+
+	for i, issue in issues do
+		local layer = layers[i]
+		if layer == nil or layer.issue ~= issue.id then
+			local got = if layer then layer.name else "(missing)"
+			return `{raftId} layer {i} is {got}, expected {issue.id}`, finishedIssues, topFinishSha
+		end
+		if layer.tip == nil or layer.tip == "" then
+			return `{layer.name} has no tip`, finishedIssues, topFinishSha
+		end
+		if not layer.stackedOnBelow then
+			return `{layer.name} is not stacked on the layer below`, finishedIssues, topFinishSha
+		end
+		if #layer.commits == 0 then
+			return `layer {layer.name} has no finish commit`, finishedIssues, topFinishSha
+		end
+		local first = layer.commits[1]
+		local expectedSubject = `{issue.id}: {layer.title}`
+		if first.subject ~= expectedSubject then
+			return `{issue.id} is not finished (expected "{expectedSubject}", got "{first.subject}")`,
+				finishedIssues,
+				topFinishSha
+		end
+		if first.parent ~= layer.base then
+			return `layer {layer.name} was rewritten (expected "{expectedSubject}" on {string.sub(
+				layer.base,
+				1,
+				12
+			)})`,
+				finishedIssues,
+				topFinishSha
+		end
+
+		if i < #layers then
+			if #layer.commits > 1 then
+				local extra = layer.commits[#layer.commits]
+				return `layer {layer.name} has commit {string.sub(extra.sha, 1, 12)} after finish commit {string.sub(
+					first.sha,
+					1,
+					12
+				)}`,
+					finishedIssues,
+					topFinishSha
+			end
+			local upper = layers[i + 1]
+			if upper ~= nil and upper.base ~= first.sha then
+				return `layer {layer.name} was rewritten after {upper.name} stacked on it`,
+					finishedIssues,
+					topFinishSha
+			end
+			finishedIssues[issue.id] = true
+		else
+			topFinishSha = first.sha
+			finishedIssues[issue.id] = true
+
+			if tableCommit == nil or tableCommit == "" then
+				return "missing Commit: header", finishedIssues, topFinishSha
+			end
+			if tableCommit ~= first.sha then
+				return `table names commit {tableCommit}, but top layer finish commit is {first.sha}`,
+					finishedIssues,
+					topFinishSha
+			end
+
+			if #layer.commits > 1 then
+				local lastTraceIdx = 0
+				for j = 2, #layer.commits do
+					local c = layer.commits[j]
+					for _, p in c.files do
+						if p == tracePath then
+							lastTraceIdx = j
+						end
+					end
+				end
+
+				for j = 2, #layer.commits do
+					local c = layer.commits[j]
+					if #c.files == 0 then
+						if lastTraceIdx > 0 and j > lastTraceIdx then
+							return `commit {string.sub(c.sha, 1, 12)} added to {layer.name} after trace.md`,
+								finishedIssues,
+								topFinishSha
+						end
+						return `commit {string.sub(c.sha, 1, 12)} added to {layer.name} after finish commit {string.sub(
+							first.sha,
+							1,
+							12
+						)}`,
+							finishedIssues,
+							topFinishSha
+					end
+					for _, p in c.files do
+						if not isTrackerFileOf(p, raftId, raftDir, issues) then
+							if lastTraceIdx > 0 and j > lastTraceIdx then
+								return `commit {string.sub(c.sha, 1, 12)} added to {layer.name} after trace.md`,
+									finishedIssues,
+									topFinishSha
+							end
+							return `commit {string.sub(c.sha, 1, 12)} on {layer.name} touches non-tracker file {p} after finish`,
+								finishedIssues,
+								topFinishSha
+						end
+					end
+				end
+
+				if lastTraceIdx == 0 then
+					local last = layer.commits[#layer.commits]
+					return `commit {string.sub(last.sha, 1, 12)} added to {layer.name} before trace.md`,
+						finishedIssues,
+						topFinishSha
+				end
+
+				for j = lastTraceIdx + 1, #layer.commits do
+					local c = layer.commits[j]
+					for _, p in c.files do
+						if not isAllowedAfterTrace(p, raftId, raftDir) then
+							return `commit {string.sub(c.sha, 1, 12)} added to {layer.name} after trace.md`,
+								finishedIssues,
+								topFinishSha
+						end
+					end
+				end
+			end
+		end
+	end
+
+	if tableCommit == nil or tableCommit == "" then
+		return "missing Commit header", finishedIssues, topFinishSha
+	end
+
+	return nil, finishedIssues, topFinishSha
 end
 
 function trace.skeleton(raftId: string, commit: string, claims: { Claim }, sources: { string }): string
@@ -567,7 +818,7 @@ local function extractRefs(cell: string): { FileLineRef }
 	return refs
 end
 
-local function isSpecForIssue(path: string, issue: IssueDoc, changedSpecs: { [string]: boolean }): boolean
+local function isSpecForIssue(path: string, issue: IssueDoc): boolean
 	if string.sub(path, -10) ~= ".spec.luau" then
 		return false
 	end
@@ -575,17 +826,20 @@ local function isSpecForIssue(path: string, issue: IssueDoc, changedSpecs: { [st
 	if string.sub(path, 1, #issueAccPrefix) == issueAccPrefix then
 		return true
 	end
-	local homeAccPrefix = issue.home .. "/tests/acceptance/" .. issue.id .. "/"
+	local homePrefix = if issue.home == "." then "" else issue.home .. "/"
+	local homeAccPrefix = homePrefix .. "tests/acceptance/" .. issue.id .. "/"
 	if string.sub(path, 1, #homeAccPrefix) == homeAccPrefix then
 		return true
 	end
-	local anyAccIssue = string.match(path, "/tests/acceptance/([cCrR]%d+)/")
-		or string.match(path, "/issues/[^/]+/([cCrR]%d+)/acceptance/")
+	local anyAccIssue = string.match(path, "/tests/acceptance/([fdcR]%d+)/")
+		or string.match(path, "^tests/acceptance/([fdcR]%d+)/")
+		or string.match(path, "/issues/[^/]+/([fdcR]%d+)/acceptance/")
+		or string.match(path, "/issues/([fdcR]%d+)/acceptance/")
 	if anyAccIssue ~= nil and anyAccIssue ~= issue.id then
 		return false
 	end
-	local homeTestsPrefix = issue.home .. "/tests/"
-	if string.sub(path, 1, #homeTestsPrefix) == homeTestsPrefix and changedSpecs[path] then
+	local homeTestsPrefix = homePrefix .. "tests/"
+	if string.sub(path, 1, #homeTestsPrefix) == homeTestsPrefix then
 		return true
 	end
 	return false
@@ -617,18 +871,39 @@ function trace.check(input: CheckInput): { string }
 		return findings
 	end
 
-	if input.staleReason ~= nil and input.staleReason ~= "" then
-		table.insert(findings, `row Commit, commit: table is stale ({input.staleReason})`)
+	local finishedIssues: { [string]: boolean } = input.finishedIssues or {}
+	local expectedCommit: string = input.expectedCommit or ""
+	local staleWhy: string? = input.staleReason
+
+	if input.layers ~= nil then
+		local rId = input.raftId or parsed.raftId or "raft"
+		local rDir = input.raftDir or ""
+		local computedStale, compFinished, compTopFinish =
+			trace.staleReason(rId, rDir, input.issues, input.layers, parsed.commit)
+		staleWhy = staleWhy or computedStale
+		if input.finishedIssues == nil then
+			finishedIssues = compFinished
+		end
+		if expectedCommit == "" and compTopFinish ~= nil then
+			expectedCommit = compTopFinish
+		end
+	end
+
+	if staleWhy ~= nil and staleWhy ~= "" then
+		table.insert(findings, `row Commit, commit: table is stale ({staleWhy})`)
 	elseif parsed.commit == nil or parsed.commit == "" then
 		table.insert(findings, "row Commit, commit: table is stale (missing Commit header)")
-	elseif parsed.commit ~= input.expectedCommit then
+	elseif expectedCommit ~= "" and parsed.commit ~= expectedCommit then
 		table.insert(
 			findings,
-			`row Commit, commit: table is stale (table commit {parsed.commit} ~= stack commit {input.expectedCommit})`
+			`row Commit, commit: table is stale (table commit {parsed.commit} ~= stack commit {expectedCommit})`
 		)
 	end
 
-	local derived = trace.deriveClaims(input.issues)
+	local derived, claimErrors = trace.deriveClaims(input.issues)
+	for _, cerr in claimErrors do
+		table.insert(findings, cerr)
+	end
 	local derivedById: { [string]: Claim } = {}
 	for _, c in derived do
 		derivedById[c.id] = c
@@ -636,6 +911,8 @@ function trace.check(input: CheckInput): { string }
 
 	local issueById: { [string]: IssueDoc } = {}
 	local rulingsByIssue: { [string]: { string } } = {}
+	local resultsByIssue: { [string]: { [string]: { [string]: boolean } }? } = {}
+	local resultsErrByIssue: { [string]: string? } = {}
 	local raftRulings = extractHumanRulings(input.raftDocText)
 	for _, issue in input.issues do
 		issueById[issue.id] = issue
@@ -644,19 +921,22 @@ function trace.check(input: CheckInput): { string }
 			table.insert(list, r)
 		end
 		rulingsByIssue[issue.id] = list
+		if issue.resultsText ~= nil then
+			local parsedRes, resErr = trace.parseResults(issue.resultsText)
+			resultsByIssue[issue.id] = parsedRes
+			resultsErrByIssue[issue.id] = resErr
+		end
 	end
 
 	local changedSourcesSet: { [string]: boolean } = {}
 	for _, src in input.changedSources do
 		changedSourcesSet[src] = true
 	end
-	local allowedCodeSet: { [string]: boolean } = changedSourcesSet
-	if #input.changedSources == 0 and input.changedFiles ~= nil then
-		allowedCodeSet = {}
-		for _, f in input.changedFiles do
-			allowedCodeSet[f] = true
-		end
-	end
+
+	local commitLabel = if expectedCommit ~= ""
+		then expectedCommit
+		elseif parsed.commit ~= nil and parsed.commit ~= "" then parsed.commit
+		else "HEAD"
 
 	local seenClaims: { [string]: boolean } = {}
 	local notMetClaims: { [string]: boolean } = {}
@@ -741,47 +1021,52 @@ function trace.check(input: CheckInput): { string }
 							findings,
 							`row {cid}, test: {ref.path}:{ref.line} is not a check command line`
 						)
-					elseif not input.finishedIssues[issue.id] then
+					elseif not finishedIssues[issue.id] then
 						table.insert(
 							findings,
 							`row {cid}, test: {ref.path}:{ref.line} did not run green for this stack`
 						)
 					end
-				elseif isSpecForIssue(ref.path, issue, input.changedSpecs) then
-					local specRes = input.greenSpecs[ref.path]
-					local explicitCase = string.match(row.test, "::%s*([^,;|\n]+)")
-					if explicitCase ~= nil then
-						explicitCase = trim(explicitCase)
-					end
-					if specRes == nil or not specRes.passed then
-						table.insert(findings, `row {cid}, test: {ref.path} did not run green for this stack`)
-					elseif meta ~= nil then
-						local lineText = meta.lines[ref.line] or ""
-						local caseTitle = explicitCase
-							or string.match(lineText, 'it%s*%(%s*"([^"]+)"')
-							or string.match(lineText, 'test%s*%(%s*"([^"]+)"')
-						if caseTitle ~= nil then
-							local matched: boolean? = nil
-							if specRes.cases ~= nil and next(specRes.cases) ~= nil then
-								matched = specRes.cases[caseTitle]
-								if matched == nil then
-									for k, ok in specRes.cases do
-										if string.find(k, caseTitle, 1, true) ~= nil then
-											matched = ok
-											break
-										end
-									end
-								end
-								if matched == nil then
-									matched = false
-								end
-							elseif explicitCase ~= nil then
-								matched = string.find(lineText, explicitCase, 1, true) ~= nil
+				elseif isSpecForIssue(ref.path, issue) then
+					local resultsPath = issue.resultsPath or `{issue.dirPath}/results.txt`
+					if issue.resultsText == nil then
+						table.insert(
+							findings,
+							`row {cid}, test: results file {resultsPath} for ticket {issue.id} does not exist at commit {commitLabel}`
+						)
+					elseif resultsErrByIssue[issue.id] ~= nil then
+						table.insert(
+							findings,
+							`row {cid}, test: invalid results file {resultsPath} for ticket {issue.id}: {resultsErrByIssue[issue.id]}`
+						)
+					else
+						local issueResults = resultsByIssue[issue.id]
+						local specCases = if issueResults ~= nil then issueResults[ref.path] else nil
+						if specCases == nil then
+							table.insert(
+								findings,
+								`row {cid}, test: {ref.path} did not run green for ticket {issue.id}`
+							)
+						elseif meta ~= nil then
+							local explicitCase = string.match(row.test, "::%s*([^,;|\n]+)")
+							if explicitCase ~= nil then
+								explicitCase = trim(explicitCase)
 							end
-							if matched == false then
+							local lineText = meta.lines[ref.line] or ""
+							local caseTitle = explicitCase
+								or string.match(lineText, 'it%s*%(%s*"([^"]+)"')
+								or string.match(lineText, "it%s*%(%s*'([^']+)'")
+								or string.match(lineText, 'test%s*%(%s*"([^"]+)"')
+								or string.match(lineText, "test%s*%(%s*'([^']+)'")
+							if caseTitle == nil or caseTitle == "" then
 								table.insert(
 									findings,
-									`row {cid}, test: case "{caseTitle}" in {ref.path} did not run green for this stack`
+									`row {cid}, test: {ref.path}:{ref.line} does not name a test case`
+								)
+							elseif specCases[caseTitle] ~= true then
+								table.insert(
+									findings,
+									`row {cid}, test: case "{caseTitle}" in {ref.path} did not run green for ticket {issue.id}`
 								)
 							end
 						end
@@ -798,6 +1083,15 @@ function trace.check(input: CheckInput): { string }
 		-- Code cell verification
 		if row.code == "" then
 			table.insert(findings, `row {cid}, code: empty cell`)
+		elseif #input.changedSources == 0 then
+			if string.lower(trim(row.code)) ~= "none" then
+				table.insert(findings, `row {cid}, code: stack changed no source file (expected "none")`)
+			end
+		elseif string.lower(trim(row.code)) == "none" then
+			table.insert(
+				findings,
+				`row {cid}, code: "none" is only valid when the stack changed no source file`
+			)
 		else
 			local refs = extractRefs(row.code)
 			if #refs == 0 then
@@ -807,7 +1101,7 @@ function trace.check(input: CheckInput): { string }
 				local _, err = checkFileLineExists(ref, input.filesAtCommit)
 				if err ~= nil then
 					table.insert(findings, `row {cid}, code: {err}`)
-				elseif not allowedCodeSet[ref.path] then
+				elseif not changedSourcesSet[ref.path] then
 					table.insert(findings, `row {cid}, code: {ref.path} was not changed by this stack`)
 				end
 			end

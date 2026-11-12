@@ -202,7 +202,7 @@ return t.spec("human approval freezes the contract", function(it)
 		if not started.ok then
 			error(say(started))
 		end
-		fs.writeFile(`{layer}/{ROOT}/rafts/active/{RAFT}/review-001.md`, "Verdict: approve\n")
+		fs.writeFile(`{layer}/{ROOT}/rafts/active/{RAFT}/final-review-001.md`, "Verdict: approve\n")
 		local flipped = fs.readFile(`{layer}/{active}/acceptance/hold.spec.luau`)
 		fs.writeFile(
 			`{layer}/{active}/acceptance/hold.spec.luau`,

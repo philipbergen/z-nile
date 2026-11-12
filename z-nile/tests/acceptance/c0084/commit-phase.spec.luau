@@ -165,6 +165,7 @@ return t.spec("tracker commit phases", function(it)
 		do
 			write(p, TRIVIAL_CHECK)
 		end
+		seal.prep(dir)
 		git({ "add", "-A" })
 		git({ "commit", "-q", "-m", "prep ready" })
 		must(tr({ "start", raft }), "start")

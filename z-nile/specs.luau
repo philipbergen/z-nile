@@ -24,6 +24,7 @@ local select = require("./lib/select")
 local serde = require("@lune/serde")
 local slow = require("./tests/lib/slow")
 local stdio = require("@lune/stdio")
+local trace = require("./engine/trace")
 local workspace = require("./lib/workspace")
 
 local ROOT = (string.gsub(process.cwd, "/+$", ""))
@@ -127,6 +128,7 @@ end
 -- ---------------------------------------------------------------------------------------------------- run
 local function runCommand()
 	local project: string? = nil
+	local outFile: string? = nil
 	local fresh, all, slowOnly = false, false, false
 	local files: { string } = {}
 	local i = 1
@@ -139,6 +141,9 @@ local function runCommand()
 			afterDashes = true
 		elseif a == "--project" then
 			project = args[i + 1]
+			i += 1
+		elseif a == "--out" then
+			outFile = args[i + 1]
 			i += 1
 		elseif a == "--fresh" then
 			fresh = true
@@ -198,6 +203,7 @@ local function runCommand()
 
 	local fps: { [string]: string } = {}
 	local toRun: { string } = {}
+	local reusedByFile: { [string]: any } = {}
 	local reusedCases, reusedFiles = 0, 0
 	if db ~= nil and state ~= nil then
 		local refs: { string } = {}
@@ -230,6 +236,7 @@ local function runCommand()
 					stdio.write(`reused {f}\n`)
 					reusedFiles += 1
 					reusedCases += #(row :: any).cases
+					reusedByFile[f] = row
 				else
 					table.insert(toRun, f)
 				end
@@ -241,6 +248,7 @@ local function runCommand()
 	end
 
 	local code = 0
+	local byFile: { [string]: any } = {}
 	if #toRun > 0 then
 		local resultsFile = `{ROOT}/{prefix}.cache/spec-results-{fence.myPid()}.json`
 		pcall(fs.writeDir, `{ROOT}/{prefix}.cache`)
@@ -266,7 +274,6 @@ local function runCommand()
 			end
 		end
 		pcall(fs.removeFile, resultsFile)
-		local byFile: { [string]: any } = {}
 		if doc ~= nil and type(doc) == "table" and type(doc.files) == "table" then
 			for _, f in toRun do
 				for _, rec in doc.files do
@@ -368,6 +375,40 @@ local function runCommand()
 		else
 			stdio.write(`{reusedCases} reused cases in {reusedFiles} spec files\n`)
 		end
+	end
+	if outFile ~= nil and code == 0 then
+		local recorded: { trace.RecordedSpec } = {}
+		local existingSpecs: { [string]: boolean } = {}
+		for _, f in files do
+			local rec = byFile[f] or reusedByFile[f]
+			local greenCases: { string } = {}
+			if rec ~= nil and type(rec.cases) == "table" then
+				for _, c in rec.cases do
+					if type(c) == "table" and c.ok == true and type(c.name) == "string" then
+						table.insert(greenCases, c.name)
+					end
+				end
+			end
+			local fullPath = prefix .. f
+			existingSpecs[fullPath] = true
+			table.insert(recorded, { spec = fullPath, cases = greenCases })
+		end
+		if fs.isFile(outFile) then
+			local prev, _ = trace.parseResults(fs.readFile(outFile))
+			if prev ~= nil then
+				for specPath, casesMap in prev do
+					if not existingSpecs[specPath] then
+						local list: { string } = {}
+						for caseName in casesMap do
+							table.insert(list, caseName)
+						end
+						table.sort(list)
+						table.insert(recorded, { spec = specPath, cases = list })
+					end
+				end
+			end
+		end
+		fs.writeFile(outFile, trace.renderResults(recorded))
 	end
 	process.exit(if code == 0 then 0 else 1)
 end

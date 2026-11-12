@@ -3753,6 +3753,8 @@ function cmd.finish(pos: { string })
 		fail(`{id}: nothing to finish`)
 	end
 	watchcmd.capture({ id = id, dest = `{issue.dir}/acceptance` }, paths)
+	local resultsOut = `{issue.dir}/results.txt`
+	sh.writeReplacing(resultsOut, "")
 	if gateLib.doneGate(process.env) == "promoted" then
 		print("finish: inside a spec run, so the affected specs are skipped")
 	else
@@ -3766,6 +3768,7 @@ function cmd.finish(pos: { string })
 			end
 			local listed = sh.run("lune", argv)
 			if not listed.ok then
+				pcall(fs.removeFile, resultsOut)
 				fail(`affected failed: {listed.stderr}`)
 			end
 			local specs: { string } = {}
@@ -3775,11 +3778,22 @@ function cmd.finish(pos: { string })
 				end
 			end
 			if #specs > 0 then
-				local run = { "run", "z-nile/specs", "--", "run", "--project", project.name, "--" }
+				local run = {
+					"run",
+					"z-nile/specs",
+					"--",
+					"run",
+					"--project",
+					project.name,
+					"--out",
+					resultsOut,
+					"--",
+				}
 				for _, spec in specs do
 					table.insert(run, spec)
 				end
 				if not sh.stream("lune", run) then
+					pcall(fs.removeFile, resultsOut)
 					fail(`{id}: a spec the watch map selects is red`)
 				end
 			end
@@ -4585,7 +4599,7 @@ end
 local function reviewProblem(raft: store.Item): string?
 	local reviewPrefix, refutePrefix, latest = layergit.latestReview(raft)
 	if latest == 0 then
-		return "no review-NNN.md: run the adversarial code review first"
+		return "no final-review-NNN.md (no review-NNN.md may stand in for the final review): run the final review first"
 	end
 	local num = string.format("%03d", latest)
 	local reviewName = `{reviewPrefix}-{num}.md`
@@ -4670,13 +4684,8 @@ local function reviewProblem(raft: store.Item): string?
 end
 
 local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { string }
-	local context = require("../lib/context")
-	local fingerprint = require("../lib/fingerprint")
-	local resultsdb = require("../lib/resultsdb")
-	local selectLib = require("../lib/select")
 	local trace = require("./trace")
 	local watch = require("../lib/watch")
-	local workspace = require("../lib/workspace")
 
 	local function diffNamesBetween(base: string, tip: string): { string }
 		local names = sh.git({ "diff", "--name-only", base, tip })
@@ -4689,15 +4698,19 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 		return out
 	end
 
-	local function fileTextAt(atCommit: string, path: string, useWorktree: boolean): string?
-		if useWorktree and fs.isFile(path) then
-			return fs.readFile(path)
-		end
+	local function gitFileTextAt(atCommit: string, path: string): string?
 		local shown = sh.run("git", { "show", `{atCommit}:{path}` })
 		if shown.ok then
 			return shown.stdout
 		end
 		return nil
+	end
+
+	local function fileTextAt(atCommit: string, path: string, useWorktree: boolean): string?
+		if useWorktree and fs.isFile(path) then
+			return fs.readFile(path)
+		end
+		return gitFileTextAt(atCommit, path)
 	end
 
 	local function capturedDocText(issue: store.Item, atCommit: string): string
@@ -4720,8 +4733,10 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 		local out: { trace.IssueDoc } = {}
 		for _, issue in issues do
 			local checkPath = `{issue.dir}/check.sh`
+			local resultsPath = `{issue.dir}/results.txt`
 			local docText = fileTextAt(atCommit, issue.doc, useWorktree) or ""
-			local checkText = fileTextAt(atCommit, checkPath, useWorktree)
+			local checkText = gitFileTextAt(atCommit, checkPath)
+			local resultsText = gitFileTextAt(atCommit, resultsPath)
 			local captured = capturedDocText(issue, atCommit)
 			table.insert(out, {
 				id = issue.id,
@@ -4732,6 +4747,8 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 				capturedText = if captured ~= "" then captured else docText,
 				docText = docText,
 				checkText = checkText,
+				resultsPath = resultsPath,
+				resultsText = resultsText,
 			})
 		end
 		return out
@@ -4747,6 +4764,31 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 			return rem
 		end
 		return loc or rem
+	end
+
+	local function collectLayerCommits(base: string, tip: string): { trace.LayerCommit }
+		local raw = sh.git({ "log", "--reverse", "--format=%H%x09%P%x09%s", `{base}..{tip}` })
+		local out: { trace.LayerCommit } = {}
+		for line in string.gmatch(raw .. "\n", "([^\n]+)\n") do
+			local sha, parents, subject = string.match(line, "^(%x+)\t([^\t]*)\t(.*)$")
+			if sha then
+				local firstParent = string.match(parents or "", "^(%x+)") or ""
+				local changed = sh.git({ "diff-tree", "--no-commit-id", "--name-only", "-r", sha })
+				local files: { string } = {}
+				for path in string.gmatch(changed .. "\n", "([^\n]+)\n") do
+					if path ~= "" then
+						table.insert(files, path)
+					end
+				end
+				table.insert(out, {
+					sha = sha,
+					parent = firstParent,
+					subject = subject or "",
+					files = files,
+				})
+			end
+		end
+		return out
 	end
 
 	local issues = layergit.orderedMembers(raft)
@@ -4782,7 +4824,10 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 		end
 		local issueDocs = buildTraceIssueDocs(issues, topTip)
 		local changedSources = watch.sourceOf(diffNamesBetween(baseTip, topTip))
-		local claims = trace.deriveClaims(issueDocs)
+		local claims, claimErrors = trace.deriveClaims(issueDocs)
+		if #claimErrors > 0 then
+			fail(table.concat(claimErrors, "\n"))
+		end
 		stdio.write(trace.skeleton(raft.id, topFinishSha, claims, changedSources))
 		return {}
 	end
@@ -4801,143 +4846,37 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 	if tableText == nil then
 		return { `no {tracePath}: run ./zn trace {raft.id} and fill the table` }
 	end
-	local parsed, _ = trace.parse(tableText)
 
 	local baseTip = layergit.mainTip()
 	local onto = baseTip
-	local finishedIssues: { [string]: boolean } = {}
-	local staleReason: string? = nil
-	local expectedCommit: string = topTip
-
-	if #layers ~= #issues then
-		staleReason = `{raft.id} has {#layers} layer(s) for {#issues} issue(s)`
-	end
-
-	for i, layer in layers do
+	local layerHistories: { trace.LayerHistory } = {}
+	for _, layer in layers do
 		local tip = localOrOriginTip(layer)
-		if not tip then
-			staleReason = staleReason or `{layer.name} has no tip`
-			continue
+		local stacked = if tip ~= nil
+			then sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok
+			else false
+		local commits: { trace.LayerCommit } = if tip ~= nil and stacked
+			then collectLayerCommits(onto, tip)
+			else {}
+		local issueItem = store.find(layer.issue)
+		local layerTitle = if issueItem then layergit.issueTitle(issueItem) else layer.issue
+		table.insert(layerHistories, {
+			name = layer.name,
+			issue = layer.issue,
+			title = layerTitle,
+			base = onto,
+			tip = tip,
+			stackedOnBelow = stacked,
+			commits = commits,
+		})
+		if tip ~= nil then
+			onto = tip
 		end
-		if not sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok then
-			staleReason = staleReason or `{layer.name} is not stacked on the layer below`
-		end
-		local finishSha = layergit.layerFinishSha(layer, onto, tip)
-		if finishSha ~= nil then
-			finishedIssues[layer.issue] = true
-		end
-		if i < #layers and parsed and parsed.commit and parsed.commit ~= "" then
-			if sh.run("git", { "cat-file", "-e", parsed.commit .. "^{commit}" }).ok then
-				if not sh.run("git", { "merge-base", "--is-ancestor", tip, parsed.commit }).ok then
-					staleReason = staleReason
-						or `layer {layer.name} has commit {string.sub(tip, 1, 12)} after trace commit {string.sub(
-							parsed.commit,
-							1,
-							12
-						)}`
-				end
-			end
-		end
-		if i == #layers then
-			if finishSha ~= nil then
-				expectedCommit = finishSha
-				local pinnedCommit = if parsed ~= nil then parsed.commit else nil
-				if
-					tip == finishSha
-					and pinnedCommit ~= nil
-					and pinnedCommit ~= ""
-					and pinnedCommit ~= finishSha
-					and sh.run("git", { "cat-file", "-e", pinnedCommit .. "^{commit}" }).ok
-					and sh.git({ "rev-parse", pinnedCommit .. "^" }) == onto
-					and fileTextAt(pinnedCommit, tracePath, false) ~= tableText
-				then
-					local diffFromPinned = sh.git({ "diff", "--name-only", pinnedCommit, finishSha })
-					local onlyPostFinish = true
-					for p in string.gmatch(diffFromPinned .. "\n", "([^\n]+)\n") do
-						if p ~= "" and not layergit.isPostFinishPath(p, raft.id) then
-							onlyPostFinish = false
-							break
-						end
-					end
-					if onlyPostFinish then
-						expectedCommit = pinnedCommit
-					end
-				elseif tip ~= finishSha then
-					local raw = sh.git({ "log", "--reverse", "--format=%H", `{finishSha}..{tip}` })
-					local postCommits: { string } = {}
-					local lastTraceIdx = 0
-					for sha in string.gmatch(raw .. "\n", "(%x+)\n") do
-						table.insert(postCommits, sha)
-						local changed = sh.git({ "diff-tree", "--no-commit-id", "--name-only", "-r", sha })
-						for p in string.gmatch(changed .. "\n", "([^\n]+)\n") do
-							if p == tracePath then
-								lastTraceIdx = #postCommits
-							end
-						end
-					end
-					if lastTraceIdx == 0 then
-						staleReason = staleReason
-							or `commit {string.sub(tip, 1, 12)} added to {layer.name} after trace commit {string.sub(
-								finishSha,
-								1,
-								12
-							)}`
-					elseif lastTraceIdx < #postCommits then
-						for idx = lastTraceIdx + 1, #postCommits do
-							local csha = postCommits[idx]
-							local changed =
-								sh.git({ "diff-tree", "--no-commit-id", "--name-only", "-r", csha })
-							if sh.trim(changed) == "" then
-								staleReason = staleReason
-									or `commit {string.sub(csha, 1, 12)} added to {layer.name} after trace.md`
-							end
-							for p in string.gmatch(changed .. "\n", "([^\n]+)\n") do
-								if p ~= "" then
-									local allowedAfterTrace = string.find(p, "/spend%.d/", 1, false) ~= nil
-										or string.match(p, "/refute%-%d+%.md$") ~= nil
-										or string.match(p, "/final%-refute%-%d+%.md$") ~= nil
-										or p == raft.doc
-									if not allowedAfterTrace then
-										staleReason = staleReason
-											or `commit {string.sub(csha, 1, 12)} added to {layer.name} after trace.md`
-									end
-								end
-							end
-						end
-					end
-				end
-			else
-				expectedCommit = tip
-				staleReason = staleReason
-					or `commit {string.sub(tip, 1, 12)} added to {layer.name} after trace commit {parsed and parsed.commit or "unknown"}`
-			end
-		end
-		onto = tip
 	end
 
 	local issueDocs = buildTraceIssueDocs(issues, topTip)
 	local diffList = diffNamesBetween(baseTip, topTip)
 	local changedSources = watch.sourceOf(diffList)
-	local changedSpecs: { [string]: boolean } = {}
-	for _, p in diffList do
-		if string.sub(p, -10) == ".spec.luau" then
-			changedSpecs[p] = true
-		end
-	end
-
-	local okReg, reg = pcall(projects.load, ".")
-	local ctx: selectLib.Context? = nil
-	if okReg and reg then
-		ctx = (context.build(reg))
-		if ctx then
-			local picked = selectLib.affected(ctx, diffList, nil)
-			if type(picked) == "table" then
-				for _, s in picked :: { string } do
-					changedSpecs[s] = true
-				end
-			end
-		end
-	end
 
 	local candidatePaths: { [string]: boolean } = {}
 	for _, idoc in issueDocs do
@@ -4952,79 +4891,23 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 	end
 
 	local filesAtCommit: { [string]: trace.FileMeta } = {}
-	local referencedSpecs: { string } = {}
 	for path in candidatePaths do
-		local text = fileTextAt(topTip, path, useWorktree)
+		local text = gitFileTextAt(topTip, path)
 		if text ~= nil then
 			filesAtCommit[path] = { lines = trace.splitLines(text) }
-			if string.sub(path, -10) == ".spec.luau" then
-				table.insert(referencedSpecs, path)
-			end
-		end
-	end
-
-	local greenSpecs: { [string]: trace.SpecResult } = {}
-	if #referencedSpecs > 0 and ctx ~= nil then
-		local dbPath = workspace.dbPath(".")
-		local db = if dbPath then (resultsdb.open(dbPath)) else nil
-		local blobs = workspace.blobs(".")
-		local tools = workspace.tools(".")
-		if db ~= nil and blobs ~= nil then
-			local refSet: { [string]: boolean } = {}
-			local refs: { string } = {}
-			for _, specPath in referencedSpecs do
-				for _, r in fingerprint.refs(ctx, specPath) do
-					if not refSet[r] then
-						refSet[r] = true
-						table.insert(refs, r)
-					end
-				end
-			end
-			table.sort(refs)
-			local gitState = workspace.gitState(".", refs)
-			if gitState ~= nil then
-				local fpBySpec: { [string]: string } = {}
-				local fpList: { string } = {}
-				for _, specPath in referencedSpecs do
-					local fp = fingerprint.of(ctx, specPath, blobs, tools, "affected", gitState)
-					fpBySpec[specPath] = fp
-					table.insert(fpList, fp)
-				end
-				local okRows, rows = pcall(resultsdb.rows, db, fpList)
-				if okRows and rows then
-					for _, specPath in referencedSpecs do
-						local row = rows[fpBySpec[specPath]]
-						if row ~= nil then
-							local casesMap: { [string]: boolean } = {}
-							if row.cases then
-								for _, c in row.cases do
-									casesMap[c.name] = c.ok
-								end
-							end
-							greenSpecs[specPath] = {
-								passed = row.state == "passed",
-								cases = casesMap,
-							}
-						end
-					end
-				end
-			end
 		end
 	end
 
 	local raftDocText = fileTextAt(topTip, raft.doc, useWorktree) or ""
 	return trace.check({
+		raftId = raft.id,
+		raftDir = raft.dir,
 		tableText = tableText,
-		expectedCommit = expectedCommit,
-		staleReason = staleReason,
+		layers = layerHistories,
 		issues = issueDocs,
 		raftDocText = raftDocText,
 		changedSources = changedSources,
-		changedFiles = diffList,
-		changedSpecs = changedSpecs,
 		filesAtCommit = filesAtCommit,
-		greenSpecs = greenSpecs,
-		finishedIssues = finishedIssues,
 	})
 end
 

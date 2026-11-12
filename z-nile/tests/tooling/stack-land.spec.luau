@@ -13,8 +13,21 @@ local PREPARED = "prepared-quiet-copper-falcon"
 local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
 	.. 'check "AC1: ok" true\nfinish\n'
 
+local CAPTURED = table.concat({
+	"## Problem",
+	"The marker is missing.",
+	"",
+	"## Solution",
+	"Store the marker.",
+	"",
+	"## Acceptance criteria",
+	"- AC1: the marker is stored",
+	"",
+}, "\n")
+
 local function issue(id: string, title: string, raft: string, body: string): string
-	return `---\nid: {id}\ntype: chore\ntitle: {title}\nslug: {id}\nraft: {raft}\ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-10-06\nstatus: {PREPARED}\n---\n\n# {id}\n\n{body}`
+	local text = if body == "" then CAPTURED else `{body}\n{CAPTURED}`
+	return `---\nid: {id}\ntype: chore\ntitle: {title}\nslug: {id}\nraft: {raft}\ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-10-06\nstatus: {PREPARED}\n---\n\n# {id}\n\n{text}`
 end
 
 local function raftDoc(id: string, slug: string, issues: string, order: string): string
@@ -121,7 +134,11 @@ return t.spec("a raft lands as a stack of layers", function(it)
 		write(wt, "pickman/src/shared.luau", "one\n")
 		write(wt, "pickman/src/alpha.luau", "alpha\n")
 		write(wt, "pickman/tests/unit/c0010-layer.spec.luau", "--!strict\nreturn nil\n")
-		write(wt, "pickman/.tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
+		write(
+			wt,
+			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
+			"# Final Review 001\n\nVerdict: approve\n"
+		)
 		git(wt, { "add", "-A" })
 		git(wt, { "commit", "-qm", "c0010 work" })
 		zn(wt, { "finish", "c0010" })
@@ -227,8 +244,8 @@ return t.spec("a raft lands as a stack of layers", function(it)
 		zn(wtBad, { "start", "R0030" })
 		write(
 			wtBad,
-			"pickman/.tracker/rafts/active/R0030/review-001.md",
-			"# Review 001\n\nVerdict: approve\n"
+			"pickman/.tracker/rafts/active/R0030/final-review-001.md",
+			"# Final Review 001\n\nVerdict: approve\n"
 		)
 		write(wtBad, "pickman/src/delta.luau", "delta\n")
 		git(wtBad, { "add", "-A" })
@@ -254,11 +271,12 @@ return t.spec("a raft lands as a stack of layers", function(it)
 		local calls = fs.readFile(log)
 		t.expect(has(calls, "pr edit 1 --base main")).toBe(true)
 		local graph = git(f.main, { "log", "--graph", "--format=%s", "origin/main" })
-		local subjects = git(f.main, { "log", "-3", "--format=%s", "origin/main" })
+		local subjects = git(f.main, { "log", "-4", "--format=%s", "origin/main" })
 		local bind = git(f.main, { "log", "-1", "--format=%B", "origin/main" })
-		local ticket2 = git(f.main, { "log", "-1", "--format=%B", "origin/main^2" })
-		local ticket1 = git(f.main, { "log", "-1", "--format=%B", "origin/main^2^" })
-		t.expect(subjects).toBe("R0010: bind c0010, c0020\nc0020: beta\nc0010: alpha")
+		local ticket2 = git(f.main, { "log", "-1", "--format=%B", "origin/main^2^" })
+		local ticket1 = git(f.main, { "log", "-1", "--format=%B", "origin/main^2^^" })
+		t.expect(subjects)
+			.toBe("R0010: bind c0010, c0020\nR0010: final-review-001\nc0020: beta\nc0010: alpha")
 		t.expect(has(bind, "Verdict: approve")).toBe(true)
 		t.expect(has(bind, "Trace: pickman/.tracker/rafts/done/R0010/trace.md")).toBe(true)
 		t.expect(git(f.main, { "rev-parse", "origin/main^2" }) ~= "").toBe(true)
@@ -281,9 +299,9 @@ return t.spec("a raft lands as a stack of layers", function(it)
 		zn(wtOne, { "finish", "c0030" })
 		seal.trace(wtOne, "R0020")
 		zn(wtOne, { "done", "R0020" })
-		local one = git(f.main, { "log", "-2", "--format=%s", "origin/main" })
-		t.expect(one).toBe("R0020: bind c0030\nc0030: gamma")
-		local oneGraph = git(f.main, { "log", "--graph", "-3", "--format=%s", "origin/main" })
+		local one = git(f.main, { "log", "-3", "--format=%s", "origin/main" })
+		t.expect(one).toBe("R0020: bind c0030\nR0020: final-review-001\nc0030: gamma")
+		local oneGraph = git(f.main, { "log", "--graph", "-4", "--format=%s", "origin/main" })
 		fs.writeFile(proof, fs.readFile(proof) .. `\n## one-ticket\n{oneGraph}\n`)
 	end)
 end)

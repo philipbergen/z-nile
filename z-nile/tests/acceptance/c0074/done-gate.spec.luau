@@ -96,7 +96,7 @@ local function fresh()
 	-- a previous done leaves `main` on the binding commit. Put the layer back, and main behind it.
 	git({ "switch", "-q", "-C", "R0010/1/f0010", reviewed })
 	if fixture.exec(work, "git", { "rev-parse", "--verify", "--quiet", "main" }, { env = ID }).ok then
-		git({ "branch", "-f", "main", `{reviewed}^` })
+		git({ "branch", "-f", "main", `{reviewed}~2` })
 	end
 	if fs.isFile(gateLog) then
 		fs.removeFile(gateLog)
@@ -171,6 +171,7 @@ return t.spec("c0800 done runs the affected gate after promotion", function(it)
 		-- c0120 override: the spec runs from its project's home after the move
 		write(`{TR}/issues/f0010/check.sh`, TRIVIAL_CHECK)
 		write(`{TR}/rafts/R0010/check.sh`, TRIVIAL_CHECK)
+		seal.prep(work)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")

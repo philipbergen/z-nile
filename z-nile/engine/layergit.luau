@@ -310,23 +310,15 @@ end
 
 function layergit.latestReview(raft: store.Item): (string, string, number)
 	local finalLatest = 0
-	local reviewLatest = 0
 	if fs.isDir(raft.dir) then
 		for _, name in fs.readDir(raft.dir) do
 			local fn = tonumber(string.match(name, "^final%-review%-(%d+)%.md$"))
 			if fn and fn > finalLatest then
 				finalLatest = fn
 			end
-			local rn = tonumber(string.match(name, "^review%-(%d+)%.md$"))
-			if rn and rn > reviewLatest then
-				reviewLatest = rn
-			end
 		end
 	end
-	if finalLatest > 0 then
-		return "final-review", "final-refute", finalLatest
-	end
-	return "review", "refute", reviewLatest
+	return "final-review", "final-refute", finalLatest
 end
 
 -- The final review file's Verdict word, or nil when nobody wrote one. Never a default of approve.

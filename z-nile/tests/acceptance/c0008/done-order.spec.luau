@@ -132,11 +132,15 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write("pickman/.tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
 		write("pickman/.tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
+		seal.prep(work)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		write("pickman/.tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
+		write(
+			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
+			"# Final Review 001\n\nVerdict: approve\n"
+		)
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
 		-- an origin whose URL contains github.com, and a pushed branch with an upstream
 		fs.writeDir(bare)
@@ -183,8 +187,8 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- c0120 override: the items are pickman's, in pickman/.tracker; its promoted specs in pickman/tests/acceptance
 		-- an unresolved review: one open finding and no answer to it
 		write(
-			"pickman/.tracker/rafts/active/R0010/review-001.md",
-			"# Review 001\n\n### F1 [low] an open finding\nEvidence: x\n\nVerdict: changes requested\n"
+			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
+			"# Final Review 001\n\n### F1 [low] an open finding\nEvidence: x\n\nVerdict: changes requested\n"
 		)
 		must(tr({ "commit", "-m", "unresolved review", "--time", "1" }), "commit")
 		git({ "push", "-q" })
@@ -195,7 +199,10 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		t.expect((string.find(log, "pr ready", 1, true))).toBe(nil)
 		-- restore the approving review for the cases that follow
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		write("pickman/.tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
+		write(
+			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
+			"# Final Review 001\n\nVerdict: approve\n"
+		)
 		must(tr({ "commit", "-m", "review approved", "--time", "1" }), "commit")
 		-- a promotion that fails is the last refusal before the ready call: done must refuse there too,
 		-- leave the tree as it was, and still not have called gh pr ready

@@ -226,6 +226,7 @@ return t.spec("tracker ready", function(it)
 			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			"pickman/.tracker/issues/c0040/c0040.md",
 			issueDoc("c0040", "Delta", "R0040", "", "ready", PREPARED)
+				.. "\n## Solution\nStore the marker.\n\n## Acceptance criteria\n- AC1: the marker is stored\n"
 		)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 		write(seed, "pickman/.tracker/issues/c0040/check.sh", simpleCheck("c0040", "issues", ""), true)

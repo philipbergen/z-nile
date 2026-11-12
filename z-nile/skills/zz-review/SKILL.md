@@ -20,7 +20,7 @@ A review runs on the review model of the CLI (the user's rule): Opus through `cl
 ## Output file
 - Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue); in raft mode, in the raft's folder. `./zn metrics` counts both and rolls an issue's rounds up to its raft through `raft:`.
 - Code mode: `review-NNN.md`, in the raft directory.
-- Final mode: `final-review-NNN.md` (or `review-NNN.md`), in the raft directory, alongside `trace.md`.
+- Final mode: `final-review-NNN.md`, in the raft directory, alongside `trace.md`.
 - The file is `001` when the folder has none of that name. A second review of the same kind is refused. An older item's higher numbers still parse and still count in `./zn metrics`.
 - Under `./zn dispatch`, in every mode, write your review to `$ZN_DISPATCH_DIR/review.md` (your own state folder) and nothing else: the dispatcher numbers it with the mode's file name and moves it into the mode's folder, and a step that wrote no review fails. The names above and in Visible record are the interactive path's, where you write the file yourself.
 
@@ -58,7 +58,7 @@ Don't pad the review. Zero findings with `Verdict: approve` is a valid result. U
 ## Visible record
 In code mode the PR shows the review as it happens: the author pushes and posts a "started" comment before you begin, and commits, pushes and summarizes `review-NNN.md` when you finish. So:
 - Write `review-NNN.md` in full (under `./zn dispatch`, `$ZN_DISPATCH_DIR/review.md`, as Output file says); findings that exist only in your reply are lost. Write only that file: don't commit, push, comment on the PR or leave other files in the tree (the author's commit uses `git add -A`).
-- Every `### F<n>` heading is a finding the author answers once. Ids start at F1. `./zn done` reads the latest `review-NNN.md`; an older file still parses and is still harvested.
+- Every `### F<n>` heading is a finding the author answers once. Ids start at F1. An older `review-NNN.md` still parses and is still harvested. `./zn done` reads `final-review-NNN.md` only; a per-layer `review-NNN.md` does not stand in for it.
 - Design mode runs in the prep worktree before any PR exists, so it is exempt; its files are committed with the prep commit and ride in the prep PR.
 
 ## Raft mode (from z-raft)
@@ -104,7 +104,7 @@ A code-mode Recommendation never asks the author to edit sequestered `check.sh` 
 ## Final mode (the finished stack)
 Run once per raft on the finished, restacked stack, on the review model of the CLI. Inputs: `./zn sync --fetch`, `./zn trace <R-id>` (the skeleton), the raft and issue documents (and `./zn capture <id>` for each issue), and `git diff origin/main...HEAD`.
 1. **Fill `trace.md`** in the raft's folder from the skeleton `./zn trace <R-id>` prints:
-   - One row per claim (`<issue>:P<n>`, `<issue>:S<n>`, `<issue>:AC<n>`): cite the design section (`<issue-doc>:<line>`), the test (`<spec-or-check.sh>:<line>`, with the case name when a spec), and the code (`<source-file>:<line>`) at the top layer's finished commit. A claim deliberately not met says `not met: "<ruling>"` in the design cell, quoting the human's ruling from `## Open to the human`; no other cell may be empty.
+   - One row per claim (`<issue>:P<n>`, `<issue>:S<n>`, `<issue>:AC<n>`): cite the design section (`<issue-doc>:<line>`), the test (`<spec-or-check.sh>:<line>`, with the exact case name when a spec), and the code (`<source-file>:<line>`, or `none` when the stack changed no source file) at the top layer's finished commit. A claim deliberately not met says `not met: "<ruling>"` in the design cell, quoting the human's ruling from `## Open to the human`; no other cell may be empty.
    - Under `## Source files`, one row per changed source file, naming the claim or claims (`<issue>:AC1, ...`) it serves. Nothing in the stack may be unaccounted for.
 2. **Verify mechanically**: `./zn trace <R-id> --check` must pass, or every gap is a **high** finding in your review.
 3. **Judge substance**: check that each cited design section really answers the claim, each cited test really proves it, and each cited source line really implements it, with nothing extra in the diff. Write `final-review-NNN.md` (under `./zn dispatch`, `$ZN_DISPATCH_DIR/review.md`, as Output file says) with findings and `Verdict: approve | changes`. One round and one revision (`final-refute-NNN.md`), then `## Open to the human`, as in Code mode.
