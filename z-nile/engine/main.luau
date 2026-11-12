@@ -106,7 +106,7 @@ usage: ./zn <command> ...
                                                 capture a new issue (z-ticket) and run its chain
   dispatch <step> <id> [--mode design|code|raft] [--dry-run]
                                                 run one step: a model step on .models.toml's CLIs, a script step itself
-  dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
+  dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it; retry takes --answer "<text>" | --answer-file <path>, and --forget-exchange sets a damaged exchange aside
   dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
   done <R-id>                                   land the stack: one --no-ff merge onto main, one binding commit (refuses an unfinished layer)
   watch-bootstrap                               write every spec's watch file from the commit that added it (once)
@@ -845,6 +845,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--dry-run"
 			or a == "--quiet"
 			or a == "--auto"
+			or a == "--forget-exchange"
 			or a == "--session-end"
 			or a == "--begin"
 			or a == "--sessions"
@@ -7385,25 +7386,12 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
 		local state = stateOfPath(path)
 		return { path = path, front = front, state = state, status = statusLib.effective(front, state) }
 	end
-	local function originIssueIds(): { string }
-		sh.run("git", { "fetch", "-q", "origin", "main" })
-		local _, files = originTree()
-		local out: { string } = {}
-		for _, p in files do
-			local pid, rel = publish.itemPath(p)
-			if pid and store.isIssueId(pid) and rel == `{pid}.md` then
-				table.insert(out, pid)
-			end
-		end
-		return out
-	end
 	local code = dispatcherLib.main({
 		fail = fail,
 		mainRoot = mainRoot,
 		onGitHub = onGitHub,
 		checking = checking,
 		origin = origin,
-		originIssueIds = originIssueIds,
 		-- a PR's state for the chain's gates (c0117): only on a GitHub origin, through the real gh
 		-- a pull request's merge commit (c0117: a commit on main that is vetted without being tracker state)
 		prMerged = function(sha: string): boolean

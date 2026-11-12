@@ -19,6 +19,7 @@ local buffer = require("./buffer")
 local costrow = require("./costrow")
 local cred = require("./credential")
 local dispatch = require("./dispatch")
+local exchange = require("./exchange")
 local fs = require("@lune/fs")
 local models = require("./models")
 local modelstep = require("./modelstep")
@@ -37,13 +38,13 @@ local trackerstate = require("./trackerstate")
 local dispatcher = {}
 
 export type OriginItem = { path: string, front: { [string]: string }, state: string, status: string }
+export type Push = { base: string, sha: string } -- main as the broker fetched it, and the commit pushed on it
 export type Ctx = {
 	fail: (string) -> never,
 	mainRoot: () -> string,
 	onGitHub: () -> boolean,
 	checking: () -> boolean, -- inside a guarded run (a spec or a check.sh): only a CLI under .cache may start
 	origin: (id: string) -> OriginItem?,
-	originIssueIds: () -> { string },
 	prView: (branch: string) -> string?, -- `gh pr view <branch> --json …`'s output, or nil
 	prMerged: (sha: string) -> boolean, -- `sha` is a pull request's merge commit on GitHub
 }
@@ -88,8 +89,11 @@ export type State = {
 	follows: string?, -- the raft an issue's chain moved on to
 	merged: { number }, -- the PRs the dispatcher merged
 	pushed: { string }, -- the commits its publish broker pushed to main
+	pushes: { Push }, -- every push it asked for, recorded before the push is made (c0256): which issues it made
 	history: { Attempt },
 	pending: { Row },
+	sealed: { [string]: string }?, -- the sha256 of each exchange file the dispatcher wrote (c0256)
+	answering: string?, -- the sha256 of the questions.md an answer was written for, until it is set aside
 }
 
 local HOME = ".cache/dispatch"
@@ -113,7 +117,16 @@ local function dirOf(ctx: Ctx, id: string): string
 end
 
 local function blank(id: string, dir: string): State
-	return { id = id, dir = dir, mode = "chain", history = {}, pending = {}, merged = {}, pushed = {} }
+	return {
+		id = id,
+		dir = dir,
+		mode = "chain",
+		history = {},
+		pending = {},
+		merged = {},
+		pushed = {},
+		pushes = {},
+	}
 end
 
 local function loadAt(id: string, dir: string): State
@@ -129,6 +142,7 @@ local function loadAt(id: string, dir: string): State
 			st.pending = st.pending or {}
 			st.merged = st.merged or {}
 			st.pushed = st.pushed or {}
+			st.pushes = st.pushes or {}
 			st.dir = dir
 			return st :: State
 		end
@@ -149,6 +163,160 @@ local function save(st: State)
 	end
 	fs.writeDir(st.dir)
 	sh.writeReplacing(`{st.dir}/state.json`, serde.encode("json", st, true) .. "\n")
+end
+
+-- The exchange of a run (c0256, exchange.luau): the messages between the user and its steps, in the state folder.
+-- Anything at all at a path, a link included (fs.isFile and fs.isDir follow links).
+local function taken(path: string): boolean
+	return process.exec("readlink", { path }).ok or fs.isFile(path) or fs.isDir(path)
+end
+
+-- A name nothing is at: `<stem><n><ext>` for the first free n (numbered), else `<stem><ext>` or, if taken, `<stem>-<n><ext>`.
+local function freeName(dir: string, stem: string, ext: string, numbered: boolean): string
+	if not numbered and not taken(`{dir}/{stem}{ext}`) then
+		return `{dir}/{stem}{ext}`
+	end
+	local n = if numbered then 1 else 2
+	while taken(`{dir}/{stem}{if numbered then "" else "-"}{n}{ext}`) do
+		n += 1
+	end
+	return `{dir}/{stem}{if numbered then "" else "-"}{n}{ext}`
+end
+
+local function exchangePath(st: State): string
+	return `{st.dir}/{exchange.DIR}`
+end
+
+-- A link, of any kind (readlink succeeds only on one). fs.isFile and fs.isDir follow links, so this asks readlink.
+local function isLink(path: string): boolean
+	return process.exec("readlink", { path }).ok
+end
+
+-- The texts of an exchange folder by name (none when it is absent), or why it cannot be read: a link in place of the
+-- folder, or an entry that is not a regular file. Names that start with a dot (a file being written) are skipped.
+local function exchangeTexts(dir: string): ({ [string]: string }?, string?)
+	if isLink(dir) then
+		return nil, `{dir} is a link`
+	elseif fs.isFile(dir) then
+		return nil, `{dir} is not a folder`
+	elseif not fs.isDir(dir) then
+		return {}, nil
+	end
+	local out: { [string]: string } = {}
+	for _, name in fs.readDir(dir) do
+		if string.sub(name, 1, 1) ~= "." then
+			local path = `{dir}/{name}`
+			if isLink(path) or not fs.isFile(path) then
+				return nil, `{path} is not a regular file`
+			end
+			out[name] = fs.readFile(path)
+		end
+	end
+	return out, nil
+end
+
+-- The entries of a run's exchange in order, checked against the seal of what the dispatcher wrote, or why not.
+local function exchangeRead(st: State): ({ exchange.Entry }?, string?)
+	local texts, why = exchangeTexts(exchangePath(st))
+	if texts == nil then
+		return nil, why
+	end
+	local names: { string } = {}
+	for name in texts do
+		table.insert(names, name)
+	end
+	local ordered, bad = exchange.order(names)
+	if ordered == nil then
+		return nil, bad
+	end
+	local changed = exchange.changed(st.sealed, texts)
+	if changed then
+		return nil, `the exchange changed since the dispatcher wrote it: {changed}`
+	end
+	local out: { exchange.Entry } = {}
+	for _, name in ordered do
+		local entry, why2 = exchange.parse(name, texts[name])
+		if entry == nil then
+			return nil, why2
+		end
+		table.insert(out, entry)
+	end
+	return out, nil
+end
+
+-- One more message, written whole under its final name (sh.writeReplacing: a fresh temporary file, renamed, never
+-- through a link) and sealed in the state; nil, or why not.
+local function exchangeAdd(st: State, kind: exchange.Kind, body: string, step: string?): string?
+	local dir = exchangePath(st)
+	local entries, why = exchangeRead(st)
+	if entries == nil then
+		return why
+	end
+	local names: { string } = {}
+	for _, e in entries do
+		table.insert(names, exchange.name(e.n, e.kind))
+	end
+	local n, bad = exchange.next(names, kind)
+	if n == nil then
+		return bad
+	end
+	fs.writeDir(dir)
+	local name = exchange.name(n :: number, kind)
+	local text = exchange.render(now(), body, step)
+	sh.writeReplacing(`{dir}/{name}`, text)
+	local sealed = st.sealed or {}
+	sealed[name] = serde.hash("sha256", text)
+	st.sealed = sealed
+	save(st)
+	return nil
+end
+
+-- The questions.md a step left, copied into the exchange once, as asked by `step` (the stop's time is its date);
+-- nil, or why not.
+local function exchangeQuestion(st: State, step: string): string?
+	local q = `{st.dir}/questions.md`
+	if isLink(q) then
+		return `{q} is a link`
+	elseif not fs.isFile(q) then
+		return nil
+	end
+	local entries, why = exchangeRead(st)
+	if entries == nil then
+		return why
+	end
+	local text = fs.readFile(q)
+	local bad = exchange.answerRefusal(text, "the question")
+	if bad then
+		return bad
+	end
+	return exchangeAdd(st, "question", text, step)
+end
+
+-- `--answer <text>` or `--answer-file <path>` of a retry: the answer, nil when none was given, or why it is refused.
+local function readAnswer(opts: { [string]: { string } }): (string?, string?)
+	local text, file = opts["--answer"], opts["--answer-file"]
+	if text and file then
+		return nil, "give --answer or --answer-file, not both"
+	end
+	if (text and #text > 1) or (file and #file > 1) then
+		return nil, "give one answer: --answer or --answer-file once"
+	end
+	local got: string? = nil
+	if text then
+		got = text[1]
+	elseif file then
+		if isLink(file[1]) or not fs.isFile(file[1]) then
+			return nil, `--answer-file {file[1]} is not a regular file`
+		end
+		got = fs.readFile(file[1])
+	end
+	if got then
+		local why = exchange.answerRefusal(got)
+		if why then
+			return nil, if file then `--answer-file {file[1]}: {why}` else `--answer: {why}`
+		end
+	end
+	return got, nil
 end
 
 -- `<dir>/zn <args>`; returns success and captured stdout and stderr.
@@ -627,6 +795,47 @@ local function freshMain(ctx: Ctx): string?
 end
 dispatcher.freshMain = freshMain
 
+-- The issues the pushes added (c0256), or nil and why it cannot be told: the issue files added in `base..sha` (the commits
+-- of that request alone, whatever other sessions landed) for each recorded push whose `sha` reached origin's main, read
+-- freshly from the pinned URL like every other read of main. A check that cannot tell refuses; it never reads as "none".
+function dispatcher.issuesAddedBy(ctx: Ctx, pushes: { Push }): ({ string }?, string?)
+	local out: { string } = {}
+	if #pushes == 0 then
+		return out, nil
+	end
+	local root = ctx.mainRoot()
+	local fresh = freshMain(ctx)
+	if not fresh then
+		return nil, "origin's main could not be fetched"
+	end
+	for _, push in pushes do
+		local ancestor = process.exec(
+			"git",
+			{ "merge-base", "--is-ancestor", push.sha, fresh },
+			{ cwd = root }
+		)
+		if ancestor.code == 0 then
+			local added = process.exec(
+				"git",
+				{ "diff", "--no-renames", "--name-only", "--diff-filter=A", push.base, push.sha },
+				{ cwd = root }
+			)
+			if not added.ok then
+				return nil, `git diff of {string.sub(push.base, 1, 8)}..{string.sub(push.sha, 1, 8)} failed`
+			end
+			for path in string.gmatch(added.stdout, "[^\n]+") do
+				local id, again = string.match(path, "/issues/(%w+)/(%w+)%.md$")
+				if id and id == again and store.isIssueId(id) then
+					table.insert(out, id)
+				end
+			end
+		elseif ancestor.code ~= 1 then
+			return nil, `git merge-base failed (exit {ancestor.code})`
+		end
+	end
+	return out, nil
+end
+
 -- The project roots of the registry at `ref` (lesson zz-arch/guards-trust-only-origin), or nil.
 local function rootsAt(ctx: Ctx, ref: string): { string }?
 	local reg = projects.at(ref, ctx.mainRoot())
@@ -877,6 +1086,29 @@ local function keepBeating(dir: string): () -> ()
 	end
 end
 
+-- A capture whose z-ticket made the issue `target`: the slot `new` is saved as finished (`outcome ok`, "captured as
+-- <id>", no seal) and the run moves to the issue's folder, with the capture's exchange and its seal, saved at once
+-- (review 004 F3). Returns why it cannot, with nothing changed.
+function dispatcher.finishCapture(ctx: Ctx, st: State, stateDir: string, target: string): string?
+	local dest = `{dispatcher.home(ctx)}/{target}`
+	if fs.isDir(`{dest}/{exchange.DIR}`) or isLink(`{dest}/{exchange.DIR}`) then
+		return `{target} already has an exchange`
+	end
+	local slot = table.clone(st)
+	slot.dir, slot.outcome, slot.detail, slot.run = stateDir, "ok", `captured as {target}`, nil
+	slot.sealed = nil -- its exchange moves to the issue below, with the seal
+	save(slot)
+	st.id = target
+	st.dir = dest
+	-- the capture's exchange travels with the item it made (c0256)
+	if fs.isDir(`{stateDir}/{exchange.DIR}`) then
+		fs.writeDir(st.dir)
+		fs.move(`{stateDir}/{exchange.DIR}`, `{st.dir}/{exchange.DIR}`)
+		save(st) -- the moved exchange and its seal are saved together, before the spend is recorded
+	end
+	return nil
+end
+
 function dispatcher.modelStep(
 	ctx: Ctx,
 	st: State,
@@ -889,6 +1121,7 @@ function dispatcher.modelStep(
 	local resolved = dispatcher.resolve(step, id, project, mode)
 	local tries = models.tries(resolved)
 	local stateDir = st.dir
+	local pushesBefore = #st.pushes -- this step's own pushes are the ones after it
 	local cwd: string
 	if step == "zz-review" then
 		-- the author's worktree: the checkout ./zn ran in (zn passes ZN_TOP, and ZN_CWD relative to it, since c0114)
@@ -924,6 +1157,50 @@ function dispatcher.modelStep(
 		end
 		streamDir = store.get(raftId).dir
 	end
+	local exEntries, exWhy = exchangeRead(st)
+	if exEntries == nil then
+		error(
+			`the exchange of this run cannot be used: {exWhy} (to go on without that record: ./zn dispatch retry {id} --forget-exchange sets it aside)`,
+			0
+		)
+	end
+	-- no step starts with an open question (review 003 F2): one left without an answer is closed here, so a
+	-- question a step leaves is always the step's new one
+	local exLastNow = exEntries[#exEntries]
+	if exLastNow and exLastNow.kind == "question" and not fs.isFile(`{stateDir}/questions.md`) then
+		local closed = exchangeAdd(st, "answer", exchange.WITHDRAWN)
+		if closed then
+			error(`the exchange of this run cannot be used: {closed}`, 0)
+		end
+		exEntries = exchangeRead(st) :: { exchange.Entry }
+	end
+	local exNames: { string } = {}
+	local exAsker: string? = nil
+	for _, e in exEntries do
+		table.insert(exNames, exchange.name(e.n, e.kind))
+		if e.kind == "question" then
+			exAsker = e.step
+		end
+	end
+	local exLast = exEntries[#exEntries]
+	local exNoReply = exLast ~= nil
+		and exLast.kind == "answer"
+		and (exLast.body == exchange.NO_REPLY or exLast.body == exchange.WITHDRAWN)
+	local exUnknown = exLast ~= nil and exLast.kind == "answer" and exLast.body == exchange.UNKNOWN_REPLY
+	local exLastStep = if st.history[#st.history] then st.history[#st.history].step else nil
+	-- a nested step also reads the exchange of the run that started it (read only, through the same reader and its seal)
+	local parentNames: { string }? = nil
+	local parentDir = process.env.ZN_DISPATCH_DIR
+	if nested and parentDir and parentDir ~= "" then
+		local parentSt = loadAt("parent", parentDir)
+		local parentEntries = exchangeRead(parentSt)
+		if parentEntries then
+			parentNames = {}
+			for _, e in parentEntries do
+				table.insert(parentNames :: { string }, exchange.name(e.n, e.kind))
+			end
+		end
+	end
 	local prompt = dispatch.prompt({
 		step = step,
 		id = id,
@@ -935,6 +1212,13 @@ function dispatcher.modelStep(
 		streamWorktree = if streamDir then `{ctx.mainRoot()}/.worktree/ws-{id}` else nil,
 		description = opts["--description"] and opts["--description"][1],
 		project = project,
+		exchange = exNames,
+		exchangeAsker = exAsker,
+		exchangeNoReply = exNoReply,
+		exchangeUnknownReply = exUnknown,
+		exchangeLastStep = exLastStep,
+		parentExchange = parentNames,
+		parentStateDir = parentDir,
 	})
 	local attempts: { Attempt } = {}
 	local function refused(spec: models.Spec, why: string)
@@ -1072,9 +1356,19 @@ function dispatcher.modelStep(
 		save(st)
 		local shot = if serving then snapshot(ctx) else nil
 		local function push(sha: string): (boolean, string)
-			local ok, said = broker.push(ctx.mainRoot(), sha, function(ref: string): { string }?
-				return rootsAt(ctx, ref)
-			end, pinOrigin(ctx), runRef(ctx.mainRoot(), "broker"))
+			local ok, said = broker.push(
+				ctx.mainRoot(),
+				sha,
+				function(ref: string): { string }?
+					return rootsAt(ctx, ref)
+				end,
+				pinOrigin(ctx),
+				runRef(ctx.mainRoot(), "broker"),
+				function(base: string, pushing: string)
+					table.insert(st.pushes, { base = base, sha = pushing })
+					save(st)
+				end
+			)
 			if ok then
 				table.insert(st.pushed, sha)
 			end
@@ -1169,19 +1463,60 @@ function dispatcher.modelStep(
 	end
 	-- the item z-ticket made: the one new issue on origin/main
 	local target = id
+	local exProblem: string? = nil
+	-- the issues THIS step's pushes added (the broker recorded each push before making it): other sessions' never count
+	local zMade: { string } = {}
+	local zAsked = fs.isFile(`{stateDir}/questions.md`)
+	local zUnknown: string? = nil -- why what z-ticket made could not be told
 	if step == "z-ticket" and outcome == "ok" then
-		local made: { string } = {}
-		local had: { [string]: boolean } = {}
-		local earlier: { string } = opts["--before"] or {}
-		for _, i in earlier do
-			had[i] = true
+		local mine: { Push } = {}
+		for n = pushesBefore + 1, #st.pushes do
+			table.insert(mine, st.pushes[n])
 		end
-		for _, i in ctx.originIssueIds() do
-			if not had[i] then
-				table.insert(made, i)
-			end
+		local got, why = dispatcher.issuesAddedBy(ctx, mine)
+		if got then
+			zMade = got
+		else
+			zUnknown = why
 		end
-		if #made ~= 1 then
+	end
+	local exAfter, exAfterWhy = exchangeRead(st)
+	if exAfter == nil then
+		exProblem = `the step changed the exchange or left it unreadable: {exAfterWhy}`
+	elseif not (zAsked and #zMade > 0) then -- a z-ticket that made an issue and asked fails below: its question is no message
+		local why = exchangeQuestion(st, step)
+		if why then
+			exProblem = `the exchange cannot take the step's question: {why}`
+		end
+	end
+	if exProblem then
+		outcome = "failed"
+		local why: Attempt = {
+			step = step :: string,
+			cli = "",
+			runtime = "",
+			model = "",
+			outcome = "failed",
+			detail = exProblem,
+			tokens = 0,
+			minutes = 0,
+		}
+		table.insert(attempts, why)
+		table.insert(st.history, why)
+		stdio.ewrite(`dispatch: {exProblem}\n`)
+		-- the question stays to be read, but it is no longer a waiting one: the failure is what stops the chain
+		local qf = `{stateDir}/questions.md`
+		if fs.isFile(qf) or isLink(qf) then
+			fs.move(qf, freeName(stateDir, "questions-refused-", ".md", true))
+		end
+	end
+	if step == "z-ticket" and outcome == "ok" then
+		local made, asked = zMade, zAsked
+		if asked and (zUnknown ~= nil or #made == 0) then
+			-- cannot tell what it made: the question waits, and the retry's own check runs before the answer is taken;
+			-- or a question stop: z-ticket made nothing and asks first; the question waits for the user
+			target = id
+		elseif zUnknown then
 			outcome = "failed"
 			local why: Attempt = {
 				step = step :: string,
@@ -1189,15 +1524,58 @@ function dispatcher.modelStep(
 				runtime = "",
 				model = "",
 				outcome = "failed",
-				detail = `z-ticket made {#made} issues on origin/main, not one`,
+				detail = `could not tell what z-ticket made: {zUnknown}; ./zn dispatch retry new checks again`,
 				tokens = 0,
 				minutes = 0,
 			}
 			table.insert(attempts, why)
+			table.insert(st.history, why)
+			stdio.ewrite(`dispatch: {why.detail}\n`)
+		elseif asked or #made ~= 1 then
+			outcome = "failed"
+			if asked then
+				-- a capture asks before it makes: the issue exists, so the question is set aside as a failure the user can read
+				local qf = `{stateDir}/questions.md`
+				if isLink(qf) then
+					fs.removeFile(qf)
+				else
+					fs.move(qf, freeName(stateDir, "questions-refused-", ".md", true))
+				end
+			end
+			local why: Attempt = {
+				step = step :: string,
+				cli = "",
+				runtime = "",
+				model = "",
+				outcome = "failed",
+				detail = if asked
+					then `z-ticket made {table.concat(made, ", ")} and asked a question: a capture asks before it makes; ./zn dispatch {made[1]} goes on with the issue, or ./zn dispatch retry new --forget-exchange drops the capture`
+					else `z-ticket made {#made} issues, not one`,
+				tokens = 0,
+				minutes = 0,
+			}
+			table.insert(attempts, why)
+			table.insert(st.history, why)
+			stdio.ewrite(`dispatch: {why.detail}\n`)
 		else
 			target = made[1]
-			st.id = target
-			st.dir = `{dispatcher.home(ctx)}/{target}`
+			local why = dispatcher.finishCapture(ctx, st, stateDir, target)
+			if why then
+				outcome = "failed"
+				local fail: Attempt = {
+					step = step :: string,
+					cli = "",
+					runtime = "",
+					model = "",
+					outcome = "failed",
+					detail = `z-ticket made {target}, but {why}: ./zn dispatch {target} goes on with it`,
+					tokens = 0,
+					minutes = 0,
+				}
+				table.insert(attempts, fail)
+				table.insert(st.history, fail)
+				stdio.ewrite(`dispatch: {fail.detail}\n`)
+			end
 		end
 	end
 	-- the dispatcher lands a dispatched review: exactly the one review.md, numbered after the last round of its kind in
@@ -1794,7 +2172,7 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 	return {
 		folder = folder,
 		root = root,
-		id = id,
+		id = if id == "" then "new" else id,
 		kind = kind :: any,
 		where = if o then o.state else "none",
 		status = if o then o.status else "none",
@@ -1981,9 +2359,7 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 				dispatcher.scriptStep(ctx, st, step, if step == "raft-plan" then id else target)
 			else
 				local o2 = table.clone(opts)
-				if step == "z-ticket" then
-					o2["--before"] = ctx.originIssueIds()
-				elseif step == "z-raft" then
+				if step == "z-raft" then
 					o2["--for"] = { id }
 				end
 				local oldDir = st.dir
@@ -2125,7 +2501,12 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 		end
 		return 0
 	elseif first == "retry" then
-		local id = pos[2] or ctx.fail("usage: ./zn dispatch retry <id>")
+		local id = pos[2]
+			or ctx.fail("usage: ./zn dispatch retry <id> [--answer <text> | --answer-file <path>]")
+		local answer, badAnswer = readAnswer(opts)
+		if badAnswer then
+			ctx.fail(badAnswer)
+		end
 		local dir = dirOf(ctx, id)
 		local refusal = lock(dir, true)
 		if refusal then
@@ -2133,6 +2514,114 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 			return dispatch.EXIT.failure
 		end
 		local st = load(ctx, id)
+		local q = `{dir}/questions.md`
+		local waiting = fs.isFile(q)
+		local function refuse(why: string): number
+			unlock(dir)
+			print(`stop: {why}`)
+			return dispatch.EXIT.failure
+		end
+		-- the refusals that need no exchange come before anything is touched, --forget-exchange included
+		if isLink(q) then
+			return refuse(`{q} is a link`)
+		end
+		if opts["--forget-exchange"] then
+			if answer and id == "new" then
+				return refuse("--forget-exchange drops the capture, so --answer has nothing to answer")
+			elseif answer and not waiting then
+				return refuse(
+					"--forget-exchange sets the exchange aside, so --answer needs a questions.md that waits"
+				)
+			end
+			-- the user's way past a record they will not use (a step rewrote it, a file is damaged): set aside, never deleted
+			local ex = exchangePath(st)
+			if isLink(ex) or fs.isDir(ex) or fs.isFile(ex) then
+				fs.move(ex, freeName(st.dir, `{exchange.DIR}-forgotten-{os.time()}`, "", false))
+			end
+			st.sealed, st.answering = nil, nil
+			if id == "new" then
+				st.pushes = {} -- the capture is dropped, so the issues it made are no longer its to account for
+			end
+			save(st)
+		end
+		local entries, readWhy = exchangeRead(st)
+		if entries == nil then
+			return refuse(
+				`the exchange of {id} cannot be used: {readWhy} (to go on without that record: ./zn dispatch retry {id} --forget-exchange sets it aside)`
+			)
+		end
+		local last = entries[#entries]
+		local unanswered = last ~= nil and last.kind == "question"
+		-- the words of a capture that `dispatch new` kept, else the reset of a capture that cannot be retried
+		local ask: string? = nil
+		if id == "new" then
+			if entries[1] and entries[1].kind == "ask" then
+				ask = entries[1].body
+				-- z-ticket may have landed its issue before it died: retrying blind would capture twice. Only the issues
+				-- this capture's own pushes added count (the broker recorded each push before making it): another
+				-- session's issue never blocks it (review 003 F1, review 004 F2)
+				local made, unknown = dispatcher.issuesAddedBy(ctx, st.pushes)
+				if made == nil then
+					return refuse(
+						`cannot tell whether this capture made an issue: {unknown}; nothing was changed, run the retry again`
+					)
+				elseif #made == 1 then
+					-- the capture made its issue and died or asked: the issue is adopted, as when the step succeeds, so the
+					-- capture's whole conversation belongs to it (review 006 F1)
+					st.outcome, st.detail, st.run = "ok", `captured as {made[1]}`, nil
+					local why = dispatcher.finishCapture(ctx, st, dir, made[1])
+					if why then
+						return refuse(
+							`{made[1]} was made by this capture, but {why}: ./zn dispatch {made[1]} goes on with it`
+						)
+					end
+					unlock(dir)
+					print(
+						`dispatch: {made[1]} was made by this capture: its conversation now belongs to it{if answer
+							then " (your --answer was not taken: nothing waited for it)"
+							else ""}. ./zn dispatch {made[1]} goes on with it`
+					)
+					return 0
+				elseif #made > 1 then
+					return refuse(
+						`{table.concat(made, ", ")} were made by this capture: ./zn dispatch retry new --forget-exchange drops the capture's words, or choose the issue to go on with: ./zn dispatch <id>`
+					)
+				end
+			else
+				if answer then
+					return refuse("no capture waits: --answer has nothing to answer")
+				end
+				if waiting then
+					fs.move(q, freeName(dir, "answered-", ".md", true))
+				end
+				st.outcome, st.detail, st.run = nil, nil, nil
+				save(st)
+				unlock(dir)
+				print(
+					'dispatch: no capture waits (it finished, failed or began before the exchange): cleared. Start again with ./zn dispatch new "<description>"'
+				)
+				return 0
+			end
+		end
+		-- a flag answers a waiting question, or the exchange's last unanswered one when questions.md is gone
+		if answer and not waiting and not unanswered then
+			return refuse(`no question waits for an answer in {dir}: --answer has nothing to answer`)
+		end
+		-- the recorded half state: an answer was written for exactly this questions.md and the retry died before it moved
+		local qtext: string? = if waiting then fs.readFile(q) else nil
+		local half = qtext ~= nil
+			and st.answering ~= nil
+			and st.answering == serde.hash("sha256", qtext :: string)
+		if not half then
+			st.answering = nil
+		elseif answer then
+			return refuse(
+				`an answer is already recorded ({exchange.name(
+					(last :: exchange.Entry).n,
+					(last :: exchange.Entry).kind
+				)}); run retry without --answer`
+			)
+		end
 		-- every run that starts a step starts through the same guards (code review 001 F2): origin's URL, the
 		-- watermark and its mirror, then main vetted since it; `top` (`<id>`, `new`, `<step> <id>`) and `retry` are
 		-- the only two entry points that run steps (`vet`, `status` and `stop` start none)
@@ -2145,13 +2634,66 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 			return dispatch.EXIT.tripwire
 		end
 		flush(ctx, st)
-		local q = `{dir}/questions.md`
-		if fs.isFile(q) then
-			local n = 1
-			while fs.isFile(`{dir}/answered-{n}.md`) do
-				n += 1
+		if waiting or (answer and unanswered) then
+			if not half then
+				local askedBy = st.step
+				if askedBy == nil then
+					return refuse(`{id} has no recorded step to attribute the question to`)
+				end
+				local copiedNow = false
+				if waiting and not unanswered then
+					local asked = exchangeQuestion(st, askedBy)
+					if asked then
+						return refuse(`the exchange of {id} cannot take the question: {asked}`)
+					end
+					copiedNow = true
+				end
+				local now2 = exchangeRead(st)
+				local lastQ = if now2 then now2[#now2] else nil
+				if lastQ == nil or lastQ.kind ~= "question" then
+					return refuse(`the exchange of {id} holds no question to answer`)
+				end
+				local body: string
+				if waiting then
+					local text = qtext :: string
+					local isBlank = exchange.normal(text) == ""
+					local edited = not copiedNow
+						and not isBlank
+						and exchange.normal(text) ~= exchange.normal(lastQ.body)
+					local way =
+						`(restore it from {exchangePath(st)}/{exchange.name(lastQ.n, lastQ.kind)}, or delete it and use --answer)`
+					if isBlank and not answer and not copiedNow then
+						return refuse(`questions.md is empty {way}`)
+					elseif answer and edited then
+						return refuse(`questions.md was edited and --answer was given: use one of them {way}`)
+					elseif answer then
+						body = answer
+					elseif edited then
+						local why = exchange.answerRefusal(text, "questions.md as edited")
+						if why then
+							return refuse(`{why} {way}`)
+						end
+						body = text
+					elseif copiedNow then
+						body = exchange.UNKNOWN_REPLY
+					else
+						body = exchange.NO_REPLY
+					end
+					st.answering = serde.hash("sha256", text)
+				else
+					body = answer :: string
+				end
+				-- the answer is written first, with the marker in the same save: a retry that dies before the move is finished next time
+				local added = exchangeAdd(st, "answer", body)
+				if added then
+					return refuse(`the exchange of {id} cannot take the answer: {added}`)
+				end
 			end
-			fs.move(q, `{dir}/answered-{n}.md`)
+			if waiting then
+				fs.move(q, freeName(dir, "answered-", ".md", true))
+				st.answering = nil
+				save(st)
+			end
 		end
 		local step, mode = st.step, st.mode
 		st.outcome, st.detail = nil, nil
@@ -2163,6 +2705,10 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 				o2["--mode"] = { st.reviewMode :: string }
 			end
 			code = dispatcher.oneStep(ctx, step :: string, id, o2, st)
+		elseif ask then
+			local o3 = table.clone(opts)
+			o3["--description"] = { ask }
+			code = dispatcher.chain(ctx, "", o3, st)
 		else
 			code = dispatcher.chain(ctx, id, opts, st)
 		end
@@ -2173,6 +2719,41 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 		local o2 = table.clone(opts)
 		o2["--description"] = { words }
 		return dispatcher.top(ctx, "", o2, function(st: State): number
+			if not opts["--dry-run"] then
+				if fs.isFile(`{st.dir}/questions.md`) then
+					print(
+						"dispatch: a capture waits for your answer; these words were not taken (./zn dispatch retry new)"
+					)
+				else
+					local entries = exchangeRead(st)
+					if
+						(st.outcome == "failed" or st.outcome == "lost")
+						and entries
+						and entries[1]
+						and entries[1].kind == "ask"
+					then
+						print(
+							"stop: a capture failed and still has its words: ./zn dispatch retry new re-runs it, or ./zn dispatch retry new --forget-exchange drops it"
+						)
+						return dispatch.EXIT.failure
+					end
+					-- a finished or abandoned capture's exchange is set aside, never deleted
+					local old = exchangePath(st)
+					if fs.isDir(old) and #fs.readDir(old) > 0 then
+						fs.move(old, freeName(st.dir, `{exchange.DIR}-{os.time()}`, "", false))
+						st.sealed = nil
+						save(st) -- the reset seal is saved with the move (review 004 F3)
+					end
+					st.pushes = {}
+					local why = exchangeAdd(st, "ask", words)
+					if why then
+						print(
+							`stop: the exchange cannot take your words: {why} (./zn dispatch retry new --forget-exchange sets that record aside)`
+						)
+						return dispatch.EXIT.failure
+					end
+				end
+			end
 			return dispatcher.chain(ctx, "", o2, st)
 		end)
 	elseif
@@ -2271,12 +2852,27 @@ function dispatcher.oneStep(
 		end
 	end
 	local function body(st: State): number
+		if s.kind == "model" and fs.isFile(`{st.dir}/questions.md`) then
+			print(
+				`stop: a question waits in {st.dir}/questions.md: answer it with ./zn dispatch retry {id} --answer "<your answer>" (or --answer-file <path>) first`
+			)
+			return dispatch.EXIT.user
+		end
 		st.mode = "step"
 		local outcome = if s.kind == "script"
 			then dispatcher.scriptStep(ctx, st, step, id)
 			else dispatcher.modelStep(ctx, st, step, id, opts)
 		if fs.isFile(`{st.dir}/questions.md`) then
-			print(`stop: needs the user: answer {st.dir}/questions.md, then ./zn dispatch retry {id}`)
+			if nested then
+				-- a step the dispatcher started for another step cannot ask the user itself: its author asks for it
+				print(
+					`stop: this step needs the user, and only the step that started it can ask: write these questions ({st.dir}/questions.md) into your own $ZN_DISPATCH_DIR/questions.md and stop; the answer reaches you when you are re-run`
+				)
+			else
+				print(
+					`stop: needs the user: read {st.dir}/questions.md, then ./zn dispatch retry {id} --answer "<your answer>" (or --answer-file <path>, or write your answer into questions.md)`
+				)
+			end
 			return dispatch.EXIT.user
 		end
 		if outcome == "tripwire" then

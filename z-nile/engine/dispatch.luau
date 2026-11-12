@@ -111,6 +111,13 @@ export type PromptInput = {
 	streamWorktree: string?, -- zz-review in stream mode: the stream's worktree (ws-<issue>), read only
 	description: string?, -- z-ticket: the user's words
 	project: string?, -- z-ticket: the project to capture into
+	exchange: { string }?, -- the run's exchange files, in order (c0256): a step reads them first
+	exchangeAsker: string?, -- the step that asked the latest question
+	exchangeNoReply: boolean?, -- the latest answer says no reply was given
+	exchangeUnknownReply: boolean?, -- the latest answer says the question was copied at the retry
+	exchangeLastStep: string?, -- the step the item's last attempt ran
+	parentExchange: { string }?, -- a nested step: the files of the run that started it, read only
+	parentStateDir: string?,
 }
 
 -- The prompt of a model step. It names the skill's file, which every CLI reads itself; no skill text,
@@ -141,7 +148,7 @@ function dispatch.prompt(p: PromptInput): string
 	else
 		what = `Read \`{p.skillPath}\` and follow it for {p.id}.`
 	end
-	local lines = {
+	local lines: { string } = {
 		`You are running the z-nile step {p.step}{if p.id ~= "" then ` for {p.id}` else ""}, headless and unattended, under ./zn dispatch.`,
 		what,
 		"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
@@ -150,6 +157,42 @@ function dispatch.prompt(p: PromptInput): string
 		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse.",
 		"Do not pass --time or --tokens. The dispatcher records this session's wall, CPU, tokens and model.",
 	}
+	if p.exchange and #p.exchange > 0 then
+		local files = table.concat(p.exchange :: { string }, ", ")
+		local format =
+			`Each starts with \`date: <UTC time>\` (a question also has a \`step:\` line naming the step that asked) and a blank line; the rest is the message exactly as it was written. An \`-ask\` is the user's own request, a \`-question\` is what a step stopped to ask (a restatement is a question), and an \`-answer\` is the user's reply to the question before it (an approval or a correction).`
+		local last = (p.exchange :: { string })[#(p.exchange :: { string })]
+		local lastIsAnswer = string.find(last, "%-answer%.md$") ~= nil
+		local text: string
+		if p.exchangeAsker == p.step and p.exchangeLastStep == p.step and lastIsAnswer then
+			text = `This is a re-run: you stopped this run with a question and the user has been asked. Before you start, read every file in \`{p.stateDir}/exchange/\`, in this order: {files}. {format} `
+				.. (
+					if p.exchangeNoReply
+						then "The last file says the user gave no reply: your question stands unanswered, so decide whether you can go on without it, and if not write questions.md again and stop."
+						elseif
+							p.exchangeUnknownReply
+						then "The last file says your question was copied when the user retried: read the question file. Text the user added to your question is their answer. If it holds only your question, the user gave no reply and your question stands, so decide whether you can go on without it, and if not write questions.md again and stop."
+						else "The last file is an answer: it replies to your latest question, so do not ask again what it settles."
+				)
+		elseif p.exchangeAsker == p.step and p.exchangeLastStep == p.step then
+			text =
+				`This is a re-run: you stopped this run with a question. Before you start, read every file in \`{p.stateDir}/exchange/\`, in this order: {files}. {format} The last file is a question: it has no reply.`
+		else
+			text =
+				`Earlier steps of this run have already exchanged messages with the user. Before you start, read every file in \`{p.stateDir}/exchange/\`, in this order: {files}. {format} They settle those steps' questions, not yours: an approval there is not an answer to a question you must ask the user.`
+		end
+		table.insert(lines, 4, text)
+	end
+	if p.parentExchange and #p.parentExchange > 0 then
+		table.insert(
+			lines,
+			4,
+			`The run that started you has exchanged messages with the user too: read every file in \`{p.parentStateDir}/exchange/\`, in this order: {table.concat(
+				p.parentExchange :: { string },
+				", "
+			)}. An answer there may settle a question you asked before. You only read them.`
+		)
+	end
 	return table.concat(lines, "\n") .. "\n"
 end
 
@@ -281,7 +324,9 @@ function dispatch.next(f: Facts): Action
 	if f.questions then
 		return stop(
 			dispatch.EXIT.user,
-			"needs the user: answer questions.md, then ./zn dispatch retry " .. f.id
+			"needs the user: read questions.md, then ./zn dispatch retry "
+				.. f.id
+				.. ' --answer "<your answer>" (or --answer-file <path>, or write your answer into questions.md)'
 		)
 	end
 	if #f.openHuman > 0 then

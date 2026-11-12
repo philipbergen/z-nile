@@ -100,7 +100,8 @@ function broker.push(
 	sha: string,
 	roots: (ref: string) -> { string }?,
 	origin: Origin?,
-	ref: string? -- the run's own fetch ref (review 005 F1); a spec's single broker may use the default
+	ref: string?, -- the run's own fetch ref (review 005 F1); a spec's single broker may use the default
+	intent: ((base: string, sha: string) -> ())? -- called with main as it fetched it and the commit, just before the push (c0256)
 ): (boolean, string)
 	local function git(args: { string }): (boolean, string)
 		local r = process.exec("git", args, { cwd = root })
@@ -128,6 +129,9 @@ function broker.push(
 	if why then
 		return false,
 			`the dispatcher pushes only tracker state to main, commit by commit (squash it and ask again): {why}`
+	end
+	if intent then
+		intent(fresh, sha) -- the commits base..sha are this request's alone: the caller records them before they can land
 	end
 	local r = process.exec("git", { "push", "-q", to, `{sha}:refs/heads/main` }, { cwd = root })
 	if r.ok then
