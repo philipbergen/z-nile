@@ -1,29 +1,29 @@
 diff --git a/z-nile/README.md b/z-nile/README.md
-index 5b189145..f6b5bcb9 100644
+index 06065836..a69533ef 100644
 --- a/z-nile/README.md
 +++ b/z-nile/README.md
 @@ -114,7 +114,7 @@ The general model (*captured* (c0248); today a raft is one branch and one PR): a
  - **The skills.** z-nile's skills live in `z-nile/skills/`, and a project's own in `<project>/skills/`. `.claude/skills/<name>` is a committed relative link to each, written by `./zn skills` and checked by `./zn skills --check` in the gate. The `z-` skills are the pipeline, in the order above; the `zz-` skills are called only from inside a step. Both prefixes are z-nile's: a project's skills are named `<project>-…`.
  - **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the watermark, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. The watermark file is shared by every dispatcher of the repository and only moves forward. The rules are in the zz-rules skill, Dispatch.
  - **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
--- **Provenance.** `<ID>/provenance.md` records who decided what that git cannot tell (append-only rows, `./zn record`, checked by `./zn audit`; zz-rules skill, Provenance); the engine's merges of `origin/main` unite two writers of it, and zz-rules, Provenance, says how to merge when `./zn sync` stops, and names the actor options (`--actor`, `ZN_ACTOR`) and the session variables.
-+- **Provenance.** `<ID>/provenance.md` records who decided what that git cannot tell (append-only rows, `./zn record`, checked by `./zn audit`; zz-rules skill, Provenance); the engine's merges of `origin/main` unite two writers of it, and zz-rules, Provenance, says how to merge when `./zn sync` stops, and names the actor options (`--actor`, `ZN_ACTOR`) and the session variables; `status <id> new`, `new raft`, `fold`, `recombine` and `done` write the `unblocked`, `rafted` and `delivered` rows.
+-- **Provenance.** `<ID>/provenance.md` records who decided what that git cannot tell (append-only rows, `./zn provenance record`, checked by `./zn audit`; zz-rules skill, Provenance); the engine's merges of `origin/main` unite two writers of it, and zz-rules, Provenance, says how to merge when `./zn sync` stops, and names the actor options (`--actor`, `ZN_ACTOR`) and the session variables.
++- **Provenance.** `<ID>/provenance.md` records who decided what that git cannot tell (append-only rows, `./zn provenance record`, checked by `./zn audit`; zz-rules skill, Provenance); the engine's merges of `origin/main` unite two writers of it, and zz-rules, Provenance, says how to merge when `./zn sync` stops, and names the actor options (`--actor`, `ZN_ACTOR`) and the session variables; `status <id> new`, `new raft`, `fold`, `recombine` and `done` write the `unblocked`, `rafted` and `delivered` rows.
  - **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.
  
  ## Skills
 diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
-index 76fd5265..184b919f 100644
+index ec28cef7..2b6119d4 100644
 --- a/z-nile/engine/dispatcher.luau
 +++ b/z-nile/engine/dispatcher.luau
-@@ -21,6 +21,7 @@ local fs = require("@lune/fs")
- local models = require("./models")
+@@ -25,6 +25,7 @@ local modelstep = require("./modelstep")
+ local openlist = require("./openlist")
  local process = require("@lune/process")
  local projects = require("./projects")
 +local provenance = require("./provenance")
  local raftcheck = require("./raftcheck")
  local runner = require("./runner")
  local serde = require("@lune/serde")
-@@ -978,6 +979,9 @@ function dispatcher.modelStep(
+@@ -1064,6 +1065,9 @@ function dispatcher.modelStep(
  		for k, v in extra do
  			env[k] = v
  		end
@@ -33,7 +33,7 @@ index 76fd5265..184b919f 100644
  		local t0 = os.time()
  		print(
  			`dispatch: {step} {id} on {spec.cli} ({spec.runtime}, {models.id(spec)}, max_tokens {spec.maxTokens})`
-@@ -1173,8 +1177,19 @@ function dispatcher.scriptStep(ctx: Ctx, st: State, step: string, id: string, ex
+@@ -1282,8 +1286,19 @@ function dispatcher.scriptStep(ctx: Ctx, st: State, step: string, id: string, ex
  	local dir = if where == "main" then ctx.mainRoot() else worktree(ctx, `raft-{id}`)
  	print(`dispatch: {step} {id}: {table.concat(argv, " ")} (in {dir})`)
  	local args = table.move(argv, 2, #argv, 1, {})
@@ -55,7 +55,16 @@ index 76fd5265..184b919f 100644
  	local outcome = if r.ok then "ok" else "failed"
  	st.step, st.cli, st.runtime, st.model, st.worktree, st.outcome = step, nil, nil, nil, dir, outcome
  	st.detail = if r.ok then "done" else `exit {r.code}`
-@@ -1410,6 +1425,10 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
+@@ -1453,7 +1468,7 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
+ 		for _, path in paths do
+ 			local pid = trackerstate.itemOf(path, roots :: { string })
+ 			if pid and movedIds[pid :: string] then
+-				return `it carries {path}, but origin's main changed {movedIds[pid :: string]} since this PR was cut: rebase it onto main`
++				return `it carries {path}, but origin's main changed {movedIds[pid :: string]} since this PR was cut: run ./zn sync in its worktree (it merges main and unites a provenance.md both sides appended), then push`
+ 			end
+ 		end
+ 		-- the rafts this PR carries, keyed by root and id (code review 004 F2: an id is per root, and an issue may
+@@ -1519,6 +1534,10 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
  		local function shapeOf(path: string): string?
  			local pid, _, rel = trackerstate.itemOf(path, roots :: { string })
  			if pid and store.isRaftId(pid :: string) then
@@ -66,7 +75,7 @@ index 76fd5265..184b919f 100644
  				if rafts[`{rootOf(path) :: string}/{pid}`] == "new" and rel == "check.sh" then
  					local r = rootOf(path) :: string
  					local reg = projects.at(fresh, root)
-@@ -1439,6 +1458,23 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
+@@ -1548,6 +1567,31 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
  					return `it adds issue {pid} ({path}): a rafting PR adds no issue`
  				elseif life ~= "" then
  					return `it changes {path}, an issue in {string.sub(life, 1, -2)}/: a rafting PR changes only a backlog issue's raft: line`
@@ -82,7 +91,15 @@ index 76fd5265..184b919f 100644
 +					if not new then
 +						return `it removes {path}: a rafting PR only appends rafted rows to a record`
 +					end
-+					local why = provenance.publishProblem(old, new :: string, pid :: string, { "rafted" })
++					-- the record follows the issue's own `raft:` line: the PR moves it to a raft it carries, and the rows name it
++					local headDoc = show(ref, doc)
++					local baseDoc = show(base, doc)
++					local became = if headDoc then raftLine(headDoc :: string) else nil
++					local was = if baseDoc then raftLine(baseDoc :: string) else nil
++					if became == nil or became == "" or became == was then
++						return `it changes {path}, but not {pid}'s raft: line: a rafted row rides the PR that rafts the issue`
++					end
++					local why = provenance.raftedProblem(old, new :: string, pid :: string, became)
 +					if why then
 +						return `it changes {path}: {why}`
 +					end
@@ -91,26 +108,50 @@ index 76fd5265..184b919f 100644
  					return `it changes {path}: a rafting PR changes only a backlog issue's raft: line`
  				end
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 5541fa1d..5b8f2cbb 100644
+index 236e630a..42090761 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
-@@ -82,6 +82,8 @@ usage: ./zn <command> ...
-          [--note <text>]                        append one phase's rows to origin/main; changes nothing here
-   record <id> unblocked|confirmed|ranked [--actor <actor>] [--detail <k=v>]
+@@ -104,6 +104,8 @@ usage: ./zn <command> ...
+                                                 write one measured row (the tool's own; not for typed numbers)
+   provenance record <id> unblocked|confirmed|ranked [--actor <actor>] [--detail <k=v>]
                                                  append one row to the item's provenance.md on origin/main (c0263)
 +                                                status <id> new, new raft, fold, recombine, new issue --raft and done
 +                                                also take --actor and write their lifecycle row (c0282)
    dispatch <id> [--dry-run]                     run the chain on an item from its tracker state (ticket, design, raft,
                                                  ready, run), stopping at a merge gate, questions.md or a failure
    dispatch new "<description>" [--project <name>] [--dry-run]
-@@ -674,6 +676,44 @@ local function liveActor(opts: { [string]: { string } }?): string
- 	return actor :: string
+@@ -369,6 +371,80 @@ local function mergeOrigin()
+ 	end
  end
  
 +-- c0282: who a lifecycle row names, and the dispatcher step a script step runs under (`ZN_VIA`): both read before the
 +-- command changes anything, so a bad `--actor`, `ZN_ACTOR` or `ZN_VIA` refuses it whole.
-+local function lifecycleWho(opts: { [string]: { string } }?): (string, string?)
-+	local actor = liveActor(opts)
++local lifecycle = {} -- one local for the helpers: main.luau is at Luau's limit of 200 locals
++
++-- The live actor of a command that records: --actor, then ZN_ACTOR, then an agent-session hint, then the git name
++-- (c0263's rule; `./zn provenance record` and every lifecycle command read it here).
++function lifecycle.actor(opts: { [string]: { string } }?): string
++	local flagList = if opts then opts["--actor"] else nil
++	local ident = sh.run("git", { "var", "GIT_AUTHOR_IDENT" })
++	local name = if ident.ok then string.match(ident.stdout, "^(.-) <") else nil
++	local env: { [string]: string? } = { CLAUDE_EFFORT = process.env.CLAUDE_EFFORT }
++	for _, marker in provenance.AGENT_MARKERS do
++		env[marker] = process.env[marker]
++	end
++	local actor, why = provenance.resolve(
++		if flagList then flagList[1] else nil,
++		process.env.ZN_ACTOR,
++		provenance.hint(env),
++		name
++	)
++	if not actor then
++		fail(why or "not an actor")
++	end
++	return actor :: string
++end
++
++function lifecycle.who(opts: { [string]: { string } }?): (string, string?)
++	local actor = lifecycle.actor(opts)
 +	if not provenance.isLive(actor) then
 +		fail("no git identity to record: set user.name or pass --actor")
 +	end
@@ -121,14 +162,26 @@ index 5541fa1d..5b8f2cbb 100644
 +	return actor, via
 +end
 +
-+local function recordNow(): string
++function lifecycle.now(): string
 +	return os.date("!%Y-%m-%d %H:%M", os.time()) :: string
 +end
 +
 +-- c0282: appends one row to the record in `dir` (an item's folder in this worktree) and stages it, so the commit the
 +-- caller makes (a pull request carries it) holds the row with the change it records. The record is created when the
 +-- folder has none.
-+local function appendRow(dir: string, id: string, event: string, actor: string, detail: string)
++-- c0282: refuses a member whose record does not parse, naming the file, before the command publishes or moves anything
++-- (appending would refuse it later, after a claim was published or the folders moved).
++function lifecycle.check(dir: string)
++	local path = `{dir}/provenance.md`
++	if fs.isFile(path) then
++		local rows, why = provenance.parse(fs.readFile(path))
++		if not rows then
++			fail(`{path}: {why}`)
++		end
++	end
++end
++
++function lifecycle.append(dir: string, id: string, event: string, actor: string, detail: string)
 +	local path = `{dir}/provenance.md`
 +	local text, why = provenance.record(
 +		if fs.isFile(path) then fs.readFile(path) else nil,
@@ -136,10 +189,10 @@ index 5541fa1d..5b8f2cbb 100644
 +		event,
 +		actor,
 +		detail,
-+		recordNow()
++		lifecycle.now()
 +	)
 +	if not text then
-+		fail(`{path}: {why or "not a record"}`)
++		error(`{path}: {why or "not a record"}`, 0)
 +	end
 +	fs.writeFile(path, text :: string)
 +	sh.git({ "add", path })
@@ -148,72 +201,78 @@ index 5541fa1d..5b8f2cbb 100644
  -- Real entropy, folded into 31 bits: Lune's math.randomseed saturates larger seeds, so seeding with
  -- os.time() plus os.clock() (seconds since boot) gave every process the same stamp.
  local function entropy(): number
-@@ -1428,6 +1468,11 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1149,6 +1225,11 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  			end
  		end
  		local state: store.State = if raftId then "active" else "backlog"
 +		-- c0282: an emergent issue is rafted from the start, so its `rafted` row names who made it
 +		local actor: string?, via: string? = nil, nil
 +		if raftId then
-+			actor, via = lifecycleWho(opts)
++			actor, via = lifecycle.who(opts)
 +		end
  		if state == "backlog" and publishing() then
  			local chosen = ""
  			refuseStale()
-@@ -1507,6 +1552,9 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
- 		fs.writeFile(`{dir}/{id}.md`, withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts))
+@@ -1231,6 +1312,9 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+ 		)
  		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/issue/check.sh`, vars))
  		sh.must("chmod", { "+x", `{dir}/check.sh` })
 +		if raftId and actor then
-+			appendRow(dir, id, "rafted", actor, provenance.raftDetail(raftId, via))
++			lifecycle.append(dir, id, "rafted", actor, provenance.raftDetail(raftId, via))
 +		end
  		print(`{dir}/{id}.md`)
  	elseif what == "raft" then
  		local rtype, slug = pos[2], pos[3]
-@@ -1520,6 +1568,8 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1244,6 +1328,14 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
  			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
  		end
 +		-- c0282: each member gets a `rafted` row; who is read before anything is published
-+		local actor, via = lifecycleWho(opts)
++		local actor, via = lifecycle.who(opts)
++		for i = 4, #pos do
++			local member = store.find(pos[i])
++			if member then
++				lifecycle.check(member.dir)
++			end
++		end
  		if publishing() then
  			if sh.git({ "status", "--porcelain" }) ~= "" then
  				fail(
-@@ -1653,6 +1703,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1377,6 +1469,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  				local item = store.get(id)
  				store.setFront(item.doc, "raft", chosen)
  				sh.git({ "add", item.doc })
-+				appendRow(item.dir, id, "rafted", actor, provenance.raftDetail(chosen, via))
++				lifecycle.append(item.dir, id, "rafted", actor, provenance.raftDetail(chosen, via))
  				if statusLib.effective(frontOf(fs.readFile(item.doc)), item.state) == "prepared" then
  					table.insert(grouped, id)
  				end
-@@ -1702,6 +1753,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
+@@ -1426,6 +1519,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
  		for _, m in members do
  			table.insert(ids, m.id)
  			store.setFront(m.doc, "raft", id)
-+			appendRow(m.dir, m.id, "rafted", actor, provenance.raftDetail(id, via))
++			lifecycle.append(m.dir, m.id, "rafted", actor, provenance.raftDetail(id, via))
  		end
  		local vars = {
  			ID = id,
-@@ -1742,7 +1794,9 @@ end
+@@ -1496,7 +1590,9 @@ local function designOpen(item: store.Item): string?
+ 	return openlist.problem(review, refute, fs.readFile(item.doc))
+ end
  
- -- Publishes `to` for `id` (and, for a raft, its members) on origin/main and brings it into this checkout. Shared by
- -- `status` and by `stop`'s give-back of a legacy-started raft.
 -local function setStatus(id: string, to: string)
 +local function setStatus(id: string, to: string, opts: { [string]: { string } }?)
 +	-- c0282: a give-back (`status <id> new`) names who unblocked each issue it changes
-+	local unblocker = if to == "new" then (lifecycleWho(opts)) else nil
++	local unblocker = if to == "new" then (lifecycle.who(opts)) else nil
  	local moved: { { id: string, from: string } } = {}
  	local carried = false
  	refuseStale()
-@@ -1851,6 +1905,15 @@ local function setStatus(id: string, to: string)
+@@ -1620,6 +1716,15 @@ local function setStatus(id: string, to: string)
  			end
  			table.insert(moved, { id = t, from = cur :: string })
  			table.insert(changes, { path = tp, content = withFront(tt, "status", value) })
 +			if unblocker and not store.isRaftId(t) then
 +				-- c0282: the row is built from origin's file, in the same published commit as the status line
 +				local rec = string.gsub(tp, "[^/]+$", "provenance.md")
-+				local row, why = provenance.record(read(rec), t, "unblocked", unblocker, "", recordNow())
++				local row, why = provenance.record(read(rec), t, "unblocked", unblocker, "", lifecycle.now())
 +				if not row then
 +					return `{rec}: {why or "not a record"}`
 +				end
@@ -222,7 +281,7 @@ index 5541fa1d..5b8f2cbb 100644
  		end
  		-- c0116 (review 002 F1): a member redesigned on origin/main since z-raft grouped it (a claim and a landing inside
  		-- the rafting window) leaves the rafting: its coherence review read the old design
-@@ -1931,7 +1994,7 @@ end
+@@ -1700,7 +1805,7 @@ end
  -- A move of a raft moves its members too. Published moves are pushed at once; the move to
  -- `prepared` is carried by the prep PR and only edits the local documents. A readied item (in active/) is not
  -- moved here: `stop` gives it back.
@@ -231,7 +290,7 @@ index 5541fa1d..5b8f2cbb 100644
  	local id, to = pos[1], pos[2]
  	if to then
  		refuseInMainCheckout("status")
-@@ -1973,7 +2036,7 @@ function cmd.status(pos: { string })
+@@ -1742,7 +1847,7 @@ function cmd.status(pos: { string })
  			"only ./zn start or ./zn ready claims active: it checks the tree, the designs and the dependencies first"
  		)
  	end
@@ -240,7 +299,7 @@ index 5541fa1d..5b8f2cbb 100644
  end
  
  -- c0116 (z-raft): an issue's raft is its own `raft:` line, written in a worktree and carried by the rafting PR, so two
-@@ -2029,11 +2092,12 @@ end
+@@ -1798,11 +1903,12 @@ end
  -- (its status only), then writes each issue's `raft:` and the raft's `issues:` here and commits; z-raft then writes the
  -- raft's design and runs the carried `status <R-id> prepared`. A raft this checkout already claimed is not claimed
  -- again.
@@ -250,11 +309,19 @@ index 5541fa1d..5b8f2cbb 100644
  	if not raftId or not store.isRaftId(raftId) or #pos < 2 then
  		fail("usage: fold <R-id> <issue>...")
  	end
-+	local actor, via = lifecycleWho(opts)
++	local actor, via = lifecycle.who(opts)
  	raftingStart("fold")
  	local raft = store.get(raftId)
  	if raft.kind ~= "raft" or raft.state ~= "backlog" then
-@@ -2108,9 +2172,11 @@ function cmd.fold(pos: { string })
+@@ -1821,6 +1927,7 @@ function cmd.fold(pos: { string })
+ 	end
+ 	for _, id in ids do
+ 		local issue = store.get(id)
++		lifecycle.check(issue.dir)
+ 		local owner = store.readFront(issue.doc).raft or ""
+ 		if owner ~= "" then
+ 			fail(`{id} already belongs to {owner}`)
+@@ -1877,9 +1984,11 @@ function cmd.fold(pos: { string })
  	raft = store.get(raftId)
  	local list = store.idList(store.readFront(raft.doc).issues)
  	for _, id in ids do
@@ -263,11 +330,11 @@ index 5541fa1d..5b8f2cbb 100644
 +		local doc = item.doc
  		store.setFront(doc, "raft", raftId)
  		sh.git({ "add", doc })
-+		appendRow(item.dir, id, "rafted", actor, provenance.raftDetail(raftId, via))
++		lifecycle.append(item.dir, id, "rafted", actor, provenance.raftDetail(raftId, via))
  		if not table.find(list, id) then
  			table.insert(list, id)
  		end
-@@ -2236,11 +2302,12 @@ end
+@@ -2005,11 +2114,12 @@ end
  -- carried `status <keeper> prepared` sees the other raft as the same claim. The moves are written here and committed;
  -- the other raft is retired only when it ends up empty: its folder moves to <root>/rafts/retired/ with `retired: <keeper>`
  -- in this branch, so in the rafting PR.
@@ -277,11 +344,19 @@ index 5541fa1d..5b8f2cbb 100644
  	if not (keeperId and otherId and store.isRaftId(keeperId) and store.isRaftId(otherId)) then
  		fail("usage: recombine <keeper R-id> <other R-id> [<issue>...]")
  	end
-+	local actor, via = lifecycleWho(opts)
++	local actor, via = lifecycle.who(opts)
  	if keeperId == otherId then
  		fail("recombine needs two different rafts")
  	end
-@@ -2340,9 +2407,11 @@ function cmd.recombine(pos: { string })
+@@ -2059,6 +2169,7 @@ function cmd.recombine(pos: { string })
+ 		table.insert(all, store.get(id))
+ 	end
+ 	for _, m in all do
++		lifecycle.check(m.dir)
+ 		refuseUnraftable(m, keeper)
+ 		if store.readFront(m.doc).solo == "true" and #all > 1 then
+ 			fail(`{m.id} is solo: true (a recorded user decision): it is rafted alone`)
+@@ -2109,9 +2220,11 @@ function cmd.recombine(pos: { string })
  	keeper, other = store.get(keeperId), store.get(otherId)
  	local list = store.idList(store.readFront(keeper.doc).issues)
  	for _, id in moving do
@@ -290,12 +365,25 @@ index 5541fa1d..5b8f2cbb 100644
 +		local doc = item.doc
  		store.setFront(doc, "raft", keeperId)
  		sh.git({ "add", doc })
-+		appendRow(item.dir, id, "rafted", actor, provenance.raftDetail(keeperId, via))
++		lifecycle.append(item.dir, id, "rafted", actor, provenance.raftDetail(keeperId, via))
  		if not table.find(list, id) then
  			table.insert(list, id)
  		end
-@@ -4513,12 +4582,14 @@ local function reviewProblem(raft: store.Item): string?
- 	return nil
+@@ -4232,7 +4345,11 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
+ 	if opts["--apply"] then
+ 		for _, args in runs :: { { string } } do
+ 			local rest = table.move(args, 2, #args, 1, {})
+-			local p, o = flags(rest);
++			local p, o = flags(rest)
++			-- c0282: the actor given to `raft-plan --apply` is the one each command it runs records
++			if opts["--actor"] then
++				o["--actor"] = opts["--actor"]
++			end
+ 			(cmd :: any)[args[1]](p, o)
+ 		end
+ 	end
+@@ -4981,12 +5098,17 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
+ 	traceProblems(raft, true)
  end
  
 -function cmd.done(pos: { string })
@@ -306,26 +394,103 @@ index 5541fa1d..5b8f2cbb 100644
  		fail(`{raft.id} must be an active raft`)
  	end
 +	-- c0282: every member gets a `delivered` row naming who ran done; read before anything changes
-+	local actor = lifecycleWho(opts)
++	local actor = lifecycle.who(opts)
++	for _, m in store.members(raft.id) do
++		lifecycle.check(m.dir)
++	end
  	if sh.git({ "status", "--porcelain" }) ~= "" then
  		fail("commit everything first (./zn commit); done needs a clean tree")
  	end
-@@ -4571,6 +4642,10 @@ function cmd.done(pos: { string })
+@@ -5124,6 +5246,16 @@ function cmd.done(pos: { string })
  	for _, m in members do
  		table.insert(movedItems, move(m, "done"))
  	end
 +	-- c0282: the rows are staged with the moves, so a rollback (git reset --hard) removes them and a retry appends once
-+	for _, item in movedItems do
-+		appendRow(item.dir, item.id, "delivered", actor, provenance.raftDetail(raft.id, nil))
++	local rowsOk, rowsErr = pcall(function()
++		for _, item in movedItems do
++			lifecycle.append(item.dir, item.id, "delivered", actor, provenance.raftDetail(raft.id, nil))
++		end
++	end)
++	if not rowsOk then
++		rollback()
++		fail(`a delivered row could not be written (rolled back): {rowsErr}`)
 +	end
  	raft = move(raft, "done")
  	table.insert(movedItems, raft)
  	for _, item in movedItems do
+@@ -6285,25 +6417,7 @@ end
+ -- 200 locals.)
+ function cmd.provenance(positional: { string }, options: { [string]: { string } })
+ 	-- The live actor of a command that records: --actor, then ZN_ACTOR, then an agent-session hint, then the git name.
+-	local function liveActor(opts: { [string]: { string } }?): string
+-		local flagList = if opts then opts["--actor"] else nil
+-		local ident = sh.run("git", { "var", "GIT_AUTHOR_IDENT" })
+-		local name = if ident.ok then string.match(ident.stdout, "^(.-) <") else nil
+-		local hint = provenance.hint({
+-			CLAUDECODE = process.env.CLAUDECODE,
+-			AI_AGENT = process.env.AI_AGENT,
+-			CURSOR_AGENT = process.env.CURSOR_AGENT,
+-			GROK_SESSION_ID = process.env.GROK_SESSION_ID,
+-			ZN_DISPATCH = process.env.ZN_DISPATCH,
+-			CLAUDE_EFFORT = process.env.CLAUDE_EFFORT,
+-		})
+-		local actor, why =
+-			provenance.resolve(if flagList then flagList[1] else nil, process.env.ZN_ACTOR, hint, name)
+-		if not actor then
+-			fail(why or "not an actor")
+-		end
+-		return actor :: string
+-	end
++	local liveActor = lifecycle.actor
+ 
+ 	-- c0263: `provenance record <id> <event> [--actor A] [--detail k=v]` publishes one row of an item's provenance.md
+ 	-- for the events other tickets call (unblocked, confirmed, ranked), built from origin/main's file. An active item
 diff --git a/z-nile/engine/provenance.luau b/z-nile/engine/provenance.luau
-index 4171dcc8..59f621e7 100644
+index 2c39f71b..708ab40b 100644
 --- a/z-nile/engine/provenance.luau
 +++ b/z-nile/engine/provenance.luau
-@@ -91,6 +91,23 @@ function provenance.resolve(flag: string?, env: string?, hint: Hint, gitName: st
+@@ -56,20 +56,31 @@ function provenance.isValid(value: string): boolean
+ 	return base == "unknown" or liveForm(base)
+ end
+ 
++-- c0282: the variables that make a session an agent's (`hint` reads exactly these), and every variable a command that
++-- records reads. A spec that needs a human environment clears `provenance.ENV_VARS`: one list, so a marker added here
++-- is cleared there.
++provenance.AGENT_MARKERS = { "CLAUDECODE", "AI_AGENT", "CURSOR_AGENT", "GROK_SESSION_ID", "ZN_DISPATCH" }
++provenance.ENV_VARS = {
++	"CLAUDECODE",
++	"AI_AGENT",
++	"CURSOR_AGENT",
++	"GROK_SESSION_ID",
++	"ZN_DISPATCH",
++	"CLAUDE_EFFORT",
++	"ZN_ACTOR",
++	"ZN_VIA",
++}
++
+ -- The agent-session hint from an environment (a table of the variables the caller read): a session is an agent's when
+ -- `CLAUDECODE` (Claude Code), `AI_AGENT`, `CURSOR_AGENT` (the `agent` CLI), `GROK_SESSION_ID` (the `grok` CLI) or `ZN_DISPATCH` (a dispatched step) is set and non-empty; its effort is `CLAUDE_EFFORT`.
+ -- One definition for every layer: c0283's refusal of `approve` calls this function.
+ function provenance.hint(env: { [string]: string? }): Hint
+-	local function set(name: string): boolean
++	local agent = false
++	for _, name in provenance.AGENT_MARKERS do
+ 		local v = env[name]
+-		return v ~= nil and v ~= ""
+-	end
+-	return {
+-		agent = set("CLAUDECODE") or set("AI_AGENT") or set("CURSOR_AGENT") or set("GROK_SESSION_ID") or set(
+-			"ZN_DISPATCH"
+-		),
+-		effort = env.CLAUDE_EFFORT,
+-	}
++		agent = agent or (v ~= nil and v ~= "")
++	end
++	return { agent = agent, effort = env.CLAUDE_EFFORT }
+ end
+ 
+ -- flag, then env, then an agent-session hint, then the git name; a given value that is not a live form refuses
+@@ -91,6 +102,23 @@ function provenance.resolve(flag: string?, env: string?, hint: Hint, gitName: st
  	return "unknown", nil
  end
  
@@ -349,35 +514,69 @@ index 4171dcc8..59f621e7 100644
  local HEADER = "| when | event | actor | detail |\n|---|---|---|---|\n"
  
  function provenance.render(id: string, rows: { Row }): string
+@@ -230,6 +258,33 @@ function provenance.publishProblem(old: string?, new: string, id: string, allowe
+ 	return nil
+ end
+ 
++-- c0282: the rafting gate's rule for one issue's record: appended `rafted` rows only (`appendOnly` and the event), each
++-- with a live actor and the detail `raft=<raft>` or `raft=<raft>; via=dispatch:<step>`, naming the raft the PR moved the
++-- issue's `raft:` line to. Nil when it holds, else the reason.
++function provenance.raftedProblem(old: string?, new: string, id: string, raft: string): string?
++	local reason = provenance.publishProblem(old, new, id, { "rafted" })
++	if reason then
++		return reason
++	end
++	local n = (provenance.parse(new)) :: { Row }
++	local before = if old then #((provenance.parse(old)) :: { Row }) else 0
++	for i = before + 1, #n do
++		local row = n[i]
++		if not provenance.isLive(row.actor) then
++			return `a rafted row's actor is not a live form: {row.actor}`
++		end
++		local okDetail = row.detail == `raft={raft}`
++		if not okDetail then
++			local via = string.match(row.detail, `^raft={raft}; via=(.+)$`)
++			okDetail = via ~= nil and provenance.via(via) ~= nil
++		end
++		if not okDetail then
++			return `a rafted row's detail is not raft={raft}[; via=dispatch:<step>]: {row.detail}`
++		end
++	end
++	return nil
++end
++
+ -- Whether `side`'s rows begin with all of `base`'s, cell for cell and in place.
+ local function extends(base: { Row }, side: { Row }): number?
+ 	for i, r in base do
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index f5d4b299..dd0ce5f4 100644
+index cee54b31..27496f4e 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
-@@ -92,7 +92,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
- | focus | `./zn focus f0010` | the following commits are attributed to that issue |
- | commit | `./zn commit -m "msg" [--issue f0010]... [--time 25] [--phase build|code-review|deliver] [--tokens <n>]` | `git add -A`, then records spend rows in each issue's `spend.md` and the raft's summary **in the same commit**, adds `Issue:` trailers, and pushes. `--phase` defaults to build; capture, prep and design-review use `./zn spend` |
- | spend | `./zn spend <id> --phase capture, prep, design-review or deliver --time <minutes> [--tokens <n>] [--note <text>]` | appends that phase's rows to each issue's `spend.md` on origin/main and changes nothing in this checkout. Refuses inside the main checkout, and refuses an item that is already active |
--| done | `./zn done R0010` | requires the latest review round to be resolved (each finding answered `fixed <sha>: <what>; consequences: <what the fix could break, and how that was checked, or none>`, `refuted`, or, for a medium or low finding and only as zz-execute Phase 4 step 7 allows, `deferred <id>: <why>` naming a backlog issue) and the raft's `check.sh` to pass. In this order: promotes acceptance specs to `tests/acceptance/`, moves everything to `done/` (uncommitted), runs the affected gate (`z-nile/check.sh --affected`) on that tree, marks the PR **ready** before its final push, commits as phase `deliver`, pushes, and appends spend to the PR body. A failing gate rolls the tree back by itself (fix and re-run `done`). Inside a spec run (a fixture) it skips the gate, says so, and checks only the promoted specs. If `done` is interrupted (Ctrl-C) during the gate, the tree is left promoted and moved but uncommitted: run `git reset --hard HEAD`, then re-run `done`. Likewise if it fails after marking the PR ready and before its commit: run `git reset --hard HEAD` and re-run `done` (marking ready twice is harmless); if only the push fails, run `git push`, then append `spend.md` to the PR body by hand |
-+| done | `./zn done R0010` | requires the latest review round to be resolved (each finding answered `fixed <sha>: <what>; consequences: <what the fix could break, and how that was checked, or none>`, `refuted`, or, for a medium or low finding and only as zz-execute Phase 4 step 7 allows, `deferred <id>: <why>` naming a backlog issue) and the raft's `check.sh` to pass. In this order: promotes acceptance specs to `tests/acceptance/`, moves everything to `done/` (uncommitted) and appends a `delivered` row to each member's `provenance.md` (staged with the moves, so a rollback removes it), runs the affected gate (`z-nile/check.sh --affected`) on that tree, marks the PR **ready** before its final push, commits as phase `deliver`, pushes, and appends spend to the PR body. A failing gate rolls the tree back by itself (fix and re-run `done`). Inside a spec run (a fixture) it skips the gate, says so, and checks only the promoted specs. If `done` is interrupted (Ctrl-C) during the gate, the tree is left promoted and moved but uncommitted: run `git reset --hard HEAD`, then re-run `done`. Likewise if it fails after marking the PR ready and before its commit: run `git reset --hard HEAD` and re-run `done` (marking ready twice is harmless); if only the push fails, run `git push`, then append `spend.md` to the PR body by hand |
+@@ -98,7 +98,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | commit | `./zn commit -m "msg" [--issue f0010]... [--phase build|code-review|deliver] [--model <id>]` | `git add -A`, then folds this checkout's measure buffer into `spend.d/<writer>.tsv` (one appended line per row; `./zn run` rows of one stage become one `other` row) together with the commit's line counts, and the raft's summary, **in the same commit**. A line for another ticket stays until that ticket is committed. A buffer nobody folds is dropped after 14 days, or when that checkout's `.cache` is deleted. Adds `Issue:` trailers and pushes. `--phase` defaults to build; capture, prep and design-review use `./zn spend`. `--time` and `--tokens` are ignored: cost is measured |
+ | spend | `./zn spend <id> --phase capture, prep, design-review or deliver [--begin] [--note <text>]` | marks the stage. `--begin` appends the start to the checkout's measure buffer and does not commit. The next call reads the CLI transcripts for that span, folds this ticket's buffer lines into `spend.d/<writer>.tsv`, and commits that file on the current branch; it pushes nothing. A call with no start writes the row with `unmeasured` where the tool could not read a session. `--time` and `--tokens` are ignored. Refuses in the main checkout (run it in the worktree, `./zn worktree <id>`), and refuses an item that is already active |
+ | trace | `./zn trace <R-id> [--check]` | read-only. Without `--check`, derives every ticket's claims (`<id>:P<n>`, `<id>:S<n>` from `./zn capture <id>`, and `<id>:AC<n>` from `## Acceptance criteria`; missing any fails naming the ticket and section) and every changed source file of the stack, and prints the skeleton of `<raft-dir>/trace.md` pinned to the top layer's finished commit. With `--check`, verifies `<raft-dir>/trace.md` against the top layer's commit: every derived claim is a row and no unknown claim appears; every `file:line` exists at that commit and is of the right kind for its column (`design` in the ticket's doc or `not met: "<ruling>"` quoted from `## Open to the human`, `test` in a spec or `check.sh` of that ticket that ran green in the ticket's `<issue-dir>/results.txt` at that commit with an exact case match, `code` in a source file the stack changed or `none` when the stack changed no source file); every changed source file appears under `## Source files` naming valid claims and no unchanged file appears; and the table is not stale (`trace.md` and `final-review-NNN.md` are committed on the top layer after its finish commit touching only the raft's and tickets' tracker files, `Commit:` names the top layer's finish commit, and nothing is added after the table or rewritten). Each failure names the row and the cell, and exits 1 |
+-| done | `./zn done R0010` | requires `./zn trace R0010 --check` to pass for the commit it lands and the final review (`final-review-NNN.md`; `review-NNN.md` is for the per-layer code review only and cannot stand in) to be resolved (verdict `approve`, or every open finding — each finding answered `fixed <sha>: <what>; consequences: <what the fix could break, and how that was checked, or none>`, `refuted`, or, for a medium or low finding and only as zz-execute Phase 4 step 7 allows, `deferred <id>: <why>` naming a backlog issue — ruled by the human in `## Open to the human`) and the raft's `check.sh` to pass. Refuses a member whose approval no longer matches the contract (the design sections, the acceptance specs and `check.sh`); a member with no approval is not sent back. The checkout must be the published top-layer commit; a lower layer or a top layer behind origin is refused, naming the layer and both shas. Refuses a layer that is not finished, not stacked on the one below, or whose contract changed. Refuses when `./zn trace R0010 --check` fails (missing, failing or stale `trace.md`) or when `final-review-NNN.md` is missing or has no `Verdict:` line. Merges that commit with `--no-ff`, promotes acceptance specs, moves the items to `done/`, runs the affected gate (`z-nile/check.sh --affected`) on that tree. A failing gate rolls the tree back by itself. Inside a spec run it skips the gate, says so, and checks only the promoted specs, and commits one binding commit (`<raft>: bind <id>, <id>`, the final review's `Verdict: <word>`, and `Trace: <done-raft-dir>/trace.md`). Then `gh pr view <n> --json baseRefName -q .baseRefName` and `gh pr edit <n> --base main` for each layer, and `git push origin HEAD:refs/heads/main`. A failing gate or a failed retarget rolls back and does not push. A failed push puts each pull request's base back and rolls the tree back. |
++| done | `./zn done R0010` | requires `./zn trace R0010 --check` to pass for the commit it lands and the final review (`final-review-NNN.md`; `review-NNN.md` is for the per-layer code review only and cannot stand in) to be resolved (verdict `approve`, or every open finding — each finding answered `fixed <sha>: <what>; consequences: <what the fix could break, and how that was checked, or none>`, `refuted`, or, for a medium or low finding and only as zz-execute Phase 4 step 7 allows, `deferred <id>: <why>` naming a backlog issue — ruled by the human in `## Open to the human`) and the raft's `check.sh` to pass. Refuses a member whose approval no longer matches the contract (the design sections, the acceptance specs and `check.sh`); a member with no approval is not sent back. The checkout must be the published top-layer commit; a lower layer or a top layer behind origin is refused, naming the layer and both shas. Refuses a layer that is not finished, not stacked on the one below, or whose contract changed. Refuses when `./zn trace R0010 --check` fails (missing, failing or stale `trace.md`) or when `final-review-NNN.md` is missing or has no `Verdict:` line. Merges that commit with `--no-ff`, promotes acceptance specs, moves the items to `done/` and appends a `delivered` row to each member's `provenance.md` (staged with the moves, so a rollback removes it), runs the affected gate (`z-nile/check.sh --affected`) on that tree. A failing gate rolls the tree back by itself. Inside a spec run it skips the gate, says so, and checks only the promoted specs, and commits one binding commit (`<raft>: bind <id>, <id>`, the final review's `Verdict: <word>`, and `Trace: <done-raft-dir>/trace.md`). Then `gh pr view <n> --json baseRefName -q .baseRefName` and `gh pr edit <n> --base main` for each layer, and `git push origin HEAD:refs/heads/main`. A failing gate or a failed retarget rolls back and does not push. A failed push puts each pull request's base back and rolls the tree back. |
  
  ## Landing a change
  One procedure for every change: a raft, a capture, a prep or an edit.
-@@ -121,7 +121,7 @@ Observed criteria (human Studio playtests) do not block the merge. Put them in t
+@@ -127,7 +127,7 @@ Observed criteria (human Studio playtests) do not block the merge. Put them in t
  The draft PR opened by `start` stays the live log of the raft. Every `./zn commit` pushes. In addition, comment on the PR (`gh pr comment`) when: a review starts (with the sha), a review file lands (verdict and findings by severity), a review is answered (the refute lines), an issue finishes, and on any `BLOCKED:` stop. Never sit on unpushed work, and never leave review files uncommitted. See zz-execute Phase 4.
  
  ## Provenance
--`provenance.md` (in an issue's or a raft's folder) is the one record of what git cannot tell: a header, the table header and one row per event, `| when | event | actor | detail |`, no row numbers, appended and never edited (`./zn audit` checks it; the file is exactly that grammar and a stray line is an error). The events are `approved`, `unblocked`, `confirmed`, `ranked`, `rafted` and `delivered`. `./zn record <id> unblocked|confirmed|ranked [--actor A] [--detail k=v]` publishes `unblocked`, `confirmed` and `ranked` for a backlog issue or raft (the tickets that make those events call it), `unblocked` only for an active one and nothing for a done one; the other events are written by their own commands in a pull request. The **actor** is `human:<git name>` or `agent:<model> effort <level>`: `--actor`, else `ZN_ACTOR` (the dispatcher sets it), else `agent:unknown effort <CLAUDE_EFFORT>` when `CLAUDECODE`, `AI_AGENT`, `CURSOR_AGENT` (the `agent` CLI), `GROK_SESSION_ID` (the `grok` CLI) or `ZN_DISPATCH` (a dispatched step) is set and non-empty, else the git name. A published append is built from `origin/main`'s file. **Merging.** Two writers (a published row on `main`, a row in your PR) are united by the engine's own merges of `origin/main`: merge with `./zn sync` (the commands that merge for you do the same: `land`, `fold`, `recombine`, `new raft` and every command that publishes, which merges `origin/main` afterwards), and let it unite the record, wherever the item's folder moved and however git paired the files: it settles every record either side changed, by the item's id, and puts it beside the item's document. It stops, with nothing left half merged, for a conflict in another file, a record that does not parse, a record both sides changed where a side edited, removed or reordered an old row, an item whose id changed on one side (a `renumber`, or a compaction: run `./zn remap`), a merge that crosses a compaction (a side numbers items differently from the merge base) when a record changed on the other side (run `./zn remap`; on the compaction's own branch, compact again on the current `origin/main`), and an uncommitted change to a record it would have to rewrite (commit or stash it); and it refuses while a merge of a branch `origin/main` does not contain, a cherry-pick, a revert or a rebase is in progress. When it stops on another file, merge by hand: `git merge origin/main`, resolve every conflict except `provenance.md`, `git add` the files, and run `./zn sync` again: it finishes that merge (a merge of `origin/main` or of an older commit of it), merges the newest `origin/main` on top, and unites the records (`origin/main`'s new rows first, then yours, every old row as it was). After a `renumber`, merge that item's record by hand under its new id. `remap` settles the records the same way; when it stops, merge by hand: its merge base is from before the compaction, so `./zn sync` would stop on the compaction, and `remap` refuses a second run.
-+`provenance.md` (in an issue's or a raft's folder) is the one record of what git cannot tell: a header, the table header and one row per event, `| when | event | actor | detail |`, no row numbers, appended and never edited (`./zn audit` checks it; the file is exactly that grammar and a stray line is an error). The events are `approved`, `unblocked`, `confirmed`, `ranked`, `rafted` and `delivered`. `./zn record <id> unblocked|confirmed|ranked [--actor A] [--detail k=v]` publishes `unblocked`, `confirmed` and `ranked` for a backlog issue or raft (the tickets that make those events call it), `unblocked` only for an active one and nothing for a done one; the other events are written by their own commands in a pull request. The **actor** is `human:<git name>` or `agent:<model> effort <level>`: `--actor`, else `ZN_ACTOR` (the dispatcher sets it), else `agent:unknown effort <CLAUDE_EFFORT>` when `CLAUDECODE`, `AI_AGENT`, `CURSOR_AGENT` (the `agent` CLI), `GROK_SESSION_ID` (the `grok` CLI) or `ZN_DISPATCH` (a dispatched step) is set and non-empty, else the git name. A published append is built from `origin/main`'s file. **Lifecycle rows** (c0282; each is written by the command that makes the change, in the commit that holds it): `status <id> new` publishes an `unblocked` row for each issue it gives back (a raft's give-back records its issues and never the raft; `release` records nothing); `new raft`, `fold`, `recombine` and an emergent `new issue --raft` append `rafted | <actor> | raft=<R-id>` to each ticket's record, one row per ticket, in the rafting PR with the `raft:` line (`unfold` removes nothing: the newest row naming the ticket's current raft is the one that counts); `done` appends `delivered | <actor> | raft=<R-id>` to each member's record, staged with the moves, so a failed `done` leaves none. A bad `--actor`, `ZN_ACTOR` or `ZN_VIA` refuses the command before it changes anything. Under the dispatcher each attempt of a model step has `ZN_ACTOR` from its own spec, and a script step (`raft-plan --apply`, `z-ready`) records the user who started the pipeline with `via=dispatch:<step>` (`ZN_VIA`). The rafting gate merges a rafting PR's change to a ticket's `provenance.md` only as appended `rafted` rows, every old row in place. **Merging.** Two writers (a published row on `main`, a row in your PR) are united by the engine's own merges of `origin/main`: merge with `./zn sync` (the commands that merge for you do the same: `land`, `fold`, `recombine`, `new raft` and every command that publishes, which merges `origin/main` afterwards), and let it unite the record, wherever the item's folder moved and however git paired the files: it settles every record either side changed, by the item's id, and puts it beside the item's document. It stops, with nothing left half merged, for a conflict in another file, a record that does not parse, a record both sides changed where a side edited, removed or reordered an old row, an item whose id changed on one side (a `renumber`, or a compaction: run `./zn remap`), a merge that crosses a compaction (a side numbers items differently from the merge base) when a record changed on the other side (run `./zn remap`; on the compaction's own branch, compact again on the current `origin/main`), and an uncommitted change to a record it would have to rewrite (commit or stash it); and it refuses while a merge of a branch `origin/main` does not contain, a cherry-pick, a revert or a rebase is in progress. When it stops on another file, merge by hand: `git merge origin/main`, resolve every conflict except `provenance.md`, `git add` the files, and run `./zn sync` again: it finishes that merge (a merge of `origin/main` or of an older commit of it), merges the newest `origin/main` on top, and unites the records (`origin/main`'s new rows first, then yours, every old row as it was). After a `renumber`, merge that item's record by hand under its new id. `remap` settles the records the same way; when it stops, merge by hand: its merge base is from before the compaction, so `./zn sync` would stop on the compaction, and `remap` refuses a second run.
+-`provenance.md` (in an issue's or a raft's folder) is the one record of what git cannot tell: a header, the table header and one row per event, `| when | event | actor | detail |`, no row numbers, appended and never edited (`./zn audit` checks it; the file is exactly that grammar and a stray line is an error). The events are `approved`, `unblocked`, `confirmed`, `ranked`, `rafted` and `delivered`. `./zn provenance record <id> unblocked|confirmed|ranked [--actor A] [--detail k=v]` publishes `unblocked`, `confirmed` and `ranked` for a backlog issue or raft (the tickets that make those events call it), `unblocked` only for an active one and nothing for a done one; the other events are written by their own commands in a pull request. The **actor** is `human:<git name>` or `agent:<model> effort <level>`: `--actor`, else `ZN_ACTOR` (the dispatcher sets it), else `agent:unknown effort <CLAUDE_EFFORT>` when `CLAUDECODE`, `AI_AGENT`, `CURSOR_AGENT` (the `agent` CLI), `GROK_SESSION_ID` (the `grok` CLI) or `ZN_DISPATCH` (a dispatched step) is set and non-empty, else the git name. A published append is built from `origin/main`'s file. **Merging.** Two writers (a published row on `main`, a row in your PR) are united by the engine's own merges of `origin/main`: merge with `./zn sync` (the commands that merge for you do the same: `land`, `fold`, `recombine`, `new raft`, every command that publishes, which merges `origin/main` afterwards). `done` merges a stack that sits on main's tip (it refuses an unstacked layer), so that merge never conflicts. `./zn restack` rebases the layers instead of merging and stops on any conflict, a record included: resolve that one by hand in the layer, and let it unite the record, wherever the item's folder moved and however git paired the files: it settles every record either side changed, by the item's id, and puts it beside the item's document. It stops, with nothing left half merged, for a conflict in another file, a record that does not parse, a record both sides changed where a side edited, removed or reordered an old row, an item whose id changed on one side (a `renumber`, or a compaction: run `./zn remap`), a merge that crosses a compaction (a side numbers items differently from the merge base) when a record changed on the other side (run `./zn remap`; on the compaction's own branch, compact again on the current `origin/main`), and an uncommitted change to a record it would have to rewrite (commit or stash it); and it refuses while a merge of a branch `origin/main` does not contain, a cherry-pick, a revert or a rebase is in progress. When it stops on another file, merge by hand: `git merge origin/main`, resolve every conflict except `provenance.md`, `git add` the files, and run `./zn sync` again: it finishes that merge (a merge of `origin/main` or of an older commit of it), merges the newest `origin/main` on top, and unites the records (`origin/main`'s new rows first, then yours, every old row as it was). After a `renumber`, merge that item's record by hand under its new id. `remap` settles the records the same way; when it stops, merge by hand: its merge base is from before the compaction, so `./zn sync` would stop on the compaction, and `remap` refuses a second run.
++`provenance.md` (in an issue's or a raft's folder) is the one record of what git cannot tell: a header, the table header and one row per event, `| when | event | actor | detail |`, no row numbers, appended and never edited (`./zn audit` checks it; the file is exactly that grammar and a stray line is an error). The events are `approved`, `unblocked`, `confirmed`, `ranked`, `rafted` and `delivered`. `./zn provenance record <id> unblocked|confirmed|ranked [--actor A] [--detail k=v]` publishes `unblocked`, `confirmed` and `ranked` for a backlog issue or raft (the tickets that make those events call it), `unblocked` only for an active one and nothing for a done one; the other events are written by their own commands in a pull request. The **actor** is `human:<git name>` or `agent:<model> effort <level>`: `--actor`, else `ZN_ACTOR` (the dispatcher sets it), else `agent:unknown effort <CLAUDE_EFFORT>` when `CLAUDECODE`, `AI_AGENT`, `CURSOR_AGENT` (the `agent` CLI), `GROK_SESSION_ID` (the `grok` CLI) or `ZN_DISPATCH` (a dispatched step) is set and non-empty, else the git name. A published append is built from `origin/main`'s file. **Lifecycle rows** (c0282; each is written by the command that makes the change, in the commit that holds it): `status <id> new` publishes an `unblocked` row for each issue it gives back (a raft's give-back records its issues and never the raft; `release` records nothing); `new raft`, `fold`, `recombine` and an emergent `new issue --raft` append `rafted | <actor> | raft=<R-id>` to each ticket's record, one row per ticket, in the rafting PR with the `raft:` line (`unfold` removes nothing: the newest row naming the ticket's current raft is the one that counts); `done` appends `delivered | <actor> | raft=<R-id>` to each member's record, staged with the moves, so a failed `done` leaves none. A bad `--actor`, `ZN_ACTOR` or `ZN_VIA` refuses the command before it changes anything. Under the dispatcher each attempt of a model step has `ZN_ACTOR` from its own spec, and a script step (`raft-plan --apply`, `z-ready`) records the user who started the pipeline with `via=dispatch:<step>` (`ZN_VIA`). The rafting gate merges a rafting PR's change to a ticket's `provenance.md` only as appended `rafted` rows, every old row in place. **Merging.** Two writers (a published row on `main`, a row in your PR) are united by the engine's own merges of `origin/main`: merge with `./zn sync` (the commands that merge for you do the same: `land`, `fold`, `recombine`, `new raft`, every command that publishes, which merges `origin/main` afterwards). `done` merges a stack that sits on main's tip (it refuses an unstacked layer), so that merge never conflicts. `./zn restack` rebases the layers instead of merging and stops on any conflict, a record included: resolve that one by hand in the layer, and let it unite the record, wherever the item's folder moved and however git paired the files: it settles every record either side changed, by the item's id, and puts it beside the item's document. It stops, with nothing left half merged, for a conflict in another file, a record that does not parse, a record both sides changed where a side edited, removed or reordered an old row, an item whose id changed on one side (a `renumber`, or a compaction: run `./zn remap`), a merge that crosses a compaction (a side numbers items differently from the merge base) when a record changed on the other side (run `./zn remap`; on the compaction's own branch, compact again on the current `origin/main`), and an uncommitted change to a record it would have to rewrite (commit or stash it); and it refuses while a merge of a branch `origin/main` does not contain, a cherry-pick, a revert or a rebase is in progress. When it stops on another file, merge by hand: `git merge origin/main`, resolve every conflict except `provenance.md`, `git add` the files, and run `./zn sync` again: it finishes that merge (a merge of `origin/main` or of an older commit of it), merges the newest `origin/main` on top, and unites the records (`origin/main`'s new rows first, then yours, every old row as it was). After a `renumber`, merge that item's record by hand under its new id. `remap` settles the records the same way; when it stops, merge by hand: its merge base is from before the compaction, so `./zn sync` would stop on the compaction, and `remap` refuses a second run.
  
  ## Spend (best effort, automatic)
  Rows are only ever appended. A row has nine columns: when, commit, +lines, -lines, minutes, attribution, phase and tokens, and a tenth, model, once any row of the file records the model that spent its tokens (`--model <id>` on `spend` and `commit`; a file with no such row keeps nine columns, and a row with no model leaves the cell empty). The phase is one of `capture`, `prep`, `design-review`, `build`, `code-review` or `deliver`.
-@@ -189,8 +189,8 @@ Tracker state is shared the moment it changes, not when a PR merges, so parallel
+@@ -196,8 +196,8 @@ Tracker state is shared the moment it changes, not when a PR merges, so parallel
  - **Statuses** (`status:` in an item's frontmatter): `new -> preparing -> prepared -> active -> done`. `design:` (draft, reviewed, ready) stays the design review's field. A missing `status:` is derived: `done/` is done, `active/` is active, `design: ready` is prepared, a draft item in a raft (or a draft raft) is preparing, anything else is new. `./zn status` lists them from `origin/main`; `status <id>` prints one; `status <id> <to>` moves one, checked against `origin/main`. `done` is only ever set by `./zn done`, and only `ready` (or the legacy `start` of a backlog raft) claims `active`, and `stop` gives a readied raft back.
  - **Every write is stamped**: the stored value is `<state>-<three words>` (for example `preparing-quiet-copper-falcon`) and each write uses fresh words, so two terminals making the same move conflict in git instead of merging silently.
  - **Published or carried.** These moves are pushed straight to `origin/main` as a tiny commit: `new issue` (the stub, `--desc "<line>"` is its Problem), `new raft` (claims the raft, and its members when they are `new`), `fold` and `recombine` (claim their rafts), `release`, `status <id> preparing|new`, `status <id> prepared` back from `active`, and the claim made by `ready` (or by a legacy `start`). An emergent `new issue --raft <R-id>` and `renumber <id>` without `<new>` push a counter-only commit (the raised `z-nile/next`) and then work locally. The move to `prepared` is **carried by the prep PR**: it only edits the local documents.
--- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), an issue's `spend.md`, rows appended only (`./zn spend`), an item's `provenance.md`, rows appended only and of the published events (`./zn record`), and `z-nile/next`, whose counters may only go up. The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after a local full gate. Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
+-- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), an item's `provenance.md`, rows appended only and of the published events (`./zn provenance record`), and `z-nile/next`, whose counters may only go up. An issue's `spend.md` is not pushed by `./zn spend`: the command commits the appended row on the current branch, and the row reaches main with that branch. `publish.commit` still accepts an appended `spend.md` when a tracker commit carries one (a directory move keeps it byte for byte). The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after the static stages (`z-nile/check.sh --static`). Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
 -- **Claims.** z-design claims one issue with `./zn status <id> preparing` and gives it back with `status <id> new`. The old prep's `new raft` over `new` issues still claims them with the raft's stamp, and `./zn status <R-id> preparing` claims an existing draft raft with its unprepared members. A raft move (`status <R-id> preparing|new`) never restamps a member that is `prepared` on `origin/main`, and refuses a member another raft holds there. `ready` (and a legacy `start`) refuses a raft unless it and its members are `prepared` on `origin/main`; the claim is made by `ready`, not `start`.
-+- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), an issue's `spend.md`, rows appended only (`./zn spend`), an item's `provenance.md`, rows appended only and of the published events (`./zn record`, and the `unblocked` row `status <id> new` adds to its own commit), and `z-nile/next`, whose counters may only go up. The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after a local full gate. Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
++- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), an item's `provenance.md`, rows appended only and of the published events (`./zn provenance record`, and the `unblocked` row `status <id> new` adds to its own commit), and `z-nile/next`, whose counters may only go up. An issue's `spend.md` is not pushed by `./zn spend`: the command commits the appended row on the current branch, and the row reaches main with that branch. `publish.commit` still accepts an appended `spend.md` when a tracker commit carries one (a directory move keeps it byte for byte). The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after the static stages (`z-nile/check.sh --static`). Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
 +- **Claims.** z-design claims one issue with `./zn status <id> preparing` and gives it back with `status <id> new` (which records who gave it back). The old prep's `new raft` over `new` issues still claims them with the raft's stamp, and `./zn status <R-id> preparing` claims an existing draft raft with its unprepared members. A raft move (`status <R-id> preparing|new`) never restamps a member that is `prepared` on `origin/main`, and refuses a member another raft holds there. `ready` (and a legacy `start`) refuses a raft unless it and its members are `prepared` on `origin/main`; the claim is made by `ready`, not `start`.
  - **Rafting** (z-raft). An issue's raft is its own `raft:` line, edited only in the rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly, and its sync shows the conflict. The published claim (`new raft` over prepared issues, `fold`, `recombine`, `status <R-id> preparing`) stamps the raft only, with a fresh `preparing-…` value; recombine gives its two rafts one value, and that shared stamp is what lets the carried `status <keeper> prepared` take a member whose `raft:` on `origin/main` still names the other raft. The carried move takes a member that is prepared on `origin/main` as it is, refuses one another raft holds there, and takes a `preparing` member only when it carries the raft's own stamp or a claim this checkout made (`status <id> preparing` here); any other `preparing` member is another terminal's live claim and is refused, naming it. z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (z-raft takes it out first with `./zn unfold <R-id> <id>`), and `ready` refuses a raft while a member is `preparing`. A raft's `grouped:` line records a hash of each prepared member's design as z-raft grouped it (its document without `status:` and `raft:`, `check.sh`, `acceptance/`, and its design reviews, refutes and `harvest.md`); the carried move and `ready` refuse a member whose design changed on `origin/main` since (a redesign landed inside the rafting window), a member this rafting grouped with no entry, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering the current one. `compact` and `renumber` re-record every entry that matched before they rewrote its ids, and `remap` does the same. `./zn release <R-id>` is the published give-back. An issue whose `raft:` names a retired or missing raft (audit's `dead-raft` error) is cleared by the command the error names for its state: in the backlog, `./zn unfold <R-id> <id>`, which claims nothing (there is no raft to claim) and rides in the rafting PR; in `active/`, `./zn stop <id>` first (main checkout), which gives that one issue back to the backlog as `stop` gives a member back, and `unfold` after it. An active issue with no `raft:` (`raftless-active`) goes back with `./zn stop <id>` too. A conflict on `raft:` or `depends_on:` (they are adjacent lines) after a sync means rerun z-raft for that issue: take `main`'s line and drop the issue from your raft, or take both edits when it was only `depends_on:`.
  - **A failed start.** `start` runs every local check before it claims. If a step after the claim fails (branch push, `gh pr create`), the local state is consistent: finish by hand (`git push -u origin <branch>`, `gh pr create --draft`), or give **your own** claim back with `status <R-id> prepared` (a raft started the legacy way, still in the backlog; a readied raft is given back only by `./zn stop <R-id>`). The same terminal can re-run `start` if it died before moving anything (it remembers the claim in `.cache/tracker-claim-<R-id>`); another terminal is refused.

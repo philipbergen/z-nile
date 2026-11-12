@@ -11,32 +11,40 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local MODELS = [[
-order = ["claude", "grok"]
-
 [dispatch]
-auto_merge = ["prep"]
+auto_merge = ["prep", "raft"]
 stall_seconds = 3
 
-[z-design.claude]
-model = "claude-opus-5-5"
-effort = "high"
-rank = 3
-runtime = "claude-cli"
-max_tokens = 5000
-
-[z-design.grok]
+[fallback.grok]
 model = "grok-4.7"
-effort = "medium"
-rank = 3
 runtime = "grok-cli"
-max_tokens = 5000
 
-[zz-review.claude]
+[roles.design]
 model = "claude-opus-5-5"
-effort = "high"
-rank = 4
+cli = "claude"
 runtime = "claude-cli"
+rank = 3
 max_tokens = 5000
+effort = "high"
+fallbacks = ["grok"]
+
+[roles.design-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+effort = "xhigh"
+fallbacks = []
+
+[roles.code-review]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+effort = "xhigh"
+fallbacks = []
 ]]
 
 local function HEADER(id: string): string
@@ -115,7 +123,7 @@ return t.spec("c0282 provenance through the dispatcher", function(it)
 		end
 		local l = fakecli.log(h)
 		t.expect(has(l, "actor=agent:claude-opus-5-5 effort high\n")).toBe(true)
-		t.expect(has(l, "actor=agent:grok-4-7 effort medium\n")).toBe(true)
+		t.expect(has(l, "actor=agent:grok-4-7 effort high\n")).toBe(true)
 	end)
 
 	it(
@@ -137,6 +145,11 @@ return t.spec("c0282 provenance through the dispatcher", function(it)
 				return (string.gsub(doc, "\nraft: \n", "\nraft: R0050\n", 1))
 			end
 			local ACTOR = "agent:claude-sonnet-5-5 effort high"
+			-- a plain replacement (the actor holds pattern characters)
+			local function swap(text: string, from: string, to: string): string
+				local at = string.find(text, from, 1, true) :: number
+				return string.sub(text, 1, at - 1) .. to .. string.sub(text, at + #from)
+			end
 			local p96, p91 =
 				"pickman/.tracker/issues/c0096/provenance.md", "pickman/.tracker/issues/c0091/provenance.md"
 			-- the rows a rafting PR may add: its own, appended to what main already holds
@@ -214,6 +227,44 @@ return t.spec("c0282 provenance through the dispatcher", function(it)
 					},
 					why = "does not write a raft's record",
 				},
+				-- a row on an issue whose raft: line the PR does not move
+				{
+					r96 = appended(p96, "c0096", "rafted"),
+					r91 = appended(p91, "c0091", "rafted"),
+					more = {
+						["pickman/.tracker/issues/c0022/provenance.md"] = HEADER("c0022")
+							.. "| 2026-11-08 10:00 | rafted | "
+							.. ACTOR
+							.. " | raft=R0050 |\n",
+					},
+					why = "but not c0022's raft: line",
+				},
+				-- a row naming a raft the PR does not carry, and one naming another raft than the issue's
+				{
+					r96 = (string.gsub(appended(p96, "c0096", "rafted"), "raft=R0050 |", "raft=R0999 |")),
+					r91 = appended(p91, "c0091", "rafted"),
+					why = "detail is not raft=R0050",
+				},
+				-- an actor no command writes: unknown, or a git-derived form
+				{
+					r96 = swap(appended(p96, "c0096", "rafted"), ACTOR, "unknown"),
+					r91 = appended(p91, "c0091", "rafted"),
+					why = "not a live form",
+				},
+				{
+					r96 = swap(appended(p96, "c0096", "rafted"), ACTOR, "human:Ann (from git)"),
+					r91 = appended(p91, "c0091", "rafted"),
+					why = "not a live form",
+				},
+				{
+					r96 = (string.gsub(
+						appended(p96, "c0096", "rafted"),
+						"raft=R0050 |",
+						"raft=R0050; via=bogus |"
+					)),
+					r91 = appended(p91, "c0091", "rafted"),
+					why = "detail is not raft=R0050",
+				},
 			}
 			for i, case in cases do
 				fakecli.clear(h)
@@ -243,6 +294,7 @@ return t.spec("c0282 provenance through the dispatcher", function(it)
 			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 			local stale = zn({ "dispatch", "c0096" })
 			t.expect(stale.code).toBe(4)
+			t.expect(has(stale.stdout, "run ./zn sync")).toBe(true)
 			t.expect(has(fakecli.log(h), "realgh pr merge 50 ")).toBe(false)
 			-- the synced PR #51 carries what the engine's union yields: main's rows (approved, ranked) first, then ours; the gate merges it
 			fakecli.clear(h)

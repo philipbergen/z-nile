@@ -3,9 +3,10 @@
 -- with a bare origin. `status <id> new` appends an `unblocked` row in its published commit (and the publish validator
 -- lets that file through, append-only); `new raft`, `fold` and `recombine` append a `rafted` row per ticket, `unfold`
 -- and `release` none; a raft's give-back records its issues and not the raft. The no-origin path (done, an emergent
--- issue) is lifecycle.spec.luau; `./zn record`, the merge and audit are c0263's.
+-- issue) is lifecycle.spec.luau; `./zn provenance record`, the merge and audit are c0263's.
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local provenance = require("@znile/engine/provenance")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -17,8 +18,12 @@ local PREPARED = "prepared-quiet-copper-falcon"
 local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
 	.. 'check "AC1: ok" true\nfinish\n'
 local ISSUES, RAFTS = "pickman/.tracker/issues", "pickman/.tracker/rafts"
-local HUMAN: { [string]: string } =
-	{ CLAUDECODE = "", AI_AGENT = "", CLAUDE_EFFORT = "", ZN_ACTOR = "", ZN_DISPATCH = "" }
+-- every variable a command that records reads, cleared: the one list is the engine's (a marker added to the hint is
+-- cleared here too)
+local HUMAN: { [string]: string } = {}
+for _, name in provenance.ENV_VARS do
+	HUMAN[name] = ""
+end
 
 local function issue(id: string, raft: string): string
 	return `---\nid: {id}\ntype: chore\ntitle: {id}\nslug: {id}\nraft: {raft}\ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-10-20\nsize: 300\nstatus: {PREPARED}\n---\n\n# {id}\n`
@@ -86,7 +91,7 @@ return t.spec("c0282 the lifecycle rows' writes", function(it)
 			seed[`{ISSUES}/{id}/{id}.md`] = draft(id)
 			seed[`{ISSUES}/{id}/check.sh`] = CHECK
 		end
-		for _, id in { "c0040", "c0050", "c0070" } do
+		for _, id in { "c0040", "c0050", "c0070", "c0080" } do
 			seed[`{ISSUES}/{id}/{id}.md`] = issue(id, "")
 			seed[`{ISSUES}/{id}/check.sh`] = CHECK
 		end
@@ -151,8 +156,8 @@ return t.spec("c0282 the lifecycle rows' writes", function(it)
 	it("a raft's give-back records its issues and never the raft; release records nothing", function()
 		local out = trOk(
 			W2,
-			{ "new", "raft", "chore", "pair", "c0011", "c0012", "--project", "pickman" },
-			{ ZN_ACTOR = SONNET, ZN_VIA = "dispatch:raft-plan" }
+			{ "new", "raft", "chore", "pair", "c0011", "c0012", "--project", "pickman", "--actor", SONNET },
+			{ ZN_ACTOR = OPUS, ZN_VIA = "dispatch:raft-plan" }
 		)
 		local rid = string.match(out, "(R%d+)") :: string
 		-- the old-flow raft claimed two new drafts; each got a rafted row, one per ticket, in the worktree
@@ -193,14 +198,23 @@ return t.spec("c0282 the lifecycle rows' writes", function(it)
 	end)
 
 	it("fold and recombine append a rafted row per ticket, unfold keeps the history", function()
-		trOk(W3, { "fold", "R0110", "c0040" }, { ZN_ACTOR = OPUS })
+		trOk(W3, { "fold", "R0110", "c0040", "--actor", OPUS }, { ZN_ACTOR = SONNET })
 		local rec = localRecord(W3, "c0040")
 		t.expect(has(rec, `| rafted | {OPUS} | raft=R0110`)).toBe(true)
 		trOk(W3, { "unfold", "R0110", "c0040" })
 		-- append-only: the row stays, the raft: line is gone
 		t.expect(#rows(localRecord(W3, "c0040"), "rafted")).toBe(1)
 		t.expect(string.match(fs.readFile(`{W3}/{ISSUES}/c0040/c0040.md`), "\nraft: ([^\n]*)\n")).toBe("")
-		trOk(W4, { "recombine", "R0130", "R0140" }, { ZN_ACTOR = SONNET })
+		-- a bad actor or a bad ZN_VIA refuses recombine before it claims anything
+		local mark = tip()
+		local bads: { { [string]: string } } = { { ZN_ACTOR = "robot:x" }, { ZN_VIA = "dispatch" } }
+		for _, bad in bads do
+			local refused = tr(W4, { "recombine", "R0130", "R0140" }, bad)
+			t.expect(refused.ok).toBe(false)
+			t.expect(has(refused.stderr, "ZN_VIA") or has(refused.stderr, "not an actor")).toBe(true)
+			t.expect(tip()).toBe(mark)
+		end
+		trOk(W4, { "recombine", "R0130", "R0140", "--actor", SONNET }, { ZN_ACTOR = OPUS })
 		local moved = localRecord(W4, "c0070")
 		t.expect(has(moved, `| rafted | {SONNET} | raft=R0130`)).toBe(true)
 		t.expect(fs.isFile(`{W4}/{RAFTS}/R0130/provenance.md`)).toBe(false)
@@ -269,4 +283,43 @@ return t.spec("c0282 the lifecycle rows' writes", function(it)
 				.toBe(true)
 		end
 	)
+
+	it("a member record that does not parse refuses fold before the claim is published", function()
+		trOk(W3, { "unfold", "R0110", "c0040" })
+		local path = `{W3}/{ISSUES}/c0040/provenance.md`
+		local good = fs.readFile(path)
+		fs.writeFile(path, good .. "a hand edit\n")
+		fixture.git(W3, { "add", "-A" })
+		fixture.git(W3, { "commit", "-q", "-m", "a hand edit of a record" })
+		local mark = tip()
+		local r = tr(W3, { "fold", "R0110", "c0040" }, { ZN_ACTOR = OPUS })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "c0040/provenance.md: line")).toBe(true)
+		t.expect(tip()).toBe(mark)
+		t.expect(fixture.git(W3, { "status", "--porcelain" })).toBe("")
+		fixture.git(W3, { "reset", "-q", "--hard", "HEAD~1" })
+		-- the same for a new raft over an issue whose record does not parse
+		local p13 = `{W1}/{ISSUES}/c0013/provenance.md`
+		fs.writeFile(p13, "not a record\n")
+		fixture.git(W1, { "add", "-A" })
+		fixture.git(W1, { "commit", "-q", "-m", "a hand edit of a record" })
+		local mark13 = tip()
+		local r13 = tr(
+			W1,
+			{ "new", "raft", "chore", "bad", "c0013", "--project", "pickman" },
+			{ ZN_ACTOR = OPUS }
+		)
+		t.expect(r13.ok).toBe(false)
+		t.expect(has(r13.stderr, "c0013/provenance.md: line")).toBe(true)
+		t.expect(tip()).toBe(mark13)
+		fixture.git(W1, { "reset", "-q", "--hard", "HEAD~1" })
+	end)
+
+	it("raft-plan --apply hands its --actor to every command it runs", function()
+		local out = trOk(W3, { "raft-plan", "--apply", "--actor", "human:Zed" }, { ZN_ACTOR = SONNET })
+		t.expect(has(out, "new raft")).toBe(true)
+		for _, id in { "c0040", "c0080" } do
+			t.expect(has(localRecord(W3, id), "| rafted | human:Zed | raft=R")).toBe(true)
+		end
+	end)
 end)

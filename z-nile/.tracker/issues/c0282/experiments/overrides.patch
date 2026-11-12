@@ -1,5 +1,5 @@
 diff --git a/z-nile/tests/acceptance/c0053/commands-prep.spec.luau b/z-nile/tests/acceptance/c0053/commands-prep.spec.luau
-index 76d8de08..b8bee43c 100644
+index d9773eff..dbe06b96 100644
 --- a/z-nile/tests/acceptance/c0053/commands-prep.spec.luau
 +++ b/z-nile/tests/acceptance/c0053/commands-prep.spec.luau
 @@ -57,7 +57,9 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
@@ -13,16 +13,3 @@ index 76d8de08..b8bee43c 100644
  		t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
  		t.expect(trOk(cap, { "status", rz })).toBe("new")
  		t.expect(trOk(cap, { "status", zeta })).toBe("new")
-diff --git a/z-nile/tests/acceptance/c0084/spend-command.spec.luau b/z-nile/tests/acceptance/c0084/spend-command.spec.luau
-index c39e181c..f67f45fb 100644
---- a/z-nile/tests/acceptance/c0084/spend-command.spec.luau
-+++ b/z-nile/tests/acceptance/c0084/spend-command.spec.luau
-@@ -229,6 +229,8 @@ return t.spec("tracker spend", function(it)
- 		trOk(prep, { "spend", a, "--phase", "prep", "--time", "2" })
- 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
- 		t.expect(last(`pickman/.tracker/issues/{a}/spend.md`).added).toBe(6) -- its own spec lines; the raft's check.sh is not its
-+		-- c0282 override: the prep worktree takes the squash commit, as a real one does before main moves its folders
-+		trOk(prep, { "sync" })
- 	end)
- 
- 	it("refuses bad input and the main checkout, and pushes nothing", function()
