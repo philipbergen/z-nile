@@ -254,9 +254,8 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 				end
 			end
 			t.expect(old > 0).toBe(true)
-			-- the hooks are unchanged: they still run scripts/hooks/
-			t.expect(settings.hooks.Stop[1].hooks[1].command)
-				.toBe('"$CLAUDE_PROJECT_DIR"/scripts/hooks/stop.sh')
+			-- the Stop gate is gone; the other hooks still run scripts/hooks/
+			t.expect(settings.hooks.Stop).toBe(nil)
 			t.expect(settings.hooks.PostToolUse[1].hooks[1].command)
 				.toBe('"$CLAUDE_PROJECT_DIR"/scripts/hooks/post-edit.sh')
 		end

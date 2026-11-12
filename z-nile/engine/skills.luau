@@ -12,7 +12,8 @@ local skills = {}
 
 skills.LINKS = ".claude/skills"
 skills.ZNILE = "z-nile"
--- The skills a raft's prompt inlines from z-nile, in this order; the raft's project's own skills follow (c0115).
+-- The skills a raft's prompt names from z-nile, in this order; the raft's project's own skills follow (c0115).
+-- The prompt gives each path and when to read it. It does not paste the file.
 skills.INLINED = { "zz-execute", "zz-rules", "zz-arch", "zz-test", "zz-review" }
 
 -- One folder of skills: the project it belongs to and its repo-relative path ("z-nile/skills").
@@ -159,8 +160,9 @@ function skills.bases(list: { Skill }, project: string?): { [string]: boolean }
 	return out
 end
 
--- The SKILL.md files a raft's prompt inlines, real paths (c0115): z-nile's `INLINED`, then every skill of the raft's
--- project (none more for z-nile's own rafts), then each skill those extend (c0184), once each. Pure.
+-- The SKILL.md files a raft's prompt names, real paths (c0115): z-nile's `INLINED`, then every skill of the raft's
+-- project (none more for z-nile's own rafts), then each skill those extend (c0184), once each. Pure. The prompt
+-- links these paths; it does not paste them.
 function skills.inlined(list: { Skill }, project: string?): { string }
 	local byName: { [string]: Skill } = {}
 	for _, sk in list do

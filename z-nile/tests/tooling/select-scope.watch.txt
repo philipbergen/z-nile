@@ -1,0 +1,9 @@
+z-nile/engine/gate.luau
+z-nile/engine/main.luau
+z-nile/lib/select.luau
+z-nile/specs.luau
+z-nile/templates/raft/check.sh
+z-nile/tests/acceptance/c0239/narrow.py
+z-nile/tests/acceptance/c0239/rehash.py
+z-nile/tests/inputs.tsv
+z-nile/tests/lib/t.luau

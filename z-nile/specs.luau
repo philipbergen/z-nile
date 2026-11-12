@@ -3,6 +3,7 @@
 -- through `lune run tests/run` in the project's home (the runner keeps its jail and guards), and keeps results in the
 -- shared SQLite db, keyed by a fingerprint of everything a spec can read.
 --   lune run z-nile/specs -- run --project <name> [--fresh] [--all | -- <spec path relative to the home>...]
+--     --slow selects only z-nile's measured slow tier; without it, the slow tier is excluded
 --   lune run z-nile/specs -- digest --mode <affected|full> --projects <a,b> [--base REF]   -- the whole-gate digest
 --   lune run z-nile/specs -- scope                         -- the one project the change set is confined to, or ALL (c0239)
 --   lune run z-nile/specs -- gate-check --digest D        -- exit 0 and the stored report when that gate passed
@@ -21,7 +22,9 @@ local resultsdb = require("./lib/resultsdb")
 local reuseplan = require("./lib/reuseplan")
 local select = require("./lib/select")
 local serde = require("@lune/serde")
+local slow = require("./tests/lib/slow")
 local stdio = require("@lune/stdio")
+local trace = require("./engine/trace")
 local workspace = require("./lib/workspace")
 
 local ROOT = (string.gsub(process.cwd, "/+$", ""))
@@ -40,15 +43,6 @@ while args[1] == "--" do
 	table.remove(args, 1)
 end
 local command = table.remove(args, 1)
-
-local function trim(s: string): string
-	return (string.gsub(s, "%s+$", ""))
-end
-
-local function git(argv: { string }): string?
-	local r = process.exec("git", argv, { cwd = ROOT })
-	return if r.ok then trim(r.stdout) else nil
-end
 
 local function collect(dir: string, out: { string })
 	for _, name in fs.readDir(dir) do
@@ -134,7 +128,8 @@ end
 -- ---------------------------------------------------------------------------------------------------- run
 local function runCommand()
 	local project: string? = nil
-	local fresh, all = false, false
+	local outFile: string? = nil
+	local fresh, all, slowOnly = false, false, false
 	local files: { string } = {}
 	local i = 1
 	local afterDashes = false
@@ -147,10 +142,15 @@ local function runCommand()
 		elseif a == "--project" then
 			project = args[i + 1]
 			i += 1
+		elseif a == "--out" then
+			outFile = args[i + 1]
+			i += 1
 		elseif a == "--fresh" then
 			fresh = true
 		elseif a == "--all" then
 			all = true
+		elseif a == "--slow" then
+			slowOnly = true
 		else
 			fail(`unknown argument {a}`)
 		end
@@ -170,6 +170,14 @@ local function runCommand()
 			table.insert(files, string.sub(p, #(if home == "." then "./" else home .. "/") + 1))
 		end
 	end
+	local tiers = if project == "z-nile" then slow.load(ROOT) else {}
+	local selected: { string } = {}
+	for _, f in files do
+		if (tiers[f] ~= nil) == slowOnly then
+			table.insert(selected, f)
+		end
+	end
+	files = selected
 	table.sort(files)
 
 	-- reuse
@@ -195,6 +203,7 @@ local function runCommand()
 
 	local fps: { [string]: string } = {}
 	local toRun: { string } = {}
+	local reusedByFile: { [string]: any } = {}
 	local reusedCases, reusedFiles = 0, 0
 	if db ~= nil and state ~= nil then
 		local refs: { string } = {}
@@ -227,6 +236,7 @@ local function runCommand()
 					stdio.write(`reused {f}\n`)
 					reusedFiles += 1
 					reusedCases += #(row :: any).cases
+					reusedByFile[f] = row
 				else
 					table.insert(toRun, f)
 				end
@@ -238,6 +248,7 @@ local function runCommand()
 	end
 
 	local code = 0
+	local byFile: { [string]: any } = {}
 	if #toRun > 0 then
 		local resultsFile = `{ROOT}/{prefix}.cache/spec-results-{fence.myPid()}.json`
 		pcall(fs.writeDir, `{ROOT}/{prefix}.cache`)
@@ -263,7 +274,6 @@ local function runCommand()
 			end
 		end
 		pcall(fs.removeFile, resultsFile)
-		local byFile: { [string]: any } = {}
 		if doc ~= nil and type(doc) == "table" and type(doc.files) == "table" then
 			for _, f in toRun do
 				for _, rec in doc.files do
@@ -366,19 +376,52 @@ local function runCommand()
 			stdio.write(`{reusedCases} reused cases in {reusedFiles} spec files\n`)
 		end
 	end
+	if outFile ~= nil and code == 0 then
+		local recorded: { trace.RecordedSpec } = {}
+		local existingSpecs: { [string]: boolean } = {}
+		for _, f in files do
+			local rec = byFile[f] or reusedByFile[f]
+			local greenCases: { string } = {}
+			if rec ~= nil and type(rec.cases) == "table" then
+				for _, c in rec.cases do
+					if type(c) == "table" and c.ok == true and type(c.name) == "string" then
+						table.insert(greenCases, c.name)
+					end
+				end
+			end
+			local fullPath = prefix .. f
+			existingSpecs[fullPath] = true
+			table.insert(recorded, { spec = fullPath, cases = greenCases })
+		end
+		if fs.isFile(outFile) then
+			local prev, _ = trace.parseResults(fs.readFile(outFile))
+			if prev ~= nil then
+				for specPath, casesMap in prev do
+					if not existingSpecs[specPath] then
+						local list: { string } = {}
+						for caseName in casesMap do
+							table.insert(list, caseName)
+						end
+						table.sort(list)
+						table.insert(recorded, { spec = specPath, cases = list })
+					end
+				end
+			end
+		end
+		fs.writeFile(outFile, trace.renderResults(recorded))
+	end
 	process.exit(if code == 0 then 0 else 1)
 end
 
 -- ---------------------------------------------------------------------------------------------------- digest
--- The digest of a whole affected gate: the projects it covers, the base it compares with, each project's selection, the
--- tools, every file's blob and, when the selection holds a `*` spec, HEAD; always the union of the selected specs' declared refs.
+-- The digest of a whole affected gate: the projects it covers, each project's selection, the tools and every file's
+-- blob; always the union of the selected specs' declared refs. Not main's sha and not HEAD.
 local function digestOf(mode: string, names: { string }, base: string?): string?
 	local reg = loadRegistry()
 	local state = readState(reg)
 	if state == nil then
 		return nil
 	end
-	local starred = false
 	local refSet: { [string]: boolean } = {}
 	local changed = changes.files(base)
 	local selected: { string } = {} -- the selection itself (review 005 F1): it reads the merge-base and HEAD's tree too
@@ -394,10 +437,10 @@ local function digestOf(mode: string, names: { string }, base: string?): string?
 		end
 		local prefix = prefixOf(homeOf(reg, name))
 		if sel == "ALL" then
-			for _, f in state.ctx.graph.files do
-				if string.match(f, "%.spec%.luau$") and string.sub(f, 1, #prefix) == prefix then
-					table.insert(specs, f)
-				end
+			local home = homeOf(reg, name)
+			local dir = if home == "." then "tests" else `{home}/tests`
+			if fs.isDir(dir) then
+				collect(dir, specs)
 			end
 		else
 			for _, f in sel :: { string } do
@@ -405,11 +448,6 @@ local function digestOf(mode: string, names: { string }, base: string?): string?
 			end
 		end
 		for _, spec in specs do
-			for _, e in (state.ctx.inputs[spec] :: { string }?) or ({} :: { string }) do
-				if e == "*" then
-					starred = true
-				end
-			end
 			for _, ref in fingerprint.refs(state.ctx, spec) do
 				refSet[ref] = true
 			end
@@ -424,10 +462,7 @@ local function digestOf(mode: string, names: { string }, base: string?): string?
 	if gitState == nil then
 		return nil
 	end
-	local baseRef = base
-		or (if git({ "rev-parse", "--verify", "-q", "origin/main" }) ~= nil then "origin/main" else "main")
-	local extra =
-		fingerprint.digestExtra(mode, names, git({ "rev-parse", baseRef }) or "?", starred, gitState, refs)
+	local extra = fingerprint.digestExtra(mode, names, gitState, refs)
 	for _, line in selected do
 		table.insert(extra, line)
 	end
