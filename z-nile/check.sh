@@ -1,36 +1,68 @@
 #!/usr/bin/env bash
 # The repo gate (c0114: z-nile's), one per project (c0120). See z-nile/skills/zz-test/SKILL.md.
-#   z-nile/check.sh [--project <name>]... [--affected [--base REF] [--fresh] | --full]
+#   z-nile/check.sh [--project <name>]... [--affected [--base REF] | --full | --slow | --static]
 #   z-nile/check.sh [--project <name>]... --plan   # print what each stage reads, run nothing, write nothing
-# With no --project it runs every project of z-nile/projects.toml (`./zn done`, `./zn land`); each --project adds
-# one (pickman/check.sh is `--project pickman`). A project's specs run from its home, which z-nile/roots gives
+# --affected selects specs from the change and runs every one (the slow tier excluded).
+# --full runs every fast-tier spec. --slow runs only z-nile's measured slow tier
+# (z-nile alone unless --project names another set). --static runs no specs.
+# A pass is this process's exit. Nothing is remembered between runs except each home's
+# .cache/spec-durations.tsv, a packing hint (schedule.luau); deleting it changes the order only.
+# ./zn land runs --static here and does not re-run it if main moves during the push.
+# ./zn done runs --affected. The merge trusts GitHub's check. The post-landing net runs
+# --full and records the commit in z-nile/watch-passed, which is in git.
+# With no --project an affected or full run starts from every project of z-nile/projects.toml.
+# An affected run and `--static` then keep only the projects whose files changed.
+# `./zn done` runs the affected gate; `./zn land` runs `--static` (`./zn done`, `./zn land`).
+# Each --project adds one (pickman/check.sh is `--project pickman`). A project's specs run from its home, which z-nile/roots gives
 # (`--projects`): z-nile/ for z-nile, pickman/ for pickman (the root belongs to no project).
 # Static stages run concurrently (z-nile/lib/par.sh); any failure fails the gate before the tests.
 set -euo pipefail
+# One measurement for the whole gate, appended to the checkout's cache. The inner run sees ZN_MEASURED and does
+# not measure again. A row that cannot be written does not fail the gate, and nothing under a tracked path is written.
+if [[ -z "${ZN_MEASURED:-}" ]]; then
+  root="$(cd "$(dirname "$0")/.." && pwd -P)"
+  mode=affected
+  for a in "$@"; do
+    case "$a" in
+      --full|--slow|--static|--plan) mode="${a#--}" ;;
+    esac
+  done
+  export ZN_TOP="$root"
+  export ZN_MEASURE_BUFFER=1
+  export ZN_MEASURE_KIND=test
+  export ZN_MEASURE_PHASE=test
+  export ZN_MEASURE_SUBJECT="$mode"
+  ZN_MEASURE_BRANCH="$(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  ZN_MEASURE_HEAD="$(git -C "$root" rev-parse HEAD 2>/dev/null || true)"
+  if [[ "$ZN_MEASURE_BRANCH" == "HEAD" ]]; then ZN_MEASURE_BRANCH=""; fi
+  export ZN_MEASURE_BRANCH ZN_MEASURE_HEAD
+  set +e
+  perl "$root/z-nile/lib/bounded.pl" --time 3600 -- env ZN_MEASURED=1 "$0" "$@"
+  code=$?
+  set -e
+  exit "$code"
+fi
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.rokit/bin:$PATH"
 
 mode=affected
 plan=
-fresh=
 base_args=()
 wanted=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --full) mode=full ;;
+    --static) mode=static ;;
+    --slow) mode=slow ;;
     --plan) plan=1 ;;
     --affected) mode=affected ;;
-    --fresh) fresh=1 ;;
     --base) base_args=(--base "$2"); shift ;;
     --project) wanted+=("$2"); shift ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
   shift
 done
-if [[ -n $fresh && $mode == full ]]; then
-  echo "check.sh: unknown or conflicting flags: --fresh is an affected flag, not for --full" >&2
-  exit 2
-fi
+if [[ $mode == slow && ${#wanted[@]} -eq 0 ]]; then wanted=(z-nile); fi
 
 # The projects: name, home and root, one per line, from the registry's reader for the shell (z-nile/roots, c0114). A
 # tree without it predates c0114: its one project lives at the root, with its places there.
@@ -52,7 +84,24 @@ if [[ ${#wanted[@]} -gt 0 ]]; then
     [[ -n $found ]] || { echo "check.sh: no project $w in z-nile/projects.toml" >&2; exit 2; }
   done
 fi
+narrow= # set: an empty wanted list means no project, not every project
+# An affected or static run with no --project keeps the projects whose files changed. A path that forces every
+# project (zn, scripts/, the root configs) keeps them all. --full and an explicit --project are not narrowed.
+if [[ $mode == affected || $mode == static ]] && [[ ${#wanted[@]} -eq 0 ]]; then
+  static_out=$(lune run z-nile/affected -- --static ${base_args[@]+"${base_args[@]}"}) || {
+    echo "check.sh: could not read which projects changed" >&2
+    exit 1
+  }
+  if [[ "$static_out" != ALL ]]; then
+    narrow=1
+    wanted=()
+    while IFS= read -r line; do
+      [[ -n $line ]] && wanted+=("$line")
+    done < <(printf '%s\n' "$static_out")
+  fi
+fi
 picked() { # picked <name>: is the project in this run?
+  [[ -n $narrow && ${#wanted[@]} -eq 0 ]] && return 1
   [[ ${#wanted[@]} -eq 0 ]] && return 0
   local w
   for w in "${wanted[@]}"; do [[ $w == "$1" ]] && return 0; done
@@ -103,13 +152,20 @@ source z-nile/lib/fence.sh
 # each home's check*.rbxl), and before --plan (they only read): a symlinked or bad .cache, which an unjailed spec could
 # leave, refuses (code review 004 F3, 005 F3). The set is fence.sh's (pickman_fence_all, code review 005 F2).
 pickman_fence_all "$(pwd -P)" refusals || exit 1
+# Nothing changed, so nothing is checked. The fence above still ran: a symlinked .cache refuses even a no-op plan.
+if [[ -n $narrow && ${#wanted[@]} -eq 0 ]]; then
+  echo "no project changed"
+  [[ -n $plan ]] && exit 0
+  printf '\nGATE PASSED (%s)\n' "$mode"
+  exit 0
+fi
 if [[ -n $plan ]]; then
   printf 'format: %s\n' "${LUAU_DIRS[*]-}"
   printf 'lint: %s\n' "${LUAU_DIRS[*]-}"
   for h in ${srcs[@]+"${srcs[@]}"}; do printf 'types (Roblox): %ssrc, from %s\n' "$(prefix "$h")" "$h"; done
   printf 'types (Lune): %s\n' "${LUNE_DIRS[*]-}"
   for e in ${places[@]+"${places[@]}"}; do printf 'build: %s\n' "${e#*|}"; done
-  [[ -d z-nile/skills ]] && printf 'skills: %s\n' .claude/skills
+  { [[ $mode == full ]] || picked z-nile; } && [[ -d z-nile/skills ]] && printf 'skills: %s\n' .claude/skills
   for i in "${!names[@]}"; do
     picked "${names[$i]}" || continue
     [[ -d $(prefix "${homes[$i]}")tests ]] && printf 'specs: %s, from %s\n' "${names[$i]}" "${homes[$i]}"
@@ -141,26 +197,9 @@ if [[ ! -s $defs || -L $defs ]]; then
   rm -f "$t"
 fi
 
-# c0165: an affected gate that already passed on this exact content is reused whole, its static report included. The
-# digest holds the projects, the base, each project's selection, the tools and every file (z-nile/specs); a failed read gives none and the gate runs.
-digest=
+# The static report is a temp file. Every selected spec runs; a stored pass never skips the gate.
 report=
-if [[ $mode == affected ]]; then
-  export PICKMAN_GATE_PID=$$
-  pnames=()
-  for i in "${!names[@]}"; do picked "${names[$i]}" && pnames+=("${names[$i]}"); done
-  proj_csv=$(IFS=,; echo "${pnames[*]}")
-  trap 'for i in "${!homes[@]}"; do rm -f "$(prefix "${homes[$i]}").cache/spec-norecord-$$"; done; [[ -z $report ]] || rm -f "$report"' EXIT
-  digest=$(lune run z-nile/specs -- digest --mode affected --projects "$proj_csv" ${base_args[@]+"${base_args[@]}"} 2>/dev/null) || digest=
-  if [[ -n $digest && -z $fresh ]]; then
-    if reused=$(lune run z-nile/specs -- gate-check --digest "$digest" 2>/dev/null) &&
-      [[ $reused == *"reused: an affected gate passed on this content"* ]]; then
-      printf '%s\n' "$reused"
-      printf '\nGATE PASSED (affected)\n'
-      exit 0
-    fi
-  fi
-fi
+trap '[[ -n ${report:-} ]] && rm -f "$report"' EXIT
 
 build_place() { # $1 the output file, then the build command. rojo writes through a symlink at its output path,
   # so it builds in a fresh folder outside and the result is renamed in (replace-file.pl); the folder always goes
@@ -209,14 +248,31 @@ for e in ${places[@]+"${places[@]}"}; do
   [[ $stem == default ]] || out="$(prefix "$h").cache/check-$stem.rbxl"
   par_start "build (rojo $f)" build_place "$out" rojo build "$f"
 done
-# the skill links (c0115): one committed relative link in .claude/skills per skill folder, every project's
-[[ -d z-nile/skills ]] && par_start "skills (./zn skills --check)" ./zn skills --check
+# the skill links (c0115): one committed relative link in .claude/skills per skill folder. A full run checks them;
+# an affected or static run checks them when z-nile's files changed (a game-only change does not).
+if [[ -d z-nile/skills ]] && { [[ $mode == full ]] || picked z-nile; }; then
+  par_start "skills (./zn skills --check)" ./zn skills --check
+fi
 report=$(mktemp "${TMPDIR:-/tmp}/gate-report.XXXXXX")
 par_wait >"$report" || { cat "$report"; exit 1; }
 cat "$report"
+# A capture (`./zn land`) checks the static stages of the projects it touched and stops. It does not run specs.
+if [[ $mode == static ]]; then
+  printf '\ngate wall time: %ss\n' "$(par_elapsed "$gate_start" "$(par_now)")"
+  printf '\nGATE PASSED (static)\n'
+  exit 0
+fi
 [[ $mode == affected ]] || rm -f "$report"
 
+# A watch file that names a missing path, or that does not parse, fails the gate in every mode that runs specs.
+if ! lune run z-nile/watch-check; then
+  echo "watch-check failed" >&2
+  exit 1
+fi
+
 # The specs: each project's from its home (its runner, its .cache, its lock), so one project's never see another's.
+# Affected mode runs every spec the map lists, in whichever project it lives. Project narrowing stays on the
+# static stages above.
 run_specs() { # run_specs <home> [spec paths relative to the home]
   local h=$1
   shift
@@ -227,34 +283,30 @@ run_specs() { # run_specs <home> [spec paths relative to the home]
   fi
 }
 for i in "${!names[@]}"; do
-  picked "${names[$i]}" || continue
+  if [[ $mode != affected ]]; then
+    picked "${names[$i]}" || continue
+  fi
   n=${names[$i]} h=${homes[$i]}
   [[ -d $(prefix "$h")tests ]] || { stage "tests ($mode): $n has no tests/"; continue; }
   stage "tests ($mode): $n"
   if [[ $mode == full ]]; then
     run_specs "$h"
+  elif [[ $mode == slow ]]; then
+    run_specs "$h" --slow
   else
     selection=$(lune run z-nile/affected -- --project "$n" ${base_args[@]+"${base_args[@]}"})
     if [[ -z $selection ]]; then
       echo "no specs affected"
     elif [[ $selection == ALL ]]; then
-      echo "infrastructure changed: running all specs"
-      lune run z-nile/specs -- run --project "$n" ${fresh:+--fresh} --all
+      echo "check.sh: affected printed ALL; a change never falls back to every spec" >&2
+      exit 1
     else
       echo "$selection"
       # shellcheck disable=SC2086
-      lune run z-nile/specs -- run --project "$n" ${fresh:+--fresh} -- $selection
+      run_specs "$h" --exclude-slow $selection
     fi
   fi
 done
-
-# the gate passed: record it, unless the tree moved while it ran (a spec that wrote a file) or a run was not recorded
-if [[ -n $digest ]]; then
-  digest_after=$(lune run z-nile/specs -- digest --mode affected --projects "$proj_csv" ${base_args[@]+"${base_args[@]}"} 2>/dev/null) || digest_after=
-  if [[ $digest_after == "$digest" ]]; then
-    lune run z-nile/specs -- gate-record --digest "$digest" --mode affected --projects "$proj_csv" --summary "$report" || true
-  fi
-fi
 
 printf '\ngate wall time: %ss\n' "$(par_elapsed "$gate_start" "$(par_now)")"
 printf '\nGATE PASSED (%s)\n' "$mode"

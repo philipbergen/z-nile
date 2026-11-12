@@ -15,10 +15,14 @@
 local adapters = require("./adapters")
 local audit = require("./audit")
 local broker = require("./broker")
+local buffer = require("./buffer")
+local costrow = require("./costrow")
 local cred = require("./credential")
 local dispatch = require("./dispatch")
 local fs = require("@lune/fs")
 local models = require("./models")
+local modelstep = require("./modelstep")
+local openlist = require("./openlist")
 local process = require("@lune/process")
 local projects = require("./projects")
 local raftcheck = require("./raftcheck")
@@ -52,8 +56,19 @@ export type Attempt = {
 	detail: string,
 	tokens: number,
 	minutes: number,
+	wall: number?,
+	cpu: number?,
 }
-export type Row = { id: string, phase: string, tokens: number, model: string, minutes: number, note: string }
+export type Row = {
+	id: string,
+	phase: string,
+	tokens: number,
+	model: string,
+	minutes: number,
+	note: string,
+	wall: number?,
+	cpu: number?,
+}
 export type State = {
 	id: string,
 	watermark: string?, -- the watermark as this item's last run left it (the mirror: review 003 F2)
@@ -317,20 +332,23 @@ end
 
 -- The walk of `skill` for an item: an issue's own folder; a raft's members, strongest per CLI, ordered by the
 -- raft's own walk; z-ticket's, its project's home.
-function dispatcher.resolve(skill: string, id: string, project: string?): models.Resolved
+function dispatcher.resolve(skill: string, id: string, project: string?, mode: string?): models.Resolved
 	if id == "" then
 		local reg = projects.load(".")
 		local p = if project then projects.named(reg, project) else reg.projects[1]
 		if not p then
 			error(`no project {tostring(project)} in {projects.FILE}`, 0)
 		end
-		return models.resolve(walk((p :: projects.Project).home), skill)
+		return models.resolve(walk((p :: projects.Project).home), skill, mode)
 	end
 	local item = store.get(id)
 	if item.kind == "issue" then
-		return models.resolve(walk(item.dir), skill)
+		return models.resolve(walk(item.dir), skill, mode)
 	end
-	local own = models.resolve(walk(item.dir), skill)
+	local own = models.resolve(walk(item.dir), skill, mode)
+	if own.fromRoles then
+		return own
+	end
 	local members: { models.Resolved } = {}
 	for _, m in store.members(id) do
 		table.insert(members, models.resolve(walk(m.dir), skill))
@@ -359,11 +377,80 @@ end
 -- pending for the next legal point (a run's rows after its merge). Minutes (the user's G13, 2026-10-25, "Dispatcher row
 -- 0 min", read with "Yes, reviewers keep minutes"): an author step's rows record 0, since its skill records its own;
 -- a review's rows record the attempt's wall minutes, since no skill records a reviewer's. A code or stream review's
--- spend is one printed `record:` line for the author's `./zn commit` (it rides with the review file): the attempts'
--- tokens and minutes summed, under the model of the attempt that did the review (the last that spent tokens).
-local function roundTenth(x: number): number
-	return math.floor(x * 10 + 0.5) / 10
+-- spend is one printed `record:` line for the author's `./zn commit`, and one line in the author's measure
+-- buffer (the author's commit folds it). Tokens are the attempts summed, under the model of the attempt that
+-- did the review (the last that spent tokens). The dispatch branch is not given this row.
+local function rowLine(root: string, row: Row): buffer.Line
+	local branch, head = costrow.branchOf(root)
+	local flags: { string } = {}
+	if not row.wall then
+		table.insert(flags, "wall")
+		table.insert(flags, "ai")
+	end
+	if not row.cpu then
+		table.insert(flags, "cpu")
+	end
+	if row.tokens == 0 then
+		table.insert(flags, "tokens")
+	end
+	return {
+		ms = 0,
+		kind = "row",
+		phase = row.phase,
+		subject = row.note,
+		wall = row.wall,
+		cpu = row.cpu,
+		ai = row.wall,
+		tokens = row.tokens,
+		model = if row.model ~= "" then row.model else nil,
+		unmeasured = if #flags > 0 then table.concat(flags, ",") else nil,
+		id = row.id,
+		branch = branch,
+		head = head,
+	}
 end
+
+-- Folds the measured row into the dispatcher's branch and commits that file alone.
+local function publishMeasured(ctx: Ctx, row: Row): (boolean, string, string)
+	local wt = worktree(ctx, "zn-dispatch")
+	zn(wt, { "sync" }, true)
+	local dir = costrow.locate(wt, row.id)
+	if not dir then
+		return false, "", `no folder for {row.id}`
+	end
+	if not costrow.append(wt, rowLine(wt, row)) then
+		return false, "", "could not buffer the row"
+	end
+	local homes: { [string]: string } = {}
+	homes[row.id] = dir
+	local planned = costrow.plan(wt, homes, nil, false)
+	local paths = costrow.writeFiles(planned)
+	if #paths == 0 then
+		return false, "", "no row"
+	end
+	local out = paths[1]
+	local added = git(wt, { "add", "--", out })
+	if not added then
+		costrow.restore(planned)
+		return false, out, "could not stage the row"
+	end
+	local committed, cerr = git(wt, {
+		"commit",
+		"-q",
+		"--only",
+		"-m",
+		`tracker: spend {row.id} {row.phase}`,
+		"--",
+		out,
+	})
+	if not committed then
+		costrow.restore(planned)
+		return false, out, cerr
+	end
+	costrow.writeBuffer(wt, planned)
+	return true, out, ""
+end
+
 local function record(
 	ctx: Ctx,
 	st: State,
@@ -372,23 +459,59 @@ local function record(
 	attempts: { Attempt },
 	note: string,
 	reviewer: boolean,
-	stream: boolean
+	stream: boolean,
+	cwd: string
 )
 	if phase == "code-review" then
-		local tokens, minutes, model = 0, 0, nil :: string?
+		local model = nil :: string?
+		local tokens = 0
+		local wall, cpu = 0, 0
+		local sawWall, sawCpu = false, false
 		for _, a in attempts do
+			tokens += a.tokens
 			if a.tokens > 0 then
-				tokens += a.tokens
-				minutes += a.minutes
 				model = a.model
+			end
+			if a.wall then
+				wall += a.wall
+				sawWall = true
+			end
+			if a.cpu then
+				cpu += a.cpu
+				sawCpu = true
 			end
 		end
 		if model then
 			print(
-				`record: ./zn commit -m "{id}: {note}" --phase code-review --time {roundTenth(minutes)} --tokens {tokens} --model {model}{if stream
+				`record: ./zn commit -m "{id}: {note}" --phase code-review --model {model}{if stream
 					then ` --issue {id}`
 					else ""}`
 			)
+			local flags: { string } = {}
+			if not sawWall then
+				table.insert(flags, "wall")
+				table.insert(flags, "ai")
+			end
+			if not sawCpu then
+				table.insert(flags, "cpu")
+			end
+			-- In the author's measure buffer. Their commit folds it. The dispatch branch is left alone.
+			local branch, head = costrow.branchOf(cwd)
+			costrow.append(cwd, {
+				ms = 0,
+				kind = "row",
+				phase = phase,
+				subject = note,
+				tokens = tokens,
+				model = model,
+				wall = if sawWall then wall else nil,
+				cpu = if sawCpu then cpu else nil,
+				ai = if sawWall then wall else nil,
+				unmeasured = if #flags > 0 then table.concat(flags, ",") else nil,
+				id = id,
+				branch = branch,
+				head = head,
+			})
 		end
 		return
 	end
@@ -401,27 +524,14 @@ local function record(
 				model = a.model,
 				minutes = if reviewer then a.minutes else 0,
 				note = note,
+				wall = a.wall,
+				cpu = a.cpu,
 			}
 			local origin = ctx.origin(id)
 			if phase == "deliver" or (origin and origin.state ~= "backlog") then
 				table.insert(st.pending, row)
 			else
-				local wt = worktree(ctx, "zn-dispatch")
-				zn(wt, { "sync" }, true)
-				local ok, out, err = zn(wt, {
-					"spend",
-					id,
-					"--phase",
-					phase,
-					"--time",
-					tostring(row.minutes),
-					"--tokens",
-					tostring(a.tokens),
-					"--model",
-					a.model,
-					"--note",
-					note,
-				}, true)
+				local ok, out, err = publishMeasured(ctx, row)
 				if ok then
 					print(`spend: {id} {phase} {a.tokens} tokens {a.model}`)
 				else
@@ -449,22 +559,7 @@ local function flush(ctx: Ctx, st: State)
 				or (row.phase ~= "deliver" and origin.state == "backlog")
 			)
 		if ready then
-			local wt = worktree(ctx, "zn-dispatch")
-			zn(wt, { "sync" }, true)
-			local ok, out, err = zn(wt, {
-				"spend",
-				row.id,
-				"--phase",
-				row.phase,
-				"--time",
-				tostring(row.minutes),
-				"--tokens",
-				tostring(row.tokens),
-				"--model",
-				row.model,
-				"--note",
-				row.note,
-			}, true)
+			local ok, out, err = publishMeasured(ctx, row)
 			if ok then
 				print(`spend: {row.id} {row.phase} {row.tokens} tokens {row.model} (pending, now written)`)
 			else
@@ -794,7 +889,7 @@ function dispatcher.modelStep(
 ): string
 	local mode = opts["--mode"] and opts["--mode"][1]
 	local project = opts["--project"] and opts["--project"][1]
-	local resolved = dispatcher.resolve(step, id, project)
+	local resolved = dispatcher.resolve(step, id, project, mode)
 	local tries = models.tries(resolved)
 	local stateDir = st.dir
 	local cwd: string
@@ -823,25 +918,14 @@ function dispatcher.modelStep(
 		end
 		promptPath = out
 	end
-	-- a stream review's raft folder (repository-relative) and, from round 2, the previous round's files
+	-- a stream review's raft folder (repository-relative). One round: a second file is refused where the review lands.
 	local streamDir: string? = nil
-	local previous: { string }? = nil
 	if step == "zz-review" and mode == "stream" and id ~= "" then
 		local raftId = store.readFront(store.get(id).doc).raft
 		if not raftId or raftId == "" then
 			error(`{id} has no raft: a stream review lands in its raft's folder`, 0)
 		end
-		local dir = store.get(raftId).dir
-		streamDir = dir
-		local _, lastReview = lastRound(`{cwd}/{dir}`, `stream-review-{id}-`)
-		local _, lastRefute = lastRound(`{cwd}/{dir}`, `stream-refute-{id}-`)
-		if lastReview then
-			local list = { `{dir}/{lastReview}` }
-			if lastRefute then
-				table.insert(list, `{dir}/{lastRefute}`)
-			end
-			previous = list
-		end
+		streamDir = store.get(raftId).dir
 	end
 	local prompt = dispatch.prompt({
 		step = step,
@@ -852,7 +936,6 @@ function dispatcher.modelStep(
 		stateDir = stateDir,
 		promptPath = promptPath,
 		streamWorktree = if streamDir then `{ctx.mainRoot()}/.worktree/ws-{id}` else nil,
-		previous = previous,
 		description = opts["--description"] and opts["--description"][1],
 		project = project,
 	})
@@ -918,7 +1001,10 @@ function dispatcher.modelStep(
 		if streamDir then
 			land = { dir = streamDir, prefix = `stream-review-{id}-`, note = "stream-review-" }
 		else
-			local prefix = if mode == "code" then "review-" else "design-review-"
+			local prefix = if mode == "code"
+				then "review-"
+				elseif mode == "final" then "final-review-"
+				else "design-review-"
 			land = { dir = store.get(id).dir, prefix = prefix, note = prefix }
 		end
 	end
@@ -997,7 +1083,7 @@ function dispatcher.modelStep(
 			end
 			return ok, said
 		end
-		local result = runner.run({
+		local result = modelstep.launch({
 			argv = argv,
 			cwd = cwd,
 			env = env,
@@ -1042,6 +1128,8 @@ function dispatcher.modelStep(
 			detail = detail,
 			tokens = result.tokens,
 			minutes = minutesSince(t0),
+			wall = result.wall,
+			cpu = result.cpu,
 		})
 		print(`dispatch: {step} on {spec.cli}: {outcomeNow} ({detail}), {result.tokens} tokens`)
 		outcome = outcomeNow
@@ -1051,7 +1139,8 @@ function dispatcher.modelStep(
 			pcall(fs.removeFile, aside)
 			fs.move(landing, aside)
 		end
-		if outcomeNow ~= "quota" then
+		-- a role's list moves on when the call fails, the CLI is missing, or the quota is gone
+		if outcomeNow ~= "quota" and not (resolved.fromRoles and outcomeNow == "failed") then
 			break
 		end
 	end
@@ -1121,10 +1210,29 @@ function dispatcher.modelStep(
 		local l = land :: Landing
 		if fs.isFile(landing) then
 			local last = lastRound(`{cwd}/{l.dir}`, l.prefix)
-			local name = string.format("%s%03d.md", l.prefix, last + 1)
-			fs.move(landing, `{cwd}/{l.dir}/{name}`)
-			reviewNote = string.format("%s%03d", l.note, last + 1)
-			print(`dispatch: the review is {l.dir}/{name}`)
+			if last >= 1 then
+				-- one round. Historical files stay where they are; a new one is not added.
+				outcome = "failed"
+				pcall(fs.removeFile, landing)
+				local why: Attempt = {
+					step = step :: string,
+					cli = "",
+					runtime = "",
+					model = "",
+					outcome = "failed",
+					detail = `{l.dir} already has {l.prefix}{string.format("%03d", last)}.md: one round, then the author answers it; there is no second round`,
+					tokens = 0,
+					minutes = 0,
+				}
+				table.insert(attempts, why)
+				table.insert(st.history, why)
+				stdio.ewrite(`dispatch: {why.detail}\n`)
+			else
+				local name = string.format("%s%03d.md", l.prefix, last + 1)
+				fs.move(landing, `{cwd}/{l.dir}/{name}`)
+				reviewNote = string.format("%s%03d", l.note, last + 1)
+				print(`dispatch: the review is {l.dir}/{name}`)
+			end
 		else
 			outcome = "failed"
 			local why: Attempt = {
@@ -1152,7 +1260,8 @@ function dispatcher.modelStep(
 			attempts,
 			note,
 			step == "zz-review",
-			mode == "stream"
+			mode == "stream",
+			cwd
 		)
 	end
 	st.outcome = outcome
@@ -1651,6 +1760,10 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 			end
 		end
 	end
+	local openHuman: { string } = {}
+	if st.worktree and o and fs.isFile(`{st.worktree}/{o.path}`) then
+		openHuman = openlist.pending(fs.readFile(`{st.worktree}/{o.path}`))
+	end
 	local pr: dispatch.Pr? = nil
 	if o then
 		local branch: string? = nil
@@ -1694,6 +1807,7 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 		localRaft = localRaft,
 		pr = pr,
 		questions = fs.isFile(`{st.dir}/questions.md`),
+		openHuman = openHuman,
 		last = last,
 		uncovered = uncovered,
 		autoMerge = settings.autoMerge,
@@ -1723,6 +1837,8 @@ local function merge(ctx: Ctx, st: State, pr: number, head: string): boolean
 		table.insert(st.merged, pr)
 		save(st)
 		zn(ctx.mainRoot(), { "sync" }, true)
+		-- the net repairs main after the landing; it returns at once and does not decide this merge
+		zn(ctx.mainRoot(), { "watch-kick" }, true)
 	end
 	return r.ok
 end
@@ -2135,7 +2251,7 @@ function dispatcher.oneStep(
 		if s.kind == "script" then
 			print(`run={table.concat(dispatch.scriptArgv(step, id), " ")}`)
 		else
-			for _, line in dispatch.describe(dispatcher.resolve(step, id, nil)) do
+			for _, line in dispatch.describe(dispatcher.resolve(step, id, nil, mode)) do
 				print(line)
 			end
 		end

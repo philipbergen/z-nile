@@ -1,28 +1,26 @@
 --!strict
--- The spec orchestrator (c0165): between the gate and the spec runner. It decides which spec files to run, runs them
--- through `lune run tests/run` in the project's home (the runner keeps its jail and guards), and keeps results in the
--- shared SQLite db, keyed by a fingerprint of everything a spec can read.
---   lune run z-nile/specs -- run --project <name> [--fresh] [--all | -- <spec path relative to the home>...]
---   lune run z-nile/specs -- digest --mode <affected|full> --projects <a,b> [--base REF]   -- the whole-gate digest
---   lune run z-nile/specs -- scope                         -- the one project the change set is confined to, or ALL (c0239)
---   lune run z-nile/specs -- gate-check --digest D        -- exit 0 and the stored report when that gate passed
---   lune run z-nile/specs -- gate-record --digest D --mode M --projects P --summary FILE
--- It runs unjailed (check.sh does), so it alone writes the db; the runner's jail denies specs every write outside the
--- home's .cache. Reuse is off wherever the db, the blob read or the context can't be had: every spec then runs as before.
+-- The spec orchestrator: between `./zn finish` and the spec runner. The gate itself
+-- (`z-nile/check.sh`) starts `tests/run` directly. This command runs the specs a
+-- finish selected and writes their passing case names to `--out`, a file in git.
+--   lune run z-nile/specs -- run --project <name> [--out FILE] [--all | --slow | -- <spec path relative to the home>...]
+--     without --slow, a spec in z-nile/tests/slow.tsv is left out; --slow runs only that list
+--   lune run z-nile/specs -- scope
+--     the one project the change set is confined to, or ALL (c0239)
+-- Every listed spec runs. Nothing is reused and nothing is written outside the
+-- results file `--out` names and the runner's own results file under the home's .cache.
+-- The gate's command lines (the contract for the later Python port) are check.sh's header.
 
 local changes = require("./lib/changed")
 local context = require("./lib/context")
 local fence = require("./tests/lib/fence")
-local fingerprint = require("./lib/fingerprint")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local projects = require("./engine/projects")
-local resultsdb = require("./lib/resultsdb")
-local reuseplan = require("./lib/reuseplan")
 local select = require("./lib/select")
 local serde = require("@lune/serde")
+local slow = require("./tests/lib/slow")
 local stdio = require("@lune/stdio")
-local workspace = require("./lib/workspace")
+local trace = require("./engine/trace")
 
 local ROOT = (string.gsub(process.cwd, "/+$", ""))
 
@@ -41,15 +39,6 @@ while args[1] == "--" do
 end
 local command = table.remove(args, 1)
 
-local function trim(s: string): string
-	return (string.gsub(s, "%s+$", ""))
-end
-
-local function git(argv: { string }): string?
-	local r = process.exec("git", argv, { cwd = ROOT })
-	return if r.ok then trim(r.stdout) else nil
-end
-
 local function collect(dir: string, out: { string })
 	for _, name in fs.readDir(dir) do
 		local path = `{dir}/{name}`
@@ -67,20 +56,6 @@ local function loadRegistry(): projects.Registry
 		fail(`cannot read the project registry: {reg}`)
 	end
 	return reg :: projects.Registry
-end
-
--- the facts a fingerprint is made of; nil and a reason when any is unreadable (reuse off)
-type State = { ctx: select.Context, blobs: fingerprint.Blobs, tools: string }
-local function readState(reg: projects.Registry): (State?, string?)
-	local ctx, why = context.build(reg)
-	if ctx == nil then
-		return nil, why
-	end
-	local blobs, blobWhy = workspace.blobs(ROOT)
-	if blobs == nil then
-		return nil, blobWhy
-	end
-	return { ctx = ctx, blobs = blobs, tools = workspace.tools(ROOT) }, nil
 end
 
 local function homeOf(reg: projects.Registry, name: string): string
@@ -123,18 +98,11 @@ local function validRecord(rec: any, file: string): any
 	}
 end
 
-local function noRecordMarker(home: string, pid: string): string
-	return `{ROOT}/{prefixOf(home)}.cache/spec-norecord-{pid}`
-end
-
-local function hostOs(): "macos" | "linux"
-	return if process.os == "macos" then "macos" else "linux"
-end
-
 -- ---------------------------------------------------------------------------------------------------- run
 local function runCommand()
 	local project: string? = nil
-	local fresh, all = false, false
+	local outFile: string? = nil
+	local all, slowOnly = false, false
 	local files: { string } = {}
 	local i = 1
 	local afterDashes = false
@@ -147,10 +115,13 @@ local function runCommand()
 		elseif a == "--project" then
 			project = args[i + 1]
 			i += 1
-		elseif a == "--fresh" then
-			fresh = true
+		elseif a == "--out" then
+			outFile = args[i + 1]
+			i += 1
 		elseif a == "--all" then
 			all = true
+		elseif a == "--slow" then
+			slowOnly = true
 		else
 			fail(`unknown argument {a}`)
 		end
@@ -170,80 +141,18 @@ local function runCommand()
 			table.insert(files, string.sub(p, #(if home == "." then "./" else home .. "/") + 1))
 		end
 	end
+	local tiers = if project == "z-nile" then slow.load(ROOT) else {}
+	files = slow.keep(files, tiers, if slowOnly then "slow" else "fast")
 	table.sort(files)
 
-	-- reuse
-	local state, why = readState(reg)
-	local db: resultsdb.Db? = nil
-	local reason: string? = why
-	if state ~= nil then
-		local path, pathWhy = workspace.dbPath(ROOT)
-		if path == nil then
-			reason = pathWhy
-		else
-			local opened, openWhy = resultsdb.open(path)
-			if opened == nil then
-				reason = openWhy
-			else
-				db = opened
-			end
-		end
-	end
-	if db == nil then
-		stdio.write(`reuse off: {reason}\n`)
-	end
-
-	local fps: { [string]: string } = {}
-	local toRun: { string } = {}
-	local reusedCases, reusedFiles = 0, 0
-	if db ~= nil and state ~= nil then
-		local refs: { string } = {}
-		for _, f in files do
-			for _, r in fingerprint.refs(state.ctx, prefix .. f) do
-				table.insert(refs, r)
-			end
-		end
-		local gitState = workspace.gitState(ROOT, refs)
-		if gitState == nil then
-			db = nil
-			stdio.write("reuse off: git state unreadable\n")
-		else
-			local list: { string } = {}
-			for _, f in files do
-				fps[f] =
-					fingerprint.of(state.ctx, prefix .. f, state.blobs, state.tools, "affected", gitState)
-				table.insert(list, fps[f])
-			end
-			local rowsOk, rows = pcall(resultsdb.rows, db :: resultsdb.Db, list)
-			if not rowsOk then
-				-- a db that can't be read turns reuse off; it never fails the gate
-				stdio.write(`reuse off: {rows}\n`)
-				db = nil
-				rows = {}
-			end
-			for _, f in files do
-				local row = rows[fps[f]]
-				if reuseplan.decide(row, fresh) == "reuse" then
-					stdio.write(`reused {f}\n`)
-					reusedFiles += 1
-					reusedCases += #(row :: any).cases
-				else
-					table.insert(toRun, f)
-				end
-			end
-		end
-	end
-	if db == nil then
-		toRun = files
-	end
-
 	local code = 0
-	if #toRun > 0 then
+	local byFile: { [string]: any } = {}
+	if #files > 0 then
 		local resultsFile = `{ROOT}/{prefix}.cache/spec-results-{fence.myPid()}.json`
 		pcall(fs.writeDir, `{ROOT}/{prefix}.cache`)
 		pcall(fs.removeFile, resultsFile)
 		local argv = { "run", "tests/run", "--" }
-		for _, f in toRun do
+		for _, f in files do
 			table.insert(argv, f)
 		end
 		local r = process.exec("lune", argv, {
@@ -253,7 +162,6 @@ local function runCommand()
 		})
 		code = r.code
 
-		-- what the run recorded, and whether it may stand for the spec's content
 		local doc: any = nil
 		local readOk, text = pcall(fs.readFile, resultsFile)
 		if readOk then
@@ -263,9 +171,8 @@ local function runCommand()
 			end
 		end
 		pcall(fs.removeFile, resultsFile)
-		local byFile: { [string]: any } = {}
 		if doc ~= nil and type(doc) == "table" and type(doc.files) == "table" then
-			for _, f in toRun do
+			for _, f in files do
 				for _, rec in doc.files do
 					if type(rec) == "table" and rec.file == f then
 						byFile[f] = validRecord(rec, f)
@@ -276,189 +183,54 @@ local function runCommand()
 			doc = nil
 		end
 		if doc == nil then
-			stdio.write(`results file missing: nothing from this run is recorded\n`)
+			stdio.write("results file missing\n")
 			if code == 0 then
 				code = 1
 			end
 		else
-			for _, f in toRun do
+			for _, f in files do
 				if byFile[f] == nil then
 					stdio.write(`FAIL {f}: no result for it\n`)
 					code = 1
 				end
 			end
 		end
-		if doc ~= nil then
-			-- whether this run may record at all is decided by the run alone (its jail), never by whether the db can be read
-			if not reuseplan.records(if type(doc.jail) == "string" then doc.jail else "", hostOs()) then
-				stdio.write(`not recorded: {if type(doc.jail) == "string" then doc.jail else ""}\n`)
-				local pid = process.env.PICKMAN_GATE_PID
-				if pid ~= nil and pid ~= "" then
-					pcall(fs.writeFile, noRecordMarker(home, pid), "")
-				end
-			elseif db ~= nil and state ~= nil then
-				if code ~= 0 then
-					-- a pass is recorded only from a run that exited 0 (a spec can pass and the runner still fail, as the
-					-- browser guard does); a failed file is recorded as failed
-					stdio.write(`results not recorded: the run exited {code}\n`)
-				end
-				local after = workspace.blobs(ROOT)
-				local now = os.time()
-				-- the refs the run's specs declare, read once for all of them
-				local union: { string } = {}
-				local seen: { [string]: boolean } = {}
-				for _, f in toRun do
-					for _, ref in fingerprint.refs(state.ctx, prefix .. f) do
-						if not seen[ref] then
-							seen[ref] = true
-							table.insert(union, ref)
-						end
+	end
+	if outFile ~= nil and code == 0 then
+		local recorded: { trace.RecordedSpec } = {}
+		local existingSpecs: { [string]: boolean } = {}
+		for _, f in files do
+			local rec = byFile[f]
+			local greenCases: { string } = {}
+			if rec ~= nil and type(rec.cases) == "table" then
+				for _, c in rec.cases do
+					if type(c) == "table" and c.ok == true and type(c.name) == "string" then
+						table.insert(greenCases, c.name)
 					end
 				end
-				local gitAfter = workspace.gitState(ROOT, union)
-				local items: { resultsdb.Item } = {}
-				for _, f in toRun do
-					local rec = byFile[f]
-					-- the same fingerprint under the content now: nothing it reads changed while it ran
-					local stands = after ~= nil
-						and gitAfter ~= nil
-						and fingerprint.of(
-								state.ctx,
-								prefix .. f,
-								after :: fingerprint.Blobs,
-								state.tools,
-								"affected",
-								gitAfter :: fingerprint.GitState
-							)
-							== fps[f]
-					if rec ~= nil and stands then
-						local failed = rec.loaded ~= true
-						for _, c in rec.cases or {} do
-							if not c.ok then
-								failed = true
-							end
+			end
+			local fullPath = prefix .. f
+			existingSpecs[fullPath] = true
+			table.insert(recorded, { spec = fullPath, cases = greenCases })
+		end
+		if fs.isFile(outFile) then
+			local prev, _ = trace.parseResults(fs.readFile(outFile))
+			if prev ~= nil then
+				for specPath, casesMap in prev do
+					if not existingSpecs[specPath] then
+						local list: { string } = {}
+						for caseName in casesMap do
+							table.insert(list, caseName)
 						end
-						if code == 0 or failed then
-							table.insert(items, {
-								fp = fps[f],
-								home = home,
-								spec = f,
-								loaded = rec.loaded == true,
-								cases = rec.cases or {},
-								detail = if rec.detail ~= "" then rec.detail else nil,
-								seconds = rec.seconds or 0,
-							})
-						end
+						table.sort(list)
+						table.insert(recorded, { spec = specPath, cases = list })
 					end
-				end
-				-- one call, one transaction: every row and the prune, or nothing
-				if code == 0 or #items > 0 then
-					pcall(resultsdb.recordMany, db :: resultsdb.Db, items, now)
 				end
 			end
 		end
-	end
-	if reusedFiles > 0 then
-		-- one closing line for the reused part; the runner printed its own for what it ran
-		if #toRun == 0 then
-			stdio.write(`{reusedCases} passed, 0 failed, {#files} spec files\n`)
-		else
-			stdio.write(`{reusedCases} reused cases in {reusedFiles} spec files\n`)
-		end
+		fs.writeFile(outFile, trace.renderResults(recorded))
 	end
 	process.exit(if code == 0 then 0 else 1)
-end
-
--- ---------------------------------------------------------------------------------------------------- digest
--- The digest of a whole affected gate: the projects it covers, the base it compares with, each project's selection, the
--- tools, every file's blob and, when the selection holds a `*` spec, HEAD; always the union of the selected specs' declared refs.
-local function digestOf(mode: string, names: { string }, base: string?): string?
-	local reg = loadRegistry()
-	local state = readState(reg)
-	if state == nil then
-		return nil
-	end
-	local starred = false
-	local refSet: { [string]: boolean } = {}
-	local changed = changes.files(base)
-	local selected: { string } = {} -- the selection itself (review 005 F1): it reads the merge-base and HEAD's tree too
-	for _, name in names do
-		local sel = select.affected(state.ctx, changed, name)
-		local specs: { string } = {}
-		if sel == "ALL" then
-			table.insert(selected, `selected {name} ALL`)
-		else
-			local sorted: { string } = table.clone(sel :: { string })
-			table.sort(sorted)
-			table.insert(selected, `selected {name}\t{table.concat(sorted, "\t")}`)
-		end
-		local prefix = prefixOf(homeOf(reg, name))
-		if sel == "ALL" then
-			for _, f in state.ctx.graph.files do
-				if string.match(f, "%.spec%.luau$") and string.sub(f, 1, #prefix) == prefix then
-					table.insert(specs, f)
-				end
-			end
-		else
-			for _, f in sel :: { string } do
-				table.insert(specs, prefix .. f)
-			end
-		end
-		for _, spec in specs do
-			for _, e in (state.ctx.inputs[spec] :: { string }?) or ({} :: { string }) do
-				if e == "*" then
-					starred = true
-				end
-			end
-			for _, ref in fingerprint.refs(state.ctx, spec) do
-				refSet[ref] = true
-			end
-		end
-	end
-	local refs: { string } = {}
-	for ref in refSet do
-		table.insert(refs, ref)
-	end
-	table.sort(refs)
-	local gitState = workspace.gitState(ROOT, refs)
-	if gitState == nil then
-		return nil
-	end
-	local baseRef = base
-		or (if git({ "rev-parse", "--verify", "-q", "origin/main" }) ~= nil then "origin/main" else "main")
-	local extra =
-		fingerprint.digestExtra(mode, names, git({ "rev-parse", baseRef }) or "?", starred, gitState, refs)
-	for _, line in selected do
-		table.insert(extra, line)
-	end
-	return fingerprint.digest(state.blobs, state.tools, extra)
-end
-
-local function optionValues(): { [string]: string }
-	local out: { [string]: string } = {}
-	local i = 1
-	while i <= #args do
-		local a = args[i]
-		if string.sub(a, 1, 2) == "--" and args[i + 1] ~= nil then
-			out[string.sub(a, 3)] = args[i + 1]
-			i += 1
-		end
-		i += 1
-	end
-	return out
-end
-
-local function digestCommand()
-	local opt = optionValues()
-	local names = string.split(opt.projects or "", ",")
-	if opt.mode ~= "affected" or #names == 0 or names[1] == "" then
-		fail("digest needs --mode affected and --projects a,b")
-	end
-	local d = digestOf(opt.mode, names, opt.base)
-	if d ~= nil then
-		print(d)
-	end
-	process.exit(0)
 end
 
 -- c0239: the project the whole change set (the branch against its base, uncommitted and untracked files: what the
@@ -476,78 +248,10 @@ local function scopeCommand()
 	process.exit(0)
 end
 
-local function openDb(): resultsdb.Db?
-	local path = workspace.dbPath(ROOT)
-	if path == nil then
-		return nil
-	end
-	return (resultsdb.open(path))
-end
-
-local function gateCheckCommand()
-	local opt = optionValues()
-	local db = openDb()
-	if db == nil or opt.digest == nil or opt.digest == "" then
-		process.exit(1)
-	end
-	local gate = resultsdb.gatePassed(db :: resultsdb.Db, opt.digest)
-	if gate == nil then
-		process.exit(1)
-	end
-	print(
-		`reused: an affected gate passed on this content at {os.date(
-			"!%Y-%m-%dT%H:%M:%SZ",
-			(gate :: any).passedAt
-		)}`
-	)
-	stdio.write((gate :: any).summary)
-	process.exit(0)
-end
-
-local function gateRecordCommand()
-	local opt = optionValues()
-	if opt.digest == nil or opt.mode == nil or opt.projects == nil or opt.summary == nil then
-		fail("gate-record needs --digest, --mode, --projects and --summary")
-	end
-	local reg = loadRegistry()
-	local db = openDb() -- the db exists after a record, whether or not this gate may record
-	local pid = process.env.PICKMAN_GATE_PID
-	if pid ~= nil and pid ~= "" then
-		for _, name in string.split(opt.projects, ",") do
-			local p = projects.named(reg, name)
-			if p ~= nil and fs.isFile(noRecordMarker((p :: any).home, pid)) then
-				process.exit(0) -- a run of this gate was not recorded: neither is the gate
-			end
-		end
-	end
-	if db == nil then
-		process.exit(0)
-	end
-	local ok, summary = pcall(fs.readFile, opt.summary)
-	if ok then
-		pcall(
-			resultsdb.recordGate,
-			db :: resultsdb.Db,
-			opt.digest,
-			opt.mode,
-			opt.projects,
-			summary :: string,
-			os.time()
-		)
-	end
-	process.exit(0)
-end
-
 if command == "run" then
 	runCommand()
-elseif command == "digest" then
-	digestCommand()
 elseif command == "scope" then
 	scopeCommand()
-elseif command == "gate-check" then
-	gateCheckCommand()
-elseif command == "gate-record" then
-	gateRecordCommand()
 else
-	fail("usage: specs run|digest|scope|gate-check|gate-record (see the file's header)")
+	fail("usage: specs run|scope (see the file's header)")
 end

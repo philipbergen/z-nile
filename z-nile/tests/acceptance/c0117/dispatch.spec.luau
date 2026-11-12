@@ -37,6 +37,7 @@ local function facts(over: { [string]: any }): dispatch.Facts
 		localRaft = "",
 		pr = nil,
 		questions = false,
+		openHuman = {},
 		last = nil,
 		uncovered = {},
 		autoMerge = { "prep", "raft" },
@@ -154,7 +155,7 @@ return t.spec("c0117 dispatch rules", function(it)
 		)).toBe(true)
 	end)
 
-	it("the prompt names the skill's file and the lessons command, and pastes no skill text", function()
+	it("the prompt names the skill's file and the lessons search, and pastes no skill text", function()
 		local p = dispatch.prompt({
 			step = "z-design",
 			id = "c0010",
@@ -163,12 +164,14 @@ return t.spec("c0117 dispatch rules", function(it)
 			stateDir = "/w/.cache/dispatch/c0010",
 		})
 		t.expect(has(p, "`z-nile/skills/z-design/SKILL.md`")).toBe(true)
-		t.expect(has(p, "`./zn lessons --when design --full`")).toBe(true)
+		t.expect(has(p, "Search with `./zn lessons <terms>`")).toBe(true)
+		t.expect(has(p, "lessons --when design --full")).toBe(false)
+		t.expect(has(p, "## Open to the human")).toBe(true)
 		t.expect(has(p, "for c0010")).toBe(true)
 		t.expect(has(p, "`/w/.worktree/prep-x`")).toBe(true)
 		t.expect(has(p, "`/w/.cache/dispatch/c0010/questions.md`")).toBe(true)
 		t.expect(has(p, "Never merge a pull request and never push to main")).toBe(true)
-		t.expect(has(p, "without --tokens")).toBe(true)
+		t.expect(has(p, "Do not pass --time or --tokens")).toBe(true)
 		-- no line of the skill itself
 		local skill = fs.readFile(`{TOP}/z-nile/skills/z-design/SKILL.md`)
 		t.expect(has(p, string.match(skill, "\n(The goal is[^\n]+)") :: string)).toBe(false)
@@ -180,7 +183,8 @@ return t.spec("c0117 dispatch rules", function(it)
 			worktree = "/w/.worktree/R0040",
 			stateDir = "/w/.cache/dispatch/R0040",
 		})
-		t.expect(has(review, "`./zn lessons --when build --full`")).toBe(true)
+		t.expect(has(review, "Search with `./zn lessons <terms>`")).toBe(true)
+		t.expect(has(review, "lessons --when build --full")).toBe(false)
 		t.expect(has(review, "in code mode")).toBe(true)
 		local run = dispatch.prompt({
 			step = "z-run",
@@ -191,12 +195,12 @@ return t.spec("c0117 dispatch rules", function(it)
 			promptPath = "/w/z-nile/.tracker/rafts/active/R0040/prompt.md",
 		})
 		t.expect(has(run, "`/w/z-nile/.tracker/rafts/active/R0040/prompt.md`")).toBe(true)
-		t.expect(has(run, "`./zn lessons --when build --full`")).toBe(true)
+		t.expect(has(run, "Search with `./zn lessons <terms>`")).toBe(true)
 	end)
 
-	-- design review 008 F1 to F3: a dispatched stream reviewer writes its review to its own state folder's review.md,
-	-- reads the stream in its worktree, and from round 2 the previous round's files
-	it("a stream review's prompt names the stream's worktree, its review.md and round 2's files", function()
+	-- a dispatched stream reviewer writes its review to its own state folder's review.md and reads the stream
+	-- in its worktree. One round: a previous file is not named.
+	it("a stream review's prompt names the stream's worktree and the one review file", function()
 		local base = {
 			step = "zz-review",
 			id = "c0010",
@@ -213,6 +217,8 @@ return t.spec("c0117 dispatch rules", function(it)
 		t.expect(has(one, "`/w/.cache/dispatch/c0010/review.md`")).toBe(true)
 		t.expect(has(one, "the dispatcher numbers it and moves it into the raft's folder")).toBe(true)
 		t.expect(has(one, "Write only the review file that mode names")).toBe(false)
+		t.expect(has(one, "This is the one round")).toBe(true)
+		t.expect(has(one, "`stream-review-c0010-001.md`")).toBe(true)
 		t.expect(has(one, "previous round")).toBe(false)
 		local two = table.clone(base) :: any
 		two.previous = {
@@ -220,9 +226,18 @@ return t.spec("c0117 dispatch rules", function(it)
 			"pickman/.tracker/rafts/R0040/stream-refute-c0010-001.md",
 		}
 		local p2 = dispatch.prompt(two)
-		t.expect(has(p2, "previous round")).toBe(true)
-		t.expect(has(p2, "`pickman/.tracker/rafts/R0040/stream-review-c0010-001.md`")).toBe(true)
-		t.expect(has(p2, "`pickman/.tracker/rafts/R0040/stream-refute-c0010-001.md`")).toBe(true)
+		t.expect(has(p2, "previous round")).toBe(false)
+		t.expect(has(p2, "stream-refute-c0010-001.md")).toBe(false)
+		t.expect(has(p2, "This is the one round")).toBe(true)
+	end)
+
+	it("an unruled open list stops for the user and does not pick a step", function()
+		t.expect(act(facts({ openHuman = { "F2" } }))).toBe("stop 3")
+		local a = dispatch.next(facts({ openHuman = { "F2", "JC1" } }))
+		t.expect(has(a.why or "", "F2")).toBe(true)
+		t.expect(has(a.why or "", "## Open to the human")).toBe(true)
+		local both = dispatch.next(facts({ questions = true, openHuman = { "F2" } }))
+		t.expect(has(both.why or "", "questions.md")).toBe(true)
 	end)
 
 	it(

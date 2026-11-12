@@ -1,5 +1,6 @@
-# extra inputs per spec: <spec, relative to the home>	<input: file, folder/, * (every blob + HEAD), or ref:<full ref>>
+# extra inputs per spec: <spec, relative to the home>	<input: file, folder/, * (every blob), or ref:<full ref>>
 tests/acceptance/c0001/ci-workflow.spec.luau	.github/workflows/check.yml
+tests/tooling/slow-tier.spec.luau	z-nile/tests/slow.tsv
 tests/acceptance/c0001/tracker-lifecycle.spec.luau	*
 tests/acceptance/c0005/worktree.spec.luau	*
 tests/acceptance/c0006/clone.spec.luau	*
@@ -191,8 +192,6 @@ tests/acceptance/c0120/runner-home.spec.luau	pickman/tests/lib/renamed.luau
 tests/acceptance/c0120/runner-home.spec.luau	pickman/tests/lib/t.luau
 tests/acceptance/c0120/runner-home.spec.luau	pickman/tests/run.luau
 tests/acceptance/c0127/reuse.spec.luau	.gitignore
-tests/acceptance/c0165/docs.spec.luau	.gitignore
-tests/acceptance/c0165/docs.spec.luau	AGENTS.md
 tests/acceptance/c0172/cicd.spec.luau	pickman/.luaurc
 tests/acceptance/c0172/cicd.spec.luau	pickman/default.project.json
 tests/acceptance/c0172/cicd.spec.luau	pickman/lobby.project.json
