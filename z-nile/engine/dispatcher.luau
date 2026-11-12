@@ -1084,16 +1084,36 @@ end
 
 -- A capture whose z-ticket made the issue `target`: the slot `new` is saved as finished (`outcome ok`, "captured as
 -- <id>", no seal) and the run moves to the issue's folder, with the capture's exchange and its seal, saved at once
--- (review 004 F3). Returns why it cannot, with nothing changed.
+-- (review 004 F3). Returns why it cannot, with nothing changed. On success this process holds the issue's run lock:
+-- the chain goes on under it, and a caller that ends here lets it go.
 function dispatcher.finishCapture(ctx: Ctx, st: State, stateDir: string, target: string): string?
 	local dest = `{dispatcher.home(ctx)}/{target}`
 	if fs.isDir(`{dest}/{exchange.DIR}`) or isLink(`{dest}/{exchange.DIR}`) then
 		return `{target} already has an exchange`
 	end
+	-- the issue's folder may already be a run of its own (the user went on with `./zn dispatch <id>` before this
+	-- adoption): it is written under its lock, and its state is joined, never replaced (code review 001 F1)
+	local busy = lock(dest, true)
+	if busy then
+		return `{target} is being dispatched by another live ./zn dispatch (run ./zn dispatch retry new again when it ends)`
+	end
+	local own: State? = if fs.isFile(`{dest}/state.json`) then loadAt(target, dest) else nil
 	local slot = table.clone(st)
 	slot.dir, slot.outcome, slot.detail, slot.run = stateDir, "ok", `captured as {target}`, nil
 	slot.sealed = nil -- its exchange moves to the issue below, with the seal
 	save(slot)
+	if own then
+		-- the issue keeps its own history, step, mode, pending rows and merges; only the capture's seal joins it
+		local seal = st.sealed
+		local into = st :: any
+		for key in table.clone(into) do
+			into[key] = nil
+		end
+		for key, value in own :: any do
+			into[key] = value
+		end
+		st.sealed = seal
+	end
 	st.id = target
 	st.dir = dest
 	-- the capture's exchange travels with the item it made (c0256)
@@ -2570,11 +2590,23 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 							`{made[1]} was made by this capture, but {why}: ./zn dispatch {made[1]} goes on with it`
 						)
 					end
+					unlock(st.dir)
+					-- a question the capture left in the slot is nobody's to answer now: set aside, as when the step ends
+					-- having made its issue and asked (code review 001 F1)
+					local aside: string? = nil
+					if waiting then
+						aside = freeName(dir, "questions-refused-", ".md", true)
+						fs.move(q, aside)
+					end
 					unlock(dir)
+					local note = if aside
+						then ` (the question z-ticket left was set aside as {aside}{if answer
+							then "; your --answer was not taken"
+							else ""})`
+						elseif answer then " (your --answer was not taken: nothing waited for it)"
+						else ""
 					print(
-						`dispatch: {made[1]} was made by this capture: its conversation now belongs to it{if answer
-							then " (your --answer was not taken: nothing waited for it)"
-							else ""}. ./zn dispatch {made[1]} goes on with it`
+						`dispatch: {made[1]} was made by this capture: its conversation now belongs to it{note}. ./zn dispatch {made[1]} goes on with it`
 					)
 					return 0
 				elseif #made > 1 then

@@ -40,3 +40,13 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-12 08:51	172 specs	0	0	test			209.327	885.490		209.327	tokens,ai
 2026-11-12 08:52	3 specs	0	0	test			13.363	28.100		13.363	tokens,ai
 2026-11-12 08:52	d0296: the three clone fixtures name their branch main	6	0	build							tokens,wall,cpu,ai
+2026-11-12 08:52	1 spec	0	0	test			1.018	0.650		1.018	tokens,ai
+2026-11-12 08:52	1 spec	0	0	test			1.040	0.650		1.040	tokens,ai
+2026-11-12 08:55	1 spec	0	0	test			161.956	130.220		161.956	tokens,ai
+2026-11-12 08:56	1 spec	0	0	test			37.423	28.740		37.423	tokens,ai
+2026-11-12 08:57	1 spec	0	0	test			106.017	76.160		106.017	tokens,ai
+2026-11-12 08:58	1 spec	0	0	test			14.826	11.880		14.826	tokens,ai
+2026-11-12 09:00	4 specs	0	0	test			119.060	103.060		119.060	tokens,ai
+2026-11-12 09:04	172 specs	0	0	test			240.497	1076.760		240.497	tokens,ai
+2026-11-12 16:01	2 specs	0	0	test			61.303	42.970		61.303	tokens,ai
+2026-11-12 16:01	c0256: review 001 F1, F2, F5: adoption joins the issue's state under its lock, caller-relative --answer-file, the ask-only prompt	418	5	code-review							tokens,wall,cpu,ai

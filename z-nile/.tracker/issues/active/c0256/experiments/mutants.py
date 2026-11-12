@@ -96,7 +96,7 @@ SLOW = [
     ("C38", "a question the retry copied is recorded as 'no reply'", DP, "body = exchange.UNKNOWN_REPLY", "body = exchange.NO_REPLY", SPEC_R),
     ("C39", "an editor's line ends count as an edit", DP, "exchange.normal(text) ~= exchange.normal(lastQ.body)", "text ~= lastQ.body", SPEC_R),
     ("C40", "a deleted questions.md leaves no way to answer", DP, "if answer and not waiting and not unanswered then", "if answer and not waiting then", SPEC_R),
-    ("C41", "a blanked questions.md with a flag counts as an edit", DP, "local edited = not copiedNow\n\t\t\t\t\t\tand not blank\n", "local edited = not copiedNow\n", SPEC_R),
+    ("C41", "a blanked questions.md with a flag counts as an edit", DP, "local edited = not copiedNow\n\t\t\t\t\t\tand not isBlank\n", "local edited = not copiedNow\n", SPEC_R),
     ("C42", "the retry of a capture runs z-ticket blind after a landed issue", DP, "local made, unknown = dispatcher.issuesAddedBy(ctx, st.pushes)", "local made, unknown = {}, nil", SPEC_C),
     ("C44", "--forget-exchange moves the folder before a refusal that needs no exchange", DP, 'elseif answer and not waiting then', 'elseif false then', SPEC_R),
     ("C43", "new words are taken over a failed capture", DP, "\t\t\t\t\t\tand entries[1].kind == \"ask\"\n\t\t\t\t\tthen", "\t\t\t\t\t\tand entries[1].kind == \"ask\"\n\t\t\t\t\t\tand false\n\t\t\t\t\tthen", SPEC_C),
