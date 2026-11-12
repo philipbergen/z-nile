@@ -10,8 +10,5 @@ A test of the form "this branch holds a commit of X that origin/main doesn't" as
 
 **How to apply:** identify a stack by something that stays true after a squash: an exact name, or a commit the stack must hold, recorded by sha or found by its subject. A commit found by a search is only as unique as the range searched: read the same range the uniqueness check reads (the branch's own commits, `origin/main..<branch>`), match the subject line only (never `--grep`, which also matches body lines and walks main's history), and refuse anything but exactly one match. Test it with a fixture that holds what the real branch holds below that commit (the squashed base's commits), with mutants that pin the oldest commit of the range, the tip, or the first of two matches, and one that brings the history test back (c0115 design review 014 F1, F2).
 
-<<<<<<< HEAD
 **Note** (c0265 design review 021 F1): a rule that dates an event by "the commit that added X to main" reads `git log --first-parent`; on a merge commit the default history simplification follows the PR branch and returns the branch commit's time, before the merge. Check: what does the read return when the PR lands by a merge commit, a squash, a rebase, and after a revert and a re-land?
-=======
 **Note (c0261 design review 010 F6):** a cutoff keyed on when a file landed must query the merge onto main (`git log --first-parent --diff-filter=A`), because `./zn done` lands `--no-ff` and the plain query returns the layer commit's date. Ask: which commit's date does the query return after a no-ff merge, and is there a case with a row between the two?
->>>>>>> origin/main
