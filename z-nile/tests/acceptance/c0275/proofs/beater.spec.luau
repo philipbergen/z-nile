@@ -56,7 +56,8 @@ local function pidOf(dir: string, id: string): string
 	local text = fs.readFile(`{dir}/.cache/tracker-beater/{id}`)
 	return string.match(text, "^(%d+) %d+") or error(`no pid in {text}`)
 end
-local SHIM = '#!/bin/sh\nif [ "$1" = push ]; then case "$*" in *":refs/heads/hb/"*) echo p >> "$FAKE_DIR/beatpush";; esac; fi\n'
+local SHIM =
+	'#!/bin/sh\nif [ "$1" = push ]; then case "$*" in *":refs/heads/hb/"*) echo p >> "$FAKE_DIR/beatpush";; esac; fi\n'
 local EVERY = { ZN_BEATER = "1", ZN_BEAT_EVERY = "1" }
 
 return t.spec("c0275 real-time proofs: the background beater", function(it)
@@ -76,21 +77,24 @@ return t.spec("c0275 real-time proofs: the background beater", function(it)
 		wt3 = (string.gsub(must(zn(h.f.main, { "worktree", "c0275-beater-3" }), "worktree"), "%s+$", ""))
 	end)
 
-	it("a claim's beater outlives the command that started it, beats while no command runs, and ends with its worktree", function()
-		must(zn(wt, { "status", "c0100", "preparing" }, EVERY), "claim c0100")
-		local pid = pidOf(wt, "c0100")
-		t.expect(alive(pid)).toBe(true) -- the command is over; the beater is not
-		local text = fs.readFile(`{wt}/.cache/tracker-beater/c0100`)
-		local deadline = tonumber(string.match(text, "^%d+ (%d+)")) :: number
-		t.expect(deadline > os.time() + 3500 and deadline <= os.time() + 3600).toBe(true) -- its hour
-		local before = pushes()
-		task.wait(5)
-		t.expect(pushes() >= before + 2).toBe(true) -- beats made by no command
-		t.expect(alive(pid)).toBe(true)
-		-- its worktree goes away: it ends within seconds
-		fs.removeDir(wt)
-		t.expect(endsWithin(pid, 20)).toBe(true)
-	end)
+	it(
+		"a claim's beater outlives the command that started it, beats while no command runs, and ends with its worktree",
+		function()
+			must(zn(wt, { "status", "c0100", "preparing" }, EVERY), "claim c0100")
+			local pid = pidOf(wt, "c0100")
+			t.expect(alive(pid)).toBe(true) -- the command is over; the beater is not
+			local text = fs.readFile(`{wt}/.cache/tracker-beater/c0100`)
+			local deadline = tonumber(string.match(text, "^%d+ (%d+)")) :: number
+			t.expect(deadline > os.time() + 3500 and deadline <= os.time() + 3600).toBe(true) -- its hour
+			local before = pushes()
+			task.wait(5)
+			t.expect(pushes() >= before + 2).toBe(true) -- beats made by no command
+			t.expect(alive(pid)).toBe(true)
+			-- its worktree goes away: it ends within seconds
+			fs.removeDir(wt)
+			t.expect(endsWithin(pid, 20)).toBe(true)
+		end
+	)
 
 	it("a beater ends, saying why, when its worktree no longer holds the claim", function()
 		must(zn(wt2, { "status", "c0101", "preparing" }, EVERY), "claim c0101")

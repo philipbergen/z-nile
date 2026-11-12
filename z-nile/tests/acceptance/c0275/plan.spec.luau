@@ -35,9 +35,11 @@ return t.spec("c0275 automatic beats' rules", function(it)
 		"the lease is the sha this checkout last wrote when it remembers one, else the sha seen, else empty",
 		function()
 			local seen = { beat(A, NOW) }
-			t.expect(leaseOf(heartbeat.plan(A, NOW + 300, seen, { [A] = true }, NOW + 300, "mine"))).toBe("mine")
+			t.expect(leaseOf(heartbeat.plan(A, NOW + 300, seen, { [A] = true }, NOW + 300, "mine")))
+				.toBe("mine")
 			-- the branch is gone: the remembered sha is still the lease, so the push is rejected and the beat learns why
-			t.expect(leaseOf(heartbeat.plan(A, NOW + 300, {}, { [A] = true }, NOW + 300, "mine"))).toBe("mine")
+			t.expect(leaseOf(heartbeat.plan(A, NOW + 300, {}, { [A] = true }, NOW + 300, "mine")))
+				.toBe("mine")
 			t.expect(leaseOf(heartbeat.plan(A, NOW + 300, seen, { [A] = true }, NOW + 300, nil)))
 				.toBe(`sha-{A}-{NOW}`)
 			t.expect(leaseOf(heartbeat.plan(A, NOW + 300, {}, { [A] = true }, NOW + 300, nil))).toBe("")
@@ -56,48 +58,79 @@ return t.spec("c0275 automatic beats' rules", function(it)
 		t.expect(heartbeat.markParse(`{A} {NOW} not-a-sha`)).toBe(nil)
 	end)
 
-	it("a beat is due when none was made, a full interval has passed, or the mark is dated in the future", function()
-		local every = heartbeat.INTERVAL
-		t.expect(heartbeat.due(nil, NOW, every)).toBe(true)
-		t.expect(heartbeat.due(NOW, NOW + every - 1, every)).toBe(false)
-		t.expect(heartbeat.due(NOW, NOW + every, every)).toBe(true)
-		t.expect(heartbeat.due(NOW + heartbeat.SKEW, NOW, every)).toBe(false)
-		t.expect(heartbeat.due(NOW + heartbeat.SKEW + 1, NOW, every)).toBe(true) -- a clock that went back
-	end)
+	it(
+		"a beat is due when none was made, a full interval has passed, or the mark is dated in the future",
+		function()
+			local every = heartbeat.INTERVAL
+			t.expect(heartbeat.due(nil, NOW, every)).toBe(true)
+			t.expect(heartbeat.due(NOW, NOW + every - 1, every)).toBe(false)
+			t.expect(heartbeat.due(NOW, NOW + every, every)).toBe(true)
+			t.expect(heartbeat.due(NOW + heartbeat.SKEW, NOW, every)).toBe(false)
+			t.expect(heartbeat.due(NOW + heartbeat.SKEW + 1, NOW, every)).toBe(true) -- a clock that went back
+		end
+	)
 
-	it("a failed attempt advances the mark and keeps the sha it knew; a written beat records its sha", function()
-		local before = { stamp = A, epoch = NOW, sha = "aaa" }
-		t.expect(heartbeat.markAfter(A, NOW + 300, before, nil)).toEqual({ stamp = A, epoch = NOW + 300, sha = "aaa" })
-		t.expect(heartbeat.markAfter(A, NOW + 300, before, "bbb")).toEqual({ stamp = A, epoch = NOW + 300, sha = "bbb" })
-		-- a mark for another stamp lends nothing: a new claim starts with no sha
-		t.expect(heartbeat.markAfter(B, NOW + 300, before, nil)).toEqual({ stamp = B, epoch = NOW + 300, sha = "" })
-		t.expect(heartbeat.leaseOf(before, A)).toBe("aaa")
-		t.expect(heartbeat.leaseOf(before, B)).toBe(nil)
-		t.expect(heartbeat.leaseOf({ stamp = A, epoch = NOW, sha = "" }, A)).toBe(nil)
-		t.expect(heartbeat.leaseOf(nil, A)).toBe(nil)
-	end)
+	it(
+		"a failed attempt advances the mark and keeps the sha it knew; a written beat records its sha",
+		function()
+			local before = { stamp = A, epoch = NOW, sha = "aaa" }
+			t.expect(heartbeat.markAfter(A, NOW + 300, before, nil))
+				.toEqual({ stamp = A, epoch = NOW + 300, sha = "aaa" })
+			t.expect(heartbeat.markAfter(A, NOW + 300, before, "bbb"))
+				.toEqual({ stamp = A, epoch = NOW + 300, sha = "bbb" })
+			-- a mark for another stamp lends nothing: a new claim starts with no sha
+			t.expect(heartbeat.markAfter(B, NOW + 300, before, nil))
+				.toEqual({ stamp = B, epoch = NOW + 300, sha = "" })
+			t.expect(heartbeat.leaseOf(before, A)).toBe("aaa")
+			t.expect(heartbeat.leaseOf(before, B)).toBe(nil)
+			t.expect(heartbeat.leaseOf({ stamp = A, epoch = NOW, sha = "" }, A)).toBe(nil)
+			t.expect(heartbeat.leaseOf(nil, A)).toBe(nil)
+		end
+	)
 
-	it("a claim starts its beater unless the dispatcher beats, it is the main checkout, a check protects it or one runs", function()
-		t.expect(heartbeat.beaterStart(facts())).toBe(true)
-		t.expect(heartbeat.beaterStart(facts({ dispatched = true }))).toBe(false)
-		t.expect(heartbeat.beaterStart(facts({ main = true }))).toBe(false)
-		t.expect(heartbeat.beaterStart(facts({ guarded = true }))).toBe(false)
-		t.expect(heartbeat.beaterStart(facts({ running = true }))).toBe(false)
-		-- a spec run starts none unless the spec asks for the real one
-		t.expect(heartbeat.beaterStart(facts({ specRun = true }))).toBe(false)
-		t.expect(heartbeat.beaterStart(facts({ specRun = true, forced = true }))).toBe(true)
-		t.expect(heartbeat.beaterStart(facts({ specRun = true, forced = true, guarded = true }))).toBe(false)
-		-- asking for it outside a spec run changes nothing
-		t.expect(heartbeat.beaterStart(facts({ forced = true }))).toBe(true)
-	end)
+	it(
+		"a claim starts its beater unless the dispatcher beats, it is the main checkout, a check protects it or one runs",
+		function()
+			t.expect(heartbeat.beaterStart(facts())).toBe(true)
+			t.expect(heartbeat.beaterStart(facts({ dispatched = true }))).toBe(false)
+			t.expect(heartbeat.beaterStart(facts({ main = true }))).toBe(false)
+			t.expect(heartbeat.beaterStart(facts({ guarded = true }))).toBe(false)
+			t.expect(heartbeat.beaterStart(facts({ running = true }))).toBe(false)
+			-- a spec run starts none unless the spec asks for the real one
+			t.expect(heartbeat.beaterStart(facts({ specRun = true }))).toBe(false)
+			t.expect(heartbeat.beaterStart(facts({ specRun = true, forced = true }))).toBe(true)
+			t.expect(heartbeat.beaterStart(facts({ specRun = true, forced = true, guarded = true })))
+				.toBe(false)
+			-- asking for it outside a spec run changes nothing
+			t.expect(heartbeat.beaterStart(facts({ forced = true }))).toBe(true)
+		end
+	)
 
 	it("the beater is ./zn run's hour of beat --watch, tied to the session that started it", function()
 		t.expect(heartbeat.BEATER_SECONDS).toBe(3600)
 		t.expect(heartbeat.beaterArgv("/w/repo", "c0010", nil)).toEqual({
-			"/w/repo/zn", "run", "--time", "3600", "--", "/w/repo/zn", "beat", "c0010", "--watch",
+			"/w/repo/zn",
+			"run",
+			"--time",
+			"3600",
+			"--",
+			"/w/repo/zn",
+			"beat",
+			"c0010",
+			"--watch",
 		})
 		t.expect(heartbeat.beaterArgv("/w/repo", "R0010", 4242)).toEqual({
-			"/w/repo/zn", "run", "--time", "3600", "--", "/w/repo/zn", "beat", "R0010", "--watch", "--session", "4242",
+			"/w/repo/zn",
+			"run",
+			"--time",
+			"3600",
+			"--",
+			"/w/repo/zn",
+			"beat",
+			"R0010",
+			"--watch",
+			"--session",
+			"4242",
 		})
 	end)
 
@@ -131,34 +164,45 @@ return t.spec("c0275 automatic beats' rules", function(it)
 		t.expect(heartbeat.watch(A, A, NOW, NOW + 100, every, nil)).toBe("stop-bound")
 	end)
 
-	it("a loop has a place to beat from while its session lives, its worktree exists and still holds the claim", function()
-		t.expect(heartbeat.gone(nil, true, true)).toBe(nil) -- no session known: its time and worktree bound it
-		t.expect(heartbeat.gone(true, true, true)).toBe(nil)
-		t.expect(heartbeat.gone(false, true, true)).toBe("its session ended")
-		t.expect(heartbeat.gone(true, false, true)).toBe("its worktree is gone")
-		t.expect(heartbeat.gone(true, true, false)).toBe("its worktree no longer holds the claim")
-	end)
+	it(
+		"a loop has a place to beat from while its session lives, its worktree exists and still holds the claim",
+		function()
+			t.expect(heartbeat.gone(nil, true, true)).toBe(nil) -- no session known: its time and worktree bound it
+			t.expect(heartbeat.gone(true, true, true)).toBe(nil)
+			t.expect(heartbeat.gone(false, true, true)).toBe("its session ended")
+			t.expect(heartbeat.gone(true, false, true)).toBe("its worktree is gone")
+			t.expect(heartbeat.gone(true, true, false)).toBe("its worktree no longer holds the claim")
+		end
+	)
 
-	it("the dispatcher beats the claim its step's worktree remembers, else the one main showed at the step's start", function()
-		t.expect(heartbeat.dispatchStamp(A, nil)).toBe(A)
-		t.expect(heartbeat.dispatchStamp(A, "")).toBe(A)
-		t.expect(heartbeat.dispatchStamp(A, B)).toBe(B)
-		t.expect(heartbeat.dispatchStamp(nil, B)).toBe(B)
-		t.expect(heartbeat.dispatchStamp(nil, nil)).toBe(nil)
-		-- a document's status counts as a claim only when it is one
-		t.expect(heartbeat.stampIn(A)).toBe(A)
-		t.expect(heartbeat.stampIn(B)).toBe(B)
-		t.expect(heartbeat.stampIn("prepared-quiet-copper-falcon")).toBe(nil)
-		t.expect(heartbeat.stampIn("new-a-b-c")).toBe(nil)
-		t.expect(heartbeat.stampIn(nil)).toBe(nil)
-	end)
+	it(
+		"the dispatcher beats the claim its step's worktree remembers, else the one main showed at the step's start",
+		function()
+			t.expect(heartbeat.dispatchStamp(A, nil)).toBe(A)
+			t.expect(heartbeat.dispatchStamp(A, "")).toBe(A)
+			t.expect(heartbeat.dispatchStamp(A, B)).toBe(B)
+			t.expect(heartbeat.dispatchStamp(nil, B)).toBe(B)
+			t.expect(heartbeat.dispatchStamp(nil, nil)).toBe(nil)
+			-- a document's status counts as a claim only when it is one
+			t.expect(heartbeat.stampIn(A)).toBe(A)
+			t.expect(heartbeat.stampIn(B)).toBe(B)
+			t.expect(heartbeat.stampIn("prepared-quiet-copper-falcon")).toBe(nil)
+			t.expect(heartbeat.stampIn("new-a-b-c")).toBe(nil)
+			t.expect(heartbeat.stampIn(nil)).toBe(nil)
+		end
+	)
 
 	it("the child's answer is a beat, a lost claim, no claim yet, or a failure", function()
 		t.expect(heartbeat.dispatchOutcome(true, "")).toBe("beat")
-		t.expect(heartbeat.dispatchOutcome(false, "c0010's claim was taken over (now preparing-a-b-c)")).toBe("lost")
+		t.expect(heartbeat.dispatchOutcome(false, "c0010's claim was taken over (now preparing-a-b-c)"))
+			.toBe("lost")
 		t.expect(heartbeat.dispatchOutcome(false, "c0010's claim ended")).toBe("lost")
-		t.expect(heartbeat.dispatchOutcome(false, "beat: c0010 is new on origin/main: no claim to beat (claim it with ./zn status c0010 preparing)"))
-			.toBe("none")
+		t.expect(
+			heartbeat.dispatchOutcome(
+				false,
+				"beat: c0010 is new on origin/main: no claim to beat (claim it with ./zn status c0010 preparing)"
+			)
+		).toBe("none")
 		t.expect(heartbeat.dispatchOutcome(false, "beat: c0010: timed out after 10 s")).toBe("failed")
 	end)
 end)

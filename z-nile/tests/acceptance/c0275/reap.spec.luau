@@ -56,9 +56,11 @@ end
 return t.spec("c0275 the background beater is not a leak", function(it)
 	it("only a runner of beat <id> --watch is a beater", function()
 		t.expect(reap.isBeater(BEATER)).toBe(true)
-		t.expect(reap.isBeater(`perl {WT}/z-nile/lib/bounded.pl --time 3600 -- {WT}/zn beat R0010 --watch`)).toBe(true)
+		t.expect(reap.isBeater(`perl {WT}/z-nile/lib/bounded.pl --time 3600 -- {WT}/zn beat R0010 --watch`))
+			.toBe(true)
 		t.expect(reap.isBeater(`perl {WT}/z-nile/lib/bounded.pl --time 60 -- sleep 50`)).toBe(false)
-		t.expect(reap.isBeater(`perl {WT}/z-nile/lib/bounded.pl --time 3600 -- {WT}/zn beat c0010`)).toBe(false)
+		t.expect(reap.isBeater(`perl {WT}/z-nile/lib/bounded.pl --time 3600 -- {WT}/zn beat c0010`))
+			.toBe(false)
 		t.expect(reap.isBeater(`{WT}/zn beat c0010 --watch`)).toBe(false) -- not under the runner: nothing bounds it
 	end)
 
@@ -77,11 +79,28 @@ return t.spec("c0275 the background beater is not a leak", function(it)
 		t.expect(pids(plain)).toEqual({ 100 })
 	end)
 
-	it("a beater past its deadline is stopped, as any marked process, and a session end stops what ran below its shell", function()
-		local late = { p({ pid = 101, ppid = 100, command = "lune run engine/main.luau beat c0010 --watch", deadline = tostring(NOW - 100) }) }
-		t.expect(pids({ p({ pid = 100, ppid = 1, command = BEATER }), late[1] })).toEqual({ 101 })
-		local shell = p({ pid = 200, ppid = 50, command = "/bin/zsh -c source /Users/me/.claude/shell-snapshots/s.sh && ./zn status c0010" })
-		local claude = p({ pid = 50, ppid = 1, command = "/Users/me/.local/bin/claude" })
-		t.expect(pids({ claude, shell, p({ pid = 100, ppid = 1, command = BEATER }) }, opts({ under = 50 }))).toEqual({ 200 })
-	end)
+	it(
+		"a beater past its deadline is stopped, as any marked process, and a session end stops what ran below its shell",
+		function()
+			local late = {
+				p({
+					pid = 101,
+					ppid = 100,
+					command = "lune run engine/main.luau beat c0010 --watch",
+					deadline = tostring(NOW - 100),
+				}),
+			}
+			t.expect(pids({ p({ pid = 100, ppid = 1, command = BEATER }), late[1] })).toEqual({ 101 })
+			local shell = p({
+				pid = 200,
+				ppid = 50,
+				command = "/bin/zsh -c source /Users/me/.claude/shell-snapshots/s.sh && ./zn status c0010",
+			})
+			local claude = p({ pid = 50, ppid = 1, command = "/Users/me/.local/bin/claude" })
+			t.expect(
+				pids({ claude, shell, p({ pid = 100, ppid = 1, command = BEATER }) }, opts({ under = 50 }))
+			)
+				.toEqual({ 200 })
+		end
+	)
 end)

@@ -43,7 +43,7 @@ end
 -- the check waits (up to 20 s) for a push of a heartbeat branch made after it began: a command that beats only before or
 -- after never satisfies it
 local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
-	.. "check \"AC1: a beat lands while this check runs\" bash -c 'i=0; while [ $i -lt 20 ]; do "
+	.. 'check "AC1: a beat lands while this check runs" bash -c \'i=0; while [ $i -lt 20 ]; do '
 	.. 'n=$(wc -l < "$FAKE_DIR/beatpush" 2>/dev/null || echo 0); '
 	.. 'if [ "${n// /}" -gt "$BEFORE" ]; then echo seen > "$FAKE_DIR/check-beat"; exit 0; fi; '
 	.. "sleep 1; i=$((i+1)); done; exit 1'\nfinish\n"
@@ -75,20 +75,26 @@ return t.spec("c0275 real-time proofs: long commands and a hung remote", functio
 		t.expect(lines(`{h.fakes}/beatpush`) > before).toBe(true)
 	end)
 
-	it("a hung remote costs one bounded attempt per interval, said, and the command still succeeds", function()
-		fs.writeFile(`{h.fakes}/lshang`, "1")
-		local before = lines(`{h.fakes}/lscalls`)
-		local started = os.time()
-		local later = os.time() + 6 * STALE
-		local r = zn(wt, { "lessons", "--tags" }, { ZN_NOW = tostring(later), ZN_NET_SECONDS = "1" })
-		t.expect(r.ok).toBe(true)
-		t.expect(os.time() - started < 30).toBe(true) -- the hung call (120 s) was cut at the 1 s net limit, per claim
-		t.expect(has(r.stderr, "beat: c0090:") or has(r.stderr, "beat: c0091:")).toBe(true)
-		local first = lines(`{h.fakes}/lscalls`)
-		t.expect(first > before).toBe(true)
-		-- inside the interval nothing more is tried: the failed attempt advanced each claim's mark
-		must(zn(wt, { "lessons", "--tags" }, { ZN_NOW = tostring(later + 10), ZN_NET_SECONDS = "1" }), "lessons again")
-		t.expect(lines(`{h.fakes}/lscalls`)).toBe(first)
-		fs.removeFile(`{h.fakes}/lshang`)
-	end)
+	it(
+		"a hung remote costs one bounded attempt per interval, said, and the command still succeeds",
+		function()
+			fs.writeFile(`{h.fakes}/lshang`, "1")
+			local before = lines(`{h.fakes}/lscalls`)
+			local started = os.time()
+			local later = os.time() + 6 * STALE
+			local r = zn(wt, { "lessons", "--tags" }, { ZN_NOW = tostring(later), ZN_NET_SECONDS = "1" })
+			t.expect(r.ok).toBe(true)
+			t.expect(os.time() - started < 30).toBe(true) -- the hung call (120 s) was cut at the 1 s net limit, per claim
+			t.expect(has(r.stderr, "beat: c0090:") or has(r.stderr, "beat: c0091:")).toBe(true)
+			local first = lines(`{h.fakes}/lscalls`)
+			t.expect(first > before).toBe(true)
+			-- inside the interval nothing more is tried: the failed attempt advanced each claim's mark
+			must(
+				zn(wt, { "lessons", "--tags" }, { ZN_NOW = tostring(later + 10), ZN_NET_SECONDS = "1" }),
+				"lessons again"
+			)
+			t.expect(lines(`{h.fakes}/lscalls`)).toBe(first)
+			fs.removeFile(`{h.fakes}/lshang`)
+		end
+	)
 end)
