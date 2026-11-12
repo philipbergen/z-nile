@@ -5706,6 +5706,19 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 				`{id}: approve is refused while ZN_DISPATCH is set. Run ./zn approve {id} yourself, in a terminal, in this worktree.`
 			)
 		end
+		-- c0283: a terminal is not enough; a session an agent runs (an agent CLI's shell, a `!` command) carries its markers
+		local env: { [string]: string? } = {}
+		for _, name in provenance.AGENT_VARS do
+			env[name] = process.env[name]
+		end
+		if provenance.hint(env).agent then
+			fail(
+				`{id}: approve is refused in an agent session, terminal or not. Run ./zn approve {id} yourself, in your own terminal, in this worktree ({sh.git({
+					"rev-parse",
+					"--show-toplevel",
+				})}).`
+			)
+		end
 		if not stdinIsTerminal() then
 			local where = sh.git({ "rev-parse", "--show-toplevel" })
 			fail(
@@ -5771,12 +5784,28 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	if not text then
 		fail(`{id}: {aerr}`)
 	end
-	local path = approval.file(item)
-	sh.writeReplacing(path, text :: string)
-	sh.git({ "add", "--", path })
-	sh.git({ "commit", "-q", "-m", `tracker: approve {id}`, "--", path })
 	local rows = contract.parse(text :: string)
 	local hash = if rows then rows[#rows].hash else ""
+	-- c0283: the same approval in c0263's record, decided before anything is written; both files ride one commit
+	local record = `{item.dir}/provenance.md`
+	if sh.git({ "status", "--porcelain", "--", record }) ~= "" then
+		fail(`{id}: commit {record} first, then ./zn approve {id}`)
+	end
+	local rtext, rerr = provenance.approved(
+		if fs.isFile(record) then fs.readFile(record) else nil,
+		id,
+		who,
+		hash,
+		os.date("!%Y-%m-%d %H:%M") :: string
+	)
+	if not rtext then
+		fail(`{id}: {rerr}`)
+	end
+	local path = approval.file(item)
+	sh.writeReplacing(path, text :: string)
+	sh.writeReplacing(record, rtext :: string)
+	sh.git({ "add", "--", path, record })
+	sh.git({ "commit", "-q", "-m", `tracker: approve {id}`, "--", path, record })
 	print(`approved {id} {hash}`)
 end
 

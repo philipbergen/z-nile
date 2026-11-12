@@ -5,6 +5,7 @@
 -- the enclosing real one. Creating a fixture (git init, git clone to a new path) needs no check: the new path is
 -- named explicitly.
 local process = require("@lune/process")
+local provenance = require("@znile/engine/provenance")
 
 local fixture = {}
 
@@ -88,6 +89,16 @@ end
 function fixture.exec(dir: string, cmd: string, args: { string }, options: Options?): Result
 	fixture.check(dir)
 	local o: Options = options or {}
+	-- c0283: a spec process never inherits the markers of the session that runs the gate (an agent CLI, a dispatched
+	-- step): `approve` refuses them. A case that tests a marker sets it in its own env.
+	local scrubbed: { [string]: string } = {}
+	for _, name in provenance.AGENT_VARS do
+		scrubbed[name] = ""
+	end
+	for k, v in o.env or {} do
+		scrubbed[k] = v
+	end
+	o = { env = scrubbed, stdin = o.stdin }
 	local away = pointsElsewhere(cmd, args, o.env)
 	if away then
 		error(`refusing to run in {dir}: {away} would point git at another repository`, 2)

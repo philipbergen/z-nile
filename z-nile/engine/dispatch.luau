@@ -250,8 +250,11 @@ local function gate(f: Facts, name: string, pr: Pr): Action
 	end
 	local carries = if name ~= "run" then pr.judged else nil
 	local head = pr.head or ""
+	-- c0283: the prep gate never merges: a human approves the design (./zn approve) and merges the PR. `auto_merge`
+	-- keeps accepting "prep" as a name, with no effect.
 	if
 		name ~= "run"
+		and name ~= "prep"
 		and table.find(f.autoMerge, name)
 		and not pr.draft
 		and pr.green
@@ -270,7 +273,11 @@ local function gate(f: Facts, name: string, pr: Pr): Action
 		elseif not pr.green then `the {name} PR #{pr.number} waits for green CI`
 		elseif not pr.mergeable then `the {name} PR #{pr.number} is not mergeable`
 		elseif carries then `the {name} PR #{pr.number} waits for a human: {carries}`
+		elseif name == "prep" then `the prep PR #{pr.number} waits for the user's approval and merge`
 		else `the {name} PR #{pr.number} waits for a human: its head commit is unknown`
+	if name == "prep" then
+		why ..= `; approve the design with ./zn approve {f.id}, then merge it yourself and run ./zn dispatch {f.id} again`
+	end
 	return { kind = "stop", code = dispatch.EXIT.gate, gate = name, pr = pr.number, why = why }
 end
 

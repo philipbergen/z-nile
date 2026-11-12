@@ -60,16 +60,36 @@ end
 -- `CLAUDECODE` (Claude Code), `AI_AGENT`, `CURSOR_AGENT` (the `agent` CLI), `GROK_SESSION_ID` (the `grok` CLI) or `ZN_DISPATCH` (a dispatched step) is set and non-empty; its effort is `CLAUDE_EFFORT`.
 -- One definition for every layer: c0283's refusal of `approve` calls this function.
 function provenance.hint(env: { [string]: string? }): Hint
-	local function set(name: string): boolean
+	local agent = false
+	for _, name in provenance.AGENT_VARS do
 		local v = env[name]
-		return v ~= nil and v ~= ""
+		if v ~= nil and v ~= "" then
+			agent = true
+		end
 	end
-	return {
-		agent = set("CLAUDECODE") or set("AI_AGENT") or set("CURSOR_AGENT") or set("GROK_SESSION_ID") or set(
-			"ZN_DISPATCH"
-		),
-		effort = env.CLAUDE_EFFORT,
-	}
+	return { agent = agent, effort = env.CLAUDE_EFFORT }
+end
+
+-- c0283: the variables that make a session an agent's; `hint` reads them, and the callers that build its environment
+-- read the same list.
+provenance.AGENT_VARS = { "CLAUDECODE", "AI_AGENT", "CURSOR_AGENT", "GROK_SESSION_ID", "ZN_DISPATCH" }
+
+-- c0283: the record of a design approval, written beside approval.md by `./zn approve`: the row `approved | human:<who> |
+-- contract=<first 12 hex of the approval's hash>`. approval.md stays the authority (the full hash, its parts, who and when
+-- to the second); the row puts the same approval in c0263's record, where `who` and the board read it. Returns the new
+-- record text, or nil and why (a name the record cannot hold, a record that does not parse).
+function provenance.approved(
+	text: string?,
+	id: string,
+	who: string,
+	hash: string,
+	now: string
+): (string?, string?)
+	local actor = provenance.human(who)
+	if not provenance.isLive(actor) then
+		return nil, `{actor} cannot be recorded (a name holds no | and no line break)`
+	end
+	return provenance.record(text, id, "approved", actor, `contract={string.sub(hash, 1, 12)}`, now)
 end
 
 -- flag, then env, then an agent-session hint, then the git name; a given value that is not a live form refuses
