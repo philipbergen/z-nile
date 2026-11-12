@@ -184,6 +184,7 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 
 	it("done moves the specs into pickman/tests/acceptance/<id> and runs them from pickman/", function()
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.layerReview(work, "f0010") -- c0248: done binds a layer only once its review is settled
 		seal.trace(work, "R0010")
 		local r = tr({ "done", "R0010" })
 		if not r.ok then

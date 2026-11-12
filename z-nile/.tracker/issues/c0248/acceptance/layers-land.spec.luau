@@ -208,18 +208,8 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 					"c0010, c0020, c0030",
 					"c0010\nc0020\nc0030"
 				),
-				["pickman/.tracker/rafts/R0020/R0020.md"] = raftDoc(
-					"R0020",
-					"pair",
-					"c0040, c0050",
-					"c0040\nc0050"
-				),
-				["pickman/.tracker/rafts/R0030/R0030.md"] = raftDoc(
-					"R0030",
-					"gap",
-					"c0070, c0080",
-					"c0070\nc0080"
-				),
+				["pickman/.tracker/rafts/R0020/R0020.md"] = raftDoc("R0020", "pair", "c0040, c0050", "c0040\nc0050"),
+				["pickman/.tracker/rafts/R0030/R0030.md"] = raftDoc("R0030", "gap", "c0070, c0080", "c0070\nc0080"),
 			}
 			local rafts = {
 				R0010 = { "c0010", "c0020", "c0030" },
@@ -372,16 +362,23 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 				t.expect(has(below.stderr, "c0070 is not complete")).toBe(true)
 			end
 			t.expect(has(git(f.main, { "log", "--format=%s", "origin/main" }), "bind")).toBe(false)
+
+			-- the third layer starts on the sealed second one, so it has a pull request on the second layer's branch;
+			-- a HEAD on that layer above is no more the tip of the layer --through names
+			git(wt, { "switch", "-q", "R0010/2/c0020" })
+			zn(wt, { "start", "R0010" })
+			t.expect(git(wt, { "branch", "--show-current" })).toBe("R0010/3/c0030")
+			t.expect(has(fs.readFile(log), "--base R0010/2/c0020 --head R0010/3/c0030")).toBe(true)
+			local above = znTry(wt, { "done", "R0010", "--through", "c0020" })
+			t.expect(above.ok).toBe(false)
+			t.expect(has(above.stderr, "R0010/2/c0020 is")).toBe(true)
+			t.expect(git(f.main, { "rev-parse", "origin/main" })).toBe(before)
 		end
 	)
 
 	it(
 		"AC6: done --through lands only the layers up to the named one, moves only them, keeps the raft active, retargets the next PR to main",
 		function()
-			-- the third layer starts on the sealed second one, so it has a pull request on the second layer's branch
-			zn(wt, { "start", "R0010" })
-			t.expect(git(wt, { "branch", "--show-current" })).toBe("R0010/3/c0030")
-			t.expect(has(fs.readFile(log), "--base R0010/2/c0020 --head R0010/3/c0030")).toBe(true)
 			git(wt, { "switch", "-q", "R0010/2/c0020" })
 			local top = git(wt, { "rev-parse", "HEAD" })
 			local landed = zn(wt, { "done", "R0010", "--through", "c0020" })
@@ -480,34 +477,28 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 		end
 	)
 
-	it(
-		"AC9: every layer PR body names the raft's Theme, Order and the stack, refreshed by finish and done",
-		function()
-			-- written by start and rewritten by finish: layer 1's body after its finish
-			t.expect(has(bodyAfterFinish1, "Raft **R0010**: stack")).toBe(true)
-			t.expect(has(bodyAfterFinish1, "The stack theme: layers that are reviewed one by one."))
-				.toBe(true)
-			t.expect(has(bodyAfterFinish1, "A second paragraph")).toBe(false) -- the Theme is its first paragraph
-			t.expect(has(bodyAfterFinish1, "## Order")).toBe(true)
-			t.expect(has(bodyAfterFinish1, "c0010\nc0020\nc0030")).toBe(true)
-			t.expect(has(bodyAfterFinish1, "## Stack")).toBe(true)
-			t.expect(has(bodyAfterFinish1, "| 1 (this layer) | c0010 | `R0010/1/c0010` | #11 | finished |"))
-				.toBe(true)
-			t.expect(has(bodyAfterFinish1, "| 2 | c0020 | `R0010/2/c0020` | - | missing |")).toBe(true)
-			-- rewritten by done for the layer that goes on: the landed layers show as landed, this one is marked
-			t.expect(has(bodyAfterBind1, "Raft **R0010**: stack")).toBe(true)
-			t.expect(has(bodyAfterBind1, "| 1 | c0010 | `R0010/1/c0010` | - | landed |")).toBe(true)
-			t.expect(has(bodyAfterBind1, "| 2 | c0020 | `R0010/2/c0020` | - | landed |")).toBe(true)
-			t.expect(has(bodyAfterBind1, "| 3 (this layer) | c0030 | `R0010/3/c0030` | #13 | claimed |"))
-				.toBe(true)
-			-- and by finish again: the third layer's body after its finish and its review
-			local last = body("13")
-			t.expect(has(last, "| 3 (this layer) | c0030 | `R0010/3/c0030` | #13 | finished |")).toBe(true)
-			t.expect(has(last, "landed")).toBe(true)
-			-- the refresh is an edit with the body on standard input
-			t.expect(has(fs.readFile(log), "pr edit 13 --body-file -")).toBe(true)
-		end
-	)
+	it("AC9: every layer PR body names the raft's Theme, Order and the stack, refreshed by finish and done", function()
+		-- written by start and rewritten by finish: layer 1's body after its finish
+		t.expect(has(bodyAfterFinish1, "Raft **R0010**: stack")).toBe(true)
+		t.expect(has(bodyAfterFinish1, "The stack theme: layers that are reviewed one by one.")).toBe(true)
+		t.expect(has(bodyAfterFinish1, "A second paragraph")).toBe(false) -- the Theme is its first paragraph
+		t.expect(has(bodyAfterFinish1, "## Order")).toBe(true)
+		t.expect(has(bodyAfterFinish1, "c0010\nc0020\nc0030")).toBe(true)
+		t.expect(has(bodyAfterFinish1, "## Stack")).toBe(true)
+		t.expect(has(bodyAfterFinish1, "| 1 (this layer) | c0010 | `R0010/1/c0010` | #11 | finished |")).toBe(true)
+		t.expect(has(bodyAfterFinish1, "| 2 | c0020 | `R0010/2/c0020` | - | missing |")).toBe(true)
+		-- rewritten by done for the layer that goes on: the landed layers show as landed, this one is marked
+		t.expect(has(bodyAfterBind1, "Raft **R0010**: stack")).toBe(true)
+		t.expect(has(bodyAfterBind1, "| 1 | c0010 | `R0010/1/c0010` | - | landed |")).toBe(true)
+		t.expect(has(bodyAfterBind1, "| 2 | c0020 | `R0010/2/c0020` | - | landed |")).toBe(true)
+		t.expect(has(bodyAfterBind1, "| 3 (this layer) | c0030 | `R0010/3/c0030` | #13 | claimed |")).toBe(true)
+		-- and by finish again: the third layer's body after its finish and its review
+		local last = body("13")
+		t.expect(has(last, "| 3 (this layer) | c0030 | `R0010/3/c0030` | #13 | finished |")).toBe(true)
+		t.expect(has(last, "landed")).toBe(true)
+		-- the refresh is an edit with the body on standard input
+		t.expect(has(fs.readFile(log), "pr edit 13 --body-file -")).toBe(true)
+	end)
 
 	it("AC5: done refuses a stack whose top layer is not complete", function()
 		wtB = trackerfix.trOk(f, f.main, { "worktree", "R0020" })

@@ -93,7 +93,7 @@ usage: ./zn <command> ...
                                                 and write that ticket's watch files from the layer's own diff
   restack <R-id>                                rebase each layer onto the one below; stop at the first conflict or red check
   stack <R-id>                                  print the layers, from git (read-only)
-  trace <R-id> [--check]                        print the final review's traceability table skeleton, or verify trace.md
+  trace <R-id> [--through <issue>] [--check]    print the final review's traceability table skeleton, or verify trace.md
   focus <issue-id>                              attribute following commits to this issue
   commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>]
                                                 stage all, record spend, commit, push. --time and --tokens are ignored
@@ -109,7 +109,7 @@ usage: ./zn <command> ...
                                                 run one step: a model step on .models.toml's CLIs, a script step itself
   dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
   dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
-  done <R-id>                                   land the stack: one --no-ff merge onto main, one binding commit (refuses an unfinished layer)
+  done <R-id> [--through <issue>]               land the stack, or its layers up to <issue>: one --no-ff merge onto main, one binding commit (refuses an unfinished or incomplete layer)
   watch-bootstrap                               write every spec's watch file from the commit that added it (once)
   watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
   watch-net                                     run every project's fast suite on current main and push a missed test's
