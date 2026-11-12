@@ -1973,13 +1973,35 @@ end
 
 -- Starts the beater of `id` when it should run and none does. Best effort, silent: a beater that cannot start only
 -- leaves the claim to the beats of the commands run in its worktree.
+-- Whether the pid in a beater's pid file is a live beater: it answers `kill -0`, and where the process table can be read it
+-- is a runner of `beat --watch` (a pid reused by another process within the hour is not).
+function hb.beaterAlive(pid: string): boolean
+	if not sh.run("kill", { "-0", pid }).ok then
+		return false
+	end
+	local read, r = pcall(sh.run, "env", { "LC_ALL=C", "ps", "-o", "command=", "-p", pid })
+	if read and (r :: sh.Result).ok and sh.trim((r :: sh.Result).stdout) ~= "" then
+		return reapLib.isBeater((r :: sh.Result).stdout)
+	end
+	return true
+end
+
+-- One start at a time per claim: a lock folder made with mkdir (atomic), taken over when it is more than a minute old (an
+-- engine that died while starting). True when this process may start the beater.
+function hb.startLock(id: string): boolean
+	local lock = hb.beaterFile(id) .. ".lock"
+	local script =
+		'mkdir "$1" 2>/dev/null && exit 0; if [ -n "$(find "$1" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then rmdir "$1" && mkdir "$1" 2>/dev/null && exit 0; fi; exit 1'
+	return sh.run("sh", { "-c", script, "_", lock }).ok
+end
+
 function hb.ensureBeater(id: string)
 	local running = false
 	local file = hb.beaterFile(id)
 	if fs.isFile(file) then
 		local text = fs.readFile(file)
 		local pid = string.match(text, "^(%d+)")
-		running = heartbeat.beaterRunning(text, os.time(), pid ~= nil and sh.run("kill", { "-0", pid }).ok)
+		running = heartbeat.beaterRunning(text, os.time(), pid ~= nil and hb.beaterAlive(pid))
 	end
 	local go = heartbeat.beaterStart({
 		dispatched = process.env.ZN_DISPATCH == "1",
@@ -1993,6 +2015,11 @@ function hb.ensureBeater(id: string)
 	if not go then
 		return
 	end
+	fs.writeDir(hb.BEATER_DIR)
+	if not hb.startLock(id) then
+		return -- another command is starting it
+	end
+	local lock = hb.beaterFile(id) .. ".lock"
 	local top = sh.git({ "rev-parse", "--show-toplevel" })
 	-- the process table may be unreadable (a sandbox): the beater is then bound by its time and its worktree only
 	local readable, session = pcall(hb.sessionPid)
@@ -2008,6 +2035,7 @@ function hb.ensureBeater(id: string)
 	if r.ok and pid then
 		sh.writeReplacing(file, `{pid} {os.time() + heartbeat.BEATER_SECONDS}`)
 	end
+	sh.run("rmdir", { lock })
 end
 
 -- The first beat of a claim just published (an issue's, a raft's, a takeover's after its swap): best effort, said on

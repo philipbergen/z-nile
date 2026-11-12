@@ -408,6 +408,15 @@ return t.spec("c0275 automatic beats", function(it)
 			fs.writeFile(`{wt5}/{BEATER}/c0085`, `999999 {os.time() + 3000}`)
 			must(zn(wt5, { "lessons", "--tags" }, T0 + 7020, { ZN_BEATER = "1" }), "a command after it ended")
 			t.expect(#ours("c0085")).toBe(2)
+			-- one start at a time: a fresh lock folder means another command is starting it, so this one starts none
+			fs.writeFile(`{wt5}/{BEATER}/c0085`, `999999 {os.time() + 3000}`)
+			fs.writeDir(`{wt5}/{BEATER}/c0085.lock`)
+			must(
+				zn(wt5, { "lessons", "--tags" }, T0 + 7022, { ZN_BEATER = "1" }),
+				"a command while another starts the beater"
+			)
+			t.expect(#ours("c0085")).toBe(2)
+			process.exec("rmdir", { `{wt5}/{BEATER}/c0085.lock` })
 			-- a worktree that no longer remembers the claim starts no beater: it would be refused at once, at every command
 			local stampFile, claimFile =
 				`{wt5}/{CACHE}tracker-stamp-c0085`, `{wt5}/{CACHE}tracker-claim-c0085`
