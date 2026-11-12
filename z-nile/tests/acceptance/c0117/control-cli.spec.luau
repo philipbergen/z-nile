@@ -18,44 +18,45 @@ local task = require("@lune/task")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local MODELS = [[
-order = ["claude", "grok", "agent"]
-
 [dispatch]
 auto_merge = ["prep"]
 stall_seconds = 3
 
-[z-ticket.claude]
-model = "claude-sonnet-5"
-rank = 2
-runtime = "claude-cli"
-max_tokens = 5000
-
-[z-design.claude]
-model = "claude-opus-5-5"
-rank = 3
-runtime = "claude-cli"
-max_tokens = 5000
-
-[z-design.grok]
+[fallback.grok]
 model = "grok-4.7"
-effort = "high"
-rank = 3
 runtime = "grok-cli"
-max_tokens = 5000
 
-[z-design.agent]
-model = "claude-opus-5-5-high"
-rank = 3
+[fallback.agent]
+model = "claude-opus-5-5"
 runtime = "cursor-cli"
-max_tokens = 5000
 max_calls = 2
 max_minutes = 60
 
-[zz-review.claude]
-model = "claude-opus-5-5"
-rank = 4
+[roles.idea]
+model = "claude-sonnet-5"
+cli = "claude"
 runtime = "claude-cli"
+rank = 2
 max_tokens = 5000
+fallbacks = []
+
+[roles.design]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 5000
+effort = "high"
+fallbacks = ["grok", "agent"]
+
+[roles.design-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+effort = "xhigh"
+fallbacks = ["grok"]
 ]]
 
 local h: fakecli.Harness
@@ -113,7 +114,7 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 			["pickman/.tracker/issues/c0080/c0080.md"] = issue("c0080", "eighth-thing"),
 			["pickman/.tracker/issues/c0080/.models.toml"] = "[dispatch]\nauto_merge = []\n",
 			["pickman/.tracker/issues/c0090/c0090.md"] = issue("c0090", "ninth-thing"),
-			["pickman/.tracker/issues/c0090/.models.toml"] = 'order = ["agent"]\n',
+			["pickman/.tracker/issues/c0090/.models.toml"] = '[roles.design]\ncli = "agent"\nmodel = "claude-opus-5-5"\nruntime = "cursor-cli"\nmax_calls = 2\nmax_minutes = 60\nfallbacks = []\n',
 			["pickman/.tracker/issues/c0091/c0091.md"] = issue("c0091", "tenth-thing"),
 			["pickman/.tracker/issues/c0101/c0101.md"] = issue("c0101", "conc-one"),
 			["pickman/.tracker/issues/c0095/c0095.md"] = issue("c0095", "long-review"),
@@ -195,7 +196,7 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 				end
 			end
 			t.expect(review ~= nil).toBe(true)
-			t.expect(review.model).toBe("claude-opus-5-5")
+			t.expect(review.model).toBe("claude-opus-5-5-xhigh")
 			t.expect(review.phase).toBe("design-review")
 			-- the author's state is its own, and the review's sits beside it
 			local author = fakecli.state(h, "c0020")

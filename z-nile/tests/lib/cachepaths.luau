@@ -151,6 +151,10 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["fs.writeDir(`{root}/.cache`)"] = "the main checkout's folder itself (c0070's board refresh; fs.writeDir of an existing folder writes nothing)",
 		["sh.writeReplacing(`{root}/.cache/board.html`, page)"] = `the main checkout's board page (c0070's board refresh): {RENAMED}`,
 		["watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)"] = "usage text: the net's log path",
+		['local at = string.find(cwd, "/.cache/", 1, true)'] = "a prefix compared with a CLI's real path (only a fake under .cache starts inside a check); nothing is written",
+		['return if at then string.sub(cwd, 1, at + 7) else cwd .. ".cache/"'] = "the same prefix; nothing is written",
+		["return `refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
+		["stateDir = `.cache/idea-run/{id}/{phase}`,"] = "the idea stage's supervisor state for one attempt (pid, stdin, stop, measure); gitignored under this checkout's .cache, written by the runner the same way a dispatch step's state dir is",
 	},
 	["z-nile/engine/watchcmd.luau"] = {
 		["'cd \"$1\" && ./zn run --time 3600 -- ./zn watch-net > .cache/watch-net.log 2>&1 &',"] = "starts the net in the background; the log is this checkout's .cache, which the fence already guards",

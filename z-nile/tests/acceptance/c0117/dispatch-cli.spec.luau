@@ -1,7 +1,7 @@
 --!strict
 -- c0117 AC6: `./zn dispatch` runs one model step for real, with fake CLIs (@tests/lib/fakecli). It runs in its worktree
 -- with the wrapper first on PATH, the agent's own token (never the user's) and a prompt that names its skill; it moves
--- down the CLI order only on a structured quota signal, kills the step's process group at the cap and on a stall
+-- down the CLI order when a call fails, the CLI is missing, or the quota is gone, kills the step's process group at the cap and on a stall
 -- (a CLI's own wait message is quota; the model's words never are; a running tool call gets the tool limit), records
 -- the step's tokens and model, and inside a check starts no CLI outside .cache. A dry run starts and writes nothing.
 -- Fixture under .cache/c0117-dispatch.
@@ -15,51 +15,55 @@ local task = require("@lune/task")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local MODELS = [[
-order = ["claude", "grok", "agent"]
-
 [dispatch]
 stall_seconds = 120
 tool_seconds = 240
 
-[z-design.claude]
-model = "claude-opus-5-5"
-rank = 3
-runtime = "claude-cli"
-max_tokens = 5000
-
-[z-design.grok]
+[fallback.grok]
 model = "grok-4.7"
-effort = "high"
-rank = 3
 runtime = "grok-cli"
-max_tokens = 5000
 
-[z-design.agent]
-model = "claude-opus-5-5-high"
-rank = 3
+[fallback.agent]
+model = "claude-opus-5-5"
 runtime = "cursor-cli"
-max_tokens = 5000
 max_calls = 30
 max_minutes = 60
 
-[zz-review.claude]
+[roles.design]
 model = "claude-opus-5-5"
-rank = 4
+cli = "claude"
 runtime = "claude-cli"
+rank = 3
 max_tokens = 5000
+effort = "high"
+fallbacks = ["grok", "agent"]
 
-[zz-review.grok]
-model = "grok-4.7"
+[roles.design-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
 effort = "xhigh"
-rank = 4
-runtime = "grok-cli"
-max_tokens = 5000
+fallbacks = ["grok"]
 
-[z-ready.claude]
-model = "nobody"
-rank = 1
+[roles.code-review]
+model = "claude-opus-5-5"
+cli = "claude"
 runtime = "claude-cli"
-max_tokens = 1
+rank = 4
+max_tokens = 5000
+effort = "xhigh"
+fallbacks = ["grok"]
+
+[roles.raft]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+effort = "xhigh"
+fallbacks = []
 ]]
 
 local h: fakecli.Harness
@@ -168,13 +172,13 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			[".models.toml"] = MODELS,
 			["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "first-thing"),
 			["pickman/.tracker/issues/c0020/c0020.md"] = issue("c0020", "second-thing"),
-			["pickman/.tracker/issues/c0020/.models.toml"] = "[z-design.claude]\nmax_tokens = 1000\n",
+			["pickman/.tracker/issues/c0020/.models.toml"] = "[roles.design]\nmax_tokens = 1000\n",
 			["pickman/.tracker/issues/c0030/c0030.md"] = issue("c0030", "third-thing"),
 			["pickman/.tracker/issues/c0040/c0040.md"] = issue("c0040", "fourth-thing"),
 			-- the one issue whose cases test a stall keeps short limits (10 s, which a starved machine does not reach, against the fakes' 12 s quiet tool call and 20 s silences); every other case stalls only if it really does
 			["pickman/.tracker/issues/c0040/.models.toml"] = "[dispatch]\nstall_seconds = 10\ntool_seconds = 30\n",
 			["pickman/.tracker/issues/c0050/c0050.md"] = issue("c0050", "fifth-thing"),
-			["pickman/.tracker/issues/c0050/.models.toml"] = 'order = ["agent"]\n',
+			["pickman/.tracker/issues/c0050/.models.toml"] = '[roles.design]\ncli = "agent"\nmodel = "claude-opus-5-5"\nruntime = "cursor-cli"\nmax_calls = 30\nmax_minutes = 60\nfallbacks = []\n',
 			["pickman/.tracker/issues/c0060/c0060.md"] = issue("c0060", "sixth-thing"),
 		})
 		-- agent resolves outside .cache (a link to /bin/echo): the dispatcher must refuse to start it
@@ -189,7 +193,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			t.expect(r.ok).toBe(true)
 			t.expect(string.split(string.gsub(r.stdout, "%s+$", ""), "\n")).toEqual({
 				"step=z-design id=c0010 kind=model",
-				"try=1 cli=claude runtime=claude-cli model=claude-opus-5-5 rank=3 max_tokens=5000",
+				"try=1 cli=claude runtime=claude-cli model=claude-opus-5-5-high rank=3 max_tokens=5000",
 				"try=2 cli=grok runtime=grok-cli model=grok-4.7-high rank=3 max_tokens=5000",
 				"try=3 cli=agent runtime=cursor-cli model=claude-opus-5-5-high rank=3 max_tokens=5000 max_calls=30 max_minutes=60",
 			})
@@ -197,7 +201,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			t.expect(
 				has(
 					closer.stdout,
-					"try=1 cli=claude runtime=claude-cli model=claude-opus-5-5 rank=3 max_tokens=1000"
+					"try=1 cli=claude runtime=claude-cli model=claude-opus-5-5-high rank=3 max_tokens=1000"
 				)
 			).toBe(true)
 			local chain = zn({ "dispatch", "c0010", "--dry-run" })
@@ -212,7 +216,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 	it("model files come from main, never the working tree: an uncommitted one is refused", function()
 		fakecli.clear(h)
 		local stray = `{h.f.main}/pickman/.tracker/issues/c0010/.models.toml`
-		fs.writeFile(stray, "[z-design.claude]\nmax_tokens = 99999999\n")
+		fs.writeFile(stray, "[roles.design]\nmax_tokens = 99999999\n")
 		local r = zn({ "dispatch", "z-design", "c0010", "--dry-run" })
 		fs.removeFile(stray)
 		t.expect(r.ok).toBe(false)
@@ -260,7 +264,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			t.expect(has(l, `broker={main}/.cache/dispatch/c0010/broker\n`)).toBe(true)
 			local row = lastRow("c0010")
 			t.expect(row.tokens).toBe(100 + 20 + 3)
-			t.expect(row.model).toBe("claude-opus-5-5")
+			t.expect(row.model).toBe("claude-opus-5-5-high")
 			t.expect(row.phase).toBe("prep")
 			t.expect(row.subject).toBe("dispatch z-design")
 			-- the user's G13, 2026-10-25: "Dispatcher row 0 min": the step's own skill records its minutes
@@ -290,7 +294,9 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			local lines = recordLines(r.stdout)
 			t.expect(#lines).toBe(1)
 			t.expect(lines[1])
-				.toBe('record: ./zn commit -m "c0010: review-001" --phase code-review --model claude-opus-5-5')
+				.toBe(
+					'record: ./zn commit -m "c0010: review-001" --phase code-review --model claude-opus-5-5-xhigh'
+				)
 			t.expect(#(fakecli.rows(h, "c0010") or {})).toBe(before) -- the row is in the author's tree, not the dispatch branch
 			t.expect(string.find(fs.readFile(`{wt}/.cache/measure.tsv`), "code-review", 1, true) ~= nil)
 				.toBe(true)
@@ -333,7 +339,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		local row = lastRow("c0010")
 		t.expect(row.subject).toBe("design-review-001")
 		t.expect(row.phase).toBe("design-review")
-		t.expect(row.model).toBe("claude-opus-5-5")
+		t.expect(row.model).toBe("claude-opus-5-5-xhigh")
 		t.expect(row.minutes).toBe(0)
 		t.expect((row.wall or 0) > 0).toBe(true)
 		t.expect(row.tokens).toBe(123)
@@ -441,7 +447,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			local lines = recordLines(r.stdout)
 			t.expect(#lines).toBe(1)
 			t.expect(lines[1]).toBe(
-				'record: ./zn commit -m "c0010: stream-review-001" --phase code-review --model claude-opus-5-5 --issue c0010'
+				'record: ./zn commit -m "c0010: stream-review-001" --phase code-review --model claude-opus-5-5-xhigh --issue c0010'
 			)
 			t.expect(#(fakecli.rows(h, "c0010") or {})).toBe(before)
 			-- the prompt names the stream's own worktree (the call site's argument, design review 008 F3)
@@ -630,23 +636,25 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(row.tokens).toBe(207)
 	end)
 
-	it(
-		"a failure that is not quota stops: the next CLI never starts; an exit 0 with no count fails",
-		function()
-			fakecli.clear(h)
-			mode("claude", "fail")
-			local r = zn({ "dispatch", "z-design", "c0030" })
-			t.expect(r.code).toBe(1)
-			t.expect(has(log(), "grok step=")).toBe(false)
-			t.expect(state("c0030").outcome).toBe("failed")
-			fakecli.clear(h)
-			mode("claude", "nocount")
-			local n = zn({ "dispatch", "z-design", "c0030" })
-			t.expect(n.ok).toBe(false)
-			t.expect(has(state("c0030").detail, "without a token count")).toBe(true)
-			t.expect(has(log(), "grok step=")).toBe(false)
+	it("a failed call moves to the next model, and an exit 0 with no token count is one", function()
+		fakecli.clear(h)
+		mode("claude", "nocount")
+		mode("grok", "fail")
+		mode("agent", "fail")
+		local r = zn({ "dispatch", "z-design", "c0030" })
+		t.expect(r.code).toBe(1)
+		t.expect(count(log(), "claude step=")).toBe(1)
+		t.expect(count(log(), "grok step=")).toBe(1)
+		local s = state("c0030")
+		t.expect(s.outcome).toBe("failed")
+		local saw = false
+		for _, a in s.history do
+			if has(a.detail, "without a token count") then
+				saw = true
+			end
 		end
-	)
+		t.expect(saw).toBe(true)
+	end)
 
 	it("kills the step's whole process group past max_tokens, and records what it spent", function()
 		fakecli.clear(h)
