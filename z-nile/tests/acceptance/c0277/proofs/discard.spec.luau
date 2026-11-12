@@ -18,16 +18,16 @@ local STAMP = "preparing-lucky-violet-heron"
 local MARKER = "." .. "cache/discarded"
 local BEATER = "." .. "cache/tracker-beater"
 local MODELS = [[
-order = ["claude"]
-
 [dispatch]
 stall_seconds = 20
 
-[z-design.claude]
+[roles.design]
 model = "claude-opus-5-5"
-rank = 3
+cli = "claude"
 runtime = "claude-cli"
+rank = 3
 max_tokens = 5000
+effort = "high"
 ]]
 
 local h: fakecli.Harness
