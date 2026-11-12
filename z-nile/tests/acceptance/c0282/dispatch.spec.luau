@@ -11,32 +11,40 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local MODELS = [[
-order = ["claude", "grok"]
-
 [dispatch]
-auto_merge = ["prep"]
+auto_merge = ["prep", "raft"]
 stall_seconds = 3
 
-[z-design.claude]
-model = "claude-opus-5-5"
-effort = "high"
-rank = 3
-runtime = "claude-cli"
-max_tokens = 5000
-
-[z-design.grok]
+[fallback.grok]
 model = "grok-4.7"
-effort = "medium"
-rank = 3
 runtime = "grok-cli"
-max_tokens = 5000
 
-[zz-review.claude]
+[roles.design]
 model = "claude-opus-5-5"
-effort = "high"
-rank = 4
+cli = "claude"
 runtime = "claude-cli"
+rank = 3
 max_tokens = 5000
+effort = "high"
+fallbacks = ["grok"]
+
+[roles.design-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+effort = "xhigh"
+fallbacks = []
+
+[roles.code-review]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+effort = "xhigh"
+fallbacks = []
 ]]
 
 local function HEADER(id: string): string
@@ -115,7 +123,7 @@ return t.spec("c0282 provenance through the dispatcher", function(it)
 		end
 		local l = fakecli.log(h)
 		t.expect(has(l, "actor=agent:claude-opus-5-5 effort high\n")).toBe(true)
-		t.expect(has(l, "actor=agent:grok-4-7 effort medium\n")).toBe(true)
+		t.expect(has(l, "actor=agent:grok-4-7 effort high\n")).toBe(true)
 	end)
 
 	it(
