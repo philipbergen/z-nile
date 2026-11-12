@@ -1460,7 +1460,7 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 		for _, path in paths do
 			local pid = trackerstate.itemOf(path, roots :: { string })
 			if pid and movedIds[pid :: string] then
-				return `it carries {path}, but origin's main changed {movedIds[pid :: string]} since this PR was cut: rebase it onto main`
+				return `it carries {path}, but origin's main changed {movedIds[pid :: string]} since this PR was cut: run ./zn sync in its worktree (it merges main and unites a provenance.md both sides appended), then push`
 			end
 		end
 		-- the rafts this PR carries, keyed by root and id (code review 004 F2: an id is per root, and an issue may
@@ -1571,7 +1571,18 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 					if not new then
 						return `it removes {path}: a rafting PR only appends rafted rows to a record`
 					end
-					local why = provenance.publishProblem(old, new :: string, pid :: string, { "rafted" })
+					-- the record follows the issue's own `raft:` line: the PR moves it to a raft it carries, and the rows name it
+					local headDoc = show(ref, doc)
+					local baseDoc = show(base, doc)
+					local became = if headDoc then raftLine(headDoc :: string) else nil
+					local was = if baseDoc then raftLine(baseDoc :: string) else nil
+					if became == nil or became == "" or became == was then
+						return `it changes {path}, but not {pid}'s raft: line: a rafted row rides the PR that rafts the issue`
+					end
+					if not rafts[`{r}/{became}`] then
+						return `it changes {path} for raft {became}, which this PR does not carry`
+					end
+					local why = provenance.raftedProblem(old, new :: string, pid :: string, became)
 					if why then
 						return `it changes {path}: {why}`
 					end

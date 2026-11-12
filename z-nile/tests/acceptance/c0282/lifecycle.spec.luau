@@ -8,6 +8,7 @@ local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local provenance = require("@znile/engine/provenance")
 local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
@@ -21,11 +22,11 @@ local ID: { [string]: string } = {
 	GIT_AUTHOR_EMAIL = "e2e@example.invalid",
 	GIT_COMMITTER_NAME = "e2e",
 	GIT_COMMITTER_EMAIL = "e2e@example.invalid",
-	CLAUDECODE = "",
-	AI_AGENT = "",
-	CLAUDE_EFFORT = "",
-	ZN_ACTOR = "",
 }
+-- every variable a command that records reads, cleared: the one list is the engine's
+for _, name in provenance.ENV_VARS do
+	ID[name] = ""
+end
 local SONNET = "agent:claude-sonnet-5-5 effort high"
 local OPUS = "agent:claude-opus-5-5 effort high"
 local TRIVIAL_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
@@ -116,10 +117,18 @@ return t.spec("c0282 the offline lifecycle stamps provenance", function(it)
 		must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new alpha")
 		must(tr({ "new", "issue", "f", "gamma", "--project", "pickman" }), "new gamma")
 		must(
-			tr(
-				{ "new", "raft", "feature", "demo", "f0010", "f0020", "--project", "pickman" },
-				{ ZN_ACTOR = SONNET }
-			),
+			tr({
+				"new",
+				"raft",
+				"feature",
+				"demo",
+				"f0010",
+				"f0020",
+				"--project",
+				"pickman",
+				"--actor",
+				SONNET,
+			}, { ZN_ACTOR = OPUS }),
 			"new raft"
 		)
 		for _, id in { "f0010", "f0020" } do
@@ -151,11 +160,31 @@ return t.spec("c0282 the offline lifecycle stamps provenance", function(it)
 			git({ "add", "-A" })
 			git({ "commit", "-qm", "prep ready" })
 			must(tr({ "start", "R0010" }), "start")
+			-- a bad actor or a bad ZN_VIA refuses before the counter is pushed or a folder is made
+			local before = git({ "status", "--porcelain" })
+			for _, env in { { ZN_ACTOR = "robot:x" }, { ZN_VIA = "dispatch" } } do
+				local refused =
+					tr({ "new", "issue", "d", "found", "--raft", "R0010", "--project", "pickman" }, env)
+				t.expect(refused.ok).toBe(false)
+				t.expect(
+					string.find(refused.stderr, "ZN_VIA", 1, true) ~= nil
+						or string.find(refused.stderr, "not an actor", 1, true) ~= nil
+				).toBe(true)
+				t.expect(git({ "status", "--porcelain" })).toBe(before)
+			end
 			local emergent = must(
-				tr(
-					{ "new", "issue", "d", "found", "--raft", "R0010", "--project", "pickman" },
-					{ ZN_ACTOR = OPUS }
-				),
+				tr({
+					"new",
+					"issue",
+					"d",
+					"found",
+					"--raft",
+					"R0010",
+					"--project",
+					"pickman",
+					"--actor",
+					OPUS,
+				}, { ZN_ACTOR = SONNET }),
 				"emergent"
 			)
 			local epath = string.match(emergent, "(%S+%.md)") :: string
@@ -170,7 +199,7 @@ return t.spec("c0282 the offline lifecycle stamps provenance", function(it)
 		function()
 			-- the emergent issue was a probe of its row: its untracked folder goes, so the stack is the two members
 			git({ "reset", "-q", "--hard", "HEAD" })
-		git({ "clean", "-fdq", "--", ISSUES })
+			git({ "clean", "-fdq", "--", ISSUES })
 			-- layer 1: f0010 with a failing promoted spec, as c0001 does
 			local good = alpha(1)
 			write(`{ISSUES}/active/f0010/acceptance/alpha.spec.luau`, alpha(2))
@@ -184,6 +213,16 @@ return t.spec("c0282 the offline lifecycle stamps provenance", function(it)
 			git({ "commit", "-qm", "f0020 work" })
 			must(tr({ "finish", "f0020" }), "finish f0020")
 			seal.trace(dir, "R0010")
+			-- a member record that does not parse refuses before anything moves, naming the file
+			local rec10 = `{ISSUES}/active/f0010/provenance.md`
+			local goodRec = read(rec10)
+			write(rec10, goodRec .. "a hand edit\n")
+			local unparsable = tr({ "done", "R0010" }, { ZN_ACTOR = OPUS })
+			t.expect(unparsable.ok).toBe(false)
+			t.expect(string.find(unparsable.stderr, "f0010/provenance.md: line", 1, true) ~= nil).toBe(true)
+			t.expect(fs.isDir(`{dir}/{ISSUES}/done/f0010`)).toBe(false)
+			write(rec10, goodRec)
+			t.expect(git({ "status", "--porcelain" })).toBe("")
 			-- a bad actor refuses before anything moves
 			local bad = tr({ "done", "R0010" }, { ZN_ACTOR = "robot:x" })
 			t.expect(bad.ok).toBe(false)
@@ -204,7 +243,7 @@ return t.spec("c0282 the offline lifecycle stamps provenance", function(it)
 			must(tr({ "commit", "-m", "the spec passes" }), "commit")
 			must(tr({ "finish", "f0020" }), "finish the fix")
 			seal.trace(dir, "R0010")
-			must(tr({ "done", "R0010" }, { ZN_ACTOR = OPUS }), "done")
+			must(tr({ "done", "R0010", "--actor", OPUS }, { ZN_ACTOR = SONNET }), "done")
 			for _, id in { "f0010", "f0020" } do
 				local p = `{ISSUES}/done/{id}/provenance.md`
 				t.expect(count(p, "delivered")).toBe(1)

@@ -410,6 +410,18 @@ end
 -- c0282: appends one row to the record in `dir` (an item's folder in this worktree) and stages it, so the commit the
 -- caller makes (a pull request carries it) holds the row with the change it records. The record is created when the
 -- folder has none.
+-- c0282: refuses a member whose record does not parse, naming the file, before the command publishes or moves anything
+-- (appending would refuse it later, after a claim was published or the folders moved).
+function lifecycle.check(dir: string)
+	local path = `{dir}/provenance.md`
+	if fs.isFile(path) then
+		local rows, why = provenance.parse(fs.readFile(path))
+		if not rows then
+			fail(`{path}: {why}`)
+		end
+	end
+end
+
 function lifecycle.append(dir: string, id: string, event: string, actor: string, detail: string)
 	local path = `{dir}/provenance.md`
 	local text, why = provenance.record(
@@ -421,7 +433,7 @@ function lifecycle.append(dir: string, id: string, event: string, actor: string,
 		lifecycle.now()
 	)
 	if not text then
-		fail(`{path}: {why or "not a record"}`)
+		error(`{path}: {why or "not a record"}`, 0)
 	end
 	fs.writeFile(path, text :: string)
 	sh.git({ "add", path })
@@ -1309,6 +1321,12 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		end
 		-- c0282: each member gets a `rafted` row; who is read before anything is published
 		local actor, via = lifecycle.who(opts)
+		for i = 4, #pos do
+			local member = store.find(pos[i])
+			if member then
+				lifecycle.check(member.dir)
+			end
+		end
 		if publishing() then
 			if sh.git({ "status", "--porcelain" }) ~= "" then
 				fail(
@@ -1890,6 +1908,7 @@ function cmd.fold(pos: { string }, opts: { [string]: { string } })
 	end
 	for _, id in ids do
 		local issue = store.get(id)
+		lifecycle.check(issue.dir)
 		local owner = store.readFront(issue.doc).raft or ""
 		if owner ~= "" then
 			fail(`{id} already belongs to {owner}`)
@@ -2131,6 +2150,7 @@ function cmd.recombine(pos: { string }, opts: { [string]: { string } })
 		table.insert(all, store.get(id))
 	end
 	for _, m in all do
+		lifecycle.check(m.dir)
 		refuseUnraftable(m, keeper)
 		if store.readFront(m.doc).solo == "true" and #all > 1 then
 			fail(`{m.id} is solo: true (a recorded user decision): it is rafted alone`)
@@ -4291,7 +4311,11 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
 	if opts["--apply"] then
 		for _, args in runs :: { { string } } do
 			local rest = table.move(args, 2, #args, 1, {})
-			local p, o = flags(rest);
+			local p, o = flags(rest)
+			-- c0282: the actor given to `raft-plan --apply` is the one each command it runs records
+			if opts["--actor"] then
+				o["--actor"] = opts["--actor"]
+			end
 			(cmd :: any)[args[1]](p, o)
 		end
 	end
@@ -5048,6 +5072,9 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 	end
 	-- c0282: every member gets a `delivered` row naming who ran done; read before anything changes
 	local actor = lifecycle.who(opts)
+	for _, m in store.members(raft.id) do
+		lifecycle.check(m.dir)
+	end
 	if sh.git({ "status", "--porcelain" }) ~= "" then
 		fail("commit everything first (./zn commit); done needs a clean tree")
 	end
@@ -5186,8 +5213,14 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 		table.insert(movedItems, move(m, "done"))
 	end
 	-- c0282: the rows are staged with the moves, so a rollback (git reset --hard) removes them and a retry appends once
-	for _, item in movedItems do
-		lifecycle.append(item.dir, item.id, "delivered", actor, provenance.raftDetail(raft.id, nil))
+	local rowsOk, rowsErr = pcall(function()
+		for _, item in movedItems do
+			lifecycle.append(item.dir, item.id, "delivered", actor, provenance.raftDetail(raft.id, nil))
+		end
+	end)
+	if not rowsOk then
+		rollback()
+		fail(`a delivered row could not be written (rolled back): {rowsErr}`)
 	end
 	raft = move(raft, "done")
 	table.insert(movedItems, raft)
