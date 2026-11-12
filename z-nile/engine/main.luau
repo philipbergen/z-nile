@@ -889,6 +889,24 @@ local function hereDir(): string
 	return rel
 end
 
+-- A file argument as the caller meant it (code review R0093 001 F2): zn runs the engine at the checkout's root, so a
+-- relative path is joined to the directory ./zn was run from (ZN_HERE, inside the checkout or not). It counts only
+-- when the engine runs in ZN_TOP, as ZN_CWD does; an absolute path is left as it is.
+local function callerFile(path: string): string
+	if string.sub(path, 1, 1) == "/" then
+		return path
+	end
+	local top, from = process.env.ZN_TOP, process.env.ZN_HERE
+	if not top or not from or top == "" or from == "" then
+		return path
+	end
+	local cwd = sh.run("pwd", { "-P" })
+	if not cwd.ok or sh.trim(cwd.stdout) ~= top then
+		return path
+	end
+	return `{from}/{path}`
+end
+
 -- The project a command works in (c0114, decided with the user: "The directory gives the project unless it's given,
 -- so at root without project=fail, deduce from PWD with --project override"): the one `--project <name>` names,
 -- else the one whose folder holds the directory ./zn was run from. Anywhere else (the checkout's root, or a folder no
@@ -7385,6 +7403,15 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
 		local front = frontOf(shown.stdout)
 		local state = stateOfPath(path)
 		return { path = path, front = front, state = state, status = statusLib.effective(front, state) }
+	end
+	-- --answer-file is the caller's path: read from where ./zn was run, and named in full in a refusal
+	local answerFile = opts["--answer-file"]
+	if answerFile then
+		local resolved: { string } = {}
+		for _, path in answerFile do
+			table.insert(resolved, callerFile(path))
+		end
+		opts["--answer-file"] = resolved
 	end
 	local code = dispatcherLib.main({
 		fail = fail,

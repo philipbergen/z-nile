@@ -164,7 +164,11 @@ function dispatch.prompt(p: PromptInput): string
 		local last = (p.exchange :: { string })[#(p.exchange :: { string })]
 		local lastIsAnswer = string.find(last, "%-answer%.md$") ~= nil
 		local text: string
-		if p.exchangeAsker == p.step and p.exchangeLastStep == p.step and lastIsAnswer then
+		if #(p.exchange :: { string }) == 1 and string.find(last, "%-ask%.md$") ~= nil then
+			-- only the user's request so far: no step has exchanged anything (code review 001 F5)
+			text =
+				`The user's own request for this run, word for word, is \`{p.stateDir}/exchange/{last}\`: read it before you start. It starts with \`date: <UTC time>\` and a blank line; the rest is the request exactly as it was written. No step has asked the user anything yet.`
+		elseif p.exchangeAsker == p.step and p.exchangeLastStep == p.step and lastIsAnswer then
 			text = `This is a re-run: you stopped this run with a question and the user has been asked. Before you start, read every file in \`{p.stateDir}/exchange/\`, in this order: {files}. {format} `
 				.. (
 					if p.exchangeNoReply

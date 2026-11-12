@@ -31,6 +31,7 @@ case "$here/" in
 *) rel="" ;; # outside the checkout: like its root
 esac
 export ZN_TOP="$top" ZN_CWD="${rel#/}"
+export ZN_HERE="$here" # the caller's own directory, inside the checkout or not: a relative file argument is the caller's
 cd "$top"
 export PATH="$HOME/.rokit/bin:$PATH"
 # approve is the human's, in a terminal. --check only reads, so a pipe may run it. The engine repeats the
