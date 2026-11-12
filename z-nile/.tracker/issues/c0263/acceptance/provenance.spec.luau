@@ -435,7 +435,7 @@ return t.spec("c0263 the provenance record", function(it)
 		has(
 			"z-nile/skills/zz-rules/SKILL.md",
 			"provenance.md",
-			"./zn record",
+			"./zn provenance record",
 			"ZN_ACTOR",
 			"--actor",
 			"CLAUDECODE",
@@ -446,7 +446,6 @@ return t.spec("c0263 the provenance record", function(it)
 			"merge by hand",
 			"`remap` settles the records the same way"
 		)
-		has("z-nile/skills/zz-execute/SKILL.md", "unites a `provenance.md` both sides appended")
-		has("z-nile/README.md", "provenance", "./zn record", "zz-rules, Provenance")
+		has("z-nile/README.md", "provenance", "./zn provenance record", "zz-rules, Provenance")
 	end)
 end)

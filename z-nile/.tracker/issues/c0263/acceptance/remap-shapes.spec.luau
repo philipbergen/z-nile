@@ -133,10 +133,10 @@ return t.spec("c0263 remap settles records by id", function(it)
 		git(wm, { "commit", "-q", "-m", "main edit" })
 		git(wm, { "push", "-q", "origin", "HEAD:main" })
 		for _, who in { "M1", "M2", "M3" } do
-			trOk(wm, { "record", "c0010", "ranked", "--actor", `human:{who}` })
+			trOk(wm, { "provenance", "record", "c0010", "ranked", "--actor", `human:{who}` })
 		end
-		trOk(wm, { "record", "c0011", "ranked", "--actor", "human:Main" })
-		trOk(wm, { "record", "c0012", "ranked", "--actor", "human:Main" })
+		trOk(wm, { "provenance", "record", "c0011", "ranked", "--actor", "human:Main" })
+		trOk(wm, { "provenance", "record", "c0012", "ranked", "--actor", "human:Main" })
 		write(`{wm}/{ISSUES}/f0020/provenance.md`, rec("f0020", "Base"))
 		git(wm, { "add", "-A" })
 		git(wm, { "commit", "-q", "-m", "a record for f0020" })
