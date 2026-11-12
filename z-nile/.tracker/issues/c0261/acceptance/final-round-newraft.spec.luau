@@ -58,10 +58,6 @@ return t.spec("c0261 a new raft's review row is found by status prepared", funct
 					id,
 					"--phase",
 					"design-review",
-					"--time",
-					"4",
-					"--tokens",
-					"50",
 					"--model",
 					model,
 					"--note",
@@ -74,7 +70,8 @@ return t.spec("c0261 a new raft's review row is found by status prepared", funct
 			local refused = trackerfix.tr(f, wt, { "status", rid, "prepared" })
 			t.expect(refused.ok).toBe(false)
 			t.expect(has(refused.stdout .. refused.stderr, "model claude-sonnet-5-5-high")).toBe(true)
-			t.expect(has(refused.stdout .. refused.stderr, "--mode raft --final")).toBe(true)
+			t.expect(has(refused.stdout .. refused.stderr, "--mode raft")).toBe(true)
+			t.expect(has(refused.stdout .. refused.stderr, "--final")).toBe(false)
 			-- the round re-run on a new Opus id and recorded under the raft's subject
 			spend(rid, "claude-opus-6-1")
 			local ok = trackerfix.tr(f, wt, { "status", rid, "prepared" })
