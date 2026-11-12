@@ -74,7 +74,7 @@ m("fronts ignored", MAIN, 'whoLib.fronts(commits)', '{}', [WHO])
 m("record not wanted", WHOM, 'return trail.isDoc(name) or name == "provenance.md"', 'return trail.isDoc(name)', [WHO])
 m("head is this checkout", WHOM, '		then "origin/main"\n', '		then "HEAD"\n', [WHO])
 m("no history is accepted", WHOM, 'if commits == nil or not hasDoc then', 'if commits == nil then', [WHO])
-m("side trailers not read", WHOM, 'if #parents >= 2 and c.sideTrailers == nil then', 'if false then', [WHO])
+m("side trailers not read", WHOM, '	if #want == 0 then\n		return\n	end', '	if true then\n		return\n	end', [WHO])
 m("who: mark dropped", MAIN, 'whoLib.fronts(commits), mark)', 'whoLib.fronts(commits), { note = "", cut = false })', [WHO])
 m("who: rows ignored", MAIN, '		rows = parsed :: { provenance.Row }\n	end', '		rows = {}\n	end', [WHO])
 m("who: bad record skipped", MAIN, 'fail(`who: {recordPath}: {err}`)', 'rows = {}', [WHO])
@@ -84,6 +84,7 @@ m("who: a raft's roll-up read as a ledger", MAIN, 'if found.kind == "issue" and 
 m("who: raft kind fixed to issues", WHOM, 'local kind = if string.sub(id, 1, 1) == "R" then "rafts" else "issues"', 'local kind = "issues"', [WHO])
 m("docs: who row dropped from zz-rules", RULES, "| who | `./zn who <id>` |", "| whom | `./zn whom <id>` |", [CASES])
 m("docs: usage line dropped", MAIN, "  who <id>   ", "  whom <id>  ", [CASES])
+m("docs: merged named the author", RULES, "(that commit's agent trailer, or its second", "(that commit's author, or its second", [CASES])
 
 
 def run(specs):
