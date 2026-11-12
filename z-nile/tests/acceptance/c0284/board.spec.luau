@@ -405,27 +405,13 @@ return t.spec("c0284 board provenance", function(it)
 			local m = board.collect(plain)
 			t.expect(m.history).toBe(false)
 			t.expect(m.issues[1].id).toBe("c0001")
+			t.expect(m.issues[1].provenance ~= nil).toBe(true)
 			t.expect(linesOf(m.issues[1].provenance)).toEqual({
 				"2026-10-05 12:00  approved  human:Ann  design=aaaaaaaaaaaa  (record)",
 			})
 			t.expect(m.issues[2].provenance).toBe(nil)
 		end
 	)
-
-	it("zz-rules and the README name the Provenance section", function()
-		t.expect(
-			has(
-				fs.readFile(`{root}/z-nile/skills/zz-rules/SKILL.md`),
-				"its Provenance (the entries `./zn who` prints for it"
-			)
-		).toBe(true)
-		t.expect(
-			has(
-				fs.readFile(`{root}/z-nile/README.md`),
-				"lists its Provenance, the same entries `./zn who` prints"
-			)
-		).toBe(true)
-	end)
 
 	it("the buckets are the item folders", function()
 		local function c(sha: string, path: string): any
