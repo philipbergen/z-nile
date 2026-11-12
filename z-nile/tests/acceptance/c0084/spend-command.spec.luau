@@ -287,8 +287,6 @@ return t.spec("tracker spend", function(it)
 		trOk(prep, { "spend", a, "--phase", "prep", "--time", "2" })
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 		t.expect(last(`pickman/.tracker/issues/{a}/spend.md`).added).toBe(6) -- its own spec lines; the raft's check.sh is not its
-		-- c0282 override: the prep worktree takes the squash commit, as a real one does before main moves its folders
-		trOk(prep, { "sync" })
 	end)
 
 	it("refuses bad input and the main checkout, and pushes nothing", function()
