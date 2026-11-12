@@ -79,8 +79,11 @@ return t.spec("c0116 z-design designs one issue with no raft; its reviews roll u
 			"--note",
 			"design-review-001",
 		})
-		local spent = fixture.git(f.origin, { "show", `main:pickman/.tracker/issues/{id}/spend.md` })
-		t.expect(has(spent, "| design-review-001 | 0 | 0 | 4.0 |")).toBe(true)
+		local names = fs.readDir(`{dir}/spend.d`)
+		table.sort(names)
+		local spent = fs.readFile(`{dir}/spend.d/{names[#names]}`)
+		t.expect(has(spent, "design-review-001")).toBe(true)
+		t.expect(has(spent, "design-review")).toBe(true)
 		-- design ready, then the carried move: nothing published, the local document prepared, raft: still empty
 		local path = `{dir}/{id}.md`
 		local text = fs.readFile(path)

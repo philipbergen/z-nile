@@ -135,7 +135,7 @@ return t.spec("c0263 remap unites records", function(it)
 	it("a forced compaction lands on main", function()
 		local wt = worktree("compact-z")
 		-- main appends to the same record before the compaction renames the item
-		trOk(wt, { "record", "c0010", "ranked", "--actor", "human:Main", "--detail", "rank=3" })
+		trOk(wt, { "provenance", "record", "c0010", "ranked", "--actor", "human:Main", "--detail", "rank=3" })
 		local r = tr(wt, { "compact", "--force" })
 		if not r.ok then
 			error(r.stderr .. r.stdout)

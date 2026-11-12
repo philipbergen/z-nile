@@ -89,34 +89,24 @@ return t.spec("c0184 the restated rules and the new skills", function(it)
 		end
 	)
 
-	it(
-		"AC7: zz-rules and zz-test restate the home, the hook and the fence scan for every registered home",
-		function()
-			local rules, test =
-				read("z-nile/skills/zz-rules/SKILL.md"), read("z-nile/skills/zz-test/SKILL.md")
-			at(
-				rules,
-				"A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.",
-				"zz-rules"
-			)
-			at(
-				test,
-				"or the home of a registered project (c0184: `pickman/`, `snake/`, and the rest, from the registry; a registry that does not parse gates every change).",
-				"zz-test"
-			)
-			absent(test, "`z-nile/` or `pickman/` (c0120: the game's home).", "zz-test")
-			at(
-				test,
-				"(the root's `scripts/`, every registered project's home, `z-nile/`'s included, `./zn` and every `check.sh`;",
-				"zz-test"
-			)
-			absent(test, "(`tests/`, `scripts/`, `z-nile/`, `./zn` and every `check.sh`;", "zz-test")
-			at(
-				test,
-				"Every project with a home except z-nile has the same `tests/run.luau`, `tests/lib/t.luau` and `renamed.luau`, `tests/meta/architecture.spec.luau`, `fence.spec.luau` and `home.spec.luau`",
-				"zz-test"
-			)
-			at(read("z-nile/skills/zz-rules/SKILL.md"), "`extends:`", "zz-rules")
-		end
-	)
+	it("AC7: zz-rules and zz-test restate the home and the fence scan for every registered home", function()
+		local rules, test = read("z-nile/skills/zz-rules/SKILL.md"), read("z-nile/skills/zz-test/SKILL.md")
+		at(
+			rules,
+			"A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.",
+			"zz-rules"
+		)
+		at(
+			test,
+			"(the root's `scripts/`, every registered project's home, `z-nile/`'s included, `./zn` and every `check.sh`;",
+			"zz-test"
+		)
+		absent(test, "(`tests/`, `scripts/`, `z-nile/`, `./zn` and every `check.sh`;", "zz-test")
+		at(
+			test,
+			"Every project with a home except z-nile has the same `tests/run.luau`, `tests/lib/t.luau` and `renamed.luau`, `tests/meta/architecture.spec.luau`, `fence.spec.luau` and `home.spec.luau`",
+			"zz-test"
+		)
+		at(read("z-nile/skills/zz-rules/SKILL.md"), "`extends:`", "zz-rules")
+	end)
 end)

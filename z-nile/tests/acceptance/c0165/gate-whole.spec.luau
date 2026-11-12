@@ -48,11 +48,15 @@ return t.spec("c0165 the whole affected gate", function(it)
 		local ok2, out2 = gatefix.gate(dir, { "--affected" })
 		t.expect(ok2).toBe(true)
 		t.expect(has(out2, "reused: an affected gate passed on this content")).toBe(true)
-		-- every project (no --project): another set of projects, so pickman's record doesn't stand for it
+		-- no --project, but only pickman changed: the static stages narrow to pickman, so it is the same gate
 		local okAll, outAll = gatefix.gateRaw(dir, { "--affected" })
 		t.expect(okAll).toBe(true)
-		t.expect(has(outAll, "reused: an affected gate passed on this content")).toBe(false)
-		-- another base: the same content, compared with another commit, is another gate
+		t.expect(has(outAll, "reused: an affected gate passed on this content")).toBe(true)
+		-- another project's record does not stand for pickman's
+		local okZn, outZn = gatefix.gateRaw(dir, { "--project", "z-nile", "--affected" })
+		t.expect(okZn).toBe(true)
+		t.expect(has(outZn, "reused: an affected gate passed on this content")).toBe(false)
+		-- another base: the same content, compared with another commit, is another selection and another gate
 		local okBase, outBase = gatefix.gate(dir, { "--affected", "--base", "HEAD" })
 		t.expect(okBase).toBe(true)
 		t.expect(has(outBase, "reused: an affected gate passed on this content")).toBe(false)

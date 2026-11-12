@@ -73,6 +73,52 @@ local function physicallyInside(root: string, folder: string): boolean
 	return string.sub(string.gsub(b.stdout, "%s+$", "") .. "/", 1, #rootPath) == rootPath
 end
 
+-- Every file Rojo reads for the project file `dir/name` (`rojo sourcemap --include-non-scripts`; the path relative to `dir`
+-- and the instance path below the root node, "/"-joined), or nil and why: nil with no reason when Rojo refuses the file
+-- (its build refuses it too, so nothing is read; "rojo cannot be run" is told apart by `rojo --version` in `problems`),
+-- nil with a reason when its answer cannot be read (c0246: the rule then fails closed).
+type Seg = { name: string, class: string }
+type Read = { file: string, instance: string, segs: { Seg }, rootClass: string }
+local function rojoReads(dir: string, name: string): ({ Read }?, string?)
+	local ran, res = pcall(process.exec, "rojo", { "sourcemap", "--include-non-scripts", `{dir}/{name}` })
+	if not ran or not res.ok then
+		return nil, nil
+	end
+	local decoded, map: any = pcall(serde.decode, "json" :: "json", res.stdout)
+	if not decoded or type(map) ~= "table" then
+		return nil, "rojo sourcemap printed no JSON"
+	end
+	-- a node's identity is its path of (name, class) pairs under the root's class, never its joined names alone: a key
+	-- "ServerStorage/Arcade", or a ReplicatedFirst named "ServerStorage", spells the allowed node but is not it (review 002 F1, 003 F1)
+	local reads: { Read } = {}
+	local rootClass = if type(map.className) == "string" then map.className else ""
+	local function collect(node: any, path: string, segs: { Seg })
+		for _, file in node.filePaths or {} do
+			table.insert(reads, { file = file, instance = path, segs = segs, rootClass = rootClass })
+		end
+		for _, child in node.children or {} do
+			local below = table.clone(segs)
+			table.insert(below, { name = child.name, class = child.className })
+			collect(child, if path == "" then child.name else `{path}/{child.name}`, below)
+		end
+	end
+	collect(map, "", {})
+	return reads, nil
+end
+
+-- The real path of each of `paths`, in order; nil when any cannot be resolved.
+local function realPaths(paths: { string }): { string }?
+	if #paths == 0 then
+		return {}
+	end
+	local res = process.exec("realpath", paths)
+	local out: { string } = {}
+	for line in string.gmatch(res.stdout, "[^\n]+") do
+		table.insert(out, line)
+	end
+	return if res.ok and #out == #paths then out else nil
+end
+
 local function read(path: string): string?
 	if fs.isFile(path) then
 		return fs.readFile(path)
@@ -85,6 +131,9 @@ end
 function home.problems(top: string, reg: Registry, only: string?): ({ string }, { string })
 	local out: { string } = {}
 	local checked: { string } = {}
+	-- whether Rojo can be run at all: a refused file exits non-zero, and so does a shim whose pinned Rojo is not installed
+	local probe, version = pcall(process.exec, "rojo", { "--version" })
+	local rojoRuns = probe and version.ok
 	local function bad(owner: string, what: string)
 		table.insert(out, `{owner}: {what}`)
 	end
@@ -173,11 +222,24 @@ function home.problems(top: string, reg: Registry, only: string?): ({ string }, 
 		local libraryNode =
 			{ [LIBRARY_SHARED] = "ReplicatedStorage/Arcade", [LIBRARY_SERVER] = "ServerStorage/Arcade" }
 		local mapped: { [string]: { graph.GameRoot } } = {} -- project file -> its mappings
+		local saidNoRojo = false
 		for _, name in files do
 			local ok, decoded: any = pcall(serde.decode, "json" :: "json", fs.readFile(`{top}/{h}/{name}`))
 			local found: { graph.GameRoot } = if ok then graph.mappings(decoded) else {}
 			mapped[name] = found
-			if #found == 0 then
+			local unreadable: { graph.Unreadable } = if ok then graph.unreadable(decoded) else {}
+			for _, u in unreadable do
+				if u.dollar then
+					bad(h, `{name} has a node named {u.instance} ({u.what}), whose mappings are not read`)
+				else
+					local where = if u.instance == "" then "the tree root" else `node {u.instance}`
+					bad(
+						h,
+						`{name} has a $path that is {u.what} at {where}: only a string or \{"optional": string} is read`
+					)
+				end
+			end
+			if #found == 0 and #unreadable == 0 then
 				bad(h, `{name} maps no $path`)
 			end
 			for _, m in found do
@@ -210,6 +272,92 @@ function home.problems(top: string, reg: Registry, only: string?): ({ string }, 
 						if not physicallyInside(`{top}/{h}`, link) then
 							bad(h, `{name} maps $path {path}, which holds a link out of the home`)
 							break
+						end
+					end
+				end
+			end
+			-- what Rojo itself reads (c0246): the net under the readers above, which closes by construction what they model
+			-- (links at any depth, project files in any casing or loaded by syncRules, a format Lune cannot decode)
+			local reads, why = nil, nil
+			if rojoRuns then
+				reads, why = rojoReads(`{top}/{h}`, name)
+			elseif not saidNoRojo then
+				saidNoRojo = true
+				bad(h, "rojo cannot be run (rojo --version fails), so what Rojo reads is not judged")
+			end
+			if why then
+				bad(h, `{name}: {why}`)
+			elseif reads then
+				local abs: { string } = {}
+				for _, r in reads do
+					table.insert(abs, `{top}/{h}/{r.file}`)
+				end
+				local real = realPaths(abs)
+				local base = realPaths({ `{top}/{h}` })
+				if not real or not base then
+					bad(h, `{name}: the files Rojo reads cannot be resolved`)
+				else
+					-- the library's two folders (by real path, when present) and the one node each may sit at
+					local libs: { { root: string, node: string } } = {}
+					for lib, node in libraryNode do
+						local at = realPaths({ `{top}/{lib}` })
+						if at then
+							table.insert(libs, { root = at[1] .. "/", node = node })
+						end
+					end
+					local outside, misplaced = 0, 0
+					for i, r in reads do
+						local lib: { root: string, node: string }? = nil
+						for _, l in libs do
+							if string.sub(real[i], 1, #l.root) == l.root then
+								lib = l
+							end
+						end
+						if lib then
+							-- a library file is judged by where Rojo puts it, not only where it comes from: the server folder
+							-- must never reach a client, however a link or a syncRules project got it into the place
+							local at = lib.node
+							local service, leaf = string.match(at, "^([^/]+)/(.+)$")
+							local sg = r.segs
+							local fine = r.rootClass == "DataModel"
+								and #sg >= 2
+								and sg[1].name == service
+								and sg[1].class == service
+								and sg[2].name == leaf
+							if not fine then
+								misplaced += 1
+								if misplaced == 1 then
+									-- say which part of the node's identity differs (review 004 F1), the name alone reads the same
+									local reason = if r.rootClass ~= "DataModel"
+										then `the root is a {r.rootClass}, not a DataModel`
+										elseif #sg < 2 then `it sits directly under the root`
+										elseif
+											sg[1].name ~= service or sg[1].class ~= service
+										then `its first node is a {sg[1].class} named {sg[1].name}`
+										else `its second node is named {sg[2].name}`
+									bad(
+										h,
+										`{name} makes Rojo put {r.file} at {r.instance} ({reason}), which is not the library's node ({at})`
+									)
+								end
+							end
+						elseif string.sub(real[i], 1, #base[1] + 1) ~= base[1] .. "/" then
+							outside += 1
+							if outside == 1 then
+								bad(
+									h,
+									`{name} makes Rojo read {r.file}, which is outside the home (and the library's two folders)`
+								)
+							end
+						end
+						if
+							string.match(r.file, "%.project%.jsonc?$")
+							and real[i] ~= base[1] .. "/" .. name
+						then
+							bad(
+								h,
+								`{name} loads {r.file} as a nested project (Rojo would follow its own mappings)`
+							)
 						end
 					end
 				end
