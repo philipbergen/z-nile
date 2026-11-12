@@ -65,21 +65,12 @@ return t.spec("c0274 takeover rules", function(it)
 		t.expect(heartbeat.lostText("c0010", nil)).toBe("c0010's claim ended")
 	end)
 
-	it("stop records the verdict it read, and only a live or parked stop lets a worktree re-adopt", function()
+	it("stop records the verdict it read in its subject", function()
 		t.expect(heartbeat.stopNote(B, "live", 5)).toBe(`(claim {B})`)
 		t.expect(heartbeat.stopNote(B, "parked", 5000)).toBe(`(claim {B})`)
 		t.expect(heartbeat.stopNote(B, "lost", 2130)).toBe(`(claim {B}, lost 35m)`)
 		for _, kind in { "stale", "nobeat", "unknown" } do
 			t.expect(heartbeat.stopNote(B, kind, 99)).toBe(`(claim {B}, unjudged)`)
 		end
-		local live = `tracker: stop R0010 Title (claim {B})`
-		t.expect(heartbeat.stopAllowsReadopt(live, B)).toBe(true)
-		t.expect(heartbeat.stopAllowsReadopt(`tracker: stop R0010 Title (claim {B}, lost 35m)`, B))
-			.toBe(false)
-		t.expect(heartbeat.stopAllowsReadopt(`tracker: stop R0010 Title (claim {B}, unjudged)`, B))
-			.toBe(false)
-		t.expect(heartbeat.stopAllowsReadopt(live, "active-other-other-other")).toBe(false)
-		t.expect(heartbeat.stopAllowsReadopt(`tracker: R0010 prepared (claim {B})`, B)).toBe(false) -- not a stop
-		t.expect(heartbeat.stopAllowsReadopt("", B)).toBe(false) -- no stop commit at all
 	end)
 end)

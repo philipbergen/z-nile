@@ -14,7 +14,7 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local h: fakecli.Harness
-local wt, wt2, wt3, wt4, wt5, wt6 = "", "", "", "", "", "" -- the old owner's worktree, the taker's, and three that run few commands (below)
+local wt, wt2, wt3, wt4, wt5 = "", "", "", "", "" -- the old owner's worktree, the taker's, and three that run few commands (below)
 local raftId = "" -- the rafting claim `new raft` made in wt
 local T0 = os.time()
 local STALE = heartbeat.STALE
@@ -148,6 +148,7 @@ return t.spec("c0274 take over a lost claim", function(it)
 				[`{P}/c0010/c0010.md`] = issue("c0010", "new-a-b-c"),
 				[`{P}/c0020/c0020.md`] = issue("c0020", "new-a-b-c"),
 				[`{P}/c0030/c0030.md`] = issue("c0030", "new-a-b-c"),
+				[`{P}/c0031/c0031.md`] = issue("c0031", "new-a-b-c"),
 				[`{P}/c0080/c0080.md`] = issue("c0080", "new-a-b-c"),
 				[`{P}/c0040/c0040.md`] = issue("c0040", "prepared-quiet-copper-falcon", "R0010", "ready"),
 				[`{P}/c0040/check.sh`] = CHECK,
@@ -181,14 +182,13 @@ return t.spec("c0274 take over a lost claim", function(it)
 			wt3 = (string.gsub(must(zn(h.f.main, { "worktree", "c0274-take3" }), "worktree"), "%s+$", ""))
 			wt4 = (string.gsub(must(zn(h.f.main, { "worktree", "c0274-take4" }), "worktree"), "%s+$", ""))
 			wt5 = (string.gsub(must(zn(h.f.main, { "worktree", "c0274-take5" }), "worktree"), "%s+$", ""))
-			wt6 = (string.gsub(must(zn(h.f.main, { "worktree", "c0274-take6" }), "worktree"), "%s+$", ""))
 			must(zn(wt, { "status", "c0010", "preparing" }, T0), "claim c0010")
 			-- c0020 and c0080 are claimed in a worktree that runs nothing afterwards: a later layer keeps every claim a
 			-- worktree holds alive at each of its commands, and these two must still be lost when the cases reach them
 			must(zn(wt3, { "status", "c0020", "preparing" }, T0), "claim c0020")
 			must(zn(wt3, { "status", "c0080", "preparing" }, T0), "claim c0080")
 			must(
-				zn(wt5, { "new", "raft", "chore", "lostraft", "c0030", "--project", "pickman" }, T0),
+				zn(wt5, { "new", "raft", "chore", "lostraft", "c0030", "c0031", "--project", "pickman" }, T0),
 				"new raft"
 			)
 			must(zn(h.f.main, { "ready", "R0010" }, T0), "ready R0010") -- readied, nobody starts it
@@ -373,6 +373,16 @@ return t.spec("c0274 take over a lost claim", function(it)
 			t.expect(giveRaft.ok).toBe(false)
 			t.expect(has(giveRaft.stderr, `{raftId}'s claim was taken over`)).toBe(true)
 			t.expect(stampOf(`pickman/.tracker/rafts/{raftId}/{raftId}.md`)).toBe(rafted)
+			-- a member of the rafting claim is the raft's, so its late moves are refused by the raft's memory: the old rafting
+			-- owner can neither give a member back nor carry it to prepared
+			local memberGive = zn(wt5, { "status", "c0030", "new" }, AT)
+			t.expect(memberGive.ok).toBe(false)
+			t.expect(has(memberGive.stderr, "claim was taken over")).toBe(true)
+			ready(`{wt5}/{P}/c0031/c0031.md`)
+			local memberCarry = zn(wt5, { "status", "c0031", "prepared" }, AT)
+			t.expect(memberCarry.ok).toBe(false)
+			t.expect(has(memberCarry.stderr, "claim was taken over")).toBe(true)
+			t.expect(stampOf(`{P}/c0030/c0030.md`)).toBe(rafted)
 			local give = zn(wt, { "status", "c0010", "new" }, AT)
 			t.expect(give.ok).toBe(false)
 			t.expect(has(give.stderr, `c0010's claim was taken over`)).toBe(true)
@@ -441,7 +451,7 @@ return t.spec("c0274 take over a lost claim", function(it)
 	end)
 
 	it(
-		"a readied raft: the owner's stop and ready keep its worktree in, a lost raft's takeover by stop then ready does not",
+		"a readied raft: stop records the verdict it read, a stop and ready never re-adopts a worktree in place, and the old lead's done is refused",
 		function()
 			local doc = "pickman/.tracker/rafts/active/R0010/R0010.md"
 			local first = stampOf(doc)
@@ -450,13 +460,8 @@ return t.spec("c0274 take over a lost claim", function(it)
 			must(zn(wt4, { "sync" }, T0), "sync")
 			must(zn(wt4, { "beat", "R0010", "--adopt" }, T0 + 100), "adopt the readied raft")
 			t.expect(memory(wt4, "R0010")).toBe(first)
-			-- the owner stops and readies its own raft while it is alive (z-stop step 4's keep path): the stop records the
-			-- claim live, so the worktree re-adopts with a plain --adopt and its done passes the stamp check
-			-- wt6 adopts the same claim and is then left behind: it never re-adopts, as an owner that was away would
-			must(zn(wt6, { "sync" }, T0), "sync")
-			must(zn(wt6, { "beat", "R0010", "--adopt" }, T0 + 110), "the second worktree adopts")
-			-- another claim is stale and the pull requests cannot be read: only that stale verdict stays unsettled, the
-			-- raft's own stays live, and its stop records it so
+			-- the owner stops and readies its own raft while it is alive. Another claim is stale and the pull requests cannot
+			-- be read: only that stale verdict stays unsettled, the raft's own stays live, and the stop records it so
 			fs.writeFile(`{h.fakes}/ghfail`, "1")
 			must(zn(h.f.main, { "stop", "R0010" }, T0 + 1000), "the owner's stop")
 			fs.removeFile(`{h.fakes}/ghfail`)
@@ -464,16 +469,18 @@ return t.spec("c0274 take over a lost claim", function(it)
 				h.f.origin,
 				{ "log", "-1", "--format=%s", "main", "--", "pickman/.tracker/rafts/R0010/R0010.md" }
 			)
+			t.expect(string.sub(kept, 1, #"tracker: stop R0010")).toBe("tracker: stop R0010")
 			t.expect(string.sub(kept, -#`(claim {first})`)).toBe(`(claim {first})`)
 			must(zn(h.f.main, { "ready", "R0010" }, T0 + 1010), "the owner's ready")
 			local second = stampOf(doc)
 			t.expect(second ~= first).toBe(true)
-			must(
-				zn(wt4, { "beat", "R0010", "--adopt" }, T0 + 1020),
-				"the owner re-adopts with a plain --adopt"
-			)
-			t.expect(memory(wt4, "R0010")).toBe(second)
-			t.expect(has(zn(wt4, { "done", "R0010" }, T0 + 1030).stderr, "claim was taken over")).toBe(false)
+			-- the worktree is not re-adopted in place, whoever stopped: a lead who stops and re-readies its own raft continues in
+			-- a numbered copy (c0277), like any taker, and the old worktree stays refused
+			local again = zn(wt4, { "beat", "R0010", "--adopt" }, T0 + 1020)
+			t.expect(again.ok).toBe(false)
+			t.expect(has(again.stderr, `R0010's claim was taken over (now {second})`)).toBe(true)
+			t.expect(memory(wt4, "R0010")).toBe(first)
+			t.expect(zn(wt4, { "done", "R0010" }, T0 + 1030).ok).toBe(false)
 			-- later the raft goes quiet and a taker takes it over by stop then ready: the stop records the claim lost
 			fs.writeFile(`{h.fakes}/prs.json`, "[]") -- no pull request names R0010
 			t.expect(has(zn(h.f.main, { "lost" }, AT).stdout, "R0010 active")).toBe(true)
@@ -494,20 +501,14 @@ return t.spec("c0274 take over a lost claim", function(it)
 			must(zn(h.f.main, { "ready", "R0010" }, AT + 10), "ready")
 			local third = stampOf(doc)
 			t.expect(third ~= second).toBe(true)
-			-- the old lead comes back: a plain --adopt is refused (the stop recorded the claim lost), and so is done
-			local again = zn(wt4, { "beat", "R0010", "--adopt" }, AT)
-			t.expect(again.ok).toBe(false)
-			t.expect(has(again.stderr, `R0010's claim was taken over (now {third})`)).toBe(true)
+			-- the old lead comes back: its plain --adopt and its done are refused
+			local late = zn(wt4, { "beat", "R0010", "--adopt" }, AT)
+			t.expect(late.ok).toBe(false)
+			t.expect(has(late.stderr, `R0010's claim was taken over (now {third})`)).toBe(true)
 			local r = zn(wt4, { "done", "R0010" }, AT)
 			t.expect(r.ok).toBe(false)
 			t.expect(has(r.stderr, "R0010's claim was taken over")).toBe(true)
-			t.expect(memory(wt4, "R0010")).toBe(second)
-			-- the worktree that was left behind remembers the first claim; the stop that ended it recorded it live, but
-			-- another claim (the second, lost) came between, so its plain --adopt is refused too
-			local behind = zn(wt6, { "beat", "R0010", "--adopt" }, AT)
-			t.expect(behind.ok).toBe(false)
-			t.expect(has(behind.stderr, `R0010's claim was taken over (now {third})`)).toBe(true)
-			t.expect(memory(wt6, "R0010")).toBe(first)
+			t.expect(memory(wt4, "R0010")).toBe(first)
 			-- a memory of a stamp the raft never carried (or a rafting one) does not adopt the readied raft either
 			fs.writeFile(`{wt3}/.cache/tracker-stamp-R0010`, "preparing-quiet-copper-falcon")
 			t.expect(zn(wt3, { "beat", "R0010", "--adopt" }, AT).ok).toBe(false)
