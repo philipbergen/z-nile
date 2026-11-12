@@ -56,6 +56,19 @@ return t.spec("c0116 z-design designs one issue with no raft; its reviews roll u
 			trackerfix.trOk(f, wt, { "new", "issue", "c", "solo-thing", "--project", "pickman" }),
 			"(c%d+)"
 		) :: string
+		-- ./zn new leaves the idea unchallenged; design starts only after the review is on origin
+		local ideaPath = `{wt}/pickman/.tracker/issues/{id}/{id}.md`
+		fs.writeFile(
+			ideaPath,
+			(string.gsub(fs.readFile(ideaPath), "idea: unchallenged", "idea: challenged", 1))
+		)
+		fs.writeFile(
+			`{wt}/pickman/.tracker/issues/{id}/idea-review-001.md`,
+			"# Idea review 001\n\n## Findings\n\nnone\n\n## Verdict\n\napprove\n"
+		)
+		fixture.git(wt, { "add", "-A" })
+		fixture.git(wt, { "commit", "-q", "-m", `tracker: idea {id}` })
+		fixture.git(wt, { "push", "-q", "origin", "HEAD:main" })
 		local before = fixture.git(f.origin, { "rev-parse", "main" })
 		trackerfix.trOk(f, wt, { "status", id, "preparing" })
 		local changed = fixture.git(f.origin, { "diff", "--name-only", before, "main" })
