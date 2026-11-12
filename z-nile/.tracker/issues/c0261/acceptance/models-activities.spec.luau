@@ -59,10 +59,10 @@ end
 
 return t.spec("c0261 a model per activity", function(it)
 	it(
-		"an activity resolves its own table: a layer's code review cheap, the final review expensive (AC1)",
+		"an activity resolves its own table: a stream review cheap, the final review expensive (AC1)",
 		function()
-			local file = ORDER .. cheap("zz-review-code") .. sharp("zz-review-final")
-			local mid = m.resolveActivity({ layer(file) }, "zz-review-code")
+			local file = ORDER .. cheap("zz-review-stream") .. sharp("zz-review-final")
+			local mid = m.resolveActivity({ layer(file) }, "zz-review-stream")
 			local fin = m.resolveActivity({ layer(file) }, "zz-review-final")
 			t.expect(models.id(mid.specs.claude)).toBe("claude-sonnet-5")
 			t.expect(models.id(mid.specs.grok)).toBe("grok-4.6-high")
@@ -78,7 +78,7 @@ return t.spec("c0261 a model per activity", function(it)
 		function()
 			local file = ORDER .. sharp("zz-review")
 			local r = m.resolveActivity({ layer(file) }, "zz-review-code")
-			t.expect(r.skill).toBe("zz-review")
+			t.expect(r.skill).toBe("zz-review") -- a layer's code review has no table of its own: the user ruled it expensive (2026-11-12)
 			t.expect(models.id(r.specs.claude)).toBe("claude-opus-5-5")
 			t.expect(has(
 				errorOf(function()
@@ -203,7 +203,7 @@ return t.spec("c0261 a model per activity", function(it)
 	)
 
 	it("the rounds on the way and the other commands take any model (AC2)", function()
-		for _, a in { "zz-review-code", "zz-review-stream", "z-design", "z-run", "z-wait" } do
+		for _, a in { "zz-review-stream", "z-design", "z-run", "z-wait" } do
 			local r = m.resolveActivity({ layer(ORDER .. cheap(a)) }, a)
 			t.expect(models.id(r.specs.claude)).toBe("claude-sonnet-5")
 		end
@@ -220,7 +220,7 @@ return t.spec("c0261 a model per activity", function(it)
 	end)
 
 	it(
-		"every review activity is a final review but a layer's code review and the stream review: they are on the way (AC2)",
+		"every review activity is a final review but the stream review: a layer's code review is a final one too (AC2)",
 		function()
 			for _, a in
 				{
@@ -229,20 +229,21 @@ return t.spec("c0261 a model per activity", function(it)
 					"zz-review-raft",
 					"zz-review-final",
 					"zz-review-idea",
+					"zz-review-code", -- a layer's code review: expensive, the user ruled it (2026-11-12)
 					"zz-review-force", -- a mode added later is bound by default
 				}
 			do
 				t.expect(`{a}: {m.isFinalActivity(a)}`).toBe(`{a}: true`)
 			end
-			for _, a in { "zz-review-code", "zz-review-stream", "z-design", "z-run", "z-wait", "z-ticket" } do
+			for _, a in { "zz-review-stream", "z-design", "z-run", "z-wait", "z-ticket" } do
 				t.expect(`{a}: {m.isFinalActivity(a)}`).toBe(`{a}: false`)
 			end
-			t.expect(m.ON_THE_WAY).toEqual({ "zz-review-code", "zz-review-stream" })
+			t.expect(m.ON_THE_WAY).toEqual({ "zz-review-stream" })
 		end
 	)
 
 	it(
-		"a new review activity is refused on a model that is not a final-review kind; code review is not (AC2)",
+		"a new review activity and a layer's code review are refused on a model that is not a final-review kind; a stream review is not (AC2)",
 		function()
 			local sonnet = table_("zz-review-force", "claude", "claude-sonnet-5", nil, 4)
 			t.expect(has(
@@ -251,8 +252,19 @@ return t.spec("c0261 a model per activity", function(it)
 				end),
 				"Opus"
 			)).toBe(true)
-			local code = table_("zz-review-code", "claude", "claude-sonnet-5", nil, 2)
-			t.expect(models.id(m.resolveActivity({ layer(ORDER .. code) }, "zz-review-code").specs.claude))
+			t.expect(has(
+				errorOf(function()
+					m.resolveActivity(
+						{ layer(ORDER .. table_("zz-review-code", "claude", "claude-sonnet-5", nil, 2)) },
+						"zz-review-code"
+					)
+				end),
+				"Opus"
+			)).toBe(true)
+			local stream = table_("zz-review-stream", "claude", "claude-sonnet-5", nil, 2)
+			t.expect(
+				models.id(m.resolveActivity({ layer(ORDER .. stream) }, "zz-review-stream").specs.claude)
+			)
 				.toBe("claude-sonnet-5")
 			-- with no table of its own it falls back to the expensive zz-review
 			local r = m.resolveActivity({ layer(ORDER .. sharp("zz-review")) }, "zz-review-force")

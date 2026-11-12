@@ -444,7 +444,7 @@ end
 -- it) and a stream review. Every other review activity (`zz-review` and each `zz-review-<x>`: design, raft, final, idea,
 -- and any mode added later) is a final review: expensive, and bound by the review rule by default. A plain `zz-review`
 -- table is the expensive base every review activity falls back to.
-models.ON_THE_WAY = { "zz-review-code", "zz-review-stream" } :: { string }
+models.ON_THE_WAY = { "zz-review-stream" } :: { string }
 
 -- Whether `activity` is a review activity the review rule binds.
 function models.isFinalActivity(activity: string): boolean
