@@ -1,0 +1,26 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-12 09:05	3 specs	0	0	test			14.588	30.880		14.588	tokens,ai
+2026-11-12 09:05	affected	0	0	test			8.062	35.870		8.062	tokens,ai
+2026-11-12 09:05	1 spec	0	0	test			1.025	0.690		1.025	tokens,ai
+2026-11-12 09:05	1 spec	0	0	test			1.027	0.740		1.027	tokens,ai
+2026-11-12 09:08	1 spec	0	0	test			178.808	145.520		178.808	tokens,ai
+2026-11-12 09:08	1 spec	0	0	test			35.787	27.250		35.787	tokens,ai
+2026-11-12 09:10	1 spec	0	0	test			101.558	72.480		101.558	tokens,ai
+2026-11-12 09:10	1 spec	0	0	test			14.413	11.640		14.413	tokens,ai
+2026-11-12 09:12	4 specs	0	0	test			108.022	93.490		108.022	tokens,ai
+2026-11-12 09:12	3 specs	0	0	test			13.148	27.200		13.148	tokens,ai
+2026-11-12 09:12	1 spec	0	0	test			1.036	0.750		1.036	tokens,ai
+2026-11-12 09:14	3 specs	0	0	test			13.741	29.200		13.741	tokens,ai
+2026-11-12 09:14	1 spec	0	0	test			1.034	0.650		1.034	tokens,ai
+2026-11-12 09:14	1 spec	0	0	test			1.032	0.650		1.032	tokens,ai
+2026-11-12 09:17	1 spec	0	0	test			207.339	171.820		207.339	tokens,ai
+2026-11-12 09:18	1 spec	0	0	test			57.097	45.700		57.097	tokens,ai
+2026-11-12 09:20	1 spec	0	0	test			108.783	79.430		108.783	tokens,ai
+2026-11-12 09:20	1 spec	0	0	test			13.813	10.890		13.813	tokens,ai
+2026-11-12 09:22	4 specs	0	0	test			108.800	94.340		108.800	tokens,ai
+2026-11-12 09:22	affected	0	0	test			1.251	1.060		1.251	tokens,ai
+2026-11-12 09:23	1 spec	0	0	test			10.911	8.010		10.911	tokens,ai
+2026-11-12 09:25	affected	0	0	test			97.524	658.640		97.524	tokens,ai
+2026-11-12 09:30	3 specs	0	0	test			216.569	199.360		216.569	tokens,ai
+2026-11-12 09:30	3 runs	0	0	other			2737.903	2192.830			tokens,ai
+2026-11-12 09:32	R0093: review-001	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
