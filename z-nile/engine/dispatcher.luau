@@ -1152,6 +1152,9 @@ function dispatcher.modelStep(
 			cwd
 		)
 	end
+	-- a step that refuses before any CLI is tried (no credential) still has to name itself, or the chain
+	-- reads no last step and runs it again
+	st.step = step
 	st.outcome = outcome
 	st.detail = attempts[#attempts] and attempts[#attempts].detail or ""
 	st.tokens = 0
