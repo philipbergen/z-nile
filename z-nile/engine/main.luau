@@ -101,6 +101,8 @@ usage: ./zn <command> ...
                                                 write one measured row (the tool's own; not for typed numbers)
   provenance record <id> unblocked|confirmed|ranked [--actor <actor>] [--detail <k=v>]
                                                 append one row to the item's provenance.md on origin/main (c0263)
+                                                status <id> new, new raft, fold, recombine, new issue --raft and done
+                                                also take --actor and write their lifecycle row (c0282)
   dispatch <id> [--dry-run]                     run the chain on an item from its tracker state (ticket, design, raft,
                                                 ready, run), stopping at a merge gate, questions.md or a failure
   dispatch new "<description>" [--project <name>] [--dry-run]
@@ -384,6 +386,44 @@ local function liveActor(opts: { [string]: { string } }?): string
 		fail(why or "not an actor")
 	end
 	return actor :: string
+end
+
+-- c0282: who a lifecycle row names, and the dispatcher step a script step runs under (`ZN_VIA`): both read before the
+-- command changes anything, so a bad `--actor`, `ZN_ACTOR` or `ZN_VIA` refuses it whole.
+local function lifecycleWho(opts: { [string]: { string } }?): (string, string?)
+	local actor = liveActor(opts)
+	if not provenance.isLive(actor) then
+		fail("no git identity to record: set user.name or pass --actor")
+	end
+	local via, why = provenance.via(process.env.ZN_VIA)
+	if why then
+		fail(why)
+	end
+	return actor, via
+end
+
+local function recordNow(): string
+	return os.date("!%Y-%m-%d %H:%M", os.time()) :: string
+end
+
+-- c0282: appends one row to the record in `dir` (an item's folder in this worktree) and stages it, so the commit the
+-- caller makes (a pull request carries it) holds the row with the change it records. The record is created when the
+-- folder has none.
+local function appendRow(dir: string, id: string, event: string, actor: string, detail: string)
+	local path = `{dir}/provenance.md`
+	local text, why = provenance.record(
+		if fs.isFile(path) then fs.readFile(path) else nil,
+		id,
+		event,
+		actor,
+		detail,
+		recordNow()
+	)
+	if not text then
+		fail(`{path}: {why or "not a record"}`)
+	end
+	fs.writeFile(path, text :: string)
+	sh.git({ "add", path })
 end
 
 -- Real entropy, folded into 31 bits: Lune's math.randomseed saturates larger seeds, so seeding with
@@ -1166,6 +1206,11 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			end
 		end
 		local state: store.State = if raftId then "active" else "backlog"
+		-- c0282: an emergent issue is rafted from the start, so its `rafted` row names who made it
+		local actor: string?, via: string? = nil, nil
+		if raftId then
+			actor, via = lifecycleWho(opts)
+		end
 		if state == "backlog" and publishing() then
 			local chosen = ""
 			refuseStale()
@@ -1245,6 +1290,9 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		fs.writeFile(`{dir}/{id}.md`, withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts))
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/issue/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
+		if raftId and actor then
+			appendRow(dir, id, "rafted", actor, provenance.raftDetail(raftId, via))
+		end
 		print(`{dir}/{id}.md`)
 	elseif what == "raft" then
 		local rtype, slug = pos[2], pos[3]
@@ -1258,6 +1306,8 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		if not string.match(slug, "^[a-z][a-z0-9%-]*$") then
 			fail(`invalid slug: {slug} (lowercase words joined by hyphens)`)
 		end
+		-- c0282: each member gets a `rafted` row; who is read before anything is published
+		local actor, via = lifecycleWho(opts)
 		if publishing() then
 			if sh.git({ "status", "--porcelain" }) ~= "" then
 				fail(
@@ -1391,6 +1441,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				local item = store.get(id)
 				store.setFront(item.doc, "raft", chosen)
 				sh.git({ "add", item.doc })
+				appendRow(item.dir, id, "rafted", actor, provenance.raftDetail(chosen, via))
 				if statusLib.effective(frontOf(fs.readFile(item.doc)), item.state) == "prepared" then
 					table.insert(grouped, id)
 				end
@@ -1440,6 +1491,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 		for _, m in members do
 			table.insert(ids, m.id)
 			store.setFront(m.doc, "raft", id)
+			appendRow(m.dir, m.id, "rafted", actor, provenance.raftDetail(id, via))
 		end
 		local vars = {
 			ID = id,
@@ -1510,7 +1562,9 @@ local function designOpen(item: store.Item): string?
 	return openlist.problem(review, refute, fs.readFile(item.doc))
 end
 
-local function setStatus(id: string, to: string)
+local function setStatus(id: string, to: string, opts: { [string]: { string } }?)
+	-- c0282: a give-back (`status <id> new`) names who unblocked each issue it changes
+	local unblocker = if to == "new" then (lifecycleWho(opts)) else nil
 	local moved: { { id: string, from: string } } = {}
 	local carried = false
 	refuseStale()
@@ -1624,6 +1678,15 @@ local function setStatus(id: string, to: string)
 			end
 			table.insert(moved, { id = t, from = cur :: string })
 			table.insert(changes, { path = tp, content = withFront(tt, "status", value) })
+			if unblocker and not store.isRaftId(t) then
+				-- c0282: the row is built from origin's file, in the same published commit as the status line
+				local rec = string.gsub(tp, "[^/]+$", "provenance.md")
+				local row, why = provenance.record(read(rec), t, "unblocked", unblocker, "", recordNow())
+				if not row then
+					return `{rec}: {why or "not a record"}`
+				end
+				table.insert(changes, { path = rec, content = row })
+			end
 		end
 		-- c0116 (review 002 F1): a member redesigned on origin/main since z-raft grouped it (a claim and a landing inside
 		-- the rafting window) leaves the rafting: its coherence review read the old design
@@ -1704,7 +1767,7 @@ end
 -- A move of a raft moves its members too. Published moves are pushed at once; the move to
 -- `prepared` is carried by the prep PR and only edits the local documents. A readied item (in active/) is not
 -- moved here: `stop` gives it back.
-function cmd.status(pos: { string })
+function cmd.status(pos: { string }, opts: { [string]: { string } })
 	local id, to = pos[1], pos[2]
 	if to then
 		refuseInMainCheckout("status")
@@ -1746,7 +1809,7 @@ function cmd.status(pos: { string })
 			"only ./zn start or ./zn ready claims active: it checks the tree, the designs and the dependencies first"
 		)
 	end
-	setStatus(id, to)
+	setStatus(id, to, opts)
 end
 
 -- c0116 (z-raft): an issue's raft is its own `raft:` line, written in a worktree and carried by the rafting PR, so two
@@ -1802,11 +1865,12 @@ end
 -- (its status only), then writes each issue's `raft:` and the raft's `issues:` here and commits; z-raft then writes the
 -- raft's design and runs the carried `status <R-id> prepared`. A raft this checkout already claimed is not claimed
 -- again.
-function cmd.fold(pos: { string })
+function cmd.fold(pos: { string }, opts: { [string]: { string } })
 	local raftId = pos[1]
 	if not raftId or not store.isRaftId(raftId) or #pos < 2 then
 		fail("usage: fold <R-id> <issue>...")
 	end
+	local actor, via = lifecycleWho(opts)
 	raftingStart("fold")
 	local raft = store.get(raftId)
 	if raft.kind ~= "raft" or raft.state ~= "backlog" then
@@ -1881,9 +1945,11 @@ function cmd.fold(pos: { string })
 	raft = store.get(raftId)
 	local list = store.idList(store.readFront(raft.doc).issues)
 	for _, id in ids do
-		local doc = store.get(id).doc
+		local item = store.get(id)
+		local doc = item.doc
 		store.setFront(doc, "raft", raftId)
 		sh.git({ "add", doc })
+		appendRow(item.dir, id, "rafted", actor, provenance.raftDetail(raftId, via))
 		if not table.find(list, id) then
 			table.insert(list, id)
 		end
@@ -2009,11 +2075,12 @@ end
 -- carried `status <keeper> prepared` sees the other raft as the same claim. The moves are written here and committed;
 -- the other raft is retired only when it ends up empty: its folder moves to <root>/rafts/retired/ with `retired: <keeper>`
 -- in this branch, so in the rafting PR.
-function cmd.recombine(pos: { string })
+function cmd.recombine(pos: { string }, opts: { [string]: { string } })
 	local keeperId, otherId = pos[1], pos[2]
 	if not (keeperId and otherId and store.isRaftId(keeperId) and store.isRaftId(otherId)) then
 		fail("usage: recombine <keeper R-id> <other R-id> [<issue>...]")
 	end
+	local actor, via = lifecycleWho(opts)
 	if keeperId == otherId then
 		fail("recombine needs two different rafts")
 	end
@@ -2113,9 +2180,11 @@ function cmd.recombine(pos: { string })
 	keeper, other = store.get(keeperId), store.get(otherId)
 	local list = store.idList(store.readFront(keeper.doc).issues)
 	for _, id in moving do
-		local doc = store.get(id).doc
+		local item = store.get(id)
+		local doc = item.doc
 		store.setFront(doc, "raft", keeperId)
 		sh.git({ "add", doc })
+		appendRow(item.dir, id, "rafted", actor, provenance.raftDetail(keeperId, via))
 		if not table.find(list, id) then
 			table.insert(list, id)
 		end
@@ -4970,12 +5039,14 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
 	traceProblems(raft, true)
 end
 
-function cmd.done(pos: { string })
+function cmd.done(pos: { string }, opts: { [string]: { string } })
 	refuseListMode()
 	local raft = store.get(pos[1] or fail("usage: done <R-id>"))
 	if raft.kind ~= "raft" or raft.state ~= "active" then
 		fail(`{raft.id} must be an active raft`)
 	end
+	-- c0282: every member gets a `delivered` row naming who ran done; read before anything changes
+	local actor = lifecycleWho(opts)
 	if sh.git({ "status", "--porcelain" }) ~= "" then
 		fail("commit everything first (./zn commit); done needs a clean tree")
 	end
@@ -5112,6 +5183,10 @@ function cmd.done(pos: { string })
 	local movedItems: { store.Item } = {}
 	for _, m in members do
 		table.insert(movedItems, move(m, "done"))
+	end
+	-- c0282: the rows are staged with the moves, so a rollback (git reset --hard) removes them and a retry appends once
+	for _, item in movedItems do
+		appendRow(item.dir, item.id, "delivered", actor, provenance.raftDetail(raft.id, nil))
 	end
 	raft = move(raft, "done")
 	table.insert(movedItems, raft)

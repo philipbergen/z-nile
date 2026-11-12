@@ -91,6 +91,23 @@ function provenance.resolve(flag: string?, env: string?, hint: Hint, gitName: st
 	return "unknown", nil
 end
 
+-- c0282: the dispatcher step a script step runs under (`ZN_VIA`), as the `via=` part of a `rafted` row. `dispatch:<step>`
+-- only; an unset or empty value is no step; anything else is refused (nil and why), so a stray value never reaches a row.
+function provenance.via(value: string?): (string?, string?)
+	if value == nil or value == "" then
+		return nil, nil
+	end
+	if string.match(value, "^dispatch:[%l][%l%d%-]*$") then
+		return value, nil
+	end
+	return nil, `ZN_VIA is not dispatch:<step>: {value}`
+end
+
+-- c0282: the detail of a lifecycle row that names a raft: `raft=<R-id>`, then `via=` when a script step ran it.
+function provenance.raftDetail(raft: string, via: string?): string
+	return if via then `raft={raft}; via={via}` else `raft={raft}`
+end
+
 local HEADER = "| when | event | actor | detail |\n|---|---|---|---|\n"
 
 function provenance.render(id: string, rows: { Row }): string

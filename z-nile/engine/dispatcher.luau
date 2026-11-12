@@ -24,6 +24,7 @@ local models = require("./models")
 local openlist = require("./openlist")
 local process = require("@lune/process")
 local projects = require("./projects")
+local provenance = require("./provenance")
 local raftcheck = require("./raftcheck")
 local runner = require("./runner")
 local serde = require("@lune/serde")
@@ -1057,6 +1058,9 @@ function dispatcher.modelStep(
 		for k, v in extra do
 			env[k] = v
 		end
+		-- c0282: the actor a row recorded by this attempt names is this attempt's own spec (a fallthrough's second
+		-- attempt has its own model), one spelling per model; it wins over the session hint in the engine
+		env.ZN_ACTOR = provenance.agent(spec.model, spec.effort)
 		local t0 = os.time()
 		print(
 			`dispatch: {step} {id} on {spec.cli} ({spec.runtime}, {models.id(spec)}, max_tokens {spec.maxTokens})`
@@ -1274,8 +1278,19 @@ function dispatcher.scriptStep(ctx: Ctx, st: State, step: string, id: string, ex
 	local dir = if where == "main" then ctx.mainRoot() else worktree(ctx, `raft-{id}`)
 	print(`dispatch: {step} {id}: {table.concat(argv, " ")} (in {dir})`)
 	local args = table.move(argv, 2, #argv, 1, {})
-	local r =
-		process.exec(`{dir}/zn`, args, { cwd = dir, stdio = { stdout = "forward", stderr = "forward" } })
+	-- c0282: a script step is the user's own pipeline: rows it records name the user who started it and the step it ran
+	-- under (`ZN_VIA`); with no git identity nothing is set and the engine resolves the actor as it always does
+	local stepEnv: { [string]: string } = { ZN_VIA = `dispatch:{step}` }
+	local okName, ident = git(dir, { "var", "GIT_AUTHOR_IDENT" })
+	local name = if okName then string.match(ident, "^(.-) <") else nil
+	if name and name ~= "" then
+		stepEnv.ZN_ACTOR = provenance.human(name)
+	end
+	local r = process.exec(
+		`{dir}/zn`,
+		args,
+		{ cwd = dir, env = stepEnv, stdio = { stdout = "forward", stderr = "forward" } }
+	)
 	local outcome = if r.ok then "ok" else "failed"
 	st.step, st.cli, st.runtime, st.model, st.worktree, st.outcome = step, nil, nil, nil, dir, outcome
 	st.detail = if r.ok then "done" else `exit {r.code}`
@@ -1511,6 +1526,10 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 		local function shapeOf(path: string): string?
 			local pid, _, rel = trackerstate.itemOf(path, roots :: { string })
 			if pid and store.isRaftId(pid :: string) then
+				-- c0282: a raft's record (a block, c0250) is main's to grow; a rafting PR writes `rafted` rows on issues
+				if rel == "provenance.md" then
+					return `it changes {path}: a rafting PR does not write a raft's record`
+				end
 				if rafts[`{rootOf(path) :: string}/{pid}`] == "new" and rel == "check.sh" then
 					local r = rootOf(path) :: string
 					local reg = projects.at(fresh, root)
@@ -1540,6 +1559,23 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
 					return `it adds issue {pid} ({path}): a rafting PR adds no issue`
 				elseif life ~= "" then
 					return `it changes {path}, an issue in {string.sub(life, 1, -2)}/: a rafting PR changes only a backlog issue's raft: line`
+				elseif path == `{r}/issues/{pid}/provenance.md` then
+					-- c0282: the record of a rafted issue grows by `rafted` rows only, every old row (the prep PR's
+					-- `approved` row, main's) byte for byte in place
+					-- read untrimmed: a record ends in a newline, which `git` above trims
+					local function raw(rev: string): string?
+						local shown = process.exec("git", { "show", `{rev}:{path}` }, { cwd = root })
+						return if shown.ok then shown.stdout else nil
+					end
+					local old, new = raw(base), raw(ref)
+					if not new then
+						return `it removes {path}: a rafting PR only appends rafted rows to a record`
+					end
+					local why = provenance.publishProblem(old, new :: string, pid :: string, { "rafted" })
+					if why then
+						return `it changes {path}: {why}`
+					end
+					return nil
 				elseif path ~= doc then
 					return `it changes {path}: a rafting PR changes only a backlog issue's raft: line`
 				end
