@@ -8,7 +8,21 @@ set -euo pipefail
 if [[ ${1:-} == run ]]; then
   shift
   export PATH="$HOME/.rokit/bin:$PATH"
-  exec perl "$(cd "$(dirname "$0")" && pwd -P)/z-nile/lib/bounded.pl" "$@"
+  export ZN_TOP="$(cd "$(dirname "$0")" && pwd -P)"
+  # A run already inside a measurement (the gate, a spec run) records nothing of its own.
+  if [[ -z "${ZN_MEASURED:-}" ]]; then
+    export ZN_MEASURE_BUFFER=1
+    export ZN_MEASURE_KIND=run
+    export ZN_MEASURE_PHASE=other
+    export ZN_MEASURE_SUBJECT=run
+    ZN_MEASURE_BRANCH="$(git -C "$ZN_TOP" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    ZN_MEASURE_HEAD="$(git -C "$ZN_TOP" rev-parse HEAD 2>/dev/null || true)"
+    if [[ "$ZN_MEASURE_BRANCH" == "HEAD" ]]; then ZN_MEASURE_BRANCH=""; fi
+    export ZN_MEASURE_BRANCH ZN_MEASURE_HEAD
+  else
+    unset ZN_MEASURE_BUFFER
+  fi
+  exec perl "$ZN_TOP/z-nile/lib/bounded.pl" "$@"
 fi
 top="$(cd "$(dirname "$0")" && pwd -P)"
 here="$(pwd -P)"
@@ -19,6 +33,26 @@ esac
 export ZN_TOP="$top" ZN_CWD="${rel#/}"
 cd "$top"
 export PATH="$HOME/.rokit/bin:$PATH"
+# approve is the human's, in a terminal. --check only reads, so a pipe may run it. The engine repeats the
+# dispatch check; this one is the stdin test, which a child process cannot see.
+if [[ ${1:-} == approve ]]; then
+  checking=0
+  for arg in "$@"; do
+    [[ $arg == --check ]] && checking=1
+  done
+  if [[ $checking == 0 ]]; then
+    id="${2:-<issue-id>}"
+    [[ $id == --* ]] && id="<issue-id>"
+    if [[ -n ${ZN_DISPATCH:-} ]]; then
+      echo "$id: approve is refused while ZN_DISPATCH is set. Run ./zn approve $id yourself, in a terminal, in this worktree." >&2
+      exit 1
+    fi
+    if [[ ! -t 0 ]]; then
+      echo "$id: approve is refused without a terminal on stdin. Run ./zn approve $id yourself, in a terminal, in this worktree ($top)." >&2
+      exit 1
+    fi
+  fi
+fi
 # the engine's own CPU limit (c0191), ZN_ENGINE_CPU seconds (default 1800): what an engine command spends is its own
 # CPU, not its children's (the gate, git), and a loop in it ends in half an hour instead of never. It only lowers the
 # limit the caller has, so the spec runner's 1200 s stays what it asks for

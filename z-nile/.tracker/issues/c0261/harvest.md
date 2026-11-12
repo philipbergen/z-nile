@@ -1,0 +1,88 @@
+# Harvest: c0261
+- design-review-001 F1: z-design/override-search-every-require-spelling, z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F2: one-off: a poll loop's clock, exits and tool timeout are specific to this step (the gist, "a bound is a limit, not a duration", is in the issue's Design)
+- design-review-001 F3: z-design/never-narrow-captured-scope
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: z-design/never-narrow-captured-scope
+- design-review-001 F7: one-off: a guard over the tier vocabulary, which the user then removed
+- design-review-001 F8: zz-test/pin-call-site-arguments
+- design-review-001 F9: one-off: exact model names pinned at check time is this issue's own call
+- design-review-001 F10: z-design/quote-other-preps-before-promising
+- design-review-001 F11: z-design/decided-guesses-rewrite-their-body
+- design-review-001 F12: z-design/restated-rules-move-together
+- design-review-001 F13: z-design/spec-design-correspondence
+- design-review-001 F14: one-off: a probe recorded without the command that ran it
+- design-review-002 F1: z-design/confirm-overrides-with-a-suite-run, z-design/override-search-every-require-spelling
+- design-review-002 F2: z-design/split-term-every-reader, z-design/restated-rules-move-together
+- design-review-002 F3: z-design/never-narrow-captured-scope
+- design-review-002 F4: zz-test/pin-fail-safes-where-they-act
+- design-review-002 F5: z-design/spec-design-correspondence
+- design-review-002 F6: z-design/accepted-risks-checked-and-decided
+- design-review-002 F7: z-design/spec-design-correspondence
+- design-review-002 F8: z-design/restated-rules-move-together
+- design-review-002 F9: z-design/never-narrow-captured-scope
+- design-review-002 F10: z-design/decided-guesses-rewrite-their-body
+- design-review-002 F11: z-design/quote-other-preps-before-promising
+- design-review-002 F12: one-off: counts and labels that did not match what ran
+- design-review-003 F1: one-off: a label lost in an edit that fixed a count
+- design-review-003 F2: z-design/split-term-every-reader
+- design-review-003 F3: z-design/spec-design-correspondence
+- design-review-003 F4: z-design/spec-design-correspondence
+- design-review-003 F5: z-design/accepted-risks-checked-and-decided
+- design-review-003 F6: z-design/specify-every-named-artifact
+- design-review-003 F7: z-design/never-narrow-captured-scope
+- design-review-003 F8: z-design/never-narrow-captured-scope
+- design-review-003 F9: z-design/restated-rules-move-together
+- design-review-003 F10: z-design/quote-other-preps-before-promising
+- design-review-003 F11: z-design/restated-rules-move-together
+- note the user's answers of 2026-11-08 (agent's ordered list, "Commands refuse"), the first changing the review rule's agent clause, the second adding AC11: z-design/never-narrow-captured-scope, z-design/decided-guesses-rewrite-their-body
+- design-review-004 F1: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-004 F2: z-design/spec-design-correspondence
+- design-review-004 F3: z-design/specify-every-named-artifact
+- design-review-004 F4: z-design/confirm-overrides-with-a-suite-run, z-design/reasoned-rows-claim-testable-reasons
+- design-review-004 F5: z-design/new-rules-migrate-existing-work
+- design-review-004 F6: z-design/never-narrow-captured-scope
+- design-review-004 F7: z-design/spec-design-correspondence
+- design-review-004 F8: z-design/specify-every-named-artifact
+- design-review-004 F9: zz-test/pin-fail-safes-where-they-act
+- design-review-004 F10: z-design/restated-rules-move-together
+- design-review-004 F11: one-off: a refusal text that named the design spend line for a code round
+- design-review-004 F12: one-off: bookkeeping slips
+- design-review-005 F1: z-design/specify-every-named-artifact
+- design-review-005 F2: z-design/reasoned-rows-claim-testable-reasons, z-design/spec-design-correspondence
+- design-review-005 F3: z-design/new-rules-migrate-existing-work
+- design-review-005 F4: z-design/spec-design-correspondence
+- design-review-005 F5: z-design/accepted-risks-checked-and-decided
+- design-review-005 F6: z-design/spec-design-correspondence
+- design-review-005 F7: z-design/restated-rules-move-together
+- note design-review-005 answered in design-refute-005.md (the coordinator's defaults for the kimi kinds, the raft subject prefix, the rows-keyed cutoff): z-design/specify-every-named-artifact, z-design/new-rules-migrate-existing-work
+- design-review-006 F1: z-design/results-land-on-every-path
+- design-review-006 F2: zz-test/pin-call-site-arguments
+- design-review-006 F3: z-design/spec-design-correspondence
+- design-review-006 F4: z-design/restated-rules-move-together
+- note the user's answer "Build it now, one more round" to design-review-006 F1 (built: the raft-mode row written from the author's worktree), and the reviewer's closing-note edits: z-design/results-land-on-every-path
+- design-review-007 F1: z-design/spec-design-correspondence
+- design-review-007 F2: z-design/new-rules-migrate-existing-work
+- design-review-007 F3: zz-test/pin-fail-safes-where-they-act
+- design-review-007 F4: z-design/restated-rules-move-together
+- note the user's veto answers of 2026-11-08 (z-design off the cheap model, the kimi family, accept the blocking wait, c0252 builds the run PR merge) applied in design-refute-008.md: z-design/decided-guesses-rewrite-their-body, z-design/never-narrow-captured-scope
+- design-review-008 F1: z-design/restated-rules-move-together, z-design/decided-guesses-rewrite-their-body
+- design-review-008 F2: z-design/never-narrow-captured-scope
+- design-review-008 F3: z-design/accepted-risks-checked-and-decided
+- design-review-008 F4: z-design/spec-design-correspondence
+- design-review-008 F5: z-design/restated-rules-move-together
+- note the user's answers "Accept it" (Open question 9) and "Yes, grok-4.7-high" (Open question 10), applied in c0261.md: z-design/decided-guesses-rewrite-their-body
+- design-review-009 F1: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-009 F2: z-design/decided-guesses-rewrite-their-body
+- design-review-009 F3: z-design/restated-rules-move-together
+- design-review-010 F1: z-design/prep-choices-marked-and-checked
+- design-review-010 F2: zz-test/kill-mutants-where-the-value-is-built
+- design-review-010 F3: zz-arch/verify-the-value-you-use
+- design-review-010 F4: z-design/new-rules-migrate-existing-work
+- design-review-010 F5: z-design/new-rules-migrate-existing-work
+- design-review-010 F6: zz-arch/history-tests-survive-squash
+- design-review-010 F7: one-off: three wiring paths with no case and a CLI output never parsed; the cases are this issue's own
+- design-review-010 F8: z-design/fallbacks-name-the-modes-they-cover
+- design-review-010 F9: one-off: already-red cases on main listed by the reviewer's run
+- design-review-010 F10: z-design/restated-rules-move-together

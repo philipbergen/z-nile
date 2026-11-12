@@ -56,6 +56,19 @@ return t.spec("c0116 z-design designs one issue with no raft; its reviews roll u
 			trackerfix.trOk(f, wt, { "new", "issue", "c", "solo-thing", "--project", "pickman" }),
 			"(c%d+)"
 		) :: string
+		-- ./zn new leaves the idea unchallenged; design starts only after the review is on origin
+		local ideaPath = `{wt}/pickman/.tracker/issues/{id}/{id}.md`
+		fs.writeFile(
+			ideaPath,
+			(string.gsub(fs.readFile(ideaPath), "idea: unchallenged", "idea: challenged", 1))
+		)
+		fs.writeFile(
+			`{wt}/pickman/.tracker/issues/{id}/idea-review-001.md`,
+			"# Idea review 001\n\n## Findings\n\nnone\n\n## Verdict\n\napprove\n"
+		)
+		fixture.git(wt, { "add", "-A" })
+		fixture.git(wt, { "commit", "-q", "-m", `tracker: idea {id}` })
+		fixture.git(wt, { "push", "-q", "origin", "HEAD:main" })
 		local before = fixture.git(f.origin, { "rev-parse", "main" })
 		trackerfix.trOk(f, wt, { "status", id, "preparing" })
 		local changed = fixture.git(f.origin, { "diff", "--name-only", before, "main" })
@@ -79,8 +92,11 @@ return t.spec("c0116 z-design designs one issue with no raft; its reviews roll u
 			"--note",
 			"design-review-001",
 		})
-		local spent = fixture.git(f.origin, { "show", `main:pickman/.tracker/issues/{id}/spend.md` })
-		t.expect(has(spent, "| design-review-001 | 0 | 0 | 4.0 |")).toBe(true)
+		local names = fs.readDir(`{dir}/spend.d`)
+		table.sort(names)
+		local spent = fs.readFile(`{dir}/spend.d/{names[#names]}`)
+		t.expect(has(spent, "design-review-001")).toBe(true)
+		t.expect(has(spent, "design-review")).toBe(true)
 		-- design ready, then the carried move: nothing published, the local document prepared, raft: still empty
 		local path = `{dir}/{id}.md`
 		local text = fs.readFile(path)

@@ -1,7 +1,8 @@
 --!strict
 -- A spec's fingerprint and the content digest of a whole gate (c0165). Pure: the caller reads the blob map (every
 -- file present, tracked or not), the tools line and git's state; nothing here touches the disk.
--- One predicate, select.isInput, decides what enters a spec's fingerprint and what the selector picks.
+-- One predicate, select.isInput, decides what enters a spec's fingerprint and what the selector picks:
+-- the spec, its watch file, and the paths that file names.
 
 local select = require("./select")
 local serde = require("@lune/serde")
@@ -61,36 +62,22 @@ function fingerprint.of(
 	for _, p in fingerprint.inputs(ctx, spec, blobs) do
 		table.insert(lines, `{p}\t{blobs[p]}`)
 	end
-	local starred = false
 	for _, e in entriesOf(ctx, spec) do
 		table.insert(lines, e)
-		if e == "*" then
-			starred = true
-		end
 	end
-	if starred then
-		table.insert(lines, `HEAD {git.head}`)
-	end
+	-- a `*` spec is valid for the blobs above, not for which commit HEAD names: a tracker commit that does not
+	-- change those blobs does not invalidate it
 	for _, ref in fingerprint.refs(ctx, spec) do
 		table.insert(lines, `{ref}\t{git.refs[ref] or "MISSING"}`)
 	end
 	return sha256(table.concat(lines, "\n"))
 end
 
--- The facts a whole affected gate's digest holds besides the files: the mode, the projects, the base, HEAD only when the
--- selection holds a `*` spec, and every declared ref of the selected specs (the caller appends each project's selection). Pure.
-function fingerprint.digestExtra(
-	mode: string,
-	names: { string },
-	base: string,
-	starred: boolean,
-	git: GitState,
-	refs: { string }
-): { string }
-	local extra = { `mode {mode}`, `projects {table.concat(names, ",")}`, `base {base}` }
-	if starred then
-		table.insert(extra, `HEAD {git.head}`)
-	end
+-- The facts a whole affected gate's digest holds besides the files: the mode, the projects, and every declared ref of
+-- the selected specs (the caller appends each project's selection). Not main's sha and not HEAD: a gate is valid for
+-- the content of its inputs, not for a position of main. Pure.
+function fingerprint.digestExtra(mode: string, names: { string }, git: GitState, refs: { string }): { string }
+	local extra = { `mode {mode}`, `projects {table.concat(names, ",")}` }
 	for _, ref in refs do
 		table.insert(extra, `{ref}\t{git.refs[ref] or "MISSING"}`)
 	end
@@ -102,8 +89,8 @@ local function isSpend(path: string): boolean
 	return string.match(path, "[^/]*$") == "spend.md" and string.find(path, "/.tracker/", 1, true) ~= nil
 end
 
--- The content digest of a whole gate: the tools line, the gate's own facts (`extra`: mode, projects, base, ...) and
--- every file's blob, minus the spend.md files under project roots.
+-- The content digest of a whole gate: the tools line, the gate's own facts (`extra`: mode, projects, ...) and
+-- every file's blob, minus the spend.md files under project roots. Main's sha is not a fact.
 function fingerprint.digest(blobs: Blobs, tools: string, extra: { string }): string
 	local lines = { "c0165 digest v1", tools }
 	for _, e in extra do

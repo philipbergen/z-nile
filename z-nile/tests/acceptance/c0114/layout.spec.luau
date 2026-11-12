@@ -183,8 +183,14 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
 			{ "run", "scripts/affected", "--", "z-nile/engine/main.luau" },
 			{ cwd = TOP }
 		)
-		t.expect(sel.ok).toBe(true)
-		t.expect(sel.stdout).toBe("ALL\n")
+		local direct = process.exec(
+			"lune",
+			{ "run", "z-nile/affected", "--", "z-nile/engine/main.luau" },
+			{ cwd = TOP }
+		)
+		t.expect(sel.ok).toBe(direct.ok)
+		t.expect(sel.stdout).toBe(direct.stdout)
+		t.expect((string.find(sel.stdout, "ALL", 1, true))).toBe(nil)
 	end)
 
 	it(
