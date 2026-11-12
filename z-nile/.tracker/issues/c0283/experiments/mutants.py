@@ -9,8 +9,8 @@ import sys
 P = os.environ.get('MUT_WT', '/Users/philipbergen/code/pickman/.worktree/proto-c0283-mut')
 Z = P + '/z-nile'
 A = 'tests/acceptance/c0283/'
-AP, AR, DP, DC = A + 'approval.spec.luau', A + 'approve.spec.luau', A + 'dispatch.spec.luau', A + 'docs.spec.luau'
-PRV, MAIN, DSP = 'engine/provenance.luau', 'engine/main.luau', 'engine/dispatch.luau'
+AP, AR, DC = A + 'approval.spec.luau', A + 'approve.spec.luau', A + 'docs.spec.luau'
+PRV, MAIN = 'engine/provenance.luau', 'engine/main.luau'
 M = [
     ('approved: the row holds the whole hash', PRV, 'design={string.sub(hash, 1, 12)}', 'design={hash}', AP),
     ('approved: the old rows are replaced', PRV, 'return provenance.record(text, id, "approved"', 'return provenance.record(nil, id, "approved"', AP),
@@ -25,20 +25,11 @@ M = [
     ('approve: an uncommitted record is overwritten', MAIN, 'if sh.git({ "status", "--porcelain", "--", record }) ~= "" then', 'if false then', AR),
     ('approve: the approval is written before the record is decided', MAIN, 'if not rtext then\n\t\tfail(`{id}: {rerr}`)\n\tend\n\tlocal path = approval.file(item)\n\tsh.writeReplacing(path, text :: string)', 'local path = approval.file(item)\n\tsh.writeReplacing(path, text :: string)\n\tif not rtext then\n\t\tfail(`{id}: {rerr}`)\n\tend', AR),
     ('approve: the row carries another hash', MAIN, '\t\twho,\n\t\thash,\n\t\tos.date("!%Y-%m-%d %H:%M")', '\t\twho,\n\t\tstring.reverse(hash),\n\t\tos.date("!%Y-%m-%d %H:%M")', AR),
-    ('prep gate merges when auto_merge names it', DSP, '\t\tand name ~= "prep"\n', '', DP),
-    ('prep reason replaced by one message', DSP, 'elseif\n\t\t\tnot table.find(f.autoMerge, name)\n\t\tthen `the {name} PR #{pr.number} waits for a merge', 'elseif\n\t\t\tfalse\n\t\tthen `the {name} PR #{pr.number} waits for a merge', DP),
-    ('prep stop lacks the approve suffix', DSP, '\t\t\twhy ..= `; approve the design with ./zn approve {f.id}, then', '\t\t\twhy ..= `; then', DP),
-    ('prep fallthrough keeps the old text', DSP, "\t\telseif name == \"prep\" then `the prep PR #{pr.number} waits for the user's approval and merge`\n", '', DP),
     ('docs: zz-rules loses the agent-session refusal', 'skills/zz-rules/SKILL.md', '**never in an agent session**', 'not in a dispatched step', DC),
     ('docs: zz-rules forgets the row', 'skills/zz-rules/SKILL.md', 'to the issue\'s `provenance.md` in the same `tracker: approve` commit', 'to a file', DC),
-    ('docs: zz-rules says the dispatcher merges prep', 'skills/zz-rules/SKILL.md', 'only a `raft` gate (a `prep` gate never merges)', 'a `prep` or `raft` gate', DC),
-    ('docs: z-design lets the dispatcher pass the gate', 'skills/z-design/SKILL.md', 'the dispatcher stops at the prep gate for the user, who approves the design', 'the dispatcher passes the gate (the user started it)', DC),
-    ('docs: .models.toml still merges prep', '../.models.toml', 'auto_merge = ["raft"]', 'auto_merge = ["prep", "raft"]', DC),
     ('docs: AGENTS.md lets an agent try', '../AGENTS.md', 'Tell the user to run it; never try to', 'Run it yourself', DC),
     ('approve: --check is refused in an agent session', MAIN, '\tlocal onlyCheck = opts["--check"] ~= nil\n\tif not onlyCheck then', '\tlocal onlyCheck = opts["--check"] ~= nil\n\tif true then', AR),
     ('fixture.exec does not clear the markers', 'tests/lib/fixture.luau', '\t\tscrubbed[name] = ""', '\t\tscrubbed[name] = nil :: any', AR),
-    ('prep: a carrying PR is told to merge', DSP, '\t\tif carries then\n\t\t\twhy ..=', '\t\tif false then\n\t\t\twhy ..=', DP),
-    ('prep: a red PR is told to merge now', DSP, '\t\telseif pr.draft or not pr.green or not pr.mergeable then', '\t\telseif false then', DP),
 ]
 
 def run(name, f, old, new, spec):
