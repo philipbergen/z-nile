@@ -91,17 +91,12 @@ return t.spec("c0282 the offline lifecycle stamps provenance", function(it)
 		end
 		clone.isolated(root, dir)
 		git({ "remote", "remove", "origin" })
-		local listed = process.exec("git", {
-			"ls-files",
-			"-co",
-			"--exclude-standard",
-			"zn",
-			"scripts",
-			"z-nile",
-			":(exclude)z-nile/.tracker",
-			":(exclude)z-nile/next",
-			":(exclude)z-nile/compaction.txt",
-		}, { cwd = root })
+		-- the tooling as every tracker fixture gets it: engine.PATHSPECS (a sibling that adds a state file excludes it there)
+		local listArgs: { string } = { "ls-files", "-co", "--exclude-standard" }
+		for _, spec in engine.PATHSPECS do
+			table.insert(listArgs, spec)
+		end
+		local listed = process.exec("git", listArgs, { cwd = root })
 		for path in string.gmatch(listed.stdout, "[^\n]+") do
 			if fs.isFile(`{root}/{path}`) then
 				local parent = string.match(path, "^(.*)/[^/]+$")

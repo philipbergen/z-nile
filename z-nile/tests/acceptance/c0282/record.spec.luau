@@ -207,8 +207,8 @@ return t.spec("c0282 the lifecycle rows' writes", function(it)
 		t.expect(string.match(fs.readFile(`{W3}/{ISSUES}/c0040/c0040.md`), "\nraft: ([^\n]*)\n")).toBe("")
 		-- a bad actor or a bad ZN_VIA refuses recombine before it claims anything
 		local mark = tip()
-		for _, env in { { ZN_ACTOR = "robot:x" }, { ZN_VIA = "dispatch" } } do
-			local refused = tr(W4, { "recombine", "R0130", "R0140" }, env)
+		for _, bad in { { ZN_ACTOR = "robot:x" }, { ZN_VIA = "dispatch" } } do
+			local refused = tr(W4, { "recombine", "R0130", "R0140" }, bad)
 			t.expect(refused.ok).toBe(false)
 			t.expect(has(refused.stderr, "ZN_VIA") or has(refused.stderr, "not an actor")).toBe(true)
 			t.expect(tip()).toBe(mark)
