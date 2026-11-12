@@ -14,11 +14,14 @@ local dispatchLib = require("./dispatch")
 local dispatcherLib = require("./dispatcher")
 local fs = require("@lune/fs")
 local gateLib = require("./gate")
+local idea = require("./idea")
 local idsLib = require("./ids")
 local layergit = require("./layergit")
 local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
 local mergerecords = require("./mergerecords")
+local models = require("./models")
+local modelstep = require("./modelstep")
 local openlist = require("./openlist")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
@@ -120,6 +123,7 @@ usage: ./zn <command> ...
   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
   capture <id>                                  print the item's document as captured (read-only)
+  idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
   metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
@@ -363,27 +367,6 @@ local function mergeOrigin()
 			`merging origin/main failed{if aborted then " (merge aborted)" else " (nothing was aborted)"}; anything this command published is already on origin/main: {why}`
 		)
 	end
-end
-
--- The live actor of a command that records: --actor, then ZN_ACTOR, then an agent-session hint, then the git name.
-local function liveActor(opts: { [string]: { string } }?): string
-	local flagList = if opts then opts["--actor"] else nil
-	local ident = sh.run("git", { "var", "GIT_AUTHOR_IDENT" })
-	local name = if ident.ok then string.match(ident.stdout, "^(.-) <") else nil
-	local hint = provenance.hint({
-		CLAUDECODE = process.env.CLAUDECODE,
-		AI_AGENT = process.env.AI_AGENT,
-		CURSOR_AGENT = process.env.CURSOR_AGENT,
-		GROK_SESSION_ID = process.env.GROK_SESSION_ID,
-		ZN_DISPATCH = process.env.ZN_DISPATCH,
-		CLAUDE_EFFORT = process.env.CLAUDE_EFFORT,
-	})
-	local actor, why =
-		provenance.resolve(if flagList then flagList[1] else nil, process.env.ZN_ACTOR, hint, name)
-	if not actor then
-		fail(why or "not an actor")
-	end
-	return actor :: string
 end
 
 -- Real entropy, folded into 31 bits: Lune's math.randomseed saturates larger seeds, so seeding with
@@ -1195,7 +1178,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				local changes: { publish.Change } = {
 					{
 						path = `{root}/issues/{chosen}/{chosen}.md`,
-						content = withFront(doc, "status", stamp("new")),
+						content = withFront(withFront(doc, "idea", "unchallenged"), "status", stamp("new")),
 					},
 					{
 						path = `{root}/issues/{chosen}/check.sh`,
@@ -1242,7 +1225,10 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			EMERGENT = if state == "active" then "true" else "false",
 			DATE = today(),
 		}
-		fs.writeFile(`{dir}/{id}.md`, withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts))
+		fs.writeFile(
+			`{dir}/{id}.md`,
+			withFront(withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts), "idea", "unchallenged")
+		)
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/issue/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
 		print(`{dir}/{id}.md`)
@@ -1621,6 +1607,16 @@ local function setStatus(id: string, to: string)
 				)
 			then
 				return `{t} is {cur} on origin/main: cannot move to {to}`
+			end
+			if t == id and not store.isRaftId(id) and to == "preparing" then
+				local suffix = `/{t}.md`
+				local reviewPath = if string.sub(tp, -#suffix) == suffix
+					then string.sub(tp, 1, #tp - #suffix) .. "/idea-review-001.md"
+					else ""
+				local why = idea.designRefusal(tt, if reviewPath ~= "" then read(reviewPath) else nil, t)
+				if why then
+					return why
+				end
 			end
 			table.insert(moved, { id = t, from = cur :: string })
 			table.insert(changes, { path = tp, content = withFront(tt, "status", value) })
@@ -6285,57 +6281,79 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
 	return nil
 end
 
--- c0263: `provenance record <id> <event> [--actor A] [--detail k=v]` publishes one row of an item's provenance.md
--- for the events other tickets call (unblocked, confirmed, ranked), built from origin/main's file. An active item
--- takes unblocked only (the validator). (`record` alone is the measured-cost row writer; this lives under `provenance`.)
-local function recordRow(pos: { string }, opts: { [string]: { string } })
-	refuseInMainCheckout("provenance record")
-	if not publishing() then
-		fail("provenance record needs an origin remote (PICKMAN_PUBLISH=0 disables it)")
-	end
-	local id, event = pos[1], pos[2]
-	if not id or not event or not (store.isIssueId(id) or store.isRaftId(id)) then
-		fail(
-			`usage: provenance record <id> <{table.concat(provenance.PUBLISHED, "|")}> [--actor <actor>] [--detail <k=v>]`
-		)
-	end
-	if not table.find(provenance.PUBLISHED, event) then
-		fail(
-			`record publishes {table.concat(provenance.PUBLISHED, ", ")} only, not {event}: the other events are written by their own commands`
-		)
-	end
-	local actor = liveActor(opts)
-	local detail = if opts["--detail"] then opts["--detail"][1] else ""
-	local when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string
-	refuseStale()
-	local r = published(publish.commit(".", function(paths, read)
-		local doc = docPath(paths, id)
-		if not doc then
-			return `{id} is not on origin/main`
-		end
-		-- backlog: unblocked, confirmed, ranked; active (an issue or a raft): unblocked; done: written in a PR
-		if string.find(doc, "/done/", 1, true) then
-			return `record refuses {id}: it is done, and a done item's record is written in a pull request, never published`
-		elseif string.find(doc, "/active/", 1, true) and event ~= "unblocked" then
-			return `record refuses {id}: it is active, and only an unblocked row is published for it, not {event}`
-		end
-		local rec = string.gsub(doc, "[^/]+$", "provenance.md")
-		local text, why = provenance.record(read(rec), id, event, actor, detail, when)
-		if not text then
-			return why or "not a record"
-		end
-		return { { path = rec, content = text } }
-	end, function()
-		return `tracker: {id} record {event}`
-	end))
-	if not r.ok then
-		fail(r.reason or "publish failed")
-	end
-	mergeOrigin()
-end
-
--- c0263: `provenance <subcommand>`; today only `record`.
+-- c0263: `provenance <subcommand>`; today only `record`. (The helpers are inner functions: main.luau is at Luau's limit of
+-- 200 locals.)
 function cmd.provenance(pos: { string }, opts: { [string]: { string } })
+	-- The live actor of a command that records: --actor, then ZN_ACTOR, then an agent-session hint, then the git name.
+	local function liveActor(opts: { [string]: { string } }?): string
+		local flagList = if opts then opts["--actor"] else nil
+		local ident = sh.run("git", { "var", "GIT_AUTHOR_IDENT" })
+		local name = if ident.ok then string.match(ident.stdout, "^(.-) <") else nil
+		local hint = provenance.hint({
+			CLAUDECODE = process.env.CLAUDECODE,
+			AI_AGENT = process.env.AI_AGENT,
+			CURSOR_AGENT = process.env.CURSOR_AGENT,
+			GROK_SESSION_ID = process.env.GROK_SESSION_ID,
+			ZN_DISPATCH = process.env.ZN_DISPATCH,
+			CLAUDE_EFFORT = process.env.CLAUDE_EFFORT,
+		})
+		local actor, why =
+			provenance.resolve(if flagList then flagList[1] else nil, process.env.ZN_ACTOR, hint, name)
+		if not actor then
+			fail(why or "not an actor")
+		end
+		return actor :: string
+	end
+
+	-- c0263: `provenance record <id> <event> [--actor A] [--detail k=v]` publishes one row of an item's provenance.md
+	-- for the events other tickets call (unblocked, confirmed, ranked), built from origin/main's file. An active item
+	-- takes unblocked only (the validator). (`record` alone is the measured-cost row writer; this lives under `provenance`.)
+	local function recordRow(pos: { string }, opts: { [string]: { string } })
+		refuseInMainCheckout("provenance record")
+		if not publishing() then
+			fail("provenance record needs an origin remote (PICKMAN_PUBLISH=0 disables it)")
+		end
+		local id, event = pos[1], pos[2]
+		if not id or not event or not (store.isIssueId(id) or store.isRaftId(id)) then
+			fail(
+				`usage: provenance record <id> <{table.concat(provenance.PUBLISHED, "|")}> [--actor <actor>] [--detail <k=v>]`
+			)
+		end
+		if not table.find(provenance.PUBLISHED, event) then
+			fail(
+				`record publishes {table.concat(provenance.PUBLISHED, ", ")} only, not {event}: the other events are written by their own commands`
+			)
+		end
+		local actor = liveActor(opts)
+		local detail = if opts["--detail"] then opts["--detail"][1] else ""
+		local when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string
+		refuseStale()
+		local r = published(publish.commit(".", function(paths, read)
+			local doc = docPath(paths, id)
+			if not doc then
+				return `{id} is not on origin/main`
+			end
+			-- backlog: unblocked, confirmed, ranked; active (an issue or a raft): unblocked; done: written in a PR
+			if string.find(doc, "/done/", 1, true) then
+				return `record refuses {id}: it is done, and a done item's record is written in a pull request, never published`
+			elseif string.find(doc, "/active/", 1, true) and event ~= "unblocked" then
+				return `record refuses {id}: it is active, and only an unblocked row is published for it, not {event}`
+			end
+			local rec = string.gsub(doc, "[^/]+$", "provenance.md")
+			local text, why = provenance.record(read(rec), id, event, actor, detail, when)
+			if not text then
+				return why or "not a record"
+			end
+			return { { path = rec, content = text } }
+		end, function()
+			return `tracker: {id} record {event}`
+		end))
+		if not r.ok then
+			fail(r.reason or "publish failed")
+		end
+		mergeOrigin()
+	end
+
 	local sub = pos[1]
 	if sub ~= "record" then
 		fail("usage: provenance record <id> unblocked|confirmed|ranked [--actor <actor>] [--detail <k=v>]")
@@ -6810,6 +6828,147 @@ function cmd.capture(pos: { string }, _opts: { [string]: { string } })
 	end
 	print(`capture {c.sha} {c.path} {c.subject}{marks}`)
 	stdio.write(shown.stdout)
+end
+
+-- idea <id> [--text <rough>]: the idea stage. The author drafts, the challenge role challenges once,
+-- and the author answers the findings when there are any. The three calls go through modelstep,
+-- the same supervised start the dispatcher uses. Files land in the working tree.
+function cmd.idea(pos: { string }, opts: { [string]: { string } })
+	refuseInMainCheckout("idea")
+	local id = pos[1]
+	if not id or not string.match(id, "^[fdc]%d%d%d%d$") then
+		fail("usage: idea <id> [--text <rough>]")
+	end
+	local item = store.find(id)
+	if not item or item.kind ~= "issue" then
+		fail(`idea: {id} is not an issue in this checkout`)
+	end
+	local here = item :: store.Item
+	local doc = fs.readFile(here.doc)
+	local rough = if opts["--text"] and opts["--text"][1] then opts["--text"][1] else doc
+	local layers = models.walk(".", here.dir)
+	local calls = 0
+	local function physicalCache(): string
+		-- the outermost .cache this checkout lies in, else this checkout's own
+		local cwd = sh.trim(process.exec("pwd", { "-P" }).stdout) .. "/"
+		local at = string.find(cwd, "/.cache/", 1, true)
+		return if at then string.sub(cwd, 1, at + 7) else cwd .. ".cache/"
+	end
+	local function guard(bin: string): string?
+		if not checking() then
+			return nil
+		end
+		if string.sub(bin, 1, #physicalCache()) ~= physicalCache() then
+			local argv = { bin }
+			return `refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`
+		end
+		return nil
+	end
+	local function run(
+		resolved: models.Resolved,
+		prompt: string,
+		phase: string,
+		accept: (string) -> boolean
+	): (string, string)
+		local okDrive, drivenOrErr = pcall(function()
+			return modelstep.drive({
+				resolved = resolved,
+				prompt = prompt,
+				cwd = process.cwd,
+				stateDir = `.cache/idea-run/{id}/{phase}`,
+				path = process.env.PATH or "/usr/bin:/bin",
+				guard = guard,
+				accept = function(raw)
+					return accept(idea.prose(raw))
+				end,
+			})
+		end)
+		if not okDrive then
+			fail(tostring(drivenOrErr))
+		end
+		local driven = drivenOrErr :: modelstep.Driven
+		local branch, head = costrow.branchOf(".")
+		for _, a in driven.attempts do
+			calls += 1
+			local missing: { string } = {}
+			if not a.cpu then
+				table.insert(missing, "cpu")
+			end
+			if a.tokens <= 0 then
+				table.insert(missing, "tokens")
+			end
+			if not a.wall then
+				table.insert(missing, "wall")
+			end
+			costrow.append(".", {
+				ms = 0,
+				kind = "row",
+				phase = phase,
+				subject = `{id} {a.outcome}`,
+				wall = a.wall,
+				cpu = a.cpu,
+				tokens = if a.tokens > 0 then a.tokens else nil,
+				model = models.id(a.spec),
+				unmeasured = if #missing > 0 then table.concat(missing, ",") else nil,
+				id = id,
+				branch = branch,
+				head = head,
+			})
+			local shown = if a.tokens > 0 then tostring(a.tokens) else "unmeasured"
+			local cpuShown = if a.cpu then string.format("%.3f", a.cpu) else "unmeasured"
+			local wallShown = if a.wall then string.format("%.1f", a.wall) else "unmeasured"
+			local note = if a.outcome == "ok" then "" else ` {a.detail}`
+			print(
+				`idea: {phase} model {models.id(a.spec)} tokens {shown} wall {wallShown} cpu {cpuShown} {a.outcome}{note}`
+			)
+		end
+		if driven.outcome ~= "ok" then
+			fail(`idea: {phase}: {driven.detail}`)
+			return "", ""
+		end
+		return idea.prose(driven.prose), driven.model
+	end
+	local drafted: idea.Draft? = nil
+	local prose, wrote = run(models.resolve(layers, "idea"), idea.authorPrompt(rough), "idea", function(text)
+		drafted = idea.parseDraft(text)
+		return drafted ~= nil
+	end)
+	local challenge = models.resolve(layers, "idea-challenge")
+	challenge.authorModel = wrote
+	local findings: { idea.Finding } = {}
+	local verdict: string? = nil
+	run(challenge, idea.challengePrompt(prose), "idea-challenge", function(text)
+		local found, said = idea.parseReview(text)
+		findings = found
+		verdict = said
+		return said == "approve" or said == "revise"
+	end)
+	local body = drafted :: idea.Draft
+	local answers: { [string]: string } = {}
+	if not (verdict == "approve" and #findings == 0) then
+		local revised: idea.Draft? = nil
+		run(models.resolve(layers, "idea"), idea.answerPrompt(rough, findings), "idea", function(text)
+			revised = idea.parseDraft(text)
+			answers = idea.parseAnswers(text)
+			return revised ~= nil
+		end)
+		body = revised :: idea.Draft
+	end
+	local openLines = idea.openLines(findings, answers)
+	local reviewPath = `{here.dir}/idea-review-001.md`
+	fs.writeFile(here.doc, withFront(idea.apply(doc, body, openLines), "idea", "challenged"))
+	fs.writeFile(reviewPath, idea.reviewText(findings, verdict or "revise"))
+	local refutePath = `{here.dir}/idea-refute-001.md`
+	if #findings > 0 then
+		fs.writeFile(refutePath, idea.refuteText(findings, answers))
+		print(refutePath)
+	end
+	print(here.doc)
+	print(reviewPath)
+	print(`idea: calls {calls}`)
+	print(
+		`idea: verdict {verdict}; commit these and push them to origin/main before ./zn status {id} preparing`
+	)
 end
 
 local function optNum(opts: { [string]: { string } }, name: string): number?
