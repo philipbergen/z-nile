@@ -1,10 +1,20 @@
 # Which model runs each model step (c0117). Files stack like .gitignore: a .models.toml closer to the work (a
 # project's home, an issue's folder) replaces only the keys it sets. A step about one issue reads that issue's walk; a
 # step about a raft takes, for each CLI, the strongest of its members' specs (higher rank, then larger max_tokens).
-# Only the CLIs below are supported, and nothing defaults: a skill no file names is an error. See zz-rules, Dispatch.
+# Only the CLIs below are supported. Nothing defaults, except that a review activity no file names takes the `zz-review`
+# table (the expensive one); any other activity no file names is an error. See zz-rules, Dispatch.
 #
 # The order, the models, the ranks and the caps below: decided with the user (c0117 G1, 2026-10-25: "Accept as written").
 # max_tokens counts input + cache writes + output (cache reads are left out); the step is killed when it passes it.
+#
+# Models per activity (c0261): each command or activity of a command has its own table, `[<activity>.<cli>]`, naming
+# real model names (never aliases) and effort that CLI runs it with. The work on the way and the review rounds on the way run
+# cheap; every final review (the design review, the raft review, the final review of the whole stack, the idea review)
+# runs the expensive model; z-wait, which only babysits a poll, runs the cheapest. A table is added only where an activity
+# really runs a different model. The model cells are the user's (2026-11-08); the capture's names were examples. A
+# `fallback` (through agent only, where the ids carry their effort) lists the models of the same CLI to try, in order, when
+# the one before is not available. See zz-rules,
+# Dispatch, Models per activity.
 
 # The CLI priority order: the dispatcher moves down it only when a CLI fails on quota.
 order = ["claude", "grok", "agent"]
@@ -18,32 +28,34 @@ stall_seconds = 300
 # the same limit while a tool call runs (a full gate is quiet for minutes)
 tool_seconds = 900
 
+# Sharpening an idea into a ticket.
 [z-ticket.claude]
-model = "claude-sonnet-5"
+model = "claude-sonnet-5-5"
+effort = "high"
 rank = 2
 runtime = "claude-cli"
 max_tokens = 300000
 
 [z-ticket.grok]
-model = "grok-4.7"
-effort = "medium"
+model = "grok-4.6"
+effort = "high"
 rank = 2
 runtime = "grok-cli"
 max_tokens = 300000
 
 [z-ticket.agent]
-model = "claude-sonnet-5-thinking-high"
+model = "cursor-grok-4.6-high"
 rank = 2
 runtime = "cursor-cli"
-# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
 max_calls = 200
-# and a wall-time ceiling, since a stream can hide its calls (fail closed)
 max_minutes = 240
 max_tokens = 300000
 
+# Authoring a design: not on the cheap model (the user, 2026-11-08: Opus 5.5 at medium on claude, grok-4.7 at high on grok and
+# agent); its review rounds are zz-review-design and, last, the final round.
 [z-design.claude]
 model = "claude-opus-5-5"
-effort = "high"
+effort = "medium"
 rank = 3
 runtime = "claude-cli"
 max_tokens = 3000000
@@ -56,64 +68,108 @@ runtime = "grok-cli"
 max_tokens = 3000000
 
 [z-design.agent]
-model = "claude-opus-5-5-high"
+model = "grok-4.7-high"
 rank = 3
 runtime = "cursor-cli"
-# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
 max_calls = 200
-# and a wall-time ceiling, since a stream can hide its calls (fail closed)
 max_minutes = 240
 max_tokens = 3000000
 
+# Grouping prepared issues into rafts.
 [z-raft.claude]
-model = "claude-sonnet-5"
+model = "claude-sonnet-5-5"
+effort = "high"
 rank = 2
 runtime = "claude-cli"
 max_tokens = 600000
 
 [z-raft.grok]
-model = "grok-4.7"
-effort = "medium"
+model = "grok-4.6"
+effort = "high"
 rank = 2
 runtime = "grok-cli"
 max_tokens = 600000
 
 [z-raft.agent]
-model = "claude-sonnet-5-thinking-high"
+model = "cursor-grok-4.6-high"
 rank = 2
 runtime = "cursor-cli"
-# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
 max_calls = 200
-# and a wall-time ceiling, since a stream can hide its calls (fail closed)
 max_minutes = 240
 max_tokens = 600000
 
+# Executing a raft.
 [z-run.claude]
-model = "claude-opus-5-5"
+model = "claude-sonnet-5-5"
 effort = "high"
-rank = 3
+rank = 2
 runtime = "claude-cli"
 max_tokens = 12000000
 
 [z-run.grok]
-model = "grok-4.7"
+model = "grok-4.6"
 effort = "high"
-rank = 3
+rank = 2
 runtime = "grok-cli"
 max_tokens = 12000000
 
 [z-run.agent]
-model = "claude-opus-5-5-high"
-rank = 3
+model = "cursor-grok-4.6-high"
+rank = 2
 runtime = "cursor-cli"
-# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
 max_calls = 200
-# and a wall-time ceiling, since a stream can hide its calls (fail closed)
 max_minutes = 240
 max_tokens = 12000000
 
-# The review model belongs to the CLI (the user's decision): Opus through claude or agent, any grok model at xhigh
-# through grok.
+# A layer's code review, which the final review of the whole stack follows (zz-review below).
+[zz-review-code.claude]
+model = "claude-sonnet-5-5"
+effort = "high"
+rank = 2
+runtime = "claude-cli"
+max_tokens = 2000000
+
+[zz-review-code.grok]
+model = "grok-4.6"
+effort = "high"
+rank = 2
+runtime = "grok-cli"
+max_tokens = 2000000
+
+[zz-review-code.agent]
+model = "cursor-grok-4.6-high"
+rank = 2
+runtime = "cursor-cli"
+max_calls = 200
+max_minutes = 240
+max_tokens = 2000000
+
+# A stream review, always on the way (a cheap model).
+[zz-review-stream.claude]
+model = "claude-sonnet-5-5"
+effort = "high"
+rank = 2
+runtime = "claude-cli"
+max_tokens = 2000000
+
+[zz-review-stream.grok]
+model = "grok-4.6"
+effort = "high"
+rank = 2
+runtime = "grok-cli"
+max_tokens = 2000000
+
+[zz-review-stream.agent]
+model = "cursor-grok-4.6-high"
+rank = 2
+runtime = "cursor-cli"
+max_calls = 200
+max_minutes = 240
+max_tokens = 2000000
+
+# Every final review: the design review, the raft review, the final review of the whole stack and the idea review, and any
+# review activity no table names. The review rule binds it: Opus through claude, a grok model at xhigh through grok, Opus first
+# through agent (then its fallbacks: Opus, a kimi model, a grok model at xhigh).
 [zz-review.claude]
 model = "claude-opus-5-5"
 rank = 4
@@ -129,10 +185,33 @@ max_tokens = 2000000
 
 [zz-review.agent]
 model = "claude-opus-5-5-high"
+# the user (2026-11-08): opus-5.5-high if available, else kimi, else grok-4.7-xhigh (`agent --list-models` lists
+# kimi-k3-high and kimi-k3-max, no "kimi 3.1 pro": the closest listed is the stand-in, for the user's veto)
+fallback = ["kimi-k3-high", "grok-4.7-xhigh"]
 rank = 4
 runtime = "cursor-cli"
-# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
 max_calls = 200
-# and a wall-time ceiling, since a stream can hide its calls (fail closed)
 max_minutes = 240
 max_tokens = 2000000
+
+# The waiting step: a cheap model babysits one bounded poll of a PR (its checks, its merge).
+[z-wait.claude]
+model = "claude-haiku-5-5"
+rank = 1
+runtime = "claude-cli"
+max_tokens = 200000
+
+[z-wait.grok]
+model = "grok-4.5"
+effort = "low"
+rank = 1
+runtime = "grok-cli"
+max_tokens = 200000
+
+[z-wait.agent]
+model = "composer-2.5"
+rank = 1
+runtime = "cursor-cli"
+max_calls = 100
+max_minutes = 240
+max_tokens = 200000

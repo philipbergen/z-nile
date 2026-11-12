@@ -57,6 +57,6 @@ return t.spec("c0261 cost per model", function(it)
 		local text: string = l.renderByModel(l.byModel({ row("claude-opus-5-5", 50, 2, "design-review") }))
 		t.expect(string.find(text, "by model", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(text, "claude-opus-5-5", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(text, "50", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(text, "| claude-opus-5-5 | 50 | 2.0 | 1 |", 1, true) ~= nil).toBe(true) -- tokens, minutes, rows
 	end)
 end)

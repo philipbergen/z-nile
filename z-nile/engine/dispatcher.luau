@@ -89,6 +89,7 @@ export type State = {
 	pushed: { string }, -- the commits its publish broker pushed to main
 	history: { Attempt },
 	pending: { Row },
+	waitedHead: string?, -- the head the last z-wait waited on (c0261): a gate waits once per head
 }
 
 local HOME = ".cache/dispatch"
@@ -338,16 +339,16 @@ function dispatcher.resolve(skill: string, id: string, project: string?): models
 		if not p then
 			error(`no project {tostring(project)} in {projects.FILE}`, 0)
 		end
-		return models.resolve(walk((p :: projects.Project).home), skill)
+		return models.resolveActivity(walk((p :: projects.Project).home), skill)
 	end
 	local item = store.get(id)
 	if item.kind == "issue" then
-		return models.resolve(walk(item.dir), skill)
+		return models.resolveActivity(walk(item.dir), skill)
 	end
-	local own = models.resolve(walk(item.dir), skill)
+	local own = models.resolveActivity(walk(item.dir), skill)
 	local members: { models.Resolved } = {}
 	for _, m in store.members(id) do
-		table.insert(members, models.resolve(walk(m.dir), skill))
+		table.insert(members, models.resolveActivity(walk(m.dir), skill))
 	end
 	return models.forRaft(own, members)
 end
@@ -361,7 +362,12 @@ function dispatcher.settings(id: string): (models.Settings, string?)
 	if ok then
 		return r :: models.Settings, nil
 	end
-	return { autoMerge = {}, stallSeconds = models.STALL_SECONDS, toolSeconds = models.TOOL_SECONDS },
+	return {
+		autoMerge = {},
+		stallSeconds = models.STALL_SECONDS,
+		toolSeconds = models.TOOL_SECONDS,
+		waitMinutes = models.WAIT_MINUTES,
+	},
 		tostring(r)
 end
 
@@ -521,7 +527,31 @@ local function record(
 				cpu = a.cpu,
 			}
 			local origin = ctx.origin(id)
-			if phase == "deliver" or (origin and origin.state ~= "backlog") then
+			if phase == "design-review" and reviewer and string.sub(id, 1, 1) == "R" then
+				-- a raft-mode review of a NEW raft (c0261, design review 006 F1): origin/main does not know its members
+				-- yet (their `raft:` lines ride in the rafting PR), so `zn-dispatch`, synced to main, would find none and
+				-- leave the row pending; the author's worktree has them. Written from there, published to origin/main,
+				-- and never also kept pending, so `flush` cannot write it a second time.
+				local ok, out, err = zn(cwd, {
+					"spend",
+					id,
+					"--phase",
+					phase,
+					"--model",
+					a.model,
+					"--note",
+					note,
+				}, true)
+				if ok then
+					print(`spend: {id} {phase} {a.tokens} tokens {a.model}`)
+				else
+					-- the author runs this itself (its model id is the one printed); it is not also kept pending, so
+					-- `flush` cannot write the same row a second time after the merge
+					stdio.ewrite(
+						`dispatch: could not record {id}'s {phase} row from the author's worktree ({err}{out}): run ./zn spend {id} --phase {phase} --model {a.model} --note {note}\n`
+					)
+				end
+			elseif phase == "deliver" or (origin and origin.state ~= "backlog") then
 				table.insert(st.pending, row)
 			else
 				local ok, out, err = publishMeasured(ctx, row)
@@ -873,6 +903,61 @@ local function keepBeating(dir: string): () -> ()
 	end
 end
 
+-- The z-wait poll: one run of at most WAIT_SECONDS, polled every WAIT_EVERY seconds; the prompt repeats it up to
+-- ceil(wait_minutes * 60 / WAIT_SECONDS) times.
+local WAIT_SECONDS = 600
+local WAIT_EVERY = 30
+
+-- The models a CLI lists (c0261): `agent --list-models`, `grok models`; claude has no list. Read once per run, by the
+-- CLI's own binary (already resolved, and past the .cache fence). nil means "assume available": a CLI with no list, a
+-- failed or empty answer (one stderr line), a CLI that cannot run. The ids are the first word of each line that starts like
+-- one; any other line (a JSON answer, a banner) is not a model.
+local modelLists: { [string]: { string }? | boolean } = {}
+local LIST_SECONDS = 40
+
+local LIST_ARGS: { [string]: { string } } =
+	{ ["cursor-cli"] = { "--list-models" }, ["grok-cli"] = { "models" } }
+
+function dispatcher.parseModelList(text: string): { string }
+	local out: { string } = {}
+	for line in string.gmatch(text, "[^\r\n]+") do
+		local clean = string.gsub(line, "\27%[[%d;]*m", "")
+		local id = string.match(clean, "^%s*([%w][%w%._%-]*)%s*$")
+			or string.match(clean, "^%s*([%w][%w%._%-]*)%s+%-%s")
+		if id then
+			table.insert(out, id)
+		end
+	end
+	return out
+end
+
+local function modelList(spec: models.Spec, bin: string): { string }?
+	local args = LIST_ARGS[spec.runtime]
+	if not args then
+		return nil
+	end
+	local key = spec.runtime
+	local seen = modelLists[key]
+	if seen ~= nil then
+		return if type(seen) == "table" then seen else nil
+	end
+	local argv = { "-e", `alarm {LIST_SECONDS}; exec @ARGV`, bin }
+	for _, a in args do
+		table.insert(argv, a)
+	end
+	local r = process.exec("perl", argv)
+	local list = if r.ok then dispatcher.parseModelList(r.stdout) else {}
+	if #list == 0 then
+		stdio.ewrite(
+			`dispatch: the {spec.cli} CLI's model list could not be read ({if r.ok then "empty" else "failed"}): its models are assumed available\n`
+		)
+		modelLists[key] = false
+		return nil
+	end
+	modelLists[key] = list
+	return list
+end
+
 function dispatcher.modelStep(
 	ctx: Ctx,
 	st: State,
@@ -882,7 +967,9 @@ function dispatcher.modelStep(
 ): string
 	local mode = opts["--mode"] and opts["--mode"][1]
 	local project = opts["--project"] and opts["--project"][1]
-	local resolved = dispatcher.resolve(step, id, project)
+	-- the activity this run is (c0261): a review by its mode
+	local activity = dispatch.activityOf(step, mode)
+	local resolved = dispatcher.resolve(activity, id, project)
 	local tries = models.tries(resolved)
 	local stateDir = st.dir
 	local cwd: string
@@ -899,6 +986,8 @@ function dispatcher.modelStep(
 		cwd = worktree(ctx, `prep-{store.get(id).slug}`)
 	elseif step == "z-raft" then
 		cwd = worktree(ctx, `raft-{opts["--for"] and opts["--for"][1] or string.lower(id)}`)
+	elseif step == "z-wait" and opts["--gate"] then
+		cwd = worktree(ctx, if opts["--gate"][1] == "prep" then `prep-{store.get(id).slug}` else `raft-{id}`)
 	else
 		cwd = worktree(ctx, id)
 	end
@@ -920,7 +1009,20 @@ function dispatcher.modelStep(
 		end
 		streamDir = store.get(raftId).dir
 	end
+	local waitCommand: string? = nil
+	local waitTimes = 1
+	if step == "z-wait" then
+		local pr = tonumber(opts["--pr"] and opts["--pr"][1] or "")
+		local until_ = opts["--until"] and opts["--until"][1]
+		if not pr or not until_ then
+			error("z-wait needs --pr <n> and --until checks|mergeable|merged", 0)
+		end
+		waitCommand = dispatch.waitCommand(until_, pr :: number, WAIT_SECONDS, WAIT_EVERY)
+		waitTimes = math.ceil(resolved.settings.waitMinutes * 60 / WAIT_SECONDS)
+	end
 	local prompt = dispatch.prompt({
+		waitCommand = waitCommand,
+		waitTimes = waitTimes,
 		step = step,
 		id = id,
 		mode = mode,
@@ -1034,6 +1136,10 @@ function dispatcher.modelStep(
 				`refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`
 			)
 			break
+		end
+		if not models.available(spec, modelList(spec, bin :: string)) then
+			skipped(spec, `model {models.id(spec)} not listed by {spec.cli}`)
+			continue
 		end
 		-- main is vetted since the watermark before every step (the user's "Persisted watermark")
 		local unvetted = if serving then dispatcher.vetMain(ctx) else nil
@@ -1306,8 +1412,18 @@ function dispatcher.parsePr(text: string?): dispatch.Pr?
 	end
 	local checks = j.statusCheckRollup
 	local green = type(checks) == "table" and #checks > 0
+	local failed = false
 	for _, c in (checks or {}) :: { any } do
 		local v = c.conclusion or c.state
+		if
+			v == "FAILURE"
+			or v == "ERROR"
+			or v == "CANCELLED"
+			or v == "TIMED_OUT"
+			or v == "ACTION_REQUIRED"
+		then
+			failed = true
+		end
 		if v ~= "SUCCESS" and v ~= "NEUTRAL" and v ~= "SKIPPED" then
 			green = false
 		end
@@ -1318,6 +1434,9 @@ function dispatcher.parsePr(text: string?): dispatch.Pr?
 		draft = j.isDraft == true,
 		green = green,
 		mergeable = j.mergeable == "MERGEABLE",
+		conflicting = j.mergeable == "CONFLICTING",
+		mergeState = if type(j.mergeable) == "string" then j.mergeable else "",
+		failed = failed,
 		head = if type(j.headRefOid) == "string" then j.headRefOid else "",
 	}
 end
@@ -1804,6 +1923,7 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 		uncovered = uncovered,
 		autoMerge = settings.autoMerge,
 		description = description,
+		waitedHead = st.waitedHead,
 	}
 end
 
@@ -1980,9 +2100,18 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 					o2["--before"] = ctx.originIssueIds()
 				elseif step == "z-raft" then
 					o2["--for"] = { id }
+				elseif step == "z-wait" then
+					o2["--pr"] = { tostring(action.pr) }
+					o2["--until"] = { action.waitFor or "checks" }
+					o2["--gate"] = { action.gate or "prep" }
 				end
 				local oldDir = st.dir
 				dispatcher.modelStep(ctx, st, step, target, o2)
+				if step == "z-wait" then
+					-- whatever its outcome: the gate waits once per head; the PR is read again at the next action
+					st.waitedHead = action.head
+					save(st)
+				end
 				if step == "z-ticket" and st.outcome == "ok" then
 					id = st.id
 					description = nil
@@ -2044,6 +2173,7 @@ local mainInner: (ctx: Ctx, pos: { string }, opts: { [string]: { string } }) -> 
 
 -- `./zn dispatch …`; its own fetch refs go at its end, whatever happened (review 005 F1)
 function dispatcher.main(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): number
+	modelLists = {} -- each CLI's model list is read once per run
 	local ok, code = pcall(mainInner, ctx, pos, opts)
 	pcall(dropRefs, ctx.mainRoot())
 	if not ok then
@@ -2243,8 +2373,20 @@ function dispatcher.oneStep(
 		if s.kind == "script" then
 			print(`run={table.concat(dispatch.scriptArgv(step, id), " ")}`)
 		else
-			for _, line in dispatch.describe(dispatcher.resolve(step, id, nil)) do
+			local activity = dispatch.activityOf(step, mode)
+			if activity ~= step then
+				print(`activity={activity}`)
+			end
+			for _, line in dispatch.describe(dispatcher.resolve(activity, id, nil)) do
 				print(line)
+			end
+			if step == "z-wait" then
+				local pr = tonumber(opts["--pr"] and opts["--pr"][1] or "")
+				local what = opts["--until"] and opts["--until"][1]
+				if not pr or not what then
+					error("z-wait needs --pr <n> and --until checks|mergeable|merged", 0)
+				end
+				print(`wait={dispatch.waitCommand(what, pr :: number, WAIT_SECONDS, WAIT_EVERY)}`)
 			end
 		end
 		return 0

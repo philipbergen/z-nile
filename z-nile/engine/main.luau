@@ -12,6 +12,7 @@ local contract = require("./contract")
 local costrow = require("./costrow")
 local dispatchLib = require("./dispatch")
 local dispatcherLib = require("./dispatcher")
+local finalround = require("./finalround")
 local fs = require("@lune/fs")
 local gateLib = require("./gate")
 local idsLib = require("./ids")
@@ -98,7 +99,7 @@ usage: ./zn <command> ...
   record --id <id> --phase <phase> [--report <file>] [--wall <s>] [--cpu <s>] [--ai <s>] [--tokens <n>]
                                                 write one measured row (the tool's own; not for typed numbers)
   dispatch <id> [--dry-run]                     run the chain on an item from its tracker state (ticket, design, raft,
-                                                ready, run), stopping at a merge gate, questions.md or a failure
+                                                ready, run), waiting at a gate for its checks and merging, stopping at a block, questions.md or a failure
   dispatch new "<description>" [--project <name>] [--dry-run]
                                                 capture a new issue (z-ticket) and run its chain
   dispatch <step> <id> [--mode design|code|raft] [--dry-run]
@@ -1445,6 +1446,54 @@ local function sectionWritten(text: string, heading: string): boolean
 	return string.match((string.gsub(body, "<!%-%-.-%-%->", "")), "%S") ~= nil
 end
 
+-- The refusal for the last review round of an item's or raft's folder, or nil (c0261, "Commands refuse"): see
+-- finalround.luau. `kind` is "design" (status prepared) or "final" (done); the rows are this checkout's spend.md and
+-- spend.d of `rowDirs` (a row the dispatcher published arrives with ./zn sync). A repository with no origin, or whose
+-- base has no root .models.toml, has no final-review models to hold a round to; an origin that cannot be read, a base
+-- whose history cannot be read or a spend file that does not parse is a refusal of its own, never "not enforced".
+local function finalRoundRefusal(
+	kind: finalround.Kind,
+	dir: string,
+	rowDirs: { string },
+	owner: string,
+	requireRound: boolean
+): string?
+	local files = if fs.isDir(dir) then fs.readDir(dir) else {}
+	if finalround.lastRound(files, kind) == nil and not requireRound then
+		return nil
+	end
+	if not sh.run("git", { "remote", "get-url", "origin" }).ok then
+		return nil
+	end
+	if not sh.run("git", { "rev-parse", "--verify", "--quiet", "origin/main" }).ok then
+		return "origin/main cannot be read: the last review round cannot be checked (./zn sync, then try again)"
+	end
+	if not sh.run("git", { "cat-file", "-e", "origin/main:.models.toml" }).ok then
+		return nil
+	end
+	local landed = sh.run("git", {
+		"log",
+		"--diff-filter=A",
+		"--format=%ct",
+		"--reverse",
+		"origin/main",
+		"--",
+		"z-nile/engine/finalround.luau",
+	})
+	if not landed.ok then
+		return "origin/main's history cannot be read: the last review round cannot be checked"
+	end
+	local rows, why = finalround.rowsOf(rowDirs, spend.rowsIn)
+	if not rows then
+		return why
+	end
+	-- the landing as a UTC minute, comparable with the rows' own `when` (content, not commit times)
+	local landedCt = tonumber(string.match(landed.stdout, "^(%d+)"))
+	local landedWhen = if landedCt then os.date("!%Y-%m-%d %H:%M", landedCt) else nil
+	local enforced = finalround.enforced(finalround.firstWhen(rows, kind), landedWhen)
+	return finalround.check(kind, files, rows, enforced, owner, requireRound)
+end
+
 local function originPaths(): { string }
 	sh.git({ "fetch", "--quiet", "origin", "main" })
 	local ok, paths = originTree()
@@ -1588,6 +1637,21 @@ local function setStatus(id: string, to: string)
 				local gap = designOpen(localItem)
 				if gap then
 					return `{t}: {gap}`
+				end
+				-- "Commands refuse" (c0261): the one design review round ran a final-review model. An issue's round
+				-- file and rows are this checkout's; a raft's round is spread over its members' rows under the
+				-- subject "<R-id>: design-review-NNN"
+				local rowDirs: { string } = {}
+				if store.isRaftId(t) then
+					for _, m in store.members(t) do
+						table.insert(rowDirs, m.dir)
+					end
+				else
+					table.insert(rowDirs, localItem.dir)
+				end
+				local refusal = finalRoundRefusal("design", localItem.dir, rowDirs, t, not store.isRaftId(t))
+				if refusal then
+					return `{t}: {refusal}`
 				end
 			end
 			if
@@ -4977,6 +5041,16 @@ function cmd.done(pos: { string })
 	if problem then
 		fail(problem)
 	end
+	-- "Commands refuse" (c0261): the final review ran a final-review model; its row is in the members' spend (./zn
+	-- commit writes it there on this branch; the raft's own spend.md is a summary, not rows)
+	local rowDirs: { string } = {}
+	for _, it in store.members(raft.id) do
+		table.insert(rowDirs, it.dir)
+	end
+	local refusal = finalRoundRefusal("final", raft.dir, rowDirs, raft.id, false)
+	if refusal then
+		fail(`{raft.id}: {refusal}`)
+	end
 	if not runCheck(raft) then
 		fail(`{raft.id} check.sh failed; not done`)
 	end
@@ -6273,6 +6347,11 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	if opts["--note"] and opts["--note"][1] ~= "" then
 		note = opts["--note"][1]
 	end
+	-- a raft's design round is spread over its members' spend.md; its subject carries the raft's id so that no member's
+	-- own round of the same number can stand in for it (c0261, finalround.luau)
+	if store.isRaftId(id) and phase == "design-review" then
+		note = `{id}: {note}`
+	end
 	local targets: { store.Item } = {}
 	local raftItem: store.Item? = nil
 	if store.isRaftId(id) then
@@ -6439,9 +6518,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			local got = reading :: any
 			ai = got.ai
 			tok = got.tokens
-			if got.model then
-				modelId = got.model
-			end
+			modelId = spend.chooseModel(model, got.model)
 			if type(got.note) == "string" and got.note ~= "" then
 				noteText = `{note} {got.note}`
 			end
@@ -7177,6 +7254,19 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 	print(`  by lines added:  {pct(d.added, f.added)}`)
 	print(`  by issues:       {pct(d.count, f.count)}`)
 	print(`  by agent time:   {pct(d.minutes, f.minutes)}`)
+	-- the cost per model (c0261): tokens, minutes and rows per model id over every issue's spend.md and spend.d, last so that no
+	-- table above changes its shape
+	local modelRows: { ledger.Row } = {}
+	for _, issue in store.all("issue") do
+		local okp, got = pcall(spend.rowsIn, issue.dir)
+		if okp then
+			for _, r in got :: { ledger.Row } do
+				table.insert(modelRows, r)
+			end
+		end
+	end
+	print("")
+	print(ledger.renderByModel(ledger.byModel(modelRows)))
 end
 
 function cmd.board(pos: { string }, opts: { [string]: { string } })

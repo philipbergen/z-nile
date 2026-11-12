@@ -250,7 +250,7 @@ function spend.appendRow(issue: store.Item, share: Share, subject: string, phase
 end
 
 -- spend.md plus every spend.d file. Measured rows are appended to one TSV per writer; an older markdown file still counts.
-local function rowsIn(dir: string): { ledger.Row }
+function spend.rowsIn(dir: string): { ledger.Row }
 	local rows: { ledger.Row } = {}
 	local path = `{dir}/spend.md`
 	if fs.isFile(path) then
@@ -268,6 +268,15 @@ local function rowsIn(dir: string): { ledger.Row }
 	return rows
 end
 
+-- The model a row records (c0261): the one the author typed with --model wins; the measured session model (the first
+-- model found in the span's transcripts) fills in only when none was typed.
+function spend.chooseModel(typed: string?, measured: string?): string?
+	if typed ~= nil then
+		return typed
+	end
+	return measured
+end
+
 -- Raft spend.md: a summary over every issue that names this raft (members and emergent), plus each
 -- phase that has records. A snapshot written by commit and done; metrics reads the members.
 function spend.writeRaft(raft: store.Item)
@@ -279,7 +288,7 @@ function spend.writeRaft(raft: store.Item)
 	}
 	local all: { ledger.Row } = {}
 	for _, issue in store.members(raft.id) do
-		local rows = rowsIn(issue.dir)
+		local rows = spend.rowsIn(issue.dir)
 		local t = ledger.sum(rows)
 		local emergent = store.readFront(issue.doc).emergent == "true"
 		table.insert(

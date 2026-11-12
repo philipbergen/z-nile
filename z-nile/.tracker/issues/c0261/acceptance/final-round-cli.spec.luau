@@ -1,8 +1,8 @@
 --!strict
 -- c0261 ("Commands refuse"): `./zn status <id> prepared` refuses an item whose last design review round was recorded on
--- a model that is not of a final-review kind, and goes on once a row for that round is. The rows are origin/main's
--- (./zn spend publishes there; this worktree has no spend.md), the model is judged by kind (a new Opus id passes), and a
--- repository whose base has no root .models.toml holds no round to it. Fixture under .cache/c0261-final-round
+-- a model that is not of a final-review kind, and goes on once a row for that round is. The rows are this checkout's
+-- (./zn spend commits them in spend.d on the branch; a row the dispatcher published arrives with ./zn sync), the model
+-- is judged by kind (a new Opus id passes), and a repository whose base has no root .models.toml holds no round to it. Fixture under .cache/c0261-final-round
 -- (tests/lib/trackerfix): a clone with an origin, whose seed commit holds the engine, finalround.luau included.
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -51,10 +51,6 @@ return t.spec("c0261 status prepared refuses a last design round not on a final-
 					id,
 					"--phase",
 					"design-review",
-					"--time",
-					"4",
-					"--tokens",
-					"50",
 					"--model",
 					model,
 					"--note",
@@ -62,7 +58,7 @@ return t.spec("c0261 status prepared refuses a last design round not on a final-
 				})
 			end
 			spend("claude-sonnet-5-5-high")
-			t.expect(fs.isFile(`{dir}/spend.md`)).toBe(false) -- the row is on origin/main only: that is where the check reads
+			t.expect(fs.isDir(`{dir}/spend.d`)).toBe(true) -- the measured row is this branch's: that is where the check reads
 			local refused = trackerfix.tr(f, wt, { "status", id, "prepared" })
 			t.expect(refused.ok).toBe(false)
 			t.expect(has(refused.stdout .. refused.stderr, "design-review-001")).toBe(true)
@@ -99,10 +95,6 @@ return t.spec("c0261 status prepared refuses a last design round not on a final-
 				id,
 				"--phase",
 				"design-review",
-				"--time",
-				"4",
-				"--tokens",
-				"50",
 				"--note",
 				"design-review-001",
 			})
@@ -115,10 +107,6 @@ return t.spec("c0261 status prepared refuses a last design round not on a final-
 				id,
 				"--phase",
 				"design-review",
-				"--time",
-				"4",
-				"--tokens",
-				"50",
 				"--model",
 				"claude-opus-5-5",
 				"--note",
@@ -196,6 +184,11 @@ return t.spec("c0261 status prepared refuses a last design round not on a final-
 			local spendPath = `pickman/.tracker/issues/{id}/spend.md`
 			-- reviewed long before the rule landed, with no model recorded: not locked out
 			trackerfix.elsewhere(f, { [spendPath] = rowDated("2020-01-01 00:00") }, "old round")
+			-- the row is only on origin/main (the dispatcher published it): refused with the sync hint until ./zn sync
+			local unsynced = trackerfix.tr(f, wt, { "status", id, "prepared" })
+			t.expect(unsynced.ok).toBe(false)
+			t.expect(has(unsynced.stdout .. unsynced.stderr, "./zn sync")).toBe(true)
+			trackerfix.trOk(f, wt, { "sync" })
 			trackerfix.trOk(f, wt, { "status", id, "prepared" })
 		end
 	)
@@ -230,6 +223,7 @@ return t.spec("c0261 status prepared refuses a last design round not on a final-
 			} :: any,
 		})
 		trackerfix.elsewhere(f, { [`pickman/.tracker/issues/{id}/spend.md`] = text }, "new round")
+		trackerfix.trOk(f, wt, { "sync" })
 		local r = trackerfix.tr(f, wt, { "status", id, "prepared" })
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stdout .. r.stderr, "no model")).toBe(true)

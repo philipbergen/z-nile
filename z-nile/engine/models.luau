@@ -33,6 +33,8 @@ models.GATES = { "prep", "raft" }
 models.STALL_SECONDS = 300
 -- the stall limit while a tool call runs (a full gate is quiet for minutes)
 models.TOOL_SECONDS = 900
+-- how long the chain waits at a gate for its checks (c0261), in minutes
+models.WAIT_MINUTES = 60
 local FIELDS = {
 	model = "string",
 	effort = "string",
@@ -41,6 +43,7 @@ local FIELDS = {
 	max_tokens = "count",
 	max_calls = "count",
 	max_minutes = "count",
+	fallback = "models",
 }
 -- the CLIs whose stream has no running token count: their step stops after `max_calls` model calls (the user's decision,
 -- 2026-10-21: "Cap model calls, record real total"); a spec of theirs without it is an error, never unlimited
@@ -56,8 +59,10 @@ export type Spec = {
 	maxTokens: number,
 	maxCalls: number?, -- the model-call cap of a CLI with no running token count (agent)
 	maxMinutes: number?, -- its wall-time ceiling beside max_calls (review 003 F7: fail closed)
+	fallback: { string }?, -- the models of the same CLI to try, in order, when `model` is not available (c0261)
 }
-export type Settings = { autoMerge: { string }, stallSeconds: number, toolSeconds: number }
+export type Settings =
+	{ autoMerge: { string }, stallSeconds: number, toolSeconds: number, waitMinutes: number }
 -- One parsed file: its order and settings when it sets them, and its skill tables (skill -> cli -> field -> value).
 export type Layer = {
 	path: string,
@@ -136,6 +141,11 @@ function models.parse(text: string, path: string): Layer
 						end
 					end
 					layer.settings.autoMerge = table.clone(v)
+				elseif k == "wait_minutes" then
+					if not count(v) then
+						error(`{path}: dispatch.wait_minutes is a whole number of minutes, at least 1`, 0)
+					end
+					layer.settings.waitMinutes = v
 				elseif k == "stall_seconds" or k == "tool_seconds" then
 					if not count(v) then
 						error(`{path}: dispatch.{k} is a whole number of seconds, at least 1`, 0)
@@ -143,7 +153,7 @@ function models.parse(text: string, path: string): Layer
 					layer.settings[if k == "stall_seconds" then "stallSeconds" else "toolSeconds"] = v
 				else
 					error(
-						`{path}: dispatch.{k} is not a setting (auto_merge, stall_seconds, tool_seconds)`,
+						`{path}: dispatch.{k} is not a setting (auto_merge, stall_seconds, tool_seconds, wait_minutes)`,
 						0
 					)
 				end
@@ -172,7 +182,19 @@ function models.parse(text: string, path: string): Layer
 							0
 						)
 					end
-					if want == "count" and not count(v) then
+					if want == "models" then
+						if type(v) ~= "table" or #v == 0 then
+							error(`{path}: {key}.{cli}.{field} is a list of model ids`, 0)
+						end
+						for _, id in v do
+							if type(id) ~= "string" or not ledger.isModel(id) then
+								error(
+									`{path}: {key}.{cli}.{field} names {tostring(id)}, not a model id the ledger takes`,
+									0
+								)
+							end
+						end
+					elseif want == "count" and not count(v) then
 						error(`{path}: {key}.{cli}.{field} is a whole number, at least 1`, 0)
 					elseif want == "string" and (type(v) ~= "string" or v == "") then
 						error(`{path}: {key}.{cli}.{field} is a non-empty string`, 0)
@@ -231,10 +253,14 @@ end
 -- The settings on a walk, each replaced by the closest file that sets it. An unset auto_merge is no auto-merge: a
 -- merge the dispatcher makes itself must be asked for (c0117 review 001 F7).
 function models.settings(layers: { Layer }): Settings
-	local s: Settings =
-		{ autoMerge = {}, stallSeconds = models.STALL_SECONDS, toolSeconds = models.TOOL_SECONDS }
+	local s: Settings = {
+		autoMerge = {},
+		stallSeconds = models.STALL_SECONDS,
+		toolSeconds = models.TOOL_SECONDS,
+		waitMinutes = models.WAIT_MINUTES,
+	}
 	for _, layer in layers do
-		for _, k in { "autoMerge", "stallSeconds", "toolSeconds" } do
+		for _, k in { "autoMerge", "stallSeconds", "toolSeconds", "waitMinutes" } do
 			if layer.settings[k] ~= nil then
 				(s :: any)[k] = layer.settings[k]
 			end
@@ -328,6 +354,7 @@ function models.resolve(layers: { Layer }, skill: string): Resolved
 			maxTokens = f.max_tokens,
 			maxCalls = f.max_calls,
 			maxMinutes = f.max_minutes,
+			fallback = f.fallback,
 		}
 		local why = models.reviewRule(skill, spec)
 		if why then
@@ -338,22 +365,101 @@ function models.resolve(layers: { Layer }, skill: string): Resolved
 	return { skill = skill, order = table.clone(order :: { string }), specs = specs, settings = settings }
 end
 
--- The review model belongs to the CLI (the user's decision): Opus through `claude` or `agent`, any grok model at xhigh
--- through `grok` (the user's G7, 2026-10-25: "Any grok at xhigh"). Returns why a zz-review spec breaks it, or nil.
+-- The kinds of model a final review may run on, per CLI family, defined once (c0261, the user 2026-11-08): by shape, not
+-- by exact id, so a new Opus id in .models.toml needs no change here and an item in flight is never locked out by an
+-- upgrade. Lua patterns on the id a spend row records (models.id): any Opus, K3.1 Pro and K3-256k at high or max
+-- (the kimi CLI's ids; the agent CLI's kimi-k3-high and kimi-k3-max stand in), never -low or kimi-for-coding, any grok model at xhigh.
+models.FINAL_SHAPES = {
+	claude = { "^claude%-opus%-" },
+	grok = { "^grok%-.+%-xhigh$" },
+	agent = {
+		"^claude%-opus%-",
+		"^kimi%-k3%-high$",
+		"^kimi%-k3%-max$", -- the agent CLI's kimi ids (K3): the stand-ins for "kimi 3.1 pro" until it lists one
+		"^kimi%-k3%.1%-pro%-high$",
+		"^kimi%-k3%.1%-pro%-max$",
+		"^grok%-.+%-xhigh$",
+	},
+	-- the kimi CLI's own ids (c0175), as models.id writes them (model, then effort): K3.1 Pro (better) and K3-256k (good) at
+	-- high or max; not low, not plain K3, not kimi-for-coding (K2.8 Preview: low-complexity work, never a final review)
+	kimi = { "^k3%.1%-pro%-high$", "^k3%.1%-pro%-max$", "^k3%-256k%-high$", "^k3%-256k%-max$" },
+} :: { [string]: { string } }
+
+-- Whether a recorded model id is of a final-review kind on any CLI.
+function models.isFinalModel(id: string): boolean
+	for _, shapes in models.FINAL_SHAPES do
+		for _, shape in shapes do
+			if string.match(id, shape) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function shapeOk(cli: string, id: string): boolean
+	local shapes: { string } = models.FINAL_SHAPES[cli] or {}
+	for _, shape in shapes do
+		if string.match(id, shape) then
+			return true
+		end
+	end
+	return false
+end
+
+-- The review rule binds the final reviews (models.FINAL_REVIEWS): a model of a final-review kind of its CLI. Through
+-- `agent` the first choice is Opus (the user: Opus 5.5 high if available) and only its fallbacks may be a kimi-k3 or a
+-- grok model at xhigh; a fallback is allowed through `agent` only, where the ids carry their effort. A round on the way
+-- takes any model. Returns why a final-review spec breaks it, or nil.
 function models.reviewRule(skill: string, spec: Spec): string?
-	if skill ~= "zz-review" then
+	if not models.FINAL_REVIEWS[skill] then
 		return nil
 	end
-	if spec.cli == "grok" then
-		if not string.match(spec.model, "^grok%-") or spec.effort ~= "xhigh" then
-			return `zz-review.grok: a review through grok runs a grok model at effort xhigh (grok-…-xhigh), not {models.id(
-				spec
-			)}`
+	local id = models.id(spec)
+	if spec.fallback and spec.cli ~= "agent" then
+		return `{skill}.{spec.cli}: a fallback is allowed through agent only (its ids carry their effort), not through {spec.cli}`
+	end
+	if spec.cli == "agent" then
+		if not string.match(spec.model, "^claude%-opus%-") then
+			return `{skill}.agent: a final review through agent first runs on Opus (claude-opus-…), not {spec.model}; kimi and grok at xhigh are its fallbacks`
 		end
-	elseif not string.match(spec.model, "^claude%-opus%-") then
-		return `zz-review.{spec.cli}: a review through {spec.cli} runs on Opus (claude-opus-…), not {spec.model}`
+		local fbs: { string } = spec.fallback or {}
+		for _, fb in fbs do
+			if not shapeOk("agent", fb) then
+				return `{skill}.agent: a fallback of a final review through agent is Opus, a kimi model of a final-review kind or a grok model at xhigh (grok-…-xhigh), not {fb}`
+			end
+		end
+	elseif spec.cli == "grok" then
+		if not shapeOk("grok", id) then
+			return `{skill}.grok: a final review through grok runs a grok model at effort xhigh (grok-…-xhigh), not {id}`
+		end
+	elseif not shapeOk("claude", id) then
+		return `{skill}.{spec.cli}: a final review through {spec.cli} runs on Opus (claude-opus-…), not {spec.model}`
 	end
 	return nil
+end
+
+-- The activities that are final reviews (c0261): the review rule binds them; the rounds on the way are free of it.
+-- A plain `zz-review` table is the expensive base every review activity falls back to.
+models.FINAL_REVIEWS = {
+	["zz-review"] = true,
+	["zz-review-design"] = true,
+	["zz-review-raft"] = true,
+	["zz-review-idea"] = true,
+	["zz-review-final"] = true,
+} :: { [string]: boolean }
+
+-- An activity's resolved spec: its own table when a file names one, else (a review activity) the zz-review table.
+function models.resolveActivity(layers: { Layer }, activity: string): Resolved
+	for _, layer in layers do
+		if layer.skills[activity] then
+			return models.resolve(layers, activity)
+		end
+	end
+	if string.sub(activity, 1, 10) == "zz-review-" then
+		return models.resolve(layers, "zz-review")
+	end
+	return models.resolve(layers, activity)
 end
 
 -- The more powerful of the specs, whole: the higher rank, then the larger max_tokens; a tie keeps the first.
@@ -396,14 +502,32 @@ end
 function models.tries(r: Resolved): { Spec }
 	local out: { Spec } = {}
 	for _, cli in r.order do
-		if r.specs[cli] then
-			table.insert(out, r.specs[cli])
+		local spec = r.specs[cli]
+		if spec then
+			table.insert(out, spec)
+			-- the models of the same CLI to fall back to, in order, on the same runtime and budget (c0261)
+			local fbs: { string } = spec.fallback or {}
+			for _, fb in fbs do
+				local alt = table.clone(spec)
+				alt.model, alt.effort, alt.fallback = fb, nil, nil
+				table.insert(out, alt)
+			end
 		end
 	end
 	if #out == 0 then
 		error(`{r.skill}: no CLI in the order ({list(r.order)}) has a spec for it`, 0)
 	end
 	return out
+end
+
+-- Whether a try's model is one its CLI lists (`agent --list-models`, `grok models`): `listed` is nil for a CLI with no
+-- list command (assumed available), else the ids it printed. A try that is not listed is skipped and named, like a CLI
+-- that is not installed. Pure; the dispatcher reads the list at the edge.
+function models.available(spec: Spec, listed: { string }?): boolean
+	if listed == nil then
+		return true
+	end
+	return table.find(listed, spec.model) ~= nil
 end
 
 -- The model id a spend row records: the model, and its effort when the spec sets one ("grok-4.7-xhigh").

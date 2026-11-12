@@ -1,8 +1,9 @@
 --!strict
 -- c0261 (design review 006 F1): `./zn dispatch zz-review <R-id> --mode raft` on a NEW raft records the review's row from
--- the author's worktree, so each member's spend.md on origin/main holds "<R-id>: design-review-NNN" with the reviewer's
--- model at once, and nothing is left pending for `flush` to write a second time. Fake CLIs (@tests/lib/fakecli), fixture
+-- the author's worktree, so each member's spend rows there hold "<R-id>: design-review-NNN" with the reviewer's model
+-- (`./zn spend` commits on the author's branch and pushes nothing), once, with nothing pending for `flush` to write again. Fake CLIs (@tests/lib/fakecli), fixture
 -- under .cache/c0261-dispatch-raft.
+local costrow = require("@znile/engine/costrow")
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -75,10 +76,18 @@ return t.spec("c0261 a dispatched raft review of a new raft is recorded at once"
 		)
 		must(znIn(wt, { "dispatch", "zz-review", rid, "--mode", "raft" }))
 		for _, id in { "c0011", "c0012" } do
-			local text = fixture.git(h.f.origin, { "show", `main:pickman/.tracker/issues/{id}/spend.md` })
-			local l = ledger.parse(text) :: ledger.Ledger
+			-- `./zn spend` commits its row on the current branch and pushes nothing (#294): it is in the author's worktree,
+			-- once, and not on the dispatcher's own branch
+			local dir = `{wt}/pickman/.tracker/issues/{id}`
+			local rows = costrow.readMeasured(dir)
+			if fs.isFile(`{dir}/spend.md`) then
+				local l = ledger.parse(fs.readFile(`{dir}/spend.md`)) :: ledger.Ledger
+				for _, r in l.rows do
+					table.insert(rows, r)
+				end
+			end
 			local n = 0
-			for _, r in l.rows do
+			for _, r in rows do
 				if r.subject == `{rid}: design-review-001` then
 					n += 1
 					t.expect(r.model).toBe("claude-opus-5-5")
@@ -86,6 +95,7 @@ return t.spec("c0261 a dispatched raft review of a new raft is recorded at once"
 				end
 			end
 			t.expect(n).toBe(1) -- once: nothing is left for flush to write again
+			t.expect(fakecli.rows(h, id)).toBe(nil)
 		end
 		local state = fakecli.state(h, rid)
 		t.expect(#(state.pending or {})).toBe(0)

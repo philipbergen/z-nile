@@ -1,8 +1,8 @@
 --!strict
--- c0261: `./zn dispatch zz-review --mode design [--final]` starts the CLI with the model of the activity it runs (the
--- round on the way cheap, the final round expensive through the zz-review fallback), writes the row with that model,
--- refuses a final stream review, and `--dry-run` names the activity. Fake CLIs (@tests/lib/fakecli), fixture under
--- .cache/c0261-dispatch.
+-- c0261: `./zn dispatch zz-review --mode <mode>` starts the CLI with the model of the activity its mode runs (a layer's
+-- code review and a stream review cheap; the design, raft and final reviews expensive through the zz-review fallback),
+-- writes the row with that model, and `--dry-run` names the activity. The wait poll and parsePr are pinned here too.
+-- Fake CLIs (@tests/lib/fakecli), fixture under .cache/c0261-dispatch.
 local dispatch = require("@znile/engine/dispatch")
 local dispatcher = require("@znile/engine/dispatcher")
 local fakecli = require("@tests/lib/fakecli")
@@ -31,7 +31,13 @@ rank = 4
 runtime = "claude-cli"
 max_tokens = 5000
 
-[zz-review-design.claude]
+[zz-review-code.claude]
+model = "claude-sonnet-5"
+rank = 2
+runtime = "claude-cli"
+max_tokens = 5000
+
+[zz-review-stream.claude]
 model = "claude-sonnet-5"
 rank = 2
 runtime = "claude-cli"
@@ -84,35 +90,22 @@ return t.spec("c0261 ./zn dispatch picks the model of the activity", function(it
 		end
 	end)
 
-	it(
-		"a round on the way starts the cheap model and records it; --final starts the expensive one (AC10)",
-		function()
-			local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
-			fakecli.clear(h)
-			fakecli.mode(h, "claude.zz-review", "script")
-			reviewer()
-			local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "design" })
-			if not r.ok then
-				error(r.stdout .. r.stderr)
-			end
-			t.expect(has(fakecli.log(h), "--model claude-sonnet-5")).toBe(true)
-			t.expect(has(fakecli.log(h), "--model claude-opus-5-5")).toBe(false)
-			t.expect(lastRow("c0010").model).toBe("claude-sonnet-5")
-			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
-			fakecli.clear(h)
-			fakecli.mode(h, "claude.zz-review", "script")
-			reviewer()
-			local f = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "design", "--final" })
-			if not f.ok then
-				error(f.stdout .. f.stderr)
-			end
-			t.expect(has(fakecli.log(h), "--model claude-opus-5-5")).toBe(true)
-			t.expect(lastRow("c0010").model).toBe("claude-opus-5-5")
-			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
+	it("a design review starts the expensive model (zz-review) and records it (AC10)", function()
+		local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
+		fakecli.clear(h)
+		fakecli.mode(h, "claude.zz-review", "script")
+		reviewer()
+		local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "design" })
+		if not r.ok then
+			error(r.stdout .. r.stderr)
 		end
-	)
+		t.expect(has(fakecli.log(h), "--model claude-opus-5-5")).toBe(true)
+		t.expect(has(fakecli.log(h), "--model claude-sonnet-5")).toBe(false)
+		t.expect(lastRow("c0010").model).toBe("claude-opus-5-5")
+		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
+	end)
 
-	it("a code review with no table of its own takes the expensive model (AC10)", function()
+	it("a layer's code review starts the cheap model of its own table (AC10)", function()
 		local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
 		fakecli.clear(h)
 		fakecli.mode(h, "claude.zz-review", "script")
@@ -121,21 +114,38 @@ return t.spec("c0261 ./zn dispatch picks the model of the activity", function(it
 		if not r.ok then
 			error(r.stdout .. r.stderr)
 		end
-		t.expect(has(fakecli.log(h), "--model claude-opus-5-5")).toBe(true)
+		t.expect(has(fakecli.log(h), "--model claude-sonnet-5")).toBe(true)
+		t.expect(has(fakecli.log(h), "--model claude-opus-5-5")).toBe(false)
 		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/review-001.md`)
 	end)
 
-	it("a final stream review is refused and starts no CLI; --dry-run names the activity (AC10)", function()
-		local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
-		fakecli.clear(h)
-		local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "stream", "--final" })
-		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stdout .. r.stderr, "stream")).toBe(true)
-		t.expect(has(fakecli.log(h), "step=zz-review")).toBe(false)
-		local d = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "design", "--final", "--dry-run" })
-		t.expect(has(d.stdout, "activity=zz-review-design-final")).toBe(true)
-		t.expect(has(d.stdout, "model=claude-opus-5-5")).toBe(true)
-	end)
+	it(
+		"the final review starts the expensive model, and --dry-run names each mode's activity (AC10)",
+		function()
+			local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
+			fakecli.clear(h)
+			fakecli.mode(h, "claude.zz-review", "script")
+			reviewer()
+			local r = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "final" })
+			if not r.ok then
+				error(r.stdout .. r.stderr)
+			end
+			t.expect(has(fakecli.log(h), "--model claude-opus-5-5")).toBe(true)
+			fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/final-review-001.md`)
+			local want = {
+				design = { "zz-review-design", "claude-opus-5-5" },
+				raft = { "zz-review-raft", "claude-opus-5-5" },
+				final = { "zz-review-final", "claude-opus-5-5" },
+				code = { "zz-review-code", "claude-sonnet-5" },
+				stream = { "zz-review-stream", "claude-sonnet-5" },
+			}
+			for mode, w in want do
+				local d = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", mode, "--dry-run" })
+				t.expect(`{mode}: {has(d.stdout, `activity={w[1]}`)}`).toBe(`{mode}: true`)
+				t.expect(`{mode}: {has(d.stdout, `model={w[2]}`)}`).toBe(`{mode}: true`)
+			end
+		end
+	)
 
 	-- the poll itself, run for real against a fake gh that counts its calls and answers a sequence of exit codes (the
 	-- runner's `./zn run --time` wrapper is cut off: it only bounds). every = 0 and a deadline of 2 to 4 seconds keep it quick.

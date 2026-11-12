@@ -23,6 +23,8 @@ dispatch.STEPS = {
 	["z-raft"] = { kind = "model", lessons = "design", phase = "prep" },
 	["z-run"] = { kind = "model", lessons = "build", phase = "deliver" },
 	["zz-review"] = { kind = "model", lessons = "design", phase = "design-review" },
+	-- the waiting step (c0261): a cheap model babysits one bounded poll; its row takes the phase of the gate it waits at
+	["z-wait"] = { kind = "model", lessons = "build", phase = "prep" },
 	["z-ready"] = { kind = "script", argv = { "ready", "{id}" }, where = "main" },
 	["z-stop"] = { kind = "script", argv = { "stop", "{id}" }, where = "main" },
 	["raft-plan"] = { kind = "script", argv = { "raft-plan", "--apply" }, where = "worktree" },
@@ -36,13 +38,14 @@ dispatch.STEPS = {
 dispatch.READ_INSIDE = { ["zz-rules"] = true, ["zz-arch"] = true, ["zz-test"] = true, ["zz-execute"] = true }
 -- zz-review's modes: the lessons each reads and the phase of its row.
 dispatch.REVIEW_MODES = {
-	design = { lessons = "design", phase = "design-review" },
-	raft = { lessons = "design", phase = "design-review" },
-	code = { lessons = "build", phase = "code-review" },
-	-- a stream's review (z-run Phase 2B) under the dispatcher: the review model of the CLI, like a code review
-	stream = { lessons = "build", phase = "code-review" },
-	final = { lessons = "build", phase = "code-review" },
-} :: { [string]: { lessons: string, phase: string } }
+	design = { lessons = "design", phase = "design-review", activity = "zz-review-design" },
+	raft = { lessons = "design", phase = "design-review", activity = "zz-review-raft" },
+	code = { lessons = "build", phase = "code-review", activity = "zz-review-code" },
+	-- a stream's review (z-run Phase 2B) under the dispatcher: the model `zz-review-stream` names, cheap (c0261)
+	stream = { lessons = "build", phase = "code-review", activity = "zz-review-stream" },
+	-- the final review of the whole stack (zz-review --mode final): the expensive, bound round
+	final = { lessons = "build", phase = "code-review", activity = "zz-review-final" },
+} :: { [string]: { lessons: string, phase: string, activity: string } }
 
 -- The step `name` is, or an error naming it: a skill read inside steps, a project's skill, or an unknown name.
 function dispatch.step(name: string): Step
@@ -56,7 +59,7 @@ function dispatch.step(name: string): Step
 	if not string.match(name, "^zz?%-") and string.match(name, "^[a-z][a-z0-9]*%-") then
 		error(`{name} is a project's skill, read inside a step: it is not a step`, 0)
 	end
-	error(`unknown step {name} (model steps: z-ticket, z-design, z-raft, z-run, zz-review)`, 0)
+	error(`unknown step {name} (model steps: z-ticket, z-design, z-raft, z-run, z-wait, zz-review)`, 0)
 end
 
 -- A script step's command line, `./zn` first.
@@ -100,7 +103,60 @@ function dispatch.phaseOf(name: string, mode: string?): string
 	return dispatch.step(name).phase or "build"
 end
 
+-- The activity a step runs, the key of its table in .models.toml (c0261): a review by its mode (design, raft, final,
+-- code, stream), a mode that names none is `zz-review-<mode>`; every other step is its own activity.
+function dispatch.activityOf(name: string, mode: string?): string
+	if name == "zz-review" then
+		local m = dispatch.REVIEW_MODES[mode or "design"]
+		if not m then
+			error(`zz-review has no mode {tostring(mode)}`, 0)
+		end
+		return (m :: any).activity or `zz-review-{mode or "design"}`
+	end
+	dispatch.step(name)
+	return name
+end
+
+-- The poll a wait step runs: one condition, a loop with its own clock below the runner's bound; exit 0 when it holds,
+-- 2 when it can no longer hold (a failed check, a closed PR), 3 when the time ran out.
+function dispatch.waitCommand(untilWhat: string, pr: number, seconds: number, every: number?): string
+	local gap = every or 30
+	if seconds < 1 or seconds ~= math.floor(seconds) or gap < 0 or gap ~= math.floor(gap) then
+		error("a wait is a whole number of seconds, at least 1, between polls of 0 or more", 0)
+	end
+	local body: string
+	if untilWhat == "checks" then
+		body =
+			`out=$(gh pr checks {pr} 2>&1); rc=$?; [ $rc -eq 0 ] && exit 0; if [ $rc -eq 8 ]; then bad=0; else case "$out" in *"no checks"*) bad=0;; *) bad=$((bad+1)); [ $bad -ge 3 ] && exit 2;; esac; fi`
+	elseif untilWhat == "mergeable" then
+		body =
+			`s=$(gh pr view {pr} --json mergeable -q .mergeable); [ "$s" = MERGEABLE ] && exit 0; [ "$s" = CONFLICTING ] && exit 2`
+	elseif untilWhat == "merged" then
+		body =
+			`s=$(gh pr view {pr} --json state -q .state); [ "$s" = MERGED ] && exit 0; [ "$s" = CLOSED ] && exit 2`
+	else
+		error(`wait until {untilWhat}: one of checks, mergeable, merged`, 0)
+	end
+	-- the loop is its own clock: it polls, then sleeps only if the next poll still fits before its deadline, so its end
+	-- is exit 3; the runner's bound sits above the deadline by one sleep and a margin for gh itself
+	local loop =
+		`bad=0; end=$((SECONDS+{seconds})); while [ $SECONDS -lt $end ]; do {body}; [ $((SECONDS+{gap})) -lt $end ] || break; sleep {gap}; done; exit 3`
+	return `./zn run --time {seconds + gap + 30} -- bash -c '{loop}'`
+end
+
+-- The wait step's prompt: the one command, again on exit 3, at most `times` times, nothing else.
+function dispatch.waitPrompt(command: string, times: number): string
+	local ms = 0
+	local bound = string.match(command, "%-%-time (%d+)")
+	if bound then
+		ms = (tonumber(bound) :: number) * 1000
+	end
+	return `Run this command in the shell, with a tool timeout of {ms} ms:\n\n{command}\n\nIf it ends with exit code 3, run it again, at most {times} times in all. Stop when it ends with exit code 0 or 2, or with any other exit code. Do nothing else: read no files, edit nothing, run no other command.`
+end
+
 export type PromptInput = {
+	waitCommand: string?, -- z-wait: the poll (dispatch.waitCommand)
+	waitTimes: number?, -- z-wait: how many times at most
 	step: string,
 	id: string, -- the item, or "" for z-ticket
 	mode: string?, -- zz-review's mode
@@ -116,6 +172,10 @@ export type PromptInput = {
 -- The prompt of a model step. It names the skill's file, which every CLI reads itself; no skill text,
 -- architecture map or other issue is pasted (the user's "Name the files in the prompt").
 function dispatch.prompt(p: PromptInput): string
+	if p.step == "z-wait" then
+		-- the wait step has no skill and no lessons to read: its prompt is the poll and nothing else (c0261)
+		return dispatch.waitPrompt(p.waitCommand or "", p.waitTimes or 1) .. "\n"
+	end
 	local what: string
 	if p.step == "z-ticket" then
 		what = `Read \`{p.skillPath}\` and follow it to capture this as one issue{if p.project
@@ -160,6 +220,9 @@ export type Pr = {
 	draft: boolean,
 	green: boolean,
 	mergeable: boolean,
+	conflicting: boolean?, -- GitHub says CONFLICTING (UNKNOWN, still computing, is not) (c0261)
+	mergeState: string?, -- GitHub's mergeable: MERGEABLE, CONFLICTING, UNKNOWN or "" (c0261)
+	failed: boolean?, -- a check already failed: no wait will turn it green (c0261)
 	head: string, -- the head commit the gate checked (the merge is pinned to it)
 	-- why its fetched head is not this gate's to merge (the one tracker-state function on the head, review 003 F5),
 	-- or nil; the dispatcher judges it before the chain decides
@@ -187,6 +250,7 @@ export type Facts = {
 	uncovered: { string }, -- `./zn lessons --uncovered <id>` in the step's worktree, after a review step
 	autoMerge: { string },
 	description: string?, -- `dispatch new`'s words
+	waitedHead: string?, -- the head the last z-wait already waited on (c0261)
 }
 export type Action = {
 	kind: "step" | "merge" | "stop",
@@ -196,7 +260,8 @@ export type Action = {
 	pr: number?,
 	head: string?, -- a merge: the head commit it is pinned to
 	why: string?,
-	code: number?, -- kind stop: 0 done, 1 failure, 3 needs the user, 4 waiting at a merge gate
+	waitFor: string?, -- the wait step: "checks" or "merged"
+	code: number?, -- kind stop: 0 done, 1 failure, 3 needs the user, 4 a block or a gate left to a human (a draft, a conflict, a failed check, a PR a human must judge, the run PR until c0252)
 }
 
 -- the most actions one chain run takes before it stops
@@ -261,6 +326,29 @@ local function gate(f: Facts, name: string, pr: Pr): Action
 	then
 		return { kind = "merge", gate = name, pr = pr.number, target = f.id, head = head }
 	end
+	-- a gate that only waits for its checks, or for GitHub to finish computing its merge state, waits once per head on the
+	-- waiting step (c0261); a failed check, a conflict, a draft or a PR a human must judge waits for nothing
+	if
+		name ~= "run"
+		and table.find(f.autoMerge, name)
+		and not pr.draft
+		and not pr.failed
+		and not pr.conflicting
+		and not carries
+		and head ~= ""
+		and f.waitedHead ~= head
+		and (not pr.green or pr.mergeState == "UNKNOWN")
+	then
+		return {
+			kind = "step",
+			step = "z-wait",
+			target = f.id,
+			gate = name,
+			pr = pr.number,
+			head = head,
+			waitFor = if pr.green then "mergeable" else "checks",
+		}
+	end
 	local why = if name == "run"
 		then `ready to merge: the run PR #{pr.number} is a human's to merge (then ./zn dispatch {f.id} again)`
 		elseif
@@ -302,7 +390,9 @@ function dispatch.next(f: Facts): Action
 			`{f.last.step} tripped the wire: main or the main checkout moved in a way the dispatcher did not make (state.json names it); a human looks first, then runs ./zn dispatch vet and ./zn dispatch retry {f.id}: nothing else clears it`
 		)
 	end
-	if f.last and f.last.outcome ~= "ok" then
+	-- a wait that ended any way (ran out, failed, capped) is not a failed chain: the gate waited once for its head, and the
+	-- PR is read again (c0261)
+	if f.last and f.last.outcome ~= "ok" and f.last.step ~= "z-wait" then
 		return stop(dispatch.EXIT.failure, `{f.last.step} ended {f.last.outcome}: ./zn dispatch retry {f.id}`)
 	end
 	if f.last and REVIEW_STEPS[f.last.step] and #f.uncovered > 0 then

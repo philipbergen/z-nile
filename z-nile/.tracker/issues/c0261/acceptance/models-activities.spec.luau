@@ -1,7 +1,8 @@
 --!strict
--- c0261: each activity (a command, or a command's activity: a review round, the final round) has its own table in
--- .models.toml, `[<activity>.<cli>]`, with the real model, its effort and its budget; a review activity the file does
--- not name falls back to the `zz-review` table; the final reviews obey the review rule and the rounds on the way do not.
+-- c0261: each activity (a command, or a review mode's activity) has its own table in .models.toml,
+-- `[<activity>.<cli>]`, with the real model, its effort and its budget; a review activity the file does not name falls
+-- back to the `zz-review` table; the final reviews (design, raft, final, idea) obey the review rule and a layer's code
+-- review and the stream review do not.
 -- Pure: models.parse, models.resolveActivity and models.reviewRule over layers built from text.
 local models = require("@znile/engine/models")
 local t = require("@tests/lib/t")
@@ -59,17 +60,17 @@ end
 
 return t.spec("c0261 a model per activity", function(it)
 	it(
-		"an activity resolves its own table: the middle round cheap, the final round expensive (AC1)",
+		"an activity resolves its own table: a layer's code review cheap, the final review expensive (AC1)",
 		function()
-			local file = ORDER .. cheap("zz-review-design") .. sharp("zz-review-design-final")
-			local mid = m.resolveActivity({ layer(file) }, "zz-review-design")
-			local fin = m.resolveActivity({ layer(file) }, "zz-review-design-final")
+			local file = ORDER .. cheap("zz-review-code") .. sharp("zz-review-final")
+			local mid = m.resolveActivity({ layer(file) }, "zz-review-code")
+			local fin = m.resolveActivity({ layer(file) }, "zz-review-final")
 			t.expect(models.id(mid.specs.claude)).toBe("claude-sonnet-5")
 			t.expect(models.id(mid.specs.grok)).toBe("grok-4.6-high")
 			t.expect(models.id(fin.specs.claude)).toBe("claude-opus-5-5")
 			t.expect(models.id(fin.specs.agent)).toBe("claude-opus-5-5-high")
 			t.expect(fin.specs.grok.rank).toBe(4)
-			t.expect(fin.skill).toBe("zz-review-design-final")
+			t.expect(fin.skill).toBe("zz-review-final")
 		end
 	)
 
@@ -114,18 +115,17 @@ return t.spec("c0261 a model per activity", function(it)
 					)
 				end)
 			end
-			t.expect(has(bad("zz-review-design-final", "claude", "claude-sonnet-5"), "Opus")).toBe(true)
-			t.expect(has(bad("zz-review-code-final", "grok", "grok-4.7", "high"), "xhigh")).toBe(true)
+			t.expect(has(bad("zz-review-design", "claude", "claude-sonnet-5"), "Opus")).toBe(true)
+			t.expect(has(bad("zz-review-final", "grok", "grok-4.7", "high"), "xhigh")).toBe(true)
 			t.expect(has(bad("zz-review-idea", "agent", "cursor-grok-4.6-high"), "Opus")).toBe(true)
 			t.expect(has(bad("zz-review-raft", "agent", "grok-4.7-xhigh"), "first")).toBe(true) -- c0117's agent case, unchanged
 			t.expect(has(bad("zz-review-raft", "claude", "claude-haiku-5-5"), "Opus")).toBe(true)
 			for _, a in
 				{
-					"zz-review-design-final",
-					"zz-review-code-final",
+					"zz-review-design",
 					"zz-review-raft",
-					"zz-review-idea",
 					"zz-review-final",
+					"zz-review-idea",
 				}
 			do
 				local ok = m.resolveActivity({
@@ -178,6 +178,20 @@ return t.spec("c0261 a model per activity", function(it)
 		end
 	)
 
+	it("an agent's fallbacks are tried before the next CLI in the order (AC1)", function()
+		local file = 'order = ["agent", "claude"]\n' .. sharp("zz-review")
+		local ids = {}
+		for _, spec in models.tries(models.resolve({ layer(file) }, "zz-review")) do
+			table.insert(ids, `{spec.cli}:{models.id(spec)}`)
+		end
+		t.expect(ids).toEqual({
+			"agent:claude-opus-5-5-high",
+			"agent:kimi-k3-high",
+			"agent:grok-4.7-xhigh",
+			"claude:claude-opus-5-5",
+		})
+	end)
+
 	it(
 		"a try is available when its CLI lists the model, and always when the CLI has no list (AC1)",
 		function()
@@ -190,9 +204,7 @@ return t.spec("c0261 a model per activity", function(it)
 	)
 
 	it("the rounds on the way and the other commands take any model (AC2)", function()
-		for _, a in
-			{ "zz-review-design", "zz-review-code", "zz-review-stream", "z-design", "z-run", "z-wait" }
-		do
+		for _, a in { "zz-review-code", "zz-review-stream", "z-design", "z-run", "z-wait" } do
 			local r = m.resolveActivity({ layer(ORDER .. cheap(a)) }, a)
 			t.expect(models.id(r.specs.claude)).toBe("claude-sonnet-5")
 		end
@@ -208,24 +220,26 @@ return t.spec("c0261 a model per activity", function(it)
 		)).toBe(true)
 	end)
 
-	it("every final-review activity is named, and the rounds on the way are not among them (AC2)", function()
-		local finals = m.FINAL_REVIEWS
-		for _, a in
-			{
-				"zz-review",
-				"zz-review-design-final",
-				"zz-review-code-final",
-				"zz-review-raft",
-				"zz-review-idea",
-				"zz-review-final",
-			}
-		do
-			t.expect(`{a}: {finals[a] == true}`).toBe(`{a}: true`)
+	it(
+		"every final-review activity is named, and a layer's code review and the stream review are not among them (AC2)",
+		function()
+			local finals = m.FINAL_REVIEWS
+			for _, a in
+				{
+					"zz-review",
+					"zz-review-design",
+					"zz-review-raft",
+					"zz-review-final",
+					"zz-review-idea",
+				}
+			do
+				t.expect(`{a}: {finals[a] == true}`).toBe(`{a}: true`)
+			end
+			for _, a in { "zz-review-code", "zz-review-stream", "z-design", "z-run", "z-wait" } do
+				t.expect(`{a}: {finals[a] == true}`).toBe(`{a}: false`)
+			end
 		end
-		for _, a in { "zz-review-design", "zz-review-code", "zz-review-stream", "z-design" } do
-			t.expect(`{a}: {finals[a] == true}`).toBe(`{a}: false`)
-		end
-	end)
+	)
 
 	it("[dispatch] wait_minutes is a whole number of minutes, 60 unless a file sets it (AC1)", function()
 		t.expect(m.settings({ layer(ORDER .. cheap("z-wait")) }).waitMinutes).toBe(60)

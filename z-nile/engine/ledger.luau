@@ -266,6 +266,39 @@ function ledger.sum(rows: { Row }): Totals
 	return t
 end
 
+export type ModelTotals = { model: string, tokens: number, minutes: number, records: number }
+-- Tokens, minutes and rows per model id, rows with no model under "none", the biggest spender (tokens) first (c0261).
+function ledger.byModel(rows: { Row }): { ModelTotals }
+	local by: { [string]: ModelTotals } = {}
+	for _, r in rows do
+		local k = r.model or "none"
+		local e = by[k] or { model = k, tokens = 0, minutes = 0, records = 0 }
+		e.tokens += r.tokens or 0
+		e.minutes += r.minutes
+		e.records += 1
+		by[k] = e
+	end
+	local out: { ModelTotals } = {}
+	for _, e in by do
+		table.insert(out, e)
+	end
+	table.sort(out, function(a, b)
+		if a.tokens ~= b.tokens then
+			return a.tokens > b.tokens
+		end
+		return a.model < b.model
+	end)
+	return out
+end
+
+function ledger.renderByModel(totals: { ModelTotals }): string
+	local lines = { "by model", "| model | tokens | minutes | rows |", "|---|---|---|---|" }
+	for _, e in totals do
+		table.insert(lines, string.format("| %s | %d | %.1f | %d |", e.model, e.tokens, e.minutes, e.records))
+	end
+	return table.concat(lines, "\n") .. "\n"
+end
+
 function ledger.byPhase(rows: { Row }): { [string]: Totals }
 	local groups: { [string]: { Row } } = {}
 	for _, p in ledger.PHASES do
