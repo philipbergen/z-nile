@@ -3923,12 +3923,27 @@ function cmd.restack(pos: { string })
 		sh.git({ "reset", "--hard", tip })
 		local before = tip
 		local rebasing = sh.run("git", { "rebase", "--onto", onto, upstream, layer.name })
+		-- c0263: a stop whose conflicts are all item records is settled by item id (the union of sync and land), then
+		-- the rebase goes on; any other conflict, or a record that cannot be united, stops here
+		local stoppedWhy = ""
+		while not rebasing.ok do
+			local settled, reason = mergerecords.settleRebaseStop()
+			if not settled then
+				stoppedWhy = reason
+				break
+			end
+			rebasing = sh.run("git", { "-c", "core.editor=true", "rebase", "--continue" })
+		end
 		if not rebasing.ok then
 			sh.run("git", { "rebase", "--abort" })
 			if back ~= "" then
 				sh.git({ "switch", "--quiet", back })
 			end
-			fail(`restack stopped at {layer.name}: conflict\n{rebasing.stderr}`)
+			fail(
+				`restack stopped at {layer.name}: conflict\n{rebasing.stderr}{if stoppedWhy ~= ""
+					then `\n{stoppedWhy}`
+					else ""}`
+			)
 		end
 		local issue = store.find(layer.issue)
 		if not issue or not runCheck(issue) then
