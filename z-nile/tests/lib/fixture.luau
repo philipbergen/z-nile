@@ -95,8 +95,10 @@ function fixture.exec(dir: string, cmd: string, args: { string }, options: Optio
 	for _, name in provenance.AGENT_VARS do
 		scrubbed[name] = ""
 	end
-	for k, v in o.env or {} do
-		scrubbed[k] = v
+	if o.env then
+		for k, v in o.env do
+			scrubbed[k] = v
+		end
 	end
 	o = { env = scrubbed, stdin = o.stdin }
 	local away = pointsElsewhere(cmd, args, o.env)
