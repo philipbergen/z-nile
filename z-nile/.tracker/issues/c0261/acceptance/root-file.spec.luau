@@ -40,7 +40,6 @@ local WAY = {
 	["z-ticket"] = true,
 	["z-raft"] = true,
 	["z-run"] = true,
-	["zz-review-code"] = true,
 	["zz-review-stream"] = true,
 } :: { [string]: boolean }
 local IDS = {

@@ -32,12 +32,6 @@ rank = 4
 runtime = "claude-cli"
 max_tokens = 5000
 
-[zz-review-code.claude]
-model = "claude-sonnet-5"
-rank = 2
-runtime = "claude-cli"
-max_tokens = 5000
-
 [zz-review-stream.claude]
 model = "claude-sonnet-5"
 rank = 2
@@ -106,7 +100,7 @@ return t.spec("c0261 ./zn dispatch picks the model of the activity", function(it
 		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/design-review-001.md`)
 	end)
 
-	it("a layer's code review starts the cheap model of its own table (AC10)", function()
+	it("a layer's code review starts the expensive model, like every review but a stream (AC10)", function()
 		local wt = fixture.physical(`{h.f.main}/.worktree/prep-first-thing`) :: string
 		fakecli.clear(h)
 		fakecli.mode(h, "claude.zz-review", "script")
@@ -115,8 +109,8 @@ return t.spec("c0261 ./zn dispatch picks the model of the activity", function(it
 		if not r.ok then
 			error(r.stdout .. r.stderr)
 		end
-		t.expect(has(fakecli.log(h), "--model claude-sonnet-5")).toBe(true)
-		t.expect(has(fakecli.log(h), "--model claude-opus-5-5")).toBe(false)
+		t.expect(has(fakecli.log(h), "--model claude-opus-5-5")).toBe(true)
+		t.expect(has(fakecli.log(h), "--model claude-sonnet-5")).toBe(false)
 		fs.removeFile(`{wt}/pickman/.tracker/issues/c0010/review-001.md`)
 	end)
 
@@ -149,7 +143,7 @@ return t.spec("c0261 ./zn dispatch picks the model of the activity", function(it
 				design = { "zz-review-design", "claude-opus-5-5" },
 				raft = { "zz-review-raft", "claude-opus-5-5" },
 				final = { "zz-review-final", "claude-opus-5-5" },
-				code = { "zz-review-code", "claude-sonnet-5" },
+				code = { "zz-review-code", "claude-opus-5-5" }, -- expensive: the user ruled it (2026-11-12)
 				stream = { "zz-review-stream", "claude-sonnet-5" },
 			}
 			for mode, w in want do

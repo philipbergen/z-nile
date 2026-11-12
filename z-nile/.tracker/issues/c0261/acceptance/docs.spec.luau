@@ -74,7 +74,7 @@ return t.spec("c0261 docs", function(it)
 	)
 
 	it(
-		"who reviews is said per activity: the final reviews are the expensive ones, a layer's code review is not (rule)",
+		"who reviews is said per activity: every review but a stream review is the expensive one (rule)",
 		function()
 			for _, name in { "z-design", "z-raft", "zz-execute", "zz-review" } do
 				-- c0117's sentence stays true and is extended: Opus first on claude and agent, and the fallbacks
@@ -92,22 +92,22 @@ return t.spec("c0261 docs", function(it)
 				"zz-execute"
 			)
 			local review = skill("zz-review")
-			at(review, "are **final reviews**: nothing is judged after them", "zz-review")
-			at(review, "`zz-review-code`, `zz-review-stream`", "zz-review")
-			at(review, 'model: "sonnet"` for a layer\'s code review', "zz-review")
+			at(review, "**final reviews** (nothing is judged after them)", "zz-review")
+			at(review, "Every review runs the expensive review model of the CLI", "zz-review")
+			at(review, "a layer's code review (Code mode)", "zz-review")
+			at(review, "Only a stream review", "zz-review")
+			absent(review, 'model: "sonnet"', "zz-review")
 		end
 	)
 
-	it(
-		"a layer's code review is the work on the way: zz-execute runs it on the zz-review-code model (rule)",
-		function()
-			local e = skill("zz-execute")
-			at(e, "A layer's code review is the work on the way", "zz-execute")
-			at(e, "the model `.models.toml` names for `zz-review-code`", "zz-execute")
-			at(e, '`model: "sonnet"` to the Agent tool', "zz-execute")
-			absent(e, "a reviewer on the author's model shares its blind spots", "zz-execute")
-		end
-	)
+	it("a layer's code review runs the expensive model: the user ruled it on 2026-11-12 (rule)", function()
+		local e = skill("zz-execute")
+		at(e, "a reviewer on the author's model shares its blind spots", "zz-execute")
+		at(e, "the user ruled (2026-11-12) that every layer's code review runs it", "zz-execute")
+		at(e, '`model: "opus"` to the Agent tool', "zz-execute")
+		absent(e, "A layer's code review is the work on the way", "zz-execute")
+		absent(e, "names for `zz-review-code`", "zz-execute")
+	end)
 
 	it(
 		"no skill, AGENTS.md or the README still counts review rounds or runs a round with --final (rule)",
@@ -156,8 +156,12 @@ return t.spec("c0261 docs", function(it)
 
 	it("AGENTS.md, the README and the .models.toml header say it per activity (rule)", function()
 		local agents = read("AGENTS.md")
-		at(agents, "The exceptions are the final reviewers", "AGENTS.md")
-		at(agents, "a layer's code review and the work on the way run cheap", "AGENTS.md")
+		at(
+			agents,
+			"The exceptions are the reviewers (the design, layer code, raft and final reviews)",
+			"AGENTS.md"
+		)
+		at(agents, "the work on the way and a stream review run cheap", "AGENTS.md")
 		at(
 			agents,
 			"A lead you start by hand runs on the model `.models.toml` names for its activity",
@@ -174,8 +178,6 @@ return t.spec("c0261 docs", function(it)
 		)
 		local readme = read("z-nile/README.md")
 		at(bullet(readme, "- **`.models.toml`.**"), "Models per activity", "README")
-		absent(readme, "round one Opus through `claude` or `agent`", "README")
-		absent(readme, "round two `grok-4.7-xhigh`", "README")
 		local text = read(".models.toml")
 		local head = string.sub(text, 1, string.find(text, "\n[dispatch]", 1, true) or 1)
 		for _, w in { "per activity", "real model names", "final review", "z-wait" } do
