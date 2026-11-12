@@ -436,8 +436,10 @@ return t.spec("c0280 provenance from git", function(it)
 			"| who | `./zn who <id>` |",
 			"`who <id>` (it reads the history and writes nothing)",
 			"(from git, first add)",
-			"status:<status>",
-			"worker="
+			"`status:<word>`",
+			"worker=",
+			"(that commit's agent trailer, or its second parent's for a `--no-ff` landing; `unknown` with none",
+			"every change of the document's `status:` word"
 		)
 		has("z-nile/README.md", "./zn who <id>")
 		has("z-nile/engine/main.luau", "  who <id>")
