@@ -7,10 +7,9 @@
 # drop that model. Raft-mode review uses the raft role for the same reason.
 
 [dispatch]
-# the merge gate the dispatcher passes itself when the PR is green and mergeable: the rafting PR. The prep PR (a human
-# approves the design with ./zn approve) and the run's PR are always a human's; "prep" is still accepted here, with no effect.
+# the merge gates the dispatcher passes itself when the PR is green and mergeable; the run's PR is always a human's.
 # Unset, or unreadable, means none: a closer file's `auto_merge = []` turns them off for its items.
-auto_merge = ["raft"]
+auto_merge = ["prep", "raft"]
 # a step that prints nothing for this long is killed (a CLI never waits for quota)
 stall_seconds = 300
 # the same limit while a tool call runs (a full gate is quiet for minutes)

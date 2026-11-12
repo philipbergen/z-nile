@@ -729,7 +729,7 @@ G=$ZN_REAL_GIT
 	)
 
 	it(
-		"stops at the prep gate whatever the item's walk allows, and merges the rafting gate with the real gh itself",
+		"passes the prep gate only when the item's own walk allows it, and merges with the real gh itself",
 		function()
 			fakecli.clear(h)
 			-- a GitHub-looking origin, rewritten to the fixture's own (the chain asks the fake gh about PRs)
@@ -743,12 +743,11 @@ G=$ZN_REAL_GIT
 			local head7 = fakecli.pullRequest(h, 7, { ["pickman/.tracker/issues/c0070/x.md"] = "notes\n" })
 			fs.writeFile(`{h.fakes}/pr-prep-seventh-thing.json`, prJson(7, head7))
 			mode("claude", "claim")
-			-- c0283: auto_merge = ["prep"] at the root has no effect: the prep gate never merges, and says who does
+			-- auto_merge = ["prep"] at the root: the dispatcher merges, then sees origin unchanged and stops
 			local merged = zn({ "dispatch", "c0070" })
-			t.expect(has(fakecli.log(h), "realgh pr merge 7")).toBe(false)
-			t.expect(merged.code).toBe(4)
-			t.expect(has(merged.stdout, "waits for the user's approval and merge")).toBe(true)
-			t.expect(has(merged.stdout, "./zn approve c0070")).toBe(true)
+			t.expect(has(fakecli.log(h), `realgh pr merge 7 --squash --match-head-commit {head7}`)).toBe(true)
+			t.expect(merged.code).toBe(1)
+			t.expect(has(merged.stdout, "merged but origin/main does not show it")).toBe(true)
 			-- an item-level auto_merge = [] wins: the chain waits at the gate, and nothing is merged
 			local head8 = fakecli.pullRequest(h, 8, { ["pickman/.tracker/issues/c0080/x.md"] = "notes\n" })
 			fs.writeFile(`{h.fakes}/pr-prep-eighth-thing.json`, prJson(8, head8))

@@ -286,14 +286,14 @@ return t.spec("c0117 dispatch rules", function(it)
 		end
 	)
 
-	it("captures, designs, and waits at the prep gate", function()
+	it("captures, designs, and waits at or passes the prep gate", function()
 		t.expect(act(facts({ kind = "none", where = "none", status = "none", description = "words" })))
 			.toBe("step z-ticket ")
 		t.expect(act(facts({ kind = "none", where = "none", status = "none" }))).toBe("stop 1")
 		t.expect(act(facts({}))).toBe("step z-design c0010")
 		t.expect(act(facts({ status = "preparing", ownClaim = true }))).toBe("step z-design c0010")
 		t.expect(act(facts({ status = "preparing", ownClaim = false }))).toBe("stop 1")
-		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr() }))).toBe("stop 4 prep") -- c0283: the prep gate never merges
+		t.expect(act(facts({ status = "preparing", ownClaim = true, pr = pr() }))).toBe("merge prep 7")
 		-- the dispatcher's judgment of the PR's fetched head (review 003 F5): any refusal waits for a human
 		local judged = dispatch.next(
 			facts({ status = "preparing", ownClaim = true, pr = pr({ judged = "it carries src/x.lua" }) })

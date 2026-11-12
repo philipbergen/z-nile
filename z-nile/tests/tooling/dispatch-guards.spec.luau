@@ -707,9 +707,8 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			fs.writeFile(`{h.fakes}/pr-prep-prep-thing.json`, prJson(99, sha99))
 			fs.writeFile(`{h.fakes}/race-99`, "pickman/.tracker/issues/c0095/spend.md")
 			local prepLate = zn({ "dispatch", "c0095" })
-			-- c0283: the prep gate never merges, so there is no merge to compare; it waits for the user
-			if prepLate.code ~= 4 or not has(prepLate.stdout, "waits for the user's approval and merge") then
-				error(`PR #99: exit {prepLate.code}, wanted 4\n{prepLate.stdout}{prepLate.stderr}`)
+			if prepLate.code ~= 5 or not has(prepLate.stdout, "not the main it was judged against") then
+				error(`PR #99: exit {prepLate.code}, wanted 5\n{prepLate.stdout}{prepLate.stderr}`)
 			end
 			-- every judgement's scratch export is gone (code review 008 F5)
 			local left = 0

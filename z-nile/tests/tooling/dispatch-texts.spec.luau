@@ -18,9 +18,6 @@ local function at(text: string, needle: string, where: string)
 		error(`{where} is missing: {needle}`)
 	end
 end
--- c0283: the prep gate never merges, so z-design's version of the sentence ends otherwise
-local HEADLESS_PREP =
-	"Under the dispatcher, don't ask and don't merge: once the PR is open and your spend is recorded, end the step; the dispatcher stops at the prep gate for the user, who approves the design (`./zn approve`, never an agent) and merges the PR."
 local HEADLESS =
 	"Under the dispatcher, don't ask and don't merge: once the PR is open and your spend is recorded, end the step; the dispatcher passes the gate (the user started it)."
 
@@ -29,7 +26,7 @@ return t.spec("c0117 the dispatcher's texts and model ids (R0052 code review 001
 		"z-design, z-raft and zz-rules say a dispatched step neither asks nor merges at its PR (F5)",
 		function()
 			local zd = read("z-nile/skills/z-design/SKILL.md")
-			at(zd, "Ask the user before merging prep they didn't request. " .. HEADLESS_PREP, "z-design §6")
+			at(zd, "Ask the user before merging prep they didn't request. " .. HEADLESS, "z-design §6")
 			at(
 				zd,
 				"ask the user before you answer it (under the dispatcher: write the question to `$ZN_DISPATCH_DIR/questions.md` and stop)",
@@ -38,7 +35,7 @@ return t.spec("c0117 the dispatcher's texts and model ids (R0052 code review 001
 			at(read("z-nile/skills/z-raft/SKILL.md"), HEADLESS, "z-raft §5")
 			at(
 				read("z-nile/skills/zz-rules/SKILL.md"),
-				"Under the dispatcher, a step neither asks nor merges: once its PR is open and its spend recorded it ends, and the dispatcher passes the rafting gate itself (the user started it, c0117 G4), and a prep PR waits for the user, who approves the design (`./zn approve`) and merges it.",
+				"Under the dispatcher, a step neither asks nor merges: once its PR is open and its spend recorded it ends, and the dispatcher passes the prep and rafting gates itself (the user started it, c0117 G4).",
 				"zz-rules Landing step 3"
 			)
 			-- code review 002 F1: the rafting gate's rule, as the code applies it

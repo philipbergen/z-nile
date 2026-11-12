@@ -72,7 +72,7 @@ One clean reviewer, one round. The designer answers every finding once, fixed or
 
 ## 6. Commit and hand off
 - **Commit** the prepared issue, its acceptance specs and architecture changes in the prep worktree as one commit, `tracker: prep c0010 <title>`, then follow Landing a change (zz-rules skill): push, PR, merge, pull the main checkout, remove the worktree. Right after the prep PR is opened, before it merges (so before any raft holding it can be readied), `./zn spend <id> --phase prep` (once: it counts the prep branch's lines). An issue readied first can no longer take it, and `spend` says so.
-  - Ask the user before merging prep they didn't request. Under the dispatcher, don't ask and don't merge: once the PR is open and your spend is recorded, end the step; the dispatcher stops at the prep gate for the user, who approves the design (`./zn approve`, never an agent) and merges the PR.
+  - Ask the user before merging prep they didn't request. Under the dispatcher, don't ask and don't merge: once the PR is open and your spend is recorded, end the step; the dispatcher passes the gate (the user started it).
 - **Report**:
   - the issue, its `size:` and whether it is `solo`;
   - the key design decisions;
