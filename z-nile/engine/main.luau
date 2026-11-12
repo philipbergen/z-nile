@@ -3,15 +3,11 @@
 local approval = require("./approval")
 local audit = require("./audit")
 local board = require("./board")
-local boardview = require("./boardview")
 local buffer = require("./buffer")
-local claimsLib = require("./claims")
-local compactLib = require("./compact")
 local contract = require("./contract")
 local costrow = require("./costrow")
 local dispatcherLib = require("./dispatcher")
 local fs = require("@lune/fs")
-local gateLib = require("./gate")
 local heartbeat = require("./heartbeat")
 local idea = require("./idea")
 local idsLib = require("./ids")
@@ -20,15 +16,11 @@ local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
 local models = require("./models")
 local modelstep = require("./modelstep")
-local openlist = require("./openlist")
-local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
 local publish = require("./publish")
 local raftplan = require("./raftplan")
 local reapLib = require("./reap")
-local serde = require("@lune/serde")
-local sessions = require("./sessions")
 local sh = require("../lib/sh")
 local skillsLib = require("./skills")
 local spend = require("./spend")
@@ -36,9 +28,7 @@ local stack = require("./stack")
 local statusLib = require("./status")
 local stdio = require("@lune/stdio")
 local store = require("./store")
-local task = require("@lune/task")
 local trailLib = require("./trail")
-local watchcmd = require("./watchcmd")
 
 -- a space name as the union ids expects: the callers only ever hold "issue" or "raft"
 local function asSpace(s: string): idsLib.Space
@@ -649,7 +639,7 @@ local function freshStamp(state: string): string
 	local value = statusLib.fresh(function()
 		return stamp(state)
 	end, function(v: string): boolean
-		local taken, err = claimsLib.taken(".", v, nil, roots)
+		local taken, err = require("./claims").taken(".", v, nil, roots)
 		if taken == nil then
 			fail(`cannot check a claim stamp against origin/main: {err}`)
 		end
@@ -724,7 +714,7 @@ local function moveOnOrigin(
 			if rel == `{fid}.md` then
 				text = withFront(text, "status", status)
 			elseif rel == "check.sh" then
-				text = pathsLib.rewrite(text, dirs)
+				text = require("./paths").rewrite(text, dirs)
 			end
 			table.insert(changes, { path = `{dirs[fid]}/{rel}`, from = p, content = text })
 		end
@@ -1483,21 +1473,21 @@ end
 
 -- A network call of the heartbeat, bounded: it runs in a process group of its own that is killed after ZN_NET_SECONDS
 -- (spec runs only; 10 s otherwise), which counts as unreadable. Always `<cmd> <subcommand> ...` from the checkout.
-local BOUND =
+hb.BOUND =
 	[[use POSIX ":sys_wait_h"; my $n = shift; my $pid = fork(); if (!$pid) { setpgrp(0,0); exec(@ARGV) or exit 127 } my $t = time + $n; while (1) { my $k = waitpid($pid, WNOHANG); if ($k == $pid) { exit($? & 127 ? 128 + ($? & 127) : $? >> 8) } if (time >= $t) { kill "KILL", -$pid; waitpid($pid, 0); exit 124 } select(undef, undef, undef, 0.05) }]]
 -- Whether this process runs inside a spec or a fenced check (the guards' answer, asked once): the only runs that honour
 -- ZN_NOW, ZN_BEAT_EVERY and ZN_NET_SECONDS.
-local specRunCache: boolean? = nil
+hb.specRunCache = nil :: boolean?
 function hb.specRun(): boolean
-	if specRunCache == nil then
-		specRunCache = checking()
+	if hb.specRunCache == nil then
+		hb.specRunCache = checking()
 	end
-	return specRunCache == true
+	return hb.specRunCache == true
 end
 
 function hb.netRun(cmdName: string, args: { string }): sh.Result
 	local secs = heartbeat.setting(process.env, "ZN_NET_SECONDS", 10, hb.specRun())
-	local a = { "-e", BOUND, tostring(secs), cmdName }
+	local a = { "-e", hb.BOUND, tostring(secs), cmdName }
 	for _, x in args do
 		table.insert(a, x)
 	end
@@ -1513,7 +1503,7 @@ end
 function hb.netRetry(cmdName: string, args: { string }): sh.Result
 	local r = hb.netRun(cmdName, args)
 	if not r.ok and string.find(r.stderr, "cannot lock ref", 1, true) then
-		task.wait(1)
+		require("@lune/task").wait(1)
 		return hb.netRun(cmdName, args)
 	end
 	return r
@@ -1590,7 +1580,7 @@ function hb.readPrs(): ({ heartbeat.Pr }?, string?)
 		return nil, sh.trim(r.stderr .. r.stdout)
 	end
 	local ok, data = pcall(function()
-		return serde.decode("json", r.stdout)
+		return require("@lune/serde").decode("json", r.stdout)
 	end)
 	if not ok or type(data) ~= "table" or (next(data :: any) ~= nil and (data :: any)[1] == nil) then
 		return nil, "gh did not answer with a list"
@@ -1905,7 +1895,7 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 				stdio.ewrite(`beat: {id}: {msg}\n`)
 			end
 		end
-		task.wait(every)
+		require("@lune/task").wait(every)
 	end
 end
 
@@ -1965,7 +1955,7 @@ local function designOpen(item: store.Item): string?
 	local review = fs.readFile(`{item.dir}/design-review-{num}.md`)
 	local refutePath = `{item.dir}/design-refute-{num}.md`
 	local refute = if fs.isFile(refutePath) then fs.readFile(refutePath) else ""
-	return openlist.problem(review, refute, fs.readFile(item.doc))
+	return require("./openlist").problem(review, refute, fs.readFile(item.doc))
 end
 
 local function setStatus(id: string, to: string)
@@ -2707,7 +2697,7 @@ function cmd.release(pos: { string }, opts: { [string]: { string } })
 			`{raftId}'s claim {value} is not this checkout's: give back only your own claim (--force when the user says it is abandoned)`
 		)
 	end
-	local carriers, err = claimsLib.carriers(".", value, nil, originRoots() or {})
+	local carriers, err = require("./claims").carriers(".", value, nil, originRoots() or {})
 	if not carriers then
 		fail(`release: cannot list what carries {value}: {err}`)
 	end
@@ -3071,7 +3061,7 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 				`landed {sha} on main; remove this worktree: git -C {mainRoot()} worktree remove {root} && git -C {mainRoot()} branch -D {branch}{suffix}`
 			)
 			local kickErr: any = nil
-			local kicked = xpcall(watchcmd.kick, function(e)
+			local kicked = xpcall(require("./watchcmd").kick, function(e)
 				kickErr = e
 			end)
 			if not kicked then
@@ -3373,7 +3363,7 @@ end
 function cmd.busy(pos: { string })
 	local current = sh.trim(sh.run("git", { "branch", "--show-current" }).stdout)
 	local own = string.match(current, "^(R%d%d%d%d)%-")
-	local paths = if #pos > 0 then pos else compactLib.guarded()
+	local paths = if #pos > 0 then pos else require("./compact").guarded()
 	local found = 0
 	local ok, tree = originTree()
 	if not ok then
@@ -3408,8 +3398,8 @@ function cmd.busy(pos: { string })
 			end
 		end
 	end
-	for _, ref in compactLib.busyRefNames(current, paths) do
-		local short = compactLib.shortRef(ref)
+	for _, ref in require("./compact").busyRefNames(current, paths) do
+		local short = require("./compact").shortRef(ref)
 		local item, why = frozenOut(freezes, ref)
 		if item then
 			stdio.ewrite(`ignored for {item}'s freeze: {short} ({why})\n`)
@@ -3419,7 +3409,7 @@ function cmd.busy(pos: { string })
 		end
 	end
 	local here = sh.trim(sh.run("pwd", { "-P" }).stdout)
-	for _, wt in compactLib.dirtyWorktrees(here, paths) do
+	for _, wt in require("./compact").dirtyWorktrees(here, paths) do
 		-- a worktree on a branch the freeze ignores is ignored with it (the same function); a detached one is not
 		local on = sh.trim(sh.run("git", { "-C", wt, "branch", "--show-current" }).stdout)
 		local item, why = nil :: string?, nil :: string?
@@ -3733,7 +3723,7 @@ function cmd.compact(_: { string }, opts: { [string]: { string } })
 			"compact runs on a branch cut from origin/main with no commits of its own: HEAD is not origin/main"
 		)
 	end
-	local busy = compactLib.busyRefs(sh.git({ "branch", "--show-current" }))
+	local busy = require("./compact").busyRefs(sh.git({ "branch", "--show-current" }))
 	if #busy > 0 and not opts["--force"] then
 		fail(
 			`compact: these branches change a project root (tracker/, z-nile/.tracker/, ...) or tests/acceptance/: {table.concat(
@@ -3756,7 +3746,7 @@ function cmd.compact(_: { string }, opts: { [string]: { string } })
 	end
 	local map = idsLib.plan(all)
 	keepRecords(".", map, function()
-		compactLib.apply(map, found)
+		require("./compact").apply(map, found)
 	end)
 	fs.writeFile(idsLib.FILE, idsLib.format({ issue = counts.issue + 1, raft = counts.raft + 1 }, phrase()))
 	-- a compaction before origin moved the counter moves it too: the old file becomes the tombstone (c0114)
@@ -3872,7 +3862,7 @@ function cmd.remap()
 		end
 	end
 	keepRecords(".", m, function()
-		compactLib.apply(m, found)
+		require("./compact").apply(m, found)
 	end)
 	local problems = audit.run(".")
 	if audit.errors(problems) > 0 then
@@ -3898,7 +3888,7 @@ function cmd.remap()
 	local built, baseTree = pcall(function(): string
 		sh.git({ "worktree", "add", "-q", "--detach", scratch, mb })
 		keepRecords(scratch, m, function()
-			compactLib.apply(m, audit.scan(scratch), scratch)
+			require("./compact").apply(m, audit.scan(scratch), scratch)
 		end)
 		-- the scratch worktree's tracked state as a commit object, with no ref moved: empty when nothing changed
 		local addBase = process.exec("git", { "add", "-A" }, { cwd = scratch })
@@ -4293,10 +4283,10 @@ function cmd.finish(pos: { string })
 	if #paths == 0 then
 		fail(`{id}: nothing to finish`)
 	end
-	watchcmd.capture({ id = id, dest = `{issue.dir}/acceptance` }, paths)
+	require("./watchcmd").capture({ id = id, dest = `{issue.dir}/acceptance` }, paths)
 	local resultsOut = `{issue.dir}/results.txt`
 	sh.writeReplacing(resultsOut, "")
-	if gateLib.doneGate(process.env) == "promoted" then
+	if require("./gate").doneGate(process.env) == "promoted" then
 		print("finish: inside a spec run, so the affected specs are skipped")
 	else
 		-- The same path the affected gate uses: one project's home per selection. tests/run from the
@@ -4991,7 +4981,7 @@ local function recordAndCommit(
 			sh.git({ "add", "-A", r })
 		end
 	end
-	watchcmd.upkeep()
+	require("./watchcmd").upkeep()
 	local committed, commitErr = pcall(function()
 		sh.git({ "commit", "--quiet", "-m", message, "-m", table.concat(trailers, "\n") })
 	end)
@@ -5159,7 +5149,7 @@ local function reviewProblem(raft: store.Item): string?
 		inHuman[fid] = true
 	end
 	local pendingSet: { [string]: boolean } = {}
-	for _, fid in openlist.pending(raftDoc) do
+	for _, fid in require("./openlist").pending(raftDoc) do
 		pendingSet[fid] = true
 	end
 
@@ -5214,11 +5204,11 @@ local function reviewProblem(raft: store.Item): string?
 		return `{refuteName}: {table.concat(invalid, "; ")}`
 	end
 	-- one round: a refuted finding, an unclosed high, or a failed Judged criterion waits for the human
-	local gap = openlist.problem(review, refute, raftDoc)
+	local gap = require("./openlist").problem(review, refute, raftDoc)
 	if gap then
 		return `{reviewName} {gap}`
 	end
-	if verdict ~= nil and findingCount == 0 and #openlist.judgedFails(review) == 0 then
+	if verdict ~= nil and findingCount == 0 and #require("./openlist").judgedFails(review) == 0 then
 		return `{reviewName} Verdict is {verdict}, not approve`
 	end
 	return nil
@@ -5630,7 +5620,7 @@ function cmd.done(pos: { string })
 		local check = `{item.dir}/check.sh`
 		if fs.isFile(check) then
 			local text = fs.readFile(check)
-			local rewritten = pathsLib.rewrite(text, doneDirs)
+			local rewritten = require("./paths").rewrite(text, doneDirs)
 			if rewritten ~= text then
 				fs.writeFile(check, rewritten)
 				sh.git({ "add", check })
@@ -5639,7 +5629,7 @@ function cmd.done(pos: { string })
 	end
 	-- finish already wrote each layer's watch from that layer's own files. Capturing again, from the
 	-- merge, would give every ticket the whole stack: a finish commit's subject is not an Issue: trailer.
-	if gateLib.doneGate(process.env) == "promoted" then
+	if require("./gate").doneGate(process.env) == "promoted" then
 		print("done: inside a spec run, so the gate is skipped; checking the promoted specs")
 		if #promoted > 0 then
 			print("\n=== promoted acceptance specs: type check + meta + run")
@@ -6243,7 +6233,7 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	if front.design ~= "ready" then
 		fail(`{id} is not design: ready`)
 	end
-	local pending = openlist.pending(fs.readFile(item.doc))
+	local pending = require("./openlist").pending(fs.readFile(item.doc))
 	if #pending > 0 then
 		fail(
 			`{id} has an unruled open-list bullet ({table.concat(pending, ", ")}): rule each under ## Open to the human, then ./zn approve {id}`
@@ -6973,8 +6963,8 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 		local sec = math.floor(since.ms / 1000)
 		local stamped = (os.date("!%Y-%m-%dT%H:%M:%S", sec) :: string) .. ".000Z"
 		local untilIso = (os.date("!%Y-%m-%dT%H:%M:%S") :: string) .. ".999Z"
-		local sinceUnix = sessions.unix(stamped) or 0
-		local untilUnix = sessions.unix(untilIso) or sinceUnix
+		local sinceUnix = require("./sessions").unix(stamped) or 0
+		local untilUnix = require("./sessions").unix(untilIso) or sinceUnix
 		local readOk, reading =
 			pcall(require("./sessionread").span, process.cwd, stamped, sinceUnix, untilIso, untilUnix)
 		if readOk and reading then
@@ -7085,12 +7075,12 @@ end
 -- metrics over lessons (c0111): findings per lesson tag, and design rounds before and after lessons existed
 -- c0116: the design-review-NNN.md files in one item's folder.
 local function designRoundsIn(dir: string): number
-	-- c0118: counted by boardview.rounds, the one rule the board's chart uses too
+	-- c0118: counted by require("./boardview").rounds, the one rule the board's chart uses too
 	local paths: { string } = {}
 	for _, name in fs.readDir(dir) do
 		table.insert(paths, `{dir}/{name}`)
 	end
-	local design = boardview.rounds(paths)
+	local design = require("./boardview").rounds(paths)
 	return design
 end
 
@@ -7787,12 +7777,12 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 			else "classic"
 	end
 	local function codeRounds(dir: string): number
-		-- c0118: counted by boardview.rounds, the one rule the board's chart uses too
+		-- c0118: counted by require("./boardview").rounds, the one rule the board's chart uses too
 		local paths: { string } = {}
 		for _, name in fs.readDir(dir) do
 			table.insert(paths, `{dir}/{name}`)
 		end
-		local _, code = boardview.rounds(paths)
+		local _, code = require("./boardview").rounds(paths)
 		return code
 	end
 	for _, raft in store.all("raft") do
@@ -8188,17 +8178,17 @@ end
 -- `reap` is also what `sync` and the gate run (`--auto`): quiet unless it stops something, a no-op inside a check run
 -- (the guards protect this repository there), and never a reason for the caller to fail.
 cmd["watch-bootstrap"] = function()
-	watchcmd.bootstrap()
+	require("./watchcmd").bootstrap()
 end
 
 -- Returns at once. The net runs under ./zn run and writes .cache/watch-net.log in this checkout.
 cmd["watch-kick"] = function()
-	watchcmd.kick()
+	require("./watchcmd").kick()
 end
 
 -- Edits `.worktree/watch-net`, never this checkout's files, and pushes a repair onto main.
 cmd["watch-net"] = function()
-	watchcmd.net()
+	require("./watchcmd").net()
 end
 
 function cmd.reap(_: { string }, opts: { [string]: { string } })
