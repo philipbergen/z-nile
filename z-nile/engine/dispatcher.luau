@@ -16,10 +16,12 @@ local adapters = require("./adapters")
 local audit = require("./audit")
 local broker = require("./broker")
 local buffer = require("./buffer")
+local completion = require("./completion")
 local costrow = require("./costrow")
 local cred = require("./credential")
 local dispatch = require("./dispatch")
 local fs = require("@lune/fs")
+local layergit = require("./layergit")
 local models = require("./models")
 local modelstep = require("./modelstep")
 local openlist = require("./openlist")
@@ -29,6 +31,7 @@ local raftcheck = require("./raftcheck")
 local runner = require("./runner")
 local serde = require("@lune/serde")
 local sh = require("../lib/sh")
+local stack = require("./stack")
 local stdio = require("@lune/stdio")
 local store = require("./store")
 local task = require("@lune/task")
@@ -927,10 +930,46 @@ function dispatcher.modelStep(
 		end
 		streamDir = store.get(raftId).dir
 	end
+	-- c0248: a layer's code review is the issue's, over the layer's finish commit: the layer must be finished, and the
+	-- file is stamped with the commit and patch the reviewer was given (only in a raft readied with layers: reviewed)
+	local through = opts["--through"] and opts["--through"][1]
+	local stampSha: string? = nil
+	local stampPatch: string? = nil
+	local finalMarked = false
+	local itemDoc: string? = nil
+	if step == "zz-review" and mode == "code" and id ~= "" and store.isIssueId(id) then
+		local issue = store.get(id)
+		itemDoc = issue.doc
+		local raftId = store.readFront(issue.doc).raft
+		local raft = if raftId and raftId ~= "" then store.find(raftId) else nil
+		if raft and raft.kind == "raft" and layergit.marked(raft) then
+			local layer: stack.Layer? = nil
+			for _, l in layergit.layersOf(raft.id) do
+				if l.issue == id then
+					layer = l
+				end
+			end
+			if not layer then
+				error(`{id} has no layer of {raft.id}: nothing to review`, 0)
+			end
+			local sha, patch, why = layergit.finishStamp(raft, layer :: stack.Layer)
+			if not sha then
+				error(`{why}: a code review reviews a finished layer`, 0)
+			end
+			stampSha, stampPatch = sha, patch
+		end
+	elseif step == "zz-review" and mode == "final" and id ~= "" and store.isRaftId(id) then
+		local raft = store.get(id)
+		finalMarked = layergit.marked(raft)
+		itemDoc = raft.doc
+	end
 	local prompt = dispatch.prompt({
 		step = step,
 		id = id,
 		mode = mode,
+		through = through,
+		perLanding = finalMarked,
+		itemDoc = itemDoc,
 		skillPath = skillPath,
 		worktree = cwd,
 		stateDir = stateDir,
@@ -995,7 +1034,7 @@ function dispatcher.modelStep(
 		end
 	end
 	-- where a dispatched review lands: the mode's folder (the item's; a stream review's raft's) and file name
-	type Landing = { dir: string, prefix: string, note: string }
+	type Landing = { dir: string, prefix: string, note: string, perLanding: boolean? }
 	local land: Landing? = nil
 	if step == "zz-review" and id ~= "" then
 		if streamDir then
@@ -1005,7 +1044,12 @@ function dispatcher.modelStep(
 				then "review-"
 				elseif mode == "final" then "final-review-"
 				else "design-review-"
-			land = { dir = store.get(id).dir, prefix = prefix, note = prefix }
+			land = {
+				dir = store.get(id).dir,
+				prefix = prefix,
+				note = prefix,
+				perLanding = mode == "final" and finalMarked,
+			}
 		end
 	end
 	local outcome = "failed"
@@ -1209,8 +1253,39 @@ function dispatcher.modelStep(
 	if land and outcome == "ok" then
 		local l = land :: Landing
 		if fs.isFile(landing) then
+			-- `last` is the round already filed in this folder; `refuse` is the one-round rule
 			local last = lastRound(`{cwd}/{l.dir}`, l.prefix)
-			if last >= 1 then
+			local refuse = last >= 1
+			if l.perLanding then
+				-- a final review per landing: one more than the last on origin/main; the one round is counted over the
+				-- reviews not yet on origin/main, so the second landing's review is not refused for the first's
+				local onMain: { number } = {}
+				local here: { number } = {}
+				local escaped = string.gsub(l.prefix, "%-", "%%-")
+				sh.run("git", { "-C", cwd, "fetch", "--quiet", "origin" })
+				local ref = if layergit.shaOf("origin/main") then "origin/main" else "main"
+				local listed = sh.run("git", { "-C", cwd, "ls-tree", "--name-only", ref, `{l.dir}/` })
+				if listed.ok then
+					for line in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
+						local n = tonumber((string.match(line, `/{escaped}(%d+)%.md$`)))
+						if n then
+							table.insert(onMain, n)
+						end
+					end
+				end
+				if fs.isDir(`{cwd}/{l.dir}`) then
+					for _, f in fs.readDir(`{cwd}/{l.dir}`) do
+						local n = tonumber((string.match(f, `^{escaped}(%d+)%.md$`)))
+						if n then
+							table.insert(here, n)
+						end
+					end
+				end
+				local round = stack.nextRound(onMain, here)
+				refuse = table.find(here, round) ~= nil
+				last = if refuse then round else round - 1
+			end
+			if refuse then
 				-- one round. Historical files stay where they are; a new one is not added.
 				outcome = "failed"
 				pcall(fs.removeFile, landing)
@@ -1227,11 +1302,39 @@ function dispatcher.modelStep(
 				table.insert(attempts, why)
 				table.insert(st.history, why)
 				stdio.ewrite(`dispatch: {why.detail}\n`)
+			elseif l.perLanding and not fs.isFile(`{stateDir}/trace.md`) then
+				outcome = "failed"
+				pcall(fs.removeFile, landing)
+				local why: Attempt = {
+					step = step :: string,
+					cli = "",
+					runtime = "",
+					model = "",
+					outcome = "failed",
+					detail = `the reviewer wrote no trace ({stateDir}/trace.md)`,
+					tokens = 0,
+					minutes = 0,
+				}
+				table.insert(attempts, why)
+				table.insert(st.history, why)
+				stdio.ewrite(`dispatch: {why.detail}\n`)
 			else
 				local name = string.format("%s%03d.md", l.prefix, last + 1)
 				fs.move(landing, `{cwd}/{l.dir}/{name}`)
 				reviewNote = string.format("%s%03d", l.note, last + 1)
 				print(`dispatch: the review is {l.dir}/{name}`)
+				if stampSha and stampPatch then
+					local filed = `{cwd}/{l.dir}/{name}`
+					fs.writeFile(filed, completion.stamp(fs.readFile(filed), stampSha, stampPatch))
+				end
+				if l.perLanding then
+					-- the reviewer's filled trace, in the state folder beside review.md, is this landing's trace-NNN.md
+					local traceFrom = `{stateDir}/trace.md`
+					if fs.isFile(traceFrom) then
+						fs.move(traceFrom, `{cwd}/{l.dir}/trace-{string.format("%03d", last + 1)}.md`)
+						print(`dispatch: the trace is {l.dir}/trace-{string.format("%03d", last + 1)}.md`)
+					end
+				end
 			end
 		else
 			outcome = "failed"

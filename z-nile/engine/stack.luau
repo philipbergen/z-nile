@@ -173,6 +173,25 @@ function stack.bindMembers(
 	return out, nil
 end
 
+-- The round of the landing in progress: the highest number a file of the landing has locally above everything already on
+-- origin/main, else one more than the highest on origin/main. Every landing has its own final review and trace, so a
+-- review that is on main belongs to a landing that is over.
+function stack.nextRound(onMain: { number }, localNums: { number }): number
+	local top = 0
+	for _, n in onMain do
+		if n > top then
+			top = n
+		end
+	end
+	local round = top + 1
+	for _, n in localNums do
+		if n > top and n > round - 1 then
+			round = n
+		end
+	end
+	return round
+end
+
 -- The first paragraph of a section's text, without HTML comments; "(none)" when it has none.
 function stack.firstParagraph(text: string): string
 	local clean = string.gsub(text, "<!%-%-.-%-%->", "")

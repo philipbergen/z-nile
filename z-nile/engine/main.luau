@@ -665,7 +665,8 @@ local function moveOnOrigin(
 	status: string,
 	message: string,
 	verify: ((id: string, st: string) -> string?)?,
-	whole: ((paths: { string }, read: (string) -> string?) -> string?)?
+	whole: ((paths: { string }, read: (string) -> string?) -> string?)?,
+	marker: boolean?
 ): publish.Result
 	refuseStale()
 	return published(publish.commit(".", function(paths, read)
@@ -707,6 +708,10 @@ local function moveOnOrigin(
 			end
 			if rel == `{fid}.md` then
 				text = withFront(text, "status", status)
+				-- c0248: a raft readied from now on has its layers reviewed one by one
+				if marker and store.isRaftId(fid) then
+					text = withFront(text, "layers", "reviewed")
+				end
 			elseif rel == "check.sh" then
 				text = pathsLib.rewrite(text, dirs)
 			end
@@ -2608,7 +2613,7 @@ function cmd.find(pos: { string })
 end
 
 function cmd.members(pos: { string })
-	for _, m in store.members(pos[1] or fail("usage: members <R-id>")) do
+	for _, m in layergit.bindScope(store.members(pos[1] or fail("usage: members <R-id>"))) do
 		print(callerPath(m.dir))
 	end
 end
@@ -3021,9 +3026,15 @@ local function refuseListMode()
 end
 
 -- Runs check.sh for an item. A raft's check.sh is responsible for running its members' checks.
-local function runCheck(item: store.Item): boolean
+local function runCheck(item: store.Item, env: { [string]: string }?): boolean
 	refuseListMode()
 	print(`\n=== {item.id} check.sh`)
+	if env then
+		return process.exec("bash", { `{item.dir}/check.sh` }, {
+			env = env,
+			stdio = { stdout = "forward", stderr = "forward" },
+		}).ok
+	end
 	return sh.stream("bash", { `{item.dir}/check.sh` })
 end
 
@@ -3820,7 +3831,9 @@ function cmd.finish(pos: { string })
 			or fail(`{belowName} does not exist: finish the layer below first`)
 	end
 	if not sh.run("git", { "merge-base", "--is-ancestor", base, "HEAD" }).ok then
-		fail(`{branch} is not based on the layer below: ./zn restack {raft.id}`)
+		fail(
+			`{branch} is not based on {if base == layergit.mainTip() then "main" else "the layer below"}: ./zn restack {raft.id}`
+		)
 	end
 	local onMain = sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{approval.file(issue)}` }).ok
 	local drift = approval.refusal(".", issue, onMain)
@@ -3946,16 +3959,11 @@ function cmd.restack(pos: { string })
 			below = layergit.mainTip()
 			continue
 		end
-		local onto = if layer.position == 1 then layergit.mainTip() else below
+		-- the lowest layer not yet landed is based on main, which holds what landed
+		local onto = if layer.position == 1 or landedPos[layer.position - 1] == true
+			then layergit.mainTip()
+			else below
 		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
-		if
-			layer.position > 1
-			and landedPos[layer.position - 1] == true
-			and layergit.baseOf(layer.position, nil, true, tip) ~= nil
-		then
-			below = tip
-			continue
-		end
 		if stack.alreadyStacked(sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok) then
 			below = tip
 			continue
@@ -4546,6 +4554,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	if not message or message == "" then
 		fail("usage: commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>]")
 	end
+	layergit.stampLayerReviews()
 	-- phase and tokens are checked before anything is staged
 	local phase = "build"
 	if opts["--phase"] then
@@ -4585,7 +4594,7 @@ end
 -- The issues whose specs a promotion covers: a raft's members, or an issue by itself (c0116: z-design checks an
 -- issue's promotion before it has a raft).
 local function promotedItems(item: store.Item): { store.Item }
-	return if item.kind == "issue" then { item } else store.members(item.id)
+	return if item.kind == "issue" then { item } else layergit.bindScope(store.members(item.id))
 end
 
 local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boolean): boolean
@@ -4696,7 +4705,12 @@ local function reviewProblem(raft: store.Item): string?
 	)
 end
 
-local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?, through: string?): { string }
+local function traceProblems(
+	raft: store.Item,
+	printSkeletonOnly: boolean?,
+	through: string?,
+	traceName: string?
+): { string }
 	local trace = require("./trace")
 	local watch = require("../lib/watch")
 
@@ -4899,10 +4913,12 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?, thro
 		return { `{topLayer.name} has no tip` }
 	end
 	local useWorktree = sh.git({ "rev-parse", "HEAD" }) == topTip
-	local tracePath = `{raft.dir}/trace.md`
+	local tracePath = `{raft.dir}/{traceName or "trace.md"}`
 	local tableText = fileTextAt(topTip, tracePath, useWorktree)
 	if tableText == nil then
-		return { `no {tracePath}: run ./zn trace {raft.id} and fill the table` }
+		return {
+			`no {tracePath}: run ./zn trace {raft.id}{if through then ` --through {through}` else ""} and fill the table`,
+		}
 	end
 
 	local onto = baseTip
@@ -4989,8 +5005,19 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
 	if raft.kind ~= "raft" then
 		fail(`{raft.id} is not a raft`)
 	end
+	if through ~= nil and not layergit.marked(raft) then
+		fail(
+			`{raft.id} was readied before layers were reviewed one by one (no layers: reviewed): it lands whole, so trace takes no --through`
+		)
+	end
 	if opts["--check"] then
-		local findings = traceProblems(raft, nil, through)
+		local traceName: string? = nil
+		if layergit.marked(raft) then
+			-- the newest trace not yet on origin/main: each landing has its own
+			local onMain, here = layergit.rounds(raft, "trace")
+			traceName = string.format("trace-%03d.md", stack.nextRound(onMain, here))
+		end
+		local findings = traceProblems(raft, nil, through, traceName)
 		if #findings > 0 then
 			stdio.ewrite(table.concat(findings, "\n") .. "\n")
 			process.exit(1)
@@ -5042,6 +5069,12 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 		landedMap[issue.id] = layergit.landed(issue.id)
 		landedAt[i] = landedMap[issue.id]
 	end
+	local marked = layergit.marked(raft)
+	if through ~= nil and not marked then
+		fail(
+			`{raft.id} was readied before layers were reviewed one by one (no layers: reviewed): it lands whole, so done takes no --through`
+		)
+	end
 	local bindIds, whyBind = stack.bindMembers(orderedIds, landedMap, through)
 	if not bindIds then
 		fail(whyBind :: string)
@@ -5079,11 +5112,68 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 	if here ~= land then
 		fail(`{hereName} is {here} and {topLayer.name} is {land}: done checks the commit it lands`)
 	end
+	local unlandedLayers = 0
+	for _, layer in layers do
+		if layer.position >= firstPos then
+			unlandedLayers += 1
+		end
+	end
+	if #bindLayers ~= #(bindIds :: { string }) or (through == nil and unlandedLayers ~= #bindLayers) then
+		fail(`{raft.id} has {unlandedLayers} layer(s) for {#(bindIds :: { string })} issue(s)`)
+	end
+	for n, layer in bindLayers do
+		local i = firstPos + n - 1
+		if layer.position ~= i or layer.issue ~= issues[i].id then
+			fail(`{raft.id} layer {i} is {layer.name}, expected {issues[i].id}`)
+		end
+		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
+		local onto = layergit.baseFor(haveAt, landedAt, i)
+		if not onto or not sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok then
+			fail(
+				`{layer.name} is not based on {if onto == layergit.mainTip()
+					then "main"
+					else "the layer below"}: ./zn restack {raft.id}`
+			)
+		end
+		if not layergit.layerFinished(layer, onto :: string) then
+			fail(`{layer.issue} is not finished: ./zn finish {layer.issue}`)
+		end
+		-- c0248: a layer is complete (finished, green, reviewed) before it is bound, the top one included
+		local why = if marked then layergit.completeReason(raft, layer, onto :: string) else nil
+		if why then
+			fail(why)
+		end
+	end
+	-- c0248: each landing has its own final review and trace, numbered one past the last landing's
+	local round = 0
+	if marked then
+		local onMainRounds, hereRounds = layergit.rounds(raft, "final-review")
+		round = stack.nextRound(onMainRounds, hereRounds)
+		local _, _, newestLocal = layergit.latestReview(raft)
+		if newestLocal > 0 and newestLocal < round then
+			fail(
+				`final-review-{string.format("%03d", newestLocal)}.md belongs to a landing that is already on main: write final-review-{string.format(
+					"%03d",
+					round
+				)}.md for these layers`
+			)
+		end
+	end
 	local problem = reviewProblem(raft)
 	if problem then
 		fail(problem)
 	end
-	if not runCheck(raft) then
+	local bindEnv: { [string]: string } = {}
+	for k, v in process.env do
+		if type(v) == "string" and k ~= "ZN_BIND_EARLY" then
+			bindEnv[k] = v
+		end
+	end
+	bindEnv.ZN_BIND_MEMBERS = table.concat(bindIds :: { string }, ",")
+	if not wholeRaft then
+		bindEnv.ZN_BIND_EARLY = "1"
+	end
+	if not runCheck(raft, if marked then bindEnv else nil) then
 		fail(`{raft.id} check.sh failed; not done`)
 	end
 	for _, m in store.members(raft.id) do
@@ -5102,49 +5192,8 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 	if not verdict then
 		fail(`{raft.id} has no Verdict line: a verdict nobody wrote is not recorded`)
 	end
-	-- a final review of an earlier bind does not stand in for this bind's own (every landing has its own)
-	local _, _, newest = layergit.latestReview(raft)
-	if anyLanded and newest > 0 then
-		local usedPath = `{raft.dir}/final-review-{string.format("%03d", newest)}.md`
-		local ref = if layergit.shaOf("origin/main") then "origin/main" else "main"
-		if sh.run("git", { "cat-file", "-e", `{ref}:{usedPath}` }).ok then
-			fail(
-				`{usedPath} belongs to a layer that already landed: write final-review-{string.format(
-					"%03d",
-					newest + 1
-				)}.md for these layers`
-			)
-		end
-	end
-	local unlandedLayers = 0
-	for _, layer in layers do
-		if layer.position >= firstPos then
-			unlandedLayers += 1
-		end
-	end
-	if #bindLayers ~= #(bindIds :: { string }) or (through == nil and unlandedLayers ~= #bindLayers) then
-		fail(`{raft.id} has {unlandedLayers} layer(s) for {#(bindIds :: { string })} issue(s)`)
-	end
-	for n, layer in bindLayers do
-		local i = firstPos + n - 1
-		if layer.position ~= i or layer.issue ~= issues[i].id then
-			fail(`{raft.id} layer {i} is {layer.name}, expected {issues[i].id}`)
-		end
-		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
-		local onto = layergit.baseFor(haveAt, landedAt, i)
-		if not onto or not sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok then
-			fail(`{layer.name} is not stacked on the layer below: ./zn restack {raft.id}`)
-		end
-		if not layergit.layerFinished(layer, onto :: string) then
-			fail(`{layer.issue} is not finished: ./zn finish {layer.issue}`)
-		end
-		-- c0248: a layer is complete (finished, green, reviewed) before it is bound, the top one included
-		local why = layergit.completeReason(raft, layer, onto :: string)
-		if why then
-			fail(why)
-		end
-	end
-	local traceFindings = traceProblems(raft, nil, through)
+	local traceName = if marked then string.format("trace-%03d.md", round) else "trace.md"
+	local traceFindings = traceProblems(raft, nil, through, traceName)
 	if #traceFindings > 0 then
 		fail(`{raft.id} trace --check failed:\n{table.concat(traceFindings, "\n")}`)
 	end
@@ -5264,7 +5313,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 	end
 	-- the raft stays in active/ until its last layer lands
 	local doneTracePath =
-		`{if wholeRaft then store.dirFor("raft", "done", raft.id, raft.root) else raft.dir}/trace.md`
+		`{if wholeRaft then store.dirFor("raft", "done", raft.id, raft.root) else raft.dir}/{traceName}`
 	local committed, commitErr = pcall(function()
 		recordAndCommit(
 			raft,
@@ -5924,9 +5973,14 @@ function cmd.ready(pos: { string })
 	local st = statusLib.effective(frontOf(fs.readFile(raft.doc)), raft.state)
 	local reissue = raft.state == "active" and st == "active"
 	local ids: { string } = {}
-	local members = store.members(raft.id)
-	for _, m in members do
-		table.insert(ids, m.id)
+	-- c0248: a member already in done/ on origin/main landed with an earlier bind; ready leaves it where it is
+	local allMembers = store.members(raft.id)
+	local members: { store.Item } = {}
+	for _, m in allMembers do
+		if m.state ~= "done" then
+			table.insert(members, m)
+			table.insert(ids, m.id)
+		end
 	end
 	if not reissue then
 		if not (raft.state == "backlog" and st == "prepared") then
@@ -5942,7 +5996,7 @@ function cmd.ready(pos: { string })
 			listed[id] = true
 		end
 		local unlisted, missing = {}, {}
-		for _, m in members do
+		for _, m in allMembers do
 			if not listed[m.id] then
 				table.insert(unlisted, m.id)
 			end
@@ -6050,7 +6104,8 @@ function cmd.ready(pos: { string })
 					return `{raft.id}'s coherence review predates its record: run a new raft-mode round (z-raft, zz-review); never edit a review that is already written`
 				end
 				return nil
-			end
+			end,
+			true
 		)
 		if not r.ok then
 			fail(`ready: {r.reason}`)
@@ -6148,6 +6203,10 @@ function cmd.stop(pos: { string })
 	end
 	for _, issue in store.all("issue") do
 		local raw = frontOf(fs.readFile(issue.doc)).status
+		-- c0248: a member that landed with an earlier bind stays in done/; the raft goes on without it
+		if issue.state == "done" and store.readFront(issue.doc).raft == raft.id then
+			continue
+		end
 		-- a done issue of another raft that once carried this value (claims are unique only since R0025) is not ours
 		local foreignDone = issue.state == "done" and store.readFront(issue.doc).raft ~= raft.id
 		if raw == claim and not foreignDone then

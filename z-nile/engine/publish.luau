@@ -139,6 +139,9 @@ local function withoutStatus(text: string): string?
 	if lines > 1 then
 		return nil
 	end
+	-- c0248: `ready` marks a raft `layers: reviewed` (its layers are reviewed one by one); that line is the tool's, as
+	-- the status line is
+	kept = string.gsub(kept, "\nlayers: reviewed", "")
 	return head .. kept .. rest
 end
 

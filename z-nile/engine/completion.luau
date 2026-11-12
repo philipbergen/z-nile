@@ -104,8 +104,8 @@ function completion.reviewProblem(review: string?, refute: string?, openList: st
 	return nil
 end
 
--- The sha a review file names on one of its first lines (`Commit: <sha>`), or nil.
-local function commitOf(text: string?): string?
+-- A header field a review or refute carries on one of its first 12 lines (`Commit: <sha>`, `Patch: <id>`), or nil.
+local function stampOf(text: string?, field: string): string?
 	if text == nil then
 		return nil
 	end
@@ -115,9 +115,9 @@ local function commitOf(text: string?): string?
 		if n > 12 then
 			break
 		end
-		local sha = string.match(line, "^Commit:%s*(%x+)%s*$")
-		if sha then
-			return string.lower(sha)
+		local value = string.match(line, `^{field}:%s*(%x+)%s*$`)
+		if value then
+			return string.lower(value)
 		end
 	end
 	return nil
@@ -131,21 +131,68 @@ local function sameCommit(a: string, b: string): boolean
 	return #short >= 7 and string.sub(long, 1, #short) == short
 end
 
--- nil when the layer is complete: its newest review has a Verdict, every finding is answered by the final review's
--- rules, and the review is current (its `Commit:`, or its refute's, is the layer's finish commit). Anything else,
--- an unreadable file included, is a reason (fail closed).
+-- Prepends `Commit:` and `Patch:` to a review or refute that lacks them (the tool stamps; the reviewer never writes
+-- them). A text that already carries a line keeps it. The lines go after the first heading line, if there is one.
+function completion.stamp(text: string, sha: string, patch: string): string
+	local have = {
+		Commit = stampOf(text, "Commit") ~= nil,
+		Patch = stampOf(text, "Patch") ~= nil,
+	}
+	local add: { string } = {}
+	if not have.Commit then
+		table.insert(add, `Commit: {sha}`)
+	end
+	if not have.Patch then
+		table.insert(add, `Patch: {patch}`)
+	end
+	if #add == 0 then
+		return text
+	end
+	local head, rest = string.match(text, "^(#[^\n]*\n)(.*)$")
+	if head then
+		return head .. "\n" .. table.concat(add, "\n") .. "\n" .. (string.gsub(rest :: string, "^\n", "", 1))
+	end
+	return table.concat(add, "\n") .. "\n\n" .. text
+end
+
+local function findingCountOf(review: string): number
+	local n = 0
+	for _ in string.gmatch("\n" .. review, "\n###%s+F%d+") do
+		n += 1
+	end
+	return n
+end
+
+local function fixedAnswers(refute: string?): number
+	local n = 0
+	for _ in string.gmatch("\n" .. (refute or ""), "\n%-%s+F%d+:%s*fixed") do
+		n += 1
+	end
+	return n
+end
+
+local function names(stamp: string?, patch: string?, sha: string, pid: string): boolean
+	return (stamp ~= nil and sameCommit(stamp, sha)) or (patch ~= nil and patch == string.lower(pid))
+end
+
+-- nil when the layer is complete: its newest review has a Verdict and a stamp, every finding is answered by the final
+-- review's rules, and the review is current: its `Commit:` is the finish commit, or its `Patch:` the finish commit's
+-- patch id (a clean rebase keeps the patch); or, when it has findings and its refute answers at least one `fixed`, the
+-- refute's `Commit:` or `Patch:` matches. A refute never carries an approve with no findings, or answers that are
+-- all refuted or deferred, to a changed patch. Anything else, an unreadable file included, is a reason (fail closed).
 function completion.layer(input: {
 	finishSha: string,
+	patchId: string,
 	review: string?,
 	refute: string?,
-	openList: string?,
+	doc: string?,
 	backlog: ((string) -> boolean)?,
 	reviewName: string?,
 	refuteName: string?,
 }): string?
 	local reviewName = input.reviewName or "review-NNN.md"
 	local refuteName = input.refuteName or "refute-NNN.md"
-	if input.finishSha == "" then
+	if input.finishSha == "" or input.patchId == "" then
 		return "the layer has no finish commit"
 	end
 	if input.review == nil then
@@ -154,11 +201,12 @@ function completion.layer(input: {
 	if string.match("\n" .. input.review, "\n[Vv]erdict:%s*%a+") == nil then
 		return `{reviewName} has no Verdict: line`
 	end
-	local reviewed = commitOf(input.review)
-	if reviewed == nil then
-		return `{reviewName} has no Commit: line (its first lines carry Commit: <sha>, the finish commit it reviewed)`
+	local reviewedSha = stampOf(input.review, "Commit")
+	local reviewedPatch = stampOf(input.review, "Patch")
+	if reviewedSha == nil and reviewedPatch == nil then
+		return `{reviewName} has no Commit: line (the tool stamps Commit: and Patch: when ./zn commit commits it)`
 	end
-	local problem = completion.reviewProblem(input.review, input.refute, input.openList, {
+	local problem = completion.reviewProblem(input.review, input.refute, input.doc, {
 		kind = "layer",
 		reviewName = reviewName,
 		refuteName = refuteName,
@@ -167,14 +215,29 @@ function completion.layer(input: {
 	if problem then
 		return problem
 	end
-	local answered = commitOf(input.refute)
-	if
-		sameCommit(reviewed, input.finishSha) or (answered ~= nil and sameCommit(answered, input.finishSha))
-	then
+	if names(reviewedSha, reviewedPatch, input.finishSha, input.patchId) then
 		return nil
 	end
 	local short = string.sub(input.finishSha, 1, 7)
-	return `{reviewName} names {string.sub(reviewed, 1, 7)}, the layer is at {short} (re-review, or answer it in {refuteName} with Commit: {short})`
+	if
+		findingCountOf(input.review) > 0
+		and fixedAnswers(input.refute) > 0
+		and names(
+			stampOf(input.refute, "Commit"),
+			stampOf(input.refute, "Patch"),
+			input.finishSha,
+			input.patchId
+		)
+	then
+		return nil
+	end
+	local seen = if reviewedSha then string.sub(reviewedSha, 1, 7) else "?"
+	local seenPatch = if reviewedPatch then string.sub(reviewedPatch, 1, 4) else "?"
+	return `{reviewName} reviewed {seen} (patch {seenPatch}...), the layer is at {short} (patch {string.sub(
+		input.patchId,
+		1,
+		4
+	)}...): the change differs, so answer it in {refuteName} with a fixed finding or review again`
 end
 
 return completion

@@ -443,6 +443,8 @@ local function isTrackerFileOf(path: string, raftId: string, raftDir: string, is
 		local name = string.sub(path, #raftPrefix + 1)
 		if
 			name == "trace.md"
+			or name == "spend.md"
+			or string.match(name, "^trace%-%d+%.md$") ~= nil
 			or name == `{raftId}.md`
 			or string.match(name, "^review%-%d+%.md$") ~= nil
 			or string.match(name, "^refute%-%d+%.md$") ~= nil
@@ -474,7 +476,10 @@ end
 -- A commit on a lower layer after its finish commit is allowed when it touches only that layer's own review and
 -- refute (c0248) or spend rows.
 local function isLowerLayerReviewFile(path: string, issue: IssueDoc): boolean
-	if string.find(path, "/spend%.d/", 1, false) ~= nil then
+	if
+		string.find(path, "/spend%.d/", 1, false) ~= nil
+		or string.match(path, "/rafts/[%w/]-[R]%d+/spend%.md$") ~= nil
+	then
 		return true
 	end
 	local issuePrefix = issue.dirPath .. "/"
@@ -494,6 +499,7 @@ local function isAllowedAfterTrace(path: string, raftId: string, raftDir: string
 		local name = string.sub(path, #raftPrefix + 1)
 		if
 			name == `{raftId}.md`
+			or name == "spend.md"
 			or string.match(name, "^final%-review%-%d+%.md$") ~= nil
 			or string.match(name, "^final%-refute%-%d+%.md$") ~= nil
 		then
@@ -603,7 +609,13 @@ function trace.staleReason(
 				for j = 2, #layer.commits do
 					local c = layer.commits[j]
 					for _, p in c.files do
-						if p == tracePath then
+						if
+							p == tracePath
+							or (
+								string.sub(p, 1, #raftDir + 1) == raftDir .. "/"
+								and string.match(string.sub(p, #raftDir + 2), "^trace%-%d+%.md$") ~= nil
+							)
+						then
 							lastTraceIdx = j
 						end
 					end
