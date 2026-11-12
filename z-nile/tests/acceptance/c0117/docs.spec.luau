@@ -62,12 +62,14 @@ return t.spec("c0117 docs", function(it)
 		end
 	end)
 
-	it("who reviews is the review model of the CLI, wherever a skill says so", function()
-		local rule = "Opus through `claude` or `agent`, any grok model at `xhigh` through `grok`"
+	it("who reviews is the role .models.toml names, wherever a skill says so", function()
 		-- z-run's reviews are its protocol's, zz-execute's, since c0115
-		for _, name in { "z-design", "z-raft", "zz-execute", "zz-review" } do
-			at(skill(name), rule, name)
-		end
+		at(skill("z-design"), "design-challenge role", "z-design")
+		at(skill("z-raft"), "raft role", "z-raft")
+		at(skill("zz-execute"), "code-review role", "zz-execute")
+		at(skill("zz-review"), "design-challenge", "zz-review")
+		at(skill("zz-review"), "code-review", "zz-review")
+		at(skill("zz-review"), "final-review", "zz-review")
 		at(skill("z-design"), "`./zn dispatch zz-review <id> --mode design`", "z-design")
 		at(skill("z-raft"), "`./zn dispatch zz-review <R-id> --mode raft`", "z-raft")
 		-- the run's protocol is zz-execute's since c0115 (z-run hands off to it)

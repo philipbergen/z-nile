@@ -15,7 +15,20 @@ You have no shared context with the author. Judge only what's in front of you:
 - in code mode, the diff.
 
 ## Who reviews
-A review runs on the review model of the CLI (the user's rule): Opus through `claude` or `agent`, any grok model at `xhigh` through `grok`, never the author's own cheaper model. `./zn dispatch zz-review <id> --mode design|raft|code|stream` (and `--mode final` on the finished stack) starts it from the author's worktree on the CLI and model `.models.toml` names for `zz-review`; under the dispatcher a stream review runs on the review model of the CLI too, and an interactive session may still run stream reviews on Sonnet subagents (Stream mode).
+A review runs on the role `.models.toml` names for the mode: `design-challenge` for design, `raft` for a raft, `code-review` for code and stream, `final-review` for the final review. `./zn dispatch zz-review <id> --mode design|raft|code|stream` (and `--mode final` on the finished stack) starts it from the author's worktree on that role. An interactive session starts its reviewer subagent on the same role's model. A challenge is never run by the model that wrote the text.
+
+## Idea challenge
+One short pass, before any design. `./zn idea` runs it. Judge only the Problem, the Solution and the Non-goals: is the problem real and stated as an outcome someone could check, is the solution the smallest that solves it, what is out of scope, what would make it wrong. Reply in this shape and nothing else:
+
+```markdown
+## Findings
+- F1: <one disputed point, or the single word none>
+
+## Verdict
+approve
+```
+
+`approve` when nothing is disputed. `revise` when a finding remains. Do not rewrite the idea. The command writes `idea-review-001.md` and leaves what is still disputed under `## Open to the human`.
 
 ## Output file
 - Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue); in raft mode, in the raft's folder. `./zn metrics` counts both and rolls an issue's rounds up to its raft through `raft:`.

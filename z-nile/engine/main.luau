@@ -1,5 +1,6 @@
 --!strict
 -- Tracker CLI. Run through ./zn at the repository root (c0114). See z-nile/skills/zz-rules/SKILL.md.
+local adapters = require("./adapters")
 local approval = require("./approval")
 local audit = require("./audit")
 local board = require("./board")
@@ -14,10 +15,12 @@ local dispatchLib = require("./dispatch")
 local dispatcherLib = require("./dispatcher")
 local fs = require("@lune/fs")
 local gateLib = require("./gate")
+local idea = require("./idea")
 local idsLib = require("./ids")
 local layergit = require("./layergit")
 local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
+local models = require("./models")
 local openlist = require("./openlist")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
@@ -116,6 +119,7 @@ usage: ./zn <command> ...
   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
   capture <id>                                  print the item's document as captured (read-only)
+  idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
   metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
@@ -1171,7 +1175,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				local changes: { publish.Change } = {
 					{
 						path = `{root}/issues/{chosen}/{chosen}.md`,
-						content = withFront(doc, "status", stamp("new")),
+						content = withFront(withFront(doc, "idea", "unchallenged"), "status", stamp("new")),
 					},
 					{
 						path = `{root}/issues/{chosen}/check.sh`,
@@ -1218,7 +1222,10 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			EMERGENT = if state == "active" then "true" else "false",
 			DATE = today(),
 		}
-		fs.writeFile(`{dir}/{id}.md`, withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts))
+		fs.writeFile(
+			`{dir}/{id}.md`,
+			withFront(withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts), "idea", "unchallenged")
+		)
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/issue/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
 		print(`{dir}/{id}.md`)
@@ -1597,6 +1604,16 @@ local function setStatus(id: string, to: string)
 				)
 			then
 				return `{t} is {cur} on origin/main: cannot move to {to}`
+			end
+			if t == id and not store.isRaftId(id) and to == "preparing" then
+				local suffix = `/{t}.md`
+				local reviewPath = if string.sub(tp, -#suffix) == suffix
+					then string.sub(tp, 1, #tp - #suffix) .. "/idea-review-001.md"
+					else ""
+				local why = idea.designRefusal(tt, if reviewPath ~= "" then read(reviewPath) else nil, t)
+				if why then
+					return why
+				end
 			end
 			table.insert(moved, { id = t, from = cur :: string })
 			table.insert(changes, { path = tp, content = withFront(tt, "status", value) })
@@ -6703,6 +6720,144 @@ function cmd.capture(pos: { string }, _opts: { [string]: { string } })
 	end
 	print(`capture {c.sha} {c.path} {c.subject}{marks}`)
 	stdio.write(shown.stdout)
+end
+
+-- idea <id> [--text <rough>]: the idea stage. The author drafts, the challenge role challenges once, the author
+-- revises once. Files land in the working tree; the human commits them before design starts.
+function cmd.idea(pos: { string }, opts: { [string]: { string } })
+	refuseInMainCheckout("idea")
+	local id = pos[1]
+	if not id or not string.match(id, "^[fdc]%d%d%d%d$") then
+		fail("usage: idea <id> [--text <rough>]")
+	end
+	local item = store.find(id)
+	if not item or item.kind ~= "issue" then
+		fail(`idea: {id} is not an issue in this checkout`)
+	end
+	local here = item :: store.Item
+	local doc = fs.readFile(here.doc)
+	local rough = if opts["--text"] and opts["--text"][1] then opts["--text"][1] else doc
+	local layers = models.walk(".", here.dir)
+	local function attempt(
+		resolved: models.Resolved,
+		prompt: string,
+		phase: string,
+		accept: (string) -> boolean
+	): (string, string)
+		local okTries, triesOrErr = pcall(function()
+			return models.tries(resolved)
+		end)
+		if not okTries then
+			fail(tostring(triesOrErr))
+		end
+		local tries = triesOrErr :: { models.Spec }
+		local why = "no model produced a usable answer"
+		for _, spec in tries do
+			local adapter = adapters.get(spec.runtime)
+			local session = (
+				string.gsub("xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx", "[xy]", function(c)
+					local n = if c == "x" then math.random(0, 15) else math.random(8, 11)
+					return string.format("%x", n)
+				end)
+			)
+			local argv = adapter.argv({
+				prompt = prompt,
+				model = spec.model,
+				effort = spec.effort,
+				cwd = process.cwd,
+				session = session,
+			})
+			local bin = table.remove(argv, 1) :: string
+			local t0 = os.clock()
+			local ran = process.exec(bin, argv)
+			local wall = os.clock() - t0
+			local acc = adapters.newAcc()
+			local function feed(blob: string)
+				for line in string.gmatch(blob .. "\n", "(.-)\n") do
+					if line ~= "" then
+						adapter.feed(acc, line)
+					end
+				end
+			end
+			feed(ran.stdout)
+			feed(ran.stderr)
+			local outcome, detail = adapters.finish(acc, ran.ok, ran.stderr, spec.runtime)
+			local tokens = adapters.tokens(acc)
+			local modelId = models.id(spec)
+			local missing = { "cpu" }
+			if tokens <= 0 then
+				table.insert(missing, "tokens")
+			end
+			local branch, head = costrow.branchOf(".")
+			costrow.append(".", {
+				ms = 0,
+				kind = "row",
+				phase = phase,
+				subject = `{id} {outcome}`,
+				wall = wall,
+				tokens = if tokens > 0 then tokens else nil,
+				model = modelId,
+				unmeasured = table.concat(missing, ","),
+				id = id,
+				branch = branch,
+				head = head,
+			})
+			local shown = if tokens > 0 then tostring(tokens) else "unmeasured"
+			local note = if outcome == "ok" then "" else ` {detail}`
+			print(
+				`idea: {phase} model {modelId} tokens {shown} wall {string.format("%.1f", wall)} {outcome}{note}`
+			)
+			if outcome == "ok" then
+				local prose = idea.prose(ran.stdout)
+				if accept(prose) then
+					return prose, modelId
+				end
+				why = "the answer was not in the required shape"
+			else
+				why = detail
+			end
+		end
+		fail(`idea: {phase}: {why}`)
+		return "", ""
+	end
+	local drafted: idea.Draft? = nil
+	local prose, wrote = attempt(
+		models.resolve(layers, "idea"),
+		idea.authorPrompt(rough),
+		"idea",
+		function(text)
+			drafted = idea.parseDraft(text)
+			return drafted ~= nil
+		end
+	)
+	local challenge = models.resolve(layers, "idea-challenge")
+	challenge.authorModel = wrote
+	local findings: { string } = {}
+	local verdict: string? = nil
+	attempt(challenge, idea.challengePrompt(prose), "idea-challenge", function(text)
+		local found, said = idea.parseReview(text)
+		findings = found
+		verdict = said
+		return said == "approve" or said == "revise"
+	end)
+	local revised: idea.Draft? = nil
+	attempt(models.resolve(layers, "idea"), idea.authorPrompt(rough, findings), "idea", function(text)
+		revised = idea.parseDraft(text)
+		return revised ~= nil
+	end)
+	local body = revised :: idea.Draft
+	if verdict == "revise" and #body.open == 0 and #findings > 0 then
+		body.open = findings
+	end
+	local reviewVerdict = if #body.open == 0 then "approve" else "open"
+	fs.writeFile(here.doc, withFront(idea.apply(doc, body), "idea", "challenged"))
+	local reviewPath = `{here.dir}/idea-review-001.md`
+	fs.writeFile(reviewPath, idea.reviewText(body.open, reviewVerdict))
+	print(here.doc)
+	print(reviewPath)
+	print(
+		`idea: verdict {reviewVerdict}; commit these and push them to origin/main before ./zn status {id} preparing`
+	)
 end
 
 local function optNum(opts: { [string]: { string } }, name: string): number?

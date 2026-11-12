@@ -8,6 +8,9 @@
 -- assistant message, a `rate_limit_event` per call and a final `result` with `modelUsage`; `grok -p --output-format
 -- streaming-json` gives a `usage` line per model call and an `end` line with the total; `agent -p --output-format
 -- stream-json` gives usage only on its final `result` line, so its step is capped by model calls instead.
+-- Kimi Code 2.5.2 (`kimi --help`): `kimi --auto -p <prompt> --output-format stream-json -m <model>`.
+-- A session wire's `usage.record` counts inputOther + inputCacheCreation + output and leaves inputCacheRead out.
+-- The ledger id `kimi-code-<rest>` is the CLI's `kimi-code/<rest>`.
 local serde = require("@lune/serde")
 
 local adapters = {}
@@ -198,6 +201,40 @@ local function claudeFeed(acc: Acc, line: string)
 	end
 end
 
+-- Kimi's usage.record (session wire and the stream the same events use). Cache reads stay out.
+local function kimiUsage(u: any): number
+	if type(u) ~= "table" then
+		return 0
+	end
+	return num(u.inputOther) + num(u.inputCacheCreation) + num(u.output)
+end
+
+local function kimiModel(id: string): string
+	if string.sub(id, 1, 10) == "kimi-code-" then
+		return "kimi-code/" .. string.sub(id, 11)
+	end
+	return id
+end
+
+local function kimiFeed(acc: Acc, line: string)
+	local j = decode(line)
+	if not j then
+		acc.cliText = line
+		return
+	end
+	if j.type == "usage.record" then
+		acc.live += kimiUsage(j.usage)
+		acc.final = acc.live
+	elseif j.type == "error" or j.error ~= nil then
+		local text = tostring(j.message or j.error or line)
+		acc.errorText = text
+		acc.cliText = text
+		if mentions(text, adapters.QUOTA) then
+			acc.quota = text
+		end
+	end
+end
+
 local function grokFeed(acc: Acc, line: string)
 	local j = decode(line)
 	if not j then
@@ -371,6 +408,24 @@ local ADAPTERS: { [string]: Adapter } = {
 			}, "--reasoning-effort", r.effort)
 		end,
 		feed = grokFeed,
+	},
+	["kimi-cli"] = {
+		cli = "kimi",
+		runtime = "kimi-cli",
+		callCapped = false,
+		argv = function(r: Request): { string }
+			return {
+				"kimi",
+				"--auto",
+				"-p",
+				r.prompt,
+				"--output-format",
+				"stream-json",
+				"-m",
+				kimiModel(r.model),
+			}
+		end,
+		feed = kimiFeed,
 	},
 	["cursor-cli"] = {
 		cli = "agent",

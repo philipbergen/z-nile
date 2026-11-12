@@ -19,7 +19,7 @@ stall_seconds = 300
 tool_seconds = 900
 
 [z-ticket.claude]
-model = "claude-sonnet-5"
+model = "claude-fable-5-2"
 rank = 2
 runtime = "claude-cli"
 max_tokens = 300000
@@ -89,7 +89,7 @@ max_minutes = 240
 max_tokens = 600000
 
 [z-run.claude]
-model = "claude-opus-5-5"
+model = "claude-sonnet-5-5"
 effort = "high"
 rank = 3
 runtime = "claude-cli"
@@ -136,3 +136,85 @@ max_calls = 200
 # and a wall-time ceiling, since a stream can hide its calls (fail closed)
 max_minutes = 240
 max_tokens = 2000000
+
+# Roles. When a walk has the role, that role replaces the skill tables above. A closer file replaces only the keys
+# it sets. `author` drops that role's model from the tries: a challenge is never run by the model that wrote the text.
+# design-challenge names no author: the table gives it the same model as design, and that model is the one that runs.
+[fallback.kimi]
+model = "kimi-code-k3.1-pro"
+runtime = "kimi-cli"
+rank = 2
+max_tokens = 300000
+
+[fallback.grok]
+model = "grok-4.7"
+runtime = "grok-cli"
+effort = "high"
+rank = 2
+max_tokens = 300000
+
+[roles.idea]
+model = "claude-fable-5-2"
+cli = "claude"
+runtime = "claude-cli"
+rank = 2
+max_tokens = 300000
+fallbacks = ["kimi", "grok"]
+
+[roles.idea-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 300000
+author = "idea"
+fallbacks = ["kimi", "grok"]
+
+[roles.design]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 3000000
+fallbacks = ["kimi", "grok"]
+
+[roles.design-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 3000000
+fallbacks = ["kimi", "grok"]
+
+[roles.raft]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 3000000
+fallbacks = ["kimi", "grok"]
+
+[roles.implementation]
+model = "claude-sonnet-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 12000000
+fallbacks = ["kimi", "grok"]
+
+[roles.code-review]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 2000000
+author = "implementation"
+fallbacks = ["kimi", "grok"]
+
+[roles.final-review]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 2000000
+fallbacks = ["kimi", "grok"]

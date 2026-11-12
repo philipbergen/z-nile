@@ -211,6 +211,7 @@ return t.spec("c0117 .models.toml", function(it)
 			claude = { "claude-cli" },
 			grok = { "grok-cli" },
 			agent = { "cursor-cli" },
+			kimi = { "kimi-cli" },
 		})
 		t.expect(has(
 			errorOf(function()
@@ -355,14 +356,19 @@ return t.spec("c0117 .models.toml", function(it)
 		t.expect(models.folders(".")).toEqual({ "." })
 	end)
 
-	it("the root .models.toml resolves every model step on all three CLIs", function()
+	it("the root .models.toml resolves every model step from its roles", function()
 		local layers = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
 		for _, skill in { "z-ticket", "z-design", "z-raft", "z-run", "zz-review" } do
 			local r = models.resolve(layers, skill)
-			for _, cli in models.CLIS do
+			t.expect(r.fromRoles).toBe(true)
+			for _, cli in { "claude", "kimi", "grok" } do
 				t.expect(r.specs[cli] ~= nil).toBe(true)
 			end
 			t.expect(#models.tries(r)).toBe(3)
 		end
+		local idea = models.resolve(layers, "z-ticket")
+		t.expect(idea.specs.claude.model).toBe("claude-fable-5-2")
+		local run = models.resolve(layers, "z-run")
+		t.expect(run.specs.claude.model).toBe("claude-sonnet-5-5")
 	end)
 end)
