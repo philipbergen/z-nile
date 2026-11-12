@@ -111,7 +111,7 @@ local SHIM = '#!/bin/sh\ncase "$1" in fetch|ls-remote|push) echo x >> "$FAKE_DIR
 	.. 'if [ "$1" = push ]; then case "$*" in *":refs/heads/hb/"*) echo p >> "$FAKE_DIR/hbpushes";; esac; fi\n'
 	.. 'if [ "$1" = push ] && [ -f "$FAKE_DIR/hbfail" ]; then case "$*" in *":refs/heads/hb/"*) echo "fatal: fake beat refusal" >&2; exit 1;; esac; fi\n'
 	.. 'if [ "$1" = merge ] && [ -f "$FAKE_DIR/mergefail" ]; then case "$*" in *origin/main*) echo "fatal: fake merge refusal" >&2; exit 1;; esac; fi\n'
-	.. 'if [ "$1" = fetch ] && [ -f "$FAKE_DIR/lockfetch" ]; then rm -f "$FAKE_DIR/lockfetch"; echo "error: cannot lock ref refs/remotes/origin/main: fake" >&2; exit 1; fi\n'
+	.. 'if [ "$1" = fetch ] && [ -f "$FAKE_DIR/lockfetch" ] && case "$*" in *--quiet*) true;; *) false;; esac; then rm -f "$FAKE_DIR/lockfetch"; echo "error: cannot lock ref refs/remotes/origin/main: fake" >&2; exit 1; fi\n'
 
 return t.spec("c0275 automatic beats", function(it)
 	it("sets up a tracker, a prepared raft to ready and one to fold into, worktrees and the shims", function()
@@ -280,9 +280,10 @@ return t.spec("c0275 automatic beats", function(it)
 			t.expect(failed.ok).toBe(false) -- the merge of origin/main failed after the claim was published
 			t.expect(tipOf(stampOf(`{P}/c0088/c0088.md`)) ~= "").toBe(true) -- and the claim had its first beat
 			fs.writeFile(`{h.fakes}/lockfetch`, "1")
-			local locked = zn(wt6, { "status", "c0089", "preparing" }, T0 + 9300)
+			-- the command's own fetch (`sync`'s, which throws when it fails) meets a ref lock another process holds
+			local locked = zn(h.f.main, { "sync" }, T0 + 9300)
 			t.expect(locked.ok).toBe(true)
-			t.expect(fs.isFile(`{h.fakes}/lockfetch`)).toBe(false) -- the refused fetch was the command's own, and it was tried again
+			t.expect(fs.isFile(`{h.fakes}/lockfetch`)).toBe(false) -- the refused fetch was made, and it was tried again
 		end
 	)
 
