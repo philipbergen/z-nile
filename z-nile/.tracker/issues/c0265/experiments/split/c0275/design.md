@@ -2,7 +2,7 @@
 
 c0265 was split on 2026-11-08 (user: "yes go ahead and split the whole thing up and tie them togetjer in a raft so we can run through these a layer at a time in a PR"). This folder holds what the monolithic c0265 design said about the first beat on every claim path, the autobeat of every `./zn` command in a worktree, the tick of long commands, the dispatcher beats, the guarded checkouts, verbatim, so this issue's prep starts from it. Nothing here is binding design: c0265's core layer (the heartbeat branch, `beat`, `beat --watch`, the verdicts, `lost`, the status markers) is prototyped on branch `proto-c0265-raft` (`z-nile/engine/heartbeat.luau`, `cmd.beat`, `cmd.lost`, `cmd.status` in `main.luau`); build on it.
 
-Layer 3. Depends on c0265 and c0274 (the stamp memory the autobeat entry and the guard read). `dispatch.spec.luau` and `race.cases.luau` are real-time proofs (never promoted, pinned by hash in check.sh). The drops of a heartbeat branch by `status <id> new`, `stop` and `done` (give-back, finished) belong here with the first-beat hooks.
+Layer 3. Depends on c0265 and c0274 (the stamp memory the autobeat entry and the guard read). `dispatch.spec.luau.txt` and `race.cases.luau.txt` are real-time proofs (never promoted, pinned by hash in check.sh). The drops of a heartbeat branch by `status <id> new`, `stop` and `done` (give-back, finished) belong here with the first-beat hooks.
 
 ## Design text (from the monolithic c0265 Design, in its order)
 
@@ -61,7 +61,7 @@ Two commands and four markers, each refusal naming the item and the rule; no age
 
 - `acceptance/beat.spec.luau` :: claim writes the first beat; beat from the main checkout; refuses unclaimed and done; ready beats; any `./zn` command in a worktree beats once an interval passed, the main checkout never; no deletion of a young unfetched beat; new raft beats; `--watch` bound → AC2
 - `acceptance/lost.spec.luau` :: fresh; lost, parked (PR, questions.md read from main even for a takeover, raft PR); revive; unreadable, malformed ref; a failed beat attempt is not retried inside the interval; the board's model carries each verdict (longest silent first) and the publish-rebuilt board too; a protected checkout reads no remote (board, status, lost); an entry for a claim that ended says so; a failed first beat does not fail the claim; takeover refusals; takeover of an issue and a raft (recorded in the claim commit's subject); the taker's carried move passes; the old claimant refused, told once, entry gone → AC3
-- `proofs/dispatch.spec.luau` :: a beat while the step works → AC4
+- `proofs/dispatch.spec.luau.txt` :: a beat while the step works → AC4
 - `proofs/race.spec.luau` :: `--watch` failed tick; `--watch` restamp stop; a long `check` beats; a hung remote is bounded and not retried inside the interval → AC5
 
 ## Acceptance criteria text
@@ -73,7 +73,7 @@ Two commands and four markers, each refusal naming the item and the rule; no age
 
 ## Pure code left out of the core layer
 
-The core `heartbeat.plan` has no `remembered` argument. The lease rule with a remembered sha (the throttle entry `<stamp> <epoch> <sha>`) is `plan(stamp, epoch, beats, claimed, now, remembered?)` in `../heartbeat.monolith.proto.txt`, with its case in `heartbeat.cases.luau`. The core `heartbeat.clock` and `heartbeat.setting` take a `specRun: boolean` (the guards answer `checking()`; the engine and specs must not name the guards variables: tooling/repo-fence bans them), unlike the prototype file.
+The core `heartbeat.plan` has no `remembered` argument. The lease rule with a remembered sha (the throttle entry `<stamp> <epoch> <sha>`) is `plan(stamp, epoch, beats, claimed, now, remembered?)` in `../heartbeat.monolith.proto.txt`, with its case in `heartbeat.cases.luau.txt`. The core `heartbeat.clock` and `heartbeat.setting` take a `specRun: boolean` (the guards answer `checking()`; the engine and specs must not name the guards variables: tooling/repo-fence bans them), unlike the prototype file.
 
 ## Lesson from the core prototype
 

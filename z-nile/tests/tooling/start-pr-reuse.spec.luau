@@ -82,7 +82,7 @@ return t.spec("a readied raft's start reuses its open pull request", function(it
 		t.expect(string.find(r.stdout, "already open", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(r.stdout, "pull/7", 1, true) ~= nil).toBe(true)
 		local calls = fs.readFile(log)
-		t.expect(string.find(calls, "pr list --head R0010-kept", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(calls, "pr list --head R0010/1/c0010", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(calls, "pr create", 1, true) == nil).toBe(true)
 	end)
 

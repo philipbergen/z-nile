@@ -13,3 +13,4 @@ check: For each Rules and mutants row marked `reasoned`, is its stated reason (w
 **Also:** f0147 design review 005 F2: the eaten ghost's carry was called observable only after a full eyes run; flipping the ghost back to blue by hand, as the neighbouring cases do, observed it in five lines.
 
 **Note** (c0265 design review 023 F2): "a collision cannot be observed" is rarely true: a stand-in can answer the collision check as taken, so no case waits for a real collision. Check: can a stand-in answer, as taken, the check the row says cannot fire?
+**Also:** c0246 design review 001 / R0088 code review 001 F1: row N15 said a file name with a newline cannot be made in a throwaway fixture; `fs.writeFile` makes one in a line, and the PATH stub the neighbouring case already used reached the other branch. Eight design rounds passed the reason unchallenged.

@@ -89,6 +89,7 @@ local function stubbed(name: string): string
 		'#!/bin/sh\nif [ "$1" = --version ]; then echo "lune 0.10.5"; exit 0; fi\n'
 			.. 'if [ "$2" = z-nile/roots ] && [ "$4" = --projects ]; then\n'
 			.. '  printf "pickman\\tpickman\\tpickman/.tracker\\nz-nile\\tz-nile\\tz-nile/.tracker\\n"; exit 0\nfi\n'
+			.. 'if [ "$2" = z-nile/affected ]; then exit 0; fi\n'
 			.. 'if [ "$2" = z-nile/roots ] && [ "$4" = --luau-dirs ]; then\n'
 			.. '  if [ "$5" = pickman ]; then echo "pickman/src pickman/tests pickman/.tracker"; exit 0; fi\n'
 			.. '  echo "pickman/src pickman/tests pickman/.tracker z-nile scripts z-nile/.tracker"; exit 0\nfi\n'
@@ -165,7 +166,7 @@ return t.spec("c0120 each project has its own gate", function(it)
 		"the plan of the real tree's layout: every home's folders, pickman's places and both projects' specs",
 		function()
 			local dir = planTree()
-			local ok, out = plan(dir, {})
+			local ok, out = plan(dir, { "--full" })
 			untouched(dir)
 			t.expect(ok).toBe(true)
 			local format = words(lineOf(out, "format"))

@@ -1,0 +1,20 @@
+diff --git a/z-nile/README.md b/z-nile/README.md
+index f76ef60b..dcb7584d 100644
+--- a/z-nile/README.md
++++ b/z-nile/README.md
+@@ -53,6 +53,7 @@ flowchart LR
+ ### Order
+ Tickets have no order today. They should: every issue and raft gets a `rank:` (integer, lower first; not the `rank` of `.models.toml`, where a higher one wins). *captured* (c0249)
+ - The next item is the lowest rank among items whose `depends_on` are all done and whose status is claimable. `depends_on` is a hard constraint; `rank` only orders what is free.
++- Lost work comes before rank: a claim whose heartbeat went quiet (`./zn lost`) is taken before anything not yet started, whatever its rank. *exists* (c0265)
+ - z-ticket and z-design append by default. You move things with `./zn rank <id> top|after <id>`. A raft takes the best rank of its members. The board shows the stack in order.
+ 
+ ### Claiming across hosts
+@@ -92,6 +93,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
+ ### Roadmap
+ | piece | issue | state |
+ |---|---|---|
++| work heartbeat, `./zn beat`, `./zn lost` | c0265 | exists |
+ | `.models.toml`, dispatcher, chain, quota fallback, bot credential | c0117 | designed |
+ | board, a tab per project | c0118 | designed |
+ | remote runtimes (`claude-cloud`, `grok-bot`, `cursor-app`) | c0142 | captured |

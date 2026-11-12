@@ -2,7 +2,7 @@
 
 c0265 was split on 2026-11-08 (user: "yes go ahead and split the whole thing up and tie them togetjer in a raft so we can run through these a layer at a time in a PR"). This folder holds what the monolithic c0265 design said about `worktree --takeover`, the numbered copies, the discard guard, the lookup by family, verbatim, so this issue's prep starts from it. Nothing here is binding design: c0265's core layer (the heartbeat branch, `beat`, `beat --watch`, the verdicts, `lost`, the status markers) is prototyped on branch `proto-c0265-raft` (`z-nile/engine/heartbeat.luau`, `cmd.beat`, `cmd.lost`, `cmd.status` in `main.luau`); build on it.
 
-Layer 5. Depends on c0265 and c0274 (the claim memory and the lost verdict `--takeover` needs). `discard.spec.luau` is the whole spec, never run against an implementation.
+Layer 5. Depends on c0265 and c0274 (the claim memory and the lost verdict `--takeover` needs). `discard.spec.luau.txt` is the whole spec, never run against an implementation.
 
 ## Design text (from the monolithic c0265 Design, in its order)
 
@@ -58,7 +58,7 @@ heartbeat.nextSuffix(name, taken): string                              -- the sm
 
 ## Test plan lines
 
-- `acceptance/discard.spec.luau` :: a live claim is refused and a missing worktree created; parked, unreadable and claim-less refused with nothing moved; a lost claim's worktree is marked discarded, its branch renamed, the numbered copy continues the pushed branch with the PR head untouched, the dirty/unpushed work kept and listed, a plain lookup finds the copy, a second taker is refused while the copy is fresh; the old process is told by every command; busy names the discarded worktree; the next takeover is -2 → AC7
+- `acceptance/discard.spec.luau.txt` :: a live claim is refused and a missing worktree created; parked, unreadable and claim-less refused with nothing moved; a lost claim's worktree is marked discarded, its branch renamed, the numbered copy continues the pushed branch with the PR head untouched, the dirty/unpushed work kept and listed, a plain lookup finds the copy, a second taker is refused while the copy is fresh; the old process is told by every command; busy names the discarded worktree; the next takeover is -2 → AC7
 
 ## Acceptance criteria text
 
@@ -66,7 +66,7 @@ heartbeat.nextSuffix(name, taken): string                              -- the sm
 
 ## Pure code left out of the core layer
 
-`nextSuffix` is in `../heartbeat.monolith.proto.txt`; add it to `z-nile/engine/heartbeat.luau` here, with its case from `heartbeat.cases.luau`.
+`nextSuffix` is in `../heartbeat.monolith.proto.txt`; add it to `z-nile/engine/heartbeat.luau` here, with its case from `heartbeat.cases.luau.txt`.
 
 ## Lesson from the core prototype
 

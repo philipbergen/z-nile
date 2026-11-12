@@ -6,7 +6,7 @@ description: How portal's start place is tested - from portal's home, with pickm
 
 # Testing (portal)
 
-This is portal's half of testing. The gate, the runner, `check.sh` files, sequestration, the affected-spec selector and the repository guards are z-nile's, in the zz-test skill, and bind here too. The spec tiers, the shape of a spec and the simulation harness are pickman's, in `pickman/skills/pickman-test/SKILL.md`: read it, and its lessons (`./zn lessons --skill pickman-test --full`).
+This is portal's half of testing. The gate, the runner, `check.sh` files, sequestration, the affected-spec selector and the repository guards are z-nile's, in the zz-test skill, and bind here too. The spec tiers, the shape of a spec and the simulation harness are pickman's, in `pickman/skills/pickman-test/SKILL.md`: read it.
 
 ## Running portal's specs
 Specs run from portal's home, `portal/`: `cd portal && lune run tests/run -- tests/unit/Foo`, or `portal/check.sh` for portal's whole gate. Every path in pickman-test is relative to the project's home, so for portal it is relative to `portal/`, where `portal/.luaurc` points `@tests`, `@logic` and `@shared` at portal's own folders and `@arcade` at the library's `src/shared` (`../arcade/src/shared`). The assertions (`@tests/lib/t`) and `renamed` are the shared ones, re-exported from `portal/tests/lib/`.
@@ -18,7 +18,7 @@ Specs run from portal's home, `portal/`: `cd portal && lune run tests/run -- tes
 - A tier folder (`tests/unit/<Feature>`, `contract`, `scenario`, `place`) appears with its first spec. The helpers `sim` and `fakeengine` are pickman's (`pickman/tests/lib/`): a portal spec never requires another home's helper. One that needs a helper asks for its move into the shared harness (`z-nile/tests/lib/`), as c0185 did for `place` (`tests/lib/place.luau` re-exports it, and `tests/place/library.spec.luau` is this home's place tier).
 
 ## Lessons
-Before you start, read this skill's lessons: `./zn lessons --skill portal-test --full`. Each is a mistake made before, with the question that catches it.
+Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
 
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.

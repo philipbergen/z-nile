@@ -1,0 +1,16 @@
+# Design refute 004: c0261
+
+Answers design-review-004.md (round 3 of the redesign). The user also decided (2026-11-08, as relayed) that the final-round rule judges by KIND of model, not by exact ids; that is what F5 and F1 now read.
+
+- F1: fixed: a `fallback` is allowed through agent only (the guard names agent: its ids carry their effort); on claude and grok it is an error, so no fallback can void the rule, and `finalModels` is gone (the commands judge by kind, `models.isFinalModel`); cases for claude, grok and a final-review activity; mutant "guard dropped" run and dies.
+- F2: fixed: a round's row is matched by phase and exact subject (`design-review-NNN`, `<id>: review-NNN`); a stream row, a member's design row and a later fixes commit are not it; a retry's exact rows pass when one is on a final kind; cases and mutants (substring, phase ignored) run.
+- F3: fixed in the Design: `status … prepared` reads the item's (or raft's) `spend.md` on the fetched origin/main plus the local copy, `done` the members' and the raft's at the branch; an unparsable spend.md refuses with its own text; `final-round-cli.spec` pins the origin-only case (the prep worktree has no spend.md).
+- F4: fixed in part: the wiring is prototyped (`finalRoundRefusal` in `main.luau`) and the 13 promoted specs that write a round and run `done` or `status … prepared` were run on it: 104 pass, 3 fail (c0008/done-order, which has an origin remote but no `origin/main`): named in Overrides with their rewrite; AC12's selection now includes `review-0`; `final-round-cli.spec` is the sequestered command spec for `status prepared`. Still the executor's tests first: `done`'s own cases and the raft's own round at `status <R-id> prepared`, and the chain's running of `z-wait` (the fakecli harness exists; stated plainly, as before).
+- F5: fixed: judged by kind, so a model upgrade locks nobody out; only the item's own move is checked (a member already `prepared` on origin/main is skipped); `firstRoundAt` is the oldest add of a round file in this branch's history, none binds; "module absent from the base" (or no root `.models.toml`, or no origin remote) binds nothing, while an unreadable origin/main or history, or an unparsable spend.md, refuses with its own text.
+- F6: fixed: Q5 is the two-option escalation again, with the note under the Decided line.
+- F7: fixed: the check runs at each target of the carried move, the raft's own folder included; the case for a raft fixture is the executor's.
+- F8: fixed: Touched modules and an Implementation step name `finalround.luau` and its call sites.
+- F9: fixed in the Design (fail-open list, `missing` attempt, summary by model, the `.cache` fence); its cases need the dispatcher wiring: the executor's tests first with a fake agent.
+- F10: fixed: the sweep is one search per mechanism with its hits; `done`'s row and "Done means", the exit-4 comment and the README's round one are reworded and pinned by docs.spec.
+- F11: fixed: one refusal text per kind, each naming its own line, pinned by final-round.spec; the interactive model is stated to be the lead's report.
+- F12: fixed in part before (Rounds line, `available` row, Decided line); the `settingsOf` fallback's `waitMinutes` is the executor's one-liner.

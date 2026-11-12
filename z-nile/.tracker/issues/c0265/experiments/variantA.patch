@@ -1,35 +1,35 @@
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index d7a498ad..43e22fb3 100644
+index 3073f582..5b5e8daf 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
-@@ -6484,6 +6484,18 @@ local function envelopeId(id: string, mine: boolean)
+@@ -8052,6 +8052,18 @@ function hb.envelopeId(id: string, mine: boolean)
  		end
  	end)
  end
-+local function envelopeDiffers(id: string): boolean
++function hb.envelopeDiffers(id: string): boolean
 +	local f = `.cache/tracker-stamp-{id}`
 +	if not fs.isFile(f) then
 +		return false
 +	end
-+	local paths = beatPaths()
++	local paths = hb.beatPaths()
 +	if not paths then
 +		return false
 +	end
-+	local cur = claimStampOf(paths, id)
++	local cur = hb.claimStampOf(paths, id)
 +	return cur ~= fs.readFile(f)
 +end
- local function envelopeHeld(): { string }
+ function hb.envelopeHeld(): { string }
  	local out: { string } = {}
  	if fs.isDir(".cache") then
-@@ -6503,7 +6515,11 @@ local envelopeActive = not READ_ONLY[name :: string]
+@@ -8072,7 +8084,11 @@ if
  	and sh.git({ "rev-parse", "--show-toplevel" }) ~= mainRoot()
- if envelopeActive then
- 	for _, id in envelopeHeld() do
--		envelopeId(id, false)
-+		if envelopeDiffers(id) then
+ then
+ 	for _, id in hb.envelopeHeld() do
+-		hb.envelopeId(id, false)
++		if hb.envelopeDiffers(id) then
 +			print(`{id}'s claim was taken over`)
 +		else
-+			envelopeId(id, false)
++			hb.envelopeId(id, false)
 +		end
  	end
  end

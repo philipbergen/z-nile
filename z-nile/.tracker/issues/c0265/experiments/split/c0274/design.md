@@ -2,7 +2,7 @@
 
 c0265 was split on 2026-11-08 (user: "yes go ahead and split the whole thing up and tie them togetjer in a raft so we can run through these a layer at a time in a PR"). This folder holds what the monolithic c0265 design said about the takeover by `status <id> preparing`, the atomic branch swap, the stamp memory and `--adopt`, refusing and telling the old owner, recorded in the claim commit subject, verbatim, so this issue's prep starts from it. Nothing here is binding design: c0265's core layer (the heartbeat branch, `beat`, `beat --watch`, the verdicts, `lost`, the status markers) is prototyped on branch `proto-c0265-raft` (`z-nile/engine/heartbeat.luau`, `cmd.beat`, `cmd.lost`, `cmd.status` in `main.luau`); build on it.
 
-Layer 2. Depends on c0265 (the beat branch, `beat`, the verdicts, `lost`). The takeover case set is `lost.cases.luau`, `edge.cases.luau`, `beat.cases.luau`, `heartbeat.cases.luau`; they ran green only against the old monolithic prototype in c0265 (never against an implementation): run them against the sibling prototype before review 1. c0265 deletes a branch at no claim end: the drops by `status <id> new`, `stop` and `done` belong with the first-beat hooks (c0275) except `stop`, whose subject records the lost stamp (here).
+Layer 2. Depends on c0265 (the beat branch, `beat`, the verdicts, `lost`). The takeover case set is `lost.cases.luau.txt`, `edge.cases.luau.txt`, `beat.cases.luau.txt`, `heartbeat.cases.luau.txt`; they ran green only against the old monolithic prototype in c0265 (never against an implementation): run them against the sibling prototype before review 1. c0265 deletes a branch at no claim end: the drops by `status <id> new`, `stop` and `done` belong with the first-beat hooks (c0275) except `stop`, whose subject records the lost stamp (here).
 
 ## Design text (from the monolithic c0265 Design, in its order)
 
@@ -69,7 +69,7 @@ heartbeat.rejected(stamp, originStamp, beats): { action, lease?, why? } -- after
 
 ## Pure code left out of the core layer
 
-`takeoverPlan` and `canTakeOver` (and the E5-proven mutants for them) are in `../heartbeat.monolith.proto.txt`; add them to `z-nile/engine/heartbeat.luau` here, with their `heartbeat.spec` cases from `heartbeat.cases.luau`.
+`takeoverPlan` and `canTakeOver` (and the E5-proven mutants for them) are in `../heartbeat.monolith.proto.txt`; add them to `z-nile/engine/heartbeat.luau` here, with their `heartbeat.spec` cases from `heartbeat.cases.luau.txt`.
 
 ## Lesson from the core prototype
 
@@ -86,3 +86,7 @@ c0265 proves its five spec files on the bare prototype and on `experiments/envel
 ## Dependency to add in this issue's prep
 
 c0253 (the `./zn work` loop) takes "lost work first" and so needs the takeover: this prep adds c0274 to c0253's `depends_on` (c0265 does not edit c0253).
+
+## Decided with the user (2026-11-12): drop in-place re-adoption
+
+"Drop in-place re-adoption": a lead who stops and re-readies continues in c0277's numbered worktree copy, like any taker, and the old worktree stays refused. This issue (c0274) builds that; the layers above, and c0265's cases, rely on no re-adoption in place.

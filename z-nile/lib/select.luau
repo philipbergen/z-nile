@@ -1,10 +1,13 @@
 --!strict
--- The selection rules (c0165): which paths force a full run, and which specs a set of changed paths reaches.
--- Moved out of affected.luau unchanged (c0185's rules included); affected.luau is a thin wrapper over `affected`.
--- Pure: the caller builds the context (the graph of every home, the inputs files) and reads the changed paths.
+-- Which paths force a static stage, and which specs a set of changed paths reaches.
+-- Spec selection is the watch map (z-nile/lib/watch.luau): a change runs a spec only when it touches that spec,
+-- its watch file, or a path the watch file names. Nothing falls back to every spec. `forces` and `staticProjects`
+-- are unchanged: they decide static stages, not which specs run.
+-- Pure: the caller builds the context (the watch files) and reads the changed paths.
 
 local graph = require("./graph")
 local projects = require("../engine/projects")
+local watch = require("./watch")
 
 local sel = {}
 
@@ -15,17 +18,15 @@ export type Context = {
 	rules: Rules,
 	graph: graph.Graph,
 	inputs: Inputs,
-	places: { [string]: { string } }, -- home prefix -> its place inputs (graph.placeInputs, read by context.luau)
+	places: { [string]: { string } }, -- home prefix -> its place inputs (kept for callers; selection does not read it)
+	watches: { [string]: { string } }?, -- repo-relative spec -> the paths in its watch file
+	current: { string }?, -- the current raft's acceptance specs, when the change includes a source file
 }
 
--- Changes to these paths can affect every spec of every project, so they force a full run: the shared runner
--- (z-nile/tests/run.luau) and harness (z-nile/tests/lib/), z-nile's libraries (the fence, the graph, the shell helpers),
--- ./zn, the root's scripts/ (c0114's shims, which belong to no project) and the root configs (c0120). Every project
--- root holds tracker documents, which select nothing.
+-- Changes to these root paths can affect every spec of every project, so they force a full run: ./zn, the root's
+-- scripts/ (c0114's shims, which belong to no project) and the root configs (c0120). Tooling paths force z-nile alone.
+-- Every project root holds tracker documents, which select nothing.
 local SHARED_FULL = {
-	"^z%-nile/tests/lib/",
-	"^z%-nile/tests/run%.luau$",
-	"^z%-nile/lib/",
 	"^zn$",
 	"^scripts/",
 	"^%.luaurc$",
@@ -97,7 +98,12 @@ function sel.forces(rules: Rules, path: string): ("all" | string)?
 				return h.name
 			end
 		end
-		if h.name == TOOLING and not string.match(path, "^z%-nile/tests/") then
+		if
+			h.name == TOOLING
+			and not string.match(path, "^z%-nile/tests/")
+			and not string.match(path, "^z%-nile/skills/")
+			and not string.match(path, "^z%-nile/.*%.md$")
+		then
 			return h.name
 		end
 	end
@@ -109,11 +115,7 @@ function sel.forces(rules: Rules, path: string): ("all" | string)?
 	return nil
 end
 
-local function isSpec(f: string): boolean
-	return string.match(f, "%.spec%.luau$") ~= nil
-end
-
--- Whether the changed paths force a full run (of every project, or of `only`): the answer needs no graph.
+-- Whether the changed paths force a full static run (of every project, or of `only`). Spec selection does not use this.
 function sel.forcedAll(rules: Rules, changed: { string }, only: string?): boolean
 	local full: { [string]: boolean } = {}
 	for _, f in changed do
@@ -133,15 +135,33 @@ function sel.forcedAll(rules: Rules, changed: { string }, only: string?): boolea
 	return false
 end
 
-local PLACE_LIB = "tests/lib/place.luau"
-
-local function underAny(f: string, list: { string }): boolean
-	for _, p in list do
-		if f == p or string.sub(f, 1, #p + 1) == p .. "/" then
-			return true
+-- The projects whose static stages a change set can affect: "ALL" when a path forces every project, otherwise the
+-- projects whose home holds a changed path (a tracker document lives in its project's home, so it names that project).
+-- An empty change set names none. Order is sorted.
+function sel.staticProjects(rules: Rules, changed: { string }): { string } | "ALL"
+	local names: { [string]: boolean } = {}
+	local order: { string } = {}
+	local function add(name: string)
+		if not names[name] then
+			names[name] = true
+			table.insert(order, name)
 		end
 	end
-	return false
+	for _, path in changed do
+		if sel.forces(rules, path) == "all" then
+			return "ALL"
+		end
+		local h = homeOf(rules.homes, path)
+		if h and h.prefix ~= "" then
+			add(h.name)
+		end
+		local forced = sel.forces(rules, path)
+		if type(forced) == "string" then
+			add(forced)
+		end
+	end
+	table.sort(order)
+	return order
 end
 
 -- the project a repo-relative path belongs to (nil: the root's, which belongs to none)
@@ -150,124 +170,41 @@ local function projectOf(rules: Rules, path: string): string?
 	return if h and h.prefix ~= "" then h.name else nil
 end
 
--- one closure per (graph, file): a context is read many times
-local closures: { [any]: { [string]: { [string]: boolean } } } = setmetatable({}, { __mode = "k" }) :: any
-local function closureOf(g: graph.Graph, file: string): { [string]: boolean }
-	local perGraph = closures[g]
-	if perGraph == nil then
-		perGraph = {}
-		closures[g] = perGraph
-	end
-	local c = perGraph[file]
-	if c == nil then
-		c = graph.closure(g, file)
-		perGraph[file] = c
-	end
-	return c
-end
-
 local function isRefEntry(e: string): boolean
 	return string.sub(e, 1, 4) == "ref:"
 end
 
-local function underRoot(rules: Rules, path: string): string?
-	for _, r in rules.roots do
-		if path == r or string.sub(path, 1, #r + 1) == r .. "/" then
-			return r
-		end
-	end
-	return nil
-end
-
--- Whether a change to `path` can change spec S's result: the one predicate of selection and of fingerprints.
+-- Whether a change to `path` can change spec S's result: the spec itself, its watch file, or a path that file names.
+-- The same predicate feeds fingerprints, so a watched file that changes is not reused.
 function sel.isInput(ctx: Context, spec: string, path: string): boolean
-	local entries: { string } = ctx.inputs[spec] or {}
-	for _, e in entries do
-		if e == "*" then
-			return true
-		end
-	end
-	local rules = ctx.rules
-	-- a tracker document is an input only through an entry that itself names a path under the same root
-	local root = underRoot(rules, path)
-	if root then
-		if string.match(path, "[^/]*$") == "spend.md" then
-			return false
-		end
-		for _, e in entries do
-			if e ~= "*" and not isRefEntry(e) and string.sub(e, 1, #root + 1) == root .. "/" then
-				if e == path or (string.sub(e, -1) == "/" and string.sub(path, 1, #e) == e) then
-					return true
-				end
-			end
-		end
-		return false
-	end
-	local project = projectOf(rules, spec)
-	local forced = sel.forces(rules, path)
-	if forced == "all" or (forced ~= nil and forced == project) then
+	if path == spec or path == watch.fileFor(spec) then
 		return true
 	end
-	local closure = closureOf(ctx.graph, spec)
-	if closure[path] then
-		return true
-	end
-	for dep in closure do
-		if string.sub(dep, 1, #path + 1) == path .. "/" then
-			return true
-		end
-	end
-	local h = homeOf(rules.homes, spec)
-	if
-		h
-		and closure[h.prefix .. PLACE_LIB]
-		and underAny(path, ctx.places[h.prefix] or ({} :: { string }))
-	then
-		return true
-	end
-	for _, e in entries do
-		if e ~= "*" and not isRefEntry(e) then
-			if e == path or (string.sub(e, -1) == "/" and string.sub(path, 1, #e) == e) then
+	local list = if ctx.watches then ctx.watches[spec] else nil
+	if list then
+		for _, w in list do
+			if w == path then
 				return true
 			end
 		end
 	end
-	if h and #entries > 0 and path == h.prefix .. "tests/inputs.tsv" then
-		return true
-	end
 	return false
 end
 
--- The specs a set of changed paths reaches, or "ALL" when a full run is required. `only` limits the answer to one
--- project's specs, relative to its home. A spec with a `ref:` entry of the project asked for (every project's without
--- `only`) is always selected: selection is stateless and can't see a ref move, so its fingerprint decides.
+-- The specs a set of changed paths reaches. `only` limits the answer to one project's specs, relative to its home.
+-- Never "ALL": a change that no watch file names selects nothing.
 function sel.affected(ctx: Context, changed: { string }, only: string?): { string } | "ALL"
-	if sel.forcedAll(ctx.rules, changed, only) then
-		return "ALL"
+	local bindings: { watch.Binding } = {}
+	local watches: { [string]: { string } } = ctx.watches or {}
+	for spec, paths in watches do
+		table.insert(bindings, { spec = spec, watch = watch.fileFor(spec), paths = paths })
 	end
+	local picked = watch.select(bindings, changed, ctx.current)
 	local out: { string } = {}
-	for _, file in ctx.graph.files do
-		if isSpec(file) then
-			local h = homeOf(ctx.rules.homes, file)
-			if only == nil or (h and h.name == only) then
-				local hit = false
-				for _, e in (ctx.inputs[file] :: { string }?) or ({} :: { string }) do
-					if isRefEntry(e) then
-						hit = true
-					end
-				end
-				if not hit then
-					for _, p in changed do
-						if sel.isInput(ctx, file, p) then
-							hit = true
-							break
-						end
-					end
-				end
-				if hit then
-					table.insert(out, if only and h then string.sub(file, #h.prefix + 1) else file)
-				end
-			end
+	for _, spec in picked do
+		local h = homeOf(ctx.rules.homes, spec)
+		if only == nil or (h and h.name == only) then
+			table.insert(out, if only and h then string.sub(spec, #h.prefix + 1) else spec)
 		end
 	end
 	table.sort(out)
