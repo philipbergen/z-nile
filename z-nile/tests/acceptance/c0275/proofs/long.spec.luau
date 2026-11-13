@@ -40,12 +40,12 @@ end
 local function issue(id: string, status: string): string
 	return trackerfix.stub(id, id, status)
 end
--- the check waits (up to 20 s) for two pushes of heartbeat branches after the count it is given: the command's own beat before
--- its handler is one, so only a tick while the check runs is the second
+-- the check counts the pushes of heartbeat branches when it starts, then waits (up to 20 s) for one more: a beat made before it
+-- started (the command's own, before its handler, or a nested command's) is not a beat while it runs
 local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
-	.. 'check "AC1: a beat lands while this check runs" bash -c \'i=0; while [ $i -lt 20 ]; do '
+	.. 'check "AC1: a beat lands while this check runs" bash -c \'n0=$(wc -l < "$FAKE_DIR/beatpush" 2>/dev/null || echo 0); i=0; while [ $i -lt 20 ]; do '
 	.. 'n=$(wc -l < "$FAKE_DIR/beatpush" 2>/dev/null || echo 0); '
-	.. 'if [ "${n// /}" -gt "$((BEFORE+1))" ]; then echo seen > "$FAKE_DIR/check-beat"; exit 0; fi; '
+	.. 'if [ "${n// /}" -gt "${n0// /}" ]; then echo seen > "$FAKE_DIR/check-beat"; exit 0; fi; '
 	.. "sleep 1; i=$((i+1)); done; exit 1'\nfinish\n"
 local SHIM = '#!/bin/sh\nif [ "$1" = push ]; then case "$*" in *":refs/heads/hb/"*) echo p >> "$FAKE_DIR/beatpush";; esac; fi\n'
 	.. 'if [ "$1" = fetch ]; then case "$*" in *hb-seen*) echo x >> "$FAKE_DIR/lscalls"; [ -f "$FAKE_DIR/lshang" ] && sleep 120;; esac; fi\n'
@@ -69,7 +69,7 @@ return t.spec("c0275 real-time proofs: long commands and a hung remote", functio
 
 	it("a long outer command beats while it runs", function()
 		local before = lines(`{h.fakes}/beatpush`)
-		local r = zn(wt, { "check", "c0090" }, { ZN_BEAT_EVERY = "1", BEFORE = tostring(before) })
+		local r = zn(wt, { "check", "c0090" }, { ZN_BEAT_EVERY = "1" })
 		t.expect(r.ok).toBe(true)
 		t.expect(fs.isFile(`{h.fakes}/check-beat`)).toBe(true)
 		t.expect(lines(`{h.fakes}/beatpush`) > before).toBe(true)
