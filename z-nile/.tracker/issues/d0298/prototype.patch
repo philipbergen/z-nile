@@ -1,0 +1,275 @@
+diff --git a/z-nile/engine/approval.luau b/z-nile/engine/approval.luau
+index 179c7bc7..f7dfa0aa 100644
+--- a/z-nile/engine/approval.luau
++++ b/z-nile/engine/approval.luau
+@@ -157,6 +157,51 @@ function approval.append(root: string, item: store.Item, who: string, when: stri
+ 	return contract.render(rows), nil
+ end
+ 
++-- d0298: the contract parts of an issue from a folder view (`files`: path relative to its folder -> text, as git
++-- tracks it), its acceptance specs from `acceptance/`, or else from `promoted` (path relative to the promoted folder).
++function approval.partsOf(
++	id: string,
++	files: { [string]: string },
++	promoted: { [string]: string }?
++): (contract.Parts?, string?)
++	local specs: { [string]: string } = {}
++	local found = false
++	for rel, text in files do
++		local name = string.match(rel, "^acceptance/(.+%.spec%.luau)$")
++		if name then
++			specs[name] = text
++			found = true
++		end
++	end
++	if not found and promoted then
++		for rel, text in promoted do
++			if string.match(rel, "%.spec%.luau$") then
++				specs[rel] = text
++			end
++		end
++	end
++	return contract.build(files[`{id}.md`] or "", files["check.sh"] or "", specs)
++end
++
++-- d0298: approval.md's text with its last row re-recorded for `parts` (same when and who, new hash and parts), or nil
++-- with why when it does not parse.
++function approval.reseal(text: string, parts: contract.Parts): (string?, string?)
++	local rows, err = contract.parse(text)
++	if not rows then
++		return nil, err
++	end
++	local last = rows[#rows]
++	rows[#rows] =
++		{ when = last.when, who = last.who, hash = contract.hash(parts), parts = contract.partHashes(parts) }
++	return contract.render(rows), nil
++end
++
++-- d0298: whether approval.md's last row matches `parts`.
++function approval.holds(text: string, parts: contract.Parts): boolean
++	local rows = contract.parse(text)
++	return rows ~= nil and #rows > 0 and rows[#rows].hash == contract.hash(parts)
++end
++
+ function approval.summary(item: store.Item): string
+ 	local path = approval.file(item)
+ 	if not fs.isFile(path) then
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index 2d0a37e5..17ed0a62 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -1042,6 +1042,24 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
+ 		return out
+ 	end
+ 	local before = byId()
++	-- d0298: every issue whose approval held before the rewrite, judged from what git tracks
++	local reg = projects.load(root)
++	local function approvalView(id: string, dir: string): ({ [string]: string }, contract.Parts?)
++		local files = gitFolderFiles(dir, true)
++		local home = projects.homeOf(reg, string.sub(dir, #root + 2))
++		local promoted = `{root}/{if home == "." then "" else home .. "/"}tests/acceptance/{id}`
++		local parts = approval.partsOf(id, files, gitFolderFiles(promoted, true))
++		return files, parts
++	end
++	local approved: { string } = {}
++	for id, dir in before do
++		if store.isIssueId(id) then
++			local files, parts = approvalView(id, dir)
++			if files["approval.md"] and parts and approval.holds(files["approval.md"], parts) then
++				table.insert(approved, id)
++			end
++		end
++	end
+ 	local kept: { { raft: string, id: string, hash: string } } = {}
+ 	for rid, dir in before do
+ 		local doc = `{dir}/{rid}.md`
+@@ -1057,6 +1075,19 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
+ 	end
+ 	rewrite()
+ 	local after = byId()
++	for _, id in approved do
++		local nid = idMap[id] or id
++		local dir = after[nid]
++		if dir and fs.isFile(`{dir}/approval.md`) then
++			local _, parts = approvalView(nid, dir)
++			if parts then
++				local text = approval.reseal(fs.readFile(`{dir}/approval.md`), parts)
++				if text then
++					fs.writeFile(`{dir}/approval.md`, text)
++				end
++			end
++		end
++	end
+ 	for _, k in kept do
+ 		local rid, mid = idMap[k.raft] or k.raft, idMap[k.id] or k.id
+ 		local rdir, mdir = after[rid], after[mid]
+@@ -5849,6 +5880,57 @@ function cmd.ready(pos: { string })
+ 				end
+ 			end
+ 		end
++		local function recordRefusal(paths: { string }, read: (string) -> string?): string?
++			local rp = docPath(paths, raft.id)
++			local rt = rp and read(rp)
++			if not rp or not rt then
++				return `{raft.id} is not on origin/main`
++			end
++			local map, problem = raftplan.parseGrouped(frontOf(rt).grouped)
++			if problem then
++				return `{rp}: {problem}`
++			end
++			local now: { [string]: string? } = {}
++			for _, m in members do
++				local mp = docPath(paths, m.id)
++				if mp then
++					now[m.id] = raftplan.recordHash(
++						m.id,
++						treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4))
++					)
++				end
++			end
++			local redesigned = regrouped(map, now)
++			if #redesigned > 0 then
++				return `{raft.id}: {table.concat(redesigned, ", ")} changed on origin/main since {raft.id} grouped it: z-raft drops it (./zn unfold {raft.id} <id>) or folds it again with a new coherence review`
++			end
++			if
++				#members > 1
++				and not reviewCovers(treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4)), map)
++			then
++				return `{raft.id}'s coherence review predates its record: run a new raft-mode round (z-raft, zz-review); never edit a review that is already written`
++			end
++			return nil
++		end
++		-- d0298: the record first, from origin/main (the tree just pulled), so a redesigned member is named for what
++		-- z-raft must redo before its approval is judged
++		do
++			local tree = sh.run("git", { "ls-tree", "-r", "--name-only", "origin/main" })
++			if not tree.ok then
++				fail("ready: cannot list origin/main")
++			end
++			local onOrigin: { string } = {}
++			for p in string.gmatch(tree.stdout, "[^\n]+") do
++				table.insert(onOrigin, p)
++			end
++			local early = recordRefusal(onOrigin, function(p: string): string?
++				local shown = sh.run("git", { "show", `origin/main:{p}` })
++				return if shown.ok then shown.stdout else nil
++			end)
++			if early then
++				fail(early)
++			end
++		end
+ 		for _, m in members do
+ 			local problem = approval.refusal(".", m, true)
+ 			if problem then
+@@ -5872,41 +5954,7 @@ function cmd.ready(pos: { string })
+ 			end,
+ 			-- c0116 (review 002 F1, 004 F1): a member redesigned since z-raft grouped it is never handed out under the
+ 			-- old review; read from the tree being published, so a redesign landing after the pull is seen too
+-			function(paths, read): string?
+-				local rp = docPath(paths, raft.id)
+-				local rt = rp and read(rp)
+-				if not rp or not rt then
+-					return `{raft.id} is not on origin/main`
+-				end
+-				local map, problem = raftplan.parseGrouped(frontOf(rt).grouped)
+-				if problem then
+-					return `{rp}: {problem}`
+-				end
+-				local now: { [string]: string? } = {}
+-				for _, m in members do
+-					local mp = docPath(paths, m.id)
+-					if mp then
+-						now[m.id] = raftplan.recordHash(
+-							m.id,
+-							treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4))
+-						)
+-					end
+-				end
+-				local redesigned = regrouped(map, now)
+-				if #redesigned > 0 then
+-					return `{raft.id}: {table.concat(redesigned, ", ")} changed on origin/main since {raft.id} grouped it: z-raft drops it (./zn unfold {raft.id} <id>) or folds it again with a new coherence review`
+-				end
+-				if
+-					#members > 1
+-					and not reviewCovers(
+-						treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4)),
+-						map
+-					)
+-				then
+-					return `{raft.id}'s coherence review predates its record: run a new raft-mode round (z-raft, zz-review); never edit a review that is already written`
+-				end
+-				return nil
+-			end
++			recordRefusal
+ 		)
+ 		if not r.ok then
+ 			fail(`ready: {r.reason}`)
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index a800c419..e3b41375 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -116,6 +116,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+     - **Watchdog**: the launcher runs the specs in a process group of their own with a watchdog in it that waits on a pipe only the launcher holds open, so if the launcher dies, however it died, the watchdog stops the specs' group.
+     - **Sweeper**: the jail's root is a sweeper (`fence.SWEEPER`): after the specs end it stops every process of the sandbox it can signal, whatever session or group it moved to, except its own ancestors, and says how many. Its interlock refuses to sweep (exit 70) unless a signal to its parent, the launcher (outside the jail, alive until the sweep is done), is refused, so an interrupted run (Ctrl-C) is still swept. Its interlock sweeps only on macOS; an explicit pid (for specs) only inside a jailed spec run; and a test seam (`PICKMAN_SWEEP_ONLY`) that can't be read refuses instead of widening the sweep. A spec can kill the sweeper (same sandbox); the run then fails ("the jail's sweeper was killed"). A spec can also stop it (SIGSTOP): the run then hangs until the launcher is SIGKILLed, which skips the sweep. A SIGKILL of the launcher itself skips the sweep and the launcher's unlink.
+     - **pids**: the sweep covers pids up to 99999, macOS's `PID_MAX`.
++  - **A dispatched step's environment**: a spec run started inside a step of `./zn dispatch` (an executor's gate, a `check.sh`, the post-landing net) would inherit the step's run state, publish broker, real git and gh, the agent's credential and the `z-nile/bin` wrapper first on PATH, so a fixture's push to its own `main` would meet the wrapper and a fixture's `./zn new` would publish through the real broker (d0298). Before any spec starts, the runner unsets every name in `fence.STEP_VARS` (`z-nile/tests/lib/fence.luau`) and drops every `z-nile/bin` entry from PATH (`fence.stepPath`). A variable added to the step's environment goes on that list, or is named as harmless in d0298's spec.
+   - **Fence**: git never looks above `<checkout>/.cache` for a repository, and a sentinel `.cache/.git` makes git fail in `.cache` itself. A fixture whose repository is missing is an error, never the checkout. The same holds for every project home a check runs in (c0120): a spec run from `pickman/` is fenced at `pickman/.cache`, and `ac.sh` fences a home before a `check.sh` runs there with `fence.sh`'s `pickman_home_fence`, in this order (review 002 F1): its `.cache` joins the ceiling (environment only, can't fail); a `.cache` that is a symlink or a file, or a sentinel that is a folder, refuses, in every mode, spec runs and the jail included; the git and spec guards are set whole (the one refusal, no ref-guard hooks, comes before any change, so a refused fence leaves the inherited guards as they were); then the sentinel is written. The sentinel is skipped in exactly one case: its write fails while all three of the runner's jail markers are set (`PICKMAN_TEST_JAIL=sandbox-exec`, `PICKMAN_FENCE_SPECS=1`, `PICKMAN_TEST_FENCE`) and the home's `.cache` lies outside the run's own `.cache`, the one place the jail lets a spec write. The jail then refuses every write there, the fence says so on stderr, and the ceiling and every other guard hold. Any other failed write refuses, spec runs included.
+   - **Overrides stripped**: an inherited `GIT_DIR`, `GIT_INDEX_FILE` or the like (git hooks run with them set) is unset before any spec runs. The guards read the repository they protect (`fence.sh`'s `real`, `pickman_guarded`, the runner's tripwire and protected paths) through a clean read, with every such override **and the inherited ceiling** removed for that read only (a ceiling at the checkout's root would hide the checkout from a project home; the specs keep the fence's ceiling). A read that finds no repository refuses, in every mode: it never means "nothing to protect" (c0120 code review 002).
+   - **Ref guard**: every git a check runs has a `reference-transaction` hook (`z-nile/lib/git-hooks/`) that refuses any ref update in the real repository. Only a `check.sh` flow started outside any spec run may fetch (create or move refs under `refs/remotes/`). On Linux this is what stops a commit, branch, switch or reset there. It refuses the ref change, but those commands may already have rewritten the index or the working files. The hooks are set only where there is no jail (Linux, `check.sh` files, runs nested inside a jail): under the jail the kernel covers it, and a hook in every fixture commit would cost a slow process start. Where they are set, they then run the repository's own hook of the same name, so a fixture's hooks behave as without the guards.
+diff --git a/z-nile/tests/lib/fence.luau b/z-nile/tests/lib/fence.luau
+index f73e9ceb..8745a596 100644
+--- a/z-nile/tests/lib/fence.luau
++++ b/z-nile/tests/lib/fence.luau
+@@ -75,6 +75,33 @@ local OVERRIDES = {
+ 	"GIT_CEILING_DIRECTORIES",
+ }
+ 
++-- d0298: what `./zn dispatch` gives a model step (dispatcher.luau's step environment, credential.agentEnv) and no spec
++-- may inherit: its run state, the publish broker, the real git and gh, and the agent's token for git (fence.sh already
++-- removes the gh tokens and replaces gh's configuration and git's). The runner unsets them, and drops the z-nile/bin wrapper from PATH (fence.stepPath), before any spec starts.
++fence.STEP_VARS = {
++	"ZN_DISPATCH",
++	"ZN_HEADLESS",
++	"ZN_DISPATCH_DIR",
++	"ZN_DISPATCH_HOME",
++	"ZN_REAL_GIT",
++	"ZN_REAL_GH",
++	"ZN_PUBLISH_BROKER",
++	"ZN_PUBLISH_TOKEN",
++	"ZN_DISPATCHER_PID",
++	"ZN_AGENT_GH_TOKEN",
++}
++
++-- PATH without any entry that is a checkout's z-nile/bin (the dispatched step's wrapper), the rest in order.
++function fence.stepPath(path: string): string
++	local out: { string } = {}
++	for entry in string.gmatch(path, "[^:]+") do
++		if not string.match(entry, "/z%-nile/bin/?$") then
++			table.insert(out, entry)
++		end
++	end
++	return table.concat(out, ":")
++end
++
+ local function trim(s: string): string
+ 	return (string.gsub(s, "^%s+", ""):gsub("%s+$", ""))
+ end
+@@ -926,7 +953,9 @@ function fence.enter()
+ 	local before = snapshot(cache)
+ 	local argv = {
+ 		"-c",
+-		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; { [ ! -f "$4/z-nile/lib/cpu.sh" ] || { . "$4/z-nile/lib/cpu.sh" && zn_lower_cpu "$6"; }; } && . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 6 && exec lune run tests/run -- "$@"',
++		"unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE "
++			.. table.concat(fence.STEP_VARS, " ")
++			.. '; PATH="$7"; { [ ! -f "$4/z-nile/lib/cpu.sh" ] || { . "$4/z-nile/lib/cpu.sh" && zn_lower_cpu "$6"; }; } && . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 7 && exec lune run tests/run -- "$@"',
+ 		"_",
+ 		here,
+ 		jailed,
+@@ -934,6 +963,7 @@ function fence.enter()
+ 		ROOT,
+ 		ceilings,
+ 		tostring(cpuLimit),
++		fence.stepPath(process.env.PATH or ""),
+ 	}
+ 	for _, a in process.args do
+ 		if a ~= "--" then
