@@ -22,7 +22,7 @@ layers() {
 	rel="${A#"$home"/}/layers-land.spec.luau" # the runner takes the spec's path from the project home
 	if [[ ${1:-} == --run ]]; then
 		shift
-		mkdir -p "${OUT%/*}" && rm -f "$OUT"
+		mkdir -p "${OUT%/*}" && : >"$OUT" # an empty record when no case passes: each criterion then names the case that did not
 		# the runner reads the project registry from the repository root
 		(cd "$(git rev-parse --show-toplevel)" && lune run "$home/specs" -- run --project z-nile --out "$OUT" -- "$rel") || true
 	fi
