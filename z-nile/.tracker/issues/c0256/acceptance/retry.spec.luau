@@ -8,32 +8,111 @@ local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local runner = require("@znile/engine/runner")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 local task = require("@lune/task")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local MODELS = [[
-order = ["claude", "grok", "agent"]
-
 [dispatch]
 auto_merge = ["prep"]
 stall_seconds = 3
 
-[z-ticket.claude]
+[roles.idea]
 model = "claude-sonnet-5"
+cli = "claude"
+runtime = "claude-cli"
 rank = 2
-runtime = "claude-cli"
 max_tokens = 5000
+fallbacks = []
 
-[z-design.claude]
+[roles.idea-challenge]
 model = "claude-opus-5-5"
-rank = 3
+cli = "claude"
 runtime = "claude-cli"
+rank = 4
 max_tokens = 5000
+fallbacks = []
+
+[roles.design]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 5000
+fallbacks = []
+
+[roles.design-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+fallbacks = []
+
+[roles.raft]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 5000
+fallbacks = []
+
+[roles.implementation]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 5000
+fallbacks = []
+
+[roles.code-review]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+fallbacks = []
+
+[roles.final-review]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+fallbacks = []
 ]]
 
 local h: fakecli.Harness
+
+-- Waits (up to 60 s of wall clock, measured with os.time) until no run left behind by a killed dispatcher still holds
+-- its lock: the step it left ends by itself, and its run lock and the dispatcher's own are free then. A failing expect
+-- names the wait when it runs out. The lock test is the engine's own (runner.held).
+local function waitForLeftOverRuns()
+	local root = `{h.f.main}/.cache/dispatch`
+	local function anyHeld(): string?
+		if not fs.isDir(root) then
+			return nil
+		end
+		for _, name in fs.readDir(root) do
+			for _, lockName in { "run.lock", "lock" } do
+				if runner.held(`{root}/{name}/{lockName}`) then
+					return `{name}/{lockName}`
+				end
+			end
+		end
+		return nil
+	end
+	local start = os.time()
+	local held = anyHeld()
+	while held ~= nil and os.time() - start < 60 do
+		task.wait(0.2)
+		held = anyHeld()
+	end
+	t.expect(held == nil or `the step the killed dispatcher left behind still holds {held} after 60 s`)
+		.toBe(true)
+end
 local function issue(id: string, slug: string): string
 	return trackerfix.stub(id, slug, "new-quiet-copper-falcon")
 end
@@ -487,7 +566,7 @@ return t.spec("c0256 AC3: retry takes the user's answer", function(it)
 				[[printf '## Q1\nsecond question\n' > "$ZN_DISPATCH_DIR/questions.md"; kill -9 "$ZN_DISPATCHER_PID"]]
 			)
 			zn({ "dispatch", "retry", "c0120", "--answer", "first answer" }) -- the dispatcher dies in the step
-			task.wait(4) -- the step the killed dispatcher left behind ends by itself; its run is held until then
+			waitForLeftOverRuns()
 			t.expect(table.concat(exchangeOf("c0120"), ",")).toBe("001-question.md,002-answer.md")
 			readThenNothing()
 			zn({ "dispatch", "retry", "c0120", "--answer", "answer to the second question" })
