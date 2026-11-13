@@ -70,6 +70,36 @@ return t.spec("trace derives claims and checks the table", function(it)
 			local _, errAc = trace.deriveClaims({ noAc })
 			t.expect(#errAc == 1 and has(errAc[1], "ticket c0010 is missing ## Acceptance criteria"))
 				.toBe(true)
+
+			-- a comment that runs across lines is not a claim, including the template's Judged note
+			local commented = table.clone(baseIssue)
+			commented.docText = captured1
+				.. "\n\n## Acceptance criteria\n### Judged\n<!-- Only if genuinely subjective. JCn: statement + rubric.\n     Ruled on by the adversarial code reviewer. -->\n"
+			local claimsC, errC = trace.deriveClaims({ commented })
+			local ac = 0
+			for _, c in claimsC do
+				if string.find(c.id, ":AC", 1, true) then
+					ac += 1
+				end
+			end
+			t.expect(ac).toBe(0)
+			t.expect(#errC == 1 and has(errC[1], "ticket c0010 is missing ## Acceptance criteria")).toBe(true)
+			local findings = trace.check({
+				tableText = "# Trace: R0010\n\nCommit: abc\n\n## Claims\n",
+				issues = { commented },
+				raftDocText = "",
+				changedSources = {},
+				filesAtCommit = {},
+			})
+			local named = false
+			for _, finding in findings do
+				if has(finding, "ticket c0010 is missing ## Acceptance criteria") then
+					named = true
+				end
+			end
+			t.expect(named).toBe(true)
+			t.expect(has(table.concat(findings, "\n"), "Ruled on by the adversarial code reviewer"))
+				.toBe(false)
 		end
 	)
 

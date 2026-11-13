@@ -1,7 +1,8 @@
 --!strict
 -- c0261: `./zn metrics` prints the cost per model: a "by model" table of tokens, minutes and rows per model id over
--- every issue's spend.md, rows that record no model under none, after every other table (c0084's tables keep their
+-- every issue's spend.md and spend.d, rows that record no model under none, after every other table (c0084's tables keep their
 -- shape). A sandbox copy of the tooling with its own small tree (metrics only reads), under .cache/c0261-metrics.
+local buffer = require("@znile/engine/buffer")
 local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local ledger = require("@znile/engine/ledger")
@@ -55,6 +56,10 @@ return t.spec("c0261 metrics shows the cost per model", function(it)
 					row("design-review-003", nil, 7, 3),
 				})
 			)
+			-- a measured row lives in spend.d/<writer>.tsv, beside an older spend.md
+			local measured = row("design-review-004", "claude-opus-5-5", 5, 0)
+			measured.ai = 120 -- two measured AI minutes, none typed
+			write(`{tr}/issues/c0960/spend.d/w1.tsv`, buffer.appendTsv(nil, { measured }))
 			write(
 				`{tr}/issues/c0961/c0961.md`,
 				"---\nid: c0961\ntype: chore\ntitle: c0961\nslug: c0961\nraft: \n---\n\n# c0961\n"
@@ -76,12 +81,13 @@ return t.spec("c0261 metrics shows the cost per model", function(it)
 			if not ok then
 				error(r.stderr .. out)
 			end
-			t.expect(has(out, "| model | tokens | minutes | rows |")).toBe(true)
-			t.expect(has(out, "| claude-sonnet-5-5-high | 120 | 2.5 | 2 |")).toBe(true)
-			t.expect(has(out, "| claude-opus-5-5 | 50 | 2.0 | 1 |")).toBe(true)
-			t.expect(has(out, "| none | 7 | 3.0 | 1 |")).toBe(true)
+			t.expect(has(out, "| model | tokens | ai minutes | typed minutes | rows |")).toBe(true)
+			t.expect(has(out, "| claude-sonnet-5-5-high | 120 | 0.0 | 2.5 | 2 |")).toBe(true)
+			t.expect(has(out, "| claude-opus-5-5 | 55 | 2.0 | 2.0 | 2 |")).toBe(true)
+			t.expect(has(out, "| none | 7 | 0.0 | 3.0 | 1 |")).toBe(true)
 			-- last: after the rework lines, so no earlier table changes shape
-			local at = string.find(out, "| model | tokens | minutes | rows |", 1, true) :: number
+			local at =
+				string.find(out, "| model | tokens | ai minutes | typed minutes | rows |", 1, true) :: number
 			local rework = string.find(out, "by agent time:", 1, true) :: number
 			t.expect(at > rework).toBe(true)
 		end

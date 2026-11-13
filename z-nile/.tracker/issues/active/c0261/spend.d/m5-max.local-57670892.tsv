@@ -1,0 +1,22 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-12 07:12	affected	0	0	test			6.334	32.330		6.334	tokens,ai
+2026-11-12 08:01	2 specs	0	0	test			0.828	0.650		0.828	tokens,ai
+2026-11-12 08:20	1 spec	0	0	test			11.945	10.350		11.945	tokens,ai
+2026-11-12 08:22	1 spec	0	0	test			1.042	0.620		1.042	tokens,ai
+2026-11-12 08:23	1 spec	0	0	test			1.037	0.720		1.037	tokens,ai
+2026-11-12 08:23	1 spec	0	0	test			0.819	0.540		0.819	tokens,ai
+2026-11-12 08:23	1 spec	0	0	test			0.832	0.520		0.832	tokens,ai
+2026-11-12 08:23	1 spec	0	0	test			0.825	0.550		0.825	tokens,ai
+2026-11-12 08:23	2 specs	0	0	test			14.441	9.040		14.441	tokens,ai
+2026-11-12 08:23	2 specs	0	0	test			6.379	5.330		6.379	tokens,ai
+2026-11-12 08:23	2 specs	0	0	test			1.435	0.900		1.435	tokens,ai
+2026-11-12 08:23	1 spec	0	0	test			0.812	0.530		0.812	tokens,ai
+2026-11-12 08:23	1 spec	0	0	test			0.831	0.530		0.831	tokens,ai
+2026-11-12 08:23	1 spec	0	0	test			1.241	0.520		1.241	tokens,ai
+2026-11-12 08:24	2 specs	0	0	test			14.417	13.470		14.417	tokens,ai
+2026-11-12 08:24	7 specs	0	0	test			25.734	51.640		25.734	tokens,ai
+2026-11-12 08:29	103 specs	0	0	test			282.897	1084.720		282.897	tokens,ai
+2026-11-12 08:43	4 specs	0	0	test			127.682	226.830		127.682	tokens,ai
+2026-11-12 09:32	affected	0	0	test			115.638	293.880		115.638	tokens,ai
+2026-11-12 10:38	30 runs	0	0	other			779.352	1708.870			tokens,ai
+2026-11-12 10:38	prep	1276	353	prep							tokens,ai

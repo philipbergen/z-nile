@@ -76,3 +76,13 @@
 - design-review-009 F1: zz-test/promoted-specs-pin-rules-not-sets
 - design-review-009 F2: z-design/decided-guesses-rewrite-their-body
 - design-review-009 F3: z-design/restated-rules-move-together
+- design-review-010 F1: z-design/prep-choices-marked-and-checked
+- design-review-010 F2: zz-test/kill-mutants-where-the-value-is-built
+- design-review-010 F3: zz-arch/verify-the-value-you-use
+- design-review-010 F4: z-design/new-rules-migrate-existing-work
+- design-review-010 F5: z-design/new-rules-migrate-existing-work
+- design-review-010 F6: zz-arch/history-tests-survive-squash
+- design-review-010 F7: one-off: three wiring paths with no case and a CLI output never parsed; the cases are this issue's own
+- design-review-010 F8: z-design/fallbacks-name-the-modes-they-cover
+- design-review-010 F9: one-off: already-red cases on main listed by the reviewer's run
+- design-review-010 F10: z-design/restated-rules-move-together

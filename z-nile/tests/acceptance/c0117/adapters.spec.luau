@@ -247,11 +247,13 @@ return t.spec("c0117 adapters", function(it)
 		end
 	)
 
-	it("any other failure is failed, and so is an exit 0 with no token count", function()
+	it("a non-zero exit is failed, and an exit 0 with no token count is ok", function()
 		t.expect(finish(feed("grok-cli", {}), false, "boom")).toBe("failed")
-		local _, why = adapters.finish(feed("cursor-cli", { AGENT[2] }), true, "", "cursor-cli")
-		t.expect(why).toBe("cursor-cli exited without a token count")
-		t.expect(finish(feed("claude-cli", { CLAUDE[2] }), true)).toBe("failed")
+		local outcome, why = adapters.finish(feed("cursor-cli", { AGENT[2] }), true, "", "cursor-cli")
+		t.expect(outcome).toBe("ok")
+		t.expect(why).toBe("no token count (cursor-cli)")
+		-- a running count with no final result line still stands
+		t.expect(finish(feed("claude-cli", { CLAUDE[2] }), true)).toBe("ok")
 		local errored = feed("cursor-cli", {
 			'{"type":"result","subtype":"error","is_error":true,"result":"tool crashed","usage":{"inputTokens":1,"outputTokens":1}}',
 		})

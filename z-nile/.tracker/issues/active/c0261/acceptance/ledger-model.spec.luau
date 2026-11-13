@@ -36,7 +36,8 @@ return t.spec("c0261 cost per model", function(it)
 			t.expect(out[1].model).toBe("claude-sonnet-5")
 			t.expect(out[1].tokens).toBe(120)
 			t.expect(out[1].records).toBe(2)
-			t.expect(out[1].minutes).toBe(2.5)
+			t.expect(out[1].typedMinutes).toBe(2.5)
+			t.expect(out[1].aiMinutes).toBe(0) -- typed rows carry no measured time
 			t.expect(out[2].model).toBe("claude-opus-5-5")
 			t.expect(out[3].model).toBe("none")
 			t.expect(out[3].tokens).toBe(0)
@@ -53,10 +54,45 @@ return t.spec("c0261 cost per model", function(it)
 		end
 	)
 
+	it(
+		"a measured row (spend.d: ai seconds, no typed minutes) counts its AI time, wall when it has no ai (AC6)",
+		function()
+			local ai: ledger.Row = row("claude-opus-5-5", 10, 0, "design-review")
+			ai.ai = 120
+			local wall: ledger.Row = row("claude-opus-5-5", 5, 0, "design-review")
+			wall.wall = 30
+			local out = l.byModel({ ai, wall })
+			t.expect(out[1].aiMinutes).toBe(2.5)
+			t.expect(out[1].typedMinutes).toBe(0)
+			t.expect(out[1].tokens).toBe(15)
+			local text: string = l.renderByModel(out)
+			t.expect(
+				string.find(text, "| model | tokens | ai minutes | typed minutes | rows |", 1, true) ~= nil
+			)
+				.toBe(true)
+			t.expect(string.find(text, "| claude-opus-5-5 | 15 | 2.5 | 0.0 | 2 |", 1, true) ~= nil).toBe(true)
+		end
+	)
+
+	it(
+		"an AI time the tool could not read shows as unmeasured, or as +? after what was read (AC6)",
+		function()
+			local open: ledger.Row = row("m1", nil, 0, "prep")
+			open.unmeasured = "ai,tokens"
+			local read: ledger.Row = row("m1", nil, 0, "prep")
+			read.ai = 60
+			local only: ledger.Row = row("m2", nil, 0, "prep")
+			only.unmeasured = "ai"
+			local text: string = l.renderByModel(l.byModel({ open, read, only }))
+			t.expect(string.find(text, "| m1 | 0 | 1.0+? | 0.0 | 2 |", 1, true) ~= nil).toBe(true)
+			t.expect(string.find(text, "| m2 | 0 | unmeasured | 0.0 | 1 |", 1, true) ~= nil).toBe(true)
+		end
+	)
+
 	it("the metrics table is printed by ./zn metrics under a 'by model' heading (AC6)", function()
 		local text: string = l.renderByModel(l.byModel({ row("claude-opus-5-5", 50, 2, "design-review") }))
 		t.expect(string.find(text, "by model", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(text, "claude-opus-5-5", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(text, "50", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(text, "| claude-opus-5-5 | 50 | 0.0 | 2.0 | 1 |", 1, true) ~= nil).toBe(true) -- tokens, ai minutes, typed minutes, rows
 	end)
 end)

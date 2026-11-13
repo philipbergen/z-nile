@@ -6,7 +6,6 @@
 -- run is lost (never resumed or signalled), a live run is never dispatched twice, and `stop` signals only a group that
 -- is still the run's; the merge gates come from the item's own walk. Fixture under .cache/c0117-control.
 local adapters = require("@znile/engine/adapters")
-local dispatcher = require("@znile/engine/dispatcher")
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -18,44 +17,45 @@ local task = require("@lune/task")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local MODELS = [[
-order = ["claude", "grok", "agent"]
-
 [dispatch]
 auto_merge = ["prep"]
 stall_seconds = 3
 
-[z-ticket.claude]
-model = "claude-sonnet-5"
-rank = 2
-runtime = "claude-cli"
-max_tokens = 5000
-
-[z-design.claude]
-model = "claude-opus-5-5"
-rank = 3
-runtime = "claude-cli"
-max_tokens = 5000
-
-[z-design.grok]
+[fallback.grok]
 model = "grok-4.7"
-effort = "high"
-rank = 3
 runtime = "grok-cli"
-max_tokens = 5000
 
-[z-design.agent]
-model = "claude-opus-5-5-high"
-rank = 3
+[fallback.agent]
+model = "claude-opus-5-5"
 runtime = "cursor-cli"
-max_tokens = 5000
 max_calls = 2
 max_minutes = 60
 
-[zz-review.claude]
-model = "claude-opus-5-5"
-rank = 4
+[roles.idea]
+model = "claude-sonnet-5"
+cli = "claude"
 runtime = "claude-cli"
+rank = 2
 max_tokens = 5000
+fallbacks = []
+
+[roles.design]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 5000
+effort = "high"
+fallbacks = ["grok", "agent"]
+
+[roles.design-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+effort = "xhigh"
+fallbacks = ["grok"]
 ]]
 
 local h: fakecli.Harness
@@ -113,7 +113,7 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 			["pickman/.tracker/issues/c0080/c0080.md"] = issue("c0080", "eighth-thing"),
 			["pickman/.tracker/issues/c0080/.models.toml"] = "[dispatch]\nauto_merge = []\n",
 			["pickman/.tracker/issues/c0090/c0090.md"] = issue("c0090", "ninth-thing"),
-			["pickman/.tracker/issues/c0090/.models.toml"] = 'order = ["agent"]\n',
+			["pickman/.tracker/issues/c0090/.models.toml"] = '[roles.design]\ncli = "agent"\nmodel = "claude-opus-5-5"\nruntime = "cursor-cli"\nmax_calls = 2\nmax_minutes = 60\nfallbacks = []\n',
 			["pickman/.tracker/issues/c0091/c0091.md"] = issue("c0091", "tenth-thing"),
 			["pickman/.tracker/issues/c0101/c0101.md"] = issue("c0101", "conc-one"),
 			["pickman/.tracker/issues/c0095/c0095.md"] = issue("c0095", "long-review"),
@@ -195,7 +195,7 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 				end
 			end
 			t.expect(review ~= nil).toBe(true)
-			t.expect(review.model).toBe("claude-opus-5-5")
+			t.expect(review.model).toBe("claude-opus-5-5-xhigh")
 			t.expect(review.phase).toBe("design-review")
 			-- the author's state is its own, and the review's sits beside it
 			local author = fakecli.state(h, "c0020")
@@ -240,32 +240,31 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 			t.expect(s.outcome).toBe("tripwire")
 			t.expect(has(s.detail, "code.lua")).toBe(true)
 			t.expect((fakecli.rows(h, "c0040") :: { any })[1].tokens).toBe(123)
-			-- the chain does not go on after it, and nor does any other run, until the user vets main
+			-- this item's chain stays stopped until retry; a later process accepts main and starts another item
 			t.expect(zn({ "dispatch", "c0040" }).code).toBe(5)
-			t.expect(zn({ "dispatch", "z-design", "c0010", "--dry-run" }).ok).toBe(true)
-			t.expect(zn({ "dispatch", "z-design", "c0010" }).code).toBe(5)
-			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
+			mode("claude", nil)
+			t.expect(zn({ "dispatch", "z-design", "c0010" }).code).toBe(0)
 		end
 	)
 
-	it("a code push straight to main between runs stops the next run until the user vets main", function()
+	-- Pinned a code push between runs refusing the next run until `dispatch vet`. A process accepts main as it is.
+	it("a code push straight to main between runs does not stop the next run", function()
 		fakecli.clear(h)
+		mode("claude", nil)
 		trackerfix.elsewhere(h.f, { ["src/direct.lua"] = "return 1\n" }, "a direct code push")
 		local r = zn({ "dispatch", "z-design", "c0010" })
-		t.expect(r.code).toBe(5)
-		t.expect(has(r.stdout, "src/direct.lua")).toBe(true)
-		t.expect(fakecli.log(h)).toBe("")
-		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
-		-- tracker state pushed by another terminal is vetted without the user
+		t.expect(r.code).toBe(0)
+		t.expect(fakecli.log(h) ~= "").toBe(true)
 		trackerfix.elsewhere(
 			h.f,
 			{ ["pickman/.tracker/issues/c0010/notes.md"] = "notes\n" },
 			"tracker state elsewhere"
 		)
-		t.expect(zn({ "dispatch", "z-design", "c0010" }).code ~= 5).toBe(true)
+		t.expect(zn({ "dispatch", "z-design", "c0010" }).code).toBe(0)
 	end)
 
-	it("a step that removes or rewrites the watermark trips the wire after that same step", function()
+	-- Pinned a missing, rewritten or rewound watermark file refusing the next run. The push itself still trips.
+	it("a step that pushes code to main trips on that commit; a later run of another item starts", function()
 		local function step(script: string): fixture.Result
 			fakecli.clear(h)
 			fs.writeFile(`{h.fakes}/script.sh`, script)
@@ -275,95 +274,47 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 		local function push(name: string): string
 			return `git fetch -q origin main; git checkout -q -B {name} FETCH_HEAD; echo {name} > {name}.lua; git add {name}.lua; git -c user.name=f -c user.email=f@example.invalid commit -q -m {name}; "$ZN_REAL_GIT" push -q origin HEAD:main; `
 		end
-		local removed = step(push("w1") .. [[find "$ZN_WATERMARK_DIR" -name main-seen -exec rm {} \;]])
-		t.expect(removed.code).toBe(5)
+		local pushed = step(push("w1"))
+		t.expect(pushed.code).toBe(5)
 		t.expect(fakecli.state(h, "c0010").outcome).toBe("tripwire")
-		-- caught by what the step pushed, vetted from the run's own copy whatever the file says (review 004 F1)
 		t.expect(has(fakecli.state(h, "c0010").detail, "w1.lua")).toBe(true)
-		-- between runs a missing watermark is never trusted
-		t.expect(zn({ "dispatch", "z-design", "c0010" }).code).toBe(5)
-		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
-		local rewritten =
-			step(push("w2") .. [[git rev-parse HEAD > "$(find "$ZN_WATERMARK_DIR" -name main-seen)"]])
-		t.expect(rewritten.code).toBe(5)
-		t.expect(has(fakecli.state(h, "c0010").detail, "w2.lua")).toBe(true)
-		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
-		-- no watermark, and an item with no run yet (so no mirror): never trusted on first use
-		do
-			local dir = h.f.base .. "/watermark"
-			local only = ""
-			for _, d in fs.readDir(dir) do
-				only = `{dir}/{d}/main-seen`
-			end
-			local saved = fs.readFile(only)
-			fs.removeFile(only)
-			local first = zn({ "dispatch", "z-design", "c0012" })
-			t.expect(first.code).toBe(5)
-			t.expect(has(first.stdout, "there is no watermark")).toBe(true)
-			fs.writeFile(only, saved)
-		end
-		-- a watermark set back between runs (to a commit main still has) is behind the item's mirror
-		fakecli.clear(h)
-		t.expect(zn({ "dispatch", "z-design", "c0010" }).code).toBe(0)
-		local mark = h.f.base .. "/watermark"
-		local file = ""
-		for _, d in fs.readDir(mark) do
-			file = `{mark}/{d}/main-seen`
-		end
-		local now = fs.readFile(file)
-		fs.writeFile(file, fixture.git(h.f.origin, { "rev-parse", "main~2" }) .. "\n")
-		local back = zn({ "dispatch", "z-design", "c0010" })
-		t.expect(back.code).toBe(5)
-		t.expect(has(back.stdout, "the watermark went back")).toBe(true)
-		fs.writeFile(file, now)
+		mode("claude", nil)
+		t.expect(zn({ "dispatch", "z-design", "c0020" }).code).toBe(0)
+		t.expect(zn({ "dispatch", "c0010" }).code).toBe(5)
 	end)
 
-	it(
-		"a step that repoints origin, or adds a push URL, trips the wire; a URL changed between runs stops the next",
-		function()
-			local function step(script: string): fixture.Result
-				fakecli.clear(h)
-				fs.writeFile(`{h.fakes}/script.sh`, script)
-				mode("claude", "script")
-				return zn({ "dispatch", "z-design", "c0010" })
-			end
-			local frozen = `{h.f.base}/frozen.git`
-			fixture.git(h.f.main, { "clone", "-q", "--bare", h.f.origin, frozen })
-			local blind = step(
-				`git fetch -q origin main; git checkout -q -B r FETCH_HEAD; echo r > r.lua; git add r.lua; git -c user.name=f -c user.email=f@example.invalid commit -q -m r; "$ZN_REAL_GIT" push -q origin HEAD:main; git config remote.origin.url {frozen}; git config remote.origin.pushurl {h.f.origin}`
-			)
-			t.expect(blind.code).toBe(5)
-			t.expect(has(fakecli.state(h, "c0010").detail, "origin's configuration changed during the step"))
-				.toBe(true)
-			fixture.git(h.f.main, { "config", "--unset", "remote.origin.pushurl" })
-			-- the URL as the step left it, at the next run: changed since the last run
-			local next = zn({ "dispatch", "z-design", "c0010" })
-			t.expect(next.code).toBe(5)
-			t.expect(has(next.stdout, "origin's URL changed since the last run")).toBe(true)
-			fixture.git(h.f.main, { "config", "remote.origin.url", h.f.origin })
-			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
-			local pushurl = step(`git config remote.origin.pushurl {frozen}`)
-			t.expect(pushurl.code).toBe(5)
-			fixture.git(h.f.main, { "config", "--unset", "remote.origin.pushurl" })
-			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
+	-- Pinned a URL changed between runs refusing the next run. During a step, a changed origin still trips.
+	it("a step that repoints origin, or adds a push URL, trips the wire", function()
+		local function step(script: string): fixture.Result
+			fakecli.clear(h)
+			fs.writeFile(`{h.fakes}/script.sh`, script)
+			mode("claude", "script")
+			return zn({ "dispatch", "z-design", "c0010" })
 		end
-	)
+		local frozen = `{h.f.base}/frozen.git`
+		fixture.git(h.f.main, { "clone", "-q", "--bare", h.f.origin, frozen })
+		local blind = step(
+			`git fetch -q origin main; git checkout -q -B r FETCH_HEAD; echo r > r.lua; git add r.lua; git -c user.name=f -c user.email=f@example.invalid commit -q -m r; "$ZN_REAL_GIT" push -q origin HEAD:main; git config remote.origin.url {frozen}; git config remote.origin.pushurl {h.f.origin}`
+		)
+		t.expect(blind.code).toBe(5)
+		t.expect(has(fakecli.state(h, "c0010").detail, "origin's configuration changed during the step"))
+			.toBe(true)
+		fixture.git(h.f.main, { "config", "--unset", "remote.origin.pushurl" })
+		fixture.git(h.f.main, { "config", "remote.origin.url", h.f.origin })
+		local pushurl = step(`git config remote.origin.pushurl {frozen}`)
+		t.expect(pushurl.code).toBe(5)
+		fixture.git(h.f.main, { "config", "--unset", "remote.origin.pushurl" })
+	end)
 
-	it("vet --dry-run lists what it would accept and writes nothing", function()
-		fakecli.clear(h)
-		trackerfix.elsewhere(h.f, { ["src/dry.lua"] = "return 1\n" }, "a code commit")
-		local dry = zn({ "dispatch", "vet", "--dry-run" })
-		t.expect(dry.ok).toBe(true)
-		t.expect(has(dry.stdout, "NOT VETTED, you accept it")).toBe(true)
-		t.expect(has(dry.stdout, "src/dry.lua")).toBe(true)
-		t.expect(has(dry.stdout, "dry run: nothing written")).toBe(true)
-		t.expect(zn({ "dispatch", "z-design", "c0010" }).code).toBe(5)
+	-- Pinned `dispatch vet` listing commits and writing the watermark file. The command is gone.
+	it("dispatch vet is not a command", function()
 		local vet = zn({ "dispatch", "vet" })
-		t.expect(has(vet.stdout, "main vetted at")).toBe(true)
+		t.expect(vet.ok).toBe(false)
+		t.expect(has(vet.stdout .. vet.stderr, "dispatch vet is gone")).toBe(true)
 	end)
 
 	it(
-		"two dispatchers at once never trip each other: another run's honest advance of the watermark is no trip",
+		"two dispatchers at once never trip each other: another run's tracker-state push is no trip",
 		function()
 			-- review 004 case C: while B's step runs, the user's other terminal publishes tracker state and runs A (its
 			-- environment is the step's without the step's own variables: the spec's guards stay, so no `env` that clears
@@ -374,7 +325,7 @@ return t.spec("c0117 the dispatcher's control of a run", function(it)
 userpath=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/z-nile/bin$' | paste -sd: -)
 G=$ZN_REAL_GIT
 ( cd @OTHER@ && $G pull -q origin main && echo note > pickman/.tracker/issues/c0101/note.md && $G add -A && $G -c user.name=u -c user.email=u@example.invalid commit -qm "other terminal: tracker state" && $G push -q origin HEAD:main; echo otherpush=$? )
-( cd @MAIN@ && env -u ZN_DISPATCH -u ZN_HEADLESS -u ZN_DISPATCH_DIR -u ZN_DISPATCH_HOME -u ZN_PUBLISH_BROKER -u ZN_PUBLISH_TOKEN -u ZN_DISPATCHER_PID -u ZN_REAL_GIT -u ZN_REAL_GH -u GITHUB_TOKEN PATH="$userpath" ZN_AGENT_TOKEN_FILE="$ZN_AGENT_TOKEN_FILE_SAVED" ZN_WATERMARK_DIR="@BASE@/watermark" GH_TOKEN=the-users-token bash scripts/tracker.sh dispatch z-design c0102; echo "A exit=$?" )
+( cd @MAIN@ && env -u ZN_DISPATCH -u ZN_HEADLESS -u ZN_DISPATCH_DIR -u ZN_DISPATCH_HOME -u ZN_PUBLISH_BROKER -u ZN_PUBLISH_TOKEN -u ZN_DISPATCHER_PID -u ZN_REAL_GIT -u ZN_REAL_GH -u GITHUB_TOKEN PATH="$userpath" ZN_AGENT_TOKEN_FILE="$ZN_AGENT_TOKEN_FILE_SAVED" GH_TOKEN=the-users-token bash scripts/tracker.sh dispatch z-design c0102; echo "A exit=$?" )
 ]==]
 			script = string.gsub(
 				string.gsub(string.gsub(script, "@OTHER@", h.f.other), "@MAIN@", h.f.main),
@@ -438,32 +389,8 @@ G=$ZN_REAL_GIT
 		t.expect(fixture.git(h.f.main, { "for-each-ref", "refs/zn-dispatch/" })).toBe("")
 	end)
 
-	it("the shared watermark only moves forward: an older main never overwrites a newer one", function()
-		local dir = `{h.f.base}/mark-forward`
-		local path = `{dir}/main-seen`
-		local older = fixture.git(h.f.origin, { "rev-parse", "main~1" })
-		local newer = fixture.git(h.f.origin, { "rev-parse", "main" })
-		fixture.git(h.f.main, { "fetch", "-q", "origin", "main" })
-		t.expect(dispatcher.advanceMark(h.f.main, path, older)).toBe(nil)
-		t.expect(dispatcher.advanceMark(h.f.main, path, newer)).toBe(nil)
-		t.expect((string.gsub(fs.readFile(path), "%s+$", ""))).toBe(newer)
-		-- the late writer of the older main leaves the file as it is
-		t.expect(dispatcher.advanceMark(h.f.main, path, older)).toBe(nil)
-		t.expect((string.gsub(fs.readFile(path), "%s+$", ""))).toBe(newer)
-		-- a diverged commit is refused; the user's vet (force) writes it
-		fixture.git(h.f.other, { "fetch", "-q", "origin", "main" })
-		fixture.git(h.f.other, { "checkout", "-q", "-B", "diverged", "FETCH_HEAD~1" })
-		fs.writeFile(`{h.f.other}/diverged.md`, "x\n")
-		fixture.git(h.f.other, { "add", "-A" })
-		fixture.git(h.f.other, { "commit", "-q", "-m", "diverged" })
-		local side = fixture.git(h.f.other, { "rev-parse", "HEAD" })
-		fixture.git(h.f.other, { "push", "-q", "origin", "HEAD:refs/heads/diverged" })
-		fixture.git(h.f.other, { "checkout", "-q", "main" })
-		fixture.git(h.f.main, { "fetch", "-q", "origin", "diverged" })
-		t.expect(has(dispatcher.advanceMark(h.f.main, path, side) or "", "diverged")).toBe(true)
-		t.expect(dispatcher.advanceMark(h.f.main, path, side, true)).toBe(nil)
-		t.expect((string.gsub(fs.readFile(path), "%s+$", ""))).toBe(side)
-	end)
+	-- Deleted: "the shared watermark only moves forward". It pinned a file that only advanced under a lock, and
+	-- `dispatch vet` writing a diverged commit. No file decides a run.
 
 	it(
 		"an author waiting on a long nested review stays alive by its heartbeat; a quiet one still stalls",
@@ -572,7 +499,9 @@ G=$ZN_REAL_GIT
 		end
 	)
 
-	it("a detached process's late code push after a step is caught at the next run", function()
+	-- Pinned a push that landed after the tripwire, caught by the watermark file at the next run. A later process
+	-- accepts main as it is; that push is GitHub's branch rules and the broker's fast-forward check.
+	it("a detached process's late code push after a step does not stop the next run", function()
 		fakecli.clear(h)
 		mode("claude", "late")
 		local r = zn({ "dispatch", "z-design", "c0060" })
@@ -585,10 +514,9 @@ G=$ZN_REAL_GIT
 			waited += task.wait(0.2)
 		end
 		t.expect(fixture.exec(h.f.origin, "git", { "cat-file", "-e", "main:late.lua" }).ok).toBe(true)
-		local next = zn({ "dispatch", "z-design", "c0060" })
-		t.expect(next.code).toBe(5)
-		t.expect(has(next.stdout, "late.lua")).toBe(true)
-		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
+		mode("claude", nil)
+		local nextRun = zn({ "dispatch", "z-design", "c0060" })
+		t.expect(nextRun.code).toBe(0)
 	end)
 
 	it("a cursor step that never shows a call still stops at its wall-time ceiling (max_minutes)", function()
@@ -771,9 +699,9 @@ G=$ZN_REAL_GIT
 			local elsewhere = zn({ "dispatch", "c0091" })
 			t.expect(elsewhere.code).toBe(4)
 			t.expect(has(elsewhere.stdout, "outside the issue's own folder")).toBe(true)
-			-- a rename of code into the issue's folder: gh would list only the new path; the head's raw diff shows both
+			-- a rename of code into the issue's folder: gh would list only the new path; the head's raw diff shows both.
+			-- the code is already on main when this process starts, so the run accepts it
 			trackerfix.elsewhere(h.f, { ["src/guard.lua"] = "return 1\n" }, "code a human merged")
-			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 			local head10 = fakecli.pullRequest(
 				h,
 				10,
@@ -798,25 +726,20 @@ G=$ZN_REAL_GIT
 			local stale = zn({ "dispatch", "c0091" })
 			t.expect(stale.code).toBe(4)
 			t.expect(has(stale.stdout, "is not the head GitHub reports")).toBe(true)
-			-- a code commit on main that GitHub reports as a pull request's merge into main is vetted; into another
-			-- branch, never (review 003 F6)
-			trackerfix.elsewhere(h.f, { ["src/side.lua"] = "return 1\n" }, "merged into a side branch")
-			local side = fixture.git(h.f.origin, { "rev-parse", "main" })
+			-- during a run, a code commit GitHub reports as merged into another branch trips; into main, it does not
+			-- (review 003 F6). A commit already on main when the process starts is accepted either way.
+			mode("claude", "script")
 			fs.writeFile(
-				`{h.fakes}/pulls-{side}.json`,
-				`[\{"number":12,"merged_at":"2026-10-21T00:00:00Z","merge_commit_sha":"{side}","base":\{"ref":"side"\}\}]`
+				`{h.fakes}/script.sh`,
+				[[git fetch -q origin main; git checkout -q -B sidepush FETCH_HEAD; mkdir -p src; echo side > src/side.lua; git add src/side.lua; git -c user.name=f -c user.email=f@example.invalid commit -q -m side; "$ZN_REAL_GIT" push -q origin HEAD:main; sha=$(git rev-parse HEAD); printf '%s\n' "[{\"number\":12,\"merged_at\":\"2026-10-21T00:00:00Z\",\"merge_commit_sha\":\"$sha\",\"base\":{\"ref\":\"side\"}}]" > "$FAKE_DIR/pulls-$sha.json"]]
 			)
-			local sideRun = zn({ "dispatch", "c0099" })
+			local sideRun = zn({ "dispatch", "z-design", "c0010" })
 			t.expect(sideRun.code).toBe(5)
-			t.expect(has(sideRun.stdout, "src/side.lua")).toBe(true)
-			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
-			trackerfix.elsewhere(h.f, { ["src/merged.lua"] = "return 1\n" }, "a merged PR")
-			local sha = fixture.git(h.f.origin, { "rev-parse", "main" })
+			t.expect(has(fakecli.state(h, "c0010").detail, "src/side.lua")).toBe(true)
 			fs.writeFile(
-				`{h.fakes}/pulls-{sha}.json`,
-				`[\{"number":13,"merged_at":"2026-10-21T00:00:00Z","merge_commit_sha":"{sha}","base":\{"ref":"main"\}\}]`
+				`{h.fakes}/script.sh`,
+				[[git fetch -q origin main; git checkout -q -B mainpush FETCH_HEAD; mkdir -p src; echo merged > src/merged.lua; git add src/merged.lua; git -c user.name=f -c user.email=f@example.invalid commit -q -m merged; "$ZN_REAL_GIT" push -q origin HEAD:main; sha=$(git rev-parse HEAD); printf '%s\n' "[{\"number\":13,\"merged_at\":\"2026-10-21T00:00:00Z\",\"merge_commit_sha\":\"$sha\",\"base\":{\"ref\":\"main\"}}]" > "$FAKE_DIR/pulls-$sha.json"]]
 			)
-			t.expect(zn({ "dispatch", "z-design", "c0010", "--dry-run" }).ok).toBe(true)
 			t.expect(zn({ "dispatch", "z-design", "c0010" }).code).toBe(0)
 		end
 	)
