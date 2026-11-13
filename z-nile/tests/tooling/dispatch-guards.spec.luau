@@ -2,7 +2,7 @@
 -- R0052 code review 001 (c0117): the dispatcher's guards, for real with fake CLIs (@tests/lib/fakecli). F1: the
 -- rafting gate never auto-merges a PR that changes a prepared issue's sequestered files (a member's or the issue's
 -- own check.sh), and still merges the raft's own document with its member's raft: line. F2: `./zn dispatch retry`
--- starts through the same guards as every run (origin's URL changed: exit 5). F6: a pending row its item may take
+-- starts through the same guards as every run. F6: a pending row its item may take
 -- is written at the next run's start. Fixture under .cache/c0117-guards.
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
@@ -107,10 +107,10 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			)),
 			["pickman/.tracker/issues/c0095/check.sh"] = "lune run tests/run -- pickman/.tracker/issues/c0095/acceptance/a.spec.luau\n",
 		})
-		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 	end)
 
-	it("retry starts through the guards: origin's URL changed since the last run stops it (F2)", function()
+	-- Pinned a URL changed between runs refusing retry. A new process reads git's current origin.
+	it("retry after origin's URL changed between runs reads the new URL and starts", function()
 		fakecli.clear(h)
 		local first = zn({ "dispatch", "z-design", "c0010" })
 		if not first.ok then
@@ -123,28 +123,26 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 		fixture.git(h.f.main, { "remote", "set-url", "origin", other })
 		local r = zn({ "dispatch", "retry", "c0010" })
 		fixture.git(h.f.main, { "remote", "set-url", "origin", url })
-		t.expect(r.code).toBe(5)
-		t.expect(has(r.stdout, "origin's URL changed")).toBe(true)
-		t.expect(has(fakecli.log(h), "claude step=z-design")).toBe(false)
+		if not r.ok then
+			error(r.stdout .. r.stderr)
+		end
+		t.expect(has(fakecli.log(h), "claude step=z-design")).toBe(true)
 	end)
 
-	it(
-		"with no pinned origin, the model walk reads only the saved origin, never origin by name (002 F3)",
-		function()
-			fakecli.clear(h)
-			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
-			local ok = zn({ "dispatch", "zz-review", "c0010", "--mode", "code", "--dry-run" })
-			t.expect(has(ok.stdout, "claude-opus-5-5")).toBe(true)
-			local url = fixture.git(h.f.main, { "remote", "get-url", "origin" })
-			local evil = `{h.f.base}/evil.git`
-			process.exec("git", { "clone", "-q", "--bare", h.f.origin, evil }) -- raw: clone to a named path
-			fixture.git(h.f.main, { "remote", "set-url", "origin", evil })
-			local r = zn({ "dispatch", "zz-review", "c0010", "--mode", "code", "--dry-run" })
-			fixture.git(h.f.main, { "remote", "set-url", "origin", url })
-			t.expect(r.ok).toBe(false)
-			t.expect(has(r.stdout .. r.stderr, ".models.toml is not read from it")).toBe(true)
-		end
-	)
+	-- Pinned a saved origin-url file refusing a dry run when origin moved. A dry run reads git's current origin.
+	it("a dry run reads .models.toml from git's current origin URL", function()
+		fakecli.clear(h)
+		local ok = zn({ "dispatch", "zz-review", "c0010", "--mode", "code", "--dry-run" })
+		t.expect(has(ok.stdout, "claude-opus-5-5")).toBe(true)
+		local url = fixture.git(h.f.main, { "remote", "get-url", "origin" })
+		local evil = `{h.f.base}/evil.git`
+		process.exec("git", { "clone", "-q", "--bare", h.f.origin, evil }) -- raw: clone to a named path
+		fixture.git(h.f.main, { "remote", "set-url", "origin", evil })
+		local r = zn({ "dispatch", "zz-review", "c0010", "--mode", "code", "--dry-run" })
+		fixture.git(h.f.main, { "remote", "set-url", "origin", url })
+		t.expect(r.ok).toBe(true)
+		t.expect(has(r.stdout, "claude-opus-5-5")).toBe(true)
+	end)
 
 	it("a nested step beats until its process ends, not only while its CLI runs (the stall cases)", function()
 		fakecli.clear(h)
@@ -170,7 +168,6 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 
 	it("a pending row its item may take is written at the next run's start (F6)", function()
 		fakecli.clear(h)
-		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 		local path = `{h.f.main}/.cache/dispatch/c0010/state.json`
 		local st = serde.decode("json", fs.readFile(path))
 		st.outcome = "failed"
@@ -656,11 +653,10 @@ return t.spec("c0117 the dispatcher's guards (R0052 code review 001)", function(
 			t.expect(again.code).toBe(5)
 			local stateText = fs.readFile(`{h.f.main}/.cache/dispatch/c0096/state.json`)
 			t.expect(has(stateText, "merge-check")).toBe(true)
-			-- `vet` alone leaves the stop; `retry` clears it (the stop's own message names both)
+			-- another dispatch leaves the stop; `retry` clears it
 			t.expect(has(late.stdout, "./zn dispatch retry c0096")).toBe(true)
 			t.expect(has(again.stdout, "./zn dispatch retry c0096")).toBe(true)
 			t.expect(has(again.stdout, "did not make")).toBe(false)
-			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 			t.expect(zn({ "dispatch", "c0096" }).code).toBe(5)
 			zn({ "dispatch", "retry", "c0096" })
 			t.expect(has(fs.readFile(`{h.f.main}/.cache/dispatch/c0096/state.json`), '"outcome":"tripwire"'))
