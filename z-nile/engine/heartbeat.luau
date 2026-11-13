@@ -556,6 +556,22 @@ function heartbeat.nextSuffix(base: string, taken: { string }): string
 	return `{base}-{n}`
 end
 
+-- Whether the worktree `name` on `branch` belongs to the family of `base`: the bare name always; a numbered copy only on the
+-- family's own branch (a copy keeps the original branch name), or, for a raft, detached or on one of its layers. An
+-- unrelated `<base>-<digits>` (another item's slug, a step's number) is no member.
+function heartbeat.isMember(base: string, name: string, branch: string?): boolean
+	local n = heartbeat.suffixOf(base, name)
+	if n == nil then
+		return false
+	elseif n == 0 then
+		return true
+	elseif string.match(base, "^R%d%d%d%d$") then
+		local layer = if branch then string.match(branch, "^(R%d%d%d%d)/%d+/[fdc]%d%d%d%d$") else nil
+		return branch == nil or branch == "" or layer == base
+	end
+	return branch == base
+end
+
 -- The family's current worktree: the highest suffix among the names not marked discarded; nil when none is left.
 function heartbeat.currentOf(base: string, members: { string }, discarded: { [string]: boolean }): string?
 	local best: string? = nil
@@ -632,6 +648,7 @@ export type Discard = {
 	copy: string,
 	branch: string,
 	base: string,
+	pushed: string,
 	items: { string },
 	since: number,
 	body: string,
@@ -673,6 +690,7 @@ function heartbeat.discardText(f: DiscardFacts): string
 		`copy: {f.copy}`,
 		`branch: {f.branch}`,
 		`base: {f.base}`,
+		`pushed: {f.pushedSha}`,
 		`items: {table.concat(f.items, " ")}`,
 		`since: {f.since}`,
 		"",
@@ -718,9 +736,10 @@ function heartbeat.discardParse(text: string): Discard?
 	local copy = string.match(head, "\ncopy: ([^\n]*)")
 	local branch = string.match(head, "\nbranch: ([^\n]*)")
 	local base = string.match(head, "\nbase: ([^\n]*)")
+	local pushed = string.match(head, "\npushed: ([^\n]*)")
 	local items = string.match(head, "\nitems: ([^\n]*)")
 	local since = tonumber(string.match(head, "\nsince: (%d+)") or "")
-	if not (path and copy and branch and base and items and since) then
+	if not (path and copy and branch and base and pushed and items and since) then
 		return nil
 	end
 	local ids: { string } = {}
@@ -732,6 +751,7 @@ function heartbeat.discardParse(text: string): Discard?
 		copy = copy,
 		branch = branch,
 		base = base,
+		pushed = pushed,
 		items = ids,
 		since = since,
 		body = body or "",

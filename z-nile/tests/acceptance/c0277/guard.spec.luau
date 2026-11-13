@@ -88,6 +88,7 @@ return t.spec("c0277 the old process in a discarded worktree", function(it)
 					{ "status", "c0010", "preparing" },
 					{ "status", "c0010", "new" },
 					{ "sync" },
+					{ "sync", "--fetch" },
 					{ "worktree", "prep-other" },
 					{ "done", "R0010" },
 					{ "stop", "R0010" },

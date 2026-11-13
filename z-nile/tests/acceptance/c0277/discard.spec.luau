@@ -1,11 +1,11 @@
 --!strict
--- c0265: taking over a lost claim discards the old worker's worktree and recovers its work (the user, 2026-11-08):
--- `./zn worktree <name> --takeover` leaves the old worktree at its path, marks it discarded and renames its branch, and
--- creates the numbered copy <name>-<n> (the next free number) on the original branch name, continuing the old agent's
--- PUSHED branch (so the PR head keeps working), listing what the old worktree still holds (uncommitted files, unpushed
--- commits). Every ./zn command run in the discarded worktree (an old process that wakes up) refuses and says so; a plain
--- `./zn worktree <name>` finds the copy, not the discarded one. Only a lost claim, in a worktree no taker is still
--- starting in, can be taken over. Time is ZN_NOW. Fixture under .cache/c0277-discard.
+-- c0277: taking over a lost claim discards the old worker's worktree and recovers its work (the user, 2026-11-08):
+-- `./zn worktree <name> --takeover` renames the old worktree's directory (`<name>-discarded-<n>`, so its old path is gone),
+-- marks it discarded and renames its branch, and creates the numbered copy <name>-<n> (the next free number) on the original
+-- branch name, continuing the old agent's PUSHED branch (so the PR head keeps working), listing what the old worktree still
+-- holds (uncommitted files, unpushed commits). A plain `./zn worktree <name>` finds the copy and says who was discarded.
+-- Only a lost claim, in a worktree no taker is still starting in, can be taken over. Time is ZN_NOW. Fixture under
+-- .cache/c0277-discard.
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -69,6 +69,7 @@ return t.spec("c0277 discarded worktrees", function(it)
 				[`{P}/c0020/c0020.md`] = trackerfix.stub("c0020", "c0020", "new-a-b-c"),
 				[`{P}/c0040/c0040.md`] = trackerfix.stub("c0040", "c0040", "new-a-b-c"),
 				[`{P}/c0050/c0050.md`] = trackerfix.stub("c0050", "c0050", "new-a-b-c"),
+				[`{P}/c0060/c0060.md`] = trackerfix.stub("c0060", "c0060", "new-a-b-c"),
 			})
 			fs.writeFile(`{h.bin}/gh`, GH)
 			process.exec("chmod", { "+x", `{h.bin}/gh` })
@@ -163,7 +164,11 @@ return t.spec("c0277 discarded worktrees", function(it)
 			t.expect(has(r.stderr, "dirty.txt")).toBe(true)
 			t.expect(has(r.stderr, "unpushed work")).toBe(true)
 			-- a plain lookup finds the copy, never the discarded worktree
-			t.expect(trim(must(zn(h.f.main, { "worktree", NAME }), "worktree"))).toBe(dir(`{NAME}-1`))
+			local looked = zn(h.f.main, { "worktree", NAME })
+			t.expect(trim(must(looked, "worktree"))).toBe(dir(`{NAME}-1`))
+			-- the lookup says who was discarded, so an old process that looks its worktree up again is told
+			t.expect(has(looked.stderr, "you were discarded")).toBe(true)
+			t.expect(has(looked.stderr, gone(NAME, 1))).toBe(true)
 			-- a second taker cannot discard the copy while the first is still starting in it
 			local second = zn(h.f.main, { "worktree", NAME, "--takeover" }, LATE)
 			t.expect(second.ok).toBe(false)
@@ -315,6 +320,64 @@ return t.spec("c0277 discarded worktrees", function(it)
 			t.expect(branchOf(wt)).toBe("prep-race") -- the winner's rename is not this taker's to undo
 			t.expect(fs.readFile(`{wt}/` .. "." .. "cache/discarded")).toBe("the winner\n") -- and its marker is untouched
 			t.expect(fs.isDir(dir("prep-race-1"))).toBe(false)
+			fs.writeFile(`{h.bin}/git`, gitShim)
+		end
+	)
+
+	it(
+		"an unrelated worktree named like a copy is no member of the family, and a copy named by its own name stands for its family",
+		function()
+			-- another item's worktree `prep-foo-2` on its own branch does not make `./zn worktree prep-foo` return it
+			local other = trim(must(zn(h.f.main, { "worktree", "prep-foo-2" }), "worktree"))
+			local bare = trim(must(zn(h.f.main, { "worktree", "prep-foo" }), "worktree"))
+			t.expect(bare).toBe(dir("prep-foo"))
+			t.expect(branchOf(other)).toBe("prep-foo-2")
+			-- and its number is taken when the family numbers a copy
+			t.expect(heartbeat.nextSuffix("prep-foo", { "prep-foo", "prep-foo-2" })).toBe("prep-foo-1")
+			-- a takeover by the copy's own name numbers the family, not the copy: prep-hello-N on branch prep-hello
+			local c = trim(must(zn(h.f.main, { "worktree", NAME }), "worktree"))
+			local copyName = string.match(c, "([^/]+)$") :: string
+			must(zn(c, { "status", "c0010", "preparing" }, LATE + 20 * STALE), "the taker claims")
+			local r = zn(h.f.main, { "worktree", copyName, "--takeover" }, LATE + 40 * STALE)
+			must(r, "takeover by the copy's name")
+			local newCopy = trim(r.stdout)
+			t.expect(string.match(newCopy, "[^/]+$") :: string).toBe(`{NAME}-5`)
+			t.expect(branchOf(newCopy)).toBe(NAME) -- the original branch name, not a new `{copyName}` branch
+		end
+	)
+
+	it(
+		"a copy that cannot be created, and a worktree whose contents cannot be read, leave everything as it was",
+		function()
+			local wt = trim(must(zn(h.f.main, { "worktree", "prep-shim" }), "worktree"))
+			must(zn(wt, { "status", "c0060", "preparing" }, T0), "claim c0060")
+			local gitShim = fs.readFile(`{h.bin}/git`)
+			local function shim(body: string)
+				fs.writeFile(`{h.bin}/git`, (string.gsub(gitShim, "^#!/bin/sh\n", `#!/bin/sh\n{body}\n`, 1)))
+			end
+			-- the status read fails: refused before anything moves
+			shim(
+				'if [ -f "$FAKE_DIR/nostatus" ] && [ "$1" = -C ] && [ "$3" = status ]; then echo "fatal: fake" >&2; exit 128; fi'
+			)
+			fs.writeFile(`{h.fakes}/nostatus`, "1")
+			local blind = zn(h.f.main, { "worktree", "prep-shim", "--takeover" }, LATE)
+			t.expect(blind.ok).toBe(false)
+			t.expect(has(blind.stderr, "cannot read what it holds")).toBe(true)
+			t.expect(branchOf(wt)).toBe("prep-shim")
+			t.expect(fs.isFile(`{wt}/` .. "." .. "cache/discarded")).toBe(false)
+			fs.removeFile(`{h.fakes}/nostatus`)
+			-- the copy cannot be created (after the directory and the branch were renamed): everything is put back
+			shim(
+				'if [ -f "$FAKE_DIR/noadd" ] && [ "$1" = worktree ] && [ "$2" = add ]; then echo "fatal: fake" >&2; exit 128; fi'
+			)
+			fs.writeFile(`{h.fakes}/noadd`, "1")
+			local r = zn(h.f.main, { "worktree", "prep-shim", "--takeover" }, LATE)
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr, "cannot create")).toBe(true)
+			t.expect(fs.isDir(wt)).toBe(true) -- the directory is back at its path
+			t.expect(branchOf(wt)).toBe("prep-shim") -- the branch has its name again
+			t.expect(fs.isFile(`{wt}/` .. "." .. "cache/discarded")).toBe(false) -- and the marker is gone
+			fs.removeFile(`{h.fakes}/noadd`)
 			fs.writeFile(`{h.bin}/git`, gitShim)
 		end
 	)

@@ -67,6 +67,22 @@ return t.spec("c0277 discarded worktree rules", function(it)
 		t.expect(heartbeat.baseOf("R0010/2/c0020-discarded-1", "x")).toBe("R0010/2/c0020-discarded-1") -- not a layer
 	end)
 
+	it(
+		"a numbered copy belongs to a family only on the family's branch; the bare name always does",
+		function()
+			t.expect(heartbeat.isMember("prep-x", "prep-x", "anything")).toBe(true)
+			t.expect(heartbeat.isMember("prep-x", "prep-x-1", "prep-x")).toBe(true)
+			t.expect(heartbeat.isMember("prep-x", "prep-x-2", "prep-x-2")).toBe(false) -- another item's own branch
+			t.expect(heartbeat.isMember("prep-x", "prep-x-2", nil)).toBe(false)
+			t.expect(heartbeat.isMember("prep-x", "prep-xy-1", "prep-x")).toBe(false)
+			-- a raft's copy is detached or on one of its layers
+			t.expect(heartbeat.isMember("R0010", "R0010-1", nil)).toBe(true)
+			t.expect(heartbeat.isMember("R0010", "R0010-1", "R0010/2/c0020")).toBe(true)
+			t.expect(heartbeat.isMember("R0010", "R0010-1", "R0011/1/c0030")).toBe(false)
+			t.expect(heartbeat.isMember("R0010", "R0010-1", "somebranch")).toBe(false)
+		end
+	)
+
 	it("a copy a taker is starting in is fresh until the limit", function()
 		t.expect(heartbeat.fresh(1000, 1000, heartbeat.STALE)).toBe(true)
 		t.expect(heartbeat.fresh(1000, 1000 + heartbeat.STALE - 1, heartbeat.STALE)).toBe(true)
@@ -111,6 +127,11 @@ return t.spec("c0277 discarded worktree rules", function(it)
 			}, "pull requests unreadable: x")
 			t.expect(why ~= nil and string.find(why, word, 1, true) ~= nil).toBe(true)
 		end
+		-- a held or unheld claim with no verdict at all is refused, never passed
+		local noverdict =
+			heartbeat.discardRefusal({ { id = "c0010", remembered = A, current = A, verdict = nil } }, "x")
+		t.expect(noverdict ~= nil and string.find(noverdict, "no heartbeat verdict", 1, true) ~= nil)
+			.toBe(true)
 		-- the verdict was judged for another stamp than origin holds now
 		t.expect(heartbeat.discardRefusal({
 			{ id = "c0010", remembered = A, current = A, verdict = verdict("c0010", B, "lost", 4000) },
@@ -138,6 +159,7 @@ return t.spec("c0277 discarded worktree rules", function(it)
 		t.expect(got.copy).toBe("/r/.worktree/prep-x-1")
 		t.expect(got.branch).toBe("prep-x-discarded-1")
 		t.expect(got.base).toBe("prep-x")
+		t.expect(got.pushed).toBe("0123456789abcdef")
 		t.expect(got.items).toEqual({ "c0010" })
 		t.expect(got.since).toBe(1800000000)
 		for _, needle in
@@ -160,7 +182,7 @@ return t.spec("c0277 discarded worktree rules", function(it)
 		t.expect(string.find(heartbeat.discardedText("junk"), "was discarded", 1, true) ~= nil).toBe(true)
 		t.expect(heartbeat.discardParse("junk")).toBe(nil)
 		-- a header with one key missing is damaged, whichever key (the reader refuses every omission)
-		for _, key in { "copy", "branch", "base", "items", "since" } do
+		for _, key in { "copy", "branch", "base", "pushed", "items", "since" } do
 			local cut = string.gsub(text, "\n" .. key .. ": [^\n]*", "", 1)
 			t.expect(heartbeat.discardParse(cut)).toBe(nil)
 		end

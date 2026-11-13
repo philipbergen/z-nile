@@ -147,5 +147,7 @@ return t.spec("c0277 real-time proofs: nothing beats from a discarded worktree",
 		fakecli.zn(h, { "dispatch", "z-design", "c0050" }, { ZN_BEAT_EVERY = "1" })
 		t.expect(epoch() >= started).toBe(true) -- it beat while the worktree was there
 		t.expect(fs.isFile(`{h.f.base}/fakes/no-beat-after`)).toBe(true) -- and not after it was renamed away
+		-- and the chain stopped there with a question: it did not go on to start its next step in the taker's copy
+		t.expect(fs.isFile(`{h.f.main}/.cache/dispatch/c0050/questions.md`)).toBe(true)
 	end)
 end)

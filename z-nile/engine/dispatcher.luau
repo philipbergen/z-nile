@@ -781,7 +781,13 @@ end
 -- --time 60`, one at a time; a hung remote cannot stall the supervising loop because the child runs in a task of its own)
 -- beats the claim `S` the step's worktree remembers, else the one main showed when the step started. A claim restamped
 -- mid-step is refused by the child: the dispatcher stops beating and says so once. Returns the function that stops it.
-function dispatcher.claimBeat(ctx: Ctx, id: string, cwd: string, started: string?): () -> ()
+function dispatcher.claimBeat(
+	ctx: Ctx,
+	id: string,
+	cwd: string,
+	started: string?,
+	onDiscard: (() -> ())?
+): () -> ()
 	local running = true
 	if id == "" then
 		return function() end
@@ -798,6 +804,9 @@ function dispatcher.claimBeat(ctx: Ctx, id: string, cwd: string, started: string
 				stdio.ewrite(
 					`dispatch: {id}: the step's worktree was discarded (the claim was taken over): not beating\n`
 				)
+				if onDiscard then
+					onDiscard() -- the chain stops here, as it does on a question: it must not start its next step in the taker's copy
+				end
 				return
 			end
 			if heartbeat.due(last, at, every) then
@@ -1046,7 +1055,13 @@ function dispatcher.modelStep(
 				startedStamp = nil
 			end
 		end
-		local stopClaimBeat = dispatcher.claimBeat(ctx, id, cwd, startedStamp)
+		local stopClaimBeat = dispatcher.claimBeat(ctx, id, cwd, startedStamp, function()
+			pcall(
+				fs.writeFile,
+				`{stateDir}/questions.md`,
+				`## Q1\nThe worktree of this step ({cwd}) was discarded: {id}'s claim was taken over while the step ran, and the taker works in a copy. Nothing was started in the copy. Decide whether the dispatcher should continue the chain on the taker's claim (\`./zn dispatch retry {id}\` after you answer here) or leave the item to the taker.\n`
+			)
+		end)
 		local result = modelstep.launch({
 			argv = argv,
 			cwd = cwd,

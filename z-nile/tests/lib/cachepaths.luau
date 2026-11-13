@@ -154,7 +154,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["stateDir = `.cache/idea-run/{id}/{phase}`,"] = "the idea stage's supervisor state for one attempt (pid, stdin, stop, measure); gitignored under this checkout's .cache, written by the runner the same way a dispatch step's state dir is",
 	},
 	["z-nile/engine/heartbeat.luau"] = {
-		['heartbeat.DISCARDED = ".cache/discarded"'] = "c0277: the marker a takeover leaves in the old worktree, written with sh.writeReplacing (a rename); every other command only reads it",
+		['heartbeat.DISCARDED = ".cache/discarded"'] = "c0277: the marker a takeover leaves in the old worktree: a temp file written with sh.writeReplacing, then hard-linked in with `ln`, which refuses an existing path (hb.claimFile); every other command only reads it",
 		['heartbeat.FRESH = ".cache/fresh"'] = "c0277: the epoch a takeover made a copy, written with sh.writeReplacing (a rename), removed when the copy gets claim memory",
 	},
 	["z-nile/engine/watchcmd.luau"] = {

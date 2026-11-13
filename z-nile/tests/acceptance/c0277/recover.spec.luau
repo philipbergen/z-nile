@@ -106,6 +106,9 @@ return t.spec("c0277 recovering a discarded worktree's work", function(it)
 			local pushedTip = trim(fixture.git(h.f.origin, { "rev-parse", "refs/heads/prep-keep" }))
 			-- the old worker's beat marks are there before, and gone after
 			t.expect(fs.isFile(`{dir("prep-keep")}/{MARKS}/c0010`)).toBe(true)
+			-- specs start no beater, so a pid file is planted: the discard must delete it as it deletes the marks
+			fs.writeDir(`{dir("prep-keep")}/{BEATER}`)
+			fs.writeFile(`{dir("prep-keep")}/{BEATER}/c0010`, "99999 1")
 			local r = zn(h.f.main, { "worktree", "prep-keep", "--takeover" }, LATE)
 			must(r, "takeover")
 			local copy = dir("prep-keep-1")
@@ -198,7 +201,7 @@ return t.spec("c0277 recovering a discarded worktree's work", function(it)
 		t.expect(fs.isFile(`{copy}/pickman/detached.txt`)).toBe(false)
 		t.expect(has(r.stderr, "detached work")).toBe(true)
 		t.expect(
-			has(trim(fixture.git(h.f.main, { "log", "--format=%s", "R0010-discarded-1" })), "detached work")
+			has(trim(fixture.git(h.f.main, { "log", "--format=%s", "discarded-R0010-1" })), "detached work")
 		)
 			.toBe(true)
 		cherryPick(r.stderr)

@@ -109,7 +109,7 @@ usage: ./zn <command> ...
   watch-net                                     run every project's fast suite on current main, then the slow tier,
                                                 and push a missed test's files or a slow-tier defect onto main
   worktree <R-id|name>                          create or reuse .worktree/<R-id|name>: a raft's is detached until a layer exists, then on that layer
-  worktree <name> --takeover [--item <id>]      discard a lost claim's worktree (marked, branch renamed) and continue in a numbered copy <name>-<n>;
+  worktree <name> --takeover [--item <id>]      discard a lost claim's worktree (directory and branch renamed, marked) and continue in a numbered copy <name>-<n>;
   worktree --takeover <id>                      by id, the worktree that holds the claim (its work is kept and listed)
   worktree-prune                                remove worktrees of rafts that are done on main
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
@@ -5446,8 +5446,7 @@ function hb.addWorktree(path: string, branch: string?, detach: boolean, base: st
 	elseif
 		branch and sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok
 	then
-		sh.git({ "branch", "--track", branch, `origin/{branch}` })
-		sh.git({ "worktree", "add", path, branch })
+		sh.git({ "worktree", "add", "--track", "-b", branch, path, `origin/{branch}` })
 	else
 		-- --no-track: a bare `git push` must not target origin/main before start or landing sets the upstream
 		sh.git({ "worktree", "add", "--no-track", "-b", branch :: string, path, base })
@@ -5479,6 +5478,25 @@ function hb.discardedNumbers(base: string): { string }
 		local stem, n = string.match(line, "^(.*)%-discarded%-(%d+)$")
 		if stem and n and heartbeat.baseOf(stem, "") == base then
 			table.insert(out, `{base}-{n}`)
+		end
+		-- a detached raft worktree's commits are kept on `discarded-R####-<n>` (a name `R####-` does not prefix: the board
+		-- and busy read `R####-…` as the raft's own branch)
+		local raft, m = string.match(line, "^discarded%-(R%d%d%d%d)%-(%d+)$")
+		if raft == base and m then
+			table.insert(out, `{base}-{m}`)
+		end
+	end
+	return out
+end
+
+-- Every name that holds a number for `base`'s copies: the discarded ones, the family's members and every other entry under
+-- .worktree/ (an unrelated `<base>-2` holds its number, so a path never collides).
+function hb.takenNames(base: string): { string }
+	local out = hb.discardedNumbers(base)
+	local wt = `{mainRoot()}/.worktree`
+	if fs.isDir(wt) then
+		for _, name in fs.readDir(wt) do
+			table.insert(out, name)
 		end
 	end
 	return out
@@ -5528,7 +5546,7 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 	local function family(base: string): { string }
 		local names: { string } = {}
 		for _, w in listed do
-			if heartbeat.suffixOf(base, w.name) then
+			if heartbeat.isMember(base, w.name, w.branch) then
 				table.insert(names, w.name)
 			end
 		end
@@ -5588,16 +5606,20 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 	else
 		base = target
 		cur = current(target)
+		-- a copy named by its own name (`prep-hello-1`) stands for its family: the base is the branch it keeps
+		if cur then
+			base = heartbeat.baseOf(cur.branch, cur.name)
+		end
 	end
 	local family0 = base :: string
-	local branch, detach, dirName = hb.worktreeTarget(if id then family0 else target)
+	local branch, detach, dirName = hb.worktreeTarget(family0)
 	-- no worktree of the family to discard: make the taker's, as ./zn worktree does (a copy when only discarded ones exist)
 	local function makeCopy(): string
 		local taken = hb.discardedNumbers(family0)
 		for _, name in family(family0) do
 			table.insert(taken, name)
 		end
-		local name = if #taken == 0 then dirName else heartbeat.nextSuffix(family0, taken)
+		local name = if #taken == 0 then dirName else heartbeat.nextSuffix(family0, hb.takenNames(family0))
 		local path = `{prefix}{name}`
 		hb.addWorktree(path, branch, detach, hb.mainBase(nil))
 		hb.homeDir(path)
@@ -5667,7 +5689,7 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 	for _, name in family(family0) do
 		table.insert(taken, name)
 	end
-	local copyName = heartbeat.nextSuffix(family0, taken)
+	local copyName = heartbeat.nextSuffix(family0, hb.takenNames(family0))
 	local number = (string.match(copyName, "%-(%d+)$")) :: string
 	local oldBranch = old.branch or ""
 	local up = oldBranch ~= ""
@@ -5675,14 +5697,20 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 	local pushedSha = if up then sh.trim(sh.git({ "rev-parse", `refs/remotes/origin/{oldBranch}` })) else ""
 	local mainRef = hb.mainBase(nil)
 	local dirty: { string } = {}
-	for line in string.gmatch(sh.run("git", { "-C", old.path, "status", "--porcelain" }).stdout, "[^\n]+") do
+	local statusRead = sh.run("git", { "-C", old.path, "status", "--porcelain" })
+	if not statusRead.ok then
+		fail(
+			`worktree --takeover {old.name}: cannot read what it holds ({sh.trim(statusRead.stderr)}): nothing moved`
+		)
+	end
+	for line in string.gmatch(statusRead.stdout, "[^\n]+") do
 		table.insert(dirty, string.sub(line, 4))
 	end
 	local unpushed = hb.logLines(old.path, `{if up then `origin/{oldBranch}` else mainRef}..HEAD`)
 	-- the old worktree's branch gives up its name; a detached head with commits of its own gets a branch to keep them on
 	local renamed = if oldBranch ~= ""
 		then `{oldBranch}-discarded-{number}`
-		elseif #unpushed > 0 then `{family0}-discarded-{number}`
+		elseif #unpushed > 0 then `discarded-{family0}-{number}`
 		else ""
 	local discardedPath = `{prefix}{family0}-discarded-{number}`
 	local text = heartbeat.discardText({
@@ -5708,16 +5736,23 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 	-- a failure undoes exactly what this process did, never a step another takeover made
 	local kept, moved = false, false
 	local function undo(msg: string): never
-		if moved then
-			sh.run("git", { "worktree", "move", discardedPath, old.path })
+		local left: { string } = {}
+		if moved and not sh.run("git", { "worktree", "move", discardedPath, old.path }).ok then
+			table.insert(left, `the directory is still {discardedPath}`)
 		end
 		if kept then
-			if oldBranch ~= "" then
-				sh.run("git", { "branch", "-m", renamed, oldBranch })
-			else
-				sh.run("git", { "-C", old.path, "switch", "--quiet", "--detach" })
+			local back = if oldBranch ~= ""
+				then sh.run("git", { "branch", "-m", renamed, oldBranch })
+				else sh.run("git", { "-C", old.path, "switch", "--quiet", "--detach" })
+			if not back.ok then
+				table.insert(left, `its branch is still {renamed}`)
+			elseif oldBranch == "" then
 				sh.run("git", { "branch", "-D", renamed })
 			end
+		end
+		if #left > 0 then
+			-- fail closed: the marker stays, so the old process is still told, and the taker is told what is half done
+			return fail(`{msg}; could not put everything back ({table.concat(left, "; ")}): the marker stays`)
 		end
 		pcall(fs.removeFile, marker)
 		return fail(msg)
@@ -5802,24 +5837,7 @@ function hb.sweepDiscarded(remove: boolean): { removed: { string }, left: { stri
 						`{w.path}: holds the discarded work of {items} (its claim is still live)`
 					)
 				else
-					local ref = if d.branch ~= "" then d.branch else "HEAD"
-					local unreachable = tonumber(
-						sh.trim(
-							sh.run(
-								"git",
-								{ "-C", w.path, "rev-list", "--count", ref, "--not", "--remotes=origin" }
-							).stdout
-						)
-					) or 1
-					local dirty = 0
-					for _ in
-						string.gmatch(
-							sh.run("git", { "-C", w.path, "status", "--porcelain" }).stdout,
-							"[^\n]+"
-						)
-					do
-						dirty += 1
-					end
+					local unreachable, dirty = hb.unrecovered(w.path, d)
 					local why = heartbeat.keepReason(dirty, unreachable)
 					if why or w.path == here or not remove then
 						table.insert(
@@ -5827,7 +5845,8 @@ function hb.sweepDiscarded(remove: boolean): { removed: { string }, left: { stri
 							`{w.path}: the work of {items} ended, kept: {why or "nothing left to recover"}`
 						)
 					else
-						local r = sh.run("git", { "worktree", "remove", w.path })
+						-- every uncommitted file and commit was found in main above, so the force only discards copies
+						local r = sh.run("git", { "worktree", "remove", "--force", w.path })
 						if r.ok then
 							if d.branch ~= "" then
 								sh.run("git", { "branch", "-D", d.branch })
@@ -5845,6 +5864,55 @@ function hb.sweepDiscarded(remove: boolean): { removed: { string }, left: { stri
 		end
 	end
 	return out
+end
+
+-- What a discarded worktree still holds that exists nowhere else: (commits, uncommitted files). Recovered work is judged by
+-- content, never by sha, because landing rewrites shas (`finish` squashes a layer, a prep is squash-merged and its branch
+-- deleted, a cherry-pick makes a new commit): a commit counts when it is reachable from the pushed tip the copy started
+-- at or from any origin ref, or when merging the branch into origin/main changes nothing (its change is already there);
+-- an uncommitted file counts when its bytes equal origin/main's file at that path, or when it is deleted and main lacks
+-- it. Anything else stays unrecovered (fail closed).
+function hb.unrecovered(path: string, d: heartbeat.Discard): (number, number)
+	local ref = if d.branch ~= "" then d.branch else "HEAD"
+	local args = { "-C", path, "rev-list", "--count", ref, "--not", "--remotes=origin" }
+	if d.pushed ~= "" then
+		table.insert(args, d.pushed)
+	end
+	local commits = tonumber(sh.trim(sh.run("git", args).stdout)) or 1
+	if commits > 0 then
+		-- with the pushed tip as the merge base, what is left is the change made since: main plus that change
+		local mergeArgs = { "-C", path, "merge-tree", "--write-tree" }
+		if d.pushed ~= "" then
+			table.insert(mergeArgs, `--merge-base={d.pushed}`)
+		end
+		table.insert(mergeArgs, "origin/main")
+		table.insert(mergeArgs, ref)
+		local merged = sh.run("git", mergeArgs)
+		local mainTree = sh.trim(sh.run("git", { "-C", path, "rev-parse", "origin/main^{tree}" }).stdout)
+		if merged.ok and mainTree ~= "" and string.match(merged.stdout, "^(%x+)") == mainTree then
+			commits = 0
+		end
+	end
+	local files = 0
+	local status = sh.run("git", { "-C", path, "status", "--porcelain" })
+	if not status.ok then
+		files = 1
+	end
+	for line in string.gmatch(status.stdout, "[^\n]+") do
+		local rel = string.sub(line, 4)
+		local abs = `{path}/{rel}`
+		local inMain = sh.run("git", { "-C", path, "rev-parse", "--verify", "--quiet", `origin/main:{rel}` })
+		if fs.isFile(abs) then
+			-- the same bytes, compared as git compares them: the blob id
+			local mine = sh.run("git", { "-C", path, "hash-object", "--", rel })
+			if not (inMain.ok and mine.ok and sh.trim(mine.stdout) == sh.trim(inMain.stdout)) then
+				files += 1
+			end
+		elseif fs.isDir(abs) or inMain.ok then
+			files += 1 -- a folder is never judged; a deletion is recovered only when main lacks the path too
+		end
+	end
+	return commits, files
 end
 
 -- Says what a sweep did on stderr (quiet when it did nothing).
@@ -5888,13 +5956,27 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 	local names: { string } = {}
 	local discarded: { [string]: boolean } = {}
 	for _, w in listed do
-		if heartbeat.suffixOf(dirName, w.name) then
+		if heartbeat.isMember(dirName, w.name, w.branch) then
 			table.insert(names, w.name)
 			discarded[w.name] = w.discarded
 		end
 	end
 	local live = heartbeat.currentOf(dirName, names, discarded)
 	if live then
+		-- a family that has had a discard says so: an old process that looks its worktree up again is told it was the one
+		-- discarded (the taker reads the same notice)
+		for _, w in listed do
+			if
+				w.discarded
+				and string.match(w.name, "^" .. string.gsub(dirName, "%p", "%%%0") .. "%-discarded%-%d+$")
+			then
+				local read, text = pcall(fs.readFile, `{w.path}/{hb.DISCARDED}`)
+				local d = if read then heartbeat.discardParse(text) else nil
+				stdio.ewrite(
+					`notice: {w.path} was discarded ({if d then table.concat(d.items, ", ") else "a claim"} was taken over); {root}/.worktree/{live} is the taker's. If your work was in {w.path}, you were discarded: clear your context and pick up something new.\n`
+				)
+			end
+		end
 		print(`{root}/.worktree/{live}`)
 		return
 	end
@@ -5910,7 +5992,7 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 		table.insert(taken, n)
 	end
 	if #taken > 0 then
-		name = heartbeat.nextSuffix(dirName, taken) -- the bare name is not reused: an old process may still address it
+		name = heartbeat.nextSuffix(dirName, hb.takenNames(dirName)) -- the bare name is not reused: an old process may still address it
 	end
 	local path = `{root}/.worktree/{name}`
 	hb.addWorktree(path, branch, detach, hb.mainBase(from))
