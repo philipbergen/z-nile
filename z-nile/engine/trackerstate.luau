@@ -1,7 +1,7 @@
 --!strict
 -- What counts as tracker state (c0117 design reviews 002 F1, F2 and 003 F1, F4, F8, F10): the one definition every
 -- guard that lets "tracker-only" changes reach `main` uses: the git wrapper, the dispatcher's publish broker, the
--- tripwire and the watermark, and the merge gates on a PR's fetched head. Like every guard here it catches honest
+-- tripwire and the merge gates on a PR's fetched head. Like every guard here it catches honest
 -- mistakes and casual misbehaviour; it is not a boundary against a determined agent of the same OS user (the user's
 -- "Keep same user, accept detection", 2026-10-21).
 --
@@ -327,8 +327,9 @@ function trackerstate.check(
 end
 
 -- Each first-parent commit of `from..to`, judged against its own parent by its parent's registry (`rootsAt`), as the
--- watermark vets main (review 003 F10: the broker judges the same way, so it never pushes what the watermark refuses).
--- `pass(sha)` may accept a commit that isn't tracker state (the watermark's pull-request merges). Returns nil, or why
+-- tripwire judges main during a run (review 003 F10: the broker judges the same way, so it never pushes what that
+-- check refuses). `pass(sha)` may accept a commit that isn't tracker state (a pull request's merge into main).
+-- Returns nil, or why
 -- the first refused commit is refused.
 function trackerstate.checkEach(
 	git: Git,
