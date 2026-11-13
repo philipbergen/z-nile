@@ -3,9 +3,12 @@
 -- sessions.luau. Claude Code writes a project jsonl (`~/.claude/projects/<cwd-with-slashes-as-dashes>`). Grok writes
 -- `events.jsonl` and `updates.jsonl` under `~/.grok/sessions/<url-encoded cwd>`. The Cursor `agent` CLI writes
 -- transcripts under `~/.cursor/projects/<cwd>` that, today, have neither timestamps nor token counts.
+-- Kimi's wire is `~/.kimi-code/sessions/<workspace>/<id>/agents/main/wire.jsonl` (or $PICKMAN_KIMI_SESSIONS).
+-- A wire has no per-line time: a file modified in the span contributes every usage.record it holds.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local sessions = require("./sessions")
+local sh = require("../lib/sh")
 
 local sessionread = {}
 
@@ -156,7 +159,57 @@ function sessionread.span(
 		end
 	end
 	table.insert(found, { cli = "agent", part = if cursorSaw then cursor else nil })
+	local fromEnv = process.env.PICKMAN_KIMI_SESSIONS
+	local kimiRoot = if fromEnv ~= nil and fromEnv ~= "" then fromEnv else `{h}/.kimi-code/sessions`
+	local kimi = blank()
+	local kimiSaw = false
+	for _, path in filesUnder(kimiRoot, "wire.jsonl", sinceUnix) do
+		local body = text(path)
+		local part = if body then sessions.kimi(body) else nil
+		if part then
+			kimiSaw = true
+			add(kimi, part)
+		end
+	end
+	table.insert(found, { cli = "kimi", part = if kimiSaw then kimi else nil })
 	return sessions.combine(found)
+end
+
+function sessionread.commitUnix(rev: string): number
+	local r = sh.run("git", { "log", "-1", "--format=%ct", rev })
+	local n = if r.ok then tonumber((string.gsub(r.stdout, "%s+$", ""))) else nil
+	return n or 0
+end
+
+-- Tokens from the CLI session this checkout is, over [unix, now]. A CLI with nothing to read is named in the
+-- note and left unmeasured. Nothing here is typed.
+function sessionread.since(unix: number): sessions.Read
+	if unix <= 0 then
+		unix = os.time()
+	end
+	local sinceIso = (os.date("!%Y-%m-%dT%H:%M:%S", unix) :: string) .. ".000Z"
+	local untilUnix = os.time()
+	local untilIso = (os.date("!%Y-%m-%dT%H:%M:%S", untilUnix) :: string) .. ".999Z"
+	local ok, reading = pcall(sessionread.span, process.cwd, sinceIso, unix, untilIso, untilUnix)
+	if ok and type(reading) == "table" then
+		return reading :: sessions.Read
+	end
+	return { tokens = nil, ai = nil, note = "session unreadable", unmeasured = "tokens,ai" }
+end
+
+-- This row does not carry wall or cpu (the measure buffer does). The reading says which of tokens and ai it had.
+function sessionread.flags(reading: sessions.Read): string
+	local have: { [string]: boolean } = { wall = true, cpu = true }
+	local out = { "wall", "cpu" }
+	if reading.unmeasured then
+		for part in string.gmatch(reading.unmeasured, "[^,]+") do
+			if not have[part] then
+				have[part] = true
+				table.insert(out, part)
+			end
+		end
+	end
+	return table.concat(out, ",")
 end
 
 return sessionread

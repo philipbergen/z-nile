@@ -971,6 +971,11 @@ function dispatcher.modelStep(
 			end
 			return ok, said
 		end
+		local function noteLine(line: string, tokens: number)
+			-- one append per stream line, so status can show a step that is still running
+			sh.run("sh", { "-c", 'printf "%s\\n" "$1" >> "$2"', "_", line, `{stateDir}/trail.log` })
+			sh.writeReplacing(`{stateDir}/live-tokens`, tostring(tokens) .. "\n")
+		end
 		local result = modelstep.launch({
 			argv = argv,
 			cwd = cwd,
@@ -995,6 +1000,7 @@ function dispatcher.modelStep(
 					broker.serve(brokerDir, brokerToken, push)
 				end
 				else nil,
+			onLine = noteLine,
 		})
 		holdBeat() -- the review still lands and the spend is recorded: beat through it
 		local outcomeNow: string = result.outcome
@@ -1965,7 +1971,16 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 	elseif first == "status" then
 		local id = pos[2] or ctx.fail("usage: ./zn dispatch status <id>")
 		for _, dir in runsUnder(dirOf(ctx, id)) do
-			print(serde.encode("json", loadAt(id, dir), true))
+			local st = loadAt(id, dir)
+			local trail = if fs.isFile(`{dir}/trail.log`) then fs.readFile(`{dir}/trail.log`) else ""
+			local tokens = st.tokens or 0
+			if fs.isFile(`{dir}/live-tokens`) then
+				tokens = tonumber(trim(fs.readFile(`{dir}/live-tokens`))) or tokens
+			end
+			for _, line in dispatch.trailReport(trail, tokens, st.outcome == "running") do
+				print(line)
+			end
+			print(serde.encode("json", st, true))
 		end
 		return 0
 	elseif first == "stop" then

@@ -4,9 +4,9 @@
 flowchart LR
   subgraph skills["skills: z-nile/skills, project/skills"]
     direction LR
-    zticket["z-ticket"] --> zdesign["z-design"] --> zraft["z-raft"] --> zready["z-ready"] --> zrun["z-run"]
+    zticket["z-ticket"] --> zdesign["z-design"] --> zraft["z-raft"] --> zready["z-ready"] --> zwork["z-work"]
     zready -.-> zstop["z-stop"]
-    zrun -.-> zstop
+    zwork -.-> zstop
   end
   steps["zz-execute, zz-review, zz-rules, zz-arch, zz-test, zz-stats (called from inside a step)"] -.-> skills
   tracker[("tracker: ./zn, z-nile/.tracker, pickman/.tracker")]
@@ -47,7 +47,7 @@ flowchart LR
 
 ### Two ends, one stack
 - **The engineer end.** You sit in any AI CLI (`claude` and `agent` today; another CLI once its skill support is checked, c0115) in the main checkout and run the front of the pipeline: `z-ticket` to capture, `z-design` to sharpen an idea into a prepared issue, the design reviews. Everything you produce is tracker state landed on `main`: by pull request, or, for a capture or a claim, pushed straight to it (`./zn land`, `./zn status`). *exists*
-- **The worker end.** A wrapper launches any supported AI CLI headless, on the same host or another, takes the next item from the stack and moves it forward: design, raft, ready, run, review, gate, merge. One command, `./zn work`, loops until the stack is empty or every remaining item is blocked. *captured* (c0253), on top of c0117's dispatcher (`./zn dispatch`, its chain, `.models.toml`, quota fallback, spend), which is *designed* (c0117).
+- **The worker end.** A person opens any AI CLI and runs `z-work` (`./zn work`, or `./zn work <R>` for one raft). That session takes the next prepared raft, says what it took, and carries it layer by layer to `./zn done`, then stops. *exists*. The headless loop that keeps taking the next item until the stack is empty, and a wrapper that launches the CLI, stay *captured* (c0253), on top of c0117's dispatcher (`./zn dispatch`, its chain, `.models.toml`, quota fallback, spend), which is *designed* (c0117).
 - **The only shared thing is `origin/main` and GitHub.** No daemon, no queue server. A worker on another machine needs a clone, its CLIs and a bot credential; the engineer sees it work on the board. *captured* (c0254)
 
 ### Order
@@ -100,7 +100,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | `blocked`, `escalation.md`, `./zn resolve` | c0250 | captured |
 | cross-model review pool, same-family fallback | c0251 | captured |
 | the dispatcher merges a green layer | c0252 | captured |
-| `./zn work` pull loop | c0253 | captured |
+| `./zn work` pull loop (the interactive session worker exists; the headless loop does not) | c0253 | captured |
 | workers on several hosts, worker identity in spend | c0254 | captured |
 | `./zn land` usage and a cheap retry | c0258 | captured |
 
@@ -112,7 +112,7 @@ The general model (*captured* (c0248); today a raft is one branch and one PR): a
 ## The five parts
 - **The tracker.** `./zn` at the repository root runs the engine in `z-nile/engine/`. Each project keeps its issues and rafts in its own root, `<project>/.tracker/` (z-nile's in `z-nile/.tracker/`), listed in `z-nile/projects.toml`. One counter, `z-nile/next`, numbers every project. The rules are in the zz-rules skill.
 - **The skills.** z-nile's skills live in `z-nile/skills/`, and a project's own in `<project>/skills/`. `.claude/skills/<name>` is a committed relative link to each, written by `./zn skills` and checked by `./zn skills --check` in the gate. The `z-` skills are the pipeline, in the order above; the `zz-` skills are called only from inside a step. Both prefixes are z-nile's: a project's skills are named `<project>-…`.
-- **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. A run accepts `main` as it is when it starts, and during the run a rewritten `main` or a commit that is not tracker state and not a pull request's merge stops it. The rules are in the zz-rules skill, Dispatch.
+- **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. A running step appends each stream line to `.cache/dispatch/<id>/trail.log`, and `./zn dispatch status <id>` prints the last lines and the running token count before the step's JSON. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. A run accepts `main` as it is when it starts, and during the run a rewritten `main` or a commit that is not tracker state and not a pull request's merge stops it. The rules are in the zz-rules skill, Dispatch.
 - **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
 - **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.
 
@@ -123,9 +123,10 @@ The general model (*captured* (c0248); today a raft is one branch and one PR): a
 | `z-design` | 2 | designs one issue to `design: ready` and `prepared`: Design, `size:`, `check.sh`, acceptance specs, experiments, the adversarial design review. It makes no raft |
 | `z-raft` | 3 | groups prepared issues into rafts (`./zn raft-plan`, or as asked), writes each raft's Theme, Order and interfaces, and runs a short coherence review for a raft of several issues |
 | `z-ready` | 4 | from the main checkout: claims a prepared raft, moves it to `active/`, writes its `prompt.md` |
-| `z-run` | 5 | launches a readied raft from the main checkout (`/z-run R0010`): reads its prompt, enters its worktree, hands off to zz-execute |
+| `z-work` | 5 | the worker a person starts (`./zn work`, or `./zn work R0010`): one raft, one next action at a time, until it lands or is released |
+| `z-run` | 5 | `/z-run R0010` is z-work with that raft named. Under `./zn dispatch` it is the headless run step |
 | `z-stop` | any | gives a readied or started raft back; its branch and PR stay |
-| `zz-execute` | from z-run | the execution protocol: one branch, one PR, experiments, tests first, review, done, merge |
+| `zz-execute` | from z-work | the execution protocol: one branch, one PR, experiments, tests first, review, done, merge |
 | `zz-review` | from z-design, z-raft and zz-execute | the clean adversarial reviewer: design, raft, stream and code modes |
 | `zz-rules` | every step | the tracker's rules: ids, roots, lifecycle, worktrees, landing, spend |
 | `zz-arch` | design and build of the tooling | the tooling's code structure |
@@ -158,7 +159,7 @@ One type per raft: feature (`f`), defect (`d`) or chore (`c`). CI and test fixes
 2. **z-design**, in `prep-<slug>`: `status <id> preparing` claims one issue; its design, checks and specs are written and reviewed; then `design: ready`, status `prepared`, and its design PR merges. It has no raft yet.
 3. **z-raft**, in `raft-<slug>`: `./zn raft-plan` groups the prepared issues (or the arguments say which), each raft is claimed (its status only) and its members' `raft:` lines are written; the raft's own design and, for several issues, a coherence review; then the rafting PR merges.
 4. **z-ready**, from the main checkout: the raft and its issues move to `active/`, and the prompt is written (ignored by git).
-5. **z-run**: `/z-run R0010` in a session started in the main checkout reads the prompt, enters `.worktree/R0010` and hands off to zz-execute: `start` opens a draft PR; experiments, tests, the change, a clean code review; `done` promotes the specs, moves the items to `done/` and marks the PR ready; the PR merges when the gate and CI are green.
+5. **z-work**: `./zn work` (or `./zn work R0010`) in a session a person opened takes the next prepared raft, or that one, and follows zz-execute one layer at a time. `start` opens a draft PR; experiments, tests, the change, a clean code review; `./zn done` promotes the specs, moves the items to `done/` and marks the PR ready; the PR merges when the gate and CI are green. `/z-run R0010` is z-work with that raft named. The session ends when the raft lands or is released.
 6. **z-stop**, from the main checkout: an `active` raft goes back to `prepared` and its prompt is deleted. The PR stays open.
 
 `design:` is separate from status: z-design changes an issue's and z-raft a raft's, `draft` → `reviewed` → `ready`.
@@ -173,7 +174,7 @@ stateDiagram-v2
   prepared --> preparing: prep again
   prepared --> active: z-ready
   active --> prepared: z-stop
-  active --> done: z-run and zz-execute, done, merge
+  active --> done: z-work and zz-execute, done, merge
   done --> [*]
 ```
 

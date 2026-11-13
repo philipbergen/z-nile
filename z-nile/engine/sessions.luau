@@ -176,6 +176,32 @@ function sessions.grokEvents(text: string, sinceIso: string, untilIso: string): 
 	return { tokens = nil, ai = ai, model = model }
 end
 
+-- Kimi's session wire: usage.record lines, counted as the adapter counts them (input + cache writes + output,
+-- cache reads left out). The wire has no per-line time, so the caller only hands a file touched in the span,
+-- and every record in it counts.
+function sessions.kimi(text: string): Part?
+	local tokens = 0
+	local saw = false
+	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+		if
+			string.find(line, '"type":"usage.record"', 1, true)
+			or string.find(line, '"usage.record"', 1, true)
+		then
+			local other = tonumber(string.match(line, '"inputOther":(%d+%.?%d*)')) or 0
+			local created = tonumber(string.match(line, '"inputCacheCreation":(%d+%.?%d*)')) or 0
+			local output = tonumber(string.match(line, '"output":(%d+%.?%d*)')) or 0
+			if string.find(line, '"inputOther"', 1, true) or string.find(line, '"output"', 1, true) then
+				saw = true
+				tokens += other + created + output
+			end
+		end
+	end
+	if not saw then
+		return nil
+	end
+	return { tokens = tokens }
+end
+
 -- Cursor's agent transcripts (the `agent` CLI) carry the messages and, today, neither timestamps nor usage.
 -- Nil means the text has nothing this reader understands.
 function sessions.cursor(text: string): Part?
