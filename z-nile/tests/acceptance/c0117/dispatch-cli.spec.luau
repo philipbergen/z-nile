@@ -98,7 +98,6 @@ local function znIn(dir: string, args: { string }): fixture.Result
 			FAKE_DIR = h.fakes,
 			PATH = `{h.bin}:{process.env.PATH}`,
 			ZN_AGENT_TOKEN_FILE = h.token,
-			ZN_WATERMARK_DIR = `{h.f.base}/watermark`,
 			GH_TOKEN = "the-users-token",
 		},
 	})
@@ -563,6 +562,16 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		fakecli.clear(h)
 		local r = zn({ "dispatch", "z-design", "c0010" }, { ZN_AGENT_TOKEN_FILE = `{h.f.base}/none` })
 		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "no agent credential")).toBe(true)
+		t.expect(log()).toBe("")
+	end)
+
+	it("a chain with no agent credential stops instead of running the step again", function()
+		fakecli.clear(h)
+		local r = zn({ "dispatch", "c0010" }, { ZN_AGENT_TOKEN_FILE = `{h.f.base}/none` })
+		t.expect(r.code).toBe(1)
+		t.expect(count(r.stdout, "next: z-design c0010")).toBe(1)
+		t.expect(has(r.stdout, "ended failed")).toBe(true)
 		t.expect(has(r.stderr, "no agent credential")).toBe(true)
 		t.expect(log()).toBe("")
 	end)
