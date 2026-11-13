@@ -118,9 +118,9 @@ usage: ./zn <command> ...
   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
   work [<R-id>]                                 print the z-work skill (the worker a person starts). With a raft id, that raft.
-  work next [--released <n>] [<R-id>]           the one next action. No raft: the next claimable one
-  work queue                                    one line per raft work next will not take, the first reason
-  work status                                   who holds which raft, which layer, since when
+  work next [--released <n>] [<R-id>]           the one next action. No raft: the next claimable one in this folder's project, or any project from the checkout root
+  work queue                                    one line per raft in that same set that work next will not take, the first reason
+  work status                                   who holds which raft in that same set, which layer, since when
   capture <id>                                  print the item's document as captured (read-only)
   idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
   metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
@@ -7778,6 +7778,12 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		return string.sub(text, close + 5)
 	end
 	local sub = pos[1]
+	-- The folder ./zn was run from (ZN_CWD). A project folder keeps that project's tracker root;
+	-- the checkout root, and any other folder, keeps nil and the queue is every project.
+	local function scopeOf(): string?
+		local p = projects.inDir(projects.load(), hereDir())
+		return if p then p.root else nil
+	end
 	if sub == "queue" then
 		if #pos ~= 1 or opts["--released"] then
 			fail("usage: ./zn work queue")
@@ -7785,7 +7791,7 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		if hasOrigin() then
 			sh.git({ "fetch", "--quiet", "origin", "main" })
 		end
-		for _, line in workLib.skipped(workread.collect(nil).rafts) do
+		for _, line in workLib.skipped(workLib.kept(workread.collect(nil).rafts, scopeOf())) do
 			print(line)
 		end
 		return
@@ -7797,7 +7803,7 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		if hasOrigin() then
 			sh.git({ "fetch", "--quiet", "origin", "main" })
 		end
-		local lines = workLib.status(workread.collect(nil).rafts)
+		local lines = workLib.status(workLib.kept(workread.collect(nil).rafts, scopeOf()))
 		if #lines == 0 then
 			print("nobody holds a raft")
 		else
@@ -7816,6 +7822,7 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 			sh.git({ "fetch", "--quiet", "origin", "main" })
 		end
 		local input = workread.collect(asked)
+		input.scope = scopeOf()
 		input.released = released
 		print(workLib.report(input, workLib.decide(input)))
 		return

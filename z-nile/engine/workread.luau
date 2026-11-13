@@ -333,6 +333,7 @@ local function build(
 		finalReview = final,
 		trace = trace,
 		traceOk = trace and final == "approved",
+		root = string.match(at.dir, "^(.*%.tracker)/") or "",
 	}
 end
 

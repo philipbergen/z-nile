@@ -7,7 +7,7 @@ description: The worker a person starts by opening an AI CLI and running z-work.
 
 You are the worker. A person opened this session and ran z-work. Ask for one action, do that one thing, ask again. The ordering is `./zn work next`; this skill has none.
 
-1. Run `./zn work next` when no raft was named, or `./zn work next <R>` when one was. While you are carrying a raft, pass its id on every later call. The line it prints is the one next action.
+1. Run `./zn work next` when no raft was named, or `./zn work next <R>` when one was. While you are carrying a raft, pass its id on every later call. The line it prints is the one next action. The folder `./zn` is run from chooses the project: from `pickman/` the next raft is a pickman raft, from `z-nile/` a z-nile raft, and the same for each other project. From the checkout root, or from a folder no project holds, it is any project. `./zn work queue` and `./zn work status` use that same folder. Naming a raft still takes that raft, whichever project it is in.
 2. Say that line to the person before you do it, and why it is the next action.
 3. Do that one action and nothing past it. A build follows `z-nile/skills/zz-execute/SKILL.md`. A review follows `z-nile/skills/zz-review/SKILL.md`. Tracker commands follow `z-nile/skills/zz-rules/SKILL.md`. Claiming is `z-nile/skills/z-ready/SKILL.md`. Giving the claim back is `z-nile/skills/z-stop/SKILL.md`. Read the skill the action names.
 4. At each layer boundary, one line: the ticket, whether its specs are green, and the next `./zn work next` line.

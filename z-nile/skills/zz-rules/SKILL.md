@@ -167,7 +167,7 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
 - `./zn compact [--force]`
 - `./zn remap`
 - `./zn run [--time S] [--cpu S] -- <command>`, `./zn reap [--dry-run]`
-- `./zn work [<R-id>]`, `./zn work next [--released <n>] [<R-id>]`, `./zn work queue`, `./zn work status`. With no raft, the session keeps taking the next raft `ready` would accept. `--released` is how many rafts this session has released in a row. `queue` prints one line per raft that is not offered.
+- `./zn work [<R-id>]`, `./zn work next [--released <n>] [<R-id>]`, `./zn work queue`, `./zn work status`. With no raft, the session keeps taking the next raft `ready` would accept. From a project's folder that raft is in that project; from the checkout root it is any project. `--released` is how many rafts this session has released in a row. `queue` prints one line per raft that is not offered.
 - `./zn dispatch <id>`, `./zn dispatch new "<description>"`, `./zn dispatch <step> <id> [--mode design|raft|code]`, `./zn dispatch stop|retry|status <id>`, each with `--dry-run` (Dispatch)
 
 ## Dispatch

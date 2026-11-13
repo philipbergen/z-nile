@@ -47,6 +47,7 @@ local function raft(over: { [string]: any }): work.RaftFact
 		finalReview = "none",
 		trace = false,
 		traceOk = false,
+		root = "",
 	}
 	for k, v in over do
 		(r :: any)[k] = v
@@ -194,6 +195,43 @@ return t.spec("z-work's next action", function(it)
 		})
 		t.expect(offer.raft).toBe("R0009")
 		t.expect(string.find(offer.why, "you hold R0061: name one to resume it", 1, true) ~= nil).toBe(true)
+	end)
+
+	it("offers this project's raft from its folder, and any project from the root", function()
+		local nile = raft({ id = "R0030", root = "z-nile/.tracker", block = "" })
+		local pick = raft({ id = "R0094", root = "pickman/.tracker", block = "" })
+		local root = work.decide({ rafts = { pick, nile } })
+		t.expect(root.raft).toBe("R0030")
+		t.expect(work.decide({ scope = "", rafts = { pick, nile } }).raft).toBe("R0030")
+		t.expect(work.decide({ scope = "pickman/.tracker", rafts = { pick, nile } }).raft).toBe("R0094")
+		t.expect(work.decide({ scope = "z-nile/.tracker", rafts = { pick, nile } }).raft).toBe("R0030")
+		local named = work.decide({ asked = "R0030", scope = "pickman/.tracker", rafts = { pick, nile } })
+		t.expect(named.raft).toBe("R0030")
+		t.expect(named.action).toBe("ready")
+		local held = raft({
+			id = "R0061",
+			root = "z-nile/.tracker",
+			where = "active",
+			status = "active",
+			holder = "Ada <ada@example>",
+			block = "is active",
+		})
+		local blocked = raft({
+			id = "R0095",
+			root = "pickman/.tracker",
+			block = "f0148 depends on f0147, which is backlog on origin/main",
+		})
+		local input: work.Input = {
+			author = "Ada <ada@example>",
+			scope = "pickman/.tracker",
+			rafts = { nile, held, blocked },
+		}
+		local quiet = work.report(input, work.decide(input))
+		t.expect(string.find(quiet, "nothing to do - no claimable raft in pickman", 1, true) ~= nil)
+			.toBe(true)
+		t.expect(string.find(quiet, "R0095: f0148 depends on f0147", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(quiet, "R0030", 1, true) == nil).toBe(true)
+		t.expect(string.find(quiet, "you hold", 1, true) == nil).toBe(true)
 	end)
 
 	it("prints the last lines of a running step's trail", function()

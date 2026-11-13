@@ -18,7 +18,10 @@
 --   c0265: nothing beats while a raft is held. An unnamed session does not resume one, and does not take it over.
 --   c0254: the holder is the author of the ready commit, not a worker identity, and two checkouts can be
 --     told to build the same active raft if both name it.
---   A person who names no raft keeps taking the next claimable one. A named raft ends the session.
+--   A person who names no raft keeps taking the next claimable one. The folder ./zn was run from
+--   is that project's tracker root (Input.scope); the checkout root, and any folder no project
+--   holds, leaves scope empty and the next raft is any project's. Naming a raft ignores scope.
+--   A named raft ends the session.
 --   A supervisor that starts a fresh session is a later ticket. The skill counts releases in a row
 --   and passes `released`; a stop commit does not name the session, so git cannot.
 local work = {}
@@ -50,6 +53,7 @@ export type RaftFact = {
 	trace: boolean,
 	traceOk: boolean,
 	block: string?, -- "" when ready would accept. A reason when the reader has judged and ready would refuse.
+	root: string, -- the project's tracker root, "pickman/.tracker". "" when the reader has not placed it.
 }
 
 export type Input = {
@@ -57,6 +61,7 @@ export type Input = {
 	held: string?,
 	author: string?, -- "Name <email>" of this checkout, the ready commit's author form
 	released: number?, -- how many rafts this session has released in a row. The skill carries it.
+	scope: string?, -- a project's tracker root. Nil or "" is every project (the checkout root).
 	rafts: { RaftFact },
 }
 
@@ -98,6 +103,28 @@ function work.claimable(r: RaftFact): boolean
 		return r.block == ""
 	end
 	return r.where == "backlog" and r.status == "prepared" and r.designReady and r.depsMet and not r.questions
+end
+
+-- The rafts an unnamed session may see. A scope is one project's tracker root; nil or "" is every project.
+function work.kept(rafts: { RaftFact }, scope: string?): { RaftFact }
+	if not scope or scope == "" then
+		return rafts
+	end
+	local out: { RaftFact } = {}
+	for _, r in rafts do
+		if r.root == scope then
+			table.insert(out, r)
+		end
+	end
+	return out
+end
+
+-- The folder name of a tracker root ("pickman" from "pickman/.tracker"), or "".
+function work.scopeName(scope: string?): string
+	if not scope or scope == "" then
+		return ""
+	end
+	return string.match(scope, "^([^/]+)/") or scope
 end
 
 -- The next raft an unnamed session may take. One function. Lowest work.rankKey, which is the id until c0249.
@@ -312,7 +339,7 @@ function work.heldBy(input: Input): { string }
 	if author == "" then
 		return out
 	end
-	for _, r in input.rafts do
+	for _, r in work.kept(input.rafts, input.scope) do
 		if r.where == "active" and r.holder == author then
 			table.insert(out, r.id)
 		end
@@ -334,11 +361,12 @@ function work.decide(input: Input): Decision
 	end
 	-- An unnamed session does not resume the raft this checkout is in, and does not resume one this
 	-- person already holds. Naming the raft is the resume.
+	local visible = work.kept(input.rafts, input.scope)
 	local holds = work.heldBy(input)
 	local prefix = if #holds > 0 then `you hold {table.concat(holds, ", ")}: name one to resume it. ` else ""
-	local nextRaft = work.nextClaimable(input.rafts)
+	local nextRaft = work.nextClaimable(visible)
 	if not nextRaft then
-		return blank("none", prefix .. work.whyNone(input.rafts), "")
+		return blank("none", prefix .. work.whyNone(visible), "")
 	end
 	local d = work.forRaft(nextRaft)
 	d.why = prefix .. d.why
@@ -354,13 +382,15 @@ function work.report(input: Input, d: Decision): string
 		return work.say(d)
 	end
 	local holds = work.heldBy(input)
+	local name = work.scopeName(input.scope)
+	local place = if name == "" then "" else ` in {name}`
 	local head = if d.action == "none"
 		then `nothing to do - {if #holds > 0
 			then `you hold {table.concat(holds, ", ")}: name one to resume it. `
-			else ""}no claimable raft`
+			else ""}no claimable raft{place}`
 		else work.say(d)
 	local lines = { head }
-	for _, skipped in work.skipped(input.rafts) do
+	for _, skipped in work.skipped(work.kept(input.rafts, input.scope)) do
 		table.insert(lines, skipped)
 	end
 	return table.concat(lines, "\n")
