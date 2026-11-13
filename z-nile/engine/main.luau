@@ -4031,6 +4031,29 @@ function cmd.restack(pos: { string })
 		sh.git({ "reset", "--hard", tip })
 		local before = tip
 		local rebasing = sh.run("git", { "rebase", "--onto", onto, upstream, layer.name })
+		-- A raft's spend.md is derived from the spend.d rows of its issues. A review committed after finish
+		-- regenerates it, and so does the bind of a landing below, so the two conflict on every restack.
+		-- Take main's copy: the next record regenerates it from the rows. Any other conflict stops the restack.
+		while not rebasing.ok do
+			local unmerged = sh.trim(sh.run("git", { "diff", "--name-only", "--diff-filter=U" }).stdout)
+			if unmerged == "" then
+				break
+			end
+			local onlyDerived = true
+			for path in string.gmatch(unmerged, "[^\n]+") do
+				if not string.match(path, "/rafts/[^/]+/R%d%d%d%d/spend%.md$") then
+					onlyDerived = false
+				end
+			end
+			if not onlyDerived then
+				break
+			end
+			for path in string.gmatch(unmerged, "[^\n]+") do
+				sh.git({ "checkout", "--ours", "--", path })
+				sh.git({ "add", "--", path })
+			end
+			rebasing = sh.run("git", { "-c", "core.editor=true", "rebase", "--continue" })
+		end
 		if not rebasing.ok then
 			sh.run("git", { "rebase", "--abort" })
 			if back ~= "" then
