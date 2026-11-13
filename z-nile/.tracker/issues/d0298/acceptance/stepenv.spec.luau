@@ -18,20 +18,17 @@ local t = require("@tests/lib/t")
 local home = fixture.physical(".") :: string
 local root = string.match(home, "^(.*)/[^/]+$") :: string
 
--- set on a step and handled without the list: fence.sh (pickman_fence) already unsets the gh tokens and the ssh agent,
--- points gh at an empty configuration folder, turns prompts off and replaces the git configuration entries; PATH is
--- fence.stepPath's; GH_PROMPT_DISABLED only turns prompts off
-local FENCED: { [string]: boolean } = {
-	PATH = true,
-	GH_PROMPT_DISABLED = true,
-	GH_TOKEN = true,
-	GITHUB_TOKEN = true,
-	GH_CONFIG_DIR = true,
-	GIT_TERMINAL_PROMPT = true,
-	SSH_AUTH_SOCK = true,
-}
+-- the rest of a step's environment, which the runner leaves to fence.sh or keeps (fence.STEP_HANDLED; a `*` ends a
+-- prefix)
 local function kept(name: string): boolean
-	return FENCED[name] == true or string.match(name, "^GIT_CONFIG_") ~= nil
+	for _, h in fence.STEP_HANDLED do
+		if
+			h == name or (string.sub(h, -1) == "*" and string.sub(name, 1, #h - 1) == string.sub(h, 1, -2))
+		then
+			return true
+		end
+	end
+	return false
 end
 
 local function listed(): { [string]: boolean }
@@ -94,7 +91,7 @@ return t.spec("d0298 a spec run never inherits a dispatched step's environment",
 			t.expect(name == "ZN_TOP" or name == "ZN_CWD" or name == "PATH").toBe(false)
 			t.expect(string.match(name, "^ZN_MEASURE") == nil).toBe(true)
 			t.expect(string.match(name, "^GIT_") == nil).toBe(true)
-			t.expect(FENCED[name] == nil).toBe(true) -- the fence's own handling stays its own
+			t.expect(kept(name)).toBe(false) -- the two lists never share a name
 		end
 	end)
 
@@ -120,12 +117,24 @@ return t.spec("d0298 a spec run never inherits a dispatched step's environment",
 		end
 	end)
 
+	it("the step environment's two writers point at both lists", function()
+		local pointer = "goes on fence.STEP_VARS (unset for every spec run) or fence.STEP_HANDLED (d0298)"
+		local dispatcher = fs.readFile(`{root}/z-nile/engine/dispatcher.luau`)
+		local a = string.find(dispatcher, "local env: { [string]: string } = {\n", 1, true) :: number
+		local before = string.sub(dispatcher, 1, a)
+		t.expect(string.find(string.sub(before, -300), pointer, 1, true) ~= nil).toBe(true)
+		local cred = fs.readFile(`{root}/z-nile/engine/credential.luau`)
+		local b = string.find(cred, "function credential.agentEnv(", 1, true) :: number
+		t.expect(string.find(string.sub(cred, math.max(1, b - 600), b), pointer, 1, true) ~= nil).toBe(true)
+	end)
+
 	it("zz-test says the runner removes a dispatched step's environment", function()
 		local text = fs.readFile(`{root}/z-nile/skills/zz-test/SKILL.md`)
 		local section = string.match(text, "\n## Specs never touch the real repository\n(.-)\n## ") :: string
 		t.expect(section ~= nil).toBe(true)
 		t.expect(string.find(section, "dispatched step", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(section, "`fence.STEP_VARS`", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(section, "`fence.STEP_HANDLED`", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(section, "`z-nile/bin`", 1, true) ~= nil).toBe(true)
 	end)
 end)

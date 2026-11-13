@@ -10,8 +10,8 @@ A="$HERE/acceptance"
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 
-# A dispatched step's environment, as `./zn dispatch` gives it to a model step (dispatcher.luau's step env and
-# credential.agentEnv): its run state, the agent's credential, and the z-nile/bin wrapper first on PATH, from the main
+# A dispatched step's environment, as `./zn dispatch` gives it to a model step (dispatcher.luau's step env and the
+# agent's token): its run state, the agent's token, and the z-nile/bin wrapper first on PATH, from the main
 # checkout and from this one. The broker and the state folder are paths nothing can create, so a spec that still
 # inherited them fails at once instead of waiting for an answer. The real git and gh are kept when this already runs
 # inside a step (where `command -v git` is the wrapper).
@@ -23,7 +23,6 @@ dispatched() {
     ZN_PUBLISH_BROKER=/nonexistent/d0298-ac/broker ZN_PUBLISH_TOKEN=d0298-ac ZN_DISPATCHER_PID=1 \
     ZN_REAL_GIT="${ZN_REAL_GIT:-$(command -v git)}" ZN_REAL_GH="${ZN_REAL_GH:-$(command -v gh || echo /nonexistent/gh)}" \
     GH_TOKEN=d0298-not-a-token GITHUB_TOKEN=d0298-not-a-token ZN_AGENT_GH_TOKEN=d0298-not-a-token \
-    GH_CONFIG_DIR=/nonexistent/d0298-ac/gh \
     PATH="$main/z-nile/bin:$ZN_ROOT/z-nile/bin:$PATH" "$@"
 }
 

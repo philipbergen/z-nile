@@ -1,8 +1,89 @@
 diff --git a/z-nile/engine/approval.luau b/z-nile/engine/approval.luau
-index 179c7bc7..f7dfa0aa 100644
+index 179c7bc7..14326cb3 100644
 --- a/z-nile/engine/approval.luau
 +++ b/z-nile/engine/approval.luau
-@@ -157,6 +157,51 @@ function approval.append(root: string, item: store.Item, who: string, when: stri
+@@ -17,18 +17,13 @@ local function rooted(root: string, rel: string): string
+ 	return `{root}/{rel}`
+ end
+ 
+-local function walk(
+-	root: string,
+-	dir: string,
+-	prefix: string,
+-	specs: { [string]: string },
+-	paths: { string }
+-): boolean
++-- Every *.spec.luau under `dir` (repo-relative, under `root`), as path relative to `dir` -> text, sorted walk; and their
++-- repo-relative paths appended to `paths`.
++local function walk(root: string, dir: string, prefix: string, specs: { [string]: string }, paths: { string })
+ 	local base = rooted(root, dir)
+ 	if not fs.isDir(base) then
+-		return false
++		return
+ 	end
+-	local found = false
+ 	local names = fs.readDir(base)
+ 	table.sort(names)
+ 	for _, name in names do
+@@ -37,38 +32,41 @@ local function walk(
+ 			local path = `{dir}/{name}`
+ 			local full = rooted(root, path)
+ 			if fs.isDir(full) then
+-				if walk(root, path, rel, specs, paths) then
+-					found = true
+-				end
++				walk(root, path, rel, specs, paths)
+ 			elseif fs.isFile(full) and string.match(name, "%.spec%.luau$") then
+ 				specs[rel] = fs.readFile(full)
+ 				table.insert(paths, path)
+-				found = true
+ 			end
+ 		end
+ 	end
+-	return found
+ end
+ 
+--- The contract parts, and the repo-relative paths of the files that make them (for a dirty check).
++-- The contract parts, and the repo-relative paths of the files that make them (for a dirty check): the folder as it is
++-- on disk, read through approval.partsOf, the one rule for which files make the contract.
+ function approval.collect(root: string, item: store.Item): (contract.Parts?, { string }, string?)
+ 	local paths = { item.doc }
++	local files: { [string]: string } = {}
+ 	local docPath = rooted(root, item.doc)
+-	local doc = if fs.isFile(docPath) then fs.readFile(docPath) else ""
++	files[`{item.id}.md`] = if fs.isFile(docPath) then fs.readFile(docPath) else ""
+ 	local checkRel = `{item.dir}/check.sh`
+-	local checkPath = rooted(root, checkRel)
+-	local check = ""
+-	if fs.isFile(checkPath) then
+-		check = fs.readFile(checkPath)
++	if fs.isFile(rooted(root, checkRel)) then
++		files["check.sh"] = fs.readFile(rooted(root, checkRel))
+ 		table.insert(paths, checkRel)
+ 	end
+-	local specs: { [string]: string } = {}
+-	if not walk(root, `{item.dir}/acceptance`, "", specs, paths) then
++	local mine: { [string]: string } = {}
++	walk(root, `{item.dir}/acceptance`, "", mine, paths)
++	local promoted: { [string]: string }? = nil
++	if next(mine) ~= nil then
++		for rel, text in mine do
++			files[`acceptance/{rel}`] = text
++		end
++	else
+ 		local base = if root == "" then "." else root
+-		local dest = projects.promotedDir(projects.load(base), item.root, item.id)
+-		walk(root, dest, "", specs, paths)
++		local found: { [string]: string } = {}
++		walk(root, projects.promotedDir(projects.load(base), item.root, item.id), "", found, paths)
++		promoted = found
+ 	end
+-	local parts, err = contract.build(doc, check, specs)
++	local parts, err = approval.partsOf(item.id, files, promoted)
+ 	if not parts then
+ 		return nil, paths, err
+ 	end
+@@ -157,6 +155,51 @@ function approval.append(root: string, item: store.Item, who: string, when: stri
  	return contract.render(rows), nil
  end
  
@@ -54,11 +135,35 @@ index 179c7bc7..f7dfa0aa 100644
  function approval.summary(item: store.Item): string
  	local path = approval.file(item)
  	if not fs.isFile(path) then
+diff --git a/z-nile/engine/credential.luau b/z-nile/engine/credential.luau
+index 3023d828..0991823a 100644
+--- a/z-nile/engine/credential.luau
++++ b/z-nile/engine/credential.luau
+@@ -49,6 +49,7 @@ end
+ -- The variables a step's environment gets on top of `base` (the dispatcher's): the agent's token for gh and git, an
+ -- empty gh configuration folder, no ssh agent, no prompts. git configuration entries are appended after any the
+ -- environment already carries (the repository guards' own, in a check), never in their place.
++-- A variable added here goes on fence.STEP_VARS (unset for every spec run) or fence.STEP_HANDLED (d0298).
+ function credential.agentEnv(
+ 	base: { [string]: string? },
+ 	token: string,
+diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
+index 33c92207..4dadbf42 100644
+--- a/z-nile/engine/dispatcher.luau
++++ b/z-nile/engine/dispatcher.luau
+@@ -864,6 +864,7 @@ function dispatcher.modelStep(
+ 	local brokerToken = if serving
+ 		then string.lower(trim(process.exec("uuidgen", {}).stdout))
+ 		else (process.env.ZN_PUBLISH_TOKEN or "")
++	-- a variable added here goes on fence.STEP_VARS (unset for every spec run) or fence.STEP_HANDLED (d0298)
+ 	local env: { [string]: string } = {
+ 		PATH = `{repo}/z-nile/bin:{basePath}`,
+ 		ZN_DISPATCH = "1",
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 2d0a37e5..17ed0a62 100644
+index 2d0a37e5..b3638250 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
-@@ -1042,6 +1042,24 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
+@@ -1042,6 +1042,26 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
  		return out
  	end
  	local before = byId()
@@ -66,9 +171,11 @@ index 2d0a37e5..17ed0a62 100644
 +	local reg = projects.load(root)
 +	local function approvalView(id: string, dir: string): ({ [string]: string }, contract.Parts?)
 +		local files = gitFolderFiles(dir, true)
-+		local home = projects.homeOf(reg, string.sub(dir, #root + 2))
-+		local promoted = `{root}/{if home == "." then "" else home .. "/"}tests/acceptance/{id}`
-+		local parts = approval.partsOf(id, files, gitFolderFiles(promoted, true))
++		local itemRoot = projects.rootOf(string.sub(dir, #root + 2), projects.roots(reg))
++		local promoted = if itemRoot
++			then gitFolderFiles(`{root}/{projects.promotedDir(reg, itemRoot, id)}`, true)
++			else {}
++		local parts = approval.partsOf(id, files, promoted)
 +		return files, parts
 +	end
 +	local approved: { string } = {}
@@ -83,7 +190,7 @@ index 2d0a37e5..17ed0a62 100644
  	local kept: { { raft: string, id: string, hash: string } } = {}
  	for rid, dir in before do
  		local doc = `{dir}/{rid}.md`
-@@ -1057,6 +1075,19 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
+@@ -1057,6 +1077,19 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
  	end
  	rewrite()
  	local after = byId()
@@ -103,7 +210,7 @@ index 2d0a37e5..17ed0a62 100644
  	for _, k in kept do
  		local rid, mid = idMap[k.raft] or k.raft, idMap[k.id] or k.id
  		local rdir, mdir = after[rid], after[mid]
-@@ -5849,6 +5880,57 @@ function cmd.ready(pos: { string })
+@@ -5849,6 +5882,57 @@ function cmd.ready(pos: { string })
  				end
  			end
  		end
@@ -161,7 +268,7 @@ index 2d0a37e5..17ed0a62 100644
  		for _, m in members do
  			local problem = approval.refusal(".", m, true)
  			if problem then
-@@ -5872,41 +5954,7 @@ function cmd.ready(pos: { string })
+@@ -5872,41 +5956,7 @@ function cmd.ready(pos: { string })
  			end,
  			-- c0116 (review 002 F1, 004 F1): a member redesigned since z-raft grouped it is never handed out under the
  			-- old review; read from the tree being published, so a redesign landing after the pull is seen too
@@ -205,22 +312,22 @@ index 2d0a37e5..17ed0a62 100644
  		if not r.ok then
  			fail(`ready: {r.reason}`)
 diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
-index a800c419..e3b41375 100644
+index a800c419..ef7a36a5 100644
 --- a/z-nile/skills/zz-test/SKILL.md
 +++ b/z-nile/skills/zz-test/SKILL.md
 @@ -116,6 +116,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
      - **Watchdog**: the launcher runs the specs in a process group of their own with a watchdog in it that waits on a pipe only the launcher holds open, so if the launcher dies, however it died, the watchdog stops the specs' group.
      - **Sweeper**: the jail's root is a sweeper (`fence.SWEEPER`): after the specs end it stops every process of the sandbox it can signal, whatever session or group it moved to, except its own ancestors, and says how many. Its interlock refuses to sweep (exit 70) unless a signal to its parent, the launcher (outside the jail, alive until the sweep is done), is refused, so an interrupted run (Ctrl-C) is still swept. Its interlock sweeps only on macOS; an explicit pid (for specs) only inside a jailed spec run; and a test seam (`PICKMAN_SWEEP_ONLY`) that can't be read refuses instead of widening the sweep. A spec can kill the sweeper (same sandbox); the run then fails ("the jail's sweeper was killed"). A spec can also stop it (SIGSTOP): the run then hangs until the launcher is SIGKILLed, which skips the sweep. A SIGKILL of the launcher itself skips the sweep and the launcher's unlink.
      - **pids**: the sweep covers pids up to 99999, macOS's `PID_MAX`.
-+  - **A dispatched step's environment**: a spec run started inside a step of `./zn dispatch` (an executor's gate, a `check.sh`, the post-landing net) would inherit the step's run state, publish broker, real git and gh, the agent's credential and the `z-nile/bin` wrapper first on PATH, so a fixture's push to its own `main` would meet the wrapper and a fixture's `./zn new` would publish through the real broker (d0298). Before any spec starts, the runner unsets every name in `fence.STEP_VARS` (`z-nile/tests/lib/fence.luau`) and drops every `z-nile/bin` entry from PATH (`fence.stepPath`). A variable added to the step's environment goes on that list, or is named as harmless in d0298's spec.
++  - **A dispatched step's environment**: a spec run started inside a step of `./zn dispatch` (an executor's gate, a `check.sh`, the post-landing net) would inherit the step's run state, publish broker, real git and gh, the agent's credential and the `z-nile/bin` wrapper first on PATH, so a fixture's push to its own `main` would meet the wrapper and a fixture's `./zn new` would publish through the real broker (d0298). Before any spec starts, the runner unsets every name in `fence.STEP_VARS` (`z-nile/tests/lib/fence.luau`) and drops every `z-nile/bin` entry from PATH (`fence.stepPath`). The rest of the step's environment is named in `fence.STEP_HANDLED` (what `fence.sh` already unsets or replaces, PATH, and `GH_PROMPT_DISABLED`), and a variable added to the step's environment goes on one of the two lists.
    - **Fence**: git never looks above `<checkout>/.cache` for a repository, and a sentinel `.cache/.git` makes git fail in `.cache` itself. A fixture whose repository is missing is an error, never the checkout. The same holds for every project home a check runs in (c0120): a spec run from `pickman/` is fenced at `pickman/.cache`, and `ac.sh` fences a home before a `check.sh` runs there with `fence.sh`'s `pickman_home_fence`, in this order (review 002 F1): its `.cache` joins the ceiling (environment only, can't fail); a `.cache` that is a symlink or a file, or a sentinel that is a folder, refuses, in every mode, spec runs and the jail included; the git and spec guards are set whole (the one refusal, no ref-guard hooks, comes before any change, so a refused fence leaves the inherited guards as they were); then the sentinel is written. The sentinel is skipped in exactly one case: its write fails while all three of the runner's jail markers are set (`PICKMAN_TEST_JAIL=sandbox-exec`, `PICKMAN_FENCE_SPECS=1`, `PICKMAN_TEST_FENCE`) and the home's `.cache` lies outside the run's own `.cache`, the one place the jail lets a spec write. The jail then refuses every write there, the fence says so on stderr, and the ceiling and every other guard hold. Any other failed write refuses, spec runs included.
    - **Overrides stripped**: an inherited `GIT_DIR`, `GIT_INDEX_FILE` or the like (git hooks run with them set) is unset before any spec runs. The guards read the repository they protect (`fence.sh`'s `real`, `pickman_guarded`, the runner's tripwire and protected paths) through a clean read, with every such override **and the inherited ceiling** removed for that read only (a ceiling at the checkout's root would hide the checkout from a project home; the specs keep the fence's ceiling). A read that finds no repository refuses, in every mode: it never means "nothing to protect" (c0120 code review 002).
    - **Ref guard**: every git a check runs has a `reference-transaction` hook (`z-nile/lib/git-hooks/`) that refuses any ref update in the real repository. Only a `check.sh` flow started outside any spec run may fetch (create or move refs under `refs/remotes/`). On Linux this is what stops a commit, branch, switch or reset there. It refuses the ref change, but those commands may already have rewritten the index or the working files. The hooks are set only where there is no jail (Linux, `check.sh` files, runs nested inside a jail): under the jail the kernel covers it, and a hook in every fixture commit would cost a slow process start. Where they are set, they then run the repository's own hook of the same name, so a fixture's hooks behave as without the guards.
 diff --git a/z-nile/tests/lib/fence.luau b/z-nile/tests/lib/fence.luau
-index f73e9ceb..8745a596 100644
+index f73e9ceb..472108ce 100644
 --- a/z-nile/tests/lib/fence.luau
 +++ b/z-nile/tests/lib/fence.luau
-@@ -75,6 +75,33 @@ local OVERRIDES = {
+@@ -75,6 +75,48 @@ local OVERRIDES = {
  	"GIT_CEILING_DIRECTORIES",
  }
  
@@ -240,6 +347,21 @@ index f73e9ceb..8745a596 100644
 +	"ZN_AGENT_GH_TOKEN",
 +}
 +
++-- d0298: the rest of a step's environment, which no spec inherits either but which the runner leaves to others:
++-- fence.sh (pickman_fence) unsets the gh tokens and the ssh agent, points gh at an empty configuration folder, turns
++-- git's prompts off and replaces the git configuration entries (GIT_CONFIG_*, by prefix); PATH is fence.stepPath's;
++-- GH_PROMPT_DISABLED only turns gh's prompts off. A variable added to the step's environment goes on one of the two lists.
++fence.STEP_HANDLED = {
++	"PATH",
++	"GH_PROMPT_DISABLED",
++	"GH_TOKEN",
++	"GITHUB_TOKEN",
++	"GH_CONFIG_DIR",
++	"GIT_TERMINAL_PROMPT",
++	"SSH_AUTH_SOCK",
++	"GIT_CONFIG_*",
++}
++
 +-- PATH without any entry that is a checkout's z-nile/bin (the dispatched step's wrapper), the rest in order.
 +function fence.stepPath(path: string): string
 +	local out: { string } = {}
@@ -254,7 +376,7 @@ index f73e9ceb..8745a596 100644
  local function trim(s: string): string
  	return (string.gsub(s, "^%s+", ""):gsub("%s+$", ""))
  end
-@@ -926,7 +953,9 @@ function fence.enter()
+@@ -926,7 +968,9 @@ function fence.enter()
  	local before = snapshot(cache)
  	local argv = {
  		"-c",
@@ -265,7 +387,7 @@ index f73e9ceb..8745a596 100644
  		"_",
  		here,
  		jailed,
-@@ -934,6 +963,7 @@ function fence.enter()
+@@ -934,6 +978,7 @@ function fence.enter()
  		ROOT,
  		ceilings,
  		tostring(cpuLimit),
@@ -273,3 +395,20 @@ index f73e9ceb..8745a596 100644
  	}
  	for _, a in process.args do
  		if a ~= "--" then
+diff --git a/z-nile/tests/tooling/repo-fence.spec.luau b/z-nile/tests/tooling/repo-fence.spec.luau
+index 480aff43..156e0ed2 100644
+--- a/z-nile/tests/tooling/repo-fence.spec.luau
++++ b/z-nile/tests/tooling/repo-fence.spec.luau
+@@ -151,6 +151,12 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 		GH_CONFIG_DIR = "an empty gh configuration folder of the step's own",
+ 		["credential."] = "resets git's credential helpers to the agent's token only",
+ 	},
++	-- d0298: the spec that proves a spec run carries none of a dispatched step's environment reads the gh configuration
++	-- folder a spec run gets, and lists the step's variables from the agent's credential module; it sets neither
++	["z-nile/tests/acceptance/d0298/stepenv.spec.luau"] = {
++		GH_CONFIG_DIR = "reads a spec run's gh configuration folder to prove it is fence.sh's empty one",
++		["credential."] = "calls and reads credential.agentEnv to list a dispatched step's variables",
++	},
+ 	-- c0117: the fake CLIs log the step's gh configuration folder, to prove the agent's credential replaced the user's
+ 	["z-nile/tests/lib/fakecli.luau"] = {
+ 		GH_CONFIG_DIR = "logged by a fake CLI to prove the step's own, empty gh configuration",
