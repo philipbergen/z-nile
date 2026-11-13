@@ -5808,6 +5808,7 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 			print(`{id} is already approved on origin/main`)
 			return
 		end
+		refuseStale()
 		local result = published(publish.commit(".", function(_paths, _read, _roots, _counter)
 			return { { path = path, content = localText } }
 		end, `tracker: approve {id}`))
@@ -7759,16 +7760,12 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 	end
 	local released = 0
 	if opts["--released"] then
-		local n = tonumber(opts["--released"][1])
-		if
-			not n
-			or n < 0
-			or opts["--released"][1] ~= tostring(n)
-				and string.match(opts["--released"][1], "^%d+$") == nil
-		then
+		local raw = opts["--released"][1]
+		local n = tonumber(raw)
+		if not n or n < 0 or not string.match(raw, "^%d+$") then
 			fail("usage: work next --released <n>")
 		end
-		released = n
+		released = n :: number
 	end
 	local function skillBody(text: string): string
 		if string.sub(text, 1, 4) ~= "---\n" then

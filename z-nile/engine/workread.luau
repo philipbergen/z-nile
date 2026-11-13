@@ -355,7 +355,11 @@ local function filesUnder(
 	take: (string, string) -> boolean
 ): { [string]: string }
 	local out: { [string]: string } = {}
-	for _, path in under[dir] or {} do
+	local listed = under[dir]
+	if not listed then
+		return out
+	end
+	for _, path in listed do
 		local rel = string.sub(path, #dir + 2)
 		local body = docs[path]
 		if body and body ~= "" and take(rel, id) then
@@ -407,7 +411,7 @@ local function blockFor(
 	for mid in isMember do
 		local mat = byId[mid]
 		local raw = if mat then docs[mat.path] else nil
-		local mf = if raw and raw ~= "" then frontText(raw) else {}
+		local mf: { [string]: string } = if raw and raw ~= "" then frontText(raw) else {}
 		local folder = if mat
 			then filesUnder(mat.dir, under, docs, mid, function(rel: string, issue: string): boolean
 				return raftplan.isDesignFile(rel, issue) or rel == "approval.md"
@@ -587,7 +591,7 @@ function workread.collect(asked: string?): work.Input
 		end
 	end
 	local dirs: { [string]: boolean } = {}
-	for id, at in keep do
+	for _, at in keep do
 		if at.state == "backlog" then
 			dirs[at.dir] = true
 			local body = docs[at.path]
@@ -644,12 +648,12 @@ function workread.collect(asked: string?): work.Input
 		local issue = string.match(dir, "([fdc]%d%d%d%d)$")
 		if issue then
 			local any = false
-			for rel in
+			for name in
 				filesUnder(dir, under, docs, issue, function(rel: string, item: string): boolean
 					return raftplan.isDesignFile(rel, item)
 				end)
 			do
-				if string.match(rel, "^acceptance/.+%.spec%.luau$") then
+				if string.match(name, "^acceptance/.+%.spec%.luau$") then
 					any = true
 				end
 			end

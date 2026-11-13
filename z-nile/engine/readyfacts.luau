@@ -11,7 +11,7 @@ local store = require("./store")
 
 local readyfacts = {}
 
-local function walk(dir: string, id: string, take: (string) -> boolean): { [string]: string }
+local function walk(dir: string, take: (string) -> boolean): { [string]: string }
 	local out: { [string]: string } = {}
 	local function rec(rel: string)
 		local base = if rel == "" then dir else `{dir}/{rel}`
@@ -36,7 +36,7 @@ end
 
 local function promoted(item: store.Item): { [string]: string }
 	local dest = projects.promotedDir(projects.load("."), item.root, item.id)
-	return walk(dest, item.id, function(rel: string): boolean
+	return walk(dest, function(rel: string): boolean
 		return string.match(rel, "%.spec%.luau$") ~= nil
 	end)
 end
@@ -51,7 +51,7 @@ function readyfacts.reason(raft: store.Item, members: { store.Item }): string?
 	local built: { readycheck.Member } = {}
 	for _, m in members do
 		local mf = store.readFront(m.doc)
-		local files = walk(m.dir, m.id, function(rel: string): boolean
+		local files = walk(m.dir, function(rel: string): boolean
 			return raftplan.isDesignFile(rel, m.id) or rel == "approval.md"
 		end)
 		table.insert(built, {
@@ -71,7 +71,7 @@ function readyfacts.reason(raft: store.Item, members: { store.Item }): string?
 			approvalFile = `{m.dir}/approval.md`,
 		})
 	end
-	local files = walk(raft.dir, raft.id, function(rel: string): boolean
+	local files = walk(raft.dir, function(rel: string): boolean
 		return rel == "check.sh"
 			or rel == "questions.md"
 			or string.match(rel, "^design%-review%-%d+%.md$") ~= nil
