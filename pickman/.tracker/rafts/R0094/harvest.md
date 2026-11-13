@@ -1,0 +1,1 @@
+- note d0298's rafting (2026-11-12): f0147 waits on c0176 and c0177, still new with no raft, and ./zn workstreams R0094 printed nothing of it; the design subagent found it from ./zn find: z-raft/grouping-cost-checks-every-wait
