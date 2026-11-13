@@ -3820,9 +3820,9 @@ function cmd.finish(pos: { string })
 	end
 	local saved = sh.git({ "rev-parse", "HEAD" })
 	sh.git({ "reset", "--soft", base })
-	-- The layer's own session, from the commit it sits on. Wall and test time are already in the measure
-	-- buffer; this row is the tokens the CLI wrote down. A missing record stays unmeasured.
-	local reading = sessionread.since(sessionread.commitUnix(base))
+	-- The session running this command. The layer's base commit is not the span: it can predate the
+	-- session, and the project folder holds other sessions. A missing record stays unmeasured.
+	local reading = sessionread.running()
 	print(`session: {reading.note}`)
 	pcall(function()
 		local top = sh.git({ "rev-parse", "--show-toplevel" })
@@ -5184,7 +5184,7 @@ function cmd.done(pos: { string })
 		fs.removeFile(FOCUS_FILE)
 	end
 	local doneTracePath = `{store.dirFor("raft", "done", raft.id, raft.root)}/trace.md`
-	local reading = sessionread.since(sessionread.commitUnix("HEAD"))
+	local reading = sessionread.running()
 	local committed, commitErr = pcall(function()
 		recordAndCommit(
 			raft,

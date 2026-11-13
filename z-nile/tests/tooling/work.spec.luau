@@ -1,5 +1,6 @@
 --!strict
 -- The worker's one next action, the dispatch trail a running step leaves, and Kimi's session wire.
+local adapters = require("@znile/engine/adapters")
 local dispatch = require("@znile/engine/dispatch")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -147,15 +148,26 @@ return t.spec("z-work's next action", function(it)
 		t.expect(quiet[2]).toBe("tokens: 0")
 	end)
 
-	it("counts a Kimi wire the way the adapter does, and leaves the other CLIs unmeasured", function()
+	it("counts a Kimi wire of this checkout only, and a Claude message id once", function()
 		t.expect((sessions.kimi(WIRE) :: sessions.Part).tokens).toBe(2361)
 		t.expect(sessions.kimi("not a wire") == nil).toBe(true)
+		local twice =
+			'{"type":"assistant","timestamp":"2026-11-03T23:33:14.633Z","message":{"id":"msg_1","model":"claude-opus-4","usage":{"input_tokens":2,"cache_creation_input_tokens":10,"output_tokens":4}}}\n'
+		local claude = sessions.claude(twice .. twice, "2026-11-03T23:33:00.000Z", "2026-11-03T23:34:00.000Z")
+		t.expect((claude :: sessions.Part).tokens).toBe(16)
 		local root = ".cache/work-kimi"
 		pcall(function()
 			fs.removeDir(root)
 		end)
 		fs.writeDir(`{root}/sessions/ws/abc/agents/main`)
+		fs.writeDir(`{root}/sessions/other/xyz/agents/main`)
+		fs.writeFile(`{root}/sessions/ws/abc/state.json`, '{"cwd":"anywhere"}\n')
+		fs.writeFile(`{root}/sessions/other/xyz/state.json`, '{"cwd":"/not-this"}\n')
 		fs.writeFile(`{root}/sessions/ws/abc/agents/main/wire.jsonl`, WIRE .. "\n")
+		fs.writeFile(
+			`{root}/sessions/other/xyz/agents/main/wire.jsonl`,
+			'{"type":"usage.record","usage":{"inputOther":99999,"output":1,"inputCacheCreation":0}}\n'
+		)
 		local oldHome = process.env.HOME
 		local oldKimi = process.env.PICKMAN_KIMI_SESSIONS
 		process.env.HOME = `{process.cwd}/{root}/home`
@@ -168,5 +180,73 @@ return t.spec("z-work's next action", function(it)
 		t.expect(reading.tokens).toBe(2361)
 		t.expect(string.find(reading.note, "kimi tokens=2361", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(reading.note, "claude unmeasured", 1, true) ~= nil).toBe(true)
+	end)
+
+	it("agrees with dispatch.next on the shared facts, and not on an active raft's action", function()
+		local function facts(over: { [string]: any }): dispatch.Facts
+			local f: { [string]: any } = {
+				id = "R0010",
+				folder = "z-nile/.tracker/rafts/R0010",
+				root = "z-nile/.tracker",
+				kind = "raft",
+				where = "backlog",
+				status = "prepared",
+				design = "ready",
+				raft = "",
+				ownClaim = false,
+				localRaft = "",
+				pr = nil,
+				questions = false,
+				openHuman = {},
+				last = nil,
+				uncovered = {},
+				autoMerge = { "prep", "raft" },
+				description = nil,
+			}
+			for k, v in over do
+				f[k] = v
+			end
+			return f :: any
+		end
+		local function stepOf(f: dispatch.Facts): string
+			local a = dispatch.next(f)
+			return if a.kind == "step" then a.step :: string else `stop {a.code}`
+		end
+		local prepared = raft({})
+		t.expect(decide({ prepared }, nil, nil).action).toBe("ready")
+		t.expect(stepOf(facts({}))).toBe("z-ready")
+		local doneRaft = raft({ where = "done", status = "done" })
+		t.expect(decide({ doneRaft }, "R0010", nil).action).toBe("end")
+		t.expect(stepOf(facts({ where = "done", status = "done" }))).toBe("stop 0")
+		local asked = raft({ where = "active", status = "active", questions = true })
+		t.expect(decide({ asked }, "R0010", nil).action).toBe("release")
+		t.expect(stepOf(facts({ where = "active", status = "active", questions = true }))).toBe("stop 3")
+		local building = raft({
+			where = "active",
+			status = "active",
+			layers = { layer(1, "c0010", 1, true, false) },
+		})
+		local action = decide({ building }, "R0010", nil).action
+		local pipe = stepOf(facts({ where = "active", status = "active" }))
+		t.expect(action).toBe("implement")
+		t.expect(pipe).toBe("z-run")
+		t.expect(action ~= pipe).toBe(true)
+	end)
+
+	it("names a tool call in the trail instead of the stream JSON", function()
+		local acc = adapters.newAcc()
+		adapters.get("claude-cli").feed(
+			acc,
+			'{"type":"assistant","message":{"id":"msg_1","content":[{"type":"tool_use","name":"Bash","input":{"command":"git status"}}],"usage":{"input_tokens":2,"cache_creation_input_tokens":10,"output_tokens":4}}}'
+		)
+		t.expect(acc.note).toBe("Bash git status")
+		t.expect(string.find(acc.note, "{", 1, true) == nil).toBe(true)
+		local report = dispatch.trailReport(acc.note .. "\n", 16, true)
+		t.expect(report[2]).toBe("  Bash git status")
+		adapters.get("claude-cli").feed(
+			acc,
+			'{"type":"assistant","message":{"id":"msg_1","content":[{"type":"tool_use","name":"Bash","input":{"command":"git diff"}}],"usage":{"input_tokens":2,"cache_creation_input_tokens":10,"output_tokens":4}}}'
+		)
+		t.expect(acc.live).toBe(16)
 	end)
 end)

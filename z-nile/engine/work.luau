@@ -2,6 +2,16 @@
 -- What one worker does next. Pure over tracker facts the edge has already read. The skill carries none of
 -- this order: `./zn work next` prints one line, and the worker does that one thing.
 --
+-- dispatch.next is a different decision and must stay one. It chooses the pipeline step from the
+-- dispatcher's facts (the pull request, the last step's outcome, a tripwire, another terminal's claim).
+-- An active raft stays on z-run until its run pull request leaves draft, and then stops for a human to
+-- merge. It does not read layers. This function chooses the one action inside that z-run (implement,
+-- finish, restack, review, trace, final-review, done) from the layer facts. It does not read the pull
+-- request. One function for both would hide either the merge gate or which layer action the session does.
+-- The shared facts agree: questions stop both, a done raft stops both, and a prepared backlog raft is
+-- `ready` here and `z-ready` there. A spec fails when those diverge, or when an active raft's action
+-- becomes the pipeline step (or the pipeline step becomes a layer action).
+--
 -- Left for later tickets, on purpose:
 --   c0249: a claimable raft is the lowest id, not a rank, and lost work is not taken first.
 --   c0250: questions.md is the only block signal. There is no blocked status and no resolve command.

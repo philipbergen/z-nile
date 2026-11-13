@@ -31,7 +31,7 @@ export type Request = {
 	stateDir: string, -- holds the pid file, the stdin file and the stop marker
 	onStart: ((id: Identity) -> ())?,
 	onTick: (() -> ())?, -- called every tick while the step runs (the dispatcher's publish broker)
-	onLine: ((line: string, tokens: number) -> ())?, -- each stdout line, after the adapter counts it
+	onLine: ((line: string, tokens: number) -> ())?, -- each action the adapter named, after it counts the line
 	beatFile: string?, -- a nested step's heartbeat in its parent's state folder: touched every second it runs (005 F3)
 }
 export type Identity = { pgid: number, lockFile: string }

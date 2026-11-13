@@ -58,8 +58,8 @@ function modelstep.launch(r: runner.Request): (runner.Result, string)
 		feed = function(acc, line)
 			table.insert(lines, line)
 			inner.feed(acc, line)
-			if r.onLine then
-				r.onLine(line, acc.live)
+			if r.onLine and acc.note ~= "" then
+				r.onLine(acc.note, acc.live)
 			end
 		end,
 	}

@@ -971,10 +971,16 @@ function dispatcher.modelStep(
 			end
 			return ok, said
 		end
+		local trailPath = `{stateDir}/trail.log`
+		local trail = if fs.isFile(trailPath) then fs.readFile(trailPath) else ""
 		local function noteLine(line: string, tokens: number)
-			-- one append per stream line, so status can show a step that is still running
-			sh.run("sh", { "-c", 'printf "%s\\n" "$1" >> "$2"', "_", line, `{stateDir}/trail.log` })
-			sh.writeReplacing(`{stateDir}/live-tokens`, tostring(tokens) .. "\n")
+			-- the adapter already reduced the stream to one short line; write it here, no process per line
+			if trail ~= "" and string.sub(trail, -1) ~= "\n" then
+				trail ..= "\n"
+			end
+			trail ..= line .. "\n"
+			pcall(fs.writeFile, trailPath, trail)
+			pcall(fs.writeFile, `{stateDir}/live-tokens`, tostring(tokens) .. "\n")
 		end
 		local result = modelstep.launch({
 			argv = argv,

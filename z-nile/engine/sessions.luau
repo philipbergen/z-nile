@@ -81,15 +81,22 @@ function sessions.claude(text: string, sinceIso: string, untilIso: string): Part
 	local ai, inn, outn, cache = 0, 0, 0, 0
 	local model: string? = nil
 	local sawTokens = false
+	-- One assistant response is several content blocks, each a line with the same message id and the same usage.
+	local seen: { [string]: boolean } = {}
 	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
 		local ts = string.match(line, '"timestamp":"([^"]+)"')
 		if ts and inside(ts, sinceIso, untilIso) then
 			saw = true
 			local assistant = string.find(line, '"type":"assistant"', 1, true) ~= nil
-			if assistant and prev then
+			local id = if assistant then string.match(line, '"id":"([^"]+)"') else nil
+			local again = id ~= nil and seen[id :: string] == true
+			if assistant and id then
+				seen[id] = true
+			end
+			if assistant and prev and not again then
 				ai += sessions.delta(prev, ts)
 			end
-			if assistant then
+			if assistant and not again then
 				local i = tonumber(string.match(line, '"input_tokens":(%d+)')) or 0
 				local c = tonumber(string.match(line, '"cache_creation_input_tokens":(%d+)')) or 0
 				local o = tonumber(string.match(line, '"output_tokens":(%d+)')) or 0
