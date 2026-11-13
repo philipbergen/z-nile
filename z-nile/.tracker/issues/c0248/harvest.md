@@ -1,0 +1,25 @@
+# Harvest: c0248
+
+- note prototype subagent candidates (prep, 2026-11-12): z-design/prove-specs-pass-on-a-prototype, zz-arch/stacked-layer-reads-landing-from-origin, zz-test/fixtures-review-again-after-refinish, zz-test/gate-fixtures-own-their-home
+- design-review-001 F1: z-design/checks-run-as-done-runs-them, z-design/check-paths-from-the-home
+- design-review-001 F2: z-design/fixtures-render-the-template, z-design/checks-run-as-done-runs-them
+- design-review-001 F3: z-design/scenario-specs-follow-the-decided-order
+- design-review-001 F4: z-design/rules-keyed-to-a-sha
+- design-review-001 F5: z-design/results-land-on-every-path, z-design/instructions-runnable-where-they-run
+- design-review-001 F6: z-design/quote-other-preps-before-promising
+- design-review-001 F7: z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F8: z-design/exemption-markers-refuse-omission
+- design-review-001 F9: z-design/restated-rules-move-together
+- design-review-001 F10: z-design/new-rules-migrate-existing-work
+- design-review-001 F11: z-design/new-refusals-reach-every-caller
+- design-review-001 F12: z-design/confirm-overrides-with-a-suite-run, z-design/reasoned-rows-claim-testable-reasons
+- design-review-001 F13: zz-test/check-sh-never-runs-the-slow-tier
+- design-review-001 F14: z-design/spec-design-correspondence
+- design-review-001 F15: z-design/run-the-other-rafts-specs
+- note the revised prototype's run (40465a34): `stylua .` skipped the sequestered specs: zz-test/format-tracker-specs-by-path
+- note the revised prototype's run (40465a34): a pattern built from `final-review` needed `-` escaped: zz-arch/escape-names-in-lua-patterns
+- note the revised prototype's run (40465a34): another raft's landing left a raft's lowest layer behind main between its cases: zz-test/landings-move-every-rafts-base
+- note the revised prototype's run (40465a34): a blank line before an appended heading changed the approval hash: zz-test/fixture-edits-keep-the-approval-hash
+- note the revised prototype's run (40465a34): a reordered refusal in done turned c0001 red: zz-arch/new-refusals-keep-the-old-order
+- note the revised prototype's run (40465a34): a spec calling a planned seal.trace argument failed promote-check: zz-test/sequestered-specs-use-mains-test-lib
+- note the revised prototype's run (40465a34): mutants ran against an older spec, one survived the final one at first: zz-test/mutants-run-the-final-spec
