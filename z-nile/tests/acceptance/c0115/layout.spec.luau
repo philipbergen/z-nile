@@ -49,6 +49,7 @@ local ZNILE = {
 	"z-raft", -- c0116 override: z-raft is made there
 	"z-ready",
 	"z-run",
+	"z-work",
 	"zz-execute",
 	"z-stop",
 	"zz-review",
@@ -94,7 +95,7 @@ end
 
 return t.spec("c0115 the skills are renamed and live in their projects' folders", function(it)
 	it(
-		"z-nile/skills holds exactly the z- and zz- skills (eleven since c0116), each a SKILL.md named for its folder",
+		"z-nile/skills holds exactly the z- and zz- skills (twelve since z-work), each a SKILL.md named for its folder",
 		function()
 			t.expect(folders("z-nile/skills")).toEqual(sorted(ZNILE))
 			for _, name in ZNILE do
