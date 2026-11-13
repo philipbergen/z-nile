@@ -563,6 +563,15 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			fs.removeFile(`{state}/fail-body`)
 			t.expect(warned.ok).toBe(true)
 			t.expect(has(warned.stderr, "warning")).toBe(true)
+			-- before this landing writes its own, the first landing's final-review-001 and trace-001 do not stand in
+			local noTrace = znTry(wt, { "trace", "R0010", "--check" })
+			t.expect(noTrace.ok).toBe(false)
+			t.expect(has(noTrace.stderr, "no pickman/.tracker/rafts/active/R0010/trace-002.md")).toBe(true)
+			local noDone = znTry(wt, { "done", "R0010" })
+			t.expect(noDone.ok).toBe(false)
+			t.expect(has(noDone.stderr, "final-review-001.md belongs to a landing that is already on main"))
+				.toBe(true)
+			t.expect(has(noDone.stderr, "write final-review-002.md for these layers")).toBe(true)
 			-- the second landing has its own final review and trace: no add/add with the first's
 			sealBind(wt, "R0010")
 			t.expect(has(zn(wt, { "trace", "R0010", "--check" }), "ok: R0010")).toBe(true)

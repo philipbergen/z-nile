@@ -23,3 +23,6 @@
 - note the revised prototype's run (40465a34): a reordered refusal in done turned c0001 red: zz-arch/new-refusals-keep-the-old-order
 - note the revised prototype's run (40465a34): a spec calling a planned seal.trace argument failed promote-check: zz-test/sequestered-specs-use-mains-test-lib
 - note the revised prototype's run (40465a34): mutants ran against an older spec, one survived the final one at first: zz-test/mutants-run-the-final-spec
+- note the prototype re-run on #318's main (4e354e14): a layer review commit and a bind both rewrote the raft's spend.md: zz-arch/derived-files-conflict-across-a-restack
+- note the prototype re-run on #318's main (4e354e14): a refused call silently skipped its commit: zz-test/a-refused-call-skips-every-step
+- note the prototype re-run on #318's main (4e354e14): main changed Touched modules after approval: z-design/prove-specs-pass-on-a-prototype
