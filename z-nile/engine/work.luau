@@ -13,12 +13,14 @@
 -- becomes the pipeline step (or the pipeline step becomes a layer action).
 --
 -- Left for later tickets, on purpose:
---   c0249: a claimable raft is the lowest id, not a rank, and lost work is not taken first.
+--   c0249: work.rankKey is the id. Rank replaces that key, and lost work is not taken first.
 --   c0250: questions.md is the only block signal. There is no blocked status and no resolve command.
---   c0265: nothing beats while a raft is held.
+--   c0265: nothing beats while a raft is held. An unnamed session does not resume one, and does not take it over.
 --   c0254: the holder is the author of the ready commit, not a worker identity, and two checkouts can be
 --     told to build the same active raft if both name it.
---   a headless `./zn work` loop is not this function. A session ends when its raft lands or is released.
+--   A person who names no raft keeps taking the next claimable one. A named raft ends the session.
+--   A supervisor that starts a fresh session is a later ticket. The skill counts releases in a row
+--   and passes `released`; a stop commit does not name the session, so git cannot.
 local work = {}
 
 export type LayerFact = {
@@ -47,13 +49,28 @@ export type RaftFact = {
 	finalReview: string, -- none, open, approved
 	trace: boolean,
 	traceOk: boolean,
+	block: string?, -- "" when ready would accept. A reason when the reader has judged and ready would refuse.
 }
 
 export type Input = {
 	asked: string?,
 	held: string?,
+	author: string?, -- "Name <email>" of this checkout, the ready commit's author form
+	released: number?, -- how many rafts this session has released in a row. The skill carries it.
 	rafts: { RaftFact },
 }
+
+-- Two blocked releases in a row stop an unnamed session. The only place that number lives.
+work.BLOCKED_IN_A_ROW = 2
+
+function work.blockedWhy(): string
+	return `{work.BLOCKED_IN_A_ROW} rafts in a row were released as blocked. Stop. This is more likely the worker or the tool than the rafts.`
+end
+
+-- c0249 replaces this key with a rank. Lowest key is first. Today the key is the id.
+function work.rankKey(r: RaftFact): string
+	return r.id
+end
 
 export type Decision = {
 	raft: string,
@@ -77,40 +94,64 @@ local function find(rafts: { RaftFact }, id: string): RaftFact?
 end
 
 function work.claimable(r: RaftFact): boolean
+	if r.block ~= nil then
+		return r.block == ""
+	end
 	return r.where == "backlog" and r.status == "prepared" and r.designReady and r.depsMet and not r.questions
 end
 
--- The next raft a fresh session may take. Lowest id. Rank is c0249's.
+-- The next raft an unnamed session may take. One function. Lowest work.rankKey, which is the id until c0249.
 function work.nextClaimable(rafts: { RaftFact }): RaftFact?
 	local best: RaftFact? = nil
 	for _, r in rafts do
-		if work.claimable(r) and (not best or r.id < (best :: RaftFact).id) then
+		if work.claimable(r) and (not best or work.rankKey(r) < work.rankKey(best :: RaftFact)) then
 			best = r
 		end
 	end
 	return best
 end
 
-function work.whyNone(rafts: { RaftFact }): string
-	local bits: { string } = {}
-	for _, r in rafts do
-		if r.where == "active" then
-			table.insert(bits, `{r.id} is held`)
-		elseif r.where == "backlog" then
-			if r.questions then
-				table.insert(bits, `{r.id} needs a human (questions.md)`)
-			elseif r.status ~= "prepared" or not r.designReady then
-				table.insert(bits, `{r.id} is {r.status}, design not ready`)
-			elseif not r.depsMet then
-				table.insert(bits, `{r.id} has a dependency that is not done`)
-			end
+-- The first reason this raft is not offered. Nil when it is offered, or when it is already done.
+function work.oneReason(r: RaftFact): string?
+	if work.claimable(r) or r.where == "done" then
+		return nil
+	end
+	if r.block ~= nil and r.block ~= "" then
+		return r.block
+	end
+	if r.where == "active" then
+		return "is held"
+	end
+	if r.where == "backlog" then
+		if r.questions then
+			return "needs a human (questions.md)"
+		elseif r.status ~= "prepared" or not r.designReady then
+			return `is {r.status}, design not ready`
+		elseif not r.depsMet then
+			return "has a dependency that is not done"
 		end
 	end
-	if #bits == 0 then
-		return "no prepared raft is claimable"
+	return `is {r.where}`
+end
+
+function work.skipped(rafts: { RaftFact }): { string }
+	local lines: { string } = {}
+	for _, r in rafts do
+		local why = work.oneReason(r)
+		if why then
+			table.insert(lines, `{r.id}: {why}`)
+		end
 	end
-	table.sort(bits)
-	return table.concat(bits, "; ")
+	table.sort(lines)
+	return lines
+end
+
+function work.whyNone(rafts: { RaftFact }): string
+	local lines = work.skipped(rafts)
+	if #lines == 0 then
+		return "no claimable raft"
+	end
+	return table.concat(lines, "; ")
 end
 
 local function of(r: RaftFact, action: string, why: string, ticket: string, layer: LayerFact?): Decision
@@ -166,13 +207,14 @@ function work.forRaft(r: RaftFact): Decision
 			return of(
 				r,
 				"ready",
-				`{r.id} is prepared and its dependencies are done. From the main checkout run ./zn ready {r.id}, then ask again.`,
+				`{r.id} is prepared and ready would accept it. From the main checkout run ./zn ready {r.id}, then ask again.`,
 				"",
 				nil
 			)
 		end
-		local why = if not r.designReady
-			then `{r.id} is not design: ready`
+		local why = if r.block ~= nil and r.block ~= ""
+			then r.block
+			elseif not r.designReady then `{r.id} is not design: ready`
 			elseif r.status ~= "prepared" then `{r.id} is {r.status}, not prepared`
 			else `{r.id} has a dependency that is not done`
 		return of(r, "none", why, "", nil)
@@ -264,6 +306,21 @@ function work.forRaft(r: RaftFact): Decision
 	return of(r, "done", `Run ./zn done {r.id}. It lands the stack. Then ask again.`, "", nil)
 end
 
+function work.heldBy(input: Input): { string }
+	local out: { string } = {}
+	local author = input.author or ""
+	if author == "" then
+		return out
+	end
+	for _, r in input.rafts do
+		if r.where == "active" and r.holder == author then
+			table.insert(out, r.id)
+		end
+	end
+	table.sort(out)
+	return out
+end
+
 function work.decide(input: Input): Decision
 	if input.asked and input.asked ~= "" then
 		local r = find(input.rafts, input.asked)
@@ -272,17 +329,41 @@ function work.decide(input: Input): Decision
 		end
 		return work.forRaft(r)
 	end
-	if input.held and input.held ~= "" then
-		local h = find(input.rafts, input.held)
-		if h and (h.where == "active" or h.where == "done" or h.questions) then
-			return work.forRaft(h)
-		end
+	if (input.released or 0) >= work.BLOCKED_IN_A_ROW then
+		return blank("none", work.blockedWhy(), "")
 	end
+	-- An unnamed session does not resume the raft this checkout is in, and does not resume one this
+	-- person already holds. Naming the raft is the resume.
+	local holds = work.heldBy(input)
+	local prefix = if #holds > 0 then `you hold {table.concat(holds, ", ")}: name one to resume it. ` else ""
 	local nextRaft = work.nextClaimable(input.rafts)
 	if not nextRaft then
-		return blank("none", work.whyNone(input.rafts), "")
+		return blank("none", prefix .. work.whyNone(input.rafts), "")
 	end
-	return work.forRaft(nextRaft)
+	local d = work.forRaft(nextRaft)
+	d.why = prefix .. d.why
+	return d
+end
+
+function work.report(input: Input, d: Decision): string
+	local unnamed = not input.asked or input.asked == ""
+	if not unnamed or (d.action ~= "none" and d.action ~= "ready") then
+		return work.say(d)
+	end
+	if d.action == "none" and string.find(d.why, "in a row", 1, true) then
+		return work.say(d)
+	end
+	local holds = work.heldBy(input)
+	local head = if d.action == "none"
+		then `nothing to do - {if #holds > 0
+			then `you hold {table.concat(holds, ", ")}: name one to resume it. `
+			else ""}no claimable raft`
+		else work.say(d)
+	local lines = { head }
+	for _, skipped in work.skipped(input.rafts) do
+		table.insert(lines, skipped)
+	end
+	return table.concat(lines, "\n")
 end
 
 function work.say(d: Decision): string

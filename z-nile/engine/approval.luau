@@ -107,26 +107,42 @@ function approval.verdict(root: string, item: store.Item): (Verdict?, string?)
 	return { state = "changed", changed = changed, row = row, err = nil }, nil
 end
 
--- The refusal, naming the issue. `required` is ready's rule (a missing approval refuses). done and land
--- leave an issue with no approval.md alone: nothing already active or done is sent back for one.
-function approval.refusal(root: string, item: store.Item, required: boolean): string?
-	local found, err = approval.verdict(root, item)
-	if not found then
-		return `{item.id}: {err}`
-	end
-	if found.state == "none" then
+-- The refusal from texts `ready` and `work next` both already have. `required` is ready's rule (a missing
+-- approval refuses). done and land leave an issue with no approval.md alone.
+function approval.reasonOf(
+	id: string,
+	fileRel: string,
+	parts: contract.Parts,
+	approvalText: string?,
+	required: boolean
+): string?
+	if not approvalText then
 		if not required then
 			return nil
 		end
-		return `{item.id} has no approval: run ./zn approve {item.id} first. This is a one-time step for an item prepared before approval.`
+		return `{id} has no approval: run ./zn approve {id}, then ./zn approve {id} --publish, from the worktree that holds the design. This is a one-time step for an item prepared before approval.`
 	end
-	if found.state == "bad" then
-		return `{item.id}: {approval.file(item)} does not parse: {found.err}`
+	local rows, perr = contract.parse(approvalText)
+	if not rows then
+		return `{id}: {fileRel} does not parse: {perr}`
 	end
-	if found.state == "changed" then
-		return `{item.id}'s contract changed since approval: {table.concat(found.changed, ", ")}. Run ./zn approve {item.id} again.`
+	local changed = contract.changed(rows[#rows], parts)
+	if #changed == 0 then
+		return nil
 	end
-	return nil
+	return `{id}'s contract changed since approval: {table.concat(changed, ", ")}. Run ./zn approve {id} again, then ./zn approve {id} --publish.`
+end
+
+-- The refusal, naming the issue. `required` is ready's rule (a missing approval refuses). done and land
+-- leave an issue with no approval.md alone: nothing already active or done is sent back for one.
+function approval.refusal(root: string, item: store.Item, required: boolean): string?
+	local parts, _, err = approval.collect(root, item)
+	if not parts then
+		return `{item.id}: {err}`
+	end
+	local path = rooted(root, approval.file(item))
+	local text = if fs.isFile(path) then fs.readFile(path) else nil
+	return approval.reasonOf(item.id, approval.file(item), parts, text, required)
 end
 
 -- approval.md with one new row appended. The caller writes and commits only that file.

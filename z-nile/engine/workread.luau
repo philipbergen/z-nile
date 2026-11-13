@@ -10,6 +10,9 @@
 local fs = require("@lune/fs")
 local layergit = require("./layergit")
 local process = require("@lune/process")
+local projects = require("./projects")
+local raftplan = require("./raftplan")
+local readycheck = require("./readycheck")
 local sh = require("../lib/sh")
 local stack = require("./stack")
 local statusLib = require("./status")
@@ -333,6 +336,123 @@ local function build(
 	}
 end
 
+function workread.author(): string
+	local named = sh.run("git", { "config", "--get", "user.name" })
+	local mailed = sh.run("git", { "config", "--get", "user.email" })
+	local name = if named.ok then trim(named.stdout) else ""
+	local email = if mailed.ok then trim(mailed.stdout) else ""
+	if name == "" or email == "" then
+		return ""
+	end
+	return `{name} <{email}>`
+end
+
+local function filesUnder(
+	dir: string,
+	under: { [string]: { string } },
+	docs: { [string]: string },
+	id: string,
+	take: (string, string) -> boolean
+): { [string]: string }
+	local out: { [string]: string } = {}
+	for _, path in under[dir] or {} do
+		local rel = string.sub(path, #dir + 2)
+		local body = docs[path]
+		if body and body ~= "" and take(rel, id) then
+			out[rel] = body
+		end
+	end
+	return out
+end
+
+local function blockFor(
+	id: string,
+	at: At,
+	text: string,
+	byId: { [string]: At },
+	docs: { [string]: string },
+	under: { [string]: { string } },
+	promoted: { [string]: { [string]: string } }
+): string
+	local front = frontText(text)
+	local status = statusLib.effective(front, at.state)
+	if at.state ~= "backlog" or status ~= "prepared" then
+		local why = readycheck.reason({
+			id = id,
+			where = at.state,
+			status = status,
+			dir = at.dir,
+			design = front.design or "",
+			doc = text,
+			grouped = front.grouped,
+			questions = docs[`{at.dir}/questions.md`] ~= nil,
+			listed = {},
+			members = {},
+			files = {},
+			loaded = false,
+		})
+		return why or ""
+	end
+	local listed = store.idList(front.issues)
+	local members: { readycheck.Member } = {}
+	local isMember: { [string]: boolean } = {}
+	for mid, mat in byId do
+		if store.isIssueId(mid) then
+			local raw = docs[mat.path]
+			if raw and raw ~= "" and frontText(raw).raft == id then
+				isMember[mid] = true
+			end
+		end
+	end
+	for mid in isMember do
+		local mat = byId[mid]
+		local raw = if mat then docs[mat.path] else nil
+		local mf = if raw and raw ~= "" then frontText(raw) else {}
+		local folder = if mat
+			then filesUnder(mat.dir, under, docs, mid, function(rel: string, issue: string): boolean
+				return raftplan.isDesignFile(rel, issue) or rel == "approval.md"
+			end)
+			else {}
+		local specs = readycheck.specs(folder, if mat then promoted[mat.dir] or {} else {})
+		table.insert(members, {
+			id = mid,
+			design = mf.design or "",
+			doc = raw or "",
+			deps = readycheck.deps(mf.depends_on, function(dep: string): string
+				if isMember[dep] then
+					return "member"
+				end
+				local depAt = byId[dep]
+				return if depAt then depAt.state else "missing"
+			end),
+			files = folder,
+			specs = specs,
+			approval = folder["approval.md"],
+			approvalFile = if mat then `{mat.dir}/approval.md` else `{mid}/approval.md`,
+		})
+	end
+	local raftFiles = filesUnder(at.dir, under, docs, id, function(rel: string, _issue: string): boolean
+		return rel == "check.sh"
+			or string.match(rel, "^design%-review%-%d+%.md$") ~= nil
+			or string.match(rel, "^design%-refute%-%d+%.md$") ~= nil
+	end)
+	local why = readycheck.reason({
+		id = id,
+		where = at.state,
+		status = status,
+		dir = at.dir,
+		design = front.design or "",
+		doc = text,
+		grouped = front.grouped,
+		questions = docs[`{at.dir}/questions.md`] ~= nil,
+		listed = listed,
+		members = members,
+		files = raftFiles,
+		loaded = true,
+	})
+	return why or ""
+end
+
 function workread.held(): string?
 	local branch = trim(sh.run("git", { "branch", "--show-current" }).stdout)
 	local layer = stack.parse(branch)
@@ -347,7 +467,7 @@ function workread.collect(asked: string?): work.Input
 	local rafts: { work.RaftFact } = {}
 	local main = trim(sh.run("git", { "rev-parse", "--verify", "--quiet", "origin/main" }).stdout)
 	if main == "" then
-		return { asked = asked, held = workread.held(), rafts = rafts }
+		return { asked = asked, held = workread.held(), author = workread.author(), rafts = rafts }
 	end
 	local listed = sh.run("git", { "ls-tree", "-r", "--name-only", "origin/main" })
 	local names: { string } = {}
@@ -466,6 +586,113 @@ function workread.collect(asked: string?): work.Input
 			end
 		end
 	end
+	local dirs: { [string]: boolean } = {}
+	for id, at in keep do
+		if at.state == "backlog" then
+			dirs[at.dir] = true
+			local body = docs[at.path]
+			if body then
+				for _, mid in store.idList(frontText(body).issues) do
+					local m = byId[mid]
+					if m then
+						dirs[m.dir] = true
+					end
+				end
+			end
+		end
+	end
+	local under: { [string]: { string } } = {}
+	for dir in dirs do
+		under[dir] = {}
+	end
+	for _, path in names do
+		for dir in dirs do
+			if string.sub(path, 1, #dir + 1) == dir .. "/" then
+				table.insert(under[dir], path)
+			end
+		end
+	end
+	local more: { string } = {}
+	for dir in dirs do
+		for _, path in under[dir] do
+			if not docs[path] then
+				local rel = string.sub(path, #dir + 2)
+				local base = string.match(dir, "([fdcR]%d%d%d%d)$")
+				if
+					base and (raftplan.isDesignFile(rel, base) or rel == "approval.md" or rel == "check.sh")
+				then
+					table.insert(more, path)
+				end
+			end
+		end
+	end
+	if #more > 0 then
+		local extraSpecs: { string } = {}
+		for _, path in more do
+			table.insert(extraSpecs, `origin/main:{path}`)
+		end
+		local extra = catBatch(extraSpecs)
+		for i, path in more do
+			docs[path] = extra[i] or ""
+		end
+	end
+	local promoted: { [string]: { [string]: string } } = {}
+	local reg = projects.load(".")
+	local promotePaths: { string } = {}
+	local promoteOf: { [string]: { string } } = {}
+	for dir in dirs do
+		local issue = string.match(dir, "([fdc]%d%d%d%d)$")
+		if issue then
+			local any = false
+			for rel in
+				filesUnder(dir, under, docs, issue, function(rel: string, item: string): boolean
+					return raftplan.isDesignFile(rel, item)
+				end)
+			do
+				if string.match(rel, "^acceptance/.+%.spec%.luau$") then
+					any = true
+				end
+			end
+			if not any then
+				local root = string.match(dir, "^(.*)/.tracker/") or ""
+				local dest = projects.promotedDir(reg, if root == "" then "." else root, issue)
+				local prefix = dest .. "/"
+				local paths: { string } = {}
+				for _, path in names do
+					if string.sub(path, 1, #prefix) == prefix and string.match(path, "%.spec%.luau$") then
+						table.insert(paths, path)
+						if docs[path] == nil then
+							table.insert(promotePaths, path)
+						end
+					end
+				end
+				promoteOf[dir] = paths
+			end
+		end
+	end
+	if #promotePaths > 0 then
+		local specList: { string } = {}
+		for _, path in promotePaths do
+			table.insert(specList, `origin/main:{path}`)
+		end
+		local extra = catBatch(specList)
+		for i, path in promotePaths do
+			docs[path] = extra[i] or ""
+		end
+	end
+	for dir, paths in promoteOf do
+		local root = string.match(dir, "^(.*)/.tracker/") or ""
+		local issue = string.match(dir, "([fdc]%d%d%d%d)$") or ""
+		local dest = projects.promotedDir(reg, if root == "" then "." else root, issue)
+		local bag: { [string]: string } = {}
+		for _, path in paths do
+			local body = docs[path]
+			if body and body ~= "" then
+				bag[string.sub(path, #dest + 2)] = body
+			end
+		end
+		promoted[dir] = bag
+	end
 	local holders = holdersOf()
 	for id, at in keep do
 		local text = docs[at.path]
@@ -493,13 +720,14 @@ function workread.collect(asked: string?): work.Input
 					end
 				end
 			end
-			table.insert(
-				rafts,
-				build(id, at, text, byId, docs, sides, holders[id], activeTips[id] or {}, main)
-			)
+			local fact = build(id, at, text, byId, docs, sides, holders[id], activeTips[id] or {}, main)
+			if at.state ~= "done" then
+				fact.block = blockFor(id, at, text, byId, docs, under, promoted)
+			end
+			table.insert(rafts, fact)
 		end
 	end
-	return { asked = asked, held = workread.held(), rafts = rafts }
+	return { asked = asked, held = workread.held(), author = workread.author(), rafts = rafts }
 end
 
 return workread
