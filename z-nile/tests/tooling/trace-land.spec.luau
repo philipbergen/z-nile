@@ -324,7 +324,7 @@ return t.spec(
 				local check1Path = "pickman/.tracker/issues/active/c0010/check.sh"
 				local doc2Path = "pickman/.tracker/issues/active/c0020/c0020.md"
 				local check2Path = "pickman/.tracker/issues/active/c0020/check.sh"
-				local tracePath = "pickman/.tracker/rafts/active/R0010/trace.md"
+				local tracePath = "pickman/.tracker/rafts/active/R0010/trace-001.md"
 
 				local filledPass = table.concat({
 					"# Trace: R0010",
@@ -474,7 +474,7 @@ return t.spec(
 				local bindMsg = git(f.main, { "log", "-1", "--format=%B", "origin/main" })
 				t.expect(has(bindMsg, "R0010: bind c0010, c0020")).toBe(true)
 				t.expect(has(bindMsg, "Verdict: approve")).toBe(true)
-				t.expect(has(bindMsg, "Trace: pickman/.tracker/rafts/done/R0010/trace.md")).toBe(true)
+				t.expect(has(bindMsg, "Trace: pickman/.tracker/rafts/done/R0010/trace-001.md")).toBe(true)
 				local subjects = git(
 					f.main,
 					{ "log", "-5", "--format=%s", "--invert-grep", "--grep=^tracker: review", "origin/main" }

@@ -286,7 +286,7 @@ return t.spec("a raft lands as a stack of layers", function(it)
 		t.expect(subjects)
 			.toBe("R0010: bind c0010, c0020\nR0010: final-review-001\nc0020: beta\nc0010: alpha")
 		t.expect(has(bind, "Verdict: approve")).toBe(true)
-		t.expect(has(bind, "Trace: pickman/.tracker/rafts/done/R0010/trace.md")).toBe(true)
+		t.expect(has(bind, "Trace: pickman/.tracker/rafts/done/R0010/trace-001.md")).toBe(true)
 		t.expect(git(f.main, { "rev-parse", "origin/main^2" }) ~= "").toBe(true)
 		fs.writeFile(
 			proof,
