@@ -538,7 +538,9 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(has(seen, "3 R0010/3/c0030 c0030 claimed")).toBe(true)
 			local refusedHere = znTry(wt, { "done", "R0010" })
 			t.expect(refusedHere.ok).toBe(false)
-			t.expect(has(refusedHere.stderr, "R0010/3/c0030 is not based on main: ./zn restack R0010"))
+			local unstacked = znTry(wt, { "trace", "R0010" })
+			t.expect(unstacked.ok).toBe(false)
+			t.expect(has(unstacked.stderr, "R0010/3/c0030 is not based on main: ./zn restack R0010"))
 				.toBe(true)
 			-- restack moves layer 3 onto main: new commits, the same patch, so the review stays current
 			local oldSha = finishSha(wt, "c0030")

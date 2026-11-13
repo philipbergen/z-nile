@@ -3832,7 +3832,9 @@ function cmd.finish(pos: { string })
 	end
 	if not sh.run("git", { "merge-base", "--is-ancestor", base, "HEAD" }).ok then
 		fail(
-			`{branch} is not based on {if base == layergit.mainTip() then "main" else "the layer below"}: ./zn restack {raft.id}`
+			`{branch} is not {if base == layergit.mainTip()
+				then "based on main"
+				else "based on the layer below"}: ./zn restack {raft.id}`
 		)
 	end
 	local onMain = sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{approval.file(issue)}` }).ok
@@ -4882,7 +4884,11 @@ local function traceProblems(
 			end
 			local tip = localOrOriginTip(layer) or fail(`{layer.name} has no tip`)
 			if not sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok then
-				fail(`{layer.name} is not stacked on the layer below: ./zn restack {raft.id}`)
+				fail(
+					`{layer.name} is not {if onto == layergit.mainTip()
+						then "based on main"
+						else "stacked on the layer below"}: ./zn restack {raft.id}`
+				)
 			end
 			local finishSha = layergit.layerFinishSha(layer, onto, tip)
 			if not finishSha then
@@ -5112,38 +5118,6 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 	if here ~= land then
 		fail(`{hereName} is {here} and {topLayer.name} is {land}: done checks the commit it lands`)
 	end
-	local unlandedLayers = 0
-	for _, layer in layers do
-		if layer.position >= firstPos then
-			unlandedLayers += 1
-		end
-	end
-	if #bindLayers ~= #(bindIds :: { string }) or (through == nil and unlandedLayers ~= #bindLayers) then
-		fail(`{raft.id} has {unlandedLayers} layer(s) for {#(bindIds :: { string })} issue(s)`)
-	end
-	for n, layer in bindLayers do
-		local i = firstPos + n - 1
-		if layer.position ~= i or layer.issue ~= issues[i].id then
-			fail(`{raft.id} layer {i} is {layer.name}, expected {issues[i].id}`)
-		end
-		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
-		local onto = layergit.baseFor(haveAt, landedAt, i)
-		if not onto or not sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok then
-			fail(
-				`{layer.name} is not based on {if onto == layergit.mainTip()
-					then "main"
-					else "the layer below"}: ./zn restack {raft.id}`
-			)
-		end
-		if not layergit.layerFinished(layer, onto :: string) then
-			fail(`{layer.issue} is not finished: ./zn finish {layer.issue}`)
-		end
-		-- c0248: a layer is complete (finished, green, reviewed) before it is bound, the top one included
-		local why = if marked then layergit.completeReason(raft, layer, onto :: string) else nil
-		if why then
-			fail(why)
-		end
-	end
 	-- c0248: each landing has its own final review and trace, numbered one past the last landing's
 	local round = 0
 	if marked then
@@ -5191,6 +5165,38 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 	local verdict = layergit.reviewVerdict(raft)
 	if not verdict then
 		fail(`{raft.id} has no Verdict line: a verdict nobody wrote is not recorded`)
+	end
+	local unlandedLayers = 0
+	for _, layer in layers do
+		if layer.position >= firstPos then
+			unlandedLayers += 1
+		end
+	end
+	if #bindLayers ~= #(bindIds :: { string }) or (through == nil and unlandedLayers ~= #bindLayers) then
+		fail(`{raft.id} has {unlandedLayers} layer(s) for {#(bindIds :: { string })} issue(s)`)
+	end
+	for n, layer in bindLayers do
+		local i = firstPos + n - 1
+		if layer.position ~= i or layer.issue ~= issues[i].id then
+			fail(`{raft.id} layer {i} is {layer.name}, expected {issues[i].id}`)
+		end
+		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
+		local onto = layergit.baseFor(haveAt, landedAt, i)
+		if not onto or not sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok then
+			fail(
+				`{layer.name} is not {if onto == layergit.mainTip()
+					then "based on main"
+					else "stacked on the layer below"}: ./zn restack {raft.id}`
+			)
+		end
+		if not layergit.layerFinished(layer, onto :: string) then
+			fail(`{layer.issue} is not finished: ./zn finish {layer.issue}`)
+		end
+		-- c0248: a layer is complete (finished, green, reviewed) before it is bound, the top one included
+		local why = if marked then layergit.completeReason(raft, layer, onto :: string) else nil
+		if why then
+			fail(why)
+		end
 	end
 	local traceName = if marked then string.format("trace-%03d.md", round) else "trace.md"
 	local traceFindings = traceProblems(raft, nil, through, traceName)
