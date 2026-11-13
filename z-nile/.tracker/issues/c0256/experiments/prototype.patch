@@ -1,5 +1,5 @@
 diff --git a/z-nile/engine/broker.luau b/z-nile/engine/broker.luau
-index 935387af..30c23766 100644
+index 3da32823..f00233ee 100644
 --- a/z-nile/engine/broker.luau
 +++ b/z-nile/engine/broker.luau
 @@ -100,7 +100,8 @@ function broker.push(
@@ -23,7 +23,7 @@ index 935387af..30c23766 100644
  	if r.ok then
  		return true, "pushed"
 diff --git a/z-nile/engine/dispatch.luau b/z-nile/engine/dispatch.luau
-index cd80f164..938878c7 100644
+index 48f37a78..872ac4cc 100644
 --- a/z-nile/engine/dispatch.luau
 +++ b/z-nile/engine/dispatch.luau
 @@ -111,6 +111,13 @@ export type PromptInput = {
@@ -115,7 +115,7 @@ index cd80f164..938878c7 100644
  	end
  	if #f.openHuman > 0 then
 diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
-index ec28cef7..02d29e3a 100644
+index 33c92207..d0fd0994 100644
 --- a/z-nile/engine/dispatcher.luau
 +++ b/z-nile/engine/dispatcher.luau
 @@ -19,6 +19,7 @@ local buffer = require("./buffer")
@@ -141,7 +141,7 @@ index ec28cef7..02d29e3a 100644
  	prView: (branch: string) -> string?, -- `gh pr view <branch> --json …`'s output, or nil
  	prMerged: (sha: string) -> boolean, -- `sha` is a pull request's merge commit on GitHub
  }
-@@ -88,8 +89,11 @@ export type State = {
+@@ -87,8 +88,11 @@ export type State = {
  	follows: string?, -- the raft an issue's chain moved on to
  	merged: { number }, -- the PRs the dispatcher merged
  	pushed: { string }, -- the commits its publish broker pushed to main
@@ -153,7 +153,7 @@ index ec28cef7..02d29e3a 100644
  }
  
  local HOME = ".cache/dispatch"
-@@ -113,7 +117,16 @@ local function dirOf(ctx: Ctx, id: string): string
+@@ -112,7 +116,16 @@ local function dirOf(ctx: Ctx, id: string): string
  end
  
  local function blank(id: string, dir: string): State
@@ -171,7 +171,7 @@ index ec28cef7..02d29e3a 100644
  end
  
  local function loadAt(id: string, dir: string): State
-@@ -129,6 +142,7 @@ local function loadAt(id: string, dir: string): State
+@@ -128,6 +141,7 @@ local function loadAt(id: string, dir: string): State
  			st.pending = st.pending or {}
  			st.merged = st.merged or {}
  			st.pushed = st.pushed or {}
@@ -179,7 +179,7 @@ index ec28cef7..02d29e3a 100644
  			st.dir = dir
  			return st :: State
  		end
-@@ -151,6 +165,160 @@ local function save(st: State)
+@@ -147,6 +161,160 @@ local function save(st: State)
  	sh.writeReplacing(`{st.dir}/state.json`, serde.encode("json", st, true) .. "\n")
  end
  
@@ -340,7 +340,7 @@ index ec28cef7..02d29e3a 100644
  -- `<dir>/zn <args>`; returns success and captured stdout and stderr.
  local function zn(dir: string, args: { string }, quiet: boolean?): (boolean, string, string)
  	local r = process.exec(`{dir}/zn`, args, {
-@@ -630,6 +798,47 @@ local function freshMain(ctx: Ctx): string?
+@@ -624,6 +792,47 @@ local function freshMain(ctx: Ctx): string?
  end
  dispatcher.freshMain = freshMain
  
@@ -388,7 +388,7 @@ index ec28cef7..02d29e3a 100644
  -- The project roots of the registry at `ref` (lesson zz-arch/guards-trust-only-origin), or nil.
  local function rootsAt(ctx: Ctx, ref: string): { string }?
  	local reg = projects.at(ref, ctx.mainRoot())
-@@ -880,6 +1089,121 @@ local function keepBeating(dir: string): () -> ()
+@@ -768,6 +977,121 @@ local function keepBeating(dir: string): () -> ()
  	end
  end
  
@@ -510,7 +510,7 @@ index ec28cef7..02d29e3a 100644
  function dispatcher.modelStep(
  	ctx: Ctx,
  	st: State,
-@@ -892,6 +1216,7 @@ function dispatcher.modelStep(
+@@ -780,6 +1104,7 @@ function dispatcher.modelStep(
  	local resolved = dispatcher.resolve(step, id, project, mode)
  	local tries = models.tries(resolved)
  	local stateDir = st.dir
@@ -518,7 +518,7 @@ index ec28cef7..02d29e3a 100644
  	local cwd: string
  	if step == "zz-review" then
  		-- the author's worktree: the checkout ./zn ran in (zn passes ZN_TOP, and ZN_CWD relative to it, since c0114)
-@@ -927,6 +1252,50 @@ function dispatcher.modelStep(
+@@ -815,6 +1140,50 @@ function dispatcher.modelStep(
  		end
  		streamDir = store.get(raftId).dir
  	end
@@ -569,7 +569,7 @@ index ec28cef7..02d29e3a 100644
  	local prompt = dispatch.prompt({
  		step = step,
  		id = id,
-@@ -938,6 +1307,13 @@ function dispatcher.modelStep(
+@@ -826,6 +1195,13 @@ function dispatcher.modelStep(
  		streamWorktree = if streamDir then `{ctx.mainRoot()}/.worktree/ws-{id}` else nil,
  		description = opts["--description"] and opts["--description"][1],
  		project = project,
@@ -583,7 +583,7 @@ index ec28cef7..02d29e3a 100644
  	})
  	local attempts: { Attempt } = {}
  	local function refused(spec: models.Spec, why: string)
-@@ -1075,9 +1451,19 @@ function dispatcher.modelStep(
+@@ -963,9 +1339,19 @@ function dispatcher.modelStep(
  		save(st)
  		local shot = if serving then snapshot(ctx) else nil
  		local function push(sha: string): (boolean, string)
@@ -606,7 +606,7 @@ index ec28cef7..02d29e3a 100644
  			if ok then
  				table.insert(st.pushed, sha)
  			end
-@@ -1143,6 +1529,11 @@ function dispatcher.modelStep(
+@@ -1031,6 +1417,11 @@ function dispatcher.modelStep(
  		if outcomeNow ~= "quota" and not (resolved.fromRoles and outcomeNow == "failed") then
  			break
  		end
@@ -618,7 +618,7 @@ index ec28cef7..02d29e3a 100644
  	end
  	-- when every CLI of the order was tried and none could run, say why for each kind (review 006 F5)
  	local onQuota, notInstalled = {}, {}
-@@ -1172,35 +1563,119 @@ function dispatcher.modelStep(
+@@ -1060,19 +1451,60 @@ function dispatcher.modelStep(
  	end
  	-- the item z-ticket made: the one new issue on origin/main
  	local target = id
@@ -641,14 +641,14 @@ index ec28cef7..02d29e3a 100644
 +		local mine: { Push } = {}
 +		for n = pushesBefore + 1, #st.pushes do
 +			table.insert(mine, st.pushes[n])
- 		end
--		if #made ~= 1 then
++		end
 +		local got, why = dispatcher.issuesAddedBy(ctx, mine)
 +		if got then
 +			zMade = got
 +		else
 +			zUnknown = why
-+		end
+ 		end
+-		if #made ~= 1 then
 +	end
 +	local exAfter, exAfterWhy = exchangeRead(st)
 +	if exAfter == nil then
@@ -687,22 +687,23 @@ index ec28cef7..02d29e3a 100644
 +			-- or a question stop: z-ticket made nothing and asks first; the question waits for the user
 +			target = id
 +		elseif zUnknown then
-+			outcome = "failed"
-+			local why: Attempt = {
-+				step = step :: string,
-+				cli = "",
-+				runtime = "",
-+				model = "",
-+				outcome = "failed",
+ 			outcome = "failed"
+ 			local why: Attempt = {
+ 				step = step :: string,
+@@ -1080,15 +1512,58 @@ function dispatcher.modelStep(
+ 				runtime = "",
+ 				model = "",
+ 				outcome = "failed",
+-				detail = `z-ticket made {#made} issues on origin/main, not one`,
 +				detail = `could not tell what z-ticket made: {zUnknown}; ./zn dispatch retry new checks again`,
-+				tokens = 0,
-+				minutes = 0,
-+			}
-+			table.insert(attempts, why)
+ 				tokens = 0,
+ 				minutes = 0,
+ 			}
+ 			table.insert(attempts, why)
 +			table.insert(st.history, why)
 +			stdio.ewrite(`dispatch: {why.detail}\n`)
 +		elseif asked or #made ~= 1 then
- 			outcome = "failed"
++			outcome = "failed"
 +			if asked then
 +				-- a capture asks before it makes: the issue exists, so the question is set aside as a failure the user can read
 +				local qf = `{stateDir}/questions.md`
@@ -712,20 +713,19 @@ index ec28cef7..02d29e3a 100644
 +					fs.move(qf, freeName(stateDir, "questions-refused-", ".md", true))
 +				end
 +			end
- 			local why: Attempt = {
- 				step = step :: string,
- 				cli = "",
- 				runtime = "",
- 				model = "",
- 				outcome = "failed",
--				detail = `z-ticket made {#made} issues on origin/main, not one`,
++			local why: Attempt = {
++				step = step :: string,
++				cli = "",
++				runtime = "",
++				model = "",
++				outcome = "failed",
 +				detail = if asked
 +					then `z-ticket made {table.concat(made, ", ")} and asked a question: a capture asks before it makes; ./zn dispatch retry new gives {made[1]} its conversation, or ./zn dispatch {made[1]} goes on with the issue, or ./zn dispatch retry new --forget-exchange drops the capture`
 +					else `z-ticket made {#made} issues, not one`,
- 				tokens = 0,
- 				minutes = 0,
- 			}
- 			table.insert(attempts, why)
++				tokens = 0,
++				minutes = 0,
++			}
++			table.insert(attempts, why)
 +			table.insert(st.history, why)
 +			stdio.ewrite(`dispatch: {why.detail}\n`)
  		else
@@ -752,7 +752,7 @@ index ec28cef7..02d29e3a 100644
  		end
  	end
  	-- the dispatcher lands a dispatched review: exactly the one review.md, numbered after the last round of its kind in
-@@ -1797,7 +2272,7 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
+@@ -1688,7 +2163,7 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
  	return {
  		folder = folder,
  		root = root,
@@ -761,7 +761,7 @@ index ec28cef7..02d29e3a 100644
  		kind = kind :: any,
  		where = if o then o.state else "none",
  		status = if o then o.status else "none",
-@@ -1984,9 +2459,7 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } },
+@@ -1875,9 +2350,7 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } },
  				dispatcher.scriptStep(ctx, st, step, if step == "raft-plan" then id else target)
  			else
  				local o2 = table.clone(opts)
@@ -772,7 +772,7 @@ index ec28cef7..02d29e3a 100644
  					o2["--for"] = { id }
  				end
  				local oldDir = st.dir
-@@ -2128,7 +2601,12 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
+@@ -1976,7 +2449,12 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
  		end
  		return 0
  	elseif first == "retry" then
@@ -786,7 +786,7 @@ index ec28cef7..02d29e3a 100644
  		local dir = dirOf(ctx, id)
  		local refusal = lock(dir, true)
  		if refusal then
-@@ -2136,6 +2614,127 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
+@@ -1984,6 +2462,127 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
  			return dispatch.EXIT.failure
  		end
  		local st = load(ctx, id)
@@ -911,10 +911,10 @@ index ec28cef7..02d29e3a 100644
 +				)}); run retry without --answer`
 +			)
 +		end
- 		-- every run that starts a step starts through the same guards (code review 001 F2): origin's URL, the
- 		-- watermark and its mirror, then main vetted since it; `top` (`<id>`, `new`, `<step> <id>`) and `retry` are
- 		-- the only two entry points that run steps (`vet`, `status` and `stop` start none)
-@@ -2148,13 +2747,66 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
+ 		-- every run that starts a step starts through the same guards (code review 001 F2): pin origin, then
+ 		-- accept main as it is; `top` (`<id>`, `new`, `<step> <id>`) and `retry` are the only two entry points
+ 		-- that run steps (`status` and `stop` start none)
+@@ -1996,13 +2595,66 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
  			return dispatch.EXIT.tripwire
  		end
  		flush(ctx, st)
@@ -987,7 +987,7 @@ index ec28cef7..02d29e3a 100644
  		end
  		local step, mode = st.step, st.mode
  		st.outcome, st.detail = nil, nil
-@@ -2166,6 +2818,10 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
+@@ -2014,6 +2666,10 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
  				o2["--mode"] = { st.reviewMode :: string }
  			end
  			code = dispatcher.oneStep(ctx, step :: string, id, o2, st)
@@ -998,7 +998,7 @@ index ec28cef7..02d29e3a 100644
  		else
  			code = dispatcher.chain(ctx, id, opts, st)
  		end
-@@ -2176,6 +2832,41 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
+@@ -2024,6 +2680,41 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
  		local o2 = table.clone(opts)
  		o2["--description"] = { words }
  		return dispatcher.top(ctx, "", o2, function(st: State): number
@@ -1040,7 +1040,7 @@ index ec28cef7..02d29e3a 100644
  			return dispatcher.chain(ctx, "", o2, st)
  		end)
  	elseif
-@@ -2274,12 +2965,27 @@ function dispatcher.oneStep(
+@@ -2121,12 +2812,27 @@ function dispatcher.oneStep(
  		end
  	end
  	local function body(st: State): number
@@ -1305,7 +1305,7 @@ index 00000000..c2110f6a
 +
 +return exchange
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 02fade24..cab3a4c8 100644
+index 2d0a37e5..a4aa5ef2 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -106,7 +106,7 @@ usage: ./zn <command> ...
@@ -1314,10 +1314,10 @@ index 02fade24..cab3a4c8 100644
                                                  run one step: a model step on .models.toml's CLIs, a script step itself
 -  dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
 +  dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it; retry takes --answer "<text>" | --answer-file <path>, and --forget-exchange sets a damaged exchange aside
-   dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
    done <R-id>                                   land the stack: one --no-ff merge onto main, one binding commit (refuses an unfinished layer)
    watch-bootstrap                               write every spec's watch file from the commit that added it (once)
-@@ -845,6 +845,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
+   watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
+@@ -844,6 +844,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
  			or a == "--dry-run"
  			or a == "--quiet"
  			or a == "--auto"
@@ -1325,7 +1325,7 @@ index 02fade24..cab3a4c8 100644
  			or a == "--session-end"
  			or a == "--begin"
  			or a == "--sessions"
-@@ -888,6 +889,24 @@ local function hereDir(): string
+@@ -887,6 +888,24 @@ local function hereDir(): string
  	return rel
  end
  
@@ -1350,7 +1350,7 @@ index 02fade24..cab3a4c8 100644
  -- The project a command works in (c0114, decided with the user: "The directory gives the project unless it's given,
  -- so at root without project=fail, deduce from PWD with --project override"): the one `--project <name>` names,
  -- else the one whose folder holds the directory ./zn was run from. Anywhere else (the checkout's root, or a folder no
-@@ -7385,17 +7404,14 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
+@@ -7384,17 +7403,14 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
  		local state = stateOfPath(path)
  		return { path = path, front = front, state = state, status = statusLib.effective(front, state) }
  	end
@@ -1375,7 +1375,7 @@ index 02fade24..cab3a4c8 100644
  	end
  	local code = dispatcherLib.main({
  		fail = fail,
-@@ -7403,7 +7419,6 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
+@@ -7402,7 +7418,6 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
  		onGitHub = onGitHub,
  		checking = checking,
  		origin = origin,
