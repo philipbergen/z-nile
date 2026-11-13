@@ -22,6 +22,6 @@ order_both() { order_in R0090 R0092 && order_in R0092 R0090; }
 check "RC2: R0090 and R0092 each name the other and the merge as the trigger" order_both
 # RC3: the c0261 text the handoff to c0260 copies is still in c0261's design
 idea_activity() { grep -q "zz-review-idea" "$("$ZN_ROOT/zn" find c0261)/c0261.md"; }
-check "RC3: c0261 still derives the idea review's activity as zz-review-idea in FINAL_REVIEWS" idea_activity
+check "RC3: c0261 still derives the idea review's activity as zz-review-idea, bound by the review rule" idea_activity
 
 finish
