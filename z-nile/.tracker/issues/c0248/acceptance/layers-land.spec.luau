@@ -14,6 +14,7 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
+local trace = require("@znile/engine/trace")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
@@ -200,6 +201,83 @@ local function staleReview(dir: string, issueId: string)
 	git(dir, { "push", "-q", "origin", git(dir, { "branch", "--show-current" }) })
 end
 
+-- The final review and the trace of one landing, committed on the layer `dir` is on after its finish. `through` scopes
+-- both to the layers up to that issue's. Each landing has its own: the round is the newest final review not yet on
+-- origin/main, else one more than the last on it.
+local function sealBind(dir: string, raftId: string, through: string?)
+	local args = { "trace", raftId }
+	if through then
+		table.insert(args, "--through")
+		table.insert(args, through)
+	end
+	local parsed, err = trace.parse(zn(dir, args))
+	if not parsed then
+		error(`trace skeleton did not parse: {err}`, 2)
+	end
+	local raftDir = zn(dir, { "find", raftId })
+	local top, topLocal = 0, 0
+	for _, name in fs.readDir(`{dir}/{raftDir}`) do
+		local k = tonumber((string.match(name, "^final%-review%-(%d+)%.md$")))
+		if k then
+			if fixture.exec(dir, "git", { "cat-file", "-e", `origin/main:{raftDir}/{name}` }).ok then
+				top = math.max(top, k)
+			end
+			topLocal = math.max(topLocal, k)
+		end
+	end
+	local num = string.format("%03d", if topLocal > top then topLocal else top + 1)
+	local issueDirs: { [string]: string } = {}
+	local checkLines: { [string]: number } = {}
+	for _, row in parsed.claims do
+		local id = string.match(row.claimId, "^([^:]+):") :: string
+		if not issueDirs[id] then
+			issueDirs[id] = zn(dir, { "find", id })
+			checkLines[id] = 1
+			local idx = 0
+			for line in string.gmatch(fs.readFile(`{dir}/{issueDirs[id]}/check.sh`) .. "\n", "([^\n]*)\n") do
+				idx += 1
+				if string.match(line, "^%s*check%s+") then
+					checkLines[id] = idx
+					break
+				end
+			end
+		end
+	end
+	local codeRef = if #parsed.sources > 0 then `{parsed.sources[1].file}:1` else "none"
+	local firstClaim = if #parsed.claims > 0 then parsed.claims[1].claimId else ""
+	local lines = {
+		`# Trace: {raftId}`,
+		"",
+		`Commit: {parsed.commit}`,
+		"",
+		"## Claims",
+		"",
+		"| claim | design | test | code |",
+		"|---|---|---|---|",
+	}
+	for _, row in parsed.claims do
+		local id = string.match(row.claimId, "^([^:]+):") :: string
+		table.insert(
+			lines,
+			`| {row.rawClaim} | {issueDirs[id]}/{id}.md:1 | {issueDirs[id]}/check.sh:{checkLines[id]} | {codeRef} |`
+		)
+	end
+	table.insert(lines, "")
+	table.insert(lines, "## Source files")
+	table.insert(lines, "")
+	table.insert(lines, "| file | claims |")
+	table.insert(lines, "|---|---|")
+	for _, srow in parsed.sources do
+		table.insert(lines, `| {srow.file} | {firstClaim} |`)
+	end
+	table.insert(lines, "")
+	write(dir, `{raftDir}/trace-{num}.md`, table.concat(lines, "\n"))
+	write(dir, `{raftDir}/final-review-{num}.md`, `# Final Review {num}\n\nVerdict: approve\n`)
+	git(dir, { "add", "-A", raftDir })
+	git(dir, { "commit", "-qm", `{raftId}: final-review-{num}` })
+	git(dir, { "push", "-q", "origin", git(dir, { "branch", "--show-current" }) })
+end
+
 local function stackText(_dir: string, raftId: string): string
 	git(f.other, { "fetch", "-q", "--prune", "origin" })
 	return zn(f.other, { "stack", raftId })
@@ -277,7 +355,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			for raft in rafts do
 				trackerfix.trOk(f, f.main, { "ready", raft })
 			end
-			for raft in { R0010 = 1, R0020 = 1, R0030 = 1, R0050 = 1, R0060 = 1, R0080 = 1, R0090 = 1 } do
+			for _, raft in { "R0010", "R0020", "R0030", "R0050", "R0060", "R0080", "R0090" } do
 				w[raft] = trackerfix.trOk(f, f.main, { "worktree", raft })
 			end
 			-- AC11: ready marks the rafts it readies; R0070 is then made one that was readied before the marker existed
@@ -398,7 +476,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(has(skeleton, "| c0020:")).toBe(true)
 			t.expect(has(skeleton, "c0030:")).toBe(false)
 			t.expect(znTry(wt, { "trace", "R0010", "--through", "c0020", "--check" }).ok).toBe(false) -- no trace yet
-			seal.trace(wt, "R0010", "c0020")
+			sealBind(wt, "R0010", "c0020")
 			t.expect(has(zn(wt, { "trace", "R0010", "--through", "c0020", "--check" }), "ok: R0010"))
 				.toBe(true)
 			-- the trace and review are over the two layers; a done without --through wants a third
@@ -482,7 +560,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(warned.ok).toBe(true)
 			t.expect(has(warned.stderr, "warning")).toBe(true)
 			-- the second landing has its own final review and trace: no add/add with the first's
-			seal.trace(wt, "R0010")
+			sealBind(wt, "R0010")
 			t.expect(has(zn(wt, { "trace", "R0010", "--check" }), "ok: R0010")).toBe(true)
 			local landed = zn(wt, { "done", "R0010" })
 			t.expect(has(landed, "landed R0010")).toBe(true)
@@ -573,7 +651,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 		zn(wt, { "finish", "c0050" })
 		-- its review names an older commit; the final review and trace are there
 		staleReview(wt, "c0050")
-		seal.trace(wt, "R0020")
+		sealBind(wt, "R0020")
 		local before = git(f.main, { "rev-parse", "origin/main" })
 		local refused = znTry(wt, { "done", "R0020" })
 		t.expect(refused.ok).toBe(false)
@@ -600,7 +678,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 		t.expect(has(seen, "1 R0020/1/c0040 c0040 complete")).toBe(true)
 		t.expect(has(seen, "2 R0020/2/c0050 c0050 complete")).toBe(true)
 		-- the trace named the old finish commit: the landing's trace is written again, and no review file is
-		seal.trace(wt, "R0020")
+		sealBind(wt, "R0020")
 		t.expect(reviewFiles(wt, "c0040")).toEqual(files40)
 		t.expect(reviewFiles(wt, "c0050")).toEqual(files50)
 		r20Top = git(wt, { "rev-parse", "HEAD" })
@@ -669,7 +747,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(newSha ~= oldSha).toBe(true)
 			t.expect(patchOf(wt, newSha) ~= oldPatch).toBe(true)
 			t.expect(has(stackText(wt, "R0080"), "1 R0080/1/c0190 c0190 finished")).toBe(true)
-			seal.trace(wt, "R0080")
+			sealBind(wt, "R0080")
 			local refused = znTry(wt, { "done", "R0080" })
 			t.expect(refused.ok).toBe(false)
 			t.expect(has(refused.stderr, "c0190 is not complete")).toBe(true)
@@ -692,7 +770,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 		review(wt, "c0130")
 		-- the first landing, layers 1 and 2
 		git(wt, { "switch", "-q", "R0050/2/c0120" })
-		seal.trace(wt, "R0050", "c0120")
+		sealBind(wt, "R0050", "c0120")
 		zn(wt, { "done", "R0050", "--through", "c0120" })
 		-- GitHub deletes a merged branch: the landed layers' branches go from origin and from this clone
 		git(wt, { "switch", "-q", "R0050/3/c0130" })
@@ -713,7 +791,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 		t.expect(git(wt, { "merge-base", "--is-ancestor", "origin/main", "HEAD" }) == "").toBe(true)
 		t.expect(patchOf(wt, finishSha(wt, "c0130"))).toBe(patch)
 		t.expect(has(stackText(wt, "R0050"), "3 R0050/3/c0130 c0130 complete")).toBe(true)
-		seal.trace(wt, "R0050")
+		sealBind(wt, "R0050")
 		zn(wt, { "done", "R0050" })
 		local bind2 = bindMessage()
 		t.expect(
@@ -763,7 +841,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(has(scoped.stdout, "copied 0 acceptance specs")).toBe(true)
 			-- the first landing: layers 1 and 2, RC0 over their members, RC1 and up skipped
 			git(wt, { "switch", "-q", "R0060/2/c0150" })
-			seal.trace(wt, "R0060", "c0150")
+			sealBind(wt, "R0060", "c0150")
 			local landed = zn(wt, { "done", "R0060", "--through", "c0150" })
 			t.expect(has(landed, "landed R0060")).toBe(true)
 			t.expect(has(landed, "SKIP RC1: an early landing; it runs at the last landing")).toBe(true)
@@ -773,7 +851,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			git(wt, { "switch", "-q", "R0060/3/c0160" })
 			fs.writeFile(`{wt}/.cache/c0160-ok`, "") -- restack runs the layer's check.sh
 			zn(wt, { "restack", "R0060" })
-			seal.trace(wt, "R0060")
+			sealBind(wt, "R0060")
 			fs.removeFile(`{wt}/.cache/c0160-ok`)
 			local before = git(f.main, { "rev-parse", "origin/main" })
 			local refused = znTry(wt, { "done", "R0060" })
@@ -803,7 +881,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			work(wt, "c0080", "gap2")
 			zn(wt, { "finish", "c0080" })
 			review(wt, "c0080")
-			seal.trace(wt, "R0030")
+			sealBind(wt, "R0030")
 			for _, args in { { "done", "R0030" }, { "done", "R0030", "--through", "c0080" } } do
 				local below = znTry(wt, args)
 				t.expect(below.ok).toBe(false)
@@ -826,7 +904,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(git(f.main, { "rev-parse", "origin/main" })).toBe(before)
 			-- the review makes layer 1 complete, and it lands; landed, it cannot be named again
 			review(wt, "c0070")
-			seal.trace(wt, "R0030", "c0070")
+			sealBind(wt, "R0030", "c0070")
 			t.expect(has(zn(wt, { "done", "R0030", "--through", "c0070" }), "landed R0030")).toBe(true)
 			local again = znTry(wt, { "done", "R0030", "--through", "c0070" })
 			t.expect(again.ok).toBe(false)
@@ -842,7 +920,7 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			work(wt, "c0200", "s1")
 			zn(wt, { "finish", "c0200" })
 			review(wt, "c0200")
-			seal.trace(wt, "R0090", "c0200")
+			sealBind(wt, "R0090", "c0200")
 			zn(wt, { "done", "R0090", "--through", "c0200" })
 			-- stop gives the unlanded member back and leaves the landed one in done/
 			trackerfix.trOk(f, f.main, { "stop", "R0090" })
