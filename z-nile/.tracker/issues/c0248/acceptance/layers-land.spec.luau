@@ -131,8 +131,10 @@ local function startsWith(s: string, prefix: string): boolean
 	return string.sub(s, 1, #prefix) == prefix
 end
 
+-- the body gh last saved for a PR, or "" when none was written
 local function body(number: string): string
-	return fs.readFile(`{state}/body-{number}.md`)
+	local path = `{state}/body-{number}.md`
+	return if fs.isFile(path) then fs.readFile(path) else ""
 end
 
 local function work(dir: string, issueId: string, file: string)
@@ -728,6 +730,28 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			zn(wt, { "finish", "c0190" })
 			review(wt, "c0190")
 			local oldSha, oldPatch = finishSha(wt, "c0190"), patchOf(wt, finishSha(wt, "c0190"))
+			t.expect(has(stackText(wt, "R0080"), "1 R0080/1/c0190 c0190 complete")).toBe(true)
+			-- a refuted high finding waits for the human, and the ruling is read from the issue's own document
+			local folder = issueDir(wt, "c0190")
+			write(
+				wt,
+				`{folder}/review-002.md`,
+				`# Review\n\nCommit: {oldSha}\nPatch: {oldPatch}\nVerdict: changes\n\n### F1 [high] a thing\nThe text of the finding.\n`
+			)
+			write(wt, `{folder}/refute-002.md`, "# Refute\n\n- F1: refuted: it is fine\n")
+			git(wt, { "add", "-A", folder })
+			git(wt, { "commit", "-qm", "tracker: review 2 c0190" })
+			git(wt, { "push", "-q", "origin", "R0080/1/c0190" })
+			t.expect(has(stackText(wt, "R0080"), "1 R0080/1/c0190 c0190 finished")).toBe(true)
+			write(
+				wt,
+				`{folder}/c0190.md`,
+				fs.readFile(`{wt}/{folder}/c0190.md`)
+					.. "## Open to the human\n- F1: the refuted high finding\n  Ruled (user, 2026-11-12): the refutation stands\n"
+			)
+			git(wt, { "add", "-A", folder })
+			git(wt, { "commit", "-qm", "tracker: ruling c0190" })
+			git(wt, { "push", "-q", "origin", "R0080/1/c0190" })
 			t.expect(has(stackText(wt, "R0080"), "1 R0080/1/c0190 c0190 complete")).toBe(true)
 			-- main adds the same file with other content: the restack stops at the conflict
 			trackerfix.elsewhere(f, { ["pickman/src/clash.luau"] = 'return "main"\n' }, "main adds clash")
