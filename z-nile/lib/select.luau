@@ -175,7 +175,6 @@ local function isRefEntry(e: string): boolean
 end
 
 -- Whether a change to `path` can change spec S's result: the spec itself, its watch file, or a path that file names.
--- The same predicate feeds fingerprints, so a watched file that changes is not reused.
 function sel.isInput(ctx: Context, spec: string, path: string): boolean
 	if path == spec or path == watch.fileFor(spec) then
 		return true

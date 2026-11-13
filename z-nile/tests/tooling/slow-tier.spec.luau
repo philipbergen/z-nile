@@ -7,7 +7,7 @@ local t = require("@tests/lib/t")
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 
 return t.spec("the measured slow-tier manifest", function(it)
-	it("names 62 existing z-nile specs with their recorded seconds", function()
+	it("names 98 existing z-nile specs with their recorded seconds", function()
 		local tiers = slow.load(root)
 		local count = 0
 		for path, seconds in tiers do
@@ -16,7 +16,7 @@ return t.spec("the measured slow-tier manifest", function(it)
 			t.expect(fs.isFile(`{root}/z-nile/{path}`)).toBe(true)
 			t.expect(seconds > 0).toBe(true)
 		end
-		t.expect(count).toBe(62)
+		t.expect(count).toBe(98)
 	end)
 
 	it("has at least the 25 slowest recorded specs", function()
@@ -28,6 +28,19 @@ return t.spec("the measured slow-tier manifest", function(it)
 		table.sort(durations, function(a, b)
 			return a > b
 		end)
-		t.expect(durations[25] >= 85.794).toBe(true)
+		t.expect(durations[25] >= 84.722).toBe(true)
+	end)
+
+	it("keep drops the slow tier or keeps only it", function()
+		local tiers = { ["tests/slow.spec.luau"] = 1 }
+		local files = { "tests/slow.spec.luau", "tests/fast.spec.luau" }
+		t.expect(slow.keep(files, tiers, "fast")).toEqual({ "tests/fast.spec.luau" })
+		t.expect(slow.keep(files, tiers, "slow")).toEqual({ "tests/slow.spec.luau" })
+	end)
+
+	it("refuses --slow together with --exclude-slow before taking the suite lock", function()
+		local r = process.exec("lune", { "run", "tests/run", "--", "--slow", "--exclude-slow" })
+		t.expect(r.code).toBe(2)
+		t.expect(string.find(r.stderr, "conflict", 1, true) ~= nil).toBe(true)
 	end)
 end)

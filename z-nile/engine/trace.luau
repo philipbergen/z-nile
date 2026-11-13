@@ -278,10 +278,32 @@ local function isPrepAdditionLine(trimmed: string): boolean
 	return false
 end
 
+-- HTML comments are not outcomes, including a comment that runs across lines.
+local function stripComments(text: string): string
+	local out: { string } = {}
+	local i = 1
+	local n = #text
+	while i <= n do
+		local startAt = string.find(text, "<!--", i, true)
+		if not startAt then
+			table.insert(out, string.sub(text, i))
+			break
+		end
+		table.insert(out, string.sub(text, i, startAt - 1))
+		local closeAt = string.find(text, "-->", startAt + 4, true)
+		if not closeAt then
+			break
+		end
+		i = closeAt + 3
+	end
+	return table.concat(out)
+end
+
 local function extractOutcomes(body: string?): { string }
 	if body == nil then
 		return {}
 	end
+	body = stripComments(body)
 	local items: { string } = {}
 	local cur: { string } = {}
 	local inFence = false

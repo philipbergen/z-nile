@@ -62,12 +62,14 @@ return t.spec("c0117 docs", function(it)
 		end
 	end)
 
-	it("who reviews is the review model of the CLI, wherever a skill says so", function()
-		local rule = "Opus through `claude` or `agent`, any grok model at `xhigh` through `grok`"
+	it("who reviews is the role .models.toml names, wherever a skill says so", function()
 		-- z-run's reviews are its protocol's, zz-execute's, since c0115
-		for _, name in { "z-design", "z-raft", "zz-execute", "zz-review" } do
-			at(skill(name), rule, name)
-		end
+		at(skill("z-design"), "design-challenge role", "z-design")
+		at(skill("z-raft"), "raft role", "z-raft")
+		at(skill("zz-execute"), "code-review role", "zz-execute")
+		at(skill("zz-review"), "design-challenge", "zz-review")
+		at(skill("zz-review"), "code-review", "zz-review")
+		at(skill("zz-review"), "final-review", "zz-review")
 		at(skill("z-design"), "`./zn dispatch zz-review <id> --mode design`", "z-design")
 		at(skill("z-raft"), "`./zn dispatch zz-review <R-id> --mode raft`", "z-raft")
 		-- the run's protocol is zz-execute's since c0115 (z-run hands off to it)
@@ -153,15 +155,15 @@ return t.spec("c0117 docs", function(it)
 				"the supported CLIs are `claude`, `grok` and `agent` (Cursor)",
 				"`claude-cli`, `grok-cli` and `cursor-cli`",
 				"Nothing defaults",
-				"an `agent` table also `max_calls` and `max_minutes`",
+				"an `agent` role or fallback also `max_calls` and `max_minutes`",
 				'- **What the guards are** (the user\'s "Keep same user, accept detection", 2026-10-21).',
 				"none is a security boundary against a determined agent",
 				"**Known limits:**",
 				"A `.models.toml` is never tracker state",
 				"judged per item",
 				"origin's URL as the run pinned it at its start",
-				"A missing watermark at a run's start is never trusted",
-				"The file is shared by every dispatcher of the repository",
+				"A run accepts `main` as it is when the process starts",
+				"No file under the home directory",
 				"another run's advance is never a trip",
 				"writes a heartbeat in its parent's state folder",
 				"`BASH_MAX_TIMEOUT_MS`",
@@ -173,10 +175,10 @@ return t.spec("c0117 docs", function(it)
 				"Not enforceable: the agent runs as the user",
 				"- **Tracker state from inside a step.**",
 				"- **Tracker state** has one definition",
-				'- **The watermark and the tripwire** (the user\'s "Persisted watermark", framed by "Keep same user, accept detection").',
-				"where a well-behaved step never writes, and detects if it changes",
+				'- **The tripwire** (the user\'s "Keep same user, accept detection").',
+				"before every step and after every step",
 				"and never prevents one",
-				"`./zn dispatch vet`",
+				"`./zn dispatch retry <id>`",
 				"--match-head-commit <head>`",
 				"never forced",
 				"stops as `cap-unknown`",
@@ -185,10 +187,10 @@ return t.spec("c0117 docs", function(it)
 				"an unset or unreadable `auto_merge` is none",
 				"Only the dispatcher merges",
 				"holds a lifeline from the dispatcher",
-				"only the CLI's own signals report",
+				"Quota is only the CLI's own signals",
 				"never a group id of 1 or less",
 				"- **Running a model step.**",
-				"It moves down `order` only on quota",
+				"It moves to the next model when the call fails",
 				"input + cache writes + output, cache reads left out",
 				"- **Spend.**",
 				"- **The chain.**",
@@ -218,7 +220,7 @@ return t.spec("c0117 docs", function(it)
 		absent(readme, "(c0117, planned)", "the README")
 		at(readme, "- **The dispatcher.** `./zn dispatch <id>`", "the README")
 		at(readme, "none of them is a security boundary against a determined agent", "the README")
-		at(readme, "The watermark file is shared by every dispatcher of the repository", "the README")
+		at(readme, "A run accepts `main` as it is when it starts", "the README")
 		at(readme, "- **`.models.toml`.**", "the README")
 	end)
 

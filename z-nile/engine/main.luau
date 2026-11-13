@@ -14,10 +14,13 @@ local dispatchLib = require("./dispatch")
 local dispatcherLib = require("./dispatcher")
 local fs = require("@lune/fs")
 local gateLib = require("./gate")
+local idea = require("./idea")
 local idsLib = require("./ids")
 local layergit = require("./layergit")
 local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
+local models = require("./models")
+local modelstep = require("./modelstep")
 local openlist = require("./openlist")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
@@ -104,18 +107,21 @@ usage: ./zn <command> ...
   dispatch <step> <id> [--mode design|code|raft] [--dry-run]
                                                 run one step: a model step on .models.toml's CLIs, a script step itself
   dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
-  dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
   done <R-id>                                   land the stack: one --no-ff merge onto main, one binding commit (refuses an unfinished layer)
   watch-bootstrap                               write every spec's watch file from the commit that added it (once)
   watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
-  watch-net                                     run every project's fast suite on current main and push a missed test's
-                                                files onto main (also started by land and by watch-kick)
+  watch-net                                     run every project's fast suite on current main, then the slow tier,
+                                                and push a missed test's files or a slow-tier defect onto main
   worktree <R-id|name>                          create or reuse .worktree/<R-id|name>: a raft's is detached until a layer exists, then on that layer
   worktree-prune                                remove worktrees of rafts that are done on main
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
+  work [<R-id>]                                 print the z-work skill (the worker a person starts). With a raft id, that raft.
+  work next [<R-id>]                            the one next action for this worker, from git
+  work status                                   who holds which raft, which layer, since when
   capture <id>                                  print the item's document as captured (read-only)
+  idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
   metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
@@ -1171,7 +1177,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				local changes: { publish.Change } = {
 					{
 						path = `{root}/issues/{chosen}/{chosen}.md`,
-						content = withFront(doc, "status", stamp("new")),
+						content = withFront(withFront(doc, "idea", "unchallenged"), "status", stamp("new")),
 					},
 					{
 						path = `{root}/issues/{chosen}/check.sh`,
@@ -1218,7 +1224,10 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			EMERGENT = if state == "active" then "true" else "false",
 			DATE = today(),
 		}
-		fs.writeFile(`{dir}/{id}.md`, withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts))
+		fs.writeFile(
+			`{dir}/{id}.md`,
+			withFront(withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts), "idea", "unchallenged")
+		)
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/issue/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
 		print(`{dir}/{id}.md`)
@@ -1597,6 +1606,16 @@ local function setStatus(id: string, to: string)
 				)
 			then
 				return `{t} is {cur} on origin/main: cannot move to {to}`
+			end
+			if t == id and not store.isRaftId(id) and to == "preparing" then
+				local suffix = `/{t}.md`
+				local reviewPath = if string.sub(tp, -#suffix) == suffix
+					then string.sub(tp, 1, #tp - #suffix) .. "/idea-review-001.md"
+					else ""
+				local why = idea.designRefusal(tt, if reviewPath ~= "" then read(reviewPath) else nil, t)
+				if why then
+					return why
+				end
 			end
 			table.insert(moved, { id = t, from = cur :: string })
 			table.insert(changes, { path = tp, content = withFront(tt, "status", value) })
@@ -3801,6 +3820,29 @@ function cmd.finish(pos: { string })
 	end
 	local saved = sh.git({ "rev-parse", "HEAD" })
 	sh.git({ "reset", "--soft", base })
+	-- The session running this command. The layer's base commit is not the span: it can predate the
+	-- session, and the project folder holds other sessions. A missing record stays unmeasured.
+	local reading = sessionread.running()
+	print(`session: {reading.note}`)
+	pcall(function()
+		local top = sh.git({ "rev-parse", "--show-toplevel" })
+		local row: ledger.Row = {
+			when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string,
+			subject = `finish {reading.note}`,
+			added = 0,
+			removed = 0,
+			minutes = 0,
+			how = "measured",
+			phase = "build",
+			tokens = reading.tokens,
+			model = reading.model,
+			ai = reading.ai,
+			unmeasured = sessionread.flags(reading),
+		}
+		local planned = costrow.plan(top, { [id] = issue.dir }, { [id] = { row } }, false)
+		costrow.writeFiles(planned)
+		costrow.writeBuffer(top, planned)
+	end)
 	sh.git({ "add", "-A" })
 	if sh.git({ "diff", "--cached", "--name-only" }) == "" then
 		sh.git({ "reset", "--hard", saved })
@@ -4363,7 +4405,8 @@ local function recordAndCommit(
 	isDone: boolean?,
 	phase: string?,
 	tokens: number?,
-	model: string?
+	model: string?,
+	reading: sessions.Read?
 )
 	phase = if phase and phase ~= "" then phase else "build"
 	-- a conflicted `git merge --squash` leaves unmerged paths; `git add -A` would commit their markers
@@ -4393,6 +4436,10 @@ local function recordAndCommit(
 	local foldHomes: { [string]: string } = {}
 	local extraRows: { [string]: { ledger.Row } } = {}
 	local keptAny = false
+	local gaveReading = false
+	if reading then
+		print(`session: {reading.note}`)
+	end
 	for _, share in shares do
 		-- The ticket is folded whether or not this commit adds a line-count row. A build share that moved no
 		-- lines is still not given a row of its own.
@@ -4407,17 +4454,35 @@ local function recordAndCommit(
 			continue
 		end
 		keptAny = true
+		local subject = string.match(message, "^[^\n]*") or message
+		local rowTokens: number? = nil
+		local rowModel = model
+		local rowAi: number? = nil
+		local rowFlags = "tokens,wall,cpu,ai"
+		if reading and not gaveReading then
+			gaveReading = true
+			if reading.note ~= "" then
+				subject ..= " " .. reading.note
+			end
+			rowTokens = reading.tokens
+			rowAi = reading.ai
+			if reading.model and not rowModel then
+				rowModel = reading.model
+			end
+			rowFlags = sessionread.flags(reading)
+		end
 		local row: ledger.Row = {
 			when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string,
-			subject = string.match(message, "^[^\n]*") or message,
+			subject = subject,
 			added = share.added,
 			removed = share.removed,
 			minutes = 0,
 			how = "measured",
 			phase = phase :: string,
-			tokens = nil,
-			model = model,
-			unmeasured = "tokens,wall,cpu,ai",
+			tokens = rowTokens,
+			model = rowModel,
+			ai = rowAi,
+			unmeasured = rowFlags,
 		}
 		local list = extraRows[share.id]
 		if not list then
@@ -4430,11 +4495,12 @@ local function recordAndCommit(
 		if phase ~= "build" then
 			trailer ..= " " .. (phase :: string)
 		end
-		if share.tokens ~= nil then
-			trailer ..= ` {share.tokens} tokens`
+		local shownTokens = rowTokens or share.tokens
+		if shownTokens ~= nil then
+			trailer ..= ` {shownTokens} tokens`
 		end
-		if model then
-			trailer ..= ` {model}`
+		if rowModel then
+			trailer ..= ` {rowModel}`
 		end
 		table.insert(trailers, trailer)
 	end
@@ -5118,6 +5184,7 @@ function cmd.done(pos: { string })
 		fs.removeFile(FOCUS_FILE)
 	end
 	local doneTracePath = `{store.dirFor("raft", "done", raft.id, raft.root)}/trace.md`
+	local reading = sessionread.running()
 	local committed, commitErr = pcall(function()
 		recordAndCommit(
 			raft,
@@ -5125,7 +5192,10 @@ function cmd.done(pos: { string })
 			{},
 			nil,
 			true,
-			"deliver"
+			"deliver",
+			nil,
+			nil,
+			reading
 		)
 	end)
 	if not committed then
@@ -6705,6 +6775,147 @@ function cmd.capture(pos: { string }, _opts: { [string]: { string } })
 	stdio.write(shown.stdout)
 end
 
+-- idea <id> [--text <rough>]: the idea stage. The author drafts, the challenge role challenges once,
+-- and the author answers the findings when there are any. The three calls go through modelstep,
+-- the same supervised start the dispatcher uses. Files land in the working tree.
+function cmd.idea(pos: { string }, opts: { [string]: { string } })
+	refuseInMainCheckout("idea")
+	local id = pos[1]
+	if not id or not string.match(id, "^[fdc]%d%d%d%d$") then
+		fail("usage: idea <id> [--text <rough>]")
+	end
+	local item = store.find(id)
+	if not item or item.kind ~= "issue" then
+		fail(`idea: {id} is not an issue in this checkout`)
+	end
+	local here = item :: store.Item
+	local doc = fs.readFile(here.doc)
+	local rough = if opts["--text"] and opts["--text"][1] then opts["--text"][1] else doc
+	local layers = models.walk(".", here.dir)
+	local calls = 0
+	local function physicalCache(): string
+		-- the outermost .cache this checkout lies in, else this checkout's own
+		local cwd = sh.trim(process.exec("pwd", { "-P" }).stdout) .. "/"
+		local at = string.find(cwd, "/.cache/", 1, true)
+		return if at then string.sub(cwd, 1, at + 7) else cwd .. ".cache/"
+	end
+	local function guard(bin: string): string?
+		if not checking() then
+			return nil
+		end
+		if string.sub(bin, 1, #physicalCache()) ~= physicalCache() then
+			local argv = { bin }
+			return `refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`
+		end
+		return nil
+	end
+	local function run(
+		resolved: models.Resolved,
+		prompt: string,
+		phase: string,
+		accept: (string) -> boolean
+	): (string, string)
+		local okDrive, drivenOrErr = pcall(function()
+			return modelstep.drive({
+				resolved = resolved,
+				prompt = prompt,
+				cwd = process.cwd,
+				stateDir = `.cache/idea-run/{id}/{phase}`,
+				path = process.env.PATH or "/usr/bin:/bin",
+				guard = guard,
+				accept = function(raw)
+					return accept(idea.prose(raw))
+				end,
+			})
+		end)
+		if not okDrive then
+			fail(tostring(drivenOrErr))
+		end
+		local driven = drivenOrErr :: modelstep.Driven
+		local branch, head = costrow.branchOf(".")
+		for _, a in driven.attempts do
+			calls += 1
+			local missing: { string } = {}
+			if not a.cpu then
+				table.insert(missing, "cpu")
+			end
+			if a.tokens <= 0 then
+				table.insert(missing, "tokens")
+			end
+			if not a.wall then
+				table.insert(missing, "wall")
+			end
+			costrow.append(".", {
+				ms = 0,
+				kind = "row",
+				phase = phase,
+				subject = `{id} {a.outcome}`,
+				wall = a.wall,
+				cpu = a.cpu,
+				tokens = if a.tokens > 0 then a.tokens else nil,
+				model = models.id(a.spec),
+				unmeasured = if #missing > 0 then table.concat(missing, ",") else nil,
+				id = id,
+				branch = branch,
+				head = head,
+			})
+			local shown = if a.tokens > 0 then tostring(a.tokens) else "unmeasured"
+			local cpuShown = if a.cpu then string.format("%.3f", a.cpu) else "unmeasured"
+			local wallShown = if a.wall then string.format("%.1f", a.wall) else "unmeasured"
+			local note = if a.outcome == "ok" then "" else ` {a.detail}`
+			print(
+				`idea: {phase} model {models.id(a.spec)} tokens {shown} wall {wallShown} cpu {cpuShown} {a.outcome}{note}`
+			)
+		end
+		if driven.outcome ~= "ok" then
+			fail(`idea: {phase}: {driven.detail}`)
+			return "", ""
+		end
+		return idea.prose(driven.prose), driven.model
+	end
+	local drafted: idea.Draft? = nil
+	local prose, wrote = run(models.resolve(layers, "idea"), idea.authorPrompt(rough), "idea", function(text)
+		drafted = idea.parseDraft(text)
+		return drafted ~= nil
+	end)
+	local challenge = models.resolve(layers, "idea-challenge")
+	challenge.authorModel = wrote
+	local findings: { idea.Finding } = {}
+	local verdict: string? = nil
+	run(challenge, idea.challengePrompt(prose), "idea-challenge", function(text)
+		local found, said = idea.parseReview(text)
+		findings = found
+		verdict = said
+		return said == "approve" or said == "revise"
+	end)
+	local body = drafted :: idea.Draft
+	local answers: { [string]: string } = {}
+	if not (verdict == "approve" and #findings == 0) then
+		local revised: idea.Draft? = nil
+		run(models.resolve(layers, "idea"), idea.answerPrompt(rough, findings), "idea", function(text)
+			revised = idea.parseDraft(text)
+			answers = idea.parseAnswers(text)
+			return revised ~= nil
+		end)
+		body = revised :: idea.Draft
+	end
+	local openLines = idea.openLines(findings, answers)
+	local reviewPath = `{here.dir}/idea-review-001.md`
+	fs.writeFile(here.doc, withFront(idea.apply(doc, body, openLines), "idea", "challenged"))
+	fs.writeFile(reviewPath, idea.reviewText(findings, verdict or "revise"))
+	local refutePath = `{here.dir}/idea-refute-001.md`
+	if #findings > 0 then
+		fs.writeFile(refutePath, idea.refuteText(findings, answers))
+		print(refutePath)
+	end
+	print(here.doc)
+	print(reviewPath)
+	print(`idea: calls {calls}`)
+	print(
+		`idea: verdict {verdict}; commit these and push them to origin/main before ./zn status {id} preparing`
+	)
+end
+
 local function optNum(opts: { [string]: { string } }, name: string): number?
 	local raw = opts[name] and opts[name][1]
 	return if raw and raw ~= "" then tonumber(raw) else nil
@@ -7531,6 +7742,61 @@ function cmd.reap(_: { string }, opts: { [string]: { string } })
 	local ok, err = pcall(reapRun, opts)
 	if not ok then
 		stdio.ewrite(`reap: skipped ({err})\n`)
+	end
+end
+
+function cmd.work(pos: { string })
+	local workLib = require("./work")
+	local workread = require("./workread")
+	local function skillBody(text: string): string
+		if string.sub(text, 1, 4) ~= "---\n" then
+			return text
+		end
+		local close = string.find(text, "\n---\n", 5, true)
+		if not close then
+			return text
+		end
+		return string.sub(text, close + 5)
+	end
+	local sub = pos[1]
+	if sub == "status" then
+		if #pos ~= 1 then
+			fail("usage: ./zn work status")
+		end
+		if hasOrigin() then
+			sh.git({ "fetch", "--quiet", "origin", "main" })
+		end
+		local lines = workLib.status(workread.collect(nil).rafts)
+		if #lines == 0 then
+			print("nobody holds a raft")
+		else
+			for _, line in lines do
+				print(line)
+			end
+		end
+		return
+	end
+	if sub == "next" then
+		local asked = pos[2]
+		if #pos > 2 or (asked and not string.match(asked, "^R%d%d%d%d$")) then
+			fail("usage: ./zn work next [<R-id>]")
+		end
+		if hasOrigin() then
+			sh.git({ "fetch", "--quiet", "origin", "main" })
+		end
+		print(workLib.say(workLib.decide(workread.collect(asked))))
+		return
+	end
+	if sub and not string.match(sub, "^R%d%d%d%d$") or #pos > 1 then
+		fail("usage: ./zn work [<R-id>] | next [<R-id>] | status")
+	end
+	local path = "z-nile/skills/z-work/SKILL.md"
+	if not fs.isFile(path) then
+		fail(`no {path}`)
+	end
+	stdio.write(skillBody(fs.readFile(path)))
+	if sub then
+		print(`This session's raft is {sub}. Pass it to every ./zn work next.`)
 	end
 end
 

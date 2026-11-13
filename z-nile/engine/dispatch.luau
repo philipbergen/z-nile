@@ -33,7 +33,14 @@ dispatch.STEPS = {
 	["zz-stats"] = { kind = "script", argv = { "metrics" }, where = "main" },
 } :: { [string]: Step }
 -- Skills read inside a step, never run as one.
-dispatch.READ_INSIDE = { ["zz-rules"] = true, ["zz-arch"] = true, ["zz-test"] = true, ["zz-execute"] = true }
+dispatch.READ_INSIDE = {
+	["zz-rules"] = true,
+	["zz-arch"] = true,
+	["zz-test"] = true,
+	["zz-execute"] = true,
+	-- the worker a person starts by hand. It is not a dispatch step.
+	["z-work"] = true,
+}
 -- zz-review's modes: the lessons each reads and the phase of its row.
 dispatch.REVIEW_MODES = {
 	design = { lessons = "design", phase = "design-review" },
@@ -216,7 +223,7 @@ function dispatch.isLesson(path: string): boolean
 end
 
 -- Whether GitHub's `commits/<sha>/pulls` answer names a pull request merged into main whose merge commit is `sha`
--- (the watermark's pull-request rule, G20; review 003 F6: into main only, never another branch).
+-- (a pull request merged into main, G20; review 003 F6: into main only, never another branch).
 function dispatch.prMergedFrom(text: string, sha: string): boolean
 	local ok, list = pcall(function()
 		return serde.decode("json", text)
@@ -293,13 +300,13 @@ function dispatch.next(f: Facts): Action
 	if f.last and f.last.outcome == "tripwire" and f.last.step == "merge-check" then
 		return stop(
 			dispatch.EXIT.tripwire,
-			`a gate merge did not land on the main it was judged against (state.json names it): look at main, then run ./zn dispatch vet and ./zn dispatch retry {f.id}: nothing else clears it`
+			`a gate merge did not land on the main it was judged against (state.json names it): look at main, then run ./zn dispatch retry {f.id}: nothing else clears it`
 		)
 	end
 	if f.last and f.last.outcome == "tripwire" then
 		return stop(
 			dispatch.EXIT.tripwire,
-			`{f.last.step} tripped the wire: main or the main checkout moved in a way the dispatcher did not make (state.json names it); a human looks first, then runs ./zn dispatch vet and ./zn dispatch retry {f.id}: nothing else clears it`
+			`{f.last.step} tripped the wire: main or the main checkout moved in a way the dispatcher did not make (state.json names it); a human looks first, then runs ./zn dispatch retry {f.id}: nothing else clears it`
 		)
 	end
 	if f.last and f.last.outcome ~= "ok" then
@@ -394,6 +401,29 @@ function dispatch.describe(r: models.Resolved): { string }
 				.. (if spec.maxMinutes then ` max_minutes={spec.maxMinutes}` else "")
 		)
 	end
+	return out
+end
+
+-- The last few stream lines of a running step, and its token count. `running` is the step's own word.
+function dispatch.trailReport(text: string, tokens: number, running: boolean): { string }
+	local lines: { string } = {}
+	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+		if line ~= "" then
+			table.insert(lines, line)
+		end
+	end
+	local out: { string } = {}
+	local n = #lines
+	if n == 0 then
+		table.insert(out, "trail: none")
+	else
+		local from = math.max(1, n - 7)
+		table.insert(out, `trail: {n} lines, last {n - from + 1}`)
+		for i = from, n do
+			table.insert(out, "  " .. lines[i])
+		end
+	end
+	table.insert(out, `tokens: {tokens}{if running then " running" else ""}`)
 	return out
 end
 

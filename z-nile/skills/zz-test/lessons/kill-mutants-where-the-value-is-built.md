@@ -11,3 +11,5 @@ A case that calls `f(value)` with the value supplied by the test proves `f` uses
 **How to apply:** put the mutant in the caller ("`scan` builds homes from a hand list") and kill it with an end-to-end case through that caller; run the mutant, don't infer the kill.
 
 c0160 design review 001 (F1): a default read "from the running checkout's registry" passed as a hand list, because every in-process case ran in a checkout whose registry equals the old list. Only a child process in a different checkout (a `git init` fixture under `.cache` with another registry) shows it. Check: does the default's source ever hold a value different from the hand list it replaces?
+
+**Note (c0261 design review 010 F2):** a criterion that says a command records X (a typed `--model` wins over the measured one) needs a command case with a fixture that makes the measured value differ; a case on the pure chooser passes a call site that never calls it.
