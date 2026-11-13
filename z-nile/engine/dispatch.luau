@@ -33,7 +33,14 @@ dispatch.STEPS = {
 	["zz-stats"] = { kind = "script", argv = { "metrics" }, where = "main" },
 } :: { [string]: Step }
 -- Skills read inside a step, never run as one.
-dispatch.READ_INSIDE = { ["zz-rules"] = true, ["zz-arch"] = true, ["zz-test"] = true, ["zz-execute"] = true }
+dispatch.READ_INSIDE = {
+	["zz-rules"] = true,
+	["zz-arch"] = true,
+	["zz-test"] = true,
+	["zz-execute"] = true,
+	-- the worker a person starts by hand. It is not a dispatch step.
+	["z-work"] = true,
+}
 -- zz-review's modes: the lessons each reads and the phase of its row.
 dispatch.REVIEW_MODES = {
 	design = { lessons = "design", phase = "design-review" },
@@ -404,6 +411,29 @@ function dispatch.describe(r: models.Resolved): { string }
 				.. (if spec.maxMinutes then ` max_minutes={spec.maxMinutes}` else "")
 		)
 	end
+	return out
+end
+
+-- The last few stream lines of a running step, and its token count. `running` is the step's own word.
+function dispatch.trailReport(text: string, tokens: number, running: boolean): { string }
+	local lines: { string } = {}
+	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+		if line ~= "" then
+			table.insert(lines, line)
+		end
+	end
+	local out: { string } = {}
+	local n = #lines
+	if n == 0 then
+		table.insert(out, "trail: none")
+	else
+		local from = math.max(1, n - 7)
+		table.insert(out, `trail: {n} lines, last {n - from + 1}`)
+		for i = from, n do
+			table.insert(out, "  " .. lines[i])
+		end
+	end
+	table.insert(out, `tokens: {tokens}{if running then " running" else ""}`)
 	return out
 end
 

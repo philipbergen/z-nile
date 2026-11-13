@@ -26,6 +26,24 @@ if [[ ${1:-} == run ]]; then
 fi
 top="$(cd "$(dirname "$0")" && pwd -P)"
 here="$(pwd -P)"
+# `work` started in another worktree of this repo reads that worktree. Every other command stays here.
+if [[ ${1:-} == work ]]; then
+  if git -C "$here" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    caller="$(git -C "$here" rev-parse --show-toplevel)"
+    common_here="$(git -C "$here" rev-parse --path-format=absolute --git-common-dir)"
+    common_top="$(git -C "$top" rev-parse --path-format=absolute --git-common-dir)"
+    if [[ "$common_here" == "$common_top" && "$caller" != "$top" ]]; then
+      export ZN_TOP="$caller" ZN_CWD=""
+      cd "$caller"
+      export PATH="$HOME/.rokit/bin:$PATH"
+      lim=${ZN_ENGINE_CPU:-1800}
+      [[ $lim =~ ^[0-9]+$ ]] || lim=1800
+      source "$top/z-nile/lib/cpu.sh"
+      zn_lower_cpu "$lim" 2>/dev/null || true
+      exec lune run "$top/z-nile/engine/main" -- "$@"
+    fi
+  fi
+fi
 case "$here/" in
 "$top/"*) rel="${here#"$top"}" ;;
 *) rel="" ;; # outside the checkout: like its root

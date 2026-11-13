@@ -119,6 +119,9 @@ usage: ./zn <command> ...
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
+  work [<R-id>]                                 print the z-work skill (the worker a person starts). With a raft id, that raft.
+  work next [<R-id>]                            the one next action for this worker, from git
+  work status                                   who holds which raft, which layer, since when
   capture <id>                                  print the item's document as captured (read-only)
   idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
   metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
@@ -3898,6 +3901,29 @@ function cmd.finish(pos: { string })
 	end
 	local saved = sh.git({ "rev-parse", "HEAD" })
 	sh.git({ "reset", "--soft", base })
+	-- The session running this command. The layer's base commit is not the span: it can predate the
+	-- session, and the project folder holds other sessions. A missing record stays unmeasured.
+	local reading = sessionread.running()
+	print(`session: {reading.note}`)
+	pcall(function()
+		local top = sh.git({ "rev-parse", "--show-toplevel" })
+		local row: ledger.Row = {
+			when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string,
+			subject = `finish {reading.note}`,
+			added = 0,
+			removed = 0,
+			minutes = 0,
+			how = "measured",
+			phase = "build",
+			tokens = reading.tokens,
+			model = reading.model,
+			ai = reading.ai,
+			unmeasured = sessionread.flags(reading),
+		}
+		local planned = costrow.plan(top, { [id] = issue.dir }, { [id] = { row } }, false)
+		costrow.writeFiles(planned)
+		costrow.writeBuffer(top, planned)
+	end)
 	sh.git({ "add", "-A" })
 	if sh.git({ "diff", "--cached", "--name-only" }) == "" then
 		sh.git({ "reset", "--hard", saved })
@@ -4451,7 +4477,8 @@ local function recordAndCommit(
 	isDone: boolean?,
 	phase: string?,
 	tokens: number?,
-	model: string?
+	model: string?,
+	reading: sessions.Read?
 )
 	phase = if phase and phase ~= "" then phase else "build"
 	-- a conflicted `git merge --squash` leaves unmerged paths; `git add -A` would commit their markers
@@ -4481,6 +4508,10 @@ local function recordAndCommit(
 	local foldHomes: { [string]: string } = {}
 	local extraRows: { [string]: { ledger.Row } } = {}
 	local keptAny = false
+	local gaveReading = false
+	if reading then
+		print(`session: {reading.note}`)
+	end
 	for _, share in shares do
 		-- The ticket is folded whether or not this commit adds a line-count row. A build share that moved no
 		-- lines is still not given a row of its own.
@@ -4495,17 +4526,35 @@ local function recordAndCommit(
 			continue
 		end
 		keptAny = true
+		local subject = string.match(message, "^[^\n]*") or message
+		local rowTokens: number? = nil
+		local rowModel = model
+		local rowAi: number? = nil
+		local rowFlags = "tokens,wall,cpu,ai"
+		if reading and not gaveReading then
+			gaveReading = true
+			if reading.note ~= "" then
+				subject ..= " " .. reading.note
+			end
+			rowTokens = reading.tokens
+			rowAi = reading.ai
+			if reading.model and not rowModel then
+				rowModel = reading.model
+			end
+			rowFlags = sessionread.flags(reading)
+		end
 		local row: ledger.Row = {
 			when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string,
-			subject = string.match(message, "^[^\n]*") or message,
+			subject = subject,
 			added = share.added,
 			removed = share.removed,
 			minutes = 0,
 			how = "measured",
 			phase = phase :: string,
-			tokens = nil,
-			model = model,
-			unmeasured = "tokens,wall,cpu,ai",
+			tokens = rowTokens,
+			model = rowModel,
+			ai = rowAi,
+			unmeasured = rowFlags,
 		}
 		local list = extraRows[share.id]
 		if not list then
@@ -4518,11 +4567,12 @@ local function recordAndCommit(
 		if phase ~= "build" then
 			trailer ..= " " .. (phase :: string)
 		end
-		if share.tokens ~= nil then
-			trailer ..= ` {share.tokens} tokens`
+		local shownTokens = rowTokens or share.tokens
+		if shownTokens ~= nil then
+			trailer ..= ` {shownTokens} tokens`
 		end
-		if model then
-			trailer ..= ` {model}`
+		if rowModel then
+			trailer ..= ` {rowModel}`
 		end
 		table.insert(trailers, trailer)
 	end
@@ -5320,6 +5370,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 	-- the raft stays in active/ until its last layer lands
 	local doneTracePath =
 		`{if wholeRaft then store.dirFor("raft", "done", raft.id, raft.root) else raft.dir}/{traceName}`
+	local reading = sessionread.running()
 	local committed, commitErr = pcall(function()
 		recordAndCommit(
 			raft,
@@ -5327,7 +5378,10 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 			if anyLanded or through ~= nil then bindIds :: { string } else {},
 			nil,
 			true,
-			"deliver"
+			"deliver",
+			nil,
+			nil,
+			reading
 		)
 	end)
 	if not committed then
@@ -7897,6 +7951,61 @@ function cmd.reap(_: { string }, opts: { [string]: { string } })
 	local ok, err = pcall(reapRun, opts)
 	if not ok then
 		stdio.ewrite(`reap: skipped ({err})\n`)
+	end
+end
+
+function cmd.work(pos: { string })
+	local workLib = require("./work")
+	local workread = require("./workread")
+	local function skillBody(text: string): string
+		if string.sub(text, 1, 4) ~= "---\n" then
+			return text
+		end
+		local close = string.find(text, "\n---\n", 5, true)
+		if not close then
+			return text
+		end
+		return string.sub(text, close + 5)
+	end
+	local sub = pos[1]
+	if sub == "status" then
+		if #pos ~= 1 then
+			fail("usage: ./zn work status")
+		end
+		if hasOrigin() then
+			sh.git({ "fetch", "--quiet", "origin", "main" })
+		end
+		local lines = workLib.status(workread.collect(nil).rafts)
+		if #lines == 0 then
+			print("nobody holds a raft")
+		else
+			for _, line in lines do
+				print(line)
+			end
+		end
+		return
+	end
+	if sub == "next" then
+		local asked = pos[2]
+		if #pos > 2 or (asked and not string.match(asked, "^R%d%d%d%d$")) then
+			fail("usage: ./zn work next [<R-id>]")
+		end
+		if hasOrigin() then
+			sh.git({ "fetch", "--quiet", "origin", "main" })
+		end
+		print(workLib.say(workLib.decide(workread.collect(asked))))
+		return
+	end
+	if sub and not string.match(sub, "^R%d%d%d%d$") or #pos > 1 then
+		fail("usage: ./zn work [<R-id>] | next [<R-id>] | status")
+	end
+	local path = "z-nile/skills/z-work/SKILL.md"
+	if not fs.isFile(path) then
+		fail(`no {path}`)
+	end
+	stdio.write(skillBody(fs.readFile(path)))
+	if sub then
+		print(`This session's raft is {sub}. Pass it to every ./zn work next.`)
 	end
 end
 

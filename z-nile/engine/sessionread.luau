@@ -1,8 +1,14 @@
 --!strict
--- Reads the session files the CLIs in .models.toml leave on this machine, for one span, and reduces them with
--- sessions.luau. Claude Code writes a project jsonl (`~/.claude/projects/<cwd-with-slashes-as-dashes>`). Grok writes
+-- Reads the session files the CLIs in .models.toml leave on this machine, and reduces them with sessions.luau.
+-- Claude Code writes a project jsonl (`~/.claude/projects/<cwd-with-slashes-as-dashes>`). Grok writes
 -- `events.jsonl` and `updates.jsonl` under `~/.grok/sessions/<url-encoded cwd>`. The Cursor `agent` CLI writes
 -- transcripts under `~/.cursor/projects/<cwd>` that, today, have neither timestamps nor token counts.
+-- Kimi's wire is `~/.kimi-code/sessions/<workspace>/<id>/agents/main/wire.jsonl` (or $PICKMAN_KIMI_SESSIONS).
+-- A wire belongs to a checkout only when that session's state.json cwd is the checkout. The workspace folder
+-- name is not enough to tell, so a wire with no cwd is not counted.
+-- `running` is the session executing this command: Claude's `CLAUDE_CODE_SESSION_ID`, or Kimi's session id when
+-- one is set. The whole file counts (each Claude message id once). The layer's base commit is not the span:
+-- that commit can predate the session, and the project folder holds other sessions.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local sessions = require("./sessions")
@@ -102,6 +108,27 @@ local function blank(): sessions.Part
 	return { tokens = nil, ai = nil }
 end
 
+-- The checkout a Kimi session was started in, from its state.json. Nil when the layout does not say.
+local function kimiCwd(wire: string): string?
+	local dir = string.match(wire, "^(.*)/agents/main/wire%.jsonl$")
+	if not dir then
+		return nil
+	end
+	local body = text(`{dir}/state.json`)
+	if not body then
+		return nil
+	end
+	local cwd = string.match(body, '"cwd":"([^"]*)"')
+	if not cwd or cwd == "" then
+		return nil
+	end
+	return (string.gsub(cwd, "/+$", ""))
+end
+
+local function samePath(a: string, b: string): boolean
+	return (string.gsub(a, "/+$", "")) == (string.gsub(b, "/+$", ""))
+end
+
 function sessionread.span(
 	cwd: string,
 	sinceIso: string,
@@ -156,7 +183,92 @@ function sessionread.span(
 		end
 	end
 	table.insert(found, { cli = "agent", part = if cursorSaw then cursor else nil })
+	local fromEnv = process.env.PICKMAN_KIMI_SESSIONS
+	local kimiRoot = if fromEnv ~= nil and fromEnv ~= "" then fromEnv else `{h}/.kimi-code/sessions`
+	local kimi = blank()
+	local kimiSaw = false
+	for _, path in filesUnder(kimiRoot, "wire.jsonl", sinceUnix) do
+		local cwdOf = kimiCwd(path)
+		if cwdOf ~= nil and samePath(cwdOf, cwd) then
+			local body = text(path)
+			local part = if body then sessions.kimi(body) else nil
+			if part then
+				kimiSaw = true
+				add(kimi, part)
+			end
+		end
+	end
+	table.insert(found, { cli = "kimi", part = if kimiSaw then kimi else nil })
 	return sessions.combine(found)
+end
+
+-- The session that is running this command, in this checkout. Not a time span, and not every file in the folder.
+function sessionread.running(): sessions.Read
+	local cwd = (string.gsub(process.cwd, "/+$", ""))
+	local h = home()
+	local found: { sessions.Found } = {}
+	local wideSince = "1970-01-01T00:00:00.000Z"
+	local wideUntil = "9999-12-31T23:59:59.999Z"
+	local claude = blank()
+	local claudeSaw = false
+	local sid = process.env.CLAUDE_CODE_SESSION_ID
+	if sid ~= nil and sid ~= "" then
+		local dir = `{h}/.claude/projects/{string.gsub(cwd, "/", "-")}`
+		local path = `{dir}/{sid}.jsonl`
+		if not fs.isFile(path) then
+			path = `{dir}/{sid}`
+		end
+		local body = text(path)
+		local part = if body then sessions.claude(body, wideSince, wideUntil) else nil
+		if part then
+			claudeSaw = true
+			add(claude, part)
+		end
+	end
+	table.insert(found, { cli = "claude", part = if claudeSaw then claude else nil })
+	table.insert(found, { cli = "grok", part = nil })
+	table.insert(found, { cli = "agent", part = nil })
+	local kimi = blank()
+	local kimiSaw = false
+	local kid = process.env.KIMI_SESSION_ID
+	if kid == nil or kid == "" then
+		kid = process.env.KIMI_CODE_SESSION_ID
+	end
+	if kid ~= nil and kid ~= "" then
+		local fromEnv = process.env.PICKMAN_KIMI_SESSIONS
+		local kimiRoot = if fromEnv ~= nil and fromEnv ~= "" then fromEnv else `{h}/.kimi-code/sessions`
+		local needle = if string.sub(kid, 1, 8) == "session_" then kid else "session_" .. kid
+		for _, path in filesUnder(kimiRoot, "wire.jsonl", 0) do
+			local dir = string.match(path, "^(.*)/agents/main/wire%.jsonl$")
+			local name = if dir then string.match(dir, "([^/]+)$") else nil
+			local cwdOf = kimiCwd(path)
+			if (name == kid or name == needle) and cwdOf ~= nil and samePath(cwdOf, cwd) then
+				local body = text(path)
+				local part = if body then sessions.kimi(body) else nil
+				if part then
+					kimiSaw = true
+					add(kimi, part)
+				end
+			end
+		end
+	end
+	table.insert(found, { cli = "kimi", part = if kimiSaw then kimi else nil })
+	return sessions.combine(found)
+end
+
+-- This row does not carry wall or cpu (the measure buffer does). The reading says which of tokens and ai it had.
+function sessionread.flags(reading: sessions.Read): string
+	local have: { [string]: boolean } = { wall = true, cpu = true }
+	local out = { "wall", "cpu" }
+	if reading.unmeasured then
+		for part in string.gmatch(reading.unmeasured, "[^,]+") do
+			if not have[part] then
+				have[part] = true
+				table.insert(out, part)
+			end
+		end
+	end
+	return table.concat(out, ",")
 end
 
 return sessionread

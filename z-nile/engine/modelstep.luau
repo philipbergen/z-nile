@@ -58,6 +58,9 @@ function modelstep.launch(r: runner.Request): (runner.Result, string)
 		feed = function(acc, line)
 			table.insert(lines, line)
 			inner.feed(acc, line)
+			if r.onLine and acc.note ~= "" then
+				r.onLine(acc.note, acc.live)
+			end
 		end,
 	}
 	local req = table.clone(r)

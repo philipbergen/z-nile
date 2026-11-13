@@ -36,14 +36,14 @@ end
 local EXECUTE = "z-nile/skills/zz-execute/SKILL.md"
 local RULES = "z-nile/skills/zz-rules/SKILL.md"
 local REVIEW = "z-nile/skills/zz-review/SKILL.md"
-local RUN = "z-nile/skills/z-run/SKILL.md"
+local WORK = "z-nile/skills/z-work/SKILL.md" -- /z-run is z-work with the raft named (#318)
 local PROMPT = "z-nile/templates/prompt.md"
 local RAFT = "z-nile/templates/raft/doc.md"
 local README = "z-nile/README.md"
 
 return t.spec("c0248 the documents say it", function(it)
 	it(
-		"AC13: zz-execute, zz-rules, zz-review, z-run, the prompt template and the raft template say it",
+		"AC13: zz-execute, zz-rules, zz-review, z-work, the prompt template and the raft template say it",
 		function()
 			-- zz-execute: one worker, in order, a takeover for a second machine; streams are subagents
 			says(
@@ -136,12 +136,12 @@ return t.spec("c0248 the documents say it", function(it)
 				"- Final mode: `final-review-NNN.md`, in the raft directory, alongside `trace-NNN.md`, once per landing (NNN is one more than the highest final review on `origin/main`)."
 			)
 			unsays(REVIEW, "- Code mode: `review-NNN.md`, in the raft directory.\n")
-			-- z-run, the prompt template and the raft template
+			-- z-work (which /z-run follows), the prompt template and the raft template
 			says(
-				RUN,
+				WORK,
 				"One worker holds the raft and builds its layers one at a time, each complete (finished, green and reviewed in its own issue folder, the review stamped by the tool) before the next `./zn start`."
 			)
-			says(RUN, "`./zn done <R> --through <issue>` lands the green layers below it.")
+			says(WORK, "`./zn done <R> --through <issue>` lands the green layers below it.")
 			says(
 				PROMPT,
 				"If it says `parallel: yes`, that work runs as subagents committing on the layer you are on; the next layer starts only when this one is complete (finished, green and reviewed)."
