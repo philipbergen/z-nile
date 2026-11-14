@@ -176,7 +176,7 @@ return t.spec("c0280 who", function(it)
 		commit("Ann", "tracker: new c0060 zeta", "2026-10-22T09:00:00Z")
 		put("c0060", doc("c0060", "R0030", "prepared-a-b-c"))
 		local map = `{dir}/z-nile/compaction.txt`
-		fs.writeFile(map, (if fs.isFile(map) then fs.readFile(map) else "") .. "# c0280 fixture\n")
+		fs.writeFile(map, (if fs.isFile(map) then fs.readFile(map) else "") .. "c0960 c0060\n") -- a pair of the real map's shape
 		commit(
 			"Phil",
 			"tracker: compact ids (#64)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>",
