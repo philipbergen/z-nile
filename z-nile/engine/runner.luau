@@ -11,6 +11,7 @@
 local adapters = require("./adapters")
 local costrow = require("./costrow")
 local fs = require("@lune/fs")
+local kimisession = require("./kimisession")
 local process = require("@lune/process")
 local task = require("@lune/task")
 
@@ -30,6 +31,7 @@ export type Request = {
 	stateDir: string, -- holds the pid file, the stdin file and the stop marker
 	onStart: ((id: Identity) -> ())?,
 	onTick: (() -> ())?, -- called every tick while the step runs (the dispatcher's publish broker)
+	onLine: ((line: string, tokens: number) -> ())?, -- each action the adapter named, after it counts the line
 	beatFile: string?, -- a nested step's heartbeat in its parent's state folder: touched every second it runs (005 F3)
 }
 export type Identity = { pgid: number, lockFile: string }
@@ -288,6 +290,24 @@ function runner.run(r: Request): Result
 	end
 	child.stdin:close()
 	local status = child:status()
+	-- A headless kimi stream names its session and prints no usage. The session's wire holds the records.
+	if r.adapter.runtime == "kimi-cli" and acc.final == nil and acc.session ~= nil and acc.session ~= "" then
+		local root = process.env.PICKMAN_KIMI_SESSIONS
+		if root == nil or root == "" then
+			local home = process.env.HOME
+			if home ~= nil and home ~= "" then
+				root = `{home}/.kimi-code/sessions`
+			end
+		end
+		local text = if root ~= nil and root ~= "" then kimisession.read(root, acc.session :: string) else nil
+		if text ~= nil then
+			for line in string.gmatch(text, "[^\n]+") do
+				if string.find(line, '"usage.record"', 1, true) then
+					r.adapter.feed(acc, line)
+				end
+			end
+		end
+	end
 	local tokens = adapters.tokens(acc)
 	local wall, cpu = nil, nil
 	if fs.isFile(reportFile) then

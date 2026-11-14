@@ -3,6 +3,7 @@ title: A term that changes meaning is re-read by every rule that uses it
 when: design
 tags: [restated-rules, review-rounds]
 check: After the edit, does every sentence that uses the changed term ("the final round") pick out the same thing in a walk where the new case happens (an expensive round that holds a high, a cheap round that would have stopped), and is the old definition deleted, not kept beside the new one?
+from: c0261 design review 002 F2 and 003 F2 (c0261 withdrawn 2026-11-12; its folder is in git history)
 ---
 When a design adds a case to a defined term (a "final round" that can now be a cheap round or an expensive one), the rules that read the term (the ready rule, the escalation rule, the merge block, `done`'s "latest review round") each silently pick one meaning, and keeping both definitions in one bullet lets a doc spec that pins only the new sentence stay green.
 

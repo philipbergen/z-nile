@@ -98,7 +98,6 @@ local function znIn(dir: string, args: { string }): fixture.Result
 			FAKE_DIR = h.fakes,
 			PATH = `{h.bin}:{process.env.PATH}`,
 			ZN_AGENT_TOKEN_FILE = h.token,
-			ZN_WATERMARK_DIR = `{h.f.base}/watermark`,
 			GH_TOKEN = "the-users-token",
 		},
 	})
@@ -567,6 +566,16 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(log()).toBe("")
 	end)
 
+	it("a chain with no agent credential stops instead of running the step again", function()
+		fakecli.clear(h)
+		local r = zn({ "dispatch", "c0010" }, { ZN_AGENT_TOKEN_FILE = `{h.f.base}/none` })
+		t.expect(r.code).toBe(1)
+		t.expect(count(r.stdout, "next: z-design c0010")).toBe(1)
+		t.expect(has(r.stdout, "ended failed")).toBe(true)
+		t.expect(has(r.stderr, "no agent credential")).toBe(true)
+		t.expect(log()).toBe("")
+	end)
+
 	-- the user's G11, 2026-10-25: "Skip missing CLIs": a CLI that is not installed is skipped like quota, named on stderr
 	it(
 		"a CLI that is not installed is skipped, named on stderr, and the next one runs; none installed fails",
@@ -636,24 +645,29 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 		t.expect(row.tokens).toBe(207)
 	end)
 
-	it("a failed call moves to the next model, and an exit 0 with no token count is one", function()
+	it("a failed call moves to the next model, and an exit 0 with no token count is ok", function()
 		fakecli.clear(h)
-		mode("claude", "nocount")
+		mode("claude", "fail")
 		mode("grok", "fail")
 		mode("agent", "fail")
 		local r = zn({ "dispatch", "z-design", "c0030" })
 		t.expect(r.code).toBe(1)
 		t.expect(count(log(), "claude step=")).toBe(1)
 		t.expect(count(log(), "grok step=")).toBe(1)
-		local s = state("c0030")
-		t.expect(s.outcome).toBe("failed")
-		local saw = false
-		for _, a in s.history do
-			if has(a.detail, "without a token count") then
-				saw = true
-			end
-		end
-		t.expect(saw).toBe(true)
+		t.expect(state("c0030").outcome).toBe("failed")
+
+		fakecli.clear(h)
+		mode("claude", "nocount")
+		mode("grok", "fail")
+		local quiet = zn({ "dispatch", "z-design", "c0040" })
+		t.expect(quiet.code).toBe(0)
+		t.expect(count(log(), "claude step=")).toBe(1)
+		t.expect(count(log(), "grok step=")).toBe(0)
+		local s = state("c0040")
+		t.expect(s.outcome).toBe("ok")
+		t.expect(has(s.history[#s.history].detail, "no token count")).toBe(true)
+		-- a zero-token attempt is not a spend row: record keeps only attempts that spent tokens
+		t.expect(lastRow("c0040")).toBe(nil)
 	end)
 
 	it("kills the step's whole process group past max_tokens, and records what it spent", function()

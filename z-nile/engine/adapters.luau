@@ -12,6 +12,10 @@
 -- `--auto` (Never Ask) cannot be combined with `--prompt`; `-p` is the non-interactive run.
 -- A session wire's `usage.record` counts inputOther + inputCacheCreation + output and leaves inputCacheRead out.
 -- The ledger id `kimi-code-<rest>` is the CLI's `kimi-code/<rest>`.
+-- A headless kimi stream prints no usage. It does print `session.resume_hint` with a session id; the runner
+-- reads that session's wire and feeds its `usage.record` lines here. Claude, grok and agent still report a
+-- count on a successful stream (the probes above). An exit 0 with no count from any of them is ok and
+-- unmeasured (`finish` says "no token count"): missing measurement is not a failed stage.
 local serde = require("@lune/serde")
 
 local adapters = {}
@@ -39,6 +43,7 @@ export type Acc = {
 	noIdTurns: number, -- turns in a row that carried no model_call_id
 	unknown: string?, -- why the call cap can't be trusted on this stream (fail closed)
 	session: string?,
+	note: string, -- one short line for the trail: the tool and its target, or the first words of a message
 }
 export type Outcome = "ok" | "failed" | "quota"
 export type Adapter = {
@@ -96,6 +101,7 @@ function adapters.newAcc(): Acc
 		noIdTurns = 0,
 		unknown = nil,
 		session = nil,
+		note = "",
 	}
 end
 
@@ -111,6 +117,52 @@ local function decode(line: string): { [string]: any }?
 		return serde.decode("json", line)
 	end)
 	return if ok and type(value) == "table" then value else nil
+end
+
+local function words(s: string, n: number): string
+	local flat = (string.gsub(s, "%s+", " "))
+	flat = (string.gsub(flat, "^%s+", ""))
+	flat = (string.gsub(flat, "%s+$", ""))
+	if #flat <= n then
+		return flat
+	end
+	return string.sub(flat, 1, n)
+end
+
+local function targetOf(input: any): string
+	if type(input) ~= "table" then
+		return ""
+	end
+	for _, key in { "command", "file_path", "path", "pattern", "query", "url", "prompt" } do
+		local v = input[key]
+		if type(v) == "string" and v ~= "" then
+			return words(v, 72)
+		end
+	end
+	return ""
+end
+
+-- One line a person can read. A tool wins over prose on the same message.
+local function noteFromMessage(message: any): string
+	if type(message) ~= "table" or type(message.content) ~= "table" then
+		return ""
+	end
+	local toolNote = ""
+	local textNote = ""
+	for _, block in message.content do
+		if type(block) == "table" then
+			if block.type == "tool_use" and type(block.name) == "string" then
+				local target = targetOf(block.input)
+				toolNote = if target ~= "" then `{block.name} {target}` else block.name
+			elseif block.type == "text" and textNote == "" and type(block.text) == "string" then
+				textNote = words(block.text, 72)
+			end
+		end
+	end
+	if toolNote ~= "" then
+		return toolNote
+	end
+	return textNote
 end
 
 -- claude's and grok's usage objects (snake_case): input + cache writes + output.
@@ -135,6 +187,7 @@ function adapters.toolRunning(acc: Acc): boolean
 end
 
 local function claudeFeed(acc: Acc, line: string)
+	acc.note = ""
 	local j = decode(line)
 	if not j then
 		acc.cliText = line
@@ -149,6 +202,10 @@ local function claudeFeed(acc: Acc, line: string)
 		-- every content block of one message repeats its usage: count the message once, at its largest
 		acc.byMessage[id] = math.max(acc.byMessage[id] or 0, snake(m.usage))
 		sumLive(acc)
+		local noted = noteFromMessage(m)
+		if noted ~= "" then
+			acc.note = noted
+		end
 		if type(m.content) == "table" then
 			for _, block in m.content do
 				if type(block) == "table" and block.type == "tool_use" and type(block.id) == "string" then
@@ -218,10 +275,14 @@ local function kimiModel(id: string): string
 end
 
 local function kimiFeed(acc: Acc, line: string)
+	acc.note = ""
 	local j = decode(line)
 	if not j then
 		acc.cliText = line
 		return
+	end
+	if type(j.session_id) == "string" and j.session_id ~= "" then
+		acc.session = j.session_id
 	end
 	if j.type == "usage.record" then
 		acc.live += kimiUsage(j.usage)
@@ -237,6 +298,7 @@ local function kimiFeed(acc: Acc, line: string)
 end
 
 local function grokFeed(acc: Acc, line: string)
+	acc.note = ""
 	local j = decode(line)
 	if not j then
 		acc.cliText = line
@@ -251,6 +313,8 @@ local function grokFeed(acc: Acc, line: string)
 		end
 	elseif j.type == "tool_call" and type(j.toolCallId) == "string" then
 		acc.open[j.toolCallId] = true
+		local name = if type(j.name) == "string" and j.name ~= "" then j.name else "tool"
+		acc.note = `{name} {j.toolCallId}`
 	elseif j.type == "tool_call_update" and type(j.toolCallId) == "string" then
 		if j.status == "completed" or j.status == "failed" then
 			acc.open[j.toolCallId] = nil
@@ -272,6 +336,7 @@ local AGENT_TYPES =
 adapters.NO_ID_TURNS = 3
 
 local function agentFeed(acc: Acc, line: string)
+	acc.note = ""
 	local j = decode(line)
 	if not j then
 		acc.cliText = line
@@ -302,6 +367,9 @@ local function agentFeed(acc: Acc, line: string)
 	if j.type == "tool_call" and type(j.call_id) == "string" then
 		if j.subtype == "started" then
 			acc.open[j.call_id] = true
+			local name = if type(j.name) == "string" and j.name ~= "" then j.name else "tool"
+			local target = targetOf(j.input or j.arguments)
+			acc.note = if target ~= "" then `{name} {target}` else name
 		elseif j.subtype == "completed" then
 			acc.open[j.call_id] = nil
 			acc.inTurn = false
@@ -311,6 +379,12 @@ local function agentFeed(acc: Acc, line: string)
 	-- line or a finished tool call: a model call, counted even when it carries no model_call_id (the fallback count;
 	-- review 003 F7: a stream of bare tool calls is turns too)
 	local bareTool = j.type == "tool_call" and j.subtype == "started" and type(j.model_call_id) ~= "string"
+	if j.type == "assistant" then
+		local noted = noteFromMessage(j.message)
+		if noted ~= "" then
+			acc.note = noted
+		end
+	end
 	if (j.type == "thinking" or j.type == "assistant" or bareTool) and not acc.inTurn then
 		if acc.turns > 0 and not acc.turnHasId then
 			acc.noIdTurns += 1
@@ -461,8 +535,9 @@ function adapters.get(runtime: string): Adapter
 end
 
 -- The outcome of a step that ended by itself: quota when the CLI said so (in its stream or its stderr), ok when it
--- exited 0 with a token count and no error, else failed. A step that exits 0 with no count failed: every adapter
--- returns one (the capture's Solution).
+-- exited 0 with no error. A count is the final one, or the running count when the stream ended before it. An exit 0
+-- with neither is ok and unmeasured ("no token count"): missing measurement is not a failed stage. `runtime` is
+-- kept so a caller can still name which CLI ended.
 function adapters.finish(acc: Acc, exitOk: boolean, stderr: string, runtime: string): (Outcome, string)
 	if acc.quota then
 		return "quota", acc.quota
@@ -471,11 +546,11 @@ function adapters.finish(acc: Acc, exitOk: boolean, stderr: string, runtime: str
 	if not exitOk and w then
 		return "quota", (string.match(stderr, "[^\n]*$") or w)
 	end
-	if exitOk and acc.final ~= nil and not acc.errorText then
-		return "ok", "done"
-	end
-	if exitOk and acc.final == nil then
-		return "failed", `{runtime} exited without a token count`
+	if exitOk and not acc.errorText then
+		if acc.final ~= nil or acc.live > 0 then
+			return "ok", "done"
+		end
+		return "ok", `no token count ({runtime})`
 	end
 	local why = acc.errorText or (string.match(string.gsub(stderr, "%s+$", ""), "[^\n]*$") or "")
 	return "failed", if why ~= "" then why else `{runtime} failed`

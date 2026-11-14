@@ -3,6 +3,16 @@
 -- durations and passes them in.
 -- Order: files with no recorded duration first (a new spec may be slow), then the recorded ones slowest first (the
 -- longest-processing-time rule: a long file started late no longer holds the gate open at the end), ties by path.
+--
+-- Durations file, the contract for the later Python port. One ignored hint, never a pass:
+--   path: <project home>/.cache/spec-durations.tsv
+--   one line per spec: <seconds>\t<path>
+--   seconds matches [%d%.]+ and is written with two decimal places (%.2f); path is non-whitespace
+--   lines are sorted by path when written
+--   a malformed line, a repeated path, or a text with no line is no record (the runner orders by path)
+--   written after a concurrent run, read at the start of the next, and safe to delete
+-- z-nile/tests/slow.tsv uses this same line grammar and is a committed list of specs the default
+-- and full gates skip. Its seconds are not these live times. Missing either file, the run is correct.
 local schedule = {}
 
 export type Durations = { [string]: number }
