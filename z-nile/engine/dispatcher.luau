@@ -1062,6 +1062,17 @@ function dispatcher.modelStep(
 				`## Q1\nThe worktree of this step ({cwd}) was discarded: {id}'s claim was taken over while the step ran, and the taker works in a copy. Nothing was started in the copy. Decide whether the dispatcher should continue the chain on the taker's claim (\`./zn dispatch retry {id}\` after you answer here) or leave the item to the taker.\n`
 			)
 		end)
+		local trailPath = `{stateDir}/trail.log`
+		local trail = if fs.isFile(trailPath) then fs.readFile(trailPath) else ""
+		local function noteLine(line: string, tokens: number)
+			-- the adapter already reduced the stream to one short line; write it here, no process per line
+			if trail ~= "" and string.sub(trail, -1) ~= "\n" then
+				trail ..= "\n"
+			end
+			trail ..= line .. "\n"
+			pcall(fs.writeFile, trailPath, trail)
+			pcall(fs.writeFile, `{stateDir}/live-tokens`, tostring(tokens) .. "\n")
+		end
 		local result = modelstep.launch({
 			argv = argv,
 			cwd = cwd,
@@ -1086,6 +1097,7 @@ function dispatcher.modelStep(
 					broker.serve(brokerDir, brokerToken, push)
 				end
 				else nil,
+			onLine = noteLine,
 		})
 		stopClaimBeat()
 		holdBeat() -- the review still lands and the spend is recorded: beat through it
@@ -2057,7 +2069,16 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 	elseif first == "status" then
 		local id = pos[2] or ctx.fail("usage: ./zn dispatch status <id>")
 		for _, dir in runsUnder(dirOf(ctx, id)) do
-			print(serde.encode("json", loadAt(id, dir), true))
+			local st = loadAt(id, dir)
+			local trail = if fs.isFile(`{dir}/trail.log`) then fs.readFile(`{dir}/trail.log`) else ""
+			local tokens = st.tokens or 0
+			if fs.isFile(`{dir}/live-tokens`) then
+				tokens = tonumber(trim(fs.readFile(`{dir}/live-tokens`))) or tokens
+			end
+			for _, line in dispatch.trailReport(trail, tokens, st.outcome == "running") do
+				print(line)
+			end
+			print(serde.encode("json", st, true))
 		end
 		return 0
 	elseif first == "stop" then

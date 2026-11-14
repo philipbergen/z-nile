@@ -9,4 +9,4 @@ A raft starts only when every member's `depends_on` is done, so items that depen
 
 **Why:** R0065 design review 001 F1: the Order said grouping cost f0158 and c0182 nothing because they wait for f0126 anyway, but c0170 also waits for c0153 (R0059), which neither needs.
 
-**How to apply:** list each member's unfinished `depends_on` against each dependent item's; name every wait the dependents do not share, and say which member to unfold if it lags.
+**How to apply:** list each member's unfinished `depends_on` against each dependent item's; name every wait the dependents do not share, and say which member to unfold if it lags. Take each wait's status and raft from `./zn find <id>` at rafting time, not from older raft text: `./zn workstreams` orders members only and prints no wait on an item outside the raft, even one still `new` with no raft.

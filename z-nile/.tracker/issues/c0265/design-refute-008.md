@@ -1,0 +1,9 @@
+# Refute 008 (c0265): round 8 answered (the user: "yes" to another round)
+
+- F1 (high): fixed: `c0042/cli.spec` and `tooling/board.spec` are named in the Regression guard. The board's verdict reads (in `cmd.board` and in `buildBoard`, which `refreshBoard` uses) run only when `guarded(true)` says the checkout is unprotected; in a protected checkout (any check.sh or spec flow of the real repository, the gate's board runs included) the page is built without verdicts and no remote is read. E9: a scratch edit that writes a marker where the reads would run when `not guarded(true)`, run against `tests/acceptance/c0042/*.spec.luau` and `tests/tooling/board.spec.luau`: 40 passed, 0 failed, marker never written, so `Overrides: none` stands for those specs; a lost.spec case asserts a board built with the fixture listed as protected carries no verdict and makes no `ls-remote`.
+- F2: fixed: the bound is started + 10 and the assertion `<= 10` (a tick of slack).
+- F3: fixed: c0010 gets a later beat (T0 + 600) so it is silent for less time than the never-beaten c0050 although its id is lower; `lost` stdout and the board bucket are asserted in silence order (c0050 before c0010), against id order.
+- F4: fixed: the worktree's throttle entry is written whether the first beat succeeded or not; the case asserts the entry file and the specific text `beat: c0075:` (not the board's note).
+- F5: fixed: AC6 greps z-design for `--from origin/prep-` and z-run for `re-adopt`; a Rules row says why a text criterion is the right kind (the commands exist).
+- F6: fixed: the unobservable mutant is removed from the row.
+- F7: fixed: the autobeat says `<id>'s claim ended` when the item is no longer a claim and `taken over (now <stamp>)` when another claim holds it; a case gives a claim back and reads the message.
