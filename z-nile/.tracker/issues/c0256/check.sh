@@ -23,9 +23,17 @@ docs_stand() {
   has skills/zz-rules/SKILL.md '**Questions and answers** (c0256).' || rc=1
   has skills/zz-rules/SKILL.md 'A capture that stops with questions is retried as `retry new`, and its exchange moves to the issue it made.' || rc=1
   has README.md '`./zn dispatch retry <id> --answer <text>`' || rc=1
+  has skills/z-ticket/SKILL.md 'Under `./zn dispatch`, ask every question before this step: once the stub is on `main` the capture can no longer ask through `questions.md`' || rc=1
+  has skills/zz-rules/SKILL.md 'Under the dispatcher a capture asks before `./zn new`: what z-ticket would ask after it goes under `## Open to the human` in the issue (z-ticket, step 2).' || rc=1
   return $rc
 }
-check "AC7: the help line, the zz-rules Dispatch section and the README name the answer input" docs_stand
+check "AC7: the help line, the zz-rules Dispatch section and the README name the answer input, and z-ticket's step 2 says a dispatched capture asks before it makes" docs_stand
 check "AC8: the dispatcher's existing contracts hold (dispatch, docs, dispatch-texts, dispatch-guards)" lune run tests/run -- tests/acceptance/c0117/dispatch.spec.luau tests/acceptance/c0117/docs.spec.luau tests/tooling/dispatch-texts.spec.luau tests/tooling/dispatch-guards.spec.luau
+check "AC9: an adopted issue keeps its own run, a live run refuses the adoption, and a question left in the slot is set aside" lune run tests/run -- "$A/adopt.spec.luau"
+check "AC10: a relative --answer-file is read from the directory ./zn was run from" lune run tests/run -- "$A/adopt.spec.luau"
+check "AC11: an exchange that holds only the ask is named as the user's own request" lune run tests/run -- "$A/askprompt.spec.luau"
+# the dispatcher's slow-tier specs: no gate runs them without --slow (about 20 minutes)
+check "AC12: the dispatcher's slow-tier contracts hold (control-cli, dispatch-cli, trackerstate)" lune run tests/run -- tests/acceptance/c0117/control-cli.spec.luau tests/acceptance/c0117/dispatch-cli.spec.luau tests/acceptance/c0117/trackerstate.spec.luau
+check "AC13: an attempt that pushed or left questions.md ends the step's tries, so a failed z-ticket is not captured twice by a fallback" lune run tests/run -- "$A/fallback.spec.luau"
 
 finish
