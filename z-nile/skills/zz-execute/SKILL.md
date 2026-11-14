@@ -109,6 +109,7 @@ To escalate:
 2. Push.
 3. Leave the PR in **draft**, or, if it's already ready (a `BLOCKED:` stop after `done`), leave it as it is and unmerged.
 4. Post a PR comment that starts with `BLOCKED:` and covers what you tried, the evidence, and the decision you need.
+5. Block the raft: land the green layers below the blocked one with `./zn done <R-id> --through <issue>`, write `escalation.md` in the raft's folder in your worktree (`## Question`, `## What was tried`, `## Open findings or error`, `## Options`: each option starts with one decision, exactly one ends `(recommended)`), and run `./zn block <R-id> <review-exhausted|design-gap|needs-decision|red-gate|quota|tripwire>`. It files the note on `origin/main` with the `blocked` status, comments `BLOCKED: <reason>: <the question>` on the open layer's PR, and leaves the branches and PRs as they are. Under `./zn dispatch` the same two steps are all there is: the dispatcher stops the chain at the blocked raft until the user runs `./zn resolve <R-id> <decision>`.
 
 ## Final report format
 ```

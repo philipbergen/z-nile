@@ -126,8 +126,8 @@ dl.run dd { margin: 0; }
   var VIEWS = ["board", "rafts", "issues"];
   var GROUPS = ["ready", "not", "done"];
   var GROUP_LABEL = { ready: "Ready", not: "Not ready", done: "Done" };
-  var COLUMNS = ["ticket", "design", "raft", "ready", "run", "done"];
-  var COLUMN_LABEL = { ticket: "Ticket", design: "Design", raft: "Raft", ready: "Ready", run: "Run", done: "Done" };
+  var COLUMNS = ["blocked", "ticket", "design", "raft", "ready", "run", "done"];
+  var COLUMN_LABEL = { blocked: "Blocked", ticket: "Ticket", design: "Design", raft: "Raft", ready: "Ready", run: "Run", done: "Done" };
   var search = $("search"), list = $("list"), pane = $("pane");
   var boardEl = $("board"), projectsEl = $("projects"), columnsEl = $("columns"), chartsEl = $("charts"), problemsEl = $("problems");
   var windowEl = $("window"), rangeEl = $("range"), asOfEl = $("as-of");
@@ -190,7 +190,8 @@ dl.run dd { margin: 0; }
   function card(id, n) {
     var i = issueById[id];
     return '<button type="button" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '"><span class="id">' + esc(id) +
-      '</span> <span class="type t-' + esc(i.label) + '">' + esc(i.label) + "</span><br>" + esc(i.title) + "</button>";
+      '</span> <span class="type t-' + esc(i.label) + '">' + esc(i.label) + "</span><br>" + esc(i.title) +
+      (i.blocked ? '<br><span class="note" data-blocked="' + esc(i.blocked.reason) + '">' + esc(i.blocked.reason) + ": " + esc(i.blocked.question) + "</span>" : "") + "</button>";
   }
   function renderBoard() {
     if (!columnsEl) return;

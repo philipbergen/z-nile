@@ -4,7 +4,7 @@
 local status = require("@scripts/tracker/status")
 local t = require("@tests/lib/t")
 
-local ALL = { "new", "preparing", "prepared", "active", "done" }
+local ALL = { "new", "preparing", "prepared", "active", "blocked", "done" }
 local ALLOWED = {
 	["new>preparing"] = true,
 	["preparing>prepared"] = true,
@@ -12,10 +12,15 @@ local ALLOWED = {
 	["prepared>active"] = true,
 	["prepared>preparing"] = true,
 	["active>prepared"] = true,
+	-- c0250: ./zn block takes the first two and ./zn resolve the last two
+	["preparing>blocked"] = true,
+	["active>blocked"] = true,
+	["blocked>new"] = true,
+	["blocked>prepared"] = true,
 }
 
 return t.spec("tracker status rules", function(it)
-	it("allows exactly the six documented transitions out of the 25 pairs", function()
+	it("allows exactly the ten documented transitions out of the 36 pairs", function()
 		for _, from in ALL do
 			for _, to in ALL do
 				t.expect(status.canMove(from, to)).toBe(ALLOWED[`{from}>{to}`] == true)
@@ -78,7 +83,7 @@ return t.spec("tracker status rules", function(it)
 		t.expect(string.match(a, "^preparing%-(%a+)%-%1%-%1$") ~= nil).toBe(true) -- the same pick gives the same word
 	end)
 
-	it("parse accepts the five names and nothing else", function()
+	it("parse accepts the six names and nothing else", function()
 		for _, s in ALL do
 			t.expect(status.parse(s)).toBe(s)
 		end

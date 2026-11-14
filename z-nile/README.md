@@ -67,7 +67,7 @@ Unless something blocks, an item is designed, design-reviewed, rafted, executed,
 - Every review records its model and whether it was a fallback. The board flags fallback reviews so you can ask for a cross-model re-review when tokens return. Every finding is still harvested into a skill's lessons.
 
 ### Escalation to the human
-A worker never guesses past a wall; it escalates formally. *captured* (c0250)
+A worker never guesses past a wall; it escalates formally. *exists* (c0250)
 - **State.** The item goes to status `blocked` on `origin/main`, so every host and the board see it, with a `blocked:` reason from a closed list:
 
   | reason | meaning |
@@ -76,11 +76,11 @@ A worker never guesses past a wall; it escalates formally. *captured* (c0250)
   | `design-gap` | the work needs a tool, library, dependency or scope the design did not cover |
   | `needs-decision` | an ambiguity only the human can settle |
   | `red-gate` | N fix attempts and the gate is still red |
-  | `quota` | every CLI failed on quota |
+  | `quota` | every CLI stayed out of quota past `quota_cap_hours` (`.models.toml`) |
   | `tripwire` | a guard fired (foreign refs, unvetted push to `main`) |
 
-- **The note.** `escalation.md` in the item's folder, landed with the state: reason, what was tried, the open findings or error verbatim, the options with a recommendation, and the exact resume commands. It is in git, not `.cache`, so it works across hosts and replaces c0117's local `questions.md`.
-- **The worker moves on.** It parks the branch and PR, releases its claim, and takes the next unblocked item that does not depend on the blocked one.
+- **The note.** `escalation.md` in the item's folder, landed with the state: reason, what was tried, the open findings or error verbatim, the options with a recommendation, and the exact resume commands. It is in git, not `.cache`, so it works across hosts and replaces c0117's local `questions.md` for an item (a capture, which has no item yet, keeps it).
+- **The worker moves on.** It parks the branch and PR, releases its claim, and takes the next raft that does not depend on the blocked one.
 - **You resolve.** The board lists blocked items first with the reason and the question. `./zn resolve <id> <decision>`, where the decision is `amend-design` (back to z-design with the note as input), `approve` (for example accept the new dependency, recorded in the design), `split` (carve out an issue), `retry` (more rounds or attempts) or `abort` (z-stop). The decision is committed to the item, and it rejoins the stack at its old rank.
 - Nothing else stops a worker.
 
@@ -97,7 +97,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | remote runtimes (`claude-cloud`, `grok-bot`, `cursor-app`) | c0142 | captured |
 | a raft delivered as a stacked PR set, one layer per issue | c0248 | captured |
 | `rank`, `./zn rank`, `./zn next` | c0249 | captured |
-| `blocked`, `escalation.md`, `./zn resolve` | c0250 | captured |
+| `blocked`, `escalation.md`, `./zn resolve` | c0250 | exists |
 | cross-model review pool, same-family fallback | c0251 | captured |
 | the dispatcher merges a green layer | c0252 | captured |
 | `./zn work` pull loop (the interactive session worker exists; the headless loop does not) | c0253 | captured |
@@ -112,7 +112,7 @@ The general model (*captured* (c0248); today a raft is one branch and one PR): a
 ## The five parts
 - **The tracker.** `./zn` at the repository root runs the engine in `z-nile/engine/`. Each project keeps its issues and rafts in its own root, `<project>/.tracker/` (z-nile's in `z-nile/.tracker/`), listed in `z-nile/projects.toml`. One counter, `z-nile/next`, numbers every project. The rules are in the zz-rules skill.
 - **The skills.** z-nile's skills live in `z-nile/skills/`, and a project's own in `<project>/skills/`. `.claude/skills/<name>` is a committed relative link to each, written by `./zn skills` and checked by `./zn skills --check` in the gate. The `z-` skills are the pipeline, in the order above; the `zz-` skills are called only from inside a step. Both prefixes are z-nile's: a project's skills are named `<project>-…`.
-- **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. A running step appends one short line per action (the tool and its target, or the first words of a message) to `.cache/dispatch/<id>/trail.log`, and `./zn dispatch status <id>` prints the last of those lines and the running token count before the step's JSON. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. A run accepts `main` as it is when it starts, and during the run a rewritten `main` or a commit that is not tracker state and not a pull request's merge stops it. The rules are in the zz-rules skill, Dispatch.
+- **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a blocked item and at a failure, and records each step's tokens and model on its spend row. A running step appends one short line per action (the tool and its target, or the first words of a message) to `.cache/dispatch/<id>/trail.log`, and `./zn dispatch status <id>` prints the last of those lines and the running token count before the step's JSON. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. A run accepts `main` as it is when it starts, and during the run a rewritten `main` or a commit that is not tracker state and not a pull request's merge stops it. The rules are in the zz-rules skill, Dispatch.
 - **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
 - **Provenance.** `<ID>/provenance.md` records who decided what that git cannot tell (append-only rows, `./zn provenance record`, checked by `./zn audit`; zz-rules skill, Provenance); the engine's merges of `origin/main` unite two writers of it, and zz-rules, Provenance, says how to merge when `./zn sync` stops, and names the actor options (`--actor`, `ZN_ACTOR`) and the session variables.
 - **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.

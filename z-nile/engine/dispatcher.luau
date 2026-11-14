@@ -19,6 +19,7 @@ local buffer = require("./buffer")
 local costrow = require("./costrow")
 local cred = require("./credential")
 local dispatch = require("./dispatch")
+local escalation = require("./escalation")
 local exchange = require("./exchange")
 local fs = require("@lune/fs")
 local models = require("./models")
@@ -37,7 +38,13 @@ local trackerstate = require("./trackerstate")
 
 local dispatcher = {}
 
-export type OriginItem = { path: string, front: { [string]: string }, state: string, status: string }
+export type OriginItem = {
+	path: string,
+	front: { [string]: string },
+	state: string,
+	status: string,
+	note: string?, -- c0250: the item's escalation.md on origin/main, when it has one
+}
 export type Push = { base: string, sha: string } -- main as the broker fetched it, and the commit pushed on it
 export type Ctx = {
 	fail: (string) -> never,
@@ -286,6 +293,30 @@ local function exchangeQuestion(st: State, step: string): string?
 		return bad
 	end
 	return exchangeAdd(st, "question", text, step)
+end
+
+-- c0250: an item a step blocked puts its note's question into the exchange as that step's question, once; nil, or why not.
+local function exchangeBlock(ctx: Ctx, st: State, step: string, target: string): string?
+	if target == "" then
+		return nil
+	end
+	local o = ctx.origin(target)
+	if not o or o.status ~= "blocked" or not o.note then
+		return nil
+	end
+	local note, why = escalation.parse(o.note :: string)
+	if not note then
+		return `{target}'s escalation.md does not parse: {why}`
+	end
+	local entries, readWhy = exchangeRead(st)
+	if entries == nil then
+		return readWhy
+	end
+	local last = entries[#entries]
+	if last and last.kind == "question" then
+		return nil
+	end
+	return exchangeAdd(st, "question", escalation.question(note :: escalation.Note), step)
 end
 
 -- `--answer <text>` or `--answer-file <path>` of a retry: the answer, nil when none was given, or why it is refused.
@@ -1408,6 +1439,9 @@ function dispatcher.modelStep(
 		exProblem = `the step changed the exchange or left it unreadable: {exAfterWhy}`
 	elseif not (zAsked and #zMade > 0) then -- a z-ticket that made an issue and asked fails below: its question is no message
 		local why = exchangeQuestion(st, step)
+		if not why then
+			why = exchangeBlock(ctx, st, step, target)
+		end
 		if why then
 			exProblem = `the exchange cannot take the step's question: {why}`
 		end
@@ -2107,7 +2141,9 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 		ownClaim = own,
 		localRaft = localRaft,
 		pr = pr,
-		questions = fs.isFile(`{st.dir}/questions.md`),
+		-- c0250: a question on an item is its block (escalation.md); questions.md is a capture's alone
+		questions = (id == "" or id == "new") and fs.isFile(`{st.dir}/questions.md`),
+		blocked = if o and o.status == "blocked" then (front.blocked or "") else nil,
 		openHuman = openHuman,
 		last = last,
 		uncovered = uncovered,
@@ -2413,6 +2449,18 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 			print(`stop: {why}`)
 			return dispatch.EXIT.failure
 		end
+		-- c0250: an item's question is its block, and the answer is the resolution's (a capture has no item yet)
+		if id ~= "new" then
+			if answer then
+				return refuse(
+					`the answer is the resolution's: ./zn resolve {id} <decision> --answer "<your answer>"; --answer and --answer-file are for a capture`
+				)
+			end
+			local blockedItem = ctx.origin(id)
+			if blockedItem and blockedItem.status == "blocked" then
+				return refuse(`{id} is blocked: ./zn resolve {id} <decision> first`)
+			end
+		end
 		-- the refusals that need no exchange come before anything is touched, --forget-exchange included
 		if isLink(q) then
 			return refuse(`{q} is a link`)
@@ -2600,6 +2648,21 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 				save(st)
 			end
 		end
+		-- c0250: after a resolve, the note's resolution is the answer to the question the block put into the exchange
+		if id ~= "new" and not waiting then
+			local resolved = ctx.origin(id)
+			local lastNow = exchangeRead(st)
+			local tail = if lastNow then lastNow[#lastNow] else nil
+			if resolved and resolved.note and tail and tail.kind == "question" then
+				local note = escalation.parse(resolved.note :: string)
+				if note and note.resolution then
+					local added = exchangeAdd(st, "answer", escalation.answerText(note.resolution))
+					if added then
+						return refuse(`the exchange of {id} cannot take the resolution: {added}`)
+					end
+				end
+			end
+		end
 		local step, mode = st.step, st.mode
 		st.outcome, st.detail = nil, nil
 		save(st)
@@ -2756,7 +2819,8 @@ function dispatcher.oneStep(
 		end
 	end
 	local function body(st: State): number
-		if s.kind == "model" and fs.isFile(`{st.dir}/questions.md`) then
+		local capture = id == "" or id == "new"
+		if s.kind == "model" and capture and fs.isFile(`{st.dir}/questions.md`) then
 			print(
 				`stop: a question waits in {st.dir}/questions.md: answer it with ./zn dispatch retry {id} --answer "<your answer>" (or --answer-file <path>) first`
 			)
@@ -2770,7 +2834,11 @@ function dispatcher.oneStep(
 			if nested then
 				-- a step the dispatcher started for another step cannot ask the user itself: its author asks for it
 				print(
-					`stop: this step needs the user, and only the step that started it can ask: write these questions ({st.dir}/questions.md) into your own $ZN_DISPATCH_DIR/questions.md and stop; the answer reaches you when you are re-run`
+					`stop: this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md and runs ./zn block {id} <reason> (the item is blocked, not this step); then stop`
+				)
+			elseif not capture then
+				print(
+					`stop: a step on {id} left {st.dir}/questions.md, which nothing reads for an item: it writes escalation.md in {id}'s folder and runs ./zn block {id} <reason>`
 				)
 			else
 				print(

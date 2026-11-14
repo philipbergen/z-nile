@@ -127,6 +127,19 @@ export type PromptInput = {
 	parentStateDir: string?,
 }
 
+-- c0250: what a step does when a decision needs the user. A capture has no item yet, so z-ticket keeps c0256's local
+-- questions.md; a step on an item files an escalation note and blocks the item, which every host and the board see.
+local function askText(p: PromptInput): string
+	local open =
+		"A review that leaves a refutation or an unclosed high is not a guess: write `## Open to the human` in the item's document, one bullet per finding (`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>`), do not rule on it yourself, and stop."
+	if p.id == "" then
+		return `Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`{p.stateDir}/questions.md\`, one \`## Q<n>\` heading per question with the options and what each costs, and stop. {open}`
+	elseif p.step == "zz-review" then
+		return `Nobody will answer a question. A review never blocks the item: when a decision needs the user, say so in your review, and the item's author blocks it. {open}`
+	end
+	return `Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`escalation.md\` in {p.id}'s folder (\`## Question\`, \`## What was tried\`, \`## Open findings or error\` and \`## Options\`, each option a bullet that starts with one of amend-design, approve, split, retry or abort and exactly one ending (recommended)) and run \`./zn block {p.id} <review-exhausted|design-gap|needs-decision|red-gate|quota|tripwire>\`, then stop. {open}`
+end
+
 -- The prompt of a model step. It names the skill's file, which every CLI reads itself; no skill text,
 -- architecture map or other issue is pasted (the user's "Name the files in the prompt").
 function dispatch.prompt(p: PromptInput): string
@@ -160,7 +173,7 @@ function dispatch.prompt(p: PromptInput): string
 		what,
 		"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
 		`Work only in \`{p.worktree}\`: it is your working directory. Never edit the main checkout.`,
-		`Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`{p.stateDir}/questions.md\`, one \`## Q<n>\` heading per question with the options and what each costs, and stop. A review that leaves a refutation or an unclosed high is not a guess: write \`## Open to the human\` in the item's document, one bullet per finding (\`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>\`), do not rule on it yourself, and stop.`,
+		askText(p),
 		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse.",
 		"Do not pass --time or --tokens. The dispatcher records this session's wall, CPU, tokens and model.",
 	}
@@ -179,10 +192,10 @@ function dispatch.prompt(p: PromptInput): string
 			text = `This is a re-run: you stopped this run with a question and the user has been asked. Before you start, read every file in \`{p.stateDir}/exchange/\`, in this order: {files}. {format} `
 				.. (
 					if p.exchangeNoReply
-						then "The last file says the user gave no reply: your question stands unanswered, so decide whether you can go on without it, and if not write questions.md again and stop."
+						then "The last file says the user gave no reply: your question stands unanswered, so decide whether you can go on without it, and if not ask again the way your instructions say and stop."
 						elseif
 							p.exchangeUnknownReply
-						then "The last file says your question was copied when the user retried: read the question file. Text the user added to your question is their answer. If it holds only your question, the user gave no reply and your question stands, so decide whether you can go on without it, and if not write questions.md again and stop."
+						then "The last file says your question was copied when the user retried: read the question file. Text the user added to your question is their answer. If it holds only your question, the user gave no reply and your question stands, so decide whether you can go on without it, and if not ask again the way your instructions say and stop."
 						else "The last file is an answer: it replies to your latest question, so do not ask again what it settles."
 				)
 		elseif p.exchangeAsker == p.step and p.exchangeLastStep == p.step then
@@ -236,6 +249,7 @@ export type Facts = {
 	localRaft: string, -- the raft: line in the rafting worktree, when the dispatcher rafted it ("" when none)
 	pr: Pr?, -- the PR of the step that holds the item now (prep, rafting or run)
 	questions: boolean, -- the run state holds questions.md
+	blocked: string?, -- c0250: the reason when the item is blocked on origin/main (its escalation.md names the question)
 	openHuman: { string }, -- unruled ids under ## Open to the human in the step's worktree document
 	last: { step: string, outcome: string }?, -- the last step's outcome in the run state
 	uncovered: { string }, -- `./zn lessons --uncovered <id>` in the step's worktree, after a review step
@@ -332,6 +346,12 @@ end
 -- unharvested finding. Then by state: capture, design, the prep gate, raft-plan, z-raft, the rafting gate, ready,
 -- run, the run's gate (always a human's), done.
 function dispatch.next(f: Facts): Action
+	if f.status == "blocked" then
+		return stop(
+			dispatch.EXIT.user,
+			`{f.id} is blocked ({f.blocked or "no reason"}): ./zn resolve {f.id} <decision> (amend-design, approve, split, retry or abort)`
+		)
+	end
 	if f.questions then
 		return stop(
 			dispatch.EXIT.user,

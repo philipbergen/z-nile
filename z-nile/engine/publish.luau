@@ -98,7 +98,7 @@ end
 -- <root>/(issues|rafts)/[active/ | done/]<ID>/(<ID>.md | check.sh), the id's prefix matching the kind, under a root
 -- that `roots` (origin/main's registry, never the working tree's; no default, c0114) lists. Also the live counter
 -- `counter` (default z-nile/next; publish.counterOf).
-function publish.allowed(path: string, roots: { string }, counter: string?): boolean
+function publish.allowed(path: string, roots: { string }, counter: string?, escalation: boolean?): boolean
 	local within: { string } = roots
 	if path == (counter or ids.FILE) then
 		return true
@@ -120,6 +120,7 @@ function publish.allowed(path: string, roots: { string }, counter: string?): boo
 	return rel == `{id}.md`
 		or rel == "check.sh"
 		or rel == "provenance.md"
+		or (escalation == true and (rel == "escalation.md" or string.match(rel, "^escalation%-%d%d%d%.md$") ~= nil))
 		or (isIssue(id) and (rel == "spend.md" or rel == "approval.md"))
 end
 
@@ -130,20 +131,44 @@ end
 
 -- The document with its single `status:` frontmatter line removed, or nil when it has no well-formed
 -- frontmatter. A published edit of an existing document may differ from origin's only in that line.
-local function withoutStatus(text: string): string?
+-- `escalation` (c0250: a `blocked` or `resolve` commit) also drops the `blocked:`, `design:`, `raft:` and `issues:`
+-- lines, and the Decided and Scope decision lines a resolve adds to the Problem.
+local ESCALATION_KEYS = { "status", "blocked", "design", "raft", "issues", "grouped" }
+
+local function withoutStatus(text: string, escalation: boolean?): string?
 	local head, block, rest = string.match(text, "^(%-%-%-\n)(.-\n)(%-%-%-\n.*)$")
 	if not head or not block or not rest then
 		return nil
 	end
-	local lines = 0
-	local kept = string.gsub("\n" .. block, "\nstatus:[^\n]*", function()
-		lines += 1
-		return ""
-	end)
-	if lines > 1 then
-		return nil
+	local kept = "\n" .. block
+	local keys: { string } = if escalation then ESCALATION_KEYS else { "status" }
+	for _, key in keys do
+		local lines = 0
+		kept = string.gsub(kept, `\n{key}:[^\n]*`, function()
+			lines += 1
+			return ""
+		end)
+		if lines > 1 then
+			return nil
+		end
+	end
+	if escalation then
+		rest = string.gsub(rest, "\nDecided with the user %(%d[^\n]*%), resolve: [^\n]*", "")
+		rest = string.gsub(rest, "\nScope decision %(user, %d[^\n]*", "")
 	end
 	return head .. kept .. rest
+end
+
+-- The number of Decided and Scope lines a resolve adds: a published change may add them, never remove one.
+local function escalationLines(text: string): number
+	local n = 0
+	for _ in string.gmatch(text, "\nDecided with the user %(%d[^\n]*%), resolve: ") do
+		n += 1
+	end
+	for _ in string.gmatch(text, "\nScope decision %(user, %d") do
+		n += 1
+	end
+	return n
 end
 
 local function git(
@@ -233,7 +258,8 @@ local function validateMoves(
 	out: { Change },
 	onOrigin: { [string]: string },
 	read: (string) -> string?,
-	roots: { string }
+	roots: { string },
+	escalation: boolean?
 ): ({ string }, string?)
 	local sources: { string } = {}
 	local targets: { [string]: boolean } = {}
@@ -260,7 +286,11 @@ local function validateMoves(
 				return sources,
 					`{from} -> {c.path}: a move stays under a project root that origin/main's registry lists`
 			end
-			if fid ~= pid or frel ~= prel or froot ~= proot then
+			-- c0250: a block of a readied raft that holds a resolved note keeps it, moved to its archive name
+			local archived = escalation == true
+				and frel == "escalation.md"
+				and string.match(prel, "^escalation%-%d%d%d%.md$") ~= nil
+			if fid ~= pid or (frel ~= prel and not archived) or froot ~= proot then
 				return sources, `{from} -> {c.path}: a move keeps the id, the root and the relative path`
 			end
 			if not onOrigin[from] then
@@ -291,7 +321,8 @@ local function validateMoves(
 			continue
 		end
 		local id, rel = publish.itemPath(from)
-		local dir = itemDir(c.path, rel :: string)
+		local _, toRel = publish.itemPath(c.path)
+		local dir = itemDir(c.path, toRel :: string)
 		if table.find(sources, dir) then
 			return sources, `{c.path} is inside {dir}, which this publish moves away`
 		end
@@ -304,9 +335,12 @@ local function validateMoves(
 		end
 		local want = old
 		if rel == `{id}.md` then
-			local before, after = withoutStatus(old), withoutStatus(c.content)
+			local before, after = withoutStatus(old, escalation), withoutStatus(c.content, escalation)
 			if not before or not after or before ~= after then
-				return sources, `{c.path}: a moved document may only change its status: line`
+				return sources,
+					`{c.path}: a moved document may only change its status: line{if escalation
+						then ", blocked: and design:"
+						else ""}`
 			end
 			want = c.content
 		elseif rel == "check.sh" then
@@ -341,7 +375,16 @@ local function validateMoves(
 	return sources, nil
 end
 
-function publish.commit(cwd: string, build: Build, message: string | () -> string, tries: number?): Result
+-- `escalation` (c0250): this publish is a `./zn block` or `./zn resolve` commit. It may add or append escalation.md, add
+-- an archive escalation-NNN.md of the resolved note, and change the front matter's status:, blocked:, design:, raft:
+-- and issues: lines and add Decided or Scope decision lines to a Problem. Every other rule is unchanged.
+function publish.commit(
+	cwd: string,
+	build: Build,
+	message: string | () -> string,
+	tries: number?,
+	escalation: boolean?
+): Result
 	local max = tries or 5
 	local last = ""
 	for attempt = 1, max do
@@ -410,7 +453,7 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 		if type(out) == "string" then
 			return fail(out)
 		end
-		local moved, why = validateMoves(out, onOrigin, read, roots)
+		local moved, why = validateMoves(out, onOrigin, read, roots, escalation)
 		if why then
 			return fail(why)
 		end
@@ -418,7 +461,7 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 			if c.from then
 				continue -- validated above, byte for byte against origin
 			end
-			if not publish.allowed(c.path, roots, counter) then
+			if not publish.allowed(c.path, roots, counter, escalation) then
 				return fail(`{c.path} is not a tracker item file under a project root of origin/main`)
 			end
 			for _, dir in moved do
@@ -501,8 +544,49 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 				end
 				continue
 			end
+			if escalation and string.match(c.path, "/escalation%.md$") and existing then
+				-- the note is appended to; a note that was resolved is kept under its archive name first
+				if string.sub(c.content, 1, #existing) ~= existing then
+					local dir = string.match(c.path, "^(.*)/escalation%.md$") :: string
+					local kept = false
+					for _, other in out do
+						if
+							string.match(
+								other.path,
+								"^" .. string.gsub(dir, "%p", "%%%0") .. "/escalation%-%d%d%d%.md$"
+							) and other.content == existing
+						then
+							kept = true
+						end
+					end
+					if not (kept and string.find(existing, "\n## Resolution\n", 1, true)) then
+						return fail(
+							`{c.path}: the note on origin/main is only appended to, or kept as escalation-NNN.md once resolved`
+						)
+					end
+				end
+				continue
+			end
+			if escalation and string.match(c.path, "/escalation%-%d%d%d%.md$") then
+				if existing then
+					return fail(`{c.path} already exists on origin/main: an earlier note is never rewritten`)
+				end
+				continue
+			end
+			if escalation and string.match(c.path, "/escalation%.md$") then
+				continue
+			end
 			if existing then
-				local before, after = withoutStatus(existing), withoutStatus(c.content)
+				local before, after =
+					withoutStatus(existing, escalation), withoutStatus(c.content, escalation)
+				if
+					escalation
+					and before
+					and after
+					and escalationLines(c.content) < escalationLines(existing)
+				then
+					return fail(`{c.path}: a Decided or Scope decision line is never removed`)
+				end
 				if not before or not after or before ~= after then
 					return fail(
 						`{c.path}: a published change to an existing document may only edit its status: line`

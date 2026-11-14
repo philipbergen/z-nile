@@ -73,7 +73,6 @@ function readyfacts.reason(raft: store.Item, members: { store.Item }): string?
 	end
 	local files = walk(raft.dir, function(rel: string): boolean
 		return rel == "check.sh"
-			or rel == "questions.md"
 			or string.match(rel, "^design%-review%-%d+%.md$") ~= nil
 			or string.match(rel, "^design%-refute%-%d+%.md$") ~= nil
 	end)
@@ -85,7 +84,6 @@ function readyfacts.reason(raft: store.Item, members: { store.Item }): string?
 		design = front.design or "",
 		doc = if fs.isFile(raft.doc) then fs.readFile(raft.doc) else "",
 		grouped = front.grouped,
-		questions = fs.isFile(`{raft.dir}/questions.md`),
 		listed = store.idList(front.issues),
 		members = built,
 		files = files,

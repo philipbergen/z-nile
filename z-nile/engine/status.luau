@@ -10,9 +10,14 @@ local ALLOWED: { [string]: boolean } = {
 	["prepared>active"] = true,
 	["prepared>preparing"] = true,
 	["active>prepared"] = true,
+	-- c0250: only ./zn block takes the first two edges and only ./zn resolve the last two
+	["preparing>blocked"] = true,
+	["active>blocked"] = true,
+	["blocked>new"] = true,
+	["blocked>prepared"] = true,
 }
 local NAMES: { [string]: boolean } =
-	{ new = true, preparing = true, prepared = true, active = true, done = true }
+	{ new = true, preparing = true, prepared = true, active = true, blocked = true, done = true }
 local WORDS = {
 	"raging",
 	"pink",

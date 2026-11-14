@@ -5,7 +5,7 @@ local stats = require("./stats")
 
 local boardview = {}
 
-export type Column = "ticket" | "design" | "raft" | "ready" | "run" | "done"
+export type Column = "blocked" | "ticket" | "design" | "raft" | "ready" | "run" | "done"
 export type Band = { raft: string?, ids: { string } }
 export type Landed = { id: string, at: number, design: number, code: number }
 export type TokenRow = { at: number, phase: string, tokens: number, model: string? }
@@ -13,9 +13,10 @@ export type Series = { key: string, label: string, values: { number? } }
 export type Range = { key: string, label: string, days: number? }
 export type Weekly = { labels: { string }, weeks: { string }, series: { Series } }
 
--- The six columns, left to right, and the pipeline step behind each (zz-rules, Board).
-boardview.COLUMNS = { "ticket", "design", "raft", "ready", "run", "done" } :: { Column }
+-- The seven columns, left to right, and the pipeline step behind each (zz-rules, Board). c0250: `blocked` is first.
+boardview.COLUMNS = { "blocked", "ticket", "design", "raft", "ready", "run", "done" } :: { Column }
 boardview.LABELS = {
+	blocked = "Blocked",
 	ticket = "Ticket",
 	design = "Design",
 	raft = "Raft",
@@ -48,6 +49,8 @@ boardview.UNRECORDED = "unrecorded"
 function boardview.column(stage: string, launched: boolean): Column
 	if stage == "done" then
 		return "done"
+	elseif stage == "blocked" then
+		return "blocked"
 	elseif stage == "active" then
 		return if launched then "run" else "ready"
 	elseif stage == "prepared" then
@@ -57,7 +60,10 @@ function boardview.column(stage: string, launched: boolean): Column
 	elseif stage == "new" then
 		return "ticket"
 	end
-	error(`boardview.column: {stage} is not an effective status (new, preparing, prepared, active, done)`, 0)
+	error(
+		`boardview.column: {stage} is not an effective status (new, preparing, prepared, active, blocked, done)`,
+		0
+	)
 end
 
 -- Cards of one column grouped into bands: one per raft, in raft id order, then the raftless cards; ids sorted.

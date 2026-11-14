@@ -2,6 +2,7 @@
 -- The tracker board: reads the tracker tree into a model and renders it as one self-contained HTML page.
 local boardview = require("./boardview")
 local chart = require("./chart")
+local escalation = require("./escalation")
 local fs = require("@lune/fs")
 local history = require("./history")
 local ledger = require("./ledger")
@@ -45,11 +46,14 @@ export type Raft = {
 	doneFrom: string?, -- "history" or "spend": where doneAt came from
 	rounds: { design: number, code: number }, -- review files of it, its members and the rafts retired into it
 	dispatch: Dispatch?,
+	blocked: Blocked?, -- c0250: the raft is blocked (status blocked)
 	pr: Pr?, -- c0121 fills these on the served page; the static page leaves them nil
 	checks: Checks?,
 }
 -- Reserved for c0121's served page (live `gh` data); nil in every model c0118 builds.
 export type Pr = { number: number, url: string, state: string }
+-- c0250: why a card is in the blocked column: the note's reason and the first 200 characters of its question.
+export type Blocked = { reason: string, question: string }
 export type Checks = { state: string, url: string? }
 -- The dispatcher's run state for an id (c0117's .cache/dispatch/<id>/state.json): its step, outcome and model, and
 -- whether it waits for answers in questions.md.
@@ -78,6 +82,7 @@ export type Issue = {
 	age: number?, -- seconds between doneAt and the model's asOf
 	spend: Spend, -- from its spend.md (ledger.parse)
 	dispatch: Dispatch?,
+	blocked: Blocked?, -- c0250: the issue, or its raft, is blocked
 	pr: Pr?, -- c0121's, as on Raft
 	checks: Checks?,
 }
@@ -844,6 +849,33 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	sortById(rawRafts)
 	sortById(rawIssues)
 
+	-- c0250: every blocked item with its reason and the first 200 characters of its note's question; a note that does
+	-- not parse is named in `problems`, and the card shows the reason alone
+	local blockedOf: { [string]: Blocked } = {}
+	for _, list in { rawRafts, rawIssues } do
+		for _, r in list do
+			local raftNote = if r.front.raft then blockedOf[r.front.raft] else nil
+			if status.effective(r.front, r.state) == "blocked" and raftNote then
+				-- a member of a blocked raft is blocked with it: the raft's note is its note
+				blockedOf[r.id] = raftNote
+			elseif status.effective(r.front, r.state) == "blocked" then
+				local path = `{r.dir}/escalation.md`
+				local question = ""
+				if fs.isFile(path) then
+					local note, why = escalation.parse(fs.readFile(path))
+					if note then
+						question = string.sub(escalation.question(note), 1, 200)
+					else
+						table.insert(problems, `{path} does not parse: {why}`)
+					end
+				else
+					table.insert(problems, `{path} is missing: {r.id} is blocked without its note`)
+				end
+				blockedOf[r.id] = { reason = r.front.blocked or "", question = question }
+			end
+		end
+	end
+
 	local raftIds: { [string]: boolean } = {}
 	for _, r in rawRafts do
 		raftIds[r.id] = true
@@ -876,6 +908,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			age = nil,
 			spend = spendOf(spendRows(spendPath(i.root, i.state, i.id), problems)),
 			dispatch = facts.dispatch[i.id],
+			blocked = nil,
 		}
 		table.insert(issues, issue)
 		issueById[i.id] = issue
@@ -951,6 +984,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			doneFrom = if doneAt[r.id] then "history" else nil,
 			rounds = { design = 0, code = 0 },
 			dispatch = facts.dispatch[r.id],
+			blocked = blockedOf[r.id],
 		}
 		local branch = branchOf(r.id, facts.refs, if hist and hist.activeAt then hist.activeAt[r.id] else nil)
 		if branch then
@@ -1089,6 +1123,13 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			if issue.project == p.name then
 				local raft = if issue.raft then raftById[issue.raft] else nil
 				issue.column = boardview.column(issue.stage, raft ~= nil and raft.launched)
+				-- c0250: an issue of a blocked raft waits with it, in the blocked column
+				local own = blockedOf[issue.id]
+					or (if issue.raft and issue.state ~= "done" then blockedOf[issue.raft] else nil)
+				if own and issue.state ~= "done" then
+					issue.blocked = own
+					issue.column = "blocked"
+				end
 				issue.age = boardview.age(issue.doneAt, facts.asOf)
 				table.insert(cards[issue.column], { id = issue.id, raft = issue.raft })
 			end

@@ -38,7 +38,6 @@ export type Raft = {
 	design: string,
 	doc: string,
 	grouped: string?,
-	questions: boolean,
 	listed: { string },
 	members: { Member },
 	files: { [string]: string },
@@ -180,11 +179,11 @@ end
 -- when the documents already pass and the design files have not been loaded yet: the caller loads them
 -- and calls again. A refusal is complete either way.
 function readycheck.reason(r: Raft): (string?, boolean)
+	if r.status == "blocked" then
+		return `{r.id} is blocked: ./zn resolve {r.id} <decision> first`, true
+	end
 	if not (r.where == "backlog" and r.status == "prepared") then
 		return `{r.id} is {r.status} in {r.dir} on origin/main: only a prepared raft is readied`, true
-	end
-	if r.questions then
-		return `{r.id} has questions.md: a human has to answer before it can be readied`, true
 	end
 	if #r.members == 0 then
 		return `{r.id} has no member issues`, true
