@@ -1,0 +1,159 @@
+# Harvest: c0263
+- design-review-001 F1: z-design/fixtures-keep-what-commands-need, z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F2: z-design/spec-design-correspondence, z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F3: z-design/live-defaults-checked-in-their-session
+- design-review-001 F4: zz-test/grammar-cases-from-real-producers, zz-test/pin-call-site-arguments
+- design-review-001 F5: zz-test/kill-mutants-where-the-value-is-built
+- design-review-001 F6: z-design/required-steps-on-every-path
+- design-review-001 F7: zz-arch/guard-no-is-explicit
+- design-review-001 F8: zz-test/refusals-tested-on-both-sides
+- design-review-001 F9: z-design/design-the-execution-window
+- design-review-001 F10: zz-review/run-the-evidence-you-cite
+- design-review-001 F11: z-design/spec-design-correspondence
+- design-review-001 F12: z-design/restated-rules-move-together
+- design-review-001 F13: one-off: the back-fill took the first rafting commit; the Design now names the newest and the empty-raft case
+- design-review-001 F14: z-design/spec-design-correspondence
+- design-review-001 F15: z-design/declare-what-full-runs-covered
+- design-review-001 F16: zz-test/source-pins-name-what-the-design-names
+- design-review-001 F17: zz-arch/one-reader-per-format
+- note reviewer's candidate lessons: z-design/fixtures-keep-what-commands-need, z-design/live-defaults-checked-in-their-session, zz-test/grammar-cases-from-real-producers
+- design-review-002 F1: z-design/prove-specs-pass-on-a-prototype, z-design/fixtures-keep-what-commands-need
+- design-review-002 F2: z-design/spec-design-correspondence
+- design-review-002 F3: z-design/spec-design-correspondence
+- design-review-002 F4: z-design/required-steps-on-every-path
+- design-review-002 F5: z-design/design-the-execution-window
+- design-review-002 F6: zz-arch/one-reader-per-format
+- design-review-002 F7: z-design/restated-rules-move-together
+- design-review-002 F8: zz-test/grammar-cases-from-real-producers
+- design-review-002 F9: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F10: z-design/spec-design-correspondence
+- note review 002 candidates (a run that stops at the first missing key proves only the steps before it; a slot is safe only if both neighbours are lines no flow edits): z-design/prove-specs-pass-on-a-prototype, z-design/design-the-execution-window
+- design-review-003 F1: z-design/one-file-two-write-channels, z-design/prove-specs-pass-on-a-prototype
+- design-review-003 F2: z-design/confirm-overrides-with-a-suite-run
+- design-review-003 F3: z-design/never-narrow-captured-scope
+- design-review-003 F4: zz-test/time-order-sets-fixture-dates
+- design-review-003 F5: zz-test/kill-mutants-where-the-value-is-built
+- design-review-003 F6: z-design/spec-design-correspondence
+- design-review-003 F7: z-design/never-narrow-captured-scope
+- design-review-003 F8: zz-arch/refusals-are-gate-checks
+- design-review-003 F9: z-design/restated-rules-move-together
+- design-review-003 F10: z-design/live-defaults-checked-in-their-session
+- design-review-003 F11: zz-test/refusals-tested-on-both-sides
+- design-review-003 F12: zz-arch/one-reader-per-format
+- design-review-003 F13: z-design/spec-design-correspondence
+- design-review-003 F14: z-design/required-steps-on-every-path
+- design-review-003 F15: zz-test/guard-needs-its-own-case
+- design-review-003 F16: z-design/prove-specs-pass-on-a-prototype
+- design-review-003 F17: z-design/new-rules-migrate-existing-work
+- design-review-003 F18: z-design/required-steps-on-every-path
+- design-review-003 F19: z-design/restated-rules-move-together
+- design-review-004 F1: zz-test/time-order-sets-fixture-dates
+- design-review-004 F2: z-design/restated-rules-move-together
+- design-review-004 F3: zz-test/kill-mutants-where-the-value-is-built
+- design-review-004 F4: z-design/spec-design-correspondence
+- design-review-004 F5: z-design/prove-specs-pass-on-a-prototype
+- design-review-004 F6: zz-arch/refusals-are-gate-checks
+- design-review-004 F7: z-design/spec-design-correspondence
+- design-review-004 F8: z-design/new-refusals-reach-every-caller
+- design-review-004 F9: z-design/specify-every-named-artifact
+- design-review-004 F10: z-design/specify-every-named-artifact
+- design-review-004 F11: z-design/specify-every-named-artifact
+- design-review-004 F12: z-design/specify-every-named-artifact
+- design-review-004 F13: z-design/required-steps-on-every-path
+- design-review-004 F14: z-design/confirm-overrides-with-a-suite-run
+- design-review-004 F15: z-design/restated-rules-move-together
+- design-review-004 F16: z-design/specify-every-named-artifact
+- design-review-004 F17: zz-arch/guard-no-is-explicit
+- design-review-004 F18: one-off: the merger was already in git, so the question was avoidable and became a derived entry
+- design-review-004 F19: z-design/specify-every-named-artifact
+- design-review-004 F20: z-design/restated-rules-move-together
+- note review 004 candidates (grep the specs for every name a refute says is gone; one pass must mean one parse; a grandfather rule needs a fact fixed at merge): z-design/restated-rules-move-together, z-design/specify-every-named-artifact, zz-arch/refusals-are-gate-checks
+- design-review-005 F1: z-design/prove-specs-pass-on-a-prototype
+- design-review-005 F2: z-design/fixtures-keep-what-commands-need
+- design-review-005 F3: zz-test/helpers-that-trim-change-expected-strings
+- design-review-005 F4: z-design/restated-rules-move-together
+- design-review-005 F5: z-design/exact-checks-compare-against-the-merge-base
+- design-review-005 F6: zz-test/guard-needs-its-own-case
+- design-review-005 F7: zz-test/refusals-tested-on-both-sides
+- design-review-005 F8: z-design/spec-design-correspondence
+- design-review-005 F9: z-design/specify-every-named-artifact
+- design-review-005 F10: z-design/new-rules-migrate-existing-work
+- design-review-005 F11: z-design/required-steps-on-every-path
+- design-review-005 F12: z-design/prove-specs-pass-on-a-prototype
+- design-review-005 F13: zz-test/refusals-tested-on-both-sides
+- design-review-005 F14: z-design/restated-rules-move-together
+- design-review-005 F15: z-design/instructions-runnable-where-they-run
+- design-review-005 F16: z-design/accepted-risks-checked-and-decided
+- design-review-005 F17: zz-arch/one-reader-per-format
+- note review 005 candidates (a union keeps the target branch's rows first; lenient runs stop proving anything at the first missing command; when several refusals apply to one call the Design states their order): z-design/one-file-two-write-channels, z-design/prove-specs-pass-on-a-prototype, zz-test/guard-needs-its-own-case
+- design-review-006 F1: z-design/restated-rules-move-together
+- design-review-006 F2: z-design/histories-checked-against-a-real-life
+- design-review-006 F3: zz-arch/validators-restrict-which-rows
+- design-review-006 F4: z-design/required-steps-on-every-path
+- design-review-006 F5: z-design/exact-checks-compare-against-the-merge-base
+- design-review-006 F6: z-design/spec-design-correspondence
+- design-review-006 F7: zz-arch/refusals-are-gate-checks
+- design-review-006 F8: z-design/confirm-overrides-with-a-suite-run
+- design-review-006 F9: z-design/restated-rules-move-together
+- design-review-006 F10: zz-arch/one-reader-per-format
+- design-review-006 F11: z-design/results-land-on-every-path
+- note review 006 candidates (a history rule is checked against a real life; a validator restricts which rows a direct push may add; a refute pastes the grep of the changed spec line): z-design/histories-checked-against-a-real-life, zz-arch/validators-restrict-which-rows, z-design/restated-rules-move-together
+- design-review-007 F1: z-design/one-reader-for-equal-views
+- design-review-007 F2: zz-test/rollback-cases-seed-each-prior-state
+- design-review-007 F3: z-design/confirm-overrides-with-a-suite-run
+- design-review-007 F4: zz-test/refusals-tested-on-both-sides
+- design-review-007 F5: z-design/spec-design-correspondence
+- design-review-007 F6: z-design/restated-rules-move-together
+- design-review-007 F7: z-design/accepted-risks-checked-and-decided
+- note review 007 candidates (two views of one history read by one function; a rollback case seeds each prior state; an append-only spec edits every cell): z-design/one-reader-for-equal-views, zz-test/rollback-cases-seed-each-prior-state, zz-test/refusals-tested-on-both-sides
+- design-review-008 F1: zz-test/kill-mutants-where-the-value-is-built
+- design-review-008 F2: zz-arch/parsers-refuse-ambiguity
+- design-review-008 F3: zz-test/pin-fail-safes-where-they-act
+- design-review-008 F4: z-design/restated-rules-move-together
+- design-review-008 F5: zz-arch/item-rules-scoped-to-their-call
+- design-review-008 F6: zz-test/seed-every-enumerated-case
+- design-review-008 F7: zz-test/guard-needs-its-own-case
+- design-review-008 F8: z-design/confirm-overrides-with-a-suite-run
+- design-review-008 F9: z-design/in-flight-bases-pin-their-source
+- design-review-008 F10: zz-test/no-vacuous-pass
+- note review 008 candidate (a fail-safe the caller enforces belongs in the pure function's return so a pure case pins it; a refusal that lives only in an adapter needs a case that reaches it with that input): zz-test/pin-fail-safes-where-they-act
+- design-review-009 F1: z-design/histories-checked-against-a-real-life
+- design-review-009 F2: zz-test/refusals-tested-on-both-sides
+- design-review-009 F3: z-design/instructions-runnable-where-they-run
+- design-review-009 F4: z-design/live-defaults-checked-in-their-session
+- design-review-009 F5: z-design/spec-design-correspondence
+- design-review-009 F6: z-design/mutant-ids-match-the-runner
+- note review 009 candidates (a merge rule keyed on git's per-path stage shapes inherits its rename heuristics; find the thing by its identity and move the folder on each side in the cases; a replaced instruction is run on the failure it answers): z-design/histories-checked-against-a-real-life, z-design/instructions-runnable-where-they-run
+- design-review-010 F1: z-design/spec-design-correspondence
+- design-review-010 F2: z-design/histories-checked-against-a-real-life
+- design-review-010 F3: z-design/never-narrow-captured-scope
+- design-review-010 F4: zz-test/guard-needs-its-own-case
+- design-review-010 F5: zz-test/no-vacuous-pass
+- design-review-010 F6: z-design/restated-rules-move-together
+- note review 010 candidates (a merge helper acting only on what git reports conflicted trusts git's pairing of small templated files; a removal during a merge must remove the folder it empties and the case must read the disk like the engine): z-design/histories-checked-against-a-real-life, z-design/spec-design-correspondence
+- design-review-011 F1: zz-rules/item-history-spans-moves-and-compaction
+- design-review-011 F2: z-design/restated-rules-move-together
+- design-review-011 F3: zz-test/guard-needs-its-own-case
+- design-review-011 F4: zz-arch/guard-no-is-explicit
+- design-review-011 F5: zz-arch/item-rules-scoped-to-their-call
+- design-review-011 F6: zz-test/seed-every-enumerated-case
+- design-review-011 F7: z-design/specify-every-named-artifact
+- design-review-011 F8: zz-test/no-vacuous-pass
+- design-review-011 F9: z-design/restated-rules-move-together
+- note review 011 candidates (settling two commits by id needs the same numbering; a helper that finishes or aborts a git operation first checks it started it; when a mechanism is replaced its other copies are replaced too): zz-rules/item-history-spans-moves-and-compaction, zz-arch/guard-no-is-explicit, z-design/restated-rules-move-together
+- design-review-012 F1: z-design/instructions-runnable-where-they-run
+- design-review-012 F2: zz-arch/merge-helpers-write-only-what-changed
+- design-review-012 F3: z-design/histories-checked-against-a-real-life
+- design-review-012 F4: zz-rules/item-history-spans-moves-and-compaction
+- design-review-012 F5: zz-test/guard-needs-its-own-case
+- design-review-012 F6: z-design/restated-rules-move-together
+- design-review-012 F7: zz-test/no-vacuous-pass
+- design-review-012 F8: zz-arch/guards-trust-only-origin
+- note review 012 candidates (a helper that finishes a user's half-done git operation must still work when the ref moves in between; a merge helper writes only what changed and refuses paths with uncommitted edits; a guard on "both sides changed X" asks which side uses which numbering): z-design/instructions-runnable-where-they-run, zz-arch/item-rules-scoped-to-their-call, zz-rules/item-history-spans-moves-and-compaction
+- design-review-013 F1: z-design/instructions-runnable-where-they-run
+- design-review-013 F2: zz-test/guard-needs-its-own-case
+- design-review-013 F3: zz-arch/guard-no-is-explicit
+- design-review-013 F4: z-design/mutant-ids-match-the-runner
+- design-review-013 F5: z-design/restated-rules-move-together
+- design-review-013 F6: z-design/restated-rules-move-together
+- note review 013 candidates (a helper's advice depends on whose git operation is in progress; a guard's position in an if-chain is a rule): z-design/instructions-runnable-where-they-run, zz-arch/guard-no-is-explicit

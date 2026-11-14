@@ -1,0 +1,12 @@
+# Refutations and fixes: design-review-019
+- F1: fixed: the beat commit takes the checkout's own identity (no `-c user.*`); beat.spec pins the author email to `git config user.email` (mutant N1); the Guards line names the tripwire rule; consequences: where git has no identity `commit-tree` fails and the beat says git's message (no fixture-looking fallback).
+- F2: fixed: the cases pin only what the later layers keep (no "a claim alone writes no beat"; every beat is made from `wt`, the checkout that made the claim; the readied-raft and seeded-claim beats are gone); the Design gains "Delivery: one raft, and what each layer's sequestered checks keep"; consequences: the main-checkout beat is described, not pinned (a reasoned row); lesson z-design/bottom-layer-pins-only-what-upper-layers-keep.
+- F3: fixed: Delivery states the one-PR landing; the "Until …" sentences are raft-internal states; zz-rules no longer says "or a run state"; consequences: c0253 needing c0274 and the siblings' `depends_on` are carried by the coordinator's capture (not edited here); z-raft groups the five by argument until it lands.
+- F4: fixed: `beatPaths` fetches main through `netRun`; prune and roll-back deletes go through it and never fail the beat; a tick runs under `pcall`; an unreadable main is a failed tick; new cases: failed fetch of main mid-tick, hung fetch of main inside beat (limit 2 s named in the message), refused prune (mutants N4 to N6); consequences: `status` and `lost` keep the shared unbounded fetch of main (stated).
+- F5: fixed: a lost claim's old branch kept in both prune cases, a retired raft seeded in lost.spec and beat.spec; mutants N3 and N2 (the retired test inside `claimsOf` was dead code behind `publish.allowed`, removed; N2 drops the allowed-path test instead).
+- F6: fixed: the interface block takes `specRun`; `unknown` is `[stale?]` with a lost.spec case (mutant N7).
+- F7: fixed: zz-rules lists `lost` and `beat` in the main-checkout list and AC5 greps them.
+- F8: fixed: `status <id> preparing` draws with `freshStamp` (new on origin/main and no `hb/` branch of that value); row `reasoned` (a collision cannot be observed).
+- F9: fixed: U1 probes with the well-formed `hb/preparing-probe-probe-probe`.
+- F10: fixed: 200 entries or a non-list answer is unreadable; lost.spec case (mutants N8, N9).
+- F11: fixed: the protected `lost` exit 0 is stated; a no-origin case added; the "claim ended" watch stop shares `lostText` with the restamp stop (covered by the restamp proof's text check).
