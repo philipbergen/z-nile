@@ -84,20 +84,31 @@ function provenance.isValid(value: string): boolean
 	return base == "unknown" or liveForm(base)
 end
 
+-- c0282: the variables that make a session an agent's (`hint` reads exactly these), and every variable a command that
+-- records reads. A spec that needs a human environment clears `provenance.ENV_VARS`: one list, so a marker added here
+-- is cleared there.
+provenance.AGENT_MARKERS = { "CLAUDECODE", "AI_AGENT", "CURSOR_AGENT", "GROK_SESSION_ID", "ZN_DISPATCH" }
+provenance.ENV_VARS = {
+	"CLAUDECODE",
+	"AI_AGENT",
+	"CURSOR_AGENT",
+	"GROK_SESSION_ID",
+	"ZN_DISPATCH",
+	"CLAUDE_EFFORT",
+	"ZN_ACTOR",
+	"ZN_VIA",
+}
+
 -- The agent-session hint from an environment (a table of the variables the caller read): a session is an agent's when
 -- `CLAUDECODE` (Claude Code), `AI_AGENT`, `CURSOR_AGENT` (the `agent` CLI), `GROK_SESSION_ID` (the `grok` CLI) or `ZN_DISPATCH` (a dispatched step) is set and non-empty; its effort is `CLAUDE_EFFORT`.
 -- One definition for every layer: c0283's refusal of `approve` calls this function.
 function provenance.hint(env: { [string]: string? }): Hint
-	local function set(name: string): boolean
+	local agent = false
+	for _, name in provenance.AGENT_MARKERS do
 		local v = env[name]
-		return v ~= nil and v ~= ""
+		agent = agent or (v ~= nil and v ~= "")
 	end
-	return {
-		agent = set("CLAUDECODE") or set("AI_AGENT") or set("CURSOR_AGENT") or set("GROK_SESSION_ID") or set(
-			"ZN_DISPATCH"
-		),
-		effort = env.CLAUDE_EFFORT,
-	}
+	return { agent = agent, effort = env.CLAUDE_EFFORT }
 end
 
 -- flag, then env, then an agent-session hint, then the git name; a given value that is not a live form refuses
@@ -117,6 +128,23 @@ function provenance.resolve(flag: string?, env: string?, hint: Hint, gitName: st
 		return provenance.human(gitName), nil
 	end
 	return "unknown", nil
+end
+
+-- c0282: the dispatcher step a script step runs under (`ZN_VIA`), as the `via=` part of a `rafted` row. `dispatch:<step>`
+-- only; an unset or empty value is no step; anything else is refused (nil and why), so a stray value never reaches a row.
+function provenance.via(value: string?): (string?, string?)
+	if value == nil or value == "" then
+		return nil, nil
+	end
+	if string.match(value, "^dispatch:[%l][%l%d%-]*$") then
+		return value, nil
+	end
+	return nil, `ZN_VIA is not dispatch:<step>: {value}`
+end
+
+-- c0282: the detail of a lifecycle row that names a raft: `raft=<R-id>`, then `via=` when a script step ran it.
+function provenance.raftDetail(raft: string, via: string?): string
+	return if via then `raft={raft}; via={via}` else `raft={raft}`
 end
 
 local HEADER = "| when | event | actor | detail |\n|---|---|---|---|\n"
@@ -253,6 +281,33 @@ function provenance.publishProblem(old: string?, new: string, id: string, allowe
 	for i = before + 1, #n do
 		if not table.find(allowed, n[i].event) then
 			return `a {n[i].event} row is not published here (published: {table.concat(allowed, ", ")})`
+		end
+	end
+	return nil
+end
+
+-- c0282: the rafting gate's rule for one issue's record: appended `rafted` rows only (`appendOnly` and the event), each
+-- with a live actor and the detail `raft=<raft>` or `raft=<raft>; via=dispatch:<step>`, naming the raft the PR moved the
+-- issue's `raft:` line to. Nil when it holds, else the reason.
+function provenance.raftedProblem(old: string?, new: string, id: string, raft: string): string?
+	local reason = provenance.publishProblem(old, new, id, { "rafted" })
+	if reason then
+		return reason
+	end
+	local n = (provenance.parse(new)) :: { Row }
+	local before = if old then #((provenance.parse(old)) :: { Row }) else 0
+	for i = before + 1, #n do
+		local row = n[i]
+		if not provenance.isLive(row.actor) then
+			return `a rafted row's actor is not a live form: {row.actor}`
+		end
+		local okDetail = row.detail == `raft={raft}`
+		if not okDetail then
+			local via = string.match(row.detail, `^raft={raft}; via=(.+)$`)
+			okDetail = via ~= nil and provenance.via(via) ~= nil
+		end
+		if not okDetail then
+			return `a rafted row's detail is not raft={raft}[; via=dispatch:<step>]: {row.detail}`
 		end
 	end
 	return nil

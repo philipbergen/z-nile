@@ -57,7 +57,9 @@ return t.spec("tracker commands publish state to origin/main (prep)", function(i
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(has(files, `pickman/.tracker/rafts/{rz}/{rz}.md`)).toBe(true)
 		t.expect(has(files, `pickman/.tracker/issues/{zeta}/{zeta}.md`)).toBe(true)
-		t.expect(#string.split(files, "\n")).toBe(2)
+		-- c0282 override: the member's record (the unblocked row) rides the same commit
+		t.expect(has(files, `pickman/.tracker/issues/{zeta}/provenance.md`)).toBe(true)
+		t.expect(#string.split(files, "\n")).toBe(3)
 		t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
 		t.expect(trOk(cap, { "status", rz })).toBe("new")
 		t.expect(trOk(cap, { "status", zeta })).toBe("new")
