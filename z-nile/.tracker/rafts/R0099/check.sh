@@ -13,9 +13,10 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0099
 
-check "RC1: the raft's members are exactly c0263 c0280 c0282 c0283 c0284" bash -c 'got=$("$ZN_ROOT/zn" members R0099 | sed "s|.*/||" | sort | tr "\n" " "); [[ $got == "c0263 c0280 c0282 c0283 c0284 " ]] || { echo "members: $got"; exit 1; }'
+check "RC1: the five layers are members, and any other member is an emergent issue" bash -c 'm=$("$ZN_ROOT/zn" members R0099); for id in c0263 c0280 c0282 c0283 c0284; do case "$m" in *"/$id"*) ;; *) echo "missing member $id"; exit 1;; esac; done; for dir in $m; do id=$(basename "$dir"); case " c0263 c0280 c0282 c0283 c0284 " in *" $id "*) continue;; esac; grep -q "^emergent: true" "$ZN_ROOT/$dir/$id.md" || { echo "$id is a member and not emergent"; exit 1; }; done'
 check "RC2: the engine has one list of agent-session variables, and AGENT_VARS is that table" bash -c '[[ $(grep -c "^provenance.AGENT_MARKERS = {" engine/provenance.luau) == 1 ]] && grep -q "^provenance.AGENT_VARS = provenance.AGENT_MARKERS" engine/provenance.luau && ! grep -q "^provenance.AGENT_VARS = {" engine/provenance.luau'
-check "RC3: the engine loads with every layer's commands (the 200-local cap holds) and ./zn who prints a real item's history" bash -c '"$ZN_ROOT/zn" who c0263 | grep -q idea'
-check "RC4: the board's item view has the Provenance section and the board builds" bash -c 'grep -q provenanceOf engine/board.html && "$ZN_ROOT/zn" board >/dev/null'
+check "RC3: the engine loads with every layer's commands (the 200-local cap holds) and ./zn who prints a real item's history, within two minutes" bash -c '"$ZN_ROOT/zn" run --time 120 -- "$ZN_ROOT/zn" who c0263 | grep -q idea'
+check "RC4: the board builds on the real tree within two minutes and carries a provenance key and the section code" bash -c 'out="$ZN_ROOT/.cache/r0099-rc4"; mkdir -p "$out"; "$ZN_ROOT/zn" run --time 120 -- "$ZN_ROOT/zn" board -O --out "$out/board.html" >/dev/null && grep -q "\"provenance\"" "$out/board.html" && grep -q "provenanceOf(" engine/board.html'
+check "RC5: the board build on the real tree reads the history with exactly one git cat-file --batch (c0284 AC3 at real scale)" bash -c 'out="$ZN_ROOT/.cache/r0099-rc5"; mkdir -p "$out"; rm -f "$out/trace"; GIT_TRACE="$out/trace" "$ZN_ROOT/zn" run --time 120 -- "$ZN_ROOT/zn" board -O --out "$out/board.html" >/dev/null && [[ $(grep -c "cat-file --batch" "$out/trace") == 1 ]]'
 
 finish
