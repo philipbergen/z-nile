@@ -61,25 +61,34 @@ function who.fronts(commits: { trail.Commit }, dir: string?): { [string]: proven
 	if #specs == 0 then
 		return out
 	end
-	local r = process.exec(
-		"git",
-		{ "cat-file", "--batch" },
-		{ cwd = dir, stdio = { stdin = table.concat(specs, "\n") .. "\n" } }
-	)
-	local text, pos = r.stdout, 1
-	for _, key in specs do
-		local eol = string.find(text, "\n", pos, true)
-		if not eol then
-			break
+	-- Lune's process.exec stalls when one process's output passes about 100 MB (every revision of every document of a
+	-- long history is that big), so the keys go in chunks: one `git cat-file --batch` per CHUNK keys.
+	local CHUNK = 400
+	for first = 1, #specs, CHUNK do
+		local slice: { string } = {}
+		for i = first, math.min(first + CHUNK - 1, #specs) do
+			table.insert(slice, specs[i])
 		end
-		local header = string.sub(text, pos, eol - 1)
-		pos = eol + 1
-		local size = tonumber(string.match(header, "^%x+ %a+ (%d+)$") or "")
-		if size then
-			local body = string.sub(text, pos, pos + size - 1)
-			pos += size + 1
-			local front = store.parseFront(body)
-			out[key] = { status = front.status or "", raft = front.raft or "" }
+		local r = process.exec(
+			"git",
+			{ "cat-file", "--batch" },
+			{ cwd = dir, stdio = { stdin = table.concat(slice, "\n") .. "\n" } }
+		)
+		local text, pos = r.stdout, 1
+		for _, key in slice do
+			local eol = string.find(text, "\n", pos, true)
+			if not eol then
+				break
+			end
+			local header = string.sub(text, pos, eol - 1)
+			pos = eol + 1
+			local size = tonumber(string.match(header, "^%x+ %a+ (%d+)$") or "")
+			if size then
+				local body = string.sub(text, pos, pos + size - 1)
+				pos += size + 1
+				local front = store.parseFront(body)
+				out[key] = { status = front.status or "", raft = front.raft or "" }
+			end
 		end
 	end
 	return out
