@@ -139,7 +139,7 @@ local C10NOTE = { [`{ROOT}/issues/c0010/escalation.md`] = RESOLVED }
 
 return t.spec("c0250 the publish rule of a block or resolve commit", function(it)
 	it(
-		"accepts the listed edits: a Decided line, the keys of the item and its member, a Resolution, a Grouped line",
+		"AC14: accepts the listed edits: a Decided line, the keys of the item and its member, a Resolution, a Grouped line",
 		function()
 			fresh()
 			local item = SEED[R10]
@@ -174,7 +174,7 @@ return t.spec("c0250 the publish rule of a block or resolve commit", function(it
 		end
 	)
 
-	it("refuses an edited Scope decision line", function()
+	it("AC14: refuses an edited Scope decision line", function()
 		refused(
 			{ [C10] = (string.gsub(SEED[C10], '"split it"', '"split it differently"')) },
 			C10NOTE,
@@ -182,7 +182,7 @@ return t.spec("c0250 the publish rule of a block or resolve commit", function(it
 		)
 	end)
 
-	it("refuses a removed Decided line", function()
+	it("AC14: refuses a removed Decided line", function()
 		local at = string.find(SEED[C10], DECIDED, 1, true) :: number
 		refused(
 			{ [C10] = string.sub(SEED[C10], 1, at - 1) .. string.sub(SEED[C10], at + #DECIDED) },
@@ -191,7 +191,7 @@ return t.spec("c0250 the publish rule of a block or resolve commit", function(it
 		)
 	end)
 
-	it("refuses a Decided line outside the Problem", function()
+	it("AC14: refuses a Decided line outside the Problem", function()
 		refused(
 			{ [C10] = SEED[C10] .. DECIDED },
 			C10NOTE,
@@ -204,7 +204,7 @@ return t.spec("c0250 the publish rule of a block or resolve commit", function(it
 		)
 	end)
 
-	it("refuses any other added or changed line of the body", function()
+	it("AC14: refuses any other added or changed line of the body", function()
 		refused(
 			{ [C10] = (string.gsub(SEED[C10], "The thing is slow.", "The thing is quick.", 1)) },
 			C10NOTE,
@@ -217,32 +217,35 @@ return t.spec("c0250 the publish rule of a block or resolve commit", function(it
 		)
 	end)
 
-	it("refuses raft: changed on an issue that is neither the item nor one of its members", function()
+	it("AC14: refuses raft: changed on an issue that is neither the item nor one of its members", function()
 		refused({
 			[C30] = (string.gsub(SEED[C30], "raft: R0099", "raft: ")),
 			[`{RAFT}/escalation.md`] = RESOLVED,
 		}, nil, "c0030 is neither the item R0010")
 	end)
 
-	it("refuses a key the role may not change: the item's raft: or title:, a member's issues:", function()
-		refused({
-			[R10] = (string.gsub(SEED[R10], "title: R0010", "title: other")),
-			[`{RAFT}/escalation.md`] = RESOLVED,
-		}, nil, "its title: line may not change here")
-		refused({
-			[C20] = (string.gsub(SEED[C20], "design: ready", "design: ready\nissues: [c0030]")),
-			[`{RAFT}/escalation.md`] = RESOLVED,
-		}, nil, "its issues: line may not change here")
-	end)
+	it(
+		"AC14: refuses a key the role may not change: the item's raft: or title:, a member's issues:",
+		function()
+			refused({
+				[R10] = (string.gsub(SEED[R10], "title: R0010", "title: other")),
+				[`{RAFT}/escalation.md`] = RESOLVED,
+			}, nil, "its title: line may not change here")
+			refused({
+				[C20] = (string.gsub(SEED[C20], "design: ready", "design: ready\nissues: [c0030]")),
+				[`{RAFT}/escalation.md`] = RESOLVED,
+			}, nil, "its issues: line may not change here")
+		end
+	)
 
-	it("refuses a rewritten escalation-NNN.md", function()
+	it("AC14: refuses a rewritten escalation-NNN.md", function()
 		refused({
 			[`{RAFT}/escalation-001.md`] = RESOLVED .. "Edited: yes\n",
 			[`{RAFT}/escalation.md`] = RESOLVED,
 		}, nil, "escalation-001.md")
 	end)
 
-	it("refuses an edited note body, and a second Resolution", function()
+	it("AC14: refuses an edited note body, and a second Resolution", function()
 		refused(
 			{ [`{RAFT}/escalation.md`] = (string.gsub(NOTE, "Which%?", "What?")) },
 			nil,
@@ -259,14 +262,14 @@ return t.spec("c0250 the publish rule of a block or resolve commit", function(it
 		}, nil, "only appended to")
 	end)
 
-	it("refuses a coherence review changed outside its Grouped: lines", function()
+	it("AC14: refuses a coherence review changed outside its Grouped: lines", function()
 		refused({
 			[`{RAFT}/design-review-001.md`] = (string.gsub(REVIEW, "A note.", "A different note.")),
 			[`{RAFT}/escalation.md`] = RESOLVED,
 		}, nil, "only the Grouped: lines of a coherence review")
 	end)
 
-	it("refuses a note that does not parse", function()
+	it("AC14: refuses a note that does not parse", function()
 		refused(
 			{},
 			{ [`{ROOT}/issues/c0010/escalation.md`] = "this is not a note\n" },

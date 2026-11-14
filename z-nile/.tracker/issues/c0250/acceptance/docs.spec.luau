@@ -212,6 +212,10 @@ return t.spec("c0250 the documents say block and resolve", function(it)
 			)
 			says(
 				work,
+				"Under `./zn dispatch` (the headless run step is this skill), do not run `./zn done`: the dispatcher lands the layers below (c0252)."
+			)
+			says(
+				work,
 				"You run `./zn resolve` only when the user's message in this conversation tells you to, quote that message in `--said`, and never resolve a block your own session filed."
 			)
 			says(work, "A release, and a block, adds one to the count you pass as `--released`.")

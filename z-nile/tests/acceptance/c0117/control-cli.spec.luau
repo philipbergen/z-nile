@@ -157,6 +157,11 @@ NOTE
 		GROK_SESSION_ID = "",
 		ZN_DISPATCH = "",
 		CLAUDE_EFFORT = "",
+		-- the block's note names the session that filed it, and that session may not resolve it: a terminal has none
+		ZN_HEADLESS = "",
+		CLAUDE_CODE_SESSION_ID = "",
+		KIMI_SESSION_ID = "",
+		KIMI_CODE_SESSION_ID = "",
 	}
 
 	it(

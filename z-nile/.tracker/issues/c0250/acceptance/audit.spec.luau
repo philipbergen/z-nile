@@ -56,7 +56,7 @@ local ISSUES = "pickman/.tracker/issues"
 local RAFTS = "pickman/.tracker/rafts"
 
 return t.spec("c0250 audit: the blocked invariants", function(it)
-	it("a blocked item with a reason and an unresolved note that parses is clean", function()
+	it("AC15: a blocked item with a reason and an unresolved note that parses is clean", function()
 		local dir = tree("clean", {
 			[`{ISSUES}/c0010/c0010.md`] = doc("c0010", "status: blocked-a-b-c\nblocked: red-gate\n"),
 			[`{ISSUES}/c0010/escalation.md`] = NOTE,
@@ -75,39 +75,45 @@ return t.spec("c0250 audit: the blocked invariants", function(it)
 		t.expect(blocked(dir)).toEqual({})
 	end)
 
-	it("a blocked item without blocked: names ./zn block, which sets it and re-files the note", function()
-		local dir = tree("no-reason", {
-			[`{ISSUES}/c0010/c0010.md`] = doc("c0010", "status: blocked-a-b-c\n"),
-			[`{ISSUES}/c0010/escalation.md`] = NOTE,
-		})
-		local found = blocked(dir)
-		t.expect(#found).toBe(1)
-		t.expect(has(found[1], "blocked-no-reason")).toBe(true)
-		t.expect(has(found[1], "c0010 is blocked without a blocked: line: ./zn block c0010 <reason>"))
-			.toBe(true)
-	end)
-
-	it("a blocked item without a readable unresolved note names ./zn block, which re-files it", function()
-		local dir = tree("no-note", {
-			[`{ISSUES}/c0010/c0010.md`] = doc("c0010", "status: blocked-a-b-c\nblocked: red-gate\n"),
-			[`{ISSUES}/c0020/c0020.md`] = doc("c0020", "status: blocked-a-b-c\nblocked: red-gate\n"),
-			[`{ISSUES}/c0020/escalation.md`] = "this is not a note\n",
-			[`{ISSUES}/c0030/c0030.md`] = doc("c0030", "status: blocked-a-b-c\nblocked: red-gate\n"),
-			[`{ISSUES}/c0030/escalation.md`] = RESOLVED,
-		})
-		local found = blocked(dir)
-		t.expect(#found).toBe(3)
-		for _, line in found do
-			t.expect(has(line, "blocked-no-note")).toBe(true)
-			t.expect(has(line, "./zn block c")).toBe(true)
-			t.expect(has(line, " red-gate re-files the note")).toBe(true)
+	it(
+		"AC15: a blocked item without blocked: names ./zn block, which sets it and re-files the note",
+		function()
+			local dir = tree("no-reason", {
+				[`{ISSUES}/c0010/c0010.md`] = doc("c0010", "status: blocked-a-b-c\n"),
+				[`{ISSUES}/c0010/escalation.md`] = NOTE,
+			})
+			local found = blocked(dir)
+			t.expect(#found).toBe(1)
+			t.expect(has(found[1], "blocked-no-reason")).toBe(true)
+			t.expect(has(found[1], "c0010 is blocked without a blocked: line: ./zn block c0010 <reason>"))
+				.toBe(true)
 		end
-		t.expect(has(found[1], "c0010 is blocked but has no escalation.md")).toBe(true)
-		t.expect(has(found[2], "does not parse")).toBe(true)
-		t.expect(has(found[3], "has only a resolved escalation.md")).toBe(true)
-	end)
+	)
 
-	it("blocked: on an item that is not blocked is an error", function()
+	it(
+		"AC15: a blocked item without a readable unresolved note names ./zn block, which re-files it",
+		function()
+			local dir = tree("no-note", {
+				[`{ISSUES}/c0010/c0010.md`] = doc("c0010", "status: blocked-a-b-c\nblocked: red-gate\n"),
+				[`{ISSUES}/c0020/c0020.md`] = doc("c0020", "status: blocked-a-b-c\nblocked: red-gate\n"),
+				[`{ISSUES}/c0020/escalation.md`] = "this is not a note\n",
+				[`{ISSUES}/c0030/c0030.md`] = doc("c0030", "status: blocked-a-b-c\nblocked: red-gate\n"),
+				[`{ISSUES}/c0030/escalation.md`] = RESOLVED,
+			})
+			local found = blocked(dir)
+			t.expect(#found).toBe(3)
+			for _, line in found do
+				t.expect(has(line, "blocked-no-note")).toBe(true)
+				t.expect(has(line, "./zn block c")).toBe(true)
+				t.expect(has(line, " red-gate re-files the note")).toBe(true)
+			end
+			t.expect(has(found[1], "c0010 is blocked but has no escalation.md")).toBe(true)
+			t.expect(has(found[2], "does not parse")).toBe(true)
+			t.expect(has(found[3], "has only a resolved escalation.md")).toBe(true)
+		end
+	)
+
+	it("AC15: blocked: on an item that is not blocked is an error", function()
 		local dir = tree("stray", {
 			[`{ISSUES}/c0010/c0010.md`] = doc("c0010", "status: new-a-b-c\nblocked: red-gate\n"),
 		})
@@ -117,7 +123,7 @@ return t.spec("c0250 audit: the blocked invariants", function(it)
 		t.expect(has(found[1], "c0010 has blocked: red-gate but is not blocked: remove the line")).toBe(true)
 	end)
 
-	it("a reason outside the list is an error naming ./zn resolve", function()
+	it("AC15: a reason outside the list is an error naming ./zn resolve", function()
 		local dir = tree("bad-reason", {
 			[`{ISSUES}/c0010/c0010.md`] = doc("c0010", "status: blocked-a-b-c\nblocked: bored\n"),
 			[`{ISSUES}/c0010/escalation.md`] = NOTE,
