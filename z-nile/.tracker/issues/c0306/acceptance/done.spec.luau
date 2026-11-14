@@ -331,8 +331,12 @@ return t.spec("c0306 done and commit judge the reviews", function(it)
 	end)
 
 	it(
-		"AC6: done never judges a stream review, and passes a marked raft whose reviews are on review models",
+		"AC6: done never judges a stream review or a refute, and passes a marked raft whose reviews are on review models",
 		function()
+			-- the author's answers are never judged: a refute carries no record
+			write(`{raftDir()}/refute-001.md`, "- F1: refuted: no\n")
+			write(`{raftDir()}/final-refute-001.md`, "- F1: refuted: no\n")
+			commitAll("refutes with no record")
 			seal.trace(dir, raft) -- the trace, once the files are right (the final review is the opus layer review)
 			local r = zn({ "done", raft })
 			if not r.ok then
