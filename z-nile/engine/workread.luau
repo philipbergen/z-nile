@@ -455,7 +455,11 @@ local function blockFor(
 		files = raftFiles,
 		loaded = true,
 	})
-	return why or ""
+	if why then
+		return why
+	end
+	-- The same record the carried move judges, on origin/main's tracked files. Not the working tree.
+	return readycheck.record(id, front.grouped, members, raftFiles) or ""
 end
 
 function workread.held(): string?

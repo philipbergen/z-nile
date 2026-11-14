@@ -1,7 +1,13 @@
 --!strict
 -- Whether `./zn ready` would accept a raft. Pure: texts in, the first refusal or nil. No push, no move.
--- `./zn ready` fails with this string. `./zn work next` refuses the raft with the same string, and does
--- not push. Rank is not this function; the queue order is work.rankKey.
+-- `readycheck.reason` is every check `./zn ready` makes before the carried move. `./zn work next`
+-- refuses a raft when this is not nil, and does not push. Rank is not this function.
+--
+-- The grouping record is not part of `reason`. `./zn ready` judges it inside the carried move's
+-- validator, on the tree being published (`readycheck.record`), so an ignored file on disk
+-- (acceptance/.DS_Store) never changes a member's hash. `./zn work next` calls `record` itself, on
+-- origin/main's tracked files, which is that tree when nothing else has landed. A raft proceeds only
+-- when `reason` and `record` are both nil.
 
 local approval = require("./approval")
 local contract = require("./contract")
@@ -227,10 +233,6 @@ function readycheck.reason(r: Raft): (string?, boolean)
 		if changed then
 			return changed, true
 		end
-	end
-	local recorded = readycheck.record(r.id, r.grouped, r.members, r.files)
-	if recorded then
-		return recorded, true
 	end
 	return nil, true
 end
