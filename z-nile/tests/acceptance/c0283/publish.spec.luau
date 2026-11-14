@@ -71,12 +71,12 @@ return t.spec("c0283 publishing an approval with its approved row", function(it)
 	local function tip(): string
 		return git(origin, { "rev-parse", "main" })
 	end
-	local function commit(changes: { { path: string, content: string } }): publish.Result
+	local function commit(changes: { publish.Change }): publish.Result
 		return publish.commit(work, function()
 			return changes
 		end, "tracker: approve c0010")
 	end
-	local function refused(changes: { { path: string, content: string } }, why: string)
+	local function refused(changes: { publish.Change }, why: string)
 		local before = tip()
 		local r = commit(changes)
 		t.expect(r.ok).toBe(false)
