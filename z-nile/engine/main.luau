@@ -5769,11 +5769,25 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 	if refusal then
 		fail(`worktree --takeover {old.name}: {refusal}`)
 	end
+	local copyPath = hb.discard(old, family0, ids, branch, detach, now, "worktree --takeover")
+	print(copyPath)
+end
+
+-- The discard itself, shared by `--takeover` and by the plain lookup that meets a worktree whose claim was taken over (c0277,
+-- review of R0100 F1): `ids` are the claims it remembers, already judged by the caller (lost, or already over). Writes the
+-- marker, renames the branch and the directory, creates the numbered copy and returns its path; a failure puts back what this
+-- process did. `label` names the command in a refusal.
+function hb.discard(
+	old: Wt,
+	family0: string,
+	ids: { string },
+	branch: string?,
+	detach: boolean,
+	now: number,
+	label: string
+): string
+	local prefix = `{mainRoot()}/.worktree/`
 	-- what the old worker left, read before anything moves
-	local taken = hb.discardedNumbers(family0)
-	for _, name in family(family0) do
-		table.insert(taken, name)
-	end
 	local copyName = heartbeat.nextSuffix(family0, hb.takenNames(family0))
 	local number = (string.match(copyName, "%-(%d+)$")) :: string
 	local oldBranch = old.branch or ""
@@ -5784,9 +5798,7 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 	local dirty: { string } = {}
 	local statusRead = sh.run("git", { "-C", old.path, "status", "--porcelain" })
 	if not statusRead.ok then
-		fail(
-			`worktree --takeover {old.name}: cannot read what it holds ({sh.trim(statusRead.stderr)}): nothing moved`
-		)
+		fail(`{label} {old.name}: cannot read what it holds ({sh.trim(statusRead.stderr)}): nothing moved`)
 	end
 	for line in string.gmatch(statusRead.stdout, "[^\n]+") do
 		table.insert(dirty, string.sub(line, 4))
@@ -5814,9 +5826,7 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 	local marker = `{old.path}/{hb.DISCARDED}`
 	hb.homeDir(old.path)
 	if not hb.claimFile(marker, text) then
-		fail(
-			`worktree --takeover {old.name}: it is being discarded, or already was, by another takeover: nothing moved`
-		)
+		fail(`{label} {old.name}: it is being discarded, or already was, by another takeover: nothing moved`)
 	end
 	-- a failure undoes exactly what this process did, never a step another takeover made
 	local kept, moved = false, false
@@ -5847,7 +5857,7 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 			then sh.run("git", { "branch", "-m", oldBranch, renamed })
 			else sh.run("git", { "-C", old.path, "switch", "--quiet", "-c", renamed })
 		if not r.ok then
-			undo(`worktree --takeover {old.name}: cannot keep {renamed}: {sh.trim(r.stderr)}`)
+			undo(`{label} {old.name}: cannot keep {renamed}: {sh.trim(r.stderr)}`)
 		end
 		kept = true
 		-- a bare `git push` from the discarded worktree must not move the PR's head
@@ -5859,13 +5869,13 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 	-- the folder open (its working directory) finds the marker; either way it is not told it works in the taker's checkout
 	local mv = sh.run("git", { "worktree", "move", old.path, discardedPath })
 	if not mv.ok then
-		undo(`worktree --takeover {old.name}: cannot rename {old.path}: {sh.trim(mv.stderr)}`)
+		undo(`{label} {old.name}: cannot rename {old.path}: {sh.trim(mv.stderr)}`)
 	end
 	moved = true
 	local copyPath = `{prefix}{copyName}`
 	local added = pcall(hb.addWorktree, copyPath, branch, detach, mainRef)
 	if not added then
-		undo(`worktree --takeover {old.name}: cannot create {copyPath}`)
+		undo(`{label} {old.name}: cannot create {copyPath}`)
 	end
 	-- nothing revives the claim from the old worktree: its throttle marks and its beater's pid file go (a running loop
 	-- or dispatcher tick re-checks the marker, and its folder is gone from where it started)
@@ -5883,7 +5893,7 @@ function hb.takeover(pos: { string }, opts: { [string]: { string } })
 	sh.writeReplacing(`{copyPath}/{hb.FRESH}`, tostring(now))
 	local noteBody = (string.gsub(text, "^.-\n\n", "", 1))
 	stdio.ewrite(`discarded worktree: {discardedPath}\n{noteBody}`)
-	print(copyPath)
+	return copyPath
 end
 
 -- c0277: the discarded worktrees under .worktree/ and what becomes of them. The user's rule (2026-11-11, Q1, Q2): a
@@ -6048,6 +6058,46 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 	end
 	local live = heartbeat.currentOf(dirName, names, discarded)
 	if live then
+		-- A member that remembers a claim `origin/main` no longer shows (a raft stopped from the main checkout and readied
+		-- again, a claim taken over elsewhere) is not handed out: nothing re-adopts it in place (c0274), so it is discarded
+		-- like any worktree of a claim already over, and the numbered copy is returned (review of R0100 F1). A member whose
+		-- claims are all still its own, or that remembers none, is returned as before and costs no network call.
+		local member: Wt? = nil
+		for _, w in listed do
+			if w.name == live then
+				member = w
+			end
+		end
+		local ids: { string } = if member then cm.ids(member.path) else {}
+		if member and #ids > 0 then
+			local paths = hb.beatPaths()
+			if paths then
+				local facts: { heartbeat.ClaimFact } = {}
+				for _, x in ids do
+					table.insert(facts, {
+						id = x,
+						remembered = cm.read(x, member.path),
+						current = hb.claimStampOf(paths :: { string }, x),
+					})
+				end
+				if heartbeat.staleMember(facts) then
+					local copy = hb.discard(
+						member,
+						heartbeat.baseOf(member.branch, member.name),
+						ids,
+						branch,
+						detach,
+						hb.hbNow(),
+						"worktree"
+					)
+					stdio.ewrite(
+						`notice: {member.path} remembered a claim that is over ({table.concat(ids, ", ")}: main shows another or none), so it was discarded; {copy} is the numbered copy to work in\n`
+					)
+					print(copy)
+					return
+				end
+			end
+		end
 		-- a family that has had a discard says so: an old process that looks its worktree up again is told it was the one
 		-- discarded (the taker reads the same notice)
 		for _, w in listed do

@@ -643,6 +643,23 @@ function heartbeat.discardRefusal(facts: { ClaimFact }, why: string?): string?
 	return nil
 end
 
+-- Whether the plain lookup must not hand a worktree out: at least one claim it remembers is over (origin/main shows another
+-- stamp or none: "taken" or "ended") and none is still its own (a "held" claim keeps the worktree in use). This is c0274's
+-- "no in-place re-adoption" meeting c0277's lookup: a raft stopped from the main checkout and readied again leaves its
+-- worktree remembering the old stamp.
+function heartbeat.staleMember(facts: { ClaimFact }): boolean
+	local over = false
+	for _, f in facts do
+		local held = heartbeat.holds(f.remembered, f.current)
+		if held == "held" then
+			return false
+		elseif held == "taken" or held == "ended" then
+			over = true
+		end
+	end
+	return over
+end
+
 export type Discard = {
 	path: string,
 	copy: string,

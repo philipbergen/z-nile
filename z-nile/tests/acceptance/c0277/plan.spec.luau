@@ -83,6 +83,26 @@ return t.spec("c0277 discarded worktree rules", function(it)
 		end
 	)
 
+	it(
+		"the lookup does not hand out a worktree that remembers a claim main no longer shows, unless another claim is still its own",
+		function()
+			local function f(remembered: string, current: string?): heartbeat.ClaimFact
+				return { id = "R0020", remembered = remembered, current = current }
+			end
+			t.expect(heartbeat.staleMember({ f(A, B) })).toBe(true) -- taken: main shows another stamp (stop, then ready)
+			t.expect(heartbeat.staleMember({ f(A, nil) })).toBe(true) -- ended: main shows none (stop)
+			t.expect(heartbeat.staleMember({ f(A, A) })).toBe(false) -- its own claim
+			t.expect(heartbeat.staleMember({})).toBe(false) -- remembers nothing
+			-- one claim still its own keeps the worktree in use, whatever order the others come in
+			t.expect(heartbeat.staleMember({ f(A, B), { id = "c0010", remembered = B, current = B } }))
+				.toBe(false)
+			t.expect(heartbeat.staleMember({ { id = "c0010", remembered = B, current = B }, f(A, B) }))
+				.toBe(false)
+			t.expect(heartbeat.staleMember({ f(A, B), { id = "c0010", remembered = A, current = nil } }))
+				.toBe(true)
+		end
+	)
+
 	it("a copy a taker is starting in is fresh until the limit", function()
 		t.expect(heartbeat.fresh(1000, 1000, heartbeat.STALE)).toBe(true)
 		t.expect(heartbeat.fresh(1000, 1000 + heartbeat.STALE - 1, heartbeat.STALE)).toBe(true)
