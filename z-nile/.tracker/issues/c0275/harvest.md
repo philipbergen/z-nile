@@ -1,0 +1,16 @@
+# Harvest: c0275
+- design-review-001 F1: z-design/overlapping-stop-rules-need-a-case-each
+- design-review-001 F2: zz-test/session-end-includes-clear
+- design-review-001 F3: zz-test/detached-helpers-meet-the-reaper
+- design-review-001 F4: zz-test/helpers-under-run-carry-zn-measured
+- design-review-001 F5: one-off: shared-ref fetch contention, answered in sh.run once
+- design-review-001 F6: z-design/prototype-engine-edits-pass-the-type-stages
+- design-review-001 F7: zz-test/each-fail-closed-rule-has-its-own-input
+- design-review-001 F8: z-design/run-the-other-rafts-specs
+- design-review-001 F9: z-design/quote-other-preps-before-promising
+- design-review-001 F10: one-off: bounded leaks accepted and stated
+- note the beater was designed against the reaper before review: zz-test/detached-helpers-meet-the-reaper
+- note kill -0 answers for zombies: zz-test/liveness-probes-skip-zombies
+- note ps is unreadable in the spec jail: zz-test/process-table-unreadable-in-the-jail
+- note two spec files naming one .cache folder fail c0049: zz-test/spell-shared-cache-names-apart
+- note surviving mutants of overlapping stop rules: z-design/overlapping-stop-rules-need-a-case-each
