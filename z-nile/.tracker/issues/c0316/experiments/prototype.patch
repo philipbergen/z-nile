@@ -1,0 +1,403 @@
+diff --git a/z-nile/engine/lessons.luau b/z-nile/engine/lessons.luau
+index ae72e613d..587146b4c 100644
+--- a/z-nile/engine/lessons.luau
++++ b/z-nile/engine/lessons.luau
+@@ -3,14 +3,20 @@
+ -- <project>/skills, c0115; .claude/skills in a tree from before c0115), and a
+ -- harvest.md ledger in each reviewed item's folder mapping every review finding to the lessons it taught, or
+ -- marking it one-off. Everything here is pure over texts except `load`, which only reads.
++local contract = require("./contract")
+ local fs = require("@lune/fs")
+ local projects = require("./projects")
+ local skillsLib = require("./skills")
+ 
+ local stats = require("./stats")
++local store = require("./store")
+ 
+ local lessons = {}
+ 
++-- c0316: the stage whose work held a mistake, which is the stage whose review should have caught it
++export type Stage = "idea" | "design" | "implementation"
++lessons.STAGES = { "idea", "design", "implementation" } :: { Stage }
++
+ export type When = "design" | "build" | "both"
+ export type Lesson = {
+ 	id: string,
+@@ -32,9 +38,27 @@ export type Entry = {
+ 	lessons: { string },
+ 	oneOff: string?,
+ 	note: string?,
++	-- c0316: an escape entry (`- escape <kind> <n> (<stage>): <target>`): review is "escape" and finding is "<kind> <n>"
++	escape: { kind: "redesign" | "stop" | "rework", n: number, stage: Stage }?,
++}
++-- one reviewed item: review stem -> text (design-review-NNN, review-NNN), and its harvest.md text if any.
++-- c0316: approvals (rows of approval.md), stops (the document's stops:) and reworks (its reworks: id) may be nil in a
++-- hand-built item and then count as 0, 0 and none.
++export type Item = {
++	id: string,
++	reviews: { [string]: string },
++	harvest: string?,
++	approvals: number?,
++	stops: number?,
++	reworks: string?,
++}
++export type Escape = {
++	item: string,
++	kind: "finding" | "redesign" | "stop" | "rework",
++	ref: string,
++	made: Stage?,
++	found: "design" | "implementation" | "merged",
+ }
+--- one reviewed item: review stem -> text (design-review-NNN, review-NNN), and its harvest.md text if any
+-export type Item = { id: string, reviews: { [string]: string }, harvest: string? }
+ export type Tree = {
+ 	lessons: { [string]: string },
+ 	found: { [string]: boolean }, -- every item folder seen, reviewed or not
+@@ -149,6 +173,19 @@ local function twice(ids: { string }): string?
+ 	return nil
+ end
+ 
++local ESCAPE_KINDS = { redesign = true, stop = true, rework = true }
++
++local function stageOfWord(word: string): Stage?
++	if word == "idea" then
++		return "idea"
++	elseif word == "design" then
++		return "design"
++	elseif word == "implementation" then
++		return "implementation"
++	end
++	return nil
++end
++
+ local function isStem(stem: string): boolean
+ 	return string.match(stem, "^design%-review%-%d%d%d$") ~= nil
+ 		or string.match(stem, "^review%-%d%d%d$") ~= nil
+@@ -163,6 +200,70 @@ function lessons.parseHarvest(item: string, text: string): ({ Entry }, { string
+ 		if string.sub(line, 1, 2) ~= "- " then
+ 			continue
+ 		end
++		local ekind, en, estage, etarget = string.match(line, "^%- escape (%S+) (%S+) %((%S*)%):%s*(.-)%s*$")
++		if ekind and en and estage and etarget then
++			local key = `escape {ekind} {en}`
++			local stage = stageOfWord(estage)
++			local n = if string.match(en, "^[1-9]%d*$") then tonumber(en) else nil
++			if not ESCAPE_KINDS[ekind] then
++				table.insert(problems, `{item}/harvest.md: {key}: unknown escape kind {ekind}: {line}`)
++				continue
++			elseif not n then
++				table.insert(
++					problems,
++					`{item}/harvest.md: {key}: the number must be a positive integer: {line}`
++				)
++				continue
++			elseif not stage then
++				table.insert(problems, `{item}/harvest.md: {key}: unknown stage {estage}: {line}`)
++				continue
++			end
++			local entry: Entry = {
++				item = item,
++				review = "escape",
++				finding = `{ekind} {n}`,
++				lessons = {},
++				oneOff = nil,
++				escape = { kind = ekind :: "redesign" | "stop" | "rework", n = n, stage = stage :: Stage },
++			}
++			local reason = string.match(etarget, "^one%-off:%s*(.*)$")
++			if reason then
++				if trim(reason) == "" then
++					table.insert(problems, `{item}/harvest.md: {key}: a one-off needs a reason`)
++					continue
++				end
++				entry.oneOff = trim(reason)
++			else
++				local ok = etarget ~= ""
++				for id in string.gmatch(etarget, "[^,]+") do
++					local lid = trim(id)
++					if not string.match(lid, "^[%w%-]+/[a-z0-9%-]+$") then
++						ok = false
++						break
++					end
++					table.insert(entry.lessons, lid)
++				end
++				if not ok then
++					table.insert(
++						problems,
++						`{item}/harvest.md: {key}: the target is neither lesson ids nor one-off: {etarget}`
++					)
++					continue
++				end
++			end
++			local dup = twice(entry.lessons)
++			if dup then
++				table.insert(problems, `{item}/harvest.md: {key}: lesson {dup} is named twice`)
++				continue
++			end
++			if seen[key] then
++				table.insert(problems, `{item}/harvest.md: {key}: a second entry for the same escape`)
++				continue
++			end
++			seen[key] = true
++			table.insert(entries, entry)
++			continue
++		end
+ 		local noteText, ids = string.match(line, "^%- note (.*): ([^:]*)$")
+ 		if noteText then
+ 			local note = trim(noteText)
+@@ -270,17 +371,24 @@ function lessons.sources(items: { Item }): { [string]: { string } }
+ 	local out: { [string]: { string } } = {}
+ 	for _, item in byId(items) do
+ 		-- review entries in review and finding order, then notes in file order
+-		local reviews: { Entry }, notes: { Entry } = {}, {}
++		local reviews: { Entry }, notes: { Entry }, escapes: { Entry } = {}, {}, {}
+ 		for _, e in entriesOf(item) do
+-			table.insert(if e.note then notes else reviews, e)
++			table.insert(if e.note then notes elseif e.escape then escapes else reviews, e)
+ 		end
++		table.sort(escapes, function(a, b)
++			local ea, eb = a.escape :: any, b.escape :: any
++			if ea.kind ~= eb.kind then
++				return ea.kind < eb.kind
++			end
++			return ea.n < eb.n
++		end)
+ 		table.sort(reviews, function(a, b)
+ 			if a.review ~= b.review then
+ 				return a.review < b.review
+ 			end
+ 			return num(a.finding) < num(b.finding)
+ 		end)
+-		for _, list in { reviews, notes } do
++		for _, list in { reviews, escapes, notes } do
+ 			for _, e in list do
+ 				for _, lid in e.lessons do
+ 					out[lid] = out[lid] or {}
+@@ -295,6 +403,126 @@ function lessons.sources(items: { Item }): { [string]: { string } }
+ 	return out
+ end
+ 
++function lessons.reviewStage(stem: string): Stage
++	return if string.sub(stem, 1, 14) == "design-review-" then "design" else "implementation"
++end
++
++-- The valid `Stage:` line inside the block of `### <finding>` (its heading to the next `### ` or `## ` heading or
++-- the end); nil when the block has none, or only an unknown stage.
++function lessons.stageOf(review: string, finding: string): Stage?
++	local inBlock = false
++	for line in string.gmatch(review .. "\n", "([^\n]*)\n") do
++		local head = string.match(line, "^###%s+(F%d+)")
++		if head then
++			inBlock = head == finding
++		elseif string.match(line, "^##%s") then
++			inBlock = false
++		elseif inBlock then
++			local word = string.match(line, "^Stage:%s*(.-)%s*$")
++			if word then
++				return stageOfWord(word)
++			end
++		end
++	end
++	return nil
++end
++
++local function sortedFindings(review: string): { string }
++	local fs_ = lessons.findings(review)
++	table.sort(fs_, function(a, b)
++		return num(a) < num(b)
++	end)
++	return fs_
++end
++
++local RANK: { [string]: number } = { idea = 1, design = 2, implementation = 3 }
++
++-- Every escape of the item, covered or not. A finding is an escape when its stage is earlier than its review's own.
++function lessons.escapes(item: Item): { Escape }
++	local out: { Escape } = {}
++	local made: { [string]: Stage } = {}
++	for _, e in entriesOf(item) do
++		if e.escape then
++			made[e.finding] = e.escape.stage
++		end
++	end
++	for _, stem in stems(item) do
++		local own = lessons.reviewStage(stem)
++		local foundAt: "design" | "implementation" = if own == "design" then "design" else "implementation"
++		for _, f in sortedFindings(item.reviews[stem]) do
++			local stage = lessons.stageOf(item.reviews[stem], f)
++			if stage and RANK[stage] < RANK[own] then
++				table.insert(out, {
++					item = item.id,
++					kind = "finding",
++					ref = `{stem} {f}`,
++					made = stage :: Stage,
++					found = foundAt,
++				})
++			end
++		end
++	end
++	for n = 2, item.approvals or 0 do
++		local ref = `redesign {n}`
++		table.insert(
++			out,
++			{ item = item.id, kind = "redesign", ref = ref, made = made[ref], found = "implementation" }
++		)
++	end
++	for n = 1, item.stops or 0 do
++		local ref = `stop {n}`
++		table.insert(
++			out,
++			{ item = item.id, kind = "stop", ref = ref, made = made[ref], found = "implementation" }
++		)
++	end
++	if item.reworks ~= nil and item.reworks ~= "" then
++		table.insert(
++			out,
++			{ item = item.id, kind = "rework", ref = "rework 1", made = made["rework 1"], found = "merged" }
++		)
++	end
++	return out
++end
++
++-- `<id> <stem> <F>: no Stage line` for every finding of a review not in `exempt` (stems) with no valid Stage line.
++function lessons.unstaged(item: Item, exempt: { [string]: boolean }): { string }
++	local out = {}
++	for _, stem in stems(item) do
++		if exempt[stem] then
++			continue
++		end
++		for _, f in sortedFindings(item.reviews[stem]) do
++			if not lessons.stageOf(item.reviews[stem], f) then
++				table.insert(out, `{item.id} {stem} {f}: no Stage line`)
++			end
++		end
++	end
++	return out
++end
++
++-- The escapes by the stage that made them and the stage that found them, for the report: made in STAGES order and
++-- then "not harvested"; found design, implementation, merged. Only the rows that count something.
++function lessons.escapeCounts(items: { Item }): { { made: string, found: string, n: number } }
++	local counts: { [string]: number } = {}
++	for _, item in items do
++		for _, e in lessons.escapes(item) do
++			local key = `{e.made or "not harvested"}\t{e.found}`
++			counts[key] = (counts[key] or 0) + 1
++		end
++	end
++	local out: { { made: string, found: string, n: number } } = {}
++	for _, made in { "idea", "design", "implementation", "not harvested" } do
++		for _, found in { "design", "implementation", "merged" } do
++			local n = counts[`{made}\t{found}`]
++			if n then
++				table.insert(out, { made = made, found = found, n = n })
++			end
++		end
++	end
++	return out
++end
++
+ function lessons.uncovered(items: { Item }): { string }
+ 	local out = {}
+ 	for _, item in byId(items) do
+@@ -303,16 +531,17 @@ function lessons.uncovered(items: { Item }): { string }
+ 			named[`{e.review} {e.finding}`] = true
+ 		end
+ 		for _, stem in stems(item) do
+-			local fs_ = lessons.findings(item.reviews[stem])
+-			table.sort(fs_, function(a, b)
+-				return num(a) < num(b)
+-			end)
+-			for _, f in fs_ do
++			for _, f in sortedFindings(item.reviews[stem]) do
+ 				if not named[`{stem} {f}`] then
+ 					table.insert(out, `{item.id} {stem} {f}`)
+ 				end
+ 			end
+ 		end
++		for _, e in lessons.escapes(item) do
++			if e.kind ~= "finding" and not named[`escape {e.ref}`] then
++				table.insert(out, `{item.id} escape {e.ref}`)
++			end
++		end
+ 	end
+ 	return out
+ end
+@@ -427,6 +656,10 @@ function lessons.check(tree: Tree): { string }
+ 		end
+ 	end
+ 	for _, item in tree.items do
++		local target = item.reworks
++		if target ~= nil and target ~= "" and not tree.found[target] then
++			add(`{item.id}: reworks {target}: no such item`)
++		end
+ 		if not item.harvest then
+ 			continue
+ 		end
+@@ -444,6 +677,23 @@ function lessons.check(tree: Tree): { string }
+ 				continue
+ 			end
+ 			local key = `{item.id}/harvest.md: {e.review} {e.finding}`
++			local esc = e.escape
++			if esc then
++				local ref = `escape {e.finding}`
++				if esc.kind == "redesign" and (esc.n < 2 or esc.n > (item.approvals or 0)) then
++					add(`{item.id}/harvest.md: {ref}: {item.id} has no approval row {esc.n} to redesign`)
++				elseif esc.kind == "stop" and esc.n > (item.stops or 0) then
++					add(`{item.id}/harvest.md: {ref}: {item.id} has no stop {esc.n}`)
++				elseif esc.kind == "rework" and (esc.n ~= 1 or item.reworks == nil or item.reworks == "") then
++					add(`{item.id}/harvest.md: {ref}: {item.id} has no reworks:`)
++				end
++				for _, lid in e.lessons do
++					if not tree.lessons[lid] then
++						add(`{item.id}/harvest.md: {ref}: no lesson {lid}`)
++					end
++				end
++				continue
++			end
+ 			local review = item.reviews[e.review]
+ 			if not review then
+ 				add(`{key}: no {e.review}.md in {item.id}`)
+@@ -616,7 +866,7 @@ function lessons.load(root: string): Tree
+ 						continue
+ 					end
+ 					tree.found[id] = true
+-					local item: Item = { id = id, reviews = {}, harvest = nil }
++					local item: Item = { id = id, reviews = {}, harvest = nil, approvals = 0, stops = 0 }
+ 					local any = false
+ 					for _, name in fs.readDir(`{parent}/{id}`) do
+ 						local stem = string.match(name, "^(.+)%.md$")
+@@ -627,8 +877,25 @@ function lessons.load(root: string): Tree
+ 						elseif name == "harvest.md" and fs.isFile(path) then
+ 							item.harvest = fs.readFile(path)
+ 							any = true
++						elseif name == "approval.md" and fs.isFile(path) then
++							local rows, err = contract.parse(fs.readFile(path))
++							if rows then
++								item.approvals = #rows
++							else
++								table.insert(tree.problems, `{id}/approval.md: {err}`)
++							end
+ 						end
+ 					end
++					local doc = `{parent}/{id}/{id}.md`
++					if fs.isFile(doc) then
++						local front = store.readFront(doc)
++						item.stops = tonumber(front.stops) or 0
++						local reworks = front.reworks
++						item.reworks = if reworks ~= nil and reworks ~= "" then reworks else nil
++					end
++					if (item.approvals or 0) >= 2 or (item.stops or 0) >= 1 or item.reworks ~= nil then
++						any = true
++					end
+ 					if any then
+ 						table.insert(tree.items, item)
+ 					end
+@@ -665,6 +932,8 @@ local function ledgerLine(
+ 	local head, ids
+ 	if entry and entry.note then
+ 		head, ids = string.match(line, "^(%- note .*: )([^:]*)$")
++	elseif entry and entry.escape and not entry.oneOff then
++		head, ids = string.match(line, "^(%- escape %S+ %S+ %(%S*%):%s*)(.*)$")
+ 	elseif entry and not entry.oneOff then
+ 		head, ids = string.match(line, "^(%- %S+ F%d+:%s*)(.*)$")
+ 	end
