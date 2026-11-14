@@ -14,7 +14,7 @@
 - design-review-001 F6: z-design/new-rules-migrate-existing-work
 - design-review-001 F7: zz-arch/one-reader-per-format
 - design-review-001 F8: z-design/restated-rules-move-together
-- design-review-001 F9: one-off: AGENTS.md:7 is c0293's carried text, reported as the Design asked, and captured as a chore that waits for c0293 and c0306
+- design-review-001 F9: one-off: AGENTS.md:7 is c0293's carried text, reported as the Design asked, and captured as c0332, which waits for c0293 and c0306
 - design-review-001 F10: one-off: the experiment records now name how each run was bounded; zz-review item 12 already asks for it
 - note the third prototype round found the mark changing grouped records, mutants left on a function the rework stopped calling, and a done fixture made unfinished by a late commit (prep, 2026-11-14): z-design/new-front-matter-lines-meet-every-hash, zz-test/mutants-follow-the-code-after-a-rework, zz-test/done-fixtures-commit-in-finish-order
 - note the fourth prototype round found that a member's way out at ready differs from the raft's own (prep, 2026-11-14): z-design/refusals-name-a-way-out-that-works
