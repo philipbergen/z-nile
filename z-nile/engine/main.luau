@@ -4780,21 +4780,6 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 		return gitFileTextAt(atCommit, path)
 	end
 
-	local function capturedDocText(issue: store.Item, atCommit: string): string
-		local head = if sh.run("git", { "rev-parse", "--verify", "-q", "origin/main" }).ok
-			then "origin/main"
-			else atCommit
-		local commits, _ = trailLib.read("issues", issue.id, trailLib.isDoc, head)
-		local found = if commits then (trailLib.capture(commits)) else nil
-		if found then
-			local shown = sh.run("git", { "show", `{found.sha}:{found.path}` })
-			if shown.ok then
-				return shown.stdout
-			end
-		end
-		return fileTextAt(atCommit, issue.doc, sh.git({ "rev-parse", "HEAD" }) == atCommit) or ""
-	end
-
 	local function buildTraceIssueDocs(issues: { store.Item }, atCommit: string): { trace.IssueDoc }
 		local useWorktree = sh.git({ "rev-parse", "HEAD" }) == atCommit
 		local out: { trace.IssueDoc } = {}
@@ -4804,14 +4789,12 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 			local docText = fileTextAt(atCommit, issue.doc, useWorktree) or ""
 			local checkText = gitFileTextAt(atCommit, checkPath)
 			local resultsText = gitFileTextAt(atCommit, resultsPath)
-			local captured = capturedDocText(issue, atCommit)
 			table.insert(out, {
 				id = issue.id,
 				docPath = issue.doc,
 				checkPath = checkPath,
 				dirPath = issue.dir,
 				home = homeOf(issue),
-				capturedText = if captured ~= "" then captured else docText,
 				docText = docText,
 				checkText = checkText,
 				resultsPath = resultsPath,
@@ -4859,6 +4842,52 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 	end
 
 	local issues = layergit.orderedMembers(raft)
+
+	-- The same refusal `./zn done` uses (`approval.reasonOf`), judged on the files at the commit
+	-- being landed. A missing approval fails here: the table is traced against the approved document.
+	local function approvalOf(issue: store.Item, atCommit: string): string?
+		local function specsUnder(dir: string): { [string]: string }
+			local specs: { [string]: string } = {}
+			local listed = sh.run("git", { "ls-tree", "-r", "--name-only", atCommit, "--", dir })
+			if listed.ok then
+				for path in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
+					if string.match(path, "%.spec%.luau$") then
+						local rel = string.sub(path, #dir + 2)
+						local body = gitFileTextAt(atCommit, path)
+						if body ~= nil then
+							specs[rel] = body
+						end
+					end
+				end
+			end
+			return specs
+		end
+		local acc = specsUnder(`{issue.dir}/acceptance`)
+		local specs = if next(acc) ~= nil
+			then acc
+			else specsUnder(projects.promotedDir(projects.load("."), issue.root, issue.id))
+		local parts, err = contract.build(
+			gitFileTextAt(atCommit, issue.doc) or "",
+			gitFileTextAt(atCommit, `{issue.dir}/check.sh`) or "",
+			specs
+		)
+		if not parts then
+			return `{issue.id}: {err}`
+		end
+		local path = approval.file(issue)
+		return approval.reasonOf(issue.id, path, parts, gitFileTextAt(atCommit, path), true)
+	end
+
+	local function withApproval(findings: { string }, atCommit: string): { string }
+		for _, issue in issues do
+			local problem = approvalOf(issue, atCommit)
+			if problem then
+				table.insert(findings, problem)
+			end
+		end
+		return findings
+	end
+
 	local layers = layergit.layersOf(raft.id)
 	if printSkeletonOnly then
 		if #layers == 0 then
@@ -4911,7 +4940,7 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 	local tracePath = `{raft.dir}/trace.md`
 	local tableText = fileTextAt(topTip, tracePath, useWorktree)
 	if tableText == nil then
-		return { `no {tracePath}: run ./zn trace {raft.id} and fill the table` }
+		return withApproval({ `no {tracePath}: run ./zn trace {raft.id} and fill the table` }, topTip)
 	end
 
 	local baseTip = layergit.mainTip()
@@ -4966,16 +4995,19 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 	end
 
 	local raftDocText = fileTextAt(topTip, raft.doc, useWorktree) or ""
-	return trace.check({
-		raftId = raft.id,
-		raftDir = raft.dir,
-		tableText = tableText,
-		layers = layerHistories,
-		issues = issueDocs,
-		raftDocText = raftDocText,
-		changedSources = changedSources,
-		filesAtCommit = filesAtCommit,
-	})
+	return withApproval(
+		trace.check({
+			raftId = raft.id,
+			raftDir = raft.dir,
+			tableText = tableText,
+			layers = layerHistories,
+			issues = issueDocs,
+			raftDocText = raftDocText,
+			changedSources = changedSources,
+			filesAtCommit = filesAtCommit,
+		}),
+		topTip
+	)
 end
 
 function cmd.trace(pos: { string }, opts: { [string]: { string } })

@@ -14,23 +14,25 @@
 --    `./zn trace <R-id> --check`
 --      Reads `<raft-dir>/trace.md` and each ticket's `<issue-dir>/results.txt`
 --      from git at the top layer's commit and verifies the table against the
---      finished stack. Prints `ok: <R-id>` and exits 0 when valid; prints each
---      failure (`row <row>, <cell>: <message>`) to stderr and exits 1 when any
---      check fails.
+--      finished stack. It also requires each ticket's approval to hold for
+--      that same commit, through `approval.reasonOf` (the check `./zn done`
+--      uses). Prints `ok: <R-id>` and exits 0 when valid; prints each failure
+--      (`row <row>, <cell>: <message>`, or the approval refusal naming the
+--      ticket) to stderr and exits 1 when any check fails.
 --
 -- 2. Stable claim names (`deriveClaims`):
---    For each member ticket `<id>` of the raft, in the raft's layer order:
+--    A claim's source is the ticket's document (`<id>.md`) at the commit being
+--    landed: the document `./zn approve` hashed. For each member ticket `<id>`
+--    of the raft, in the raft's layer order:
 --    - `<id>:P1`, `<id>:P2`, ... : each outcome (paragraph or bullet item)
---      under `## Problem` in `./zn capture <id>` (the ticket's captured idea
---      before prep).
+--      under `## Problem`.
 --    - `<id>:S1`, `<id>:S2`, ... : each outcome (paragraph or bullet item)
---      under `## Solution` in `./zn capture <id>`.
+--      under `## Solution`.
 --    - `<id>:AC1`, `<id>:AC2`, ... : each criterion under
---      `## Acceptance criteria` in `<id>.md` at the commit being landed
---      (preserving explicit `AC<N>` numbers when written, else 1..N).
---    Every ticket must have a captured `## Problem`, a captured `## Solution`,
---    and `## Acceptance criteria`; a missing or empty section is a failure
---    naming the ticket and the missing section (no vacuous fallback).
+--      `## Acceptance criteria` (preserving explicit `AC<N>` numbers when
+--      written, else 1..N).
+--    A missing or empty section is a failure naming the ticket and the section
+--    (no vacuous fallback).
 --
 -- 3. Recorded green spec results (`<issue-dir>/results.txt`):
 --    `trace.renderResults` is the only serializer and `trace.parseResults` the
@@ -93,7 +95,6 @@ export type IssueDoc = {
 	checkPath: string,
 	dirPath: string,
 	home: string,
-	capturedText: string,
 	docText: string,
 	checkText: string?,
 	resultsPath: string?,
@@ -368,10 +369,10 @@ function trace.deriveClaims(issues: { IssueDoc }): ({ Claim }, { string })
 	local out: { Claim } = {}
 	local errors: { string } = {}
 	for _, issue in issues do
-		local captured = if issue.capturedText ~= "" then issue.capturedText else issue.docText
-		local problems = extractOutcomes(sectionBody(captured, "Problem"))
+		local doc = issue.docText
+		local problems = extractOutcomes(sectionBody(doc, "Problem"))
 		if #problems == 0 then
-			table.insert(errors, `row {issue.id}, claim: ticket {issue.id} is missing captured ## Problem`)
+			table.insert(errors, `row {issue.id}, claim: ticket {issue.id} is missing ## Problem`)
 		else
 			for i, text in problems do
 				local id = `{issue.id}:P{i}`
@@ -385,9 +386,9 @@ function trace.deriveClaims(issues: { IssueDoc }): ({ Claim }, { string })
 			end
 		end
 
-		local solutions = extractOutcomes(sectionBody(captured, "Solution"))
+		local solutions = extractOutcomes(sectionBody(doc, "Solution"))
 		if #solutions == 0 then
-			table.insert(errors, `row {issue.id}, claim: ticket {issue.id} is missing captured ## Solution`)
+			table.insert(errors, `row {issue.id}, claim: ticket {issue.id} is missing ## Solution`)
 		else
 			for i, text in solutions do
 				local id = `{issue.id}:S{i}`
@@ -401,9 +402,7 @@ function trace.deriveClaims(issues: { IssueDoc }): ({ Claim }, { string })
 			end
 		end
 
-		local acBody = sectionBody(issue.docText, "Acceptance criteria")
-			or sectionBody(captured, "Acceptance criteria")
-		local acItems = extractOutcomes(acBody)
+		local acItems = extractOutcomes(sectionBody(doc, "Acceptance criteria"))
 		if #acItems == 0 then
 			table.insert(errors, `row {issue.id}, claim: ticket {issue.id} is missing ## Acceptance criteria`)
 		else
