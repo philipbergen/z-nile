@@ -173,22 +173,49 @@ return t.spec("c0306 ready and work next judge the reviews", function(it)
 		end
 	)
 
-	it("AC5: every round of the coherence review is judged, not only the last", function()
-		local why = readycheck.reason(
-			raft(true, { ["design-review-001.md"] = SONNET, ["design-review-002.md"] = OPUS })
-		)
-		t.expect(has(why, "design-review-001.md")).toBe(true)
-		-- the first failing file by number is the one named
-		-- a later round off the review models is refused when the first is fine
-		local later = readycheck.reason(
-			raft(true, { ["design-review-001.md"] = OPUS, ["design-review-002.md"] = SONNET })
-		)
-		t.expect(has(later, "design-review-002.md")).toBe(true)
-		local both = readycheck.reason(
-			raft(true, { ["design-review-002.md"] = SONNET, ["design-review-001.md"] = BARE })
-		)
-		t.expect(has(both, "design-review-001.md")).toBe(true)
-	end)
+	it(
+		"AC5: only the newest round of the coherence review is judged: a later round on a review model clears an earlier cheap one, and a later cheap round is refused",
+		function()
+			-- a later round on a review model clears an earlier cheap one, and one that records none
+			t.expect(
+				(
+					readycheck.reason(
+						raft(true, { ["design-review-001.md"] = SONNET, ["design-review-002.md"] = OPUS })
+					)
+				)
+			).toBe(nil)
+			t.expect(
+				(
+					readycheck.reason(
+						raft(true, { ["design-review-001.md"] = BARE, ["design-review-002.md"] = OPUS })
+					)
+				)
+			).toBe(nil)
+			-- a later cheap round after one on a review model is refused, naming the newest
+			local later = readycheck.reason(
+				raft(true, { ["design-review-001.md"] = OPUS, ["design-review-002.md"] = SONNET })
+			)
+			t.expect(has(later, "design-review-002.md")).toBe(true)
+			t.expect(has(later, "design-review-001.md")).toBe(false)
+			-- the newest by number, whatever the order the files are given in
+			local both = readycheck.reason(
+				raft(true, { ["design-review-002.md"] = SONNET, ["design-review-001.md"] = BARE })
+			)
+			t.expect(has(both, "design-review-002.md")).toBe(true)
+			-- the same for a member's design reviews
+			t.expect((readycheck.reason(raft(nil, nil, {
+				member(true, { ["design-review-001.md"] = SONNET, ["design-review-002.md"] = OPUS }),
+			})))).toBe(nil)
+			local mlater = readycheck.reason(
+				raft(
+					nil,
+					nil,
+					{ member(true, { ["design-review-001.md"] = OPUS, ["design-review-002.md"] = SONNET }) }
+				)
+			)
+			t.expect(has(mlater, "design-review-002.md")).toBe(true)
+		end
+	)
 
 	it("AC5: a marked member's design review off the review models is refused, naming the member", function()
 		local m = member(true, { ["design-review-001.md"] = SONNET })

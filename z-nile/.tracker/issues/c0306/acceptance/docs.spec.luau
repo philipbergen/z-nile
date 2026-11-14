@@ -73,6 +73,10 @@ return t.spec("c0306 docs", function(it)
 					"stream review",
 					"with any other phase at all",
 					"An unmarked item is exempt",
+					"newest round of each kind",
+					"at the next number",
+					"starts no try the rule would refuse",
+					"a `grok-` id needs it typed",
 				}
 			do
 				at(p, needle, `{name} Review models`)

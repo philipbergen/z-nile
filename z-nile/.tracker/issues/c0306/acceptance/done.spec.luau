@@ -337,6 +337,55 @@ return t.spec("c0306 done and commit judge the reviews", function(it)
 	end)
 
 	it(
+		"AC8: commit refuses a grok- review with no typed --effort in a marked raft, whatever CLAUDE_EFFORT says, and takes no effort from it for a non-claude model",
+		function()
+			local grok = `{raftDir()}/review-008.md`
+			write(grok, review(nil, nil))
+			local before = git({ "rev-parse", "HEAD" })
+			local r = zn(
+				{ "commit", "-m", `{raft}: review-008`, "--phase", "code-review", "--model", "grok-4.7" },
+				{ CLAUDE_EFFORT = "xhigh" }
+			)
+			t.expect(r.ok).toBe(false)
+			t.expect(has(say(r), "a grok- review is judged by its effort: --effort <level>")).toBe(true)
+			t.expect(git({ "rev-parse", "HEAD" })).toBe(before)
+			t.expect(read(grok)).toBe(review(nil, nil))
+			-- typed, it stamps with that effort
+			must(
+				zn({
+					"commit",
+					"-m",
+					`{raft}: review-008`,
+					"--phase",
+					"code-review",
+					"--model",
+					"grok-4.7",
+					"--effort",
+					"xhigh",
+				}, { CLAUDE_EFFORT = "low" }),
+				"commit"
+			)
+			t.expect(read(grok)).toBe("Model: grok-4.7\nEffort: xhigh\n" .. review(nil, nil))
+			-- a non-claude model that is not grok takes no effort from the environment
+			local kimi = `{raftDir()}/review-009.md`
+			write(kimi, review(nil, nil))
+			must(
+				zn({
+					"commit",
+					"-m",
+					`{raft}: review-009`,
+					"--phase",
+					"code-review",
+					"--model",
+					"kimi-code-k3.2",
+				}, { CLAUDE_EFFORT = "xhigh" }),
+				"commit"
+			)
+			t.expect(read(kimi)).toBe("Model: kimi-code-k3.2\n" .. review(nil, nil))
+		end
+	)
+
+	it(
 		"sets up a marked started raft of one issue, finished, with a final review on claude-opus-5-5",
 		function()
 			setup("c0306-done-b", true)
@@ -406,24 +455,34 @@ return t.spec("c0306 done and commit judge the reviews", function(it)
 		commitAll("final restored again")
 	end)
 
-	it("AC6: done judges every code review round of the raft folder, not only the last", function()
-		write(`{raftDir()}/review-001.md`, review("claude-sonnet-5-5", "high"))
-		write(`{raftDir()}/review-002.md`, review("claude-opus-5-5", "high"))
-		commitAll("two code review rounds")
-		local r = zn({ "done", raft })
-		t.expect(r.ok).toBe(false)
-		t.expect(has(say(r), "review-001.md")).toBe(true)
-		write(`{raftDir()}/review-001.md`, review("claude-opus-5-5", "high"))
-		commitAll("round one on opus")
-		-- and a later round off the review models, the first being fine
-		write(`{raftDir()}/review-002.md`, review("claude-sonnet-5-5", "high"))
-		commitAll("round two on sonnet")
-		local later = zn({ "done", raft })
-		t.expect(later.ok).toBe(false)
-		t.expect(has(say(later), "review-002.md")).toBe(true)
-		write(`{raftDir()}/review-002.md`, review("claude-opus-5-5", "high"))
-		commitAll("round two on opus")
-	end)
+	it(
+		"AC6: only the newest review-NNN and the newest final-review-NNN are judged: a later round on a review model clears an earlier cheap one, and a later cheap round is refused",
+		function()
+			-- a later round on a review model clears an earlier cheap one: done goes on to its next check
+			write(`{raftDir()}/review-001.md`, review("claude-sonnet-5-5", "high"))
+			write(`{raftDir()}/review-002.md`, review("claude-opus-5-5", "high"))
+			commitAll("two code review rounds, the later on opus")
+			local cleared = zn({ "done", raft })
+			t.expect(has(say(cleared), "is not a review model")).toBe(false)
+			-- a later cheap round after one on a review model is refused, naming the newest
+			write(`{raftDir()}/review-001.md`, review("claude-opus-5-5", "high"))
+			write(`{raftDir()}/review-002.md`, review("claude-sonnet-5-5", "high"))
+			commitAll("round two on sonnet")
+			local later = zn({ "done", raft })
+			t.expect(later.ok).toBe(false)
+			t.expect(has(say(later), "review-002.md")).toBe(true)
+			t.expect(has(say(later), "review-001.md")).toBe(false)
+			-- the kinds are apart: a newer final review does not clear a cheap newest review-NNN
+			write(`{raftDir()}/final-review-002.md`, review("claude-opus-5-5", "high"))
+			commitAll("a final review on opus")
+			local apart = zn({ "done", raft })
+			t.expect(apart.ok).toBe(false)
+			t.expect(has(say(apart), "review-002.md")).toBe(true)
+			t.expect(has(say(apart), "final-review")).toBe(false)
+			write(`{raftDir()}/review-002.md`, review("claude-opus-5-5", "high"))
+			commitAll("round two on opus")
+		end
+	)
 
 	it(
 		"AC6: done never judges a stream review or a refute, and passes a marked raft whose reviews are on review models",
@@ -472,10 +531,73 @@ return t.spec("c0306 done and commit judge the reviews", function(it)
 		end
 	)
 
+	it(
+		"AC6: following done's refusal to a pass: a new final round, committed with the command the refusal names, clears it",
+		function()
+			setup("c0306-done-e", true)
+			write("notes/alpha/b.txt", "3\n")
+			must(zn({ "commit", "-m", "work", "--issue", issue }), "commit")
+			-- a final review recorded on claude-sonnet-5-5 by the lead who typed it, committed before the layer is finished
+			write(`{raftDir()}/final-review-001.md`, review(nil, nil))
+			must(
+				zn({
+					"commit",
+					"-m",
+					`{raft}: final-review-001`,
+					"--phase",
+					"code-review",
+					"--model",
+					"claude-sonnet-5-5",
+					"--effort",
+					"high",
+				}),
+				"commit"
+			)
+			must(zn({ "finish", issue }), "finish")
+			local refused = zn({ "done", raft })
+			t.expect(refused.ok).toBe(false)
+			local said = say(refused)
+			t.expect(has(said, "final-review-001.md")).toBe(true)
+			t.expect(has(said, `./zn dispatch zz-review {raft} --mode final`)).toBe(true)
+			t.expect(
+				has(
+					said,
+					`./zn commit -m "{raft}: review-NNN" --phase code-review --model <id> --effort <level>`
+				)
+			).toBe(true)
+			-- the fresh-subagent route writes the next-numbered round with no record; the command the refusal names records it
+			write(`{raftDir()}/final-review-002.md`, review(nil, nil))
+			must(
+				zn({
+					"commit",
+					"-m",
+					`{raft}: final-review-002`,
+					"--phase",
+					"code-review",
+					"--model",
+					"claude-opus-5-5",
+					"--effort",
+					"high",
+				}),
+				"commit"
+			)
+			t.expect(has(read(`{raftDir()}/final-review-002.md`), "Model: claude-opus-5-5\nEffort: high\n"))
+				.toBe(true)
+			must(zn({ "finish", issue }), "finish") -- ./zn commit rewrote the raft's spend.md: the layer is finished again
+			seal.trace(dir, raft)
+			local passed = zn({ "done", raft })
+			if not passed.ok then
+				error(`done still refuses after the named commit: {say(passed)}`)
+			end
+			t.expect(fs.isDir(`{dir}/{TR}/rafts/done/{raft}`)).toBe(true)
+		end
+	)
+
 	it("cleans up", function()
 		fs.removeDir(`{base}/c0306-done-a`)
 		fs.removeDir(`{base}/c0306-done-b`)
 		fs.removeDir(`{base}/c0306-done-c`)
 		fs.removeDir(`{base}/c0306-done-d`)
+		fs.removeDir(`{base}/c0306-done-e`)
 	end)
 end)

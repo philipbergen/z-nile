@@ -19,6 +19,12 @@ tool_seconds = 240
 model = "grok-4.7"
 runtime = "grok-cli"
 
+[fallback.agent]
+model = "claude-opus-5-5"
+runtime = "cursor-cli"
+max_calls = 30
+max_minutes = 60
+
 [roles.design-challenge]
 model = "claude-opus-5-5"
 cli = "claude"
@@ -54,6 +60,31 @@ rank = 4
 max_tokens = 5000
 fallbacks = []
 ]]
+
+local HIGH = [[
+[roles.design-challenge]
+effort = "high"
+fallbacks = ["grok", "agent"]
+]]
+local ONLY_GROK = [[
+[roles.design-challenge]
+model = "grok-4.7"
+cli = "grok"
+runtime = "grok-cli"
+effort = "high"
+fallbacks = []
+]]
+
+local function marked(id: string): string
+	return (
+		string.gsub(
+			trackerfix.stub(id, id, "new-quiet-copper-falcon"),
+			"design: draft\n",
+			"design: draft\nreviews: judged\n",
+			1
+		)
+	)
+end
 
 local RAFT_DOC =
 	"---\nid: R0090\ntype: chore\ntitle: demo\nslug: demo\nissues: [c0010, c0011]\ncreated: 2026-01-01\nstatus: active-a-b-c\n---\n\n# R0090\n"
@@ -116,6 +147,10 @@ end
 
 local ISSUE = "pickman/.tracker/issues/c0010"
 local RAFT = "pickman/.tracker/rafts/R0090"
+local ISSUE2 = "pickman/.tracker/issues/c0011"
+local function item(id: string): string
+	return `pickman/.tracker/issues/{id}`
+end
 
 return t.spec("c0306 the dispatcher stamps the reviews it files", function(it)
 	it("sets up a tracker with .models.toml, an issue, a raft in a worktree and the fake CLIs", function()
@@ -133,6 +168,32 @@ return t.spec("c0306 the dispatcher stamps the reviews it files", function(it)
 				"second-thing",
 				"new-quiet-copper-falcon"
 			),
+			-- c0012 marked, its newest design review on a review model; c0013 marked, its newest off the review models;
+			-- c0017 marked with a cheap code review; c0018 unmarked with a cheap design review
+			["pickman/.tracker/issues/c0012/c0012.md"] = marked("c0012"),
+			["pickman/.tracker/issues/c0012/design-review-001.md"] = "Model: claude-opus-5-5\nEffort: high\n# Review\n\nVerdict: approve\n",
+			["pickman/.tracker/issues/c0013/c0013.md"] = marked("c0013"),
+			["pickman/.tracker/issues/c0013/design-review-001.md"] = "Model: claude-sonnet-5-5\nEffort: high\n# Review\n\nVerdict: approve\n",
+			["pickman/.tracker/issues/c0017/c0017.md"] = marked("c0017"),
+			["pickman/.tracker/issues/c0017/review-001.md"] = "Model: claude-sonnet-5-5\nEffort: high\n# Review\n\nVerdict: approve\n",
+			["pickman/.tracker/issues/c0018/c0018.md"] = trackerfix.stub(
+				"c0018",
+				"eighth-thing",
+				"new-quiet-copper-falcon"
+			),
+			["pickman/.tracker/issues/c0018/design-review-001.md"] = "Model: claude-sonnet-5-5\nEffort: high\n# Review\n\nVerdict: approve\n",
+			-- c0014 marked and c0015 unmarked: the design-challenge role runs at high with grok, then the agent, as fallbacks
+			["pickman/.tracker/issues/c0014/c0014.md"] = marked("c0014"),
+			["pickman/.tracker/issues/c0014/.models.toml"] = HIGH,
+			["pickman/.tracker/issues/c0015/c0015.md"] = trackerfix.stub(
+				"c0015",
+				"fifth-thing",
+				"new-quiet-copper-falcon"
+			),
+			["pickman/.tracker/issues/c0015/.models.toml"] = HIGH,
+			-- c0016 marked: every try of its design-challenge role is grok at high
+			["pickman/.tracker/issues/c0016/c0016.md"] = marked("c0016"),
+			["pickman/.tracker/issues/c0016/.models.toml"] = ONLY_GROK,
 		})
 		wt = fixture.physical(`{h.f.base}/wt-review`) or `{h.f.base}/wt-review`
 		fixture.git(h.f.main, { "worktree", "add", "-q", "-b", "prep-review", wt, "origin/main" })
@@ -175,10 +236,10 @@ return t.spec("c0306 the dispatcher stamps the reviews it files", function(it)
 			fakecli.mode(h, "claude.zz-review", "scriptquota")
 			fakecli.mode(h, "grok.zz-review", "script")
 			reviewer()
-			dispatch("c0010", "code")
-			t.expect(filed(`{ISSUE}/review-001.md`))
+			dispatch("c0011", "code") -- an unmarked item: a marked one never starts grok at high (F6)
+			t.expect(filed(`{ISSUE2}/review-001.md`))
 				.toBe("Model: grok-4.7\nEffort: high\n# Review\n\nVerdict: approve\n")
-			clean(`{ISSUE}/review-001.md`)
+			clean(`{ISSUE2}/review-001.md`)
 			fakecli.mode(h, "claude.zz-review", "script")
 			fakecli.mode(h, "grok.zz-review", nil)
 		end
@@ -217,6 +278,87 @@ return t.spec("c0306 the dispatcher stamps the reviews it files", function(it)
 		t.expect(filed(`pickman/.tracker/issues/c0011/design-review-001.md`))
 			.toBe("Model: claude-sonnet-5-5\n# Review\n\nVerdict: approve\n")
 		clean(`pickman/.tracker/issues/c0011/design-review-001.md`)
+	end)
+
+	it(
+		"AC7: in a marked item, a newest design review off the review models is superseded: the dispatcher files design-review-002, stamped",
+		function()
+			reviewer()
+			dispatch("c0013", "design")
+			t.expect(filed(`{item("c0013")}/design-review-002.md`))
+				.toBe("Model: claude-opus-5-5\nEffort: xhigh\n# Review\n\nVerdict: approve\n")
+			t.expect(has(filed(`{item("c0013")}/design-review-001.md`), "claude-sonnet-5-5")).toBe(true) -- the cheap round stays as history
+			clean(`{item("c0013")}/design-review-002.md`)
+		end
+	)
+
+	it("AC7: in a marked item, a newest review on a review model keeps the one-round refusal", function()
+		reviewer()
+		local r = znIn({ "dispatch", "zz-review", "c0012", "--mode", "design" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stdout .. r.stderr, "there is no second round")).toBe(true)
+		t.expect(fs.isFile(`{wt}/{item("c0012")}/design-review-002.md`)).toBe(false)
+	end)
+
+	it("AC7: in an unmarked item, a cheap review keeps the one-round refusal as today", function()
+		reviewer()
+		local r = znIn({ "dispatch", "zz-review", "c0018", "--mode", "design" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stdout .. r.stderr, "there is no second round")).toBe(true)
+		t.expect(fs.isFile(`{wt}/{item("c0018")}/design-review-002.md`)).toBe(false)
+	end)
+
+	it("AC7: in a marked item, a cheap code review is superseded too: review-002, stamped", function()
+		reviewer()
+		dispatch("c0017", "code")
+		t.expect(filed(`{item("c0017")}/review-002.md`))
+			.toBe("Model: claude-opus-5-5\nEffort: high\n# Review\n\nVerdict: approve\n")
+		clean(`{item("c0017")}/review-002.md`)
+	end)
+
+	it(
+		"AC7: in a marked item, a try the rule refuses is never started and the next try is: grok at high is skipped for the agent",
+		function()
+			fakecli.clear(h)
+			fakecli.mode(h, "claude.zz-review", "fail")
+			fakecli.mode(h, "grok.zz-review", "script")
+			fakecli.mode(h, "agent.zz-review", "script")
+			reviewer()
+			dispatch("c0014", "design")
+			t.expect(filed(`{item("c0014")}/design-review-001.md`))
+				.toBe("Model: claude-opus-5-5\nEffort: high\n# Review\n\nVerdict: approve\n")
+			local log = fakecli.log(h)
+			t.expect(has(log, "agent step=")).toBe(true)
+			t.expect(has(log, "grok step=")).toBe(false)
+			clean(`{item("c0014")}/design-review-001.md`)
+		end
+	)
+
+	it(
+		"AC7: in a marked item with no try on a review model, the step fails up front, naming the role",
+		function()
+			fakecli.clear(h)
+			fakecli.mode(h, "grok.zz-review", "script")
+			reviewer()
+			local r = znIn({ "dispatch", "zz-review", "c0016", "--mode", "design" })
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stdout .. r.stderr, "no try of role design-challenge is a review model"))
+				.toBe(true)
+			t.expect(has(fakecli.log(h), "grok step=")).toBe(false)
+			t.expect(fs.isFile(`{wt}/{item("c0016")}/design-review-001.md`)).toBe(false)
+		end
+	)
+
+	it("AC7: in an unmarked item, grok at high is tried as today", function()
+		fakecli.clear(h)
+		fakecli.mode(h, "claude.zz-review", "fail")
+		fakecli.mode(h, "grok.zz-review", "script")
+		reviewer()
+		dispatch("c0015", "design")
+		t.expect(filed(`{item("c0015")}/design-review-001.md`))
+			.toBe("Model: grok-4.7\nEffort: high\n# Review\n\nVerdict: approve\n")
+		t.expect(has(fakecli.log(h), "grok step=")).toBe(true)
+		clean(`{item("c0015")}/design-review-001.md`)
 	end)
 
 	it("cleans up", function()

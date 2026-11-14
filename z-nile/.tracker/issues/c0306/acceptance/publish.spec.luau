@@ -3,6 +3,8 @@
 -- preparing-...) and in a new raft's document, and refuses it in any other commit: another status move, a changed or
 -- removed line, a new issue or any other document. Pure: path, the document on origin (nil when new), the document.
 local publish = require("@znile/engine/publish")
+local reviewmodel = require("@znile/engine/reviewmodel")
+local store = require("@znile/engine/store")
 local t = require("@tests/lib/t")
 
 local ISSUE = "pickman/.tracker/issues/c0010/c0010.md"
@@ -80,6 +82,37 @@ return t.spec("c0306 publish accepts the mark only where the tool writes it", fu
 			t.expect(has(mark(ISSUE, doc("new-a-b-c") .. body, moved), "reviews: judged")).toBe(true)
 			local fake = doc("new-a-b-c") .. "\nreviews: judged\n"
 			t.expect(mark(ISSUE, doc("new-a-b-c"), fake)).toBe(nil)
+		end
+	)
+
+	it(
+		"AC3: publish and the commands read the mark the same way: a trailing space is a mark in both",
+		function()
+			-- the one reader: store.parseFront, then reviewmodel.judged (read through any: the prep has none of the code)
+			local function judged(text: string): boolean
+				return reviewmodel.judged((store :: any).parseFront(text))
+			end
+			local spaced = (
+				string.gsub(doc("preparing-a-b-c", "judged"), "reviews: judged\n", "reviews: judged \n", 1)
+			)
+			t.expect(judged(spaced)).toBe(true)
+			-- publish sees it as the mark: a claim may add it, any other status move may not
+			t.expect(mark(ISSUE, doc("new-a-b-c"), spaced)).toBe(nil)
+			t.expect(
+				has(
+					mark(ISSUE, doc("new-a-b-c"), (string.gsub(spaced, "preparing", "prepared", 1))),
+					"reviews: judged"
+				)
+			).toBe(true)
+			-- and a kept mark with a trailing space is not a change
+			t.expect(mark(ISSUE, spaced, spaced)).toBe(nil)
+			t.expect(has(mark(ISSUE, spaced, doc("preparing-a-b-c")), "reviews: judged")).toBe(true)
+			-- a value that is not the mark is neither a mark nor refused
+			local other = (
+				string.gsub(doc("preparing-a-b-c", "judged"), "reviews: judged", "reviews: judgedx", 1)
+			)
+			t.expect(judged(other)).toBe(false)
+			t.expect(mark(ISSUE, doc("new-a-b-c"), other)).toBe(nil)
 		end
 	)
 end)

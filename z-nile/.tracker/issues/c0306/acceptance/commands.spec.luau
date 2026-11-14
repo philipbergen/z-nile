@@ -194,6 +194,10 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 					"c0139",
 					"c0152",
 					"c0170",
+					"c0177",
+					"c0178",
+					"c0182",
+					"c0183",
 				}
 			do
 				item(id, issue(id, PREPARING, "", "ready", true))
@@ -210,8 +214,7 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 				memberReview: string?
 			)
 				local doc = issue(member, PREPARED, raft, "ready", marked)
-				local files: { [string]: string } =
-					{ [`{member}.md`] = doc, ["check.sh"] = CHECK, ["acceptance/.gitkeep"] = "" }
+				local files: { [string]: string } = { [`{member}.md`] = doc, ["check.sh"] = CHECK }
 				if memberReview then
 					files["design-review-001.md"] = memberReview
 				end
@@ -222,7 +225,6 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 					string.gsub(coherence, "\nVerdict", `\nGrouped: {grouped}\nVerdict`, 1)
 				)
 				item(member, doc)
-				seed[`{ROOT}/issues/{member}/acceptance/.gitkeep`] = ""
 				if memberReview then
 					seed[`{ROOT}/issues/{member}/design-review-001.md`] = memberReview
 				end
@@ -232,6 +234,7 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 			preparedRaft("R0042", "c0242", true, review(nil, nil), OPUS) -- the coherence review records none
 			preparedRaft("R0043", "c0243", false, SONNET, SONNET) -- unmarked: any review passes
 			preparedRaft("R0044", "c0244", true, OPUS, OPUS) -- marked and fine
+			preparedRaft("R0045", "c0245", true, SONNET, OPUS) -- like R0040, cleared by work next's case
 			-- a raft in rafting (claimed, preparing) whose members z-raft grouped: its coherence review is off the review models
 			do
 				local grouped: { string } = {}
@@ -357,15 +360,61 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 		end
 	)
 
-	it("AC4: status prepared judges every round, not only the last", function()
-		reviewIn("c0132", SONNET)
-		write(prep, `{ROOT}/issues/c0132/design-review-002.md`, OPUS)
-		write(prep, `{ROOT}/issues/c0132/design-refute-001.md`, "- F1: refuted: no\n")
-		local r = prepared("c0132")
-		t.expect(r.ok).toBe(false)
-		t.expect(has(say(r), "design-review-001.md")).toBe(true)
-		t.expect(moved("c0132")).toBe(false)
-	end)
+	it(
+		"AC4: only the newest round is judged: a later round on a review model clears an earlier cheap one, and a later cheap round is refused",
+		function()
+			-- a later round on a review model clears an earlier cheap one
+			reviewIn("c0132", SONNET)
+			write(prep, `{ROOT}/issues/c0132/design-review-002.md`, OPUS)
+			local cleared = prepared("c0132")
+			if not cleared.ok then
+				error(`a later round on a review model did not clear the earlier one: {say(cleared)}`)
+			end
+			t.expect(moved("c0132")).toBe(true)
+			-- a later cheap round after one on a review model is refused, naming the newest
+			reviewIn("c0177", OPUS)
+			write(prep, `{ROOT}/issues/c0177/design-review-002.md`, SONNET)
+			local r = prepared("c0177")
+			t.expect(r.ok).toBe(false)
+			t.expect(has(say(r), "design-review-002.md")).toBe(true)
+			t.expect(has(say(r), "design-review-001.md")).toBe(false)
+			t.expect(moved("c0177")).toBe(false)
+		end
+	)
+
+	it(
+		"AC4: following status prepared's refusal to a pass: a new round, recorded with the spend the refusal names",
+		function()
+			reviewIn("c0178", SONNET)
+			local first = prepared("c0178")
+			t.expect(first.ok).toBe(false)
+			t.expect(has(say(first), "./zn dispatch zz-review c0178 --mode design")).toBe(true)
+			-- the fresh-subagent route writes the next-numbered round, with no record
+			write(prep, `{ROOT}/issues/c0178/design-review-002.md`, review(nil, nil))
+			local second = prepared("c0178")
+			t.expect(second.ok).toBe(false)
+			t.expect(has(say(second), "design-review-002.md")).toBe(true)
+			local named = string.match(
+				say(second),
+				"%./zn (spend c0178 %-%-phase design%-review %-%-note design%-review%-002 %-%-model <id> %-%-effort <level>)"
+			)
+			t.expect(named ~= nil).toBe(true)
+			-- run the spend the refusal names, with the reviewer's model and effort typed in
+			local args = string.split(
+				(string.gsub(string.gsub(named :: string, "<id>", "claude-opus-5-5"), "<level>", "high")),
+				" "
+			)
+			local recorded = zn(prep, args)
+			if not recorded.ok then
+				error(`the spend the refusal names was refused: {say(recorded)}`)
+			end
+			local passed = prepared("c0178")
+			if not passed.ok then
+				error(`status prepared still refuses after the named spend: {say(passed)}`)
+			end
+			t.expect(moved("c0178")).toBe(true)
+		end
+	)
 
 	it("AC4: status prepared passes a marked issue on each review kind", function()
 		local kinds: { { string } } = {
@@ -475,6 +524,55 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 		end
 	end)
 
+	-- the way out of a coherence review on origin/main is made in a worktree and lands by pull request: a worktree off
+	-- origin/main writes the next-numbered round, records it with the spend the refusal names, and pushes the commit
+	local function landRound(raft: string, branch: string)
+		local wt = `{f.base}/wt-{branch}`
+		fetch()
+		git(f.main, { "worktree", "add", "-q", "-b", branch, wt, "origin/main" })
+		write(wt, `{ROOT}/rafts/{raft}/design-review-002.md`, review(nil, nil))
+		znOk(wt, {
+			"spend",
+			raft,
+			"--phase",
+			"design-review",
+			"--note",
+			"design-review-002",
+			"--model",
+			"claude-opus-5-5",
+			"--effort",
+			"high",
+		})
+		git(wt, { "add", "-A" })
+		git(wt, { "commit", "-q", "-m", `{raft}: design-review-002` })
+		git(wt, { "push", "-q", "origin", "HEAD:main" })
+		fetch()
+	end
+
+	it(
+		"AC5: following ready's refusal to a pass: a new coherence round, recorded in a worktree and landed, clears it",
+		function()
+			local refused = zn(f.main, { "ready", "R0040" })
+			t.expect(refused.ok).toBe(false)
+			t.expect(has(say(refused), "./zn dispatch zz-review R0040 --mode raft")).toBe(true)
+			t.expect(has(say(refused), "worktree")).toBe(true)
+			landRound("R0040", "fix-r0040")
+			znOk(f.main, { "ready", "R0040" })
+			fetch()
+			t.expect(originFile(`{ROOT}/rafts/active/R0040/R0040.md`) ~= nil).toBe(true)
+		end
+	)
+
+	it("AC5: following work next's refusal to a pass: the same new round clears it", function()
+		local refused = say(zn(f.main, { "work", "next", "R0045" }))
+		t.expect(has(refused, "design-review-001.md")).toBe(true)
+		t.expect(has(refused, "claude-sonnet-5-5")).toBe(true)
+		landRound("R0045", "fix-r0045")
+		local after = say(zn(f.main, { "work", "next", "R0045" }))
+		t.expect(has(after, "not a review model")).toBe(false)
+		t.expect(has(after, "ready R0045")).toBe(true)
+	end)
+
 	-- AC8: ./zn spend --phase design-review stamps the review file it records
 	local function spend(id: string, extra: { string }, env2: { [string]: string }?): fixture.Result
 		local args = { "spend", id, "--phase", "design-review", "--note", "design-review-001" }
@@ -504,21 +602,6 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 			local r = spend("c0170", {})
 			t.expect(r.ok).toBe(false)
 			t.expect(has(say(r), "--model")).toBe(true)
-			t.expect(reviewOf("c0170")).toBe(review(nil, nil))
-			t.expect(tsv("c0170")).toBe("")
-			-- a marked issue's spend must also name the review file it records
-			local named = zn(prep, {
-				"spend",
-				"c0170",
-				"--phase",
-				"design-review",
-				"--note",
-				"a-note",
-				"--model",
-				"claude-opus-5-5",
-			})
-			t.expect(named.ok).toBe(false)
-			t.expect(has(say(named), "design-review-NNN")).toBe(true)
 			t.expect(reviewOf("c0170")).toBe(review(nil, nil))
 			t.expect(tsv("c0170")).toBe("")
 		end
@@ -562,6 +645,87 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 			end
 		end
 	)
+
+	it(
+		"AC8: a refute note records as today in a marked item and stamps nothing, and a typed --model on it is the row's model",
+		function()
+			write(prep, `{ROOT}/issues/c0170/design-refute-001.md`, "- F1: refuted: no\n")
+			local before = tsv("c0170")
+			local r =
+				zn(prep, { "spend", "c0170", "--phase", "design-review", "--note", "design-refute-001" })
+			if not r.ok then
+				error(`a refute note was refused in a marked item: {say(r)}`)
+			end
+			t.expect(fs.readFile(`{prep}/{ROOT}/issues/c0170/design-refute-001.md`))
+				.toBe("- F1: refuted: no\n")
+			t.expect(#tsv("c0170") > #before).toBe(true)
+			t.expect(has(tsv("c0170"), "design-refute-001")).toBe(true)
+			-- a typed --model on it is the row's model, and the refute is still not stamped
+			local typed = zn(prep, {
+				"spend",
+				"c0170",
+				"--phase",
+				"design-review",
+				"--note",
+				"design-refute-001",
+				"--model",
+				"claude-sonnet-5-5",
+			})
+			t.expect(typed.ok).toBe(true)
+			t.expect(has(tsv("c0170"), "claude-sonnet-5-5")).toBe(true)
+			t.expect(fs.readFile(`{prep}/{ROOT}/issues/c0170/design-refute-001.md`))
+				.toBe("- F1: refuted: no\n")
+		end
+	)
+
+	it("AC8: the author's answering span after --begin records as today in a marked item", function()
+		znOk(prep, { "spend", "c0170", "--phase", "design-review", "--begin" })
+		local r = zn(prep, { "spend", "c0170", "--phase", "design-review" })
+		if not r.ok then
+			error(`the answering span was refused in a marked item: {say(r)}`)
+		end
+		t.expect(reviewOf("c0170")).toBe("Model: claude-opus-5-5[1m]\nEffort: xhigh\n" .. review(nil, nil))
+	end)
+
+	it(
+		"AC8: a grok- model with no typed --effort is refused in a marked item, whatever CLAUDE_EFFORT says",
+		function()
+			reviewIn("c0182", review(nil, nil))
+			local r = spend("c0182", { "--model", "grok-4.7" }, { CLAUDE_EFFORT = "xhigh" })
+			t.expect(r.ok).toBe(false)
+			t.expect(has(say(r), "a grok- review is judged by its effort: --effort <level>")).toBe(true)
+			t.expect(reviewOf("c0182")).toBe(review(nil, nil))
+			-- typed, it stamps
+			znOk(prep, {
+				"spend",
+				"c0182",
+				"--phase",
+				"design-review",
+				"--note",
+				"design-review-001",
+				"--model",
+				"grok-4.7",
+				"--effort",
+				"xhigh",
+			}, { CLAUDE_EFFORT = "low" })
+			t.expect(reviewOf("c0182")).toBe("Model: grok-4.7\nEffort: xhigh\n" .. review(nil, nil))
+		end
+	)
+
+	it("AC8: a non-claude model takes no effort from CLAUDE_EFFORT", function()
+		reviewIn("c0183", review(nil, nil))
+		znOk(prep, {
+			"spend",
+			"c0183",
+			"--phase",
+			"design-review",
+			"--note",
+			"design-review-001",
+			"--model",
+			"kimi-code-k3.2",
+		}, { CLAUDE_EFFORT = "xhigh" })
+		t.expect(reviewOf("c0183")).toBe("Model: kimi-code-k3.2\n" .. review(nil, nil))
+	end)
 
 	it(
 		"AC8: the effort is CLAUDE_EFFORT when --effort is not typed, and the line is left out when there is neither",
