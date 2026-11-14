@@ -125,6 +125,8 @@ return t.spec("c0800 done runs the affected gate after promotion", function(it)
 		fs.writeDir(base)
 		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
 		git({ "remote", "remove", "origin" })
+		-- d0296: the clone carries the checkout's branch name; on a stack layer branch `start` finds no main below it
+		git({ "checkout", "-q", "-B", "main" })
 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
 		local listed = process.exec("git", {
 			"ls-files",

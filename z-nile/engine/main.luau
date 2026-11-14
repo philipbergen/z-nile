@@ -106,7 +106,7 @@ usage: ./zn <command> ...
                                                 capture a new issue (z-ticket) and run its chain
   dispatch <step> <id> [--mode design|code|raft] [--dry-run]
                                                 run one step: a model step on .models.toml's CLIs, a script step itself
-  dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
+  dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it; retry takes --answer "<text>" | --answer-file <path>, and --forget-exchange sets a damaged exchange aside
   done <R-id>                                   land the stack: one --no-ff merge onto main, one binding commit (refuses an unfinished layer)
   watch-bootstrap                               write every spec's watch file from the commit that added it (once)
   watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
@@ -848,6 +848,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--dry-run"
 			or a == "--quiet"
 			or a == "--auto"
+			or a == "--forget-exchange"
 			or a == "--session-end"
 			or a == "--begin"
 			or a == "--sessions"
@@ -889,6 +890,24 @@ local function hereDir(): string
 		return ""
 	end
 	return rel
+end
+
+-- A file argument as the caller meant it (code review R0093 001 F2): zn runs the engine at the checkout's root, so a
+-- relative path is joined to the directory ./zn was run from (ZN_HERE, inside the checkout or not). It counts only
+-- when the engine runs in ZN_TOP, as ZN_CWD does; an absolute path is left as it is.
+local function callerFile(path: string): string
+	if string.sub(path, 1, 1) == "/" then
+		return path
+	end
+	local top, from = process.env.ZN_TOP, process.env.ZN_HERE
+	if not top or not from or top == "" or from == "" then
+		return path
+	end
+	local cwd = sh.run("pwd", { "-P" })
+	if not cwd.ok or sh.trim(cwd.stdout) ~= top then
+		return path
+	end
+	return `{from}/{path}`
 end
 
 -- The project a command works in (c0114, decided with the user: "The directory gives the project unless it's given,
@@ -7441,17 +7460,14 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
 		local state = stateOfPath(path)
 		return { path = path, front = front, state = state, status = statusLib.effective(front, state) }
 	end
-	local function originIssueIds(): { string }
-		sh.run("git", { "fetch", "-q", "origin", "main" })
-		local _, files = originTree()
-		local out: { string } = {}
-		for _, p in files do
-			local pid, rel = publish.itemPath(p)
-			if pid and store.isIssueId(pid) and rel == `{pid}.md` then
-				table.insert(out, pid)
-			end
+	-- --answer-file is the caller's path: read from where ./zn was run, and named in full in a refusal
+	local answerFile = opts["--answer-file"]
+	if answerFile then
+		local resolved: { string } = {}
+		for _, path in answerFile do
+			table.insert(resolved, callerFile(path))
 		end
-		return out
+		opts["--answer-file"] = resolved
 	end
 	local code = dispatcherLib.main({
 		fail = fail,
@@ -7459,7 +7475,6 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
 		onGitHub = onGitHub,
 		checking = checking,
 		origin = origin,
-		originIssueIds = originIssueIds,
 		-- a PR's state for the chain's gates (c0117): only on a GitHub origin, through the real gh
 		-- a pull request's merge commit (c0117: a commit on main that is vetted without being tracker state)
 		prMerged = function(sha: string): boolean

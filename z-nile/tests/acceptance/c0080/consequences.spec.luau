@@ -92,6 +92,8 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 		fs.writeDir(base)
 		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
 		git({ "remote", "remove", "origin" })
+		-- d0296: the clone carries the checkout's branch name; on a stack layer branch `start` finds no main below it
+		git({ "checkout", "-q", "-B", "main" })
 		local listed = process.exec("git", {
 			"ls-files",
 			"-co",
