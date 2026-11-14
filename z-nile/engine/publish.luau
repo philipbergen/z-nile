@@ -173,6 +173,9 @@ local function withoutMark(text: string): string
 	return head .. string.sub(kept, 2) .. rest
 end
 
+-- exported for the claim's status-only comparison to be pinned by a spec
+publish.withoutMark = withoutMark
+
 -- The refusal for a published document that adds, changes or removes the `reviews: judged` line anywhere but where
 -- the tool writes it: an issue's claim (its status becomes preparing-…) and a new raft's document.
 function publish.markProblem(path: string, existing: string?, content: string): string?

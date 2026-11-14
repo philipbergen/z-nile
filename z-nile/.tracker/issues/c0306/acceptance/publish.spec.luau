@@ -3,6 +3,7 @@
 -- preparing-...) and in a new raft's document, and refuses it in any other commit: another status move, a changed or
 -- removed line, a new issue or any other document. Pure: path, the document on origin (nil when new), the document.
 local publish = require("@znile/engine/publish")
+local raftplan = require("@znile/engine/raftplan")
 local reviewmodel = require("@znile/engine/reviewmodel")
 local store = require("@znile/engine/store")
 local t = require("@tests/lib/t")
@@ -107,6 +108,10 @@ return t.spec("c0306 publish accepts the mark only where the tool writes it", fu
 			-- and a kept mark with a trailing space is not a change
 			t.expect(mark(ISSUE, spaced, spaced)).toBe(nil)
 			t.expect(has(mark(ISSUE, spaced, doc("preparing-a-b-c")), "reviews: judged")).toBe(true)
+			-- the claim's status-only comparison sets the spaced mark aside as well
+			local bare = doc("preparing-a-b-c")
+			t.expect((publish :: any).withoutMark(spaced)).toBe(bare)
+			t.expect((publish :: any).withoutMark(doc("preparing-a-b-c", "judged"))).toBe(bare)
 			-- a value that is not the mark is neither a mark nor refused
 			local other = (
 				string.gsub(doc("preparing-a-b-c", "judged"), "reviews: judged", "reviews: judgedx", 1)
@@ -115,4 +120,12 @@ return t.spec("c0306 publish accepts the mark only where the tool writes it", fu
 			t.expect(mark(ISSUE, doc("new-a-b-c"), other)).toBe(nil)
 		end
 	)
+
+	it("AC3: the mark is no part of a design's hash, so a claim does not read as a redesign", function()
+		local marked = doc("preparing-a-b-c", "judged")
+		t.expect(raftplan.designHash(marked)).toBe(raftplan.designHash(doc("new-x-y-z")))
+		t.expect(raftplan.designHash(marked)).toBe(raftplan.designHash(doc("prepared-d-e-f", "judged")))
+		-- a change to the design still changes it
+		t.expect(raftplan.designHash(marked) ~= raftplan.designHash(marked .. "\n## Design\nD\n")).toBe(true)
+	end)
 end)
