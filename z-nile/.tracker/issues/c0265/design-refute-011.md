@@ -1,0 +1,5 @@
+# Refute 011 (c0265): round 11 answered (no high finding)
+
+- F1: fixed: no shared signature changes. `board.collect` and `board.build` keep their parameters (R0083/c0118 uses the third as `facts`); the verdicts apply through a new pure `board.withVerdicts(model, verdicts)` between `collect` and `render`, and `buildBoard` composes them. Landing order with R0083 is free; the executor reads R0083's `board.luau` in Phase 1 and tells its lead. Consequence: `buildBoard` stops calling `board.build`; the later lander resolves that one conflict.
+- F2: fixed: the rule is stated for every heartbeat path (the autobeat and the explicit `beat` ask the guard before their first network call); beat.spec's protected case now counts fetch, ls-remote and push with a shim and asserts none ran; the row names the mutant "asking the guard after the fetch".
+- F3: fixed: the replay lesson ("read a replay's failures, not only their count") is a note in `prove-specs-pass-on-a-prototype`; the in-flight-raft signature lesson is a note in `run-the-other-rafts-specs`; harvest maps both.

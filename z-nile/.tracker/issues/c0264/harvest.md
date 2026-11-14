@@ -31,3 +31,14 @@
 - design-review-008 F3: z-design/restated-rules-move-together
 - design-review-008 F4: zz-test/promoted-specs-pin-rules-not-sets
 - note a landing-order scenario is built from the other issue's real text (its prototype or patch, sha recorded), never from an edit the author writes; after a split, check every clause of each sentence that keeps the parent's label: z-design/quote-other-preps-before-promising, z-design/status-labels-need-a-tracker-fact
+- design-review-009 F1: z-design/status-labels-need-a-tracker-fact
+- design-review-009 F2: z-design/quote-other-preps-before-promising
+- design-review-009 F3: z-design/status-labels-need-a-tracker-fact
+- design-review-009 F4: z-design/quote-other-preps-before-promising
+- design-review-009 F5: z-design/restated-rules-move-together
+- design-review-009 F6: z-design/status-labels-need-a-tracker-fact
+- design-review-009 F7: z-design/open-bullets-use-finding-ids
+- design-review-009 F8: z-design/new-rules-migrate-existing-work
+- design-review-009 F9: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-009 F10: one-off: wording kept as the user and the ticket have it
+- design-review-009 F11: one-off: records corrected

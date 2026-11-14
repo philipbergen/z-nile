@@ -1,0 +1,203 @@
+# Harvest: c0265
+- design-review-001 F1: z-design/liveness-names-held-not-worked-states
+- design-review-001 F2: zz-test/background-seeds-meet-later-assertions, z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F3: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F4: zz-test/seed-every-enumerated-case
+- design-review-001 F5: z-design/instructions-runnable-where-they-run
+- design-review-001 F6: z-design/spec-design-correspondence, zz-arch/children-need-a-lifeline
+- design-review-001 F7: zz-test/pin-fail-safes-where-they-act
+- design-review-001 F8: zz-arch/lock-reads-live-state
+- design-review-001 F9: z-design/new-refusals-reach-every-caller
+- design-review-001 F10: zz-test/kill-mutants-where-the-value-is-built
+- design-review-001 F11: zz-test/criterion-fails-on-todays-file
+- design-review-001 F12: zz-arch/lock-reads-live-state
+- design-review-001 F13: z-design/accepted-risks-checked-and-decided
+- design-review-001 F14: z-design/accepted-risks-checked-and-decided
+- design-review-001 F15: z-design/status-labels-need-a-tracker-fact
+- design-review-001 F16: z-design/specify-every-named-artifact
+- design-review-001 F17: one-off: experiment commands and the prototype were not recorded in the draft
+- design-review-002 F1: zz-arch/automatic-effects-have-an-end-and-a-subject-check, z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F2: zz-test/future-dated-fixtures-and-whole-output-assertions, zz-test/background-seeds-meet-later-assertions
+- design-review-002 F3: zz-test/future-dated-fixtures-and-whole-output-assertions, zz-test/specs-set-host-markers-explicitly
+- design-review-002 F4: z-design/liveness-names-held-not-worked-states
+- design-review-002 F5: zz-arch/lock-reads-live-state
+- design-review-002 F6: z-design/spec-design-correspondence
+- design-review-002 F7: zz-test/pin-fail-safes-where-they-act
+- design-review-002 F8: zz-test/specs-set-host-markers-explicitly
+- design-review-002 F9: one-off: the prep prototype was not strict; promote-check now run with it
+- design-review-002 F10: zz-test/kill-mutants-where-the-value-is-built
+- design-review-002 F11: z-design/accepted-risks-checked-and-decided
+- design-review-002 F12: z-design/instructions-runnable-where-they-run
+- note c0265 prep: the user reversed Q4 ("flatline") after round 2 had reviewed the "heartless" reading, and the capture was rewritten on an unlanded branch (c0265) with a new wording ("pushed to main"): z-design/never-narrow-captured-scope
+- design-review-003 F1: z-design/claim-memory-rules-list-every-claim-path, z-design/confirm-overrides-with-a-suite-run
+- design-review-003 F2: zz-arch/every-command-effects-name-the-check-flows
+- design-review-003 F3: zz-arch/guard-no-is-explicit
+- design-review-003 F4: zz-test/pin-fail-safes-where-they-act
+- design-review-003 F5: z-design/reasoned-rows-claim-testable-reasons
+- design-review-003 F6: z-design/spec-design-correspondence
+- design-review-003 F7: z-design/required-steps-on-every-path
+- design-review-003 F8: z-design/design-the-execution-window
+- design-review-003 F9: z-design/restated-rules-move-together
+- design-review-003 F10: zz-test/pin-fail-safes-where-they-act
+- design-review-003 F11: zz-arch/children-need-a-lifeline
+- design-review-003 F12: zz-test/specs-set-host-markers-explicitly
+- design-review-003 F13: z-design/reasoned-rows-claim-testable-reasons
+- design-review-004 F1: z-design/walk-refute-added-cases-against-the-order-of-effects, z-design/prove-specs-pass-on-a-prototype
+- design-review-004 F2: zz-arch/one-fact-per-checkout-memory-file, z-design/confirm-overrides-with-a-suite-run
+- design-review-004 F3: zz-arch/one-reader-per-format, zz-arch/guard-no-is-explicit
+- design-review-004 F4: z-design/trace-every-way-code-runs
+- design-review-004 F5: zz-test/specs-never-burn-real-resources
+- design-review-004 F6: z-design/spec-design-correspondence
+- design-review-004 F7: z-design/restated-rules-move-together
+- design-review-004 F8: z-design/spec-design-correspondence
+- design-review-004 F9: zz-test/specs-set-host-markers-explicitly
+- design-review-004 F10: zz-test/stand-ins-answer-only-named-arguments
+- design-review-004 F11: one-off: the c0114 classified gate failure comes from f0263/c0265 being filed as features in z-nile's root; the reviewer's evidence for the user's rename decision, not a design defect of this issue
+- design-review-005 F1: zz-test/seed-guard-inputs-in-the-producers-spelling, z-design/prove-specs-pass-on-a-prototype
+- design-review-005 F2: z-design/claim-memory-rules-list-every-claim-path
+- design-review-005 F3: zz-test/proofs-hold-only-the-cases-that-wait
+- design-review-005 F4: zz-test/stand-ins-answer-only-named-arguments
+- design-review-005 F5: zz-rules/exhaustive-lists-name-new-things
+- design-review-005 F6: z-design/restated-rules-move-together
+- design-review-005 F7: zz-arch/guard-no-is-explicit
+- design-review-006 F1: z-design/walk-refute-added-cases-against-the-order-of-effects
+- design-review-006 F2: z-design/never-narrow-captured-scope
+- design-review-006 F3: z-design/never-narrow-captured-scope, z-design/spec-design-correspondence
+- design-review-006 F4: z-design/spec-design-correspondence
+- design-review-006 F5: z-design/confirm-overrides-with-a-suite-run
+- design-review-006 F6: z-design/restated-rules-move-together
+- design-review-006 F7: zz-test/proofs-hold-only-the-cases-that-wait
+- design-review-006 F8: one-off: duplicated fixture setup left over from splitting a spec
+- design-review-006 F9: z-design/restated-rules-move-together
+- design-review-006 F10: zz-arch/guard-no-is-explicit
+- design-review-007 F1: z-design/prove-specs-pass-on-a-prototype, zz-test/future-dated-fixtures-and-whole-output-assertions
+- design-review-007 F2: z-design/spec-design-correspondence
+- design-review-007 F3: z-design/trace-every-way-code-runs
+- design-review-007 F4: z-design/confirm-overrides-with-a-suite-run
+- design-review-007 F5: z-design/restated-rules-move-together
+- design-review-007 F6: z-design/reasoned-rows-claim-testable-reasons
+- design-review-008 F1: zz-arch/every-command-effects-name-the-check-flows, z-design/confirm-overrides-with-a-suite-run
+- design-review-008 F2: zz-test/specs-never-burn-real-resources
+- design-review-008 F3: z-design/spec-design-correspondence
+- design-review-008 F4: z-design/required-steps-on-every-path
+- design-review-008 F5: z-design/spec-design-correspondence
+- design-review-008 F6: z-design/reasoned-rows-claim-testable-reasons
+- design-review-008 F7: z-design/specify-every-named-artifact
+- note c0265 prep round 9: the answers to round 8 ran the promoted board specs against a guard marker (E9): zz-arch/every-command-effects-name-the-check-flows
+- design-review-009 F1: z-design/proofs-run-only-by-check-are-pinned, zz-review/sequestration-reference-not-a-ref
+- design-review-009 F2: zz-arch/every-command-effects-name-the-check-flows
+- design-review-009 F3: z-design/reasoned-rows-claim-testable-reasons
+- design-review-009 F4: z-design/restated-rules-move-together
+- design-review-009 F5: z-design/prove-specs-pass-on-a-prototype
+- design-review-010 F1: z-design/prove-specs-pass-on-a-prototype, zz-arch/guard-no-is-explicit
+- design-review-010 F2: z-design/restated-rules-move-together
+- design-review-010 F3: z-design/proofs-run-only-by-check-are-pinned
+- design-review-011 F1: z-design/run-the-other-rafts-specs
+- design-review-011 F2: zz-arch/every-command-effects-name-the-check-flows
+- design-review-011 F3: z-design/prove-specs-pass-on-a-prototype
+- design-review-012 F1: z-design/liveness-names-held-not-worked-states, zz-arch/automatic-effects-have-an-end-and-a-subject-check
+- design-review-012 F2: z-design/never-narrow-captured-scope
+- design-review-012 F3: z-design/spec-design-correspondence
+- design-review-012 F4: z-design/restated-rules-move-together, zz-arch/one-reader-per-format
+- design-review-012 F5: zz-arch/guard-no-is-explicit
+- design-review-012 F6: z-design/confirm-overrides-with-a-suite-run
+- design-review-012 F7: z-design/restated-rules-move-together
+- design-review-012 F8: z-design/accepted-risks-checked-and-decided
+- design-review-012 F9: one-off: a shared local ref namespace; fails safe
+- design-review-012 F10: z-design/reasoned-rows-claim-testable-reasons
+- design-review-013 F1: zz-test/background-seeds-meet-later-assertions
+- design-review-013 F2: zz-test/background-seeds-meet-later-assertions
+- design-review-013 F3: z-design/spec-design-correspondence
+- design-review-013 F4: zz-arch/automatic-effects-have-an-end-and-a-subject-check
+- design-review-013 F5: z-design/reasoned-rows-claim-testable-reasons
+- design-review-013 F6: z-design/accepted-risks-checked-and-decided
+- design-review-013 F7: z-design/required-steps-on-every-path
+- design-review-013 F8: z-design/confirm-overrides-with-a-suite-run
+- design-review-013 F9: zz-test/stand-ins-answer-only-named-arguments
+- design-review-013 F10: z-design/restated-rules-move-together
+- design-review-013 F11: z-design/accepted-risks-checked-and-decided
+- design-review-014 F1: zz-arch/automatic-effects-have-an-end-and-a-subject-check, z-design/liveness-names-held-not-worked-states
+- design-review-014 F2: z-design/spec-design-correspondence
+- design-review-014 F3: z-design/required-steps-on-every-path
+- design-review-014 F4: zz-arch/automatic-effects-have-an-end-and-a-subject-check
+- design-review-014 F5: z-design/restated-rules-move-together
+- design-review-014 F6: z-design/reasoned-rows-claim-testable-reasons
+- design-review-014 F7: one-off: small wording and edge gaps listed in the review
+- design-review-015 F1: zz-arch/automatic-effects-have-an-end-and-a-subject-check, z-design/accepted-risks-checked-and-decided
+- design-review-015 F2: z-design/claim-memory-rules-list-every-claim-path
+- design-review-015 F3: z-design/spec-design-correspondence
+- design-review-015 F4: zz-test/seed-every-enumerated-case
+- design-review-015 F5: z-design/required-steps-on-every-path
+- design-review-015 F6: z-design/trace-every-way-code-runs
+- design-review-015 F7: zz-test/seed-every-enumerated-case
+- design-review-015 F8: zz-test/refusals-tested-on-both-sides
+- design-review-015 F9: z-design/restated-rules-move-together
+- design-review-015 F10: z-design/reasoned-rows-claim-testable-reasons
+- design-review-015 F11: one-off: small gaps listed in the review
+- design-review-016 F1: z-design/accepted-risks-checked-and-decided, z-design/restated-rules-move-together
+- design-review-016 F2: z-design/new-rules-migrate-existing-work
+- design-review-016 F3: z-design/restated-rules-move-together
+- design-review-016 F4: z-design/required-steps-on-every-path
+- design-review-016 F5: z-design/trace-every-way-code-runs
+- design-review-016 F6: zz-test/kill-mutants-where-the-value-is-built
+- design-review-016 F7: zz-arch/automatic-effects-have-an-end-and-a-subject-check
+- design-review-016 F8: zz-arch/guard-no-is-explicit
+- design-review-016 F9: one-off: small gaps listed in the review
+- design-review-017 F1: z-design/confirm-overrides-with-a-suite-run
+- design-review-017 F2: z-design/spec-design-correspondence
+- design-review-017 F3: z-design/trace-every-way-code-runs
+- design-review-017 F4: z-design/restated-rules-move-together
+- design-review-017 F5: zz-test/pin-fail-safes-where-they-act
+- design-review-017 F6: z-design/reasoned-rows-claim-testable-reasons
+- design-review-017 F7: zz-arch/every-command-effects-name-the-check-flows
+- design-review-017 F8: one-off: leftovers listed in the review
+- note c0265 prep (review 017): a guard that refuses every command in a checkout must exempt the cleanup that runs there (reap, hooks), and a lookup made to find copies must keep every refusal the old lookup had (c0005): zz-arch/every-command-effects-name-the-check-flows
+- design-review-018 F1: z-design/trace-every-way-code-runs, zz-arch/automatic-effects-have-an-end-and-a-subject-check
+- design-review-018 F2: z-design/spec-design-correspondence
+- design-review-018 F3: zz-test/new-commands-run-in-a-copy
+- design-review-018 F4: z-design/reasoned-rows-claim-testable-reasons
+- design-review-018 F5: z-design/reasoned-rows-claim-testable-reasons
+- design-review-018 F6: z-design/spec-design-correspondence
+- design-review-018 F7: z-design/never-narrow-captured-scope
+- design-review-018 F8: z-design/confirm-overrides-with-a-suite-run
+- design-review-018 F9: z-design/restated-rules-move-together
+- note the monolithic c0265 ran 18 design-review rounds (3.5 M tokens) without converging, only its pure module prototyped, the engine edge and about 2,300 lines of fixture specs never run: z-design/prove-specs-pass-on-a-prototype
+- note size: 640 from round 1 to round 18 while the design grew to six interlocking mechanisms and the specs tripled, split only after 18 rounds by the user: z-design/size-is-re-estimated-when-scope-grows
+- design-review-019 F1: zz-arch/commits-for-the-real-origin-are-never-fixture-looking
+- design-review-019 F2: z-design/bottom-layer-pins-only-what-upper-layers-keep, z-design/no-check-red-between-steps
+- design-review-019 F3: z-design/design-the-execution-window
+- design-review-019 F4: z-design/spec-design-correspondence
+- design-review-019 F5: zz-test/seed-every-enumerated-case
+- design-review-019 F6: z-design/spec-design-correspondence
+- design-review-019 F7: zz-rules/exhaustive-lists-name-new-things
+- design-review-019 F8: one-off: a claim stamp drawn without the freshness check the other claim paths use
+- design-review-019 F9: one-off: a probe name the core's own parser calls malformed
+- design-review-019 F10: zz-arch/guard-no-is-explicit
+- design-review-019 F11: z-design/spec-design-correspondence
+- design-review-020 F1: z-design/bottom-layer-pins-only-what-upper-layers-keep
+- design-review-020 F2: z-design/prove-specs-pass-on-a-prototype
+- design-review-020 F3: z-design/restated-rules-move-together
+- design-review-020 F4: z-design/instructions-runnable-where-they-run
+- design-review-020 F5: z-design/design-the-execution-window
+- design-review-020 F6: z-design/new-rules-migrate-existing-work
+- design-review-020 F7: z-design/spec-design-correspondence
+- design-review-020 F8: zz-arch/guard-no-is-explicit
+- note round 2 candidate: an absolute count of a shared resource after commands is an absence assertion; prove early-layer cases on stubs of the later layers' effects: z-design/bottom-layer-pins-only-what-upper-layers-keep
+- design-review-021 F1: zz-arch/history-tests-survive-squash
+- design-review-021 F2: z-design/bottom-layer-pins-only-what-upper-layers-keep
+- design-review-021 F3: z-design/bottom-layer-pins-only-what-upper-layers-keep
+- design-review-021 F4: z-design/design-the-execution-window
+- design-review-021 F5: z-design/restated-rules-move-together
+- design-review-021 F6: z-design/restated-rules-move-together
+- design-review-022 F1: z-design/bottom-layer-pins-only-what-upper-layers-keep, z-design/mutation-runner-runs-correct-variants
+- design-review-022 F2: zz-test/pin-call-site-arguments
+- design-review-022 F3: zz-arch/read-paired-facts-at-one-moment, zz-arch/lock-reads-live-state
+- design-review-022 F4: z-design/spec-design-correspondence
+- design-review-022 F5: one-off: load-sensitive bounds in a real-time proof
+- design-review-022 F6: z-design/restated-rules-move-together
+- design-review-023 F1: zz-test/pin-fail-safes-where-they-act
+- design-review-023 F2: z-design/reasoned-rows-claim-testable-reasons
+- design-review-023 F3: z-design/spec-design-correspondence
+- design-review-023 F4: z-design/spec-design-correspondence
+- design-review-023 F5: one-off: hang markers close to the proof's limits and an undeclared local
+- design-review-023 F6: z-design/restated-rules-move-together
