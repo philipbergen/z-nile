@@ -125,6 +125,9 @@ export type PromptInput = {
 	exchangeLastStep: string?, -- the step the item's last attempt ran
 	parentExchange: { string }?, -- a nested step: the files of the run that started it, read only
 	parentStateDir: string?,
+	through: string?, -- zz-review final mode: the layers of this landing end at this issue (c0248)
+	perLanding: boolean?, -- zz-review final mode: the raft has a final review and a trace per landing (c0248)
+	itemDoc: string?, -- the item's document, where a review's `## Open to the human` goes
 }
 
 -- c0250: what a step does when a decision needs the user. A capture has no item yet, so z-ticket keeps c0256's local
@@ -157,14 +160,21 @@ function dispatch.prompt(p: PromptInput): string
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in stream mode. This is the one round. Read the stream's diff and run its checks in \`{p.streamWorktree or `.worktree/ws-{p.id}`}\` (read only there). Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into the raft's folder as \`stream-review-{p.id}-001.md\`.`
 	elseif p.step == "zz-review" and p.mode == "final" then
+		local scope = if p.through then ` --through {p.through}` else ""
+		if p.perLanding then
+			what =
+				`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode, for the layers of this landing only. Run \`./zn trace {p.id}{scope}\`, fill its table, and write the filled table to \`{p.stateDir}/trace.md\` and your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers them and moves them into the raft's folder as \`final-review-NNN.md\` and \`trace-NNN.md\` (the same NNN, one more than the last landing's). Findings you leave for the human go under \`## Open to the human\` in the raft document{if p.itemDoc
+					then ` (\`{p.itemDoc}\`)`
+					else ""}.`
+		else
+			what =
+				`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. Run \`./zn trace {p.id}\`, fill \`trace.md\` in {p.id}'s folder, verify it with \`./zn trace {p.id} --check\`, and write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.`
+		end
+	elseif p.step == "zz-review" and p.mode == "code" then
 		what =
-			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. Run \`./zn trace {p.id}\`, fill \`trace.md\` in {p.id}'s folder, verify it with \`./zn trace {p.id} --check\`, and write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.`
-	elseif p.step == "zz-review" then
-		what =
-			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as that mode's file ({if p.mode
-					== "code"
-				then "`review-NNN.md`"
-				else "`design-review-NNN.md`"}).`
+			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in code mode: the diff of {p.id}'s layer. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it, stamps it with the layer's \`Commit:\` and \`Patch:\`, and moves it into {p.id}'s folder as \`review-NNN.md\`. A finding that must wait for the human goes under \`## Open to the human\` in the issue's document{if p.itemDoc
+				then ` (\`{p.itemDoc}\`)`
+				else ""}, not the raft's.`
 	else
 		what = `Read \`{p.skillPath}\` and follow it for {p.id}.`
 	end

@@ -156,6 +156,9 @@ local function withoutStatus(text: string, escalation: boolean?): string?
 		rest = string.gsub(rest, "\nDecided with the user %(%d[^\n]*%), resolve: [^\n]*", "")
 		rest = string.gsub(rest, "\nScope decision %(user, %d[^\n]*", "")
 	end
+	-- c0248: `ready` marks a raft `layers: reviewed` (its layers are reviewed one by one); that line is the tool's, as
+	-- the status line is
+	kept = string.gsub(kept, "\nlayers: reviewed", "")
 	return head .. kept .. rest
 end
 
