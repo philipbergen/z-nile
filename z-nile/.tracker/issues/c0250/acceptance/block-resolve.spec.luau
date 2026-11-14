@@ -313,7 +313,7 @@ return t.spec("c0250 block and resolve", function(it)
 					seed[`{ROOT}/issues/active/{id}/acceptance/.gitkeep`] = ""
 				end
 				for _, id in done do
-					seed[`{ROOT}/issues/done/{id}/{id}.md`] = issue(id, "done", raft, "ready")
+					seed[`{ROOT}/issues/done/{id}/{id}.md`] = issue(id, ACTIVE, raft, "ready") -- a landed member keeps the claim stamp, as on main
 					seed[`{ROOT}/issues/done/{id}/check.sh`] = CHECK
 				end
 			end
@@ -353,7 +353,7 @@ return t.spec("c0250 block and resolve", function(it)
 				end
 				local landedIds: { string } = landed or {}
 				for _, id in landedIds do
-					seed[`{ROOT}/issues/done/{id}/{id}.md`] = issue(id, "done", raft, "ready")
+					seed[`{ROOT}/issues/done/{id}/{id}.md`] = issue(id, ACTIVE, raft, "ready") -- a landed member keeps the claim stamp, as on main
 					seed[`{ROOT}/issues/done/{id}/check.sh`] = CHECK
 				end
 			end
@@ -711,7 +711,7 @@ return t.spec("c0250 block and resolve", function(it)
 			t.expect(string.match(front(raftOf("R0010"), "status") or "", "^blocked%-") ~= nil).toBe(true)
 			-- the landed member stays where it is, untouched
 			t.expect(has(files, `{ROOT}/issues/done/c0200/c0200.md`)).toBe(true)
-			t.expect(statusOf(`{ROOT}/issues/done/c0200/c0200.md`)).toBe("done")
+			t.expect(statusOf(`{ROOT}/issues/done/c0200/c0200.md`)).toBe("active")
 			t.expect(front(`{ROOT}/issues/done/c0200/c0200.md`, "blocked")).toBe(nil)
 			-- the note is in the raft's folder, with its header and the layer the worker was on
 			local filed = originFile(`{ROOT}/rafts/R0010/escalation.md`) or ""
@@ -838,7 +838,7 @@ return t.spec("c0250 block and resolve", function(it)
 			)
 				.toBe(true)
 			t.expect(has(tree(), `{ROOT}/issues/done/c0340/c0340.md`)).toBe(true) -- the landed member stays
-			t.expect(statusOf(`{ROOT}/issues/done/c0340/c0340.md`)).toBe("done")
+			t.expect(statusOf(`{ROOT}/issues/done/c0340/c0340.md`)).toBe("active")
 		end
 	)
 	it(
@@ -1102,7 +1102,7 @@ return t.spec("c0250 block and resolve", function(it)
 			t.expect(
 				has(
 					originFile(docOf("c0140")) or "",
-					`Scope decision (user, {date}): "the parser is its own issue" (split into {newId})`
+					`Scope decision (user, {date}): "the parser is its own issue" (split into {newId})\n\n## Solution`
 				)
 			).toBe(true)
 			local made = originFile(docOf(newId)) or ""
