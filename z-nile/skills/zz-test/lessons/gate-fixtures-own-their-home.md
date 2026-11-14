@@ -15,3 +15,5 @@ check: Does a fixture that runs `check.sh` set its own HOME (so `$HOME/.rokit/bi
 **How to apply:** give the fixture `HOME=<fixture>/home` with `.lune/.typedefs/<lune version>` made, and a `bin/lune` wrapper that runs the real `lune` with the real HOME. Put `sourcemap.json` (and every other gate output) in the fixture's `.gitignore`. Copy `z-nile/tests/run.luau` and `z-nile/tests/lib` after `engine.copy`. `c0120/gate-homes.spec` is the model.
 
 A nested runner inherits the outer run's guard markers. With `PICKMAN_OPEN_GUARD` set, the fixture's runner skips its own browser guard, so a spec that tests that guard sees it never fire, and the real run around it fails instead (c0165 prep, round 1's prototype). Setting the marker to `""` makes the fixture's runner the outermost again.
+
+c0248 prep (2026-11-12): `stylua --check` gave different results on the `.tracker` acceptance specs when run from the repository root and from `z-nile/`, because each reads the config of the folder it starts in. Format and check acceptance specs from the project home, as the gate does.

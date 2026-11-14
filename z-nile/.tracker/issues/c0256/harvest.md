@@ -35,3 +35,16 @@
 - design-review-005 F2: z-design/restated-rules-move-together
 - design-review-006 F1: z-design/exemption-needs-the-check-to-run
 - design-review-006 F2: zz-arch/one-reader-per-format
+- note R0093 code review 001 F1 (the first build's review; the raft was stopped, so its findings are harvested here): zz-arch/moved-records-join-under-the-owners-lock
+- note R0093 code review 001 F4: z-design/guards-name-slow-tier-specs
+- note R0093 code review 001 F7: zz-execute/emergent-fix-commits-name-their-issue
+- note R0093 stopped after #299 changed the format the sequestered specs' fixture restates: z-design/design-the-execution-window
+
+- design-review-007 F1: z-design/rules-on-a-step-live-in-its-skill
+- design-review-007 F2: zz-arch/moved-records-join-under-the-owners-lock
+- design-review-007 F3: z-design/restated-rules-move-together
+- design-review-007 F4: z-design/design-the-execution-window
+- design-review-007 F5: zz-test/hold-on-markers-not-sleeps
+- design-review-007 F6: zz-test/seed-every-enumerated-case
+- design-review-007 F7: zz-test/seed-every-enumerated-case
+- design-review-007 F8: z-design/spec-design-correspondence
