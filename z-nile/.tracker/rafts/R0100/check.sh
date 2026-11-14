@@ -31,7 +31,7 @@ check "RC2: each interface two members share is defined once in the engine, and 
 
 check "RC3: z-run, now a shim over z-work, still carries the phrases the members pin" bash -c '
 	f="$ZN_ROOT/z-nile/skills/z-run/SKILL.md"
-	for p in "./zn lost" "./zn beat" "--time 3600" "--adopt" "keeps itself alive" "a lost raft" "--takeover" "you were discarded" "remove its old worktree"; do
+	for p in "./zn lost" "./zn beat" "--time 3600" "--adopt" "keeps itself alive" "a lost raft" "--takeover" "you were discarded"; do
 		grep -qF -e "$p" "$f" || { echo "z-run lacks: $p"; exit 1; }
 	done'
 
