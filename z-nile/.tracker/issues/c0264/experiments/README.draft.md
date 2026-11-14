@@ -24,9 +24,9 @@ z-nile is the tooling that tracks, designs, gates and delivers the work of every
 
 ## Intent
 z-nile exists so that people spend their time on ideas and designs, and agents carry everything after that to merge. This section is the intent, set by the user (2026-11-07, c0264); what of it is built is labelled sub-section by sub-section in How it should work.
-- **People work at the idea and the design.** A person brings an idea. z-ticket challenges it, keeps the person's words and every question and answer, writes the idea out clean, has it checked against what they said and confirms it with them. z-design turns the confirmed idea into a design with acceptance tests as code, reviewed by a clean adversarial reviewer, with a person ruling what the review leaves open, and a person approves it. Apart from resolving a block, and giving a rank when a person wants one, those are the only two stages that ask a person for anything.
+- **People work at the idea and the design.** A person brings an idea. z-ticket challenges it, keeps the person's words and every question and answer, writes the idea out clean, has it checked against what they said and confirms it with them. z-design turns the confirmed idea into a design with acceptance tests as code, reviewed back and forth, and a person approves it. Apart from resolving a block, and giving a rank when a person wants one, those are the only two stages that ask a person for anything.
 - **Workers carry it to merge.** A worker is any AI CLI running `z-work`. It takes a raft and stays with it until it merges, one ticket at a time, then clears its context and takes the next raft.
-- **The result stays true to the ask.** Before a raft merges, a final full-force review compares the original ask, the design and the implementation, without the compromises made on the way, and sends the work back when it went off course.
+- **The result stays true to the ask.** Reviews are back and forth, except for the last one, which just verifies that the diff matches the original ask. Before each ticket's layer is complete, that final full-force review compares the original ask, the design and the implementation, without the compromises made on the way, and sends the work back when it went off course.
 - **It stays cheap.** Expensive models do every final review; cheaper, faster ones do the work on the way there; the cheapest do the waiting. An expensive model never orchestrates or waits.
 - **Every decision has a name.** A ticket says whose idea it was, who approved its design, who unblocked it and which worker delivered it.
 
@@ -46,7 +46,7 @@ flowchart LR
   subgraph wrk["worker end: any AI CLI running z-work"]
     direction TB
     loop["claim the top raft: lost first, then rank"]
-    layer["one ticket at a time: build, review, finish its layer"]
+    layer["one ticket at a time: build, review, full-force review, finish its layer"]
     final["final review of the stack, then ./zn done lands it"]
     loop --> layer
     layer --> final
@@ -145,7 +145,7 @@ Every ticket says who did what to it.
 - `./zn who <id>` prints a ticket's history, oldest first: whose idea it was (the author of the ticket's capture commit), each status change, the merge, and the worker of each delivered layer, read from the ticket's spend rows; what git already knows is read from git and never stored. *captured* (c0280)
 - The record gets a row, with its actor, when a ticket is unblocked, rafted or delivered. *captured* (c0282)
 - A person approves a design with `./zn approve <id>`, which records the person and a hash of the design sections, the acceptance specs and `check.sh` in the issue's `approval.md`; `ready` and `done` refuse a design that changed since. *exists*
-- The approval is also a row of the record, with the person's words, and `prepared` is refused until it has run. *captured* (c0283)
+- `./zn approve` is also refused in any agent session, terminal or not, and records an `approved` row in the record (the person and the first 12 hex of the design hash, no words). *captured* (c0283)
 - The board shows each ticket's provenance, the same entries `./zn who` prints. *captured* (c0284)
 
 ### Trust
@@ -179,7 +179,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | discard and recover a worktree: the numbered copy | c0277 | captured |
 | `./zn who`, the history from git | c0280 | captured |
 | provenance rows: unblocked, rafted, delivered | c0282 | captured |
-| the approval recorded, `prepared` refused without it | c0283 | captured |
+| `./zn approve` refused in an agent session, the approved row | c0283 | captured |
 | the board shows provenance | c0284 | captured |
 | the dispatcher waits on a cheap model | c0305 | captured |
 | commands refuse a review off the review models | c0306 | captured |

@@ -177,8 +177,8 @@ check "AC6: the README states the rules of the worker model, and names no tiers,
 	'acceptance tests as code' 'the `idea-challenge` role' 'names a real model for each stage in its `[roles.*]` table' 'Every review runs on an expensive role' \
 	'the cheapest do the waiting' 'An expensive model never orchestrates or waits' 'the dispatcher no longer stops at a gate just to wait' 'Metrics show the cost per model' 'A command refuses a design review or a final review' \
 	'a heartbeat branch, not on `main`' 'the takeover deletes the old heartbeat branch' 'its old owner is refused and told' 'Agents keep their claims alive without remembering to beat' \
-	'`./zn who <id>` prints a ticket'"'"'s history, oldest first' 'A person approves a design with `./zn approve <id>`' 'and `prepared` is refused until it has run' 'the same entries `./zn who` prints' \
-	'a numbered copy of it continues the work' 'it never orchestrates on an expensive one' 'and a person approves it' \
+	'`./zn who <id>` prints a ticket'"'"'s history, oldest first' 'A person approves a design with `./zn approve <id>`' 'is also refused in any agent session, terminal or not' 'the same entries `./zn who` prints' \
+	'a numbered copy of it continues the work' 'it never orchestrates on an expensive one' 'reviewed back and forth, and a person approves it' 'Reviews are back and forth, except for the last one, which just verifies that the diff matches the original ask' 'Before each ticket'"'"'s layer is complete' \
 	'Expensive models do every final review;' \
 	'on an expensive model checks that it says what the person said' \
 	'so the order works around a blocked item without changing any rank' \
