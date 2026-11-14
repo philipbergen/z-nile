@@ -11,35 +11,73 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local MODELS = [[
-order = ["claude", "grok", "agent"]
-
 [dispatch]
 auto_merge = ["prep"]
 stall_seconds = 3
 
-[z-ticket.claude]
+[roles.idea]
 model = "claude-sonnet-5"
+cli = "claude"
+runtime = "claude-cli"
 rank = 2
-runtime = "claude-cli"
 max_tokens = 5000
+fallbacks = []
 
-[zz-review.claude]
+[roles.idea-challenge]
 model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
 rank = 4
-runtime = "claude-cli"
 max_tokens = 5000
+fallbacks = []
 
-[z-raft.claude]
+[roles.design]
 model = "claude-opus-5-5"
-rank = 3
+cli = "claude"
 runtime = "claude-cli"
+rank = 3
 max_tokens = 5000
+fallbacks = []
 
-[z-design.claude]
+[roles.design-challenge]
 model = "claude-opus-5-5"
-rank = 3
+cli = "claude"
 runtime = "claude-cli"
+rank = 4
 max_tokens = 5000
+fallbacks = []
+
+[roles.raft]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 5000
+fallbacks = []
+
+[roles.implementation]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 5000
+fallbacks = []
+
+[roles.code-review]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+fallbacks = []
+
+[roles.final-review]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+fallbacks = []
 ]]
 
 local h: fakecli.Harness
