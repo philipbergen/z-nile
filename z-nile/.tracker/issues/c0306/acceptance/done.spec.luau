@@ -473,7 +473,7 @@ return t.spec("c0306 done and commit judge the reviews", function(it)
 			t.expect(has(say(later), "review-002.md")).toBe(true)
 			t.expect(has(say(later), "review-001.md")).toBe(false)
 			-- the kinds are apart: a newer final review does not clear a cheap newest review-NNN
-			write(`{raftDir()}/final-review-002.md`, review("claude-opus-5-5", "high"))
+			write(`{raftDir()}/final-review-003.md`, review("claude-opus-5-5", "high"))
 			commitAll("a final review on opus")
 			local apart = zn({ "done", raft })
 			t.expect(apart.ok).toBe(false)

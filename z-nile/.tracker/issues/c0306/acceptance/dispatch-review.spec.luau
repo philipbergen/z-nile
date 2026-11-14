@@ -95,7 +95,7 @@ local function marked(id: string): string
 end
 
 local RAFT_DOC =
-	"---\nid: R0090\ntype: chore\ntitle: demo\nslug: demo\nissues: [c0010, c0011, c0019]\ncreated: 2026-01-01\nstatus: active-a-b-c\n---\n\n# R0090\n"
+	"---\nid: R0090\ntype: chore\ntitle: demo\nslug: demo\nissues: [c0010, c0011, c0019]\nreviews: judged\ncreated: 2026-01-01\nstatus: active-a-b-c\n---\n\n# R0090\n"
 
 local h: fakecli.Harness
 local wt = ""
