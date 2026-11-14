@@ -2,3 +2,15 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-14 17:17	c0265: heartbeat, beat, lost, status markers	173	10	build							tokens,wall,cpu,ai
 2026-11-14 18:38	c0265: review-001 F4, F5 and U1 record	1	1	build							tokens,wall,cpu,ai
 2026-11-14 19:28	c0265: stylua the readBeats line (review-003 F1)	1	0	build							tokens,wall,cpu,ai
+2026-11-14 18:04	c0274: take over a lost claim	80	4	build							tokens,wall,cpu,ai
+2026-11-14 18:04	1 spec	0	0	test			0.825	0.550		0.825	tokens,ai
+2026-11-14 18:05	1 spec	0	0	test			31.026	24.910		31.026	tokens,ai
+2026-11-14 18:06	1 spec	0	0	test			60.422	49.240		60.422	tokens,ai
+2026-11-14 18:07	134 specs	0	0	test			69.316	162.470		69.316	tokens,ai
+2026-11-14 18:07	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-14 18:27	c0274: done drops the claim memory after the push (review-002 F1, F2, F3)	6	1	build							tokens,wall,cpu,ai
+2026-11-14 18:27	1 spec	0	0	test			0.827	0.530		0.827	tokens,ai
+2026-11-14 18:28	1 spec	0	0	test			30.805	24.420		30.805	tokens,ai
+2026-11-14 18:29	1 spec	0	0	test			57.174	46.070		57.174	tokens,ai
+2026-11-14 18:30	134 specs	0	0	test			66.149	150.260		66.149	tokens,ai
+2026-11-14 18:30	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
