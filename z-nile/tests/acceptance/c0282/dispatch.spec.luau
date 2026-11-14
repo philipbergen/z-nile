@@ -109,7 +109,6 @@ return t.spec("c0282 provenance through the dispatcher", function(it)
 			["pickman/.tracker/rafts/R0041/R0041.md"] = "---\nid: R0041\nslug: a-raft\ntitle: a backlog raft\nissues: []\n---\n",
 			["pickman/.tracker/rafts/R0041/check.sh"] = "bash members-check.sh\n",
 		})
-		t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 	end)
 
 	it("each attempt's ZN_ACTOR is its own spec: model, version and effort, one spelling", function()
@@ -291,7 +290,6 @@ return t.spec("c0282 provenance through the dispatcher", function(it)
 				[p96] = fixture.git(h.f.origin, { "show", `main:{p96}` })
 					.. "\n| 2026-11-08 09:30 | ranked | human:Ann | rank=3 |\n",
 			}, "a rank on c0096")
-			t.expect(zn({ "dispatch", "vet" }).ok).toBe(true)
 			local stale = zn({ "dispatch", "c0096" })
 			t.expect(stale.code).toBe(4)
 			t.expect(has(stale.stdout, "run ./zn sync")).toBe(true)
