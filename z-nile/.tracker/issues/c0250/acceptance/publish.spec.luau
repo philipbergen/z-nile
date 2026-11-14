@@ -193,11 +193,11 @@ return t.spec("c0250 the publish rule of a block or resolve commit", function(it
 	end)
 
 	it("AC14: refuses a document that lost its last lines", function()
-		local doc = SEED[C10]
+		local text = SEED[C10]
 		local tail = "\nMake it fast.\n"
-		t.expect(string.sub(doc, -#tail)).toBe(tail)
+		t.expect(string.sub(text, -#tail)).toBe(tail)
 		refused(
-			{ [C10] = string.sub(doc, 1, #doc - #tail) },
+			{ [C10] = string.sub(text, 1, #text - #tail) },
 			C10NOTE,
 			"a line of the document on origin/main is missing"
 		)
