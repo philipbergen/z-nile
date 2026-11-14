@@ -178,7 +178,8 @@ function publish.markProblem(path: string, existing: string?, content: string): 
 	if existing == nil then
 		return if string.match(path, "/rafts/R%d%d%d%d/R%d%d%d%d%.md$") then nil else where
 	end
-	local claim = string.match(content, "\nstatus: preparing%-") ~= nil
+	local block = string.match(content, "^%-%-%-\n(.-\n)%-%-%-\n") or ""
+	local claim = string.find("\n" .. block, "\nstatus: preparing%-") ~= nil
 	local issue = string.match(path, "/[fdc]%d%d%d%d/[fdc]%d%d%d%d%.md$") ~= nil
 	return if claim and issue then nil else where
 end
