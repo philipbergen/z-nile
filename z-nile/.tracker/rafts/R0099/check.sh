@@ -13,6 +13,9 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0099
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: the raft's members are exactly c0263 c0280 c0282 c0283 c0284" bash -c 'got=$("$ZN_ROOT/zn" members R0099 | sed "s|.*/||" | sort | tr "\n" " "); [[ $got == "c0263 c0280 c0282 c0283 c0284 " ]] || { echo "members: $got"; exit 1; }'
+check "RC2: the engine has one list of agent-session variables, and AGENT_VARS is that table" bash -c '[[ $(grep -c "^provenance.AGENT_MARKERS = {" engine/provenance.luau) == 1 ]] && grep -q "^provenance.AGENT_VARS = provenance.AGENT_MARKERS" engine/provenance.luau && ! grep -q "^provenance.AGENT_VARS = {" engine/provenance.luau'
+check "RC3: the engine loads with every layer's commands (the 200-local cap holds) and ./zn who prints a real item's history" bash -c '"$ZN_ROOT/zn" who c0263 | grep -q idea'
+check "RC4: the board's item view has the Provenance section and the board builds" bash -c 'grep -q provenanceOf engine/board.html && "$ZN_ROOT/zn" board >/dev/null'
 
 finish
