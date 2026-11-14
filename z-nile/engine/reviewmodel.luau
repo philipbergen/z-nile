@@ -74,8 +74,7 @@ end
 function reviewmodel.stamp(text: string, model: string, effort: string?): (string?, string?)
 	local had = reviewmodel.read(text)
 	if had ~= nil then
-		return nil,
-			`already records {had}: a review is recorded once; run a new round`
+		return nil, `already records {had}: a review is recorded once; run a new round`
 	end
 	local head = `Model: {model}\n`
 	if effort and effort ~= "" then

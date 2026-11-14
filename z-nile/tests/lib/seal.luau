@@ -243,7 +243,10 @@ function seal.trace(dir: string, raftId: string)
 	-- c0306: the final review is recorded on a review model, as a marked raft's `done` requires
 	local finalText = fs.readFile(`{dir}/{finalRevRel}`)
 	if reviewmodel.read(finalText) == nil then
-		fs.writeFile(`{dir}/{finalRevRel}`, (reviewmodel.stamp(finalText, "claude-opus-5-5", "xhigh")) :: string)
+		fs.writeFile(
+			`{dir}/{finalRevRel}`,
+			(reviewmodel.stamp(finalText, "claude-opus-5-5", "xhigh")) :: string
+		)
 	end
 	local commitEnv: { [string]: string }? = nil
 	if not fixture.exec(dir, "git", { "config", "user.email" }).ok then

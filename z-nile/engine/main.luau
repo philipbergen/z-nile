@@ -4588,11 +4588,10 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 				and path
 				and base
 				and (mark == "??" or string.sub(mark, 1, 1) == "A")
-				and (
-					string.match(base, "^review%-%d+%.md$")
-					or string.match(base, "^final%-review%-%d+%.md$")
-					or string.match(base, "^design%-review%-%d+%.md$")
-				)
+				and (string.match(base, "^review%-%d+%.md$") or string.match(base, "^final%-review%-%d+%.md$") or string.match(
+					base,
+					"^design%-review%-%d+%.md$"
+				))
 				and require("./reviewmodel").read(fs.readFile(path)) == nil
 			then
 				table.insert(unstamped, path)

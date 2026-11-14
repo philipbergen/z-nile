@@ -170,7 +170,8 @@ function publish.markProblem(path: string, existing: string?, content: string): 
 	if now == before then
 		return nil
 	end
-	local where = `{path}: reviews: judged is written only by a claim (./zn status <id> preparing) or by ./zn new raft, and never changed or removed`
+	local where =
+		`{path}: reviews: judged is written only by a claim (./zn status <id> preparing) or by ./zn new raft, and never changed or removed`
 	if not now then
 		return where
 	end
@@ -517,7 +518,8 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 				return fail(markWhy)
 			end
 			if existing then
-				local before, after = withoutStatus(withoutMark(existing)), withoutStatus(withoutMark(c.content))
+				local before, after =
+					withoutStatus(withoutMark(existing)), withoutStatus(withoutMark(c.content))
 				if not before or not after or before ~= after then
 					return fail(
 						`{c.path}: a published change to an existing document may only edit its status: line`
