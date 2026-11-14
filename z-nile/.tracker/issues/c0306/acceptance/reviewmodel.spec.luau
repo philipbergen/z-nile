@@ -91,10 +91,13 @@ return t.spec("c0306 review models and the record", function(it)
 		"AC2: stamp refuses a review that already records a model, whether the new value differs or not",
 		function()
 			local once = reviewmodel.stamp(REVIEW, "claude-opus-5-5", "high") :: string
-			for _, again in
-				{ { "claude-opus-5-5", "high" }, { "claude-sonnet-5-5", "low" }, { "claude-opus-5-5", nil } }
-			do
-				local out, why = reviewmodel.stamp(once, again[1] :: string, again[2])
+			local agains: { { model: string, effort: string? } } = {
+				{ model = "claude-opus-5-5", effort = "high" },
+				{ model = "claude-sonnet-5-5", effort = "low" },
+				{ model = "claude-opus-5-5", effort = nil },
+			}
+			for _, again in agains do
+				local out, why = reviewmodel.stamp(once, again.model, again.effort)
 				t.expect(out).toBe(nil)
 				t.expect(has(why, "already records claude-opus-5-5")).toBe(true)
 				t.expect(has(why, "recorded once")).toBe(true)

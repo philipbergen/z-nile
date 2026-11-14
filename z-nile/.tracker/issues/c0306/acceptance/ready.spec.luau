@@ -55,7 +55,8 @@ end
 local function member(judged: boolean?, reviews: { [string]: string }?): readycheck.Member
 	local a = approval()
 	local files: { [string]: string } = { ["c0001.md"] = DOC, ["check.sh"] = CHECK, ["approval.md"] = a }
-	for name, text in reviews or {} do
+	local given: { [string]: string } = reviews or {}
+	for name, text in given do
 		files[name] = text
 	end
 	return {
@@ -77,7 +78,8 @@ local function raft(
 	members: { readycheck.Member }?
 ): readycheck.Raft
 	local files: { [string]: string } = { ["check.sh"] = CHECK }
-	for name, text in reviews or {} do
+	local given: { [string]: string } = reviews or {}
+	for name, text in given do
 		files[name] = text
 	end
 	return {
@@ -161,6 +163,11 @@ return t.spec("c0306 ready and work next judge the reviews", function(it)
 		)
 		t.expect(has(why, "design-review-001.md")).toBe(true)
 		-- the first failing file by number is the one named
+		-- a later round off the review models is refused when the first is fine
+		local later = readycheck.reason(
+			raft(true, { ["design-review-001.md"] = OPUS, ["design-review-002.md"] = SONNET })
+		)
+		t.expect(has(later, "design-review-002.md")).toBe(true)
 		local both = readycheck.reason(
 			raft(true, { ["design-review-002.md"] = SONNET, ["design-review-001.md"] = BARE })
 		)
@@ -179,20 +186,22 @@ return t.spec("c0306 ready and work next judge the reviews", function(it)
 
 	it("AC5: a marked raft and member on a review model pass, at every kind", function()
 		t.expect(
-			readycheck.reason(
-				raft(
-					true,
-					{ ["design-review-001.md"] = OPUS },
-					{ member(true, { ["design-review-001.md"] = OPUS }) }
+			(
+				readycheck.reason(
+					raft(
+						true,
+						{ ["design-review-001.md"] = OPUS },
+						{ member(true, { ["design-review-001.md"] = OPUS }) }
+					)
 				)
 			)
 		).toBe(nil)
 		for _, model in { "claude-fable-5-2", "kimi-code-k3.2" } do
 			local text = `Model: {model}\n# Review\nVerdict: approve\n`
-			t.expect(readycheck.reason(raft(true, { ["design-review-001.md"] = text }))).toBe(nil)
+			t.expect((readycheck.reason(raft(true, { ["design-review-001.md"] = text })))).toBe(nil)
 		end
 		local grok = "Model: grok-4.7\nEffort: xhigh\n# Review\nVerdict: approve\n"
-		t.expect(readycheck.reason(raft(true, { ["design-review-001.md"] = grok }))).toBe(nil)
+		t.expect((readycheck.reason(raft(true, { ["design-review-001.md"] = grok })))).toBe(nil)
 		local lowGrok = "Model: grok-4.7\nEffort: high\n# Review\nVerdict: approve\n"
 		t.expect(has(readycheck.reason(raft(true, { ["design-review-001.md"] = lowGrok })), "grok-4.7"))
 			.toBe(true)
@@ -202,19 +211,21 @@ return t.spec("c0306 ready and work next judge the reviews", function(it)
 		"AC5: an unmarked raft and member pass any review, and a marked raft with no review is not refused",
 		function()
 			t.expect(
-				readycheck.reason(
-					raft(
-						nil,
-						{ ["design-review-001.md"] = SONNET },
-						{ member(nil, { ["design-review-001.md"] = SONNET }) }
+				(
+					readycheck.reason(
+						raft(
+							nil,
+							{ ["design-review-001.md"] = SONNET },
+							{ member(nil, { ["design-review-001.md"] = SONNET }) }
+						)
 					)
 				)
 			).toBe(nil)
-			t.expect(readycheck.reason(raft(false, { ["design-review-001.md"] = BARE }))).toBe(nil)
-			t.expect(readycheck.reason(raft(true, nil, { member(true, nil) }))).toBe(nil)
+			t.expect((readycheck.reason(raft(false, { ["design-review-001.md"] = BARE })))).toBe(nil)
+			t.expect((readycheck.reason(raft(true, nil, { member(true, nil) })))).toBe(nil)
 			-- a refute and a harvest are never judged
 			t.expect(
-				readycheck.reason(raft(true, { ["design-refute-001.md"] = BARE, ["harvest.md"] = BARE }))
+				(readycheck.reason(raft(true, { ["design-refute-001.md"] = BARE, ["harvest.md"] = BARE })))
 			)
 				.toBe(nil)
 		end

@@ -43,8 +43,9 @@ local dir = ""
 local raft, issue = "", ""
 
 local function run(cmd: string, args: { string }, extra: { [string]: string }?): Result
-	local env = table.clone(TERMINAL)
-	for k, v in extra or {} do
+	local env: { [string]: string } = table.clone(TERMINAL)
+	local more: { [string]: string } = extra or {}
+	for k, v in more do
 		env[k] = v
 	end
 	return fixture.exec(dir, cmd, args, { env = env })
@@ -170,6 +171,9 @@ return t.spec("c0306 done and commit judge the reviews", function(it)
 			-- a design review in the issue's folder is stamped too
 			local design = `{issueDir()}/design-review-001.md`
 			write(design, review(nil, nil))
+			-- an unstamped final review is stamped too
+			local final2 = `{raftDir()}/final-review-002.md`
+			write(final2, review(nil, nil))
 			must(
 				zn({
 					"commit",
@@ -187,6 +191,7 @@ return t.spec("c0306 done and commit judge the reviews", function(it)
 			t.expect(read(file)).toBe("Model: claude-sonnet-5-5\nEffort: high\n" .. review(nil, nil))
 			t.expect(read(own)).toBe(review("claude-fable-5-2", "high"))
 			t.expect(read(design)).toBe("Model: claude-sonnet-5-5\nEffort: high\n" .. review(nil, nil))
+			t.expect(read(final2)).toBe("Model: claude-sonnet-5-5\nEffort: high\n" .. review(nil, nil))
 			-- the committed blob is the stamped text
 			t.expect(git({ "show", `HEAD:{file}` })).toBe(trim(read(file)))
 		end
@@ -198,18 +203,15 @@ return t.spec("c0306 done and commit judge the reviews", function(it)
 			local a, b = `{raftDir()}/review-002.md`, `{raftDir()}/review-003.md`
 			write(a, review(nil, nil))
 			must(
-				zn(
-					{
-						"commit",
-						"-m",
-						`{raft}: review-002`,
-						"--phase",
-						"code-review",
-						"--model",
-						"claude-opus-5-5",
-					},
-					{ CLAUDE_EFFORT = "max" }
-				),
+				zn({
+					"commit",
+					"-m",
+					`{raft}: review-002`,
+					"--phase",
+					"code-review",
+					"--model",
+					"claude-opus-5-5",
+				}, { CLAUDE_EFFORT = "max" }),
 				"commit"
 			)
 			t.expect(read(a)).toBe("Model: claude-opus-5-5\nEffort: max\n" .. review(nil, nil))
@@ -231,20 +233,17 @@ return t.spec("c0306 done and commit judge the reviews", function(it)
 			local c = `{raftDir()}/review-004.md`
 			write(c, review(nil, nil))
 			must(
-				zn(
-					{
-						"commit",
-						"-m",
-						`{raft}: review-004`,
-						"--phase",
-						"code-review",
-						"--model",
-						"claude-opus-5-5",
-						"--effort",
-						"low",
-					},
-					{ CLAUDE_EFFORT = "max" }
-				),
+				zn({
+					"commit",
+					"-m",
+					`{raft}: review-004`,
+					"--phase",
+					"code-review",
+					"--model",
+					"claude-opus-5-5",
+					"--effort",
+					"low",
+				}, { CLAUDE_EFFORT = "max" }),
 				"commit"
 			)
 			t.expect(read(c)).toBe("Model: claude-opus-5-5\nEffort: low\n" .. review(nil, nil))
@@ -321,6 +320,14 @@ return t.spec("c0306 done and commit judge the reviews", function(it)
 		t.expect(has(say(r), "review-001.md")).toBe(true)
 		write(`{raftDir()}/review-001.md`, review("claude-opus-5-5", "high"))
 		commitAll("round one on opus")
+		-- and a later round off the review models, the first being fine
+		write(`{raftDir()}/review-002.md`, review("claude-sonnet-5-5", "high"))
+		commitAll("round two on sonnet")
+		local later = zn({ "done", raft })
+		t.expect(later.ok).toBe(false)
+		t.expect(has(say(later), "review-002.md")).toBe(true)
+		write(`{raftDir()}/review-002.md`, review("claude-opus-5-5", "high"))
+		commitAll("round two on opus")
 	end)
 
 	it(

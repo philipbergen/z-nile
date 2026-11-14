@@ -24,7 +24,7 @@ local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --sho
 	.. 'check "AC1: ok" true\nfinish\n'
 
 -- a terminal: no agent marker is set (an empty variable is not set to the hint)
-local TERMINAL = {
+local TERMINAL: { [string]: string } = {
 	CLAUDECODE = "",
 	AI_AGENT = "",
 	CLAUDE_EFFORT = "",
@@ -63,6 +63,7 @@ exit 0
 ]=]
 
 local f: trackerfix.Fixture
+local inHome = false -- the case that reads a session runs ./zn with the fixture's home
 local env: { [string]: string } = {}
 local prep = ""
 local log = ""
@@ -80,12 +81,16 @@ local function git(dir: string, args: { string }): string
 end
 
 local function zn(dir: string, args: { string }, extra: { [string]: string }?): fixture.Result
-	local out = table.clone(env)
+	local out: { [string]: string } = table.clone(env)
 	for k, v in TERMINAL do
 		out[k] = v
 	end
-	for k, v in extra or {} do
+	local more: { [string]: string } = extra or {}
+	for k, v in more do
 		out[k] = v
+	end
+	if inHome then
+		out.HOME = `{f.base}/home`
 	end
 	return fixture.exec(dir, "./zn", args, { env = out })
 end
@@ -224,14 +229,35 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 			preparedRaft("R0042", "c0242", true, review(nil, nil), OPUS) -- the coherence review records none
 			preparedRaft("R0043", "c0243", false, SONNET, SONNET) -- unmarked: any review passes
 			preparedRaft("R0044", "c0244", true, OPUS, OPUS) -- marked and fine
+			-- a raft in rafting (claimed, preparing) whose members z-raft grouped: its coherence review is off the review models
+			do
+				local grouped: { string } = {}
+				for _, member in { "c0290", "c0291" } do
+					local doc = issue(member, PREPARED, "", "ready", false)
+					item(member, doc)
+					seed[`{ROOT}/issues/{member}/acceptance/.gitkeep`] = ""
+					local files =
+						{ [`{member}.md`] = doc, ["check.sh"] = CHECK, ["acceptance/.gitkeep"] = "" }
+					table.insert(grouped, `{member}@{raftplan.recordHash(member, files)}`)
+				end
+				local record = `[{table.concat(grouped, ", ")}]`
+				seed[`{ROOT}/rafts/R0200/R0200.md`] =
+					raftDoc("R0200", PREPARING, "c0290, c0291", record, true)
+				seed[`{ROOT}/rafts/R0200/check.sh`] = CHECK
+				seed[`{ROOT}/rafts/R0200/design-review-001.md`] = (
+					string.gsub(SONNET, "\nVerdict", `\nGrouped: {record}\nVerdict`, 1)
+				)
+			end
 			f = trackerfix.new("c0306-commands-github.com", seed)
 			local bin = `{f.base}/bin`
 			log = `{f.base}/gh.log`
 			fs.writeDir(bin)
 			fs.writeFile(`{bin}/gh`, (string.gsub(GH, "@LOG@", log)))
 			process.exec("chmod", { "+x", `{bin}/gh` })
-			env = { PATH = `{bin}:{process.env.PATH or ""}`, HOME = `{f.base}/home` }
+			env = { PATH = `{bin}:{process.env.PATH or ""}` }
+			-- a home of its own for the one case that reads a session; rokit's shims (which find lune) read ~/.rokit
 			fs.writeDir(`{f.base}/home`)
+			process.exec("ln", { "-s", `{process.env.HOME or ""}/.rokit`, `{f.base}/home/.rokit` })
 			prep = `{f.base}/wt-prep`
 			git(f.main, { "worktree", "add", "-q", "-b", "prep-c0306", prep, "origin/main" })
 		end
@@ -349,6 +375,15 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 		end
 	)
 
+	it("AC4: status prepared on a raft does not judge its coherence review: ready does", function()
+		local r = zn(prep, { "status", "R0200", "prepared" })
+		if not r.ok then
+			error(`a raft's own coherence review was judged at prepared: {say(r)}`)
+		end
+		t.expect(string.sub(front(fs.readFile(`{prep}/{ROOT}/rafts/R0200/R0200.md`), "status") or "", 1, 9))
+			.toBe("prepared-")
+	end)
+
 	it(
 		"AC5: ./zn ready and ./zn work next refuse a marked raft whose coherence review is off the review models",
 		function()
@@ -404,6 +439,157 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 			t.expect(originFile(`{ROOT}/rafts/active/{id}/{id}.md`) ~= nil).toBe(true)
 		end
 	end)
+
+	-- AC8: ./zn spend --phase design-review stamps the review file it records
+	local function spend(id: string, extra: { string }, env2: { [string]: string }?): fixture.Result
+		local args = { "spend", id, "--phase", "design-review", "--note", "design-review-001" }
+		for _, a in extra do
+			table.insert(args, a)
+		end
+		return zn(prep, args, env2)
+	end
+	local function tsv(id: string): string
+		local folder = `{prep}/{ROOT}/issues/{id}/spend.d`
+		local out = ""
+		if fs.isDir(folder) then
+			for _, name in fs.readDir(folder) do
+				out ..= fs.readFile(`{folder}/{name}`)
+			end
+		end
+		return out
+	end
+	local function reviewOf(id: string): string
+		return fs.readFile(`{prep}/{ROOT}/issues/{id}/design-review-001.md`)
+	end
+
+	it(
+		"AC8: spend --phase design-review is refused without --model, naming the flag, and stamps nothing",
+		function()
+			reviewIn("c0170", review(nil, nil))
+			local r = spend("c0170", {})
+			t.expect(r.ok).toBe(false)
+			t.expect(has(say(r), "--model")).toBe(true)
+			t.expect(reviewOf("c0170")).toBe(review(nil, nil))
+			t.expect(tsv("c0170")).toBe("")
+		end
+	)
+
+	it(
+		"AC8: spend --phase design-review --model --effort stamps the review file with both and records the model",
+		function()
+			local r = spend("c0170", { "--model", "claude-opus-5-5[1m]", "--effort", "xhigh" })
+			if not r.ok then
+				error(`spend refused: {say(r)}`)
+			end
+			t.expect(reviewOf("c0170"))
+				.toBe("Model: claude-opus-5-5[1m]\nEffort: xhigh\n" .. review(nil, nil))
+			t.expect(has(tsv("c0170"), "claude-opus-5-5[1m]")).toBe(true)
+		end
+	)
+
+	it(
+		"AC8: a review is recorded once: a second spend naming the same file is refused, whether the model differs or not",
+		function()
+			for _, model in { "claude-sonnet-5-5", "claude-opus-5-5[1m]" } do
+				local r = spend("c0170", { "--model", model })
+				t.expect(r.ok).toBe(false)
+				t.expect(has(say(r), "already records")).toBe(true)
+				t.expect(reviewOf("c0170"))
+					.toBe("Model: claude-opus-5-5[1m]\nEffort: xhigh\n" .. review(nil, nil))
+			end
+		end
+	)
+
+	it(
+		"AC8: the effort is CLAUDE_EFFORT when --effort is not typed, and the line is left out when there is neither",
+		function()
+			reviewIn("c0171", review(nil, nil))
+			znOk(prep, {
+				"spend",
+				"c0171",
+				"--phase",
+				"design-review",
+				"--note",
+				"design-review-001",
+				"--model",
+				"claude-opus-5-5",
+			}, { CLAUDE_EFFORT = "high" })
+			t.expect(reviewOf("c0171")).toBe("Model: claude-opus-5-5\nEffort: high\n" .. review(nil, nil))
+			reviewIn("c0172", review(nil, nil))
+			znOk(prep, {
+				"spend",
+				"c0172",
+				"--phase",
+				"design-review",
+				"--note",
+				"design-review-001",
+				"--model",
+				"claude-opus-5-5",
+			})
+			t.expect(reviewOf("c0172")).toBe("Model: claude-opus-5-5\n" .. review(nil, nil))
+			-- a typed --effort wins over the environment
+			reviewIn("c0175", review(nil, nil))
+			znOk(prep, {
+				"spend",
+				"c0175",
+				"--phase",
+				"design-review",
+				"--note",
+				"design-review-001",
+				"--model",
+				"claude-opus-5-5",
+				"--effort",
+				"low",
+			}, { CLAUDE_EFFORT = "high" })
+			t.expect(reviewOf("c0175")).toBe("Model: claude-opus-5-5\nEffort: low\n" .. review(nil, nil))
+		end
+	)
+
+	it(
+		"AC8: a typed --model wins over the session's measured model, which a spend with none records",
+		function()
+			-- a Claude Code session of this worktree in the fixture's home, with one assistant message on claude-sonnet-5-5
+			local cwd = fixture.physical(prep) :: string
+			local sessions = `{f.base}/home/.claude/projects/{string.gsub(cwd, "/", "-")}`
+			inHome = true
+			znOk(prep, { "spend", "c0173", "--phase", "design-review", "--begin" })
+			znOk(prep, { "spend", "c0174", "--phase", "deliver", "--begin" })
+			local ts = (os.date("!%Y-%m-%dT%H:%M:%S") :: string) .. ".500Z" -- after the begins: inside the span
+			local line = '{"type":"assistant","timestamp":"'
+				.. ts
+				.. '","message":{"id":"m1","model":"claude-sonnet-5-5","usage":{"input_tokens":10,"output_tokens":5}}}\n'
+			fs.writeDir(sessions)
+			fs.writeFile(`{sessions}/s1.jsonl`, line)
+			-- the premise: with no typed model the measured one is what a row records (a deliver spend needs no review file)
+			znOk(prep, { "spend", "c0174", "--phase", "deliver" })
+			if not has(tsv("c0174"), "claude-sonnet-5-5") then
+				error(
+					`the fixture session was not read: rows {tsv("c0174")}, session {sessions}, files {table.concat(
+						fs.readDir(sessions),
+						","
+					)}`
+				)
+			end
+			-- the typed model wins
+			reviewIn("c0173", review(nil, nil))
+			znOk(prep, {
+				"spend",
+				"c0173",
+				"--phase",
+				"design-review",
+				"--note",
+				"design-review-001",
+				"--model",
+				"claude-opus-5-5",
+				"--effort",
+				"high",
+			})
+			t.expect(has(tsv("c0173"), "claude-opus-5-5")).toBe(true)
+			t.expect(has(tsv("c0173"), "claude-sonnet-5-5")).toBe(false)
+			t.expect(reviewOf("c0173")).toBe("Model: claude-opus-5-5\nEffort: high\n" .. review(nil, nil))
+			inHome = false
+		end
+	)
 
 	-- AC6: ./zn work next, on a started and finished raft, says to run ./zn done only when done would accept it
 	local function finishedRaft(raft: string, member: string): string
