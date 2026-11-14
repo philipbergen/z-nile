@@ -28,3 +28,6 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-14 17:51	1 spec	0	0	test			1.239	0.770		1.239	tokens,ai
 2026-11-14 17:51	1 spec	0	0	test			1.440	1.000		1.440	tokens,ai
 2026-11-14 17:51	design-refute-001 claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	design-review							tokens,ai
+2026-11-14 17:51	affected	0	0	test			10.432	52.290		10.432	tokens,ai
+2026-11-14 17:52	affected	0	0	test			8.870	53.900		8.870	tokens,ai
+2026-11-14 17:52	prep	305	1	prep							tokens,ai
