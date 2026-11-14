@@ -176,7 +176,10 @@ return t.spec("c0800 done runs the affected gate after promotion", function(it)
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")
 		-- c0120 override: the spec runs from its project's home after the move
-		write(`{TR}/rafts/active/R0010/review-001.md`, "# Review 001\n\nVerdict: approve\n")
+		write(
+			`{TR}/rafts/active/R0010/review-001.md`,
+			"Model: claude-opus-5-5\n# Review 001\n\nVerdict: approve\n"
+		)
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
 		must(tr({ "finish", "f0010" }), "finish")
 		seal.trace(work, "R0010")

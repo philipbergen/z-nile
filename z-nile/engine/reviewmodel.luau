@@ -116,6 +116,35 @@ function reviewmodel.files(names: { string }, kind: string): { string }
 	return out
 end
 
+-- The newest round of each kind the command judges, per folder (F2: a later round supersedes an earlier one):
+-- the newest `design-review-NNN.md`; for the code kind the newest `review-NNN.md` and the newest `final-review-NNN.md`,
+-- apart. `names` are the folder's files; the result is in file order (review before final).
+function reviewmodel.newest(names: { string }, kind: string): { string }
+	local groups: { { string } } = if kind == "code"
+		then { { "^review%-(%d+)%.md$" }, { "^final%-review%-(%d+)%.md$" } }
+		else { { "^design%-review%-(%d+)%.md$" } }
+	local out: { string } = {}
+	for _, g in groups do
+		local best, bestName = -1, nil
+		for _, name in names do
+			local n = number(name, g[1])
+			if n and n > best then
+				best, bestName = n, name
+			end
+		end
+		if bestName then
+			table.insert(out, bestName)
+		end
+	end
+	return out
+end
+
+-- True when a review's text is one the judge refuses: no `Model:` line, an empty one, or a model that is not a review model.
+function reviewmodel.refused(text: string): boolean
+	local model, effort = reviewmodel.read(text)
+	return model == nil or not reviewmodel.ok(model, effort)
+end
+
 -- The mode `./zn dispatch zz-review` takes for a review file: from its kind and its name.
 local function modeOf(kind: string, name: string): string
 	if kind == "code" then
@@ -140,7 +169,7 @@ function reviewmodel.problem(
 	for name in files do
 		table.insert(names, name)
 	end
-	for _, name in reviewmodel.files(names, kind) do
+	for _, name in reviewmodel.newest(names, kind) do
 		local model, effort = reviewmodel.read(files[name])
 		local recorded = ""
 		if model == nil then

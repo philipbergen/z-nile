@@ -8,6 +8,7 @@ local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
 local reviewmodel = require("./reviewmodel")
+local store = require("./store")
 local task = require("@lune/task")
 
 local publish = {}
@@ -145,20 +146,30 @@ local function withoutStatus(text: string): string?
 	return head .. kept .. rest
 end
 
--- c0306: the document with its `reviews: judged` front-matter line removed (the first one, inside the front matter).
-local MARK_LINE = "\nreviews: " .. reviewmodel.MARK .. "\n"
-
+-- c0306: the mark is read by the one reader the commands use (store.parseFront, then reviewmodel.judged), so a
+-- `reviews: judged ` with a trailing space is a mark here as everywhere (review 001 F7).
 local function hasMark(text: string): boolean
-	local head, block = string.match(text, "^(%-%-%-\n)(.-\n)%-%-%-\n")
-	return head ~= nil and block ~= nil and string.find("\n" .. block, MARK_LINE, 1, true) ~= nil
+	return reviewmodel.judged(store.parseFront(text))
 end
 
+-- The document with the first `reviews: judged` line of its front matter removed.
 local function withoutMark(text: string): string
 	local head, block, rest = string.match(text, "^(%-%-%-\n)(.-\n)(%-%-%-\n.*)$")
 	if not head or not block or not rest then
 		return text
 	end
-	local kept = string.gsub("\n" .. block, "\nreviews: " .. reviewmodel.MARK .. "\n", "\n", 1)
+	local done = false
+	local kept = string.gsub(
+		"\n" .. block,
+		"\nreviews:[ \t]*" .. reviewmodel.MARK .. "[ \t]*(\n)",
+		function(nl: string): string
+			if done then
+				return "\nreviews: " .. reviewmodel.MARK .. nl
+			end
+			done = true
+			return nl
+		end
+	)
 	return head .. string.sub(kept, 2) .. rest
 end
 

@@ -188,7 +188,10 @@ return t.spec("tracker commit phases", function(it)
 
 	it("records the phase and tokens it is given, and names them in the trailer", function()
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(`pickman/.tracker/rafts/active/{raft}/review-001.md`, "# Review 001\n\nVerdict: approve\n")
+		write(
+			`pickman/.tracker/rafts/active/{raft}/review-001.md`,
+			"Model: claude-opus-5-5\n# Review 001\n\nVerdict: approve\n"
+		)
 		must(
 			tr({
 				"commit",

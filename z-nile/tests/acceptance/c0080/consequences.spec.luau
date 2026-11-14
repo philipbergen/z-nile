@@ -138,7 +138,7 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
 		write(
 			"pickman/.tracker/rafts/active/R0010/review-001.md",
-			"# Review 001\n\n### F1 [low] a small thing\nEvidence: x\n\n### F2 [high] a big thing\nEvidence: y\n\nVerdict: changes\n"
+			"Model: claude-opus-5-5\n# Review 001\n\n### F1 [low] a small thing\nEvidence: x\n\n### F2 [high] a big thing\nEvidence: y\n\nVerdict: changes\n"
 		)
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
 		reviewed = git({ "rev-parse", "HEAD" })

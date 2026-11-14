@@ -74,7 +74,12 @@ end
 -- have no `Model:` line. Returns a refusal, or nil after stamping them (with --phase code-review and --model).
 -- A review of a marked item is refused without --model under --phase code-review, and under any other phase at all;
 -- an unmarked item's is left as it is without --model, and stamped with it.
-function reviewfiles.commitReviews(phase: string, model: string?, effort: string?): string?
+function reviewfiles.commitReviews(
+	phase: string,
+	model: string?,
+	effort: string?,
+	typedEffort: string?
+): string?
 	local status = sh.run("git", { "status", "--porcelain", "--untracked-files=all" })
 	if not status.ok then
 		return "cannot read git status"
@@ -107,6 +112,8 @@ function reviewfiles.commitReviews(phase: string, model: string?, effort: string
 			return `{u.path} is a review: commit it with --phase code-review --model <the reviewer's model id>`
 		elseif u.marked and not model then
 			return `{u.path} is a review: --model <the reviewer's model id> records it`
+		elseif u.marked and model and string.sub(model, 1, 5) == "grok-" and not typedEffort then
+			return `{u.path} is a review: a grok- review is judged by its effort: --effort <level>`
 		end
 	end
 	if phase == "code-review" and model then
@@ -121,10 +128,20 @@ function reviewfiles.commitReviews(phase: string, model: string?, effort: string
 end
 
 -- `--effort <level>`, else CLAUDE_EFFORT when set and not empty, else nil.
-function reviewfiles.effortOption(opts: { [string]: { string } }): string?
+function reviewfiles.typedEffort(opts: { [string]: { string } }): string?
 	local typed = opts["--effort"] and opts["--effort"][1]
-	if typed and typed ~= "" then
+	return if typed and typed ~= "" then typed else nil
+end
+
+-- The effort to record: `--effort`; else, for a `claude-` id only, CLAUDE_EFFORT (an interactive Claude Code subagent
+-- runs at its session's effort); for any other id it is never taken from the environment (review 001 F5).
+function reviewfiles.effortOption(opts: { [string]: { string } }, model: string?): string?
+	local typed = reviewfiles.typedEffort(opts)
+	if typed then
 		return typed
+	end
+	if model == nil or string.sub(model, 1, 7) ~= "claude-" then
+		return nil
 	end
 	local env = process.env.CLAUDE_EFFORT
 	return if env and env ~= "" then env else nil

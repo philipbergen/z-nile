@@ -242,7 +242,7 @@ return t.spec("tracker lifecycle", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
 			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
-			"# Final Review 001\n\n### F1 [medium] thing\nEvidence: x\n\n### F2 [low] other\nEvidence: y\n\nVerdict: changes\n"
+			"Model: claude-opus-5-5\n# Final Review 001\n\n### F1 [medium] thing\nEvidence: x\n\n### F2 [low] other\nEvidence: y\n\nVerdict: changes\n"
 		)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(

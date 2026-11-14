@@ -904,7 +904,29 @@ function dispatcher.modelStep(
 	if land then
 		pcall(fs.removeFile, landing) -- a stale one from an earlier run is never this run's review
 	end
+	-- c0306 (F6): in a marked item a review step (every mode but stream) starts no try the rule would refuse, and fails at
+	-- once when none is left
+	local onlyReviewModels = land ~= nil
+		and mode ~= "stream"
+		and require("./reviewfiles").markedFolder(`{cwd}/{(land :: Landing).dir}`)
+	if onlyReviewModels then
+		local left = 0
+		for _, spec in tries do
+			if reviewmodel.ok(spec.model, spec.effort) then
+				left += 1
+			end
+		end
+		if left == 0 then
+			local role = models.roleFor(step :: string, mode) or "?"
+			refused(tries[1], `no try of role {role} is a review model`)
+			tries = {}
+		end
+	end
 	for _, spec in tries do
+		if onlyReviewModels and not reviewmodel.ok(spec.model, spec.effort) then
+			skipped(spec, `{spec.model} at effort {spec.effort or "none"} is not a review model: skipped`)
+			continue
+		end
 		local adapter = adapters.get(spec.runtime)
 		local argv = adapter.argv({
 			prompt = prompt,
@@ -1113,7 +1135,16 @@ function dispatcher.modelStep(
 		local l = land :: Landing
 		if fs.isFile(landing) then
 			local last = lastRound(`{cwd}/{l.dir}`, l.prefix)
-			if last >= 1 then
+			-- c0306 (F2): in a marked item a new round takes the next number when the newest round of its kind is one
+			-- the judge refuses; otherwise the one-round rule stands
+			local supersedes = false
+			if last >= 1 and l.prefix ~= "" and not streamDir then
+				local newest = `{cwd}/{l.dir}/{l.prefix}{string.format("%03d", last)}.md`
+				supersedes = fs.isFile(newest)
+					and require("./reviewfiles").markedFolder(`{cwd}/{l.dir}`)
+					and reviewmodel.refused(fs.readFile(newest))
+			end
+			if last >= 1 and not supersedes then
 				-- one round. Historical files stay where they are; a new one is not added.
 				outcome = "failed"
 				pcall(fs.removeFile, landing)

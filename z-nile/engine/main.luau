@@ -4576,8 +4576,12 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	local model = modelOption("commit", opts)
 	-- c0306: the review files this commit carries are stamped with --model under --phase code-review, and refused in a
 	-- marked item without it (under any other phase, at all)
-	local refused =
-		require("./reviewfiles").commitReviews(phase, model, require("./reviewfiles").effortOption(opts))
+	local refused = require("./reviewfiles").commitReviews(
+		phase,
+		model,
+		require("./reviewfiles").effortOption(opts, model),
+		require("./reviewfiles").typedEffort(opts)
+	)
 	if refused then
 		fail(refused)
 	end
@@ -6403,19 +6407,27 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			targets = { item }
 		end
 	end
-	-- c0306: a design or coherence review is recorded with the reviewer's model, stamped into its file. In a marked
-	-- item the call is refused without --model and without --note design-review-NNN; in an unmarked one it records as
-	-- before, and stamps when it is given both.
+	-- c0306: a reviewer's run (--note design-review-NNN) is recorded with the reviewer's model, stamped into its file. In a
+	-- marked item it is refused without --model, and a grok- model without a typed --effort. Any other note (a
+	-- design-refute-NNN one) or none (the author's answering span after --begin) records as today and stamps nothing (F1).
+	-- An unmarked item records as before, and stamps when it is given a model and the note.
 	local reviewFile: string? = nil
 	if phase == "design-review" and not opts["--begin"] then
 		local owner = raftItem or targets[1]
 		local named = string.match(note, "^design%-review%-%d+$") ~= nil
-		if owner and require("./reviewmodel").judged(store.readFront((owner :: store.Item).doc)) then
+		if
+			named
+			and owner
+			and require("./reviewmodel").judged(store.readFront((owner :: store.Item).doc))
+		then
 			if not model then
 				fail("spend --phase design-review needs --model <the reviewer's model id> [--effort <level>]")
 			end
-			if not named then
-				fail("spend --phase design-review needs --note design-review-NNN, the review file it records")
+			if
+				string.sub(model :: string, 1, 5) == "grok-"
+				and not require("./reviewfiles").typedEffort(opts)
+			then
+				fail("a grok- review is judged by its effort: --effort <level>")
 			end
 		end
 		if model and named then
@@ -6525,7 +6537,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 		local why = require("./reviewfiles").stampFile(
 			`{dir}/{reviewFile}.md`,
 			model :: string,
-			require("./reviewfiles").effortOption(opts)
+			require("./reviewfiles").effortOption(opts, model)
 		)
 		if why then
 			fail(why)
