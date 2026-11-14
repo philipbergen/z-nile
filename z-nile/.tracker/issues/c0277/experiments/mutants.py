@@ -10,8 +10,8 @@ HB = "z-nile/engine/heartbeat.luau"
 MAIN = "z-nile/engine/main.luau"
 DISP = "z-nile/engine/dispatcher.luau"
 A = "tests/acceptance/c0277/"
-PLAN, DISCARD, RECOVER, GUARD, SWEEP, PROOF = (A + "plan.spec.luau", A + "discard.spec.luau", A + "recover.spec.luau",
-                                               A + "guard.spec.luau", A + "sweep.spec.luau", A + "proofs/discard.spec.luau")
+PLAN, DISCARD, RECOVER, GUARD, SWEEP, PROOF, REREADY = (A + "plan.spec.luau", A + "discard.spec.luau", A + "recover.spec.luau",
+                                               A + "guard.spec.luau", A + "sweep.spec.luau", A + "proofs/discard.spec.luau", A + "reready.spec.luau")
 
 # (id, file, [(old, new)], [specs])
 M = []
@@ -108,6 +108,12 @@ m("E54", MAIN, ("\t\tlocal merged = sh.run(\"git\", mergeArgs)", "\t\tlocal merg
 
 m("E55", MAIN, ("live[id] = paths == nil or hb.claimStampOf(paths, id) ~= nil", "live[id] = paths ~= nil and hb.claimStampOf(paths, id) ~= nil"), [SWEEP])
 
+m("P27", HB, ('\t\tif held == "held" then\n\t\t\treturn false', '\t\tif false then\n\t\t\treturn false'), [PLAN])
+m("P28", HB, ('elseif held == "taken" or held == "ended" then\n\t\t\tover = true', 'elseif held == "taken" then\n\t\t\tover = true'), [PLAN])
+m("E56", MAIN, ("if heartbeat.staleMember(facts) then", "if false then"), [REREADY, PROOF])
+m("E57", MAIN, ("\t\t\tlocal paths = hb.beatPaths()\n\t\t\tif paths then\n\t\t\t\tlocal facts: { heartbeat.ClaimFact } = {}", "\t\t\tlocal paths = hb.beatPaths() or {}\n\t\t\tif true then\n\t\t\t\tlocal facts: { heartbeat.ClaimFact } = {}"), [REREADY])
+m("E58", MAIN, ("\t\tif member and #ids > 0 then", "\t\tif false then"), [REREADY])
+
 def run(cmd, cwd, timeout):
     r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
     return r.returncode, r.stdout + r.stderr
@@ -134,7 +140,7 @@ def preflight():
     if bad:
         print("REFUSED: the base moved; a prep's promoted specs differ from the prototype's copies:", *bad, sep="\n  ")
         sys.exit(2)
-    code, out = run([os.path.join(WT, "zn"), "run", "--time", "900", "--", "lune", "run", "tests/run", "--", PLAN, DISCARD, RECOVER, GUARD, SWEEP, PROOF,
+    code, out = run([os.path.join(WT, "zn"), "run", "--time", "900", "--", "lune", "run", "tests/run", "--", PLAN, DISCARD, RECOVER, GUARD, SWEEP, PROOF, REREADY,
                      "tests/acceptance/c0265/heartbeat.spec.luau", "tests/acceptance/c0274/plan.spec.luau", "tests/acceptance/c0275/plan.spec.luau",
                      "tests/acceptance/c0275/reap.spec.luau"], os.path.join(WT, "z-nile"), 1000)
     tail = out.strip().splitlines()[-1] if out.strip() else ""
