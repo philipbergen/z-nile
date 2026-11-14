@@ -3,6 +3,7 @@ title: An Override search names every way a spec can require the module
 when: design
 tags: [overrides, acceptance, search]
 check: Does the Override search, and the check that re-runs "every spec that reads it", name every spelling a spec uses to require each Touched module (`@znile/engine/<m>` and the older `@scripts` alias spelling of the tracker modules, as `.luaurc` lists them) as well as the path, and was the resulting list run against the prototype?
+from: c0261 design review 001 F1 and 002 F1 (c0261 withdrawn 2026-11-12; its folder is in git history)
 ---
 A search for the specs a change touches that uses one alias spelling of a module finds only the specs that spell it that way. The same module is required through another alias by older specs, which then go red at execution on an override the design never declared.
 
