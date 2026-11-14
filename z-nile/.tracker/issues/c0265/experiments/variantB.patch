@@ -1,0 +1,33 @@
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index 3073f582..b74cef26 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -8052,6 +8052,18 @@ function hb.envelopeId(id: string, mine: boolean)
+ 		end
+ 	end)
+ end
++function hb.envelopeDiffers(id: string): boolean
++	local f = `.cache/tracker-stamp-{id}`
++	if not fs.isFile(f) then
++		return false
++	end
++	local paths = hb.beatPaths()
++	if not paths then
++		return false
++	end
++	local cur = hb.claimStampOf(paths, id)
++	return cur ~= fs.readFile(f)
++end
+ function hb.envelopeHeld(): { string }
+ 	local out: { string } = {}
+ 	if fs.isDir(".cache") then
+@@ -8072,6 +8084,9 @@ if
+ 	and sh.git({ "rev-parse", "--show-toplevel" }) ~= mainRoot()
+ then
+ 	for _, id in hb.envelopeHeld() do
++		if hb.envelopeDiffers(id) then
++			fail("this worktree was discarded: " .. id .. "'s claim was taken over")
++		end
+ 		hb.envelopeId(id, false)
+ 	end
+ end

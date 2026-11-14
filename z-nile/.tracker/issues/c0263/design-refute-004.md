@@ -1,0 +1,22 @@
+# Answers to design review 004: c0263
+
+- F1: fixed: the stored rows' dates sit inside the derived range (09-24 20:00 and 09-27 15:00 against commits 09-22 to 09-28), the whole list is asserted with `toEqual` (including a stored `confirmed` row in the same minute as the idea, which pins derived-before-stored), and the pure spec was run on a prototype (E10).
+- F2: fixed: lifecycle.spec asserts `| delivered | {OPUS} | raft=R0010 |` exactly and that no `worker=` is stored; `ZN_WORKER` is gone from every spec (grep checked: no `ZN_WORKER`, `rafted_by`, `delivered_by`, `idea_by`, `unblocked_by`, `approved_by` remains in any spec but a grammar example).
+- F3: fixed: record.spec's first `new raft` runs with `ZN_VIA=dispatch:raft-plan`, a second without asserts no `via=`; dispatch.spec drives the chain over a prepared, raftless issue (c0022): `raft-plan --apply` as a script step must leave `| rafted | human:<git name> | raft=R…; via=dispatch:raft-plan |` in `raft-c0022`'s record.
+- F4: fixed (rule a): a `tracker: <id> new` commit prints once, as `unblocked` (from git), never also as a status line, and a `merged` entry is always derived from the `done/` commit; the table, Behaviour 7, `select`, who.spec, the board case and the pure case agree.
+- F5: fixed: `Commit = trail.Commit` (with optional author, email, trailers), `union`'s base is `string?`, the specs cast optional entries; `./zn promote-check` is clean against a prototype that exports the Interfaces (E10).
+- F6: put to the user as open question 2 with the third option (a frozen list), and its cost in promoted fixtures stated; the design keeps the grandfather clause by absence, approve.spec pins that an issue with no record passes `fold`, and z-design's offline instruction says to run `./zn approve` first.
+- F7: fixed: approve.spec's doors case seeds issues approved once and redesigned since (c0014, and c0016 in a raft R0120) and checks `audit` (warning, exit 0), `fold`, `new raft`, `ready` (in the main checkout) and `raft-plan`, each refusing before publishing (origin's tip and R0110's status unchanged), plus the no-record pass.
+- F8: fixed: `raft-plan` skips a stale issue (never a command) and each door checks before it publishes anything (Behaviour 2); the doors case compares origin's tip and R0110's status.
+- F9: fixed: one `trail.parse` call with every item folder as `dirs`, the commits bucketed, then `life` per item (E9: 5.2 s per-item vs O(lines)); fallback stated.
+- F10: fixed: the exact log format and tags are specified (no body is read; only trailer values), a trail case pins a line that looks like a change.
+- F11: fixed: `approve` refuses changes outside the issue's folder and commits that folder only; approve.spec adds the stray-file case and commits the raft document before approving c0013.
+- F12: fixed: the file format is written in the Design with an example (header, table, UTC `YYYY-MM-DD HH:MM`, escaping, an empty detail).
+- F13: fixed: `./zn record` and the publish validator accept `unblocked` rows in `active/` (a worker blocks while holding a raft), reaching the raft's branch through the union merge; publish.spec covers an accepted `unblocked` row and a refused `approved` row there.
+- F14: partly fixed: the pure module was built as a prototype and the pure rows are `run` with eight killed mutants (E10); the wired rows stay `reasoned` with the reason stated in E10 (no full wiring prototype in prep); the full-suite run and the named promoted specs that assert on files and subjects are the executor's first step, listed in Unknowns.
+- F15: fixed: the check.sh labels for AC5, AC6 and AC10 and the Rules rows say what the design now says.
+- F16: fixed: the worker is the newest `deliver` row's model, else the newest `build` row's.
+- F17: fixed: a prep stop with no failing condition says the PR waits for the user's approval and merge.
+- F18: fixed: open question 2 is gone; a derived `merged` entry names whoever merged.
+- F19: fixed: `people` is every commit author's email from the same pass (`%ae`), said in the Interfaces.
+- F20: fixed: the union merge is specified once (Behaviour 11); the others refer to it.

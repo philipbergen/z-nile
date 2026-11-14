@@ -23,3 +23,5 @@ c0264 design review 001 F1: a part of a document that carries no labels and no c
 c0264 design review 002 F1: for a diagram, check the edges that carry the rule, with fixed node ids, not only its words: words floated into a node pass a word check while the flow they name is gone.
 
 c0264 design review 003 F1: a diagram that carries the rule is pinned word for word (a sequestered copy diffed, like the legend): a word or edge check is beaten by floating the words or commenting the edge out (`%%`).
+
+c0264 design review 009 F1, F3, F6 (the re-prep on the main of 2026-11-12): four sentences labelled `exists` said more than main does (a challenger that drops the author's model is only two of four review roles; `./zn approve` records no words; `./zn done` runs the affected gate, not a full one); a per-ticket review sat under the label of the ticket that lands before its owner; and "nothing expensive orchestrates or waits" sat under a ticket that owns only the gate wait. An `exists` sentence names the file or command that proves each clause, and every clause that belongs to a later ticket moves under that ticket's label.
