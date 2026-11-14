@@ -5,6 +5,7 @@
 -- `raft:` after each of its commits (ONE `git cat-file --batch` for any number of commits, so the board reads every
 -- item's in the same process). The pure functions of provenance turn it into entries.
 local process = require("@lune/process")
+local task = require("@lune/task")
 
 local ledger = require("./ledger")
 local provenance = require("./provenance")
@@ -61,12 +62,22 @@ function who.fronts(commits: { trail.Commit }, dir: string?): { [string]: proven
 	if #specs == 0 then
 		return out
 	end
-	local r = process.exec(
-		"git",
-		{ "cat-file", "--batch" },
-		{ cwd = dir, stdio = { stdin = table.concat(specs, "\n") .. "\n" } }
-	)
-	local text, pos = r.stdout, 1
+	-- Streamed: `process.exec` writes all of stdin before it reads stdout, so a request over about 128 KB (some 3,000 keys
+	-- here) deadlocks against git's output. Write from a task, close stdin, read to the end.
+	local child = process.create("git", { "cat-file", "--batch" }, { cwd = dir })
+	task.spawn(function()
+		child.stdin:write(table.concat(specs, "\n") .. "\n")
+		child.stdin:close()
+	end)
+	local parts: { string } = {}
+	while true do
+		local chunk = child.stdout:read()
+		if chunk == nil or chunk == "" then
+			break
+		end
+		table.insert(parts, chunk)
+	end
+	local text, pos = table.concat(parts), 1
 	for _, key in specs do
 		local eol = string.find(text, "\n", pos, true)
 		if not eol then
