@@ -121,4 +121,13 @@ return t.spec("c0306 docs", function(it)
 		end
 		t.expect(seen > 10).toBe(true)
 	end)
+
+	it(
+		"AC9: z-raft and zz-rules restate a member's design record as its document without status:, raft: and reviews:",
+		function()
+			for _, name in { "z-raft", "zz-rules" } do
+				at(skill(name), "its document without `status:`, `raft:` and `reviews:`", name)
+			end
+		end
+	)
 end)

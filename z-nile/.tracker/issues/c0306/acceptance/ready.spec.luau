@@ -161,15 +161,33 @@ return t.spec("c0306 ready and work next judge the reviews", function(it)
 			t.expect(has(none, "pull request")).toBe(true)
 			t.expect(has(none, "./zn spend R0001 --phase design-review --note design-review-001 --model"))
 				.toBe(true)
-			local memberWhy =
-				readycheck.reason(raft(nil, nil, { member(true, { ["design-review-001.md"] = BARE }) }))
-			t.expect(has(memberWhy, "worktree")).toBe(true)
-			t.expect(has(memberWhy, "pull request")).toBe(true)
-			t.expect(has(memberWhy, "--mode design")).toBe(true)
+			t.expect(has(none, "unfold")).toBe(false) -- the raft's own review is not the member route
 			local off = readycheck.reason(raft(true, { ["design-review-001.md"] = SONNET }))
 			t.expect(has(off, "worktree")).toBe(true)
 			t.expect(has(off, "pull request")).toBe(true)
 			t.expect(has(off, "./zn spend")).toBe(false)
+		end
+	)
+
+	it(
+		"AC5: a member's design review refusal names the route that works: unfold it, redo it in its prep, fold it back",
+		function()
+			for _, text in { BARE, SONNET } do
+				local why =
+					readycheck.reason(raft(nil, nil, { member(true, { ["design-review-001.md"] = text }) }))
+				t.expect(has(why, "design-review-001.md")).toBe(true)
+				t.expect(has(why, "./zn unfold <R-id> c0001")).toBe(true)
+				t.expect(has(why, "./zn dispatch zz-review c0001 --mode design")).toBe(true)
+				t.expect(
+					has(
+						why,
+						"./zn spend c0001 --phase design-review --note design-review-NNN --model <id> --effort <level>"
+					)
+				).toBe(true)
+				t.expect(has(why, "./zn fold <R-id> c0001")).toBe(true)
+				t.expect(has(why, "new coherence review")).toBe(true)
+				t.expect(has(why, "pull request")).toBe(false) -- not the coherence route
+			end
 		end
 	)
 

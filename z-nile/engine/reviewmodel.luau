@@ -191,6 +191,14 @@ function reviewmodel.problem(
 		if kind == "code" then
 			ways =
 				`{again} and commit it with ./zn commit -m "{owner}: review-NNN" --phase code-review --model <id> --effort <level>`
+		elseif onOrigin and kind ~= "coherence" then
+			-- a grouped member's design review is on origin/main, and a new round changes the member's design record, which
+			-- ready then refuses as changed since grouped: the member leaves its raft, is redone in its prep, and is folded back
+			ways =
+				`take {owner} out of its raft (./zn unfold <R-id> {owner}, in a rafting worktree), run the round again on a review model in its prep (z-design: ./zn dispatch zz-review {owner} --mode {modeOf(
+					kind,
+					name
+				)}, or a fresh subagent on that role's model) and record it with ./zn spend {owner} --phase design-review --note design-review-NNN --model <id> --effort <level>, land that, then fold it back with ./zn fold <R-id> {owner}, which makes a new record (a raft of several issues then needs a new coherence review)`
 		else
 			ways = again
 			if model == nil then
