@@ -109,7 +109,8 @@ end
 
 local function envWith(extra: { [string]: string }?): { [string]: string }
 	local out = table.clone(env)
-	for k, v in extra or TERMINAL do
+	local source: { [string]: string } = extra or TERMINAL
+	for k, v in source do
 		out[k] = v
 	end
 	return out
@@ -371,7 +372,7 @@ return t.spec("c0250 block and resolve", function(it)
 				has(filed, "# Escalation: c0110\nItem: c0110\nReason: needs-decision\nFrom: preparing\n")
 			)
 				.toBe(true)
-			t.expect(has(filed, "\nActor: human:")).toBe(true)
+			t.expect(has(filed, "\nActor: human:c0250-block-resolve-github.com\n")).toBe(true) -- the git author, in a terminal
 			t.expect(string.match(filed, "\nWhen: %d%d%d%d%-%d%d%-%d%d %d%d:%d%d\n") ~= nil).toBe(true)
 			t.expect(has(filed, "## Question\nWhich library should we take?\n")).toBe(true)
 			t.expect(has(filed, '\n## Resume\n./zn resolve c0110 retry --answer "<your answer>"\n'))
@@ -385,15 +386,14 @@ return t.spec("c0250 block and resolve", function(it)
 			t.expect(again.ok).toBe(false)
 			fs.removeFile(`{prep}/{path}`)
 			-- the other issues in design block with their own reasons, for the cases below
-			for id, reason in
-				{
-					c0120 = "design-gap",
-					c0130 = "review-exhausted",
-					c0140 = "needs-decision",
-					c0150 = "red-gate",
-					c0160 = "tripwire",
-				}
-			do
+			local reasons: { [string]: string } = {
+				c0120 = "design-gap",
+				c0130 = "review-exhausted",
+				c0140 = "needs-decision",
+				c0150 = "red-gate",
+				c0160 = "tripwire",
+			}
+			for id, reason in reasons do
 				write(
 					prep,
 					`{ROOT}/issues/{id}/escalation.md`,
@@ -437,7 +437,8 @@ return t.spec("c0250 block and resolve", function(it)
 			write(f.main, ".cache/tracker-claim-R0010", ACTIVE .. "\n")
 			local path = `{ROOT}/rafts/active/R0010/escalation.md`
 			write(w.R0010, path, note("The gate stays red on c0210: expected 1, got 2. Retry, or redesign?"))
-			local out = znOk(w.R0010, { "block", "R0010", "red-gate" })
+			-- the worker is an agent: the note names it as the actor
+			local out = znOk(w.R0010, { "block", "R0010", "red-gate" }, AGENT)
 			fetch()
 			t.expect(subjects(before)).toEqual({ "tracker: R0010 blocked red-gate" })
 			-- the raft and the members still in active/ are in the backlog, blocked, with the reason
@@ -462,6 +463,7 @@ return t.spec("c0250 block and resolve", function(it)
 			-- the note is in the raft's folder, with its header and the layer the worker was on
 			local filed = originFile(`{ROOT}/rafts/R0010/escalation.md`) or ""
 			t.expect(has(filed, "Item: R0010\nReason: red-gate\nFrom: active\nLayer: c0210\n")).toBe(true)
+			t.expect(has(filed, "\nActor: agent:unknown effort high\nWhen: ")).toBe(true)
 			t.expect(has(filed, "expected 1, got 2")).toBe(true)
 			-- check.sh paths are rewritten back, as stop does
 			t.expect(has(originFile(`{ROOT}/issues/c0210/check.sh`) or "", `# {ROOT}/issues/c0210/check.sh`))
@@ -628,7 +630,8 @@ return t.spec("c0250 block and resolve", function(it)
 				fetch()
 				local before = head()
 				local args = { "resolve", id, decision }
-				for _, a in extra or {} do
+				local more: { string } = extra or {}
+				for _, a in more do
 					table.insert(args, a)
 				end
 				local out = znOk(f.main, args)

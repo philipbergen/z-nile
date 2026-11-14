@@ -22,7 +22,7 @@ local function has(s: string, part: string): boolean
 end
 
 local function raft(over: { [string]: any }): work.RaftFact
-	local r: work.RaftFact = {
+	local r: any = {
 		id = "R0010",
 		title = "t",
 		where = "backlog",
@@ -51,7 +51,7 @@ local DOC =
 	"---\nid: c0001\ndesign: ready\n---\n\n# c0001\n\n## Problem\nP\n\n## Solution\nS\n\n## Design\nD\n\n## Acceptance criteria\nA\n\n## Test plan\nT\n"
 
 local function readyRaft(over: { [string]: any }): readycheck.Raft
-	local r: readycheck.Raft = {
+	local r: any = {
 		id = "R0001",
 		where = "backlog",
 		status = "prepared",
@@ -107,6 +107,11 @@ local function raftDoc(id: string, status: string, issues: string): string
 		) == "blocked"
 		then "blocked: needs-decision\n"
 		else ""}---\n\n# {id}\n\n## Theme\nT\n`
+end
+
+-- read through any: the cap is c0250's to add
+local function quotaCap(layers: { models.Layer }): number?
+	return (models :: any).quotaCapHours(layers)
 end
 
 local f: trackerfix.Fixture
@@ -170,7 +175,7 @@ return t.spec("c0250 blocked rafts, the board and the cap", function(it)
 			-- the columns
 			t.expect(boardview.COLUMNS)
 				.toEqual({ "blocked", "ticket", "design", "raft", "ready", "run", "done" })
-			t.expect(boardview.LABELS.blocked).toBe("Blocked")
+			t.expect((boardview.LABELS :: any).blocked).toBe("Blocked")
 			t.expect(boardview.column("blocked", false)).toBe("blocked")
 			t.expect(boardview.column("blocked", true)).toBe("blocked")
 			t.expect(boardview.column("new", false)).toBe("ticket")
@@ -214,7 +219,7 @@ return t.spec("c0250 blocked rafts, the board and the cap", function(it)
 			table.sort(ids)
 			-- c0050 is not itself blocked, but its raft is: it waits in the blocked column with the raft
 			t.expect(ids).toEqual({ "c0010", "c0020", "c0030", "c0040", "c0050" })
-			local function issue(id: string): board.Issue
+			local function issue(id: string): any
 				for _, i in model.issues do
 					if i.id == id then
 						return i
@@ -223,15 +228,14 @@ return t.spec("c0250 blocked rafts, the board and the cap", function(it)
 				error(`no issue {id}`)
 			end
 			t.expect(issue("c0010").column).toBe("blocked")
-			t.expect((issue("c0010").blocked :: board.Blocked).reason).toBe("red-gate")
+			t.expect(issue("c0010").blocked.reason).toBe("red-gate")
 			-- the question, cut at 200 characters
-			t.expect((issue("c0010").blocked :: board.Blocked).question).toBe(string.sub(long, 1, 200))
-			t.expect(#(issue("c0010").blocked :: board.Blocked).question).toBe(200)
+			t.expect(issue("c0010").blocked.question).toBe(string.sub(long, 1, 200))
+			t.expect(#issue("c0010").blocked.question).toBe(200)
 			-- members carry their raft's block: the reason of the raft's note and its question
-			t.expect((issue("c0020").blocked :: board.Blocked).question).toBe("The gate is red on c0020.")
-			t.expect((issue("c0050").blocked :: board.Blocked).question)
-				.toBe("Which members belong together?")
-			t.expect((issue("c0050").blocked :: board.Blocked).reason).toBe("needs-decision")
+			t.expect(issue("c0020").blocked.question).toBe("The gate is red on c0020.")
+			t.expect(issue("c0050").blocked.question).toBe("Which members belong together?")
+			t.expect(issue("c0050").blocked.reason).toBe("needs-decision")
 			t.expect(issue("c0060").column).toBe("raft")
 			t.expect(issue("c0060").blocked).toBe(nil)
 			t.expect(issue("c0070").column).toBe("ticket")
@@ -247,7 +251,7 @@ return t.spec("c0250 blocked rafts, the board and the cap", function(it)
 			-- the rafts know their block too
 			for _, r in model.rafts do
 				if r.id == "R0100" then
-					t.expect((r.blocked :: board.Blocked).reason).toBe("needs-decision")
+					t.expect((r :: any).blocked.reason).toBe("needs-decision")
 				end
 			end
 			-- a note that does not parse goes to problems, and the card shows the reason alone
@@ -258,7 +262,7 @@ return t.spec("c0250 blocked rafts, the board and the cap", function(it)
 				end
 			end
 			t.expect(named).toBe(true)
-			t.expect((issue("c0040").blocked :: board.Blocked).question).toBe("")
+			t.expect(issue("c0040").blocked.question).toBe("")
 			t.expect(issue("c0040").column).toBe("blocked")
 			-- the page carries the column and the card's text
 			local page = fs.readFile(`{TOP}/z-nile/engine/board.html`)
@@ -281,14 +285,13 @@ return t.spec("c0250 blocked rafts, the board and the cap", function(it)
 				),
 				["pickman/.tracker/rafts/R0020/check.sh"] = "finish\n",
 			}
-			for id, status in
-				{
-					c0010 = "prepared-quiet-copper-falcon",
-					c0030 = "new-quiet-copper-falcon",
-					c0040 = "blocked-quiet-copper-falcon",
-					c0050 = "prepared-quiet-copper-falcon",
-				}
-			do
+			local statuses: { [string]: string } = {
+				c0010 = "prepared-quiet-copper-falcon",
+				c0030 = "new-quiet-copper-falcon",
+				c0040 = "blocked-quiet-copper-falcon",
+				c0050 = "prepared-quiet-copper-falcon",
+			}
+			for id, status in statuses do
 				seed[`pickman/.tracker/issues/{id}/{id}.md`] =
 					item(id, status, if id == "c0010" then "R0010" else "")
 				seed[`pickman/.tracker/issues/{id}/check.sh`] = "finish\n"
@@ -329,15 +332,15 @@ return t.spec("c0250 blocked rafts, the board and the cap", function(it)
 		local function layer(text: string, path: string?): models.Layer
 			return models.parse(text, path or "a/.models.toml")
 		end
-		t.expect(models.quotaCapHours({})).toBe(nil)
-		t.expect(models.quotaCapHours({ layer("[dispatch]\nauto_merge = []\n") })).toBe(nil)
-		t.expect(models.quotaCapHours({ layer("[dispatch]\nquota_cap_hours = 24\n") })).toBe(24)
+		t.expect(quotaCap({})).toBe(nil)
+		t.expect(quotaCap({ layer("[dispatch]\nauto_merge = []\n") })).toBe(nil)
+		t.expect(quotaCap({ layer("[dispatch]\nquota_cap_hours = 24\n") })).toBe(24)
 		-- the closest file that sets it wins, and one that does not set it leaves it
-		t.expect(models.quotaCapHours({
+		t.expect(quotaCap({
 			layer("[dispatch]\nquota_cap_hours = 24\n", ".models.toml"),
 			layer("[dispatch]\nquota_cap_hours = 6\n", "pickman/.models.toml"),
 		})).toBe(6)
-		t.expect(models.quotaCapHours({
+		t.expect(quotaCap({
 			layer("[dispatch]\nquota_cap_hours = 24\n", ".models.toml"),
 			layer("[dispatch]\nauto_merge = []\n", "pickman/.models.toml"),
 		})).toBe(24)

@@ -4,6 +4,11 @@
 local escalation = require("@znile/engine/escalation")
 local t = require("@tests/lib/t")
 
+-- the module's types, read through any: the spec stays loadable by a type check of the tree that has no module yet
+type Note = any
+type Header = any
+type Resolution = any
+
 local function has(s: string, part: string): boolean
 	return string.find(s, part, 1, true) ~= nil
 end
@@ -47,7 +52,7 @@ local function without(section: string): string
 	return table.concat(out, "\n")
 end
 
-local HEADER: escalation.Header = {
+local HEADER: Header = {
 	item = "R0120",
 	reason = "red-gate",
 	from = "active",
@@ -63,7 +68,7 @@ return t.spec("c0250 the escalation note", function(it)
 			local note, why = escalation.parse(GOOD)
 			t.expect(why).toBe(nil)
 			t.expect(note ~= nil).toBe(true)
-			local n = note :: escalation.Note
+			local n = note :: Note
 			t.expect(n.question).toBe("Accept a new dependency on the json library, or write our own reader?")
 			t.expect(#n.options).toBe(3)
 			t.expect(n.options[1].decision).toBe("retry")
@@ -83,20 +88,19 @@ return t.spec("c0250 the escalation note", function(it)
 			t.expect(has(emptyWhy or "", "What was tried")).toBe(true)
 			-- an option naming no decision
 			local odd = string.gsub(GOOD, "%- retry:", "- maybe:")
-			local oddNote = escalation.parse(odd) :: escalation.Note
+			local oddNote = escalation.parse(odd) :: Note
 			local oddWhy = escalation.check(oddNote)
 			t.expect(oddWhy ~= nil).toBe(true)
 			t.expect(has(oddWhy or "", "maybe")).toBe(true)
 			-- no recommendation, and two
-			local none = escalation.parse((string.gsub(GOOD, " %(recommended%)", ""))) :: escalation.Note
+			local none = escalation.parse((string.gsub(GOOD, " %(recommended%)", ""))) :: Note
 			t.expect(has(escalation.check(none) or "", "exactly one")).toBe(true)
 			local two = escalation.parse(
 				(string.gsub(GOOD, "one more review round", "one more review round (recommended)"))
-			) :: escalation.Note
+			) :: Note
 			t.expect(has(escalation.check(two) or "", "exactly one")).toBe(true)
 			-- no option at all
-			local bare =
-				escalation.parse((string.gsub(GOOD, "%- [^\n]*\n", "Whatever you think.\n"))) :: escalation.Note
+			local bare = escalation.parse((string.gsub(GOOD, "%- [^\n]*\n", "Whatever you think.\n"))) :: Note
 			t.expect(escalation.check(bare) ~= nil).toBe(true)
 		end
 	)
@@ -151,7 +155,7 @@ return t.spec("c0250 the escalation note", function(it)
 			})
 			t.expect(has(issueText, "\nLayer:")).toBe(false)
 			-- the stamped note reads back with its header
-			local back = escalation.parse(text) :: escalation.Note
+			local back = escalation.parse(text) :: Note
 			t.expect(back.item).toBe("R0120")
 			t.expect(back.reason).toBe("red-gate")
 			t.expect(back.from).toBe("active")
@@ -172,8 +176,7 @@ return t.spec("c0250 the escalation note", function(it)
 				})
 			end).toThrow("bored")
 			-- a stamped note with a reason outside the list does not check
-			local bad =
-				escalation.parse((string.gsub(text, "Reason: red%-gate", "Reason: bored"))) :: escalation.Note
+			local bad = escalation.parse((string.gsub(text, "Reason: red%-gate", "Reason: bored"))) :: Note
 			t.expect(has(escalation.check(bad) or "", "bored")).toBe(true)
 			-- a title or header the worker wrote is replaced, not doubled
 			local twice = escalation.stamp(text, HEADER)
@@ -309,10 +312,10 @@ return t.spec("c0250 the escalation note", function(it)
 			).toBe(true)
 			t.expect(has(done, 'Said: "yes, take the library"\n')).toBe(true)
 			t.expect(has(done, "When: 2026-11-20 09:00\n")).toBe(true)
-			local read = escalation.parse(done) :: escalation.Note
-			t.expect((read.resolution :: escalation.Resolution).decision).toBe("approve")
-			t.expect((read.resolution :: escalation.Resolution).answer).toBe("use the library")
-			t.expect((read.resolution :: escalation.Resolution).said).toBe("yes, take the library")
+			local read = escalation.parse(done) :: Note
+			t.expect((read.resolution :: Resolution).decision).toBe("approve")
+			t.expect((read.resolution :: Resolution).answer).toBe("use the library")
+			t.expect((read.resolution :: Resolution).said).toBe("yes, take the library")
 			-- a terminal resolution has no Said line, and no answer reads as none
 			local human = escalation.resolution(stamped, {
 				decision = "retry",
@@ -323,10 +326,7 @@ return t.spec("c0250 the escalation note", function(it)
 			})
 			t.expect(has(human, "Said:")).toBe(false)
 			t.expect(has(human, "Answer: none\n")).toBe(true)
-			t.expect(
-				((escalation.parse(human) :: escalation.Note).resolution :: escalation.Resolution).answer
-			)
-				.toBe(nil)
+			t.expect(((escalation.parse(human) :: Note).resolution :: Resolution).answer).toBe(nil)
 			t.expect(escalation.question(read))
 				.toBe("Accept a new dependency on the json library, or write our own reader?")
 			-- the next free archive name
