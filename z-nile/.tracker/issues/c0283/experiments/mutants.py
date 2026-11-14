@@ -16,7 +16,7 @@ M = [
     ('approved: the old rows are replaced', PRV, 'return provenance.record(text, id, "approved"', 'return provenance.record(nil, id, "approved"', AP),
     ('hint ignores CURSOR_AGENT', PRV, '"AI_AGENT", "CURSOR_AGENT", "GROK_SESSION_ID"', '"AI_AGENT", "GROK_SESSION_ID"', AP),
     ('hint ignores GROK_SESSION_ID', PRV, '"CURSOR_AGENT", "GROK_SESSION_ID", "ZN_DISPATCH" }', '"CURSOR_AGENT", "ZN_DISPATCH" }', AP),
-    ('hint takes an empty marker', PRV, 'if v ~= nil and v ~= "" then', 'if v ~= nil then', AP),
+    ('hint takes an empty marker', PRV, 'agent = agent or (v ~= nil and v ~= "")', 'agent = agent or (v ~= nil)', AP),
     ('approve: an agent session with a terminal passes', MAIN, 'if provenance.hint(env).agent then', 'if false then', AR),
     ('approve: a human-claiming ZN_ACTOR passes an agent session', MAIN, 'if provenance.hint(env).agent then', 'if provenance.hint(env).agent and not string.find(process.env.ZN_ACTOR or "", "^human:") then', AR),
     ('approve: the agent markers are not read from the process', MAIN, 'env[name] = process.env[name]', 'env[name] = nil', AR),
