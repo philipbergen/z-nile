@@ -32,8 +32,8 @@ approve
 
 ## Output file
 - Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue); in raft mode, in the raft's folder. `./zn metrics` counts both and rolls an issue's rounds up to its raft through `raft:`.
-- Code mode: `review-NNN.md`, in the raft directory.
-- Final mode: `final-review-NNN.md`, in the raft directory, alongside `trace.md`.
+- Code mode: `review-NNN.md`, in the issue's folder (the layer's issue; a raft readied before layers were reviewed one by one keeps it in the raft directory). The tool stamps `Commit:` and `Patch:` on it; the reviewer writes neither.
+- Final mode: `final-review-NNN.md`, in the raft directory, alongside `trace-NNN.md`, once per landing (NNN is one more than the highest final review on `origin/main`).
 - The file is `001` when the folder has none of that name. A second review of the same kind is refused. An older item's higher numbers still parse and still count in `./zn metrics`.
 - Under `./zn dispatch`, in every mode, write your review to `$ZN_DISPATCH_DIR/review.md` (your own state folder) and nothing else: the dispatcher numbers it with the mode's file name and moves it into the mode's folder, and a step that wrote no review fails. The names above and in Visible record are the interactive path's, where you write the file yourself.
 
@@ -100,7 +100,7 @@ Attack all of the following:
 Layers replaced stream branches. A raft is reviewed in Code mode, one layer at a time (`git diff <layer below>...HEAD`). The dispatcher still accepts `--mode stream` and files that review itself; it is not how a layer is reviewed.
 
 ## Code mode (one layer)
-Inputs: `./zn sync --fetch` (never a merge: a merge would add a commit and move the sha the author announced), then `git diff <layer below>...HEAD` (the first layer: `origin/main...HEAD`), that ticket's document, and its `check.sh`. One layer is one ticket.
+Inputs: `./zn sync --fetch` (never a merge: a merge would add a commit and move the sha the author announced), then `git diff <layer below>...HEAD` (the first layer: `origin/main...HEAD`), that ticket's document, and its `check.sh`. One layer is one ticket; the dispatcher gives the reviewer the layer's finish commit and stamps it on the review (`Commit:` and `Patch:`).
 A code-mode Recommendation never asks the author to edit sequestered `check.sh` files or acceptance specs, or to decide product questions. If that's the only fix, say the author must escalate (zz-execute stop conditions).
 1. **Correctness**: run the code in your head against edge cases, and read the tests critically. Run `z-nile/check.sh --affected` and each `./zn check <id>` yourself.
 2. **Sequestration**: `git fetch origin main && git diff --find-renames=100% --name-status origin/main...HEAD -- 'tracker/**/check.sh' 'tracker/**/acceptance/**' '*/.tracker/**/check.sh' '*/.tracker/**/acceptance/**'` must list nothing except `R100` renames (the move to `active/`). Any other change is **high**. The three-dot form shows only what this branch changed, not what `main` brought in. When a check judges the item's own sequestered files against a reviewed prep commit (c0120's AC18), an approving review records that commit as a line `Prep reference: <sha>`, and beside it the anchors the check is derived from: `Move commit: <sha>` (c0120's renames commit) and `Core commit: <sha>` (its hand-written core, the third first-parent commit after the move) (the prep commit whose `check.sh` and acceptance files you reviewed, as `git log -1 --format=%H origin/prep-<id>` gave it after your fetch). Only a reviewer writes it; never record a commit you didn't review.
@@ -115,11 +115,11 @@ A code-mode Recommendation never asks the author to edit sequestered `check.sh` 
 11. **Bounded commands**: Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do. Does any script, spec or step in the diff start a process nothing stops (`nohup`, `setsid`, `perl -e alarm` around `lune`, a bare `lune run` in a `check.sh`), and did the probes the author reports run through `./zn run`?
 
 ## Final mode (the finished stack)
-Run once per raft on the finished, restacked stack, on the review model of the CLI. Inputs: `./zn sync --fetch`, `./zn trace <R-id>` (the skeleton), the raft and issue documents (and `./zn capture <id>` for each issue), and `git diff origin/main...HEAD`.
-1. **Fill `trace.md`** in the raft's folder from the skeleton `./zn trace <R-id>` prints:
+Run once per raft on the finished, restacked stack, on the review model of the CLI. Inputs: `./zn sync --fetch`, `./zn trace <R-id>` (the skeleton; `--through <issue>` for a landing below a block), the raft and issue documents (and `./zn capture <id>` for each issue), and `git diff origin/main...HEAD`.
+1. **Fill `trace-NNN.md`** in the raft's folder from the skeleton `./zn trace <R-id>` prints:
    - One row per claim (`<issue>:P<n>`, `<issue>:S<n>`, `<issue>:AC<n>`): cite the design section (`<issue-doc>:<line>`), the test (`<spec-or-check.sh>:<line>`, with the exact case name when a spec), and the code (`<source-file>:<line>`, or `none` when the stack changed no source file) at the top layer's finished commit. A claim deliberately not met says `not met: "<ruling>"` in the design cell, quoting the human's ruling from `## Open to the human`; no other cell may be empty.
    - Under `## Source files`, one row per changed source file, naming the claim or claims (`<issue>:AC1, ...`) it serves. Nothing in the stack may be unaccounted for.
-2. **Verify mechanically**: `./zn trace <R-id> --check` must pass, or every gap is a **high** finding in your review.
+2. **Verify mechanically**: `./zn trace <R-id> [--through <issue>] --check` must pass, or every gap is a **high** finding in your review.
 3. **Judge substance**: check that each cited design section really answers the claim, each cited test really proves it, and each cited source line really implements it, with nothing extra in the diff. Write `final-review-NNN.md` (under `./zn dispatch`, `$ZN_DISPATCH_DIR/review.md`, as Output file says) with findings and `Verdict: approve | changes`. One round and one revision (`final-refute-NNN.md`), then `## Open to the human`, as in Code mode.
 
 ## Lessons

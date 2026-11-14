@@ -19,7 +19,7 @@ created: {{DATE}}
      Every issue design must agree with this. Include any changes to the project's architecture.md (in its root, as pickman/.tracker/). -->
 
 ## Order & dependencies
-<!-- Execution order of member issues and why. -->
+<!-- Execution order of member issues and why. This order is the stack's: layer 1 is the first issue, each next layer is on the one below. -->
 
 ## Experiments phase
 <!-- All unknowns across the raft, run FIRST. For each: question, command, result (if run in prep),

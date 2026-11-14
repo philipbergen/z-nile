@@ -86,7 +86,17 @@ function readyfacts.reason(raft: store.Item, members: { store.Item }): string?
 		doc = if fs.isFile(raft.doc) then fs.readFile(raft.doc) else "",
 		grouped = front.grouped,
 		questions = fs.isFile(`{raft.dir}/questions.md`),
-		listed = store.idList(front.issues),
+		-- c0248: a member that landed with an earlier bind stays listed in issues: but is not a member to ready
+		listed = (function(): { string }
+			local out: { string } = {}
+			for _, id in store.idList(front.issues) do
+				local found = store.find(id)
+				if not (found and found.state == "done" and store.readFront(found.doc).raft == raft.id) then
+					table.insert(out, id)
+				end
+			end
+			return out
+		end)(),
 		members = built,
 		files = files,
 		loaded = true,
