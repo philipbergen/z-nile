@@ -113,11 +113,15 @@ function who.sideTrailers(life: { trail.Commit }, dir: string?)
 	for line in string.gmatch(if r.ok then r.stdout else "", "[^\n]+") do
 		local sha = string.match(line, "^@@(%x+)$")
 		if sha then
-			current = {}
-			bySha[sha] = current
-		elseif current then
-			for value in string.gmatch(line, "[^\31]+") do
-				table.insert(current, value)
+			local fresh: { string } = {}
+			bySha[sha] = fresh
+			current = fresh
+		else
+			local list = current
+			if list then
+				for value in string.gmatch(line, "[^\31]+") do
+					table.insert(list, value)
+				end
 			end
 		end
 	end
