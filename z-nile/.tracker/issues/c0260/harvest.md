@@ -86,4 +86,3 @@
 - design-review-009 F13: one-off: a fallback that restates the design, and a one-call experiment; fixed in the document
 - design-review-009 F14: z-design/spec-design-correspondence
 - note re-prep onto a main that gained the stage (the ten hand-made records found by the real-tree audit spec on the first prototype): z-design/new-rules-migrate-existing-work
-- note a foreign agent's prototype ref tripped the runner's tripwire during a 40-minute run: no lesson (memory: retry once)
