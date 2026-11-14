@@ -1,0 +1,7 @@
+- design-review-001 F1: z-raft/main-changed-a-skill-walk-its-loops
+- design-review-001 F2: z-raft/main-changed-a-skill-walk-its-loops
+- design-review-001 F3: z-raft/escalations-are-bullets
+- design-review-001 F4: z-design/quote-other-preps-before-promising
+- design-review-001 F5: z-raft/main-changed-a-skill-walk-its-loops
+- design-review-001 F6: z-design/prove-specs-pass-on-a-prototype
+- note merging the five heartbeat prototypes was textually clean but declared `local hb` twice and dropped main's new uses of two inlined requires; only the real-time proofs and the lint stage caught them: z-raft/run-sequestered-specs-on-all-prototypes-together

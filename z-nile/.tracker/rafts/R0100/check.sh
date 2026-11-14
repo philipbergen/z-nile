@@ -31,7 +31,7 @@ check "RC2: each interface two members share is defined once in the engine, and 
 
 check "RC3: z-run, now a shim over z-work, still carries the phrases the members pin" bash -c '
 	f="$ZN_ROOT/z-nile/skills/z-run/SKILL.md"
-	for p in "./zn lost" "./zn beat" "--time 3600" "--adopt" "keeps itself alive" "a lost raft" "--takeover" "you were discarded"; do
+	for p in "./zn lost" "./zn beat" "--time 3600" "--adopt" "keeps itself alive" "a lost raft" "--takeover" "you were discarded" "remove its old worktree"; do
 		grep -qF -e "$p" "$f" || { echo "z-run lacks: $p"; exit 1; }
 	done'
 
@@ -39,5 +39,11 @@ check "RC4: the raft changes nothing in pickman/ or any game, and no other raft'
 	extra=$(git diff --name-only "$base" | grep -E "^(pickman|arcade|portal|snake|invaders|asteroids)/") || true
 	other=$(git diff --name-only "$base" | grep -E "^z-nile/\.tracker/rafts/(active/|done/)?R[0-9]+/" | grep -v -E "/R0100/") || true
 	[[ -z $extra && -z $other ]] || { echo "unexpected: $extra $other"; exit 1; }'
+
+check "RC5: z-work carries the discarded-session rule" bash -c '
+	f="$ZN_ROOT/z-nile/skills/z-work/SKILL.md"
+	for p in "you were discarded" "./zn lost" "--adopt" "with no raft"; do
+		grep -qF -e "$p" "$f" || { echo "z-work lacks: $p"; exit 1; }
+	done'
 
 finish
