@@ -13,7 +13,11 @@ local costrow = require("./costrow")
 local dispatchLib = require("./dispatch")
 local dispatcherLib = require("./dispatcher")
 local H = {} -- top-level helpers kept in one table (this file is at Luau's limit of 200 locals)
-local esc = { lib = require("./escalation"), completion = require("./completion"), mergerecords = require("./mergerecords") } -- c0250 (a table: this file is at Luau's limit of 200 locals)
+local esc = {
+	lib = require("./escalation"),
+	completion = require("./completion"),
+	mergerecords = require("./mergerecords"),
+} -- c0250 (a table: this file is at Luau's limit of 200 locals)
 local fs = require("@lune/fs")
 local gateLib = require("./gate")
 local idea = require("./idea")
@@ -6594,9 +6598,7 @@ function cmd.block(pos: { string }, opts: { [string]: { string } }?)
 	end
 	if from == "active" and not isRaft then
 		local raftId = originFront.raft or "its raft"
-		fail(
-			`{id} is in {raftId}, readied: block the raft: ./zn block {raftId} {reason} --layer {id}`
-		)
+		fail(`{id} is in {raftId}, readied: block the raft: ./zn block {raftId} {reason} --layer {id}`)
 	end
 	local dir = string.match(originDoc, "^(.*)/[^/]+$") :: string
 	local notePath = `{dir}/escalation.md`
@@ -6730,6 +6732,7 @@ function cmd.block(pos: { string }, opts: { [string]: { string } }?)
 	local message = `tracker: {id} blocked {reason}`
 	if refile then
 		-- the recovery path: the item stays blocked, the note is published (an unreadable one is kept as an archive)
+		refuseStale()
 		r = published(publish.commit(".", function(paths, read)
 			local doc = docPath(paths, id)
 			local text = doc and read(doc)
@@ -6808,7 +6811,8 @@ function cmd.block(pos: { string }, opts: { [string]: { string } }?)
 			end
 			-- the main checkout follows origin/main when it can (a clean main with nothing local to lose)
 			local before = sh.run("git", { "-C", mainRoot(), "rev-parse", "HEAD" })
-			local pulled = sh.run("git", { "-C", mainRoot(), "pull", "--ff-only", "--quiet", "origin", "main" })
+			local pulled =
+				sh.run("git", { "-C", mainRoot(), "pull", "--ff-only", "--quiet", "origin", "main" })
 			if pulled.ok and before.ok then
 				local after = sh.run("git", { "-C", mainRoot(), "rev-parse", "HEAD" })
 				if after.ok then
@@ -6835,10 +6839,18 @@ function cmd.block(pos: { string }, opts: { [string]: { string } }?)
 			if layerBranch == nil then
 				stdio.ewrite(`warning: {layer} has no layer branch yet: no pull request to comment on\n`)
 			else
-				local found = sh.run(
-					"gh",
-					{ "pr", "list", "--head", layerBranch :: string, "--state", "open", "--json", "url", "-q", ".[0].url" }
-				)
+				local found = sh.run("gh", {
+					"pr",
+					"list",
+					"--head",
+					layerBranch :: string,
+					"--state",
+					"open",
+					"--json",
+					"url",
+					"-q",
+					".[0].url",
+				})
 				local url = if found.ok then sh.trim(found.stdout) else ""
 				if url == "" or url == "null" then
 					stdio.ewrite(`warning: {layerBranch} has no pull request yet: nothing to comment on\n`)
@@ -6849,7 +6861,9 @@ function cmd.block(pos: { string }, opts: { [string]: { string } }?)
 					)
 					if not c.ok then
 						stdio.ewrite(
-							`warning: could not comment on the pull request of {layerBranch}: {sh.trim(c.stderr)}\n`
+							`warning: could not comment on the pull request of {layerBranch}: {sh.trim(
+								c.stderr
+							)}\n`
 						)
 					end
 				end
@@ -6874,7 +6888,12 @@ function esc.intoProblem(text: string, line: string): string
 	local section = string.sub(text, body, nextHeading - 1)
 	local content = string.gsub(section, "%s+$", "")
 	local tail = string.sub(section, #content + 1)
-	return string.sub(text, 1, body - 1) .. content .. "\n" .. line .. (if tail == "" then "\n" else tail) .. string.sub(text, nextHeading)
+	return string.sub(text, 1, body - 1)
+		.. content
+		.. "\n"
+		.. line
+		.. (if tail == "" then "\n" else tail)
+		.. string.sub(text, nextHeading)
 end
 
 function esc.withoutFront(text: string, key: string): string
@@ -7195,8 +7214,7 @@ function cmd.resolve(pos: { string }, opts: { [string]: { string } })
 		end
 		local resolvedNote = esc.lib.resolution(noteText, resolutionOf)
 		local rec = `{dir}/provenance.md`
-		local detail =
-			`decision={decision}{if agent then ` said="{said}"` else ""}`
+		local detail = `decision={decision}{if agent then ` said="{said}"` else ""}`
 		local recorded, recWhy = provenance.record(read(rec), id, "unblocked", actor, detail, when)
 		if not recorded then
 			return recWhy or "not a record"
@@ -7214,7 +7232,12 @@ function cmd.resolve(pos: { string }, opts: { [string]: { string } })
 			movedTo = `{target}/`
 			for _, p2 in paths do
 				local pid, prel = publish.itemPath(p2)
-				if pid == id and prel and string.sub(p2, 1, #dir + 1) == dir .. "/" and not string.find(prel, "/", 1, true) then
+				if
+					pid == id
+					and prel
+					and string.sub(p2, 1, #dir + 1) == dir .. "/"
+					and not string.find(prel, "/", 1, true)
+				then
 					local content = read(p2) :: string
 					if prel == `{id}.md` then
 						content = itemText
@@ -7257,7 +7280,9 @@ function cmd.resolve(pos: { string }, opts: { [string]: { string } })
 		end
 	end
 	print(
-		`resolved {id}: {decision}{if newId ~= "" then ` (new issue {newId})` else ""}{if movedTo ~= "" then ` (the raft has no unlanded member: its folder is now in rafts/{movedTo})` else ""}`
+		`resolved {id}: {decision}{if newId ~= "" then ` (new issue {newId})` else ""}{if movedTo ~= ""
+			then ` (the raft has no unlanded member: its folder is now in rafts/{movedTo})`
+			else ""}`
 	)
 end
 

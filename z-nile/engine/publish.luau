@@ -121,14 +121,9 @@ function publish.allowed(path: string, roots: { string }, counter: string?, esca
 	return rel == `{id}.md`
 		or rel == "check.sh"
 		or rel == "provenance.md"
-		or (
-			escalation == true
-			and (
-				rel == "escalation.md"
-				or string.match(rel, "^escalation%-%d%d%d%.md$") ~= nil
-				or (not isIssue(id) and string.match(rel, "^design%-review%-%d%d%d%.md$") ~= nil)
-			)
-		)
+		or (escalation == true and (rel == "escalation.md" or string.match(rel, "^escalation%-%d%d%d%.md$") ~= nil or (not isIssue(
+			id
+		) and string.match(rel, "^design%-review%-%d%d%d%.md$") ~= nil)))
 		or (isIssue(id) and (rel == "spend.md" or rel == "approval.md"))
 end
 
@@ -406,12 +401,15 @@ local function validateMoves(
 			-- c0250: a resolve that leaves a raft no unlanded member sends its whole folder to done/ or retired/
 			local finished = escalation == true
 				and string.match(fid :: string, "^R%d%d%d%d$") ~= nil
-				and (
-					string.match(dst, "/rafts/done/R%d%d%d%d$") ~= nil
-					or string.match(dst, "/rafts/retired/R%d%d%d%d$") ~= nil
-				)
+				and (string.match(dst, "/rafts/done/R%d%d%d%d$") ~= nil or string.match(
+					dst,
+					"/rafts/retired/R%d%d%d%d$"
+				) ~= nil)
 				and string.match(src, "/rafts/R%d%d%d%d$") ~= nil
-			if not finished and (string.find(src .. "/", "/done/", 1, true) or string.find(dst .. "/", "/done/", 1, true)) then
+			if
+				not finished
+				and (string.find(src .. "/", "/done/", 1, true) or string.find(dst .. "/", "/done/", 1, true))
+			then
 				return sources, `{from} -> {c.path}: published moves never touch done/`
 			end
 			if (srcOf[fid] and srcOf[fid] ~= src) or (dirs[fid] and dirs[fid] ~= dst) then
@@ -456,14 +454,16 @@ local function validateMoves(
 			want = c.content
 		elseif rel == "check.sh" then
 			want = pathsLib.rewrite(old, dirs)
-		elseif escalation and rel == "escalation.md" and string.sub(c.content, 1, #old) == old then
-			-- an emptied raft's note, extended by the resolution
-			want = c.content
 		elseif
 			escalation
-			and rel == "provenance.md"
 			and string.sub(c.content, 1, #old) == old
-			and provenance.publishProblem(old, c.content, id :: string, { "unblocked" }) == nil
+			and (
+				rel == "escalation.md" -- an emptied raft's note, extended by the resolution
+				or (
+					rel == "provenance.md"
+					and provenance.publishProblem(old, c.content, id :: string, { "unblocked" }) == nil
+				)
+			)
 		then
 			want = c.content
 		end
@@ -585,7 +585,11 @@ function publish.commit(
 		if escalation then
 			for _, c in out do
 				local nid, nrel = movePath(c.path)
-				if nid and nrel and (nrel == "escalation.md" or string.match(nrel, "^escalation%-%d%d%d%.md$")) then
+				if
+					nid
+					and nrel
+					and (nrel == "escalation.md" or string.match(nrel, "^escalation%-%d%d%d%.md$"))
+				then
 					if not escItem or string.match(nid, "^R") then
 						escItem = nid
 					end
@@ -723,7 +727,9 @@ function publish.commit(
 						end
 					end
 					local readable = escalationLib.parse(existing)
-					if not (kept and (not readable or string.find(existing, "\n## Resolution\n", 1, true))) then
+					if
+						not (kept and (not readable or string.find(existing, "\n## Resolution\n", 1, true)))
+					then
 						return fail(
 							`{c.path}: the note on origin/main is only appended to, or kept as escalation-NNN.md once resolved`
 						)
@@ -750,12 +756,17 @@ function publish.commit(
 				local cid, crel = publish.itemPath(c.path)
 				if crel and string.match(crel, "^design%-review%-%d%d%d%.md$") then
 					if not groupedOnly(existing, c.content) then
-						return fail(`{c.path}: a resolve may change only the Grouped: lines of a coherence review`)
+						return fail(
+							`{c.path}: a resolve may change only the Grouped: lines of a coherence review`
+						)
 					end
 					continue
 				end
 				-- the item and its members only; the keys by role
-				local role: string? = if cid == escItem then "item" elseif escMembers[cid or ""] then "member" else nil
+				local role: string? = if cid == escItem
+					then "item"
+					elseif escMembers[cid or ""] then "member"
+					else nil
 				if not role then
 					return fail(
 						`{c.path}: {cid} is neither the item {escItem} of this block or resolve nor one of its members`
@@ -771,7 +782,8 @@ function publish.commit(
 				continue
 			end
 			if existing then
-				local before, after = withoutStatus(existing, escalation), withoutStatus(c.content, escalation)
+				local before, after =
+					withoutStatus(existing, escalation), withoutStatus(c.content, escalation)
 				if not before or not after or before ~= after then
 					return fail(
 						`{c.path}: a published change to an existing document may only edit its status: line`

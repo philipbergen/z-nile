@@ -1501,7 +1501,11 @@ function dispatcher.modelStep(
 	local exAfter, exAfterWhy = exchangeRead(st)
 	if exAfter == nil then
 		exProblem = `the step changed the exchange or left it unreadable: {exAfterWhy}`
-	elseif id ~= "" and id ~= "new" and (fs.isFile(`{stateDir}/questions.md`) or isLink(`{stateDir}/questions.md`)) then
+	elseif
+		id ~= ""
+		and id ~= "new"
+		and (fs.isFile(`{stateDir}/questions.md`) or isLink(`{stateDir}/questions.md`))
+	then
 		-- c0250 (F10): nothing reads a questions.md for an item; the step's question is its block. The file is set aside
 		-- and never copied into the exchange, so `retry` re-runs the step without it.
 		local parentRun = process.env.ZN_DISPATCH_DIR
@@ -1538,7 +1542,12 @@ function dispatcher.modelStep(
 		if fs.isFile(qf) or isLink(qf) then
 			fs.move(
 				qf,
-				freeName(stateDir, if exIgnored then "questions-ignored-" else "questions-refused-", ".md", true)
+				freeName(
+					stateDir,
+					if exIgnored then "questions-ignored-" else "questions-refused-",
+					".md",
+					true
+				)
 			)
 		end
 	end
@@ -2390,12 +2399,12 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 	end
 	st.mode = "chain"
 	for _ = 1, dispatch.MAX_ACTIONS do
-		local resumed, taken = exchangeResolution(ctx, st, id)
+		local resumed, reopened = exchangeResolution(ctx, st, id)
 		if resumed then
 			print(`stop: the exchange of {id} cannot take the resolution: {resumed}`)
 			return dispatch.EXIT.failure
 		end
-		if taken then
+		if reopened then
 			-- the step that blocked is not an attempt that "ended ok": the resolve reopened the item (as retry does)
 			st.outcome, st.detail = nil, nil
 			save(st)

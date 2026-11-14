@@ -225,9 +225,19 @@ function audit.run(root: string): { Problem }
 			local reasonOf = fm.blocked or ""
 			if isBlocked then
 				if reasonOf == "" then
-					add("error", "blocked-no-reason", f.path, `{f.id} is blocked without a blocked: line: ./zn block {f.id} <reason> sets it and re-files its note`)
+					add(
+						"error",
+						"blocked-no-reason",
+						f.path,
+						`{f.id} is blocked without a blocked: line: ./zn block {f.id} <reason> sets it and re-files its note`
+					)
 				elseif not table.find(escalation.REASONS, reasonOf) then
-					add("error", "blocked-bad-reason", f.path, `{f.id}'s blocked: {reasonOf} is not a reason ({table.concat(escalation.REASONS, ", ")}): ./zn resolve {f.id} <decision> clears the block`)
+					add(
+						"error",
+						"blocked-bad-reason",
+						f.path,
+						`{f.id}'s blocked: {reasonOf} is not a reason ({table.concat(escalation.REASONS, ", ")}): ./zn resolve {f.id} <decision> clears the block`
+					)
 				end
 				local notePath = `{abs}/escalation.md`
 				local ownNote = (fm.raft or "") == ""
@@ -244,11 +254,23 @@ function audit.run(root: string): { Problem }
 						end
 					end
 					if why then
-						add("error", "blocked-no-note", f.path, `{f.id} is blocked but {why}: ./zn block {f.id} {if reasonOf ~= "" then reasonOf else "<reason>"} re-files the note`)
+						add(
+							"error",
+							"blocked-no-note",
+							f.path,
+							`{f.id} is blocked but {why}: ./zn block {f.id} {if reasonOf ~= ""
+								then reasonOf
+								else "<reason>"} re-files the note`
+						)
 					end
 				end
 			elseif fm.blocked ~= nil and fm.blocked ~= "" then
-				add("error", "blocked-stray", f.path, `{f.id} has blocked: {fm.blocked} but is not blocked: remove the line, or ./zn block {f.id} {fm.blocked} if it is preparing`)
+				add(
+					"error",
+					"blocked-stray",
+					f.path,
+					`{f.id} has blocked: {fm.blocked} but is not blocked: remove the line, or ./zn block {f.id} {fm.blocked} if it is preparing`
+				)
 			end
 		else
 			local legacy = nil
