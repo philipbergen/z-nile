@@ -507,19 +507,16 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 			t.expect(reviewOf("c0170")).toBe(review(nil, nil))
 			t.expect(tsv("c0170")).toBe("")
 			-- a marked issue's spend must also name the review file it records
-			local named = zn(
-				prep,
-				{
-					"spend",
-					"c0170",
-					"--phase",
-					"design-review",
-					"--note",
-					"a-note",
-					"--model",
-					"claude-opus-5-5",
-				}
-			)
+			local named = zn(prep, {
+				"spend",
+				"c0170",
+				"--phase",
+				"design-review",
+				"--note",
+				"a-note",
+				"--model",
+				"claude-opus-5-5",
+			})
 			t.expect(named.ok).toBe(false)
 			t.expect(has(say(named), "design-review-NNN")).toBe(true)
 			t.expect(reviewOf("c0170")).toBe(review(nil, nil))
