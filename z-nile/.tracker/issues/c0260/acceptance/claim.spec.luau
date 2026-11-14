@@ -75,7 +75,10 @@ local function challenge(id: string)
 	git(c, { "reset", "-q", "--hard", "origin/main" })
 	local path = `{c}/{ISSUES}/{id}/{id}.md`
 	fs.writeFile(path, (string.gsub(fs.readFile(path), "idea: unchallenged", "idea: challenged", 1)))
-	write(`{c}/{ISSUES}/{id}/idea-review-001.md`, "# Idea review 001\n\n## Findings\n\nnone\n\n## Verdict\n\napprove\n")
+	write(
+		`{c}/{ISSUES}/{id}/idea-review-001.md`,
+		"# Idea review 001\n\n## Findings\n\nnone\n\n## Verdict\n\napprove\n"
+	)
 	git(c, { "add", "-A" })
 	git(c, { "commit", "-q", "-m", `tracker: idea {id}` })
 	git(c, { "push", "-q", "origin", "HEAD:main" })
@@ -122,18 +125,23 @@ return t.spec("c0260 the claim gate", function(it)
 		t.expect(has(git(origin, { "show", `main:{ISSUES}/c0777/c0777.md` }), "status: preparing")).toBe(true)
 	end)
 
-	it("AC10: an issue made after the landing without the record is refused, and its claim is not published", function()
-		local wt = trOk(main, { "worktree", "prep-new" })
-		identity(wt)
-		local made =
-			trOk(wt, { "new", "issue", "c", "after-landing", "--desc", "A bare stub.", "--project", "pickman" })
-		local id = string.match(made, "(c%d%d%d%d)") :: string
-		local before = tip()
-		local r = tr(wt, { "status", id, "preparing" })
-		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr, "made after the capture record landed")).toBe(true)
-		t.expect(tip()).toBe(before)
-	end)
+	it(
+		"AC10: an issue made after the landing without the record is refused, and its claim is not published",
+		function()
+			local wt = trOk(main, { "worktree", "prep-new" })
+			identity(wt)
+			local made = trOk(
+				wt,
+				{ "new", "issue", "c", "after-landing", "--desc", "A bare stub.", "--project", "pickman" }
+			)
+			local id = string.match(made, "(c%d%d%d%d)") :: string
+			local before = tip()
+			local r = tr(wt, { "status", id, "preparing" })
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr, "made after the capture record landed")).toBe(true)
+			t.expect(tip()).toBe(before)
+		end
+	)
 
 	it(
 		"AC11: --filed-by writes the marker with its source and the Scope decision, and that ticket is claimed",
@@ -209,8 +217,10 @@ return t.spec("c0260 the claim gate", function(it)
 		identity(shallow)
 		local wt = trOk(shallow, { "worktree", "prep-shallow" })
 		identity(wt)
-		local id =
-			string.match(git(origin, { "log", "--format=%s", "main" }), "tracker: new (c%d+) after%-landing") :: string
+		local id = string.match(
+			git(origin, { "log", "--format=%s", "main" }),
+			"tracker: new (c%d+) after%-landing"
+		) :: string
 		t.expect(has(git(origin, { "show", `main:{ISSUES}/{id}/{id}.md` }), "capture: required")).toBe(true)
 		local r = tr(wt, { "status", id, "preparing" })
 		t.expect(r.ok).toBe(false)
@@ -224,8 +234,10 @@ return t.spec("c0260 the claim gate", function(it)
 		function()
 			local wt = trOk(main, { "worktree", "raft-direct" })
 			identity(wt)
-			local made =
-				trOk(wt, { "new", "issue", "c", "direct-member", "--desc", "A bare stub.", "--project", "pickman" })
+			local made = trOk(
+				wt,
+				{ "new", "issue", "c", "direct-member", "--desc", "A bare stub.", "--project", "pickman" }
+			)
 			local id = string.match(made, "(c%d%d%d%d)") :: string
 			local before = tip()
 			local r = tr(wt, { "new", "raft", "chore", "direct-raft", id, "--project", "pickman" })
@@ -293,7 +305,10 @@ return t.spec("c0260 the claim gate", function(it)
 			git(rec, { "push", "-q", "origin", "HEAD:main" })
 			trOk(wt, { "status", id, "preparing" }) -- claimed: the record is there
 			local id2 = string.match(
-				trOk(wt, { "new", "issue", "c", "second-record", "--desc", "Another.", "--project", "pickman" }),
+				trOk(
+					wt,
+					{ "new", "issue", "c", "second-record", "--desc", "Another.", "--project", "pickman" }
+				),
 				"(c%d%d%d%d)"
 			) :: string
 			git(rec, { "fetch", "-q", "origin" })
@@ -310,7 +325,10 @@ return t.spec("c0260 the claim gate", function(it)
 			trOk(wt, { "new", "raft", "chore", "recorded-raft", id2, "--project", "pickman" }) -- a raft claims a recorded member
 			-- the same record with no raw review beside it is refused: the claim calls the record check
 			local id3 = string.match(
-				trOk(wt, { "new", "issue", "c", "no-review", "--desc", "Unreviewed.", "--project", "pickman" }),
+				trOk(
+					wt,
+					{ "new", "issue", "c", "no-review", "--desc", "Unreviewed.", "--project", "pickman" }
+				),
 				"(c%d%d%d%d)"
 			) :: string
 			git(rec, { "fetch", "-q", "origin" })
@@ -333,7 +351,8 @@ return t.spec("c0260 the claim gate", function(it)
 				git(rec, { "fetch", "-q", "origin" })
 				git(rec, { "reset", "-q", "--hard", "origin/main" })
 				local path = `{rec}/{ISSUES}/{made}/{made}.md`
-				local body = string.gsub(RECORD, 'Confirmed %(user, 2026%-11%-08%) after round 1: "yes"', line)
+				local body =
+					string.gsub(RECORD, 'Confirmed %(user, 2026%-11%-08%) after round 1: "yes"', line)
 				local txt = (
 					string.gsub(
 						fs.readFile(path),
@@ -356,8 +375,10 @@ return t.spec("c0260 the claim gate", function(it)
 			local blocked = tr(wt, { "status", userOpen, "preparing" })
 			t.expect(blocked.ok).toBe(false)
 			t.expect(has(blocked.stderr, "open to the human")).toBe(true)
-			local dispatchedOpen =
-				withOpen("dispatched-open", "Unconfirmed (unattended, 2026-11-08) after round 1: nobody answered")
+			local dispatchedOpen = withOpen(
+				"dispatched-open",
+				"Unconfirmed (unattended, 2026-11-08) after round 1: nobody answered"
+			)
 			trOk(wt, { "status", dispatchedOpen, "preparing" })
 			-- the end of prep: the user's words in the Ask are not rewritten on the way to prepared
 			local prepDoc = `{wt}/{ISSUES}/{id}/{id}.md`

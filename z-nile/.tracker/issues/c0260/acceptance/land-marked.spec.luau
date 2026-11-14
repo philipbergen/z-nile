@@ -57,7 +57,8 @@ end
 local function capture(name: string, slug: string): (string, string)
 	local wt = trOk(main, { "worktree", name })
 	identity(wt)
-	local made = trOk(wt, { "new", "issue", "c", slug, "--desc", `First line of {slug}.`, "--project", "pickman" })
+	local made =
+		trOk(wt, { "new", "issue", "c", slug, "--desc", `First line of {slug}.`, "--project", "pickman" })
 	local id = string.match(made, "(c%d%d%d%d)") :: string
 	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 	local doc = `{wt}/pickman/.tracker/issues/{id}/{id}.md`
@@ -147,7 +148,11 @@ return t.spec("c0260 land judges a marked record", function(it)
 			end
 			attempt(function(d)
 				return (
-					string.gsub(withRecord(d), "Answer: approve\n", "Answer: approve\n### Q3\nQuestion: q\nAnswer: a\n")
+					string.gsub(
+						withRecord(d),
+						"Answer: approve\n",
+						"Answer: approve\n### Q3\nQuestion: q\nAnswer: a\n"
+					)
 				)
 			end, "found Q3 where Q2 belongs")
 			attempt(function(d)
@@ -177,7 +182,8 @@ return t.spec("c0260 land judges a marked record", function(it)
 			)
 			commit(wt)
 			trOk(wt, { "land" })
-			t.expect(has(git(origin, { "show", `main:{CAPTURE}/{id}/{id}.md` }), 'after round 1: "yes"')).toBe(true)
+			t.expect(has(git(origin, { "show", `main:{CAPTURE}/{id}/{id}.md` }), 'after round 1: "yes"'))
+				.toBe(true)
 			-- the Problem changed by hand afterwards: the line no longer stands for it
 			local second = trOk(main, { "worktree", "capture-drift" })
 			identity(second)

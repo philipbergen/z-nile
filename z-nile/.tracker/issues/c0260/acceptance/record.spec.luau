@@ -160,7 +160,12 @@ return t.spec("c0260 ./zn idea keeps the user's words and the confirmation", fun
 				error(`--record failed: {r.stderr}{r.stdout}`, 0)
 			end
 			local text = doc()
-			t.expect(has(text, "## Ask (verbatim)\n### Message 2026-11-07\n```\nmake the ghosts scarrier, thx\n```"))
+			t.expect(
+				has(
+					text,
+					"## Ask (verbatim)\n### Message 2026-11-07\n```\nmake the ghosts scarrier, thx\n```"
+				)
+			)
 				.toBe(true)
 			t.expect(has(text, "### Q1\nQuestion: Scarier how: look or sound?")).toBe(true)
 			t.expect(
@@ -212,25 +217,28 @@ return t.spec("c0260 ./zn idea keeps the user's words and the confirmation", fun
 		end
 	)
 
-	it("AC4: --confirm records the user's words after the last round, and is refused by a dispatched run", function()
-		local dispatched = idea({ "idea", id, "--confirm", "yes, that is it" }, { ZN_DISPATCH = "1" })
-		t.expect(dispatched.ok).toBe(false)
-		t.expect(has(dispatched.stderr, "a dispatched run never confirms")).toBe(true)
-		t.expect(has(doc(), "## Confirmation")).toBe(false)
-		local blank = idea({ "idea", id, "--confirm", "  " })
-		t.expect(blank.ok).toBe(false)
-		local r = idea({ "idea", id, "--confirm", "yes, that is it" })
-		if not r.ok then
-			error(`--confirm failed: {r.stderr}{r.stdout}`, 0)
+	it(
+		"AC4: --confirm records the user's words after the last round, and is refused by a dispatched run",
+		function()
+			local dispatched = idea({ "idea", id, "--confirm", "yes, that is it" }, { ZN_DISPATCH = "1" })
+			t.expect(dispatched.ok).toBe(false)
+			t.expect(has(dispatched.stderr, "a dispatched run never confirms")).toBe(true)
+			t.expect(has(doc(), "## Confirmation")).toBe(false)
+			local blank = idea({ "idea", id, "--confirm", "  " })
+			t.expect(blank.ok).toBe(false)
+			local r = idea({ "idea", id, "--confirm", "yes, that is it" })
+			if not r.ok then
+				error(`--confirm failed: {r.stderr}{r.stdout}`, 0)
+			end
+			t.expect(has(doc(), "## Confirmation\nConfirmed (c0260-record, ")).toBe(true)
+			t.expect(has(doc(), ') after round 1: "yes, that is it"')).toBe(true)
+			local second = idea({ "idea", id, "--confirm", "again" })
+			t.expect(second.ok).toBe(false) -- one Confirmed line
+			local unattended = idea({ "idea", id, "--unattended" })
+			t.expect(unattended.ok).toBe(false)
+			t.expect(has(unattended.stderr, "is for a dispatched run")).toBe(true)
 		end
-		t.expect(has(doc(), "## Confirmation\nConfirmed (c0260-record, ")).toBe(true)
-		t.expect(has(doc(), ') after round 1: "yes, that is it"')).toBe(true)
-		local second = idea({ "idea", id, "--confirm", "again" })
-		t.expect(second.ok).toBe(false) -- one Confirmed line
-		local unattended = idea({ "idea", id, "--unattended" })
-		t.expect(unattended.ok).toBe(false)
-		t.expect(has(unattended.stderr, "is for a dispatched run")).toBe(true)
-	end)
+	)
 
 	it(
 		"AC4: a change after the confirmation is the next round; it drops the Confirmed line, and the new one names the last pass",
@@ -250,7 +258,8 @@ return t.spec("c0260 ./zn idea keeps the user's words and the confirmation", fun
 			t.expect(fs.isFile(`{dir}/idea-refute-002.md`)).toBe(true)
 			t.expect(fs.isFile(`{dir}/idea-review-004.md`)).toBe(true) -- the loop ran three passes (the cap), numbered on
 			t.expect(fs.isFile(`{dir}/idea-review-005.md`)).toBe(false)
-			t.expect(fs.readFile(`{dir}/idea-review-001.md`) ~= fs.readFile(`{dir}/idea-review-002.md`)).toBe(true)
+			t.expect(fs.readFile(`{dir}/idea-review-001.md`) ~= fs.readFile(`{dir}/idea-review-002.md`))
+				.toBe(true)
 			t.expect(has(doc(), "Confirmed (")).toBe(false) -- the idea changed: the old confirmation does not hold
 			-- a finding left open must be ruled by the user before the confirmation
 			local open = idea({ "idea", id, "--confirm", "fine" })
@@ -319,7 +328,10 @@ return t.spec("c0260 ./zn idea keeps the user's words and the confirmation", fun
 				"idea",
 				fid,
 				"--record",
-				recordFile("f2.md", "## Interview\n### Q2\nQuestion: F1 as shown\nAnswer: keep it, they said so\n"),
+				recordFile(
+					"f2.md",
+					"## Interview\n### Q2\nQuestion: F1 as shown\nAnswer: keep it, they said so\n"
+				),
 			})
 			t.expect(ruling.ok).toBe(true)
 			-- the record grew after the round: the idea is not confirmed as it now stands
@@ -408,7 +420,8 @@ return t.spec("c0260 ./zn idea keeps the user's words and the confirmation", fun
 			if not r.ok then
 				error(`dispatched idea failed: {r.stderr}{r.stdout}`, 0)
 			end
-			t.expect(has(fs.readFile(`{log}.challenge`), "answered only the questions in ## Interview")).toBe(true)
+			t.expect(has(fs.readFile(`{log}.challenge`), "answered only the questions in ## Interview"))
+				.toBe(true)
 			local u = idea({ "idea", other, "--unattended" }, { ZN_DISPATCH = "1" })
 			if not u.ok then
 				error(`--unattended failed: {u.stderr}{u.stdout}`, 0)

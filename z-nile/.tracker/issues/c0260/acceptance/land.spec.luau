@@ -57,7 +57,8 @@ end
 local function capture(name: string, slug: string): (string, string)
 	local wt = trOk(main, { "worktree", name })
 	identity(wt)
-	local made = trOk(wt, { "new", "issue", "c", slug, "--desc", `First line of {slug}.`, "--project", "pickman" })
+	local made =
+		trOk(wt, { "new", "issue", "c", slug, "--desc", `First line of {slug}.`, "--project", "pickman" })
 	local id = string.match(made, "(c%d%d%d%d)") :: string
 	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 	local doc = `{wt}/pickman/.tracker/issues/{id}/{id}.md`
@@ -75,7 +76,10 @@ end
 local ASK =
 	"\n## Ask (verbatim)\n### Message 2026-11-07\n```\nmake the ghosts scarrier, thx\n```\n\n## Interview\n### Q1\nQuestion: restate?\nAnswer: approve\n"
 local function challenged(wt: string, id: string)
-	fs.writeFile(docOf(wt, id), (string.gsub(fs.readFile(docOf(wt, id)), "idea: unchallenged", "idea: challenged", 1)))
+	fs.writeFile(
+		docOf(wt, id),
+		(string.gsub(fs.readFile(docOf(wt, id)), "idea: unchallenged", "idea: challenged", 1))
+	)
 end
 local function addAsk(wt: string, id: string, text: string)
 	fs.writeFile(docOf(wt, id), fs.readFile(docOf(wt, id)) .. text)
@@ -135,7 +139,8 @@ return t.spec("c0260 a capture lands its record", function(it)
 			t.expect(has(changed, `{CAPTURE}/{id}/{id}.md`)).toBe(true)
 			t.expect(has(changed, `{CAPTURE}/{id}/idea-review-001.md`)).toBe(true)
 			t.expect(has(changed, `{CAPTURE}/{id}/idea-refute-001.md`)).toBe(true)
-			t.expect(has(git(origin, { "show", `main:{CAPTURE}/{id}/{id}.md` }), "idea: challenged")).toBe(true)
+			t.expect(has(git(origin, { "show", `main:{CAPTURE}/{id}/{id}.md` }), "idea: challenged"))
+				.toBe(true)
 			t.expect(git(wt, { "rev-parse", "HEAD" })).toBe(tip())
 		end
 	)
@@ -143,8 +148,10 @@ return t.spec("c0260 a capture lands its record", function(it)
 	it(
 		"AC6: a second land appends a message to the Ask; it refuses to change what the Ask held, to edit a landed review, or to delete one",
 		function()
-			local first =
-				string.match(git(origin, { "log", "--format=%s", "main" }), "tracker: new (c%d+) alpha") :: string
+			local first = string.match(
+				git(origin, { "log", "--format=%s", "main" }),
+				"tracker: new (c%d+) alpha"
+			) :: string
 			local wt = trOk(main, { "worktree", "capture-b" })
 			identity(wt)
 			git(wt, { "pull", "-q", "origin", "main" })
@@ -179,7 +186,8 @@ return t.spec("c0260 a capture lands its record", function(it)
 			)
 			commit(wt)
 			trOk(wt, { "land" })
-			t.expect(has(git(origin, { "show", `main:{CAPTURE}/{first}/{first}.md` }), "and a map")).toBe(true)
+			t.expect(has(git(origin, { "show", `main:{CAPTURE}/{first}/{first}.md` }), "and a map"))
+				.toBe(true)
 		end
 	)
 
@@ -216,23 +224,29 @@ return t.spec("c0260 a capture lands its record", function(it)
 		end
 	)
 
-	it("AC6: a dispatched run (ZN_DISPATCH=1) cannot land a Confirmed line; the user's own land can", function()
-		local wt, id = capture("capture-conf", "confirm")
-		addAsk(wt, id, '\n## Confirmation\nConfirmed (user, 2026-11-08) after round 1: "yes"\n')
-		commit(wt)
-		local before = tip()
-		local r = fixture.exec(
-			wt,
-			"bash",
-			{ "scripts/tracker.sh", "land" },
-			{ env = { PICKMAN_LAND_GATE = "true", ZN_DISPATCH = "1" } }
-		)
-		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr, "only the user confirms")).toBe(true)
-		t.expect(tip()).toBe(before)
-		trOk(wt, { "land" }) -- the same record, landed by the user's own session
-		t.expect(has(git(origin, { "show", `main:{CAPTURE}/{id}/{id}.md` }), "Confirmed (user, 2026-11-08)")).toBe(true)
-	end)
+	it(
+		"AC6: a dispatched run (ZN_DISPATCH=1) cannot land a Confirmed line; the user's own land can",
+		function()
+			local wt, id = capture("capture-conf", "confirm")
+			addAsk(wt, id, '\n## Confirmation\nConfirmed (user, 2026-11-08) after round 1: "yes"\n')
+			commit(wt)
+			local before = tip()
+			local r = fixture.exec(
+				wt,
+				"bash",
+				{ "scripts/tracker.sh", "land" },
+				{ env = { PICKMAN_LAND_GATE = "true", ZN_DISPATCH = "1" } }
+			)
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr, "only the user confirms")).toBe(true)
+			t.expect(tip()).toBe(before)
+			trOk(wt, { "land" }) -- the same record, landed by the user's own session
+			t.expect(
+				has(git(origin, { "show", `main:{CAPTURE}/{id}/{id}.md` }), "Confirmed (user, 2026-11-08)")
+			)
+				.toBe(true)
+		end
+	)
 
 	it(
 		"AC6: only `./zn new --filed-by` writes the agent-filed marker: a land that adds, changes or removes it, or drops its Scope line, is refused",
@@ -283,7 +297,14 @@ return t.spec("c0260 a capture lands its record", function(it)
 			clean = git(wt2, { "rev-parse", "HEAD" })
 			local text = fs.readFile(doc)
 			attempt(
-				(string.gsub(text, "Source: lesson:z%-ticket/graph%-miss", "Source: agent:c0260/something-else", 1))
+				(
+					string.gsub(
+						text,
+						"Source: lesson:z%-ticket/graph%-miss",
+						"Source: agent:c0260/something-else",
+						1
+					)
+				)
 			)
 			attempt((string.gsub(text, "\n## Filed by %(agent%)\nSource: [^\n]*\n", "", 1)))
 			attempt((string.gsub(text, "\nScope decision %(user[^\n]*", "", 1)))

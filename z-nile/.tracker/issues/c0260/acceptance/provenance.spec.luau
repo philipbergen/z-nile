@@ -81,8 +81,10 @@ return t.spec("c0260 --confirm records the provenance when ./zn provenance exist
 		return trackerfix.tr(f, wt, args, e)
 	end
 	local function challenged(slug: string): (string, string)
-		local id =
-			string.match(trackerfix.trOk(f, wt, { "new", "issue", "c", slug, "--project", "pickman" }), "(c%d+)") :: string
+		local id = string.match(
+			trackerfix.trOk(f, wt, { "new", "issue", "c", slug, "--project", "pickman" }),
+			"(c%d+)"
+		) :: string
 		local file = `{f.base}/record.md`
 		fs.writeFile(file, RECORD)
 		t.expect(idea({ "idea", id, "--record", file }).ok).toBe(true)
@@ -111,18 +113,22 @@ return t.spec("c0260 --confirm records the provenance when ./zn provenance exist
 			local id = challenged("with-provenance")
 			local r = idea({ "idea", id, "--confirm", "yes" })
 			t.expect(r.ok).toBe(true)
-			t.expect(calls()).toBe(`provenance record {id} confirmed --actor human:c0260-provenance --detail round=1\n`)
+			t.expect(calls())
+				.toBe(`provenance record {id} confirmed --actor human:c0260-provenance --detail round=1\n`)
 		end
 	)
 
-	it("AC4: a call that fails leaves the line, exits 0 and tells the user to check before running it again", function()
-		local id, dir = challenged("failing-provenance")
-		pcall(fs.removeFile, provLog)
-		local r = idea({ "idea", id, "--confirm", "yes" }, { STUB_RC = "1" })
-		t.expect(r.ok).toBe(true)
-		t.expect(has(r.stdout, "check provenance.md on origin/main before running it again")).toBe(true)
-		t.expect(has(fs.readFile(`{dir}/{id}.md`), ') after round 1: "yes"')).toBe(true)
-	end)
+	it(
+		"AC4: a call that fails leaves the line, exits 0 and tells the user to check before running it again",
+		function()
+			local id, dir = challenged("failing-provenance")
+			pcall(fs.removeFile, provLog)
+			local r = idea({ "idea", id, "--confirm", "yes" }, { STUB_RC = "1" })
+			t.expect(r.ok).toBe(true)
+			t.expect(has(r.stdout, "check provenance.md on origin/main before running it again")).toBe(true)
+			t.expect(has(fs.readFile(`{dir}/{id}.md`), ') after round 1: "yes"')).toBe(true)
+		end
+	)
 
 	it("AC4: a dispatched capture's --unattended is not a confirmation and records nothing", function()
 		local id = challenged("unattended-provenance")

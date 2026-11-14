@@ -20,7 +20,8 @@ end
 local RECORD = "## Ask (verbatim)\n### Message 2026-11-07\n```\nmore ghosts\n```\n\n## Interview\nINTERVIEW\n\n"
 	.. "## Confirmation\nCONFIRMATION\n\n## Design\n"
 local CONFIRMED = 'Confirmed (user, 2026-11-07) after round 1: "yes"'
-local UNCONFIRMED = "Unconfirmed (unattended, 2026-11-07) after round 1: the dispatch was started with this ask"
+local UNCONFIRMED =
+	"Unconfirmed (unattended, 2026-11-07) after round 1: the dispatch was started with this ask"
 local function record(interview: string, confirmation: string): string
 	return (string.gsub(string.gsub(RECORD, "INTERVIEW", interview), "CONFIRMATION", confirmation))
 end
@@ -72,14 +73,17 @@ return t.spec("c0260 audit checks the capture record", function(it)
 		t.expect(errors(out) > before).toBe(true)
 	end)
 
-	it("an unmarked issue is never judged, even with a record of another shape (ten tickets hold one)", function()
-		local legacy =
-			'## Ask (verbatim)\n### Message 2026-11-11\n```\nx\n```\n\n## Interview\nfree prose\n\n## Idea\nI.\n\n## Idea review\n### Round 1\n- F1: fixed\n\n## Confirmation\nConfirmed (Phil, 2026-11-11) after round 3: "ok"\n\n## Design\n'
-		write(`{ITEM}/c0900.md`, front("ready", true) .. legacy)
-		t.expect(captureLines(audit())).toBe("")
-		write(`{ITEM}/c0900.md`, front("ready") .. legacy)
-		t.expect(captureLines(audit()) ~= "").toBe(true) -- marked, the same text is judged
-	end)
+	it(
+		"an unmarked issue is never judged, even with a record of another shape (ten tickets hold one)",
+		function()
+			local legacy =
+				'## Ask (verbatim)\n### Message 2026-11-11\n```\nx\n```\n\n## Interview\nfree prose\n\n## Idea\nI.\n\n## Idea review\n### Round 1\n- F1: fixed\n\n## Confirmation\nConfirmed (Phil, 2026-11-11) after round 3: "ok"\n\n## Design\n'
+			write(`{ITEM}/c0900.md`, front("ready", true) .. legacy)
+			t.expect(captureLines(audit())).toBe("")
+			write(`{ITEM}/c0900.md`, front("ready") .. legacy)
+			t.expect(captureLines(audit()) ~= "").toBe(true) -- marked, the same text is judged
+		end
+	)
 
 	it("a ready design with an idea point still unruled is an error; a reviewed one is not", function()
 		local open = "## Open to the human\n- F1: a point.\n\n"
@@ -107,19 +111,22 @@ return t.spec("c0260 audit checks the capture record", function(it)
 		t.expect(captureLines(audit())).toBe("")
 	end)
 
-	it("a designed issue whose last confirmation is still Unconfirmed is an error until the user confirms", function()
-		local unattended = front("reviewed") .. record(Q1TEXT, UNCONFIRMED)
-		write(`{ITEM}/c0900.md`, unattended)
-		t.expect(has(captureLines(audit()), "still Unconfirmed")).toBe(true)
-		local confirmed = front("reviewed")
-			.. record(
-				Q1TEXT .. "\n### Q2\nQuestion: how many?\nOptions: 1 | 2\nAnswer: 2",
-				UNCONFIRMED .. "\n" .. CONFIRMED
-			)
-		write(`{ITEM}/c0900.md`, confirmed)
-		t.expect(captureLines(audit())).toBe("")
-		fs.removeDir(base)
-	end)
+	it(
+		"a designed issue whose last confirmation is still Unconfirmed is an error until the user confirms",
+		function()
+			local unattended = front("reviewed") .. record(Q1TEXT, UNCONFIRMED)
+			write(`{ITEM}/c0900.md`, unattended)
+			t.expect(has(captureLines(audit()), "still Unconfirmed")).toBe(true)
+			local confirmed = front("reviewed")
+				.. record(
+					Q1TEXT .. "\n### Q2\nQuestion: how many?\nOptions: 1 | 2\nAnswer: 2",
+					UNCONFIRMED .. "\n" .. CONFIRMED
+				)
+			write(`{ITEM}/c0900.md`, confirmed)
+			t.expect(captureLines(audit())).toBe("")
+			fs.removeDir(base)
+		end
+	)
 
 	it(
 		"AC3: a marked issue at reviewed or ready needs the record or the marker; with a complete record, or unmarked, it is clean",

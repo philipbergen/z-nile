@@ -157,7 +157,15 @@ return t.spec("c0260 ./zn idea loops until the challenger approves, at most thre
 	trackerfix.trOk(f, wt, { "sync" })
 	local function idea(args: { string }, env: { [string]: string }?)
 		for _, name in
-			{ "count", "revisions", "challenge", "author", "fable", "fallback-challenge", "fallback-revision" }
+			{
+				"count",
+				"revisions",
+				"challenge",
+				"author",
+				"fable",
+				"fallback-challenge",
+				"fallback-revision",
+			}
 		do
 			pcall(fs.removeFile, `{log}.{name}`)
 		end
@@ -252,7 +260,8 @@ return t.spec("c0260 ./zn idea loops until the challenger approves, at most thre
 		function()
 			local id, dir = ticket("never-approved")
 			record(id)
-			local r = ok(idea({ "idea", id, "--text", "Ghosts." }, { LOOP_UNTIL = "9", LOOP_ANSWER = "revised" }))
+			local r =
+				ok(idea({ "idea", id, "--text", "Ghosts." }, { LOOP_UNTIL = "9", LOOP_ANSWER = "revised" }))
 			t.expect(has(r.stdout, "idea: rounds 3 of at most 3, not approved")).toBe(true)
 			t.expect(has(r.stdout, "idea: calls 6")).toBe(true) -- a draft, three challenges, two revisions
 			for _, n in { "001", "002", "003" } do
@@ -283,7 +292,12 @@ return t.spec("c0260 ./zn idea loops until the challenger approves, at most thre
 			t.expect(has(openPart(dir, id), "- F1:")).toBe(false)
 			local other, odir = ticket("dispute-kept")
 			record(other)
-			ok(idea({ "idea", other, "--text", "Ghosts." }, { LOOP_REPLIES = "f,f,f", LOOP_ANSWER = "disputed" }))
+			ok(
+				idea(
+					{ "idea", other, "--text", "Ghosts." },
+					{ LOOP_REPLIES = "f,f,f", LOOP_ANSWER = "disputed" }
+				)
+			)
 			local open = openPart(odir, other)
 			t.expect(has(open, "finding from call 3")).toBe(true)
 			t.expect(has(open, "finding from call 1")).toBe(false)
@@ -414,29 +428,37 @@ return t.spec("c0260 ./zn idea loops until the challenger approves, at most thre
 		end
 	)
 
-	it("AC12: the model that wrote a text, a fallback included and whatever its effort, never challenges it", function()
-		fs.writeFile(`{wt}/.models.toml`, rolesWith('["kimi", "grok"]'))
-		local id, dir = ticket("fallback-excluded")
-		record(id)
-		-- the author's first model fails from its second call on, so kimi writes the revision; the challenger's first model
-		-- fails at its second challenge, and kimi (who wrote the revision) must not take it over: grok does
-		ok(idea({ "idea", id, "--text", "Ghosts." }, { LOOP_UNTIL = "1", LOOP_FABLE_ONCE = "1", LOOP_FAIL_AT = "2" }))
-		t.expect(has(fs.readFile(`{log}.fallback-revision`), "kimi")).toBe(true)
-		t.expect(has(fs.readFile(`{log}.fallback-challenge`), "grok")).toBe(true)
-		t.expect(has(fs.readFile(`{log}.fallback-challenge`), "kimi")).toBe(false)
-		t.expect(fs.isFile(`{dir}/idea-review-002.md`)).toBe(true)
-		-- with grok gone the second challenge fails rather than let kimi challenge its own revision
-		fs.writeFile(`{wt}/.models.toml`, rolesWith('["kimi"]'))
-		local other, odir = ticket("fallback-none-left")
-		record(other)
-		local r = idea(
-			{ "idea", other, "--text", "Ghosts." },
-			{ LOOP_UNTIL = "1", LOOP_FABLE_ONCE = "1", LOOP_FAIL_AT = "2" }
-		)
-		t.expect(r.ok).toBe(false)
-		t.expect(fs.isFile(`{odir}/idea-review-001.md`)).toBe(true) -- pass 1 stays
-		t.expect(fs.isFile(`{log}.fallback-challenge`)).toBe(false) -- kimi wrote the revision and did not take over the challenge
-		fs.writeFile(`{wt}/.models.toml`, ROLES)
-		fs.removeDir(f.base)
-	end)
+	it(
+		"AC12: the model that wrote a text, a fallback included and whatever its effort, never challenges it",
+		function()
+			fs.writeFile(`{wt}/.models.toml`, rolesWith('["kimi", "grok"]'))
+			local id, dir = ticket("fallback-excluded")
+			record(id)
+			-- the author's first model fails from its second call on, so kimi writes the revision; the challenger's first model
+			-- fails at its second challenge, and kimi (who wrote the revision) must not take it over: grok does
+			ok(
+				idea(
+					{ "idea", id, "--text", "Ghosts." },
+					{ LOOP_UNTIL = "1", LOOP_FABLE_ONCE = "1", LOOP_FAIL_AT = "2" }
+				)
+			)
+			t.expect(has(fs.readFile(`{log}.fallback-revision`), "kimi")).toBe(true)
+			t.expect(has(fs.readFile(`{log}.fallback-challenge`), "grok")).toBe(true)
+			t.expect(has(fs.readFile(`{log}.fallback-challenge`), "kimi")).toBe(false)
+			t.expect(fs.isFile(`{dir}/idea-review-002.md`)).toBe(true)
+			-- with grok gone the second challenge fails rather than let kimi challenge its own revision
+			fs.writeFile(`{wt}/.models.toml`, rolesWith('["kimi"]'))
+			local other, odir = ticket("fallback-none-left")
+			record(other)
+			local r = idea(
+				{ "idea", other, "--text", "Ghosts." },
+				{ LOOP_UNTIL = "1", LOOP_FABLE_ONCE = "1", LOOP_FAIL_AT = "2" }
+			)
+			t.expect(r.ok).toBe(false)
+			t.expect(fs.isFile(`{odir}/idea-review-001.md`)).toBe(true) -- pass 1 stays
+			t.expect(fs.isFile(`{log}.fallback-challenge`)).toBe(false) -- kimi wrote the revision and did not take over the challenge
+			fs.writeFile(`{wt}/.models.toml`, ROLES)
+			fs.removeDir(f.base)
+		end
+	)
 end)
