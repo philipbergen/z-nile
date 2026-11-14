@@ -140,7 +140,7 @@ local function askText(p: PromptInput): string
 	elseif p.step == "zz-review" then
 		return `Nobody will answer a question. A review never blocks the item: when a decision needs the user, say so in your review, and the item's author blocks it. {open}`
 	end
-	return `Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`escalation.md\` in {p.id}'s folder (\`## Question\`, \`## What was tried\`, \`## Open findings or error\` and \`## Options\`, each option a bullet that starts with one of amend-design, approve, split, retry or abort and exactly one ending (recommended)) and run \`./zn block {p.id} <review-exhausted|design-gap|needs-decision|red-gate|quota|tripwire>\`, then stop. {open}`
+	return `Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`escalation.md\` in {p.id}'s folder (\`## Question\`, \`## What was tried\`, \`## Open findings or error\` and \`## Options\`, each option a bullet that starts with one of amend-design, approve, split, retry or abort and exactly one ending (recommended)) and run \`./zn block {p.id} <review-exhausted|design-gap|needs-decision|red-gate|quota|tripwire>\`, then stop. Under ./zn dispatch, do not run \`./zn done\`: the dispatcher lands the layers below (c0252). A review that leaves a refutation or an unclosed high is review-exhausted: write \`## Open to the human\` in the item's document (one bullet per finding: \`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>\`), copy those bullets verbatim under \`## Open findings or error\` in \`escalation.md\`, run \`./zn block {p.id} review-exhausted\`, and never rule on them yourself. After the user resolves it, run \`./zn rulings {p.id}\` before you go on.`
 end
 
 -- The prompt of a model step. It names the skill's file, which every CLI reads itself; no skill text,
@@ -373,7 +373,7 @@ function dispatch.next(f: Facts): Action
 	if #f.openHuman > 0 then
 		return stop(
 			dispatch.EXIT.user,
-			`needs the user: {f.id} has {table.concat(f.openHuman, ", ")} under ## Open to the human with no ruling; rule on each in the document, then ./zn dispatch retry {f.id}`
+			`needs the user: {f.id} has {table.concat(f.openHuman, ", ")} under ## Open to the human with no ruling; write escalation.md with them under ## Open findings or error and run ./zn block {f.id} review-exhausted (the user rules with ./zn resolve {f.id} <decision> --rule <Fn>=\"<ruling>\", then ./zn rulings {f.id})`
 		)
 	end
 	if f.last and f.last.outcome == "tripwire" and f.last.step == "merge-check" then

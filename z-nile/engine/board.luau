@@ -872,6 +872,15 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 					table.insert(problems, `{path} is missing: {r.id} is blocked without its note`)
 				end
 				blockedOf[r.id] = { reason = r.front.blocked or "", question = question }
+				-- the members the raft lists wait with it, whatever their own raft: line says (a draft raft's members have
+				-- none on origin/main until the rafting PR lands)
+				if list == rawRafts then
+					for _, mid in listOf(r.front.issues) do
+						if blockedOf[mid] == nil then
+							blockedOf[mid] = blockedOf[r.id]
+						end
+					end
+				end
 			end
 		end
 	end

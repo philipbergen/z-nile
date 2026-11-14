@@ -90,6 +90,11 @@ usage: ./zn <command> ...
   ready <R-id|issue-id>                         claim the raft, move it to active/ on origin/main, write <root>/rafts/active/<R>/prompt.md
   stop <R-id>                                   give back a readied or started raft: move it out of active/ on origin/main, remove its prompt
   stop <issue>                                  give back one active issue whose raft is retired, missing or empty
+  block <id> <reason> [--layer <issue>]         give a stuck item to the human: file the escalation.md written in the item's worktree
+                                                (an issue in design, a draft raft, or a readied raft: it and its members move out of active/)
+  resolve <id> <decision> [--answer <text> | --answer-file <path>] [--said <text>] [--title <text>] [--rule <Fn>=<ruling>]
+                                                the human's decision on a blocked item (retry, approve, amend-design, split, abort)
+  rulings <id>                                  write the rulings a resolve recorded under the bullets of ## Open to the human
   start <R-id>                                  open the next layer: branch R0010/1/c0010, claim commit, draft PR on the layer below
   finish <issue-id>                             make that layer one commit ("<issue>: <title>") once its checks are green,
                                                 and write that ticket's watch files from the layer's own diff
@@ -1900,11 +1905,15 @@ function cmd.fold(pos: { string })
 			solo = m.id
 		end
 	end
+	local held = esc.heldBy()
 	for _, id in ids do
 		local issue = store.get(id)
 		local owner = store.readFront(issue.doc).raft or ""
 		if owner ~= "" then
 			fail(`{id} already belongs to {owner}`)
+		end
+		if held[id] then
+			fail(`{id} is listed by {held[id]}, which is blocked: ./zn resolve {held[id]} <decision> first`)
 		end
 		refuseUnraftable(issue, raft)
 		if store.readFront(issue.doc).solo == "true" and #members + #ids > 1 then
@@ -4374,9 +4383,19 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
 	end
 	local issues: { raftplan.Issue } = {}
 	local slugOf: { [string]: string } = {}
+	local held = esc.heldBy()
+	local heldSkips: { string } = {}
 	for _, it in store.all("issue") do
 		local front = frontOf(fs.readFile(it.doc))
 		slugOf[it.id] = it.slug
+		if held[it.id] then
+			-- c0250: a blocked raft lists it: it waits with the raft
+			table.insert(
+				heldSkips,
+				`skip {it.id}: {held[it.id]} lists it and is blocked: ./zn resolve {held[it.id]} <decision> first`
+			)
+			continue
+		end
 		table.insert(issues, {
 			id = it.id,
 			type = store.typeOf(it),
@@ -4424,7 +4443,10 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
 	for _, sk in skips do
 		print(`skip {sk.id}: {sk.reason}`)
 	end
-	if #ops == 0 and #skips == 0 then
+	for _, line in heldSkips do
+		print(line)
+	end
+	if #ops == 0 and #skips == 0 and #heldSkips == 0 then
 		print("raft-plan: nothing to raft (no prepared issue without a raft)")
 	end
 	if opts["--apply"] then
@@ -6497,13 +6519,45 @@ function esc.actorOf(): (string, boolean)
 	return actor :: string, hint.agent
 end
 
--- `block <id> <reason>` (c0250): files the escalation note the worker wrote in the item's folder here and gives the
--- item to the human. One tracker commit on origin/main: an issue in design or a draft raft in rafting gets `blocked-…`
--- and `blocked: <reason>`; a readied raft and its active members move to the backlog blocked, as `stop` moves them.
-function cmd.block(pos: { string })
+-- the running CLI session's id, as sessionread reads it (Claude's, else Kimi's), or nil when none is known
+function esc.sessionId(): string?
+	for _, name in { "CLAUDE_CODE_SESSION_ID", "KIMI_SESSION_ID", "KIMI_CODE_SESSION_ID" } do
+		local v = process.env[name]
+		if v ~= nil and v ~= "" then
+			return v
+		end
+	end
+	return nil
+end
+
+-- the issues that a blocked raft lists (its members wait with it, whatever their own raft: line says): id -> raft id
+function esc.heldBy(): { [string]: string }
+	local out: { [string]: string } = {}
+	for _, r in store.all("raft") do
+		local front = frontOf(fs.readFile(r.doc))
+		if statusLib.effective(front, r.state) == "blocked" then
+			for _, mid in store.idList(front.issues) do
+				out[mid] = r.id
+			end
+		end
+	end
+	return out
+end
+
+-- `block <id> <reason> [--layer <issue>]` (c0250): files the escalation note the worker wrote in the item's folder here
+-- and gives the item to the human. One tracker commit on origin/main: an issue in design or a draft raft in rafting
+-- gets `blocked-…` and `blocked: <reason>`; a readied raft and its active members move to the backlog blocked, as
+-- `stop` moves them. On an item that is already blocked whose note is missing or unreadable it only re-files the note.
+function cmd.block(pos: { string }, opts: { [string]: { string } }?)
+	local given: { [string]: { string } } = opts or {}
+	for k in given do
+		if k ~= "--layer" then
+			fail(`usage: block <id> <reason> [--layer <issue>] (unknown option {k})`)
+		end
+	end
 	local id, reason = pos[1], pos[2]
 	if not id or not reason or #pos > 2 then
-		fail("usage: block <id> <reason>")
+		fail("usage: block <id> <reason> [--layer <issue>]")
 	end
 	if hasOrigin() and inMainCheckout() then
 		fail(
@@ -6519,6 +6573,12 @@ function cmd.block(pos: { string })
 	if not table.find(esc.lib.REASONS, reason) then
 		fail(`{reason} is not a reason ({table.concat(esc.lib.REASONS, ", ")})`)
 	end
+	local actor, agent = esc.actorOf()
+	if reason == "tripwire" and agent then
+		fail(
+			"block tripwire is the person's: after a tripwire the person checks the checkout, then runs ./zn block <id> tripwire; an agent session is refused"
+		)
+	end
 	refuseStale()
 	local isRaft = store.isRaftId(id)
 	local _, listed = originTree()
@@ -6527,9 +6587,16 @@ function cmd.block(pos: { string })
 	if not shown.ok then
 		fail(`cannot read {originDoc} on origin/main`)
 	end
-	local from = statusLib.effective(frontOf(shown.stdout), stateOfPath(originDoc))
-	if from ~= "preparing" and from ~= "active" then
+	local originFront = frontOf(shown.stdout)
+	local from = statusLib.effective(originFront, stateOfPath(originDoc))
+	if from ~= "preparing" and from ~= "active" and from ~= "blocked" then
 		fail(`{id} is {from} on origin/main: only a preparing issue or raft, or an active raft, blocks`)
+	end
+	if from == "active" and not isRaft then
+		local raftId = originFront.raft or "its raft"
+		fail(
+			`{id} is in {raftId}, readied: block the raft: ./zn block {raftId} {reason} --layer {id}`
+		)
 	end
 	local dir = string.match(originDoc, "^(.*)/[^/]+$") :: string
 	local notePath = `{dir}/escalation.md`
@@ -6547,20 +6614,94 @@ function cmd.block(pos: { string })
 	if checkWhy then
 		fail(`{notePath}: {checkWhy}`)
 	end
-	local branch = sh.git({ "branch", "--show-current" })
-	local layer: string? = nil
-	if isRaft and from == "active" then
-		local l = stack.parse(branch)
-		layer = if l and l.raft == id then l.issue else nil
+	-- the members of a raft that was running: those still in active/ on origin/main (a blocked raft being re-filed: the
+	-- blocked ones), in the raft's issues: order, which is the layers' order
+	local refile = from == "blocked"
+	local runFrom: string = if refile then "preparing" else from
+	local claim = originFront.status
+	local candidates: { string } = {}
+	local memberPaths: { [string]: string } = {}
+	if isRaft then
+		local byId: { [string]: string } = {}
+		for _, p in listed do
+			local mid, rel = publish.itemPath(p)
+			if mid and store.isIssueId(mid) and rel == `{mid}.md` then
+				byId[mid] = p
+			end
+		end
+		for _, mid in store.idList(originFront.issues) do
+			local p = byId[mid]
+			local t = if p then sh.run("git", { "show", `origin/main:{p}` }) else nil
+			if p and t and t.ok and frontOf(t.stdout).raft == id then
+				local mstate = stateOfPath(p)
+				local mstatus = statusLib.effective(frontOf(t.stdout), mstate)
+				if refile then
+					if mstatus == "blocked" then
+						table.insert(candidates, mid)
+						memberPaths[mid] = p
+						runFrom = "active"
+					end
+				elseif from == "active" and mstate == "active" and frontOf(t.stdout).status == claim then
+					table.insert(candidates, mid)
+					memberPaths[mid] = p
+				end
+			end
+		end
 	end
-	local actor = esc.actorOf()
+	if refile then
+		local filed = sh.run("git", { "show", `origin/main:{notePath}` })
+		local filedNote = if filed.ok then esc.lib.parse(filed.stdout) else nil
+		if filedNote and not filedNote.resolution then
+			fail(`{id} is blocked and its note is filed: nothing to re-file`)
+		end
+	end
+	local layer: string? = nil
+	if isRaft and runFrom == "active" then
+		local want = if given["--layer"] then given["--layer"][1] else nil
+		if want then
+			if not table.find(candidates, want) then
+				local why = if store.find(want) and (store.find(want) :: store.Item).state == "done"
+					then `{want} landed (it is in done/)`
+					else `{want} is not a member of {id} still in active/`
+				fail(`--layer {want}: {why}; the Layer is one of {table.concat(candidates, ", ")}`)
+			end
+			layer = want
+		else
+			layer = candidates[1]
+		end
+	elseif given["--layer"] then
+		fail("--layer names the layer of a readied raft: it is only for ./zn block <R> <reason>")
+	end
+	-- review-exhausted: the ids of the unruled bullets under `## Open to the human`, in the item's document here and in
+	-- the Layer member's
+	local open: { string } = {}
+	if reason == "review-exhausted" then
+		local docs: { string } = {}
+		local here = store.find(id)
+		if here and fs.isFile(here.doc) then
+			table.insert(docs, fs.readFile(here.doc))
+		end
+		local layerItem = if layer then store.find(layer :: string) else nil
+		if layerItem and fs.isFile(layerItem.doc) then
+			table.insert(docs, fs.readFile(layerItem.doc))
+		end
+		for _, text in docs do
+			for _, fid in openlist.pending(text) do
+				if not table.find(open, fid) then
+					table.insert(open, fid)
+				end
+			end
+		end
+	end
 	local when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string
 	local stamped = esc.lib.stamp(noteText, {
 		item = id,
 		reason = reason,
-		from = from,
+		from = runFrom,
 		layer = layer,
 		actor = actor,
+		session = esc.sessionId(),
+		open = open,
 		when = when,
 	})
 	local value = freshStamp("blocked")
@@ -6587,7 +6728,28 @@ function cmd.block(pos: { string })
 	local r: publish.Result
 	local members: { string } = {}
 	local message = `tracker: {id} blocked {reason}`
-	if from == "preparing" then
+	if refile then
+		-- the recovery path: the item stays blocked, the note is published (an unreadable one is kept as an archive)
+		r = published(publish.commit(".", function(paths, read)
+			local doc = docPath(paths, id)
+			local text = doc and read(doc)
+			if not doc or not text then
+				return `{id} is not on origin/main`
+			end
+			if statusLib.effective(frontOf(text), stateOfPath(doc)) ~= "blocked" then
+				return `{id} is not blocked on origin/main`
+			end
+			local have = frontOf(text).blocked
+			if have and have ~= reason then
+				return `{id} is blocked as {have}: re-file its note with ./zn block {id} {have}`
+			end
+			local changes = noteChanges(paths, read, string.match(doc, "^(.*)/[^/]+$") :: string)
+			if not have then
+				table.insert(changes, 1, { path = doc, content = withFront(text, "blocked", reason) })
+			end
+			return changes
+		end, message, nil, true))
+	elseif from == "preparing" then
 		refuseStale()
 		r = published(publish.commit(".", function(paths, read)
 			local doc = docPath(paths, id)
@@ -6609,17 +6771,10 @@ function cmd.block(pos: { string })
 		end, message, nil, true))
 	else
 		-- a readied raft: the raft and every member still in active/ (the claim's set, as stop reads it)
-		local claim = frontOf(shown.stdout).status
 		local ids: { string } = { id }
-		for _, p in listed do
-			local mid, rel = publish.itemPath(p)
-			if mid and store.isIssueId(mid) and rel == `{mid}.md` and stateOfPath(p) == "active" then
-				local t = sh.run("git", { "show", `origin/main:{p}` })
-				if t.ok and frontOf(t.stdout).status == claim and frontOf(t.stdout).raft == id then
-					table.insert(ids, mid)
-					table.insert(members, mid)
-				end
-			end
+		for _, mid in candidates do
+			table.insert(ids, mid)
+			table.insert(members, mid)
 		end
 		local function stillActive(item: string, now: string): string?
 			return if now == "active"
@@ -6640,40 +6795,65 @@ function cmd.block(pos: { string })
 		fs.removeFile(notePath)
 	end
 	local question = esc.lib.question(note :: any)
-	if isRaft and from == "active" then
-		local prompt = promptPath((select(3, publish.itemPath(originDoc))) :: string, id)
-		if fs.isFile(prompt) then
-			fs.removeFile(prompt)
-		end
-		for _, claimPath in { claimFile(id), `{mainRoot()}/{claimFile(id)}` } do
-			if fs.isFile(claimPath) then
-				fs.removeFile(claimPath)
+	if isRaft and runFrom == "active" then
+		if not refile then
+			local prompt = promptPath((select(3, publish.itemPath(originDoc))) :: string, id)
+			if fs.isFile(prompt) then
+				fs.removeFile(prompt)
 			end
-		end
-		-- the main checkout follows origin/main when it can (a clean main with nothing local to lose)
-		local before = sh.run("git", { "-C", mainRoot(), "rev-parse", "HEAD" })
-		local pulled = sh.run("git", { "-C", mainRoot(), "pull", "--ff-only", "--quiet", "origin", "main" })
-		if pulled.ok and before.ok then
-			local after = sh.run("git", { "-C", mainRoot(), "rev-parse", "HEAD" })
-			if after.ok then
-				sweepStale(mainRoot(), sh.trim(before.stdout), sh.trim(after.stdout))
+			for _, claimPath in { claimFile(id), `{mainRoot()}/{claimFile(id)}` } do
+				if fs.isFile(claimPath) then
+					fs.removeFile(claimPath)
+				end
+			end
+			-- the main checkout follows origin/main when it can (a clean main with nothing local to lose)
+			local before = sh.run("git", { "-C", mainRoot(), "rev-parse", "HEAD" })
+			local pulled = sh.run("git", { "-C", mainRoot(), "pull", "--ff-only", "--quiet", "origin", "main" })
+			if pulled.ok and before.ok then
+				local after = sh.run("git", { "-C", mainRoot(), "rev-parse", "HEAD" })
+				if after.ok then
+					sweepStale(mainRoot(), sh.trim(before.stdout), sh.trim(after.stdout))
+				end
 			end
 		end
 		local layers = layergit.layersOf(id)
 		local names: { string } = {}
+		local layerBranch: string? = nil
 		for _, l in layers do
 			table.insert(names, l.name)
+			if l.issue == layer then
+				layerBranch = l.name
+			end
 		end
 		if #names > 0 then
 			print(
 				`{table.concat(names, ", ")} and their pull requests are left as they are: close or keep them yourself`
 			)
 		end
-	end
-	if onGitHub() and branch ~= "" then
-		local c = sh.run("gh", { "pr", "comment", branch, "--body", `BLOCKED: {reason}: {question}` })
-		if not c.ok then
-			stdio.ewrite(`warning: could not comment on the pull request of {branch}: {sh.trim(c.stderr)}\n`)
+		-- the Layer's own pull request is told, whatever branch this checkout is on (F3)
+		if onGitHub() then
+			if layerBranch == nil then
+				stdio.ewrite(`warning: {layer} has no layer branch yet: no pull request to comment on\n`)
+			else
+				local found = sh.run(
+					"gh",
+					{ "pr", "list", "--head", layerBranch :: string, "--state", "open", "--json", "url", "-q", ".[0].url" }
+				)
+				local url = if found.ok then sh.trim(found.stdout) else ""
+				if url == "" or url == "null" then
+					stdio.ewrite(`warning: {layerBranch} has no pull request yet: nothing to comment on\n`)
+				else
+					local c = sh.run(
+						"gh",
+						{ "pr", "comment", layerBranch :: string, "--body", `BLOCKED: {reason}: {question}` }
+					)
+					if not c.ok then
+						stdio.ewrite(
+							`warning: could not comment on the pull request of {layerBranch}: {sh.trim(c.stderr)}\n`
+						)
+					end
+				end
+			end
 		end
 	end
 	print(
@@ -6690,33 +6870,42 @@ function esc.intoProblem(text: string, line: string): string
 	end
 	local body = start + #"\n## Problem\n"
 	local nextHeading = string.find(text, "\n## ", body, true) or (#text + 1)
-	local section = string.gsub(string.sub(text, body, nextHeading - 1), "%s+$", "")
-	return string.sub(text, 1, body - 1) .. section .. "\n" .. line .. "\n" .. string.sub(text, nextHeading)
+	-- after the last non-blank line of the section: every line already there is kept, blank lines included
+	local section = string.sub(text, body, nextHeading - 1)
+	local content = string.gsub(section, "%s+$", "")
+	local tail = string.sub(section, #content + 1)
+	return string.sub(text, 1, body - 1) .. content .. "\n" .. line .. (if tail == "" then "\n" else tail) .. string.sub(text, nextHeading)
 end
 
 function esc.withoutFront(text: string, key: string): string
 	return (string.gsub(text, `\n{key}:[^\n]*\n`, "\n", 1))
 end
 
--- `resolve <id> <decision> [--answer <text> | --answer-file <path>] [--said <text>] [--title <text>]` (c0250): the
--- human's decision on a blocked item, one tracker commit on origin/main. An interactive agent runs it on the user's
--- word and quotes it with --said; a headless session is refused.
+-- `resolve <id> <decision> [--answer <text> | --answer-file <path>] [--said <text>] [--title <text>] [--rule <Fn>=<words>]…`
+-- (c0250): the human's decision on a blocked item, one tracker commit on origin/main. An interactive agent runs it on
+-- the user's word and quotes it with --said; a headless session, and the session that filed the block, are refused.
 function cmd.resolve(pos: { string }, opts: { [string]: { string } })
+	local usage =
+		"usage: resolve <id> <decision> [--answer <text> | --answer-file <path>] [--said <text>] [--title <text>] [--rule <Fn>=<ruling>]"
 	for k in opts do
-		if k ~= "--answer" and k ~= "--answer-file" and k ~= "--said" and k ~= "--title" then
-			fail(
-				`usage: resolve <id> <decision> [--answer <text> | --answer-file <path>] [--said <text>] [--title <text>] (unknown option {k})`
-			)
+		if
+			k ~= "--answer"
+			and k ~= "--answer-file"
+			and k ~= "--said"
+			and k ~= "--title"
+			and k ~= "--rule"
+		then
+			fail(`{usage} (unknown option {k})`)
 		end
 	end
 	local id, decision = pos[1], pos[2]
 	if not id or not decision or #pos > 2 then
-		fail(
-			"usage: resolve <id> <decision> [--answer <text> | --answer-file <path>] [--said <text>] [--title <text>]"
-		)
+		fail(usage)
 	end
-	if process.env.ZN_DISPATCH and process.env.ZN_DISPATCH ~= "" then
-		fail("resolve is the human's: a headless session is refused")
+	for _, name in { "ZN_DISPATCH", "ZN_HEADLESS" } do
+		if process.env[name] and process.env[name] ~= "" then
+			fail("resolve is the human's: a headless session is refused")
+		end
 	end
 	local actor, agent = esc.actorOf()
 	local said = if opts["--said"] then opts["--said"][1] else nil
@@ -6746,6 +6935,14 @@ function cmd.resolve(pos: { string }, opts: { [string]: { string } })
 	if decision == "split" and (not newTitle or newTitle == "") then
 		fail('split needs --title "<the new issue\'s title>"')
 	end
+	local rules: { { id: string, words: string } } = {}
+	for _, raw in (opts["--rule"] :: any) or ({} :: { string }) do
+		local rid, words = string.match(raw, "^(%w+)=(.+)$")
+		if not rid or not words or sh.trim(words) == "" then
+			fail(`--rule {raw}: give --rule <Fn>="<the ruling>"`)
+		end
+		table.insert(rules, { id = rid :: string, words = sh.trim(words :: string) })
+	end
 	if not publishing() then
 		fail("resolve needs an origin remote (PICKMAN_PUBLISH=0 disables it)")
 	end
@@ -6756,10 +6953,12 @@ function cmd.resolve(pos: { string }, opts: { [string]: { string } })
 	local words = if agent then said :: string else answer
 	local newId = ""
 	local parked = false -- an aborted raft that was running: its branches and PRs are the human's to close
+	local movedTo = "" -- an emptied raft: where its folder went
 	refuseStale()
 	local r = published(publish.commit(".", function(paths, read, _roots, counter)
 		newId = ""
 		parked = false
+		movedTo = ""
 		local doc = docPath(paths, id)
 		local text = doc and read(doc)
 		if not doc or not text then
@@ -6782,19 +6981,58 @@ function cmd.resolve(pos: { string }, opts: { [string]: { string } })
 		if note.resolution then
 			return `{dir}/escalation.md is already resolved`
 		end
+		local mine = esc.sessionId()
+		if mine and note.session and mine == note.session then
+			return `this session filed the block of {id}: an agent never resolves a block its own session filed`
+		end
 		local from = note.from
 		if from ~= "preparing" and from ~= "active" then
 			return `{dir}/escalation.md has no From: line (preparing or active)`
 		end
-		local plan = esc.lib.plan(from :: "preparing" | "active", isRaft, decision)
+		-- the rulings: one --rule per open id of the note, and no other
+		for _, oid in note.open do
+			local found = false
+			for _, rule in rules do
+				found = found or rule.id == oid
+			end
+			if not found then
+				return `{dir}/escalation.md leaves {oid} open: add --rule {oid}="<the ruling>" (one per open id: {table.concat(
+					note.open,
+					", "
+				)})`
+			end
+		end
+		for _, rule in rules do
+			if not table.find(note.open, rule.id) then
+				return `--rule {rule.id}: the note's Open: lists {if #note.open > 0
+					then table.concat(note.open, ", ")
+					else "no finding"}`
+			end
+		end
+		local okPlan, plan = pcall(esc.lib.plan, from :: "preparing" | "active", isRaft, decision)
+		if not okPlan then
+			return `{dir}/escalation.md: {plan}`
+		end
+		local p = plan :: any
+		if p.refuse then
+			return p.refuse
+		end
 		parked = decision == "abort" and isRaft and from == "active"
 		local changes: { publish.Change } = {}
 		local function add(path: string, content: string, mode: string?)
 			table.insert(changes, { path = path, content = content, mode = mode })
 		end
+		local resolutionOf = {
+			decision = decision,
+			answer = answer,
+			by = actor,
+			said = if agent then said else nil,
+			ruled = rules,
+			when = when,
+		}
 		-- the member the note's Layer names (a raft that was running), else the item itself
 		local layerId = note.layer
-		local targetId = if plan.unfold or (plan.decided and isRaft) then layerId else id
+		local targetId = if p.unfold or (p.decided and isRaft) or p.regroup then layerId else id
 		local targetDoc: string? = nil
 		local targetText: string? = nil
 		if targetId and targetId ~= id then
@@ -6803,11 +7041,11 @@ function cmd.resolve(pos: { string }, opts: { [string]: { string } })
 			if not targetDoc or not targetText then
 				return `the note's Layer {targetId} is not on origin/main`
 			end
-		elseif (plan.unfold or plan.decided) and isRaft and from == "active" then
+		elseif (p.unfold or p.decided or p.regroup) and isRaft and from == "active" then
 			return `{dir}/escalation.md names no Layer: the member to change is unknown`
 		end
 		-- split's new issue
-		if plan.split then
+		if p.split then
 			local itemRoot = select(3, publish.itemPath(doc)) :: string
 			local ids = idsOf(paths, "issue")
 			for _, local_ in localIds("issue") do
@@ -6817,6 +7055,7 @@ function cmd.resolve(pos: { string }, opts: { [string]: { string } })
 			if err then
 				return err
 			end
+			-- the new issue takes the type of the issue it is carved from (the Layer member, else the item)
 			local prefix = string.sub(
 				if targetId and targetId ~= id then targetId else (if isRaft then "c0000" else id),
 				1,
@@ -6851,58 +7090,70 @@ function cmd.resolve(pos: { string }, opts: { [string]: { string } })
 				table.insert(changes, raise)
 			end
 		end
-		local decidedLine = `Decided with the user ({date}), resolve: "{answer or words or decision}"`
-		local scopeLine = `Scope decision (user, {date}): "{words or decision}" (split into {newId})`
+		local decidedLine = esc.lib.decidedLine(date, decision, answer, if agent then said else nil)
+		local scopeLine = esc.lib.scopeLine(date, words or decision, newId)
 		local function problemLines(t: string): string
 			local out = t
-			if plan.decided then
+			if p.decided then
 				out = esc.intoProblem(out, decidedLine)
 			end
-			if plan.split then
+			if p.split then
 				out = esc.intoProblem(out, scopeLine)
 			end
 			return out
 		end
 		-- the item itself
 		local itemText = esc.withoutFront(text, "blocked")
-		itemText = withFront(itemText, "status", stamp(plan.status))
-		if plan.design then
-			itemText = withFront(itemText, "design", plan.design)
+		itemText = withFront(itemText, "status", stamp(p.status))
+		if p.design then
+			itemText = withFront(itemText, "design", p.design)
 		end
 		if not targetDoc then
 			itemText = problemLines(itemText)
 		end
 		-- a raft that was running: its blocked members go back with it; the Layer member may leave
+		local emptied = false
+		local landedMember = false
+		local layerOut = ""
 		if isRaft and from == "active" then
 			local issuesList = store.idList(front.issues)
 			local kept: { string } = {}
+			local unlanded = 0
 			for _, mid in issuesList do
-				if not (plan.unfold and mid == layerId) then
+				if not (p.unfold and mid == layerId) then
 					table.insert(kept, mid)
+					local mp = docPath(paths, mid)
+					if mp and stateOfPath(mp) == "done" then
+						landedMember = true
+					else
+						unlanded += 1
+					end
 				end
 			end
-			if plan.unfold then
+			if p.unfold then
 				itemText = withFront(itemText, "issues", listValue(kept))
 				local map, problem = raftplan.parseGrouped(front.grouped)
 				if not problem and layerId and map[layerId] then
 					map[layerId] = nil
 					itemText = withFront(itemText, "grouped", raftplan.renderGrouped(map))
 				end
+				emptied = unlanded == 0
 			end
 			for _, mid in issuesList do
 				local mp = docPath(paths, mid)
 				local mt = mp and read(mp)
-				local stays = not (plan.unfold and mid == layerId)
+				local stays = not (p.unfold and mid == layerId)
 				if stays and mp and mt and statusLib.effective(frontOf(mt), stateOfPath(mp)) == "blocked" then
 					local out = esc.withoutFront(mt, "blocked")
 					out = withFront(out, "status", stamp("prepared"))
 					if mid == layerId then
 						out = problemLines(out)
+						layerOut = out
 					end
 					add(mp, out)
 				end
 			end
-			if plan.unfold and targetDoc and targetText then
+			if p.unfold and targetDoc and targetText then
 				local out = esc.withoutFront(targetText, "blocked")
 				out = withFront(out, "status", stamp("new"))
 				out = withFront(out, "raft", "")
@@ -6911,36 +7162,80 @@ function cmd.resolve(pos: { string }, opts: { [string]: { string } })
 				add(targetDoc, out)
 				-- the member's folder gets a copy of the resolved note
 				local memberDir = string.match(targetDoc, "^(.*)/[^/]+$") :: string
-				add(
-					`{memberDir}/escalation.md`,
-					esc.lib.resolution(noteText, {
-						decision = decision,
-						answer = answer,
-						by = actor,
-						said = if agent then said else nil,
-						when = when,
-					})
-				)
+				add(`{memberDir}/escalation.md`, esc.lib.resolution(noteText, resolutionOf))
+			end
+			-- an approve changes the Layer member's contract on the user's word: its `grouped:` entry and every
+			-- coherence review's `Grouped:` line for it are re-recorded as compact and remap do (keepRecords), so the
+			-- change needs no new raft-mode round; the user's own `./zn approve <member>` still gates `ready` (Q8)
+			if p.regroup and layerId and targetDoc and layerOut ~= "" then
+				local map, problem = raftplan.parseGrouped(front.grouped)
+				local old = map[layerId]
+				if not problem and old then
+					local memberDir = string.match(targetDoc, "^(.*)/[^/]+$") :: string
+					local files = treeFolderFiles(paths, read, memberDir)
+					files[`{layerId}.md`] = esc.withoutFront(targetText :: string, "blocked")
+					if raftplan.recordHash(layerId, files) == old then
+						files[`{layerId}.md`] = layerOut
+						local fresh = raftplan.recordHash(layerId, files)
+						map[layerId] = fresh
+						itemText = withFront(itemText, "grouped", raftplan.renderGrouped(map))
+						for _, rp in paths do
+							local rid2, rrel = publish.itemPath(rp)
+							if rid2 == id and rrel and string.match(rrel, "^design%-review%-%d+%.md$") then
+								local rt = read(rp) :: string
+								local swapped = raftplan.rerecord(rt, layerId, old, fresh)
+								if swapped ~= rt then
+									add(rp, swapped)
+								end
+							end
+						end
+					end
+				end
 			end
 		end
-		add(doc, itemText)
-		add(
-			`{dir}/escalation.md`,
-			esc.lib.resolution(noteText, {
-				decision = decision,
-				answer = answer,
-				by = actor,
-				said = if agent then said else nil,
-				when = when,
-			})
-		)
+		local resolvedNote = esc.lib.resolution(noteText, resolutionOf)
 		local rec = `{dir}/provenance.md`
-		local detail = `decision={decision}{if agent then ` said="{said}"` else ""}`
+		local detail =
+			`decision={decision}{if agent then ` said="{said}"` else ""}`
 		local recorded, recWhy = provenance.record(read(rec), id, "unblocked", actor, detail, when)
 		if not recorded then
 			return recWhy or "not a record"
 		end
-		add(rec, recorded)
+		if emptied then
+			-- no unlanded member is left: the raft is a finished one (a member landed) or a retired one (none did),
+			-- and its folder goes there whole, with the note and the record extended
+			local target = if landedMember then "done" else "retired"
+			local rootDir = string.match(dir, "^(.*)/rafts/[^/]+$") :: string
+			local dst = `{rootDir}/rafts/{target}/{id}`
+			itemText = esc.withoutFront(itemText, "status")
+			if not landedMember then
+				itemText = withFront(itemText, "retired", "emptied")
+			end
+			movedTo = `{target}/`
+			for _, p2 in paths do
+				local pid, prel = publish.itemPath(p2)
+				if pid == id and prel and string.sub(p2, 1, #dir + 1) == dir .. "/" and not string.find(prel, "/", 1, true) then
+					local content = read(p2) :: string
+					if prel == `{id}.md` then
+						content = itemText
+					elseif prel == "check.sh" then
+						content = pathsLib.rewrite(content, { [id] = dst })
+					elseif prel == "escalation.md" then
+						content = resolvedNote
+					elseif prel == "provenance.md" then
+						content = recorded :: string
+					end
+					table.insert(changes, { path = `{dst}/{prel}`, from = p2, content = content })
+				end
+			end
+			if not read(rec) then
+				table.insert(changes, { path = `{dst}/provenance.md`, content = recorded :: string })
+			end
+			return changes
+		end
+		add(doc, itemText)
+		add(`{dir}/escalation.md`, resolvedNote)
+		add(rec, recorded :: string)
 		return changes
 	end, `tracker: {id} resolve {decision}`, nil, true))
 	if not r.ok then
@@ -6964,7 +7259,62 @@ function cmd.resolve(pos: { string }, opts: { [string]: { string } })
 			)
 		end
 	end
-	print(`resolved {id}: {decision}{if newId ~= "" then ` (new issue {newId})` else ""}`)
+	print(
+		`resolved {id}: {decision}{if newId ~= "" then ` (new issue {newId})` else ""}{if movedTo ~= "" then ` (the raft has no unlanded member: its folder is now in rafts/{movedTo})` else ""}`
+	)
+end
+
+-- `rulings <id>` (c0250): writes `Ruled (user, <date>): <words>` under each unruled bullet of the item's `## Open to the
+-- human`, from the rulings the user's `./zn resolve` recorded in the note on origin/main. Run in the step's worktree; it
+-- refuses a bullet with no recorded ruling. No agent writes a ruling of its own.
+function cmd.rulings(pos: { string })
+	local id = pos[1]
+	if not id or #pos > 1 or not (store.isIssueId(id) or store.isRaftId(id)) then
+		fail("usage: rulings <id>")
+	end
+	if hasOrigin() and inMainCheckout() then
+		fail("rulings writes into the step's worktree, not the main checkout")
+	end
+	if hasOrigin() then
+		sh.run("git", { "fetch", "-q", "origin", "main" })
+	end
+	local _, listed = originTree()
+	local originDoc = docPath(listed, id) or fail(`{id} is not on origin/main`)
+	local dir = string.match(originDoc, "^(.*)/[^/]+$") :: string
+	local shown = sh.run("git", { "show", `origin/main:{dir}/escalation.md` })
+	if not shown.ok then
+		fail(`{id} has no {dir}/escalation.md on origin/main`)
+	end
+	local note, why = esc.lib.parse(shown.stdout)
+	if not note then
+		fail(`{dir}/escalation.md: {why}`)
+	end
+	local docs: { string } = {}
+	local item = store.get(id)
+	table.insert(docs, item.doc)
+	if item.kind == "raft" then
+		for _, m in store.members(id) do
+			table.insert(docs, m.doc)
+		end
+	end
+	local today_ = today()
+	local wrote: { string } = {}
+	for _, d in docs do
+		local text = fs.readFile(d)
+		if #openlist.pending(text) > 0 then
+			local out, err = esc.lib.applyRulings(text, note :: any, today_)
+			if not out then
+				fail(`{d}: {err}`)
+			end
+			fs.writeFile(d, out :: string)
+			table.insert(wrote, d)
+		end
+	end
+	if #wrote == 0 then
+		print(`{id}: no unruled bullet under ## Open to the human`)
+	else
+		print(`ruled {id}: {table.concat(wrote, ", ")}`)
+	end
 end
 
 local SPEND_PHASES = { "capture", "prep", "design-review", "deliver" }

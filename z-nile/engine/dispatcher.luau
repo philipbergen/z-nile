@@ -322,6 +322,24 @@ local function exchangeBlock(ctx: Ctx, st: State, step: string, target: string):
 	return exchangeAdd(st, "question", escalation.question(note :: escalation.Note), step)
 end
 
+-- c0250 (F17): wherever a run resumes an item whose exchange ends in its note's question, the note's `## Resolution` is
+-- copied as the answer first (`./zn dispatch <id>` and `retry` both). nil, or why not.
+local function exchangeResolution(ctx: Ctx, st: State, id: string): string?
+	if id == "" or id == "new" then
+		return nil
+	end
+	local resolved = ctx.origin(id)
+	local entries = exchangeRead(st)
+	local tail = if entries then entries[#entries] else nil
+	if resolved and resolved.note and resolved.status ~= "blocked" and tail and tail.kind == "question" then
+		local note = escalation.parse(resolved.note :: string)
+		if note and note.resolution then
+			return exchangeAdd(st, "answer", escalation.answerText(note.resolution))
+		end
+	end
+	return nil
+end
+
 -- `--answer <text>` or `--answer-file <path>` of a retry: the answer, nil when none was given, or why it is refused.
 local function readAnswer(opts: { [string]: { string } }): (string?, string?)
 	local text, file = opts["--answer"], opts["--answer-file"]
@@ -1462,6 +1480,7 @@ function dispatcher.modelStep(
 	-- the item z-ticket made: the one new issue on origin/main
 	local target = id
 	local exProblem: string? = nil
+	local exIgnored = false
 	-- the issues THIS step's pushes added (the broker recorded each push before making it): other sessions' never count
 	local zMade: { string } = {}
 	local zAsked = fs.isFile(`{stateDir}/questions.md`)
@@ -1481,6 +1500,14 @@ function dispatcher.modelStep(
 	local exAfter, exAfterWhy = exchangeRead(st)
 	if exAfter == nil then
 		exProblem = `the step changed the exchange or left it unreadable: {exAfterWhy}`
+	elseif id ~= "" and id ~= "new" and (fs.isFile(`{stateDir}/questions.md`) or isLink(`{stateDir}/questions.md`)) then
+		-- c0250 (F10): nothing reads a questions.md for an item; the step's question is its block. The file is set aside
+		-- and never copied into the exchange, so `retry` re-runs the step without it.
+		local parentRun = process.env.ZN_DISPATCH_DIR
+		exProblem = if parentRun and parentRun ~= ""
+			then `this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md and runs ./zn block {id} <reason> (the item is blocked, not this step; the file is set aside as questions-ignored-N.md)`
+			else `{step} on {id} left questions.md, which nothing reads for an item: write escalation.md in {id}'s folder and run ./zn block {id} <reason> (the file is set aside as questions-ignored-N.md)`
+		exIgnored = true
 	elseif not (zAsked and #zMade > 0) then -- a z-ticket that made an issue and asked fails below: its question is no message
 		local why = exchangeQuestion(st, step)
 		if not why then
@@ -1508,7 +1535,10 @@ function dispatcher.modelStep(
 		-- the question stays to be read, but it is no longer a waiting one: the failure is what stops the chain
 		local qf = `{stateDir}/questions.md`
 		if fs.isFile(qf) or isLink(qf) then
-			fs.move(qf, freeName(stateDir, "questions-refused-", ".md", true))
+			fs.move(
+				qf,
+				freeName(stateDir, if exIgnored then "questions-ignored-" else "questions-refused-", ".md", true)
+			)
 		end
 	end
 	if step == "z-ticket" and outcome == "ok" then
@@ -2347,6 +2377,11 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 	end
 	st.mode = "chain"
 	for _ = 1, dispatch.MAX_ACTIONS do
+		local resumed = exchangeResolution(ctx, st, id)
+		if resumed then
+			print(`stop: the exchange of {id} cannot take the resolution: {resumed}`)
+			return dispatch.EXIT.failure
+		end
 		local f = dispatcher.facts(ctx, st, id, description)
 		local action = dispatch.next(f)
 		print(describeAction(action))
@@ -2753,17 +2788,9 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 		end
 		-- c0250: after a resolve, the note's resolution is the answer to the question the block put into the exchange
 		if id ~= "new" and not waiting then
-			local resolved = ctx.origin(id)
-			local lastNow = exchangeRead(st)
-			local tail = if lastNow then lastNow[#lastNow] else nil
-			if resolved and resolved.note and tail and tail.kind == "question" then
-				local note = escalation.parse(resolved.note :: string)
-				if note and note.resolution then
-					local added = exchangeAdd(st, "answer", escalation.answerText(note.resolution))
-					if added then
-						return refuse(`the exchange of {id} cannot take the resolution: {added}`)
-					end
-				end
+			local added = exchangeResolution(ctx, st, id)
+			if added then
+				return refuse(`the exchange of {id} cannot take the resolution: {added}`)
 			end
 		end
 		local step, mode = st.step, st.mode

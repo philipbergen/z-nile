@@ -1,6 +1,7 @@
 --!strict
 -- Whole-tree tracker audit: every problem, never just the first. Reads the tree with plain directory listings, so a
 -- malformed tree (which store.find refuses) can still be described. See c0880.
+local escalation = require("./escalation")
 local fs = require("@lune/fs")
 local ids = require("./ids")
 local process = require("@lune/process")
@@ -217,6 +218,37 @@ function audit.run(root: string): { Problem }
 			end
 			if not fm.slug or fm.slug == "" then
 				add("error", "no-slug", f.path, `{f.id}.md has no slug:`)
+			end
+			-- c0250: a blocked item holds a reason from the closed list and an unresolved note that parses (a member of a
+			-- blocked raft is covered by the raft's note); `blocked:` belongs to a blocked item only
+			local isBlocked = string.match(fm.status or "", "^blocked%-") ~= nil
+			local reasonOf = fm.blocked or ""
+			if isBlocked then
+				if reasonOf == "" then
+					add("error", "blocked-no-reason", f.path, `{f.id} is blocked without a blocked: line: ./zn block {f.id} <reason> sets it and re-files its note`)
+				elseif not table.find(escalation.REASONS, reasonOf) then
+					add("error", "blocked-bad-reason", f.path, `{f.id}'s blocked: {reasonOf} is not a reason ({table.concat(escalation.REASONS, ", ")}): ./zn resolve {f.id} <decision> clears the block`)
+				end
+				local notePath = `{abs}/escalation.md`
+				local ownNote = (fm.raft or "") == ""
+				if ownNote then
+					local why: string? = nil
+					if not fs.isFile(notePath) then
+						why = "has no escalation.md"
+					else
+						local note, parseWhy = escalation.parse(fs.readFile(notePath))
+						if not note then
+							why = `has an escalation.md that does not parse ({parseWhy})`
+						elseif note.resolution then
+							why = "has only a resolved escalation.md"
+						end
+					end
+					if why then
+						add("error", "blocked-no-note", f.path, `{f.id} is blocked but {why}: ./zn block {f.id} {if reasonOf ~= "" then reasonOf else "<reason>"} re-files the note`)
+					end
+				end
+			elseif fm.blocked ~= nil and fm.blocked ~= "" then
+				add("error", "blocked-stray", f.path, `{f.id} has blocked: {fm.blocked} but is not blocked: remove the line, or ./zn block {f.id} {fm.blocked} if it is preparing`)
 			end
 		else
 			local legacy = nil

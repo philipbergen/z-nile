@@ -2,6 +2,7 @@
 -- Pushes a tracker-only commit to origin/main with git plumbing (mktree, no index). Never touches the caller's working
 -- tree, index, HEAD or branch. See c0510.
 local broker = require("./broker")
+local escalationLib = require("./escalation")
 local ids = require("./ids")
 local ledger = require("./ledger")
 local pathsLib = require("./paths")
@@ -120,7 +121,14 @@ function publish.allowed(path: string, roots: { string }, counter: string?, esca
 	return rel == `{id}.md`
 		or rel == "check.sh"
 		or rel == "provenance.md"
-		or (escalation == true and (rel == "escalation.md" or string.match(rel, "^escalation%-%d%d%d%.md$") ~= nil))
+		or (
+			escalation == true
+			and (
+				rel == "escalation.md"
+				or string.match(rel, "^escalation%-%d%d%d%.md$") ~= nil
+				or (not isIssue(id) and string.match(rel, "^design%-review%-%d%d%d%.md$") ~= nil)
+			)
+		)
 		or (isIssue(id) and (rel == "spend.md" or rel == "approval.md"))
 end
 
@@ -133,7 +141,7 @@ end
 -- frontmatter. A published edit of an existing document may differ from origin's only in that line.
 -- `escalation` (c0250: a `blocked` or `resolve` commit) also drops the `blocked:`, `design:`, `raft:` and `issues:`
 -- lines, and the Decided and Scope decision lines a resolve adds to the Problem.
-local ESCALATION_KEYS = { "status", "blocked", "design", "raft", "issues", "grouped" }
+local ESCALATION_KEYS = { "status", "blocked", "design", "raft", "issues", "grouped", "retired" }
 
 local function withoutStatus(text: string, escalation: boolean?): string?
 	local head, block, rest = string.match(text, "^(%-%-%-\n)(.-\n)(%-%-%-\n.*)$")
@@ -152,26 +160,105 @@ local function withoutStatus(text: string, escalation: boolean?): string?
 			return nil
 		end
 	end
-	if escalation then
-		rest = string.gsub(rest, "\nDecided with the user %(%d[^\n]*%), resolve: [^\n]*", "")
-		rest = string.gsub(rest, "\nScope decision %(user, %d[^\n]*", "")
-	end
 	-- c0248: `ready` marks a raft `layers: reviewed` (its layers are reviewed one by one); that line is the tool's, as
 	-- the status line is
 	kept = string.gsub(kept, "\nlayers: reviewed", "")
 	return head .. kept .. rest
 end
 
--- The number of Decided and Scope lines a resolve adds: a published change may add them, never remove one.
-local function escalationLines(text: string): number
-	local n = 0
-	for _ in string.gmatch(text, "\nDecided with the user %(%d[^\n]*%), resolve: ") do
-		n += 1
+-- c0250 (a `blocked` or `resolve` commit): why `after` may not replace the document `before`, or nil. The front matter
+-- may change only the keys in `allowed`; every line of the body is kept, in order, and the only lines added are a
+-- Decided or Scope decision line inside `## Problem`.
+local function escalationDocDiff(before: string, after: string, allowed: { string }): string?
+	local bh, bk, br = string.match(before, "^(%-%-%-\n)(.-\n)(%-%-%-\n.*)$")
+	local ah, ak, ar = string.match(after, "^(%-%-%-\n)(.-\n)(%-%-%-\n.*)$")
+	if not bh or not bk or not br or not ah or not ak or not ar then
+		return "the document has no well-formed front matter"
 	end
-	for _ in string.gmatch(text, "\nScope decision %(user, %d") do
-		n += 1
+	local function keyed(block: string): ({ [string]: string }, { string })
+		local map: { [string]: string } = {}
+		local order: { string } = {}
+		for line in string.gmatch(block, "([^\n]*)\n") do
+			local key, value = string.match(line, "^([%w_]+):%s?(.*)$")
+			if not key or not value then
+				return map, { line }
+			end
+			if map[key] ~= nil then
+				return map, { `{key} twice` }
+			end
+			map[key] = value
+			table.insert(order, key)
+		end
+		return map, order
 	end
-	return n
+	local bm, bo = keyed(bk)
+	local am, ao = keyed(ak)
+	local touched: { string } = {}
+	for _, key in ao do
+		if bm[key] ~= am[key] then
+			table.insert(touched, key)
+		end
+	end
+	for _, key in bo do
+		if am[key] == nil then
+			table.insert(touched, key)
+		end
+	end
+	for _, key in touched do
+		if not table.find(allowed, key) then
+			return `its {key}: line may not change here (allowed: {table.concat(allowed, ", ")})`
+		end
+	end
+	-- the rest of the front matter keeps its order: the keys both texts hold, in their order
+	local common = {}
+	for _, key in bo do
+		if am[key] ~= nil and not table.find(touched, key) then
+			table.insert(common, key)
+		end
+	end
+	local at = 1
+	for _, key in ao do
+		if common[at] == key then
+			at += 1
+		elseif table.find(common, key) then
+			return "its front matter lines were reordered"
+		end
+	end
+	-- the body: a subsequence rule
+	local bl = string.split(br, "\n")
+	local section = ""
+	local i = 1
+	for _, line in string.split(ar, "\n") do
+		local heading = string.match(line, "^## (.-)%s*$")
+		if heading then
+			section = heading
+		end
+		if bl[i] == line then
+			i += 1
+		elseif
+			section == "Problem"
+			and (
+				string.match(line, "^Decided with the user %(%d%d%d%d%-%d%d%-%d%d%), resolve [%a%-]+: ")
+				or string.match(line, "^Scope decision %(user, %d%d%d%d%-%d%d%-%d%d%): ")
+			)
+		then
+			continue -- an added line
+		else
+			return "only a Decided or Scope decision line inside ## Problem may be added, and no other line may change or go"
+		end
+	end
+	if i <= #bl then
+		return "a line of the document on origin/main is missing (a Decided or Scope decision line is never removed or edited)"
+	end
+	return nil
+end
+
+-- A coherence review changed by a resolve: only its `Grouped:` lines differ.
+local function groupedOnly(before: string, after: string): boolean
+	local function strip(text: string): string
+		return (string.gsub(text, "\nGrouped: %[[^\n]*%]", "\nGrouped:"))
+	end
+	return strip("\n" .. before) == strip("\n" .. after)
 end
 
 local function git(
@@ -254,6 +341,19 @@ local function makeTree(
 	return tree, nil, #input == 0
 end
 
+-- itemPath for a move: a raft folder's `retired/` level is read as the raft's own (c0250: an emptied raft goes there)
+local function movePath(path: string): (string?, string?, string?)
+	local id, rel, root = publish.itemPath(path)
+	if id then
+		return id, rel, root
+	end
+	local plain = string.gsub(path, "/rafts/retired/", "/rafts/", 1)
+	if plain ~= path then
+		return publish.itemPath(plain)
+	end
+	return nil, nil, nil
+end
+
 -- Checks every move (a change with `from`) in `out` against origin: whole item directories between the backlog and
 -- active/, files carried byte for byte (the document may change its status, check.sh its item paths). Returns the
 -- source directories of the moves, or a reason. A move's mode is set to its source's. See c0067.
@@ -280,8 +380,8 @@ local function validateMoves(
 				return sources, `{from} is moved twice in one publish`
 			end
 			froms[from] = true
-			local fid, frel, froot = publish.itemPath(from)
-			local pid, prel, proot = publish.itemPath(c.path)
+			local fid, frel, froot = movePath(from)
+			local pid, prel, proot = movePath(c.path)
 			if not fid or not frel or not pid or not prel then
 				return sources, `{from} -> {c.path}: both sides of a move must be item files`
 			end
@@ -303,7 +403,15 @@ local function validateMoves(
 			if src == dst then
 				return sources, `{from} -> {c.path}: a move changes the directory`
 			end
-			if string.find(src .. "/", "/done/", 1, true) or string.find(dst .. "/", "/done/", 1, true) then
+			-- c0250: a resolve that leaves a raft no unlanded member sends its whole folder to done/ or retired/
+			local finished = escalation == true
+				and string.match(fid :: string, "^R%d%d%d%d$") ~= nil
+				and (
+					string.match(dst, "/rafts/done/R%d%d%d%d$") ~= nil
+					or string.match(dst, "/rafts/retired/R%d%d%d%d$") ~= nil
+				)
+				and string.match(src, "/rafts/R%d%d%d%d$") ~= nil
+			if not finished and (string.find(src .. "/", "/done/", 1, true) or string.find(dst .. "/", "/done/", 1, true)) then
 				return sources, `{from} -> {c.path}: published moves never touch done/`
 			end
 			if (srcOf[fid] and srcOf[fid] ~= src) or (dirs[fid] and dirs[fid] ~= dst) then
@@ -323,8 +431,8 @@ local function validateMoves(
 		if not from then
 			continue
 		end
-		local id, rel = publish.itemPath(from)
-		local _, toRel = publish.itemPath(c.path)
+		local id, rel = movePath(from)
+		local _, toRel = movePath(c.path)
 		local dir = itemDir(c.path, toRel :: string)
 		if table.find(sources, dir) then
 			return sources, `{c.path} is inside {dir}, which this publish moves away`
@@ -348,6 +456,16 @@ local function validateMoves(
 			want = c.content
 		elseif rel == "check.sh" then
 			want = pathsLib.rewrite(old, dirs)
+		elseif escalation and rel == "escalation.md" and string.sub(c.content, 1, #old) == old then
+			-- an emptied raft's note, extended by the resolution
+			want = c.content
+		elseif
+			escalation
+			and rel == "provenance.md"
+			and string.sub(c.content, 1, #old) == old
+			and provenance.publishProblem(old, c.content, id :: string, { "unblocked" }) == nil
+		then
+			want = c.content
 		end
 		if c.content ~= want then
 			return sources,
@@ -460,6 +578,32 @@ function publish.commit(
 		if why then
 			return fail(why)
 		end
+		-- c0250: the item of a block or resolve is the one whose note this commit writes; its members are the issues its
+		-- document lists on origin/main
+		local escItem: string? = nil
+		local escMembers: { [string]: boolean } = {}
+		if escalation then
+			for _, c in out do
+				local nid, nrel = movePath(c.path)
+				if nid and nrel and (nrel == "escalation.md" or string.match(nrel, "^escalation%-%d%d%d%.md$")) then
+					if not escItem or string.match(nid, "^R") then
+						escItem = nid
+					end
+				end
+			end
+			if escItem and string.match(escItem, "^R%d%d%d%d$") then
+				for p in onOrigin do
+					local pid, prel = publish.itemPath(p)
+					if pid == escItem and prel == `{escItem}.md` then
+						local text = read(p)
+						local list = text and string.match(text, "\nissues: %[([^\n]*)%]\n")
+						for mid in string.gmatch(list or "", "[fdc]%d%d%d%d") do
+							escMembers[mid] = true
+						end
+					end
+				end
+			end
+		end
 		for _, c in out do
 			if c.from then
 				continue -- validated above, byte for byte against origin
@@ -548,8 +692,19 @@ function publish.commit(
 				continue
 			end
 			if escalation and string.match(c.path, "/escalation%.md$") and existing then
-				-- the note is appended to; a note that was resolved is kept under its archive name first
-				if string.sub(c.content, 1, #existing) ~= existing then
+				-- the note is appended to (a `## Resolution` only); a note that was resolved or cannot be read is kept
+				-- under its archive name first
+				if string.sub(c.content, 1, #existing) == existing then
+					local added = string.sub(c.content, #existing + 1)
+					if
+						string.find(existing, "\n## Resolution\n", 1, true)
+						or not string.match(added, "^\n+## Resolution\n")
+					then
+						return fail(
+							`{c.path}: the note on origin/main is only appended to, by one ## Resolution, and only while unresolved`
+						)
+					end
+				else
 					local dir = string.match(c.path, "^(.*)/escalation%.md$") :: string
 					local kept = false
 					for _, other in out do
@@ -562,10 +717,14 @@ function publish.commit(
 							kept = true
 						end
 					end
-					if not (kept and string.find(existing, "\n## Resolution\n", 1, true)) then
+					local readable = escalationLib.parse(existing)
+					if not (kept and (not readable or string.find(existing, "\n## Resolution\n", 1, true))) then
 						return fail(
 							`{c.path}: the note on origin/main is only appended to, or kept as escalation-NNN.md once resolved`
 						)
+					end
+					if not escalationLib.parse(c.content) then
+						return fail(`{c.path}: not an escalation note that parses`)
 					end
 				end
 				continue
@@ -577,19 +736,37 @@ function publish.commit(
 				continue
 			end
 			if escalation and string.match(c.path, "/escalation%.md$") then
+				if not escalationLib.parse(c.content) then
+					return fail(`{c.path}: not an escalation note that parses`)
+				end
+				continue
+			end
+			if existing and escalation then
+				local cid, crel = publish.itemPath(c.path)
+				if crel and string.match(crel, "^design%-review%-%d%d%d%.md$") then
+					if not groupedOnly(existing, c.content) then
+						return fail(`{c.path}: a resolve may change only the Grouped: lines of a coherence review`)
+					end
+					continue
+				end
+				-- the item and its members only; the keys by role
+				local role: string? = if cid == escItem then "item" elseif escMembers[cid or ""] then "member" else nil
+				if not role then
+					return fail(
+						`{c.path}: {cid} is neither the item {escItem} of this block or resolve nor one of its members`
+					)
+				end
+				local keys = if role == "item"
+					then { "status", "blocked", "design", "issues", "grouped", "retired", "layers" }
+					else { "status", "blocked", "design", "raft", "layers" }
+				local reason = escalationDocDiff(existing, c.content, keys)
+				if reason then
+					return fail(`{c.path}: {reason}`)
+				end
 				continue
 			end
 			if existing then
-				local before, after =
-					withoutStatus(existing, escalation), withoutStatus(c.content, escalation)
-				if
-					escalation
-					and before
-					and after
-					and escalationLines(c.content) < escalationLines(existing)
-				then
-					return fail(`{c.path}: a Decided or Scope decision line is never removed`)
-				end
+				local before, after = withoutStatus(existing, escalation), withoutStatus(c.content, escalation)
 				if not before or not after or before ~= after then
 					return fail(
 						`{c.path}: a published change to an existing document may only edit its status: line`
