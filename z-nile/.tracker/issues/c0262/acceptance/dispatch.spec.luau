@@ -155,6 +155,7 @@ return t.spec("c0262 dispatching a ticket's final review", function(it)
 				PATH = `{h.bin}:{process.env.PATH}`,
 				ZN_AGENT_TOKEN_FILE = h.token,
 				GH_TOKEN = "the-users-token",
+				ZN_FINAL_VIEW_ROOT = `{f.base}/views`,
 			}
 			local function zn(args: { string }): fixture.Result
 				return trackerfix.tr(f, wt, args, env)
@@ -167,6 +168,11 @@ return t.spec("c0262 dispatching a ticket's final review", function(it)
 			git(wt, { "add", "-A" })
 			git(wt, { "commit", "-qm", "c0010 implementation" })
 			git(wt, { "push", "-q", "origin", "HEAD:refs/heads/R0010/1/c0010" })
+			-- a review the ticket's state cannot read (the usual `Verdict: approve`) is not placed, and the step fails
+			fakecli.mode(h, "claude.zz-review", "reviewer")
+			local unreadable = zn({ "dispatch", "zz-review", "c0010", "--mode", "final" })
+			t.expect(unreadable.ok).toBe(false)
+			t.expect(fs.isFile(`{wt}/pickman/.tracker/issues/active/c0010/final-review-001.md`)).toBe(false)
 			fakecli.mode(h, "claude.zz-review", "script")
 			fs.writeFile(`{h.fakes}/script.sh`, SCRIPT)
 			local dir = "pickman/.tracker/issues/active/c0010"
@@ -176,7 +182,10 @@ return t.spec("c0262 dispatching a ticket's final review", function(it)
 				error(first.stdout .. first.stderr)
 			end
 			local log = fakecli.log(h)
-			t.expect(has(log, "/.cache/final/c0010")).toBe(true)
+			t.expect(has(log, `cwd={fixture.physical(f.base .. "/views/c0010")}`)).toBe(true)
+			-- not under any checkout of the fixture (no CLAUDE.md or AGENTS.md above it)
+			t.expect(has(log, `cwd={fixture.physical(wt)}`)).toBe(false)
+			t.expect(has(log, "Open to the human")).toBe(false)
 			t.expect(has(log, "README.md")).toBe(true)
 			t.expect(has(log, "z-nile/skills/zz-review/SKILL.md")).toBe(false)
 			t.expect(fs.isFile(`{wt}/{dir}/final-review-001.md`)).toBe(true)
@@ -202,4 +211,11 @@ return t.spec("c0262 dispatching a ticket's final review", function(it)
 			t.expect(fs.isFile(`{wt}/{dir}/final-review-002.md`)).toBe(true)
 		end
 	)
+
+	it("AC11: with no override the view folder is outside every checkout", function()
+		local dir = require("@znile/engine/finalread").viewDir("c0010")
+		t.expect(string.sub(dir, 1, #TOP) == TOP).toBe(false)
+		t.expect(string.find(dir, "/.cache/", 1, true) == nil).toBe(true)
+		t.expect(string.match(dir, "/zn%-final/c0010$") ~= nil).toBe(true)
+	end)
 end)

@@ -147,7 +147,7 @@ return t.spec("c0262 the final review on a real layer", function(it)
 				'#!/bin/sh\ncase "$1 $2" in\n  "pr list") echo 1; exit 0 ;;\n  "pr create") echo https://github.com/x/y/pull/1; exit 0 ;;\n  "pr view") echo main; exit 0 ;;\n  "pr edit") exit 0 ;;\nesac\nexit 0\n'
 			)
 			process.exec("chmod", { "+x", `{bin}/gh` })
-			local env = { PATH = `{bin}:{process.env.PATH or ""}` }
+			local env = { PATH = `{bin}:{process.env.PATH or ""}`, ZN_FINAL_VIEW_ROOT = `{f.base}/views` }
 			trackerfix.trOk(f, f.main, { "ready", "R0010" })
 			local wt = trackerfix.trOk(f, f.main, { "worktree", "R0010" })
 			local function zn(args: { string }): fixture.Result
@@ -161,9 +161,9 @@ return t.spec("c0262 the final review on a real layer", function(it)
 				return (string.gsub(r.stdout, "%s+$", ""))
 			end
 
+			local dir = "pickman/.tracker/issues/active/c0010"
 			znOk({ "start", "R0010" })
 			write(wt, "pickman/src/alpha.luau", "--!strict\nreturn { alpha = 1 }\n")
-			local dir = "pickman/.tracker/issues/active/c0010"
 			write(wt, `{dir}/design-review-001.md`, "SECRET-REVIEW-TRAIL\n")
 			write(wt, `{dir}/harvest.md`, "SECRET-HARVEST\n")
 			git(wt, { "add", "-A" })
@@ -171,16 +171,27 @@ return t.spec("c0262 the final review on a real layer", function(it)
 
 			-- finished and unreviewed: the worker's next action is the ticket's final review, before any next layer
 			znOk({ "finish", "c0010" })
-			t.expect(has(znOk({ "work", "next", "R0010" }), "final-review-ticket")).toBe(true)
-
-			-- no review yet
+			t.expect(has(znOk({ "work", "next", "R0010" }), ": final-review-ticket c0010 - ")).toBe(true)
 			t.expect(has(znOk({ "final", "c0010" }), "c0010: none")).toBe(true)
+			-- an older review sits on origin/main in the ticket's folder (a ticket that went back to z-design leaves
+			-- its reviews there): it counts, and it judged another view
+			trackerfix.elsewhere(
+				f,
+				{ [`{dir}/final-review-001.md`] = reviewText("on-course", string.rep("a", 64), nil) },
+				"an earlier review"
+			)
+			git(wt, { "fetch", "-q", "origin" })
+			-- the layer does not carry it yet: the review is read from origin/main's folder, and judged another view
+			t.expect(has(znOk({ "final", "c0010" }), "c0010: review-again")).toBe(true)
+			-- restacked onto the moved main, the layer carries it too
+			znOk({ "restack", "R0010" })
+			t.expect(has(znOk({ "final", "c0010" }), "c0010: review-again")).toBe(true)
 
-			-- the view
+			-- the view, written outside every checkout
 			local listed = znOk({ "final", "c0010", "--view" })
-			local view = `{wt}/.cache/final/c0010`
+			local view = `{f.base}/views/c0010`
+			t.expect(has(listed, `{view}`)).toBe(true)
 			t.expect(has(listed, "ask.md")).toBe(true)
-			t.expect(has(listed, "diff.patch")).toBe(true)
 			local diff = fs.readFile(`{view}/diff.patch`)
 			t.expect(has(diff, "alpha.luau")).toBe(true)
 			t.expect(has(diff, "SECRET-REVIEW-TRAIL")).toBe(false)
@@ -201,44 +212,80 @@ return t.spec("c0262 the final review on a real layer", function(it)
 			t.expect(has(everything, "SECRET")).toBe(false)
 			t.expect(has(everything, "A compromise")).toBe(false)
 			t.expect(has(fs.readFile(`{view}/design.md`), "alpha = 1")).toBe(true)
-			local readme = fs.readFile(`{view}/README.md`)
-			local id = string.match(readme, "View: (%x+)") or ""
+			t.expect(fs.isFile(`{view}/design-changes.patch`)).toBe(false)
+			local id = string.match(fs.readFile(`{view}/README.md`), "View: (%x+)") or ""
 			t.expect(#id).toBe(64)
 
-			-- off course on this view: redo by gap; a later view makes it review-again
-			write(wt, `{dir}/final-review-001.md`, reviewText("off-course", id, "implementation"))
+			-- off course on this view: redo by gap. done refuses.
+			write(wt, `{dir}/final-review-002.md`, reviewText("off-course", id, "implementation"))
 			git(wt, { "add", "-A" })
-			git(wt, { "commit", "-qm", "final review 1" })
+			git(wt, { "commit", "-qm", "final review 2" })
 			git(wt, { "push", "-q", "origin", "HEAD:refs/heads/R0010/1/c0010" })
 			t.expect(has(znOk({ "final", "c0010" }), "c0010: redo-layer")).toBe(true)
-			-- done refuses a ticket that stands off course
+			t.expect(has(znOk({ "work", "next", "R0010" }), ": rebuild c0010 - ")).toBe(true)
 			local refused = zn({ "done", "R0010" })
 			t.expect(refused.ok).toBe(false)
 			t.expect(has(refused.stderr .. refused.stdout, "c0010: the final review is redo-layer"))
 				.toBe(true)
 
-			-- the layer is rebuilt: the view changes, the review runs again
+			-- the layer is rebuilt, and its design edited on the layer: re-finished (the committed review is kept),
+			-- the view changed, the edit shown apart as a claim, and done still refuses (the redo is not reviewed yet)
 			write(wt, "pickman/src/alpha.luau", "--!strict\nreturn { alpha = 2 }\n")
 			git(wt, { "add", "-A" })
 			git(wt, { "commit", "-qm", "rebuilt" })
+			znOk({ "finish", "c0010" })
+			-- (an approved ticket's design cannot change before the finish; after it the document may, which is why the
+			-- view shows the change apart)
+			write(
+				wt,
+				`{dir}/c0010.md`,
+				(string.gsub(DOC, "Export `{ alpha = 1 }`", "Export `{ alpha = 2 }`"))
+					.. "\n## Verification log\nTHE-WORKERS-NOTE\n"
+			)
+			git(wt, { "add", "-A" })
+			git(wt, { "commit", "-qm", "design note" })
+			git(wt, { "push", "-q", "origin", "HEAD:refs/heads/R0010/1/c0010" })
 			t.expect(has(znOk({ "final", "c0010" }), "c0010: review-again")).toBe(true)
+			t.expect(has(znOk({ "work", "next", "R0010" }), ": final-review-ticket c0010 - ")).toBe(true)
+			local again = zn({ "done", "R0010" })
+			t.expect(again.ok).toBe(false)
+			t.expect(has(again.stderr .. again.stdout, "c0010: the final review is review-again")).toBe(true)
 			znOk({ "final", "c0010", "--view" })
 			local id2 = string.match(fs.readFile(`{view}/README.md`), "View: (%x+)") or ""
 			t.expect(id2 ~= id).toBe(true)
+			t.expect(has(fs.readFile(`{view}/design.md`), "alpha = 1")).toBe(true)
+			local changes = fs.readFile(`{view}/design-changes.patch`)
+			t.expect(has(changes, "alpha = 2")).toBe(true)
+			t.expect(has(changes, "THE-WORKERS-NOTE")).toBe(false)
 
-			-- on course on the rebuilt view
-			write(wt, `{dir}/final-review-002.md`, reviewText("on-course", id2, nil))
+			-- on course on the rebuilt view; main moves on (a capture touches z-nile/next, an engine file changes):
+			-- the review still stands and the diff does not show main's work
+			write(wt, `{dir}/final-review-003.md`, reviewText("on-course", id2, nil))
 			git(wt, { "add", "-A" })
-			git(wt, { "commit", "-qm", "final review 2" })
+			git(wt, { "commit", "-qm", "final review 3" })
+			git(wt, { "push", "-q", "origin", "HEAD:refs/heads/R0010/1/c0010" })
 			t.expect(has(znOk({ "final", "c0010" }), "c0010: on-course")).toBe(true)
-			t.expect(has(znOk({ "work", "next", "R0010" }), "final-review-ticket")).toBe(false)
+			t.expect(has(znOk({ "work", "next", "R0010" }), ": final-review-ticket c0010 - ")).toBe(false)
+			trackerfix.elsewhere(
+				f,
+				{ ["z-nile/next"] = "999\n", ["pickman/src/mainonly.luau"] = "--!strict\nreturn {}\n" },
+				"main moves on"
+			)
+			git(wt, { "fetch", "-q", "origin" })
+			znOk({ "restack", "R0010" })
+			t.expect(has(znOk({ "final", "c0010" }), "c0010: on-course")).toBe(true)
+			znOk({ "final", "c0010", "--view" })
+			local moved = fs.readFile(`{view}/diff.patch`)
+			t.expect(has(moved, "mainonly")).toBe(false)
+			t.expect(has(moved, "z-nile/next")).toBe(false)
+			t.expect(has(moved, "alpha.luau")).toBe(true)
 
 			-- a second off-course verdict blocks, even on a ticket that was once on course
-			write(wt, `{dir}/final-review-002.md`, reviewText("off-course", id2, "design"))
+			write(wt, `{dir}/final-review-003.md`, reviewText("off-course", id2, "design"))
 			git(wt, { "add", "-A" })
-			git(wt, { "commit", "-qm", "final review 2 off" })
+			git(wt, { "commit", "-qm", "final review 3 off" })
 			t.expect(has(znOk({ "final", "c0010" }), "c0010: blocked")).toBe(true)
-			t.expect(has(znOk({ "work", "next", "R0010" }), "blocked")).toBe(true)
+			t.expect(has(znOk({ "work", "next", "R0010" }), ": blocked c0010 - ")).toBe(true)
 		end
 	)
 end)

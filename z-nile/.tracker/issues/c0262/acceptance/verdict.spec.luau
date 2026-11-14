@@ -4,7 +4,11 @@ local finalview = require("@znile/engine/finalview")
 local t = require("@tests/lib/t")
 
 local function review(n: number, verdict: string, view: string, gaps: { string }): finalview.Review
-	return { n = n, verdict = verdict, view = view, findings = #gaps, gaps = gaps }
+	local measured: { boolean } = {}
+	for _ in gaps do
+		table.insert(measured, true)
+	end
+	return { n = n, verdict = verdict, view = view, findings = #gaps, gaps = gaps, measured = measured }
 end
 
 local function text(verdict: string, view: string, gaps: { string }): string
@@ -87,7 +91,50 @@ return t.spec("c0262 the ticket's final verdict", function(it)
 	end)
 
 	it("AC5: an unreadable review stops the ticket", function()
-		local bad = { n = 1, verdict = "", view = "v1", findings = 0, gaps = {} } :: finalview.Review
+		local bad =
+			{ n = 1, verdict = "", view = "v1", findings = 0, gaps = {}, measured = {} } :: finalview.Review
 		t.expect(finalview.state({ bad }, "v1").state).toBe("invalid")
 	end)
+
+	it("AC4: a finding that quotes nothing, and a template Gap line, are not read", function()
+		local nomeasure = finalview.parse(1, "### F1\nGap: design\nno quote\nView: ab\nVerdict: off-course\n")
+		t.expect(finalview.problem(nomeasure) ~= nil).toBe(true)
+		local placeholder = finalview.parse(
+			1,
+			'### F1\nGap: design\nMeasured against: "<the ask or design line>"\nView: ab\nVerdict: off-course\n'
+		)
+		t.expect(finalview.problem(placeholder) ~= nil).toBe(true)
+		local template = finalview.parse(
+			1,
+			'### F1\nGap: design | implementation\nMeasured against: "the ask"\nView: ab\nVerdict: off-course\n'
+		)
+		t.expect(template.gaps[1]).toBe("")
+		t.expect(finalview.problem(template) ~= nil).toBe(true)
+		local approve = finalview.parse(1, "## Findings\nnone\nView: ab\nVerdict: approve\n")
+		t.expect(finalview.problem(approve) ~= nil).toBe(true)
+	end)
+
+	it(
+		"AC5: a review of a view an off-course review already judged is not read (reviewed again without a redo)",
+		function()
+			local same =
+				{ review(1, "off-course", "v1", { "implementation" }), review(2, "on-course", "v1", {}) }
+			t.expect(finalview.state(same, "v1").state).toBe("invalid")
+			local twice = {
+				review(1, "off-course", "v1", { "implementation" }),
+				review(2, "off-course", "v1", { "design" }),
+			}
+			t.expect(finalview.state(twice, "v1").state).toBe("invalid")
+		end
+	)
+
+	it(
+		"AC5: the state says what the latest verdict was, so review-again after an off-course one is told apart",
+		function()
+			t.expect(finalview.state({ review(1, "off-course", "v1", { "design" }) }, "v2").latest)
+				.toBe("off-course")
+			t.expect(finalview.state({ review(1, "on-course", "v1", {}) }, "v2").latest).toBe("on-course")
+			t.expect(finalview.state({}, "v1").latest).toBe("")
+		end
+	)
 end)

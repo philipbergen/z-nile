@@ -90,4 +90,30 @@ return t.spec("c0262 a layer is complete after its final review", function(it)
 	it("AC9: a layer read without the fact is not held up", function()
 		t.expect(step(raft({ layer(1, "c0010", nil) })).action).toBe("implement")
 	end)
+
+	it("AC7: the redo and the block tell the worker to harvest the review's findings first", function()
+		for _, state in { "redo-layer", "redo-design", "blocked" } do
+			local d = step(raft({ layer(1, "c0010", state) }))
+			t.expect(string.find(d.why, "harvest.md", 1, true) ~= nil).toBe(true)
+		end
+	end)
+
+	it("AC8: a block or a redo above a layer that is on course lands the layers below first", function()
+		local d = step(raft({ layer(1, "c0010", "on-course"), layer(2, "c0020", "blocked") }))
+		t.expect(d.action).toBe("blocked")
+		t.expect(string.find(d.why, "./zn done R0010 --through c0010", 1, true) ~= nil).toBe(true)
+		local first = step(raft({ layer(1, "c0010", "blocked") }))
+		t.expect(string.find(first.why, "--through", 1, true) == nil).toBe(true)
+	end)
+
+	it("AC6: the layer's code review comes before the ticket's final review", function()
+		local unsettled = layer(1, "c0010", "none")
+		unsettled.reviewReason = "review-001.md is not current"
+		local d = step(raft({ unsettled }))
+		t.expect(d.action).toBe("review")
+		t.expect(string.find(d.why, "review-001.md is not current", 1, true) ~= nil).toBe(true)
+		local settled = layer(1, "c0010", "none")
+		settled.reviewReason = ""
+		t.expect(step(raft({ settled })).action).toBe("final-review-ticket")
+	end)
 end)
