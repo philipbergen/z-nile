@@ -468,6 +468,21 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 					then { "unblocked" }
 					else provenance.PUBLISHED
 				local reason = provenance.publishProblem(existing, c.content, pid, allowed)
+				if reason and not string.find(c.path, "/active/", 1, true) then
+					-- c0283: an `approved` row rides only in the commit that appends the matching approval.md row
+					local approvalPath = string.gsub(c.path, "/provenance%.md$", "/approval.md")
+					for _, other in out do
+						if other.path == approvalPath then
+							reason = provenance.approvedPublishProblem(
+								existing,
+								c.content,
+								pid,
+								buildRead(approvalPath),
+								other.content
+							)
+						end
+					end
+				end
 				if reason then
 					return fail(`{c.path}: {reason}`)
 				end

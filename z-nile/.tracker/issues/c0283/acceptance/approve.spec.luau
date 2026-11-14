@@ -11,6 +11,7 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local NAME = "c0283-approve"
+local PUBLISH_NAME = "c0283-approve-publish"
 local ID = "c0001"
 local ROOT = "z-nile/.tracker"
 local ISSUE = `{ROOT}/issues/{ID}`
@@ -213,4 +214,56 @@ return t.spec("c0283 approve in an agent session and the provenance row", functi
 			t.expect((r :: fixture.Result).ok).toBe(true)
 		end
 	)
+
+	it("approve --publish puts approval.md and the approved row on origin/main in one commit", function()
+		-- the dispatched path: the prep PR has merged with no approval (a dispatcher cannot approve), and the human
+		-- approves afterwards from a worktree of main; the row must reach main with the approval
+		local g = trackerfix.new(PUBLISH_NAME, {
+			[`{ISSUE}/{ID}.md`] = doc("Hash the contract.", false),
+			[`{ISSUE}/check.sh`] = CHECK,
+			[`{ISSUE}/acceptance/hold.spec.luau`] = SPEC,
+		})
+		local w = `{g.base}/wt`
+		fixture.git(g.main, { "worktree", "add", "-q", "-b", "approve-c0001", w, "HEAD" })
+		fs.writeFile(`{w}/{ISSUE}/{ID}.md`, doc("Hash the contract."))
+		fixture.git(w, { "add", "-A" })
+		fixture.git(w, { "commit", "-q", "-m", "the prep PR merged" })
+		fixture.git(w, { "push", "-q", "origin", "HEAD:main" })
+		local env = { PATH = process.env.PATH or "", HOME = process.env.HOME or "" }
+		local function viaTerminal(extra: { string }): fixture.Result
+			local args = { "-q", "/dev/null", "./zn", "approve", ID }
+			for _, a in extra do
+				table.insert(args, a)
+			end
+			return fixture.exec(w, "script", args, { env = env })
+		end
+		local made = viaTerminal({})
+		if not made.ok then
+			error(say(made))
+		end
+		local hash = string.match(made.stdout, `approved {ID} (%x+)`) :: string
+		local before = fixture.git(g.origin, { "rev-list", "--count", "main" })
+		local pushed = viaTerminal({ "--publish" })
+		if not pushed.ok then
+			error(say(pushed))
+		end
+		t.expect(fixture.git(g.origin, { "rev-list", "--count", "main" }))
+			.toBe(tostring((tonumber(before) :: number) + 1))
+		t.expect(fixture.git(g.origin, { "show", "--name-only", "--format=%s", "main" }))
+			.toBe(`tracker: approve {ID}\n\n{ISSUE}/approval.md\n{ISSUE}/provenance.md`)
+		local record = fixture.git(g.origin, { "show", `main:{ISSUE}/provenance.md` })
+		t.expect(has(record, ` | approved | human:{PUBLISH_NAME} | design={string.sub(hash, 1, 12)} |`))
+			.toBe(true)
+		-- run again: already approved, nothing more is published
+		local again = viaTerminal({ "--publish" })
+		t.expect(has(say(again), "already approved")).toBe(true)
+		-- the record command still cannot publish an approval, even a matching one
+		local forged = fixture.exec(
+			w,
+			"./zn",
+			{ "provenance", "record", ID, "approved", "--actor", `human:{PUBLISH_NAME}` }
+		)
+		t.expect(forged.ok).toBe(false)
+		t.expect(has(say(forged), "approved")).toBe(true)
+	end)
 end)
