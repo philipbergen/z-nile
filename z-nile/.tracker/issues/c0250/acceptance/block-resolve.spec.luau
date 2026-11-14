@@ -285,9 +285,9 @@ return t.spec("c0250 block and resolve", function(it)
 			seed[`{ROOT}/issues/c0181/escalation.md`] = "this is not a note\n"
 			-- draft rafts in rafting: claimed preparing, their members prepared with an EMPTY raft: line, as real drafts
 			-- have on origin/main until the rafting PR lands (F8)
-			for raft, members in
+			local drafts: { [string]: { string } } =
 				{ R0200 = { "c0190", "c0195" }, R0210 = { "c0191", "c0196" }, R0220 = { "c0192", "c0197" } }
-			do
+			for raft, members in drafts do
 				seed[`{ROOT}/rafts/{raft}/{raft}.md`] = raftDoc(
 					raft,
 					PREPARING,
@@ -351,7 +351,8 @@ return t.spec("c0250 block and resolve", function(it)
 					item(id, issue(id, PREPARED, raft, "ready"))
 					seed[`{ROOT}/issues/{id}/acceptance/.gitkeep`] = ""
 				end
-				for _, id in landed or {} do
+				local landedIds: { string } = landed or {}
+				for _, id in landedIds do
 					seed[`{ROOT}/issues/done/{id}/{id}.md`] = issue(id, "done", raft, "ready")
 					seed[`{ROOT}/issues/done/{id}/check.sh`] = CHECK
 				end

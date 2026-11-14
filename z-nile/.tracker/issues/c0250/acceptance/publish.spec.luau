@@ -81,7 +81,7 @@ local SEED: { [string]: string } = {
 
 -- the commit of crafted changes: what the case replaces on origin's text, as { path = content }
 local function commit(edits: { [string]: string }, creates: { [string]: string }?): (boolean, string)
-	local result = publish.commit(work, function(paths, read)
+	local result = (publish :: any).commit(work, function(paths: { string }, read: (string) -> string?): any
 		local changes: { publish.Change } = {}
 		for path, content in edits do
 			if not table.find(paths, path) or read(path) == nil then
@@ -89,7 +89,8 @@ local function commit(edits: { [string]: string }, creates: { [string]: string }
 			end
 			table.insert(changes, { path = path, content = content })
 		end
-		for path, content in creates or {} do
+		local created: { [string]: string } = creates or {}
+		for path, content in created do
 			table.insert(changes, { path = path, content = content })
 		end
 		return changes
@@ -188,6 +189,17 @@ return t.spec("c0250 the publish rule of a block or resolve commit", function(it
 			{ [C10] = string.sub(SEED[C10], 1, at - 1) .. string.sub(SEED[C10], at + #DECIDED) },
 			C10NOTE,
 			"no other line may change or go"
+		)
+	end)
+
+	it("AC14: refuses a document that lost its last lines", function()
+		local doc = SEED[C10]
+		local tail = "\nMake it fast.\n"
+		t.expect(string.sub(doc, -#tail)).toBe(tail)
+		refused(
+			{ [C10] = string.sub(doc, 1, #doc - #tail) },
+			C10NOTE,
+			"a line of the document on origin/main is missing"
 		)
 	end)
 
