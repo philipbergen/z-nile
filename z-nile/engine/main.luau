@@ -1603,8 +1603,8 @@ local function setStatus(id: string, to: string)
 				if gap then
 					return `{t}: {gap}`
 				end
-				-- c0306: a marked issue's design reviews, every round, are on a review model
-				if store.readFront(localItem.doc).reviews == "judged" then
+				-- c0306: a marked issue's design reviews, every round, are on a review model (a raft's are judged at ready)
+				if store.isIssueId(t) and store.readFront(localItem.doc).reviews == "judged" then
 					local off = require("./reviewfiles").judge(localItem.dir, "design", t)
 					if off then
 						return off
