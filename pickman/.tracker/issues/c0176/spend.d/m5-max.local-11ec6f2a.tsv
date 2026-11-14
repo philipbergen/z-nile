@@ -24,3 +24,28 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-14 17:39	4 runs design-review	0	0	other			13.531	9.150			tokens,ai
 2026-11-14 17:45	design-review-001 claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	design-review							tokens,ai
 2026-11-14 17:45	design-refute-001 claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	design-review							tokens,ai
+2026-11-14 17:45	1 spec	0	0	test			1.639	1.000		1.639	tokens,ai
+2026-11-14 17:45	1 spec	0	0	test			1.651	0.950		1.651	tokens,ai
+2026-11-14 17:45	1 spec	0	0	test			1.640	1.070		1.640	tokens,ai
+2026-11-14 17:45	1 spec	0	0	test			2.237	1.610		2.237	tokens,ai
+2026-11-14 17:45	26 specs	0	0	test			2.447	4.410		2.447	tokens,ai
+2026-11-14 17:45	1 spec	0	0	test			2.045	1.300		2.045	tokens,ai
+2026-11-14 17:45	1 spec	0	0	test			1.625	1.020		1.625	tokens,ai
+2026-11-14 17:45	1 spec	0	0	test			1.845	1.120		1.845	tokens,ai
+2026-11-14 17:45	1 spec	0	0	test			1.829	1.090		1.829	tokens,ai
+2026-11-14 17:45	1 spec	0	0	test			1.629	1.080		1.629	tokens,ai
+2026-11-14 17:45	1 spec	0	0	test			1.640	1.070		1.640	tokens,ai
+2026-11-14 17:46	1 spec	0	0	test			2.230	1.360		2.230	tokens,ai
+2026-11-14 17:46	1 spec	0	0	test			1.639	0.970		1.639	tokens,ai
+2026-11-14 17:46	1 spec	0	0	test			1.637	1.130		1.637	tokens,ai
+2026-11-14 17:46	1 spec	0	0	test			1.833	1.060		1.833	tokens,ai
+2026-11-14 17:46	1 spec	0	0	test			3.661	3.100		3.661	tokens,ai
+2026-11-14 17:46	1 spec	0	0	test			1.439	0.960		1.439	tokens,ai
+2026-11-14 17:46	1 spec	0	0	test			1.833	1.240		1.833	tokens,ai
+2026-11-14 17:46	1 spec	0	0	test			1.640	1.030		1.640	tokens,ai
+2026-11-14 17:46	1 spec	0	0	test			1.831	1.050		1.831	tokens,ai
+2026-11-14 17:46	5 specs	0	0	test			1.841	1.620		1.841	tokens,ai
+2026-11-14 17:46	1 spec	0	0	test			1.859	1.230		1.859	tokens,ai
+2026-11-14 17:52	affected	0	0	test			6.372	18.320		6.372	tokens,ai
+2026-11-14 17:52	affected	0	0	test			5.357	18.150		5.357	tokens,ai
+2026-11-14 17:52	prep	309	1	prep							tokens,ai
