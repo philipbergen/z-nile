@@ -33,6 +33,9 @@ c0172 design review 002 F1: that clone, made with `git clone` of the local check
 
 **Also:** f0148 design review 003 F3: round 2 bounded the lobby's write at 5 s, which made "a later arrival without a new pick starts on level 1" false when the write lands after the claim; the sentence was swept in round 3.
 
+c0263 design review 006 F1, F9: a refute that says a spec was changed must paste the grep showing the changed line; two specs asserted opposite things about `merged` after a refute claimed one was fixed.
+
+When a mechanism is replaced, its other copies are replaced too (c0263 design review 011 F2): round 3 moved the sync to settling records by item id, and remap kept the retired by-path rule; list every place that merges the same file and give them one routine.
 c0260 design review 007 F5: a refute that says "fixed (greps run)" pastes each grep's output and runs the grep the reviewer named, not only the patterns the author chose.
 
 **Also:** c0279 design review 004 F4: a late user decision changed a value (the stall cases' limit from 2 s to 10 s); the Design's general claims that the old value supported ("none longer", "no added cost", "holds under any load", the Test plan's three modes, the size) stayed. After a late decision, grep for every claim the old value supported, not just for the number.
@@ -40,3 +43,5 @@ c0260 design review 007 F5: a refute that says "fixed (greps run)" pastes each g
 **Also:** c0279 design review 005 F1: a `fixed:` answer to a finding whose evidence is a list must answer each bullet on its own line; round 4 F5 listed ten stale places, four stayed, and the refute said "fixed". Check: for each evidence bullet, can the refute point to the changed line (from a grep rerun after the edit), or say why it stays?
 
 **Note (c0261 design review 010 F10):** after a redesign, search the document for the vocabulary of the old design (`--final`, "rounds", "final round") in the Solution's prep bullet, the .models.toml header, comments and Open questions, not only in the skills.
+
+c0264 design review 009 F5 (re-prep): a withdrawn ticket's `depends_on` edges move to new tickets; the roadmap prose listing a raft's outside dependencies named the old ones. Re-read the members' `depends_on` before restating a dependency list, and check it against the tracker.

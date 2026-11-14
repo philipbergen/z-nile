@@ -3,7 +3,7 @@ flowchart LR
   subgraph eng["engineer end: any AI CLI, interactive"]
     direction TB
     cap["z-ticket: interview, idea, idea review, confirm"]
-    des["z-design: design, acceptance tests, reviews, approve"]
+    des["z-design: design, acceptance tests, review, approve"]
     res["resolve blocks: ./zn resolve"]
     cap --> des
   end
@@ -11,12 +11,14 @@ flowchart LR
   subgraph wrk["worker end: any AI CLI running z-work"]
     direction TB
     loop["claim the top raft: lost first, then rank"]
-    layer["one ticket at a time: build, review, full-force review, merge"]
+    layer["one ticket at a time: build, review, full-force review, finish its layer"]
+    final["final review of the stack, then ./zn done lands it"]
     loop --> layer
+    layer --> final
   end
   eng --> stack
   stack --> loop
-  layer -->|"raft merged: clear context"| loop
+  final -->|"raft merged: clear context"| loop
   layer -. blocked .-> esc["escalation.md, status blocked"]
   esc -->|"raft released: clear context"| loop
   esc --> res
