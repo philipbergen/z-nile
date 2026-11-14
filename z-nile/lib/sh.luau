@@ -1,6 +1,7 @@
 --!strict
 -- Subprocess helpers for Lune scripts.
 local process = require("@lune/process")
+local task = require("@lune/task")
 -- this module's folder, z-nile/lib/: its helper scripts are found from here, wherever the caller runs (a spec runs from
 -- its project's home since c0120, not the root)
 local LIB = string.match(debug.info(1, "s"), "^(.*)/[^/]+$") or "z-nile/lib"
@@ -16,10 +17,21 @@ sh.trim = trim
 
 -- Run and return the result; never throws.
 function sh.run(cmd: string, args: { string }, stdin: string?): Result
-	if stdin then
-		return process.exec(cmd, args, { stdio = { stdin = stdin } })
+	local r: Result = if stdin
+		then process.exec(cmd, args, { stdio = { stdin = stdin } })
+		else process.exec(cmd, args)
+	-- c0275: a fetch meeting another process's lock on a ref every worktree shares (the heartbeat's beaters, ticks and
+	-- dispatcher child fetch `main` too) is tried once more after a second; a second failure is the answer
+	if
+		cmd == "git"
+		and args[1] == "fetch"
+		and not r.ok
+		and string.find(r.stderr, "cannot lock ref", 1, true)
+	then
+		task.wait(1)
+		r = if stdin then process.exec(cmd, args, { stdio = { stdin = stdin } }) else process.exec(cmd, args)
 	end
-	return process.exec(cmd, args)
+	return r
 end
 
 -- Run with output streamed to the terminal; returns success.
