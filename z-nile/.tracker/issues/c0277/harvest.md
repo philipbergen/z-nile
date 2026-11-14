@@ -13,3 +13,5 @@
 - design-review-001 F9: zz-arch/a-moved-aside-address-is-never-reused
 - design-review-001 F10: z-design/restated-rules-move-together
 - design-review-001 F11: one-off: a probe script in the real repository used a fixed name and a forced removal
+- note R0100 design-review-001 F1 (stop then ready leaves the worktree remembering the old stamp; the lookup handed it out): zz-arch/a-moved-aside-address-is-never-reused
+- note R0100 design-review-001 F2 (a discarded z-work session sent back into the taker's copy): zz-arch/a-moved-aside-address-is-never-reused
