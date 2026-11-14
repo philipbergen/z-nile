@@ -53,3 +53,4 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-14 07:23	1 spec	0	0	test			0.824	0.480		0.824	tokens,ai
 2026-11-14 07:23	1 spec	0	0	test			1.032	0.620		1.032	tokens,ai
 2026-11-14 07:23	prep	3062	1644	prep							tokens,ai
+2026-11-14 08:34	design-review-011	0	0	design-review		claude-opus-5-5					tokens,ai
