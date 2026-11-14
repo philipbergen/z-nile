@@ -15,7 +15,9 @@ check "AC3: no Problem outcome, or no acceptance criteria, is still refused" lun
 check "AC4: the skeleton has no S row for a stub ticket and the check expects none" lune run tests/run -- "$A/stub.spec.luau"
 check "AC5: a readied ticket takes its claims from the captured text" lune run tests/run -- "$A/stub.spec.luau"
 check "AC6: the zz-rules trace row and the engine contract state the stub rule" lune run tests/run -- "$A/stub.spec.luau"
-check "AC7: the trace specs pass" lune run tests/run -- tests/tooling/trace.spec.luau tests/tooling/trace-land.spec.luau
-check "AC8: a Problem of only a Decided-with-the-user line has that line as its claim" lune run tests/run -- "$A/stub.spec.luau"
+check "AC7: trace.spec passes, its noSolution block asserting no refusal" bash -c 'grep -qF "c0330: an empty or template-only captured Solution" tests/tooling/trace.spec.luau && lune run tests/run -- tests/tooling/trace.spec.luau'
+check "AC8: a section whose first read finds no outcome is read again with decision lines as text" lune run tests/run -- "$A/stub.spec.luau"
+check "AC9: a Solution of text with no outcome is still refused" lune run tests/run -- "$A/stub.spec.luau"
+check "AC10: trace-land with a stub-captured ticket lands" bash -c 'grep -qF "so no S claim" tests/tooling/trace-land.spec.luau && lune run tests/run -- tests/tooling/trace-land.spec.luau'
 
 finish

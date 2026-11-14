@@ -47,3 +47,5 @@ c0260 design review 007 F5: a refute that says "fixed (greps run)" pastes each g
 c0264 design review 009 F5 (re-prep): a withdrawn ticket's `depends_on` edges move to new tickets; the roadmap prose listing a raft's outside dependencies named the old ones. Re-read the members' `depends_on` before restating a dependency list, and check it against the tracker.
 
 **Note** (R0100 design review 002 F3): a refute answered "fixed" did not find the sentence the finding quoted ("Flagged for the user in Open to the human") still standing in Risks. When an answer changes a ruling, grep the raft or issue document for every sentence that states or implies the old one.
+
+**Note** (c0330 design review 001 F3): a prototype added a fallback reader, and the prose still said the change "adds no refusal and removes none" and listed only the tickets the first edit affected. When a late edit changes who is affected, rerun the sweep (a probe over real tickets, c0157 here) and rewrite every sentence that counted them, the contract comment and the command table row included.

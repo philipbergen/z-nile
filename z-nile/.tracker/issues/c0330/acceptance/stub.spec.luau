@@ -202,25 +202,64 @@ return t.spec("c0330: trace takes claims from a stub capture's Problem", functio
 			t.expect(has(row, "only the template under `## Solution`")).toBe(true)
 			t.expect(has(row, "is not refused")).toBe(true)
 			t.expect(has(row, "missing any fails")).toBe(false)
+			t.expect(has(row, "is read again with those lines as text")).toBe(true)
 			local engine = fs.readFile(`{TOP}/z-nile/engine/trace.luau`)
 			t.expect(has(engine, "`## Solution` is optional")).toBe(true)
 			t.expect(has(engine, "a captured `## Solution`,")).toBe(false)
+			t.expect(has(engine, "is only a decision line")).toBe(true)
 		end
 	)
 
-	it("AC8: a Problem that holds only a Decided-with-the-user line has that line as its claim", function()
-		local line = "Decided with the user (2026-11-14): fix the trace first."
-		local only = issue(capture(`## Problem\n{line}\n`, STUB_SOLUTION))
-		local claims, errs = trace.deriveClaims({ only })
-		t.expect(errs).toEqual({})
-		t.expect(ids(claims)).toEqual({ "c0010:P1", "c0010:AC1", "c0010:AC2" })
-		t.expect(has(claims[1].text, "fix the trace first")).toBe(true)
+	it(
+		"AC8: a section whose first read finds no outcome is read again with decision lines as text, in Problem and Solution alike",
+		function()
+			local line = "Decided with the user (2026-11-14): fix the trace first."
+			-- a Problem of only the line has it as P1
+			local only = issue(capture(`## Problem\n{line}\n`, STUB_SOLUTION))
+			local claims, errs = trace.deriveClaims({ only })
+			t.expect(errs).toEqual({})
+			t.expect(ids(claims)).toEqual({ "c0010:P1", "c0010:AC1", "c0010:AC2" })
+			t.expect(has(claims[1].text, "fix the trace first")).toBe(true)
 
-		-- with an outcome before it, the line still ends the captured part, as before
-		local first =
-			issue(capture(`## Problem\n- Alpha is missing.\n{line}\n- Added later.\n`, STUB_SOLUTION))
-		local claims2 = trace.deriveClaims({ first })
-		t.expect(ids(claims2)).toEqual({ "c0010:P1", "c0010:AC1", "c0010:AC2" })
-		t.expect(claims2[1].text).toBe("Alpha is missing.")
+			-- with the line first and outcomes after it, every later outcome counts
+			local lead =
+				issue(capture(`## Problem\n{line}\n\n- Alpha is missing.\n- Reload resets.\n`, STUB_SOLUTION))
+			local claimsL = trace.deriveClaims({ lead })
+			t.expect(ids(claimsL)).toEqual({ "c0010:P1", "c0010:P2", "c0010:P3", "c0010:AC1", "c0010:AC2" })
+			t.expect(claimsL[2].text).toBe("Alpha is missing.")
+
+			-- with an outcome before it, the line still ends the captured part, as before
+			local first =
+				issue(capture(`## Problem\n- Alpha is missing.\n{line}\n- Added later.\n`, STUB_SOLUTION))
+			local claims2 = trace.deriveClaims({ first })
+			t.expect(ids(claims2)).toEqual({ "c0010:P1", "c0010:AC1", "c0010:AC2" })
+			t.expect(claims2[1].text).toBe("Alpha is missing.")
+
+			-- the other two markers read the same way
+			for _, marker in
+				{ "**Scope decision (user, 2026-11-14):** keep it small.", "(Added in prep) A detail." }
+			do
+				local m = issue(capture(`## Problem\n{marker}\n`, STUB_SOLUTION))
+				local claimsM, errM = trace.deriveClaims({ m })
+				t.expect(errM).toEqual({})
+				t.expect(ids(claimsM)[1]).toBe("c0010:P1")
+			end
+
+			-- a Solution of only the line has it as S1; one with an outcome first keeps S1 only
+			local solOnly = issue(capture(PROBLEM, `## Solution\n{line}\n`))
+			local claimsS, errS = trace.deriveClaims({ solOnly })
+			t.expect(errS).toEqual({})
+			t.expect(ids(claimsS)).toEqual({ "c0010:P1", "c0010:P2", "c0010:S1", "c0010:AC1", "c0010:AC2" })
+			local solFirst =
+				issue(capture(PROBLEM, `## Solution\n- Compute alpha.\n{line}\n- Added later.\n`))
+			local claimsF = trace.deriveClaims({ solFirst })
+			t.expect(ids(claimsF)).toEqual({ "c0010:P1", "c0010:P2", "c0010:S1", "c0010:AC1", "c0010:AC2" })
+		end
+	)
+
+	it("AC9: a Solution that has text but no outcome (a fence only) is still refused", function()
+		local fenced = issue(capture(PROBLEM, "## Solution\n```\nnot an outcome\n```\n"))
+		local _, errs = trace.deriveClaims({ fenced })
+		t.expect(#errs == 1 and has(errs[1], "ticket c0010 is missing captured ## Solution")).toBe(true)
 	end)
 end)
