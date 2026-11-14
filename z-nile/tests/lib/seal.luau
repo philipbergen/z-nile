@@ -10,6 +10,7 @@ local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local openlist = require("@znile/engine/openlist")
 local paths = require("@znile/engine/paths")
+local reviewmodel = require("@znile/engine/reviewmodel")
 local store = require("@znile/engine/store")
 local trace = require("@znile/engine/trace")
 
@@ -238,6 +239,11 @@ function seal.trace(dir: string, raftId: string)
 		end
 	elseif not fs.isFile(`{dir}/{finalRevRel}`) then
 		fs.writeFile(`{dir}/{finalRevRel}`, "# Final Review 001\n\nVerdict: approve\n")
+	end
+	-- c0306: the final review is recorded on a review model, as a marked raft's `done` requires
+	local finalText = fs.readFile(`{dir}/{finalRevRel}`)
+	if reviewmodel.read(finalText) == nil then
+		fs.writeFile(`{dir}/{finalRevRel}`, (reviewmodel.stamp(finalText, "claude-opus-5-5", "xhigh")) :: string)
 	end
 	local commitEnv: { [string]: string }? = nil
 	if not fixture.exec(dir, "git", { "config", "user.email" }).ok then

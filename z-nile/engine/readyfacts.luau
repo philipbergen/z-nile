@@ -6,6 +6,7 @@ local fs = require("@lune/fs")
 local projects = require("./projects")
 local raftplan = require("./raftplan")
 local readycheck = require("./readycheck")
+local reviewmodel = require("./reviewmodel")
 local statusLib = require("./status")
 local store = require("./store")
 
@@ -69,6 +70,7 @@ function readyfacts.reason(raft: store.Item, members: { store.Item }): string?
 			specs = readycheck.specs(files, promoted(m)),
 			approval = files["approval.md"],
 			approvalFile = `{m.dir}/approval.md`,
+			judged = reviewmodel.judged(mf),
 		})
 	end
 	local files = walk(raft.dir, function(rel: string): boolean
@@ -90,6 +92,7 @@ function readyfacts.reason(raft: store.Item, members: { store.Item }): string?
 		members = built,
 		files = files,
 		loaded = true,
+		judged = reviewmodel.judged(front),
 	})
 	return why
 end

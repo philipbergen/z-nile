@@ -7,6 +7,7 @@ local ledger = require("./ledger")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
+local reviewmodel = require("./reviewmodel")
 local task = require("@lune/task")
 
 local publish = {}
@@ -142,6 +143,43 @@ local function withoutStatus(text: string): string?
 		return nil
 	end
 	return head .. kept .. rest
+end
+
+-- c0306: the document with its `reviews: judged` front-matter line removed (the first one, inside the front matter).
+local MARK_LINE = "\nreviews: " .. reviewmodel.MARK .. "\n"
+
+local function hasMark(text: string): boolean
+	local head, block = string.match(text, "^(%-%-%-\n)(.-\n)%-%-%-\n")
+	return head ~= nil and block ~= nil and string.find("\n" .. block, MARK_LINE, 1, true) ~= nil
+end
+
+local function withoutMark(text: string): string
+	local head, block, rest = string.match(text, "^(%-%-%-\n)(.-\n)(%-%-%-\n.*)$")
+	if not head or not block or not rest then
+		return text
+	end
+	local kept = string.gsub("\n" .. block, "\nreviews: " .. reviewmodel.MARK .. "\n", "\n", 1)
+	return head .. string.sub(kept, 2) .. rest
+end
+
+-- The refusal for a published document that adds, changes or removes the `reviews: judged` line anywhere but where
+-- the tool writes it: an issue's claim (its status becomes preparing-…) and a new raft's document.
+function publish.markProblem(path: string, existing: string?, content: string): string?
+	local now = hasMark(content)
+	local before = existing ~= nil and hasMark(existing)
+	if now == before then
+		return nil
+	end
+	local where = `{path}: reviews: judged is written only by a claim (./zn status <id> preparing) or by ./zn new raft, and never changed or removed`
+	if not now then
+		return where
+	end
+	if existing == nil then
+		return if string.match(path, "/rafts/R%d%d%d%d/R%d%d%d%d%.md$") then nil else where
+	end
+	local claim = string.match(content, "\nstatus: preparing%-") ~= nil
+	local issue = string.match(path, "/[fdc]%d%d%d%d/[fdc]%d%d%d%d%.md$") ~= nil
+	return if claim and issue then nil else where
 end
 
 local function git(
@@ -474,8 +512,12 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 				end
 				continue
 			end
+			local markWhy = publish.markProblem(c.path, existing, c.content)
+			if markWhy then
+				return fail(markWhy)
+			end
 			if existing then
-				local before, after = withoutStatus(existing), withoutStatus(c.content)
+				local before, after = withoutStatus(withoutMark(existing)), withoutStatus(withoutMark(c.content))
 				if not before or not after or before ~= after then
 					return fail(
 						`{c.path}: a published change to an existing document may only edit its status: line`

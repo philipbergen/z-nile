@@ -26,6 +26,7 @@ local openlist = require("./openlist")
 local process = require("@lune/process")
 local projects = require("./projects")
 local raftcheck = require("./raftcheck")
+local reviewmodel = require("./reviewmodel")
 local runner = require("./runner")
 local serde = require("@lune/serde")
 local sh = require("../lib/sh")
@@ -897,6 +898,7 @@ function dispatcher.modelStep(
 		end
 	end
 	local outcome = "failed"
+	local filedBy: { model: string, effort: string? }? = nil -- c0306: the attempt that wrote the review
 	fs.writeDir(stateDir)
 	local landing = `{stateDir}/review.md`
 	if land then
@@ -1033,6 +1035,7 @@ function dispatcher.modelStep(
 		})
 		print(`dispatch: {step} on {spec.cli}: {outcomeNow} ({detail}), {result.tokens} tokens`)
 		outcome = outcomeNow
+		filedBy = { model = spec.model, effort = spec.effort }
 		-- a failed attempt's review is moved aside, so only the attempt that ends the step can land one
 		if land and outcomeNow ~= "ok" and fs.isFile(landing) then
 			local aside = `{stateDir}/review-attempt-{#attempts}.md`
@@ -1129,9 +1132,31 @@ function dispatcher.modelStep(
 				stdio.ewrite(`dispatch: {why.detail}\n`)
 			else
 				local name = string.format("%s%03d.md", l.prefix, last + 1)
-				fs.move(landing, `{cwd}/{l.dir}/{name}`)
-				reviewNote = string.format("%s%03d", l.note, last + 1)
-				print(`dispatch: the review is {l.dir}/{name}`)
+				-- c0306: the dispatcher records the model and effort that wrote the review; the reviewer never does
+				local by = filedBy :: { model: string, effort: string? }
+				local stamped, refusal = reviewmodel.stamp(fs.readFile(landing), by.model, by.effort)
+				if stamped then
+					fs.writeFile(`{cwd}/{l.dir}/{name}`, stamped)
+					pcall(fs.removeFile, landing)
+					reviewNote = string.format("%s%03d", l.note, last + 1)
+					print(`dispatch: the review is {l.dir}/{name}`)
+				else
+					outcome = "failed"
+					pcall(fs.removeFile, landing)
+					local why: Attempt = {
+						step = step :: string,
+						cli = "",
+						runtime = "",
+						model = "",
+						outcome = "failed",
+						detail = `the reviewer's file {refusal}: the tool records the model, the reviewer writes no Model: line`,
+						tokens = 0,
+						minutes = 0,
+					}
+					table.insert(attempts, why)
+					table.insert(st.history, why)
+					stdio.ewrite(`dispatch: {why.detail}\n`)
+				end
 			end
 		else
 			outcome = "failed"

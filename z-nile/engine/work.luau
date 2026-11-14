@@ -50,6 +50,7 @@ export type RaftFact = {
 	stacked: boolean,
 	codeReview: string, -- none, open, resolved
 	finalReview: string, -- none, open, approved
+	codeModel: string?, -- c0306: the refusal `./zn done` would give for a review off the review models
 	trace: boolean,
 	traceOk: boolean,
 	block: string?, -- "" when ready would accept. A reason when the reader has judged and ready would refuse.
@@ -329,6 +330,9 @@ function work.forRaft(r: RaftFact): Decision
 			"",
 			nil
 		)
+	end
+	if r.codeModel then
+		return of(r, "review", r.codeModel, "", nil)
 	end
 	return of(r, "done", `Run ./zn done {r.id}. It lands the stack. Then ask again.`, "", nil)
 end

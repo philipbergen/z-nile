@@ -1351,7 +1351,11 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				}
 				table.insert(changes, {
 					path = `{root}/rafts/{chosen}/{chosen}.md`,
-					content = withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "status", claim),
+					content = withFront(
+						withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "reviews", "judged"),
+						"status",
+						claim
+					),
 				})
 				table.insert(changes, {
 					path = `{root}/rafts/{chosen}/check.sh`,
@@ -1599,6 +1603,13 @@ local function setStatus(id: string, to: string)
 				if gap then
 					return `{t}: {gap}`
 				end
+				-- c0306: a marked issue's design reviews, every round, are on a review model
+				if store.readFront(localItem.doc).reviews == "judged" then
+					local off = require("./reviewfiles").judge(localItem.dir, "design", t)
+					if off then
+						return off
+					end
+				end
 			end
 			if
 				not (
@@ -1619,7 +1630,21 @@ local function setStatus(id: string, to: string)
 				end
 			end
 			table.insert(moved, { id = t, from = cur :: string })
-			table.insert(changes, { path = tp, content = withFront(tt, "status", value) })
+			local body = tt
+			if t == id and not store.isRaftId(id) and to == "preparing" then
+				-- c0306 (prep Q3): a claim of an issue with no design review marks it judged
+				local dirPrefix = string.sub(tp, 1, #tp - #t - 3) .. "design-review-"
+				local reviewed = false
+				for _, p in paths do
+					if string.sub(p, 1, #dirPrefix) == dirPrefix then
+						reviewed = true
+					end
+				end
+				if not reviewed then
+					body = withFront(body, "reviews", "judged")
+				end
+			end
+			table.insert(changes, { path = tp, content = withFront(body, "status", value) })
 		end
 		-- c0116 (review 002 F1): a member redesigned on origin/main since z-raft grouped it (a claim and a landing inside
 		-- the rafting window) leaves the rafting: its coherence review read the old design
@@ -4549,6 +4574,42 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 		stdio.ewrite("commit: --time and --tokens are ignored; cost is measured\n")
 	end
 	local model = modelOption("commit", opts)
+	if phase == "code-review" then
+		-- c0306: every new review file in this commit is stamped with the reviewer's model and effort; one with no
+		-- --model is refused (the lead's own model would otherwise be taken for the reviewer's)
+		local effort = require("./reviewfiles").effortOption(opts)
+		local status = sh.git({ "status", "--porcelain", "--untracked-files=all" })
+		local unstamped: { string } = {}
+		for line in string.gmatch(status .. "\n", "([^\n]*)\n") do
+			local mark, path = string.match(line, "^(..) (.+)$")
+			local base = if path then string.match(path, "([^/]+)$") else nil
+			if
+				mark
+				and path
+				and base
+				and (mark == "??" or string.sub(mark, 1, 1) == "A")
+				and (
+					string.match(base, "^review%-%d+%.md$")
+					or string.match(base, "^final%-review%-%d+%.md$")
+					or string.match(base, "^design%-review%-%d+%.md$")
+				)
+				and require("./reviewmodel").read(fs.readFile(path)) == nil
+			then
+				table.insert(unstamped, path)
+			end
+		end
+		for _, path in unstamped do
+			if not model then
+				fail(`{path} is a review: --model <the reviewer's model id> records it`)
+			end
+		end
+		for _, path in unstamped do
+			local why = require("./reviewfiles").stampFile(path, model :: string, effort)
+			if why then
+				fail(why)
+			end
+		end
+	end
 	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
 end
 
@@ -5043,6 +5104,17 @@ function cmd.done(pos: { string })
 	local problem = reviewProblem(raft)
 	if problem then
 		fail(problem)
+	end
+	-- c0306: a marked raft's code and final reviews (its own folder and its members') are on a review model
+	if store.readFront(raft.doc).reviews == "judged" then
+		local dirs = { { id = raft.id, dir = raft.dir } }
+		for _, m in store.members(raft.id) do
+			table.insert(dirs, { id = m.id, dir = m.dir })
+		end
+		local off = require("./reviewfiles").judgeDone(dirs)
+		if off then
+			fail(off)
+		end
 	end
 	if not runCheck(raft) then
 		fail(`{raft.id} check.sh failed; not done`)
@@ -6346,6 +6418,17 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	if opts["--note"] and opts["--note"][1] ~= "" then
 		note = opts["--note"][1]
 	end
+	-- c0306: a design or coherence review is recorded with the reviewer's model, stamped into its file
+	local reviewFile: string? = nil
+	if phase == "design-review" and not opts["--begin"] then
+		if not model then
+			fail("spend --phase design-review needs --model <the reviewer's model id> [--effort <level>]")
+		end
+		if not string.match(note, "^design%-review%-%d+$") then
+			fail("spend --phase design-review needs --note design-review-NNN, the review file it records")
+		end
+		reviewFile = note
+	end
 	local targets: { store.Item } = {}
 	local raftItem: store.Item? = nil
 	if store.isRaftId(id) then
@@ -6458,6 +6541,17 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			end
 		end
 	end
+	if reviewFile then
+		local dir = if raftItem then (raftItem :: store.Item).dir else (targets[1] and targets[1].dir or "")
+		local why = require("./reviewfiles").stampFile(
+			`{dir}/{reviewFile}.md`,
+			model :: string,
+			require("./reviewfiles").effortOption(opts)
+		)
+		if why then
+			fail(why)
+		end
+	end
 	local top = sh.git({ "rev-parse", "--show-toplevel" })
 	local branch, head = costrow.branchOf(top)
 	if opts["--begin"] then
@@ -6512,7 +6606,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			local got = reading :: any
 			ai = got.ai
 			tok = got.tokens
-			if got.model then
+			if got.model and not model then -- c0306: a typed --model wins over the session's measured one
 				modelId = got.model
 			end
 			if type(got.note) == "string" and got.note ~= "" then

@@ -13,6 +13,7 @@ local approval = require("./approval")
 local contract = require("./contract")
 local openlist = require("./openlist")
 local raftplan = require("./raftplan")
+local reviewmodel = require("./reviewmodel")
 local store = require("./store")
 
 local readycheck = {}
@@ -28,6 +29,7 @@ export type Member = {
 	specs: { [string]: string },
 	approval: string?,
 	approvalFile: string,
+	judged: boolean?, -- c0306: marked `reviews: judged`
 }
 
 export type Raft = {
@@ -43,6 +45,7 @@ export type Raft = {
 	members: { Member },
 	files: { [string]: string },
 	loaded: boolean,
+	judged: boolean?, -- c0306: marked `reviews: judged`
 }
 
 local function hasCheckLine(text: string): boolean
@@ -220,10 +223,23 @@ function readycheck.reason(r: Raft): (string?, boolean)
 	if gap then
 		return gap, true
 	end
+	-- c0306 (prep Q2): a marked raft's coherence reviews, and a marked member's design reviews, are on a review model
+	if r.judged then
+		local off = reviewmodel.problem(r.files, "coherence", r.id)
+		if off then
+			return off, true
+		end
+	end
 	for _, m in r.members do
 		local memberGap = designAndCheck(m.id, m.design, m.doc, m.files)
 		if memberGap then
 			return memberGap, true
+		end
+		if m.judged then
+			local off = reviewmodel.problem(m.files, "design", m.id)
+			if off then
+				return off, true
+			end
 		end
 		local parts, err = contract.build(m.doc, m.files["check.sh"] or "", m.specs)
 		if not parts then
