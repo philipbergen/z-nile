@@ -71,6 +71,8 @@ return t.spec("c0306 docs", function(it)
 					"./zn work next",
 					"./zn done",
 					"stream review",
+					"with any other phase at all",
+					"An unmarked item is exempt",
 				}
 			do
 				at(p, needle, `{name} Review models`)

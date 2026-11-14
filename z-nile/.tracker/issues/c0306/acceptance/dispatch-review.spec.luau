@@ -121,11 +121,13 @@ return t.spec("c0306 the dispatcher stamps the reviews it files", function(it)
 	it("sets up a tracker with .models.toml, an issue, a raft in a worktree and the fake CLIs", function()
 		h = fakecli.new("c0306-dispatch-review", {
 			[".models.toml"] = MODELS,
-			["pickman/.tracker/issues/c0010/c0010.md"] = trackerfix.stub(
-				"c0010",
-				"first-thing",
-				"new-quiet-copper-falcon"
-			),
+			-- c0010 is marked `reviews: judged`; c0011 is not
+			["pickman/.tracker/issues/c0010/c0010.md"] = (string.gsub(
+				trackerfix.stub("c0010", "first-thing", "new-quiet-copper-falcon"),
+				"design: draft\n",
+				"design: draft\nreviews: judged\n",
+				1
+			)),
 			["pickman/.tracker/issues/c0011/c0011.md"] = trackerfix.stub(
 				"c0011",
 				"second-thing",
@@ -207,6 +209,14 @@ return t.spec("c0306 the dispatcher stamps the reviews it files", function(it)
 		t.expect(r.ok).toBe(false)
 		t.expect(has(r.stdout .. r.stderr, "already records")).toBe(true)
 		t.expect(fs.isFile(`{wt}/{ISSUE}/design-review-001.md`)).toBe(false)
+	end)
+
+	it("AC7: in an unmarked item, a reviewer's own Model: line is filed as written", function()
+		reviewer("Model: claude-sonnet-5-5\\n")
+		dispatch("c0011", "design")
+		t.expect(filed(`pickman/.tracker/issues/c0011/design-review-001.md`))
+			.toBe("Model: claude-sonnet-5-5\n# Review\n\nVerdict: approve\n")
+		clean(`pickman/.tracker/issues/c0011/design-review-001.md`)
 	end)
 
 	it("cleans up", function()

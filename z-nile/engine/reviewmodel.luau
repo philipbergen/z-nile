@@ -116,10 +116,26 @@ function reviewmodel.files(names: { string }, kind: string): { string }
 	return out
 end
 
-local MODE = { design = "design", coherence = "raft", code = "code|final" }
+-- The mode `./zn dispatch zz-review` takes for a review file: from its kind and its name.
+local function modeOf(kind: string, name: string): string
+	if kind == "code" then
+		return if string.sub(name, 1, 6) == "final-" then "final" else "code"
+	end
+	return if kind == "coherence" then "raft" else "design"
+end
 
--- The refusal for the first file of `kind` in `files` (name -> text) that is not on a review model, or nil.
-function reviewmodel.problem(files: { [string]: string }, kind: string, owner: string): string?
+-- The refusal for the first file of `kind` in `files` (name -> text) that is not on a review model, or nil. The ways
+-- out are the ones that work from where the file is: always a new round on a review model; for a design or coherence
+-- review that records no `Model:` line also the spend that records it (an off-model record is recorded once, so it has
+-- only the new round); a coherence review or a member's design review (`onOrigin`) is on origin/main, so its way out is
+-- made in a worktree and lands by pull request; a code or final review is committed, so its new round is committed with
+-- `./zn commit --phase code-review`.
+function reviewmodel.problem(
+	files: { [string]: string },
+	kind: string,
+	owner: string,
+	onOrigin: boolean?
+): string?
 	local names: { string } = {}
 	for name in files do
 		table.insert(names, name)
@@ -137,10 +153,25 @@ function reviewmodel.problem(files: { [string]: string }, kind: string, owner: s
 				recorded = "an empty `Model:` line"
 			end
 		end
-		local record = if kind == "code"
-			then `./zn commit -m "{owner}: {(string.gsub(name, "%.md$", ""))}" --phase code-review --model <id> --effort <level>`
-			else `./zn spend {owner} --phase design-review --note {(string.gsub(name, "%.md$", ""))} --model <id> --effort <level>`
-		return `{owner}: {name} records {recorded}, which is not a review model (review models: {reviewmodel.describe()}). Run the round again on a review model (./zn dispatch zz-review {owner} --mode {MODE[kind] or kind}, or a fresh subagent on the role's model), or if it did run on one, record it: {record}`
+		local stem = (string.gsub(name, "%.md$", ""))
+		local again = `run the round again on a review model (./zn dispatch zz-review {owner} --mode {modeOf(
+			kind,
+			name
+		)}, or a fresh subagent on that role's model)`
+		local ways: string
+		if kind == "code" then
+			ways =
+				`{again} and commit it with ./zn commit -m "{owner}: review-NNN" --phase code-review --model <id> --effort <level>`
+		else
+			ways = again
+			if model == nil then
+				ways ..= `, or if it did run on one, record it: ./zn spend {owner} --phase design-review --note {stem} --model <id> --effort <level>, then commit the file`
+			end
+			if kind == "coherence" or onOrigin then
+				ways ..= " (this review is on origin/main: either way out is made in a worktree and lands by pull request)"
+			end
+		end
+		return `{owner}: {name} records {recorded}, which is not a review model (review models: {reviewmodel.describe()}). To go on, {ways}`
 	end
 	return nil
 end

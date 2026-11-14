@@ -1134,7 +1134,17 @@ function dispatcher.modelStep(
 				local name = string.format("%s%03d.md", l.prefix, last + 1)
 				-- c0306: the dispatcher records the model and effort that wrote the review; the reviewer never does
 				local by = filedBy :: { model: string, effort: string? }
-				local stamped, refusal = reviewmodel.stamp(fs.readFile(landing), by.model, by.effort)
+				local written = fs.readFile(landing)
+				-- a reviewer's own record fails the step in a marked item; an unmarked one is filed as the reviewer wrote it
+				local stamped: string?, refusal: string?
+				if
+					reviewmodel.read(written) ~= nil
+					and not require("./reviewfiles").markedFolder(`{cwd}/{l.dir}`)
+				then
+					stamped = written
+				else
+					stamped, refusal = reviewmodel.stamp(written, by.model, by.effort)
+				end
 				if stamped then
 					fs.writeFile(`{cwd}/{l.dir}/{name}`, stamped)
 					pcall(fs.removeFile, landing)

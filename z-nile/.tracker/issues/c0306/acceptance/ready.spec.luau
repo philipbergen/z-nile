@@ -139,8 +139,8 @@ return t.spec("c0306 ready and work next judge the reviews", function(it)
 			t.expect(has(why, "claude-sonnet-5-5")).toBe(true)
 			t.expect(has(why, "claude-opus-")).toBe(true)
 			t.expect(has(why, "R0001")).toBe(true)
-			t.expect(has(why, "./zn spend R0001 --phase design-review --note design-review-001 --model"))
-				.toBe(true)
+			t.expect(has(why, "./zn dispatch zz-review R0001 --mode raft")).toBe(true)
+			t.expect(has(why, "./zn spend")).toBe(false) -- an off-model record is recorded once: only a new round
 		end
 	)
 
@@ -150,6 +150,26 @@ return t.spec("c0306 ready and work next judge the reviews", function(it)
 			local why = readycheck.reason(raft(true, { ["design-review-001.md"] = BARE }))
 			t.expect(has(why, "design-review-001.md")).toBe(true)
 			t.expect(has(why, "no `Model:` line")).toBe(true)
+		end
+	)
+
+	it(
+		"AC5: a coherence review's refusal says its way out is made in a worktree and lands by pull request",
+		function()
+			local none = readycheck.reason(raft(true, { ["design-review-001.md"] = BARE }))
+			t.expect(has(none, "worktree")).toBe(true)
+			t.expect(has(none, "pull request")).toBe(true)
+			t.expect(has(none, "./zn spend R0001 --phase design-review --note design-review-001 --model"))
+				.toBe(true)
+			local member =
+				readycheck.reason(raft(nil, nil, { member(true, { ["design-review-001.md"] = BARE }) }))
+			t.expect(has(member, "worktree")).toBe(true)
+			t.expect(has(member, "pull request")).toBe(true)
+			t.expect(has(member, "--mode design")).toBe(true)
+			local off = readycheck.reason(raft(true, { ["design-review-001.md"] = SONNET }))
+			t.expect(has(off, "worktree")).toBe(true)
+			t.expect(has(off, "pull request")).toBe(true)
+			t.expect(has(off, "./zn spend")).toBe(false)
 		end
 	)
 

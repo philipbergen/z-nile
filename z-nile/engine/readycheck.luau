@@ -236,7 +236,7 @@ function readycheck.reason(r: Raft): (string?, boolean)
 			return memberGap, true
 		end
 		if m.judged then
-			local off = reviewmodel.problem(m.files, "design", m.id)
+			local off = reviewmodel.problem(m.files, "design", m.id, true)
 			if off then
 				return off, true
 			end

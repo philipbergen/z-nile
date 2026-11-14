@@ -177,6 +177,8 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 			seed[`{ROOT}/issues/c0120/design-review-001.md`] = SONNET
 			item("c0160", issue("c0160", NEW, "", "draft", false))
 			item("c0161", issue("c0161", NEW, "", "draft", false))
+			item("c0180", issue("c0180", NEW, "", "draft", false))
+			item("c0181", issue("c0181", NEW, "", "draft", false))
 			-- the carried move to prepared: preparing issues with design: ready, marked or not
 			for _, id in
 				{
@@ -191,11 +193,12 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 					"c0138",
 					"c0139",
 					"c0152",
+					"c0170",
 				}
 			do
 				item(id, issue(id, PREPARING, "", "ready", true))
 			end
-			for _, id in { "c0150", "c0151", "c0170", "c0171", "c0172", "c0173", "c0174", "c0175" } do
+			for _, id in { "c0150", "c0151", "c0171", "c0172", "c0173", "c0174", "c0175", "c0176" } do
 				item(id, issue(id, PREPARING, "", "ready", false))
 			end
 			-- prepared rafts with the record z-raft wrote: each member's design hash and the coherence review quoting it
@@ -296,6 +299,19 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 		t.expect(front(originFile(docOf("c0161")), "reviews")).toBe(nil)
 	end)
 
+	it("AC3: the local new raft writes reviews: judged into the raft it makes", function()
+		local out = znOk(
+			prep,
+			{ "new", "raft", "chore", "local", "c0180", "c0181", "--project", "pickman" },
+			{ PICKMAN_PUBLISH = "0" }
+		)
+		local path = string.match(out, "(%S+%.md)") :: string
+		t.expect(string.match(path, "/rafts/R%d%d%d%d/R%d%d%d%d%.md$") ~= nil).toBe(true)
+		t.expect(front(fs.readFile(`{prep}/{path}`), "reviews")).toBe("judged")
+		t.expect(front(fs.readFile(`{prep}/{docOf("c0180")}`), "reviews")).toBe(nil)
+		t.expect(front(fs.readFile(`{prep}/{docOf("c0181")}`), "reviews")).toBe(nil)
+	end)
+
 	it(
 		"AC4: status prepared refuses a marked issue whose design review records a model that is not a review model, naming the file, the model and the four kinds",
 		function()
@@ -321,6 +337,25 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 		t.expect(has(say(r), "no `Model:` line")).toBe(true)
 		t.expect(moved("c0131")).toBe(false)
 	end)
+
+	it(
+		"AC4: status prepared's refusal of an off-model record names only a new round, and of a missing record also the spend that records it",
+		function()
+			reviewIn("c0139", SONNET)
+			local off = say(prepared("c0139"))
+			t.expect(has(off, "claude-sonnet-5-5")).toBe(true)
+			t.expect(has(off, "./zn dispatch zz-review c0139 --mode design")).toBe(true)
+			t.expect(has(off, "./zn spend")).toBe(false)
+			t.expect(has(off, "code|final")).toBe(false)
+			t.expect(has(off, "pull request")).toBe(false) -- the file is in this worktree
+			-- c0131's design review still records no model
+			local none = say(prepared("c0131"))
+			t.expect(has(none, "no `Model:` line")).toBe(true)
+			t.expect(has(none, "./zn dispatch zz-review c0131 --mode design")).toBe(true)
+			t.expect(has(none, "./zn spend c0131 --phase design-review --note design-review-001 --model"))
+				.toBe(true)
+		end
+	)
 
 	it("AC4: status prepared judges every round, not only the last", function()
 		reviewIn("c0132", SONNET)
@@ -471,6 +506,19 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 			t.expect(has(say(r), "--model")).toBe(true)
 			t.expect(reviewOf("c0170")).toBe(review(nil, nil))
 			t.expect(tsv("c0170")).toBe("")
+		end
+	)
+
+	it(
+		"AC8: an unmarked issue's spend --phase design-review with no --model records as today and stamps nothing",
+		function()
+			reviewIn("c0176", review(nil, nil))
+			local r = spend("c0176", {})
+			if not r.ok then
+				error(`spend refused an unmarked issue: {say(r)}`)
+			end
+			t.expect(reviewOf("c0176")).toBe(review(nil, nil))
+			t.expect(tsv("c0176") ~= "").toBe(true)
 		end
 	)
 

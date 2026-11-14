@@ -4,6 +4,8 @@
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local reviewmodel = require("./reviewmodel")
+local sh = require("../lib/sh")
+local store = require("./store")
 
 local reviewfiles = {}
 
@@ -53,6 +55,67 @@ function reviewfiles.stampFile(path: string, model: string, effort: string?): st
 		return `{path} {why}`
 	end
 	fs.writeFile(path, stamped)
+	return nil
+end
+
+-- Whether the item whose folder this is is marked `reviews: judged`: the folder's own document,
+-- `<folder>/<folder name>.md`. A folder with no document there is not marked.
+function reviewfiles.markedFolder(dir: string): boolean
+	local trimmed = string.gsub(dir, "/+$", "")
+	local name = string.match(trimmed, "([^/]+)$")
+	local doc = if name then `{trimmed}/{name}.md` else ""
+	if doc == "" or not fs.isFile(doc) then
+		return false
+	end
+	return reviewmodel.judged(store.readFront(doc))
+end
+
+-- What `./zn commit` does with the review files the commit carries (untracked, added or modified; not deleted) that
+-- have no `Model:` line. Returns a refusal, or nil after stamping them (with --phase code-review and --model).
+-- A review of a marked item is refused without --model under --phase code-review, and under any other phase at all;
+-- an unmarked item's is left as it is without --model, and stamped with it.
+function reviewfiles.commitReviews(phase: string, model: string?, effort: string?): string?
+	local status = sh.run("git", { "status", "--porcelain", "--untracked-files=all" })
+	if not status.ok then
+		return "cannot read git status"
+	end
+	local unstamped: { { path: string, marked: boolean } } = {}
+	for line in string.gmatch(status.stdout .. "\n", "([^\n]*)\n") do
+		local xy, rest = string.match(line, "^(..) (.+)$")
+		if xy and rest and not string.find(xy, "D", 1, true) then
+			local path = string.match(rest, " %-> (.+)$") or rest
+			local base = string.match(path, "([^/]+)$")
+			if
+				base
+				and (string.match(base, "^review%-%d+%.md$") or string.match(base, "^final%-review%-%d+%.md$") or string.match(
+					base,
+					"^design%-review%-%d+%.md$"
+				))
+				and fs.isFile(path)
+				and reviewmodel.read(fs.readFile(path)) == nil
+			then
+				table.insert(unstamped, {
+					path = path,
+					marked = reviewfiles.markedFolder(string.sub(path, 1, #path - #base - 1)),
+				})
+			end
+		end
+	end
+	for _, u in unstamped do
+		if u.marked and phase ~= "code-review" then
+			return `{u.path} is a review: commit it with --phase code-review --model <the reviewer's model id>`
+		elseif u.marked and not model then
+			return `{u.path} is a review: --model <the reviewer's model id> records it`
+		end
+	end
+	if phase == "code-review" and model then
+		for _, u in unstamped do
+			local why = reviewfiles.stampFile(u.path, model, effort)
+			if why then
+				return why
+			end
+		end
+	end
 	return nil
 end
 

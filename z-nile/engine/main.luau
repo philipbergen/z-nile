@@ -1441,7 +1441,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			DATE = today(),
 			PROJECT = projectNameOf(root),
 		}
-		fs.writeFile(`{dir}/{id}.md`, render(`{TEMPLATES}/raft/doc.md`, vars))
+		fs.writeFile(`{dir}/{id}.md`, withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "reviews", "judged"))
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/raft/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
 		print(`{dir}/{id}.md`)
@@ -4574,40 +4574,12 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 		stdio.ewrite("commit: --time and --tokens are ignored; cost is measured\n")
 	end
 	local model = modelOption("commit", opts)
-	if phase == "code-review" then
-		-- c0306: every new review file in this commit is stamped with the reviewer's model and effort; one with no
-		-- --model is refused (the lead's own model would otherwise be taken for the reviewer's)
-		local effort = require("./reviewfiles").effortOption(opts)
-		local status = sh.git({ "status", "--porcelain", "--untracked-files=all" })
-		local unstamped: { string } = {}
-		for line in string.gmatch(status .. "\n", "([^\n]*)\n") do
-			local mark, path = string.match(line, "^(..) (.+)$")
-			local base = if path then string.match(path, "([^/]+)$") else nil
-			if
-				mark
-				and path
-				and base
-				and (mark == "??" or string.sub(mark, 1, 1) == "A")
-				and (string.match(base, "^review%-%d+%.md$") or string.match(base, "^final%-review%-%d+%.md$") or string.match(
-					base,
-					"^design%-review%-%d+%.md$"
-				))
-				and require("./reviewmodel").read(fs.readFile(path)) == nil
-			then
-				table.insert(unstamped, path)
-			end
-		end
-		for _, path in unstamped do
-			if not model then
-				fail(`{path} is a review: --model <the reviewer's model id> records it`)
-			end
-		end
-		for _, path in unstamped do
-			local why = require("./reviewfiles").stampFile(path, model :: string, effort)
-			if why then
-				fail(why)
-			end
-		end
+	-- c0306: the review files this commit carries are stamped with --model under --phase code-review, and refused in a
+	-- marked item without it (under any other phase, at all)
+	local refused =
+		require("./reviewfiles").commitReviews(phase, model, require("./reviewfiles").effortOption(opts))
+	if refused then
+		fail(refused)
 	end
 	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
 end
@@ -6417,17 +6389,6 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	if opts["--note"] and opts["--note"][1] ~= "" then
 		note = opts["--note"][1]
 	end
-	-- c0306: a design or coherence review is recorded with the reviewer's model, stamped into its file
-	local reviewFile: string? = nil
-	if phase == "design-review" and not opts["--begin"] then
-		if not model then
-			fail("spend --phase design-review needs --model <the reviewer's model id> [--effort <level>]")
-		end
-		if not string.match(note, "^design%-review%-%d+$") then
-			fail("spend --phase design-review needs --note design-review-NNN, the review file it records")
-		end
-		reviewFile = note
-	end
 	local targets: { store.Item } = {}
 	local raftItem: store.Item? = nil
 	if store.isRaftId(id) then
@@ -6440,6 +6401,25 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 		local item = store.find(id)
 		if item then
 			targets = { item }
+		end
+	end
+	-- c0306: a design or coherence review is recorded with the reviewer's model, stamped into its file. In a marked
+	-- item the call is refused without --model and without --note design-review-NNN; in an unmarked one it records as
+	-- before, and stamps when it is given both.
+	local reviewFile: string? = nil
+	if phase == "design-review" and not opts["--begin"] then
+		local owner = raftItem or targets[1]
+		local named = string.match(note, "^design%-review%-%d+$") ~= nil
+		if owner and require("./reviewmodel").judged(store.readFront((owner :: store.Item).doc)) then
+			if not model then
+				fail("spend --phase design-review needs --model <the reviewer's model id> [--effort <level>]")
+			end
+			if not named then
+				fail("spend --phase design-review needs --note design-review-NNN, the review file it records")
+			end
+		end
+		if model and named then
+			reviewFile = note
 		end
 	end
 	local stats: { { path: string, added: number, removed: number } } = {}

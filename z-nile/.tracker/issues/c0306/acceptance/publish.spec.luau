@@ -31,6 +31,8 @@ return t.spec("c0306 publish accepts the mark only where the tool writes it", fu
 
 	it("AC3: a new raft's document may carry the line, and a document without it is untouched", function()
 		t.expect(mark(RAFT, nil, doc("preparing-quiet-copper-falcon", "judged"))).toBe(nil)
+		-- a raft made by the local form lands by pull request with the line; its later published changes carry it
+		t.expect(mark(RAFT, doc("prepared-a-b-c", "judged"), doc("preparing-d-e-f", "judged"))).toBe(nil)
 		t.expect(mark(ISSUE, doc("new-quiet-copper-falcon"), doc("preparing-quiet-copper-falcon"))).toBe(nil)
 		t.expect(mark(ISSUE, nil, doc("new-quiet-copper-falcon"))).toBe(nil)
 	end)

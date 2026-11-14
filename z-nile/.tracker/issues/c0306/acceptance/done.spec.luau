@@ -118,12 +118,10 @@ local function setup(name: string, marked: boolean)
 	for _, doc in { issueDoc, raftDocPath } do
 		write(doc, (string.gsub(read(doc), "design: draft", "design: ready", 1)))
 	end
-	if marked then
-		-- `new raft` offline writes no mark (only the published claim does): the fixture marks the raft as the tool would
-		write(
-			raftDocPath,
-			(string.gsub(read(raftDocPath), "design: ready\n", "design: ready\nreviews: judged\n", 1))
-		)
+	-- the local `new raft` marks the raft; an unmarked fixture stands for a raft made before c0306 landed
+	t.expect(has(read(raftDocPath), "reviews: judged\n")).toBe(true)
+	if not marked then
+		write(raftDocPath, (string.gsub(read(raftDocPath), "reviews: judged\n", "", 1)))
 	end
 	write(
 		issueDoc,
@@ -144,6 +142,50 @@ return t.spec("c0306 done and commit judge the reviews", function(it)
 	it("sets up an unmarked started raft of one issue", function()
 		setup("c0306-done-a", false)
 		t.expect(has(read(`{TR}/rafts/active/{raft}/{raft}.md`), "reviews: judged")).toBe(false)
+	end)
+
+	it(
+		"AC8: commit --phase code-review in an unmarked raft commits an unstamped review with no --model, as today",
+		function()
+			local file = `{raftDir()}/review-002.md`
+			write(file, review(nil, nil))
+			local before = git({ "rev-parse", "HEAD" })
+			must(zn({ "commit", "-m", `{raft}: review-002`, "--phase", "code-review" }), "commit")
+			t.expect(git({ "rev-parse", "HEAD" }) ~= before).toBe(true)
+			t.expect(read(file)).toBe(review(nil, nil)) -- committed as written, not stamped
+			-- with --model it stamps, in an unmarked raft too
+			local typed = `{raftDir()}/review-001.md`
+			write(typed, review(nil, nil))
+			must(
+				zn({
+					"commit",
+					"-m",
+					`{raft}: review-001`,
+					"--phase",
+					"code-review",
+					"--model",
+					"claude-sonnet-5-5",
+				}),
+				"commit"
+			)
+			t.expect(read(typed)).toBe("Model: claude-sonnet-5-5\n" .. review(nil, nil))
+		end
+	)
+
+	it("AC6: done passes an unmarked raft whose reviews record claude-sonnet-5-5", function()
+		must(zn({ "finish", issue }), "finish")
+		-- the final review is the code review, as the sealed fixtures write it (seal.trace copies review-001.md)
+		seal.trace(dir, raft)
+		local r = zn({ "done", raft })
+		if not r.ok then
+			error(`done refused an unmarked raft: {say(r)}`)
+		end
+		t.expect(fs.isDir(`{dir}/{TR}/rafts/done/{raft}`)).toBe(true)
+	end)
+
+	it("sets up a marked started raft of one issue for the commit cases", function()
+		setup("c0306-done-d", true)
+		t.expect(has(read(`{TR}/rafts/active/{raft}/{raft}.md`), "reviews: judged")).toBe(true)
 	end)
 
 	it(
@@ -250,15 +292,48 @@ return t.spec("c0306 done and commit judge the reviews", function(it)
 		end
 	)
 
-	it("AC6: done passes an unmarked raft whose reviews record claude-sonnet-5-5", function()
-		must(zn({ "finish", issue }), "finish")
-		-- the final review is the code review, as the sealed fixtures write it (seal.trace copies review-001.md)
-		seal.trace(dir, raft)
-		local r = zn({ "done", raft })
-		if not r.ok then
-			error(`done refused an unmarked raft: {say(r)}`)
+	it(
+		"AC8: commit with another phase refuses an unstamped review file in a marked raft, naming --phase code-review, and commits nothing",
+		function()
+			local file = `{raftDir()}/review-005.md`
+			write(file, review(nil, nil))
+			local before = git({ "rev-parse", "HEAD" })
+			for _, phase in { "build", "deliver" } do
+				local r = zn({ "commit", "-m", `{raft}: not a review`, "--phase", phase })
+				t.expect(r.ok).toBe(false)
+				t.expect(has(say(r), "review-005.md")).toBe(true)
+				t.expect(has(say(r), "--phase code-review --model")).toBe(true)
+				t.expect(git({ "rev-parse", "HEAD" })).toBe(before)
+				t.expect(git({ "diff", "--cached", "--name-only" })).toBe("")
+			end
+			t.expect(read(file)).toBe(review(nil, nil))
+			-- a review that records its model commits under any phase
+			write(file, review("claude-opus-5-5", "high"))
+			must(zn({ "commit", "-m", `{raft}: a stamped review`, "--phase", "deliver" }), "commit")
 		end
-		t.expect(fs.isDir(`{dir}/{TR}/rafts/done/{raft}`)).toBe(true)
+	)
+
+	it("AC8: commit --model stamps a modified review file that has no Model: line", function()
+		local file = `{raftDir()}/review-006.md`
+		-- committed unstamped outside the protocol (a raw git commit), then edited
+		write(file, review(nil, nil))
+		git({ "add", "-A" })
+		git({ "commit", "-q", "-m", "an unstamped review, raw" })
+		write(file, read(file) .. "\nA later note.\n")
+		must(
+			zn({
+				"commit",
+				"-m",
+				`{raft}: review-006`,
+				"--phase",
+				"code-review",
+				"--model",
+				"claude-opus-5-5",
+			}),
+			"commit"
+		)
+		t.expect(read(file)).toBe("Model: claude-opus-5-5\n" .. review(nil, nil) .. "\nA later note.\n")
+		t.expect(git({ "show", `HEAD:{file}` })).toBe(trim(read(file)))
 	end)
 
 	it(
@@ -310,6 +385,26 @@ return t.spec("c0306 done and commit judge the reviews", function(it)
 			commitAll("final restored")
 		end
 	)
+
+	it("AC6: done's refusal names only a new round, committed with --phase code-review --model", function()
+		local final = `{raftDir()}/final-review-001.md`
+		local good = read(final)
+		write(final, review("claude-sonnet-5-5", "high"))
+		commitAll("final on sonnet again")
+		local r = zn({ "done", raft })
+		t.expect(r.ok).toBe(false)
+		local said = say(r)
+		t.expect(has(said, "--mode final")).toBe(true)
+		t.expect(
+			has(said, `./zn commit -m "{raft}: review-NNN" --phase code-review --model <id> --effort <level>`)
+		)
+			.toBe(true)
+		t.expect(has(said, "./zn spend")).toBe(false)
+		t.expect(has(said, "code|final")).toBe(false)
+		t.expect(has(said, "pull request")).toBe(false)
+		write(final, good)
+		commitAll("final restored again")
+	end)
 
 	it("AC6: done judges every code review round of the raft folder, not only the last", function()
 		write(`{raftDir()}/review-001.md`, review("claude-sonnet-5-5", "high"))
@@ -381,5 +476,6 @@ return t.spec("c0306 done and commit judge the reviews", function(it)
 		fs.removeDir(`{base}/c0306-done-a`)
 		fs.removeDir(`{base}/c0306-done-b`)
 		fs.removeDir(`{base}/c0306-done-c`)
+		fs.removeDir(`{base}/c0306-done-d`)
 	end)
 end)
