@@ -1,6 +1,7 @@
 --!strict
--- c0260 AC6: `./zn land` lets a capture add the raw idea reviews (capture/idea-review-NNN.md) of an unclaimed draft
--- issue beside its document, whose Ask section may only grow, and nothing else in that folder or for another issue. Fixture under
+-- c0260 AC6: `./zn land` lets a capture land what `./zn idea` writes: the `idea:` line, the Ask and Interview sections
+-- (which may only grow), and the idea-review-NNN.md and idea-refute-NNN.md beside the document of an unclaimed draft
+-- issue, and nothing else in that folder or for another issue. Fixture under
 -- .cache/c0260-land (c0072's: a seed with this tree's tooling, a bare origin, a main clone and capture worktrees; the
 -- gate is PICKMAN_LAND_GATE, so no case runs the real gate).
 local engine = require("@tests/lib/engine")
@@ -56,8 +57,7 @@ end
 local function capture(name: string, slug: string): (string, string)
 	local wt = trOk(main, { "worktree", name })
 	identity(wt)
-	local made =
-		trOk(wt, { "new", "issue", "c", slug, "--desc", `First line of {slug}.`, "--project", "pickman" })
+	local made = trOk(wt, { "new", "issue", "c", slug, "--desc", `First line of {slug}.`, "--project", "pickman" })
 	local id = string.match(made, "(c%d%d%d%d)") :: string
 	-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 	local doc = `{wt}/pickman/.tracker/issues/{id}/{id}.md`
@@ -69,9 +69,13 @@ local function capture(name: string, slug: string): (string, string)
 end
 
 local CAPTURE = "pickman/.tracker/issues"
-local ASK = "\n## Ask (verbatim)\n### Message 2026-11-07\n```\nmake the ghosts scarrier, thx\n```\n"
 local function docOf(wt: string, id: string): string
 	return `{wt}/{CAPTURE}/{id}/{id}.md`
+end
+local ASK =
+	"\n## Ask (verbatim)\n### Message 2026-11-07\n```\nmake the ghosts scarrier, thx\n```\n\n## Interview\n### Q1\nQuestion: restate?\nAnswer: approve\n"
+local function challenged(wt: string, id: string)
+	fs.writeFile(docOf(wt, id), (string.gsub(fs.readFile(docOf(wt, id)), "idea: unchallenged", "idea: challenged", 1)))
 end
 local function addAsk(wt: string, id: string, text: string)
 	fs.writeFile(docOf(wt, id), fs.readFile(docOf(wt, id)) .. text)
@@ -81,7 +85,7 @@ local function commit(wt: string)
 	git(wt, { "commit", "-q", "-m", "capture files" })
 end
 local function review(wt: string, id: string, name: string)
-	write(`{wt}/{CAPTURE}/{id}/capture/{name}`, `# {name} of {id}\n`)
+	write(`{wt}/{CAPTURE}/{id}/{name}`, `# {name} of {id}\n`)
 end
 local function refusedWith(wt: string, path: string)
 	local before = tip()
@@ -114,28 +118,33 @@ return t.spec("c0260 a capture lands its record", function(it)
 		t.expect(git(main, { "branch", "--show-current" })).toBe("main")
 	end)
 
-	it("AC6: land pushes the document with its Ask section and the raw idea review in one commit", function()
-		local wt, id = capture("capture-a", "alpha")
-		addAsk(wt, id, ASK)
-		review(wt, id, "idea-review-001.md")
-		commit(wt)
-		local before = tip()
-		local out = trOk(wt, { "land" })
-		t.expect(has(out, "landed")).toBe(true)
-		t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
-		local changed = git(origin, { "diff", "--name-only", before, "main" })
-		t.expect(has(changed, `{CAPTURE}/{id}/{id}.md`)).toBe(true)
-		t.expect(has(changed, `{CAPTURE}/{id}/capture/idea-review-001.md`)).toBe(true)
-		t.expect(git(wt, { "rev-parse", "HEAD" })).toBe(tip())
-	end)
+	it(
+		"AC6: land pushes the document with its Ask and Interview, the idea line and the idea review and refute in one commit",
+		function()
+			local wt, id = capture("capture-a", "alpha")
+			addAsk(wt, id, ASK)
+			challenged(wt, id)
+			review(wt, id, "idea-review-001.md")
+			review(wt, id, "idea-refute-001.md")
+			commit(wt)
+			local before = tip()
+			local out = trOk(wt, { "land" })
+			t.expect(has(out, "landed")).toBe(true)
+			t.expect(git(origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
+			local changed = git(origin, { "diff", "--name-only", before, "main" })
+			t.expect(has(changed, `{CAPTURE}/{id}/{id}.md`)).toBe(true)
+			t.expect(has(changed, `{CAPTURE}/{id}/idea-review-001.md`)).toBe(true)
+			t.expect(has(changed, `{CAPTURE}/{id}/idea-refute-001.md`)).toBe(true)
+			t.expect(has(git(origin, { "show", `main:{CAPTURE}/{id}/{id}.md` }), "idea: challenged")).toBe(true)
+			t.expect(git(wt, { "rev-parse", "HEAD" })).toBe(tip())
+		end
+	)
 
 	it(
 		"AC6: a second land appends a message to the Ask; it refuses to change what the Ask held, to edit a landed review, or to delete one",
 		function()
-			local first = string.match(
-				git(origin, { "log", "--format=%s", "main" }),
-				"tracker: new (c%d+) alpha"
-			) :: string
+			local first =
+				string.match(git(origin, { "log", "--format=%s", "main" }), "tracker: new (c%d+) alpha") :: string
 			local wt = trOk(main, { "worktree", "capture-b" })
 			identity(wt)
 			git(wt, { "pull", "-q", "origin", "main" })
@@ -144,13 +153,17 @@ return t.spec("c0260 a capture lands its record", function(it)
 			commit(wt)
 			refusedWith(wt, `{CAPTURE}/{first}/{first}.md`)
 			git(wt, { "reset", "-q", "--hard", "HEAD~1" })
-			write(`{wt}/{CAPTURE}/{first}/capture/idea-review-001.md`, "rewritten\n") -- a landed review edited: refused
+			fs.writeFile(docOf(wt, first), (string.gsub(doc, "Answer: approve", "Answer: correct"))) -- a landed answer rewritten: refused
 			commit(wt)
-			refusedWith(wt, `{CAPTURE}/{first}/capture/idea-review-001.md`)
+			refusedWith(wt, `{CAPTURE}/{first}/{first}.md`)
 			git(wt, { "reset", "-q", "--hard", "HEAD~1" })
-			fs.removeFile(`{wt}/{CAPTURE}/{first}/capture/idea-review-001.md`) -- a deletion: refused
+			write(`{wt}/{CAPTURE}/{first}/idea-review-001.md`, "rewritten\n") -- a landed review edited: refused
 			commit(wt)
-			refusedWith(wt, `{CAPTURE}/{first}/capture/idea-review-001.md`)
+			refusedWith(wt, `{CAPTURE}/{first}/idea-review-001.md`)
+			git(wt, { "reset", "-q", "--hard", "HEAD~1" })
+			fs.removeFile(`{wt}/{CAPTURE}/{first}/idea-review-001.md`) -- a deletion: refused
+			commit(wt)
+			refusedWith(wt, `{CAPTURE}/{first}/idea-review-001.md`)
 			git(wt, { "reset", "-q", "--hard", "HEAD~1" })
 			addAsk(wt, first, "") -- a message appended after the held text: lands
 			fs.writeFile(
@@ -166,60 +179,60 @@ return t.spec("c0260 a capture lands its record", function(it)
 			)
 			commit(wt)
 			trOk(wt, { "land" })
-			t.expect(has(git(origin, { "show", `main:{CAPTURE}/{first}/{first}.md` }), "and a map"))
-				.toBe(true)
+			t.expect(has(git(origin, { "show", `main:{CAPTURE}/{first}/{first}.md` }), "and a map")).toBe(true)
 		end
 	)
 
 	it(
-		"AC6: land refuses any other file in capture/, a nested path, a review for no draft issue and a symlink",
+		"AC6: land refuses any other file beside the document, a nested path, a review for no draft issue, a review whose document is not changed with it and a symlink",
 		function()
 			local wt, id = capture("capture-c", "gamma")
-			for _, name in { "notes.md", "ask.md", "idea-refute-001.md", "idea-review-1.md" } do
+			challenged(wt, id)
+			for _, name in { "notes.md", "ask.md", "idea-answer-001.md", "idea-review-1.md" } do
 				review(wt, id, name)
 				commit(wt)
-				refusedWith(wt, `{CAPTURE}/{id}/capture/{name}`)
+				refusedWith(wt, `{CAPTURE}/{id}/{name}`)
 				git(wt, { "reset", "-q", "--hard", "HEAD~1" })
 			end
 			review(wt, id, "sub/idea-review-001.md")
 			commit(wt)
-			refusedWith(wt, `{CAPTURE}/{id}/capture/sub/idea-review-001.md`)
+			refusedWith(wt, `{CAPTURE}/{id}/sub/idea-review-001.md`)
 			git(wt, { "reset", "-q", "--hard", "HEAD~1" })
+			-- a review whose issue document this land does not change is refused
+			local lone, loneId = capture("capture-lone", "lone")
+			git(lone, { "push", "-q", "origin", "HEAD:main" })
+			review(lone, loneId, "idea-review-001.md")
+			commit(lone)
+			refusedWith(lone, `{CAPTURE}/{loneId}/idea-review-001.md`)
 			review(wt, "c0999", "idea-review-001.md") -- no such issue on origin/main
 			commit(wt)
-			refusedWith(wt, `{CAPTURE}/c0999/capture/idea-review-001.md`)
+			refusedWith(wt, `{CAPTURE}/c0999/idea-review-001.md`)
 			git(wt, { "reset", "-q", "--hard", "HEAD~1" })
 			fs.writeDir(`{wt}/{CAPTURE}/{id}/capture`)
-			process.exec("ln", { "-s", "/etc/passwd", `{wt}/{CAPTURE}/{id}/capture/idea-review-001.md` }) -- a link out
+			process.exec("ln", { "-s", "/etc/passwd", `{wt}/{CAPTURE}/{id}/idea-review-001.md` }) -- a link out
 			commit(wt)
-			refusedWith(wt, `{CAPTURE}/{id}/capture/idea-review-001.md`)
+			refusedWith(wt, `{CAPTURE}/{id}/idea-review-001.md`)
 			git(wt, { "reset", "-q", "--hard", "HEAD~1" })
 		end
 	)
 
-	it(
-		"AC6: a dispatched run (ZN_DISPATCH=1) cannot land a Confirmed line; the user's own land can",
-		function()
-			local wt, id = capture("capture-conf", "confirm")
-			addAsk(wt, id, '\n## Confirmation\nConfirmed (user, 2026-11-08) after round 1: "yes"\n')
-			commit(wt)
-			local before = tip()
-			local r = fixture.exec(
-				wt,
-				"bash",
-				{ "scripts/tracker.sh", "land" },
-				{ env = { PICKMAN_LAND_GATE = "true", ZN_DISPATCH = "1" } }
-			)
-			t.expect(r.ok).toBe(false)
-			t.expect(has(r.stderr, "only the user confirms")).toBe(true)
-			t.expect(tip()).toBe(before)
-			trOk(wt, { "land" }) -- the same record, landed by the user's own session
-			t.expect(
-				has(git(origin, { "show", `main:{CAPTURE}/{id}/{id}.md` }), "Confirmed (user, 2026-11-08)")
-			)
-				.toBe(true)
-		end
-	)
+	it("AC6: a dispatched run (ZN_DISPATCH=1) cannot land a Confirmed line; the user's own land can", function()
+		local wt, id = capture("capture-conf", "confirm")
+		addAsk(wt, id, '\n## Confirmation\nConfirmed (user, 2026-11-08) after round 1: "yes"\n')
+		commit(wt)
+		local before = tip()
+		local r = fixture.exec(
+			wt,
+			"bash",
+			{ "scripts/tracker.sh", "land" },
+			{ env = { PICKMAN_LAND_GATE = "true", ZN_DISPATCH = "1" } }
+		)
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "only the user confirms")).toBe(true)
+		t.expect(tip()).toBe(before)
+		trOk(wt, { "land" }) -- the same record, landed by the user's own session
+		t.expect(has(git(origin, { "show", `main:{CAPTURE}/{id}/{id}.md` }), "Confirmed (user, 2026-11-08)")).toBe(true)
+	end)
 
 	it(
 		"AC6: only `./zn new --filed-by` writes the agent-filed marker: a land that adds, changes or removes it, or drops its Scope line, is refused",
@@ -261,7 +274,7 @@ return t.spec("c0260 a capture lands its record", function(it)
 				"--project",
 				"pickman",
 				"--filed-by",
-				"agent:c0260/graph-miss",
+				"lesson:z-ticket/graph-miss",
 			})
 			local id2 = string.match(made, "(c%d%d%d%d)") :: string
 			doc = docOf(wt2, id2)
@@ -270,14 +283,7 @@ return t.spec("c0260 a capture lands its record", function(it)
 			clean = git(wt2, { "rev-parse", "HEAD" })
 			local text = fs.readFile(doc)
 			attempt(
-				(
-					string.gsub(
-						text,
-						"Source: agent:c0260/graph%-miss",
-						"Source: agent:c0260/something-else",
-						1
-					)
-				)
+				(string.gsub(text, "Source: lesson:z%-ticket/graph%-miss", "Source: agent:c0260/something-else", 1))
 			)
 			attempt((string.gsub(text, "\n## Filed by %(agent%)\nSource: [^\n]*\n", "", 1)))
 			attempt((string.gsub(text, "\nScope decision %(user[^\n]*", "", 1)))
@@ -307,11 +313,11 @@ return t.spec("c0260 a capture lands its record", function(it)
 			local clean = git(wt, { "rev-parse", "HEAD" })
 			review(wt, "c0888", "idea-review-001.md")
 			commit(wt)
-			refusedWith(wt, `{CAPTURE}/c0888/capture/idea-review-001.md`)
+			refusedWith(wt, `{CAPTURE}/c0888/idea-review-001.md`)
 			git(wt, { "reset", "-q", "--hard", clean }) -- land merged origin/main on top: HEAD~1 would not be this
 			review(wt, id, "idea-review-001.md")
 			commit(wt)
-			refusedWith(wt, `{CAPTURE}/{id}/capture/idea-review-001.md`)
+			refusedWith(wt, `{CAPTURE}/{id}/idea-review-001.md`)
 			fs.removeDir(base)
 		end
 	)

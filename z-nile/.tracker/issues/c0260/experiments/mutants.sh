@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# c0260 mutation check. Run from the prototype's z-nile/ (a worktree off origin/main with the change applied and the
+# acceptance specs copied under .tracker/issues/c0260/acceptance/): each mutant is applied to one engine file, its
+# spec case must FAIL on an assertion, and the file is restored. Usage: bash mutants.sh <prototype>/z-nile
+set -u
+cd "$1" || exit 2
+A=.tracker/issues/c0260/acceptance
+fail=0
+mutate() { # name file python-regex-from python-to spec expected-failure-substring
+  local name=$1 file=$2 from=$3 to=$4 spec=$5 want=$6
+  cp "$file" "$file.bak"
+  python3 - "$file" "$from" "$to" <<'PY'
+import re, sys
+p, a, b = sys.argv[1:4]
+s = open(p).read()
+n, c = re.subn(a, b, s, count=1, flags=re.S)
+if c != 1:
+    sys.exit("mutant did not apply")
+open(p, "w").write(n)
+PY
+  local applied=$?
+  if [ $applied -ne 0 ]; then echo "NOAPPLY $name"; mv "$file.bak" "$file"; fail=1; return; fi
+  out=$(lune run tests/run -- "$A/$spec" 2>&1)
+  mv "$file.bak" "$file"
+  if echo "$out" | grep -q "FAIL" && echo "$out" | grep -qF -- "$want"; then echo "KILLED  $name"; else echo "SURVIVED $name :: $(echo "$out" | tail -3 | tr '\n' ' ')"; fail=1; fi
+}
+E=engine
+mutate M1-ask-grows "$E/capturecheck.luau" 'if b == nil or string.sub\(b, 1, #held\) ~= held then\n\t\t\t\treturn false' 'if false then\n\t\t\t\treturn false' shape.spec.luau "only grow"
+mutate M2-qnumbers "$E/capturecheck.luau" 'if firstQ and firstQ.head ~= `Q\{count \+ 1\}` then' 'if false then' shape.spec.luau "appends"
+mutate M3-confirm-round "$E/capturecheck.luau" 'elseif final.round ~= last then' 'elseif false then' shape.spec.luau "confirmation names"
+mutate M4-drop-confirmed "$E/capturecheck.luau" 'and string.sub\(line, 1, 11\) ~= "Confirmed \(" then\n\t\t\t\t\ttable.insert\(kept, line\)' 'and true then\n\t\t\t\t\ttable.insert(kept, line)' record.spec.luau "next round"
+mutate M5-dispatch-confirm "$E/main.luau" 'if opts\["--confirm"\] and dispatched then' 'if false then' record.spec.luau "--confirm records"
+mutate M6-challenge-record "$E/idea.luau" 'if record then\n\t\tagainst' 'if false then\n\t\tagainst' record.spec.luau "given the user"
+mutate M7-claim-gate "$E/capturecut.luau" 'if capturecheck.satisfies\(doc, capturecut.reviewsBeside\(folder, paths, read\)\) then' 'if true then' claim.spec.luau "made after"
+mutate M8-land-doc-changed "$E/main.luau" 'if not captured\[entry.id\] then\n\t\t\treturn `not a capture change: \{entry.path\} \(an idea review' 'if false then\n\t\t\treturn `not a capture change: {entry.path} (an idea review' land.spec.luau "refuses any other"
+mutate M9-land-marker "$E/main.luau" 'if capturecheck.markerOf\(theirs.stdout\) ~= capturecheck.markerOf\(mine.stdout\) then' 'if false then' land.spec.luau "agent-filed marker"
+mutate M10-filed-idea-key "$E/capturecut.luau" 'if filedBy == nil then' 'if true then' exempt.spec.luau "new ticket"
+mutate M11-unattended-anywhere "$E/main.luau" 'if opts\["--unattended"\] and not dispatched then' 'if false then' record.spec.luau "--confirm records"
+mutate M12-standalone "$E/main.luau" 'if standalone > 1 or \(standalone == 1 and opts\["--text"\]\) then' 'if false then' record.spec.luau "--record appends"
+mutate M13-raft-members "$E/main.luau" 'if st == "new" then\n\t\t\t\t\t\tlocal gap = require' 'if false then\n\t\t\t\t\t\tlocal gap = require' claim.spec.luau "new raft"
+mutate M14-audit-unconfirmed "$E/audit.luau" 'if capturecheck.unconfirmed\(doc\) and' 'if false and' audit.spec.luau "still Unconfirmed"
+mutate M15-dispatched-confirmed-land "$E/main.luau" 'process.env.ZN_DISPATCH == "1"\n\t\t\tand capturecheck.confirmed' 'false\n\t\t\tand capturecheck.confirmed' land.spec.luau "dispatched run"
+mutate M16-record-first "$E/main.luau" 'if cutMod.required\(frontOf\(doc\)\) and capturecheck.kind\(doc\) ~= "user" then' 'if false then' record.spec.luau "ask is kept"
+mutate M17-fences-ignored "$E/capturecheck.luau" 'local function fenceOf\(line: string\): \(string\?, number\)\n' 'local function fenceOf(line: string): (string?, number)\n\tif true then\n\t\treturn nil, 0\n\tend\n' record.spec.luau "pasted headings"
+mutate M18-confirm-unbound "$E/capturecheck.luau" 'if capturing and final.kind == "Confirmed"' 'if false and final.kind == "Confirmed"' shape.spec.luau "bound to it"
+mutate M19-skip-open-ignored "$E/idea.luau" 'local pending = if skipOpen then \{\} else openlist.pending\(doc\)' 'local pending = openlist.pending(doc)' record.spec.luau "leaves a finding open"
+mutate M20-claim-skip-open "$E/main.luau" 'capturecut.required\(frontOf\(tt\)\) and require\("./capturecheck"\).unconfirmed\(tt\)' 'false' claim.spec.luau "full user record"
+mutate M21-land-runs-no-check "$E/main.luau" 'local problems = capturecheck.check\(mine.stdout, landed\)' 'local problems = {}' land-marked.spec.luau "malformed record"
+mutate M22-prepared-keeps-words "$E/main.luau" 'if not require\("./capturecheck"\).recordGrows\(tt, fs.readFile\(localItem.doc\)\) then' 'if false then' claim.spec.luau "full user record"
+mutate M23-source-unchecked "$E/main.luau" 'if sourceWhy then' 'if false then' claim.spec.luau "--filed-by refuses"
+mutate M24-audit-ready-open "$E/audit.luau" 'if design == "ready" and #openlist.pending\(doc\) > 0 then' 'if false then' audit.spec.luau "idea point still unruled"
+mutate M25-idea-name-widened "$E/main.luau" 'idea%-review%-%d%d%d%\.md\$"\) or' 'idea%-re[a-z]+%-%d%d%d%.md$") or' land-marked.spec.luau "land beside a document"
+mutate M26-idea-key-free "$E/main.luau" 'local ideaStep = k == "idea"\n\t\t\t\t\tand \(was\[k\] == "unchallenged" or was\[k\] == "challenged"\)\n\t\t\t\t\tand now\[k\] == "challenged"' 'local ideaStep = k == "idea"' land-marked.spec.luau "land beside a document"
+mutate M27-confirm-incomplete "$E/main.luau" 'if #problems == 0 and not capturecheck.satisfies\(confirmed, reviews\) then' 'if false then' record.spec.luau "needs the interview"
+mutate M28-ask-after-interview "$E/capturecheck.luau" '\["Ask \(verbatim\)"\] = \{ "Interview", "Confirmation", "Design" \}' '["Ask (verbatim)"] = { "Confirmation", "Design" }' shape.spec.luau "Interview only"
+mutate M29-record-keeps-confirmed "$E/capturecheck.luau" 'local parts = split\(capturecheck.dropConfirmed\(doc\)\)' 'local parts = split(doc)' record.spec.luau "pasted headings"
+exit $fail

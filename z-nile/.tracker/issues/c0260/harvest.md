@@ -71,3 +71,19 @@
 - design-review-008 F3: z-design/restated-rules-move-together
 - design-review-008 F4: z-design/spec-design-correspondence
 - design-review-008 F5: z-design/restated-rules-move-together
+- design-review-009 F1: z-design/dispatched-refusals-name-their-way-through
+- design-review-009 F2: z-design/results-land-on-every-path
+- design-review-009 F3: z-design/user-words-parsers-accept-anything
+- design-review-009 F4: z-design/confirmations-bind-what-they-confirm
+- design-review-009 F5: zz-arch/audited-shapes-are-checked-on-every-direct-push
+- design-review-009 F6: z-design/never-narrow-captured-scope
+- design-review-009 F7: z-design/user-words-parsers-accept-anything
+- design-review-009 F8: z-design/quote-other-preps-before-promising
+- design-review-009 F9: z-design/quote-other-preps-before-promising
+- design-review-009 F10: z-design/results-land-on-every-path
+- design-review-009 F11: z-design/spec-design-correspondence
+- design-review-009 F12: z-design/spec-design-correspondence
+- design-review-009 F13: one-off: a fallback that restates the design, and a one-call experiment; fixed in the document
+- design-review-009 F14: z-design/spec-design-correspondence
+- note re-prep onto a main that gained the stage (the ten hand-made records found by the real-tree audit spec on the first prototype): z-design/new-rules-migrate-existing-work
+- note a foreign agent's prototype ref tripped the runner's tripwire during a 40-minute run: no lesson (memory: retry once)

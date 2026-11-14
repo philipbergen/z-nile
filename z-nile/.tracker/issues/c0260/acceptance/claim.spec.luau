@@ -5,6 +5,7 @@
 -- writes the exemption marker. Fixture under
 -- .cache/c0260-claim (c0072's: a seed with this tree's tooling, a bare origin, a main clone and capture worktrees; the
 -- gate is PICKMAN_LAND_GATE, so no case runs the real gate).
+local capturecheck = require("@znile/engine/capturecheck")
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -55,10 +56,13 @@ local function identity(dir: string)
 end
 
 local ISSUES = "pickman/.tracker/issues"
-local REVIEW_FILE = "# Review 001\n\n### F1 [low] a claim\n"
--- a full user record (the claim needs all five sections; the audit judges their content, c0260 AC3/AC4)
+-- the review a real round writes: it names the state of the record and the idea it saw (capturecheck.roundState)
+local function reviewFor(doc: string): string
+	return `# Idea review 001\n\nRound: {capturecheck.roundState(doc)}\n\n## Findings\n\nnone\n\n## Verdict\n\napprove\n`
+end
+-- a full user record (the claim needs all three sections, the idea challenged and its review beside the document)
 local RECORD = "\n## Ask (verbatim)\n### Message 2026-11-08\n```\nmore ghosts\n```\n\n## Interview\n### Q1\nQuestion: restate?\nOptions: approve | correct\nAnswer: approve\n\n"
-	.. '## Idea\nMore ghosts.\n\n## Idea review\n### Round 1\n- F1: fixed: done\n\n## Confirmation\nConfirmed (user, 2026-11-08) after round 1: "yes"\n'
+	.. '## Confirmation\nConfirmed (user, 2026-11-08) after round 1: "yes"\n'
 
 return t.spec("c0260 the claim gate", function(it)
 	it("sets up an origin whose history holds an old issue, then the marker's landing", function()
@@ -78,6 +82,7 @@ return t.spec("c0260 the claim gate", function(it)
 			"---\nid: c0777\ntype: chore\ntitle: Old\nslug: old\nraft: \ndepends_on: []\nemergent: false\ndesign: draft\ncreated: 2026-11-01\nstatus: new-a-b-c\n---\n\n# c0777: Old\n\n## Problem\nOld.\n\n## Design\n"
 		)
 		write(`{seed}/{ISSUES}/c0777/check.sh`, "#!/usr/bin/env bash\n", true)
+		write(`{seed}/{ISSUES}/c0777/design-review-001.md`, "# Review 001\n\n### F4 [low] a point\n")
 		-- the first commit is the history before the landing; the second adds the marker file that puts the rule in force
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-q", "-m", "before the landing" })
@@ -100,23 +105,18 @@ return t.spec("c0260 the claim gate", function(it)
 		t.expect(has(git(origin, { "show", `main:{ISSUES}/c0777/c0777.md` }), "status: preparing")).toBe(true)
 	end)
 
-	it(
-		"AC10: an issue made after the landing without the record is refused, and its claim is not published",
-		function()
-			local wt = trOk(main, { "worktree", "prep-new" })
-			identity(wt)
-			local made = trOk(
-				wt,
-				{ "new", "issue", "c", "after-landing", "--desc", "A bare stub.", "--project", "pickman" }
-			)
-			local id = string.match(made, "(c%d%d%d%d)") :: string
-			local before = tip()
-			local r = tr(wt, { "status", id, "preparing" })
-			t.expect(r.ok).toBe(false)
-			t.expect(has(r.stderr, "made after the capture record landed")).toBe(true)
-			t.expect(tip()).toBe(before)
-		end
-	)
+	it("AC10: an issue made after the landing without the record is refused, and its claim is not published", function()
+		local wt = trOk(main, { "worktree", "prep-new" })
+		identity(wt)
+		local made =
+			trOk(wt, { "new", "issue", "c", "after-landing", "--desc", "A bare stub.", "--project", "pickman" })
+		local id = string.match(made, "(c%d%d%d%d)") :: string
+		local before = tip()
+		local r = tr(wt, { "status", id, "preparing" })
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stderr, "made after the capture record landed")).toBe(true)
+		t.expect(tip()).toBe(before)
+	end)
 
 	it(
 		"AC11: --filed-by writes the marker with its source and the Scope decision, and that ticket is claimed",
@@ -133,11 +133,11 @@ return t.spec("c0260 the claim gate", function(it)
 				"--project",
 				"pickman",
 				"--filed-by",
-				"review:c0260/design-review-003 F4",
+				"review:c0777/design-review-001 F4",
 			})
 			local id = string.match(made, "(c%d%d%d%d)") :: string
 			local doc = git(origin, { "show", `main:{ISSUES}/{id}/{id}.md` })
-			t.expect(has(doc, "## Filed by (agent)\nSource: review:c0260/design-review-003 F4")).toBe(true)
+			t.expect(has(doc, "## Filed by (agent)\nSource: review:c0777/design-review-001 F4")).toBe(true)
 			t.expect(has(doc, "Scope decision (user, 2026-11-08): agent-filed tickets are exempt")).toBe(true)
 			trOk(wt, { "status", id, "preparing" })
 		end
@@ -149,7 +149,18 @@ return t.spec("c0260 the claim gate", function(it)
 			local wt = trOk(main, { "worktree", "prep-bad" })
 			identity(wt)
 			local before = tip()
-			for _, bad in { "", "make the ghosts scarier", "lesson:no-slash", "agent:no-item" } do
+			for _, bad in
+				{
+					"",
+					"make the ghosts scarier",
+					"lesson:no-slash",
+					"agent:no-item",
+					"agent:c0999/graph-miss", -- no such item on origin/main
+					"review:c0999/design-review-001 F4",
+					"review:c0777/design-review-009 F1", -- no such review file
+					"review:c0777/design-review-001 F9", -- no such finding
+				}
+			do
 				local r = tr(wt, {
 					"new",
 					"issue",
@@ -163,7 +174,7 @@ return t.spec("c0260 the claim gate", function(it)
 					bad,
 				})
 				t.expect(r.ok).toBe(false)
-				t.expect(has(r.stderr, "--filed-by takes")).toBe(true)
+				t.expect(has(r.stderr, "--filed-by")).toBe(true)
 			end
 			t.expect(tip()).toBe(before)
 		end
@@ -175,10 +186,8 @@ return t.spec("c0260 the claim gate", function(it)
 		identity(shallow)
 		local wt = trOk(shallow, { "worktree", "prep-shallow" })
 		identity(wt)
-		local id = string.match(
-			git(origin, { "log", "--format=%s", "main" }),
-			"tracker: new (c%d+) after%-landing"
-		) :: string
+		local id =
+			string.match(git(origin, { "log", "--format=%s", "main" }), "tracker: new (c%d+) after%-landing") :: string
 		t.expect(has(git(origin, { "show", `main:{ISSUES}/{id}/{id}.md` }), "capture: required")).toBe(true)
 		local r = tr(wt, { "status", id, "preparing" })
 		t.expect(r.ok).toBe(false)
@@ -192,10 +201,8 @@ return t.spec("c0260 the claim gate", function(it)
 		function()
 			local wt = trOk(main, { "worktree", "raft-direct" })
 			identity(wt)
-			local made = trOk(
-				wt,
-				{ "new", "issue", "c", "direct-member", "--desc", "A bare stub.", "--project", "pickman" }
-			)
+			local made =
+				trOk(wt, { "new", "issue", "c", "direct-member", "--desc", "A bare stub.", "--project", "pickman" })
 			local id = string.match(made, "(c%d%d%d%d)") :: string
 			local before = tip()
 			local r = tr(wt, { "new", "raft", "chore", "direct-raft", id, "--project", "pickman" })
@@ -219,10 +226,10 @@ return t.spec("c0260 the claim gate", function(it)
 			"--project",
 			"pickman",
 			"--filed-by",
-			"agent:c0260/graph-miss",
+			"agent:c0777/graph-miss",
 		})
 		local id = string.match(made, "(c%d%d%d%d)") :: string
-		t.expect(has(git(origin, { "show", `main:{ISSUES}/{id}/{id}.md` }), "Source: agent:c0260/graph-miss"))
+		t.expect(has(git(origin, { "show", `main:{ISSUES}/{id}/{id}.md` }), "Source: agent:c0777/graph-miss"))
 			.toBe(true)
 		trOk(wt, { "status", id, "preparing" })
 	end)
@@ -252,24 +259,23 @@ return t.spec("c0260 the claim gate", function(it)
 			local doc = `{rec}/{ISSUES}/{id}/{id}.md`
 			local text = fs.readFile(doc)
 			text = (string.gsub(text, "\n## Design", RECORD .. "\n## Design", 1))
+			text = (string.gsub(text, "idea: unchallenged", "idea: challenged", 1))
 			fs.writeFile(doc, text)
-			write(`{rec}/{ISSUES}/{id}/capture/idea-review-001.md`, REVIEW_FILE)
+			write(`{rec}/{ISSUES}/{id}/idea-review-001.md`, reviewFor(text))
 			git(rec, { "add", "-A" })
 			git(rec, { "commit", "-q", "-m", `tracker: new {id} record` })
 			git(rec, { "push", "-q", "origin", "HEAD:main" })
 			trOk(wt, { "status", id, "preparing" }) -- claimed: the record is there
 			local id2 = string.match(
-				trOk(
-					wt,
-					{ "new", "issue", "c", "second-record", "--desc", "Another.", "--project", "pickman" }
-				),
+				trOk(wt, { "new", "issue", "c", "second-record", "--desc", "Another.", "--project", "pickman" }),
 				"(c%d%d%d%d)"
 			) :: string
 			git(rec, { "fetch", "-q", "origin" })
 			git(rec, { "reset", "-q", "--hard", "origin/main" })
 			local doc2 = `{rec}/{ISSUES}/{id2}/{id2}.md`
-			fs.writeFile(doc2, (string.gsub(fs.readFile(doc2), "\n## Design", RECORD .. "\n## Design", 1)))
-			write(`{rec}/{ISSUES}/{id2}/capture/idea-review-001.md`, REVIEW_FILE)
+			local text2 = (string.gsub(fs.readFile(doc2), "\n## Design", RECORD .. "\n## Design", 1))
+			fs.writeFile(doc2, text2)
+			write(`{rec}/{ISSUES}/{id2}/idea-review-001.md`, reviewFor(text2))
 			git(rec, { "add", "-A" })
 			git(rec, { "commit", "-q", "-m", `tracker: new {id2} record` })
 			git(rec, { "push", "-q", "origin", "HEAD:main" })
@@ -278,10 +284,7 @@ return t.spec("c0260 the claim gate", function(it)
 			trOk(wt, { "new", "raft", "chore", "recorded-raft", id2, "--project", "pickman" }) -- a raft claims a recorded member
 			-- the same record with no raw review beside it is refused: the claim calls the record check
 			local id3 = string.match(
-				trOk(
-					wt,
-					{ "new", "issue", "c", "no-review", "--desc", "Unreviewed.", "--project", "pickman" }
-				),
+				trOk(wt, { "new", "issue", "c", "no-review", "--desc", "Unreviewed.", "--project", "pickman" }),
 				"(c%d%d%d%d)"
 			) :: string
 			git(rec, { "fetch", "-q", "origin" })
@@ -294,6 +297,53 @@ return t.spec("c0260 the claim gate", function(it)
 			local refused = tr(wt, { "status", id3, "preparing" })
 			t.expect(refused.ok).toBe(false)
 			t.expect(has(refused.stderr, "made after the capture record landed")).toBe(true)
+			-- an open point of the idea: a user capture is refused until it is ruled, a dispatched one (last line Unconfirmed)
+			-- is claimed so that z-design can show it
+			local function withOpen(slug: string, line: string): string
+				local made = string.match(
+					trOk(wt, { "new", "issue", "c", slug, "--desc", "Open.", "--project", "pickman" }),
+					"(c%d%d%d%d)"
+				) :: string
+				git(rec, { "fetch", "-q", "origin" })
+				git(rec, { "reset", "-q", "--hard", "origin/main" })
+				local path = `{rec}/{ISSUES}/{made}/{made}.md`
+				local body = string.gsub(RECORD, 'Confirmed %(user, 2026%-11%-08%) after round 1: "yes"', line)
+				local txt = (
+					string.gsub(
+						fs.readFile(path),
+						"\n## Design",
+						body .. "\n## Open to the human\n- F1: a point.\n\n## Design",
+						1
+					)
+				)
+				txt = (string.gsub(txt, "idea: unchallenged", "idea: challenged", 1))
+				fs.writeFile(path, txt)
+				write(`{rec}/{ISSUES}/{made}/idea-review-001.md`, reviewFor(txt))
+				git(rec, { "add", "-A" })
+				git(rec, { "commit", "-q", "-m", `tracker: new {made} open` })
+				git(rec, { "push", "-q", "origin", "HEAD:main" })
+				git(wt, { "fetch", "-q", "origin" })
+				git(wt, { "reset", "-q", "--hard", "origin/main" })
+				return made
+			end
+			local userOpen = withOpen("user-open", 'Confirmed (user, 2026-11-08) after round 1: "yes"')
+			local blocked = tr(wt, { "status", userOpen, "preparing" })
+			t.expect(blocked.ok).toBe(false)
+			t.expect(has(blocked.stderr, "open to the human")).toBe(true)
+			local dispatchedOpen =
+				withOpen("dispatched-open", "Unconfirmed (unattended, 2026-11-08) after round 1: nobody answered")
+			trOk(wt, { "status", dispatchedOpen, "preparing" })
+			-- the end of prep: the user's words in the Ask are not rewritten on the way to prepared
+			local prepDoc = `{wt}/{ISSUES}/{id}/{id}.md`
+			local claimed = fs.readFile(prepDoc)
+			fs.writeFile(prepDoc, (string.gsub(claimed, "design: draft", "design: ready", 1)))
+			fs.writeFile(prepDoc, (string.gsub(fs.readFile(prepDoc), "more ghosts", "fewer ghosts", 1)))
+			local rewritten = tr(wt, { "status", id, "prepared" })
+			t.expect(rewritten.ok).toBe(false)
+			t.expect(has(rewritten.stderr, "changes the user's words")).toBe(true)
+			fs.writeFile(prepDoc, (string.gsub(claimed, "design: draft", "design: ready", 1)))
+			local kept = tr(wt, { "status", id, "prepared" })
+			t.expect(has(kept.stderr, "changes the user's words")).toBe(false) -- any other refusal is not this rule
 			fs.removeDir(base)
 		end
 	)
