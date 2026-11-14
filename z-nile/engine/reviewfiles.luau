@@ -96,7 +96,8 @@ function reviewfiles.commitReviews(phase: string, model: string?, effort: string
 			then
 				table.insert(unstamped, {
 					path = path,
-					marked = #path > #base and reviewfiles.markedFolder(string.sub(path, 1, #path - #base - 1)),
+					marked = #path > #base
+						and reviewfiles.markedFolder(string.sub(path, 1, #path - #base - 1)),
 				})
 			end
 		end
