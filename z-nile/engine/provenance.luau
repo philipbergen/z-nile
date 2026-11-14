@@ -111,6 +111,28 @@ function provenance.hint(env: { [string]: string? }): Hint
 	return { agent = agent, effort = env.CLAUDE_EFFORT }
 end
 
+-- c0283: the variables that make a session an agent's; `hint` reads them, and the callers that build its environment
+-- read the same list.
+provenance.AGENT_VARS = provenance.AGENT_MARKERS
+
+-- c0283: the record of a design approval, written beside approval.md by `./zn approve`: the row `approved | human:<who> |
+-- design=<first 12 hex of the approval's hash>`. approval.md stays the authority (the full hash, its parts, who and when
+-- to the second); the row puts the same approval in c0263's record, where `who` and the board read it. Returns the new
+-- record text, or nil and why (a name the record cannot hold, a record that does not parse).
+function provenance.approved(
+	text: string?,
+	id: string,
+	who: string,
+	hash: string,
+	now: string
+): (string?, string?)
+	local actor = provenance.human(who)
+	if not provenance.isLive(actor) then
+		return nil, `{actor} cannot be recorded (a name holds no | and no line break)`
+	end
+	return provenance.record(text, id, "approved", actor, `design={string.sub(hash, 1, 12)}`, now)
+end
+
 -- flag, then env, then an agent-session hint, then the git name; a given value that is not a live form refuses
 function provenance.resolve(flag: string?, env: string?, hint: Hint, gitName: string?): (string?, string?)
 	for _, given in { flag, env } do
