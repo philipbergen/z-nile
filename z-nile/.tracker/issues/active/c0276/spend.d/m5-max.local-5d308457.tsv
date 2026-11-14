@@ -1,2 +1,4 @@
 when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-14 17:17	c0265: heartbeat, beat, lost, status markers	101	9	build							tokens,wall,cpu,ai
+2026-11-14 18:04	c0274: take over a lost claim	61	2	build							tokens,wall,cpu,ai
+2026-11-14 18:27	c0274: done drops the claim memory after the push (review-002 F1, F2, F3)	5	1	build							tokens,wall,cpu,ai
