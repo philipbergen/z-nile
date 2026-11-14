@@ -25,3 +25,7 @@ c0180 design review 002 F1: c0180's Problem said the user's gate placement was "
 c0264 design review 004 F1: a README label for another prepared item is a promise to that prep (relabel me when you land) that its design never makes; name the item without a label instead, or put the step in its own design.
 
 c0264 design review 006 F1: a search for who else edits a shared document read each open branch's copy of the file; three preps planned their README edits in patches, specs and check.sh files, and the step that replaced a whole section would have undone or been red against each. Read every open prep's plans (patches, specs, check.sh), and make the step a three-way merge.
+
+c0284 design review 001 F9: "its executor measures the served page and may memoize" was a promise to c0121 that its documents never make (its CPU budget is a user ruling, 0.37 s per rebuild). State the measured cost in your own Scalability and hand the number to the coordinator; do not write a step for another issue.
+
+c0264 design review 009 F2, F4 (re-prep): the user's 2026-11-11 idea interviews ("a person rafts") reversed a line the draft pinned, and a merge rule for an open PR (#318) dropped its `*exists*` label because the pinned label map forbade the right one. Read the Decided lines of every labelled ticket and the README diff of every open PR again at the start of a re-prep, and make the pinned map follow a fact of the merge base for a PR that adds a label place.
