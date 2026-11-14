@@ -81,15 +81,22 @@ function sessions.claude(text: string, sinceIso: string, untilIso: string): Part
 	local ai, inn, outn, cache = 0, 0, 0, 0
 	local model: string? = nil
 	local sawTokens = false
+	-- One assistant response is several content blocks, each a line with the same message id and the same usage.
+	local seen: { [string]: boolean } = {}
 	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
 		local ts = string.match(line, '"timestamp":"([^"]+)"')
 		if ts and inside(ts, sinceIso, untilIso) then
 			saw = true
 			local assistant = string.find(line, '"type":"assistant"', 1, true) ~= nil
-			if assistant and prev then
+			local id = if assistant then string.match(line, '"id":"([^"]+)"') else nil
+			local again = id ~= nil and seen[id :: string] == true
+			if assistant and id then
+				seen[id] = true
+			end
+			if assistant and prev and not again then
 				ai += sessions.delta(prev, ts)
 			end
-			if assistant then
+			if assistant and not again then
 				local i = tonumber(string.match(line, '"input_tokens":(%d+)')) or 0
 				local c = tonumber(string.match(line, '"cache_creation_input_tokens":(%d+)')) or 0
 				local o = tonumber(string.match(line, '"output_tokens":(%d+)')) or 0
@@ -174,6 +181,32 @@ function sessions.grokEvents(text: string, sinceIso: string, untilIso: string): 
 		return nil
 	end
 	return { tokens = nil, ai = ai, model = model }
+end
+
+-- Kimi's session wire: usage.record lines, counted as the adapter counts them (input + cache writes + output,
+-- cache reads left out). The wire has no per-line time, so the caller only hands a file touched in the span,
+-- and every record in it counts.
+function sessions.kimi(text: string): Part?
+	local tokens = 0
+	local saw = false
+	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+		if
+			string.find(line, '"type":"usage.record"', 1, true)
+			or string.find(line, '"usage.record"', 1, true)
+		then
+			local other = tonumber(string.match(line, '"inputOther":(%d+%.?%d*)')) or 0
+			local created = tonumber(string.match(line, '"inputCacheCreation":(%d+%.?%d*)')) or 0
+			local output = tonumber(string.match(line, '"output":(%d+%.?%d*)')) or 0
+			if string.find(line, '"inputOther"', 1, true) or string.find(line, '"output"', 1, true) then
+				saw = true
+				tokens += other + created + output
+			end
+		end
+	end
+	if not saw then
+		return nil
+	end
+	return { tokens = tokens }
 end
 
 -- Cursor's agent transcripts (the `agent` CLI) carry the messages and, today, neither timestamps nor usage.

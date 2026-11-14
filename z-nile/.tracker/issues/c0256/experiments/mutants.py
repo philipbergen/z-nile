@@ -25,6 +25,9 @@ SPEC_R = ACC + "retry.spec.luau"
 SPEC_S = ACC + "step.spec.luau"
 SPEC_C = ACC + "capture.spec.luau"
 SPEC_U = ACC + "rounds.spec.luau"
+SPEC_A = ACC + "adopt.spec.luau"
+SPEC_P = ACC + "askprompt.spec.luau"
+SPEC_F = ACC + "fallback.spec.luau"
 
 # (id, what it breaks, file, old text (exactly once), new text, spec)
 FAST = [
@@ -55,6 +58,9 @@ FAST = [
     ("M25", "the step that asked is told the history is others'", DI, "if p.exchangeAsker == p.step and p.exchangeLastStep == p.step and lastIsAnswer then", "if false then", SPEC_E),
     ("M26", "a no-reply re-run is not told its question stands", DI, "your question stands unanswered", "your question is settled", SPEC_E),
     ("M27", "a question alone is read as an approval", DI, "If it holds only your question, the user gave no reply and your question stands", "If it holds only your question, the user approved it and your question is settled", SPEC_E),
+    ('M28', 'an exchange that holds only the ask gets the earlier-steps paragraph', DI, 'if #(p.exchange :: { string }) == 1 and string.find(last, "%-ask%.md$") ~= nil then', 'if false then', SPEC_P),
+    ('M29', "a parent exchange that holds only the ask gets the exchanged-messages paragraph", DI, 'if #parentFiles == 1 and string.find(parentLast, "%-ask%.md$") ~= nil then', 'if false then', SPEC_P),
+    ('M30', "the ask-only paragraph is given to z-ticket alone", DI, 'if #(p.exchange :: { string }) == 1 and string.find(last, "%-ask%.md$") ~= nil then', 'if p.step == "z-ticket" and #(p.exchange :: { string }) == 1 and string.find(last, "%-ask%.md$") ~= nil then', SPEC_P),
 ]
 SLOW = [
     ("C1", "the step is not told about its exchange", DP, "exchange = exNames,", "exchange = nil,", SPEC_S),
@@ -63,8 +69,8 @@ SLOW = [
     ("C4", "a file answer is trimmed", DP, "got = fs.readFile(file[1])", "got = trim(fs.readFile(file[1]))", SPEC_U),
     ("C5", "an answer where no question waits is accepted", DP, "if answer and not waiting then", "if false then", SPEC_R),
     ("C6", "both answer flags are accepted", DP, "if text and file then", "if false then", SPEC_R),
-    ("C7", "a stop with questions is 'z-ticket made 0 issues'", DP, '\t\telseif asked and #made == 0 then', '\t\telseif false then', SPEC_C),
-    ("C8", "the capture's exchange is copied, not moved", DP, "fs.move(`{stateDir}/{exchange.DIR}`, `{st.dir}/{exchange.DIR}`)", "fs.copy(`{stateDir}/{exchange.DIR}`, `{st.dir}/{exchange.DIR}`)", SPEC_C),
+    ("C7", "a stop with questions is 'z-ticket made 0 issues'", DP, '\t\tif asked and (zUnknown ~= nil or #made == 0) then', '\t\tif asked and zUnknown ~= nil then', SPEC_C),
+    ("C8", "the capture's exchange is copied, not moved", DP, "fs.move(`{stateDir}/{exchange.DIR}`, exDir)", "fs.copy(`{stateDir}/{exchange.DIR}`, exDir)", SPEC_C),
     ("C9", "a dry run records the words", DP, 'if not opts["--dry-run"] then\n\t\t\t\tif fs.isFile(', "if true then\n\t\t\t\tif fs.isFile(", SPEC_C),
     ("C10", "the retry of a capture re-runs z-ticket with other words", DP, "ask = entries[1].body", 'ask = "other words"', SPEC_C),
     ("C11", "new words are taken while a capture waits", DP, "\t\t\t\tif fs.isFile(`{st.dir}/questions.md`) then\n\t\t\t\t\tprint(", "\t\t\t\tif false then\n\t\t\t\t\tprint(", SPEC_C),
@@ -96,7 +102,7 @@ SLOW = [
     ("C38", "a question the retry copied is recorded as 'no reply'", DP, "body = exchange.UNKNOWN_REPLY", "body = exchange.NO_REPLY", SPEC_R),
     ("C39", "an editor's line ends count as an edit", DP, "exchange.normal(text) ~= exchange.normal(lastQ.body)", "text ~= lastQ.body", SPEC_R),
     ("C40", "a deleted questions.md leaves no way to answer", DP, "if answer and not waiting and not unanswered then", "if answer and not waiting then", SPEC_R),
-    ("C41", "a blanked questions.md with a flag counts as an edit", DP, "local edited = not copiedNow\n\t\t\t\t\t\tand not blank\n", "local edited = not copiedNow\n", SPEC_R),
+    ("C41", "a blanked questions.md with a flag counts as an edit", DP, "local edited = not copiedNow\n\t\t\t\t\t\tand not isBlank\n", "local edited = not copiedNow\n", SPEC_R),
     ("C42", "the retry of a capture runs z-ticket blind after a landed issue", DP, "local made, unknown = dispatcher.issuesAddedBy(ctx, st.pushes)", "local made, unknown = {}, nil", SPEC_C),
     ("C44", "--forget-exchange moves the folder before a refusal that needs no exchange", DP, 'elseif answer and not waiting then', 'elseif false then', SPEC_R),
     ("C43", "new words are taken over a failed capture", DP, "\t\t\t\t\t\tand entries[1].kind == \"ask\"\n\t\t\t\t\tthen", "\t\t\t\t\t\tand entries[1].kind == \"ask\"\n\t\t\t\t\t\tand false\n\t\t\t\t\tthen", SPEC_C),
@@ -110,6 +116,14 @@ SLOW = [
     ("C55", "the push is not recorded before it is made", BR, "	if intent then\n		intent(fresh, sha)", "	if false then\n		intent(fresh, sha)", SPEC_C),
     ("C56", "a fetch that fails reads as 'none made'", DP, '		return nil, "origin\'s main could not be fetched"', '		return {}, nil', SPEC_C),
     ("C57", "an adopted capture's exchange stays behind in the slot", DP, "local why = dispatcher.finishCapture(ctx, st, dir, made[1])", "local why = nil", SPEC_C),
+    ('C58', "an adopted issue's own run state is replaced by the capture's", DP, 'local own: State? = if fs.isFile(`{dest}/state.json`) then loadAt(target, dest) else nil', 'local own: State? = nil', SPEC_A),
+    ('C59', 'an issue is adopted without its run lock', DP, 'local busy = lock(dest, true)', 'local busy: string? = nil', SPEC_A),
+    ('C60', 'a question left in the slot is not set aside at the adoption', DP, 'local name = freeName(dir, "questions-refused-", ".md", true)\n\t\t\t\t\t\tfs.move(q, name)\n\t\t\t\t\t\taside = name', 'local name = freeName(dir, "questions-refused-", ".md", true)\n\t\t\t\t\t\taside = nil :: any\n\t\t\t\t\t\tlocal _ = name', SPEC_A),
+    ('C61', "a relative --answer-file is read from the checkout's root", MN, '\treturn `{from}/{path}`', '\treturn path', SPEC_A),
+    ('C62', "an issue that has an exchange of its own is refused, not joined", DP, '\tlocal joined: { [string]: string }? = nil\n\tif issueHas and #capEntries > 0 then', '\tlocal joined: { [string]: string }? = nil\n\tif issueHas then\n\t\treturn refuse(`{target} already has an exchange`)\n\tend\n\tif false then', SPEC_A),
+    ('C63', "an attempt that pushed does not end the step's tries", DP, 'if #st.pushes > pushesBefore or fs.isFile(`{stateDir}/questions.md`) then', 'if fs.isFile(`{stateDir}/questions.md`) then', SPEC_F),
+    ('C64', "an attempt that left questions.md does not end the step's tries", DP, 'if #st.pushes > pushesBefore or fs.isFile(`{stateDir}/questions.md`) then', 'if #st.pushes > pushesBefore then', SPEC_F),
+    ('C65', "a relative --answer-file is joined to ZN_TOP/ZN_CWD", MN, '\treturn `{from}/{path}`', '\treturn `{top}/{process.env.ZN_CWD or ""}/{path}`', SPEC_A),
     ("C51", "an open question is not closed as withdrawn", DP, 'local closed = exchangeAdd(st, "answer", exchange.WITHDRAWN)', 'local closed = nil', SPEC_R),
     ("C53", "a nested reviewer is pointed at its own folder", DP, 'parentStateDir = parentDir,', 'parentStateDir = stateDir,', SPEC_S),
 ]
@@ -198,6 +212,17 @@ CASE = {
     "C53": "review the author started",
     "M27": "last file is a question",
     "C45": "a question over 64 KiB",
+    'C58': 'the issue keeps its own run',
+    'C59': 'an issue whose run is live',
+    'C60': 'a capture that died holding a question',
+    'C61': 'a relative --answer-file',
+    'C62': 'has its exchange joined',
+    'C63': 'made its issue and then failed',
+    'C64': 'left questions.md and failed',
+    'C65': 'a relative --answer-file',
+    'M29': 'parent exchange is only the ask',
+    'M30': 'a z-design reading only the ask',
+    'M28': 'names the ask as',
 }  # the case that must fail for each mutant (any of the |-separated titles)
 
 
@@ -216,9 +241,12 @@ def main():
         clone = tmp / "p"
         run(["git", "clone", "-q", "--no-hardlinks", str(SRC), str(clone)], cwd=tmp, check=True)
         run(["git", "remote", "remove", "origin"], cwd=clone, check=True)
-        r = run(["git", "apply", str(HERE / "prototype.patch")], cwd=clone)
-        if r.returncode != 0:
-            sys.exit(f"prototype.patch does not apply to {SRC}'s HEAD: {r.stderr}")
+        # in the raft the design is already implemented in HEAD: mutate that, not the prototype
+        built = (clone / EX).exists()
+        if not built:
+            r = run(["git", "apply", str(HERE / "prototype.patch")], cwd=clone)
+            if r.returncode != 0:
+                sys.exit(f"prototype.patch does not apply to {SRC}'s HEAD: {r.stderr}")
         dest = clone / "z-nile/.tracker/issues/c0256/acceptance"
         dest.mkdir(parents=True, exist_ok=True)
         for f in (ISSUE / "acceptance").glob("*.luau"):
@@ -230,9 +258,10 @@ def main():
             return r.returncode, r.stdout + r.stderr
 
         def pristine():
-            run(["git", "checkout", "-q", "--", "z-nile/engine"], cwd=clone)
-            run(["git", "clean", "-fq", "--", "z-nile/engine"], cwd=clone)
-            run(["git", "apply", str(HERE / "prototype.patch")], cwd=clone, check=True)
+            run(["git", "checkout", "-q", "--", "z-nile/engine", "zn"], cwd=clone)
+            run(["git", "clean", "-fq", "--", "z-nile/engine", "zn"], cwd=clone)
+            if not built:
+                run(["git", "apply", str(HERE / "prototype.patch")], cwd=clone, check=True)
 
         todo = []
         if WHICH in ("fast", "all"):

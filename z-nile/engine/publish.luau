@@ -116,11 +116,11 @@ function publish.allowed(path: string, roots: { string }, counter: string?): boo
 	if string.find(rel, "/", 1, true) then
 		return false
 	end
-	-- an issue's spend.md and an item's provenance.md are published append-only; a raft's summary stays on its branch
+	-- an issue's spend.md and an item's provenance.md are published append-only, an issue's approval.md whole; a raft's summary stays on its branch
 	return rel == `{id}.md`
 		or rel == "check.sh"
 		or rel == "provenance.md"
-		or (isIssue(id) and rel == "spend.md")
+		or (isIssue(id) and (rel == "spend.md" or rel == "approval.md"))
 end
 
 -- The directory of an item file: `path` without its `/<rel>`.
@@ -470,6 +470,18 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 				local reason = provenance.publishProblem(existing, c.content, pid, allowed)
 				if reason then
 					return fail(`{c.path}: {reason}`)
+				end
+				continue
+			end
+			if string.sub(c.path, -12) == "/approval.md" then
+				-- an approval is not a status document. ready and work next read it from origin/main, so
+				-- `./zn approve --publish` may add it or replace it. The caller checks the contract.
+				local approved = string.match(c.path, "/([fdc]%d%d%d%d)/approval%.md$")
+				local beside = if approved
+					then string.gsub(c.path, "/approval%.md$", `/{approved}.md`)
+					else ""
+				if not approved or not onOrigin[beside] then
+					return fail(`{c.path}: no issue document beside it on origin/main`)
 				end
 				continue
 			end
