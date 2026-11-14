@@ -677,14 +677,6 @@ end
 -- In-process, not a second ./zn (c0070's fallback: a second Lune process per publish cost c0053's commands spec
 -- about a third more). The page is built from every project root of root's registry with this tooling's template, as
 -- `board -O` writes it.
--- c0276: each claim's verdict for the board, or nil (no marks) when none can be read; `fresh` says the caller has just
--- fetched origin/main (a publish, land or sync), so the rebuild does not fetch it again. Assigned where the heartbeat's
--- reads are defined, below. A protected checkout reads no remote, and a checkout with no origin reads none either.
-local hb = {} :: {
-	boardVerdicts: (fresh: boolean) -> ({ board.Verdict }?, { string }),
-	[string]: any,
-} -- the heartbeat edge's functions, in one table: main.luau's chunk is near Luau's limit of 200 locals
-
 local function buildBoard(root: string)
 	local ok, err = pcall(function()
 		local verdicts, notes = hb.boardVerdicts(true)
