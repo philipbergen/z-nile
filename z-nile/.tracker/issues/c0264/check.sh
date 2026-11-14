@@ -34,7 +34,7 @@ no_overclaim() {
 	[[ -n $l && $l != *words* ]] || { echo "the *exists* approve line is missing or claims the person's words (c0283's)"; bad=1; }
 	l="$(sed -n '/^### Stacked delivery/,/^## The five parts/p' "$README" | grep -F 'lands it with one bind' | grep -F '*exists*' || true)"
 	[[ -n $l && $l != *"full gate"* ]] || { echo "the *exists* Stacked delivery line is missing or claims a full gate (c0248's)"; bad=1; }
-	l="$(sed -n '/^### Stacked delivery/,/^## The five parts/p' "$README" | grep -F '*captured* (c0248)' || true)"
+	l="$(sed -n '/^### Stacked delivery/,/^## The five parts/p' "$README" | grep -E '\*[a-z]+\* \(c0248\)' || true)"
 	[[ -n $l && $l != *full-force\ reviewed* ]] || { echo "c0248's line is missing or carries the full-force review (c0262's)"; bad=1; }
 	return $bad
 }
