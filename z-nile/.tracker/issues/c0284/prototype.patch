@@ -1,0 +1,539 @@
+diff --git a/z-nile/engine/board.html b/z-nile/engine/board.html
+index 1c3c98f1..35588829 100644
+--- a/z-nile/engine/board.html
++++ b/z-nile/engine/board.html
+@@ -106,6 +106,9 @@ ul.links { margin: 0; padding-left: 20px; }
+ dl.run { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
+ dl.run dt { color: var(--mut); }
+ dl.run dd { margin: 0; }
++table.prov { border-collapse: collapse; font-size: 13px; }
++table.prov td { padding: 1px 12px 1px 0; vertical-align: top; }
++table.prov td.mut { color: var(--mut); }
+ </style>
+ <script>{{MARKED}}</script>
+ </head>
+@@ -305,6 +308,15 @@ dl.run dd { margin: 0; }
+     ]);
+   }
+ 
++  // c0284: the entries ./zn who prints for the item, oldest first; nothing when the model carries none
++  function provenanceOf(it) {
++    if (!it.provenance || !it.provenance.length) return "";
++    return "<h3>Provenance</h3><table class=\"prov\"><tbody>" + it.provenance.map(function (e) {
++      return "<tr><td>" + esc(e.when) + "</td><td>" + esc(e.event) + "</td><td>" + esc(e.actor) + "</td><td>" + esc(e.detail) +
++        "</td><td class=\"mut\">" + esc(e.source) + "</td></tr>";
++    }).join("") + "</tbody></table>";
++  }
++
+   function renderIssue(issue) {
+     var meta = [];
+     if (issue.label) meta.push(issue.label);
+@@ -313,6 +325,7 @@ dl.run dd { margin: 0; }
+       '<p class="meta">' + esc(meta.join(" · ")) + "</p>";
+     if (issue.raft) h += "<p>Raft " + idLink(issue.raft) + "</p>";
+     h += runOfIssue(issue);
++    h += provenanceOf(issue);
+     h += group("Depends on", issue.dependsOn) + group("Dependents", issue.dependents);
+     if (issue.body) h += '<h3>Document</h3><div class="md">' + marked.parse(issue.body) + "</div>";
+     pane.innerHTML = h;
+@@ -336,6 +349,7 @@ dl.run dd { margin: 0; }
+       }).join("") + "</ul>";
+     }
+     h += runOfRaft(r);
++    h += provenanceOf(r);
+     if (r.body) h += '<h3>Document</h3><div class="md">' + marked.parse(r.body) + "</div>";
+     pane.innerHTML = h;
+     pane.scrollTop = 0;
+diff --git a/z-nile/engine/board.luau b/z-nile/engine/board.luau
+index fdcf1ecf..c25bd07a 100644
+--- a/z-nile/engine/board.luau
++++ b/z-nile/engine/board.luau
+@@ -1,5 +1,6 @@
+ --!strict
+ -- The tracker board: reads the tracker tree into a model and renders it as one self-contained HTML page.
++local boardprov = require("./boardprov")
+ local boardview = require("./boardview")
+ local chart = require("./chart")
+ local fs = require("@lune/fs")
+@@ -12,6 +13,7 @@ local stack = require("./stack")
+ local stats = require("./stats")
+ local status = require("./status")
+ local store = require("./store")
++local who = require("./who")
+ 
+ local board = {}
+ 
+@@ -47,6 +49,7 @@ export type Raft = {
+ 	dispatch: Dispatch?,
+ 	pr: Pr?, -- c0121 fills these on the served page; the static page leaves them nil
+ 	checks: Checks?,
++	provenance: { boardprov.Entry }?, -- c0284: the entries ./zn who prints for it; nil when it has none
+ }
+ -- Reserved for c0121's served page (live `gh` data); nil in every model c0118 builds.
+ export type Pr = { number: number, url: string, state: string }
+@@ -80,6 +83,7 @@ export type Issue = {
+ 	dispatch: Dispatch?,
+ 	pr: Pr?, -- c0121's, as on Raft
+ 	checks: Checks?,
++	provenance: { boardprov.Entry }?, -- c0284, as on Raft
+ }
+ export type Project = { name: string, root: string }
+ -- What the board knows besides the tracker documents (c0118), all read locally: the instant the page is as of (HEAD's
+@@ -260,6 +264,7 @@ end
+ -- An issue's spend rows through the one reader of spend.md (ledger.parse, c0084 and c0117). A file that does not
+ -- parse gives no rows and is named in `problems`.
+ local spendCache: { [string]: { ledger.Row } } = {}
++local spendBad: { [string]: boolean } = {} -- spend.md files that did not parse (c0284: `who` refuses such an item)
+ local function spendRows(path: string, problems: { string }): { ledger.Row }
+ 	local hit = spendCache[path]
+ 	if hit then
+@@ -272,6 +277,7 @@ local function spendRows(path: string, problems: { string }): { ledger.Row }
+ 			rows = parsed.rows
+ 		else
+ 			table.insert(problems, `{path} does not parse: {err}`)
++			spendBad[path] = true
+ 		end
+ 	end
+ 	spendCache[path] = rows
+@@ -812,6 +818,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
+ 	local facts: Facts = given or (if root then NO_FACTS else board.readFacts(checkoutDir))
+ 	local problems: { string } = {}
+ 	table.clear(spendCache)
++	table.clear(spendBad)
+ 	local rawRafts: { Raw }, rawIssues: { Raw } = {}, {}
+ 	local projectOf: { [string]: string } = {}
+ 	local retired = {}
+@@ -1181,6 +1188,26 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
+ 	for _, range in boardview.RANGES do
+ 		table.insert(ranges, { key = range.key, label = range.label })
+ 	end
++	-- c0284: each item's provenance, the entries `./zn who` prints (boardprov reads the history once for all of them)
++	local items: { boardprov.Item } = {}
++	for _, i in rawIssues do
++		local path = spendPath(i.root, i.state, i.id)
++		local rows = spendRows(path, problems)
++		if not spendBad[path] then -- an unparsable spend.md is named once above; `who` refuses the item, so no entries
++			table.insert(items, { id = i.id, kind = "issue", dir = i.dir, spend = who.spend(rows) })
++		end
++	end
++	for _, r in rawRafts do
++		table.insert(items, { id = r.id, kind = "raft", dir = r.dir, spend = {} })
++	end
++	local entries =
++		boardprov.read(items, if hist or history.atTop(checkoutDir) then checkoutDir else nil, problems)
++	for _, issue in issues do
++		issue.provenance = entries[issue.id]
++	end
++	for _, raft in rafts do
++		raft.provenance = entries[raft.id]
++	end
+ 	table.sort(problems)
+ 
+ 	return {
+diff --git a/z-nile/engine/boardprov.luau b/z-nile/engine/boardprov.luau
+new file mode 100644
+index 00000000..90ce51bc
+--- /dev/null
++++ b/z-nile/engine/boardprov.luau
+@@ -0,0 +1,128 @@
++--!strict
++-- c0284: the provenance the board shows on each item, the same entries `./zn who` prints for it. The board reads the
++-- history ONCE per build, not once per item: one `git log --first-parent` over every item folder (parsed once by
++-- `trail.parse`, the commits bucketed by item folder, each life cut by `trail.lifeOf` as `trail.read` cuts it), the
++-- compaction cuts, one `git log` of the authors' emails, one `git cat-file --batch` for every document change of every
++-- life and one `git log -1` per distinct merge commit: a few processes for any number of items (E9: 5.2 s when each
++-- item was read alone). The entries come from `who.entries`, the one function `who` calls too.
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++local projects = require("./projects")
++local provenance = require("./provenance")
++local trail = require("./trail")
++local who = require("./who")
++
++local boardprov = {}
++
++export type Entry = provenance.Entry
++-- An item to read: its id, its kind ("issue" or "raft"), its folder as the board reads it, and its spend rows (an
++-- issue's ledger; a raft's roll-up names no worker, so a raft has none).
++export type Item = { id: string, kind: string, dir: string, spend: { provenance.Spend } }
++
++-- The commits of a log of many items by the item folder they changed (the folder's name is the id). Pure.
++function boardprov.bucket(commits: { trail.Commit }): { [string]: { trail.Commit } }
++	local out: { [string]: { trail.Commit } } = {}
++	for _, c in commits do
++		local id = string.match(c.path, "([^/]+)/[^/]+$")
++		if id then
++			local list = out[id] or {}
++			out[id] = list
++			table.insert(list, c)
++		end
++	end
++	return out
++end
++
++type Read = {
++	lives: { [string]: { trail.Commit } },
++	marks: { [string]: provenance.Mark },
++	people: { [string]: boolean },
++	fronts: { [string]: provenance.Front },
++}
++
++-- The lives of `items` on the mainline of the checkout `dir`: nil without a registry or a log. An item with no commit
++-- there gets none (`who` refuses it as "no history"; the board shows its stored rows alone).
++local function readLives(items: { Item }, dir: string): Read?
++	local head = who.head(dir)
++	local reg = projects.at(head, dir)
++	if not reg then
++		return nil
++	end
++	local roots = projects.allRoots(reg)
++	local specs: { string } = {}
++	for _, r in roots do
++		table.insert(specs, `{r}/issues`)
++		table.insert(specs, `{r}/rafts`)
++	end
++	local dirs: { string } = {}
++	for _, item in items do
++		for _, d in trail.dirs(if item.kind == "raft" then "rafts" else "issues", item.id, roots) do
++			table.insert(dirs, d)
++		end
++	end
++	local log = process.exec("git", trail.logArgs(head, specs, true), { cwd = dir })
++	if not log.ok then
++		return nil
++	end
++	local commits = trail.parse(log.stdout, dirs, who.want)
++	who.sideTrailers(commits, dir)
++	local cuts = trail.cuts(head, dir)
++	local byId = boardprov.bucket(commits)
++	local out: Read = { lives = {}, marks = {}, people = {}, fronts = {} }
++	local all: { trail.Commit } = {}
++	for _, item in items do
++		local life, notes = trail.lifeOf(byId[item.id] or {}, item.id, cuts, who.want)
++		if #life > 0 then
++			out.lives[item.id] = life
++			out.marks[item.id] = who.mark(notes, trail.ambiguous(life))
++			for _, c in life do
++				table.insert(all, c)
++			end
++		end
++	end
++	out.fronts = who.fronts(all, dir)
++	out.people = who.people(head, dir)
++	return out
++end
++
++-- The entries of every item that has any, keyed by id. `dir` is the checkout whose history is read; nil (no git, a
++-- shallow clone: the board's `history` is false) leaves the stored rows alone. An item whose `provenance.md` does not
++-- parse is named in `problems` and has no entry list; an item with neither history nor a row has none either.
++function boardprov.read(items: { Item }, dir: string?, problems: { string }): { [string]: { Entry } }
++	local read: Read = { lives = {}, marks = {}, people = {}, fronts = {} }
++	if dir then
++		read = readLives(items, dir) or read
++	end
++	local none: provenance.Mark = { note = "", cut = false }
++	local out: { [string]: { Entry } } = {}
++	for _, item in items do
++		local path = `{item.dir}/provenance.md`
++		local rows: { provenance.Row } = {}
++		local ok = true
++		if fs.isFile(path) then
++			local parsed, err = provenance.parse(fs.readFile(path))
++			if parsed then
++				rows = parsed
++			else
++				ok = false
++				table.insert(problems, `{path} does not parse: {err}`)
++			end
++		end
++		if ok then
++			local entries = who.entries(
++				read.lives[item.id] or {},
++				read.people,
++				rows,
++				item.spend,
++				read.fronts,
++				read.marks[item.id] or none
++			)
++			if #entries > 0 then
++				out[item.id] = entries
++			end
++		end
++	end
++	return out
++end
++
++return boardprov
+diff --git a/z-nile/engine/history.luau b/z-nile/engine/history.luau
+index 823e9d5c..5820c595 100644
+--- a/z-nile/engine/history.luau
++++ b/z-nile/engine/history.luau
+@@ -447,21 +447,27 @@ local function storeCache(path: string, sha: string, parsed: Parsed)
+ end
+ 
+ -- nil when `root` has no git, is not the top of its own repository, or that repository is shallow.
+-function history.read(root: string?): Parsed?
+-	local dir = root or "."
++-- Whether `dir` is the top level of its own git repository (c0284: the board reads the history of such a folder only,
++-- never of the repository a fixture folder happens to sit in).
++function history.atTop(dir: string): boolean
+ 	local top = process.exec("git", { "rev-parse", "--show-toplevel" }, { cwd = dir })
+ 	if not top.ok then
++		return false
++	end
++	local topPhys = physical(sh.trim(top.stdout))
++	local rootPhys = physical(dir)
++	return topPhys ~= nil and rootPhys ~= nil and topPhys == rootPhys
++end
++
++function history.read(root: string?): Parsed?
++	local dir = root or "."
++	if not history.atTop(dir) then
+ 		return nil
+ 	end
+ 	local shallow = process.exec("git", { "rev-parse", "--is-shallow-repository" }, { cwd = dir })
+ 	if not shallow.ok or sh.trim(shallow.stdout) == "true" then
+ 		return nil
+ 	end
+-	local topPhys = physical(sh.trim(top.stdout))
+-	local rootPhys = physical(dir)
+-	if not topPhys or not rootPhys or topPhys ~= rootPhys then
+-		return nil
+-	end
+ 	local shaRun = process.exec("git", { "rev-parse", "HEAD" }, { cwd = dir })
+ 	if not shaRun.ok then
+ 		return nil
+diff --git a/z-nile/engine/trail.luau b/z-nile/engine/trail.luau
+index 50cc732a..c1d8aeab 100644
+--- a/z-nile/engine/trail.luau
++++ b/z-nile/engine/trail.luau
+@@ -85,6 +85,8 @@ function trail.isDoc(name: string): boolean
+ 			"^design%-refute%-%d+%.md$",
+ 			"^refute%-%d+%.md$",
+ 			"^final%-refute%-%d+%.md$",
++			"^idea%-review%-%d+%.md$",
++			"^idea%-refute%-%d+%.md$",
+ 		}
+ 	do
+ 		if string.match(name, pattern) then
+@@ -318,40 +320,47 @@ function trail.capture(commits: { Commit }): (Commit?, boolean)
+ 	return trail.oldestAdd(commits) or sorted[#sorted], false
+ end
+ 
+-local function git(args: { string }): string?
+-	local r = process.exec("git", args)
++-- `dir` is the checkout git runs in (c0284: the board reads the checkout it was given); nil is the current folder.
++local function git(args: { string }, dir: string?): string?
++	local r = if dir then process.exec("git", args, { cwd = dir }) else process.exec("git", args)
+ 	return if r.ok then r.stdout else nil
+ end
+ 
+-local function changes(
+-	args: { string },
+-	dirs: { string },
+-	want: (name: string) -> boolean,
+-	firstParent: boolean
+-): { Commit }
+-	local argv = table.clone(args)
++-- The arguments of the log every reader of a trail runs (c0284: `read` and the board build it here): `head`'s history,
++-- the mainline only with `firstParent`, over `specs` (folders or files), in `trail.FORMAT` with the changed files.
++function trail.logArgs(head: string, specs: { string }, firstParent: boolean): { string }
++	local argv = { "log", head }
+ 	if firstParent then
+ 		table.insert(argv, "--first-parent")
+ 	end
+ 	for _, a in { "--no-renames", trail.FORMAT, "--name-status", "--" } do
+ 		table.insert(argv, a)
+ 	end
+-	for _, d in dirs do
++	for _, d in specs do
+ 		table.insert(argv, d)
+ 	end
+-	return trail.parse(git(argv) or "", dirs, want)
++	return argv
++end
++
++local function changes(
++	head: string,
++	dirs: { string },
++	want: (name: string) -> boolean,
++	firstParent: boolean
++): { Commit }
++	return trail.parse(git(trail.logArgs(head, dirs, firstParent)) or "", dirs, want)
+ end
+ 
+ -- The commits on `head` that changed a compaction map's content: added or modified, never only moved (`-M`, so the
+ -- c0114 move of tracker/compaction.txt to z-nile/compaction.txt is a rename and no cut), each with the file it changed.
+-function trail.cuts(head: string): { [string]: string }
++function trail.cuts(head: string, dir: string?): { [string]: string }
+ 	local args = { "log", "-M", "--diff-filter=AM", "--format=@@%H", "--name-only", head, "--" }
+ 	for _, f in ids.MAP_FILES do
+ 		table.insert(args, f)
+ 	end
+ 	local out: { [string]: string } = {}
+ 	local sha = ""
+-	for line in string.gmatch(git(args) or "", "[^\n]+") do
++	for line in string.gmatch(git(args, dir) or "", "[^\n]+") do
+ 		local s = string.match(line, "^@@(%x+)$")
+ 		if s then
+ 			sha = s
+@@ -432,8 +441,7 @@ function trail.read(
+ 	local function keep(name: string): boolean
+ 		return trail.isDoc(name) or want(name)
+ 	end
+-	local all =
+-		changes({ "log", head }, trail.dirs(kind, id, within :: { string }), keep, firstParent == true)
++	local all = changes(head, trail.dirs(kind, id, within :: { string }), keep, firstParent == true)
+ 	local out, cutNotes = trail.lifeOf(all, id, trail.cuts(head), want)
+ 	notes = cutNotes
+ 	return out, notes
+diff --git a/z-nile/engine/who.luau b/z-nile/engine/who.luau
+index 645396e7..44a72e8f 100644
+--- a/z-nile/engine/who.luau
++++ b/z-nile/engine/who.luau
+@@ -6,15 +6,16 @@
+ -- item's in the same process). The pure functions of provenance turn it into entries.
+ local process = require("@lune/process")
+ 
++local ledger = require("./ledger")
+ local provenance = require("./provenance")
+-local sh = require("../lib/sh")
+ local store = require("./store")
+ local trail = require("./trail")
+ 
+ local who = {}
+ 
+-local function git(args: { string }): string?
+-	local r = process.exec("git", args)
++-- `dir` is the checkout git runs in (c0284: the board reads the checkout it was given); nil is the current folder.
++local function git(args: { string }, dir: string?): string?
++	local r = if dir then process.exec("git", args, { cwd = dir }) else process.exec("git", args)
+ 	return if r.ok then r.stdout else nil
+ end
+ 
+@@ -25,17 +26,15 @@ end
+ 
+ -- The history `who` reads: the published mainline (`origin/main`), else this checkout's `HEAD`. A worktree's own
+ -- unpublished commits are not history yet, and a branch's `done` commit is no merge.
+-function who.head(): string
+-	return if process.exec("git", { "rev-parse", "--verify", "-q", "origin/main" }).ok
+-		then "origin/main"
+-		else "HEAD"
++function who.head(dir: string?): string
++	return if git({ "rev-parse", "--verify", "-q", "origin/main" }, dir) ~= nil then "origin/main" else "HEAD"
+ end
+ 
+ -- Every commit author's email on `head`, lower-cased: a person is whoever commits, so a Co-Authored-By trailer with one
+ -- of these is a person's, not an agent's (E4). One `git log` for the whole history.
+-function who.people(head: string): { [string]: boolean }
++function who.people(head: string, dir: string?): { [string]: boolean }
+ 	local out: { [string]: boolean } = {}
+-	for email in string.gmatch(git({ "log", "--format=%ae", head }) or "", "[^\n]+") do
++	for email in string.gmatch(git({ "log", "--format=%ae", head }, dir) or "", "[^\n]+") do
+ 		out[string.lower(email)] = true
+ 	end
+ 	return out
+@@ -43,7 +42,7 @@ end
+ 
+ -- The document's status word and `raft:` after each of `commits`' document changes (an add or a modify; a delete has
+ -- none), keyed `<sha>:<path>`, from one `git cat-file --batch` for all of them.
+-function who.fronts(commits: { trail.Commit }): { [string]: provenance.Front }
++function who.fronts(commits: { trail.Commit }, dir: string?): { [string]: provenance.Front }
+ 	local specs: { string } = {}
+ 	local seen: { [string]: boolean } = {}
+ 	for _, c in commits do
+@@ -62,7 +61,11 @@ function who.fronts(commits: { trail.Commit }): { [string]: provenance.Front }
+ 	if #specs == 0 then
+ 		return out
+ 	end
+-	local r = sh.run("git", { "cat-file", "--batch" }, table.concat(specs, "\n") .. "\n")
++	local r = process.exec(
++		"git",
++		{ "cat-file", "--batch" },
++		{ cwd = dir, stdio = { stdin = table.concat(specs, "\n") .. "\n" } }
++	)
+ 	local text, pos = r.stdout, 1
+ 	for _, key in specs do
+ 		local eol = string.find(text, "\n", pos, true)
+@@ -83,28 +86,47 @@ function who.fronts(commits: { trail.Commit }): { [string]: provenance.Front }
+ end
+ 
+ -- Sets `sideTrailers` on every merge commit of `life`: the Co-Authored-By values of its second parent (the top layer of
+--- a `--no-ff` landing, which `./zn finish` committed with the agent's trailer). One `git log -1` per merge.
+-function who.sideTrailers(life: { trail.Commit })
++-- a `--no-ff` landing, which `./zn finish` committed with the agent's trailer). ONE `git log --no-walk` reads the
++-- second parents of every merge (c0284: a board of many items, and a history that gains a landing per raft, still
++-- cost one process).
++function who.sideTrailers(life: { trail.Commit }, dir: string?)
++	local want: { string } = {}
++	local seen: { [string]: boolean } = {}
+ 	for _, c in life do
+ 		local parents = c.parents or {}
+-		if #parents >= 2 and c.sideTrailers == nil then
+-			local values: { string } = {}
+-			local text = git({
+-				"log",
+-				"-1",
+-				"--format=%(trailers:key=Co-Authored-By,valueonly,unfold,separator=%x1f)",
+-				parents[2],
+-			}) or ""
+-			for value in string.gmatch(text, "[^\31\n]+") do
+-				table.insert(values, value)
+-			end
+-			for _, other in life do
+-				if other.sha == c.sha then
+-					other.sideTrailers = values
+-				end
++		if #parents >= 2 and c.sideTrailers == nil and not seen[parents[2]] then
++			seen[parents[2]] = true
++			table.insert(want, parents[2])
++		end
++	end
++	if #want == 0 then
++		return
++	end
++	local r = process.exec("git", {
++		"log",
++		"--no-walk=unsorted",
++		"--stdin",
++		"--format=@@%H%n%(trailers:key=Co-Authored-By,valueonly,unfold,separator=%x1f)",
++	}, { cwd = dir, stdio = { stdin = table.concat(want, "\n") .. "\n" } })
++	local bySha: { [string]: { string } } = {}
++	local current: { string }? = nil
++	for line in string.gmatch(if r.ok then r.stdout else "", "[^\n]+") do
++		local sha = string.match(line, "^@@(%x+)$")
++		if sha then
++			current = {}
++			bySha[sha] = current
++		elseif current then
++			for value in string.gmatch(line, "[^\31]+") do
++				table.insert(current, value)
+ 			end
+ 		end
+ 	end
++	for _, c in life do
++		local parents = c.parents or {}
++		if #parents >= 2 and c.sideTrailers == nil then
++			c.sideTrailers = bySha[parents[2]] or {}
++		end
++	end
+ end
+ 
+ -- The note a cut or an ambiguous life carries, as `capture` prints it; "" for a plain life.
+@@ -136,6 +158,16 @@ function who.life(id: string, head: string): ({ trail.Commit }?, provenance.Mark
+ 	return commits, who.mark(notes, trail.ambiguous(commits)), nil
+ end
+ 
++-- The spend rows `provenance` reads the worker from (phase and the worker's columns that exist: the model today; c0254
++-- adds host and CLI here, once, for `who` and the board).
++function who.spend(rows: { ledger.Row }): { provenance.Spend }
++	local out: { provenance.Spend } = {}
++	for _, r in rows do
++		table.insert(out, { phase = r.phase, model = r.model })
++	end
++	return out
++end
++
+ -- The history of one item as entries, oldest first: the git side from `life` (`who.life`'s answer), the stored `rows`
+ -- and the spend rows `spend` (file order), `fronts` from `who.fronts` (for the board: one call for every item).
+ function who.entries(
