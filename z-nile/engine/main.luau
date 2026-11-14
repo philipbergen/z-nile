@@ -4,16 +4,12 @@ local approval = require("./approval")
 local audit = require("./audit")
 local board = require("./board")
 local boardview = require("./boardview")
-local brokerLib = require("./broker")
 local buffer = require("./buffer")
-local claimsLib = require("./claims")
-local compactLib = require("./compact")
 local contract = require("./contract")
 local costrow = require("./costrow")
-local dispatchLib = require("./dispatch")
 local dispatcherLib = require("./dispatcher")
 local fs = require("@lune/fs")
-local gateLib = require("./gate")
+local heartbeat = require("./heartbeat")
 local idea = require("./idea")
 local idsLib = require("./ids")
 local layergit = require("./layergit")
@@ -21,12 +17,9 @@ local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
 local models = require("./models")
 local modelstep = require("./modelstep")
-local openlist = require("./openlist")
-local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
 local publish = require("./publish")
-local raftcheck = require("./raftcheck")
 local raftplan = require("./raftplan")
 local reapLib = require("./reap")
 local sessionread = require("./sessionread")
@@ -39,7 +32,6 @@ local statusLib = require("./status")
 local stdio = require("@lune/stdio")
 local store = require("./store")
 local trailLib = require("./trail")
-local watchcmd = require("./watchcmd")
 
 -- a space name as the union ids expects: the callers only ever hold "issue" or "raft"
 local function asSpace(s: string): idsLib.Space
@@ -60,6 +52,10 @@ usage: ./zn <command> ...
   release <R-id> [--force]                      give back a rafting claim: what carries its stamp goes back to
                                                 prepared (design ready) or new (z-raft)
   raft-plan [--apply]                           print z-raft's plan for every prepared, raftless issue (--apply runs it)
+  beat <id> [--watch]                           beat a claim: replace its heartbeat branch hb/<stamp> on origin (--watch: every
+                                                5 minutes, only under ./zn run --time S -- ./zn beat <id> --watch)
+  lost                                          list lost claims, longest silent first (a stale claim no pull request
+                                                names; status marks them too)
   status [<id>] [<to>]                          list statuses on origin/main, show one, or move one (new|preparing|prepared; ready claims active)
   sync [--fetch]                                bring origin/main into this checkout (--fetch: update origin/main only)
   land [-m <message>]                           in a capture worktree: merge origin/main, run the gate, push the capture to main
@@ -154,7 +150,7 @@ local function projectNameOf(root: string): string
 end
 
 local function render(path: string, vars: { [string]: string }): string
-	return raftcheck.render(fs.readFile(path), vars)
+	return require("./raftcheck").render(fs.readFile(path), vars)
 end
 
 local function today(): string
@@ -641,11 +637,17 @@ local function freshStamp(state: string): string
 	local value = statusLib.fresh(function()
 		return stamp(state)
 	end, function(v: string): boolean
-		local taken, err = claimsLib.taken(".", v, nil, roots)
+		local taken, err = require("./claims").taken(".", v, nil, roots)
 		if taken == nil then
 			fail(`cannot check a claim stamp against origin/main: {err}`)
 		end
-		return taken == true
+		if taken then
+			return true
+		end
+		-- c0265: a stamp is the lease's identity, so a value with a heartbeat branch (a young ended claim) is taken too;
+		-- where the branches cannot be read the draw stands, as origin/main alone decides then
+		local hb = sh.run("git", { "ls-remote", "--heads", "origin", heartbeat.branch(v) })
+		return hb.ok and sh.trim(hb.stdout) ~= ""
 	end)
 	return value or fail("could not draw a claim stamp that origin/main does not already carry")
 end
@@ -710,7 +712,7 @@ local function moveOnOrigin(
 			if rel == `{fid}.md` then
 				text = withFront(text, "status", status)
 			elseif rel == "check.sh" then
-				text = pathsLib.rewrite(text, dirs)
+				text = require("./paths").rewrite(text, dirs)
 			end
 			table.insert(changes, { path = `{dirs[fid]}/{rel}`, from = p, content = text })
 		end
@@ -849,6 +851,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--quiet"
 			or a == "--auto"
 			or a == "--session-end"
+			or a == "--watch"
 			or a == "--begin"
 			or a == "--sessions"
 		then
@@ -1464,6 +1467,410 @@ local function originPaths(): { string }
 	return paths
 end
 
+local hb = {} -- the heartbeat edge's functions, in one table: main.luau's chunk is near Luau's limit of 200 locals
+-- ---- the work heartbeat (c0265): the one place that reads and writes the heartbeat branches ----
+
+-- A network call of the heartbeat, bounded: it runs in a process group of its own that is killed after ZN_NET_SECONDS
+-- (spec runs only; 10 s otherwise), which counts as unreadable. Always `<cmd> <subcommand> ...` from the checkout.
+hb.BOUND =
+	[[use POSIX ":sys_wait_h"; my $n = shift; my $pid = fork(); if (!$pid) { setpgrp(0,0); exec(@ARGV) or exit 127 } my $t = time + $n; while (1) { my $k = waitpid($pid, WNOHANG); if ($k == $pid) { exit($? & 127 ? 128 + ($? & 127) : $? >> 8) } if (time >= $t) { kill "KILL", -$pid; waitpid($pid, 0); exit 124 } select(undef, undef, undef, 0.05) }]]
+-- Whether this process runs inside a spec or a fenced check (the guards' answer, asked once): the only runs that honour
+-- ZN_NOW, ZN_BEAT_EVERY and ZN_NET_SECONDS.
+hb.specRunCache = nil :: boolean?
+function hb.specRun(): boolean
+	if hb.specRunCache == nil then
+		hb.specRunCache = checking()
+	end
+	return hb.specRunCache == true
+end
+
+function hb.netRun(cmdName: string, args: { string }): sh.Result
+	local secs = heartbeat.setting(process.env, "ZN_NET_SECONDS", 10, hb.specRun())
+	local a = { "-e", hb.BOUND, tostring(secs), cmdName }
+	for _, x in args do
+		table.insert(a, x)
+	end
+	local r = sh.run("perl", a)
+	if not r.ok and sh.trim(r.stderr) == "" then
+		return { ok = false, code = r.code, stdout = r.stdout, stderr = `timed out after {secs} s\n` }
+	end
+	return r
+end
+
+-- hb.netRun, retried once after a second when a sibling checkout holds the lock of a ref both fetch into (the refs under
+-- refs/remotes/origin and refs/zn/hb-seen are shared by every worktree); a second failure is the answer.
+function hb.netRetry(cmdName: string, args: { string }): sh.Result
+	local r = hb.netRun(cmdName, args)
+	if not r.ok and string.find(r.stderr, "cannot lock ref", 1, true) then
+		require("@lune/task").wait(1)
+		return hb.netRun(cmdName, args)
+	end
+	return r
+end
+
+function hb.hbNow(): number
+	return heartbeat.clock(process.env, os.time(), hb.specRun())
+end
+
+-- Every heartbeat branch on origin: one fetch into refs/zn/hb-seen, then one listing. Beats, the problems (a branch that
+-- is not a beat, with its cure), and an error when the branches could not be read.
+function hb.readBeats(): ({ heartbeat.Beat }, { string }, string?)
+	local f =
+		hb.netRetry("git", { "fetch", "-q", "--prune", "origin", `+{heartbeat.PREFIX}*:refs/zn/hb-seen/*` })
+	if not f.ok then
+		return {}, {}, sh.trim(f.stderr .. f.stdout)
+	end
+	local l =
+		sh.run("git", { "for-each-ref", "--format=%(refname) %(objectname) %(subject)", "refs/zn/hb-seen/" })
+	if not l.ok then
+		return {}, {}, sh.trim(l.stderr)
+	end
+	local entries: { heartbeat.Entry } = {}
+	for line in string.gmatch(l.stdout, "[^\n]+") do
+		local ref, sha, subject = string.match(line, "^refs/zn/hb%-seen/(%S+) (%x+) ?(.*)$")
+		if ref then
+			table.insert(
+				entries,
+				{ ref = heartbeat.PREFIX .. ref, sha = sha :: string, subject = subject :: string }
+			)
+		end
+	end
+	local beats, problems = heartbeat.parse(entries)
+	return beats, problems, nil
+end
+
+-- What a claim is: an item on origin/main (publish.allowed does not see a retired raft's folder), not done, whose effective state is preparing or active and whose
+-- stored status carries a stamp. `since` (the epoch the stamp landed) only when asked: it costs a git log per claim.
+function hb.claimsOf(paths: { string }, withSince: boolean, at: string?): { heartbeat.Claim }
+	local ref = at or "origin/main"
+	local roots = originRoots() or fail(`origin/main has no readable {projects.FILE}`)
+	local out: { heartbeat.Claim } = {}
+	for _, p in paths do
+		local fid, file = string.match(p, "/([fdcR]%d%d%d%d)/([^/]+)$")
+		if fid and file == `{fid}.md` and publish.allowed(p, roots) and stateOfPath(p) ~= "done" then
+			local front = frontOf(sh.git({ "show", `{ref}:{p}` }))
+			local st = statusLib.effective(front, stateOfPath(p))
+			if (st == "preparing" or st == "active") and statusLib.phrase(front.status) then
+				local held = front.status
+				local match = { fid }
+				if store.isRaftId(fid) and front.issues then
+					for m in string.gmatch(front.issues, "%a%d%d%d%d") do
+						table.insert(match, m)
+					end
+				end
+				local since: number? = nil
+				if withSince then
+					local r = sh.run("git", { "log", "-1", "--format=%ct", `-Sstatus: {held}`, ref, "--", p })
+					since = if r.ok then tonumber(sh.trim(r.stdout)) else nil
+				end
+				local claim: heartbeat.Claim =
+					{ id = fid, state = st, stamp = held, since = since, match = match }
+				table.insert(out, claim)
+			end
+		end
+	end
+	return out
+end
+
+-- The open pull requests (title and head branch), or nil and why. Asked only when some claim is stale.
+function hb.readPrs(): ({ heartbeat.Pr }?, string?)
+	local r =
+		hb.netRun("gh", { "pr", "list", "--state", "open", "--json", "title,headRefName", "--limit", "200" })
+	if not r.ok then
+		return nil, sh.trim(r.stderr .. r.stdout)
+	end
+	local ok, data = pcall(function()
+		return require("@lune/serde").decode("json", r.stdout)
+	end)
+	if not ok or type(data) ~= "table" or (next(data :: any) ~= nil and (data :: any)[1] == nil) then
+		return nil, "gh did not answer with a list"
+	end
+	if #(data :: { any }) >= 200 then
+		return nil, "gh listed 200 pull requests: there may be more than it shows"
+	end
+	local out: { heartbeat.Pr } = {}
+	for _, e in data :: { any } do
+		table.insert(out, { title = tostring(e.title or ""), head = tostring(e.headRefName or "") })
+	end
+	return out, nil
+end
+
+-- The epoch the heartbeat landed on origin/main: the newest first-parent commit that added its pure module (heartbeat.landingArgs;
+-- a squash merge keeps one, a merge commit is read at the merge, and compaction renumbers items, not engine files). Unreadable: math.huge, so a claim that never beat is never lost for
+-- lack of it. A claim made at or before it reads `nobeat` until it beats once (the user's decision, 2026-11-08).
+function hb.landingEpoch(): number
+	local r = sh.run("git", heartbeat.landingArgs())
+	return (if r.ok then tonumber(string.match(r.stdout, "%d+")) else nil) or math.huge
+end
+
+type Judged = {
+	verdicts: { heartbeat.Verdict },
+	problems: { string },
+	beatsError: string?,
+	prsError: string?,
+}
+
+-- The verdicts of every claim on origin/main (paths as originPaths returned them): judged from the beats, then settled
+-- (lost or parked) when the pull requests could be read. Whatever cannot be read leaves a stale claim stale: unknown is
+-- never lost.
+function hb.judgeAll(paths: { string }): Judged
+	local claims = hb.claimsOf(paths, true)
+	local beats, problems, err = hb.readBeats()
+	if err then
+		return { verdicts = {}, problems = {}, beatsError = err }
+	end
+	local verdicts = heartbeat.judge(claims, beats, hb.hbNow(), nil, hb.landingEpoch())
+	local anyStale = false
+	for _, v in verdicts do
+		anyStale = anyStale or v.kind == "stale"
+	end
+	if not anyStale or #problems > 0 then
+		return { verdicts = verdicts, problems = problems }
+	end
+	local prs, prsErr = hb.readPrs()
+	if not prs then
+		return { verdicts = verdicts, problems = problems, prsError = prsErr }
+	end
+	local runs: { [string]: boolean } = {}
+	for _, c in claims do
+		for _, id in c.match do
+			if dispatcherLib.waitsOnUser(mainRoot(), id) then
+				runs[id] = true
+			end
+		end
+	end
+	local parked = heartbeat.parkedBy(prs, claims, runs)
+	return { verdicts = heartbeat.settle(verdicts, parked), problems = problems }
+end
+
+function hb.silentMinutes(v: heartbeat.Verdict): number
+	return math.floor(v.silent / 60)
+end
+
+-- The claim stamp origin/main shows for `id`, or nil and why it is not a claim.
+function hb.claimStampOf(paths: { string }, id: string): (string?, string)
+	local p = docPath(paths, id)
+	if not p then
+		return nil, `{id} is not on origin/main`
+	end
+	local front = frontOf(sh.git({ "show", `origin/main:{p :: string}` }))
+	local st = statusLib.effective(front, stateOfPath(p :: string))
+	if st == "done" then
+		return nil, `{id} is done: no claim to beat`
+	end
+	if (st == "preparing" or st == "active") and statusLib.phrase(front.status) then
+		return front.status, ""
+	end
+	return nil, `{id} is {st} on origin/main: no claim to beat (claim it with ./zn status {id} preparing)`
+end
+
+function hb.lostText(id: string, now: string?): string
+	return if now then `{id}'s claim was taken over (now {now})` else `{id}'s claim ended`
+end
+
+-- origin/main's paths for a beat: the fetch is bounded like every network call of the heartbeat. Paths, or nil and why.
+function hb.beatPaths(): ({ string }?, string?)
+	local f = hb.netRetry("git", { "fetch", "-q", "origin", "main" })
+	if not f.ok then
+		return nil, sh.trim(f.stderr .. f.stdout)
+	end
+	local ok, paths = originTree()
+	if not ok then
+		return nil, `cannot read origin/main's project roots ({projects.FILE})`
+	end
+	return paths, nil
+end
+
+-- The stamp `id` holds on origin/main now: (stamp, nil), (nil, nil) when it is no longer a claim, (nil, why) unreadable.
+function hb.stampNow(id: string): (string?, string?)
+	local paths, err = hb.beatPaths()
+	if not paths then
+		return nil, err
+	end
+	local current = hb.claimStampOf(paths, id)
+	return current, nil
+end
+
+-- Pushes one beat for `held`: the plan's branch write (with its lease) and its best-effort deletions. Returns nil when
+-- written (or already newer), else the text to say and whether it means the claim was lost (taken over or ended).
+function hb.beatOnce(id: string, held: string): (string?, boolean)
+	for attempt = 1, 2 do
+		-- the beats first, then main: a branch seen was seen before the claimed set was read, so a taker's branch
+		-- (younger than anything read here) is never judged unclaimed
+		local beats, _, err = hb.readBeats()
+		if err then
+			return err, false
+		end
+		local paths, perr = hb.beatPaths()
+		if not paths then
+			return perr, false
+		end
+		-- one main for the whole attempt: the claimed set and the beat commit's tree and parent all name this sha (sibling
+		-- worktrees share origin/main and may fetch it forward at any moment)
+		local at = sh.git({ "rev-parse", "origin/main" })
+		local claimed: { [string]: boolean } = {}
+		for _, c in hb.claimsOf(paths, false, at) do
+			claimed[c.stamp] = true
+		end
+		local now = hb.hbNow()
+		local plan = heartbeat.plan(held, now, beats, claimed, now)
+		for _, d in plan.delete do
+			-- best effort: a refused or hung prune never fails the beat
+			hb.netRun("git", { "push", "-q", "origin", `--force-with-lease={d.ref}:{d.lease}`, `:{d.ref}` })
+		end
+		local w = plan.write
+		if w == nil then
+			return nil, false
+		end
+		local tree = sh.git({ "rev-parse", `{at}^\{tree}` })
+		local tip = at
+		-- authored by the checkout's own identity: a commit made for the real origin is never a fixture-looking one
+		-- (the spec runner's tripwire reads a new ref authored @example.invalid as a fixture leak)
+		local c = sh.run("git", { "commit-tree", tree, "-p", tip, "-m", w.subject })
+		if not c.ok then
+			return sh.trim(c.stderr), false
+		end
+		local sha = sh.trim(c.stdout)
+		local r = hb.netRun(
+			"git",
+			{ "push", "-q", `--force-with-lease={w.ref}:{w.lease}`, "origin", `{sha}:{w.ref}` }
+		)
+		if r.ok then
+			if w.lease == "" then
+				-- create-only: a takeover may have landed between the main read and the branch read
+				local again, why = hb.stampNow(id)
+				if why then
+					return why, false
+				end
+				if again ~= held then
+					hb.netRun(
+						"git",
+						{ "push", "-q", "origin", `--force-with-lease={w.ref}:{sha}`, `:{w.ref}` }
+					)
+					return hb.lostText(id, again), true
+				end
+			end
+			return nil, false
+		end
+		local msg = sh.trim(r.stderr .. r.stdout)
+		-- a rejected write: re-read, and learn whether the claim is still this one's
+		local nowStamp, why = hb.stampNow(id)
+		if why then
+			return why, false
+		end
+		local seen, _, err2 = hb.readBeats()
+		if err2 then
+			return err2, false
+		end
+		local verdict = heartbeat.rejected(held, nowStamp, seen)
+		if verdict.action == "lost" then
+			return hb.lostText(id, nowStamp), true
+		end
+		if attempt == 2 then
+			return msg, false
+		end
+		-- a lease rejection (git's "stale info") is a co-beater of the same claim: retried silently
+		if string.find(msg, "(stale info)", 1, true) == nil then
+			stdio.ewrite(`beat: {id}: {msg}\n`)
+		end
+	end
+	return "the beat did not land", false
+end
+
+function cmd.beat(pos: { string }, opts: { [string]: { string } })
+	local id = pos[1] or fail("usage: beat <id> [--watch]")
+	if guarded(true) then
+		fail(`beat: not beating {id} from a protected checkout (a check run protects this repository)`)
+	end
+	if not publishing() then
+		fail("beat needs an origin remote (PICKMAN_PUBLISH=0 disables it)")
+	end
+	local watch = opts["--watch"] ~= nil
+	local deadline: number? = nil
+	if watch then
+		deadline = tonumber(process.env.ZN_BOUNDED_DEADLINE or "")
+		if deadline == nil then
+			fail(`beat --watch must run as ./zn run --time 3600 -- ./zn beat {id} --watch`)
+		end
+	end
+	local first, perr = hb.beatPaths()
+	if not first then
+		fail(`beat: {id}: {perr}`)
+	end
+	local current, why = hb.claimStampOf(first :: { string }, id)
+	if not current then
+		fail(`beat: {why}`)
+	end
+	local startStamp = current :: string
+	if not watch then
+		local msg, lost = hb.beatOnce(id, startStamp)
+		if msg then
+			fail(if lost then msg else `beat: {id}: {msg}`)
+		end
+		return
+	end
+	local every = heartbeat.setting(process.env, "ZN_BEAT_EVERY", heartbeat.INTERVAL, hb.specRun())
+	while true do
+		local here, unreadable = hb.stampNow(id)
+		-- an unreadable main is a failed tick, not a restamp
+		local act = heartbeat.watch(
+			startStamp,
+			if unreadable then startStamp else here,
+			os.time(),
+			deadline :: number,
+			every
+		)
+		if act == "stop-restamped" then
+			print(hb.lostText(id, here))
+			return
+		elseif act == "stop-bound" then
+			print(`beat: {id}: stopping before its bound`)
+			return
+		end
+		if unreadable then
+			stdio.ewrite(`beat: {id}: {unreadable}\n`)
+		else
+			local ok, msg, lost = pcall(hb.beatOnce, id, startStamp)
+			if not ok then
+				stdio.ewrite(`beat: {id}: {tostring(msg)}\n`)
+			elseif msg and lost then
+				print(msg)
+				return
+			elseif msg then
+				stdio.ewrite(`beat: {id}: {msg}\n`)
+			end
+		end
+		require("@lune/task").wait(every)
+	end
+end
+
+function cmd.lost()
+	if guarded(true) then
+		stdio.ewrite("lost: not read in a protected checkout (no remote is read)\n")
+		return
+	end
+	if not publishing() then
+		fail("lost needs an origin remote (PICKMAN_PUBLISH=0 disables it)")
+	end
+	local j = hb.judgeAll(originPaths())
+	if j.beatsError then
+		stdio.ewrite(`lost: heartbeats unreadable: {j.beatsError}\n`)
+		process.exit(1)
+	end
+	for _, p in j.problems do
+		stdio.ewrite(`lost: {p}\n`)
+	end
+	if j.prsError then
+		stdio.ewrite(`lost: pull requests unreadable: {j.prsError}\n`)
+		process.exit(1)
+	end
+	for _, v in heartbeat.order(j.verdicts) do
+		if v.kind == "lost" then
+			print(`{v.id} {v.state} {hb.silentMinutes(v)}m`)
+		end
+	end
+end
+
 -- Publishes `to` for `id` (and, for a raft, its members) on origin/main and brings it into this checkout. Shared by
 -- `status` and by `stop`'s give-back of a legacy-started raft.
 -- The latest `<prefix>-NNN.md` in a folder (design-review or review), or 0 when there is none.
@@ -1493,7 +1900,7 @@ local function designOpen(item: store.Item): string?
 	local review = fs.readFile(`{item.dir}/design-review-{num}.md`)
 	local refutePath = `{item.dir}/design-refute-{num}.md`
 	local refute = if fs.isFile(refutePath) then fs.readFile(refutePath) else ""
-	return openlist.problem(review, refute, fs.readFile(item.doc))
+	return require("./openlist").problem(review, refute, fs.readFile(item.doc))
 end
 
 local function setStatus(id: string, to: string)
@@ -1521,7 +1928,7 @@ local function setStatus(id: string, to: string)
 				table.insert(targets, m)
 			end
 		end
-		local value = stamp(to)
+		local value = if to == "preparing" then freshStamp(to) else stamp(to)
 		local changes: { publish.Change } = {}
 		local rafted = false -- c0116: a member that was prepared on origin (z-raft grouped it)
 		local originHashes: { [string]: string? } = {} -- c0116 (review 002 F1, 003 F1): each member's record on origin
@@ -1711,12 +2118,61 @@ function cmd.status(pos: { string })
 	if not id then
 		local listed = originPaths()
 		local roots = originRoots() :: { string }
+		local lines: { { id: string, text: string } } = {}
 		for _, p in listed do
 			-- the item's own document only: spend.md sits beside it and must not list the item twice
 			local fid, file = string.match(p, "/([fdcR]%d%d%d%d)/([^/]+)$")
 			if fid and file == `{fid}.md` and publish.allowed(p, roots) and stateOfPath(p) ~= "done" then
 				local front = frontOf(sh.git({ "show", `origin/main:{p}` }))
-				print(`{fid} {statusLib.effective(front, stateOfPath(p))} {front.title or ""}`)
+				table.insert(lines, {
+					id = fid,
+					text = `{fid} {statusLib.effective(front, stateOfPath(p))} {front.title or ""}`,
+				})
+			end
+		end
+		-- heartbeat markers (c0265): lost claims first, longest silent first; parked and unconfirmed ones tagged
+		local j = hb.judgeAll(listed)
+		if j.beatsError then
+			stdio.ewrite("status: heartbeats unreadable\n")
+		end
+		for _, p in j.problems do
+			stdio.ewrite(`status: {p}\n`)
+		end
+		local by: { [string]: heartbeat.Verdict } = {}
+		for _, v in j.verdicts do
+			by[v.id] = v
+		end
+		local firsts: { string } = {}
+		for _, v in heartbeat.order(j.verdicts) do
+			if v.kind == "lost" then
+				table.insert(firsts, v.id)
+			end
+		end
+		local function mark(l: { id: string, text: string }): string
+			local v = by[l.id]
+			if v == nil then
+				return l.text
+			elseif v.kind == "lost" then
+				return `{l.text} [lost {hb.silentMinutes(v)}m]`
+			elseif v.kind == "parked" then
+				return `{l.text} [parked]`
+			elseif v.kind == "nobeat" then
+				return `{l.text} [no beat]`
+			elseif v.kind == "stale" or v.kind == "unknown" then
+				return `{l.text} [stale?]`
+			end
+			return l.text
+		end
+		for _, first in firsts do
+			for _, l in lines do
+				if l.id == first then
+					print(mark(l))
+				end
+			end
+		end
+		for _, l in lines do
+			if table.find(firsts, l.id) == nil then
+				print(mark(l))
 			end
 		end
 		return
@@ -2186,7 +2642,7 @@ function cmd.release(pos: { string }, opts: { [string]: { string } })
 			`{raftId}'s claim {value} is not this checkout's: give back only your own claim (--force when the user says it is abandoned)`
 		)
 	end
-	local carriers, err = claimsLib.carriers(".", value, nil, originRoots() or {})
+	local carriers, err = require("./claims").carriers(".", value, nil, originRoots() or {})
 	if not carriers then
 		fail(`release: cannot list what carries {value}: {err}`)
 	end
@@ -2529,7 +2985,7 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 		local pushed: sh.Result
 		if process.env.ZN_PUBLISH_BROKER and process.env.ZN_PUBLISH_BROKER ~= "" then
 			-- inside a dispatched step the agent's credential can't push to main: the dispatcher pushes it (c0117)
-			local ok, said = brokerLib.request(
+			local ok, said = require("./broker").request(
 				process.env.ZN_PUBLISH_BROKER :: string,
 				process.env.ZN_PUBLISH_TOKEN or "",
 				sha,
@@ -2550,7 +3006,7 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 				`landed {sha} on main; remove this worktree: git -C {mainRoot()} worktree remove {root} && git -C {mainRoot()} branch -D {branch}{suffix}`
 			)
 			local kickErr: any = nil
-			local kicked = xpcall(watchcmd.kick, function(e)
+			local kicked = xpcall(require("./watchcmd").kick, function(e)
 				kickErr = e
 			end)
 			if not kicked then
@@ -2852,7 +3308,7 @@ end
 function cmd.busy(pos: { string })
 	local current = sh.trim(sh.run("git", { "branch", "--show-current" }).stdout)
 	local own = string.match(current, "^(R%d%d%d%d)%-")
-	local paths = if #pos > 0 then pos else compactLib.guarded()
+	local paths = if #pos > 0 then pos else require("./compact").guarded()
 	local found = 0
 	local ok, tree = originTree()
 	if not ok then
@@ -2887,8 +3343,8 @@ function cmd.busy(pos: { string })
 			end
 		end
 	end
-	for _, ref in compactLib.busyRefNames(current, paths) do
-		local short = compactLib.shortRef(ref)
+	for _, ref in require("./compact").busyRefNames(current, paths) do
+		local short = require("./compact").shortRef(ref)
 		local item, why = frozenOut(freezes, ref)
 		if item then
 			stdio.ewrite(`ignored for {item}'s freeze: {short} ({why})\n`)
@@ -2898,7 +3354,7 @@ function cmd.busy(pos: { string })
 		end
 	end
 	local here = sh.trim(sh.run("pwd", { "-P" }).stdout)
-	for _, wt in compactLib.dirtyWorktrees(here, paths) do
+	for _, wt in require("./compact").dirtyWorktrees(here, paths) do
 		-- a worktree on a branch the freeze ignores is ignored with it (the same function); a detached one is not
 		local on = sh.trim(sh.run("git", { "-C", wt, "branch", "--show-current" }).stdout)
 		local item, why = nil :: string?, nil :: string?
@@ -3212,7 +3668,7 @@ function cmd.compact(_: { string }, opts: { [string]: { string } })
 			"compact runs on a branch cut from origin/main with no commits of its own: HEAD is not origin/main"
 		)
 	end
-	local busy = compactLib.busyRefs(sh.git({ "branch", "--show-current" }))
+	local busy = require("./compact").busyRefs(sh.git({ "branch", "--show-current" }))
 	if #busy > 0 and not opts["--force"] then
 		fail(
 			`compact: these branches change a project root (tracker/, z-nile/.tracker/, ...) or tests/acceptance/: {table.concat(
@@ -3235,7 +3691,7 @@ function cmd.compact(_: { string }, opts: { [string]: { string } })
 	end
 	local map = idsLib.plan(all)
 	keepRecords(".", map, function()
-		compactLib.apply(map, found)
+		require("./compact").apply(map, found)
 	end)
 	fs.writeFile(idsLib.FILE, idsLib.format({ issue = counts.issue + 1, raft = counts.raft + 1 }, phrase()))
 	-- a compaction before origin moved the counter moves it too: the old file becomes the tombstone (c0114)
@@ -3351,7 +3807,7 @@ function cmd.remap()
 		end
 	end
 	keepRecords(".", m, function()
-		compactLib.apply(m, found)
+		require("./compact").apply(m, found)
 	end)
 	local problems = audit.run(".")
 	if audit.errors(problems) > 0 then
@@ -3377,7 +3833,7 @@ function cmd.remap()
 	local built, baseTree = pcall(function(): string
 		sh.git({ "worktree", "add", "-q", "--detach", scratch, mb })
 		keepRecords(scratch, m, function()
-			compactLib.apply(m, audit.scan(scratch), scratch)
+			require("./compact").apply(m, audit.scan(scratch), scratch)
 		end)
 		-- the scratch worktree's tracked state as a commit object, with no ref moved: empty when nothing changed
 		local addBase = process.exec("git", { "add", "-A" }, { cwd = scratch })
@@ -3772,10 +4228,10 @@ function cmd.finish(pos: { string })
 	if #paths == 0 then
 		fail(`{id}: nothing to finish`)
 	end
-	watchcmd.capture({ id = id, dest = `{issue.dir}/acceptance` }, paths)
+	require("./watchcmd").capture({ id = id, dest = `{issue.dir}/acceptance` }, paths)
 	local resultsOut = `{issue.dir}/results.txt`
 	sh.writeReplacing(resultsOut, "")
-	if gateLib.doneGate(process.env) == "promoted" then
+	if require("./gate").doneGate(process.env) == "promoted" then
 		print("finish: inside a spec run, so the affected specs are skipped")
 	else
 		-- The same path the affected gate uses: one project's home per selection. tests/run from the
@@ -4517,7 +4973,7 @@ local function recordAndCommit(
 			sh.git({ "add", "-A", r })
 		end
 	end
-	watchcmd.upkeep()
+	require("./watchcmd").upkeep()
 	local committed, commitErr = pcall(function()
 		sh.git({ "commit", "--quiet", "-m", message, "-m", table.concat(trailers, "\n") })
 	end)
@@ -4685,7 +5141,7 @@ local function reviewProblem(raft: store.Item): string?
 		inHuman[fid] = true
 	end
 	local pendingSet: { [string]: boolean } = {}
-	for _, fid in openlist.pending(raftDoc) do
+	for _, fid in require("./openlist").pending(raftDoc) do
 		pendingSet[fid] = true
 	end
 
@@ -4740,11 +5196,11 @@ local function reviewProblem(raft: store.Item): string?
 		return `{refuteName}: {table.concat(invalid, "; ")}`
 	end
 	-- one round: a refuted finding, an unclosed high, or a failed Judged criterion waits for the human
-	local gap = openlist.problem(review, refute, raftDoc)
+	local gap = require("./openlist").problem(review, refute, raftDoc)
 	if gap then
 		return `{reviewName} {gap}`
 	end
-	if verdict ~= nil and findingCount == 0 and #openlist.judgedFails(review) == 0 then
+	if verdict ~= nil and findingCount == 0 and #require("./openlist").judgedFails(review) == 0 then
 		return `{reviewName} Verdict is {verdict}, not approve`
 	end
 	return nil
@@ -5156,7 +5612,7 @@ function cmd.done(pos: { string })
 		local check = `{item.dir}/check.sh`
 		if fs.isFile(check) then
 			local text = fs.readFile(check)
-			local rewritten = pathsLib.rewrite(text, doneDirs)
+			local rewritten = require("./paths").rewrite(text, doneDirs)
 			if rewritten ~= text then
 				fs.writeFile(check, rewritten)
 				sh.git({ "add", check })
@@ -5165,7 +5621,7 @@ function cmd.done(pos: { string })
 	end
 	-- finish already wrote each layer's watch from that layer's own files. Capturing again, from the
 	-- merge, would give every ticket the whole stack: a finish commit's subject is not an Issue: trailer.
-	if gateLib.doneGate(process.env) == "promoted" then
+	if require("./gate").doneGate(process.env) == "promoted" then
 		print("done: inside a spec run, so the gate is skipped; checking the promoted specs")
 		if #promoted > 0 then
 			print("\n=== promoted acceptance specs: type check + meta + run")
@@ -5843,7 +6299,7 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	if front.design ~= "ready" then
 		fail(`{id} is not design: ready`)
 	end
-	local pending = openlist.pending(fs.readFile(item.doc))
+	local pending = require("./openlist").pending(fs.readFile(item.doc))
 	if #pending > 0 then
 		fail(
 			`{id} has an unruled open-list bullet ({table.concat(pending, ", ")}): rule each under ## Open to the human, then ./zn approve {id}`
@@ -6505,9 +6961,10 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 		local sec = math.floor(since.ms / 1000)
 		local stamped = (os.date("!%Y-%m-%dT%H:%M:%S", sec) :: string) .. ".000Z"
 		local untilIso = (os.date("!%Y-%m-%dT%H:%M:%S") :: string) .. ".999Z"
-		local sinceUnix = sessions.unix(stamped) or 0
-		local untilUnix = sessions.unix(untilIso) or sinceUnix
-		local readOk, reading = pcall(sessionread.span, process.cwd, stamped, sinceUnix, untilIso, untilUnix)
+		local sinceUnix = require("./sessions").unix(stamped) or 0
+		local untilUnix = require("./sessions").unix(untilIso) or sinceUnix
+		local readOk, reading =
+			pcall(require("./sessionread").span, process.cwd, stamped, sinceUnix, untilIso, untilUnix)
 		if readOk and reading then
 			local got = reading :: any
 			ai = got.ai
@@ -7467,7 +7924,7 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
 				return false
 			end
 			local r = sh.run("gh", { "api", `repos/\{owner\}/\{repo\}/commits/{sha}/pulls` })
-			return r.ok and dispatchLib.prMergedFrom(r.stdout, sha)
+			return r.ok and require("./dispatch").prMergedFrom(r.stdout, sha)
 		end,
 		prView = function(branch: string): string?
 			if not onGitHub() then
@@ -7718,17 +8175,17 @@ end
 -- `reap` is also what `sync` and the gate run (`--auto`): quiet unless it stops something, a no-op inside a check run
 -- (the guards protect this repository there), and never a reason for the caller to fail.
 cmd["watch-bootstrap"] = function()
-	watchcmd.bootstrap()
+	require("./watchcmd").bootstrap()
 end
 
 -- Returns at once. The net runs under ./zn run and writes .cache/watch-net.log in this checkout.
 cmd["watch-kick"] = function()
-	watchcmd.kick()
+	require("./watchcmd").kick()
 end
 
 -- Edits `.worktree/watch-net`, never this checkout's files, and pushes a repair onto main.
 cmd["watch-net"] = function()
-	watchcmd.net()
+	require("./watchcmd").net()
 end
 
 function cmd.reap(_: { string }, opts: { [string]: { string } })
