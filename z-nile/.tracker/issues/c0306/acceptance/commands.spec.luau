@@ -558,8 +558,11 @@ return t.spec("c0306 commands refuse a review off the review models", function(i
 			local line = '{"type":"assistant","timestamp":"'
 				.. ts
 				.. '","message":{"id":"m1","model":"claude-sonnet-5-5","usage":{"input_tokens":10,"output_tokens":5}}}\n'
-			fs.writeDir(sessions)
-			fs.writeFile(`{sessions}/s1.jsonl`, line)
+			-- spend asks for the folder of process.cwd, which Lune gives with a trailing slash: the session is filed under both names
+			for _, dir in { sessions, sessions .. "-" } do
+				fs.writeDir(dir)
+				fs.writeFile(`{dir}/s1.jsonl`, line)
+			end
 			-- the premise: with no typed model the measured one is what a row records (a deliver spend needs no review file)
 			znOk(prep, { "spend", "c0174", "--phase", "deliver" })
 			if not has(tsv("c0174"), "claude-sonnet-5-5") then
