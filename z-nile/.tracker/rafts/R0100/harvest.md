@@ -5,3 +5,11 @@
 - design-review-001 F5: z-raft/main-changed-a-skill-walk-its-loops
 - design-review-001 F6: z-design/prove-specs-pass-on-a-prototype
 - note merging the five heartbeat prototypes was textually clean but declared `local hb` twice and dropped main's new uses of two inlined requires; only the real-time proofs and the lint stage caught them: z-raft/run-sequestered-specs-on-all-prototypes-together
+- design-review-002 F1: z-raft/order-names-members-once
+- design-review-002 F2: z-design/guards-name-slow-tier-specs
+- design-review-002 F3: z-design/restated-rules-move-together
+- design-review-002 F4: z-raft/cross-raft-order-written-in-both
+- design-review-002 F5: zz-test/no-vacuous-pass
+- design-review-002 F6: z-raft/interface-names-every-writer
+- design-review-002 F7: z-design/new-rules-migrate-existing-work
+- design-review-002 F8: z-raft/plan-the-switch-over

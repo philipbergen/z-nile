@@ -18,7 +18,8 @@ check "RC1: the five layers run in the Order, one wave each (c0265, c0274, c0275
 	want="c0265 wave 1 c0274 wave 2 c0275 wave 3 c0276 wave 4 c0277 wave 5"
 	got=$(printf "%s\n" "$out" | grep -E "^c[0-9]+ wave" | awk "{printf \"%s %s %s \", \$1, \$2, \$3}" | sed "s/ *$//")
 	[[ $got == "$want" ]] || { echo "workstreams prints: $got"; exit 1; }
-	printf "%s\n" "$out" | grep -qx "parallel: no"'
+	printf "%s\n" "$out" | grep -qx "parallel: no" || exit 1
+	"$ZN_ROOT/zn" stack R0100 >/dev/null || { echo "zn stack R0100 refuses the Order section"; exit 1; }'
 
 check "RC2: each interface two members share is defined once in the engine, and main.luau declares the hb table once and keeps the boardview local" bash -c '
 	cd "$ZN_ROOT/z-nile/engine" || exit 1
@@ -42,7 +43,7 @@ check "RC4: the raft changes nothing in pickman/ or any game, and no other raft'
 
 check "RC5: z-work carries the discarded-session rule" bash -c '
 	f="$ZN_ROOT/z-nile/skills/z-work/SKILL.md"
-	for p in "you were discarded" "./zn lost" "--adopt" "with no raft"; do
+	for p in "you were discarded" "./zn lost" "--adopt" "drops the raft id"; do
 		grep -qF -e "$p" "$f" || { echo "z-work lacks: $p"; exit 1; }
 	done'
 
