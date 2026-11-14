@@ -8,12 +8,12 @@ local brokerLib = require("./broker")
 local buffer = require("./buffer")
 local claimsLib = require("./claims")
 local compactLib = require("./compact")
-local completion = require("./completion")
 local contract = require("./contract")
 local costrow = require("./costrow")
 local dispatchLib = require("./dispatch")
 local dispatcherLib = require("./dispatcher")
-local esc = { lib = require("./escalation") } -- c0250 (a table: this file is at Luau's limit of 200 locals)
+local H = {} -- top-level helpers kept in one table (this file is at Luau's limit of 200 locals)
+local esc = { lib = require("./escalation"), completion = require("./completion"), mergerecords = require("./mergerecords") } -- c0250 (a table: this file is at Luau's limit of 200 locals)
 local fs = require("@lune/fs")
 local gateLib = require("./gate")
 local idea = require("./idea")
@@ -21,7 +21,6 @@ local idsLib = require("./ids")
 local layergit = require("./layergit")
 local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
-local mergerecords = require("./mergerecords")
 local models = require("./models")
 local modelstep = require("./modelstep")
 local openlist = require("./openlist")
@@ -168,12 +167,12 @@ local function today(): string
 	return os.date("%Y-%m-%d") :: string
 end
 
-local function hasUpstream(): boolean
+function H.hasUpstream(): boolean
 	return sh.run("git", { "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}" }).ok
 end
 
 local function push()
-	if hasUpstream() then
+	if H.hasUpstream() then
 		sh.git({ "push", "--quiet" })
 	end
 end
@@ -367,7 +366,7 @@ end
 -- Brings what was just published into this worktree. A merge that stops is aborted (the tree is left as it was) or
 -- refused (nothing was started): the message says which, and the way through.
 local function mergeOrigin()
-	local ok, why, aborted = mergerecords.mergeRef("origin/main")
+	local ok, why, aborted = esc.mergerecords.mergeRef("origin/main")
 	if not ok then
 		fail(
 			`merging origin/main failed{if aborted then " (merge aborted)" else " (nothing was aborted)"}; anything this command published is already on origin/main: {why}`
@@ -495,7 +494,7 @@ local function originIds(kind: string): { string }
 	return idsOf(paths, kind)
 end
 
-local function activeRaft(): store.Item
+function H.activeRaft(): store.Item
 	local raft = currentRaft()
 	if not raft then
 		fail(
@@ -938,7 +937,7 @@ end
 -- A file argument as the caller meant it (code review R0093 001 F2): zn runs the engine at the checkout's root, so a
 -- relative path is joined to the directory ./zn was run from (ZN_HERE, inside the checkout or not). It counts only
 -- when the engine runs in ZN_TOP, as ZN_CWD does; an absolute path is left as it is.
-local function callerFile(path: string): string
+function H.callerFile(path: string): string
 	if string.sub(path, 1, 1) == "/" then
 		return path
 	end
@@ -1840,7 +1839,7 @@ local function raftingStart(what: string)
 		fail(`working tree is not clean: commit first ({what} merges origin/main before and after it claims)`)
 	end
 	refuseStale()
-	local ok, why, aborted = mergerecords.mergeRef("origin/main")
+	local ok, why, aborted = esc.mergerecords.mergeRef("origin/main")
 	if not ok then
 		fail(
 			`{what}: merging origin/main failed{if aborted
@@ -2379,7 +2378,7 @@ end
 -- Returns the first refusal (naming the path), or nil.
 -- The frontmatter keys in order, or nil when one repeats: frontOf reads the last copy of a key, store.withFront
 -- rewrites the first, so a document with two is refused rather than read two ways.
-local function frontKeys(text: string): { string }?
+function H.frontKeys(text: string): { string }?
 	local block = string.match(text, "^%-%-%-\n(.-)\n%-%-%-") or ""
 	local keys: { string } = {}
 	for line in string.gmatch(block .. "\n", "([^\n]*)\n") do
@@ -2443,7 +2442,7 @@ local function captureScope(diff: string, base: string): string?
 		if not mode.ok or string.sub(mode.stdout, 1, 7) ~= "100644 " then
 			return `not a capture change: {path} must stay a plain file (mode 100644)`
 		end
-		local wasKeys, nowKeys = frontKeys(theirs.stdout), frontKeys(mine.stdout)
+		local wasKeys, nowKeys = H.frontKeys(theirs.stdout), H.frontKeys(mine.stdout)
 		if not wasKeys or not nowKeys then
 			return `not a capture change: {path} repeats a frontmatter key`
 		end
@@ -2478,7 +2477,7 @@ end
 
 -- An issue the landed diff touches, that already has an approval, whose contract no longer matches.
 -- An issue with no approval.md is left alone (a capture, or an item prepared before approval).
-local function approvedDrift(base: string): string?
+function H.approvedDrift(base: string): string?
 	local names = sh.git({ "diff", "--name-only", base, "HEAD" })
 	local seen: { [string]: boolean } = {}
 	for path in string.gmatch(names, "[^\n]+") do
@@ -2537,14 +2536,14 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 	local gate = override or "z-nile/check.sh --static"
 	local given = opts["-m"]
 	local function take(base: string)
-		local merged, why, aborted = mergerecords.mergeRef(base)
+		local merged, why, aborted = esc.mergerecords.mergeRef(base)
 		if not merged then
 			fail(
 				`merging origin/main failed{if aborted then " (merge aborted)" else " (nothing was aborted)"}: {why}\nthen run land again`
 			)
 		end
 		refuseStale()
-		local drift = approvedDrift(base)
+		local drift = H.approvedDrift(base)
 		if drift then
 			fail(drift)
 		end
@@ -2878,7 +2877,7 @@ end
 
 -- whether every path in `pos` is one of `inside` or under one, by whole segments ("./" and a trailing "/" ignored;
 -- a path with a ".." segment is never inside: c0115 design review 014 F4)
-local function allInside(pos: { string }, inside: { string }): boolean
+function H.allInside(pos: { string }, inside: { string }): boolean
 	for _, p in pos do
 		local n = string.gsub(string.gsub(p, "^%./", ""), "/+$", "")
 		if n == ".." or string.find(`/{n}/`, "/../", 1, true) then
@@ -2908,7 +2907,7 @@ local function freezesOn(pos: { string }): { Freeze }
 	end
 	for _, fr in FREEZES do
 		if
-			allInside(pos, fr.paths)
+			H.allInside(pos, fr.paths)
 			and sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{fr.mark}` }).ok
 		then
 			table.insert(on, fr)
@@ -3510,7 +3509,7 @@ function cmd.remap()
 	local mtTree = string.match(mt.stdout, "^(%x+)")
 	-- c0263: item records are settled by id whether or not git reported a conflict (it can pair a record with another
 	-- item's and exit 0); any other conflict, or a record that cannot be settled, stops as it always did
-	local settled = if mtTree then mergerecords.settleRemapRecords(mt.stdout, mtTree, baseTree) else nil
+	local settled = if mtTree then esc.mergerecords.settleRemapRecords(mt.stdout, mtTree, baseTree) else nil
 	if not settled then
 		fail(
 			`remap committed, but merging origin/main conflicts: git merge origin/main and resolve (a provenance.md both sides appended: keep the common rows, then origin/main's new rows, then yours)\n{mt.stdout}`
@@ -3608,7 +3607,7 @@ end
 
 -- c0248: every open layer pull request of the raft carries the raft's Theme, its Order and the stack. A view of git,
 -- never state: a failed edit warns and the command goes on.
-local function refreshPrBodies(raft: store.Item)
+function H.refreshPrBodies(raft: store.Item)
 	if not hasOrigin() or not onGitHub() then
 		return
 	end
@@ -3755,7 +3754,7 @@ function cmd.start(pos: { string })
 		local ftitle = store.readFront(raft.doc).title or raft.slug
 		print(`on branch {branch}; {raft.id} and {#members} issue(s) are active`)
 		pushAndOpenPr(raft, members, branch, ftitle, true, prBase, `{issue.id}: {layergit.issueTitle(issue)}`)
-		refreshPrBodies(raft)
+		H.refreshPrBodies(raft)
 		return
 	end
 	if raft.state ~= "backlog" then
@@ -4043,7 +4042,7 @@ function cmd.finish(pos: { string })
 		end
 	end
 	print(`finished {branch}: {message}`)
-	refreshPrBodies(raft)
+	H.refreshPrBodies(raft)
 end
 
 -- Rebase every layer onto the tip below it. A conflict or a red check.sh stops at that layer.
@@ -4145,7 +4144,7 @@ function cmd.restack(pos: { string })
 					sh.git({ "add", "--", path })
 				end
 			else
-				local settled, reason = mergerecords.settleRebaseStop()
+				local settled, reason = esc.mergerecords.settleRebaseStop()
 				if not settled then
 					stoppedWhy = reason
 					break
@@ -4196,7 +4195,7 @@ function cmd.restack(pos: { string })
 	else
 		print(`{raft.id} is already stacked`)
 	end
-	refreshPrBodies(raft)
+	H.refreshPrBodies(raft)
 end
 
 -- What another clone can see: the layers, from git, after a fetch. No local file is the authority.
@@ -4747,7 +4746,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 		stdio.ewrite("commit: --time and --tokens are ignored; cost is measured\n")
 	end
 	local model = modelOption("commit", opts)
-	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
+	recordAndCommit(H.activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
 end
 
 -- The project home of an item (c0120): where its check.sh runs and its specs are promoted to, from the working
@@ -4858,9 +4857,9 @@ cmd["promote-check"] = function(pos: { string })
 	print("promote-check OK")
 end
 
--- Latest final review round must be resolved (completion.reviewProblem holds the rule, which a layer's review shares);
+-- Latest final review round must be resolved (esc.completion.reviewProblem holds the rule, which a layer's review shares);
 -- this reads the raft's files.
-local function backlogIssue(id: string): boolean
+function H.backlogIssue(id: string): boolean
 	local item = store.find(id)
 	return item ~= nil and item.kind == "issue" and item.state == "backlog"
 end
@@ -4870,7 +4869,7 @@ local function reviewProblem(raft: store.Item): string?
 	local num = string.format("%03d", latest)
 	local reviewPath = `{raft.dir}/{reviewPrefix}-{num}.md`
 	local refutePath = `{raft.dir}/{refutePrefix}-{num}.md`
-	return completion.reviewProblem(
+	return esc.completion.reviewProblem(
 		if latest > 0 then fs.readFile(reviewPath) else nil,
 		if fs.isFile(refutePath) then fs.readFile(refutePath) else nil,
 		if fs.isFile(raft.doc) then fs.readFile(raft.doc) else "",
@@ -4878,7 +4877,7 @@ local function reviewProblem(raft: store.Item): string?
 			kind = "final",
 			reviewName = `{reviewPrefix}-{num}.md`,
 			refuteName = `{refutePrefix}-{num}.md`,
-			backlog = backlogIssue,
+			backlog = H.backlogIssue,
 		}
 	)
 end
@@ -5614,7 +5613,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 	print(`landed {raft.id}`)
 	if not wholeRaft then
 		-- the raft goes on: its remaining layer pull requests show the stack as it now stands
-		pcall(refreshPrBodies, store.get(raft.id))
+		pcall(H.refreshPrBodies, store.get(raft.id))
 	end
 end
 
@@ -5827,7 +5826,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 end
 
 -- The raft's project's architecture map (c0120): the path, not the text. A project without one (z-nile) gets a line saying so.
-local function architectureOf(raft: store.Item): string
+function H.architectureOf(raft: store.Item): string
 	local path = `{raft.root}/architecture.md`
 	return if fs.isFile(path)
 		then `Read \`{path}\` before you change a dependency.`
@@ -5916,7 +5915,7 @@ local function renderPrompt(raft: store.Item): string
 		ISSUE_IDS = table.concat(ids, ", "),
 		ISSUES = table.concat(issues, "\n"),
 		SKILLS = table.concat(skills, "\n"),
-		ARCHITECTURE = architectureOf(raft),
+		ARCHITECTURE = H.architectureOf(raft),
 		ARCHITECTURE_PATH = `{raft.root}/architecture.md`,
 		RAFT_DOC = raft.doc,
 		RAFT_CHECK = `{raft.dir}/check.sh`,
@@ -6017,7 +6016,7 @@ local function stdinIsTerminal(): boolean
 	return r.ok
 end
 
-local function contractDirty(paths: { string }): string?
+function H.contractDirty(paths: { string }): string?
 	local args = { "status", "--porcelain", "--" }
 	for _, path in paths do
 		table.insert(args, path)
@@ -6186,7 +6185,7 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	if collectErr then
 		fail(`{id}: {collectErr}`)
 	end
-	local dirty = contractDirty(paths)
+	local dirty = H.contractDirty(paths)
 	if dirty then
 		fail(`{id}: commit the contract first ({dirty}), then ./zn approve {id}`)
 	end
@@ -6293,6 +6292,9 @@ function cmd.ready(pos: { string })
 					treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4))
 				)
 			end,
+			nil,
+			nil,
+			nil,
 			true
 		)
 		if not r.ok then
@@ -7503,7 +7505,7 @@ end
 
 -- the earliest commit time (unix seconds) that added any of `paths` (a file's homes before and after a move); nil
 -- without git history
-local function addedAt(paths: { string }): number?
+function H.addedAt(paths: { string }): number?
 	local args = { "log", "--diff-filter=A", "--format=%ct", "--" }
 	for _, p in paths do
 		table.insert(args, p)
@@ -7630,7 +7632,7 @@ local function metricsLessons()
 		end
 	end
 	-- the cutoff keeps the original add: c0114 moved the file to z-nile/engine/lessons.luau
-	local added = addedAt({ "scripts/tracker/lessons.luau", "z-nile/engine/lessons.luau" })
+	local added = H.addedAt({ "scripts/tracker/lessons.luau", "z-nile/engine/lessons.luau" })
 	-- `created:` is written as the local calendar day, so the cutoff is the local day of that commit too
 	local split =
 		lessonsLib.roundsSplit(rafts, if added then lessonsLib.day(os.date("%Y-%m-%d", added)) else nil)
@@ -8365,7 +8367,7 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
 	if answerFile then
 		local resolved: { string } = {}
 		for _, path in answerFile do
-			table.insert(resolved, callerFile(path))
+			table.insert(resolved, H.callerFile(path))
 		end
 		opts["--answer-file"] = resolved
 	end
