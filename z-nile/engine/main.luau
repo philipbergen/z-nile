@@ -340,9 +340,9 @@ local function checking(): boolean
 	return not (ok and r.ok and sh.trim(r.stdout) == "free")
 end
 
-local function publishing(): boolean
+local function publishing(quiet: boolean?): boolean
 	local v = process.env.PICKMAN_PUBLISH
-	return hasOrigin() and (v == nil or v == "" or v ~= "0") and not guarded()
+	return hasOrigin() and (v == nil or v == "" or v ~= "0") and not guarded(quiet)
 end
 
 local function frontOf(text: string): { [string]: string }
@@ -448,6 +448,7 @@ end
 -- to tell an old owner it lost the claim. It is dropped only by a claim-ending command run in this checkout, never by
 -- the observation that triggers a refusal (dropping it would let the old owner's next move through).
 local hb = {} -- the heartbeat edge and c0274's claim memory, one table: main.luau is at Luau's limit of 200 top-level locals
+hb.task = require("@lune/task") -- a field, not a local: the chunk is at Luau's limit of 200 (c0275)
 
 function hb.file(id: string): string
 	return `.cache/tracker-stamp-{id}`
@@ -470,11 +471,13 @@ end
 
 -- The stamp this checkout remembers for `id`, "" for none. A checkout that claimed before this existed holds only
 -- tracker-claim-<id> (the same stamp for the claims it made), which is read when the stamp file is absent.
-function hb.read(id: string): string
-	if fs.isFile(hb.file(id)) then
-		return sh.trim(fs.readFile(hb.file(id)))
+function hb.read(id: string, dir: string?): string
+	-- `dir`: another checkout's folder (c0275: the dispatcher reads its step worktree's memory)
+	local base = if dir then `{dir}/` else ""
+	if fs.isFile(base .. hb.file(id)) then
+		return sh.trim(fs.readFile(base .. hb.file(id)))
 	end
-	return if fs.isFile(claimFile(id)) then sh.trim(fs.readFile(claimFile(id))) else ""
+	return if fs.isFile(base .. claimFile(id)) then sh.trim(fs.readFile(base .. claimFile(id))) else ""
 end
 
 -- c0116: remembers a rafting claim (`new raft`, `fold`, `recombine`) in this checkout, so a re-run resumes it and
@@ -1493,6 +1496,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			end
 			-- this checkout's claim: a re-run here resumes it, and `release` gives back only a claim it finds here
 			rememberClaim(chosen, claim)
+			hb.firstBeat(chosen, claim)
 			mergeOrigin()
 			-- membership is written locally and committed, so later merges of origin/main stay clean
 			local grouped: { string } = {}
@@ -1670,8 +1674,18 @@ end
 -- What a claim is: an item on origin/main (publish.allowed does not see a retired raft's folder), not done, whose effective state is preparing or active and whose
 -- stored status carries a stamp. `since` (the epoch the stamp landed) only when asked: it costs a git log per claim.
 function hb.claimsOf(paths: { string }, withSince: boolean, at: string?): { heartbeat.Claim }
+	local out, why = hb.claimsRead(paths, withSince, at)
+	return out or fail(why :: string)
+end
+
+-- The same, returning nil and why when the registry cannot be read, for the automatic beat, which never fails the command
+-- it rides on (`fail` exits the process and no pcall catches it).
+function hb.claimsRead(paths: { string }, withSince: boolean, at: string?): ({ heartbeat.Claim }?, string?)
 	local ref = at or "origin/main"
-	local roots = originRoots() or fail(`origin/main has no readable {projects.FILE}`)
+	local roots = originRoots()
+	if not roots then
+		return nil, `origin/main has no readable {projects.FILE}`
+	end
 	local out: { heartbeat.Claim } = {}
 	for _, p in paths do
 		local fid, file = string.match(p, "/([fdcR]%d%d%d%d)/([^/]+)$")
@@ -1697,7 +1711,7 @@ function hb.claimsOf(paths: { string }, withSince: boolean, at: string?): { hear
 			end
 		end
 	end
-	return out
+	return out, nil
 end
 
 -- The open pull requests (title and head branch), or nil and why. Asked only when some claim is stale.
@@ -1821,7 +1835,8 @@ end
 
 -- Pushes one beat for `held`: the plan's branch write (with its lease) and its best-effort deletions. Returns nil when
 -- written (or already newer), else the text to say and whether it means the claim was lost (taken over or ended).
-function hb.beatOnce(id: string, held: string): (string?, boolean)
+function hb.beatOnce(id: string, held: string, remembered: string?): (string?, boolean, string?)
+	local lease = remembered -- c0275: the sha this checkout last wrote; a second attempt reads the sha it sees
 	for attempt = 1, 2 do
 		-- the beats first, then main: a branch seen was seen before the claimed set was read, so a taker's branch
 		-- (younger than anything read here) is never judged unclaimed
@@ -1837,17 +1852,27 @@ function hb.beatOnce(id: string, held: string): (string?, boolean)
 		-- worktrees share origin/main and may fetch it forward at any moment)
 		local at = sh.git({ "rev-parse", "origin/main" })
 		local claimed: { [string]: boolean } = {}
-		for _, c in hb.claimsOf(paths, false, at) do
+		local standing, claimsWhy = hb.claimsRead(paths, false, at)
+		if not standing then
+			return claimsWhy, false
+		end
+		for _, c in standing do
 			claimed[c.stamp] = true
 		end
 		local now = hb.hbNow()
-		local plan = heartbeat.plan(held, now, beats, claimed, now)
+		local plan = heartbeat.plan(held, now, beats, claimed, now, lease)
 		for _, d in plan.delete do
 			-- best effort: a refused or hung prune never fails the beat
 			hb.netRun("git", { "push", "-q", "origin", `--force-with-lease={d.ref}:{d.lease}`, `:{d.ref}` })
 		end
 		local w = plan.write
 		if w == nil then
+			-- already newer: the sha of the branch that is there
+			for _, b in beats do
+				if b.stamp == held then
+					return nil, false, b.sha
+				end
+			end
 			return nil, false
 		end
 		local tree = sh.git({ "rev-parse", `{at}^\{tree}` })
@@ -1878,8 +1903,9 @@ function hb.beatOnce(id: string, held: string): (string?, boolean)
 					return hb.lostText(id, again), true
 				end
 			end
-			return nil, false
+			return nil, false, sha
 		end
+		lease = nil
 		local msg = sh.trim(r.stderr .. r.stdout)
 		-- a rejected write: re-read, and learn whether the claim is still this one's
 		local nowStamp, why = hb.stampNow(id)
@@ -1903,6 +1929,384 @@ function hb.beatOnce(id: string, held: string): (string?, boolean)
 		end
 	end
 	return "the beat did not land", false
+end
+
+-- ---- c0275: automatic beats ----
+-- A claim beats from the moment it is made, every `./zn` command in its worktree keeps it alive (one beat per interval, no
+-- network call inside it), long commands tick while they run, and a background beater (`beat --watch` under `./zn run`)
+-- keeps it alive while the session thinks or waits. All of it is best effort: a beat never fails the command it rides on.
+
+-- The worktree's throttle mark for a claim, `.cache/tracker-beats/<id>` (`<stamp> <epoch> <sha>`). The main checkout holds
+-- no work: it never writes or reads one (the dispatcher's and `ready`'s beats there are ref pushes only).
+hb.MARKS = ".cache/tracker-beats"
+hb.BEATER_DIR = ".cache/tracker-beater"
+
+function hb.beaterFile(id: string): string
+	return `{hb.BEATER_DIR}/{id}`
+end
+
+function hb.markFile(id: string): string
+	return `{hb.MARKS}/{id}`
+end
+
+function hb.readMark(id: string): heartbeat.Mark?
+	local f = hb.markFile(id)
+	return if fs.isFile(f) then heartbeat.markParse(fs.readFile(f)) else nil
+end
+
+function hb.writeMark(id: string, m: heartbeat.Mark)
+	if hb.inMain() then
+		return
+	end
+	fs.writeDir(hb.MARKS)
+	sh.writeReplacing(hb.markFile(id), heartbeat.markText(m))
+end
+
+-- The worktree's local state of a claim ends (its mark and its beater's pid file; the beater loop itself stops, since its
+-- worktree no longer holds the claim).
+function hb.dropMark(id: string)
+	if fs.isFile(hb.markFile(id)) then
+		fs.removeFile(hb.markFile(id))
+	end
+	if fs.isFile(hb.beaterFile(id)) then
+		fs.removeFile(hb.beaterFile(id))
+	end
+end
+
+function hb.markIds(): { string }
+	local out: { string } = {}
+	if fs.isDir(hb.MARKS) then
+		for _, f in fs.readDir(hb.MARKS) do
+			table.insert(out, f)
+		end
+	end
+	table.sort(out)
+	return out
+end
+
+-- Whether an automatic beat may run here at all: the same answer every heartbeat path asks. `publishing()` is the engine's
+-- own fence answer (it is false in a checkout a check protects), one reader that fails closed: a nested `./zn` in a check
+-- or spec flow of the real repository never fetches or pushes.
+function hb.mayBeat(): boolean
+	return publishing(true)
+end
+
+-- Whether this is the main checkout, asked once per process (it costs two git calls).
+hb.memo = {} :: { main: boolean? }
+function hb.inMain(): boolean
+	if hb.memo.main == nil then
+		hb.memo.main = inMainCheckout()
+	end
+	return hb.memo.main == true
+end
+
+-- One beat attempt for the stamp `held` of `id`, with the worktree's mark: it leases on the sha it last wrote and records
+-- the attempt, a failed one too (a hung or offline remote then costs one bounded attempt per interval). Returns the text
+-- to say and whether it means the claim was lost.
+function hb.attempt(id: string, held: string): (string?, boolean)
+	local before = if hb.inMain() then nil else hb.readMark(id) -- the main checkout holds no work and no mark
+	local ok, msg, lost, sha = pcall(hb.beatOnce, id, held, heartbeat.leaseOf(before, held))
+	if not ok then
+		return tostring(msg), false
+	end
+	if lost then
+		hb.dropMark(id)
+	elseif hb.inMain() or hb.read(id) == held then
+		-- only while this worktree still holds the claim: a give-back that ran meanwhile is not undone by a late write
+		hb.writeMark(id, heartbeat.markAfter(held, hb.hbNow(), before, sha))
+	end
+	return msg, lost == true
+end
+
+-- Says what a beat attempt reported: a lost claim in the words `--watch` uses, any other failure with the item named.
+function hb.say(id: string, msg: string?, lost: boolean?)
+	if msg then
+		stdio.ewrite(if lost then `{msg}\n` else `beat: {id}: {msg}\n`)
+	end
+end
+
+-- Deletes the heartbeat branch of a stamp no claim holds any more (the claim was given back, stopped or finished). Best
+-- effort with a lease on the sha read: a vanished or refused delete never fails the command (the pruner is the backstop).
+function hb.dropBranch(ofStamp: string)
+	if not hb.mayBeat() then
+		return
+	end
+	pcall(function()
+		local beats = hb.readBeats()
+		local paths = hb.beatPaths()
+		if not paths then
+			return
+		end
+		local at = sh.git({ "rev-parse", "origin/main" })
+		local claims = hb.claimsRead(paths, false, at)
+		if not claims then
+			return
+		end
+		for _, c in claims do
+			if c.stamp == ofStamp then
+				return -- another item still holds it: the claim goes on
+			end
+		end
+		for _, b in beats do
+			if b.stamp == ofStamp then
+				hb.netRun("git", { "push", "-q", "origin", `--force-with-lease={b.ref}:{b.sha}`, `:{b.ref}` })
+			end
+		end
+	end)
+end
+
+-- The background beater of a claim held in this worktree (the user, 2026-11-11: "Background beater"). It is
+-- `./zn run --time 3600 -- ./zn beat <id> --watch --session <pid>`, started detached (a double fork and a new session,
+-- so it outlives the command that started it; `./zn run` stops its command when its starter dies, so the starter is
+-- the process that becomes its parent only after it has been left to init) with its output in a log. It ends at its
+-- bound, when the claim is restamped, when its session ends and when its worktree goes away.
+hb.DAEMON =
+	[[use strict; use warnings; use POSIX qw(setsid); my ($dir, $log, @cmd) = @ARGV; my $orig = $$; my $pid = fork; die "fork: $!" unless defined $pid; if ($pid) { print "$pid\n"; exit 0 } setsid(); my $left = 100; while ($left-- > 0 && getppid() == $orig) { select(undef, undef, undef, 0.05) } exit 1 if getppid() == $orig; chdir $dir or exit 1; open STDIN, '<', '/dev/null'; open STDOUT, '>>', $log; open STDERR, '>&', \*STDOUT; exec @cmd or exit 127;]]
+
+-- This process's ancestors, nearest first, as far as the process table can be read.
+function hb.ancestors(): { { pid: number, command: string } }
+	local chain: { { pid: number, command: string } } = {}
+	local at = tonumber(sh.trim(sh.run("sh", { "-c", "echo $PPID" }).stdout))
+	while at ~= nil and at > 1 and #chain < 24 do
+		local r = sh.run("env", { "LC_ALL=C", "ps", "-o", "ppid=,command=", "-p", tostring(at) })
+		local ppid, command = string.match(sh.trim(r.stdout), "^(%d+)%s+(.*)$")
+		if not r.ok or ppid == nil or command == nil then
+			break
+		end
+		table.insert(chain, { pid = at, command = command })
+		at = tonumber(ppid)
+	end
+	return chain
+end
+
+-- The nearest ancestor of this process that is the session's CLI, nil for any other CLI.
+function hb.sessionPid(): number?
+	return heartbeat.sessionPid(hb.ancestors())
+end
+
+-- Whether the pid in a beater's pid file answers `kill -0`, and whether the process table lists it as a runner of
+-- `beat --watch` (nil where it cannot be read; a pid reused by another process within the hour is not one).
+function hb.beaterAlive(pid: string): (boolean, boolean?)
+	if not sh.run("kill", { "-0", pid }).ok then
+		return false, nil
+	end
+	local read, r = pcall(sh.run, "env", { "LC_ALL=C", "ps", "-o", "command=", "-p", pid })
+	if read and (r :: sh.Result).ok and sh.trim((r :: sh.Result).stdout) ~= "" then
+		return true, reapLib.isBeater((r :: sh.Result).stdout)
+	end
+	return true, nil
+end
+
+-- Whether the pid file of `id` names a running beater (see heartbeat.beaterRunning).
+function hb.beaterNamed(id: string): boolean
+	local file = hb.beaterFile(id)
+	if not fs.isFile(file) then
+		return false
+	end
+	local text = fs.readFile(file)
+	local pid = string.match(text, "^(%d+)")
+	if pid == nil then
+		return false
+	end
+	local alive, listed = hb.beaterAlive(pid)
+	return heartbeat.beaterRunning(text, os.time(), alive, listed)
+end
+
+-- One start at a time per claim: a lock folder made with mkdir (atomic), taken over when it is more than a minute old (an
+-- engine that died while starting). True when this process may start the beater.
+function hb.startLock(id: string): boolean
+	local lock = hb.beaterFile(id) .. ".lock"
+	local script =
+		'mkdir "$1" 2>/dev/null && exit 0; if [ -n "$(find "$1" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then rmdir "$1" && mkdir "$1" 2>/dev/null && exit 0; fi; exit 1'
+	return sh.run("sh", { "-c", script, "_", lock }).ok
+end
+
+-- Starts the beater of `id` when it should run and none does. Best effort, silent: a beater that cannot start only
+-- leaves the claim to the beats of the commands run in its worktree.
+-- A running beater is seen without the lock (it is stable); "none runs" is decided under the lock, after reading the pid file
+-- again, so a command that read "none" before another wrote the file starts nothing (final-review F6). The lock is released
+-- on every path (review-005 F2).
+function hb.ensureBeater(id: string)
+	local facts = {
+		dispatched = process.env.ZN_DISPATCH == "1",
+		main = hb.inMain(),
+		guarded = guarded(true),
+		running = false,
+		held = hb.inMain() or hb.read(id) ~= "",
+		specRun = hb.specRun(),
+		forced = process.env.ZN_BEATER == "1",
+	}
+	if not heartbeat.beaterStart(facts) or hb.beaterNamed(id) then
+		return
+	end
+	fs.writeDir(hb.BEATER_DIR)
+	if not hb.startLock(id) then
+		return -- another command is starting it
+	end
+	local lock = hb.beaterFile(id) .. ".lock"
+	local ok, err = pcall(function(): string?
+		if hb.beaterNamed(id) then
+			return nil -- one started while this command waited for the lock
+		end
+		local top = sh.git({ "rev-parse", "--show-toplevel" })
+		-- the process table may be unreadable (a sandbox): the beater is then bound by its time and its worktree only
+		local readable, session = pcall(hb.sessionPid)
+		local argv = heartbeat.beaterArgv(top, id, if readable then session else nil)
+		fs.writeDir(hb.BEATER_DIR)
+		-- ZN_MEASURED: the beater is not a measured piece of the claim's work (`./zn run` would add its hour to the ticket's spend)
+		local args = { "ZN_MEASURED=1", "perl", "-e", hb.DAEMON, top, `{hb.BEATER_DIR}/{id}.log` }
+		for _, a in argv do
+			table.insert(args, a)
+		end
+		local r = sh.run("env", args)
+		local pid = string.match(sh.trim(r.stdout), "^(%d+)$")
+		if r.ok and pid then
+			sh.writeReplacing(hb.beaterFile(id), `{pid} {os.time() + heartbeat.BEATER_SECONDS}`)
+		end
+		return nil
+	end)
+	sh.run("rmdir", { lock })
+	if not ok then
+		error(err, 0)
+	end
+end
+
+-- Whether another beater of `id` already runs: the pid file names a live runner of `beat --watch` that is not an ancestor
+-- of this process (the file names this loop's own runner). A duplicate, started by a command that raced or by an interrupted
+-- start, ends at once (review-005 F2). Unreadable process tables answer no.
+function hb.otherBeater(id: string): string?
+	local file = hb.beaterFile(id)
+	local text = if fs.isFile(file) then fs.readFile(file) else ""
+	local pid = string.match(text, "^(%d+)")
+	if pid == nil then
+		return nil
+	end
+	local alive, listed = hb.beaterAlive(pid)
+	if not alive or listed ~= true then
+		return nil
+	end
+	local read, chain = pcall(hb.ancestors)
+	if not read or #chain == 0 then
+		return nil
+	end
+	for _, p in chain do
+		if tostring(p.pid) == pid then
+			return nil
+		end
+	end
+	return pid
+end
+
+-- The first beat of a claim just published (an issue's, a raft's, a takeover's after its swap): best effort, said on
+-- stderr while the claim stands. In a worktree it also writes the throttle mark, whether or not the beat landed (so a
+-- claim whose first beat failed is beaten by the worktree's next command after an interval), and starts the beater.
+function hb.firstBeat(id: string, held: string)
+	if not hb.mayBeat() then
+		return
+	end
+	local ok, err = pcall(function()
+		local msg, lost = hb.attempt(id, held)
+		hb.say(id, msg, lost)
+		if not lost then
+			hb.ensureBeater(id)
+		end
+	end)
+	if not ok then
+		stdio.ewrite(`beat: {id}: {err}\n`)
+	end
+end
+
+-- A claim given back, stopped or finished: its worktree stops beating it and its heartbeat branch goes.
+function hb.ended(id: string, ofStamp: string?)
+	hb.dropMark(id)
+	if ofStamp ~= nil and ofStamp ~= "" then
+		hb.dropBranch(ofStamp)
+	end
+end
+
+-- Every claim this worktree holds a mark for: dropped with a word when it was taken over or ended (a takeover or a
+-- give-back), else beaten when due (and its beater started when none runs). One fetch of main for all of them. Never
+-- fails the caller; a long command calls it again at every interval while it runs.
+function hb.autobeat(): string?
+	local ids = hb.markIds() -- one folder read first: a worktree with no claim pays nothing more
+	if #ids == 0 or hb.inMain() or not hb.mayBeat() then
+		return nil
+	end
+	local now = hb.hbNow()
+	local every = heartbeat.setting(process.env, "ZN_BEAT_EVERY", heartbeat.INTERVAL, hb.specRun())
+	local paths: { string }? = nil
+	local err: string? = nil
+	local read = false
+	for _, id in ids do
+		local ok, said = pcall(function(): string?
+			local mark = hb.readMark(id)
+			if mark == nil then
+				hb.dropMark(id) -- damaged: nothing to bind a beat to
+				return nil
+			end
+			hb.ensureBeater(id)
+			if not heartbeat.due(mark.epoch, now, every) then
+				return nil
+			end
+			if not read then
+				paths, err = hb.beatPaths()
+				read = true
+			end
+			if paths == nil then
+				hb.writeMark(id, heartbeat.markAfter(mark.stamp, now, mark, nil))
+				return `beat: {id}: {err}`
+			end
+			local current = hb.claimStampOf(paths, id)
+			local held = heartbeat.holds(mark.stamp, current)
+			if held == "taken" or held == "ended" then
+				hb.dropMark(id)
+				-- a prep that ended normally and an item later readied (preparing-… then active-…) is an ended claim, not a taken one
+				local told = if heartbeat.lostKind(mark.stamp, current) == "taken" then current else nil
+				return `{hb.lostText(id, told)}{if told then ": stop working it" else ""}`
+			end
+			local msg, lost = hb.attempt(id, mark.stamp)
+			return if msg == nil then nil elseif lost then msg else `beat: {id}: {msg}`
+		end)
+		if not ok then
+			stdio.ewrite(`beat: {id}: {said}\n`)
+		elseif said then
+			stdio.ewrite(`{said}\n`)
+		end
+	end
+	return nil
+end
+
+-- c0275: the start and the end of a command's automatic beats (main.luau's last lines call them: the chunk is at Luau's
+-- limit of local registers, so no top-level local holds the ticker). `readOnly`: the command is on the READ_ONLY list.
+function hb.begin(name: string, readOnly: boolean)
+	if readOnly or name == "beat" or name == "reap" then
+		return
+	end
+	local ok, why = pcall(hb.autobeat)
+	if not ok then
+		stdio.ewrite(`beat: {why}\n`)
+	end
+	if heartbeat.LONG_COMMANDS[name] and #hb.markIds() > 0 then
+		local held: any = hb
+		held.ticker = hb.task.spawn(function()
+			local every = heartbeat.setting(process.env, "ZN_BEAT_EVERY", heartbeat.INTERVAL, hb.specRun())
+			while true do
+				hb.task.wait(every)
+				local ticked, e = pcall(hb.autobeat)
+				if not ticked then
+					stdio.ewrite(`beat: {e}\n`)
+				end
+			end
+		end)
+	end
+end
+
+function hb.finish()
+	local held: any = hb
+	if held.ticker then
+		hb.task.cancel(held.ticker)
+		held.ticker = nil
+	end
 end
 
 function cmd.beat(pos: { string }, opts: { [string]: { string } })
@@ -1954,13 +2358,35 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 	end
 	local startStamp = current :: string
 	if not watch then
-		local msg, lost = hb.beatOnce(id, startStamp)
+		local msg, lost = hb.attempt(id, startStamp)
 		if msg then
 			fail(if lost then msg else `beat: {id}: {msg}`)
 		end
+		-- c0275: a beat from a worktree that holds the claim (an adoption included) gives it a beater, like a claim it made
+		if named == nil and not inMainCheckout() then
+			pcall(hb.ensureBeater, id)
+		end
+		return
+	end
+	local other = hb.otherBeater(id)
+	if other then
+		print(`beat: {id}: another beater runs (pid {other})`)
 		return
 	end
 	local every = heartbeat.setting(process.env, "ZN_BEAT_EVERY", heartbeat.INTERVAL, hb.specRun())
+	-- c0275: the session whose end ends this loop (`--session <pid>`, from the claim that started it), and the worktree it
+	-- beats from (the claim's memory is there unless this is the main checkout, which holds none)
+	local session = if opts["--session"] then tonumber(opts["--session"][1]) else nil
+	local home = sh.git({ "rev-parse", "--show-toplevel" })
+	local isMain = hb.inMain() -- asked once: the loop looks at local facts every five seconds
+	local function goneNow(): string?
+		local alive: boolean? = nil
+		if session ~= nil then
+			alive = sh.run("kill", { "-0", tostring(session) }).ok
+		end
+		local there = fs.isDir(home)
+		return heartbeat.gone(alive, there, there and (isMain or hb.read(id, home) ~= ""))
+	end
 	while true do
 		local here, unreadable = hb.stampNow(id)
 		-- an unreadable main is a failed tick, not a restamp
@@ -1969,10 +2395,14 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 			if unreadable then startStamp else here,
 			os.time(),
 			deadline :: number,
-			every
+			every,
+			goneNow()
 		)
 		if act == "stop-restamped" then
 			print(hb.lostText(id, here))
+			return
+		elseif act == "stop-gone" then
+			print(`beat: {id}: stopping: {goneNow()}`)
 			return
 		elseif act == "stop-bound" then
 			print(`beat: {id}: stopping before its bound`)
@@ -1981,17 +2411,26 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 		if unreadable then
 			stdio.ewrite(`beat: {id}: {unreadable}\n`)
 		else
-			local ok, msg, lost = pcall(hb.beatOnce, id, startStamp)
-			if not ok then
-				stdio.ewrite(`beat: {id}: {tostring(msg)}\n`)
-			elseif msg and lost then
+			local msg, lost = hb.attempt(id, startStamp)
+			if msg and lost then
 				print(msg)
 				return
 			elseif msg then
 				stdio.ewrite(`beat: {id}: {msg}\n`)
 			end
 		end
-		require("@lune/task").wait(every)
+		-- one interval, in short steps that look only at local facts, so a session that ended stops the loop within seconds
+		local slept = 0
+		while slept < every do
+			local step = math.min(5, every - slept)
+			hb.task.wait(step)
+			slept += step
+			local reason = goneNow()
+			if reason then
+				print(`beat: {id}: stopping: {reason}`)
+				return
+			end
+		end
 	end
 end
 
@@ -2191,6 +2630,7 @@ local function setStatus(id: string, to: string)
 	local judged: { [string]: heartbeat.Verdict } = {}
 	local judgedWhy: string? = nil
 	local takeover: { old: string }? = nil -- set by the publish when it takes a lost claim over
+	local givenBack: string? = nil -- c0275: the stamp of the claim a give-back ends (its heartbeat branch goes)
 	local claimValue = ""
 	local carrierRafts: { string } = {}
 	if to == "preparing" then
@@ -2219,6 +2659,7 @@ local function setStatus(id: string, to: string)
 	local r = published(publish.commit(".", function(paths, read)
 		moved = {}
 		takeover = nil
+		givenBack = nil
 		local path = docPath(paths, id)
 		local text = path and read(path)
 		if not path or not text then
@@ -2262,6 +2703,7 @@ local function setStatus(id: string, to: string)
 		-- the old owner's late give-back is refused too: it would end the taker's live claim. Only a checkout with proof
 		-- that it lost the claim (a remembered different stamp) is refused; one that remembers nothing gives back as today
 		if not carried and to ~= "preparing" and string.match(front.status or "", "^preparing%-") then
+			givenBack = front.status
 			if heartbeat.holds(memoryOf(), front.status) == "taken" then
 				return `{heartbeat.lostText(id, front.status)}: this checkout's claim is gone; do not give it back (./zn lost lists lost work to pick up)`
 			end
@@ -2521,10 +2963,15 @@ local function setStatus(id: string, to: string)
 			end
 		else
 			hb.drop(id)
+			hb.ended(id, givenBack) -- c0275: the claim is given back: its mark and its heartbeat branch go
 		end
 		local t = takeover
 		if t then
 			hb.swapBranches(id, t.old, claimValue)
+		end
+		if to == "preparing" then
+			-- c0275: every claim publish gives the first beat, after the swap (a takeover's taker already has its branch)
+			hb.firstBeat(id, claimValue)
 		end
 		mergeOrigin()
 		-- c0116: an issue claimed here is remembered, so this checkout's carried raft move may take it
@@ -2904,6 +3351,7 @@ function cmd.fold(pos: { string })
 	end
 	if not resumed then
 		rememberClaim(raftId, claim)
+		hb.firstBeat(raftId, claim)
 		mergeOrigin()
 	end
 	raft = store.get(raftId)
@@ -3017,6 +3465,7 @@ function cmd.unfold(pos: { string })
 	end
 	if not resumed then
 		rememberClaim(raftId, claim)
+		hb.firstBeat(raftId, claim)
 		mergeOrigin()
 	end
 	raft = store.get(raftId)
@@ -3143,6 +3592,8 @@ function cmd.recombine(pos: { string })
 	end
 	rememberClaim(keeperId, claim)
 	rememberClaim(otherId, claim)
+	hb.dropMark(otherId) -- the other raft is retired: only the keeper is a claim, and it beats
+	hb.firstBeat(keeperId, claim)
 	mergeOrigin()
 	keeper, other = store.get(keeperId), store.get(otherId)
 	local list = store.idList(store.readFront(keeper.doc).issues)
@@ -3295,6 +3746,13 @@ function cmd.release(pos: { string }, opts: { [string]: { string } })
 			fs.removeFile(claimFile(id))
 		end
 		hb.drop(id)
+		hb.dropMark(id)
+	end
+	hb.dropBranch(value) -- c0275: the rafting claim is given up: its heartbeat branch goes with it
+	for _, w in wanted do
+		if w.value ~= value then
+			hb.dropBranch(w.value)
+		end
 	end
 	-- no merge: the branch is given up, and it may well conflict with origin/main (another rafting of its issues)
 	print(`released {table.concat(done, ", ")}`)
@@ -4891,6 +5349,7 @@ function cmd.start(pos: { string })
 		if not r.ok then
 			fail(r.reason or "publish failed")
 		end
+		hb.firstBeat(raft.id, claim) -- c0275: the legacy claim beats like any other
 		mergeOrigin()
 		raft = store.get(raft.id)
 		members = store.members(raft.id)
@@ -6407,6 +6866,10 @@ function cmd.done(pos: { string })
 	end
 	-- The work claim ends with the raft, after the last step that can roll back: a rolled-back done keeps its memory.
 	hb.drop(raft.id) -- the work claim ends with the raft: a finished worktree is never told it was taken over
+	-- c0275: the raft and its issues are finished: no mark, no beater work, and the work claim's heartbeat branch goes
+	for _, finished in { raft.id, table.unpack(bindIds) } do
+		hb.dropMark(finished)
+	end
 	if sh.run("git", { "branch", "-f", "main", "HEAD" }).ok then
 		sh.git({ "switch", "--quiet", "main" })
 	else
@@ -6427,6 +6890,10 @@ function cmd.done(pos: { string })
 		{ raft = raft.id, project = require("./liveemit").projectOf(raft.root) }
 	)
 	require("./workerlive").releaseUnit(raft.id, "done")
+	-- c0275: the work claim's heartbeat branch goes once the delivery is on main (it is no claim there any more)
+	if workStamp ~= "" then
+		hb.dropBranch(workStamp)
+	end
 	print(`landed {raft.id}`)
 end
 
@@ -7790,6 +8257,8 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 			)
 		end
 		raft = store.get(raft.id)
+		-- c0275: ready is a claim publish: its first beat is a ref push from the main checkout (no mark, no beater there)
+		hb.firstBeat(raft.id, frontOf(fs.readFile(raft.doc)).status or "")
 	end
 	local text = renderPrompt(raft)
 	local path = promptPath(raft.root, raft.id)
@@ -7980,6 +8449,7 @@ function cmd.stop(pos: { string })
 		fail(`stopped on origin/main, but pulling the main checkout failed: {failed}`)
 	end
 	hb.drop(raft.id) -- the stamp memory and the c0116 claim file
+	hb.ended(raft.id, claim) -- c0275: after the verdict above was read from the branch it judged; the branch goes with the claim
 	sh.run("git", { "fetch", "--quiet", "--prune", "origin" })
 	local layers = layergit.layersOf(raft.id)
 	local branch = if #layers > 0 then layers[#layers].name else raftBranch(raft)
@@ -9475,6 +9945,9 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
 		mainRoot = mainRoot,
 		onGitHub = onGitHub,
 		checking = checking,
+		memoryIn = function(dir: string, id: string): string
+			return hb.read(id, dir) -- c0275: the dispatcher beats the claim its step's worktree remembers
+		end,
 		origin = origin,
 		originIssueIds = originIssueIds,
 		-- a PR's state for the chain's gates (c0117): only on a GitHub origin, through the real gh
@@ -10025,7 +10498,10 @@ local pos, opts = flags(
 if name ~= "work" and name ~= "live" then
 	require("./workerlive").beat()
 end
+-- c0275: automatic beats (hb.begin): every command run in a worktree keeps its claims alive, and a long one ticks.
+hb.begin(name :: string, READ_ONLY[name :: string] == true)
 local ok, err = pcall(handler, pos, opts)
+hb.finish()
 if not ok then
 	fail(`tracker {name}: {err}`)
 end
