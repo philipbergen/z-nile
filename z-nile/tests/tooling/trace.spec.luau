@@ -10,7 +10,7 @@ end
 
 return t.spec("trace derives claims and checks the table", function(it)
 	it(
-		"derives stable P, S and AC claims from captured idea and acceptance criteria, and fails on vacuous tickets",
+		"derives stable P, S and AC claims from the approved document, and fails on vacuous tickets",
 		function()
 			local captured1 = table.concat({
 				"---",
@@ -35,7 +35,6 @@ return t.spec("trace derives claims and checks the table", function(it)
 				checkPath = "pickman/.tracker/issues/active/c0010/check.sh",
 				dirPath = "pickman/.tracker/issues/active/c0010",
 				home = "pickman",
-				capturedText = captured1,
 				docText = doc1,
 				checkText = nil,
 				resultsPath = "pickman/.tracker/issues/active/c0010/results.txt",
@@ -56,14 +55,16 @@ return t.spec("trace derives claims and checks the table", function(it)
 			})
 
 			local noProblem = table.clone(baseIssue)
-			noProblem.capturedText = "# c0010\n\n## Problem\n<!-- comment only -->\n\n## Solution\nDo it.\n"
+			noProblem.docText =
+				"# c0010\n\n## Problem\n<!-- comment only -->\n\n## Solution\nDo it.\n\n## Acceptance criteria\n- AC1: Done.\n"
 			local _, errP = trace.deriveClaims({ noProblem })
-			t.expect(#errP == 1 and has(errP[1], "ticket c0010 is missing captured ## Problem")).toBe(true)
+			t.expect(#errP == 1 and has(errP[1], "ticket c0010 is missing ## Problem")).toBe(true)
 
 			local noSolution = table.clone(baseIssue)
-			noSolution.capturedText = "# c0010\n\n## Problem\nBroken.\n\n## Solution\n\n"
+			noSolution.docText =
+				"# c0010\n\n## Problem\nBroken.\n\n## Solution\n\n## Acceptance criteria\n- AC1: Done.\n"
 			local _, errS = trace.deriveClaims({ noSolution })
-			t.expect(#errS == 1 and has(errS[1], "ticket c0010 is missing captured ## Solution")).toBe(true)
+			t.expect(#errS == 1 and has(errS[1], "ticket c0010 is missing ## Solution")).toBe(true)
 
 			local noAc = table.clone(baseIssue)
 			noAc.docText = captured1 .. "\n\n## Acceptance criteria\n<!-- none -->\n"
@@ -113,7 +114,6 @@ return t.spec("trace derives claims and checks the table", function(it)
 					checkPath = "pickman/.tracker/issues/active/c0010/check.sh",
 					dirPath = "pickman/.tracker/issues/active/c0010",
 					home = "pickman",
-					capturedText = "",
 					docText = "",
 				},
 				{
@@ -122,7 +122,6 @@ return t.spec("trace derives claims and checks the table", function(it)
 					checkPath = "pickman/.tracker/issues/active/c0020/check.sh",
 					dirPath = "pickman/.tracker/issues/active/c0020",
 					home = "pickman",
-					capturedText = "",
 					docText = "",
 				},
 			}
@@ -323,7 +322,6 @@ return t.spec("trace derives claims and checks the table", function(it)
 				checkPath = "pickman/.tracker/issues/active/c0010/check.sh",
 				dirPath = "pickman/.tracker/issues/active/c0010",
 				home = "pickman",
-				capturedText = doc,
 				docText = doc,
 				checkText = checkSh,
 				resultsPath = "pickman/.tracker/issues/active/c0010/results.txt",

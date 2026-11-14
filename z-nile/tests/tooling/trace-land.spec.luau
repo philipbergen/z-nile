@@ -93,7 +93,7 @@ return t.spec(
 					copy(rel)
 				end
 
-				-- Capture commit on origin/main so `./zn capture` reads the captured Problem and Solution
+				-- The first commit still records the capture. Claims come from the prepared document below, not from it.
 				local capC0010 = table.concat({
 					"---",
 					"id: c0010",
@@ -453,6 +453,23 @@ return t.spec(
 					)
 				).toBe(true)
 				write(clone2, tracePath, filledPass)
+
+				-- An approval whose hash no longer matches the document at the tip is refused by name.
+				local approvalPath = "pickman/.tracker/issues/active/c0010/approval.md"
+				local approvalText = git(clone2, { "show", `HEAD:{approvalPath}` })
+				local broken = string.gsub(
+					approvalText,
+					"%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x",
+					"0000000000000000000000000000000000000000000000000000000000000000",
+					1
+				)
+				write(clone2, approvalPath, broken)
+				git(clone2, { "add", approvalPath })
+				git(clone2, { "commit", "-qm", "break c0010 approval" })
+				local failApproval = znClone2({ "trace", "R0010", "--check" })
+				t.expect(failApproval.ok).toBe(false)
+				t.expect(has(failApproval.stderr, "c0010's contract changed since approval")).toBe(true)
+				git(clone2, { "reset", "--hard", "origin/R0010/2/c0020" })
 
 				-- Commit added on top of the table in wt and pushed -> clone2 reports stale
 				git(wt, { "commit", "-q", "--allow-empty", "-m", "post-review fix" })
