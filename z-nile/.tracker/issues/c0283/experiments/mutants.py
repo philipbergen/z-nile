@@ -9,14 +9,14 @@ import sys
 P = os.environ.get('MUT_WT', '/Users/philipbergen/code/pickman/.worktree/proto-c0283-mut')
 Z = P + '/z-nile'
 A = 'tests/acceptance/c0283/'
-AP, AR, DC = A + 'approval.spec.luau', A + 'approve.spec.luau', A + 'docs.spec.luau'
-PRV, MAIN = 'engine/provenance.luau', 'engine/main.luau'
+AP, AR, DC, PB = A + 'approval.spec.luau', A + 'approve.spec.luau', A + 'docs.spec.luau', A + 'publish.spec.luau'
+PRV, MAIN, PUB = 'engine/provenance.luau', 'engine/main.luau', 'engine/publish.luau'
 M = [
     ('approved: the row holds the whole hash', PRV, 'design={string.sub(hash, 1, 12)}', 'design={hash}', AP),
     ('approved: the old rows are replaced', PRV, 'return provenance.record(text, id, "approved"', 'return provenance.record(nil, id, "approved"', AP),
     ('hint ignores CURSOR_AGENT', PRV, '"AI_AGENT", "CURSOR_AGENT", "GROK_SESSION_ID"', '"AI_AGENT", "GROK_SESSION_ID"', AP),
     ('hint ignores GROK_SESSION_ID', PRV, '"CURSOR_AGENT", "GROK_SESSION_ID", "ZN_DISPATCH" }', '"CURSOR_AGENT", "ZN_DISPATCH" }', AP),
-    ('hint takes an empty marker', PRV, 'if v ~= nil and v ~= "" then', 'if v ~= nil then', AP),
+    ('hint takes an empty marker', PRV, 'agent = agent or (v ~= nil and v ~= "")', 'agent = agent or (v ~= nil)', AP),
     ('approve: an agent session with a terminal passes', MAIN, 'if provenance.hint(env).agent then', 'if false then', AR),
     ('approve: a human-claiming ZN_ACTOR passes an agent session', MAIN, 'if provenance.hint(env).agent then', 'if provenance.hint(env).agent and not string.find(process.env.ZN_ACTOR or "", "^human:") then', AR),
     ('approve: the agent markers are not read from the process', MAIN, 'env[name] = process.env[name]', 'env[name] = nil', AR),
@@ -25,6 +25,17 @@ M = [
     ('approve: an uncommitted record is overwritten', MAIN, 'if sh.git({ "status", "--porcelain", "--", record }) ~= "" then', 'if false then', AR),
     ('approve: the approval is written before the record is decided', MAIN, 'if not rtext then\n\t\tfail(`{id}: {rerr}`)\n\tend\n\tlocal path = approval.file(item)\n\tsh.writeReplacing(path, text :: string)', 'local path = approval.file(item)\n\tsh.writeReplacing(path, text :: string)\n\tif not rtext then\n\t\tfail(`{id}: {rerr}`)\n\tend', AR),
     ('approve: the row carries another hash', MAIN, '\t\twho,\n\t\thash,\n\t\tos.date("!%Y-%m-%d %H:%M")', '\t\twho,\n\t\tstring.reverse(hash),\n\t\tos.date("!%Y-%m-%d %H:%M")', AR),
+    ('pair: the row of another human passes', PRV, 'if row.actor ~= provenance.human(last.who) then', 'if false then', AP),
+    ('pair: the row of another hash passes', PRV, 'if row.detail ~= `design={string.sub(last.hash, 1, 12)}` then', 'if false then', AP),
+    ('pair: several approved rows pass', PRV, 'if #n - before ~= 1 then', 'if #n - before < 1 then', AP),
+    ('pair: several approval rows pass', PRV, 'if #after ~= oldCount + 1 then', 'if #after < oldCount + 1 then', AP),
+    ('pair: an old approval row may be rewritten', PRV, 'if not m or m.when ~= r.when or m.who ~= r.who or m.hash ~= r.hash then', 'if false then', AP),
+    ('publish: a lone approved row passes', PUB, 'else provenance.PUBLISHED\n', 'else { "unblocked", "confirmed", "ranked", "approved" }\n', PB),
+    ('publish: an active issue takes the pair', PUB, 'if reason and not string.find(c.path, "/active/", 1, true) then', 'if reason then', PB),
+    ('publish: any approval.md in the commit is the matching one', PUB, 'if other.path == approvalPath then', 'if string.sub(other.path, -12) == "/approval.md" then', PB),
+    ('publish: origin approval.md is ignored', PUB, '\t\t\t\t\t\t\t\tbuildRead(approvalPath),\n', '\t\t\t\t\t\t\t\tnil,\n', PB),
+    ('approve --publish: the row is not published', MAIN, '\t\t\tif recordText then\n', '\t\t\tif false then\n', AR),
+    ('docs: zz-rules forgets that --publish carries the row', 'skills/zz-rules/SKILL.md', '`./zn approve <id> --publish` publishes `approval.md` and that approved row to `origin/main` in one commit', '`./zn approve <id> --publish` publishes `approval.md`', DC),
     ('docs: zz-rules loses the agent-session refusal', 'skills/zz-rules/SKILL.md', '**never in an agent session**', 'not in a dispatched step', DC),
     ('docs: zz-rules forgets the row', 'skills/zz-rules/SKILL.md', 'to the issue\'s `provenance.md` in the same `tracker: approve` commit', 'to a file', DC),
     ('docs: AGENTS.md lets an agent try', '../AGENTS.md', 'Tell the user to run it; never try to', 'Run it yourself', DC),
