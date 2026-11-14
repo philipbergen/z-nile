@@ -86,3 +86,13 @@
 - design-review-009 F13: one-off: a fallback that restates the design, and a one-call experiment; fixed in the document
 - design-review-009 F14: z-design/spec-design-correspondence
 - note re-prep onto a main that gained the stage (the ten hand-made records found by the real-tree audit spec on the first prototype): z-design/new-rules-migrate-existing-work
+- design-review-011 F1: z-design/spec-design-correspondence
+- design-review-011 F2: z-design/loops-write-each-pass
+- design-review-011 F3: z-design/confirmations-bind-what-they-confirm
+- design-review-011 F4: z-design/user-words-parsers-accept-anything
+- design-review-011 F5: z-design/design-the-execution-window
+- design-review-011 F6: z-design/instructions-runnable-where-they-run
+- design-review-011 F7: z-design/restated-rules-move-together
+- design-review-011 F8: z-design/spec-design-correspondence
+- design-review-011 F9: z-design/spec-design-correspondence
+- design-review-011 F10: z-design/restated-rules-move-together

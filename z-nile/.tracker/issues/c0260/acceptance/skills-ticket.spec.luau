@@ -72,11 +72,19 @@ return t.spec("c0260 z-ticket describes the record, the interview and the confir
 		t.expect(has(s["2a"], "./zn idea <id> --record")).toBe(true)
 		t.expect(has(s["4a"], "idea-review-NNN.md")).toBe(true)
 		t.expect(has(s["4a"], "dropped, added or bent")).toBe(true)
-		t.expect(has(s["4a"], "the next round")).toBe(true)
+		t.expect(has(s["4a"], "the next round")).toBe(false) -- a run after a change numbers on; there is no "next round" file name
 		t.expect(has(s["4b"], '--confirm "<their words>"')).toBe(true)
 		t.expect(has(s["4b"], "Only the user confirms")).toBe(true)
 		t.expect(has(s["4a"], "as the next `### Qn` of the Interview")).toBe(true) -- a round rewrites the idea whole; the words are kept
 		t.expect(has(s["4a"], "Step 4 is round 1")).toBe(true)
+		t.expect(has(s["4a"], "Where step 4 says the command challenges once and names `-001`, it now loops"))
+			.toBe(true)
+		t.expect(has(s["4a"], "never followed by a revision")).toBe(true)
+		t.expect(has(s["4a"], "(7200000 ms)")).toBe(true) -- the long Bash timeout of a command that makes up to six model calls
+		t.expect(has(s["4a"], "beats into the step's folder")).toBe(true)
+		t.expect(has(s["4a"], "the passes already written stay and a rerun numbers on")).toBe(true)
+		t.expect(has(s["4a"], "`idea-review-003.md`")).toBe(true) -- after a first loop of two passes
+		t.expect(has(s["4a"], "Ask the user each `ask:` question")).toBe(true)
 		t.expect(has(s["4b"], "--unattended")).toBe(true)
 	end)
 
