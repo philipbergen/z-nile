@@ -1,0 +1,25 @@
+- design-review-001 F1: zz-test/sort-cases-defeat-pre-order
+- design-review-001 F2: z-design/spec-design-correspondence
+- design-review-001 F3: z-design/restated-rules-move-together
+- design-review-001 F4: one-off: a parameter type and a comment worded for the old state
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: one-off: a duplicate real-tree run, dropped by the author
+- design-review-002 F1: z-design/spec-design-correspondence
+- design-review-002 F2: one-off: Rojo builds a format (.jsonc) the tooling never matched; outside the captured scope
+- design-review-002 F3: z-design/spec-design-correspondence
+- design-review-003 F1: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-003 F2: z-design/spec-design-correspondence
+- design-review-004 F1: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-004 F2: one-off: a location caveat for keys the walker joins with a slash
+- design-review-005 F1: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-005 F2: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-006 F1: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-006 F2: zz-test/pin-fail-safes-where-they-act
+- design-review-006 F3: z-design/restated-rules-move-together
+- design-review-007 F1: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-007 F2: z-design/spec-design-correspondence
+- note c0246 round 7 decision (user: "3"): the guard re-modelled Rojo's discovery five rounds running, replaced by asking Rojo: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-008 F1: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-008 F2: z-design/spec-design-correspondence
+- design-review-008 F3: zz-test/pin-fail-safes-where-they-act
+- design-review-008 F4: z-design/spec-design-correspondence

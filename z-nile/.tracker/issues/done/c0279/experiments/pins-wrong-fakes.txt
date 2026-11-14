@@ -1,0 +1,7 @@
+ok: rc=0
+  DIFFERS (stop fake): not the reviewed text (acceptance/fakecli-modes.expected)
+delay-after-stop: rc=1
+  DIFFERS (stop fake): not the reviewed text (acceptance/fakecli-modes.expected)
+while-true: rc=1
+  DIFFERS (stop fake): not the reviewed text (acceptance/fakecli-modes.expected)
+pid-double-quoted: rc=1

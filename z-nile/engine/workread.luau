@@ -1,0 +1,505 @@
+--!strict
+-- Reads git and the tracker into the facts work.luau decides on. The decision is not made here.
+--
+-- One `ls-tree` of origin/main, one `cat-file --batch` of the files that decision needs, and one
+-- `git log` for every ready commit. Done rafts are not read unless one is named. Layer tips are
+-- read only for active rafts (the status line and the layer action). A cold `work next` used to
+-- take minutes because it built a fact for every raft, done ones included, and each of those ran
+-- `git for-each-ref`, `git show` per file and `git log --grep` over all of main. `work status`
+-- is that same function, so a later call only looked faster once the page cache was warm.
+local fs = require("@lune/fs")
+local layergit = require("./layergit")
+local process = require("@lune/process")
+local sh = require("../lib/sh")
+local stack = require("./stack")
+local statusLib = require("./status")
+local store = require("./store")
+local work = require("./work")
+
+local workread = {}
+
+local function trim(s: string): string
+	return (string.gsub(s, "%s+$", ""))
+end
+
+local function section(text: string, heading: string): string
+	local hay = "\n" .. text
+	local mark = "\n## " .. heading
+	local s = string.find(hay, mark, 1, true)
+	if not s then
+		return ""
+	end
+	local body = s + #mark
+	local nxt = string.find(hay, "\n## ", body, true)
+	local chunk = if nxt then string.sub(hay, body, nxt - 1) else string.sub(hay, body)
+	return (string.gsub(chunk, "^%s*(.-)%s*$", "%1"))
+end
+
+local function frontText(text: string): { [string]: string }
+	local block = string.match(text, "^%-%-%-\n(.-)\n%-%-%-")
+	local out: { [string]: string } = {}
+	if block then
+		for line in string.gmatch(block, "[^\n]+") do
+			local k, v = string.match(line, "^([%w_]+):%s*(.-)%s*$")
+			if k and v then
+				out[k] = v
+			end
+		end
+	end
+	return out
+end
+
+-- state, directory, id, from a document path on origin/main. Retired rafts are not a place a worker reads.
+local function slot(path: string): (string?, string?, string?)
+	local root, id, file = string.match(path, "^(.*)/rafts/active/(R%d%d%d%d)/(R%d%d%d%d)%.md$")
+	if root and id == file then
+		return "active", `{root}/rafts/active/{id}`, id
+	end
+	root, id, file = string.match(path, "^(.*)/rafts/done/(R%d%d%d%d)/(R%d%d%d%d)%.md$")
+	if root and id == file then
+		return "done", `{root}/rafts/done/{id}`, id
+	end
+	root, id, file = string.match(path, "^(.*)/rafts/(R%d%d%d%d)/(R%d%d%d%d)%.md$")
+	if root and id == file then
+		return "backlog", `{root}/rafts/{id}`, id
+	end
+	root, id, file = string.match(path, "^(.*)/issues/active/([fdc]%d%d%d%d)/([fdc]%d%d%d%d)%.md$")
+	if root and id == file then
+		return "active", `{root}/issues/active/{id}`, id
+	end
+	root, id, file = string.match(path, "^(.*)/issues/done/([fdc]%d%d%d%d)/([fdc]%d%d%d%d)%.md$")
+	if root and id == file then
+		return "done", `{root}/issues/done/{id}`, id
+	end
+	root, id, file = string.match(path, "^(.*)/issues/([fdc]%d%d%d%d)/([fdc]%d%d%d%d)%.md$")
+	if root and id == file then
+		return "backlog", `{root}/issues/{id}`, id
+	end
+	return nil, nil, nil
+end
+
+type At = { path: string, state: string, dir: string }
+
+local function sideFile(name: string): boolean
+	return name == "questions.md"
+		or name == "trace.md"
+		or string.match(name, "^review%-%d+%.md$") ~= nil
+		or string.match(name, "^final%-review%-%d+%.md$") ~= nil
+end
+
+local function verdictOf(text: string): string?
+	return string.match("\n" .. text, "\n[Vv]erdict:%s*(%a+)")
+end
+
+local function bestNumbered(sides: { [string]: string }, prefix: string): (number, string)
+	local best, body = 0, ""
+	for name, text in sides do
+		local captured = string.match(name, "^" .. prefix .. "(%d+)%.md$")
+		local n = if captured then tonumber(captured) else nil
+		if n and n > best then
+			best = n
+			body = text
+		end
+	end
+	return best, body
+end
+
+local function reviewState(sides: { [string]: string }, prefix: string, approved: string): string
+	local n, text = bestNumbered(sides, prefix)
+	if n == 0 then
+		return "none"
+	end
+	if verdictOf(text) == "approve" then
+		return approved
+	end
+	return "open"
+end
+
+-- `git cat-file --batch` in request order. A missing object is an empty slot.
+local function catBatch(specs: { string }): { string }
+	local out: { string } = {}
+	if #specs == 0 then
+		return out
+	end
+	local r = sh.run("git", { "cat-file", "--batch" }, table.concat(specs, "\n") .. "\n")
+	if not r.ok then
+		return out
+	end
+	local i = 1
+	local text = r.stdout
+	for _ = 1, #specs do
+		local nl = string.find(text, "\n", i, true)
+		if not nl then
+			table.insert(out, "")
+			continue
+		end
+		local header = string.sub(text, i, nl - 1)
+		i = nl + 1
+		local size = string.match(header, "^%x+ %w+ (%d+)$")
+		if size then
+			local n = tonumber(size) :: number
+			table.insert(out, string.sub(text, i, i + n - 1))
+			i += n + 1
+		else
+			table.insert(out, "")
+		end
+	end
+	return out
+end
+
+type Tip = { name: string, sha: string, position: number, issue: string }
+
+local function tipsFor(raftId: string, refs: { { sha: string, ref: string } }): { [number]: Tip }
+	local byPos: { [number]: Tip } = {}
+	local localAt: { [number]: boolean } = {}
+	for _, row in refs do
+		local layer = stack.parse(row.ref)
+		if layer and layer.raft == raftId and row.sha ~= "" then
+			local origin = string.sub(row.ref, 1, 7) == "origin/"
+			if not byPos[layer.position] or (not origin and not localAt[layer.position]) then
+				byPos[layer.position] = {
+					name = layer.name,
+					sha = row.sha,
+					position = layer.position,
+					issue = layer.issue,
+				}
+				if not origin then
+					localAt[layer.position] = true
+				end
+			end
+		end
+	end
+	return byPos
+end
+
+local function layerFacts(
+	raftId: string,
+	issues: { string },
+	tips: { [number]: Tip },
+	mainSha: string
+): { work.LayerFact }
+	local base = mainSha
+	local out: { work.LayerFact } = {}
+	for i, issue in issues do
+		local tip = tips[i]
+		if tip and tip.issue == issue and base ~= "" then
+			local count = 0
+			local subject = ""
+			local counted = sh.run("git", { "rev-list", "--count", `{base}..{tip.sha}` })
+			if counted.ok then
+				count = tonumber(trim(counted.stdout)) or 0
+			end
+			if count > 0 then
+				local logged = sh.run("git", { "log", "-1", "--format=%s", tip.sha })
+				if logged.ok then
+					subject = trim(logged.stdout)
+				end
+			end
+			local finished = false
+			local ok, finish = pcall(layergit.layerFinishSha, {
+				raft = raftId,
+				position = i,
+				issue = issue,
+				name = tip.name,
+			}, base, tip.sha)
+			finished = ok and finish ~= nil
+			table.insert(out, {
+				position = i,
+				issue = issue,
+				name = tip.name,
+				commits = count,
+				onlyStart = count == 1 and string.sub(subject, 1, 14) == "tracker: start",
+				finished = finished,
+			})
+			base = tip.sha
+		end
+	end
+	return out
+end
+
+local function stacked(
+	issues: { string },
+	layers: { work.LayerFact },
+	tips: { [number]: Tip },
+	mainSha: string
+): boolean
+	if #layers < #issues or mainSha == "" then
+		return false
+	end
+	local onto = mainSha
+	for i, issue in issues do
+		local tip = tips[i]
+		if not tip or tip.issue ~= issue then
+			return false
+		end
+		if not sh.run("git", { "merge-base", "--is-ancestor", onto, tip.sha }).ok then
+			return false
+		end
+		onto = tip.sha
+	end
+	return true
+end
+
+local function holdersOf(): { [string]: { who: string, when: string } }
+	local out: { [string]: { who: string, when: string } } = {}
+	local r = sh.run("git", {
+		"log",
+		"origin/main",
+		"--format=%s%x09%an <%ae>%x09%cI",
+		"--grep=^tracker: ready",
+	})
+	if not r.ok then
+		return out
+	end
+	for line in string.gmatch(r.stdout .. "\n", "([^\n]*)\n") do
+		local subject, who, when = string.match(line, "^(.-)\t(.-)\t(.+)$")
+		local id = if subject then string.match(subject, "^tracker: ready (R%d%d%d%d)") else nil
+		if id and who and when and not out[id] then
+			out[id] = { who = who, when = when }
+		end
+	end
+	return out
+end
+
+local function build(
+	id: string,
+	at: At,
+	text: string,
+	byId: { [string]: At },
+	docs: { [string]: string },
+	sides: { [string]: string },
+	holder: { who: string, when: string }?,
+	tips: { [number]: Tip },
+	mainSha: string
+): work.RaftFact
+	local front = frontText(text)
+	local listed = store.idList(front.issues)
+	local specs: { stack.Member } = {}
+	local memberFront: { [string]: { [string]: string } } = {}
+	for _, mid in listed do
+		local found = byId[mid]
+		local raw = if found then docs[found.path] else nil
+		if (not raw or raw == "") and found and fs.isFile(found.path) then
+			raw = fs.readFile(found.path)
+		end
+		local mf: { [string]: string } = if raw and raw ~= "" then frontText(raw) else {}
+		memberFront[mid] = mf
+		table.insert(specs, { id = mid, dependsOn = store.idList(mf.depends_on) })
+	end
+	local ordered = stack.order(id, section(text, "Order & dependencies"), specs)
+	local issues: { string } = if ordered and #ordered > 0 then ordered else listed
+	local memberIds: { [string]: boolean } = {}
+	for _, mid in issues do
+		memberIds[mid] = true
+	end
+	local ready = front.design == "ready"
+	local deps = true
+	for _, mid in issues do
+		local mf: { [string]: string } = memberFront[mid] or {}
+		if mf.design ~= "ready" then
+			ready = false
+		end
+		for _, dep in store.idList(mf.depends_on) do
+			if not memberIds[dep] then
+				local depAt = byId[dep]
+				if not depAt or depAt.state ~= "done" then
+					deps = false
+				end
+			end
+		end
+	end
+	local layers: { work.LayerFact } = if at.state == "active"
+		then layerFacts(id, issues, tips, mainSha)
+		else {}
+	local final = reviewState(sides, "final%-review%-", "approved")
+	local trace = sides["trace.md"] ~= nil
+	return {
+		id = id,
+		title = front.title or id,
+		where = at.state,
+		status = statusLib.effective(front, at.state),
+		designReady = ready,
+		depsMet = deps,
+		questions = sides["questions.md"] ~= nil,
+		issues = issues,
+		layers = layers,
+		holder = if holder then holder.who else "",
+		since = if holder then holder.when else "",
+		stacked = if at.state == "active" then stacked(issues, layers, tips, mainSha) else false,
+		codeReview = reviewState(sides, "review%-", "resolved"),
+		finalReview = final,
+		trace = trace,
+		traceOk = trace and final == "approved",
+	}
+end
+
+function workread.held(): string?
+	local branch = trim(sh.run("git", { "branch", "--show-current" }).stdout)
+	local layer = stack.parse(branch)
+	if layer then
+		return layer.raft
+	end
+	local cwd = (string.gsub(process.cwd, "/+$", ""))
+	return string.match(cwd, "/%.worktree/(R%d%d%d%d)$")
+end
+
+function workread.collect(asked: string?): work.Input
+	local rafts: { work.RaftFact } = {}
+	local main = trim(sh.run("git", { "rev-parse", "--verify", "--quiet", "origin/main" }).stdout)
+	if main == "" then
+		return { asked = asked, held = workread.held(), rafts = rafts }
+	end
+	local listed = sh.run("git", { "ls-tree", "-r", "--name-only", "origin/main" })
+	local names: { string } = {}
+	if listed.ok then
+		for line in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
+			if line ~= "" then
+				table.insert(names, line)
+			end
+		end
+	end
+	local byId: { [string]: At } = {}
+	for _, path in names do
+		local state, dir, id = slot(path)
+		if state and dir and id then
+			byId[id] = { path = path, state = state, dir = dir }
+		end
+	end
+	local keep: { [string]: At } = {}
+	for id, at in byId do
+		if store.isRaftId(id) and (at.state ~= "done" or id == asked) then
+			keep[id] = at
+		end
+	end
+	local want: { string } = {}
+	local seenPath: { [string]: boolean } = {}
+	local function add(path: string)
+		if not seenPath[path] then
+			seenPath[path] = true
+			table.insert(want, path)
+		end
+	end
+	for _, at in keep do
+		add(at.path)
+	end
+	for id, at in byId do
+		if store.isIssueId(id) and at.state ~= "done" then
+			add(at.path)
+		end
+	end
+	for _, path in names do
+		local slash = string.match(path, "^(.*)/([^/]+)$")
+		local base = string.match(path, "([^/]+)$")
+		if slash and base and sideFile(base) then
+			for _, at in keep do
+				if slash == at.dir then
+					add(path)
+				end
+			end
+		end
+	end
+	local refText = sh.run("git", {
+		"for-each-ref",
+		"--format=%(objectname)%09%(refname:short)",
+		"refs/heads",
+		"refs/remotes/origin",
+	})
+	local refs: { { sha: string, ref: string } } = {}
+	if refText.ok then
+		for line in string.gmatch(refText.stdout .. "\n", "([^\n]*)\n") do
+			local sha, ref = string.match(line, "^(%x+)\t(.+)$")
+			if sha and ref then
+				table.insert(refs, { sha = sha, ref = ref })
+			end
+		end
+	end
+	local activeTips: { [string]: { [number]: Tip } } = {}
+	local specs: { string } = {}
+	for _, path in want do
+		table.insert(specs, `origin/main:{path}`)
+	end
+	local layerKeys: { string } = {}
+	for id, at in keep do
+		if at.state == "active" then
+			local tips = tipsFor(id, refs)
+			activeTips[id] = tips
+			local ordered: { Tip } = {}
+			for _, tip in tips do
+				table.insert(ordered, tip)
+			end
+			table.sort(ordered, function(a, b)
+				return a.position < b.position
+			end)
+			for _, tip in ordered do
+				local tree = sh.run("git", { "ls-tree", "-r", "--name-only", tip.sha, "--", at.dir })
+				if tree.ok then
+					for path in string.gmatch(tree.stdout .. "\n", "([^\n]*)\n") do
+						local base = string.match(path, "([^/]+)$")
+						if path ~= "" and base and sideFile(base) then
+							table.insert(specs, `{tip.sha}:{path}`)
+							table.insert(layerKeys, `{id}\t{base}\t{tip.position}`)
+						end
+					end
+				end
+			end
+		end
+	end
+	local blobs = catBatch(specs)
+	local docs: { [string]: string } = {}
+	for i, path in want do
+		docs[path] = blobs[i] or ""
+	end
+	local layerBlobs: { [string]: { [string]: string } } = {}
+	local layerPos: { [string]: { [string]: number } } = {}
+	for n, key in layerKeys do
+		local id, base, pos = string.match(key, "^(R%d%d%d%d)\t([^\t]+)\t(%d+)$")
+		local position = if pos then tonumber(pos) else nil
+		if id and base and position then
+			local bag: { [string]: string } = layerBlobs[id] or {}
+			local at: { [string]: number } = layerPos[id] or {}
+			layerBlobs[id] = bag
+			layerPos[id] = at
+			local body = blobs[#want + n]
+			if body and body ~= "" and (at[base] == nil or position >= at[base]) then
+				bag[base] = body
+				at[base] = position
+			end
+		end
+	end
+	local holders = holdersOf()
+	for id, at in keep do
+		local text = docs[at.path]
+		if text and text ~= "" then
+			local sides: { [string]: string } = {}
+			for _, path in want do
+				if string.match(path, "^(.*)/[^/]+$") == at.dir then
+					local base = string.match(path, "([^/]+)$")
+					local body = docs[path]
+					if base and body and body ~= "" and sideFile(base) then
+						sides[base] = body
+					end
+				end
+			end
+			local fromLayer = layerBlobs[id]
+			if fromLayer then
+				for name, body in fromLayer do
+					sides[name] = body
+				end
+			end
+			if fs.isDir(at.dir) then
+				for _, name in fs.readDir(at.dir) do
+					if sideFile(name) and fs.isFile(`{at.dir}/{name}`) then
+						sides[name] = fs.readFile(`{at.dir}/{name}`)
+					end
+				end
+			end
+			table.insert(
+				rafts,
+				build(id, at, text, byId, docs, sides, holders[id], activeTips[id] or {}, main)
+			)
+		end
+	end
+	return { asked = asked, held = workread.held(), rafts = rafts }
+end
+
+return workread

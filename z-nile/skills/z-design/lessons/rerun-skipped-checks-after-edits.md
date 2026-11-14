@@ -18,3 +18,5 @@ c0118 design review 008 F1: a spec case added in answer to round 006 passed `str
 c0170 design review 003 F1: a refute rewrote prototype code after the last full gate, and its type step broke; the design still quoted the earlier green run. After a refute rewrites prototype code or a check.sh, rerun the full gate (every project, the type step included) and date the result.
 
 c0239 design review 005 F1: a round's answer edited a sequestered spec's fixture (a base-commit `default.project.json` written as `{ "name": "pickman" }`, not a valid Rojo project) and nobody reran the spec, so three cases failed against a correct implementation while the Rules rows still said `run`. Before writing `run`, check that the prototype run is later than the last edit of its spec, and rerun the spec on the final bytes after any fixture edit.
+
+**Also:** c0118 design review 013 F1: the evidence for a round's answers must come from the tree that holds the answers (main + prep + apply), not from the prototype that predates them; `git show <tree>:<item>/check.sh` should equal the prep's.

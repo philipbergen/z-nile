@@ -1,0 +1,33 @@
+# Harvest: c0264
+- design-review-001 F1: z-design/status-labels-need-a-tracker-fact
+- design-review-001 F2: z-design/restated-rules-move-together
+- design-review-001 F3: one-off: a paraphrase of the user's rule narrowed it ("never waits on an expensive one" for "don't orchestrate and wait on expensive models")
+- design-review-001 F4: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F5: one-off: an id range counted the issue itself
+- design-review-001 F6: one-off: a mutation runner that writes a tracked file restores it on signals too, and runs through ./zn run
+- design-review-002 F1: z-design/status-labels-need-a-tracker-fact
+- design-review-002 F2: z-design/mutant-ids-match-the-runner
+- design-review-003 F1: z-design/status-labels-need-a-tracker-fact
+- design-review-003 F2: z-design/restated-rules-move-together
+- design-review-004 F1: z-design/quote-other-preps-before-promising
+- design-review-004 F2: z-design/mutant-ids-match-the-runner
+- design-review-005 F1: z-design/spec-design-correspondence
+- design-review-005 F2: z-design/spec-design-correspondence
+- design-review-005 F3: z-design/quote-other-preps-before-promising
+- design-review-005 F4: z-design/spec-design-correspondence
+- design-review-006 F1: z-design/quote-other-preps-before-promising
+- design-review-006 F2: z-design/spec-design-correspondence
+- design-review-006 F3: z-design/restated-rules-move-together
+- design-review-006 F4: z-design/spec-design-correspondence
+- design-review-006 F5: z-design/spec-design-correspondence
+- design-review-007 F1: z-design/quote-other-preps-before-promising
+- design-review-007 F2: z-design/spec-design-correspondence
+- design-review-007 F3: z-design/quote-other-preps-before-promising
+- design-review-007 F4: one-off: a prep path written for the prep location
+- design-review-007 F5: z-design/spec-design-correspondence
+- note re-check the tracker for splits of every labelled id after each merge of main, and back a landing-order claim with a real merge and its conflict count: z-design/quote-other-preps-before-promising
+- design-review-008 F1: z-design/quote-other-preps-before-promising
+- design-review-008 F2: z-design/status-labels-need-a-tracker-fact
+- design-review-008 F3: z-design/restated-rules-move-together
+- design-review-008 F4: zz-test/promoted-specs-pin-rules-not-sets
+- note a landing-order scenario is built from the other issue's real text (its prototype or patch, sha recorded), never from an edit the author writes; after a split, check every clause of each sentence that keeps the parent's label: z-design/quote-other-preps-before-promising, z-design/status-labels-need-a-tracker-fact

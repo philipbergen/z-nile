@@ -1,0 +1,2 @@
+pickman/tests/lib/renamed.luau
+pickman/tests/lib/t.luau

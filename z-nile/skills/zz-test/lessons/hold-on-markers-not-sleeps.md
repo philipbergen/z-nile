@@ -9,3 +9,5 @@ A fixed sleep makes overlap a matter of timing. Under load, a 3 s sleep against 
 **Why:** c0165 design review 002 F1 and F5. The concurrent, failed-wait and timeout cases rested on 3 s and 30 s sleeps, and the orphan case's "runner is gone" assertion would have passed for a runner that merely finished its sleep.
 
 **How to apply:** hold on a marker (optionally only for runs with an environment flag, so a waiter's own run doesn't hold), release it when the event is seen, bound every hold to a fixed number of polls, and assert "gone" while the marker still holds.
+
+**Also:** c0279 design review 002 F2: a poll bounded by summing the `task.wait` it asked for does not count its own commands (600 `kill` execs cost 1.1 s of 20 s at load 10 and far more at the loads this repo sees), and the time before the poll starts grows with load too, so a grandchild's `sleep 120` ended inside the poll and a broken kill passed. Check: is the hold compared with the poll's wall time plus everything before it (bound the poll on the wall clock and make the hold an hour, or hold on a marker)?

@@ -155,6 +155,7 @@ function gatefix.make(base: string, name: string, opts: MakeOpts?): string
 	gatefix.write(`{dir}/pickman/tests/run.luau`, `return {R}("../../z-nile/tests/run")\n`)
 	gatefix.write(`{dir}/pickman/tests/inputs.tsv`, "# extra inputs per spec\n")
 	gatefix.write(`{dir}/pickman/src/A.luau`, "return { value = 1 }\n")
+	gatefix.write(`{dir}/pickman/src/Hold.luau`, "return {}\n")
 	gatefix.write(`{dir}/pickman/src/B.luau`, "return { value = 1 }\n")
 	gatefix.write(`{dir}/pickman/src/C.luau`, "return { value = 1 }\n")
 	gatefix.write(`{dir}/pickman/data/x.txt`, "ok\n")
@@ -169,6 +170,22 @@ function gatefix.make(base: string, name: string, opts: MakeOpts?): string
 	end
 	for n, spec in specs do
 		gatefix.write(`{dir}/pickman/tests/unit/{n}.spec.luau`, gatefix.specText(dir, n, spec))
+		local watched: { string } = {}
+		if spec.needs then
+			table.insert(watched, `pickman/src/{spec.needs}.luau`)
+		end
+		if spec.reads then
+			local rel = spec.reads
+			if string.sub(rel, 1, 8) ~= "pickman/" then
+				rel = `pickman/{rel}`
+			end
+			table.insert(watched, rel)
+		end
+		if #watched == 0 then
+			table.insert(watched, "pickman/src/Hold.luau")
+		end
+		table.sort(watched)
+		gatefix.write(`{dir}/pickman/tests/unit/{n}.watch.txt`, table.concat(watched, "\n") .. "\n")
 	end
 	if o.setup then
 		o.setup(dir)

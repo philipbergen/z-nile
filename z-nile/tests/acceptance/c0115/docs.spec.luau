@@ -72,7 +72,7 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
 		at(run, 'cd "$(./zn worktree <R>)"', "z-run")
 		at(
 			run,
-			"**Hand off.** Follow the prompt as your instructions, from its first line: it carries the zz-execute skill",
+			"**Hand off.** Follow the prompt as your instructions, from its first line: it names `z-nile/skills/zz-execute/SKILL.md`",
 			"z-run"
 		)
 		local exec = read(`{Z}/zz-execute/SKILL.md`)
@@ -80,7 +80,7 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
 		at(exec, "\n## Stop conditions", "zz-execute")
 		at(
 			read("z-nile/templates/prompt.md"),
-			"1. **Follow the `zz-execute` skill below, step by step.**",
+			"1. **Follow `z-nile/skills/zz-execute/SKILL.md` step by step.**",
 			"the prompt template"
 		)
 	end)
@@ -203,7 +203,12 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
 				d
 			)
 			at(s, "never through a `.claude/skills/` link, which git can't add through", d)
-			at(s, `./zn lessons --skill {string.match(d, "[^/]+$")} --full`, d)
+			at(
+				s,
+				"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
+				d
+			)
+			t.expect(string.find(s, "--full", 1, true) == nil).toBe(true)
 		end
 	end)
 

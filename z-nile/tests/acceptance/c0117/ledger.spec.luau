@@ -3,6 +3,7 @@
 -- records a model, then has ten; an empty model cell is no model; rows stay append-only, the model included.
 -- `spend --model` and `commit --model` write it. Pure cases on ledger.luau, then the commands in fixtures under
 -- .cache/c0117-ledger-spend (a published spend) and .cache/c0117-ledger-commit (an offline started raft).
+local buffer = require("@znile/engine/buffer")
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -83,7 +84,7 @@ return t.spec("c0117 the spend row's model cell", function(it)
 		t.expect(ledger.appendOnly(old, ledger.append(old, "c0010", "T", row(nil, 1)), "c0010")).toBe(nil)
 	end)
 
-	it("spend --model records the model on the published row", function()
+	it("spend --model records the model on the branch's row", function()
 		local f = trackerfix.new("c0117-ledger-spend", {
 			["pickman/.tracker/issues/c0010/c0010.md"] = trackerfix.stub(
 				"c0010",
@@ -104,10 +105,34 @@ return t.spec("c0117 the spend row's model cell", function(it)
 			"--model",
 			"claude-opus-5-5-high",
 		})
-		local text = fixture.git(f.origin, { "show", "main:pickman/.tracker/issues/c0010/spend.md" }) .. "\n"
-		local l = ledger.parse(text) :: ledger.Ledger
-		t.expect(l.rows[#l.rows].model).toBe("claude-opus-5-5-high")
-		t.expect(l.rows[#l.rows].tokens).toBe(123)
+		local function latest(work: string): { ledger.Row }
+			local listed = fixture.git(work, {
+				"ls-tree",
+				"-r",
+				"--name-only",
+				"HEAD",
+				"--",
+				"pickman/.tracker/issues/c0010/spend.d",
+			})
+			local last = ""
+			for file in string.gmatch(listed .. "\n", "([^\n]*)\n") do
+				if (string.sub(file, -4) == ".tsv" or string.sub(file, -3) == ".md") and file > last then
+					last = file
+				end
+			end
+			local text = fixture.git(work, { "show", `HEAD:{last}` }) .. "\n"
+			if string.sub(last, -4) == ".tsv" then
+				local parsed, err = buffer.parseTsv(text)
+				if not parsed then
+					error(`{last} does not parse: {err}`, 2)
+				end
+				return parsed
+			end
+			return (ledger.parse(text) :: ledger.Ledger).rows
+		end
+		local l = latest(w)
+		t.expect(l[#l].model).toBe("claude-opus-5-5-high")
+		t.expect(l[#l].tokens).toBe(nil)
 		local r = trackerfix.tr(
 			f,
 			w,
@@ -117,10 +142,8 @@ return t.spec("c0117 the spend row's model cell", function(it)
 		t.expect(has(r.stderr, "--model takes one model id")).toBe(true)
 		-- without --model the cell stays empty
 		trackerfix.trOk(f, w, { "spend", "c0010", "--phase", "capture", "--time", "1", "--tokens", "4" })
-		local again = ledger.parse(
-			fixture.git(f.origin, { "show", "main:pickman/.tracker/issues/c0010/spend.md" }) .. "\n"
-		) :: ledger.Ledger
-		t.expect(again.rows[#again.rows].model).toBe(nil)
+		local again = latest(w)
+		t.expect(again[#again].model).toBe(nil)
 	end)
 
 	it("commit --model records the model on the raft's rows", function()
@@ -178,10 +201,14 @@ return t.spec("c0117 the spend row's model cell", function(it)
 			"--model",
 			"claude-opus-5-5",
 		})
-		local l =
-			ledger.parse(fs.readFile(`{dir}/pickman/.tracker/issues/active/{a}/spend.md`)) :: ledger.Ledger
-		t.expect(l.rows[#l.rows].model).toBe("claude-opus-5-5")
-		t.expect(l.rows[#l.rows].tokens).toBe(77)
+		local folder = `{dir}/pickman/.tracker/issues/active/{a}/spend.d`
+		local names = fs.readDir(folder)
+		table.sort(names)
+		local l = buffer.parseTsv(fs.readFile(`{folder}/{names[#names]}`))
+		t.expect(l ~= nil).toBe(true)
+		local rows = l :: { ledger.Row }
+		t.expect(rows[#rows].model).toBe("claude-opus-5-5")
+		t.expect(rows[#rows].tokens).toBe(nil)
 		local bad = run({ "commit", "-m", "x", "--model", "a|b" })
 		t.expect(bad.ok).toBe(false)
 		t.expect(has(bad.stderr, "--model takes one model id")).toBe(true)

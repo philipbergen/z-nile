@@ -50,7 +50,7 @@ return t.spec("c0117 the dispatcher's texts and model ids (R0052 code review 001
 	it("a model id the ledger refuses is refused in .models.toml, with its effort (F6)", function()
 		local function parse(model: string, effort: string?): (boolean, string)
 			local text =
-				`order = ["claude"]\n[z-design.claude]\nmodel = "{model}"\nrank = 1\nruntime = "claude-cli"\nmax_tokens = 9\n`
+				`[roles.design]\nmodel = "{model}"\ncli = "claude"\nrank = 1\nruntime = "claude-cli"\nmax_tokens = 9\n`
 			if effort then
 				text ..= `effort = "{effort}"\n`
 			end

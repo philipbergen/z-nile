@@ -90,10 +90,6 @@ local function editJson(file: string): string
 	return '{"tool_input":{"file_path":"' .. file .. '"}}'
 end
 
-local function stopJson(cwd: string): string
-	return '{"cwd":"' .. cwd .. '","stop_hook_active":false}'
-end
-
 local function countWorktrees(): number
 	local _, n = string.gsub(git(main, { "worktree", "list", "--porcelain" }), "worktree ", "")
 	return n
@@ -119,7 +115,7 @@ end
 local startOut = ""
 
 return t.spec("worktrees", function(it)
-	it("worktree creates a raft-named worktree and branch from origin/main", function()
+	it("worktree creates a raft-named worktree, detached, from origin/main", function()
 		if fs.isDir(base) then
 			fs.removeDir(base)
 		end
@@ -181,7 +177,7 @@ return t.spec("worktrees", function(it)
 		local r = tr(main, { "worktree", "R0010" })
 		t.expect(must(r, "worktree R0010")).toBe(wt1)
 		t.expect(fs.isDir(wt1)).toBe(true)
-		t.expect(git(wt1, { "branch", "--show-current" })).toBe("R0010-demo")
+		t.expect(git(wt1, { "branch", "--show-current" })).toBe("")
 		t.expect(git(wt1, { "rev-parse", "HEAD" })).toBe(git(main, { "rev-parse", "origin/main" }))
 		-- a new branch must not track origin/main: a bare `git push` would target the wrong ref
 		t.expect(run(wt1, "git", { "rev-parse", "--abbrev-ref", "@{u}" }).ok).toBe(false)
@@ -191,7 +187,7 @@ return t.spec("worktrees", function(it)
 		t.expect(must(tr(main, { "worktree", "R0010" }), "worktree again")).toBe(wt1)
 		-- invoked from inside R0010's worktree, R0020's worktree still lands under the main checkout
 		t.expect(must(tr(wt1, { "worktree", "R0020" }), "worktree R0020")).toBe(wt2)
-		t.expect(git(wt2, { "branch", "--show-current" })).toBe("R0020-other")
+		t.expect(git(wt2, { "branch", "--show-current" })).toBe("")
 	end)
 
 	it("main checkout stays on main and clean", function()
@@ -225,14 +221,9 @@ return t.spec("worktrees", function(it)
 		t.expect(git(main, { "status", "--porcelain" })).toBe("")
 	end)
 
-	it("worktree resumes an existing branch after its worktree is deleted", function()
-		-- the branch exists only on origin: push it, then delete the worktree and the local branch
-		git(main, { "push", "-q", "origin", "R0010-demo" })
-		git(main, { "worktree", "remove", wt1 })
-		git(main, { "branch", "-D", "R0010-demo" })
-		t.expect(must(tr(main, { "worktree", "R0010" }), "worktree resume")).toBe(wt1)
-		t.expect(git(wt1, { "branch", "--show-current" })).toBe("R0010-demo")
-		t.expect(git(wt1, { "rev-parse", "HEAD" })).toBe(git(main, { "rev-parse", "origin/R0010-demo" }))
+	it("a raft worktree creates no slug branch", function()
+		t.expect(git(wt1, { "branch", "--show-current" })).toBe("")
+		t.expect(git(main, { "branch", "--list", "R0010-demo" })).toBe("")
 	end)
 
 	it("worktree refuses a branch checked out elsewhere", function()
@@ -247,13 +238,22 @@ return t.spec("worktrees", function(it)
 
 	it("start inside the worktree reuses the branch and pushes", function()
 		startOut = must(tr(wt1, { "start", "R0010" }), "start")
-		t.expect(git(wt1, { "branch", "--show-current" })).toBe("R0010-demo")
+		t.expect(git(wt1, { "branch", "--show-current" })).toBe("R0010/1/f0010")
 		t.expect(git(wt1, { "log", "-1", "--format=%s" })).toBe("tracker: start R0010 Demo")
 		t.expect(git(wt1, { "rev-parse", "HEAD~1" })).toBe(git(main, { "rev-parse", "origin/main" }))
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isDir(`{wt1}/pickman/.tracker/rafts/active/R0010`)).toBe(true)
-		t.expect(git(origin, { "rev-parse", "R0010-demo" })).toBe(git(wt1, { "rev-parse", "HEAD" }))
+		t.expect(git(origin, { "rev-parse", "R0010/1/f0010" })).toBe(git(wt1, { "rev-parse", "HEAD" }))
 		t.expect(git(main, { "branch", "--show-current" })).toBe("main")
+		t.expect(string.find(git(main, { "branch", "-a" }), "R0010-", 1, true) == nil).toBe(true)
+	end)
+
+	it("worktree resumes the layer after its worktree is deleted", function()
+		git(main, { "worktree", "remove", wt1 })
+		git(main, { "branch", "-D", "R0010/1/f0010" })
+		t.expect(must(tr(main, { "worktree", "R0010" }), "worktree resume")).toBe(wt1)
+		t.expect(git(wt1, { "branch", "--show-current" })).toBe("R0010/1/f0010")
+		t.expect(git(wt1, { "rev-parse", "HEAD" })).toBe(git(main, { "rev-parse", "origin/R0010/1/f0010" }))
 	end)
 
 	it("non-GitHub origin skips the draft PR", function()
@@ -378,20 +378,21 @@ return t.spec("worktrees", function(it)
 	it("worktree-prune removes squash-merged done rafts and keeps unfinished ones", function()
 		-- R0010 is done on its branch and squash-merged; R0030 is done only on its own pushed branch
 		finishOnBranch(wt1, "R0010", "f0010", "active/")
-		squashMerge("R0010-demo")
+		squashMerge("R0010/1/f0010")
 		must(tr(main, { "worktree", "R0030" }), "worktree R0030")
+		git(wt3, { "switch", "-c", "R0030/1/f0030" })
 		finishOnBranch(wt3, "R0030", "f0030", "")
 
 		must(tr(main, { "worktree-prune" }), "worktree-prune")
 		t.expect(fs.isDir(wt1)).toBe(false)
-		t.expect(git(main, { "branch", "--list", "R0010-demo" })).toBe("")
+		t.expect(git(main, { "branch", "--list", "R0010/1/f0010" })).toBe("")
 		t.expect(fs.isDir(wt2)).toBe(true)
-		t.expect(git(main, { "branch", "--list", "R0020-other" }) ~= "").toBe(true)
+		t.expect(git(main, { "branch", "--list", "R0020/1/f0020" }) ~= "").toBe(true)
 	end)
 
 	it("worktree-prune keeps a raft that is done only on its own unmerged branch", function()
 		t.expect(fs.isDir(wt3)).toBe(true)
-		t.expect(git(main, { "branch", "--list", "R0030-third" }) ~= "").toBe(true)
+		t.expect(git(main, { "branch", "--list", "R0030/1/f0030" }) ~= "").toBe(true)
 	end)
 
 	it("worktree-prune lists a named worktree and leaves it", function()
@@ -403,15 +404,16 @@ return t.spec("worktrees", function(it)
 
 	it("worktree-prune never forces: a dirty finished worktree survives and the exit code is 1", function()
 		must(tr(main, { "worktree", "R0040" }), "worktree R0040")
+		git(wt4, { "switch", "-c", "R0040/1/f0040" })
 		finishOnBranch(wt4, "R0040", "f0040", "")
-		squashMerge("R0040-fourth")
+		squashMerge("R0040/1/f0040")
 		fs.writeFile(`{wt4}/unsaved.txt`, "work in progress")
 		local r = tr(main, { "worktree-prune" })
 		t.expect(r.ok).toBe(false)
 		t.expect(r.code).toBe(1)
 		t.expect(string.find(r.stderr, wt4, 1, true) ~= nil).toBe(true)
 		t.expect(fs.isFile(`{wt4}/unsaved.txt`)).toBe(true)
-		t.expect(git(main, { "branch", "--list", "R0040-fourth" }) ~= "").toBe(true)
+		t.expect(git(main, { "branch", "--list", "R0040/1/f0040" }) ~= "").toBe(true)
 	end)
 
 	it("worktree-prune run from inside a finished worktree skips it", function()
@@ -422,7 +424,7 @@ return t.spec("worktrees", function(it)
 		-- from the main checkout the same worktree is removed
 		must(tr(main, { "worktree-prune" }), "prune from main")
 		t.expect(fs.isDir(wt4)).toBe(false)
-		t.expect(git(main, { "branch", "--list", "R0040-fourth" })).toBe("")
+		t.expect(git(main, { "branch", "--list", "R0040/1/f0040" })).toBe("")
 	end)
 
 	it("worktree refuses a done raft", function()
@@ -468,26 +470,5 @@ return t.spec("worktrees", function(it)
 		fs.removeDir(dir)
 		-- linted from the hook's own repo it would fail; outside a repo there is nothing to lint
 		t.expect(r.code).toBe(0)
-	end)
-
-	it("stop hook gates the session's cwd worktree", function()
-		local hook = `{main}/scripts/hooks/stop.sh`
-		-- c0120 override: the game's src/ is pickman/src/
-		fs.writeFile(`{wt2}/pickman/src/shared/Broken.luau`, "--!strict\nlocal = \n")
-		local inWorktree = run(main, "bash", { hook }, stopJson(wt2))
-		local inMain = run(main, "bash", { hook }, stopJson(main))
-		-- c0120 override: pickman's files live in pickman/ (its home)
-		fs.removeFile(`{wt2}/pickman/src/shared/Broken.luau`)
-		t.expect(inWorktree.code).toBe(2)
-		t.expect(inMain.code).toBe(0)
-	end)
-
-	it("stop hook gates the worktree root when cwd is a subdirectory", function()
-		local hook = `{main}/scripts/hooks/stop.sh`
-		-- c0120 override: pickman's files live in pickman/ (its home)
-		fs.writeFile(`{wt2}/pickman/src/shared/Broken.luau`, "--!strict\nlocal = \n")
-		local fromSubdir = run(main, "bash", { hook }, stopJson(`{wt2}/pickman/src/shared`))
-		fs.removeFile(`{wt2}/pickman/src/shared/Broken.luau`)
-		t.expect(fromSubdir.code).toBe(2)
 	end)
 end)

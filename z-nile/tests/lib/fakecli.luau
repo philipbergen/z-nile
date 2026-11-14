@@ -4,6 +4,7 @@
 -- `<fakes>/<cli>`, else `ok`. Each logs how it was started to `<fakes>/log`. No real CLI and no network: a spec puts
 -- the fakes first on PATH, under its own .cache folder, and the dispatcher refuses any CLI outside .cache in a check.
 -- The tracker fixture under them is @tests/lib/trackerfix's.
+local buffer = require("@znile/engine/buffer")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ledger = require("@znile/engine/ledger")
@@ -37,6 +38,8 @@ function fakecli.script(cli: string): string
 	local commit = "git -c user.name=c0117-fake -c user.email=c0117-fake@example.invalid commit -q -m"
 	return table.concat({
 		"#!/bin/sh",
+		-- before the first output: a check.sh run simulates a starved machine with FAKE_DELAY (seconds, default 0)
+		[[[ -z "${FAKE_DELAY:-}" ] || sleep "$FAKE_DELAY"]],
 		'step=$(printf "%s" "$*" | sed -n "s/.*z-nile step \\([a-z-]*\\).*/\\1/p" | head -n 1)',
 		'id=$(printf "%s" "$*" | sed -n "s/.* for \\([cfdR][0-9][0-9][0-9][0-9]\\).*/\\1/p" | head -n 1)',
 		'mode=ok; [ -f "$FAKE_DIR/' .. cli .. '" ] && mode=$(cat "$FAKE_DIR/' .. cli .. '")',
@@ -57,7 +60,8 @@ function fakecli.script(cli: string): string
 		'fail) echo "boom" >&2; exit 1 ;;',
 		"nocount) echo 'not json'; exit 0 ;;",
 		'questions) printf "## Q1\\nWhich scope?\\n" > "$ZN_DISPATCH_DIR/questions.md"; ' .. ok .. " ;;",
-		'cap) i=0; ( sleep 2; touch "$FAKE_DIR/grandchild-cap" ) & while [ $i -lt 20 ]; do '
+		-- the grandchild records its pid before the tokens that get the group killed (same as stop)
+		[[cap) i=0; sh -c 'echo $$ > "$FAKE_DIR/grandchild-cap.pid"; exec sleep 3600' & n=0; while [ ! -s "$FAKE_DIR/grandchild-cap.pid" ] && [ $n -lt 600 ]; do sleep 0.1; n=$((n+1)); done; while [ $i -lt 20 ]; do ]]
 			.. heavy
 			.. "; i=$((i+1)); done; sleep 20 ;;",
 		-- the CLI's own wait message (stdout, not JSON): a stall after it is quota
@@ -65,7 +69,7 @@ function fakecli.script(cli: string): string
 		"stall) echo 'thinking'; sleep 20 ;;",
 		-- a cursor stream with no model_call_id at all: four turns, then quiet (the call cap can't be trusted)
 		[[noids) for c in 1 2 3 4; do echo '{"type":"thinking","subtype":"delta"}'; echo '{"type":"tool_call","subtype":"started","call_id":"x'$c'"}'; echo '{"type":"tool_call","subtype":"completed","call_id":"x'$c'"}'; done; sleep 20 ;;]],
-		-- a detached process pushes code to main after the step has ended (the watermark's to catch at the next run)
+		-- a detached process pushes code to main after the step has ended (a later run accepts main as it is)
 		[[late) git fetch -q origin main; git checkout -q -B late FETCH_HEAD; echo late > late.lua; git add late.lua; git -c user.name=c0117-fake -c user.email=c0117-fake@example.invalid commit -q -m late; perl -e 'setpgrp(0,0); exec @ARGV' sh -c "sleep 1; \"$ZN_REAL_GIT\" push -q origin HEAD:main" > /dev/null 2>&1 < /dev/null & ]]
 			.. OK.claude
 			.. " ;;",
@@ -74,10 +78,13 @@ function fakecli.script(cli: string): string
 		-- the model's own words about waiting and trying again: a stall after them is a stall, not quota
 		[[prose) echo '{"type":"assistant","message":{"id":"m9","content":[{"type":"text","text":"Rate limit? I will try again, waiting for the gate"}]}}'; sleep 20 ;;]],
 		-- a quiet tool call longer than the stall limit, under the tool limit
-		[[tool) echo '{"type":"assistant","message":{"id":"m9","content":[{"type":"tool_use","id":"t1","name":"Bash"}]}}'; sleep 3; echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}'; ]]
+		[[tool) echo '{"type":"assistant","message":{"id":"m9","content":[{"type":"tool_use","id":"t1","name":"Bash"}]}}'; sleep 12; echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}'; ]]
 			.. ok
 			.. " ;;",
-		'stop) ( sleep 2; touch "$FAKE_DIR/grandchild-stop" ) & echo \'{"type":"system"}\'; sleep 0.5; ./zn dispatch stop "$FAKE_STOP" >> "$FAKE_DIR/log" 2>&1; sleep 20 ;;',
+		-- the grandchild records its pid and outlives any wait; the stop follows once it has (FAKE_DELAY seconds later: a
+		-- check.sh run simulates a loaded machine with it); then the step goes silent, so a stop that kills nothing ends
+		-- in a stall, never in the exit it would otherwise reach
+		[[stop) echo '{"type":"system"}'; sh -c 'echo $$ > "$FAKE_DIR/grandchild-stop.pid"; exec sleep 3600' & n=0; while [ ! -s "$FAKE_DIR/grandchild-stop.pid" ] && [ $n -lt 600 ]; do sleep 0.1; n=$((n+1)); done; sleep ${FAKE_DELAY:-0}; ./zn dispatch stop "$FAKE_STOP" >> "$FAKE_DIR/log" 2>&1; sleep 3600 ;;]],
 		-- the dispatcher dies mid-step: the supervisor's lifeline kills the group
 		'orphan) ( sleep 3; touch "$FAKE_DIR/grandchild-orphan" ) & echo \'{"type":"system"}\'; kill -9 "$ZN_DISPATCHER_PID"; sleep 20 ;;',
 		'ticket) ( while :; do echo \'{"type":"system"}\'; sleep 0.5; done ) & hb=$!; ./zn new issue c dispatched-thing --project pickman --desc \'from the fake\' >> "$FAKE_DIR/log" 2>&1; kill $hb; '
@@ -89,7 +96,7 @@ function fakecli.script(cli: string): string
 			.. " ;;",
 		"push) echo note > notes.txt; git add notes.txt; "
 			.. commit
-			.. ' note; git push -q origin HEAD:main 2>> "$FAKE_DIR/log"; echo "push=$?" >> "$FAKE_DIR/log"; gh pr merge 7 --squash 2>> "$FAKE_DIR/log"; echo "merge=$?" >> "$FAKE_DIR/log"; '
+			.. ' note; sleep ${FAKE_DELAY:-0}; git push -q origin HEAD:main 2>> "$FAKE_DIR/log"; echo "push=$?" >> "$FAKE_DIR/log"; sleep ${FAKE_DELAY:-0}; gh pr merge 7 --squash 2>> "$FAKE_DIR/log"; echo "merge=$?" >> "$FAKE_DIR/log"; '
 			.. ok
 			.. " ;;",
 		-- past the wrapper with the real git: the tripwire's to catch
@@ -155,7 +162,7 @@ function fakecli.new(name: string, seed: { [string]: string }): Harness
 		table.concat({
 			"#!/bin/sh",
 			'echo "realgh $*" >> "$FAKE_DIR/log"',
-			-- `api …/commits/<sha>/pulls` prints <fakes>/pulls-<sha>.json, else [] (the watermark's PR rule)
+			-- `api …/commits/<sha>/pulls` prints <fakes>/pulls-<sha>.json, else [] (a pull request merged into main)
 			'if [ "$1" = api ]; then sha=$(printf "%s" "$2" | sed -n "s#.*/commits/\\([0-9a-f]*\\)/pulls#\\1#p"); cat "$FAKE_DIR/pulls-$sha.json" 2>/dev/null || echo "[]"; exit 0; fi',
 			-- `pr view <n> --json mergeCommit` prints what gh prints: the squash commit `pr merge` made, or null (not merged)
 			'if [ "$1" = pr ] && [ "$2" = view ] && [ "$5" = mergeCommit ] && [ "$#" = 5 ]; then if [ -f "$FAKE_DIR/mergecommit-$3" ]; then echo "{\\"mergeCommit\\":{\\"oid\\":\\"$(cat "$FAKE_DIR/mergecommit-$3")\\"}}"; else echo "{\\"mergeCommit\\":null}"; fi; exit 0; fi',
@@ -194,9 +201,6 @@ function fakecli.new(name: string, seed: { [string]: string }): Harness
 	local token = `{f.base}/agent-token`
 	fs.writeFile(token, "fake-agent-token\n")
 	local h = { f = f, bin = bin, fakes = fakes, token = token }
-	-- the user's first vet: no run trusts a missing watermark (review 003 F2)
-	local vet = fakecli.zn(h, { "dispatch", "vet" })
-	assert(vet.ok, `dispatch vet failed in the fixture: {vet.stdout}{vet.stderr}`)
 	fakecli.clear(h)
 	return h
 end
@@ -299,8 +303,6 @@ function fakecli.zn(h: Harness, args: { string }, extra: { [string]: string }?):
 		FAKE_DIR = h.fakes,
 		PATH = `{h.bin}:{process.env.PATH}`,
 		ZN_AGENT_TOKEN_FILE = h.token,
-		-- the watermark lives outside the repository; in a spec, in the fixture's own folder (the jail closes $HOME)
-		ZN_WATERMARK_DIR = `{h.f.base}/watermark`,
 		GH_TOKEN = "the-users-token",
 	}
 	local more: { [string]: string } = extra or {}
@@ -319,13 +321,54 @@ function fakecli.state(h: Harness, id: string, sub: string?): any
 	return serde.decode("json", fs.readFile(`{dir}/state.json`))
 end
 
--- The rows of an issue's spend.md on origin/main, or nil.
+-- The rows of an issue's spend.md on the dispatcher's branch. `./zn spend` commits there and pushes nothing, so the
+-- row is not on origin/main until that branch lands.
 function fakecli.rows(h: Harness, id: string): { ledger.Row }?
-	local r = fixture.exec(h.f.origin, "git", { "show", `main:pickman/.tracker/issues/{id}/spend.md` })
-	if not r.ok then
+	local wt = fixture.physical(`{h.f.main}/.worktree/zn-dispatch`)
+	if not wt then
 		return nil
 	end
-	return (ledger.parse(r.stdout .. "\n") :: ledger.Ledger).rows
+	local dir = `pickman/.tracker/issues/{id}`
+	local rows: { ledger.Row } = {}
+	local function take(path: string)
+		local r = fixture.exec(wt, "git", { "show", `HEAD:{path}` })
+		if not r.ok then
+			return
+		end
+		if string.sub(path, -4) == ".tsv" then
+			local parsed = buffer.parseTsv(r.stdout .. "\n")
+			if parsed then
+				for _, row in parsed do
+					table.insert(rows, row)
+				end
+			end
+			return
+		end
+		local parsed = ledger.parse(r.stdout .. "\n")
+		if parsed then
+			for _, row in parsed.rows do
+				table.insert(rows, row)
+			end
+		end
+	end
+	take(`{dir}/spend.md`)
+	local listed = fixture.exec(wt, "git", { "ls-tree", "-r", "--name-only", "HEAD", "--", `{dir}/spend.d` })
+	if listed.ok then
+		local files: { string } = {}
+		for file in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
+			if string.sub(file, -4) == ".tsv" or string.sub(file, -3) == ".md" then
+				table.insert(files, file)
+			end
+		end
+		table.sort(files)
+		for _, file in files do
+			take(file)
+		end
+	end
+	if #rows == 0 then
+		return nil
+	end
+	return rows
 end
 
 return fakecli

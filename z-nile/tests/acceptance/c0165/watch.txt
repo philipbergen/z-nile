@@ -1,0 +1,12 @@
+z-nile/affected.luau
+z-nile/check.sh
+z-nile/lib/context.luau
+z-nile/lib/select.luau
+z-nile/specs.luau
+z-nile/tests/acceptance/c0165/gatefix.luau
+z-nile/tests/inputs.tsv
+z-nile/tests/lib/cachepaths.luau
+z-nile/tests/lib/fence.luau
+z-nile/tests/lib/fixture.luau
+z-nile/tests/lib/t.luau
+z-nile/tests/run.luau

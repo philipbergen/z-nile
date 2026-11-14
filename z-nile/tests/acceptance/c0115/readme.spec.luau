@@ -140,7 +140,7 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
 		at(pic, 'zraft["z-raft"]', "the picture") -- c0116 override: z-raft is built
 		at(pic, 'dispatcher["dispatcher: ./zn dispatch"]', "the picture") -- c0117 override: the dispatcher is built
 		at(pic, 'models[".models.toml: the model and CLI per step"]', "the picture") -- c0117 override
-		at(pic, "c0118, planned", "the picture")
+		at(pic, 'board["board: ./zn board, a tab per project"]', "the picture") -- c0118 override: the board is built
 	end)
 
 	it("a short account of the five parts follows the picture", function()

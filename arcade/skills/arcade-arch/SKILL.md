@@ -9,7 +9,7 @@ description: Code structure rules for the arcade library (the code every place s
 The arcade library is a project of its own, in its home `arcade/`: every path in this skill is relative to `arcade/`, where its specs and `check.sh` files run (`arcade/src/shared/Logic/...` in the repository). Its design is `arcade/.tracker/architecture.md` and binding; its features and their dependencies are listed there too (a ```` ```deps ```` block, when it has one). It has no game of its own: its `default.project.json` builds the library alone as a place (a game maps it into its own place: `ReplicatedStorage.Arcade` = `../arcade/src/shared` and `ServerStorage.Arcade` = `../arcade/src/server`, c0185).
 
 ## The rules are pickman's, with these changes
-Read `pickman/skills/pickman-arch/SKILL.md` first, and its lessons (`./zn lessons --skill pickman-arch --full`). Its Rules 1 to 8 and Design checklist are the library's too, as written (`--!strict`, pure Logic, thin adapters, a feature is a directory with an `init.luau`, string-literal requires, declared dependencies, types), with the changes below.
+Read `pickman/skills/pickman-arch/SKILL.md` first. Its Rules 1 to 8 and Design checklist are the library's too, as written (`--!strict`, pure Logic, thin adapters, a feature is a directory with an `init.luau`, string-literal requires, declared dependencies, types), with the changes below.
 
 ## Layout
 | path | Roblox location | contains |
@@ -34,7 +34,7 @@ Pickman's checklist, answered for the library:
 - **Touched modules**: the exact paths, used for spend attribution and for choosing affected tests.
 
 ## Lessons
-Before you start, read this skill's lessons: `./zn lessons --skill arcade-arch --full`. Each is a mistake made before, with the question that catches it.
+Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
 
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.

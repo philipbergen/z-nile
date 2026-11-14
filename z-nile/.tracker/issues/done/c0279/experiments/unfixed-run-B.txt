@@ -1,0 +1,6 @@
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: a quota fallthrough lands one review, numbered once; the failed attempt's file is moved aside; another issue's file is never this one's
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:489: dispatch: zz-review c0010 on claude (claude-cli, claude-opus-5-5, max_tokens 5000)
+dispatch: zz-review on claude: stalled (no output for 2 s), 0 tokens
+
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: dispatch stop kills the running step's group, and retry reruns the same step
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:691: expected "stopped", got "stalled"

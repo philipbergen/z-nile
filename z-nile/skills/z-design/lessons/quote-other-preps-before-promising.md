@@ -21,3 +21,7 @@ d0149 design review 001 F1, F9: c0155's in-flight `narrowed.spec` runs f0110's b
 **Also:** f0148 design review 002 F1: the Sessions.made and Starts contracts with f0145 lived only in messages; with no order, whichever landed second turned the other's specs red or dropped the continue offer. The order was fixed (f0148 first) and f0145's lead records it when its prep resumes.
 
 c0180 design review 002 F1: c0180's Problem said the user's gate placement was "folded into c0165", and no document of c0165 held it (c0165 still built the opposite). A `Decided with the user` line that names another issue as its builder is checked against that issue's documents in every round, and an owner that can't be reached goes to the user at once.
+
+c0264 design review 004 F1: a README label for another prepared item is a promise to that prep (relabel me when you land) that its design never makes; name the item without a label instead, or put the step in its own design.
+
+c0264 design review 006 F1: a search for who else edits a shared document read each open branch's copy of the file; three preps planned their README edits in patches, specs and check.sh files, and the step that replaced a whole section would have undone or been red against each. Read every open prep's plans (patches, specs, check.sh), and make the step a three-way merge.

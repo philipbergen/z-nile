@@ -24,6 +24,8 @@ local TOOLING: { [string]: boolean } = {
 	["z-nile/tests/run"] = true,
 	["pickman/tests/run"] = true,
 	["z-nile/affected"] = true,
+	["z-nile/watch-check"] = true,
+	["z-nile/record"] = true,
 	["z-nile/roots"] = true,
 	["scripts/affected"] = true,
 }

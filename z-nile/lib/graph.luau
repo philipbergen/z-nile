@@ -1,5 +1,6 @@
 --!strict
--- Static require graph for the repo. Used by z-nile/affected.luau and tests/meta.
+-- Static require graph for the repo. Used by tests/meta and by watch-bootstrap to resolve requires.
+-- Spec selection does not read it.
 -- Resolves string requires the same way Luau does: "./" and "../" relative to the
 -- requiring file (for init.luau: relative to its directory's parent), "@self/",
 -- and aliases from .luaurc. Non-string requires are reported as "dynamic". Paths are relative to the current
@@ -14,6 +15,12 @@ export type Graph = {
 	deps: { [string]: { string } }, -- file -> resolved repo-relative files it requires
 	unresolved: { { file: string, spec: string } },
 	dynamic: { string }, -- files containing require() with a non-literal argument
+}
+
+export type Unreadable = {
+	instance: string, -- the node's "/"-joined instance path ("" for the tree node)
+	what: string,
+	dollar: boolean?,
 }
 
 export type GameRoot = {
@@ -163,13 +170,42 @@ end
 
 local gameRootsCache: { GameRoot }? = nil
 
--- Every "$path" of a Rojo project and the instance path of the node that maps it, in both of Rojo's forms (a string, or the
--- `optional` string of a table), at any depth, the tree node itself included (instance ""). The one walker of a project's
--- mappings (c0185): gameRoots, placeInputs and the home rule all read them through here.
-local function walkMappings(node: any, prefix: { string }, out: { GameRoot })
+local RESERVED: { [any]: boolean } = {
+	["$className"] = true,
+	["$id"] = true,
+	["$ignoreUnknownInstances"] = true,
+	["$path"] = true,
+	["$properties"] = true,
+	["$attributes"] = true,
+}
+
+local function article(value: any): string
+	return `a {type(value)}`
+end
+
+-- What a "$path" that is neither a string nor {"optional": <string>} is, for the home rule's report (c0246).
+local function describe(value: any): string
+	if type(value) == "table" then
+		local optional = (value :: any).optional
+		if optional ~= nil then
+			return `an optional that is {article(optional)}`
+		end
+		return if (value :: any)[1] ~= nil then "an array" else "a table without an optional string"
+	end
+	return article(value)
+end
+
+-- Every "$path" of a Rojo project and the instance path of the node that maps it, in the two forms it reads (a string, or the
+-- `optional` string of a table), at any depth, the tree node itself included (instance ""). Rojo 7.7.1 also builds a
+-- one-element array, which the reader deliberately does not read: `bad` collects it (graph.unreadable) so the home rule names it.
+-- The one walker of a project's mappings (c0185): gameRoots, placeInputs and the home rule all read them through here.
+local function walkMappings(node: any, prefix: { string }, out: { GameRoot }, bad: { Unreadable }?)
 	local path = node["$path"]
 	if type(path) == "table" and type((path :: any).optional) == "string" then
 		path = (path :: any).optional
+	end
+	if bad and path ~= nil and type(path) ~= "string" then
+		table.insert(bad, { instance = table.concat(prefix, "/"), what = describe(path) })
 	end
 	if type(path) == "string" then
 		-- an absolute path stays absolute (Rojo accepts one; it names nothing of a home)
@@ -179,10 +215,20 @@ local function walkMappings(node: any, prefix: { string }, out: { GameRoot })
 		})
 	end
 	for key, child in node do
-		if string.sub(tostring(key), 1, 1) ~= "$" and type(child) == "table" then
+		if type(child) == "table" and string.sub(tostring(key), 1, 1) == "$" and not RESERVED[key] then
+			if bad then
+				local inst = table.clone(prefix)
+				table.insert(inst, tostring(key))
+				table.insert(bad, {
+					instance = table.concat(inst, "/"),
+					what = "a node Rojo builds although its key starts with $",
+					dollar = true,
+				})
+			end
+		elseif string.sub(tostring(key), 1, 1) ~= "$" and type(child) == "table" then
 			local inst = table.clone(prefix)
 			table.insert(inst, key)
-			walkMappings(child, inst, out)
+			walkMappings(child, inst, out, bad)
 		end
 	end
 end
@@ -195,6 +241,20 @@ function graph.mappings(project: any): { GameRoot }
 		walkMappings((project :: any).tree, {}, out)
 	end
 	return out
+end
+
+-- Every node of a decoded project whose "$path" mappings() skips: a value that is neither a string nor a table with an
+-- `optional` string (c0246), sorted by instance path. Rojo 7.7.1 parses a one-element array of strings as a path too, so
+-- this is a report of what the reader cannot see, never a guess at what Rojo would build.
+function graph.unreadable(project: any): { Unreadable }
+	local bad: { Unreadable } = {}
+	if type(project) == "table" and type((project :: any).tree) == "table" then
+		walkMappings((project :: any).tree, {}, {}, bad)
+	end
+	table.sort(bad, function(a, b)
+		return a.instance < b.instance
+	end)
+	return bad
 end
 
 -- Whether a "$path" written in a project file stays inside the folder of that file once its "." and ".." segments are
@@ -564,7 +624,7 @@ end
 -- `*.project.json` in the home, and every "$path" any of them maps resolved against the home, so `../arcade/src/shared`
 -- from `snake/` is `arcade/src/shared`. `home` is "" for the current folder or "<dir>/". A home with no project file
 -- gets the legacy answer (its src/ and the two project files c0120 named), the conservative one. A project file
--- that is not JSON with a tree is an error naming it (projectsIn): the selection can't be made without it, and the build refuses it too.
+-- that is not JSON with a tree is an error naming it (projectsIn): the selection can't be made without it (Rojo may still build what Lune's decoder refuses, such as a commented file: the home rule's `maps no $path` line is its answer).
 function graph.placeInputs(home: string): { string }
 	local dir = if home == "" then "." else string.sub(home, 1, -2)
 	local found = projectsIn(dir)

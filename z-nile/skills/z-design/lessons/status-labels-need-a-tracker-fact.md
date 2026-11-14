@@ -17,3 +17,9 @@ c0259 design review 005 F1: the scan skipped the Roadmap sub-section and the int
 R0085 review 001 F1: check.sh pinned the labels, not the claims under them; a sentence labelled `exists` ("everything you produce lands by pull request") was false, since captures and claims are pushed without one.
 
 **How to apply:** define each state by a tracker fact (done, `design: ready`, draft), name the issue in every label, pin which issue each label belongs to by its position in the reviewed text (an ordered list in check.sh) pin only what the executor may not change, read the state words from the delivered file and judge them against the tracker, scan every part of the section where a label could appear (exempt only text pinned word for word), and run the check on a README that follows a simulated tracker change, put the exact vocabulary and the truth check in check.sh (which reads the live tracker), and keep only the shape (every section labelled, every row ends in a defined state) in the promoted spec.
+
+c0264 design review 001 F1: a part of a document that carries no labels and no checked words (a diagram) escapes both the label truth check and the vocabulary check; give it a check of its own (the words it must show), or an outcome that names it ("the diagram gains the new tickets") stays unchecked.
+
+c0264 design review 002 F1: for a diagram, check the edges that carry the rule, with fixed node ids, not only its words: words floated into a node pass a word check while the flow they name is gone.
+
+c0264 design review 003 F1: a diagram that carries the rule is pinned word for word (a sequestered copy diffed, like the legend): a word or edge check is beaten by floating the words or commenting the edge out (`%%`).

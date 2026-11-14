@@ -1,11 +1,18 @@
 --!strict
 -- The pure format of spend.md (c0084): nine columns, rows only appended. A tenth column, the model id, appears only
--- when some row records one (c0117): a file with no model row keeps the nine-column header.
+-- when some row records one (c0117): a file with no model row keeps the nine-column header. A measured row (the tool
+-- wrote it) adds wall, cpu, ai and test seconds. An old 7-, 9- or 10-cell file still parses; its minutes are reported
+-- time, kept apart from the measured cells. `unmeasured` in a measured cell means the tool looked and found nothing.
 local ledger = {}
 
 ledger.PHASES = { "capture", "prep", "design-review", "build", "code-review", "deliver" }
+-- Measured rows also use these. They are not part of the lifecycle list the board and the old reports walk.
+ledger.EXTRA = { "test", "other" }
 local IS: { [string]: boolean } = {}
 for _, p in ledger.PHASES do
+	IS[p] = true
+end
+for _, p in ledger.EXTRA do
 	IS[p] = true
 end
 
@@ -19,6 +26,12 @@ export type Row = {
 	phase: string,
 	tokens: number?,
 	model: string?,
+	wall: number?,
+	cpu: number?,
+	ai: number?,
+	test: number?,
+	-- comma-separated cell names whose text was the word unmeasured (ai, tokens, wall, cpu, test)
+	unmeasured: string?,
 }
 export type Totals = { added: number, removed: number, minutes: number, records: number, tokens: number }
 export type Ledger = { id: string, title: string, rows: { Row } }
@@ -28,6 +41,8 @@ ledger.HEADER = "| # | when | commit | +lines | -lines | minutes | attribution |
 -- the header once any row records the model that spent its tokens (c0117)
 ledger.HEADER_MODEL = "| # | when | commit | +lines | -lines | minutes | attribution | phase | tokens | model |\n"
 	.. "|---|---|---|---|---|---|---|---|---|---|\n"
+ledger.HEADER_MEASURED = "| # | when | commit | +lines | -lines | minutes | attribution | phase | tokens | model | wall | cpu | ai | test |\n"
+	.. "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
 
 -- A model id as spend.md stores it: letters, digits, dots, dashes and underscores (no cell separator or space).
 function ledger.isModel(s: string): boolean
@@ -90,11 +105,14 @@ function ledger.parse(text: string): (Ledger?, string?)
 		for cell in string.gmatch(string.sub(line, 2, -2) .. "|", "([^|]*)|") do
 			table.insert(c, trim(cell))
 		end
-		if #c ~= 7 and #c ~= 9 and #c ~= 10 then
-			return nil, `not a spend row (7, 9 or 10 cells): {line}`
+		if #c ~= 7 and #c ~= 9 and #c ~= 10 and #c ~= 14 then
+			return nil, `not a spend row (7, 9, 10 or 14 cells): {line}`
 		end
 		local n, added, removed = count(c[1]), count(c[4]), count(c[5])
 		local minutes = if string.match(c[6], "^%d+%.?%d*$") then tonumber(c[6]) else nil
+		if not minutes and #c == 14 and c[6] == "" then
+			minutes = 0
+		end
 		if not n or not added or not removed or not minutes then
 			return nil, `not a spend row (numbers): {line}`
 		end
@@ -106,18 +124,59 @@ function ledger.parse(text: string): (Ledger?, string?)
 			return nil, `unknown phase {phase}: {line}`
 		end
 		local tokens: number? = nil
+		local flags: { string } = {}
 		if #c >= 9 and c[9] ~= "" then
-			tokens = count(c[9])
-			if not tokens then
-				return nil, `not a spend row (tokens): {line}`
+			if c[9] == "unmeasured" then
+				table.insert(flags, "tokens")
+			else
+				tokens = count(c[9])
+				if not tokens then
+					return nil, `not a spend row (tokens): {line}`
+				end
 			end
 		end
 		local model: string? = nil
-		if #c == 10 and c[10] ~= "" then
+		if (#c == 10 or #c == 14) and c[10] ~= "" then
 			if not ledger.isModel(c[10]) then
 				return nil, `not a spend row (model): {line}`
 			end
 			model = c[10]
+		end
+		local wall: number? = nil
+		local cpu: number? = nil
+		local ai: number? = nil
+		local test: number? = nil
+		if #c == 14 then
+			local function seconds(cell: string, name: string): (number?, string?)
+				if cell == "" then
+					return nil, nil
+				end
+				if cell == "unmeasured" then
+					table.insert(flags, name)
+					return nil, nil
+				end
+				if not string.match(cell, "^%d+%.?%d*$") then
+					return nil, `not a spend row ({name}): {line}`
+				end
+				return tonumber(cell), nil
+			end
+			local err: string? = nil
+			wall, err = seconds(c[11], "wall")
+			if err then
+				return nil, err
+			end
+			cpu, err = seconds(c[12], "cpu")
+			if err then
+				return nil, err
+			end
+			ai, err = seconds(c[13], "ai")
+			if err then
+				return nil, err
+			end
+			test, err = seconds(c[14], "test")
+			if err then
+				return nil, err
+			end
 		end
 		table.insert(out.rows, {
 			when = c[2],
@@ -129,9 +188,69 @@ function ledger.parse(text: string): (Ledger?, string?)
 			phase = phase,
 			tokens = tokens,
 			model = model,
+			wall = wall,
+			cpu = cpu,
+			ai = ai,
+			test = test,
+			unmeasured = if #flags > 0 then table.concat(flags, ",") else nil,
 		})
 	end
 	return out
+end
+
+local function hasFlag(r: Row, name: string): boolean
+	return r.unmeasured ~= nil and string.find(`,{r.unmeasured},`, `,{name},`, 1, true) ~= nil
+end
+
+local function measuredRow(r: Row): boolean
+	return r.wall ~= nil or r.cpu ~= nil or r.ai ~= nil or r.test ~= nil or r.unmeasured ~= nil
+end
+
+export type Cost = {
+	reported: number,
+	wall: number,
+	cpu: number,
+	ai: number,
+	test: number,
+	tokens: number,
+	n: number,
+	aiOpen: boolean,
+	tokensOpen: boolean,
+}
+
+-- Reported minutes are the typed ones (a row the tool measured does not add its minutes here). Wall, cpu, ai and
+-- test are the measured seconds. A cell the tool could not read sets the matching *Open flag and adds nothing.
+function ledger.cost(rows: { Row }): Cost
+	local c: Cost = {
+		reported = 0,
+		wall = 0,
+		cpu = 0,
+		ai = 0,
+		test = 0,
+		tokens = 0,
+		n = #rows,
+		aiOpen = false,
+		tokensOpen = false,
+	}
+	local rep = 0
+	for _, r in rows do
+		if not measuredRow(r) then
+			rep += tenths(r.minutes)
+		end
+		c.wall += r.wall or 0
+		c.cpu += r.cpu or 0
+		c.ai += r.ai or 0
+		c.test += r.test or 0
+		c.tokens += r.tokens or 0
+		if hasFlag(r, "ai") then
+			c.aiOpen = true
+		end
+		if hasFlag(r, "tokens") then
+			c.tokensOpen = true
+		end
+	end
+	c.reported = rep / 10
+	return c
 end
 
 function ledger.sum(rows: { Row }): Totals
@@ -153,6 +272,9 @@ function ledger.byPhase(rows: { Row }): { [string]: Totals }
 		groups[p] = {}
 	end
 	for _, r in rows do
+		if not groups[r.phase] then
+			groups[r.phase] = {}
+		end
 		table.insert(groups[r.phase], r)
 	end
 	local out: { [string]: Totals } = {}
@@ -168,32 +290,65 @@ local function clean(s: string): string
 	end)))
 end
 
+local function secondsCell(r: Row, name: string, n: number?): string
+	if hasFlag(r, name) then
+		return "unmeasured"
+	end
+	if n == nil then
+		return ""
+	end
+	return string.format("%.3f", n)
+end
+
+local function tokensCell(r: Row): string
+	if hasFlag(r, "tokens") then
+		return "unmeasured"
+	end
+	return if r.tokens then tostring(r.tokens) else ""
+end
+
 function ledger.render(id: string, title: string, rows: { Row }): string
 	local withModel = false
+	local withMeasured = false
 	for _, r in rows do
 		if r.model then
 			withModel = true
 		end
+		if measuredRow(r) then
+			withMeasured = true
+		end
 	end
-	local header = if withModel then ledger.HEADER_MODEL else ledger.HEADER
+	local header = if withMeasured
+		then ledger.HEADER_MEASURED
+		elseif withModel then ledger.HEADER_MODEL
+		else ledger.HEADER
 	local lines = { `# Spend: {id} {title}`, "", (string.gsub(header, "\n$", "")) }
 	for i, r in rows do
-		table.insert(
-			lines,
-			string.format(
-				"| %d | %s | %s | %d | %d | %.1f | %s | %s | %s |" .. (if withModel then " %s |" else "%s"),
-				i,
-				r.when,
-				clean(r.subject),
-				r.added,
-				r.removed,
-				tenths(r.minutes) / 10,
-				clean(r.how),
-				r.phase,
-				if r.tokens then tostring(r.tokens) else "",
-				if withModel then r.model or "" else ""
-			)
+		local base = string.format(
+			"| %d | %s | %s | %d | %d | %.1f | %s | %s | %s |",
+			i,
+			r.when,
+			clean(r.subject),
+			r.added,
+			r.removed,
+			tenths(r.minutes) / 10,
+			clean(r.how),
+			r.phase,
+			tokensCell(r)
 		)
+		if withMeasured then
+			base ..= string.format(
+				" %s | %s | %s | %s | %s |",
+				r.model or "",
+				secondsCell(r, "wall", r.wall),
+				secondsCell(r, "cpu", r.cpu),
+				secondsCell(r, "ai", r.ai),
+				secondsCell(r, "test", r.test)
+			)
+		elseif withModel then
+			base ..= ` {r.model or ""} |`
+		end
+		table.insert(lines, base)
 	end
 	local t = ledger.sum(rows)
 	table.insert(lines, "")
@@ -254,6 +409,11 @@ local function same(a: Row, b: Row): boolean
 		and a.phase == b.phase
 		and a.tokens == b.tokens
 		and a.model == b.model
+		and a.wall == b.wall
+		and a.cpu == b.cpu
+		and a.ai == b.ai
+		and a.test == b.test
+		and a.unmeasured == b.unmeasured
 end
 
 -- True when every row of `prefix` is field-equal to the same position in `rows` (minutes in tenths,

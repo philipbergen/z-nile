@@ -55,7 +55,7 @@ function fence.homes(): { string }?
 	end
 	return if #out > 0 then out else nil
 end
-local DEFAULT_WAIT_SECONDS = 240 -- under the Stop hook's 300 s budget
+local DEFAULT_WAIT_SECONDS = 240
 local UNOWNED_SECONDS = 2
 local FIXTURE_EMAIL = "@example.invalid" -- every fixture commits as <name>@example.invalid
 -- inherited repository overrides that would point git (and so every fixture) at another repository
@@ -288,7 +288,8 @@ end
 
 local function takeLock(lock: string)
 	local limit = tonumber(process.env.PICKMAN_TEST_LOCK_WAIT or "") or DEFAULT_WAIT_SECONDS
-	local waited, unowned, said = 0, 0, false
+	local started = os.time()
+	local unowned, said = 0, false
 	-- this process's own facts, read once: they don't change while it waits
 	local me = myPid()
 	local myId = fence.startOf(me)
@@ -298,7 +299,7 @@ local function takeLock(lock: string)
 		takeOverIfStale(lock, unowned, me, myId)
 		if fs.isDir(lock) then
 			local holder = if #pids > 0 then table.concat(pids, ", ") else "starting"
-			if waited >= limit then
+			if os.time() - started >= limit then
 				stdio.ewrite(
 					`another test run (pid {holder}) is using this checkout's fixtures ({lock}); gave up after {limit}s\n`
 				)
@@ -309,7 +310,6 @@ local function takeLock(lock: string)
 				said = true
 			end
 			task.wait(0.1)
-			waited += 0.1
 		end
 	end
 	if myId then
@@ -763,6 +763,55 @@ local REAPER = table.concat({
 }, " ")
 fence.REAPER = REAPER
 
+-- Every concurrent runner on this machine, in any checkout, shares these eight worker lanes. The guard creates their
+-- files before entering the jail; workers only read and flock them, so the kernel releases a lane when its holder dies.
+fence.WORKER_LANES = 8
+fence.WORKER_LANE = table.concat({
+	"use Fcntl qw(LOCK_EX LOCK_NB);",
+	'my $dir = shift @ARGV; die "worker lane: missing directory or command\n" unless defined $dir && @ARGV;',
+	"while (1) {",
+	"for my $n (1 .. " .. tostring(fence.WORKER_LANES) .. ") {",
+	'open(my $fh, "<", "$dir/$n") or die "worker lane $dir/$n: $!\n";',
+	"next unless flock($fh, LOCK_EX | LOCK_NB);",
+	'my $pid = fork; die "fork: $!\n" unless defined $pid;',
+	"if ($pid == 0) { exec { $ARGV[0] } @ARGV or exit 127 }",
+	"waitpid($pid, 0); my $st = $?; exit($st & 127 ? 128 + ($st & 127) : $st >> 8);",
+	"}",
+	"select(undef, undef, undef, 0.05);",
+	"}",
+}, " ")
+
+local function workerLanes(): string
+	local id = process.exec("id", { "-u" })
+	if not id.ok or string.match(trim(id.stdout), "^%d+$") == nil then
+		stdio.ewrite(`tests/run: cannot read this user's id for the shared worker lanes: {id.stderr}\n`)
+		process.exit(1)
+	end
+	local dir =
+		`{if process.os == "macos" then "/private/tmp" else "/tmp"}/pickman-spec-lanes-{trim(id.stdout)}`
+	if process.exec("test", { "-L", dir }).ok or fs.isFile(dir) then
+		stdio.ewrite(`tests/run: {dir} is not a plain folder; refusing to use the shared worker lanes\n`)
+		process.exit(1)
+	end
+	fs.writeDir(dir)
+	local mode = process.exec("chmod", { "700", dir })
+	if not mode.ok then
+		stdio.ewrite(`tests/run: cannot protect {dir}: {mode.stderr}\n`)
+		process.exit(1)
+	end
+	for n = 1, fence.WORKER_LANES do
+		local file = `{dir}/{n}`
+		if process.exec("test", { "-L", file }).ok or fs.isDir(file) then
+			stdio.ewrite(`tests/run: {file} is not a plain file; refusing to use the shared worker lanes\n`)
+			process.exit(1)
+		end
+		if not fs.isFile(file) then
+			fs.writeFile(file, "")
+		end
+	end
+	return dir
+end
+
 -- The CPU-time limit, in seconds, of every process of a spec run (`ulimit -t`, c0191): inherited by each worker and each
 -- spec's children, and kept after one is orphaned. A limit the caller already has stays when it is lower (it cannot be
 -- raised again), so a run under `./zn run --cpu 100` or the engine's 1800 s gets the smaller. PICKMAN_SPEC_CPU sets it; unset or empty is 1200; anything but a
@@ -844,6 +893,7 @@ function fence.enter()
 		process.exit(1)
 	end
 	local cpuLimit = fence.specCpu() -- a bad value refuses here, before anything is made or locked
+	process.env.PICKMAN_WORKER_LANES = workerLanes()
 	-- decide the jail first: a run that must refuse does so before it takes the lock
 	-- the run's own temp folder, outside the checkout (a spec's `mktemp -d` must land outside .cache) and fresh,
 	-- so nothing outside the jail runs from it; removed when the run ends

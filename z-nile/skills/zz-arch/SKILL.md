@@ -39,7 +39,7 @@ A Lune entry the gate runs, and so an agent may start bare, joins `TOOLING` in `
 - **Touched modules**: the exact paths, used for spend attribution and for choosing affected tests.
 
 ## Lessons
-Before you start, read this skill's lessons: `./zn lessons --skill zz-arch --full`. Each is a mistake made before, with the question that catches it.
+Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
 
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.

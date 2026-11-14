@@ -15,10 +15,14 @@
 local adapters = require("./adapters")
 local audit = require("./audit")
 local broker = require("./broker")
+local buffer = require("./buffer")
+local costrow = require("./costrow")
 local cred = require("./credential")
 local dispatch = require("./dispatch")
 local fs = require("@lune/fs")
 local models = require("./models")
+local modelstep = require("./modelstep")
+local openlist = require("./openlist")
 local process = require("@lune/process")
 local projects = require("./projects")
 local raftcheck = require("./raftcheck")
@@ -52,11 +56,21 @@ export type Attempt = {
 	detail: string,
 	tokens: number,
 	minutes: number,
+	wall: number?,
+	cpu: number?,
 }
-export type Row = { id: string, phase: string, tokens: number, model: string, minutes: number, note: string }
+export type Row = {
+	id: string,
+	phase: string,
+	tokens: number,
+	model: string,
+	minutes: number,
+	note: string,
+	wall: number?,
+	cpu: number?,
+}
 export type State = {
 	id: string,
-	watermark: string?, -- the watermark as this item's last run left it (the mirror: review 003 F2)
 	dir: string, -- the folder this state lives in
 	mode: string, -- "chain" or "step"
 	step: string?,
@@ -129,9 +143,6 @@ end
 local guard: { origin: broker.Origin?, config: string?, mark: string?, fresh: string? } = {}
 
 local function save(st: State)
-	if guard.mark then
-		st.watermark = guard.mark
-	end
 	fs.writeDir(st.dir)
 	sh.writeReplacing(`{st.dir}/state.json`, serde.encode("json", st, true) .. "\n")
 end
@@ -288,8 +299,7 @@ end
 -- The commit settings, caps and models are read at: main, fetched once per run (review 002 F5).
 local pinned: string? = nil
 
--- origin's fetch URL for a process that has pinned none (a nested step, a dry run), set below once the watermark's
--- helpers exist
+-- origin's fetch URL for a process that has pinned none (a nested step, a dry run), set below once pinOrigin exists
 local unpinnedOrigin: () -> string
 
 local function walk(dir: string): { models.Layer }
@@ -317,20 +327,23 @@ end
 
 -- The walk of `skill` for an item: an issue's own folder; a raft's members, strongest per CLI, ordered by the
 -- raft's own walk; z-ticket's, its project's home.
-function dispatcher.resolve(skill: string, id: string, project: string?): models.Resolved
+function dispatcher.resolve(skill: string, id: string, project: string?, mode: string?): models.Resolved
 	if id == "" then
 		local reg = projects.load(".")
 		local p = if project then projects.named(reg, project) else reg.projects[1]
 		if not p then
 			error(`no project {tostring(project)} in {projects.FILE}`, 0)
 		end
-		return models.resolve(walk((p :: projects.Project).home), skill)
+		return models.resolve(walk((p :: projects.Project).home), skill, mode)
 	end
 	local item = store.get(id)
 	if item.kind == "issue" then
-		return models.resolve(walk(item.dir), skill)
+		return models.resolve(walk(item.dir), skill, mode)
 	end
-	local own = models.resolve(walk(item.dir), skill)
+	local own = models.resolve(walk(item.dir), skill, mode)
+	if own.fromRoles then
+		return own
+	end
 	local members: { models.Resolved } = {}
 	for _, m in store.members(id) do
 		table.insert(members, models.resolve(walk(m.dir), skill))
@@ -359,11 +372,80 @@ end
 -- pending for the next legal point (a run's rows after its merge). Minutes (the user's G13, 2026-10-25, "Dispatcher row
 -- 0 min", read with "Yes, reviewers keep minutes"): an author step's rows record 0, since its skill records its own;
 -- a review's rows record the attempt's wall minutes, since no skill records a reviewer's. A code or stream review's
--- spend is one printed `record:` line for the author's `./zn commit` (it rides with the review file): the attempts'
--- tokens and minutes summed, under the model of the attempt that did the review (the last that spent tokens).
-local function roundTenth(x: number): number
-	return math.floor(x * 10 + 0.5) / 10
+-- spend is one printed `record:` line for the author's `./zn commit`, and one line in the author's measure
+-- buffer (the author's commit folds it). Tokens are the attempts summed, under the model of the attempt that
+-- did the review (the last that spent tokens). The dispatch branch is not given this row.
+local function rowLine(root: string, row: Row): buffer.Line
+	local branch, head = costrow.branchOf(root)
+	local flags: { string } = {}
+	if not row.wall then
+		table.insert(flags, "wall")
+		table.insert(flags, "ai")
+	end
+	if not row.cpu then
+		table.insert(flags, "cpu")
+	end
+	if row.tokens == 0 then
+		table.insert(flags, "tokens")
+	end
+	return {
+		ms = 0,
+		kind = "row",
+		phase = row.phase,
+		subject = row.note,
+		wall = row.wall,
+		cpu = row.cpu,
+		ai = row.wall,
+		tokens = row.tokens,
+		model = if row.model ~= "" then row.model else nil,
+		unmeasured = if #flags > 0 then table.concat(flags, ",") else nil,
+		id = row.id,
+		branch = branch,
+		head = head,
+	}
 end
+
+-- Folds the measured row into the dispatcher's branch and commits that file alone.
+local function publishMeasured(ctx: Ctx, row: Row): (boolean, string, string)
+	local wt = worktree(ctx, "zn-dispatch")
+	zn(wt, { "sync" }, true)
+	local dir = costrow.locate(wt, row.id)
+	if not dir then
+		return false, "", `no folder for {row.id}`
+	end
+	if not costrow.append(wt, rowLine(wt, row)) then
+		return false, "", "could not buffer the row"
+	end
+	local homes: { [string]: string } = {}
+	homes[row.id] = dir
+	local planned = costrow.plan(wt, homes, nil, false)
+	local paths = costrow.writeFiles(planned)
+	if #paths == 0 then
+		return false, "", "no row"
+	end
+	local out = paths[1]
+	local added = git(wt, { "add", "--", out })
+	if not added then
+		costrow.restore(planned)
+		return false, out, "could not stage the row"
+	end
+	local committed, cerr = git(wt, {
+		"commit",
+		"-q",
+		"--only",
+		"-m",
+		`tracker: spend {row.id} {row.phase}`,
+		"--",
+		out,
+	})
+	if not committed then
+		costrow.restore(planned)
+		return false, out, cerr
+	end
+	costrow.writeBuffer(wt, planned)
+	return true, out, ""
+end
+
 local function record(
 	ctx: Ctx,
 	st: State,
@@ -372,23 +454,59 @@ local function record(
 	attempts: { Attempt },
 	note: string,
 	reviewer: boolean,
-	stream: boolean
+	stream: boolean,
+	cwd: string
 )
 	if phase == "code-review" then
-		local tokens, minutes, model = 0, 0, nil :: string?
+		local model = nil :: string?
+		local tokens = 0
+		local wall, cpu = 0, 0
+		local sawWall, sawCpu = false, false
 		for _, a in attempts do
+			tokens += a.tokens
 			if a.tokens > 0 then
-				tokens += a.tokens
-				minutes += a.minutes
 				model = a.model
+			end
+			if a.wall then
+				wall += a.wall
+				sawWall = true
+			end
+			if a.cpu then
+				cpu += a.cpu
+				sawCpu = true
 			end
 		end
 		if model then
 			print(
-				`record: ./zn commit -m "{id}: {note}" --phase code-review --time {roundTenth(minutes)} --tokens {tokens} --model {model}{if stream
+				`record: ./zn commit -m "{id}: {note}" --phase code-review --model {model}{if stream
 					then ` --issue {id}`
 					else ""}`
 			)
+			local flags: { string } = {}
+			if not sawWall then
+				table.insert(flags, "wall")
+				table.insert(flags, "ai")
+			end
+			if not sawCpu then
+				table.insert(flags, "cpu")
+			end
+			-- In the author's measure buffer. Their commit folds it. The dispatch branch is left alone.
+			local branch, head = costrow.branchOf(cwd)
+			costrow.append(cwd, {
+				ms = 0,
+				kind = "row",
+				phase = phase,
+				subject = note,
+				tokens = tokens,
+				model = model,
+				wall = if sawWall then wall else nil,
+				cpu = if sawCpu then cpu else nil,
+				ai = if sawWall then wall else nil,
+				unmeasured = if #flags > 0 then table.concat(flags, ",") else nil,
+				id = id,
+				branch = branch,
+				head = head,
+			})
 		end
 		return
 	end
@@ -401,27 +519,14 @@ local function record(
 				model = a.model,
 				minutes = if reviewer then a.minutes else 0,
 				note = note,
+				wall = a.wall,
+				cpu = a.cpu,
 			}
 			local origin = ctx.origin(id)
 			if phase == "deliver" or (origin and origin.state ~= "backlog") then
 				table.insert(st.pending, row)
 			else
-				local wt = worktree(ctx, "zn-dispatch")
-				zn(wt, { "sync" }, true)
-				local ok, out, err = zn(wt, {
-					"spend",
-					id,
-					"--phase",
-					phase,
-					"--time",
-					tostring(row.minutes),
-					"--tokens",
-					tostring(a.tokens),
-					"--model",
-					a.model,
-					"--note",
-					note,
-				}, true)
+				local ok, out, err = publishMeasured(ctx, row)
 				if ok then
 					print(`spend: {id} {phase} {a.tokens} tokens {a.model}`)
 				else
@@ -449,22 +554,7 @@ local function flush(ctx: Ctx, st: State)
 				or (row.phase ~= "deliver" and origin.state == "backlog")
 			)
 		if ready then
-			local wt = worktree(ctx, "zn-dispatch")
-			zn(wt, { "sync" }, true)
-			local ok, out, err = zn(wt, {
-				"spend",
-				row.id,
-				"--phase",
-				row.phase,
-				"--time",
-				tostring(row.minutes),
-				"--tokens",
-				tostring(row.tokens),
-				"--model",
-				row.model,
-				"--note",
-				row.note,
-			}, true)
+			local ok, out, err = publishMeasured(ctx, row)
 			if ok then
 				print(`spend: {row.id} {row.phase} {row.tokens} tokens {row.model} (pending, now written)`)
 			else
@@ -499,11 +589,10 @@ local function lastRound(dir: string, prefix: string): (number, string?)
 	return best, name
 end
 
--- What this dispatcher pinned at its start, held in memory for the whole run (review 003 F2, F3): origin's fetch and
--- push URLs and the configuration that resolves them, and the watermark as it last read or wrote it. A step can rewrite
--- the repository's configuration or the watermark file; it can't reach these. Under the user's "Keep same user, accept
--- detection" this detects such a rewrite within a run; between runs only the persisted copies (beside the watermark)
--- and the item's own mirror are checked, which a step could rewrite too.
+-- What this dispatcher pinned at its start, held in memory for this process (review 003 F2, F3): origin's fetch and
+-- push URLs, the configuration that resolves them, and the commit of main the process started from. A step can rewrite
+-- the repository's configuration; it can't reach this memory. A rewrite during the run is detected. Between runs
+-- nothing is remembered: the next process accepts main and origin as git reports them.
 
 local function originConfig(root: string): string
 	local _, out = git(root, { "config", "--get-regexp", "^(remote\\.origin\\.|url\\.)" })
@@ -541,86 +630,12 @@ local function rootsAt(ctx: Ctx, ref: string): { string }?
 	return if reg then projects.roots(reg :: projects.Registry) else nil
 end
 
--- The watermark (the user's "Persisted watermark", 2026-10-21, as framed by "Keep same user, accept detection"): the
--- last commit of main the dispatcher vetted, kept where a well-behaved step never writes, and detected if it changes:
--- `$ZN_WATERMARK_DIR`, else `$XDG_STATE_HOME/zn-dispatch`, else `~/.local/state/zn-dispatch`, then a folder named for the
--- repository's git directory, file `main-seen` (and `origin-url` beside it). A step of the same OS user can write it;
--- within a run the dispatcher compares it with its own copy, across runs with the item's mirror (state.json).
-function dispatcher.watermarkPath(ctx: Ctx): string
-	local base = process.env.ZN_WATERMARK_DIR
-	if not base or base == "" then
-		local state = process.env.XDG_STATE_HOME
-		base = if state and state ~= ""
-			then `{state}/zn-dispatch`
-			else `{process.env.HOME or ""}/.local/state/zn-dispatch`
-	end
-	local _, common = git(ctx.mainRoot(), { "rev-parse", "--path-format=absolute", "--git-common-dir" })
-	local key = string.gsub(common, "[^%w]+", "-")
-	return `{base}/{key}/main-seen`
-end
-
-local function originPath(ctx: Ctx): string
-	return (string.gsub(dispatcher.watermarkPath(ctx), "main%-seen$", "origin-url"))
-end
-
-local function readWatermark(ctx: Ctx): string?
-	local path = dispatcher.watermarkPath(ctx)
-	if not fs.isFile(path) then
-		return nil
-	end
-	local sha = trim(fs.readFile(path))
-	return if string.match(sha, "^%x+$") then sha else nil
-end
-
 local function isAncestor(root: string, a: string, b: string): boolean
 	return process.exec("git", { "merge-base", "--is-ancestor", a, b }, { cwd = root }).ok
 end
 
--- The shared watermark file moves only forward (review 004 F1: every dispatcher of the repository, and `vet`, write it
--- honestly). Under an flock on its folder: `sha` is written when the file is missing, equal, or an ancestor of it; an
--- older `sha` (another dispatcher already wrote a newer main) leaves the file as it is; a file that has diverged from
--- `sha` is refused (why). `force` (the user's `vet`) writes whatever is there.
-function dispatcher.advanceMark(root: string, path: string, sha: string, force: boolean?): string?
-	local dir = string.match(path, "^(.*)/[^/]+$") :: string
-	fs.writeDir(dir)
-	local held: any = nil
-	local waited = 0
-	while not held do
-		held = runner.holdLock(`{dir}/lock`)
-		if not held then
-			if waited > 30 then
-				return "the watermark's lock is held by another dispatcher for 30 s"
-			end
-			waited += task.wait(0.1)
-		end
-	end
-	local current: string? = nil
-	if fs.isFile(path) then
-		local text = trim(fs.readFile(path))
-		current = if string.match(text, "^%x+$") then text else nil
-	end
-	local why: string? = nil
-	if force or not current or current == sha or isAncestor(root, current :: string, sha) then
-		sh.writeReplacing(path, sha .. "\n")
-	elseif not isAncestor(root, sha, current :: string) then
-		why = `the watermark ({current}) and main ({sha}) have diverged: look, then ./zn dispatch vet`
-	end
-	held.stdin:close()
-	return why
-end
-
-local function writeWatermark(ctx: Ctx, sha: string, force: boolean?): string?
-	guard.mark = sha
-	return dispatcher.advanceMark(ctx.mainRoot(), dispatcher.watermarkPath(ctx), sha, force)
-end
-dispatcher.writeWatermark = writeWatermark
-
-local function originText(o: broker.Origin): string
-	return `{o.fetch}\n{o.push}\n`
-end
-
--- With no pinned origin (code review 002 F3: a nested step never runs guardStart), origin is the URL the last vetted
--- run saved beside the watermark, and only while the configuration still resolves to it: never `origin` by name.
+-- A nested step never runs guardStart (code review 002 F3). It reads .models.toml from git's current origin URL.
+-- During a run the tripwire still stops if origin's configuration changes after the run pinned it.
 unpinnedOrigin = function(): string
 	local ctx = ({
 		mainRoot = function(): string
@@ -628,90 +643,57 @@ unpinnedOrigin = function(): string
 		end,
 	} :: any) :: Ctx
 	local origin = pinOrigin(ctx)
-	local saved = originPath(ctx)
-	if not fs.isFile(saved) then
-		error(
-			"no pinned origin to read .models.toml from (no vetted run saved one): ./zn dispatch vet first",
-			0
-		)
-	end
-	if fs.readFile(saved) ~= originText(origin) then
-		error(
-			`origin's URL changed since the last run (it was {trim(fs.readFile(saved))}, now {origin.fetch} / {origin.push}): .models.toml is not read from it`,
-			0
-		)
+	if origin.fetch == "" then
+		error("origin has no fetch URL, so .models.toml is not read from it", 0)
 	end
 	return origin.fetch
 end
 
--- Vets main since the watermark (every run, every step, after every step): each commit, first parent by first parent,
--- must be tracker state by the registry of its parent (trackerstate.checkEach, the broker's own rule), or a pull
--- request's merge into main on GitHub. Returns why not, or nil. Within a run it vets from the run's own copy of the
--- watermark (`guard.mark`), whatever the shared file says (review 004 F1): another dispatcher's honest advance is never
--- a trip, and a step that deletes or rewrites the file is still caught by the commits it pushed. The file is read only
--- when the run has no copy yet; a missing one then is never trusted (review 003 F2): only `./zn dispatch vet` writes it.
+-- During this process, main may only move forward by tracker state or a pull request's merge into main. The first
+-- call remembers the fetched tip in memory and accepts it: a fresh clone, a second machine and a cleaned home folder
+-- all start. A later call in the same process walks the commits since that tip (trackerstate.checkEach, the broker's
+-- own rule). Nothing is written outside the repository. Returns why the run stops, or nil.
 function dispatcher.vetMain(ctx: Ctx): string?
 	local root = ctx.mainRoot()
 	local fresh = freshMain(ctx)
 	if not fresh then
-		return "origin's main could not be fetched to vet it (after retries: the network?); ./zn dispatch retry once it is back"
+		return "origin's main could not be fetched (after retries: the network?); ./zn dispatch retry once it is back"
 	end
-	local from = guard.mark
-	if not from then
-		from = readWatermark(ctx)
-		if not from then
-			return "there is no watermark (none yet, or something removed it): look at main, then ./zn dispatch vet"
-		end
-		guard.mark = from
+	local mark = guard.mark
+	if not mark then
+		guard.mark = fresh
+		return nil
 	end
-	local mark = from :: string
-	if mark ~= fresh then
-		if not isAncestor(root, mark, fresh :: string) then
-			return `origin's main was rewritten: {mark} (the last vetted commit) is no longer in it (look, then ./zn dispatch vet)`
-		end
-		local why = trackerstate.checkEach(
-			function(a: { string }): (boolean, string)
-				return git(root, a)
-			end,
-			mark,
-			fresh :: string,
-			function(ref: string): { string }?
-				return rootsAt(ctx, ref)
-			end,
-			true,
-			ctx.prMerged
-		)
-		if why then
-			return `main has {why}, which the dispatcher did not vet (look, then ./zn dispatch vet)`
-		end
+	if mark == fresh then
+		return nil
 	end
-	if not fs.isFile(dispatcher.watermarkPath(ctx)) then
-		stdio.ewrite("dispatch: the watermark file was gone; writing this run's vetted main again\n")
+	if not isAncestor(root, mark, fresh :: string) then
+		return `origin's main was rewritten during this run: {mark} is no longer in it`
 	end
-	return writeWatermark(ctx, fresh :: string)
+	local why = trackerstate.checkEach(
+		function(a: { string }): (boolean, string)
+			return git(root, a)
+		end,
+		mark,
+		fresh :: string,
+		function(ref: string): { string }?
+			return rootsAt(ctx, ref)
+		end,
+		true,
+		ctx.prMerged
+	)
+	if why then
+		return `main has {why}, which arrived during this run and is not tracker state or a pull request's merge into main`
+	end
+	guard.mark = fresh
+	return nil
 end
 
--- At the start of a top-level run: origin's URLs as the last run left them, the watermark not behind the item's mirror
--- and not gone, then main vetted (review 003 F2, F3). Returns why the run stops, or nil.
-function dispatcher.guardStart(ctx: Ctx, st: State): string?
+-- At the start of a top-level run: sweep leftover refs, pin origin's URLs for this process, and accept main as it is.
+-- Returns why the run stops, or nil.
+function dispatcher.guardStart(ctx: Ctx, _st: State): string?
 	dispatcher.sweepRefs(ctx.mainRoot())
-	local origin = pinOrigin(ctx)
-	local saved = originPath(ctx)
-	if fs.isFile(saved) and fs.readFile(saved) ~= originText(origin) then
-		return `origin's URL changed since the last run (it was {trim(fs.readFile(saved))}, now {origin.fetch} / {origin.push}): look, then ./zn dispatch vet`
-	end
-	local mark = readWatermark(ctx)
-	if st.watermark and not mark then
-		return "the watermark is gone since this item's last run: look, then ./zn dispatch vet"
-	end
-	if
-		st.watermark
-		and mark
-		and mark ~= st.watermark
-		and isAncestor(ctx.mainRoot(), mark :: string, st.watermark :: string)
-	then
-		return `the watermark went back since this item's last run ({st.watermark} to {mark}): look, then ./zn dispatch vet`
-	end
+	pinOrigin(ctx)
 	return dispatcher.vetMain(ctx)
 end
 
@@ -725,9 +707,10 @@ local function snapshot(ctx: Ctx): Snapshot
 	return { head = head, status = status, diff = diff }
 end
 
--- The tripwire, after a step's group is gone: main is vetted since the watermark (every interval, not only the step's:
--- review 002 F4), and the main checkout's tracked and untracked files did not change (its HEAD may only move forward
--- along main, as ./zn fast-forwards it). Returns what tripped it, or nil.
+-- The tripwire, after a step's group is gone: main is judged since the commit this process started from (every
+-- interval, not only the step's: review 002 F4), origin's configuration is the one this run pinned, and the main
+-- checkout's tracked and untracked files did not change (its HEAD may only move forward along main, as ./zn
+-- fast-forwards it). Returns what tripped it, or nil.
 function dispatcher.tripwire(ctx: Ctx, _st: State, before: Snapshot): string?
 	local root = ctx.mainRoot()
 	local after = snapshot(ctx)
@@ -794,7 +777,7 @@ function dispatcher.modelStep(
 ): string
 	local mode = opts["--mode"] and opts["--mode"][1]
 	local project = opts["--project"] and opts["--project"][1]
-	local resolved = dispatcher.resolve(step, id, project)
+	local resolved = dispatcher.resolve(step, id, project, mode)
 	local tries = models.tries(resolved)
 	local stateDir = st.dir
 	local cwd: string
@@ -823,25 +806,14 @@ function dispatcher.modelStep(
 		end
 		promptPath = out
 	end
-	-- a stream review's raft folder (repository-relative) and, from round 2, the previous round's files
+	-- a stream review's raft folder (repository-relative). One round: a second file is refused where the review lands.
 	local streamDir: string? = nil
-	local previous: { string }? = nil
 	if step == "zz-review" and mode == "stream" and id ~= "" then
 		local raftId = store.readFront(store.get(id).doc).raft
 		if not raftId or raftId == "" then
 			error(`{id} has no raft: a stream review lands in its raft's folder`, 0)
 		end
-		local dir = store.get(raftId).dir
-		streamDir = dir
-		local _, lastReview = lastRound(`{cwd}/{dir}`, `stream-review-{id}-`)
-		local _, lastRefute = lastRound(`{cwd}/{dir}`, `stream-refute-{id}-`)
-		if lastReview then
-			local list = { `{dir}/{lastReview}` }
-			if lastRefute then
-				table.insert(list, `{dir}/{lastRefute}`)
-			end
-			previous = list
-		end
+		streamDir = store.get(raftId).dir
 	end
 	local prompt = dispatch.prompt({
 		step = step,
@@ -852,7 +824,6 @@ function dispatcher.modelStep(
 		stateDir = stateDir,
 		promptPath = promptPath,
 		streamWorktree = if streamDir then `{ctx.mainRoot()}/.worktree/ws-{id}` else nil,
-		previous = previous,
 		description = opts["--description"] and opts["--description"][1],
 		project = project,
 	})
@@ -918,7 +889,10 @@ function dispatcher.modelStep(
 		if streamDir then
 			land = { dir = streamDir, prefix = `stream-review-{id}-`, note = "stream-review-" }
 		else
-			local prefix = if mode == "code" then "review-" else "design-review-"
+			local prefix = if mode == "code"
+				then "review-"
+				elseif mode == "final" then "final-review-"
+				else "design-review-"
 			land = { dir = store.get(id).dir, prefix = prefix, note = prefix }
 		end
 	end
@@ -956,7 +930,7 @@ function dispatcher.modelStep(
 			)
 			break
 		end
-		-- main is vetted since the watermark before every step (the user's "Persisted watermark")
+		-- main is judged since the commit this process started from, before every step
 		local unvetted = if serving then dispatcher.vetMain(ctx) else nil
 		if unvetted then
 			outcome = "tripwire"
@@ -997,7 +971,18 @@ function dispatcher.modelStep(
 			end
 			return ok, said
 		end
-		local result = runner.run({
+		local trailPath = `{stateDir}/trail.log`
+		local trail = if fs.isFile(trailPath) then fs.readFile(trailPath) else ""
+		local function noteLine(line: string, tokens: number)
+			-- the adapter already reduced the stream to one short line; write it here, no process per line
+			if trail ~= "" and string.sub(trail, -1) ~= "\n" then
+				trail ..= "\n"
+			end
+			trail ..= line .. "\n"
+			pcall(fs.writeFile, trailPath, trail)
+			pcall(fs.writeFile, `{stateDir}/live-tokens`, tostring(tokens) .. "\n")
+		end
+		local result = modelstep.launch({
 			argv = argv,
 			cwd = cwd,
 			env = env,
@@ -1021,6 +1006,7 @@ function dispatcher.modelStep(
 					broker.serve(brokerDir, brokerToken, push)
 				end
 				else nil,
+			onLine = noteLine,
 		})
 		holdBeat() -- the review still lands and the spend is recorded: beat through it
 		local outcomeNow: string = result.outcome
@@ -1042,6 +1028,8 @@ function dispatcher.modelStep(
 			detail = detail,
 			tokens = result.tokens,
 			minutes = minutesSince(t0),
+			wall = result.wall,
+			cpu = result.cpu,
 		})
 		print(`dispatch: {step} on {spec.cli}: {outcomeNow} ({detail}), {result.tokens} tokens`)
 		outcome = outcomeNow
@@ -1051,7 +1039,8 @@ function dispatcher.modelStep(
 			pcall(fs.removeFile, aside)
 			fs.move(landing, aside)
 		end
-		if outcomeNow ~= "quota" then
+		-- a role's list moves on when the call fails, the CLI is missing, or the quota is gone
+		if outcomeNow ~= "quota" and not (resolved.fromRoles and outcomeNow == "failed") then
 			break
 		end
 	end
@@ -1121,10 +1110,29 @@ function dispatcher.modelStep(
 		local l = land :: Landing
 		if fs.isFile(landing) then
 			local last = lastRound(`{cwd}/{l.dir}`, l.prefix)
-			local name = string.format("%s%03d.md", l.prefix, last + 1)
-			fs.move(landing, `{cwd}/{l.dir}/{name}`)
-			reviewNote = string.format("%s%03d", l.note, last + 1)
-			print(`dispatch: the review is {l.dir}/{name}`)
+			if last >= 1 then
+				-- one round. Historical files stay where they are; a new one is not added.
+				outcome = "failed"
+				pcall(fs.removeFile, landing)
+				local why: Attempt = {
+					step = step :: string,
+					cli = "",
+					runtime = "",
+					model = "",
+					outcome = "failed",
+					detail = `{l.dir} already has {l.prefix}{string.format("%03d", last)}.md: one round, then the author answers it; there is no second round`,
+					tokens = 0,
+					minutes = 0,
+				}
+				table.insert(attempts, why)
+				table.insert(st.history, why)
+				stdio.ewrite(`dispatch: {why.detail}\n`)
+			else
+				local name = string.format("%s%03d.md", l.prefix, last + 1)
+				fs.move(landing, `{cwd}/{l.dir}/{name}`)
+				reviewNote = string.format("%s%03d", l.note, last + 1)
+				print(`dispatch: the review is {l.dir}/{name}`)
+			end
 		else
 			outcome = "failed"
 			local why: Attempt = {
@@ -1152,9 +1160,13 @@ function dispatcher.modelStep(
 			attempts,
 			note,
 			step == "zz-review",
-			mode == "stream"
+			mode == "stream",
+			cwd
 		)
 	end
+	-- a step that refuses before any CLI is tried (no credential) still has to name itself, or the chain
+	-- reads no last step and runs it again
+	st.step = step
 	st.outcome = outcome
 	st.detail = attempts[#attempts] and attempts[#attempts].detail or ""
 	st.tokens = 0
@@ -1651,6 +1663,10 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 			end
 		end
 	end
+	local openHuman: { string } = {}
+	if st.worktree and o and fs.isFile(`{st.worktree}/{o.path}`) then
+		openHuman = openlist.pending(fs.readFile(`{st.worktree}/{o.path}`))
+	end
 	local pr: dispatch.Pr? = nil
 	if o then
 		local branch: string? = nil
@@ -1694,6 +1710,7 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 		localRaft = localRaft,
 		pr = pr,
 		questions = fs.isFile(`{st.dir}/questions.md`),
+		openHuman = openHuman,
 		last = last,
 		uncovered = uncovered,
 		autoMerge = settings.autoMerge,
@@ -1723,6 +1740,8 @@ local function merge(ctx: Ctx, st: State, pr: number, head: string): boolean
 		table.insert(st.merged, pr)
 		save(st)
 		zn(ctx.mainRoot(), { "sync" }, true)
+		-- the net repairs main after the landing; it returns at once and does not decide this merge
+		zn(ctx.mainRoot(), { "watch-kick" }, true)
 	end
 	return r.ok
 end
@@ -1749,21 +1768,21 @@ function dispatcher.afterMerge(ctx: Ctx, number: number, pr: dispatch.Pr?, id: s
 		end
 	end
 	if commit == "" then
-		return `PR #{number}: GitHub names no merge commit for it (a merge queue, a delay, or gh failing), so nothing was compared with the main it was judged against: look at main, then run ./zn dispatch vet and ./zn dispatch retry {id}`
+		return `PR #{number}: GitHub names no merge commit for it (a merge queue, a delay, or gh failing), so nothing was compared with the main it was judged against: look at main, then run ./zn dispatch retry {id}`
 	end
 	if not freshMain(ctx) or not (git(root, { "cat-file", "-e", `{commit}^\{commit\}` })) then
-		return `PR #{number} merged as {commit}, which could not be fetched from origin, so nothing was compared with the main it was judged against: look at main, then run ./zn dispatch vet and ./zn dispatch retry {id}`
+		return `PR #{number} merged as {commit}, which could not be fetched from origin, so nothing was compared with the main it was judged against: look at main, then run ./zn dispatch retry {id}`
 	end
 	local okP, parent = git(root, { "rev-parse", `{commit}^1` })
 	if not okP then
-		return `PR #{number} merged as {commit}, whose parent could not be read: look at main, then run ./zn dispatch vet and ./zn dispatch retry {id}`
+		return `PR #{number} merged as {commit}, whose parent could not be read: look at main, then run ./zn dispatch retry {id}`
 	end
 	if parent == pr.judgedMain then
 		return nil
 	end
 	local okD, names = git(root, { "diff", "--name-only", "--no-renames", pr.judgedMain :: string, parent })
 	if not okD then
-		return `PR #{number} merged as {commit} onto {parent}, not the main it was judged against ({pr.judgedMain}), and the difference could not be read: look at it, then run ./zn dispatch vet and ./zn dispatch retry {id}`
+		return `PR #{number} merged as {commit} onto {parent}, not the main it was judged against ({pr.judgedMain}), and the difference could not be read: look at it, then run ./zn dispatch retry {id}`
 	end
 	local roots = rootsAt(ctx, parent) or {}
 	local mine: { [string]: boolean } = {}
@@ -1774,7 +1793,7 @@ function dispatcher.afterMerge(ctx: Ctx, number: number, pr: dispatch.Pr?, id: s
 	for path in string.gmatch(names, "[^\n]+") do
 		local pid = trackerstate.itemOf(path, roots)
 		if pid and mine[pid :: string] then
-			return `PR #{number} merged as {commit} onto {parent}, not the main it was judged against ({pr.judgedMain}), and main changed {path}, an item the PR carries: look at it, then run ./zn dispatch vet and ./zn dispatch retry {id}`
+			return `PR #{number} merged as {commit} onto {parent}, not the main it was judged against ({pr.judgedMain}), and main changed {path}, an item the PR carries: look at it, then run ./zn dispatch retry {id}`
 		end
 	end
 	return nil
@@ -1948,60 +1967,26 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 	local first = pos[1]
 	if not first then
 		ctx.fail(
-			'usage: ./zn dispatch <id> | new "<description>" | <step> <id> [--mode design|code|raft|stream] | stop|retry|status <id> | vet [--dry-run]'
+			'usage: ./zn dispatch <id> | new "<description>" | <step> <id> [--mode design|code|raft|stream] | stop|retry|status <id>'
 		)
 	end
 	if first == "vet" then
-		-- the user's act after a tripwire stop: lists every commit since the watermark with its verdict, then takes main
-		-- as it is now as vetted (an agent of the same OS user could run this too: zz-rules says it is the user's)
-		local root = ctx.mainRoot()
-		dispatcher.sweepRefs(root)
-		local origin = pinOrigin(ctx)
-		local fresh = freshMain(ctx) or ctx.fail("origin's main could not be fetched")
-		local mark = readWatermark(ctx)
-		if not mark then
-			print(`dispatch: no watermark yet: you take main as it is ({fresh})`)
-		elseif not isAncestor(root, mark :: string, fresh) then
-			print(
-				`dispatch: the last vetted commit {mark} is no longer in main (rewritten): you take main as it is`
-			)
-		else
-			local _, list = git(root, { "rev-list", "--reverse", "--first-parent", `{mark}..{fresh}` })
-			for sha in string.gmatch(list, "%x+") do
-				local _, subject = git(root, { "log", "-1", "--format=%s", sha })
-				local why = trackerstate.checkEach(
-					function(a: { string }): (boolean, string)
-						return git(root, a)
-					end,
-					`{sha}^`,
-					sha,
-					function(ref: string): { string }?
-						return rootsAt(ctx, ref)
-					end,
-					true
-				)
-				local verdict = if not why
-					then "tracker state"
-					elseif ctx.prMerged(sha) then "a pull request's merge into main"
-					else `NOT VETTED, you accept it: {why}`
-				print(`dispatch: {string.sub(sha, 1, 12)} {subject}: {verdict}`)
-			end
-		end
-		if opts["--dry-run"] then
-			print("dispatch: dry run: nothing written")
-			return 0
-		end
-		local why = writeWatermark(ctx, fresh, true)
-		if why then
-			ctx.fail(why)
-		end
-		sh.writeReplacing(originPath(ctx), originText(origin))
-		print(`dispatch: main vetted at {fresh}`)
-		return 0
+		ctx.fail(
+			"dispatch vet is gone: a run accepts main as it is when it starts; ./zn dispatch retry <id> continues an item a tripwire stopped"
+		)
 	elseif first == "status" then
 		local id = pos[2] or ctx.fail("usage: ./zn dispatch status <id>")
 		for _, dir in runsUnder(dirOf(ctx, id)) do
-			print(serde.encode("json", loadAt(id, dir), true))
+			local st = loadAt(id, dir)
+			local trail = if fs.isFile(`{dir}/trail.log`) then fs.readFile(`{dir}/trail.log`) else ""
+			local tokens = st.tokens or 0
+			if fs.isFile(`{dir}/live-tokens`) then
+				tokens = tonumber(trim(fs.readFile(`{dir}/live-tokens`))) or tokens
+			end
+			for _, line in dispatch.trailReport(trail, tokens, st.outcome == "running") do
+				print(line)
+			end
+			print(serde.encode("json", st, true))
 		end
 		return 0
 	elseif first == "stop" then
@@ -2020,9 +2005,9 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 			return dispatch.EXIT.failure
 		end
 		local st = load(ctx, id)
-		-- every run that starts a step starts through the same guards (code review 001 F2): origin's URL, the
-		-- watermark and its mirror, then main vetted since it; `top` (`<id>`, `new`, `<step> <id>`) and `retry` are
-		-- the only two entry points that run steps (`vet`, `status` and `stop` start none)
+		-- every run that starts a step starts through the same guards (code review 001 F2): pin origin, then
+		-- accept main as it is; `top` (`<id>`, `new`, `<step> <id>`) and `retry` are the only two entry points
+		-- that run steps (`status` and `stop` start none)
 		local unvetted = dispatcher.guardStart(ctx, st)
 		if unvetted then
 			st.outcome, st.detail = "tripwire", unvetted
@@ -2096,8 +2081,7 @@ function dispatcher.top(ctx: Ctx, id: string, opts: { [string]: { string } }, bo
 		print(`stop: {key}'s last step was lost (its dispatcher died): ./zn dispatch retry {key}`)
 		return dispatch.EXIT.failure
 	end
-	-- main is vetted since the watermark at the start of every run (the user's "Persisted watermark"), after the
-	-- checks of origin's URL and the item's mirror of the watermark
+	-- main is accepted as it is at the start of every run; during the run, vetMain judges commits since that tip
 	local unvetted = dispatcher.guardStart(ctx, st)
 	if unvetted then
 		st.outcome, st.detail = "tripwire", unvetted
@@ -2135,7 +2119,7 @@ function dispatcher.oneStep(
 		if s.kind == "script" then
 			print(`run={table.concat(dispatch.scriptArgv(step, id), " ")}`)
 		else
-			for _, line in dispatch.describe(dispatcher.resolve(step, id, nil)) do
+			for _, line in dispatch.describe(dispatcher.resolve(step, id, nil, mode)) do
 				print(line)
 			end
 		end
