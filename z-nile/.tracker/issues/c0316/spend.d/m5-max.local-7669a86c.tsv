@@ -1,0 +1,10 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-14 06:56	c0316 ok	0	0	idea	31941	claude-fable-5-2-medium	15.666	1.520			
+2026-11-14 06:56	c0316 ok	0	0	idea-challenge	39986	claude-opus-5-5-xhigh	34.174	2.000			
+2026-11-14 06:57	c0316 ok	0	0	idea	17380	claude-fable-5-2-medium	10.789	1.320			
+2026-11-14 06:59	c0316 failed	0	0	idea	19531	claude-fable-5-2-medium	26.455	1.800			
+2026-11-14 06:59	c0316 quota	0	0	idea		kimi-code-k3.1-pro-medium	7.939	0.780			tokens
+2026-11-14 06:59	c0316 failed	0	0	idea	30049	grok-4.7-medium	107.092	1.970			
+2026-11-14 06:59	c0316 failed	0	0	idea		claude-opus-5-5-medium	8.140	2.780			tokens
+2026-11-14 07:00	1 run	0	0	other			0.206	0.020			tokens,ai
+2026-11-14 07:00	capture	0	0	capture							tokens,ai
