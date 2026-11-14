@@ -11,3 +11,5 @@ When two checks refuse the same input (a local check and the publish's origin ch
 **How to apply:** in the mutation check, a surviving mutant whose case still sees a refusal means a second guard: give the case an input only this guard can refuse (an empty raft of another type), or assert the message the Design states for this guard.
 
 R0050 code review 003 F2: `unfold`'s refusal of a done issue in its dead-raft branch had no case, so dropping it left every spec green.
+
+**Note (c0282 prep E2):** the same holds when the second refusal is a bug. All four refusal cases of the rafting gate passed while every PR was refused for a parse error that had nothing to do with the case; only the one case that expected a merge failed. Assert the reason each case is about (and run a mutant that makes the guard accept).

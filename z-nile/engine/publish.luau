@@ -116,7 +116,9 @@ function publish.allowed(path: string, roots: { string }, counter: string?): boo
 		return false
 	end
 	-- an issue's spend.md is published append-only; a raft's summary stays on its branch
-	return rel == `{id}.md` or rel == "check.sh" or (isIssue(id) and rel == "spend.md")
+	return rel == `{id}.md`
+		or rel == "check.sh"
+		or (isIssue(id) and (rel == "spend.md" or rel == "approval.md"))
 end
 
 -- The directory of an item file: `path` without its `/<rel>`.
@@ -443,6 +445,18 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 			end
 			if string.find(c.content, "\r", 1, true) then
 				return fail(`{c.path}: carriage returns are not allowed in a published change`)
+			end
+			if string.sub(c.path, -12) == "/approval.md" then
+				-- an approval is not a status document. ready and work next read it from origin/main, so
+				-- `./zn approve --publish` may add it or replace it. The caller checks the contract.
+				local approved = string.match(c.path, "/([fdc]%d%d%d%d)/approval%.md$")
+				local beside = if approved
+					then string.gsub(c.path, "/approval%.md$", `/{approved}.md`)
+					else ""
+				if not approved or not onOrigin[beside] then
+					return fail(`{c.path}: no issue document beside it on origin/main`)
+				end
+				continue
 			end
 			if string.sub(c.path, -9) == "/spend.md" then
 				-- moves (c.from) already continued: a ready/stop carries the file byte for byte
