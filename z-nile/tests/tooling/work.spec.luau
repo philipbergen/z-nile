@@ -47,6 +47,7 @@ local function raft(over: { [string]: any }): work.RaftFact
 		finalReview = "none",
 		trace = false,
 		traceOk = false,
+		root = "",
 	}
 	for k, v in over do
 		(r :: any)[k] = v
@@ -69,9 +70,9 @@ return t.spec("z-work's next action", function(it)
 		local raw = raft({ id = "R0007", status = "new", designReady = false })
 		local none = decide({ blocked, raw, raft({ id = "R0030", where = "active" }) }, nil, nil)
 		t.expect(none.action).toBe("none")
-		t.expect(string.find(none.why, "R0008 needs a human", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(none.why, "R0007 is new", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(none.why, "R0030 is held", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(none.why, "R0008: needs a human", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(none.why, "R0007: is new", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(none.why, "R0030: is held", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(work.say(none), "nothing to do - ", 1, true) ~= nil).toBe(true)
 	end)
 
@@ -105,13 +106,16 @@ return t.spec("z-work's next action", function(it)
 		t.expect(decide({ open }, "R0010", nil).action).toBe("done")
 	end)
 
-	it("stays with the raft it holds, releases on questions, and ends when that raft is over", function()
+	it("does not resume a held raft unless it was named, and a named raft ends", function()
 		local held =
 			raft({ where = "active", status = "active", layers = { layer(1, "c0010", 1, true, false) } })
 		local other = raft({ id = "R0001" })
 		local stayed = decide({ other, held }, nil, "R0010")
-		t.expect(stayed.raft).toBe("R0010")
-		t.expect(stayed.action).toBe("implement")
+		t.expect(stayed.raft).toBe("R0001")
+		t.expect(stayed.action).toBe("ready")
+		local named = decide({ other, held }, "R0010", nil)
+		t.expect(named.raft).toBe("R0010")
+		t.expect(named.action).toBe("implement")
 		held.questions = true
 		t.expect(decide({ held }, "R0010", nil).action).toBe("release")
 		held.where = "backlog"
@@ -121,16 +125,113 @@ return t.spec("z-work's next action", function(it)
 		t.expect(string.find(released.why, "fresh session", 1, true) ~= nil).toBe(true)
 		local landed = raft({ where = "done", status = "done" })
 		local again = decide({ landed, other }, nil, "R0010")
-		t.expect(again.action).toBe("end")
-		t.expect(again.raft).toBe("R0010")
+		t.expect(again.action).toBe("ready")
+		t.expect(again.raft).toBe("R0001")
+		local namedEnd = decide({ landed, other }, "R0010", nil)
+		t.expect(namedEnd.action).toBe("end")
+		t.expect(namedEnd.raft).toBe("R0010")
 		t.expect(decide({ other }, "R9999", nil).action).toBe("none")
 		local lines = work.status({
 			held,
 			raft({ id = "R0002", where = "active", status = "active", layers = {}, holder = "", since = "" }),
 		})
 		t.expect(lines[1]).toBe("R0002 claimed holder unknown since unknown")
-		t.expect(string.find(work.say(stayed), "R0010 layer 1 c0010: implement c0010 - ", 1, true) ~= nil)
+		t.expect(string.find(work.say(named), "R0010 layer 1 c0010: implement c0010 - ", 1, true) ~= nil)
 			.toBe(true)
+	end)
+
+	it("lands one raft, skips an unapproved one, lands the next, and stops", function()
+		local reason =
+			"c0002 has no approval: run ./zn approve c0002, then ./zn approve c0002 --publish, from the worktree that holds the design."
+		local first = raft({ id = "R0001", block = "" })
+		local skipped = raft({ id = "R0002", block = reason })
+		local third = raft({ id = "R0003", block = "" })
+		local function step(rafts: { work.RaftFact }): string
+			local input: work.Input = { rafts = rafts, released = 0 }
+			return work.report(input, work.decide(input))
+		end
+		local claim = step({ first, skipped, third })
+		t.expect(string.find(claim, "R0001: ready", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(claim, reason, 1, true) ~= nil).toBe(true)
+		t.expect(string.find(claim, "R0003:", 1, true) == nil).toBe(true)
+		first.where = "done"
+		first.status = "done"
+		first.block = nil
+		local nextClaim = step({ first, skipped, third })
+		t.expect(string.find(nextClaim, "R0003: ready", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(nextClaim, reason, 1, true) ~= nil).toBe(true)
+		third.where = "done"
+		third.status = "done"
+		third.block = nil
+		local done = step({ first, skipped, third })
+		t.expect(string.find(done, "nothing to do - ", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(done, "R0002: " .. reason, 1, true) ~= nil).toBe(true)
+	end)
+
+	it("stops after two blocked releases, and a named raft still ends on its own", function()
+		local open = raft({ id = "R0004", block = "" })
+		local input: work.Input = { rafts = { open }, released = work.BLOCKED_IN_A_ROW }
+		local stopped = work.report(input, work.decide(input))
+		t.expect(stopped).toBe(`nothing to do - {work.blockedWhy()}`)
+		local landed = raft({ id = "R0001", where = "done", status = "done" })
+		local another = raft({ id = "R0009", block = "" })
+		local named = work.decide({
+			asked = "R0001",
+			released = work.BLOCKED_IN_A_ROW,
+			rafts = { landed, another },
+		})
+		t.expect(named.action).toBe("end")
+		t.expect(named.raft).toBe("R0001")
+		local held = raft({
+			id = "R0061",
+			where = "active",
+			status = "active",
+			holder = "Ada <ada@example>",
+			layers = { layer(1, "c0010", 1, true, false) },
+		})
+		local offer = work.decide({
+			author = "Ada <ada@example>",
+			rafts = { held, another },
+		})
+		t.expect(offer.raft).toBe("R0009")
+		t.expect(string.find(offer.why, "you hold R0061: name one to resume it", 1, true) ~= nil).toBe(true)
+	end)
+
+	it("offers this project's raft from its folder, and any project from the root", function()
+		local nile = raft({ id = "R0030", root = "z-nile/.tracker", block = "" })
+		local pick = raft({ id = "R0094", root = "pickman/.tracker", block = "" })
+		local root = work.decide({ rafts = { pick, nile } })
+		t.expect(root.raft).toBe("R0030")
+		t.expect(work.decide({ scope = "", rafts = { pick, nile } }).raft).toBe("R0030")
+		t.expect(work.decide({ scope = "pickman/.tracker", rafts = { pick, nile } }).raft).toBe("R0094")
+		t.expect(work.decide({ scope = "z-nile/.tracker", rafts = { pick, nile } }).raft).toBe("R0030")
+		local named = work.decide({ asked = "R0030", scope = "pickman/.tracker", rafts = { pick, nile } })
+		t.expect(named.raft).toBe("R0030")
+		t.expect(named.action).toBe("ready")
+		local held = raft({
+			id = "R0061",
+			root = "z-nile/.tracker",
+			where = "active",
+			status = "active",
+			holder = "Ada <ada@example>",
+			block = "is active",
+		})
+		local blocked = raft({
+			id = "R0095",
+			root = "pickman/.tracker",
+			block = "f0148 depends on f0147, which is backlog on origin/main",
+		})
+		local input: work.Input = {
+			author = "Ada <ada@example>",
+			scope = "pickman/.tracker",
+			rafts = { nile, held, blocked },
+		}
+		local quiet = work.report(input, work.decide(input))
+		t.expect(string.find(quiet, "nothing to do - no claimable raft in pickman", 1, true) ~= nil)
+			.toBe(true)
+		t.expect(string.find(quiet, "R0095: f0148 depends on f0147", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(quiet, "R0030", 1, true) == nil).toBe(true)
+		t.expect(string.find(quiet, "you hold", 1, true) == nil).toBe(true)
 	end)
 
 	it("prints the last lines of a running step's trail", function()
