@@ -163,7 +163,7 @@ return t.spec("c0260 an agent-filed ticket is exempt, and only that", function(i
 	)
 
 	it(
-		"AC9: a new ticket is `idea: unchallenged`; one filed by an agent carries the marker and no idea key; the mark is added only when asked",
+		"AC9: a new ticket is `idea: unchallenged`; one filed by an agent carries the marker and the same idea key; the mark is added only when asked",
 		function()
 			local function setFront(doc: string, key: string, value: string): string
 				return (string.gsub(doc, "\ndesign: draft\n", `\ndesign: draft\n{key}: {value}\n`, 1))
@@ -174,7 +174,7 @@ return t.spec("c0260 an agent-filed ticket is exempt, and only that", function(i
 			t.expect(has(user, "capture: required")).toBe(false)
 			t.expect(has(capturecut.newDoc(stub, setFront, nil, true) :: string, "capture: required")).toBe(true)
 			local filed = capturecut.newDoc(stub, setFront, "agent:c0260/graph-miss", true) :: string
-			t.expect(has(filed, "idea:")).toBe(false)
+			t.expect(has(filed, "idea: unchallenged")).toBe(true) -- an agent ticket runs ./zn idea like any ticket
 			t.expect(has(filed, "## Filed by (agent)\nSource: agent:c0260/graph-miss")).toBe(true)
 			t.expect(has(filed, capturecheck.SCOPE_LINE)).toBe(true)
 			t.expect(capturecheck.kind(filed)).toBe("agent")

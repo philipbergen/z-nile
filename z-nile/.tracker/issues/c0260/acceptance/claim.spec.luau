@@ -64,6 +64,23 @@ end
 local RECORD = "\n## Ask (verbatim)\n### Message 2026-11-08\n```\nmore ghosts\n```\n\n## Interview\n### Q1\nQuestion: restate?\nOptions: approve | correct\nAnswer: approve\n\n"
 	.. '## Confirmation\nConfirmed (user, 2026-11-08) after round 1: "yes"\n'
 
+-- an agent-filed ticket runs the idea stage like any ticket (the user's ruling of 2026-11-13): until a challenged idea and its
+-- review are on origin it is not claimed; this stands in for `./zn idea` (whose own cases are record.spec and loop.spec)
+local challengers = 0
+local function challenge(id: string)
+	challengers += 1
+	local c = trOk(main, { "worktree", `challenger-{challengers}` })
+	identity(c)
+	git(c, { "fetch", "-q", "origin" })
+	git(c, { "reset", "-q", "--hard", "origin/main" })
+	local path = `{c}/{ISSUES}/{id}/{id}.md`
+	fs.writeFile(path, (string.gsub(fs.readFile(path), "idea: unchallenged", "idea: challenged", 1)))
+	write(`{c}/{ISSUES}/{id}/idea-review-001.md`, "# Idea review 001\n\n## Findings\n\nnone\n\n## Verdict\n\napprove\n")
+	git(c, { "add", "-A" })
+	git(c, { "commit", "-q", "-m", `tracker: idea {id}` })
+	git(c, { "push", "-q", "origin", "HEAD:main" })
+end
+
 return t.spec("c0260 the claim gate", function(it)
 	it("sets up an origin whose history holds an old issue, then the marker's landing", function()
 		if fs.isDir(base) then
@@ -139,6 +156,12 @@ return t.spec("c0260 the claim gate", function(it)
 			local doc = git(origin, { "show", `main:{ISSUES}/{id}/{id}.md` })
 			t.expect(has(doc, "## Filed by (agent)\nSource: review:c0777/design-review-001 F4")).toBe(true)
 			t.expect(has(doc, "Scope decision (user, 2026-11-08): agent-filed tickets are exempt")).toBe(true)
+			local unchallenged = tr(wt, { "status", id, "preparing" })
+			t.expect(unchallenged.ok).toBe(false)
+			t.expect(has(unchallenged.stderr, "the idea was not challenged")).toBe(true) -- no record is asked of it, the idea stage is
+			challenge(id)
+			git(wt, { "fetch", "-q", "origin" })
+			git(wt, { "reset", "-q", "--hard", "origin/main" })
 			trOk(wt, { "status", id, "preparing" })
 		end
 	)
@@ -231,6 +254,9 @@ return t.spec("c0260 the claim gate", function(it)
 		local id = string.match(made, "(c%d%d%d%d)") :: string
 		t.expect(has(git(origin, { "show", `main:{ISSUES}/{id}/{id}.md` }), "Source: agent:c0777/graph-miss"))
 			.toBe(true)
+		challenge(id)
+		git(wt, { "fetch", "-q", "origin" })
+		git(wt, { "reset", "-q", "--hard", "origin/main" })
 		trOk(wt, { "status", id, "preparing" })
 	end)
 
