@@ -14,28 +14,25 @@ local function doc(status: string, reviews: string?): string
 		else ""}created: 2026-11-14\nstatus: {status}\n---\n\n# c0010\n`
 end
 
+-- read through any: the prep type-checks with none of the issue's code present
+local function mark(path: string, existing: string?, content: string): string?
+	return (publish :: any).markProblem(path, existing, content)
+end
+
 local function has(s: string?, part: string): boolean
 	return s ~= nil and string.find(s, part, 1, true) ~= nil
 end
 
 return t.spec("c0306 publish accepts the mark only where the tool writes it", function(it)
 	it("AC3: a claim (status preparing) may add reviews: judged to an existing issue", function()
-		t.expect(
-			publish.markProblem(
-				ISSUE,
-				doc("new-quiet-copper-falcon"),
-				doc("preparing-quiet-copper-falcon", "judged")
-			)
-		).toBe(nil)
+		t.expect(mark(ISSUE, doc("new-quiet-copper-falcon"), doc("preparing-quiet-copper-falcon", "judged")))
+			.toBe(nil)
 	end)
 
 	it("AC3: a new raft's document may carry the line, and a document without it is untouched", function()
-		t.expect(publish.markProblem(RAFT, nil, doc("preparing-quiet-copper-falcon", "judged"))).toBe(nil)
-		t.expect(
-			publish.markProblem(ISSUE, doc("new-quiet-copper-falcon"), doc("preparing-quiet-copper-falcon"))
-		)
-			.toBe(nil)
-		t.expect(publish.markProblem(ISSUE, nil, doc("new-quiet-copper-falcon"))).toBe(nil)
+		t.expect(mark(RAFT, nil, doc("preparing-quiet-copper-falcon", "judged"))).toBe(nil)
+		t.expect(mark(ISSUE, doc("new-quiet-copper-falcon"), doc("preparing-quiet-copper-falcon"))).toBe(nil)
+		t.expect(mark(ISSUE, nil, doc("new-quiet-copper-falcon"))).toBe(nil)
 	end)
 
 	it("AC3: the line is refused on any other status move of an existing document", function()
@@ -47,44 +44,30 @@ return t.spec("c0306 publish accepts the mark only where the tool writes it", fu
 				"blocked-quiet-copper-falcon",
 			}
 		do
-			local why = publish.markProblem(ISSUE, doc("preparing-quiet-copper-falcon"), doc(to, "judged"))
+			local why = mark(ISSUE, doc("preparing-quiet-copper-falcon"), doc(to, "judged"))
 			t.expect(has(why, "reviews: judged")).toBe(true)
 			t.expect(has(why, ISSUE)).toBe(true)
 		end
 	end)
 
 	it("AC3: the line is refused on a document that is not an issue's, or whose claim is a raft's", function()
-		t.expect(publish.markProblem(RAFT, doc("preparing-a-b-c"), doc("preparing-a-b-c", "judged")) ~= nil)
+		t.expect(mark(RAFT, doc("preparing-a-b-c"), doc("preparing-a-b-c", "judged")) ~= nil).toBe(true)
+		t.expect(mark("pickman/.tracker/issues/c0010/provenance.md", nil, doc("new-a-b-c", "judged")) ~= nil)
 			.toBe(true)
-		t.expect(
-			publish.markProblem(
-				"pickman/.tracker/issues/c0010/provenance.md",
-				nil,
-				doc("new-a-b-c", "judged")
-			) ~= nil
-		).toBe(true)
 	end)
 
 	it("AC3: the line is refused in a new issue's stub", function()
-		t.expect(
-			has(publish.markProblem(ISSUE, nil, doc("new-quiet-copper-falcon", "judged")), "reviews: judged")
-		)
+		t.expect(has(mark(ISSUE, nil, doc("new-quiet-copper-falcon", "judged")), "reviews: judged"))
 			.toBe(true)
 	end)
 
 	it("AC3: the line is never removed or changed, in a claim or out of it", function()
-		t.expect(publish.markProblem(ISSUE, doc("preparing-a-b-c", "judged"), doc("preparing-d-e-f")) ~= nil)
-			.toBe(true)
-		t.expect(publish.markProblem(ISSUE, doc("new-a-b-c", "judged"), doc("new-d-e-f")) ~= nil).toBe(true)
-		t.expect(publish.markProblem(ISSUE, doc("new-a-b-c", "judged"), doc("preparing-d-e-f", "all")) ~= nil)
-			.toBe(true)
+		t.expect(mark(ISSUE, doc("preparing-a-b-c", "judged"), doc("preparing-d-e-f")) ~= nil).toBe(true)
+		t.expect(mark(ISSUE, doc("new-a-b-c", "judged"), doc("new-d-e-f")) ~= nil).toBe(true)
+		t.expect(mark(ISSUE, doc("new-a-b-c", "judged"), doc("preparing-d-e-f", "all")) ~= nil).toBe(true)
 		-- already marked and kept: a re-claim carries it
-		t.expect(publish.markProblem(ISSUE, doc("new-a-b-c", "judged"), doc("preparing-d-e-f", "judged")))
-			.toBe(nil)
-		t.expect(
-			publish.markProblem(ISSUE, doc("preparing-a-b-c", "judged"), doc("prepared-d-e-f", "judged"))
-		)
-			.toBe(nil)
+		t.expect(mark(ISSUE, doc("new-a-b-c", "judged"), doc("preparing-d-e-f", "judged"))).toBe(nil)
+		t.expect(mark(ISSUE, doc("preparing-a-b-c", "judged"), doc("prepared-d-e-f", "judged"))).toBe(nil)
 	end)
 
 	it(
@@ -92,10 +75,9 @@ return t.spec("c0306 publish accepts the mark only where the tool writes it", fu
 		function()
 			local body = "\nstatus: preparing-x-y-z\n"
 			local moved = doc("prepared-a-b-c", "judged") .. body
-			t.expect(has(publish.markProblem(ISSUE, doc("new-a-b-c") .. body, moved), "reviews: judged"))
-				.toBe(true)
+			t.expect(has(mark(ISSUE, doc("new-a-b-c") .. body, moved), "reviews: judged")).toBe(true)
 			local fake = doc("new-a-b-c") .. "\nreviews: judged\n"
-			t.expect(publish.markProblem(ISSUE, doc("new-a-b-c"), fake)).toBe(nil)
+			t.expect(mark(ISSUE, doc("new-a-b-c"), fake)).toBe(nil)
 		end
 	)
 end)

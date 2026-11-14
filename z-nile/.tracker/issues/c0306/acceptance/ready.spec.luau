@@ -52,7 +52,7 @@ local function approval(): string
 	})
 end
 
-local function member(judged: boolean?, reviews: { [string]: string }?): readycheck.Member
+local function member(judged: boolean?, reviews: { [string]: string }?): any
 	local a = approval()
 	local files: { [string]: string } = { ["c0001.md"] = DOC, ["check.sh"] = CHECK, ["approval.md"] = a }
 	local given: { [string]: string } = reviews or {}
@@ -72,11 +72,7 @@ local function member(judged: boolean?, reviews: { [string]: string }?): readych
 	}
 end
 
-local function raft(
-	judged: boolean?,
-	reviews: { [string]: string }?,
-	members: { readycheck.Member }?
-): readycheck.Raft
+local function raft(judged: boolean?, reviews: { [string]: string }?, members: { any }?): any
 	local files: { [string]: string } = { ["check.sh"] = CHECK }
 	local given: { [string]: string } = reviews or {}
 	for name, text in given do
@@ -99,8 +95,8 @@ local function raft(
 	}
 end
 
-local function fact(over: { [string]: any }): work.RaftFact
-	local r: work.RaftFact = {
+local function fact(over: { [string]: any }): any
+	local r: any = {
 		id = "R0010",
 		title = "t",
 		where = "active",
