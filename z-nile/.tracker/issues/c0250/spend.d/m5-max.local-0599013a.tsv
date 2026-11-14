@@ -1,0 +1,18 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-14 02:25	1 spec	0	0	test			12.359	9.740		12.359	tokens,ai
+2026-11-14 02:25	1 spec	0	0	test			0.821	0.480		0.821	tokens,ai
+2026-11-14 02:25	1 spec	0	0	test			13.828	10.170		13.828	tokens,ai
+2026-11-14 02:25	1 spec	0	0	test			1.031	0.580		1.031	tokens,ai
+2026-11-14 02:25	1 spec	0	0	test			0.833	0.530		0.833	tokens,ai
+2026-11-14 02:26	4 specs	0	0	test			2.057	1.840		2.057	tokens,ai
+2026-11-14 02:26	1 spec	0	0	test			1.028	0.660		1.028	tokens,ai
+2026-11-14 02:27	1 spec	0	0	test			1.042	0.670		1.042	tokens,ai
+2026-11-14 03:07	1 spec	0	0	test			1.251	0.620		1.251	tokens,ai
+2026-11-14 03:08	1 spec	0	0	test			13.006	9.560		13.006	tokens,ai
+2026-11-14 03:08	1 spec	0	0	test			0.827	0.480		0.827	tokens,ai
+2026-11-14 03:08	1 spec	0	0	test			14.923	10.110		14.923	tokens,ai
+2026-11-14 03:08	1 spec	0	0	test			0.815	0.510		0.815	tokens,ai
+2026-11-14 03:08	1 spec	0	0	test			0.830	0.480		0.830	tokens,ai
+2026-11-14 03:08	4 specs	0	0	test			1.844	1.640		1.844	tokens,ai
+2026-11-14 03:10	33 runs	0	0	other			5684.283	53.810			tokens,ai
+2026-11-14 03:32	design-review-001	0	0	design-review							tokens,ai
