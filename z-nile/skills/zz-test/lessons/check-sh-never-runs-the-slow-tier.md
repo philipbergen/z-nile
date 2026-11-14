@@ -1,0 +1,11 @@
+---
+title: A check.sh never runs specs from the slow tier
+when: design
+tags: [check-sh, slow, speed]
+check: Does any check.sh line run a spec listed in `tests/slow.tsv`, which the issue's `finish`, every `restack` and `done` will rerun?
+---
+An issue's check.sh runs at `finish`, at every `restack` and through the raft's check.sh at `done`, so a slow spec there is paid at every step of the raft, for every layer above it.
+
+**Why:** c0248 design review 001 F13: its AC12 pulled about 2,850 s of slow-tier specs into check.sh; as layer 1 of a seven-layer raft it would have run at every restack.
+
+**How to apply:** check only the fast specs that pin the change; the slow tier is the gate's (`z-nile/check.sh --slow`), run once in the implementation steps.
