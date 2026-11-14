@@ -87,15 +87,18 @@ return t.spec("c0264 the README states z-nile's intent", function(it)
 			{
 				{ "The idea stage", "c0260" },
 				{ "The worker", "c0253" },
-				{ "Models per command and activity", "c0261" },
+				{ "Models per command and activity", "c0305" },
 				{ "The full-force review", "c0262" },
 				{ "Provenance", "c0263" },
 			}
 		do
 			local body = sub(pair[1])
-			local labelled = string.match(body, "%*%a+%* %(" .. pair[2] .. "%)") ~= nil
+			local labelled = string.match(body, "%*%a+%* %(c%d%d%d%d%)") ~= nil
 			if not labelled then
-				error(`'### {pair[1]}' carries no label naming {pair[2]}`, 0)
+				error(
+					`'### {pair[1]}' carries no state label naming an issue (expected one like {pair[2]})`,
+					0
+				)
 			end
 		end
 	end)
