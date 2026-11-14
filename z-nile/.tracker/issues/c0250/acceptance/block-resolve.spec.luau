@@ -5,14 +5,20 @@
 -- commands, and a `gh` stub that records every call. Fixture: .cache/c0250-block-resolve-github.com.
 -- Nothing here touches the real repository. The cases build on each other in order; each decision and each raft has
 -- its own item, because a block is consumed by its resolve:
---   issues  c0110 AC3 block, AC6 retry   c0120 AC6 approve   c0130 AC6 amend-design   c0140 AC6 split   c0150 AC6 abort
---           c0160 AC5 (the actors)       c0170 not preparing  c0190..c0198 the raft members below
+--   issues  c0110 AC3 block, AC6 retry   c0120 AC6 approve   c0130 AC6 amend-design (review-exhausted, F2 and F5 open)
+--           c0140 AC6 split   c0150 AC5 and AC6 abort   c0160 AC5 (the actors, an agent's approve)   c0170 not preparing
+--           c0175 AC3 (a resolved note)   c0180 and c0181 AC3 (blocked, no note, an unreadable note: re-filed)
+--           c0190..c0198 the draft rafts' members
 --   rafts   R0010 AC4 (seeded active, c0200 done, c0210 and c0220 active)   R0200 AC3 (a draft raft in rafting)
---           R0020 AC6 amend-design (c0230 the Layer)   R0030 AC6 split (c0240 the Layer)
+--           R0210 AC6 (a draft raft: approve acts as retry)   R0220 AC6 (a draft raft: split is refused, amend-design acts as retry)
+--           R0020 AC6 amend-design (c0230 the Layer)   R0030 AC6 split (f0240 the Layer)
 --           R0040 AC7 approve (c0250 the Layer)        R0050 AC7 retry and start   R0060 AC4 second block
+--           R0070 AC4 (detached, no layer started)     R0080 AC7 (c0330 landed, c0335 and c0336 active; retry, ready, start)
+--           R0090 AC6 (c0340 landed, c0345 the Layer: the raft goes to done/)   R0300 AC6 (c0350 the Layer: retired/)
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local raftplan = require("@znile/engine/raftplan")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -33,6 +39,10 @@ local TERMINAL = {
 	ZN_DISPATCH = "",
 	CLAUDE_EFFORT = "",
 	ZN_ACTOR = "",
+	ZN_HEADLESS = "",
+	CLAUDE_CODE_SESSION_ID = "",
+	KIMI_SESSION_ID = "",
+	KIMI_CODE_SESSION_ID = "",
 }
 local AGENT = {
 	CLAUDECODE = "1",
@@ -42,20 +52,41 @@ local AGENT = {
 	ZN_DISPATCH = "",
 	CLAUDE_EFFORT = "high",
 	ZN_ACTOR = "",
+	ZN_HEADLESS = "",
+	CLAUDE_CODE_SESSION_ID = "sess-agent-1",
+	KIMI_SESSION_ID = "",
+	KIMI_CODE_SESSION_ID = "",
 }
+
+-- an environment: the base with some variables changed
+local function with(base: { [string]: string }, extra: { [string]: string }): { [string]: string }
+	local out = table.clone(base)
+	for k, v in extra do
+		out[k] = v
+	end
+	return out
+end
 
 local function problem(extra: string): string
 	return `## Problem\nThe thing is slow.{extra}\n\n## Solution\nMake it fast.\n\n## Acceptance criteria\n- AC1: it is fast\n`
 end
 
-local function issue(id: string, status: string, raft: string, design: string, extra: string?): string
-	return `---\nid: {id}\ntype: chore\ntitle: title {id}\nslug: {id}\nraft: {raft}\ndepends_on: []\nemergent: false\ndesign: {design}\nrank: 7\ncreated: 2026-11-10\nstatus: {status}\n---\n\n# {id}\n\n{problem(
-		extra or ""
-	)}`
+local TYPES = { c = "chore", f = "feature", d = "defect" }
+
+-- tail: sections after the Problem, Solution and criteria (the open list of a review that ran out of rounds)
+local function issue(id: string, status: string, raft: string, design: string, tail: string?): string
+	return `---\nid: {id}\ntype: {TYPES[string.sub(id, 1, 1)]}\ntitle: title {id}\nslug: {id}\nraft: {raft}\ndepends_on: []\nemergent: false\ndesign: {design}\nrank: 7\ncreated: 2026-11-10\nstatus: {status}\n---\n\n# {id}\n\n{problem(
+		""
+	)}{tail or ""}`
 end
 
-local function raftDoc(id: string, status: string, issues: string, design: string): string
-	return `---\nid: {id}\ntype: chore\ntitle: {id}\nslug: {string.lower(id)}\nsingle: false\nissues: [{issues}]\ndesign: {design}\nrank: 3\ncreated: 2026-11-10\nstatus: {status}\n---\n\n# {id}\n\n## Theme\nThe {id} theme.\n\n## Order & dependencies\n{string.gsub(
+local OPEN_LIST =
+	"\n## Open to the human\n- F2: the reader is missing. Answer: refuted. Decision: keep it or not?\n- F5: the cache is slow. Answer: refuted. Decision: defer it?\n"
+
+local function raftDoc(id: string, status: string, issues: string, design: string, grouped: string?): string
+	return `---\nid: {id}\ntype: chore\ntitle: {id}\nslug: {string.lower(id)}\nsingle: false\nissues: [{issues}]\n{if grouped
+		then `grouped: {grouped}\n`
+		else ""}design: {design}\nrank: 3\ncreated: 2026-11-10\nstatus: {status}\n---\n\n# {id}\n\n## Theme\nThe {id} theme.\n\n## Order & dependencies\n{string.gsub(
 		issues,
 		", ",
 		"\n"
@@ -226,17 +257,48 @@ return t.spec("c0250 block and resolve", function(it)
 				seed[`{ROOT}/issues/{id}/check.sh`] = CHECK
 			end
 			-- issues in design (preparing), with a rank and an existing provenance row
-			for _, id in { "c0110", "c0120", "c0130", "c0140", "c0150", "c0160" } do
-				item(id, issue(id, PREPARING, "", "draft"))
+			for _, id in { "c0110", "c0120", "c0130", "c0140", "c0150", "c0160", "c0175" } do
+				item(id, issue(id, PREPARING, "", "draft", if id == "c0130" then OPEN_LIST else nil))
 				seed[`{ROOT}/issues/{id}/provenance.md`] =
 					`# Provenance: {id}\n\n| when | event | actor | detail |\n|---|---|---|---|\n| 2026-11-01 10:00 | confirmed | human:Philip Bergen | idea |\n`
 			end
 			item("c0170", issue("c0170", "new-quiet-copper-falcon", "", "draft"))
-			-- a draft raft in rafting: claimed preparing, its members prepared
-			seed[`{ROOT}/rafts/R0200/R0200.md`] = raftDoc("R0200", PREPARING, "c0190, c0195", "draft")
-			seed[`{ROOT}/rafts/R0200/check.sh`] = CHECK
-			item("c0190", issue("c0190", PREPARED, "R0200", "ready"))
-			item("c0195", issue("c0195", PREPARED, "R0200", "ready"))
+			-- blocked on origin/main, but with no note (the block's publish was lost) and with an unreadable one: re-filed
+			item("c0180", issue("c0180", "blocked-quiet-copper-falcon", "", "draft"))
+			seed[`{ROOT}/issues/c0180/c0180.md`] = (
+				string.gsub(
+					seed[`{ROOT}/issues/c0180/c0180.md`],
+					"status: ",
+					"blocked: needs-decision\nstatus: ",
+					1
+				)
+			)
+			item("c0181", issue("c0181", "blocked-quiet-copper-falcon", "", "draft"))
+			seed[`{ROOT}/issues/c0181/c0181.md`] = (
+				string.gsub(
+					seed[`{ROOT}/issues/c0181/c0181.md`],
+					"status: ",
+					"blocked: needs-decision\nstatus: ",
+					1
+				)
+			)
+			seed[`{ROOT}/issues/c0181/escalation.md`] = "this is not a note\n"
+			-- draft rafts in rafting: claimed preparing, their members prepared with an EMPTY raft: line, as real drafts
+			-- have on origin/main until the rafting PR lands (F8)
+			for raft, members in
+				{ R0200 = { "c0190", "c0195" }, R0210 = { "c0191", "c0196" }, R0220 = { "c0192", "c0197" } }
+			do
+				seed[`{ROOT}/rafts/{raft}/{raft}.md`] = raftDoc(
+					raft,
+					PREPARING,
+					table.concat(members, ", "),
+					if raft == "R0220" then "ready" else "draft"
+				)
+				seed[`{ROOT}/rafts/{raft}/check.sh`] = CHECK
+				for _, mid in members do
+					item(mid, issue(mid, PREPARED, "", "ready"))
+				end
+			end
 			-- seeded active rafts: members carry the raft's claim; a landed member is in done/
 			local function activeRaft(raft: string, members: { string }, done: { string })
 				local all = table.concat(done, ", ")
@@ -257,20 +319,47 @@ return t.spec("c0250 block and resolve", function(it)
 			end
 			activeRaft("R0010", { "c0210", "c0220" }, { "c0200" })
 			activeRaft("R0020", { "c0230", "c0235" }, {})
-			activeRaft("R0030", { "c0240", "c0245" }, {})
+			activeRaft("R0030", { "f0240", "c0245" }, {})
+			activeRaft("R0070", { "c0280", "c0285" }, {})
+			activeRaft("R0090", { "c0345" }, { "c0340" })
+			activeRaft("R0300", { "c0350" }, {})
+			for _, raft in { "R0090", "R0300" } do
+				seed[`{ROOT}/rafts/active/{raft}/provenance.md`] =
+					`# Provenance: {raft}\n\n| when | event | actor | detail |\n|---|---|---|---|\n| 2026-11-01 10:00 | confirmed | human:Philip Bergen | idea |\n`
+			end
 			-- readied for real below: their members are prepared with a ready design (the seed's approvals make ready pass)
-			local function preparedRaft(raft: string, members: { string })
-				seed[`{ROOT}/rafts/{raft}/{raft}.md`] =
-					raftDoc(raft, PREPARED, table.concat(members, ", "), "ready")
+			-- the record z-raft wrote: each member's design hash, and the coherence review that quotes it
+			local function preparedRaft(raft: string, members: { string }, landed: { string }?)
+				local order = table.concat(landed or {}, ", ")
+					.. (if landed then ", " else "")
+					.. table.concat(members, ", ")
+				local entries: { string } = {}
+				for _, id in members do
+					local hash = raftplan.recordHash(id, {
+						[`{id}.md`] = issue(id, PREPARED, raft, "ready"),
+						["check.sh"] = CHECK,
+						["acceptance/.gitkeep"] = "",
+					})
+					table.insert(entries, `{id}@{hash}`)
+				end
+				local grouped = `[{table.concat(entries, ", ")}]`
+				seed[`{ROOT}/rafts/{raft}/{raft}.md`] = raftDoc(raft, PREPARED, order, "ready", grouped)
 				seed[`{ROOT}/rafts/{raft}/check.sh`] = CHECK
+				seed[`{ROOT}/rafts/{raft}/design-review-001.md`] =
+					`# Coherence review of {raft}\nGrouped: {grouped}\n`
 				for _, id in members do
 					item(id, issue(id, PREPARED, raft, "ready"))
 					seed[`{ROOT}/issues/{id}/acceptance/.gitkeep`] = ""
+				end
+				for _, id in landed or {} do
+					seed[`{ROOT}/issues/done/{id}/{id}.md`] = issue(id, "done", raft, "ready")
+					seed[`{ROOT}/issues/done/{id}/check.sh`] = CHECK
 				end
 			end
 			preparedRaft("R0040", { "c0250", "c0255" })
 			preparedRaft("R0050", { "c0260", "c0265" })
 			preparedRaft("R0060", { "c0270", "c0275" })
+			preparedRaft("R0080", { "c0335", "c0336" }, { "c0330" })
 			f = trackerfix.new("c0250-block-resolve-github.com", seed)
 			local bin = `{f.base}/bin`
 			log, state = `{f.base}/gh.log`, `{f.base}/gh-state`
@@ -282,7 +371,7 @@ return t.spec("c0250 block and resolve", function(it)
 			-- the worktree for the issues in design: a branch of origin/main
 			prep = `{f.base}/wt-prep`
 			git(f.main, { "worktree", "add", "-q", "-b", "prep-c0110", prep, "origin/main" })
-			for _, raft in { "R0040", "R0050", "R0060" } do
+			for _, raft in { "R0040", "R0050", "R0060", "R0080" } do
 				znOk(f.main, { "ready", raft })
 			end
 			fetch()
@@ -299,6 +388,110 @@ return t.spec("c0250 block and resolve", function(it)
 		t.expect(head()).toBe(before)
 		t.expect(statusOf(docOf("c0110"))).toBe("preparing")
 	end)
+
+	it("AC3: block refuses the reason tripwire in an agent session and files it from a terminal", function()
+		fetch()
+		local before = head()
+		local path = `{ROOT}/issues/c0160/escalation.md`
+		write(prep, path, note("Did the checkout change under us?"))
+		local refused = zn(prep, { "block", "c0160", "tripwire" }, AGENT)
+		t.expect(refused.ok).toBe(false)
+		t.expect(has(say(refused), "block tripwire is the person's")).toBe(true)
+		-- a dispatched step is an agent session too
+		local dispatched = zn(prep, { "block", "c0160", "tripwire" }, with(AGENT, { ZN_DISPATCH = "1" }))
+		t.expect(dispatched.ok).toBe(false)
+		-- an agent may file the other reasons
+		local other = zn(prep, { "block", "c0160", "bored" }, AGENT)
+		t.expect(has(say(other), "bored is not a reason")).toBe(true)
+		fetch()
+		t.expect(head()).toBe(before)
+		t.expect(statusOf(docOf("c0160"))).toBe("preparing")
+		fs.removeFile(`{prep}/{path}`)
+	end)
+
+	it("AC3: block refuses a note that already holds a resolution", function()
+		fetch()
+		local before = head()
+		local path = `{ROOT}/issues/c0175/escalation.md`
+		write(
+			prep,
+			path,
+			note("Which library?")
+				.. "\n## Resolution\nDecision: retry\nAnswer: none\nBy: human:Ann\nWhen: 2026-11-01 10:00\n"
+		)
+		local refused = zn(prep, { "block", "c0175", "needs-decision" })
+		t.expect(refused.ok).toBe(false)
+		t.expect(has(say(refused), "this is the last block's note: write the new one")).toBe(true)
+		fetch()
+		t.expect(head()).toBe(before)
+		t.expect(statusOf(docOf("c0175"))).toBe("preparing")
+		fs.removeFile(`{prep}/{path}`)
+	end)
+
+	it(
+		"AC3: block refuses an issue that is a member of an active raft, naming the raft and --layer",
+		function()
+			fetch()
+			local before = head()
+			local path = `{ROOT}/issues/active/c0220/escalation.md`
+			write(prep, path, note("The gate is red on c0220."))
+			local refused = zn(prep, { "block", "c0220", "red-gate" })
+			t.expect(refused.ok).toBe(false)
+			t.expect(
+				has(
+					say(refused),
+					"c0220 is in R0010, readied: block the raft: ./zn block R0010 red-gate --layer c0220"
+				)
+			).toBe(true)
+			fetch()
+			t.expect(head()).toBe(before) -- origin/main is unmoved
+			t.expect(statusOf(`{ROOT}/issues/active/c0220/c0220.md`)).toBe("active")
+			fs.removeFile(`{prep}/{path}`)
+		end
+	)
+
+	it(
+		"AC3: block re-files the note of a blocked item whose note is missing or unreadable, without moving it",
+		function()
+			fetch()
+			local before = head()
+			-- c0180 is blocked with no note at all
+			local missing = `{ROOT}/issues/c0180/escalation.md`
+			write(prep, missing, note("What did c0180 want to ask?"))
+			-- a reason other than the one it is blocked with is refused
+			local other = zn(prep, { "block", "c0180", "red-gate" })
+			t.expect(other.ok).toBe(false)
+			t.expect(has(say(other), "c0180 is blocked as needs-decision")).toBe(true)
+			znOk(prep, { "block", "c0180", "needs-decision" })
+			fetch()
+			t.expect(subjects(before)).toEqual({ "tracker: c0180 blocked needs-decision" })
+			t.expect(filesOf(head())).toEqual({ `A\t{missing}` }) -- the note alone: the item did not move
+			t.expect(statusOf(docOf("c0180"))).toBe("blocked")
+			t.expect(has(originFile(missing) or "", "Item: c0180\nReason: needs-decision\nFrom: preparing\n"))
+				.toBe(true)
+			t.expect(fs.isFile(`{prep}/{missing}`)).toBe(false)
+			-- c0181 is blocked with a note that does not parse: it is kept as escalation-001.md and the new one filed
+			local mid = head()
+			local bad = `{ROOT}/issues/c0181/escalation.md`
+			write(prep, bad, note("What did c0181 want to ask?"))
+			znOk(prep, { "block", "c0181", "needs-decision" })
+			fetch()
+			t.expect(subjects(mid)).toEqual({ "tracker: c0181 blocked needs-decision" })
+			t.expect(filesOf(head())).toEqual({
+				`A\t{ROOT}/issues/c0181/escalation-001.md`,
+				`M\t{bad}`,
+			})
+			t.expect(originFile(`{ROOT}/issues/c0181/escalation-001.md`)).toBe("this is not a note\n")
+			t.expect(has(originFile(bad) or "", "What did c0181 want to ask?")).toBe(true)
+			t.expect(statusOf(docOf("c0181"))).toBe("blocked")
+			-- a blocked item whose note is filed has nothing to re-file
+			write(prep, bad, note("Again?"))
+			local again = zn(prep, { "block", "c0181", "needs-decision" })
+			t.expect(again.ok).toBe(false)
+			t.expect(has(say(again), "nothing to re-file")).toBe(true)
+			fs.removeFile(`{prep}/{bad}`)
+		end
+	)
 
 	it(
 		"AC3: block on a preparing issue publishes one commit with the status, the reason and the note, and refuses a bad reason, a bad note and the main checkout",
@@ -384,6 +577,7 @@ return t.spec("c0250 block and resolve", function(it)
 			write(prep, path, note("Again?"))
 			local again = zn(prep, { "block", "c0110", "needs-decision" })
 			t.expect(again.ok).toBe(false)
+			t.expect(has(say(again), "nothing to re-file")).toBe(true) -- blocked, and its note is filed
 			fs.removeFile(`{prep}/{path}`)
 			-- the other issues in design block with their own reasons, for the cases below
 			local reasons: { [string]: string } = {
@@ -405,11 +599,36 @@ return t.spec("c0250 block and resolve", function(it)
 						"- abort: stop",
 					})
 				)
-				znOk(prep, { "block", id, reason })
+				-- c0150 is filed from a CLI session: its note names the session, which may not resolve it (F12)
+				znOk(
+					prep,
+					{ "block", id, reason },
+					if id == "c0150" then with(TERMINAL, { CLAUDE_CODE_SESSION_ID = "sess-A" }) else nil
+				)
 			end
 			fetch()
 			t.expect(front(docOf("c0140"), "blocked")).toBe("needs-decision")
 			t.expect(front(docOf("c0160"), "blocked")).toBe("tripwire")
+			t.expect(has(originFile(`{ROOT}/issues/c0150/escalation.md`) or "", "\nSession: sess-A\nWhen: "))
+				.toBe(true)
+			t.expect(has(originFile(`{ROOT}/issues/c0110/escalation.md`) or "", "\nSession:")).toBe(false)
+			-- review-exhausted lists the unruled bullets of the open list, and its resume lines carry one --rule each
+			local exhausted = originFile(`{ROOT}/issues/c0130/escalation.md`) or ""
+			t.expect(has(exhausted, "\nActor: human:")).toBe(true)
+			t.expect(has(exhausted, "\nOpen: F2, F5\nWhen: ")).toBe(true)
+			t.expect(
+				has(
+					exhausted,
+					'./zn resolve c0130 amend-design --answer "<your answer>" --rule F2="<your ruling>" --rule F5="<your ruling>"\n'
+				)
+			).toBe(true)
+			t.expect(
+				has(
+					exhausted,
+					'./zn resolve c0130 split --answer "<your answer>" --title "<the new issue\'s title>" --rule F2="<your ruling>" --rule F5="<your ruling>"\n'
+				)
+			).toBe(true)
+			t.expect(has(originFile(`{ROOT}/issues/c0140/escalation.md`) or "", "--rule")).toBe(false)
 			-- a draft raft in rafting blocks too
 			write(prep, `{ROOT}/rafts/R0200/escalation.md`, note("Which members?"))
 			znOk(prep, { "block", "R0200", "design-gap" })
@@ -425,19 +644,52 @@ return t.spec("c0250 block and resolve", function(it)
 		function()
 			fetch()
 			local before = head()
-			-- layer 2 (c0210) is the open layer, parked on its branch; layer 1 (c0200) landed
+			-- layer 1 (c0200) landed; layer 2 (c0210) is the open layer, parked on its branch with its pull request. The
+			-- worker's checkout sits on layer 1's branch, as after `done --through`: the Layer is read from origin/main's
+			-- tracker state, never from the current branch (F3)
+			local parkedAt = `{f.base}/wt-R0010-2`
+			git(f.main, { "worktree", "add", "-q", "-b", "R0010/2/c0210", parkedAt, "origin/main" })
+			write(parkedAt, "pickman/src/alpha.luau", 'return "alpha"\n')
+			git(parkedAt, { "add", "-A" })
+			git(parkedAt, { "commit", "-qm", "c0210 work" })
+			git(parkedAt, { "push", "-q", "origin", "R0010/2/c0210" })
+			git(f.main, { "worktree", "remove", "--force", parkedAt })
 			w.R0010 = `{f.base}/wt-R0010`
-			git(f.main, { "worktree", "add", "-q", "-b", "R0010/2/c0210", w.R0010, "origin/main" })
-			write(w.R0010, "pickman/src/alpha.luau", 'return "alpha"\n')
-			git(w.R0010, { "add", "-A" })
-			git(w.R0010, { "commit", "-qm", "c0210 work" })
-			git(w.R0010, { "push", "-q", "origin", "R0010/2/c0210" })
+			git(f.main, { "worktree", "add", "-q", "-b", "R0010/1/c0200", w.R0010, "origin/main" })
+			git(w.R0010, { "push", "-q", "origin", "R0010/1/c0200" })
+			fs.writeFile(`{state}/base-11`, "main\n") -- both layers have a pull request: only the Layer's is told
+			fs.writeFile(`{state}/base-12`, "main\n")
 			-- the readied raft's prompt and claim file live in the main checkout
 			write(f.main, `{ROOT}/rafts/active/R0010/prompt.md`, "the prompt\n")
 			write(f.main, ".cache/tracker-claim-R0010", ACTIVE .. "\n")
 			local path = `{ROOT}/rafts/active/R0010/escalation.md`
 			write(w.R0010, path, note("The gate stays red on c0210: expected 1, got 2. Retry, or redesign?"))
-			-- the worker is an agent: the note names it as the actor
+			-- a --layer that is landed, unknown, or another raft's is refused, and origin/main stays as it was
+			local settled = head()
+			for _, bad in { "c0200", "c0999", "c0230" } do
+				local refusedLayer = zn(w.R0010, { "block", "R0010", "red-gate", "--layer", bad })
+				t.expect(refusedLayer.ok).toBe(false)
+				t.expect(has(say(refusedLayer), `--layer {bad}`)).toBe(true)
+				t.expect(has(say(refusedLayer), "the Layer is one of c0210, c0220")).toBe(true)
+			end
+			t.expect(
+				has(
+					say(zn(w.R0010, { "block", "R0010", "red-gate", "--layer", "c0200" })),
+					"landed (it is in done/)"
+				)
+			).toBe(true)
+			-- an issue: --layer names a raft's layer only
+			write(prep, `{ROOT}/issues/c0175/escalation.md`, note("Why?"))
+			t.expect(
+				has(
+					say(zn(prep, { "block", "c0175", "red-gate", "--layer", "c0210" })),
+					"only for ./zn block <R>"
+				)
+			).toBe(true)
+			fs.removeFile(`{prep}/{ROOT}/issues/c0175/escalation.md`)
+			fetch()
+			t.expect(head()).toBe(settled)
+			-- the worker is an agent: the note names it as the actor and the session it ran in
 			local out = znOk(w.R0010, { "block", "R0010", "red-gate" }, AGENT)
 			fetch()
 			t.expect(subjects(before)).toEqual({ "tracker: R0010 blocked red-gate" })
@@ -463,7 +715,8 @@ return t.spec("c0250 block and resolve", function(it)
 			-- the note is in the raft's folder, with its header and the layer the worker was on
 			local filed = originFile(`{ROOT}/rafts/R0010/escalation.md`) or ""
 			t.expect(has(filed, "Item: R0010\nReason: red-gate\nFrom: active\nLayer: c0210\n")).toBe(true)
-			t.expect(has(filed, "\nActor: agent:unknown effort high\nWhen: ")).toBe(true)
+			t.expect(has(filed, "\nActor: agent:unknown effort high\nSession: sess-agent-1\nWhen: "))
+				.toBe(true)
 			t.expect(has(filed, "expected 1, got 2")).toBe(true)
 			-- check.sh paths are rewritten back, as stop does
 			t.expect(has(originFile(`{ROOT}/issues/c0210/check.sh`) or "", `# {ROOT}/issues/c0210/check.sh`))
@@ -482,6 +735,7 @@ return t.spec("c0250 block and resolve", function(it)
 				git(f.main, { "rev-parse", "--verify", "-q", "refs/remotes/origin/R0010/2/c0210" }) ~= ""
 			)
 				.toBe(true)
+			-- the Layer's pull request is told, though the checkout sat on layer 1's branch (F3)
 			t.expect(
 				has(
 					ghCalls(),
@@ -489,6 +743,7 @@ return t.spec("c0250 block and resolve", function(it)
 				)
 			)
 				.toBe(true)
+			t.expect(has(ghCalls(), "pr comment R0010/1/c0200")).toBe(false)
 		end
 	)
 	it("AC4: a second block keeps the resolved note as escalation-001.md", function()
@@ -499,7 +754,11 @@ return t.spec("c0250 block and resolve", function(it)
 		local active = `{ROOT}/rafts/active/R0060/escalation.md`
 		local backlog = `{ROOT}/rafts/R0060/escalation.md`
 		write(w.R0060, active, note("First question: which approach?"))
-		znOk(w.R0060, { "block", "R0060", "needs-decision" })
+		local first = zn(w.R0060, { "block", "R0060", "needs-decision" })
+		t.expect(first.ok).toBe(true)
+		-- the Layer has a branch and no pull request yet: the comment is skipped with a warning
+		t.expect(has(say(first), "warning: R0060/1/c0270 has no pull request yet")).toBe(true)
+		t.expect(has(ghCalls(), "pr comment R0060/1/c0270")).toBe(false)
 		fetch()
 		t.expect(has(originFile(backlog) or "", "First question")).toBe(true)
 		znOk(f.main, { "resolve", "R0060", "retry", "--answer", "take the first approach" })
@@ -531,6 +790,57 @@ return t.spec("c0250 block and resolve", function(it)
 		t.expect(statusOf(docOf("c0270"))).toBe("blocked")
 	end)
 	it(
+		"AC4: block from a detached worktree takes the lowest member still in active/ as the Layer, and --layer names another",
+		function()
+			fetch()
+			local function detached(name: string): string
+				local dir = `{f.base}/wt-{name}`
+				git(f.main, { "worktree", "add", "-q", "--detach", dir, "origin/main" })
+				return dir
+			end
+			-- R0070: no layer started; --layer names the second member, and both members move with the raft
+			local wt70 = detached("R0070")
+			write(wt70, `{ROOT}/rafts/active/R0070/escalation.md`, note("Which of the two layers is wrong?"))
+			local flagged = zn(wt70, { "block", "R0070", "design-gap", "--layer", "c0285" })
+			t.expect(flagged.ok).toBe(true)
+			fetch()
+			local filed = originFile(`{ROOT}/rafts/R0070/escalation.md`) or ""
+			t.expect(has(filed, "From: active\nLayer: c0285\n")).toBe(true)
+			t.expect(statusOf(docOf("c0280"))).toBe("blocked")
+			t.expect(statusOf(docOf("c0285"))).toBe("blocked")
+			-- no layer branch exists yet: nothing to comment on, said so, and no gh comment call
+			t.expect(has(say(flagged), "warning: c0285 has no layer branch yet")).toBe(true)
+			t.expect(has(ghCalls(), "pr comment R0070")).toBe(false)
+			-- R0090: a layer already landed (c0340 is in done/): the Layer is the lowest member still in active/
+			local wt90 = detached("R0090")
+			write(
+				wt90,
+				`{ROOT}/rafts/active/R0090/escalation.md`,
+				note("The design of c0345 misses the reader.")
+			)
+			znOk(wt90, { "block", "R0090", "design-gap" })
+			-- R0300: its only member
+			local wt300 = detached("R0300")
+			write(
+				wt300,
+				`{ROOT}/rafts/active/R0300/escalation.md`,
+				note("The design of c0350 misses the reader.")
+			)
+			znOk(wt300, { "block", "R0300", "design-gap" })
+			fetch()
+			t.expect(
+				has(originFile(`{ROOT}/rafts/R0090/escalation.md`) or "", "From: active\nLayer: c0345\n")
+			)
+				.toBe(true)
+			t.expect(
+				has(originFile(`{ROOT}/rafts/R0300/escalation.md`) or "", "From: active\nLayer: c0350\n")
+			)
+				.toBe(true)
+			t.expect(has(tree(), `{ROOT}/issues/done/c0340/c0340.md`)).toBe(true) -- the landed member stays
+			t.expect(statusOf(`{ROOT}/issues/done/c0340/c0340.md`)).toBe("done")
+		end
+	)
+	it(
 		"AC5: resolve is refused with ZN_DISPATCH, needs --said in an agent session and records it, needs none in a terminal, and refuses an item that is not blocked",
 		function()
 			fetch()
@@ -543,6 +853,54 @@ return t.spec("c0250 block and resolve", function(it)
 			local dispatchedTerminal = zn(f.main, { "resolve", "c0160", "retry" }, { ZN_DISPATCH = "1" })
 			t.expect(dispatchedTerminal.ok).toBe(false)
 			t.expect(has(say(dispatchedTerminal), "headless session is refused")).toBe(true)
+			-- the headless loop (c0253) sets ZN_HEADLESS: refused whoever else is set, with or without --said
+			for _, extra in
+				{
+					with(TERMINAL, { ZN_HEADLESS = "1" }),
+					with(AGENT, { ZN_HEADLESS = "1" }),
+				}
+			do
+				local loop = zn(f.main, { "resolve", "c0160", "retry", "--said", "yes" }, extra)
+				t.expect(loop.ok).toBe(false)
+				t.expect(has(say(loop), "resolve is the human's: a headless session is refused")).toBe(true)
+			end
+			-- the session that filed the block may not resolve it (c0150's note names sess-A), as the user's agent or not
+			for _, extra in
+				{
+					with(AGENT, { CLAUDE_CODE_SESSION_ID = "sess-A" }),
+					with(TERMINAL, { CLAUDE_CODE_SESSION_ID = "sess-A" }),
+				}
+			do
+				local own = zn(f.main, { "resolve", "c0150", "abort", "--said", "yes, abort it" }, extra)
+				t.expect(own.ok).toBe(false)
+				t.expect(has(say(own), "this session filed the block of c0150")).toBe(true)
+			end
+			-- a review-exhausted resolve needs one --rule per open id of the note (c0130: F2 and F5), and no other
+			local noRules = zn(f.main, { "resolve", "c0130", "amend-design", "--answer", "redo it" })
+			t.expect(noRules.ok).toBe(false)
+			t.expect(has(say(noRules), "leaves F2 open: add --rule F2=")).toBe(true)
+			local oneRule = zn(
+				f.main,
+				{ "resolve", "c0130", "amend-design", "--answer", "redo it", "--rule", "F2=keep it" }
+			)
+			t.expect(oneRule.ok).toBe(false)
+			t.expect(has(say(oneRule), "leaves F5 open")).toBe(true)
+			local strayRule = zn(f.main, {
+				"resolve",
+				"c0130",
+				"amend-design",
+				"--rule",
+				"F2=keep it",
+				"--rule",
+				"F5=defer",
+				"--rule",
+				"F9=never",
+			})
+			t.expect(strayRule.ok).toBe(false)
+			t.expect(has(say(strayRule), "--rule F9: the note's Open: lists F2, F5")).toBe(true)
+			local badRule = zn(f.main, { "resolve", "c0130", "amend-design", "--rule", "F2" })
+			t.expect(badRule.ok).toBe(false)
+			t.expect(has(say(badRule), "give --rule <Fn>=")).toBe(true)
 			-- an agent session quotes the user: no --said, or an empty one, is refused
 			local noSaid = zn(f.main, { "resolve", "c0160", "retry" }, AGENT)
 			t.expect(noSaid.ok).toBe(false)
@@ -575,19 +933,19 @@ return t.spec("c0250 block and resolve", function(it)
 			znOk(f.main, {
 				"resolve",
 				"c0160",
-				"retry",
+				"approve",
 				"--answer",
 				"retry it",
 				"--said",
 				"yes, go ahead and retry c0160",
 			}, AGENT)
 			fetch()
-			t.expect(subjects(before)).toEqual({ "tracker: c0160 resolve retry" })
+			t.expect(subjects(before)).toEqual({ "tracker: c0160 resolve approve" })
 			local resolved = originFile(`{ROOT}/issues/c0160/escalation.md`) or ""
 			t.expect(
 				has(
 					resolved,
-					"\n## Resolution\nDecision: retry\nAnswer: retry it\nBy: agent:unknown effort high\n"
+					"\n## Resolution\nDecision: approve\nAnswer: retry it\nBy: agent:unknown effort high\n"
 				)
 			).toBe(true)
 			t.expect(has(resolved, 'Said: "yes, go ahead and retry c0160"\n')).toBe(true)
@@ -595,10 +953,17 @@ return t.spec("c0250 block and resolve", function(it)
 			t.expect(
 				has(
 					record,
-					'| unblocked | agent:unknown effort high | decision=retry said="yes, go ahead and retry c0160" |'
+					'| unblocked | agent:unknown effort high | decision=approve said="yes, go ahead and retry c0160" |'
 				)
 			).toBe(true)
 			t.expect(statusOf(docOf("c0160"))).toBe("new")
+			-- the Decided line quotes the user's words, not the agent's answer, and names the option the agent took (F5)
+			t.expect(
+				has(
+					originFile(docOf("c0160")) or "",
+					`The thing is slow.\nDecided with the user ({os.date("%Y-%m-%d")}), resolve approve: "yes, go ahead and retry c0160" (the option: retry it)\n\n## Solution`
+				)
+			).toBe(true)
 			-- a terminal needs no quote, and records no Said line
 			local beforeHuman = head()
 			znOk(f.main, { "resolve", "c0110", "retry", "--answer-file", `{f.base}/answer.txt` })
@@ -668,14 +1033,54 @@ return t.spec("c0250 block and resolve", function(it)
 			t.expect(
 				has(
 					approved,
-					`The thing is slow.\nDecided with the user ({date}), resolve: "use the json library"\n\n## Solution`
+					`The thing is slow.\nDecided with the user ({date}), resolve approve: "use the json library"\n\n## Solution`
 				)
 			).toBe(true)
 			-- amend-design: back to design with the note as input
-			resolve("c0130", "amend-design", { "--answer", "the design misses the reader" })
+			resolve("c0130", "amend-design", {
+				"--answer",
+				"the design misses the reader",
+				"--rule",
+				"F2=keep the reader",
+				"--rule",
+				"F5=defer the cache",
+			})
 			t.expect(statusOf(docOf("c0130"))).toBe("new")
 			t.expect(front(docOf("c0130"), "design")).toBe("draft")
 			t.expect(has(originFile(docOf("c0130")) or "", "Decided with the user")).toBe(false)
+			-- the rulings are in the note's Resolution, and no document on origin/main was edited by them
+			local ruledNote = originFile(`{ROOT}/issues/c0130/escalation.md`) or ""
+			t.expect(has(ruledNote, 'Ruled F2: "keep the reader"\nRuled F5: "defer the cache"\nWhen: '))
+				.toBe(true)
+			t.expect(has(originFile(docOf("c0130")) or "", "Ruled (user")).toBe(false)
+			-- ./zn rulings, run in the step's worktree, writes them under the bullets; a bullet with no ruling is refused
+			local doc130 = `{prep}/{docOf("c0130")}`
+			local original = fs.readFile(doc130)
+			fs.writeFile(doc130, original .. "- F9: a later finding. Answer: refuted. Decision: x\n")
+			local unrecorded = zn(prep, { "rulings", "c0130" })
+			t.expect(unrecorded.ok).toBe(false)
+			t.expect(has(say(unrecorded), "F9 has no recorded ruling")).toBe(true)
+			t.expect(fs.readFile(doc130))
+				.toBe(original .. "- F9: a later finding. Answer: refuted. Decision: x\n") -- untouched
+			fs.writeFile(doc130, original)
+			local ruledOut = znOk(prep, { "rulings", "c0130" })
+			t.expect(has(ruledOut, "ruled c0130")).toBe(true)
+			local ruledDoc = fs.readFile(doc130)
+			t.expect(
+				has(
+					ruledDoc,
+					`- F2: the reader is missing. Answer: refuted. Decision: keep it or not?\n  Ruled (user, {date}): keep the reader\n`
+				)
+			).toBe(true)
+			t.expect(
+				has(
+					ruledDoc,
+					`- F5: the cache is slow. Answer: refuted. Decision: defer it?\n  Ruled (user, {date}): defer the cache\n`
+				)
+			).toBe(true)
+			t.expect(has(say(zn(prep, { "rulings", "c0130" })), "no unruled bullet")).toBe(true) -- a second run changes nothing
+			t.expect(fs.readFile(doc130)).toBe(ruledDoc)
+			t.expect(zn(f.main, { "rulings", "c0130" }).ok).toBe(false) -- never the main checkout
 			-- abort: the claim is given back
 			resolve("c0150", "abort")
 			t.expect(statusOf(docOf("c0150"))).toBe("new")
@@ -721,6 +1126,64 @@ return t.spec("c0250 block and resolve", function(it)
 			t.expect(front(raftOf("R0200"), "blocked")).toBe(nil)
 			t.expect(front(raftOf("R0200"), "rank")).toBe("3")
 			t.expect(statusOf(docOf("c0190"))).toBe("prepared")
+			-- a draft raft has no design to approve, amend or split (F13): approve and amend-design act as retry, with
+			-- the answer only in the Resolution, and split is refused
+			local function blockDraft(raft: string)
+				write(
+					prep,
+					`{ROOT}/rafts/{raft}/escalation.md`,
+					note(`Which members does {raft} take?`, {
+						"- retry: again (recommended)",
+						"- approve: take it as it is",
+						"- amend-design: redo the grouping",
+						"- split: carve out",
+					})
+				)
+				znOk(prep, { "block", raft, "design-gap" })
+				fetch()
+				t.expect(statusOf(raftOf(raft))).toBe("blocked")
+			end
+			blockDraft("R0210")
+			blockDraft("R0220")
+			local beforeDraft = head()
+			znOk(f.main, { "resolve", "R0210", "approve", "--answer", "take the plan as it is" })
+			fetch()
+			t.expect(subjects(beforeDraft)).toEqual({ "tracker: R0210 resolve approve" })
+			t.expect(statusOf(raftOf("R0210"))).toBe("new")
+			t.expect(front(raftOf("R0210"), "blocked")).toBe(nil)
+			t.expect(front(raftOf("R0210"), "design")).toBe("draft")
+			t.expect(has(originFile(raftOf("R0210")) or "", "Decided with the user")).toBe(false)
+			for _, mid in { "c0191", "c0196" } do
+				t.expect(has(originFile(docOf(mid)) or "", "Decided with the user")).toBe(false)
+				t.expect(statusOf(docOf(mid))).toBe("prepared")
+			end
+			t.expect(
+				has(
+					originFile(`{ROOT}/rafts/R0210/escalation.md`) or "",
+					"Decision: approve\nAnswer: take the plan as it is\n"
+				)
+			).toBe(true)
+			-- split on a draft raft is refused with the way out, and nothing is published
+			local atSplit = head()
+			local splitDraft =
+				zn(f.main, { "resolve", "R0220", "split", "--title", "A new one", "--answer", "carve it" })
+			t.expect(splitDraft.ok).toBe(false)
+			t.expect(
+				has(
+					say(splitDraft),
+					"a draft raft has no design to split: resolve it amend-design, then split the issue in z-design"
+				)
+			).toBe(true)
+			fetch()
+			t.expect(head()).toBe(atSplit)
+			t.expect(statusOf(raftOf("R0220"))).toBe("blocked")
+			-- amend-design acts as retry: new, and its design stays as it was (not reset to draft)
+			znOk(f.main, { "resolve", "R0220", "amend-design", "--answer", "regroup them" })
+			fetch()
+			t.expect(statusOf(raftOf("R0220"))).toBe("new")
+			t.expect(front(raftOf("R0220"), "design")).toBe("ready")
+			t.expect(front(raftOf("R0220"), "issues")).toBe("[c0192, c0197]")
+			t.expect(statusOf(docOf("c0192"))).toBe("prepared")
 		end
 	)
 	it(
@@ -752,7 +1215,7 @@ return t.spec("c0250 block and resolve", function(it)
 				fetch()
 			end
 			blockAt("R0020", "c0230", "design-gap")
-			blockAt("R0030", "c0240", "needs-decision")
+			blockAt("R0030", "f0240", "needs-decision")
 			for _, raft in { "R0020", "R0030" } do
 				t.expect(statusOf(raftOf(raft))).toBe("blocked")
 			end
@@ -803,12 +1266,15 @@ return t.spec("c0250 block and resolve", function(it)
 			fetch()
 			t.expect(statusOf(raftOf("R0030"))).toBe("prepared")
 			t.expect(front(raftOf("R0030"), "issues")).toBe("[c0245]")
-			t.expect(statusOf(docOf("c0240"))).toBe("new")
-			t.expect(front(docOf("c0240"), "raft")).toBe("")
-			t.expect(front(docOf("c0240"), "design")).toBe("draft")
-			local layerDoc = originFile(docOf("c0240")) or ""
-			local newId = string.match(layerDoc, "%(split into (c%d%d%d%d)%)") :: string
+			t.expect(statusOf(docOf("f0240"))).toBe("new")
+			t.expect(front(docOf("f0240"), "raft")).toBe("")
+			t.expect(front(docOf("f0240"), "design")).toBe("draft")
+			local layerDoc = originFile(docOf("f0240")) or ""
+			local newId = string.match(layerDoc, "%(split into ([fdc]%d%d%d%d)%)") :: string
 			t.expect(newId ~= nil).toBe(true)
+			-- the new issue takes the Layer member's type: f0240 is a feature (F13)
+			t.expect(string.sub(newId, 1, 1)).toBe("f")
+			t.expect(has(originFile(docOf(newId)) or "", "\ntype: feature\n")).toBe(true)
 			t.expect(
 				has(
 					layerDoc,
@@ -826,6 +1292,54 @@ return t.spec("c0250 block and resolve", function(it)
 		end
 	)
 	it(
+		"AC6: a raft the Layer leaves with no unlanded member goes to done/ when a member landed and to retired/ when none did",
+		function()
+			fetch()
+			local landedBefore = originFile(`{ROOT}/issues/done/c0340/c0340.md`)
+			-- R0090: c0340 landed, c0345 is the Layer
+			local before = head()
+			local out = znOk(f.main, { "resolve", "R0090", "amend-design", "--answer", "add the reader" })
+			fetch()
+			t.expect(subjects(before)).toEqual({ "tracker: R0090 resolve amend-design" })
+			t.expect(has(out, "the raft has no unlanded member: its folder is now in rafts/done/")).toBe(true)
+			local files = tree()
+			t.expect(has(files, `{ROOT}/rafts/done/R0090/R0090.md`)).toBe(true)
+			t.expect(has(files, `{ROOT}/rafts/R0090/`)).toBe(false)
+			t.expect(has(files, `{ROOT}/rafts/active/R0090/`)).toBe(false)
+			local moved = originFile(`{ROOT}/rafts/done/R0090/R0090.md`) or ""
+			t.expect(has(moved, "\nstatus:")).toBe(false) -- a finished raft carries no status line
+			t.expect(has(moved, "\nblocked:")).toBe(false)
+			t.expect(has(moved, "\nissues: [c0340]\n")).toBe(true)
+			local note90 = originFile(`{ROOT}/rafts/done/R0090/escalation.md`) or ""
+			t.expect(has(note90, "\n## Resolution\nDecision: amend-design\nAnswer: add the reader\n"))
+				.toBe(true)
+			t.expect(has(originFile(`{ROOT}/rafts/done/R0090/provenance.md`) or "", "| unblocked | human:"))
+				.toBe(true)
+			-- the Layer member is back in design, and the landed member is untouched, byte for byte
+			t.expect(statusOf(docOf("c0345"))).toBe("new")
+			t.expect(front(docOf("c0345"), "raft")).toBe("")
+			t.expect(front(docOf("c0345"), "design")).toBe("draft")
+			t.expect(has(originFile(`{ROOT}/issues/c0345/escalation.md`) or "", "Decision: amend-design"))
+				.toBe(true)
+			t.expect(originFile(`{ROOT}/issues/done/c0340/c0340.md`)).toBe(landedBefore)
+			-- R0300: no member landed, so the raft is retired
+			znOk(f.main, { "resolve", "R0300", "amend-design", "--answer", "add the reader" })
+			fetch()
+			files = tree()
+			t.expect(has(files, `{ROOT}/rafts/retired/R0300/R0300.md`)).toBe(true)
+			t.expect(has(files, `{ROOT}/rafts/R0300/`)).toBe(false)
+			local retired = originFile(`{ROOT}/rafts/retired/R0300/R0300.md`) or ""
+			t.expect(has(retired, "\nretired: emptied\n")).toBe(true)
+			t.expect(has(retired, "\nstatus:")).toBe(false)
+			t.expect(has(retired, "\nissues: []\n")).toBe(true)
+			t.expect(statusOf(docOf("c0350"))).toBe("new")
+			-- R0070, blocked elsewhere, is untouched
+			t.expect(statusOf(docOf("c0280"))).toBe("blocked")
+			t.expect(statusOf(raftOf("R0070"))).toBe("blocked")
+		end
+	)
+
+	it(
 		"AC7: approve on a raft writes the Decided line in the Layer member, and ready refuses until that member is approved again",
 		function()
 			local date = os.date("%Y-%m-%d") :: string
@@ -842,7 +1356,16 @@ return t.spec("c0250 block and resolve", function(it)
 			)
 			znOk(dir, { "block", "R0040", "design-gap" })
 			fetch()
-			znOk(f.main, { "resolve", "R0040", "approve", "--answer", "take the json library" })
+			-- run by an agent on the user's word: the Decided line quotes --said, and names the option taken (F5)
+			znOk(f.main, {
+				"resolve",
+				"R0040",
+				"approve",
+				"--answer",
+				"take the json library",
+				"--said",
+				"yes, accept the json library for c0250",
+			}, AGENT)
 			fetch()
 			t.expect(statusOf(raftOf("R0040"))).toBe("prepared")
 			t.expect(statusOf(docOf("c0255"))).toBe("prepared")
@@ -851,13 +1374,35 @@ return t.spec("c0250 block and resolve", function(it)
 			t.expect(
 				has(
 					layer,
-					`The thing is slow.\nDecided with the user ({date}), resolve: "take the json library"\n\n## Solution`
+					`The thing is slow.\nDecided with the user ({date}), resolve approve: "yes, accept the json library for c0250" (the option: take the json library)\n\n## Solution`
 				)
 			).toBe(true)
 			t.expect(statusOf(docOf("c0250"))).toBe("prepared")
 			t.expect(front(docOf("c0250"), "blocked")).toBe(nil)
 			t.expect(has(originFile(raftOf("R0040")) or "", "Decided with the user")).toBe(false)
 			t.expect(has(originFile(docOf("c0255")) or "", "Decided with the user")).toBe(false)
+			-- the raft's grouped: entry and its coherence review's Grouped: line for the Layer member are re-recorded, as
+			-- compact and remap do (F4); the other member's stay
+			local function hashOf(id: string, doc: string): string
+				return raftplan.recordHash(
+					id,
+					{ [`{id}.md`] = doc, ["check.sh"] = CHECK, ["acceptance/.gitkeep"] = "" }
+				)
+			end
+			local oldHash = hashOf("c0250", issue("c0250", PREPARED, "R0040", "ready"))
+			local newHash = hashOf("c0250", layer)
+			local otherHash = hashOf("c0255", issue("c0255", PREPARED, "R0040", "ready"))
+			t.expect(newHash ~= oldHash).toBe(true)
+			local raftText = originFile(raftOf("R0040")) or ""
+			t.expect(front(raftOf("R0040"), "grouped")).toBe(`[c0250@{newHash}, c0255@{otherHash}]`)
+			t.expect(
+				has(
+					originFile(`{ROOT}/rafts/R0040/design-review-001.md`) or "",
+					`Grouped: [c0250@{newHash}, c0255@{otherHash}]`
+				)
+			).toBe(true)
+			t.expect(has(raftText .. (originFile(`{ROOT}/rafts/R0040/design-review-001.md`) or ""), oldHash))
+				.toBe(false)
 			-- the approved contract changed: ready refuses the raft, naming the member and the user's own approve
 			local before = head()
 			local refused = zn(f.main, { "ready", "R0040" })
@@ -964,6 +1509,71 @@ return t.spec("c0250 block and resolve", function(it)
 			).toBe(false)
 		end
 	)
+	it(
+		"AC7: a raft with a landed member resumes at layer 2: ready moves only the unlanded members, start reuses the parked branch and PR, the done member is untouched",
+		function()
+			fetch()
+			local doneDoc = `{ROOT}/issues/done/c0330/c0330.md`
+			local doneBefore = originFile(doneDoc)
+			t.expect(doneBefore ~= nil).toBe(true)
+			local wt = (string.gsub(znOk(f.main, { "worktree", "R0080" }), "%s+$", ""))
+			-- ready (in the setup) left c0330 in done/ and moved the other two; start opens the first unlanded layer
+			t.expect(statusOf(`{ROOT}/rafts/active/R0080/R0080.md`)).toBe("active")
+			znOk(wt, { "start", "R0080" })
+			t.expect(git(wt, { "branch", "--show-current" })).toBe("R0080/2/c0335")
+			local function created(): number
+				local n, at = 0, 1
+				local calls = ghCalls()
+				while true do
+					local found = string.find(calls, "pr create --draft", at, true)
+					if not found then
+						return n
+					end
+					n += 1
+					at = found + 1
+				end
+			end
+			local made = created()
+			write(wt, "pickman/src/gamma.luau", 'return "gamma"\n')
+			git(wt, { "add", "-A" })
+			git(wt, { "commit", "-qm", "c0335 work" })
+			git(wt, { "push", "-q", "origin", "R0080/2/c0335" })
+			local parked = git(wt, { "rev-parse", "HEAD" })
+			write(
+				wt,
+				`{ROOT}/rafts/active/R0080/escalation.md`,
+				note("The gate on c0335 is red.", { "- retry: again (recommended)", "- abort: stop" })
+			)
+			znOk(wt, { "block", "R0080", "red-gate" })
+			fetch()
+			t.expect(has(originFile(`{ROOT}/rafts/R0080/escalation.md`) or "", "Layer: c0335\n")).toBe(true)
+			t.expect(statusOf(docOf("c0335"))).toBe("blocked")
+			t.expect(statusOf(docOf("c0336"))).toBe("blocked")
+			t.expect(originFile(doneDoc)).toBe(doneBefore) -- the landed member is not part of the block
+			-- retry: the raft and its two members are prepared; the landed member did not move
+			znOk(f.main, { "resolve", "R0080", "retry", "--answer", "one more attempt" })
+			fetch()
+			t.expect(statusOf(raftOf("R0080"))).toBe("prepared")
+			t.expect(statusOf(docOf("c0335"))).toBe("prepared")
+			t.expect(statusOf(docOf("c0336"))).toBe("prepared")
+			t.expect(originFile(doneDoc)).toBe(doneBefore)
+			-- ready moves only the unlanded members, and passes with the raft's record as it was
+			local readyOut = znOk(f.main, { "ready", "R0080" })
+			fetch()
+			t.expect(has(readyOut, "readied R0080")).toBe(true)
+			t.expect(has(tree(), `{ROOT}/issues/active/c0335/c0335.md`)).toBe(true)
+			t.expect(has(tree(), `{ROOT}/issues/active/c0336/c0336.md`)).toBe(true)
+			t.expect(has(tree(), `{ROOT}/issues/active/c0330/`)).toBe(false)
+			t.expect(originFile(doneDoc)).toBe(doneBefore) -- byte for byte
+			-- start resumes on layer 2's own branch, at the commit it was parked at, and opens no second pull request
+			git(wt, { "merge", "-q", "--no-edit", "origin/main" })
+			znOk(wt, { "start", "R0080" })
+			t.expect(git(wt, { "branch", "--show-current" })).toBe("R0080/2/c0335")
+			t.expect(git(wt, { "merge-base", "--is-ancestor", parked, "HEAD" })).toBe("")
+			t.expect(created()).toBe(made)
+		end
+	)
+
 	it("AC6: abort on a raft leaves it prepared and names the parked branches and PRs", function()
 		fetch()
 		t.expect(statusOf(raftOf("R0060"))).toBe("blocked") -- blocked a second time in AC4

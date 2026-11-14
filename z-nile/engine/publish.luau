@@ -696,9 +696,14 @@ function publish.commit(
 				-- under its archive name first
 				if string.sub(c.content, 1, #existing) == existing then
 					local added = string.sub(c.content, #existing + 1)
+					local headings = 0
+					for _ in string.gmatch("\n" .. added, "\n## ") do
+						headings += 1
+					end
 					if
 						string.find(existing, "\n## Resolution\n", 1, true)
 						or not string.match(added, "^\n+## Resolution\n")
+						or headings ~= 1
 					then
 						return fail(
 							`{c.path}: the note on origin/main is only appended to, by one ## Resolution, and only while unresolved`

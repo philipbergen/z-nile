@@ -33,6 +33,15 @@ max_tokens = 5000
 effort = "high"
 fallbacks = []
 
+[roles.implementation]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 5000
+effort = "high"
+fallbacks = []
+
 [roles.design-challenge]
 model = "claude-opus-5-5"
 cli = "claude"
@@ -66,9 +75,18 @@ NOTE
 ./zn block "$id" needs-decision
 ]]
 
+-- a prepared raft with one member, ready to be readied (z-run's step runs on it): the documents `ready` accepts
+local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
+	.. 'check "AC1: ok" true\nfinish\n'
+local RAFT_DOC =
+	"---\nid: R0010\ntype: chore\ntitle: R0010\nslug: r0010\nsingle: false\nissues: [c0050]\ndesign: ready\nrank: 3\ncreated: 2026-11-10\nstatus: prepared-quiet-copper-falcon\n---\n\n# R0010\n\n## Theme\nThe theme.\n\n## Order & dependencies\nc0050\n"
+local MEMBER_DOC =
+	"---\nid: c0050\ntype: chore\ntitle: title c0050\nslug: c0050\nraft: R0010\ndepends_on: []\nemergent: false\ndesign: ready\nrank: 7\ncreated: 2026-11-10\nstatus: prepared-quiet-copper-falcon\n---\n\n# c0050\n\n## Problem\nThe thing is slow.\n\n## Solution\nMake it fast.\n\n## Acceptance criteria\n- AC1: it is fast\n"
+
 local h: fakecli.Harness
 local function issue(id: string, slug: string): string
-	return trackerfix.stub(id, slug, "new-quiet-copper-falcon")
+	-- with the Problem a Decided line goes into
+	return trackerfix.stub(id, slug, "new-quiet-copper-falcon") .. "\n## Problem\nThe thing is slow.\n"
 end
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
@@ -92,6 +110,10 @@ local TERMINAL = {
 	ZN_DISPATCH = "",
 	CLAUDE_EFFORT = "",
 	ZN_ACTOR = "",
+	ZN_HEADLESS = "",
+	CLAUDE_CODE_SESSION_ID = "",
+	KIMI_SESSION_ID = "",
+	KIMI_CODE_SESSION_ID = "",
 }
 local function zn(args: { string }, extra: { [string]: string }?): fixture.Result
 	return fakecli.zn(h, args, extra)
@@ -141,8 +163,16 @@ return t.spec("c0250 the dispatcher and a blocked item", function(it)
 	it("sets up a tracker with .models.toml, an issue and the fake CLIs", function()
 		h = fakecli.new("c0250-dispatch-block", {
 			[".models.toml"] = MODELS,
+			[".gitignore"] = ".cache/\n.worktree/\n/*/.tracker/rafts/active/*/prompt.md\n",
 			["pickman/.tracker/issues/c0010/c0010.md"] = issue("c0010", "first-thing"),
 			["pickman/.tracker/issues/c0020/c0020.md"] = issue("c0020", "second-thing"),
+			["pickman/.tracker/issues/c0030/c0030.md"] = issue("c0030", "third-thing"),
+			["pickman/.tracker/issues/c0040/c0040.md"] = issue("c0040", "fourth-thing"),
+			["pickman/.tracker/rafts/R0010/R0010.md"] = RAFT_DOC,
+			["pickman/.tracker/rafts/R0010/check.sh"] = CHECK,
+			["pickman/.tracker/issues/c0050/c0050.md"] = MEMBER_DOC,
+			["pickman/.tracker/issues/c0050/check.sh"] = CHECK,
+			["pickman/.tracker/issues/c0050/acceptance/.gitkeep"] = "",
 		})
 	end)
 
@@ -168,6 +198,14 @@ return t.spec("c0250 the dispatcher and a blocked item", function(it)
 			-- a preparing issue that is not blocked still routes as before
 			local routed = dispatch.next(facts({ status = "preparing", ownClaim = true }))
 			t.expect(routed.kind).toBe("step")
+			-- an unruled open list is a block (review-exhausted); the chain's own stop on it is only a fallback and names
+			-- the command that blocks
+			local fallback = dispatch.next(facts({ openHuman = { "F2", "F5" } }))
+			t.expect(fallback.kind).toBe("stop")
+			t.expect(fallback.code).toBe(dispatch.EXIT.user)
+			t.expect(has(fallback.why or "", "F2, F5 under ## Open to the human with no ruling")).toBe(true)
+			t.expect(has(fallback.why or "", "./zn block c0010 review-exhausted")).toBe(true)
+			t.expect(has(fallback.why or "", "./zn rulings c0010")).toBe(true)
 			-- the prompt says to block, not to write questions.md, for a step on an item
 			local prompt = dispatch.prompt({
 				step = "z-design",
@@ -191,6 +229,11 @@ return t.spec("c0250 the dispatcher and a blocked item", function(it)
 			t.expect(has(prompt, "escalation.md")).toBe(true)
 			t.expect(has(prompt, "./zn block c0010 <")).toBe(true)
 			t.expect(has(prompt, "/state/questions.md")).toBe(false)
+			-- under the dispatcher a step never lands layers itself, and an unruled open list is a block (F1, F7)
+			t.expect(has(prompt, "do not run `./zn done`: the dispatcher lands the layers below (c0252)"))
+				.toBe(true)
+			t.expect(has(prompt, "run `./zn block c0010 review-exhausted`")).toBe(true)
+			t.expect(has(prompt, "run `./zn rulings c0010`")).toBe(true)
 			-- and a capture, which has no item yet, still writes the local questions.md
 			local capture = dispatch.prompt({
 				step = "z-ticket",
@@ -319,6 +362,170 @@ return t.spec("c0250 the dispatcher and a blocked item", function(it)
 		t.expect(has(log, "./zn block c0020 <reason>")).toBe(true)
 		t.expect(has(log, "write these questions")).toBe(false)
 		t.expect(has(log, "$ZN_DISPATCH_DIR/questions.md")).toBe(false)
-		t.expect(has(log, "review=3")).toBe(true) -- the nested step stopped for the user
+		t.expect(has(log, "review=1")).toBe(true) -- the nested step failed: its questions.md is set aside, never read
 	end)
+	it(
+		"AC8: an unruled open list blocks with review-exhausted, and ./zn dispatch <id> after the resolve carries the resolution",
+		function()
+			fakecli.clear(h)
+			fakecli.mode(h, "claude", "script")
+			-- the step records the open list in the item's document, as z-design 5.4 says, and blocks it
+			fs.writeFile(
+				`{h.fakes}/script.sh`,
+				[[
+./zn status "$id" preparing
+printf '\n## Open to the human\n- F2: the reader is missing. Answer: refuted. Decision: keep it or not?\n- F5: the cache. Answer: refuted. Decision: defer it?\n' >> pickman/.tracker/issues/$id/$id.md
+cat > pickman/.tracker/issues/$id/escalation.md <<'NOTE'
+## Question
+Rule on F2 and F5.
+
+## What was tried
+One review round and one revision.
+
+## Open findings or error
+- F2: the reader is missing. Answer: refuted. Decision: keep it or not?
+- F5: the cache. Answer: refuted. Decision: defer it?
+
+## Options
+- retry: go on with your rulings (recommended)
+- abort: stop
+NOTE
+./zn block "$id" review-exhausted
+]]
+			)
+			local r = zn({ "dispatch", "c0030" })
+			t.expect(r.code).toBe(3)
+			t.expect(has(r.stdout, "c0030 is blocked (review-exhausted)")).toBe(true)
+			local note = onOrigin("pickman/.tracker/issues/c0030/escalation.md")
+			t.expect(has(note, "Reason: review-exhausted\n")).toBe(true)
+			t.expect(has(note, "\nOpen: F2, F5\n")).toBe(true)
+			t.expect(
+				has(
+					note,
+					'resolve c0030 retry --answer "<your answer>" --rule F2="<your ruling>" --rule F5="<your ruling>"'
+				)
+			).toBe(true)
+			t.expect(exchangeFiles("c0030")).toEqual({ "001-question.md" })
+			-- the user resolves it with a ruling per open id; the next chain run copies the resolution first
+			local before = count(fakecli.log(h), "claude step=")
+			local noRules = zn({ "resolve", "c0030", "retry", "--answer", "go on" }, TERMINAL)
+			t.expect(noRules.ok).toBe(false)
+			local resolved = zn({
+				"resolve",
+				"c0030",
+				"retry",
+				"--answer",
+				"go on",
+				"--rule",
+				"F2=keep the reader",
+				"--rule",
+				"F5=defer the cache",
+			}, TERMINAL)
+			t.expect(resolved.ok).toBe(true)
+			fixture.git(h.f.main, { "pull", "-q", "--ff-only", "origin", "main" })
+			fs.writeFile(`{h.fakes}/script.sh`, './zn status "$id" preparing\n') -- the re-run step claims the item again
+			zn({ "dispatch", "c0030" }) -- not `retry`: the plain chain resumes the item
+			t.expect(count(fakecli.log(h), "claude step=") > before).toBe(true)
+			t.expect(exchangeFiles("c0030")).toEqual({ "001-question.md", "002-answer.md" })
+			local answer = fs.readFile(`{dirOf("c0030")}/exchange/002-answer.md`)
+			t.expect(has(answer, "Decision: retry")).toBe(true)
+			t.expect(has(answer, "Answer: go on")).toBe(true)
+			local log = fakecli.log(h)
+			t.expect(has(log, "The last file is an answer")).toBe(true)
+		end
+	)
+
+	it(
+		"AC8: a step that leaves questions.md on an item fails the chain with exit 1 and the file is set aside, and a one-step run does the same",
+		function()
+			fakecli.clear(h)
+			fakecli.mode(h, "claude.z-design", "questions")
+			local r = zn({ "dispatch", "c0040" })
+			t.expect(r.code).toBe(1)
+			t.expect(has(r.stderr .. r.stdout, "left questions.md, which nothing reads for an item"))
+				.toBe(true)
+			t.expect(
+				has(
+					r.stderr .. r.stdout,
+					"write escalation.md in c0040's folder and run ./zn block c0040 <reason>"
+				)
+			).toBe(true)
+			-- set aside, never read: no waiting question and nothing in the exchange
+			t.expect(fs.isFile(`{dirOf("c0040")}/questions.md`)).toBe(false)
+			t.expect(fs.isFile(`{dirOf("c0040")}/questions-ignored-1.md`)).toBe(true)
+			t.expect(has(fs.readFile(`{dirOf("c0040")}/questions-ignored-1.md`), "Which scope?")).toBe(true)
+			t.expect(exchangeFiles("c0040")).toEqual({})
+			t.expect(fakecli.state(h, "c0040").outcome).toBe("failed")
+			-- a retry re-runs the step without the file: no answer is invented for it
+			fakecli.mode(h, "claude.z-design", "ok")
+			local before = count(fakecli.log(h), "claude step=z-design")
+			zn({ "dispatch", "retry", "c0040" })
+			t.expect(count(fakecli.log(h), "claude step=z-design")).toBe(before + 1)
+			t.expect(exchangeFiles("c0040")).toEqual({})
+			-- a one-step run prints the same, and sets the next file aside under its own number
+			fakecli.mode(h, "claude.z-design", "questions")
+			local one = zn({ "dispatch", "z-design", "c0040" })
+			t.expect(one.code).toBe(1)
+			t.expect(has(one.stderr .. one.stdout, "left questions.md, which nothing reads for an item"))
+				.toBe(true)
+			t.expect(fs.isFile(`{dirOf("c0040")}/questions-ignored-2.md`)).toBe(true)
+			t.expect(fs.isFile(`{dirOf("c0040")}/questions.md`)).toBe(false)
+			t.expect(exchangeFiles("c0040")).toEqual({})
+		end
+	)
+	it(
+		"AC8: a dispatched z-run step blocks an active raft: the chain stops with exit 3 and the move is on origin/main",
+		function()
+			fakecli.clear(h)
+			local readied = zn({ "ready", "R0010" }, TERMINAL)
+			t.expect(readied.ok).toBe(true)
+			fixture.git(h.f.main, { "pull", "-q", "--ff-only", "origin", "main" })
+			fakecli.mode(h, "claude", "script")
+			-- the step is in the raft's worktree; it does not run ./zn done (a dispatched step never lands layers)
+			fs.writeFile(
+				`{h.fakes}/script.sh`,
+				[[
+cat > pickman/.tracker/rafts/active/R0010/escalation.md <<'NOTE'
+## Question
+The gate on c0050 stays red after two attempts: retry, or redesign?
+
+## What was tried
+Two fix attempts.
+
+## Open findings or error
+check.sh: AC1 failed.
+
+## Options
+- retry: one more attempt (recommended)
+- amend-design: redesign c0050
+NOTE
+./zn block R0010 red-gate
+]]
+			)
+			local r = zn({ "dispatch", "R0010" })
+			t.expect(r.code).toBe(3)
+			t.expect(has(r.stdout, "R0010 is blocked (red-gate)")).toBe(true)
+			t.expect(has(r.stdout, "./zn resolve R0010 <decision>")).toBe(true)
+			t.expect(has(fakecli.log(h), "claude step=z-run")).toBe(true)
+			-- the raft and its member left active/ on origin/main, blocked, with the note beside the raft
+			local raft = onOrigin("pickman/.tracker/rafts/R0010/R0010.md")
+			t.expect(string.match(raft, "\nstatus: blocked%-%a+%-%a+%-%a+\n") ~= nil).toBe(true)
+			t.expect(has(raft, "\nblocked: red-gate\n")).toBe(true)
+			t.expect(
+				has(onOrigin("pickman/.tracker/rafts/R0010/escalation.md"), "From: active\nLayer: c0050\n")
+			)
+				.toBe(true)
+			t.expect(has(onOrigin("pickman/.tracker/issues/c0050/c0050.md"), "\nblocked: red-gate\n"))
+				.toBe(true)
+			local listed = fixture.git(h.f.origin, { "ls-tree", "-r", "--name-only", "main" })
+			t.expect(has(listed, "pickman/.tracker/rafts/active/R0010/")).toBe(false)
+			t.expect(has(listed, "pickman/.tracker/issues/active/c0050/")).toBe(false)
+			t.expect(has(listed, "pickman/.tracker/rafts/done/R0010/")).toBe(false) -- no ./zn done was run
+			-- a second run stops at once, with no new step
+			local steps = count(fakecli.log(h), "claude step=")
+			local again = zn({ "dispatch", "R0010" })
+			t.expect(again.code).toBe(3)
+			t.expect(count(fakecli.log(h), "claude step=")).toBe(steps)
+		end
+	)
 end)

@@ -39,6 +39,8 @@ local HEADLESS = {
 	"and run `./zn block <id> <reason>` in your worktree, then stop.",
 	"The dispatcher stops the chain at the blocked item until the user runs `./zn resolve <id> <decision>`, then `./zn dispatch retry <id>` re-runs the step with the note and its resolution.",
 	"A nested step (a review) never blocks the item: its author does.",
+	"Under `./zn dispatch`, do not run `./zn done`: the dispatcher lands the layers below (c0252).",
+	"A refutation or an unclosed high is `review-exhausted`: write it under `## Open to the human` in the item's document, copy the bullets verbatim under `## Open findings or error` in `escalation.md`, run `./zn block <id> review-exhausted` and stop without ruling on it; after the user's `./zn resolve` (one `--rule <Fn>=\"<ruling>\"` per open id) run `./zn rulings <id>` in your worktree, which writes the rulings under the bullets.",
 }
 local OLD_HEADLESS =
 	"write the questions to `$ZN_DISPATCH_DIR/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. The dispatcher stops the chain there until the user answers and runs `./zn dispatch retry <id>`."
@@ -62,7 +64,7 @@ return t.spec("c0250 the documents say block and resolve", function(it)
 			)
 			says(
 				RULES,
-				"| block | `./zn block <id> <reason>` | in the item's worktree (never the main checkout), after the worker wrote `escalation.md` in the item's folder there"
+				"| block | `./zn block <id> <reason> [--layer <issue>]` | in the item's worktree (never the main checkout), after the worker wrote `escalation.md` in the item's folder there"
 			)
 			says(RULES, "One tracker commit on `origin/main`, `tracker: <id> blocked <reason>`:")
 			says(
@@ -71,11 +73,15 @@ return t.spec("c0250 the documents say block and resolve", function(it)
 			)
 			says(
 				RULES,
-				"comments `BLOCKED: <reason>: <the question>` on the open layer's PR and removes the worktree's copy of the note |"
+				"comments `BLOCKED: <reason>: <the question>` on the Layer's PR (`--layer`, else the lowest member still in `active/` on `origin/main`, never the current branch; skipped with a warning when it has no PR) and removes the worktree's copy of the note."
 			)
 			says(
 				RULES,
-				"| resolve | `./zn resolve <id> <decision> [--answer <text> \\| --answer-file <path>] [--said <text>] [--title <text>]` | the human's, in any checkout; refused while `ZN_DISPATCH` is set."
+				"It refuses an issue that is a member of an active raft (block the raft: `./zn block <R> <reason> --layer <issue>`), the reason `tripwire` in an agent session (after a tripwire the worker writes `escalation.md`, runs neither `done --through` nor `block`, and tells the person, who checks the checkout and files it), and a note that already holds a `## Resolution`; on an item already blocked whose note is missing or unreadable it only re-files the note."
+			)
+			says(
+				RULES,
+				"| resolve | `./zn resolve <id> <decision> [--answer <text> \\| --answer-file <path>] [--said <text>] [--title <text>] [--rule <Fn>=<ruling>]` | the human's, in any checkout; refused while `ZN_DISPATCH` or `ZN_HEADLESS` is set, and by the session the note's `Session:` names. An agent runs it only when the user's message in this conversation tells it to."
 			)
 			says(
 				RULES,
@@ -86,6 +92,22 @@ return t.spec("c0250 the documents say block and resolve", function(it)
 				"One tracker commit, `tracker: <id> resolve <decision>`: appends `## Resolution` to `escalation.md`, removes `blocked:`"
 			)
 			says(RULES, "appends the `unblocked` row to `provenance.md`, and keeps `rank:`.")
+			says(
+				RULES,
+				'`approve` writes `Decided with the user (<date>), resolve approve: "<answer>"` in the Problem (in an agent session the user\'s `--said` words and `(the option: <answer>)`;'
+			)
+			says(
+				RULES,
+				"whose `grouped:` entry and coherence reviews' `Grouped:` lines `resolve` re-records, so an approve on a raft vouches for the change without a new raft-mode round,"
+			)
+			says(
+				RULES,
+				"a `review-exhausted` resolve needs one `--rule <Fn>=\"<ruling>\"` per id of the note's `Open:` line, records them in `## Resolution`, and `./zn rulings <id>` writes them as `Ruled (user, <date>)` lines in the step's worktree;"
+			)
+			says(
+				RULES,
+				"on a draft raft `approve` and `amend-design` act as `retry` and `split` is refused; a raft left with no unlanded member goes to `done/` (a member landed) or `retired/`;"
+			)
 			says(
 				RULES,
 				"`abort` leaves a raft `prepared` as `stop` does and prints the parked branches and PRs to close |"
@@ -113,7 +135,11 @@ return t.spec("c0250 the documents say block and resolve", function(it)
 			)
 			says(
 				RULES,
-				"a `block` or `resolve` commit may also change `blocked:`, `design:`, `raft:` and `issues:` lines and add Decided or Scope decision lines to a Problem"
+				"a `block` or `resolve` commit keeps every line of the origin text in order and may only change the `status:`, `blocked:`, `design:`, `raft:`, `issues:` and `grouped:` lines of the item, its raft's members and the Layer member, add Decided or Scope decision lines inside `## Problem`, and change the `Grouped:` lines of a coherence review"
+			)
+			says(
+				RULES,
+				"A `questions.md` a step leaves for an item fails the chain (exit 1, naming `escalation.md` and `./zn block`) and is set aside as `questions-ignored-N.md`. Under `./zn dispatch` a step never runs `./zn done`: it blocks, and the dispatcher lands the layers below (c0252). An unruled `## Open to the human` is a block with reason `review-exhausted`."
 			)
 			unsays(
 				RULES,
@@ -145,17 +171,48 @@ return t.spec("c0250 the documents say block and resolve", function(it)
 			)
 			says(
 				"z-nile/skills/zz-execute/SKILL.md",
-				"and run `./zn block <R-id> <review-exhausted|design-gap|needs-decision|red-gate|quota|tripwire>`."
+				"and run `./zn block <R-id> <review-exhausted|design-gap|needs-decision|red-gate|quota|tripwire> [--layer <issue>]`."
+			)
+			-- under the dispatcher a step never lands layers, a tripwire is the person's, and an agent resolves only on the user's word
+			local EXECUTE = "z-nile/skills/zz-execute/SKILL.md"
+			says(
+				EXECUTE,
+				"Under `./zn dispatch` the same two steps are all there is, except that you do not run `./zn done`: write `escalation.md` and run `./zn block <R-id> <reason>`, and the dispatcher lands the layers below (c0252) and stops the chain at the blocked raft until the user runs `./zn resolve <R-id> <decision>`."
 			)
 			says(
-				"z-nile/skills/zz-execute/SKILL.md",
-				"Under `./zn dispatch` the same two steps are all there is: the dispatcher stops the chain at the blocked raft until the user runs `./zn resolve <R-id> <decision>`."
+				EXECUTE,
+				"After a tripwire (a `REPOSITORY CHANGED` stop, a refused fixture identity) run neither `./zn done --through` nor `./zn block`: write `escalation.md`, tell the person, who checks the checkout and runs `./zn block <R-id> tripwire`."
+			)
+			says(
+				EXECUTE,
+				"You run `./zn resolve` only when the user's message in this conversation tells you to, quote that message in `--said`, and never resolve a block your own session filed."
+			)
+			says(
+				EXECUTE,
+				"An unruled `## Open to the human` is `review-exhausted`: copy the bullets verbatim under `## Open findings or error`, block, and after the resolve run `./zn rulings <id>` in your worktree."
+			)
+			says(
+				"z-nile/skills/z-design/SKILL.md",
+				"Under `./zn dispatch` the list is a block: write `escalation.md` with the bullets verbatim under `## Open findings or error`, run `./zn block <id> review-exhausted`, and after the user's `./zn resolve` run `./zn rulings <id>`, which writes the rulings under the bullets; you never write one."
 			)
 			-- z-work: step 5 and step 10
 			local work = "z-nile/skills/z-work/SKILL.md"
 			says(
 				work,
 				"5. Blocked means a human decision, or the same check failed after a real second attempt. If layers below the blocked one are green, land them first with `./zn done <R> --through <issue>`. Write `escalation.md` in the raft folder, then run `./zn block <R> <reason>` in the raft's worktree. Tell the person, then run `./zn work next` again."
+			)
+			-- c0248's pinned sentence stays after c0250's step 5 (F21)
+			says(
+				work,
+				"A blocked layer stops the layers above it, and `./zn done <R> --through <issue>` lands the green layers below it."
+			)
+			says(
+				work,
+				"After a tripwire (a `REPOSITORY CHANGED` stop, a refused fixture identity) run neither `./zn done --through` nor `./zn block`: write `escalation.md`, tell the person, who checks the checkout and runs `./zn block <R> tripwire`."
+			)
+			says(
+				work,
+				"You run `./zn resolve` only when the user's message in this conversation tells you to, quote that message in `--said`, and never resolve a block your own session filed."
 			)
 			says(work, "A release, and a block, adds one to the count you pass as `--released`.")
 			unsays(work, "Write `questions.md` in the raft folder")

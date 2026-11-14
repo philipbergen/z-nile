@@ -141,6 +141,7 @@ return t.spec("c0250 the escalation note", function(it)
 				'./zn resolve R0120 retry --answer "<your answer>"\n'
 					.. './zn resolve R0120 approve --answer "<your answer>"\n'
 					.. './zn resolve R0120 amend-design --answer "<your answer>"\n'
+					.. 'An agent adds --said "<the user\'s message>" to each command.\n'
 			)
 			t.expect(has(text, "resolve R0120 split")).toBe(false)
 			t.expect(has(text, "resolve R0120 abort")).toBe(false)
@@ -162,7 +163,7 @@ return t.spec("c0250 the escalation note", function(it)
 			t.expect(back.layer).toBe("c0230")
 			t.expect(back.actor).toBe("agent:claude-opus-5-5 effort high")
 			t.expect(back.when).toBe("2026-11-20 03:10")
-			t.expect(#back.resume).toBe(3)
+			t.expect(#back.resume).toBe(4) -- three commands and the closing line
 			t.expect(escalation.check(back)).toBe(nil)
 			-- the reason list is closed
 			t.expect(function()
@@ -204,6 +205,8 @@ return t.spec("c0250 the escalation note", function(it)
 			t.expect(`{label} copy {got.copyNote}`).toBe(`{label} copy {want.unfold}`)
 		end
 		for _, isRaft in { false, true } do
+			-- a draft raft has no design to amend or split: its approve and amend-design act as retry (F13)
+			local draft = isRaft
 			expectPlan("preparing", isRaft, {
 				decision = "retry",
 				status = "new",
@@ -216,26 +219,33 @@ return t.spec("c0250 the escalation note", function(it)
 				decision = "approve",
 				status = "new",
 				design = nil,
-				decided = true,
+				decided = not draft,
 				unfold = false,
 				split = false,
 			})
 			expectPlan("preparing", isRaft, {
 				decision = "amend-design",
 				status = "new",
-				design = "draft",
+				design = if draft then nil else "draft",
 				decided = false,
 				unfold = false,
 				split = false,
 			})
-			expectPlan("preparing", isRaft, {
-				decision = "split",
-				status = "new",
-				design = "draft",
-				decided = false,
-				unfold = false,
-				split = true,
-			})
+			if draft then
+				t.expect(escalation.plan("preparing", true, "split").refuse).toBe(
+					"a draft raft has no design to split: resolve it amend-design, then split the issue in z-design"
+				)
+			else
+				t.expect(escalation.plan("preparing", false, "split").refuse).toBe(nil)
+				expectPlan("preparing", false, {
+					decision = "split",
+					status = "new",
+					design = "draft",
+					decided = false,
+					unfold = false,
+					split = true,
+				})
+			end
 			expectPlan("preparing", isRaft, {
 				decision = "abort",
 				status = "new",
@@ -286,6 +296,17 @@ return t.spec("c0250 the escalation note", function(it)
 			unfold = false,
 			split = false,
 		})
+		-- only an approve on a raft that was running re-records its Layer member (F4)
+		t.expect(escalation.plan("active", true, "approve").regroup).toBe(true)
+		t.expect(escalation.plan("active", true, "retry").regroup).toBe(false)
+		t.expect(escalation.plan("preparing", false, "approve").regroup).toBe(false)
+		t.expect(escalation.plan("preparing", true, "approve").regroup).toBe(false)
+		-- an issue is never blocked from active: its raft is (F2)
+		for _, decision in escalation.DECISIONS do
+			t.expect(function()
+				escalation.plan("active", false, decision)
+			end).toThrow("its raft is")
+		end
 		-- a sixth decision is not one
 		t.expect(function()
 			escalation.plan("preparing", false, "shrug")
@@ -334,6 +355,164 @@ return t.spec("c0250 the escalation note", function(it)
 			t.expect(escalation.nextArchive({ "escalation.md", "escalation-001.md", "escalation-004.md" }))
 				.toBe("escalation-005.md")
 			t.expect(escalation.nextArchive({ "escalation-12.md", "notes-009.md" })).toBe("escalation-001.md")
+		end
+	)
+	it(
+		"AC2: stamp writes Session and Open, and the resume lines carry --title for split and one --rule per open id",
+		function()
+			local all = escalation.stamp(GOOD .. "- split: carve it out\n- abort: stop\n", {
+				item = "c0230",
+				reason = "review-exhausted",
+				from = "preparing",
+				layer = nil,
+				actor = HEADER.actor,
+				session = "6f1c-aaaa",
+				open = { "F2", "F5" },
+				when = HEADER.when,
+			})
+			local head = lines(all)
+			t.expect(head[6]).toBe("Session: 6f1c-aaaa")
+			t.expect(head[7]).toBe("Open: F2, F5")
+			t.expect(head[8]).toBe("When: 2026-11-20 03:10")
+			local resume =
+				string.sub(all, (string.find(all, "\n## Resume\n", 1, true) :: number) + #"\n## Resume\n")
+			t.expect(
+				has(
+					resume,
+					'./zn resolve c0230 split --answer "<your answer>" --title "<the new issue\'s title>" --rule F2="<your ruling>" --rule F5="<your ruling>"\n'
+				)
+			).toBe(true)
+			t.expect(
+				has(
+					resume,
+					'./zn resolve c0230 retry --answer "<your answer>" --rule F2="<your ruling>" --rule F5="<your ruling>"\n'
+				)
+			).toBe(true)
+			t.expect(has(resume, 'An agent adds --said "<the user\'s message>" to each command.\n'))
+				.toBe(true)
+			-- a reason other than review-exhausted carries no --rule, and no Open line when none is open
+			local plain = escalation.stamp(GOOD, {
+				item = "c0230",
+				reason = "red-gate",
+				from = "preparing",
+				layer = nil,
+				actor = HEADER.actor,
+				session = nil,
+				open = { "F2" },
+				when = HEADER.when,
+			})
+			t.expect(has(plain, "--rule")).toBe(false)
+			t.expect(has(plain, "\nSession:")).toBe(false)
+			-- the header reads back
+			local back = escalation.parse(all) :: Note
+			t.expect(back.session).toBe("6f1c-aaaa")
+			t.expect(back.open).toEqual({ "F2", "F5" })
+			t.expect((escalation.parse(plain) :: Note).open).toEqual({ "F2" })
+		end
+	)
+
+	it("AC2: check refuses a note that already holds a resolution", function()
+		local stamped = escalation.stamp(GOOD, HEADER)
+		t.expect(escalation.check(escalation.parse(stamped) :: Note)).toBe(nil)
+		local resolved = escalation.resolution(stamped, {
+			decision = "retry",
+			answer = nil,
+			by = "human:Ann",
+			said = nil,
+			when = "2026-11-20 09:00",
+		})
+		t.expect(escalation.check(escalation.parse(resolved) :: Note))
+			.toBe("this is the last block's note: write the new one")
+	end)
+
+	it(
+		"AC6: the resolution records rulings, the Decided and Scope lines quote the user, and rulings apply",
+		function()
+			local stamped = escalation.stamp(GOOD, {
+				item = "c0230",
+				reason = "review-exhausted",
+				from = "preparing",
+				layer = nil,
+				actor = HEADER.actor,
+				session = nil,
+				open = { "F2", "F5" },
+				when = HEADER.when,
+			})
+			local done = escalation.resolution(stamped, {
+				decision = "retry",
+				answer = "go on",
+				by = "human:Ann",
+				said = nil,
+				ruled = { { id = "F2", words = "keep the reader" }, { id = "F5", words = "defer it" } },
+				when = "2026-11-20 09:00",
+			})
+			t.expect(
+				has(
+					done,
+					'Answer: go on\nBy: human:Ann\nRuled F2: "keep the reader"\nRuled F5: "defer it"\nWhen: '
+				)
+			).toBe(true)
+			local note = escalation.parse(done) :: Note
+			t.expect(escalation.rulings(note)).toEqual({ F2 = "keep the reader", F5 = "defer it" })
+			-- an unresolved note has none
+			t.expect(escalation.rulings(escalation.parse(stamped) :: Note)).toEqual({})
+			-- the Decided line: a terminal quotes the answer, an agent session the user's words and the option
+			t.expect(escalation.decidedLine("2026-11-20", "approve", "use json", nil))
+				.toBe('Decided with the user (2026-11-20), resolve approve: "use json"')
+			t.expect(escalation.decidedLine("2026-11-20", "approve", "use json", "yes, take json"))
+				.toBe(
+					'Decided with the user (2026-11-20), resolve approve: "yes, take json" (the option: use json)'
+				)
+			t.expect(escalation.scopeLine("2026-11-20", "split it", "c0301"))
+				.toBe('Scope decision (user, 2026-11-20): "split it" (split into c0301)')
+			-- rulings go under each unruled bullet of the open list, and an already ruled bullet is left as it is
+			local doc = table.concat({
+				"# c0230",
+				"",
+				"## Open to the human",
+				"- F2: the reader is missing. Answer: refuted. Decision: keep it or not?",
+				"- F5: the cache. Answer: refuted. Decision: defer?",
+				"- F7: old. Answer: refuted. Decision: x",
+				"  Ruled (user, 2026-11-01): fine",
+				"",
+				"## Notes",
+				"x",
+				"",
+			}, "\n")
+			local out, why = escalation.applyRulings(doc, note, "2026-11-20")
+			t.expect(why).toBe(nil)
+			t.expect(out).toBe(table.concat({
+				"# c0230",
+				"",
+				"## Open to the human",
+				"- F2: the reader is missing. Answer: refuted. Decision: keep it or not?",
+				"  Ruled (user, 2026-11-20): keep the reader",
+				"- F5: the cache. Answer: refuted. Decision: defer?",
+				"  Ruled (user, 2026-11-20): defer it",
+				"- F7: old. Answer: refuted. Decision: x",
+				"  Ruled (user, 2026-11-01): fine",
+				"",
+				"## Notes",
+				"x",
+				"",
+			}, "\n"))
+			-- a bullet with no recorded ruling is refused, naming it; an unresolved note applies nothing
+			local partial = escalation.resolution(stamped, {
+				decision = "retry",
+				answer = nil,
+				by = "human:Ann",
+				said = nil,
+				ruled = { { id = "F2", words = "keep" } },
+				when = "2026-11-20 09:00",
+			})
+			local none, noneWhy =
+				escalation.applyRulings(doc, escalation.parse(partial) :: Note, "2026-11-20")
+			t.expect(none).toBe(nil)
+			t.expect(has(noneWhy or "", "F5 has no recorded ruling")).toBe(true)
+			local unresolved, unresolvedWhy =
+				escalation.applyRulings(doc, escalation.parse(stamped) :: Note, "2026-11-20")
+			t.expect(unresolved).toBe(nil)
+			t.expect(has(unresolvedWhy or "", "no resolution")).toBe(true)
 		end
 	)
 end)

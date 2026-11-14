@@ -6865,8 +6865,8 @@ end
 function esc.intoProblem(text: string, line: string): string
 	local start = string.find(text, "\n## Problem\n", 1, true)
 	if not start then
-		-- a document with no Problem section takes the line at its end
-		return (string.gsub(text, "%s+$", "")) .. "\n" .. line .. "\n"
+		-- the published rule accepts a Decided or Scope decision line inside ## Problem only
+		error("the document has no ## Problem section to put the line in: " .. line, 0)
 	end
 	local body = start + #"\n## Problem\n"
 	local nextHeading = string.find(text, "\n## ", body, true) or (#text + 1)
@@ -7227,9 +7227,6 @@ function cmd.resolve(pos: { string }, opts: { [string]: { string } })
 					end
 					table.insert(changes, { path = `{dst}/{prel}`, from = p2, content = content })
 				end
-			end
-			if not read(rec) then
-				table.insert(changes, { path = `{dst}/provenance.md`, content = recorded :: string })
 			end
 			return changes
 		end

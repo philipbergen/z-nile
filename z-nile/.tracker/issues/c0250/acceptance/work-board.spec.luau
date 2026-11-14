@@ -198,7 +198,8 @@ return t.spec("c0250 blocked rafts, the board and the cap", function(it)
 				["issues/c0030/c0030.md"] = item("c0030", "blocked-quiet-copper-falcon", "R0100"),
 				["rafts/R0200/R0200.md"] = raftDoc("R0200", "blocked-quiet-copper-falcon", "c0050"),
 				["rafts/R0200/escalation.md"] = note("Which members belong together?"),
-				["issues/c0050/c0050.md"] = item("c0050", "prepared-quiet-copper-falcon", "R0200"),
+				-- a draft raft's members have an empty raft: line on origin/main: the board joins them by the raft's issues:
+				["issues/c0050/c0050.md"] = item("c0050", "prepared-quiet-copper-falcon", ""),
 				["issues/c0040/c0040.md"] = item("c0040", "blocked-quiet-copper-falcon", ""),
 				["issues/c0040/escalation.md"] = "this is not a note\n",
 				["issues/c0060/c0060.md"] = item("c0060", "prepared-quiet-copper-falcon", ""),
@@ -325,6 +326,72 @@ return t.spec("c0250 blocked rafts, the board and the cap", function(it)
 				t.expect(has(rows[i], "blocked")).toBe(false)
 			end
 			t.expect(#rows).toBe(7)
+		end
+	)
+
+	it(
+		"AC10: raft-plan skips, and fold refuses, an issue that a blocked raft lists, naming the raft",
+		function()
+			local function candidate(id: string): string
+				return (
+					string.gsub(
+						item(id, "prepared-quiet-copper-falcon", ""),
+						"design: ready\n",
+						"design: ready\nsize: 100\n",
+						1
+					)
+				)
+			end
+			local seed: { [string]: string } = {
+				[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
+				["pickman/.tracker/architecture.md"] = fs.readFile(`{TOP}/pickman/.tracker/architecture.md`),
+				["pickman/.tracker/rafts/R0010/R0010.md"] = raftDoc(
+					"R0010",
+					"prepared-quiet-copper-falcon",
+					"c0070"
+				),
+				["pickman/.tracker/rafts/R0010/check.sh"] = "finish\n",
+				["pickman/.tracker/rafts/R0030/R0030.md"] = raftDoc(
+					"R0030",
+					"blocked-quiet-copper-falcon",
+					"c0060"
+				),
+				["pickman/.tracker/rafts/R0030/check.sh"] = "finish\n",
+				["pickman/.tracker/rafts/R0030/escalation.md"] = note("Which members belong together?"),
+			}
+			-- c0060 is listed by the blocked draft raft (an empty raft: line); c0061 is free; c0070 is R0010's member
+			for _, id in { "c0060", "c0061" } do
+				seed[`pickman/.tracker/issues/{id}/{id}.md`] = candidate(id)
+				seed[`pickman/.tracker/issues/{id}/check.sh`] = "finish\n"
+			end
+			seed["pickman/.tracker/issues/c0070/c0070.md"] =
+				item("c0070", "prepared-quiet-copper-falcon", "R0010")
+			seed["pickman/.tracker/issues/c0070/check.sh"] = "finish\n"
+			local g = trackerfix.new("c0250-raft-plan", seed)
+			local plan = fixture.exec(g.main, "./zn", { "raft-plan" })
+			t.expect(plan.ok).toBe(true)
+			t.expect(
+				has(
+					plan.stdout,
+					"skip c0060: R0030 lists it and is blocked: ./zn resolve R0030 <decision> first"
+				)
+			).toBe(true)
+			t.expect(has(plan.stdout, "new raft")).toBe(true) -- c0061 is still rafted
+			t.expect(has(plan.stdout, "c0061")).toBe(true)
+			t.expect(has(string.gsub(plan.stdout, "skip c0060[^\n]*", ""), "c0060")).toBe(false)
+			-- fold refuses it and names the raft
+			local wt = `{g.base}/wt-fold`
+			fixture.git(g.main, { "worktree", "add", "-q", "-b", "rafting-fold", wt, "origin/main" })
+			local folded = fixture.exec(wt, "./zn", { "fold", "R0010", "c0060" })
+			t.expect(folded.ok).toBe(false)
+			t.expect(
+				has(
+					folded.stderr .. folded.stdout,
+					"c0060 is listed by R0030, which is blocked: ./zn resolve R0030 <decision> first"
+				)
+			).toBe(true)
+			-- the free issue folds as before
+			t.expect(has(folded.stderr .. folded.stdout, "c0061")).toBe(false)
 		end
 	)
 

@@ -324,9 +324,9 @@ end
 
 -- c0250 (F17): wherever a run resumes an item whose exchange ends in its note's question, the note's `## Resolution` is
 -- copied as the answer first (`./zn dispatch <id>` and `retry` both). nil, or why not.
-local function exchangeResolution(ctx: Ctx, st: State, id: string): string?
+local function exchangeResolution(ctx: Ctx, st: State, id: string): (string?, boolean)
 	if id == "" or id == "new" then
-		return nil
+		return nil, false
 	end
 	local resolved = ctx.origin(id)
 	local entries = exchangeRead(st)
@@ -334,10 +334,11 @@ local function exchangeResolution(ctx: Ctx, st: State, id: string): string?
 	if resolved and resolved.note and resolved.status ~= "blocked" and tail and tail.kind == "question" then
 		local note = escalation.parse(resolved.note :: string)
 		if note and note.resolution then
-			return exchangeAdd(st, "answer", escalation.answerText(note.resolution))
+			local why = exchangeAdd(st, "answer", escalation.answerText(note.resolution))
+			return why, why == nil
 		end
 	end
-	return nil
+	return nil, false
 end
 
 -- `--answer <text>` or `--answer-file <path>` of a retry: the answer, nil when none was given, or why it is refused.
@@ -2231,6 +2232,18 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 	local openHuman: { string } = {}
 	if st.worktree and o and fs.isFile(`{st.worktree}/{o.path}`) then
 		openHuman = openlist.pending(fs.readFile(`{st.worktree}/{o.path}`))
+		-- c0250: bullets the user ruled through `./zn resolve --rule` are not open: the step runs `./zn rulings` to write them
+		local filed = if o.note then escalation.parse(o.note :: string) else nil
+		if filed and filed.resolution then
+			local ruled = escalation.rulings(filed :: escalation.Note)
+			local still: { string } = {}
+			for _, fid in openHuman do
+				if not ruled[fid] then
+					table.insert(still, fid)
+				end
+			end
+			openHuman = still
+		end
 	end
 	local pr: dispatch.Pr? = nil
 	if o then
@@ -2377,10 +2390,15 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 	end
 	st.mode = "chain"
 	for _ = 1, dispatch.MAX_ACTIONS do
-		local resumed = exchangeResolution(ctx, st, id)
+		local resumed, taken = exchangeResolution(ctx, st, id)
 		if resumed then
 			print(`stop: the exchange of {id} cannot take the resolution: {resumed}`)
 			return dispatch.EXIT.failure
+		end
+		if taken then
+			-- the step that blocked is not an attempt that "ended ok": the resolve reopened the item (as retry does)
+			st.outcome, st.detail = nil, nil
+			save(st)
 		end
 		local f = dispatcher.facts(ctx, st, id, description)
 		local action = dispatch.next(f)
