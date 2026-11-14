@@ -1,0 +1,13 @@
+# Harvest: c0282
+- design-review-001 F1: z-design/siblings-state-files-reach-fixtures, z-design/quote-other-preps-before-promising
+- design-review-001 F2: zz-test/specs-set-host-markers-explicitly
+- design-review-001 F3: zz-arch/merge-gate-checks-what-it-merges
+- design-review-001 F4: zz-test/pin-call-site-arguments
+- design-review-001 F5: zz-arch/refuse-before-the-first-write
+- design-review-001 F6: z-design/prep-choices-marked-and-checked
+- design-review-001 F7: zz-review/lists-paste-their-search
+- design-review-001 F8: z-design/touched-paths-exist
+- design-review-001 F9: one-off: a refusal text named a recovery (rebase) that the engine's own merge does not take; the text and its case now name ./zn sync
+- note the dispatcher's git helper trims stdout, so the rafting gate read a record without its final newline and four refusal cases passed for the wrong reason: zz-arch/one-reader-per-format, zz-test/guard-needs-its-own-case
+- note a record added directly in a member folder turned a clean merge into a file-location stop in c0084/spend-command: z-design/new-files-in-item-folders-run-merge-specs
+- note three helpers added to main.luau failed to load with "Out of local registers": zz-arch/engine-main-local-limit

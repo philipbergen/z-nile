@@ -1,0 +1,11 @@
+# Harvest: d0298
+- design-review-001 F1: z-design/rulings-reach-every-acting-item, z-design/restated-rules-move-together
+- design-review-001 F2: z-design/reproduce-each-captured-report
+- design-review-001 F3: z-design/instructions-runnable-where-they-run
+- design-review-001 F4: zz-test/seed-every-enumerated-case
+- design-review-001 F5: zz-arch/one-reader-per-format, z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F6: z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F7: zz-test/specs-read-sources-through-the-selector
+- design-review-001 F8: z-design/quote-other-preps-before-promising
+- design-review-001 F9: one-off: the mutation runs were bounded (`./zn run --time`), but E10 did not say so
+- note d0298 prep: `./zn land` refused c0304's challenged idea ("changes idea:"), so it went by PR #317; no idea had landed on main before: z-ticket/land-a-challenged-idea

@@ -9,3 +9,5 @@ A grep finds the specs that name the string being changed. A spec that pins its 
 **Why:** c0239 design review 004 F1: the template's RC0 line became `--affected`, and `c0120/homes.spec` pins the rendered `... --project z-nile --full`, which no grep for `{{PROJECT}} --full` matched. The whole z-nile suite on the reviewer's prototype found it.
 
 **How to apply:** build the prototype with every changed string and run every home's full suite once; each new red spec is an Override or a design change.
+
+c0248 design review 001 F7 and F12 (2026-11-12): `z-nile/check.sh --affected` skips the measured slow tier, so a suite run that confirms the Overrides line must also run `z-nile/check.sh --slow`; watch-map and seven promoted folders went red only there, or only in the full set.
