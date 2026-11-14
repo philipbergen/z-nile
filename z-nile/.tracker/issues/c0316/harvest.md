@@ -4,3 +4,4 @@
 - note design question 1 to the user, 2026-11-13 (how c0316 relates to c0250's escalation.md; answered "Split c0316 in two"); avoidable, the idea named c0250 and left the relation open: z-ticket/idea-settles-what-it-builds-on
 
 Design questions 2 and 3 to the user (2026-11-13: "Yes, any type", "The reviewer") were not avoidable: whether a chore can be a post-merge escape, and who names a finding's stage, came up only when the detection of each escape kind was designed. No lesson.
+- note the subagent that wrote gates.spec found the done gate asked for a harvest the trace would call stale: z-design/a-gate-names-where-its-fix-is-committed
