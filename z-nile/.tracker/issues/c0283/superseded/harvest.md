@@ -1,0 +1,28 @@
+# Harvest: c0283
+- design-review-001 F1: z-design/never-narrow-captured-scope
+- design-review-001 F2: zz-test/state-files-are-excluded-from-fixtures
+- design-review-001 F3: zz-test/specs-set-host-markers-explicitly
+- design-review-001 F4: z-design/run-the-other-rafts-specs
+- design-review-001 F5: zz-test/no-vacuous-pass
+- design-review-001 F6: zz-arch/guard-no-is-explicit
+- design-review-001 F7: z-design/rewrites-keep-rafted-records
+- design-review-001 F8: z-design/new-rules-migrate-existing-work
+- design-review-001 F9: zz-arch/history-tests-survive-squash
+- design-review-001 F10: z-design/restated-rules-move-together
+- design-review-001 F11: zz-test/refusals-tested-on-both-sides
+- design-review-001 F12: z-design/mutant-ids-match-the-runner
+- design-review-001 F13: one-off: two overrides recorded as unrun were run by the reviewer (31 cases green); the record now says so
+- design-review-001 F14: one-off: the approval check sits in the per-issue loop; the Design says "after the per-issue refusals"
+- design-review-001 F15: one-off: three references to a hand-off "open point 1" now point at E4 and OC1
+- design-review-001 F16: zz-arch/parsers-refuse-ambiguity
+- design-review-001 F17: one-off: refuted, the pure gate carries no worktree path
+- note reviewer's candidate lessons (fixtures exclude new state files; session variables reach every spec): zz-test/state-files-are-excluded-from-fixtures, zz-test/specs-set-host-markers-explicitly
+- design-review-002 F1: z-design/run-the-other-rafts-specs
+- design-review-002 F2: z-design/design-the-execution-window
+- design-review-002 F3: z-design/confirm-overrides-with-a-suite-run
+- design-review-002 F4: zz-arch/guard-state-out-of-reach-or-checked
+- design-review-002 F5: z-design/mutant-ids-match-the-runner
+- design-review-002 F6: zz-test/no-vacuous-pass
+- design-review-002 F7: z-design/never-narrow-captured-scope
+- design-review-002 F8: zz-arch/records-cover-what-was-reviewed
+- design-review-002 F9: z-design/restated-rules-move-together
