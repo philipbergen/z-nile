@@ -677,9 +677,18 @@ end
 -- In-process, not a second ./zn (c0070's fallback: a second Lune process per publish cost c0053's commands spec
 -- about a third more). The page is built from every project root of root's registry with this tooling's template, as
 -- `board -O` writes it.
+-- c0276: each claim's verdict for the board, or nil (no marks) when none can be read; `fresh` says the caller has just
+-- fetched origin/main (a publish, land or sync), so the rebuild does not fetch it again. Assigned where the heartbeat's
+-- reads are defined, below. A protected checkout reads no remote, and a checkout with no origin reads none either.
+local hb = {} :: {
+	boardVerdicts: (fresh: boolean) -> ({ board.Verdict }?, { string }),
+	[string]: any,
+} -- the heartbeat edge's functions, in one table: main.luau's chunk is near Luau's limit of 200 locals
+
 local function buildBoard(root: string)
 	local ok, err = pcall(function()
-		local page = board.build(nil, root)
+		local verdicts, notes = hb.boardVerdicts(true)
+		local page = board.build(nil, root, nil, verdicts, notes)
 		fs.writeDir(`{root}/.cache`)
 		sh.writeReplacing(`{root}/.cache/board.html`, page)
 	end)
@@ -1724,6 +1733,61 @@ function hb.judgedFor(paths: { string }): ({ [string]: heartbeat.Verdict }, stri
 		elseif j.prsError then `pull requests unreadable: {j.prsError}`
 		else nil
 	return judged, why
+end
+
+-- c0276: the verdicts the board marks its cards with: the same reads as `status` (one fetch of main, one of the beat
+-- branches, the pull requests only when a claim is stale). Nil, and the board builds without marks, in a protected
+-- checkout (asked first, quietly: no remote is read) or without an origin; whatever cannot be read leaves the page
+-- built with what is known (unreadable pull requests leave stale claims stale) and says so in one `warning: board:` line.
+function hb.boardVerdicts(fresh: boolean): ({ board.Verdict }?, { string })
+	local notes: { string } = {}
+	if guarded(true) or not publishing() then
+		return nil, notes
+	end
+	-- each failure is one line on stderr and one note on the page (a rebuild by an agent whose stderr nobody reads must
+	-- not leave a page that looks as if nothing is lost)
+	local function say(text: string)
+		stdio.ewrite(`warning: board: {text}\n`)
+		table.insert(notes, text)
+	end
+	-- total: whatever throws below (a document another checkout moved between two reads) is one warning, never a failed
+	-- build; the guard above stays outside it, so a protected checkout stays silent
+	local ok, verdicts = pcall(function(): { board.Verdict }?
+		if not fresh then
+			local f = hb.netRetry("git", { "fetch", "-q", "origin", "main" })
+			if not f.ok then
+				say("origin/main could not be read; built without lost-work marks")
+				return nil
+			end
+		end
+		local readable, paths = originTree()
+		if not readable or originRoots() == nil then
+			say("origin/main's projects could not be read; built without lost-work marks")
+			return nil
+		end
+		local j = hb.judgeAll(paths)
+		if j.beatsError then
+			say("heartbeats unreadable; built without lost-work marks")
+			return nil
+		end
+		for _, p in j.problems do
+			say(p)
+		end
+		if j.prsError then
+			say("pull requests unreadable; stale claims are shown unconfirmed")
+		end
+		-- the board's own record type: board.luau names no heartbeat type, and a table type with more fields is not one
+		local marks: { board.Verdict } = {}
+		for _, v in j.verdicts do
+			table.insert(marks, { id = v.id, kind = v.kind, silent = v.silent })
+		end
+		return marks
+	end)
+	if not ok then
+		say("the lost-work marks could not be read; built without them")
+		return nil, notes
+	end
+	return verdicts, notes
 end
 
 function hb.silentMinutes(v: heartbeat.Verdict): number
@@ -9182,7 +9246,8 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
 	if dir and dir ~= "" then
 		fs.writeDir(dir)
 	end
-	sh.writeReplacing(out, board.build())
+	local verdicts, notes = hb.boardVerdicts(false)
+	sh.writeReplacing(out, board.build(nil, nil, nil, verdicts, notes))
 	-- ./zn runs from the repo root, so say where a relative path really is
 	if string.sub(out, 1, 1) ~= "/" then
 		out = process.cwd .. out
