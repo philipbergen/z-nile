@@ -56,39 +56,6 @@ runFast() {
 ac11() {
 	local f bad=0
 	for f in tests/acceptance/c0001/tracker-lifecycle.spec.luau tests/acceptance/c0008/done-order.spec.luau tests/acceptance/c0038/deferred.spec.luau tests/acceptance/c0074/done-gate.spec.luau tests/acceptance/c0080/consequences.spec.luau tests/acceptance/c0084/commit-phase.spec.luau tests/acceptance/c0084/spend-command.spec.luau tests/acceptance/c0116/claims.spec.luau tests/acceptance/c0116/issue-design.spec.luau tests/acceptance/c0120/promote-home.spec.luau tests/tooling/watch-map.spec.luau; do
-		grep -qE 'Model: claude-opus-5-5|--model[",[:space:]]+claude-opus-5-5' "$f" || { echo "no review in $f has a record: add a Model: claude-opus-5-5 line or --model claude-opus-5-5"; bad=1; }
-	done
-	return $bad
-}
-
-# AC11: a text check, no spec run (the slow tier is the gate's): each spec on the Overrides line, and the tooling spec
-# watch-map, gives the reviews it writes by hand the record the rule needs, a `Model: claude-opus-5-5` line or
-# `--model claude-opus-5-5` on the commit or spend that records it. Each of today's files (origin/main) has neither.
-ac11() {
-	local f bad=0
-	for f in tests/acceptance/c0001/tracker-lifecycle.spec.luau tests/acceptance/c0008/done-order.spec.luau tests/acceptance/c0038/deferred.spec.luau tests/acceptance/c0074/done-gate.spec.luau tests/acceptance/c0080/consequences.spec.luau tests/acceptance/c0084/commit-phase.spec.luau tests/acceptance/c0084/spend-command.spec.luau tests/acceptance/c0116/claims.spec.luau tests/acceptance/c0116/issue-design.spec.luau tests/acceptance/c0120/promote-home.spec.luau tests/tooling/watch-map.spec.luau; do
-		grep -qE 'Model: claude-opus-5-5|--model[",[:space:]]+claude-opus-5-5' "$f" || { echo "no review in $f has a record: add a Model: claude-opus-5-5 line or --model claude-opus-5-5"; bad=1; }
-	done
-	return $bad
-}
-
-# AC11: a text check, no spec run (the slow tier is the gate's): each spec on the Overrides line, and the tooling spec
-# watch-map, gives the reviews it writes by hand the record the rule needs, a `Model: claude-opus-5-5` line or
-# `--model claude-opus-5-5` on the commit or spend that records it. Each of today's files (origin/main) has neither.
-ac11() {
-	local f bad=0
-	for f in tests/acceptance/c0001/tracker-lifecycle.spec.luau tests/acceptance/c0008/done-order.spec.luau tests/acceptance/c0038/deferred.spec.luau tests/acceptance/c0074/done-gate.spec.luau tests/acceptance/c0080/consequences.spec.luau tests/acceptance/c0084/commit-phase.spec.luau tests/acceptance/c0084/spend-command.spec.luau tests/acceptance/c0116/claims.spec.luau tests/acceptance/c0116/issue-design.spec.luau tests/acceptance/c0120/promote-home.spec.luau tests/tooling/watch-map.spec.luau; do
-		perl -0ne 'exit(/Model: claude-opus-5-5|--model["\s,]+claude-opus-5-5/ ? 0 : 1)' "$f" || { echo "no review in $f has a record: add a Model: claude-opus-5-5 line or --model claude-opus-5-5"; bad=1; }
-	done
-	return $bad
-}
-
-# AC11: a text check, no spec run (the slow tier is the gate's): each spec on the Overrides line, and the tooling spec
-# watch-map, gives the reviews it writes by hand the record the rule needs, a `Model: claude-opus-5-5` line or
-# `--model claude-opus-5-5` on the commit or spend that records it. Each of today's files (origin/main) has neither.
-ac11() {
-	local f bad=0
-	for f in tests/acceptance/c0001/tracker-lifecycle.spec.luau tests/acceptance/c0008/done-order.spec.luau tests/acceptance/c0038/deferred.spec.luau tests/acceptance/c0074/done-gate.spec.luau tests/acceptance/c0080/consequences.spec.luau tests/acceptance/c0084/commit-phase.spec.luau tests/acceptance/c0084/spend-command.spec.luau tests/acceptance/c0116/claims.spec.luau tests/acceptance/c0116/issue-design.spec.luau tests/acceptance/c0120/promote-home.spec.luau tests/tooling/watch-map.spec.luau; do
 		perl -0ne 'exit(/Model: claude-opus-5-5|--model["\s,]+claude-opus-5-5/ ? 0 : 1)' "$f" || { echo "no review in $f has a record: add a Model: claude-opus-5-5 line or --model claude-opus-5-5"; bad=1; }
 	done
 	return $bad
