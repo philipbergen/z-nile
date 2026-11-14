@@ -150,4 +150,46 @@ return t.spec("c0277 real-time proofs: nothing beats from a discarded worktree",
 		-- and the chain stopped there with a question: it did not go on to start its next step in the taker's copy
 		t.expect(fs.isFile(`{h.f.main}/.cache/dispatch/c0050/questions.md`)).toBe(true)
 	end)
+
+	it(
+		"a dispatched step on an item whose worktree remembers an older stamp runs in the numbered copy and beats the new stamp",
+		function()
+			-- review of R0100 F1: the raft was stopped from the main checkout and readied again (a new stamp); the family's member
+			-- still remembers the old one. The dispatcher's `worktree(ctx, ...)` goes through the lookup, so it gets the copy.
+			local fx = fakecli.new("c0277-proof-reready", {
+				[".models.toml"] = MODELS,
+				["pickman/.tracker/issues/c0050/c0050.md"] = trackerfix.stub("c0050", "claimed", STAMP),
+			})
+			h = fx
+			local old =
+				trim(fixture.exec(h.f.main, "bash", { "scripts/tracker.sh", "worktree", "prep-claimed" }, {
+					env = { FAKE_DIR = h.fakes, PATH = `{h.bin}:{process.env.PATH}` },
+				}).stdout)
+			fs.writeDir(`{old}/` .. "." .. "cache")
+			fs.writeFile(`{old}/` .. "." .. "cache/tracker-stamp-c0050", "preparing-an-older-stamp")
+			fs.writeFile(
+				`{h.f.base}/fakes/script.sh`,
+				table.concat({
+					'pwd -P > "$FAKE_DIR/cwd-seen"; start=$(date +%s); i=0',
+					"while [ $i -lt 15 ]; do",
+					"  git fetch -q origin '+refs/heads/hb/"
+						.. STAMP
+						.. ":refs/zn/hb-seen/"
+						.. STAMP
+						.. "' 2>/dev/null",
+					"  s=$(git log -1 --format=%s refs/zn/hb-seen/" .. STAMP .. " 2>/dev/null); e=${s##* }",
+					'  if [ -n "$e" ] && [ "$e" -ge $((start+2)) ]; then echo seen > "$FAKE_DIR/beat-seen"; exit 0; fi',
+					"  sleep 1; i=$((i+1))",
+					"done",
+					"",
+				}, "\n")
+			)
+			fakecli.mode(h, "claude", "script")
+			fakecli.zn(h, { "dispatch", "z-design", "c0050" }, { ZN_BEAT_EVERY = "1" })
+			local seen = trim(fs.readFile(`{h.f.base}/fakes/cwd-seen`))
+			t.expect(string.match(seen, "prep%-claimed%-1$") ~= nil).toBe(true) -- the numbered copy, not the old folder
+			t.expect(fs.isDir(old)).toBe(false) -- the old path is gone
+			t.expect(fs.isFile(`{h.f.base}/fakes/beat-seen`)).toBe(true) -- and the new stamp was beaten while the step worked
+		end
+	)
 end)
