@@ -42,7 +42,7 @@ end
 -- a round as a reviewer leaves it: with the record of the design it read, when it has one to quote
 local function round(n: string, verdict: string, hash: string?): string
 	local quote = if hash then `\nDesign record: {hash}\n` else ""
-	return `# Review {n}: x (design mode)\nInputs: y\n\n### F1 [low] a claim\nWhere: a\nEvidence: b\n\nVerdict: {verdict}\n{quote}`
+	return `# Review {n}: x (design mode)\nModel: claude-opus-5-5\nEffort: xhigh\nInputs: y\n\n### F1 [low] a claim\nWhere: a\nEvidence: b\n\nVerdict: {verdict}\n{quote}`
 end
 
 -- a claimed issue of this type with its design ready, as z-design leaves it just before `status <id> prepared`
@@ -168,7 +168,7 @@ return t.spec(
 			local id, dir = claimed("c", "two-rounds")
 			write(
 				`{dir}/design-review-001.md`,
-				"# Review 001\n\n### F1 [low] x\nEvidence: Verdict: approve\n"
+				"# Review 001\nModel: claude-opus-5-5\nEffort: xhigh\n\n### F1 [low] x\nEvidence: Verdict: approve\n"
 			)
 			refusedWith(id, "design-review-001.md", "Verdict")
 			write(`{dir}/design-review-001.md`, round("001", "approve", record(id)))

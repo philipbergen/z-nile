@@ -38,7 +38,7 @@ local function record(id: string): string
 end
 local function round(n: string, verdict: string, hash: string?): string
 	local quote = if hash then `\nDesign record: {hash}\n` else ""
-	return `# Review {n}: x (design mode)\nInputs: y\n\n### F1 [low] a claim\nWhere: a\nEvidence: b\n\nVerdict: {verdict}\n{quote}`
+	return `# Review {n}: x (design mode)\nModel: claude-opus-5-5\nEffort: xhigh\nInputs: y\n\n### F1 [low] a claim\nWhere: a\nEvidence: b\n\nVerdict: {verdict}\n{quote}`
 end
 
 local function refusedWith(id: string, ...: string)
