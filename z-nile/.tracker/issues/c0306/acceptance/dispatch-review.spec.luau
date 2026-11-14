@@ -66,6 +66,14 @@ local HIGH = [[
 effort = "high"
 fallbacks = ["grok", "agent"]
 ]]
+local ONLY_GROK_CODE = [[
+[roles.code-review]
+model = "grok-4.7"
+cli = "grok"
+runtime = "grok-cli"
+effort = "high"
+fallbacks = []
+]]
 local ONLY_GROK = [[
 [roles.design-challenge]
 model = "grok-4.7"
@@ -87,7 +95,7 @@ local function marked(id: string): string
 end
 
 local RAFT_DOC =
-	"---\nid: R0090\ntype: chore\ntitle: demo\nslug: demo\nissues: [c0010, c0011]\ncreated: 2026-01-01\nstatus: active-a-b-c\n---\n\n# R0090\n"
+	"---\nid: R0090\ntype: chore\ntitle: demo\nslug: demo\nissues: [c0010, c0011, c0019]\ncreated: 2026-01-01\nstatus: active-a-b-c\n---\n\n# R0090\n"
 
 local h: fakecli.Harness
 local wt = ""
@@ -191,6 +199,9 @@ return t.spec("c0306 the dispatcher stamps the reviews it files", function(it)
 				"new-quiet-copper-falcon"
 			),
 			["pickman/.tracker/issues/c0015/.models.toml"] = HIGH,
+			-- c0019 marked, in the raft: its stream review runs on grok at high, which a stream review may
+			["pickman/.tracker/issues/c0019/c0019.md"] = marked("c0019"),
+			["pickman/.tracker/issues/c0019/.models.toml"] = ONLY_GROK_CODE,
 			-- c0016 marked: every try of its design-challenge role is grok at high
 			["pickman/.tracker/issues/c0016/c0016.md"] = marked("c0016"),
 			["pickman/.tracker/issues/c0016/.models.toml"] = ONLY_GROK,
@@ -203,6 +214,8 @@ return t.spec("c0306 the dispatcher stamps the reviews it files", function(it)
 		fs.writeFile(`{wt}/{RAFT}/R0090.md`, RAFT_DOC)
 		local doc = `{wt}/{ISSUE}/c0010.md`
 		fs.writeFile(doc, (string.gsub(fs.readFile(doc), "\nraft:[^\n]*", "\nraft: R0090", 1)))
+		local doc19 = `{wt}/{item("c0019")}/c0019.md`
+		fs.writeFile(doc19, (string.gsub(fs.readFile(doc19), "\nraft:[^\n]*", "\nraft: R0090", 1)))
 		fakecli.mode(h, "claude.zz-review", "script")
 	end)
 
@@ -359,6 +372,17 @@ return t.spec("c0306 the dispatcher stamps the reviews it files", function(it)
 			.toBe("Model: grok-4.7\nEffort: high\n# Review\n\nVerdict: approve\n")
 		t.expect(has(fakecli.log(h), "grok step=")).toBe(true)
 		clean(`{item("c0015")}/design-review-001.md`)
+	end)
+
+	it("AC7: a stream review is not held to the review models: grok at high runs in a marked item", function()
+		fakecli.clear(h)
+		fakecli.mode(h, "grok.zz-review", "script")
+		reviewer()
+		dispatch("c0019", "stream")
+		t.expect(filed(`{RAFT}/stream-review-c0019-001.md`))
+			.toBe("Model: grok-4.7\nEffort: high\n# Review\n\nVerdict: approve\n")
+		t.expect(has(fakecli.log(h), "grok step=")).toBe(true)
+		clean(`{RAFT}/stream-review-c0019-001.md`)
 	end)
 
 	it("cleans up", function()

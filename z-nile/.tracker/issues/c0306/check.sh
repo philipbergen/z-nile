@@ -72,6 +72,28 @@ ac11() {
 	return $bad
 }
 
+# AC11: a text check, no spec run (the slow tier is the gate's): each spec on the Overrides line, and the tooling spec
+# watch-map, gives the reviews it writes by hand the record the rule needs, a `Model: claude-opus-5-5` line or
+# `--model claude-opus-5-5` on the commit or spend that records it. Each of today's files (origin/main) has neither.
+ac11() {
+	local f bad=0
+	for f in tests/acceptance/c0001/tracker-lifecycle.spec.luau tests/acceptance/c0008/done-order.spec.luau tests/acceptance/c0038/deferred.spec.luau tests/acceptance/c0074/done-gate.spec.luau tests/acceptance/c0080/consequences.spec.luau tests/acceptance/c0084/commit-phase.spec.luau tests/acceptance/c0084/spend-command.spec.luau tests/acceptance/c0116/claims.spec.luau tests/acceptance/c0116/issue-design.spec.luau tests/acceptance/c0120/promote-home.spec.luau tests/tooling/watch-map.spec.luau; do
+		perl -0ne 'exit(/Model: claude-opus-5-5|--model["\s,]+claude-opus-5-5/ ? 0 : 1)' "$f" || { echo "no review in $f has a record: add a Model: claude-opus-5-5 line or --model claude-opus-5-5"; bad=1; }
+	done
+	return $bad
+}
+
+# AC11: a text check, no spec run (the slow tier is the gate's): each spec on the Overrides line, and the tooling spec
+# watch-map, gives the reviews it writes by hand the record the rule needs, a `Model: claude-opus-5-5` line or
+# `--model claude-opus-5-5` on the commit or spend that records it. Each of today's files (origin/main) has neither.
+ac11() {
+	local f bad=0
+	for f in tests/acceptance/c0001/tracker-lifecycle.spec.luau tests/acceptance/c0008/done-order.spec.luau tests/acceptance/c0038/deferred.spec.luau tests/acceptance/c0074/done-gate.spec.luau tests/acceptance/c0080/consequences.spec.luau tests/acceptance/c0084/commit-phase.spec.luau tests/acceptance/c0084/spend-command.spec.luau tests/acceptance/c0116/claims.spec.luau tests/acceptance/c0116/issue-design.spec.luau tests/acceptance/c0120/promote-home.spec.luau tests/tooling/watch-map.spec.luau; do
+		perl -0ne 'exit(/Model: claude-opus-5-5|--model["\s,]+claude-opus-5-5/ ? 0 : 1)' "$f" || { echo "no review in $f has a record: add a Model: claude-opus-5-5 line or --model claude-opus-5-5"; bad=1; }
+	done
+	return $bad
+}
+
 ac1() {
 	fixtureSpec reviewmodel --run "AC1: ok passes claude-opus-, claude-fable- and kimi-code-k3 ids at any effort" "AC1: ok passes a grok- id only at effort xhigh and refuses it with no effort" "AC1: ok refuses every other id, the aliases opus and claude-opus included, and judges the prefix plainly" "AC1: describe names the four kinds"
 }
@@ -101,7 +123,7 @@ ac6() {
 }
 check "AC6: \`./zn done <R-id>\` refuses a marked raft whose newest \`review-NNN.md\` or newest \`final-review-NNN.md\`, in the raft folder or a member's folder, is not on a review model or records none, while a later round on one clears it, never judges a stream review, and passes one on a review model; \`./zn work next\` names the refusal instead of \`./zn done\`; an unmarked raft passes." ac6
 ac7() {
-	fixtureSpec dispatch-review --run "AC7: a design review is stamped with the design-challenge role's model and effort" "AC7: a raft review is stamped with the raft role's model and effort" "AC7: a code review is stamped with the code-review role's model and effort" "AC7: a code review that a fallback wrote is stamped with the fallback's model, the one that wrote it" "AC7: a final review is stamped with the final-review role's model, and no Effort: line when the role names none" "AC7: a stream review is stamped too" "AC7: a reviewer that writes its own Model: line fails the step and files nothing" "AC7: in an unmarked item, a reviewer's own Model: line is filed as written" "AC7: in a marked item, a newest design review off the review models is superseded: the dispatcher files design-review-002, stamped" "AC7: in a marked item, a newest review on a review model keeps the one-round refusal" "AC7: in an unmarked item, a cheap review keeps the one-round refusal as today" "AC7: in a marked item, a cheap code review is superseded too: review-002, stamped" "AC7: in a marked item, a try the rule refuses is never started and the next try is: grok at high is skipped for the agent" "AC7: in a marked item with no try on a review model, the step fails up front, naming the role" "AC7: in an unmarked item, grok at high is tried as today"
+	fixtureSpec dispatch-review --run "AC7: a design review is stamped with the design-challenge role's model and effort" "AC7: a raft review is stamped with the raft role's model and effort" "AC7: a code review is stamped with the code-review role's model and effort" "AC7: a code review that a fallback wrote is stamped with the fallback's model, the one that wrote it" "AC7: a final review is stamped with the final-review role's model, and no Effort: line when the role names none" "AC7: a stream review is stamped too" "AC7: a reviewer that writes its own Model: line fails the step and files nothing" "AC7: in an unmarked item, a reviewer's own Model: line is filed as written" "AC7: in a marked item, a newest design review off the review models is superseded: the dispatcher files design-review-002, stamped" "AC7: in a marked item, a newest review on a review model keeps the one-round refusal" "AC7: in an unmarked item, a cheap review keeps the one-round refusal as today" "AC7: in a marked item, a cheap code review is superseded too: review-002, stamped" "AC7: in a marked item, a try the rule refuses is never started and the next try is: grok at high is skipped for the agent" "AC7: in a marked item with no try on a review model, the step fails up front, naming the role" "AC7: in an unmarked item, grok at high is tried as today" "AC7: a stream review is not held to the review models: grok at high runs in a marked item"
 }
 check "AC7: the dispatcher stamps \`Model:\` and \`Effort:\` from the spec of the attempt that wrote it into every review it files (design, raft, code, final and stream modes), and in a marked item fails a step whose reviewer wrote its own \`Model:\` line, skips a try the rule would refuse (failing when none is left), and files a new round of a kind at the next number only when the newest one is refused." ac7
 ac8() {
