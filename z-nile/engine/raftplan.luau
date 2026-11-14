@@ -348,7 +348,7 @@ function raftplan.designHash(text: string): string
 			seen += 1
 			inFront = seen == 1
 			table.insert(kept, line)
-		elseif inFront and (string.match(line, "^status:") or string.match(line, "^raft:")) then
+		elseif inFront and (string.match(line, "^status:") or string.match(line, "^raft:") or string.match(line, "^reviews:")) then
 			continue
 		else
 			table.insert(kept, line)
