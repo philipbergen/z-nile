@@ -1,0 +1,14 @@
+- design-review-001 F1: z-design/spec-design-correspondence
+- design-review-001 F2: arcade-arch/per-title-state-has-two-title-cases
+- design-review-001 F3: z-design/new-rules-migrate-existing-work
+- design-review-001 F4: pickman-arch/open-stores-guarded
+- design-review-001 F5: pickman-arch/open-stores-guarded
+- design-review-001 F6: arcade-arch/shared-screens-state-their-input-rule
+- design-review-001 F7: arcade-arch/free-grants-check-their-own-precondition
+- design-review-001 F8: zz-arch/client-triggered-reads-guarded
+- design-review-001 F9: pickman-arch/give-backs-undo-every-effect
+- design-review-001 F10: zz-arch/client-triggered-reads-guarded
+- design-review-001 F11: zz-test/source-text-pins-read-the-code
+- design-review-001 F12: z-design/spec-design-correspondence
+- design-review-001 F13: pickman-arch/open-stores-guarded
+- design-review-001 F14: one-off: a bound on memory kept for departed players, specific to this run count

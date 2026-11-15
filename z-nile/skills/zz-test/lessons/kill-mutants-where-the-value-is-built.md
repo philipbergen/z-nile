@@ -2,7 +2,7 @@
 title: A "comes from X" mutant is killed where the value is built, not where it is passed in
 when: design
 tags: [mutants, call-sites, registry]
-check: For each "comes from X" rule, does some case go through the caller that reads X, rather than a function the test hands the value to?
+check: For each "comes from X" rule, does some case go through the caller that reads X, rather than a function the test hands the value to? And when a composer relies on a leaf's property (a wrapping field's short-way distance), does each of the composer's calls into that leaf have a case whose inputs sit where the property changes the answer?
 ---
 A case that calls `f(value)` with the value supplied by the test proves `f` uses its parameter, not that the caller builds that parameter from the right source. A hand list in the caller then passes every spec while the Rules table claims the kill.
 
@@ -13,3 +13,5 @@ A case that calls `f(value)` with the value supplied by the test proves `f` uses
 c0160 design review 001 (F1): a default read "from the running checkout's registry" passed as a hand list, because every in-process case ran in a checkout whose registry equals the old list. Only a child process in a different checkout (a `git init` fixture under `.cache` with another registry) shows it. Check: does the default's source ever hold a value different from the hand list it replaces?
 
 **Note (c0261 design review 010 F2):** a criterion that says a command records X (a typed `--model` wins over the measured one) needs a command case with a fixture that makes the measured value differ; a case on the pure chooser passes a call site that never calls it.
+
+**Note (f0220 design review 001 F1):** the wrap was pinned on `Field.delta`, `Field.distance` and `Field.sweep` alone, so a run whose ram, saucer ram and shot hits measured straight across (no wrap), and whose saucer shots never wrapped, passed all 81 cases. A composer's every call into a geometry leaf needs a case through the composer with the inputs across the edge: a rock 10 units across each edge, a saucer's shot 14 across, a shot reaching a rock across.

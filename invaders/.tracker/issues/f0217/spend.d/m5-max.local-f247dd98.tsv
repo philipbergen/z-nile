@@ -1,0 +1,60 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-15 11:43	7 specs	0	0	test			7.490	4.560		7.490	tokens,ai
+2026-11-15 11:44	7 specs	0	0	test			3.490	3.400		3.490	tokens,ai
+2026-11-15 11:49	1 spec	0	0	test			4.332	1.800		4.332	tokens,ai
+2026-11-15 11:50	1 spec	0	0	test			3.936	1.710		3.936	tokens,ai
+2026-11-15 11:51	1 spec	0	0	test			4.546	1.900		4.546	tokens,ai
+2026-11-15 11:51	1 spec	0	0	test			2.691	1.630		2.691	tokens,ai
+2026-11-15 11:53	1 spec	0	0	test			2.875	1.650		2.875	tokens,ai
+2026-11-15 11:54	1 spec	0	0	test			4.764	1.850		4.764	tokens,ai
+2026-11-15 11:54	2 specs	0	0	test			3.074	2.170		3.074	tokens,ai
+2026-11-15 11:55	static	0	0	test			3.313	3.730		3.313	tokens,ai
+2026-11-15 11:55	static	0	0	test			3.303	4.420		3.303	tokens,ai
+2026-11-15 11:56	static	0	0	test			2.914	3.970		2.914	tokens,ai
+2026-11-15 11:56	1 spec	0	0	test			2.478	1.400		2.478	tokens,ai
+2026-11-15 11:56	1 spec	0	0	test			2.279	1.250		2.279	tokens,ai
+2026-11-15 11:56	1 spec	0	0	test			2.045	1.250		2.045	tokens,ai
+2026-11-15 11:56	1 spec	0	0	test			2.690	1.620		2.690	tokens,ai
+2026-11-15 11:56	1 spec	0	0	test			2.451	1.470		2.451	tokens,ai
+2026-11-15 11:56	1 spec	0	0	test			3.079	1.960		3.079	tokens,ai
+2026-11-15 11:56	1 spec	0	0	test			2.281	1.290		2.281	tokens,ai
+2026-11-15 11:58	6 specs	0	0	test			2.261	2.290		2.261	tokens,ai
+2026-11-15 12:20	6 specs	0	0	test			1.442	1.160		1.442	tokens,ai
+2026-11-15 12:21	6 specs	0	0	test			1.433	1.320		1.433	tokens,ai
+2026-11-15 12:21	6 specs	0	0	test			1.233	1.170		1.233	tokens,ai
+2026-11-15 12:22	6 specs	0	0	test			1.432	1.310		1.432	tokens,ai
+2026-11-15 12:25	1 spec	0	0	test			1.030	0.590		1.030	tokens,ai
+2026-11-15 12:26	1 spec	0	0	test			1.241	0.630		1.241	tokens,ai
+2026-11-15 12:26	1 spec	0	0	test			1.040	0.520		1.040	tokens,ai
+2026-11-15 12:26	1 spec	0	0	test			1.031	0.560		1.031	tokens,ai
+2026-11-15 12:26	1 spec	0	0	test			1.041	0.520		1.041	tokens,ai
+2026-11-15 12:26	6 specs	0	0	test			1.234	1.170		1.234	tokens,ai
+2026-11-15 12:27	static	0	0	test			1.649	2.240		1.649	tokens,ai
+2026-11-15 12:28	6 specs	0	0	test			1.236	1.190		1.236	tokens,ai
+2026-11-15 12:29	6 specs	0	0	test			1.450	1.280		1.450	tokens,ai
+2026-11-15 12:31	1 spec	0	0	test			1.031	0.540		1.031	tokens,ai
+2026-11-15 12:31	1 spec	0	0	test			1.028	0.540		1.028	tokens,ai
+2026-11-15 12:31	1 spec	0	0	test			1.034	0.540		1.034	tokens,ai
+2026-11-15 12:31	1 spec	0	0	test			1.033	0.500		1.033	tokens,ai
+2026-11-15 12:31	1 spec	0	0	test			1.033	0.520		1.033	tokens,ai
+2026-11-15 12:31	1 spec	0	0	test			1.030	0.540		1.030	tokens,ai
+2026-11-15 12:31	1 spec	0	0	test			1.037	0.540		1.037	tokens,ai
+2026-11-15 12:31	1 spec	0	0	test			1.030	0.540		1.030	tokens,ai
+2026-11-15 12:31	1 spec	0	0	test			1.041	0.550		1.041	tokens,ai
+2026-11-15 12:31	1 spec	0	0	test			1.027	0.550		1.027	tokens,ai
+2026-11-15 12:31	1 spec	0	0	test			1.021	0.570		1.021	tokens,ai
+2026-11-15 12:31	1 spec	0	0	test			1.031	0.570		1.031	tokens,ai
+2026-11-15 12:31	1 spec	0	0	test			1.037	0.560		1.037	tokens,ai
+2026-11-15 12:31	1 spec	0	0	test			1.033	0.550		1.033	tokens,ai
+2026-11-15 12:52	1 spec	0	0	test			2.673	1.160		2.673	tokens,ai
+2026-11-15 12:53	1 spec	0	0	test			3.096	1.140		3.096	tokens,ai
+2026-11-15 12:53	6 specs	0	0	test			4.697	2.050		4.697	tokens,ai
+2026-11-15 12:58	static	0	0	test			1.451	2.000		1.451	tokens,ai
+2026-11-15 12:58	1 spec	0	0	test			1.240	0.610		1.240	tokens,ai
+2026-11-15 12:58	24 runs	0	0	other			2238.550	634.830			tokens,ai
+2026-11-15 12:59	design-refute-001	0	0	design-review							tokens,ai
+2026-11-15 12:59	static	0	0	test			1.851	2.340		1.851	tokens,ai
+2026-11-15 14:48	affected	0	0	test			4.338	4.730		4.338	tokens,ai
+2026-11-15 14:48	affected	0	0	test			4.333	4.700		4.333	tokens,ai
+2026-11-15 13:40	1 run	0	0	other			0.205	0.020			tokens,ai
+2026-11-15 14:48	prep	2800	1	prep							tokens,ai

@@ -1,0 +1,54 @@
+M1 commit drops revives: KILLED by AC4: every row and the run's list entry record the revives the run used
+M2 valid ignores revives: KILLED by AC4: a run outside the figures' ranges is refused with a warning and writes nothing
+M3 fewer revives replace a tie: KILLED by AC2: revives never replace a row: the same score and level with fewer revives keeps the stored row
+M4a rows rank fewer revives first: KILLED by AC2: revives never rank: rows of equal score and level keep their order whatever their revives
+M4b rows rank more revives first: KILLED by AC2: revives never rank: rows of equal score and level keep their order whatever their revives
+M4c list ranks fewer revives first: KILLED by AC2: a stored list entry without revives (written before f0197) shows 0, and revives never order the list
+M4d list ranks more revives first: KILLED by AC2: a stored list entry without revives (written before f0197) shows 0, and revives never order the list
+M5 rows pass raw revives: KILLED by AC2: a row read shows its stored revives, and one stored without them (or with junk) shows 0
+M6 boardRows drops revives: KILLED by AC4: serve answers all with the list's rows and revives, the rank, and the asker's best with revives
+M7 the list's reader drops revives: KILLED by AC4: every row and the run's list entry record the revives the run used
+M8 topRun writes 0: KILLED by AC4: every row and the run's list entry record the revives the run used
+M9 bestRun's unnamed branch writes 0: KILLED by AC2: a per-player best merged into the list brings the row's revives, whether or not it names its run
+M9b bestRun's named branch writes 0: KILLED by AC2: a per-player best merged into the list brings the row's revives, whether or not it names its run
+M10 best writes 0: KILLED by AC4: serve answers all with the list's rows and revives, the rank, and the asker's best with revives
+M11 onStep writes 0: KILLED by AC2: a run's submission carries the game over's revives, and one that names none is 0
+M12 names no validation: KILLED by AC1: a prefix is "" or a capital, then letters and digits, at most PREFIX_MAX; anything else errors
+M13 names allow a lower-case start: KILLED by AC1: a prefix is "" or a capital, then letters and digits, at most PREFIX_MAX; anything else errors
+M14 names cap off by one: KILLED by AC1: a prefix is "" or a capital, then letters and digits, at most PREFIX_MAX; anything else errors
+M15 names not frozen: KILLED by AC1: the names are frozen, so no caller can point a title at another's stores
+M16 storeTarget ignores the names: KILLED by AC1: a board's store target is the title's store, scoped by period, or its global name
+M17 Snake shares pickman's prefix: KILLED by AC3: HiscoreGames gives every title a prefix of its own, and pickman's is ""
+M18 open makes a new handle each call: KILLED by AC4: open names a title's stores from its prefix, one handle per prefix, and a bad prefix errors
+M19 the list store hard-coded: KILLED by AC4: a title's run is written to its own stores only: every board, the list, and none of pickman's
+M20 submit drops revives: KILLED by AC4: every row and the run's list entry record the revives the run used
+M21 a failed read sent as healthy: KILLED by AC4: serve ignores any id but all, day or week, and a failed read answers once, failed
+M22 titles share one cache: KILLED by AC4: a board read is shared for CACHE_TTL, and two titles never share a read or a row
+M23 a leaving player's best kept: KILLED by AC4: a player's best is forgotten when they leave, and read again when they ask
+M24 one pending count for every handle: KILLED by AC4: a submit is pending until its write ends, per title, and the listener hears the run's place
+M25 the best sent with every board: KILLED by AC4: serve answers day and week with the per-player rows and their revives, and no best
+M26 raw rows sent: KILLED by AC4: serve answers all with the list's rows and revives, the rank, and the asker's best with revives
+M27 no page-of-50 fallback in Logic: KILLED by the ordered page field is value, unpacked to the score, and a rejected page size is tried once at 50
+M28 pickman's window one short: KILLED by the window is the classic dying pause
+M29 day key in local time: KILLED by AC1: a board's store target is the title's store, scoped by period, or its global name
+M30 the ordered write not a max: KILLED by a retried ordered write keeps a higher value another drive stored, and does not recommit
+M31 leave ignores its window: KILLED by AC5: leave honours the window it is given, not pickman's
+M32 onStep ignores its window: KILLED by AC5: onStep drops a departed run at the window it is given
+M33 the list's reader passes junk revives: KILLED by AC2: a stored list entry with junk revives reads 0, through the list and through a merge
+M34 best passes junk revives: KILLED by AC2: a player's best carries the revives of their all-time row, 0 when it has none
+M35 valid has no revives bound: KILLED by AC2: revives that are not a whole number from 0 make the attempt invalid, and nothing is written
+M36 revivesOf has no bound: KILLED by AC2: a row read shows its stored revives, and one stored without them (or with junk) shows 0
+M37 one listener for every handle: KILLED by AC4: each title's listener hears only its own runs
+M39 (X4) no list fails the all-time read: KILLED by AC4: a title with no list yet answers the all-time board with its per-player board
+M40 (Y1) no size-50 retry: KILLED by AC4: a page size of 10 that the store rejects is tried once at 50, cut to N, and the rank comes
+M41 (Y2) an unreadable row skipped: KILLED by AC4: a companion row that cannot be read fails the read: no short board is answered as healthy
+M42 (Y3) a request during a read never answered: KILLED by AC4: a request that arrives while the read is under way does not read again, and each gets one answer
+M43 (Y4) the failure wait ignored: KILLED by AC4: a failed read still answers once, failed, with the rows it had or none, and waits to read again
+M44 (Y5) the get budget is OrderedRead: KILLED by AC4: a title's stores are its own names scoped by period, and budgets are the modern types
+M45 (Y6) a departed player answered: KILLED by AC4: a waiter who left before the read returned gets no answer, and nothing outlives the visitor
+M46 (Y7) pending kept when the write throws: KILLED by AC4: a submit is pending from the call until its drive ends, also when the drive fails
+M47 (Y8) a failed read answers empty rows: KILLED by AC4: a failed read still answers once, failed, with the rows it had or none, and waits to read again
+M48 (Y9) a stale best kept when its re-read fails: KILLED by AC4: a best that cannot be read again is no best: the stale one is not kept
+M49 (Y10) a best read after the player left kept: KILLED by AC4: a best read that ends once the player's Parent is empty is not kept for anyone
+M50 (Y11) the budgets never asked: KILLED by AC4: a title's stores are its own names scoped by period, and budgets are the modern types
+M38 a refused run is silent: KILLED by AC4: a run outside the figures' ranges is refused with a warning and writes nothing

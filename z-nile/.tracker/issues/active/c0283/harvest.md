@@ -1,0 +1,14 @@
+# Harvest: c0283
+- design-review-001 F1: z-raft/interface-names-every-writer, z-design/run-the-other-rafts-specs
+- design-review-001 F2: z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F3: one-off: the approve-and-merge suffix rode every prep stop; it now follows the reason
+- design-review-001 F4: zz-test/specs-set-host-markers-explicitly
+- design-review-001 F5: z-design/quote-other-preps-before-promising
+- design-review-001 F6: one-off: the earlier design's rounds are kept under superseded/ and the lessons they taught stay
+- design-review-001 F7: one-off: a second writer of a published record needs the sync advice in the approve row
+- design-review-001 F8: one-off: the row's key follows c0263 and its siblings (design=)
+- design-review-001 F9: zz-test/guard-needs-its-own-case
+- design-review-001 F10: z-design/restated-rules-move-together
+- design-review-001 F11: one-off: the mutation runner runs bounded and refuses a dirty copy
+- note the superseded design (a status-prepared gate, a frozen list and --said, dropped by the user's re-scope of 2026-11-12) taught two lessons and its reviews are in superseded/: zz-test/state-files-are-excluded-from-fixtures, zz-test/specs-set-host-markers-explicitly
+- note R0099 design review 002 F1: AC5 named c0263's promoted spec paths, absent before the raft's done, and the coordinator's first fix prefixed `zn find` with $ZN_ROOT: z-design/check-paths-from-the-home
