@@ -9,3 +9,5 @@ A reviewer cannot judge a design whose outcome depends on an answer nobody has g
 **Why:** c0276 design review 001 F1: the Design said the served board's wiring "is a decision I need confirmed" while the document was marked `design: reviewed`; the wiring had no criterion, spec case or Rules row, so any implementation passed.
 
 **How to apply:** when a design leans on an outcome that is not clearly inside the captured scope, put the question to the user (or into the report that goes to them) before the first review round, and keep it out of the Checked criteria until it is answered; never write "the executor decides".
+
+**Note** (c0278 design review 001 F1): "if the user overrules the guess, it comes back as its own criterion and step" is a conditional step that waits on a person, as much as an open question is. The guess goes under `## Open to the human` before the review, so the gate that needs the ruling holds.

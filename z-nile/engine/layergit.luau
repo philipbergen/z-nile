@@ -124,6 +124,7 @@ function layergit.isPostFinishPath(path: string, raftId: string): boolean
 	if name ~= nil then
 		if
 			name == "trace.md"
+			or name == "spend.md" -- d0333: every `./zn commit` rewrites the raft's snapshot
 			or name == `{raftId}.md`
 			or string.match(name, "^review%-%d+%.md$") ~= nil
 			or string.match(name, "^refute%-%d+%.md$") ~= nil
@@ -142,7 +143,8 @@ function layergit.isPostFinishPath(path: string, raftId: string): boolean
 end
 
 -- Returns the SHA of the layer's "<issue>: <title>" commit on `base` when the layer is finished
--- (either that commit is the tip, or commits above it touch only post-finish review/trace/ruling files).
+-- (either that commit is the tip, or commits above it touch only post-finish review/trace/ruling files
+-- and the raft's own `spend.md`, which every `./zn commit` rewrites).
 function layergit.layerFinishSha(layer: stack.Layer, base: string, overrideTip: string?): string?
 	local tip = overrideTip or layergit.layerTip(layer)
 	if not tip or base == "" then

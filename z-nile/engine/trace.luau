@@ -73,7 +73,8 @@
 --    ```
 --    - `trace.md` and `final-review-NNN.md` (and optional `final-refute-NNN.md`)
 --      are committed on the top layer after its finish commit, in commits that
---      touch only the raft's and tickets' tracker files.
+--      touch only the raft's and tickets' tracker files (the raft's own
+--      `spend.md` among them: every `./zn commit` rewrites it).
 --    - `Commit:` names the top layer's finish commit (`<issue>: <title>`).
 --      Anything else added after the table, or any layer rewritten, makes the
 --      table stale.
@@ -465,6 +466,7 @@ local function isTrackerFileOf(path: string, raftId: string, raftDir: string, is
 		local name = string.sub(path, #raftPrefix + 1)
 		if
 			name == "trace.md"
+			or name == "spend.md" -- d0333: every `./zn commit` rewrites the raft's snapshot
 			or name == `{raftId}.md`
 			or string.match(name, "^review%-%d+%.md$") ~= nil
 			or string.match(name, "^refute%-%d+%.md$") ~= nil
@@ -491,6 +493,7 @@ local function isAllowedAfterTrace(path: string, raftId: string, raftDir: string
 		local name = string.sub(path, #raftPrefix + 1)
 		if
 			name == `{raftId}.md`
+			or name == "spend.md" -- d0333
 			or string.match(name, "^final%-review%-%d+%.md$") ~= nil
 			or string.match(name, "^final%-refute%-%d+%.md$") ~= nil
 		then
@@ -502,7 +505,8 @@ end
 
 -- Pure stale decision over the stack's layers and commits.
 -- Rule: `trace.md` and `final-review-NNN.md` are committed on the top layer after its finish commit,
--- in commits that touch only the raft's and tickets' tracker files; `Commit:` names the top layer's
+-- in commits that touch only the raft's and tickets' tracker files (the raft's own `spend.md` among
+-- them, before and after the table); `Commit:` names the top layer's
 -- finish commit; anything else added after the table, or any layer rewritten, makes it stale.
 function trace.staleReason(
 	raftId: string,
