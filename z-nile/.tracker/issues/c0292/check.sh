@@ -30,20 +30,28 @@ check "AC1: the lesson z-design/prep-specs-pass-format-and-lint is read in desig
     grep -qxF "check: did '"'"'stylua --check'"'"' and '"'"'selene'"'"' run clean over the issue'"'"'s folder (acceptance/, experiments/) on the prep commit?" "$L" ||
       { echo "$L lost the captured check question"; exit 1; }'
 
-check "AC2: the lesson says what the gate's stages read and fail on (every .luau of each .tracker, acceptance/ and experiments/ included; a diff, an error or a warning), and that nothing a prep runs earlier does (tests/run, ./zn check, ./zn promote-check, the edit hook for a file a shell command, a copy or a merge wrote), and that they read no .sh and no .luau.txt" \
+check "AC2: the lesson says what the gate's stages read and fail on (every .luau of each .tracker, acceptance/ and experiments/ included; a diff, an error or a warning), and that nothing a prep runs earlier does (tests/run, ./zn check, ./zn promote-check, the Claude Code edit hook, which no other CLI runs and which misses a shell command, a copy or a merge), that they read no .sh and no .luau.txt, and that under ./zn dispatch the prep gate merges on CI, which runs no gate (c0359)" \
   bash -c 'has "$L" "full gate" "every \`.luau\`" "\`.tracker/\`" "\`acceptance/\` and \`experiments/\` included" "a diff, an error or a warning" \
-    "\`tests/run\`" "\`./zn check\`" "\`./zn promote-check\`" "edit hook" "a shell command, a copy or a merge" "no \`.sh\` and no \`.luau.txt\`"'
+    "\`tests/run\`" "\`./zn check\`" "\`./zn promote-check\`" "the Claude Code edit hook (no other CLI runs it)" "a shell command, a copy or a merge" "no \`.sh\` and no \`.luau.txt\`" \
+    "Under \`./zn dispatch\` the prep gate merges on CI, which runs no gate, so a failing folder reaches main (c0359)"'
 
 check "AC3: the lesson tells the incident: c0261's prep PR #259 at its merge gate on 2026-11-09, all 12 acceptance specs unformatted, invalid '\\{' escapes, an unused require, the gate failing at format and lint" \
   bash -c 'has "$L" "c0261" "PR #259" "2026-11-09" "all 12 acceptance specs unformatted" "\`'"'"'\\{'"'"'\`" "unused require" "failed at format and lint"'
 
-check "AC4: the lesson's How to apply gives the command from the repository root, right before the prep commit and again after any later change, formats by the folder's path until both exit 0, says a warning alone fails selene, and names zz-test/format-tracker-specs-by-path" \
-  bash -c 'has "$L" "**How to apply:** from the repository root" "right before the prep commit" "again after any later change to a \`.luau\` in the folder" \
+check "AC4: the lesson's How to apply gives the command from the repository root, after writing the specs (before the mutation check and the review), right before the prep commit and again after any later change, formats by the folder's path until both exit 0, says a warning alone fails selene, and names zz-test/format-tracker-specs-by-path" \
+  bash -c 'has "$L" "**How to apply:** from the repository root" "after writing the specs (before the mutation check and the review)" "right before the prep commit" "again after any later change to a \`.luau\` in the folder" \
     "\`d=\$(./zn find <id>); stylua \"\$d\"; stylua --check \"\$d\" && selene --quiet \"\$d\"\`" "until both exit 0" "selene exits 1 on a warning alone" \
     "\`stylua .\` skips \`.tracker/\`" "(zz-test/format-tracker-specs-by-path)"'
 
-check "AC5: z-design step 6 tells the prep to run the two stages over the issue's folder before the prep commit, with the lesson's command, and names the lesson" \
+check "AC5: z-design step 4 tells the prep to run the two stages over the issue's folder before the mutation check and the review, and step 6 before the prep commit, each with the lesson's command and naming the lesson" \
   bash -c 'S=skills/z-design/SKILL.md
+    s4=$(awk "/^## 4\\. Write the executable acceptance/{f=1;next} /^## /{f=0} f" "$S")
+    [[ -n $s4 ]] || { echo "$S has no section ## 4. Write the executable acceptance"; exit 1; }
+    w4="- **Format and lint the folder** before the mutation check and the review: \`d=\$(./zn find <id>); stylua \"\$d\"; stylua --check \"\$d\" && selene --quiet \"\$d\"\` from the repository root, until both exit 0 (step 6 runs it again on the committed bytes; lesson z-design/prep-specs-pass-format-and-lint)."
+    l4=$(printf "%s\n" "$s4" | grep -nxF -- "$w4" | cut -d: -f1)
+    [[ -n $l4 ]] || { echo "step 4 lacks the sentence: $w4"; exit 1; }
+    m4=$(printf "%s\n" "$s4" | grep -n "^- \*\*Mutation check\*\*" | cut -d: -f1)
+    [[ -n $m4 && $l4 -lt $m4 ]] || { echo "the step-4 sentence is not before the Mutation check bullet"; exit 1; }
     sec=$(awk "/^## 6\\. Commit and hand off/{f=1;next} /^## /{f=0} f" "$S")
     [[ -n $sec ]] || { echo "$S has no section ## 6. Commit and hand off"; exit 1; }
     want="  - Before the prep commit, run the gate'"'"'s format and lint stages over the issue'"'"'s folder from the repository root, \`d=\$(./zn find <id>); stylua \"\$d\"; stylua --check \"\$d\" && selene --quiet \"\$d\"\`, until both exit 0, and again after any later change to a \`.luau\` there: the full gate reads every \`.luau\` in it, and nothing earlier in a prep does (lesson z-design/prep-specs-pass-format-and-lint)."
