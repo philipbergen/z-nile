@@ -3,13 +3,18 @@ selene.toml
 z-nile/.luaurc
 z-nile/affected.luau
 z-nile/check.sh
+z-nile/engine/approval.luau
 z-nile/engine/audit.luau
 z-nile/engine/board.luau
 z-nile/engine/compact.luau
+z-nile/engine/contract.luau
 z-nile/engine/ids.luau
 z-nile/engine/main.luau
+z-nile/engine/openlist.luau
+z-nile/engine/paths.luau
 z-nile/engine/projects.luau
 z-nile/engine/spend.luau
+z-nile/engine/store.luau
 z-nile/lib/ac.sh
 z-nile/lib/fence.sh
 z-nile/lib/graph.luau
@@ -39,6 +44,7 @@ z-nile/tests/lib/engine.luau
 z-nile/tests/lib/fence.luau
 z-nile/tests/lib/fixture.luau
 z-nile/tests/lib/renamed.luau
+z-nile/tests/lib/seal.luau
 z-nile/tests/lib/t.luau
 z-nile/tests/lib/trackerfix.luau
 z-nile/tests/run.luau

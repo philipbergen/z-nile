@@ -1,0 +1,121 @@
+== M0 the prototype itself
+PASS tests/acceptance/c0060/retrofit.spec.luau: 3 passed, 0 failed
+PASS tests/acceptance/c0045/workstreams.spec.luau: 11 passed, 0 failed
+14 passed, 0 failed, 2 spec files
+== M1 worktree ignores --from
+PASS tests/acceptance/c0060/retrofit.spec.luau: 3 passed, 0 failed
+FAIL tests/acceptance/c0045/workstreams.spec.luau :: worktree --from bases the new worktree on the ref
+     z-nile/tests/acceptance/c0045/workstreams.spec:338: expected "1f524edb044df34dbee6d95e528b8d5709c36b51", got "b884a32a070cf1340203b465fcf78ab4bd22ec1c"
+FAIL tests/acceptance/c0045/workstreams.spec.luau: 10 passed, 1 failed
+13 passed, 1 failed, 2 spec files
+== M2 latestReview counts stream review files
+PASS tests/acceptance/c0060/retrofit.spec.luau: 3 passed, 0 failed
+FAIL tests/acceptance/c0045/workstreams.spec.luau :: stream review files are not review rounds
+     z-nile/tests/acceptance/c0045/workstreams.spec:398: expected true, got false
+FAIL tests/acceptance/c0045/workstreams.spec.luau: 10 passed, 1 failed
+13 passed, 1 failed, 2 spec files
+== M3 the ref is cut at origin/main, not the raft work
+PASS tests/acceptance/c0060/retrofit.spec.luau: 3 passed, 0 failed
+FAIL tests/acceptance/c0045/workstreams.spec.luau :: worktree --from bases the new worktree on the ref
+     z-nile/tests/acceptance/c0045/workstreams.spec:338: expected "cc93583db08e3cf0322365c90c2d1608f6f6e72b", got "f11ebfa36984be524d8b2a208ae5e2e3a2a972ff"
+FAIL tests/acceptance/c0045/workstreams.spec.luau: 10 passed, 1 failed
+13 passed, 1 failed, 2 spec files
+== M4 the layer is not pushed (main's stale case)
+PASS tests/acceptance/c0060/retrofit.spec.luau: 3 passed, 0 failed
+FAIL tests/acceptance/c0045/workstreams.spec.luau :: stream review files are not review rounds
+     z-nile/tests/acceptance/c0045/workstreams.spec:397: expected true, got false
+FAIL tests/acceptance/c0045/workstreams.spec.luau: 10 passed, 1 failed
+13 passed, 1 failed, 2 spec files
+== M5 the push through raw process.exec
+FAIL tests/acceptance/c0060/retrofit.spec.luau :: no listed spec runs git or tracker.sh outside the fixture helper
+     z-nile/tests/acceptance/c0060/retrofit.spec:84: 1 raw git or tracker.sh calls:
+FAIL tests/acceptance/c0060/retrofit.spec.luau: 2 passed, 1 failed
+PASS tests/acceptance/c0045/workstreams.spec.luau: 11 passed, 0 failed
+13 passed, 1 failed, 2 spec files
+== N0 the prototype
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: the base af1d8397 with exactly the three c0304 hunks
+narrow rc=0
+== N1 another case loses an assertion
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: differs from its merge base af1d8397 with exactly the three c0304 hunks, first at line 346:
+  expected: 		t.expect(has(unknown.stderr, "no-such-ref")).toBe(true)
+  found:    		t.expect(git(main, { "branch", "--list", "ws-f0020" })).toBe("")
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N2 case 1 loses the tip assertion
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: differs from its merge base af1d8397 with exactly the three c0304 hunks, first at line 338:
+  expected: 		t.expect(git(stream, { "rev-parse", "HEAD" })).toBe(tip)
+  found:    		t.expect(must(tr(main, { "worktree", "ws-f0010", "--from", "raft-tip" }), "again")).toBe(stream)
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N3 case 2 loses the review assertion
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: differs from its merge base af1d8397 with exactly the three c0304 hunks, first at line 398:
+  expected: 		t.expect(has(done.stderr, "no review-NNN.md")).toBe(true)
+  found:    		local metrics = must(tr(wt1, { "metrics" }), "metrics")
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N4 a case is renamed
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: differs from its merge base af1d8397 with exactly the three c0304 hunks, first at line 268:
+  expected: 	it("a single-issue raft is sequential", function()
+  found:    	it("a single issue raft is sequential", function()
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N5 the two --from lines name different refs
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: differs from its merge base af1d8397 with exactly the three c0304 hunks, first at line 339:
+  expected: 		t.expect(must(tr(main, { "worktree", "ws-f0010", "--from", "raft-tip" }), "again")).toBe(stream)
+  found:    		t.expect(must(tr(main, { "worktree", "ws-f0010", "--from", "other" }), "again")).toBe(stream)
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N6 the preamble changes
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: differs from its merge base af1d8397 with exactly the three c0304 hunks, first at line 31:
+  expected: local NO_GC: { [string]: string } = {}
+  found:    local NO_GC: { [string]: string } = { x = "1" }
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N8 case 1 changes the rest of a --from line
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: differs from its merge base af1d8397 with exactly the three c0304 hunks, first at line 335:
+  expected: 		t.expect(must(tr(main, { "worktree", "ws-f0010", "--from", "raft-tip" }), "worktree --from"))
+  found:    		t.expect(must(tr(main, { "worktree", "ws-f0010", "--from", "raft-tip" }), "worktree from"))
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N9 case 2's done call and assertions commented out
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: differs from its merge base af1d8397 with exactly the three c0304 hunks, first at line 396:
+  expected: 		local done = tr(wt1, { "done", "R0010" })
+  found:    		--[[
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N10 case 1 returns before its branch and tip assertions
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: differs from its merge base af1d8397 with exactly the three c0304 hunks, first at line 337:
+  expected: 		t.expect(git(stream, { "branch", "--show-current" })).toBe("ws-f0010")
+  found:    		do return end
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N11 case 2 rebinds done to a canned refusal
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: differs from its merge base af1d8397 with exactly the three c0304 hunks, first at line 397:
+  expected: 		t.expect(done.ok).toBe(false)
+  found:    		done = { ok = false, code = 1, stdout = "", stderr = "no review-NNN.md" }
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N12 the push through raw process.exec
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: differs from its merge base af1d8397 with exactly the three c0304 hunks, first at line 394:
+  expected: 		git(wt1, { "push", "-q", "origin", "HEAD" })
+  found:    		process.exec("git", { "-C", wt1, "push", "-q", "origin", "HEAD" })
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N13 an override comment reworded
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: differs from its merge base af1d8397 with exactly the three c0304 hunks, first at line 393:
+  expected: 		-- layer is pushed to the fixture's origin and done reaches the review check
+  found:    		-- layer is pushed to origin and done reaches the review check
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N14 R0010-demo kept, with a branch of that name
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: differs from its merge base af1d8397 with exactly the three c0304 hunks, first at line 334:
+  expected: 		git(wt1, { "branch", "raft-tip", tip })
+  found:    		git(wt1, { "branch", "R0010-demo", tip })
+(apply experiments/prototype.patch exactly; if the base moved, stop for a re-prep)
+narrow rc=1
+== N7 a base that already holds the change
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: the base c5f0ab7e is not the stale form c0304 was reviewed against ((b) --from R0010-demo occurs 0 times, expected 2; the base already names raft-tip; the base already names "push"): this check runs at finish, before the change lands; stop for a re-prep
+narrow rc=1
+== N15 a base with a c0178-style edit to the first case's clone setup, the prototype on top (must pass)
+z-nile/tests/acceptance/c0045/workstreams.spec.luau: the base e58a6037 with exactly the three c0304 hunks
+narrow rc=0

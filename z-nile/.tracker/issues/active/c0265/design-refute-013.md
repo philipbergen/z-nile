@@ -1,0 +1,12 @@
+# Refute 013 (c0265): redesign round 2 answered
+
+- F1 (high): fixed: the last beat.spec case claims a fresh item (c0095) in the worktree and checks the main checkout, which never adopted it; the Design now says `--adopt` writes the memory in the adopting checkout, main included (zz-rules' list of ignored files the main checkout may write gains `.cache/tracker-stamp-<id>`).
+- F2 (high): fixed: the stop-then-ready case first resets the fake PR list to empty, so R0010 is lost, not parked.
+- F3 (high): fixed in the Design: any failed write is said on stderr (git's message) even when the one retry then succeeds, so the pinned race proof's failed tick is reported.
+- F4 (high): fixed: adoption writes the memory where it happens (the raft worktree, after `ready`), and never overrides a remembered different stamp (`--adopt` there refuses with the takeover text; `--adopt --replace` is the deliberate handover z-run uses). So an old owner that comes back in its own checkout is told by every form, bare, `--watch` or `--adopt` (a lost.spec case pins the adopt form); a different checkout adopting is a new owner by definition (said in the Design).
+- F5: fixed: said plainly that a step that makes its own claim is kept alive by that agent's own commands and loop, and the dispatcher's stamp-bound beat serves steps that start on a claim; the row now names beat.spec's c0095 case (the instant check) instead of cases that never run the dispatcher.
+- F6: listed under "Readings of the user's words, for veto": `stop` stays open (the user's rule), its subject records the stamp, and `done` is refused by the same stamp check as the carried `prepared`.
+- F7: fixed: `ready` does not drop the rafting branch (it cannot know it; the pruner does); `done` drops branch, entry and memory so no autobeat recreates it while the PR waits.
+- F8: E8 re-run on 53 spec files (c0116, c0053, c0117, c0115, c0120, c0005, ready/recombine members, busy, tracker-guarded): 478 passed, 0 failed; the earlier "265 passed" of the previous answer had run on an unmodified engine (its scratch edit never applied) and is withdrawn; the autobeat, drops and the stop subject are not hooked, so the executor runs the whole suite on them.
+- F9: fixed: the beat-race shim arm fires only for a push to the item's old stamp branch.
+- F10/F11: fixed or listed: the readings are under the veto list; the lows on exit codes and wording are left to the executor's text, except the stale "ref" wording fixed here.

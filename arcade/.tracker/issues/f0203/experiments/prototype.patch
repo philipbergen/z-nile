@@ -1,0 +1,688 @@
+diff --git a/arcade/src/shared/Logic/Look/init.luau b/arcade/src/shared/Logic/Look/init.luau
+new file mode 100644
+index 00000000..c1b01593
+--- /dev/null
++++ b/arcade/src/shared/Logic/Look/init.luau
+@@ -0,0 +1,201 @@
++--!strict
++-- Look: first-person free look and smoothing, engine-free (numbers in, numbers out). A look is a yaw and a pitch in
++-- radians relative to the heading; a positive yaw turns left and a positive pitch looks up.
++export type Look = { yaw: number, pitch: number }
++export type Arrows = { up: boolean, down: boolean, left: boolean, right: boolean }
++export type Dir = "up" | "down" | "left" | "right"
++-- the look and whether it is springing back to the heading (after the arrows were let go)
++export type Spring = { look: Look, spring: boolean }
++export type Tuning = {
++	radiansPerPixel: number, -- the mouse's (and a touch drag's) turn per pixel
++	maxPitch: number, -- radians up or down
++	turnSeconds: number, -- seconds per quarter turn: the eased turn's, the arrows' and the spring's rate
++}
++export type Partial = { radiansPerPixel: number?, maxPitch: number?, turnSeconds: number? }
++
++local PI = math.pi
++local TAU = 2 * math.pi
++
++local function finite(v: any): boolean
++	return type(v) == "number" and v == v and math.abs(v) ~= math.huge
++end
++
++local Look = {}
++Look.DEFAULT =
++	table.freeze({ radiansPerPixel = 0.004, maxPitch = math.rad(80), turnSeconds = 0.12 } :: Tuning)
++
++function Look.tune(over: Partial?): Tuning
++	local o: Partial = over or {}
++	local d = Look.DEFAULT
++	local t: Tuning = {
++		radiansPerPixel = if o.radiansPerPixel ~= nil then o.radiansPerPixel else d.radiansPerPixel,
++		maxPitch = if o.maxPitch ~= nil then o.maxPitch else d.maxPitch,
++		turnSeconds = if o.turnSeconds ~= nil then o.turnSeconds else d.turnSeconds,
++	}
++	if not (finite(t.radiansPerPixel) and finite(t.maxPitch) and finite(t.turnSeconds)) then
++		error("Look.tune: every value must be finite")
++	end
++	if t.radiansPerPixel <= 0 then
++		error("Look.tune: radiansPerPixel must be above 0")
++	end
++	if t.maxPitch <= 0 then
++		error("Look.tune: maxPitch must be above 0")
++	end
++	if t.maxPitch > PI / 2 then
++		error("Look.tune: maxPitch must be at most pi/2")
++	end
++	if t.turnSeconds <= 0 then
++		error("Look.tune: turnSeconds must be above 0")
++	end
++	return table.freeze(t)
++end
++
++-- An angle in (-pi, pi].
++function Look.wrap(a: number): number
++	local r = (a + PI) % TAU - PI
++	if r == -PI then
++		return PI
++	end
++	return r
++end
++
++-- `current` moved toward `target` the short way round by at most `maxDelta`, wrapped.
++function Look.approach(current: number, target: number, maxDelta: number): number
++	local diff = Look.wrap(target - current)
++	if math.abs(diff) <= maxDelta then
++		return Look.wrap(target)
++	end
++	return Look.wrap(current + (if diff > 0 then maxDelta else -maxDelta))
++end
++
++-- radians a second: a quarter turn in turnSeconds
++function Look.rate(tuning: Tuning?): number
++	local t = tuning or Look.DEFAULT
++	return (PI / 2) / t.turnSeconds
++end
++
++local function step(dt: number, t: Tuning): number
++	return Look.rate(t) * (if finite(dt) and dt > 0 then dt else 0)
++end
++
++-- The eased turn: a yaw `dt` seconds on toward `target` at Look.rate. With no yaw yet (nil) it is the target.
++function Look.ease(current: number?, target: number, dt: number, tuning: Tuning?): number
++	local t = tuning or Look.DEFAULT
++	if current == nil or not finite(current) then
++		return Look.wrap(target)
++	end
++	return Look.approach(current, target, step(dt, t))
++end
++
++local function clampPitch(p: number, t: Tuning): number
++	return math.clamp(p, -t.maxPitch, t.maxPitch)
++end
++
++-- A mouse or drag of dx, dy pixels (screen right and down): right turns right, down looks down.
++function Look.mouse(l: Look, dx: number, dy: number, tuning: Tuning?): Look
++	local t = tuning or Look.DEFAULT
++	if not finite(dx) or not finite(dy) then
++		return { yaw = l.yaw, pitch = l.pitch }
++	end
++	local k = t.radiansPerPixel
++	return { yaw = Look.wrap(l.yaw - dx * k), pitch = clampPitch(l.pitch - dy * k, t) }
++end
++
++-- A turn by radians (Pad.look's): yaw positive left, pitch positive up.
++function Look.turn(l: Look, dyaw: number, dpitch: number, tuning: Tuning?): Look
++	local t = tuning or Look.DEFAULT
++	if not finite(dyaw) or not finite(dpitch) then
++		return { yaw = l.yaw, pitch = l.pitch }
++	end
++	return { yaw = Look.wrap(l.yaw + dyaw), pitch = clampPitch(l.pitch + dpitch, t) }
++end
++
++function Look.snap(): Look
++	return { yaw = 0, pitch = 0 }
++end
++
++function Look.rest(): Spring
++	return { look = { yaw = 0, pitch = 0 }, spring = false }
++end
++
++function Look.arrows(): Arrows
++	return { up = false, down = false, left = false, right = false }
++end
++
++-- The arrows held after `dir` went down (true) or up (false). A nil dir leaves them as they are.
++function Look.press(a: Arrows, dir: Dir?, down: boolean): Arrows
++	return {
++		up = if dir == "up" then down else a.up,
++		down = if dir == "down" then down else a.down,
++		left = if dir == "left" then down else a.left,
++		right = if dir == "right" then down else a.right,
++	}
++end
++
++-- Where the held arrows look, in quarter turns from the heading, positive left: up 0, left 1, right -1, down 2;
++-- two together give the half quarters between. Opposite arrows cancel. Nil when none is held.
++function Look.quarters(a: Arrows): number?
++	if not (a.up or a.down or a.left or a.right) then
++		return nil
++	end
++	local side = (if a.left then 1 else 0) - (if a.right then 1 else 0)
++	local ahead = (if a.up then 1 else 0) - (if a.down then 1 else 0)
++	if side == 0 then
++		return if ahead < 0 then 2 else 0
++	end
++	if ahead == 0 then
++		return side
++	end
++	if ahead > 0 then
++		return side * 0.5
++	end
++	return side * 1.5
++end
++
++-- One frame of the arrow look, after any other look input has moved `look`. While an arrow is held the look turns
++-- from prev.look toward the arrows (pitch level) at Look.rate; once they are let go it springs back to the heading
++-- at the same rate, until anything else moves the look, which takes over from there.
++function Look.spring(prev: Spring, look: Look, a: Arrows, dt: number, tuning: Tuning?): Spring
++	local t = tuning or Look.DEFAULT
++	local s = step(dt, t)
++	local function toward(from: Look, target: Look): Look
++		local dp = math.clamp(target.pitch - from.pitch, -s, s)
++		return { yaw = Look.approach(from.yaw, target.yaw, s), pitch = from.pitch + dp }
++	end
++	local q = Look.quarters(a)
++	if q ~= nil then
++		return { look = toward(prev.look, { yaw = Look.wrap(q * PI / 2), pitch = 0 }), spring = true }
++	end
++	if look.yaw ~= prev.look.yaw or look.pitch ~= prev.look.pitch then
++		return { look = { yaw = look.yaw, pitch = look.pitch }, spring = false }
++	end
++	if prev.spring then
++		local back = toward(look, { yaw = 0, pitch = 0 })
++		return { look = back, spring = not (back.yaw == 0 and back.pitch == 0) }
++	end
++	return { look = { yaw = look.yaw, pitch = look.pitch }, spring = false }
++end
++
++-- How far between two snapshots the screen is, `elapsed` seconds after the later one arrived, at `rate` snapshots a
++-- second: in 0..1, and 1 for a value that is not a number.
++function Look.alpha(elapsed: number, rate: number): number
++	local a = elapsed * rate
++	if a ~= a then
++		return 1
++	end
++	return math.clamp(a, 0, 1)
++end
++
++-- A value between `from` and `to` at blend `alpha` (clamped to 0..1; not a number is 1).
++function Look.blend(from: number, to: number, alpha: number): number
++	local a = if alpha ~= alpha then 1 else math.clamp(alpha, 0, 1)
++	return from + (to - from) * a
++end
++
++-- An angle between `from` and `to` the short way round, wrapped.
++function Look.blendYaw(from: number, to: number, alpha: number): number
++	local a = if alpha ~= alpha then 1 else math.clamp(alpha, 0, 1)
++	return Look.wrap(from + Look.wrap(to - from) * a)
++end
++
++return Look
+diff --git a/arcade/src/shared/Logic/Pad/init.luau b/arcade/src/shared/Logic/Pad/init.luau
+new file mode 100644
+index 00000000..bb9a70e5
+--- /dev/null
++++ b/arcade/src/shared/Logic/Pad/init.luau
+@@ -0,0 +1,201 @@
++--!strict
++-- Pad: the gamepad's generic folds, engine-free. No button map lives here: each place keeps its own. The left stick
++-- folds into one direction a push (with hysteresis in tilt and in angle), the right stick looks at a rate, and the
++-- most recently used controller drives.
++export type Dir = "up" | "down" | "left" | "right"
++export type Axes = "both" | "horizontal"
++export type Steer = { held: Dir? } -- the sector the stick is engaged in, nil when released
++export type Tuning = {
++	on: number, -- tilt that engages a sector
++	off: number, -- tilt below which the stick is released (and the least that takes over the controller)
++	margin: number, -- degrees past the diagonal an engaged stick must turn to change sector
++	axes: Axes, -- "horizontal": only left and right, folded on the x tilt alone
++	lookDead: number, -- radial dead zone of the look stick
++	lookYaw: number, -- radians a second at full tilt, sideways
++	lookPitch: number, -- radians a second at full tilt, up and down
++	invert: boolean, -- pushing up looks down
++}
++export type Partial = {
++	on: number?,
++	off: number?,
++	margin: number?,
++	axes: Axes?,
++	lookDead: number?,
++	lookYaw: number?,
++	lookPitch: number?,
++	invert: boolean?,
++}
++
++local function finite(v: any): boolean
++	return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
++end
++
++local Pad = {}
++Pad.DEFAULT = table.freeze({
++	on = 0.6,
++	off = 0.4,
++	margin = 15,
++	axes = "both",
++	lookDead = 0.15,
++	lookYaw = 3,
++	lookPitch = 2,
++	invert = false,
++} :: Tuning)
++
++function Pad.tune(over: Partial?): Tuning
++	local o: Partial = over or {}
++	local d = Pad.DEFAULT
++	local t: Tuning = {
++		on = if o.on ~= nil then o.on else d.on,
++		off = if o.off ~= nil then o.off else d.off,
++		margin = if o.margin ~= nil then o.margin else d.margin,
++		axes = if o.axes ~= nil then o.axes else d.axes,
++		lookDead = if o.lookDead ~= nil then o.lookDead else d.lookDead,
++		lookYaw = if o.lookYaw ~= nil then o.lookYaw else d.lookYaw,
++		lookPitch = if o.lookPitch ~= nil then o.lookPitch else d.lookPitch,
++		invert = if o.invert ~= nil then o.invert else d.invert,
++	}
++	if not (finite(t.on) and finite(t.off) and finite(t.margin)) then
++		error("Pad.tune: on, off and margin must be finite")
++	end
++	if not (finite(t.lookDead) and finite(t.lookYaw) and finite(t.lookPitch)) then
++		error("Pad.tune: the look values must be finite")
++	end
++	if t.off <= 0 then
++		error("Pad.tune: off must be above 0")
++	end
++	if t.off >= t.on then
++		error("Pad.tune: off must be below on")
++	end
++	if t.on > 1 then
++		error("Pad.tune: on must be at most 1")
++	end
++	if t.margin < 0 then
++		error("Pad.tune: margin must not be negative")
++	end
++	if t.margin >= 45 then
++		error("Pad.tune: margin must be below 45 degrees")
++	end
++	if t.axes ~= "both" and t.axes ~= "horizontal" then
++		error("Pad.tune: axes must be both or horizontal")
++	end
++	if t.lookDead < 0 then
++		error("Pad.tune: lookDead must not be negative")
++	end
++	if t.lookDead >= 1 then
++		error("Pad.tune: lookDead must be below 1")
++	end
++	if t.lookYaw < 0 or t.lookPitch < 0 then
++		error("Pad.tune: look rates must not be negative")
++	end
++	if type(t.invert) ~= "boolean" then
++		error("Pad.tune: invert must be a boolean")
++	end
++	return table.freeze(t)
++end
++
++function Pad.isPad(inputType: string): boolean
++	local n = tonumber(string.match(inputType, "^Gamepad(%d)$"))
++	return n ~= nil and n >= 1 and n <= 8
++end
++
++-- The controller that drives now: an input from a gamepad of `magnitude` (1 for a button, the tilt for a stick)
++-- takes over when it is at least the tuning's `off`; any other input keeps the one before.
++function Pad.track(active: string?, inputType: string, magnitude: number, tuning: Tuning?): string?
++	local t = tuning or Pad.DEFAULT
++	if Pad.isPad(inputType) and finite(magnitude) and magnitude >= t.off then
++		return inputType
++	end
++	return active
++end
++
++function Pad.steerStart(): Steer
++	return { held = nil }
++end
++
++local AXIS: { [Dir]: number } = { up = 90, down = -90, left = 180, right = 0 }
++
++local function off(x: number, y: number, held: Dir): number
++	local deg = math.deg(math.atan2(y, x))
++	local d = math.abs(deg - AXIS[held]) % 360
++	return if d > 180 then 360 - d else d
++end
++
++local function sector(x: number, y: number): Dir
++	local up: Dir, down: Dir, right: Dir, left: Dir = "up", "down", "right", "left"
++	if math.abs(y) >= math.abs(x) then
++		return if y >= 0 then up else down
++	end
++	return if x > 0 then right else left
++end
++
++local function steerX(s: Steer, x: number, t: Tuning): (Steer, Dir?)
++	local r = math.abs(x)
++	local now: Dir = if x > 0 then "right" else "left"
++	if s.held == nil or s.held == "up" or s.held == "down" then
++		if r >= t.on then
++			return { held = now }, now
++		end
++		return { held = nil }, nil
++	end
++	if r < t.off then
++		return { held = nil }, nil
++	end
++	if now ~= s.held then
++		-- the other side: it changes at the on tilt, and short of it the stick is released (a held state never
++		-- points the other way)
++		if r >= t.on then
++			return { held = now }, now
++		end
++		return { held = nil }, nil
++	end
++	return { held = s.held }, nil
++end
++
++-- One reading of the stick (x right, y up): the new state and the direction to send, if any.
++function Pad.steer(s: Steer, x: number, y: number, tuning: Tuning?): (Steer, Dir?)
++	local t = tuning or Pad.DEFAULT
++	if not finite(x) or not finite(y) then
++		return { held = nil }, nil
++	end
++	if t.axes == "horizontal" then
++		return steerX(s, x, t)
++	end
++	local r = math.sqrt(x * x + y * y)
++	local held: Dir? = s.held
++	if held == nil then
++		if r >= t.on then
++			local now = sector(x, y)
++			return { held = now }, now
++		end
++		return { held = nil }, nil
++	end
++	if r < t.off then
++		return { held = nil }, nil
++	end
++	if r >= t.on and off(x, y, held) > 45 + t.margin + 1e-9 then
++		local now = sector(x, y)
++		return { held = now }, now
++	end
++	return { held = held }, nil
++end
++
++-- One reading of the look stick over `dt` seconds: the yaw and pitch to turn by, in radians (yaw positive left,
++-- pitch positive up), for Look.turn.
++function Pad.look(x: number, y: number, dt: number, tuning: Tuning?): (number, number)
++	local t = tuning or Pad.DEFAULT
++	if not finite(x) or not finite(y) or not finite(dt) or dt <= 0 then
++		return 0, 0
++	end
++	local r = math.sqrt(x * x + y * y)
++	if r <= t.lookDead then
++		return 0, 0
++	end
++	local scaled = (math.min(r, 1) - t.lookDead) / (1 - t.lookDead)
++	local a = scaled * scaled
++	local dyaw = -a * (x / r) * t.lookYaw * dt
++	local dpitch = a * (y / r) * t.lookPitch * dt
++	return dyaw, if t.invert then -dpitch else dpitch
++end
++
++return Pad
+diff --git a/arcade/src/shared/Logic/Rng/init.luau b/arcade/src/shared/Logic/Rng/init.luau
+new file mode 100644
+index 00000000..a55524de
+--- /dev/null
++++ b/arcade/src/shared/Logic/Rng/init.luau
+@@ -0,0 +1,71 @@
++--!strict
++-- Rng: a seeded generator (Park-Miller), engine-free. The state is one whole number in 1..MODULUS-1 held in a plain
++-- table, so a generator is plain data; a stream's multiplier, mix and offset pick its sequence from a seed.
++export type Stream = { multiplier: number, mix: number, offset: number }
++export type Generator = { state: number, multiplier: number }
++export type Draw = (n: number) -> number
++
++local MODULUS = 2147483647
++local MAX_MULTIPLIER = 2 ^ 21 -- state * multiplier stays below 2^52, exact in a double
++local MAX_MIX = 2 ^ 21
++
++local Rng = {}
++Rng.MODULUS = MODULUS
++Rng.STREAM = table.freeze({ multiplier = 48271, mix = 1, offset = 0 } :: Stream)
++
++local function whole(v: any): boolean
++	return type(v) == "number" and v == v and math.abs(v) ~= math.huge and v == math.floor(v)
++end
++
++function Rng.new(seed: number, stream: Stream?): Generator
++	local st = stream or Rng.STREAM
++	if not whole(st.multiplier) then
++		error("Rng.new: the stream's multiplier must be a whole number")
++	end
++	if st.multiplier < 2 or st.multiplier >= MAX_MULTIPLIER then
++		error("Rng.new: the stream's multiplier must be in 2..2^21-1")
++	end
++	if not whole(st.mix) then
++		error("Rng.new: the stream's mix must be a whole number")
++	end
++	if st.mix < 1 or st.mix >= MAX_MIX then
++		error("Rng.new: the stream's mix must be in 1..2^21-1")
++	end
++	if not whole(st.offset) then
++		error("Rng.new: the stream's offset must be a whole number")
++	end
++	if math.abs(st.offset) >= MODULUS then
++		error("Rng.new: the stream's offset must be below the modulus in size")
++	end
++	local s = if type(seed) == "number"
++			and seed == seed
++			and math.abs(seed) ~= math.huge
++		then math.floor(seed)
++		else 0
++	s = s % (MODULUS - 1)
++	return { state = (s * st.mix + st.offset) % (MODULUS - 1) + 1, multiplier = st.multiplier }
++end
++
++function Rng.int(g: Generator, n: number): number
++	if not whole(n) then
++		error("Rng.int: n must be a whole number")
++	end
++	if n < 1 then
++		error("Rng.int: n must be at least 1")
++	end
++	g.state = (g.state * g.multiplier) % MODULUS
++	return g.state % n + 1
++end
++
++function Rng.float(g: Generator): number
++	g.state = (g.state * g.multiplier) % MODULUS
++	return (g.state - 1) / (MODULUS - 1)
++end
++
++function Rng.draw(g: Generator): Draw
++	return function(n: number): number
++		return Rng.int(g, n)
++	end
++end
++
++return Rng
+diff --git a/arcade/src/shared/Logic/Touch/init.luau b/arcade/src/shared/Logic/Touch/init.luau
+new file mode 100644
+index 00000000..4efdfabe
+--- /dev/null
++++ b/arcade/src/shared/Logic/Touch/init.luau
+@@ -0,0 +1,191 @@
++--!strict
++-- Touch: the phone's gestures as a pure fold over begin, move and end events, engine-free. A finger is classified
++-- once, when it goes down: a named button (the first in the context's list that holds the point), else the screen's
++-- left or right half, each used for swipes, for looking, or for nothing. A button sends a press when its finger goes
++-- down and a release when it comes up; a swipe finger sends one straight-line swipe on release; a look finger sends a
++-- pixel step per move. One finger holds a zone at a time.
++--
++-- Every point and rectangle is in screen pixels (origin the top-left of the device screen).
++export type Rect = { x: number, y: number, w: number, h: number } -- half-open [x, x+w) x [y, y+h)
++export type Use = "swipe" | "look" | "none"
++export type Side = "left" | "right"
++export type Button = { name: string, rect: Rect }
++export type Context = { width: number, buttons: { Button }, left: Use, right: Use }
++export type Phase = "begin" | "move" | "end"
++export type Event = { id: number, phase: Phase, x: number, y: number }
++export type Dir = "up" | "down" | "left" | "right"
++export type Finger = { button: string?, side: Side?, use: Use, x0: number, y0: number, x: number, y: number }
++export type State = { fingers: { [number]: Finger } }
++export type Effect =
++	{ kind: "press", name: string }
++	| { kind: "release", name: string }
++	| { kind: "swipe", dir: Dir }
++	| { kind: "look", dx: number, dy: number }
++-- Min/Max, the shape of an inset area.
++export type Area = { Min: { X: number, Y: number }, Max: { X: number, Y: number } }
++
++local Touch = {}
++Touch.MIN_SWIPE = 48 -- px, straight line from finger-down to finger-up
++Touch.AXIS_DEGREES = 30 -- the cone around each screen axis
++Touch.MIN_TARGET = 44 -- px, the smallest side of a touch control
++
++local function finite(v: any): boolean
++	return type(v) == "number" and v == v and math.abs(v) ~= math.huge
++end
++
++function Touch.empty(): State
++	return { fingers = {} }
++end
++
++function Touch.inside(r: Rect?, x: number, y: number): boolean
++	return r ~= nil and x >= r.x and y >= r.y and x < r.x + r.w and y < r.y + r.h
++end
++
++-- What a finger down at (x, y) is: a button's name, or the half it is in and that half's use.
++function Touch.zone(ctx: Context, x: number, y: number): (string?, Side, Use)
++	local left: Side, right: Side, none: Use = "left", "right", "none"
++	local side: Side = if finite(ctx.width) and ctx.width > 0 and x < ctx.width / 2 then left else right
++	for _, b in ctx.buttons do
++		if Touch.inside(b.rect, x, y) then
++			return b.name, side, none
++		end
++	end
++	local use: Use = if side == "left" then ctx.left else ctx.right
++	return nil, side, use
++end
++
++-- The direction of a straight-line swipe from finger-down to finger-up, or nil. Screen-down is "down".
++function Touch.swipe(dx: number, dy: number): Dir?
++	if not finite(dx) or not finite(dy) then
++		return nil
++	end
++	if math.sqrt(dx * dx + dy * dy) < Touch.MIN_SWIPE then
++		return nil
++	end
++	local angle = math.atan2(math.abs(dy), math.abs(dx)) -- 0 horizontal .. pi/2 vertical
++	local fromAxis = math.min(angle, math.pi / 2 - angle)
++	if fromAxis > math.rad(Touch.AXIS_DEGREES) + 1e-9 then
++		return nil
++	end
++	if angle <= math.pi / 4 then
++		return if dx < 0 then "left" else "right"
++	end
++	return if dy > 0 then "down" else "up"
++end
++
++local function same(a: Finger, button: string?, side: Side): boolean
++	if button ~= nil then
++		return a.button == button
++	end
++	return a.button == nil and a.side == side
++end
++
++-- Folds one event into a fresh state and the effects it causes. The given state is never changed.
++function Touch.track(state: State, event: Event, ctx: Context): (State, { Effect })
++	local fingers: { [number]: Finger } = table.clone(state.fingers)
++	local effects: { Effect } = {}
++	local finger: Finger? = fingers[event.id]
++	-- a begin or a move at a point that is not a number is dropped; an end always lifts its finger (no swipe)
++	local bad = not finite(event.x) or not finite(event.y)
++	local phase: Phase = event.phase
++	if bad and phase ~= "end" then
++		return { fingers = fingers }, effects
++	end
++	if phase == "begin" then
++		if finger == nil then
++			local button, side, use = Touch.zone(ctx, event.x, event.y)
++			if button ~= nil or use ~= "none" then
++				local taken = false
++				for _, f in fingers do
++					taken = taken or same(f, button, side)
++				end
++				if not taken then
++					fingers[event.id] = {
++						button = button,
++						side = side,
++						use = use,
++						x0 = event.x,
++						y0 = event.y,
++						x = event.x,
++						y = event.y,
++					}
++					if button ~= nil then
++						table.insert(effects, { kind = "press", name = button })
++					end
++				end
++			end
++		end
++	elseif phase == "move" then
++		if finger then
++			fingers[event.id] = {
++				button = finger.button,
++				side = finger.side,
++				use = finger.use,
++				x0 = finger.x0,
++				y0 = finger.y0,
++				x = event.x,
++				y = event.y,
++			}
++			if finger.button == nil and finger.use == "look" then
++				table.insert(effects, { kind = "look", dx = event.x - finger.x, dy = event.y - finger.y })
++			end
++		end
++	elseif phase == "end" then
++		if finger then
++			fingers[event.id] = nil
++			if finger.button ~= nil then
++				table.insert(effects, { kind = "release", name = finger.button })
++			elseif finger.use == "swipe" then
++				local dir = Touch.swipe(event.x - finger.x0, event.y - finger.y0)
++				if dir then
++					local swiped: Effect = { kind = "swipe", dir = dir }
++					table.insert(effects, swiped)
++				end
++			end
++		end
++	end
++	return { fingers = fingers }, effects
++end
++
++-- Every finger lifted at once (the screen went away, the player respawned): a release for each held button, in
++-- finger id order, and an empty state. No swipe is sent.
++function Touch.reset(state: State): (State, { Effect })
++	local ids: { number } = {}
++	for id in state.fingers do
++		table.insert(ids, id)
++	end
++	table.sort(ids)
++	local effects: { Effect } = {}
++	for _, id in ids do
++		local b = state.fingers[id].button
++		if b ~= nil then
++			table.insert(effects, { kind = "release", name = b })
++		end
++	end
++	return { fingers = {} }, effects
++end
++
++-- An input position (measured from the core-UI area's top-left) in screen pixels. A nil area is the identity; a
++-- non-finite origin component counts as 0 on its axis.
++function Touch.toScreen(none: Area?, x: number, y: number): (number, number)
++	if none == nil then
++		return x, y
++	end
++	local ox = if finite(none.Min.X) then none.Min.X else 0
++	local oy = if finite(none.Min.Y) then none.Min.Y else 0
++	return x - ox, y - oy
++end
++
++-- The screen's size from the full-screen area, or the fallback while that area is empty or bad.
++function Touch.screenSize(none: Area?, fallbackW: number, fallbackH: number): (number, number)
++	if none then
++		local w = none.Max.X - none.Min.X
++		local h = none.Max.Y - none.Min.Y
++		if finite(w) and finite(h) and w > 0 and h > 0 then
++			return w, h
++		end
++	end
++	return fallbackW, fallbackH
++end
++
++return Touch

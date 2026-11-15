@@ -2,7 +2,7 @@
 title: Specs and Design correspond one to one
 when: design
 tags: [acceptance, rules-and-mutants]
-check: Does every behaviour the Design states have a spec case that fails without it, does every sequestered assertion follow from a Design sentence, and does every check's label say exactly what its command verifies? Is each new case's recorded mutant killed by that case itself, not first by an older, stricter case (delete the case: does its row's mutant still die)? Does every outcome stated under Edge cases (not only under Behaviour) have its row and case too?
+check: Does every behaviour the Design states have a spec case that fails without it, does every sequestered assertion follow from a Design sentence, and does every check's label say exactly what its command verifies? Is each new case's recorded mutant killed by that case itself, not first by an older, stricter case (delete the case: does its row's mutant still die)? Does every outcome stated under Edge cases (not only under Behaviour) have its row and case too And does every destination or outcome the Design states for a rare input (a file name, a path it lands in) have a row, or is the claim dropped with the reason it is no rule?
 ---
 Sequestered specs and the Design must match in both directions. A stated behaviour with no failing case (a refusal, an output format, an order) can be implemented wrong. An assertion the Design never states (message wording, which stream) can fail a correct implementation that the executor may not fix.
 
@@ -20,9 +20,20 @@ c0153 design review 002 F1, F2: `plain.roundTrip` "checks plain data, then compa
 
 c0180 design review 004 F1: a round added a field (`clean`/`edited`) to a record format and changed one case's hand-written line to `edited`, while another case still expected the other worktree to count that line; only a wrong, asymmetric reader passed both. When a round adds a field or rule to a format that existing cases write, re-read every case that writes or reads it, from each side (this worktree and a sibling).
 
+Disk, not index (c0263 design review 010 F1): a case that pins "nothing at the old place" after a merge must read the disk the way the engine does (a folder scan, `./zn find`), not only `ls-files` or `git status`: a record unlinked but its folder left made every later command fail with "duplicate id" while the case stayed green.
 c0264 design review 005 F2 and 006 F2: vocabulary pins were chosen by what looked important, and rules the Design lists (expensive models on final reviews, the idea review, the order working around blocked items, lost work first even when a person started it, the full-force review fresh) had none; five mutants passed. Derive the pins from the Design's list of rules, one phrase and one deletion mutant each; and when a decision becomes "the text says no X", add a mutant that puts X back where the decision applies.
 
 c0260 design reviews 006 and 007: beside every refusal case add one where the accepted kind of document passes through the same command; an audit rule that runs on every tree needs a case where the everyday states pass clean (a fresh stub at draft, an agent-filed ticket, a finished item).
 
 **Also:** c0279 design review 002 F3: a Rules row's mutant has to die because of that row's rule: the row for the silent hold after a stop named a mutant (the stop replaced by `true`, no marker) that fails with or without the hold. Weaken the rule's mechanism (the hold from 120 s to 20 s) and check that the row's mutant then survives; if it still dies, it tests something else.
 Note (c0246 round 7): when a function's answer gains a value (a boolean becomes "nested" | "link" | nil), re-derive each row's mutant for the new value, and make a fixture that must stay clean assert no line at all, not only the absence of one line.
+
+c0302 design review 001 F5: a Non-goal ("mainTip keeps its refusal") was a rule with no Rules row, and the spec the Design cited for it had never existed. The design's own rejected option passed every check. A Non-goal that says existing behaviour stays names the spec that pins it, checked with `ls`, or adds one.
+
+c0270 design review 001 F4: the sentences that decide whether a hit stops the session (yours, "or none", "a merged one is history") had no needle, so four plausible rewrites passed every case. The classification is the rule: pin each sentence.
+
+**Also:** f0201 design review 001 F1: the Design said the record seen is refreshed by "every read and write, a grant here included", but no case followed a grant with the read or use that depends on it, and deleting the refresh passed all 88 cases; each writer of a cache, and each exclusion, gets a case that reads after it. F12: twelve stated rules had a case but no row; walk the Design sentence by sentence against the table before the review.
+
+c0273 design review 001 F4: the Design said a `default.project.jsonc` builds into `check.rbxl`, with no row or case; the home rule refuses every home holding one, so the claim was dropped and the reason recorded.
+
+**Note** (R0109 final review 001 F3): a pin of an order that already held in the text it replaced cannot fail when the new sentence is deleted. The first case of `trace-skeleton.spec` found "skeleton" before "final review" in the old Phase 5 step 3, which says "print the trace skeleton" and then "run the final review" and never commits the skeleton. Pin the new sentence, and build a prompt with the function that writes it (`dispatch.prompt`) rather than searching the source file, where the sentence can hide in a comment or another mode.

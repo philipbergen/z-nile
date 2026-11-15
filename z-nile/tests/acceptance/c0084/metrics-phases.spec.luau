@@ -121,9 +121,21 @@ return t.spec("metrics by phase", function(it)
 	end
 
 	it("lists every counted issue with its tokens, old seven-cell ledgers included", function()
-		local tbl = tableAt(out, "| issue | type | raft | +lines | -lines | agent-minutes | tokens |")
-		t.expect(has(tbl, "| f0910 | feature | R0910 | 140 | 0 | 60.0 | 1500 |")).toBe(true)
-		t.expect(has(tbl, "| f0911 | feature | R0910 | 10 | 0 | 20.0 | 0 |")).toBe(true)
+		local tbl = tableAt(
+			out,
+			"| issue | type | raft | +lines | -lines | reported | wall | cpu | tokens | ai | test | n |"
+		)
+		t.expect(
+			has(
+				tbl,
+				"| f0910 | feature | R0910 | 140 | 0 | 60.0 | 0.000 | 0.000 | 1500 | 0.000 | 0.000 | 6 |"
+			)
+		)
+			.toBe(true)
+		t.expect(
+			has(tbl, "| f0911 | feature | R0910 | 10 | 0 | 20.0 | 0.000 | 0.000 | 0 | 0.000 | 0.000 | 1 |")
+		)
+			.toBe(true)
 		t.expect((string.find(tbl, "c0940", 1, true))).toBe(nil) -- not done
 	end)
 

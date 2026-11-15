@@ -1,0 +1,8 @@
+- note PR #256 was closed by another session with a comment while an agent kept pushing review rounds into it and reporting it updated (the capture of c0271): zz-rules/read-pr-state-before-pushing
+- design-review-001 F1: z-design/refusing-memory-names-how-its-owner-gets-back-in
+- design-review-001 F2: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-001 F3: z-design/required-steps-on-every-path
+- design-review-001 F4: zz-arch/guard-no-is-explicit, z-design/restated-rules-move-together
+- design-review-001 F5: z-design/per-step-reads-are-trimmed
+- design-review-001 F6: z-design/spec-design-correspondence
+- design-review-001 F7: z-design/instructions-runnable-where-they-run

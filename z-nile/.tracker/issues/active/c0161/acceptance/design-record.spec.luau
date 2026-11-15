@@ -41,6 +41,23 @@ local function trOk(args: { string }): string
 	return trackerfix.trOk(f, wt, args)
 end
 
+-- main's idea stage refuses to claim an issue whose idea is unchallenged (`./zn new` writes `idea: unchallenged`):
+-- publish it challenged first, as `./zn idea` leaves it (c0306's prep, 2026-11-14), so the claim reaches the rule
+local function challenged(id: string)
+	local dir = `{wt}/pickman/.tracker/issues/{id}`
+	fs.writeFile(
+		`{dir}/{id}.md`,
+		(string.gsub(fs.readFile(`{dir}/{id}.md`), "idea: unchallenged", "idea: challenged", 1))
+	)
+	fs.writeFile(
+		`{dir}/idea-review-001.md`,
+		"# Idea review 001\n\n## Findings\n\nnone\n\n## Verdict\n\napprove\n"
+	)
+	fixture.git(wt, { "add", `{dir}/{id}.md`, `{dir}/idea-review-001.md` })
+	fixture.git(wt, { "commit", "-q", "-m", `tracker: idea {id}` })
+	fixture.git(wt, { "push", "-q", "origin", "HEAD:main" })
+end
+
 return t.spec("c0161 the design record", function(it)
 	it("is twelve hex digits and the same for the same design", function()
 		t.expect(string.match(record(), "^%x%x%x%x%x%x%x%x%x%x%x%x$") ~= nil).toBe(true)
@@ -157,6 +174,7 @@ return t.spec("c0161 the design record", function(it)
 			trOk({ "new", "issue", "c", "renumbered", "--project", "pickman" }),
 			"(%a%d+)"
 		) :: string
+		challenged(old)
 		trOk({ "status", old, "preparing" })
 		local dir = `{wt}/pickman/.tracker/issues/{old}`
 		local ready = fs.readFile(`{dir}/{old}.md`)
@@ -232,6 +250,7 @@ return t.spec("c0161 the design record", function(it)
 				trOk({ "new", "issue", "c", "untracked-round", "--project", "pickman" }),
 				"(%a%d+)"
 			) :: string
+			challenged(old)
 			trOk({ "status", old, "preparing" })
 			local dir = `{wt}/pickman/.tracker/issues/{old}`
 			fs.writeFile(
@@ -259,6 +278,7 @@ return t.spec("c0161 the design record", function(it)
 			trOk({ "new", "issue", "c", "names-the-target", "--project", "pickman" }),
 			"(%a%d+)"
 		) :: string
+		challenged(other)
 		trOk({ "status", other, "preparing" })
 		local odir = `{wt}/pickman/.tracker/issues/{other}`
 		fs.writeFile(

@@ -48,7 +48,7 @@ return t.spec("c0117 docs", function(it)
 			at(h, "Never `git push` to `main` and never merge a pull request", name)
 			at(h, "the dispatcher pushes that tracker state to `main` for you", name)
 			at(h, "with the agent's own GitHub credential", name)
-			at(h, "without `--tokens` for your own session", name)
+			at(h, "Do not pass `--time` or `--tokens`", name)
 			at(h, "`./zn dispatch zz-review <id> --mode <design|raft|code|stream>`", name)
 			at(h, "give that one command a two-hour timeout", name)
 			if first then
@@ -62,12 +62,14 @@ return t.spec("c0117 docs", function(it)
 		end
 	end)
 
-	it("who reviews is the review model of the CLI, wherever a skill says so", function()
-		local rule = "Opus through `claude` or `agent`, any grok model at `xhigh` through `grok`"
+	it("who reviews is the role .models.toml names, wherever a skill says so", function()
 		-- z-run's reviews are its protocol's, zz-execute's, since c0115
-		for _, name in { "z-design", "z-raft", "zz-execute", "zz-review" } do
-			at(skill(name), rule, name)
-		end
+		at(skill("z-design"), "design-challenge role", "z-design")
+		at(skill("z-raft"), "raft role", "z-raft")
+		at(skill("zz-execute"), "code-review role", "zz-execute")
+		at(skill("zz-review"), "design-challenge", "zz-review")
+		at(skill("zz-review"), "code-review", "zz-review")
+		at(skill("zz-review"), "final-review", "zz-review")
 		at(skill("z-design"), "`./zn dispatch zz-review <id> --mode design`", "z-design")
 		at(skill("z-raft"), "`./zn dispatch zz-review <R-id> --mode raft`", "z-raft")
 		-- the run's protocol is zz-execute's since c0115 (z-run hands off to it)
@@ -79,27 +81,13 @@ return t.spec("c0117 docs", function(it)
 		at(zr, "`./zn dispatch zz-review <id> --mode design|raft|code|stream`", "zz-review Who reviews")
 		absent(zr, "stream reviews stay on Sonnet subagents", "zz-review Who reviews")
 		-- design review 008 F1, F2: the dispatcher lands a dispatched review; round 2's inputs are the files in the raft
-		at(
-			zr,
-			"Under `./zn dispatch`, the reviewer writes its review to `$ZN_DISPATCH_DIR/review.md` (its own state folder), and the dispatcher numbers it into the raft's folder as `stream-review-<issue>-001.md`",
-			"zz-review Stream mode"
-		)
-		at(zr, "One round: do not read a previous stream review as a second pass.", "zz-review Stream mode")
-		at(
-			zr,
-			"An interactive subagent returns the review markdown and writes no file",
-			"zz-review Stream mode"
-		)
-		at(
-			skill("zz-execute"),
-			'you commit it with the `record:` line it prints (`-m "<issue>: stream-review-NNN"` … `--issue <issue>`)',
-			"zz-execute"
-		)
+		at(zr, "Layers replaced stream branches", "zz-review Stream mode")
+		at(zr, "reviewed in Code mode, one layer at a time", "zz-review Stream mode")
 		-- a dispatched raft review records its own row (design review 007 F2): the author records only a subagent's
 		at(skill("z-raft"), "As soon as a subagent reviewer returns", "z-raft")
 		at(
 			skill("z-raft"),
-			"Either way, record your answering time: `./zn spend <R-id> --phase design-review --time <minutes>`",
+			"Mark your own answering span with `./zn spend <R-id> --phase design-review --begin`",
 			"z-raft"
 		) -- design review 008 F4
 		local ze = skill("zz-execute")
@@ -109,11 +97,7 @@ return t.spec("c0117 docs", function(it)
 			"Under `./zn dispatch`, in every mode, write your review to `$ZN_DISPATCH_DIR/review.md` (your own state folder) and nothing else",
 			"zz-review Output file"
 		)
-		at(
-			ze,
-			"the dispatcher places the review as `stream-review-<issue>-NNN.md` in the raft's folder",
-			"zz-execute"
-		)
+		at(ze, "Layers replace stream branches. There is no `ws-<issue>` branch", "zz-execute Phase 2B")
 		at(
 			ze,
 			'A dispatched review that fails with "the reviewer wrote no review" still prints its `record:` line: commit that line alone (the commit is its spend row), then rerun the review, which is still the same round.',
@@ -137,26 +121,8 @@ return t.spec("c0117 docs", function(it)
 			'A dispatched review that fails with "the reviewer wrote no review" still prints its `record:` line',
 			"zz-execute Phase 4 step 3"
 		)
-		at(
-			ze,
-			"A dispatched stream review that fails with no review is handled as Phase 4 step 3 says.",
-			"zz-execute step 7"
-		)
-		at(
-			ze,
-			"One dispatched stream review at a time: commit its file before you start the next.",
-			"zz-execute"
-		)
-		at(
-			ze,
-			"3. **Review each stream** as soon as it reports `done`. In an interactive session:",
-			"zz-execute"
-		)
-		at(
-			ze,
-			"(an interactive reviewer returns its text and the lead writes the file; a dispatched one's review is placed in the raft worktree by the dispatcher; the lead commits both there)",
-			"zz-execute"
-		)
+		at(ze, "After a fix on a lower layer, `./zn finish`", "zz-execute Phase 2B")
+		at(ze, "`./zn done` already landed the stack", "zz-execute Phase 6")
 		for _, name in fs.readDir(`{TOP}/z-nile/skills`) do
 			if fs.isFile(`{TOP}/z-nile/skills/{name}/SKILL.md`) then
 				absent(skill(name), "on **Opus 5.5**", name)
@@ -165,21 +131,10 @@ return t.spec("c0117 docs", function(it)
 		end
 	end)
 
-	it(
-		"z-ticket lands without asking, and z-run's stream reviews run on any CLI, under the dispatcher",
-		function()
-			at(
-				skill("z-ticket"),
-				"Under the dispatcher, land without asking (the user started it)",
-				"z-ticket"
-			)
-			at(
-				skill("zz-execute"),
-				"a stream review is `./zn dispatch zz-review <issue> --mode stream` instead",
-				"zz-execute"
-			)
-		end
-	)
+	it("z-ticket lands without asking, and a layer is reviewed in code mode", function()
+		at(skill("z-ticket"), "Under the dispatcher, land without asking (the user started it)", "z-ticket")
+		at(skill("zz-execute"), "Review that layer in Code mode", "zz-execute")
+	end)
 
 	it("z-run ends at Ready to merge under the dispatcher", function()
 		at(
@@ -200,15 +155,15 @@ return t.spec("c0117 docs", function(it)
 				"the supported CLIs are `claude`, `grok` and `agent` (Cursor)",
 				"`claude-cli`, `grok-cli` and `cursor-cli`",
 				"Nothing defaults",
-				"an `agent` table also `max_calls` and `max_minutes`",
+				"an `agent` role or fallback also `max_calls` and `max_minutes`",
 				'- **What the guards are** (the user\'s "Keep same user, accept detection", 2026-10-21).',
 				"none is a security boundary against a determined agent",
 				"**Known limits:**",
 				"A `.models.toml` is never tracker state",
 				"judged per item",
 				"origin's URL as the run pinned it at its start",
-				"A missing watermark at a run's start is never trusted",
-				"The file is shared by every dispatcher of the repository",
+				"A run accepts `main` as it is when the process starts",
+				"No file under the home directory",
 				"another run's advance is never a trip",
 				"writes a heartbeat in its parent's state folder",
 				"`BASH_MAX_TIMEOUT_MS`",
@@ -220,10 +175,10 @@ return t.spec("c0117 docs", function(it)
 				"Not enforceable: the agent runs as the user",
 				"- **Tracker state from inside a step.**",
 				"- **Tracker state** has one definition",
-				'- **The watermark and the tripwire** (the user\'s "Persisted watermark", framed by "Keep same user, accept detection").',
-				"where a well-behaved step never writes, and detects if it changes",
+				'- **The tripwire** (the user\'s "Keep same user, accept detection").',
+				"before every step and after every step",
 				"and never prevents one",
-				"`./zn dispatch vet`",
+				"`./zn dispatch retry <id>`",
 				"--match-head-commit <head>`",
 				"never forced",
 				"stops as `cap-unknown`",
@@ -232,10 +187,10 @@ return t.spec("c0117 docs", function(it)
 				"an unset or unreadable `auto_merge` is none",
 				"Only the dispatcher merges",
 				"holds a lifeline from the dispatcher",
-				"only the CLI's own signals report",
+				"Quota is only the CLI's own signals",
 				"never a group id of 1 or less",
 				"- **Running a model step.**",
-				"It moves down `order` only on quota",
+				"It moves to the next model when the call fails",
 				"input + cache writes + output, cache reads left out",
 				"- **Spend.**",
 				"- **The chain.**",
@@ -265,7 +220,7 @@ return t.spec("c0117 docs", function(it)
 		absent(readme, "(c0117, planned)", "the README")
 		at(readme, "- **The dispatcher.** `./zn dispatch <id>`", "the README")
 		at(readme, "none of them is a security boundary against a determined agent", "the README")
-		at(readme, "The watermark file is shared by every dispatcher of the repository", "the README")
+		at(readme, "A run accepts `main` as it is when it starts", "the README")
 		at(readme, "- **`.models.toml`.**", "the README")
 	end)
 

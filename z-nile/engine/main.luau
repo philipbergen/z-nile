@@ -1,18 +1,26 @@
 --!strict
 -- Tracker CLI. Run through ./zn at the repository root (c0114). See z-nile/skills/zz-rules/SKILL.md.
+local approval = require("./approval")
 local audit = require("./audit")
 local board = require("./board")
 local boardview = require("./boardview")
 local brokerLib = require("./broker")
+local buffer = require("./buffer")
 local claimsLib = require("./claims")
 local compactLib = require("./compact")
+local contract = require("./contract")
+local costrow = require("./costrow")
 local dispatchLib = require("./dispatch")
 local dispatcherLib = require("./dispatcher")
 local fs = require("@lune/fs")
 local gateLib = require("./gate")
+local idea = require("./idea")
 local idsLib = require("./ids")
+local layergit = require("./layergit")
 local ledger = require("./ledger")
 local lessonsLib = require("./lessons")
+local models = require("./models")
+local modelstep = require("./modelstep")
 local openlist = require("./openlist")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
@@ -21,9 +29,12 @@ local publish = require("./publish")
 local raftcheck = require("./raftcheck")
 local raftplan = require("./raftplan")
 local reapLib = require("./reap")
+local sessionread = require("./sessionread")
+local sessions = require("./sessions")
 local sh = require("../lib/sh")
 local skillsLib = require("./skills")
 local spend = require("./spend")
+local stack = require("./stack")
 local statusLib = require("./status")
 local stdio = require("@lune/stdio")
 local store = require("./store")
@@ -72,15 +83,23 @@ usage: ./zn <command> ...
   compact [--force]                             renumber every item from 0001 (a fresh worktree on origin/main)
   remap                                         bring a branch from before a compaction onto the new ids
   migrate                                       rename legacy-named documents to <ID>.md (adds slug: to the frontmatter)
+  approve <issue-id> [--check|--publish]       record the human's approval, check it, or publish it to origin/main
   ready <R-id|issue-id>                         claim the raft, move it to active/ on origin/main, write <root>/rafts/active/<R>/prompt.md
   stop <R-id>                                   give back a readied or started raft: move it out of active/ on origin/main, remove its prompt
   stop <issue>                                  give back one active issue whose raft is retired, missing or empty
-  start <R-id>                                  branch, empty commit, push, draft PR (a readied raft; a backlog raft is claimed and moved)
+  start <R-id>                                  open the next layer: branch R0010/1/c0010, claim commit, draft PR on the layer below
+  finish <issue-id>                             make that layer one commit ("<issue>: <title>") once its checks are green,
+                                                and write that ticket's watch files from the layer's own diff
+  restack <R-id>                                rebase each layer onto the one below; stop at the first conflict or red check
+  stack <R-id>                                  print the layers, from git (read-only)
+  trace <R-id> [--check]                        print the final review's traceability table skeleton, or verify trace.md
   focus <issue-id>                              attribute following commits to this issue
-  commit -m <msg> [--issue <id>]... [--time <minutes>] [--phase build|code-review|deliver] [--tokens <n>]
-         [--model <id>]                         stage all, record spend, commit, push
-  spend <id> --phase capture|prep|design-review|deliver --time <minutes> [--tokens <n>] [--model <id>]
-         [--note <text>]                        append one phase's rows to origin/main; changes nothing here
+  commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>]
+                                                stage all, record spend, commit, push. --time and --tokens are ignored
+  spend <id> --phase capture|prep|design-review|deliver [--begin] [--model <id>] [--note <text>]
+                                                mark a stage; the tool writes the measured row. --time and --tokens are ignored
+  record --id <id> --phase <phase> [--report <file>] [--wall <s>] [--cpu <s>] [--ai <s>] [--tokens <n>]
+                                                write one measured row (the tool's own; not for typed numbers)
   dispatch <id> [--dry-run]                     run the chain on an item from its tracker state (ticket, design, raft,
                                                 ready, run), stopping at a merge gate, questions.md or a failure
   dispatch new "<description>" [--project <name>] [--dry-run]
@@ -88,20 +107,23 @@ usage: ./zn <command> ...
   dispatch <step> <id> [--mode design|code|raft] [--dry-run]
                                                 run one step: a model step on .models.toml's CLIs, a script step itself
   dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it
-  dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
-  done <R-id>                                   verify checks + review resolution, move to done, ready PR (commit is deliver)
-                                                and write each issue's tests/acceptance/<id>/watch.txt
+  done <R-id>                                   land the stack: one --no-ff merge onto main, one binding commit (refuses an unfinished layer)
   watch-bootstrap                               write every spec's watch file from the commit that added it (once)
   watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
-  watch-net                                     run every project's fast suite on current main and push a missed test's
-                                                files onto main (also started by land and by watch-kick)
-  worktree <R-id|name>                          create or reuse .worktree/<R-id|name> from origin/main; print its path
+  watch-net                                     run every project's fast suite on current main, then the slow tier,
+                                                and push a missed test's files or a slow-tier defect onto main
+  worktree <R-id|name>                          create or reuse .worktree/<R-id|name>: a raft's is detached until a layer exists, then on that layer
   worktree-prune                                remove worktrees of rafts that are done on main
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
+  work [<R-id>]                                 print the z-work skill (the worker a person starts). With a raft id, that raft.
+  work next [--released <n>] [<R-id>]           the one next action. No raft: the next claimable one in this folder's project, or any project from the checkout root
+  work queue                                    one line per raft in that same set that work next will not take, the first reason
+  work status                                   who holds which raft in that same set, which layer, since when
   capture <id>                                  print the item's document as captured (read-only)
-  metrics [--include-active]                    cost per issue and rework %
+  idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
+  metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
   lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]
@@ -375,6 +397,10 @@ local function currentRaft(): store.Item?
 	local branch = sh.git({ "branch", "--show-current" })
 	for _, r in store.all("raft") do
 		if r.state == "active" and raftBranch(r) == branch then
+			return r
+		end
+		local layer = stack.parse(branch)
+		if r.state == "active" and layer and layer.raft == r.id then
 			return r
 		end
 	end
@@ -823,6 +849,8 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--quiet"
 			or a == "--auto"
 			or a == "--session-end"
+			or a == "--begin"
+			or a == "--sessions"
 		then
 			opts[a] = { "true" }
 		elseif string.sub(a, 1, 1) == "-" then
@@ -1150,7 +1178,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				local changes: { publish.Change } = {
 					{
 						path = `{root}/issues/{chosen}/{chosen}.md`,
-						content = withFront(doc, "status", stamp("new")),
+						content = withFront(withFront(doc, "idea", "unchallenged"), "status", stamp("new")),
 					},
 					{
 						path = `{root}/issues/{chosen}/check.sh`,
@@ -1197,7 +1225,10 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			EMERGENT = if state == "active" then "true" else "false",
 			DATE = today(),
 		}
-		fs.writeFile(`{dir}/{id}.md`, withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts))
+		fs.writeFile(
+			`{dir}/{id}.md`,
+			withFront(withDesc(render(`{TEMPLATES}/issue/doc.md`, vars), opts), "idea", "unchallenged")
+		)
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/issue/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
 		print(`{dir}/{id}.md`)
@@ -1576,6 +1607,16 @@ local function setStatus(id: string, to: string)
 				)
 			then
 				return `{t} is {cur} on origin/main: cannot move to {to}`
+			end
+			if t == id and not store.isRaftId(id) and to == "preparing" then
+				local suffix = `/{t}.md`
+				local reviewPath = if string.sub(tp, -#suffix) == suffix
+					then string.sub(tp, 1, #tp - #suffix) .. "/idea-review-001.md"
+					else ""
+				local why = idea.designRefusal(tt, if reviewPath ~= "" then read(reviewPath) else nil, t)
+				if why then
+					return why
+				end
 			end
 			table.insert(moved, { id = t, from = cur :: string })
 			table.insert(changes, { path = tp, content = withFront(tt, "status", value) })
@@ -2288,6 +2329,10 @@ local function captureScope(diff: string, base: string): string?
 		end
 		local root, rest = projects.rootOf(path, roots)
 		local spendId = if root and rest then string.match(rest, "^issues/([^/]+)/spend%.md$") else nil
+		local tsvId = if root and rest
+			then string.match(rest, "^issues/([^/]+)/spend%.d/[%w._%-]+%.tsv$")
+			else nil
+		spendId = spendId or tsvId
 		if spendId and store.isIssueId(spendId) and (kind == "A" or kind == "M") then
 			local mode = sh.run("git", { "ls-tree", "HEAD", "--", path })
 			if not mode.ok or string.sub(mode.stdout, 1, 7) ~= "100644 " then
@@ -2337,11 +2382,52 @@ local function captureScope(diff: string, base: string): string?
 	end
 	for _, entry in spends do
 		if not captured[entry.id] then
-			return `not a capture change: {entry.path} (a capture's spend.md belongs to an issue document this land changes)`
+			return `not a capture change: {entry.path} (a capture's spend record belongs to an issue document this land changes)`
 		end
 	end
 	if not seen then
 		return "nothing to land: this branch has no change against origin/main"
+	end
+	return nil
+end
+
+-- An issue the landed diff touches, that already has an approval, whose contract no longer matches.
+-- An issue with no approval.md is left alone (a capture, or an item prepared before approval).
+local function approvedDrift(base: string): string?
+	local names = sh.git({ "diff", "--name-only", base, "HEAD" })
+	local seen: { [string]: boolean } = {}
+	for path in string.gmatch(names, "[^\n]+") do
+		local id = string.match(path, "/issues/active/([fdc]%d%d%d%d)/")
+			or string.match(path, "/issues/done/([fdc]%d%d%d%d)/")
+			or string.match(path, "/issues/([fdc]%d%d%d%d)/")
+			or string.match(path, "/tests/acceptance/([fdc]%d%d%d%d)/")
+		if id then
+			seen[id] = true
+		end
+	end
+	local ids = {}
+	for id in seen do
+		table.insert(ids, id)
+	end
+	table.sort(ids)
+	for _, id in ids do
+		-- A deleted document leaves the directory (check.sh remains) and store.find throws. That is
+		-- captureScope's refusal, which names the path; the approval check has nothing left to read.
+		local ok, found = pcall(store.find, id)
+		if not ok then
+			local why = tostring(found)
+			if string.find(why, "has no ", 1, true) then
+				continue
+			end
+			return why
+		end
+		local item = found :: store.Item?
+		if item and item.kind == "issue" then
+			local problem = approval.refusal(".", item, false)
+			if problem then
+				return problem
+			end
+		end
 	end
 	return nil
 end
@@ -2374,6 +2460,10 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 			)
 		end
 		refuseStale()
+		local drift = approvedDrift(base)
+		if drift then
+			fail(drift)
+		end
 		local diff = sh.must("git", { "diff", "--name-status", "--no-renames", base, "HEAD" })
 		local refusal = captureScope(diff, base)
 		if refusal then
@@ -2389,6 +2479,42 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 	if not sh.stream("bash", { "-c", gate }) then
 		fail("the gate failed: nothing was pushed")
 	end
+	-- The gate appended its row to the cache. Fold it into the landed tree without an extra commit on the branch.
+	local names = sh.git({ "diff", "--name-only", base, "HEAD" })
+	local homes: { [string]: string } = {}
+	for path in string.gmatch(names, "[^\n]+") do
+		local id = string.match(path, "/issues/([fdc]%d%d%d%d)/[fdc]%d%d%d%d%.md$")
+		if id then
+			local item = store.find(id)
+			if item then
+				homes[id] = item.dir
+			end
+		end
+	end
+	local planned: costrow.Planned? = nil
+	local foldedPaths: { string } = {}
+	local plannedOk, plannedOrErr = pcall(costrow.plan, root, homes, nil, false)
+	if plannedOk then
+		local ready = plannedOrErr :: costrow.Planned
+		planned = ready
+		local wroteOk, wrote = pcall(costrow.writeFiles, ready)
+		if wroteOk and wrote then
+			foldedPaths = wrote
+		else
+			planned = nil
+		end
+	end
+	local function treeNow(): string
+		if #foldedPaths == 0 then
+			return sh.git({ "rev-parse", "HEAD^{tree}" })
+		end
+		local args = { "add", "--" }
+		for _, path in foldedPaths do
+			table.insert(args, path)
+		end
+		sh.git(args)
+		return sh.git({ "write-tree" })
+	end
 	local message = if given and given[1] and given[1] ~= "" then given[1] else nil
 	if not message then
 		local subjects = sh.git({ "log", "--reverse", "--no-merges", "--format=%s", `{base}..HEAD` })
@@ -2398,7 +2524,8 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 	end
 	local parent = base
 	for _ = 1, 3 do
-		local sha = sh.git({ "commit-tree", "HEAD^{tree}", "-p", parent, "-m", message :: string })
+		local tree = treeNow()
+		local sha = sh.git({ "commit-tree", tree, "-p", parent, "-m", message :: string })
 		local pushed: sh.Result
 		if process.env.ZN_PUBLISH_BROKER and process.env.ZN_PUBLISH_BROKER ~= "" then
 			-- inside a dispatched step the agent's credential can't push to main: the dispatcher pushes it (c0117)
@@ -2413,6 +2540,9 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 			pushed = sh.run("git", { "push", "origin", `{sha}:refs/heads/main` })
 		end
 		if pushed.ok then
+			if planned then
+				pcall(costrow.writeBuffer, root, planned)
+			end
 			sh.git({ "reset", "--hard", "--quiet", sha })
 			sh.run("git", { "fetch", "--quiet", "origin", "main" })
 			local suffix = if override then " (gate overridden)" else ""
@@ -2431,11 +2561,23 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
 		sh.run("git", { "fetch", "--quiet", "origin", "main" })
 		local now = sh.git({ "rev-parse", "--verify", "origin/main^{commit}" })
 		if now == parent then
+			if planned then
+				pcall(costrow.restore, planned)
+				pcall(function()
+					sh.git({ "reset", "--quiet" })
+				end)
+			end
 			fail(`the push failed (origin/main did not move): {pushed.stderr}{pushed.stdout}`)
 		end
 		-- origin/main moved: merge it and push again. The gate already passed; it is not run again.
 		take(now)
 		parent = now
+	end
+	if planned then
+		pcall(costrow.restore, planned)
+		pcall(function()
+			sh.git({ "reset", "--quiet" })
+		end)
 	end
 	fail("lost the race to main 3 times: run land again")
 end
@@ -3358,13 +3500,15 @@ function cmd.migrate()
 	end
 end
 
--- Pushes the raft's branch and opens its draft PR (when the origin is on GitHub): the end of every start.
+-- Pushes the layer and opens its draft PR (when the origin is on GitHub): the end of every start.
 local function pushAndOpenPr(
 	raft: store.Item,
 	members: { store.Item },
 	branch: string,
 	ftitle: string,
-	reuse: boolean?
+	reuse: boolean?,
+	base: string?,
+	prTitle: string?
 )
 	if hasOrigin() then
 		sh.git({ "push", "--quiet", "-u", "origin", branch })
@@ -3391,8 +3535,21 @@ local function pushAndOpenPr(
 			print(`draft PR (already open): {existing}`)
 			return
 		end
-		local url =
-			sh.must("gh", { "pr", "create", "--draft", "--title", `{raft.id}: {ftitle}`, "--body", body })
+		local heading = prTitle or `{raft.id}: {ftitle}`
+		local create = {
+			"pr",
+			"create",
+			"--draft",
+			"--base",
+			base or "main",
+			"--head",
+			branch,
+			"--title",
+			heading,
+			"--body",
+			body,
+		}
+		local url = sh.must("gh", create)
 		print(`draft PR: {url}`)
 	else
 		print("no origin remote: skipped push and draft PR")
@@ -3422,19 +3579,20 @@ function cmd.start(pos: { string })
 				fail(`{raft.id} is not readied on origin/main: run ./zn ready {raft.id} in the main checkout`)
 			end
 		end
-		local branch = raftBranch(raft)
-		if sh.git({ "branch", "--show-current" }) ~= branch then
+		local issue, _, branch, startAt, prBase = layergit.startLayer(raft)
+		if startAt ~= "" then
 			refuseInMainCheckout("start")
-			if sh.run("git", { "rev-parse", "--verify", "--quiet", `refs/heads/{branch}` }).ok then
-				fail(`branch {branch} already exists: switch to it and run start there`)
+			if layergit.shaOf(`refs/heads/{branch}`) or layergit.shaOf(`refs/remotes/origin/{branch}`) then
+				fail(`{issue.id} is claimed on {branch}`)
 			end
-			sh.git({ "switch", "-c", branch })
+			sh.git({ "switch", "-c", branch, startAt })
+			local ftitle = store.readFront(raft.doc).title or raft.slug
+			sh.git({ "commit", "--quiet", "--allow-empty", "-m", `tracker: start {raft.id} {ftitle}` })
 		end
 		local members = store.members(raft.id)
 		local ftitle = store.readFront(raft.doc).title or raft.slug
-		sh.git({ "commit", "--quiet", "--allow-empty", "-m", `tracker: start {raft.id} {ftitle}` })
 		print(`on branch {branch}; {raft.id} and {#members} issue(s) are active`)
-		pushAndOpenPr(raft, members, branch, ftitle, true)
+		pushAndOpenPr(raft, members, branch, ftitle, true, prBase, `{issue.id}: {layergit.issueTitle(issue)}`)
 		return
 	end
 	if raft.state ~= "backlog" then
@@ -3475,13 +3633,14 @@ function cmd.start(pos: { string })
 			end
 		end
 	end
-	local branch = raftBranch(raft)
+	local issue, _, branch, startAt, prBase = layergit.startLayer(raft)
+	local prTitle = `{issue.id}: {layergit.issueTitle(issue)}`
 	-- every local precondition first: a refusal after the claim would leave origin saying `active`
-	local onBranch = sh.git({ "branch", "--show-current" }) == branch
+	local onBranch = startAt == "" or sh.git({ "branch", "--show-current" }) == branch
 	if not onBranch then
 		refuseInMainCheckout("start")
-		if sh.run("git", { "rev-parse", "--verify", "--quiet", `refs/heads/{branch}` }).ok then
-			fail(`branch {branch} already exists: switch to it and run start there`)
+		if layergit.shaOf(`refs/heads/{branch}`) or layergit.shaOf(`refs/remotes/origin/{branch}`) then
+			fail(`{issue.id} is claimed on {branch}`)
 		end
 	end
 	if publishing() then
@@ -3551,7 +3710,7 @@ function cmd.start(pos: { string })
 		members = store.members(raft.id)
 	end
 	if not onBranch then
-		sh.git({ "switch", "-c", branch })
+		sh.git({ "switch", "-c", branch, startAt })
 	end
 	raft = move(raft, "active")
 	for _, m in members do
@@ -3560,7 +3719,304 @@ function cmd.start(pos: { string })
 	local ftitle = store.readFront(raft.doc).title or raft.slug
 	sh.git({ "commit", "--quiet", "-m", `tracker: start {raft.id} {ftitle}` })
 	print(`on branch {branch}; {raft.id} and {#members} issue(s) are active`)
-	pushAndOpenPr(raft, members, branch, ftitle)
+	pushAndOpenPr(raft, members, branch, ftitle, nil, prBase, prTitle)
+end
+
+-- One commit for the layer the working tree is on. Worker commits stay until this.
+function cmd.finish(pos: { string })
+	local id = pos[1] or fail("usage: finish <issue-id>")
+	if sh.git({ "status", "--porcelain" }) ~= "" then
+		fail("commit everything first (./zn commit); finish needs a clean tree")
+	end
+	local issue = store.get(id)
+	if issue.kind ~= "issue" then
+		fail(`{id} is not an issue`)
+	end
+	local branch = sh.git({ "branch", "--show-current" })
+	local parsed = stack.parse(branch)
+	if not parsed or parsed.issue ~= id then
+		fail(`finish {id} on its layer branch (this is {branch})`)
+	end
+	local layer = parsed :: stack.Layer
+	if hasOrigin() then
+		sh.git({ "fetch", "--quiet", "origin" })
+	end
+	local raft = store.get(layer.raft)
+	local issues = layergit.orderedMembers(raft)
+	local base = layergit.mainTip()
+	if layer.position > 1 then
+		local below = issues[layer.position - 1]
+		if not below then
+			fail(`{raft.id} has no issue at layer {layer.position - 1}`)
+		end
+		local belowName = stack.branch(raft.id, layer.position - 1, below.id)
+		base = layergit.layerTip({
+			raft = raft.id,
+			position = layer.position - 1,
+			issue = below.id,
+			name = belowName,
+		}) or fail(`{belowName} does not exist: finish the layer below first`)
+	end
+	if not sh.run("git", { "merge-base", "--is-ancestor", base, "HEAD" }).ok then
+		fail(`{branch} is not based on the layer below: ./zn restack {raft.id}`)
+	end
+	local onMain = sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{approval.file(issue)}` }).ok
+	local drift = approval.refusal(".", issue, onMain)
+	if drift then
+		fail(drift)
+	end
+	if not runCheck(issue) then
+		fail(`{id} check.sh failed; not finished`)
+	end
+	local paths = layergit.diffPaths(base)
+	if #paths == 0 then
+		fail(`{id}: nothing to finish`)
+	end
+	watchcmd.capture({ id = id, dest = `{issue.dir}/acceptance` }, paths)
+	local resultsOut = `{issue.dir}/results.txt`
+	sh.writeReplacing(resultsOut, "")
+	if gateLib.doneGate(process.env) == "promoted" then
+		print("finish: inside a spec run, so the affected specs are skipped")
+	else
+		-- The same path the affected gate uses: one project's home per selection. tests/run from the
+		-- repository root is not a project's home, so it refuses every spec.
+		local reg = projects.load(".")
+		for _, project in reg.projects do
+			local argv = { "run", "z-nile/affected", "--", "--project", project.name }
+			for _, path in paths do
+				table.insert(argv, path)
+			end
+			local listed = sh.run("lune", argv)
+			if not listed.ok then
+				pcall(fs.removeFile, resultsOut)
+				fail(`affected failed: {listed.stderr}`)
+			end
+			local specs: { string } = {}
+			for line in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
+				if line ~= "" then
+					table.insert(specs, line)
+				end
+			end
+			if #specs > 0 then
+				local run = {
+					"run",
+					"z-nile/specs",
+					"--",
+					"run",
+					"--project",
+					project.name,
+					"--out",
+					resultsOut,
+					"--",
+				}
+				for _, spec in specs do
+					table.insert(run, spec)
+				end
+				if not sh.stream("lune", run) then
+					pcall(fs.removeFile, resultsOut)
+					fail(`{id}: a spec the watch map selects is red`)
+				end
+			end
+		end
+	end
+	local saved = sh.git({ "rev-parse", "HEAD" })
+	sh.git({ "reset", "--soft", base })
+	-- The session running this command. The layer's base commit is not the span: it can predate the
+	-- session, and the project folder holds other sessions. A missing record stays unmeasured.
+	local reading = sessionread.running()
+	print(`session: {reading.note}`)
+	pcall(function()
+		local top = sh.git({ "rev-parse", "--show-toplevel" })
+		local row: ledger.Row = {
+			when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string,
+			subject = `finish {reading.note}`,
+			added = 0,
+			removed = 0,
+			minutes = 0,
+			how = "measured",
+			phase = "build",
+			tokens = reading.tokens,
+			model = reading.model,
+			ai = reading.ai,
+			unmeasured = sessionread.flags(reading),
+		}
+		local planned = costrow.plan(top, { [id] = issue.dir }, { [id] = { row } }, false)
+		costrow.writeFiles(planned)
+		costrow.writeBuffer(top, planned)
+	end)
+	sh.git({ "add", "-A" })
+	if sh.git({ "diff", "--cached", "--name-only" }) == "" then
+		sh.git({ "reset", "--hard", saved })
+		fail(`{id}: nothing to finish`)
+	end
+	local message = stack.finishSubject(id, layergit.issueTitle(issue))
+	sh.git({ "commit", "--quiet", "-m", message })
+	if hasOrigin() then
+		if not stack.owns(branch, raft.id) then
+			fail(`{branch} is not a layer of {raft.id}`)
+		end
+		local remote = layergit.shaOf(`origin/{branch}`)
+		if remote then
+			sh.git({
+				"push",
+				"--quiet",
+				`--force-with-lease=refs/heads/{branch}:{remote}`,
+				"origin",
+				branch,
+			})
+		else
+			sh.git({ "push", "--quiet", "-u", "origin", branch })
+		end
+	end
+	print(`finished {branch}: {message}`)
+end
+
+-- Rebase every layer onto the tip below it. A conflict or a red check.sh stops at that layer.
+function cmd.restack(pos: { string })
+	local raft = store.get(pos[1] or fail("usage: restack <R-id>"))
+	if raft.kind ~= "raft" then
+		fail(`{raft.id} is not a raft`)
+	end
+	if sh.git({ "status", "--porcelain" }) ~= "" then
+		fail("working tree is not clean")
+	end
+	if hasOrigin() then
+		sh.git({ "fetch", "--quiet", "origin" })
+	end
+	local why = layergit.oldShapeRefusal(raft)
+	if why then
+		fail(why)
+	end
+	local layers = layergit.layersOf(raft.id)
+	if #layers == 0 then
+		fail(`{raft.id} has no layers`)
+	end
+	local back = sh.git({ "branch", "--show-current" })
+	local below = layergit.mainTip()
+	local moved = false
+	for _, layer in layers do
+		local onto = if layer.position == 1 then layergit.mainTip() else below
+		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
+		if stack.alreadyStacked(sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok) then
+			below = tip
+			continue
+		end
+		local fork = sh.run("git", { "merge-base", tip, onto })
+		if not fork.ok then
+			fail(`restack stopped at {layer.name}: no common base`)
+		end
+		local tipSubject = sh.trim(sh.git({ "log", "-1", "--format=%s", tip }))
+		local tipParent = sh.trim(sh.git({ "rev-parse", `{tip}^` }))
+		local parentInLower = sh.run("git", { "merge-base", "--is-ancestor", tipParent, onto }).ok
+		local raw = sh.git({
+			"log",
+			"--reverse",
+			"--format=%s%x00%P",
+			`{sh.trim(fork.stdout)}..{tip}`,
+		})
+		local rows: { stack.CommitRow } = {}
+		for subject, parents in string.gmatch(raw .. "\n", "(.-)%z(.-)\n") do
+			local text = if type(parents) == "string" then parents else ""
+			local matched = string.match(text, "%S+")
+			local parent: string = if type(matched) == "string" then matched else ""
+			table.insert(
+				rows,
+				{ subject = if type(subject) == "string" then subject else "", parent = parent }
+			)
+		end
+		local upstream = stack.rebaseUpstream(
+			layer.issue,
+			raft.id,
+			tipSubject,
+			tipParent,
+			parentInLower,
+			rows
+		) or sh.trim(fork.stdout)
+		layergit.checkoutLayer(layer)
+		sh.git({ "reset", "--hard", tip })
+		local before = tip
+		local rebasing = sh.run("git", { "rebase", "--onto", onto, upstream, layer.name })
+		if not rebasing.ok then
+			sh.run("git", { "rebase", "--abort" })
+			if back ~= "" then
+				sh.git({ "switch", "--quiet", back })
+			end
+			fail(`restack stopped at {layer.name}: conflict\n{rebasing.stderr}`)
+		end
+		local issue = store.find(layer.issue)
+		if not issue or not runCheck(issue) then
+			sh.git({ "reset", "--hard", before })
+			if back ~= "" then
+				sh.git({ "switch", "--quiet", back })
+			end
+			fail(`restack stopped at {layer.name}: {layer.issue} check.sh failed`)
+		end
+		if hasOrigin() then
+			if not stack.owns(layer.name, raft.id) then
+				fail(`{layer.name} is not a layer of {raft.id}`)
+			end
+			local remote = layergit.shaOf(`origin/{layer.name}`) or before
+			sh.git({
+				"push",
+				"--quiet",
+				`--force-with-lease=refs/heads/{layer.name}:{remote}`,
+				"origin",
+				layer.name,
+			})
+		end
+		below = sh.git({ "rev-parse", "HEAD" })
+		moved = true
+	end
+	if back ~= "" and sh.git({ "branch", "--show-current" }) ~= back then
+		sh.git({ "switch", "--quiet", back })
+	end
+	if moved then
+		print(`restacked {raft.id}`)
+	else
+		print(`{raft.id} is already stacked`)
+	end
+end
+
+-- What another clone can see: the layers, from git, after a fetch. No local file is the authority.
+function cmd.stack(pos: { string })
+	local raftId = pos[1] or fail("usage: stack <R-id>")
+	if hasOrigin() then
+		local fetched = sh.run("git", { "fetch", "--quiet", "origin" })
+		if not fetched.ok then
+			fail(`stack: fetch failed: {sh.trim(fetched.stderr)}`)
+		end
+	end
+	local raft = store.find(raftId) or fail(`{raftId} is not in this tree`)
+	if raft.kind ~= "raft" then
+		fail(`{raftId} is not a raft`)
+	end
+	local issues = layergit.orderedMembers(raft)
+	local have: { [number]: stack.Layer } = {}
+	for _, layer in layergit.layersOf(raftId) do
+		have[layer.position] = layer
+	end
+	local below = layergit.shaOf("origin/main") or layergit.shaOf("main") or ""
+	local rows: { stack.Row } = {}
+	for i, issue in issues do
+		local name = stack.branch(raftId, i, issue.id)
+		local layer = have[i]
+		local state = "missing"
+		local sha = "-"
+		if layer then
+			local tip = layergit.layerTip(layer) or ""
+			sha = if tip == "" then "-" else string.sub(tip, 1, 12)
+			if tip ~= "" and below ~= "" and layergit.layerFinished(layer, below) then
+				state = "finished"
+			else
+				state = "claimed"
+			end
+			if tip ~= "" then
+				below = tip
+			end
+		end
+		table.insert(rows, { position = i, name = name, issue = issue.id, state = state, sha = sha })
+	end
+	print(stack.render(raftId, rows))
 end
 
 -- The backticked paths on the bulleted lines of an issue's "### Touched modules" section, or nil when
@@ -3786,7 +4242,8 @@ end
 
 function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 	local target = pos[1] or fail("usage: worktree <R-id|name>")
-	local branch: string
+	local branch: string? = nil
+	local detach = false
 	local dirName: string
 	if string.match(target, "^R%d%d%d%d$") then
 		local missing = `{target} is not in this tree; if it was just merged, run {mainRoot()}/zn sync`
@@ -3794,7 +4251,15 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 		if raft.state == "done" then
 			fail(`{target} is done`)
 		end
-		branch, dirName = raftBranch(raft), target
+		dirName = target
+		-- A raft worktree is on its latest layer, or on no branch until start opens one.
+		-- It does not create the old R####-<slug> branch.
+		local layers = layergit.layersOf(raft.id)
+		if #layers > 0 then
+			branch = layers[#layers].name
+		else
+			detach = true
+		end
 	elseif string.match(target, "^[fdc]%d%d%d%d$") then
 		fail("give a raft id or a name")
 	elseif #target <= 60 and string.match(target, "^[a-z][a-z0-9%-]*$") then
@@ -3821,11 +4286,17 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 		if w.path == path then
 			print(path)
 			return
-		elseif w.branch == branch then
+		elseif branch and w.branch == branch then
 			fail(`{branch} is already used by worktree at {w.path}`)
 		end
 	end
-	if sh.run("git", { "show-ref", "--verify", "--quiet", `refs/heads/{branch}` }).ok then
+	local base = from
+		or if sh.run("git", { "show-ref", "--verify", "--quiet", "refs/remotes/origin/main" }).ok
+			then "origin/main"
+			else "main"
+	if detach then
+		sh.git({ "worktree", "add", "--detach", path, base })
+	elseif branch and sh.run("git", { "show-ref", "--verify", "--quiet", `refs/heads/{branch}` }).ok then
 		local track = sh.git({ "for-each-ref", "--format=%(upstream:track)", `refs/heads/{branch}` })
 		if track == "[gone]" then
 			stdio.ewrite(
@@ -3833,16 +4304,14 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 			)
 		end
 		sh.git({ "worktree", "add", path, branch })
-	elseif sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok then
+	elseif
+		branch and sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok
+	then
 		sh.git({ "branch", "--track", branch, `origin/{branch}` })
 		sh.git({ "worktree", "add", path, branch })
 	else
-		local base = from
-			or if sh.run("git", { "show-ref", "--verify", "--quiet", "refs/remotes/origin/main" }).ok
-				then "origin/main"
-				else "main"
 		-- --no-track: a bare `git push` must not target origin/main before start or landing sets the upstream
-		sh.git({ "worktree", "add", "--no-track", "-b", branch, path, base })
+		sh.git({ "worktree", "add", "--no-track", "-b", branch :: string, path, base })
 	end
 	print(path)
 end
@@ -3937,7 +4406,8 @@ local function recordAndCommit(
 	isDone: boolean?,
 	phase: string?,
 	tokens: number?,
-	model: string?
+	model: string?,
+	reading: sessions.Read?
 )
 	phase = if phase and phase ~= "" then phase else "build"
 	-- a conflicted `git merge --squash` leaves unmerged paths; `git add -A` would commit their markers
@@ -3959,27 +4429,87 @@ local function recordAndCommit(
 		how = "raft"
 		issues = store.members(raft.id)
 	end
-	local minutes = explicitMinutes or spend.elapsedMinutes()
+	-- Typed --time and the gap since the last commit are not stored. Line counts are the diff; wall, CPU,
+	-- AI time and tokens are unmeasured here (a commit did not run the process it would time).
+	local minutes = explicitMinutes or 0
 	local shares = spend.attribute(issues, spend.stagedStats(isDone), minutes, how, tokens)
 	local trailers: { string } = {}
+	local foldHomes: { [string]: string } = {}
+	local extraRows: { [string]: { ledger.Row } } = {}
+	local keptAny = false
+	local gaveReading = false
+	if reading then
+		print(`session: {reading.note}`)
+	end
 	for _, share in shares do
-		-- a share with tokens is kept even when it moved no lines and took no measurable time
-		if share.added + share.removed == 0 and share.minutes < 0.1 and (share.tokens or 0) == 0 then
+		-- The ticket is folded whether or not this commit adds a line-count row. A build share that moved no
+		-- lines is still not given a row of its own.
+		local issue = store.get(share.id)
+		foldHomes[share.id] = issue.dir
+		if
+			phase == "build"
+			and share.added + share.removed == 0
+			and share.minutes < 0.1
+			and (share.tokens or 0) == 0
+		then
 			continue
 		end
-		spend.appendRow(store.get(share.id), share, message, phase, model)
+		keptAny = true
+		local subject = string.match(message, "^[^\n]*") or message
+		local rowTokens: number? = nil
+		local rowModel = model
+		local rowAi: number? = nil
+		local rowFlags = "tokens,wall,cpu,ai"
+		if reading and not gaveReading then
+			gaveReading = true
+			if reading.note ~= "" then
+				subject ..= " " .. reading.note
+			end
+			rowTokens = reading.tokens
+			rowAi = reading.ai
+			if reading.model and not rowModel then
+				rowModel = reading.model
+			end
+			rowFlags = sessionread.flags(reading)
+		end
+		local row: ledger.Row = {
+			when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string,
+			subject = subject,
+			added = share.added,
+			removed = share.removed,
+			minutes = 0,
+			how = "measured",
+			phase = phase :: string,
+			tokens = rowTokens,
+			model = rowModel,
+			ai = rowAi,
+			unmeasured = rowFlags,
+		}
+		local list = extraRows[share.id]
+		if not list then
+			list = {}
+			extraRows[share.id] = list
+		end
+		table.insert(list, row)
 		local trailer =
 			string.format("Issue: %s +%d/-%d %.1fm", share.id, share.added, share.removed, share.minutes)
 		if phase ~= "build" then
 			trailer ..= " " .. (phase :: string)
 		end
-		if share.tokens ~= nil then
-			trailer ..= ` {share.tokens} tokens`
+		local shownTokens = rowTokens or share.tokens
+		if shownTokens ~= nil then
+			trailer ..= ` {shownTokens} tokens`
 		end
-		if model then
-			trailer ..= ` {model}`
+		if rowModel then
+			trailer ..= ` {rowModel}`
 		end
 		table.insert(trailers, trailer)
+	end
+	local top = sh.git({ "rev-parse", "--show-toplevel" })
+	local planned = costrow.plan(top, foldHomes, extraRows, false)
+	local folded = costrow.writeFiles(planned)
+	if keptAny and #folded == 0 then
+		fail("could not write the measured row")
 	end
 	spend.writeRaft(raft)
 	for _, r in store.roots() do
@@ -3988,7 +4518,14 @@ local function recordAndCommit(
 		end
 	end
 	watchcmd.upkeep()
-	sh.git({ "commit", "--quiet", "-m", message, "-m", table.concat(trailers, "\n") })
+	local committed, commitErr = pcall(function()
+		sh.git({ "commit", "--quiet", "-m", message, "-m", table.concat(trailers, "\n") })
+	end)
+	if not committed then
+		pcall(costrow.restore, planned)
+		error(commitErr, 0)
+	end
+	costrow.writeBuffer(top, planned)
 	print(`committed: {message}\n  {table.concat(trailers, "\n  ")}`)
 	push()
 end
@@ -3996,9 +4533,7 @@ end
 function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	local message = opts["-m"] and opts["-m"][1]
 	if not message or message == "" then
-		fail(
-			"usage: commit -m <msg> [--issue <id>]... [--time <minutes>] [--phase build|code-review|deliver] [--tokens <n>] [--model <id>]"
-		)
+		fail("usage: commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>]")
 	end
 	-- phase and tokens are checked before anything is staged
 	local phase = "build"
@@ -4010,17 +4545,11 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 			fail("commit --phase is build, code-review or deliver")
 		end
 	end
-	local tokens: number? = nil
-	if opts["--tokens"] then
-		local raw = opts["--tokens"][1]
-		if not string.match(raw, "^%d+$") then
-			fail("commit --tokens must be a non-negative integer")
-		end
-		tokens = tonumber(raw)
+	if opts["--tokens"] or opts["--time"] then
+		stdio.ewrite("commit: --time and --tokens are ignored; cost is measured\n")
 	end
 	local model = modelOption("commit", opts)
-	local t = opts["--time"] and tonumber((string.gsub(opts["--time"][1], "m$", "")))
-	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, t, nil, phase, tokens, model)
+	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
 end
 
 -- The project home of an item (c0120): where its check.sh runs and its specs are promoted to, from the working
@@ -4132,29 +4661,41 @@ cmd["promote-check"] = function(pos: { string })
 end
 
 -- Latest review round must be resolved: verdict approve, or a same-numbered refute file that
--- answers every finding id with "fixed", "refuted" or a valid "deferred <id>: <why>".
+-- answers every finding id with "fixed", "refuted" or a valid "deferred <id>: <why>", or a human
+-- ruling under ## Open to the human in the raft's document.
 local function reviewProblem(raft: store.Item): string?
-	local latest = 0
-	for _, name in fs.readDir(raft.dir) do
-		local n = tonumber(string.match(name, "^review%-(%d+)%.md$"))
-		if n and n > latest then
-			latest = n
-		end
-	end
+	local reviewPrefix, refutePrefix, latest = layergit.latestReview(raft)
 	if latest == 0 then
-		return "no review-NNN.md: run the adversarial code review first"
+		return "no final-review-NNN.md (no review-NNN.md may stand in for the final review): run the final review first"
 	end
 	local num = string.format("%03d", latest)
-	local review = "\n" .. fs.readFile(`{raft.dir}/review-{num}.md`)
+	local reviewName = `{reviewPrefix}-{num}.md`
+	local refuteName = `{refutePrefix}-{num}.md`
+	local review = "\n" .. fs.readFile(`{raft.dir}/{reviewName}`)
 	local verdict = string.match(review, "\n[Vv]erdict:%s*(%a+)")
 	if verdict == "approve" then
 		return nil
 	end
-	local refutePath = `{raft.dir}/refute-{num}.md`
+	local raftDoc = if fs.isFile(raft.doc) then fs.readFile(raft.doc) else ""
+	local humanSection = string.match("\n" .. raftDoc, "\n## Open to the human\n(.-)\n## ")
+		or string.match("\n" .. raftDoc, "\n## Open to the human\n(.*)$")
+		or ""
+	local inHuman: { [string]: boolean } = {}
+	for fid in string.gmatch("\n" .. humanSection, "\n%- (F%d+):") do
+		inHuman[fid] = true
+	end
+	local pendingSet: { [string]: boolean } = {}
+	for _, fid in openlist.pending(raftDoc) do
+		pendingSet[fid] = true
+	end
+
+	local refutePath = `{raft.dir}/{refuteName}`
 	local refute = "\n" .. (if fs.isFile(refutePath) then fs.readFile(refutePath) else "")
 	local missing = {}
 	local invalid = {}
+	local findingCount = 0
 	for id, rest in string.gmatch(review, "\n###%s+(F%d+)([^\n]*)") do
+		findingCount += 1
 		local line = string.match(refute, `\n%-%s+{id}:%s*([^\n]*)`)
 		if line and string.find(line, "^fixed") then
 			if not string.find(line, "consequences:%s*%S", 6) then
@@ -4168,7 +4709,13 @@ local function reviewProblem(raft: store.Item): string?
 		if line and string.find(line, "^refuted") then
 			continue
 		end
+		if inHuman[id] and not pendingSet[id] then
+			continue
+		end
 		if not line or not (line == "deferred" or string.find(line, "^deferred%s")) then
+			if inHuman[id] and pendingSet[id] then
+				continue
+			end
 			table.insert(missing, id)
 			continue
 		end
@@ -4187,17 +4734,277 @@ local function reviewProblem(raft: store.Item): string?
 		end
 	end
 	if #missing > 0 then
-		return `review-{num}.md findings not answered in refute-{num}.md: {table.concat(missing, ", ")}`
+		return `{reviewName} findings not answered in {refuteName}: {table.concat(missing, ", ")}`
 	end
 	if #invalid > 0 then
-		return `refute-{num}.md: {table.concat(invalid, "; ")}`
+		return `{refuteName}: {table.concat(invalid, "; ")}`
 	end
 	-- one round: a refuted finding, an unclosed high, or a failed Judged criterion waits for the human
-	local gap = openlist.problem(review, refute, fs.readFile(raft.doc))
+	local gap = openlist.problem(review, refute, raftDoc)
 	if gap then
-		return `review-{num}.md {gap}`
+		return `{reviewName} {gap}`
+	end
+	if verdict ~= nil and findingCount == 0 and #openlist.judgedFails(review) == 0 then
+		return `{reviewName} Verdict is {verdict}, not approve`
 	end
 	return nil
+end
+
+local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { string }
+	local trace = require("./trace")
+	local watch = require("../lib/watch")
+
+	local function diffNamesBetween(base: string, tip: string): { string }
+		local names = sh.git({ "diff", "--name-only", base, tip })
+		local out: { string } = {}
+		for path in string.gmatch(names .. "\n", "([^\n]*)\n") do
+			if path ~= "" then
+				table.insert(out, path)
+			end
+		end
+		return out
+	end
+
+	local function gitFileTextAt(atCommit: string, path: string): string?
+		local shown = sh.run("git", { "show", `{atCommit}:{path}` })
+		if shown.ok then
+			return shown.stdout
+		end
+		return nil
+	end
+
+	local function fileTextAt(atCommit: string, path: string, useWorktree: boolean): string?
+		if useWorktree and fs.isFile(path) then
+			return fs.readFile(path)
+		end
+		return gitFileTextAt(atCommit, path)
+	end
+
+	local function capturedDocText(issue: store.Item, atCommit: string): string
+		local head = if sh.run("git", { "rev-parse", "--verify", "-q", "origin/main" }).ok
+			then "origin/main"
+			else atCommit
+		local commits, _ = trailLib.read("issues", issue.id, trailLib.isDoc, head)
+		local found = if commits then (trailLib.capture(commits)) else nil
+		if found then
+			local shown = sh.run("git", { "show", `{found.sha}:{found.path}` })
+			if shown.ok then
+				return shown.stdout
+			end
+		end
+		return fileTextAt(atCommit, issue.doc, sh.git({ "rev-parse", "HEAD" }) == atCommit) or ""
+	end
+
+	local function buildTraceIssueDocs(issues: { store.Item }, atCommit: string): { trace.IssueDoc }
+		local useWorktree = sh.git({ "rev-parse", "HEAD" }) == atCommit
+		local out: { trace.IssueDoc } = {}
+		for _, issue in issues do
+			local checkPath = `{issue.dir}/check.sh`
+			local resultsPath = `{issue.dir}/results.txt`
+			local docText = fileTextAt(atCommit, issue.doc, useWorktree) or ""
+			local checkText = gitFileTextAt(atCommit, checkPath)
+			local resultsText = gitFileTextAt(atCommit, resultsPath)
+			local captured = capturedDocText(issue, atCommit)
+			table.insert(out, {
+				id = issue.id,
+				docPath = issue.doc,
+				checkPath = checkPath,
+				dirPath = issue.dir,
+				home = homeOf(issue),
+				capturedText = if captured ~= "" then captured else docText,
+				docText = docText,
+				checkText = checkText,
+				resultsPath = resultsPath,
+				resultsText = resultsText,
+			})
+		end
+		return out
+	end
+
+	local function localOrOriginTip(layer: stack.Layer): string?
+		local loc = layergit.shaOf(layer.name)
+		local rem = layergit.shaOf(`origin/{layer.name}`)
+		if loc and rem then
+			if sh.run("git", { "merge-base", "--is-ancestor", rem, loc }).ok then
+				return loc
+			end
+			return rem
+		end
+		return loc or rem
+	end
+
+	local function collectLayerCommits(base: string, tip: string): { trace.LayerCommit }
+		local raw = sh.git({ "log", "--reverse", "--format=%H%x09%P%x09%s", `{base}..{tip}` })
+		local out: { trace.LayerCommit } = {}
+		for line in string.gmatch(raw .. "\n", "([^\n]+)\n") do
+			local sha, parents, subject = string.match(line, "^(%x+)\t([^\t]*)\t(.*)$")
+			if sha then
+				local firstParent = string.match(parents or "", "^(%x+)") or ""
+				local changed = sh.git({ "diff-tree", "--no-commit-id", "--name-only", "-r", sha })
+				local files: { string } = {}
+				for path in string.gmatch(changed .. "\n", "([^\n]+)\n") do
+					if path ~= "" then
+						table.insert(files, path)
+					end
+				end
+				table.insert(out, {
+					sha = sha,
+					parent = firstParent,
+					subject = subject or "",
+					files = files,
+				})
+			end
+		end
+		return out
+	end
+
+	local issues = layergit.orderedMembers(raft)
+	local layers = layergit.layersOf(raft.id)
+	if printSkeletonOnly then
+		if #layers == 0 then
+			fail(`{raft.id} has no layers: ./zn start {raft.id}`)
+		end
+		if #layers ~= #issues then
+			fail(`{raft.id} has {#layers} layer(s) for {#issues} issue(s)`)
+		end
+		local baseTip = layergit.mainTip()
+		local onto = baseTip
+		local topFinishSha = ""
+		local topTip = ""
+		for i, layer in layers do
+			if layer.position ~= i or layer.issue ~= issues[i].id then
+				fail(`{raft.id} layer {i} is {layer.name}, expected {issues[i].id}`)
+			end
+			local tip = localOrOriginTip(layer) or fail(`{layer.name} has no tip`)
+			if not sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok then
+				fail(`{layer.name} is not stacked on the layer below: ./zn restack {raft.id}`)
+			end
+			local finishSha = layergit.layerFinishSha(layer, onto, tip)
+			if not finishSha then
+				fail(`{layer.issue} is not finished: ./zn finish {layer.issue}`)
+			end
+			if i == #layers then
+				topFinishSha = finishSha :: string
+				topTip = tip
+			end
+			onto = tip
+		end
+		local issueDocs = buildTraceIssueDocs(issues, topTip)
+		local changedSources = watch.sourceOf(diffNamesBetween(baseTip, topTip))
+		local claims, claimErrors = trace.deriveClaims(issueDocs)
+		if #claimErrors > 0 then
+			fail(table.concat(claimErrors, "\n"))
+		end
+		stdio.write(trace.skeleton(raft.id, topFinishSha, claims, changedSources))
+		return {}
+	end
+
+	if #layers == 0 then
+		return { `{raft.id} has no layers: ./zn start {raft.id}` }
+	end
+	local topLayer = layers[#layers]
+	local topTip = localOrOriginTip(topLayer)
+	if not topTip then
+		return { `{topLayer.name} has no tip` }
+	end
+	local useWorktree = sh.git({ "rev-parse", "HEAD" }) == topTip
+	local tracePath = `{raft.dir}/trace.md`
+	local tableText = fileTextAt(topTip, tracePath, useWorktree)
+	if tableText == nil then
+		return { `no {tracePath}: run ./zn trace {raft.id} and fill the table` }
+	end
+
+	local baseTip = layergit.mainTip()
+	local onto = baseTip
+	local layerHistories: { trace.LayerHistory } = {}
+	for _, layer in layers do
+		local tip = localOrOriginTip(layer)
+		local stacked = if tip ~= nil
+			then sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok
+			else false
+		local commits: { trace.LayerCommit } = if tip ~= nil and stacked
+			then collectLayerCommits(onto, tip)
+			else {}
+		local issueItem = store.find(layer.issue)
+		local layerTitle = if issueItem then layergit.issueTitle(issueItem) else layer.issue
+		table.insert(layerHistories, {
+			name = layer.name,
+			issue = layer.issue,
+			title = layerTitle,
+			base = onto,
+			tip = tip,
+			stackedOnBelow = stacked,
+			commits = commits,
+		})
+		if tip ~= nil then
+			onto = tip
+		end
+	end
+
+	local issueDocs = buildTraceIssueDocs(issues, topTip)
+	local diffList = diffNamesBetween(baseTip, topTip)
+	local changedSources = watch.sourceOf(diffList)
+
+	local candidatePaths: { [string]: boolean } = {}
+	for _, idoc in issueDocs do
+		candidatePaths[idoc.docPath] = true
+		candidatePaths[idoc.checkPath] = true
+	end
+	for _, src in changedSources do
+		candidatePaths[src] = true
+	end
+	for refPath in string.gmatch(tableText, "([A-Za-z0-9_./%-]+):%d+") do
+		candidatePaths[refPath] = true
+	end
+
+	local filesAtCommit: { [string]: trace.FileMeta } = {}
+	for path in candidatePaths do
+		local text = gitFileTextAt(topTip, path)
+		if text ~= nil then
+			filesAtCommit[path] = { lines = trace.splitLines(text) }
+		end
+	end
+
+	local raftDocText = fileTextAt(topTip, raft.doc, useWorktree) or ""
+	return trace.check({
+		raftId = raft.id,
+		raftDir = raft.dir,
+		tableText = tableText,
+		layers = layerHistories,
+		issues = issueDocs,
+		raftDocText = raftDocText,
+		changedSources = changedSources,
+		filesAtCommit = filesAtCommit,
+	})
+end
+
+function cmd.trace(pos: { string }, opts: { [string]: { string } })
+	for k in opts do
+		if k ~= "--check" then
+			fail(`usage: trace <R-id> [--check] (unknown option {k})`)
+		end
+	end
+	if #pos ~= 1 then
+		fail("usage: trace <R-id> [--check]")
+	end
+	local raftId = pos[1]
+	if hasOrigin() then
+		sh.run("git", { "fetch", "--quiet", "origin" })
+	end
+	local raft = store.get(raftId)
+	if raft.kind ~= "raft" then
+		fail(`{raft.id} is not a raft`)
+	end
+	if opts["--check"] then
+		local findings = traceProblems(raft)
+		if #findings > 0 then
+			stdio.ewrite(table.concat(findings, "\n") .. "\n")
+			process.exit(1)
+		end
+		print(`ok: {raft.id}`)
+		return
+	end
+	traceProblems(raft, true)
 end
 
 function cmd.done(pos: { string })
@@ -4209,6 +5016,30 @@ function cmd.done(pos: { string })
 	if sh.git({ "status", "--porcelain" }) ~= "" then
 		fail("commit everything first (./zn commit); done needs a clean tree")
 	end
+	local whyOld = layergit.oldShapeRefusal(raft)
+	if whyOld then
+		fail(whyOld)
+	end
+	if hasOrigin() then
+		sh.git({ "fetch", "--quiet", "origin" })
+	end
+	local issues = layergit.orderedMembers(raft)
+	local layers = layergit.layersOf(raft.id)
+	if #layers == 0 then
+		fail(`{raft.id} has no layers: ./zn start {raft.id}`)
+	end
+	-- The commit that will be merged is the published top layer. The working tree has to be that
+	-- commit before any check reads it: a lower layer, or a top layer behind origin, is a different tree.
+	local topLayer = layers[#layers]
+	local land = layergit.layerTip(topLayer) or fail(`{topLayer.name} has no tip`)
+	local here = sh.git({ "rev-parse", "HEAD" })
+	local hereName = sh.git({ "branch", "--show-current" })
+	if hereName == "" then
+		hereName = "detached HEAD"
+	end
+	if here ~= land then
+		fail(`{hereName} is {here} and {topLayer.name} is {land}: done checks the commit it lands`)
+	end
 	local problem = reviewProblem(raft)
 	if problem then
 		fail(problem)
@@ -4216,6 +5047,60 @@ function cmd.done(pos: { string })
 	if not runCheck(raft) then
 		fail(`{raft.id} check.sh failed; not done`)
 	end
+	for _, m in store.members(raft.id) do
+		-- An approval `ready` published stays required: deleting approval.md on the branch is not a way
+		-- past the check. An item readied before approval has none on origin/main and is left alone.
+		local onMain = sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{approval.file(m)}` }).ok
+		local drift = approval.refusal(".", m, onMain)
+		if drift then
+			fail(drift)
+		end
+	end
+	local verdict = layergit.reviewVerdict(raft)
+	if not verdict then
+		fail(`{raft.id} has no Verdict line: a verdict nobody wrote is not recorded`)
+	end
+	if #layers ~= #issues then
+		fail(`{raft.id} has {#layers} layer(s) for {#issues} issue(s)`)
+	end
+	local onto = layergit.mainTip()
+	for i, layer in layers do
+		if layer.position ~= i or layer.issue ~= issues[i].id then
+			fail(`{raft.id} layer {i} is {layer.name}, expected {issues[i].id}`)
+		end
+		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
+		if not sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok then
+			fail(`{layer.name} is not stacked on the layer below: ./zn restack {raft.id}`)
+		end
+		if not layergit.layerFinished(layer, onto) then
+			fail(`{layer.issue} is not finished: ./zn finish {layer.issue}`)
+		end
+		onto = tip
+	end
+	local traceFindings = traceProblems(raft)
+	if #traceFindings > 0 then
+		fail(`{raft.id} trace --check failed:\n{table.concat(traceFindings, "\n")}`)
+	end
+	local bindIds: { string } = {}
+	for _, issue in issues do
+		table.insert(bindIds, issue.id)
+	end
+	local layerBranch = sh.git({ "branch", "--show-current" })
+	local baseRef = if layergit.shaOf("origin/main")
+		then "origin/main"
+		elseif layergit.shaOf("main") then "main"
+		else layergit.mainTip()
+	sh.git({ "switch", "--detach", baseRef })
+	local top = topLayer.name
+	local merged = sh.run("git", { "merge", "--no-ff", "--no-commit", land })
+	if not merged.ok then
+		sh.run("git", { "merge", "--abort" })
+		if layerBranch ~= "" then
+			sh.git({ "switch", "--quiet", layerBranch })
+		end
+		fail(`{top} does not merge onto main: {sh.trim(merged.stderr)}`)
+	end
+	local bound = false
 	-- Promote sequestered acceptance specs into the permanent suite, then prove they still pass
 	-- there (type check + structural meta spec + the specs themselves). Roll back on failure.
 	local promoted: { string } = {}
@@ -4241,7 +5126,14 @@ function cmd.done(pos: { string })
 	end
 	table.insert(movedDirs, store.dirFor(raft.kind, "done", raft.id, raft.root))
 	local function rollback()
-		sh.git({ "reset", "-q", "--hard", "HEAD" })
+		if bound then
+			sh.git({ "reset", "--hard", layerBranch })
+		else
+			sh.run("git", { "merge", "--abort" })
+		end
+		if layerBranch ~= "" then
+			sh.run("git", { "switch", "--quiet", layerBranch })
+		end
 		-- git removes the folders it empties; if one is left, store.find would see a duplicate id
 		for _, dir in movedDirs do
 			if fs.isDir(dir) and #fs.readDir(dir) == 0 then
@@ -4271,11 +5163,8 @@ function cmd.done(pos: { string })
 			end
 		end
 	end
-	local caps: { watchcmd.Member } = {}
-	for _, m in members do
-		table.insert(caps, { id = m.id, dest = promotedDir(m) })
-	end
-	watchcmd.capture(caps)
+	-- finish already wrote each layer's watch from that layer's own files. Capturing again, from the
+	-- merge, would give every ticket the whole stack: a finish commit's subject is not an Issue: trailer.
 	if gateLib.doneGate(process.env) == "promoted" then
 		print("done: inside a spec run, so the gate is skipped; checking the promoted specs")
 		if #promoted > 0 then
@@ -4292,25 +5181,117 @@ function cmd.done(pos: { string })
 			fail("the affected gate fails on the done tree (rolled back); fix and retry done")
 		end
 	end
-	-- Mark the PR ready before the final push: CI skips drafts, so the push below is what gets tested.
-	if hasUpstream() and onGitHub() then
-		-- pcall: process.exec throws when gh can't be spawned at all (not on PATH)
-		local ok, r = pcall(sh.run, "gh", { "pr", "ready" })
-		if not (ok and r.ok) then
-			rollback()
-			fail("could not mark the PR ready (rolled back); fix gh and retry done")
-		end
-	end
 	if fs.isFile(FOCUS_FILE) then
 		fs.removeFile(FOCUS_FILE)
 	end
-	recordAndCommit(raft, `tracker: done {raft.id}`, {}, nil, true, "deliver")
-	if hasUpstream() and onGitHub() then
-		local summary = fs.readFile(`{raft.dir}/spend.md`)
-		local body = sh.must("gh", { "pr", "view", "--json", "body", "-q", ".body" })
-		sh.must("gh", { "pr", "edit", "--body", body .. "\n\n" .. summary })
-		print("PR marked ready for review")
+	local doneTracePath = `{store.dirFor("raft", "done", raft.id, raft.root)}/trace.md`
+	local reading = sessionread.running()
+	local committed, commitErr = pcall(function()
+		recordAndCommit(
+			raft,
+			stack.bindMessage(raft.id, bindIds, verdict :: string, doneTracePath),
+			{},
+			nil,
+			true,
+			"deliver",
+			nil,
+			nil,
+			reading
+		)
+	end)
+	if not committed then
+		rollback()
+		fail(`binding commit failed (rolled back): {commitErr}`)
 	end
+	bound = true
+	-- Remember each pull request's base, retarget it to main, and put that base back if the push fails.
+	-- GitHub marks a pull request merged when its head is reachable from its base; base main does that
+	-- once the binding commit is on main. Retargeting first and then failing the push would leave the
+	-- pull request pointing at main while main does not have the commit.
+	local retargeted: { { number: string, base: string, layer: string } } = {}
+	local function restoreBases()
+		local unrestored: { string } = {}
+		for _, row in retargeted do
+			if row.base ~= "main" then
+				local back = sh.run("gh", { "pr", "edit", row.number, "--base", row.base })
+				if not back.ok then
+					table.insert(unrestored, row.layer)
+				end
+			end
+		end
+		return unrestored
+	end
+	if onGitHub() then
+		for _, layer in layers do
+			local listed = sh.run("gh", {
+				"pr",
+				"list",
+				"--head",
+				layer.name,
+				"--state",
+				"open",
+				"--json",
+				"number",
+				"-q",
+				".[0].number",
+			})
+			local number = if listed.ok then sh.trim(listed.stdout) else ""
+			if number ~= "" and number ~= "null" then
+				local viewed = sh.run("gh", {
+					"pr",
+					"view",
+					number,
+					"--json",
+					"baseRefName",
+					"-q",
+					".baseRefName",
+				})
+				local oldBase = if viewed.ok then sh.trim(viewed.stdout) else ""
+				if oldBase == "" then
+					rollback()
+					fail(`could not read the pull request base for {layer.name} (rolled back)`)
+				end
+				local edited = sh.run("gh", { "pr", "edit", number, "--base", "main" })
+				if not edited.ok then
+					local unrestored = restoreBases()
+					rollback()
+					local extra = if #unrestored > 0
+						then `; could not put back {table.concat(unrestored, ", ")}`
+						else ""
+					fail(`could not retarget the pull request for {layer.name} (rolled back){extra}`)
+				end
+				table.insert(retargeted, { number = number, base = oldBase, layer = layer.name })
+			end
+		end
+	end
+	if hasOrigin() then
+		-- HEAD is detached, so the destination has to be a full ref. This is the binding commit on main.
+		local pushed = sh.run("git", { "push", "--quiet", "origin", "HEAD:refs/heads/main" })
+		if not pushed.ok then
+			local unrestored = restoreBases()
+			rollback()
+			local extra = if #unrestored > 0
+				then `; could not put back {table.concat(unrestored, ", ")}`
+				else ""
+			fail(`could not push the binding commit to main (rolled back){extra}: {sh.trim(pushed.stderr)}`)
+		end
+	end
+	if sh.run("git", { "branch", "-f", "main", "HEAD" }).ok then
+		sh.git({ "switch", "--quiet", "main" })
+	else
+		-- main is checked out in the main checkout. Fast-forward that checkout; this one stays on the commit.
+		local root = mainRoot()
+		local before = sh.git({ "-C", root, "rev-parse", "HEAD" })
+		local pulled = sh.run("git", { "-C", root, "pull", "--ff-only", "--quiet" })
+		if pulled.ok then
+			sweepStale(root, before, sh.git({ "-C", root, "rev-parse", "HEAD" }))
+		else
+			stdio.ewrite(
+				`landed on origin/main, but pulling the main checkout failed: {sh.trim(pulled.stderr)}\n`
+			)
+		end
+	end
+	print(`landed {raft.id}`)
 end
 
 -- The parsed lessons of a loaded tree; a lesson that fails to parse is left out and named on stderr.
@@ -4670,16 +5651,6 @@ function cmd.prompt(pos: { string }, opts: { [string]: { string } })
 	end
 end
 
--- Whether `text` has a line that runs a check (`check "AC1: ..."`), not a commented one.
-local function hasCheckLine(text: string): boolean
-	for line in string.gmatch(text, "[^\n]+") do
-		if string.match(line, '^%s*check "') then
-			return true
-		end
-	end
-	return false
-end
-
 -- The guards of the commands that publish from the main checkout (`ready`, `stop`): it is the main checkout, the repo
 -- has an origin, `main` is checked out and clean.
 local function mainCheckoutGuards(name: string)
@@ -4712,6 +5683,204 @@ local function pullMain(): string?
 	return nil
 end
 
+-- A controlling terminal. Lune's own stdin is not a tty even when `./zn` was started on one (a child
+-- cannot inherit it), so this opens /dev/tty. `./zn` also refuses when its own stdin is not a terminal.
+local function stdinIsTerminal(): boolean
+	local r = process.exec("perl", {
+		"-e",
+		"open(my $f, q{<}, q{/dev/tty}) or exit 1; exit(-t $f ? 0 : 1)",
+	})
+	return r.ok
+end
+
+local function contractDirty(paths: { string }): string?
+	local args = { "status", "--porcelain", "--" }
+	for _, path in paths do
+		table.insert(args, path)
+	end
+	local out = sh.git(args)
+	local line = string.match(out, "^([^\n]+)")
+	if not line or line == "" then
+		return nil
+	end
+	return line
+end
+
+-- `approve <issue-id>` records the contract hash in the issue's approval.md and commits only that file.
+-- `--check` reads: it says whether the latest row still matches, and which part changed.
+function cmd.approve(pos: { string }, opts: { [string]: { string } })
+	for k in opts do
+		if k ~= "--check" and k ~= "--publish" then
+			fail(`usage: approve <issue-id> [--check|--publish] (unknown option {k})`)
+		end
+	end
+	if #pos ~= 1 or (opts["--check"] and opts["--publish"]) then
+		fail("usage: approve <issue-id> [--check|--publish]")
+	end
+	local id = pos[1]
+	local onlyCheck = opts["--check"] ~= nil
+	if not onlyCheck then
+		local dispatched = process.env.ZN_DISPATCH
+		if dispatched and dispatched ~= "" then
+			fail(
+				`{id}: approve is refused while ZN_DISPATCH is set. Run ./zn approve {id} yourself, in a terminal, in this worktree.`
+			)
+		end
+		if not stdinIsTerminal() then
+			local where = sh.git({ "rev-parse", "--show-toplevel" })
+			fail(
+				`{id}: approve is refused without a terminal on stdin. Run ./zn approve {id} yourself, in a terminal, in this worktree ({where}).`
+			)
+		end
+		refuseInMainCheckout("approve")
+	end
+	local item = store.get(id)
+	if item.kind ~= "issue" then
+		fail(`approve takes an issue ({id} is a {item.kind})`)
+	end
+	if opts["--publish"] then
+		local path = approval.file(item)
+		if not fs.isFile(path) then
+			fail(`{id} has no approval in this worktree. Run ./zn approve {id} first.`)
+		end
+		local localText = fs.readFile(path)
+		local function show(rel: string): string?
+			local got = sh.run("git", { "show", `origin/main:{rel}` })
+			return if got.ok then got.stdout else nil
+		end
+		local doc = show(item.doc)
+		if not doc then
+			fail(`{id} is not on origin/main. From this worktree run: git push origin HEAD`)
+		end
+		local checkRel = `{item.dir}/check.sh`
+		local check = show(checkRel) or ""
+		local listed = sh.run("git", { "ls-tree", "-r", "--name-only", "origin/main", "--", item.dir })
+		local folder: { [string]: string } = {}
+		if listed.ok then
+			local prefix = item.dir .. "/"
+			for relPath in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
+				if string.sub(relPath, 1, #prefix) == prefix then
+					local rel = string.sub(relPath, #prefix + 1)
+					local body = show(relPath)
+					if body then
+						folder[rel] = body
+					end
+				end
+			end
+		end
+		local promoted: { [string]: string } = {}
+		local readycheck = require("./readycheck")
+		local anySpec = false
+		for rel in folder do
+			if string.match(rel, "^acceptance/.+%.spec%.luau$") then
+				anySpec = true
+			end
+		end
+		if not anySpec then
+			local dest = projects.promotedDir(projects.load("."), item.root, item.id)
+			local listedPromoted =
+				sh.run("git", { "ls-tree", "-r", "--name-only", "origin/main", "--", dest })
+			if listedPromoted.ok then
+				local prefix = dest .. "/"
+				for relPath in string.gmatch(listedPromoted.stdout .. "\n", "([^\n]*)\n") do
+					if
+						string.sub(relPath, 1, #prefix) == prefix and string.match(relPath, "%.spec%.luau$")
+					then
+						local body = show(relPath)
+						if body then
+							promoted[string.sub(relPath, #prefix + 1)] = body
+						end
+					end
+				end
+			end
+		end
+		local specs = readycheck.specs(folder, promoted)
+		local parts, err = contract.build(doc :: string, check, specs)
+		if not parts then
+			fail(`{id}: {err}`)
+		end
+		local problem = approval.reasonOf(id, path, parts :: contract.Parts, localText, true)
+		if problem then
+			fail(`{problem} From this worktree run: git push origin HEAD`)
+		end
+		local onMain = show(path)
+		if onMain == localText then
+			print(`{id} is already approved on origin/main`)
+			return
+		end
+		refuseStale()
+		local result = published(publish.commit(".", function(_paths, _read, _roots, _counter)
+			return { { path = path, content = localText } }
+		end, `tracker: approve {id}`))
+		if not result.ok then
+			fail(`{id}: {result.reason}. From this worktree run: ./zn approve {id} --publish`)
+		end
+		print(`published {id} to origin/main`)
+		return
+	end
+	if onlyCheck then
+		local found, err = approval.verdict(".", item)
+		if not found then
+			fail(`{id}: {err}`)
+		end
+		local verdict: approval.Verdict = found :: approval.Verdict
+		if verdict.state == "none" then
+			fail(`{id} has no approval`)
+		end
+		if verdict.state == "bad" then
+			fail(`{id}: {approval.file(item)} does not parse: {verdict.err}`)
+		end
+		if verdict.state == "changed" then
+			fail(
+				`{id}'s contract changed since approval: {table.concat(verdict.changed, ", ")}. Run ./zn approve {id} again.`
+			)
+		end
+		local row = verdict.row :: contract.Row
+		print(`{id} approved {row.hash} at {row.when} by {row.who}`)
+		return
+	end
+	local front = store.readFront(item.doc)
+	if front.design ~= "ready" then
+		fail(`{id} is not design: ready`)
+	end
+	local pending = openlist.pending(fs.readFile(item.doc))
+	if #pending > 0 then
+		fail(
+			`{id} has an unruled open-list bullet ({table.concat(pending, ", ")}): rule each under ## Open to the human, then ./zn approve {id}`
+		)
+	end
+	local check = `{item.dir}/check.sh`
+	if not fs.isFile(check) then
+		fail(`{id} has no check.sh`)
+	end
+	local named = sh.run("git", { "config", "--get", "user.name" })
+	local who = if named.ok then contract.who(sh.trim(named.stdout)) else ""
+	if who == "" then
+		fail("approve needs a git identity (git config user.name)")
+	end
+	local _, paths, collectErr = approval.collect(".", item)
+	if collectErr then
+		fail(`{id}: {collectErr}`)
+	end
+	local dirty = contractDirty(paths)
+	if dirty then
+		fail(`{id}: commit the contract first ({dirty}), then ./zn approve {id}`)
+	end
+	local when = os.date("!%Y-%m-%dT%H:%M:%SZ") :: string
+	local text, aerr = approval.append(".", item, who, when)
+	if not text then
+		fail(`{id}: {aerr}`)
+	end
+	local path = approval.file(item)
+	sh.writeReplacing(path, text :: string)
+	sh.git({ "add", "--", path })
+	sh.git({ "commit", "-q", "-m", `tracker: approve {id}`, "--", path })
+	local rows = contract.parse(text :: string)
+	local hash = if rows then rows[#rows].hash else ""
+	print(`approved {id} {hash}`)
+	print(`Publish it to origin/main from this worktree: ./zn approve {id} --publish`)
+end
+
 -- `ready <R-id|issue-id>`: claims a prepared raft, moves it and its members to active/ on origin/main (one tracker-only
 -- commit, check.sh paths rewritten), pulls the main checkout and writes the ignored prompt.md. On a raft that is
 -- already active it only regenerates the prompt.
@@ -4742,69 +5911,11 @@ function cmd.ready(pos: { string })
 		table.insert(ids, m.id)
 	end
 	if not reissue then
-		if not (raft.state == "backlog" and st == "prepared") then
-			fail(`{raft.id} is {st} in {raft.dir} on origin/main: only a prepared raft is readied`)
-		end
-		if #members == 0 then
-			fail(`{raft.id} has no member issues`)
-		end
-		-- the raft's issues: list and its members' raft: fields name one set, or `stop` could not move back what
-		-- `ready` moved (review 001 F1)
-		local listed: { [string]: boolean } = {}
-		for _, id in store.idList(store.readFront(raft.doc).issues) do
-			listed[id] = true
-		end
-		local unlisted, missing = {}, {}
-		for _, m in members do
-			if not listed[m.id] then
-				table.insert(unlisted, m.id)
-			end
-			listed[m.id] = nil
-		end
-		for id in listed do
-			table.insert(missing, id)
-		end
-		table.sort(missing)
-		if #unlisted > 0 or #missing > 0 then
-			fail(
-				`{raft.id}'s issues: list and its members' raft: fields disagree (raft: {raft.id} but not listed: {table.concat(
-					unlisted,
-					", "
-				)}; listed without raft: {raft.id}: {table.concat(missing, ", ")}); fix the documents (z-design) and ready again`
-			)
-		end
-		local everyone: { store.Item } = { raft }
-		for _, m in members do
-			table.insert(everyone, m)
-		end
-		local isMember: { [string]: boolean } = {}
-		for _, m in members do
-			isMember[m.id] = true
-		end
-		for _, it in everyone do
-			if store.readFront(it.doc).design ~= "ready" then
-				fail(`{it.id} is not design: ready (run z-design first)`)
-			end
-			local gap = designOpen(it)
-			if gap then
-				fail(`{it.id}: {gap}`)
-			end
-			local check = `{it.dir}/check.sh`
-			if not fs.isFile(check) or not hasCheckLine(fs.readFile(check)) then
-				fail(`{it.id} has no check: its check.sh needs at least one line starting check "..."`)
-			end
-		end
-		for _, m in members do
-			for _, dep in store.idList(store.readFront(m.doc).depends_on) do
-				if not isMember[dep] then
-					local found = store.find(dep)
-					if not found or found.state ~= "done" then
-						fail(
-							`{m.id} depends on {dep}, which is {if found then found.state else "unknown"} on origin/main: it must be done first`
-						)
-					end
-				end
-			end
+		-- The same check work next uses, on the tree just pulled. The publish below calls it again on the
+		-- snapshot, so a redesign that lands between the two is still refused. Neither call here is work next.
+		local refused = require("./readyfacts").reason(raft, members)
+		if refused then
+			fail(refused)
 		end
 		local all = { raft.id }
 		for _, id in ids do
@@ -4824,39 +5935,34 @@ function cmd.ready(pos: { string })
 			-- c0116 (review 002 F1, 004 F1): a member redesigned since z-raft grouped it is never handed out under the
 			-- old review; read from the tree being published, so a redesign landing after the pull is seen too
 			function(paths, read): string?
+				local readycheck = require("./readycheck")
 				local rp = docPath(paths, raft.id)
 				local rt = rp and read(rp)
 				if not rp or not rt then
 					return `{raft.id} is not on origin/main`
 				end
-				local map, problem = raftplan.parseGrouped(frontOf(rt).grouped)
-				if problem then
-					return `{rp}: {problem}`
-				end
-				local now: { [string]: string? } = {}
+				local built: { readycheck.Member } = {}
 				for _, m in members do
 					local mp = docPath(paths, m.id)
 					if mp then
-						now[m.id] = raftplan.recordHash(
-							m.id,
-							treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4))
-						)
+						table.insert(built, {
+							id = m.id,
+							design = "",
+							doc = "",
+							deps = {},
+							files = treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4)),
+							specs = {},
+							approval = nil,
+							approvalFile = "",
+						})
 					end
 				end
-				local redesigned = regrouped(map, now)
-				if #redesigned > 0 then
-					return `{raft.id}: {table.concat(redesigned, ", ")} changed on origin/main since {raft.id} grouped it: z-raft drops it (./zn unfold {raft.id} <id>) or folds it again with a new coherence review`
-				end
-				if
-					#members > 1
-					and not reviewCovers(
-						treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4)),
-						map
-					)
-				then
-					return `{raft.id}'s coherence review predates its record: run a new raft-mode round (z-raft, zz-review); never edit a review that is already written`
-				end
-				return nil
+				return readycheck.record(
+					raft.id,
+					frontOf(rt).grouped,
+					built,
+					treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4))
+				)
 			end
 		)
 		if not r.ok then
@@ -5001,16 +6107,28 @@ function cmd.stop(pos: { string })
 	if fs.isFile(claimFile(raft.id)) then
 		fs.removeFile(claimFile(raft.id))
 	end
-	local branch = raftBranch(raft)
 	sh.run("git", { "fetch", "--quiet", "--prune", "origin" })
-	local exists = sh.run("git", { "show-ref", "--verify", "--quiet", `refs/heads/{branch}` }).ok
-		or sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok
+	local layers = layergit.layersOf(raft.id)
+	local branch = if #layers > 0 then layers[#layers].name else raftBranch(raft)
+	local exists = false
+	if #layers > 0 then
+		exists = true
+		local names: { string } = {}
+		for _, layer in layers do
+			table.insert(names, layer.name)
+		end
+		branch = table.concat(names, ", ")
+	else
+		exists = sh.run("git", { "show-ref", "--verify", "--quiet", `refs/heads/{branch}` }).ok
+			or sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok
+	end
 	if exists then
 		local pr = "its pull request, if any"
+		local head = if #layers > 0 then layers[1].name else branch
 		if onGitHub() then
 			local g = sh.run(
 				"gh",
-				{ "pr", "list", "--head", branch, "--state", "open", "--json", "url", "-q", ".[0].url" }
+				{ "pr", "list", "--head", head, "--state", "open", "--json", "url", "-q", ".[0].url" }
 			)
 			local url = if g.ok then sh.trim(g.stdout) else ""
 			if url ~= "" and url ~= "null" then
@@ -5024,18 +6142,47 @@ end
 
 local SPEND_PHASES = { "capture", "prep", "design-review", "deliver" }
 
-local function nonNegativeMinutes(raw: string?): number?
-	if not raw or not string.match(raw, "^%d+%.?%d*m?$") then
-		return nil
-	end
-	return tonumber((string.gsub(raw, "m$", "")))
-end
-
 -- origin/main's issue spend.md blobs, keyed by id, loaded once. nil means this checkout has no
 -- origin/main of its own (a sandbox under .cache, or a cwd that is not the git toplevel): metrics
 -- then reads only the working tree, and it never fetches.
 local originSpend: { [string]: { string } }? = nil
+local originBody: { [string]: string } = {}
 local originChecked = false
+
+-- One git process for every origin spend.md. A process per issue is what made metrics take half a minute.
+local function readBatch(paths: { string })
+	if #paths == 0 then
+		return
+	end
+	local names: { string } = {}
+	for _, p in paths do
+		table.insert(names, `origin/main:{p}`)
+	end
+	local shown = process.exec("git", { "cat-file", "--batch" }, {
+		stdio = { stdin = table.concat(names, "\n") .. "\n" },
+	})
+	if not shown.ok then
+		return
+	end
+	local text = shown.stdout
+	local i, n = 1, 1
+	while n <= #paths do
+		local nl = string.find(text, "\n", i, true)
+		if not nl then
+			break
+		end
+		local header = string.sub(text, i, nl - 1)
+		local size = tonumber(string.match(header, " (%d+)$"))
+		if not size then
+			i = nl + 1
+		else
+			local startAt = nl + 1
+			originBody[paths[n]] = string.sub(text, startAt, startAt + size - 1)
+			i = startAt + size + 1
+		end
+		n += 1
+	end
+end
 
 local function originBlobs(id: string): { string }?
 	if not originChecked then
@@ -5054,6 +6201,7 @@ local function originBlobs(id: string): { string }?
 			local listed = if roots then sh.run("git", args) else { ok = false, stdout = "" }
 			if listed.ok then
 				originSpend = {}
+				local all: { string } = {}
 				for path in string.gmatch(listed.stdout, "[^\n]+") do
 					local found = string.match(path, "/([fdc]%d%d%d%d)/spend%.md$")
 					if found and originSpend then
@@ -5063,8 +6211,10 @@ local function originBlobs(id: string): { string }?
 							originSpend[found] = list
 						end
 						table.insert(list, path)
+						table.insert(all, path)
 					end
 				end
+				readBatch(all)
 			end
 		end
 	end
@@ -5077,6 +6227,15 @@ end
 -- The longer of the working-tree ledger and origin/main's, when one is a prefix of the other.
 -- nil means the issue is skipped. A checkout with no origin/main keeps the local read.
 local function ledgerRows(issue: store.Item): { ledger.Row }?
+	local function attach(rows: { ledger.Row }?): { ledger.Row }?
+		if not rows then
+			return nil
+		end
+		for _, row in costrow.readMeasured(issue.dir) do
+			table.insert(rows, row)
+		end
+		return rows
+	end
 	local path = `{issue.dir}/spend.md`
 	local localRows: { ledger.Row }? = nil
 	local localErr: string? = nil
@@ -5096,7 +6255,7 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
 			stdio.ewrite(`metrics: {path} does not parse ({localErr}); skipped\n`)
 			return nil
 		end
-		return localRows
+		return attach(localRows)
 	end
 	if #blobs > 1 then
 		stdio.ewrite(`metrics: {issue.id} spend.md appears twice on origin/main; skipped\n`)
@@ -5107,12 +6266,18 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
 	local absent = #blobs == 0
 	if not absent then
 		local blob = blobs[1]
-		local shown = sh.run("git", { "show", `origin/main:{blob}` })
-		if not shown.ok then
-			stdio.ewrite(`metrics: origin/main:{blob} could not be read; using the working tree\n`)
-			absent = true
-		else
-			local parsed, err = ledger.parse(shown.stdout)
+		local body = originBody[blob]
+		if body == nil then
+			local shown = sh.run("git", { "show", `origin/main:{blob}` })
+			if not shown.ok then
+				stdio.ewrite(`metrics: origin/main:{blob} could not be read; using the working tree\n`)
+				absent = true
+			else
+				body = shown.stdout
+			end
+		end
+		if body ~= nil then
+			local parsed, err = ledger.parse(body)
 			if parsed then
 				originRows = parsed.rows
 			else
@@ -5129,18 +6294,18 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
 	end
 	if localErr and originRows then
 		stdio.ewrite(`metrics: {path} does not parse ({localErr}); using origin/main\n`)
-		return originRows
+		return attach(originRows)
 	end
 	if originErr then
 		stdio.ewrite(`metrics: origin/main:{blobs[1]} does not parse ({originErr}); using the working tree\n`)
-		return localRows
+		return attach(localRows)
 	end
 	if absent or not originRows then
-		return localRows
+		return attach(localRows)
 	end
 	local here = localRows :: { ledger.Row }
 	if ledger.extends(here, originRows) or ledger.extends(originRows, here) then
-		return if #originRows > #here then originRows else here
+		return attach(if #originRows > #here then originRows else here)
 	end
 	stdio.ewrite(
 		`metrics: {issue.id} spend.md on origin/main and in the working tree have diverged; skipped\n`
@@ -5162,7 +6327,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	local id = pos[1]
 	if not id or not (store.isIssueId(id) or store.isRaftId(id)) then
 		fail(
-			"usage: spend <id> --phase capture|prep|design-review|deliver --time <minutes> [--tokens <n>] [--model <id>] [--note <text>]"
+			"usage: spend <id> --phase capture|prep|design-review|deliver [--begin] [--model <id>] [--note <text>]"
 		)
 	end
 	local phase = opts["--phase"] and opts["--phase"][1] or ""
@@ -5171,20 +6336,11 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	elseif not table.find(SPEND_PHASES, phase) then
 		fail("spend --phase is capture, prep, design-review or deliver")
 	end
-	local minutes = nonNegativeMinutes(opts["--time"] and opts["--time"][1])
-	if not opts["--time"] then
-		fail("spend needs --time <minutes>: spend has no commit gap to measure")
-	elseif minutes == nil then
-		fail("spend --time must be a non-negative number")
+	if opts["--time"] or opts["--tokens"] then
+		stdio.ewrite("spend: --time and --tokens are ignored; cost is measured\n")
 	end
+	local minutes = 0
 	local tokens: number? = nil
-	if opts["--tokens"] then
-		local raw = opts["--tokens"][1]
-		if not string.match(raw, "^%d+$") then
-			fail("spend --tokens must be a non-negative integer")
-		end
-		tokens = tonumber(raw)
-	end
 	local model = modelOption("spend", opts)
 	local note = phase
 	if opts["--note"] and opts["--note"][1] ~= "" then
@@ -5242,12 +6398,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 		tokens,
 		if phase == "prep" then owners else nil
 	)
-	local kept: { spend.Share } = {}
-	for _, share in shares do
-		if not (share.added + share.removed == 0 and share.minutes < 0.1 and (share.tokens or 0) == 0) then
-			table.insert(kept, share)
-		end
-	end
+	local kept: { spend.Share } = shares
 	if #kept == 0 then
 		fail("nothing to record")
 	end
@@ -5307,33 +6458,116 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			end
 		end
 	end
-	local wrote: { string } = {}
+	local top = sh.git({ "rev-parse", "--show-toplevel" })
+	local branch, head = costrow.branchOf(top)
+	if opts["--begin"] then
+		local began = costrow.append(top, {
+			ms = 0,
+			kind = "begin",
+			phase = phase,
+			subject = note,
+			id = id,
+			branch = branch,
+			head = head,
+		})
+		if not began then
+			fail("spend: could not record the stage start")
+		end
+		for _, share in kept do
+			print(string.format("%s %s +%d/-%d began", share.id, phase, share.added, share.removed))
+		end
+		return
+	end
+	local ai: number? = nil
+	local tok: number? = nil
+	local modelId = model
+	local noteText = note
+	local openCells = "ai,tokens"
+	local buf = ""
+	local bufPath = costrow.bufferFile(top)
+	if fs.isFile(bufPath) then
+		buf = fs.readFile(bufPath)
+	end
+	local since: buffer.Line? = nil
+	for _, line in buffer.parse(buf) do
+		if line.kind == "begin" and line.phase == phase then
+			local match = line.id == id
+			if not match and line.id == "" then
+				match = (line.branch ~= "" and line.branch == branch)
+					or (line.branch == "" and line.head ~= "" and line.head == head)
+			end
+			if match then
+				since = line
+			end
+		end
+	end
+	if since then
+		local sec = math.floor(since.ms / 1000)
+		local stamped = (os.date("!%Y-%m-%dT%H:%M:%S", sec) :: string) .. ".000Z"
+		local untilIso = (os.date("!%Y-%m-%dT%H:%M:%S") :: string) .. ".999Z"
+		local sinceUnix = sessions.unix(stamped) or 0
+		local untilUnix = sessions.unix(untilIso) or sinceUnix
+		local readOk, reading = pcall(sessionread.span, process.cwd, stamped, sinceUnix, untilIso, untilUnix)
+		if readOk and reading then
+			local got = reading :: any
+			ai = got.ai
+			tok = got.tokens
+			if got.model then
+				modelId = got.model
+			end
+			if type(got.note) == "string" and got.note ~= "" then
+				noteText = `{note} {got.note}`
+			end
+			openCells = if type(got.unmeasured) == "string" then got.unmeasured else ""
+		end
+	end
+	local homes: { [string]: string } = {}
+	local extra: { [string]: { ledger.Row } } = {}
+	local memberIds: { string } = {}
+	for _, share in kept do
+		table.insert(memberIds, share.id)
+	end
+	table.sort(memberIds)
+	local primary = memberIds[1]
 	for _, share in kept do
 		local item = store.find(share.id)
 		if not item then
 			fail(`{share.id} is not in this checkout: run ./zn sync first`)
 		end
 		local here = item :: store.Item
-		local spendPath = `{here.dir}/spend.md`
-		local row: ledger.Row = {
-			when = when,
-			subject = note,
-			added = share.added,
-			removed = share.removed,
-			minutes = share.minutes,
-			how = share.how,
-			phase = phase,
-			tokens = share.tokens,
-			model = model,
-		}
-		local itemTitle = store.readFront(here.doc).title or share.id
-		local existing = if fs.isFile(spendPath) then fs.readFile(spendPath) else nil
-		local okAppend, content = pcall(ledger.append, existing, share.id, itemTitle, row)
-		if not okAppend then
-			fail(tostring(content))
+		homes[share.id] = here.dir
+		local useAi, useTok = ai, tok
+		local cellFlags = openCells
+		if share.id ~= primary then
+			useAi, useTok = nil, nil
+			cellFlags = buffer.flags(`{cellFlags},tokens,ai`) or "tokens,ai"
 		end
-		fs.writeFile(spendPath, content :: string)
-		table.insert(wrote, spendPath)
+		extra[share.id] = {
+			{
+				when = when,
+				subject = noteText,
+				added = share.added,
+				removed = share.removed,
+				minutes = 0,
+				how = "measured",
+				phase = phase,
+				tokens = useTok,
+				model = modelId,
+				ai = useAi,
+				unmeasured = if cellFlags ~= "" then cellFlags else nil,
+			},
+		}
+	end
+	if store.isRaftId(id) then
+		local raft = store.find(id)
+		if raft then
+			homes[id] = raft.dir
+		end
+	end
+	local planned = costrow.plan(top, homes, extra, true)
+	local wrote = costrow.writeFiles(planned)
+	if #wrote == 0 then
+		fail("spend: could not write the measured row")
 	end
 	local addArgs = { "add", "--" }
 	local commitArgs = { "commit", "-q", "--only", "-m", `tracker: spend {id} {phase}`, "--" }
@@ -5343,25 +6577,17 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	end
 	local added = sh.run("git", addArgs)
 	if not added.ok then
+		costrow.restore(planned)
 		fail(`spend: could not stage the row: {sh.trim(added.stderr)}`)
 	end
 	local committed = sh.run("git", commitArgs)
 	if not committed.ok then
+		costrow.restore(planned)
 		fail(`spend: could not commit the row: {sh.trim(committed.stderr .. committed.stdout)}`)
 	end
+	costrow.writeBuffer(top, planned)
 	for _, share in kept do
-		local tok = if share.tokens ~= nil then ` {share.tokens} tokens` else ""
-		print(
-			string.format(
-				"%s %s +%d/-%d %.1f min%s",
-				share.id,
-				phase,
-				share.added,
-				share.removed,
-				share.minutes,
-				tok
-			)
-		)
+		print(string.format("%s %s +%d/-%d measured", share.id, phase, share.added, share.removed))
 	end
 	print(sh.git({ "rev-parse", "HEAD" }))
 end
@@ -5399,11 +6625,40 @@ local function designRoundsIn(dir: string): number
 	return design
 end
 
+-- metrics asks for every raft's members several times. store.members scans every issue on each call,
+-- which is what made `./zn metrics` take half a minute. Filled once at the start of that command.
+local memberCache: { [string]: { store.Item } }? = nil
+
+local function metricsMembers(raftId: string): { store.Item }
+	if not memberCache then
+		local built: { [string]: { store.Item } } = {}
+		for _, issue in store.all("issue") do
+			local rid = store.readFront(issue.doc).raft
+			if rid and rid ~= "" then
+				local list = built[rid]
+				if not list then
+					list = {}
+					built[rid] = list
+				end
+				table.insert(list, issue)
+			end
+		end
+		memberCache = built
+	end
+	local cache = memberCache :: { [string]: { store.Item } }
+	local found = cache[raftId]
+	if found then
+		return found
+	end
+	local empty: { store.Item } = {}
+	return empty
+end
+
 -- A raft's design rounds: z-design's reviews live on each issue and z-raft's coherence review on the raft, so they
 -- roll up to the raft through its members' `raft:` lines (c0116).
 local function raftDesignRounds(raft: store.Item): number
 	local n = designRoundsIn(raft.dir)
-	for _, m in store.members(raft.id) do
+	for _, m in metricsMembers(raft.id) do
 		n += designRoundsIn(m.dir)
 	end
 	return n
@@ -5523,7 +6778,224 @@ function cmd.capture(pos: { string }, _opts: { [string]: { string } })
 	stdio.write(shown.stdout)
 end
 
-function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
+-- idea <id> [--text <rough>]: the idea stage. The author drafts, the challenge role challenges once,
+-- and the author answers the findings when there are any. The three calls go through modelstep,
+-- the same supervised start the dispatcher uses. Files land in the working tree.
+function cmd.idea(pos: { string }, opts: { [string]: { string } })
+	refuseInMainCheckout("idea")
+	local id = pos[1]
+	if not id or not string.match(id, "^[fdc]%d%d%d%d$") then
+		fail("usage: idea <id> [--text <rough>]")
+	end
+	local item = store.find(id)
+	if not item or item.kind ~= "issue" then
+		fail(`idea: {id} is not an issue in this checkout`)
+	end
+	local here = item :: store.Item
+	local doc = fs.readFile(here.doc)
+	local rough = if opts["--text"] and opts["--text"][1] then opts["--text"][1] else doc
+	local layers = models.walk(".", here.dir)
+	local calls = 0
+	local function physicalCache(): string
+		-- the outermost .cache this checkout lies in, else this checkout's own
+		local cwd = sh.trim(process.exec("pwd", { "-P" }).stdout) .. "/"
+		local at = string.find(cwd, "/.cache/", 1, true)
+		return if at then string.sub(cwd, 1, at + 7) else cwd .. ".cache/"
+	end
+	local function guard(bin: string): string?
+		if not checking() then
+			return nil
+		end
+		if string.sub(bin, 1, #physicalCache()) ~= physicalCache() then
+			local argv = { bin }
+			return `refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`
+		end
+		return nil
+	end
+	local function run(
+		resolved: models.Resolved,
+		prompt: string,
+		phase: string,
+		accept: (string) -> boolean
+	): (string, string)
+		local okDrive, drivenOrErr = pcall(function()
+			return modelstep.drive({
+				resolved = resolved,
+				prompt = prompt,
+				cwd = process.cwd,
+				stateDir = `.cache/idea-run/{id}/{phase}`,
+				path = process.env.PATH or "/usr/bin:/bin",
+				guard = guard,
+				accept = function(raw)
+					return accept(idea.prose(raw))
+				end,
+			})
+		end)
+		if not okDrive then
+			fail(tostring(drivenOrErr))
+		end
+		local driven = drivenOrErr :: modelstep.Driven
+		local branch, head = costrow.branchOf(".")
+		for _, a in driven.attempts do
+			calls += 1
+			local missing: { string } = {}
+			if not a.cpu then
+				table.insert(missing, "cpu")
+			end
+			if a.tokens <= 0 then
+				table.insert(missing, "tokens")
+			end
+			if not a.wall then
+				table.insert(missing, "wall")
+			end
+			costrow.append(".", {
+				ms = 0,
+				kind = "row",
+				phase = phase,
+				subject = `{id} {a.outcome}`,
+				wall = a.wall,
+				cpu = a.cpu,
+				tokens = if a.tokens > 0 then a.tokens else nil,
+				model = models.id(a.spec),
+				unmeasured = if #missing > 0 then table.concat(missing, ",") else nil,
+				id = id,
+				branch = branch,
+				head = head,
+			})
+			local shown = if a.tokens > 0 then tostring(a.tokens) else "unmeasured"
+			local cpuShown = if a.cpu then string.format("%.3f", a.cpu) else "unmeasured"
+			local wallShown = if a.wall then string.format("%.1f", a.wall) else "unmeasured"
+			local note = if a.outcome == "ok" then "" else ` {a.detail}`
+			print(
+				`idea: {phase} model {models.id(a.spec)} tokens {shown} wall {wallShown} cpu {cpuShown} {a.outcome}{note}`
+			)
+		end
+		if driven.outcome ~= "ok" then
+			fail(`idea: {phase}: {driven.detail}`)
+			return "", ""
+		end
+		return idea.prose(driven.prose), driven.model
+	end
+	local drafted: idea.Draft? = nil
+	local prose, wrote = run(models.resolve(layers, "idea"), idea.authorPrompt(rough), "idea", function(text)
+		drafted = idea.parseDraft(text)
+		return drafted ~= nil
+	end)
+	local challenge = models.resolve(layers, "idea-challenge")
+	challenge.authorModel = wrote
+	local findings: { idea.Finding } = {}
+	local verdict: string? = nil
+	run(challenge, idea.challengePrompt(prose), "idea-challenge", function(text)
+		local found, said = idea.parseReview(text)
+		findings = found
+		verdict = said
+		return said == "approve" or said == "revise"
+	end)
+	local body = drafted :: idea.Draft
+	local answers: { [string]: string } = {}
+	if not (verdict == "approve" and #findings == 0) then
+		local revised: idea.Draft? = nil
+		run(models.resolve(layers, "idea"), idea.answerPrompt(rough, findings), "idea", function(text)
+			revised = idea.parseDraft(text)
+			answers = idea.parseAnswers(text)
+			return revised ~= nil
+		end)
+		body = revised :: idea.Draft
+	end
+	local openLines = idea.openLines(findings, answers)
+	local reviewPath = `{here.dir}/idea-review-001.md`
+	fs.writeFile(here.doc, withFront(idea.apply(doc, body, openLines), "idea", "challenged"))
+	fs.writeFile(reviewPath, idea.reviewText(findings, verdict or "revise"))
+	local refutePath = `{here.dir}/idea-refute-001.md`
+	if #findings > 0 then
+		fs.writeFile(refutePath, idea.refuteText(findings, answers))
+		print(refutePath)
+	end
+	print(here.doc)
+	print(reviewPath)
+	print(`idea: calls {calls}`)
+	print(
+		`idea: verdict {verdict}; commit these and push them to origin/main before ./zn status {id} preparing`
+	)
+end
+
+local function optNum(opts: { [string]: { string } }, name: string): number?
+	local raw = opts[name] and opts[name][1]
+	return if raw and raw ~= "" then tonumber(raw) else nil
+end
+
+local function optStr(opts: { [string]: { string } }, name: string): string?
+	local raw = opts[name] and opts[name][1]
+	return if raw and raw ~= "" then raw else nil
+end
+
+function cmd.record(_pos: { string }, opts: { [string]: { string } })
+	local root = process.env.ZN_TOP or "."
+	local phase = optStr(opts, "--phase") or "test"
+	local wall, cpu = optNum(opts, "--wall"), optNum(opts, "--cpu")
+	local report = optStr(opts, "--report")
+	if report and fs.isFile(report) then
+		local w, c = costrow.report(fs.readFile(report))
+		wall = wall or w
+		cpu = cpu or c
+	end
+	local missing: { string } = {}
+	if opts["--unmeasured"] then
+		for _, name in opts["--unmeasured"] do
+			if name ~= "" then
+				table.insert(missing, name)
+			end
+		end
+	end
+	if report and wall == nil then
+		table.insert(missing, "wall")
+	end
+	if report and cpu == nil then
+		table.insert(missing, "cpu")
+	end
+	local test = optNum(opts, "--test")
+	if phase == "test" and test == nil then
+		test = wall
+	end
+	local branch, head = costrow.branchOf(root)
+	local kind = if phase == "test" then "test" elseif phase == "other" then "run" else "row"
+	local appended = costrow.append(root, {
+		ms = 0,
+		kind = kind,
+		phase = phase,
+		subject = optStr(opts, "--subject") or "measured",
+		wall = wall,
+		cpu = cpu,
+		ai = optNum(opts, "--ai"),
+		test = test,
+		tokens = optNum(opts, "--tokens"),
+		model = optStr(opts, "--model"),
+		unmeasured = if #missing > 0 then table.concat(missing, ",") else nil,
+		id = optStr(opts, "--id") or "",
+		branch = branch,
+		head = head,
+	})
+	if not appended then
+		fail("record: could not append the measurement")
+	end
+	print(costrow.bufferFile(root))
+end
+
+local function showSeconds(n: number, open: boolean): string
+	if open and n == 0 then
+		return "unmeasured"
+	end
+	return string.format("%.3f", n)
+end
+
+local function showTokens(n: number, open: boolean): string
+	if open and n == 0 then
+		return "unmeasured"
+	end
+	return tostring(n)
+end
+
+function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 	type Counted = {
 		id: string,
 		type: string,
@@ -5534,15 +7006,28 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 		tokens: number,
 		rows: { ledger.Row },
 	}
+	memberCache = nil
 	local rows: { Counted } = {}
 	local byType: { [string]: { added: number, minutes: number, count: number } } = {}
+	local seenRows: { [string]: boolean } = {}
+	local cachedRows: { [string]: { ledger.Row }? } = {}
+	local function rowsOf(issue: store.Item): { ledger.Row }?
+		if seenRows[issue.id] then
+			return cachedRows[issue.id]
+		end
+		seenRows[issue.id] = true
+		local parsed = ledgerRows(issue)
+		cachedRows[issue.id] = parsed
+		return parsed
+	end
 	for _, issue in store.all("issue") do
 		if issue.state == "done" or (issue.state == "active" and opts["--include-active"]) then
-			local parsed = ledgerRows(issue)
+			local parsed = rowsOf(issue)
 			if not parsed then
 				continue
 			end
 			local t = ledger.sum(parsed)
+			local cost = ledger.cost(parsed)
 			local ty = store.typeOf(issue)
 			table.insert(rows, {
 				id = issue.id,
@@ -5550,35 +7035,45 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 				raft = store.readFront(issue.doc).raft or "",
 				added = t.added,
 				removed = t.removed,
-				minutes = t.minutes,
-				tokens = t.tokens,
+				minutes = cost.reported,
+				tokens = cost.tokens,
 				rows = parsed,
 			})
 			local b = byType[ty] or { added = 0, minutes = 0, count = 0 }
 			b.added += t.added
-			b.minutes += t.minutes
+			b.minutes += cost.reported
 			b.count += 1
 			byType[ty] = b
 		end
 	end
-	print("\nCost per issue (done, plus active with --include-active).")
-	print("| issue | type | raft | +lines | -lines | agent-minutes | tokens |\n|---|---|---|---|---|---|---|")
+	print(
+		"\nCost per issue (done, plus active with --include-active). Reported is typed minutes; wall, cpu, ai and test are measured seconds."
+	)
+	print(
+		"| issue | type | raft | +lines | -lines | reported | wall | cpu | tokens | ai | test | n |\n|---|---|---|---|---|---|---|---|---|---|---|---|"
+	)
 	for _, r in rows do
+		local cost = ledger.cost(r.rows)
 		print(
 			string.format(
-				"| %s | %s | %s | %d | %d | %.1f | %d |",
+				"| %s | %s | %s | %d | %d | %.1f | %s | %s | %s | %s | %s | %d |",
 				r.id,
 				r.type,
 				r.raft,
 				r.added,
 				r.removed,
-				r.minutes,
-				r.tokens
+				cost.reported,
+				showSeconds(cost.wall, false),
+				showSeconds(cost.cpu, false),
+				showTokens(cost.tokens, cost.tokensOpen),
+				showSeconds(cost.ai, cost.aiOpen),
+				showSeconds(cost.test, false),
+				cost.n
 			)
 		)
 	end
-	print("\nTotals by type.")
-	print("| type | issues | +lines | agent-minutes | minutes/issue |\n|---|---|---|---|---|")
+	print("\nTotals by type (reported minutes).")
+	print("| type | issues | +lines | reported | minutes/issue |\n|---|---|---|---|---|")
 	for _, ty in { "feature", "defect", "chore" } do
 		local b = byType[ty] or { added = 0, minutes = 0, count = 0 }
 		local per = if b.count > 0 then b.minutes / b.count else 0
@@ -5587,6 +7082,10 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 	local phaseMin: { [string]: { [string]: number } } = {}
 	local phaseTok: { [string]: number } = {}
 	for _, p in ledger.PHASES do
+		phaseMin[p] = { feature = 0, defect = 0, chore = 0 }
+		phaseTok[p] = 0
+	end
+	for _, p in ledger.EXTRA do
 		phaseMin[p] = { feature = 0, defect = 0, chore = 0 }
 		phaseTok[p] = 0
 	end
@@ -5599,9 +7098,16 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 	end
 	print("\nSpend by phase (agent-minutes).")
 	print("| phase | feature | defect | chore | all | tokens |\n|---|---|---|---|---|---|")
-	for _, p in ledger.PHASES do
+	local phaseOrder = table.clone(ledger.PHASES)
+	for _, p in ledger.EXTRA do
+		table.insert(phaseOrder, p)
+	end
+	for _, p in phaseOrder do
 		local m = phaseMin[p]
 		local all = m.feature + m.defect + m.chore
+		if (p == "test" or p == "other") and all == 0 and phaseTok[p] == 0 then
+			continue
+		end
 		print(
 			string.format(
 				"| %s | %.1f | %.1f | %.1f | %.1f | %d |",
@@ -5638,6 +7144,9 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 		for _, p in ledger.PHASES do
 			tenths[p] = 0
 		end
+		for _, p in ledger.EXTRA do
+			tenths[p] = 0
+		end
 		for _, r in byRaft[rid] do
 			for _, row in r.rows do
 				local n = math.floor(row.minutes * 10 + 0.5)
@@ -5672,8 +7181,8 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 			continue
 		end
 		local tenths, tokens = 0, 0
-		for _, issue in store.members(raft.id) do
-			local parsed = ledgerRows(issue)
+		for _, issue in metricsMembers(raft.id) do
+			local parsed = rowsOf(issue)
 			if parsed then
 				for _, row in parsed do
 					if row.phase == "design-review" then
@@ -5700,6 +7209,90 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 		local rounds = designRoundsIn(r.dir)
 		if rounds > 0 then
 			print(string.format("| %s | %d | %.1f | %.1f | %d |", r.id, rounds, 0, 0, 0))
+		end
+	end
+	print("\nMeasured per raft (sums of its counted issues).")
+	print("| raft | reported | wall | cpu | tokens | ai | test | n |\n|---|---|---|---|---|---|---|---|")
+	for _, rid in raftIds do
+		local all: { ledger.Row } = {}
+		for _, r in byRaft[rid] do
+			for _, row in r.rows do
+				table.insert(all, row)
+			end
+		end
+		local cost = ledger.cost(all)
+		print(
+			string.format(
+				"| %s | %.1f | %s | %s | %s | %s | %s | %d |",
+				rid,
+				cost.reported,
+				showSeconds(cost.wall, false),
+				showSeconds(cost.cpu, false),
+				showTokens(cost.tokens, cost.tokensOpen),
+				showSeconds(cost.ai, cost.aiOpen),
+				showSeconds(cost.test, false),
+				cost.n
+			)
+		)
+	end
+	if pos[1] then
+		local item = store.find(pos[1])
+		local parsed: { ledger.Row }? = nil
+		if item and item.kind == "issue" then
+			parsed = rowsOf(item) or {}
+		elseif item and item.kind == "raft" then
+			local stageRows: { ledger.Row } = {}
+			for _, member in metricsMembers(item.id) do
+				local part = rowsOf(member)
+				if part then
+					for _, row in part do
+						table.insert(stageRows, row)
+					end
+				end
+			end
+			parsed = stageRows
+		end
+		if parsed then
+			print(`\nStages for {pos[1]}.`)
+			print(
+				"| stage | reported | wall | cpu | tokens | ai | test | n |\n|---|---|---|---|---|---|---|---|"
+			)
+			local stageOrder = table.clone(ledger.PHASES)
+			for _, p in ledger.EXTRA do
+				table.insert(stageOrder, p)
+			end
+			for _, p in stageOrder do
+				local group: { ledger.Row } = {}
+				for _, row in parsed do
+					if row.phase == p then
+						table.insert(group, row)
+					end
+				end
+				if #group == 0 then
+					continue
+				end
+				local cost = ledger.cost(group)
+				print(
+					string.format(
+						"| %s | %.1f | %s | %s | %s | %s | %s | %d |",
+						p,
+						cost.reported,
+						showSeconds(cost.wall, false),
+						showSeconds(cost.cpu, false),
+						showTokens(cost.tokens, cost.tokensOpen),
+						showSeconds(cost.ai, cost.aiOpen),
+						showSeconds(cost.test, false),
+						cost.n
+					)
+				)
+			end
+		end
+		if item and item.kind == "issue" then
+			print(approval.summary(item))
+		elseif item and item.kind == "raft" then
+			for _, member in store.members(item.id) do
+				print(approval.summary(member))
+			end
 		end
 	end
 	local f = byType.feature or { added = 0, minutes = 0, count = 0 }
@@ -5736,7 +7329,7 @@ function cmd.metrics(_pos: { string }, opts: { [string]: { string } })
 	for _, raft in store.all("raft") do
 		local first = `{raft.dir}/design-review-001.md`
 		if not fs.isFile(first) then
-			for _, m in store.members(raft.id) do
+			for _, m in metricsMembers(raft.id) do
 				if fs.isFile(`{m.dir}/design-review-001.md`) then
 					first = `{m.dir}/design-review-001.md`
 					break
@@ -6155,6 +7748,98 @@ function cmd.reap(_: { string }, opts: { [string]: { string } })
 	end
 end
 
+function cmd.work(pos: { string }, opts: { [string]: { string } })
+	local workLib = require("./work")
+	local workread = require("./workread")
+	for k in opts do
+		if k ~= "--released" then
+			fail(
+				`usage: work [<R-id>] | next [--released <n>] [<R-id>] | queue | status (unknown option {k})`
+			)
+		end
+	end
+	local released = 0
+	if opts["--released"] then
+		local raw = opts["--released"][1]
+		local n = tonumber(raw)
+		if not n or n < 0 or not string.match(raw, "^%d+$") then
+			fail("usage: work next --released <n>")
+		end
+		released = n :: number
+	end
+	local function skillBody(text: string): string
+		if string.sub(text, 1, 4) ~= "---\n" then
+			return text
+		end
+		local close = string.find(text, "\n---\n", 5, true)
+		if not close then
+			return text
+		end
+		return string.sub(text, close + 5)
+	end
+	local sub = pos[1]
+	-- The folder ./zn was run from (ZN_CWD). A project folder keeps that project's tracker root;
+	-- the checkout root, and any other folder, keeps nil and the queue is every project.
+	local function scopeOf(): string?
+		local p = projects.inDir(projects.load(), hereDir())
+		return if p then p.root else nil
+	end
+	if sub == "queue" then
+		if #pos ~= 1 or opts["--released"] then
+			fail("usage: ./zn work queue")
+		end
+		if hasOrigin() then
+			sh.git({ "fetch", "--quiet", "origin", "main" })
+		end
+		for _, line in workLib.skipped(workLib.kept(workread.collect(nil).rafts, scopeOf())) do
+			print(line)
+		end
+		return
+	end
+	if sub == "status" then
+		if #pos ~= 1 or opts["--released"] then
+			fail("usage: ./zn work status")
+		end
+		if hasOrigin() then
+			sh.git({ "fetch", "--quiet", "origin", "main" })
+		end
+		local lines = workLib.status(workLib.kept(workread.collect(nil).rafts, scopeOf()))
+		if #lines == 0 then
+			print("nobody holds a raft")
+		else
+			for _, line in lines do
+				print(line)
+			end
+		end
+		return
+	end
+	if sub == "next" then
+		local asked = pos[2]
+		if #pos > 2 or (asked and not string.match(asked, "^R%d%d%d%d$")) then
+			fail("usage: ./zn work next [--released <n>] [<R-id>]")
+		end
+		if hasOrigin() then
+			sh.git({ "fetch", "--quiet", "origin", "main" })
+		end
+		local input = workread.collect(asked)
+		input.scope = scopeOf()
+		input.released = released
+		print(workLib.report(input, workLib.decide(input)))
+		return
+	end
+	if opts["--released"] or (sub and not string.match(sub, "^R%d%d%d%d$")) or #pos > 1 then
+		fail("usage: ./zn work [<R-id>] | next [--released <n>] [<R-id>] | queue | status")
+	end
+	local path = "z-nile/skills/z-work/SKILL.md"
+	if not fs.isFile(path) then
+		fail(`no {path}`)
+	end
+	stdio.write(skillBody(fs.readFile(path)))
+	if sub then
+		print(`This session's raft is {sub}. Pass it to every ./zn work next.`)
+	end
+end
+
 local args = table.clone(process.args)
 if args[1] == "--" then
 	table.remove(args, 1)
@@ -6177,7 +7862,9 @@ local READ_ONLY: { [string]: boolean } = {
 	board = true,
 	workstreams = true,
 	["promote-check"] = true,
+	stack = true,
 	stamp = true,
+	trace = true,
 }
 if not READ_ONLY[name :: string] then
 	guardRepoRoot()

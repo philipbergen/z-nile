@@ -33,7 +33,14 @@ dispatch.STEPS = {
 	["zz-stats"] = { kind = "script", argv = { "metrics" }, where = "main" },
 } :: { [string]: Step }
 -- Skills read inside a step, never run as one.
-dispatch.READ_INSIDE = { ["zz-rules"] = true, ["zz-arch"] = true, ["zz-test"] = true, ["zz-execute"] = true }
+dispatch.READ_INSIDE = {
+	["zz-rules"] = true,
+	["zz-arch"] = true,
+	["zz-test"] = true,
+	["zz-execute"] = true,
+	-- the worker a person starts by hand. It is not a dispatch step.
+	["z-work"] = true,
+}
 -- zz-review's modes: the lessons each reads and the phase of its row.
 dispatch.REVIEW_MODES = {
 	design = { lessons = "design", phase = "design-review" },
@@ -41,6 +48,7 @@ dispatch.REVIEW_MODES = {
 	code = { lessons = "build", phase = "code-review" },
 	-- a stream's review (z-run Phase 2B) under the dispatcher: the review model of the CLI, like a code review
 	stream = { lessons = "build", phase = "code-review" },
+	final = { lessons = "build", phase = "code-review" },
 } :: { [string]: { lessons: string, phase: string } }
 
 -- The step `name` is, or an error naming it: a skill read inside steps, a project's skill, or an unknown name.
@@ -80,7 +88,7 @@ function dispatch.lessonsOf(name: string, mode: string?): string
 	if name == "zz-review" then
 		local m = dispatch.REVIEW_MODES[mode or "design"]
 		if not m then
-			error(`zz-review has no mode {tostring(mode)} (design, raft, code, stream)`, 0)
+			error(`zz-review has no mode {tostring(mode)} (design, raft, code, stream, final)`, 0)
 		end
 		return m.lessons
 	end
@@ -128,6 +136,9 @@ function dispatch.prompt(p: PromptInput): string
 		-- the dispatcher numbers it into the raft's folder (design review 008 F1). One round: there is no later one.
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in stream mode. This is the one round. Read the stream's diff and run its checks in \`{p.streamWorktree or `.worktree/ws-{p.id}`}\` (read only there). Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into the raft's folder as \`stream-review-{p.id}-001.md\`.`
+	elseif p.step == "zz-review" and p.mode == "final" then
+		what =
+			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.`
 	elseif p.step == "zz-review" then
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as that mode's file ({if p.mode
@@ -144,7 +155,7 @@ function dispatch.prompt(p: PromptInput): string
 		`Work only in \`{p.worktree}\`: it is your working directory. Never edit the main checkout.`,
 		`Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`{p.stateDir}/questions.md\`, one \`## Q<n>\` heading per question with the options and what each costs, and stop. A review that leaves a refutation or an unclosed high is not a guess: write \`## Open to the human\` in the item's document, one bullet per finding (\`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>\`), do not rule on it yourself, and stop.`,
 		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse.",
-		"Record your own spend as the skill says, without --tokens for this session: the dispatcher records this session's tokens and model.",
+		"Do not pass --time or --tokens. The dispatcher records this session's wall, CPU, tokens and model.",
 	}
 	return table.concat(lines, "\n") .. "\n"
 end
@@ -212,7 +223,7 @@ function dispatch.isLesson(path: string): boolean
 end
 
 -- Whether GitHub's `commits/<sha>/pulls` answer names a pull request merged into main whose merge commit is `sha`
--- (the watermark's pull-request rule, G20; review 003 F6: into main only, never another branch).
+-- (a pull request merged into main, G20; review 003 F6: into main only, never another branch).
 function dispatch.prMergedFrom(text: string, sha: string): boolean
 	local ok, list = pcall(function()
 		return serde.decode("json", text)
@@ -289,13 +300,13 @@ function dispatch.next(f: Facts): Action
 	if f.last and f.last.outcome == "tripwire" and f.last.step == "merge-check" then
 		return stop(
 			dispatch.EXIT.tripwire,
-			`a gate merge did not land on the main it was judged against (state.json names it): look at main, then run ./zn dispatch vet and ./zn dispatch retry {f.id}: nothing else clears it`
+			`a gate merge did not land on the main it was judged against (state.json names it): look at main, then run ./zn dispatch retry {f.id}: nothing else clears it`
 		)
 	end
 	if f.last and f.last.outcome == "tripwire" then
 		return stop(
 			dispatch.EXIT.tripwire,
-			`{f.last.step} tripped the wire: main or the main checkout moved in a way the dispatcher did not make (state.json names it); a human looks first, then runs ./zn dispatch vet and ./zn dispatch retry {f.id}: nothing else clears it`
+			`{f.last.step} tripped the wire: main or the main checkout moved in a way the dispatcher did not make (state.json names it); a human looks first, then runs ./zn dispatch retry {f.id}: nothing else clears it`
 		)
 	end
 	if f.last and f.last.outcome ~= "ok" then
@@ -390,6 +401,29 @@ function dispatch.describe(r: models.Resolved): { string }
 				.. (if spec.maxMinutes then ` max_minutes={spec.maxMinutes}` else "")
 		)
 	end
+	return out
+end
+
+-- The last few stream lines of a running step, and its token count. `running` is the step's own word.
+function dispatch.trailReport(text: string, tokens: number, running: boolean): { string }
+	local lines: { string } = {}
+	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+		if line ~= "" then
+			table.insert(lines, line)
+		end
+	end
+	local out: { string } = {}
+	local n = #lines
+	if n == 0 then
+		table.insert(out, "trail: none")
+	else
+		local from = math.max(1, n - 7)
+		table.insert(out, `trail: {n} lines, last {n - from + 1}`)
+		for i = from, n do
+			table.insert(out, "  " .. lines[i])
+		end
+	end
+	table.insert(out, `tokens: {tokens}{if running then " running" else ""}`)
 	return out
 end
 

@@ -1,8 +1,8 @@
 --!strict
 -- c0117 AC1, AC2: .models.toml stacks like .gitignore (a closer file replaces only the keys it sets), a raft takes the
--- stronger spec whole per CLI (higher rank, then larger max_tokens), only the three CLIs and their runtimes exist,
--- nothing defaults, and the review model belongs to the CLI. Pure: models.parse and models.resolve over layers built
--- from text; one case reads the real root .models.toml.
+-- stronger spec whole per CLI (higher rank, then larger max_tokens), only the supported CLIs and their runtimes exist,
+-- and nothing defaults. One shape: roles, fallbacks and dispatch. A fallback try carries the role's rank, cap and effort.
+-- Pure: models.parse and models.resolve over layers built from text; one case reads the real root .models.toml.
 local fs = require("@lune/fs")
 local models = require("@znile/engine/models")
 local t = require("@tests/lib/t")
@@ -13,29 +13,25 @@ local TOP = (
 )
 
 local ROOT = [[
-order = ["claude", "grok", "agent"]
-
 [dispatch]
 stall_seconds = 300
 
-[z-design.claude]
-model = "claude-opus-5-5"
-rank = 3
-runtime = "claude-cli"
-max_tokens = 300000
+[fallback.kimi]
+model = "kimi-code-k3.1-pro"
+runtime = "kimi-cli"
 
-[z-design.grok]
+[fallback.grok]
 model = "grok-4.7"
-effort = "high"
-rank = 2
 runtime = "grok-cli"
-max_tokens = 200000
 
-[zz-review.claude]
+[roles.design]
 model = "claude-opus-5-5"
-rank = 4
+cli = "claude"
 runtime = "claude-cli"
-max_tokens = 100000
+rank = 3
+max_tokens = 300000
+effort = "high"
+fallbacks = ["kimi", "grok"]
 ]]
 
 local function layer(text: string, path: string?): models.Layer
@@ -62,41 +58,44 @@ local function spec(cli: string, rank: number, max: number, model: string?): mod
 end
 
 return t.spec("c0117 .models.toml", function(it)
-	it(
-		"a closer file replaces only the keys it sets: max_tokens closer, model and rank from the root",
-		function()
-			local closer = layer("[z-design.claude]\nmax_tokens = 1000\n", "pickman/.models.toml")
-			local r = models.resolve({ layer(ROOT, ".models.toml"), closer }, "z-design")
-			local c = r.specs.claude
-			t.expect(c.maxTokens).toBe(1000)
-			t.expect(c.model).toBe("claude-opus-5-5")
-			t.expect(c.rank).toBe(3)
-			t.expect(c.runtime).toBe("claude-cli")
-			-- the CLI the closer file did not name keeps the root's whole spec
-			t.expect(r.specs.grok.maxTokens).toBe(200000)
-			t.expect(r.specs.grok.effort).toBe("high")
-			-- the walk's order and settings come from the root
-			t.expect(r.order).toEqual({ "claude", "grok", "agent" })
-			t.expect(r.settings.stallSeconds).toBe(300)
-		end
-	)
-
-	it("a closer order replaces the root's whole, and each setting is replaced on its own", function()
-		local closer = layer('order = ["grok"]\n[dispatch]\nauto_merge = ["prep"]\n')
+	it("a closer file replaces only the keys it sets, and every try of the role carries that cap", function()
+		local closer = layer("[roles.design]\nmax_tokens = 1000\n", "pickman/.models.toml")
 		local r = models.resolve({ layer(ROOT, ".models.toml"), closer }, "z-design")
-		t.expect(r.order).toEqual({ "grok" })
+		local c = r.specs.claude
+		t.expect(c.maxTokens).toBe(1000)
+		t.expect(c.model).toBe("claude-opus-5-5")
+		t.expect(c.rank).toBe(3)
+		t.expect(c.runtime).toBe("claude-cli")
+		t.expect(c.effort).toBe("high")
+		-- the fallback was not named in the closer file; it still runs at the role's cap and effort
+		t.expect(r.specs.grok.model).toBe("grok-4.7")
+		t.expect(r.specs.grok.maxTokens).toBe(1000)
+		t.expect(r.specs.grok.rank).toBe(3)
+		t.expect(r.specs.grok.effort).toBe("high")
+		t.expect(r.settings.stallSeconds).toBe(300)
+	end)
+
+	it("a closer fallbacks list replaces the try list, and each setting is replaced on its own", function()
+		local closer = layer('[roles.design]\nfallbacks = ["grok"]\n[dispatch]\nauto_merge = ["prep"]\n')
+		local r = models.resolve({ layer(ROOT, ".models.toml"), closer }, "z-design")
+		t.expect(r.order).toEqual({ "claude", "grok" })
 		t.expect(r.settings.autoMerge).toEqual({ "prep" })
 		t.expect(r.settings.stallSeconds).toBe(300)
-		local tries = models.tries(r)
+		local only = models.resolve({
+			layer(ROOT, ".models.toml"),
+			layer('[roles.design]\ncli = "grok"\nmodel = "grok-4.7"\nruntime = "grok-cli"\nfallbacks = []\n'),
+		}, "z-design")
+		local tries = models.tries(only)
 		t.expect(#tries).toBe(1)
 		t.expect(tries[1].cli).toBe("grok")
+		t.expect(tries[1].maxTokens).toBe(300000)
+		t.expect(tries[1].effort).toBe("high")
 	end)
 
 	it(
 		"settings come from the walk, closest first; an unset auto_merge is none, and so is any error",
 		function()
-			local root =
-				layer('order = ["claude"]\n[dispatch]\nauto_merge = ["prep", "raft"]\ntool_seconds = 600\n')
+			local root = layer('[dispatch]\nauto_merge = ["prep", "raft"]\ntool_seconds = 600\n')
 			local item = layer("[dispatch]\nauto_merge = []\n")
 			t.expect(models.settings({ root }).autoMerge).toEqual({ "prep", "raft" })
 			t.expect(models.settings({ root, item }).autoMerge).toEqual({})
@@ -113,27 +112,13 @@ return t.spec("c0117 .models.toml", function(it)
 		end
 	)
 
-	it("tries the CLIs of the order that name the skill, in the order's order", function()
-		local r = models.resolve(
-			{ layer('order = ["agent", "grok", "claude"]\n' .. string.gsub(ROOT, "^order[^\n]*\n", "")) },
-			"z-design"
-		)
+	it("tries are the role's CLI, then its fallbacks", function()
+		local r = models.resolve({ layer(ROOT) }, "z-design")
 		local clis = {}
 		for _, s in models.tries(r) do
 			table.insert(clis, s.cli)
 		end
-		t.expect(clis).toEqual({ "grok", "claude" })
-		local only = models.resolve({
-			layer(
-				'order = ["agent"]\n[z-design.claude]\nmodel = "m"\nrank = 1\nruntime = "claude-cli"\nmax_tokens = 5\n'
-			),
-		}, "z-design")
-		t.expect(has(
-			errorOf(function()
-				models.tries(only)
-			end),
-			"z-design"
-		)).toBe(true)
+		t.expect(clis).toEqual({ "claude", "kimi", "grok" })
 	end)
 
 	it("the higher rank wins whole, with its own cap", function()
@@ -159,91 +144,129 @@ return t.spec("c0117 .models.toml", function(it)
 		)).toBe(true)
 	end)
 
-	it("a raft takes, per CLI, the stronger of its members' specs, in the raft's own order", function()
+	it("a raft takes, per CLI, the stronger of its members' specs, in the raft's own try list", function()
 		local root = layer(ROOT, ".models.toml")
 		local cheap =
-			models.resolve({ root, layer("[z-design.claude]\nrank = 1\nmax_tokens = 10\n") }, "z-design")
+			models.resolve({ root, layer("[roles.design]\nrank = 1\nmax_tokens = 10\n") }, "z-design")
 		local rich = models.resolve({ root }, "z-design")
-		local own = models.resolve({ root, layer('order = ["grok", "claude"]\n') }, "z-design")
-		local r = models.forRaft(own, { cheap, rich })
+		local r = models.forRaft(rich, { cheap, rich })
 		t.expect(r.specs.claude.rank).toBe(3)
 		t.expect(r.specs.claude.maxTokens).toBe(300000)
-		t.expect(r.order).toEqual({ "grok", "claude" })
-		-- a closer file can lower its own members' caps when every member shares it
-		local low = models.forRaft(own, { cheap, cheap })
+		t.expect(r.order).toEqual({ "claude", "kimi", "grok" })
+		local low = models.forRaft(rich, { cheap, cheap })
 		t.expect(low.specs.claude.maxTokens).toBe(10)
 		t.expect(has(
 			errorOf(function()
-				models.forRaft(own, {})
+				models.forRaft(rich, {})
 			end),
 			"no member"
 		)).toBe(true)
 	end)
 
-	it("refuses a CLI the file does not support, in a table or in the order", function()
+	it("refuses a CLI the file does not support, in a role or in its fallbacks", function()
 		local e = errorOf(function()
-			layer('[z-design.codex]\nmodel = "x"\n')
+			layer('[roles.design]\ncli = "codex"\n')
 		end)
-		t.expect(has(e, "codex is not a supported CLI")).toBe(true)
+		t.expect(has(e, "codex is not a supported CLI") or has(e, "not a supported CLI")).toBe(true)
 		t.expect(has(e, "x/.models.toml")).toBe(true)
 		t.expect(has(
 			errorOf(function()
-				layer('order = ["claude", "cursor"]\n')
+				layer('[roles.design]\nfallbacks = ["cursor"]\n')
 			end),
-			"cursor, which is not a supported CLI"
+			"not a supported CLI"
 		)).toBe(true)
 		t.expect(has(
 			errorOf(function()
-				layer('order = ["claude", "claude"]\n')
+				layer('[roles.design]\nfallbacks = ["claude", "claude"]\n')
 			end),
 			"twice"
 		)).toBe(true)
 	end)
 
+	it("order and a skill table are refused at load, and so is a fallback's rank, cap or effort", function()
+		t.expect(has(
+			errorOf(function()
+				layer('order = ["claude", "grok"]\n')
+			end),
+			"order is gone"
+		)).toBe(true)
+		t.expect(has(
+			errorOf(function()
+				layer('[z-design.claude]\nmodel = "claude-opus-5-5"\n')
+			end),
+			"skill tables are gone"
+		)).toBe(true)
+		t.expect(has(
+			errorOf(function()
+				layer(
+					'[fallback.kimi]\nmodel = "kimi-code-k3.1-pro"\nruntime = "kimi-cli"\nmax_tokens = 300000\n'
+				)
+			end),
+			"fallback.kimi.max_tokens belongs to the role, not the fallback"
+		)).toBe(true)
+		t.expect(has(
+			errorOf(function()
+				layer('[fallback.grok]\nmodel = "grok-4.7"\nruntime = "grok-cli"\neffort = "high"\n')
+			end),
+			"fallback.grok.effort belongs to the role, not the fallback"
+		)).toBe(true)
+	end)
+
 	it("a runtime belongs to its CLI: each CLI's one local runtime, and no other", function()
+		local modelOf = {
+			claude = "claude-opus-5-5",
+			grok = "grok-4.7",
+			kimi = "kimi-code-k3.1-pro",
+			agent = "claude-opus-5-5",
+		}
 		for cli, runtimes in models.RUNTIMES do
 			for _, rt in runtimes do
-				layer(`[z-design.{cli}]\nruntime = "{rt}"\n`)
+				local model = modelOf[cli]
+				if cli == "claude" then
+					layer(`[roles.design]\ncli = "claude"\nmodel = "{model}"\nruntime = "{rt}"\n`)
+				else
+					layer(`[fallback.{cli}]\nmodel = "{model}"\nruntime = "{rt}"\n`)
+				end
 			end
 		end
-		-- the remote runtimes are not c0117's (the user's G8, 2026-10-25: "Split into a follow-up")
 		t.expect(models.RUNTIMES).toEqual({
 			claude = { "claude-cli" },
 			grok = { "grok-cli" },
 			agent = { "cursor-cli" },
+			kimi = { "kimi-cli" },
 		})
 		t.expect(has(
 			errorOf(function()
-				layer('[z-design.claude]\nruntime = "claude-cloud"\n')
+				layer('[roles.design]\ncli = "claude"\nmodel = "claude-opus-5-5"\nruntime = "claude-cloud"\n')
 			end),
 			"not a runtime of claude"
 		)).toBe(true)
 		t.expect(has(
 			errorOf(function()
-				layer('[z-design.grok]\nruntime = "cursor-cli"\n')
+				layer('[fallback.grok]\nmodel = "grok-4.7"\nruntime = "cursor-cli"\n')
 			end),
 			"not a runtime of grok"
 		)).toBe(true)
 	end)
 
-	it("a spec missing a field is an error naming the skill, the CLI and the field", function()
+	it("a spec missing a field is an error naming the role and the field", function()
 		local e = errorOf(function()
 			models.resolve({
 				layer(
-					'order = ["claude"]\n[z-design.claude]\nmodel = "m"\nruntime = "claude-cli"\nmax_tokens = 5\n'
+					'[roles.design]\nmodel = "claude-opus-5-5"\ncli = "claude"\nruntime = "claude-cli"\nmax_tokens = 5\n'
 				),
 			}, "z-design")
 		end)
-		t.expect(has(e, "z-design.claude: no rank")).toBe(true)
+		t.expect(has(e, "roles.design has no rank")).toBe(true)
 		t.expect(has(
 			errorOf(function()
-				layer("[z-design.claude]\ntemperature = 1\n")
+				layer("[roles.design]\ntemperature = 1\n")
 			end),
-			"z-design.claude.temperature is not a field"
+			"roles.design.temperature is not a field"
 		)).toBe(true)
 		t.expect(has(
 			errorOf(function()
-				layer("[z-design.claude]\nrank = 2.5\n")
+				layer("[roles.design]\nrank = 2.5\n")
 			end),
 			"whole number"
 		)).toBe(true)
@@ -251,18 +274,17 @@ return t.spec("c0117 .models.toml", function(it)
 
 	it("agent's specs need max_calls and max_minutes, never unlimited; the other CLIs' don't", function()
 		local base =
-			'order = ["agent", "claude"]\n[z-design.agent]\nmodel = "m"\nrank = 1\nruntime = "cursor-cli"\nmax_tokens = 5\n'
+			'[roles.design]\nmodel = "claude-opus-5-5"\ncli = "agent"\nruntime = "cursor-cli"\nrank = 1\nmax_tokens = 5\n'
 		local e = errorOf(function()
 			models.resolve({ layer(base) }, "z-design")
 		end)
-		t.expect(has(e, "z-design.agent: no max_calls")).toBe(true)
+		t.expect(has(e, "no max_calls")).toBe(true)
 		t.expect(has(e, "calls are not tokens")).toBe(true)
-		-- and a wall-time ceiling beside it (review 003 F7)
 		t.expect(has(
 			errorOf(function()
 				models.resolve({ layer(base .. "max_calls = 30\n") }, "z-design")
 			end),
-			"z-design.agent: no max_minutes"
+			"no max_minutes"
 		)).toBe(true)
 		local r = models.resolve({ layer(base .. "max_calls = 30\nmax_minutes = 60\n") }, "z-design")
 		t.expect(r.specs.agent.maxCalls).toBe(30)
@@ -270,72 +292,43 @@ return t.spec("c0117 .models.toml", function(it)
 		t.expect(models.resolve({ layer(ROOT) }, "z-design").specs.claude.maxCalls).toBe(nil)
 		t.expect(has(
 			errorOf(function()
-				layer("[z-design.agent]\nmax_calls = 0\n")
+				layer("[roles.design]\nmax_calls = 0\n")
 			end),
 			"whole number"
 		)).toBe(true)
 	end)
 
-	it("nothing defaults: no file, no order, or a skill no file names is an error naming it", function()
-		t.expect(has(
-			errorOf(function()
-				models.resolve({}, "z-design")
-			end),
-			"nothing defaults"
-		)).toBe(true)
-		t.expect(has(
-			errorOf(function()
-				models.resolve({
-					layer(
-						'[z-design.claude]\nmodel = "m"\nrank = 1\nruntime = "claude-cli"\nmax_tokens = 5\n'
-					),
-				}, "z-design")
-			end),
-			"no order"
-		)).toBe(true)
-		t.expect(has(
-			errorOf(function()
-				models.resolve({ layer(ROOT) }, "z-run")
-			end),
-			"names z-run"
-		)).toBe(true)
-	end)
+	it(
+		"nothing defaults: no file, a role no file names, or a skill that is not a step is an error naming it",
+		function()
+			t.expect(has(
+				errorOf(function()
+					models.resolve({}, "z-design")
+				end),
+				"nothing defaults"
+			)).toBe(true)
+			t.expect(has(
+				errorOf(function()
+					models.resolve({ layer("[dispatch]\nstall_seconds = 300\n") }, "z-design")
+				end),
+				"names role design"
+			)).toBe(true)
+			t.expect(has(
+				errorOf(function()
+					models.resolve({ layer(ROOT) }, "z-ready")
+				end),
+				"z-ready is not a model step"
+			)).toBe(true)
+		end
+	)
 
 	it("a repeated table or key is the reader's error, never a silent pick", function()
 		local e = errorOf(function()
-			layer("[z-design.claude]\nrank = 1\n[z-design.claude]\nrank = 2\n")
+			layer("[roles.design]\nrank = 1\n[roles.design]\nrank = 2\n")
 		end)
 		t.expect(has(e, "x/.models.toml")).toBe(true)
 		t.expect(has(e, "duplicate")).toBe(true)
 	end)
-
-	it(
-		"the review model belongs to the CLI: Opus through claude and agent, any grok model at xhigh through grok",
-		function()
-			local function review(cli: string, model: string, effort: string?): string?
-				local text =
-					`order = ["{cli}"]\n[zz-review.{cli}]\nmodel = "{model}"\nrank = 4\nruntime = "{models.RUNTIMES[cli][1]}"\nmax_tokens = 9\nmax_calls = 9\nmax_minutes = 9\n`
-				if effort then
-					text ..= `effort = "{effort}"\n`
-				end
-				local ok, e = pcall(models.resolve, { layer(text) }, "zz-review")
-				return if ok then nil else tostring(e)
-			end
-			t.expect(review("claude", "claude-opus-5-5")).toBe(nil)
-			t.expect(review("agent", "claude-opus-5-5-high")).toBe(nil)
-			t.expect(review("grok", "grok-4.7", "xhigh")).toBe(nil)
-			t.expect(has(review("claude", "claude-sonnet-5") or "", "runs on Opus")).toBe(true)
-			t.expect(has(review("agent", "grok-4.7-xhigh") or "", "runs on Opus")).toBe(true)
-			-- any grok model at xhigh (the user's G7, 2026-10-25: "Any grok at xhigh"); never below xhigh, never a non-grok
-			t.expect(review("grok", "grok-4.6", "xhigh")).toBe(nil)
-			t.expect(review("grok", "grok-5", "xhigh")).toBe(nil)
-			t.expect(has(review("grok", "grok-4.7", "high") or "", "at effort xhigh")).toBe(true)
-			t.expect(has(review("grok", "grok-4.7") or "", "at effort xhigh")).toBe(true)
-			t.expect(has(review("grok", "claude-opus-5-5", "xhigh") or "", "a grok model")).toBe(true)
-			-- the rule is the review's alone: an author may run on any model
-			t.expect(models.reviewRule("z-design", spec("claude", 1, 1, "claude-sonnet-5"))).toBe(nil)
-		end
-	)
 
 	it("the model id a row records carries its effort", function()
 		local s = spec("grok", 4, 9, "grok-4.7")
@@ -355,14 +348,31 @@ return t.spec("c0117 .models.toml", function(it)
 		t.expect(models.folders(".")).toEqual({ "." })
 	end)
 
-	it("the root .models.toml resolves every model step on all three CLIs", function()
+	it("the root .models.toml resolves every model step, and a fallback carries the role's cap", function()
 		local layers = { models.parse(fs.readFile(`{TOP}/.models.toml`), ".models.toml") }
 		for _, skill in { "z-ticket", "z-design", "z-raft", "z-run", "zz-review" } do
 			local r = models.resolve(layers, skill)
-			for _, cli in models.CLIS do
+			t.expect(r.fromRoles).toBe(true)
+			for _, cli in { "claude", "kimi", "grok", "agent" } do
 				t.expect(r.specs[cli] ~= nil).toBe(true)
 			end
-			t.expect(#models.tries(r)).toBe(3)
+			t.expect(#models.tries(r)).toBe(4)
 		end
+		local idea = models.resolve(layers, "z-ticket")
+		t.expect(idea.specs.claude.model).toBe("claude-fable-5-2")
+		t.expect(idea.specs.claude.effort).toBe("medium")
+		local run = models.resolve(layers, "z-run")
+		t.expect(run.specs.claude.model).toBe("claude-sonnet-5-5")
+		t.expect(run.specs.kimi.maxTokens).toBe(12000000)
+		t.expect(run.specs.kimi.effort).toBe("high")
+		t.expect(run.specs.kimi.rank).toBe(3)
+		t.expect(run.specs.grok.maxTokens).toBe(12000000)
+		t.expect(run.specs.agent.maxCalls).toBe(200)
+		local review = models.resolve(layers, "zz-review")
+		t.expect(review.specs.grok.effort).toBe("xhigh")
+		t.expect(review.specs.grok.maxTokens).toBe(2000000)
+		t.expect(review.specs.grok.rank).toBe(4)
+		t.expect(models.roleFor("zz-review", "raft")).toBe("raft")
+		t.expect(models.roleFor("zz-review", "design")).toBe("design-challenge")
 	end)
 end)

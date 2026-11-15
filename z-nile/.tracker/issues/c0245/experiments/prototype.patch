@@ -1,0 +1,263 @@
+diff --git a/z-nile/engine/boundcmd.luau b/z-nile/engine/boundcmd.luau
+index 14dd31e09..1bf8cf80d 100644
+--- a/z-nile/engine/boundcmd.luau
++++ b/z-nile/engine/boundcmd.luau
+@@ -18,9 +18,10 @@ export type Context = {
+ }
+ export type Verdict = { ok: boolean, rule: string?, program: string?, command: string?, say: string? }
+ 
+--- `lune run <target>` for these targets is the gate's own tooling: jailed, swept and CPU-limited by the runner
++-- `lune run <target>` for these targets is the gate's own tooling: jailed, swept and CPU-limited by the runner. Each is
++-- its path from the top of a tree of the checkout (the checkout itself, or one of its worktrees); every registered
++-- home's runner, `<home>/tests/run`, counts as well (homeRunner).
+ local TOOLING: { [string]: boolean } = {
+-	["tests/run"] = true,
+ 	["z-nile/tests/run"] = true,
+ 	["pickman/tests/run"] = true,
+ 	["z-nile/affected"] = true,
+@@ -29,6 +30,8 @@ local TOOLING: { [string]: boolean } = {
+ 	["z-nile/roots"] = true,
+ 	["scripts/affected"] = true,
+ }
++-- a home's runner named from inside that home: `lune run tests/run` in `pickman/`
++local RUNNER = "tests/run"
+ 
+ local INTERPRETERS: { [string]: boolean } = {
+ 	python = true,
+@@ -224,32 +227,80 @@ local function homeRunner(t: string): boolean
+ 	return false
+ end
+ 
+--- The entry in TOOLING, in this checkout: a relative target from a folder inside it, or an absolute one under it (its
+--- worktrees are inside it). A scratch copy of the tooling is not the gate's. Without a known checkout (the hook was
+--- not told) the path alone decides.
+-local function toolingMatch(target: string): boolean
++-- Whether `t` ends in `/<key>`
++local function endsIn(t: string, key: string): boolean
++	return #t > #key and string.sub(t, -#key - 1) == "/" .. key
++end
++
++-- With no checkout, or a relative target and no folder to resolve it from, the path alone decides (c0191): a relative
++-- one, `normalise`d, is an entry of TOOLING, the runner or a registered home's runner; an absolute one ends in the
++-- runner or in one of TOOLING's entries.
++local function byName(target: string): boolean
+ 	local t = normalise(target)
+-	local checkout = CTX.checkout
+-	if string.sub(target, 1, 1) == "/" then
+-		if checkout ~= nil and not insideOf(target, checkout) then
+-			return false
+-		end
+-		if TOOLING[t] then
++	if string.sub(target, 1, 1) ~= "/" then
++		return t == RUNNER or TOOLING[t] == true or homeRunner(t)
++	end
++	if endsIn(t, RUNNER) then
++		return true
++	end
++	for key in TOOLING do
++		if endsIn(t, key) then
+ 			return true
+ 		end
+-		for key in TOOLING do
+-			if #t > #key and string.sub(t, -#key - 1) == "/" .. key then
+-				return true
+-			end
++	end
++	return false
++end
++
++-- The path of `target` from the top of its tree of `checkout` (c0245): from `dir` unless it is absolute, its `.` and
++-- `..` resolved, repeated slashes folded and `.luau` dropped. A tree is the checkout itself or one of its worktrees
++-- (`.worktree/<name>/`). nil when the path is not inside the checkout.
++local function treePath(target: string, dir: string, checkout: string): string?
++	local full = if string.sub(target, 1, 1) == "/" then target else `{dir}/{target}`
++	local parts: { string } = {}
++	for part in string.gmatch(full, "[^/]+") do
++		if part == ".." then
++			table.remove(parts) -- `/..` is `/`
++		elseif part ~= "." then
++			table.insert(parts, part)
+ 		end
+-		return false
+ 	end
+-	-- the folder the command runs in: the call's, moved by the `cd`s before it (`checkText` keeps it); nil when a `cd` went
+-	-- somewhere the scanner cannot resolve, and then the entry does not match
+-	if checkout ~= nil and CTX.cwd ~= nil and (CTX.dir == nil or not insideOf(CTX.dir, checkout)) then
++	local top: { string } = {}
++	for part in string.gmatch(checkout, "[^/]+") do
++		table.insert(top, part)
++	end
++	if #parts <= #top then
++		return nil
++	end
++	for i, part in top do
++		if parts[i] ~= part then
++			return nil
++		end
++	end
++	local first = #top + 1
++	if parts[first] == ".worktree" and #parts >= first + 2 then
++		first += 2
++	end
++	return (string.gsub(table.concat(parts, "/", first), "%.luau$", ""))
++end
++
++-- The gate's tooling, decided by the file the target names (c0245): its path in its tree of this checkout is an entry
++-- of TOOLING or a registered home's runner, whether it is written relative or absolute, never by its suffix. A path
++-- outside the checkout is a scratch copy, not the gate's. Without a known checkout (the hook was not told), or a
++-- relative target with no known folder, the path alone decides.
++local function toolingMatch(target: string): boolean
++	local checkout = CTX.checkout
++	local absolute = string.sub(target, 1, 1) == "/"
++	if checkout == nil or (not absolute and CTX.cwd == nil) then
++		return byName(target)
++	end
++	-- the folder the command runs in: the call's, moved by the `cd`s before it (`checkText` keeps it), inside the checkout;
++	-- nil when a `cd` went somewhere the scanner cannot resolve, and then a relative target does not match
++	local dir = if absolute then "/" else CTX.dir
++	if dir == nil or (not absolute and not insideOf(dir, checkout)) then
+ 		return false
+ 	end
+-	return TOOLING[t] == true or homeRunner(t)
++	local path = treePath(target, dir, checkout)
++	return path ~= nil and (TOOLING[path] == true or homeRunner(path))
+ end
+ 
+ -- Splits one shell line into simple commands (each a list of words, quotes removed) and the sub-commands inside
+@@ -608,11 +659,15 @@ function checkCommand(words: { string }, depth: number, raw: string?): Verdict
+ 		if target ~= nil and toolingMatch(target) then
+ 			return OK
+ 		end
++		-- a name the gate's tooling has that reaches some other file (c0245): say why it is not the gate's
++		local where = if target ~= nil and byName(target)
++			then ` \`{target}\` here is not the gate's own: only a registered home's \`tests/run\` and the tooling in this checkout or one of its worktrees count, by the file the path reaches.`
++			else ""
+ 		return refuse(
+ 			"unbounded",
+ 			name,
+ 			line,
+-			`\`{line}\` has no time limit, and nothing stops it when you end. Run it as \`{CTX.zn} run --time 60 -- {line}\` (the gate, \`./zn …\`, check.sh files and \`lune run tests/run\` need no wrapper).`
++			`\`{line}\` has no time limit, and nothing stops it when you end. Run it as \`{CTX.zn} run --time 60 -- {line}\` (the gate, \`./zn …\`, check.sh files and \`lune run tests/run\` from a project's home need no wrapper).{where}`
+ 		)
+ 	elseif INTERPRETERS[name] then
+ 		if args[1] ~= nil and EXEMPT_ARG[args[1]] then
+@@ -679,6 +734,30 @@ function checkCommand(words: { string }, depth: number, raw: string?): Verdict
+ 	return OK
+ end
+ 
++-- A `cd` moves the folder (`CTX.dir`) for the commands after it; an operand the scanner cannot resolve (a variable, `~`,
++-- `-`, none) leaves it unknown, and an unknown folder refuses the tooling match. Both walks follow it: `checkText`'s and
++-- the background call's (c0245 design review 001 F1).
++local function followCd(words: { string })
++	local program, args = resolve(words)
++	if program ~= nil and basename(program) == "cd" and CTX.dir ~= nil then
++		local operand = args[1]
++		if operand == nil or string.find(operand, "[%$~`]") or operand == "-" then
++			CTX.dir = nil
++		else
++			local parts: { string } = {}
++			local from = if string.sub(operand, 1, 1) == "/" then operand else CTX.dir .. "/" .. operand
++			for part in string.gmatch(from, "[^/]+") do
++				if part == ".." then
++					table.remove(parts)
++				elseif part ~= "." then
++					table.insert(parts, part)
++				end
++			end
++			CTX.dir = "/" .. table.concat(parts, "/")
++		end
++	end
++end
++
+ function checkText(text: string, depth: number): Verdict
+ 	if depth > 6 then
+ 		return OK -- too deep to read: the backstop covers it
+@@ -691,26 +770,7 @@ function checkText(text: string, depth: number): Verdict
+ 			CTX.dir = start
+ 			return v
+ 		end
+-		-- a `cd` moves the folder for the commands after it; an operand the scanner cannot resolve (a variable, `~`, `-`,
+-		-- none) leaves it unknown, and an unknown folder refuses the tooling match
+-		local program, args = resolve(words)
+-		if program ~= nil and basename(program) == "cd" and CTX.dir ~= nil then
+-			local operand = args[1]
+-			if operand == nil or string.find(operand, "[%$~`]") or operand == "-" then
+-				CTX.dir = nil
+-			else
+-				local parts: { string } = {}
+-				local from = if string.sub(operand, 1, 1) == "/" then operand else CTX.dir .. "/" .. operand
+-				for part in string.gmatch(from, "[^/]+") do
+-					if part == ".." then
+-						table.remove(parts)
+-					elseif part ~= "." then
+-						table.insert(parts, part)
+-					end
+-				end
+-				CTX.dir = "/" .. table.concat(parts, "/")
+-			end
+-		end
++		followCd(words)
+ 	end
+ 	CTX.dir = start
+ 	for _, sub in inner do
+@@ -881,8 +941,10 @@ function boundcmd.check(command: string, ctx: Context?): Verdict
+ 	if v.ok then
+ 		local commands, _, ends = split(text)
+ 		if CTX.background then
+-			-- every command of a background call must be bounded by its own means or end by itself
++			-- every command of a background call must be bounded by its own means or end by itself, each read from the folder
++			-- the `cd`s before it moved to, as `checkText` reads it
+ 			local loose: string? = nil
++			CTX.dir = CTX.cwd
+ 			for k, words in commands do
+ 				local program, args = resolve(words)
+ 				if program ~= nil and not boundedish(words) and loose == nil then
+@@ -898,7 +960,9 @@ function boundcmd.check(command: string, ctx: Context?): Verdict
+ 						loose = nm
+ 					end
+ 				end
++				followCd(words)
+ 			end
++			CTX.dir = CTX.cwd
+ 			if loose ~= nil then
+ 				return refuse(
+ 					"background",
+diff --git a/z-nile/skills/zz-arch/SKILL.md b/z-nile/skills/zz-arch/SKILL.md
+index e6561647f..fad121df0 100644
+--- a/z-nile/skills/zz-arch/SKILL.md
++++ b/z-nile/skills/zz-arch/SKILL.md
+@@ -30,7 +30,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
+ 7. **Guards fail closed.** A guard acts only on its one explicit "no" answer and treats every other outcome as guarded. Configuration that widens a guard is read from `origin/main`, never from the working tree a branch can edit.
+ 8. **Every refusal names the path, the item or the rule** it broke, so the person reading it can fix it without reading the code.
+ 
+-A Lune entry the gate runs, and so an agent may start bare, joins `TOOLING` in `z-nile/engine/boundcmd.luau` (the PreToolUse hook refuses every other `lune run` that is not wrapped).
++A Lune entry the gate runs, and so an agent may start bare, joins `TOOLING` in `z-nile/engine/boundcmd.luau` as its path from the top of the tree (`z-nile/affected`); a registered home's `tests/run` needs no entry. The PreToolUse hook refuses every other `lune run` that is not wrapped, and it reads a target by the file the path reaches, never by its suffix (c0245).
+ 
+ ## Design checklist (answer these in every tooling issue's Design section)
+ - **Scalability**: the git calls, file reads and processes per command, and how they grow with the items, the roots and the projects.
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index a800c4198..7d5f12453 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -162,7 +162,7 @@ Run every probe, experiment, loop and background command you start yourself (any
+ - A `/clear` ends the background commands of the conversation it clears (the SessionEnd hook stops its tool shells).
+ - A subagent stays open while its background commands run, and a command it started stops at its own `./zn run` limit (at most an hour) or at the session's end; the session-end reaper catches anything left.
+ - `./zn run [--time S] [--cpu S] -- <command>` (`z-nile/lib/bounded.pl`, which needs `z-nile/lib/cpu.sh` beside it; started before the engine, also callable as `perl <checkout>/z-nile/lib/bounded.pl`): process group, `--time` wall-clock limit (default 60, at most 3600), `--cpu` CPU limit by `ulimit -t` (SIGXCPU; a process that ignores the signal is stopped by the wall-clock limit only; limits only ever lower), TERM then KILL, a watchdog if the runner dies, exit 124 (wall clock), 125 (CPU), 123 (the process that started it is gone), 128+n (a signal). A finished `./zn run`, gate or spec run appends one line to that checkout's `.cache/measure.tsv` and writes no tracked path. `./zn commit`, `./zn spend`, `./zn done` and `./zn land` fold the lines for the tickets they commit into `spend.d/<writer>.tsv`. A buffer that is never folded is dropped after 14 days, or when that checkout's `.cache` is deleted.
+-- **The hook** (`scripts/hooks/pre-bash.sh`, rules in `z-nile/engine/boundcmd.luau`, entry `z-nile/guard-bash.luau`; PreToolUse on `Bash|Monitor`, 10 s timeout, 2 s of CPU) refuses by class and names the exact `<checkout>/zn run` command: a bare `lune run` of anything but the gate's tooling (`TOOLING` in `boundcmd.luau`: a new Lune entry the gate runs joins it; each registered home's `tests/run` counts without an entry, from the registry, c0244), other interpreters, inline Python only when it loops or starts a process with no `timeout=` (a Python file is refused), the `perl alarm` recipe (it leaves the tool child behind), `while`/`until` loops, follows (`tail -f`, `watch`, `gh ... watch`), detachers (`nohup`, `setsid`, `disown`, `at`, `tmux new -d`, `screen -dm`, `launchctl submit`), a `&` job without `wait`, and a background call with anything unbounded in it. It **fails open** (any error exits 0): a seatbelt that can block all work on its own bug is worse than the leak it prevents, and the reaper is the backstop. A **Monitor** command is bounded by its own timeout, so loops and follows pass there; its interpreters and detachers do not. It reads one shell line, not scripts: a script run by name (`bash probe.sh`), `npm`/`make`, other interpreters, `yes` (it ends in a pipe) and spellings a one-line scanner cannot read pass. `Bash(./zn run:*)` is in `permissions.allow` (the user's decision), so **any command wrapped in `./zn run` runs without a permission prompt**; the wrapper's limits are the safeguard, not the prompt.
++- **The hook** (`scripts/hooks/pre-bash.sh`, rules in `z-nile/engine/boundcmd.luau`, entry `z-nile/guard-bash.luau`; PreToolUse on `Bash|Monitor`, 10 s timeout, 2 s of CPU) refuses by class and names the exact `<checkout>/zn run` command: a bare `lune run` of anything but the gate's tooling (`TOOLING` in `boundcmd.luau`: a new Lune entry the gate runs joins it; each registered home's `tests/run` counts without an entry, from the registry, c0244; a target counts by the file it reaches in this checkout or one of its worktrees, written relative or absolute, never by its suffix (c0245)), other interpreters, inline Python only when it loops or starts a process with no `timeout=` (a Python file is refused), the `perl alarm` recipe (it leaves the tool child behind), `while`/`until` loops, follows (`tail -f`, `watch`, `gh ... watch`), detachers (`nohup`, `setsid`, `disown`, `at`, `tmux new -d`, `screen -dm`, `launchctl submit`), a `&` job without `wait`, and a background call with anything unbounded in it. It **fails open** (any error exits 0): a seatbelt that can block all work on its own bug is worse than the leak it prevents, and the reaper is the backstop. A **Monitor** command is bounded by its own timeout, so loops and follows pass there; its interpreters and detachers do not. It reads one shell line, not scripts: a script run by name (`bash probe.sh`), `npm`/`make`, other interpreters, `yes` (it ends in a pipe) and spellings a one-line scanner cannot read pass. `Bash(./zn run:*)` is in `permissions.allow` (the user's decision), so **any command wrapped in `./zn run` runs without a permission prompt**; the wrapper's limits are the safeguard, not the prompt.
+ - **The reaper** (`./zn reap`, `z-nile/engine/reap.luau`) treats a process as a leak only on an explicit yes, in one of three ways: *marked* (a non-system program whose environment carries a `ZN_BOUNDED_DEADLINE` that passed), *orphaned* (a tool program, interpreter, tool shell or `sleep`/`tail`/`gh`/`grep`/`watch` older than 60 s whose ancestors up to launchd are all of that kind), or *session end* (`--session-end`: the ending session's own tool shells, direct children of its `claude` process that source a shell snapshot, with everything below them; MCP servers and the status line are never touched). Scope: the user's processes, working in this repository's checkout and worktrees or its Claude session folders and the runner's temp folders (the session rule goes by ancestry wherever the shell went); never the reaper or its ancestors, a detached `git maintenance` or what runs below it, or an application (macOS's framework `Python` is read as `python3`). Call sites: `--auto` at the start of the gate and `./zn sync` (quiet, does nothing in a check run, never fails), SessionEnd (`scripts/hooks/session-end.sh`, skips `resume`, logs to `${XDG_STATE_HOME:-~/.local/state}/z-nile/reaped.log`), and by hand (`--dry-run` first). Its `ps` calls run with `LC_ALL=C`. macOS only.
+ - **CPU limits only lower** (`zn_lower_cpu` in `z-nile/lib/cpu.sh`): the spec runner puts `ulimit -t` of `PICKMAN_SPEC_CPU` (default 1200 s) on every spec process, `./zn` puts `ZN_ENGINE_CPU` (default 1800 s) on the engine, the hook entry gets 2 s and the session-end hook 15 s, and `./zn run --cpu` its own; a caller already under a lower limit keeps it. A limit is SIGXCPU only: a process that ignores the signal, or a loop that spends its time in system calls, is not stopped by it, so the wall-clock limit, the watchdog and the reaper are the other lines.
+ - **What none of this can do:** stop a command the hook cannot read, stop a process that calls `setsid` and is a system binary (the reaper cannot see its environment), or stop a syscall-heavy loop by CPU time alone. A subagent's command stops at its own `./zn run` limit.
+diff --git a/z-nile/tests/acceptance/c0191/boundcmd.spec.luau b/z-nile/tests/acceptance/c0191/boundcmd.spec.luau
+index eff8e1c70..02b0c735a 100644
+--- a/z-nile/tests/acceptance/c0191/boundcmd.spec.luau
++++ b/z-nile/tests/acceptance/c0191/boundcmd.spec.luau
+@@ -153,7 +153,7 @@ local TOOLING_CASES: { { command: string, cwd: string, ok: boolean } } = {
+ 	{ command = "lune run tests/run -- a", cwd = "/tmp/scratch/cr4", ok = false },
+ 	{ command = "lune run /tmp/scratch/cr4/z-nile/affected", cwd = CHECKOUT, ok = false },
+ 	{ command = "cd /scratch && lune run tests/run", cwd = CHECKOUT .. "/z-nile", ok = false },
+-	{ command = "cd .. && lune run tests/run", cwd = CHECKOUT .. "/z-nile", ok = true },
++	{ command = "cd .. && lune run pickman/tests/run", cwd = CHECKOUT .. "/z-nile", ok = true },
+ 	{ command = "cd ../.. && lune run tests/run", cwd = CHECKOUT .. "/z-nile", ok = false },
+ 	{ command = "cd ~ && lune run tests/run", cwd = CHECKOUT .. "/z-nile", ok = false },
+ 	{ command = 'cd "$X" && lune run tests/run', cwd = CHECKOUT .. "/z-nile", ok = false },

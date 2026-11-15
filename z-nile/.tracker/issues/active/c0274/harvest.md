@@ -1,0 +1,33 @@
+# Harvest: c0274
+- design-review-001 F1: z-design/refusing-memory-names-how-its-owner-gets-back-in
+- design-review-001 F2: z-design/inherited-decisions-agree
+- design-review-001 F3: z-design/spec-design-correspondence
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: zz-test/refusals-tested-on-both-sides
+- design-review-001 F6: z-design/refusing-memory-names-how-its-owner-gets-back-in
+- design-review-001 F7: z-design/never-narrow-captured-scope
+- design-review-001 F8: one-off: a fixture-pinned limit the Design had called a feature
+- design-review-001 F9: z-design/required-steps-on-every-path
+- design-review-001 F10: one-off: wording and a grep that could not fail
+- design-review-001 F11: z-design/spec-design-correspondence
+- note the atomic swap pinned by counting attempts, not by the end state: zz-test/retries-are-pinned-by-counting-attempts
+- design-review-002 F1: z-design/refusing-memory-names-how-its-owner-gets-back-in
+- design-review-002 F2: zz-test/refusals-tested-on-both-sides
+- design-review-002 F3: zz-test/seed-every-enumerated-case
+- design-review-002 F4: z-design/inherited-decisions-agree
+- design-review-002 F5: z-design/refusing-memory-names-how-its-owner-gets-back-in
+- design-review-002 F6: one-off: a refusal text that names a step that does not unblock
+- design-review-002 F7: zz-test/pin-call-site-arguments
+- design-review-002 F8: one-off: the swap's create-only lease depends on the sibling's placement of its first beat
+- design-review-002 F9: z-design/refusing-memory-names-how-its-owner-gets-back-in
+- design-review-003 F1: z-design/refusing-memory-names-how-its-owner-gets-back-in
+- design-review-003 F2: zz-test/seed-every-enumerated-case
+- design-review-003 F3: z-design/restated-rules-move-together
+- design-review-003 F4: z-design/quote-other-preps-before-promising
+- design-review-003 F5: z-design/reasoned-rows-claim-testable-reasons
+- design-review-004 F1: z-design/refusing-memory-names-how-its-owner-gets-back-in
+- design-review-004 F2: z-design/refusing-memory-names-how-its-owner-gets-back-in
+- design-review-004 F3: z-design/restated-rules-move-together
+- design-review-004 F4: z-design/spec-design-correspondence
+- design-review-004 F5: one-off: a refusal hint that names a give-back of a claim that may be live
+- design-review-004 F6: one-off: a stray empty experiments file and a claim that every case is instant

@@ -1,0 +1,7 @@
+- design-review-001 F1: zz-test/seed-every-enumerated-case
+- design-review-001 F2: invaders-arch/per-player-states-meet-match-changes
+- design-review-001 F3: z-design/spec-design-correspondence
+- design-review-001 F4: one-off: the map edit waits on a sibling prep's open PR that rewrites the same lines; ruled by the human
+- design-review-001 F5: z-design/quote-other-preps-before-promising
+- design-review-001 F6: one-off: a fly-off the view draws from the state replicated before the call, now stated in The split
+- design-review-001 F7: one-off: the probe's numbers were already pinned by AC2 and AC5; kept and its command recorded

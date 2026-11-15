@@ -2,7 +2,7 @@
 title: Pin every argument a call site passes
 when: both
 tags: [wiring, seams]
-check: Is every argument the call site passes pinned by a spec whose fixture makes a wrong value visible, not masked by a default or a fallback (and, when a rule depends on which of several sources a value is read from, does the fixture give those sources different values, even where the fake makes them equal)?
+check: Is every argument the call site passes pinned by a spec whose fixture makes a wrong value visible, not masked by a default or a fallback (and, when a rule depends on which of several sources a value is read from, does the fixture give those sources different values, even where the fake makes them equal)? And when a change alters what a shared decision function reads from its context, has every caller been listed with what that context holds when it calls?
 ---
 Testing a pure function does not test the call that feeds it. Each argument the adapter passes (a filter, a source map, a path) needs a spec through the real entry point, with a fixture where a wrong or empty value changes the output.
 
@@ -27,3 +27,9 @@ c0170 design review 001 F1: a spy on a pure rule's input compared one spec's req
 c0170 design review 002 F2: a spy compared what the call site gathered with the real tree, which had no example of one kind of input (a fixture dep in a helper or unit spec), so a call site that dropped that kind passed. A spy is only as strong as the kinds today's tree holds; hand the pure function the whole source (the graph) and let it choose, or seed a synthetic input with every kind.
 
 c0180 design review 002 F2: a new flag (`--recorded`) that narrows selection had cases on the selector alone, so the gate could drop it and every criterion still passed. A flag a caller must pass gets a case through every real caller: a run that drives the caller where that is possible, and a rule over the caller's text (as c0180's AC10 has for `z-nile/check.sh`, beside a measurement through the gate) only where the caller can't be driven in a spec; the text rule alone is the weaker answer.
+
+**Note (c0282 design review 001 F4):** a flag every command accepts is a call-site argument of every command. `--actor` was pinned in `status new` only, so four mutants passing `nil` instead of the options (done, new raft, recombine, the emergent issue) survived, and `raft-plan --apply` dropped it silently. One case per command where the flag beats the environment value, with different values for each.
+
+**Note (c0230 design review 001 F1):** a measured number the call site passes on (the CPU a wrapper printed, carried into a report) was pinned only by a format regex on a live value, so a report that showed the wall seconds as the CPU passed. Make the number exact through the real path with a stand-in (perl's `CORE::GLOBAL::times` in a module loaded through `PERL5OPT=-I<dir> -M<Module>`, which reaches every perl of a nested run), then assert the exact value and that a limit just under it lists the file and one just over it does not.
+
+**Note (c0245 design review 001 F1):** a shared function has a call site per caller, and each sees the context as it is at that moment. c0245 made the seatbelt's tooling match read the folder a command's `cd`s moved to, and `boundcmd.check`'s background loop calls the same match again after the foreground walk has put the folder back to the call's, so `cd pickman && lune run tests/run` in the background was refused. The old, looser rule (the bare `tests/run` from any folder) had hidden the stale folder, and no promoted case ran a background call with a checkout. List every caller of a changed function, give each a case, and make both walks share the step that moves the state (`followCd`).

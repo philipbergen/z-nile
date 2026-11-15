@@ -1,8 +1,7 @@
 --!strict
--- The watch-map commands and the two writes the tracker makes for it: `./zn done` captures a ticket's source
--- files, `./zn commit` rewrites watch files a rename or delete touches, `./zn watch-bootstrap` fills the map
--- from history once, and `./zn watch-net` repairs a miss after a landing. Reads and git sit here; the rules
--- are z-nile/lib/watch.luau.
+-- The watch-map commands. `./zn finish` captures one layer's changed files (the only writer). `./zn commit`
+-- rewrites watch files a rename or delete touches, `./zn watch-bootstrap` fills the map from history once,
+-- and `./zn watch-net` repairs a miss after a landing. Reads and git sit here; the rules are z-nile/lib/watch.luau.
 
 local fs = require("@lune/fs")
 local graph = require("../lib/graph")
@@ -16,8 +15,6 @@ local watch = require("../lib/watch")
 local watchcmd = {}
 
 export type Member = { id: string, dest: string }
-
-local LOG = "--pretty=format:---COMMIT---%n%B%n---FILES---"
 
 local function fail(msg: string): never
 	stdio.ewrite(msg .. "\n")
@@ -45,29 +42,8 @@ local function mustAt(dir: string, args: { string }): string
 	return out
 end
 
--- Commits reachable from HEAD but not from the merge base, in `git log` order.
-local function raftLog(): string
-	local base = sh.run("git", { "merge-base", "HEAD", "origin/main" })
-	if not base.ok then
-		base = sh.run("git", { "merge-base", "HEAD", "main" })
-	end
-	local args = { "log", "--name-only", LOG }
-	if base.ok and sh.trim(base.stdout) ~= "" then
-		table.insert(args, `{sh.trim(base.stdout)}..HEAD`)
-	end
-	return sh.git(args)
-end
-
 local addingCommit: (string) -> string?
 local resolvedRequires: (string, string) -> { string }
-
-local function memberIdsOf(members: { Member }): { string }
-	local ids_: { string } = {}
-	for _, m in members do
-		table.insert(ids_, m.id)
-	end
-	return ids_
-end
 
 local function readList(file: string): { string }
 	if not fs.isFile(file) then
@@ -119,112 +95,61 @@ local function union(a: { string }, b: { string }): { string }
 	return watch.unique(all)
 end
 
--- Writes each member's watch.txt from the source files its commits changed, and a sidecar for every
--- spec those commits added or edited outside an acceptance folder. Stages them so a failed `done`
--- (git reset --hard) drops them. A source commit that does not name exactly one member gives every
--- member the raft's whole source list. A ticket whose commits changed no source file watches the
--- files its specs require. An empty list is never written.
-function watchcmd.capture(members: { Member })
-	local commits = watch.parseLog(raftLog())
-	local ids_ = memberIdsOf(members)
-	local per, shared = watch.assign(commits, ids_)
-	if shared then
-		print(
-			"watch: a source commit does not name exactly one issue, so every issue gets the raft's source list"
-		)
-	end
-	local member: { [string]: boolean } = {}
-	for _, id in ids_ do
-		member[id] = true
-	end
-	local function raftList(): { string }
-		local all: { string } = {}
-		for _, id in ids_ do
-			local paths: { string } = per[id] or {}
-			for _, p in paths do
-				table.insert(all, p)
-			end
-		end
-		return watch.unique(all)
-	end
-	-- The issue whose commit added the spec, or nil when that cannot be told.
-	local function issueOf(spec: string): string?
-		local added = addingCommit(spec)
-		if not added then
-			return nil
-		end
-		local shown = sh.run("git", { "log", "-1", "--format=%B", added })
-		if not shown.ok then
-			return nil
-		end
-		local named: { string } = {}
-		for _, id in watch.issueIds(shown.stdout) do
-			if member[id] then
-				table.insert(named, id)
-			end
-		end
-		if #named == 1 then
-			return named[1]
-		end
-		return nil
-	end
-	local function listFor(issueId: string?): { string }
-		if shared or not issueId then
-			return raftList()
-		end
-		return per[issueId] or raftList()
-	end
-	local function withRequires(spec: string, paths: { string }): { string }
-		local kept = watch.forSuite(spec, paths)
-		if #kept > 0 or not fs.isFile(spec) then
-			return kept
+-- Writes this layer's watch files from `changed`, the paths in its diff against the layer below.
+-- One `watch.txt` in the ticket's acceptance folder. A spec under `tests/` outside `acceptance/`
+-- that this diff adds or edits keeps the union of its existing watch and this layer's sources,
+-- and only the paths that belong to its own suite. A layer that changes no source file falls back
+-- to what the spec requires. An empty list is never written. Stages the files so the finish commit picks them up.
+function watchcmd.capture(member: Member, changed: { string })
+	local sources = watch.sourceOf(changed)
+	local function kept(spec: string, paths: { string }): { string }
+		local filtered = watch.forSuite(spec, paths)
+		if #filtered > 0 or not fs.isFile(spec) then
+			return filtered
 		end
 		return watch.forSuite(spec, resolvedRequires(spec, fs.readFile(spec)))
 	end
-	for _, m in members do
-		local specs = specsIn(m.dest)
-		if #specs > 0 then
-			local paths = withRequires(specs[1], listFor(m.id))
-			if #paths == 0 then
-				local req: { string } = {}
-				for _, spec in specs do
-					if fs.isFile(spec) then
-						for _, p in resolvedRequires(spec, fs.readFile(spec)) do
-							table.insert(req, p)
-						end
+	if fs.isDir(member.dest) then
+		local specs = specsIn(member.dest)
+		-- The folder's own path is enough for the suite filter when the ticket has no spec yet.
+		local standIn = if #specs > 0 then specs[1] else `{member.dest}/stand.spec.luau`
+		local paths = watch.forSuite(standIn, sources)
+		if #paths == 0 and #specs > 0 then
+			local req: { string } = {}
+			for _, spec in specs do
+				if fs.isFile(spec) then
+					for _, p in resolvedRequires(spec, fs.readFile(spec)) do
+						table.insert(req, p)
 					end
 				end
-				paths = watch.forSuite(specs[1], req)
 			end
-			local file = `{m.dest}/watch.txt`
-			if stageList(file, paths) then
-				print(`watch: {m.id} {file} ({#paths})`)
-			else
-				print(`watch: {m.id} lists no source files and its specs require none ({file})`)
-			end
+			paths = watch.forSuite(specs[1], req)
+		end
+		local file = `{member.dest}/watch.txt`
+		if stageList(file, paths) then
+			print(`watch: {member.id} {file} ({#paths})`)
+		else
+			print(`watch: {member.id} lists no source files and its specs require none ({file})`)
 		end
 	end
 	local seen: { [string]: boolean } = {}
 	local specs: { string } = {}
-	for _, c in commits do
-		for _, f in c.files do
-			local underTests = string.find(f, "/tests/", 1, true) or string.sub(f, 1, 6) == "tests/"
-			if
-				string.sub(f, -10) == ".spec.luau"
-				and underTests
-				and not string.find(f, "/tests/acceptance/", 1, true)
-			then
-				if not seen[f] then
-					seen[f] = true
-					table.insert(specs, f)
-				end
+	for _, f in changed do
+		local underTests = string.find(f, "/tests/", 1, true) ~= nil or string.sub(f, 1, 6) == "tests/"
+		if
+			string.sub(f, -10) == ".spec.luau"
+			and underTests
+			and not string.find(f, "/tests/acceptance/", 1, true)
+		then
+			if not seen[f] then
+				seen[f] = true
+				table.insert(specs, f)
 			end
 		end
 	end
 	table.sort(specs)
 	for _, spec in specs do
-		local paths = union(readList(watch.fileFor(spec)), listFor(issueOf(spec)))
-		paths = withRequires(spec, paths)
+		local paths = kept(spec, union(readList(watch.fileFor(spec)), watch.forSuite(spec, sources)))
 		local file = watch.fileFor(spec)
 		if stageList(file, paths) then
 			print(`watch: {spec} {file} ({#paths})`)
@@ -735,6 +660,97 @@ local function writeDefect(dir: string, spec: string, commit: string, sources: {
 	print(`watch-net: captured {root}/issues/{id}/{id}.md ({slug})`)
 end
 
+-- An open defect with this slug (not one already moved to done/ or retired/).
+local function openDefect(dir: string, slug: string): boolean
+	local ok, out = gitAt(dir, { "grep", "-l", "-F", `slug: {slug}`, "--", "*.md" })
+	if not ok or sh.trim(out) == "" then
+		return false
+	end
+	for _, path in linesOf(out) do
+		if not string.find(path, "/done/", 1, true) and not string.find(path, "/retired/", 1, true) then
+			return true
+		end
+	end
+	return false
+end
+
+-- One defect for a red slow tier. A second failure while it is open writes nothing.
+local function writeSlowDefect(dir: string, specs: { string }, commit: string)
+	local slug = "slow-tier-red"
+	local nextFile = `{dir}/z-nile/next`
+	local text = if fs.isFile(nextFile)
+		then fs.readFile(nextFile)
+		else "issue 1 watch-net\nraft 1 watch-net\n"
+	local counters = ids.parse(text)
+	if not counters then
+		fail(`watch-net: {ids.FILE} does not parse`)
+	end
+	local phrase = string.match(text, "^issue %d+ (%S+)") or "watch-net"
+	local n = ids.nextFree("issue", counters :: ids.Counters, usedIds(dir))
+	local id = string.format("d%04d", n)
+	local root = "z-nile/.tracker"
+	local folder = `{dir}/{root}/issues/{id}`
+	fs.writeDir(folder)
+	local today = os.date("%Y-%m-%d") :: string
+	local listed = if #specs > 0 then table.concat(specs, ", ") else "the run named no spec"
+	local doc = table.concat({
+		"---",
+		`id: {id}`,
+		"type: defect",
+		"title: Slow tier failed",
+		`slug: {slug}`,
+		"raft: ",
+		"depends_on: []",
+		"emergent: false",
+		"design: draft",
+		`created: {today}`,
+		"status: backlog",
+		"---",
+		"",
+		`# {id}: Slow tier failed`,
+		"",
+		"## Problem",
+		`z-nile/check.sh --slow failed on {commit}. The failing specs: {listed}.`,
+		"The fast suite had already passed. This defect is the slow tier's owner.",
+		"",
+		"## Non-goals",
+		"Running the slow tier on the landing path.",
+		"",
+		"## Solution",
+		"Each named spec is rewritten to the behaviour that replaced what it pinned, or deleted with a line saying what it pinned.",
+		"",
+		"## Design",
+		"No code change in this capture.",
+		"",
+		"### Touched modules",
+		"- `z-nile/tests/slow.tsv`",
+		"",
+		"## Acceptance criteria",
+		"",
+		"### Checked",
+		"AC1: z-nile/check.sh --slow passes.",
+		"",
+		"### Judged",
+		"",
+		"### Observed",
+		"",
+		"## Test plan",
+		"`z-nile/check.sh --slow`.",
+		"",
+	}, "\n")
+	fs.writeFile(`{folder}/{id}.md`, doc)
+	fs.writeFile(
+		`{folder}/check.sh`,
+		'#!/usr/bin/env bash\nHERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"\n'
+			.. 'source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh"\n'
+			.. 'check "AC1: z-nile/check.sh --slow passes" true\nfinish\n'
+	)
+	process.exec("chmod", { "+x", `{folder}/check.sh` })
+	local nextText = ids.format({ issue = n + 1, raft = (counters :: ids.Counters).raft }, phrase)
+	fs.writeFile(nextFile, nextText)
+	print(`watch-net: captured {root}/issues/{id}/{id}.md ({slug})`)
+end
+
 local function applyRepairs(dir: string, output: string): boolean
 	local landed, commit = sincePassed(dir)
 	local changed = false
@@ -810,9 +826,40 @@ local function recordPass(dir: string, head: string, sources: { string })
 	print("watch-net: pushed main")
 end
 
+-- After a green fast suite, off the landing path. A failure opens one defect and leaves the fast pass recorded.
+local function runSlow(dir: string, head: string)
+	print("watch-net: slow tier")
+	local slow = process.exec("bash", { "z-nile/check.sh", "--slow" }, { cwd = dir })
+	if slow.ok then
+		print("watch-net: slow tier passed")
+		return
+	end
+	local names = watch.failingSpecs(slow.stdout .. "\n" .. slow.stderr)
+	if #names == 0 then
+		stdio.ewrite(slow.stdout .. "\n" .. slow.stderr)
+	end
+	if openDefect(dir, "slow-tier-red") then
+		print("watch-net: the slow tier failed; defect slow-tier-red is already open")
+		return
+	end
+	writeSlowDefect(dir, names, head)
+	local _, porcelain = gitAt(dir, { "status", "--porcelain" })
+	if sh.trim(porcelain) == "" then
+		print("watch-net: the slow tier failed and no new defect was written")
+		return
+	end
+	commitRepair(dir, "watch-net: the slow tier failed")
+	if not pushMain(dir) then
+		fail("watch-net: could not push the slow-tier defect")
+	end
+	print("watch-net: the slow tier failed; pushed a defect")
+end
+
 -- Runs every project's fast suite on current main, in `.worktree/watch-net`, and pushes a repair onto
 -- main. The files it adds are the source files changed since `z-nile/watch-passed` (the last commit the
--- suite passed on). A second machine rebases; when the repair is already on main it finds nothing to do.
+-- suite passed on). A green fast suite then runs the slow tier in the same worktree; a slow failure opens
+-- one defect and does not undo the fast pass. A second machine rebases; when the repair is already on main
+-- it finds nothing to do.
 function watchcmd.net()
 	local dir = ensureWorktree()
 	local sources, head = sincePassed(dir)
@@ -826,6 +873,7 @@ function watchcmd.net()
 	local output = ran.stdout .. "\n" .. ran.stderr
 	if ran.ok then
 		recordPass(dir, head, sources)
+		runSlow(dir, head)
 		return
 	end
 	if #watch.failingSpecs(output) == 0 then

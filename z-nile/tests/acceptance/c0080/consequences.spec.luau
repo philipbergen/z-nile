@@ -7,6 +7,7 @@ local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -78,6 +79,8 @@ local function answer(lines: { string }, ruling: string?): Result
 		write(doc, fs.readFile(`{work}/{doc}`) .. "\n" .. ruling)
 	end
 	must(tr({ "commit", "-m", "refute 001", "--time", "1" }), "commit refute")
+	must(tr({ "finish", "f0010" }), "finish")
+	seal.trace(work, "R0010")
 	return tr({ "done", "R0010" })
 end
 
@@ -89,6 +92,8 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 		fs.writeDir(base)
 		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
 		git({ "remote", "remove", "origin" })
+		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
+		git({ "checkout", "-q", "-B", "main" })
 		local listed = process.exec("git", {
 			"ls-files",
 			"-co",
@@ -128,6 +133,7 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write("pickman/.tracker/issues/f0010/check.sh", TRIVIAL_CHECK)
 		write("pickman/.tracker/rafts/R0010/check.sh", TRIVIAL_CHECK)
+		seal.prep(work)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")
@@ -178,7 +184,7 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 		if not r.ok then
 			error(r.stderr .. r.stdout)
 		end
-		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: done R0010")
+		t.expect(git({ "log", "-1", "--format=%s" })).toBe("R0010: bind f0010")
 	end)
 
 	it("cleans up", function()

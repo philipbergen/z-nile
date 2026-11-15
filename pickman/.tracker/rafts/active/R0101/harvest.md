@@ -1,0 +1,4 @@
+- design-review-001 F1: z-raft/theme-quotes-are-copied
+- design-review-001 F2: z-raft/rc-pins-the-claims-it-makes
+- design-review-001 F3: one-off: two wording slips in this raft's own text (a step number and an incomplete list of what a prep landed), with no rule behind them
+- design-review-001 F4: z-raft/grouping-cost-checks-every-wait

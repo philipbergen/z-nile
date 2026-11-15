@@ -3,6 +3,7 @@
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -59,6 +60,7 @@ return t.spec("the watch map is captured, rewritten and repaired", function(it)
 		write(f.main, `{root}/issues/{id}/acceptance/alpha.spec.luau`, SPEC)
 		write(f.main, `{root}/issues/{id}/check.sh`, CHECK)
 		write(f.main, `{root}/rafts/{raft}/check.sh`, CHECK)
+		seal.prep(f.main)
 		fixture.git(f.main, { "add", "-A" })
 		fixture.git(f.main, { "commit", "-qm", "prep" })
 		zn(f, { "start", raft })
@@ -66,6 +68,8 @@ return t.spec("the watch map is captured, rewritten and repaired", function(it)
 		zn(f, { "commit", "-m", "maze", "--issue", id, "--time", "1" })
 		write(f.main, `{root}/rafts/active/{raft}/review-001.md`, "# Review 001\n\nVerdict: approve\n")
 		zn(f, { "commit", "-m", "review", "--time", "1" })
+		zn(f, { "finish", id })
+		seal.trace(f.main, raft)
 		zn(f, { "done", raft }, { PICKMAN_DONE_GATE = "1", GATE_LOG = `{f.base}/gate.log`, GATE_EXIT = "0" })
 		local watch = fs.readFile(`{f.main}/pickman/tests/acceptance/{id}/watch.txt`)
 		t.expect(watch).toBe("pickman/src/shared/Logic/Maze/init.luau\n")
@@ -146,6 +150,77 @@ return t.spec("the watch map is captured, rewritten and repaired", function(it)
 		t.expect(has(second, "nothing to do")).toBe(true)
 	end)
 
+	it("a green fast suite runs the slow tier, and a slow failure opens one defect", function()
+		local f = trackerfix.new("watchmap-slow", { ["z-nile/next"] = NEXT })
+		write(
+			f.main,
+			"z-nile/check.sh",
+			'#!/usr/bin/env bash\ncase " $* " in\n*" --slow "*) echo "FAIL pickman/tests/unit/miss.spec.luau :: holds"; exit 1 ;;\nesac\nexit 0\n'
+		)
+		process.exec("chmod", { "+x", `{f.main}/z-nile/check.sh` })
+		fixture.git(f.main, { "add", "-A" })
+		fixture.git(f.main, { "commit", "-qm", "stub the suite" })
+		local marked = fixture.git(f.main, { "rev-parse", "HEAD" })
+		write(f.main, "z-nile/watch-passed", marked .. "\n")
+		fixture.git(f.main, { "add", "-A" })
+		fixture.git(f.main, { "commit", "-qm", "the suite passed here" })
+		write(f.main, "pickman/src/More.luau", "return {}\n")
+		fixture.git(f.main, { "add", "-A" })
+		fixture.git(f.main, { "commit", "-qm", "a source since the last pass" })
+		fixture.git(f.main, { "push", "-q", "origin", "HEAD:main" })
+		local ran = zn(f, { "watch-net" })
+		t.expect(has(ran, "watch-net: slow tier")).toBe(true)
+		t.expect(has(ran, "pushed a defect")).toBe(true)
+		local listed = process.exec(
+			"git",
+			{ "grep", "-l", "slug: slow-tier-red", "origin/main", "--", "*.md" },
+			{ cwd = f.main }
+		)
+		t.expect(listed.ok).toBe(true)
+		fixture.git(f.main, { "pull", "-q", "--rebase", "origin", "main" })
+		write(f.main, "pickman/src/Second.luau", "return {}\n")
+		fixture.git(f.main, { "add", "-A" })
+		fixture.git(f.main, { "commit", "-qm", "another source" })
+		fixture.git(f.main, { "push", "-q", "origin", "HEAD:main" })
+		local again = zn(f, { "watch-net" })
+		t.expect(has(again, "already open")).toBe(true)
+		local still = process.exec(
+			"git",
+			{ "grep", "-l", "slug: slow-tier-red", "origin/main", "--", "*.md" },
+			{ cwd = f.main }
+		)
+		t.expect(still.ok).toBe(true)
+		local n = 0
+		for _ in string.gmatch(still.stdout, "[^\n]+") do
+			n += 1
+		end
+		t.expect(n).toBe(1)
+	end)
+
+	it("a green slow tier records no defect", function()
+		local f = trackerfix.new("watchmap-slow-green", { ["z-nile/next"] = NEXT })
+		write(f.main, "z-nile/check.sh", "#!/usr/bin/env bash\nexit 0\n")
+		process.exec("chmod", { "+x", `{f.main}/z-nile/check.sh` })
+		fixture.git(f.main, { "add", "-A" })
+		fixture.git(f.main, { "commit", "-qm", "stub the suite" })
+		local marked = fixture.git(f.main, { "rev-parse", "HEAD" })
+		write(f.main, "z-nile/watch-passed", marked .. "\n")
+		fixture.git(f.main, { "add", "-A" })
+		fixture.git(f.main, { "commit", "-qm", "the suite passed here" })
+		write(f.main, "pickman/src/More.luau", "return {}\n")
+		fixture.git(f.main, { "add", "-A" })
+		fixture.git(f.main, { "commit", "-qm", "a source since the last pass" })
+		fixture.git(f.main, { "push", "-q", "origin", "HEAD:main" })
+		local ran = zn(f, { "watch-net" })
+		t.expect(has(ran, "slow tier passed")).toBe(true)
+		local listed = process.exec(
+			"git",
+			{ "grep", "-l", "slug: slow-tier-red", "origin/main", "--", "*.md" },
+			{ cwd = f.main }
+		)
+		t.expect(listed.ok).toBe(false)
+	end)
+
 	it("done writes a sidecar for a unit spec, and a later edit of its source selects it", function()
 		local f = trackerfix.new("watchmap-unit", { ["z-nile/next"] = NEXT })
 		fixture.git(f.main, { "remote", "remove", "origin" })
@@ -174,6 +249,7 @@ return t.spec("the watch map is captured, rewritten and repaired", function(it)
 		write(f.main, `{root}/issues/{id}/acceptance/alpha.spec.luau`, SPEC)
 		write(f.main, `{root}/issues/{id}/check.sh`, CHECK)
 		write(f.main, `{root}/rafts/{raft}/check.sh`, CHECK)
+		seal.prep(f.main)
 		fixture.git(f.main, { "add", "-A" })
 		fixture.git(f.main, { "commit", "-qm", "prep" })
 		zn(f, { "start", raft })
@@ -182,6 +258,8 @@ return t.spec("the watch map is captured, rewritten and repaired", function(it)
 		zn(f, { "commit", "-m", "maze", "--issue", id, "--time", "1" })
 		write(f.main, `{root}/rafts/active/{raft}/review-001.md`, "# Review 001\n\nVerdict: approve\n")
 		zn(f, { "commit", "-m", "review", "--time", "1" })
+		zn(f, { "finish", id })
+		seal.trace(f.main, raft)
 		zn(f, { "done", raft }, { PICKMAN_DONE_GATE = "1", GATE_LOG = `{f.base}/gate.log`, GATE_EXIT = "0" })
 		local watch = fs.readFile(`{f.main}/pickman/tests/unit/added.watch.txt`)
 		t.expect(has(watch, "pickman/src/shared/Logic/Maze/init.luau")).toBe(true)

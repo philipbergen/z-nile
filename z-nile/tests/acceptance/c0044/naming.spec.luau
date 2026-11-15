@@ -162,8 +162,8 @@ return t.spec("document naming", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(has(must(tr({ "members", "R0010" }), "members"), "pickman/.tracker/issues/f0010")).toBe(true)
 		must(tr({ "start", "R0010" }), "start")
-		-- the branch name comes from the slug in the frontmatter
-		t.expect(git({ "branch", "--show-current" })).toBe("R0010-demo")
+		-- the layer name is the raft, the position and the issue
+		t.expect(git({ "branch", "--show-current" })).toBe("R0010/1/f0010")
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isFile(`{seed}/pickman/.tracker/rafts/active/R0010/R0010.md`)).toBe(true)
 		t.expect(git({ "log", "-1", "--format=%s" })).toBe("tracker: start R0010 Demo")

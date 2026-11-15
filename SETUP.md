@@ -3,7 +3,7 @@
 Everything here is automated by `z-nile/setup.sh`, which is idempotent. This file explains what the script does and how to fix it when it fails.
 
 ```bash
-git clone git@github.com:philipbergen/pickman.git && cd pickman
+git clone git@github.com:philipbergen/z-nile.git && cd z-nile
 z-nile/setup.sh
 ```
 

@@ -8,6 +8,7 @@ local ledger = require("./ledger")
 local process = require("@lune/process")
 local projects = require("./projects")
 local serde = require("@lune/serde")
+local stack = require("./stack")
 local stats = require("./stats")
 local status = require("./status")
 local store = require("./store")
@@ -697,15 +698,27 @@ end
 
 local NO_FACTS: Facts = { asOf = nil, refs = {}, worktrees = {}, dispatch = {} }
 
--- The branch that launched raft `id`: the first ref, in name order, named `<id>-…` (local) or `origin/<id>-…`, as
--- plain text, whose tip is newer than the raft's latest arrival in active/ (`since`; `start` commits on the branch
--- after `ready`). A branch left from before a stop and a new ready (`stop` keeps it) launched nothing. With no
--- arrival known (no history, a legacy start), any such branch counts.
+-- The branch that launched raft `id`. A layer (`R0010/1/c0010`) wins, the highest position. Otherwise the
+-- first ref, in name order, named `<id>-…` (local) or `origin/<id>-…`, whose tip is newer than the raft's
+-- latest arrival in active/ (`since`). A branch left from before a stop and a new ready launched nothing.
 local function branchOf(id: string, refs: { Ref }, since: number?): string?
 	local sorted = table.clone(refs)
 	table.sort(sorted, function(a, b)
 		return a.name < b.name
 	end)
+	local best: string? = nil
+	local bestPos = 0
+	for _, ref in sorted do
+		local name = if string.sub(ref.name, 1, 7) == "origin/" then string.sub(ref.name, 8) else ref.name
+		local layer = stack.parse(name)
+		if layer and layer.raft == id and layer.position >= bestPos and (since == nil or ref.at > since) then
+			best = name
+			bestPos = layer.position
+		end
+	end
+	if best then
+		return best
+	end
 	for _, ref in sorted do
 		local name = if string.sub(ref.name, 1, 7) == "origin/" then string.sub(ref.name, 8) else ref.name
 		if string.sub(name, 1, #id + 1) == id .. "-" and (since == nil or ref.at > since) then
