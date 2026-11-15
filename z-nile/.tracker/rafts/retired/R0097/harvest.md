@@ -1,0 +1,8 @@
+- design-review-001 F1: z-raft/stacked-members-cannot-override-each-other
+- design-review-001 F2: z-raft/stacked-members-cannot-override-each-other
+- design-review-001 F3: one-off: two issues in different rafts each claimed the same rule number in zz-arch; the later design pins its rule without the number
+- design-review-001 F4: z-raft/grouping-cost-checks-every-wait
+- design-review-001 F5: z-raft/run-sequestered-specs-on-all-prototypes-together
+- design-review-001 F6: z-raft/grouping-cost-checks-every-wait
+- design-review-001 F7: z-raft/copied-raft-text-is-reverified
+- note R0097 design-review-001's candidate (overrides and check.sh paths naming a same-raft member's promoted specs): z-raft/stacked-members-cannot-override-each-other

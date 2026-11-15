@@ -1,0 +1,551 @@
+diff --git a/z-nile/engine/broker.luau b/z-nile/engine/broker.luau
+index 3da328239..197ff6c04 100644
+--- a/z-nile/engine/broker.luau
++++ b/z-nile/engine/broker.luau
+@@ -16,6 +16,8 @@ local broker = {}
+ 
+ -- how long a client waits for its answer: the dispatcher may be fetching for its tripwire when the request lands
+ broker.WAIT_SECONDS = 600
++-- how request's answer begins when no answer came in that time (c0258: land stops then instead of trying again)
++broker.NO_ANSWER = "no answer from the dispatcher's publish broker"
+ -- the ref the dispatcher fetches `main` into: its own, never the tracking ref an agent can rewrite
+ broker.FRESH = "refs/zn-dispatch/main"
+ 
+@@ -43,7 +45,7 @@ function broker.request(dir: string, token: string, sha: string, base: string?):
+ 		end
+ 		waited += task.wait(0.1)
+ 	end
+-	return false, `no answer from the dispatcher's publish broker in {broker.WAIT_SECONDS} s`
++	return false, `{broker.NO_ANSWER} in {broker.WAIT_SECONDS} s`
+ end
+ 
+ -- Server side: claims every request in `dir` (a rename, which only one server wins) and answers it with `push`;
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index 59d6bd67c..f8634e58c 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -16,6 +16,7 @@ local fs = require("@lune/fs")
+ local gateLib = require("./gate")
+ local idea = require("./idea")
+ local idsLib = require("./ids")
++local landrace = require("./landrace")
+ local layergit = require("./layergit")
+ local ledger = require("./ledger")
+ local lessonsLib = require("./lessons")
+@@ -38,7 +39,9 @@ local stack = require("./stack")
+ local statusLib = require("./status")
+ local stdio = require("@lune/stdio")
+ local store = require("./store")
++local trackerstate = require("./trackerstate")
+ local trailLib = require("./trail")
++local usageLib = require("./usage")
+ local watchcmd = require("./watchcmd")
+ 
+ -- a space name as the union ids expects: the callers only ever hold "issue" or "raft"
+@@ -47,7 +50,7 @@ local function asSpace(s: string): idsLib.Space
+ end
+ 
+ local USAGE = [[
+-usage: ./zn <command> ...
++usage: ./zn <command> ...                       (./zn <command> -h prints that command's entries)
+   new issue <f|d|c> <slug> [--raft R0010] [--desc "<line>"] [--project <name>]
+                                                 create an issue (emergent if the raft is active) in the project
+                                                 whose folder you are in, or --project (refused elsewhere)
+@@ -851,6 +854,8 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
+ 			or a == "--session-end"
+ 			or a == "--begin"
+ 			or a == "--sessions"
++			or a == "-h"
++			or a == "--help"
+ 		then
+ 			opts[a] = { "true" }
+ 		elseif string.sub(a, 1, 1) == "-" then
+@@ -2434,7 +2439,10 @@ end
+ 
+ -- c0072: lands a capture without a pull request. Merge origin/main, check the scope, run the static stages (not the
+ -- full gate: a capture is a draft backlog document), push one commit made on top of origin/main (never a force).
+--- A lost push race merges the new main and retries the push, not the gate (up to 3 tries).
++-- c0258: a lost push race merges the new main and pushes again (up to landrace.TRIES pushes). The gate runs again
++-- only when main moved by more than tracker state (trackerstate.checkEach, the broker's and the tripwire's rule) or
++-- changed one of the capture's files since the gate last passed. A push that reports a failure while origin/main
++-- holds its commit has landed, and a branch whose changes origin/main already holds says it already landed.
+ function cmd.land(_: { string }, opts: { [string]: { string } })
+ 	local branch = sh.trim(sh.run("git", { "branch", "--show-current" }).stdout)
+ 	if string.sub(branch, 1, 8) ~= "capture-" then
+@@ -2451,8 +2459,36 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
+ 	local override = if raw and string.match(raw, "%S") then raw else nil
+ 	local gate = override or "z-nile/check.sh --static"
+ 	local given = opts["-m"]
+-	local function take(base: string)
+-		local merged = sh.run("git", { "merge", "--no-edit", base })
++	local suffix = if override then " (gate overridden)" else ""
++	local function removal(): string
++		return `remove this worktree: git -C {mainRoot()} worktree remove {root} && git -C {mainRoot()} branch -D {branch}{suffix}`
++	end
++	local function lines(text: string): { string }
++		local out: { string } = {}
++		for line in string.gmatch(text, "[^\n]+") do
++			table.insert(out, line)
++		end
++		return out
++	end
++	sh.git({ "fetch", "--quiet", "origin", "main" })
++	-- the merge, the scope and the first push all name this sha, so a push during the gate cannot become the
++	-- parent of a tree it isn't in
++	local base = sh.git({ "rev-parse", "--verify", "origin/main^{commit}" })
++	-- what the branch itself changed: the paths of its own (non-merge) commits that origin/main does not have, read
++	-- before any merge. None is nothing to land; changes main already holds have landed (an earlier land pushed them,
++	-- also when the branch has merged that push since, as `./zn sync` does: a diff from the merge base would read 0)
++	local seenOwn: { [string]: boolean } = {}
++	local own = 0
++	for _, path in lines(sh.git({ "log", "--no-merges", "--format=", "--name-only", `{base}..HEAD` })) do
++		if not seenOwn[path] then
++			seenOwn[path] = true
++			own += 1
++		end
++	end
++	-- merge `at`, refuse a stale tree, a drifted approval and a change outside the capture's scope; true when
++	-- origin/main already holds every change of the branch
++	local function take(at: string): boolean
++		local merged = sh.run("git", { "merge", "--no-edit", at })
+ 		if not merged.ok then
+ 			sh.run("git", { "merge", "--abort" })
+ 			fail(
+@@ -2460,27 +2496,40 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
+ 			)
+ 		end
+ 		refuseStale()
+-		local drift = approvedDrift(base)
++		local diff = sh.must("git", { "diff", "--name-status", "--no-renames", at, "HEAD" })
++		local start = landrace.start(own, #lines(diff))
++		if start == "already" then
++			return true
++		end
++		local drift = approvedDrift(at)
+ 		if drift then
+ 			fail(drift)
+ 		end
+-		local diff = sh.must("git", { "diff", "--name-status", "--no-renames", base, "HEAD" })
+-		local refusal = captureScope(diff, base)
++		local refusal = captureScope(diff, at)
+ 		if refusal then
+ 			fail(refusal)
+ 		end
++		return false
+ 	end
+-	sh.git({ "fetch", "--quiet", "origin", "main" })
+-	-- the merge, the scope and the first push all name this sha, so a push during the gate cannot become the
+-	-- parent of a tree it isn't in
+-	local base = sh.git({ "rev-parse", "--verify", "origin/main^{commit}" })
+-	take(base)
+-	print(`gate: {gate}{if override then " (gate overridden: PICKMAN_LAND_GATE)" else ""}`)
+-	if not sh.stream("bash", { "-c", gate }) then
+-		fail("the gate failed: nothing was pushed")
++	local function already(at: string)
++		sh.git({ "reset", "--hard", "--quiet", at })
++		print(`already landed on main: origin/main {at} holds every change of this branch; {removal()}`)
++	end
++	if take(base) then
++		already(base)
++		return
+ 	end
++	local function runGate()
++		print(`gate: {gate}{if override then " (gate overridden: PICKMAN_LAND_GATE)" else ""}`)
++		if not sh.stream("bash", { "-c", gate }) then
++			fail("the gate failed: nothing was pushed")
++		end
++	end
++	runGate()
++	local gated = base
+ 	-- The gate appended its row to the cache. Fold it into the landed tree without an extra commit on the branch.
+ 	local names = sh.git({ "diff", "--name-only", base, "HEAD" })
++	local capturePaths = lines(names)
+ 	local homes: { [string]: string } = {}
+ 	for path in string.gmatch(names, "[^\n]+") do
+ 		local id = string.match(path, "/issues/([fdc]%d%d%d%d)/[fdc]%d%d%d%d%.md$")
+@@ -2493,17 +2542,34 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
+ 	end
+ 	local planned: costrow.Planned? = nil
+ 	local foldedPaths: { string } = {}
+-	local plannedOk, plannedOrErr = pcall(costrow.plan, root, homes, nil, false)
+-	if plannedOk then
+-		local ready = plannedOrErr :: costrow.Planned
+-		planned = ready
+-		local wroteOk, wrote = pcall(costrow.writeFiles, ready)
+-		if wroteOk and wrote then
+-			foldedPaths = wrote
+-		else
+-			planned = nil
++	local function fold()
++		planned = nil
++		foldedPaths = {}
++		local plannedOk, plannedOrErr = pcall(costrow.plan, root, homes, nil, false)
++		if plannedOk then
++			local ready = plannedOrErr :: costrow.Planned
++			local wroteOk, wrote = pcall(costrow.writeFiles, ready)
++			if wroteOk and wrote then
++				planned = ready
++				foldedPaths = wrote
++				for _, path in wrote do
++					table.insert(capturePaths, path)
++				end
++			end
++		end
++	end
++	-- the fold leaves the work tree and index as HEAD has them, so git merges (it refuses with anything staged)
++	local function unfold()
++		if planned then
++			pcall(costrow.restore, planned :: costrow.Planned)
++			pcall(function()
++				sh.git({ "reset", "--quiet" })
++			end)
+ 		end
++		planned = nil
++		foldedPaths = {}
+ 	end
++	fold()
+ 	local function treeNow(): string
+ 		if #foldedPaths == 0 then
+ 			return sh.git({ "rev-parse", "HEAD^{tree}" })
+@@ -2522,11 +2588,20 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
+ 		local subject = string.match(subjects, "^[^\n]*") or "tracker: capture"
+ 		message = if bodies ~= "" then `{subject}\n\n{bodies}` else subject
+ 	end
++	local function gitFn(a: { string }): (boolean, string)
++		local r = sh.run("git", a)
++		return r.ok, if r.ok then sh.trim(r.stdout) else r.stderr
++	end
++	local function rootsAt(ref: string): { string }?
++		local reg = projects.at(ref)
++		return if reg then projects.roots(reg :: projects.Registry) else nil
++	end
+ 	local parent = base
+-	for _ = 1, 3 do
++	for attempt = 1, landrace.TRIES do
+ 		local tree = treeNow()
+ 		local sha = sh.git({ "commit-tree", tree, "-p", parent, "-m", message :: string })
+ 		local pushed: sh.Result
++		local answered = true
+ 		if process.env.ZN_PUBLISH_BROKER and process.env.ZN_PUBLISH_BROKER ~= "" then
+ 			-- inside a dispatched step the agent's credential can't push to main: the dispatcher pushes it (c0117)
+ 			local ok, said = brokerLib.request(
+@@ -2536,19 +2611,43 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
+ 				nil
+ 			)
+ 			pushed = { ok = ok, code = if ok then 0 else 1, stdout = "", stderr = said }
++			answered = ok or string.sub(said, 1, #brokerLib.NO_ANSWER) ~= brokerLib.NO_ANSWER
+ 		else
+ 			pushed = sh.run("git", { "push", "origin", `{sha}:refs/heads/main` })
+ 		end
+-		if pushed.ok then
++		local facts: landrace.Facts = {
++			attempt = attempt,
++			max = landrace.TRIES,
++			pushed = pushed.ok,
++			answered = answered,
++			moved = false,
++			contains = false,
++			trackerWhy = nil,
++			touched = {},
++		}
++		local now = parent
++		if not pushed.ok then
++			sh.run("git", { "fetch", "--quiet", "origin", "main" })
++			now = sh.git({ "rev-parse", "--verify", "origin/main^{commit}" })
++			facts.moved = now ~= parent
++			facts.contains = facts.moved and sh.run("git", { "merge-base", "--is-ancestor", sha, now }).ok
++			if answered and facts.moved and not facts.contains and attempt < landrace.TRIES then
++				facts.trackerWhy = trackerstate.checkEach(gitFn, gated, now, rootsAt, true)
++				local changed = lines(sh.git({ "diff", "--name-only", gated, now }))
++				facts.touched = landrace.touched(capturePaths, changed)
++			end
++		end
++		local step, why = landrace.next(facts)
++		if step == "landed" then
+ 			if planned then
+-				pcall(costrow.writeBuffer, root, planned)
++				pcall(costrow.writeBuffer, root, planned :: costrow.Planned)
+ 			end
+ 			sh.git({ "reset", "--hard", "--quiet", sha })
+ 			sh.run("git", { "fetch", "--quiet", "origin", "main" })
+-			local suffix = if override then " (gate overridden)" else ""
+-			print(
+-				`landed {sha} on main; remove this worktree: git -C {mainRoot()} worktree remove {root} && git -C {mainRoot()} branch -D {branch}{suffix}`
+-			)
++			local note = if pushed.ok
++				then ""
++				else " (the push reported a failure; origin/main holds the commit)"
++			print(`landed {sha} on main{note}; {removal()}`)
+ 			local kickErr: any = nil
+ 			local kicked = xpcall(watchcmd.kick, function(e)
+ 				kickErr = e
+@@ -2558,28 +2657,31 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
+ 			end
+ 			return
+ 		end
+-		sh.run("git", { "fetch", "--quiet", "origin", "main" })
+-		local now = sh.git({ "rev-parse", "--verify", "origin/main^{commit}" })
+-		if now == parent then
+-			if planned then
+-				pcall(costrow.restore, planned)
+-				pcall(function()
+-					sh.git({ "reset", "--quiet" })
+-				end)
+-			end
++		unfold()
++		if step == "no-answer" then
++			fail(`{pushed.stderr}: run land again (its start check finds a push that landed late)`)
++		end
++		if step == "unmoved" then
+ 			fail(`the push failed (origin/main did not move): {pushed.stderr}{pushed.stdout}`)
+ 		end
+-		-- origin/main moved: merge it and push again. The gate already passed; it is not run again.
+-		take(now)
++		if step == "give-up" then
++			local last = sh.trim(pushed.stderr .. pushed.stdout)
++			fail(`lost the race to main {landrace.TRIES} times: run land again (last push: {last})`)
++		end
++		-- origin/main moved: merge it and push again, after the gate when the move asks for it
++		if take(now) then
++			already(now)
++			return
++		end
++		if step == "regate" then
++			print(`{why}: running the gate again`)
++			runGate()
++			gated = now
++		end
++		fold()
+ 		parent = now
+ 	end
+-	if planned then
+-		pcall(costrow.restore, planned)
+-		pcall(function()
+-			sh.git({ "reset", "--quiet" })
+-		end)
+-	end
+-	fail("lost the race to main 3 times: run land again")
++	fail(`lost the race to main {landrace.TRIES} times: run land again`)
+ end
+ 
+ -- A repo-relative path as the caller can use it (c0120): relative to the directory ./zn was run from (hereDir, c0114's
+@@ -7845,11 +7947,23 @@ if args[1] == "--" then
+ 	table.remove(args, 1)
+ end
+ local name = args[1]
++-- c0258: `./zn -h` and `./zn --help` are the whole usage, like `./zn` alone
++if name == "-h" or name == "--help" then
++	print(USAGE)
++	process.exit(0)
++end
+ local handler = name and (cmd :: any)[name]
+ if not handler then
+ 	print(USAGE)
+ 	process.exit(if name then 1 else 0)
+ end
++local rest = table.move(args, 2, #args, 1, {})
++local pos, opts = flags(rest)
++-- c0258: -h or --help after any command prints that command's usage and runs nothing (no guard, no handler)
++if usageLib.wantsHelp(opts) then
++	print(usageLib.of(USAGE, name :: string) or USAGE)
++	process.exit(0)
++end
+ -- Every command that can change a repository checks first that git's root is the checkout the tracker
+ -- lives in, whatever PICKMAN_PUBLISH says. Only commands that read the tracker run in `.git`-less
+ -- sandboxes on purpose (specs do), so they alone are exempt.
+@@ -7869,8 +7983,6 @@ local READ_ONLY: { [string]: boolean } = {
+ if not READ_ONLY[name :: string] then
+ 	guardRepoRoot()
+ end
+-local rest = table.move(args, 2, #args, 1, {})
+-local pos, opts = flags(rest)
+ local ok, err = pcall(handler, pos, opts)
+ if not ok then
+ 	fail(`tracker {name}: {err}`)
+diff --git a/z-nile/lib/bounded.pl b/z-nile/lib/bounded.pl
+index abf91b4b9..a58ee003e 100644
+--- a/z-nile/lib/bounded.pl
++++ b/z-nile/lib/bounded.pl
+@@ -33,6 +33,11 @@ my ( $time, $cpu, $report );
+ while ( @ARGV && $ARGV[0] =~ /^-/ ) {
+     my $o = shift @ARGV;
+     last if $o eq '--';
++    if ( $o eq '-h' || $o eq '--help' ) {    # c0258: the usage on stdout, and nothing runs
++        print "usage: ./zn run [--time S] [--cpu S] [--report FILE] [--] <command> [args...]"
++          . " (S: whole seconds, --time 1..$MAX_TIME, default $DEFAULT_TIME)\n";
++        exit 0;
++    }
+     if ( $o eq '--report' ) {
+         my $path = shift @ARGV;
+         usage("--report needs a path") unless defined $path && $path ne '';
+diff --git a/z-nile/skills/z-ticket/lessons/confirm-landed-before-removing.md b/z-nile/skills/z-ticket/lessons/confirm-landed-before-removing.md
+index e8ee93aa3..e22c70385 100644
+--- a/z-nile/skills/z-ticket/lessons/confirm-landed-before-removing.md
++++ b/z-nile/skills/z-ticket/lessons/confirm-landed-before-removing.md
+@@ -2,10 +2,10 @@
+ title: Remove a capture worktree only after land says it landed
+ when: build
+ tags: [land, worktrees, capture]
+-check: Did `./zn land` print `landed <sha> on main` (read whole, with its exit code unmasked by a pipe), before the spend was recorded and the worktree and branch were removed?
++check: Did `./zn land` print `landed <sha> on main` or `already landed on main` (read whole, with its exit code unmasked by a pipe), before the spend was recorded and the worktree and branch were removed?
+ ---
+-`./zn land` can fail after its full gate (it gives up when it loses the race to `main` three times), and the capture's sections then exist only on its branch.
++`./zn land` can fail after its full gate (it gives up when it loses the race to `main` ten times), and the capture's sections then exist only on its branch.
+ 
+ **Why:** f0126's prep (2026-10-25) captured c0150 with `./zn land 2>&1 | tail -3` in the background: the pipe's exit code was `tail`'s, so a "lost the race to main 3 times" failure looked like success, and the worktree and branch were removed. The commit survived only as a dangling object and had to be cherry-picked into a new capture worktree and landed again. f0158's prep (2026-10-26) captured c0159 with `./zn land 2>&1 | tail -1; …; git worktree remove … && git branch -D …` in one command: the land lost the race three times and the chained cleanup still removed the worktree and the unlanded branch, so the filled text was lost and had to be rewritten.
+ 
+-**How to apply:** run `land` without a pipe (or with `set -o pipefail`), look for its `landed <sha> on main` line, and only then run `./zn spend` and the removal command it prints. On a lost race, run `land` again in the same worktree.
++**How to apply:** run `land` without a pipe (or with `set -o pipefail`), look for its `landed <sha> on main` (or `already landed on main`) line, and only then run `./zn spend` and the removal command it prints. On a lost race, run `land` again in the same worktree.
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index d009a1d87..c05a0661d 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -106,7 +106,7 @@ One procedure for every change: a raft, a capture, a prep or an edit.
+    - A `CONFLICT (add/add)` on a tracker document means two items picked the same number: see Conflicts.
+    - Then run `./zn list` (it fails on a duplicate id and warns when one number is shared by two prefixes; renumber yours if you can) and `z-nile/check.sh --affected`.
+ 1. **Commit in the worktree**: `./zn commit` inside a raft; plain `git add` and `git commit` elsewhere.
+-2. **Push and open the PR**: `git push -u origin <branch>`. A raft's PR is opened as a draft by `start`; any other PR is opened ready with `gh pr create`. A capture lands with `./zn land` instead (no PR): it merges `origin/main`, runs the static stages (`z-nile/check.sh --static`) for the projects the capture changed, checks that only the sections, title and `depends_on` of draft backlog issue documents changed, refuses an issue in that diff whose approval no longer matches its contract, pushes one commit to `main` (a lost push retries the push, not the gate) and prints the worktree-removal command. A capture's spend row is committed on the capture branch before `land`, so it is in the tree that push carries.
++2. **Push and open the PR**: `git push -u origin <branch>`. A raft's PR is opened as a draft by `start`; any other PR is opened ready with `gh pr create`. A capture lands with `./zn land` instead (no PR): it merges `origin/main`, runs the static stages (`z-nile/check.sh --static`) for the projects the capture changed, checks that only the sections, title and `depends_on` of draft backlog issue documents changed, refuses an issue in that diff whose approval no longer matches its contract, pushes one commit to `main` and prints the worktree-removal command. A lost push race merges the new `main` and pushes again, up to ten pushes; it runs the gate again only when `main` moved by more than tracker state (the publisher's classes, `trackerstate`) or changed one of the capture's files since the gate passed. A push that reports a failure while `origin/main` holds its commit has landed, and a branch whose changes `origin/main` already holds says `already landed` and exits 0. Every `./zn` command prints its usage for `-h` or `--help` and runs nothing. A capture's spend row is committed on the capture branch before `land`, so it is in the tree that push carries.
+ 3. **Merge** a PR only when the conditions under Merging hold. A raft is landed by `./zn done` (one `--no-ff` merge, not a squash) once its review is resolved. Any other PR is merged with `gh pr merge --squash`. A prep the user didn't ask for is not merged without asking, and a capture they didn't ask for is not landed without asking. Under the dispatcher, a step neither asks nor merges: once its PR is open and its spend recorded it ends, and the dispatcher passes the prep and rafting gates itself (the user started it, c0117 G4). (A capture has no PR: `./zn land` in step 2 is its landing.)
+ 4. **After the merge, one chained command, run last**: `"<root>/zn" sync; git -C <root> worktree remove <path> && git -C <root> branch -D <branch>; git -C <root> worktree prune`. `<root>` is the first path in `git worktree list`; `sync` fast-forwards the root and rebuilds its board. When the session works inside the worktree (with z-work it started in the main checkout and `cd`'d into the worktree), removing it removes the session's own directory, so every command after it must use `-C <root>` or absolute paths, and nothing should run after this command: post the final report first. The alternative is to leave removal to `./zn worktree-prune`, run later from the main checkout.
+ 
+diff --git a/zn b/zn
+index 568afff90..1ce426316 100755
+--- a/zn
++++ b/zn
+@@ -57,7 +57,7 @@ export PATH="$HOME/.rokit/bin:$PATH"
+ if [[ ${1:-} == approve ]]; then
+   checking=0
+   for arg in "$@"; do
+-    [[ $arg == --check ]] && checking=1
++    [[ $arg == --check || $arg == -h || $arg == --help ]] && checking=1 # help only prints (c0258)
+   done
+   if [[ $checking == 0 ]]; then
+     id="${2:-<issue-id>}"
+diff --git a/z-nile/engine/landrace.luau b/z-nile/engine/landrace.luau
+new file mode 100644
+index 000000000..815d4e0ae
+--- /dev/null
++++ b/z-nile/engine/landrace.luau
+@@ -0,0 +1,81 @@
++--!strict
++-- c0258: what `./zn land` does after each push. Pure over facts:
++-- main.luau reads git and runs the gate; this module only decides.
++local landrace = {}
++
++-- How many pushes one land makes before it gives up (each lost race merges the new main and pushes again).
++landrace.TRIES = 10
++
++export type Step = "landed" | "no-answer" | "unmoved" | "give-up" | "regate" | "again"
++
++export type Facts = {
++	attempt: number, -- 1-based: the push just tried
++	max: number, -- landrace.TRIES in the command
++	pushed: boolean, -- the push (or the broker) said it pushed
++	answered: boolean, -- false when the dispatcher's publish broker gave no answer in its wait (broker.NO_ANSWER)
++	moved: boolean, -- after a failed push: origin/main is no longer the commit's parent
++	contains: boolean, -- after a failed push: origin/main holds the commit land tried to push
++	trackerWhy: string?, -- why gated..now is not tracker state (trackerstate.checkEach), or nil when it is
++	touched: { string }, -- the capture's files that gated..now changes
++}
++
++-- The step after one push. A push that says it failed is landed anyway when origin/main holds its commit; a broker
++-- that gave no answer stops the land at once (ten more waits would take hours; a late push is found by the next
++-- run's start check); a main that did not move is a real push failure; the last try gives up; a main that moved by
++-- more than tracker state, or that changed a file of the capture, runs the gate again before the next push;
++-- otherwise the next push needs no gate. Returns the step and, for "regate", why.
++function landrace.next(f: Facts): (Step, string?)
++	if f.pushed or f.contains then
++		return "landed", nil
++	end
++	if not f.answered then
++		return "no-answer", nil
++	end
++	if not f.moved then
++		return "unmoved", nil
++	end
++	if f.attempt >= f.max then
++		return "give-up", nil
++	end
++	if f.trackerWhy then
++		return "regate", `main moved by more than tracker state: {f.trackerWhy}`
++	end
++	if #f.touched > 0 then
++		return "regate", `main changed this capture's {table.concat(f.touched, ", ")}`
++	end
++	return "again", nil
++end
++
++-- The paths in both lists, sorted, each once.
++function landrace.touched(own: { string }, changed: { string }): { string }
++	local mine: { [string]: boolean } = {}
++	for _, p in own do
++		mine[p] = true
++	end
++	local seen: { [string]: boolean } = {}
++	local out: { string } = {}
++	for _, p in changed do
++		if mine[p] and not seen[p] then
++			seen[p] = true
++			table.insert(out, p)
++		end
++	end
++	table.sort(out)
++	return out
++end
++
++export type Start = "land" | "already" | "nothing"
++
++-- Before the gate and after each race: `own` is the number of paths the branch's own non-merge commits that
++-- origin/main lacks change (read before any merge), `left` what the merged branch still changes against origin/main.
++-- A branch whose own commits changed files and main already holds the result has landed (an earlier land pushed it,
++-- even if the branch merged that push since); a branch with no commit of its own has nothing to land. A branch whose
++-- own commits cancel out (an edit and its revert) also reads as landed: main lacks nothing it has.
++function landrace.start(own: number, left: number): Start
++	if left > 0 then
++		return "land"
++	end
++	return if own > 0 then "already" else "nothing"
++end
++
++return landrace
+diff --git a/z-nile/engine/usage.luau b/z-nile/engine/usage.luau
+new file mode 100644
+index 000000000..aa751fc49
+--- /dev/null
++++ b/z-nile/engine/usage.luau
+@@ -0,0 +1,34 @@
++--!strict
++-- c0258: what `./zn` prints for -h/--help. Pure over the usage text and the parsed options: main.luau prints.
++local usage = {}
++
++-- Whether the arguments after the command ask for help: `-h` or `--help` as an option of its own. The flags
++-- reader of main.luau gives the answer (a value an option takes is never an option), so this reads its result.
++function usage.wantsHelp(opts: { [string]: { string } }): boolean
++	return opts["-h"] ~= nil or opts["--help"] ~= nil
++end
++
++-- The usage entries of `name` in `text` (main.luau's USAGE): every entry whose first word is the command, with
++-- its continuation lines, as the text has them. An entry starts with exactly two spaces; a continuation line with
++-- more. Nil when the text has none.
++function usage.of(text: string, name: string): string?
++	local out: { string } = {}
++	local inside = false
++	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
++		local word = string.match(line, "^  (%S+)")
++		if word then
++			inside = word == name
++		elseif not string.match(line, "^   ") then
++			inside = false
++		end
++		if inside then
++			table.insert(out, line)
++		end
++	end
++	if #out == 0 then
++		return nil
++	end
++	return `usage: ./zn {name} ...\n` .. table.concat(out, "\n")
++end
++
++return usage
