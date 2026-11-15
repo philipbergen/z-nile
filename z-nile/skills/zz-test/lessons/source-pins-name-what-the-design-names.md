@@ -17,3 +17,5 @@ f0126 design review 005 F2: two absence pins left beside the new behaviour cases
 c0164 design reviews 002 and 003: when a behaviour case replaces a text pin, try a guard mutant on each field the case holds constant, against the case, the deleted pin and every kept spec; whatever only the deleted pin killed must be killed by the case.
 
 **Also:** c0284 design review 001 F2: a page case that removed the JSON and counted `provenanceOf(` and `<h3>Provenance</h3>` in the script passed with the cells unescaped (and would with a wrong key); the page's script can be run in node against the fake DOM that c0118's page spec uses, so assert on the pane it builds (rows, order, escaping, nothing without data).
+
+**Note (c0281 design review 001 F2):** when a behaviour case replaces a source pin, prove the pin is gone with correct variants that respell what it required (the call's spelling, the helper's name, the loop's form), not only with variants that add what it forbade: a spec that keeps one positive assertion of the old pin passes the second kind. Ask: does a spec that keeps one of the old pin's positive assertions still pass every check?

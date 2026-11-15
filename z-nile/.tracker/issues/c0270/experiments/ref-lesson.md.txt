@@ -1,0 +1,11 @@
+---
+title: Before claiming or resuming a prep, find any other prep of the issue, and join it or stop rather than prep it twice
+when: design
+tags: [coordination, claims, process]
+check: Do `git branch -r --list '*<id>*'`, `gh pr list --state all --search <id>` and `./zn status <id>` name another worker or branch for this issue? And did the branch search also take the slug (`'*<slug>*'`), the PR search name the repository with `--repo`, and `git worktree list` show no other worktree for it?
+---
+z-design step 1 says how (**One prep per issue**): a prep found elsewhere is joined, with its owner's say, or you stop; it is never designed a second time beside it.
+
+**Why:** c0264 was prepped twice at once: 4 rounds by hand on `prep-c0264-readme-intent`, and 9 by an agent that claimed it (2026-11-07 19:44 PST) on `prep-readme-states-znile-intent`, PR #256. The user kept the hand prep and closed #256, and the agent's work was lost. A search by id alone misses the agent's branch (a prep branch is `prep-<slug>`), and where `origin` still names the repository before its rename, `gh pr list --search` finds nothing without `--repo` (c0270's prep, 2026-11-15).
+
+**How to apply:** run step 1's searches before `./zn status <id> preparing` and again at every resume, and sort each hit as its sub-bullets say: your own branch, PR and named prototypes are not another prep, and at a resume the claim alone proves nothing. Claim ownership is documented, not checked (zz-rules, Whose claim), so nothing else stops a second prep.

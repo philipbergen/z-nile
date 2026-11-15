@@ -9,7 +9,7 @@ Pillars: (1) Snake seen from the head. (2) Deterministic Logic, simulated headle
 - A square grid of tiles with a solid border. The camera sits low in the snake's head (eye about 0.6 tile up; walls and bodies are 1 tile high, so you can't see over them).
 - A top-right **minimap** shows the whole arena: walls, food, your snake and every other snake. In first person this is what makes it fair.
 - On a turn the camera yaw eases round over about 120 ms, so turns stay readable.
-- Solo arena: 20×20. With N players, the side is `ceil(sqrt(400 + 250·(N−1)))`: 26 for 2, 34 for 4, 48 for 8, 66 for 16, 79 for 24. The size is fixed when a map starts.
+- Solo arena: 20×20. With N players, the side is `ceil(sqrt(400 + 250·(N−1)))`: 26 for 2, 34 for 4, 47 for 8, 65 for 16, 79 for 24. The size is fixed when a map starts.
 
 **Movement**
 - The snake moves one tile per step at the map's speed: 4 tiles/s real time on map 1, +0.25 per map, capped at 7.

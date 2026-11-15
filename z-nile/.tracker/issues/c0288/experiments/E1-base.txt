@@ -1,0 +1,10 @@
+load: 11:30  up 11 days, 23:11, 13 users, load averages: 10.83 10.92 14.27
+Sun Nov 15 11:30:02 PST 2026
+bounded: the caller's CPU limit of 1700 s is lower than --cpu 3600: it stays
+PASS .tracker/issues/c0260/acceptance/provenance.spec.luau: 4 passed, 0 failed
+PASS .tracker/issues/c0260/acceptance/record.spec.luau: 10 passed, 0 failed
+PASS .tracker/issues/c0260/acceptance/loop.spec.luau: 11 passed, 0 failed
+slowest: .tracker/issues/c0260/acceptance/loop.spec.luau 78.6s, .tracker/issues/c0260/acceptance/record.spec.luau 37.4s, .tracker/issues/c0260/acceptance/provenance.spec.luau 21.0s
+25 passed, 0 failed, 3 spec files
+Sun Nov 15 11:31:23 PST 2026
+load: 11:31  up 11 days, 23:13, 13 users, load averages: 13.24 11.72 14.26
