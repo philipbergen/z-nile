@@ -1,0 +1,845 @@
+diff --git a/asteroids/src/shared/Logic/Classic/init.luau b/asteroids/src/shared/Logic/Classic/init.luau
+index 0766c58b..ea3e7b43 100644
+--- a/asteroids/src/shared/Logic/Classic/init.luau
++++ b/asteroids/src/shared/Logic/Classic/init.luau
+@@ -28,6 +28,8 @@ export type Event = {
+ 	wave: number?,
+ 	x: number?,
+ 	y: number?,
++	player: number?, -- the player's slot in a two-player match; nil in a solo run
++	shooter: number?, -- the slot whose shot destroyed a ship (two players, friendly fire)
+ }
+ export type Config = {
+ 	tickRate: number,
+@@ -50,6 +52,36 @@ export type Config = {
+ 	waveTicks: number,
+ 	spawnClear: number,
+ }
++export type Home = Pilot.Home
++export type Rock = Rocks.Rock
++export type Saucer = Saucers.Saucer
++-- one player on a run's field: a Pilot (every field of Pilot.Pilot), whether their run is over, and their slot
++export type Player = {
++	ship: Ship.Ship,
++	shipState: ShipState,
++	timer: number,
++	protect: number,
++	shots: { Shot },
++	lives: number,
++	score: number,
++	nextExtra: number,
++	home: Pilot.Home?,
++	phase: Phase,
++	slot: number?, -- set by a two-player match; nil in a solo run
++}
++-- the field's side of a run: what every player on it shares
++export type Run = {
++	config: Config,
++	wave: number,
++	rng: number,
++	nextId: number,
++	rocks: { Rocks.Rock },
++	saucer: Saucers.Saucer?,
++	saucerShots: { Shot },
++	saucerElapsed: number,
++	waveTimer: number,
++}
++-- a solo run: one table that is both the Run and its one Player
+ export type Game = {
+ 	config: Config,
+ 	phase: Phase,
+@@ -69,6 +101,8 @@ export type Game = {
+ 	saucerShots: { Shot },
+ 	saucerElapsed: number,
+ 	waveTimer: number,
++	home: Pilot.Home?,
++	slot: number?,
+ }
+ 
+ local Classic = {}
+@@ -96,7 +130,8 @@ Classic.CONFIG = table.freeze({
+ 	spawnClear = 160,
+ } :: Config)
+ 
+-local function drawer(g: Game): Rocks.Draw
++-- every draw a rule makes, from the run's own generator
++function Classic.draw(g: Run): Rocks.Draw
+ 	return function(n: number): number
+ 		local v
+ 		g.rng, v = Rng.next(g.rng, n)
+@@ -104,27 +139,46 @@ local function drawer(g: Game): Rocks.Draw
+ 	end
+ end
+ 
++-- the generator's first state for a seed (a fraction floored; not a finite number: 0)
++function Classic.seed(seed: number): number
++	return Rng.seed(seed)
++end
++
+ -- the large rocks a wave starts with
+ function Classic.rockCount(c: Config, wave: number): number
+ 	return math.min(c.maxRocks, c.firstRocks + c.rocksStep * (wave - 1))
+ end
+ 
++local function nearest(f: Field.Field, x: number, y: number, ships: { Ship.Ship }): number
++	local best = math.huge
++	for _, s in ships do
++		best = math.min(best, Field.distance(f, x, y, s.x, s.y))
++	end
++	return best
++end
++
+ -- The wave's rocks, each on the field's edge (draw(width + height) - 1 runs along the bottom edge, then up the
+--- left one), moved half that edge along when it would start within spawnClear of the ship, then launched.
+-local function spawnWave(g: Game)
++-- left one). A point closer than spawnClear to one of the ships moves half that edge along, unless that puts it
++-- nearer a ship than it was. Then launched.
++function Classic.spawnWave(g: Run, ships: { Ship.Ship })
+ 	local c, f = g.config, g.config.field
+-	local draw = drawer(g)
++	local draw = Classic.draw(g)
+ 	for _ = 1, Classic.rockCount(c, g.wave) do
+ 		local at = draw(f.width + f.height) - 1
+ 		local x, y = at, 0
+ 		if at >= f.width then
+ 			x, y = 0, at - f.width
+ 		end
+-		if Field.distance(f, x, y, g.ship.x, g.ship.y) < c.spawnClear then
++		local near = nearest(f, x, y, ships)
++		if near < c.spawnClear then
++			local mx, my = x, y
+ 			if at < f.width then
+-				x = (x + f.width / 2) % f.width
++				mx = (x + f.width / 2) % f.width
+ 			else
+-				y = (y + f.height / 2) % f.height
++				my = (y + f.height / 2) % f.height
++			end
++			if nearest(f, mx, my, ships) >= near then
++				x, y = mx, my
+ 			end
+ 		end
+ 		table.insert(g.rocks, Rocks.launch(g.nextId, "large", x, y, draw))
+@@ -155,85 +209,125 @@ function Classic.new(seed: number, config: Config?): Game
+ 		saucerElapsed = 0,
+ 		waveTimer = 0,
+ 	}
+-	spawnWave(g)
++	Classic.spawnWave(g, { g.ship })
+ 	return g
+ end
+ 
+--- a pilot's events, copied into the run's
+-local function emitter(events: { Event }): (Pilot.Event) -> ()
++-- a player's pilot events, copied into the run's with the player's slot (and a loss's shooter)
++local function emitter(events: { Event }, p: Player, shooter: number?): (Pilot.Event) -> ()
+ 	return function(e: Pilot.Event)
+-		table.insert(events, { kind = e.kind, lives = e.lives, cause = e.cause, x = e.x, y = e.y })
++		table.insert(events, {
++			kind = e.kind,
++			lives = e.lives,
++			cause = e.cause,
++			x = e.x,
++			y = e.y,
++			player = p.slot,
++			shooter = shooter,
++		})
+ 	end
+ end
+ 
+-local function endIfOut(g: Game, out: boolean, events: { Event }): boolean
++-- the player's last life lost ends their run
++local function endIfOut(p: Player, out: boolean, events: { Event }): boolean
+ 	if out then
+-		g.phase = "gameover"
+-		table.insert(events, { kind = "GameOver" })
++		p.phase = "gameover"
++		table.insert(events, { kind = "GameOver", player = p.slot })
+ 	end
+ 	return out
+ end
+ 
+-local function breakRock(g: Game, index: number, by: By, events: { Event })
++-- the player's ship is lost (shooter: the slot whose shot it was, with friendly fire)
++local function lose(g: Run, p: Player, cause: Cause, events: { Event }, shooter: number?)
++	endIfOut(p, Pilot.lose(p, g.config, cause, emitter(events, p, shooter)), events)
++end
++
++local function breakRock(g: Run, p: Player, index: number, by: By, events: { Event })
+ 	local r = table.remove(g.rocks, index) :: Rocks.Rock
+ 	local points = Rocks.SIZES[r.size].points
+-	table.insert(events, { kind = "RockHit", id = r.id, size = r.size, points = points, by = by })
+-	Pilot.award(g, g.config, points, emitter(events))
+-	local pieces = Rocks.split(r, g.nextId, drawer(g))
+-	for _, p in pieces do
+-		table.insert(g.rocks, p)
++	table.insert(
++		events,
++		{ kind = "RockHit", id = r.id, size = r.size, points = points, by = by, player = p.slot }
++	)
++	Pilot.award(p, g.config, points, emitter(events, p))
++	local pieces = Rocks.split(r, g.nextId, Classic.draw(g))
++	for _, piece in pieces do
++		table.insert(g.rocks, piece)
+ 	end
+ 	g.nextId += #pieces
+ end
+ 
+-local function breakSaucer(g: Game, by: By, events: { Event })
++local function breakSaucer(g: Run, p: Player, by: By, events: { Event })
+ 	local s = g.saucer :: Saucers.Saucer
+ 	local points = g.config.saucers[s.kind].points
+ 	g.saucer = nil
+ 	g.saucerElapsed = 0
+-	table.insert(events, { kind = "SaucerHit", saucer = s.kind, points = points, by = by })
+-	Pilot.award(g, g.config, points, emitter(events))
++	table.insert(events, { kind = "SaucerHit", saucer = s.kind, points = points, by = by, player = p.slot })
++	Pilot.award(p, g.config, points, emitter(events, p))
+ end
+ 
+-local function centreClear(g: Game): boolean
++-- no rock or saucer comes within clearRadius (beyond its own radius) of the point
++function Classic.clearAt(g: Run, x: number, y: number): boolean
+ 	local c, f = g.config, g.config.field
+-	local cx, cy = f.width / 2, f.height / 2
+ 	for _, r in g.rocks do
+-		if Field.distance(f, cx, cy, r.x, r.y) < Rocks.SIZES[r.size].radius + c.clearRadius then
++		if Field.distance(f, x, y, r.x, r.y) < Rocks.SIZES[r.size].radius + c.clearRadius then
+ 			return false
+ 		end
+ 	end
+ 	local s = g.saucer
+-	if s and Field.distance(f, cx, cy, s.x, s.y) < c.saucers[s.kind].radius + c.clearRadius then
++	if s and Field.distance(f, x, y, s.x, s.y) < c.saucers[s.kind].radius + c.clearRadius then
+ 		return false
+ 	end
+ 	return true
+ end
+ 
+--- 4. the saucer: its clock while there is none, else its move, its leaving and its fire
+-local function saucerStep(g: Game, events: { Event })
++-- 1. the player's ship's clocks (Pilot.clock), its home judged clear by the rocks and the saucer. True when it
++-- was lost on its last life (their run is then over).
++function Classic.clock(g: Run, p: Player, events: { Event }): boolean
++	local hx, hy = Pilot.home(p, g.config)
++	local out = Pilot.clock(p, g.config, Classic.draw(g), function()
++		return Classic.clearAt(g, hx, hy)
++	end, emitter(events, p))
++	return endIfOut(p, out, events)
++end
++
++-- 2. the player's controls (Pilot.control)
++function Classic.control(g: Run, p: Player, input: Input?, events: { Event })
++	Pilot.control(p, g.config, Pilot.controls(input), Classic.draw(g), emitter(events, p))
++end
++
++-- 3. the rocks drift
++function Classic.moveRocks(g: Run)
++	for _, r in g.rocks do
++		Rocks.move(r, g.config.field)
++	end
++end
++
++-- 4. the saucer: its clock while there is none, else its move, its leaving and its fire at the target (a player
++-- whose ship is on the field, aimed from their score; nil holds its fire)
++function Classic.saucerStep(g: Run, target: Player?, events: { Event })
+ 	local f, sc = g.config.field, g.config.saucers
+ 	local s = g.saucer
+ 	if s == nil then
+ 		g.saucerElapsed += 1
+ 		if g.saucerElapsed >= Saucers.wait(sc, g.wave) then
+ 			g.saucerElapsed = 0
+-			local new = Saucers.appear(sc, f, g.wave, drawer(g))
++			local new = Saucers.appear(sc, f, g.wave, Classic.draw(g))
+ 			g.saucer = new
+ 			table.insert(events, { kind = "SaucerAppear", saucer = new.kind })
+ 		end
+ 		return
+ 	end
+-	if Saucers.move(s, sc, f, drawer(g)) then
++	if Saucers.move(s, sc, f, Classic.draw(g)) then
+ 		g.saucer = nil
+ 		g.saucerElapsed = 0
+ 		table.insert(events, { kind = "SaucerLeave", saucer = s.kind })
+ 		return
+ 	end
+ 	s.fireElapsed += 1
+-	if s.fireElapsed >= sc[s.kind].fireTicks and g.shipState == "alive" then
++	if s.fireElapsed >= sc[s.kind].fireTicks and target then
+ 		s.fireElapsed = 0
+-		local h = Saucers.aim(s, sc, f, g.score, g.ship.x, g.ship.y, drawer(g))
++		local h = Saucers.aim(s, sc, f, target.score, target.ship.x, target.ship.y, Classic.draw(g))
+ 		local ux, uy = Field.unit(h)
+ 		table.insert(
+ 			g.saucerShots,
+@@ -243,11 +337,12 @@ local function saucerStep(g: Game, events: { Event })
+ 	end
+ end
+ 
+--- 5. the player's shots, oldest first: each hits the first rock or saucer along its move, or flies on
+-local function moveShots(g: Game, events: { Event })
+-	local f = g.config.field
++-- 5. the player's shots, oldest first: each hits the first rock, saucer or (friendly fire: foe given) exposed foe
++-- ship along its move, or flies on. A tie goes to the rock, then the saucer.
++function Classic.moveShots(g: Run, p: Player, foe: Player?, events: { Event })
++	local c, f = g.config, g.config.field
+ 	local kept = {}
+-	for _, shot in g.shots do
++	for _, shot in p.shots do
+ 		local best, bestRock = nil :: number?, nil :: number?
+ 		for i, r in g.rocks do
+ 			local t = Field.sweep(f, shot.x, shot.y, shot.vx, shot.vy, r.x, r.y, Rocks.SIZES[r.size].radius)
+@@ -256,12 +351,17 @@ local function moveShots(g: Game, events: { Event })
+ 			end
+ 		end
+ 		local s = g.saucer
+-		local st = s
+-			and Field.sweep(f, shot.x, shot.y, shot.vx, shot.vy, s.x, s.y, g.config.saucers[s.kind].radius)
+-		if st and (best == nil or st < best) then
+-			breakSaucer(g, "shot", events)
++		local st = s and Field.sweep(f, shot.x, shot.y, shot.vx, shot.vy, s.x, s.y, c.saucers[s.kind].radius)
++		local ft = nil :: number?
++		if foe and Pilot.exposed(foe) then
++			ft = Field.sweep(f, shot.x, shot.y, shot.vx, shot.vy, foe.ship.x, foe.ship.y, c.ship.radius)
++		end
++		if ft and (best == nil or ft < best) and (st == nil or ft < st) then
++			lose(g, foe :: Player, "shot", events, p.slot)
++		elseif st and (best == nil or st < best) then
++			breakSaucer(g, p, "shot", events)
+ 		elseif bestRock then
+-			breakRock(g, bestRock, "shot", events)
++			breakRock(g, p, bestRock, "shot", events)
+ 		else
+ 			shot.x, shot.y = Field.wrap(f, shot.x + shot.vx, shot.y + shot.vy)
+ 			shot.life -= 1
+@@ -270,18 +370,26 @@ local function moveShots(g: Game, events: { Event })
+ 			end
+ 		end
+ 	end
+-	g.shots = kept
++	p.shots = kept
+ end
+ 
+--- 6. the saucer's shots: each hits an exposed ship along its move, or flies on
+-local function moveSaucerShots(g: Game, events: { Event })
++-- 6. the saucer's shots: each hits the exposed ship it reaches first along its move (a tie to the earlier
++-- listed player), or flies on
++function Classic.moveSaucerShots(g: Run, players: { Player }, events: { Event })
+ 	local c, f = g.config, g.config.field
+ 	local kept = {}
+ 	for _, shot in g.saucerShots do
+-		local hit = Pilot.exposed(g)
+-			and Field.sweep(f, shot.x, shot.y, shot.vx, shot.vy, g.ship.x, g.ship.y, c.ship.radius) ~= nil
++		local best, hit = nil :: number?, nil :: Player?
++		for _, p in players do
++			if Pilot.exposed(p) then
++				local t = Field.sweep(f, shot.x, shot.y, shot.vx, shot.vy, p.ship.x, p.ship.y, c.ship.radius)
++				if t and (best == nil or t < best) then
++					best, hit = t, p
++				end
++			end
++		end
+ 		if hit then
+-			endIfOut(g, Pilot.lose(g, c, "saucershot", emitter(events)), events)
++			lose(g, hit, "saucershot", events)
+ 		else
+ 			shot.x, shot.y = Field.wrap(f, shot.x + shot.vx, shot.y + shot.vy)
+ 			shot.life -= 1
+@@ -293,34 +401,35 @@ local function moveSaucerShots(g: Game, events: { Event })
+ 	g.saucerShots = kept
+ end
+ 
+--- 7. the exposed ship against the rocks (the first it overlaps), then the saucer: both break, and the ship is lost
+-local function collide(g: Game, events: { Event })
+-	if not Pilot.exposed(g) then
++-- 7. the player's exposed ship against the rocks (the first it overlaps), then the saucer: both break, and the
++-- ship is lost
++function Classic.collide(g: Run, p: Player, events: { Event })
++	if not Pilot.exposed(p) then
+ 		return
+ 	end
+ 	local c, f = g.config, g.config.field
+-	local sx, sy = g.ship.x, g.ship.y
++	local sx, sy = p.ship.x, p.ship.y
+ 	for i, r in g.rocks do
+ 		if Field.distance(f, sx, sy, r.x, r.y) < Rocks.SIZES[r.size].radius + c.ship.radius then
+-			breakRock(g, i, "ship", events)
+-			endIfOut(g, Pilot.lose(g, c, "rock", emitter(events)), events)
++			breakRock(g, p, i, "ship", events)
++			lose(g, p, "rock", events)
+ 			return
+ 		end
+ 	end
+ 	local s = g.saucer
+ 	if s and Field.distance(f, sx, sy, s.x, s.y) < c.saucers[s.kind].radius + c.ship.radius then
+-		breakSaucer(g, "ship", events)
+-		endIfOut(g, Pilot.lose(g, c, "saucer", emitter(events)), events)
++		breakSaucer(g, p, "ship", events)
++		lose(g, p, "saucer", events)
+ 	end
+ end
+ 
+--- 8. the waves: the last rock gone starts the clock, and the next wave comes waveTicks later
+-local function waveClock(g: Game, events: { Event })
++-- 8. the waves: the last rock gone starts the clock, and the next wave comes waveTicks later, clear of the ships
++function Classic.waveClock(g: Run, ships: { Ship.Ship }, events: { Event })
+ 	if g.waveTimer > 0 then
+ 		g.waveTimer -= 1
+ 		if g.waveTimer == 0 then
+ 			g.wave += 1
+-			spawnWave(g)
++			Classic.spawnWave(g, ships)
+ 			table.insert(events, { kind = "WaveStart", wave = g.wave })
+ 		end
+ 	elseif #g.rocks == 0 then
+@@ -340,27 +449,22 @@ function Classic.step(g: Game, input: Input?): { Event }
+ 	if over(g) then
+ 		return events
+ 	end
+-	local out = Pilot.clock(g, g.config, drawer(g), function()
+-		return centreClear(g)
+-	end, emitter(events))
+-	if endIfOut(g, out, events) then
++	if Classic.clock(g, g, events) then
+ 		return events
+ 	end
+-	Pilot.control(g, g.config, Pilot.controls(input), drawer(g), emitter(events))
+-	for _, r in g.rocks do
+-		Rocks.move(r, g.config.field)
+-	end
+-	saucerStep(g, events)
+-	moveShots(g, events)
+-	moveSaucerShots(g, events)
++	Classic.control(g, g, input, events)
++	Classic.moveRocks(g)
++	Classic.saucerStep(g, if g.shipState == "alive" then g else nil, events)
++	Classic.moveShots(g, g, nil, events)
++	Classic.moveSaucerShots(g, { g }, events)
+ 	if over(g) then
+ 		return events
+ 	end
+-	collide(g, events)
++	Classic.collide(g, g, events)
+ 	if over(g) then
+ 		return events
+ 	end
+-	waveClock(g, events)
++	Classic.waveClock(g, { g.ship }, events)
+ 	return events
+ end
+ 
+diff --git a/asteroids/src/shared/Logic/Pilot/init.luau b/asteroids/src/shared/Logic/Pilot/init.luau
+index 9d2c3716..8a6593d3 100644
+--- a/asteroids/src/shared/Logic/Pilot/init.luau
++++ b/asteroids/src/shared/Logic/Pilot/init.luau
+@@ -7,7 +7,7 @@ local Field = require("./Field")
+ local Ship = require("./Ship")
+ 
+ export type State = "alive" | "hyperspace" | "dead"
+-export type Cause = "rock" | "saucer" | "saucershot" | "hyperspace"
++export type Cause = "rock" | "saucer" | "saucershot" | "hyperspace" | "shot" -- shot: the other player's, with friendly fire
+ export type Shot = { x: number, y: number, vx: number, vy: number, life: number }
+ export type Controls = { turn: number, thrust: boolean, fire: boolean, hyperspace: boolean }
+ export type Config = {
+@@ -23,6 +23,7 @@ export type Config = {
+ 	respawnTicks: number,
+ 	protectTicks: number,
+ }
++export type Home = { x: number, y: number }
+ export type Pilot = {
+ 	ship: Ship.Ship,
+ 	shipState: State,
+@@ -32,12 +33,22 @@ export type Pilot = {
+ 	lives: number,
+ 	score: number,
+ 	nextExtra: number, -- the score that earns the next life
++	home: Home?, -- where the ship is lost to and comes back at; nil is the field's centre
+ }
+ export type Event = { kind: string, lives: number?, cause: Cause?, x: number?, y: number? }
+ export type Draw = (n: number) -> number -- a whole number in 1..n
+ 
+ local Pilot = {}
+ 
++-- where the pilot's ship waits when lost and comes back: its home, or the field's centre
++function Pilot.home(p: Pilot, c: Config): (number, number)
++	local h = p.home
++	if h then
++		return h.x, h.y
++	end
++	return c.field.width / 2, c.field.height / 2
++end
++
+ -- a pilot at (x, y), on the field at rest, with the run's lives and no score
+ function Pilot.new(c: Config, x: number, y: number): Pilot
+ 	return {
+@@ -82,12 +93,13 @@ function Pilot.award(p: Pilot, c: Config, points: number, emit: (Event) -> ())
+ 	end
+ end
+ 
+--- The ship is lost where it is: a life, and it waits at the field's centre, unseen, for its respawn. Its
++-- The ship is lost where it is: a life, and it waits at its home (the centre), unseen, for its respawn. Its
+ -- shots fly on. True when that was its last life (the run decides what that ends).
+ function Pilot.lose(p: Pilot, c: Config, cause: Cause, emit: (Event) -> ()): boolean
+ 	p.lives -= 1
+ 	emit({ kind = "ShipDestroyed", cause = cause, lives = p.lives, x = p.ship.x, y = p.ship.y })
+-	p.ship = Ship.new(c.ship, c.field.width / 2, c.field.height / 2)
++	local hx, hy = Pilot.home(p, c)
++	p.ship = Ship.new(c.ship, hx, hy)
+ 	p.shipState = "dead"
+ 	p.timer = c.respawnTicks
+ 	p.protect = 0
+@@ -96,8 +108,8 @@ end
+ 
+ -- One tick of the ship's clocks, first in the tick. Protection runs down while the ship is not lost (on the
+ -- field or away). Away, it comes back when its time is up, unless draw(hyperspaceOdds) is 1, which loses it
+--- there, protected or not. Lost, it waits out its time, then comes back at the centre, protected, on the
+--- first tick clear() says the centre is clear. True when the ship was lost on its last life.
++-- there, protected or not. Lost, it waits out its time, then comes back at its home, protected, on the
++-- first tick clear() says the home is clear. True when the ship was lost on its last life.
+ function Pilot.clock(p: Pilot, c: Config, draw: Draw, clear: () -> boolean, emit: (Event) -> ()): boolean
+ 	if p.shipState ~= "dead" and p.protect > 0 then
+ 		p.protect -= 1
+@@ -117,7 +129,8 @@ function Pilot.clock(p: Pilot, c: Config, draw: Draw, clear: () -> boolean, emit
+ 			p.timer -= 1
+ 		end
+ 		if p.timer == 0 and clear() then
+-			p.ship = Ship.new(c.ship, c.field.width / 2, c.field.height / 2)
++			local hx, hy = Pilot.home(p, c)
++			p.ship = Ship.new(c.ship, hx, hy)
+ 			p.shipState = "alive"
+ 			p.protect = c.protectTicks
+ 			emit({ kind = "Respawn", lives = p.lives })
+diff --git a/asteroids/src/shared/Logic/TwoPlayer/init.luau b/asteroids/src/shared/Logic/TwoPlayer/init.luau
+new file mode 100644
+index 00000000..9fa57c46
+--- /dev/null
++++ b/asteroids/src/shared/Logic/TwoPlayer/init.luau
+@@ -0,0 +1,328 @@
++--!strict
++-- TwoPlayer: two ships on one field, a match as plain data stepped once per tick with both players' inputs. The
++-- rocks, the saucer and the waves are shared; each player has their own ship, shots, score, lives and revives,
++-- through Pilot's and Classic's own steps. The ships start on opposite sides, the waves have 1.5 x the rocks, shots pass
++-- through the other ship and the ships bounce off each other (two switches), and a lone survivor plays on.
++local Classic = require("./Classic")
++local Field = require("./Field")
++local Ship = require("./Ship")
++
++export type Phase = "playing" | "gameover"
++export type Config = {
++	classic: Classic.Config, -- every solo rule's numbers, with 1.5 x the rocks
++	homes: { Classic.Home }, -- where each player's ship starts and respawns
++	friendlyFire: boolean, -- a shot can destroy the other player's exposed ship
++	shipsBounce: boolean, -- two ships on the field bounce off each other
++}
++-- a player's side: Classic's player (every field of Classic.Player), their revives, and whether they have left
++export type Pilot = {
++	ship: Ship.Ship,
++	shipState: Classic.ShipState,
++	timer: number,
++	protect: number,
++	shots: { Classic.Shot },
++	lives: number,
++	score: number,
++	nextExtra: number,
++	home: Classic.Home?,
++	phase: Classic.Phase,
++	slot: number?,
++	revives: number,
++	left: boolean,
++}
++-- the field's side is Classic's run (every field of Classic.Run); the match adds its switches, its phase, the
++-- tick's lead and the two pilots
++export type Match = {
++	config: Classic.Config,
++	wave: number,
++	rng: number,
++	nextId: number,
++	rocks: { Classic.Rock },
++	saucer: Classic.Saucer?,
++	saucerShots: { Classic.Shot },
++	saucerElapsed: number,
++	waveTimer: number,
++	pair: Config,
++	phase: Phase,
++	lead: number,
++	pilots: { Pilot },
++}
++
++local TwoPlayer = {}
++
++local function frozenCopy<T>(base: T, changes: { [string]: any }): T
++	local out = table.clone(base :: any)
++	for k, v in changes do
++		out[k] = v
++	end
++	return table.freeze(out) :: any
++end
++
++local SOLO = Classic.CONFIG
++local W, H = SOLO.field.width, SOLO.field.height
++
++TwoPlayer.CONFIG = table.freeze({
++	-- 1.5 x the solo count, rounded down: 6, 9, 12, 15, then 16
++	classic = frozenCopy(SOLO, { firstRocks = 6, rocksStep = 3, maxRocks = 16 }),
++	homes = table.freeze({
++		table.freeze({ x = W / 4, y = H / 2 }),
++		table.freeze({ x = 3 * W / 4, y = H / 2 }),
++	}),
++	friendlyFire = false,
++	shipsBounce = true,
++} :: Config)
++
++local function pilot(c: Config, slot: number): Pilot
++	local home = c.homes[slot]
++	return {
++		phase = "playing",
++		score = 0,
++		lives = c.classic.lives,
++		nextExtra = c.classic.extraLifeEvery,
++		ship = Ship.new(c.classic.ship, home.x, home.y),
++		shipState = "alive",
++		timer = 0,
++		protect = 0,
++		shots = {},
++		slot = slot,
++		home = { x = home.x, y = home.y },
++		revives = 0,
++		left = false,
++	}
++end
++
++local function playing(p: Pilot): boolean
++	return p.phase == "playing"
++end
++
++-- the ships the next wave's rocks keep clear of: every player still playing
++local function ships(m: Match): { Ship.Ship }
++	local out = {}
++	for _, p in m.pilots do
++		if playing(p) then
++			table.insert(out, p.ship)
++		end
++	end
++	return out
++end
++
++function TwoPlayer.new(seed: number, config: Config?): Match
++	local c = config or TwoPlayer.CONFIG
++	local m: Match = {
++		config = c.classic,
++		wave = 1,
++		rng = Classic.seed(seed),
++		nextId = 1,
++		rocks = {},
++		saucer = nil,
++		saucerShots = {},
++		saucerElapsed = 0,
++		waveTimer = 0,
++		pair = c,
++		phase = "playing",
++		lead = 1,
++		pilots = { pilot(c, 1), pilot(c, 2) },
++	}
++	Classic.spawnWave(m, ships(m))
++	return m
++end
++
++local function inputOf(inputs: any, slot: number): Classic.Input?
++	if type(inputs) ~= "table" then
++		return nil
++	end
++	return inputs[slot]
++end
++
++-- An elastic bounce of two equal ships on the field whose centres are closer than their two radii: each moves
++-- half the overlap apart along the line of centres, and, if they are closing, they swap their speeds along it.
++local function bounce(m: Match, a: Pilot, b: Pilot, events: { Classic.Event })
++	local c, f = m.config, m.config.field
++	local reach = 2 * c.ship.radius
++	local dx, dy = Field.delta(f, a.ship.x, a.ship.y, b.ship.x, b.ship.y)
++	local d = math.sqrt(dx * dx + dy * dy)
++	if d >= reach then
++		return
++	end
++	local nx, ny = 1, 0
++	if d > 0 then
++		nx, ny = dx / d, dy / d
++	end
++	local push = (reach - d) / 2
++	a.ship.x, a.ship.y = Field.wrap(f, a.ship.x - nx * push, a.ship.y - ny * push)
++	b.ship.x, b.ship.y = Field.wrap(f, b.ship.x + nx * push, b.ship.y + ny * push)
++	local closing = (b.ship.vx - a.ship.vx) * nx + (b.ship.vy - a.ship.vy) * ny
++	if closing < 0 then
++		a.ship.vx += nx * closing
++		a.ship.vy += ny * closing
++		b.ship.vx -= nx * closing
++		b.ship.vy -= ny * closing
++	end
++	for _, s in { a.ship, b.ship } do
++		local speed = math.sqrt(s.vx * s.vx + s.vy * s.vy)
++		if speed > c.ship.maxSpeed then
++			s.vx = s.vx * c.ship.maxSpeed / speed
++			s.vy = s.vy * c.ship.maxSpeed / speed
++		end
++	end
++	table.insert(events, { kind = "Bounce" })
++end
++
++-- the ship the saucer aims at: the nearest on the field, the tick's lead on a tie
++local function target(m: Match, order: { Pilot }): Pilot?
++	local s = m.saucer
++	if s == nil then
++		return nil
++	end
++	local best, bestD = nil :: Pilot?, math.huge
++	for _, p in order do
++		if playing(p) and p.shipState == "alive" then
++			local d = Field.distance(m.config.field, s.x, s.y, p.ship.x, p.ship.y)
++			if d < bestD then
++				best, bestD = p, d
++			end
++		end
++	end
++	return best
++end
++
++-- after a stage: a player out has no shots; both out ends the match (true: the rest of the tick is skipped)
++local function settle(m: Match, events: { Classic.Event }): boolean
++	local left = 0
++	for _, p in m.pilots do
++		if playing(p) then
++			left += 1
++		else
++			p.shots = {}
++		end
++	end
++	if left == 0 then
++		m.phase = "gameover"
++		table.insert(events, { kind = "MatchOver" })
++		return true
++	end
++	return false
++end
++
++-- read through a call, so the checks after each stage are not narrowed away
++local function over(m: Match): boolean
++	return m.phase == "gameover"
++end
++
++-- One tick; the events in the order they happened. The tick's lead (player 1 on the first tick, then turn about)
++-- goes first at every stage and wins every tie. A finished match (gameover) changes no more until a revive.
++function TwoPlayer.step(m: Match, inputs: { Classic.Input? }?): { Classic.Event }
++	local events: { Classic.Event } = {}
++	if over(m) then
++		return events
++	end
++	local order = { m.pilots[m.lead], m.pilots[3 - m.lead] }
++	m.lead = 3 - m.lead
++	-- 1. each ship's clocks
++	for _, p in order do
++		if playing(p) then
++			Classic.clock(m, p, events)
++		end
++	end
++	if settle(m, events) then
++		return events
++	end
++	-- 2. each player's input
++	for _, p in order do
++		if playing(p) then
++			Classic.control(m, p, inputOf(inputs, p.slot :: number), events)
++		end
++	end
++	-- 3. the ships bounce
++	local a, b = order[1], order[2]
++	if
++		m.pair.shipsBounce
++		and playing(a)
++		and playing(b)
++		and a.shipState == "alive"
++		and b.shipState == "alive"
++	then
++		bounce(m, m.pilots[1], m.pilots[2], events)
++	end
++	-- 4. the rocks, 5. the saucer
++	Classic.moveRocks(m)
++	Classic.saucerStep(m, target(m, order), events)
++	-- 6. each player's shots
++	for i, p in order do
++		if playing(p) then
++			local foe = order[3 - i]
++			Classic.moveShots(m, p, if m.pair.friendlyFire and playing(foe) then foe else nil, events)
++		end
++	end
++	if settle(m, events) then
++		return events
++	end
++	-- 7. the saucer's shots
++	local live: { Classic.Player } = {}
++	for _, p in order do
++		if playing(p) then
++			table.insert(live, p)
++		end
++	end
++	Classic.moveSaucerShots(m, live, events)
++	if settle(m, events) then
++		return events
++	end
++	-- 8. each ship's collisions
++	for _, p in order do
++		if playing(p) then
++			Classic.collide(m, p, events)
++		end
++	end
++	if settle(m, events) then
++		return events
++	end
++	-- 9. the waves
++	Classic.waveClock(m, ships(m), events)
++	return events
++end
++
++-- Player slot's run is over: 3 new lives, keeping their score; their ship comes back at its home once that is
++-- clear, protected. False (and nothing changes) unless their run is over and they have not left.
++function TwoPlayer.revive(m: Match, slot: number): boolean
++	local p = m.pilots[slot]
++	if p == nil or p.left or p.phase ~= "gameover" then
++		return false
++	end
++	p.phase = "playing"
++	p.lives = m.config.lives
++	p.revives += 1
++	p.shipState = "dead"
++	p.timer = 0
++	p.protect = 0
++	p.shots = {}
++	m.phase = "playing"
++	return true
++end
++
++-- Player slot leaves the match: out at once, for good (no revive), their ship and shots gone; the other plays on.
++-- False if they have already left.
++function TwoPlayer.leave(m: Match, slot: number): boolean
++	local p = m.pilots[slot]
++	if p == nil or p.left then
++		return false
++	end
++	p.left = true
++	p.phase = "gameover"
++	local home = p.home :: Classic.Home
++	p.ship = Ship.new(m.config.ship, home.x, home.y)
++	p.shipState = "dead"
++	p.timer = 0
++	p.protect = 0
++	p.shots = {}
++	local any = false
++	for _, q in m.pilots do
++		any = any or playing(q)
++	end
++	if not any then
++		m.phase = "gameover"
++	end
++	return true
++end
++
++return TwoPlayer

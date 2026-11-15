@@ -123,7 +123,7 @@ Run once per raft on the finished, restacked stack, on the review model of the C
 1. **Fill `trace.md`** in the raft's folder from the skeleton `./zn trace <R-id>` prints:
    - One row per claim (`<issue>:P<n>`, `<issue>:S<n>`, `<issue>:AC<n>`): cite the design section (`<issue-doc>:<line>`), the test (`<spec-or-check.sh>:<line>`, with the exact case name when a spec), and the code (`<source-file>:<line>`, or `none` when the stack changed no source file) at the top layer's finished commit. A claim deliberately not met says `not met: "<ruling>"` in the design cell, quoting the human's ruling from `## Open to the human`; no other cell may be empty.
    - Under `## Source files`, one row per changed source file, naming the claim or claims (`<issue>:AC1, ...`) it serves. Nothing in the stack may be unaccounted for.
-2. **Verify mechanically**: `./zn trace <R-id> --check` must pass, or every gap is a **high** finding in your review.
+2. **Verify mechanically**: the skeleton is committed before this review starts. `./zn trace <R-id> --check` must pass, or every gap is a **high** finding in your review. A stale line that names a commit means that commit came after the table. Report it as such.
 3. **Judge substance**: check that each cited design section really answers the claim, each cited test really proves it, and each cited source line really implements it, with nothing extra in the diff. Write `final-review-NNN.md` (under `./zn dispatch`, `$ZN_DISPATCH_DIR/review.md`, as Output file says) with findings and `Verdict: approve | changes`. One round and one revision (`final-refute-NNN.md`), then `## Open to the human`, as in Code mode.
 
 ## Lessons

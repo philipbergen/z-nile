@@ -1,0 +1,5 @@
+- design-review-001 F1: z-design/skips-move-the-checks-they-bypass
+- design-review-001 F2: z-design/spec-design-correspondence
+- design-review-001 F3: z-design/quote-other-preps-before-promising, z-design/mutation-runner-runs-correct-variants
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/prep-experiments-run-in-standalone-clones

@@ -308,7 +308,7 @@ function work.forRaft(r: RaftFact): Decision
 		return of(
 			r,
 			"trace",
-			`Run ./zn trace {r.id} and commit that skeleton as trace.md in {r.id}'s folder, then ask again.`,
+			`Append and commit the final Verification log entries (zz-execute Phase 5 step 1), then run ./zn trace {r.id} and commit that skeleton as trace.md in {r.id}'s folder, then ask again.`,
 			"",
 			nil
 		)
