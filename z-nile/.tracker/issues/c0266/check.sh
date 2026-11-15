@@ -10,11 +10,13 @@ A="$HERE/acceptance"
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
 
-# AC3, check-only (one run of a slow-tier spec, about 270 s, never promoted): the promoted classified spec runs all
-# five of its cases, and neither the case c0266 rewrites nor the chores-only case it replaces is among the failures.
-# Its first two cases are red on main since #383 for a reason outside c0266 (two rafts share the slug
-# capture-interview-and-idea-review: R0106 and the retired R0091; c0266's Non-goals), so its other failures are not
-# judged here.
+# AC3, check-only (never promoted): one run of a slow-tier spec, 267.9 s in tests/slow.tsv. Lesson
+# zz-test/check-sh-never-runs-the-slow-tier gives way as its c0302 note allows: the slow spec is the file c0266
+# changes, so no gate runs it on this change, and the raft runs it once, here (Implementation step 3). The promoted
+# classified spec runs all five of its cases, and neither the case c0266 rewrites nor the chores-only case it replaces
+# is among the failures. Its first two cases are red on main since #383 for a reason outside c0266 (two rafts share the
+# slug capture-interview-and-idea-review: R0106 and the retired R0091; c0354, c0266's Non-goals), so its other failures
+# are not judged here.
 classified_case() {
   local out
   out=$(lune run tests/run -- tests/acceptance/c0114/classified.spec.luau 2>&1)

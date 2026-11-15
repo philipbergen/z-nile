@@ -24,7 +24,7 @@ index 1ff7ef3e..81757ae7 100644
  - **Overrides**: every promoted spec the chore changes, named on its `Overrides:` line with what it still pins (a chore may change promoted specs in its own raft).
  - **Existing work**: which prepared, active or mid-prep items, open branches and sequestered `check.sh` files fail the new rule or layout on the day it lands, and what each does then (lesson z-design/new-rules-migrate-existing-work).
 diff --git a/z-nile/skills/z-ticket/SKILL.md b/z-nile/skills/z-ticket/SKILL.md
-index 9bc7b64e..a4e63c22 100644
+index 9bc7b64e..96ba3010 100644
 --- a/z-nile/skills/z-ticket/SKILL.md
 +++ b/z-nile/skills/z-ticket/SKILL.md
 @@ -8,13 +8,13 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
@@ -33,7 +33,7 @@ index 9bc7b64e..a4e63c22 100644
     - **feature** (`f`): new player-facing or developer-facing capability.
 -   - **defect** (`d`): **game or product** behavior that's wrong compared with an issue that's already done or with an obvious expectation. This is rework, and it's counted against the 20% target, so classify honestly.
 -   - **chore** (`c`): tooling, refactors or infrastructure, with no change in behavior. **Anything related to CI or tests is always a chore, even when it's a bug**, for example:
-+   - **defect** (`d`): **product** behavior that's wrong compared with an issue that's already done or with an obvious expectation: a game's, the portal's, the arcade library's, or z-nile's own (its commands, the gate, the guards, the runner, the selector). This is rework, and it's counted against the 20% target, so classify honestly.
++   - **defect** (`d`): **product** behavior that's wrong compared with an issue that's already done or with an obvious expectation: a game's, the portal's, the arcade library's, or z-nile's own (its commands, the gate, the guards, the runner, the selector's code; a hole in the watch map is a chore). This is rework, and it's counted against the 20% target, so classify honestly.
 +   - **chore** (`c`): refactors, infrastructure or upkeep, with no change in behavior. **A spec that is wrong while the code is right is always a chore, even when it's a bug**, for example:
       - a flaky or wrong spec, including a promoted acceptance spec;
 -     - a test-selector graph miss;
@@ -73,7 +73,7 @@ index f1105f37..1437b661 100644
     - Which of the three measures is over target, and which defects drove it. Read each defect's Problem section to find the feature issue or raft it was reworking.
     - Review rounds: compare design rounds between `classic` and `second-order` rafts, and say whether the second-order ones need fewer. Treat backlog and active rafts as incomplete: they may have rounds to come.
 diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
-index a800c419..a257a8b9 100644
+index a800c419..60ed082a 100644
 --- a/z-nile/skills/zz-test/SKILL.md
 +++ b/z-nile/skills/zz-test/SKILL.md
 @@ -36,7 +36,7 @@ Each project's specs live under its home and run from it (c0120): z-nile's (the
@@ -90,10 +90,19 @@ index a800c419..a257a8b9 100644
  - **The net**: `./zn land` and the merge (`./zn watch-kick` after the merge, and the dispatcher after it merges) start `./zn watch-net` under `./zn run`. It returns at once; the log is `.cache/watch-net.log` in the checkout that started it. The net runs every project's fast suite on current main, in `.worktree/watch-net`, and pushes a repair onto main: the failing spec's watch file gains the source files changed since `z-nile/watch-passed` (the last commit the suite passed on; with no record yet, the last 30 commits), and a defect issue. A passing run records that commit in `z-nile/watch-passed` and pushes it, then runs `z-nile/check.sh --slow` in the same worktree, still off the landing path. A slow failure opens one defect (slug `slow-tier-red`) when none is already open, and does not undo the fast pass. A second machine rebases and stops when the repair is already on main.
  - **Every selected spec runs.** An affected gate runs the specs the watch map lists, a full gate every fast-tier spec, a slow gate only `z-nile/tests/slow.tsv`. Nothing is skipped because an earlier run passed. The same commit and the same change do the same work on any machine. The runner packs files by `<home>/.cache/spec-durations.tsv` (one line `<seconds>\t<path>`), a hint written after a run and safe to delete: with no file the run is ordered by path. `slow.tsv` is the committed list of specs those two gates skip, in the same line grammar; its seconds are not the live times.
 -- **Watch miss**: a spec fails under `--full` but wasn't selected for the same diff. That's a hole in the map. `./zn watch-net` fills it; file the defect it captures, since CI and test bugs are always chores.
-+- **Watch miss**: a spec fails under `--full` but wasn't selected for the same diff. That's a hole in the map. `./zn watch-net` fills it; file the defect it captures for the failing spec, which stays a defect: z-nile's root holds defects (c0266).
++- **Watch miss**: a spec fails under `--full` but wasn't selected for the same diff. That's a hole in the map, a chore (z-ticket). `./zn watch-net` fills it and captures it, though it still types the capture a defect (d0353).
  
  ## Acceptance checks (`check.sh`)
  Every issue and raft has a `check.sh` that uses `z-nile/lib/ac.sh`:
+@@ -101,7 +101,7 @@ If something could be expressed as a measurable proxy, it's not Judged or Observ
+ ## Speed
+ A standing rule, not a one-off. Tests and checks run very often, so they must run **concurrently** and as swiftly as possible.
+ - **What exists**: `z-nile/lib/par.sh` runs the independent static stages together (`par_start` / `par_wait`: buffered, timed, reported in start order); `tests/run` runs spec files in concurrent workers (`--jobs N`, `PICKMAN_JOBS`), slowest first by the durations it records in the home's `.cache/spec-durations.tsv` (files with no recorded time first, ties by path; c0154), so a long spec no longer starts late and holds the gate open at the end. Each result prints as its file finishes, and all runners for this user share eight machine-wide worker lanes (`--jobs` remains a per-run cap). A run in-process (`--jobs 1`, one file) neither reads nor writes the record. `PICKMAN_JOBS=1` restores serial runs when you suspect an ordering bug.
+-- **Monitor continuously**: every gate run prints per-stage times, a `slowest:` line and `gate wall time:`, and whoever runs it looks at them. A stage or spec that dominates, or a time that creeps up between runs, is a gate defect: **optimise** it now if it is in your Touched modules, otherwise file a chore (`./zn new issue c gate-slow-<what> --project z-nile`). Never add a serial dependency between stages without a reason.
++- **Monitor continuously**: every gate run prints per-stage times, a `slowest:` line and `gate wall time:`, and whoever runs it looks at them. A stage or spec that dominates, or a time that creeps up between runs, is slow-gate upkeep, a chore while the gate's results are right (c0266): **optimise** it now if it is in your Touched modules, otherwise file one (`./zn new issue c gate-slow-<what> --project z-nile`). Never add a serial dependency between stages without a reason.
+ - **Writing specs for speed**: no wall-clock assertions and no fixed sleeps to let something finish (a bounded poll or rendezvous with a timeout is fine). Shell-heavy fixtures own a unique `.cache/<name>` (a literal `.cache/<dir>` in two spec files under `tests/` fails the gate, a mere mention counts, and `sim` is exempt). No shared mutable state across spec files. Prefer in-process Logic specs, and split or stub a spec that takes more than about a second. Two suites in one checkout queue on the runner's lock; separate worktrees run in parallel (see "Specs never touch the real repository").
+ 
+ ## Specs never touch the real repository
 diff --git a/z-nile/tests/acceptance/c0114/classified.spec.luau b/z-nile/tests/acceptance/c0114/classified.spec.luau
 index a3d78bb6..6a6b887e 100644
 --- a/z-nile/tests/acceptance/c0114/classified.spec.luau
