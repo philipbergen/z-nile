@@ -5,9 +5,11 @@
 -- github.com, a prep worktree and a gh stub, as c0306's commands.spec) and `commit` (an offline started raft, as c0306's
 -- done.spec). Every case has its own item, because a spend or a move is consumed by the command that makes it.
 --   spend  c0200 c0201 c0202 c0203 c0204 c0205 c0206 c0207 c0208 (issues), R0050 R0051 (rafts)
+local R: any = require("@znile/engine/authorread")
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local models = require("@znile/engine/models")
 local process = require("@lune/process")
 local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
@@ -52,6 +54,31 @@ local function issue(id: string, status: string, marked: boolean): string
 		then "reviews: judged\n"
 		else ""}rank: 7\ncreated: 2026-11-10\nstatus: {status}\n---\n\n# {id}\n\n## Problem\nThe thing is slow.\n\n## Solution\nMake it fast.\n\n## Acceptance criteria\n- AC1: it is fast\n`
 end
+
+-- a prepared member of the raft R0050, which is in rafting (claimed, preparing)
+local function raftMember(id: string): string
+	return (string.gsub(issue(id, "prepared-quiet-copper-falcon", true), "raft: \n", "raft: R0050\n", 1))
+end
+local RAFT_DOC =
+	"---\nid: R0050\ntype: chore\ntitle: R0050\nslug: r0050\nsingle: false\nissues: [c0209, c0210]\ndesign: ready\nreviews: judged\nrank: 3\ncreated: 2026-11-10\nstatus: preparing-quiet-copper-falcon\n---\n\n# R0050\n\n## Theme\nT.\n\n## Order & dependencies\nc0209\nc0210\n"
+
+local ROLES = [[
+[roles.design]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 300000
+fallbacks = []
+
+[roles.raft]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 300000
+fallbacks = []
+]]
 
 local GH = [=[#!/bin/sh
 echo "$*" >> "@LOG@"
@@ -267,6 +294,12 @@ return t.spec("c0325 spend and commit record the model that wrote the work", fun
 			item("c0206", PREPARING, true) -- typed model beats the env
 			item("c0207", PREPARING, false) -- a reviewer's row takes no env default
 			item("c0208", PREPARING, true) -- a marked item's reviewer row
+			for _, id in { "c0209", "c0210" } do
+				seed[`{ROOT}/issues/{id}/{id}.md`] = raftMember(id)
+				seed[`{ROOT}/issues/{id}/check.sh`] = CHECK
+			end
+			seed[`{ROOT}/rafts/R0050/R0050.md`] = RAFT_DOC
+			seed[`{ROOT}/rafts/R0050/check.sh`] = CHECK
 			f = trackerfix.new("c0325-authorcmd-github.com", seed)
 			local bin = `{f.base}/bin`
 			fs.writeDir(bin)
@@ -383,6 +416,31 @@ return t.spec("c0325 spend and commit record the model that wrote the work", fun
 		end
 	)
 
+	it(
+		"AC7: a raft's prep spend with `--note raft-prep` writes that subject into each member, and authorread reads it as the raft's writer and the member's own prep row as the design's",
+		function()
+			-- the member's own design row first, then the raft's, in the same folder
+			znOk(prep, { "spend", "c0209", "--phase", "prep", "--model", "claude-sonnet-5-5" })
+			znOk(prep, { "spend", "R0050", "--phase", "prep", "--note", "raft-prep", "--model", "grok-4.7" })
+			local subjects = ""
+			for line in string.gmatch(tsv("c0209"), "[^\n]+") do
+				subjects ..= `{string.split(line, "\t")[2]};`
+			end
+			t.expect(subjects).toBe("subject;prep;raft-prep;")
+			local layers = { models.parse(ROLES, ".models.toml") }
+			local dirs = { `{prep}/{ROOT}/issues/c0209`, `{prep}/{ROOT}/issues/c0210` }
+			local raft = R.read("raft", dirs, layers, nil, nil)
+			t.expect(#raft.writers).toBe(1)
+			t.expect(raft.writers[1].model).toBe("grok-4.7")
+			t.expect(raft.provenance).toBe("recorded")
+			local design = R.read("design", { dirs[1] }, layers, nil, nil)
+			t.expect(#design.writers).toBe(1)
+			t.expect(design.writers[1].model).toBe("claude-sonnet-5-5")
+			-- the raft folder holds no row of its own
+			t.expect(fs.isDir(`{prep}/{ROOT}/rafts/R0050/spend.d`)).toBe(false)
+		end
+	)
+
 	it("AC9: the restated skill and usage lines are pinned", function()
 		for _, name in { "z-design", "z-raft", "zz-review", "zz-rules", "zz-execute" } do
 			local text = skillText(name)
@@ -395,6 +453,7 @@ return t.spec("c0325 spend and commit record the model that wrote the work", fun
 			for _, needle in
 				{
 					"`./zn spend <id> --phase capture|prep`",
+					"`--note raft-prep`",
 					"`./zn commit`",
 					"`--model <your model id>`",
 					"`ZN_MODEL`",
@@ -415,7 +474,12 @@ return t.spec("c0325 spend and commit record the model that wrote the work", fun
 			has(skillText("z-design"), "add `--model <your model id>`, which records who wrote the design")
 		)
 			.toBe(true)
-		t.expect(has(skillText("z-raft"), "--phase prep --model <your model id>")).toBe(true)
+		t.expect(
+			has(
+				skillText("z-raft"),
+				"`./zn spend <R-id> --phase prep --note raft-prep --model <your model id>`"
+			)
+		).toBe(true)
 		t.expect(has(skillText("z-ticket"), "--phase capture --model <your model id>")).toBe(true)
 		t.expect(has(skillText("zz-execute"), "--model <your model id>` (the model that wrote the layer)"))
 			.toBe(true)

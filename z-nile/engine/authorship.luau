@@ -35,6 +35,9 @@ authorship.ROLES = {
 	build = "implementation",
 } :: { [string]: string }
 
+-- the note `./zn spend <R-id> --phase prep --note raft-prep` puts in the subject of the raft's prep rows
+authorship.RAFT_NOTE = "raft-prep"
+
 local PHASE = { idea = "idea", design = "prep", raft = "prep", build = "build" } :: { [string]: string }
 
 local function mine(step: string, row: ledger.Row): boolean
@@ -42,7 +45,17 @@ local function mine(step: string, row: ledger.Row): boolean
 		return false
 	end
 	-- an idea row is the attempt that ended ok (subject `<id> ok`), not the challenge's rows
-	return step ~= "idea" or string.sub(row.subject, -3) == " ok"
+	if step == "idea" then
+		return string.sub(row.subject, -3) == " ok"
+	end
+	-- a raft's prep row and a member's design prep row share the phase: z-raft's carries the subject `raft-prep`
+	local isRaft = string.sub(row.subject, 1, #authorship.RAFT_NOTE) == authorship.RAFT_NOTE
+	if step == "raft" then
+		return isRaft
+	elseif step == "design" then
+		return not isRaft
+	end
+	return true
 end
 
 local function filled(s: string?): boolean

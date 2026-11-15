@@ -97,7 +97,17 @@ return t.spec("c0325 authorread reads the item folders of the checkout it starts
 			})
 			local m1 = folder("author-wt", "issues/c0011", { { "build", "claude-sonnet-5-5-high" } })
 			local m2 = folder("author-wt", "issues/c0012", { { "build", "kimi-code-k3.1-pro-high" } })
-			local raftA = folder("author-wt", "rafts/R0090", { { "prep", "claude-opus-5-5" } })
+			-- a raft's prep spend writes its `raft-prep` row into each member (E1a), beside the member's own design row; the
+			-- raft's folder holds none (a decoy here, so a reader that looked there would answer differently)
+			local rm1 = folder("author-wt", "issues/c0014", {
+				{ "prep", "kimi-code-k3.1-pro", "prep" },
+				{ "prep", "claude-fable-5-2-high", "raft-prep" },
+			})
+			local rm2 = folder("author-wt", "issues/c0015", {
+				{ "prep", "claude-opus-5-5-high", "prep" },
+				{ "prep", "claude-fable-5-2-high", "raft-prep" },
+			})
+			folder("author-wt", "rafts/R0090", { { "prep", "claude-sonnet-5-5", "raft-prep" } })
 			local stream = folder("author-wt", "issues/c0013", { { "build", "kimi-code-k3.1-pro" } })
 			-- an interactive worktree of the same items, whose rows name other models
 			local issueB = folder("lead-wt", "issues/c0010", {
@@ -116,8 +126,14 @@ return t.spec("c0325 authorread reads the item folders of the checkout it starts
 			-- code mode: each member of the raft is a folder
 			local code = R.read("code", { m1, m2 }, layers, nil, nil)
 			t.expect(writers(code)).toEqual({ "build:claude-sonnet-5-5", "build:kimi-code-k3.1-pro" })
-			-- a raft: its own folder's prep rows
-			t.expect(writers(R.read("raft", { raftA }, layers, nil, nil))).toEqual({ "raft:claude-opus-5-5" })
+			-- a raft: the `raft-prep` rows of its members, not their design rows and not the raft folder
+			t.expect(writers(R.read("raft", { rm1, rm2 }, layers, nil, nil)))
+				.toEqual({ "raft:claude-fable-5-2" })
+			-- and a member's design is its own `prep` row, not the raft's
+			t.expect(writers(R.read("design", { rm1 }, layers, nil, nil)))
+				.toEqual({ "design:kimi-code-k3.1-pro" })
+			t.expect(writers(R.read("design", { rm1, rm2 }, layers, nil, nil)))
+				.toEqual({ "design:kimi-code-k3.1-pro", "design:claude-opus-5-5" })
 			-- a stream: the stream's issue
 			t.expect(writers(R.read("stream", { stream }, layers, nil, nil)))
 				.toEqual({ "build:kimi-code-k3.1-pro" })

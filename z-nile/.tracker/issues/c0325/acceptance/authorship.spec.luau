@@ -63,7 +63,7 @@ return t.spec("c0325: authorship reads who wrote the text, per review mode", fun
 		local rows = {
 			idea = { row("idea", "claude-fable-5-2-medium", "c0325 ok") },
 			design = { row("prep", "claude-opus-5-5") },
-			raft = { row("prep", "grok-4.7") },
+			raft = { row("prep", "grok-4.7", "raft-prep") },
 			build = { row("build", "claude-sonnet-5-5") },
 		}
 		local function of(mode: string): { string }
@@ -89,7 +89,10 @@ return t.spec("c0325: authorship reads who wrote the text, per review mode", fun
 				A.of("design", input({ rows = { design = { row("prep", "claude-opus-5-5-high") } } }))
 			t.expect(A.isAuthor(spec("claude-opus-5-5", "xhigh"), design)).toBe(true)
 			t.expect(A.isAuthor(spec("claude-sonnet-5-5", "high"), design)).toBe(false)
-			local raft = A.of("raft", input({ rows = { raft = { row("prep", "kimi-code-k3.1-pro-high") } } }))
+			local raft = A.of(
+				"raft",
+				input({ rows = { raft = { row("prep", "kimi-code-k3.1-pro-high", "raft-prep") } } })
+			)
 			t.expect(A.isAuthor(spec("kimi-code-k3.1-pro", "low"), raft)).toBe(true)
 			t.expect(A.isAuthor(spec("grok-4.7", "high"), raft)).toBe(false)
 			-- with no record, the role's first choice stands in, for a role that has no `author` key too
@@ -204,6 +207,29 @@ return t.spec("c0325: authorship reads who wrote the text, per review mode", fun
 			-- one step with no writer at all makes the whole unknown
 			local gap = A.of("final", input({ rows = { idea = { idea }, design = { design } } }))
 			t.expect(gap.provenance).toBe("unknown")
+		end
+	)
+
+	it(
+		"AC3: a member's design prep row and the `raft-prep` row in one folder are read by their own mode only",
+		function()
+			-- both rows sit in the same member folder, so the reader hands the same rows to both steps
+			local both = {
+				row("prep", "claude-opus-5-5-high", "prep"),
+				row("prep", "grok-4.7-high", "raft-prep"),
+				row("prep", "kimi-code-k3.1-pro", "raft-prep measured"),
+			}
+			local design = A.of("design", input({ rows = { design = both } }))
+			t.expect(models_(design)).toEqual({ "design:claude-opus-5-5" })
+			local raft = A.of("raft", input({ rows = { raft = both } }))
+			t.expect(models_(raft)).toEqual({ "raft:grok-4.7", "raft:kimi-code-k3.1-pro" })
+			t.expect(A.isAuthor(spec("claude-opus-5-5", nil), raft)).toBe(false)
+			t.expect(A.isAuthor(spec("grok-4.7", nil), design)).toBe(false)
+			t.expect(A.isAuthor(spec("grok-4.7", nil), raft)).toBe(true)
+			-- final reads the design, not the raft
+			local final = A.of("final", input({ rows = { idea = {}, design = both, build = {} } }))
+			t.expect(models_(final)).toEqual({ "design:claude-opus-5-5" })
+			t.expect(A.RAFT_NOTE).toBe("raft-prep")
 		end
 	)
 

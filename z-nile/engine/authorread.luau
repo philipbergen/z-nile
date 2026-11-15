@@ -9,7 +9,7 @@ local models = require("./models")
 local authorread = {}
 
 -- `dirs` are the item folders of the mode in the checkout the review starts from (design and idea: the issue; raft:
--- the raft; code: each member; stream: the stream's issue; final: each member), `layers` the loaded .models.toml walk.
+-- the raft's members, where its `raft-prep` rows land; code: each member; stream: the stream's issue; final: each member), `layers` the loaded .models.toml walk.
 function authorread.read(
 	mode: string,
 	dirs: { string },

@@ -112,7 +112,7 @@ ac2() {
 }
 check "AC2: \`authorship.isAuthor\` normalises both sides with \`bareModel\`: identical and mixed \`[1m]\`/plain strings match, \`[1m][2m]\` keeps one marker, and a model that only starts with another's name does not match." ac2
 ac3() {
-	fixtureSpec authorship --run "AC3: each mode reads its own steps (idea, design, raft, code, stream, final)" "AC3: design-challenge with a design record, the raft role against its own try's id, and final-review with an implementation fallback's record are true" "AC3: precedence live over rows over \`authorModel\` over the role's first choice; empty record or empty \`authorModel\` is none" "AC3: provenance is \`recorded\`, \`assumed\` or \`unknown\` as stated, and \`final\` is \`assumed\` when build alone is unrecorded"
+	fixtureSpec authorship --run "AC3: each mode reads its own steps (idea, design, raft, code, stream, final)" "AC3: design-challenge with a design record, the raft role against its own try's id, and final-review with an implementation fallback's record are true" "AC3: precedence live over rows over \`authorModel\` over the role's first choice; empty record or empty \`authorModel\` is none" "AC3: provenance is \`recorded\`, \`assumed\` or \`unknown\` as stated, and \`final\` is \`assumed\` when build alone is unrecorded" "AC3: a member's design prep row and the \`raft-prep\` row in one folder are read by their own mode only"
 }
 check "AC3: \`authorship.of\` reads each mode's own steps (\`idea\`: idea; \`design\`: design; \`raft\`: raft; \`code\`, \`stream\`: build; \`final\`: idea, design, build), takes the writing role as an input (design-challenge, the raft role and final-review answer), applies live > rows > \`authorModel\` > first choice, and reports \`recorded\`, \`assumed\` or \`unknown\` as the Design states." ac3
 ac4() {
@@ -131,7 +131,7 @@ ac6() {
 }
 check "AC6: the dispatcher sets \`ZN_MODEL\` to each attempt's \`spec.model\`; \`spend\`/\`commit\` take it only for \`capture\`, \`prep\` and \`build\`, a typed \`--model\` winning, and never for a reviewer's row." ac6
 ac7() {
-	fixtureSpec authorcmd "AC7: a marked item refuses prep/capture/build with no model; an unmarked item, other phases and a given \`--model\` are unchanged; the row and trailer hold the model"
+	fixtureSpec authorcmd "AC7: a marked item refuses prep/capture/build with no model; an unmarked item, other phases and a given \`--model\` are unchanged; the row and trailer hold the model" "AC7: a raft's prep spend with \`--note raft-prep\` writes that subject into each member, and authorread reads it as the raft's writer and the member's own prep row as the design's"
 }
 check "AC7: in a marked item \`spend --phase capture|prep\` and \`commit --phase build\` refuse a missing model, naming \`--model\`; an unmarked item, other phases and a given model behave as today, and the row and trailer record the model." ac7
 ac8() {
