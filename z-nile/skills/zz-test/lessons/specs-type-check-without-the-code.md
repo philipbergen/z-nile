@@ -9,3 +9,5 @@ check: Does every sequestered spec type-check with none of the issue's code pres
 **Why:** c0250's prep: the work-board spec called `models.quotaCapHours` and built `readycheck` fixtures with a `blocked` field, so `promote-check` failed on them as well as on the one require of the new `escalation` module.
 
 **How to apply:** reach new exports of existing modules through a cast to `any`, type fixtures that carry new fields as `any`, and confirm that `promote-check` in the prep lists only the missing new module. Related: [[sequestered-specs-use-mains-test-lib]].
+
+**Note (c0325's prep, 2026-11-15):** a loop like `for _, x in t.field or {}` over a `{ string }` field read through `any` fails `promote-check`'s type check. Bind it to a typed local first.
