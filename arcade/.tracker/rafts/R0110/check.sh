@@ -13,6 +13,13 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0110
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: the deps comment names Travel and PaidPlay has its section and no edge" bash -c '
+  doc=.tracker/architecture.md
+  grep -F -x -q "# Travel is a leaf" "$doc" || grep -F -x -q "# PaidPlay and Travel are leaves" "$doc" || exit 1
+  grep -F -q "### PaidPlay and Receipts (f0201)" "$doc" || exit 1
+  grep -F -q "installed by **every place**" "$doc" || exit 1
+  awk "BEGIN{p=0} index(\$0, \"\`\`\`deps\")==1 {p=1; next} p && index(\$0, \"\`\`\`\")==1 {exit} p {print}" "$doc" | grep -F -e "PaidPlay ->" -e "Travel ->" && exit 1
+  exit 0
+'
 
 finish
