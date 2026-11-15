@@ -7,9 +7,9 @@ source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to t
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/f0125"
 
-check "AC1: the shipped config's edge over a hunting ghost is the classic edge times 1.07 to 1.13 on every level" lune run tests/run -- "$A/speeds.spec.luau"
+check "AC1: the shipped config's edge over a hunting ghost is the untuned config's edge times 1.07 to 1.13 on every level (the classic edge before f0147's ramp; narrowed by c0177)" lune run tests/run -- "$A/speeds.spec.luau"
 check "AC2: the default config keeps the classic tables" lune run tests/run -- "$A/speeds.spec.luau"
-check "AC3: eyes keep twice level 1's speed; the player stays within a tile a tick" lune run tests/run -- "$A/speeds.spec.luau"
+check "AC3: eyes are never tuned, and are twice the base speed on the classic tables; the player stays within a tile a tick (narrowed by c0177)" lune run tests/run -- "$A/speeds.spec.luau"
 check "AC4: a shipped session's ghosts run at the speeds Session.speeds gives" lune run tests/run -- "$A/speeds.spec.luau"
 check "AC5: a bad ghostTuning is refused" lune run tests/run -- "$A/speeds.spec.luau"
 check "AC6: game-design.md records the user's factor and where it lives" lune run tests/run -- "$A/docs.spec.luau"
