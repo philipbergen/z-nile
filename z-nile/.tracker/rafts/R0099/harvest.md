@@ -14,3 +14,6 @@
 - design-review-002 F3: z-raft/rc-pins-the-claims-it-makes
 - design-review-002 F4: z-raft/cross-raft-order-written-in-both, z-design/restated-rules-move-together
 - design-review-002 F5: z-design/restated-rules-move-together
+- design-review-003 F1: z-raft/list-every-override-with-layer-and-ref
+- design-review-003 F2: z-design/restated-rules-move-together
+- design-review-003 F3: z-raft/merge-the-other-rafts-finished-stack
