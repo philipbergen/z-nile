@@ -143,6 +143,14 @@ return t.spec("c0267: which issues wait for a person's approval", function(it)
 		t.expect(list[1].id).toBe("c0004")
 		t.expect(table.concat(list[1].changed, ",")).toBe("design")
 		t.expect(#list[2].changed + #list[3].changed).toBe(0)
+		-- an unreadable approval carries why, and every entry its file
+		t.expect(list[2].id).toBe("c0002")
+		t.expect(list[2].why).toBe(nil)
+		t.expect(list[3].id).toBe("c0003")
+		t.expect(list[3].why ~= nil and list[3].why ~= "").toBe(true)
+		for _, u in list do
+			t.expect(u.file).toBe(`z-nile/.tracker/issues/{u.id}/approval.md`)
+		end
 		-- ready itself still refuses the raft, with its own words
 		t.expect(string.find(readycheck.reason(r) or "", "approve", 1, true) ~= nil).toBe(true)
 	end)
@@ -152,10 +160,10 @@ return t.spec("c0267: which issues wait for a person's approval", function(it)
 		function()
 			local dep = { { id = "c0099", state = "backlog" } }
 			t.expect(readycheck.waiting(raftOf({ member("c0001", "none", dep) }), { "c0001" })).toBe(nil)
-			t.expect(
-				readycheck.waiting(raftOf({ member("c0001", "none") }, { questions = true }), { "c0001" })
-			)
-				.toBe(nil)
+			-- a member whose check.sh has no check line (a refusal c0250's ready keeps as it is)
+			local unchecked = member("c0001", "none")
+			unchecked.files["check.sh"] = "true\n"
+			t.expect(readycheck.waiting(raftOf({ unchecked }), { "c0001" })).toBe(nil)
 			t.expect(
 				readycheck.waiting(raftOf({ member("c0001", "none") }, { design = "draft" }), { "c0001" })
 			)
@@ -173,7 +181,7 @@ return t.spec("c0267: which issues wait for a person's approval", function(it)
 		end
 	)
 
-	it("AC6: approval.stateOf is the one reading, and reasonOf keeps its words", function()
+	it("AC6: approval.stateOf is the one reading, and reasonOf keeps its answers' heads", function()
 		local doc = docOf("c0001")
 		local parts = contract.build(doc, CHECK, {}) :: contract.Parts
 		local state, changed, err = approval.stateOf(parts, nil)
@@ -190,14 +198,29 @@ return t.spec("c0267: which issues wait for a person's approval", function(it)
 		t.expect(#parts2 > 0).toBe(true)
 		local file = "z-nile/.tracker/issues/c0001/approval.md"
 		t.expect(approval.reasonOf("c0001", file, parts, nil, false)).toBe(nil)
-		t.expect(approval.reasonOf("c0001", file, parts, nil, true)).toBe(
-			"c0001 has no approval: run ./zn approve c0001, then ./zn approve c0001 --publish, from the worktree that holds the design. This is a one-time step for an item prepared before approval."
+		-- each answer's head names its state and the way through; a later item may reword what follows it
+		local function head(text: string?, start: string): boolean
+			return text ~= nil and string.sub(text :: string, 1, #start) == start
+		end
+		local none = approval.reasonOf("c0001", file, parts, nil, true)
+		t.expect(
+			head(none, "c0001 has no approval: run ./zn approve c0001, then ./zn approve c0001 --publish")
 		)
+			.toBe(true)
+		-- the dispatched path drafts, merges and rafts before approval: no "one-time step" for a legacy item
+		t.expect(string.find(none or "", "one-time step", 1, true) == nil).toBe(true)
 		t.expect(approval.reasonOf("c0001", file, parts, approvalOf(doc), true)).toBe(nil)
-		t.expect(approval.reasonOf("c0001", file, parts, "not an approval\n", true))
-			.toBe(`c0001: {file} does not parse: {why}`)
-		t.expect(approval.reasonOf("c0001", file, moved, approvalOf(doc), true)).toBe(
-			`c0001's contract changed since approval: {table.concat(parts2, ", ")}. Run ./zn approve c0001 again, then ./zn approve c0001 --publish.`
-		)
+		t.expect(
+			head(
+				approval.reasonOf("c0001", file, parts, "not an approval\n", true),
+				`c0001: {file} does not parse: {why}`
+			)
+		).toBe(true)
+		t.expect(
+			head(
+				approval.reasonOf("c0001", file, moved, approvalOf(doc), true),
+				`c0001's contract changed since approval: {table.concat(parts2, ", ")}.`
+			)
+		).toBe(true)
 	end)
 end)

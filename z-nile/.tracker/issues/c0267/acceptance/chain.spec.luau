@@ -58,9 +58,28 @@ local function act(f: dispatch.Facts): string
 	return `stop {a.code}`
 end
 
-local NONE = { id = "c0010", state = "none", changed = {} }
-local CHANGED = { id = "c0011", state = "changed", changed = { "check.sh", "design" } }
-local BAD = { id = "c0012", state = "bad", changed = {} }
+local function file(id: string): string
+	return `z-nile/.tracker/issues/{id}/approval.md`
+end
+local NONE: dispatch.Unapproved = { id = "c0010", state = "none", changed = {}, file = file("c0010") }
+local CHANGED: dispatch.Unapproved =
+	{ id = "c0011", state = "changed", changed = { "check.sh", "design" }, file = file("c0011") }
+local BAD: dispatch.Unapproved = {
+	id = "c0012",
+	state = "bad",
+	changed = {},
+	why = "the first lines must be the approval header",
+	file = file("c0012"),
+}
+
+-- the lines of a stop's text
+local function lines(text: string): { string }
+	local out: { string } = {}
+	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+		table.insert(out, line)
+	end
+	return out
+end
 
 return t.spec("c0267: the chain waits for a person's approval before a raft starts", function(it)
 	it(
@@ -70,7 +89,6 @@ return t.spec("c0267: the chain waits for a person's approval before a raft star
 			t.expect(a.kind).toBe("stop")
 			t.expect(a.code).toBe(dispatch.EXIT.user)
 			t.expect(a.code).toBe(3)
-			t.expect(a.waiting).toBe("approval")
 			t.expect(a.step).toBe(nil)
 			local why = a.why or ""
 			t.expect(has(why, "waiting for the person (not a failure)")).toBe(true)
@@ -84,24 +102,41 @@ return t.spec("c0267: the chain waits for a person's approval before a raft star
 		"AC1: the stop names each issue, why, and the commands that get it through, in the order given",
 		function()
 			local why = dispatch.next(facts({ unapproved = { NONE, CHANGED, BAD } })).why or ""
-			t.expect(has(why, "c0010: no approval.")).toBe(true)
-			t.expect(has(why, "c0011: its contract changed since approval (check.sh, design).")).toBe(true)
-			t.expect(has(why, "c0012: its approval.md does not parse.")).toBe(true)
-			local a10 = string.find(why, "c0010: ", 1, true) or 0
-			local a11 = string.find(why, "c0011: ", 1, true) or 0
-			local a12 = string.find(why, "c0012: ", 1, true) or 0
-			t.expect(a10 < a11 and a11 < a12).toBe(true)
-			for _, id in { "c0010", "c0011", "c0012" } do
+			local ls = lines(why)
+			t.expect(ls[1]).toBe(
+				"waiting for the person (not a failure): no layer of R0050 starts until a person approves the design of each of its issues on origin/main."
+			)
+			t.expect(ls[2]).toBe("c0010: no approval.")
+			t.expect(ls[3]).toBe("c0011: its contract changed since approval (check.sh, design).")
+			t.expect(ls[4]).toBe(
+				"c0012: its approval.md does not parse (the first lines must be the approval header); ./zn approve refuses to add to it, so its line removes it first."
+			)
+			t.expect(ls[5]).toBe("In a terminal of your own, from the main checkout, run each line:")
+			-- one whole command line per issue, in the same order, with nothing after it
+			for n, u in { NONE, CHANGED, BAD } do
+				local line = ls[5 + n]
+				t.expect(line).toBe(dispatch.approveLine(u))
 				t.expect(
-					has(
-						why,
-						`cd "$(./zn worktree approve-{id}-$(date +%s) --from origin/main)" && ./zn approve {id} && ./zn approve {id} --publish`
+					string.sub(
+						line,
+						1,
+						#`w="$(./zn worktree approve-{u.id}-$(date +%s) --from origin/main)" && (cd "$w" && `
 					)
-				).toBe(true)
+				).toBe(
+					`w="$(./zn worktree approve-{u.id}-$(date +%s) --from origin/main)" && (cd "$w" && `
+				)
+				t.expect(has(line, `./zn approve {u.id} && ./zn approve {u.id} --publish) && `)).toBe(true)
+				t.expect(has(line, ` && git worktree remove "$w" && git branch -D "$\{w##*/}"`)).toBe(true)
+				t.expect(string.sub(line, -#'"${w##*/}"')).toBe('"${w##*/}"')
 			end
-			t.expect(has(why, "In a terminal of your own, from the main checkout")).toBe(true)
-			t.expect(has(why, "Then run ./zn dispatch R0050 again.")).toBe(true)
-			-- the same text dispatch.waitingWhy gives, so the board and status can print it
+			-- an unreadable approval is removed first, in that issue's line only
+			local drop =
+				`git rm -q {BAD.file} && git commit -qm "tracker: drop c0012's unreadable approval.md" && ./zn approve c0012`
+			t.expect(has(ls[8], drop)).toBe(true)
+			t.expect(has(ls[6], "git rm")).toBe(false)
+			t.expect(has(ls[7], "git rm")).toBe(false)
+			t.expect(ls[9]).toBe("Then run ./zn dispatch R0050 again.")
+			t.expect(#ls).toBe(9)
 			t.expect(why).toBe(dispatch.waitingWhy("R0050", { NONE, CHANGED, BAD }))
 		end
 	)
@@ -119,7 +154,7 @@ return t.spec("c0267: the chain waits for a person's approval before a raft star
 			t.expect(a.code).toBe(dispatch.EXIT.failure)
 			t.expect(has(a.why or "", "git ls-tree failed")).toBe(true)
 			t.expect(has(a.why or "", "R0050")).toBe(true)
-			t.expect(a.waiting).toBe(nil)
+			t.expect(has(a.why or "", "waiting for the person")).toBe(false)
 			-- unreadable wins over a list that says nothing is missing
 			t.expect(act(facts({ unreadable = "x", unapproved = {} }))).toBe("stop 1")
 		end
@@ -160,7 +195,7 @@ return t.spec("c0267: the chain waits for a person's approval before a raft star
 		local q = dispatch.next(facts({ questions = true, unapproved = { NONE } }))
 		t.expect(q.code).toBe(3)
 		t.expect(has(q.why or "", "questions.md")).toBe(true)
-		t.expect(q.waiting).toBe(nil)
+		t.expect(has(q.why or "", "waiting for the person")).toBe(false)
 		local open = dispatch.next(facts({ openHuman = { "F2" }, unapproved = { NONE } }))
 		t.expect(has(open.why or "", "## Open to the human")).toBe(true)
 		t.expect(act(facts({ last = { step = "z-raft", outcome = "cap" }, unapproved = { NONE } })))

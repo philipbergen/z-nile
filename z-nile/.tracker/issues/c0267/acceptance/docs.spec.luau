@@ -101,9 +101,29 @@ return t.spec("c0267: the documents say the design step is a draft a person appr
 		local skill = read("z-nile/skills/z-design/SKILL.md")
 		local review = section(skill, "## 5. Adversarial design review (required)")
 		local line =
-			"Under the dispatcher you do not ask: the chain merges the prep and rafts the issue, and stops before the raft is readied until a person has approved it."
+			"Under the dispatcher you do not ask: the chain merges the prep and rafts the issue, and stops before the raft is readied until a person has approved it"
 		at(review, "Do not run it yourself. " .. line, "z-design step 5")
 		-- the headless section stays the one every model step's skill shares (c0117 docs)
 		t.expect(has(section(skill, "## Headless (under `./zn dispatch`)"), line)).toBe(false)
 	end)
+	it(
+		"AC9: z-ready and zz-rules' ready row describe an approval the dispatched path asks for, not a one-time step",
+		function()
+			local ready = read("z-nile/skills/z-ready/SKILL.md")
+			at(
+				ready,
+				"A design the dispatcher drafted, merged and rafted has none until a person approves it: `./zn ready` refuses it, and the chain waits for it before `z-ready`",
+				"z-ready step 2"
+			)
+			-- the legacy sentence stays beside it: an item prepared before approval (f0339's docs spec finds this line by it)
+			at(ready, "An item prepared before approval has none either", "z-ready step 2")
+			local rules = read("z-nile/skills/zz-rules/SKILL.md")
+			t.expect(has(rules, "told to take that one-time step")).toBe(false)
+			at(
+				rules,
+				"the refusal names `./zn approve <id>`, then `./zn approve <id> --publish`, in a worktree on `origin/main`",
+				"zz-rules' ready row"
+			)
+		end
+	)
 end)

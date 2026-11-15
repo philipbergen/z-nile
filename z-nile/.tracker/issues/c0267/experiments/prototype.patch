@@ -1,21 +1,3 @@
-From a6b0f50bcd6c154c1dc74902e83b94a4fc476473 Mon Sep 17 00:00:00 2001
-From: Philip Bergen <philip.bergen@me.com>
-Date: Sun, 15 Nov 2026 11:16:06 -0800
-Subject: [PATCH] proto c0267: the chain waits for approval before z-ready
-
----
- z-nile/README.md                |  4 +--
- z-nile/engine/approval.luau     | 27 +++++++++++++----
- z-nile/engine/dispatch.luau     | 45 +++++++++++++++++++++++++++++
- z-nile/engine/dispatcher.luau   | 12 ++++++++
- z-nile/engine/main.luau         |  4 +++
- z-nile/engine/readycheck.luau   | 51 +++++++++++++++++++++++++++++++--
- z-nile/engine/work.luau         |  3 ++
- z-nile/engine/workread.luau     | 34 ++++++++++++++++------
- z-nile/skills/z-design/SKILL.md |  2 +-
- z-nile/skills/zz-rules/SKILL.md |  2 +-
- 10 files changed, 165 insertions(+), 19 deletions(-)
-
 diff --git a/z-nile/README.md b/z-nile/README.md
 index 509341554..f8e844242 100644
 --- a/z-nile/README.md
@@ -39,7 +21,7 @@ index 509341554..f8e844242 100644
  - **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.
  
 diff --git a/z-nile/engine/approval.luau b/z-nile/engine/approval.luau
-index dc2720272..2d8948a76 100644
+index dc2720272..706c37375 100644
 --- a/z-nile/engine/approval.luau
 +++ b/z-nile/engine/approval.luau
 @@ -107,6 +107,24 @@ function approval.verdict(root: string, item: store.Item): (Verdict?, string?)
@@ -77,7 +59,8 @@ index dc2720272..2d8948a76 100644
  		if not required then
  			return nil
  		end
- 		return `{id} has no approval: run ./zn approve {id}, then ./zn approve {id} --publish, from the worktree that holds the design. This is a one-time step for an item prepared before approval.`
+-		return `{id} has no approval: run ./zn approve {id}, then ./zn approve {id} --publish, from the worktree that holds the design. This is a one-time step for an item prepared before approval.`
++		return `{id} has no approval: run ./zn approve {id}, then ./zn approve {id} --publish, in a terminal of your own, in a worktree on origin/main (not the main checkout).`
  	end
 -	local rows, perr = contract.parse(approvalText)
 -	if not rows then
@@ -91,7 +74,7 @@ index dc2720272..2d8948a76 100644
  	end
  	return `{id}'s contract changed since approval: {table.concat(changed, ", ")}. Run ./zn approve {id} again, then ./zn approve {id} --publish.`
 diff --git a/z-nile/engine/dispatch.luau b/z-nile/engine/dispatch.luau
-index b7e50876c..fabc440f0 100644
+index b7e50876c..071628f3c 100644
 --- a/z-nile/engine/dispatch.luau
 +++ b/z-nile/engine/dispatch.luau
 @@ -194,7 +194,13 @@ export type Facts = {
@@ -104,50 +87,50 @@ index b7e50876c..fabc440f0 100644
 +	unapproved: { Unapproved }?,
 +	unreadable: string?, -- why those approvals could not be read from origin/main
  }
-+export type Unapproved = { id: string, state: string, changed: { string } }
++export type Unapproved = { id: string, state: string, changed: { string }, why: string?, file: string }
  export type Action = {
  	kind: "step" | "merge" | "stop",
  	step: string?, -- kind step: the step to run
-@@ -204,6 +210,7 @@ export type Action = {
- 	head: string?, -- a merge: the head commit it is pinned to
- 	why: string?,
- 	code: number?, -- kind stop: 0 done, 1 failure, 3 needs the user, 4 waiting at a merge gate
-+	waiting: string?, -- a stop that waits for a person, not a failure: "approval"
- }
- 
- -- the most actions one chain run takes before it stops
-@@ -281,6 +288,30 @@ local function gate(f: Facts, name: string, pr: Pr): Action
+@@ -281,6 +287,38 @@ local function gate(f: Facts, name: string, pr: Pr): Action
  	return { kind = "stop", code = dispatch.EXIT.gate, gate = name, pr = pr.number, why = why }
  end
  
 +-- The stop before a raft is readied while a person has not approved each of its issues (c0267): the design step
 +-- drafted them, the chain merged the prep and rafted them, and no layer starts until the approvals are on origin/main.
++-- Lines: the reason, one line per issue, then one whole command line per issue (run from the main checkout; it
++-- approves in a fresh worktree on origin/main, publishes, and removes that worktree and its branch), then what to run.
++function dispatch.approveLine(u: Unapproved): string
++	local drop = if u.state == "bad"
++		then `git rm -q {u.file} && git commit -qm "tracker: drop {u.id}'s unreadable approval.md" && `
++		else ""
++	return `w="$(./zn worktree approve-{u.id}-$(date +%s) --from origin/main)" && (cd "$w" && {drop}./zn approve {u.id} && ./zn approve {u.id} --publish) && git worktree remove "$w" && git branch -D "$\{w##*/}"`
++end
++
 +function dispatch.waitingWhy(raft: string, unapproved: { Unapproved }): string
-+	local each: { string } = {}
++	local lines = {
++		`waiting for the person (not a failure): no layer of {raft} starts until a person approves the design of each of its issues on origin/main.`,
++	}
 +	for _, u in unapproved do
 +		local what = if u.state == "none"
-+			then "no approval"
-+			elseif u.state == "bad" then "its approval.md does not parse"
-+			else `its contract changed since approval ({table.concat(u.changed, ", ")})`
-+		table.insert(each, `{u.id}: {what}.`)
++			then "no approval."
++			elseif
++				u.state == "bad"
++			then `its approval.md does not parse ({u.why or "unreadable"}); ./zn approve refuses to add to it, so its line removes it first.`
++			else `its contract changed since approval ({table.concat(u.changed, ", ")}).`
++		table.insert(lines, `{u.id}: {what}`)
 +	end
-+	local how: { string } = {}
++	table.insert(lines, "In a terminal of your own, from the main checkout, run each line:")
 +	for _, u in unapproved do
-+		table.insert(
-+			how,
-+			`cd "$(./zn worktree approve-{u.id}-$(date +%s) --from origin/main)" && ./zn approve {u.id} && ./zn approve {u.id} --publish`
-+		)
++		table.insert(lines, dispatch.approveLine(u))
 +	end
-+	return `waiting for the person (not a failure): no layer of {raft} starts until a person approves the design of each of its issues on origin/main. {table.concat(
-+		each,
-+		" "
-+	)} In a terminal of your own, from the main checkout, for each: {table.concat(how, "; ")}. Then run ./zn dispatch {raft} again.`
++	table.insert(lines, `Then run ./zn dispatch {raft} again.`)
++	return table.concat(lines, "\n")
 +end
 +
  -- The next thing the chain does for the item. Stops first: questions.md, a failed step, a review step that left an
  -- unharvested finding. Then by state: capture, design, the prep gate, raft-plan, z-raft, the rafting gate, ready,
  -- run, the run's gate (always a human's), done.
-@@ -379,6 +410,20 @@ function dispatch.next(f: Facts): Action
+@@ -379,6 +417,15 @@ function dispatch.next(f: Facts): Action
  	end
  	if f.where == "backlog" then
  		if f.status == "prepared" then
@@ -158,18 +141,13 @@ index b7e50876c..fabc440f0 100644
 +				)
 +			end
 +			if f.unapproved and #f.unapproved > 0 then
-+				return {
-+					kind = "stop",
-+					code = dispatch.EXIT.user,
-+					why = dispatch.waitingWhy(f.id, f.unapproved),
-+					waiting = "approval",
-+				}
++				return stop(dispatch.EXIT.user, dispatch.waitingWhy(f.id, f.unapproved))
 +			end
  			return { kind = "step", step = "z-ready", target = f.id }
  		end
  		return stop(dispatch.EXIT.failure, `{f.id} is {f.status} in the backlog: z-raft prepares it first`)
 diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
-index c856b6b79..9eb5a8d13 100644
+index c856b6b79..b018d77de 100644
 --- a/z-nile/engine/dispatcher.luau
 +++ b/z-nile/engine/dispatcher.luau
 @@ -46,6 +46,8 @@ export type Ctx = {
@@ -181,18 +159,41 @@ index c856b6b79..9eb5a8d13 100644
  }
  export type Attempt = {
  	step: string,
-@@ -1697,7 +1699,17 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
+@@ -1633,6 +1635,28 @@ function dispatcher.backstop(
+ 	return result
+ end
+ 
++-- The approvals the chain judges (c0267): read only for a raft that is backlog and prepared on origin/main; a read
++-- that answers neither a list nor why is unreadable, so the chain stops instead of running z-ready.
++function dispatcher.approvalFacts(
++	ctx: Ctx,
++	kind: string,
++	where: string,
++	status: string,
++	id: string
++): ({ dispatch.Unapproved }?, string?)
++	if not (kind == "raft" and where == "backlog" and status == "prepared") then
++		return nil, nil
++	end
++	local ok, list, why = pcall(ctx.approvals, id)
++	if not ok then
++		return nil, tostring(list)
++	end
++	if not list and not why then
++		return nil, "no answer"
++	end
++	return list, why
++end
++
+ -- What the chain sees of `id` now.
+ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?): dispatch.Facts
+ 	local o = if id ~= "" then ctx.origin(id) else nil
+@@ -1697,7 +1721,11 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
  			end
  		end
  	end
-+	local unapproved: { dispatch.Unapproved }? = nil
-+	local unreadable: string? = nil
-+	if o and kind == "raft" and o.state == "backlog" and o.status == "prepared" then
-+		unapproved, unreadable = ctx.approvals(id)
-+		if not unapproved and not unreadable then
-+			unreadable = "no answer"
-+		end
-+	end
++	local unapproved, unreadable =
++		dispatcher.approvalFacts(ctx, kind, if o then o.state else "none", if o then o.status else "none", id)
  	return {
 +		unapproved = unapproved,
 +		unreadable = unreadable,
@@ -215,7 +216,7 @@ index 59d6bd67c..8d2741099 100644
  		-- a pull request's merge commit (c0117: a commit on main that is vetted without being tracker state)
  		prMerged = function(sha: string): boolean
 diff --git a/z-nile/engine/readycheck.luau b/z-nile/engine/readycheck.luau
-index c30f0a314..569e44dee 100644
+index c30f0a314..c67f1edb6 100644
 --- a/z-nile/engine/readycheck.luau
 +++ b/z-nile/engine/readycheck.luau
 @@ -179,7 +179,7 @@ end
@@ -238,7 +239,7 @@ index c30f0a314..569e44dee 100644
  		if changed then
  			return changed, true
  		end
-@@ -237,6 +239,51 @@ function readycheck.reason(r: Raft): (string?, boolean)
+@@ -237,6 +239,55 @@ function readycheck.reason(r: Raft): (string?, boolean)
  	return nil, true
  end
  
@@ -246,14 +247,15 @@ index c30f0a314..569e44dee 100644
 +	return refusal(r, true)
 +end
 +
-+-- A member whose approval does not let ready take the raft: "none", "bad" or "changed" (approval.stateOf), and the
-+-- contract parts that changed.
-+export type Unapproved = { id: string, state: string, changed: { string } }
++-- A member whose approval does not let ready take the raft: "none", "bad" or "changed" (approval.stateOf), the
++-- contract parts that changed, why approval.md does not parse, and that file's repo path.
++export type Unapproved = { id: string, state: string, changed: { string }, why: string?, file: string }
 +
 +-- The members whose approval on these texts is missing, unreadable or no longer matches their contract, in the
 +-- order given (the raft's layer order; any member it leaves out after, by id), when approvals are all that ready
 +-- would refuse `r` for. Nil when ready would refuse it for anything else first (the grouping record included), or
-+-- when its design files are not loaded. An empty list: ready would accept it.
++-- when its design files are not loaded. An empty list: ready would accept it. A refusal another item adds to ready
++-- goes in `refusal` above its approvals flag, so it comes first here too.
 +function readycheck.waiting(r: Raft, order: { string }): { Unapproved }?
 +	local other, complete = refusal(r, false)
 +	if other or not complete then
@@ -278,9 +280,12 @@ index c30f0a314..569e44dee 100644
 +	for _, m in members do
 +		local parts = contract.build(m.doc, m.files["check.sh"] or "", m.specs)
 +		if parts then
-+			local state, changed = approval.stateOf(parts, m.approval)
++			local state, changed, why = approval.stateOf(parts, m.approval)
 +			if state ~= "holds" then
-+				table.insert(out, { id = m.id, state = state, changed = changed })
++				table.insert(
++					out,
++					{ id = m.id, state = state, changed = changed, why = why, file = m.approvalFile }
++				)
 +			end
 +		end
 +	end
@@ -291,7 +296,7 @@ index c30f0a314..569e44dee 100644
  -- caller already read. Same choice as approval.collect.
  function readycheck.specs(files: { [string]: string }, promoted: { [string]: string }): { [string]: string }
 diff --git a/z-nile/engine/work.luau b/z-nile/engine/work.luau
-index 8b38e6aa1..9d664904d 100644
+index 8b38e6aa1..330ce49b5 100644
 --- a/z-nile/engine/work.luau
 +++ b/z-nile/engine/work.luau
 @@ -53,6 +53,9 @@ export type RaftFact = {
@@ -300,12 +305,12 @@ index 8b38e6aa1..9d664904d 100644
  	block: string?, -- "" when ready would accept. A reason when the reader has judged and ready would refuse.
 +	-- the members whose approval ready refuses, when approvals are all it refuses (readycheck.waiting); nil when
 +	-- something else refuses first or the reader has not judged
-+	unapproved: { { id: string, state: string, changed: { string } } }?,
++	unapproved: { { id: string, state: string, changed: { string }, why: string?, file: string } }?,
  	root: string, -- the project's tracker root, "pickman/.tracker". "" when the reader has not placed it.
  }
  
 diff --git a/z-nile/engine/workread.luau b/z-nile/engine/workread.luau
-index 2e5781387..3b630b756 100644
+index 2e5781387..48201a3ca 100644
 --- a/z-nile/engine/workread.luau
 +++ b/z-nile/engine/workread.luau
 @@ -377,8 +377,9 @@ local function blockFor(
@@ -364,7 +369,7 @@ index 2e5781387..3b630b756 100644
  			end
  			table.insert(rafts, fact)
  		end
-@@ -739,4 +741,20 @@ function workread.collect(asked: string?): work.Input
+@@ -739,4 +741,29 @@ function workread.collect(asked: string?): work.Input
  	return { asked = asked, held = workread.held(), author = workread.author(), rafts = rafts }
  end
  
@@ -373,8 +378,17 @@ index 2e5781387..3b630b756 100644
 +-- when ready would refuse the raft for something else first, or would accept it.
 +function workread.unapproved(id: string): ({ readycheck.Unapproved }?, string?)
 +	local ok, input = pcall(workread.collect, id)
++	return workread.unapprovedFrom(ok, input, id)
++end
++
++-- workread.unapproved's answer from collect's pcall, pure: a failed read or a raft collect did not see is nil and
++-- why, never an empty list (which would let the chain run z-ready).
++function workread.unapprovedFrom(ok: boolean, input: any, id: string): ({ readycheck.Unapproved }?, string?)
 +	if not ok then
 +		return nil, tostring(input)
++	end
++	if type(input) ~= "table" or type(input.rafts) ~= "table" then
++		return nil, "the reader gave no rafts"
 +	end
 +	for _, r in (input :: work.Input).rafts do
 +		if r.id == id then
@@ -398,10 +412,32 @@ index 668b34d80..d308702df 100644
  
  ## 6. Commit and hand off
  - **Commit** the prepared issue, its acceptance specs and architecture changes in the prep worktree as one commit, `tracker: prep c0010 <title>`, then follow Landing a change (zz-rules skill): push, PR, merge, pull the main checkout, remove the worktree. Right after the prep PR is opened, before it merges (so before any raft holding it can be readied), `./zn spend <id> --phase prep` (once: it counts the prep branch's lines). An issue readied first can no longer take it, and `spend` says so.
+diff --git a/z-nile/skills/z-ready/SKILL.md b/z-nile/skills/z-ready/SKILL.md
+index b9ebe094b..128689260 100644
+--- a/z-nile/skills/z-ready/SKILL.md
++++ b/z-nile/skills/z-ready/SKILL.md
+@@ -8,7 +8,7 @@ description: Ready a raft for execution, which claims it, moves it and its issue
+ 1. **Resolve the target.** Given an issue ID, the target is its raft. If the issue has no raft, stop: z-raft makes one (`./zn raft-plan`, or `./zn new raft … <id> --project <name>`) in its rafting worktree and merges it. A prompt for an undesigned issue defeats the purpose.
+ 2. **Check readiness.** First, **scope**: each member's title, Problem and Solution ideas match its capture (`./zn capture <id>`; z-design, **Scope is what was captured**) apart from added detail and decision lines, and a capture whose header carries any marker (`(no capture commit: …)`, `(ambiguous: …)` or `(history before … not followed: …)`) counts as not matching until the Problem has a `Scope decision (user, …)` line that confirms the item's scope. If one doesn't, stop and ask the user. Their answer lands as a `Scope decision` line through a pull request merged with the subject `tracker: scope <id> <what>` (a `tracker: new` subject would make the whole prepared document the new capture) before you ready the raft. If they restore the captured scope instead, the raft goes back to prep. `./zn ready` enforces every rule below except the acceptance specs one, and refuses with the reason, naming the item; read them so you can explain a refusal.
+    - The raft and every member are `design: ready`.
+-   - Every member has an approval (`./zn approve <id>`, run by the human in the prep worktree) whose contract still matches. An item prepared before approval has none: `./zn ready` asks for that one-time step and stops.
++   - Every member has an approval (`./zn approve <id>`, then `./zn approve <id> --publish`, run by the human in a terminal, in the prep worktree or any worktree on origin/main) whose contract still matches. A design the dispatcher drafted, merged and rafted has none until a person approves it: `./zn ready` refuses it, and the chain waits for it before `z-ready`. An item prepared before approval has none either: `./zn ready` asks for that one-time step and stops.
+    - Every issue has a `check.sh` with at least one `check`.
+    - The acceptance specs that each `check.sh` names exist. `ready` doesn't check this one, so look before you run it.
+    - `./zn status <R-id>` prints `prepared`: the prep PR has merged and main is current.
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index d009a1d87..95cd8cb5a 100644
+index d009a1d87..17c68e8ee 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -76,7 +76,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | step | command | effect |
+ |---|---|---|
+ | approve | `./zn approve <issue-id> [--check]` | in the worktree where the design is, with a terminal on stdin, and not while `ZN_DISPATCH` is set. Records a hash of the design sections (Problem, Solution, Design, Acceptance criteria, Test plan), the acceptance specs and `check.sh` in the issue's `approval.md`, and keeps earlier rows. `--check` says whether that hash still holds and which part changed. |
+-| ready | `./zn ready <R-id\|issue-id>` | main checkout only, on a clean `main`, with an origin (z-ready skill). Checks the raft and every member are `design: ready` with a `check.sh` that has a check, and that every `depends_on` outside the raft is `done`. Refuses a member with no approval, or whose contract hash no longer matches (`./zn approve <id>`); an item prepared before approval is told to take that one-time step. Claims the raft, publishes one tracker-only commit that moves it and its members to `active/` on `origin/main` (every `check.sh` item path rewritten), pulls the main checkout, and writes the ignored `<root>/rafts/active/<R-id>/prompt.md` (it inlines the project's `<root>/architecture.md`, pickman's map; a project without one gets a line saying so). On an active raft it regenerates the prompt and makes no commit. |
++| ready | `./zn ready <R-id\|issue-id>` | main checkout only, on a clean `main`, with an origin (z-ready skill). Checks the raft and every member are `design: ready` with a `check.sh` that has a check, and that every `depends_on` outside the raft is `done`. Refuses a member with no approval, or whose contract hash no longer matches (`./zn approve <id>`); the refusal names `./zn approve <id>`, then `./zn approve <id> --publish`, in a worktree on `origin/main`. Claims the raft, publishes one tracker-only commit that moves it and its members to `active/` on `origin/main` (every `check.sh` item path rewritten), pulls the main checkout, and writes the ignored `<root>/rafts/active/<R-id>/prompt.md` (it inlines the project's `<root>/architecture.md`, pickman's map; a project without one gets a line saying so). On an active raft it regenerates the prompt and makes no commit. |
+ | stop | `./zn stop <R-id>` | main checkout only, on a clean `main`, with an origin (z-stop skill). It gives back exactly the issues that carry the raft's own claim stamp (`ready` and `start` stamp the raft and every issue they claim with one `active-…` value); an issue only listed in `issues:`, or one filed naming the raft after the claim, is never touched (the latter is named in a warning). Every claim stamp is new on `origin/main` (redrawn until no item carries it), and a raft with no `active-…` stamp is refused, to be given back by hand. Gives back a readied raft: publishes one tracker-only commit that moves it and its members from `active/` back to the backlog, stamped `prepared-…` (every `check.sh` item path rewritten back), removes `prompt.md`, pulls the main checkout, and names the raft's branch and PR, which it leaves as they are. A raft claimed by the legacy `start` (backlog, status `active`) gets a status-only publish and no move. A member in `done/` refuses. |
+ | start | `./zn start R0010` | clean tree required. Opens the next layer (`R0010/1/c0010`: an empty `tracker: start` commit, a push, and a **draft** PR based on the layer below, or on main). The next layer waits until `./zn finish` has made the one below a single commit. A readied raft claims and moves nothing. A backlog raft (legacy) still claims and moves to `active/` on that layer branch: members must be `design: ready`, and every `depends_on` outside the raft must be `done` on `origin/main`. If it refuses, merge `origin/main` and retry, never edit `depends_on` to get past it: stop and report. Do this first, so the claim is visible to another machine. |
+ | worktree | `./zn worktree <R-id\|name>` | creates or reuses `<repo>/.worktree/<R-id\|name>` and prints its path. A raft's worktree is `.worktree/R0010`, detached at a freshly fetched `origin/main` until a layer exists, then on the highest layer. It does not create `R0010-<slug>`. Any other is `.worktree/<name>` on a branch of that name. Refuses a done raft, and a branch that is checked out elsewhere. For a named worktree, `--from <ref>` cuts the new branch from that ref instead of `origin/main`. |
 @@ -182,7 +182,7 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
  - **Running a model step.** In the step's worktree (`prep-<slug>`, `raft-<id>`, the raft's own, `capture-zn-<n>`; a review in its author's), with a prompt that names the skill's file and pastes nothing. Search with `./zn lessons <terms>` when you are about to do something a lesson might cover. A supervisor starts the CLI in a process group of its own and holds a lifeline from the dispatcher: when the dispatcher dies, however it died, the group dies with it. The dispatcher kills the group when the running token count passes `max_tokens`, or for `agent` its call count passes `max_calls` or its wall time `max_minutes` (outcome `cap`), when the step prints nothing for `stall_seconds` (`tool_seconds` while a tool call runs) (`stalled`, or `quota` when the CLI's own last words were a wait for quota: a CLI never waits for quota, and the model's words never count), or on `./zn dispatch stop <id>` (`stopped`). A nested step (a review its author waits on as one shell command) writes a heartbeat in its parent's state folder while its CLI prints, and the parent counts a fresh beat as output; claude's maximum for one shell command (`BASH_MAX_TIMEOUT_MS`) is raised to two hours in its step's environment, its default left as it is, and the author passes a two-hour timeout on its review command alone. The nested runner beats once a second while it is alive and within its own limits, not only while its CLI prints, so a beat means "alive and within my limits". It moves to the next model when the call fails, the CLI is missing, or the quota is gone. Quota is only the CLI's own signals (claude's rejected rate-limit event, an error result or line, stderr); a missing CLI is skipped and named on stderr. A stall, a cap or a stop ends the step. A challenge whose only remaining model is the one that wrote the text stops and says so. The count is input + cache writes + output, cache reads left out, for every CLI.
  - **The tripwire** (the user's "Keep same user, accept detection"). A run accepts `main` as it is when the process starts. No file under the home directory, and no copy of one in `state.json`, decides whether a dispatch may start: a fresh clone, a second machine and a cleaned home folder all start. During that process, before every step and after every step, every commit of `main` since the commit the process started from must be tracker state (as above) or a pull request's merge into `main` on GitHub. After a step, origin's configuration (`remote.origin.*`, `url.*`) must be as the run pinned it, the main checkout's tracked and untracked files unchanged, its HEAD moved only forward along `main`. Anything else stops the chain (exit 5, outcome `tripwire`), with the step's spend still recorded, until the user looks and runs `./zn dispatch retry <id>` (nothing else clears that item's stop; the stop after a gate merge is the same, recorded as the attempt `merge-check`). When the commits another run added are tracker state, another run's advance is never a trip. A layer branch is pushed with `--force-with-lease`, so a rewritten branch refuses the push. **Known limits:** this detects a push during the run after the fact, and never prevents one; a push that lands after that step's tripwire, or between runs, is not seen here (a ticket lands only through its pull request, and the broker, the wrapper and `publish` refuse a non-fast-forward of `main`); a merge made with the user's credential (stolen or not) is a pull request's merge and passes. They are the user's, by rule.
@@ -411,6 +447,16 @@ index d009a1d87..95cd8cb5a 100644
  - **Run state.** `.cache/dispatch/<id>/state.json` (the step, CLI, runtime, model, the running group and its lock, worktree, start, tokens, outcome, every attempt, the merges and broker pushes, pending rows), `questions.md`, and a folder `<step>-<mode>-<id>-<n>/` of its own for each step a step dispatched (a review from its author): ignored files in the main checkout. One dispatcher per item at a time (an flock that dies with its holder); a step whose dispatcher died is `lost`, never resumed, until `retry`. `./zn dispatch status <id>` prints every run, `stop <id>` kills each running group only while it is still that run (its supervisor still holds the run's lock; never a group id of 1 or less) and marks any other `lost`, `retry <id>` reruns the failed, stopped or lost step on the same order. The board (c0118) reads it.
  - **The wrapper.** A model step's PATH starts with `z-nile/bin`, a convenience layer over the credential and the tripwire: its `git` decides a push from git's own dry run (aliases, `-c` and refspecs resolved by git) against a private, freshly fetched copy of `main`, refuses anything but tracker state there, and refuses plumbing pushes; its `gh` allows only the skills' commands (no merge, however spelled or aliased) and `gh api` reads and comments. Both are bypassable by an absolute path; the tripwire catches what they miss during the run.
  - **Inside a check.** A spec or `check.sh` that runs `./zn dispatch` may start only a CLI whose real path is under the checkout's `.cache` (a fake); any other is refused before it starts.
--- 
-2.54.0 (Apple Git-157)
-
+diff --git a/z-nile/tests/tooling/approve.spec.luau b/z-nile/tests/tooling/approve.spec.luau
+index d122f7e4f..26c206d43 100644
+--- a/z-nile/tests/tooling/approve.spec.luau
++++ b/z-nile/tests/tooling/approve.spec.luau
+@@ -113,7 +113,7 @@ return t.spec("human approval freezes the contract", function(it)
+ 		publish("design ready, no approval yet")
+ 		local early = zn(f.main, { "ready", RAFT })
+ 		t.expect(early.ok).toBe(false)
+-		t.expect(has(say(early), "one-time step for an item prepared before approval")).toBe(true)
++		t.expect(has(say(early), "in a worktree on origin/main (not the main checkout)")).toBe(true)
+ 		t.expect(has(say(early), ID)).toBe(true)
+ 
+ 		local recorded = approve(nil)
