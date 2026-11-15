@@ -1,4 +1,4 @@
-# Prototype of c0325 (redesign, raft-prep round): branch proto-c0325b, tip 15cf5f72a3044f82db543931c3d8af528055e83a
+# Prototype of c0325 (redesign, raft-prep round): branch proto-c0325b, tip e4b36147fbda20a3bc3e9c7d37920389cf5bd6ae
 # Base d437ad1f4 = proto-c0306 (eb8aaccc, c0306's prototype) merged with origin/main 6a876be2b; apply on c0306 once landed. git diff base tip -- . ':!z-nile/.tracker/issues/c0325'
 diff --git a/z-nile/engine/authorread.luau b/z-nile/engine/authorread.luau
 new file mode 100644
