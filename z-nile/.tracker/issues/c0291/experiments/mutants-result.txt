@@ -1,0 +1,66 @@
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 2400: it stays
+M1 noteName takes any date [notes]: KILLED
+    FAIL tests/tooling/notes.spec.luau :: AC1: a note's name is <YYYY-MM-DD>-<label>.md with a real date and a lowercase kebab label
+M2 noteName takes any non-empty label [notes]: KILLED
+    FAIL tests/tooling/notes.spec.luau :: AC1: a note's name is <YYYY-MM-DD>-<label>.md with a real date and a lowercase kebab label
+M3 compose always ends the text with a newline [notes]: KILLED
+    FAIL tests/tooling/notes.spec.luau :: AC1: with no notes a lesson's text is its file byte for byte, whether the tree has a notes map or not
+M4 compose keeps the order read [notes]: KILLED
+    FAIL tests/tooling/notes.spec.luau :: AC1: the notes follow the file in name order, each after one blank line, whatever order they were read in
+    FAIL tests/tooling/notes.spec.luau :: AC1: a file or a note with no final newline gets one, so the next note still starts after a blank line
+M5 compose puts no blank line before a note [notes]: KILLED
+    FAIL tests/tooling/notes.spec.luau :: AC1: the notes follow the file in name order, each after one blank line, whatever order they were read in
+    FAIL tests/tooling/notes.spec.luau :: AC1: a file or a note with no final newline gets one, so the next note still starts after a blank line
+    FAIL tests/tooling/notes.spec.luau :: AC1: the parsed lesson's body carries its notes, after the file's own body
+M6 compose leaves a missing final newline [notes]: KILLED
+    FAIL tests/tooling/notes.spec.luau :: AC1: a file or a note with no final newline gets one, so the next note still starts after a blank line
+M7 text ignores the notes [notes]: KILLED
+    FAIL tests/tooling/notes.spec.luau :: AC1: the notes follow the file in name order, each after one blank line, whatever order they were read in
+    FAIL tests/tooling/notes.spec.luau :: AC1: the parsed lesson's body carries its notes, after the file's own body
+M8 search reads the file alone [notes-merge]: KILLED
+    FAIL tests/tooling/notes-merge.spec.luau :: AC2: a word only a note holds finds the lesson
+M9 --full prints the file alone [notes-merge]: KILLED
+    FAIL tests/tooling/notes-merge.spec.luau :: AC2: lessons --full shows the merged lesson's file, then both notes in name order, and --check passes, a hidden file aside
+M10 no orphan check [notes]: KILLED
+    FAIL tests/tooling/notes.spec.luau :: AC1: check refuses a notes folder with no lesson, naming the folder
+M11 no note-name check [notes]: KILLED
+    FAIL tests/tooling/notes.spec.luau :: AC1: check refuses a file in a notes folder that is not named as a note, naming the file
+    FAIL tests/tooling/notes.spec.luau :: AC1: a notes folder's problems leave the other lessons' checks as they were
+M12 no empty-note check [notes]: KILLED
+    FAIL tests/tooling/notes.spec.luau :: AC1: check refuses an empty note, naming the file
+M13 load leaves a notes folder 'not a lesson file' [notes-merge]: KILLED
+    FAIL tests/tooling/notes-merge.spec.luau :: AC2: lessons --full shows the merged lesson's file, then both notes in name order, and --check passes, a hidden file aside
+    FAIL tests/tooling/notes-merge.spec.luau :: AC2: a word only a note holds finds the lesson
+    FAIL tests/tooling/notes-merge.spec.luau :: AC2: lessons --check names a notes folder whose lesson is gone, a folder inside a notes folder, a misnamed note and an empty one
+M14 load skips a folder inside a notes folder [notes-merge]: KILLED
+    FAIL tests/tooling/notes-merge.spec.luau :: AC2: lessons --check names a notes folder whose lesson is gone, a folder inside a notes folder, a misnamed note and an empty one
+M15 load reads hidden files as notes [notes-merge]: KILLED
+    FAIL tests/tooling/notes-merge.spec.luau :: AC2: lessons --full shows the merged lesson's file, then both notes in name order, and --check passes, a hidden file aside
+M16 isLesson takes lesson files only [notes-paths]: KILLED
+    FAIL tests/tooling/notes-paths.spec.luau :: AC3: a lesson and a note in its notes folder are lesson paths, in z-nile's skills and a project's
+M17 isLesson takes any depth [notes-paths]: KILLED
+    FAIL tests/tooling/notes-paths.spec.luau :: AC3: deeper paths, other files and other folders are not
+    FAIL tests/tooling/notes-paths.spec.luau :: AC3: a file in a notes folder not shaped as a note, or a folder not shaped as a slug, is not
+    FAIL tests/tooling/notes-paths.spec.luau :: AC3: a lesson file whose name is not a slug's shape is not
+M18 lessons merge by union (an attribute) [notes-merge]: KILLED
+    FAIL tests/tooling/notes-merge.spec.luau :: AC2: two edits of the lesson's own check still conflict, in git merge and in merge-tree
+M21 notes merge by union (an attribute) [notes-merge]: KILLED
+    FAIL tests/tooling/notes-merge.spec.luau :: AC2: one note name with two texts conflicts (add/add) in git merge and merge-tree; with one text it merges clean
+M22 load drops misnamed notes [notes-merge]: KILLED
+    FAIL tests/tooling/notes-merge.spec.luau :: AC2: lessons --check names a notes folder whose lesson is gone, a folder inside a notes folder, a misnamed note and an empty one
+M23 load drops empty notes [notes-merge]: KILLED
+    FAIL tests/tooling/notes-merge.spec.luau :: AC2: lessons --check names a notes folder whose lesson is gone, a folder inside a notes folder, a misnamed note and an empty one
+M24 check parses the composed text [notes]: KILLED
+    FAIL tests/tooling/notes.spec.luau :: AC1: check judges the lesson's own file: an empty body with a note is still refused
+M25 one skill keeps the old sentence [notes-docs]: KILLED
+    FAIL tests/tooling/notes-docs.spec.luau :: AC4: every skill's Lessons paragraph says a note is a file in the lesson's notes folder, and none keeps the old sentence
+M26 isLesson takes any md in a notes folder [notes-paths]: KILLED
+    FAIL tests/tooling/notes-paths.spec.luau :: AC3: a file in a notes folder not shaped as a note, or a folder not shaped as a slug, is not
+M27 isLesson takes any md as a lesson [notes-paths]: KILLED
+    FAIL tests/tooling/notes-paths.spec.luau :: AC3: a lesson file whose name is not a slug's shape is not
+M28 docs drop the --full sentence [notes-docs]: KILLED
+    FAIL tests/tooling/notes-docs.spec.luau :: AC4: Items says how notes are read and checked, and that an edit of the rule or check still conflicts
+M19 docs keep the append habit [notes-docs]: KILLED
+    FAIL tests/tooling/notes-docs.spec.luau :: AC4: Items says a note is its own file, never a paragraph at the end of the lesson
+M20 docs drop the conflict sentence [notes-docs]: KILLED
+    FAIL tests/tooling/notes-docs.spec.luau :: AC4: Items says how notes are read and checked, and that an edit of the rule or check still conflicts

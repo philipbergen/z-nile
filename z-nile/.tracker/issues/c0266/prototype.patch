@@ -1,0 +1,145 @@
+diff --git a/z-nile/README.md b/z-nile/README.md
+index 50934155..c1d9d7f3 100644
+--- a/z-nile/README.md
++++ b/z-nile/README.md
+@@ -238,7 +238,7 @@ z-design reads the checklist for the issue's type before it writes the Design:
+ - `z-nile/skills/z-design/checklists/chore.md`
+ 
+ ## The flow
+-One type per raft: feature (`f`), defect (`d`) or chore (`c`). CI and test fixes are chores. A lone issue still gets a raft.
++One type per raft: feature (`f`), defect (`d`) or chore (`c`). Every project root holds all three, z-nile's included (c0266): a wrong spec is a chore, and a z-nile command, gate or guard that does the wrong thing is a defect (z-ticket). A lone issue still gets a raft.
+ 1. **z-ticket**, in `capture-<slug>`: the issue lands on `main` with `design: draft` and status `new`. No PR.
+ 2. **z-design**, in `prep-<slug>`: `status <id> preparing` claims one issue; its design, checks and specs are written and reviewed; then `design: ready`, status `prepared`, and its design PR merges. It has no raft yet.
+ 3. **z-raft**, in `raft-<slug>`: `./zn raft-plan` groups the prepared issues (or the arguments say which), each raft is claimed (its status only) and its members' `raft:` lines are written; the raft's own design and, for several issues, a coherence review; then the rafting PR merges.
+diff --git a/z-nile/skills/z-design/checklists/chore.md b/z-nile/skills/z-design/checklists/chore.md
+index 1ff7ef3e..81757ae7 100644
+--- a/z-nile/skills/z-design/checklists/chore.md
++++ b/z-nile/skills/z-design/checklists/chore.md
+@@ -1,6 +1,6 @@
+ # Design checklist: chore
+ 
+-Answer each in the issue's Design before the first review round (z-design step 3). CI, test and tooling fixes are chores even when they fix a bug.
++Answer each in the issue's Design before the first review round (z-design step 3). A fix of a wrong spec is a chore even when it fixes a bug; a z-nile command, gate or guard that does the wrong thing is a defect (z-ticket, Classify the work).
+ - **No behaviour change** for players: say which behaviour stays exactly as it is, and which spec shows it.
+ - **Overrides**: every promoted spec the chore changes, named on its `Overrides:` line with what it still pins (a chore may change promoted specs in its own raft).
+ - **Existing work**: which prepared, active or mid-prep items, open branches and sequestered `check.sh` files fail the new rule or layout on the day it lands, and what each does then (lesson z-design/new-rules-migrate-existing-work).
+diff --git a/z-nile/skills/z-ticket/SKILL.md b/z-nile/skills/z-ticket/SKILL.md
+index 9bc7b64e..96ba3010 100644
+--- a/z-nile/skills/z-ticket/SKILL.md
++++ b/z-nile/skills/z-ticket/SKILL.md
+@@ -8,13 +8,13 @@ description: Capture a new feature/defect/chore issue in the tracker backlog. Us
+ 0. **Open a capture worktree first**, before anything is created: `cd "$(./zn worktree capture-<slug>)"` (zz-rules skill, Worktrees). Everything below runs there, never in the main checkout. Then run `./zn sync`, so you see every item other terminals have created.
+ 1. **Classify the work**:
+    - **feature** (`f`): new player-facing or developer-facing capability.
+-   - **defect** (`d`): **game or product** behavior that's wrong compared with an issue that's already done or with an obvious expectation. This is rework, and it's counted against the 20% target, so classify honestly.
+-   - **chore** (`c`): tooling, refactors or infrastructure, with no change in behavior. **Anything related to CI or tests is always a chore, even when it's a bug**, for example:
++   - **defect** (`d`): **product** behavior that's wrong compared with an issue that's already done or with an obvious expectation: a game's, the portal's, the arcade library's, or z-nile's own (its commands, the gate, the guards, the runner, the selector's code; a hole in the watch map is a chore). This is rework, and it's counted against the 20% target, so classify honestly.
++   - **chore** (`c`): refactors, infrastructure or upkeep, with no change in behavior. **A spec that is wrong while the code is right is always a chore, even when it's a bug**, for example:
+      - a flaky or wrong spec, including a promoted acceptance spec;
+-     - a test-selector graph miss;
+-     - a broken gate script, `setup.sh`, hook or workflow;
+-     - tracker CLI bugs.
++     - a test-selector graph miss (a hole in the watch map);
++     - a game's own spec or test helper that is broken.
+      These never count as rework.
++   - **Every root holds all three types** (c0266): z-nile's root (`z-nile/.tracker`) holds its chores, features and defects as a game's root holds the game's. A z-nile command, gate script, guard, hook or workflow that does the wrong thing is a z-nile defect (`--project z-nile`).
+ 2. **Create the shell**: `./zn new issue <f|d|c> <kebab-slug> --project <name> --desc "<one line>"`. The project is `--project`'s when given, else the one whose folder you run `./zn` in (`z-nile/` and below is z-nile's, `pickman/` and below pickman's, c0120); at the checkout's root, or in a folder no project holds, `./zn` refuses and asks for `--project`. Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`; the work of a game, the portal or the arcade library is its project's (`--project pickman`, `--project snake`, `--project portal`, `--project arcade`, …: a name in `z-nile/projects.toml`), or a capture run in that project's folder (`pickman/`, `snake/`, …) (zz-rules skill, Projects). This only allocates the id and the stub (`idea: unchallenged`). It does not write the Problem or the Solution. The stub is pushed to `origin/main` at once, so other terminals see the id. The slug is 2–5 words describing the outcome.
+ 3. **Fill in the frontmatter**: `title`, and `depends_on` (IDs) if you already know them.
+ 4. **Write the idea**: `./zn idea <id> --text "<the rough idea>"`. That command is the only writer of Problem, Solution, Non-goals, `idea-review-001.md` and `idea-refute-001.md`. The `idea` role drafts the outcomes (each bullet one sentence a later claim can find true or false). The `idea-challenge` role challenges once, and the review file is that challenge. An approval with no findings stops there. Otherwise the author answers each finding in the refute (`revised`, or `disputed: <reason>`), and a finding disputed or not answered is left under `## Open to the human`. Do not type those sections yourself. `./zn capture <id>` stays the read-only view of the captured document. Every outcome the idea names is the issue's scope: once it lands, prep may add detail but never narrows, defers or drops an outcome without the user (z-design, **Scope is what was captured**). Everything else is left for `z-design`. Keep `design: draft`. The human rules what is open, then commits the review, the refute and the document and pushes them before design starts.
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index d009a1d8..36e1464e 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -12,7 +12,7 @@ All work is tracked in project roots, which are committed. `z-nile/projects.toml
+ |---|---|---|
+ | feature issue | `f` + 4 digits | `f0010` |
+ | defect issue | `d` + 4 digits | `d0020` |
+-| chore issue | `c` + 4 digits | `c0030` (includes every CI/test/tooling fix, even bugs; see z-ticket) |
++| chore issue | `c` + 4 digits | `c0030` (includes every fix of a wrong spec, even a bug; a z-nile command that does the wrong thing is a defect; see z-ticket) |
+ | raft (epic) | `R` + 4 digits | `R0010` |
+ 
+ - **Numbering**: `f`, `d` and `c` share one number space; rafts have their own. `z-nile/next` holds the next number of each (`issue <n> <phrase>`, `raft <n> <phrase>`). The first publish after c0114 lands moves the counter there from the old counter file, in its own lease push, and leaves a tombstone in the old file, so an engine from before c0114 refuses to number; until then the old file is the counter. `new`, `new raft`, an emergent issue and `renumber` take the counter, counting by one, and push it raised, with a fresh phrase, in a lease push to `origin/main` (a lost race is retried on the new `main`); a number already in use is always passed. Offline (`PICKMAN_PUBLISH=0`) the local counter is read but never written. A tree without `z-nile/next` (a fixture) keeps the old rule: the next multiple of 10 above the highest number in use.
+diff --git a/z-nile/skills/zz-stats/SKILL.md b/z-nile/skills/zz-stats/SKILL.md
+index f1105f37..1437b661 100644
+--- a/z-nile/skills/zz-stats/SKILL.md
++++ b/z-nile/skills/zz-stats/SKILL.md
+@@ -14,7 +14,7 @@ description: Report cost per issue (agent active time, lines) and the rework rat
+    - **review rounds per raft**, for every raft in any state: design and code rounds, and `format`, the finding format of the raft's first design review (`classic`, `second-order` or `none`). A raft's design rounds are its own (z-raft's coherence review) plus its members' (z-design reviews each issue in the issue's folder), rolled up through `raft:`;
+    - **design rounds per issue**, for every issue with a design review in its own folder, and its raft;
+    - **size estimates**: each counted issue's `size:` (z-design's estimate) against the changed lines counted, and their ratio, to calibrate the estimates z-raft sums;
+-   - **Rework %** = defect ÷ (defect + feature), measured by lines added, by issue count and by agent time. Rework counts every phase, capture to deliver. Chores are excluded, and that includes every CI and test fix, even ones that are bugs. The target is **under 20%** on all three.
++   - **Rework %** = defect ÷ (defect + feature), measured by lines added, by issue count and by agent time. Rework counts every phase, capture to deliver. Chores are excluded, and that includes every fix of a wrong spec, even one that is a bug. Every root's features and defects count, z-nile's included (c0266). The target is **under 20%** on all three.
+ 2. **Interpret it for the user** (and run `./zn lessons`: the lessons with the most sources are the defect classes that keep coming back; the "Findings per lesson tag" and "Design rounds before and after lessons" tables show whether lessons reduce review rounds):
+    - Which of the three measures is over target, and which defects drove it. Read each defect's Problem section to find the feature issue or raft it was reworking.
+    - Review rounds: compare design rounds between `classic` and `second-order` rafts, and say whether the second-order ones need fewer. Treat backlog and active rafts as incomplete: they may have rounds to come.
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index a800c419..60ed082a 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -36,7 +36,7 @@ Each project's specs live under its home and run from it (c0120): z-nile's (the
+ | dir | tier | may require |
+ |---|---|---|
+ | `tests/tooling/` (z-nile's) | the tooling's scripts (`z-nile/`, the root's `scripts/`) | scripts |
+-| `tests/acceptance/<id>/` | acceptance specs promoted by `./zn done`, in the item's project's home (`pickman/tests/acceptance/<id>` for pickman's, `z-nile/tests/acceptance/<id>` for z-nile's). Never edit these; if one is wrong, file a chore (test fixes are always chores) | anything, via aliases |
++| `tests/acceptance/<id>/` | acceptance specs promoted by `./zn done`, in the item's project's home (`pickman/tests/acceptance/<id>` for pickman's, `z-nile/tests/acceptance/<id>` for z-nile's). Never edit these; if one is wrong, file a chore (a wrong spec is always a chore) | anything, via aliases |
+ | `tests/meta/` | the structural rules: pickman's from the pickman-arch skill (`pickman/tests/meta/`), the tooling's (`z-nile/tests/meta/`) | the graph library |
+ 
+ The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThrow(pattern?)`.
+@@ -59,7 +59,7 @@ The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThr
+ - **Helpers**: a file under `tests/` that is not a spec and not a watch file is a source file. The runner, `z-nile/check.sh`, `zn` and the Lune and tool pins are named in the watch files of the specs whose text names them, so a change runs those specs and never every spec.
+ - **The net**: `./zn land` and the merge (`./zn watch-kick` after the merge, and the dispatcher after it merges) start `./zn watch-net` under `./zn run`. It returns at once; the log is `.cache/watch-net.log` in the checkout that started it. The net runs every project's fast suite on current main, in `.worktree/watch-net`, and pushes a repair onto main: the failing spec's watch file gains the source files changed since `z-nile/watch-passed` (the last commit the suite passed on; with no record yet, the last 30 commits), and a defect issue. A passing run records that commit in `z-nile/watch-passed` and pushes it, then runs `z-nile/check.sh --slow` in the same worktree, still off the landing path. A slow failure opens one defect (slug `slow-tier-red`) when none is already open, and does not undo the fast pass. A second machine rebases and stops when the repair is already on main.
+ - **Every selected spec runs.** An affected gate runs the specs the watch map lists, a full gate every fast-tier spec, a slow gate only `z-nile/tests/slow.tsv`. Nothing is skipped because an earlier run passed. The same commit and the same change do the same work on any machine. The runner packs files by `<home>/.cache/spec-durations.tsv` (one line `<seconds>\t<path>`), a hint written after a run and safe to delete: with no file the run is ordered by path. `slow.tsv` is the committed list of specs those two gates skip, in the same line grammar; its seconds are not the live times.
+-- **Watch miss**: a spec fails under `--full` but wasn't selected for the same diff. That's a hole in the map. `./zn watch-net` fills it; file the defect it captures, since CI and test bugs are always chores.
++- **Watch miss**: a spec fails under `--full` but wasn't selected for the same diff. That's a hole in the map, a chore (z-ticket). `./zn watch-net` fills it and captures it, though it still types the capture a defect (d0353).
+ 
+ ## Acceptance checks (`check.sh`)
+ Every issue and raft has a `check.sh` that uses `z-nile/lib/ac.sh`:
+@@ -101,7 +101,7 @@ If something could be expressed as a measurable proxy, it's not Judged or Observ
+ ## Speed
+ A standing rule, not a one-off. Tests and checks run very often, so they must run **concurrently** and as swiftly as possible.
+ - **What exists**: `z-nile/lib/par.sh` runs the independent static stages together (`par_start` / `par_wait`: buffered, timed, reported in start order); `tests/run` runs spec files in concurrent workers (`--jobs N`, `PICKMAN_JOBS`), slowest first by the durations it records in the home's `.cache/spec-durations.tsv` (files with no recorded time first, ties by path; c0154), so a long spec no longer starts late and holds the gate open at the end. Each result prints as its file finishes, and all runners for this user share eight machine-wide worker lanes (`--jobs` remains a per-run cap). A run in-process (`--jobs 1`, one file) neither reads nor writes the record. `PICKMAN_JOBS=1` restores serial runs when you suspect an ordering bug.
+-- **Monitor continuously**: every gate run prints per-stage times, a `slowest:` line and `gate wall time:`, and whoever runs it looks at them. A stage or spec that dominates, or a time that creeps up between runs, is a gate defect: **optimise** it now if it is in your Touched modules, otherwise file a chore (`./zn new issue c gate-slow-<what> --project z-nile`). Never add a serial dependency between stages without a reason.
++- **Monitor continuously**: every gate run prints per-stage times, a `slowest:` line and `gate wall time:`, and whoever runs it looks at them. A stage or spec that dominates, or a time that creeps up between runs, is slow-gate upkeep, a chore while the gate's results are right (c0266): **optimise** it now if it is in your Touched modules, otherwise file one (`./zn new issue c gate-slow-<what> --project z-nile`). Never add a serial dependency between stages without a reason.
+ - **Writing specs for speed**: no wall-clock assertions and no fixed sleeps to let something finish (a bounded poll or rendezvous with a timeout is fine). Shell-heavy fixtures own a unique `.cache/<name>` (a literal `.cache/<dir>` in two spec files under `tests/` fails the gate, a mere mention counts, and `sim` is exempt). No shared mutable state across spec files. Prefer in-process Logic specs, and split or stub a spec that takes more than about a second. Two suites in one checkout queue on the runner's lock; separate worktrees run in parallel (see "Specs never touch the real repository").
+ 
+ ## Specs never touch the real repository
+diff --git a/z-nile/tests/acceptance/c0114/classified.spec.luau b/z-nile/tests/acceptance/c0114/classified.spec.luau
+index a3d78bb6..6a6b887e 100644
+--- a/z-nile/tests/acceptance/c0114/classified.spec.luau
++++ b/z-nile/tests/acceptance/c0114/classified.spec.luau
+@@ -299,6 +299,8 @@ local function filed(list: { [string]: { string } }, root: string): { string }
+ 				table.insert(wrong, `{kind} {slug}: not found`)
+ 			elseif item.root ~= root then
+ 				table.insert(wrong, `{kind} {slug} ({item.id}): in {item.root}`)
++			-- c0266 override: z-nile's root holds all three types; the items c0114 moved were chores, and this keeps that
++			-- record of them, not a rule for the root
+ 			elseif root == "z-nile/.tracker" and store.typeOf(item) ~= "chore" then
+ 				table.insert(wrong, `{kind} {slug} ({item.id}): a {store.typeOf(item)} in z-nile's root`)
+ 			end
+@@ -323,12 +325,24 @@ return t.spec("c0114 every item is filed in its project", function(it)
+ 		t.expect(table.concat(filed(PICKMAN, "pickman/.tracker"), "\n")).toBe("")
+ 	end)
+ 
+-	it("no feature or defect is filed in z-nile's root", function()
++	-- c0266 override: z-nile's root holds chores, features and defects (Scope decision, user, 2026-11-12), so the case
++	-- pins each issue's `type:` to its id's letter there, and the defect main-red-specs-after-cuts stays one
++	it("z-nile's root holds chores, features and defects, each typed by its id", function()
++		local wrong: { string } = {}
++		local defect = false
+ 		for _, item in allItems("issue") do -- c0120 override: read at the top
+ 			if item.root == "z-nile/.tracker" then
+-				t.expect(string.sub(item.id, 1, 1)).toBe("c")
++				local typed = store.readFront(item.doc).type
++				if typed ~= store.typeOf(item) then
++					table.insert(wrong, `{item.id}: type {typed or "(none)"}`)
++				end
++				if item.slug == "main-red-specs-after-cuts" then
++					defect = store.typeOf(item) == "defect"
++				end
+ 			end
+ 		end
++		t.expect(table.concat(wrong, "\n")).toBe("")
++		t.expect(defect).toBe(true)
+ 	end)
+ 
+ 	-- List mode is proven first (as c0034's locator does): a check.sh that ignored AC_LIST would run every raft's full

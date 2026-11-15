@@ -1,0 +1,7 @@
+- design-review-001 F1: zz-test/kill-mutants-where-the-value-is-built
+- design-review-001 F2: z-design/spec-design-correspondence
+- design-review-001 F3: zz-test/seed-every-enumerated-case
+- design-review-001 F4: zz-test/pin-call-site-arguments
+- design-review-001 F5: z-design/mutation-runner-runs-correct-variants
+- design-review-001 F6: zz-test/refusals-tested-on-both-sides
+- design-review-001 F7: one-off: the run's events lacked the place a view needs for one effect (the explosion); it is this game's catalogue, decided per game against its view
