@@ -1,0 +1,313 @@
+
+local GRANTED = "ProductPurchaseDecision.PurchaseGranted" -- the stub's Enum values are their own names
+local NOT_YET = "ProductPurchaseDecision.NotProcessedYet"
+
+local function rec(w: any, storeName: string, userId: number): PaidPlay.Record
+	return PaidPlay.record(w.record(storeName, userId))
+end
+
+local function eventsOf(w: any, kind: string): { any }
+	local out = {}
+	for _, e in w.events do
+		if e.kind == kind then
+			table.insert(out, e)
+		end
+	end
+	return out
+end
+
+return t.spec("f0201 Receipts on a stub engine", function(it)
+	it("a receipt is granted once: PurchaseGranted both times, one credit, and the place hears one grant", function()
+		local w = world("live")
+		local p = w.player(7)
+		w.start()
+		t.expect(w.run(w.receipt, 7, 202, "buy-1").results[1]).toBe(GRANTED)
+		t.expect(w.run(w.receipt, 7, 202, "buy-1").results[1]).toBe(GRANTED)
+		t.expect(rec(w, "SnakePaidPlay", 7).revives).toBe(1)
+		t.expect(rec(w, "SnakePaidPlay", 7).receipts).toEqual({ "buy-1" })
+		local g = eventsOf(w, "granted")
+		t.expect(#g).toBe(1)
+		t.expect(g[1].player).toBe(p)
+		t.expect(g[1].name).toBe("snake")
+		t.expect(g[1].what).toBe("revive")
+	end)
+
+	it("every title's receipt is granted in any place, into its own record, by user id", function()
+		local w = world("live")
+		w.player(7)
+		w.start()
+		local cases: { { id: number, store: string, field: string } } = {
+			{ id = 101, store = "PaidPlay", field = "plays" },
+			{ id = 302, store = "InvadersPaidPlay", field = "revives" },
+			{ id = 401, store = "AsteroidsPaidPlay", field = "plays" },
+		}
+		for _, case in cases do
+			t.expect(w.run(w.receipt, 7, case.id, `r{case.id}`).results[1]).toBe(GRANTED)
+			t.expect((rec(w, case.store, 7) :: any)[case.field]).toBe(1)
+		end
+	end)
+
+	it("a buyer not on this server is granted all the same, and nothing is handed to the place", function()
+		local w = world("live")
+		w.start()
+		t.expect(w.run(w.receipt, 9, 201, "away-1").results[1]).toBe(GRANTED)
+		t.expect(rec(w, "SnakePaidPlay", 9).plays).toBe(1)
+		t.expect(#eventsOf(w, "granted")).toBe(0)
+	end)
+
+	it("an unknown product, a missing purchase id or a failed write answers NotProcessedYet and grants nothing", function()
+		local w = world("live")
+		w.player(7)
+		w.start()
+		t.expect(w.run(w.receipt, 7, 999, "x-1").results[1]).toBe(NOT_YET)
+		t.expect(w.run(w.receipt, 7, 101, "").results[1]).toBe(NOT_YET)
+		t.expect(w.run(w.receipt, 7, 101, nil).results[1]).toBe(NOT_YET)
+		t.expect(w.run(w.receipt, "7", 101, "x-2").results[1]).toBe(NOT_YET)
+		w.fail.update = true
+		t.expect(w.run(w.receipt, 7, 101, "x-3").results[1]).toBe(NOT_YET)
+		w.fail.update = false
+		t.expect(w.record("PaidPlay", 7)).toBe(nil)
+		t.expect(#eventsOf(w, "granted")).toBe(0)
+		t.expect(w.run(w.receipt, 7, 101, "x-3").results[1]).toBe(GRANTED)
+		t.expect(rec(w, "PaidPlay", 7).plays).toBe(1)
+	end)
+
+	it("PurchaseGranted is answered only after the write: a held write holds the answer", function()
+		local w = world("live")
+		w.player(7)
+		w.start()
+		w.hold.update = true
+		local h = w.run(w.receipt, 7, 101, "slow-1")
+		t.expect(h.done).toBe(false)
+		t.expect(w.record("PaidPlay", 7)).toBe(nil)
+		w.release()
+		t.expect(h.results[1]).toBe(GRANTED)
+		t.expect(rec(w, "PaidPlay", 7).plays).toBe(1)
+	end)
+
+	it("a receipt another server granted during this write counts once and is not handed on as new", function()
+		local w = world("live")
+		w.player(7)
+		w.start()
+		w.race = function(store: { [string]: any }, key: string)
+			store[key] = { plays = 1, revives = 0, receipts = { "dup-1" } }
+		end
+		t.expect(w.run(w.receipt, 7, 101, "dup-1").results[1]).toBe(GRANTED)
+		t.expect(rec(w, "PaidPlay", 7).plays).toBe(1)
+		t.expect(#eventsOf(w, "granted")).toBe(0)
+	end)
+
+	it("the transform's last call decides whether the grant is new", function()
+		local w = world("live")
+		w.player(7)
+		w.start()
+		w.twice = true
+		w.race = function(store: { [string]: any }, key: string)
+			store[key] = { plays = 1, receipts = { "dup-2" } }
+		end
+		w.run(w.receipt, 7, 101, "dup-2")
+		t.expect(rec(w, "PaidPlay", 7).plays).toBe(1)
+		t.expect(#eventsOf(w, "granted")).toBe(0)
+	end)
+
+	it("a real receipt in test mode is kept in the live record, and not handed to a place that reads the test one", function()
+		local w = world(nil)
+		w.player(7)
+		w.start()
+		t.expect(w.run(w.receipt, 7, 102, "real-1").results[1]).toBe(GRANTED)
+		t.expect(rec(w, "PaidPlay", 7).revives).toBe(1)
+		t.expect(w.record("PaidPlayTest", 7)).toBe(nil)
+		t.expect(#eventsOf(w, "granted")).toBe(0)
+	end)
+
+	it("a closed title's receipt is still granted: it was charged", function()
+		local w = world("live", { ContinueProductId = "bad" })
+		w.player(7)
+		w.start()
+		t.expect(w.wallet().mode("pickman")).toBe("closed")
+		t.expect(w.run(w.receipt, 7, 101, "c-1").results[1]).toBe(GRANTED)
+		t.expect(rec(w, "PaidPlay", 7).plays).toBe(1)
+		t.expect(#eventsOf(w, "granted")).toBe(1)
+	end)
+
+	it("ask in live mode prompts the title's own product; nothing else opens", function()
+		local w = world("live")
+		local p = w.player(7)
+		local r = w.start()
+		t.expect(r.ask(p, "snake", "play")).toBe(true)
+		t.expect(r.ask(p, "pickman", "revive")).toBe(true)
+		t.expect(#w.prompts).toBe(2)
+		t.expect(w.prompts[1].player).toBe(p)
+		t.expect(w.prompts[1].id).toBe(201)
+		t.expect(w.prompts[2].id).toBe(102)
+		t.expect(#w.sent).toBe(0)
+	end)
+
+	it("ask in closed mode opens nothing and answers false", function()
+		local w = world("live", { SnakePlayProductId = 0 })
+		local p = w.player(7)
+		local r = w.start()
+		t.expect(r.ask(p, "snake", "revive")).toBe(false)
+		t.expect(#w.prompts).toBe(0)
+		t.expect(#w.sent).toBe(0)
+	end)
+
+	it("ask in test mode opens the test screen with its lines and never prompts Roblox", function()
+		local w = world(nil)
+		local p = w.player(7)
+		local r = w.start()
+		t.expect(r.ask(p, "invaders", "revive")).toBe(true)
+		t.expect(#w.prompts).toBe(0)
+		t.expect(#w.sent).toBe(1)
+		t.expect(w.sent[1].player).toBe(p)
+		local expected: { any } = {
+			"open",
+			{ "INVADERS: REVIVE: 3 NEW LIVES", "5 R$ 1 R$ SALE", "TEST PURCHASE: NOTHING IS CHARGED" },
+		}
+		t.expect(w.sent[1].args).toEqual(expected)
+		t.expect(w.folder("ArcadePaidPlay")).toBeTruthy()
+		t.expect(w.remote("TestPurchase")).toBeTruthy()
+	end)
+
+	it("a test confirm grants into the test store under a test id; the screen closes bought, then the place hears it", function()
+		local w = world(nil)
+		local p = w.player(7)
+		local r = w.start()
+		r.ask(p, "snake", "play")
+		w.run(w.answer, p, "confirm")
+		local tr = rec(w, "SnakePaidPlayTest", 7)
+		t.expect(tr.plays).toBe(1)
+		t.expect(string.match(tr.receipts[1], "^test:") ~= nil).toBe(true)
+		t.expect(w.record("SnakePaidPlay", 7)).toBe(nil)
+		t.expect(#w.events).toBe(2)
+		t.expect(w.events[1]).toEqual({ kind = "closed", player = p, name = "snake", what = "play", bought = true })
+		t.expect(w.events[2]).toEqual({ kind = "granted", player = p, name = "snake", what = "play" })
+	end)
+
+	it("each test confirm is its own purchase: two screens bought, two credits", function()
+		local w = world(nil)
+		local p = w.player(7)
+		local r = w.start()
+		r.ask(p, "pickman", "revive")
+		w.run(w.answer, p, "confirm")
+		r.ask(p, "pickman", "revive")
+		w.run(w.answer, p, "confirm")
+		t.expect(rec(w, "PaidPlayTest", 7).revives).toBe(2)
+	end)
+
+	it("a test confirm whose write fails closes the screen not bought and grants nothing", function()
+		local w = world(nil)
+		local p = w.player(7)
+		local r = w.start()
+		r.ask(p, "pickman", "play")
+		w.fail.update = true
+		w.run(w.answer, p, "confirm")
+		t.expect(#eventsOf(w, "granted")).toBe(0)
+		t.expect(eventsOf(w, "closed")[1].bought).toBe(false)
+	end)
+
+	it("a cancel closes the screen not bought; a confirm after it, or with no screen open, grants nothing", function()
+		local w = world(nil)
+		local p = w.player(7)
+		local r = w.start()
+		w.run(w.answer, p, "confirm")
+		t.expect(#w.events).toBe(0)
+		r.ask(p, "pickman", "play")
+		w.run(w.answer, p, "cancel")
+		w.run(w.answer, p, "confirm")
+		t.expect(w.record("PaidPlayTest", 7)).toBe(nil)
+		t.expect(#w.events).toBe(1)
+		t.expect(w.events[1]).toEqual({ kind = "closed", player = p, name = "pickman", what = "play", bought = false })
+	end)
+
+	it("an answer that is neither confirm nor cancel is ignored and the screen stays open", function()
+		local w = world(nil)
+		local p = w.player(7)
+		local r = w.start()
+		r.ask(p, "pickman", "play")
+		w.run(w.answer, p, "grant")
+		w.run(w.answer, p, { "confirm" })
+		t.expect(#w.events).toBe(0)
+		w.run(w.answer, p, "confirm")
+		t.expect(rec(w, "PaidPlayTest", 7).plays).toBe(1)
+	end)
+
+	it("one test screen per player at a time: a second ask opens nothing; another player's confirm grants nothing", function()
+		local w = world(nil)
+		local p = w.player(7)
+		local q = w.player(8)
+		local r = w.start()
+		t.expect(r.ask(p, "pickman", "play")).toBe(true)
+		t.expect(r.ask(p, "snake", "revive")).toBe(false)
+		t.expect(#w.sent).toBe(1)
+		w.run(w.answer, q, "confirm")
+		t.expect(w.record("PaidPlayTest", 8)).toBe(nil)
+		t.expect(#w.events).toBe(0)
+	end)
+
+	it("a confirm in live mode grants nothing: no test screen is ever open there", function()
+		local w = world("live")
+		local p = w.player(7)
+		local r = w.start()
+		r.ask(p, "pickman", "play")
+		w.run(w.answer, p, "confirm")
+		t.expect(w.record("PaidPlay", 7)).toBe(nil)
+		t.expect(w.record("PaidPlayTest", 7)).toBe(nil)
+		t.expect(#w.events).toBe(0)
+	end)
+
+	it("a player who leaves with a test screen open: their next join's confirm grants nothing", function()
+		local w = world(nil)
+		local p = w.player(7)
+		local r = w.start()
+		r.ask(p, "pickman", "play")
+		w.leave(p)
+		local again = w.player(7)
+		w.run(w.answer, again, "confirm")
+		t.expect(w.record("PaidPlayTest", 7)).toBe(nil)
+	end)
+
+	it("a grant whose player left during its write is not handed to the place", function()
+		local w = world(nil)
+		local p = w.player(7)
+		local r = w.start()
+		r.ask(p, "pickman", "revive")
+		w.hold.update = true
+		w.run(w.answer, p, "confirm")
+		w.leave(p)
+		w.release()
+		t.expect(rec(w, "PaidPlayTest", 7).revives).toBe(1)
+		t.expect(#w.events).toBe(0)
+	end)
+
+	it("Roblox's purchase screen closing tells the place, bought or not, for a known product only", function()
+		local w = world("live")
+		local p = w.player(7)
+		w.start()
+		w.finished(7, 202, false)
+		w.finished(7, 101, true)
+		w.finished(7, 999, true)
+		w.finished(8, 101, true)
+		t.expect(#w.events).toBe(2)
+		t.expect(w.events[1]).toEqual({ kind = "closed", player = p, name = "snake", what = "revive", bought = false })
+		t.expect(w.events[2]).toEqual({ kind = "closed", player = p, name = "pickman", what = "play", bought = true })
+		t.expect(w.record("PaidPlay", 7)).toBe(nil) -- a closed screen grants nothing
+	end)
+
+	it("Receipts starts once per server: the second start does nothing; ask before start is an error", function()
+		local w = world("live")
+		local p = w.player(7)
+		local r = w.receipts()
+		t.expect(function()
+			r.ask(p, "pickman", "play")
+		end).toThrow("start")
+		t.expect(r.start({})).toBe(true)
+		local handler = w.marketplace.ProcessReceipt
+		t.expect(type(handler)).toBe("function")
+		t.expect(r.start({})).toBe(false)
+		t.expect(w.marketplace.ProcessReceipt).toBe(handler)
+		t.expect(function()
+			r.ask(p, "tetris", "play")
+		end).toThrow("no title")
+	end)
+end)

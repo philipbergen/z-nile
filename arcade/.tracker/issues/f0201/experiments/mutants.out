@@ -1,0 +1,71 @@
+Y1 | paidplay | killed: the first start is free and records its instant; the next is due a full hour later, not a second sooner
+Y2 | paidplay | killed: the first start is free and records its instant; the next is due a full hour later, not a second sooner
+Y3 | paidplay | killed: a free start due is used before a held play
+Y4 | paidplay | killed: a receipt is granted once: the same id again grants nothing; each kind adds its own credit
+Y5 | paidplay | killed: only the latest RECEIPTS_KEPT receipt ids are kept, oldest dropped first
+Y6 | paidplay | killed: only the latest RECEIPTS_KEPT receipt ids are kept, oldest dropped first
+Y7 | paidplay | killed: a held revive is used once; with none held nothing changes
+Y8 | config | killed: the mode is live only for exactly 'live' with both ids; 'live' with an id missing is closed; else test
+Y9 | paidplay | killed: a stored record is read defensively: nil or broken fields are a new player's
+Y10 | config | killed: configure reads each title's ids: whole positive numbers only, per title, and maps them to title and kind
+Y11 | config | killed: an id two products share belongs to neither, and its titles are closed
+Y12 | config | killed: the mode is live only for exactly 'live' with both ids; 'live' with an id missing is closed; else test
+Y13 | config | killed: each mode has its own store: test credits never reach a live record; closed keeps the live one
+Y14 | paidplay | killed: a record f0145 wrote keeps its continues as revives; revives win when both are there
+Y15 | paidplay | killed: a refund is its own credit: each one counts, and none takes a receipt slot
+Y16 | paidplay | killed: an arrival plays when charged or when the claim failed; a buy plays only with the portal's pass
+Y17 | paidplay | killed: an arrival plays when charged or when the claim failed; a buy plays only with the portal's pass
+Y18 | paidplay | killed: a clock behind the recorded free start waits; an instant that is not whole never grants
+Y19 | config | killed: the test screen's keys: Return, KeypadEnter, ButtonA buy; Backspace, ButtonB cancel; nothing else
+Y20 | config | killed: the test screen's lines: the title and product, the badge, and that nothing is charged
+Y21 | paidplay | killed: nothing mutates the record it is given
+W1 | wallet | killed: the arrival is charged once per join: a later call answers the same; a new join claims again
+W2 | wallet | killed: a second arrival during the first's write waits for it: one write, the same answer
+W3 | wallet | killed: an arrival whose write fails plays and charges nothing; one not back within WAIT_SECONDS plays
+W4 | wallet | killed: an arrival whose write fails plays and charges nothing; one not back within WAIT_SECONDS plays
+W5 | wallet | killed: the portal's pass lets a buy arrival play, and is taken on every arrival, whatever its start
+W6 | wallet | killed: the portal's pass lets a buy arrival play, and is taken on every arrival, whatever its start
+W7 | wallet | killed: a buy arrival whose pass map cannot be read plays (the user, 2026-10-31: 'Let all of them play')
+W8 | wallet | killed: the portal's pass lets a buy arrival play, and is taken on every arrival, whatever its start
+W9 | wallet | killed: the transform's last call decides: a first call on an outdated value does not count
+W10 | wallet | killed: a held revive is used once and counted for the run; with none held known, no write is made
+W11 | wallet | killed: the run's revive count is kept after the player leaves, and starts again at their next arrival
+W12 | wallet | killed: the run's revive count is kept after the player leaves, and starts again at their next arrival
+W13 | wallet | killed: one revive write per player and title at a time: a use during a use's write answers nil, one write
+W14 | wallet | killed: a held revive is used once and counted for the run; with none held known, no write is made
+W15 | wallet | killed: revive writes are bounded over time: none within USE_SECONDS of the last; one after it
+W16 | wallet | killed: a read during a read for the same player is busy: one read, and the second answers nil
+W17 | wallet | killed: a read reads the mode's store; within READ_SECONDS of the last record seen it answers from it
+W19 | wallet | killed: a DataStore that cannot be opened: the arrival plays, a read is down, nothing throws
+W20 | wallet | killed: a read not back within WAIT_SECONDS is down, and stays busy until it ends
+W21 | wallet | killed: TeleportData is never trusted: a join claiming a paid play is a buy arrival
+W22 | wallet | killed: a first arrival is free, recorded in test mode's own store; live mode writes the live one
+R1 | receipts | killed: an unknown product, a missing purchase id or a failed write answers NotProcessedYet and grants nothing
+R2 | receipts | killed: a receipt is granted once: PurchaseGranted both times, one credit, and the place hears one grant
+R3 | receipts | killed: an unknown product, a missing purchase id or a failed write answers NotProcessedYet and grants nothing
+R4 | receipts | killed: a real receipt in test mode is kept in the live record, and not handed to a place that reads the test one
+R5 | receipts | killed: a real receipt in test mode is kept in the live record, and not handed to a place that reads the test one
+R6 | receipts | killed: a buyer not on this server is granted all the same, and nothing is handed to the place
+R7 | receipts | killed: a cancel closes the screen not bought; a confirm after it, or with no screen open, grants nothing
+R8 | receipts | killed: ask in test mode opens the test screen with its lines and never prompts Roblox
+R9 | receipts | killed: ask in closed mode opens nothing and answers false
+R10 | receipts | killed: one test screen per player at a time: a second ask opens nothing; another player's confirm grants nothing
+R11 | receipts | killed: one test screen per player at a time: a second ask opens nothing; another player's confirm grants nothing
+R12 | receipts | killed: a player who leaves with a test screen open: their next join's confirm grants nothing
+R13 | receipts | killed: a test confirm grants into the test store under a test id; the screen closes bought, then the place hears it
+R14 | receipts | killed: Roblox's purchase screen closing tells the place, bought or not, for a known product only
+R16 | receipts | killed: Receipts starts once per server: the second start does nothing; ask before start is an error
+R17 | receipts | killed: a grant whose player left during its write is not handed to the place
+R18 | receipts | killed: a test confirm grants into the test store under a test id; the screen closes bought, then the place hears it
+R19 | receipts | killed: each test confirm is its own purchase: two screens bought, two credits
+R20 | receipts | killed: an unknown product, a missing purchase id or a failed write answers NotProcessedYet and grants nothing
+R21 | receipts | killed: an unknown product, a missing purchase id or a failed write answers NotProcessedYet and grants nothing
+R22 | receipts | killed: a test confirm whose write fails closes the screen not bought and grants nothing
+C1 | client | killed: while it is open Return, KeypadEnter and ButtonA buy on the press; the release adds nothing
+C2 | client | killed: a tap on BUY sends confirm and closes; a tap on CANCEL sends cancel and closes
+C3 | client | killed: its keys are bound only while it is open, above the place's own: outside it they pass on and send nothing
+C5 | client | killed: a tap on BUY sends confirm and closes; a tap on CANCEL sends cancel and closes
+C6 | client | killed: a tap on BUY sends confirm and closes; a tap on CANCEL sends cancel and closes
+C7 | client | killed: a malformed open shows nothing; lines that are not text are dropped
+C8 | client | killed: centred in the middle half, inside the safe insets, above the place's screens, kept across respawns
+C9 | client | killed: started twice it listens once: one open, one screen
