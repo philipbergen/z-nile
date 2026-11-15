@@ -9,6 +9,13 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+# AC1 runs the promoted spec itself (it is in the slow tier, z-nile/tests/slow.tsv, which no --affected or --full gate
+# runs: lesson z-design/guards-name-slow-tier-specs), and c0060/retrofit, which reads its text for raw git and which
+# the selector does not pick for it (design review 001 F3). The dispatcher's publish broker is unset for it: inside a
+# dispatched step the spec's fixture `start` would hand its push to that broker and the squash-merge case would fail
+# for the environment, not the spec (c0304 E1; d0298 makes spec runs drop that environment, after which this is a no-op).
+check "AC1: every case of c0045/workstreams passes, the two narrowed ones included, and c0060/retrofit still finds no raw git in it" env -u ZN_PUBLISH_BROKER -u ZN_PUBLISH_TOKEN lune run tests/run -- tests/acceptance/c0045/workstreams.spec.luau tests/acceptance/c0060/retrofit.spec.luau
+echo "AC2 base: $(git -C "$ZN_ROOT" ls-remote --get-url origin) refs/heads/main"
+check "AC2: c0045/workstreams is its merge base with exactly the three reviewed c0304 hunks, byte for byte (the raft-tip branch and both --from lines in case 1, the push in case 2), and a base that is not the stale form is refused" python3 "$A/narrow.py" "$ZN_ROOT"
 
 finish

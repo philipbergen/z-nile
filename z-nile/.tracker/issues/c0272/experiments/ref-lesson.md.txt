@@ -1,0 +1,11 @@
+---
+title: A prep that supersedes another hands over its claim and names the live branch where the other worker looks
+when: design
+tags: [coordination, claims, process]
+check: When I closed or replaced another worker's PR, did I run `./zn status <id>` to hand over or release the claim and leave the new branch name on the claim, the issue and the old PR? And was it the user's decision, did the take-over run `./zn status <id> new` then `./zn status <id> preparing` in the live prep's worktree, did I remove the superseded worktrees' claim memories, and did I stop the other worker if it is a dispatched step?
+---
+Closing or replacing another prep's PR ends nothing by itself: the claim stays with the other worker, which keeps designing.
+
+**Why:** c0264 was prepped twice. The user kept `prep-c0264-readme-intent`, and PR #256 (`prep-readme-states-znile-intent`) was closed with a comment that reached nobody: the agent holding the claim kept designing.
+
+**How to apply:** only on the user's decision (zz-rules, Whose claim). Find every candidate holder, never judging by a memory's contents: `./zn status <id>`, `git worktree list | grep -e <id> -e <slug>`, `ls <main checkout>/.worktree/*/.cache/tracker-claim-<id>` and `./zn dispatch status <id>`; stop a dispatched one with `./zn dispatch stop <id>`. The claim: in the live prep's worktree, `./zn status <id> new`, then `./zn status <id> preparing` (`new` alone releases it); then remove each superseded worktree's memory (`rm <main checkout>/.worktree/<old>/.cache/tracker-claim-<id>`), so the claim's only memory is in `.worktree/<live branch>`. The name: in the old PR's body and a comment (if it has one), then close it; and in the issue, a `Prep moved (<date>): live on <branch> (PR #<n>)` line directly under its `# <id>: <title>` heading (the newest on top), landed from a `capture-<slug>` worktree with `./zn land`; both preps' next sync merges it.

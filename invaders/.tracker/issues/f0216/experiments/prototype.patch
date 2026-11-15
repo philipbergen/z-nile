@@ -1,0 +1,875 @@
+diff --git a/invaders/src/shared/Logic/Barriers/init.luau b/invaders/src/shared/Logic/Barriers/init.luau
+new file mode 100644
+index 00000000..b92e63c8
+--- /dev/null
++++ b/invaders/src/shared/Logic/Barriers/init.luau
+@@ -0,0 +1,126 @@
++--!strict
++-- Barriers: the bunkers between the cannon and the formation, engine-free (f0216). Each bunker is a grid of
++-- blocks (cols x rows); a shot erodes the block it reaches and its pattern around it, from whichever side it
++-- comes, and an alien marching through erases every block its box overlaps. Coordinates are the field's:
++-- x across, d the depth from the base line. Rows count from the near side (row 1 is nearest the cannon).
++export type Layout = {
++	lefts: { number }, -- each bunker's left x
++	near: number, -- the depth of every bunker's near edge
++	cols: number,
++	rows: number,
++	block: number, -- a block's side, in field units
++}
++export type Barriers = {
++	layout: Layout,
++	blocks: { { boolean } }, -- blocks[bunker][(row - 1) * cols + col]
++}
++
++local Barriers = {}
++Barriers.CLASSIC = table.freeze({
++	lefts = table.freeze({ 28, 76, 124, 172 }),
++	near = 24,
++	cols = 8,
++	rows = 6,
++	block = 3,
++} :: Layout)
++-- A hit's pattern: { column offset, row offset along the shot's travel }. The hit block, its two neighbours
++-- across, and the block beyond it.
++Barriers.EROSION = table.freeze({
++	table.freeze({ 0, 0 }),
++	table.freeze({ -1, 0 }),
++	table.freeze({ 1, 0 }),
++	table.freeze({ 0, 1 }),
++})
++
++function Barriers.new(layout: Layout): Barriers
++	local blocks = {}
++	for i = 1, #layout.lefts do
++		local grid = table.create(layout.cols * layout.rows, true)
++		blocks[i] = grid
++	end
++	return { layout = layout, blocks = blocks }
++end
++
++function Barriers.present(b: Barriers, bunker: number, col: number, row: number): boolean
++	local l = b.layout
++	if col < 1 or col > l.cols or row < 1 or row > l.rows then
++		return false
++	end
++	local grid = b.blocks[bunker]
++	return grid ~= nil and grid[(row - 1) * l.cols + col] == true
++end
++
++-- The present block whose square holds the point (x, d): bunker, col, row. Nil when there is none.
++function Barriers.blockAt(b: Barriers, x: number, d: number): (number?, number?, number?)
++	local l = b.layout
++	local row = math.floor((d - l.near) / l.block) + 1
++	if row < 1 or row > l.rows then
++		return nil, nil, nil
++	end
++	for i, left in l.lefts do
++		local col = math.floor((x - left) / l.block) + 1
++		if col >= 1 and col <= l.cols then
++			if Barriers.present(b, i, col, row) then
++				return i, col, row
++			end
++			return nil, nil, nil
++		end
++	end
++	return nil, nil, nil
++end
++
++-- A shot reached (bunker, col, row) travelling `travel` (+1 away from the base line, -1 toward it): removes the
++-- EROSION pattern's present blocks. Returns how many were removed.
++function Barriers.erode(b: Barriers, bunker: number, col: number, row: number, travel: number): number
++	local l = b.layout
++	local grid = b.blocks[bunker]
++	local removed = 0
++	for _, o in Barriers.EROSION do
++		local c, r = col + o[1], row + o[2] * travel
++		if Barriers.present(b, bunker, c, r) then
++			grid[(r - 1) * l.cols + c] = false
++			removed += 1
++		end
++	end
++	return removed
++end
++
++-- Removes every present block overlapping the half-open box [x0, x1) x [d0, d1). Returns how many.
++function Barriers.eraseBox(b: Barriers, x0: number, d0: number, x1: number, d1: number): number
++	local l = b.layout
++	local removed = 0
++	for i, left in l.lefts do
++		local grid = b.blocks[i]
++		for row = 1, l.rows do
++			local bd = l.near + (row - 1) * l.block
++			if bd < d1 and bd + l.block > d0 then
++				for col = 1, l.cols do
++					local bx = left + (col - 1) * l.block
++					local k = (row - 1) * l.cols + col
++					if bx < x1 and bx + l.block > x0 and grid[k] then
++						grid[k] = false
++						removed += 1
++					end
++				end
++			end
++		end
++	end
++	return removed
++end
++
++-- Present blocks, in one bunker or in all of them.
++function Barriers.count(b: Barriers, bunker: number?): number
++	local n = 0
++	for i, grid in b.blocks do
++		if bunker == nil or bunker == i then
++			for _, v in grid do
++				if v then
++					n += 1
++				end
++			end
++		end
++	end
++	return n
++end
++
++return Barriers
+diff --git a/invaders/src/shared/Logic/Classic/Rng.luau b/invaders/src/shared/Logic/Classic/Rng.luau
+new file mode 100644
+index 00000000..c455fce2
+--- /dev/null
++++ b/invaders/src/shared/Logic/Classic/Rng.luau
+@@ -0,0 +1,23 @@
++--!strict
++-- A small deterministic generator (Park-Miller, multiplier 16807): the state is one number, so a run stays
++-- plain data, and every product stays below 2^53.
++local Rng = {}
++
++local MODULUS = 2147483647
++
++-- A state in 1..MODULUS-1 from any seed; a seed that is not a finite number counts as 0.
++function Rng.seed(seed: number): number
++	local s = if type(seed) == "number" then math.floor(seed) else 0
++	if s ~= s or math.abs(s) == math.huge then
++		s = 0
++	end
++	return s % (MODULUS - 1) + 1
++end
++
++-- The next state and a whole number in 1..n.
++function Rng.next(state: number, n: number): (number, number)
++	local nextState = (state * 16807) % MODULUS
++	return nextState, nextState % n + 1
++end
++
++return Rng
+diff --git a/invaders/src/shared/Logic/Classic/init.luau b/invaders/src/shared/Logic/Classic/init.luau
+new file mode 100644
+index 00000000..500bd7ec
+--- /dev/null
++++ b/invaders/src/shared/Logic/Classic/init.luau
+@@ -0,0 +1,434 @@
++--!strict
++-- Classic: one player's Space Invaders as a pure state machine (f0216), stepped once per tick (TICK_RATE a
++-- second) and told the player's input. It owns the cannon, the shots, lives, score, waves and the revive, and
++-- composes Formation, Barriers and Mystery. Phases: playing -> dying -> playing, playing -> waveclear ->
++-- playing (the next wave), and playing -> gameover (out of lives, or invasion at once). The field is 2-D: x
++-- across, d the depth from the base line (the cannon's line, d = 0) to the far end.
++local Barriers = require("./Barriers")
++local Formation = require("./Formation")
++local Mystery = require("./Mystery")
++local Rng = require("@self/Rng")
++
++export type Phase = "playing" | "dying" | "waveclear" | "gameover"
++export type Reason = "lives" | "invasion"
++export type Slot = "aimed" | "random"
++export type Bomb = { x: number, d: number, slot: number } -- slot 1 is aimed, 2 and 3 random
++export type Shot = { x: number, d: number }
++export type Input = { move: number?, fire: boolean? }
++export type Event = {
++	kind: string,
++	points: number?,
++	row: number?,
++	col: number?,
++	slot: number?,
++	lives: number?,
++	wave: number?,
++	reason: Reason?,
++	interval: number?,
++}
++export type Config = {
++	tickRate: number,
++	fieldWidth: number,
++	fieldDepth: number,
++	lives: number,
++	reviveLives: number,
++	extraLifeScore: number,
++	cannonHalf: number, -- the cannon spans [x - half, x + half]
++	cannonDepth: number, -- the cannon spans [0, cannonDepth) in depth; its shot starts there
++	cannonSpeed: number,
++	cannonStart: number,
++	shotSpeed: number,
++	bombSpeed: number,
++	reload: { { score: number, ticks: number } }, -- the aliens' wait between shots, by score
++	firstDepth: number, -- wave 1's front row near edge
++	waveCycle: number, -- waves after this many repeat the depths
++	invasionDepth: number, -- a living alien's near edge at or below this is an invasion
++	dyingTicks: number,
++	waveClearTicks: number,
++	formation: Formation.Config,
++	barriers: Barriers.Layout,
++	mystery: Mystery.Config,
++}
++export type Game = {
++	config: Config,
++	phase: Phase,
++	timer: number, -- ticks left in a pause
++	reason: Reason?, -- why the run ended
++	wave: number,
++	score: number,
++	lives: number,
++	revives: number,
++	extraLifeGiven: boolean,
++	shotsFired: number,
++	cannon: number, -- the cannon's centre x
++	shot: Shot?,
++	bombs: { Bomb },
++	reloadElapsed: number,
++	nextSlot: number,
++	rng: number,
++	formation: Formation.Formation,
++	barriers: Barriers.Barriers,
++	mystery: Mystery.Mystery,
++}
++
++local Classic = {}
++Classic.TICK_RATE = 60
++Classic.CONFIG = table.freeze({
++	tickRate = 60,
++	fieldWidth = 224,
++	fieldDepth = 232,
++	lives = 3,
++	reviveLives = 3,
++	extraLifeScore = 1500,
++	cannonHalf = 6,
++	cannonDepth = 8,
++	cannonSpeed = 1,
++	cannonStart = 112,
++	shotSpeed = 4,
++	bombSpeed = 1,
++	reload = table.freeze({
++		table.freeze({ score = 0, ticks = 48 }),
++		table.freeze({ score = 200, ticks = 16 }),
++		table.freeze({ score = 1000, ticks = 11 }),
++		table.freeze({ score = 2000, ticks = 8 }),
++		table.freeze({ score = 3000, ticks = 7 }),
++	}),
++	firstDepth = 120,
++	waveCycle = 8,
++	invasionDepth = 8,
++	dyingTicks = 120,
++	waveClearTicks = 120,
++	formation = Formation.CLASSIC,
++	barriers = Barriers.CLASSIC,
++	mystery = Mystery.CLASSIC,
++} :: Config)
++
++-- The front row's starting depth for a wave: one row closer each wave, repeating after waveCycle waves.
++function Classic.waveDepth(wave: number): number
++	local c = Classic.CONFIG
++	return c.firstDepth - c.formation.rowStep * ((wave - 1) % c.waveCycle)
++end
++
++-- The aliens' wait between shots at a score.
++function Classic.reloadTicks(score: number): number
++	local ticks = 0
++	for _, r in Classic.CONFIG.reload do
++		if score >= r.score then
++			ticks = r.ticks
++		end
++	end
++	return ticks
++end
++
++local function startWave(g: Game)
++	local c = g.config
++	g.formation = Formation.new(c.formation, Classic.waveDepth(g.wave))
++	g.barriers = Barriers.new(c.barriers)
++	g.mystery = Mystery.new(c.mystery)
++	g.shot = nil
++	g.bombs = {}
++	g.reloadElapsed = 0
++	g.nextSlot = 1
++	g.cannon = c.cannonStart
++	g.phase = "playing"
++	g.timer = 0
++end
++
++function Classic.new(seed: number): Game
++	local c = Classic.CONFIG
++	local g: Game = {
++		config = c,
++		phase = "playing",
++		timer = 0,
++		reason = nil,
++		wave = 1,
++		score = 0,
++		lives = c.lives,
++		revives = 0,
++		extraLifeGiven = false,
++		shotsFired = 0,
++		cannon = c.cannonStart,
++		shot = nil,
++		bombs = {},
++		reloadElapsed = 0,
++		nextSlot = 1,
++		rng = Rng.seed(seed),
++		formation = Formation.new(c.formation, c.firstDepth),
++		barriers = Barriers.new(c.barriers),
++		mystery = Mystery.new(c.mystery),
++	}
++	return g
++end
++
++local function addScore(g: Game, points: number, events: { Event })
++	g.score += points
++	if not g.extraLifeGiven and g.score >= g.config.extraLifeScore then
++		g.extraLifeGiven = true
++		g.lives += 1
++		table.insert(events, { kind = "ExtraLife", lives = g.lives })
++	end
++end
++
++local function endGame(g: Game, reason: Reason, events: { Event })
++	g.phase = "gameover"
++	g.reason = reason
++	g.shot = nil
++	g.bombs = {}
++	table.insert(events, { kind = "GameOver", reason = reason })
++end
++
++-- The player's shot, unit by unit. True when the wave was cleared.
++local function moveShot(g: Game, events: { Event }): boolean
++	local shot = g.shot
++	if shot == nil then
++		return false
++	end
++	local c = g.config
++	for _ = 1, c.shotSpeed do
++		shot.d += 1
++		if shot.d >= c.fieldDepth then
++			g.shot = nil
++			return false
++		end
++		local bunker, col, row = Barriers.blockAt(g.barriers, shot.x, shot.d)
++		if bunker and col and row then
++			Barriers.erode(g.barriers, bunker, col, row, 1)
++			g.shot = nil
++			table.insert(events, { kind = "BarrierHit" })
++			return false
++		end
++		local arow, acol = Formation.hitAt(g.formation, shot.x, shot.d)
++		if arow and acol then
++			local points = Formation.kill(g.formation, arow, acol)
++			g.shot = nil
++			table.insert(events, { kind = "AlienHit", row = arow, col = acol, points = points })
++			addScore(g, points, events)
++			return g.formation.live == 0
++		end
++		if Mystery.hitAt(g.mystery, shot.x, shot.d) then
++			local points = Mystery.value(g.mystery, g.shotsFired)
++			Mystery.remove(g.mystery)
++			g.shot = nil
++			table.insert(events, { kind = "MysteryHit", points = points })
++			addScore(g, points, events)
++			return false
++		end
++	end
++	return false
++end
++
++-- The aliens' bombs, unit by unit. True when one hit the cannon.
++local function moveBombs(g: Game, events: { Event }): boolean
++	local c = g.config
++	local kept = {}
++	local hit = false
++	for _, bomb in g.bombs do
++		local alive = true
++		for _ = 1, c.bombSpeed do
++			bomb.d -= 1
++			if bomb.d < 0 then
++				alive = false
++				break
++			end
++			local bunker, col, row = Barriers.blockAt(g.barriers, bomb.x, bomb.d)
++			if bunker and col and row then
++				Barriers.erode(g.barriers, bunker, col, row, -1)
++				table.insert(events, { kind = "BarrierHit", slot = bomb.slot })
++				alive = false
++				break
++			end
++			if
++				bomb.d < c.cannonDepth
++				and bomb.x >= g.cannon - c.cannonHalf
++				and bomb.x <= g.cannon + c.cannonHalf
++			then
++				hit = true
++				alive = false
++				break
++			end
++		end
++		if alive then
++			table.insert(kept, bomb)
++		end
++		if hit then
++			break
++		end
++	end
++	g.bombs = kept
++	return hit
++end
++
++local function eraseUnder(g: Game)
++	local f = g.formation
++	for row = 1, f.config.rows do
++		for col = 1, f.config.cols do
++			if Formation.isAlive(f, row, col) then
++				local x0, d0, x1, d1 = Formation.box(f, row, col)
++				Barriers.eraseBox(g.barriers, x0, d0, x1, d1)
++			end
++		end
++	end
++end
++
++local function slotTaken(g: Game, slot: number): boolean
++	for _, b in g.bombs do
++		if b.slot == slot then
++			return true
++		end
++	end
++	return false
++end
++
++local function fireBomb(g: Game, events: { Event })
++	local f = g.formation
++	g.reloadElapsed += 1
++	if f.live == 0 or g.reloadElapsed < Classic.reloadTicks(g.score) then
++		return
++	end
++	local slot = nil
++	for i = 0, 2 do
++		local s = (g.nextSlot - 1 + i) % 3 + 1
++		if not slotTaken(g, s) then
++			slot = s
++			break
++		end
++	end
++	if slot == nil then
++		return
++	end
++	local columns = Formation.columns(f)
++	local col
++	if slot == 1 then
++		local best = math.huge
++		for _, cc in columns do
++			local x0, _, x1 = Formation.box(f, 1, cc)
++			local dist = math.abs((x0 + x1) // 2 - g.cannon)
++			if dist < best then
++				best, col = dist, cc
++			end
++		end
++	else
++		local pick
++		g.rng, pick = Rng.next(g.rng, #columns)
++		col = columns[pick]
++	end
++	local row = Formation.front(f, col)
++	assert(row, "a living column has a front")
++	local x0, d0, x1 = Formation.box(f, row, col)
++	table.insert(g.bombs, { x = (x0 + x1) // 2, d = d0, slot = slot })
++	g.nextSlot = slot % 3 + 1
++	g.reloadElapsed = 0
++	table.insert(events, { kind = "AlienFire", slot = slot, col = col })
++end
++
++local function sanitize(input: Input?): (number, boolean)
++	if type(input) ~= "table" then
++		return 0, false
++	end
++	local move = input.move
++	local m = if move == -1 then -1 elseif move == 1 then 1 else 0
++	return m, input.fire == true
++end
++
++-- One tick. Returns what happened, in order.
++function Classic.step(g: Game, input: Input?): { Event }
++	local events: { Event } = {}
++	local c = g.config
++	if g.phase == "gameover" then
++		return events
++	end
++	if g.phase == "dying" or g.phase == "waveclear" then
++		g.timer -= 1
++		if g.timer > 0 then
++			return events
++		end
++		if g.phase == "waveclear" then
++			g.wave += 1
++			startWave(g)
++			table.insert(events, { kind = "WaveStart", wave = g.wave })
++		else
++			g.phase = "playing"
++			g.cannon = c.cannonStart
++			table.insert(events, { kind = "Respawn", lives = g.lives })
++		end
++		return events
++	end
++	local move, fire = sanitize(input)
++	g.cannon = math.clamp(g.cannon + move * c.cannonSpeed, c.cannonHalf, c.fieldWidth - 1 - c.cannonHalf)
++	if fire and g.shot == nil then
++		g.shot = { x = g.cannon, d = c.cannonDepth - 1 }
++		g.shotsFired += 1
++		table.insert(events, { kind = "PlayerFire" })
++	end
++	local before = #events
++	local cleared = moveShot(g, events)
++	local shipHit = false
++	for i = before + 1, #events do
++		if events[i].kind == "MysteryHit" then
++			shipHit = true
++		end
++	end
++	if cleared then
++		g.phase = "waveclear"
++		g.timer = c.waveClearTicks
++		g.shot = nil
++		g.bombs = {}
++		Mystery.remove(g.mystery)
++		table.insert(events, { kind = "WaveClear", wave = g.wave })
++		return events
++	end
++	if moveBombs(g, events) then
++		g.lives -= 1
++		g.shot = nil
++		g.bombs = {}
++		table.insert(events, { kind = "CannonHit", lives = g.lives })
++		if g.lives <= 0 then
++			endGame(g, "lives", events)
++		else
++			g.phase = "dying"
++			g.timer = c.dyingTicks
++		end
++		return events
++	end
++	local moved = Formation.tick(g.formation)
++	if moved then
++		eraseUnder(g)
++		table.insert(events, {
++			kind = if moved == "advance" then "Advance" else "March",
++			interval = Formation.interval(g.formation),
++		})
++		if moved == "advance" then
++			local _, _, near = Formation.extent(g.formation)
++			if near and near <= c.invasionDepth then
++				endGame(g, "invasion", events)
++				return events
++			end
++		end
++	end
++	fireBomb(g, events)
++	if shipHit then
++		return events -- the wait for the next ship starts on the next tick, as it does after one leaves
++	end
++	local change = Mystery.tick(g.mystery, g.formation.live)
++	if change == "appear" then
++		table.insert(events, { kind = "MysteryAppear" })
++	elseif change == "leave" then
++		table.insert(events, { kind = "MysteryLeave" })
++	end
++	return events
++end
++
++-- A revive (f0219 makes the offer): only at run over. The player gets reviveLives lives and the wave restarts
++-- from its starting state; score, wave and the extra life already given stay. False when not at run over.
++function Classic.revive(g: Game): boolean
++	if g.phase ~= "gameover" then
++		return false
++	end
++	g.lives = g.config.reviveLives
++	g.revives += 1
++	g.reason = nil
++	startWave(g)
++	return true
++end
++
++return Classic
+diff --git a/invaders/src/shared/Logic/Formation/init.luau b/invaders/src/shared/Logic/Formation/init.luau
+new file mode 100644
+index 00000000..395f4129
+--- /dev/null
++++ b/invaders/src/shared/Logic/Formation/init.luau
+@@ -0,0 +1,174 @@
++--!strict
++-- Formation: the rows x cols aliens and their march, engine-free (f0216). The formation steps sideways as one
++-- block; when its living extent would cross a side margin it advances one row toward the base line instead and
++-- reverses. The wait between steps is read from the live count every tick, so it shortens as the formation thins.
++-- Row 1 is the front row (nearest the cannon), column 1 the leftmost.
++export type Config = {
++	rows: number,
++	cols: number,
++	colSpacing: number,
++	rowSpacing: number,
++	width: number, -- an alien's box across
++	depth: number, -- an alien's box in depth
++	stepX: number, -- one sideways step
++	rowStep: number, -- one advance toward the base line
++	margin: number, -- the living extent stays within [margin, fieldWidth - margin]
++	fieldWidth: number,
++	ticksPerAlien: number,
++	minInterval: number,
++	points: { number }, -- by row, front first
++}
++export type Formation = {
++	config: Config,
++	x: number, -- column 1's left edge
++	d: number, -- row 1's near edge
++	dir: number, -- +1 marching right, -1 left
++	elapsed: number, -- ticks since the last step
++	alive: { boolean }, -- alive[(row - 1) * cols + col]
++	live: number,
++}
++export type Move = "step" | "advance"
++
++local Formation = {}
++Formation.CLASSIC = table.freeze({
++	rows = 5,
++	cols = 11,
++	colSpacing = 16,
++	rowSpacing = 16,
++	width = 12,
++	depth = 8,
++	stepX = 2,
++	rowStep = 8,
++	margin = 8,
++	fieldWidth = 224,
++	ticksPerAlien = 1,
++	minInterval = 1,
++	points = table.freeze({ 10, 10, 20, 20, 30 }),
++} :: Config)
++
++-- A full formation, centred across, its front row's near edge at depth `d`, marching right.
++function Formation.new(config: Config, d: number): Formation
++	local span = (config.cols - 1) * config.colSpacing + config.width
++	return {
++		config = config,
++		x = (config.fieldWidth - span) // 2,
++		d = d,
++		dir = 1,
++		elapsed = 0,
++		alive = table.create(config.rows * config.cols, true),
++		live = config.rows * config.cols,
++	}
++end
++
++function Formation.isAlive(f: Formation, row: number, col: number): boolean
++	local c = f.config
++	if row < 1 or row > c.rows or col < 1 or col > c.cols then
++		return false
++	end
++	return f.alive[(row - 1) * c.cols + col] == true
++end
++
++-- The ticks between steps at the current live count.
++function Formation.interval(f: Formation): number
++	return math.max(f.config.minInterval, f.live * f.config.ticksPerAlien)
++end
++
++-- The half-open box [x0, x1) x [d0, d1) of the alien at (row, col).
++function Formation.box(f: Formation, row: number, col: number): (number, number, number, number)
++	local c = f.config
++	local x0 = f.x + (col - 1) * c.colSpacing
++	local d0 = f.d + (row - 1) * c.rowSpacing
++	return x0, d0, x0 + c.width, d0 + c.depth
++end
++
++-- The living extent: left edge, right edge (exclusive) and the front's near edge. Nil when none is alive.
++function Formation.extent(f: Formation): (number?, number?, number?)
++	local c = f.config
++	local minCol, maxCol, minRow = math.huge, -math.huge, math.huge
++	for row = 1, c.rows do
++		for col = 1, c.cols do
++			if f.alive[(row - 1) * c.cols + col] then
++				minCol = math.min(minCol, col)
++				maxCol = math.max(maxCol, col)
++				minRow = math.min(minRow, row)
++			end
++		end
++	end
++	if f.live == 0 then
++		return nil, nil, nil
++	end
++	local left = f.x + (minCol - 1) * c.colSpacing
++	local right = f.x + (maxCol - 1) * c.colSpacing + c.width
++	return left, right, f.d + (minRow - 1) * c.rowSpacing
++end
++
++-- One tick of the march. Returns the move made when a step was due, else nil. An empty formation never moves.
++function Formation.tick(f: Formation): Move?
++	if f.live == 0 then
++		return nil
++	end
++	f.elapsed += 1
++	if f.elapsed < Formation.interval(f) then
++		return nil
++	end
++	f.elapsed = 0
++	local c = f.config
++	local left, right = Formation.extent(f)
++	assert(left and right, "a living formation has an extent")
++	local nl, nr = left + f.dir * c.stepX, right + f.dir * c.stepX
++	if nl < c.margin or nr > c.fieldWidth - c.margin then
++		f.d -= c.rowStep
++		f.dir = -f.dir
++		return "advance"
++	end
++	f.x += f.dir * c.stepX
++	return "step"
++end
++
++-- The living alien whose box holds the point (x, d), or nil.
++function Formation.hitAt(f: Formation, x: number, d: number): (number?, number?)
++	local c = f.config
++	local col = math.floor((x - f.x) / c.colSpacing) + 1
++	local row = math.floor((d - f.d) / c.rowSpacing) + 1
++	if not Formation.isAlive(f, row, col) then
++		return nil, nil
++	end
++	local x0, d0, x1, d1 = Formation.box(f, row, col)
++	if x >= x0 and x < x1 and d >= d0 and d < d1 then
++		return row, col
++	end
++	return nil, nil
++end
++
++-- Kills the alien at (row, col): its points, or 0 when it was not alive.
++function Formation.kill(f: Formation, row: number, col: number): number
++	if not Formation.isAlive(f, row, col) then
++		return 0
++	end
++	f.alive[(row - 1) * f.config.cols + col] = false
++	f.live -= 1
++	return f.config.points[row]
++end
++
++-- The front-most living row of a column, or nil.
++function Formation.front(f: Formation, col: number): number?
++	for row = 1, f.config.rows do
++		if Formation.isAlive(f, row, col) then
++			return row
++		end
++	end
++	return nil
++end
++
++-- The columns with a living alien, left to right.
++function Formation.columns(f: Formation): { number }
++	local out = {}
++	for col = 1, f.config.cols do
++		if Formation.front(f, col) then
++			table.insert(out, col)
++		end
++	end
++	return out
++end
++
++return Formation
+diff --git a/invaders/src/shared/Logic/Mystery/init.luau b/invaders/src/shared/Logic/Mystery/init.luau
+new file mode 100644
+index 00000000..0b98a91e
+--- /dev/null
++++ b/invaders/src/shared/Logic/Mystery/init.luau
+@@ -0,0 +1,88 @@
++--!strict
++-- Mystery: the ship that crosses the far end of the field, engine-free (f0216). It appears `every` ticks after
++-- the last one left (or the wave began), only while at least `minAliens` aliens live, alternating its side:
++-- first from the left. Its value comes from the player's shot count, through a fixed table of 50, 100, 150
++-- and 300. The caller ticks it only while the run is playing.
++export type Config = {
++	every: number, -- ticks without a ship before the next one appears
++	speed: number,
++	width: number,
++	depth: number,
++	lane: number, -- the ship's near edge depth
++	fieldWidth: number,
++	minAliens: number,
++	values: { number },
++}
++export type Mystery = {
++	config: Config,
++	x: number?, -- the ship's left edge, nil when there is no ship
++	dir: number, -- the ship's heading, +1 right
++	nextDir: number, -- the side the next ship comes from: +1 from the left
++	elapsed: number, -- ticks without a ship
++}
++export type Change = "appear" | "leave"
++
++local Mystery = {}
++Mystery.CLASSIC = table.freeze({
++	every = 1500,
++	speed = 1,
++	width = 16,
++	depth = 7,
++	lane = 216,
++	fieldWidth = 224,
++	minAliens = 8,
++	values = table.freeze({ 100, 50, 50, 100, 150, 100, 100, 50, 300, 100, 100, 100, 50, 150, 100 }),
++} :: Config)
++
++function Mystery.new(config: Config): Mystery
++	return { config = config, x = nil, dir = 1, nextDir = 1, elapsed = 0 }
++end
++
++-- One playing tick, with `live` aliens alive. Returns "appear" or "leave" when the ship did.
++function Mystery.tick(m: Mystery, live: number): Change?
++	local c = m.config
++	local x = m.x
++	if x == nil then
++		m.elapsed += 1
++		if m.elapsed >= c.every and live >= c.minAliens then
++			m.dir = m.nextDir
++			m.nextDir = -m.nextDir
++			m.x = if m.dir > 0 then -c.width else c.fieldWidth
++			m.elapsed = 0
++			return "appear"
++		end
++		return nil
++	end
++	x += m.dir * c.speed
++	if (m.dir > 0 and x >= c.fieldWidth) or (m.dir < 0 and x + c.width <= 0) then
++		m.x = nil
++		m.elapsed = 0
++		return "leave"
++	end
++	m.x = x
++	return nil
++end
++
++-- Whether the ship's box holds the point (x, d).
++function Mystery.hitAt(m: Mystery, x: number, d: number): boolean
++	local sx = m.x
++	if sx == nil then
++		return false
++	end
++	local c = m.config
++	return x >= sx and x < sx + c.width and d >= c.lane and d < c.lane + c.depth
++end
++
++-- The ship's value when hit by the player's `shots`-th shot.
++function Mystery.value(m: Mystery, shots: number): number
++	local values = m.config.values
++	return values[shots % #values + 1]
++end
++
++-- The ship is gone (hit): the wait for the next one starts again.
++function Mystery.remove(m: Mystery)
++	m.x = nil
++	m.elapsed = 0
++end
++
++return Mystery
