@@ -1,0 +1,32 @@
+== the prototype itself
+25 passed, 0 failed, 7 spec files
+AC4 passed
+selected by z-nile/check.sh: own-acceptance-callers
+selected by scripts/affected.luau: own-acceptance-callers
+selected by z-nile/specs.luau: own-acceptance-callers
+selected by zn: own-acceptance-callers
+== mutants
+KILLED  M1-no-filter: FAIL .tracker/issues/d0297/acceptance/select.spec.luau :: AC1: a changed spec under a project root is never selected, with or without a project
+KILLED  M2-current-exempt: FAIL .tracker/issues/d0297/acceptance/select.spec.luau :: AC1: a sequestered spec in the branch's current list is dropped, a promoted one kept
+KILLED  M3-acceptance-substring: FAIL .tracker/issues/d0297/acceptance/select.spec.luau :: AC1: a changed spec under a project root is never selected, with or without a project
+KILLED  M4-issues-substring: FAIL .tracker/issues/d0297/acceptance/select.spec.luau :: AC1: a changed spec under a project root is never selected, with or without a project
+KILLED  M5-own-ignored: FAIL .tracker/issues/d0297/acceptance/select.spec.luau :: AC1: the caller's own list is the one way a sequestered spec is selected, and it keeps the project filter
+KILLED  M6-own-skips-project-filter: FAIL .tracker/issues/d0297/acceptance/select.spec.luau :: AC1: the caller's own list is the one way a sequestered spec is selected, and it keeps the project filter
+KILLED  M7-own-disables-filter: FAIL .tracker/issues/d0297/acceptance/select.spec.luau :: AC1: the caller's own list is the one way a sequestered spec is selected, and it keeps the project filter
+KILLED  M8-flag-not-parsed: FAIL .tracker/issues/d0297/acceptance/cli.spec.luau :: AC2: on a layer branch the ticket's own sequestered specs print only with --own-acceptance
+KILLED  M9-flag-always-on: FAIL .tracker/issues/d0297/acceptance/cli.spec.luau :: AC2: on a layer branch the ticket's own sequestered specs print only with --own-acceptance
+KILLED  M10-finish-omits-flag: FAIL .tracker/issues/d0297/acceptance/cli.spec.luau :: AC2: ./zn finish is the one caller that passes --own-acceptance; the gate never does
+KILLED  M11-gate-passes-flag: FAIL .tracker/issues/d0297/acceptance/cli.spec.luau :: AC2: ./zn finish is the one caller that passes --own-acceptance; the gate never does
+KILLED  M11b-gate-passes-flag-tooling: FAIL tests/tooling/own-acceptance-callers.spec.luau :: the files a gate, hook or forwarder runs from never use the flag
+KILLED  M12-usage-line-deleted: FAIL :: AC4 (expected its text)
+KILLED  M13-scope-keeps-own: FAIL .tracker/issues/d0297/acceptance/select.spec.luau :: AC1: the caller's own list is the one way a sequestered spec is selected, and it keeps the project filter
+KILLED  M14-own-whenever-project: FAIL .tracker/issues/d0297/acceptance/cli.spec.luau :: AC2: on a layer branch the ticket's own sequestered specs print only with --own-acceptance
+KILLED  M15-flag-in-dispatcher: FAIL .tracker/issues/d0297/acceptance/cli.spec.luau :: AC2: ./zn finish is the one caller that passes --own-acceptance; the gate never does
+KILLED  M16-flag-in-a-call-without-results: FAIL .tracker/issues/d0297/acceptance/cli.spec.luau :: AC2: ./zn finish is the one caller that passes --own-acceptance; the gate never does
+== correct variants
+GREEN   V1-tracker-substring
+GREEN   V2-flag-appended
+GREEN   V3-flag-first
+GREEN   V4-gate-comment-names-flag
+GREEN   V5-usage-reworded
+GREEN   V6-finish-in-its-own-module
