@@ -1,1 +1,4 @@
 - note raft-plan --apply (d0298's rafting, 2026-11-12) folded c0260 into R0092 although R0090 says c0260 must be redone against c0261 and c0264's AC8 needs c0260 in another PR; unfolded before review: z-raft/fold-reads-what-other-rafts-say-of-the-member, z-raft/run-sequestered-specs-on-all-prototypes-together
+- review-001 F1: z-design/status-labels-need-a-tracker-fact
+- review-001 F2: zz-test/document-only-layers-run-no-spec
+- final-review-001 F1: z-design/a-gate-names-where-its-fix-is-committed
