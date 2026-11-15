@@ -1,6 +1,6 @@
 --- /private/tmp/claude-501/-Users-philipbergen-code-pickman/3fbf9326-e053-49c8-ab1e-bfbc221fe8f4/scratchpad/proto-checkpaths.luau	2026-11-15 13:17:21
-+++ /private/tmp/claude-501/-Users-philipbergen-code-pickman/3fbf9326-e053-49c8-ab1e-bfbc221fe8f4/scratchpad/v3-checkpaths.luau	2026-11-15 14:13:39
-@@ -82,139 +82,525 @@
++++ /private/tmp/claude-501/-Users-philipbergen-code-pickman/3fbf9326-e053-49c8-ab1e-bfbc221fe8f4/scratchpad/v5-checkpaths.luau	2026-11-15 15:29:54
+@@ -82,139 +82,695 @@
  -- a top-level folder a move takes, named alone: a path only as a folder `find` searches (in prose it is a word)
  local FOLDERS = { tracker = true, src = true, tests = true }
  
@@ -17,56 +17,27 @@
 -			for j = k, #raw do
 -				if starts[j] < close then
 -					marked[j] = true
-+-- The quoting of every byte of a check.sh, read once: `ctx[i]` is 0 at the top level and a fresh number inside each
-+-- single-quoted string (a `bash -c '…'` script, read as a script of its own; the `'"'"'` and `'\''` idioms continue the
-+-- same script); `dq[i]` is true inside a double-quoted string of that context. A comment (a `#` that begins a word,
-+-- outside quotes) changes nothing. A backslash escapes the next byte outside single quotes, and inside a script only
-+-- a byte other than `'`.
-+type Quoting = { ctx: { number }, dq: { boolean } }
-+local function quoting(text: string): Quoting
-+	local ctx: { number }, dq: { boolean } = {}, {}
-+	local cur, count, inDq, saved = 0, 0, false, false
-+	local i, n = 1, #text
-+	while i <= n do
-+		local c = string.sub(text, i, i)
-+		ctx[i], dq[i] = cur, inDq
-+		if
-+			c == "#"
-+			and cur == 0
-+			and not inDq
-+			and (i == 1 or string.find(string.sub(text, i - 1, i - 1), "[%s;|&(]"))
-+		then
-+			while i <= n and string.sub(text, i, i) ~= "\n" do
-+				ctx[i], dq[i] = cur, inDq
-+				i += 1
-+			end
-+			continue
-+		elseif c == "\\" and i < n and not (cur ~= 0 and string.sub(text, i + 1, i + 1) == "'") then
-+			ctx[i + 1], dq[i + 1] = cur, inDq
-+			i += 2
-+			continue
-+		elseif c == "'" and cur == 0 and not inDq then
-+			count += 1
-+			cur, saved, inDq = count, inDq, false
-+		elseif c == "'" and cur ~= 0 then
-+			local idiom = if string.sub(text, i + 1, i + 4) == `"'"'`
-+				then 4
-+				elseif string.sub(text, i + 1, i + 3) == "\\''" then 3
-+				else 0
-+			if idiom > 0 then
-+				for k = 1, idiom do
-+					ctx[i + k], dq[i + k] = cur, inDq
- 				end
-+				i += idiom + 1
-+				continue
- 			end
+-				end
+-			end
 -		else
 -			marked[k] = true
-+			cur, inDq = 0, saved
-+		elseif c == '"' then
-+			inDq = not inDq
++-- The quoting of every byte of a check.sh, read once. `ctx[i]` is 0 at the top level and a fresh number inside each
++-- single-quoted string (a `bash -c '…'` script is a context of its own; the `'"'"'`, `'\''` and `'"$X"'` splices
++-- continue the same script); `dq[i]` is true inside double quotes of that context, and not inside a `$(…)` in them,
++-- where quotes are quotes again. A heredoc body, a `$'…'` string and a comment (a `#` that begins a word at the top
++-- level outside quotes, marked in `comment`) change nothing. A backslash escapes the next byte outside single
++-- quotes, and inside a script every byte but `'`.
++type Quoting = { ctx: { number }, dq: { boolean }, comment: { boolean } }
++local function quoting(text: string): Quoting
++	local ctx: { number }, dq: { boolean }, comment: { boolean } = {}, {}, {}
++	local cur, count, inDq, saved = 0, 0, false, false
++	local levels: { { saved: boolean, depth: number } } = {}
++	local pending: { { word: string, dash: boolean } } = {}
++	local i, n = 1, #text
++	local function mark(from: number, to: number)
++		for k = from, math.min(to, n) do
++			ctx[k], dq[k] = cur, inDq
  		end
-+		i += 1
  	end
 -	for k, w in raw do
 -		if w == "grep" or w == "rg" or w == "egrep" then
@@ -76,41 +47,207 @@
 -					if raw[j + 1] then
 -						mark(j + 1)
 -						named = true
--					end
++	while i <= n do
++		local c = string.sub(text, i, i)
++		ctx[i], dq[i] = cur, inDq
++		if c == "\n" and #pending > 0 then
++			-- the heredoc bodies that began on this line: to the line that is the word
++			local j = i + 1
++			for _, h in pending do
++				while j <= n do
++					local e = string.find(text, "\n", j, true) or (n + 1)
++					local body = string.sub(text, j, e - 1)
++					mark(j, e)
++					j = e + 1
++					if (if h.dash then string.gsub(body, "^\t+", "") else body) == h.word then
++						break
+ 					end
 -					j += 2
 -				else
-+	return { ctx = ctx, dq = dq }
-+end
-+
-+-- the names of the functions a check.sh defines that search text: a body that runs grep or rg, or calls another such
-+-- function (c0292's `has`, c0256's `has`, c0264's `words`, `has_all`; a `g() { grep -qF -e "$1" "$2" … }`)
-+local function searchHelpers(text: string): { [string]: boolean }
-+	local bodies: { [string]: string } = {}
-+	local lines: { string } = {}
-+	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
-+		table.insert(lines, line)
-+	end
-+	local k = 1
-+	while k <= #lines do
-+		local name, rest = string.match(lines[k], "^%s*([%a_][%w_]*)%s*%(%)%s*(.*)$")
-+		if name then
-+			local body = { rest }
-+			local j = k
-+			if not string.find(rest, "}%s*$") then
-+				while j < #lines do
- 					j += 1
-+					table.insert(body, lines[j])
-+					if string.find(lines[j], "^%s*}") then
-+						break
-+					end
+-					j += 1
  				end
  			end
 -			if raw[j] == "--" then
--				j += 1
-+			bodies[name] = table.concat(body, "\n")
-+			k = j
++			pending = {}
++			i = j
++			continue
 +		end
-+		k += 1
++		if
++			c == "#"
++			and cur == 0
++			and not inDq
++			and (i == 1 or string.find(string.sub(text, i - 1, i - 1), "[%s;|&(]"))
++		then
++			while i <= n and string.sub(text, i, i) ~= "\n" do
++				ctx[i], dq[i], comment[i] = cur, inDq, true
++				i += 1
++			end
++			continue
++		elseif c == "\\" and i < n and not (cur ~= 0 and string.sub(text, i + 1, i + 1) == "'") then
++			mark(i + 1, i + 1)
++			i += 2
++			continue
++		elseif c == "$" and string.sub(text, i + 1, i + 1) == "'" and cur == 0 and not inDq then
++			local k = i + 2
++			while k <= n and string.sub(text, k, k) ~= "'" do
++				k += if string.sub(text, k, k) == "\\" then 2 else 1
++			end
++			mark(i, k)
++			i = k + 1
++			continue
++		elseif c == "$" and string.sub(text, i + 1, i + 1) == "(" then
++			table.insert(levels, { saved = inDq, depth = 0 })
++			inDq = false
++			mark(i + 1, i + 1)
++			i += 2
++			continue
++		elseif c == "(" and #levels > 0 and not inDq then
++			levels[#levels].depth += 1
++		elseif c == ")" and #levels > 0 and not inDq then
++			if levels[#levels].depth == 0 then
++				local level = table.remove(levels) :: { saved: boolean, depth: number }
++				i += 1
++				inDq = level.saved
++				continue
++			end
++			levels[#levels].depth -= 1
++		elseif
++			c == "<"
++			and string.sub(text, i + 1, i + 1) == "<"
++			and string.sub(text, i + 2, i + 2) ~= "<"
++			and cur == 0
++			and not inDq
++		then
++			local j = i + 2
++			local dash = string.sub(text, j, j) == "-"
++			if dash then
+ 				j += 1
+ 			end
+-			if not named and raw[j] then
+-				mark(j)
++			local _, e = string.find(text, "^%s*[\"']?[%w_%.%-]+[\"']?", j)
++			if e then
++				local word = string.match(string.sub(text, j, e), "[%w_%.%-]+") :: string
++				table.insert(pending, { word = word, dash = dash })
++				mark(i + 1, e)
++				i = e + 1
++				continue
+ 			end
++		elseif c == "'" and cur == 0 and not inDq then
++			count += 1
++			cur, saved, inDq = count, inDq, false
++		elseif c == "'" and cur ~= 0 then
++			-- a splice keeps the script: `'"…"'` (a double-quoted piece between two quotes) or `'\''`
++			local skip = 0
++			if string.sub(text, i + 1, i + 1) == '"' then
++				local close = string.find(text, '"', i + 2, true)
++				if close and string.sub(text, close + 1, close + 1) == "'" then
++					skip = close + 1 - i
++				end
++			elseif string.sub(text, i + 1, i + 3) == "\\''" then
++				skip = 3
++			end
++			if skip > 0 then
++				mark(i + 1, i + skip)
++				i += skip + 1
++				continue
++			end
++			cur, inDq = 0, saved
++		elseif c == '"' then
++			inDq = not inDq
+ 		end
++		i += 1
+ 	end
+-	return marked
++	return { ctx = ctx, dq = dq, comment = comment }
+ end
+ 
+--- the literal paths of a check.sh, in order (a path may repeat)
+-local function literals(text: string): { string }
+-	local out: { string } = {}
+-	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+-		if not string.match(line, "^%s*#") then
+-			line = string.gsub(line, "%s#%s.*$", "")
+-			-- a check's label is prose, not a command
+-			line = string.gsub(line, '^(%s*check%s+)"[^"]*"', "%1")
+-			local words: { string } = {}
+-			local quoted: { boolean } = {}
+-			local starts: { number } = {}
+-			local at = 1
+-			while true do
+-				local s, e = string.find(line, "[^%s\"'();|&<>`]+", at)
+-				if not s then
+-					break
+-				end
+-				at = (e :: number) + 1
+-				local _, quotes = string.gsub(string.sub(line, 1, s - 1), '"', "")
+-				table.insert(quoted, quotes % 2 == 1)
+-				table.insert(starts, s)
+-				local w = string.sub(line, s, e :: number)
+-				local word = string.gsub(w, "[\\,]+$", "")
+-				-- a shell assignment's value is the word (`f=.claude/skills/testing/SKILL.md`)
+-				local name = string.match(word, "^[%a_][%w_]*=")
+-				if name and #word > #name then
+-					word = string.sub(word, #name + 1)
++-- Is the word at byte `pos` of `text` a shell keyword there: in the context `ctxWanted`, outside double quotes and
++-- comments, and at the start of a command (after `;`, `&`, `|`, `(`, `{`, a newline, or `do`, `then`, `else`)?
++local function keywordAt(text: string, q: Quoting, pos: number, ctxWanted: number): boolean
++	if q.ctx[pos] ~= ctxWanted or q.dq[pos] or q.comment[pos] then
++		return false
++	end
++	local k = pos - 1
++	while k >= 1 and string.find(string.sub(text, k, k), "[ \t]") do
++		k -= 1
++	end
++	if k < 1 then
++		return true
++	end
++	if string.find(string.sub(text, k, k), "[;&|(){\n]") then
++		return true
++	end
++	local before = string.sub(text, 1, k)
++	return string.find(before, "%f[%w_]do$") ~= nil
++		or string.find(before, "%f[%w_]then$") ~= nil
++		or string.find(before, "%f[%w_]else$") ~= nil
++end
++
++-- Does a positional parameter (`$1`, `"$@"`, `"${2}"`, or a `for` variable over `"$@"`) stand in `token`?
++local function positional(token: string, loopVars: { [string]: boolean }): boolean
++	if string.find(token, '^"?%${?[%d@*]') then
++		return true
++	end
++	local name = string.match(token, '^"?%${?([%a_][%w_]*)')
++	return name ~= nil and loopVars[name] == true
++end
++
++-- the names of the functions a check.sh defines that search text: a body that passes one of its positional parameters
++-- (or a `for w in "$@"` variable) as the pattern of a grep, egrep or rg, or as an argument to another such function
++-- (c0292's and c0256's `has`, c0264's `words` and `has_all`, `g() { grep -qF -e "$1" "$2" … }`). A function that greps
++-- its own output (`passes() { … | grep -q " 0 failed"; }`) or names grep in a message is none.
++local function searchHelpers(text: string): { [string]: boolean }
++	local bodies: { [string]: string } = {}
++	for at, name in string.gmatch(text, "()([%a_][%w_]*)%s*%(%)%s*{") do
++		local open = string.find(text, "{", at, true) :: number
++		local depth, k = 0, open
++		while k <= #text do
++			local ch = string.sub(text, k, k)
++			if ch == "{" then
++				depth += 1
++			elseif ch == "}" then
++				depth -= 1
++				if depth == 0 then
++					break
+ 				end
+-				-- a word that goes on with a variable: its literal folder is the path
+-				local dollar = string.find(word, "$", 1, true)
+-				if dollar and dollar > 1 then
+-					local folder = string.match(string.sub(word, 1, dollar - 1), "^(.*)/[^/]*$")
+-					if folder and folder ~= "" then
+-						word = folder .. "/"
++			end
++			k += 1
++		end
++		bodies[name] = string.sub(text, open + 1, k - 1)
 +	end
 +	local found: { [string]: boolean } = {}
 +	local changed = true
@@ -118,13 +255,36 @@
 +		changed = false
 +		for name, body in bodies do
 +			if not found[name] then
-+				local hit = string.find(body, "%f[%w_]grep%f[^%w_]") ~= nil
-+					or string.find(body, "%f[%w_]egrep%f[^%w_]") ~= nil
-+					or string.find(body, "%f[%w_]rg%f[^%w_]") ~= nil
++				local loopVars: { [string]: boolean } = {}
++				for var in string.gmatch(body, '%f[%w_]for%s+([%a_][%w_]*)%s+in%s+"?%$[@*]') do
++					loopVars[var] = true
++				end
++				local hit = false
++				for _, cmd in { "grep", "egrep", "rg" } do
++					for tail in string.gmatch(body, "%f[%w_]" .. cmd .. "%f[^%w_]([^;|&)\n]*)") do
++						local last, patternTaken = nil, false
++						for token in string.gmatch(tail, "%S+") do
++							if string.sub(token, 1, 1) == "-" and token ~= "--" then
++								last = token
++							elseif last == "-e" or last == "--regexp" or not patternTaken then
++								if token ~= "--" then
++									hit = hit or positional(token, loopVars)
++									patternTaken = true
++								end
++								last = nil
++							end
++						end
+ 					end
+ 				end
+-				table.insert(words, word)
 +				if not hit then
 +					for other in found do
-+						if other ~= name and string.find(body, "%f[%w_]" .. other .. "%f[^%w_]") then
-+							hit = true
++						if other ~= name then
++							for tail in string.gmatch(body, "%f[%w_]" .. other .. "%f[^%w_]([^;|&)\n]*)") do
++								for token in string.gmatch(tail, "%S+") do
++									hit = hit or positional(token, loopVars)
++								end
++							end
 +						end
 +					end
 +				end
@@ -133,8 +293,13 @@
 +					changed = true
 +				end
  			end
--			if not named and raw[j] then
--				mark(j)
+-			local pattern = patternWords(line, words, starts)
+-			local dir = "" -- a `cd <dir>` earlier on the line: the words after it are relative to <dir>
+-			local finding = false -- the words after `find`, before its first option, are the folders it searches
+-			for i, w in words do
+-				local path: string? = nil
+-				if pattern[i] then
+-					continue
 +		end
 +	end
 +	return found
@@ -158,12 +323,16 @@
 +	["command"] = true,
 +	["exec"] = true,
 +	["check"] = true,
++	["nice"] = true,
++	["nohup"] = true,
++	["sudo"] = true,
 +}
 +local COMMAND_BREAK = "[;|&(){\n]"
 +
 +-- Is the use of `$name` at byte `at` of `body` only text to match? A glob pattern around it (`*"$f"*`), the pattern of a
-+-- grep (the first word that is no option, or the word after `-e`; the file operand is a use), or the message of an
-+-- echo or printf. `from` is where the current command begins.
++-- grep (the first word that is no option, or the word after `-e`; the file operand is a use), or a message of an echo
++-- (more than one word) or the format of a printf. An argument that echo or printf prints (`echo "$f"`,
++-- `printf '%s\n' "$f"`) is a value, a path the check runs.
 +local function matchedUse(body: string, at: number, len: number): boolean
 +	local before = string.sub(body, 1, at - 1)
 +	local after = string.sub(body, at + len)
@@ -182,89 +351,68 @@
 +		table.remove(words, 1)
 +	end
 +	local head = words[1]
-+	if head == "echo" or head == "printf" then
-+		return true
++	if head == "echo" then
++		local args = 1 -- the use itself
++		for j = 2, #words do
++			if string.sub(words[j], 1, 1) ~= "-" then
++				args += 1
++			end
++		end
++		local rest = string.match(after, "^[^;|&)\n]*") or ""
++		for w in string.gmatch(rest, "[^%s\"']+") do
++			if string.sub(w, 1, 1) ~= "-" then
++				args += 1
++			end
++		end
++		return args >= 2
++	elseif head == "printf" then
++		-- the format is the first argument: the use is text only inside it
++		local segment = string.match(string.sub(before, from), "printf%s+(.*)$") or ""
++		segment = string.gsub(segment, "^%-%S*%s+", "")
++		local qc = string.sub(segment, 1, 1)
++		if qc == '"' or qc == "'" then
++			return string.find(segment, qc, 2, true) == nil
++		end
++		return string.find(segment, "%s") == nil
 +	elseif head == "grep" or head == "egrep" or head == "rg" then
 +		local operands, last = 0, nil
 +		for j = 2, #words do
 +			if string.sub(words[j], 1, 1) ~= "-" and not (last == "-e" or last == "--regexp") then
 +				operands += 1
- 			end
++			end
 +			last = words[j]
- 		end
++		end
 +		return operands == 0 or last == "-e" or last == "--regexp"
- 	end
--	return marked
++	end
 +	return false
- end
- 
---- the literal paths of a check.sh, in order (a path may repeat)
--local function literals(text: string): { string }
--	local out: { string } = {}
--	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
--		if not string.match(line, "^%s*#") then
--			line = string.gsub(line, "%s#%s.*$", "")
--			-- a check's label is prose, not a command
--			line = string.gsub(line, '^(%s*check%s+)"[^"]*"', "%1")
--			local words: { string } = {}
--			local quoted: { boolean } = {}
--			local starts: { number } = {}
--			local at = 1
--			while true do
--				local s, e = string.find(line, "[^%s\"'();|&<>`]+", at)
--				if not s then
++end
++
 +-- a `for NAME in WORDS; do BODY done` whose body uses `$NAME` only as text to match: its WORDS are text (c0193's list
-+-- of engine files a lesson must name). `rest` is the text from the `for` on; the body ends at the loop's own `done`
-+-- (loops inside it counted, a `done` inside quotes ignored).
-+local function textOnlyLoop(rest: string, restDq: (number) -> boolean, name: string): boolean
-+	local depth, bodyEnd = 0, #rest
-+	for at, word in string.gmatch(rest, "()([%a_][%w_]*)") do
-+		if not restDq(at :: number) then
++-- of engine files a lesson must name). `pos` is the byte of the `for`; the body ends at the loop's own `done`: loops
++-- inside it counted, and a `done` in quotes, a comment or as an argument (`./zn done`) is no keyword.
++local function textOnlyLoop(text: string, q: Quoting, pos: number, name: string): boolean
++	local depth, bodyEnd = 0, #text
++	local forCtx = q.ctx[pos]
++	for at, word in string.gmatch(string.sub(text, pos), "()([%a_][%w_]*)") do
++		local abs = pos + (at :: number) - 1
++		if keywordAt(text, q, abs, forCtx) then
 +			if word == "for" or word == "while" or word == "until" then
 +				depth += 1
 +			elseif word == "done" then
 +				depth -= 1
 +				if depth == 0 then
-+					bodyEnd = at :: number - 1
- 					break
++					bodyEnd = abs - 1
++					break
  				end
--				at = (e :: number) + 1
--				local _, quotes = string.gsub(string.sub(line, 1, s - 1), '"', "")
--				table.insert(quoted, quotes % 2 == 1)
--				table.insert(starts, s)
--				local w = string.sub(line, s, e :: number)
--				local word = string.gsub(w, "[\\,]+$", "")
--				-- a shell assignment's value is the word (`f=.claude/skills/testing/SKILL.md`)
--				local name = string.match(word, "^[%a_][%w_]*=")
--				if name and #word > #name then
--					word = string.sub(word, #name + 1)
--				end
--				-- a word that goes on with a variable: its literal folder is the path
--				local dollar = string.find(word, "$", 1, true)
--				if dollar and dollar > 1 then
--					local folder = string.match(string.sub(word, 1, dollar - 1), "^(.*)/[^/]*$")
--					if folder and folder ~= "" then
--						word = folder .. "/"
--					end
--				end
--				table.insert(words, word)
- 			end
--			local pattern = patternWords(line, words, starts)
--			local dir = "" -- a `cd <dir>` earlier on the line: the words after it are relative to <dir>
--			local finding = false -- the words after `find`, before its first option, are the folders it searches
--			for i, w in words do
--				local path: string? = nil
--				if pattern[i] then
--					continue
--				end
 -				if w == "find" then
 -					finding = true
 -					continue
 -				elseif string.sub(w, 1, 1) == "-" then
 -					finding = false
++			end
 +		end
 +	end
-+	local body = string.sub(rest, 1, bodyEnd)
++	local body = string.sub(text, pos, bodyEnd)
 +	local uses = 0
 +	for _, form in { "${" .. name .. "}", "$" .. name } do
 +		local from = 1
@@ -286,14 +434,25 @@
 +-- the literal paths of a check.sh, in order (a path may repeat); `root` marks a path read from the repository root
 +-- (a command after `cd "$ZN_ROOT"`), else it is read from the item's home
 +type Lit = { path: string, root: boolean }
-+type Slot = { dir: string, ctx: number, depth: number } -- a root reading: its folder, its script, its open groups
++-- a directory frame: whether the command runs from the root, and the folders a cd took it through. A subshell or a
++-- command substitution pushes a copy of its parent's frame; a script (single-quoted) starts from the top-level one
++type Frame = { root: boolean, dir: string }
 +local function literals(text: string): { Lit }
 +	local out: { Lit } = {}
 +	local q = quoting(text)
 +	local helpers = searchHelpers(text)
-+	local top: Slot? = nil -- a `cd "$ZN_ROOT"` at the top level: it holds for the scripts it starts too
-+	local script: Slot? = nil -- one inside a `bash -c '…'` script: it holds in that script only (`slotOf`)
-+	local dqSub = 0 -- open `$(` inside double quotes
++	local stacks: { [number]: { Frame } } = { [0] = { { root = false, dir = "" } } }
++	local function stackOf(ctxNow: number): { Frame }
++		local stack = stacks[ctxNow]
++		if not stack then
++			local parent = stacks[0][#stacks[0]]
++			stack = { { root = parent.root, dir = parent.dir } }
++			stacks[ctxNow] = stack
++		end
++		return stack
++	end
++	local funcs: { { isFunc: boolean, ctx: number, saved: Frame } } = {} -- open `{` groups
++	local caseDepth = 0
 +	local call: string? = nil -- a search helper's call: its quoted arguments are text, until the command ends
 +	local callCtx, callDq = 0, false
 +	local listEnd = 0 -- the end of a text-only `for` list, as a byte of the text
@@ -304,15 +463,27 @@
 +		offset += #line + 1
 +		local wasContinued = continued
 +		continued = string.sub(line, -1) == "\\"
-+		if string.match(line, "^%s*#") then
-+			continue
++		-- a comment ends the line where the quoting pass marks it; in a script, a ` # ` tail (main's cut) does too
++		local cut = #line + 1
++		for k = 1, #line do
++			if q.comment[base + k] then
++				cut = k
++				break
++			end
 +		end
-+		line = string.gsub(line, "%s#%s.*$", "")
-+		-- a check's label is prose, not a command
-+		line = string.gsub(line, '^(%s*check%s+)("[^"]*")', function(a: string, b: string): string
++		do
++			local hash = string.find(line, "%s#%s")
++			if hash and hash < cut and q.ctx[base + hash] ~= 0 and not q.dq[base + hash] then
++				cut = hash
++			end
++		end
++		line = string.sub(line, 1, cut - 1)
++		-- a check's label is prose, not a command, wherever `check` stands
++		line = string.gsub(line, '(%f[%w_]check%s+)("[^"]*")', function(a: string, b: string): string
 +			return a .. string.rep(" ", #b)
 +		end)
 +		local words: { string } = {}
++		local raws: { string } = {}
 +		local starts: { number } = {}
 +		local ends: { number } = {}
 +		local sep: { boolean } = {}
@@ -329,6 +500,7 @@
 +			table.insert(starts, s)
 +			table.insert(ends, e :: number)
 +			local w = string.sub(line, s, e :: number)
++			table.insert(raws, w)
 +			local word = string.gsub(w, "[\\,]+$", "")
 +			-- a shell assignment's value is the word (`f=.claude/skills/testing/SKILL.md`)
 +			local name = string.match(word, "^[%a_][%w_]*=")
@@ -351,6 +523,9 @@
 +		-- the words that are text: a grep's pattern, an echo's message, a search helper's quoted arguments, a code span
 +		local pattern: { [number]: boolean } = {}
 +		local message: { [number]: boolean } = {}
++		local commandAt: { boolean } = {}
++		local caseStart = caseDepth
++		local caseAt: { number } = {} -- how many `case` bodies are open after each word
 +		-- code spans: the words between an opening and a closing backslash-backtick of one double-quoted argument
 +		local ticks: { number } = {}
 +		for tick in string.gmatch(line, "()\\`") do
@@ -363,14 +538,38 @@
 +						pattern[i] = true
 +					end
  				end
+-				if
+-					not string.find(w, "$", 1, true)
+-					and string.sub(w, 1, 1) ~= "/"
+-					and string.sub(w, 1, 1) ~= "-"
+-				then
+-					if words[i - 2] == "lune" and words[i - 1] == "run" and string.find(w, "/", 1, true) then
+-						path = if string.match(w, "%.luau$") then w else w .. ".luau"
+-					elseif
+-						(
+-							FILES[w]
+-							and (
+-								substituted(line, starts[i])
+-								or not (
+-									quoted[i]
+-									or string.find(string.sub(line, starts[i] - 1, starts[i] - 1), "[\"']")
+-								)
+-							)
+-						) or (finding and FOLDERS[w])
+-					then
+-						path = w
 +			end
 +		end
 +		for i, w in words do
 +			local s = starts[i]
 +			local abs = base + s
 +			local prev = words[i - 1]
++			local assignment = string.find(raws[i - 1] or "", "^[%a_][%w_]*=") ~= nil
 +			local command = sep[i]
 +				or (prev ~= nil and (INTRODUCERS[prev] == true or string.find(prev, "^%-[%a]*c$") ~= nil))
++				or (assignment and commandAt[i - 1] == true)
++				or (prev ~= nil and string.find(prev, "^%d+[smhd]?$") ~= nil and words[i - 2] == "timeout")
++			commandAt[i] = command
 +			if call and (sep[i] or (q.ctx[abs] ~= callCtx and q.ctx[abs] == 0)) then
 +				call = nil
 +			end
@@ -390,7 +589,10 @@
 +							named = true
 +						end
 +						j += 2
-+					else
+ 					else
+-						for _, p in PREFIXES do
+-							if string.sub(w, 1, #p) == p and #w > #p then
+-								path = w
 +						j += 1
 +					end
 +				end
@@ -410,33 +612,15 @@
 +					message[j] = true
 +				end
 +			elseif command and w == "for" and words[i + 2] == "in" then
-+				local rest = string.sub(text, abs)
- 				if
--					not string.find(w, "$", 1, true)
--					and string.sub(w, 1, 1) ~= "/"
--					and string.sub(w, 1, 1) ~= "-"
-+					textOnlyLoop(rest, function(k: number): boolean
-+						return q.dq[abs + k - 1] == true
-+					end, words[i + 1])
- 				then
--					if words[i - 2] == "lune" and words[i - 1] == "run" and string.find(w, "/", 1, true) then
--						path = if string.match(w, "%.luau$") then w else w .. ".luau"
--					elseif
--						(
--							FILES[w]
--							and (
--								substituted(line, starts[i])
--								or not (
--									quoted[i]
--									or string.find(string.sub(line, starts[i] - 1, starts[i] - 1), "[\"']")
--								)
--							)
--						) or (finding and FOLDERS[w])
--					then
--						path = w
-+					listEnd = abs + (string.find(rest, "[;\n]") or #rest)
++				if textOnlyLoop(text, q, abs, words[i + 1]) then
++					listEnd = abs + (string.find(string.sub(text, abs), "[;\n]") or #text)
 +				end
++			elseif command and w == "case" then
++				caseDepth += 1
++			elseif command and w == "esac" then
++				caseDepth -= 1
 +			end
++			caseAt[i] = caseDepth
 +		end
 +		-- quoted words follow the marked word to the closing quote (a message or a pattern runs to its closing quote);
 +		-- an echo's message stops where a command substitution starts, and a message of one word is a value
@@ -462,31 +646,25 @@
 +			end
 +		end
 +		-- one-word messages are values (`echo tests/acceptance/c0077/x.spec.luau` returns a path)
-+		for i, w in words do
++		for i in words do
 +			local before = words[i - 1]
 +			if pattern[i] and (before == "echo" or before == "printf") then
 +				local s = starts[i]
 +				local qc = if s > 1 then string.sub(line, s - 1, s - 1) else ""
-+				local close = if qc == '"' or qc == "'"
-+					then (string.find(line, qc, s, true) or #line + 1)
-+					else ends[i] + 1
++				local quoted = qc == '"' or qc == "'"
++				local close = if quoted then (string.find(line, qc, s, true) or #line + 1) else ends[i] + 1
 +				local count = 0
 +				for j = i, #words do
 +					if starts[j] < close then
 +						count += 1
 +					end
 +				end
-+				if count == 1 and not (qc == '"' or qc == "'") then
-+					pattern[i] = nil
-+				elseif count == 1 and string.sub(line, ends[i] + 1, ends[i] + 1) == qc then
++				if count == 1 and (not quoted or string.sub(line, ends[i] + 1, ends[i] + 1) == qc) then
 +					pattern[i] = nil
 +				end
 +			end
-+			if w == "" then
-+				continue
-+			end
 +		end
-+		-- the path reading, in order with the groups that close a root reading
++		-- the path reading, in order with the groups that push and pop a directory frame
 +		local nextParen = 1
 +		local parens: { number } = {}
 +		for k = 1, #line do
@@ -495,41 +673,37 @@
 +				table.insert(parens, k)
 +			end
 +		end
-+		local function slotOf(ctxNow: number): Slot?
-+			if script and script.ctx == ctxNow then
-+				return script
-+			end
-+			return top
-+		end
 +		local function applyParens(upto: number)
 +			while parens[nextParen] and parens[nextParen] < upto do
 +				local k = parens[nextParen]
 +				nextParen += 1
-+				local ch = string.sub(line, k, k)
-+				local inDq = q.dq[base + k]
-+				local ctxHere = q.ctx[base + k]
-+				local opens = ch == "(" and not (inDq and string.sub(line, k - 1, k - 1) ~= "$")
-+				local closes = ch == ")" and (not inDq or dqSub > 0)
-+				if opens and inDq then
-+					dqSub += 1
-+				elseif closes and inDq then
-+					dqSub -= 1
-+				end
-+				if opens or closes then
-+					local delta = if opens then 1 else -1
-+					if top and ctxHere == 0 then
-+						top.depth += delta
-+						if top.depth < 0 then
-+							top = nil
++				if not q.dq[base + k] then
++					local stack = stackOf(q.ctx[base + k])
++					if string.sub(line, k, k) == "(" then
++						local top = stack[#stack]
++						table.insert(stack, { root = top.root, dir = top.dir })
++					else
++						-- a `)` that ends a `case` pattern closes nothing
++						local prefix = string.sub(line, 1, k - 1)
++						local open = caseStart
++						for w2 = 1, #words do
++							if starts[w2] < k then
++								open = caseAt[w2]
+ 							end
+ 						end
++						local isPattern = open > 0
++							and (
++								string.find(prefix, ";;%s*[^;()]*$") ~= nil
++								or string.find(prefix, "%f[%w_]in%s+[^;()]*$") ~= nil
++								or string.find(prefix, "^%s*[^;()]*$") ~= nil
++							)
++						if not isPattern and #stack > 1 then
++							table.remove(stack)
 +						end
-+					end
-+					if script and ctxHere == script.ctx then
-+						script.depth += delta
-+						if script.depth < 0 then
-+							script = nil
-+						end
-+					end
-+				end
+ 					end
+ 				end
+-				if path then
+-					table.insert(out, dir .. path)
 +			end
 +		end
 +		local dir = "" -- a `cd <dir>` earlier on the line: the words after it are relative to <dir>
@@ -538,14 +712,20 @@
 +			local s = starts[i]
 +			local abs = base + s
 +			applyParens(s)
-+			if top and (w == "{") then
-+				top.depth += if q.ctx[abs] == 0 then 1 else 0
-+			elseif top and w == "}" and q.ctx[abs] == 0 then
-+				top.depth -= 1
-+				if top.depth < 0 then
-+					top = nil
-+				end
-+			end
++			local stack = stackOf(q.ctx[abs])
++			if w == "{" then
++				local isFunc = string.find(string.sub(line, 1, s - 1), "%)%s*$") ~= nil
++				local top = stack[#stack]
++				table.insert(
++					funcs,
++					{ isFunc = isFunc, ctx = q.ctx[abs], saved = { root = top.root, dir = top.dir } }
++				)
++			elseif w == "}" then
++				local group = table.remove(funcs)
++				if group and group.isFunc then
++					stack[#stack] = group.saved
+ 				end
+ 			end
 +			local path: string? = nil
 +			if pattern[i] or abs < listEnd then
 +				continue
@@ -557,6 +737,7 @@
 +				finding = false
 +			end
 +			if words[i - 1] == "cd" then
++				local cdInDq = q.dq[base + starts[i - 1]] == true
 +				local sub = string.match(w, "^%$ZN_ROOT/?(.*)$")
 +				if
 +					w == "$"
@@ -566,23 +747,14 @@
 +				then
 +					sub = ""
 +				end
-+				if sub then
-+					local slot: Slot =
-+						{ dir = if sub == "" then "" else sub .. "/", ctx = q.ctx[abs], depth = 0 }
-+					if q.ctx[abs] == 0 then
-+						top = slot
- 					else
--						for _, p in PREFIXES do
--							if string.sub(w, 1, #p) == p and #w > #p then
--								path = w
--							end
-+						script = slot
-+					end
++				if sub and not cdInDq then
++					stack[#stack] = { root = true, dir = if sub == "" then "" else sub .. "/" }
++					continue
++				elseif sub then
 +					continue
 +				elseif not string.find(w, "$", 1, true) then
-+					local slot = slotOf(q.ctx[abs])
-+					if slot then
-+						slot.dir ..= w .. "/"
++					if stack[#stack].root and not cdInDq then
++						stack[#stack].dir ..= w .. "/"
 +					else
 +						dir = w .. "/"
 +					end
@@ -613,26 +785,24 @@
 +					for _, p in PREFIXES do
 +						if string.sub(w, 1, #p) == p and #w > #p then
 +							path = w
- 						end
- 					end
- 				end
--				if path then
--					table.insert(out, dir .. path)
++						end
++					end
++				end
 +			end
 +			if path then
-+				local slot = slotOf(q.ctx[abs])
-+				if slot then
-+					table.insert(out, { path = slot.dir .. path, root = true })
++				local frame = stack[#stack]
++				if frame.root then
++					table.insert(out, { path = frame.dir .. path, root = true })
 +				else
 +					table.insert(out, { path = dir .. path, root = false })
- 				end
- 			end
++				end
++			end
  		end
 +		applyParens(#line + 2)
  	end
  	return out
  end
-@@ -324,10 +710,14 @@
+@@ -324,10 +880,14 @@
  						table.insert(own, o)
  					end
  				end
@@ -651,3 +821,11 @@
  					end
  				end
  				out.checked += 1
+@@ -340,6 +900,7 @@
+ end
+ 
+ checkpaths.literals = literals
++checkpaths.quoting = quoting
+ checkpaths.present = present
+ checkpaths.touched = touched
+ checkpaths.under = under

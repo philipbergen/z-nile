@@ -22,3 +22,11 @@
 - design-review-002 F8: z-design/design-the-execution-window
 - design-review-002 F9: z-design/restated-rules-move-together
 - note a live-tree case that stays green after a rule change was re-run with each defect fixed alone (c0292 passed only because two defects cancelled): zz-test/shell-readers-carry-state-across-lines
+- design-review-003 F1: zz-test/shell-readers-carry-state-across-lines
+- design-review-003 F2: zz-test/shell-readers-carry-state-across-lines
+- design-review-003 F3: z-design/one-reading-per-value
+- design-review-003 F4: zz-test/one-rule-one-function
+- design-review-003 F5: zz-test/shell-rules-key-on-command-position
+- design-review-003 F6: zz-test/seed-every-enumerated-case
+- design-review-003 F7: z-design/spec-design-correspondence
+- note a hand-written shell reader is not proven by review rounds (four rounds, each found a construct it did not model; the user chose known edges): zz-test/measure-hand-written-readers-on-the-corpus

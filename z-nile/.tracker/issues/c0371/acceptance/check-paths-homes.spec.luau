@@ -1,15 +1,18 @@
 --!strict
 -- c0371: c0120 AC11's scan reads an item's check.sh the way bash runs it (c0371 absorbs c0141: the module is
--- `checkpaths.luau`, the Touched reading is per document). The reader's rules, one case each:
+-- `checkpaths.luau`, the Touched reading is per document). The reader models only the forms below, one case each;
+-- every other form is a Known edge in the Design (the user's ruling), measured against the corpus by E8.
 -- R   a command after `cd "$ZN_ROOT"` (or `cd "$(git rev-parse --show-toplevel)"`) is read from the repository root,
---     over the lines of its script and file; a top-level cd holds for the scripts it starts; a group closes it at a `)`
---     outside quotes (also the last byte of a line) or a `}`; a script's cd holds in that script only.
--- H   the quoted arguments of a search helper the check defines (a function that runs grep or rg) are text.
+--     over the lines of its script and file, in directory frames: `(` pushes and `)` pops (the last byte of a line
+--     included), a brace group pushes nothing, a function body restores its frame at `}`, a script starts from the
+--     top-level frame, a cd in a double-quoted script is no root cd, a `case` pattern's `)` pops nothing.
+-- H   the quoted arguments of a search helper the check defines (a function that passes a positional parameter to
+--     grep or rg) are text; a function that greps its own output or names grep in a message is none.
 -- S   the words of a code span (backslash-backtick pair) in one double-quoted argument are text.
--- E   an echo or printf message in command position is text, up to a command substitution; a message of one word is a value.
--- L   the list of a `for` loop that only matches `$NAME` as text is text.
--- A comment changes no quoting. Known edge, not a case: a `case` pattern's `)` after a root cd in a multi-line script
--- closes the root reading early (the rest of the script is read from the home).
+-- E   an echo or printf message in command position is text, up to a command substitution; a message of one word,
+--     and what echo or printf prints for a loop variable, is a value.
+-- L   the list of a `for` loop that only matches `$NAME` as text is text; its body ends at its own `done` keyword.
+-- Quoting: a comment, a heredoc body and a `$'…'` change nothing; a `$(` inside double quotes is a level of its own.
 -- A path missing from where its command runs and covered by no Touched entry is still reported, also when it exists
 -- elsewhere in the repository.
 local fs = require("@lune/fs")
@@ -304,8 +307,17 @@ return t.spec("c0371 check-paths reads homes right", function(it)
 			findings("z-nile", {}, '(\ncd "$ZN_ROOT"\ntest -f tests/run.luau\n)\ntest -f z-nile/roots.luau\n')
 		)
 			.toEqual({ bad("z-nile", "tests/run.luau", ROOT), bad("z-nile", "z-nile/roots.luau") })
+		-- a brace group runs in the current shell: its cd holds after the closing brace (bash, checked); a function body's does not
 		t.expect(findings("z-nile", {}, '{ cd "$ZN_ROOT" && true; }; test -f z-nile/roots.luau\n'))
+			.toEqual({})
+		t.expect(findings("z-nile", {}, '{ cd "$ZN_ROOT" && true; }; test -f tests/run.luau\n'))
+			.toEqual({ bad("z-nile", "tests/run.luau", ROOT) })
+		t.expect(findings("z-nile", {}, 'toroot() { cd "$ZN_ROOT"; }\ntest -f z-nile/roots.luau\n'))
 			.toEqual(gone)
+		t.expect(
+			findings("z-nile", {}, 'cd "$ZN_ROOT" || { echo "no root"; exit 1; }\ntest -f tests/run.luau\n')
+		)
+			.toEqual({ bad("z-nile", "tests/run.luau", ROOT) })
 	end)
 
 	it(
@@ -457,6 +469,211 @@ return t.spec("c0371 check-paths reads homes right", function(it)
 			.toEqual({ bad("z-nile", "src/a"), bad("z-nile", "tests/gone.md") })
 		t.expect(findings("z-nile", {}, [=[grep -qF "\`./zn" "$F" && test -f tests/gone.md]=] .. "\n"))
 			.toEqual({ bad("z-nile", "tests/gone.md") })
+	end)
+
+	it(
+		"a heredoc body, a $'...' string and the quotes inside $(...) change no quoting (review 003 F1)",
+		function()
+			local label = 'check "AC9: the item\'s diff" git diff --quiet -- default.project.json\n'
+			local gone = { bad("z-nile", "default.project.json") }
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					"read -r -d '' PARA <<'EOF'\nthe user's dispatcher's skill's prose\nEOF\n" .. label
+				)
+			).toEqual(gone)
+			t.expect(findings("z-nile", {}, "cat <<-EOF\n\tit's here\n\tEOF\n" .. label)).toEqual(gone)
+			t.expect(findings("z-nile", {}, "x=$'it\\'s'\n" .. label)).toEqual(gone)
+			t.expect(findings("z-nile", {}, 'x="$(echo "it\'s")"\n' .. label)).toEqual(gone)
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					"cat <<'EOF'\nit's\nEOF\ncheck \"AC1\" bash -c 'cd \"$ZN_ROOT\" && true'\ntest -f z-nile/roots.luau\n"
+				)
+			).toEqual({ bad("z-nile", "z-nile/roots.luau") })
+			t.expect(findings("z-nile", {}, "cat <<EOF | grep -q x\nbody\nEOF\ntest -f src/gone.luau\n"))
+				.toEqual({ bad("z-nile", "src/gone.luau") })
+		end
+	)
+
+	it(
+		"directory frames follow bash: subshells, literal cds, double-quoted scripts, splices, comments in quotes, case patterns (review 003 F2)",
+		function()
+			local run = { bad("z-nile", "tests/run.luau", ROOT) }
+			-- a subshell's cd replaces nothing of its parent
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					'cd "$ZN_ROOT"\n(cd "$ZN_ROOT/pickman" && true)\ntest -f tests/run.luau\n'
+				)
+			).toEqual(run)
+			-- a literal cd in a subshell ends with it
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					'cd "$ZN_ROOT"\n(cd pickman && test -d src/server)\ntest -d src/server\n'
+				)
+			).toEqual({ bad("z-nile", "src/server", ROOT) })
+			-- a cd in a double-quoted script is read as main reads it: the home
+			t.expect(
+				findings(
+					"pickman",
+					{},
+					'check "AC1" bash -c "cd \'$ZN_ROOT/z-nile\' && true"\ntest -f tests/run.luau\ntest -d src/server\n'
+				)
+			).toEqual({ bad("pickman", "tests/run.luau") })
+			-- a '"$X"' splice keeps the script's cd
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					[=[check "AC1" bash -c 'cd "$ZN_ROOT" && test -f '"$F"' && test -f tests/run.luau']=]
+						.. "\n"
+				)
+			).toEqual(run)
+			-- a # inside quotes hides no parenthesis
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					'(cd "$ZN_ROOT" && grep -qF "a # b" AGENTS.md)\ntest -f z-nile/roots.luau\n'
+				)
+			).toEqual({ bad("z-nile", "AGENTS.md", ROOT), bad("z-nile", "z-nile/roots.luau") })
+			-- a case pattern's parenthesis closes nothing
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					'cd "$ZN_ROOT"\ncase "$x" in a) true ;; esac\ntest -f tests/run.luau\n'
+				)
+			)
+				.toEqual(run)
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					'(cd "$ZN_ROOT"\ncase "$x" in a) true ;; esac\ntest -f tests/run.luau)\ntest -f z-nile/roots.luau\n'
+				)
+			).toEqual({ bad("z-nile", "tests/run.luau", ROOT), bad("z-nile", "z-nile/roots.luau") })
+		end
+	)
+
+	it("a value that echo or printf prints is a path the check runs (review 003 F3)", function()
+		local gone = { bad("z-nile", "tests/gone.md") }
+		t.expect(findings("z-nile", {}, 'for f in tests/gone.md; do echo "$f"; done | xargs cat\n'))
+			.toEqual(gone)
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'for f in tests/gone.md; do grep -qF "x" tests/slow.tsv || printf \'%s\\n\' "$f"; done\n'
+			)
+		).toEqual({ bad("z-nile", "tests/gone.md"), bad("z-nile", "tests/slow.tsv") })
+		t.expect(findings("z-nile", {}, 'for f in tests/gone.md; do printf "missing $f\\n"; done\n'))
+			.toEqual({})
+	end)
+
+	it("rules L and H read keywords and commands, not words (review 003 F4)", function()
+		local gone = { bad("z-nile", "tests/gone.md") }
+		-- a done in a comment, in single quotes, or as an argument does not end the body
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'for f in tests/gone.md; do\n  grep -qF "$f" "$E" || exit 1 # not done yet\n  test -f "$f"\ndone\n'
+			)
+		).toEqual(gone)
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'for f in tests/gone.md; do grep -qF "$f" \'not done\'; test -f "$f"; done\n'
+			)
+		).toEqual(gone)
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'for f in tests/gone.md; do grep -qF "$f" "$E" || ./zn done c0001; test -f "$f"; done\n'
+			)
+		).toEqual(gone)
+		t.expect(
+			findings("z-nile", {}, 'for f in tests/gone.md; do grep -qF "$f" "x; done"; test -f "$f"; done\n')
+		)
+			.toEqual(gone)
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'for f in tests/gone.md; do grep -qF "$f" \'x; done\'; test -f "$f"; done\n'
+			)
+		)
+			.toEqual(gone)
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'for f in tests/gone.md; do grep -qF "$f" "$E" # x; done\n  test -f "$f"\ndone\n'
+			)
+		).toEqual(gone)
+		-- a function that names grep in a message, or greps its own output, is no search helper
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'lint() { lune run "$1" || { echo "lint failed: grep the log"; return 1; }; }\ncheck "AC1" lint "src/gone.luau"\n'
+			)
+		).toEqual({ bad("z-nile", "src/gone.luau") })
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'passes() { lune run tests/run -- "$1" 2>&1 | grep -q " 0 failed"; }\npasses "tests/gone.spec.luau"\n'
+			)
+		).toEqual({ bad("z-nile", "tests/gone.spec.luau") })
+		-- a function body ends at its own closing brace
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'typecheck() {\n  lune run "$1" || return 1; }\nhas() { grep -qF -- "$2" "$1"; }\ntypecheck "src/gone.luau"\n'
+			)
+		).toEqual({ bad("z-nile", "src/gone.luau") })
+		-- while/until nest; an rg helper is a helper
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'for f in tests/gone.md; do while true; do case "$x" in *"$f"*) ;; esac; done; test -f "$f"; done\n'
+			)
+		).toEqual(gone)
+		t.expect(findings("z-nile", {}, 'h() { rg -F -- "$1" "$2"; }\nh "src/nothing" "$F"\n')).toEqual({})
+	end)
+
+	it(
+		"command position reaches past assignments, timeout and a check that does not start its line (review 003 F5)",
+		function()
+			t.expect(findings("z-nile", {}, 'LC_ALL=C grep -qF "src/nothing" "$F"\n')).toEqual({})
+			for _, wrap in { "nice", "nohup", "sudo" } do
+				t.expect(findings("z-nile", {}, wrap .. ' grep -qF "src/nothing" "$F"\n')).toEqual({})
+			end
+			t.expect(findings("z-nile", {}, 'timeout 10 grep -qF "src/nothing" "$F"\n')).toEqual({})
+			t.expect(findings("z-nile", {}, 'true; check "AC2: y" grep -qF "src/nothing" "$F"\n')).toEqual({})
+		end
+	)
+
+	it("the grep forms and the ${NAME} use are read (review 003 F6)", function()
+		t.expect(findings("z-nile", {}, 'egrep -q "src/nothing" "$F"\n')).toEqual({})
+		t.expect(findings("z-nile", {}, 'grep --regexp "src/nothing" "$F"\n')).toEqual({})
+		t.expect(findings("z-nile", {}, 'grep --regexp a --regexp src/nothing "$F"\n')).toEqual({})
+		t.expect(findings("z-nile", {}, 'for f in tests/gone.md; do case "$x" in *"${f}"*) ;; esac; done\n'))
+			.toEqual({})
+		t.expect(findings("z-nile", {}, 'for f in src/gone.luau; do test -f "${f}"; done\n'))
+			.toEqual({ bad("z-nile", "src/gone.luau") })
 	end)
 
 	it("the live tree passes, every check.sh read", function()
