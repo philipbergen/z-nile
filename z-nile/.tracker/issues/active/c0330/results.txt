@@ -1,0 +1,13 @@
+z-nile/.tracker/issues/active/c0330/acceptance/stub.spec.luau
+	AC1: a Solution of only the template, empty or absent yields no S claim and no refusal
+	AC2: a Solution with outcomes still gets one S claim per outcome, in a raft with a stub ticket
+	AC3: a captured document with no Problem outcome, or no acceptance criteria, is still refused
+	AC4: the skeleton has no S rows for a stub ticket, and the check expects none and reports no Solution refusal
+	AC5: a readied ticket takes its claims from the captured text, not from a Solution the prep wrote
+	AC6: the zz-rules trace row and the engine contract state the stub rule, not the old refusal
+	AC8: a section whose first read finds no outcome is read again with decision lines as text, in Problem and Solution alike
+	AC9: a Solution that has text but no outcome (a fence only) is still refused
+z-nile/tests/tooling/trace.spec.luau
+	derives stable P, S and AC claims from captured idea and acceptance criteria, and fails on vacuous tickets
+	pure trace.staleReason covers every layer, finish, Commit: and post-finish commit condition
+	pure trace.check catches every missing link, bad file kind, unrun spec, exact case match, missing results file, missing source, none code cell, and stale commit
