@@ -7,6 +7,7 @@
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local raftplan = require("@znile/engine/raftplan")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -74,6 +75,15 @@ end
 local function push(files: { [string]: string }, message: string)
 	trackerfix.elsewhere(f, files, message)
 	trackerfix.trOk(f, wt, { "sync" })
+end
+-- ready asks each member for an approval of its contract: stamp every backlog issue as it is on origin/main now and publish
+local function approveOrigin(message: string)
+	fixture.git(f.other, { "pull", "-q", "origin", "main" })
+	if seal.stamp(f.other, "t") > 0 then
+		fixture.git(f.other, { "add", "-A" })
+		fixture.git(f.other, { "commit", "-q", "-m", message })
+		fixture.git(f.other, { "push", "-q", "origin", "HEAD:main" })
+	end
 end
 local function refused(args: { string }, ...: string)
 	local r = trackerfix.tr(f, wt, args)
@@ -221,6 +231,7 @@ return t.spec("c0161 a prepared issue is checked against its quoted record when 
 			["pickman/.tracker/rafts/R0961/check.sh"] = CHECK,
 		}, "a prepared raft with a member")
 		trackerfix.elsewhere(f, { [path("c0955", "c0955.md")] = doc }, "the member is edited after its round")
+		approveOrigin("approvals of the members as they are now")
 		fixture.git(f.main, { "pull", "-q", "origin", "main" })
 		local r = trackerfix.tr(f, f.main, { "ready", "R0961" })
 		t.expect(r.ok).toBe(false)
@@ -307,6 +318,7 @@ return t.spec("c0161 a prepared issue is checked against its quoted record when 
 	it(
 		"ready takes a raft whose member still matches its quoted round, although the move rewrites its check.sh",
 		function()
+			approveOrigin("approvals of the members as they are now")
 			fixture.git(f.main, { "pull", "-q", "origin", "main" })
 			local r = trackerfix.tr(f, f.main, { "ready", "R0962" })
 			if not r.ok then
@@ -360,6 +372,7 @@ return t.spec("c0161 a prepared issue is checked against its quoted record when 
 			local raft = string.match(fs.readFile(`{w}/{path("c0966", "c0966.md")}`), "\nraft: (R%d+)") or "?"
 			prepareAndLand(w, raft) -- landing 0: the raft with its member
 			editWithRound(w, "c0966") -- the edit and its round in the rafting worktree, no unfold
+			seal.stamp(w, "t")
 			fixture.git(w, { "add", "-A" })
 			fixture.git(w, { "commit", "-q", "-m", "edit and round inside the raft" })
 			trackerfix.trOk(f, w, { "sync" })
@@ -384,6 +397,7 @@ return t.spec("c0161 a prepared issue is checked against its quoted record when 
 			-- landing 1: the member leaves the raft with its edit and an approving round 002
 			trackerfix.trOk(f, w, { "unfold", raft, "c0967" })
 			editWithRound(w, "c0967")
+			seal.stamp(w, "t")
 			prepareAndLand(w, raft) -- the unfold claimed the raft; its remaining (no) members are prepared again
 			-- landing 2: a second rafting folds it again, which records the landed design
 			local w2 = trackerfix.trOk(f, f.main, { "worktree", "prep-twice2" })
