@@ -28,7 +28,7 @@ This repo only takes work through its tracker (AGENTS.md: no code without an iss
 - Adapters require `@game/ReplicatedStorage/Arcade/...` (and `@game/ServerStorage/Arcade/...` from server roots). `graph.srcAliasAllowed` in `z-nile/lib/graph.luau` must allow that.
 - **Game Logic never requires arcade Logic.** Arcade features are leaves that adapters wire in, and game Logic gets them as parameters (an RNG, a store, a travel status). That keeps pickman-arch rules 2 and 5. Lune tests reach arcade through an `@arcade` alias in each home's `.luaurc`.
 - **What moves into arcade, in order:**
-  1. Hiscores: per-game store names (Pickman keeps today's names), a `revives` field on rows, one generic `Boards` server adapter.
+  1. Hiscores: per-game store names (Pickman keeps today's names), a `revives` field on rows, one generic `Boards` server adapter. (f0197: `Logic/Hiscores` names a title's stores from its prefix, `Hiscores.names(prefix)`, where Pickman's prefix `""` gives today's `Hiscores`, `HiscoreEntries` and `HiscoreTop`; the progress figure keeps its stored name `level` for every title; `src/server/Boards.luau` is opened per title with `Boards.open(prefix)`; `src/shared/HiscoreGames.luau` lists every title's prefix and the name of its progress figure.)
   2. Travel.
   3. PaidPlay: the per-game free hour as an atomic UpdateAsync, purchase decisions, an idempotent receipt ledger, and a `Receipts` adapter that every place installs.
   4. Rng.
