@@ -2,7 +2,7 @@
 title: A new rule says how existing work gets through it
 when: design
 tags: [process, migration, rollout]
-check: When this adds a rule, a check or a new data structure, which existing items (prepared, active, mid-prep, done) or stored data fail it on the day it lands, what does the design say they do, and, for a one-time migration, which writers (older builds, old servers, a rollback) still produce the old shape after it ran, and does the new structure pick their data up?
+check: When this adds a rule, a check or a new data structure, which existing items (prepared, active, mid-prep, done) or stored data fail it on the day it lands, what does the design say they do, and, for a one-time migration, which writers (older builds, old servers, a rollback) still produce the old shape after it ran, and does the new structure pick their data up? Stored data includes configuration: can a configured producer (a role's fallback or effort in `.models.toml`) still make what the rule refuses?
 ---
 A new requirement is written for the work that comes after it, but it is checked against everything already in flight. Prepared rafts, active ones and preps open on a branch were made under the old rules and fail the new check the moment it lands, unless the design gives them a path (a migration, a harvest-at-confirm, an exemption, or an order).
 
@@ -21,3 +21,5 @@ c0118 design review 006 F2: c0116 replaced the rafting flow (z-raft plans by `si
 **Note (c0261 design review 010 F4, F5):** a change of the ledger's format (#294: measured cost, typed minutes now 0, tokens no longer passed) moves every writer and reader of it: the dispatched raft review lost its tokens and the by-model table summed a dead column. Ask: for each place that writes or sums a cost, does it still get a real value after the upstream change?
 
 c0302 design review 001 F2: a design that adds a rule about how fixtures are set up searches the sequestered acceptance specs of unfinished items for the old shape too, not only the promoted specs: c0282's prepared `lifecycle.spec` had the exact defect, and its promotion would have turned the new scan red. Ask: does the search for the old shape cover `*/.tracker/**/acceptance/` outside `done/`, and is each hit run against the new rule?
+
+**Note (c0306's prep, 2026-11-14, design review 001 F6):** `[roles.raft]` runs at effort `high`, so its grok fallback would write a raft review that c0306's rule refuses. The dispatcher would spend a whole review run on a result refused by construction. The user ruled that a review step skips such a try.
