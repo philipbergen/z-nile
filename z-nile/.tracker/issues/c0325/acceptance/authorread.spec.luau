@@ -102,7 +102,7 @@ return t.spec("c0325 authorread reads the item folders of the checkout it starts
 			-- an interactive worktree of the same items, whose rows name other models
 			local issueB = folder("lead-wt", "issues/c0010", {
 				{ "idea", "claude-fable-5-2-medium", "c0010 ok" },
-				{ "prep", "claude-opus-5-5[1m]" },
+				{ "prep", "claude-opus-5-5[1m]-high" },
 				{ "build", "claude-opus-5-5[1m]" },
 			})
 			local empty = folder("lead-wt", "issues/c0099", {})
