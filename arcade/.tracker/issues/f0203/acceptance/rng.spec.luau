@@ -39,7 +39,6 @@ return t.spec("f0203 Rng", function(it)
 
 	it("the same seed and stream give the same sequence; another seed gives another", function()
 		t.expect(draws(Rng.new(9), 50, 40)).toEqual(draws(Rng.new(9), 50, 40))
-		t.expect(draws(Rng.new(9), 50, 40) == draws(Rng.new(10), 50, 40)).toBe(false)
 		local a, b = draws(Rng.new(9), 1000, 10), draws(Rng.new(10), 1000, 10)
 		local same = 0
 		for i = 1, 10 do
@@ -132,21 +131,29 @@ return t.spec("f0203 Rng", function(it)
 		end
 	end)
 
-	it("new refuses a stream whose products could leave a double's exact range", function()
-		for _, st in
-			{
-				{ multiplier = 1, mix = 1, offset = 0 },
-				{ multiplier = 2 ^ 21, mix = 1, offset = 0 },
-				{ multiplier = 16807.5, mix = 1, offset = 0 },
-				{ multiplier = 16807, mix = -1, offset = 0 },
-				{ multiplier = 16807, mix = 2 ^ 21, offset = 0 },
-				{ multiplier = 16807, mix = 1, offset = 0.5 },
-				{ multiplier = 16807, mix = 1, offset = M },
+	it(
+		"new refuses a stream that is not whole or whose products could leave a double's exact range",
+		function()
+			local bads: { { number } } = {
+				{ 16807.5, 1, 0 }, -- the multiplier is not whole
+				{ 1, 1, 0 }, -- the multiplier is below 2
+				{ 2 ^ 21, 1, 0 }, -- the multiplier is 2^21 or more
+				{ 16807, 1.5, 0 }, -- the mix is not whole
+				{ 16807, 0, 0 }, -- the mix is below 1 (every seed would give one sequence)
+				{ 16807, -1, 0 },
+				{ 16807, 2 ^ 21, 0 }, -- the mix is 2^21 or more
+				{ 16807, 1, 0.5 }, -- the offset is not whole
+				{ 16807, 1, M }, -- the offset is not below the modulus in size
+				{ 16807, 1, -M },
+				{ 0 / 0, 1, 0 },
 			}
-		do
-			t.expect(function()
-				Rng.new(1, st)
-			end).toThrow("Rng.new")
+			for _, b in bads do
+				t.expect(function()
+					Rng.new(1, { multiplier = b[1], mix = b[2], offset = b[3] })
+				end).toThrow("Rng.new")
+			end
+			t.expect(Rng.new(1, { multiplier = 2 ^ 21 - 1, mix = 1, offset = -(M - 1) }).state >= 1)
+				.toBe(true)
 		end
-	end)
+	)
 end)

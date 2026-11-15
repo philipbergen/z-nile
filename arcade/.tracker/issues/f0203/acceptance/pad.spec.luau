@@ -137,6 +137,26 @@ return t.spec("f0203 Pad", function(it)
 		t.expect(s.held).toBe(nil)
 	end)
 
+	it(
+		"a horizontal fold never holds the side the stick is not on: short of on across the centre, it releases",
+		function()
+			local h = Pad.tune({ axes = "horizontal" })
+			local s, dir = Pad.steer(Pad.steerStart(), -1, 0, h)
+			t.expect(s.held).toBe("left")
+			-- a flick past the centre between two frames, short of the on tilt: released, nothing sent
+			s, dir = Pad.steer(s, 0.5, 0, h)
+			t.expect(dir).toBe(nil)
+			t.expect(s.held).toBe(nil)
+			s, dir = Pad.steer(s, 0.6, 0, h)
+			t.expect(dir).toBe("right")
+			t.expect(s.held).toBe("right")
+			-- on the same side, the band between off and on keeps it
+			s, dir = Pad.steer(s, 0.5, 0, h)
+			t.expect(dir).toBe(nil)
+			t.expect(s.held).toBe("right")
+		end
+	)
+
 	it("the look stick turns at its rate: full tilt right turns right, full tilt up looks up", function()
 		local dyaw, dpitch = Pad.look(1, 0, 0.5)
 		t.expect(dyaw).toBeNear(-1.5, 1e-12)
@@ -179,6 +199,15 @@ return t.spec("f0203 Pad", function(it)
 		t.expect(dpitch).toBeNear(0.25, 1e-12)
 		dyaw = Pad.look(1, 0, 1, fast)
 		t.expect(dyaw).toBeNear(-6, 1e-12)
+	end)
+
+	it("a resting look stick turns nothing, even with no dead zone", function()
+		local dyaw, dpitch = Pad.look(0, 0, 0.1, Pad.tune({ lookDead = 0 }))
+		t.expect(dyaw).toBe(0)
+		t.expect(dpitch).toBe(0)
+		dyaw, dpitch = Pad.look(0.15, 0, 0.1)
+		t.expect(dyaw).toBe(0)
+		t.expect(dpitch).toBe(0)
 	end)
 
 	it("the look turns nothing for a dt or reading that is not a positive finite number", function()
@@ -232,6 +261,12 @@ return t.spec("f0203 Pad", function(it)
 			{ "lookDead", 1 },
 			{ "lookYaw", -1 },
 			{ "lookPitch", 0 / 0 },
+			{ "invert", 1 },
+			{ "lookPitch", -1 },
+			{ "lookDead", -0.1 },
+			{ "on", 0 / 0 },
+			{ "margin", math.huge },
+			{ "lookYaw", math.huge },
 		}
 		for _, bad in bads do
 			local over: any = { [bad[1]] = bad[2] }

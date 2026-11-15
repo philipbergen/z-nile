@@ -11,7 +11,6 @@ local M = 2147483647
 -- product loses precision and arcade's (reduced first) stays exact, so the streams differ there (E1 result).
 local seeds = { 0, 1, 7, 42, 123456789, -7, 9e10, 4.6 }
 local bad = 0
-local golden = {}
 for _, seed in seeds do
 	-- Ghosts: Rng.seed(seed), then Rng.next(state, n)
 	local g = Rng.new(seed, { multiplier = 16807, mix = 1, offset = 0 })

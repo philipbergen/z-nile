@@ -214,6 +214,10 @@ return t.spec("f0203 Look", function(it)
 			{ "maxPitch", 2 },
 			{ "turnSeconds", 0 },
 			{ "turnSeconds", -1 },
+			{ "turnSeconds", math.huge },
+			{ "maxPitch", 0 / 0 },
+			{ "radiansPerPixel", math.huge },
+			{ "radiansPerPixel", -0.004 },
 		}
 		for _, bad in bads do
 			local over: any = { [bad[1]] = bad[2] }
