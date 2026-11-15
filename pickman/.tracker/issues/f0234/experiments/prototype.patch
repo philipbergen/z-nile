@@ -24,7 +24,7 @@ index 4975bcfa..aced3f02 100644
  - **Keys**: see *Desktop keys* (f0104). **(prep)**: the arrow look turns at the camera's turn rate and springs back the same way; two arrows that tie aim the way of travel.
  
 diff --git a/pickman/src/client/Camera.luau b/pickman/src/client/Camera.luau
-index bc81dea6..d08b2181 100644
+index bc81dea6..b0a27799 100644
 --- a/pickman/src/client/Camera.luau
 +++ b/pickman/src/client/Camera.luau
 @@ -20,6 +20,7 @@ local steer: View.Steer = { look = { yaw = 0, pitch = 0 }, spring = false } -- t
@@ -48,16 +48,21 @@ index bc81dea6..d08b2181 100644
  -- The heading a shot would go now (f0100, f0104), nil before the first snapshot.
  function Camera.aim(): Maze.Heading?
  	local last = latest
-@@ -134,7 +141,8 @@ function Camera.start()
+@@ -134,9 +141,11 @@ function Camera.start()
  
  		current = { x = pose.x, y = pose.y, yaw = turned + look.yaw }
  		local x, z = View.world(pose.x, pose.y)
 -		camera.CFrame = CFrame.new(x, View.SCALE.eyeHeight + Hop.rise(hopped, shown, hopTicks), z)
-+		local eye = View.SCALE.eyeHeight + Hop.rise(hopped, shown, hopTicks) + Hop.held(readyEnd, shown)
-+		camera.CFrame = CFrame.new(x, eye, z)
- 			* CFrame.Angles(0, turned + look.yaw, 0)
- 			* CFrame.Angles(look.pitch, 0, 0)
+-			* CFrame.Angles(0, turned + look.yaw, 0)
+-			* CFrame.Angles(look.pitch, 0, 0)
++		camera.CFrame = CFrame.new(
++			x,
++			View.SCALE.eyeHeight + Hop.rise(hopped, shown, hopTicks) + Hop.held(readyEnd, shown),
++			z
++		) * CFrame.Angles(0, turned + look.yaw, 0) * CFrame.Angles(look.pitch, 0, 0)
  	end)
+ end
+ 
 diff --git a/pickman/src/client/Main.client.luau b/pickman/src/client/Main.client.luau
 index 7248ec60..46b690ac 100644
 --- a/pickman/src/client/Main.client.luau

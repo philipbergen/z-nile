@@ -3,7 +3,7 @@
 -- way Main feeds them (push, hopped, hopTicks, ready). While a READY pause runs (the run's start, a new life) the
 -- eye is the standing height plus Hop.held at the tick being shown: the top of a hop, held, then the landing, down
 -- on the standing height when the first step in play is shown. The look stays live through the pause (the right
--- stick and the mouse turn the view at the top), a hop in play still lifts the eye by Hop.rise, and the height
+-- stick, the arrow keys and the mouse turn the view at the top), a hop in play still lifts the eye by Hop.rise, and the height
 -- follows the clock, not the frame rate. Expected values come from the same Logic calls the design names.
 local Hop = require("@logic/Hop")
 local Maze = require("@logic/Maze")
@@ -49,31 +49,45 @@ type Rig = {
 	now: number, -- the stub's os.clock
 	stick: { x: number?, y: number? },
 	mouse: { x: number, y: number },
-	render: (dt: number?) -> number, -- one render step; the eye height it set
+	render: (dt: number?) -> number, -- one render step; the height of the eye it drew (its CFrame's Position.Y)
 	send: () -> Session.Frame, -- one server step, its frame handed to the camera as Main hands it
 	pitch: () -> number,
 	yaw: () -> number,
 }
 
+-- A stub CFrame value: a position and the rotations composed into it. As in Roblox, `a * b` keeps a's position
+-- (plus b's own offset, unrotated: exact for the CFrame.Angles values the camera multiplies by, which have none).
+local CFRAME: any = {}
+local function cframeValue(x: number, y: number, z: number, angles: { { number } }): any
+	return setmetatable({ Position = { X = x, Y = y, Z = z }, X = x, Y = y, Z = z, angles = angles }, CFRAME)
+end
+CFRAME.__mul = function(a: any, b: any): any
+	local angles = table.clone(a.angles)
+	for _, v in b.angles do
+		table.insert(angles, v)
+	end
+	return cframeValue(a.X + b.X, a.Y + b.Y, a.Z + b.Z, angles)
+end
+
+-- a service the rig does not model: every method is a no-op
+local function inert(): any
+	return setmetatable({}, {
+		__index = function(): any
+			return function() end
+		end,
+	})
+end
+
 local function rig(): Rig
 	local r: Rig
 	local renderStep: ((number) -> ())? = nil
-	local heights: { number } = {}
-	local angles: { { number } } = {}
-	local frame: any = {}
-	setmetatable(frame, {
-		__mul = function(a: any, _b: any): any
-			return a
-		end,
-	})
+	local cam: any = {}
 	local cframe = {
-		new = function(_x: number, y: number, _z: number): any
-			table.insert(heights, y)
-			return frame
+		new = function(x: number, y: number, z: number): any
+			return cframeValue(x, y, z, {})
 		end,
 		Angles = function(x: number, y: number, z: number): any
-			table.insert(angles, { x, y, z })
-			return frame
+			return cframeValue(0, 0, 0, { { x, y, z } })
 		end,
 	}
 	local services: { [string]: any } = {
@@ -93,10 +107,10 @@ local function rig(): Rig
 	local env = {
 		game = {
 			GetService = function(_: any, name: string): any
-				return assert(services[name], name)
+				return services[name] or inert()
 			end,
 		},
-		workspace = { CurrentCamera = {} },
+		workspace = { CurrentCamera = cam },
 		Enum = enumProxy(),
 		CFrame = cframe,
 		require = function(spec: string): any
@@ -119,11 +133,11 @@ local function rig(): Rig
 		stick = { x = nil, y = nil },
 		mouse = { x = 0, y = 0 },
 		render = function(dt: number?): number
-			local before = #heights
+			cam.CFrame = nil
 			local fn = renderStep :: (number) -> ()
 			fn(dt or 1 / 60)
-			t.expect(#heights).toBe(before + 1)
-			return heights[#heights]
+			t.expect(cam.CFrame ~= nil).toBe(true) -- the step drew the camera
+			return cam.CFrame.Position.Y -- the eye as drawn
 		end,
 		send = function(): Session.Frame
 			Session.step(s)
@@ -135,7 +149,8 @@ local function rig(): Rig
 			return f
 		end,
 		pitch = function(): number
-			return angles[#angles][1]
+			local angles = cam.CFrame.angles
+			return angles[#angles][1] -- the last rotation is the look's pitch
 		end,
 		yaw = function(): number
 			return camera.pose().yaw
@@ -236,7 +251,7 @@ return t.spec("f0234 the camera waits at the top of a hop", function(it)
 		t.expect(sawDying and sawTop and landed).toBe(true)
 	end)
 
-	it("the right stick and the mouse turn the view at the top of the pause", function()
+	it("the right stick, the arrow keys and the mouse turn the view at the top of the pause", function()
 		local r = rig()
 		r.send()
 		r.render()
@@ -250,6 +265,17 @@ return t.spec("f0234 the camera waits at the top of a hop", function(it)
 		t.expect(math.abs(r.yaw() - yaw0) > 0.1).toBe(true)
 		t.expect(r.pitch() ~= 0).toBe(true)
 		r.stick.x, r.stick.y = 0, 0
+		-- the arrow keys (f0104) look too while held: the left arrow turns the view toward the heading's left
+		local before = r.yaw()
+		r.camera.arrows({ up = false, down = false, left = true, right = false })
+		for _ = 1, 10 do
+			t.expect(r.render()).toBe(EYE + Hop.RISE)
+		end
+		t.expect(math.abs(r.yaw() - before) > 0.1).toBe(true)
+		r.camera.arrows({ up = false, down = false, left = false, right = false })
+		for _ = 1, 60 do
+			r.render() -- sprung back to the heading, as after any arrow look
+		end
 		local yaw1, pitch1 = r.yaw(), r.pitch()
 		r.mouse = { x = 50, y = -40 }
 		t.expect(r.render()).toBe(EYE + Hop.RISE)

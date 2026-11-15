@@ -1,12 +1,27 @@
 #!/usr/bin/env python3
-"""f0234's mutation check: apply each mutant to the prototype's source (a text substitution, restored after),
-run its spec case's file, and report whether it failed on an assertion. It edits files only: no git command, no ref.
-Usage (from the prep worktree): ./zn run --time 600 -- python3 -I <this> <prototype's pickman home>"""
-import pathlib, subprocess, sys
+"""f0234's mutation check: apply each mutant to a prototype's source (a text substitution, restored after, also
+when the run is stopped by a signal), run its spec case's file, and report whether it failed on an assertion. It
+edits source files only: no git command, no ref. The specs are this issue's own, found beside this script (so it
+works from issues/f0234 and from issues/active/f0234 after `./zn ready`), at the same place in the prototype.
+Usage: ./zn run --time 600 -- python3 -I <issue dir>/experiments/mutants.py <prototype worktree>/pickman
+The prototype must be a detached worktree under .worktree/proto-*, never the main checkout or this script's own."""
+import pathlib, signal, subprocess, sys
 
 HOME = pathlib.Path(sys.argv[1]).resolve()
-assert (HOME / "default.project.json").is_file() and HOME.parent.name == "proto-f0234", HOME
-A = ".tracker/issues/f0234/acceptance/"
+OWN = pathlib.Path(__file__).resolve()
+# the specs at the same place in the prototype as beside this script (the runner loads specs inside its home)
+SRC_HOME = next(p for p in OWN.parents if (p / "default.project.json").is_file())
+A = str(OWN.parents[1].relative_to(SRC_HOME) / "acceptance") + "/"
+assert (HOME / "default.project.json").is_file(), f"not a pickman home: {HOME}"
+assert HOME.parent.name.startswith("proto-") and HOME.parent.parent.name == ".worktree", f"not a prototype: {HOME}"
+assert HOME.parent not in OWN.parents, f"refusing the worktree this script lives in: {HOME}"
+assert (HOME / A).is_dir(), f"the prototype has no {A}: make it from the branch that holds this issue"
+
+def stop(signum, _frame):
+    raise KeyboardInterrupt(f"signal {signum}")  # unwinds through the `finally` that restores the sources
+
+signal.signal(signal.SIGTERM, stop)
+signal.signal(signal.SIGINT, stop)
 HOP, VIEW = "src/shared/Logic/Hop/init.luau", "src/shared/Logic/View/init.luau"
 CAM, MAIN, SES = "src/client/Camera.luau", "src/client/Main.client.luau", "src/shared/Logic/Session/init.luau"
 
@@ -34,6 +49,9 @@ MUTANTS = [
      "camera"),
     ("C6", CAM, "\t\tif read then", "\t\tif read and Hop.held(readyEnd, latest and latest.tick or 0) == 0 then", "camera"),
     ("C7", CAM, "Hop.held(readyEnd, shown)", "Hop.held(readyEnd, shown + 1)", "camera"),
+    ("C8", CAM, "\t\tsteer = View.steer(steer, look, arrows, dt)",
+     "\t\tsteer = View.steer(steer, look, if Hop.held(readyEnd, latest and latest.tick or 0) > 0 "
+     "then { up = false, down = false, left = false, right = false } else arrows, dt)", "camera"),
     ("M1", MAIN, "\tCamera.ready(frame.play, frame.tick)\n", "", "place"),
     ("M2", MAIN, "Camera.ready(frame.play, frame.tick)", "Camera.ready(frame.play, frame.tick + 1)", "place"),
     # a hop asked for in a pause starts one there (the pause's forgetting of a young hop dropped for it)
