@@ -197,53 +197,66 @@ return t.spec("f0339 approve shows the explainer page and asks y/n", function(it
 		t.expect(fs.isFile(`{wt}/{ISSUE}/approval.md`)).toBe(false)
 	end)
 
-	it("AC2: approve refuses an uncommitted page, a page for another contract, one missing a Touched module and one that fetches", function()
-		local _, hash = explain()
-		fs.writeFile(`{wt}/{PAGE}`, page(hash :: string))
-		local dirty, dcode = approve("y")
-		t.expect(dcode ~= nil and dcode ~= "0").toBe(true)
-		t.expect(has(say(dirty), "commit the contract first")).toBe(true)
-		t.expect(has(say(dirty), "explainer.html")).toBe(true)
-		t.expect(opened()).toBe("")
+	it(
+		"AC2: approve refuses an uncommitted page, a page for another contract, one missing a Touched module and one that fetches",
+		function()
+			local _, hash = explain()
+			fs.writeFile(`{wt}/{PAGE}`, page(hash :: string))
+			local dirty, dcode = approve("y")
+			t.expect(dcode ~= nil and dcode ~= "0").toBe(true)
+			t.expect(has(say(dirty), "commit the contract first")).toBe(true)
+			t.expect(has(say(dirty), "explainer.html")).toBe(true)
+			t.expect(opened()).toBe("")
 
-		fs.writeFile(`{wt}/{PAGE}`, page(string.rep("0", 64)))
-		commit("a stale page")
-		local before = head()
-		local stale, scode = approve("y")
-		t.expect(scode ~= nil and scode ~= "0").toBe(true)
-		t.expect(
-			has(
-				say(stale),
-				`explains contract 000000000000, but the contract is now {string.sub(hash :: string, 1, 12)}`
+			fs.writeFile(`{wt}/{PAGE}`, page(string.rep("0", 64)))
+			commit("a stale page")
+			local before = head()
+			local stale, scode = approve("y")
+			t.expect(scode ~= nil and scode ~= "0").toBe(true)
+			t.expect(
+				has(
+					say(stale),
+					`explains contract 000000000000, but the contract is now {string.sub(
+						hash :: string,
+						1,
+						12
+					)}`
+				)
+			).toBe(true)
+			t.expect(has(say(stale), "[y/N]")).toBe(false)
+			t.expect(opened()).toBe("")
+			t.expect(head()).toBe(before)
+			local ex = explain()
+			t.expect(ex.ok).toBe(false)
+			t.expect(has(ex.stdout, "explains contract 000000000000")).toBe(true)
+
+			-- a page whose changes leave out the issue's Touched module: approve passes it the issue's own list
+			local good = page(hash :: string)
+			local cut = string.find(good, TOUCHED, 1, true) :: number
+			fs.writeFile(
+				`{wt}/{PAGE}`,
+				string.sub(good, 1, cut - 1) .. "z-nile/engine/other.luau" .. string.sub(good, cut + #TOUCHED)
 			)
-		).toBe(true)
-		t.expect(has(say(stale), "[y/N]")).toBe(false)
-		t.expect(opened()).toBe("")
-		t.expect(head()).toBe(before)
-		local ex = explain()
-		t.expect(ex.ok).toBe(false)
-		t.expect(has(ex.stdout, "explains contract 000000000000")).toBe(true)
+			commit("a page that leaves out a Touched module")
+			local unnamed, ucode = approve("y")
+			t.expect(ucode ~= nil and ucode ~= "0").toBe(true)
+			t.expect(has(say(unnamed), `does not name {TOUCHED} (a Touched module)`)).toBe(true)
+			t.expect(opened()).toBe("")
+			local ux = explain()
+			t.expect(ux.ok).toBe(false)
+			t.expect(has(ux.stdout, `does not name {TOUCHED}`)).toBe(true)
 
-		-- a page whose changes leave out the issue's Touched module: approve passes it the issue's own list
-		local good = page(hash :: string)
-		local at = string.find(good, TOUCHED, 1, true) :: number
-		fs.writeFile(`{wt}/{PAGE}`, string.sub(good, 1, at - 1) .. "z-nile/engine/other.luau" .. string.sub(good, at + #TOUCHED))
-		commit("a page that leaves out a Touched module")
-		local unnamed, ucode = approve("y")
-		t.expect(ucode ~= nil and ucode ~= "0").toBe(true)
-		t.expect(has(say(unnamed), `does not name {TOUCHED} (a Touched module)`)).toBe(true)
-		t.expect(opened()).toBe("")
-		local ux = explain()
-		t.expect(ux.ok).toBe(false)
-		t.expect(has(ux.stdout, `does not name {TOUCHED}`)).toBe(true)
-
-		fs.writeFile(`{wt}/{PAGE}`, page(hash :: string, '<link rel="stylesheet" href="https://example.invalid/a.css">'))
-		commit("a page that fetches")
-		local fetches, fcode = approve("y")
-		t.expect(fcode ~= nil and fcode ~= "0").toBe(true)
-		t.expect(has(say(fetches), 'fetches href="https://example.invalid/a.css"')).toBe(true)
-		t.expect(opened()).toBe("")
-	end)
+			fs.writeFile(
+				`{wt}/{PAGE}`,
+				page(hash :: string, '<link rel="stylesheet" href="https://example.invalid/a.css">')
+			)
+			commit("a page that fetches")
+			local fetches, fcode = approve("y")
+			t.expect(fcode ~= nil and fcode ~= "0").toBe(true)
+			t.expect(has(say(fetches), 'fetches href="https://example.invalid/a.css"')).toBe(true)
+			t.expect(opened()).toBe("")
+		end
+	)
 
 	it("AC2: explain passes a good page", function()
 		local _, hash = explain()
@@ -261,7 +274,8 @@ return t.spec("f0339 approve shows the explainer page and asks y/n", function(it
 		local no, code = approve("n")
 		t.expect(code ~= nil and code ~= "0").toBe(true)
 		t.expect(opened()).toBe(`{wt}/{PAGE}\n`)
-		t.expect(has(no.stdout, `Approve {ID}, contract {string.sub(hash :: string, 1, 12)}? [y/N]`)).toBe(true)
+		t.expect(has(no.stdout, `Approve {ID}, contract {string.sub(hash :: string, 1, 12)}? [y/N]`))
+			.toBe(true)
 		-- the page opens before the question, in the one stream script records
 		local shown, asked = at(no.stdout, "F0339-OPENED"), at(no.stdout, "[y/N]")
 		t.expect(shown ~= nil and asked ~= nil and (shown :: number) < (asked :: number)).toBe(true)
@@ -317,15 +331,23 @@ return t.spec("f0339 approve shows the explainer page and asks y/n", function(it
 		t.expect(has(yes.stdout, `approved {ID} {hash}`)).toBe(true)
 	end)
 
-	it("AC2: --publish warns when the page is not on origin/main as it is here, and is silent when it is", function()
-		local r = approve("y", nil, `{ID} --publish`)
-		t.expect(has(say(r), `warning: {PAGE} is not on origin/main as it is here: push this branch and land it by pull request, or main keeps no page`)).toBe(true)
+	it(
+		"AC2: --publish warns when the page is not on origin/main as it is here, and is silent when it is",
+		function()
+			local r = approve("y", nil, `{ID} --publish`)
+			t.expect(
+				has(
+					say(r),
+					`warning: {PAGE} is not on origin/main as it is here: push this branch and land it by pull request, or main keeps no page`
+				)
+			).toBe(true)
 
-		local recorded, code = approve("y", nil, SECOND)
-		t.expect(code).toBe("0")
-		t.expect(has(recorded.stdout, `approved {SECOND} {SECOND_HASH}`)).toBe(true)
-		local quiet = approve("y", nil, `{SECOND} --publish`)
-		t.expect(has(say(quiet), "is not on origin/main")).toBe(false)
-		t.expect(has(say(quiet), "zn-exit=")).toBe(true)
-	end)
+			local recorded, code = approve("y", nil, SECOND)
+			t.expect(code).toBe("0")
+			t.expect(has(recorded.stdout, `approved {SECOND} {SECOND_HASH}`)).toBe(true)
+			local quiet = approve("y", nil, `{SECOND} --publish`)
+			t.expect(has(say(quiet), "is not on origin/main")).toBe(false)
+			t.expect(has(say(quiet), "zn-exit=")).toBe(true)
+		end
+	)
 end)

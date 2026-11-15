@@ -27,14 +27,31 @@ return t.spec("c0230 budget module", function(it)
 		t.expect((budget.limits("0.001:.5"))).toEqual({ seconds = 0.001, cpu = 0.5 })
 	end)
 
-	it("AC1: anything else, the empty string included, is refused with the message naming the value", function()
-		local bad = { "", "abc", "5", "0:5", "5:0", "5:-1", "5:", ":5", "1:2:3", ".:1", "1e3:1", " 5:1", "0x10:1" }
-		for _, v in bad do
-			local l, e = budget.limits(v)
-			t.expect(l).toBe(nil)
-			t.expect(e).toBe(refusal(v))
+	it(
+		"AC1: anything else, the empty string included, is refused with the message naming the value",
+		function()
+			local bad = {
+				"",
+				"abc",
+				"5",
+				"0:5",
+				"5:0",
+				"5:-1",
+				"5:",
+				":5",
+				"1:2:3",
+				".:1",
+				"1e3:1",
+				" 5:1",
+				"0x10:1",
+			}
+			for _, v in bad do
+				local l, e = budget.limits(v)
+				t.expect(l).toBe(nil)
+				t.expect(e).toBe(refusal(v))
+			end
 		end
-	end)
+	)
 
 	it("AC1: the measurer's line is read only as the last line, and taken off", function()
 		local cpu, rest = budget.takeCpu("FAIL x\n1 passed, 0 failed, 1 spec files\nzn-spec-cpu 1.250\n")
@@ -45,25 +62,28 @@ return t.spec("c0230 budget module", function(it)
 		t.expect(r2).toBe("")
 	end)
 
-	it("AC1: no measurer's line, one that is not last, or a malformed one leaves the output unchanged", function()
-		local summary = "1 passed, 0 failed, 1 spec files\n"
-		local unchanged = {
-			summary,
-			"zn-spec-cpu 1.000\n" .. summary,
-			summary .. "zn-spec-cpu x\n",
-			summary .. "zn-spec-cpu 1\n",
-			summary .. " zn-spec-cpu 1.000\n",
-			summary .. "xzn-spec-cpu 1.000\n",
-			-- the last line is 65 bytes and its last 64 begin like the measurer's line: it is not the measurer's
-			summary .. "x" .. "zn-spec-cpu 1." .. string.rep("0", 50) .. "\n",
-			"",
-		}
-		for _, s in unchanged do
-			local cpu, rest = budget.takeCpu(s)
-			t.expect(cpu).toBe(nil)
-			t.expect(rest).toBe(s)
+	it(
+		"AC1: no measurer's line, one that is not last, or a malformed one leaves the output unchanged",
+		function()
+			local summary = "1 passed, 0 failed, 1 spec files\n"
+			local unchanged = {
+				summary,
+				"zn-spec-cpu 1.000\n" .. summary,
+				summary .. "zn-spec-cpu x\n",
+				summary .. "zn-spec-cpu 1\n",
+				summary .. " zn-spec-cpu 1.000\n",
+				summary .. "xzn-spec-cpu 1.000\n",
+				-- the last line is 65 bytes and its last 64 begin like the measurer's line: it is not the measurer's
+				summary .. "x" .. "zn-spec-cpu 1." .. string.rep("0", 50) .. "\n",
+				"",
+			}
+			for _, s in unchanged do
+				local cpu, rest = budget.takeCpu(s)
+				t.expect(cpu).toBe(nil)
+				t.expect(rest).toBe(s)
+			end
 		end
-	end)
+	)
 
 	it("AC1: a megabyte line before the measurer's line, or as the last line, is read at once", function()
 		local long = 'FAIL x :: y\n     expected "'
@@ -91,7 +111,8 @@ return t.spec("c0230 budget module", function(it)
 		for _, c in budget.over(costs, { seconds = 10, cpu = 5 }) do
 			table.insert(names, c.file)
 		end
-		t.expect(names).toEqual({ "tests/nocpu-slow.spec.luau", "tests/wall.spec.luau", "tests/cpu.spec.luau" })
+		t.expect(names)
+			.toEqual({ "tests/nocpu-slow.spec.luau", "tests/wall.spec.luau", "tests/cpu.spec.luau" })
 	end)
 
 	it("AC1: over budget is slowest first, ties by path", function()
@@ -123,14 +144,18 @@ return t.spec("c0230 budget module", function(it)
 				.. "  tests/b.spec.luau 61.1 s wall, cpu not measured"
 		)
 		local one: { Cost } = { { file = "x", seconds = 1, cpu = 0.3 } }
-		t.expect(budget.render(one, { seconds = 0.5, cpu = 0.125 }))
-			.toBe(`over budget: 1 spec files over 0.5 s wall or 0.125 s cpu (lesson {LESSON})\n  x 1.0 s wall, 0.3 s cpu`)
+		t.expect(budget.render(one, { seconds = 0.5, cpu = 0.125 })).toBe(
+			`over budget: 1 spec files over 0.5 s wall or 0.125 s cpu (lesson {LESSON})\n  x 1.0 s wall, 0.3 s cpu`
+		)
 	end)
 
 	it("AC1: the report shows ten files and counts the rest", function()
 		local list: { Cost } = {}
 		for i = 1, 12 do
-			table.insert(list, { file = string.format("tests/f%02d.spec.luau", i), seconds = 100 - i, cpu = 1 })
+			table.insert(
+				list,
+				{ file = string.format("tests/f%02d.spec.luau", i), seconds = 100 - i, cpu = 1 }
+			)
 		end
 		local lines = string.split(budget.render(list, budget.DEFAULT) :: string, "\n")
 		t.expect(#lines).toBe(12)
