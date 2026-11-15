@@ -9,3 +9,5 @@ When two conditions guard the same outcome and one implies the other, dropping t
 **Why:** c0250's prototype: "a done member moved back with the raft" survived until the claim-stamp condition was dropped too, since a member in `done/` never carries the raft's `active-` stamp.
 
 **How to apply:** before recording a survivor, check whether the code holds an implied guard; mutate the pair, or name the mutant equivalent in Unknowns with the reason.
+
+**Note (c0306's prep, 2026-11-14):** the same holds across two layers that filter one input. M16 ("the code kind also takes stream reviews") survived because `reviewfiles.read`, the folder reader, already drops stream files before `reviewmodel.files` sees them. The mutant had to edit both filters. Mutate the first place the unwanted input is dropped, or every place.

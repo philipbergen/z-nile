@@ -2,7 +2,7 @@
 title: A fixture that runs the gate owns its HOME and ignores what the gate writes
 when: both
 tags: [fixtures, gate, tools]
-check: Does a fixture that runs `check.sh` set its own HOME (so `$HOME/.rokit/bin` can't put the real tools before its stubs), run rokit's shims with the real HOME, ignore every file the gate writes (`sourcemap.json`, `.cache/`), copy what `engine.copy` leaves out (`z-nile/tests/run.luau`, `z-nile/tests/lib`), and reset every guard marker it inherits whose guard it tests (`PICKMAN_OPEN_GUARD=""`)?
+check: Does a fixture that runs `check.sh` set its own HOME (so `$HOME/.rokit/bin` can't put the real tools before its stubs), does every fixture that sets HOME, for any reason, run rokit's shims with the real HOME (or link `~/.rokit` into its own), ignore every file the gate writes (`sourcemap.json`, `.cache/`), copy what `engine.copy` leaves out (`z-nile/tests/run.luau`, `z-nile/tests/lib`), and reset every guard marker it inherits whose guard it tests (`PICKMAN_OPEN_GUARD=""`)?
 ---
 `check.sh` puts `$HOME/.rokit/bin` first on PATH, so under the real HOME the real rojo and stylua shadow a fixture's stubs. A rokit shim also finds its tool through HOME, so under a fixture HOME the shimmed `lune` fails with `No such file or directory`. The gate itself writes files (the `rojo sourcemap` step writes `sourcemap.json` beside the project file). In a fixture that isn't ignoring them, those writes dirty the tree that the gate's own checks read. `engine.copy` copies the tooling but not `z-nile/tests`, so a fixture that runs specs has no runner.
 
@@ -17,3 +17,5 @@ check: Does a fixture that runs `check.sh` set its own HOME (so `$HOME/.rokit/bi
 A nested runner inherits the outer run's guard markers. With `PICKMAN_OPEN_GUARD` set, the fixture's runner skips its own browser guard, so a spec that tests that guard sees it never fire, and the real run around it fails instead (c0165 prep, round 1's prototype). Setting the marker to `""` makes the fixture's runner the outermost again.
 
 c0248 prep (2026-11-12): `stylua --check` gave different results on the `.tracker` acceptance specs when run from the repository root and from `z-nile/`, because each reads the config of the folder it starts in. Format and check acceptance specs from the project home, as the gate does.
+
+**Note (c0306's prep, 2026-11-14):** a fixture that sets HOME for any other reason has the same trap. c0306's sets it to seed a fake Claude session folder for `./zn spend`. Every nested `./zn` then died with "No such file or directory (os error 2)", because rokit's shim finds `lune` through `~/.rokit`. Link the real `~/.rokit` into the fixture's HOME, and set HOME only on the calls that read it.
