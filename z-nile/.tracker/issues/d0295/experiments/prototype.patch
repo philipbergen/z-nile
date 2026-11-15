@@ -1,0 +1,405 @@
+diff --git a/pickman/.tracker/rafts/R0066/R0066.md b/pickman/.tracker/rafts/R0066/R0066.md
+index 0d5ca400f..fc40a1afa 100644
+--- a/pickman/.tracker/rafts/R0066/R0066.md
++++ b/pickman/.tracker/rafts/R0066/R0066.md
+@@ -29,6 +29,9 @@ Decisions this raft relies on are d0149's `Decided with the user` lines (2026-10
+ One issue, d0149; its Design is the contract. Pure Logic in `Logic/Touch` (the fold `Touch.track`, `Touch.hold`, `Touch.same`, `Touch.knobs`, `Touch.buttons`, `Touch.quarters`) and `Logic/View` (`arrowQuarters` reads `Arrows.point`); the adapters `Controls` (one `step(fold)` for every path into the fold, a `task.delay` per look finger), `Camera` (`Camera.point`), `HudView` (the circles, row and knobs) and `Main` (the new `Controls.keys` and `Controls.start` wiring). `tracker/architecture.md` already has `Touch -> Pad` (landed with d0149's prep); the executor removes `Touch -> Hud` and `Touch -> View` and updates the Touch row (d0149 step list).
+ 
+ ## Order & dependencies
++d0149.
++
++## Cross-raft waits
+ d0149 has `depends_on: [d0151, f0110, f0126, f0143, f0158, c0182]`; z-ready refuses this raft until every one is in `done/`. On 2026-11-01: d0151 and f0110 are done; f0126 is prepared in R0053; f0143 and f0158 are prepared with no raft; c0182 is `new` (its text was detailed in d0149's prep, but it still needs z-design) and itself depends on f0110, f0126, f0143, f0158 and c0155 (prepared, R0065). So the order is: f0126, f0143, f0158 and c0155 land; c0182 is designed and lands; then this raft.
+ 
+ ## Experiments phase
+diff --git a/z-nile/.tracker/rafts/R0030/R0030.md b/z-nile/.tracker/rafts/R0030/R0030.md
+index 8486804b4..8f3ef0c1b 100644
+--- a/z-nile/.tracker/rafts/R0030/R0030.md
++++ b/z-nile/.tracker/rafts/R0030/R0030.md
+@@ -55,6 +55,9 @@ No new edge in `tracker/architecture.md`. This module is not a Logic feature.
+ The issue design's today → becomes table is the skill and template edit. The two documents agree: no spec moves, and R0025 and c0072 are not edited (both are in `done/`).
+ 
+ ## Order & dependencies
++c0083.
++
++## Cross-raft waits
+ Single issue, c0083. Nothing else is in this raft. `depends_on` is empty. c0074, c0080 and c0037 are already in `done/`; execution edits their live text, it does not wait for them. c0037 is not an Override.
+ 
+ Neighbours in the test-runner area, checked on 2026-10-20 (E7): neither blocks this raft and this raft blocks neither.
+diff --git a/z-nile/.tracker/rafts/R0074/R0074.md b/z-nile/.tracker/rafts/R0074/R0074.md
+index 8da8e181f..bacca1c8c 100644
+--- a/z-nile/.tracker/rafts/R0074/R0074.md
++++ b/z-nile/.tracker/rafts/R0074/R0074.md
+@@ -28,6 +28,9 @@ Single member: no interface between members. Interfaces to the rest of the rafti
+ - No `architecture.md` change.
+ 
+ ## Order & dependencies
++c0181.
++
++## Cross-raft waits
+ One member. **Cross-raft: R0074 starts only after R0068 is done** (`depends_on: [c0136]`; z-ready enforces it). No raft depends on it. Landing relative to R0069 and R0072 is free (see above); R0071 should land first so the `bounded.pl` collision is seen by whoever lands second.
+ 
+ ## Experiments phase
+diff --git a/z-nile/.tracker/rafts/R0080/R0080.md b/z-nile/.tracker/rafts/R0080/R0080.md
+index 72c96a5ad..86c92dee1 100644
+--- a/z-nile/.tracker/rafts/R0080/R0080.md
++++ b/z-nile/.tracker/rafts/R0080/R0080.md
+@@ -27,6 +27,9 @@ Single member: no interface between members. Interfaces to the rest of the rafti
+ - No `architecture.md` change. Nothing in `pickman/` changes.
+ 
+ ## Order & dependencies
++No members.
++
++## Cross-raft waits
+ One member, no `depends_on`. `./zn workstreams R0080` gives one wave, one member.
+ **Cross-raft.** (1) **R0068 lands first.** It is active and its c0136 hunks sit beside c0161's in z-design, the zz-review format block and `main.luau`; do not execute R0080 concurrently with R0068 without merging `main` first: c0161's executor starts from a `main` that has R0068, or merges `main` before step 4 (the skills) and resolves by hand, then reruns `docs.spec` and the docs specs. The trigger is R0068's merge (not its ready). R0068's own lead is told the reverse: c0161 changes the same z-design step 5.4/5.5 sentences and the zz-review format, so a later R0068 hunk may conflict. (2) R0075 (c0184), R0070 (c0194) and R0073: free; whichever lands second merges mechanically, refitting the skill wording to R0075's docs pins if it landed first. (3) **R0074 (c0181)**: free; the second one wires `recordPaths` (above). (4) R0079 (c0191): free; the second one re-reads the other's document. (5) R0072 is unrelated and waits only for R0079.
+ This raft waits for nothing, so `/z-ready R0080` is possible at once; it is `prepared`, and the rule above is a launch condition for its lead, not a `depends_on` (R0068 is active, and an unmet `depends_on` would not express "merge main first").
+diff --git a/z-nile/engine/layergit.luau b/z-nile/engine/layergit.luau
+index a81ed2fa0..63f819503 100644
+--- a/z-nile/engine/layergit.luau
++++ b/z-nile/engine/layergit.luau
+@@ -18,30 +18,31 @@ local function hasOrigin(): boolean
+ 	return sh.run("git", { "remote", "get-url", "origin" }).ok
+ end
+ 
+-local function raftSection(text: string, heading: string): string
+-	local hay = "\n" .. text
+-	local mark = "\n## " .. heading
+-	local s = string.find(hay, mark, 1, true)
+-	if not s then
+-		return `(no ## {heading} section)`
+-	end
+-	local body = s + #mark
+-	local nxt = string.find(hay, "\n## ", body, true)
+-	local chunk = if nxt then string.sub(hay, body, nxt - 1) else string.sub(hay, body)
+-	return (string.gsub(chunk, "^%s*(.-)%s*$", "%1"))
++-- d0295: the raft's layers in the order `start` stacks them, or the refusal. The carried `status <R> prepared` asks this.
++-- d0295: the members as start reads them (their raft: line) with their depends_on
++function layergit.memberSpecs(raft: store.Item): { stack.Member }
++	local specs: { stack.Member } = {}
++	for _, m in store.members(raft.id) do
++		table.insert(specs, { id = m.id, dependsOn = store.idList(store.readFront(m.doc).depends_on) })
++	end
++	return specs
+ end
+ 
+-function layergit.orderedMembers(raft: store.Item): { store.Item }
++-- d0295: the faults of the raft's Order text that start would refuse (stack.orderProblem), on the members start reads
++function layergit.orderProblem(raft: store.Item): string?
++	return stack.orderProblem(raft.id, stack.orderSection(fs.readFile(raft.doc)), layergit.memberSpecs(raft))
++end
++
++function layergit.order(raft: store.Item): ({ store.Item }?, string?)
+ 	local members = store.members(raft.id)
+ 	local byId: { [string]: store.Item } = {}
+-	local specs: { stack.Member } = {}
+ 	for _, m in members do
+ 		byId[m.id] = m
+-		table.insert(specs, { id = m.id, dependsOn = store.idList(store.readFront(m.doc).depends_on) })
+ 	end
+-	local ids, err = stack.order(raft.id, raftSection(fs.readFile(raft.doc), "Order & dependencies"), specs)
++	local specs = layergit.memberSpecs(raft)
++	local ids, err = stack.order(raft.id, stack.orderSection(fs.readFile(raft.doc)), specs)
+ 	if not ids then
+-		fail(err :: string)
++		return nil, err
+ 	end
+ 	local out: { store.Item } = {}
+ 	for _, id in ids :: { string } do
+@@ -50,7 +51,15 @@ function layergit.orderedMembers(raft: store.Item): { store.Item }
+ 			table.insert(out, item)
+ 		end
+ 	end
+-	return out
++	return out, nil
++end
++
++function layergit.orderedMembers(raft: store.Item): { store.Item }
++	local out, err = layergit.order(raft)
++	if not out then
++		fail(err :: string)
++	end
++	return out :: { store.Item }
+ end
+ 
+ function layergit.shaOf(ref: string): string?
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index 59d6bd67c..af5b34e48 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -1649,6 +1649,16 @@ local function setStatus(id: string, to: string)
+ 					return `{id} has no {heading}: z-raft writes it before status {id} prepared`
+ 				end
+ 			end
++			-- d0295: the order `./zn start` stacks (its Order and the members' depends_on); a raft start would refuse is
++			-- never prepared. ready and work judge only the Order's text (readycheck); a depends_on cycle there is d0360's.
++			local problem = layergit.orderProblem(raftItem)
++			if problem then
++				return `{id}'s Order & dependencies: {problem}: {require("./readycheck").ORDER_FIX}`
++			end
++			local _, cycle = layergit.order(raftItem)
++			if cycle then
++				return `{id}'s Order & dependencies: {cycle}: its members' depends_on must not form a cycle (z-design)`
++			end
+ 		end
+ 		-- review 003 F2: a raft of several issues needs a coherence review of the record it now holds (after its Theme)
+ 		if carried and store.isRaftId(id) and #targets > 2 then
+@@ -5598,6 +5608,7 @@ local function renderPrompt(raft: store.Item): string
+ 		RAFT_CHECK = `{raft.dir}/check.sh`,
+ 		THEME = raftSection(raftDoc, "Theme"),
+ 		ORDER = raftSection(raftDoc, "Order & dependencies"),
++		CROSS_RAFT = raftSection(raftDoc, "Cross-raft waits"),
+ 		INTERFACES = raftSection(raftDoc, "Whole-raft design"),
+ 		WORKSTREAMS = planText,
+ 		PROJECT = project or raft.root,
+diff --git a/z-nile/engine/readycheck.luau b/z-nile/engine/readycheck.luau
+index c30f0a314..3c03a33bc 100644
+--- a/z-nile/engine/readycheck.luau
++++ b/z-nile/engine/readycheck.luau
+@@ -13,10 +13,15 @@ local approval = require("./approval")
+ local contract = require("./contract")
+ local openlist = require("./openlist")
+ local raftplan = require("./raftplan")
++local stack = require("./stack")
+ local store = require("./store")
+ 
+ local readycheck = {}
+ 
++-- d0295: what every Order refusal before start tells its reader to do
++readycheck.ORDER_FIX =
++	"name only members there, each once, and write an order against another raft or its issues under ## Cross-raft waits (z-raft); ./zn stack <R-id> reads it as start does"
++
+ export type Dep = { id: string, state: string }
+ 
+ export type Member = {
+@@ -213,6 +218,19 @@ function readycheck.reason(r: Raft): (string?, boolean)
+ 			end
+ 		end
+ 	end
++	-- d0295: the Order `./zn start` reads, refused here so a raft start would refuse is never readied
++	local specs: { stack.Member } = {}
++	for _, m in r.members do
++		local ids: { string } = {}
++		for _, dep in m.deps do
++			table.insert(ids, dep.id)
++		end
++		table.insert(specs, { id = m.id, dependsOn = ids })
++	end
++	local orderErr = stack.orderProblem(r.id, stack.orderSection(r.doc), specs)
++	if orderErr then
++		return `{r.id}'s Order & dependencies: {orderErr}: {readycheck.ORDER_FIX}`, true
++	end
+ 	if not r.loaded then
+ 		return nil, false
+ 	end
+diff --git a/z-nile/engine/stack.luau b/z-nile/engine/stack.luau
+index 976545efb..61e34546c 100644
+--- a/z-nile/engine/stack.luau
++++ b/z-nile/engine/stack.luau
+@@ -140,6 +140,21 @@ local function inRaftDeps(m: Member, set: { [string]: Member }): { string }
+ 	return out
+ end
+ 
++-- d0295: the Order section as every reader cuts it: the text after `## Order & dependencies` up to the next
++-- `## ` heading, trimmed; "" when the document has none. A `## Cross-raft waits` section after it is never read.
++function stack.orderSection(doc: string): string
++	local hay = "\n" .. doc
++	local mark = "\n## Order & dependencies"
++	local s = string.find(hay, mark, 1, true)
++	if not s then
++		return ""
++	end
++	local body = s + #mark
++	local nxt = string.find(hay, "\n## ", body, true)
++	local chunk = if nxt then string.sub(hay, body, nxt - 1) else string.sub(hay, body)
++	return (string.gsub(chunk, "^%s*(.-)%s*$", "%1"))
++end
++
+ -- Ids named in the Order section, in the order written. A section that names none is the fallback.
+ local function namedIds(section: string): { string }
+ 	local out: { string } = {}
+@@ -195,21 +210,20 @@ end
+ -- The raft's Order: ids the section names, in the order written, then the members it does not name,
+ -- topological by in-raft depends_on, ties by lowest id. A section that names no id is that fallback
+ -- for every member. A named order that puts a dependent before its depends_on is refused.
+-function stack.order(raftId: string, section: string, members: { Member }): ({ string }?, string?)
++-- d0295: the faults of the Order's own text, which the commands before start refuse: an id that is not a member,
++-- a member named twice, a dependent named before its in-raft depends_on. A depends_on cycle among members the
++-- Order does not name is the members' fault, not the Order's: stack.order refuses it, this does not.
++function stack.orderProblem(raftId: string, section: string, members: { Member }): string?
+ 	local set = memberSet(members)
+-	local function depsOf(id: string): { string }
+-		local m = set[id]
+-		return if m then inRaftDeps(m, set) else {}
+-	end
+ 	local named = namedIds(section)
+ 	local seen: { [string]: boolean } = {}
+ 	for _, id in named do
+ 		if seen[id] then
+-			return nil, `{id} is listed twice in {raftId}'s Order`
++			return `{id} is listed twice in {raftId}'s Order`
+ 		end
+ 		seen[id] = true
+ 		if not set[id] then
+-			return nil, `{id} is in {raftId}'s Order and is not a member`
++			return `{id} is in {raftId}'s Order and is not a member`
+ 		end
+ 	end
+ 	local index: { [string]: number } = {}
+@@ -217,13 +231,31 @@ function stack.order(raftId: string, section: string, members: { Member }): ({ s
+ 		index[id] = i
+ 	end
+ 	for _, id in named do
+-		for _, dep in depsOf(id) do
++		for _, dep in inRaftDeps(set[id], set) do
+ 			local at = index[dep]
+ 			if not at or at > (index[id] :: number) then
+-				return nil, `{id} is listed before {dep}, which it depends on`
++				return `{id} is listed before {dep}, which it depends on`
+ 			end
+ 		end
+ 	end
++	return nil
++end
++
++function stack.order(raftId: string, section: string, members: { Member }): ({ string }?, string?)
++	local set = memberSet(members)
++	local function depsOf(id: string): { string }
++		local m = set[id]
++		return if m then inRaftDeps(m, set) else {}
++	end
++	local problem = stack.orderProblem(raftId, section, members)
++	if problem then
++		return nil, problem
++	end
++	local named = namedIds(section)
++	local seen: { [string]: boolean } = {}
++	for _, id in named do
++		seen[id] = true
++	end
+ 	local placed: { [string]: boolean } = {}
+ 	for _, id in named do
+ 		placed[id] = true
+diff --git a/z-nile/engine/workread.luau b/z-nile/engine/workread.luau
+index 2e5781387..af4b1fab1 100644
+--- a/z-nile/engine/workread.luau
++++ b/z-nile/engine/workread.luau
+@@ -25,19 +25,6 @@ local function trim(s: string): string
+ 	return (string.gsub(s, "%s+$", ""))
+ end
+ 
+-local function section(text: string, heading: string): string
+-	local hay = "\n" .. text
+-	local mark = "\n## " .. heading
+-	local s = string.find(hay, mark, 1, true)
+-	if not s then
+-		return ""
+-	end
+-	local body = s + #mark
+-	local nxt = string.find(hay, "\n## ", body, true)
+-	local chunk = if nxt then string.sub(hay, body, nxt - 1) else string.sub(hay, body)
+-	return (string.gsub(chunk, "^%s*(.-)%s*$", "%1"))
+-end
+-
+ local function frontText(text: string): { [string]: string }
+ 	local block = string.match(text, "^%-%-%-\n(.-)\n%-%-%-")
+ 	local out: { [string]: string } = {}
+@@ -289,7 +276,7 @@ local function build(
+ 		memberFront[mid] = mf
+ 		table.insert(specs, { id = mid, dependsOn = store.idList(mf.depends_on) })
+ 	end
+-	local ordered = stack.order(id, section(text, "Order & dependencies"), specs)
++	local ordered = stack.order(id, stack.orderSection(text), specs)
+ 	local issues: { string } = if ordered and #ordered > 0 then ordered else listed
+ 	local memberIds: { [string]: boolean } = {}
+ 	for _, mid in issues do
+diff --git a/z-nile/skills/z-raft/SKILL.md b/z-nile/skills/z-raft/SKILL.md
+index c56ffc9de..25dd90db3 100644
+--- a/z-nile/skills/z-raft/SKILL.md
++++ b/z-nile/skills/z-raft/SKILL.md
+@@ -33,7 +33,8 @@ Each command commits its own edits in this worktree and remembers its claim in `
+ In each raft document this branch changes (`R<NNNN>.md`):
+ - **Theme**: why these issues belong together: the member titles and the surface they share (their common Touched paths), and the user decisions their designs quote.
+ - **Whole-raft design**: the interfaces between the members: for each module two members both touch, the public types and signatures each one adds or changes there, copied from their designs, and whether they agree.
+-- **Order & dependencies**: the members in `depends_on` order, then by id, and any order the interfaces force.
++- **Order & dependencies**: the members in `depends_on` order, then by id, and any order the interfaces force. `./zn start` reads every item id in this section as a layer, so it names only members, each once (a layer branch such as `R0090/1/c0261` names its member again). Raft ids may appear.
++- **Cross-raft waits**: an order against another raft or its issues goes under `## Cross-raft waits`, after the Order, in both rafts' documents. It is never read as a layer, and the raft's prompt carries it. Write `None.` when there are none.
+ - **Risks & rollback**, and the raft's `check.sh` RCn checks after the generated RC0 lines (RC0 runs the raft's project's gate, `--project <project>`) (a raft check finds its members with `./zn find <id>` or `members`, never a hard-coded path).
+ Then set the raft's `design: ready`. z-raft sets a raft's `design:`; z-design sets an issue's.
+ 
+@@ -42,7 +43,7 @@ A raft that groups two or more issues gets one short, raft-only coherence review
+ As soon as a subagent reviewer returns, `./zn spend <R-id> --phase design-review --note design-review-NNN` (it shares the row among the members this branch gives the raft; a review started with `./zn dispatch zz-review` records its own row). Mark your own answering span with `./zn spend <R-id> --phase design-review --begin` when you start and `./zn spend <R-id> --phase design-review` when you stop. Do not pass `--time` or `--tokens`.
+ 
+ ## 5. Prepare and land
+-For each raft, `./zn status <R-id> prepared`: it is carried by the PR (it publishes nothing), takes each member that is prepared on `origin/main` as it is, and refuses a member that another raft holds there (unless that raft carries this raft's own claim, as recombine's other raft does), a raft with no Theme or Order, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering its current one (§4: a raft whose record this rafting didn't change needs no new review). A recombined other raft that keeps members is prepared the same way. Then commit (`tracker: raft <R-ids> <summary>`), and follow Landing a change (zz-rules skill): `./zn sync`, the gate, push, PR, merge. Ask the user before merging a rafting PR they didn't ask for. Under the dispatcher, don't ask and don't merge: once the PR is open and your spend is recorded, end the step; the dispatcher passes the gate (the user started it).
++For each raft, `./zn status <R-id> prepared`: it is carried by the PR (it publishes nothing), takes each member that is prepared on `origin/main` as it is, and refuses a member that another raft holds there (unless that raft carries this raft's own claim, as recombine's other raft does), a raft with no Theme or Order, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering its current one (§4: a raft whose record this rafting didn't change needs no new review). It also refuses a raft that `./zn start` would refuse for its order (an item id in the Order that is not a member, one named twice, a dependent named before its `depends_on`, or a `depends_on` cycle among its members), and `./zn ready` and `./zn work` refuse the same faults of the Order's text. A recombined other raft that keeps members is prepared the same way. Then commit (`tracker: raft <R-ids> <summary>`), and follow Landing a change (zz-rules skill): `./zn sync`, the gate, push, PR, merge. Ask the user before merging a rafting PR they didn't ask for. Under the dispatcher, don't ask and don't merge: once the PR is open and your spend is recorded, end the step; the dispatcher passes the gate (the user started it).
+ 
+ **Redesigned members.** A member whose document changed on `origin/main` since this raft grouped it (a design claimed and landed inside the rafting window) makes the carried move refuse ("<id> (<recorded> → <now>): changed on origin/main since <R-id> grouped it"), and `./zn ready` refuses the landed raft the same way: its coherence review read the old design. Drop it with `./zn unfold <R-id> <id>`; to keep it, fold it again (a new record) and rerun the coherence review (§4): the engine refuses the raft until a review quotes the new record.
+ 
+diff --git a/z-nile/skills/z-raft/lessons/cross-raft-order-written-in-both.md b/z-nile/skills/z-raft/lessons/cross-raft-order-written-in-both.md
+index 07d72259c..f3673a38b 100644
+--- a/z-nile/skills/z-raft/lessons/cross-raft-order-written-in-both.md
++++ b/z-nile/skills/z-raft/lessons/cross-raft-order-written-in-both.md
+@@ -3,10 +3,12 @@ title: A cross-raft order is written in both rafts, and never inside lines a mem
+ when: design
+ tags: [raft, order, pins]
+ from: R0078 design review 001 F1
+-check: For each "X before Y", does Y's raft document say it, and would writing it there touch a pinned file or a line within three of a patch hunk?
++check: For each "X before Y", does Y's raft document say it under `## Cross-raft waits` (never in the Order, which start reads as layers), and would writing it there touch a pinned file or a line within three of a patch hunk?
+ ---
+ An order recorded in one raft is read by the lead of that raft only, and a note added to a document a member's check pins (a patch that must apply without fuzz) turns that check red.
+ 
+ **Why:** R0078 design review 001 F1: the "R0078 before R0070" order was written only in R0078; a dated note placed directly under a Design heading in c0075.md fails c0173's AC3.
+ 
+-**How to apply:** write the order in both raft documents with the merge (not ready) as the trigger, and give a placement rule for any note that lands in a pinned document.
++**How to apply:** write the order under `## Cross-raft waits` in both raft documents with the merge (not ready) as the trigger, and give a placement rule for any note that lands in a pinned document.
++
++**Note** (d0295, 2026-11-15): R0090's Order named c0264 and c0260 to say R0090 merges first, and `./zn start` refused it ("c0264 is in R0090's Order and is not a member"). The section is `## Cross-raft waits`; `./zn status <R-id> prepared` now refuses an order start would refuse, and `ready` and `work` the same faults of the Order's text.
+diff --git a/z-nile/skills/z-raft/lessons/order-names-members-once.md b/z-nile/skills/z-raft/lessons/order-names-members-once.md
+index f416d4d6a..4f985b8aa 100644
+--- a/z-nile/skills/z-raft/lessons/order-names-members-once.md
++++ b/z-nile/skills/z-raft/lessons/order-names-members-once.md
+@@ -2,9 +2,9 @@
+ title: The Order section names each member once and no other item id
+ when: design
+ tags: [raft, order, layers, stack]
+-check: Run over the `## Order & dependencies` section as `layergit.raftSection` cuts it (up to the next `## `): is every item id in it a member, and is each named only once?
++check: Run over the `## Order & dependencies` section as `stack.orderSection` cuts it (up to the next `## `): is every item id in it a member, and is each named only once?
+ ---
+-Since layers (#296), `layergit.orderedMembers` passes the whole Order section to `stack.order`. That function reads every `[fdc]NNNN` in it, in order, and fails on a non-member or a repeat. `./zn start`, `finish`, `stack`, `commit` and `done` then refuse the raft. `./zn status <R> prepared` and `ready` do not run it, so a broken Order is found only when the first layer starts.
++Since layers (#296), `layergit.orderedMembers` passes the whole Order section to `stack.order`. That function reads every `[fdc]NNNN` in it, in order, and fails on a non-member or a repeat. `./zn start`, `finish`, `stack`, `commit` and `done` then refuse the raft. Since d0295, `./zn status <R> prepared` runs it too, and `ready` and `work` refuse the same faults of the Order's text, so such an Order is refused before the raft is readied.
+ 
+ **Why:** R0077 design review 001 F1. R0077's Order named c0141, c0194 and c0189 (cross-raft waits) and pasted a `./zn workstreams` block that named its members a second time. R0072's Order named c0191. A scan at d0298's rafting (2026-11-12) found the same defect in most rafts on main, five active ones among them.
+ 
+diff --git a/z-nile/templates/prompt.md b/z-nile/templates/prompt.md
+index b641c03c3..369eeaea4 100644
+--- a/z-nile/templates/prompt.md
++++ b/z-nile/templates/prompt.md
+@@ -47,6 +47,9 @@ Document: `{{RAFT_DOC}}`. Checks: `{{RAFT_CHECK}}`.
+ ### Order & dependencies
+ {{ORDER}}
+ 
++### Cross-raft waits
++{{CROSS_RAFT}}
++
+ ### Interfaces
+ {{INTERFACES}}
+ 
+diff --git a/z-nile/templates/raft/doc.md b/z-nile/templates/raft/doc.md
+index aa08fb0ae..67cfd220d 100644
+--- a/z-nile/templates/raft/doc.md
++++ b/z-nile/templates/raft/doc.md
+@@ -19,7 +19,12 @@ created: {{DATE}}
+      Every issue design must agree with this. Include any changes to the project's architecture.md (in its root, as pickman/.tracker/). -->
+ 
+ ## Order & dependencies
+-<!-- Execution order of member issues and why. -->
++<!-- Execution order of member issues and why. Member ids only, each once: `./zn start` reads every
++     f/d/cNNNN here as a layer. Raft ids (R<NNNN>) may appear. -->
++
++## Cross-raft waits
++<!-- Orders against other rafts and their issues (this raft merges before R<NNNN>; <issue-id> is done first),
++     written in both rafts' documents. Never read as layers. Write None. when there are none. -->
+ 
+ ## Experiments phase
+ <!-- All unknowns across the raft, run FIRST. For each: question, command, result (if run in prep),
