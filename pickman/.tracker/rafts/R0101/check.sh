@@ -13,6 +13,7 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0101
 
-# check "RC1: <end-to-end statement>" <command>
+# the raft is specs only: the Theme and the rollback rest on it, and no member can check it for the other
+check "RC1: the branch changes nothing of the game: no file under src, no Rojo project, no script, not the architecture map" git diff --quiet origin/main...HEAD -- src default.project.json lobby.project.json scripts .tracker/architecture.md
 
 finish
