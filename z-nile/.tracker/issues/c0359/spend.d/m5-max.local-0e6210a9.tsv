@@ -10,3 +10,30 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-15 20:36	2 specs	0	0	test			543.484	0.300		543.484	tokens,ai
 2026-11-15 20:48	33 runs	0	0	other			794.388	1317.120			tokens,ai
 2026-11-15 20:50	design-refute-001	0	0	design-review							tokens,ai
+2026-11-15 20:51	1 spec	0	0	test			1.229	0.690		1.229	tokens,ai
+2026-11-15 20:51	1 spec	0	0	test			1.444	0.740		1.444	tokens,ai
+2026-11-15 20:51	1 spec	0	0	test			1.240	0.700		1.240	tokens,ai
+2026-11-15 20:51	1 spec	0	0	test			7.212	4.660		7.212	tokens,ai
+2026-11-15 20:52	1 spec	0	0	test			61.642	34.190		61.642	tokens,ai
+2026-11-15 20:56	2 specs	0	0	test			236.729	0.340		236.729	tokens,ai
+2026-11-15 21:09	1 spec	0	0	test			3.058	1.600		3.058	tokens,ai
+2026-11-15 21:09	1 spec	0	0	test			1.629	0.880		1.629	tokens,ai
+2026-11-15 21:09	1 spec	0	0	test			1.826	0.980		1.826	tokens,ai
+2026-11-15 21:09	1 spec	0	0	test			2.033	1.110		2.033	tokens,ai
+2026-11-15 21:10	1 spec	0	0	test			9.761	6.300		9.761	tokens,ai
+2026-11-15 21:11	1 spec	0	0	test			69.080	37.540		69.080	tokens,ai
+2026-11-15 21:16	2 specs	0	0	test			299.966	0.360		299.966	tokens,ai
+2026-11-15 23:50	1 spec	0	0	test			1.634	1.050		1.634	tokens,ai
+2026-11-15 23:50	1 spec	0	0	test			1.240	0.770		1.240	tokens,ai
+2026-11-15 23:50	1 spec	0	0	test			1.437	0.790		1.437	tokens,ai
+2026-11-15 23:50	1 spec	0	0	test			1.215	0.720		1.215	tokens,ai
+2026-11-15 23:50	1 spec	0	0	test			10.275	6.110		10.275	tokens,ai
+2026-11-15 23:51	1 spec	0	0	test			64.355	39.610		64.355	tokens,ai
+2026-11-15 23:56	1 spec	0	0	test			240.411	25.590		240.411	tokens,ai
+2026-11-15 23:58	2 specs	0	0	test			375.511	406.260		375.511	tokens,ai
+2026-11-15 23:58	affected	0	0	test			157.150	101.860		157.150	tokens,ai
+2026-11-15 23:58	1 spec	0	0	test			133.423	16.180		133.423	tokens,ai
+2026-11-15 23:58	1 spec	0	0	test			2.247	1.110		2.247	tokens,ai
+2026-11-15 23:59	1 spec	0	0	test			9.450	6.930		9.450	tokens,ai
+2026-11-15 21:16	2 runs	0	0	other			695.217	339.160			tokens,ai
+2026-11-15 23:59	prep	1628	1	prep							tokens,ai
