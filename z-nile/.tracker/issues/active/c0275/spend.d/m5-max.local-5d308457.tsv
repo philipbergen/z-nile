@@ -37,3 +37,4 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-14 23:02	R0100: addressed during execution, c0276 spec note	0	0	code-review							tokens,wall,cpu,ai
 2026-11-15 08:30	R0100: refute-005 names c0338	0	0	code-review							tokens,wall,cpu,ai
 2026-11-15 09:56	R0100: final refute, trace for the top layer	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-15 16:40	R0100: refresh shas in final refute and trace	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai

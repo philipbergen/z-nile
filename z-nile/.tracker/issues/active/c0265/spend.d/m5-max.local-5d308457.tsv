@@ -270,3 +270,49 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-15 09:53	2 specs	0	0	test			37.967	35.410		37.967	tokens,ai
 2026-11-15 09:56	7 runs	0	0	other			510.318	1170.210			tokens,ai
 2026-11-15 09:56	R0100: final refute, trace for the top layer	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-15 09:58	affected	0	0	test			85.488	436.420		85.488	tokens,ai
+2026-11-15 09:58	1 spec	0	0	test			1.037	0.680		1.037	tokens,ai
+2026-11-15 09:58	2 specs	0	0	test			24.061	36.630		24.061	tokens,ai
+2026-11-15 09:59	1 spec	0	0	test			51.957	38.700		51.957	tokens,ai
+2026-11-15 10:01	1 spec	0	0	test			85.531	24.630		85.531	tokens,ai
+2026-11-15 10:01	1 spec	0	0	test			1.219	0.780		1.219	tokens,ai
+2026-11-15 10:02	1 spec	0	0	test			56.899	44.960		56.899	tokens,ai
+2026-11-15 10:03	1 spec	0	0	test			79.296	64.850		79.296	tokens,ai
+2026-11-15 10:03	2 specs	0	0	test			1.045	0.750		1.045	tokens,ai
+2026-11-15 10:04	1 spec	0	0	test			67.519	53.120		67.519	tokens,ai
+2026-11-15 10:05	3 specs	0	0	test			34.818	31.990		34.818	tokens,ai
+2026-11-15 10:05	1 spec	0	0	test			1.257	0.740		1.257	tokens,ai
+2026-11-15 10:05	1 spec	0	0	test			25.331	20.340		25.331	tokens,ai
+2026-11-15 10:06	14 specs	0	0	test			24.494	40.490		24.494	tokens,ai
+2026-11-15 10:06	1 spec	0	0	test			1.228	0.720		1.228	tokens,ai
+2026-11-15 10:06	1 spec	0	0	test			45.928	36.310		45.928	tokens,ai
+2026-11-15 10:07	1 spec	0	0	test			17.514	13.930		17.514	tokens,ai
+2026-11-15 10:07	2 specs	0	0	test			38.430	24.910		38.430	tokens,ai
+2026-11-15 10:08	1 spec	0	0	test			49.669	40.510		49.669	tokens,ai
+2026-11-15 10:09	2 specs	0	0	test			39.411	40.730		39.411	tokens,ai
+2026-11-15 10:09	1 spec	0	0	test			1.245	0.910		1.245	tokens,ai
+2026-11-15 10:12	affected	0	0	test			96.472	485.730		96.472	tokens,ai
+2026-11-15 10:12	1 spec	0	0	test			1.238	0.810		1.238	tokens,ai
+2026-11-15 10:13	2 specs	0	0	test			25.273	38.640		25.273	tokens,ai
+2026-11-15 10:14	1 spec	0	0	test			53.095	39.900		53.095	tokens,ai
+2026-11-15 10:15	1 spec	0	0	test			85.926	24.560		85.926	tokens,ai
+2026-11-15 10:15	1 spec	0	0	test			1.019	0.740		1.019	tokens,ai
+2026-11-15 10:16	1 spec	0	0	test			55.942	43.940		55.942	tokens,ai
+2026-11-15 10:17	1 spec	0	0	test			74.999	60.900		74.999	tokens,ai
+2026-11-15 10:17	2 specs	0	0	test			1.045	0.790		1.045	tokens,ai
+2026-11-15 10:19	1 spec	0	0	test			72.705	57.760		72.705	tokens,ai
+2026-11-15 10:19	3 specs	0	0	test			34.611	33.530		34.611	tokens,ai
+2026-11-15 10:19	1 spec	0	0	test			1.026	0.740		1.026	tokens,ai
+2026-11-15 10:20	1 spec	0	0	test			29.856	22.270		29.856	tokens,ai
+2026-11-15 10:20	14 specs	0	0	test			28.302	44.080		28.302	tokens,ai
+2026-11-15 10:20	1 spec	0	0	test			1.035	0.700		1.035	tokens,ai
+2026-11-15 10:21	1 spec	0	0	test			42.287	33.720		42.287	tokens,ai
+2026-11-15 10:21	1 spec	0	0	test			17.276	13.770		17.276	tokens,ai
+2026-11-15 10:22	2 specs	0	0	test			39.140	26.290		39.140	tokens,ai
+2026-11-15 10:23	1 spec	0	0	test			47.703	38.720		47.703	tokens,ai
+2026-11-15 10:23	2 specs	0	0	test			38.997	39.130		38.997	tokens,ai
+2026-11-15 10:23	1 spec	0	0	test			1.040	0.790		1.040	tokens,ai
+2026-11-15 10:26	1 spec	0	0	test			1.234	0.820		1.234	tokens,ai
+2026-11-15 16:40	1 spec	0	0	test			6.116	1.980		6.116	tokens,ai
+2026-11-15 16:40	2 runs	0	0	other			3.866	2.000			tokens,ai
+2026-11-15 16:40	R0100: refresh shas in final refute and trace	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
