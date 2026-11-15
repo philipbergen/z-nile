@@ -13,7 +13,8 @@ local function has(list: { string }, needle: string): boolean
 	return false
 end
 
-local CAPTURED = "---\nid: c0010\n---\n\n# c0010: Alpha\n\n## Problem\nAlpha is missing.\n\n## Solution\n<!-- x -->\n"
+local CAPTURED =
+	"---\nid: c0010\n---\n\n# c0010: Alpha\n\n## Problem\nAlpha is missing.\n\n## Solution\n<!-- x -->\n"
 local DOC_PATH = "pickman/.tracker/issues/active/c0010/c0010.md"
 local CHECK_PATH = "pickman/.tracker/issues/active/c0010/check.sh"
 
@@ -25,7 +26,10 @@ local function issue(acSection: string): trace.IssueDoc
 		dirPath = "pickman/.tracker/issues/active/c0010",
 		home = "pickman",
 		capturedText = CAPTURED,
-		docText = CAPTURED .. "\n## Design\nDo it.\n\n## Acceptance criteria\n" .. acSection .. "\n## Implementation steps\n1. Go.\n",
+		docText = CAPTURED
+			.. "\n## Design\nDo it.\n\n## Acceptance criteria\n"
+			.. acSection
+			.. "\n## Implementation steps\n1. Go.\n",
 		checkText = nil,
 		resultsPath = "pickman/.tracker/issues/active/c0010/results.txt",
 		resultsText = "",
@@ -56,16 +60,18 @@ return t.spec("c0301: an empty Judged or Observed subsection derives no claim", 
 			t.expect(ids).toEqual({ "c0010:AC1=Alpha shows.", "c0010:AC2=Alpha persists." })
 		end
 		-- the template's comment above the None. is not part of the body
-		t.expect(acIds(CHECKED .. JUDGED_TEMPLATE .. "None.\n\n### Observed\n<!-- steps -->\nNone.\n")).toEqual({
-			"c0010:AC1=Alpha shows.",
-			"c0010:AC2=Alpha persists.",
-		})
+		t.expect(acIds(CHECKED .. JUDGED_TEMPLATE .. "None.\n\n### Observed\n<!-- steps -->\nNone.\n"))
+			.toEqual({
+				"c0010:AC1=Alpha shows.",
+				"c0010:AC2=Alpha persists.",
+			})
 		-- each heading on its own: Judged empty, Observed real; Observed empty, Judged real
-		t.expect(acIds(CHECKED .. "### Judged\nNone.\n\n### Observed\n- OC1: Open Studio and look.\n")).toEqual({
-			"c0010:AC1=Alpha shows.",
-			"c0010:AC2=Alpha persists.",
-			"c0010:AC4=OC1: Open Studio and look.",
-		})
+		t.expect(acIds(CHECKED .. "### Judged\nNone.\n\n### Observed\n- OC1: Open Studio and look.\n"))
+			.toEqual({
+				"c0010:AC1=Alpha shows.",
+				"c0010:AC2=Alpha persists.",
+				"c0010:AC4=OC1: Open Studio and look.",
+			})
 		t.expect(acIds(CHECKED .. "### Judged\n- JC1: It reads well.\n\n### Observed\nNone.\n")).toEqual({
 			"c0010:AC1=Alpha shows.",
 			"c0010:AC2=Alpha persists.",
@@ -73,56 +79,68 @@ return t.spec("c0301: an empty Judged or Observed subsection derives no claim", 
 		})
 	end)
 
-	it("AC1: every other claim keeps the number it had before, so no row of an old table moves to another claim", function()
-		-- AC3 (the Judged None.) is gone; the Observed criterion keeps AC4, it is not renumbered AC3
-		local ids = acIds(CHECKED .. "### Judged\nNone.\n\n### Observed\n- Walk the maze.\n")
-		t.expect(ids).toEqual({ "c0010:AC1=Alpha shows.", "c0010:AC2=Alpha persists.", "c0010:AC4=Walk the maze." })
-	end)
+	it(
+		"AC1: every other claim keeps the number it had before, so no row of an old table moves to another claim",
+		function()
+			-- AC3 (the Judged None.) is gone; the Observed criterion keeps AC4, it is not renumbered AC3
+			local ids = acIds(CHECKED .. "### Judged\nNone.\n\n### Observed\n- Walk the maze.\n")
+			t.expect(ids)
+				.toEqual({ "c0010:AC1=Alpha shows.", "c0010:AC2=Alpha persists.", "c0010:AC4=Walk the maze." })
+		end
+	)
 
-	it("AC1: a None. that is not the whole body of a Judged or Observed subsection is still a claim", function()
-		-- under Checked
-		t.expect(acIds("### Checked\n- AC1: Alpha shows.\n\nNone.\n\n### Judged\nNone.\n")).toEqual({
-			"c0010:AC1=Alpha shows.",
-			"c0010:AC2=None.",
-		})
-		t.expect(acIds("### Checked\nNone.\n\n### Observed\n- OC1: Look.\n")).toEqual({
-			"c0010:AC1=None.",
-			"c0010:AC2=OC1: Look.",
-		})
-		-- with a reason after it
-		t.expect(acIds(CHECKED .. "### Judged\nNone. The playtest is f0029 OC1.\n")).toEqual({
-			"c0010:AC1=Alpha shows.",
-			"c0010:AC2=Alpha persists.",
-			"c0010:AC3=None. The playtest is f0029 OC1.",
-		})
-		t.expect(acIds(CHECKED .. "### Observed\nNone: no runtime change.\n")).toEqual({
-			"c0010:AC1=Alpha shows.",
-			"c0010:AC2=Alpha persists.",
-			"c0010:AC3=None: no runtime change.",
-		})
-		-- beside another paragraph in the same subsection
-		t.expect(acIds(CHECKED .. "### Observed\nNone.\n\nOpen Studio and look.\n")).toEqual({
-			"c0010:AC1=Alpha shows.",
-			"c0010:AC2=Alpha persists.",
-			"c0010:AC3=None.",
-			"c0010:AC4=Open Studio and look.",
-		})
-		-- under a heading that only starts like one of the two
-		t.expect(acIds(CHECKED .. "### Judged criteria\nNone.\n")).toEqual({
-			"c0010:AC1=Alpha shows.",
-			"c0010:AC2=Alpha persists.",
-			"c0010:AC3=None.",
-		})
-	end)
+	it(
+		"AC1: a None. that is not the whole body of a Judged or Observed subsection is still a claim",
+		function()
+			-- under Checked
+			t.expect(acIds("### Checked\n- AC1: Alpha shows.\n\nNone.\n\n### Judged\nNone.\n")).toEqual({
+				"c0010:AC1=Alpha shows.",
+				"c0010:AC2=None.",
+			})
+			t.expect(acIds("### Checked\nNone.\n\n### Observed\n- OC1: Look.\n")).toEqual({
+				"c0010:AC1=None.",
+				"c0010:AC2=OC1: Look.",
+			})
+			-- with a reason after it
+			t.expect(acIds(CHECKED .. "### Judged\nNone. The playtest is f0029 OC1.\n")).toEqual({
+				"c0010:AC1=Alpha shows.",
+				"c0010:AC2=Alpha persists.",
+				"c0010:AC3=None. The playtest is f0029 OC1.",
+			})
+			t.expect(acIds(CHECKED .. "### Observed\nNone: no runtime change.\n")).toEqual({
+				"c0010:AC1=Alpha shows.",
+				"c0010:AC2=Alpha persists.",
+				"c0010:AC3=None: no runtime change.",
+			})
+			-- beside another paragraph in the same subsection
+			t.expect(acIds(CHECKED .. "### Observed\nNone.\n\nOpen Studio and look.\n")).toEqual({
+				"c0010:AC1=Alpha shows.",
+				"c0010:AC2=Alpha persists.",
+				"c0010:AC3=None.",
+				"c0010:AC4=Open Studio and look.",
+			})
+			-- under a heading that only starts like one of the two
+			t.expect(acIds(CHECKED .. "### Judged criteria\nNone.\n")).toEqual({
+				"c0010:AC1=Alpha shows.",
+				"c0010:AC2=Alpha persists.",
+				"c0010:AC3=None.",
+			})
+		end
+	)
 
-	it("AC1: a ticket whose only criteria are empty Judged and Observed subsections is refused as having none", function()
-		local _, errs = trace.deriveClaims({ issue("### Checked\n\n### Judged\nNone.\n\n### Observed\nNone.\n") })
-		t.expect(has(errs, "ticket c0010 is missing ## Acceptance criteria")).toBe(true)
-	end)
+	it(
+		"AC1: a ticket whose only criteria are empty Judged and Observed subsections is refused as having none",
+		function()
+			local _, errs =
+				trace.deriveClaims({ issue("### Checked\n\n### Judged\nNone.\n\n### Observed\nNone.\n") })
+			t.expect(has(errs, "ticket c0010 is missing ## Acceptance criteria")).toBe(true)
+		end
+	)
 
 	it("AC1: extractAcs reads the criteria deriveClaims makes claims of", function()
 		local section = CHECKED .. "### Judged\nNone.\n\n### Observed\n- OC1: Look.\n"
-		t.expect(trace.extractAcs(section)).toEqual({ "AC1: Alpha shows.", "AC2: Alpha persists.", "OC1: Look." })
+		t.expect(trace.extractAcs(section))
+			.toEqual({ "AC1: Alpha shows.", "AC2: Alpha persists.", "OC1: Look." })
 		t.expect(trace.extractAcs("### Judged\nNone.\n\n### Observed\nNone.\n")).toEqual({})
 	end)
 
@@ -139,7 +157,16 @@ return t.spec("c0301: an empty Judged or Observed subsection derives no claim", 
 			`| c0010:AC2 | {DOC_PATH}:7 | {CHECK_PATH}:2 | none |`,
 		}
 		local function tableOf(extra: { string }): string
-			local lines = { "# Trace: R0010", "", "Commit: abc", "", "## Claims", "", "| claim | design | test | code |", "|---|---|---|---|" }
+			local lines = {
+				"# Trace: R0010",
+				"",
+				"Commit: abc",
+				"",
+				"## Claims",
+				"",
+				"| claim | design | test | code |",
+				"|---|---|---|---|",
+			}
 			for _, r in rows do
 				table.insert(lines, r)
 			end

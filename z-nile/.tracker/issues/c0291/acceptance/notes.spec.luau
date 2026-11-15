@@ -36,31 +36,34 @@ local function has(list: { string }, needle: string): boolean
 end
 
 return t.spec("c0291 lesson notes", function(it)
-	it("AC1: a note's name is <YYYY-MM-DD>-<label>.md with a real date and a lowercase kebab label", function()
-		local date, label = lessons.noteName("2026-11-09-c0279-design-review-002-f3.md")
-		t.expect(date).toBe("2026-11-09")
-		t.expect(label).toBe("c0279-design-review-002-f3")
-		for _, bad in
-			{
-				"2026-11-09.md", -- no label
-				"2026-11-09-.md",
-				"2026-13-01-a.md", -- no month 13
-				"2026-11-32-a.md",
-				"2026-11-09-Upper.md",
-				"2026-11-09-a-.md", -- a trailing dash
-				"2026-11-09-a--b.md",
-				"2026-11-09-a.txt",
-				"2026-11-09-a.md.bak",
-				"note-2026-11-09-a.md", -- the date first
-				"26-11-09-a.md",
-			}
-		do
-			local d, l = lessons.noteName(bad)
-			if d ~= nil or l ~= nil then
-				error(`{bad} was taken for a note name`)
+	it(
+		"AC1: a note's name is <YYYY-MM-DD>-<label>.md with a real date and a lowercase kebab label",
+		function()
+			local date, label = lessons.noteName("2026-11-09-c0279-design-review-002-f3.md")
+			t.expect(date).toBe("2026-11-09")
+			t.expect(label).toBe("c0279-design-review-002-f3")
+			for _, bad in
+				{
+					"2026-11-09.md", -- no label
+					"2026-11-09-.md",
+					"2026-13-01-a.md", -- no month 13
+					"2026-11-32-a.md",
+					"2026-11-09-Upper.md",
+					"2026-11-09-a-.md", -- a trailing dash
+					"2026-11-09-a--b.md",
+					"2026-11-09-a.txt",
+					"2026-11-09-a.md.bak",
+					"note-2026-11-09-a.md", -- the date first
+					"26-11-09-a.md",
+				}
+			do
+				local d, l = lessons.noteName(bad)
+				if d ~= nil or l ~= nil then
+					error(`{bad} was taken for a note name`)
+				end
 			end
 		end
-	end)
+	)
 
 	it(
 		"AC1: with no notes a lesson's text is its file byte for byte, whether the tree has a notes map or not",
@@ -82,7 +85,9 @@ return t.spec("c0291 lesson notes", function(it)
 			local want = GOOD .. "\nOlder note.\n\nNewer note.\n\nSame day, later label.\n"
 			t.expect(lessons.compose(GOOD, { same, newer, older })).toBe(want)
 			t.expect(lessons.compose(GOOD, { older, newer, same })).toBe(want)
-			t.expect(lessons.text(tree({ ["zz-test/a-lesson"] = { newer, same, older } }), "zz-test/a-lesson"))
+			t.expect(
+				lessons.text(tree({ ["zz-test/a-lesson"] = { newer, same, older } }), "zz-test/a-lesson")
+			)
 				.toBe(want)
 		end
 	)
@@ -131,19 +136,22 @@ return t.spec("c0291 lesson notes", function(it)
 	it("AC1: check refuses an empty note, naming the file", function()
 		local blank = { name = "2026-11-09-a.md", text = " \n\n" }
 		local problems = lessons.check(tree({ ["zz-test/a-lesson"] = { blank } }))
-		t.expect(problems).toEqual({ "z-nile/skills/zz-test/lessons/a-lesson/2026-11-09-a.md: the note is empty" })
+		t.expect(problems)
+			.toEqual({ "z-nile/skills/zz-test/lessons/a-lesson/2026-11-09-a.md: the note is empty" })
 	end)
 
 	it("AC1: check judges the lesson's own file: an empty body with a note is still refused", function()
 		local n = { name = "2026-11-09-a.md", text = "A note.\n" }
 		local bare = "---\ntitle: A lesson\nwhen: design\ntags: [merge]\ncheck: Is it merged?\n---\n\n"
-		local problems = lessons.check(tree({ ["zz-test/a-lesson"] = { n } }, { ["zz-test/a-lesson"] = bare }))
+		local problems =
+			lessons.check(tree({ ["zz-test/a-lesson"] = { n } }, { ["zz-test/a-lesson"] = bare }))
 		t.expect(problems).toEqual({ "zz-test/a-lesson: the body is empty" })
 	end)
 
 	it("AC1: a notes folder's problems leave the other lessons' checks as they were", function()
 		local bad = { name = "x.md", text = "x\n" }
-		local problems = lessons.check(tree({ ["zz-test/a-lesson"] = { bad } }, { ["zz-test/unsourced"] = GOOD }))
+		local problems =
+			lessons.check(tree({ ["zz-test/a-lesson"] = { bad } }, { ["zz-test/unsourced"] = GOOD }))
 		t.expect(has(problems, "zz-test/unsourced: no source")).toBe(true)
 		t.expect(has(problems, "a-lesson/x.md: not a note file")).toBe(true)
 		t.expect(#problems).toBe(2)

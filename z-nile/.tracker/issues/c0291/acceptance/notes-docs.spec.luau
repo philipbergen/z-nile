@@ -76,7 +76,10 @@ return t.spec("c0291 lesson notes docs", function(it)
 				"`./zn lessons` reads a lesson's notes after its file, in name order (oldest first), and searches them"
 			)
 			at(s, "`--full` prints them after the file, under the file's path: the note files are the record")
-			at(s, "`--check` refuses a notes folder with no lesson, a file in it not named that way, and an empty note")
+			at(
+				s,
+				"`--check` refuses a notes folder with no lesson, a file in it not named that way, and an empty note"
+			)
 			at(
 				s,
 				"An edit to the lesson's rule, `check` or other frontmatter is still an edit of `<slug>.md`, and two such edits still conflict"

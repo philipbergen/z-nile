@@ -30,7 +30,8 @@ end
 
 expect(
 	"title",
-	fields.title == "A promoted spec is fast and cheap; a proof that needs real work is a check.sh-only script run once",
+	fields.title
+		== "A promoted spec is fast and cheap; a proof that needs real work is a check.sh-only script run once",
 	fields.title
 )
 expect("when", fields.when == "design", fields.when)
