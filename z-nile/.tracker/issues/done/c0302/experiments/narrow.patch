@@ -1,0 +1,91 @@
+diff --git a/z-nile/tests/acceptance/c0001/tracker-lifecycle.spec.luau b/z-nile/tests/acceptance/c0001/tracker-lifecycle.spec.luau
+index b7e763854..5ce5b2a18 100644
+--- a/z-nile/tests/acceptance/c0001/tracker-lifecycle.spec.luau
++++ b/z-nile/tests/acceptance/c0001/tracker-lifecycle.spec.luau
+@@ -71,6 +71,8 @@ return t.spec("tracker lifecycle", function(it)
+ 		end
+ 		clone.isolated(root, dir)
+ 		git({ "remote", "remove", "origin" })
++		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
++		git({ "checkout", "-q", "-B", "main" })
+ 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
+ 		local listed = process.exec("git", {
+ 			"ls-files",
+diff --git a/z-nile/tests/acceptance/c0008/done-order.spec.luau b/z-nile/tests/acceptance/c0008/done-order.spec.luau
+index f1e848b6f..986743cdd 100644
+--- a/z-nile/tests/acceptance/c0008/done-order.spec.luau
++++ b/z-nile/tests/acceptance/c0008/done-order.spec.luau
+@@ -76,6 +76,8 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
+ 		fs.writeDir(base)
+ 		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
+ 		git({ "remote", "remove", "origin" })
++		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
++		git({ "checkout", "-q", "-B", "main" })
+ 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
+ 		local listed = process.exec("git", {
+ 			"ls-files",
+diff --git a/z-nile/tests/acceptance/c0038/deferred.spec.luau b/z-nile/tests/acceptance/c0038/deferred.spec.luau
+index 81761b38e..7d2abcf71 100644
+--- a/z-nile/tests/acceptance/c0038/deferred.spec.luau
++++ b/z-nile/tests/acceptance/c0038/deferred.spec.luau
+@@ -82,6 +82,8 @@ return t.spec("c0360 done accepts deferred answers", function(it)
+ 		end
+ 		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
+ 		git({ "remote", "remove", "origin" })
++		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
++		git({ "checkout", "-q", "-B", "main" })
+ 		local listed = process.exec("git", {
+ 			"ls-files",
+ 			"-co",
+diff --git a/z-nile/tests/acceptance/c0050/start-depends.spec.luau b/z-nile/tests/acceptance/c0050/start-depends.spec.luau
+index 8f109552c..8763de199 100644
+--- a/z-nile/tests/acceptance/c0050/start-depends.spec.luau
++++ b/z-nile/tests/acceptance/c0050/start-depends.spec.luau
+@@ -53,6 +53,8 @@ return t.spec("c0480 start checks depends_on", function(it)
+ 		end
+ 		clone.isolated(root, dir)
+ 		git({ "remote", "remove", "origin" })
++		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
++		git({ "checkout", "-q", "-B", "main" })
+ 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
+ 		local listed = process.exec("git", {
+ 			"ls-files",
+diff --git a/z-nile/tests/acceptance/c0074/done-gate.spec.luau b/z-nile/tests/acceptance/c0074/done-gate.spec.luau
+index d85e9accb..955e31eb7 100644
+--- a/z-nile/tests/acceptance/c0074/done-gate.spec.luau
++++ b/z-nile/tests/acceptance/c0074/done-gate.spec.luau
+@@ -125,6 +125,8 @@ return t.spec("c0800 done runs the affected gate after promotion", function(it)
+ 		fs.writeDir(base)
+ 		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
+ 		git({ "remote", "remove", "origin" })
++		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
++		git({ "checkout", "-q", "-B", "main" })
+ 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
+ 		local listed = process.exec("git", {
+ 			"ls-files",
+diff --git a/z-nile/tests/acceptance/c0080/consequences.spec.luau b/z-nile/tests/acceptance/c0080/consequences.spec.luau
+index 3780e2939..c44a98b56 100644
+--- a/z-nile/tests/acceptance/c0080/consequences.spec.luau
++++ b/z-nile/tests/acceptance/c0080/consequences.spec.luau
+@@ -92,6 +92,8 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
+ 		fs.writeDir(base)
+ 		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
+ 		git({ "remote", "remove", "origin" })
++		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
++		git({ "checkout", "-q", "-B", "main" })
+ 		local listed = process.exec("git", {
+ 			"ls-files",
+ 			"-co",
+diff --git a/z-nile/tests/acceptance/c0120/promote-home.spec.luau b/z-nile/tests/acceptance/c0120/promote-home.spec.luau
+index b27b58bd6..1c8153589 100644
+--- a/z-nile/tests/acceptance/c0120/promote-home.spec.luau
++++ b/z-nile/tests/acceptance/c0120/promote-home.spec.luau
+@@ -84,6 +84,8 @@ return t.spec("c0120 done promotes into the item's home", function(it)
+ 		fs.writeDir(base)
+ 		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
+ 		git({ "remote", "remove", "origin" })
++		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
++		git({ "checkout", "-q", "-B", "main" })
+ 		local listed = process.exec("git", {
+ 			"ls-files",
+ 			"-co",
