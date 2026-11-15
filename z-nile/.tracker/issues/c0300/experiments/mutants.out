@@ -1,0 +1,67 @@
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 3500: it stays
+M1 upstream from the last <issue>: commit (the tip shortcut): KILLED (assertion); 3 case(s) red
+    AC3: a restack killed during its check leaves no ref on a layer missing a commit
+    AC2: a commit whose change is already on main refuses the layer unchanged and says what to do
+    AC1, AC4: finish names restack, restack keeps every commit (an unpushed one too), and finish then succeeds
+M2 no keepsCommits verification: KILLED (assertion); 2 case(s) red
+    AC2: a commit whose change is already on main refuses the layer unchanged and says what to do
+    AC1, AC4: finish names restack, restack keeps every commit (an unpushed one too), and finish then succeeds
+M3 origin's copy always wins: KILLED (assertion); 1 case(s) red
+    AC1, AC4: finish names restack, restack keeps every commit (an unpushed one too), and finish then succeeds
+M4 diverged copies: local wins: KILLED (assertion); 2 case(s) red
+    AC2: a local branch and origin copy that have diverged refuse the layer unchanged
+    AC1, AC4: finish names restack, restack keeps every commit (an unpushed one too), and finish then succeeds
+M5 push before the check: KILLED (assertion); 4 case(s) red
+    AC3: a restack whose rebuilt layer fails its check leaves the branch and its remote where they were
+    AC3: a restack killed during its check leaves no ref on a layer missing a commit
+    AC3: a restack killed when main does not move again is finished by the next one, which pushes it
+    AC1, AC4: finish names restack, restack keeps every commit (an unpushed one too), and finish then succeeds
+M6 rebase on the branch, a refusal leaves it moved: KILLED (assertion); 3 case(s) red
+    AC2: a commit whose change is already on main refuses the layer unchanged and says what to do
+    AC2: a local branch and origin copy that have diverged refuse the layer unchanged
+    AC1, AC4: finish names restack, restack keeps every commit (an unpushed one too), and finish then succeeds
+M7 hunk headers kept: KILLED (assertion); 1 case(s) red
+    AC1: a commit's change survives a clean rebase that moves its line numbers, blob ids and paths
+M8 spend.md not left out: KILLED (assertion); 1 case(s) red
+    AC1: the raft's derived spend.md is left out of a commit's change, and no other file is
+M9 index lines kept: KILLED (assertion); 1 case(s) red
+    AC1: a commit's change survives a clean rebase that moves its line numbers, blob ids and paths
+M10 extra commits accepted: KILLED (assertion); 1 case(s) red
+    AC2: a rebuilt layer must keep one commit per commit, with the same subject and change, in order
+M11 subjects not compared: KILLED (assertion); 1 case(s) red
+    AC2: a rebuilt layer must keep one commit per commit, with the same subject and change, in order
+M12 skip never cleared after a spend.md section: KILLED (assertion); 1 case(s) red
+    AC1: the raft's derived spend.md is left out of a commit's change, and no other file is
+M13 only added lines in the key: KILLED (assertion); 1 case(s) red
+    AC1: a commit's change survives a clean rebase that moves its line numbers, blob ids and paths
+M14 a stale local copy wins over origin: KILLED (assertion); 1 case(s) red
+    AC2: the copy of the layer that holds every commit is picked, and diverged copies are refused
+M15 no reset on a red check: KILLED (assertion); 1 case(s) red
+    AC3: a restack whose rebuilt layer fails its check leaves the branch and its remote where they were
+M16 a conflict is not aborted: KILLED (assertion); 4 case(s) red
+    AC2: a conflict refuses the layer with its branch, its remote and the worktree as they were
+    AC2: a commit whose change is already on main refuses the layer unchanged and says what to do
+    AC2: a local branch and origin copy that have diverged refuse the layer unchanged
+    AC1, AC4: finish names restack, restack keeps every commit (an unpushed one too), and finish then succeeds
+M17 same-commit copies refused as diverged: KILLED (assertion); 1 case(s) red
+    AC3: two copies holding the same commits on two bases are one layer: the one on the base, else local
+M17b same-commit copies refused as diverged (restack): KILLED (assertion); 5 case(s) red
+    AC3: the restack after a killed one finishes the layer, with no hand repair
+    AC3: a restack killed when main does not move again is finished by the next one, which pushes it
+    AC2: a conflict refuses the layer with its branch, its remote and the worktree as they were
+    AC2: a commit whose change is already on main refuses the layer unchanged and says what to do
+    AC1, AC4: finish names restack, restack keeps every commit (an unpushed one too), and finish then succeeds
+M18 an already stacked copy origin lacks is never pushed: KILLED (assertion); 2 case(s) red
+    AC3: a restack killed when main does not move again is finished by the next one, which pushes it
+    AC1, AC4: finish names restack, restack keeps every commit (an unpushed one too), and finish then succeeds
+M19 neither ancestor: copies taken as the same without comparing: KILLED (assertion); 2 case(s) red
+    AC2: a local branch and origin copy that have diverged refuse the layer unchanged
+    AC1, AC4: finish names restack, restack keeps every commit (an unpushed one too), and finish then succeeds
+M20 path lines kept in the key: KILLED (assertion); 1 case(s) red
+    AC1: a commit's change survives a clean rebase that moves its line numbers, blob ids and paths
+M20b path lines kept in the key (restack, a rename on main): KILLED (assertion); 1 case(s) red
+    AC1, AC4: finish names restack, restack keeps every commit (an unpushed one too), and finish then succeeds
+M21 --- and +++ dropped outside the header too: KILLED (assertion); 1 case(s) red
+    AC1: a commit's change survives a clean rebase that moves its line numbers, blob ids and paths
+M22 sections not sorted: KILLED (assertion); 1 case(s) red
+    AC1: a commit's change survives a clean rebase that moves its line numbers, blob ids and paths

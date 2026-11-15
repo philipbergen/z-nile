@@ -1,0 +1,8 @@
+- design-review-001 F1: z-design/quote-other-preps-before-promising, z-design/mutation-runner-runs-correct-variants
+- design-review-001 F2: zz-test/source-pins-name-what-the-design-names
+- design-review-001 F3: z-design/spec-design-correspondence
+- design-review-001 F4: pickman-arch/new-parts-meet-the-eyes-path
+- design-review-001 F5: z-design/affected-takes-file-paths
+- design-review-001 F6: one-off: the bullet named E1's unit wrongly (tiles for pairs) and restated f0236's captured Non-goal more strongly ("in colour and form"); both reworded to E1's unit and the capture's words
+- design-review-001 F7: one-off: architecture.md's per-feature View row was not extended; the row is now in Touched modules, the records patch and AC6
+- design-review-001 F8: z-design/instructions-runnable-where-they-run
