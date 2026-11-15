@@ -62,8 +62,14 @@ return t.spec("trace derives claims and checks the table", function(it)
 
 			local noSolution = table.clone(baseIssue)
 			noSolution.capturedText = "# c0010\n\n## Problem\nBroken.\n\n## Solution\n\n"
-			local _, errS = trace.deriveClaims({ noSolution })
-			t.expect(#errS == 1 and has(errS[1], "ticket c0010 is missing captured ## Solution")).toBe(true)
+			-- c0330: an empty or template-only captured Solution is no refusal; it yields no S claim
+			local claimsS, errS = trace.deriveClaims({ noSolution })
+			t.expect(errS).toEqual({})
+			local idsS = {}
+			for _, c in claimsS do
+				table.insert(idsS, c.id)
+			end
+			t.expect(idsS).toEqual({ "c0010:P1", "c0010:AC1", "c0010:AC2" })
 
 			local noAc = table.clone(baseIssue)
 			noAc.docText = captured1 .. "\n\n## Acceptance criteria\n<!-- none -->\n"

@@ -53,3 +53,5 @@ c0264 design review 009 F5 (re-prep): a withdrawn ticket's `depends_on` edges mo
 c0177 design review 001 F2: a narrowing that changes a spec's baseline (f0125's 10%, from the classic tables to the same config untuned) left the old baseline in the spec's header and titles, the owning item's `check.sh` labels and a game-design.md row, and the design said the row named no baseline when it said "classic". Search for the baseline's word across titles, headers, labels and decision rows, not for the one sentence already known.
 
 **Note (c0306's prep, 2026-11-14, design review 001 F8):** c0306's check.sh said the slow tier is run by "Implementation step 13", copied from another issue's check, while c0306 has ten steps.
+
+**Note** (R0103 code review 001 F1): c0330 narrowed a refusal and the contract comment and the zz-rules row said the Solution was simply optional, leaving out the refusal the code kept (a fence-only Solution). A restatement of a narrowed rule names what still fails, not only what no longer does. Check: does each restatement list the cases the code still refuses?
