@@ -22,3 +22,5 @@ c0239 design review 005 F1: a round's answer edited a sequestered spec's fixture
 **Also:** c0118 design review 013 F1: the evidence for a round's answers must come from the tree that holds the answers (main + prep + apply), not from the prototype that predates them; `git show <tree>:<item>/check.sh` should equal the prep's.
 
 **Note** (R0109 final review 001 F1): a spec added in answer to a code review is type-checked only by the gate and `promote-check`. The runner and `./zn finish` do not. `trace-skeleton.spec.luau` passed `string.find`'s two returns to `t.expect`; both cases stayed green and finish recorded them, and the type error surfaced in the final review. Before the final review, run the gate on the specs changed since the last run that printed GATE PASSED.
+
+**Note (c0325's prep, 2026-11-15):** run `z-nile/check.sh --static` (format, lint and types) in the prep worktree before asking the user to approve. Neither `./zn check` nor `promote-check` runs selene. A shadowed local in a spec added in the last round was found only by the affected gate after approval. Because the approval hashes the specs, the fix needed the user to approve again.
