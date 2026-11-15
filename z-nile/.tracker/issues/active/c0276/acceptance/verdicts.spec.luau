@@ -55,8 +55,8 @@ local function model(): any
 		columns = {
 			game = {
 				design = {
-					{ raft = "R0010", ids = { "c0010", "c0020", "c0030" } },
-					{ raft = nil, ids = { "c0050" } },
+					{ raft = "R0010" :: string?, ids = { "c0010", "c0020", "c0030" } },
+					{ raft = nil :: string?, ids = { "c0050" } },
 				},
 			},
 		},

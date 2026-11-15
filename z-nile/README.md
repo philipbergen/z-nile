@@ -90,7 +90,7 @@ Tickets have no order today. They should: every issue and raft gets a `rank:` (i
 - Lost work comes first: anything in progress whose heartbeat is stale (`./zn lost` lists it) comes before anything not yet started, whatever its rank, even when a person started it without changing its rank. *exists* (c0265)
 - The next item is the first in that order whose `depends_on` are all done, which is not blocked, and whose status is claimable. `depends_on` is a hard constraint; `rank` only orders what is free, so the order works around a blocked item without changing any rank.
 - z-ticket and z-design leave the rank unset, which appends; only a person sets one, with `./zn rank <id> top|after <id>|unset`. z-raft asks for a raft's rank when it makes the raft, and unset is a valid answer: with no one to answer, the rank stays unset. A rank given to a raft is the raft's own; an unset one takes its members' best. The board shows the stack in order.
-- The board shows lost, parked and stale claims, lost first. *designed* (c0276)
+- The board shows lost, parked and stale claims, lost first. *exists* (c0276)
 - The z-nile app in Omarchy shows the same order, marks lost items, and reorders by drag and drop through `./zn rank`. *captured* (c0257)
 
 ### Claiming across hosts
@@ -177,7 +177,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | the heartbeat branch, `./zn beat`, lost work | c0265 | exists |
 | take over a lost claim, the old owner told | c0274 | exists |
 | automatic heartbeats | c0275 | exists |
-| the board shows lost work | c0276 | designed |
+| the board shows lost work | c0276 | exists |
 | discard and recover a worktree: the numbered copy | c0277 | designed |
 | `./zn who`, the history from git | c0280 | designed |
 | provenance rows: unblocked, rafted, delivered | c0282 | designed |
@@ -198,7 +198,7 @@ A raft is delivered as a stack: `./zn start` opens one layer per ticket (a branc
 - **The skills.** z-nile's skills live in `z-nile/skills/`, and a project's own in `<project>/skills/`. `.claude/skills/<name>` is a committed relative link to each, written by `./zn skills` and checked by `./zn skills --check` in the gate. The `z-` skills are the pipeline, in the order above; the `zz-` skills are called only from inside a step. Both prefixes are z-nile's: a project's skills are named `<project>-…`.
 - **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. A running step appends one short line per action (the tool and its target, or the first words of a message) to `.cache/dispatch/<id>/trail.log`, and `./zn dispatch status <id>` prints the last of those lines and the running token count before the step's JSON. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. A run accepts `main` as it is when it starts, and during the run a rewritten `main` or a commit that is not tracker state and not a pull request's merge stops it. The rules are in the zz-rules skill, Dispatch.
 - **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
-- **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.
+- **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). A claim that is not live carries a mark, `lost 35m`, `parked`, `stale?` or `no beat`, and lost work comes first in its band, longest silent first (c0276; the same verdicts as `./zn status`, read from the remote only in an unprotected checkout). `./zn board --serve` (c0121, planned) serves the same page live.
 
 ## Skills
 | skill | step | what it does |
