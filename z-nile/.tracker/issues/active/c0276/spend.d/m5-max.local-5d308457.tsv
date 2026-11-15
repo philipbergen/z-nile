@@ -7,3 +7,39 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-14 22:25	c0275: review-005 and final-review F6 fixes	62	9	code-review							tokens,wall,cpu,ai
 2026-11-14 22:26	c0275: keep the design text, record the old-engine window in the log	0	0	code-review							tokens,wall,cpu,ai
 2026-11-14 22:45	c0275: lint and format of the review-005 fixes	15	11	code-review							tokens,wall,cpu,ai
+2026-11-14 18:50	c0276: board shows lost work	128	11	build							tokens,wall,cpu,ai
+2026-11-14 18:50	1 spec	0	0	test			1.023	0.600		1.023	tokens,ai
+2026-11-14 18:51	1 spec	0	0	test			22.689	18.220		22.689	tokens,ai
+2026-11-14 18:51	14 specs	0	0	test			21.855	36.140		21.855	tokens,ai
+2026-11-14 18:52	131 specs	0	0	test			28.445	83.770		28.445	tokens,ai
+2026-11-14 18:52	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-14 19:32	R0100: review-003	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-14 19:32	c0276: review-003 F2 comment, README, deviation record	0	1	build							tokens,wall,cpu,ai
+2026-11-14 19:32	1 spec	0	0	test			1.229	0.680		1.229	tokens,ai
+2026-11-14 19:33	1 spec	0	0	test			24.380	19.190		24.380	tokens,ai
+2026-11-14 19:33	14 specs	0	0	test			22.266	36.530		22.266	tokens,ai
+2026-11-14 19:33	131 specs	0	0	test			29.688	89.000		29.688	tokens,ai
+2026-11-14 19:32	1 run	0	0	other			1.032	0.510			tokens,ai
+2026-11-14 19:33	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-14 22:29	1 spec	0	0	test			1.027	0.690		1.027	tokens,ai
+2026-11-14 22:29	1 spec	0	0	test			23.139	18.370		23.139	tokens,ai
+2026-11-14 22:30	14 specs	0	0	test			22.335	36.270		22.335	tokens,ai
+2026-11-14 22:30	1 spec	0	0	test			1.031	0.700		1.031	tokens,ai
+2026-11-14 22:30	1 spec	0	0	test			23.367	18.650		23.367	tokens,ai
+2026-11-14 22:31	14 specs	0	0	test			22.223	36.080		22.223	tokens,ai
+2026-11-14 22:31	132 specs	0	0	test			29.681	100.440		29.681	tokens,ai
+2026-11-14 22:30	2 runs	0	0	other			131.026	203.990			tokens,ai
+2026-11-14 22:31	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-14 22:48	1 spec	0	0	test			1.239	0.700		1.239	tokens,ai
+2026-11-14 22:48	1 spec	0	0	test			23.365	18.700		23.365	tokens,ai
+2026-11-14 22:49	14 specs	0	0	test			22.289	36.520		22.289	tokens,ai
+2026-11-14 22:49	132 specs	0	0	test			30.080	102.860		30.080	tokens,ai
+2026-11-14 22:31	1 run	0	0	other			80.848	158.470			tokens,ai
+2026-11-14 22:49	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-15 08:28	affected	0	0	test			45.686	158.390		45.686	tokens,ai
+2026-11-15 08:28	1 spec	0	0	test			1.017	0.720		1.017	tokens,ai
+2026-11-15 08:29	1 spec	0	0	test			24.047	19.520		24.047	tokens,ai
+2026-11-15 08:29	14 specs	0	0	test			23.502	38.810		23.502	tokens,ai
+2026-11-15 08:29	132 specs	0	0	test			31.685	109.100		31.685	tokens,ai
+2026-11-15 08:28	2 runs	0	0	other			128.244	319.800			tokens,ai
+2026-11-15 08:29	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai

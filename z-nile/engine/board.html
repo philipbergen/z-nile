@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>pickman tracker</title>
 <style>
-:root { --bg: #fff; --fg: #1d2024; --mut: #6b7280; --line: #d9dde3; --sel: #e7efff; --code: #f3f4f6; --ser-feature: #2a78d6; --ser-defect: #eb6834; --ser-chore: #1baf7a; --ser-net: #6b7280; }
+:root { --bg: #fff; --fg: #1d2024; --mut: #6b7280; --line: #d9dde3; --sel: #e7efff; --code: #f3f4f6; --ser-feature: #2a78d6; --ser-defect: #eb6834; --ser-chore: #1baf7a; --ser-net: #6b7280; --alert: #c0392b; }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #15171a; --fg: #e6e8eb; --mut: #9aa3ad; --line: #2d3238; --sel: #1e2b44; --code: #21252a; --ser-feature: #3987e5; --ser-defect: #d95926; --ser-chore: #199e70; --ser-net: #9aa3ad; }
+  :root { --bg: #15171a; --fg: #e6e8eb; --mut: #9aa3ad; --line: #2d3238; --sel: #1e2b44; --code: #21252a; --ser-feature: #3987e5; --ser-defect: #d95926; --ser-chore: #199e70; --ser-net: #9aa3ad; --alert: #ff8a80; }
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; }
@@ -40,6 +40,9 @@ h2 { margin: 8px 0 0; font-size: 20px; }
 h3 { margin: 20px 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); }
 .meta { color: var(--mut); margin: 0; }
 a.jump { color: #2563eb; cursor: pointer; font-family: ui-monospace, monospace; }
+.mark { font-size: 11px; border-radius: 9px; padding: 0 7px; margin-left: 6px; border: 1px solid var(--line); }
+.mark.m-lost { border-color: var(--alert); color: var(--alert); font-weight: 600; }
+.mark.m-parked, .mark.m-stale, .mark.m-nobeat { font-style: italic; }
 .badge { font-size: 11px; border-radius: 9px; padding: 0 7px; border: 1px solid var(--line); }
 .s-done { background: #9ca3af33; color: var(--mut); }
 .s-active { background: #3b82f633; }
@@ -117,7 +120,7 @@ dl.run dd { margin: 0; }
 <input id="search" placeholder="Jump to an id (press /)" autocomplete="off" spellcheck="false">
 </header>
 <section id="stats" hidden>{{STATS}}</section>
-<main><nav id="projects" aria-label="Projects"></nav><section id="board" hidden><div id="board-controls"><label>Done cards from the last <select id="window"></select></label><label>Charts over <select id="range"></select></label><span id="as-of" class="note"></span></div><div id="problems"></div><div id="columns"></div><div id="charts"></div></section><ul id="list"></ul><section id="pane"></section></main>
+<div id="notes"></div><main><nav id="projects" aria-label="Projects"></nav><section id="board" hidden><div id="board-controls"><label>Done cards from the last <select id="window"></select></label><label>Charts over <select id="range"></select></label><span id="as-of" class="note"></span></div><div id="problems"></div><div id="columns"></div><div id="charts"></div></section><ul id="list"></ul><section id="pane"></section></main>
 <script type="application/json" id="board-data">{{DATA}}</script>
 <script>
 (function () {
@@ -152,6 +155,13 @@ dl.run dd { margin: 0; }
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
   function badge(s) { return s ? '<span class="badge s-' + esc(s) + '">' + esc(s) + "</span>" : ""; }
+  // c0276: the claim's verdict, when it is not live: "lost 35m", "parked", "stale?" or "no beat".
+  var MARK_TEXT = { parked: "parked", stale: "stale?", nobeat: "no beat" };
+  function mark(it) {
+    if (!it || !it.heartbeat) return "";
+    var text = it.heartbeat === "lost" ? "lost " + it.minutes + "m" : has(MARK_TEXT, it.heartbeat) ? MARK_TEXT[it.heartbeat] : it.heartbeat;
+    return '<span class="mark m-' + esc(it.heartbeat) + '">' + esc(text) + "</span>";
+  }
   function idLink(id) {
     var it = has(byId, id) ? byId[id] : has(issueById, id) ? issueById[id] : null;
     return '<a class="jump" data-id="' + esc(id) + '" href="#' + esc(id) + '">' + esc(id) + "</a>" + (it ? " " + esc(it.title) + " " + badge(it.stage) : "");
@@ -190,7 +200,7 @@ dl.run dd { margin: 0; }
   function card(id, n) {
     var i = issueById[id];
     return '<button type="button" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '"><span class="id">' + esc(id) +
-      '</span> <span class="type t-' + esc(i.label) + '">' + esc(i.label) + "</span><br>" + esc(i.title) + "</button>";
+      '</span> <span class="type t-' + esc(i.label) + '">' + esc(i.label) + "</span> " + mark(i) + "<br>" + esc(i.title) + "</button>";
   }
   function renderBoard() {
     if (!columnsEl) return;
@@ -201,7 +211,7 @@ dl.run dd { margin: 0; }
         var cards = "";
         b.ids.forEach(function (id) { if (shown(issueById[id])) { cards += card(id, n); n++; count++; } });
         if (!cards) return;
-        var head = b.raft ? '<div class="raft">' + idLink(b.raft) + "</div>" : "";
+        var head = b.raft ? '<div class="raft">' + idLink(b.raft) + (has(byId, b.raft) ? " " + mark(byId[b.raft]) : "") + "</div>" : "";
         body += '<div class="band"' + (b.raft ? ' data-raft="' + esc(b.raft) + '"' : "") + ">" + head + cards + "</div>";
       });
       if (c === "done" && model.asOf === undefined) body += '<p class="note">no as-of time: done cards have no age</p>';
@@ -227,6 +237,9 @@ dl.run dd { margin: 0; }
   }
 
   function renderList() {
+    // c0276: why the lost-work marks are missing or weaker than they should be (a read that was tried and failed), on every view
+    var notesEl = $("notes");
+    if (notesEl) notesEl.innerHTML = (model.notes || []).map(function (n) { return '<p class="note" data-notes="1">' + esc(n) + "</p>"; }).join("");
     VIEWS.forEach(function (v) { var b = $("tab-" + v); if (b) b.classList.toggle("on", v === view); });
     renderProjects();
     if (boardEl) { if (view === "board") boardEl.removeAttribute("hidden"); else boardEl.setAttribute("hidden", ""); }
@@ -246,7 +259,7 @@ dl.run dd { margin: 0; }
           : "";
         html += '<li class="row ' + g + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '"><span class="id">' +
           esc(it.id) + '</span> <span class="title">' + esc(it.title) + '</span> <span class="type t-' + esc(it.label) + '">' +
-          esc(it.label) + "</span> " + badge(it.stage) + copy + "</li>";
+          esc(it.label) + "</span> " + badge(it.stage) + mark(it) + copy + "</li>";
         n++;
       });
     });
@@ -309,7 +322,7 @@ dl.run dd { margin: 0; }
     var meta = [];
     if (issue.label) meta.push(issue.label);
     if (issue.design) meta.push("design " + issue.design);
-    var h = '<h2><span class="id">' + esc(issue.id) + "</span> " + esc(issue.title) + " " + badge(issue.stage) + "</h2>" +
+    var h = '<h2><span class="id">' + esc(issue.id) + "</span> " + esc(issue.title) + " " + badge(issue.stage) + mark(issue) + "</h2>" +
       '<p class="meta">' + esc(meta.join(" · ")) + "</p>";
     if (issue.raft) h += "<p>Raft " + idLink(issue.raft) + "</p>";
     h += runOfIssue(issue);
@@ -327,7 +340,7 @@ dl.run dd { margin: 0; }
     if (r.label) meta.push(r.label);
     if (r.single) meta.push("single issue");
     if (r.design) meta.push("design " + r.design);
-    var h = '<h2><span class="id">' + esc(r.id) + "</span> " + esc(r.title) + " " + badge(r.stage) + "</h2>" +
+    var h = '<h2><span class="id">' + esc(r.id) + "</span> " + esc(r.title) + " " + badge(r.stage) + mark(r) + "</h2>" +
       '<p class="meta">' + esc(meta.join(" · ")) + "</p>" +
       group("Waiting for", r.blockedBy) + group("Depends on", r.dependsOn) + group("Dependents", r.dependents);
     if (r.issues.length) {
