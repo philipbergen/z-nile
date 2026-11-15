@@ -1,0 +1,32 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-15 10:17	1 spec	0	0	test			19.577	13.360		19.577	tokens,ai
+2026-11-15 10:18	1 spec	0	0	test			21.833	15.140		21.833	tokens,ai
+2026-11-15 10:20	1 spec	0	0	test			29.232	19.020		29.232	tokens,ai
+2026-11-15 10:23	1 spec	0	0	test			25.448	17.660		25.448	tokens,ai
+2026-11-15 10:24	1 spec	0	0	test			23.287	16.210		23.287	tokens,ai
+2026-11-15 10:24	1 spec	0	0	test			23.689	16.300		23.689	tokens,ai
+2026-11-15 10:24	1 spec	0	0	test			24.077	16.650		24.077	tokens,ai
+2026-11-15 10:25	1 spec	0	0	test			23.890	16.460		23.890	tokens,ai
+2026-11-15 10:26	1 spec	0	0	test			23.711	16.390		23.711	tokens,ai
+2026-11-15 10:26	1 spec	0	0	test			23.671	16.260		23.671	tokens,ai
+2026-11-15 10:26	1 spec	0	0	test			23.954	16.280		23.954	tokens,ai
+2026-11-15 10:27	1 spec	0	0	test			24.370	16.630		24.370	tokens,ai
+2026-11-15 10:27	1 spec	0	0	test			22.688	15.420		22.688	tokens,ai
+2026-11-15 10:28	1 spec	0	0	test			21.296	14.790		21.296	tokens,ai
+2026-11-15 10:28	1 spec	0	0	test			1.245	0.720		1.245	tokens,ai
+2026-11-15 10:28	1 spec	0	0	test			3.082	1.730		3.082	tokens,ai
+2026-11-15 10:29	1 spec	0	0	test			2.895	1.780		2.895	tokens,ai
+2026-11-15 11:03	1 spec	0	0	test			3.084	1.820		3.084	tokens,ai
+2026-11-15 11:04	1 spec	0	0	test			1.227	0.710		1.227	tokens,ai
+2026-11-15 11:04	1 spec	0	0	test			1.234	0.720		1.234	tokens,ai
+2026-11-15 11:11	2 specs	0	0	test			35.589	23.770		35.589	tokens,ai
+2026-11-15 11:13	2 specs	0	0	test			122.681	87.580		122.681	tokens,ai
+2026-11-15 11:15	2 specs	0	0	test			152.030	109.780		152.030	tokens,ai
+2026-11-15 11:17	2 specs	0	0	test			125.905	93.340		125.905	tokens,ai
+2026-11-15 11:19	2 specs	0	0	test			126.854	93.690		126.854	tokens,ai
+2026-11-15 11:22	2 specs	0	0	test			130.175	96.490		130.175	tokens,ai
+2026-11-15 11:26	2 specs	0	0	test			108.016	75.000		108.016	tokens,ai
+2026-11-15 11:27	2 specs	0	0	test			95.782	54.860		95.782	tokens,ai
+2026-11-15 11:29	1 spec	0	0	test			3.304	2.120		3.304	tokens,ai
+2026-11-15 11:28	26 runs	0	0	other			1003.190	703.500			tokens,ai
+2026-11-15 11:29	design-refute-001	0	0	design-review							tokens,ai
