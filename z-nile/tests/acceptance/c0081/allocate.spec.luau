@@ -3,13 +3,13 @@
 -- (with a fresh phrase) in the same commit as what it creates; a lost race is a rejected lease push, retried on the
 -- new origin/main. Without z-nile/next the numbering is unchanged (next multiple of 10). Fixture under
 -- .cache/c0870-allocate: a seed with this tree's tooling, a bare origin, a main clone and a second clone.
-local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local ids = require("@scripts/tracker/ids")
 local process = require("@lune/process")
 local publish = require("@scripts/tracker/publish")
 local t = require("@tests/lib/t")
+local trackerfix = require("@tests/lib/trackerfix")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
@@ -20,7 +20,8 @@ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout
 -- c0120 override: fixtures live under the spec's home's .cache (the jail refuses the checkout top's)
 local here = trim(process.exec("pwd", { "-P" }).stdout)
 local base = `{here}/.cache/c0870-allocate`
-local seed, origin, main, other = `{base}/seed`, `{base}/origin.git`, `{base}/main`, `{base}/other`
+-- c0178: the folders are the shared fixture's (trackerfix.new makes them in the setup case); there is no seed folder
+local origin, main, other = `{base}/origin.git`, `{base}/main`, `{base}/other`
 local SEED_NEXT = "issue 891 seed-seed-seed\nraft 271 seed-seed-seed\n"
 
 local function git(cwd: string, args: { string }): string
@@ -102,32 +103,20 @@ local phrases: { string } = {}
 return t.spec("c0870 allocation from z-nile/next", function(it)
 	it("sets up a bare origin holding z-nile/next, a main checkout and a second clone", function()
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		if fs.isDir(base) then
-			fs.removeDir(base)
-		end
-		fs.writeDir(seed)
-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
-		identity(seed)
-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
-		end
-		-- c0120 override: the spec runs from its project's home after the move
-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
-		engine.roots(seed) -- c0120 override: the fixture is on the final layout (engine.roots lays out every root)
-		write(`{seed}/{ids.FILE}`, SEED_NEXT)
-		write(`{seed}/pickman/.tracker/issues/c0890/c0890.md`, stub("c0890", "older"))
-		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		write(
-			`{seed}/pickman/.tracker/rafts/done/R0270/R0270.md`,
-			"---\nid: R0270\ntype: chore\ntitle: Old\nslug: old\nissues: []\ndesign: ready\n---\n\n# R0270\n"
-		)
-		git(seed, { "add", "-A" })
-		git(seed, { "commit", "-q", "-m", "seed" })
-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
-		for _, c in { main, other } do
-			process.exec("git", { "clone", "-q", origin, c }) -- raw: clone to a named path
-			identity(c)
-		end
+		-- c0178: one trackerfix.new replaces git init, engine.copy, engine.roots, the copied .claude/.luaurc/.gitignore, the
+		-- seed files, the seed commit and the bare origin with its clones. The checkout's real .gitignore stays the fixture's
+		-- (the default is only ".cache/" and ".worktree/"). main and `other` are committed as the fixture name instead of
+		-- "alloc"; `other` is made at the seed by the first helper that works in it (the git shim below needs it to exist:
+		-- the cases before it have used it through `elsewhere`)
+		trackerfix.new("c0870-allocate", {
+			[".gitignore"] = fs.readFile(`{root}/.gitignore`),
+			[ids.FILE] = SEED_NEXT,
+			["pickman/.tracker/issues/c0890/c0890.md"] = stub("c0890", "older"),
+			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+			["pickman/.tracker/rafts/done/R0270/R0270.md"] = "---\nid: R0270\ntype: chore\ntitle: Old\nslug: old\nissues: []\ndesign: ready\n---\n\n# R0270\n",
+		}, {
+			copy = { ".claude", ".luaurc" },
+		})
 		table.insert(phrases, phraseOf(SEED_NEXT))
 		t.expect(counters().issue).toBe(891)
 	end)

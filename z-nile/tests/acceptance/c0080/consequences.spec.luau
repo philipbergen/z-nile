@@ -3,6 +3,7 @@
 -- ("; consequences: ..."), naming the finding; refuted answers need none. Driven in a throwaway clone (no origin,
 -- so no gh), inside this spec run (so done skips the gate, c0800); each case starts from the same commit,
 -- a started raft with a two-finding review.
+local clone = require("@tests/lib/clone")
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -90,7 +91,32 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(base)
-		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
+		-- c0178: a sparse clone (git writes only `paths` to the working tree) in place of the full checkout of ~2,580 files;
+		-- the tooling overlay below writes the rest.
+		clone.isolated(root, work, {
+			paths = {
+				-- the tooling ./zn runs: a `git reset --hard` (the spec's own, or done's rollback) deletes the overlay's files outside the sparse set
+				"zn",
+				"scripts/", -- c0178: the whole folder, so a script the engine newly runs is in a reset clone
+				"z-nile/lib/", -- same, for the libraries the engine requires
+				-- the tooling ./zn runs: a `git reset --hard` (the spec's own, or done's rollback) deletes the overlay's files outside the sparse set: the raft's check.sh sources it
+				"z-nile/engine/",
+				"z-nile/roots.luau",
+				"z-nile/projects.toml",
+				-- ./zn commit runs `git add -A` on each root, which refuses a root with nothing of it in the clone
+				"z-nile/.tracker/issues/active/.gitkeep",
+				-- done/ folders git keeps when a reset empties them (git mv does not create its destination folder)
+				"pickman/.tracker/issues/done/.gitkeep",
+				"pickman/.tracker/rafts/done/.gitkeep",
+				-- the item folders the spec creates and ./zn moves (start, done): a plain `git add -A` and `git mv` need them in the sparse set
+				"pickman/.tracker/issues/f0010/",
+				"pickman/.tracker/rafts/R0010/",
+				"pickman/.tracker/issues/active/f0010/",
+				"pickman/.tracker/rafts/active/R0010/",
+				"pickman/.tracker/issues/done/f0010/",
+				"pickman/.tracker/rafts/done/R0010/",
+			},
+		})
 		git({ "remote", "remove", "origin" })
 		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
 		git({ "checkout", "-q", "-B", "main" })
@@ -113,7 +139,8 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 		git({ "config", "gc.auto", "0" })
 		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
 		engine.empty(work)
-		git({ "add", "-A" })
+		-- c0178: --sparse, so the overlay (all on disk, mostly outside the sparse clone's paths) is committed as before
+		git({ "add", "-A", "--sparse" })
 		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
 		must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue")
 		must(

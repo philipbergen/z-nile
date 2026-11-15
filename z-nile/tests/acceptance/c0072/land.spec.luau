@@ -3,11 +3,11 @@
 -- backlog issue documents change, push one commit on top of origin/main, retry a lost race. Fixture under
 -- .cache/c0780-land: a seed with this tree's tooling, a bare origin, a main clone, a second clone and capture
 -- worktrees. The gate is PICKMAN_LAND_GATE (a command), so no case runs the real gate.
-local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
+local trackerfix = require("@tests/lib/trackerfix")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
@@ -18,7 +18,8 @@ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout
 -- c0120 override: fixtures live under the home's .cache (the jail refuses the checkout top's)
 local here = fixture.physical(".") or "."
 local base = `{here}/.cache/c0780-land`
-local seed, origin, main, other = `{base}/seed`, `{base}/origin.git`, `{base}/main`, `{base}/other`
+-- c0178: the folders are the shared fixture's (trackerfix.new makes them in the setup case); there is no seed folder
+local origin, main, other = `{base}/origin.git`, `{base}/main`, `{base}/other`
 
 local function git(cwd: string, args: { string }): string
 	return fixture.git(cwd, args)
@@ -70,25 +71,14 @@ end
 
 return t.spec("tracker land", function(it)
 	it("sets up a bare origin, a main checkout and a second clone", function()
-		if fs.isDir(base) then
-			fs.removeDir(base)
-		end
-		fs.writeDir(seed)
-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
-		identity(seed)
-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
-		end
-		-- c0120 override: the spec runs from its project's home after the move
-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
-		engine.roots(seed) -- c0120 override: the fixture is on the final layout (engine.roots lays out every root)
-		git(seed, { "add", "-A" })
-		git(seed, { "commit", "-q", "-m", "seed" })
-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
-		for _, c in { main, other } do
-			process.exec("git", { "clone", "-q", origin, c })
-			identity(c)
-		end
+		-- c0178: one trackerfix.new replaces git init, engine.copy, engine.roots, the copied .claude/.luaurc/.gitignore, the
+		-- seed commit and the bare origin with its clones. The checkout's real .gitignore stays the fixture's (the default is
+		-- only ".cache/" and ".worktree/"). main and `other` are committed as the fixture name instead of "land"; `other`
+		-- is made at the seed by the first helper that works in it (the race gate below runs raw git in it, after the earlier
+		-- cases made it)
+		trackerfix.new("c0780-land", { [".gitignore"] = fs.readFile(`{root}/.gitignore`) }, {
+			copy = { ".claude", ".luaurc" },
+		})
 		t.expect(git(main, { "branch", "--show-current" })).toBe("main")
 	end)
 

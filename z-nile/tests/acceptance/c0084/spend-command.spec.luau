@@ -13,6 +13,7 @@ local process = require("@lune/process")
 local publish = require("@scripts/tracker/publish")
 local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
+local trackerfix = require("@tests/lib/trackerfix")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
 
@@ -22,7 +23,8 @@ end
 local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
 -- c0120 override: fixtures live under the home's .cache (z-nile/.cache); root stays the checkout to copy from
 local base = `{trim(process.exec("pwd", { "-P" }).stdout)}/.cache/c0084-spend`
-local seed, origin, main, other = `{base}/seed`, `{base}/origin.git`, `{base}/main`, `{base}/other`
+-- c0178: no seed folder any more (trackerfix.new, in the setup case)
+local origin, main, other = `{base}/origin.git`, `{base}/main`, `{base}/other`
 
 local function git(cwd: string, args: { string }): string
 	return fixture.git(cwd, args)
@@ -130,34 +132,12 @@ end
 
 return t.spec("tracker spend", function(it)
 	it("sets up an origin, a main checkout, a second clone and a prep worktree with a raft of two", function()
-		if fs.isDir(base) then
-			fs.removeDir(base)
-		end
-		fs.writeDir(seed)
-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
-		identity(seed)
-		for _, p in { ".claude", ".luaurc", ".gitignore", "rokit.toml" } do
-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
-		end
-		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		fs.writeDir(`{seed}/pickman/.tracker`)
-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
-		-- c0120 override: the checkout keeps pickman's architecture.md in pickman/.tracker, the fixtures' pickman root too
-		process.exec(
-			"cp",
-			{ `{root}/pickman/.tracker/architecture.md`, `{seed}/pickman/.tracker/architecture.md` }
-		) -- ready's prompt
-		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-			write(`{seed}/pickman/.tracker/{d}/.gitkeep`, "")
-		end
-		git(seed, { "add", "-A" })
-		git(seed, { "commit", "-q", "-m", "seed" })
-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
-		for _, c in { main, other } do
-			process.exec("git", { "clone", "-q", origin, c }) -- raw: clone to a named path
-			identity(c)
-		end
+		-- c0178: trackerfix.new makes the repositories (tooling, empty tracker roots, the checkout's .claude, .luaurc,
+		-- .gitignore, rokit.toml and pickman's architecture.md (ready's prompt) as one commit "seed") that this setup built by
+		-- hand (init, copy, empty tracker folders, add, commit, bare clone, two clones, identities)
+		trackerfix.new("c0084-spend", nil, {
+			copy = { ".claude", ".luaurc", ".gitignore", "rokit.toml", "pickman/.tracker/architecture.md" },
+		})
 		prep = trOk(main, { "worktree", "prep-demo" })
 		identity(prep)
 		a = string.match(

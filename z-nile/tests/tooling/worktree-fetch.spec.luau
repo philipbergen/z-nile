@@ -66,7 +66,15 @@ return t.spec("worktree and stale remote refs", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(base)
-		clone.isolated(root, seed)
+		-- c0178: was `clone.isolated(root, seed)` (a full checkout, ~2,500 files); now only the paths the overlay below writes
+		-- (its ls-files pathspec: scripts and .gitignore) are written, the rest stays in the index. `main` (a clone of the
+		-- seed commit) and its worktrees still get the whole tree, as before.
+		clone.isolated(root, seed, {
+			paths = {
+				"scripts/", -- overlay writes scripts/ (tracker.sh and its libs); `git add -A` needs them inside the checkout
+				".gitignore", -- overlay writes .gitignore
+			},
+		})
 		identity(seed)
 		git(seed, { "checkout", "-q", "-B", "main" })
 		git(seed, { "remote", "remove", "origin" })

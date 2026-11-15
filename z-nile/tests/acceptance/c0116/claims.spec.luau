@@ -165,26 +165,50 @@ return t.spec(
 			seed["pickman/.tracker/rafts/R0090/check.sh"] = CHECK
 			seed["pickman/.tracker/rafts/R0100/check.sh"] = CHECK
 			f = trackerfix.new("c0116-claims", seed)
-			A = trOk(f.main, { "worktree", "raft-a" })
-			B = trOk(f.main, { "worktree", "raft-b" })
-			C = trOk(f.main, { "worktree", "raft-c" })
-			D = trOk(f.main, { "worktree", "raft-d" })
-			E = trOk(f.main, { "worktree", "raft-e" })
-			F = trOk(f.main, { "worktree", "raft-f" })
-			G = trOk(f.main, { "worktree", "prep-g" })
-			H = trOk(f.main, { "worktree", "raft-h" })
-			J = trOk(f.main, { "worktree", "raft-j" })
-			K = trOk(f.main, { "worktree", "prep-k" })
-			L = trOk(f.main, { "worktree", "raft-l" })
-			M = trOk(f.main, { "worktree", "prep-m" })
-			N = trOk(f.main, { "worktree", "raft-n" })
-			O = trOk(f.main, { "worktree", "raft-o" })
-			P = trOk(f.main, { "worktree", "raft-p" })
-			Q = trOk(f.main, { "worktree", "prep-q" })
-			S = trOk(f.main, { "worktree", "raft-s" })
-			U = trOk(f.main, { "worktree", "raft-u" })
-			V = trOk(f.main, { "worktree", "raft-v" })
-			X = trOk(f.main, { "worktree", "raft-x" })
+			-- c0178 override: the twenty worktrees are one checkout of the tooling and nineteen copies of it
+			local made = trackerfix.worktrees(f, {
+				"raft-a",
+				"raft-b",
+				"raft-c",
+				"raft-d",
+				"raft-e",
+				"raft-f",
+				"prep-g",
+				"raft-h",
+				"raft-j",
+				"prep-k",
+				"raft-l",
+				"prep-m",
+				"raft-n",
+				"raft-o",
+				"raft-p",
+				"prep-q",
+				"raft-s",
+				"raft-u",
+				"raft-v",
+				"raft-x",
+			})
+			A, B, C, D, E, F, G, H, J, K, L, M, N, O, P, Q, S, U, V, X =
+				made[1],
+				made[2],
+				made[3],
+				made[4],
+				made[5],
+				made[6],
+				made[7],
+				made[8],
+				made[9],
+				made[10],
+				made[11],
+				made[12],
+				made[13],
+				made[14],
+				made[15],
+				made[16],
+				made[17],
+				made[18],
+				made[19],
+				made[20]
 			t.expect(trOk(A, { "status", "c0010" })).toBe("prepared")
 		end)
 

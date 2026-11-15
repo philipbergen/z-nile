@@ -22,6 +22,8 @@ local schedule = require("./lib/schedule")
 local serde = require("@lune/serde")
 local slow = require("./lib/slow")
 local stdio = require("@lune/stdio")
+local swept = require("./lib/swept")
+local tally = require("./lib/tally")
 local task = require("@lune/task")
 
 type Spec = { name: string, cases: { { name: string, fn: () -> () } } }
@@ -353,6 +355,7 @@ local function runConcurrently()
 	end
 
 	local resultsFile = resultsPath()
+	local counts = tally.begin()
 	local queue = schedule.order(files, recorded())
 	local nextIndex, running = 1, math.min(jobs, #files)
 	for _ = 1, math.min(jobs, #files) do
@@ -362,6 +365,13 @@ local function runConcurrently()
 				nextIndex += 1
 				local file = files[index]
 				local started = os.clock()
+				-- git's template for this file alone: what another file's spec writes into its own can never be blamed on this one
+				local template = process.env.GIT_TEMPLATE_DIR
+				local own = if template ~= nil and template ~= "" then `{template}-{index}` else ""
+				if own ~= "" then
+					fs.writeDir(`{own}/hooks`)
+					fs.writeDir(`{own}/info`)
+				end
 				local part = if resultsFile then `{resultsFile}.{index}` else nil
 				local command, args =
 					"lune", { "run", "tests/run", "--", "--jobs", "1", "--report-seconds", file }
@@ -377,7 +387,12 @@ local function runConcurrently()
 					-- a fixture's ./zn land must not start the net, and a worker does not measure itself
 					PICKMAN_WATCH_NET = "off",
 					ZN_MEASURED = "1",
+					PICKMAN_WORKER = "1",
+					PICKMAN_TALLY = counts or "",
 				}
+				if own ~= "" then
+					env.GIT_TEMPLATE_DIR = own
+				end
 				if part then
 					env.PICKMAN_RESULTS = part
 				end
@@ -469,6 +484,10 @@ local function runConcurrently()
 		table.insert(slowest, string.format("%s %.1fs", bySpeed[i].file, bySpeed[i].seconds))
 	end
 	print(`slowest: {table.concat(slowest, ", ")}`)
+	local written, started = tally.total()
+	if written > 0 or started > 0 then
+		print(`fixtures: {written} files written, {started} processes started (by the fixture helpers)`)
+	end
 	print(`{passed} passed, {failed} failed, {#files} spec files`)
 	process.exit(if failed == 0 then 0 else 1)
 end
@@ -477,8 +496,31 @@ if jobs > 1 and #files >= 2 then
 	runConcurrently()
 end
 
+-- Anything in the run's git template folder but its empty hooks/ and info/ (the folder GIT_TEMPLATE_DIR names).
+local function templateExtras(): { string }
+	local dir = process.env.GIT_TEMPLATE_DIR
+	local extras: { string } = {}
+	if dir == nil or dir == "" or not fs.isDir(dir) then
+		return extras
+	end
+	for _, name in fs.readDir(dir) do
+		if (name == "hooks" or name == "info") and fs.isDir(`{dir}/{name}`) then
+			for _, inner in fs.readDir(`{dir}/{name}`) do
+				table.insert(extras, `{dir}/{name}/{inner}`)
+			end
+		else
+			table.insert(extras, `{dir}/{name}`)
+		end
+	end
+	return extras
+end
+
 local passed, failed = 0, 0
 local results: { FileResult } = {}
+local sweepFailed = false
+if process.env.PICKMAN_TALLY == nil or process.env.PICKMAN_TALLY == "" then
+	tally.begin()
+end
 for _, file in files do
 	-- require paths are relative to this file (z-nile/tests/run.luau); a spec path is relative to the folder the run
 	-- started in (a project's home, c0120)
@@ -496,6 +538,7 @@ for _, file in files do
 		continue
 	end
 	local record: FileResult = { file = file, loaded = true, cases = {}, detail = "", seconds = 0 }
+	local failedBefore = failed
 	for _, case in (spec :: Spec).cases do
 		local err: any = nil
 		local cOk = xpcall(case.fn, function(e: any)
@@ -511,6 +554,23 @@ for _, file in files do
 			record.detail ..= (if record.detail == "" then "" else "\n") .. line
 		end
 	end
+	-- git's template must still be the empty hooks/ and info/ the run made: a spec that wrote into it is named, the
+	-- template is restored, and the run fails (c0178)
+	for _, extra in templateExtras() do
+		print(`FAIL {file}: git template changed: {extra}`)
+		pcall(fs.removeDir, extra)
+		pcall(fs.removeFile, extra)
+		failed += 1
+	end
+	-- the fixtures a passing file's helpers registered go; a failing file keeps them to look at (c0178)
+	if failed == failedBefore then
+		local _, stuck = swept.sweep()
+		for _, line in stuck do
+			print(`swept: could not remove {line}`)
+			sweepFailed = true
+		end
+	end
+	tally.flush()
 	record.seconds = os.clock() - started
 	table.insert(results, record)
 end
@@ -519,11 +579,18 @@ if resultsFile then
 	writeResults(resultsFile, results)
 end
 
+if process.env.PICKMAN_WORKER == nil or process.env.PICKMAN_WORKER == "" then
+	local written, started = tally.total()
+	if written > 0 or started > 0 then
+		print(`fixtures: {written} files written, {started} processes started (by the fixture helpers)`)
+	end
+end
+
 -- the coordinator asks for this so its duration is the spec's own run, not the wait for a shared lane
 if reportSeconds and #results == 1 then
 	print(string.format("seconds %.3f", results[1].seconds))
 end
 print(`{passed} passed, {failed} failed, {#files} spec files`)
-process.exit(if failed == 0 then 0 else 1)
+process.exit(if failed == 0 and not sweepFailed then 0 else 1)
 -- a project home requires this file as its own runner (pickman/tests/run.luau, c0120); a module returns one value
 return nil

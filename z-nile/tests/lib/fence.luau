@@ -12,6 +12,7 @@
 -- records its pid in the lock, so the lock stays held while any guarded process lives.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local pruning = require("@tests/lib/pruning")
 local stdio = require("@lune/stdio")
 local task = require("@lune/task")
 
@@ -916,6 +917,10 @@ function fence.enter()
 		)
 		process.exec("chmod", { "+x", `{runTemp}/bin/mktemp` })
 	end
+	-- git's template for the repositories specs make: empty hooks/ and info/ folders and none of the 16 sample files, so
+	-- a fixture repository costs those files no more (c0178); folders because specs write hooks into .git/hooks
+	fs.writeDir(`{runTemp}/git-templates/hooks`)
+	fs.writeDir(`{runTemp}/git-templates/info`)
 	local prefix, jailed = jail(here, cache, runTemp)
 	if string.sub(jailed, 1, 14) == "outer sandbox " then
 		-- the lock code runs here, inside that sandbox: fence.alive must read its refusals as "alive" (review 001 F3)
@@ -923,10 +928,11 @@ function fence.enter()
 	end
 	local lock = `{cache}/tests-run.lock`
 	takeLock(lock)
+	pruning.run(pruning.dir()) -- only this run is in the home now, and no spec has started (c0178)
 	local before = snapshot(cache)
 	local argv = {
 		"-c",
-		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; { [ ! -f "$4/z-nile/lib/cpu.sh" ] || { . "$4/z-nile/lib/cpu.sh" && zn_lower_cpu "$6"; }; } && . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 6 && exec lune run tests/run -- "$@"',
+		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; { [ ! -f "$4/z-nile/lib/cpu.sh" ] || { . "$4/z-nile/lib/cpu.sh" && zn_lower_cpu "$6"; }; } && . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" GIT_TEMPLATE_DIR="$3/git-templates" PATH="$3/bin:$PATH" && shift 6 && exec lune run tests/run -- "$@"',
 		"_",
 		here,
 		jailed,

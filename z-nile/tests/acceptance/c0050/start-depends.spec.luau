@@ -51,7 +51,27 @@ return t.spec("c0480 start checks depends_on", function(it)
 		if fs.isDir(dir) then
 			fs.removeDir(dir)
 		end
-		clone.isolated(root, dir)
+		-- c0178: was `clone.isolated(root, dir)` (a full checkout, ~2,500 files); now only these paths are written, the rest
+		-- stays in the index. Each entry says why it is needed; add a path here when `git add -A` names it as outside the checkout.
+		clone.isolated(root, dir, {
+			tooling = true, -- c0178: ./zn, scripts/, .gitignore and z-nile/ but its tracker state: what the overlay below writes
+			paths = {
+				"z-nile/.tracker/issues/done/.gitkeep", -- engine.empty writes it; untracked in the repository, so `git add -A` needs it inside the checkout
+				"z-nile/.tracker/rafts/done/.gitkeep", -- same, for rafts/done
+				"**/f0010/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
+				"**/f0020/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
+				"**/f0030/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
+				"**/f0040/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
+				"**/f0050/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
+				"**/f0060/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
+				"**/f0070/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
+				"**/R0010/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
+				"**/R0020/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
+				"**/R0030/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
+				"**/R0040/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
+				"**/R0050/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
+			},
+		})
 		git({ "remote", "remove", "origin" })
 		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
 		git({ "checkout", "-q", "-B", "main" })

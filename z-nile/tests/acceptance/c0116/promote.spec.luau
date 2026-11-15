@@ -4,6 +4,7 @@
 -- the meta spec, and removes the copies whatever the result; a spec that breaks the type check fails it. Run in a
 -- clone of this checkout under .cache/c0116-promote (its tooling overlaid from the working tree, its tracker emptied),
 -- never in the real checkout.
+local clone = require("@tests/lib/clone")
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -72,7 +73,21 @@ return t.spec("c0116 promote-check takes an issue's own acceptance specs", funct
 			fs.removeDir(base)
 		end
 		fs.writeDir(base)
-		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
+		-- c0178: a sparse clone (git writes only `paths` to the working tree) in place of the full checkout of ~2,580 files;
+		-- the tooling overlay below writes the rest.
+		clone.isolated(root, work, {
+			tooling = true, -- c0178: what the overlay below writes, new files of the working tree included
+			paths = {
+				-- the type check's base config (promote-check)
+				".luaurc",
+				-- the two issues the spec writes (git add -A refuses new files outside the sparse set)
+				"z-nile/.tracker/issues/c0010/",
+				"z-nile/.tracker/issues/c0020/",
+				-- engine.roots' .gitkeep files for z-nile's root, new to the index
+				"z-nile/.tracker/issues/done/.gitkeep",
+				"z-nile/.tracker/rafts/done/.gitkeep",
+			},
+		})
 		must(fixture.exec(work, "git", { "remote", "remove", "origin" }), "remote remove")
 		-- the tooling as this checkout has it, committed or not
 		local args = { "ls-files", "-co", "--exclude-standard" }

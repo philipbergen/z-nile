@@ -6,6 +6,7 @@
 -- compaction renames pickman's promoted folders and rewrites the paths that name them. Fixture under
 -- .cache/c0120-promote: a clone of the repository with its tooling, pickman's items in pickman/.tracker, a stub gate.
 local audit = require("@znile/engine/audit")
+local clone = require("@tests/lib/clone")
 local compact = require("@znile/engine/compact")
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
@@ -82,7 +83,44 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 			fs.removeDir(base)
 		end
 		fs.writeDir(base)
-		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
+		-- c0178: a sparse clone (git writes only `paths` to the working tree) in place of the full checkout of 2,580 files.
+		clone.isolated(root, work, {
+			tooling = true, -- c0178: the overlay below writes tooling that a reset (done's rollback) must not delete
+			paths = {
+				-- pickman's architecture meta spec scans every Logic feature, its unit specs and the declared dependencies
+				"pickman/src/shared/Logic/",
+				"pickman/tests/unit/",
+				"pickman/.tracker/architecture.md",
+				-- pickman's meta spec, which done runs on the promoted tree with its fence spec (z-nile/tests/tooling is not in the overlay)
+				"z-nile/tests/tooling/repo-fence.spec.luau",
+				-- ./zn commit runs `git add -A` on each root, which refuses a root with nothing of it in the clone
+				"z-nile/.tracker/issues/active/.gitkeep",
+				-- the item folders the spec creates and ./zn moves (start, done): a plain `git add -A` and `git mv` need them in the sparse set
+				"pickman/.tracker/issues/f0010/",
+				"pickman/.tracker/rafts/R0010/",
+				"pickman/.tracker/issues/active/f0010/",
+				"pickman/.tracker/rafts/active/R0010/",
+				"pickman/.tracker/issues/done/f0010/",
+				"pickman/.tracker/rafts/done/R0010/",
+				-- where a compaction renames the items (through f0001.compacting)
+				"pickman/.tracker/issues/done/f0001/",
+				-- where a compaction renames the items (through R0001.compacting)
+				"pickman/.tracker/rafts/done/R0001/",
+				"pickman/.tracker/issues/done/f0001.compacting/",
+				"pickman/.tracker/rafts/done/R0001.compacting/",
+				-- done's promoted spec
+				"pickman/tests/acceptance/f0010/",
+				-- where a compaction renames the promoted folder (through f0001.compacting)
+				"pickman/tests/acceptance/f0001/",
+				"pickman/tests/acceptance/f0001.compacting/",
+				-- files the spend and compaction cases write and `git add`
+				"pickman/tests/acceptance/f0099/",
+				"z-nile/tests/acceptance/c0099/",
+				"pickman/src/counted.luau",
+				"notes.md",
+				"pickman/notes.md",
+			},
+		})
 		git({ "remote", "remove", "origin" })
 		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
 		git({ "checkout", "-q", "-B", "main" })
@@ -117,7 +155,8 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 		for _, state in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
 			write(`pickman/.tracker/{state}/.gitkeep`, "")
 		end
-		git({ "add", "-A" })
+		-- c0178: --sparse, so the overlay (all on disk, mostly outside the sparse clone's paths) is committed as before
+		git({ "add", "-A", "--sparse" })
 		git({ "commit", "-qm", "empty tracker, pickman's home", "--allow-empty" })
 		t.expect(must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue"))
 			.toBe("pickman/.tracker/issues/f0010/f0010.md")
