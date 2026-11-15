@@ -33,3 +33,5 @@ c0302 design review 001 F2: a design that adds a rule about how fixtures are set
 **Note (c0301 design review 001 F1, F4):** a rule about what a layer changed is checked against every kind of layer, one that only deletes included: an Overrides chore that removes a promoted spec leaves the ticket no line to cite at the top commit, so the first design refused a stack that lands today. And the existing-work list missed a second active raft with the same rows; name the search that made the list (here, `trace.md` at every layer tip and every active raft on `origin/main`) so the executor reruns it.
 
 **Also:** f0201 design review 001 F3: the arcade's PaidPlay read f0145's `continues` but wrote `revives`, so an old f0145 Pickman server (which outlives a publish) would read none of the arcade's credits and its next write would drop them. When two builds share a store, the new one writes the old shape exactly, and a case pins the stored keys.
+
+**Also:** c0288 design review 001 F6: the Non-goals named the search but listed only part of what it found, leaving out two `proofs/` files. Quote the search's whole result, then say which hits are out of scope and why.
