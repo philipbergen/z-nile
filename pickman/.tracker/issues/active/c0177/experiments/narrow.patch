@@ -1,0 +1,165 @@
+diff --git a/pickman/tests/acceptance/f0125/speeds.spec.luau b/pickman/tests/acceptance/f0125/speeds.spec.luau
+index f26d6544e..e43dac9f4 100644
+--- a/pickman/tests/acceptance/f0125/speeds.spec.luau
++++ b/pickman/tests/acceptance/f0125/speeds.spec.luau
+@@ -1,8 +1,10 @@
+ --!strict
+--- f0125: the player is about 10% faster relative to a hunting ghost than in the classic tables, on every level,
++-- f0125: the player is about 10% faster relative to a hunting ghost than without f0125's tuning, on every level,
+ -- through one pure function, Session.speeds, that the session's own stepping uses too. The shipped config
+ -- (Session.GAME_CONFIG) carries the change; the default config keeps the classic tables. Speeds are whole units
+ -- per tick, so the 10% is judged per level on the rounded numbers, within a unit's worth (about 3% at 30 units).
++-- c0177: the 10% is measured against the same config without its tuning: the classic tables before f0147's ramp,
++-- the ramped speeds with it.
+ local Ghosts = require("@logic/Ghosts")
+ local Levels = require("@logic/Levels")
+ local Maze = require("@logic/Maze")
+@@ -13,6 +15,26 @@ local UNITS = 120 -- Movement.UNITS: sub-tile units per tile
+ 
+ local LAST = Levels.COUNT + 1 -- one level past the table, which repeats its last row
+ 
++-- c0177: the same config without f0125's tuning (f0147's ramp kept): the baseline f0125's 10% is measured against
++local function untunedOf(c: Session.Config): Session.Config
++	local u = table.clone(c) :: any
++	u.ghostTuning = nil
++	return u
++end
++
++-- c0177: the same config without f0147's ramp: the classic tables (before f0147 a config has no ramp)
++local function classicOf(c: Session.Config): Session.Config
++	local u = table.clone(c) :: any
++	u.ramp = nil
++	return u
++end
++
++-- c0177: the levels a config's speeds change over: its ramp's (f0147), or the classic table's
++local function levelsOf(c: Session.Config): number
++	local ramp = (c :: any).ramp
++	return if ramp then ramp.top else Levels.COUNT
++end
++
+ local function edge(c: Session.Config, level: number): number
+ 	local sp = Session.speeds(c, level)
+ 	return sp.player / sp.ghost
+@@ -20,21 +42,22 @@ end
+ 
+ return t.spec("f0125 player 10% faster than the ghosts", function(it)
+ 	it(
+-		"on every level the shipped config's edge over a hunting ghost is the classic edge times 1.07 to 1.13",
++		"on every level the shipped config's edge over a hunting ghost is the untuned config's edge times 1.07 to 1.13",
+ 		function()
+-			for level = 1, LAST do
+-				local gain = edge(Session.GAME_CONFIG, level) / edge(Session.DEFAULT_CONFIG, level)
++			for level = 1, levelsOf(Session.GAME_CONFIG) + 1 do
++				local gain = edge(Session.GAME_CONFIG, level) / edge(untunedOf(Session.GAME_CONFIG), level)
+ 				t.expect(gain >= 1.07 and gain <= 1.13).toBe(true)
+ 			end
+ 		end
+ 	)
+ 
+-	it("averaged over the table's levels the gain is 9% to 13%", function()
++	it("averaged over the config's levels the gain is 9% to 13%", function()
+ 		local sum = 0
+-		for level = 1, Levels.COUNT do
+-			sum += edge(Session.GAME_CONFIG, level) / edge(Session.DEFAULT_CONFIG, level)
++		local levels = levelsOf(Session.GAME_CONFIG)
++		for level = 1, levels do
++			sum += edge(Session.GAME_CONFIG, level) / edge(untunedOf(Session.GAME_CONFIG), level)
+ 		end
+-		local mean = sum / Levels.COUNT
++		local mean = sum / levels
+ 		t.expect(mean >= 1.09 and mean <= 1.13).toBe(true)
+ 	end)
+ 
+@@ -52,9 +75,15 @@ return t.spec("f0125 player 10% faster than the ghosts", function(it)
+ 		end
+ 	end)
+ 
+-	it("the eyes returning home keep twice level 1's player speed", function()
+-		for level = 1, LAST do
++	-- c0177: eyes are never tuned, so the shipped eyes are the untuned config's on every level; on the classic tables
++	-- (the shipped config less f0147's ramp) they are still twice the base speed
++	it("the eyes returning home are the untuned config's: f0125's tuning never changes them", function()
++		for level = 1, levelsOf(Session.GAME_CONFIG) + 1 do
+ 			t.expect(Session.speeds(Session.GAME_CONFIG, level).eyes)
++				.toBe(Session.speeds(untunedOf(Session.GAME_CONFIG), level).eyes)
++		end
++		for level = 1, LAST do
++			t.expect(Session.speeds(classicOf(Session.GAME_CONFIG), level).eyes)
+ 				.toBe(2 * Session.GAME_CONFIG.movement.speed)
+ 		end
+ 	end)
+@@ -76,11 +105,17 @@ return t.spec("f0125 player 10% faster than the ghosts", function(it)
+ 		local set = (s :: any).members.p.ghosts :: Ghosts.Set -- each member has its own ghosts
+ 		t.expect(set ~= nil).toBe(true)
+ 		local base = Session.GAME_CONFIG.movement.speed
+-		for level = 1, LAST do
++		-- c0177: the set's ramp is passed (f0147; before it the set has none and Levels takes no ramp), and with a ramp
++		-- the tunnel and frightened speeds are rates the ghosts carry fractions of (Levels.ghostRate, which f0147 adds)
++		local levels = Levels :: any
++		local ramp = (set :: any).ramp
++		t.expect(ramp).toBe((Session.GAME_CONFIG :: any).ramp)
++		local rate = levels.ghostRate or levels.ghostSpeed
++		for level = 1, levelsOf(Session.GAME_CONFIG) + 1 do
+ 			local sp = Session.speeds(Session.GAME_CONFIG, level)
+-			t.expect(Levels.ghostSpeed(base, level, "normal", set.tuning)).toBe(sp.ghost)
+-			t.expect(Levels.ghostSpeed(base, level, "tunnel", set.tuning)).toBe(sp.tunnel)
+-			t.expect(Levels.ghostSpeed(base, level, "frightened", set.tuning)).toBe(sp.frightened)
++			t.expect(levels.ghostSpeed(base, level, "normal", set.tuning, ramp)).toBe(sp.ghost)
++			t.expect(rate(base, level, "tunnel", set.tuning, ramp)).toBe(sp.tunnel)
++			t.expect(rate(base, level, "frightened", set.tuning, ramp)).toBe(sp.frightened)
+ 		end
+ 	end)
+ 
+@@ -119,13 +154,18 @@ return t.spec("f0125 player 10% faster than the ghosts", function(it)
+ 		end
+ 		return out
+ 	end
++	-- c0177: a whole speed is covered every step; a ramp's fractional rate (f0147) as its floor or ceiling, within a
++	-- tenth of a unit on average
+ 	local function allEqual(list: { number }, want: number, at: string)
+ 		t.expect(#list >= 8).toBe(true)
++		local sum = 0
+ 		for _, d in list do
+-			if d ~= want then
++			if d ~= math.floor(want) and d ~= math.ceil(want) then
+ 				error(`{at}: a step covered {d} units, want {want}`)
+ 			end
++			sum += d
+ 		end
++		t.expect(math.abs(sum / #list - want) < 0.1).toBe(true)
+ 	end
+ 
+ 	it(
+@@ -177,6 +217,7 @@ return t.spec("f0125 player 10% faster than the ghosts", function(it)
+ 			local classic = Maze.layout("classic")
+ 			local fast = table.clone(Session.GAME_CONFIG) :: any
+ 			fast.movement = { speed = 96, turnBufferTicks = 24 }
++			fast.ramp = nil -- c0177: the bound on the classic tables
+ 			fast.ghostTuning = 1.1 -- level 5's hunting ghost: round(96 * 0.95 / 0.8 * 1.1) = 125 > 120
+ 			t.expect((pcall(Session.new, classic, 1, fast))).toBe(false)
+ 			local untuned = table.clone(fast) :: any
+@@ -192,8 +233,23 @@ return t.spec("f0125 player 10% faster than the ghosts", function(it)
+ 			t.expect((pcall(Session.new, classic, 1, over))).toBe(false)
+ 			-- faster ghosts are allowed when they stay within a tile: GAME_CONFIG's base with twice the speed
+ 			local double = table.clone(Session.GAME_CONFIG) :: any
++			double.ramp = nil -- c0177: the bound on the classic tables
+ 			double.ghostTuning = 2 -- level 5's ghost: round(30 * 0.95 / 0.8 * 2) = 71
+ 			t.expect((pcall(Session.new, classic, 1, double))).toBe(true)
++			-- c0177: with a ramp (f0147) the bound runs to the ramp's top: a tuning whose ghost stays within a tile on
++			-- the classic table's last level and passes it on the ramp's last is refused, and one just under is not
++			if (Session.GAME_CONFIG :: any).ramp then
++				local top = levelsOf(Session.GAME_CONFIG)
++				local high = table.clone(Session.GAME_CONFIG) :: any
++				high.ghostTuning = 1.25
++				t.expect(Session.speeds(high, Levels.COUNT).ghost <= UNITS).toBe(true)
++				t.expect(Session.speeds(high, top).ghost > UNITS).toBe(true)
++				t.expect((pcall(Session.new, classic, 1, high))).toBe(false)
++				local under = table.clone(Session.GAME_CONFIG) :: any
++				under.ghostTuning = 1.2
++				t.expect(Session.speeds(under, top).ghost <= UNITS).toBe(true)
++				t.expect((pcall(Session.new, classic, 1, under))).toBe(true)
++			end
+ 		end
+ 	)
+ 
