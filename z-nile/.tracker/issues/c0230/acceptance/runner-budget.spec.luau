@@ -142,7 +142,9 @@ return t.spec("c0230 runner budget report", function(it)
 			t.expect(b[1]).toBe(`over budget: 2 spec files over 0.1 s wall or 1000 s cpu (lesson {LESSON})`)
 			t.expect(#b).toBe(3)
 			for _, f in { a, c } do
-				t.expect(string.match(lineOf(b, f), "^  " .. escape(f) .. " %d+%.%d s wall, 7%.1 s cpu$") ~= nil)
+				t.expect(
+					string.match(lineOf(b, f), "^  " .. escape(f) .. " %d+%.%d s wall, 7%.1 s cpu$") ~= nil
+				)
 					.toBe(true)
 			end
 			t.expect((string.find(r.stdout, "zn-spec-cpu", 1, true))).toBe(nil)
@@ -212,7 +214,8 @@ return t.spec("c0230 runner budget report", function(it)
 			t.expect((string.find(nested, "over budget", 1, true))).toBe(nil)
 			t.expect(string.match(nested, "\n2 passed, 0 failed, 2 spec files\n$") ~= nil).toBe(true)
 			if concurrent then
-				t.expect(string.find(block(r)[1], "over 0.001 s wall or 0.001 s cpu", 1, true) ~= nil).toBe(true)
+				t.expect(string.find(block(r)[1], "over 0.001 s wall or 0.001 s cpu", 1, true) ~= nil)
+					.toBe(true)
 			else
 				t.expect((string.find(r.stdout, "over budget", 1, true))).toBe(nil)
 			end
