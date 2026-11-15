@@ -9,3 +9,4 @@
 - F7: fixed: the probe is kept as `experiments/flyin-ticks.luau`, with its bounded command recorded in E4, and rerun: paired 176 to 185 ticks, lone 174 to 185. consequences: none.
 
 Final mutation run after these answers: base green (f0217 48 passed, f0216 66 passed), 92 mutants killed, 7 correct variants green.
+- F4 (after the user's ruling, 2026-11-15, "Add them to the design now"): fixed: the four `TwoPlayer ->` edges and the Features row are in `invaders/.tracker/architecture.md` in this prep; step 3 confirms them; consequences: none (the map's meta spec passes with edges to a feature that has no code yet, as it does for f0216's).

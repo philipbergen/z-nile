@@ -1,0 +1,9 @@
+# Answers to design review 002 (R0094)
+
+The review read the record `[f0143@9de19e99185d, f0147@deb99c51e2b8, f0148@d09fb2e83d5c, f0158@59277d5ddbf9]`, which is still the record. No member is unfolded.
+
+- F1: fixed: `## Order & dependencies` holds only the numbered list of the four members; the reasons moved to `## Why this order`, and `./zn stack R0094` lists four layers; consequences: the same fault was in R0093 and R0097 (one brief wrote all three) and is fixed there the same way; nothing else reads the moved text.
+- F2: fixed: Cross-raft waits and `## Experiments phase` now say the user runs f0148's E6 and E5 in Studio before `./zn ready R0094`, that the result is written in R0094.md, and that a failure unfolds f0148; what grouping costs names f0143, f0158, d0149 and c0182 as now waiting on f0148, and c0342 is listed as waiting on the raft; consequences: the raft cannot be readied until the user has run them, which is stated; no member document changed, so the grouped hashes hold.
+- F3: fixed: neither design decides whether a run started on level 2 or later carries the bonanza's longer jumps, so it is under `## Open to the human` with the two options; consequences: `./zn status R0094 prepared` and `ready` refuse until it is ruled; option (b) unfolds f0148.
+- F4: fixed: the Theme says the 2026-11-15 request replaces the "3 rafts in order" packaging for f0147 and f0148, which now land as two layers of this raft in the same order; consequences: none.
+- F5: fixed: each listed fact is corrected against the tree (f0148's prep already landed its game-design section and `Best` row; f0145's edge is on its prep branch; f0143 and f0147 share `Member`, `Session.step`, `HudView.start` and `HudView.show`; three members edit `Session`; the data flow has `StartGame:FireServer(level)`); consequences: none.

@@ -90,12 +90,17 @@ return t.spec("f0339 the template, the usage and the docs", function(it)
 
 	it("AC3: a re-approval and the one-time approval say the page comes first", function()
 		local execute = read("z-nile/skills/zz-execute/SKILL.md")
-		local again = string.match(execute, "[^\n]*`./zn approve <id>` again when the contract changed[^\n]*") or ""
+		local again = string.match(execute, "[^\n]*`./zn approve <id>` again when the contract changed[^\n]*")
+			or ""
 		expectHas(again, "explainer page", "zz-execute's re-approval sentence")
 		local ready = read("z-nile/skills/z-ready/SKILL.md")
 		local once = string.match(ready, "[^\n]*one%-time step[^\n]*") or ""
 		expectHas(once, "explainer page", "z-ready's one-time approval line")
 		local engine = read("z-nile/engine/approval.luau")
-		expectHas(engine, "approving first needs the issue's explainer page (./zn explain {id})", "ready's no-approval refusal")
+		expectHas(
+			engine,
+			"approving first needs the issue's explainer page (./zn explain {id})",
+			"ready's no-approval refusal"
+		)
 	end)
 end)

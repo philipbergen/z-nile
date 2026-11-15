@@ -9,6 +9,7 @@ c0184 scaffolds this home and c0185 gates code shared across homes. Shared code 
 | `Logic/Barriers` | the four bunkers of 8 x 6 blocks, eroded by shots from either side and erased by aliens | f0216 |
 | `Logic/Mystery` | the ship across the far end: its timer, its crossing and its value table | f0216 |
 | `Logic/Classic` | one player's game: cannon, shots, lives, score, waves, invasion and the revive's restart; composes the three above | f0216 |
+| `Logic/TwoPlayer` | the two-player match: the field's two frames, the fly-in, shots across the field, the ship at the midline, the wave's end, revive and retire; each player's half a Classic run | f0217 |
 
 The field is 2-D (game-design.md, The field and view): `x` across, `d` the depth from the base line (the cannon's line, `d = 0`) to the far end, in whole field units. The view (f0218) maps `x` and `d` to the world.
 
@@ -20,4 +21,8 @@ One `Consumer -> Provider` per line.
 Classic -> Formation
 Classic -> Barriers
 Classic -> Mystery
+TwoPlayer -> Classic
+TwoPlayer -> Formation
+TwoPlayer -> Barriers
+TwoPlayer -> Mystery
 ```
