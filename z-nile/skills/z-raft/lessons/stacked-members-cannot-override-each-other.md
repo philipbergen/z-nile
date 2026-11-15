@@ -1,7 +1,7 @@
 ---
 title: A member stacked on another cannot override or run its promoted specs
 when: design
-tags: [raft, overrides, promotion, stack, depends_on]
+tags: [raft, overrides, promotion, stack, depends-on]
 check: Does any member's `Overrides:` line, `check.sh` or spec name a promoted path (`tests/acceptance/<id>/…`) of another member of the same raft, or assume that member is already done?
 ---
 An issue designed to land after its dependency treats the dependency as done: it overrides the dependency's promoted specs and may run them from `tests/acceptance/<id>/`. In one raft nothing is promoted until the single `./zn done`, and the raft's `check.sh` runs every member's sequestered specs on the final tree. Two members that pin opposite things about one file are then both run, and one is red whatever the file says.
