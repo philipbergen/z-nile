@@ -9,3 +9,5 @@ A front-matter line written by a command changes the document's text. Every reco
 **Why:** c0306 prep, round 3 (2026-11-14). The claim's new `reviews: judged` line changed a grouped member's design record (`raftplan.designHash` skipped only `status:` and `raft:`). So `c0116/claims :: a member claimed after the carried move…` read "changed since grouped" instead of "preparing". The design had covered only `publish.luau`'s status-only comparison.
 
 **How to apply:** list every reader of front matter that hashes or compares a whole document (`grep` for `designHash`, `contract`, `readFront` and the publish rules). Say in the Design whether each one skips the new line or includes it, and pin each answer with a case.
+
+**Also:** c0288 design review 001 F3: the same holds for a change to another item's specs. `approval.collect` hashes every `*.spec.luau` under its `acceptance/`, and `raftplan.isDesignFile` counts `acceptance/` in a grouped record. An edit there voids both, and only the human re-approves.
