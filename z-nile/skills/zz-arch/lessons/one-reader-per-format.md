@@ -2,7 +2,7 @@
 title: One reader per format
 when: both
 tags: [parsers, drift]
-check: Does a new reader of an existing format reuse the existing reader, or match it exactly and say so?
+check: Does a new reader of an existing format reuse the existing reader, or match it exactly and say so? A new front-matter line or marker counts: is it read by one function everywhere (the commands and the publish guard alike)?
 ---
 Two parsers of one format drift apart, and then each tool sees a different set of records. Reuse the existing reader. If it cannot be shared, copy its pattern exactly and name it in a comment and in the Design.
 
@@ -17,3 +17,5 @@ Two parsers of one format drift apart, and then each tool sees a different set o
 **Note (R0083 code review 001 F3):** a caller that pre-filters its inputs with the shared function's own patterns undoes the sharing. The board's `reviewFiles` kept only names matching the two round patterns before calling `boardview.rounds`, so a new review kind added to `boardview.rounds` alone was counted by `metrics` but not by the chart. Ask: does any caller filter or pre-select what it hands the shared rule, with a pattern the rule also owns? Hand it everything, and pin the caller's source for the pattern.
 
 **Note (c0282 prep E2):** a helper that trims its output is not a reader of a file whose last byte matters. The dispatcher's `git` helper trims stdout, so the rafting gate read a `provenance.md` without its final newline and `parse` refused every PR. The gate's refusal cases passed anyway (exit 4, a loose substring); only the merging case failed. Read such a file's bytes untrimmed, and make each refusal case assert its own reason.
+
+**Note (c0306's prep, 2026-11-14, design review 001 F7):** the `reviews: judged` mark had two readers. `publish.luau` matched the exact text `\nreviews: judged\n`, while the commands read `store`'s trimmed front matter, so `reviews: judged ` with a trailing space was judged by one and not seen by the other. Both now read it through `reviewmodel.judged`.

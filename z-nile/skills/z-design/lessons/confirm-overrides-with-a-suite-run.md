@@ -2,7 +2,7 @@
 title: An Override list is confirmed by a suite run on a prototype, not by a grep
 when: design
 tags: [overrides, prototype, specs]
-check: Was the list of promoted specs the change turns red confirmed by running the whole suite of every home on a prototype that holds every changed string, rather than by grepping for the text the author edits (specs pin rendered forms, derived strings and counts a grep for the source text does not match)?
+check: Was the list of promoted specs the change turns red confirmed by running the whole suite of every home, the slow tier included, on a prototype that holds every changed string and every later design revision, rather than by grepping for the text the author edits (specs pin rendered forms, derived strings and counts a grep for the source text does not match)?
 ---
 A grep finds the specs that name the string being changed. A spec that pins its rendered form (a template filled with a project name, a digest, a count) names a different string and turns red unseen.
 
@@ -11,3 +11,5 @@ A grep finds the specs that name the string being changed. A spec that pins its 
 **How to apply:** build the prototype with every changed string and run every home's full suite once; each new red spec is an Override or a design change.
 
 c0248 design review 001 F7 and F12 (2026-11-12): `z-nile/check.sh --affected` skips the measured slow tier, so a suite run that confirms the Overrides line must also run `z-nile/check.sh --slow`; watch-map and seven promoted folders went red only there, or only in the full set.
+
+**Note (c0306's prep, 2026-11-14):** the suite run must be repeated after every design change to what a command writes, and it must include the slow tier. c0306's first prototype marked only the published `./zn new raft`, and `--slow` turned four promoted specs red. The revision also marked the local form (prep Q3: "every command that creates a raft"). The next `--slow` run turned eleven specs red, because every fixture that builds a raft offline and commits a hand-written review now meets the rule. For each place a new mark or rule is written, list the promoted specs that go through it, then confirm the list with the slow run.
