@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="zn-contract" content="0000000000000000000000000000000000000000000000000000000000000000">
+<title>f0339: Ticket explainer page</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; color: #1d1d1f; }
+  h1 { font-size: 1.6rem; } h2 { margin-top: 2rem; border-bottom: 1px solid #ddd; }
+  svg { width: 100%; height: auto; background: #fafafa; border: 1px solid #eee; border-radius: 6px; }
+  .choice { border-left: 3px solid #888; padding-left: 1rem; margin: 1rem 0; }
+  .pros li::marker { content: "+ "; } .cons li::marker { content: "- "; }
+  code { background: #f2f2f2; padding: 0 .2rem; }
+  .new { fill: #e6f4ea; stroke: #2e7d32; }
+</style>
+</head>
+<body>
+<h1>f0339: Ticket explainer page</h1>
+
+<section id="idea">
+<h2>The idea</h2>
+<p>Before a ticket is built, a person approves its design with <code>./zn approve &lt;id&gt;</code>.
+That command saves a fingerprint (a hash) of the design in the ticket's <code>approval.md</code>.
+Later steps refuse to build a design whose fingerprint changed.</p>
+<p>Today the person approves without being shown anything. They must read the long design text on their own.</p>
+<p>After this change, each ticket has one web page, <code>explainer.html</code>, written when the ticket is designed.
+It says in plain words what the idea is. It draws the system before and after. It lists which files change.
+It gives the good and bad sides of each choice.</p>
+<p><code>./zn approve</code> opens that page in your browser and then asks <strong>y/n</strong>.
+Only <code>y</code> or <code>yes</code> saves the approval. Any other answer saves nothing.</p>
+</section>
+
+<section id="before">
+<h2>Before</h2>
+<p>The designer writes the ticket. The person runs approve, and it saves the fingerprint at once.</p>
+<svg viewBox="0 0 640 140" role="img" aria-label="before: the design goes straight to the approval">
+  <rect x="10" y="40" width="170" height="60" rx="8" fill="#fff" stroke="#555"/>
+  <text x="95" y="66" text-anchor="middle">designer writes</text>
+  <text x="95" y="86" text-anchor="middle">the ticket</text>
+  <line x1="180" y1="70" x2="235" y2="70" stroke="#555" marker-end="url(#arrow)"/>
+  <rect x="235" y="40" width="170" height="60" rx="8" fill="#fff" stroke="#555"/>
+  <text x="320" y="66" text-anchor="middle">./zn approve</text>
+  <text x="320" y="86" text-anchor="middle">(no question asked)</text>
+  <line x1="405" y1="70" x2="460" y2="70" stroke="#555" marker-end="url(#arrow)"/>
+  <rect x="460" y="40" width="170" height="60" rx="8" fill="#fff" stroke="#555"/>
+  <text x="545" y="66" text-anchor="middle">approval.md</text>
+  <text x="545" y="86" text-anchor="middle">saves the hash</text>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker></defs>
+</svg>
+</section>
+
+<section id="changes">
+<h2>What changes where</h2>
+<ul>
+  <li><code>z-nile/engine/explainer.luau</code> (new): <code>explainer.check(path, html, hash, touched)</code> lists every way a page breaks the expected shape, and <code>explainer.accepts(answer)</code> says whether an answer is a yes. No files are read here.</li>
+  <li><code>z-nile/engine/main.luau</code>: a new command, <code>./zn explain &lt;id&gt;</code>, prints the page's path and the hash it must name, then <code>ok</code> or the problems. <code>cmd.approve</code> checks the page, opens it, asks <code>[y/N]</code> at the terminal, and checks again that nothing changed before it saves. New helpers: <code>openInDefaultApp</code> (also used by <code>./zn board</code>), <code>readTerminalLine</code>, <code>explainerProblems</code>.</li>
+  <li><code>z-nile/templates/explainer.html</code> (new): an empty page of the right shape to copy.</li>
+  <li><code>z-nile/skills/z-design/SKILL.md</code>: the designer writes the page and runs <code>./zn explain</code> until it says <code>ok</code>.</li>
+  <li><code>z-nile/skills/zz-rules/SKILL.md</code>: the <code>approve</code> row describes the page and the question; a new <code>explain</code> row.</li>
+  <li><code>z-nile/skills/zz-review/SKILL.md</code>: the design reviewer reads the page beside the design.</li>
+  <li><code>z-nile/README.md</code>: the approve sentence says the page is shown first.</li>
+  <li><code>z-nile/tests/tooling/approve.spec.luau</code> and <code>z-nile/tests/tooling/approve-publish.spec.luau</code>: their test tickets get a page, and they type <code>y</code>.</li>
+  <li><code>z-nile/.tracker/issues/f0339/acceptance</code>: the new tests (the page's shape, the approve flow, the docs).</li>
+</ul>
+</section>
+
+<section id="after">
+<h2>After</h2>
+<p>The designer also writes the page. Approve checks it, opens it, and waits for your answer.</p>
+<svg viewBox="0 0 640 230" role="img" aria-label="after: approve shows the page and asks before it saves">
+  <rect x="10" y="20" width="170" height="60" rx="8" fill="#fff" stroke="#555"/>
+  <text x="95" y="46" text-anchor="middle">designer writes</text>
+  <text x="95" y="66" text-anchor="middle">ticket + page</text>
+  <line x1="180" y1="50" x2="235" y2="50" stroke="#555" marker-end="url(#arrow2)"/>
+  <rect x="235" y="20" width="170" height="60" rx="8" class="new"/>
+  <text x="320" y="46" text-anchor="middle">./zn approve checks</text>
+  <text x="320" y="66" text-anchor="middle">and opens the page</text>
+  <line x1="405" y1="50" x2="460" y2="50" stroke="#555" marker-end="url(#arrow2)"/>
+  <rect x="460" y="20" width="170" height="60" rx="8" class="new"/>
+  <text x="545" y="46" text-anchor="middle">you read it, then</text>
+  <text x="545" y="66" text-anchor="middle">answer [y/N]</text>
+  <line x1="545" y1="80" x2="545" y2="140" stroke="#555" marker-end="url(#arrow2)"/>
+  <text x="560" y="115">y</text>
+  <rect x="460" y="140" width="170" height="60" rx="8" fill="#fff" stroke="#555"/>
+  <text x="545" y="166" text-anchor="middle">approval.md</text>
+  <text x="545" y="186" text-anchor="middle">saves the hash</text>
+  <line x1="460" y1="50" x2="405" y2="170" stroke="#999" stroke-dasharray="4 3" marker-end="url(#arrow2)"/>
+  <rect x="235" y="140" width="170" height="60" rx="8" fill="#fff" stroke="#999"/>
+  <text x="320" y="166" text-anchor="middle">n, no answer, or a</text>
+  <text x="320" y="186" text-anchor="middle">changed design: nothing</text>
+  <defs><marker id="arrow2" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker></defs>
+</svg>
+</section>
+
+<section id="choices">
+<h2>Choices</h2>
+<div class="choice">
+  <h3>The page is not part of the approved fingerprint</h3>
+  <ul class="pros"><li>Every approval saved today stays valid.</li><li>Fixing a typo on the page never asks for a new approval.</li></ul>
+  <ul class="cons"><li>The page could drift from the design. To catch that, the page names the fingerprint it explains, and approve refuses a page that names an old one.</li></ul>
+</div>
+<div class="choice">
+  <h3>z-nile checks the page's shape, a person checks its words</h3>
+  <ul class="pros"><li>A machine check finds a missing diagram, a file left off the list, or a link to the web.</li><li>The words and pictures are read by the design reviewer and by you.</li></ul>
+  <ul class="cons"><li>A page can pass the check and still explain badly; only people catch that.</li></ul>
+</div>
+<div class="choice">
+  <h3>The page loads nothing from anywhere else</h3>
+  <ul class="pros"><li>It opens the same offline and years later, with no web fonts or chart libraries.</li><li>One simple rule is easy to check.</li></ul>
+  <ul class="cons"><li>Diagrams are hand-written SVG, not drawn by a diagram tool, and the page can't link to a pull request.</li></ul>
+</div>
+<div class="choice">
+  <h3>Only <code>y</code> or <code>yes</code> approves; the answer is read from the terminal</h3>
+  <ul class="pros"><li>Pressing Enter, a typo, or a closed terminal saves nothing.</li><li>A script piping text into the command can't answer for you.</li></ul>
+  <ul class="cons"><li>Tests have to give the command a real terminal (they use <code>script</code> and <code>yes y</code>).</li></ul>
+</div>
+<div class="choice">
+  <h3>If the browser can't be opened, approve warns and still asks</h3>
+  <ul class="pros"><li>A machine without a browser opener can still approve; the page's path is printed.</li></ul>
+  <ul class="cons"><li>Someone could answer without opening the page. The warning tells them to read it first.</li></ul>
+</div>
+<div class="choice">
+  <h3>Tickets designed earlier need a page before their first approval</h3>
+  <ul class="pros"><li>Every approval from now on comes after an explanation, which is the point.</li><li>No list of exceptions to keep.</li></ul>
+  <ul class="cons"><li>16 designed tickets waiting for approval each need a page written first (minutes of an agent's work each).</li></ul>
+</div>
+</section>
+</body>
+</html>
