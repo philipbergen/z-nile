@@ -96,7 +96,11 @@ return t.spec("z-work's next action", function(it)
 		t.expect(answering.action).toBe("review")
 		t.expect(string.find(answering.why, "Do not guess", 1, true) ~= nil).toBe(true)
 		open.codeReview = "resolved"
-		t.expect(decide({ open }, "R0010", nil).action).toBe("trace")
+		local tracing = decide({ open }, "R0010", nil)
+		t.expect(tracing.action).toBe("trace")
+		local step1 = string.find(tracing.why, "Phase 5 step 1", 1, true)
+		local skeleton = string.find(tracing.why, "skeleton", 1, true)
+		t.expect(step1 ~= nil and skeleton ~= nil and (step1 :: number) < (skeleton :: number)).toBe(true)
 		open.trace = true
 		t.expect(decide({ open }, "R0010", nil).action).toBe("final-review")
 		open.finalReview = "approved"

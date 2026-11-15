@@ -22,6 +22,14 @@ flowchart LR
 
 z-nile is the tooling that tracks, designs, gates and delivers the work of every project in this repository. A game is a project: pickman is one, in `pickman/`. The arcade adds five more (c0183): the shared library `arcade`, the start place `portal`, and the games `snake`, `invaders` and `asteroids`, each in its own folder. z-nile belongs to no game.
 
+## Intent
+z-nile exists so that people spend their time on ideas and designs, and agents carry everything after that to merge. This section is the intent, set by the user (2026-11-07, c0264); what of it is built is labelled sub-section by sub-section in How it should work.
+- **People work at the idea and the design.** A person brings an idea. z-ticket challenges it, keeps the person's words and every question and answer, writes the idea out clean, has it checked against what they said and confirms it with them. z-design turns the confirmed idea into a design with acceptance tests as code, reviewed back and forth, and a person approves it. Apart from resolving a block, and giving a rank when a person wants one, those are the only two stages that ask a person for anything.
+- **Workers carry it to merge.** A worker is any AI CLI running `z-work`. It takes a raft and stays with it until it merges, one ticket at a time, then clears its context and takes the next raft.
+- **The result stays true to the ask.** Reviews are back and forth, except for the last one, which just verifies that the diff matches the original ask. Before each ticket's layer is complete, that final full-force review compares the original ask, the design and the implementation, without the compromises made on the way, and sends the work back when it went off course.
+- **It stays cheap.** Expensive models do every final review; cheaper, faster ones do the work on the way there; the cheapest do the waiting. An expensive model never orchestrates or waits.
+- **Every decision has a name.** A ticket says whose idea it was, who approved its design, who unblocked it and which worker delivered it.
+
 ## How it should work
 Status labels, on every sub-section below and every roadmap row (*captured* is this section's word for an issue that exists as a draft): **exists** (built and on `main`), **designed** (its issue's Design is ready, not built), **captured** (an issue exists as a draft with no design yet). Nothing below is described as built unless it is labelled *exists*. A feature's PR changes its own roadmap row and every label that names it. Older notes in this file written "(cNNNN, planned)" predate these labels and mean not built.
 
@@ -29,45 +37,93 @@ Status labels, on every sub-section below and every roadmap row (*captured* is t
 flowchart LR
   subgraph eng["engineer end: any AI CLI, interactive"]
     direction TB
-    cap["capture, sharpen ideas, review designs"]
-    res["resolve escalations: ./zn resolve"]
+    cap["z-ticket: interview, idea, idea review, confirm"]
+    des["z-design: design, acceptance tests, review, approve"]
+    res["resolve blocks: ./zn resolve"]
+    cap --> des
   end
-  stack[("ranked stack on origin/main: tickets, rafts, state")]
-  subgraph wrk["worker end: any AI CLI, headless, same or other host"]
+  stack[("ranked stack on origin: tickets, rafts and state on main, heartbeats on branches")]
+  subgraph wrk["worker end: any AI CLI running z-work"]
     direction TB
-    loop["./zn work: claim top item, run next step, record spend"]
-    rev["cross-model review"]
+    loop["claim the top raft: lost first, then rank"]
+    layer["one ticket at a time: build, review, full-force review, finish its layer"]
+    final["final review of the stack, then ./zn done lands it"]
+    loop --> layer
+    layer --> final
   end
   eng --> stack
-  stack --> loop --> rev --> merge["merge when green"]
-  loop -. blocked .-> esc["escalation.md, status blocked"]
+  stack --> loop
+  final -->|"raft merged: clear context"| loop
+  layer -. blocked .-> esc["escalation.md, status blocked"]
+  esc -->|"raft released: clear context"| loop
   esc --> res
   res --> stack
 ```
 
 ### Two ends, one stack
-- **The engineer end.** You sit in any AI CLI (`claude` and `agent` today; another CLI once its skill support is checked, c0115) in the main checkout and run the front of the pipeline: `z-ticket` to capture, `z-design` to sharpen an idea into a prepared issue, the design reviews. Everything you produce is tracker state landed on `main`: by pull request, or, for a capture or a claim, pushed straight to it (`./zn land`, `./zn status`). *exists*
-- **The worker end.** A person opens any AI CLI and runs `z-work` (`./zn work`, or `./zn work <R>` for one raft). That session takes the next prepared raft, says what it took, and carries it layer by layer to `./zn done`, then stops. *exists*. The headless loop that keeps taking the next item until the stack is empty, and a wrapper that launches the CLI, stay *captured* (c0253), on top of c0117's dispatcher (`./zn dispatch`, its chain, `.models.toml`, quota fallback, spend), which is *designed* (c0117).
+- **The engineer end.** You sit in any AI CLI (`claude` and `agent` today; another CLI once its skill support is checked, c0115) in the main checkout and run the front of the pipeline: `z-ticket` to capture, `z-design` to sharpen an idea into a prepared issue, the design review. Everything you produce is tracker state landed on `main`: by pull request, or, for a capture or a claim, pushed straight to it (`./zn land`, `./zn status`). *exists*
+- **The worker end.** Any AI CLI runs the back of the pipeline: you start one by hand and run `z-work` in it, or a wrapper launches one headless (`./zn work`), on the same host or another. *captured* (c0253), on top of c0117's dispatcher (`./zn dispatch`, its chain, `.models.toml`, quota fallback, spend), which *exists* (c0117).
 - **The only shared thing is `origin/main` and GitHub.** No daemon, no queue server. A worker on another machine needs a clone, its CLIs and a bot credential; the engineer sees it work on the board. *captured* (c0254)
+
+### The idea stage
+z-ticket writes an idea as checkable outcomes and challenges it once before anything is designed. Today `./zn idea <id>` does this: the `idea` role writes the Problem, Solution and Non-goals, the `idea-challenge` role writes `idea-review-001.md`, the author answers each finding in `idea-refute-001.md`, and what stays disputed goes under `## Open to the human`. `./zn status <id> preparing` is refused, for a ticket captured since (one with an `idea:` key), until the review is on `origin/main` and every open point is ruled by a person. *exists*
+- The ticket also keeps the person's ask verbatim, every message of it, dated, and every question z-ticket asked with its answer, in order. *designed* (c0260)
+- From all of that z-ticket writes a clean, fully formed idea, and a clean adversarial reviewer on an expensive model checks that it says what the person said: nothing dropped, added or bent. *designed* (c0260)
+- The person confirms the idea as it then stands, and the confirmation is recorded on the ticket. Only a confirmed idea goes to z-design, which works as it does today: a design, acceptance tests as code, a review, a person's approval. *designed* (c0260)
+- c0247, which has z-ticket confirm intent before it creates a ticket, comes first, and c0260 builds on it.
+
+### The worker
+Today a person can run `z-work` in the CLI they opened: that session takes the next prepared raft, or the one named (`./zn work <R>`), says what it took, and carries it layer by layer to `./zn done`. With a raft named it then stops; with none named it goes on to the next raft ready would accept, in the same context, and stops when none is claimable or after two rafts in a row are released as blocked. *exists*
+
+A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent` or `deepseek`. *captured* (c0253); the CLIs beyond `claude`, `grok` and `agent`, `deepseek` through `opencode`: *captured* (c0175).
+- It claims the first raft in the order and stays with it all the way to merge, delivering it as a PR stack, one ticket at a time.
+- It keeps one context for the whole raft, so what it learned on one ticket carries to the next.
+- A worker clears its context and picks up the next raft whenever a raft ends: when the raft is merged, or when it is blocked and the worker lets it go. No context carries from one raft to the next.
+- It lets go of a raft only when the raft is blocked.
+- When no raft is claimable the worker waits, polling `origin/main` from a plain `./zn` loop with no model running, and it may draft the design of a confirmed idea, which stops at a person's `./zn approve`.
+- The worker itself runs on a cheap model: it never orchestrates on an expensive one, and its waiting (for a gate, CI or a review it handed to an expensive model) runs on the cheapest model.
+- A CLI that cannot read skills gets the same instructions from a `./zn` command.
 
 ### Order
 Tickets have no order today. They should: every issue and raft gets a `rank:` (integer, lower first; not the `rank` of `.models.toml`, where a higher one wins). *captured* (c0249)
-- The next item is the lowest rank among items whose `depends_on` are all done and whose status is claimable. `depends_on` is a hard constraint; `rank` only orders what is free.
-- z-ticket and z-design append by default. You move things with `./zn rank <id> top|after <id>`. A raft takes the best rank of its members. The board shows the stack in order.
+- An unset `rank:` is the lowest rank, and equal or unset ranks fall back to the ticket number, so the order is always stable.
+- Lost work comes first: anything in progress whose heartbeat is stale (`./zn lost` lists it) comes before anything not yet started, whatever its rank, even when a person started it without changing its rank. *designed* (c0265)
+- The next item is the first in that order whose `depends_on` are all done, which is not blocked, and whose status is claimable. `depends_on` is a hard constraint; `rank` only orders what is free, so the order works around a blocked item without changing any rank.
+- z-ticket and z-design leave the rank unset, which appends; only a person sets one, with `./zn rank <id> top|after <id>|unset`. z-raft asks for a raft's rank when it makes the raft, and unset is a valid answer: with no one to answer, the rank stays unset. A rank given to a raft is the raft's own; an unset one takes its members' best. The board shows the stack in order.
+- The board shows lost, parked and stale claims, lost first. *designed* (c0276)
+- The z-nile app in Omarchy shows the same order, marks lost items, and reorders by drag and drop through `./zn rank`. *captured* (c0257)
 
 ### Claiming across hosts
-A worker claims an item by landing the status change on `origin/main`, as `status <id> preparing` and z-ready already do. The push is the lock: a lost race means taking the next item. Each step runs in its own worktree under `.worktree/` on the worker's host. The worker's identity (host, CLI, model) goes on its spend rows. *captured* (c0254) (the claim itself *exists*)
+A worker claims an item by landing the status change on `origin/main`, as `status <id> preparing` and z-ready already do. The push is the lock: a lost race means taking the next item. Each step runs in its own worktree under `.worktree/` on the worker's host, and a worker pushes its layer branch after every commit, so a taker on any host recovers all committed work. The worker's identity (host, CLI, model) goes on its spend rows. *captured* (c0254) (the claim itself *exists*)
+- A worker that holds an item beats a heartbeat on it every 5 minutes, as a commit on a heartbeat branch, not on `main`; the branch is deleted when the heartbeat drops or the task completes. An item in progress whose heartbeat is stale is lost. *designed* (c0265)
+- Agents keep their claims alive without remembering to beat: the claim paths, every `./zn` command in a worktree, long commands and the dispatcher beat. *designed* (c0275)
+- A lost claim is taken over by the next worker as a normal claim, which resumes it and is recorded, and its old owner is refused and told: the takeover deletes the old heartbeat branch and creates a new one, so a worker that comes back learns it lost the claim. *designed* (c0274)
+- A takeover discards the old worker's worktree, and a numbered copy recovers its work: the old worker's work is kept, and a numbered copy of it continues the work. *designed* (c0277)
 
 ### Autonomous delivery
-Unless something blocks, an item is designed, design-reviewed, rafted, executed, code-reviewed, tested and merged with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the PR is green and regression-free. This replaces c0117's "stops at a merge" gate with the dispatcher merging after its own checks. *captured* (c0252)
+Unless something blocks, once a person has approved its design, an item is rafted, executed, code-reviewed, full-force reviewed, tested and landed with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the stack is green and regression-free. This replaces c0117's "stops at a merge" gate: the stack lands through `./zn done`, with the dispatcher's credential, after its own checks. *captured* (c0252)
+
+### Models per command and activity
+`.models.toml` names a real model for each stage in its `[roles.*]` table: `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `code-review` and `final-review`, each with its CLI, rank, token cap and effort and a fallback list, and spend records the model. No level has a name. *exists*
+- Every review runs on an expensive role: `idea-challenge`, `design-challenge`, `code-review`, `final-review`, and `raft` for a raft's review. `idea-challenge` and `code-review` name the role that wrote the text as their `author`, which drops that model; `design-challenge` and a raft's review run on the same model as their author. The cheaper `implementation` role builds and the `idea` role drafts. *exists*
+- A command refuses a design review or a final review recorded off its role's kind of model. *designed* (c0306)
+- The cheapest do the waiting: the dispatcher no longer stops at a gate just to wait, and polls it on the cheapest model of the CLI, so no expensive model waits on a gate. *captured* (c0305)
+- Metrics show the cost per model, from the real model on each spend row. *captured* (c0307)
 
 ### Reviews by different models
-- A reviewer should run on a different model family than the author, and successive rounds rotate (author Sonnet, round one Opus through `claude` or `agent`, round two `grok-4.7-xhigh` through `grok`). `.models.toml` names a review pool; the dispatcher takes the first member whose family differs from the author's and the previous round's reviewer. *captured* (c0251); what c0117 designs (*designed* (c0117)) fixes only which model reviews per CLI.
+- A reviewer should run on a different model family than the author, and successive rounds rotate. `.models.toml` names a review pool; the dispatcher takes the first member whose family differs from the author's and the previous reviewer's. *captured* (c0251); today `idea-challenge` and `code-review` name an `author`, which drops that model from their lists. *exists*
 - Same-family review (Opus reviewing Opus) is fine, but it is the fallback and never the only choice: it runs only when no different-family CLI can (out of tokens or quota, CLI missing). It never blocks the chain.
 - Every review records its model and whether it was a fallback. The board flags fallback reviews so you can ask for a cross-model re-review when tokens return. Every finding is still harvested into a skill's lessons.
 
+### The full-force review
+Once per raft, on the finished stack, a final review checks that each ticket's design covers its idea and that the implementation delivers the design. `./zn trace <R-id>` prints a table with one row per claim of the Problem, Solution and acceptance criteria; the reviewer on the `final-review` role cites the design section, the test and the code for each, `./zn trace <R-id> --check` verifies it, `final-review-NNN.md` ends in a verdict, `approve` or `changes`, and `./zn done` refuses a stack without it. *exists*
+- It runs in a fresh context with a limited view: the original ask (the verbatim ask, the interview and the confirmed idea), the design and the implementation as given. It sees no design reviews, refutes, harvests, PR comments or worker notes, so it judges the result on its merits and not through the compromises on the way. *designed* (c0262)
+- It runs once per ticket, before the next layer starts, as part of that layer's completion. *designed* (c0262)
+- Its verdict says plainly whether the work stayed on course, naming each gap against the ask or the design. *designed* (c0262)
+- Off course means a redo: back to z-design when the design missed the idea, a rebuilt layer when the implementation missed the design, and then the review again. A second off-course verdict blocks the ticket. *designed* (c0262)
+
 ### Escalation to the human
-A worker never guesses past a wall; it escalates formally. *captured* (c0250)
+A worker never guesses past a wall; it escalates formally. *designed* (c0250)
 - **State.** The item goes to status `blocked` on `origin/main`, so every host and the board see it, with a `blocked:` reason from a closed list:
 
   | reason | meaning |
@@ -80,34 +136,62 @@ A worker never guesses past a wall; it escalates formally. *captured* (c0250)
   | `tripwire` | a guard fired (foreign refs, unvetted push to `main`) |
 
 - **The note.** `escalation.md` in the item's folder, landed with the state: reason, what was tried, the open findings or error verbatim, the options with a recommendation, and the exact resume commands. It is in git, not `.cache`, so it works across hosts and replaces c0117's local `questions.md`.
-- **The worker moves on.** It parks the branch and PR, releases its claim, and takes the next unblocked item that does not depend on the blocked one.
-- **You resolve.** The board lists blocked items first with the reason and the question. `./zn resolve <id> <decision>`, where the decision is `amend-design` (back to z-design with the note as input), `approve` (for example accept the new dependency, recorded in the design), `split` (carve out an issue), `retry` (more rounds or attempts) or `abort` (z-stop). The decision is committed to the item, and it rejoins the stack at its old rank.
+- **The worker moves on.** A block on any ticket of a raft marks the raft blocked. The green layers below the blocked one land now, with one full gate on the top green one. The worker parks the branch and PR, releases its claim, clears its context and takes the next unblocked raft that does not depend on the blocked one.
+- **You resolve.** The board lists blocked items first with the reason and the question. `./zn resolve <id> <decision>`, where the decision is `amend-design` (back to z-design with the note as input), `approve` (for example accept the new dependency, recorded in the design), `split` (carve out an issue), `retry` (more rounds or attempts) or `abort` (z-stop). The decision is committed to the item, with who made it, and the raft resumes at the blocked layer.
 - Nothing else stops a worker.
 
+### Provenance
+Every ticket says who did what to it.
+- The record is kept on the ticket and appended by the record's command. *designed* (c0263)
+- The record holds who confirmed the idea and who set the rank as well: c0260 writes the first row and c0249 the second, through the record's small API. *designed* (c0263)
+- `./zn who <id>` prints a ticket's history, oldest first: whose idea it was (the author of the ticket's capture commit), each status change, the merge, and the worker of each delivered layer, read from the ticket's spend rows; what git already knows is read from git and never stored. *designed* (c0280)
+- The record gets a row, with its actor, when a ticket is unblocked, rafted or delivered. *designed* (c0282)
+- A person approves a design with `./zn approve <id>`, which records the person and a hash of the design sections, the acceptance specs and `check.sh` in the issue's `approval.md`; `ready` and `done` refuse a design that changed since. *exists*
+- `./zn approve` is also refused in any agent session, terminal or not, and records an `approved` row in the record (the person and the first 12 hex of the design hash, no words). *designed* (c0283)
+- The board shows each ticket's provenance, the same entries `./zn who` prints. *designed* (c0284)
+
 ### Trust
-*designed* (c0117).
+*exists* (c0117).
 
 Workers run with a bot credential that can push branches and open PRs but cannot merge or bypass `main`'s protection; only the dispatcher merges. The guards (git/gh wrapper, publish broker, tripwire) catch honest mistakes and casual misbehaviour; none is a boundary against a determined agent (c0117).
 
 ### Roadmap
 | piece | issue | state |
 |---|---|---|
-| `.models.toml`, dispatcher, chain, quota fallback, bot credential | c0117 | designed |
-| board, a tab per project | c0118 | designed |
+| `.models.toml`, dispatcher, chain, quota fallback, bot credential | c0117 | exists |
+| board, a tab per project | c0118 | exists |
 | remote runtimes (`claude-cloud`, `grok-bot`, `cursor-app`) | c0142 | captured |
-| a raft delivered as a stacked PR set, one layer per issue | c0248 | captured |
-| `rank`, `./zn rank`, `./zn next` | c0249 | captured |
-| `blocked`, `escalation.md`, `./zn resolve` | c0250 | captured |
+| `agy`, `kimi` and `deepseek` as CLIs | c0175 | captured |
+| a raft delivered as a stacked PR set, one layer per issue, each finished before the next | c0248 | designed |
+| `rank`, `./zn rank`, `./zn next`, lost first | c0249 | captured |
+| `blocked`, `escalation.md`, `./zn resolve` | c0250 | designed |
 | cross-model review pool, same-family fallback | c0251 | captured |
-| the dispatcher merges a green layer | c0252 | captured |
+| the dispatcher lands a green stack | c0252 | captured |
 | `./zn work` pull loop (the interactive session worker exists; the headless loop does not) | c0253 | captured |
 | workers on several hosts, worker identity in spend | c0254 | captured |
-| `./zn land` usage and a cheap retry | c0258 | captured |
+| the z-nile app in Omarchy: order, lost items, drag and drop | c0257 | captured |
+| `./zn land` usage and a cheap retry | c0258 | designed |
+| the capture interview, idea review and confirmation | c0260 | designed |
+| the full-force review: limited view, verdict, redo | c0262 | designed |
+| provenance: the record and its command | c0263 | designed |
+| the heartbeat branch, `./zn beat`, lost work | c0265 | designed |
+| take over a lost claim, the old owner told | c0274 | designed |
+| automatic heartbeats | c0275 | designed |
+| the board shows lost work | c0276 | designed |
+| discard and recover a worktree: the numbered copy | c0277 | designed |
+| `./zn who`, the history from git | c0280 | designed |
+| provenance rows: unblocked, rafted, delivered | c0282 | designed |
+| `./zn approve` refused in an agent session, the approved row | c0283 | designed |
+| the board shows provenance | c0284 | designed |
+| the dispatcher waits on a cheap model | c0305 | captured |
+| commands refuse a review off the review models | c0306 | designed |
+| metrics show cost per model | c0307 | captured |
 
-c0248 to c0254 are meant to be one raft once designed, delivered as a stacked PR set: layer 1 is c0248 on `main`, each next layer on the one below, in that order, merging bottom-up. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
+c0248 to c0254 stay one raft, delivered as one stack in that order, and it starts only when every outside dependency of its members is done: c0256, c0257, c0260, c0263, c0283, c0305, c0306 and the heartbeat tickets c0265, c0274, c0275 and c0277, and c0325. The other worker tickets (c0262, c0280, c0282, c0284, c0307, c0276) are designed one at a time with the user and then rafted; c0264 is this README chore. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
 
 ### Stacked delivery
-The general model (*captured* (c0248); today a raft is one branch and one PR): a raft is delivered as a **stacked PR set**, one layer (a branch and a PR) per issue, in the raft's Order. Each layer is reviewed and gated on its own diff; layers merge bottom-up, each retargeted to `main` as the one below merges. A one-issue raft is a stack of one. A blocked layer stops the layers above it, not the ones below.
+A raft is delivered as a stack: `./zn start` opens one layer per ticket (a branch and a draft PR on the layer below), in the raft's Order, `./zn finish` makes a layer one commit, `./zn restack` brings the stack onto a moved `main`, and `./zn done` lands it with one bind after the final review and the affected gate. A one-issue raft is a stack of one. *exists*
+- Each ticket is worked to completion before the next is picked up, by the same worker, so its context carries over: a layer is complete when it is built, reviewed and green on top of the layer below (its full-force review is c0262's), and the stack lands with one full gate on its top. A blocked layer stops the layers above it, not the ones below. *designed* (c0248)
 
 ## The five parts
 - **The tracker.** `./zn` at the repository root runs the engine in `z-nile/engine/`. Each project keeps its issues and rafts in its own root, `<project>/.tracker/` (z-nile's in `z-nile/.tracker/`), listed in `z-nile/projects.toml`. One counter, `z-nile/next`, numbers every project. The rules are in the zz-rules skill.

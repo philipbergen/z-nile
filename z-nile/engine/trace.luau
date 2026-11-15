@@ -9,8 +9,8 @@
 --    `./zn trace <R-id>`
 --      Prints the trace table skeleton for active raft `<R-id>` to stdout.
 --      Requires every layer of `<R-id>` to be finished and every ticket to
---      have its required sections (`## Problem`, `## Solution`,
---      `## Acceptance criteria`).
+--      have its required sections (`## Problem`, `## Acceptance criteria`; a
+--      captured `## Solution` is optional when it is empty or only the template).
 --    `./zn trace <R-id> --check`
 --      Reads `<raft-dir>/trace.md` and each ticket's `<issue-dir>/results.txt`
 --      from git at the top layer's commit and verifies the table against the
@@ -28,9 +28,16 @@
 --    - `<id>:AC1`, `<id>:AC2`, ... : each criterion under
 --      `## Acceptance criteria` in `<id>.md` at the commit being landed
 --      (preserving explicit `AC<N>` numbers when written, else 1..N).
---    Every ticket must have a captured `## Problem`, a captured `## Solution`,
---    and `## Acceptance criteria`; a missing or empty section is a failure
---    naming the ticket and the missing section (no vacuous fallback).
+--    Every ticket must have a captured `## Problem` and `## Acceptance criteria`;
+--    a missing or empty section is a failure naming the ticket and the missing
+--    section (no vacuous fallback). A `## Solution` of text with no outcome (only a
+--    fence) fails naming the ticket and section. A captured `## Solution` that is missing,
+--    empty or only the template comment (a ticket captured by `./zn new --desc`)
+--    yields no S claims and no failure; its claims are its P and AC claims.
+--    A captured section is read twice: the first read ends at a prep-addition line
+--    (`Decided with the user`, `**Scope decision`, `(Added in prep`); when it finds no
+--    outcome, the section is read again with those lines as text, so a section that
+--    is only a decision line has that line as its claim.
 --
 -- 3. Recorded green spec results (`<issue-dir>/results.txt`):
 --    `trace.renderResults` is the only serializer and `trace.parseResults` the
@@ -66,7 +73,8 @@
 --    ```
 --    - `trace.md` and `final-review-NNN.md` (and optional `final-refute-NNN.md`)
 --      are committed on the top layer after its finish commit, in commits that
---      touch only the raft's and tickets' tracker files.
+--      touch only the raft's and tickets' tracker files (the raft's own
+--      `spend.md` among them: every `./zn commit` rewrites it).
 --    - `Commit:` names the top layer's finish commit (`<issue>: <title>`).
 --      Anything else added after the table, or any layer rewritten, makes the
 --      table stale.
@@ -299,7 +307,9 @@ local function stripComments(text: string): string
 	return table.concat(out)
 end
 
-local function extractOutcomes(body: string?): { string }
+-- `keepPrepLines` reads a prep-addition line (`Decided with the user ...`) as an outcome instead of the end of the
+-- captured part: `readSection` asks for it only when the first read of a section gave no outcome (c0330).
+local function extractOutcomes(body: string?, keepPrepLines: boolean?): { string }
 	if body == nil then
 		return {}
 	end
@@ -324,7 +334,7 @@ local function extractOutcomes(body: string?): { string }
 			flush()
 			inFence = not inFence
 		elseif not inFence then
-			if isPrepAdditionLine(trimmed) then
+			if keepPrepLines ~= true and isPrepAdditionLine(trimmed) then
 				flush()
 				break
 			elseif
@@ -364,12 +374,22 @@ trace.extractOutcomes = extractOutcomes
 -- Acceptance criteria are read the same way as outcomes: one per bullet or paragraph.
 trace.extractAcs = extractOutcomes
 
+-- A captured section's outcomes: the first read stops at a prep-addition line; when that finds nothing, the section
+-- is read again with those lines as text, so a section that is only a decision line still has that line (c0330).
+local function readSection(body: string?): { string }
+	local items = extractOutcomes(body)
+	if #items == 0 then
+		items = extractOutcomes(body, true)
+	end
+	return items
+end
+
 function trace.deriveClaims(issues: { IssueDoc }): ({ Claim }, { string })
 	local out: { Claim } = {}
 	local errors: { string } = {}
 	for _, issue in issues do
 		local captured = if issue.capturedText ~= "" then issue.capturedText else issue.docText
-		local problems = extractOutcomes(sectionBody(captured, "Problem"))
+		local problems = readSection(sectionBody(captured, "Problem"))
 		if #problems == 0 then
 			table.insert(errors, `row {issue.id}, claim: ticket {issue.id} is missing captured ## Problem`)
 		else
@@ -385,20 +405,23 @@ function trace.deriveClaims(issues: { IssueDoc }): ({ Claim }, { string })
 			end
 		end
 
-		local solutions = extractOutcomes(sectionBody(captured, "Solution"))
-		if #solutions == 0 then
+		-- A ticket captured by `./zn new --desc` holds only the template under `## Solution`: it has no S
+		-- claims and is not refused (its P claims carry the captured idea, c0330). A Solution with text
+		-- but no outcome (a fence only) is still refused.
+		local solutionBody = sectionBody(captured, "Solution")
+		local solutions = readSection(solutionBody)
+		if #solutions == 0 and trim(stripComments(solutionBody or "")) ~= "" then
 			table.insert(errors, `row {issue.id}, claim: ticket {issue.id} is missing captured ## Solution`)
-		else
-			for i, text in solutions do
-				local id = `{issue.id}:S{i}`
-				table.insert(out, {
-					id = id,
-					issue = issue.id,
-					kind = "S",
-					text = text,
-					rowLabel = `{id}: {text}`,
-				})
-			end
+		end
+		for i, text in solutions do
+			local id = `{issue.id}:S{i}`
+			table.insert(out, {
+				id = id,
+				issue = issue.id,
+				kind = "S",
+				text = text,
+				rowLabel = `{id}: {text}`,
+			})
 		end
 
 		local acBody = sectionBody(issue.docText, "Acceptance criteria")
@@ -443,6 +466,7 @@ local function isTrackerFileOf(path: string, raftId: string, raftDir: string, is
 		local name = string.sub(path, #raftPrefix + 1)
 		if
 			name == "trace.md"
+			or name == "spend.md" -- d0333: every `./zn commit` rewrites the raft's snapshot
 			or name == `{raftId}.md`
 			or string.match(name, "^review%-%d+%.md$") ~= nil
 			or string.match(name, "^refute%-%d+%.md$") ~= nil
@@ -469,6 +493,7 @@ local function isAllowedAfterTrace(path: string, raftId: string, raftDir: string
 		local name = string.sub(path, #raftPrefix + 1)
 		if
 			name == `{raftId}.md`
+			or name == "spend.md" -- d0333
 			or string.match(name, "^final%-review%-%d+%.md$") ~= nil
 			or string.match(name, "^final%-refute%-%d+%.md$") ~= nil
 		then
@@ -480,7 +505,8 @@ end
 
 -- Pure stale decision over the stack's layers and commits.
 -- Rule: `trace.md` and `final-review-NNN.md` are committed on the top layer after its finish commit,
--- in commits that touch only the raft's and tickets' tracker files; `Commit:` names the top layer's
+-- in commits that touch only the raft's and tickets' tracker files (the raft's own `spend.md` among
+-- them, before and after the table); `Commit:` names the top layer's
 -- finish commit; anything else added after the table, or any layer rewritten, makes it stale.
 function trace.staleReason(
 	raftId: string,

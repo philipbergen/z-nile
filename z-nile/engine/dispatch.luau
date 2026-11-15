@@ -138,7 +138,7 @@ function dispatch.prompt(p: PromptInput): string
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in stream mode. This is the one round. Read the stream's diff and run its checks in \`{p.streamWorktree or `.worktree/ws-{p.id}`}\` (read only there). Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into the raft's folder as \`stream-review-{p.id}-001.md\`.`
 	elseif p.step == "zz-review" and p.mode == "final" then
 		what =
-			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. Run \`./zn trace {p.id}\`, fill \`trace.md\` in {p.id}'s folder, verify it with \`./zn trace {p.id} --check\`, and write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.`
+			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.`
 	elseif p.step == "zz-review" then
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as that mode's file ({if p.mode

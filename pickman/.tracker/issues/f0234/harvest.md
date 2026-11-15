@@ -1,0 +1,6 @@
+- design-review-001 F1: z-design/mutation-runner-runs-correct-variants
+- design-review-001 F2: z-design/spec-design-correspondence
+- design-review-001 F3: z-design/experiments-run-where-the-executor-runs
+- design-review-001 F4: z-design/affected-lists-from-changed-files
+- design-review-001 F5: z-design/mutation-runner-runs-correct-variants
+- design-review-001 F6: one-off: the no-overlap argument said "every pause" where only every READY pause holds, which the draft's own Edge cases contradicted; reworded, and the extension point now states the rule it needs

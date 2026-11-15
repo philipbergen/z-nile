@@ -1,0 +1,3 @@
+- review-001 F1: zz-test/specs-read-sources-through-the-selector
+- final-review-001 F1: zz-arch/allow-lists-accept-what-the-prescribed-command-writes
+- final-review-001 F2: z-design/rules-keyed-to-a-sha
