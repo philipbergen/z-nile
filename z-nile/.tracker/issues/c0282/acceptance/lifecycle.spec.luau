@@ -91,6 +91,8 @@ return t.spec("c0282 the offline lifecycle stamps provenance", function(it)
 		end
 		clone.isolated(root, dir)
 		git({ "remote", "remove", "origin" })
+		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
+		git({ "checkout", "-q", "-B", "main" })
 		-- the tooling as every tracker fixture gets it: engine.PATHSPECS (a sibling that adds a state file excludes it there)
 		local listArgs: { string } = { "ls-files", "-co", "--exclude-standard" }
 		for _, spec in engine.PATHSPECS do
