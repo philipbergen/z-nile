@@ -1,0 +1,46 @@
+import sys
+
+B = "z-nile/engine/boundcmd.luau"
+G = "z-nile/guard-bash.luau"
+S = "z-nile/tests/acceptance/c0191/boundcmd.spec.luau"
+T = "z-nile/skills/zz-test/SKILL.md"
+
+MUTANTS = {
+    "M1-absolute-by-suffix": (B, "if checkout == nil or (not absolute and CTX.cwd == nil) then", "if checkout == nil or absolute or CTX.cwd == nil then"),
+    "M2-homes-ignored": (B, "return path ~= nil and (TOOLING[path] == true or homeRunner(path))", 'return path ~= nil and (TOOLING[path] == true or string.match(path, "^[^/]+/tests/run$") ~= nil)'),
+    "M3-checkout-text-prefix": (B, "\tfor i, part in top do\n\t\tif parts[i] ~= part then\n\t\t\treturn nil\n\t\tend\n\tend\n", "\tif string.sub(full, 1, #checkout) ~= checkout then\n\t\treturn nil\n\tend\n"),
+    "M4-no-worktree-strip": (B, "\t\tfirst += 2\n", "\t\tfirst += 0\n"),
+    "M5-root-runner-kept": (B, '\t["z-nile/tests/run"] = true,\n', '\t["tests/run"] = true,\n\t["z-nile/tests/run"] = true,\n'),
+    "M6-cds-ignored": (B, "local dir = if absolute then \"/\" else CTX.dir\n", "local dir = if absolute then \"/\" else CTX.cwd\n"),
+    "M7-unresolved-cd-by-name": (B, "\tif dir == nil or (not absolute and not insideOf(dir, checkout)) then\n", "\tif dir == nil then\n\t\treturn byName(target)\n\tend\n\tif not absolute and not insideOf(dir, checkout) then\n"),
+    "M8-no-checkout-refuses": (B, "\tif checkout == nil or (not absolute and CTX.cwd == nil) then\n\t\treturn byName(target)\n", "\tif checkout == nil or (not absolute and CTX.cwd == nil) then\n\t\treturn false\n"),
+    "M9-no-cwd-absolute-by-name": (B, "if checkout == nil or (not absolute and CTX.cwd == nil) then", "if checkout == nil or CTX.cwd == nil then"),
+    "M10-luau-kept": (B, '"%.luau$", ""))', '"%.luau$", ".luau"))'),
+    "M11-dot-kept": (B, "\t\t\ttable.remove(parts) -- `/..` is `/`\n\t\telseif part ~= \".\" then\n", "\t\t\ttable.remove(parts) -- `/..` is `/`\n\t\telse\n"),
+    "M12-above-root-refuses": (B, "\t\t\ttable.remove(parts) -- `/..` is `/`\n", "\t\t\tif #parts == 0 then\n\t\t\t\treturn nil\n\t\t\tend\n\t\t\ttable.remove(parts)\n"),
+    "M13-folder-rule-dropped": (B, "\tif dir == nil or (not absolute and not insideOf(dir, checkout)) then\n", "\tif dir == nil then\n"),
+    "M14-no-reason": (B, "local where = if target ~= nil and byName(target)", "local where = if target ~= nil and false"),
+    "M15-reason-always": (B, "local where = if target ~= nil and byName(target)", "local where = if target ~= nil"),
+    "M16-hook-hand-list": (G, "\t\thomes = list\n", '\t\thomes = { "pickman", "z-nile", "snake" }\n'),
+    "M17-narrowed-assertion-dropped": (S, '\t{ command = "lune run /tmp/x/z-nile/tests/run -- a", cwd = CHECKOUT, ok = false },\n', ""),
+    "M18-narrowed-line-joined": (S, "\t\t\tlocal r = hook(toolCall(\"lune run p2.luau check a\"))\n\t\t\tt.expect(r.code).toBe(2)\n", "\t\t\tlocal r = hook(toolCall(\"lune run p2.luau check a\")) t.expect(r.code).toBe(2)\n"),
+    "M19-skill-unchanged": (T, "; a target counts by the file it reaches in this checkout or one of its worktrees, written relative or absolute, never by its suffix (c0245))", ")"),
+    "M20-bare-runner-anywhere": (B, "return path ~= nil and (TOOLING[path] == true or homeRunner(path))", "return normalise(target) == RUNNER or (path ~= nil and (TOOLING[path] == true or homeRunner(path)))"),
+    "M21-background-ignores-cds": (B, "\t\t\t\tfollowCd(words)\n\t\t\tend\n\t\t\tCTX.dir = CTX.cwd\n", "\t\t\tend\n\t\t\tCTX.dir = CTX.cwd\n"),
+    "M22-reason-absolute-only": (B, "local where = if target ~= nil and byName(target)", 'local where = if target ~= nil and string.sub(target, 1, 1) == "/" and byName(target)'),
+    "M23-old-parenthesis": (B, "\\`lune run tests/run\\` from a project's home need no wrapper", "\\`lune run tests/run\\` need no wrapper"),
+}
+
+if sys.argv[1] == "list":
+    print("\n".join(MUTANTS))
+    sys.exit(0)
+root, name = sys.argv[1], sys.argv[2]
+rel, old, new = MUTANTS[name]
+p = f"{root}/{rel}"
+s = open(p).read()
+n = s.count(old)
+if n != 1:
+    print(f"{name}: matched {n} times")
+    sys.exit(3)
+open(p, "w").write(s.replace(old, new))
+print(f"applied {name} to {rel}")
