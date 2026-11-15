@@ -25,3 +25,5 @@ c0302 design review 001 F2: a design that adds a rule about how fixtures are set
 **Note (c0306's prep, 2026-11-14, design review 001 F6):** `[roles.raft]` runs at effort `high`, so its grok fallback would write a raft review that c0306's rule refuses. The dispatcher would spend a whole review run on a result refused by construction. The user ruled that a review step skips such a try.
 
 **Note** (c0282 re-prep 2026-11-15): c0302's rule that a clone fixture names its branch `main` scans only `z-nile/tests`, so a prepared issue's sequestered spec breaks it only when a raft promotes it (c0282's `lifecycle.spec`, found at R0099's prototype gate). A new rule over specs also scans the open `acceptance/` folders, or names the prepared issues it leaves to fix.
+
+**Note (c0270 design review 001 F2):** a rule on what counts as "another prep" was never run over the 42 items `preparing` on `origin/main`; it counted their own prototype branches and worktrees and PRs that only mention the id. The revision ran it on every one (its E8) and recorded what each resume finds.
