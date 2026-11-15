@@ -13,6 +13,7 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0102
 
-# check "RC1: <end-to-end statement>" <command>
+# the raft is specs only: Non-goal 1 and the rollback rest on it
+check "RC1: the branch changes nothing of the tooling: no file under engine or lib, not the selector, not the gate" git diff --quiet origin/main...HEAD -- engine lib affected.luau check.sh
 
 finish
