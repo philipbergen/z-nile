@@ -1,0 +1,23 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-15 11:13	1 spec	0	0	test			40.164	24.190		40.164	tokens,ai
+2026-11-15 11:13	1 spec	0	0	test			4.971	3.150		4.971	tokens,ai
+2026-11-15 11:14	1 spec	0	0	test			39.365	25.310		39.365	tokens,ai
+2026-11-15 11:19	1 spec	0	0	test			5.143	3.200		5.143	tokens,ai
+2026-11-15 11:23	1 spec	0	0	test			3.700	2.530		3.700	tokens,ai
+2026-11-15 11:26	1 spec	0	0	test			15.931	9.510		15.931	tokens,ai
+2026-11-15 11:27	1 spec	0	0	test			43.165	23.320		43.165	tokens,ai
+2026-11-15 11:33	2 specs	0	0	test			56.110	24.560		56.110	tokens,ai
+2026-11-15 11:36	6 specs	0	0	test			15.480	29.590		15.480	tokens,ai
+2026-11-15 11:45	1 spec	0	0	test			2.261	1.360		2.261	tokens,ai
+2026-11-15 11:45	1 spec	0	0	test			9.086	6.750		9.086	tokens,ai
+2026-11-15 11:45	1 spec	0	0	test			19.380	13.450		19.380	tokens,ai
+2026-11-15 11:51	1 spec	0	0	test			3.310	2.170		3.310	tokens,ai
+2026-11-15 11:51	1 spec	0	0	test			3.521	2.210		3.521	tokens,ai
+2026-11-15 11:54	7 specs	0	0	test			77.595	178.220		77.595	tokens,ai
+2026-11-15 11:58	1 spec	0	0	test			2.663	1.690		2.663	tokens,ai
+2026-11-15 12:58	97 specs	0	0	test			1193.701	4622.430		1193.701	tokens,ai
+2026-11-15 12:59	1 spec	0	0	test			1.449	0.810		1.449	tokens,ai
+2026-11-15 12:59	1 spec	0	0	test			4.961	3.470		4.961	tokens,ai
+2026-11-15 13:00	1 spec	0	0	test			10.895	7.240		10.895	tokens,ai
+2026-11-15 12:59	54 runs	0	0	other			4609.887	11737.390			tokens,ai
+2026-11-15 13:00	design-refute-001	0	0	design-review							tokens,ai
