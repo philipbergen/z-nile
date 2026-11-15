@@ -1,0 +1,1 @@
+- note PR #256 was closed by another session with a comment while an agent kept pushing review rounds into it and reporting it updated (the capture of c0271): zz-rules/read-pr-state-before-pushing
