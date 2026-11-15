@@ -1,5 +1,5 @@
 --!strict
--- c0278 AC10: the rules restate closing an issue as won't do wherever the statuses, the published changes and the
+-- c0278 AC10, AC13: the rules restate closing an issue as won't do wherever the statuses, the published changes and the
 -- commands are listed (zz-rules and the usage text), and close joins neither the read-only set nor the main checkout's
 -- allowed list.
 local fs = require("@lune/fs")
@@ -74,6 +74,26 @@ return t.spec("c0278 docs", function(it)
 		t.expect(says(other, "- `./zn list [backlog|active|done|closed]`")).toBe(true)
 		t.expect(says(other, "- `./zn list [backlog|active|done]`\n")).toBe(false)
 	end)
+
+	it(
+		"zz-rules' land sentences say a capture never edits a closed issue or adds one to a depends_on",
+		function()
+			local text = rules()
+			local push = bullet(text, "- **The direct-push exception.**")
+			t.expect(
+				says(
+					push,
+					"never a closed issue's document, and never adding a closed issue to a `depends_on`"
+				)
+			)
+				.toBe(true)
+			local land = bullet(text, "2. **Push and open the PR**")
+			t.expect(
+				says(land, "refuses a closed issue's document and a `depends_on` that adds a closed issue")
+			)
+				.toBe(true)
+		end
+	)
 
 	it(
 		"usage names close and list closed, and close is neither read-only nor allowed in the main checkout",

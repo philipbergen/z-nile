@@ -47,9 +47,27 @@ closed_here() {
   if "$ZN_ROOT/zn" audit 2>&1 | grep -E "closed-[a-z-]+ " | grep -F "$id"; then
     echo "audit reports $id"; return 1
   fi
+  # carried, not published: a published close leaves its subject in the document's history for good
+  if git log --format=%s HEAD -- "$doc" | grep -qxF "tracker: close $id won't do"; then
+    echo "$id was closed by a published close, not carried in this branch"; return 1
+  fi
+  # no live item on origin/main (which done fetches before it runs this) depends on it: a backlog or active
+  # item document, not itself closed, whose depends_on line names the id
+  local p
+  while IFS= read -r p; do
+    [[ $p =~ /(issues|rafts)/(active/)?([cfdR][0-9]{4})/([cfdR][0-9]{4})\.md$ ]] || continue
+    [[ ${BASH_REMATCH[3]} == "${BASH_REMATCH[4]}" ]] || continue
+    git show "origin/main:$p" | awk '/^---$/{n++; next} n==1 && /^status: closed-/{c=1} END{exit !c}' && continue
+    echo "origin/main's $p names $id in its depends_on"; return 1
+  done < <(git grep --full-name -l -w -e "$id" --and -e '^depends_on:' origin/main -- ':(top,glob)*/.tracker/**' | sed 's#^origin/main:##')
 }
-check "AC11: c0268 is closed on this branch with its wont_do: reason, and audit reports nothing for it" bash -c "$(declare -f closed_here); ZN_ROOT='$ZN_ROOT'; closed_here c0268"
+check "AC11: c0268 is closed on this branch with its wont_do: reason by the carried close, audit reports nothing for it, and no live item on origin/main depends on it" bash -c "$(declare -f closed_here); ZN_ROOT='$ZN_ROOT'; closed_here c0268"
 
+# AC12 runs four slow-tier specs (c0053/publish 13.2 s, c0067/publish-move 10.9 s, tooling/board 8.0 s, c0082/cli 5.6 s:
+# 37.7 s): they pin the publish guard, list and the board, which this chore changes (lesson
+# zz-test/check-sh-never-runs-the-slow-tier, its c0302 note). The other slow specs at risk run once, in step 11.
 check "AC12: the promoted specs next to this chore still pass" nostep lune run tests/run -- tests/acceptance/c0053/publish.spec.luau tests/acceptance/c0081/publish-guard.spec.luau tests/acceptance/c0067/publish-move.spec.luau tests/acceptance/c0082/audit.spec.luau tests/acceptance/c0082/cli.spec.luau tests/acceptance/c0118/view.spec.luau tests/acceptance/c0081/skill-doc.spec.luau tests/tooling/status-fresh.spec.luau tests/tooling/watch.spec.luau tests/tooling/board.spec.luau
+
+check "AC13: ./zn land refuses a capture that edits a closed issue's document or adds a closed issue to a depends_on, and zz-rules says so" nostep lune run tests/run -- "$A/close-cli.spec.luau" "$A/docs.spec.luau"
 
 finish

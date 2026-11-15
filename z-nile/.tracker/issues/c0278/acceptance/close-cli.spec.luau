@@ -96,6 +96,24 @@ return t.spec("c0278 ./zn close", function(it)
 				[`{RAFTS}/active/R0520/R0520.md`] = raftDoc("R0520", "c0580", "active-jolly-lynx-heron"),
 				[`{ISSUES}/c0590/c0590.md`] = issue("c0590", "new-amber-otter-lynx", "draft"),
 				[`{ISSUES}/c0600/c0600.md`] = issue("c0600", "prepared-amber-otter-lynx", "ready"),
+				-- c0610 is held by a live active dependent (c0620), c0630 only by a closed one (c0640), and c0650 only by a
+				-- review file's `depends_on:` line, which is no item document
+				[`{ISSUES}/c0610/c0610.md`] = issue("c0610", "new-amber-otter-lynx", "draft"),
+				[`{ISSUES}/active/c0620/c0620.md`] = issue(
+					"c0620",
+					"active-jolly-lynx-heron",
+					"ready",
+					"R0520",
+					"c0610"
+				),
+				[`{ISSUES}/c0630/c0630.md`] = issue("c0630", "new-amber-otter-lynx", "draft"),
+				[`{ISSUES}/c0640/c0640.md`] = closedAs(
+					issue("c0640", "new-amber-otter-lynx", "draft", nil, "c0630"),
+					"closed-amber-otter-lynx",
+					"moot: seeded closed"
+				),
+				[`{ISSUES}/c0650/c0650.md`] = issue("c0650", "new-amber-otter-lynx", "draft"),
+				[`{ISSUES}/c0550/design-review-001.md`] = "# Design review 001\n\ndepends_on: [c0650]\n",
 			}
 			for _, p in
 				{
@@ -275,6 +293,74 @@ return t.spec("c0278 ./zn close", function(it)
 		t.expect(has(onOrigin(`{ISSUES}/c0590/c0590.md`), `\nwont_do: {REASON}\n`)).toBe(true)
 		fixture.git(W3, { "checkout", "--", `{ISSUES}/c0550/c0550.md` })
 	end)
+
+	it(
+		"close counts only live item documents as dependents: an active dependent holds it; a closed dependent and a review file's depends_on line do not",
+		function()
+			-- c0620 is a live item in active/ naming c0610
+			refused(W, { "close", "c0610", "--reason", REASON }, nil, "named in the depends_on of c0620")
+			t.expect(statusOf(onOrigin(`{ISSUES}/c0610/c0610.md`))).toBe("new-amber-otter-lynx")
+			-- c0640 names c0630 but is itself closed
+			trOk(W, { "close", "c0630", "--reason", REASON })
+			t.expect(has(onOrigin(`{ISSUES}/c0630/c0630.md`), `\nwont_do: {REASON}\n`)).toBe(true)
+			-- c0550/design-review-001.md has a line `depends_on: [c0650]`: not an item document
+			trOk(W, { "close", "c0650", "--reason", REASON })
+			t.expect(has(onOrigin(`{ISSUES}/c0650/c0650.md`), `\nwont_do: {REASON}\n`)).toBe(true)
+		end
+	)
+
+	it(
+		"land refuses a capture that edits a closed issue's document or adds it to a depends_on, and lands one that adds a live id",
+		function()
+			trOk(W, { "sync" })
+			local wt = trOk(f.main, { "worktree", "capture-closed" })
+			fixture.git(wt, { "config", "user.name", "land" })
+			fixture.git(wt, { "config", "user.email", "land@example.invalid" })
+			local env = { PICKMAN_LAND_GATE = "true" }
+			local start = fixture.git(wt, { "rev-parse", "HEAD" })
+			local function commitEdit(path: string, change: (string) -> string)
+				fs.writeFile(`{wt}/{path}`, change(fs.readFile(`{wt}/{path}`)))
+				fixture.git(wt, { "add", path })
+				fixture.git(wt, { "commit", "-q", "-m", "capture attempt" })
+			end
+			-- (a) c0510 is closed (above): a capture that rewrites its Problem
+			local closedDoc = `{ISSUES}/c0510/c0510.md`
+			t.expect(string.match(statusOf(onOrigin(closedDoc)), "^closed%-") ~= nil).toBe(true)
+			commitEdit(closedDoc, function(text)
+				return text .. "\nA capture's addition.\n"
+			end)
+			refused(
+				wt,
+				{ "land" },
+				env,
+				`not a capture change: {closedDoc} is closed (won't do): its document is never published again`
+			)
+			fixture.git(wt, { "reset", "-q", "--hard", start })
+			-- (b) c0510 is added to the draft c0550's depends_on
+			local other = `{ISSUES}/c0550/c0550.md`
+			commitEdit(other, function(text)
+				return (string.gsub(text, "depends_on: %[%]", "depends_on: [c0510]", 1))
+			end)
+			refused(
+				wt,
+				{ "land" },
+				env,
+				`not a capture change: {other} adds c0510 to depends_on, and c0510 is closed (won't do): drop it from depends_on`
+			)
+			fixture.git(wt, { "reset", "-q", "--hard", start })
+			-- (c) a live id (c0560 is new) in the same depends_on lands
+			commitEdit(other, function(text)
+				return (string.gsub(text, "depends_on: %[%]", "depends_on: [c0560]", 1))
+			end)
+			local before = tip()
+			local r = tr(wt, { "land" }, env)
+			if not r.ok then
+				error(`land of a live depends_on id failed: {r.stderr}{r.stdout}`)
+			end
+			t.expect(tip() ~= before).toBe(true)
+			t.expect(has(onOrigin(other), "depends_on: [c0560]")).toBe(true)
+		end
+	)
 
 	it("cleans up", function()
 		fs.removeDir(f.base)
