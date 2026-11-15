@@ -9,6 +9,7 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: f0125's speeds.spec is exactly the narrowed one (pinned whole), no compare of the shipped config against the classic tables, and no ghost speed without the ramp, is left, and f0125's check.sh still runs it" lune run tests/run -- "$A/narrowed.spec.luau"
+check "AC2: f0125's acceptance checks pass" bash -c 'bash "$("$ZN_ROOT/zn" find f0125)/check.sh"'
 
 finish
