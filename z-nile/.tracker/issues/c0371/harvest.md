@@ -12,3 +12,13 @@
 - design-review-001 F12: z-design/check-paths-from-the-home
 - design-review-001 F13: z-design/spec-design-correspondence
 - note a prep that changes a promoted spec searched the unfinished items for it only after the review found c0141: z-design/quote-other-preps-before-promising
+- design-review-002 F1: zz-test/shell-readers-carry-state-across-lines
+- design-review-002 F2: zz-test/shell-readers-carry-state-across-lines
+- design-review-002 F3: zz-test/shell-readers-carry-state-across-lines
+- design-review-002 F4: zz-test/shell-rules-key-on-command-position
+- design-review-002 F5: zz-test/one-rule-one-function
+- design-review-002 F6: z-design/spec-design-correspondence
+- design-review-002 F7: zz-test/seed-every-enumerated-case
+- design-review-002 F8: z-design/design-the-execution-window
+- design-review-002 F9: z-design/restated-rules-move-together
+- note a live-tree case that stays green after a rule change was re-run with each defect fixed alone (c0292 passed only because two defects cancelled): zz-test/shell-readers-carry-state-across-lines
