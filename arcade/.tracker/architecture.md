@@ -52,6 +52,7 @@ This repo only takes work through its tracker (AGENTS.md: no code without an iss
   - `ROBLOX_BETA_PLACE_ID` is the portal (start place).
   - The games use `ROBLOX_BETA_PICKMAN_PLACE_ID` (the old `…_GAME_PLACE_ID` is still accepted), `…_SNAKE_…`, `…_INVADERS_…` and `…_ASTEROIDS_…`.
 - Every place gets every place id as an attribute (`PortalPlaceId`, `PickmanPlaceId`, `SnakePlaceId`, `InvadersPlaceId`, `AsteroidsPlaceId`; 0 means not published, and the portal shows that card as "coming soon"). `LobbyPlaceId` becomes `PortalPlaceId`.
+  - The attributes are on `ServerScriptService` (where `Beta.project` writes them today), so they stay on the server. A place reads them with arcade's `Places.read(read)` (`src/shared/Places.luau`, a config module outside Logic, so the Travel feature names no game), its adapter passing `ServerScriptService:GetAttribute`; the names are `Places.attribute(name)` for each of `Places.NAMES` (f0199).
 - The deploy scripts and the runtime-test runner (`--place <name>`) move to `portal/scripts/`. f0169 (live publish) builds on that.
 
 **Unknowns that prep must settle with experiments:**
