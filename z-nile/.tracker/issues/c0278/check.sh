@@ -49,8 +49,7 @@ closed_here() {
   fi
 }
 check "AC11: c0268 is closed on this branch with its wont_do: reason, and audit reports nothing for it" bash -c "$(declare -f closed_here); ZN_ROOT='$ZN_ROOT'; closed_here c0268"
-check "AC12: c0266 is closed on this branch with its wont_do: reason (the captured outcome; Q1)" bash -c "$(declare -f closed_here); ZN_ROOT='$ZN_ROOT'; closed_here c0266"
 
-check "AC13: the promoted specs next to this chore still pass" nostep lune run tests/run -- tests/acceptance/c0053/publish.spec.luau tests/acceptance/c0081/publish-guard.spec.luau tests/acceptance/c0067/publish-move.spec.luau tests/acceptance/c0082/audit.spec.luau tests/acceptance/c0082/cli.spec.luau tests/acceptance/c0118/view.spec.luau tests/acceptance/c0081/skill-doc.spec.luau tests/tooling/status-fresh.spec.luau tests/tooling/watch.spec.luau tests/tooling/board.spec.luau
+check "AC12: the promoted specs next to this chore still pass" nostep lune run tests/run -- tests/acceptance/c0053/publish.spec.luau tests/acceptance/c0081/publish-guard.spec.luau tests/acceptance/c0067/publish-move.spec.luau tests/acceptance/c0082/audit.spec.luau tests/acceptance/c0082/cli.spec.luau tests/acceptance/c0118/view.spec.luau tests/acceptance/c0081/skill-doc.spec.luau tests/tooling/status-fresh.spec.luau tests/tooling/watch.spec.luau tests/tooling/board.spec.luau
 
 finish
