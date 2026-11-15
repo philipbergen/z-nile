@@ -429,10 +429,10 @@ return t.spec("c0325 spend and commit record the model that wrote the work", fun
 			t.expect(subjects).toBe("subject;prep;raft-prep;")
 			local layers = { models.parse(ROLES, ".models.toml") }
 			local dirs = { `{prep}/{ROOT}/issues/c0209`, `{prep}/{ROOT}/issues/c0210` }
-			local raft = R.read("raft", dirs, layers, nil, nil)
-			t.expect(#raft.writers).toBe(1)
-			t.expect(raft.writers[1].model).toBe("grok-4.7")
-			t.expect(raft.provenance).toBe("recorded")
+			local raftRead = R.read("raft", dirs, layers, nil, nil)
+			t.expect(#raftRead.writers).toBe(1)
+			t.expect(raftRead.writers[1].model).toBe("grok-4.7")
+			t.expect(raftRead.provenance).toBe("recorded")
 			local design = R.read("design", { dirs[1] }, layers, nil, nil)
 			t.expect(#design.writers).toBe(1)
 			t.expect(design.writers[1].model).toBe("claude-sonnet-5-5")
