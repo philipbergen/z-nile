@@ -8,3 +8,4 @@
 - design-review-001 F6: z-design/never-narrow-captured-scope
 - design-review-001 F7: zz-test/kill-mutants-where-the-value-is-built
 - design-review-001 F8: one-off: wording left from the first prototype (the lane's line) and a patch step that would refuse instead of merging
+- note c0230 after the F3 ruling (E13): the 3 s default listed 13 z-nile files at load 5 to 16, not the four the option quoted from a light-load run: z-design/measured-thresholds-name-their-load

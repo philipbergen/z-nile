@@ -1,5 +1,5 @@
 --!strict
--- c0230 AC2: the coordinator reports the spec files over the per-file budget (`--budget`, default 60 s wall and 30 s cpu)
+-- c0230 AC2: the coordinator reports the spec files over the per-file budget (`--budget`, default 60 s wall and 3 s cpu)
 -- before its summary, from each worker's own seconds and the CPU its measurer saw (the worker and every process it waited
 -- for). It reports only, and no nested run inherits the limits. Fixture spec files are written under .cache/c0230-budget
 -- and run through the real runner as child processes, on worker lanes of their own (or none). Nothing here burns CPU

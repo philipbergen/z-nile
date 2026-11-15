@@ -1,6 +1,6 @@
 diff --git a/z-nile/tests/lib/budget.luau b/z-nile/tests/lib/budget.luau
 new file mode 100644
-index 0000000000000000000000000000000000000000..24e912f5cd633d3cd5a70e39ece945cf35074282
+index 0000000000000000000000000000000000000000..06f8e08e5b8bdfbf01e233b1e46504a6b042fa9e
 --- /dev/null
 +++ b/z-nile/tests/lib/budget.luau
 @@ -0,0 +1,117 @@
@@ -15,7 +15,7 @@ index 0000000000000000000000000000000000000000..24e912f5cd633d3cd5a70e39ece945cf
 +export type Limits = { seconds: number, cpu: number }
 +export type Cost = { file: string, seconds: number, cpu: number? }
 +
-+budget.DEFAULT = { seconds = 60, cpu = 30 } :: Limits
++budget.DEFAULT = { seconds = 60, cpu = 3 } :: Limits
 +budget.LESSON = "zz-test/specs-never-burn-real-resources"
 +budget.SHOWN = 10
 +-- The CPU measurer every worker of a concurrent run is started under (`perl -e MEASURE <command> <args>`): it runs the

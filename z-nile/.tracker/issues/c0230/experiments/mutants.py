@@ -9,7 +9,8 @@ P = ['bash', '-c', 'ulimit -t 60; lune run ' + A + 'proof-cpu.luau']
 BL = 'tests/lib/budget.luau'
 RN = 'tests/run.luau'
 M = [
-    ('M1 defaults swapped', [(BL, 'budget.DEFAULT = { seconds = 60, cpu = 30 }', 'budget.DEFAULT = { seconds = 30, cpu = 60 }')], B),
+    ('M1 defaults swapped', [(BL, 'budget.DEFAULT = { seconds = 60, cpu = 3 }', 'budget.DEFAULT = { seconds = 3, cpu = 60 }')], B),
+    ('M1b cpu default left at 30 s', [(BL, 'budget.DEFAULT = { seconds = 60, cpu = 3 }', 'budget.DEFAULT = { seconds = 60, cpu = 30 }')], B),
     ('M2 one value accepted for both', [(BL, 'local a, b = string.match(value, "^([^:]+):([^:]+)$")', 'local a, b = string.match(value, "^([^:]+):?([^:]*)$"); if b == "" then b = a end')], B),
     ('M3 zero accepted', [(BL, 'if n == nil or n <= 0 then', 'if n == nil or n < 0 then')], B),
     ('M3b empty value is the default', [(BL, '	if value == nil then\n		return budget.DEFAULT, nil', '	if value == nil or value == "" then\n		return budget.DEFAULT, nil')], B),
