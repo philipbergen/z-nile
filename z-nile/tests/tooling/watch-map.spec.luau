@@ -65,13 +65,13 @@ return t.spec("the watch map is captured, rewritten and repaired", function(it)
 		fixture.git(f.main, { "commit", "-qm", "prep" })
 		zn(f, { "start", raft })
 		write(f.main, "pickman/src/shared/Logic/Maze/init.luau", "return {}\n")
-		zn(f, { "commit", "-m", "maze", "--issue", id, "--time", "1" })
+		zn(f, { "commit", "-m", "maze", "--model", "claude-sonnet-5-5", "--issue", id, "--time", "1" })
 		write(
 			f.main,
 			`{root}/rafts/active/{raft}/review-001.md`,
 			"Model: claude-opus-5-5\n# Review 001\n\nVerdict: approve\n"
 		)
-		zn(f, { "commit", "-m", "review", "--time", "1" })
+		zn(f, { "commit", "-m", "review", "--model", "claude-sonnet-5-5", "--time", "1" })
 		zn(f, { "finish", id })
 		seal.trace(f.main, raft)
 		zn(f, { "done", raft }, { PICKMAN_DONE_GATE = "1", GATE_LOG = `{f.base}/gate.log`, GATE_EXIT = "0" })
@@ -108,7 +108,7 @@ return t.spec("the watch map is captured, rewritten and repaired", function(it)
 		fixture.git(f.main, { "commit", "-qm", "prep" })
 		zn(f, { "start", raft })
 		fixture.git(f.main, { "mv", "pickman/src/Old.luau", "pickman/src/New.luau" })
-		zn(f, { "commit", "-m", "rename", "--issue", issue, "--time", "1" })
+		zn(f, { "commit", "-m", "rename", "--model", "claude-sonnet-5-5", "--issue", issue, "--time", "1" })
 		local shown = fixture.git(f.main, { "show", "HEAD:pickman/tests/unit/old.watch.txt" })
 		t.expect(shown).toBe("pickman/src/New.luau")
 		local names = fixture.git(f.main, { "show", "--name-only", "--pretty=format:", "HEAD" })
@@ -259,13 +259,13 @@ return t.spec("the watch map is captured, rewritten and repaired", function(it)
 		zn(f, { "start", raft })
 		write(f.main, "pickman/src/shared/Logic/Maze/init.luau", "return {}\n")
 		write(f.main, "pickman/tests/unit/added.spec.luau", SPEC)
-		zn(f, { "commit", "-m", "maze", "--issue", id, "--time", "1" })
+		zn(f, { "commit", "-m", "maze", "--model", "claude-sonnet-5-5", "--issue", id, "--time", "1" })
 		write(
 			f.main,
 			`{root}/rafts/active/{raft}/review-001.md`,
 			"Model: claude-opus-5-5\n# Review 001\n\nVerdict: approve\n"
 		)
-		zn(f, { "commit", "-m", "review", "--time", "1" })
+		zn(f, { "commit", "-m", "review", "--model", "claude-sonnet-5-5", "--time", "1" })
 		zn(f, { "finish", id })
 		seal.trace(f.main, raft)
 		zn(f, { "done", raft }, { PICKMAN_DONE_GATE = "1", GATE_LOG = `{f.base}/gate.log`, GATE_EXIT = "0" })

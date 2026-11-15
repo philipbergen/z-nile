@@ -976,6 +976,7 @@ function dispatcher.modelStep(
 		for k, v in extra do
 			env[k] = v
 		end
+		env.ZN_MODEL = spec.model -- c0325: this attempt's own model; ./zn spend and commit record it for the author's phases
 		local t0 = os.time()
 		print(
 			`dispatch: {step} {id} on {spec.cli} ({spec.runtime}, {models.id(spec)}, max_tokens {spec.maxTokens})`

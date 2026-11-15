@@ -154,7 +154,7 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 			"pickman/.tracker/rafts/active/R0010/review-001.md",
 			"Model: claude-opus-5-5\n# Review 001\n\nVerdict: approve\n"
 		)
-		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
+		must(tr({ "commit", "-m", "review 001", "--model", "claude-sonnet-5-5", "--time", "1" }), "commit")
 	end)
 
 	it("spend's lines leave out every project's promoted specs", function()

@@ -60,7 +60,7 @@ local function attempt(answers: { string }, review: string?): Result
 	-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
 	write("pickman/.tracker/rafts/active/R0010/review-001.md", review or REVIEW)
 	write("pickman/.tracker/rafts/active/R0010/refute-001.md", table.concat(answers, "\n") .. "\n")
-	must(tr({ "commit", "-m", "round", "--time", "1" }), "commit")
+	must(tr({ "commit", "-m", "round", "--model", "claude-sonnet-5-5", "--time", "1" }), "commit")
 	must(tr({ "finish", "f0010" }), "finish")
 	seal.trace(work, "R0010")
 	return tr({ "done", "R0010" })

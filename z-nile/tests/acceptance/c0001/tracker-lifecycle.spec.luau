@@ -206,7 +206,22 @@ return t.spec("tracker lifecycle", function(it)
 		fs.writeDir(`{dir}/notes/gamma`)
 		write("notes/alpha/a.txt", "1\n2\n3\n4\n5\n")
 		write("notes/gamma/g.txt", "1\n2\n3\n")
-		must(tr({ "commit", "-m", "work", "--issue", "f0010", "--issue", "f0031", "--time", "8" }), "commit")
+		must(
+			tr({
+				"commit",
+				"-m",
+				"work",
+				"--model",
+				"claude-sonnet-5-5",
+				"--issue",
+				"f0010",
+				"--issue",
+				"f0031",
+				"--time",
+				"8",
+			}),
+			"commit"
+		)
 		local added = 0
 		for line in
 			-- c0120 override: pickman's files live in pickman/ (its home)
@@ -255,7 +270,7 @@ return t.spec("tracker lifecycle", function(it)
 		t.expect(dirty.ok).toBe(false)
 		t.expect(string.find(dirty.stderr, "clean tree", 1, true) ~= nil).toBe(true)
 
-		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
+		must(tr({ "commit", "-m", "review 001", "--model", "claude-sonnet-5-5", "--time", "1" }), "commit")
 		local r2 = tr({ "done", "R0010" })
 		t.expect(r2.ok).toBe(false)
 		t.expect(string.find(r2.stderr, "F2", 1, true) ~= nil).toBe(true)
@@ -280,7 +295,10 @@ return t.spec("tracker lifecycle", function(it)
 			"pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau",
 			(string.gsub(good, "toBe%(1%)", "toBe(2)"))
 		)
-		must(tr({ "commit", "-m", "review 001 answered", "--time", "1" }), "commit")
+		must(
+			tr({ "commit", "-m", "review 001 answered", "--model", "claude-sonnet-5-5", "--time", "1" }),
+			"commit"
+		)
 		must(tr({ "finish", "f0010" }), "finish f0010")
 		must(tr({ "start", "R0010" }), "start f0031")
 		write("notes/f0031.txt", "gamma\n")
@@ -299,7 +317,10 @@ return t.spec("tracker lifecycle", function(it)
 		t.expect(fs.isFile(`{dir}/pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau`))
 			.toBe(true)
 		write("pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau", good)
-		must(tr({ "commit", "-m", "fix acceptance fixture", "--time", "1" }), "commit")
+		must(
+			tr({ "commit", "-m", "fix acceptance fixture", "--model", "claude-sonnet-5-5", "--time", "1" }),
+			"commit"
+		)
 		must(tr({ "finish", "f0031" }), "finish the fix")
 		seal.trace(dir, "R0010")
 	end)

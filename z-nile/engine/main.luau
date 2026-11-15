@@ -95,9 +95,11 @@ usage: ./zn <command> ...
   trace <R-id> [--check]                        print the final review's traceability table skeleton, or verify trace.md
   focus <issue-id>                              attribute following commits to this issue
   commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>]
+                                                (--phase build records the model that wrote the layer: --model, or ZN_MODEL under dispatch; a marked item refuses none)
                                                 stage all, record spend, commit, push. --time and --tokens are ignored
   spend <id> --phase capture|prep|design-review|deliver [--begin] [--model <id>] [--note <text>]
                                                 mark a stage; the tool writes the measured row. --time and --tokens are ignored
+                                                (--phase capture|prep records the model that wrote the work: --model, or ZN_MODEL under dispatch; a marked item refuses none)
   record --id <id> --phase <phase> [--report <file>] [--wall <s>] [--cpu <s>] [--ai <s>] [--tokens <n>]
                                                 write one measured row (the tool's own; not for typed numbers)
   dispatch <id> [--dry-run]                     run the chain on an item from its tracker state (ticket, design, raft,
@@ -4412,8 +4414,20 @@ function cmd.focus(pos: { string })
 end
 
 -- `--model <id>` of commit and spend (c0117): the model that spent the row's tokens; nil when not given.
-local function modelOption(what: string, opts: { [string]: { string } }): string?
+-- c0325: with no --model, the phases that record the author's work (capture, prep, build) take ZN_MODEL, which the
+-- dispatcher sets to each attempt's model. A reviewer's phase never does (it would record the author's model as the
+-- reviewer's), and a typed --model always wins.
+local AUTHORING_PHASES = { capture = true, prep = true, build = true } :: { [string]: boolean }
+
+local function modelOption(what: string, opts: { [string]: { string } }, phase: string?): string?
 	if not opts["--model"] then
+		local fromEnv = process.env.ZN_MODEL
+		if phase and AUTHORING_PHASES[phase] and fromEnv and fromEnv ~= "" then
+			if not ledger.isModel(fromEnv) then
+				fail(`{what}: ZN_MODEL is not a model id (letters, digits, '.', '_' and '-')`)
+			end
+			return fromEnv
+		end
 		return nil
 	end
 	local raw = opts["--model"][1]
@@ -4421,6 +4435,21 @@ local function modelOption(what: string, opts: { [string]: { string } }): string
 		fail(`{what} --model takes one model id (letters, digits, '.', '_' and '-')`)
 	end
 	return raw
+end
+
+-- The issues a commit is attributed to: the ones named, else the focus, else the raft's members.
+local function commitIssues(raft: store.Item, issueIds: { string }): ({ store.Item }, string)
+	local issues: { store.Item } = {}
+	if #issueIds > 0 then
+		for _, id in issueIds do
+			table.insert(issues, store.get(id))
+		end
+		return issues, "explicit"
+	elseif fs.isFile(FOCUS_FILE) and store.find(sh.trim(fs.readFile(FOCUS_FILE))) then
+		table.insert(issues, store.get(sh.trim(fs.readFile(FOCUS_FILE))))
+		return issues, "focus"
+	end
+	return store.members(raft.id), "raft"
 end
 
 local function recordAndCommit(
@@ -4440,20 +4469,7 @@ local function recordAndCommit(
 		fail("unmerged paths: resolve the merge first")
 	end
 	sh.git({ "add", "-A" })
-	local issues: { store.Item } = {}
-	local how: string
-	if #issueIds > 0 then
-		how = "explicit"
-		for _, id in issueIds do
-			table.insert(issues, store.get(id))
-		end
-	elseif fs.isFile(FOCUS_FILE) and store.find(sh.trim(fs.readFile(FOCUS_FILE))) then
-		how = "focus"
-		table.insert(issues, store.get(sh.trim(fs.readFile(FOCUS_FILE))))
-	else
-		how = "raft"
-		issues = store.members(raft.id)
-	end
+	local issues, how = commitIssues(raft, issueIds)
 	-- Typed --time and the gap since the last commit are not stored. Line counts are the diff; wall, CPU,
 	-- AI time and tokens are unmeasured here (a commit did not run the process it would time).
 	local minutes = explicitMinutes or 0
@@ -4573,7 +4589,20 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	if opts["--tokens"] or opts["--time"] then
 		stdio.ewrite("commit: --time and --tokens are ignored; cost is measured\n")
 	end
-	local model = modelOption("commit", opts)
+	local model = modelOption("commit", opts, phase)
+	-- c0325: a build commit records the model that wrote its layer; a marked item (c0306's mark) refuses the omission
+	local raftHere = activeRaft()
+	if phase == "build" and model == nil then
+		local owners = { raftHere }
+		for _, item in (commitIssues(raftHere, opts["--issue"] or {})) do
+			table.insert(owners, item)
+		end
+		for _, item in owners do
+			if require("./reviewmodel").judged(store.readFront(item.doc)) then
+				fail("build records the model that wrote the work: --model <your model id>")
+			end
+		end
+	end
 	-- c0306: the review files this commit carries are stamped with --model under --phase code-review, and refused in a
 	-- marked item without it (under any other phase, at all)
 	local refused = require("./reviewfiles").commitReviews(
@@ -4585,7 +4614,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	if refused then
 		fail(refused)
 	end
-	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
+	recordAndCommit(raftHere, message, opts["--issue"] or {}, nil, nil, phase, nil, model)
 end
 
 -- The project home of an item (c0120): where its check.sh runs and its specs are promoted to, from the working
@@ -6388,7 +6417,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 	end
 	local minutes = 0
 	local tokens: number? = nil
-	local model = modelOption("spend", opts)
+	local model = modelOption("spend", opts, phase)
 	local note = phase
 	if opts["--note"] and opts["--note"][1] ~= "" then
 		note = opts["--note"][1]
@@ -6604,6 +6633,14 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 				noteText = `{note} {got.note}`
 			end
 			openCells = if type(got.unmeasured) == "string" then got.unmeasured else ""
+		end
+	end
+	-- c0325: a capture or prep row records the model that wrote the work (typed, ZN_MODEL, or measured); a marked item
+	-- refuses a row with none
+	if (phase == "capture" or phase == "prep") and not modelId then
+		local owner = raftItem or targets[1]
+		if owner and require("./reviewmodel").judged(store.readFront((owner :: store.Item).doc)) then
+			fail(`{phase} records the model that wrote the work: --model <your model id>`)
 		end
 	end
 	local homes: { [string]: string } = {}

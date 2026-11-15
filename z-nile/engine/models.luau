@@ -588,4 +588,51 @@ function models.id(spec: Spec): string
 	return if spec.effort then `{spec.model}-{spec.effort}` else spec.model
 end
 
+-- c0325: the model with one trailing context marker `[...]` removed (`claude-opus-5-5[1m]` is `claude-opus-5-5`: the same
+-- model with a longer window, so it shares the same blind spots). `[1m][2m]` keeps `[1m]`.
+function models.bareModel(model: string): string
+	return (string.gsub(model, "%[[^%[%]]*%]$", ""))
+end
+
+-- c0325: every `model` any role or fallback of the walk names, bare, each once, sorted.
+function models.knownModels(layers: { Layer }): { string }
+	local seen: { [string]: boolean } = {}
+	local out: { string } = {}
+	for _, layer in layers do
+		for _, group in { layer.roles, layer.fallbacks } do
+			for _, fields in group do
+				local model = fields.model
+				if type(model) == "string" and model ~= "" then
+					local bare = models.bareModel(model)
+					if not seen[bare] then
+						seen[bare] = true
+						table.insert(out, bare)
+					end
+				end
+			end
+		end
+	end
+	table.sort(out)
+	return out
+end
+
+-- c0325: the bare model of a record of the model that wrote a text (a spend row's `<model>-<effort>`, a bare id,
+-- either with a context marker). The longest known model `m` such that the record is `m`, or `m`, an optional one
+-- marker and `-<any effort word>`. An effort word may hold a hyphen, so the record is never split at its last hyphen.
+-- No known model fits: the record with one trailing marker removed.
+function models.modelOf(recorded: string, known: { string }): string
+	local best: string? = nil
+	for _, m in known do
+		local bare = models.bareModel(m)
+		if string.sub(recorded, 1, #bare) == bare and (best == nil or #bare > #(best :: string)) then
+			local rest = string.sub(recorded, #bare + 1)
+			rest = string.gsub(rest, "^%[[^%[%]]*%]", "")
+			if rest == "" or (string.sub(rest, 1, 1) == "-" and #rest > 1) then
+				best = bare
+			end
+		end
+	end
+	return best or models.bareModel(recorded)
+end
+
 return models
