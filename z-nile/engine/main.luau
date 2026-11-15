@@ -5989,7 +5989,8 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 		local approvals = contract.parse(localText)
 		local wanted = if approvals then `design={string.sub(approvals[#approvals].hash, 1, 12)}` else ""
 		local mine: provenance.Row? = nil
-		for _, r in localRows or {} do
+		local localList: { provenance.Row } = localRows or {}
+		for _, r in localList do
 			if r.event == "approved" and r.detail == wanted then
 				mine = r
 			end
@@ -5999,7 +6000,8 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 			local row = mine :: provenance.Row
 			local base = show(recordRel)
 			local seen = false
-			for _, r in if base then (provenance.parse(base) or {}) else {} do
+			local baseRows: { provenance.Row } = if base then (provenance.parse(base) or {}) else {}
+			for _, r in baseRows do
 				seen = seen or (r.event == row.event and r.actor == row.actor and r.detail == row.detail)
 			end
 			if not seen then
