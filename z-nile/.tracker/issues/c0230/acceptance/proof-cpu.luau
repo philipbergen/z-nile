@@ -71,7 +71,10 @@ for _, lanes in { `{WORK}/lanes`, "" } do
 		table.concat(block, "\n")
 	)
 	local cpu = block[2]
-		and string.match(block[2], "^  " .. string.gsub(burn, "%p", "%%%0") .. " %d+%.%d s wall, (%d+%.%d) s cpu$")
+		and string.match(
+			block[2],
+			"^  " .. string.gsub(burn, "%p", "%%%0") .. " %d+%.%d s wall, (%d+%.%d) s cpu$"
+		)
 	expect(
 		`{label}: the burning file, with its grandchild's cpu`,
 		cpu ~= nil and (tonumber(cpu) :: number) >= 0.5,

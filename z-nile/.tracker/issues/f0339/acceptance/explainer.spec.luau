@@ -219,11 +219,18 @@ return t.spec("f0339 the explainer page's shape and the approving answer", funct
 	end)
 
 	it("AC1: a page still holding the template's placeholders, or one picture twice, is refused", function()
-		one(page({ extra = '<p class="zn-fill">What is wrong today</p>' }), 'still holds the template\'s placeholder text (class="zn-fill")')
+		one(
+			page({ extra = '<p class="zn-fill">What is wrong today</p>' }),
+			'still holds the template\'s placeholder text (class="zn-fill")'
+		)
 		one(page({ extra = '<p class="lead ZN-FILL">x</p><p class="zn-fill">y</p>' }), "placeholder")
-		t.expect(#problems(page({ extra = '<p class="zn-filler">x</p><p>zn-fill is the marker</p>' }))).toBe(0)
+		t.expect(#problems(page({ extra = '<p class="zn-filler">x</p><p>zn-fill is the marker</p>' })))
+			.toBe(0)
 		local svg = '<svg viewBox="0 0 10 10"><rect width="4" height="4"/></svg>'
-		one(page({ before = `<h2>Before</h2>{svg}`, after = `<h2>After</h2>{svg}` }), "the before and after diagrams are the same picture")
+		one(
+			page({ before = `<h2>Before</h2>{svg}`, after = `<h2>After</h2>{svg}` }),
+			"the before and after diagrams are the same picture"
+		)
 		local spaced = '<svg viewBox="0 0 10 10">\n  <rect width="4"   height="4"/>\n</svg>'
 		one(page({ before = `<h2>Before</h2>{svg}`, after = `<h2>After</h2>{spaced}` }), "the same picture")
 	end)
