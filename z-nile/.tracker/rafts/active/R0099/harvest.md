@@ -1,0 +1,19 @@
+# Harvest: R0099
+- design-review-001 F1: z-design/every-recorded-row-has-a-path-to-main
+- design-review-001 F2: z-raft/raft-fix-keeps-member-criteria-true, zz-arch/process-exec-stdin-over-128k-deadlocks
+- design-review-001 F3: z-raft/cross-raft-wait-bites-at-the-first-red-layer, z-raft/grouping-cost-checks-every-wait
+- design-review-001 F4: z-raft/rc-pins-the-claims-it-makes
+- design-review-001 F5: z-raft/rc-pins-the-claims-it-makes
+- design-review-001 F6: z-raft/rc-pins-the-claims-it-makes
+- design-review-001 F7: z-raft/merged-text-read-against-captures
+- design-review-001 F8: z-raft/interface-names-every-writer, z-raft/cross-raft-order-written-in-both
+- note the prototype stack's first run (2026-11-13): proto-c0280 is not an ancestor of proto-c0284, so a stack built in the brief's order missed c0280's final tip and its docs case failed; the stale base is in c0284's document: z-raft/run-sequestered-specs-on-all-prototypes-together
+- note c0282's sequestered dispatch.spec called `dispatch vet`, which main removed (#311) after its prep; its re-prep (#342) fixed it: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F1: z-design/specs-promoted-by-done-do-not-exist-before-it
+- design-review-002 F2: z-design/check-paths-from-the-home
+- design-review-002 F3: z-raft/rc-pins-the-claims-it-makes
+- design-review-002 F4: z-raft/cross-raft-order-written-in-both, z-design/restated-rules-move-together
+- design-review-002 F5: z-design/restated-rules-move-together
+- design-review-003 F1: z-raft/list-every-override-with-layer-and-ref
+- design-review-003 F2: z-design/restated-rules-move-together
+- design-review-003 F3: z-raft/merge-the-other-rafts-finished-stack

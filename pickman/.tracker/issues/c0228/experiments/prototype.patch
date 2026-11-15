@@ -1,0 +1,100 @@
+diff --git a/pickman/src/client/Main.client.luau b/pickman/src/client/Main.client.luau
+index 7248ec60..515b34eb 100644
+--- a/pickman/src/client/Main.client.luau
++++ b/pickman/src/client/Main.client.luau
+@@ -31,13 +31,16 @@ local pellets: PelletView.Handle? = nil
+ local lit = false -- the walls are drawn lit
+ local wallsKey: string? = nil -- the holes and marks the walls were built with (f0126)
+ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
++	local marked = if frame.walls then frame.walls.marked else {}
+ 	if built ~= frame.maze then
+ 		built = frame.maze
+ 		if model then
+ 			model:Destroy() -- its pellets with it
+ 		end
+ 		local m = Maze.layout(frame.maze)
+-		local walls = MazeView.build(m)
++		-- built with the frame's holes and marks, so the rewall below finds them drawn and the walls are built once (c0228);
++		-- its floor is the layout's all the same, since picks open interior walls only (View.bounds' margins stay put)
++		local walls = MazeView.build(View.frameMaze(frame), marked)
+ 		model = walls
+ 		pellets = PelletView.build(m, walls)
+ 		lit = false -- new walls are built unlit
+@@ -46,7 +49,7 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
+ 	local key = View.wallsKey(frame)
+ 	if model and key ~= wallsKey then
+ 		wallsKey = key
+-		MazeView.rewall(model, View.frameMaze(frame), if frame.walls then frame.walls.marked else {})
++		MazeView.rewall(model, View.frameMaze(frame), marked)
+ 	end
+ 	Camera.push(frame)
+ 	Camera.hopped(frame.hopped)
+diff --git a/pickman/src/client/MazeView.luau b/pickman/src/client/MazeView.luau
+index d4a1bae2..e5337bfb 100644
+--- a/pickman/src/client/MazeView.luau
++++ b/pickman/src/client/MazeView.luau
+@@ -33,16 +33,26 @@ local function wallColorOf(model: Model, marked: boolean?): Color3
+ 	)
+ end
+ 
++-- The runs (View.runsKey) each maze model's walls were last drawn with: walls already drawn are not drawn again (c0228).
++local drawn: { [Model]: string } = setmetatable({}, { __mode = "k" }) :: any
++
+ -- The wall parts of `m`, the marked ones gold, as children of the maze model (where f0109's checks read them), coloured
+ -- for the model's lit and edible state. A rebuild replaces only the `Wall` and `MarkedWall` parts: pellets and doors stay.
++-- Runs the model already has drawn change nothing: its parts stay, coloured by flash and edible as they go.
+ local function walls(model: Model, m: Maze.Maze, marked: { Maze.Tile }?)
+ 	local s = View.SCALE
++	local runs = View.walls(m, nil, marked)
++	local key = View.runsKey(runs)
++	if drawn[model] == key then
++		return
++	end
++	drawn[model] = key
+ 	for _, child in model:GetChildren() do
+ 		if child.Name == "Wall" or child.Name == "MarkedWall" then
+ 			child:Destroy()
+ 		end
+ 	end
+-	for _, r in View.walls(m, nil, marked) do
++	for _, r in runs do
+ 		local cx, cz = View.world((r.x0 + r.x1) / 2, r.y0)
+ 		local size = Vector3.new((r.x1 - r.x0 + 1) * s.tileStuds, s.wallHeight, s.tileStuds)
+ 		local center = Vector3.new(cx, s.wallHeight / 2, cz)
+@@ -59,12 +69,13 @@ function MazeView.rewall(model: Model, m: Maze.Maze, marked: { Maze.Tile })
+ 	walls(model, m, marked)
+ end
+ 
+-function MazeView.build(m: Maze.Maze): Model
++-- The maze model: its walls (the `marked` ones gold, as rewall draws them), its doors and its floor.
++function MazeView.build(m: Maze.Maze, marked: { Maze.Tile }?): Model
+ 	local s = View.SCALE
+ 	local model = Instance.new("Model")
+ 	model.Name = "Maze"
+ 
+-	walls(model, m)
++	walls(model, m, marked)
+ 	for _, d in Maze.tiles(m, "door") do
+ 		local cx, cz = View.world(d.x, d.y)
+ 		part(
+diff --git a/pickman/src/shared/Logic/View/init.luau b/pickman/src/shared/Logic/View/init.luau
+index fdc95f5a..720887a3 100644
+--- a/pickman/src/shared/Logic/View/init.luau
++++ b/pickman/src/shared/Logic/View/init.luau
+@@ -172,6 +172,16 @@ function View.walls(m: Maze.Maze, margin: number?, marked: { Maze.Tile }?): { Re
+ 	return rects
+ end
+ 
++-- A key that changes exactly when the runs do (c0228): each run's bounds and whether it is marked, in order. Two
++-- calls of View.walls on equal mazes and marks give equal keys, so MazeView can tell walls it has drawn already.
++function View.runsKey(rects: { Rect }): string
++	local parts: { string } = {}
++	for _, r in rects do
++		table.insert(parts, `{r.x0},{r.y0},{r.x1},{r.y1},{if r.marked == true then 1 else 0}`)
++	end
++	return table.concat(parts, ";")
++end
++
+ -- A key that changes exactly when the frame's holes or marked walls do (f0126): the client rebuilds its walls then.
+ function View.wallsKey(frame: Session.Frame): string
+ 	local parts = { frame.maze }

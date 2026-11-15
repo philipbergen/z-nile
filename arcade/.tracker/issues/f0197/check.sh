@@ -9,6 +9,16 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: a title's stores are named from its prefix, and pickman's prefix \"\" keeps today's names" \
+  lune run tests/run -- "$A/names.spec.luau" "$A/store.spec.luau"
+check "AC2: every row records the run's revives and every row read shows them, 0 for a row stored before; revives never rank or replace" \
+  lune run tests/run -- "$A/revives.spec.luau" "$A/top.spec.luau"
+check "AC3: HiscoreGames gives each title its own prefix and names its progress figure, stored as the row's level" \
+  lune run tests/run -- "$A/games.spec.luau"
+check "AC4: one generic Boards server adapter writes and serves one title's boards, with revives, on its own stores" \
+  lune run tests/run -- "$A/boards.spec.luau" "$A/write.spec.luau" "$A/serve.spec.luau"
+check "AC5: the library's Hiscores keeps pickman's rules: periods, replace, rows, retries, run policy, the shared read and the list" \
+  lune run tests/run -- "$A/period.spec.luau" "$A/replace.spec.luau" "$A/rows.spec.luau" "$A/drive.spec.luau" \
+  "$A/run.spec.luau" "$A/leave.spec.luau" "$A/read.spec.luau" "$A/drivetop.spec.luau"
 
 finish
