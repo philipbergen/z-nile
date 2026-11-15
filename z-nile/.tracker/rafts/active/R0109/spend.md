@@ -4,8 +4,8 @@
 |---|---|---|---|---|---|---|
 | d0333 | defect |  | 943 | 16 | 0.0 | 0 |
 
-**Total:** +943 / -16 lines, 0.0 agent-minutes, 0 tokens over 120 records
-<!-- totals: added=943 removed=16 minutes=0.0 records=120 tokens=0 -->
+**Total:** +943 / -16 lines, 0.0 agent-minutes, 0 tokens over 125 records
+<!-- totals: added=943 removed=16 minutes=0.0 records=125 tokens=0 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
