@@ -170,7 +170,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | `./zn work` pull loop (the interactive session worker exists; the headless loop does not) | c0253 | captured |
 | workers on several hosts, worker identity in spend | c0254 | captured |
 | the z-nile app in Omarchy: order, lost items, drag and drop | c0257 | captured |
-| `./zn land` usage and a cheap retry | c0258 | captured |
+| `./zn land` usage and a cheap retry | c0258 | designed |
 | the capture interview, idea review and confirmation | c0260 | designed |
 | the full-force review: limited view, verdict, redo | c0262 | designed |
 | provenance: the record and its command | c0263 | designed |
