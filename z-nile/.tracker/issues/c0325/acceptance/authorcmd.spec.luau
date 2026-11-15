@@ -113,7 +113,8 @@ local function spendIn(
 	e: { [string]: string }?
 ): fixture.Result
 	local args = { "spend", id, "--phase", phase }
-	for _, a in extra or {} do
+	local more: { string } = extra or {}
+	for _, a in more do
 		table.insert(args, a)
 	end
 	return zn(prep, args, e)
@@ -126,7 +127,8 @@ local TR = "pickman/.tracker"
 
 local function run(cmd: string, args: { string }, extra: { [string]: string }?): fixture.Result
 	local e: { [string]: string } = table.clone(TERMINAL)
-	for k, v in extra or {} do
+	local more: { [string]: string } = extra or {}
+	for k, v in more do
 		e[k] = v
 	end
 	return fixture.exec(dir, cmd, args, { env = e })

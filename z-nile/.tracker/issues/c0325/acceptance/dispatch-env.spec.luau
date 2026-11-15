@@ -52,7 +52,8 @@ local function znIn(args: { string }, extra: { [string]: string }?): fixture.Res
 		KIMI_SESSION_ID = "",
 		KIMI_CODE_SESSION_ID = "",
 	}
-	for k, v in extra or {} do
+	local more: { [string]: string } = extra or {}
+	for k, v in more do
 		env[k] = v
 	end
 	return fixture.exec(wt, "bash", argv, { env = env })

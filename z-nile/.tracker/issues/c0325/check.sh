@@ -124,8 +124,10 @@ ac5() {
 }
 check "AC5: \`authorread.read\` finds the rows of the item folders of the checkout it starts from, for an issue, a raft's members and a stream." ac5
 ac6() {
-	fixtureSpec dispatch-env --run "AC6: each attempt's env carries \`ZN_MODEL\` = that attempt's model (a fallback's own); a nested review sets its own" && \
-	fixtureSpec authorcmd --run "AC6: \`spend --phase prep|capture\` and \`commit\` take \`ZN_MODEL\` only for \`capture\`/\`prep\`/\`build\`; a typed \`--model\` wins; \`code-review\`/\`design-review\` rows take none"
+	local rc=0 # both specs run, so a red first one never leaves AC7 with a spec that did not run
+	fixtureSpec dispatch-env --run "AC6: each attempt's env carries \`ZN_MODEL\` = that attempt's model (a fallback's own); a nested review sets its own" || rc=1
+	fixtureSpec authorcmd --run "AC6: \`spend --phase prep|capture\` and \`commit\` take \`ZN_MODEL\` only for \`capture\`/\`prep\`/\`build\`; a typed \`--model\` wins; \`code-review\`/\`design-review\` rows take none" || rc=1
+	return $rc
 }
 check "AC6: the dispatcher sets \`ZN_MODEL\` to each attempt's \`spec.model\`; \`spend\`/\`commit\` take it only for \`capture\`, \`prep\` and \`build\`, a typed \`--model\` winning, and never for a reviewer's row." ac6
 ac7() {
