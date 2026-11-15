@@ -1,0 +1,6 @@
+- design-review-001 F1: z-design/new-rules-migrate-existing-work
+- design-review-001 F2: z-design/design-the-execution-window
+- design-review-001 F3: z-design/rerun-skipped-checks-after-edits
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/instructions-runnable-where-they-run
+- design-review-001 F6: z-design/most-specific-environment-first

@@ -2,7 +2,7 @@
 title: The mutation check also runs correct variants
 when: design
 tags: [mutants, specs, sequestration]
-check: For each sequestered spec that loads source a later issue will change (an adapter, a shared module), has a list of correct variants (a right change of the kind the next issues make) been run against it, and do they all stay green? And for each prep in flight that changes a file this spec loads, has its actual prototype diff been run as a correct variant, or built into the prototype's base?
+check: For each sequestered spec that loads source a later issue will change (an adapter, a shared module), has a list of correct variants (a right change of the kind the next issues make) been run against it, and do they all stay green? And for each prep in flight that changes a file this spec loads, has its actual prototype diff been run as a correct variant, or built into the prototype's base, including a prep that is only claimed (`preparing`, its worktree under `.worktree/prep-*` holding an `experiments/prototype.patch`)? And does a stub engine model every engine value such a diff reads back from what the adapter wrote (a CFrame's `Position`), rather than one shared stand-in?
 ---
 Mutants prove a spec fails for wrong code; nothing proves it passes for right code that differs from the prototype. A sequestered spec that rejects a correct later change can't be edited during execution, so the later issue needs an override chore.
 
@@ -17,3 +17,5 @@ c0159 design review 001 F1: a chore that narrowed promoted specs for an already 
 c0164 design review 001 F2: correct variants were called green because the new case passed them, while another promoted spec reading the same file (f0109's place.spec, a text pin) went red. A correct variant is green only if every promoted spec that reads the mutated file stays green; the runner runs them too and reports it.
 
 **Also:** c0284 design review 001 F3, F4: a fixture event of the wrong shape (a compaction map holding only a comment, which today's rule cuts at but c0138's does not) and a process count that also matched c0276's extra read both fail correct later code. Check: for each in-flight prep that changes a rule the fixture exercises or a command the spec counts, was its prototype run against the spec (or, when it does not apply, the rule's text read against each fixture event and the gap recorded)?
+
+f0234 design review 001 F1, F5: camera.spec's stub returned one shared CFrame table with no `Position`; f0235, claimed in another worktree, reads `camera.CFrame.Position.Y` after the write, so every case would have errored once both landed, and f0234's new render-step local `eye` would have shadowed f0235's module-level `eye`. Neither showed until f0235's own prototype hunk was stacked over f0234's prototype: list the worktrees of every prep claimed on the same files, not only the prepared ones.
