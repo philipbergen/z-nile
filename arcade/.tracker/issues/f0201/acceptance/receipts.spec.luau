@@ -1,9 +1,11 @@
 --!strict
 -- f0201 AC4: Receipts, run from its real source on the same stub engine. ProcessReceipt grants a known product of
 -- any title once, into that title's live record by user id, wherever it is processed, answering PurchaseGranted only
--- after the write; an unknown product or a failed write answers NotProcessedYet. ask prompts Roblox in live mode,
--- opens the test screen in test mode, nothing in closed mode; a test confirm grants into the test store only for a
--- screen this server opened for that player. Fresh grants and closed screens are handed to the place.
+-- after the write; an unknown product or a failed write answers NotProcessedYet. A grant, a test grant and a refund
+-- refresh the record this server saw, so a purchase is usable at once. ask prompts Roblox in live mode, opens the
+-- test screen in test mode, nothing in closed mode; a test confirm grants into the test store only for a screen this
+-- server opened for that player. Fresh grants and closed screens are handed to the place, which hears one client
+-- message and never reads join data.
 local PaidPlay = require("@logic/PaidPlay")
 local Prices = require("@shared/Prices")
 local luau = require("@lune/luau")
@@ -34,7 +36,8 @@ local IDS: { [string]: number } = {
 }
 
 type Signal = { Connect: (any, (...any) -> ()) -> (), fire: (...any) -> () }
-local function signal(): Signal
+type Counted = Signal & { connections: () -> number }
+local function signal(): Counted
 	local fns: { (...any) -> () } = {}
 	return {
 		Connect = function(_: any, fn: (...any) -> ())
@@ -44,6 +47,9 @@ local function signal(): Signal
 			for _, fn in fns do
 				fn(...)
 			end
+		end,
+		connections = function(): number
+			return #fns
 		end,
 	}
 end
@@ -76,7 +82,8 @@ type Event = { kind: string, player: any, name: string, what: string, bought: bo
 
 -- A server on a stub engine: in-memory DataStores (one table per store name), a MemoryStore pass map, players,
 -- Marketplace prompts and ProcessReceipt, remotes made at run time, and a task library whose spawned threads run at
--- once and whose delays run on w.elapse(). A store call can be held: it yields until w.release() resumes it.
+-- once, whose delays and waits run on w.elapse() (all) or w.advance(seconds) (those due by then), and whose defer runs at
+-- once. A store call can be held: it yields until w.release() resumes it. Spies count what must never happen.
 local function world(mode: any?, attrs: { [string]: any }?): any
 	local w: any = {}
 	local enum = enumProxy()
@@ -98,7 +105,8 @@ local function world(mode: any?, attrs: { [string]: any }?): any
 	w.prompts = {} :: { { player: any, id: number } }
 	w.sent = {} :: { { player: any, args: { any } } }
 	w.events = {} :: { Event }
-	w.delayed = {} :: { () -> () }
+	w.delayed = {} :: { { due: number, fn: () -> () } }
+	w.joinReads = 0 -- GetJoinData calls: what a teleport carries is never read
 	w.opened = {} :: { string }
 	w.attributes = { PaidPlay = mode }
 	for k, v in IDS do
@@ -217,6 +225,9 @@ local function world(mode: any?, attrs: { [string]: any }?): any
 		MarketplaceService = marketplace,
 		Players = {
 			PlayerRemoving = removing,
+			GetPlayers = function(): { any }
+				return table.clone(players)
+			end,
 			GetPlayerByUserId = function(_: any, id: number): any
 				for _, p in players do
 					if p.UserId == id then
@@ -308,8 +319,21 @@ local function world(mode: any?, attrs: { [string]: any }?): any
 				resume(coroutine.create(fn), ...)
 			end
 		end,
-		delay = function(_seconds: number, fn: () -> ())
-			table.insert(w.delayed, fn)
+		delay = function(seconds: number, fn: () -> ())
+			table.insert(w.delayed, { due = w.clock + seconds, fn = fn })
+		end,
+		defer = function(fn: any, ...: any)
+			env.task.spawn(fn, ...)
+		end,
+		wait = function(seconds: number?): number
+			local co = coroutine.running()
+			table.insert(w.delayed, {
+				due = w.clock + (seconds or 0),
+				fn = function()
+					resume(co, seconds or 0)
+				end,
+			})
+			return coroutine.yield()
 		end,
 	}
 
@@ -329,16 +353,30 @@ local function world(mode: any?, attrs: { [string]: any }?): any
 		assert(co, "nothing held")
 		resume(co)
 	end
+	-- runs every delay and wait, due or not
 	w.elapse = function()
 		local list = w.delayed
 		w.delayed = {}
-		for _, fn in list do
-			resume(coroutine.create(fn))
+		for _, d in list do
+			resume(coroutine.create(d.fn))
+		end
+	end
+	-- moves the clock and runs the delays and waits due by then
+	w.advance = function(seconds: number)
+		w.clock += seconds
+		local due: { any }, later: { any } = {}, {}
+		for _, d in w.delayed do
+			table.insert(if d.due <= w.clock then due else later, d)
+		end
+		w.delayed = later
+		for _, d in due do
+			resume(coroutine.create(d.fn))
 		end
 	end
 	w.player = function(userId: number, joinData: any?): any
 		local p: any = { UserId = userId, Parent = {}, Name = `P{userId}` }
 		p.GetJoinData = function(): any
+			w.joinReads += 1
 			return { TeleportData = joinData }
 		end
 		table.insert(players, p)
@@ -366,13 +404,20 @@ local function world(mode: any?, attrs: { [string]: any }?): any
 				table.insert(w.events, { kind = "granted", player = player, name = name, what = kind })
 			end,
 			closed = function(player: any, name: string, kind: string, bought: boolean)
-				table.insert(w.events, { kind = "closed", player = player, name = name, what = kind, bought = bought })
+				table.insert(
+					w.events,
+					{ kind = "closed", player = player, name = name, what = kind, bought = bought }
+				)
 			end,
 		})
 		return r
 	end
 	w.receipt = function(userId: any, productId: any, purchaseId: any): any
-		return marketplace.ProcessReceipt({ PlayerId = userId, ProductId = productId, PurchaseId = purchaseId })
+		return marketplace.ProcessReceipt({
+			PlayerId = userId,
+			ProductId = productId,
+			PurchaseId = purchaseId,
+		})
 	end
 	w.finished = function(userId: number, productId: number, bought: boolean)
 		finished.fire(userId, productId, bought)
@@ -397,7 +442,6 @@ local function world(mode: any?, attrs: { [string]: any }?): any
 	end
 	return w
 end
-
 local GRANTED = "ProductPurchaseDecision.PurchaseGranted" -- the stub's Enum values are their own names
 local NOT_YET = "ProductPurchaseDecision.NotProcessedYet"
 
@@ -416,20 +460,23 @@ local function eventsOf(w: any, kind: string): { any }
 end
 
 return t.spec("f0201 Receipts on a stub engine", function(it)
-	it("a receipt is granted once: PurchaseGranted both times, one credit, and the place hears one grant", function()
-		local w = world("live")
-		local p = w.player(7)
-		w.start()
-		t.expect(w.run(w.receipt, 7, 202, "buy-1").results[1]).toBe(GRANTED)
-		t.expect(w.run(w.receipt, 7, 202, "buy-1").results[1]).toBe(GRANTED)
-		t.expect(rec(w, "SnakePaidPlay", 7).revives).toBe(1)
-		t.expect(rec(w, "SnakePaidPlay", 7).receipts).toEqual({ "buy-1" })
-		local g = eventsOf(w, "granted")
-		t.expect(#g).toBe(1)
-		t.expect(g[1].player).toBe(p)
-		t.expect(g[1].name).toBe("snake")
-		t.expect(g[1].what).toBe("revive")
-	end)
+	it(
+		"a receipt is granted once: PurchaseGranted both times, one credit, and the place hears one grant",
+		function()
+			local w = world("live")
+			local p = w.player(7)
+			w.start()
+			t.expect(w.run(w.receipt, 7, 202, "buy-1").results[1]).toBe(GRANTED)
+			t.expect(w.run(w.receipt, 7, 202, "buy-1").results[1]).toBe(GRANTED)
+			t.expect(rec(w, "SnakePaidPlay", 7).revives).toBe(1)
+			t.expect(rec(w, "SnakePaidPlay", 7).receipts).toEqual({ "buy-1" })
+			local g = eventsOf(w, "granted")
+			t.expect(#g).toBe(1)
+			t.expect(g[1].player).toBe(p)
+			t.expect(g[1].name).toBe("snake")
+			t.expect(g[1].what).toBe("revive")
+		end
+	)
 
 	it("every title's receipt is granted in any place, into its own record, by user id", function()
 		local w = world("live")
@@ -454,22 +501,25 @@ return t.spec("f0201 Receipts on a stub engine", function(it)
 		t.expect(#eventsOf(w, "granted")).toBe(0)
 	end)
 
-	it("an unknown product, a missing purchase id or a failed write answers NotProcessedYet and grants nothing", function()
-		local w = world("live")
-		w.player(7)
-		w.start()
-		t.expect(w.run(w.receipt, 7, 999, "x-1").results[1]).toBe(NOT_YET)
-		t.expect(w.run(w.receipt, 7, 101, "").results[1]).toBe(NOT_YET)
-		t.expect(w.run(w.receipt, 7, 101, nil).results[1]).toBe(NOT_YET)
-		t.expect(w.run(w.receipt, "7", 101, "x-2").results[1]).toBe(NOT_YET)
-		w.fail.update = true
-		t.expect(w.run(w.receipt, 7, 101, "x-3").results[1]).toBe(NOT_YET)
-		w.fail.update = false
-		t.expect(w.record("PaidPlay", 7)).toBe(nil)
-		t.expect(#eventsOf(w, "granted")).toBe(0)
-		t.expect(w.run(w.receipt, 7, 101, "x-3").results[1]).toBe(GRANTED)
-		t.expect(rec(w, "PaidPlay", 7).plays).toBe(1)
-	end)
+	it(
+		"an unknown product, a missing purchase id or a failed write answers NotProcessedYet and grants nothing",
+		function()
+			local w = world("live")
+			w.player(7)
+			w.start()
+			t.expect(w.run(w.receipt, 7, 999, "x-1").results[1]).toBe(NOT_YET)
+			t.expect(w.run(w.receipt, 7, 101, "").results[1]).toBe(NOT_YET)
+			t.expect(w.run(w.receipt, 7, 101, nil).results[1]).toBe(NOT_YET)
+			t.expect(w.run(w.receipt, "7", 101, "x-2").results[1]).toBe(NOT_YET)
+			w.fail.update = true
+			t.expect(w.run(w.receipt, 7, 101, "x-3").results[1]).toBe(NOT_YET)
+			w.fail.update = false
+			t.expect(w.record("PaidPlay", 7)).toBe(nil)
+			t.expect(#eventsOf(w, "granted")).toBe(0)
+			t.expect(w.run(w.receipt, 7, 101, "x-3").results[1]).toBe(GRANTED)
+			t.expect(rec(w, "PaidPlay", 7).plays).toBe(1)
+		end
+	)
 
 	it("PurchaseGranted is answered only after the write: a held write holds the answer", function()
 		local w = world("live")
@@ -484,17 +534,20 @@ return t.spec("f0201 Receipts on a stub engine", function(it)
 		t.expect(rec(w, "PaidPlay", 7).plays).toBe(1)
 	end)
 
-	it("a receipt another server granted during this write counts once and is not handed on as new", function()
-		local w = world("live")
-		w.player(7)
-		w.start()
-		w.race = function(store: { [string]: any }, key: string)
-			store[key] = { plays = 1, revives = 0, receipts = { "dup-1" } }
+	it(
+		"a receipt another server granted during this write counts once and is not handed on as new",
+		function()
+			local w = world("live")
+			w.player(7)
+			w.start()
+			w.race = function(store: { [string]: any }, key: string)
+				store[key] = { plays = 1, revives = 0, receipts = { "dup-1" } }
+			end
+			t.expect(w.run(w.receipt, 7, 101, "dup-1").results[1]).toBe(GRANTED)
+			t.expect(rec(w, "PaidPlay", 7).plays).toBe(1)
+			t.expect(#eventsOf(w, "granted")).toBe(0)
 		end
-		t.expect(w.run(w.receipt, 7, 101, "dup-1").results[1]).toBe(GRANTED)
-		t.expect(rec(w, "PaidPlay", 7).plays).toBe(1)
-		t.expect(#eventsOf(w, "granted")).toBe(0)
-	end)
+	)
 
 	it("the transform's last call decides whether the grant is new", function()
 		local w = world("live")
@@ -509,15 +562,18 @@ return t.spec("f0201 Receipts on a stub engine", function(it)
 		t.expect(#eventsOf(w, "granted")).toBe(0)
 	end)
 
-	it("a real receipt in test mode is kept in the live record, and not handed to a place that reads the test one", function()
-		local w = world(nil)
-		w.player(7)
-		w.start()
-		t.expect(w.run(w.receipt, 7, 102, "real-1").results[1]).toBe(GRANTED)
-		t.expect(rec(w, "PaidPlay", 7).revives).toBe(1)
-		t.expect(w.record("PaidPlayTest", 7)).toBe(nil)
-		t.expect(#eventsOf(w, "granted")).toBe(0)
-	end)
+	it(
+		"a real receipt in test mode is kept in the live record, and not handed to a place that reads the test one",
+		function()
+			local w = world(nil)
+			w.player(7)
+			w.start()
+			t.expect(w.run(w.receipt, 7, 102, "real-1").results[1]).toBe(GRANTED)
+			t.expect(rec(w, "PaidPlay", 7).revives).toBe(1)
+			t.expect(w.record("PaidPlayTest", 7)).toBe(nil)
+			t.expect(#eventsOf(w, "granted")).toBe(0)
+		end
+	)
 
 	it("a closed title's receipt is still granted: it was charged", function()
 		local w = world("live", { ContinueProductId = "bad" })
@@ -568,20 +624,24 @@ return t.spec("f0201 Receipts on a stub engine", function(it)
 		t.expect(w.remote("TestPurchase")).toBeTruthy()
 	end)
 
-	it("a test confirm grants into the test store under a test id; the screen closes bought, then the place hears it", function()
-		local w = world(nil)
-		local p = w.player(7)
-		local r = w.start()
-		r.ask(p, "snake", "play")
-		w.run(w.answer, p, "confirm")
-		local tr = rec(w, "SnakePaidPlayTest", 7)
-		t.expect(tr.plays).toBe(1)
-		t.expect(string.match(tr.receipts[1], "^test:") ~= nil).toBe(true)
-		t.expect(w.record("SnakePaidPlay", 7)).toBe(nil)
-		t.expect(#w.events).toBe(2)
-		t.expect(w.events[1]).toEqual({ kind = "closed", player = p, name = "snake", what = "play", bought = true })
-		t.expect(w.events[2]).toEqual({ kind = "granted", player = p, name = "snake", what = "play" })
-	end)
+	it(
+		"a test confirm grants into the test store under a test id; the screen closes bought, then the place hears it",
+		function()
+			local w = world(nil)
+			local p = w.player(7)
+			local r = w.start()
+			r.ask(p, "snake", "play")
+			w.run(w.answer, p, "confirm")
+			local tr = rec(w, "SnakePaidPlayTest", 7)
+			t.expect(tr.plays).toBe(1)
+			t.expect(string.match(tr.receipts[1], "^test:") ~= nil).toBe(true)
+			t.expect(w.record("SnakePaidPlay", 7)).toBe(nil)
+			t.expect(#w.events).toBe(2)
+			t.expect(w.events[1])
+				.toEqual({ kind = "closed", player = p, name = "snake", what = "play", bought = true })
+			t.expect(w.events[2]).toEqual({ kind = "granted", player = p, name = "snake", what = "play" })
+		end
+	)
 
 	it("each test confirm is its own purchase: two screens bought, two credits", function()
 		local w = world(nil)
@@ -605,19 +665,23 @@ return t.spec("f0201 Receipts on a stub engine", function(it)
 		t.expect(eventsOf(w, "closed")[1].bought).toBe(false)
 	end)
 
-	it("a cancel closes the screen not bought; a confirm after it, or with no screen open, grants nothing", function()
-		local w = world(nil)
-		local p = w.player(7)
-		local r = w.start()
-		w.run(w.answer, p, "confirm")
-		t.expect(#w.events).toBe(0)
-		r.ask(p, "pickman", "play")
-		w.run(w.answer, p, "cancel")
-		w.run(w.answer, p, "confirm")
-		t.expect(w.record("PaidPlayTest", 7)).toBe(nil)
-		t.expect(#w.events).toBe(1)
-		t.expect(w.events[1]).toEqual({ kind = "closed", player = p, name = "pickman", what = "play", bought = false })
-	end)
+	it(
+		"a cancel closes the screen not bought; a confirm after it, or with no screen open, grants nothing",
+		function()
+			local w = world(nil)
+			local p = w.player(7)
+			local r = w.start()
+			w.run(w.answer, p, "confirm")
+			t.expect(#w.events).toBe(0)
+			r.ask(p, "pickman", "play")
+			w.run(w.answer, p, "cancel")
+			w.run(w.answer, p, "confirm")
+			t.expect(w.record("PaidPlayTest", 7)).toBe(nil)
+			t.expect(#w.events).toBe(1)
+			t.expect(w.events[1])
+				.toEqual({ kind = "closed", player = p, name = "pickman", what = "play", bought = false })
+		end
+	)
 
 	it("an answer that is neither confirm nor cancel is ignored and the screen stays open", function()
 		local w = world(nil)
@@ -631,18 +695,21 @@ return t.spec("f0201 Receipts on a stub engine", function(it)
 		t.expect(rec(w, "PaidPlayTest", 7).plays).toBe(1)
 	end)
 
-	it("one test screen per player at a time: a second ask opens nothing; another player's confirm grants nothing", function()
-		local w = world(nil)
-		local p = w.player(7)
-		local q = w.player(8)
-		local r = w.start()
-		t.expect(r.ask(p, "pickman", "play")).toBe(true)
-		t.expect(r.ask(p, "snake", "revive")).toBe(false)
-		t.expect(#w.sent).toBe(1)
-		w.run(w.answer, q, "confirm")
-		t.expect(w.record("PaidPlayTest", 8)).toBe(nil)
-		t.expect(#w.events).toBe(0)
-	end)
+	it(
+		"one test screen per player at a time: a second ask opens nothing; another player's confirm grants nothing",
+		function()
+			local w = world(nil)
+			local p = w.player(7)
+			local q = w.player(8)
+			local r = w.start()
+			t.expect(r.ask(p, "pickman", "play")).toBe(true)
+			t.expect(r.ask(p, "snake", "revive")).toBe(false)
+			t.expect(#w.sent).toBe(1)
+			w.run(w.answer, q, "confirm")
+			t.expect(w.record("PaidPlayTest", 8)).toBe(nil)
+			t.expect(#w.events).toBe(0)
+		end
+	)
 
 	it("a confirm in live mode grants nothing: no test screen is ever open there", function()
 		local w = world("live")
@@ -688,25 +755,124 @@ return t.spec("f0201 Receipts on a stub engine", function(it)
 		w.finished(7, 999, true)
 		w.finished(8, 101, true)
 		t.expect(#w.events).toBe(2)
-		t.expect(w.events[1]).toEqual({ kind = "closed", player = p, name = "snake", what = "revive", bought = false })
-		t.expect(w.events[2]).toEqual({ kind = "closed", player = p, name = "pickman", what = "play", bought = true })
+		t.expect(w.events[1])
+			.toEqual({ kind = "closed", player = p, name = "snake", what = "revive", bought = false })
+		t.expect(w.events[2])
+			.toEqual({ kind = "closed", player = p, name = "pickman", what = "play", bought = true })
 		t.expect(w.record("PaidPlay", 7)).toBe(nil) -- a closed screen grants nothing
 	end)
 
-	it("Receipts starts once per server: the second start does nothing; ask before start is an error", function()
+	it(
+		"Receipts starts once per server: the second start does nothing; ask before start is an error",
+		function()
+			local w = world("live")
+			local p = w.player(7)
+			local r = w.receipts()
+			t.expect(function()
+				r.ask(p, "pickman", "play")
+			end).toThrow("start")
+			t.expect(r.start({})).toBe(true)
+			local handler = w.marketplace.ProcessReceipt
+			t.expect(type(handler)).toBe("function")
+			t.expect(r.start({})).toBe(false)
+			t.expect(w.marketplace.ProcessReceipt).toBe(handler)
+			t.expect(function()
+				r.ask(p, "tetris", "play")
+			end).toThrow("no title")
+		end
+	)
+
+	it("a revive bought on this server is usable at once: the grant refreshes the record seen", function()
+		local w = world("live")
+		w.seed("PaidPlay", 7, { free = NOW - 7200 })
+		local p = w.player(7)
+		w.start()
+		local wallet = w.wallet()
+		w.run(wallet.arrive, p, "pickman")
+		t.expect(w.run(wallet.useRevive, p, "pickman").results[1]).toBe(false)
+		local writes = w.writes
+		t.expect(w.run(w.receipt, 7, 102, "rv-1").results[1]).toBe(GRANTED)
+		t.expect(w.run(wallet.useRevive, p, "pickman").results[1]).toBe(true)
+		t.expect(w.writes).toBe(writes + 2)
+		t.expect(wallet.revives(p, "pickman")).toBe(1)
+	end)
+
+	it("a test revive bought is usable at once: the test grant refreshes the record seen", function()
+		local w = world(nil)
+		local p = w.player(7)
+		local r = w.start()
+		local wallet = w.wallet()
+		w.run(wallet.arrive, p, "pickman")
+		t.expect(w.run(wallet.useRevive, p, "pickman").results[1]).toBe(false)
+		r.ask(p, "pickman", "revive")
+		w.run(w.answer, p, "confirm")
+		t.expect(w.run(wallet.useRevive, p, "pickman").results[1]).toBe(true)
+	end)
+
+	it("a revive given back is usable again: the refund refreshes the record seen", function()
+		local w = world(nil)
+		w.seed("PaidPlayTest", 7, { free = NOW - 7200, continues = 1 })
+		local p = w.player(7)
+		local wallet = w.wallet()
+		w.run(wallet.arrive, p, "pickman")
+		t.expect(w.run(wallet.useRevive, p, "pickman").results[1]).toBe(true)
+		w.run(wallet.refund, p, "pickman", "revive")
+		w.advance(7)
+		t.expect(w.run(wallet.useRevive, p, "pickman").results[1]).toBe(true)
+	end)
+
+	it("a play bought shows in the next read at once, with no new store read", function()
 		local w = world("live")
 		local p = w.player(7)
-		local r = w.receipts()
-		t.expect(function()
-			r.ask(p, "pickman", "play")
-		end).toThrow("start")
-		t.expect(r.start({})).toBe(true)
-		local handler = w.marketplace.ProcessReceipt
-		t.expect(type(handler)).toBe("function")
-		t.expect(r.start({})).toBe(false)
-		t.expect(w.marketplace.ProcessReceipt).toBe(handler)
-		t.expect(function()
-			r.ask(p, "tetris", "play")
-		end).toThrow("no title")
+		w.start()
+		local wallet = w.wallet()
+		t.expect(w.run(wallet.read, p, "snake").results[1].plays).toBe(0)
+		w.run(w.receipt, 7, 201, "pl-1")
+		t.expect(w.run(wallet.read, p, "snake").results[1].plays).toBe(1)
+		t.expect(w.reads).toBe(1)
+	end)
+
+	it(
+		"in test mode a real receipt leaves the record seen alone: the next read still shows the test record",
+		function()
+			local w = world(nil)
+			w.seed("PaidPlayTest", 7, { plays = 2 })
+			local p = w.player(7)
+			w.start()
+			local wallet = w.wallet()
+			t.expect(w.run(wallet.read, p, "pickman").results[1].plays).toBe(2)
+			w.run(w.receipt, 7, 101, "real-2")
+			t.expect(w.run(wallet.read, p, "pickman").results[1].plays).toBe(2)
+			t.expect(rec(w, "PaidPlay", 7).plays).toBe(1)
+		end
+	)
+
+	it(
+		"the place's adapters hear one client message: one connection to the test screen's answer, no invoke",
+		function()
+			local w = world(nil)
+			w.player(7)
+			w.start()
+			local remote = w.remote("TestPurchase")
+			t.expect(remote.OnServerEvent.connections()).toBe(1)
+			t.expect(rawget(remote, "OnServerInvoke")).toBe(nil)
+			t.expect(w.folder("ArcadePaidPlay").children.TestPurchase).toBe(remote)
+		end
+	)
+
+	it("nothing a teleport carries is read: no Receipts path reads the join data", function()
+		local w = world(nil)
+		local p = w.player(7, { plays = 9, paid = true })
+		local r = w.start()
+		r.ask(p, "pickman", "play")
+		w.run(w.answer, p, "confirm")
+		w.run(w.receipt, 7, 101, "j-1")
+		w.finished(7, 101, true)
+		local lw = world("live")
+		local lp = lw.player(7, { paid = true })
+		local lr = lw.start()
+		lr.ask(lp, "snake", "revive")
+		lw.run(lw.receipt, 7, 202, "j-2")
+		t.expect(w.joinReads + lw.joinReads).toBe(0)
 	end)
 end)

@@ -28,7 +28,8 @@ local IDS: { [string]: number } = {
 }
 
 type Signal = { Connect: (any, (...any) -> ()) -> (), fire: (...any) -> () }
-local function signal(): Signal
+type Counted = Signal & { connections: () -> number }
+local function signal(): Counted
 	local fns: { (...any) -> () } = {}
 	return {
 		Connect = function(_: any, fn: (...any) -> ())
@@ -38,6 +39,9 @@ local function signal(): Signal
 			for _, fn in fns do
 				fn(...)
 			end
+		end,
+		connections = function(): number
+			return #fns
 		end,
 	}
 end
@@ -70,7 +74,8 @@ type Event = { kind: string, player: any, name: string, what: string, bought: bo
 
 -- A server on a stub engine: in-memory DataStores (one table per store name), a MemoryStore pass map, players,
 -- Marketplace prompts and ProcessReceipt, remotes made at run time, and a task library whose spawned threads run at
--- once and whose delays run on w.elapse(). A store call can be held: it yields until w.release() resumes it.
+-- once, whose delays and waits run on w.elapse() (all) or w.advance(seconds) (those due by then), and whose defer runs at
+-- once. A store call can be held: it yields until w.release() resumes it. Spies count what must never happen.
 local function world(mode: any?, attrs: { [string]: any }?): any
 	local w: any = {}
 	local enum = enumProxy()
@@ -92,7 +97,8 @@ local function world(mode: any?, attrs: { [string]: any }?): any
 	w.prompts = {} :: { { player: any, id: number } }
 	w.sent = {} :: { { player: any, args: { any } } }
 	w.events = {} :: { Event }
-	w.delayed = {} :: { () -> () }
+	w.delayed = {} :: { { due: number, fn: () -> () } }
+	w.joinReads = 0 -- GetJoinData calls: what a teleport carries is never read
 	w.opened = {} :: { string }
 	w.attributes = { PaidPlay = mode }
 	for k, v in IDS do
@@ -211,6 +217,9 @@ local function world(mode: any?, attrs: { [string]: any }?): any
 		MarketplaceService = marketplace,
 		Players = {
 			PlayerRemoving = removing,
+			GetPlayers = function(): { any }
+				return table.clone(players)
+			end,
 			GetPlayerByUserId = function(_: any, id: number): any
 				for _, p in players do
 					if p.UserId == id then
@@ -302,8 +311,21 @@ local function world(mode: any?, attrs: { [string]: any }?): any
 				resume(coroutine.create(fn), ...)
 			end
 		end,
-		delay = function(_seconds: number, fn: () -> ())
-			table.insert(w.delayed, fn)
+		delay = function(seconds: number, fn: () -> ())
+			table.insert(w.delayed, { due = w.clock + seconds, fn = fn })
+		end,
+		defer = function(fn: any, ...: any)
+			env.task.spawn(fn, ...)
+		end,
+		wait = function(seconds: number?): number
+			local co = coroutine.running()
+			table.insert(w.delayed, {
+				due = w.clock + (seconds or 0),
+				fn = function()
+					resume(co, seconds or 0)
+				end,
+			})
+			return coroutine.yield()
 		end,
 	}
 
@@ -323,16 +345,30 @@ local function world(mode: any?, attrs: { [string]: any }?): any
 		assert(co, "nothing held")
 		resume(co)
 	end
+	-- runs every delay and wait, due or not
 	w.elapse = function()
 		local list = w.delayed
 		w.delayed = {}
-		for _, fn in list do
-			resume(coroutine.create(fn))
+		for _, d in list do
+			resume(coroutine.create(d.fn))
+		end
+	end
+	-- moves the clock and runs the delays and waits due by then
+	w.advance = function(seconds: number)
+		w.clock += seconds
+		local due: { any }, later: { any } = {}, {}
+		for _, d in w.delayed do
+			table.insert(if d.due <= w.clock then due else later, d)
+		end
+		w.delayed = later
+		for _, d in due do
+			resume(coroutine.create(d.fn))
 		end
 	end
 	w.player = function(userId: number, joinData: any?): any
 		local p: any = { UserId = userId, Parent = {}, Name = `P{userId}` }
 		p.GetJoinData = function(): any
+			w.joinReads += 1
 			return { TeleportData = joinData }
 		end
 		table.insert(players, p)
@@ -360,13 +396,20 @@ local function world(mode: any?, attrs: { [string]: any }?): any
 				table.insert(w.events, { kind = "granted", player = player, name = name, what = kind })
 			end,
 			closed = function(player: any, name: string, kind: string, bought: boolean)
-				table.insert(w.events, { kind = "closed", player = player, name = name, what = kind, bought = bought })
+				table.insert(
+					w.events,
+					{ kind = "closed", player = player, name = name, what = kind, bought = bought }
+				)
 			end,
 		})
 		return r
 	end
 	w.receipt = function(userId: any, productId: any, purchaseId: any): any
-		return marketplace.ProcessReceipt({ PlayerId = userId, ProductId = productId, PurchaseId = purchaseId })
+		return marketplace.ProcessReceipt({
+			PlayerId = userId,
+			ProductId = productId,
+			PurchaseId = purchaseId,
+		})
 	end
 	w.finished = function(userId: number, productId: number, bought: boolean)
 		finished.fire(userId, productId, bought)

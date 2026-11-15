@@ -2,7 +2,7 @@
 title: A new rule says how existing work gets through it
 when: design
 tags: [process, migration, rollout]
-check: When this adds a rule, a check or a new data structure, which existing items (prepared, active, mid-prep, done) or stored data fail it on the day it lands, what does the design say they do, and, for a one-time migration, which writers (older builds, old servers, a rollback) still produce the old shape after it ran, and does the new structure pick their data up? Stored data includes configuration: can a configured producer (a role's fallback or effort in `.models.toml`) still make what the rule refuses?
+check: When this adds a rule, a check or a new data structure, which existing items (prepared, active, mid-prep, done) or stored data fail it on the day it lands, what does the design say they do, and, for a one-time migration, which writers (older builds, old servers, a rollback) still produce the old shape after it ran, and does the new structure pick their data up? When old and new builds share a store at the same time, does the new one write the old shape, so each reads the other's writes? Stored data includes configuration: can a configured producer (a role's fallback or effort in `.models.toml`) still make what the rule refuses?
 ---
 A new requirement is written for the work that comes after it, but it is checked against everything already in flight. Prepared rafts, active ones and preps open on a branch were made under the old rules and fail the new check the moment it lands, unless the design gives them a path (a migration, a harvest-at-confirm, an exemption, or an order).
 
@@ -25,3 +25,5 @@ c0302 design review 001 F2: a design that adds a rule about how fixtures are set
 **Note (c0306's prep, 2026-11-14, design review 001 F6):** `[roles.raft]` runs at effort `high`, so its grok fallback would write a raft review that c0306's rule refuses. The dispatcher would spend a whole review run on a result refused by construction. The user ruled that a review step skips such a try.
 
 **Note** (c0282 re-prep 2026-11-15): c0302's rule that a clone fixture names its branch `main` scans only `z-nile/tests`, so a prepared issue's sequestered spec breaks it only when a raft promotes it (c0282's `lifecycle.spec`, found at R0099's prototype gate). A new rule over specs also scans the open `acceptance/` folders, or names the prepared issues it leaves to fix.
+
+**Also:** f0201 design review 001 F3: the arcade's PaidPlay read f0145's `continues` but wrote `revives`, so an old f0145 Pickman server (which outlives a publish) would read none of the arcade's credits and its next write would drop them. When two builds share a store, the new one writes the old shape exactly, and a case pins the stored keys.

@@ -205,15 +205,17 @@ index 00000000..d36e8faa
 +return Receipts
 diff --git a/arcade/src/server/Wallet.luau b/arcade/src/server/Wallet.luau
 new file mode 100644
-index 00000000..719f8f80
+index 00000000..f801d2bb
 --- /dev/null
 +++ b/arcade/src/server/Wallet.luau
-@@ -0,0 +1,397 @@
+@@ -0,0 +1,501 @@
 +--!strict
 +-- Wallet (f0201): a player's paid-play records, one per title, through one UpdateAsync per decision; the portal's
 +-- passes; this run's revives; and the guards that bound what one client can make this server spend. Server only
 +-- (ServerStorage.Arcade): no client can read it. Every decision is PaidPlay's, taken inside the transform, and the
 +-- transform's last call decides (UpdateAsync may call it again on a newer value). What a teleport carries is never read.
++-- Engine surface: time limits are task.delay, waits are coroutine.yield resumed by task.spawn, a player is present
++-- while their Parent is not nil, and a buyer is found with Players:GetPlayerByUserId.
 +local Catalog = require("./Catalog")
 +local PaidPlay = require("@game/ReplicatedStorage/Arcade/Logic/PaidPlay")
 +
@@ -225,18 +227,23 @@ index 00000000..719f8f80
 +
 +local Wallet = {}
 +
-+Wallet.WAIT_SECONDS = 5 -- an arrival's claim or a read not back by then counts as failed
++Wallet.WAIT_SECONDS = 5 -- a claim, a pass read or a read not back by then counts as failed
 +Wallet.READ_SECONDS = 60 -- a read within this of the last record seen answers from it (every write here refreshes it)
++Wallet.RETRY_SECONDS = 6 -- after a read that failed, reads answer "down" with no store call for this long
 +Wallet.USE_SECONDS = 6 -- at most one revive write per player and title in this span
++Wallet.KEEP_SECONDS = 600 -- a departed player's run count is dropped this long after they left
 +Wallet.PASS_SECONDS = 300 -- a portal pass lives this long
 +Wallet.PASS_MAP = "PaidPlayPass" -- MemoryStore hash map of the passes, key "<name>/<user id>"
 +Wallet.MODE_ATTRIBUTE = "PaidPlay" -- ServerScriptService attribute: "live" for live mode
 +
 +type Arrival = { verdict: PaidPlay.Verdict, start: PaidPlay.Start? }
++-- per Player object and title; dropped when the player leaves
 +type Slot = {
 +	seen: PaidPlay.Record?, -- the last record of this title this server saw for the player, in the mode's store
 +	seenAt: number?,
 +	reading: boolean,
++	downUntil: number?, -- reads answer "down" with no store call until then
++	mayPass: boolean, -- the last read answered "down" and no pass was written since
 +	using: boolean,
 +	usedAt: number?,
 +	arrival: Arrival?, -- this join's arrival, answered once
@@ -246,7 +253,9 @@ index 00000000..719f8f80
 +local configured: PaidPlay.Config? = nil
 +local slots: { [any]: { [string]: Slot } } = {}
 +local tallies: { [string]: number } = {} -- "<name>/<user id>": revives used in this run
++local leftAt: { [string]: number } = {} -- "<name>/<user id>": when that player last left
 +local stores: { [string]: any } = {}
++local standIns: { [string]: any } = {}
 +local passMap: any = nil
 +
 +function Wallet.config(): PaidPlay.Config
@@ -280,6 +289,14 @@ index 00000000..719f8f80
 +	return `{name}/{userId}`
 +end
 +
++local function present(player: any): boolean
++	return player.Parent ~= nil
++end
++
++local function newSlot(): Slot
++	return { reading = false, mayPass = false, using = false }
++end
++
 +local function slotOf(player: any, name: string): Slot
 +	local byName = slots[player]
 +	if byName == nil then
@@ -288,20 +305,45 @@ index 00000000..719f8f80
 +	end
 +	local slot = byName[name]
 +	if slot == nil then
-+		slot = { reading = false, using = false }
++		slot = newSlot()
 +		byName[name] = slot
 +	end
 +	return slot
 +end
 +
-+-- Slots are kept per Player object and dropped when the player leaves, so a result that comes back after a leave
-+-- lands in a dropped slot, and a rejoin starts a fresh one.
++-- Slots are kept per Player object and title and dropped when the player leaves, so a result that comes back after a
++-- leave lands in a dropped slot, and a rejoin starts a fresh one.
 +local function see(slot: Slot, r: PaidPlay.Record)
 +	slot.seen = r
 +	slot.seenAt = os.clock()
 +end
 +
-+local function store(name: string): any
++-- A per-server stand-in for a store, with UpdateAsync's and GetAsync's contract: test mode's records where the test
++-- store cannot be opened (a Studio playtest from a file, API access off), so a test purchase still goes through.
++local function standIn(name: string): any
++	local s = standIns[name]
++	if s == nil then
++		local values: { [string]: any } = {}
++		s = {
++			UpdateAsync = function(_: any, key: string, fn: (any) -> any): any
++				local value = fn(values[key])
++				if value ~= nil then
++					values[key] = value
++				end
++				return value
++			end,
++			GetAsync = function(_: any, key: string): any
++				return values[key]
++			end,
++		}
++		standIns[name] = s
++	end
++	return s
++end
++
++-- The DataStore of that name, opened on first use inside a pcall and kept; nil when it cannot be opened, except a
++-- test store (`test`), which then has its stand-in.
++local function store(name: string, test: boolean): any
 +	local s = stores[name]
 +	if s == nil then
 +		local ok, opened = pcall(function(): any
@@ -310,19 +352,26 @@ index 00000000..719f8f80
 +		if ok and opened ~= nil then
 +			s = opened
 +			stores[name] = s
++		elseif test then
++			s = standIn(name)
++			stores[name] = s
 +		end
 +	end
 +	return s
 +end
 +
-+-- One UpdateAsync of a player's record: `fn` answers the new record (nil writes nothing) and a decision. Answers the
-+-- final record and the decision of the transform's last call, or nil when the store failed.
++local function storeOf(t: PaidPlay.Title): any
++	return store(PaidPlay.store(t.entry, t.mode), t.mode == "test")
++end
++
++-- One UpdateAsync of a player's record: `fn` answers the new record (nil writes nothing) and a decision; the value
++-- written is PaidPlay.stored's. Answers the final record and the decision of the transform's last call, or nil when
++-- the store failed.
 +local function update(
-+	storeName: string,
++	s: any,
 +	userId: number,
 +	fn: (PaidPlay.Record) -> (PaidPlay.Record?, any)
 +): (PaidPlay.Record?, any)
-+	local s = store(storeName)
 +	if s == nil then
 +		return nil
 +	end
@@ -333,7 +382,7 @@ index 00000000..719f8f80
 +			local r = PaidPlay.record(raw)
 +			local n, d = fn(r)
 +			final, decision = n or r, d
-+			return n
++			return if n then PaidPlay.stored(n) else nil
 +		end)
 +	end)
 +	if not ok then
@@ -372,42 +421,71 @@ index 00000000..719f8f80
 +	return table.unpack(r, 1, r.n)
 +end
 +
-+-- A player's record of a title, from the mode's store. Answers nil and "busy" while a read for them is under way,
-+-- or nil and "down" when the store failed or was not back within WAIT_SECONDS; a read within READ_SECONDS of the
-+-- last record seen answers from it.
++-- A player's record of a title, from the mode's store. Answers nil and "busy" while a read for them is under way; the
++-- last record seen when it is less than READ_SECONDS old; nil and "down" when the store failed or was not back
++-- within WAIT_SECONDS, and then for RETRY_SECONDS after that call ended, with no store call; nil and "down" for a
++-- player who left. A "down" answer allows one pass (Wallet.pass).
 +function Wallet.read(player: any, name: string): (PaidPlay.Record?, string?)
 +	local t = title(name)
++	if not present(player) then
++		return nil, "down"
++	end
 +	local slot = slotOf(player, name)
 +	if slot.reading then
 +		return nil, "busy"
++	end
++	if slot.downUntil ~= nil and os.clock() < slot.downUntil then
++		slot.mayPass = true
++		return nil, "down"
 +	end
 +	if slot.seen ~= nil and slot.seenAt ~= nil and os.clock() - slot.seenAt < Wallet.READ_SECONDS then
 +		return slot.seen
 +	end
 +	slot.reading = true
-+	local s = store(PaidPlay.store(t.entry, t.mode))
++	local s = storeOf(t)
++	local late = false
 +	local back, ok, raw = within(Wallet.WAIT_SECONDS, function(): (boolean, any)
-+		if s == nil then
-+			slot.reading = false
-+			return false, nil
++		local okRead, value = false, nil
++		if s ~= nil then
++			okRead, value = pcall(function(): any
++				return s:GetAsync(tostring(player.UserId))
++			end)
 +		end
-+		local okRead, value = pcall(function(): any
-+			return s:GetAsync(tostring(player.UserId))
-+		end)
 +		slot.reading = false
++		if not okRead or late then
++			slot.downUntil = os.clock() + Wallet.RETRY_SECONDS
++		end
 +		return okRead, value
 +	end)
-+	if not back or not ok then
++	if not back then
++		-- the call ends later; until then the player stays busy, and its end starts the retry span
++		late = true
++		slot.mayPass = true
 +		return nil, "down"
 +	end
++	if not ok then
++		slot.mayPass = true
++		return nil, "down"
++	end
++	slot.mayPass = false
 +	local r = PaidPlay.record(raw)
 +	see(slot, r)
 +	return r
 +end
 +
 +-- The portal's pass, for a player it let go on a failed read: the arrival then plays even with nothing to pay with.
++-- Written only after this server's last read for that player and title answered "down", once per such answer; else
++-- false and nothing written.
 +function Wallet.pass(player: any, name: string): boolean
 +	title(name)
++	if not present(player) then
++		return false
++	end
++	local slot = slotOf(player, name)
++	if not slot.mayPass then
++		return false
++	end
++	slot.mayPass = false
 +	local ok = pcall(function()
 +		if passMap == nil then
 +			passMap = MemoryStoreService:GetHashMap(Wallet.PASS_MAP)
@@ -417,34 +495,41 @@ index 00000000..719f8f80
 +	return ok
 +end
 +
-+-- Takes the player's pass for a title: true when one was there, or when the map cannot be read (decided with the
-+-- user, 2026-10-31: "Let all of them play").
-+local function takePass(player: any, name: string): boolean
-+	local key = keyOf(name, player.UserId)
-+	local ok, value = pcall(function(): any
-+		if passMap == nil then
-+			passMap = MemoryStoreService:GetHashMap(Wallet.PASS_MAP)
++-- Takes the player's pass for a title: true when one was there, or when the map cannot be read or is not back within
++-- WAIT_SECONDS (decided with the user, 2026-10-31: "Let all of them play"); a late answer still removes the entry.
++local function takePass(userId: number, name: string): boolean
++	local key = keyOf(name, userId)
++	local back, found = within(Wallet.WAIT_SECONDS, function(): boolean
++		local ok, value = pcall(function(): any
++			if passMap == nil then
++				passMap = MemoryStoreService:GetHashMap(Wallet.PASS_MAP)
++			end
++			return passMap:GetAsync(key)
++		end)
++		if not ok then
++			return true
 +		end
-+		return passMap:GetAsync(key)
-+	end)
-+	if not ok then
++		if value == nil then
++			return false
++		end
++		pcall(function()
++			passMap:RemoveAsync(key)
++		end)
 +		return true
-+	end
-+	if value == nil then
-+		return false
-+	end
-+	pcall(function()
-+		passMap:RemoveAsync(key)
 +	end)
-+	return true
++	return not back or found == true
 +end
 +
 +-- The arrival in a title's place, once per join: the free start due, else a held play (PaidPlay.start, in one
 +-- UpdateAsync); the portal's pass is taken whatever the start; a claim that failed or was not back within
 +-- WAIT_SECONDS plays (a failure costs the player nothing). Answers "play" or "back" and the start (nil: failed).
-+-- Begins this run's revive count. A second call during the first waits for it; a later one answers the same.
++-- Begins this run's revive count. A second call during the first waits for it; a later one answers the same. A
++-- player who already left goes "back" with nothing claimed.
 +function Wallet.arrive(player: any, name: string): (PaidPlay.Verdict, PaidPlay.Start?)
 +	local t = title(name)
++	if not present(player) then
++		return "back", nil
++	end
 +	local slot = slotOf(player, name)
 +	local done = slot.arrival
 +	if done ~= nil then
@@ -458,19 +543,18 @@ index 00000000..719f8f80
 +	slot.arriving = {}
 +	local userId = player.UserId
 +	local now = os.time()
++	local s = storeOf(t)
 +	local back, final, start = within(Wallet.WAIT_SECONDS, function(): (PaidPlay.Record?, any)
-+		return update(
-+			PaidPlay.store(t.entry, t.mode),
-+			userId,
-+			function(r: PaidPlay.Record): (PaidPlay.Record?, any)
-+				local s, n = PaidPlay.start(r, now)
-+				return if s == "buy" then nil else n, s
-+			end
-+		)
++		return update(s, userId, function(r: PaidPlay.Record): (PaidPlay.Record?, any)
++			local st, n = PaidPlay.start(r, now)
++			return if st == "buy" then nil else n, st
++		end)
 +	end)
-+	local passed = takePass(player, name)
++	local passed = takePass(userId, name)
 +	local verdict: PaidPlay.Verdict = PaidPlay.arrive(start, passed) :: PaidPlay.Verdict
-+	tallies[keyOf(name, userId)] = 0
++	local key = keyOf(name, userId)
++	tallies[key] = 0
++	leftAt[key] = nil
 +	if back and final ~= nil then
 +		see(slot, final)
 +	end
@@ -485,10 +569,13 @@ index 00000000..719f8f80
 +end
 +
 +-- Uses one held revive: true when used (this run's count goes up), false when none is held (known from the last
-+-- record this server saw, then no write), nil when it cannot tell (a use under way, one within USE_SECONDS, or the
-+-- store failed).
++-- record this server saw, then no write), nil when it cannot tell (a use under way, one within USE_SECONDS, the
++-- store failed, or the player left).
 +function Wallet.useRevive(player: any, name: string): boolean?
 +	local t = title(name)
++	if not present(player) then
++		return nil
++	end
 +	local slot = slotOf(player, name)
 +	if slot.using then
 +		return nil
@@ -503,14 +590,10 @@ index 00000000..719f8f80
 +	slot.using = true
 +	slot.usedAt = os.clock()
 +	local userId = player.UserId
-+	local final, used = update(
-+		PaidPlay.store(t.entry, t.mode),
-+		userId,
-+		function(r: PaidPlay.Record): (PaidPlay.Record?, any)
-+			local u, n = PaidPlay.useRevive(r)
-+			return if u then n else nil, u
-+		end
-+	)
++	local final, used = update(storeOf(t), userId, function(r: PaidPlay.Record): (PaidPlay.Record?, any)
++		local u, n = PaidPlay.useRevive(r)
++		return if u then n else nil, u
++	end)
 +	slot.using = false
 +	if final == nil then
 +		return nil
@@ -523,38 +606,41 @@ index 00000000..719f8f80
 +	return used == true
 +end
 +
-+-- Gives a credit back (a revive used that could not be applied): its own credit, outside the receipts.
++-- Gives a credit back (a revive used that could not be applied): its own credit, outside the receipts, written for a
++-- player who left too. A written revive refund takes one off this run's count, never below 0.
 +function Wallet.refund(player: any, name: string, kind: PaidPlay.Kind): boolean
 +	local t = title(name)
-+	local slot = slotOf(player, name)
-+	local final = update(
-+		PaidPlay.store(t.entry, t.mode),
-+		player.UserId,
-+		function(r: PaidPlay.Record): (PaidPlay.Record?, any)
-+			return PaidPlay.refund(r, kind), nil
-+		end
-+	)
++	local slot = if present(player) then slotOf(player, name) else newSlot()
++	local userId = player.UserId
++	local final = update(storeOf(t), userId, function(r: PaidPlay.Record): (PaidPlay.Record?, any)
++		return PaidPlay.refund(r, kind), nil
++	end)
 +	if final == nil then
 +		return false
 +	end
 +	see(slot, final)
++	if kind == "revive" then
++		local key = keyOf(name, userId)
++		tallies[key] = math.max(0, (tallies[key] or 0) - 1)
++	end
 +	return true
 +end
 +
 +-- The revives this run of the player has used (PaidPlay's count for the boards): 0 at the arrival, one more for each
-+-- revive used. Kept after the player leaves, until their next arrival on this server.
++-- revive used, one less for each revive refunded. Kept after the player leaves for KEEP_SECONDS (a departed run is
++-- submitted after PlayerRemoving), and started again at their next arrival.
 +function Wallet.revives(player: any, name: string): number
 +	title(name)
 +	return tallies[keyOf(name, player.UserId)] or 0
 +end
 +
 +local function grantInto(
-+	storeName: string,
++	s: any,
 +	userId: number,
 +	kind: PaidPlay.Kind,
 +	receiptId: string
 +): (boolean, boolean, PaidPlay.Record?)
-+	local final, fresh = update(storeName, userId, function(r: PaidPlay.Record): (PaidPlay.Record?, any)
++	local final, fresh = update(s, userId, function(r: PaidPlay.Record): (PaidPlay.Record?, any)
 +		local n, isNew = PaidPlay.grant(r, kind, receiptId)
 +		return if isNew then n else nil, isNew
 +	end)
@@ -564,6 +650,7 @@ index 00000000..719f8f80
 +	return true, fresh == true, final
 +end
 +
++-- a grant refreshes the record seen for a buyer on this server
 +local function seeGrant(userId: number, name: string, final: PaidPlay.Record?)
 +	local player = Players:GetPlayerByUserId(userId)
 +	if player ~= nil and final ~= nil then
@@ -572,7 +659,8 @@ index 00000000..719f8f80
 +end
 +
 +-- A Roblox receipt's grant, by user id (the buyer need not be on this server): always into the title's live store,
-+-- since real Robux were charged. Answers whether it was written, and whether it was new (not granted before).
++-- since real Robux were charged. Answers whether it was written, and whether it was new (not granted before). The
++-- record seen is refreshed unless this server's mode for the title is test (it sees the test record).
 +function Wallet.grant(
 +	userId: number,
 +	name: string,
@@ -580,21 +668,22 @@ index 00000000..719f8f80
 +	receiptId: string
 +): (boolean, boolean)
 +	local t = title(name)
-+	local written, fresh, final = grantInto(t.entry.store, userId, kind, receiptId)
++	local written, fresh, final = grantInto(store(t.entry.store, false), userId, kind, receiptId)
 +	if written and t.mode ~= "test" then
 +		seeGrant(userId, name, final)
 +	end
 +	return written, fresh
 +end
 +
-+-- A test purchase's grant (test mode only): into the test store, under a fresh "test:" id. Answers whether written.
++-- A test purchase's grant (test mode only): into the test store (or its stand-in), under a fresh "test:" id.
++-- Answers whether written; the record seen is refreshed.
 +function Wallet.testGrant(player: any, name: string, kind: PaidPlay.Kind): boolean
 +	local t = title(name)
 +	if t.mode ~= "test" then
 +		return false
 +	end
 +	local receiptId = "test:" .. HttpService:GenerateGUID(false)
-+	local written, _, final = grantInto(t.entry.testStore, player.UserId, kind, receiptId)
++	local written, _, final = grantInto(store(t.entry.testStore, true), player.UserId, kind, receiptId)
 +	if written then
 +		seeGrant(player.UserId, name, final)
 +	end
@@ -603,15 +692,30 @@ index 00000000..719f8f80
 +
 +Players.PlayerRemoving:Connect(function(player: any)
 +	slots[player] = nil
++	local userId = player.UserId
++	local now = os.clock()
++	for _, entry in Catalog do
++		local key = keyOf(entry.name, userId)
++		if tallies[key] ~= nil then
++			leftAt[key] = now
++			task.delay(Wallet.KEEP_SECONDS, function()
++				local at = leftAt[key]
++				if at ~= nil and os.clock() - at >= Wallet.KEEP_SECONDS then
++					tallies[key] = nil
++					leftAt[key] = nil
++				end
++			end)
++		end
++	end
 +end)
 +
 +return Wallet
 diff --git a/arcade/src/shared/Logic/PaidPlay/init.luau b/arcade/src/shared/Logic/PaidPlay/init.luau
 new file mode 100644
-index 00000000..0f37f5d6
+index 00000000..28b9cadb
 --- /dev/null
 +++ b/arcade/src/shared/Logic/PaidPlay/init.luau
-@@ -0,0 +1,242 @@
+@@ -0,0 +1,249 @@
 +--!strict
 +-- PaidPlay (f0201): the cost model every arcade title shares. One free start per rolling hour per title and player,
 +-- then a held play (bought for 1 R$), else a purchase; a revive (3 new lives) for 1 R$; a receipt granted once; test
@@ -624,6 +728,8 @@ index 00000000..0f37f5d6
 +export type Verdict = "play" | "back"
 +-- one player's record in one title, as stored (key: the user id)
 +export type Record = { free: number?, plays: number, revives: number, receipts: { string } }
++-- the stored shape: f0145's record (its `continues` are the revives)
++export type Stored = { free: number?, plays: number, continues: number, receipts: { string } }
 +export type Status = { free: boolean, nextFree: number?, plays: number, revives: number }
 +-- a title's catalog entry: its name, the title its screens print, its two stores and the attribute names of its ids
 +export type Entry = {
@@ -732,8 +838,8 @@ index 00000000..0f37f5d6
 +	return config
 +end
 +
-+-- A stored value read defensively: nil or broken fields are a new player's. A record written before revives were
-+-- named (f0145's `continues`) keeps its count.
++-- A stored value read defensively: nil or broken fields are a new player's. Revives are stored as f0145's
++-- `continues`, so a Pickman record either build writes is the other's too (PaidPlay.stored).
 +function PaidPlay.record(raw: any): Record
 +	local r: Record = { free = nil, plays = 0, revives = 0, receipts = {} }
 +	if type(raw) ~= "table" then
@@ -741,7 +847,7 @@ index 00000000..0f37f5d6
 +	end
 +	r.free = whole(raw.free)
 +	r.plays = whole(raw.plays) or 0
-+	r.revives = whole(raw.revives) or whole(raw.continues) or 0
++	r.revives = whole(raw.continues) or 0
 +	if type(raw.receipts) == "table" then
 +		for _, x in raw.receipts do
 +			if type(x) == "string" and x ~= "" then
@@ -750,6 +856,11 @@ index 00000000..0f37f5d6
 +		end
 +	end
 +	return r
++end
++
++-- The value to store: exactly f0145's four fields (`continues` holds the revives), nothing else.
++function PaidPlay.stored(r: Record): Stored
++	return { free = r.free, plays = r.plays, continues = r.revives, receipts = table.clone(r.receipts) }
 +end
 +
 +-- A free start is due when none was taken yet, or the latest one is a full hour old. A clock behind the recorded
@@ -871,10 +982,10 @@ index 00000000..7258c092
 +})
 diff --git a/arcade/src/shared/TestPurchase.luau b/arcade/src/shared/TestPurchase.luau
 new file mode 100644
-index 00000000..ece523ef
+index 00000000..65be3dc3
 --- /dev/null
 +++ b/arcade/src/shared/TestPurchase.luau
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,139 @@
 +--!strict
 +-- TestPurchase (f0201): the test purchase screen, which stands in for Roblox's purchase dialog in test mode, so a
 +-- playtest shows and takes the same choice and charges nothing. A client adapter module: each place's client boots it
@@ -905,16 +1016,15 @@ index 00000000..ece523ef
 +end
 +
 +local started = false
++local gui: any = nil
 +
-+function TestPurchase.start()
-+	if started then
-+		return
-+	end
-+	started = true
-+	local remote = ReplicatedStorage:WaitForChild("ArcadePaidPlay"):WaitForChild("TestPurchase")
-+	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
-+	local gui: any = nil
++-- Whether the screen is open: a place whose own handlers of the screen's keys or taps are not ContextActionService
++-- bindings below TestPurchase.PRIORITY skips them while this is true.
++function TestPurchase.isOpen(): boolean
++	return gui ~= nil
++end
 +
++local function listen(remote: any, playerGui: any)
 +	local function close()
 +		if gui ~= nil then
 +			gui:Destroy()
@@ -997,6 +1107,20 @@ index 00000000..ece523ef
 +			end
 +		end
 +		open(text)
++	end)
++end
++
++-- Boots the screen once; returns at once and waits for the server's remote in its own thread.
++function TestPurchase.start()
++	if started then
++		return
++	end
++	started = true
++	task.spawn(function()
++		listen(
++			ReplicatedStorage:WaitForChild("ArcadePaidPlay"):WaitForChild("TestPurchase"),
++			Players.LocalPlayer:WaitForChild("PlayerGui")
++		)
 +	end)
 +end
 +

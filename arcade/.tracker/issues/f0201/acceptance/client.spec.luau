@@ -3,14 +3,18 @@
 -- client. The server opens it with its lines; it shows them with BUY and CANCEL, centred in the middle half of the
 -- screen inside the safe insets; BUY (a tap, Return, KeypadEnter or ButtonA) sends "confirm" and CANCEL (a tap,
 -- Backspace or ButtonB) sends "cancel", on the press, and closes it. Its keys are bound above the place's own only
--- while it is open, so outside it they pass on and send nothing. A malformed open shows nothing it cannot print.
+-- while it is open, so outside it they pass on and send nothing, and isOpen says so for a place's own handlers. A
+-- malformed open shows nothing it cannot print. start returns at once.
 local PaidPlay = require("@logic/PaidPlay")
 local luau = require("@lune/luau")
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
 
 local built = place.load()
-local SOURCE = (built :: any):GetService("ReplicatedStorage"):FindFirstChild("Arcade"):FindFirstChild("TestPurchase").Source
+local SOURCE = (built :: any)
+	:GetService("ReplicatedStorage")
+	:FindFirstChild("Arcade")
+	:FindFirstChild("TestPurchase").Source
 
 type Signal = { Connect: (any, (...any) -> ()) -> (), fire: (...any) -> () }
 local function signal(): Signal
@@ -93,8 +97,9 @@ local function node(className: string): any
 	})
 end
 
-local function client(): any
-	local c: any = { sent = {}, binds = {}, unbinds = 0 }
+-- a stub client; with `slow`, ReplicatedStorage's WaitForChild yields until c.release()
+local function client(slow: boolean?): any
+	local c: any = { sent = {}, binds = {}, unbinds = 0, waiting = {} }
 	local enum = enumProxy()
 	local remote: any = { OnClientEvent = signal() }
 	remote.FireServer = function(_: any, ...: any)
@@ -110,7 +115,14 @@ local function client(): any
 	local bound: any = nil
 	local services: { [string]: any } = {
 		ContextActionService = {
-			BindActionAtPriority = function(_: any, name: string, fn: any, touch: boolean, priority: number, ...: any)
+			BindActionAtPriority = function(
+				_: any,
+				name: string,
+				fn: any,
+				touch: boolean,
+				priority: number,
+				...: any
+			)
 				bound = { name = name, fn = fn, touch = touch, priority = priority, keys = { ... } }
 				table.insert(c.binds, bound)
 			end,
@@ -132,6 +144,10 @@ local function client(): any
 		ReplicatedStorage = {
 			WaitForChild = function(_: any, name: string): any
 				assert(name == "ArcadePaidPlay", name)
+				if slow then
+					table.insert(c.waiting, coroutine.running())
+					coroutine.yield()
+				end
 				return folder
 			end,
 		},
@@ -152,12 +168,25 @@ local function client(): any
 				return node(className)
 			end,
 		},
+		task = {
+			spawn = function(fn: any, ...: any)
+				local co = if type(fn) == "thread" then fn else coroutine.create(fn)
+				local ok, err = coroutine.resume(co, ...)
+				assert(ok, err)
+			end,
+		},
 		UDim2 = {
 			fromScale = function(x: number, y: number): any
 				return { X = x, Y = y }
 			end,
 		},
 	}
+	c.release = function()
+		local co = table.remove(c.waiting, 1)
+		assert(co, "nothing waiting")
+		local ok, err = coroutine.resume(co)
+		assert(ok, err)
+	end
 	c.module = luau.load(SOURCE, { environment = env, debugName = "TestPurchase" })()
 	c.enum = enum
 	c.gui = playerGui
@@ -221,19 +250,22 @@ return t.spec("f0201 the test purchase screen", function(it)
 		t.expect(c.screen()).toBe(nil)
 	end)
 
-	it("while it is open Return, KeypadEnter and ButtonA buy on the press; the release adds nothing", function()
-		for _, k in { "Return", "KeypadEnter", "ButtonA" } do
-			local c = client()
-			c.module.start()
-			c.open("open", LINES)
-			local sunk = c.key(k, "Begin")
-			t.expect(tostring(sunk)).toBe("ContextActionResult.Sink")
-			t.expect(c.sent).toEqual({ { "confirm" } })
-			t.expect(c.screen()).toBe(nil)
-			c.key(k, "End")
-			t.expect(c.sent).toEqual({ { "confirm" } })
+	it(
+		"while it is open Return, KeypadEnter and ButtonA buy on the press; the release adds nothing",
+		function()
+			for _, k in { "Return", "KeypadEnter", "ButtonA" } do
+				local c = client()
+				c.module.start()
+				c.open("open", LINES)
+				local sunk = c.key(k, "Begin")
+				t.expect(tostring(sunk)).toBe("ContextActionResult.Sink")
+				t.expect(c.sent).toEqual({ { "confirm" } })
+				t.expect(c.screen()).toBe(nil)
+				c.key(k, "End")
+				t.expect(c.sent).toEqual({ { "confirm" } })
+			end
 		end
-	end)
+	)
 
 	it("while it is open Backspace and ButtonB cancel on the press; the release adds nothing", function()
 		for _, k in { "Backspace", "ButtonB" } do
@@ -247,40 +279,46 @@ return t.spec("f0201 the test purchase screen", function(it)
 		end
 	end)
 
-	it("its keys are bound only while it is open, above the place's own: outside it they pass on and send nothing", function()
-		local c = client()
-		c.module.start()
-		t.expect(c.key("Return", "Begin")).toBe("passed")
-		t.expect(#c.binds).toBe(0)
-		c.open("open", LINES)
-		local b = c.bound()
-		t.expect(b.priority).toBe(3000)
-		t.expect(b.priority > 2000).toBe(true) -- Enum.ContextActionPriority.High
-		t.expect(b.touch).toBe(false)
-		local names = {}
-		for _, code in b.keys do
-			table.insert(names, code.Name)
+	it(
+		"its keys are bound only while it is open, above the place's own: outside it they pass on and send nothing",
+		function()
+			local c = client()
+			c.module.start()
+			t.expect(c.key("Return", "Begin")).toBe("passed")
+			t.expect(#c.binds).toBe(0)
+			c.open("open", LINES)
+			local b = c.bound()
+			t.expect(b.priority).toBe(3000)
+			t.expect(b.priority > 2000).toBe(true) -- Enum.ContextActionPriority.High
+			t.expect(b.touch).toBe(false)
+			local names = {}
+			for _, code in b.keys do
+				table.insert(names, code.Name)
+			end
+			table.sort(names)
+			t.expect(names).toEqual({ "Backspace", "ButtonA", "ButtonB", "KeypadEnter", "Return" })
+			c.key("Return", "Begin")
+			t.expect(c.key("Return", "Begin")).toBe("passed")
+			t.expect(c.key("ButtonB", "Begin")).toBe("passed")
+			t.expect(c.sent).toEqual({ { "confirm" } })
 		end
-		table.sort(names)
-		t.expect(names).toEqual({ "Backspace", "ButtonA", "ButtonB", "KeypadEnter", "Return" })
-		c.key("Return", "Begin")
-		t.expect(c.key("Return", "Begin")).toBe("passed")
-		t.expect(c.key("ButtonB", "Begin")).toBe("passed")
-		t.expect(c.sent).toEqual({ { "confirm" } })
-	end)
+	)
 
-	it("centred in the middle half, inside the safe insets, above the place's screens, kept across respawns", function()
-		local c = client()
-		c.module.start()
-		c.open("open", LINES)
-		local s = c.screen()
-		t.expect(tostring(s.ScreenInsets)).toBe("ScreenInsets.CoreUISafeInsets")
-		t.expect(s.ResetOnSpawn).toBe(false)
-		t.expect(s.DisplayOrder >= 1000).toBe(true)
-		local panel = s:FindFirstChild("Panel")
-		t.expect(panel.Position).toEqual({ X = 0.25, Y = 0.25 })
-		t.expect(panel.Size).toEqual({ X = 0.5, Y = 0.5 })
-	end)
+	it(
+		"centred in the middle half, inside the safe insets, above the place's screens, kept across respawns",
+		function()
+			local c = client()
+			c.module.start()
+			c.open("open", LINES)
+			local s = c.screen()
+			t.expect(tostring(s.ScreenInsets)).toBe("ScreenInsets.CoreUISafeInsets")
+			t.expect(s.ResetOnSpawn).toBe(false)
+			t.expect(s.DisplayOrder >= 1000).toBe(true)
+			local panel = s:FindFirstChild("Panel")
+			t.expect(panel.Position).toEqual({ X = 0.25, Y = 0.25 })
+			t.expect(panel.Size).toEqual({ X = 0.5, Y = 0.5 })
+		end
+	)
 
 	it("a second open replaces the first: one screen, one binding", function()
 		local c = client()
@@ -314,4 +352,36 @@ return t.spec("f0201 the test purchase screen", function(it)
 		c.open("open", LINES)
 		t.expect(#c.binds).toBe(1)
 	end)
+
+	it("start returns at once and waits for the server's remote in its own thread", function()
+		local c = client(true)
+		local returned = false
+		local co = coroutine.create(function()
+			c.module.start()
+			returned = true
+		end)
+		coroutine.resume(co)
+		t.expect(returned).toBe(true)
+		t.expect(#c.waiting).toBe(1)
+		c.release()
+		c.open("open", LINES)
+		t.expect(c.screen() ~= nil).toBe(true)
+	end)
+
+	it(
+		"isOpen says whether the screen is open: false before, true while open, false after each answer",
+		function()
+			local c = client()
+			c.module.start()
+			t.expect(c.module.isOpen()).toBe(false)
+			c.open("open", LINES)
+			t.expect(c.module.isOpen()).toBe(true)
+			c.key("Return", "Begin")
+			t.expect(c.module.isOpen()).toBe(false)
+			c.open("open", LINES)
+			t.expect(c.module.isOpen()).toBe(true)
+			c.screen():FindFirstChild("Panel"):FindFirstChild("CANCEL").Activated.fire()
+			t.expect(c.module.isOpen()).toBe(false)
+		end
+	)
 end)
