@@ -1,0 +1,10 @@
+- note c0230 prep found that fence.enter's process.env assignments never reach the spec processes (Lune 0.10.5), so the shared worker lanes are never used; captured as c0352: zz-arch/child-env-passes-through-exec
+- note the user's capture of c0230 (2026-11-01, "Make a lesson, fast tests are important") widens the lesson to files and waits and adds the runner's report: zz-test/specs-never-burn-real-resources
+- design-review-001 F1: zz-test/pin-call-site-arguments
+- design-review-001 F2: zz-test/runner-knobs-are-flags, zz-arch/child-env-passes-through-exec
+- design-review-001 F3: z-design/never-narrow-captured-scope
+- design-review-001 F4: zz-arch/last-line-reads-a-bounded-tail
+- design-review-001 F5: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F6: z-design/never-narrow-captured-scope
+- design-review-001 F7: zz-test/kill-mutants-where-the-value-is-built
+- design-review-001 F8: one-off: wording left from the first prototype (the lane's line) and a patch step that would refuse instead of merging

@@ -11,3 +11,5 @@ A spec that says "these are exactly the ten skills" or "pickman's skills hold no
 **How to apply:** for each set a promoted case reads, ask whether a planned or ordinary change adds to it. If so, assert membership (the named ones are there) and the rule (every member is well formed, the links equal the folders found), never equality with a literal list. Put "this change doesn't make X" claims in `check.sh`, which is not rerun after `done`.
 
 c0264 design review 009 F9: a promoted case required a label naming one capture of the day (c0305); it now asserts that the section carries a state label naming an issue, and the exact ids stay in the sequestered check.
+
+c0230 design review 001 F5: a promoted docs spec pinned a lesson's `check` and body word for word, and c0181 is prepared to rewrite every lesson's check and cap its body, so either landing order turned one of them red. Lesson text is meant to change: pin its wording only in check.sh before `done`, and in the suite only that the lesson a tool names exists.
