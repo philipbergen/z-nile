@@ -1,0 +1,8 @@
+- design-review-001 F1: zz-test/guard-needs-its-own-case
+- design-review-001 F2: z-design/bottom-layer-pins-only-what-upper-layers-keep
+- design-review-001 F3: z-design/a-fix-that-removes-a-workaround-reopens-its-steps
+- design-review-001 F4: zz-arch/judges-of-one-state-change-together, z-design/a-fix-that-removes-a-workaround-reopens-its-steps
+- design-review-001 F5: z-design/a-fix-that-removes-a-workaround-reopens-its-steps
+- design-review-001 F6: zz-test/guard-needs-its-own-case
+- design-review-001 F7: one-off: two open points of another terminal's handoff file were not read, because the handoff arrived on a branch after the draft was written; both are now captured (c0349, d0350)
+- note the user ruled "Keep d0333 (Recommended)" when c0343 turned out to be the same defect captured by another terminal the same day: z-ticket/search-the-backlog-before-capturing
