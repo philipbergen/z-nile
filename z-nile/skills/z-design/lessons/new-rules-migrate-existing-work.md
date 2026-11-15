@@ -2,7 +2,7 @@
 title: A new rule says how existing work gets through it
 when: design
 tags: [process, migration, rollout]
-check: When this adds a rule, a check or a new data structure, which existing items (prepared, active, mid-prep, done) or stored data fail it on the day it lands, what does the design say they do, and, for a one-time migration, which writers (older builds, old servers, a rollback) still produce the old shape after it ran, and does the new structure pick their data up? Stored data includes configuration: can a configured producer (a role's fallback or effort in `.models.toml`) still make what the rule refuses?
+check: When this adds a rule, a check or a new data structure, which existing items (prepared, active, mid-prep, done) or stored data fail it on the day it lands, what does the design say they do, and, for a one-time migration, which writers (older builds, old servers, a rollback) still produce the old shape after it ran, and does the new structure pick their data up? Stored data includes configuration: can a configured producer (a role's fallback or effort in `.models.toml`) still make what the rule refuses? And does a rule about what a change touched hold for a change that only deletes, and was the list of existing work made by a search the design names, so it can be rerun?
 ---
 A new requirement is written for the work that comes after it, but it is checked against everything already in flight. Prepared rafts, active ones and preps open on a branch were made under the old rules and fail the new check the moment it lands, unless the design gives them a path (a migration, a harvest-at-confirm, an exemption, or an order).
 
@@ -25,3 +25,5 @@ c0302 design review 001 F2: a design that adds a rule about how fixtures are set
 **Note (c0306's prep, 2026-11-14, design review 001 F6):** `[roles.raft]` runs at effort `high`, so its grok fallback would write a raft review that c0306's rule refuses. The dispatcher would spend a whole review run on a result refused by construction. The user ruled that a review step skips such a try.
 
 **Note** (c0282 re-prep 2026-11-15): c0302's rule that a clone fixture names its branch `main` scans only `z-nile/tests`, so a prepared issue's sequestered spec breaks it only when a raft promotes it (c0282's `lifecycle.spec`, found at R0099's prototype gate). A new rule over specs also scans the open `acceptance/` folders, or names the prepared issues it leaves to fix.
+
+**Note (c0301 design review 001 F1, F4):** a rule about what a layer changed is checked against every kind of layer, one that only deletes included: an Overrides chore that removes a promoted spec leaves the ticket no line to cite at the top commit, so the first design refused a stack that lands today. And the existing-work list missed a second active raft with the same rows; name the search that made the list (here, `trace.md` at every layer tip and every active raft on `origin/main`) so the executor reruns it.
