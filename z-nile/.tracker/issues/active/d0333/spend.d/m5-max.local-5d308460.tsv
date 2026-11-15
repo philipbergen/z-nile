@@ -89,3 +89,8 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-15 18:41	1 spec	0	0	test			1.423	0.960		1.423	tokens,ai
 2026-11-15 18:42	15 specs	0	0	test			44.317	39.570		44.317	tokens,ai
 2026-11-15 18:42	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-15 18:42	1 spec	0	0	test			2.027	1.200		2.027	tokens,ai
+2026-11-15 18:43	1 spec	0	0	test			46.937	35.950		46.937	tokens,ai
+2026-11-15 18:43	1 spec	0	0	test			1.616	1.040		1.616	tokens,ai
+2026-11-15 18:43	1 spec	0	0	test			1.624	1.040		1.624	tokens,ai
+2026-11-15 18:44	R0109: filled trace and final review	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
