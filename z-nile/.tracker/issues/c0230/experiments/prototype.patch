@@ -1,0 +1,261 @@
+diff --git a/z-nile/tests/lib/budget.luau b/z-nile/tests/lib/budget.luau
+new file mode 100644
+index 0000000000000000000000000000000000000000..06f8e08e5b8bdfbf01e233b1e46504a6b042fa9e
+--- /dev/null
++++ b/z-nile/tests/lib/budget.luau
+@@ -0,0 +1,117 @@
++--!strict
++-- The per-file cost budget of a spec run (c0230; lesson zz-test/specs-never-burn-real-resources). Pure: the runner hands
++-- it each file's wall seconds and, where its measurer printed it, the CPU seconds of the worker and every process it
++-- waited for; it says which files are over and renders the report the coordinator prints before its summary. It
++-- reports only: a file over budget never changes a result.
++
++local budget = {}
++
++export type Limits = { seconds: number, cpu: number }
++export type Cost = { file: string, seconds: number, cpu: number? }
++
++budget.DEFAULT = { seconds = 60, cpu = 5 } :: Limits
++budget.LESSON = "zz-test/specs-never-burn-real-resources"
++budget.SHOWN = 10
++-- The CPU measurer every worker of a concurrent run is started under (`perl -e MEASURE <command> <args>`): it runs the
++-- command, waits for it, prints the CPU of the command and of every process it waited for (a detached one is not
++-- counted) as the last line of the worker's stdout, and exits with the command's status.
++budget.CPU_PREFIX = "zn-spec-cpu "
++budget.MEASURE = table.concat({
++	'my $pid = fork; die "measure: fork: $!\n" unless defined $pid;',
++	"if ($pid == 0) { exec { $ARGV[0] } @ARGV or exit 127 }",
++	"waitpid($pid, 0); my $st = $?; my ($cu, $cs) = (times)[2, 3];",
++	'printf "zn-spec-cpu %.3f\n", $cu + $cs;',
++	"exit($st & 127 ? 128 + ($st & 127) : $st >> 8);",
++}, " ")
++
++local function positive(s: string): number?
++	if string.match(s, "^%d+$") == nil and string.match(s, "^%d*%.%d+$") == nil then
++		return nil
++	end
++	local n = tonumber(s)
++	if n == nil or n <= 0 then
++		return nil
++	end
++	return n
++end
++
++-- The runner's `--budget` value: nil (no flag) is the default; "<wall>:<cpu>" (positive seconds, decimals allowed)
++-- replaces it; anything else, the empty string included, is refused with the message the runner prints before it
++-- exits 2.
++function budget.limits(value: string?): (Limits?, string?)
++	if value == nil then
++		return budget.DEFAULT, nil
++	end
++	local a, b = string.match(value, "^([^:]+):([^:]+)$")
++	local wall = if a then positive(a) else nil
++	local cpu = if b then positive(b) else nil
++	if wall == nil or cpu == nil then
++		return nil,
++			`tests/run: --budget must be <wall seconds>:<cpu seconds>, each a positive number (got "{value}")`
++	end
++	return { seconds = wall :: number, cpu = cpu :: number }, nil
++end
++
++-- The CPU seconds on the measurer's line, the last line of a worker's stdout, and the stdout without that line;
++-- (nil, stdout) when the last line is not the measurer's. Only a bounded tail is read: the line is at most a few dozen
++-- bytes, and a pattern over the whole output is quadratic in a long line.
++function budget.takeCpu(stdout: string): (number?, string)
++	local text = if string.sub(stdout, -1) == "\n" then string.sub(stdout, 1, -2) else stdout
++	local last = string.match(string.sub(text, -64), "([^\n]*)$") :: string
++	local start = #text - #last + 1
++	-- the line starts the text or follows a newline; a longer last line has no newline in the tail
++	if start > 1 and string.sub(text, start - 1, start - 1) ~= "\n" then
++		return nil, stdout
++	end
++	if string.sub(last, 1, #budget.CPU_PREFIX) ~= budget.CPU_PREFIX then
++		return nil, stdout
++	end
++	local n = string.match(string.sub(last, #budget.CPU_PREFIX + 1), "^(%d+%.%d+)$")
++	if n == nil then
++		return nil, stdout
++	end
++	return tonumber(n), string.sub(text, 1, start - 1)
++end
++
++-- The files over either limit (strictly), slowest first, ties by path. A file with no CPU measure is judged on wall only.
++function budget.over(costs: { Cost }, limits: Limits): { Cost }
++	local out: { Cost } = {}
++	for _, c in costs do
++		if c.seconds > limits.seconds or (c.cpu ~= nil and (c.cpu :: number) > limits.cpu) then
++			table.insert(out, c)
++		end
++	end
++	table.sort(out, function(x, y)
++		if x.seconds ~= y.seconds then
++			return x.seconds > y.seconds
++		end
++		return x.file < y.file
++	end)
++	return out
++end
++
++local function num(x: number): string
++	return string.format("%g", x)
++end
++
++-- The report, or nil when nothing is over: a header naming the limits and the lesson, one line per file (at most SHOWN),
++-- then how many more.
++function budget.render(over: { Cost }, limits: Limits): string?
++	if #over == 0 then
++		return nil
++	end
++	local lines = {
++		`over budget: {#over} spec files over {num(limits.seconds)} s wall or {num(limits.cpu)} s cpu (lesson {budget.LESSON})`,
++	}
++	for i = 1, math.min(#over, budget.SHOWN) do
++		local c = over[i]
++		local cpu = if c.cpu ~= nil then string.format("%.1f s cpu", c.cpu :: number) else "cpu not measured"
++		table.insert(lines, string.format("  %s %.1f s wall, %s", c.file, c.seconds, cpu))
++	end
++	if #over > budget.SHOWN then
++		table.insert(lines, `  and {#over - budget.SHOWN} more`)
++	end
++	return table.concat(lines, "\n")
++end
++
++return budget
+diff --git a/z-nile/tests/run.luau b/z-nile/tests/run.luau
+index 5c0331a99d4e33cfdb887fe542b677b0ac240dd5..8bd374f00fb3eaa2c6bcb095d03b0f7c6d81c4a9 100644
+--- a/z-nile/tests/run.luau
++++ b/z-nile/tests/run.luau
+@@ -8,6 +8,11 @@
+ --   --slow together with --exclude-slow is refused (exit 2) before the lock
+ --   --jobs N / PICKMAN_JOBS=N                  -- N concurrent workers (default min(max(cpus, 2), 8);
+ --                                               1 or a single file runs in-process). --jobs wins over the environment.
++--   --budget W:C                               -- the per-file budget (default 60:30, c0230): a concurrent run prints
++--                                               `over budget:` after `slowest:` for each file over W s of its own
++--                                               wall time or C s of CPU (its worker and every process it waited for,
++--                                               read by the measurer each worker runs under). It reports only. A
++--                                               flag, so no nested run inherits it; a worker is never given it.
+ --   --report-seconds                           -- a worker prints its own seconds before the summary. The
+ --                                               coordinator passes it. A spec that starts the runner does not.
+ -- Lanes take the files with no recorded duration first, then the recorded ones slowest first (c0154). The durations
+@@ -16,6 +21,7 @@
+ -- as its file finishes; all runners for this user share eight machine-wide worker lanes. Exits non-zero if any
+ -- case fails or a spec can't load.
+ 
++local budget = require("./lib/budget")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local schedule = require("./lib/schedule")
+@@ -86,10 +92,23 @@ do
+ 		end
+ 	end
+ 	if slowOnly and excludeSlow then
+-		stdio.ewrite("usage: lune run tests/run [--jobs N] [--slow | --exclude-slow] [spec files]\n")
++		stdio.ewrite(
++			"usage: lune run tests/run [--jobs N] [--budget W:C] [--slow | --exclude-slow] [spec files]\n"
++		)
+ 		stdio.ewrite("--slow and --exclude-slow conflict\n")
+ 		process.exit(2)
+ 	end
++	-- c0230: a bad per-file budget (`--budget <wall>:<cpu>`, a flag so no nested run inherits it) is refused here too,
++	-- before any spec runs
++	for i, arg in process.args do
++		if arg == "--budget" then
++			local _, budgetError = budget.limits(process.args[i + 1] or "")
++			if budgetError then
++				stdio.ewrite(budgetError .. "\n")
++				process.exit(2)
++			end
++		end
++	end
+ end
+ 
+ -- One measurement for a spec run the gate did not already wrap. The child sees ZN_MEASURED and runs the suite.
+@@ -191,7 +210,7 @@ if guard == nil or guard == "" or not fs.isFile(`{guard}/open`) then
+ 	process.exit(r.code)
+ end
+ 
+-local USAGE = "usage: lune run tests/run [--jobs N] [--slow | --exclude-slow] [spec files]"
++local USAGE = "usage: lune run tests/run [--jobs N] [--budget W:C] [--slow | --exclude-slow] [spec files]"
+ 
+ local function usageError(name: string)
+ 	stdio.ewrite(`{USAGE}\nbad value for {name}\n`)
+@@ -219,6 +238,7 @@ local files: { string } = {}
+ local flagJobs: number? = nil
+ local slowOnly, excludeSlow = false, false
+ local reportSeconds = false
++local budgetValue: string? = nil
+ do
+ 	local args = process.args
+ 	local i = 1
+@@ -236,6 +256,10 @@ do
+ 			excludeSlow = true
+ 		elseif arg == "--report-seconds" then
+ 			reportSeconds = true
++		elseif arg == "--budget" then
++			-- checked at the top; a coordinator never passes it to its workers
++			i += 1
++			budgetValue = args[i]
+ 		elseif arg ~= "--" then
+ 			-- accept absolute paths inside the repo (check.sh passes them)
+ 			if string.sub(arg, 1, #process.cwd) == process.cwd then
+@@ -268,7 +292,7 @@ elseif slowOnly or excludeSlow then
+ end
+ table.sort(files)
+ 
+-type Outcome = { file: string, seconds: number, code: number, stdout: string, stderr: string }
++type Outcome = { file: string, seconds: number, cpu: number?, code: number, stdout: string, stderr: string }
+ 
+ -- c0165: with PICKMAN_RESULTS set, this run records every file's cases and results (the orchestrator specs.luau reads
+ -- them; a run without the variable is exactly as before). A path outside this home's .cache is never written.
+@@ -316,6 +340,8 @@ local function runConcurrently()
+ 		local lines = {}
+ 		-- the child's own timing, printed before the summary: the parent's clock includes the wait for a shared lane
+ 		local own: number? = nil
++		-- the measurer's CPU line comes last, after the worker's own output (c0230)
++		o.cpu, o.stdout = budget.takeCpu(o.stdout)
+ 		for line in string.gmatch(o.stdout, "[^\n]+") do
+ 			local s = string.match(line, "^seconds (%d+%.%d+)$")
+ 			if s then
+@@ -363,15 +389,18 @@ local function runConcurrently()
+ 				local file = files[index]
+ 				local started = os.clock()
+ 				local part = if resultsFile then `{resultsFile}.{index}` else nil
+-				local command, args =
+-					"lune", { "run", "tests/run", "--", "--jobs", "1", "--report-seconds", file }
++				-- c0230: every worker runs under the CPU measurer, which prints its CPU as the last line
++				local command, args = "perl", { "-e", budget.MEASURE, "lune" }
++				for _, a in { "run", "tests/run", "--", "--jobs", "1", "--report-seconds", file } do
++					table.insert(args, a)
++				end
+ 				local lanes = process.env.PICKMAN_WORKER_LANES
+ 				if lanes ~= nil and lanes ~= "" then
+-					command = "perl"
+-					args = { "-e", fenceLib.WORKER_LANE, lanes, "lune" }
+-					for _, a in { "run", "tests/run", "--", "--jobs", "1", "--report-seconds", file } do
+-						table.insert(args, a)
++					local laned = { "-e", fenceLib.WORKER_LANE, lanes, "perl" }
++					for _, a in args do
++						table.insert(laned, a)
+ 					end
++					args = laned
+ 				end
+ 				local env: { [string]: string } = {
+ 					-- a fixture's ./zn land must not start the net, and a worker does not measure itself
+@@ -469,6 +498,17 @@ local function runConcurrently()
+ 		table.insert(slowest, string.format("%s %.1fs", bySpeed[i].file, bySpeed[i].seconds))
+ 	end
+ 	print(`slowest: {table.concat(slowest, ", ")}`)
++	-- c0230: the files over the per-file budget (it reports only; the outcome stands)
++	local costs: { budget.Cost } = {}
++	for _, o in outcomes do
++		table.insert(costs, { file = o.file, seconds = o.seconds, cpu = o.cpu })
++	end
++	-- refused at the top when malformed, so the limits are here
++	local limits = (budget.limits(budgetValue)) :: budget.Limits
++	local overBudget = budget.render(budget.over(costs, limits), limits)
++	if overBudget then
++		print(overBudget)
++	end
+ 	print(`{passed} passed, {failed} failed, {#files} spec files`)
+ 	process.exit(if failed == 0 then 0 else 1)
+ end

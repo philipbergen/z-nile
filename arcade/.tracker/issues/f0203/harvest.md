@@ -1,0 +1,12 @@
+- design-review-001 F1: z-design/spec-design-correspondence, zz-test/criterion-fails-on-todays-file
+- design-review-001 F2: z-design/prep-choices-marked-and-checked
+- design-review-001 F3: z-design/prep-experiments-run-in-standalone-clones
+- design-review-001 F4: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F5: pickman-arch/hysteresis-on-every-boundary
+- design-review-001 F6: pickman-arch/tuning-edges-stay-finite
+- design-review-001 F7: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F8: z-design/quote-other-preps-before-promising
+- design-review-001 F9: zz-test/no-change-claims-check-behaviour-not-the-raft-diff
+- design-review-001 F10: one-off: one control's shape (a disc) and its hit area, stated now so f0218 need not ask
+- design-review-001 F11: one-off: a vacuous identity comparison in one case, where the count after it did the work; the mutation check covers the class
+- design-review-001 F12: z-design/spec-design-correspondence

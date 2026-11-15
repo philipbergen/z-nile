@@ -1,0 +1,11 @@
+start: 2026-11-15 11:37:39 PST  load averages: 20.37 17.65 16.70
+head: 0e79784e3  env: (none)
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+E5: run.lock free 2.06 s after the dispatcher's lock was
+2 passed, 0 failed, 1 spec files
+sweeper: stopped 1 process(es) the specs left running
+exit: 0  seconds: 12
+end: 2026-11-15 11:37:51 PST  load averages: 26.46 19.10 17.22
+mutant: E5
+ z-nile/tests/acceptance/c0117/control-cli.spec.luau | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)

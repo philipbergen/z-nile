@@ -1,0 +1,237 @@
+diff --git a/pickman/src/client/Camera.luau b/pickman/src/client/Camera.luau
+index bc81dea6..98d5724c 100644
+--- a/pickman/src/client/Camera.luau
++++ b/pickman/src/client/Camera.luau
+@@ -24,6 +24,7 @@ local yaw: number? = nil
+ local padStick: ((name: string) -> (number?, number?, string?))? = nil -- the driving controller's sticks (Pads.stick)
+ local cursor = false -- the mouse is free (and shown) for a prompt
+ local current: Awareness.Pose? = nil
++local eye: number? = nil -- the eye's world height in the last frame drawn: the one CFrame write is built from it (f0235)
+ -- a touch looked, or a finger went down or came up, since the last render step; and a finger is down (the
+ -- locked mouse's delta is then the touch)
+ local lookedThisFrame, mouseHeld = false, false
+@@ -43,6 +44,12 @@ function Camera.pose(): Awareness.Pose?
+ 	return current
+ end
+ 
++-- The world height the camera drew its eye at in the last frame (nil before the first snapshot). Anything that raises
++-- the camera adds to this one sum, which the CFrame is built from (f0235's beacons).
++function Camera.eye(): number?
++	return eye
++end
++
+ function Camera.snap()
+ 	look = View.snap(look)
+ end
+@@ -134,7 +141,9 @@ function Camera.start()
+ 
+ 		current = { x = pose.x, y = pose.y, yaw = turned + look.yaw }
+ 		local x, z = View.world(pose.x, pose.y)
+-		camera.CFrame = CFrame.new(x, View.SCALE.eyeHeight + Hop.rise(hopped, shown, hopTicks), z)
++		local drawn = View.SCALE.eyeHeight + Hop.rise(hopped, shown, hopTicks)
++		eye = drawn
++		camera.CFrame = CFrame.new(x, drawn, z)
+ 			* CFrame.Angles(0, turned + look.yaw, 0)
+ 			* CFrame.Angles(look.pitch, 0, 0)
+ 	end)
+diff --git a/pickman/src/client/Main.client.luau b/pickman/src/client/Main.client.luau
+index 7248ec60..662f1cd6 100644
+--- a/pickman/src/client/Main.client.luau
++++ b/pickman/src/client/Main.client.luau
+@@ -82,7 +82,7 @@ GhostView.start()
+ DangerHud.start(Camera.pose)
+ Controls.keys({ arrows = Camera.arrows, aim = Camera.aim })
+ Controls.start(Camera.snap, Camera.lookBy, HudView.snapRect, Camera.holdMouse, HudView.buttons)
+-PelletView.start()
++PelletView.start(Camera.eye, Camera.pose)
+ Sticks.start(Pads.stick)
+ HudView.start()
+ FlowView.start()
+diff --git a/pickman/src/client/PelletView.luau b/pickman/src/client/PelletView.luau
+index e465ddae..6d8b819f 100644
+--- a/pickman/src/client/PelletView.luau
++++ b/pickman/src/client/PelletView.luau
+@@ -1,6 +1,7 @@
+ --!strict
+ -- Client adapter: one ball per pellet slot, shown or hidden from each frame's pellets code, with the
+--- power pellets pulsing. Where and how big is View's; what is eaten is the server's.
++-- power pellets pulsing, and a beacon over each power pellet left while the drawn eye is above the walls (f0235).
++-- Where and how big, and which beacons show, is View's; what is eaten is the server's.
+ local RunService = game:GetService("RunService")
+ 
+ local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
+@@ -9,34 +10,67 @@ local View = require("@game/ReplicatedStorage/Shared/Logic/View")
+ 
+ local COLOR = Color3.fromRGB(255, 184, 174)
+ 
+-export type Handle = { maze: Maze.Maze, parts: { BasePart }, power: { BasePart }, code: string? }
++export type Handle = {
++	maze: Maze.Maze,
++	slots: { Pellets.Slot },
++	parts: { BasePart },
++	power: { BasePart },
++	beacons: { [number]: BasePart }, -- by slot index, one per power slot (f0235)
++	code: string?,
++	present: { boolean }, -- the last code shown, decoded
++	shown: { [number]: boolean }, -- by slot index: whether each beacon is shown now
++}
+ 
+ local PelletView = {}
+ 
+ local current: Handle? = nil -- the pellets being pulsed: the latest built
+ 
++local function quiet(p: Part)
++	p.Anchored = true
++	p.CanCollide = false
++	p.CanQuery = false
++	p.CanTouch = false
++	p.CastShadow = false
++	p.Material = Enum.Material.Neon
++	p.Color = COLOR
++end
++
+ function PelletView.build(m: Maze.Maze, parent: Instance): Handle
+ 	local model = Instance.new("Model")
+ 	model.Name = "Pellets"
+-	local h: Handle = { maze = m, parts = {}, power = {}, code = nil }
+-	for i, slot in Pellets.slots(m) do
++	local slots = Pellets.slots(m)
++	local h: Handle = {
++		maze = m,
++		slots = slots,
++		parts = {},
++		power = {},
++		beacons = {},
++		code = nil,
++		present = {},
++		shown = {},
++	}
++	for i, slot in slots do
+ 		local spot = View.pellet(slot)
+ 		local p = Instance.new("Part")
+ 		p.Name = slot.kind
+ 		p.Shape = Enum.PartType.Ball
+-		p.Anchored = true
+-		p.CanCollide = false
+-		p.CanQuery = false
+-		p.CanTouch = false
+-		p.CastShadow = false
+-		p.Material = Enum.Material.Neon
+-		p.Color = COLOR
++		quiet(p)
+ 		p.Size = Vector3.one * spot.diameter
+ 		p.Position = Vector3.new(spot.x, spot.y, spot.z)
+ 		p.Parent = model
+ 		h.parts[i] = p
+ 		if slot.kind == "power" then
+ 			table.insert(h.power, p)
++			local b = View.beacon(slot)
++			local beacon = Instance.new("Part")
++			beacon.Name = "Beacon"
++			quiet(beacon)
++			beacon.Size = Vector3.new(b.width, b.height, b.width)
++			beacon.Position = Vector3.new(b.x, b.y, b.z)
++			beacon.Transparency = 1
++			beacon.Parent = model
++			h.beacons[i] = beacon
++			h.shown[i] = false
+ 		end
+ 	end
+ 	model.Parent = parent
+@@ -49,13 +83,17 @@ function PelletView.show(h: Handle, code: string)
+ 	if code == h.code then
+ 		return
+ 	end
+-	for i, present in Pellets.decode(h.maze, code) do
+-		h.parts[i].Transparency = if present then 0 else 1
++	local present = Pellets.decode(h.maze, code)
++	for i, here in present do
++		h.parts[i].Transparency = if here then 0 else 1
+ 	end
+ 	h.code = code
++	h.present = present
+ end
+ 
+-function PelletView.start()
++-- `eye`: the height the camera drew its eye at (Camera.eye), and `pose`: where it stood (Camera.pose), each nil
++-- before the camera has drawn one.
++function PelletView.start(eye: () -> number?, pose: () -> View.Pose?)
+ 	local started = os.clock()
+ 	RunService.RenderStepped:Connect(function()
+ 		local h = current
+@@ -66,6 +104,12 @@ function PelletView.start()
+ 		for _, p in h.power do
+ 			p.Size = size
+ 		end
++		for i, on in View.beacons(h.slots, h.present, View.elevated(eye()), pose()) do
++			if h.shown[i] ~= on then
++				h.shown[i] = on
++				h.beacons[i].Transparency = if on then View.BEACON.transparency else 1
++			end
++		end
+ 	end)
+ end
+ 
+diff --git a/pickman/src/shared/Logic/View/init.luau b/pickman/src/shared/Logic/View/init.luau
+index fdc95f5a..df2c3fa4 100644
+--- a/pickman/src/shared/Logic/View/init.luau
++++ b/pickman/src/shared/Logic/View/init.luau
+@@ -30,6 +30,8 @@ export type Rgb = { r: number, g: number, b: number } -- 0..255
+ export type Look = { yaw: number, pitch: number } -- radians, relative to the heading
+ export type Pose = { x: number, y: number } -- tile coordinates
+ export type PelletPart = { x: number, y: number, z: number, diameter: number } -- world studs; y is up
++-- A power pellet's beacon (f0235): a square pillar, its centre and size in world studs; y is up.
++export type BeaconPart = { x: number, y: number, z: number, width: number, height: number }
+ 
+ local PI = math.pi
+ local TAU = 2 * math.pi
+@@ -297,6 +299,49 @@ function View.pulse(kind: Pellets.Kind, seconds: number): number
+ 	return p.pulseMin + (1 - p.pulseMin) * wave
+ end
+ 
++-- f0235: while the drawn eye is above the wall tops, each power pellet still in the maze shows a beacon, a pillar of
++-- the pellets' light from the pellet up past the walls and the ghosts, so the player can plan a route to it. A beacon
++-- within `clear` tiles of the eye is not shown, so a hop down its corridor never flies through it.
++View.BEACON = table.freeze({ width = 3, top = 20, transparency = 0.3, clear = 1.5 })
++
++-- Where a pellet's beacon stands: on its tile's centre, from the pellet's centre (View.PELLET.height) up to
++-- View.BEACON.top, View.BEACON.width wide.
++function View.beacon(slot: Pellets.Slot): BeaconPart
++	local x, z = View.world(slot.x, slot.y)
++	local bottom, top = View.PELLET.height, View.BEACON.top
++	return { x = x, y = (bottom + top) / 2, z = z, width = View.BEACON.width, height = top - bottom }
++end
++
++-- Whether the eye drawn at height `eye` (world studs) is above the wall tops: a hop's middle (Hop.airborne's
++-- window, as the camera shows it), a long hop's, or any other raised eye (f0234's wait at a jump's top). False for
++-- no eye yet, or one that is not a finite number.
++function View.elevated(eye: number?): boolean
++	if type(eye) ~= "number" or eye ~= eye or math.abs(eye) == math.huge then
++		return false
++	end
++	return eye > SCALE.wallHeight
++end
++
++-- Which beacons show, keyed by slot index over every power slot of `slots`: a power pellet still present
++-- (`present`, Pellets.decode's list) while the eye is `elevated`, unless the eye's place `pose` (tile coordinates)
++-- is strictly within View.BEACON.clear tiles of it. A nil pose is near nothing. Other slots have no key.
++function View.beacons(
++	slots: { Pellets.Slot },
++	present: { boolean },
++	elevated: boolean,
++	pose: Pose?
++): { [number]: boolean }
++	local out: { [number]: boolean } = {}
++	local clear = View.BEACON.clear
++	for i, slot in slots do
++		if slot.kind == "power" then
++			local near = pose ~= nil and (pose.x - slot.x) ^ 2 + (pose.y - slot.y) ^ 2 < clear * clear
++			out[i] = elevated and present[i] == true and not near
++		end
++	end
++	return out
++end
++
+ function View.action(keyName: string): Action?
+ 	return KEYS[keyName]
+ end

@@ -1,0 +1,3 @@
+
+=== c0287 check.sh
+PASS  AC1: the orphan, late and review-waiting fakes hold the reviewed shape, every fake marks its start, c0279's pins hold, and c0117's specs outside dispatch-cli wait only through their wall-clock helpers

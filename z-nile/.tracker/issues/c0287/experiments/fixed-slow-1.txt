@@ -1,0 +1,9 @@
+start: 2026-11-15 11:37:24 PST  load averages: 13.40 16.28 16.21
+head: 0e79784e3  env: FAKE_DELAY=3 FAKE_START_DELAY=12
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+PASS tests/acceptance/c0117/trackerstate.spec.luau: 12 passed, 0 failed
+PASS tests/acceptance/c0117/control-cli.spec.luau: 24 passed, 0 failed
+slowest: tests/acceptance/c0117/control-cli.spec.luau 364.9s, tests/acceptance/c0117/trackerstate.spec.luau 9.2s
+36 passed, 0 failed, 2 spec files
+exit: 0  seconds: 366
+end: 2026-11-15 11:43:30 PST  load averages: 9.90 13.85 15.54
