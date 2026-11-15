@@ -1,0 +1,10 @@
+=== c0287: dry-run promotion of acceptance specs (type check + meta)
+copied 0 acceptance specs
+[WARN] No definitions file provided by client
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/.luaurc
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+2 passed, 0 failed, 1 spec files
+promote-check OK
+exit=0

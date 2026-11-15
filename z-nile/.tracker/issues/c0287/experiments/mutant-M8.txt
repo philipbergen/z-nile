@@ -1,0 +1,10 @@
+start: 2026-11-15 11:37:04 PST  load averages: 13.35 16.45 16.27
+head: 0e79784e3  env: (none)
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+3 passed, 0 failed, 1 spec files
+exit: 0  seconds: 68
+end: 2026-11-15 11:38:12 PST  load averages: 27.02 19.95 17.59
+mutant: M8
+ z-nile/engine/runner.luau     | 3 ---
+ z-nile/tests/lib/fakecli.luau | 4 ++--
+ 2 files changed, 2 insertions(+), 5 deletions(-)
