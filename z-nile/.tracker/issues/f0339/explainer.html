@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="zn-contract" content="0000000000000000000000000000000000000000000000000000000000000000">
+<meta name="zn-contract" content="3dae4143497e87c46df8e8c45ca83c63825d4b0a9c27327283b6214f5877e59c">
 <title>f0339: Ticket explainer page</title>
 <style>
   body { font: 16px/1.5 system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; color: #1d1d1f; }
@@ -53,11 +53,13 @@ Only <code>y</code> or <code>yes</code> saves the approval. Any other answer sav
 <h2>What changes where</h2>
 <ul>
   <li><code>z-nile/engine/explainer.luau</code> (new): <code>explainer.check(path, html, hash, touched)</code> lists every way a page breaks the expected shape, and <code>explainer.accepts(answer)</code> says whether an answer is a yes. No files are read here.</li>
-  <li><code>z-nile/engine/main.luau</code>: a new command, <code>./zn explain &lt;id&gt;</code>, prints the page's path and the hash it must name, then <code>ok</code> or the problems. <code>cmd.approve</code> checks the page, opens it, asks <code>[y/N]</code> at the terminal, and checks again that nothing changed before it saves. New helpers: <code>openInDefaultApp</code> (also used by <code>./zn board</code>), <code>readTerminalLine</code>, <code>explainerProblems</code>.</li>
-  <li><code>z-nile/templates/explainer.html</code> (new): an empty page of the right shape to copy.</li>
+  <li><code>z-nile/engine/main.luau</code>: a new command, <code>./zn explain &lt;id&gt;</code>, prints the page's path and the hash it must name, then <code>ok</code> or the problems. <code>cmd.approve</code> checks the page, opens it, asks <code>[y/N]</code> at the terminal, and checks again that nothing changed before it saves. <code>approve --publish</code> warns when the page is not on <code>main</code> yet. One new table, <code>pageIO</code>, holds the helpers <code>open</code> (also used by <code>./zn board</code>), <code>readLine</code> and <code>problems</code>: the file has room for only one more top-level name.</li>
+  <li><code>z-nile/engine/approval.luau</code>: the "has no approval" refusal adds that the approval first needs the page.</li>
+  <li><code>z-nile/templates/explainer.html</code> (new): a page of the right shape to copy. Each placeholder is marked <code>zn-fill</code>, and a page that still has one is refused.</li>
   <li><code>z-nile/skills/z-design/SKILL.md</code>: the designer writes the page and runs <code>./zn explain</code> until it says <code>ok</code>.</li>
   <li><code>z-nile/skills/zz-rules/SKILL.md</code>: the <code>approve</code> row describes the page and the question; a new <code>explain</code> row.</li>
   <li><code>z-nile/skills/zz-review/SKILL.md</code>: the design reviewer reads the page beside the design.</li>
+  <li><code>z-nile/skills/zz-execute/SKILL.md</code> and <code>z-nile/skills/z-ready/SKILL.md</code>: a re-approval during a raft, and the first approval of an older ticket, start by bringing the page up to date.</li>
   <li><code>z-nile/README.md</code>: the approve sentence says the page is shown first.</li>
   <li><code>z-nile/tests/tooling/approve.spec.luau</code> and <code>z-nile/tests/tooling/approve-publish.spec.luau</code>: their test tickets get a page, and they type <code>y</code>.</li>
   <li><code>z-nile/.tracker/issues/f0339/acceptance</code>: the new tests (the page's shape, the approve flow, the docs).</li>
@@ -101,13 +103,13 @@ Only <code>y</code> or <code>yes</code> saves the approval. Any other answer sav
 </div>
 <div class="choice">
   <h3>z-nile checks the page's shape, a person checks its words</h3>
-  <ul class="pros"><li>A machine check finds a missing diagram, a file left off the list, or a link to the web.</li><li>The words and pictures are read by the design reviewer and by you.</li></ul>
+  <ul class="pros"><li>A machine check finds a missing diagram, the same picture twice, a file left off the list, template text left in, or a link to the web.</li><li>The words and pictures are read by the design reviewer and by you.</li></ul>
   <ul class="cons"><li>A page can pass the check and still explain badly; only people catch that.</li></ul>
 </div>
 <div class="choice">
-  <h3>The page loads nothing from anywhere else</h3>
-  <ul class="pros"><li>It opens the same offline and years later, with no web fonts or chart libraries.</li><li>One simple rule is easy to check.</li></ul>
-  <ul class="cons"><li>Diagrams are hand-written SVG, not drawn by a diagram tool, and the page can't link to a pull request.</li></ul>
+  <h3>The page loads nothing from anywhere else and runs no scripts</h3>
+  <ul class="pros"><li>It opens the same offline and years later, with no web fonts or chart libraries.</li><li>With no scripts at all, nothing on the page can fetch anything behind the check's back.</li></ul>
+  <ul class="cons"><li>Diagrams are hand-written SVG, not drawn by a diagram tool, and the page can't link to a pull request or even name a web address.</li></ul>
 </div>
 <div class="choice">
   <h3>Only <code>y</code> or <code>yes</code> approves; the answer is read from the terminal</h3>
@@ -120,9 +122,9 @@ Only <code>y</code> or <code>yes</code> saves the approval. Any other answer sav
   <ul class="cons"><li>Someone could answer without opening the page. The warning tells them to read it first.</li></ul>
 </div>
 <div class="choice">
-  <h3>Tickets designed earlier need a page before their first approval</h3>
+  <h3>Tickets designed earlier need a page before their next approval</h3>
   <ul class="pros"><li>Every approval from now on comes after an explanation, which is the point.</li><li>No list of exceptions to keep.</li></ul>
-  <ul class="cons"><li>16 designed tickets waiting for approval each need a page written first (minutes of an agent's work each).</li></ul>
+  <ul class="cons"><li>16 designed tickets waiting for approval, and any ticket whose design changes during a raft, each need a page written first (minutes of an agent's work each).</li><li>A page written at approval time travels in a pull request, not with the approval itself; <code>approve --publish</code> warns until it is on <code>main</code>.</li></ul>
 </div>
 </section>
 </body>

@@ -11,101 +11,152 @@ index 50934155..74d661ce 100644
  - `./zn approve` is also refused in any agent session, terminal or not, and records an `approved` row in the record (the person and the first 12 hex of the design hash, no words). *designed* (c0283)
  - The board shows each ticket's provenance, the same entries `./zn who` prints. *designed* (c0284)
  
+diff --git a/z-nile/engine/approval.luau b/z-nile/engine/approval.luau
+index dc272027..c6cc427c 100644
+--- a/z-nile/engine/approval.luau
++++ b/z-nile/engine/approval.luau
+@@ -120,7 +120,7 @@ function approval.reasonOf(
+ 		if not required then
+ 			return nil
+ 		end
+-		return `{id} has no approval: run ./zn approve {id}, then ./zn approve {id} --publish, from the worktree that holds the design. This is a one-time step for an item prepared before approval.`
++		return `{id} has no approval: run ./zn approve {id}, then ./zn approve {id} --publish, from the worktree that holds the design. This is a one-time step for an item prepared before approval; approving first needs the issue's explainer page (./zn explain {id}).`
+ 	end
+ 	local rows, perr = contract.parse(approvalText)
+ 	if not rows then
 diff --git a/z-nile/engine/explainer.luau b/z-nile/engine/explainer.luau
 new file mode 100644
-index 00000000..ac443619
+index 00000000..9e8d6f82
 --- /dev/null
 +++ b/z-nile/engine/explainer.luau
-@@ -0,0 +1,215 @@
+@@ -0,0 +1,276 @@
 +--!strict
 +-- The ticket explainer page (f0339): one self-contained HTML file per issue, `<issue-dir>/explainer.html`, that
 +-- explains the idea and the design in plain words to the person who approves it. Pure: texts in, problems out.
 +-- The caller reads the page, the issue's Touched modules and the contract hash (approval.collect).
 +--
-+-- The shape this checks (z-nile/templates/explainer.html is a page of that shape):
++-- The shape this checks (z-nile/templates/explainer.html is a page of that shape, still holding its placeholders):
 +--   <meta name="zn-contract" content="<64 lowercase hex>">   the contract hash the page explains, exactly once
-+--   <section id="idea">, "before", "changes", "after", "choices", each exactly once and in that order
-+--   "before" and "after" each hold an inline <svg> (the diagrams of the system before and after)
++--   <section id="idea">, "before", "changes", "after", "choices", each exactly once and in that order (the id may
++--   stand anywhere in the tag)
++--   "before" and "after" each hold an inline <svg>, and the two pictures differ
 +--   "changes" names every path of the issue's Touched modules
 +--   "choices" holds at least one class="choice" block, and each block a class="pros" and a class="cons"
-+--   nothing is fetched: every src, href, srcset, poster, action, formaction, data, background and xlink:href value
-+--   starts with "#" or "data:", every CSS url( does too, and there is no @import
-+-- The page is not part of the contract: approval.md's hash and `ready`'s check never read it.
++--   no element still has the template's placeholder class, zn-fill
++--   nothing is fetched or run: every src, href, srcset, poster, action, formaction, data, background and xlink:href
++--   value starts with "#" or "data:", every CSS url( and image-set( does too, there is no @import, no <script>, no
++--   on<event>= handler and no refresh; and no "://" stands anywhere but in an xmlns value
++-- Matching is on the lowercased page. The page is not part of the contract: approval.md's hash and `ready`'s check
++-- never read it.
 +
 +local explainer = {}
 +
 +explainer.FILE = "explainer.html"
 +explainer.SECTIONS = { "idea", "before", "changes", "after", "choices" }
 +explainer.DIAGRAMS = { "before", "after" }
-+explainer.ATTRS = { "src", "href", "srcset", "poster", "action", "formaction", "data", "background" }
++explainer.ATTRS =
++	{ "src", "href", "srcset", "poster", "action", "formaction", "data", "background", "xlink:href" }
++explainer.FILL = "zn-fill"
 +
 +local HEX = string.rep("%x", 64)
++local SELF = "the page is self-contained (inline styles and <svg>, data: URIs, no scripts)"
 +
 +-- A value fetches nothing when it is a fragment, an inline data: URI, or empty.
-+local function local_(value: string): boolean
++local function isLocal(value: string): boolean
 +	local v = string.gsub(value, "^%s+", "")
 +	return v == "" or string.sub(v, 1, 1) == "#" or string.sub(v, 1, 5) == "data:"
 +end
 +
-+-- The external references in a lowercased page, each as `<attr>="<value>"`, `url(<value>)` or `@import`.
++local function escape(text: string): string
++	return (string.gsub(text, "[%^%$%(%)%%%.%[%]%*%+%-%?%:]", "%%%0"))
++end
++
++local function hasClass(classes: string, name: string): boolean
++	return string.match(" " .. classes .. " ", "%s" .. escape(name) .. "%s") ~= nil
++end
++
++-- What makes a lowercased page fetch or run something, each as a short description.
 +local function external(low: string): { string }
 +	local out: { string } = {}
-+	local names = table.clone(explainer.ATTRS)
-+	table.insert(names, "xlink:href")
-+	for _, name in names do
-+		local pattern = "[%s/\"']" .. string.gsub(name, "[%:%-]", "%%%0") .. "%s*=%s*([\"']?)"
-+		local at = 1
-+		while true do
-+			local s, e, quote = string.find(low, pattern, at)
-+			if not s then
-+				break
-+			end
-+			local rest = string.sub(low, (e :: number) + 1)
-+			local value = if quote ~= ""
-+				then string.match(rest, "^([^" .. quote .. "]*)") or ""
-+				else string.match(rest, "^([^%s>]*)") or ""
++	for tag in string.gmatch(low, "<[^>]+>") do
++		for _, name in explainer.ATTRS do
 +			-- the character before the name (space, slash or quote) keeps a longer name (data-src, onsrc) out
-+			if not local_(value) then
-+				table.insert(out, `{name}="{value}"`)
++			local pattern = "[%s/\"']" .. escape(name) .. "%s*=%s*([\"']?)"
++			local at = 1
++			while true do
++				local _, e, quote = string.find(tag, pattern, at)
++				if not e then
++					break
++				end
++				local rest = string.sub(tag, (e :: number) + 1)
++				local value = if quote ~= ""
++					then string.match(rest, "^([^" .. quote .. "]*)") or ""
++					else string.match(rest, "^([^%s>]*)") or ""
++				if not isLocal(value) then
++					table.insert(out, `fetches {name}="{value}"`)
++				end
++				at = (e :: number) + 1
 +			end
-+			at = (e :: number) + 1
++		end
++		local handler = string.match(tag, "[%s/\"'](on%a+)%s*=")
++		if handler then
++			table.insert(out, `runs an event handler ({handler}=)`)
++		end
++		if string.find(tag, "^<meta[%s/]") and string.find(tag, "http%-equiv%s*=%s*[\"']?refresh") then
++			table.insert(out, "refreshes to another page (http-equiv=refresh)")
 +		end
 +	end
 +	for value in string.gmatch(low, "url%(%s*([^%)]*)%)") do
 +		local v = string.gsub(value, "^[\"']", "")
-+		if not local_(v) then
-+			table.insert(out, `url({value})`)
++		if not isLocal(v) then
++			table.insert(out, `fetches url({value})`)
++		end
++	end
++	for body in string.gmatch(low, "image%-set%(([^%)]*)%)") do
++		for _, q in { '"', "'" } do
++			for value in string.gmatch(body, q .. "([^" .. q .. "]*)" .. q) do
++				if not isLocal(value) then
++					table.insert(out, `fetches image-set("{value}")`)
++				end
++			end
 +		end
 +	end
 +	if string.find(low, "@import", 1, true) then
-+		table.insert(out, "@import")
++		table.insert(out, "fetches @import")
++	end
++	if string.find(low, "<script", 1, true) then
++		table.insert(out, "runs a <script>")
++	end
++	if #out == 0 then
++		-- the backstop: a web address anywhere but in an xmlns value (inline svg's namespace)
++		local bare = string.gsub(low, "xmlns[%w:]*%s*=%s*[\"'][^\"']*[\"']", "")
++		local s = string.find(bare, "://", 1, true)
++		if s then
++			local word = string.match(
++				string.sub(bare, math.max(1, s - 12), s + 30),
++				"([%w%.%+%-]*://[^%s\"'<>]*)"
++			) or "://"
++			table.insert(out, `names a web address ({word})`)
++		end
 +	end
 +	return out
 +end
 +
-+-- The body of `<section id="<name>">` up to its first `</section>`, and how many such openings the page has.
-+local function section(low: string, name: string): (string?, number, number?)
-+	local opens = 0
-+	local first: number? = nil
-+	local body: string? = nil
-+	for _, q in { '"', "'" } do
-+		local needle = `<section id={q}{name}{q}`
-+		local at = 1
-+		while true do
-+			local s, e = string.find(low, needle, at, true)
-+			if not s then
-+				break
-+			end
-+			opens += 1
-+			if first == nil or (s :: number) < (first :: number) then
-+				first = s
-+				local close = string.find(low, "</section>", (e :: number) + 1, true)
-+				body = string.sub(low, (e :: number) + 1, if close then (close :: number) - 1 else #low)
-+			end
-+			at = (e :: number) + 1
++type Section = { body: string, at: number }
++
++-- Every `<section>` whose id is `name`, wherever the id stands in its tag: its body (to the first `</section>`
++-- after it) and where it opens.
++local function sections(low: string, name: string): { Section }
++	local out: { Section } = {}
++	for at, attrs, after in string.gmatch(low, "()<section([^>]*)>()") do
++		local id = string.match(attrs :: string, "[%s/\"']id%s*=%s*[\"']?([^\"'%s>]+)")
++		if id == name then
++			local close = string.find(low, "</section>", after :: number, true)
++			local body = string.sub(low, after :: number, if close then (close :: number) - 1 else #low)
++			table.insert(out, { body = body, at = at :: number })
 +		end
 +	end
-+	return body, opens, first
++	return out
 +end
 +
 +-- The contract hashes the page names in its zn-contract meta tags.
@@ -118,6 +169,16 @@ index 00000000..ac443619
 +		end
 +	end
 +	return out
++end
++
++-- The first inline <svg> of a section, whitespace between tags dropped and the rest collapsed, or nil.
++local function picture(body: string): string?
++	local svg = string.match(body, "<svg.-</svg>")
++	if not svg then
++		return nil
++	end
++	local tight = string.gsub(svg, ">%s+<", "><")
++	return (string.gsub(tight, "%s+", " "))
 +end
 +
 +-- Every way the page breaks the shape above, naming `path` and the rule; empty when it holds. `hash` is the
@@ -146,28 +207,39 @@ index 00000000..ac443619
 +	local ordered = true
 +	local bodies: { [string]: string } = {}
 +	for _, name in explainer.SECTIONS do
-+		local body, opens, at = section(low, name)
-+		if opens == 0 then
++		local found = sections(low, name)
++		if #found == 0 then
 +			add(`has no <section id="{name}">`)
-+		elseif opens > 1 then
-+			add(`has {opens} <section id="{name}">: each section is there once`)
++		elseif #found > 1 then
++			add(`has {#found} <section id="{name}">: each section is there once`)
 +		else
-+			bodies[name] = body :: string
-+			if (at :: number) < last then
++			bodies[name] = found[1].body
++			if found[1].at < last then
 +				ordered = false
 +			end
-+			last = at :: number
++			last = found[1].at
 +		end
 +	end
 +	if not ordered then
 +		add(`its sections are out of order: they are {table.concat(explainer.SECTIONS, ", ")}`)
 +	end
 +
++	local pictures: { [string]: string } = {}
 +	for _, name in explainer.DIAGRAMS do
 +		local body = bodies[name]
-+		if body and not string.find(body, "<svg", 1, true) then
-+			add(`<section id="{name}"> has no inline <svg> diagram`)
++		if body then
++			local svg = picture(body)
++			if svg then
++				pictures[name] = svg
++			else
++				add(`<section id="{name}"> has no inline <svg> diagram`)
++			end
 +		end
++	end
++	if pictures.before and pictures.before == pictures.after then
++		add(
++			"the before and after diagrams are the same picture: draw the system as it is and as this leaves it"
++		)
 +	end
 +
 +	local changes = bodies.changes
@@ -181,42 +253,44 @@ index 00000000..ac443619
 +
 +	local choices = bodies.choices
 +	if choices then
-+		local blocks: { string } = {}
-+		local at = 1
 +		local marks: { number } = {}
-+		while true do
-+			local s, e = string.find(choices, "class%s*=%s*[\"'][^\"']*choice[^\"']*[\"']", at)
-+			if not s then
-+				break
-+			end
-+			local whole = string.sub(choices, s :: number, e :: number)
-+			if string.match(whole, "[\"'%s]choice[\"'%s]") then
++		for s, classes in string.gmatch(choices, "()class%s*=%s*[\"']([^\"']*)[\"']") do
++			if hasClass(classes :: string, "choice") then
 +				table.insert(marks, s :: number)
 +			end
-+			at = (e :: number) + 1
 +		end
-+		for i, s in marks do
-+			local stop = if marks[i + 1] then marks[i + 1] - 1 else #choices
-+			table.insert(blocks, string.sub(choices, s, stop))
-+		end
-+		if #blocks == 0 then
++		if #marks == 0 then
 +			add(
 +				`<section id="choices"> has no class="choice" block: each choice is one, with its pros and cons`
 +			)
 +		end
-+		for i, block in blocks do
++		for i, s in marks do
++			local block = string.sub(choices, s, if marks[i + 1] then marks[i + 1] - 1 else #choices)
 +			for _, kind in { "pros", "cons" } do
-+				if
-+					not string.match(block, "class%s*=%s*[\"'][^\"']*%f[%w]" .. kind .. "%f[^%w][^\"']*[\"']")
-+				then
++				local found = false
++				for classes in string.gmatch(block, "class%s*=%s*[\"']([^\"']*)[\"']") do
++					if hasClass(classes, kind) then
++						found = true
++					end
++				end
++				if not found then
 +					add(`choice {i} in <section id="choices"> has no class="{kind}" list`)
 +				end
 +			end
 +		end
 +	end
 +
++	for classes in string.gmatch(low, "class%s*=%s*[\"']([^\"']*)[\"']") do
++		if hasClass(classes, explainer.FILL) then
++			add(
++				`still holds the template's placeholder text (class="{explainer.FILL}"): fill it in and drop the class`
++			)
++			break
++		end
++	end
++
 +	for _, ref in external(low) do
-+		add(`fetches {ref}: the page is self-contained (inline styles, scripts and images, data: URIs only)`)
++		add(`{ref}: {SELF}`)
 +	end
 +	return problems
 +end
@@ -233,18 +307,10 @@ index 00000000..ac443619
 +
 +return explainer
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 59d6bd67..a29bf87d 100644
+index 59d6bd67..2ceed161 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
-@@ -1,6 +1,7 @@
- --!strict
- -- Tracker CLI. Run through ./zn at the repository root (c0114). See z-nile/skills/zz-rules/SKILL.md.
- local approval = require("./approval")
-+local explainer = require("./explainer")
- local audit = require("./audit")
- local board = require("./board")
- local boardview = require("./boardview")
-@@ -83,7 +84,10 @@ usage: ./zn <command> ...
+@@ -83,7 +83,10 @@ usage: ./zn <command> ...
    compact [--force]                             renumber every item from 0001 (a fresh worktree on origin/main)
    remap                                         bring a branch from before a compaction onto the new ids
    migrate                                       rename legacy-named documents to <ID>.md (adds slug: to the frontmatter)
@@ -256,13 +322,16 @@ index 59d6bd67..a29bf87d 100644
    ready <R-id|issue-id>                         claim the raft, move it to active/ on origin/main, write <root>/rafts/active/<R>/prompt.md
    stop <R-id>                                   give back a readied or started raft: move it out of active/ on origin/main, remove its prompt
    stop <issue>                                  give back one active issue whose raft is retired, missing or empty
-@@ -5685,6 +5689,38 @@ end
+@@ -5685,6 +5688,42 @@ end
  
  -- A controlling terminal. Lune's own stdin is not a tty even when `./zn` was started on one (a child
  -- cannot inherit it), so this opens /dev/tty. `./zn` also refuses when its own stdin is not a terminal.
++-- The explainer page's edges (f0339), in one table: main.luau's top level is at Luau's 200-local limit.
++local pageIO = {}
++
 +-- Opens `path` in the system's default app for its type (`open` on macOS, `xdg-open` elsewhere): the browser for a page.
 +-- Returns whether it opened, and the opener's name for a warning.
-+local function openInDefaultApp(path: string): (boolean, string)
++function pageIO.open(path: string): (boolean, string)
 +	local opener = if process.os == "macos" then "open" else "xdg-open"
 +	local ok, r = pcall(sh.run, opener, { path })
 +	return ok and r.ok, opener
@@ -270,7 +339,7 @@ index 59d6bd67..a29bf87d 100644
 +
 +-- One line typed at the controlling terminal (the one stdinIsTerminal opens), or nil when there is none or it
 +-- closes before a line.
-+local function readTerminalLine(): string?
++function pageIO.readLine(): string?
 +	local r = process.exec("perl", {
 +		"-e",
 +		"open(my $f, q{<}, q{/dev/tty}) or exit 2; my $l = <$f>; exit 3 unless defined $l; print $l; exit 0",
@@ -282,7 +351,8 @@ index 59d6bd67..a29bf87d 100644
 +end
 +
 +-- The issue's explainer page problems, or the refusal for a missing page; empty when it holds.
-+local function explainerProblems(item: store.Item, hash: string): { string }
++function pageIO.problems(item: store.Item, hash: string): { string }
++	local explainer = require("./explainer")
 +	local path = `{item.dir}/{explainer.FILE}`
 +	if not fs.isFile(path) then
 +		return {
@@ -295,12 +365,31 @@ index 59d6bd67..a29bf87d 100644
  local function stdinIsTerminal(): boolean
  	local r = process.exec("perl", {
  		"-e",
-@@ -5858,14 +5894,45 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
+@@ -5748,6 +5787,17 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
+ 			local got = sh.run("git", { "show", `origin/main:{rel}` })
+ 			return if got.ok then got.stdout else nil
+ 		end
++		-- the page rides in a pull request, never in this publish: say so when main doesn't have it as it is here
++		local pageRel = `{item.dir}/explainer.html`
++		if fs.isFile(pageRel) then
++			local onMainPage = show(pageRel)
++			if onMainPage ~= fs.readFile(pageRel) then
++				local keeps = if onMainPage then "the old page" else "no page"
++				stdio.ewrite(
++					`warning: {pageRel} is not on origin/main as it is here: push this branch and land it by pull request, or main keeps {keeps}\n`
++				)
++			end
++		end
+ 		local doc = show(item.doc)
+ 		if not doc then
+ 			fail(`{id} is not on origin/main. From this worktree run: git push origin HEAD`)
+@@ -5858,14 +5908,46 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
  	if who == "" then
  		fail("approve needs a git identity (git config user.name)")
  	end
 -	local _, paths, collectErr = approval.collect(".", item)
 -	if collectErr then
++	local explainer = require("./explainer")
 +	local parts, paths, collectErr = approval.collect(".", item)
 +	if collectErr or not parts then
  		fail(`{id}: {collectErr}`)
@@ -312,19 +401,19 @@ index 59d6bd67..a29bf87d 100644
  		fail(`{id}: commit the contract first ({dirty}), then ./zn approve {id}`)
  	end
 +	local hash = contract.hash(parts :: contract.Parts)
-+	local problems = explainerProblems(item, hash)
++	local problems = pageIO.problems(item, hash)
 +	if #problems > 0 then
 +		fail(`{id}: the explainer page does not hold:\n- {table.concat(problems, "\n- ")}`)
 +	end
 +	local full = `{process.cwd}{page}`
-+	local opened, opener = openInDefaultApp(full)
++	local opened, opener = pageIO.open(full)
 +	if opened then
 +		print(`{id}: opened its explainer page, {full}`)
 +	else
 +		stdio.ewrite(`warning: could not open {full} with {opener}; open it yourself and read it before you answer\n`)
 +	end
 +	stdio.write(`Approve {id}, contract {string.sub(hash, 1, 12)}? [y/N] `)
-+	local answer = readTerminalLine()
++	local answer = pageIO.readLine()
 +	if not explainer.accepts(answer) then
 +		local said = if answer then sh.trim(answer) else "no answer"
 +		fail(`{id}: not approved ({said}); nothing recorded`)
@@ -343,7 +432,7 @@ index 59d6bd67..a29bf87d 100644
  	local when = os.date("!%Y-%m-%dT%H:%M:%SZ") :: string
  	local text, aerr = approval.append(".", item, who, when)
  	if not text then
-@@ -5881,6 +5948,35 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
+@@ -5881,6 +5963,36 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
  	print(`Publish it to origin/main from this worktree: ./zn approve {id} --publish`)
  end
  
@@ -355,6 +444,7 @@ index 59d6bd67..a29bf87d 100644
 +	if #pos ~= 1 then
 +		fail("usage: explain <issue-id>")
 +	end
++	local explainer = require("./explainer")
 +	local item = store.get(pos[1])
 +	if item.kind ~= "issue" then
 +		fail(`explain takes an issue ({item.id} is a {item.kind})`)
@@ -366,7 +456,7 @@ index 59d6bd67..a29bf87d 100644
 +	local hash = contract.hash(parts :: contract.Parts)
 +	print(`{item.dir}/{explainer.FILE}`)
 +	print(`contract {hash}`)
-+	local problems = explainerProblems(item, hash)
++	local problems = pageIO.problems(item, hash)
 +	if #problems > 0 then
 +		for _, p in problems do
 +			print(`- {p}`)
@@ -379,27 +469,27 @@ index 59d6bd67..a29bf87d 100644
  -- `ready <R-id|issue-id>`: claims a prepared raft, moves it and its members to active/ on origin/main (one tracker-only
  -- commit, check.sh paths rewritten), pulls the main checkout and writes the ignored prompt.md. On a raft that is
  -- already active it only regenerates the prompt.
-@@ -7413,9 +7509,8 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
+@@ -7413,9 +7525,8 @@ function cmd.board(pos: { string }, opts: { [string]: { string } })
  	end
  	print(out)
  	if not opts["-O"] then
 -		local opener = if process.os == "macos" then "open" else "xdg-open"
 -		local ok, r = pcall(sh.run, opener, { out })
 -		if not ok or not r.ok then
-+		local opened, opener = openInDefaultApp(out)
++		local opened, opener = pageIO.open(out)
 +		if not opened then
  			stdio.ewrite(`warning: could not open {out} with {opener}; the page is written\n`)
  		end
  	end
 diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
-index 668b34d8..022e47cc 100644
+index 668b34d8..a07a6104 100644
 --- a/z-nile/skills/z-design/SKILL.md
 +++ b/z-nile/skills/z-design/SKILL.md
 @@ -54,6 +54,7 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
    - They never change the real repository: every command that changes anything runs in a fixture under `.cache/<unique name>` with its own repository, checked before each write, committing as `<name>@example.invalid` (zz-test skill, "Specs never touch the real repository"). Before the guards exist on your branch, or while prototyping them, run them only in a clone under `$TMPDIR`.
  - **Verify the wiring**: `./zn check <id>` runs and fails *for the right reasons*: assertion failures or missing modules, not bash errors.
  - **Mutation check** (fills the Rules and mutants `checked` column): when you prototype the change in a scratch worktree, apply each row's mutant to the prototype and run the row's spec case, which must fail on an **assertion**, not a syntax or require error. Mark the row `run` and record the outcome in Unknowns & experiments. A row you didn't run (no prototype, or a mutant you couldn't apply) is `reasoned`: say why in Unknowns & experiments, and the reviewer then judges those rows by reading them.
-+- **Write the explainer page**: copy `z-nile/templates/explainer.html` to `<issue-dir>/explainer.html` and fill it for the person who approves: in plain words, the idea; a diagram of the system before (an inline `<svg>`); what changes where (every Touched module, with the functions and types each gains or changes); a diagram of the system after; and each choice with its pros and cons. It is one self-contained file (inline styles and diagrams, nothing fetched), it is not part of the contract, and it names the contract it explains in its `zn-contract` meta tag: `./zn explain <id>` prints that hash and every way the page breaks the shape.
++- **Write the explainer page**: copy `z-nile/templates/explainer.html` to `<issue-dir>/explainer.html` and fill it for the person who approves: in plain words, the idea; a diagram of the system before (an inline `<svg>`); what changes where (every Touched module, with the functions and types each gains or changes); a diagram of the system after; and each choice with its pros and cons. Replace every placeholder (the template marks each with the class `zn-fill`), and draw two different pictures. It is one self-contained file (inline styles and diagrams, no scripts, nothing fetched), it is not part of the contract, and it names the contract it explains in its `zn-contract` meta tag: `./zn explain <id>` prints that hash and every way the page breaks the shape.
  - **Dry-run the promotion**: `./zn promote-check <id>`. The only acceptable failures before implementation are requires of modules the issue will create.
  
  ## 5. Adversarial design review (required)
@@ -413,6 +503,32 @@ index 668b34d8..022e47cc 100644
  
  ## 6. Commit and hand off
  - **Commit** the prepared issue, its acceptance specs and architecture changes in the prep worktree as one commit, `tracker: prep c0010 <title>`, then follow Landing a change (zz-rules skill): push, PR, merge, pull the main checkout, remove the worktree. Right after the prep PR is opened, before it merges (so before any raft holding it can be readied), `./zn spend <id> --phase prep` (once: it counts the prep branch's lines). An issue readied first can no longer take it, and `spend` says so.
+diff --git a/z-nile/skills/z-ready/SKILL.md b/z-nile/skills/z-ready/SKILL.md
+index b9ebe094..262e74c9 100644
+--- a/z-nile/skills/z-ready/SKILL.md
++++ b/z-nile/skills/z-ready/SKILL.md
+@@ -8,7 +8,7 @@ description: Ready a raft for execution, which claims it, moves it and its issue
+ 1. **Resolve the target.** Given an issue ID, the target is its raft. If the issue has no raft, stop: z-raft makes one (`./zn raft-plan`, or `./zn new raft … <id> --project <name>`) in its rafting worktree and merges it. A prompt for an undesigned issue defeats the purpose.
+ 2. **Check readiness.** First, **scope**: each member's title, Problem and Solution ideas match its capture (`./zn capture <id>`; z-design, **Scope is what was captured**) apart from added detail and decision lines, and a capture whose header carries any marker (`(no capture commit: …)`, `(ambiguous: …)` or `(history before … not followed: …)`) counts as not matching until the Problem has a `Scope decision (user, …)` line that confirms the item's scope. If one doesn't, stop and ask the user. Their answer lands as a `Scope decision` line through a pull request merged with the subject `tracker: scope <id> <what>` (a `tracker: new` subject would make the whole prepared document the new capture) before you ready the raft. If they restore the captured scope instead, the raft goes back to prep. `./zn ready` enforces every rule below except the acceptance specs one, and refuses with the reason, naming the item; read them so you can explain a refusal.
+    - The raft and every member are `design: ready`.
+-   - Every member has an approval (`./zn approve <id>`, run by the human in the prep worktree) whose contract still matches. An item prepared before approval has none: `./zn ready` asks for that one-time step and stops.
++   - Every member has an approval (`./zn approve <id>`, run by the human in the prep worktree) whose contract still matches. An item prepared before approval has none: `./zn ready` asks for that one-time step and stops, and that approval first needs the issue's explainer page (`./zn explain <id>`).
+    - Every issue has a `check.sh` with at least one `check`.
+    - The acceptance specs that each `check.sh` names exist. `ready` doesn't check this one, so look before you run it.
+    - `./zn status <R-id>` prints `prepared`: the prep PR has merged and main is current.
+diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
+index 4366d718..2ea0ddf3 100644
+--- a/z-nile/skills/zz-execute/SKILL.md
++++ b/z-nile/skills/zz-execute/SKILL.md
+@@ -82,7 +82,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
+ 2. If `main` moved, `./zn restack <R-id>` (renumber colliding IDs, rerun `z-nile/check.sh --affected`, commit with `./zn commit --phase deliver`), so the stack is on that main before `done`.
+ 3. **Final review (idea = design = test = code)**: after the last layer is finished and restacked, print the trace skeleton with `./zn trace <R-id>`, and run the final review once on the finished stack (`./zn dispatch zz-review <R-id> --mode final`, or a fresh subagent on the review model of the CLI in final mode) given the skeleton, the tickets' documents and `git diff origin/main...HEAD`. The reviewer fills `<raft-dir>/trace.md` and writes `final-review-001.md` with a verdict and findings. Answer any findings once in `final-refute-001.md` (if a fix changes a layer, `./zn finish` and `./zn restack <R-id>`, and update `trace.md` for the new top-layer commit; anything still open goes under `## Open to the human`). Verify `./zn trace <R-id> --check` passes and commit `trace.md` and the final review files with `./zn commit --phase code-review --model <reviewer model>`.
+ 4. **Confirm the harvest**: first harvest anything `./zn lessons --uncovered R0010` still lists, as Phase 4 step 5 says. That includes the design reviews of a raft prepped before lessons existed, which are harvested here by you. Then `./zn lessons --uncovered R0010` and `./zn lessons --check` must pass. Commit with `./zn commit --phase deliver`.
+-5. `./zn done R0010` lands the stack. It refuses a checkout that is not the published top-layer commit, an unfinished or unstacked layer, a changed contract, a failing or stale `./zn trace <R-id> --check`, and a final review with no `Verdict:` line or whose verdict is not `approve` while an open finding has no human ruling in `## Open to the human`. The binding commit records the final review's `Verdict:` line and `Trace: <done-raft-dir>/trace.md`. The human runs `./zn approve <id>` again when the contract changed, then `./zn done`.
++5. `./zn done R0010` lands the stack. It refuses a checkout that is not the published top-layer commit, an unfinished or unstacked layer, a changed contract, a failing or stale `./zn trace <R-id> --check`, and a final review with no `Verdict:` line or whose verdict is not `approve` while an open finding has no human ruling in `## Open to the human`. The binding commit records the final review's `Verdict:` line and `Trace: <done-raft-dir>/trace.md`. The human runs `./zn approve <id>` again when the contract changed, then `./zn done`; before that, bring the issue's explainer page up to date on the layer (`./zn explain <id>` ends in `ok`; an item readied without one gets it from `z-nile/templates/explainer.html`) and commit it, since approve refuses a missing or stale page.
+ 6. Post a PR comment `Ready to merge at <short sha>` (no final report yet).
+ 
+ ## Phase 6: Merge and clean up
 diff --git a/z-nile/skills/zz-review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
 index e542d374..5f9f7a65 100644
 --- a/z-nile/skills/zz-review/SKILL.md
@@ -426,7 +542,7 @@ index e542d374..5f9f7a65 100644
  ## Stream mode
  Layers replaced stream branches. A raft is reviewed in Code mode, one layer at a time (`git diff <layer below>...HEAD`). The dispatcher still accepts `--mode stream` and files that review itself; it is not how a layer is reviewed.
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index d009a1d8..7709e217 100644
+index d009a1d8..6e305812 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -75,7 +75,8 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
@@ -434,20 +550,22 @@ index d009a1d8..7709e217 100644
  | step | command | effect |
  |---|---|---|
 -| approve | `./zn approve <issue-id> [--check]` | in the worktree where the design is, with a terminal on stdin, and not while `ZN_DISPATCH` is set. Records a hash of the design sections (Problem, Solution, Design, Acceptance criteria, Test plan), the acceptance specs and `check.sh` in the issue's `approval.md`, and keeps earlier rows. `--check` says whether that hash still holds and which part changed. |
-+| approve | `./zn approve <issue-id> [--check]` | in the worktree where the design is, with a terminal on stdin, and not while `ZN_DISPATCH` is set. Refuses an issue whose explainer page (`<issue-dir>/explainer.html`, z-design step 4) is missing, uncommitted or fails `./zn explain`; opens it in the system's default app for `.html` (`open` on macOS, `xdg-open` elsewhere; a failed opener only warns) and asks y/n at the terminal: anything but `y` or `yes` records nothing, and so does a contract that changed while the page was open. On `y` it records a hash of the design sections (Problem, Solution, Design, Acceptance criteria, Test plan), the acceptance specs and `check.sh` in the issue's `approval.md`, and keeps earlier rows. `--check` says whether that hash still holds and which part changed. |
++| approve | `./zn approve <issue-id> [--check]` | in the worktree where the design is, with a terminal on stdin, and not while `ZN_DISPATCH` is set. Refuses an issue whose explainer page (`<issue-dir>/explainer.html`, z-design step 4) is missing, uncommitted or fails `./zn explain`; opens it in the system's default app for `.html` (`open` on macOS, `xdg-open` elsewhere; a failed opener only warns) and asks y/n at the terminal: anything but `y` or `yes` records nothing, and so does a contract that changed while the page was open. On `y` it records a hash of the design sections (Problem, Solution, Design, Acceptance criteria, Test plan), the acceptance specs and `check.sh` in the issue's `approval.md`, and keeps earlier rows. `--check` says whether that hash still holds and which part changed.. `--publish` publishes `approval.md` only, and warns when the page in this worktree is not on `origin/main` as it is (the page lands by pull request). |
 +| explain | `./zn explain <issue-id>` | read-only, anywhere. Prints the issue's explainer page path and the contract hash its `zn-contract` must name, then `ok`, or each problem (missing, another contract, a section or diagram missing, a Touched module not named, a choice without pros and cons, anything fetched) and exits 1. |
  | ready | `./zn ready <R-id\|issue-id>` | main checkout only, on a clean `main`, with an origin (z-ready skill). Checks the raft and every member are `design: ready` with a `check.sh` that has a check, and that every `depends_on` outside the raft is `done`. Refuses a member with no approval, or whose contract hash no longer matches (`./zn approve <id>`); an item prepared before approval is told to take that one-time step. Claims the raft, publishes one tracker-only commit that moves it and its members to `active/` on `origin/main` (every `check.sh` item path rewritten), pulls the main checkout, and writes the ignored `<root>/rafts/active/<R-id>/prompt.md` (it inlines the project's `<root>/architecture.md`, pickman's map; a project without one gets a line saying so). On an active raft it regenerates the prompt and makes no commit. |
  | stop | `./zn stop <R-id>` | main checkout only, on a clean `main`, with an origin (z-stop skill). It gives back exactly the issues that carry the raft's own claim stamp (`ready` and `start` stamp the raft and every issue they claim with one `active-…` value); an issue only listed in `issues:`, or one filed naming the raft after the claim, is never touched (the latter is named in a warning). Every claim stamp is new on `origin/main` (redrawn until no item carries it), and a raft with no `active-…` stamp is refused, to be given back by hand. Gives back a readied raft: publishes one tracker-only commit that moves it and its members from `active/` back to the backlog, stamped `prepared-…` (every `check.sh` item path rewritten back), removes `prompt.md`, pulls the main checkout, and names the raft's branch and PR, which it leaves as they are. A raft claimed by the legacy `start` (backlog, status `active`) gets a status-only publish and no move. A member in `done/` refuses. |
  | start | `./zn start R0010` | clean tree required. Opens the next layer (`R0010/1/c0010`: an empty `tracker: start` commit, a push, and a **draft** PR based on the layer below, or on main). The next layer waits until `./zn finish` has made the one below a single commit. A readied raft claims and moves nothing. A backlog raft (legacy) still claims and moves to `active/` on that layer branch: members must be `design: ready`, and every `depends_on` outside the raft must be `done` on `origin/main`. If it refuses, merge `origin/main` and retry, never edit `depends_on` to get past it: stop and report. Do this first, so the claim is visible to another machine. |
 diff --git a/z-nile/templates/explainer.html b/z-nile/templates/explainer.html
 new file mode 100644
-index 00000000..eff09776
+index 00000000..2753548b
 --- /dev/null
 +++ b/z-nile/templates/explainer.html
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,63 @@
 +<!doctype html>
 +<!-- The ticket explainer page (f0339). Copy to <issue-dir>/explainer.html and fill every section in plain words.
-+     Keep it self-contained: inline styles and inline <svg>, no links to files, fonts or scripts elsewhere.
++     Every placeholder carries the class zn-fill: replace its text and drop the class (./zn explain refuses a page
++     that still has one). Draw the before and after diagrams as two different pictures.
++     Keep it self-contained: inline styles and inline <svg>, no scripts, no links to files, fonts or web pages.
 +     Set zn-contract to the hash `./zn explain <id>` prints, after the last change to the design. -->
 +<html lang="en">
 +<head>
@@ -464,44 +582,44 @@ index 00000000..eff09776
 +</style>
 +</head>
 +<body>
-+<h1>ID: Title</h1>
++<h1 class="zn-fill">ID: Title</h1>
 +
 +<section id="idea">
 +<h2>The idea</h2>
-+<p>What is wrong today and what will be true after, in a few short sentences a newcomer can follow.</p>
++<p class="zn-fill">What is wrong today and what will be true after, in a few short sentences a newcomer can follow.</p>
 +</section>
 +
 +<section id="before">
 +<h2>Before</h2>
-+<p>How the parts work together today.</p>
++<p class="zn-fill">How the parts work together today.</p>
 +<svg viewBox="0 0 400 80" role="img" aria-label="the system before">
 +  <rect x="10" y="20" width="120" height="40" rx="6" fill="#fff" stroke="#555"/>
-+  <text x="70" y="45" text-anchor="middle">part</text>
++  <text x="70" y="45" text-anchor="middle" class="zn-fill">part</text>
 +</svg>
 +</section>
 +
 +<section id="changes">
 +<h2>What changes where</h2>
 +<ul>
-+  <li><code>path/to/file</code>: which functions and types it gains or changes, in one line.</li>
++  <li class="zn-fill"><code>path/to/file</code>: which functions and types it gains or changes, in one line.</li>
 +</ul>
 +</section>
 +
 +<section id="after">
 +<h2>After</h2>
-+<p>How the parts work together once this lands.</p>
++<p class="zn-fill">How the parts work together once this lands.</p>
 +<svg viewBox="0 0 400 80" role="img" aria-label="the system after">
 +  <rect x="10" y="20" width="120" height="40" rx="6" fill="#fff" stroke="#555"/>
-+  <text x="70" y="45" text-anchor="middle">part</text>
++  <text x="70" y="45" text-anchor="middle" class="zn-fill">part</text>
 +</svg>
 +</section>
 +
 +<section id="choices">
 +<h2>Choices</h2>
 +<div class="choice">
-+  <h3>The choice, and what was picked</h3>
-+  <ul class="pros"><li>Why it is good.</li></ul>
-+  <ul class="cons"><li>What it costs, and what was given up.</li></ul>
++  <h3 class="zn-fill">The choice, and what was picked</h3>
++  <ul class="pros"><li class="zn-fill">Why it is good.</li></ul>
++  <ul class="cons"><li class="zn-fill">What it costs, and what was given up.</li></ul>
 +</div>
 +</section>
 +</body>

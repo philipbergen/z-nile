@@ -164,10 +164,12 @@ return t.spec("f0339 the explainer page's shape and the approving answer", funct
 		}))).toBe(0)
 	end)
 
-	it("AC1: the page fetches nothing", function()
+	it("AC1: the page fetches nothing and runs nothing", function()
 		local refs = {
 			'<link rel="stylesheet" href="style.css">',
 			'<script src="https://cdn.example.invalid/mermaid.js"></script>',
+			"<script>const n = 1;</script>",
+			'<script type="module">import "https://cdn.example.invalid/m.mjs";</script>',
 			"<img alt=x src=/tmp/a.png>",
 			'<img alt="x" srcset="a.png 2x">',
 			'<video poster="p.png"></video>',
@@ -176,24 +178,37 @@ return t.spec("f0339 the explainer page's shape and the approving answer", funct
 			'<form action="https://example.invalid/"></form>',
 			'<button formaction="go"></button>',
 			'<table background="bg.png"></table>',
+			'<svg onload="go()"></svg>',
+			'<div ONCLICK="go()"></div>',
+			'<meta http-equiv="refresh" content="0;url=https://example.invalid/">',
+			'<meta http-equiv="Refresh" content="0;url=next.html">',
 			"<style>body { background: url(bg.png); }</style>",
 			"<style>body { background: url( 'bg.png' ); }</style>",
+			'<style>body { background-image: image-set("bg.png" 1x); }</style>',
 			"<style>@import 'more.css';</style>",
 			'<a href="https://github.com/">the PR</a>',
+			"<p>see https://example.invalid/pr/1 for more</p>",
 		}
 		for _, ref in refs do
 			local got = problems(page({ extra = ref }))
-			if #got ~= 1 or not string.find(got[1], "fetches", 1, true) then
-				error(`{ref} was not refused as a fetch: {table.concat(got, "\n")}`)
+			local ok = #got >= 1
+			for _, p in got do
+				if not string.find(p, "the page is self-contained", 1, true) then
+					ok = false
+				end
+			end
+			if not ok then
+				error(`{ref} was not refused as a fetch or a script: {table.concat(got, "\n")}`)
 			end
 		end
 		local fine = {
 			'<a href="#after">after</a>',
 			'<img alt="x" src="data:image/png;base64,AA">',
 			"<style>.a { background: url(#grad); } .b { background: url('data:image/png;base64,AA'); }</style>",
-			'<svg><use xlink:href="#box"/></svg>',
+			'<style>.c { background-image: image-set("data:image/png;base64,AA" 1x); }</style>',
+			'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="#box"/></svg>',
 			'<div data-src="x.png" data-href="y"></div>',
-			"<script>const n = 1;</script>",
+			"<p>The onset = late, and the reason: none.</p>",
 		}
 		for _, ref in fine do
 			local got = problems(page({ extra = ref }))
@@ -201,6 +216,24 @@ return t.spec("f0339 the explainer page's shape and the approving answer", funct
 				error(`{ref} was refused: {table.concat(got, "\n")}`)
 			end
 		end
+	end)
+
+	it("AC1: a page still holding the template's placeholders, or one picture twice, is refused", function()
+		one(page({ extra = '<p class="zn-fill">What is wrong today</p>' }), 'still holds the template\'s placeholder text (class="zn-fill")')
+		one(page({ extra = '<p class="lead ZN-FILL">x</p><p class="zn-fill">y</p>' }), "placeholder")
+		t.expect(#problems(page({ extra = '<p class="zn-filler">x</p><p>zn-fill is the marker</p>' }))).toBe(0)
+		local svg = '<svg viewBox="0 0 10 10"><rect width="4" height="4"/></svg>'
+		one(page({ before = `<h2>Before</h2>{svg}`, after = `<h2>After</h2>{svg}` }), "the before and after diagrams are the same picture")
+		local spaced = '<svg viewBox="0 0 10 10">\n  <rect width="4"   height="4"/>\n</svg>'
+		one(page({ before = `<h2>Before</h2>{svg}`, after = `<h2>After</h2>{spaced}` }), "the same picture")
+	end)
+
+	it("AC1: a section's id may stand anywhere in its tag", function()
+		local html = page()
+		local moved = string.gsub(html, '<section id="idea">', '<section class="card" id="idea">') :: string
+		t.expect(#problems(moved)).toBe(0)
+		local other = string.gsub(html, '<section id="idea">', '<section data-id="idea">') :: string
+		one(other, 'has no <section id="idea">')
 	end)
 
 	it("AC1: only y or yes approves", function()
