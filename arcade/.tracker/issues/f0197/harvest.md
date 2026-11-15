@@ -1,0 +1,7 @@
+- design-review-001 F1: z-design/port-the-copied-modules-cases, zz-test/pin-fail-safes-where-they-act
+- design-review-001 F2: zz-test/seed-every-enumerated-case
+- design-review-001 F3: z-design/prep-experiments-run-in-standalone-clones
+- design-review-001 F4: arcade-arch/copied-constants-are-parameters
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: one-off: a library write that refuses a run said nothing; latent today (every title's figure starts at 1), fixed by a warning and its case
+- design-review-001 F7: one-off: the Scalability paragraph compared the portal's reads with the GetAsync budget only, though the sorted-read budget is the tighter one; E3 itself stays f0206's

@@ -28,7 +28,7 @@ This repo only takes work through its tracker (AGENTS.md: no code without an iss
 - Adapters require `@game/ReplicatedStorage/Arcade/...` (and `@game/ServerStorage/Arcade/...` from server roots). `graph.srcAliasAllowed` in `z-nile/lib/graph.luau` must allow that.
 - **Game Logic never requires arcade Logic.** Arcade features are leaves that adapters wire in, and game Logic gets them as parameters (an RNG, a store, a travel status). That keeps pickman-arch rules 2 and 5. Lune tests reach arcade through an `@arcade` alias in each home's `.luaurc`.
 - **What moves into arcade, in order:**
-  1. Hiscores: per-game store names (Pickman keeps today's names), a `revives` field on rows, one generic `Boards` server adapter.
+  1. Hiscores: per-game store names (Pickman keeps today's names), a `revives` field on rows, one generic `Boards` server adapter. (f0197: `Logic/Hiscores` names a title's stores from its prefix, `Hiscores.names(prefix)`, where Pickman's prefix `""` gives today's `Hiscores`, `HiscoreEntries` and `HiscoreTop`; the progress figure keeps its stored name `level` for every title; `src/server/Boards.luau` is opened per title with `Boards.open(prefix)`; `src/shared/HiscoreGames.luau` lists every title's prefix and the name of its progress figure.)
   2. Travel.
   3. PaidPlay: the per-game free hour as an atomic UpdateAsync, purchase decisions, an idempotent receipt ledger, and a `Receipts` adapter that every place installs.
   4. Rng.
@@ -52,6 +52,7 @@ This repo only takes work through its tracker (AGENTS.md: no code without an iss
   - `ROBLOX_BETA_PLACE_ID` is the portal (start place).
   - The games use `ROBLOX_BETA_PICKMAN_PLACE_ID` (the old `…_GAME_PLACE_ID` is still accepted), `…_SNAKE_…`, `…_INVADERS_…` and `…_ASTEROIDS_…`.
 - Every place gets every place id as an attribute (`PortalPlaceId`, `PickmanPlaceId`, `SnakePlaceId`, `InvadersPlaceId`, `AsteroidsPlaceId`; 0 means not published, and the portal shows that card as "coming soon"). `LobbyPlaceId` becomes `PortalPlaceId`.
+  - The attributes are on `ServerScriptService` (where `Beta.project` writes them today), so they stay on the server. A place reads them with arcade's `Places.read(read)` (`src/shared/Places.luau`, a config module outside Logic, so the Travel feature names no game), its adapter passing `ServerScriptService:GetAttribute`; the names are `Places.attribute(name)` for each of `Places.NAMES` (f0199).
 - The deploy scripts and the runtime-test runner (`--place <name>`) move to `portal/scripts/`. f0169 (live publish) builds on that.
 
 **Unknowns that prep must settle with experiments:**
