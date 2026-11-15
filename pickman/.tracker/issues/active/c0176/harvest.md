@@ -1,0 +1,2 @@
+- design-review-001 F1: z-design/reproduce-each-captured-report
+- design-review-001 F2: one-off: a note on duplicated spec helpers across promoted pins; no rule for a design to follow, and the fold is a chore of its own

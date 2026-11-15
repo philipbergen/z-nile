@@ -20,4 +20,6 @@ c0118 design review 006 F2: c0116 replaced the rafting flow (z-raft plans by `si
 
 **Note (c0261 design review 010 F4, F5):** a change of the ledger's format (#294: measured cost, typed minutes now 0, tokens no longer passed) moves every writer and reader of it: the dispatched raft review lost its tokens and the by-model table summed a dead column. Ask: for each place that writes or sums a cost, does it still get a real value after the upstream change?
 
+c0302 design review 001 F2: a design that adds a rule about how fixtures are set up searches the sequestered acceptance specs of unfinished items for the old shape too, not only the promoted specs: c0282's prepared `lifecycle.spec` had the exact defect, and its promotion would have turned the new scan red. Ask: does the search for the old shape cover `*/.tracker/**/acceptance/` outside `done/`, and is each hit run against the new rule?
+
 **Note (c0306's prep, 2026-11-14, design review 001 F6):** `[roles.raft]` runs at effort `high`, so its grok fallback would write a raft review that c0306's rule refuses. The dispatcher would spend a whole review run on a result refused by construction. The user ruled that a review step skips such a try.
