@@ -27,3 +27,5 @@ R0053 code review 001 F1, F2: a unit case named "cached for the same holes, and 
 c0276 design review 005 F1: failure cases that all wrote the same output file read each other's page, so a build that wrote nothing passed. A case that asserts a command wrote a file starts with that file absent, or uses a path no other case writes, and asserts content only this run could produce. Check: if this command wrote nothing, would the file this case reads still satisfy it?
 
 **Note** (R0100 design review 002 F5): a phrase an RC or AC pins to prove new text exists must be absent from `origin/main`'s file. RC5's `with no raft` was already in main's z-work step 6. Ask: does `git show origin/main:<file> | grep -cF -e <phrase>` print 0 for every phrase the check pins?
+
+**Note** (R0103 code review 001 F2): a case asserting "no S claim" looped over the claims, so a derivation that returned no claims at all passed. A negative assertion over a list also asserts the list's exact contents. Check: if every item vanished, would this loop still pass?

@@ -21,6 +21,23 @@ end
 local function trOk(args: { string }): string
 	return trackerfix.trOk(f, wt, args)
 end
+
+-- main's idea stage refuses to claim an issue whose idea is unchallenged (`./zn new` writes `idea: unchallenged`):
+-- publish it challenged first, as `./zn idea` leaves it (c0306's prep, 2026-11-14), so the claim reaches the rule
+local function challenged(id: string)
+	local dir = `{wt}/pickman/.tracker/issues/{id}`
+	fs.writeFile(
+		`{dir}/{id}.md`,
+		(string.gsub(fs.readFile(`{dir}/{id}.md`), "idea: unchallenged", "idea: challenged", 1))
+	)
+	fs.writeFile(
+		`{dir}/idea-review-001.md`,
+		"# Idea review 001\n\n## Findings\n\nnone\n\n## Verdict\n\napprove\n"
+	)
+	fixture.git(wt, { "add", `{dir}/{id}.md`, `{dir}/idea-review-001.md` })
+	fixture.git(wt, { "commit", "-q", "-m", `tracker: idea {id}` })
+	fixture.git(wt, { "push", "-q", "origin", "HEAD:main" })
+end
 local function tip(): string
 	return fixture.git(f.origin, { "rev-parse", "main" })
 end
@@ -38,7 +55,7 @@ local function record(id: string): string
 end
 local function round(n: string, verdict: string, hash: string?): string
 	local quote = if hash then `\nDesign record: {hash}\n` else ""
-	return `# Review {n}: x (design mode)\nInputs: y\n\n### F1 [low] a claim\nWhere: a\nEvidence: b\n\nVerdict: {verdict}\n{quote}`
+	return `# Review {n}: x (design mode)\nModel: claude-opus-5-5\nEffort: xhigh\nInputs: y\n\n### F1 [low] a claim\nWhere: a\nEvidence: b\n\nVerdict: {verdict}\n{quote}`
 end
 
 local function refusedWith(id: string, ...: string)
@@ -146,6 +163,7 @@ return t.spec(
 					trOk({ "new", "issue", "c", "claimed-here", "--project", "pickman" }),
 					"(%a%d+)"
 				) :: string
+				challenged(b)
 				trOk({ "status", b, "preparing" })
 				local rdir = `{wt}/pickman/.tracker/rafts/{raft}`
 				setLine(`{rdir}/{raft}.md`, "design", "ready")

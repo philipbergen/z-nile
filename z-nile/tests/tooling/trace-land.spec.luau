@@ -138,7 +138,7 @@ return t.spec(
 					"- Optional telemetry hook is not wired.",
 					"",
 					"## Solution",
-					"Add `pickman/src/beta.luau` returning the beta table.",
+					"<!-- The approach in one paragraph. -->", -- c0330: captured by `--desc`, so no S claim
 					"",
 				}, "\n")
 				write(f.main, "pickman/.tracker/issues/c0010/c0010.md", capC0010)
@@ -197,7 +197,7 @@ return t.spec(
 					"- Optional telemetry hook is not wired.",
 					"",
 					"## Solution",
-					"Add `pickman/src/beta.luau` returning the beta table.",
+					"<!-- The approach in one paragraph. -->", -- c0330: captured by `--desc`, so no S claim
 					"",
 					"## Design",
 					"Export `{ beta = 2 }` from `pickman/src/beta.luau`.",
@@ -312,7 +312,7 @@ return t.spec(
 				t.expect(has(skeleton, "| c0010:AC1:")).toBe(true)
 				t.expect(has(skeleton, "| c0020:P1:")).toBe(true)
 				t.expect(has(skeleton, "| c0020:P2:")).toBe(true)
-				t.expect(has(skeleton, "| c0020:S1:")).toBe(true)
+				t.expect(has(skeleton, "| c0020:S1:")).toBe(false)
 				t.expect(has(skeleton, "| c0020:AC1:")).toBe(true)
 				t.expect(has(skeleton, "| pickman/src/alpha.luau |  |")).toBe(true)
 				t.expect(has(skeleton, "| pickman/src/beta.luau |  |")).toBe(true)
@@ -338,7 +338,6 @@ return t.spec(
 					`| c0010:AC1 | {doc1Path}:23 | pickman/tests/unit/alpha.spec.luau:4 :: computes alpha | pickman/src/alpha.luau:2 |`,
 					`| c0020:P1 | {doc2Path}:24 | pickman/tests/unit/beta.spec.luau:4 :: computes beta | pickman/src/beta.luau:2 |`,
 					`| c0020:P2 | {doc2Path}:24 | {check2Path}:2 | pickman/src/beta.luau:2 |`,
-					`| c0020:S1 | {doc2Path}:24 | {check2Path}:2 | pickman/src/beta.luau:2 |`,
 					`| c0020:AC1 | {doc2Path}:24 | pickman/tests/unit/beta.spec.luau:4 :: computes beta | pickman/src/beta.luau:2 |`,
 					"",
 					"## Source files",
@@ -346,7 +345,7 @@ return t.spec(
 					"| file | claims |",
 					"|---|---|",
 					"| pickman/src/alpha.luau | c0010:P1, c0010:S1, c0010:AC1 |",
-					"| pickman/src/beta.luau | c0020:P1, c0020:P2, c0020:S1, c0020:AC1 |",
+					"| pickman/src/beta.luau | c0020:P1, c0020:P2, c0020:AC1 |",
 					"",
 				}, "\n")
 				write(wt, tracePath, filledPass)

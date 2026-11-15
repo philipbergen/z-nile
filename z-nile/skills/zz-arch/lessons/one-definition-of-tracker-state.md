@@ -9,3 +9,5 @@ When several guards each decide "is this change only tracker state", each spelli
 **Why:** c0117 design review 002 F1: the broker deleted `src/guard.lua` from `main` through a `git mv` into a tracker root, and pushed `z-nile/nextgen/evil.luau`; the wrapper, the broker and the tripwire each had their own copy of the test. F2: the same allow-list let a step weaken its own `check.sh` on `main`.
 
 **How to apply:** one module (`trackerstate.luau`); spec cases for a rename out of a root, a sibling of an allowed path, a symlink, a submodule, git's own config files, and a sequestered file changed versus moved; a mutant per rule.
+
+**Note** (c0278 design review 001 F4): a new rule about what may be pushed (a closed document is never published again) is held by every path that pushes tracker documents to `main`, not only `publish.commit`: `./zn land`'s `captureScope` pushes capture edits straight to `main` without the publish guard. Check: for a new "never published" or "never added" rule, which commands push or merge tracker state (`publish`, `land`, the dispatcher's gates, a hand-merged PR), and which of them refuses it?
