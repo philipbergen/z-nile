@@ -26,6 +26,8 @@ c0302 design review 001 F2: a design that adds a rule about how fixtures are set
 
 **Note** (c0282 re-prep 2026-11-15): c0302's rule that a clone fixture names its branch `main` scans only `z-nile/tests`, so a prepared issue's sequestered spec breaks it only when a raft promotes it (c0282's `lifecycle.spec`, found at R0099's prototype gate). A new rule over specs also scans the open `acceptance/` folders, or names the prepared issues it leaves to fix.
 
+**Note (c0270 design review 001 F2):** a rule on what counts as "another prep" was never run over the 42 items `preparing` on `origin/main`; it counted their own prototype branches and worktrees and PRs that only mention the id. The revision ran it on every one (its E8) and recorded what each resume finds.
+
 **Note (c0301 design review 001 F1, F4):** a rule about what a layer changed is checked against every kind of layer, one that only deletes included: an Overrides chore that removes a promoted spec leaves the ticket no line to cite at the top commit, so the first design refused a stack that lands today. And the existing-work list missed a second active raft with the same rows; name the search that made the list (here, `trace.md` at every layer tip and every active raft on `origin/main`) so the executor reruns it.
 
 **Also:** f0201 design review 001 F3: the arcade's PaidPlay read f0145's `continues` but wrote `revives`, so an old f0145 Pickman server (which outlives a publish) would read none of the arcade's credits and its next write would drop them. When two builds share a store, the new one writes the old shape exactly, and a case pins the stored keys.
