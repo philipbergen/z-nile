@@ -48,4 +48,6 @@ c0264 design review 009 F5 (re-prep): a withdrawn ticket's `depends_on` edges mo
 
 **Note** (R0100 design review 002 F3): a refute answered "fixed" did not find the sentence the finding quoted ("Flagged for the user in Open to the human") still standing in Risks. When an answer changes a ruling, grep the raft or issue document for every sentence that states or implies the old one.
 
+**Note** (c0330 design review 001 F3): a prototype added a fallback reader, and the prose still said the change "adds no refusal and removes none" and listed only the tickets the first edit affected. When a late edit changes who is affected, rerun the sweep (a probe over real tickets, c0157 here) and rewrite every sentence that counted them, the contract comment and the command table row included.
+
 c0177 design review 001 F2: a narrowing that changes a spec's baseline (f0125's 10%, from the classic tables to the same config untuned) left the old baseline in the spec's header and titles, the owning item's `check.sh` labels and a game-design.md row, and the design said the row named no baseline when it said "classic". Search for the baseline's word across titles, headers, labels and decision rows, not for the one sentence already known.
