@@ -43,3 +43,4 @@
 - design-review-007 F3: z-design/quote-other-preps-before-promising
 - note c0161's reviews 001 and 002 found the move to prepared accepted whatever round an earlier cycle of the item left: z-design/existence-checks-exclude-earlier-cycles
 - note running the recovery end to end in design review 007 showed the z-raft advice 'fold it again at the end' fails, and the corrected recovery takes two landings: z-raft/rafted-member-changes-stay-in-the-raft
+- note the re-prep for c0306's F3 found the specs drifted from main (the idea stage, approval at ready) and the prototype's ready check in a replaced code path (prep, 2026-11-15): z-design/reprep-reruns-on-a-reported-prototype, zz-test/fixture-edits-keep-the-approval-hash
