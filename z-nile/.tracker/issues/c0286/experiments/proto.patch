@@ -1,0 +1,356 @@
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index 59d6bd67c..df2fe785f 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -4192,6 +4192,7 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
+ 			size = raftplan.parseSize(front.size),
+ 			solo = front.solo == "true",
+ 			touched = touchedModules(it),
++			tied = front.tied,
+ 		})
+ 	end
+ 	local rafts: { raftplan.Raft } = {}
+diff --git a/z-nile/engine/raftplan.luau b/z-nile/engine/raftplan.luau
+index b929a66be..37dcfeffc 100644
+--- a/z-nile/engine/raftplan.luau
++++ b/z-nile/engine/raftplan.luau
+@@ -8,7 +8,14 @@
+ --     issue with no Touched modules overlaps nothing;
+ --   * a raft that would pass the cap of changed lines (the members' `size:`) starts another; an issue over the cap
+ --     is a raft by itself and is never split; an issue with no `size:` is skipped and named;
+---   * a `solo: true` issue is always a raft by itself (a recorded user decision), and so is an over-cap one.
++--   * a `solo: true` issue is always a raft by itself (a recorded user decision), and so is an over-cap one;
++--   * c0286: issues tied by `tied:` (a recorded user decision: one raft) are never rafted apart. Each issue's `tied:`
++--     names others; the ties are undirected and taken as connected groups over every issue in the tree, whatever its
++--     state. A group is skipped and named until every member is prepared, then made one raft whatever its size or
++--     surface (or folded into the one open raft that holds the rest of it); a raft that holds a tied issue takes no
++--     other issue from the plan. The first cause found, in a fixed order, is the one named (review 001 F5): an id not
++--     in the tree, two types or projects, a solo member, a member done or active with no raft, members in two rafts,
++--     a raft being rafted, a raft that is not open, then the members still waiting.
+ local raftplan = {}
+ 
+ export type Issue = {
+@@ -22,6 +29,7 @@ export type Issue = {
+ 	size: number?, -- the designer's estimate of changed lines; nil when missing or not a number
+ 	solo: boolean,
+ 	touched: { string }?,
++	tied: string?, -- c0286: the raw `tied:` value, nil when the document has none
+ }
+ export type Raft = {
+ 	id: string,
+@@ -76,6 +84,34 @@ function raftplan.parseSize(value: string?): number?
+ 	return if n > 0 then n else nil
+ end
+ 
++-- c0286: `tied:`'s value as the issue ids it names, `[]` or `[c0002, c0003]`. A value that is not such a list, an
++-- entry that is not an issue id (f, d or c), or an id twice is a problem (lesson parsers-refuse-ambiguity).
++function raftplan.parseTied(value: string?): ({ string }, string?)
++	local out: { string } = {}
++	if not value or value == "" then
++		return out, nil
++	end
++	local inner = string.match(value, "^%[(.*)%]$")
++	if not inner then
++		return {}, `tied: is not a list of issue ids: {value}`
++	end
++	local seen: { [string]: boolean } = {}
++	for entry in string.gmatch(inner, "[^,]+") do
++		local e = (string.gsub(entry, "^%s*(.-)%s*$", "%1"))
++		if e ~= "" then
++			if not string.match(e, "^[fdc]%d%d%d%d$") then
++				return {}, `tied: names {e}, which is not an issue id`
++			end
++			if seen[e] then
++				return {}, `tied: names {e} twice`
++			end
++			seen[e] = true
++			table.insert(out, e)
++		end
++	end
++	return out, nil
++end
++
+ local function isCandidate(i: Issue): boolean
+ 	return i.state == "backlog" and i.status == "prepared" and i.design == "ready" and i.raft == ""
+ end
+@@ -122,6 +158,169 @@ function raftplan.plan(issues: { Issue }, rafts: { Raft }, cap: number?): ({ Op
+ 			sizeOf[i.id] = i.size
+ 		end
+ 	end
++	-- c0286: the ties, as connected groups of ids over every issue's `tied:` (an id no issue has stays in its group)
++	local issueOf: { [string]: Issue } = {}
++	local raftOf: { [string]: Raft } = {}
++	for _, i in issues do
++		issueOf[i.id] = i
++	end
++	for _, r in rafts do
++		raftOf[r.id] = r
++	end
++	local tparent: { [string]: string } = {}
++	local function tfind(x: string): string
++		tparent[x] = tparent[x] or x
++		while tparent[x] ~= x do
++			tparent[x] = tparent[tparent[x]]
++			x = tparent[x]
++		end
++		return x
++	end
++	local tiedProblem: { [string]: string } = {}
++	for _, i in issues do
++		local ids, problem = raftplan.parseTied(i.tied)
++		if problem then
++			tiedProblem[i.id] = problem
++		end
++		for _, j in ids do
++			if j ~= i.id then
++				local a, b = tfind(i.id), tfind(j)
++				if a ~= b then
++					tparent[a] = b
++				end
++			end
++		end
++	end
++	-- c0286 review 001 F3: the one test of whether a candidate can be planned. The candidate loop skips it with the
++	-- reason, and a tie's verdict counts it as a member still waiting, with the note.
++	local function unplannable(i: Issue): (string?, string?)
++		if i.size == nil then
++			return "no size: (z-design records its estimate of changed lines)", "no size:"
++		end
++		if tiedProblem[i.id] then
++			return tiedProblem[i.id], "tied: unreadable"
++		end
++		if not TYPE_ORDER[i.type] then
++			return `unknown type {i.type}`, `unknown type {i.type}`
++		end
++		return nil, nil
++	end
++	local tieMembers: { [string]: { string } } = {}
++	for x in tparent do
++		local g = tfind(x)
++		tieMembers[g] = tieMembers[g] or {}
++		table.insert(tieMembers[g], x)
++	end
++	for _, list in tieMembers do
++		table.sort(list)
++	end
++	local function tieOf(id: string): { string }?
++		local list = if tparent[id] then tieMembers[tfind(id)] else nil
++		return if list and #list > 1 then list else nil
++	end
++	-- what a tie group does: one op, or a cause every candidate of it is skipped with
++	type Verdict = { op: Op?, cause: string?, emitted: boolean }
++	local verdicts: { [string]: Verdict } = {}
++	local function verdict(list: { string }): Verdict
++		local key = list[1]
++		if verdicts[key] then
++			return verdicts[key]
++		end
++		local v: Verdict = { op = nil, cause = nil, emitted = false }
++		verdicts[key] = v
++		local ref: Issue? = nil
++		for _, id in list do
++			if not issueOf[id] then
++				v.cause = `{id} is not in the tree`
++				return v
++			end
++			ref = ref or issueOf[id]
++		end
++		local first = ref :: Issue
++		for _, id in list do
++			local m = issueOf[id]
++			if m.type ~= first.type or m.root ~= first.root then
++				v.cause =
++					`{id} is a {m.type} of {m.root} and {first.id} a {first.type} of {first.root}: one raft holds one type of one project`
++				return v
++			end
++		end
++		for _, id in list do
++			if issueOf[id].solo then
++				v.cause = `{id} is solo: true, a raft by itself: z-raft with arguments decides`
++				return v
++			end
++		end
++		local candidates: { string } = {}
++		local inRafts: { string } = {}
++		local waiting: { string } = {}
++		for _, id in list do
++			local m = issueOf[id]
++			local _, note = unplannable(m)
++			if isCandidate(m) and not note then
++				table.insert(candidates, id)
++			elseif m.raft ~= "" then
++				if not table.find(inRafts, m.raft) then
++					table.insert(inRafts, m.raft)
++				end
++			elseif m.state ~= "backlog" then
++				v.cause = `{id} is {m.state} with no raft: z-raft with arguments decides`
++				return v
++			elseif isCandidate(m) then
++				table.insert(waiting, `{id} ({note})`)
++			else
++				table.insert(waiting, `{id} ({m.status}, design {m.design or "draft"})`)
++			end
++		end
++		table.sort(inRafts)
++		if #inRafts > 1 then
++			v.cause =
++				`its members are in {table.concat(inRafts, " and ")}: z-raft with arguments decides (./zn recombine)`
++			return v
++		end
++		local into = inRafts[1]
++		if into then
++			local r = raftOf[into]
++			if not r then
++				v.cause = `{into}, which holds some of them, is not in the tree`
++				return v
++			end
++			-- review 001 F4: a raft being rafted (a fold or recombine not landed yet) is waited for, not decided
++			if r.state == "backlog" and r.status == "preparing" and not r.single then
++				v.cause =
++					`{into}, which holds some of them, is being rafted: raft-plan places them once that rafting lands`
++				return v
++			end
++			if r.state ~= "backlog" or r.status ~= "prepared" or r.single then
++				local what = if r.single then "single" else `{r.state}, {r.status}`
++				v.cause = `{into}, which holds some of them, is {what}: z-raft with arguments decides`
++				return v
++			end
++		end
++		if #waiting > 0 then
++			v.cause =
++				`{table.concat(waiting, ", ")} not prepared yet: raft-plan rafts them together when every one is (retry a dispatched member once that rafting has merged)`
++			return v
++		end
++		v.op = if into
++			then {
++				kind = "fold",
++				raft = into,
++				type = first.type,
++				root = first.root,
++				issues = candidates,
++				single = false,
++			}
++			else {
++				kind = "new",
++				raft = nil,
++				type = first.type,
++				root = first.root,
++				issues = candidates,
++				single = false,
++			}
++		return v
++	end
+ 	-- candidates by project and type
+ 	local groups: { [string]: { Issue } } = {}
+ 	local keys: { string } = {}
+@@ -134,15 +333,26 @@ function raftplan.plan(issues: { Issue }, rafts: { Raft }, cap: number?): ({ Op
+ 		if not isCandidate(i) then
+ 			continue
+ 		end
+-		if i.size == nil then
+-			table.insert(
+-				skips,
+-				{ id = i.id, reason = "no size: (z-design records its estimate of changed lines)" }
+-			)
++		local reason = unplannable(i)
++		if reason then
++			table.insert(skips, { id = i.id, reason = reason })
+ 			continue
+ 		end
+-		if not TYPE_ORDER[i.type] then
+-			table.insert(skips, { id = i.id, reason = `unknown type {i.type}` })
++		local tie = tieOf(i.id)
++		if tie then
++			local v = verdict(tie)
++			if v.cause then
++				local others: { string } = {}
++				for _, id in tie do
++					if id ~= i.id then
++						table.insert(others, id)
++					end
++				end
++				table.insert(skips, { id = i.id, reason = `tied to {table.concat(others, ", ")}: {v.cause}` })
++			elseif v.op and not v.emitted then
++				v.emitted = true
++				table.insert(ops, v.op :: Op)
++			end
+ 			continue
+ 		end
+ 		if i.solo or (i.size :: number) > limit then
+@@ -159,6 +369,17 @@ function raftplan.plan(issues: { Issue }, rafts: { Raft }, cap: number?): ({ Op
+ 		end
+ 		table.insert(groups[key], i)
+ 	end
++	-- c0286 review 001 F2: an unreadable `tied:` is named on every backlog issue, prepared or not, so a tie lost to a
++	-- malformed line is never silent
++	for _, i in
++		byId(issues, function(x: Issue): string
++			return x.id
++		end)
++	do
++		if i.state == "backlog" and not isCandidate(i) and tiedProblem[i.id] then
++			table.insert(skips, { id = i.id, reason = tiedProblem[i.id] })
++		end
++	end
+ 	-- open rafts that may take more: prepared in the backlog, not single, every member sized
+ 	local sizeless: { [string]: { Skip } } = {}
+ 	local open: { [string]: { Bin } } = {}
+@@ -168,7 +389,12 @@ function raftplan.plan(issues: { Issue }, rafts: { Raft }, cap: number?): ({ Op
+ 			return x.id
+ 		end)
+ 	do
+-		if r.state == "backlog" and r.status == "prepared" and not r.single then
++		local holdsTie = false
++		for _, m in r.members do
++			holdsTie = holdsTie or tieOf(m) ~= nil
++		end
++		-- c0286: a raft that holds a tied issue is the tie's: the plan folds no other issue into it
++		if r.state == "backlog" and r.status == "prepared" and not r.single and not holdsTie then
+ 			local key = `{r.root}|{r.type}`
+ 			-- review 001 F3: a member with no size: makes the raft's size unknown, so the cap can't be kept: such a
+ 			-- raft takes nothing without an argument, and the plan says so where it would have been considered
+diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
+index 668b34d80..300bfe359 100644
+--- a/z-nile/skills/z-design/SKILL.md
++++ b/z-nile/skills/z-design/SKILL.md
+@@ -43,7 +43,7 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
+   - **Observed**: minimal Studio steps.
+   Push hard to turn Judged and Observed criteria into measurable proxies (see the zz-test skill).
+ - **Implementation steps**: small, ordered, and each one verifiable.
+-- **Size and solo** (frontmatter, for z-raft): `size: <n>`, your estimate of the changed lines the executor will count (code, skills and docs; the acceptance specs, `check.sh` and experiments you write here are prep's and not counted). z-raft sums them against its cap of about 1,500 lines, and an issue over it is a raft by itself, never split. `solo: true` only when a recorded user decision says the issue lands as its own raft (a `Decided with the user` line such as "the work lands as sequenced rafts"); z-raft never folds a solo issue with others.
++- **Size and solo** (frontmatter, for z-raft): `size: <n>`, your estimate of the changed lines the executor will count (code, skills and docs; the acceptance specs, `check.sh` and experiments you write here are prep's and not counted). z-raft sums them against its cap of about 1,500 lines, and an issue over it is a raft by itself, never split, unless it is tied. `solo: true` only when a recorded user decision says the issue lands as its own raft (a `Decided with the user` line such as "the work lands as sequenced rafts"); z-raft never folds a solo issue with others. `tied: [<ids>]`, as the line after `id:`, when a recorded user decision ties the issue to others in one raft (a split's `Scope decision` such as "tie them together in a raft"): name every other issue of the tie, prepared or not, so whichever is prepared first carries it; z-raft's plan rafts none of them until every one is prepared, then all of them as one raft.
+ 
+ ## 4. Write the executable acceptance
+ - **Issue checks**: `check.sh` for each issue, with one `check "ACn: …"` per Checked criterion.
+diff --git a/z-nile/skills/z-raft/SKILL.md b/z-nile/skills/z-raft/SKILL.md
+index c56ffc9de..90df7297c 100644
+--- a/z-nile/skills/z-raft/SKILL.md
++++ b/z-nile/skills/z-raft/SKILL.md
+@@ -15,11 +15,12 @@ Work in a rafting worktree: `cd "$(./zn worktree raft-<slug>)"` (any short slug,
+   - one type per raft and one project per raft; a raft that is not prepared in the backlog (new, being prepared, active or done) is never pulled in, and a `single: true` raft never takes another issue;
+   - defects fold into one open prepared defect raft (the lowest id that still fits), and chores fold the same way;
+   - features group only when they share a surface: a Touched path of one overlaps a Touched path of another (or of an open feature raft's member), taken as connected groups; an issue with no Touched modules shares nothing;
+-  - a raft that would pass about 1,500 changed lines (the sum of its members' `size:`) starts another; an issue estimated over that is a raft by itself and is never split;
++  - a raft that would pass about 1,500 changed lines (the sum of its members' `size:`) starts another; an issue estimated over that is a raft by itself and is never split, unless it is tied (below);
+   - an open raft with a member that has no `size:` takes nothing, because the cap can't be kept: the plan prints `skip <R-id>: <member> has no size:, …` and opens another raft instead (with an argument you may still `fold` into it);
+   - a `solo: true` issue is always a raft by itself (it records a user decision, such as sequenced rafts), and nothing is ever folded into a raft that holds one;
++  - issues tied together are one raft: an issue's `tied: [<ids>]` (a recorded user decision that they land as one raft, written by z-design) ties it to each issue it names, both ways, and a tie is every issue those lines connect, whatever its state. While any member is not prepared, the plan prints `skip <id>: tied to …` for each prepared one, naming the members it waits for; once every member is prepared they are one raft, whatever their size or surface, or are folded into the one open raft that already holds some of them. A tie one raft can't hold (two types or projects, a solo member, members in two rafts or in a raft that is not open) is skipped and named, for z-raft with arguments to decide; a tie some of which a raft being rafted holds waits until that rafting lands; and a raft that holds a tied issue takes no other issue from the plan. Under `./zn dispatch`, each member prepared before the last stops at its `raft-plan` step on that skip, and the last member's own `raft-plan` step rafts the whole tie; retry a stopped member (`./zn dispatch retry <id>`) only once that rafting PR has merged, when it follows the raft (a retry before then plans the same tie again, a second raft). If the last member was prepared outside the dispatcher, run `raft-plan` once, or retry one stopped member, not each;
+   - an issue with no `size:` is skipped and named: send it back to z-design.
+-- **With arguments, it does what was asked**: which issues and rafts are grouped is the caller's choice, overriding the fold and surface rules and the cap. The tracker's rules always hold, because the commands enforce them: one type, backlog only, one project, and solo issues alone. So `z-raft c0001 c0002` is `./zn new raft <type> <slug> c0001 c0002 --project <name>`, `z-raft R0010 c0003` is `./zn fold R0010 c0003`, and `z-raft recombine R0010 R0020 [<issue>…]` is `./zn recombine R0010 R0020 [<issue>…]`.
++- **With arguments, it does what was asked**: which issues and rafts are grouped is the caller's choice, overriding the fold and surface rules, the cap and the ties (`tied:`). The tracker's rules always hold, because the commands enforce them: one type, backlog only, one project, and solo issues alone. So `z-raft c0001 c0002` is `./zn new raft <type> <slug> c0001 c0002 --project <name>`, `z-raft R0010 c0003` is `./zn fold R0010 c0003`, and `z-raft recombine R0010 R0020 [<issue>…]` is `./zn recombine R0010 R0020 [<issue>…]`.
+ 
+ ## 2. Claim and group
+ Run the plan's commands in order (`./zn raft-plan --apply` runs them all), or the ones the arguments name:
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index d009a1d87..a627b1457 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -87,7 +87,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | capture | `./zn capture <id>` | read-only. Prints `capture <sha> <path> <subject>` and then the item's document as captured: the newest commit on `origin/main` (`HEAD` without one) whose subject is `tracker: new` with the item's id in its leading id list (`tracker: new raft …` and `tracker: scope …` are not captures), or else the document's first add. It reads the item's backlog, `active/` and `done/` folders, under the item's current id only: no id change (a compaction or a `renumber`) is followed. The header line says when the answer is weaker: it ends `(no capture commit: first add)` when no commit is a capture (a renumbered item, or one made before captures had that subject), `(ambiguous: two items held this id at once)` when the id had two copies, and `(history before <sha> not followed: it changed tracker/compaction.txt)` when the item's life starts at a commit that changed the compaction map and its document. A legacy slug-named document counts. Exit 1 for an id with no history |
+ | lessons | `./zn lessons [--skill <s>]... [--when design\|build] [--tag <t>]... [--full] [<word>...]`, `--tags`, `--check`, `--uncovered [<id>...]` | read-only. Lists the skill lessons (most sources first), shows them in full, lists tags, validates every lesson and `harvest.md` (`--check`, exit 1 on a problem), or lists the review findings no `harvest.md` entry covers (`--uncovered`, exit 1 if any) |
+ | skills | `./zn skills [--check]` | writes `.claude/skills/` as one relative link per skill folder (`z-nile/skills/*` and every project's `<project>/skills/*`) and removes anything else there, or, with `--check`, writes nothing and exits 1 naming each missing, extra, wrong or non-link entry. Both refuse a skill folder without a `SKILL.md`, a `name:` that differs from its folder, a name two folders share, and a project skill not named `<project>-…`. The gate runs `--check`; `skills` without it refuses in the main checkout of a repository with an origin, like `new` |
+-| raft-plan | `./zn raft-plan [--apply]` | read-only without `--apply`. Prints z-raft's no-argument plan for every prepared issue with no raft, as the commands that carry it out (`./zn fold <R-id> <ids…>`, `./zn new raft <type> <slug> <ids…> [--single] --project <name>`), and `skip <id>: <why>` for an issue it can't place (no `size:`) or an open raft it won't fold into (a member with no `size:`); `raft-plan: nothing to raft` when there is none. `--apply` runs them in order, in a worktree. The policy is z-raft's (one type and one project per raft, backlog prepared rafts only, defects and chores folded, features by shared surface, the size cap, solo issues alone) |
++| raft-plan | `./zn raft-plan [--apply]` | read-only without `--apply`. Prints z-raft's no-argument plan for every prepared issue with no raft, as the commands that carry it out (`./zn fold <R-id> <ids…>`, `./zn new raft <type> <slug> <ids…> [--single] --project <name>`), and `skip <id>: <why>` for an issue it can't place (no `size:`, or tied to an issue that is not prepared), for any backlog issue whose `tied:` it can't read, prepared or not, or an open raft it won't fold into (a member with no `size:`); `raft-plan: nothing to raft` when there is none. `--apply` runs them in order, in a worktree. The policy is z-raft's (one type and one project per raft, backlog prepared rafts only, defects and chores folded, features by shared surface, the size cap, solo issues alone, tied issues together) |
+ | fold | `./zn fold <R-id> <issue>...` | in a worktree, on a clean tree. Puts prepared backlog issues with no `raft:` into a prepared backlog raft of their type and project: publishes the raft's claim (its `status:` only; a raft this checkout already claimed is not claimed again), then writes each issue's `raft:` and the raft's `issues:` here and commits. Refuses a solo issue with others, and a raft that is new, being prepared, active or done |
+ | unfold | `./zn unfold <R-id> <issue>...` | in a worktree, on a clean tree. Takes members out of a backlog raft: claims it as `fold` does, then empties each issue's `raft:`, drops it from `issues:` and `grouped:` here and commits. The route back to z-design for a rafted issue, during a rafting or after it landed |
+ | recombine | `./zn recombine <keeper> <other> [<issue>...]` | in a worktree, on a clean tree. Moves the named members of the other backlog raft, or all of them, into the keeper (same project and type, both prepared or new, every member prepared). Publishes one fresh `preparing-…` stamp on both rafts (status lines only), then writes the moves here and commits; the other raft is retired only when it ends up empty: its folder moves to `<root>/rafts/retired/<R-id>` in this branch, with `retired: <keeper>`, keeping its reviews, refutes and `harvest.md` (read by `lessons` and `metrics`, never by `find`, the board or the plan) |
