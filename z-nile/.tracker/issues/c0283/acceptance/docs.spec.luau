@@ -26,6 +26,9 @@ return t.spec("c0283 the texts", function(it)
 			"in the same `tracker: approve` commit",
 			"It records no words.",
 			"run `./zn sync` in the prep worktree: it unites the records",
+			"`./zn approve <id> --publish` publishes `approval.md` and that approved row to `origin/main` in one commit",
+			"only in the commit that appends the matching `approval.md` row",
+			"`./zn provenance record` never publishes one",
 		})).toEqual({})
 	end)
 
