@@ -11,3 +11,77 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-14 18:50	c0276: board shows lost work	13	1	build							tokens,wall,cpu,ai
 2026-11-14 19:32	R0100: review-003	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
 2026-11-14 19:32	c0276: review-003 F2 comment, README, deviation record	0	1	build							tokens,wall,cpu,ai
+2026-11-14 19:34	1 spec	0	0	test			1.234	0.620		1.234	tokens,ai
+2026-11-14 19:35	1 spec	0	0	test			41.084	32.030		41.084	tokens,ai
+2026-11-14 19:35	1 spec	0	0	test			16.332	12.800		16.332	tokens,ai
+2026-11-14 19:36	2 specs	0	0	test			37.570	22.660		37.570	tokens,ai
+2026-11-14 19:37	1 spec	0	0	test			42.750	33.890		42.750	tokens,ai
+2026-11-14 19:37	2 specs	0	0	test			37.371	33.990		37.371	tokens,ai
+2026-11-14 19:38	137 specs	0	0	test			60.500	249.230		60.500	tokens,ai
+2026-11-14 19:38	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-14 20:05	R0100: review-004	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-14 20:09	1 spec	0	0	test			34.696	27.180		34.696	tokens,ai
+2026-11-14 20:09	1 spec	0	0	test			35.324	28.090		35.324	tokens,ai
+2026-11-14 20:10	affected	0	0	test			5.169	39.230		5.169	tokens,ai
+2026-11-14 20:10	affected	0	0	test			4.988	39.460		4.988	tokens,ai
+2026-11-14 20:11	affected	0	0	test			4.787	39.990		4.787	tokens,ai
+2026-11-14 20:11	6 runs	0	0	other			86.168	174.290			tokens,ai
+2026-11-14 20:11	c0277: review-004 F1-F4: -z status reader, sweep keeps unproven paths, skills agree	276	38	code-review							tokens,wall,cpu,ai
+2026-11-14 20:11	1 spec	0	0	test			1.035	0.600		1.035	tokens,ai
+2026-11-14 20:12	1 spec	0	0	test			39.381	30.920		39.381	tokens,ai
+2026-11-14 20:12	1 spec	0	0	test			15.713	12.340		15.713	tokens,ai
+2026-11-14 20:13	2 specs	0	0	test			36.615	22.380		36.615	tokens,ai
+2026-11-14 20:13	1 spec	0	0	test			41.861	33.270		41.861	tokens,ai
+2026-11-14 20:14	2 specs	0	0	test			36.936	33.940		36.936	tokens,ai
+2026-11-14 20:15	138 specs	0	0	test			65.592	322.280		65.592	tokens,ai
+2026-11-14 20:15	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-14 20:19	affected	0	0	test			71.794	357.710		71.794	tokens,ai
+2026-11-14 20:19	1 spec	0	0	test			1.037	0.620		1.037	tokens,ai
+2026-11-14 20:19	2 specs	0	0	test			23.280	35.210		23.280	tokens,ai
+2026-11-14 20:20	1 spec	0	0	test			49.363	36.160		49.363	tokens,ai
+2026-11-14 20:22	1 spec	0	0	test			85.515	25.190		85.515	tokens,ai
+2026-11-14 20:22	1 spec	0	0	test			1.015	0.590		1.015	tokens,ai
+2026-11-14 20:23	1 spec	0	0	test			53.293	41.030		53.293	tokens,ai
+2026-11-14 20:24	1 spec	0	0	test			68.746	54.980		68.746	tokens,ai
+2026-11-14 20:24	2 specs	0	0	test			1.027	0.690		1.027	tokens,ai
+2026-11-14 20:25	1 spec	0	0	test			66.600	51.870		66.600	tokens,ai
+2026-11-14 20:25	3 specs	0	0	test			33.471	31.200		33.471	tokens,ai
+2026-11-14 20:25	1 spec	0	0	test			1.041	0.620		1.041	tokens,ai
+2026-11-14 20:26	1 spec	0	0	test			23.091	18.520		23.091	tokens,ai
+2026-11-14 20:26	14 specs	0	0	test			22.101	35.730		22.101	tokens,ai
+2026-11-14 20:26	1 spec	0	0	test			1.026	0.600		1.026	tokens,ai
+2026-11-14 20:27	1 spec	0	0	test			39.588	31.160		39.588	tokens,ai
+2026-11-14 20:27	1 spec	0	0	test			16.103	12.440		16.103	tokens,ai
+2026-11-14 20:28	2 specs	0	0	test			36.822	22.350		36.822	tokens,ai
+2026-11-14 20:28	1 spec	0	0	test			41.894	33.350		41.894	tokens,ai
+2026-11-14 20:29	2 specs	0	0	test			36.199	33.250		36.199	tokens,ai
+2026-11-14 20:29	1 spec	0	0	test			1.028	0.740		1.028	tokens,ai
+2026-11-14 20:29	1 spec	0	0	test			1.018	0.690		1.018	tokens,ai
+2026-11-14 20:30	1 spec	0	0	test			1.048	0.710		1.048	tokens,ai
+2026-11-14 20:50	12 specs	0	0	test			757.263	513.510		757.263	tokens,ai
+2026-11-14 21:42	1 spec	0	0	test			1.037	0.660		1.037	tokens,ai
+2026-11-14 22:06	affected	0	0	test			8.494	43.310		8.494	tokens,ai
+2026-11-14 22:06	1 spec	0	0	test			1.032	0.600		1.032	tokens,ai
+2026-11-14 22:07	1 spec	0	0	test			40.944	31.850		40.944	tokens,ai
+2026-11-14 22:07	1 spec	0	0	test			16.940	13.150		16.940	tokens,ai
+2026-11-14 22:08	2 specs	0	0	test			38.746	24.040		38.746	tokens,ai
+2026-11-14 22:09	1 spec	0	0	test			44.661	35.310		44.661	tokens,ai
+2026-11-14 22:09	2 specs	0	0	test			37.189	34.470		37.189	tokens,ai
+2026-11-14 22:10	140 specs	0	0	test			66.809	324.600		66.809	tokens,ai
+2026-11-14 22:06	59 runs	0	0	other			3762.605	2536.620			tokens,ai
+2026-11-14 22:10	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-14 23:02	R0100: addressed during execution, c0276 spec note	0	0	code-review							tokens,wall,cpu,ai
+2026-11-15 08:30	R0100: refute-005 names c0338	0	0	code-review							tokens,wall,cpu,ai
+2026-11-15 08:32	affected	0	0	test			100.851	456.540		100.851	tokens,ai
+2026-11-15 08:32	1 spec	0	0	test			1.023	0.720		1.023	tokens,ai
+2026-11-15 08:33	1 spec	0	0	test			46.982	38.120		46.982	tokens,ai
+2026-11-15 08:33	1 spec	0	0	test			29.699	24.260		29.699	tokens,ai
+2026-11-15 08:34	2 specs	0	0	test			59.099	53.830		59.099	tokens,ai
+2026-11-15 08:35	1 spec	0	0	test			46.765	38.260		46.765	tokens,ai
+2026-11-15 08:35	2 specs	0	0	test			38.171	36.790		38.171	tokens,ai
+2026-11-15 08:37	141 specs	0	0	test			81.229	419.070		81.229	tokens,ai
+2026-11-15 08:32	1 run	0	0	other			101.049	456.590			tokens,ai
+2026-11-15 08:37	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-15 09:56	R0100: final refute, trace for the top layer	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-15 16:40	R0100: refresh shas in final refute and trace	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-15 16:46	R0100: refresh shas again	1599	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai

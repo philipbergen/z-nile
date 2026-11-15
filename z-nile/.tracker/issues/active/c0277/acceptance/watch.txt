@@ -1,3 +1,5 @@
 z-nile/engine/dispatcher.luau
 z-nile/engine/heartbeat.luau
 z-nile/engine/main.luau
+z-nile/engine/work.luau
+z-nile/tests/lib/cachepaths.luau

@@ -776,12 +776,39 @@ local function keepBeating(dir: string): () -> ()
 	end
 end
 
+-- True when `<main>/.worktree/<name>-discarded-<n>` (the renamed worktree of a takeover) holds a discard marker naming `id`.
+function dispatcher.discardMarked(root: string, cwd: string, id: string): boolean
+	local name = string.match(cwd, "([^/]+)/*$")
+	if not name or not fs.isDir(`{root}/.worktree`) then
+		return false
+	end
+	local prefix = `{name}-discarded-`
+	for _, entry in fs.readDir(`{root}/.worktree`) do
+		if
+			string.sub(entry, 1, #prefix) == prefix and string.match(string.sub(entry, #prefix + 1), "^%d+$")
+		then
+			local read, text = pcall(fs.readFile, `{root}/.worktree/{entry}/{heartbeat.DISCARDED}`)
+			local d = if read then heartbeat.discardParse(text) else nil
+			if d and table.find(d.items, id) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 -- c0275: while a model step works an item, the dispatcher beats for it, so a claim whose model thinks for minutes between
 -- two `./zn` commands never reads lost. Every INTERVAL one child (`zn beat <id> --adopt --stamp <S>` under `./zn run
 -- --time 60`, one at a time; a hung remote cannot stall the supervising loop because the child runs in a task of its own)
 -- beats the claim `S` the step's worktree remembers, else the one main showed when the step started. A claim restamped
 -- mid-step is refused by the child: the dispatcher stops beating and says so once. Returns the function that stops it.
-function dispatcher.claimBeat(ctx: Ctx, id: string, cwd: string, started: string?): () -> ()
+function dispatcher.claimBeat(
+	ctx: Ctx,
+	id: string,
+	cwd: string,
+	started: string?,
+	onDiscard: ((boolean) -> ())?
+): () -> ()
 	local running = true
 	if id == "" then
 		return function() end
@@ -792,6 +819,25 @@ function dispatcher.claimBeat(ctx: Ctx, id: string, cwd: string, started: string
 		local said = false
 		while running do
 			local at = os.time()
+			if not fs.isDir(cwd) or fs.isFile(`{cwd}/{heartbeat.DISCARDED}`) then
+				-- c0277: a takeover discarded this step's worktree (renamed: its path is gone). Nothing beats from it, and
+				-- an empty memory would only make the beat fall back to the stamp the step started with
+				-- the folder is also gone when someone removed it (`git worktree remove`, a prune): only a discard marker for this
+				-- item in the renamed family member says a takeover happened
+				local taken = fs.isFile(`{cwd}/{heartbeat.DISCARDED}`)
+					or dispatcher.discardMarked(ctx.mainRoot(), cwd, id)
+				if taken then
+					stdio.ewrite(
+						`dispatch: {id}: the step's worktree was discarded (the claim was taken over): not beating\n`
+					)
+				else
+					stdio.ewrite(`dispatch: {id}: the step's worktree is gone: not beating\n`)
+				end
+				if onDiscard then
+					onDiscard(taken) -- the chain stops here, as it does on a question: it must not start its next step in the taker's copy
+				end
+				return
+			end
 			if heartbeat.due(last, at, every) then
 				last = at
 				local remembered = if ctx.memoryIn then ctx.memoryIn(cwd, id) else ""
@@ -1038,7 +1084,16 @@ function dispatcher.modelStep(
 				startedStamp = nil
 			end
 		end
-		local stopClaimBeat = dispatcher.claimBeat(ctx, id, cwd, startedStamp)
+		local stopClaimBeat = dispatcher.claimBeat(ctx, id, cwd, startedStamp, function(taken)
+			local what = if taken
+				then `was discarded: {id}'s claim was taken over while the step ran, and the taker works in a copy. Nothing was started in the copy. Decide whether the dispatcher should continue the chain on the taker's claim (\`./zn dispatch retry {id}\` after you answer here) or leave the item to the taker.`
+				else `is gone, and no takeover marked it: someone removed it while the step ran. Nothing more was started. Decide whether to restart the step (\`./zn dispatch retry {id}\` after you answer here).`
+			pcall(
+				fs.writeFile,
+				`{stateDir}/questions.md`,
+				`## Q1\nThe worktree of this step ({cwd}) {what}\n`
+			)
+		end)
 		local trailPath = `{stateDir}/trail.log`
 		local trail = if fs.isFile(trailPath) then fs.readFile(trailPath) else ""
 		local function noteLine(line: string, tokens: number)
