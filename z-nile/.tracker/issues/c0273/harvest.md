@@ -1,0 +1,6 @@
+- design-review-001 F1: z-design/new-refusals-reach-every-caller
+- design-review-001 F2: z-design/restated-rules-move-together
+- design-review-001 F3: z-design/mutant-ids-match-the-runner
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: zz-arch/fail-closed-lines-name-the-cause
+- design-review-001 F6: z-design/prep-experiments-run-in-standalone-clones
