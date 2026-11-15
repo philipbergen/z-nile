@@ -2,7 +2,7 @@
 title: Instructions must be runnable where they are read
 when: design
 tags: [skills, worktrees]
-check: Can every agent told to do this do it from where it runs and in the role it has (a read-only main checkout, a capture that lands only issue documents, a reviewer or stream subagent that may not publish), and without breaking a project rule? And does every step that runs specs before the issue's code exists name the cases expected to pass then, and what a failure means?
+check: Can every agent told to do this do it from where it runs and in the role it has (a read-only main checkout, a capture that lands only issue documents, a reviewer or stream subagent that may not publish), and without breaking a project rule? And does every step that runs specs before the issue's code exists name the cases expected to pass then, and what a failure means? And does every experiment the design records name the exact bounded command it was run with (`./zn run --time <s> -- ...`), in the design and in the script's own header? And can a fresh session that resumes the work (a `./zn dispatch retry`, a new terminal) apply the rule from what is on disk and on origin, or does it lean on a memory of "what you did" that only the first session had?
 ---
 An instruction added to many skills has to fit each skill's context. Writing a file is impossible in the main checkout, cannot land through a capture, and is forbidden to a reviewer. Where the action cannot happen, route it to something that can land (an issue, the author's harvest).
 
@@ -23,3 +23,7 @@ f0126 design review 008 F3: step 1 ran f0126's touch specs "first", on dependenc
 Run the replacement instruction on the failure it answers (c0263 design review 009 F3): a text changed from "resolve it with git merge" to "run ./zn sync" looped, because the sync that aborted left nothing to resolve; after the abort, can the user do what the text says, and does the next command then succeed?
 
 Whose operation it is (c0263 design review 013 F1): a stop message in a helper that can be called while the user's own git operation is in progress must give the advice that fits that operation: "commit or stash" is right for a merge the helper started and aborts, and wrong for the user's hand merge (a commit keeps git's wrong pairing, a stash discards the merge); in each state that reaches a stop message, follow the advice and check the next command.
+
+**Note (c0270 design review 001 F1):** a rule that called a `preparing` claim "another prep" unless "you made it" sent every dispatched retry of a prep to `questions.md`: the retried session made nothing yet, and nothing records who made a claim. Say what a resuming session reads instead (the dispatcher starts z-design on a claim only after its own chain's z-design step).
+
+**Note** (c0226 design review 001, the reviewer's candidate): an inline shell recipe an agent is told to type runs in the agent's shell, which is the user's (zsh here), not bash. `for v in $(compgen -e …)` fails there with `compgen not found` and silently loops over nothing. Ask: does every inline recipe in a step or experiment run under the shell it was written for (`bash -c '…'`, or a script with a bash shebang)?

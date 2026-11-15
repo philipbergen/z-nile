@@ -1,0 +1,5 @@
+- design-review-001 F1: zz-test/seed-every-enumerated-case
+- design-review-001 F2: zz-test/source-pins-name-what-the-design-names
+- design-review-001 F3: zz-test/nothing-lost-compares-sets
+- design-review-001 F4: one-off: a comment's arithmetic in the prototype disagreed with the assertion under it; fixed in the patch
+- note the first draft of mutants.luau built its copy under the home's .cache, which a check script must not do, and leaked it on an error: zz-test/check-scripts-copy-trees-outside-the-repo

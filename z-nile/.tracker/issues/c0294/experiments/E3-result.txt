@@ -1,0 +1,49 @@
+# E3 (2026-11-15): lesson-reading specs on the prototype (proto-c0294 off origin/main a965dee5, with the lesson, the note and prep's z-design lesson), after design review 001
+PASS tests/acceptance/c0111/trail.spec.luau: 7 passed, 0 failed
+PASS tests/acceptance/c0111/lesson-format.spec.luau: 3 passed, 0 failed
+PASS tests/acceptance/c0111/harvest.spec.luau: 8 passed, 0 failed
+PASS tests/acceptance/c0111/select.spec.luau: 3 passed, 0 failed
+PASS tests/acceptance/c0111/skill-docs.spec.luau: 5 passed, 0 failed
+PASS tests/acceptance/c0119/scope-docs.spec.luau: 9 passed, 0 failed
+PASS tests/acceptance/c0119/scope-lessons.spec.luau: 1 passed, 0 failed
+PASS tests/tooling/lessons-hidden.spec.luau: 1 passed, 0 failed
+PASS tests/acceptance/c0115/lessons.spec.luau: 13 passed, 0 failed
+PASS tests/acceptance/c0111/metrics-lessons.spec.luau: 5 passed, 0 failed
+FAIL tests/acceptance/c0184/skills.spec.luau :: AC6: the prompt of a raft in a project whose skill extends another names that skill and its base
+     proto-c0294/z-nile/tests/acceptance/c0184/skills.spec:133: expected true, got false
+FAIL tests/acceptance/c0184/skills.spec.luau: 2 passed, 1 failed
+FAIL tests/acceptance/c0111/prompt-lessons.spec.luau :: ready names the search and pastes no lesson, and a bad lesson does not stop it
+     proto-c0294/z-nile/tests/acceptance/c0111/prompt-lessons.spec:60: tracker ready: Operation not permitted (os error 1)
+FAIL tests/acceptance/c0111/prompt-lessons.spec.luau :: a tree with no lessons still readies, and still does not invent an index
+     proto-c0294/z-nile/tests/acceptance/c0111/prompt-lessons.spec:78: tracker ready: Operation not permitted (os error 1)
+FAIL tests/acceptance/c0111/prompt-lessons.spec.luau: 0 passed, 2 failed
+PASS tests/acceptance/c0111/lessons-cli.spec.luau: 12 passed, 0 failed
+PASS tests/acceptance/c0115/skills.spec.luau: 18 passed, 0 failed
+FAIL tests/acceptance/c0119/capture-cli.spec.luau :: sets up a fixture whose items were captured, prepped, migrated, compacted and moved
+FAIL tests/acceptance/c0119/capture-cli.spec.luau :: never follows a compaction: it marks the start, and keeps a reused number to its own item
+     proto-c0294/z-nile/tests/acceptance/c0119/capture-cli.spec:71: invalid argument #1 to 'find' (string expected, got nil)
+FAIL tests/acceptance/c0119/capture-cli.spec.luau :: does not follow a renumber, and marks what it cannot settle
+     proto-c0294/z-nile/tests/acceptance/c0119/capture-cli.spec:311: expected "capture nil pickman/.tracker/issues/c0061/c0061.md R0060: prep, with a renumber (no capture commit: first add)", got nil
+FAIL tests/acceptance/c0119/capture-cli.spec.luau :: starts a life at the last appearance or at a commit that changed the map and the document
+     proto-c0294/z-nile/tests/acceptance/c0119/capture-cli.spec:332: expected true, got false
+FAIL tests/acceptance/c0119/capture-cli.spec.luau: 6 passed, 4 failed
+93 passed, 7 failed, 15 spec files
+
+## the three failing files on the prep tree without the lesson (before review 001, same messages)
+FAIL tests/acceptance/c0184/skills.spec.luau :: AC6: the prompt of a raft in a project whose skill extends another names that skill and its base
+     prep-lesson-moved-part-rewrites-owner/z-nile/tests/acceptance/c0184/skills.spec:133: expected true, got false
+FAIL tests/acceptance/c0184/skills.spec.luau: 2 passed, 1 failed
+FAIL tests/acceptance/c0111/prompt-lessons.spec.luau :: ready names the search and pastes no lesson, and a bad lesson does not stop it
+     prep-lesson-moved-part-rewrites-owner/z-nile/tests/acceptance/c0111/prompt-lessons.spec:60: tracker ready: Operation not permitted (os error 1)
+FAIL tests/acceptance/c0111/prompt-lessons.spec.luau :: a tree with no lessons still readies, and still does not invent an index
+     prep-lesson-moved-part-rewrites-owner/z-nile/tests/acceptance/c0111/prompt-lessons.spec:78: tracker ready: Operation not permitted (os error 1)
+FAIL tests/acceptance/c0111/prompt-lessons.spec.luau: 0 passed, 2 failed
+FAIL tests/acceptance/c0119/capture-cli.spec.luau :: sets up a fixture whose items were captured, prepped, migrated, compacted and moved
+FAIL tests/acceptance/c0119/capture-cli.spec.luau :: never follows a compaction: it marks the start, and keeps a reused number to its own item
+     prep-lesson-moved-part-rewrites-owner/z-nile/tests/acceptance/c0119/capture-cli.spec:71: invalid argument #1 to 'find' (string expected, got nil)
+FAIL tests/acceptance/c0119/capture-cli.spec.luau :: does not follow a renumber, and marks what it cannot settle
+     prep-lesson-moved-part-rewrites-owner/z-nile/tests/acceptance/c0119/capture-cli.spec:311: expected "capture nil pickman/.tracker/issues/c0061/c0061.md R0060: prep, with a renumber (no capture commit: first add)", got nil
+FAIL tests/acceptance/c0119/capture-cli.spec.luau :: starts a life at the last appearance or at a commit that changed the map and the document
+     prep-lesson-moved-part-rewrites-owner/z-nile/tests/acceptance/c0119/capture-cli.spec:332: expected true, got false
+FAIL tests/acceptance/c0119/capture-cli.spec.luau: 6 passed, 4 failed
+8 passed, 7 failed, 3 spec files

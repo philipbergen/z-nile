@@ -1,0 +1,7 @@
+- review-001 F1: z-design/a-fix-that-removes-a-workaround-reopens-its-steps
+- review-001 F2: zz-test/specs-read-sources-through-the-selector
+- final-review-001 F1: z-design/rerun-skipped-checks-after-edits
+- final-review-001 F2: zz-review/not-stacked-is-main-moving
+- final-review-001 F3: z-design/spec-design-correspondence
+- final-review-001 F4: zz-test/done-fixtures-commit-in-finish-order
+- final-review-001 F5: one-off: d0366's outcome is delivered on this layer; closing the backlog ticket is a tracker move on main, named for the user to withdraw

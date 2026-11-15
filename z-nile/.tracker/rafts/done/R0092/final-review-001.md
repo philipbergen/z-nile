@@ -1,0 +1,63 @@
+# Review 001: R0092 (final mode)
+Inputs: the finished stack, one layer `R0092/1/c0264` at 1264f8e5e ("c0264: README states z-nile's intent"), stacked on origin/main 672423a05 after `./zn sync --fetch`; `git diff origin/main...HEAD` (10 files); `R0092.md`, `c0264.md`, `c0264/check.sh`, `c0264/acceptance/*.spec.luau`, `diagram.txt`, `legend.txt`, `experiments/README.draft.md`; `./zn capture c0264` (c8c784041, no marker); `review-001.md` and `refute-001.md`; to judge the `*exists*` sentences: `.models.toml`, `z-nile/engine/idea.luau`, `work.luau`, `models.luau`, `contract.luau`, `trace.luau`, `trail.luau`, `readycheck.luau`, `main.luau` (`done`, `traceProblems`), `z-nile/skills/z-work/SKILL.md`.
+
+Commands run at 1264f8e5e:
+- `./zn trace R0092`: exit 1, no skeleton: `row c0264, claim: ticket c0264 is missing captured ## Solution` (F1).
+- `./zn trace R0092 --check`, on the `trace.md` I filled (P1 and AC1 to AC12): exit 1, that same single line.
+- `./zn check c0264`: 10/10. `./zn check R0092`: 3/3. `./zn approve c0264 --check`: the approval of 2026-11-14 holds (1e0ab8f2…).
+- The 17 specs that read the README, run directly from `z-nile/` (the 15 acceptance specs and 2 tooling specs review 001 lists): 111 passed, 0 failed.
+- `./zn lessons --uncovered R0092`: every finding covered. `./zn lessons --check`: ok.
+- Sequestration: one path, `A …/c0264/acceptance/watch.txt`, written by `./zn finish`. No `check.sh` or spec changed.
+
+### F1 [high] The trace cannot be verified: c0264's capture has no `## Solution`, so `./zn trace` derives no table and `./zn done R0092` refuses the stack
+Where: `./zn capture c0264` (c8c784041, `tracker: new c0264 readme-states-znile-intent`); `z-nile/engine/trace.luau:388-390`; `z-nile/engine/trail.luau:268-276`; `z-nile/engine/main.luau:5080-5083` (`done` runs the same check).
+Evidence:
+- The capture commit is the stub `./zn new --desc` wrote: a one-sentence Problem, and under `## Solution` only the template comment. `deriveClaims` reads Problem and Solution from the capture and has no fallback ("no vacuous fallback", trace.luau:31-33), so it reports `ticket c0264 is missing captured ## Solution` before it reads any row. `./zn trace R0092` therefore prints no skeleton, and `./zn trace R0092 --check` fails whatever the table says.
+- The scope the user set was written four and a half hours after the stub, by 081392e0f ("tracker: capture workers carry rafts to merge …", #258). It rewrote the Problem (the verbatim ask and its outcome bullets) and wrote the Solution ("Keep the README's labels …; nothing new is described as built."). `trail.capture` accepts only a subject that starts `tracker: new <id>`, so #258 is not the capture.
+- No row closes the gap. An `S1` row answers `unknown claim c0264:S1`. A `not met` row needs a claim to sit on, and the tool derives none.
+- The table that can be written is thinner than the ticket: one P row (the stub's sentence), where the Problem the user approved has about twenty outcomes and the Solution one rule. I judged those by hand (Substance, below). All are delivered, so this finding is about the gate, not about the README.
+- It is a class. Of the 46 open issues with `design: ready`, 26 have a capture with no Solution: d0149 f0158 c0139 c0181 c0189 c0260 c0274 c0275 c0276 c0277 c0280 c0282 c0283 c0284 d0298 c0121 c0122 c0134 c0138 c0161 c0173 c0174 c0178 c0192 c0193 c0264. c0193 is in an active raft. c0301 says no raft has landed through the trace yet; this is the first to reach `done` with a ticket captured before the idea stage.
+Critique: The raft's exit criterion is "`./zn done R0092` succeeds", and `done` fails on this line. Nothing the author may change removes it. The capture is history on `main`. The document's Problem and Solution are inputs of the approval hash (contract.luau:26), and the tool reads the capture, not the document, anyway. The tempting fix is to give `deriveClaims` the document's Solution as a fallback inside this raft. That puts a source change to a gate into a README chore: the stack then has a changed source file, every code cell stops being `none`, and a rule #297 chose on purpose is reversed with no design and no spec.
+Consequences, of each way out:
+- (a) Re-land the capture: a commit on `main` whose subject starts `tracker: new c0264` and that changes `c0264.md` becomes the capture (`trail.capture` takes the newest such commit). The capture is then the whole document of that commit. The P claims become every paragraph and bullet of the Problem above the first `Decided with the user` line, 21 rows (two opening paragraphs, 15 bullets, the four quoted messages), and S1 is the Solution line. The layer must restack onto the moved `main`, so the finish sha and `Commit:` change and the table is rebuilt from the new skeleton. The commit must change the file somewhere: a change in Problem, Solution, Design, Acceptance criteria or Test plan voids the approval. `./zn capture c0264` afterwards shows a text that holds prep's Design, which changes what "the capture" means for this ticket. It is a one-off, and 25 more designed tickets meet the same refusal.
+- (b) A tooling ticket first, for the class: decide which text stands for the capture of a ticket with no `idea:` key whose `tracker: new` commit has no Solution. Candidates: a later capture commit a person names, or the Problem and Solution a person approved (the approval hash covers both, so the words are signed). It qualifies #297's no-fallback rule, so it needs its own design and spec cases: a stub capture with a later rewrite derives S claims from the chosen text; a ticket with an `idea:` key and an empty Solution still refuses; a ticket with neither a captured nor an approved Solution still refuses; `./zn capture <id>` and the trace name the same commit. R0092 waits for it, then restacks and its table is rebuilt. While it waits, seven open prototype branches conflict with these two README sections (c0264.md:116), and every label that moves in the tracker must be flipped again (AC7).
+- (c) Land R0092 without the trace gate. Only the human can choose this. It skips the check on the first raft to reach it, so it is an escape and needs its lesson and its record.
+Recommendation: The author must escalate (zz-execute stop conditions): none of (a), (b) or (c) is the author's to choose, and none is a README edit. Put the three options and their costs under `## Open to the human`. Whichever the human picks, rebuild `trace.md` from the skeleton `./zn trace R0092` then prints, and fill the new P and S rows from the Substance section below (it names the README line for each outcome). Do not add an `S1` row to the present table, and do not change `trace.luau`, `trail.luau`, the Problem or the Solution in this raft.
+Lesson: z-design/a-gate-names-where-its-fix-is-committed
+
+## Substance
+The tool counts no changed file as a source (`watch.isSource` drops `.md`), so `## Source files` has no row and every code cell is `none`. The product change is `z-nile/README.md` (+111, -27, all inside `## Intent` and `## How it should work`). I read it against the ask, the design and `main`.
+
+The diff, file by file: `z-nile/README.md` (AC1 to AC10); `c0264.md` (three Verification log lines, nothing else); `c0264/results.txt` (empty, written by finish: the affected run selects no spec for a `.md` change); `c0264/acceptance/watch.txt` (written by finish); `c0264/spend.d/*.tsv` and `R0092/spend.md` (spend); `R0092/review-001.md`, `refute-001.md`, `harvest.md` (the code review, its answer, its harvest); `z-nile/skills/zz-test/lessons/document-only-layers-run-no-spec.md` (review 001 F2's lesson, well formed, named in the harvest). Nothing else is in the stack.
+
+The design covers the idea, and the README delivers the design. Each outcome of the Problem (c0264.md:20-35), with where the delivered README states it:
+- Intent near the top, what z-nile is for: README:25-31. People at the idea and the design: :27. Workers carry it to merge: :28. Expensive models on every final review, cheaper on the way, the cheapest waiting: :30.
+- The worker, any of the six CLIs running `z-work`: :78. Stays with the raft to merge, a PR stack, one ticket at a time: :79. Each ticket completed before the next, in one worker: :80 and :194.
+- The worker clears its context and takes the next raft when a raft is merged or released: :81, :28, and the diagram's two edges back to `loop` (:56, :58).
+- Blocked, with who unblocked it: :125-141 (who decided: :140), :148, :31.
+- The capture interview and idea review, then z-design as today: :69-73.
+- Model tiers, as the user re-ruled it (real models per stage, no levels, no model names): :106-111.
+- The full-force review, its limited view and redo: :118-123, :29.
+- Rank and lost first: :87-94, :98.
+- Provenance: :143-151, :31.
+- The Omarchy app's order and drag and drop: :94.
+- The roadmap and the diagram gain the new tickets: :158-190 (rows for c0260, c0262, c0263, c0265, c0274 to c0277, c0280, c0282 to c0284, c0305 to c0307), :36-61.
+- Every sentence of the four quoted messages (c0264.md:38-44) has its line, with the two the user changed later stated as changed: the heartbeat is on a branch, not on `main` (:98), and models are real names per stage, not tiers (:107).
+
+The Solution ("nothing new is described as built"): I checked every `*exists*` sentence that names no ticket against `main` at 672423a05. All are true: the engineer end (:64); `./zn idea`, its two roles, its two files and the `preparing` refusal (:69, idea.luau:7-33); `z-work`, named and unnamed, with the stop after two blocked releases (:76, work.luau:21-24 and :69, the z-work skill's steps 6 and 8); the claim (:97); the roles table, eight roles, no level named (:107); every review on an expensive role, `author` on `idea-challenge` and `code-review` only, `design-challenge` and `raft` on their author's model (:108, :114, `.models.toml`, models.luau:501-507); `./zn trace`, `--check`, the verdict and `done`'s refusal (:119, main.luau:5080); `./zn approve` and its hash of the design sections, the specs and `check.sh`, refused at `ready` and `done` (:149, contract.luau:4-12, readycheck.luau:232, main.luau:5054); the stack commands and `done`'s one bind after the affected gate (:193, main.luau:5179). The delivered sections differ from `experiments/README.draft.md` only by the 30 state words flipped to *designed*, c0256 added to the raft's outside dependencies, and review 001 F1's reworded worker sentence. Each is recorded in the Verification log.
+
+The tests prove the criteria as far as a test can: AC1 to AC5 and AC10 run the two specs through `check.sh` (green), AC6 to AC9 are `check.sh` functions (green), and 60 mutants were killed in prep. No check reads what an unlabelled `*exists*` sentence claims; that is why I read each one.
+
+## Notes, not findings
+- `trace.md` rows AC11 and AC12 are not criteria. `deriveClaims` makes a claim of the "None." under `### Judged` and `### Observed` (c0301, captured, not designed). Their test cells cite `check.sh:216` (`finish`), which tests nothing, and each cell says so. I wrote them this way so that the table carries one gap, F1, and not three. When c0301 lands, the two rows go.
+- README:108 and :114 say the `author` key "drops that model". That is what models.luau:570 does for the author role's first choice. c0325 (captured 2026-11-14) records that a fallback or another effort is not dropped. The README sentence stays true to the mechanism; c0325's PR owns any change to it.
+- README:210 and :246, outside the two sections, still say a z-work session ends with its raft. c0327 holds it.
+
+Lesson candidates (for the lead to harvest; a reviewer writes none):
+- z-design/a-gate-names-where-its-fix-is-committed, a new source: `./zn trace` (#297) refuses a ticket whose capture has no `## Solution`. The capture is a commit on `main` from before prep, so no later commit can supply what the gate asks for, and 26 of 46 designed issues are in that state. Sharpen the check: for a refusal that reads history (a capture commit, a first review, a date), can a ticket that already exists still satisfy it, and how many open tickets fail it on the day the gate lands?
+- z-ready or zz-execute, new: the last gate's inputs are checked before the first layer is built. R0092 was readied, built, code-reviewed and final-reviewed before anything ran `./zn trace`, which fails on a fact that was fixed on 2026-11-07. Check: before a raft is readied, does `./zn trace <R-id>`'s claim derivation succeed for every member (a captured Problem and a captured Solution), and does `ready` refuse when it does not?
+
+## Judged criteria (code mode only)
+None: c0264 has no Judged criteria.
+
+Verdict: changes

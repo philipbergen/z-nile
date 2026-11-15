@@ -1,0 +1,4 @@
+# c0176 design refute 001
+
+- F1: fixed: E3 now records the reproduction on this prep's ramp prototype (30 red un-narrowed, by file 3, 1, 14, 12; 66 of 66 narrowed) and the Rules row cites it; the Design says four of the eight calls sit in cases that pass un-narrowed and why they change anyway; E2 names the fallback (f0147's AC5 red, f0147 stops, a chore re-narrows); consequences: none (documents only; no spec, check or patch text changed, so the digests and the mutation results stand).
+- F2: fixed: Maintainability names the eight copies of `exact`, that c0156's `pin.luau` does not cover this kind, and that folding them is a later chore; consequences: none here. The follow-up chore is not captured by this prep (a capture the user did not ask for): it is in the prep's report for the user to decide.

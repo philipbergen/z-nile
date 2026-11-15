@@ -1,0 +1,716 @@
+diff --git a/z-nile/engine/costrow.luau b/z-nile/engine/costrow.luau
+index a93e20512..b9a2c86da 100644
+--- a/z-nile/engine/costrow.luau
++++ b/z-nile/engine/costrow.luau
+@@ -13,7 +13,13 @@ local store = require("./store")
+ local costrow = {}
+ 
+ export type PlannedFile = { path: string, text: string, previous: string? }
+-export type Planned = { files: { PlannedFile }, bufferText: string, bufferPrevious: string? }
++export type Planned = {
++	files: { PlannedFile },
++	bufferText: string,
++	bufferPrevious: string?,
++	-- the rows this fold took from the buffer, by ticket, without the caller's extra rows (d0331)
++	rows: { [string]: { ledger.Row } },
++}
+ 
+ function costrow.report(text: string): (number?, number?)
+ 	local wall = tonumber(string.match(text, "wall=([%d%.%-]+)"))
+@@ -106,6 +112,10 @@ function costrow.plan(
+ 	end
+ 	local folded = buffer.fold(lines, ids, branch, head, DateTime.now().unixTimestampMillis, takeBegins)
+ 	local byId: { [string]: { ledger.Row } } = folded.rows
++	local took: { [string]: { ledger.Row } } = {}
++	for id, list in byId do
++		took[id] = table.clone(list)
++	end
+ 	if extra then
+ 		for id, more in extra do
+ 			local list = byId[id]
+@@ -131,7 +141,12 @@ function costrow.plan(
+ 	table.sort(files, function(a: PlannedFile, b: PlannedFile): boolean
+ 		return a.path < b.path
+ 	end)
+-	return { files = files, bufferText = buffer.renderLines(folded.kept), bufferPrevious = previous }
++	return {
++		files = files,
++		bufferText = buffer.renderLines(folded.kept),
++		bufferPrevious = previous,
++		rows = took,
++	}
+ end
+ 
+ local function parentOf(path: string): string
+diff --git a/z-nile/engine/layergit.luau b/z-nile/engine/layergit.luau
+index a81ed2fa0..3d3f0850a 100644
+--- a/z-nile/engine/layergit.luau
++++ b/z-nile/engine/layergit.luau
+@@ -85,6 +85,16 @@ function layergit.mainTip(): string
+ 	return fail("no main branch")
+ end
+ 
++-- The commit layer 1 is judged against (d0331): where `tip` left main, not main's newest commit. Main gaining
++-- commits after that is no reason to refuse or to restack; only `restack` moves a layer onto main's tip.
++-- With no shared commit it is main's tip, so every caller's own check still refuses.
++function layergit.mainFork(tip: string, main: string?): string
++	local onto = main or layergit.mainTip()
++	local r = sh.run("git", { "merge-base", onto, tip })
++	local sha = if r.ok then sh.trim(r.stdout) else ""
++	return if sha == "" then onto else sha
++end
++
+ function layergit.layersOf(raftId: string): { stack.Layer }
+ 	local listed =
+ 		sh.run("git", { "for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin" })
+@@ -240,7 +250,8 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
+ 	for _, layer in layergit.layersOf(raft.id) do
+ 		have[layer.position] = layer
+ 	end
+-	local baseTip = layergit.mainTip()
++	local first = if have[1] then layergit.layerTip(have[1] :: stack.Layer) else nil
++	local baseTip = if first then layergit.mainFork(first) else layergit.mainTip()
+ 	local current = stack.parse(sh.git({ "branch", "--show-current" }))
+ 	if current and current.raft == raft.id and have[current.position] then
+ 		local below = if current.position == 1
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index 59d6bd67c..e80be1793 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -3743,7 +3743,7 @@ function cmd.finish(pos: { string })
+ 	end
+ 	local raft = store.get(layer.raft)
+ 	local issues = layergit.orderedMembers(raft)
+-	local base = layergit.mainTip()
++	local base = layergit.mainFork("HEAD")
+ 	if layer.position > 1 then
+ 		local below = issues[layer.position - 1]
+ 		if not below then
+@@ -3956,13 +3956,26 @@ function cmd.restack(pos: { string })
+ 				fail(`{layer.name} is not a layer of {raft.id}`)
+ 			end
+ 			local remote = layergit.shaOf(`origin/{layer.name}`) or before
+-			sh.git({
++			local pushed = sh.run("git", {
+ 				"push",
+ 				"--quiet",
+ 				`--force-with-lease=refs/heads/{layer.name}:{remote}`,
+ 				"origin",
+ 				layer.name,
+ 			})
++			if not pushed.ok then
++				local left: { string } = {}
++				for _, other in layers do
++					if other.position >= layer.position then
++						table.insert(left, other.name)
++					end
++				end
++				sh.git({ "reset", "--hard", before })
++				if back ~= "" then
++					sh.git({ "switch", "--quiet", back })
++				end
++				fail(stack.restackUnpushed(raft.id, left, sh.trim(pushed.stderr)))
++			end
+ 		end
+ 		below = sh.git({ "rev-parse", "HEAD" })
+ 		moved = true
+@@ -3996,6 +4009,10 @@ function cmd.stack(pos: { string })
+ 		have[layer.position] = layer
+ 	end
+ 	local below = layergit.shaOf("origin/main") or layergit.shaOf("main") or ""
++	local firstTip = if have[1] then layergit.layerTip(have[1] :: stack.Layer) else nil
++	if firstTip and below ~= "" then
++		below = layergit.mainFork(firstTip, below)
++	end
+ 	local rows: { stack.Row } = {}
+ 	for i, issue in issues do
+ 		local name = stack.branch(raftId, i, issue.id)
+@@ -4407,8 +4424,9 @@ local function recordAndCommit(
+ 	phase: string?,
+ 	tokens: number?,
+ 	model: string?,
+-	reading: sessions.Read?
+-)
++	reading: sessions.Read?,
++	carry: { [string]: { ledger.Row } }?
++): { [string]: { ledger.Row } }
+ 	phase = if phase and phase ~= "" then phase else "build"
+ 	-- a conflicted `git merge --squash` leaves unmerged paths; `git add -A` would commit their markers
+ 	if sh.git({ "ls-files", "-u" }) ~= "" then
+@@ -4505,8 +4523,33 @@ local function recordAndCommit(
+ 		end
+ 		table.insert(trailers, trailer)
+ 	end
++	-- rows a discarded attempt of this commit took from the buffer (done's retry, d0331) ride in this one
++	local carried: { [string]: { ledger.Row } } = carry or {}
++	for id, rows in carried do
++		local list = extraRows[id]
++		if not list then
++			list = {}
++			extraRows[id] = list
++		end
++		for _, row in rows do
++			table.insert(list, row)
++		end
++	end
+ 	local top = sh.git({ "rev-parse", "--show-toplevel" })
+ 	local planned = costrow.plan(top, foldHomes, extraRows, false)
++	local took: { [string]: { ledger.Row } } = {}
++	for _, source in { carried, planned.rows } do
++		for id, rows in source do
++			local list = took[id]
++			if not list then
++				list = {}
++				took[id] = list
++			end
++			for _, row in rows do
++				table.insert(list, row)
++			end
++		end
++	end
+ 	local folded = costrow.writeFiles(planned)
+ 	if keptAny and #folded == 0 then
+ 		fail("could not write the measured row")
+@@ -4528,6 +4571,7 @@ local function recordAndCommit(
+ 	costrow.writeBuffer(top, planned)
+ 	print(`committed: {message}\n  {table.concat(trailers, "\n  ")}`)
+ 	push()
++	return took
+ end
+ 
+ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
+@@ -4867,7 +4911,8 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
+ 		if #layers ~= #issues then
+ 			fail(`{raft.id} has {#layers} layer(s) for {#issues} issue(s)`)
+ 		end
+-		local baseTip = layergit.mainTip()
++		local firstTip = localOrOriginTip(layers[1])
++		local baseTip = if firstTip then layergit.mainFork(firstTip) else layergit.mainTip()
+ 		local onto = baseTip
+ 		local topFinishSha = ""
+ 		local topTip = ""
+@@ -4914,7 +4959,8 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
+ 		return { `no {tracePath}: run ./zn trace {raft.id} and fill the table` }
+ 	end
+ 
+-	local baseTip = layergit.mainTip()
++	local firstTip = localOrOriginTip(layers[1])
++	local baseTip = if firstTip then layergit.mainFork(firstTip) else layergit.mainTip()
+ 	local onto = baseTip
+ 	local layerHistories: { trace.LayerHistory } = {}
+ 	for _, layer in layers do
+@@ -5063,7 +5109,8 @@ function cmd.done(pos: { string })
+ 	if #layers ~= #issues then
+ 		fail(`{raft.id} has {#layers} layer(s) for {#issues} issue(s)`)
+ 	end
+-	local onto = layergit.mainTip()
++	local firstTip = layergit.layerTip(layers[1]) or fail(`{layers[1].name} has no tip`)
++	local onto = layergit.mainFork(firstTip)
+ 	for i, layer in layers do
+ 		if layer.position ~= i or layer.issue ~= issues[i].id then
+ 			fail(`{raft.id} layer {i} is {layer.name}, expected {issues[i].id}`)
+@@ -5085,196 +5132,235 @@ function cmd.done(pos: { string })
+ 	for _, issue in issues do
+ 		table.insert(bindIds, issue.id)
+ 	end
+-	local layerBranch = sh.git({ "branch", "--show-current" })
+-	local baseRef = if layergit.shaOf("origin/main")
+-		then "origin/main"
+-		elseif layergit.shaOf("main") then "main"
+-		else layergit.mainTip()
+-	sh.git({ "switch", "--detach", baseRef })
+-	local top = topLayer.name
+-	local merged = sh.run("git", { "merge", "--no-ff", "--no-commit", land })
+-	if not merged.ok then
+-		sh.run("git", { "merge", "--abort" })
+-		if layerBranch ~= "" then
+-			sh.git({ "switch", "--quiet", layerBranch })
+-		end
+-		fail(`{top} does not merge onto main: {sh.trim(merged.stderr)}`)
+-	end
+-	local bound = false
+-	-- Promote sequestered acceptance specs into the permanent suite, then prove they still pass
+-	-- there (type check + structural meta spec + the specs themselves). Roll back on failure.
+-	local promoted: { string } = {}
+-	for _, m in store.members(raft.id) do
+-		local acc = `{m.dir}/acceptance`
+-		if fs.isDir(acc) and #fs.readDir(acc) > 0 then
+-			local dest = promotedDir(m)
+-			fs.writeDir(string.match(dest, "^(.*)/[^/]+$") :: string)
+-			sh.git({ "mv", acc, dest })
+-			for _, name in fs.readDir(dest) do
+-				if string.match(name, "%.spec%.luau$") then
+-					table.insert(promoted, `{dest}/{name}`)
++	local landing = raft
++	local lostRows: { [string]: { ledger.Row } } = {}
++	for attempt = 1, stack.DONE_ATTEMPTS do
++		local attemptRows: { [string]: { ledger.Row } } = {}
++		raft = landing
++		local layerBranch = sh.git({ "branch", "--show-current" })
++		local baseRef = if layergit.shaOf("origin/main")
++			then "origin/main"
++			elseif layergit.shaOf("main") then "main"
++			else layergit.mainTip()
++		local mergedOnto = layergit.shaOf(baseRef) or ""
++		sh.git({ "switch", "--detach", baseRef })
++		local top = topLayer.name
++		local merged = sh.run("git", { "merge", "--no-ff", "--no-commit", land })
++		if not merged.ok then
++			sh.run("git", { "merge", "--abort" })
++			if layerBranch ~= "" then
++				sh.git({ "switch", "--quiet", layerBranch })
++			end
++			fail(stack.doneConflict(top, raft.id, sh.trim(merged.stderr .. merged.stdout)))
++		end
++		local bound = false
++		-- Promote sequestered acceptance specs into the permanent suite, then prove they still pass
++		-- there (type check + structural meta spec + the specs themselves). Roll back on failure.
++		local promoted: { string } = {}
++		for _, m in store.members(raft.id) do
++			local acc = `{m.dir}/acceptance`
++			if fs.isDir(acc) and #fs.readDir(acc) > 0 then
++				local dest = promotedDir(m)
++				fs.writeDir(string.match(dest, "^(.*)/[^/]+$") :: string)
++				sh.git({ "mv", acc, dest })
++				for _, name in fs.readDir(dest) do
++					if string.match(name, "%.spec%.luau$") then
++						table.insert(promoted, `{dest}/{name}`)
++					end
+ 				end
+ 			end
+ 		end
+-	end
+-	-- Move everything to done/ now, so the gate sees the final tree. A rollback (git reset --hard HEAD) undoes
+-	-- both the promotion and the moves, since nothing is committed yet.
+-	local members = store.members(raft.id)
+-	local movedDirs: { string } = {}
+-	for _, m in members do
+-		table.insert(movedDirs, store.dirFor(m.kind, "done", m.id, m.root))
+-	end
+-	table.insert(movedDirs, store.dirFor(raft.kind, "done", raft.id, raft.root))
+-	local function rollback()
+-		if bound then
+-			sh.git({ "reset", "--hard", layerBranch })
+-		else
+-			sh.run("git", { "merge", "--abort" })
+-		end
+-		if layerBranch ~= "" then
+-			sh.run("git", { "switch", "--quiet", layerBranch })
++		-- Move everything to done/ now, so the gate sees the final tree. A rollback (git reset --hard HEAD) undoes
++		-- both the promotion and the moves, since nothing is committed yet.
++		local members = store.members(raft.id)
++		local movedDirs: { string } = {}
++		for _, m in members do
++			table.insert(movedDirs, store.dirFor(m.kind, "done", m.id, m.root))
+ 		end
+-		-- git removes the folders it empties; if one is left, store.find would see a duplicate id
+-		for _, dir in movedDirs do
+-			if fs.isDir(dir) and #fs.readDir(dir) == 0 then
+-				fs.removeDir(dir)
++		table.insert(movedDirs, store.dirFor(raft.kind, "done", raft.id, raft.root))
++		local function rollback()
++			if bound then
++				sh.git({ "reset", "--hard", layerBranch })
++			else
++				sh.run("git", { "merge", "--abort" })
++			end
++			if layerBranch ~= "" then
++				sh.run("git", { "switch", "--quiet", layerBranch })
++			end
++			-- git removes the folders it empties; if one is left, store.find would see a duplicate id
++			for _, dir in movedDirs do
++				if fs.isDir(dir) and #fs.readDir(dir) == 0 then
++					fs.removeDir(dir)
++				end
+ 			end
+ 		end
+-	end
+-	-- every moved item's check.sh follows the move: its own item paths name done/ from now on (c0067)
+-	local doneDirs: { [string]: string } = { [raft.id] = store.dirFor("raft", "done", raft.id, raft.root) }
+-	for _, m in members do
+-		doneDirs[m.id] = store.dirFor("issue", "done", m.id, m.root)
+-	end
+-	local movedItems: { store.Item } = {}
+-	for _, m in members do
+-		table.insert(movedItems, move(m, "done"))
+-	end
+-	raft = move(raft, "done")
+-	table.insert(movedItems, raft)
+-	for _, item in movedItems do
+-		local check = `{item.dir}/check.sh`
+-		if fs.isFile(check) then
+-			local text = fs.readFile(check)
+-			local rewritten = pathsLib.rewrite(text, doneDirs)
+-			if rewritten ~= text then
+-				fs.writeFile(check, rewritten)
+-				sh.git({ "add", check })
++		-- every moved item's check.sh follows the move: its own item paths name done/ from now on (c0067)
++		local doneDirs: { [string]: string } =
++			{ [raft.id] = store.dirFor("raft", "done", raft.id, raft.root) }
++		for _, m in members do
++			doneDirs[m.id] = store.dirFor("issue", "done", m.id, m.root)
++		end
++		local movedItems: { store.Item } = {}
++		for _, m in members do
++			table.insert(movedItems, move(m, "done"))
++		end
++		raft = move(raft, "done")
++		table.insert(movedItems, raft)
++		for _, item in movedItems do
++			local check = `{item.dir}/check.sh`
++			if fs.isFile(check) then
++				local text = fs.readFile(check)
++				local rewritten = pathsLib.rewrite(text, doneDirs)
++				if rewritten ~= text then
++					fs.writeFile(check, rewritten)
++					sh.git({ "add", check })
++				end
+ 			end
+ 		end
+-	end
+-	-- finish already wrote each layer's watch from that layer's own files. Capturing again, from the
+-	-- merge, would give every ticket the whole stack: a finish commit's subject is not an Issue: trailer.
+-	if gateLib.doneGate(process.env) == "promoted" then
+-		print("done: inside a spec run, so the gate is skipped; checking the promoted specs")
+-		if #promoted > 0 then
+-			print("\n=== promoted acceptance specs: type check + meta + run")
+-			if not promotedChecksAll(raft, promoted, true) then
++		-- finish already wrote each layer's watch from that layer's own files. Capturing again, from the
++		-- merge, would give every ticket the whole stack: a finish commit's subject is not an Issue: trailer.
++		if gateLib.doneGate(process.env) == "promoted" then
++			print("done: inside a spec run, so the gate is skipped; checking the promoted specs")
++			if #promoted > 0 then
++				print("\n=== promoted acceptance specs: type check + meta + run")
++				if not promotedChecksAll(raft, promoted, true) then
++					rollback()
++					fail(
++						"promoted acceptance specs fail in tests/acceptance (rolled back); fix and retry done"
++							.. stack.restackHint(landing.id)
++					)
++				end
++			end
++		else
++			print("\n=== affected gate on the done tree")
++			if not sh.stream("bash", { "z-nile/check.sh", "--affected" }) then
+ 				rollback()
+-				fail("promoted acceptance specs fail in tests/acceptance (rolled back); fix and retry done")
++				fail(
++					"the affected gate fails on the done tree (rolled back); fix and retry done"
++						.. stack.restackHint(landing.id)
++				)
+ 			end
+ 		end
+-	else
+-		print("\n=== affected gate on the done tree")
+-		if not sh.stream("bash", { "z-nile/check.sh", "--affected" }) then
++		if fs.isFile(FOCUS_FILE) then
++			fs.removeFile(FOCUS_FILE)
++		end
++		local doneTracePath = `{store.dirFor("raft", "done", raft.id, raft.root)}/trace.md`
++		local reading = sessionread.running()
++		local committed, commitErr = pcall(function()
++			attemptRows = recordAndCommit(
++				raft,
++				stack.bindMessage(raft.id, bindIds, verdict :: string, doneTracePath),
++				{},
++				nil,
++				true,
++				"deliver",
++				nil,
++				nil,
++				reading,
++				lostRows
++			)
++		end)
++		if not committed then
+ 			rollback()
+-			fail("the affected gate fails on the done tree (rolled back); fix and retry done")
+-		end
+-	end
+-	if fs.isFile(FOCUS_FILE) then
+-		fs.removeFile(FOCUS_FILE)
+-	end
+-	local doneTracePath = `{store.dirFor("raft", "done", raft.id, raft.root)}/trace.md`
+-	local reading = sessionread.running()
+-	local committed, commitErr = pcall(function()
+-		recordAndCommit(
+-			raft,
+-			stack.bindMessage(raft.id, bindIds, verdict :: string, doneTracePath),
+-			{},
+-			nil,
+-			true,
+-			"deliver",
+-			nil,
+-			nil,
+-			reading
+-		)
+-	end)
+-	if not committed then
+-		rollback()
+-		fail(`binding commit failed (rolled back): {commitErr}`)
+-	end
+-	bound = true
+-	-- Remember each pull request's base, retarget it to main, and put that base back if the push fails.
+-	-- GitHub marks a pull request merged when its head is reachable from its base; base main does that
+-	-- once the binding commit is on main. Retargeting first and then failing the push would leave the
+-	-- pull request pointing at main while main does not have the commit.
+-	local retargeted: { { number: string, base: string, layer: string } } = {}
+-	local function restoreBases()
+-		local unrestored: { string } = {}
+-		for _, row in retargeted do
+-			if row.base ~= "main" then
+-				local back = sh.run("gh", { "pr", "edit", row.number, "--base", row.base })
+-				if not back.ok then
+-					table.insert(unrestored, row.layer)
++			fail(`binding commit failed (rolled back): {commitErr}`)
++		end
++		bound = true
++		-- Remember each pull request's base, retarget it to main, and put that base back if the push fails.
++		-- GitHub marks a pull request merged when its head is reachable from its base; base main does that
++		-- once the binding commit is on main. Retargeting first and then failing the push would leave the
++		-- pull request pointing at main while main does not have the commit.
++		local retargeted: { { number: string, base: string, layer: string } } = {}
++		local lostBases: { string } = {}
++		local function restoreBases()
++			local unrestored: { string } = {}
++			for _, row in retargeted do
++				if row.base ~= "main" then
++					local back = sh.run("gh", { "pr", "edit", row.number, "--base", row.base })
++					if not back.ok then
++						table.insert(unrestored, row.layer)
++						table.insert(lostBases, `gh pr edit {row.number} --base {row.base}`)
++					end
+ 				end
+ 			end
++			return unrestored
+ 		end
+-		return unrestored
+-	end
+-	if onGitHub() then
+-		for _, layer in layers do
+-			local listed = sh.run("gh", {
+-				"pr",
+-				"list",
+-				"--head",
+-				layer.name,
+-				"--state",
+-				"open",
+-				"--json",
+-				"number",
+-				"-q",
+-				".[0].number",
+-			})
+-			local number = if listed.ok then sh.trim(listed.stdout) else ""
+-			if number ~= "" and number ~= "null" then
+-				local viewed = sh.run("gh", {
++		if onGitHub() then
++			for _, layer in layers do
++				local listed = sh.run("gh", {
+ 					"pr",
+-					"view",
+-					number,
++					"list",
++					"--head",
++					layer.name,
++					"--state",
++					"open",
+ 					"--json",
+-					"baseRefName",
++					"number",
+ 					"-q",
+-					".baseRefName",
++					".[0].number",
+ 				})
+-				local oldBase = if viewed.ok then sh.trim(viewed.stdout) else ""
+-				if oldBase == "" then
+-					rollback()
+-					fail(`could not read the pull request base for {layer.name} (rolled back)`)
++				local number = if listed.ok then sh.trim(listed.stdout) else ""
++				if number ~= "" and number ~= "null" then
++					local viewed = sh.run("gh", {
++						"pr",
++						"view",
++						number,
++						"--json",
++						"baseRefName",
++						"-q",
++						".baseRefName",
++					})
++					local oldBase = if viewed.ok then sh.trim(viewed.stdout) else ""
++					if oldBase == "" then
++						rollback()
++						fail(`could not read the pull request base for {layer.name} (rolled back)`)
++					end
++					local edited = sh.run("gh", { "pr", "edit", number, "--base", "main" })
++					if not edited.ok then
++						local unrestored = restoreBases()
++						rollback()
++						local extra = if #unrestored > 0
++							then `; could not put back {table.concat(unrestored, ", ")}`
++							else ""
++						fail(`could not retarget the pull request for {layer.name} (rolled back){extra}`)
++					end
++					table.insert(retargeted, { number = number, base = oldBase, layer = layer.name })
+ 				end
+-				local edited = sh.run("gh", { "pr", "edit", number, "--base", "main" })
+-				if not edited.ok then
++			end
++		end
++		if hasOrigin() then
++			-- HEAD is detached, so the destination has to be a full ref. This is the binding commit on main.
++			local pushed = sh.run("git", { "push", "--quiet", "origin", "HEAD:refs/heads/main" })
++			if not pushed.ok then
++				sh.run("git", { "fetch", "--quiet", "origin" })
++				local now = layergit.shaOf("origin/main") or mergedOnto
++				if now == sh.git({ "rev-parse", "HEAD" }) then
++					-- the push reached origin and reported failure (the connection dropped after it): it landed
++					print(stack.donePushLanded(landing.id))
++				else
+ 					local unrestored = restoreBases()
+ 					rollback()
+ 					local extra = if #unrestored > 0
+ 						then `; could not put back {table.concat(unrestored, ", ")}`
+ 						else ""
+-					fail(`could not retarget the pull request for {layer.name} (rolled back){extra}`)
++					local next = stack.doneRetry(now ~= mergedOnto, attempt, #unrestored == 0)
++					if next == "again" then
++						lostRows = attemptRows
++						print(stack.doneAgain(landing.id, attempt + 1))
++						continue
++					elseif next == "lost" then
++						fail(stack.doneLost(landing.id, lostBases))
++					elseif next == "moved" then
++						fail(stack.doneMoved(landing.id))
++					end
++					fail(
++						`could not push the binding commit to main (rolled back){extra}: {sh.trim(
++							pushed.stderr
++						)}`
++					)
+ 				end
+-				table.insert(retargeted, { number = number, base = oldBase, layer = layer.name })
+ 			end
+ 		end
+-	end
+-	if hasOrigin() then
+-		-- HEAD is detached, so the destination has to be a full ref. This is the binding commit on main.
+-		local pushed = sh.run("git", { "push", "--quiet", "origin", "HEAD:refs/heads/main" })
+-		if not pushed.ok then
+-			local unrestored = restoreBases()
+-			rollback()
+-			local extra = if #unrestored > 0
+-				then `; could not put back {table.concat(unrestored, ", ")}`
+-				else ""
+-			fail(`could not push the binding commit to main (rolled back){extra}: {sh.trim(pushed.stderr)}`)
+-		end
++		break
+ 	end
+ 	if sh.run("git", { "branch", "-f", "main", "HEAD" }).ok then
+ 		sh.git({ "switch", "--quiet", "main" })
+diff --git a/z-nile/engine/stack.luau b/z-nile/engine/stack.luau
+index 976545efb..14b002352 100644
+--- a/z-nile/engine/stack.luau
++++ b/z-nile/engine/stack.luau
+@@ -3,7 +3,9 @@
+ --
+ -- Contract, which the Python port reads as these bytes:
+ --   branch:   R0010/1/c0010
+---             raft / 1-based position, unpadded / issue. The first layer's base is main.
++--             raft / 1-based position, unpadded / issue. The first layer's base is main: the merge base of
++--             its tip and main's tip (d0331). Main gaining commits after that changes nothing for finish,
++--             start, stack, trace or done; only restack moves the layer onto main's tip.
+ --   claim:    a commit whose subject is not "<issue>: <title>" (tracker: start …, or any worker commit)
+ --   finish:   ./zn finish <issue-id>
+ --             one commit, subject "<issue>: <title>" (tab and newline in the title become a space)
+@@ -25,6 +27,9 @@
+ --             gh pr view <n> --json baseRefName -q .baseRefName, then gh pr edit <n> --base main,
+ --             then git push origin HEAD:refs/heads/main. A failed push runs
+ --             gh pr edit <n> --base <the base just read> so the pull request is left where it was.
++--             The merge is onto main's tip as fetched. A push rejected because main gained commits since is
++--             tried again from the merge (the gate included), at most DONE_ATTEMPTS times (d0331); a push that
++--             reported failure and reached origin has landed.
+ 
+ local stack = {}
+ 
+@@ -84,6 +89,59 @@ function stack.oldShapeMessage(raftId: string, branch: string): string
+ end
+ 
+ -- Once git has said whether the lower tip is an ancestor of this layer, the layer needs no rebase.
++-- done after main moved (d0331). It merges onto the main it fetched; these are its only refusals for main's sake.
++stack.DONE_ATTEMPTS = 9
++
++function stack.doneConflict(layerName: string, raftId: string, detail: string): string
++	return `{layerName} does not merge onto main: ./zn restack {raftId}, resolve the conflict, then done again\n{detail}`
++end
++
++function stack.restackHint(raftId: string): string
++	return `. If main moved under the stack: ./zn restack {raftId}`
++end
++
++-- What done does when its push of the binding commit is rejected and did not reach origin: "failed" (main did not
++-- move: the rejection has another cause), "lost" (main moved and a pull request base could not be put back, so a
++-- person has to), "again" (main moved and an attempt is left), or "moved" (main moved on the last attempt).
++function stack.doneRetry(mainMoved: boolean, attempt: number, basesRestored: boolean): string
++	if not mainMoved then
++		return "failed"
++	end
++	if not basesRestored then
++		return "lost"
++	end
++	if attempt < stack.DONE_ATTEMPTS then
++		return "again"
++	end
++	return "moved"
++end
++
++function stack.doneLost(raftId: string, fixes: { string }): string
++	return `main gained commits during the gate, and a pull request base could not be put back (rolled back). Put it back with: {table.concat(
++		fixes,
++		"; "
++	)}. Then run ./zn done {raftId} again`
++end
++
++function stack.donePushLanded(raftId: string): string
++	return `the push of {raftId}'s binding commit reported a failure, and origin's main holds it: it landed`
++end
++
++function stack.doneAgain(raftId: string, attempt: number): string
++	return `main gained commits during the gate: merging {raftId} onto the new main and running the gate again (attempt {attempt} of {stack.DONE_ATTEMPTS})`
++end
++
++function stack.doneMoved(raftId: string): string
++	return `main gained commits during each of {stack.DONE_ATTEMPTS} attempts (rolled back): run ./zn done {raftId} again`
++end
++
++function stack.restackUnpushed(raftId: string, layers: { string }, detail: string): string
++	return `restack stopped: the push of {layers[1] or "?"} was rejected; not pushed: {table.concat(
++		layers,
++		", "
++	)}. Run ./zn restack {raftId} again\n{detail}`
++end
++
+ function stack.alreadyStacked(lowerIsAncestor: boolean): boolean
+ 	return lowerIsAncestor
+ end
+diff --git a/z-nile/engine/workread.luau b/z-nile/engine/workread.luau
+index 2e5781387..1954eec5c 100644
+--- a/z-nile/engine/workread.luau
++++ b/z-nile/engine/workread.luau
+@@ -181,7 +181,7 @@ local function layerFacts(
+ 	tips: { [number]: Tip },
+ 	mainSha: string
+ ): { work.LayerFact }
+-	local base = mainSha
++	local base = if tips[1] then layergit.mainFork(tips[1].sha, mainSha) else mainSha
+ 	local out: { work.LayerFact } = {}
+ 	for i, issue in issues do
+ 		local tip = tips[i]
+@@ -229,7 +229,7 @@ local function stacked(
+ 	if #layers < #issues or mainSha == "" then
+ 		return false
+ 	end
+-	local onto = mainSha
++	local onto = if tips[1] then layergit.mainFork(tips[1].sha, mainSha) else mainSha
+ 	for i, issue in issues do
+ 		local tip = tips[i]
+ 		if not tip or tip.issue ~= issue then

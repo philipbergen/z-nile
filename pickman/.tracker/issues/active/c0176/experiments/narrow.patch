@@ -1,0 +1,132 @@
+diff --git a/pickman/tests/acceptance/c0153/golden.spec.luau b/pickman/tests/acceptance/c0153/golden.spec.luau
+index ebab272ef..a6dfdb746 100644
+--- a/pickman/tests/acceptance/c0153/golden.spec.luau
++++ b/pickman/tests/acceptance/c0153/golden.spec.luau
+@@ -34,7 +34,8 @@ local PINS: { { path: string, sha: string } } = {
+ 	},
+ 	{
+ 		path = "tests/acceptance/f0100/drops.spec.luau",
+-		sha = "bd7fe073fa4193702568cf6e415b925b6e5d305fa2608d98b880af2bab1bc249",
++		-- c0176: its sessions are built without f0147's ramp (three lines and one call); the round trip is as it was
++		sha = "611b2ed37535ad74fb53fc216693f6e13708e18bb9b106e2079ebbca0a89feb7",
+ 	},
+ }
+ 
+diff --git a/pickman/tests/acceptance/f0023/session-ghosts.spec.luau b/pickman/tests/acceptance/f0023/session-ghosts.spec.luau
+index 8da5813a7..948abe041 100644
+--- a/pickman/tests/acceptance/f0023/session-ghosts.spec.luau
++++ b/pickman/tests/acceptance/f0023/session-ghosts.spec.luau
+@@ -9,12 +9,15 @@ local Maze = require("@logic/Maze")
+ local Pellets = require("@logic/Pellets")
+ local Session = require("@logic/Session")
+ local t = require("@tests/lib/t")
++-- c0176: the shipped rules less f0147's ramp, so these cases keep the classic level 1 and the last pellet's clear
++local CLASSIC_GAME = table.clone(Session.GAME_CONFIG) :: any
++CLASSIC_GAME.ramp = nil
+ 
+ local classic = Maze.layout("classic")
+ local CORRIDOR = Maze.parse({ "###############", "#            P#", "###############" }, "corridor")
+ 
+ local function new(config: Session.Config?): Session.Session
+-	local s = Session.new(classic, 1, config or Session.GAME_CONFIG)
++	local s = Session.new(classic, 1, config or CLASSIC_GAME)
+ 	Session.join(s, "p")
+ 	return s
+ end
+@@ -76,7 +79,7 @@ return t.spec("f0220 ghosts in a session", function(it)
+ 			t.expect(Session.DEFAULT_CONFIG.ghosts).toBe(nil)
+ 			local plain = new(Session.DEFAULT_CONFIG)
+ 			t.expect(plain.members.p.ghosts).toBe(nil)
+-			local custom = Session.new(CORRIDOR, 1, Session.GAME_CONFIG)
++			local custom = Session.new(CORRIDOR, 1, CLASSIC_GAME)
+ 			Session.join(custom, "p")
+ 			t.expect(custom.members.p.ghosts).toBe(nil)
+ 			for _ = 1, 100 do
+diff --git a/pickman/tests/acceptance/f0100/drops.spec.luau b/pickman/tests/acceptance/f0100/drops.spec.luau
+index 2d289d5e6..119608c16 100644
+--- a/pickman/tests/acceptance/f0100/drops.spec.luau
++++ b/pickman/tests/acceptance/f0100/drops.spec.luau
+@@ -11,11 +11,14 @@ local Pellets = require("@logic/Pellets")
+ local Session = require("@logic/Session")
+ local plain = require("@tests/lib/plain")
+ local t = require("@tests/lib/t")
++-- c0176: the shipped rules less f0147's ramp, so these cases keep the classic level 1 and the last pellet's clear
++local CLASSIC_GAME = table.clone(Session.GAME_CONFIG) :: any
++CLASSIC_GAME.ramp = nil
+ 
+ local classic = Maze.layout("classic")
+ 
+ local function new(seed: number): Session.Session
+-	local s = Session.new(classic, seed, Session.GAME_CONFIG)
++	local s = Session.new(classic, seed, CLASSIC_GAME)
+ 	Session.join(s, "p")
+ 	return s
+ end
+diff --git a/pickman/tests/acceptance/f0100/shots.spec.luau b/pickman/tests/acceptance/f0100/shots.spec.luau
+index 3a8ae80cc..74ec28396 100644
+--- a/pickman/tests/acceptance/f0100/shots.spec.luau
++++ b/pickman/tests/acceptance/f0100/shots.spec.luau
+@@ -12,12 +12,15 @@ local Movement = require("@logic/Movement")
+ local Pellets = require("@logic/Pellets")
+ local Session = require("@logic/Session")
+ local t = require("@tests/lib/t")
++-- c0176: the shipped rules less f0147's ramp, so these cases keep the classic level 1 and the last pellet's clear
++local CLASSIC_GAME = table.clone(Session.GAME_CONFIG) :: any
++CLASSIC_GAME.ramp = nil
+ 
+ local classic = Maze.layout("classic")
+ local CORRIDOR = Maze.parse({ "###############", "#            P#", "###############" }, "corridor")
+ 
+ local function new(seed: number?): Session.Session
+-	local s = Session.new(classic, seed or 1, Session.GAME_CONFIG)
++	local s = Session.new(classic, seed or 1, CLASSIC_GAME)
+ 	Session.join(s, "p")
+ 	return s
+ end
+@@ -274,7 +277,7 @@ return t.spec("f0100 shots in a session", function(it)
+ 	end)
+ 
+ 	it("a session without ghosts takes no shot and spends nothing", function()
+-		local s = Session.new(CORRIDOR, 1, Session.GAME_CONFIG)
++		local s = Session.new(CORRIDOR, 1, CLASSIC_GAME)
+ 		Session.join(s, "p")
+ 		for _ = 1, 61 do
+ 			Session.step(s)
+diff --git a/pickman/tests/acceptance/f0101/airborne.spec.luau b/pickman/tests/acceptance/f0101/airborne.spec.luau
+index 02566354c..a2422cc02 100644
+--- a/pickman/tests/acceptance/f0101/airborne.spec.luau
++++ b/pickman/tests/acceptance/f0101/airborne.spec.luau
+@@ -14,11 +14,14 @@ local Movement = require("@logic/Movement")
+ local Pellets = require("@logic/Pellets")
+ local Session = require("@logic/Session")
+ local t = require("@tests/lib/t")
++-- c0176: the shipped rules less f0147's ramp, so these cases keep the classic level 1 and the last pellet's clear
++local CLASSIC_GAME = table.clone(Session.GAME_CONFIG) :: any
++CLASSIC_GAME.ramp = nil
+ 
+ local classic = Maze.layout("classic")
+ 
+ local function new(): Session.Session
+-	local s = Session.new(classic, 1, Session.GAME_CONFIG)
++	local s = Session.new(classic, 1, CLASSIC_GAME)
+ 	Session.join(s, "p")
+ 	return s
+ end
+@@ -289,7 +292,7 @@ return t.spec("f0101 the hop in a session", function(it)
+ 	end)
+ 
+ 	it("each player has their own hop", function()
+-		local s = Session.new(classic, 1, Session.GAME_CONFIG)
++		local s = Session.new(classic, 1, CLASSIC_GAME)
+ 		Session.join(s, "p")
+ 		Session.join(s, "q")
+ 		for _ = 1, 101 do
+@@ -398,7 +401,7 @@ return t.spec("f0101 the hop in a session", function(it)
+ 	end)
+ 
+ 	it("a take-off catch forgets only that player's hop", function()
+-		local s = Session.new(classic, 1, Session.GAME_CONFIG)
++		local s = Session.new(classic, 1, CLASSIC_GAME)
+ 		Session.join(s, "p")
+ 		Session.join(s, "q")
+ 		for _ = 1, 101 do

@@ -1,0 +1,17 @@
+start: 2026-11-15 11:36:03 PST  load averages: 18.03 17.76 16.68
+head: 0e79784e3  env: FAKE_DELAY=3
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+FAIL tests/acceptance/c0117/control-cli-mut.spec.luau :: a claim from inside a step reaches main through the publish broker, and the tripwire stays quiet
+     /Users/philipbergen/code/pickman/.worktree/mut-c0287-c/z-nile/tests/acceptance/c0117/control-cli-mut.spec:161: dispatch: z-design c0030 on claude (claude-cli, claude-opus-5-5-high, max_tokens 5000)
+dispatch: z-design on claude: stalled (no output for 3 s), 0 tokens
+
+FAIL tests/acceptance/c0117/control-cli-mut.spec.luau :: a code push past the wrapper (the real git) trips the wire: exit 5, and the step's spend is kept
+     /Users/philipbergen/code/pickman/.worktree/mut-c0287-c/z-nile/tests/acceptance/c0117/control-cli-mut.spec:179: expected 5, got 1
+FAIL tests/acceptance/c0117/control-cli-mut.spec.luau :: a detached process's late code push after a step does not stop the next run
+     /Users/philipbergen/code/pickman/.worktree/mut-c0287-c/z-nile/tests/acceptance/c0117/control-cli-mut.spec:198: expected true, got false
+1 passed, 3 failed, 1 spec files
+exit: 1  seconds: 18
+end: 2026-11-15 11:36:21 PST  load averages: 16.37 17.41 16.58
+mutant: M1
+ z-nile/tests/acceptance/c0117/control-cli.spec.luau | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
