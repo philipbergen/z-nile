@@ -29,3 +29,5 @@ c0260 design reviews 006 and 007: beside every refusal case add one where the ac
 Note (c0246 round 7): when a function's answer gains a value (a boolean becomes "nested" | "link" | nil), re-derive each row's mutant for the new value, and make a fixture that must stay clean assert no line at all, not only the absence of one line.
 
 c0302 design review 001 F5: a Non-goal ("mainTip keeps its refusal") was a rule with no Rules row, and the spec the Design cited for it had never existed. The design's own rejected option passed every check. A Non-goal that says existing behaviour stays names the spec that pins it, checked with `ls`, or adds one.
+
+**Also:** f0201 design review 001 F1: the Design said the record seen is refreshed by "every read and write, a grant here included", but no case followed a grant with the read or use that depends on it, and deleting the refresh passed all 88 cases; each writer of a cache, and each exclusion, gets a case that reads after it. F12: twelve stated rules had a case but no row; walk the Design sentence by sentence against the table before the review.
