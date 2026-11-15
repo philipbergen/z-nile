@@ -1,0 +1,39 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-15 07:05	1 spec	0	0	test			1.017	0.570		1.017	tokens,ai
+2026-11-15 07:05	1 spec	0	0	test			1.429	1.040		1.429	tokens,ai
+2026-11-15 07:06	affected	0	0	test			6.332	39.640		6.332	tokens,ai
+2026-11-15 07:06	1 run	0	0	other			24.196	42.780			tokens,ai
+2026-11-15 07:06	c0302: name each clone fixture's branch main	14	0	build							tokens,wall,cpu,ai
+2026-11-15 07:07	1 spec	0	0	test			1.217	0.630		1.217	tokens,ai
+2026-11-15 07:07	1 spec	0	0	test			1.841	1.120		1.841	tokens,ai
+2026-11-15 07:07	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-15 07:07	1 spec	0	0	test			1.026	0.640		1.026	tokens,ai
+2026-11-15 07:11	1 spec	0	0	test			1.231	0.740		1.231	tokens,ai
+2026-11-15 07:11	1 spec	0	0	test			1.863	1.330		1.863	tokens,ai
+2026-11-15 07:11	affected	0	0	test			5.415	39.440		5.415	tokens,ai
+2026-11-15 07:13	1 spec	0	0	test			1.036	0.680		1.036	tokens,ai
+2026-11-15 07:13	1 spec	0	0	test			1.445	1.060		1.445	tokens,ai
+2026-11-15 07:13	1 spec	0	0	test			1.045	0.640		1.045	tokens,ai
+2026-11-15 07:13	affected	0	0	test			6.633	42.200		6.633	tokens,ai
+2026-11-15 07:15	affected	0	0	test			8.365	52.130		8.365	tokens,ai
+2026-11-15 07:15	affected	0	0	test			8.176	50.990		8.176	tokens,ai
+2026-11-15 07:14	4 runs	0	0	other			38.223	54.990			tokens,ai
+2026-11-15 07:17	R0102: review-001	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-15 07:18	1 run	0	0	other			0.204	0.010			tokens,ai
+2026-11-15 07:18	R0102: refute-001, harvest, verification log	4	2	code-review							tokens,wall,cpu,ai
+2026-11-15 07:20	1 spec	0	0	test			0.821	0.560		0.821	tokens,ai
+2026-11-15 07:20	1 spec	0	0	test			1.424	0.970		1.424	tokens,ai
+2026-11-15 07:21	1 spec	0	0	test			1.020	0.610		1.020	tokens,ai
+2026-11-15 07:21	1 spec	0	0	test			1.632	1.090		1.632	tokens,ai
+2026-11-15 07:21	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-15 07:22	R0102: trace skeleton	0	0	deliver							tokens,wall,cpu,ai
+2026-11-15 07:28	1 spec	0	0	test			1.035	0.630		1.035	tokens,ai
+2026-11-15 07:28	1 spec	0	0	test			1.450	1.090		1.450	tokens,ai
+2026-11-15 07:33	1 spec	0	0	test			1.042	0.670		1.042	tokens,ai
+2026-11-15 07:33	2 runs	0	0	other			6.394	5.390			tokens,ai
+2026-11-15 07:36	R0102: final-review-001, final-refute-001, trace, harvest	11	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-15 07:38	1 spec	0	0	test			1.016	0.590		1.016	tokens,ai
+2026-11-15 07:38	1 spec	0	0	test			1.431	1.020		1.431	tokens,ai
+2026-11-15 07:39	1 spec	0	0	test			1.043	0.630		1.043	tokens,ai
+2026-11-15 07:39	1 spec	0	0	test			1.649	1.090		1.649	tokens,ai
+2026-11-15 07:39	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
