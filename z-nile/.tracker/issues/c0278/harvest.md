@@ -1,0 +1,9 @@
+- design-review-001 F1: z-design/never-narrow-captured-scope, z-design/no-open-question-in-a-reviewed-design
+- design-review-001 F2: zz-test/pin-fail-safes-where-they-act
+- design-review-001 F3: z-design/guards-name-slow-tier-specs, zz-test/check-sh-never-runs-the-slow-tier
+- design-review-001 F4: zz-arch/one-definition-of-tracker-state
+- design-review-001 F5: z-design/carried-changes-check-they-were-carried
+- design-review-001 F6: zz-test/seed-every-enumerated-case
+- design-review-001 F7: z-design/probe-free-cli-lines-in-prep
+- design-review-001 F8: z-design/experiments-record-their-bounded-command
+- note AC11's origin/main dependents grep in check.sh matched nothing from z-nile's home until it used `:(top)` pathspecs and `--full-name`: zz-test/check-sh-git-paths-from-the-top
