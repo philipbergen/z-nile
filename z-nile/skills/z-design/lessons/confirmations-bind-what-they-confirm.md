@@ -9,3 +9,5 @@ A line that says "the user confirmed" is true only of the text the user saw. If 
 **Why:** c0260 design review 009 F4: a message recorded after the last round, or a hand edit of the Problem after `--confirm`, left the `Confirmed` line standing, and the claim and the audit accepted it.
 
 **How to apply:** each round records what it was given (counts of the user's messages and questions, a hash of the idea) where the engine writes it; the confirmation is refused when that no longer matches, and a record or a round after it drops the line. Check it where the item is still an unclaimed capture, so later design edits do not void it.
+
+**Also:** c0288 design review 001 F5: an approval hashes `check.sh` and `*.spec.luau`, not a shell helper under `acceptance/`. A value the human approves (a floor, a blob) therefore goes in `check.sh` as an argument, and the helper keeps only logic.

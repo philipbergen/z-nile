@@ -2,7 +2,7 @@
 title: Specs and Design correspond one to one
 when: design
 tags: [acceptance, rules-and-mutants]
-check: Does every behaviour the Design states have a spec case that fails without it, does every sequestered assertion follow from a Design sentence, and does every check's label say exactly what its command verifies? Is each new case's recorded mutant killed by that case itself, not first by an older, stricter case (delete the case: does its row's mutant still die)? Does every outcome stated under Edge cases (not only under Behaviour) have its row and case too?
+check: Does every behaviour the Design states have a spec case that fails without it, does every sequestered assertion follow from a Design sentence, and does every check's label say exactly what its command verifies? Is each new case's recorded mutant killed by that case itself, not first by an older, stricter case (delete the case: does its row's mutant still die)? Does every outcome stated under Edge cases (not only under Behaviour) have its row and case too And does every destination or outcome the Design states for a rare input (a file name, a path it lands in) have a row, or is the claim dropped with the reason it is no rule?
 ---
 Sequestered specs and the Design must match in both directions. A stated behaviour with no failing case (a refusal, an output format, an order) can be implemented wrong. An assertion the Design never states (message wording, which stream) can fail a correct implementation that the executor may not fix.
 
@@ -33,3 +33,7 @@ c0302 design review 001 F5: a Non-goal ("mainTip keeps its refusal") was a rule 
 c0270 design review 001 F4: the sentences that decide whether a hit stops the session (yours, "or none", "a merged one is history") had no needle, so four plausible rewrites passed every case. The classification is the rule: pin each sentence.
 
 **Also:** f0201 design review 001 F1: the Design said the record seen is refreshed by "every read and write, a grant here included", but no case followed a grant with the read or use that depends on it, and deleting the refresh passed all 88 cases; each writer of a cache, and each exclusion, gets a case that reads after it. F12: twelve stated rules had a case but no row; walk the Design sentence by sentence against the table before the review.
+
+c0273 design review 001 F4: the Design said a `default.project.jsonc` builds into `check.rbxl`, with no row or case; the home rule refuses every home holding one, so the claim was dropped and the reason recorded.
+
+**Note** (R0109 final review 001 F3): a pin of an order that already held in the text it replaced cannot fail when the new sentence is deleted. The first case of `trace-skeleton.spec` found "skeleton" before "final review" in the old Phase 5 step 3, which says "print the trace skeleton" and then "run the final review" and never commits the skeleton. Pin the new sentence, and build a prompt with the function that writes it (`dispatch.prompt`) rather than searching the source file, where the sentence can hide in a comment or another mode.
