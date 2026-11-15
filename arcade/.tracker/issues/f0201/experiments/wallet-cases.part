@@ -1,0 +1,686 @@
+local LIVE, TEST = "PaidPlay", "PaidPlayTest" -- Pickman's stores
+
+-- the portal's read of a title failing, as before it writes a pass
+local function downRead(w: any, p: any, name: string)
+	w.fail.get = true
+	w.run(w.wallet().read, p, name)
+	w.fail.get = false
+end
+
+-- a player's Pickman record in a store, read back as PaidPlay reads it
+local function rec(w: any, storeName: string, userId: number): PaidPlay.Record
+	return PaidPlay.record(w.record(storeName, userId))
+end
+
+return t.spec("f0201 Wallet on a stub engine", function(it)
+	it("a first arrival is free, recorded in test mode's own store; live mode writes the live one", function()
+		local w = world(nil)
+		local p = w.player(7)
+		local h = w.run(w.wallet().arrive, p, "pickman")
+		t.expect(h.done).toBe(true)
+		t.expect(h.results[1]).toBe("play")
+		t.expect(h.results[2]).toBe("free")
+		t.expect(rec(w, TEST, 7).free).toBe(NOW)
+		t.expect(w.record(LIVE, 7)).toBe(nil)
+		local lw = world("live")
+		local lp = lw.player(7)
+		local lh = lw.run(lw.wallet().arrive, lp, "pickman")
+		t.expect(lh.results[2]).toBe("free")
+		t.expect(rec(lw, LIVE, 7).free).toBe(NOW)
+		t.expect(lw.record(TEST, 7)).toBe(nil)
+	end)
+
+	it("each title keeps its own record: a free start in one leaves another's due", function()
+		local w = world(nil)
+		local p = w.player(7)
+		w.run(w.wallet().arrive, p, "snake")
+		t.expect(rec(w, "SnakePaidPlayTest", 7).free).toBe(NOW)
+		t.expect(w.record(TEST, 7)).toBe(nil)
+		local h = w.run(w.wallet().arrive, p, "pickman")
+		t.expect(h.results[2]).toBe("free")
+		t.expect(rec(w, TEST, 7).free).toBe(NOW)
+		t.expect(w.writes).toBe(2)
+	end)
+
+	it(
+		"within the hour a held play is used; with none the arrival is buy, goes back and writes nothing",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { free = NOW - 60, plays = 1 })
+			local p = w.player(7)
+			local h = w.run(w.wallet().arrive, p, "pickman")
+			t.expect(h.results[1]).toBe("play")
+			t.expect(h.results[2]).toBe("credit")
+			t.expect(rec(w, TEST, 7).plays).toBe(0)
+			local w2 = world(nil)
+			w2.seed(TEST, 8, { free = NOW - 60 })
+			local before = w2.record(TEST, 8)
+			local h2 = w2.run(w2.wallet().arrive, w2.player(8), "pickman")
+			t.expect(h2.results[1]).toBe("back")
+			t.expect(h2.results[2]).toBe("buy")
+			t.expect(w2.record(TEST, 8)).toBe(before)
+		end
+	)
+
+	it(
+		"the arrival is charged once per join: a later call answers the same; a new join claims again",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { free = NOW - 60, plays = 2 })
+			local p = w.player(7)
+			w.run(w.wallet().arrive, p, "pickman")
+			local h = w.run(w.wallet().arrive, p, "pickman")
+			t.expect(h.results[2]).toBe("credit")
+			t.expect(w.writes).toBe(1)
+			t.expect(rec(w, TEST, 7).plays).toBe(1)
+			w.leave(p)
+			local again = w.player(7)
+			w.run(w.wallet().arrive, again, "pickman")
+			t.expect(w.writes).toBe(2)
+			t.expect(rec(w, TEST, 7).plays).toBe(0)
+		end
+	)
+
+	it("a second arrival during the first's write waits for it: one write, the same answer", function()
+		local w = world(nil)
+		local p = w.player(7)
+		w.hold.update = true
+		local first = w.run(w.wallet().arrive, p, "pickman")
+		local second = w.run(w.wallet().arrive, p, "pickman")
+		t.expect(first.done).toBe(false)
+		t.expect(second.done).toBe(false)
+		t.expect(w.writes).toBe(1)
+		w.release()
+		t.expect(first.done).toBe(true)
+		t.expect(second.done).toBe(true)
+		t.expect(first.results[2]).toBe("free")
+		t.expect(second.results[1]).toBe("play")
+		t.expect(second.results[2]).toBe("free")
+		t.expect(w.writes).toBe(1)
+	end)
+
+	it(
+		"an arrival whose write fails plays and charges nothing; one not back within WAIT_SECONDS plays",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { free = NOW - 60, plays = 1 })
+			w.fail.update = true
+			local h = w.run(w.wallet().arrive, w.player(7), "pickman")
+			t.expect(h.results[1]).toBe("play")
+			t.expect(h.results[2]).toBe(nil)
+			t.expect(rec(w, TEST, 7).plays).toBe(1)
+			local w2 = world(nil)
+			local p2 = w2.player(8)
+			w2.seed(TEST, 8, { free = NOW - 60 })
+			w2.hold.update = true
+			local h2 = w2.run(w2.wallet().arrive, p2, "pickman")
+			t.expect(h2.done).toBe(false)
+			t.expect(w2.wallet().WAIT_SECONDS).toBe(5)
+			w2.elapse()
+			t.expect(h2.done).toBe(true)
+			t.expect(h2.results[1]).toBe("play")
+			t.expect(h2.results[2]).toBe(nil)
+			w2.release() -- the late write ends; its answer changes nothing
+			t.expect((w2.run(w2.wallet().arrive, p2, "pickman")).results[2]).toBe(nil)
+		end
+	)
+
+	it("a live DataStore that cannot be opened: the arrival plays, a read is down, nothing throws", function()
+		local w = world("live")
+		w.fail.open = true
+		local p = w.player(7)
+		local ok, h = pcall(w.run, w.wallet().arrive, p, "pickman")
+		t.expect(ok).toBe(true)
+		t.expect(h.results[1]).toBe("play")
+		t.expect(h.results[2]).toBe(nil)
+		local okRead, r = pcall(w.run, w.wallet().read, w.player(8), "pickman")
+		t.expect(okRead).toBe(true)
+		t.expect(r.results[1]).toBe(nil)
+		t.expect(r.results[2]).toBe("down")
+		local okUse, u = pcall(w.run, w.wallet().useRevive, w.player(9), "pickman")
+		t.expect(okUse).toBe(true)
+		t.expect(u.results[1]).toBe(nil)
+		t.expect(#w.opened > 0).toBe(true)
+	end)
+
+	it(
+		"the portal's pass lets a buy arrival play, and is taken on every arrival, whatever its start",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { free = NOW - 60 })
+			local p = w.player(7)
+			downRead(w, p, "pickman")
+			t.expect(w.run(w.wallet().pass, p, "pickman").results[1]).toBe(true)
+			t.expect(w.passes["pickman/7"]).toBe(true)
+			local h = w.run(w.wallet().arrive, p, "pickman")
+			t.expect(h.results[1]).toBe("play")
+			t.expect(h.results[2]).toBe("buy")
+			t.expect(w.passes["pickman/7"]).toBe(nil)
+			local w2 = world(nil)
+			local p2 = w2.player(8)
+			downRead(w2, p2, "pickman")
+			w2.run(w2.wallet().pass, p2, "pickman")
+			w2.run(w2.wallet().arrive, p2, "pickman") -- free: the pass is taken all the same
+			t.expect(w2.passes["pickman/8"]).toBe(nil)
+			w2.leave(p2)
+			local back = w2.run(w2.wallet().arrive, w2.player(8), "pickman")
+			t.expect(back.results[1]).toBe("back")
+		end
+	)
+
+	it("a pass is the title's own: another title's pass does not let a buy arrival play", function()
+		local w = world(nil)
+		w.seed(TEST, 7, { free = NOW - 60 })
+		local p = w.player(7)
+		downRead(w, p, "snake")
+		w.run(w.wallet().pass, p, "snake")
+		t.expect(w.run(w.wallet().arrive, p, "pickman").results[1]).toBe("back")
+		t.expect(w.passes["snake/7"]).toBe(true)
+	end)
+
+	it(
+		"a buy arrival whose pass map cannot be read plays (the user, 2026-10-31: 'Let all of them play')",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { free = NOW - 60 })
+			w.fail.passGet = true
+			local h = w.run(w.wallet().arrive, w.player(7), "pickman")
+			t.expect(h.results[1]).toBe("play")
+			t.expect(h.results[2]).toBe("buy")
+		end
+	)
+
+	it("TeleportData is never trusted: a join claiming a paid play is a buy arrival", function()
+		local w = world(nil)
+		w.seed(TEST, 7, { free = NOW - 60 })
+		local p = w.player(7, { plays = 9, paid = true, start = "credit" })
+		local h = w.run(w.wallet().arrive, p, "pickman")
+		t.expect(h.results[1]).toBe("back")
+		t.expect(h.results[2]).toBe("buy")
+	end)
+
+	it(
+		"the transform decides: another server's free start just before this write makes this one use a held play",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { plays = 1 })
+			w.race = function(store: { [string]: any }, key: string)
+				store[key] = { free = NOW - 10, plays = 1 }
+			end
+			local h = w.run(w.wallet().arrive, w.player(7), "pickman")
+			t.expect(h.results[2]).toBe("credit")
+			local r = rec(w, TEST, 7)
+			t.expect(r.free).toBe(NOW - 10)
+			t.expect(r.plays).toBe(0)
+		end
+	)
+
+	it("the transform's last call decides: a first call on an outdated value does not count", function()
+		local w = world(nil)
+		w.seed(TEST, 7, { plays = 1 })
+		w.twice = true
+		w.race = function(store: { [string]: any }, key: string)
+			store[key] = { free = NOW - 10 }
+		end
+		local h = w.run(w.wallet().arrive, w.player(7), "pickman")
+		t.expect(h.results[1]).toBe("back")
+		t.expect(h.results[2]).toBe("buy")
+	end)
+
+	it(
+		"a held revive is used once and counted for the run; with none held known, no write is made",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { free = NOW - 7200, continues = 1 })
+			local p = w.player(7)
+			local wallet = w.wallet()
+			w.run(wallet.arrive, p, "pickman")
+			t.expect(wallet.revives(p, "pickman")).toBe(0)
+			local writes = w.writes
+			t.expect(w.run(wallet.useRevive, p, "pickman").results[1]).toBe(true)
+			t.expect(w.writes).toBe(writes + 1)
+			t.expect(rec(w, TEST, 7).revives).toBe(0)
+			t.expect(wallet.revives(p, "pickman")).toBe(1)
+			w.clock += 30
+			t.expect(w.run(wallet.useRevive, p, "pickman").results[1]).toBe(false)
+			t.expect(w.writes).toBe(writes + 1)
+			t.expect(wallet.revives(p, "pickman")).toBe(1)
+		end
+	)
+
+	it(
+		"one revive write per player and title at a time: a use during a use's write answers nil, one write",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { continues = 2 })
+			local p = w.player(7)
+			local wallet = w.wallet()
+			w.hold.update = true
+			local first = w.run(wallet.useRevive, p, "pickman")
+			local second = w.run(wallet.useRevive, p, "pickman")
+			t.expect(second.done).toBe(true)
+			t.expect(second.results[1]).toBe(nil)
+			w.clock += 30 -- a write slower than USE_SECONDS: still one at a time
+			local third = w.run(wallet.useRevive, p, "pickman")
+			t.expect(third.results[1]).toBe(nil)
+			t.expect(w.writes).toBe(1)
+			w.release()
+			t.expect(first.results[1]).toBe(true)
+			t.expect(rec(w, TEST, 7).revives).toBe(1)
+			t.expect(wallet.revives(p, "pickman")).toBe(1)
+		end
+	)
+
+	it("revive writes are bounded over time: none within USE_SECONDS of the last; one after it", function()
+		local w = world(nil)
+		w.seed(TEST, 7, { continues = 3 })
+		local p = w.player(7)
+		local wallet = w.wallet()
+		t.expect(wallet.USE_SECONDS).toBe(6)
+		t.expect(w.run(wallet.useRevive, p, "pickman").results[1]).toBe(true)
+		w.clock += 5.9
+		t.expect(w.run(wallet.useRevive, p, "pickman").results[1]).toBe(nil)
+		t.expect(w.writes).toBe(1)
+		w.clock += 0.2
+		t.expect(w.run(wallet.useRevive, p, "pickman").results[1]).toBe(true)
+		t.expect(w.writes).toBe(2)
+		t.expect(wallet.revives(p, "pickman")).toBe(2)
+	end)
+
+	it("a revive use whose store fails answers nil and counts nothing", function()
+		local w = world(nil)
+		w.seed(TEST, 7, { continues = 1 })
+		local p = w.player(7)
+		w.fail.update = true
+		t.expect(w.run(w.wallet().useRevive, p, "pickman").results[1]).toBe(nil)
+		t.expect(w.wallet().revives(p, "pickman")).toBe(0)
+	end)
+
+	it(
+		"the run's revive count is kept after the player leaves, and starts again at their next arrival",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { free = NOW - 7200, continues = 2 })
+			local p = w.player(7)
+			local wallet = w.wallet()
+			w.run(wallet.arrive, p, "pickman")
+			w.run(wallet.useRevive, p, "pickman")
+			w.leave(p)
+			t.expect(wallet.revives(p, "pickman")).toBe(1)
+			local again = w.player(7)
+			t.expect(wallet.revives(again, "pickman")).toBe(1)
+			w.run(wallet.arrive, again, "pickman")
+			t.expect(wallet.revives(again, "pickman")).toBe(0)
+			t.expect(wallet.revives(again, "snake")).toBe(0)
+		end
+	)
+
+	it("a refund is one more credit of its kind, outside the receipts", function()
+		local w = world(nil)
+		w.seed(TEST, 7, { receipts = { "a" } })
+		local p = w.player(7)
+		t.expect(w.run(w.wallet().refund, p, "pickman", "revive").results[1]).toBe(true)
+		t.expect(w.run(w.wallet().refund, p, "pickman", "revive").results[1]).toBe(true)
+		local r = rec(w, TEST, 7)
+		t.expect(r.revives).toBe(2)
+		t.expect(r.receipts).toEqual({ "a" })
+	end)
+
+	it(
+		"a read reads the mode's store; within READ_SECONDS of the last record seen it answers from it",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { plays = 2 })
+			local p = w.player(7)
+			local wallet = w.wallet()
+			t.expect(wallet.READ_SECONDS).toBe(60)
+			local r = w.run(wallet.read, p, "pickman")
+			t.expect(r.results[1].plays).toBe(2)
+			t.expect(w.reads).toBe(1)
+			w.clock += 59.9
+			t.expect(w.run(wallet.read, p, "pickman").results[1].plays).toBe(2)
+			t.expect(w.reads).toBe(1)
+			w.clock += 0.2
+			w.run(wallet.read, p, "pickman")
+			t.expect(w.reads).toBe(2)
+		end
+	)
+
+	it("a read during a read for the same player is busy: one read, and the second answers nil", function()
+		local w = world(nil)
+		local p = w.player(7)
+		local wallet = w.wallet()
+		w.hold.get = true
+		local first = w.run(wallet.read, p, "pickman")
+		local second = w.run(wallet.read, p, "pickman")
+		t.expect(second.done).toBe(true)
+		t.expect(second.results[1]).toBe(nil)
+		t.expect(second.results[2]).toBe("busy")
+		t.expect(w.reads).toBe(1)
+		w.release()
+		t.expect(first.done).toBe(true)
+		t.expect(first.results[1].plays).toBe(0)
+	end)
+
+	it("a read not back within WAIT_SECONDS is down, and stays busy until it ends", function()
+		local w = world(nil)
+		local p = w.player(7)
+		local wallet = w.wallet()
+		w.hold.get = true
+		local first = w.run(wallet.read, p, "pickman")
+		w.elapse()
+		t.expect(first.done).toBe(true)
+		t.expect(first.results[2]).toBe("down")
+		t.expect(w.run(wallet.read, p, "pickman").results[2]).toBe("busy")
+		t.expect(w.reads).toBe(1)
+		w.release() -- the late end starts the retry span: down with no store call for RETRY_SECONDS
+		t.expect(w.run(wallet.read, p, "pickman").results[2]).toBe("down")
+		t.expect(w.reads).toBe(1)
+		w.advance(6.1)
+		t.expect(w.run(wallet.read, p, "pickman").results[1].plays).toBe(0)
+		t.expect(w.reads).toBe(2)
+	end)
+
+	it("a read that ends after the player left keeps nothing: their next join reads again", function()
+		local w = world(nil)
+		w.seed(TEST, 7, { plays = 1 })
+		local p = w.player(7)
+		local wallet = w.wallet()
+		w.hold.get = true
+		w.run(wallet.read, p, "pickman")
+		w.leave(p)
+		w.release()
+		local again = w.player(7)
+		w.seed(TEST, 7, { plays = 3 })
+		t.expect(w.run(wallet.read, again, "pickman").results[1].plays).toBe(3)
+		t.expect(w.reads).toBe(2)
+	end)
+
+	it(
+		"a read whose store fails is down, and reads stay down with no store call for RETRY_SECONDS",
+		function()
+			local w = world(nil)
+			local p = w.player(7)
+			local wallet = w.wallet()
+			t.expect(wallet.RETRY_SECONDS).toBe(6)
+			w.fail.get = true
+			local r = w.run(wallet.read, p, "pickman")
+			t.expect(r.results[1]).toBe(nil)
+			t.expect(r.results[2]).toBe("down")
+			t.expect(w.reads).toBe(1)
+			w.fail.get = false
+			w.advance(5.9)
+			t.expect(w.run(wallet.read, p, "pickman").results[2]).toBe("down")
+			t.expect(w.reads).toBe(1)
+			w.advance(0.2)
+			t.expect(w.run(wallet.read, p, "pickman").results[1].plays).toBe(0)
+			t.expect(w.reads).toBe(2)
+		end
+	)
+
+	it("a title not in the catalog is an error, not a silent free start", function()
+		local w = world(nil)
+		local p = w.player(7)
+		t.expect(function()
+			w.wallet().arrive(p, "tetris")
+		end).toThrow("no title")
+		t.expect(function()
+			w.wallet().useRevive(p, "Pickman")
+		end).toThrow("no title")
+	end)
+
+	it("the mode is read once from ServerScriptService: PaidPlay and each title's two ids", function()
+		local w = world("live", { SnakeReviveProductId = 0 })
+		t.expect(w.wallet().mode("pickman")).toBe("live")
+		t.expect(w.wallet().mode("snake")).toBe("closed")
+		w.attributes.PaidPlay = nil
+		w.attributes.SnakeReviveProductId = 202
+		t.expect(w.wallet().mode("pickman")).toBe("live")
+		t.expect(w.wallet().mode("snake")).toBe("closed")
+		t.expect(world(nil).wallet().mode("pickman")).toBe("test")
+	end)
+
+	it(
+		"a record Wallet writes is f0145's shape: free, plays, continues and receipts, nothing else",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { free = NOW - 7200, plays = 1, continues = 2, receipts = { "a" } })
+			local p = w.player(7)
+			w.run(w.wallet().arrive, p, "pickman")
+			w.run(w.wallet().useRevive, p, "pickman")
+			local raw = w.record(TEST, 7)
+			local keys = {}
+			for k in raw do
+				table.insert(keys, k)
+			end
+			table.sort(keys)
+			t.expect(keys).toEqual({ "continues", "free", "plays", "receipts" })
+			t.expect(raw.continues).toBe(1)
+			t.expect(raw.plays).toBe(1)
+			t.expect(raw.free).toBe(NOW)
+		end
+	)
+
+	it(
+		"each title has its own read: two titles read within READ_SECONDS each answer their own record",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { plays = 2 })
+			w.seed("SnakePaidPlayTest", 7, { free = NOW - 60 })
+			local p = w.player(7)
+			local wallet = w.wallet()
+			t.expect(w.run(wallet.read, p, "pickman").results[1].plays).toBe(2)
+			local snake = w.run(wallet.read, p, "snake").results[1]
+			t.expect(snake.plays).toBe(0)
+			t.expect(snake.free).toBe(NOW - 60)
+			t.expect(w.reads).toBe(2)
+		end
+	)
+
+	it("a read of one title under way leaves another title's read free", function()
+		local w = world(nil)
+		w.seed(TEST, 7, { plays = 1 })
+		local p = w.player(7)
+		local wallet = w.wallet()
+		w.hold.get = true
+		local snake = w.run(wallet.read, p, "snake")
+		local pickman = w.run(wallet.read, p, "pickman")
+		t.expect(snake.done).toBe(false)
+		t.expect(pickman.results[1].plays).toBe(1)
+		w.release()
+		t.expect(snake.done).toBe(true)
+	end)
+
+	it("a revive used in one title does not start another title's USE_SECONDS", function()
+		local w = world(nil)
+		w.seed(TEST, 7, { continues = 1 })
+		w.seed("SnakePaidPlayTest", 7, { continues = 1 })
+		local p = w.player(7)
+		local wallet = w.wallet()
+		t.expect(w.run(wallet.useRevive, p, "pickman").results[1]).toBe(true)
+		t.expect(w.run(wallet.useRevive, p, "snake").results[1]).toBe(true)
+		t.expect(wallet.revives(p, "pickman")).toBe(1)
+		t.expect(wallet.revives(p, "snake")).toBe(1)
+	end)
+
+	it(
+		"a pass read not back within WAIT_SECONDS counts as a pass; its late answer still removes the entry",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { free = NOW - 60 })
+			local p = w.player(7)
+			w.passes["pickman/7"] = true -- the portal's pass
+			w.hold.pass = true
+			local h = w.run(w.wallet().arrive, p, "pickman")
+			t.expect(h.done).toBe(false)
+			w.elapse()
+			t.expect(h.done).toBe(true)
+			t.expect(h.results[1]).toBe("play")
+			t.expect(h.results[2]).toBe("buy")
+			w.release()
+			t.expect(w.passes["pickman/7"]).toBe(nil)
+			w.leave(p)
+			t.expect(w.run(w.wallet().arrive, w.player(7), "pickman").results[1]).toBe("back")
+		end
+	)
+
+	it("a slow pass read with no pass there still plays, and the arrival ends within its limit", function()
+		local w = world(nil)
+		w.seed(TEST, 7, { free = NOW - 60 })
+		w.hold.pass = true
+		local h = w.run(w.wallet().arrive, w.player(7), "pickman")
+		w.elapse()
+		t.expect(h.results[1]).toBe("play")
+	end)
+
+	it(
+		"in test mode a test store that cannot be opened has a stand-in: arrivals, test purchases and revives work",
+		function()
+			local w = world(nil)
+			w.fail.open = true
+			local p = w.player(7)
+			local r = w.start()
+			local wallet = w.wallet()
+			local h = w.run(wallet.arrive, p, "pickman")
+			t.expect(h.results[1]).toBe("play")
+			t.expect(h.results[2]).toBe("free")
+			t.expect(r.ask(p, "pickman", "revive")).toBe(true)
+			w.run(w.answer, p, "confirm")
+			t.expect(w.events[1].bought).toBe(true)
+			t.expect(w.events[2].kind).toBe("granted")
+			t.expect(w.run(wallet.useRevive, p, "pickman").results[1]).toBe(true)
+			t.expect(wallet.revives(p, "pickman")).toBe(1)
+			w.leave(p)
+			local again = w.player(7)
+			t.expect(w.run(wallet.arrive, again, "pickman").results[1]).toBe("back") -- the stand-in kept the free start
+		end
+	)
+
+	it(
+		"in live mode an unopenable store has no stand-in: a receipt is not processed and the arrival claims nothing",
+		function()
+			local w = world("live")
+			w.fail.open = true
+			w.player(7)
+			w.start()
+			t.expect(w.run(w.receipt, 7, 101, "live-1").results[1])
+				.toBe("ProductPurchaseDecision.NotProcessedYet")
+			local h = w.run(w.wallet().arrive, w.player(8), "pickman")
+			t.expect(h.results[1]).toBe("play")
+			t.expect(h.results[2]).toBe(nil)
+		end
+	)
+
+	it("a pass is written only after a read that answered down, once per such answer", function()
+		local w = world(nil)
+		local p = w.player(7)
+		local wallet = w.wallet()
+		t.expect(w.run(wallet.pass, p, "pickman").results[1]).toBe(false)
+		w.run(wallet.read, p, "pickman") -- a good read
+		t.expect(w.run(wallet.pass, p, "pickman").results[1]).toBe(false)
+		t.expect(w.passes["pickman/7"]).toBe(nil)
+		local q = w.player(8)
+		w.hold.get = true
+		w.run(wallet.read, q, "pickman")
+		t.expect(w.run(wallet.read, q, "pickman").results[2]).toBe("busy")
+		t.expect(w.run(wallet.pass, q, "pickman").results[1]).toBe(false)
+		w.release()
+		local d = w.player(9)
+		w.fail.get = true
+		t.expect(w.run(wallet.read, d, "pickman").results[2]).toBe("down")
+		t.expect(w.run(wallet.pass, d, "pickman").results[1]).toBe(true)
+		t.expect(w.passes["pickman/9"]).toBe(true)
+		w.passes["pickman/9"] = nil
+		t.expect(w.run(wallet.pass, d, "pickman").results[1]).toBe(false)
+		t.expect(w.run(wallet.read, d, "pickman").results[2]).toBe("down") -- within RETRY_SECONDS, no store call
+		t.expect(w.run(wallet.pass, d, "pickman").results[1]).toBe(true)
+		t.expect(w.run(wallet.pass, d, "snake").results[1]).toBe(false)
+	end)
+
+	it(
+		"a written revive refund takes one off the run's count, never below 0; a failed one or a play refund does not",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { free = NOW - 7200, continues = 1 })
+			local p = w.player(7)
+			local wallet = w.wallet()
+			w.run(wallet.arrive, p, "pickman")
+			w.run(wallet.useRevive, p, "pickman")
+			t.expect(wallet.revives(p, "pickman")).toBe(1)
+			w.fail.update = true
+			t.expect(w.run(wallet.refund, p, "pickman", "revive").results[1]).toBe(false)
+			t.expect(wallet.revives(p, "pickman")).toBe(1)
+			w.fail.update = false
+			t.expect(w.run(wallet.refund, p, "pickman", "play").results[1]).toBe(true)
+			t.expect(wallet.revives(p, "pickman")).toBe(1)
+			t.expect(w.run(wallet.refund, p, "pickman", "revive").results[1]).toBe(true)
+			t.expect(wallet.revives(p, "pickman")).toBe(0)
+			t.expect(rec(w, TEST, 7).revives).toBe(1)
+			t.expect(w.run(wallet.refund, p, "pickman", "revive").results[1]).toBe(true)
+			t.expect(wallet.revives(p, "pickman")).toBe(0)
+		end
+	)
+
+	it(
+		"calls for a player who already left claim, read, use and pass nothing; a refund is still written",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { continues = 1 })
+			local p = w.player(7)
+			local wallet = w.wallet()
+			w.leave(p)
+			local a = w.run(wallet.arrive, p, "pickman")
+			t.expect(a.results[1]).toBe("back")
+			t.expect(a.results[2]).toBe(nil)
+			t.expect(w.run(wallet.useRevive, p, "pickman").results[1]).toBe(nil)
+			local r = w.run(wallet.read, p, "pickman")
+			t.expect(r.results[1]).toBe(nil)
+			t.expect(r.results[2]).toBe("down")
+			t.expect(w.run(wallet.pass, p, "pickman").results[1]).toBe(false)
+			t.expect(w.writes).toBe(0)
+			t.expect(w.reads).toBe(0)
+			t.expect(w.passReads).toBe(0)
+			t.expect(w.run(wallet.refund, p, "pickman", "revive").results[1]).toBe(true)
+			t.expect(rec(w, TEST, 7).revives).toBe(2)
+		end
+	)
+
+	it(
+		"a departed run's count is dropped KEEP_SECONDS after the leave, and a later leave restarts that span",
+		function()
+			local w = world(nil)
+			w.seed(TEST, 7, { free = NOW - 7200, continues = 3 })
+			local wallet = w.wallet()
+			t.expect(wallet.KEEP_SECONDS).toBe(600)
+			local p = w.player(7)
+			w.run(wallet.arrive, p, "pickman")
+			w.run(wallet.useRevive, p, "pickman")
+			w.leave(p) -- t = 0
+			w.advance(100)
+			t.expect(wallet.revives(p, "pickman")).toBe(1) -- kept for the departed run's submit
+			local again = w.player(7)
+			w.run(wallet.arrive, again, "pickman")
+			w.run(wallet.useRevive, again, "pickman")
+			w.advance(400)
+			w.leave(again) -- t = 500
+			w.advance(101) -- t = 601: the first leave's span is over, but this run left at 500
+			t.expect(wallet.revives(again, "pickman")).toBe(1)
+			w.advance(500) -- t = 1101
+			t.expect(wallet.revives(again, "pickman")).toBe(0)
+		end
+	)
+
+	it("nothing a teleport carries is read: no Wallet call reads the join data", function()
+		local w = world(nil)
+		w.seed(TEST, 7, { free = NOW - 60, continues = 1 })
+		local p = w.player(7, { plays = 9, paid = true })
+		local wallet = w.wallet()
+		w.run(wallet.arrive, p, "pickman")
+		w.run(wallet.read, p, "snake")
+		w.run(wallet.useRevive, p, "pickman")
+		w.run(wallet.refund, p, "pickman", "play")
+		w.run(wallet.pass, p, "pickman")
+		w.run(wallet.revives, p, "pickman")
+		t.expect(w.joinReads).toBe(0)
+	end)
+end)

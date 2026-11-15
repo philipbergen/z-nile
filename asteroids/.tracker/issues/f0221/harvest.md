@@ -1,0 +1,7 @@
+- design-review-001 F1: asteroids-test/wrap-cases-disagree-with-raw, zz-test/pin-call-site-arguments
+- design-review-001 F2: zz-test/seed-every-enumerated-case
+- design-review-001 F3: z-design/spec-design-correspondence
+- design-review-001 F4: zz-test/pin-call-site-arguments
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: zz-review/lists-paste-their-search
+- note f0220's prototype moved under its design review while this prep's base was cut from it; the runner refused on the hashes and the base was re-cut on f0220's prepared branch: z-design/in-flight-bases-pin-their-source

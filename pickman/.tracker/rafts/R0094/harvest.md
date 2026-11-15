@@ -5,3 +5,8 @@
 - design-review-001 F4: one-off: a margin quoted for the wrong levels; the conclusion held
 - design-review-001 F5: z-raft/member-handshakes-reach-the-order
 - note R0094 design-review-001's candidate: two of three members' prototypes were only branches and were gone at rafting: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F1: z-raft/order-names-members-once
+- design-review-002 F2: z-raft/pre-ready-results-go-in-the-raft-document
+- design-review-002 F3: one-off: a product sentence two members' designs left undecided once one could start a run past level 1; put to the user
+- design-review-002 F4: one-off: an earlier packaging decision needed one sentence once the user replaced it
+- design-review-002 F5: z-raft/copied-raft-text-is-reverified

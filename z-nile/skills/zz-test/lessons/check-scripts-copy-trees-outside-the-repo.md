@@ -10,3 +10,5 @@ A check.sh command runs outside the jail. A copy of the tree at a fixed name und
 **Why:** c0302 design review 001 F7: `layer.sh` cloned the checkout into `z-nile/.cache/c0302-layer`, copied seven files into the clone and started its runner there; four early exits skipped the final removal.
 
 **How to apply:** `hold=$(mktemp -d "${TMPDIR:-/tmp}/<id>-<name>.XXXXXX")`, `trap 'rm -rf "$hold"' EXIT`, and check that the copy is its own checkout before any git command names it (zz-test, Writers).
+
+**Note (c0281 prep):** c0281's mutation driver made its copy with mktemp under the home's `.cache`, and an error between the copy and its removal left it behind; it moved to `$TMPDIR` with the removal after an `xpcall`. Ask: is the copy outside the repository even when its name is random, and does the removal run when the check stops on an error?
