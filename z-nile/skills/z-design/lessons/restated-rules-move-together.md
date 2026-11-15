@@ -55,3 +55,5 @@ c0177 design review 001 F2: a narrowing that changes a spec's baseline (f0125's 
 **Note (c0306's prep, 2026-11-14, design review 001 F8):** c0306's check.sh said the slow tier is run by "Implementation step 13", copied from another issue's check, while c0306 has ten steps.
 
 **Note** (R0103 code review 001 F1): c0330 narrowed a refusal and the contract comment and the zz-rules row said the Solution was simply optional, leaving out the refusal the code kept (a fence-only Solution). A restatement of a narrowed rule names what still fails, not only what no longer does. Check: does each restatement list the cases the code still refuses?
+
+**Also:** d0297 design review 001 F6: the new rule "the selector never names a sequestered spec" was added beside the old sentence "on a layer branch, that ticket's acceptance specs", in zz-test and in the selector's header, and a context comment still described the list the rule now filters. Each restatement had to say "promoted" or name the flag.

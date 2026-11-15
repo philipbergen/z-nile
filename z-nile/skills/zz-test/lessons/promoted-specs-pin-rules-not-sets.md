@@ -11,3 +11,5 @@ A spec that says "these are exactly the ten skills" or "pickman's skills hold no
 **How to apply:** for each set a promoted case reads, ask whether a planned or ordinary change adds to it. If so, assert membership (the named ones are there) and the rule (every member is well formed, the links equal the folders found), never equality with a literal list. Put "this change doesn't make X" claims in `check.sh`, which is not rerun after `done`.
 
 c0264 design review 009 F9: a promoted case required a label naming one capture of the day (c0305); it now asserts that the section carries a state label naming an issue, and the exact ids stay in the sequestered check.
+
+**Also:** d0297 design review 001 F3: a wiring case asserted that exactly `z-nile/engine/main.luau` holds the flag and located `function cmd.finish(` by name, while c0180 plans to split `main.luau` into one module per command. Pin where the use may be by its content (inside a selector call's argv, in the file that writes `results.txt`), and keep a correct variant that moves the function to its own module.
