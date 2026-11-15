@@ -5981,9 +5981,42 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 			print(`{id} is already approved on origin/main`)
 			return
 		end
+		-- c0283: the approved row of this approval (the one `approve` committed beside approval.md) is published in the same
+		-- commit, appended to origin/main's record, so `who` and the board see the approver of a prep that merged before
+		-- the human approved. An approval made before the row existed has none, and publishes approval.md alone.
+		local recordRel = `{item.dir}/provenance.md`
+		local localRows = if fs.isFile(recordRel) then provenance.parse(fs.readFile(recordRel)) else nil
+		local approvals = contract.parse(localText)
+		local wanted = if approvals then `design={string.sub(approvals[#approvals].hash, 1, 12)}` else ""
+		local mine: provenance.Row? = nil
+		for _, r in localRows or {} do
+			if r.event == "approved" and r.detail == wanted then
+				mine = r
+			end
+		end
+		local recordText: string? = nil
+		if mine then
+			local row = mine :: provenance.Row
+			local base = show(recordRel)
+			local seen = false
+			for _, r in if base then (provenance.parse(base) or {}) else {} do
+				seen = seen or (r.event == row.event and r.actor == row.actor and r.detail == row.detail)
+			end
+			if not seen then
+				local grown, rerr = provenance.record(base, id, "approved", row.actor, row.detail, row.when)
+				if not grown then
+					fail(`{id}: {rerr}`)
+				end
+				recordText = grown
+			end
+		end
 		refuseStale()
 		local result = published(publish.commit(".", function(_paths, _read, _roots, _counter)
-			return { { path = path, content = localText } }
+			local changes = { { path = path, content = localText } }
+			if recordText then
+				table.insert(changes, { path = recordRel, content = recordText })
+			end
+			return changes
 		end, `tracker: approve {id}`))
 		if not result.ok then
 			fail(`{id}: {result.reason}. From this worktree run: ./zn approve {id} --publish`)

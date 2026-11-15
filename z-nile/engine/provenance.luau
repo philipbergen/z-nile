@@ -6,6 +6,7 @@
 export type Hint = { agent: boolean, effort: string? }
 export type Row = { when: string, event: string, actor: string, detail: string }
 
+local contract = require("./contract")
 local trail = require("./trail")
 
 export type Commit = trail.Commit
@@ -131,6 +132,59 @@ function provenance.approved(
 		return nil, `{actor} cannot be recorded (a name holds no | and no line break)`
 	end
 	return provenance.record(text, id, "approved", actor, `design={string.sub(hash, 1, 12)}`, now)
+end
+
+-- c0283: the publish rule for an approval, used when one commit appends a row to an issue's provenance.md and to its
+-- approval.md. The record gains exactly one row, `approved`, by the human of the approval.md row appended in the same
+-- commit, with `design=` the first 12 hex of that row's hash; approval.md gains exactly that one row after its old ones.
+-- `PUBLISHED` is not widened: without an approval.md appended beside it an `approved` row is still refused. Nil when it
+-- holds, else the reason.
+function provenance.approvedPublishProblem(
+	old: string?,
+	new: string,
+	id: string,
+	approvalOld: string?,
+	approvalNew: string
+): string?
+	local reason = provenance.publishProblem(old, new, id, { "approved" })
+	if reason then
+		return reason
+	end
+	local n = (provenance.parse(new)) :: { Row }
+	local before = if old then #((provenance.parse(old)) :: { Row }) else 0
+	if #n - before ~= 1 then
+		return `exactly one approved row may be published with an approval, not {#n - before}`
+	end
+	local after, why = contract.parse(approvalNew)
+	if not after then
+		return `the new approval.md does not parse: {why}`
+	end
+	local oldCount = 0
+	if approvalOld then
+		local prior, owhy = contract.parse(approvalOld)
+		if not prior then
+			return `approval.md on origin/main does not parse ({owhy})`
+		end
+		for i, r in prior do
+			local m = after[i]
+			if not m or m.when ~= r.when or m.who ~= r.who or m.hash ~= r.hash then
+				return `approval.md row {i} differs from origin/main: rows are only appended`
+			end
+		end
+		oldCount = #prior
+	end
+	if #after ~= oldCount + 1 then
+		return "the approved row needs exactly one approval.md row appended in the same commit"
+	end
+	local last = after[#after]
+	local row = n[#n]
+	if row.actor ~= provenance.human(last.who) then
+		return `the approved row's human ({row.actor}) is not the approval's ({provenance.human(last.who)})`
+	end
+	if row.detail ~= `design={string.sub(last.hash, 1, 12)}` then
+		return `the approved row's {row.detail} does not start the appended approval's hash`
+	end
+	return nil
 end
 
 -- flag, then env, then an agent-session hint, then the git name; a given value that is not a live form refuses
