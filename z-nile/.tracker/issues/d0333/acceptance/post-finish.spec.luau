@@ -73,7 +73,7 @@ return t.spec("d0333 a commit after finish keeps the layer finished", function(i
 		-- code, specs and the other tracker files still unfinish the layer
 		t.expect(layergit.isPostFinishPath("pickman/src/alpha.luau", "R0010")).toBe(false)
 		t.expect(layergit.isPostFinishPath("pickman/tests/unit/alpha.spec.luau", "R0010")).toBe(false)
-		t.expect(layergit.isPostFinishPath(`{RAFT}/harvest.md`, "R0010")).toBe(false)
+		t.expect(layergit.isPostFinishPath(`{RAFT}/notes.md`, "R0010")).toBe(false)
 		t.expect(layergit.isPostFinishPath(`{RAFT}/check.sh`, "R0010")).toBe(false)
 		t.expect(layergit.isPostFinishPath("pickman/.tracker/issues/active/c0010/check.sh", "R0010"))
 			.toBe(false)
@@ -98,7 +98,7 @@ return t.spec("d0333 a commit after finish keeps the layer finished", function(i
 		local function has(text: string, needle: string): boolean
 			return string.find(text, needle, 1, true) ~= nil
 		end
-		-- after the finish: code, another raft's snapshot, the raft's harvest
+		-- after the finish: code, another raft's snapshot, a file of the raft no rule names
 		t.expect(
 			has(
 				stale({ { "pickman/src/alpha.luau", `{RAFT}/spend.md` }, { `{RAFT}/trace.md` } }),
@@ -111,14 +111,14 @@ return t.spec("d0333 a commit after finish keeps the layer finished", function(i
 				"touches non-tracker file pickman/.tracker/rafts/active/R0020/spend.md"
 			)
 		).toBe(true)
-		t.expect(has(stale({ { `{RAFT}/trace.md`, `{RAFT}/harvest.md`, `{RAFT}/spend.md` } }), "harvest.md"))
+		t.expect(has(stale({ { `{RAFT}/trace.md`, `{RAFT}/notes.md`, `{RAFT}/spend.md` } }), "notes.md"))
 			.toBe(true)
-		-- after the table: code, the issue's document (allowed before the table only), the harvest, a nested spend.md
+		-- after the table: code, the issue's document (allowed before the table only), an unnamed file, a nested spend.md
 		local table1 = { `{RAFT}/trace.md`, `{RAFT}/spend.md`, ROW }
 		t.expect(has(stale({ table1, { "pickman/src/alpha.luau", `{RAFT}/spend.md` } }), "after trace.md"))
 			.toBe(true)
 		t.expect(has(stale({ table1, { DOC, `{RAFT}/spend.md` } }), "after trace.md")).toBe(true)
-		t.expect(has(stale({ table1, { `{RAFT}/harvest.md`, `{RAFT}/spend.md` } }), "after trace.md"))
+		t.expect(has(stale({ table1, { `{RAFT}/notes.md`, `{RAFT}/spend.md` } }), "after trace.md"))
 			.toBe(true)
 		t.expect(has(stale({ table1, { `{RAFT}/notes/spend.md` } }), "after trace.md")).toBe(true)
 		-- a commit of the snapshot alone, with no table at all, is still "before trace.md"

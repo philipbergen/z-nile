@@ -34,10 +34,10 @@ MUTANTS = {
     "M3": "trace's isAllowedAfterTrace left as it is",
     "M4": "layergit takes any path ending /spend.md",
     "M5": "trace's isTrackerFileOf takes any path ending /spend.md",
-    "M6": "layergit also takes the raft's harvest.md",
+    "M6": "layergit takes any file directly in the raft's folder",
     "M7": "trace's isAllowedAfterTrace also takes trace's pre-table set (issue documents)",
     "M8": "trace's isAllowedAfterTrace takes any path ending /spend.md",
-    "M9": "trace's isTrackerFileOf also takes the raft's harvest.md",
+    "M9": "trace's isTrackerFileOf takes any file directly in the raft's folder",
 }
 if mutant and mutant not in MUTANTS:
     sys.exit("unknown mutant " + mutant)
@@ -57,7 +57,7 @@ if mutant == "M4":
     tail = once(tail, SPEND_D, ANY_SPEND, "layergit spend.d")
     s = head + "function layergit.isPostFinishPath" + tail
 elif mutant == "M6":
-    s = once(s, A, A_FIX.replace('or name == "spend.md"', 'or name == "spend.md"\n\t\t\tor name == "harvest.md"'), "layergit A")
+    s = once(s, A, A_FIX.replace('or name == "spend.md"', 'or name == "spend.md"\n\t\t\tor string.find(name, "/", 1, true) == nil'), "layergit A")
 elif mutant != "M1":
     s = once(s, A, A_FIX, "layergit A")
 open(p, "w").write(s)
@@ -70,7 +70,7 @@ first, second = rest.split("local function isAllowedAfterTrace", 1)
 if mutant == "M5":
     first = once(first, SPEND_D, ANY_SPEND, "trace first spend.d")
 elif mutant == "M9":
-    first = once(first, A, A_FIX.replace('or name == "spend.md"', 'or name == "spend.md"\n\t\t\tor name == "harvest.md"'), "trace A")
+    first = once(first, A, A_FIX.replace('or name == "spend.md"', 'or name == "spend.md"\n\t\t\tor string.find(name, "/", 1, true) == nil'), "trace A")
 elif mutant != "M2":
     first = once(first, A, A_FIX, "trace A")
 if mutant == "M8":
