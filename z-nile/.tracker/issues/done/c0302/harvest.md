@@ -1,0 +1,9 @@
+- design-review-001 F1: z-design/checks-pass-in-a-dispatched-step
+- design-review-001 F2: z-design/new-rules-migrate-existing-work
+- design-review-001 F3: z-design/design-the-execution-window
+- design-review-001 F4: zz-test/absence-scans-cover-every-form
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: zz-test/check-sh-never-runs-the-slow-tier
+- design-review-001 F7: zz-test/check-scripts-copy-trees-outside-the-repo
+- design-review-001 F8: one-off: one script built its paths in two parts; the whole-path rule for pins is already in zz-test/narrowing-pins-the-whole-file's model
+- design-review-001 F9: one-off: a self-contradicting step and an unrecorded wrapper in this document only
