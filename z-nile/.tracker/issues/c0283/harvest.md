@@ -11,3 +11,4 @@
 - design-review-001 F10: z-design/restated-rules-move-together
 - design-review-001 F11: one-off: the mutation runner runs bounded and refuses a dirty copy
 - note the superseded design (a status-prepared gate, a frozen list and --said, dropped by the user's re-scope of 2026-11-12) taught two lessons and its reviews are in superseded/: zz-test/state-files-are-excluded-from-fixtures, zz-test/specs-set-host-markers-explicitly
+- note R0099 design review 002 F1: AC5 named c0263's promoted spec paths, absent before the raft's done, and the coordinator's first fix prefixed `zn find` with $ZN_ROOT: z-design/check-paths-from-the-home
