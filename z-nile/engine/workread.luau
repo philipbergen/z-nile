@@ -13,6 +13,7 @@ local process = require("@lune/process")
 local projects = require("./projects")
 local raftplan = require("./raftplan")
 local readycheck = require("./readycheck")
+local reviewmodel = require("./reviewmodel")
 local sh = require("../lib/sh")
 local stack = require("./stack")
 local statusLib = require("./status")
@@ -330,6 +331,7 @@ local function build(
 		since = if holder then holder.when else "",
 		stacked = if at.state == "active" then stacked(issues, layers, tips, mainSha) else false,
 		codeReview = reviewState(sides, "review%-", "resolved"),
+		codeModel = if reviewmodel.judged(front) then reviewmodel.problem(sides, "code", id) else nil,
 		finalReview = final,
 		trace = trace,
 		traceOk = trace and final == "approved",
@@ -434,6 +436,7 @@ local function blockFor(
 			specs = specs,
 			approval = folder["approval.md"],
 			approvalFile = if mat then `{mat.dir}/approval.md` else `{mid}/approval.md`,
+			judged = reviewmodel.judged(mf),
 		})
 	end
 	local raftFiles = filesUnder(at.dir, under, docs, id, function(rel: string, _issue: string): boolean
@@ -454,6 +457,7 @@ local function blockFor(
 		members = members,
 		files = raftFiles,
 		loaded = true,
+		judged = reviewmodel.judged(front),
 	})
 	if why then
 		return why

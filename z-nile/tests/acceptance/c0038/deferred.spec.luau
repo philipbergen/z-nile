@@ -20,7 +20,7 @@ local work = `{fixture.physical(".")}/.cache/c0360-deferred`
 local TRIVIAL_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
 	.. 'check "RC1: fixture" true\nfinish\n'
 
-local REVIEW = "# Review 001\n\n"
+local REVIEW = "Model: claude-opus-5-5\n# Review 001\n\n"
 	.. "### F1 [high] a high finding\nEvidence: x\n\n"
 	.. "### F2 [medium] a medium finding\nEvidence: y\n\n"
 	.. "### F3 [low] a low finding\nEvidence: z\n\n"
@@ -206,7 +206,7 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 
 	it("refuses to defer a finding whose severity is not stated", function()
 		-- the unrated finding is followed by a rated one: its severity must not be borrowed
-		local review = "# Review 001\n\n### F1 an unrated finding\nEvidence: x\n\n"
+		local review = "Model: claude-opus-5-5\n# Review 001\n\n### F1 an unrated finding\nEvidence: x\n\n"
 			.. "### F2 [low] a rated finding\nEvidence: y\n\nVerdict: changes requested\n"
 		refused(
 			attempt({ "- F1: deferred c0020: later", "- F2: fixed abc: ok; consequences: none" }, review),

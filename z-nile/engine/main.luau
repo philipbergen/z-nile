@@ -1351,7 +1351,11 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				}
 				table.insert(changes, {
 					path = `{root}/rafts/{chosen}/{chosen}.md`,
-					content = withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "status", claim),
+					content = withFront(
+						withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "reviews", "judged"),
+						"status",
+						claim
+					),
 				})
 				table.insert(changes, {
 					path = `{root}/rafts/{chosen}/check.sh`,
@@ -1437,7 +1441,7 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 			DATE = today(),
 			PROJECT = projectNameOf(root),
 		}
-		fs.writeFile(`{dir}/{id}.md`, render(`{TEMPLATES}/raft/doc.md`, vars))
+		fs.writeFile(`{dir}/{id}.md`, withFront(render(`{TEMPLATES}/raft/doc.md`, vars), "reviews", "judged"))
 		fs.writeFile(`{dir}/check.sh`, render(`{TEMPLATES}/raft/check.sh`, vars))
 		sh.must("chmod", { "+x", `{dir}/check.sh` })
 		print(`{dir}/{id}.md`)
@@ -1599,6 +1603,13 @@ local function setStatus(id: string, to: string)
 				if gap then
 					return `{t}: {gap}`
 				end
+				-- c0306: a marked issue's design reviews, every round, are on a review model (a raft's are judged at ready)
+				if store.isIssueId(t) and store.readFront(localItem.doc).reviews == "judged" then
+					local off = require("./reviewfiles").judge(localItem.dir, "design", t)
+					if off then
+						return off
+					end
+				end
 			end
 			if
 				not (
@@ -1619,7 +1630,21 @@ local function setStatus(id: string, to: string)
 				end
 			end
 			table.insert(moved, { id = t, from = cur :: string })
-			table.insert(changes, { path = tp, content = withFront(tt, "status", value) })
+			local body = tt
+			if t == id and not store.isRaftId(id) and to == "preparing" then
+				-- c0306 (prep Q3): a claim of an issue with no design review marks it judged
+				local dirPrefix = string.sub(tp, 1, #tp - #t - 3) .. "design-review-"
+				local reviewed = false
+				for _, p in paths do
+					if string.sub(p, 1, #dirPrefix) == dirPrefix then
+						reviewed = true
+					end
+				end
+				if not reviewed then
+					body = withFront(body, "reviews", "judged")
+				end
+			end
+			table.insert(changes, { path = tp, content = withFront(body, "status", value) })
 		end
 		-- c0116 (review 002 F1): a member redesigned on origin/main since z-raft grouped it (a claim and a landing inside
 		-- the rafting window) leaves the rafting: its coherence review read the old design
@@ -4549,6 +4574,17 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 		stdio.ewrite("commit: --time and --tokens are ignored; cost is measured\n")
 	end
 	local model = modelOption("commit", opts)
+	-- c0306: the review files this commit carries are stamped with --model under --phase code-review, and refused in a
+	-- marked item without it (under any other phase, at all)
+	local refused = require("./reviewfiles").commitReviews(
+		phase,
+		model,
+		require("./reviewfiles").effortOption(opts, model),
+		require("./reviewfiles").typedEffort(opts)
+	)
+	if refused then
+		fail(refused)
+	end
 	recordAndCommit(activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
 end
 
@@ -5043,6 +5079,17 @@ function cmd.done(pos: { string })
 	local problem = reviewProblem(raft)
 	if problem then
 		fail(problem)
+	end
+	-- c0306: a marked raft's code and final reviews (its own folder and its members') are on a review model
+	if store.readFront(raft.doc).reviews == "judged" then
+		local dirs = { { id = raft.id, dir = raft.dir } }
+		for _, m in store.members(raft.id) do
+			table.insert(dirs, { id = m.id, dir = m.dir })
+		end
+		local off = require("./reviewfiles").judgeDone(dirs)
+		if off then
+			fail(off)
+		end
 	end
 	if not runCheck(raft) then
 		fail(`{raft.id} check.sh failed; not done`)
@@ -6360,6 +6407,33 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			targets = { item }
 		end
 	end
+	-- c0306: a reviewer's run (--note design-review-NNN) is recorded with the reviewer's model, stamped into its file. In a
+	-- marked item it is refused without --model, and a grok- model without a typed --effort. Any other note (a
+	-- design-refute-NNN one) or none (the author's answering span after --begin) records as today and stamps nothing (F1).
+	-- An unmarked item records as before, and stamps when it is given a model and the note.
+	local reviewFile: string? = nil
+	if phase == "design-review" and not opts["--begin"] then
+		local owner = raftItem or targets[1]
+		local named = string.match(note, "^design%-review%-%d+$") ~= nil
+		if
+			named
+			and owner
+			and require("./reviewmodel").judged(store.readFront((owner :: store.Item).doc))
+		then
+			if not model then
+				fail("spend --phase design-review needs --model <the reviewer's model id> [--effort <level>]")
+			end
+			if
+				string.sub(model :: string, 1, 5) == "grok-"
+				and not require("./reviewfiles").typedEffort(opts)
+			then
+				fail("a grok- review is judged by its effort: --effort <level>")
+			end
+		end
+		if model and named then
+			reviewFile = note
+		end
+	end
 	local stats: { { path: string, added: number, removed: number } } = {}
 	local owners: { [string]: { string } }? = nil
 	if phase == "prep" then
@@ -6458,6 +6532,17 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			end
 		end
 	end
+	if reviewFile then
+		local dir = if raftItem then (raftItem :: store.Item).dir else (targets[1] and targets[1].dir or "")
+		local why = require("./reviewfiles").stampFile(
+			`{dir}/{reviewFile}.md`,
+			model :: string,
+			require("./reviewfiles").effortOption(opts, model)
+		)
+		if why then
+			fail(why)
+		end
+	end
 	local top = sh.git({ "rev-parse", "--show-toplevel" })
 	local branch, head = costrow.branchOf(top)
 	if opts["--begin"] then
@@ -6512,7 +6597,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			local got = reading :: any
 			ai = got.ai
 			tok = got.tokens
-			if got.model then
+			if got.model and not model then -- c0306: a typed --model wins over the session's measured one
 				modelId = got.model
 			end
 			if type(got.note) == "string" and got.note ~= "" then

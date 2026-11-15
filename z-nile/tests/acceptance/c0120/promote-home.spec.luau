@@ -150,7 +150,10 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")
-		write("pickman/.tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
+		write(
+			"pickman/.tracker/rafts/active/R0010/review-001.md",
+			"Model: claude-opus-5-5\n# Review 001\n\nVerdict: approve\n"
+		)
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
 	end)
 

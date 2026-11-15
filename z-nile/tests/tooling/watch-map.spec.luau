@@ -66,7 +66,11 @@ return t.spec("the watch map is captured, rewritten and repaired", function(it)
 		zn(f, { "start", raft })
 		write(f.main, "pickman/src/shared/Logic/Maze/init.luau", "return {}\n")
 		zn(f, { "commit", "-m", "maze", "--issue", id, "--time", "1" })
-		write(f.main, `{root}/rafts/active/{raft}/review-001.md`, "# Review 001\n\nVerdict: approve\n")
+		write(
+			f.main,
+			`{root}/rafts/active/{raft}/review-001.md`,
+			"Model: claude-opus-5-5\n# Review 001\n\nVerdict: approve\n"
+		)
 		zn(f, { "commit", "-m", "review", "--time", "1" })
 		zn(f, { "finish", id })
 		seal.trace(f.main, raft)
@@ -256,7 +260,11 @@ return t.spec("the watch map is captured, rewritten and repaired", function(it)
 		write(f.main, "pickman/src/shared/Logic/Maze/init.luau", "return {}\n")
 		write(f.main, "pickman/tests/unit/added.spec.luau", SPEC)
 		zn(f, { "commit", "-m", "maze", "--issue", id, "--time", "1" })
-		write(f.main, `{root}/rafts/active/{raft}/review-001.md`, "# Review 001\n\nVerdict: approve\n")
+		write(
+			f.main,
+			`{root}/rafts/active/{raft}/review-001.md`,
+			"Model: claude-opus-5-5\n# Review 001\n\nVerdict: approve\n"
+		)
 		zn(f, { "commit", "-m", "review", "--time", "1" })
 		zn(f, { "finish", id })
 		seal.trace(f.main, raft)

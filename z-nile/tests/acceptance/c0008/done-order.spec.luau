@@ -141,7 +141,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
 			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
-			"# Final Review 001\n\nVerdict: approve\n"
+			"Model: claude-opus-5-5\n# Final Review 001\n\nVerdict: approve\n"
 		)
 		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
 		-- an origin whose URL contains github.com, and a pushed branch with an upstream
@@ -190,7 +190,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- an unresolved review: one open finding and no answer to it
 		write(
 			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
-			"# Final Review 001\n\n### F1 [low] an open finding\nEvidence: x\n\nVerdict: changes requested\n"
+			"Model: claude-opus-5-5\n# Final Review 001\n\n### F1 [low] an open finding\nEvidence: x\n\nVerdict: changes requested\n"
 		)
 		must(tr({ "commit", "-m", "unresolved review", "--time", "1" }), "commit")
 		git({ "push", "-q" })
@@ -203,7 +203,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
 			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
-			"# Final Review 001\n\nVerdict: approve\n"
+			"Model: claude-opus-5-5\n# Final Review 001\n\nVerdict: approve\n"
 		)
 		must(tr({ "commit", "-m", "review approved", "--time", "1" }), "commit")
 		-- a promotion that fails is the last refusal before the ready call: done must refuse there too,

@@ -1,0 +1,11 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-15 23:49	1 spec	0	0	test			1.443	0.900		1.443	tokens,ai
+2026-11-15 23:49	1 spec	0	0	test			1.631	0.980		1.631	tokens,ai
+2026-11-15 23:51	1 spec	0	0	test			93.392	59.970		93.392	tokens,ai
+2026-11-15 23:51	1 spec	0	0	test			1.231	0.770		1.231	tokens,ai
+2026-11-15 23:52	1 spec	0	0	test			55.556	38.170		55.556	tokens,ai
+2026-11-15 23:53	1 spec	0	0	test			56.098	40.300		56.098	tokens,ai
+2026-11-15 23:53	1 spec	0	0	test			1.828	1.040		1.828	tokens,ai
+2026-11-15 23:53	26 specs	0	0	test			6.975	7.330		6.975	tokens,ai
+2026-11-15 23:56	affected	0	0	test			161.902	352.200		161.902	tokens,ai
+2026-11-15 23:56	c0306: refuse reviews off the review models (prototype applied, specs green)	698	38	build							tokens,wall,cpu,ai

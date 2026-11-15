@@ -217,6 +217,11 @@ return t.spec("tracker spend", function(it)
 
 	it("splits a raft's row over its members in one commit: minutes near, tokens exactly", function()
 		local before, head = tip(), git(prep, { "rev-parse", "HEAD" })
+		-- the raft is marked: the coherence review this spend records is written first, and --model stamps it
+		fs.writeFile(
+			`{prep}/pickman/.tracker/rafts/{raft}/design-review-001.md`,
+			"# Review 001\n\nVerdict: approve\n"
+		)
 		trOk(prep, {
 			"spend",
 			raft,
@@ -228,6 +233,8 @@ return t.spec("tracker spend", function(it)
 			"3001",
 			"--note",
 			"design-review-001",
+			"--model",
+			"claude-opus-5-5",
 		})
 		t.expect(tip()).toBe(before)
 		local changed = branchChanged(head)

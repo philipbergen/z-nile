@@ -26,6 +26,7 @@ local openlist = require("./openlist")
 local process = require("@lune/process")
 local projects = require("./projects")
 local raftcheck = require("./raftcheck")
+local reviewmodel = require("./reviewmodel")
 local runner = require("./runner")
 local serde = require("@lune/serde")
 local sh = require("../lib/sh")
@@ -897,12 +898,35 @@ function dispatcher.modelStep(
 		end
 	end
 	local outcome = "failed"
+	local filedBy: { model: string, effort: string? }? = nil -- c0306: the attempt that wrote the review
 	fs.writeDir(stateDir)
 	local landing = `{stateDir}/review.md`
 	if land then
 		pcall(fs.removeFile, landing) -- a stale one from an earlier run is never this run's review
 	end
+	-- c0306 (F6): in a marked item a review step (every mode but stream) starts no try the rule would refuse, and fails at
+	-- once when none is left
+	local onlyReviewModels = land ~= nil
+		and mode ~= "stream"
+		and require("./reviewfiles").markedFolder(`{cwd}/{(land :: Landing).dir}`)
+	if onlyReviewModels then
+		local left = 0
+		for _, spec in tries do
+			if reviewmodel.ok(spec.model, spec.effort) then
+				left += 1
+			end
+		end
+		if left == 0 then
+			local role = models.roleFor(step :: string, mode) or "?"
+			refused(tries[1], `no try of role {role} is a review model`)
+			tries = {}
+		end
+	end
 	for _, spec in tries do
+		if onlyReviewModels and not reviewmodel.ok(spec.model, spec.effort) then
+			skipped(spec, `{spec.model} at effort {spec.effort or "none"} is not a review model: skipped`)
+			continue
+		end
 		local adapter = adapters.get(spec.runtime)
 		local argv = adapter.argv({
 			prompt = prompt,
@@ -1033,6 +1057,7 @@ function dispatcher.modelStep(
 		})
 		print(`dispatch: {step} on {spec.cli}: {outcomeNow} ({detail}), {result.tokens} tokens`)
 		outcome = outcomeNow
+		filedBy = { model = spec.model, effort = spec.effort }
 		-- a failed attempt's review is moved aside, so only the attempt that ends the step can land one
 		if land and outcomeNow ~= "ok" and fs.isFile(landing) then
 			local aside = `{stateDir}/review-attempt-{#attempts}.md`
@@ -1110,7 +1135,16 @@ function dispatcher.modelStep(
 		local l = land :: Landing
 		if fs.isFile(landing) then
 			local last = lastRound(`{cwd}/{l.dir}`, l.prefix)
-			if last >= 1 then
+			-- c0306 (F2): in a marked item a new round takes the next number when the newest round of its kind is one
+			-- the judge refuses; otherwise the one-round rule stands
+			local supersedes = false
+			if last >= 1 and l.prefix ~= "" and not streamDir then
+				local newest = `{cwd}/{l.dir}/{l.prefix}{string.format("%03d", last)}.md`
+				supersedes = fs.isFile(newest)
+					and require("./reviewfiles").markedFolder(`{cwd}/{l.dir}`)
+					and reviewmodel.refused(fs.readFile(newest))
+			end
+			if last >= 1 and not supersedes then
 				-- one round. Historical files stay where they are; a new one is not added.
 				outcome = "failed"
 				pcall(fs.removeFile, landing)
@@ -1129,9 +1163,41 @@ function dispatcher.modelStep(
 				stdio.ewrite(`dispatch: {why.detail}\n`)
 			else
 				local name = string.format("%s%03d.md", l.prefix, last + 1)
-				fs.move(landing, `{cwd}/{l.dir}/{name}`)
-				reviewNote = string.format("%s%03d", l.note, last + 1)
-				print(`dispatch: the review is {l.dir}/{name}`)
+				-- c0306: the dispatcher records the model and effort that wrote the review; the reviewer never does
+				local by = filedBy :: { model: string, effort: string? }
+				local written = fs.readFile(landing)
+				-- a reviewer's own record fails the step in a marked item; an unmarked one is filed as the reviewer wrote it
+				local stamped: string?, refusal: string?
+				if
+					reviewmodel.read(written) ~= nil
+					and not require("./reviewfiles").markedFolder(`{cwd}/{l.dir}`)
+				then
+					stamped = written
+				else
+					stamped, refusal = reviewmodel.stamp(written, by.model, by.effort)
+				end
+				if stamped then
+					fs.writeFile(`{cwd}/{l.dir}/{name}`, stamped)
+					pcall(fs.removeFile, landing)
+					reviewNote = string.format("%s%03d", l.note, last + 1)
+					print(`dispatch: the review is {l.dir}/{name}`)
+				else
+					outcome = "failed"
+					pcall(fs.removeFile, landing)
+					local why: Attempt = {
+						step = step :: string,
+						cli = "",
+						runtime = "",
+						model = "",
+						outcome = "failed",
+						detail = `the reviewer's file {refusal}: the tool records the model, the reviewer writes no Model: line`,
+						tokens = 0,
+						minutes = 0,
+					}
+					table.insert(attempts, why)
+					table.insert(st.history, why)
+					stdio.ewrite(`dispatch: {why.detail}\n`)
+				end
 			end
 		else
 			outcome = "failed"
