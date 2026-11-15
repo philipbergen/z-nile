@@ -24,3 +24,27 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-15 18:21	2 specs	0	0	test			3.913	1.770		3.913	tokens,ai
 2026-11-15 18:21	1 spec	0	0	test			3.915	1.820		3.915	tokens,ai
 2026-11-15 18:22	c0263: ticket provenance record, provenance command, union through merges	1106	26	build							tokens,wall,cpu,ai
+2026-11-15 18:27	2 specs	0	0	test			326.660	212.720		326.660	tokens,ai
+2026-11-15 18:27	1 spec	0	0	test			3.452	1.620		3.452	tokens,ai
+2026-11-15 18:33	1 spec	0	0	test			342.765	209.140		342.765	tokens,ai
+2026-11-15 18:33	1 spec	0	0	test			0.207	0.110		0.207	tokens,ai
+2026-11-15 18:33	2 specs	0	0	test			0.412	0.130		0.412	tokens,ai
+2026-11-15 18:33	5 specs	0	0	test			0.206	0.060		0.206	tokens,ai
+2026-11-15 18:33	4 specs	0	0	test			0.206	0.050		0.206	tokens,ai
+2026-11-15 18:36	2 specs	0	0	test			142.720	122.390		142.720	tokens,ai
+2026-11-15 18:36	1 spec	0	0	test			1.020	0.650		1.020	tokens,ai
+2026-11-15 18:38	1 spec	0	0	test			137.648	118.330		137.648	tokens,ai
+2026-11-15 18:38	1 spec	0	0	test			4.680	3.740		4.680	tokens,ai
+2026-11-15 18:41	2 specs	0	0	test			135.208	118.640		135.208	tokens,ai
+2026-11-15 18:45	5 specs	0	0	test			250.775	311.400		250.775	tokens,ai
+2026-11-15 18:45	1 spec	0	0	test			1.218	0.790		1.218	tokens,ai
+2026-11-15 18:46	4 specs	0	0	test			52.550	89.590		52.550	tokens,ai
+2026-11-15 18:50	2 specs	0	0	test			209.557	172.240		209.557	tokens,ai
+2026-11-15 18:50	1 spec	0	0	test			1.413	0.940		1.413	tokens,ai
+2026-11-15 18:52	1 spec	0	0	test			142.366	122.680		142.366	tokens,ai
+2026-11-15 18:52	1 spec	0	0	test			4.276	3.420		4.276	tokens,ai
+2026-11-15 18:55	2 specs	0	0	test			141.618	118.920		141.618	tokens,ai
+2026-11-15 18:59	5 specs	0	0	test			263.662	278.120		263.662	tokens,ai
+2026-11-15 18:59	1 spec	0	0	test			1.620	1.120		1.620	tokens,ai
+2026-11-15 19:00	4 specs	0	0	test			65.096	114.070		65.096	tokens,ai
+2026-11-15 19:04	135 specs	0	0	test			238.068	397.550		238.068	tokens,ai
