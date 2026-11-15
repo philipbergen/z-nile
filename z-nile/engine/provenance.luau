@@ -88,7 +88,8 @@ end
 -- c0282: the variables that make a session an agent's (`hint` reads exactly these), and every variable a command that
 -- records reads. A spec that needs a human environment clears `provenance.ENV_VARS`: one list, so a marker added here
 -- is cleared there.
-provenance.AGENT_MARKERS = { "CLAUDECODE", "AI_AGENT", "CURSOR_AGENT", "GROK_SESSION_ID", "ZN_DISPATCH" }
+provenance.AGENT_VARS = { "CLAUDECODE", "AI_AGENT", "CURSOR_AGENT", "GROK_SESSION_ID", "ZN_DISPATCH" }
+provenance.AGENT_MARKERS = provenance.AGENT_VARS
 provenance.ENV_VARS = {
 	"CLAUDECODE",
 	"AI_AGENT",
@@ -105,7 +106,7 @@ provenance.ENV_VARS = {
 -- One definition for every layer: c0283's refusal of `approve` calls this function.
 function provenance.hint(env: { [string]: string? }): Hint
 	local agent = false
-	for _, name in provenance.AGENT_MARKERS do
+	for _, name in provenance.AGENT_VARS do
 		local v = env[name]
 		agent = agent or (v ~= nil and v ~= "")
 	end
@@ -114,7 +115,6 @@ end
 
 -- c0283: the variables that make a session an agent's; `hint` reads them, and the callers that build its environment
 -- read the same list.
-provenance.AGENT_VARS = provenance.AGENT_MARKERS
 
 -- c0283: the record of a design approval, written beside approval.md by `./zn approve`: the row `approved | human:<who> |
 -- design=<first 12 hex of the approval's hash>`. approval.md stays the authority (the full hash, its parts, who and when
