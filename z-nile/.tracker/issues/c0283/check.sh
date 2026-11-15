@@ -6,6 +6,9 @@ source "$(git -C "$HERE" rev-parse --show-toplevel)/z-nile/lib/ac.sh" # cds to t
 # sequestered specs: here before `./zn done`, promoted to its project's tests/acceptance/c0283 after it
 A="$HERE/acceptance"
 [[ -d $A ]] || A="$PWD/tests/acceptance/c0283"
+# c0263's specs the same way: in its item folder (`zn find`) until the raft's `./zn done` promotes them
+P="$PWD/$("$ZN_ROOT/zn" find c0263 2>/dev/null)/acceptance" # find prints a path from the home ac.sh cds to
+[[ -d $P ]] || P="$PWD/tests/acceptance/c0263"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
@@ -19,7 +22,7 @@ check "AC3: ./zn approve commits approval.md and the approved row together by th
 check "AC4: zz-rules, z-design, the README and AGENTS.md state the refusal, the row and the no-words rule" \
   lune run tests/run -- "$A/docs.spec.luau"
 check "AC5: the real tree audits and lessons-checks clean and the specs that read approve and the harness stay green" \
-  bash -c '"$ZN_ROOT/zn" audit && "$ZN_ROOT/zn" lessons --check && lune run tests/run -- tests/acceptance/c0263/provenance.spec.luau tests/acceptance/c0263/publish.spec.luau tests/tooling/approve.spec.luau tests/acceptance/c0116/promote.spec.luau tests/acceptance/c0117/dispatch.spec.luau tests/tooling/dispatch-texts.spec.luau'
+  bash -c '"$ZN_ROOT/zn" audit && "$ZN_ROOT/zn" lessons --check && lune run tests/run -- "$1/provenance.spec.luau" "$1/publish.spec.luau" tests/tooling/approve.spec.luau tests/acceptance/c0116/promote.spec.luau tests/acceptance/c0117/dispatch.spec.luau tests/tooling/dispatch-texts.spec.luau' _ "$P"
 
 check "AC6: the publish validator takes an approved row only beside the matching approval.md row, and PUBLISHED stays as it was" \
   lune run tests/run -- "$A/publish.spec.luau" "$A/approval.spec.luau"
