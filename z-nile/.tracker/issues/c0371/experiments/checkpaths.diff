@@ -1,0 +1,509 @@
+--- /private/tmp/claude-501/-Users-philipbergen-code-pickman/3fbf9326-e053-49c8-ab1e-bfbc221fe8f4/scratchpad/proto-checkpaths.luau	2026-11-15 13:17:21
++++ tests/acceptance/c0120/checkpaths.luau	2026-11-15 13:24:29
+@@ -82,136 +82,379 @@
+ -- a top-level folder a move takes, named alone: a path only as a folder `find` searches (in prose it is a word)
+ local FOLDERS = { tracker = true, src = true, tests = true }
+ 
+--- The words of a grep's pattern (a pattern names text, not a file: c0046's `grep -qF "./zn worktree" …`): after
+--- `grep` or `rg` and its options, the first other word, or each `-e`'s; a quoted pattern runs to its closing quote.
+--- `line` is the scanned line, `raw[k]` the k-th word as written and `starts[k]` its first byte.
+-local function patternWords(line: string, raw: { string }, starts: { number }): { [number]: boolean }
+-	local marked: { [number]: boolean } = {}
+-	local function mark(k: number)
+-		local s = starts[k]
+-		local q = if s > 1 then string.sub(line, s - 1, s - 1) else ""
+-		if q == '"' or q == "'" then
+-			local close = string.find(line, q, s, true) or (#line + 1)
+-			for j = k, #raw do
+-				if starts[j] < close then
+-					marked[j] = true
++-- The quoting of every byte of a check.sh, read once: `ctx[i]` is 0 at the top level and a fresh number inside each
++-- single-quoted string (a `bash -c '…'` script, read as a script of its own); `dq[i]` is true inside a double-quoted
++-- string of that context. A backslash escapes the next byte outside single quotes.
++type Quoting = { ctx: { number }, dq: { boolean } }
++local function quoting(text: string): Quoting
++	local ctx: { number }, dq: { boolean } = {}, {}
++	local cur, count, inDq, saved = 0, 0, false, false
++	local i, n = 1, #text
++	while i <= n do
++		local c = string.sub(text, i, i)
++		ctx[i], dq[i] = cur, inDq
++		if c == "\\" and i < n then
++			ctx[i + 1], dq[i + 1] = cur, inDq
++			i += 2
++			continue
++		elseif c == "'" and cur == 0 and not inDq then
++			count += 1
++			cur, saved, inDq = count, inDq, false
++		elseif c == "'" and cur ~= 0 then
++			cur, inDq = 0, saved
++		elseif c == '"' then
++			inDq = not inDq
++		end
++		i += 1
++	end
++	return { ctx = ctx, dq = dq }
++end
++
++-- the names of the functions a check.sh defines that search text: a body that runs grep or rg, or calls another such
++-- function (c0292's `has`, c0256's `has`, c0264's `words`, `has_all`; a `g() { grep -qF -e "$1" "$2" … }`)
++local function searchHelpers(text: string): { [string]: boolean }
++	local bodies: { [string]: string } = {}
++	local lines: { string } = {}
++	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
++		table.insert(lines, line)
++	end
++	local k = 1
++	while k <= #lines do
++		local name, rest = string.match(lines[k], "^%s*([%a_][%w_]*)%s*%(%)%s*(.*)$")
++		if name then
++			local body = { rest }
++			local j = k
++			if not string.find(rest, "}%s*$") then
++				while j < #lines do
++					j += 1
++					table.insert(body, lines[j])
++					if string.find(lines[j], "^%s*}") then
++						break
++					end
+ 				end
+ 			end
+-		else
+-			marked[k] = true
++			bodies[name] = table.concat(body, "\n")
++			k = j
+ 		end
++		k += 1
+ 	end
+-	for k, w in raw do
+-		if w == "grep" or w == "rg" or w == "egrep" then
+-			local j, named = k + 1, false
+-			while raw[j] and string.sub(raw[j], 1, 1) == "-" and raw[j] ~= "--" do
+-				if raw[j] == "-e" or raw[j] == "--regexp" then
+-					if raw[j + 1] then
+-						mark(j + 1)
+-						named = true
++	local found: { [string]: boolean } = {}
++	local changed = true
++	while changed do
++		changed = false
++		for name, body in bodies do
++			if not found[name] then
++				local hit = string.find(body, "%f[%w_]grep%f[^%w_]") ~= nil
++					or string.find(body, "%f[%w_]egrep%f[^%w_]") ~= nil
++					or string.find(body, "%f[%w_]rg%f[^%w_]") ~= nil
++				if not hit then
++					for other in found do
++						if other ~= name and string.find(body, "%f[%w_]" .. other .. "%f[^%w_]") then
++							hit = true
++						end
+ 					end
+-					j += 2
+-				else
+-					j += 1
+ 				end
++				if hit then
++					found[name] = true
++					changed = true
++				end
+ 			end
+-			if raw[j] == "--" then
+-				j += 1
++		end
++	end
++	return found
++end
++
++-- words after which the next word is a command
++local INTRODUCERS = {
++	["then"] = true,
++	["do"] = true,
++	["else"] = true,
++	["if"] = true,
++	["elif"] = true,
++	["while"] = true,
++	["until"] = true,
++	["!"] = true,
++	["{"] = true,
++	["}"] = true,
++	["time"] = true,
++	["xargs"] = true,
++	["env"] = true,
++	["command"] = true,
++	["exec"] = true,
++}
++
++-- a `for NAME in WORDS; do BODY done` whose body uses NAME only as text to match (`case "$x" in *"$f"*)`, a grep
++-- pattern) names no files: its WORDS are text (c0193's list of engine files a lesson must name)
++local function textOnlyLoop(rest: string, name: string): boolean
++	local body = string.match(rest, "^(.-)%f[%w_]done%f[^%w_]") or rest
++	local left = body
++	for _, form in
++		{ '*"$' .. name .. '"*', '*"${' .. name .. '}"*', "*$" .. name .. "*", "*${" .. name .. "}*" }
++	do
++		while true do
++			local a, b = string.find(left, form, 1, true)
++			if not a then
++				break
+ 			end
+-			if not named and raw[j] then
+-				mark(j)
+-			end
++			left = string.sub(left, 1, a - 1) .. string.sub(left, (b :: number) + 1)
+ 		end
+ 	end
+-	return marked
++	left = string.gsub(left, "grep[^;|&\n]-[\"']%$" .. name .. "[\"']", "")
++	-- an echo's message may name the file (`echo "the lesson does not name $f"`)
++	left = string.gsub(left, 'echo%s+"[^"]*"', function(m: string): string
++		return if string.find(m, "$" .. name, 1, true) then "" else m
++	end)
++	return string.find(left, "$" .. name, 1, true) == nil
++		and string.find(left, "${" .. name .. "}", 1, true) == nil
++		and string.find(body, "$" .. name, 1, true) ~= nil
+ end
+ 
+--- the literal paths of a check.sh, in order (a path may repeat)
+-local function literals(text: string): { string }
+-	local out: { string } = {}
++-- the literal paths of a check.sh, in order (a path may repeat); `root` marks a path read from the repository root
++-- (a command after `cd "$ZN_ROOT"`), else it is read from the item's home
++type Lit = { path: string, root: boolean }
++local function literals(text: string): { Lit }
++	local out: { Lit } = {}
++	local q = quoting(text)
++	local helpers = searchHelpers(text)
++	local rootDir: string? = nil -- after `cd "$ZN_ROOT"[/sub]`: the words are the repository root's…
++	local dqSub = 0 -- open `$(` inside double quotes
++	local rootCtx, rootDepth = 0, 0 -- …in the script that holds the cd, until its group closes
++	local call: string? = nil -- a search helper's call: its quoted arguments are text, until the command ends
++	local callCtx, callDq = 0, false
++	local spanOpen = false -- inside a code span (`\`…\``) of quoted text
++	local listEnd = 0 -- the end of a text-only `for` list, as a byte of the text
++	local continued = false
++	local offset = 0 -- the byte before the current line
+ 	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+-		if not string.match(line, "^%s*#") then
+-			line = string.gsub(line, "%s#%s.*$", "")
+-			-- a check's label is prose, not a command
+-			line = string.gsub(line, '^(%s*check%s+)"[^"]*"', "%1")
+-			local words: { string } = {}
+-			local quoted: { boolean } = {}
+-			local starts: { number } = {}
+-			local at = 1
+-			while true do
+-				local s, e = string.find(line, "[^%s\"'();|&<>`]+", at)
+-				if not s then
+-					break
+-				end
+-				at = (e :: number) + 1
+-				local _, quotes = string.gsub(string.sub(line, 1, s - 1), '"', "")
+-				table.insert(quoted, quotes % 2 == 1)
+-				table.insert(starts, s)
+-				local w = string.sub(line, s, e :: number)
+-				local word = string.gsub(w, "[\\,]+$", "")
+-				-- a shell assignment's value is the word (`f=.claude/skills/testing/SKILL.md`)
+-				local name = string.match(word, "^[%a_][%w_]*=")
+-				if name and #word > #name then
+-					word = string.sub(word, #name + 1)
+-				end
+-				-- a word that goes on with a variable: its literal folder is the path
+-				local dollar = string.find(word, "$", 1, true)
+-				if dollar and dollar > 1 then
+-					local folder = string.match(string.sub(word, 1, dollar - 1), "^(.*)/[^/]*$")
+-					if folder and folder ~= "" then
+-						word = folder .. "/"
+-					end
+-				end
+-				table.insert(words, word)
++		local base = offset
++		offset += #line + 1
++		local wasContinued = continued
++		continued = string.sub(line, -1) == "\\"
++		if string.match(line, "^%s*#") then
++			continue
++		end
++		line = string.gsub(line, "%s#%s.*$", "")
++		-- a check's label is prose, not a command
++		line = string.gsub(line, '^(%s*check%s+)("[^"]*")', function(a: string, b: string): string
++			return a .. string.rep(" ", #b)
++		end)
++		local words: { string } = {}
++		local starts: { number } = {}
++		local sep: { boolean } = {}
++		local ends: { number } = {}
++		local at = 1
++		while true do
++			local s, e = string.find(line, "[^%s\"'();|&<>`]+", at)
++			if not s then
++				break
+ 			end
+-			local pattern = patternWords(line, words, starts)
+-			local dir = "" -- a `cd <dir>` earlier on the line: the words after it are relative to <dir>
+-			local finding = false -- the words after `find`, before its first option, are the folders it searches
+-			for i, w in words do
+-				local path: string? = nil
+-				if pattern[i] then
+-					continue
+-				end
+-				if w == "find" then
+-					finding = true
+-					continue
+-				elseif string.sub(w, 1, 1) == "-" then
+-					finding = false
++			local gap = string.sub(line, at, s - 1)
++			table.insert(sep, if #words == 0 then not wasContinued else string.find(gap, "[;|&()`]") ~= nil)
++			at = (e :: number) + 1
++			table.insert(starts, s)
++			table.insert(ends, e :: number)
++			local w = string.sub(line, s, e :: number)
++			local word = string.gsub(w, "[\\,]+$", "")
++			-- a shell assignment's value is the word (`f=.claude/skills/testing/SKILL.md`)
++			local name = string.match(word, "^[%a_][%w_]*=")
++			if name and #word > #name then
++				word = string.sub(word, #name + 1)
++			end
++			-- a word that goes on with a variable: its literal folder is the path
++			local dollar = string.find(word, "$", 1, true)
++			if dollar and dollar > 1 then
++				local folder = string.match(string.sub(word, 1, dollar - 1), "^(.*)/[^/]*$")
++				if folder and folder ~= "" then
++					word = folder .. "/"
+ 				end
+-				if words[i - 1] == "cd" and not string.find(w, "$", 1, true) then
+-					dir = w .. "/"
+-					continue
++			end
++			table.insert(words, word)
++		end
++		-- the words that are text: a grep's pattern, an echo's message, a search helper's quoted arguments, a code span
++		local dir = "" -- a `cd <dir>` earlier on the line: the words after it are relative to <dir>
++		local finding = false -- the words after `find`, before its first option, are the folders it searches
++		local pattern: { [number]: boolean } = {}
++		for i, w in words do
++			local s = starts[i]
++			local abs = base + s
++			local prev = words[i - 1]
++			local command = sep[i]
++				or (prev ~= nil and (INTRODUCERS[prev] == true or string.find(prev, "^%-[%a]*c$") ~= nil))
++			if call and (sep[i] or (q.ctx[abs] ~= callCtx and q.ctx[abs] == 0)) then
++				call = nil
++			end
++			-- code spans: every word between an opening and a closing backslash-backtick of the line
++			local ticks = 0
++			for at in string.gmatch(line, "()\\`") do
++				if (at :: number) < s then
++					ticks += 1
+ 				end
++			end
++			spanOpen = ticks % 2 == 1
++			if spanOpen then
++				pattern[i] = true
++			end
++			if call and (q.dq[abs] ~= callDq or q.ctx[abs] ~= callCtx) then
++				pattern[i] = true
++			end
++			if command and call == nil and helpers[w] then
++				call, callCtx, callDq = w, q.ctx[abs], q.dq[abs]
++			end
++			-- grep and rg: the pattern; echo and printf: the message
++			if command and (w == "grep" or w == "egrep" or w == "rg") then
++				local j, named = i + 1, false
++				while words[j] and string.sub(words[j], 1, 1) == "-" and words[j] ~= "--" do
++					if words[j] == "-e" or words[j] == "--regexp" then
++						if words[j + 1] then
++							pattern[j + 1] = true
++							named = true
++						end
++						j += 2
++					else
++						j += 1
++					end
++				end
++				if words[j] == "--" then
++					j += 1
++				end
++				if not named and words[j] then
++					pattern[j] = true
++				end
++			elseif command and (w == "echo" or w == "printf") then
++				local j = i + 1
++				while words[j] and string.sub(words[j], 1, 1) == "-" do
++					j += 1
++				end
++				if words[j] then
++					pattern[j] = true
++				end
++			elseif command and w == "for" and words[i + 2] == "in" then
++				local loopVar = words[i + 1]
++				local rest = string.sub(text, abs)
++				if textOnlyLoop(rest, loopVar) then
++					listEnd = abs + (string.find(rest, "[;\n]") or #rest)
++				end
++			end
++		end
++		-- quoted words follow the marked word to the closing quote (a message or a pattern runs to its closing quote)
++		for i = 1, #words do
++			if pattern[i] then
++				local s = starts[i]
++				local qc = if s > 1 then string.sub(line, s - 1, s - 1) else ""
++				if qc == '"' or qc == "'" then
++					local close = string.find(line, qc, s, true) or (#line + 1)
++					for j = i, #words do
++						if starts[j] < close then
++							pattern[j] = true
++						end
++					end
++				end
++			end
++		end
++		for i, w in words do
++			local s = starts[i]
++			local abs = base + s
++			local path: string? = nil
++			-- the end of a group that held a `cd "$ZN_ROOT"`, or of its script: parentheses outside quotes, and a
++			-- `$(…)` inside double quotes, close or open a group
++			for k = (if i == 1 then 1 else ends[i - 1] + 1), s - 1 do
++				local ch = string.sub(line, k, k)
++				local inDq = q.dq[base + k]
+ 				if
+-					not string.find(w, "$", 1, true)
+-					and string.sub(w, 1, 1) ~= "/"
+-					and string.sub(w, 1, 1) ~= "-"
++					ch == "("
++					and not (inDq and string.sub(line, k - 1, k - 1) ~= "$")
++					and q.ctx[base + k] == rootCtx
+ 				then
+-					if words[i - 2] == "lune" and words[i - 1] == "run" and string.find(w, "/", 1, true) then
+-						path = if string.match(w, "%.luau$") then w else w .. ".luau"
+-					elseif
+-						(
+-							FILES[w]
+-							and (
+-								substituted(line, starts[i])
+-								or not (
+-									quoted[i]
+-									or string.find(string.sub(line, starts[i] - 1, starts[i] - 1), "[\"']")
+-								)
+-							)
+-						) or (finding and FOLDERS[w])
+-					then
+-						path = w
++					if inDq then
++						dqSub += 1
++					end
++					if rootDir then
++						rootDepth += 1
++					end
++				elseif ch == ")" and q.ctx[base + k] == rootCtx and (not inDq or dqSub > 0) then
++					if inDq then
++						dqSub -= 1
++					end
++					if rootDir then
++						rootDepth -= 1
++					end
++				end
++			end
++			if rootDir then
++				if w == "{" then
++					rootDepth += 1
++				elseif w == "}" then
++					rootDepth -= 1
++				end
++				if rootDepth < 0 or q.ctx[abs] ~= rootCtx then
++					rootDir = nil
++				end
++			end
++			if pattern[i] or abs < listEnd then
++				continue
++			end
++			if w == "find" then
++				finding = true
++				continue
++			elseif string.sub(w, 1, 1) == "-" then
++				finding = false
++			end
++			if words[i - 1] == "cd" then
++				local sub = string.match(w, "^%$ZN_ROOT/?(.*)$")
++				if
++					w == "$"
++					and words[i + 1] == "git"
++					and words[i + 2] == "rev-parse"
++					and words[i + 3] == "--show-toplevel"
++				then
++					sub = ""
++				end
++				if sub then
++					rootDir = if sub == "" then "" else sub .. "/"
++					rootCtx, rootDepth = q.ctx[abs], 0
++					continue
++				elseif not string.find(w, "$", 1, true) then
++					if rootDir then
++						rootDir ..= w .. "/"
+ 					else
+-						for _, p in PREFIXES do
+-							if string.sub(w, 1, #p) == p and #w > #p then
+-								path = w
+-							end
++						dir = w .. "/"
++					end
++					continue
++				end
++			end
++			if
++				not string.find(w, "$", 1, true)
++				and string.sub(w, 1, 1) ~= "/"
++				and string.sub(w, 1, 1) ~= "-"
++			then
++				if words[i - 2] == "lune" and words[i - 1] == "run" and string.find(w, "/", 1, true) then
++					path = if string.match(w, "%.luau$") then w else w .. ".luau"
++				elseif
++					(
++						FILES[w]
++						and (
++							substituted(line, starts[i])
++							or not (
++								q.dq[abs]
++								or string.find(string.sub(line, starts[i] - 1, starts[i] - 1), "[\"']")
++							)
++						)
++					) or (finding and FOLDERS[w])
++				then
++					path = w
++				else
++					for _, p in PREFIXES do
++						if string.sub(w, 1, #p) == p and #w > #p then
++							path = w
+ 						end
+ 					end
+ 				end
+-				if path then
+-					table.insert(out, dir .. path)
++			end
++			if path then
++				if rootDir then
++					table.insert(out, { path = rootDir .. path, root = true })
++				else
++					table.insert(out, { path = dir .. path, root = false })
+ 				end
+ 			end
+ 		end
+@@ -324,10 +567,14 @@
+ 						table.insert(own, o)
+ 					end
+ 				end
+-				for _, p in literals(text) do
+-					local at = checkpaths.repoPath(home, p)
+-					if not present(base, home, p) and not (at and under(at, own)) then
+-						table.insert(out.bad, `{file}: {p} (from {home})`)
++				for _, lit in literals(text) do
++					local from = if lit.root then "." else home
++					local at = checkpaths.repoPath(from, lit.path)
++					if not present(base, from, lit.path) and not (at and under(at, own)) then
++						table.insert(
++							out.bad,
++							`{file}: {lit.path} (from {if lit.root then "the repository root" else home})`
++						)
+ 					end
+ 				end
+ 				out.checked += 1

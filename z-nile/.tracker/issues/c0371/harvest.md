@@ -1,0 +1,14 @@
+- design-review-001 F1: z-design/one-reading-per-value
+- design-review-001 F2: zz-test/shell-readers-carry-state-across-lines
+- design-review-001 F3: z-design/never-narrow-captured-scope
+- design-review-001 F4: zz-test/shell-rules-key-on-command-position
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: z-design/declare-what-full-runs-covered
+- design-review-001 F7: zz-test/moved-rules-pin-the-old-caller
+- design-review-001 F8: z-design/new-rules-migrate-existing-work
+- design-review-001 F9: one-off: the size field was left out of the first draft
+- design-review-001 F10: one-off: the Affected specs section pasted grep hits as the selector's output
+- design-review-001 F11: one-off: an experiment reasoned that a cheap run could answer
+- design-review-001 F12: z-design/check-paths-from-the-home
+- design-review-001 F13: z-design/spec-design-correspondence
+- note a prep that changes a promoted spec searched the unfinished items for it only after the review found c0141: z-design/quote-other-preps-before-promising

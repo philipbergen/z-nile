@@ -1,0 +1,37 @@
+--!strict
+-- E5: the scan (c0141's module with c0371's rules) over every open worktree's unfinished check.sh files: which ones
+-- it reports, by worktree. Run from z-nile/: lune run .tracker/issues/c0371/experiments/E5-worktrees
+local checkpaths = require("@tests/acceptance/c0120/checkpaths")
+local fs = require("@lune/fs")
+local process = require("@lune/process")
+local top = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+local main = string.gsub(top, "/%.worktree/.*$", "")
+local serde = require("@lune/serde")
+local exempt: { [string]: boolean } = {}
+for id in
+	string.gmatch(fs.readFile(`{top}/z-nile/tests/acceptance/c0120/check-paths.spec.luau`), '%["(%x+)"%]%s*=')
+do
+	exempt[id] = true
+end
+local seen: { [string]: number } = {}
+local reported = 0
+for _, name in fs.readDir(`{main}/.worktree`) do
+	local base = `{main}/.worktree/{name}/`
+	if fs.isFile(`{base}z-nile/projects.toml`) then
+		local ok, s = pcall(checkpaths.scan, base, function(text: string): boolean
+			return exempt[serde.hash("sha1", `blob {#text}\0{text}`)] == true
+		end)
+		if ok and #s.bad > 0 then
+			reported += 1
+			for _, line in s.bad do
+				seen[line] = (seen[line] or 0) + 1
+			end
+		elseif not ok then
+			print(`{name}: scan failed`)
+		end
+	end
+end
+for line, n in seen do
+	print(`{n}x {line}`)
+end
+print(`worktrees reported: {reported}`)
