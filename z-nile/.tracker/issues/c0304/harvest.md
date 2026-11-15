@@ -1,0 +1,3 @@
+- design-review-001 F1: zz-test/narrowing-pins-the-whole-file
+- design-review-001 F2: z-design/quote-other-preps-before-promising
+- design-review-001 F3: z-design/confirm-overrides-with-a-suite-run

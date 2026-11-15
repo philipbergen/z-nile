@@ -1,0 +1,18 @@
+== edit, squash
+capture 739403a2 tracker: new c0001 The title (#2)
+doc: ## Solution | CAPTURED solution, plus PREP detail
+== edit, merge
+capture 8daeed86 tracker: new c0001 The title
+doc: ## Solution | CAPTURED solution
+== add, squash
+capture 0c30b4c7 tracker: new c0001 The title (#2)
+doc: ## Solution | CAPTURED solution, plus PREP detail
+== add, merge
+capture 39306de7 tracker: new c0001 The title
+doc: ## Solution | CAPTURED solution
+== rename, squash
+capture 30351277 tracker: new c0001 The title (#2)
+doc: ## Solution | CAPTURED solution, plus PREP detail
+== rename, merge
+capture a850b8bf tracker: new c0001 The title
+doc: ## Solution | CAPTURED solution
