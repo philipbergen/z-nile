@@ -1,0 +1,301 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 36bc26fc..f1f150ed 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -1,36 +1,22 @@
+-# pickman
++# Engaging the pipeline
+ 
+-A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune for headless tests. New machine: see `SETUP.md`. The game is the `pickman` project, in `pickman/` (its `src/`, specs, Rojo projects and issues, `pickman/.tracker/`); the tooling that tracks and gates it is `z-nile/` (zz-rules skill, Projects). The arcade's projects are registered too (c0183): `arcade/` (the library every place shares), `portal/` (the experience's start place) and the games `snake/`, `invaders/` and `asteroids/`; each keeps its product decisions in `<name>/.tracker/game-design.md`, and the library its design in `arcade/.tracker/architecture.md`. Every project with code has the same home as `pickman/` (c0184): `check.sh`, `.luaurc`, `default.project.json`, `src/`, `tests/` and `skills/`, which the gate checks for each registered project (z-nile/README.md, A project's home).
++Work in this repository moves through z-nile's pipeline, one skill per stage: capture, design, raft, ready and run. This file says how each stage is engaged, then the rules every session follows.
+ 
+ **Non-negotiable:** no code without a tracker issue, and work is done only when its `check.sh` passes. **Every change is made in a git worktree under `.worktree/` and lands by pull request** (a capture lands with `./zn land`, after a local full gate); the main checkout is never edited, except by `./zn` itself (`ready`, `stop`, `sync`, and the board refresh after every publish or `land`), which only fast-forwards it, clears ignored files from item folders that left it, and writes ignored files (`prompt.md`, `.cache/board.html`, the dispatcher's run state in `.cache/dispatch/`), and the gate writes its results db, `.claude/.znile_tests.sqlite` (zz-rules skill, Worktrees and Landing a change). Start execution with `/z-run <R-id>` in a session in the main checkout, or run the whole pipeline headless with `./zn dispatch <id>` (zz-rules skill, Dispatch; `.models.toml` names the models). Before doing anything, read the skill that applies. The skills hold all the rules.
+ 
++| Skill | Engage it | Read when |
++|---|---|---|
++| `z-nile/skills/z-ticket/SKILL.md` | `/z-ticket`, when the user describes work, a bug or a chore | capturing a new feature, defect or chore |
++| `z-nile/skills/z-design/SKILL.md` | `/z-design <id>`, on a captured issue | designing one issue to prepared (includes the design review) |
++| `z-nile/skills/z-raft/SKILL.md` | `/z-raft`, or `/z-raft <ids>` to group as asked | grouping prepared issues into rafts, recombining backlog rafts |
++| `z-nile/skills/z-ready/SKILL.md` | `/z-ready <R-id>`, from the main checkout | readying a raft: claim, move to active/, write its prompt |
++| `z-nile/skills/z-run/SKILL.md` | `/z-run <R-id>`, in a session started in the main checkout | launching a readied raft from the main checkout (`/z-run R0010`) |
++| `z-nile/skills/z-stop/SKILL.md` | `/z-stop <R-id>`, from the main checkout | undoing z-ready or aborting a raft |
++
++The `z-` skills are the pipeline, in order; the `zz-` skills are called from inside a step, and each stage's skill names the ones it reads. `z-nile/README.md` is the map: the flow, the five parts and every skill. A project's own skills and decisions are in its folder's `AGENTS.md`: `pickman/`, `arcade/`, `portal/`, `snake/`, `invaders/` and `asteroids/`.
++
+ **Subagents:** don't use `fork` subagents. Delegate to a plain subagent (general-purpose) with `model: "sonnet"` and a full brief. The exceptions are design and code reviewers, which the skills pin to Opus 5.5.
+ 
+ **Processes:** Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do. A PreToolUse hook refuses a bare `lune run` of a probe, a loop that never ends and a background job nothing bounds, and `./zn reap` stops what still leaks. A `/clear` ends the background commands of the conversation it clears (the SessionEnd hook stops its tool shells). A subagent stays open while its background commands run, and a command it started stops at its own `./zn run` limit (at most an hour) or at the session's end; the session-end reaper catches anything left. The zz-test skill's "Bounded commands" has the rest.
+ 
+ **No check may ever change the real repository.** Specs, `check.sh` files and the scripts they run change only throwaway fixtures under `.cache/`. The runner enforces it. On macOS it runs specs in a jail that denies every write to the repository outside `.cache`; a run that can't be jailed (inside another sandbox) refuses to start unless that sandbox already protects the repository. Everywhere it fences git into `.cache`, refuses ref updates and pushes into the real repository, runs one suite per checkout and project home at a time, and fails any run during which the remotes, config, branch or history changed. What it can't see (unjailed runs on Linux, `check.sh` files' own commands, work handed to processes outside the jail), review must catch (zz-test skill, "Specs never touch the real repository"). If its tripwire fires, stop and report: never repair the shared git configuration yourself.
+-
+-The skills are z-nile's (`z-nile/skills/`) and each project's (`<project>/skills/`); `.claude/skills/<name>` links to each one (`./zn skills`). `z-nile/README.md` is the map: the flow, the five parts and every skill.
+-
+-| Skill | Read when |
+-|---|---|
+-| `z-nile/skills/z-ticket/SKILL.md` | capturing a new feature, defect or chore |
+-| `z-nile/skills/z-design/SKILL.md` | designing one issue to prepared (includes the design review) |
+-| `z-nile/skills/z-raft/SKILL.md` | grouping prepared issues into rafts, recombining backlog rafts |
+-| `z-nile/skills/z-ready/SKILL.md` | readying a raft: claim, move to active/, write its prompt |
+-| `z-nile/skills/z-run/SKILL.md` | launching a readied raft from the main checkout (`/z-run R0010`) |
+-| `z-nile/skills/z-stop/SKILL.md` | undoing z-ready or aborting a raft |
+-| `z-nile/skills/zz-rules/SKILL.md` | creating, moving, committing or finishing tracked work |
+-| `z-nile/skills/zz-execute/SKILL.md` | executing a raft, the protocol z-run hands off to: one branch, one PR |
+-| `z-nile/skills/zz-review/SKILL.md` | acting as, or launching, the adversarial reviewer |
+-| `z-nile/skills/zz-arch/SKILL.md` | designing or writing the tooling: `z-nile/` (its `tests/` included), `zn`, `scripts/` |
+-| `z-nile/skills/zz-test/SKILL.md` | writing specs or `check.sh`, running the gate |
+-| `z-nile/skills/zz-stats/SKILL.md` | cost and rework reporting |
+-| `pickman/skills/pickman-arch/SKILL.md` | designing or writing anything in `pickman/src/` |
+-| `pickman/skills/pickman-test/SKILL.md` | writing pickman's game specs (with zz-test) |
+-| `<name>/skills/<name>-arch/SKILL.md`, for `arcade`, `portal`, `snake`, `invaders` and `asteroids` | designing or writing anything in that project's `src/` (each follows pickman-arch's rules with the changes it states, arcade's for a library) |
+-| `<name>/skills/<name>-test/SKILL.md`, for the same five | writing that project's specs (with zz-test and pickman-test) |
+-
+-The `z-` skills are the pipeline, in order; the `zz-` skills are called from inside a step. The `zz-` and `z-` prefixes are z-nile's: a project's skills are named `<project>-…`.
+-
+-Each skill keeps what reviews and mistakes taught it in its `lessons/` folder, and `./zn lessons` searches them. Search with `./zn lessons <terms>` when you are about to do something a lesson might cover. z-design and zz-execute harvest every review finding into them. Any other new lesson depends on your role: the lead of a prep or raft writes it under the skill it improves, any other lead must capture a new lesson as an issue, and a subagent reports it to the agent that launched it.
+diff --git a/SETUP.md b/SETUP.md
+index 74626ccd..ed105361 100644
+--- a/SETUP.md
++++ b/SETUP.md
+@@ -34,8 +34,8 @@ z-nile/setup.sh
+ 4. The lobby place: in `pickman/`, `rojo serve lobby.project.json`, then Connect and Play: a black screen titled HISCORES with an UNAVAILABLE button, and `[pickman] lobby server started` and `[pickman] lobby client started`. To turn the button on, set the attribute `GamePlaceId` on `ServerScriptService` to the id of the game place (Studio refuses the teleport itself; it works in a published session).
+ 
+ ## Agents on this host
+-- **Claude Code**: `CLAUDE.md` imports `AGENTS.md`. The hooks in `.claude/settings.json` format and lint each `.luau` edit, and gate the Stop event.
+-- **Other agents** (Grok, Codex, …): read `AGENTS.md`. For execution, give them the prompt of a readied raft, `./zn prompt <R-id>` (`/z-ready` writes it), which is self-contained.
++- **Claude Code**: `CLAUDE.md` imports `AGENTS.md`, and each project folder's `CLAUDE.md` imports that folder's `AGENTS.md`, which Claude Code loads once it works on a file there. The hooks in `.claude/settings.json` format and lint each `.luau` edit, and gate the Stop event.
++- **Other agents** (Grok, Codex, …): read `AGENTS.md`, and the `AGENTS.md` of the project folder they work in. For execution, give them the prompt of a readied raft, `./zn prompt <R-id>` (`/z-ready` writes it), which is self-contained.
+ - **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start Claude in the main checkout and run `/z-run R0010`, which enters the raft's worktree; every job starts in a worktree directory inside the repo, never outside it. The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone outside the repo that is not a worktree. After a PR merges, the agent removes its worktree; `./zn worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
+ 
+ ## CI
+diff --git a/arcade/AGENTS.md b/arcade/AGENTS.md
+new file mode 100644
+index 00000000..2d9c09f0
+--- /dev/null
++++ b/arcade/AGENTS.md
+@@ -0,0 +1,8 @@
++# arcade
++
++The library every place shares, registered in c0183: the `arcade` project, in `arcade/` (its `src/`, specs and issues, `arcade/.tracker/`). Its design is in `arcade/.tracker/architecture.md`.
++
++| Skill | Read when |
++|---|---|
++| `arcade/skills/arcade-arch/SKILL.md` | designing or writing anything in `arcade/src/` (it follows pickman-arch's rules with the changes it states, for a library) |
++| `arcade/skills/arcade-test/SKILL.md` | writing arcade's specs (with zz-test and pickman-test) |
+diff --git a/arcade/CLAUDE.md b/arcade/CLAUDE.md
+new file mode 100644
+index 00000000..43c994c2
+--- /dev/null
++++ b/arcade/CLAUDE.md
+@@ -0,0 +1 @@
++@AGENTS.md
+diff --git a/asteroids/AGENTS.md b/asteroids/AGENTS.md
+new file mode 100644
+index 00000000..9571f488
+--- /dev/null
++++ b/asteroids/AGENTS.md
+@@ -0,0 +1,8 @@
++# asteroids
++
++A first-person Asteroids game, registered in c0183: the `asteroids` project, in `asteroids/` (its `src/`, specs and issues, `asteroids/.tracker/`). Its product decisions are in `asteroids/.tracker/game-design.md`, and its architecture map in `asteroids/.tracker/architecture.md`.
++
++| Skill | Read when |
++|---|---|
++| `asteroids/skills/asteroids-arch/SKILL.md` | designing or writing anything in `asteroids/src/` (it follows pickman-arch's rules with the changes it states) |
++| `asteroids/skills/asteroids-test/SKILL.md` | writing asteroids's specs (with zz-test and pickman-test) |
+diff --git a/asteroids/CLAUDE.md b/asteroids/CLAUDE.md
+new file mode 100644
+index 00000000..43c994c2
+--- /dev/null
++++ b/asteroids/CLAUDE.md
+@@ -0,0 +1 @@
++@AGENTS.md
+diff --git a/invaders/AGENTS.md b/invaders/AGENTS.md
+new file mode 100644
+index 00000000..76ab5f35
+--- /dev/null
++++ b/invaders/AGENTS.md
+@@ -0,0 +1,8 @@
++# invaders
++
++A first-person Space Invaders game, registered in c0183: the `invaders` project, in `invaders/` (its `src/`, specs and issues, `invaders/.tracker/`). Its product decisions are in `invaders/.tracker/game-design.md`, and its architecture map in `invaders/.tracker/architecture.md`.
++
++| Skill | Read when |
++|---|---|
++| `invaders/skills/invaders-arch/SKILL.md` | designing or writing anything in `invaders/src/` (it follows pickman-arch's rules with the changes it states) |
++| `invaders/skills/invaders-test/SKILL.md` | writing invaders's specs (with zz-test and pickman-test) |
+diff --git a/invaders/CLAUDE.md b/invaders/CLAUDE.md
+new file mode 100644
+index 00000000..43c994c2
+--- /dev/null
++++ b/invaders/CLAUDE.md
+@@ -0,0 +1 @@
++@AGENTS.md
+diff --git a/pickman/AGENTS.md b/pickman/AGENTS.md
+new file mode 100644
+index 00000000..5ee73b73
+--- /dev/null
++++ b/pickman/AGENTS.md
+@@ -0,0 +1,8 @@
++# pickman
++
++A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune for headless tests. The game is the `pickman` project, in `pickman/` (its `src/`, specs, Rojo projects and issues, `pickman/.tracker/`); the tooling that tracks and gates it is `z-nile/` (zz-rules skill, Projects). Its product decisions are in `pickman/.tracker/game-design.md`, and its architecture map in `pickman/.tracker/architecture.md`.
++
++| Skill | Read when |
++|---|---|
++| `pickman/skills/pickman-arch/SKILL.md` | designing or writing anything in `pickman/src/` |
++| `pickman/skills/pickman-test/SKILL.md` | writing pickman's game specs (with zz-test) |
+diff --git a/pickman/CLAUDE.md b/pickman/CLAUDE.md
+new file mode 100644
+index 00000000..43c994c2
+--- /dev/null
++++ b/pickman/CLAUDE.md
+@@ -0,0 +1 @@
++@AGENTS.md
+diff --git a/portal/AGENTS.md b/portal/AGENTS.md
+new file mode 100644
+index 00000000..cc0a4492
+--- /dev/null
++++ b/portal/AGENTS.md
+@@ -0,0 +1,8 @@
++# portal
++
++The experience's start place, registered in c0183: the `portal` project, in `portal/` (its `src/`, specs and issues, `portal/.tracker/`). Its product decisions are in `portal/.tracker/game-design.md`, and its architecture map in `portal/.tracker/architecture.md`.
++
++| Skill | Read when |
++|---|---|
++| `portal/skills/portal-arch/SKILL.md` | designing or writing anything in `portal/src/` (it follows pickman-arch's rules with the changes it states) |
++| `portal/skills/portal-test/SKILL.md` | writing portal's specs (with zz-test and pickman-test) |
+diff --git a/portal/CLAUDE.md b/portal/CLAUDE.md
+new file mode 100644
+index 00000000..43c994c2
+--- /dev/null
++++ b/portal/CLAUDE.md
+@@ -0,0 +1 @@
++@AGENTS.md
+diff --git a/snake/AGENTS.md b/snake/AGENTS.md
+new file mode 100644
+index 00000000..7b31c95a
+--- /dev/null
++++ b/snake/AGENTS.md
+@@ -0,0 +1,8 @@
++# snake
++
++A first-person Snake game, registered in c0183: the `snake` project, in `snake/` (its `src/`, specs and issues, `snake/.tracker/`). Its product decisions are in `snake/.tracker/game-design.md`, and its architecture map in `snake/.tracker/architecture.md`.
++
++| Skill | Read when |
++|---|---|
++| `snake/skills/snake-arch/SKILL.md` | designing or writing anything in `snake/src/` (it follows pickman-arch's rules with the changes it states) |
++| `snake/skills/snake-test/SKILL.md` | writing snake's specs (with zz-test and pickman-test) |
+diff --git a/snake/CLAUDE.md b/snake/CLAUDE.md
+new file mode 100644
+index 00000000..43c994c2
+--- /dev/null
++++ b/snake/CLAUDE.md
+@@ -0,0 +1 @@
++@AGENTS.md
+diff --git a/z-nile/tests/acceptance/c0111/skill-docs.spec.luau b/z-nile/tests/acceptance/c0111/skill-docs.spec.luau
+index d342f990..ead17d91 100644
+--- a/z-nile/tests/acceptance/c0111/skill-docs.spec.luau
++++ b/z-nile/tests/acceptance/c0111/skill-docs.spec.luau
+@@ -156,12 +156,7 @@ return t.spec("c0111 skills search lessons and route new ones by role", function
+ 			at(section(tracker, "Worktrees"), "`lessons`") -- it may run in the main checkout
+ 			at(read(`{TOP}/z-nile/skills/z-ready/SKILL.md`), "Lessons are not listed")
+ 			at(read(`{TOP}/z-nile/skills/zz-stats/SKILL.md`), "./zn lessons")
+-			-- c0120 override: the spec runs from its home: the checkout's files are read from the top
+-			local agents = read(`{TOP}/AGENTS.md`)
+-			at(agents, "lessons/")
+-			at(agents, "./zn lessons")
+-			at(agents, "capture a new lesson as an issue")
+-			t.expect(string.find(agents, "records new ones when it finishes", 1, true) == nil).toBe(true)
++			-- c0293 override: the root AGENTS.md no longer holds the lesson rules (every skill states its own)
+ 			local prompt = read(`{TOP}/z-nile/templates/prompt.md`) -- c0120 override: read from the checkout's top
+ 			at(
+ 				prompt,
+diff --git a/z-nile/tests/acceptance/c0115/docs.spec.luau b/z-nile/tests/acceptance/c0115/docs.spec.luau
+index 514cb9eb..d1581e95 100644
+--- a/z-nile/tests/acceptance/c0115/docs.spec.luau
++++ b/z-nile/tests/acceptance/c0115/docs.spec.luau
+@@ -216,11 +216,16 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
+ 		"AGENTS.md lists every skill by its real path and starts execution with /z-run; SETUP.md too",
+ 		function()
+ 			local agents = read("AGENTS.md")
++			-- c0293 override: the root lists the pipeline (z-) skills; the zz- skills are named by the stages that call
++			-- them, and pickman's rows are in pickman/AGENTS.md
+ 			for _, n in ALL do
+-				at(agents, `| \`{Z}/{n}/SKILL.md\` |`, "AGENTS.md")
++				if string.sub(n, 1, 3) ~= "zz-" then
++					at(agents, `| \`{Z}/{n}/SKILL.md\` |`, "AGENTS.md")
++				end
+ 			end
+-			at(agents, "| `pickman/skills/pickman-arch/SKILL.md` |", "AGENTS.md")
+-			at(agents, "| `pickman/skills/pickman-test/SKILL.md` |", "AGENTS.md")
++			local pickman = read("pickman/AGENTS.md")
++			at(pickman, "| `pickman/skills/pickman-arch/SKILL.md` |", "pickman/AGENTS.md")
++			at(pickman, "| `pickman/skills/pickman-test/SKILL.md` |", "pickman/AGENTS.md")
+ 			at(agents, "Start execution with `/z-run <R-id>`", "AGENTS.md")
+ 			at(agents, "`z-nile/README.md` is the map", "AGENTS.md")
+ 			local setup = read("SETUP.md")
+diff --git a/z-nile/tests/acceptance/c0120/docs.spec.luau b/z-nile/tests/acceptance/c0120/docs.spec.luau
+index 73449c19..1a618dd3 100644
+--- a/z-nile/tests/acceptance/c0120/docs.spec.luau
++++ b/z-nile/tests/acceptance/c0120/docs.spec.luau
+@@ -154,8 +154,9 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
+ 			"architecture skill"
+ 		)
+ 		at(read(`z-nile/skills/z-design/SKILL.md`), "`pickman/.tracker/game-design.md`", "ticket-prep skill")
+-		at(read("AGENTS.md"), "The game is the `pickman` project, in `pickman/`", "AGENTS.md")
+-		at(read("AGENTS.md"), "designing or writing anything in `pickman/src/`", "AGENTS.md")
++		-- c0293 override: pickman's parts moved to pickman/AGENTS.md
++		at(read("pickman/AGENTS.md"), "The game is the `pickman` project, in `pickman/`", "pickman/AGENTS.md")
++		at(read("pickman/AGENTS.md"), "designing or writing anything in `pickman/src/`", "pickman/AGENTS.md")
+ 		at(read("AGENTS.md"), "runs one suite per checkout and project home at a time", "AGENTS.md")
+ 		at(
+ 			read("SETUP.md"),
+diff --git a/z-nile/tests/acceptance/c0183/docs.spec.luau b/z-nile/tests/acceptance/c0183/docs.spec.luau
+index 378ee79b..e17dc7de 100644
+--- a/z-nile/tests/acceptance/c0183/docs.spec.luau
++++ b/z-nile/tests/acceptance/c0183/docs.spec.luau
+@@ -30,7 +30,8 @@ return t.spec("c0183 the docs name the arcade's projects", function(it)
+ 	it("AC6: AGENTS.md names each new project's folder after the pickman sentence", function()
+ 		namedAfter(
+ 			fs.readFile(`{TOP}/AGENTS.md`),
+-			"The game is the `pickman` project, in `pickman/`",
++			-- c0293 override: the root names every project's folder in its pointer to their AGENTS.md files
++			"in its folder's `AGENTS.md`: `pickman/`",
+ 			function(n)
+ 				return `\`{n}/\``
+ 			end,
+diff --git a/z-nile/tests/acceptance/c0184/docs.spec.luau b/z-nile/tests/acceptance/c0184/docs.spec.luau
+index e92ece90..2d6d9449 100644
+--- a/z-nile/tests/acceptance/c0184/docs.spec.luau
++++ b/z-nile/tests/acceptance/c0184/docs.spec.luau
+@@ -51,13 +51,9 @@ return t.spec("c0184 the restated rules and the new skills", function(it)
+ 	it(
+ 		"AC7: AGENTS.md and the README say every project with code has pickman's home, and name each project's skills",
+ 		function()
+-			local agents, readme = read("AGENTS.md"), read("z-nile/README.md")
+-			at(agents, "Every project with code has the same home as `pickman/` (c0184)", "AGENTS.md")
+-			at(
+-				agents,
+-				"which the gate checks for each registered project (z-nile/README.md, A project's home).",
+-				"AGENTS.md"
+-			)
++			-- c0293 override: the root AGENTS.md no longer restates the home (the README does); each project's own
++			-- AGENTS.md names its skills
++			local readme = read("z-nile/README.md")
+ 			at(readme, "## A project's home", "README")
+ 			at(
+ 				readme,
+@@ -82,10 +78,10 @@ return t.spec("c0184 the restated rules and the new skills", function(it)
+ 			end
+ 			-- every registered project but z-nile is named in a skills row of each
+ 			for _, p in others() do
+-				t.expect(line(agents, { "-arch/SKILL.md", `\`{p.name}\`` })).toBe(true)
++				t.expect(line(read(`{p.name}/AGENTS.md`), { "-arch/SKILL.md", `\`{p.name}/` })).toBe(true)
+ 				t.expect(line(readme, { `{p.name}-arch`, `{p.name}-test` })).toBe(true)
+ 			end
+-			t.expect(line(agents, { "pickman-arch/SKILL.md" })).toBe(true)
++			t.expect(line(read("pickman/AGENTS.md"), { "pickman-arch/SKILL.md" })).toBe(true)
+ 		end
+ 	)
+ 
