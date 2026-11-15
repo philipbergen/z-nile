@@ -19,9 +19,11 @@ L=z-nile/skills/zz-rules/lessons/read-pr-state-before-pushing.md
 H=z-nile/.tracker/issues/c0271/harvest.md
 CK=z-nile/.tracker/issues/c0271/check.sh
 SAVE=$(mktemp -d) || exit 2
-trap 'rm -rf "$SAVE"' EXIT
 cp "$R" "$SAVE/R"; cp "$X" "$SAVE/X"; cp "$L" "$SAVE/L"; cp "$H" "$SAVE/H"
 restore() { cp "$SAVE/R" "$R"; cp "$SAVE/X" "$X"; cp "$SAVE/L" "$L"; cp "$SAVE/H" "$H"; }
+# a run stopped mid-mutant (its ./zn run limit, ^C) restores the clone before it goes
+trap 'restore; rm -rf "$SAVE"' EXIT
+trap 'exit 130' INT TERM
 out=$(bash "$CK" 2>&1); echo "$out" | grep -q -- "---- 3/3 criteria passed" || { echo "BASE not green:"; echo "$out"; exit 1; }
 echo "base: 3/3"
 fails=0
@@ -58,7 +60,7 @@ run M5 AC3 "os.remove(L)"
 run M6 AC1 "sub(L,'when: both','when: design')"
 run M7 AC1 "sub(L,', and does my report quote the state I read?','?')"
 run M8 AC1 "sub(L,'PR #256','a PR')"
-run M9 AC2 "open(H,'w').write('')"
+run M9 AC2 "s=open(H).read(); open(H,'w').write(''.join(l for l in s.splitlines(True) if not l.startswith('- note ')))"
 run M10 AC1 "sub(L,'A \`CLOSED\` or \`MERGED\` one whose head is in your history or in origin\'s branch takes nothing: report its state and newest comment, and stop.','A \`CLOSED\` one is reopened.')"
 run M11 AC1 "sub(L,'when: both','when: build')"
 run M12 AC1 "s,b=body(L); open(L,'w').write(s+'x'*(1201-len(b.encode())-1)+'\n')"
