@@ -87,7 +87,7 @@ A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent`
 ### Order
 Tickets have no order today. They should: every issue and raft gets a `rank:` (integer, lower first; not the `rank` of `.models.toml`, where a higher one wins). *captured* (c0249)
 - An unset `rank:` is the lowest rank, and equal or unset ranks fall back to the ticket number, so the order is always stable.
-- Lost work comes first: anything in progress whose heartbeat is stale (`./zn lost` lists it) comes before anything not yet started, whatever its rank, even when a person started it without changing its rank. *exists* (c0265)
+- Lost work comes first: anything in progress whose heartbeat is stale (`./zn lost` lists it) comes before anything not yet started, whatever its rank, even when a person started it without changing its rank. *exists* as the list (`./zn lost`, the board and status markers) and the skills' rule (z-work step 1); `./zn work next` itself reads no verdict, so the engine's order does not yet put lost work first (c0249). (c0265)
 - The next item is the first in that order whose `depends_on` are all done, which is not blocked, and whose status is claimable. `depends_on` is a hard constraint; `rank` only orders what is free, so the order works around a blocked item without changing any rank.
 - z-ticket and z-design leave the rank unset, which appends; only a person sets one, with `./zn rank <id> top|after <id>|unset`. z-raft asks for a raft's rank when it makes the raft, and unset is a valid answer: with no one to answer, the rank stays unset. A rank given to a raft is the raft's own; an unset one takes its members' best. The board shows the stack in order.
 - The board shows lost, parked and stale claims, lost first. *exists* (c0276)
@@ -98,7 +98,7 @@ A worker claims an item by landing the status change on `origin/main`, as `statu
 - A worker that holds an item beats a heartbeat on it every 5 minutes, as a commit on a heartbeat branch, not on `main`; the branch is deleted when the heartbeat drops or the task completes. An item in progress whose heartbeat is stale is lost. *exists* (c0265)
 - Agents keep their claims alive without remembering to beat: the claim paths, every `./zn` command in a worktree, long commands and the dispatcher beat. *exists* (c0275)
 - A lost claim is taken over by the next worker as a normal claim, which resumes it and is recorded, and its old owner is refused and told: the takeover deletes the old heartbeat branch and creates a new one, so a worker that comes back learns it lost the claim. *exists* (c0274)
-- A takeover discards the old worker's worktree, and a numbered copy recovers its work: the old worker's work is kept, and a numbered copy of it continues the work. *designed* (c0277)
+- A takeover discards the old worker's worktree, and a numbered copy recovers its work: the old worker's work is kept, and a numbered copy of it continues the work. *exists* (c0277)
 
 ### Autonomous delivery
 Unless something blocks, once a person has approved its design, an item is rafted, executed, code-reviewed, full-force reviewed, tested and landed with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the stack is green and regression-free. This replaces c0117's "stops at a merge" gate: the stack lands through `./zn done`, with the dispatcher's credential, after its own checks. *captured* (c0252)
@@ -178,7 +178,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | take over a lost claim, the old owner told | c0274 | exists |
 | automatic heartbeats | c0275 | exists |
 | the board shows lost work | c0276 | exists |
-| discard and recover a worktree: the numbered copy | c0277 | designed |
+| discard and recover a worktree: the numbered copy | c0277 | exists |
 | `./zn who`, the history from git | c0280 | designed |
 | provenance rows: unblocked, rafted, delivered | c0282 | designed |
 | `./zn approve` refused in an agent session, the approved row | c0283 | designed |

@@ -43,3 +43,6 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-15 08:29	132 specs	0	0	test			31.685	109.100		31.685	tokens,ai
 2026-11-15 08:28	2 runs	0	0	other			128.244	319.800			tokens,ai
 2026-11-15 08:29	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-14 20:05	R0100: review-004	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-14 23:02	R0100: addressed during execution, c0276 spec note	0	0	code-review							tokens,wall,cpu,ai
+2026-11-15 08:30	R0100: refute-005 names c0338	0	0	code-review							tokens,wall,cpu,ai

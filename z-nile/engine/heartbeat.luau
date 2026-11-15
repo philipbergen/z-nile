@@ -466,12 +466,19 @@ function heartbeat.sessionPid(chain: { { pid: number, command: string } }): numb
 end
 
 -- Why `beat --watch` has no place to beat from any more, or nil: its session ended, its worktree is gone, or the claim's
--- memory in it ended (a claim-ending command ran there). c0277 adds its discard mark here.
-function heartbeat.gone(sessionAlive: boolean?, worktreeThere: boolean, memoryThere: boolean): string?
+-- memory in it ended (a claim-ending command ran there), or it was discarded by a takeover (c0277: its marker is there).
+function heartbeat.gone(
+	sessionAlive: boolean?,
+	worktreeThere: boolean,
+	memoryThere: boolean,
+	discarded: boolean?
+): string?
 	if sessionAlive == false then
 		return "its session ended"
 	elseif not worktreeThere then
 		return "its worktree is gone"
+	elseif discarded == true then
+		return "its worktree was discarded (the claim was taken over)"
 	elseif not memoryThere then
 		return "its worktree no longer holds the claim"
 	end
@@ -518,6 +525,332 @@ function heartbeat.dispatchOutcome(ok: boolean, stderr: string): string
 		return "none"
 	end
 	return "failed"
+end
+
+-- c0277. A takeover DISCARDS the old worker's worktree (the user, 2026-11-08: "Rename the old worktree and create a copy to
+-- continue the work and call it R123-1 R123-2 and so on. That way a process that wakes up knows it has been discarded and
+-- can clear and pick up something new. I assume that there is a point in trying to recover the work and not just discarding
+-- it"): the old worktree is renamed to <name>-discarded-<n> with a marker, its branch is renamed, and the taker works in a
+-- numbered copy <name>-<n>. Everything below is pure: the engine edge reads the checkout and writes the marker.
+
+-- The marker a takeover leaves in the old worktree, and the file that marks a copy its taker is still starting in (the
+-- epoch it was made). Both are relative to a worktree's top.
+heartbeat.DISCARDED = ".cache/discarded"
+heartbeat.FRESH = ".cache/fresh"
+
+-- n when `name` is `base` (0) or `base-<n>` (n >= 1, digits only), else nil: the worktrees of one family.
+function heartbeat.suffixOf(base: string, name: string): number?
+	if name == base then
+		return 0
+	end
+	local digits = string.match(name, "^" .. string.gsub(base, "%p", "%%%0") .. "%-(%d+)$")
+	local n = if digits then tonumber(digits) else nil
+	if n and n >= 1 and tostring(n) == digits then
+		return n
+	end
+	return nil
+end
+
+-- The smallest free `<base>-<n>` (n >= 1). `taken` holds names (directories, and branches mapped to the name they stand for).
+function heartbeat.nextSuffix(base: string, taken: { string }): string
+	local used: { [number]: boolean } = {}
+	for _, name in taken do
+		local n = heartbeat.suffixOf(base, name)
+		if n then
+			used[n] = true
+		end
+	end
+	local n = 1
+	while used[n] do
+		n += 1
+	end
+	return `{base}-{n}`
+end
+
+-- Whether the worktree `name` on `branch` belongs to the family of `base`: the bare name always; a numbered copy only on the
+-- family's own branch (a copy keeps the original branch name), or, for a raft, detached or on one of its layers. An
+-- unrelated `<base>-<digits>` (another item's slug, a step's number) is no member.
+function heartbeat.isMember(base: string, name: string, branch: string?): boolean
+	local n = heartbeat.suffixOf(base, name)
+	if n == nil then
+		return false
+	elseif n == 0 then
+		return true
+	elseif string.match(base, "^R%d%d%d%d$") then
+		local layer = if branch then string.match(branch, "^(R%d%d%d%d)/%d+/[fdc]%d%d%d%d$") else nil
+		return branch == nil or branch == "" or layer == base
+	end
+	return branch == base
+end
+
+-- The family's current worktree: the highest suffix among the names not marked discarded; nil when none is left.
+function heartbeat.currentOf(base: string, members: { string }, discarded: { [string]: boolean }): string?
+	local best: string? = nil
+	local bestN = -1
+	for _, name in members do
+		local n = heartbeat.suffixOf(base, name)
+		if n and not discarded[name] and n > bestN then
+			best, bestN = name, n
+		end
+	end
+	return best
+end
+
+-- The base a worktree stands for: the name its branch had before any discard (a raft layer's branch stands for its raft),
+-- else the worktree's own name without a numeric suffix.
+function heartbeat.baseOf(branch: string?, dirName: string): string
+	local raft = if branch then string.match(branch, "^(R%d%d%d%d)/%d+/[fdc]%d%d%d%d$") else nil
+	if raft then
+		return raft
+	elseif branch and branch ~= "" then
+		return branch
+	end
+	return (string.gsub(dirName, "%-%d+$", ""))
+end
+
+-- A taker who is still starting in a copy (`.cache/fresh` holds the epoch it was made) is not discarded until the limit.
+function heartbeat.fresh(epoch: number?, now: number, limit: number): boolean
+	return epoch ~= nil and now - epoch < limit
+end
+
+-- `--item <id>` names a claim for a worktree that remembers none, accepted only for the item's own branch: an issue's
+-- `prep-<slug>` or its layer branch, a raft's `raft-<slug>`, its worktree name or one of its layers. The lost verdict is
+-- about the item, not about whose worktree this is.
+function heartbeat.ownsBranch(branch: string?, id: string, slug: string?): boolean
+	if branch == nil or branch == "" then
+		return false
+	end
+	local raft, _, issue = string.match(branch, "^(R%d%d%d%d)/(%d+)/([fdc]%d%d%d%d)$")
+	if raft or issue then
+		return id == raft or id == issue
+	end
+	return branch == id or (slug ~= nil and (branch == `prep-{slug}` or branch == `raft-{slug}`))
+end
+
+export type ClaimFact = { id: string, remembered: string, current: string?, verdict: Verdict? }
+
+-- Whether every claim a worktree remembers (or the item named for it) may be discarded: lost, or already over (origin
+-- shows another stamp or none). nil when it may, else the first refusal, naming the item and why (c0274's wording).
+function heartbeat.discardRefusal(facts: { ClaimFact }, why: string?): string?
+	if #facts == 0 then
+		return "it remembers no claim: name the item with --item <id> (accepted for the item's own branch only)"
+	end
+	for _, f in facts do
+		local held = heartbeat.holds(f.remembered, f.current)
+		if f.remembered == "" and f.current == nil then
+			return `{f.id} is not a claim on origin/main: nothing to take over`
+		elseif held == "held" or held == "unheld" then
+			local v = f.verdict
+			if not (v and heartbeat.canTakeOver(v.kind, v.stamp, f.current or "")) then
+				return `{f.id}: {heartbeat.takeoverRefusal(
+					f.id,
+					if v then v.kind else "unknown",
+					if v then v.silent else 0,
+					why
+				)}`
+			end
+		end
+	end
+	return nil
+end
+
+-- Whether the plain lookup must not hand a worktree out: at least one claim it remembers is over (origin/main shows another
+-- stamp or none: "taken" or "ended") and none is still its own (a "held" claim keeps the worktree in use). This is c0274's
+-- "no in-place re-adoption" meeting c0277's lookup: a raft stopped from the main checkout and readied again leaves its
+-- worktree remembering the old stamp.
+function heartbeat.staleMember(facts: { ClaimFact }): boolean
+	local over = false
+	for _, f in facts do
+		local held = heartbeat.holds(f.remembered, f.current)
+		if held == "held" then
+			return false
+		elseif held == "taken" or held == "ended" then
+			over = true
+		end
+	end
+	return over
+end
+
+export type Discard = {
+	path: string,
+	copy: string,
+	branch: string,
+	base: string,
+	pushed: string,
+	items: { string },
+	since: number,
+	body: string,
+}
+export type DiscardFacts = {
+	path: string,
+	copy: string,
+	branch: string, -- the renamed branch ("" for a detached worktree)
+	base: string, -- the branch name the copy keeps
+	items: { string },
+	since: number,
+	pushedSha: string, -- the pushed tip the copy continues ("" when nothing was pushed)
+	pushed: { string },
+	unpushed: { string },
+	dirty: { string },
+}
+
+local LIST_CAP = 20
+local function listed(lines: { string }): string
+	local out: { string } = {}
+	for i, l in lines do
+		if i > LIST_CAP then
+			table.insert(out, `  ... and {#lines - LIST_CAP} more`)
+			break
+		end
+		table.insert(out, `  {l}`)
+	end
+	return table.concat(out, "\n")
+end
+
+-- The marker's text: a header the engine reads back (`discardParse`, the one reader) and a body every command run in the
+-- discarded worktree prints and the taker is shown. Nothing is deleted: this is where the old worker's work is listed.
+function heartbeat.discardText(f: DiscardFacts): string
+	local first = f.items[1] or "?"
+	local more = if #f.items > 1 then ` (and {#f.items - 1} more)` else ""
+	local range = if f.pushedSha ~= "" then `origin/{f.base}..{f.branch}` else `origin/main..{f.branch}`
+	local out = {
+		`discarded worktree: {f.path}`,
+		`copy: {f.copy}`,
+		`branch: {f.branch}`,
+		`base: {f.base}`,
+		`pushed: {f.pushedSha}`,
+		`items: {table.concat(f.items, " ")}`,
+		`since: {f.since}`,
+		"",
+		`this worktree was discarded: {first}'s claim was taken over{more}. Clear your context and pick up something new. Your work is kept here: {f.path}`,
+		`The taker continues in {f.copy}, on {if f.base ~= "" then f.base else "a detached head"}{if f.pushedSha
+				~= ""
+			then ` at the pushed {string.sub(f.pushedSha, 1, 7)}`
+			else " (nothing was pushed)"}.`,
+	}
+	if #f.pushed > 0 then
+		table.insert(out, `pushed commits (the copy has them):\n{listed(f.pushed)}`)
+	end
+	if #f.unpushed > 0 then
+		table.insert(
+			out,
+			`unpushed commits (kept on {f.branch}; take them with: git -C {f.copy} cherry-pick {range}):\n{listed(
+				f.unpushed
+			)}`
+		)
+	end
+	if #f.dirty > 0 then
+		table.insert(
+			out,
+			`uncommitted files (kept in {f.path}; copy what you need, for example cp {f.path}/<file> {f.copy}/<file>):\n{listed(
+				f.dirty
+			)}`
+		)
+	end
+	if #f.pushed == 0 and #f.unpushed == 0 and #f.dirty == 0 then
+		table.insert(out, "nothing else was left here")
+	end
+	return table.concat(out, "\n") .. "\n"
+end
+
+-- The marker's header and body, or nil for a damaged file (the engine then refuses with the file's own text: a marker
+-- is present or it is not, and a present one is never ignored).
+function heartbeat.discardParse(text: string): Discard?
+	local head, body = string.match(text, "^(.-)\n\n(.*)$")
+	if not head then
+		return nil
+	end
+	local path = string.match(head, "^discarded worktree: ([^\n]+)")
+	local copy = string.match(head, "\ncopy: ([^\n]*)")
+	local branch = string.match(head, "\nbranch: ([^\n]*)")
+	local base = string.match(head, "\nbase: ([^\n]*)")
+	local pushed = string.match(head, "\npushed: ([^\n]*)")
+	local items = string.match(head, "\nitems: ([^\n]*)")
+	local since = tonumber(string.match(head, "\nsince: (%d+)") or "")
+	if not (path and copy and branch and base and pushed and items and since) then
+		return nil
+	end
+	local ids: { string } = {}
+	for id in string.gmatch(items, "%S+") do
+		table.insert(ids, id)
+	end
+	return {
+		path = path,
+		copy = copy,
+		branch = branch,
+		base = base,
+		pushed = pushed,
+		items = ids,
+		since = since,
+		body = body or "",
+	}
+end
+
+-- What a command run in a discarded worktree is told (exit 1): the body of the marker.
+function heartbeat.discardedText(text: string): string
+	local d = heartbeat.discardParse(text)
+	if d then
+		return d.body
+	end
+	return "this worktree was discarded. Clear your context and pick up something new. " .. text
+end
+
+-- A discarded worktree is finished with when no item it was discarded for is a live claim any more (done, prepared again,
+-- new or gone): the raft merged or was stopped, the prep merged or was given back. `live` says, per item, whether
+-- origin/main shows it as a claim (preparing or active); an item it says nothing about is not live.
+function heartbeat.discardEnded(live: { [string]: boolean }, items: { string }): boolean
+	for _, id in items do
+		if live[id] == true then
+			return false
+		end
+	end
+	return true
+end
+
+-- Why a finished discarded worktree is kept anyway, or nil when it may go: it still holds uncommitted files, or commits
+-- that exist nowhere else (not reachable from any origin ref). The user's "try to recover the work and not just discard it".
+function heartbeat.keepReason(dirty: number, unreachable: number): string?
+	if dirty > 0 and unreachable > 0 then
+		return `{dirty} uncommitted file(s) and {unreachable} commit(s) exist nowhere else`
+	elseif dirty > 0 then
+		return `{dirty} uncommitted file(s)`
+	elseif unreachable > 0 then
+		return `{unreachable} commit(s) exist nowhere else`
+	end
+	return nil
+end
+
+-- One entry of `git status --porcelain -z`: the two status letters, the path, and for a rename or copy the path it came
+-- from. The only reader of that output (the unrecovered-work test and the discard's note both use it): without -z git
+-- quotes and C-escapes odd paths and prints a rename as `old -> new`.
+export type StatusEntry = { xy: string, path: string, from: string? }
+
+function heartbeat.statusEntries(z: string): { StatusEntry }
+	local out: { StatusEntry } = {}
+	local parts = string.split(z, "\0")
+	local i = 1
+	while i <= #parts do
+		local part = parts[i]
+		i += 1
+		if #part >= 4 then
+			local xy = string.sub(part, 1, 2)
+			local entry: StatusEntry = { xy = xy, path = string.sub(part, 4) }
+			if string.find(xy, "[RC]") and i <= #parts then
+				entry.from = parts[i]
+				i += 1
+			end
+			table.insert(out, entry)
+		end
+	end
+	return out
+end
+
+-- The path to show for an entry in a note: a rename reads `old -> new`.
+function heartbeat.statusLabel(e: StatusEntry): string
+	if e.from then
+		return `{e.from} -> {e.path}`
+	end
+	return e.path
 end
 
 return heartbeat

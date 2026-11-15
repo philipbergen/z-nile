@@ -13,3 +13,39 @@
 - design-review-002 F6: z-raft/interface-names-every-writer
 - design-review-002 F7: z-design/new-rules-migrate-existing-work
 - design-review-002 F8: z-raft/plan-the-switch-over
+- review-001 F1: zz-arch/an-operation-pinning-one-sha-lists-at-that-sha
+- review-001 F2: zz-arch/children-need-a-lifeline
+- review-001 F3: zz-arch/bounded-wrapper-states-its-own-timeout
+- review-001 F4: z-design/restated-rules-move-together
+- review-001 F5: zz-arch/one-reader-per-format
+- review-002 F1: zz-arch/side-effect-outside-git-follows-the-last-rollback
+- review-002 F2: zz-arch/fail-inside-pcall-is-not-caught
+- review-002 F3: zz-arch/one-owner-per-user-facing-text
+- review-002 F4: zz-execute/log-each-cross-prep-run-and-how-it-was-applied
+- review-002 F5: z-design/restated-rules-move-together
+- review-003 F1: zz-execute/fix-rounds-rerun-every-member-check
+- review-003 F2: z-design/restated-rules-move-together
+- review-004 F1: zz-arch/guard-no-is-explicit
+- review-004 F2: z-design/restated-rules-move-together
+- review-004 F3: z-design/restated-rules-move-together
+- review-004 F4: zz-execute/log-each-cross-prep-run-and-how-it-was-applied
+- review-005 F1: z-design/new-rules-migrate-existing-work, zz-test/detached-helpers-meet-the-reaper
+- review-005 F2: zz-arch/single-instance-guard-both-ends
+- review-005 F3: zz-arch/per-command-cost-is-measured
+- review-005 F4: zz-arch/fail-inside-pcall-is-not-caught
+- review-005 F5: zz-execute/log-each-cross-prep-run-and-how-it-was-applied
+- review-005 F6: z-design/restated-rules-move-together
+- final-review-001 F1: z-design/a-gate-names-where-its-fix-is-committed
+- final-review-001 F2: z-design/a-gate-names-where-its-fix-is-committed, zz-execute/top-layer-harvest-before-the-final-finish
+- final-review-001 F3: z-design/rules-keyed-to-a-sha, zz-execute/restack-just-before-trace-and-done
+- final-review-001 F4: z-design/required-steps-on-every-path, zz-execute/every-layer-gets-its-code-review
+- final-review-001 F5: z-design/restated-rules-move-together
+- final-review-001 F6: zz-arch/single-instance-guard-both-ends, zz-arch/read-paired-facts-at-one-moment
+- final-review-001 F7: zz-arch/guard-no-is-explicit
+- final-review-001 F8: zz-execute/log-each-cross-prep-run-and-how-it-was-applied
+- final-review-001 F9: zz-execute/harvest-sets-the-lessons-stage
+- note executor 3 saw a process meant to outlive its starter stopped by the reaper of an engine older than the one that shipped it, still running in a sibling worktree: zz-test/detached-helpers-meet-the-reaper
+- note the top layer's harvest and lessons were committed after its last finish and left the layer unfinished by the tool's rule: zz-execute/top-layer-harvest-before-the-final-finish
+- note layer 3 went from finish to the final review with no code review and `./zn done` does not check for one: zz-execute/every-layer-gets-its-code-review
+- note the stack fell five commits behind main during the raft and the trace table went stale: zz-execute/restack-just-before-trace-and-done
+- note an acceptance spec's type error showed only in `./zn promote-check` at the end, because the test runner does not type-check: z-design/rerun-skipped-checks-after-edits

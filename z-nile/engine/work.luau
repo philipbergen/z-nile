@@ -13,9 +13,11 @@
 -- becomes the pipeline step (or the pipeline step becomes a layer action).
 --
 -- Left for later tickets, on purpose:
---   c0249: work.rankKey is the id. Rank replaces that key, and lost work is not taken first.
+--   c0249: work.rankKey is the id. Rank replaces that key. (Lost work is taken first by the skill, not by this
+--     function: z-work step 1 runs `./zn lost` before `./zn work next`.)
 --   c0250: questions.md is the only block signal. There is no blocked status and no resolve command.
---   c0265: nothing beats while a raft is held. An unnamed session does not resume one, and does not take it over.
+--   c0265: a claim beats itself (the autobeat); this function reads no verdict, so an unnamed `./zn work next` does not
+--     resume or take over a lost raft: z-work step 1 does, through `./zn lost`.
 --   c0254: the holder is the author of the ready commit, not a worker identity, and two checkouts can be
 --     told to build the same active raft if both name it.
 --   A person who names no raft keeps taking the next claimable one. The folder ./zn was run from

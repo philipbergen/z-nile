@@ -52,7 +52,7 @@ usage: ./zn <command> ...
   release <R-id> [--force]                      give back a rafting claim: what carries its stamp goes back to
                                                 prepared (design ready) or new (z-raft)
   raft-plan [--apply]                           print z-raft's plan for every prepared, raftless issue (--apply runs it)
-  beat <id> [--watch] [--adopt] [--stamp S]             beat a claim: replace its heartbeat branch hb/<stamp> on origin (--watch: every
+  beat <id> [--watch] [--adopt] [--stamp S]     beat a claim: replace its heartbeat branch hb/<stamp> on origin (--watch: every
                                                 5 minutes, only under ./zn run --time S -- ./zn beat <id> --watch). A
                                                 checkout beats only the claim it made; --adopt takes on one it did not
                                                 (--stamp S: only while main still shows S)
@@ -111,6 +111,8 @@ usage: ./zn <command> ...
   watch-net                                     run every project's fast suite on current main, then the slow tier,
                                                 and push a missed test's files or a slow-tier defect onto main
   worktree <R-id|name>                          create or reuse .worktree/<R-id|name>: a raft's is detached until a layer exists, then on that layer
+  worktree <name> --takeover [--item <id>]      discard a lost claim's worktree (directory and branch renamed, marked) and continue in a numbered copy <name>-<n>;
+  worktree --takeover <id>                      by id, the worktree that holds the claim (its work is kept and listed)
   worktree-prune                                remove worktrees of rafts that are done on main
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
@@ -429,6 +431,30 @@ end
 function cm.remember(id: string, value: string)
 	fs.writeDir(".cache")
 	sh.writeReplacing(cm.file(id), value)
+	-- c0277: a taker who starts in a numbered copy marks it fresh; holding claim memory ends that
+	if fs.isFile(heartbeat.FRESH) then
+		fs.removeFile(heartbeat.FRESH)
+	end
+end
+
+-- c0277: the items whose claim a checkout's folder remembers (tracker-stamp-<id>, and tracker-claim-<id> for a claim made
+-- before the stamp file existed), sorted.
+function cm.ids(dir: string): { string }
+	local seen: { [string]: boolean } = {}
+	local out: { string } = {}
+	local cache = `{dir}/.cache`
+	if fs.isDir(cache) then
+		for _, name in fs.readDir(cache) do
+			local id = string.match(name, "^tracker%-stamp%-(.+)$")
+				or string.match(name, "^tracker%-claim%-(.+)$")
+			if id and not seen[id] then
+				seen[id] = true
+				table.insert(out, id)
+			end
+		end
+	end
+	table.sort(out)
+	return out
 end
 
 function cm.drop(id: string)
@@ -900,6 +926,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--begin"
 			or a == "--sessions"
 			or a == "--adopt"
+			or a == "--takeover"
 		then
 			opts[a] = { "true" }
 		elseif string.sub(a, 1, 1) == "-" then
@@ -1699,6 +1726,22 @@ function hb.judgeAll(paths: { string }): Judged
 	return { verdicts = heartbeat.settle(verdicts, parked), problems = problems }
 end
 
+-- The verdicts of every claim by id, and why none could be relied on (the beats, the pull requests or a malformed beat
+-- branch could not be read), for the commands that decide on one claim (a takeover, c0274; a worktree takeover, c0277).
+function hb.judgedFor(paths: { string }): ({ [string]: heartbeat.Verdict }, string?)
+	local judged: { [string]: heartbeat.Verdict } = {}
+	local j = hb.judgeAll(paths)
+	for _, v in j.verdicts do
+		judged[v.id] = v
+	end
+	local why = if j.beatsError
+		then `heartbeats unreadable: {j.beatsError}`
+		elseif j.problems[1] then j.problems[1]
+		elseif j.prsError then `pull requests unreadable: {j.prsError}`
+		else nil
+	return judged, why
+end
+
 -- c0276: the verdicts the board marks its cards with: the same reads as `status` (one fetch of main, one of the beat
 -- branches, the pull requests only when a claim is stale). Nil, and the board builds without marks, in a protected
 -- checkout (asked first, quietly: no remote is read) or without an origin; whatever cannot be read leaves the page
@@ -2354,7 +2397,12 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 			alive = sh.run("kill", { "-0", tostring(session) }).ok
 		end
 		local there = fs.isDir(home)
-		return heartbeat.gone(alive, there, there and (isMain or cm.read(id, home) ~= ""))
+		return heartbeat.gone(
+			alive,
+			there,
+			there and (isMain or cm.read(id, home) ~= ""),
+			there and fs.isFile(`{home}/{hb.DISCARDED}`) -- c0277: a takeover discarded this worktree
+		)
 	end
 	while true do
 		local here, unreadable = hb.stampNow(id)
@@ -2526,15 +2574,7 @@ local function setStatus(id: string, to: string)
 			local lp = if listed then docPath(listed, id) else nil
 			local lf = if lp then frontOf(sh.git({ "show", `origin/main:{lp}` })) else nil
 			if listed and lp and lf and string.match(lf.status or "", "^preparing%-") then
-				local j = hb.judgeAll(listed)
-				for _, v in j.verdicts do
-					judged[v.id] = v
-				end
-				judgedWhy = if j.beatsError
-					then `heartbeats unreadable: {j.beatsError}`
-					elseif j.problems[1] then j.problems[1]
-					elseif j.prsError then `pull requests unreadable: {j.prsError}`
-					else nil
+				judged, judgedWhy = hb.judgedFor(listed)
 			end
 		end)
 		if not ok then
@@ -3513,6 +3553,11 @@ function cmd.sync(_: { string }, opts: { [string]: { string } })
 			sh.git({ "pull", "--quiet", "--ff-only" })
 			sweepStale(mainRoot(), before, sh.git({ "rev-parse", "HEAD" }))
 			buildBoard(mainRoot())
+			-- c0277: the discarded worktrees whose work ended (a prep that merged) go
+			local swept, r = pcall(hb.sweepDiscarded, true)
+			if swept then
+				hb.sweepSay(r :: any, false)
+			end
 		else
 			mergeOrigin()
 		end
@@ -5474,60 +5519,82 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
 	end
 end
 
-function cmd.worktree(pos: { string }, opts: { [string]: { string } })
-	local target = pos[1] or fail("usage: worktree <R-id|name>")
-	local branch: string? = nil
-	local detach = false
-	local dirName: string
+-- c0277: the files that tell a worktree what happened to it. `discarded` is the marker a takeover leaves in the old
+-- worktree (heartbeat.discardText); `fresh` holds the epoch a takeover made a copy, until its taker holds claim memory.
+hb.DISCARDED = heartbeat.DISCARDED
+hb.FRESH = heartbeat.FRESH
+
+-- Creates `path` holding `text` only when it does not exist yet: the text is written beside it and hard-linked in, which
+-- fails when the path is taken, so two takers never both own one marker. false when the path exists.
+function hb.claimFile(path: string, text: string): boolean
+	local tmp = `{path}.new-{math.random(1, 1000000000)}`
+	sh.writeReplacing(tmp, text)
+	local r = sh.run("ln", { tmp, path })
+	pcall(fs.removeFile, tmp)
+	return r.ok
+end
+
+-- Makes a worktree's .cache folder (fs.writeDir of an existing folder writes nothing).
+function hb.homeDir(path: string)
+	fs.writeDir(`{path}/.cache`)
+end
+
+-- Every command run in a discarded worktree is refused with the marker's text (exit 1), except the read-only ones (main's
+-- dispatch skips this function for them) and `reap`: the session-end reaper of a session whose folder is the discarded
+-- worktree must still stop its processes. It runs before `hb.begin`, so a discarded worktree never beats.
+function hb.refuseDiscarded(name: string)
+	if name == "reap" or not fs.isFile(hb.DISCARDED) then
+		return
+	end
+	local ok, text = pcall(fs.readFile, hb.DISCARDED)
+	fail(sh.trim(heartbeat.discardedText(if ok then text else "")))
+end
+
+-- The worktrees under .worktree/ as the family lookup sees them: name, path, branch and whether a marker discards it.
+type Wt = { name: string, path: string, branch: string?, discarded: boolean }
+function hb.wtList(): { Wt }
+	local prefix = `{mainRoot()}/.worktree/`
+	local out: { Wt } = {}
+	for _, w in worktrees() do
+		local name = if string.sub(w.path, 1, #prefix) == prefix then string.sub(w.path, #prefix + 1) else nil
+		if name and not string.find(name, "/", 1, true) then
+			table.insert(out, {
+				name = name,
+				path = w.path,
+				branch = w.branch,
+				discarded = fs.isFile(`{w.path}/{hb.DISCARDED}`),
+			})
+		end
+	end
+	return out
+end
+
+-- Where a worktree target stands: its branch, whether it is detached, and the directory name (the raft's own, or the name).
+function hb.worktreeTarget(target: string): (string?, boolean, string)
 	if string.match(target, "^R%d%d%d%d$") then
 		local missing = `{target} is not in this tree; if it was just merged, run {mainRoot()}/zn sync`
 		local raft = store.find(target) or fail(missing)
 		if raft.state == "done" then
 			fail(`{target} is done`)
 		end
-		dirName = target
 		-- A raft worktree is on its latest layer, or on no branch until start opens one.
 		-- It does not create the old R####-<slug> branch.
 		local layers = layergit.layersOf(raft.id)
 		if #layers > 0 then
-			branch = layers[#layers].name
-		else
-			detach = true
+			return layers[#layers].name, false, target
 		end
+		return nil, true, target
 	elseif string.match(target, "^[fdc]%d%d%d%d$") then
-		fail("give a raft id or a name")
+		return fail("give a raft id or a name")
 	elseif #target <= 60 and string.match(target, "^[a-z][a-z0-9%-]*$") then
-		branch, dirName = target, target
-	else
-		fail(`invalid worktree name: {target}`)
+		return target, false, target
 	end
-	local from = opts["--from"] and opts["--from"][1]
-	if from then
-		if string.match(target, "^R%d%d%d%d$") then
-			fail("--from is for named worktrees")
-		end
-		if not sh.run("git", { "rev-parse", "--verify", "--quiet", from .. "^{commit}" }).ok then
-			fail(`unknown ref {from}`)
-		end
-	end
-	local root = mainRoot()
-	local path = `{root}/.worktree/{dirName}`
-	sh.run("git", { "worktree", "prune" }) -- forget worktrees whose directory was deleted
-	if hasOrigin() then
-		sh.run("git", { "fetch", "--quiet", "--prune", "origin" })
-	end
-	for _, w in worktrees() do
-		if w.path == path then
-			print(path)
-			return
-		elseif branch and w.branch == branch then
-			fail(`{branch} is already used by worktree at {w.path}`)
-		end
-	end
-	local base = from
-		or if sh.run("git", { "show-ref", "--verify", "--quiet", "refs/remotes/origin/main" }).ok
-			then "origin/main"
-			else "main"
+	return fail(`invalid worktree name: {target}`)
+end
+
+-- Adds the worktree at `path`: detached at `base`, on the local branch when it exists, on a tracking branch of
+-- origin/<branch> when only that exists (the old agent's pushed branch), else on a new branch cut from `base`.
+function hb.addWorktree(path: string, branch: string?, detach: boolean, base: string)
 	if detach then
 		sh.git({ "worktree", "add", "--detach", path, base })
 	elseif branch and sh.run("git", { "show-ref", "--verify", "--quiet", `refs/heads/{branch}` }).ok then
@@ -5541,12 +5608,632 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 	elseif
 		branch and sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok
 	then
-		sh.git({ "branch", "--track", branch, `origin/{branch}` })
-		sh.git({ "worktree", "add", path, branch })
+		sh.git({ "worktree", "add", "--track", "-b", branch, path, `origin/{branch}` })
 	else
 		-- --no-track: a bare `git push` must not target origin/main before start or landing sets the upstream
 		sh.git({ "worktree", "add", "--no-track", "-b", branch :: string, path, base })
 	end
+end
+
+function hb.mainBase(from: string?): string
+	return from
+		or if sh.run("git", { "show-ref", "--verify", "--quiet", "refs/remotes/origin/main" }).ok
+			then "origin/main"
+			else "main"
+end
+
+-- The names that stand for `<base>-<n>` already: `<base>-discarded-<n>`, the renamed directory of an old worktree of the
+-- family, and `<branch>-discarded-<n>`, its renamed branch. A family that has one is never given its bare name again.
+function hb.discardedNumbers(base: string): { string }
+	local out: { string } = {}
+	-- the renamed directories `<base>-discarded-<n>` stand for the same number as their branches
+	local wt = `{mainRoot()}/.worktree`
+	if fs.isDir(wt) then
+		for _, name in fs.readDir(wt) do
+			local n = string.match(name, "^" .. string.gsub(base, "%p", "%%%0") .. "%-discarded%-(%d+)$")
+			if n then
+				table.insert(out, `{base}-{n}`)
+			end
+		end
+	end
+	for line in string.gmatch(sh.git({ "for-each-ref", "--format=%(refname:short)", "refs/heads" }), "[^\n]+") do
+		local stem, n = string.match(line, "^(.*)%-discarded%-(%d+)$")
+		if stem and n and heartbeat.baseOf(stem, "") == base then
+			table.insert(out, `{base}-{n}`)
+		end
+		-- a detached raft worktree's commits are kept on `discarded-R####-<n>` (a name `R####-` does not prefix: the board
+		-- and busy read `R####-…` as the raft's own branch)
+		local raft, m = string.match(line, "^discarded%-(R%d%d%d%d)%-(%d+)$")
+		if raft == base and m then
+			table.insert(out, `{base}-{m}`)
+		end
+	end
+	return out
+end
+
+-- Every name that holds a number for `base`'s copies: the discarded ones, the family's members and every other entry under
+-- .worktree/ (an unrelated `<base>-2` holds its number, so a path never collides).
+function hb.takenNames(base: string): { string }
+	local out = hb.discardedNumbers(base)
+	local wt = `{mainRoot()}/.worktree`
+	if fs.isDir(wt) then
+		for _, name in fs.readDir(wt) do
+			table.insert(out, name)
+		end
+	end
+	return out
+end
+
+-- The lines of a git log between two refs in the worktree at `path`, as `<short sha> <subject>`.
+function hb.logLines(path: string, range: string): { string }
+	local out: { string } = {}
+	for line in string.gmatch(sh.run("git", { "-C", path, "log", "--format=%h %s", range }).stdout, "[^\n]+") do
+		table.insert(out, line)
+	end
+	return out
+end
+
+-- `./zn worktree <name> --takeover [--item <id>]` and `./zn worktree --takeover <id>` (the user, 2026-11-08: "Rename the old
+-- worktree and create a copy to continue the work ... That way a process that wakes up knows it has been discarded and can
+-- clear and pick up something new. I assume that there is a point in trying to recover the work and not just discarding
+-- it"). Only a lost claim's worktree (or one whose claim is already over), and not a copy its taker is still starting in:
+-- the old worktree is marked discarded and its branch renamed `<branch>-discarded-<n>`; the taker works in `<base>-<n>`,
+-- on the original branch name, continuing the old agent's PUSHED branch. Nothing is deleted: the unpushed commits stay on
+-- the renamed branch, the uncommitted files stay in the old worktree, and the note lists both with the commands to take them.
+function hb.takeover(pos: { string }, opts: { [string]: { string } })
+	local target = pos[1]
+		or fail("usage: worktree <name> --takeover [--item <id>]  |  worktree --takeover <id>")
+	local item = opts["--item"] and opts["--item"][1]
+	if guarded(true) then
+		fail(
+			"worktree --takeover: not reading a remote from a protected checkout (a check run protects this repository)"
+		)
+	end
+	if not publishing() then
+		fail("worktree --takeover needs an origin remote (PICKMAN_PUBLISH=0 disables it)")
+	end
+	local root = mainRoot()
+	local prefix = `{root}/.worktree/`
+	sh.run("git", { "worktree", "prune" })
+	local fetched = hb.netRetry("git", { "fetch", "-q", "--prune", "origin" })
+	if not fetched.ok then
+		fail(`worktree --takeover: no heartbeat verdict: cannot fetch origin ({sh.trim(fetched.stderr)})`)
+	end
+	local now = hb.hbNow()
+	local listed = hb.wtList()
+	local byName: { [string]: Wt } = {}
+	for _, w in listed do
+		byName[w.name] = w
+	end
+	local function family(base: string): { string }
+		local names: { string } = {}
+		for _, w in listed do
+			if heartbeat.isMember(base, w.name, w.branch) then
+				table.insert(names, w.name)
+			end
+		end
+		return names
+	end
+	local function current(base: string): Wt?
+		local discarded: { [string]: boolean } = {}
+		for _, w in listed do
+			discarded[w.name] = w.discarded
+		end
+		local name = heartbeat.currentOf(base, family(base), discarded)
+		return if name then byName[name] else nil
+	end
+	-- which worktree, and which item the target names
+	local isId = string.match(target, "^[fdc]%d%d%d%d$") ~= nil
+	local isRaft = string.match(target, "^R%d%d%d%d$") ~= nil
+	local id: string? = if isId or isRaft then target else nil
+	local paths, perr = hb.beatPaths()
+	if not paths then
+		fail(`worktree --takeover: no heartbeat verdict: {perr}`)
+	end
+	local base: string? = nil
+	local cur: Wt? = nil
+	if id then
+		-- the worktree that holds the claim: the one whose memory is the stamp origin shows ...
+		local origin = hb.claimStampOf(paths :: { string }, target)
+		for _, w in listed do
+			local mem = if w.discarded then "" else cm.read(target, w.path)
+			if mem ~= "" and mem == origin then
+				cur = w -- a worktree that remembers another stamp holds nothing of this claim
+			end
+		end
+		if cur then
+			base = heartbeat.baseOf(cur.branch, cur.name)
+		end
+		-- ... else the copy of a discarded one (it still remembers the claim and says where its copy went: a second
+		-- taker finds that copy, and is refused while it is fresh) ...
+		for _, w in listed do
+			local d = if base == nil
+					and w.discarded
+					and cm.read(target, w.path) ~= ""
+				then heartbeat.discardParse(fs.readFile(`{w.path}/{hb.DISCARDED}`))
+				else nil
+			if d and d.base ~= "" then
+				base = d.base
+				cur = current(d.base)
+			end
+		end
+		-- ... else the worktree the work is done in: a prep's `prep-<slug>` (as the dispatcher names it), a raft's own
+		if base == nil then
+			local named = if isRaft
+				then target
+				else `prep-{(store.find(target) or fail(`{target} is not in this tree`)).slug}`
+			base = named
+			cur = current(named)
+		end
+	else
+		base = target
+		cur = current(target)
+		-- a copy named by its own name (`prep-hello-1`) stands for its family: the base is the branch it keeps
+		if cur then
+			base = heartbeat.baseOf(cur.branch, cur.name)
+		end
+	end
+	local family0 = base :: string
+	local branch, detach, dirName = hb.worktreeTarget(family0)
+	-- no worktree of the family to discard: make the taker's, as ./zn worktree does (a copy when only discarded ones exist)
+	local function makeCopy(): string
+		local taken = hb.discardedNumbers(family0)
+		for _, name in family(family0) do
+			table.insert(taken, name)
+		end
+		local name = if #taken == 0 then dirName else heartbeat.nextSuffix(family0, hb.takenNames(family0))
+		local path = `{prefix}{name}`
+		hb.addWorktree(path, branch, detach, hb.mainBase(nil))
+		hb.homeDir(path)
+		sh.writeReplacing(`{path}/{hb.FRESH}`, tostring(now))
+		return path
+	end
+	if cur == nil then
+		print(makeCopy())
+		return
+	end
+	local old = cur :: Wt
+	-- a taker who is still starting in this copy is not discarded
+	if fs.isFile(`{old.path}/{hb.FRESH}`) then
+		local epoch = tonumber(sh.trim(fs.readFile(`{old.path}/{hb.FRESH}`)))
+		if heartbeat.fresh(epoch, now, heartbeat.STALE) then
+			fail(
+				`worktree --takeover {old.name}: it is fresh (a taker started in it {now - (epoch :: number)}s ago and has not claimed yet; after {heartbeat.STALE}s it can be taken over)`
+			)
+		end
+	end
+	if sh.trim(sh.run("git", { "rev-parse", "--show-toplevel" }).stdout) == old.path then
+		fail(
+			`worktree --takeover {old.name}: run it from another checkout (the main checkout, or the taker's own worktree), not from the worktree it discards`
+		)
+	end
+	-- the claims it takes over: the ones the worktree remembers, the item the target names, and --item for its own branch
+	local ids = cm.ids(old.path)
+	local function add(x: string)
+		if not table.find(ids, x) then
+			table.insert(ids, x)
+		end
+	end
+	if id then
+		add(id)
+	end
+	if item then
+		local it = store.find(item) or fail(`worktree --takeover: {item} is not in this tree`)
+		if not heartbeat.ownsBranch(old.branch, item, it.slug) then
+			fail(
+				`worktree --takeover {old.name}: --item {item} is accepted only for {item}'s own branch (prep-{it.slug}, or its raft's); {old.name} is on {old.branch or "no branch"}: nothing moved`
+			)
+		end
+		add(item)
+	end
+	if #ids == 0 then
+		fail(
+			`worktree --takeover {old.name}: it remembers no claim; name the item with --item <id> (accepted for the item's own branch only)`
+		)
+	end
+	-- every claim must be lost, or already over: judged now, from the heartbeats and the pull requests
+	local verdicts, why = hb.judgedFor(paths :: { string })
+	local facts: { heartbeat.ClaimFact } = {}
+	for _, x in ids do
+		table.insert(facts, {
+			id = x,
+			remembered = cm.read(x, old.path),
+			current = hb.claimStampOf(paths :: { string }, x),
+			verdict = verdicts[x],
+		})
+	end
+	local refusal = heartbeat.discardRefusal(facts, why)
+	if refusal then
+		fail(`worktree --takeover {old.name}: {refusal}`)
+	end
+	local copyPath = hb.discard(old, family0, ids, branch, detach, now, "worktree --takeover")
+	print(copyPath)
+end
+
+-- The discard itself, shared by `--takeover` and by the plain lookup that meets a worktree whose claim was taken over (c0277,
+-- review of R0100 F1): `ids` are the claims it remembers, already judged by the caller (lost, or already over). Writes the
+-- marker, renames the branch and the directory, creates the numbered copy and returns its path; a failure puts back what this
+-- process did. `label` names the command in a refusal.
+function hb.discard(
+	old: Wt,
+	family0: string,
+	ids: { string },
+	branch: string?,
+	detach: boolean,
+	now: number,
+	label: string
+): string
+	local prefix = `{mainRoot()}/.worktree/`
+	-- what the old worker left, read before anything moves
+	local copyName = heartbeat.nextSuffix(family0, hb.takenNames(family0))
+	local number = (string.match(copyName, "%-(%d+)$")) :: string
+	local oldBranch = old.branch or ""
+	local up = oldBranch ~= ""
+		and sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{oldBranch}` }).ok
+	local pushedSha = if up then sh.trim(sh.git({ "rev-parse", `refs/remotes/origin/{oldBranch}` })) else ""
+	local mainRef = hb.mainBase(nil)
+	local dirty: { string } = {}
+	local statusRead = sh.run("git", { "-C", old.path, "status", "--porcelain", "-z" })
+	if not statusRead.ok then
+		fail(`{label} {old.name}: cannot read what it holds ({sh.trim(statusRead.stderr)}): nothing moved`)
+	end
+	for _, e in heartbeat.statusEntries(statusRead.stdout) do
+		table.insert(dirty, heartbeat.statusLabel(e))
+	end
+	local unpushed = hb.logLines(old.path, `{if up then `origin/{oldBranch}` else mainRef}..HEAD`)
+	-- the old worktree's branch gives up its name; a detached head with commits of its own gets a branch to keep them on
+	local renamed = if oldBranch ~= ""
+		then `{oldBranch}-discarded-{number}`
+		elseif #unpushed > 0 then `discarded-{family0}-{number}`
+		else ""
+	local discardedPath = `{prefix}{family0}-discarded-{number}`
+	local text = heartbeat.discardText({
+		path = discardedPath,
+		copy = `{prefix}{copyName}`,
+		branch = renamed,
+		base = if oldBranch ~= "" then oldBranch else "",
+		items = ids,
+		since = now,
+		pushedSha = pushedSha,
+		pushed = if up then hb.logLines(old.path, `{mainRef}..origin/{oldBranch}`) else {},
+		unpushed = unpushed,
+		dirty = dirty,
+	})
+	-- the marker first: from here on the old process is told, whatever fails next; it is removed again on a failure
+	local marker = `{old.path}/{hb.DISCARDED}`
+	hb.homeDir(old.path)
+	if not hb.claimFile(marker, text) then
+		fail(`{label} {old.name}: it is being discarded, or already was, by another takeover: nothing moved`)
+	end
+	-- a failure undoes exactly what this process did, never a step another takeover made
+	local kept, moved = false, false
+	local function undo(msg: string): never
+		local left: { string } = {}
+		if moved and not sh.run("git", { "worktree", "move", discardedPath, old.path }).ok then
+			table.insert(left, `the directory is still {discardedPath}`)
+		end
+		if kept then
+			local back = if oldBranch ~= ""
+				then sh.run("git", { "branch", "-m", renamed, oldBranch })
+				else sh.run("git", { "-C", old.path, "switch", "--quiet", "--detach" })
+			if not back.ok then
+				table.insert(left, `its branch is still {renamed}`)
+			elseif oldBranch == "" then
+				sh.run("git", { "branch", "-D", renamed })
+			end
+		end
+		if #left > 0 then
+			-- fail closed: the marker stays, so the old process is still told, and the taker is told what is half done
+			return fail(`{msg}; could not put everything back ({table.concat(left, "; ")}): the marker stays`)
+		end
+		pcall(fs.removeFile, marker)
+		return fail(msg)
+	end
+	if renamed ~= "" then
+		local r = if oldBranch ~= ""
+			then sh.run("git", { "branch", "-m", oldBranch, renamed })
+			else sh.run("git", { "-C", old.path, "switch", "--quiet", "-c", renamed })
+		if not r.ok then
+			undo(`{label} {old.name}: cannot keep {renamed}: {sh.trim(r.stderr)}`)
+		end
+		kept = true
+		-- a bare `git push` from the discarded worktree must not move the PR's head
+		if sh.run("git", { "config", "--get", `branch.{renamed}.remote` }).ok then
+			sh.run("git", { "branch", "--unset-upstream", renamed })
+		end
+	end
+	-- the old worktree's directory is renamed: a process that addresses it by path finds the path gone, and one that kept
+	-- the folder open (its working directory) finds the marker; either way it is not told it works in the taker's checkout
+	local mv = sh.run("git", { "worktree", "move", old.path, discardedPath })
+	if not mv.ok then
+		undo(`{label} {old.name}: cannot rename {old.path}: {sh.trim(mv.stderr)}`)
+	end
+	moved = true
+	local copyPath = `{prefix}{copyName}`
+	local added = pcall(hb.addWorktree, copyPath, branch, detach, mainRef)
+	if not added then
+		undo(`{label} {old.name}: cannot create {copyPath}`)
+	end
+	-- nothing revives the claim from the old worktree: its throttle marks and its beater's pid file go (a running loop
+	-- or dispatcher tick re-checks the marker, and its folder is gone from where it started)
+	for _, rel in { hb.MARKS, hb.BEATER_DIR } do
+		local d = `{discardedPath}/{rel}`
+		if fs.isDir(d) then
+			for _, f in fs.readDir(d) do
+				if fs.isFile(`{d}/{f}`) then
+					fs.removeFile(`{d}/{f}`)
+				end
+			end
+		end
+	end
+	hb.homeDir(copyPath)
+	sh.writeReplacing(`{copyPath}/{hb.FRESH}`, tostring(now))
+	local noteBody = (string.gsub(text, "^.-\n\n", "", 1))
+	stdio.ewrite(`discarded worktree: {discardedPath}\n{noteBody}`)
+	return copyPath
+end
+
+-- c0277: the discarded worktrees under .worktree/ and what becomes of them. The user's rule (2026-11-11, Q1, Q2): a
+-- discarded worktree is kept until the work it was discarded for ends (the raft merged or was stopped, the prep merged or
+-- was given back), then removed with its renamed branch; and the principle behind it, "a point in trying to recover the
+-- work": one that still holds uncommitted files, or commits that exist on no origin ref, is KEPT and listed instead.
+-- Returns { removed, left (ended, kept: the work is still unrecovered), holding (their claims are still live) }.
+function hb.sweepDiscarded(remove: boolean): { removed: { string }, left: { string }, holding: { string } }
+	local out = { removed = {} :: { string }, left = {} :: { string }, holding = {} :: { string } }
+	local discarded: { Wt } = {}
+	for _, w in hb.wtList() do
+		if w.discarded then
+			table.insert(discarded, w)
+		end
+	end
+	if #discarded == 0 then
+		return out -- the usual case: no fetch, no git call
+	end
+	local paths = hb.beatPaths() -- nil: origin/main cannot be read, so no claim is known to be over
+	local here = sh.trim(sh.run("git", { "rev-parse", "--show-toplevel" }).stdout)
+	for _, w in discarded do
+		do
+			local read, text = pcall(fs.readFile, `{w.path}/{hb.DISCARDED}`)
+			local d = if read then heartbeat.discardParse(text) else nil
+			if d == nil then
+				table.insert(out.left, `{w.path}: its discard marker is damaged`)
+			else
+				local live: { [string]: boolean } = {}
+				for _, id in d.items do
+					live[id] = paths == nil or hb.claimStampOf(paths, id) ~= nil
+				end
+				local items = table.concat(d.items, ", ")
+				if not heartbeat.discardEnded(live, d.items) then
+					table.insert(
+						out.holding,
+						`{w.path}: holds the discarded work of {items} (its claim is still live)`
+					)
+				else
+					local unreachable, dirty = hb.unrecovered(w.path, d)
+					local why = heartbeat.keepReason(dirty, unreachable)
+					if why or w.path == here or not remove then
+						table.insert(
+							out.left,
+							`{w.path}: the work of {items} ended, kept: {why or "nothing left to recover"}`
+						)
+					else
+						-- every uncommitted path and commit was found in main above, by an explicit yes, so the force only discards copies
+						local r = sh.run("git", { "worktree", "remove", "--force", w.path })
+						if r.ok then
+							if d.branch ~= "" then
+								sh.run("git", { "branch", "-D", d.branch })
+							end
+							table.insert(out.removed, w.path)
+						else
+							table.insert(
+								out.left,
+								`{w.path}: the work of {items} ended, kept: {sh.trim(r.stderr)}`
+							)
+						end
+					end
+				end
+			end
+		end
+	end
+	return out
+end
+
+-- What a discarded worktree still holds that exists nowhere else: (commits, uncommitted files). Recovered work is judged by
+-- content, never by sha, because landing rewrites shas (`finish` squashes a layer, a prep is squash-merged and its branch
+-- deleted, a cherry-pick makes a new commit): a commit counts when it is reachable from the pushed tip the copy started
+-- at or from any origin ref, or when merging it into origin/main changes nothing (its change is already there), for the
+-- renamed branch and for HEAD (a detached head the old process committed on after the discard). An uncommitted path counts
+-- only on an explicit yes: a file whose work-tree bytes, and staged bytes when it has any, equal origin/main's file at
+-- that path; or a path gone from the work tree and the index that main lacks too. Everything else (a folder, a path that
+-- does not resolve, a conflict, the old path of a rename that main still has, a failed read) stays unrecovered.
+function hb.unrecovered(path: string, d: heartbeat.Discard): (number, number)
+	local ref = if d.branch ~= "" then d.branch else "HEAD"
+	local args = { "-C", path, "rev-list", "--count", ref, "HEAD", "--not", "--remotes=origin" }
+	if d.pushed ~= "" then
+		table.insert(args, d.pushed)
+	end
+	local commits = tonumber(sh.trim(sh.run("git", args).stdout)) or 1
+	if commits > 0 then
+		-- with the pushed tip as the merge base, what is left is the change made since: main plus that change
+		local mainTree = sh.trim(sh.run("git", { "-C", path, "rev-parse", "origin/main^{tree}" }).stdout)
+		local function inMain(tip: string): boolean
+			local mergeArgs = { "-C", path, "merge-tree", "--write-tree" }
+			if d.pushed ~= "" then
+				table.insert(mergeArgs, `--merge-base={d.pushed}`)
+			end
+			table.insert(mergeArgs, "origin/main")
+			table.insert(mergeArgs, tip)
+			local merged = sh.run("git", mergeArgs)
+			return merged.ok and mainTree ~= "" and string.match(merged.stdout, "^(%x+)") == mainTree
+		end
+		if inMain(ref) and (ref == "HEAD" or inMain("HEAD")) then
+			commits = 0
+		end
+	end
+	local files = 0
+	local status = sh.run("git", { "-C", path, "status", "--porcelain", "-z" })
+	if not status.ok then
+		files = 1
+	end
+	local function blob(rev: string): string? -- the blob a revision names, nil when it names nothing
+		local r = sh.run("git", { "-C", path, "rev-parse", "--verify", "--quiet", rev })
+		return if r.ok then sh.trim(r.stdout) else nil
+	end
+	for _, e in heartbeat.statusEntries(status.stdout) do
+		local recovered = not string.find(e.xy, "U", 1, true) and e.xy ~= "AA" and e.xy ~= "DD"
+		local rels: { string } = { e.path }
+		if e.from then
+			table.insert(rels, e.from)
+		end
+		for _, rel in rels do
+			if not recovered then
+				break
+			end
+			local abs = `{path}/{rel}`
+			local main = blob(`origin/main:{rel}`)
+			local staged = blob(`:{rel}`)
+			if fs.isDir(abs) then
+				recovered = false -- a folder is never judged
+			elseif fs.isFile(abs) and not sh.run("test", { "-L", abs }).ok then
+				-- the same bytes, compared as git compares them: the blob id
+				local mine = sh.run("git", { "-C", path, "hash-object", "--", rel })
+				recovered = main ~= nil
+					and mine.ok
+					and sh.trim(mine.stdout) == main
+					and (staged == nil or staged == main)
+			else
+				-- gone from the work tree: recovered only when the index and main lack it too
+				recovered = main == nil and staged == nil and not sh.run("test", { "-L", abs }).ok
+			end
+		end
+		if not recovered then
+			files += 1
+		end
+	end
+	return commits, files
+end
+
+-- Says what a sweep did on stderr (quiet when it did nothing).
+function hb.sweepSay(r: { removed: { string }, left: { string }, holding: { string } }, withHolding: boolean)
+	for _, p in r.removed do
+		stdio.ewrite(`removed discarded worktree {p}\n`)
+	end
+	for _, l in r.left do
+		stdio.ewrite(`kept discarded worktree {l}\n`)
+	end
+	if withHolding then
+		for _, l in r.holding do
+			stdio.ewrite(`kept {l}\n`)
+		end
+	end
+end
+
+function cmd.worktree(pos: { string }, opts: { [string]: { string } })
+	if opts["--takeover"] then
+		return hb.takeover(pos, opts)
+	end
+	local target = pos[1] or fail("usage: worktree <R-id|name>")
+	local branch, detach, dirName = hb.worktreeTarget(target)
+	local from = opts["--from"] and opts["--from"][1]
+	if from then
+		if string.match(target, "^R%d%d%d%d$") then
+			fail("--from is for named worktrees")
+		end
+		if not sh.run("git", { "rev-parse", "--verify", "--quiet", from .. "^{commit}" }).ok then
+			fail(`unknown ref {from}`)
+		end
+	end
+	local root = mainRoot()
+	sh.run("git", { "worktree", "prune" }) -- forget worktrees whose directory was deleted
+	if hasOrigin() then
+		sh.run("git", { "fetch", "--quiet", "--prune", "origin" })
+	end
+	-- c0277: the lookup is by family. `<name>` and `<name>-<n>` are one family, and the one not marked discarded is the
+	-- worktree (every path that asks gets the taker's copy; only a process that kept the old path stays discarded).
+	local listed = hb.wtList()
+	local names: { string } = {}
+	local discarded: { [string]: boolean } = {}
+	for _, w in listed do
+		if heartbeat.isMember(dirName, w.name, w.branch) then
+			table.insert(names, w.name)
+			discarded[w.name] = w.discarded
+		end
+	end
+	local live = heartbeat.currentOf(dirName, names, discarded)
+	if live then
+		-- A member that remembers a claim `origin/main` no longer shows (a raft stopped from the main checkout and readied
+		-- again, a claim taken over elsewhere) is not handed out: nothing re-adopts it in place (c0274), so it is discarded
+		-- like any worktree of a claim already over, and the numbered copy is returned (review of R0100 F1). A member whose
+		-- claims are all still its own, or that remembers none, is returned as before and costs no network call.
+		local member: Wt? = nil
+		for _, w in listed do
+			if w.name == live then
+				member = w
+			end
+		end
+		local ids: { string } = if member then cm.ids(member.path) else {}
+		if member and #ids > 0 then
+			local paths = hb.beatPaths()
+			if paths then
+				local facts: { heartbeat.ClaimFact } = {}
+				for _, x in ids do
+					table.insert(facts, {
+						id = x,
+						remembered = cm.read(x, member.path),
+						current = hb.claimStampOf(paths :: { string }, x),
+					})
+				end
+				if heartbeat.staleMember(facts) then
+					local copy = hb.discard(
+						member,
+						heartbeat.baseOf(member.branch, member.name),
+						ids,
+						branch,
+						detach,
+						hb.hbNow(),
+						"worktree"
+					)
+					stdio.ewrite(
+						`notice: {member.path} remembered a claim that is over ({table.concat(ids, ", ")}: main shows another or none), so it was discarded; {copy} is the numbered copy to work in\n`
+					)
+					print(copy)
+					return
+				end
+			end
+		end
+		-- a family that has had a discard says so: an old process that looks its worktree up again is told it was the one
+		-- discarded (the taker reads the same notice)
+		for _, w in listed do
+			if
+				w.discarded
+				and string.match(w.name, "^" .. string.gsub(dirName, "%p", "%%%0") .. "%-discarded%-%d+$")
+			then
+				local read, text = pcall(fs.readFile, `{w.path}/{hb.DISCARDED}`)
+				local d = if read then heartbeat.discardParse(text) else nil
+				stdio.ewrite(
+					`notice: {w.path} was discarded ({if d then table.concat(d.items, ", ") else "a claim"} was taken over, or stopped and readied again); {root}/.worktree/{live} is the numbered copy. If your work was in {w.path} and you did not stop and ready the raft yourself, you were discarded: clear your context and pick up something new. If you did, continue in {root}/.worktree/{live} and run './zn beat <R-id> --adopt' there.\n`
+				)
+			end
+		end
+		print(`{root}/.worktree/{live}`)
+		return
+	end
+	for _, w in worktrees() do
+		if branch and w.branch == branch then
+			fail(`{branch} is already used by worktree at {w.path}`)
+		end
+	end
+	-- a family of discarded worktrees only (a copy removed by hand): the next free number
+	local name = dirName
+	local taken = hb.discardedNumbers(dirName)
+	for _, n in names do
+		table.insert(taken, n)
+	end
+	if #taken > 0 then
+		name = heartbeat.nextSuffix(dirName, hb.takenNames(dirName)) -- the bare name is not reused: an old process may still address it
+	end
+	local path = `{root}/.worktree/{name}`
+	hb.addWorktree(path, branch, detach, hb.mainBase(from))
 	print(path)
 end
 
@@ -5578,10 +6265,12 @@ cmd["worktree-prune"] = function()
 	end
 	for _, w in worktrees() do
 		local name = if string.sub(w.path, 1, #prefix) == prefix then string.sub(w.path, #prefix + 1) else nil
-		if name and not string.find(name, "/", 1, true) then
-			if not string.match(name, "^R%d%d%d%d$") then
+		-- c0277: a discarded worktree is judged by the sweep below, not by its name
+		if name and not string.find(name, "/", 1, true) and not fs.isFile(`{w.path}/{hb.DISCARDED}`) then
+			local family = string.match(name, "^(R%d%d%d%d)%-%d+$") or name -- c0277: R0010-1 is R0010's copy
+			if not string.match(family, "^R%d%d%d%d$") then
 				print(`kept {w.path} (named worktree: remove it when its PR has merged)`)
-			elseif isDone(name) then
+			elseif isDone(family) then
 				-- finished: the raft is in done/ on the base branch, whatever merge strategy landed it
 				if w.path == here then
 					print(`skipped {w.path} (it is the current directory)`)
@@ -5598,6 +6287,19 @@ cmd["worktree-prune"] = function()
 					end
 				end
 			end
+		end
+	end
+	-- c0277: discarded worktrees go when the work they were discarded for ended and nothing in them is unrecovered
+	local swept, sweep = pcall(hb.sweepDiscarded, true)
+	if swept then
+		for _, p in (sweep :: any).removed do
+			print(`removed {p}`)
+		end
+		for _, l in (sweep :: any).left do
+			print(`kept {l}`)
+		end
+		for _, l in (sweep :: any).holding do
+			print(`kept {l}`)
 		end
 	end
 	-- worktrees belong under .worktree/: flag (never move or remove) any other than the main checkout
@@ -6550,6 +7252,11 @@ function cmd.done(pos: { string })
 	if workStamp ~= "" then
 		hb.dropBranch(workStamp)
 	end
+	-- c0277: the raft is finished: the worktrees discarded for it go (unless they still hold unrecovered work)
+	local swept, sweep = pcall(hb.sweepDiscarded, true)
+	if swept then
+		hb.sweepSay(sweep :: any, false)
+	end
 	print(`landed {raft.id}`)
 end
 
@@ -7419,6 +8126,11 @@ function cmd.stop(pos: { string })
 			end
 		end
 		print(`{branch} and {pr} are left as they are: close or keep them yourself`)
+	end
+	-- c0277: the raft is given back: the worktrees discarded for it go (unless they still hold unrecovered work)
+	local swept, sweep = pcall(hb.sweepDiscarded, true)
+	if swept then
+		hb.sweepSay(sweep :: any, false)
 	end
 	print(`stopped {raft.id} ({table.concat(ids, ", ")})`)
 end
@@ -9021,6 +9733,16 @@ end
 
 function cmd.reap(_: { string }, opts: { [string]: { string } })
 	if opts["--auto"] == nil then
+		-- c0277: a plain `./zn reap` also lists the discarded worktrees left over (their work ended, but they still hold
+		-- work that exists nowhere else); it removes none. The session-end and quiet forms say nothing of them.
+		if opts["--session-end"] == nil and opts["--quiet"] == nil and not guarded(true) then
+			local swept, r = pcall(hb.sweepDiscarded, false)
+			if swept then
+				for _, l in (r :: any).left do
+					stdio.ewrite(`reap: discarded worktree left over {l}\n`)
+				end
+			end
+		end
 		if reapRun(opts) then
 			process.exit(1)
 		end
@@ -9155,6 +9877,7 @@ local READ_ONLY: { [string]: boolean } = {
 	trace = true,
 }
 if not READ_ONLY[name :: string] then
+	hb.refuseDiscarded(name :: string) -- c0277: a discarded worktree refuses every command but reap (before anything beats)
 	guardRepoRoot()
 end
 local rest = table.move(args, 2, #args, 1, {})
