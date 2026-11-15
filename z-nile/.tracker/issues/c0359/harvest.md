@@ -1,0 +1,8 @@
+- design-review-001 F1: z-design/every-path-claim-lists-each-writer
+- design-review-001 F2: z-design/server-rules-measured-as-the-actor
+- design-review-001 F3: z-design/spec-design-correspondence
+- design-review-001 F4: zz-arch/authority-config-is-not-tracker-state
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: one-off: an arithmetic slip in the Actions-minutes estimate (counted only the new job's minutes, not the total with deploy's)
+- design-review-001 F7: zz-arch/merge-gate-checks-what-it-merges
+- design-review-001 F8: z-design/prep-experiments-run-in-standalone-clones

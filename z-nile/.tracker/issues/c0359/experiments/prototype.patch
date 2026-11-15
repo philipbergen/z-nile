@@ -1,0 +1,408 @@
+diff --git a/.github/rulesets/static.json b/.github/rulesets/static.json
+new file mode 100644
+index 000000000..9d52f60e5
+--- /dev/null
++++ b/.github/rulesets/static.json
+@@ -0,0 +1,17 @@
++{
++  "name": "static",
++  "target": "branch",
++  "enforcement": "active",
++  "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
++  "bypass_actors": [{ "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }],
++  "rules": [
++    {
++      "type": "required_status_checks",
++      "parameters": {
++        "required_status_checks": [{ "context": "static", "integration_id": 15368 }],
++        "strict_required_status_checks_policy": false,
++        "do_not_enforce_on_create": false
++      }
++    }
++  ]
++}
+diff --git a/.github/workflows/static.yml b/.github/workflows/static.yml
+new file mode 100644
+index 000000000..1dff8c46f
+--- /dev/null
++++ b/.github/workflows/static.yml
+@@ -0,0 +1,25 @@
++name: static
++# The gate's format and lint stages (`z-nile/check.sh --lint`) on every pull request, whatever it changes (c0359).
++# The `static` ruleset (.github/rulesets/static.json, posted by the user: SETUP.md) requires this check on main, so a
++# pull request whose merge fails either stage does not merge. It runs no spec, no item's check.sh and no runtime test:
++# verification stays the local gate (zz-rules skill, Merging).
++on:
++  pull_request:
++    types: [opened, synchronize, reopened, ready_for_review]
++
++permissions:
++  contents: read
++
++jobs:
++  static:
++    runs-on: ubuntu-latest
++    timeout-minutes: 15
++    concurrency:
++      group: static-${{ github.event.pull_request.number }}
++      cancel-in-progress: true
++    steps:
++      - uses: actions/checkout@v4
++      - run: z-nile/setup.sh --tools
++        env:
++          GH_TOKEN: ${{ github.token }}
++      - run: z-nile/check.sh --lint
+diff --git a/SETUP.md b/SETUP.md
+index 6688a9af3..b26f7bdb1 100644
+--- a/SETUP.md
++++ b/SETUP.md
+@@ -39,7 +39,10 @@ z-nile/setup.sh
+ - **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start Claude in the main checkout and run `/z-run R0010`, which enters the raft's worktree; every job starts in a worktree directory inside the repo, never outside it. The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone outside the repo that is not a worktree. After a PR merges, the agent removes its worktree; `./zn worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
+ 
+ ## CI
+-Verification is local. A game pull request's merge runs `z-nile/check.sh --full` in a clean clone; a tooling pull request's merge runs `z-nile/check.sh --affected` on the branch; `./zn done` runs the affected gate; `./zn land` runs `--static`. GitHub Actions does not run it, and a merge does not wait for an Actions result. Specs run from a project's home (`cd pickman && lune run tests/run`, `cd z-nile && lune run tests/run`), never from the root.
++Verification is local. A game pull request's merge runs `z-nile/check.sh --full` in a clean clone; a tooling pull request's merge runs `z-nile/check.sh --affected` on the branch; `./zn done` runs the affected gate; `./zn land` runs `--static`. GitHub Actions does not run it. A merge waits for one Actions result, the required `static` check: `.github/workflows/static.yml` runs `z-nile/check.sh --lint` (the format and lint stages) on every pull request, and the `static` ruleset makes `main` refuse a merge while it fails (c0359). Specs run from a project's home (`cd pickman && lune run tests/run`, `cd z-nile && lune run tests/run`), never from the root.
++
++### The required check on main (once, by the repository admin)
++`gh api -X POST repos/{owner}/{repo}/rulesets --input .github/rulesets/static.json` creates the `static` ruleset: `main` then requires the `static` check from GitHub Actions, and the repository admin role is its one bypass, because every tracker push (`./zn status`, `land`, `done`, the dispatcher's broker) goes straight to `main`. `gh api repos/{owner}/{repo}/rules/branches/main` shows it. A pull request opened before `static.yml` reached `main` reports no `static` check until it runs again: push to its branch (a merge of `origin/main` does), or close and reopen it. When `main` itself fails the stages, every pull request's `static` fails until `main` is fixed, and then each needs a new run the same way (`gh run rerun` judges the old merge again). `gh api -X DELETE repos/{owner}/{repo}/rulesets/<id>` removes it.
+ 
+ ## Troubleshooting
+ | symptom | fix |
+@@ -51,7 +54,7 @@ Verification is local. A game pull request's merge runs `z-nile/check.sh --full`
+ | lifecycle specs fail with "No such file or directory", or git reports missing objects | the checkout is in a cloud-synced folder (iCloud Drive, Dropbox, OneDrive): move it to a plain directory such as ~/code/pickman |
+ 
+ ## Beta publishing (Pickman Beta)
+-`.github/workflows/deploy.yml` is the only workflow. It publishes a pull request that is ready for review from this repo to the private **Pickman (Beta)** experience by running `lune run scripts/deploy-beta` from `pickman/`. A push to `main` and a manual dispatch start the workflow and skip the job. It does not run the gate or the runtime tests. A pull-request comment names the published version and commit.
++`.github/workflows/deploy.yml` is the only workflow besides `static.yml` (CI, above). It publishes a pull request that is ready for review from this repo to the private **Pickman (Beta)** experience by running `lune run scripts/deploy-beta` from `pickman/`. A push to `main` and a manual dispatch start the workflow and skip the job. It does not run the gate or the runtime tests. A pull-request comment names the published version and commit.
+ - **Repo secret** `ROBLOX_API_KEY`: an Open Cloud key scoped to that experience, with `universe-places` write and, for the runtime tests, `luau-execution-sessions` read and write, plus `datastore.control:create` and data-store entry read, create, update and delete for the reservation. The live publish's copy is a GitHub Actions secret. The merging machine keeps its own in `~/.config/pickman/cicd.toml`, mode `600`, outside the repo.
+ - **Repo variables** `ROBLOX_BETA_UNIVERSE_ID` and `ROBLOX_BETA_PLACE_ID`: plain digits. `ROBLOX_BETA_PLACE_ID` is the experience's start place.
+ - **Two places** (c0064): the repo variable `ROBLOX_BETA_GAME_PLACE_ID` is the id of the game place. With it set, the deploy publishes `default.project.json` (the game) to it and `lobby.project.json` (the lobby) to `ROBLOX_BETA_PLACE_ID`, with the game place's id written into the lobby's `GamePlaceId` (in a copy of the project built outside the checkout; the checked-in value stays 0). Both are built before either is published. Without it, the deploy warns and publishes the game to `ROBLOX_BETA_PLACE_ID` as before, and the lobby is not live.
+diff --git a/z-nile/check.sh b/z-nile/check.sh
+index 504e3f990..230f72f1b 100755
+--- a/z-nile/check.sh
++++ b/z-nile/check.sh
+@@ -1,10 +1,13 @@
+ #!/usr/bin/env bash
+ # The repo gate (c0114: z-nile's), one per project (c0120). See z-nile/skills/zz-test/SKILL.md.
+-#   z-nile/check.sh [--project <name>]... [--affected [--base REF] | --full | --slow | --static]
++#   z-nile/check.sh [--project <name>]... [--affected [--base REF] | --full | --slow | --static | --lint]
+ #   z-nile/check.sh [--project <name>]... --plan   # print what each stage reads, run nothing, write nothing
+ # --affected selects specs from the change and runs every one (the slow tier excluded).
+ # --full runs every fast-tier spec. --slow runs only z-nile's measured slow tier
+ # (z-nile alone unless --project names another set). --static runs no specs.
++# --lint runs the format and lint stages alone, over every project (never narrowed by the change), and writes,
++# fetches and reaps nothing: GitHub's required `static` check (.github/workflows/static.yml) and the dispatcher's
++# prep and raft gates run it on what a pull request would merge (c0359).
+ # A pass is this process's exit. Nothing is remembered between runs except each home's
+ # .cache/spec-durations.tsv, a packing hint (schedule.luau); deleting it changes the order only.
+ # ./zn land runs --static here and does not re-run it if main moves during the push.
+@@ -24,7 +27,7 @@ if [[ -z "${ZN_MEASURED:-}" ]]; then
+   mode=affected
+   for a in "$@"; do
+     case "$a" in
+-      --full|--slow|--static|--plan) mode="${a#--}" ;;
++      --full|--slow|--static|--lint|--plan) mode="${a#--}" ;;
+     esac
+   done
+   export ZN_TOP="$root"
+@@ -53,6 +56,7 @@ while [[ $# -gt 0 ]]; do
+   case "$1" in
+     --full) mode=full ;;
+     --static) mode=static ;;
++    --lint) mode=lint ;;
+     --slow) mode=slow ;;
+     --plan) plan=1 ;;
+     --affected) mode=affected ;;
+@@ -108,11 +112,27 @@ picked() { # picked <name>: is the project in this run?
+   return 1
+ }
+ 
+-[[ -n $plan ]] || ./zn reap --auto || true
++[[ -n $plan ]] || [[ $mode == lint ]] || ./zn reap --auto || true
+ source z-nile/lib/par.sh
+ gate_start=$(par_now)
+ 
+ stage() { printf '\n== %s\n' "$1"; }
++# A format or lint setting inside a project root (an ignore list, a settings file) would change what the two stages
++# read there, so none may sit under a .tracker/ folder (c0359): this lists each one it finds and fails.
++tracker_settings() {
++  local d hits=""
++  for d in "${LUAU_DIRS[@]}"; do
++    [[ $d == *.tracker && -d $d ]] || continue
++    hits+=$(find "$d" -type f \( -iname .styluaignore -o -iname stylua.toml -o -iname .stylua.toml -o -iname selene.toml \) -print)
++  done
++  [[ -z $hits ]] || { printf 'format or lint settings under a .tracker/ folder:\n%s\n' "$hits"; return 1; }
++}
++# the format and lint stages: one definition for every mode that runs them
++lint_stages() {
++  par_start "settings (none under .tracker/)" tracker_settings
++  par_start "format (stylua --check)" stylua --check "${LUAU_DIRS[@]}"
++  par_start "lint (selene)" selene --quiet "${LUAU_DIRS[@]}"
++}
+ prefix() { [[ $1 == . ]] && echo "" || echo "$1/"; }
+ 
+ # What each picked project's stages read, by its home (prefix p: "" at the root, "pickman/" for pickman):
+@@ -159,6 +179,20 @@ if [[ -n $narrow && ${#wanted[@]} -eq 0 ]]; then
+   printf '\nGATE PASSED (%s)\n' "$mode"
+   exit 0
+ fi
++if [[ -n $plan && $mode == lint ]]; then
++  printf 'format: %s\n' "${LUAU_DIRS[*]-}"
++  printf 'lint: %s\n' "${LUAU_DIRS[*]-}"
++  exit 0
++fi
++# --lint (c0359): those two stages alone, before anything below writes, fetches or builds (z-nile/roots names every
++# project's root, so the folder list is never empty)
++if [[ $mode == lint ]]; then
++  lint_stages
++  par_wait || exit 1
++  printf '\ngate wall time: %ss\n' "$(par_elapsed "$gate_start" "$(par_now)")"
++  printf '\nGATE PASSED (lint)\n'
++  exit 0
++fi
+ if [[ -n $plan ]]; then
+   printf 'format: %s\n' "${LUAU_DIRS[*]-}"
+   printf 'lint: %s\n' "${LUAU_DIRS[*]-}"
+@@ -231,8 +265,7 @@ lune_version=$(lune --version | awk '{print $2}')
+ # .tracker/**/acceptance specs are not type-checked here: they target code that may not exist yet. They are checked
+ # once `./zn done` promotes them into their project's tests/acceptance/.
+ if [[ ${#LUAU_DIRS[@]} -gt 0 ]]; then
+-  par_start "format (stylua --check)" stylua --check "${LUAU_DIRS[@]}"
+-  par_start "lint (selene)" selene --quiet "${LUAU_DIRS[@]}"
++  lint_stages
+ fi
+ for h in ${srcs[@]+"${srcs[@]}"}; do
+   par_start "types (luau-lsp analyze, $(prefix "$h")src with Roblox definitions)" roblox_types "$h"
+diff --git a/z-nile/engine/dispatch.luau b/z-nile/engine/dispatch.luau
+index b7e50876c..bd77a321d 100644
+--- a/z-nile/engine/dispatch.luau
++++ b/z-nile/engine/dispatch.luau
+@@ -222,6 +222,17 @@ function dispatch.isLesson(path: string): boolean
+ 	return string.match(path, "^[^/]+/skills/[^/]+/lessons/[^/]+%.md$") ~= nil
+ end
+ 
++-- Whether a path a PR changes can change what the gate's format and lint stages report (c0359): a Lua or Luau source,
++-- or a file of a kind the two tools read as configuration (TOML settings, YAML standard libraries, a dotfile ignore
++-- list), by its name in any case (a checkout may be case-insensitive). A PR that changes none is not linted at a gate.
++function dispatch.lintable(path: string): boolean
++	local name = string.lower(string.match(path, "[^/]+$") or path)
++	return string.sub(name, 1, 1) == "."
++		or string.match(name, "%.luau?$") ~= nil
++		or string.match(name, "%.toml$") ~= nil
++		or string.match(name, "%.ya?ml$") ~= nil
++end
++
+ -- Whether GitHub's `commits/<sha>/pulls` answer names a pull request merged into main whose merge commit is `sha`
+ -- (a pull request merged into main, G20; review 003 F6: into main only, never another branch).
+ function dispatch.prMergedFrom(text: string, sha: string): boolean
+@@ -274,6 +285,9 @@ local function gate(f: Facts, name: string, pr: Pr): Action
+ 			not table.find(f.autoMerge, name)
+ 		then `the {name} PR #{pr.number} waits for a merge (dispatch.auto_merge leaves it to a human)`
+ 		elseif pr.draft then `the {name} PR #{pr.number} is a draft`
++		elseif
++			not pr.green and carries
++		then `the {name} PR #{pr.number} waits for green CI, and for a human: {carries}`
+ 		elseif not pr.green then `the {name} PR #{pr.number} waits for green CI`
+ 		elseif not pr.mergeable then `the {name} PR #{pr.number} is not mergeable`
+ 		elseif carries then `the {name} PR #{pr.number} waits for a human: {carries}`
+diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
+index c856b6b79..fdf9aea40 100644
+--- a/z-nile/engine/dispatcher.luau
++++ b/z-nile/engine/dispatcher.luau
+@@ -1520,7 +1520,7 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
+ 	end
+ 	-- code review 007 F2: the prep gate auto-merges too, so it is judged by the tracker's readers the same way (its
+ 	-- issue's `raft:` line, if any, is held to the raft's own list)
+-	return dispatcher.backstop(
++	local refused = dispatcher.backstop(
+ 		ctx,
+ 		pr.number,
+ 		main,
+@@ -1529,6 +1529,82 @@ function dispatcher.judgePr(ctx: Ctx, gateName: string, id: string, pr: dispatch
+ 		carriedRafts,
+ 		if gateName == "prep" and folder ~= "" then `{folder}/{id}.md` else nil
+ 	)
++	if refused then
++		return refused
++	end
++	-- c0359: last, the gate's own format and lint stages on what the merge would make
++	return dispatcher.lintMerge(ctx, pr.number, main, ref, if okBase then base else nil)
++end
++
++-- the longest the format and lint stages may run at a gate (they take seconds; a hang fails closed)
++local LINT_SECONDS = 600
++
++-- c0359: a gate refuses a PR whose merge fails the gate's format and lint stages. Only when the PR changes a path
++-- they read (dispatch.lintable, from `base`, the merge base, or the empty tree): `git merge-tree` of today's main and
++-- the head, exported whole into a folder of this judgement alone (removed whole), and `z-nile/check.sh --lint` run
++-- there, bounded. The script is that tree's own, which is main's: the shape judgement before this refuses a PR that
++-- carries anything outside tracker state. Returns why not, or nil.
++function dispatcher.lintMerge(ctx: Ctx, number: number, main: string, ref: string, base: string?): string?
++	local root = ctx.mainRoot()
++	local okD, names =
++		git(root, { "diff", "--name-only", "--no-renames", base or trackerstate.EMPTY_TREE, ref })
++	if not okD then
++		return "its changed files could not be listed for the static stages"
++	end
++	local lintable = false
++	for path in string.gmatch(names, "[^\n]+") do
++		if dispatch.lintable(path) then
++			lintable = true
++			break
++		end
++	end
++	if not lintable then
++		return nil
++	end
++	local ok, out = git(root, { "merge-tree", "--write-tree", main, ref })
++	local tree = if ok then string.match(out, "^(%x+)") else nil
++	if not tree then
++		return "its merge with origin's main conflicts or could not be made"
++	end
++	local dir = `{root}/{HOME}/lint-{number}-{os.time()}-{math.random(1, 1000000000)}`
++	local function done(why: string?): string?
++		if fs.isDir(dir) then
++			pcall(fs.removeDir, dir)
++		end
++		return why
++	end
++	fs.writeDir(`{dir}/tree`)
++	local tar = `{dir}/tree.tar`
++	local okA = git(root, { "archive", "--format=tar", "-o", tar, tree :: string })
++	local x = if okA then process.exec("tar", { "-xf", tar, "-C", `{dir}/tree` }) else nil
++	if not okA or not x or not x.ok then
++		return done("its merge could not be exported for the static stages")
++	end
++	if not fs.isFile(`{dir}/tree/z-nile/check.sh`) then
++		return done("its merge has no z-nile/check.sh, so the static stages could not run")
++	end
++	local r = process.exec("perl", {
++		`{root}/z-nile/lib/bounded.pl`,
++		"--time",
++		tostring(LINT_SECONDS),
++		"--",
++		"env",
++		"ZN_MEASURED=1",
++		"bash",
++		"z-nile/check.sh",
++		"--lint",
++	}, { cwd = `{dir}/tree` })
++	if r.ok then
++		return done(nil)
++	end
++	local lines: { string } = {}
++	for line in string.gmatch(r.stdout .. "\n" .. r.stderr, "[^\n]+") do
++		if #lines < 40 then
++			table.insert(lines, line)
++		end
++	end
++	local said = table.concat(lines, "\n")
++	return done(`its merge fails the static stages (z-nile/check.sh --lint, exit {r.code}):\n{said}`)
+ end
+ 
+ -- Code review 005 F2, 006 F1: the rafting gate's last word is the tracker's own readers on what the merge would make:
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index d009a1d87..e3fdd7f5f 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -107,7 +107,7 @@ One procedure for every change: a raft, a capture, a prep or an edit.
+    - Then run `./zn list` (it fails on a duplicate id and warns when one number is shared by two prefixes; renumber yours if you can) and `z-nile/check.sh --affected`.
+ 1. **Commit in the worktree**: `./zn commit` inside a raft; plain `git add` and `git commit` elsewhere.
+ 2. **Push and open the PR**: `git push -u origin <branch>`. A raft's PR is opened as a draft by `start`; any other PR is opened ready with `gh pr create`. A capture lands with `./zn land` instead (no PR): it merges `origin/main`, runs the static stages (`z-nile/check.sh --static`) for the projects the capture changed, checks that only the sections, title and `depends_on` of draft backlog issue documents changed, refuses an issue in that diff whose approval no longer matches its contract, pushes one commit to `main` (a lost push retries the push, not the gate) and prints the worktree-removal command. A capture's spend row is committed on the capture branch before `land`, so it is in the tree that push carries.
+-3. **Merge** a PR only when the conditions under Merging hold. A raft is landed by `./zn done` (one `--no-ff` merge, not a squash) once its review is resolved. Any other PR is merged with `gh pr merge --squash`. A prep the user didn't ask for is not merged without asking, and a capture they didn't ask for is not landed without asking. Under the dispatcher, a step neither asks nor merges: once its PR is open and its spend recorded it ends, and the dispatcher passes the prep and rafting gates itself (the user started it, c0117 G4). (A capture has no PR: `./zn land` in step 2 is its landing.)
++3. **Merge** a PR only when the conditions under Merging hold. A raft is landed by `./zn done` (one `--no-ff` merge, not a squash) once its review is resolved. Any other PR is merged with `gh pr merge --squash`. A prep the user didn't ask for is not merged without asking, and a capture they didn't ask for is not landed without asking. Before you merge a pull request by hand (`gh pr merge` or the button), merge `origin/main` into its head and run `z-nile/check.sh --lint` there until it exits 0, and check that `gh pr checks <pr> --required` passes: GitHub's checks are not the gate (lesson zz-rules/hand-merge-runs-static-stages). Under the dispatcher, a step neither asks nor merges: once its PR is open and its spend recorded it ends, and the dispatcher passes the prep and rafting gates itself (the user started it, c0117 G4). (A capture has no PR: `./zn land` in step 2 is its landing.)
+ 4. **After the merge, one chained command, run last**: `"<root>/zn" sync; git -C <root> worktree remove <path> && git -C <root> branch -D <branch>; git -C <root> worktree prune`. `<root>` is the first path in `git worktree list`; `sync` fast-forwards the root and rebuilds its board. When the session works inside the worktree (with z-work it started in the main checkout and `cd`'d into the worktree), removing it removes the session's own directory, so every command after it must use `-C <root>` or absolute paths, and nothing should run after this command: post the final report first. The alternative is to leave removal to `./zn worktree-prune`, run later from the main checkout.
+ 
+ ## Merging
+@@ -115,10 +115,10 @@ The agent that delivered the change merges its own PR once the evidence is in. D
+ 1. **For a raft**, `./zn done` succeeded: the one code review is answered and the raft's `check.sh` passed. The PR is ready, not draft, and has no unresolved `BLOCKED:` comment. The review is already on the PR as a comment (zz-execute Phase 4). A refuted finding, a high finding that was not fixed, or a failed Judged criterion stays open until the raft document's `## Open to the human` records `Ruled (user, YYYY-MM-DD):` for it; `./zn done` refuses before that. A medium or low finding that is fixed, or deferred to a backlog issue, does not block (zz-execute Phase 4 step 6).
+ 2. The gate depends on what the pull request changes. A pull request that changes only tooling (no path under a game home — `pickman`, `arcade`, `portal`, `snake`, `invaders`, `asteroids` — outside `<home>/.tracker/`) is gated by `z-nile/check.sh --affected` on the branch: no clean clone and no Roblox publish. A pull request that changes a game keeps the clean-clone full gate, run by you, outside this repo. `dir=$(mktemp -d)` only when that directory's parent directories are not a checkout of this repo; if `$TMPDIR` is inside this checkout, stop. Then `git clone --no-hardlinks --no-checkout` of this checkout into `$dir`, `git remote remove origin`, and `git checkout --detach` the exact head. Spawn `z-nile/check.sh --full` there with `PICKMAN_FENCE_REAL_GIT` set to the real repository's git directory appended to whatever the process inherited (`${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}` plus `git rev-parse --path-format=absolute --git-common-dir` of this checkout). That is the local full gate. That is the verification. A merge does not read GitHub Actions. `./zn done`'s gate in the raft worktree is the raft's own gate and is not this check. A red full gate here is BLOCKED: zz-execute Phase 6 step 1 says what to post and file.
+ 3. When the pull request changes a game: In `$dir/pickman`, on the detached head from step 2 (`git checkout --detach`), `lune run scripts/cicd` passes. Run it as `../zn run --time 1800 -- lune run scripts/cicd` from `$dir/pickman`, where the clone's `zn` is `../zn` (a bare `lune run` of it is refused by the PreToolUse hook: it runs the minutes-long runtime suites). It reads `~/.config/pickman/cicd.toml`, reserves the CICD places, publishes them, and runs both runtime suites. A missing file, a lease held by someone else, a publish failure, or a runtime failure stops the merge. This command is not part of `z-nile/check.sh --full`. A tooling pull request does not run it.
+-4. `gh pr view <pr> --json mergeable,mergeStateStatus` shows `MERGEABLE` and `CLEAN` (`UNKNOWN` is GitHub still computing it right after `done`: re-poll for up to a minute before deciding); any other state (`BEHIND`, `BLOCKED`, `UNSTABLE`, `DIRTY`) is not mergeable. `done` is preceded by a merge of `origin/main` (zz-execute Phase 5), so this should hold. If `main` moved since, and the merge is a clean one, merge `origin/main` in with plain `git` (`./zn commit` needs an active raft, and `done` has moved it). A re-run is required only when `git diff --name-only <the main you gated> <the main you merged>` names a path that selects a spec for this pull request (`lune run z-nile/affected --` those paths). Commits that touch only tracker documents (a project root, or `z-nile/next`) select none and need no re-run. When a re-run is required, a tooling pull request reruns `z-nile/check.sh --affected` on the branch, and a game pull request must rerun `z-nile/check.sh --full` in that clone and `lune run scripts/cicd` (wrapped as in step 3); then push, and repeat this step. If it conflicts, or it needs anything beyond renumbering colliding IDs (`renumber` per Conflicts), post `BLOCKED:` and stop: a finished PR gets no unreviewed code changes.
++4. `gh pr view <pr> --json mergeable,mergeStateStatus` shows `MERGEABLE` and `CLEAN` (`UNKNOWN` is GitHub still computing it right after `done`: re-poll for up to a minute before deciding); any other state (`BEHIND`, `BLOCKED`, `UNSTABLE`, `DIRTY`) is not mergeable. `gh pr checks <pr> --required` must pass too: it reads the required `static` check itself, whatever merge state GitHub reports to the admin (c0359). `done` is preceded by a merge of `origin/main` (zz-execute Phase 5), so this should hold. If `main` moved since, and the merge is a clean one, merge `origin/main` in with plain `git` (`./zn commit` needs an active raft, and `done` has moved it). A re-run is required only when `git diff --name-only <the main you gated> <the main you merged>` names a path that selects a spec for this pull request (`lune run z-nile/affected --` those paths). Commits that touch only tracker documents (a project root, or `z-nile/next`) select none and need no re-run. When a re-run is required, a tooling pull request reruns `z-nile/check.sh --affected` on the branch, and a game pull request must rerun `z-nile/check.sh --full` in that clone and `lune run scripts/cicd` (wrapped as in step 3); then push, and repeat this step. If it conflicts, or it needs anything beyond renumbering colliding IDs (`renumber` per Conflicts), post `BLOCKED:` and stop: a finished PR gets no unreviewed code changes.
+ 5. The human hasn't said to hold.
+ 
+-Then `gh pr merge <pr> --squash --subject "<raft>: <title> (#<pr>)" --body $'<summary>\n\n<the Co-Authored-By line from your commit instructions>'` (the `$'...'` form makes the newlines real, so the trailer is a trailer). Get the merge sha with `gh pr view <pr> --json mergeCommit -q .mergeCommit.oid`. Then follow Landing a change, step 4. `main` may have no branch protection (R0063 removed the `gate` check), so these conditions are the only gate: you enforce them. The ruleset c0117 §8 describes (a pull request required, updates restricted to the bypass list, the user the only bypass) is the user's to add, and until then the server stops nothing. The conditions are still yours to check, because your credentials are the admin's; a dispatched agent's are not (Dispatch, the agent credential). Never use `--admin`, and never merge on a red or missing gate for what the pull request changes, a red or missing `lune run scripts/cicd` when the pull request changes a game, an unresolved review, or a stop condition. If any condition can't be met, leave the PR as it is, post a `BLOCKED:` comment saying which, and stop.
++Then `gh pr merge <pr> --squash --subject "<raft>: <title> (#<pr>)" --body $'<summary>\n\n<the Co-Authored-By line from your commit instructions>'` (the `$'...'` form makes the newlines real, so the trailer is a trailer). Get the merge sha with `gh pr view <pr> --json mergeCommit -q .mergeCommit.oid`. Then follow Landing a change, step 4. `main` requires one check, `static` (c0359: `.github/workflows/static.yml` runs `z-nile/check.sh --lint`, the gate's format and lint stages, on every pull request, and the `static` ruleset in `.github/rulesets/static.json` requires it), so GitHub refuses to merge a pull request whose merge fails those two stages. It is a floor, not the verification: these conditions are the gate, and you enforce them. The repository admin may bypass the ruleset: the tracker's own pushes to `main` and `./zn done`'s landing push need it, and `./zn done` lands a raft only after its own affected gate, whose format and lint stages read every project the raft changes. A hand merge never uses it (`--admin`). Known limit: a pull request that changes `.github/workflows/static.yml`, the gate's two stages or the tools' settings is judged by its own copy of them, so its review checks that change and its hand merge runs `main`'s `--lint` on it. The ruleset c0117 §8 describes (a pull request required, updates restricted to the bypass list, the user the only bypass) is the user's to add. The conditions are still yours to check, because your credentials are the admin's; a dispatched agent's are not (Dispatch, the agent credential). Never use `--admin`, and never merge on a red or missing gate for what the pull request changes, a red or missing `lune run scripts/cicd` when the pull request changes a game, an unresolved review, or a stop condition. If any condition can't be met, leave the PR as it is, post a `BLOCKED:` comment saying which, and stop.
+ 
+ Observed criteria (human Studio playtests) do not block the merge. Put them in the final report and PR comment, and file any failure the human finds later as a defect issue.
+ 
+@@ -182,7 +182,7 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
+ - **Running a model step.** In the step's worktree (`prep-<slug>`, `raft-<id>`, the raft's own, `capture-zn-<n>`; a review in its author's), with a prompt that names the skill's file and pastes nothing. Search with `./zn lessons <terms>` when you are about to do something a lesson might cover. A supervisor starts the CLI in a process group of its own and holds a lifeline from the dispatcher: when the dispatcher dies, however it died, the group dies with it. The dispatcher kills the group when the running token count passes `max_tokens`, or for `agent` its call count passes `max_calls` or its wall time `max_minutes` (outcome `cap`), when the step prints nothing for `stall_seconds` (`tool_seconds` while a tool call runs) (`stalled`, or `quota` when the CLI's own last words were a wait for quota: a CLI never waits for quota, and the model's words never count), or on `./zn dispatch stop <id>` (`stopped`). A nested step (a review its author waits on as one shell command) writes a heartbeat in its parent's state folder while its CLI prints, and the parent counts a fresh beat as output; claude's maximum for one shell command (`BASH_MAX_TIMEOUT_MS`) is raised to two hours in its step's environment, its default left as it is, and the author passes a two-hour timeout on its review command alone. The nested runner beats once a second while it is alive and within its own limits, not only while its CLI prints, so a beat means "alive and within my limits". It moves to the next model when the call fails, the CLI is missing, or the quota is gone. Quota is only the CLI's own signals (claude's rejected rate-limit event, an error result or line, stderr); a missing CLI is skipped and named on stderr. A stall, a cap or a stop ends the step. A challenge whose only remaining model is the one that wrote the text stops and says so. The count is input + cache writes + output, cache reads left out, for every CLI.
+ - **The tripwire** (the user's "Keep same user, accept detection"). A run accepts `main` as it is when the process starts. No file under the home directory, and no copy of one in `state.json`, decides whether a dispatch may start: a fresh clone, a second machine and a cleaned home folder all start. During that process, before every step and after every step, every commit of `main` since the commit the process started from must be tracker state (as above) or a pull request's merge into `main` on GitHub. After a step, origin's configuration (`remote.origin.*`, `url.*`) must be as the run pinned it, the main checkout's tracked and untracked files unchanged, its HEAD moved only forward along `main`. Anything else stops the chain (exit 5, outcome `tripwire`), with the step's spend still recorded, until the user looks and runs `./zn dispatch retry <id>` (nothing else clears that item's stop; the stop after a gate merge is the same, recorded as the attempt `merge-check`). When the commits another run added are tracker state, another run's advance is never a trip. A layer branch is pushed with `--force-with-lease`, so a rewritten branch refuses the push. **Known limits:** this detects a push during the run after the fact, and never prevents one; a push that lands after that step's tripwire, or between runs, is not seen here (a ticket lands only through its pull request, and the broker, the wrapper and `publish` refuse a non-fast-forward of `main`); a merge made with the user's credential (stolen or not) is a pull request's merge and passes. They are the user's, by rule.
+ - **Spend.** The dispatcher writes each step's measured row (wall, CPU, the adapter's token count, model id) itself: a row in `spend.d/<writer>.tsv` on the `zn-dispatch` branch while the item is in the backlog, a reviewer's row under its review file's name (`design-review-NNN`), a code or stream review's as the `./zn commit … --phase code-review --model <id>` line it prints for the author (the measured row is appended to the author's measure buffer, and that commit folds it), and a run's as pending in `state.json` until the merge, when the next `./zn dispatch <R-id>` writes it as `deliver`. Nobody passes `--time` or `--tokens`. A gate, a spec run and `./zn run` only append to `.cache/measure.tsv`. `./zn commit`, `./zn spend`, `./zn done` and `./zn land` fold the lines for the tickets they commit. A buffer that is never folded (the main checkout, a branch with no ticket) is dropped after 14 days, or when that checkout's `.cache` is deleted.
+-- **The chain.** `./zn dispatch <id>` (or `new "<description>"`) reads the item's state on `origin/main` after every step and never a model's prose: a new issue goes to z-design; its prep PR is the `prep` gate; a prepared raftless issue gets `raft-plan --apply` in `raft-<id>`, then z-raft; the rafting PR is the `raft` gate; a prepared raft gets `z-ready`; an active raft gets z-run until its PR leaves draft (`./zn done`), and that PR is the `run` gate, always a human's. Only the dispatcher merges: it passes a `prep` or `raft` gate itself, with the real `gh` and the user's credential, when `auto_merge` names it, the PR is green and mergeable, and its head (fetched from `refs/pull/<n>/head` and equal to the head GitHub reports) is the item's own tracker state by the one function, from its merge base with `main` (a prep PR: the issue's own folder, whose sequestered files it may change, and skill lessons; a rafting PR: each item's change judged by its shape against the base, never by what the PR says: an existing backlog issue only its `raft:` line, between empty and a raft the PR carries; an existing backlog raft any file but its sequestered ones; a new raft its backlog folder, its `check.sh` the rendered template's RC0 lines byte for byte, then only `check "RCn: …"` lines and `finish`; nothing of an active, done or retired item) pinned to the head it checked (`gh pr merge --squash --match-head-commit <head>`, so a push to the branch since voids it); otherwise it stops there (exit 4). A rafting PR also needs, beyond that shape: each carried raft keeps its `<id>.md`; an item that main changed since the PR was cut is refused (rebase first: the merge lands on today's main); the id counter is never carried; and the tracker's own readers accept what the merge would make (`git merge-tree` with today's main must not conflict, `audit` must report no error main's does not, and a carried raft's `issues:` and its members' `raft:` lines must agree). The prep gate is held to the same readers (an issue's `raft:` line must be listed by that raft). GitHub pins no base, so after a gate merge the dispatcher compares the merge commit's first parent with the main it judged, and stops with exit 5 when main moved over an item the PR carries; the merge is not undone, and `vetMain` does not judge it. It stops (exit 3) when a step wrote `questions.md` in its state folder (the user answers in that file and runs `./zn dispatch retry <id>`, which keeps it as `answered-<n>.md`), and (exit 1) when a step failed, was lost, or left a finding `./zn lessons --uncovered <id>` still lists after a review step (z-design, z-raft, z-run, zz-review). `--dry-run` prints the next action and the CLIs it would try, and starts nothing and changes no tracker state (a gate's judgement still exports and removes a scratch tree under `.cache/dispatch/`).
++- **The chain.** `./zn dispatch <id>` (or `new "<description>"`) reads the item's state on `origin/main` after every step and never a model's prose: a new issue goes to z-design; its prep PR is the `prep` gate; a prepared raftless issue gets `raft-plan --apply` in `raft-<id>`, then z-raft; the rafting PR is the `raft` gate; a prepared raft gets `z-ready`; an active raft gets z-run until its PR leaves draft (`./zn done`), and that PR is the `run` gate, always a human's. Only the dispatcher merges: it passes a `prep` or `raft` gate itself, with the real `gh` and the user's credential, when `auto_merge` names it, the PR is green and mergeable, its merge with today's `main` passes the gate's format and lint stages (`z-nile/check.sh --lint`, run on that merge when the PR changes a Lua, Luau, TOML, YAML or dot file; c0359), and its head (fetched from `refs/pull/<n>/head` and equal to the head GitHub reports) is the item's own tracker state by the one function, from its merge base with `main` (a prep PR: the issue's own folder, whose sequestered files it may change, and skill lessons; a rafting PR: each item's change judged by its shape against the base, never by what the PR says: an existing backlog issue only its `raft:` line, between empty and a raft the PR carries; an existing backlog raft any file but its sequestered ones; a new raft its backlog folder, its `check.sh` the rendered template's RC0 lines byte for byte, then only `check "RCn: …"` lines and `finish`; nothing of an active, done or retired item) pinned to the head it checked (`gh pr merge --squash --match-head-commit <head>`, so a push to the branch since voids it); otherwise it stops there (exit 4). A rafting PR also needs, beyond that shape: each carried raft keeps its `<id>.md`; an item that main changed since the PR was cut is refused (rebase first: the merge lands on today's main); the id counter is never carried; and the tracker's own readers accept what the merge would make (`git merge-tree` with today's main must not conflict, `audit` must report no error main's does not, and a carried raft's `issues:` and its members' `raft:` lines must agree). The prep gate is held to the same readers (an issue's `raft:` line must be listed by that raft). GitHub pins no base, so after a gate merge the dispatcher compares the merge commit's first parent with the main it judged, and stops with exit 5 when main moved over an item the PR carries; the merge is not undone, and `vetMain` does not judge it. It stops (exit 3) when a step wrote `questions.md` in its state folder (the user answers in that file and runs `./zn dispatch retry <id>`, which keeps it as `answered-<n>.md`), and (exit 1) when a step failed, was lost, or left a finding `./zn lessons --uncovered <id>` still lists after a review step (z-design, z-raft, z-run, zz-review). `--dry-run` prints the next action and the CLIs it would try, and starts nothing and changes no tracker state (a gate's judgement still exports and removes a scratch tree under `.cache/dispatch/`).
+ - **Run state.** `.cache/dispatch/<id>/state.json` (the step, CLI, runtime, model, the running group and its lock, worktree, start, tokens, outcome, every attempt, the merges and broker pushes, pending rows), `questions.md`, and a folder `<step>-<mode>-<id>-<n>/` of its own for each step a step dispatched (a review from its author): ignored files in the main checkout. One dispatcher per item at a time (an flock that dies with its holder); a step whose dispatcher died is `lost`, never resumed, until `retry`. `./zn dispatch status <id>` prints every run, `stop <id>` kills each running group only while it is still that run (its supervisor still holds the run's lock; never a group id of 1 or less) and marks any other `lost`, `retry <id>` reruns the failed, stopped or lost step on the same order. The board (c0118) reads it.
+ - **The wrapper.** A model step's PATH starts with `z-nile/bin`, a convenience layer over the credential and the tripwire: its `git` decides a push from git's own dry run (aliases, `-c` and refspecs resolved by git) against a private, freshly fetched copy of `main`, refuses anything but tracker state there, and refuses plumbing pushes; its `gh` allows only the skills' commands (no merge, however spelled or aliased) and `gh api` reads and comments. Both are bypassable by an absolute path; the tripwire catches what they miss during the run.
+ - **Inside a check.** A spec or `check.sh` that runs `./zn dispatch` may start only a CLI whose real path is under the checkout's `.cache` (a fake); any other is refused before it starts.
+diff --git a/z-nile/skills/zz-rules/lessons/hand-merge-runs-static-stages.md b/z-nile/skills/zz-rules/lessons/hand-merge-runs-static-stages.md
+new file mode 100644
+index 000000000..5a6993076
+--- /dev/null
++++ b/z-nile/skills/zz-rules/lessons/hand-merge-runs-static-stages.md
+@@ -0,0 +1,11 @@
++---
++title: A hand merge runs the static stages on the head first, because GitHub's checks are not the gate
++when: both
++tags: [merge, gate, format, lint, stylua, selene, github]
++check: Before this `gh pr merge` (or the merge button), did `z-nile/check.sh --lint` exit 0 on the pull request's head merged with `origin/main`, whatever GitHub's checks say?
++---
++GitHub's checks are not the gate. Until c0359 the only workflow, `deploy.yml`, ran none of it, so every pull request showed green whatever its files held. The required `static` check (c0359) now runs the format and lint stages, but it is a floor: it judged the merge as it stood at the last push, and the repository admin can bypass it. Whoever merges by hand runs the stages on the head first.
++
++**Why:** on 2026-11-15 Claude merged 28 prep pull requests by hand on green checks. Four of them (#397, #399, #408, #417) carried unformatted specs and selene warnings, so `main` failed `stylua --check` on 16 files and `selene` on two warnings until #433, and the user's `./zn done` was refused on files outside its raft. c0292's E3 had named three of those pull requests as failing before they merged. The user: "Learn a lesson from this and make sure it can't happen again".
++
++**How to apply:** in the pull request's worktree, or a clone of its exact head, merge `origin/main`, run `z-nile/check.sh --lint`, and fix what it names on the branch until it exits 0; check that `gh pr checks <pr> --required` passes (the merge state GitHub shows the admin may not say `BLOCKED`); read what other designs say about the pull request (a prep's Existing work may name it). Then merge, never with `--admin`. A pull request that changes the checker itself (`static.yml`, the gate's stages, the tools' settings) passes its own copy: run `main`'s `--lint` on it. While `main` fails the stages, every pull request's `static` fails; once `main` is fixed, each needs a push or a close and reopen (`gh run rerun` judges the old merge). The dispatcher's prep and raft gates run the same command on the merge (zz-rules skill, Dispatch).
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index a800c4198..139822289 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -13,6 +13,7 @@ description: How z-nile tests and gates every project - the gate and its modes,
+ | `z-nile/check.sh --slow` | z-nile's measured slow tier only; not part of the affected or full gates |
+ | `pickman/check.sh [--full]` / `z-nile/check.sh --project <name>` | one project's gate: its static stages and its specs alone (each project has its own gate; no `--project` runs every project's). A home's `scripts/check.sh` runs that project's gate (c0120): `pickman/scripts/check.sh` pickman's, `z-nile/scripts/check.sh` z-nile's. The local full gate runs every project (`z-nile/check.sh --full` with no `--project`). GitHub Actions does not run it. |
+ | `z-nile/check.sh --static` | the static stages of the projects whose files changed, and no specs. `./zn land` runs it |
++| `z-nile/check.sh --lint` | the format and lint stages alone (`stylua --check`, `selene`), over every project and never narrowed by the change, writing, fetching and building nothing. GitHub's required `static` check and the dispatcher's prep and raft gates run it (c0359) |
+ | `z-nile/check.sh --plan` | print what each stage reads for each project, and run nothing |
+ | `lune run tests/run -- <spec files>` | specific specs, from the project's home: `z-nile/` for z-nile's, `pickman/` for pickman's (`cd pickman && lune run tests/run -- tests/unit/Maze`). The runner refuses any other folder: the repository root belongs to no project |
+ | `lune run z-nile/affected -- [--base REF] [files…]` | show which specs a change selects (one path per line; never `ALL`) |
+diff --git a/z-nile/tests/acceptance/c0172/deploy.spec.luau b/z-nile/tests/acceptance/c0172/deploy.spec.luau
+index 24888152d..c7713d017 100644
+--- a/z-nile/tests/acceptance/c0172/deploy.spec.luau
++++ b/z-nile/tests/acceptance/c0172/deploy.spec.luau
+@@ -35,10 +35,11 @@ local function stepWith(job: any, needle: string): any
+ end
+ 
+ return t.spec("c0172 deploy workflow", function(it)
+-	it("the only workflow file is deploy.yml", function()
++	-- c0359 override: the static check is the one other workflow (c0359's workflow spec pins what it runs)
++	it("the only workflow files are deploy.yml and static.yml", function()
+ 		local names = fs.readDir(`{TOP}/.github/workflows`)
+ 		table.sort(names)
+-		t.expect(names).toEqual({ "deploy.yml" })
++		t.expect(names).toEqual({ "deploy.yml", "static.yml" })
+ 	end)
+ 
+ 	it("the gate workflow, the board workflow and ci-verify are absent", function()
+diff --git a/z-nile/tests/inputs.tsv b/z-nile/tests/inputs.tsv
+index 54cdfb893..db6f18f93 100644
+--- a/z-nile/tests/inputs.tsv
++++ b/z-nile/tests/inputs.tsv
+@@ -296,3 +296,11 @@ tests/acceptance/c0239/docs.spec.luau	SETUP.md
+ tests/acceptance/c0239/done.spec.luau	z-nile/engine/main.luau
+ tests/acceptance/c0239/land.spec.luau	z-nile/engine/main.luau
+ tests/acceptance/c0269/titles.spec.luau	z-nile/tests/
++tests/acceptance/c0359/workflow.spec.luau	.github/workflows/
++tests/acceptance/c0359/ruleset.spec.luau	.github/rulesets/
++tests/acceptance/c0359/ruleset.spec.luau	.github/workflows/
++tests/acceptance/c0359/lint.spec.luau	stylua.toml
++tests/acceptance/c0359/lint.spec.luau	selene.toml
++tests/acceptance/c0359/lint.spec.luau	.luaurc
++tests/acceptance/c0359/gate.spec.luau	stylua.toml
++tests/acceptance/c0359/gate.spec.luau	selene.toml
+diff --git a/z-nile/.tracker/issues/c0359/harvest.md b/z-nile/.tracker/issues/c0359/harvest.md
+new file mode 100644
+index 000000000..9cfd23a62
+--- /dev/null
++++ b/z-nile/.tracker/issues/c0359/harvest.md
+@@ -0,0 +1 @@
++- note the 2026-11-15 hand merges on green checks (the user: "Learn a lesson from this and make sure it can't happen again", the Scope decision in c0359's Problem): zz-rules/hand-merge-runs-static-stages
