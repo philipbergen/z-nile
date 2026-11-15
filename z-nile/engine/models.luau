@@ -99,6 +99,7 @@ export type Resolved = {
 	specs: { [string]: Spec },
 	settings: Settings,
 	authorModel: string?,
+	author: Resolved?,
 	fromRoles: boolean?,
 }
 
@@ -499,12 +500,14 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
 		end
 	end
 	local authorModel: string? = nil
+	local authorRole: Resolved? = nil
 	if fields.author ~= nil then
 		if fields.author == role then
 			error(`{role}: author is itself; a challenge cannot name its own role`, 0)
 		end
 		local author = models.resolveRole(layers, fields.author)
 		authorModel = models.id(author.specs[author.order[1]])
+		authorRole = author
 	end
 	return {
 		skill = role,
@@ -512,6 +515,7 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
 		specs = specs,
 		settings = models.settings(layers),
 		authorModel = authorModel,
+		author = authorRole,
 		fromRoles = true,
 	}
 end
@@ -586,6 +590,34 @@ end
 -- The model id a spend row records: the model, and its effort when the spec sets one (model, then a hyphen, then the effort).
 function models.id(spec: Spec): string
 	return if spec.effort then `{spec.model}-{spec.effort}` else spec.model
+end
+
+-- The bare model of a record of the model that wrote a text. A record that is the id of one of the author role's
+-- tries is cut to that try's model (an effort word may hold a hyphen, so the id is never split). Any other record is a
+-- bare id, and loses one trailing context marker `[...]` (the same model, a longer window).
+function models.modelOf(recorded: string, author: Resolved?): string
+	if author then
+		for _, cli in author.order do
+			local s = author.specs[cli]
+			if s and models.id(s) == recorded then
+				return s.model
+			end
+		end
+	end
+	return (string.gsub(recorded, "%[[^%[%]]*%]$", ""))
+end
+
+-- Whether the challenger try `spec` runs the model that wrote the text, its effort ignored. `recorded` is the author
+-- step's model (a spend row's id or a bare id); with none, the author role's first choice stands in. No author, no match.
+function models.isAuthor(spec: Spec, r: Resolved, recorded: string?): boolean
+	local author = r.author
+	if author == nil then
+		return false
+	end
+	if recorded ~= nil and recorded ~= "" then
+		return spec.model == models.modelOf(recorded, author)
+	end
+	return spec.model == author.specs[author.order[1]].model
 end
 
 return models
