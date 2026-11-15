@@ -11,3 +11,4 @@
 - note the dispatcher's git helper trims stdout, so the rafting gate read a record without its final newline and four refusal cases passed for the wrong reason: zz-arch/one-reader-per-format, zz-test/guard-needs-its-own-case
 - note a record added directly in a member folder turned a clean merge into a file-location stop in c0084/spend-command: z-design/new-files-in-item-folders-run-merge-specs
 - note three helpers added to main.luau failed to load with "Out of local registers": zz-arch/engine-main-local-limit
+- note c0302's fixture rule landed after this re-prep and scans only z-nile/tests, so the sequestered lifecycle spec broke it only at R0099's prototype gate: z-design/new-rules-migrate-existing-work
