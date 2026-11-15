@@ -14,10 +14,10 @@ local function refusal(v: string): string
 end
 
 return t.spec("c0230 budget module", function(it)
-	it("AC1: no --budget is 60 s wall and 3 s cpu", function()
+	it("AC1: no --budget is 60 s wall and 5 s cpu", function()
 		local l, e = budget.limits(nil)
 		t.expect(e).toBe(nil)
-		t.expect(l).toEqual({ seconds = 60, cpu = 3 })
+		t.expect(l).toEqual({ seconds = 60, cpu = 5 })
 	end)
 
 	it("AC1: <wall>:<cpu> sets both limits, decimals allowed", function()
@@ -118,7 +118,7 @@ return t.spec("c0230 budget module", function(it)
 			{ file = "tests/b.spec.luau", seconds = 61.06 },
 		}
 		t.expect(budget.render(costs, budget.DEFAULT)).toBe(
-			`over budget: 2 spec files over 60 s wall or 3 s cpu (lesson {LESSON})\n`
+			`over budget: 2 spec files over 60 s wall or 5 s cpu (lesson {LESSON})\n`
 				.. "  tests/a.spec.luau 75.2 s wall, 41.0 s cpu\n"
 				.. "  tests/b.spec.luau 61.1 s wall, cpu not measured"
 		)
@@ -134,7 +134,7 @@ return t.spec("c0230 budget module", function(it)
 		end
 		local lines = string.split(budget.render(list, budget.DEFAULT) :: string, "\n")
 		t.expect(#lines).toBe(12)
-		t.expect(lines[1]).toBe(`over budget: 12 spec files over 60 s wall or 3 s cpu (lesson {LESSON})`)
+		t.expect(lines[1]).toBe(`over budget: 12 spec files over 60 s wall or 5 s cpu (lesson {LESSON})`)
 		t.expect(lines[2]).toBe("  tests/f01.spec.luau 99.0 s wall, 1.0 s cpu")
 		t.expect(lines[11]).toBe("  tests/f10.spec.luau 90.0 s wall, 1.0 s cpu")
 		t.expect(lines[12]).toBe("  and 2 more")

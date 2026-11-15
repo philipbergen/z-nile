@@ -15,7 +15,7 @@ index 0000000000000000000000000000000000000000..06f8e08e5b8bdfbf01e233b1e46504a6
 +export type Limits = { seconds: number, cpu: number }
 +export type Cost = { file: string, seconds: number, cpu: number? }
 +
-+budget.DEFAULT = { seconds = 60, cpu = 3 } :: Limits
++budget.DEFAULT = { seconds = 60, cpu = 5 } :: Limits
 +budget.LESSON = "zz-test/specs-never-burn-real-resources"
 +budget.SHOWN = 10
 +-- The CPU measurer every worker of a concurrent run is started under (`perl -e MEASURE <command> <args>`): it runs the
