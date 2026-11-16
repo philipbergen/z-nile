@@ -13,3 +13,5 @@ When two conditions guard the same outcome and one implies the other, dropping t
 **Note (c0306's prep, 2026-11-14):** the same holds across two layers that filter one input. M16 ("the code kind also takes stream reviews") survived because `reviewfiles.read`, the folder reader, already drops stream files before `reviewmodel.files` sees them. The mutant had to edit both filters. Mutate the first place the unwanted input is dropped, or every place.
 
 **Note** (c0249 prep, 2026-11-16): an equivalent mutant can show that the clause it removes is dead code. c0249's `rank.next` checked `blocked` although a blocked item's status already excluded it. Remove the redundant clause and aim the mutant at the condition that really decides (the status test), rather than keeping code no case can see.
+
+**Also** (c0254 prep, 2026-11-16): a mutant meant to fail on an assertion can die on `attempt to index nil` instead. Assert the value exists (`t.expect(parsed ~= nil)`) before the case reads its fields. c0254's "newest trailer wins" mutant survived because the stamp filter already decided the answer, so the rule needed its own observable case.

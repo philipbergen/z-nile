@@ -33,3 +33,5 @@ c0276 design review 005 F1: failure cases that all wrote the same output file re
 **Note** (c0252 prep, 2026-11-16): a case meant to tell two implementations apart must be shown to fail for the wrong one before it is trusted. c0252's first case for "the base's engine lands, not the stack's own `zn`" passed with either engine, and its mutant M53 survived. A second case, in which a layer rewords its own bind message, killed it.
 
 **Note** (c0253 prep, 2026-11-16): an assertion on a log line that another code path also prints proves nothing. c0253's beat case matched "dispatch: beat", which the dispatcher printed whether or not the worker's own beat ran. Make the path under test print what it did, and assert that line.
+
+**Note** (c0254 design refute 001): a mutation run that names its killing case by a fragment of the case name reports "survived" when the fragment matches no case, which reads as a weak spec. Make the runner say "no case matched" apart from "survived", and check every survivor's fragment before fixing the spec.
