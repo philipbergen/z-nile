@@ -1,0 +1,142 @@
+intended                                                         ok (green)
+B1 the tabs out of order                                         killed
+B2 no wrap                                                       killed
+B3 a step that is not whole moves                                killed
+B4 W steps forward                                               killed
+B5 Tab steps too                                                 killed
+B6 bound at the default controls' priority                       killed
+B6b bound at the test screen's priority                          killed
+B7 no revives shows 0                                            killed
+B8 junk revives shown                                            killed
+B9 the figure not upper case                                     killed
+B10 score and figure swapped                                     killed
+B11 no best shows no line                                        killed
+B12 the best's revives as a bare count                           killed
+B13 a wait shows its rows                                        killed
+B14 a failed empty board says no scores                          killed
+B15 the player's row never marked                                killed
+B16 a pending best drawn as no best                              killed
+B17 no smallest line                                             killed
+B18 the tab bar not left out of the lines                        killed
+B19 a wait waits REASK                                           killed
+B20 a clock that went back waits                                 killed
+B21 the all-time board not asked while the best is unknown       killed
+T1 the text as tall as the line, whatever the width              killed
+T2 the glyph width ignored                                       killed
+T3 a name column too narrow                                      killed
+T4 a text size that is not whole                                 killed
+P12 a pending best read as none                                  killed
+P13 a pending answer forgets the best                            killed
+F1a the relay sends a pending best as none                       killed
+F1b heard counted from the forward                               killed
+F1c a pending answer re-asked only after REASK                   killed
+F2a the version raised on every answer                           killed
+F2b the version never raised                                     killed
+F2c rows compared by reference                                   killed
+F3a no floor at all                                              killed
+F3b one token per title                                          killed
+F3c KEEP for one board                                           killed
+F5a a tab gamepad-selectable                                     killed
+F5b the rows gamepad-selectable                                  killed
+F6a no gutter                                                    killed
+F6b the rank aligned left                                        killed
+F6c the view aligns nothing                                      killed
+F6d labels placed without their inset                            killed
+F7 a refresh charged one sorted read                             killed
+B23 the all-time label on every board                            killed
+B22 the view's rows not cut at the header                        killed
+P1 any title read                                                killed
+P2 any status read                                               killed
+P3 a rank past ten kept                                          killed
+P4 rows not sorted                                               killed
+P5 rows not cut to ten                                           killed
+P6 junk revives kept                                             killed
+P7 a rank kept that is no row's                                  killed
+P8 the best kept on the all-time board only                      killed
+P9 the best not checked                                          killed
+P10 a row that is no table read                                  killed
+P11 a score that is not whole kept                               killed
+L1 a failed answer keeps the window open                         killed
+L2 the window to the arcade's whole cache time                   killed
+L3 no REFRESH wait                                               killed
+L4 a refresh takes no token                                      killed
+L5 no allowance                                                  killed
+L6 the rate not per player                                       killed
+L6b no floor                                                     killed
+L7 no BURST cap                                                  killed
+L8 the sorted budget not read                                    killed
+L9 the standard budget not read                                  killed
+L10 a held best forwarded                                        killed
+L11 a best read with no budget                                   killed
+L12 no KEEP                                                      killed
+L13 a clock that went back waits                                 killed
+L14 a refresh never marks the best                               killed
+L15 rows not answered say ok                                     killed
+L16 a rank kept over changed rows                                killed
+L17 a refilled allowance re-dated wrong                          killed
+L18 a held best inside BEST_GAP read                             killed
+S1 the arcade serves the client's remote                         killed
+S2 opened by name                                                killed
+S3 every arcade answer says ok                                   killed
+S4 the best only with all-time answers                           killed
+S5 a held answer without the held rank                           killed
+S6 a held answer without the held best                           killed
+S7 a refresh not dated                                           killed
+S8 the wrong sorted budget read                                  killed
+S9 an answer sent to a player who left                           killed
+S10 the arcade's rows not held                                   killed
+S11 a best read not recorded                                     killed
+S12 every ask forwarded to the first title                       killed
+S13 start twice listens twice                                    killed
+S14 a failed open stops the boot                                 killed
+S15 a budget that cannot be read stops the ask                   killed
+S16 every ask forwarded                                          killed
+S17 one player always                                            killed
+S18 a player who left still asks                                 killed
+S20 the arcade's cache time read as a minute                     killed
+S21 no ask counted as the all-time board                         killed
+S22 the board keyed by its id alone                              killed
+S19 the allowance never kept                                     killed
+V1 the carousel not started                                      killed
+V2 the figure by the title's name                                killed
+V3 bound at the test screen's priority                           killed
+V4 keys on the release too                                       killed
+V5 a tab chosen for its card only                                killed
+V6 asks every frame                                              killed
+V7 a wait not marked                                             killed
+V8 a wait marks the front card's board                           killed
+V9 an answer drawn on the front card                             killed
+V10 no layout on a resize                                        killed
+V11 the rows never scroll                                        killed
+V12 the player's row not marked                                  killed
+V13 the boot waits for the remote                                killed
+V14 started twice fills twice                                    killed
+V15 the chosen tab not shown                                     killed
+V16 rows placed at a fixed line                                  killed
+V17 an answer not read through parse                             killed
+V19 labels scaled to their boxes                                 killed
+V20 the rows' text size not set                                  killed
+V21 the tab keys act while the player types                      killed
+V22 YOUR BEST in the name column only                            killed
+V23 the layout with a glyph width of its own                     killed
+V24 the best line never hidden                                   killed
+V18 a long name not cut                                          killed
+X1 the server's Main never starts the relay                      killed
+X2 Board requires outside Logic                                  killed
+X3 no Boards remote                                              killed
+X4 the client's Main starts the view twice                       killed
+J6 the play buttons booted before the carousel                   killed
+X7 the board booted before the carousel                          killed
+X5 not in the map                                                killed
+X6 the view requires the arcade's Boards                         killed
+M1 a comment says game                                           killed
+CV1 the view requires a sibling adapter a later issue adds       ok (green)
+CV2 the server's answer gains a field                            ok (green)
+CV3 the view gains a field                                       ok (green)
+CV4 the relay requires one more arcade module                    ok (green)
+CV5 the board booted before the play buttons                     ok (green)
+CV8 a local holds the carousel module                            ok (green)
+CV9 another adapter booted first                                 ok (green)
+CV7 Board requires Card for its text model                       ok (green)
+CV6 the tab bar's buttons in a list layout                       ok (green)
+131 mutants, 9 correct variants, 0 not as intended
