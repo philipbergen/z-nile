@@ -13,6 +13,6 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0114
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: none of c0348's promoted specs is in the slow tier, so a gate runs the guards this raft adds" bash -c '! grep -F "acceptance/c0348/" tests/slow.tsv'
 
 finish
