@@ -175,7 +175,8 @@ return t.spec("tracker commit phases", function(it)
 
 	it("records build by default, with no tokens and the trailer as before", function()
 		write("notes/alpha/a.txt", "1\n2\n3\n")
-		local committed = tr({ "commit", "-m", "work", "--issue", a, "--time", "2" })
+		local committed =
+			tr({ "commit", "-m", "work", "--model", "claude-sonnet-5-5", "--issue", a, "--time", "2" })
 		t.expect(committed.ok).toBe(true)
 		t.expect(string.find(committed.stderr, "ignored", 1, true) ~= nil).toBe(true)
 		local r = rows(active(a))
@@ -188,7 +189,10 @@ return t.spec("tracker commit phases", function(it)
 
 	it("records the phase and tokens it is given, and names them in the trailer", function()
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		write(`pickman/.tracker/rafts/active/{raft}/review-001.md`, "# Review 001\n\nVerdict: approve\n")
+		write(
+			`pickman/.tracker/rafts/active/{raft}/review-001.md`,
+			"Model: claude-opus-5-5\n# Review 001\n\nVerdict: approve\n"
+		)
 		must(
 			tr({
 				"commit",
@@ -217,7 +221,10 @@ return t.spec("tracker commit phases", function(it)
 	it("splits tokens over the issues exactly, as minutes are split", function()
 		write("notes/alpha/b.txt", "1\n2\n3\n")
 		write("notes/beta/b.txt", "1\n")
-		must(tr({ "commit", "-m", "both", "--time", "8", "--tokens", "1001" }), "commit")
+		must(
+			tr({ "commit", "-m", "both", "--model", "claude-sonnet-5-5", "--time", "8", "--tokens", "1001" }),
+			"commit"
+		)
 		local ra, rb = rows(active(a)), rows(active(b))
 		t.expect(ra[#ra].tokens).toBe(nil)
 		t.expect(rb[#rb].tokens).toBe(nil)
@@ -248,7 +255,8 @@ return t.spec("tracker commit phases", function(it)
 			end
 			local r = tr({ "commit", "-m", "nope", "--phase", "capture", "--time", "1" })
 			t.expect(string.find(r.stderr, "./zn spend", 1, true) ~= nil).toBe(true)
-			local warned = tr({ "commit", "-m", "tokens ignored", "--tokens", "nope" })
+			local warned =
+				tr({ "commit", "-m", "tokens ignored", "--model", "claude-sonnet-5-5", "--tokens", "nope" })
 			t.expect(warned.ok).toBe(true)
 			t.expect(string.find(warned.stderr, "ignored", 1, true) ~= nil).toBe(true)
 			-- dated ten minutes back, so done's own row (minutes since this commit) is never too small to record
@@ -272,10 +280,12 @@ return t.spec("tracker commit phases", function(it)
 
 	it("done records its own commit as deliver, and the raft summary shows each phase", function()
 		must(tr({ "finish", a }), "finish a")
+		seal.layerReview(dir, a) -- c0248: a layer is complete before the next starts or done binds it
 		must(tr({ "start", raft }), "start the next layer")
 		write("notes/layer-b.txt", "b\n")
-		must(tr({ "commit", "-m", "layer b", "--time", "1" }), "commit b")
+		must(tr({ "commit", "-m", "layer b", "--model", "claude-sonnet-5-5", "--time", "1" }), "commit b")
 		must(tr({ "finish", b }), "finish b")
+		seal.layerReview(dir, b) -- c0248: a layer is complete before the next starts or done binds it
 		seal.trace(dir, raft)
 		must(tr({ "done", raft }), "done")
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)

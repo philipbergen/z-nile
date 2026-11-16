@@ -20,7 +20,7 @@ local work = `{fixture.physical(".")}/.cache/c0360-deferred`
 local TRIVIAL_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
 	.. 'check "RC1: fixture" true\nfinish\n'
 
-local REVIEW = "# Review 001\n\n"
+local REVIEW = "Model: claude-opus-5-5\n# Review 001\n\n"
 	.. "### F1 [high] a high finding\nEvidence: x\n\n"
 	.. "### F2 [medium] a medium finding\nEvidence: y\n\n"
 	.. "### F3 [low] a low finding\nEvidence: z\n\n"
@@ -60,8 +60,9 @@ local function attempt(answers: { string }, review: string?): Result
 	-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
 	write("pickman/.tracker/rafts/active/R0010/review-001.md", review or REVIEW)
 	write("pickman/.tracker/rafts/active/R0010/refute-001.md", table.concat(answers, "\n") .. "\n")
-	must(tr({ "commit", "-m", "round", "--time", "1" }), "commit")
+	must(tr({ "commit", "-m", "round", "--model", "claude-sonnet-5-5", "--time", "1" }), "commit")
 	must(tr({ "finish", "f0010" }), "finish")
+	seal.layerReview(work, "f0010") -- c0248: a layer is complete before the next starts or done binds it
 	seal.trace(work, "R0010")
 	return tr({ "done", "R0010" })
 end
@@ -206,7 +207,7 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 
 	it("refuses to defer a finding whose severity is not stated", function()
 		-- the unrated finding is followed by a rated one: its severity must not be borrowed
-		local review = "# Review 001\n\n### F1 an unrated finding\nEvidence: x\n\n"
+		local review = "Model: claude-opus-5-5\n# Review 001\n\n### F1 an unrated finding\nEvidence: x\n\n"
 			.. "### F2 [low] a rated finding\nEvidence: y\n\nVerdict: changes requested\n"
 		refused(
 			attempt({ "- F1: deferred c0020: later", "- F2: fixed abc: ok; consequences: none" }, review),

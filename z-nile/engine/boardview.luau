@@ -1,11 +1,12 @@
 --!strict
 -- The board's pure rules (c0118): an issue's column, raft bands, the done window's age, the UTC week of an instant, a
 -- landed raft's review rounds, and the two charts' weekly series. No reads: board.luau gathers the inputs.
+local reviewmodel = require("./reviewmodel")
 local stats = require("./stats")
 
 local boardview = {}
 
-export type Column = "ticket" | "design" | "raft" | "ready" | "run" | "done"
+export type Column = "blocked" | "ticket" | "design" | "raft" | "ready" | "run" | "done"
 export type Band = { raft: string?, ids: { string } }
 export type Landed = { id: string, at: number, design: number, code: number }
 export type TokenRow = { at: number, phase: string, tokens: number, model: string? }
@@ -13,9 +14,10 @@ export type Series = { key: string, label: string, values: { number? } }
 export type Range = { key: string, label: string, days: number? }
 export type Weekly = { labels: { string }, weeks: { string }, series: { Series } }
 
--- The six columns, left to right, and the pipeline step behind each (zz-rules, Board).
-boardview.COLUMNS = { "ticket", "design", "raft", "ready", "run", "done" } :: { Column }
+-- The seven columns, left to right, and the pipeline step behind each (zz-rules, Board). c0250: `blocked` is first.
+boardview.COLUMNS = { "blocked", "ticket", "design", "raft", "ready", "run", "done" } :: { Column }
 boardview.LABELS = {
+	blocked = "Blocked",
 	ticket = "Ticket",
 	design = "Design",
 	raft = "Raft",
@@ -48,6 +50,8 @@ boardview.UNRECORDED = "unrecorded"
 function boardview.column(stage: string, launched: boolean): Column
 	if stage == "done" then
 		return "done"
+	elseif stage == "blocked" then
+		return "blocked"
 	elseif stage == "active" then
 		return if launched then "run" else "ready"
 	elseif stage == "prepared" then
@@ -57,7 +61,10 @@ function boardview.column(stage: string, launched: boolean): Column
 	elseif stage == "new" then
 		return "ticket"
 	end
-	error(`boardview.column: {stage} is not an effective status (new, preparing, prepared, active, done)`, 0)
+	error(
+		`boardview.column: {stage} is not an effective status (new, preparing, prepared, active, blocked, done)`,
+		0
+	)
 end
 
 -- Cards of one column grouped into bands: one per raft, in raft id order, then the raftless cards; ids sorted.
@@ -151,6 +158,50 @@ function boardview.rounds(paths: { string }): (number, number)
 		end
 	end
 	return design, code
+end
+
+-- c0251: the paths among `paths` that are review files (design-review, review, final-review, idea-review and stream-review rounds): the one pattern of them
+-- the board has, beside `rounds`.
+function boardview.reviewPaths(paths: { string }): { string }
+	local out: { string } = {}
+	for _, p in paths do
+		local name = string.match(p, "([^/]+)$") or p
+		if
+			string.match(name, "^design%-review%-%d+%.md$")
+			or string.match(name, "^review%-%d+%.md$")
+			or string.match(name, "^final%-review%-%d+%.md$")
+			or string.match(name, "^idea%-review%-%d+%.md$")
+			or string.match(name, "^stream%-review%-.+%-%d+%.md$")
+		then
+			table.insert(out, p)
+		end
+	end
+	return out
+end
+
+-- c0251: the review files whose newest round of a kind carries a `Fallback:` line. `files` is path -> text of the review
+-- files of one folder set; the newest round of each kind is taken per folder (reviewmodel.newest), so an older flagged round
+-- with a clean newer one is not listed. The paths, sorted.
+function boardview.fallbacks(files: { [string]: string }): { string }
+	local byDir: { [string]: { string } } = {}
+	for path in files do
+		local dir = string.match(path, "^(.*)/[^/]+$") or ""
+		byDir[dir] = byDir[dir] or {}
+		table.insert(byDir[dir], string.match(path, "([^/]+)$") or path)
+	end
+	local out: { string } = {}
+	for dir, names in byDir do
+		for _, kind in { "design", "code", "idea", "stream" } do
+			for _, name in reviewmodel.newest(names, kind) do
+				local path = if dir == "" then name else `{dir}/{name}`
+				if reviewmodel.fallbackOf(files[path]) ~= nil then
+					table.insert(out, path)
+				end
+			end
+		end
+	end
+	table.sort(out)
+	return out
 end
 
 -- The range's first instant: `asOf` minus its days, or the earliest of `ats` for all history (nil when empty).
@@ -324,6 +375,53 @@ function boardview.rowInstant(when: string): number?
 	local hh, mi = string.match(rest :: string, "^[ T](%d%d):(%d%d)")
 	local stamp = `{y}-{m}-{d}T{hh or "00"}:{mi or "00"}:00Z`
 	return stats.seconds(stamp)
+end
+
+-- c0251: what a person can run to ask for the cross-model re-review of a flagged file, from where the board is read, or nil
+-- when the flag is history. The route is the worktree where the item is still being worked: an issue in the backlog is in
+-- its prep worktree, an issue or raft in a launched raft in the raft's worktree; a done item's flag is informational.
+-- `item` is the card ("issue" or "raft") with its folder state, id, slug and raft.
+function boardview.rereview(
+	item: { kind: string, state: string, id: string, slug: string, raft: string? },
+	file: string
+): string?
+	local name = string.match(file, "([^/]+)$") or file
+	if item.state == "done" or (item.kind == "raft" and item.state ~= "active") then
+		return nil
+	end
+	if string.match(name, "^idea%-review%-%d+%.md$") then
+		return if item.kind == "issue" and item.state == "backlog"
+			then `cd "$(./zn worktree prep-{item.slug})" && ./zn idea {item.id}`
+			else nil
+	end
+	local mode: string
+	if string.match(name, "^design%-review%-%d+%.md$") then
+		mode = if item.kind == "raft" then "raft" else "design"
+	elseif string.match(name, "^final%-review%-%d+%.md$") then
+		mode = "final"
+	elseif string.match(name, "^stream%-review%-.+%-%d+%.md$") then
+		mode = "stream"
+	elseif string.match(name, "^review%-%d+%.md$") then
+		mode = "code"
+	else
+		return nil
+	end
+	local target = item.id
+	if mode == "stream" then
+		target = string.match(name, "^stream%-review%-(.+)%-%d+%.md$") or item.id
+	end
+	local where: string?
+	if item.kind == "raft" then
+		where = item.id
+	elseif item.state == "backlog" then
+		where = `prep-{item.slug}`
+	elseif item.raft then
+		where = item.raft
+	end
+	if where == nil then
+		return nil
+	end
+	return `cd "$(./zn worktree {where})" && ./zn dispatch zz-review {target} --mode {mode}`
 end
 
 return boardview

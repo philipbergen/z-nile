@@ -94,7 +94,7 @@ return t.spec("stack corrections", function(it)
 			'#!/bin/sh\necho "$*" >> "$GH_LOG"\ncase "$1 $2" in\n'
 				.. '  "pr list") echo 1; exit 0 ;;\n'
 				.. '  "pr create") echo https://github.com/x/y/pull/1; exit 0 ;;\n'
-				.. '  "pr view") echo main; exit 0 ;;\n'
+				.. '  "pr view") case "$*" in *statusCheckRollup*) sha=$(git rev-parse "origin/$3" 2>/dev/null || git rev-parse "$3"); printf \'{"state":"OPEN","isDraft":false,"headRefOid":"%s","mergeable":"MERGEABLE","statusCheckRollup":[{"name":"static","conclusion":"SUCCESS"}]}\' "$sha"; exit 0 ;; esac; echo main; exit 0 ;;\n'
 				.. '  "pr edit") exit 0 ;;\n'
 				.. "esac\nexit 0\n"
 		)
@@ -125,6 +125,7 @@ return t.spec("stack corrections", function(it)
 		git(wt, { "add", "-A" })
 		git(wt, { "commit", "-qm", "c0010 work" })
 		local out = zn(wt, { "finish", "c0010" })
+		seal.layerReview(wt, "c0010")
 		t.expect(has(out, "affected specs are skipped")).toBe(true)
 		local acc = fs.readFile(`{wt}/pickman/.tracker/issues/active/c0010/acceptance/watch.txt`)
 		t.expect(has(acc, "pickman/src/later.luau")).toBe(true)
@@ -152,6 +153,7 @@ return t.spec("stack corrections", function(it)
 		git(wt, { "add", "-A" })
 		git(wt, { "commit", "-qm", "c0020 work" })
 		zn(wt, { "finish", "c0020" })
+		seal.layerReview(wt, "c0020")
 		local watch = fs.readFile(`{wt}/pickman/tests/unit/req.watch.txt`)
 		t.expect(has(watch, "pickman/src/needed.luau")).toBe(true)
 		t.expect(has(watch, "pickman/src/later.luau")).toBe(false)
@@ -176,7 +178,7 @@ return t.spec("stack corrections", function(it)
 			`#!/bin/sh\necho "$*" >> "{log}"\n`
 				.. 'case "$1 $2" in\n'
 				.. '  "pr list") case "$*" in *R0010/2*) echo 2 ;; *) echo 1 ;; esac; exit 0 ;;\n'
-				.. '  "pr view") case "$3" in 2) echo R0010/1/c0010 ;; *) echo main ;; esac; exit 0 ;;\n'
+				.. '  "pr view") case "$*" in *statusCheckRollup*) sha=$(git rev-parse "origin/$3" 2>/dev/null || git rev-parse "$3"); printf \'{"state":"OPEN","isDraft":false,"headRefOid":"%s","mergeable":"MERGEABLE","statusCheckRollup":[{"name":"static","conclusion":"SUCCESS"}]}\' "$sha"; exit 0 ;; esac; case "$3" in 2) echo R0010/1/c0010 ;; *) echo main ;; esac; exit 0 ;;\n'
 				.. '  "pr edit") exit 0 ;;\n'
 				.. "esac\nexit 0\n"
 		)

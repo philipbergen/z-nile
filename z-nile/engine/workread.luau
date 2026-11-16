@@ -13,6 +13,7 @@ local process = require("@lune/process")
 local projects = require("./projects")
 local raftplan = require("./raftplan")
 local readycheck = require("./readycheck")
+local reviewmodel = require("./reviewmodel")
 local sh = require("../lib/sh")
 local stack = require("./stack")
 local statusLib = require("./status")
@@ -84,8 +85,7 @@ end
 type At = { path: string, state: string, dir: string }
 
 local function sideFile(name: string): boolean
-	return name == "questions.md"
-		or name == "trace.md"
+	return name == "trace.md"
 		or string.match(name, "^review%-%d+%.md$") ~= nil
 		or string.match(name, "^final%-review%-%d+%.md$") ~= nil
 end
@@ -323,13 +323,14 @@ local function build(
 		status = statusLib.effective(front, at.state),
 		designReady = ready,
 		depsMet = deps,
-		questions = sides["questions.md"] ~= nil,
+		blocked = front.blocked,
 		issues = issues,
 		layers = layers,
 		holder = if holder then holder.who else "",
 		since = if holder then holder.when else "",
 		stacked = if at.state == "active" then stacked(issues, layers, tips, mainSha) else false,
 		codeReview = reviewState(sides, "review%-", "resolved"),
+		codeModel = if reviewmodel.judged(front) then reviewmodel.problem(sides, "code", id) else nil,
 		finalReview = final,
 		trace = trace,
 		traceOk = trace and final == "approved",
@@ -390,7 +391,6 @@ local function blockFor(
 			design = front.design or "",
 			doc = text,
 			grouped = front.grouped,
-			questions = docs[`{at.dir}/questions.md`] ~= nil,
 			listed = {},
 			members = {},
 			files = {},
@@ -434,6 +434,7 @@ local function blockFor(
 			specs = specs,
 			approval = folder["approval.md"],
 			approvalFile = if mat then `{mat.dir}/approval.md` else `{mid}/approval.md`,
+			judged = reviewmodel.judged(mf),
 		})
 	end
 	local raftFiles = filesUnder(at.dir, under, docs, id, function(rel: string, _issue: string): boolean
@@ -449,11 +450,11 @@ local function blockFor(
 		design = front.design or "",
 		doc = text,
 		grouped = front.grouped,
-		questions = docs[`{at.dir}/questions.md`] ~= nil,
 		listed = listed,
 		members = members,
 		files = raftFiles,
 		loaded = true,
+		judged = reviewmodel.judged(front),
 	})
 	if why then
 		return why

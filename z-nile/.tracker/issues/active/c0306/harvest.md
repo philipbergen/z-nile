@@ -1,6 +1,8 @@
 # Harvest: c0306
 
 - note the idea run dropped the carried Decided lines, and land refused the spend (prep, 2026-11-13): z-ticket/idea-runs-keep-decided-lines, z-ticket/land-a-challenged-idea
+<<<<<<< HEAD:z-nile/.tracker/issues/c0306/harvest.md
+=======
 - note the prototype's done fixtures had to commit stream and member-folder reviews before finish and seal the trace last (prep, 2026-11-14): zz-test/done-fixtures-commit-in-finish-order
 - note the skills paragraph had to fit the strings and positions three promoted docs specs pin (prep, 2026-11-14): z-design/skill-edits-meet-the-docs-pins
 - note the runner writes --out only for a green run, so check.sh misnames the failing criterion (prep, 2026-11-14): zz-test/out-records-only-a-green-run
@@ -18,3 +20,4 @@
 - design-review-001 F10: one-off: the experiment records now name how each run was bounded; zz-review item 12 already asks for it
 - note the third prototype round found the mark changing grouped records, mutants left on a function the rework stopped calling, and a done fixture made unfinished by a late commit (prep, 2026-11-14): z-design/new-front-matter-lines-meet-every-hash, zz-test/mutants-follow-the-code-after-a-rework, zz-test/done-fixtures-commit-in-finish-order
 - note the fourth prototype round found that a member's way out at ready differs from the raft's own (prep, 2026-11-14): z-design/refusals-name-a-way-out-that-works
+>>>>>>> origin/main:z-nile/.tracker/issues/active/c0306/harvest.md

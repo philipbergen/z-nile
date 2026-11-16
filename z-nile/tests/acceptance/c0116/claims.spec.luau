@@ -84,7 +84,10 @@ end
 local function coherence(dir: string, n: string)
 	local id = string.match(dir, "(R%d+)$") :: string
 	local grouped = string.match(fs.readFile(`{dir}/{id}.md`), "\ngrouped: ([^\n]*)\n") or "[]"
-	fs.writeFile(`{dir}/design-review-{n}.md`, `# Review {n}\n\nGrouped: {grouped}\n\nVerdict: approve\n`)
+	fs.writeFile(
+		`{dir}/design-review-{n}.md`,
+		`Model: claude-opus-5-5\n# Review {n}\n\nGrouped: {grouped}\n\nVerdict: approve\n`
+	)
 end
 
 return t.spec(

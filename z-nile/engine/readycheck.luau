@@ -13,6 +13,7 @@ local approval = require("./approval")
 local contract = require("./contract")
 local openlist = require("./openlist")
 local raftplan = require("./raftplan")
+local reviewmodel = require("./reviewmodel")
 local store = require("./store")
 
 local readycheck = {}
@@ -28,6 +29,7 @@ export type Member = {
 	specs: { [string]: string },
 	approval: string?,
 	approvalFile: string,
+	judged: boolean?, -- c0306: marked `reviews: judged`
 }
 
 export type Raft = {
@@ -38,11 +40,11 @@ export type Raft = {
 	design: string,
 	doc: string,
 	grouped: string?,
-	questions: boolean,
 	listed: { string },
 	members: { Member },
 	files: { [string]: string },
 	loaded: boolean,
+	judged: boolean?, -- c0306: marked `reviews: judged`
 }
 
 local function hasCheckLine(text: string): boolean
@@ -180,11 +182,11 @@ end
 -- when the documents already pass and the design files have not been loaded yet: the caller loads them
 -- and calls again. A refusal is complete either way.
 function readycheck.reason(r: Raft): (string?, boolean)
+	if r.status == "blocked" then
+		return `{r.id} is blocked: ./zn resolve {r.id} <decision> first`, true
+	end
 	if not (r.where == "backlog" and r.status == "prepared") then
 		return `{r.id} is {r.status} in {r.dir} on origin/main: only a prepared raft is readied`, true
-	end
-	if r.questions then
-		return `{r.id} has questions.md: a human has to answer before it can be readied`, true
 	end
 	if #r.members == 0 then
 		return `{r.id} has no member issues`, true
@@ -220,10 +222,23 @@ function readycheck.reason(r: Raft): (string?, boolean)
 	if gap then
 		return gap, true
 	end
+	-- c0306 (prep Q2): a marked raft's coherence reviews, and a marked member's design reviews, are on a review model
+	if r.judged then
+		local off = reviewmodel.problem(r.files, "coherence", r.id)
+		if off then
+			return off, true
+		end
+	end
 	for _, m in r.members do
 		local memberGap = designAndCheck(m.id, m.design, m.doc, m.files)
 		if memberGap then
 			return memberGap, true
+		end
+		if m.judged then
+			local off = reviewmodel.problem(m.files, "design", m.id, true)
+			if off then
+				return off, true
+			end
 		end
 		local parts, err = contract.build(m.doc, m.files["check.sh"] or "", m.specs)
 		if not parts then

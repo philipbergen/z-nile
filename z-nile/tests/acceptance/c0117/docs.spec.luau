@@ -43,7 +43,16 @@ return t.spec("c0117 docs", function(it)
 		for _, name in { "z-ticket", "z-design", "z-raft", "z-run" } do
 			local text = skill(name)
 			local h = section(text, "## Headless (under `./zn dispatch`)")
-			at(h, "write the questions to `$ZN_DISPATCH_DIR/questions.md`", name)
+			if name == "z-ticket" then
+				-- c0250: a capture has no item to block, so z-ticket keeps c0256's local questions.md
+				at(h, "write the questions to `$ZN_DISPATCH_DIR/questions.md`", name)
+			else
+				-- a step on an item blocks it: the note and `./zn block`, then the user's `./zn resolve`
+				absent(h, "write the questions to `$ZN_DISPATCH_DIR/questions.md`", name)
+				at(h, "write `escalation.md` in the item's folder", name)
+				at(h, "and run `./zn block <id> <reason>` in your worktree, then stop.", name)
+				at(h, "until the user runs `./zn resolve <id> <decision>`", name)
+			end
 			at(h, "./zn dispatch retry <id>", name)
 			at(h, "Never `git push` to `main` and never merge a pull request", name)
 			at(h, "the dispatcher pushes that tracker state to `main` for you", name)
@@ -51,10 +60,13 @@ return t.spec("c0117 docs", function(it)
 			at(h, "Do not pass `--time` or `--tokens`", name)
 			at(h, "`./zn dispatch zz-review <id> --mode <design|raft|code|stream>`", name)
 			at(h, "give that one command a two-hour timeout", name)
-			if first then
-				t.expect(h).toBe(first)
+			-- the item skills share one section; z-ticket's differs in the sentence about questions only
+			if name ~= "z-ticket" then
+				if first then
+					t.expect(h).toBe(first)
+				end
+				first = h
 			end
-			first = h
 			t.expect(
 				(string.find(text, "## Headless", 1, true) :: number)
 					< string.find(text, "\n## Lessons\n", 1, true) :: number
@@ -114,7 +126,7 @@ return t.spec("c0117 docs", function(it)
 		)
 		local step3 = string.match(
 			ze,
-			"\n3%. The reviewer writes `review%-NNN%.md` in the raft directory[^\n]*"
+			"\n3%. The reviewer writes `review%-NNN%.md` in the issue's folder[^\n]*"
 		) or ""
 		at(
 			step3,
@@ -194,7 +206,7 @@ return t.spec("c0117 docs", function(it)
 				"input + cache writes + output, cache reads left out",
 				"- **Spend.**",
 				"- **The chain.**",
-				"always a human's",
+				"the `run` gate",
 				"`./zn lessons --uncovered <id>`",
 				"- **Run state.**",
 				"- **The wrapper.**",
@@ -220,6 +232,9 @@ return t.spec("c0117 docs", function(it)
 		absent(readme, "(c0117, planned)", "the README")
 		at(readme, "- **The dispatcher.** `./zn dispatch <id>`", "the README")
 		at(readme, "none of them is a security boundary against a determined agent", "the README")
+		-- c0250: it stops at a blocked item, no longer at a step's questions.md
+		at(readme, "It stops at a merge gate, at a blocked item and at a failure", "the README")
+		absent(readme, "at a step's `questions.md`", "the README")
 		at(readme, "A run accepts `main` as it is when it starts", "the README")
 		at(readme, "- **`.models.toml`.**", "the README")
 	end)

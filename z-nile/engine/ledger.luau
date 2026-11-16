@@ -46,7 +46,7 @@ ledger.HEADER_MEASURED = "| # | when | commit | +lines | -lines | minutes | attr
 
 -- A model id as spend.md stores it: letters, digits, dots, dashes and underscores (no cell separator or space).
 function ledger.isModel(s: string): boolean
-	return string.match(s, "^[%w][%w%._%-]*$") ~= nil
+	return string.match(s, "^[%w][%w%._%-%[%]]*$") ~= nil
 end
 
 function ledger.isPhase(s: string): boolean

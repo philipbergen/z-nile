@@ -105,7 +105,7 @@ return t.spec("c0117 .models.toml", function(it)
 			t.expect(models.settings({}).toolSeconds).toBe(900)
 			t.expect(has(
 				errorOf(function()
-					layer('[dispatch]\nauto_merge = ["run"]\n')
+					layer('[dispatch]\nauto_merge = ["merge"]\n')
 				end),
 				"only prep, raft"
 			)).toBe(true)
@@ -356,7 +356,8 @@ return t.spec("c0117 .models.toml", function(it)
 			for _, cli in { "claude", "kimi", "grok", "agent" } do
 				t.expect(r.specs[cli] ~= nil).toBe(true)
 			end
-			t.expect(#models.tries(r)).toBe(4)
+			-- c0251: a review (zz-review: code-review) lists a Fable member beside the four CLIs; authoring steps do not
+			t.expect(#models.tries(r)).toBe(if skill == "zz-review" then 5 else 4)
 		end
 		local idea = models.resolve(layers, "z-ticket")
 		t.expect(idea.specs.claude.model).toBe("claude-fable-5-2")
@@ -374,5 +375,6 @@ return t.spec("c0117 .models.toml", function(it)
 		t.expect(review.specs.grok.rank).toBe(4)
 		t.expect(models.roleFor("zz-review", "raft")).toBe("raft")
 		t.expect(models.roleFor("zz-review", "design")).toBe("design-challenge")
+		t.expect(models.roleFor("zz-review", "stream")).toBe("stream-review")
 	end)
 end)

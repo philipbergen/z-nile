@@ -56,6 +56,15 @@ max_tokens = 5000
 effort = "xhigh"
 fallbacks = ["grok"]
 
+[roles.stream-review]
+model = "claude-haiku-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+effort = "xhigh"
+fallbacks = ["grok"]
+
 [roles.raft]
 model = "claude-opus-5-5"
 cli = "claude"
@@ -192,9 +201,11 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			t.expect(r.ok).toBe(true)
 			t.expect(string.split(string.gsub(r.stdout, "%s+$", ""), "\n")).toEqual({
 				"step=z-design id=c0010 kind=model",
-				"try=1 cli=claude runtime=claude-cli model=claude-opus-5-5-high rank=3 max_tokens=5000",
-				"try=2 cli=grok runtime=grok-cli model=grok-4.7-high rank=3 max_tokens=5000",
-				"try=3 cli=agent runtime=cursor-cli model=claude-opus-5-5-high rank=3 max_tokens=5000 max_calls=30 max_minutes=60",
+				"pool: no rotation (the role is tried in the order of .models.toml)",
+				"try=1 cli=claude runtime=claude-cli model=claude-opus-5-5-high rank=3 max_tokens=5000 tier=1 family=none fallback=no",
+				"try=2 cli=grok runtime=grok-cli model=grok-4.7-high rank=3 max_tokens=5000 tier=1 family=none fallback=no",
+				"try=3 cli=agent runtime=cursor-cli model=claude-opus-5-5-high rank=3 max_tokens=5000 max_calls=30 max_minutes=60 tier=1 family=none fallback=no",
+				"pick: claude claude-opus-5-5",
 			})
 			local closer = zn({ "dispatch", "z-design", "c0020", "--dry-run" })
 			t.expect(
@@ -446,7 +457,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
 			local lines = recordLines(r.stdout)
 			t.expect(#lines).toBe(1)
 			t.expect(lines[1]).toBe(
-				'record: ./zn commit -m "c0010: stream-review-001" --phase code-review --model claude-opus-5-5-xhigh --issue c0010'
+				'record: ./zn commit -m "c0010: stream-review-001" --phase code-review --model claude-haiku-5-5-xhigh --issue c0010'
 			)
 			t.expect(#(fakecli.rows(h, "c0010") or {})).toBe(before)
 			-- the prompt names the stream's own worktree (the call site's argument, design review 008 F3)

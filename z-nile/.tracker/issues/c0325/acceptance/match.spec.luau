@@ -157,7 +157,7 @@ return t.spec("c0325: a record is cut to its model, and the match normalises bot
 	end)
 
 	it(
-		"AC8: `models.tries` returns the same tries or error for every input, including a fallback author",
+		"AC8: `models.tries` returns the same tries for every input, including a fallback author (c0251: the author is never dropped)",
 		function()
 			local review = models.resolveRole({ layer }, "code-review")
 			t.expect(review.authorModel).toBe("claude-sonnet-5-5-high")
@@ -177,7 +177,8 @@ return t.spec("c0325: a record is cut to its model, and the match normalises bot
 			t.expect(ids(models.tries(fb)))
 				.toEqual({ "claude-opus-5-5-low", "kimi-code-k3.1-pro-low", "grok-4.7-low" })
 			fb.authorModel = "kimi-code-k3.1-pro-low"
-			t.expect(ids(models.tries(fb))).toEqual({ "claude-opus-5-5-low", "grok-4.7-low" })
+			t.expect(ids(models.tries(fb)))
+				.toEqual({ "claude-opus-5-5-low", "kimi-code-k3.1-pro-low", "grok-4.7-low" })
 			-- the only model left is the author's: the error, word for word
 			local solo = models.parse(
 				[[
@@ -202,16 +203,10 @@ fallbacks = []
 ]],
 				".models.toml"
 			)
-			local ok, err = pcall(models.tries, models.resolveRole({ solo }, "code-review"))
-			t.expect(ok).toBe(false)
-			t.expect(
-				string.find(
-					tostring(err),
-					"code-review: the only model left is the author's (claude-sonnet-5-5-high); a challenge is never run by the model that wrote the text",
-					1,
-					true
-				) ~= nil
-			).toBe(true)
+			-- c0251: the only model left is the author's: it still runs (the picker flags it), the chain never stops
+			local ok, only = pcall(models.tries, models.resolveRole({ solo }, "code-review"))
+			t.expect(ok).toBe(true)
+			t.expect(ids(only :: { models.Spec })).toEqual({ "claude-sonnet-5-5-high" })
 		end
 	)
 end)

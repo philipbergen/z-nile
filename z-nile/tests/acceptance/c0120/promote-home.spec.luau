@@ -150,8 +150,11 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "prep ready" })
 		must(tr({ "start", "R0010" }), "start")
-		write("pickman/.tracker/rafts/active/R0010/review-001.md", "# Review 001\n\nVerdict: approve\n")
-		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
+		write(
+			"pickman/.tracker/rafts/active/R0010/review-001.md",
+			"Model: claude-opus-5-5\n# Review 001\n\nVerdict: approve\n"
+		)
+		must(tr({ "commit", "-m", "review 001", "--model", "claude-sonnet-5-5", "--time", "1" }), "commit")
 	end)
 
 	it("spend's lines leave out every project's promoted specs", function()
@@ -186,6 +189,7 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 
 	it("done moves the specs into pickman/tests/acceptance/<id> and runs them from pickman/", function()
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.layerReview(work, "f0010") -- c0248: done binds a layer only once its review is settled
 		seal.trace(work, "R0010")
 		local r = tr({ "done", "R0010" })
 		if not r.ok then

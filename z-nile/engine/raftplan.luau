@@ -348,7 +348,14 @@ function raftplan.designHash(text: string): string
 			seen += 1
 			inFront = seen == 1
 			table.insert(kept, line)
-		elseif inFront and (string.match(line, "^status:") or string.match(line, "^raft:")) then
+		elseif
+			inFront
+			and (
+				string.match(line, "^status:")
+				or string.match(line, "^raft:")
+				or string.match(line, "^reviews:")
+			)
+		then
 			continue
 		else
 			table.insert(kept, line)
@@ -424,6 +431,24 @@ function raftplan.renderGrouped(map: { [string]: string }): string
 		table.insert(parts, `{id}@{map[id]}`)
 	end
 	return `[{table.concat(parts, ", ")}]`
+end
+
+-- `text` with every `<id>@<old>` record replaced by `<id>@<new>`: the way `keepRecords` re-records a member in a raft
+-- document and in the `Grouped:` lines of its coherence reviews (c0250's `resolve approve` uses it in a publish build).
+function raftplan.rerecord(text: string, id: string, old: string, new: string): string
+	local from, to = `{id}@{old}`, `{id}@{new}`
+	local parts: { string } = {}
+	local at = 1
+	while true do
+		local a, b = string.find(text, from, at, true)
+		if not a then
+			break
+		end
+		table.insert(parts, string.sub(text, at, a - 1) .. to)
+		at = (b :: number) + 1
+	end
+	table.insert(parts, string.sub(text, at))
+	return table.concat(parts)
 end
 
 return raftplan

@@ -101,17 +101,17 @@ A worker claims an item by landing the status change on `origin/main`, as `statu
 - A takeover discards the old worker's worktree, and a numbered copy recovers its work: the old worker's work is kept, and a numbered copy of it continues the work. *designed* (c0277)
 
 ### Autonomous delivery
-Unless something blocks, once a person has approved its design, an item is rafted, executed, code-reviewed, full-force reviewed, tested and landed with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the stack is green and regression-free. This replaces c0117's "stops at a merge" gate: the stack lands through `./zn done`, with the dispatcher's credential, after its own checks. *captured* (c0252)
+Unless something blocks, once a person has approved its design, an item is rafted, executed, code-reviewed, full-force reviewed, tested and landed with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the stack is green and regression-free. This replaces c0117's "stops at a merge" gate: the stack lands through `./zn done`, with the dispatcher's credential, after its own checks. *exists* (c0252)
 
 ### Models per command and activity
-`.models.toml` names a real model for each stage in its `[roles.*]` table: `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `code-review` and `final-review`, each with its CLI, rank, token cap and effort and a fallback list, and spend records the model. No level has a name. *exists*
-- Every review runs on an expensive role: `idea-challenge`, `design-challenge`, `code-review`, `final-review`, and `raft` for a raft's review. `idea-challenge` and `code-review` name the role that wrote the text as their `author`, which drops that model; `design-challenge` and a raft's review run on the same model as their author. The cheaper `implementation` role builds and the `idea` role drafts. *exists*
+`.models.toml` names a real model for each stage in its `[roles.*]` table: `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `code-review`, `stream-review` and `final-review`, each with its CLI, rank, token cap and effort and a fallback list, and spend records the model. No level has a name. *exists*
+- Every review runs on an expensive role: `idea-challenge`, `design-challenge`, `code-review`, `final-review`, and `raft` for a raft's review, except a stream review, which runs on the cheap `stream-review` role. Which model of the role reviews is the picker's, away from the model that wrote the text (below). The cheaper `implementation` role builds and the `idea` role drafts. *exists*
 - A command refuses a design review or a final review recorded off its role's kind of model. *designed* (c0306)
 - The cheapest do the waiting: the dispatcher no longer stops at a gate just to wait, and polls it on the cheapest model of the CLI, so no expensive model waits on a gate. *captured* (c0305)
 - Metrics show the cost per model, from the real model on each spend row. *captured* (c0307)
 
 ### Reviews by different models
-- A reviewer should run on a different model family than the author, and successive rounds rotate. `.models.toml` names a review pool; the dispatcher takes the first member whose family differs from the author's and the previous reviewer's. *captured* (c0251); today `idea-challenge` and `code-review` name an `author`, which drops that model from their lists. *exists*
+- A reviewer should run on a different model family than the author, and successive rounds rotate. `.models.toml` names a review pool and its model lines (`[families]`); the dispatcher takes the first member whose family differs from the author's and the previous reviewer's. *exists* (c0251); a role's `author` only stands in for the writer when no spend row records it, and drops nothing. *exists*
 - Same-family review (Opus reviewing Opus) is fine, but it is the fallback and never the only choice: it runs only when no different-family CLI can (out of tokens or quota, CLI missing). It never blocks the chain.
 - Every review records its model and whether it was a fallback. The board flags fallback reviews so you can ask for a cross-model re-review when tokens return. Every finding is still harvested into a skill's lessons.
 
@@ -123,7 +123,7 @@ Once per raft, on the finished stack, a final review checks that each ticket's d
 - Off course means a redo: back to z-design when the design missed the idea, a rebuilt layer when the implementation missed the design, and then the review again. A second off-course verdict blocks the ticket. *designed* (c0262)
 
 ### Escalation to the human
-A worker never guesses past a wall; it escalates formally. *designed* (c0250)
+A worker never guesses past a wall; it escalates formally. *exists* (c0250)
 - **State.** The item goes to status `blocked` on `origin/main`, so every host and the board see it, with a `blocked:` reason from a closed list:
 
   | reason | meaning |
@@ -132,11 +132,11 @@ A worker never guesses past a wall; it escalates formally. *designed* (c0250)
   | `design-gap` | the work needs a tool, library, dependency or scope the design did not cover |
   | `needs-decision` | an ambiguity only the human can settle |
   | `red-gate` | N fix attempts and the gate is still red |
-  | `quota` | every CLI failed on quota |
+  | `quota` | every CLI stayed out of quota past `quota_cap_hours` (`.models.toml`) |
   | `tripwire` | a guard fired (foreign refs, unvetted push to `main`) |
 
-- **The note.** `escalation.md` in the item's folder, landed with the state: reason, what was tried, the open findings or error verbatim, the options with a recommendation, and the exact resume commands. It is in git, not `.cache`, so it works across hosts and replaces c0117's local `questions.md`.
-- **The worker moves on.** A block on any ticket of a raft marks the raft blocked. The green layers below the blocked one land now, with one full gate on the top green one. The worker parks the branch and PR, releases its claim, clears its context and takes the next unblocked raft that does not depend on the blocked one.
+- **The note.** `escalation.md` in the item's folder, landed with the state: reason, what was tried, the open findings or error verbatim, the options with a recommendation, and the exact resume commands. It is in git, not `.cache`, so it works across hosts and replaces c0117's local `questions.md` for an item (a capture, which has no item yet, keeps it).
+- **The worker moves on.** It parks the branch and PR, releases its claim, and takes the next raft that does not depend on the blocked one.
 - **You resolve.** The board lists blocked items first with the reason and the question. `./zn resolve <id> <decision>`, where the decision is `amend-design` (back to z-design with the note as input), `approve` (for example accept the new dependency, recorded in the design), `split` (carve out an issue), `retry` (more rounds or attempts) or `abort` (z-stop). The decision is committed to the item, with who made it, and the raft resumes at the blocked layer.
 - Nothing else stops a worker.
 
@@ -161,12 +161,11 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | `.models.toml`, dispatcher, chain, quota fallback, bot credential | c0117 | exists |
 | board, a tab per project | c0118 | exists |
 | remote runtimes (`claude-cloud`, `grok-bot`, `cursor-app`) | c0142 | captured |
-| `agy`, `kimi` and `deepseek` as CLIs | c0175 | captured |
-| a raft delivered as a stacked PR set, one layer per issue, each finished before the next | c0248 | designed |
+| a raft delivered as a stacked PR set, one layer per issue | c0248 | exists |
 | `rank`, `./zn rank`, `./zn next`, lost first | c0249 | captured |
-| `blocked`, `escalation.md`, `./zn resolve` | c0250 | designed |
-| cross-model review pool, same-family fallback | c0251 | captured |
-| the dispatcher lands a green stack | c0252 | captured |
+| `blocked`, `escalation.md`, `./zn resolve` | c0250 | exists |
+| cross-model review pool, same-family fallback | c0251 | exists |
+| the dispatcher lands a green stack | c0252 | exists |
 | `./zn work` pull loop (the interactive session worker exists; the headless loop does not) | c0253 | captured |
 | workers on several hosts, worker identity in spend | c0254 | captured |
 | the z-nile app in Omarchy: order, lost items, drag and drop | c0257 | captured |
@@ -187,17 +186,20 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | commands refuse a review off the review models | c0306 | designed |
 | metrics show cost per model | c0307 | captured |
 
+c0248 to c0254 are one raft (R-vision), delivered as a stacked PR set in that order: layer 1 is c0248 on `main`, each next layer on the one below, landed as one bind. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
 c0248 to c0254 stay one raft, delivered as one stack in that order, and it starts only when every outside dependency of its members is done: c0256, c0257, c0260, c0263, c0283, c0305, c0306 and the heartbeat tickets c0265, c0274, c0275 and c0277, and c0325. The other worker tickets (c0262, c0280, c0282, c0284, c0307, c0276) are designed one at a time with the user and then rafted; c0264 is this README chore. c0258 (a capture lands with `./zn land`, which should print usage on `--help` and retry cheaply when `main` moves) is separate.
 
 ### Stacked delivery
+A raft is delivered as a **stacked PR set**, one layer (a branch and a PR) per issue, in the raft's Order. One worker builds the layers one at a time, each complete (finished, green and reviewed) before the next starts. Each layer is reviewed and gated on its own diff. The stack lands as one `--no-ff` bind of its top layer, with one full gate on its top; a blocked layer stops the layers above it, and the green layers below it land now as a shorter bind (`./zn done <R-id> --through <issue>`). Each landing has its own final review and trace, and the layers above an early landing are restacked onto `main`. A one-issue raft is a stack of one. *exists* (c0248)
 A raft is delivered as a stack: `./zn start` opens one layer per ticket (a branch and a draft PR on the layer below), in the raft's Order, `./zn finish` makes a layer one commit, `./zn restack` brings the stack onto a moved `main`, and `./zn done` lands it with one bind after the final review and the affected gate. A one-issue raft is a stack of one. *exists*
 - Each ticket is worked to completion before the next is picked up, by the same worker, so its context carries over: a layer is complete when it is built, reviewed and green on top of the layer below (its full-force review is c0262's), and the stack lands with one full gate on its top. A blocked layer stops the layers above it, not the ones below. *designed* (c0248)
 
 ## The five parts
 - **The tracker.** `./zn` at the repository root runs the engine in `z-nile/engine/`. Each project keeps its issues and rafts in its own root, `<project>/.tracker/` (z-nile's in `z-nile/.tracker/`), listed in `z-nile/projects.toml`. One counter, `z-nile/next`, numbers every project. The rules are in the zz-rules skill.
 - **The skills.** z-nile's skills live in `z-nile/skills/`, and a project's own in `<project>/skills/`. `.claude/skills/<name>` is a committed relative link to each, written by `./zn skills` and checked by `./zn skills --check` in the gate. The `z-` skills are the pipeline, in the order above; the `zz-` skills are called only from inside a step. Both prefixes are z-nile's: a project's skills are named `<project>-…`.
-- **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. A running step appends one short line per action (the tool and its target, or the first words of a message) to `.cache/dispatch/<id>/trail.log`, and `./zn dispatch status <id>` prints the last of those lines and the running token count before the step's JSON. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. A run accepts `main` as it is when it starts, and during the run a rewritten `main` or a commit that is not tracker state and not a pull request's merge stops it. The rules are in the zz-rules skill, Dispatch.
+- **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a blocked item and at a failure, and records each step's tokens and model on its spend row. A running step appends one short line per action (the tool and its target, or the first words of a message) to `.cache/dispatch/<id>/trail.log`, and `./zn dispatch status <id>` prints the last of those lines and the running token count before the step's JSON. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. A run accepts `main` as it is when it starts, and during the run a rewritten `main` or a commit that is not tracker state and not a pull request's merge stops it. The rules are in the zz-rules skill, Dispatch.
 - **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
+- **Provenance.** `<ID>/provenance.md` records who decided what that git cannot tell (append-only rows, `./zn provenance record`, checked by `./zn audit`; zz-rules skill, Provenance); the engine's merges of `origin/main` unite two writers of it, and zz-rules, Provenance, says how to merge when `./zn sync` stops, and names the actor options (`--actor`, `ZN_ACTOR`) and the session variables.
 - **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.
 
 ## Skills

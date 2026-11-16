@@ -27,7 +27,16 @@ fi
 top="$(cd "$(dirname "$0")" && pwd -P)"
 here="$(pwd -P)"
 # `work` started in another worktree of this repo reads that worktree. Every other command stays here.
-if [[ ${1:-} == work ]]; then
+# c0252: `./zn -C <worktree> <command> ...` runs THIS checkout's engine against another worktree of the same repository,
+# so the dispatcher judges and lands a raft with the base's code (the main checkout's), never the stack's own `zn`.
+against=""
+if [[ ${1:-} == -C ]]; then
+  against="${2:?usage: ./zn -C <worktree> <command> [args]}"
+  shift 2
+  [[ -d $against ]] || { echo "zn -C: $against is not a directory" >&2; exit 1; }
+  here="$(cd "$against" && pwd -P)"
+fi
+if [[ ${1:-} == work || -n $against ]]; then
   if git -C "$here" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     caller="$(cd "$(git -C "$here" rev-parse --show-toplevel)" && pwd -P)"
     common_here="$(git -C "$here" rev-parse --path-format=absolute --git-common-dir)"
@@ -45,11 +54,16 @@ if [[ ${1:-} == work ]]; then
     fi
   fi
 fi
+if [[ -n $against && "$(git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" != "$(git -C "$top" rev-parse --path-format=absolute --git-common-dir)" ]]; then
+  echo "zn -C: $against is not a worktree of this repository" >&2
+  exit 1
+fi
 case "$here/" in
 "$top/"*) rel="${here#"$top"}" ;;
 *) rel="" ;; # outside the checkout: like its root
 esac
 export ZN_TOP="$top" ZN_CWD="${rel#/}"
+export ZN_HERE="$here" # the caller's own directory, inside the checkout or not: a relative file argument is the caller's
 cd "$top"
 export PATH="$HOME/.rokit/bin:$PATH"
 # approve is the human's, in a terminal. --check only reads, so a pipe may run it. The engine repeats the

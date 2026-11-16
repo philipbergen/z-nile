@@ -46,6 +46,7 @@ a.jump { color: #2563eb; cursor: pointer; font-family: ui-monospace, monospace; 
 .s-prepared { background: #22c55e33; }
 .s-preparing { background: #f59e0b33; }
 .s-new { background: #d1d5db33; }
+.s-fallback { background: #ef444433; }
 .md pre, .md code { background: var(--code); border-radius: 4px; }
 .md pre { padding: 8px 12px; overflow-x: auto; }
 .md code { padding: 0 4px; }
@@ -126,8 +127,8 @@ dl.run dd { margin: 0; }
   var VIEWS = ["board", "rafts", "issues"];
   var GROUPS = ["ready", "not", "done"];
   var GROUP_LABEL = { ready: "Ready", not: "Not ready", done: "Done" };
-  var COLUMNS = ["ticket", "design", "raft", "ready", "run", "done"];
-  var COLUMN_LABEL = { ticket: "Ticket", design: "Design", raft: "Raft", ready: "Ready", run: "Run", done: "Done" };
+  var COLUMNS = ["blocked", "ticket", "design", "raft", "ready", "run", "done"];
+  var COLUMN_LABEL = { blocked: "Blocked", ticket: "Ticket", design: "Design", raft: "Raft", ready: "Ready", run: "Run", done: "Done" };
   var search = $("search"), list = $("list"), pane = $("pane");
   var boardEl = $("board"), projectsEl = $("projects"), columnsEl = $("columns"), chartsEl = $("charts"), problemsEl = $("problems");
   var windowEl = $("window"), rangeEl = $("range"), asOfEl = $("as-of");
@@ -152,6 +153,21 @@ dl.run dd { margin: 0; }
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
   function badge(s) { return s ? '<span class="badge s-' + esc(s) + '">' + esc(s) + "</span>" : ""; }
+  // c0251: the newest review round of a kind was run by the writer's own model line (a Fallback: line in the file)
+  function fallbackBadge(it) {
+    return it.fallbackReviews && it.fallbackReviews.length
+      ? '<span class="badge s-fallback" title="' + esc(it.fallbackReviews.join(", ")) + '">fallback review</span>'
+      : "";
+  }
+  function fallbackNote(it) {
+    if (!it.fallbackReviews || !it.fallbackReviews.length) return "";
+    return "<ul class=\"links\">" + it.fallbackReviews.map(function (f) {
+      var route = it.rereview && it.rereview[f];
+      return "<li>" + esc(f) + (route
+        ? ": ask for a cross-model re-review: <code>" + esc(route) + "</code>"
+        : ": a fallback review, kept as history (no re-review can be asked from here)") + "</li>";
+    }).join("") + "</ul>";
+  }
   function idLink(id) {
     var it = has(byId, id) ? byId[id] : has(issueById, id) ? issueById[id] : null;
     return '<a class="jump" data-id="' + esc(id) + '" href="#' + esc(id) + '">' + esc(id) + "</a>" + (it ? " " + esc(it.title) + " " + badge(it.stage) : "");
@@ -190,7 +206,8 @@ dl.run dd { margin: 0; }
   function card(id, n) {
     var i = issueById[id];
     return '<button type="button" class="card' + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '"><span class="id">' + esc(id) +
-      '</span> <span class="type t-' + esc(i.label) + '">' + esc(i.label) + "</span><br>" + esc(i.title) + "</button>";
+      '</span> <span class="type t-' + esc(i.label) + '">' + esc(i.label) + "</span><br>" + esc(i.title) +
+      (i.blocked ? '<br><span class="note" data-blocked="' + esc(i.blocked.reason) + '">' + esc(i.blocked.reason) + ": " + esc(i.blocked.question) + "</span>" : "") + "</button>";
   }
   function renderBoard() {
     if (!columnsEl) return;
@@ -246,7 +263,7 @@ dl.run dd { margin: 0; }
           : "";
         html += '<li class="row ' + g + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '"><span class="id">' +
           esc(it.id) + '</span> <span class="title">' + esc(it.title) + '</span> <span class="type t-' + esc(it.label) + '">' +
-          esc(it.label) + "</span> " + badge(it.stage) + copy + "</li>";
+          esc(it.label) + "</span> " + badge(it.stage) + fallbackBadge(it) + copy + "</li>";
         n++;
       });
     });
@@ -309,8 +326,8 @@ dl.run dd { margin: 0; }
     var meta = [];
     if (issue.label) meta.push(issue.label);
     if (issue.design) meta.push("design " + issue.design);
-    var h = '<h2><span class="id">' + esc(issue.id) + "</span> " + esc(issue.title) + " " + badge(issue.stage) + "</h2>" +
-      '<p class="meta">' + esc(meta.join(" · ")) + "</p>";
+    var h = '<h2><span class="id">' + esc(issue.id) + "</span> " + esc(issue.title) + " " + badge(issue.stage) + fallbackBadge(issue) + "</h2>" +
+      '<p class="meta">' + esc(meta.join(" · ")) + "</p>" + fallbackNote(issue);
     if (issue.raft) h += "<p>Raft " + idLink(issue.raft) + "</p>";
     h += runOfIssue(issue);
     h += group("Depends on", issue.dependsOn) + group("Dependents", issue.dependents);
@@ -327,8 +344,8 @@ dl.run dd { margin: 0; }
     if (r.label) meta.push(r.label);
     if (r.single) meta.push("single issue");
     if (r.design) meta.push("design " + r.design);
-    var h = '<h2><span class="id">' + esc(r.id) + "</span> " + esc(r.title) + " " + badge(r.stage) + "</h2>" +
-      '<p class="meta">' + esc(meta.join(" · ")) + "</p>" +
+    var h = '<h2><span class="id">' + esc(r.id) + "</span> " + esc(r.title) + " " + badge(r.stage) + fallbackBadge(r) + "</h2>" +
+      '<p class="meta">' + esc(meta.join(" · ")) + "</p>" + fallbackNote(r) +
       group("Waiting for", r.blockedBy) + group("Depends on", r.dependsOn) + group("Dependents", r.dependents);
     if (r.issues.length) {
       h += "<h3>Issues</h3><ul class=\"links\">" + r.issues.map(function (iid) {

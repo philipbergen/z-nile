@@ -52,6 +52,15 @@ max_tokens = 5000
 effort = "medium"
 fallbacks = []
 
+[roles.stream-review]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+effort = "high"
+fallbacks = ["grok"]
+
 [roles.final-review]
 model = "claude-fable-5-2"
 cli = "claude"
@@ -67,7 +76,7 @@ effort = "high"
 fallbacks = ["grok", "agent"]
 ]]
 local ONLY_GROK_CODE = [[
-[roles.code-review]
+[roles.stream-review]
 model = "grok-4.7"
 cli = "grok"
 runtime = "grok-cli"

@@ -217,6 +217,11 @@ return t.spec("tracker spend", function(it)
 
 	it("splits a raft's row over its members in one commit: minutes near, tokens exactly", function()
 		local before, head = tip(), git(prep, { "rev-parse", "HEAD" })
+		-- the raft is marked: the coherence review this spend records is written first, and --model stamps it
+		fs.writeFile(
+			`{prep}/pickman/.tracker/rafts/{raft}/design-review-001.md`,
+			"# Review 001\n\nVerdict: approve\n"
+		)
 		trOk(prep, {
 			"spend",
 			raft,
@@ -228,6 +233,8 @@ return t.spec("tracker spend", function(it)
 			"3001",
 			"--note",
 			"design-review-001",
+			"--model",
+			"claude-opus-5-5",
 		})
 		t.expect(tip()).toBe(before)
 		local changed = branchChanged(head)
@@ -261,7 +268,7 @@ return t.spec("tracker spend", function(it)
 			write(`{prep}/notes.txt`, "a\nb\nc\nd\ne\n")
 			git(prep, { "add", "-A" })
 			git(prep, { "commit", "-q", "-m", "prep" })
-			trOk(prep, { "spend", raft, "--phase", "prep", "--time", "10" })
+			trOk(prep, { "spend", raft, "--phase", "prep", "--model", "claude-sonnet-5-5", "--time", "10" })
 			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 			local ra, rb =
 				last(`pickman/.tracker/issues/{a}/spend.md`), last(`pickman/.tracker/issues/{b}/spend.md`)
@@ -284,7 +291,7 @@ return t.spec("tracker spend", function(it)
 		git(other, { "merge", "-q", "--squash", "FETCH_HEAD" })
 		git(other, { "commit", "-q", "-m", "prep demo (#1)" })
 		git(other, { "push", "-q", "origin", "HEAD:main" })
-		trOk(prep, { "spend", a, "--phase", "prep", "--time", "2" })
+		trOk(prep, { "spend", a, "--phase", "prep", "--model", "claude-sonnet-5-5", "--time", "2" })
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 		t.expect(last(`pickman/.tracker/issues/{a}/spend.md`).added).toBe(6) -- its own spec lines; the raft's check.sh is not its
 	end)
@@ -408,7 +415,7 @@ return t.spec("tracker spend", function(it)
 		git(other, { "push", "-q", "origin", "HEAD:main" })
 		trOk(prep, { "sync" })
 		local before = tip()
-		trOk(prep, { "spend", d, "--phase", "prep", "--time", "2" })
+		trOk(prep, { "spend", d, "--phase", "prep", "--model", "claude-sonnet-5-5", "--time", "2" })
 		t.expect(tip()).toBe(before)
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
 		local l = onBranch(`pickman/.tracker/issues/{d}/spend.md`)

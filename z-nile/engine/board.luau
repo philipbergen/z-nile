@@ -2,6 +2,7 @@
 -- The tracker board: reads the tracker tree into a model and renders it as one self-contained HTML page.
 local boardview = require("./boardview")
 local chart = require("./chart")
+local escalation = require("./escalation")
 local fs = require("@lune/fs")
 local history = require("./history")
 local ledger = require("./ledger")
@@ -44,12 +45,17 @@ export type Raft = {
 	doneAt: number?, -- first arrival in done/, UTC epoch seconds (history, else the members' newest spend row)
 	doneFrom: string?, -- "history" or "spend": where doneAt came from
 	rounds: { design: number, code: number }, -- review files of it, its members and the rafts retired into it
+	fallbackReviews: { string }, -- c0251: the newest round of a kind that the writer's own model line ran (a Fallback: line)
+	rereview: { [string]: string }, -- c0251: for each of those files, the command that asks for the cross-model re-review from here
 	dispatch: Dispatch?,
+	blocked: Blocked?, -- c0250: the raft is blocked (status blocked)
 	pr: Pr?, -- c0121 fills these on the served page; the static page leaves them nil
 	checks: Checks?,
 }
 -- Reserved for c0121's served page (live `gh` data); nil in every model c0118 builds.
 export type Pr = { number: number, url: string, state: string }
+-- c0250: why a card is in the blocked column: the note's reason and the first 200 characters of its question.
+export type Blocked = { reason: string, question: string }
 export type Checks = { state: string, url: string? }
 -- The dispatcher's run state for an id (c0117's .cache/dispatch/<id>/state.json): its step, outcome and model, and
 -- whether it waits for answers in questions.md.
@@ -77,7 +83,10 @@ export type Issue = {
 	doneFrom: string?,
 	age: number?, -- seconds between doneAt and the model's asOf
 	spend: Spend, -- from its spend.md (ledger.parse)
+	fallbackReviews: { string }, -- c0251, as on Raft
+	rereview: { [string]: string }, -- c0251, as on Raft
 	dispatch: Dispatch?,
+	blocked: Blocked?, -- c0250: the issue, or its raft, is blocked
 	pr: Pr?, -- c0121's, as on Raft
 	checks: Checks?,
 }
@@ -764,6 +773,18 @@ local function reviewFiles(dir: string, into: { string })
 	end
 end
 
+-- c0251: the text of each review file among `paths` (path -> text), for boardview.fallbacks. Which paths are review files
+-- is boardview.reviewPaths' alone.
+local function reviewTexts(paths: { string }): { [string]: string }
+	local out: { [string]: string } = {}
+	for _, path in boardview.reviewPaths(paths) do
+		if fs.isFile(path) then
+			out[path] = fs.readFile(path)
+		end
+	end
+	return out
+end
+
 -- Every retired raft (`<root>/rafts/retired/<R-id>`, c0116) with the keeper its `retired:` names.
 local function retiredOf(base: string): { { id: string, dir: string, keeper: string } }
 	local out = {}
@@ -844,6 +865,42 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	sortById(rawRafts)
 	sortById(rawIssues)
 
+	-- c0250: every blocked item with its reason and the first 200 characters of its note's question; a note that does
+	-- not parse is named in `problems`, and the card shows the reason alone
+	local blockedOf: { [string]: Blocked } = {}
+	for _, list in { rawRafts, rawIssues } do
+		for _, r in list do
+			local raftNote = if r.front.raft then blockedOf[r.front.raft] else nil
+			if status.effective(r.front, r.state) == "blocked" and raftNote then
+				-- a member of a blocked raft is blocked with it: the raft's note is its note
+				blockedOf[r.id] = raftNote
+			elseif status.effective(r.front, r.state) == "blocked" then
+				local path = `{r.dir}/escalation.md`
+				local question = ""
+				if fs.isFile(path) then
+					local note, why = escalation.parse(fs.readFile(path))
+					if note then
+						question = string.sub(escalation.question(note), 1, 200)
+					else
+						table.insert(problems, `{path} does not parse: {why}`)
+					end
+				else
+					table.insert(problems, `{path} is missing: {r.id} is blocked without its note`)
+				end
+				blockedOf[r.id] = { reason = r.front.blocked or "", question = question }
+				-- the members the raft lists wait with it, whatever their own raft: line says (a draft raft's members have
+				-- none on origin/main until the rafting PR lands)
+				if list == rawRafts then
+					for _, mid in listOf(r.front.issues) do
+						if blockedOf[mid] == nil then
+							blockedOf[mid] = blockedOf[r.id]
+						end
+					end
+				end
+			end
+		end
+	end
+
 	local raftIds: { [string]: boolean } = {}
 	for _, r in rawRafts do
 		raftIds[r.id] = true
@@ -875,8 +932,27 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			doneFrom = if doneAt[i.id] then "history" else nil,
 			age = nil,
 			spend = spendOf(spendRows(spendPath(i.root, i.state, i.id), problems)),
+			fallbackReviews = (function(): { string }
+				local own: { string } = {}
+				reviewFiles(i.dir, own)
+				return boardview.fallbacks(reviewTexts(own))
+			end)(),
+			rereview = {},
 			dispatch = facts.dispatch[i.id],
+			blocked = nil,
 		}
+		for _, file in issue.fallbackReviews do
+			local route = boardview.rereview({
+				kind = "issue",
+				state = i.state,
+				id = i.id,
+				slug = i.front.slug or "",
+				raft = issue.raft,
+			}, file)
+			if route then
+				issue.rereview[file] = route
+			end
+		end
 		table.insert(issues, issue)
 		issueById[i.id] = issue
 	end
@@ -950,7 +1026,10 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			doneAt = doneAt[r.id],
 			doneFrom = if doneAt[r.id] then "history" else nil,
 			rounds = { design = 0, code = 0 },
+			fallbackReviews = {},
+			rereview = {},
 			dispatch = facts.dispatch[r.id],
+			blocked = blockedOf[r.id],
 		}
 		local branch = branchOf(r.id, facts.refs, if hist and hist.activeAt then hist.activeAt[r.id] else nil)
 		if branch then
@@ -1089,6 +1168,13 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			if issue.project == p.name then
 				local raft = if issue.raft then raftById[issue.raft] else nil
 				issue.column = boardview.column(issue.stage, raft ~= nil and raft.launched)
+				-- c0250: an issue of a blocked raft waits with it, in the blocked column
+				local own = blockedOf[issue.id]
+					or (if issue.raft and issue.state ~= "done" then blockedOf[issue.raft] else nil)
+				if own and issue.state ~= "done" then
+					issue.blocked = own
+					issue.column = "blocked"
+				end
 				issue.age = boardview.age(issue.doneAt, facts.asOf)
 				table.insert(cards[issue.column], { id = issue.id, raft = issue.raft })
 			end
@@ -1132,6 +1218,16 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	for _, raft in rafts do
 		local design, code = boardview.rounds(files[raft.id])
 		raft.rounds = { design = design, code = code }
+		raft.fallbackReviews = boardview.fallbacks(reviewTexts(files[raft.id]))
+		for _, file in raft.fallbackReviews do
+			local route = boardview.rereview(
+				{ kind = "raft", state = rawRaftById[raft.id].state, id = raft.id, slug = "", raft = nil },
+				file
+			)
+			if route then
+				raft.rereview[file] = route
+			end
+		end
 	end
 	local charts: { [string]: ProjectCharts } = {}
 	for _, p in projectList do

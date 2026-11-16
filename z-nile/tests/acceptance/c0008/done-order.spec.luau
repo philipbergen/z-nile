@@ -141,9 +141,9 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
 			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
-			"# Final Review 001\n\nVerdict: approve\n"
+			"Model: claude-opus-5-5\n# Final Review 001\n\nVerdict: approve\n"
 		)
-		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
+		must(tr({ "commit", "-m", "review 001", "--model", "claude-sonnet-5-5", "--time", "1" }), "commit")
 		-- an origin whose URL contains github.com, and a pushed branch with an upstream
 		fs.writeDir(bare)
 		must(process.exec("git", { "init", "-q", "--bare", bare }), "init bare")
@@ -164,7 +164,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 				'  "pr edit")',
 				'    if [ -n "$GH_FAIL_READY" ]; then echo "gh: boom" >&2; exit 1; fi',
 				'    git --git-dir="$GH_BARE" rev-parse "refs/heads/$GH_BRANCH" > "$GH_READY_HEAD" ;;',
-				'  "pr view") echo "body" ;;',
+				'  "pr view") case "$*" in *statusCheckRollup*) sha=$(git rev-parse "origin/$3" 2>/dev/null || git rev-parse "$3"); printf \'{"state":"OPEN","isDraft":false,"headRefOid":"%s","mergeable":"MERGEABLE","statusCheckRollup":[{"name":"static","conclusion":"SUCCESS"}]}\' "$sha"; exit 0 ;; esac; echo "body" ;;',
 				"esac",
 				"exit 0",
 				"",
@@ -190,9 +190,12 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- an unresolved review: one open finding and no answer to it
 		write(
 			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
-			"# Final Review 001\n\n### F1 [low] an open finding\nEvidence: x\n\nVerdict: changes requested\n"
+			"Model: claude-opus-5-5\n# Final Review 001\n\n### F1 [low] an open finding\nEvidence: x\n\nVerdict: changes requested\n"
 		)
-		must(tr({ "commit", "-m", "unresolved review", "--time", "1" }), "commit")
+		must(
+			tr({ "commit", "-m", "unresolved review", "--model", "claude-sonnet-5-5", "--time", "1" }),
+			"commit"
+		)
 		git({ "push", "-q" })
 		local r = done(false)
 		t.expect(r.ok).toBe(false)
@@ -203,9 +206,12 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		write(
 			"pickman/.tracker/rafts/active/R0010/final-review-001.md",
-			"# Final Review 001\n\nVerdict: approve\n"
+			"Model: claude-opus-5-5\n# Final Review 001\n\nVerdict: approve\n"
 		)
-		must(tr({ "commit", "-m", "review approved", "--time", "1" }), "commit")
+		must(
+			tr({ "commit", "-m", "review approved", "--model", "claude-sonnet-5-5", "--time", "1" }),
+			"commit"
+		)
 		-- a promotion that fails is the last refusal before the ready call: done must refuse there too,
 		-- leave the tree as it was, and still not have called gh pr ready
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
@@ -215,8 +221,9 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 				.. REQ
 				.. '("@tests/lib/t")\n\nreturn t.spec("bad", function(it)\n\tit("fails", function()\n\t\tt.expect(1).toBe(2)\n\tend)\nend)\n'
 		)
-		must(tr({ "commit", "-m", "failing spec", "--time", "1" }), "commit")
+		must(tr({ "commit", "-m", "failing spec", "--model", "claude-sonnet-5-5", "--time", "1" }), "commit")
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.layerReview(work, "f0010") -- c0248: a layer is complete before the next starts or done binds it
 		seal.trace(work, "R0010")
 		local promoted = done(false)
 		t.expect(promoted.ok).toBe(false)
@@ -227,12 +234,16 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isFile(`{work}/pickman/.tracker/issues/active/f0010/acceptance/bad.spec.luau`)).toBe(true)
 		fs.removeFile(`{work}/pickman/.tracker/issues/active/f0010/acceptance/bad.spec.luau`)
-		must(tr({ "commit", "-m", "drop the failing spec", "--time", "1" }), "commit")
+		must(
+			tr({ "commit", "-m", "drop the failing spec", "--model", "claude-sonnet-5-5", "--time", "1" }),
+			"commit"
+		)
 	end)
 
 	it("rolls back and stays active when the layer pull request cannot be retargeted", function()
 		installGh()
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.layerReview(work, "f0010") -- c0248: a layer is complete before the next starts or done binds it
 		seal.trace(work, "R0010")
 		local before = git({ "rev-parse", "HEAD" })
 		local r = done(true)
@@ -253,8 +264,12 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		-- this raft has nothing to promote: the ready call must not depend on a promotion happening
 		-- c0120 override: the items are pickman's, in pickman/.tracker; its promoted specs in pickman/tests/acceptance
 		fs.removeFile(`{work}/pickman/.tracker/issues/active/f0010/acceptance/alpha.spec.luau`)
-		must(tr({ "commit", "-m", "no acceptance spec", "--time", "1" }), "commit")
+		must(
+			tr({ "commit", "-m", "no acceptance spec", "--model", "claude-sonnet-5-5", "--time", "1" }),
+			"commit"
+		)
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.layerReview(work, "f0010") -- c0248: a layer is complete before the next starts or done binds it
 		seal.trace(work, "R0010")
 		local before = git({ "rev-parse", "HEAD" })
 		local r = done(false)

@@ -1,19 +1,41 @@
 # Which model runs each stage. Files stack like .gitignore: a .models.toml closer to the work replaces only
 # the keys it sets. A role names what belongs to the stage (model, cli, runtime, rank, max_tokens, effort,
-# fallbacks). A fallback names what belongs to the model (its id, its runtime, and anything only that CLI
-# needs). A try is the role's rank, cap and effort on that model. Nothing defaults.
+# pool, fallbacks, rotate). A fallback names what belongs to the model (its id, its runtime, and anything only
+# that CLI needs). A member is a named extra model of a CLI (several models may run on one CLI). A try is the
+# role's rank, cap and effort on that model. Nothing defaults.
 # max_tokens counts input + cache writes + output (cache reads are left out); the step is killed when it passes it.
-# design-challenge names no author: the table gives it the same model as design, and naming the author would
-# drop that model. Raft-mode review uses the raft role for the same reason.
+# A role's tries are its own model, the members its `pool` lists (in that order), then its `fallbacks`. Pool members and
+# rotation are for review steps: a step that authors on the same role (z-raft on `raft`) tries the role's model, then its fallbacks.
+# A role with rotate = true is ordered by family (the picker, reviewpool.luau): a review goes first to a model line that
+# differs from the one that wrote the text and from the previous round's reviewer (tier 1), then to one that
+# differs from the writer only (tier 2), and last to the writer's own line, the exact model that wrote it at the very
+# end (tier 3: the flagged fallback, which never blocks the chain). `author` names the role whose first choice stands in
+# for the writer when no spend row records it; no try is dropped for it.
+# [families] maps a model line to its id prefixes (the longest prefix wins): add a line when a CLI brings new ids.
+# design-challenge names no author: the table gives it the same model as design. Raft-mode review uses the raft role.
+
+[families]
+opus = ["claude-opus-"]
+fable = ["claude-fable-"]
+sonnet = ["claude-sonnet-"]
+haiku = ["claude-haiku-"]
+kimi = ["kimi-"]
+grok = ["grok-"]
+deepseek = ["deepseek-"] # reachable once opencode is added as a CLI
 
 [dispatch]
-# the merge gates the dispatcher passes itself when the PR is green and mergeable; the run's PR is always a human's.
+# the gates the dispatcher passes itself: prep and raft merge a green, mergeable PR; run lands a raft's finished stack
+# with `./zn done` once landcheck passes (c0252). merge_retries: reruns of the worker for one repeated failure it can fix
+# (2: three runs in all) before the raft blocks.
 # Unset, or unreadable, means none: a closer file's `auto_merge = []` turns them off for its items.
-auto_merge = ["prep", "raft"]
+auto_merge = ["prep", "raft", "run"]
+merge_retries = 2
 # a step that prints nothing for this long is killed (a CLI never waits for quota)
 stall_seconds = 300
 # the same limit while a tool call runs (a full gate is quiet for minutes)
 tool_seconds = 900
+# quota_cap_hours = <whole hours, at least 1>: c0253's worker blocks the raft with `quota` (./zn block) when every CLI
+# stays out of quota past this many hours. Unset, the worker has no cap yet.
 
 [fallback.kimi]
 model = "kimi-code-k3.1-pro"
@@ -30,6 +52,23 @@ runtime = "cursor-cli"
 max_calls = 200
 # and a wall-time ceiling, since a stream can hide its calls (fail closed)
 max_minutes = 240
+
+# a second Claude model on the same CLI, tried after a role's own model and before its fallbacks
+[member.fable]
+cli = "claude"
+model = "claude-fable-5-2"
+runtime = "claude-cli"
+
+[member.opus]
+cli = "claude"
+model = "claude-opus-5-5"
+runtime = "claude-cli"
+
+# the cheap second model of a stream review (a Haiku-written layer is reviewed by Sonnet)
+[member.sonnet]
+cli = "claude"
+model = "claude-sonnet-5-5"
+runtime = "claude-cli"
 
 [roles.idea]
 model = "claude-fable-5-2"
@@ -48,6 +87,7 @@ rank = 4
 max_tokens = 300000
 effort = "xhigh"
 author = "idea"
+rotate = true
 fallbacks = ["kimi", "grok", "agent"]
 
 [roles.design]
@@ -66,6 +106,8 @@ runtime = "claude-cli"
 rank = 4
 max_tokens = 3000000
 effort = "xhigh"
+rotate = true
+pool = ["fable"]
 fallbacks = ["kimi", "grok", "agent"]
 
 [roles.raft]
@@ -75,6 +117,8 @@ runtime = "claude-cli"
 rank = 3
 max_tokens = 3000000
 effort = "high"
+rotate = true
+pool = ["fable"]
 fallbacks = ["kimi", "grok", "agent"]
 
 [roles.implementation]
@@ -94,6 +138,8 @@ rank = 4
 max_tokens = 2000000
 effort = "xhigh"
 author = "implementation"
+rotate = true
+pool = ["fable"]
 fallbacks = ["kimi", "grok", "agent"]
 
 [roles.final-review]
@@ -103,4 +149,19 @@ runtime = "claude-cli"
 rank = 4
 max_tokens = 2000000
 effort = "xhigh"
+rotate = true
+pool = ["opus"]
 fallbacks = ["kimi", "grok", "agent"]
+
+# the one cheap review: a stream review of a layer, on a model line other than the Sonnet that writes the code. Its second
+# model is the cheap Sonnet member (kimi and grok are not cheap); opencode (DeepSeek) joins as a fallback once it is a CLI.
+[roles.stream-review]
+model = "claude-haiku-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 2
+max_tokens = 1000000
+effort = "medium"
+rotate = true
+pool = ["sonnet"]
+fallbacks = []

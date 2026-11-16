@@ -78,8 +78,9 @@ local function answer(lines: { string }, ruling: string?): Result
 		local doc = "pickman/.tracker/rafts/active/R0010/R0010.md"
 		write(doc, fs.readFile(`{work}/{doc}`) .. "\n" .. ruling)
 	end
-	must(tr({ "commit", "-m", "refute 001", "--time", "1" }), "commit refute")
+	must(tr({ "commit", "-m", "refute 001", "--model", "claude-sonnet-5-5", "--time", "1" }), "commit refute")
 	must(tr({ "finish", "f0010" }), "finish")
+	seal.layerReview(work, "f0010") -- c0248: a layer is complete before the next starts or done binds it
 	seal.trace(work, "R0010")
 	return tr({ "done", "R0010" })
 end
@@ -140,9 +141,9 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
 		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
 		write(
 			"pickman/.tracker/rafts/active/R0010/review-001.md",
-			"# Review 001\n\n### F1 [low] a small thing\nEvidence: x\n\n### F2 [high] a big thing\nEvidence: y\n\nVerdict: changes\n"
+			"Model: claude-opus-5-5\n# Review 001\n\n### F1 [low] a small thing\nEvidence: x\n\n### F2 [high] a big thing\nEvidence: y\n\nVerdict: changes\n"
 		)
-		must(tr({ "commit", "-m", "review 001", "--time", "1" }), "commit")
+		must(tr({ "commit", "-m", "review 001", "--model", "claude-sonnet-5-5", "--time", "1" }), "commit")
 		reviewed = git({ "rev-parse", "HEAD" })
 	end)
 

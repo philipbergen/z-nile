@@ -37,7 +37,7 @@ local function raft(over: { [string]: any }): work.RaftFact
 		status = "prepared",
 		designReady = true,
 		depsMet = true,
-		questions = false,
+		blocked = nil,
 		issues = { "c0010" },
 		layers = {},
 		holder = "Ada <ada@example>",
@@ -66,11 +66,11 @@ return t.spec("z-work's next action", function(it)
 		local d = decide({ high, low }, nil, nil)
 		t.expect(d.raft).toBe("R0009")
 		t.expect(d.action).toBe("ready")
-		local blocked = raft({ id = "R0008", questions = true })
+		local blocked = raft({ id = "R0008", status = "blocked", blocked = "red-gate" })
 		local raw = raft({ id = "R0007", status = "new", designReady = false })
 		local none = decide({ blocked, raw, raft({ id = "R0030", where = "active" }) }, nil, nil)
 		t.expect(none.action).toBe("none")
-		t.expect(string.find(none.why, "R0008: needs a human", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(none.why, "R0008: is blocked (red-gate)", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(none.why, "R0007: is new", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(none.why, "R0030: is held", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(work.say(none), "nothing to do - ", 1, true) ~= nil).toBe(true)
@@ -120,10 +120,9 @@ return t.spec("z-work's next action", function(it)
 		local named = decide({ other, held }, "R0010", nil)
 		t.expect(named.raft).toBe("R0010")
 		t.expect(named.action).toBe("implement")
-		held.questions = true
-		t.expect(decide({ held }, "R0010", nil).action).toBe("release")
 		held.where = "backlog"
-		held.status = "prepared"
+		held.status = "blocked"
+		held.blocked = "red-gate"
 		local released = decide({ held, other }, "R0010", nil)
 		t.expect(released.action).toBe("end")
 		t.expect(string.find(released.why, "fresh session", 1, true) ~= nil).toBe(true)
@@ -323,9 +322,10 @@ return t.spec("z-work's next action", function(it)
 		local doneRaft = raft({ where = "done", status = "done" })
 		t.expect(decide({ doneRaft }, "R0010", nil).action).toBe("end")
 		t.expect(stepOf(facts({ where = "done", status = "done" }))).toBe("stop 0")
-		local asked = raft({ where = "active", status = "active", questions = true })
-		t.expect(decide({ asked }, "R0010", nil).action).toBe("release")
-		t.expect(stepOf(facts({ where = "active", status = "active", questions = true }))).toBe("stop 3")
+		local asked = raft({ where = "backlog", status = "blocked", blocked = "red-gate" })
+		t.expect(decide({ asked }, "R0010", nil).action).toBe("end")
+		t.expect(stepOf(facts({ where = "backlog", status = "blocked", blocked = "red-gate" })))
+			.toBe("stop 3")
 		local building = raft({
 			where = "active",
 			status = "active",

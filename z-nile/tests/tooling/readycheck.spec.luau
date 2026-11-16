@@ -55,7 +55,6 @@ local function raft(over: { [string]: any }): readycheck.Raft
 		design = "ready",
 		doc = "---\ndesign: ready\n---\n",
 		grouped = nil,
-		questions = false,
 		listed = { "c0001" },
 		members = { member(nil) },
 		files = { ["check.sh"] = CHECK },
@@ -68,10 +67,13 @@ local function raft(over: { [string]: any }): readycheck.Raft
 end
 
 return t.spec("ready would accept it", function(it)
-	it("refuses questions, a held raft, and a missing approval", function()
-		local asked = raft({ questions = true })
+	it("refuses a blocked raft, a held raft, and a missing approval", function()
+		local asked = raft({ status = "blocked" })
 		local why = readycheck.reason(asked)
-		t.expect(string.find(why or "", "questions.md", 1, true) ~= nil).toBe(true)
+		t.expect(
+			string.find(why or "", "R0001 is blocked: ./zn resolve R0001 <decision> first", 1, true) ~= nil
+		)
+			.toBe(true)
 		local held = raft({ where = "active", status = "active" })
 		t.expect(string.find(readycheck.reason(held) or "", "only a prepared raft", 1, true) ~= nil)
 			.toBe(true)
@@ -222,8 +224,8 @@ return t.spec("ready would accept it", function(it)
 					else "refuses",
 			},
 			{
-				"questions present",
-				if proceeds(whole({ a }, groupedOf({ a }), nil, { questions = true }))
+				"blocked",
+				if proceeds(whole({ a }, groupedOf({ a }), nil, { status = "blocked" }))
 					then "proceeds"
 					else "refuses",
 			},
@@ -242,7 +244,7 @@ return t.spec("ready would accept it", function(it)
 			["folded with its review"] = "proceeds",
 			["member redesigned since grouping"] = "refuses",
 			["dependency not done"] = "refuses",
-			["questions present"] = "refuses",
+			blocked = "refuses",
 			held = "refuses",
 			["no members"] = "refuses",
 		}

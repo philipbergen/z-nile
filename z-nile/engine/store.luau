@@ -165,8 +165,7 @@ function store.formatId(prefix: string, n: number): string
 end
 
 -- Frontmatter: simple `key: value` lines between leading `---` fences.
-function store.readFront(path: string): { [string]: string }
-	local text = fs.readFile(path)
+function store.parseFront(text: string): { [string]: string }
 	local block = string.match(text, "^%-%-%-\n(.-)\n%-%-%-")
 	local out: { [string]: string } = {}
 	if block then
@@ -178,6 +177,10 @@ function store.readFront(path: string): { [string]: string }
 		end
 	end
 	return out
+end
+
+function store.readFront(path: string): { [string]: string }
+	return store.parseFront(fs.readFile(path))
 end
 
 -- `text` with frontmatter key `key` set to `value` (added as the last key when missing), or nil when the text

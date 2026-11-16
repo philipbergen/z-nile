@@ -1,10 +1,12 @@
 --!strict
 -- Whole-tree tracker audit: every problem, never just the first. Reads the tree with plain directory listings, so a
 -- malformed tree (which store.find refuses) can still be described. See c0880.
+local escalation = require("./escalation")
 local fs = require("@lune/fs")
 local ids = require("./ids")
 local process = require("@lune/process")
 local projects = require("./projects")
+local provenance = require("./provenance")
 
 export type Level = "error" | "warning"
 export type Problem = { level: Level, code: string, path: string, message: string }
@@ -217,6 +219,59 @@ function audit.run(root: string): { Problem }
 			if not fm.slug or fm.slug == "" then
 				add("error", "no-slug", f.path, `{f.id}.md has no slug:`)
 			end
+			-- c0250: a blocked item holds a reason from the closed list and an unresolved note that parses (a member of a
+			-- blocked raft is covered by the raft's note); `blocked:` belongs to a blocked item only
+			local isBlocked = string.match(fm.status or "", "^blocked%-") ~= nil
+			local reasonOf = fm.blocked or ""
+			if isBlocked then
+				if reasonOf == "" then
+					add(
+						"error",
+						"blocked-no-reason",
+						f.path,
+						`{f.id} is blocked without a blocked: line: ./zn block {f.id} <reason> sets it and re-files its note`
+					)
+				elseif not table.find(escalation.REASONS, reasonOf) then
+					add(
+						"error",
+						"blocked-bad-reason",
+						f.path,
+						`{f.id}'s blocked: {reasonOf} is not a reason ({table.concat(escalation.REASONS, ", ")}): ./zn resolve {f.id} <decision> clears the block`
+					)
+				end
+				local notePath = `{abs}/escalation.md`
+				local ownNote = (fm.raft or "") == ""
+				if ownNote then
+					local why: string? = nil
+					if not fs.isFile(notePath) then
+						why = "has no escalation.md"
+					else
+						local note, parseWhy = escalation.parse(fs.readFile(notePath))
+						if not note then
+							why = `has an escalation.md that does not parse ({parseWhy})`
+						elseif note.resolution then
+							why = "has only a resolved escalation.md"
+						end
+					end
+					if why then
+						add(
+							"error",
+							"blocked-no-note",
+							f.path,
+							`{f.id} is blocked but {why}: ./zn block {f.id} {if reasonOf ~= ""
+								then reasonOf
+								else "<reason>"} re-files the note`
+						)
+					end
+				end
+			elseif fm.blocked ~= nil and fm.blocked ~= "" then
+				add(
+					"error",
+					"blocked-stray",
+					f.path,
+					`{f.id} has blocked: {fm.blocked} but is not blocked: remove the line, or ./zn block {f.id} {fm.blocked} if it is preparing`
+				)
+			end
 		else
 			local legacy = nil
 			for _, name in fs.readDir(abs) do
@@ -403,6 +458,15 @@ function audit.run(root: string): { Problem }
 					f.path,
 					`{f.id} is a raft with no member (given back, or emptied by unfold): retire it with ./zn recombine <a raft of its project and type> {f.id}`
 				)
+			end
+		end
+	end
+	-- c0263: an item's provenance.md parses, names its folder's id and holds known events and actors
+	for _, f in found do
+		local recFile = `{root}/{f.path}/provenance.md`
+		if fs.isFile(recFile) then
+			for _, why in provenance.problems(recFile, fs.readFile(recFile)) do
+				add("error", "provenance", f.path, why)
 			end
 		end
 	end

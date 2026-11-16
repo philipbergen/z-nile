@@ -1,6 +1,6 @@
 --!strict
 -- R0052 code review 001 (c0117): F5, the model steps' skills and zz-rules' Landing say that under the dispatcher a
--- step neither asks nor merges at its PR (the user's G4), and z-design's scope question goes to questions.md; F6,
+-- step neither asks nor merges at its PR (the user's G4), and z-design's scope question goes to escalation.md and `./zn block`; F6,
 -- `.models.toml` takes only a model id the ledger takes (one predicate); F8, no comment states a decided guess as
 -- pending or two runtimes per CLI. Reads the real tree.
 local fs = require("@lune/fs")
@@ -29,7 +29,7 @@ return t.spec("c0117 the dispatcher's texts and model ids (R0052 code review 001
 			at(zd, "Ask the user before merging prep they didn't request. " .. HEADLESS, "z-design §6")
 			at(
 				zd,
-				"ask the user before you answer it (under the dispatcher: write the question to `$ZN_DISPATCH_DIR/questions.md` and stop)",
+				"ask the user before you answer it (under the dispatcher: write `escalation.md` in the issue's folder and run `./zn block <id> needs-decision`, then stop)",
 				"z-design §5"
 			)
 			at(read("z-nile/skills/z-raft/SKILL.md"), HEADLESS, "z-raft §5")

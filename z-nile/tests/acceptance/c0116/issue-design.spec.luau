@@ -91,6 +91,8 @@ return t.spec("c0116 z-design designs one issue with no raft; its reviews roll u
 			"50",
 			"--note",
 			"design-review-001",
+			"--model",
+			"claude-opus-5-5",
 		})
 		local names = fs.readDir(`{dir}/spend.d`)
 		table.sort(names)
