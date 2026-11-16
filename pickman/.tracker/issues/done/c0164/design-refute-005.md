@@ -1,0 +1,5 @@
+# c0164 design refute 005
+
+- F1: fixed, by the review's first part: the frames carry the game's values (every pellet eaten on the level-clear frames, on both passes; a moving, turning, jumping player in the busy pass), and the new case then kills X1, X2 and X3 (run, killed, with every earlier mutant). The second part (a data-path rule added to main-walls) is not taken: the case now kills the rebinding mutants, and the kept pin stays the content the user's decision named. consequences: views.patch and walls.spec's views digest regenerated; three Rules rows.
+- F2: fixed: the Design and the case's comment say which busy fields change and that the holes and marks stay put, and that the case sits beside main-walls (not "replaces"); the Test plan names walls.spec's current first case; main-walls' header says its variant case still uses the calls' text as anchors. consequences: both digests regenerated.
+- F3: fixed: the lesson note says the placement pin closed the guards, not the inputs, and what still needed real values. consequences: none.

@@ -9,6 +9,7 @@ export type Steer = { held: Movement.Intent? } -- the sector the left stick is e
 local BUTTONS: { [string]: View.Action } = {
 	ButtonA = "Jump", -- the bottom face button: PlayStation's cross, Xbox's A
 	ButtonR2 = "Fire",
+	ButtonY = "Pick", -- the wall pick (f0126; user, 2026-10-25: "Y / triangle")
 	ButtonR3 = "Snap",
 	DPadUp = "Forward",
 	DPadDown = "Back",

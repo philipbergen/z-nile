@@ -2,7 +2,7 @@
 title: Restated rules move together
 when: design
 tags: [stale-text, docs]
-check: After changing a rule, does every place that restates it (AGENTS.md, other skills, the raft document, comments) still agree or point to one owner, with the new wording pinned and any lesson rewrite folded into the general rule? And after a scope change, has every sweep of the earlier design's text (Non-goals, the Regression guard, game-design.md, the landing order, the experiments' preamble) been redone?
+check: After changing a rule, does every place that restates it (AGENTS.md, other skills, the raft document, comments) still agree or point to one owner, with the new wording pinned and any lesson rewrite folded into the general rule? And after a scope change, has every sweep of the earlier design's text (Non-goals, the Regression guard, game-design.md, the landing order, the experiments' preamble) been redone, by a search for the old non-goal's words and for "either order", and, where a sentence names CI as the backstop because a worktree lacks a property of the checkout, has the design given the local check that property, and, for a clone that runs the gate outside the repo, does its origin still point at this checkout or is the real git directory missing from the `PICKMAN_FENCE_REAL_GIT` value the gate inherits? When a refute answers "fixed" for a finding that named a sentence to change, does it search for that sentence and find it gone? And when a round's answer adds a failure path (a time limit, a fallback), have the earlier promises it contradicts been swept, not only the sentences the reviewer named? And does every cross-reference into the issue's own document (a check.sh comment naming an Implementation step, an AC number) still point at the text it names And did the sweep for a restated rule cover every project's `.tracker/architecture.md`, not only the skills and the README?
 ---
 A rule is usually stated in one place and summarized in several others. A fix that changes the rule but not the summaries leaves an executor or a future agent reading the old rule.
 
@@ -20,6 +20,44 @@ R0044 design review 2 (F4): rounds 1 and 2 changed the design behind a separate 
 
 c0115 design review 015 F2: round 014 fixed the engine's move-commit lookup (subject only, not `--grep`), and AC13's `check.sh` kept the old `--grep` for the same commit. When a lookup is fixed, search the item's own sequestered files (check.sh, experiments, specs) for the same mechanism in the same change.
 
+c0118 design review 009 F1: a note added to a lesson's body restated a new rule, but the lesson's `check:` (the only line `./zn lessons` lists) still asked the old question. A note that changes what a lesson teaches updates its `check:` in the same change.
+
 A scoping sentence covers only what it points at (c0117 design review 010 F1): "the names above are the interactive path's" left a section further down still stating the old rule unscoped. When a rule gains a second path, search the whole skill for the old rule's wording, not just the section you edited, and scope each hit.
 
-f0126 design review 006 F7: after the user widened f0126 to every input, the old non-goal "a gamepad button (f0146)", "touch has no pick", "either order" and the first prototype's base and counts survived beside the new sections.
+
+c0172 design review 001 F2: deleting the word CI from Merging left zz-execute, the worktree paragraph, the raft template and the Linux bullet still telling the agent that CI is the final check. The worktree sentence existed because a worktree under the repo loads the main checkout's `.luaurc`. The local check has to be a clone whose parent directories are not a checkout of this repo, not a renamed sentence about the same worktree.
+
+c0172 design review 002 F1: that clone, made with `git clone` of the local checkout, kept `origin` pointed at the checkout, and `pre-push` allows a push to a local directory that is absent from `PICKMAN_FENCE_REAL_GIT`. The procedure removes `origin` and appends this checkout's git directory to the variable the gate inherits.
+
+**Also:** f0148 design review 002 F3, F4: round 1 changed Behaviour 5 but left the Edge cases' "the lobby stores the best instead", and game-design.md kept "(1 until f0148)" twice.
+
+**Also:** f0148 design review 003 F3: round 2 bounded the lobby's write at 5 s, which made "a later arrival without a new pick starts on level 1" false when the write lands after the claim; the sentence was swept in round 3.
+
+c0263 design review 006 F1, F9: a refute that says a spec was changed must paste the grep showing the changed line; two specs asserted opposite things about `merged` after a refute claimed one was fixed.
+
+When a mechanism is replaced, its other copies are replaced too (c0263 design review 011 F2): round 3 moved the sync to settling records by item id, and remap kept the retired by-path rule; list every place that merges the same file and give them one routine.
+c0260 design review 007 F5: a refute that says "fixed (greps run)" pastes each grep's output and runs the grep the reviewer named, not only the patterns the author chose.
+
+**Also:** c0279 design review 004 F4: a late user decision changed a value (the stall cases' limit from 2 s to 10 s); the Design's general claims that the old value supported ("none longer", "no added cost", "holds under any load", the Test plan's three modes, the size) stayed. After a late decision, grep for every claim the old value supported, not just for the number.
+
+**Also:** c0279 design review 005 F1: a `fixed:` answer to a finding whose evidence is a list must answer each bullet on its own line; round 4 F5 listed ten stale places, four stayed, and the refute said "fixed". Check: for each evidence bullet, can the refute point to the changed line (from a grep rerun after the edit), or say why it stays?
+
+**Note (c0261 design review 010 F10):** after a redesign, search the document for the vocabulary of the old design (`--final`, "rounds", "final round") in the Solution's prep bullet, the .models.toml header, comments and Open questions, not only in the skills.
+
+c0264 design review 009 F5 (re-prep): a withdrawn ticket's `depends_on` edges move to new tickets; the roadmap prose listing a raft's outside dependencies named the old ones. Re-read the members' `depends_on` before restating a dependency list, and check it against the tracker.
+
+**Note** (R0100 design review 002 F3): a refute answered "fixed" did not find the sentence the finding quoted ("Flagged for the user in Open to the human") still standing in Risks. When an answer changes a ruling, grep the raft or issue document for every sentence that states or implies the old one.
+
+**Note** (c0330 design review 001 F3): a prototype added a fallback reader, and the prose still said the change "adds no refusal and removes none" and listed only the tickets the first edit affected. When a late edit changes who is affected, rerun the sweep (a probe over real tickets, c0157 here) and rewrite every sentence that counted them, the contract comment and the command table row included.
+
+c0177 design review 001 F2: a narrowing that changes a spec's baseline (f0125's 10%, from the classic tables to the same config untuned) left the old baseline in the spec's header and titles, the owning item's `check.sh` labels and a game-design.md row, and the design said the row named no baseline when it said "classic". Search for the baseline's word across titles, headers, labels and decision rows, not for the one sentence already known.
+
+**Note (c0306's prep, 2026-11-14, design review 001 F8):** c0306's check.sh said the slow tier is run by "Implementation step 13", copied from another issue's check, while c0306 has ten steps.
+
+**Note** (R0103 code review 001 F1): c0330 narrowed a refusal and the contract comment and the zz-rules row said the Solution was simply optional, leaving out the refusal the code kept (a fence-only Solution). A restatement of a narrowed rule names what still fails, not only what no longer does. Check: does each restatement list the cases the code still refuses?
+
+**Also:** d0297 design review 001 F6: the new rule "the selector never names a sequestered spec" was added beside the old sentence "on a layer branch, that ticket's acceptance specs", in zz-test and in the selector's header, and a context comment still described the list the rule now filters. Each restatement had to say "promoted" or name the flag.
+
+**Note** (c0266 design review 001 F1, F4): c0266 rewrote "tooling, CI and test fixes are chores" by searching for the old rule's words, and left a watch miss called a chore in z-ticket and zz-execute but a defect in zz-test, a slow gate called both in one sentence, and watch-net still typing its capture a defect. When a rule that classifies work changes, the sweep searches for the events it classifies (a watch miss, a graph miss, a slow gate, a red merge gate), not only the rule's old words, and checks the tooling that files items for those events (watch-net's `type:`). Check: for each event a skill tells someone to file, do the skill, the tooling that files it and every pinned sentence give it the same type? And does a question an earlier prep left to this one (d0298's "whether z-nile's defects count in the rework rate") get its answer and the reason in the design?
+
+c0273 design review 001 F2: the sweep for `*.project.json` covered the README and the skills but not `arcade/.tracker/architecture.md`, which restates a place's project files and the selector's match twice.

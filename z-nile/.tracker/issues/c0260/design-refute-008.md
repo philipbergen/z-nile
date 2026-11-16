@@ -1,0 +1,11 @@
+# Refute 008: c0260 (round 5, answered after the user's decision on F4; the next review is design-review-008)
+
+- F1 (high): fixed: audit.spec "the everyday states pass clean" (a fresh marked stub at `draft`, an agent-filed marked ticket at `reviewed`, a marked unrecorded issue under `done/`, which the audit does not judge); mutants T1 (`kind ~= "user"` as the rule), T2 (no `reviewed|ready` condition) and T3 (no `done/` exemption) each die (fixture matching widened to `c090` after T3 survived once because the case filtered out its own c0901).
+- F2 (medium): fixed: `capturecheck.satisfies` needs every one of the five sections non-empty and of its kind (a `### Message`, a `### Q1`, a `### Round 1`, a confirmation line); exempt.spec empties each section in turn and breaks each kind; mutants T4 and T5 die.
+- F3 (medium): fixed: `captureScope` refuses a land whose agent-marker section differs from the base's (added, changed or removed); z-ticket says a stub an agent made without the flag cannot be exempted afterwards (recreate it with the flag, or capture it as a user ticket); land.spec adds a marker to a user's stub and is refused; mutant T6 dies.
+- F4 (medium): decided by the user ("Plan file keeps every restatement"): c0247's plan-file sentence is reworded again: the plan file keeps the original messages under `Ask (verbatim)` and every restatement with the user's replies, in order and dated, under `Restatements`; the whole sentence is c0260's pin (skills-ticket.spec, mutant T7 removes the clause and dies); the Override names c0247's docs.spec AC2 and check.sh AC8.
+- F5 (medium): fixed, greps run and pasted:
+  - `$ grep -n "keyed on\|keys on\|dated today\|told the interview" z-nile/skills/z-ticket/SKILL.md z-nile/skills/zz-review/SKILL.md z-nile/engine/dispatch.luau` printed nothing (exit 1).
+  - `$ grep -n 'keyed on\|keys on\|after review 004\|rerun below' c0260.md` printed nothing.
+  - `$ grep -c 'new raft' c0260.md` printed 4 (Record enforcement, Engine, the Rules row, AC10), and Implementation step 4 names it.
+  - The Verification log is filled; the Round count lists 003 to 008; the Regression guard and the Overrides line say the order is a stated convention (the user's "Just state the order"); step 6's pin is the whole sentence.

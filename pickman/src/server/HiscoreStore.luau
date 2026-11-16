@@ -3,7 +3,9 @@
 -- the retries, the budgets, the ordered integer, the rank) is Hiscores.drive; this module only opens the stores,
 -- spends no thought on policy, and hands drive the calls it needs. A submit never waits: the write runs on its own
 -- thread. The stores are shared by every place of the experience, and a beta server has stores of its own because
--- it is another experience, so the names carry no environment prefix.
+-- it is another experience, so the names carry no environment prefix. A run first goes to the per-player boards
+-- (Hiscores.drive), then, with the all-time bests drive read back, to the all-time top-N list of runs
+-- (Hiscores.driveTop); the rank a player hears is the run's place on that list, or that it missed it.
 local DataStoreService = game:GetService("DataStoreService")
 
 local Hiscores = require("@game/ReplicatedStorage/Shared/Logic/Hiscores")
@@ -11,7 +13,7 @@ local Hiscores = require("@game/ReplicatedStorage/Shared/Logic/Hiscores")
 local HiscoreStore = {}
 
 local pending = 0
-local listener: ((userId: string, run: number, rank: number) -> ())? = nil
+local listener: ((userId: string, run: number, rank: number?, missed: number?) -> ())? = nil
 
 local BUDGETS: { [string]: EnumItem } = {
 	get = Enum.DataStoreRequestType.StandardRead,
@@ -28,6 +30,10 @@ end
 local function companionStore(board: Hiscores.Board): DataStore
 	local name, scope = Hiscores.storeTarget("companion", board, true)
 	return DataStoreService:GetDataStore(name, scope)
+end
+
+local function topStore(): DataStore
+	return DataStoreService:GetDataStore(Hiscores.TOP_STORE, Hiscores.TOP_SCOPE)
 end
 
 -- a pcall's result as the (value, error) pair Hiscores.Io uses
@@ -86,15 +92,39 @@ local io: Hiscores.Io = {
 	end,
 }
 
--- Write a finished run. Returns at once; `listen` hears the player's all-time rank once the write is done.
+local top: Hiscores.TopIo = {
+	update = function(transform: ({ Hiscores.TopRun }?) -> { Hiscores.TopRun }?): (any, string?)
+		return answer(function()
+			return topStore():UpdateAsync(Hiscores.TOP_KEY, transform :: any)
+		end)
+	end,
+}
+
+-- Write a finished run. Returns at once; `listen` hears the run's place on the top-N list once the write is done.
 function HiscoreStore.submit(userId: string, name: string, score: number, level: number, run: number)
 	pending += 1
 	local ok, err = pcall(task.spawn, function()
 		local fine, failure = pcall(function()
-			local attempt = { name = name, userId = userId, level = level, score = score }
-			local result = Hiscores.drive(io, attempt, os.time(), Hiscores.RETRY)
-			if result.rank ~= nil and listener ~= nil then
-				listener(userId, run, result.rank)
+			local now = os.time()
+			local entry = Hiscores.topRun(
+				{ name = name, userId = userId, level = level, score = score },
+				now,
+				run,
+				(game :: any).JobId
+			)
+			-- the per-player rows this run writes name it, so a server that merges this best first uses the run's id
+			local attempt = {
+				name = name,
+				userId = userId,
+				level = level,
+				score = score,
+				run = if entry then entry.id else nil,
+				at = if entry then entry.at else nil,
+			}
+			local result = Hiscores.drive(io, attempt, now, Hiscores.RETRY)
+			local placed = Hiscores.driveTop(top, io, entry, result.rows, Hiscores.RETRY)
+			if placed.known and listener ~= nil then
+				listener(userId, run, placed.place, placed.missed)
 			end
 		end)
 		if not fine then
@@ -113,8 +143,9 @@ function HiscoreStore.pending(): number
 	return pending
 end
 
--- The one function called with (userId, run, rank) when a write found the player on the all-time board.
-function HiscoreStore.listen(fn: (userId: string, run: number, rank: number) -> ())
+-- The one function called with (userId, run, rank, missed) once a run's place is known: `rank` is its place on the
+-- top-N list, or `missed` is N when it is not on it.
+function HiscoreStore.listen(fn: (userId: string, run: number, rank: number?, missed: number?) -> ())
 	listener = fn
 end
 

@@ -1,0 +1,6 @@
+- design-review-001 F1: z-design/lesson-facts-come-from-the-record, z-design/spec-design-correspondence
+- design-review-001 F2: z-design/design-the-execution-window
+- design-review-001 F3: z-design/spec-design-correspondence
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/lesson-facts-come-from-the-record
+- design-review-001 F6: z-design/experiments-assert-on-the-assertions-subject

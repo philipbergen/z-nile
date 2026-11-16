@@ -1,0 +1,8 @@
+# Answers to design-review-002 (c0279)
+- F1 (high, scope): not decidable by the author; recorded as an open decision for the user in Non-goals and E5, with the three options and their cost. The design is option (ii) (accept the residual) until the user decides. If the user says (i), the change is small: c0040's closer file, the tool fake's quiet, an AC2 delay before the first line, one mutant row.
+- F2: fixed: the poll's bound is wall-clock (`os.time`), the grandchildren `sleep 3600`; lesson note added to zz-test/hold-on-markers-not-sleeps.
+- F3: M8 was built and run; the first two attempts edited the wrong branch (see design-refute-003 F1); the corrected M8 fails `stalled` and M8b (hold 20 s) passes, so the silent hold is what kills it. Row 3 is M8/M8b, M1 has its own row.
+- F4: fixed: pins.sh compares the exact text of the `stop`, `cap` and `push` entries with `acceptance/fakecli-modes.expected`; tried on three wrong fakes (a delay after the stop, a `while true` heartbeat, the pid written with the wrong `$$`): all fail.
+- F5: fixed: AC3 also pins `git hash-object` of the spec to the reviewed blob (a ref cannot move it); step 0 reads the base from the remote now and again before the PR. The golden diff still uses the merge base, as the readable record.
+- F6: fixed: harvest mappings corrected.
+- F7: fixed: logs added (`experiments/unfixed-check-ac2-push-failure.txt`, `draft1-other-fakecli-users.txt`), E1b and E5 reworded, `kill` from PATH, the 60 s bound described as a wall-clock bound, not unreachable. `design: reviewed` is set when the final round is done; spend rows are recorded at the end.

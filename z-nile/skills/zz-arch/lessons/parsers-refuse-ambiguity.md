@@ -11,3 +11,5 @@ A record shaped for one value loses the second one, and a parser that keeps the 
 **How to apply:** for each field of a new format, ask "can there be two?". If yes, give it a repeatable form. If no, add a spec case where it appears twice and must be refused.
 
 c0120 code review 011 F5: `busyRefs` shortened `refs/heads/origin/x` and `refs/remotes/origin/x` both to `origin/x`, and the exemption then stripped `origin/` from either, so a local branch named `origin/proto-c0117` matched an approved name it doesn't have. Keep the full refname until the last step that needs it, and strip a prefix only from the namespace it belongs to.
+
+**Also:** R0075 review 003 F1 (c0184): the home rule checked a Rojo `$path` only when it was a string, so `{"optional": "../pickman/src/shared"}` mapped a path outside the home past it. A reader of a config key checks every spelling the format allows for it and reports a value of a type it does not know, instead of skipping it.

@@ -1,0 +1,223 @@
+diff --git a/pickman/skills/pickman-test/SKILL.md b/pickman/skills/pickman-test/SKILL.md
+index 9556d019..4a9ea719 100644
+--- a/pickman/skills/pickman-test/SKILL.md
++++ b/pickman/skills/pickman-test/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: pickman-test
+-description: How pickman's game is tested - its spec tiers (unit, contract, integration, scenario, place, runtime), the sim harness, the fake engine and the Roblox runtime tests, all from pickman's home. Read with zz-test (the gate, check.sh, the guards) before writing a game spec.
++description: How pickman's game is tested - its spec tiers (unit, helper, contract, integration, scenario, place, runtime), the sim harness, the fake engine and the Roblox runtime tests, all from pickman's home. Read with zz-test (the gate, check.sh, the guards) before writing a game spec.
+ ---
+ 
+ # Testing the game (pickman)
+@@ -8,12 +8,13 @@ description: How pickman's game is tested - its spec tiers (unit, contract, inte
+ This is pickman's half of testing. The gate, the runner, `check.sh` files, sequestration, the affected-spec selector and the repository guards are z-nile's, in the zz-test skill, and bind here too.
+ 
+ ## Running pickman's specs
+-Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run -- tests/unit/Maze`, or `pickman/check.sh` for pickman's whole gate (zz-test skill, Running tests). Every path below is relative to `pickman/`, where `pickman/.luaurc` points `@tests`, `@logic`, `@shared` and `@scripts` at pickman's own folders. `sim`, `place` and `fakeengine` are pickman's helpers; the assertions (`@tests/lib/t`) and `renamed` are shared, re-exported from `pickman/tests/lib/`.
++Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run -- tests/unit/Maze`, or `pickman/check.sh` for pickman's whole gate (zz-test skill, Running tests). Every path below is relative to `pickman/`, where `pickman/.luaurc` points `@tests`, `@logic`, `@shared` and `@scripts` at pickman's own folders. `sim`, `place`, `fakeengine` and `plain` are pickman's helpers; the assertions (`@tests/lib/t`) and `renamed` are shared, re-exported from `pickman/tests/lib/`.
+ 
+ ## Spec tiers
+ | dir | tier | may require |
+ |---|---|---|
+ | `tests/unit/<Feature>/` | one feature's behavior | only that feature (through its `init`) plus `@tests/lib/t` |
++| `tests/helper/<helper>/` | one `tests/lib` helper's behavior (`tests/helper/plain/` for `tests/lib/plain.luau`) | only that helper (`@tests/lib/<helper>`), `@tests/lib/t`, its own fixtures under `@tests/fixtures/<helper>/` and `@lune/` builtins |
+ | `tests/contract/<Consumer>__<Provider>.spec.luau` | the Provider API exactly as the Consumer relies on it | the Provider only |
+ | `tests/integration/` | a few headless cross-feature checks that don't step time (see Simulations) | several features |
+ | `tests/scenario/` | story-style simulations through `@tests/lib/sim` | Logic features, `@tests/lib/sim`, `@tests/lib/t`, `@tests/fixtures/...`. Never adapters (they use Roblox globals) |
+@@ -65,7 +66,7 @@ t.expect(sim.firstTick(trace, "Bump")).toBe(6)
+ - **Replays**: a failure writes `.cache/sim/<model>-seed<seed>-tick<t>.json` (gitignored) and names it in the message. To debug, re-run it from a scratch spec: `sim.replay(Model, ".cache/sim/…json")`. It re-runs the model, so a `print` in the model works; for a step error the failing step runs again and re-raises.
+ - **`sim.bench`** steps N worlds interleaved, like the server, and returns elapsed seconds. Budgets are the one **timing exception** to "no wall-clock time": keep a margin of at least 50x over the measured cost.
+ 
+-**Choosing a tier**: anything driven through `@tests/lib/sim`, including whole-level simulations, goes in `tests/scenario/`. `tests/integration/ is for` cross-feature checks that don't step time.
++**Choosing a tier**: anything driven through `@tests/lib/sim`, including whole-level simulations, goes in `tests/scenario/`. `tests/integration/ is for` cross-feature checks that don't step time. A spec of a `tests/lib` helper itself goes in `tests/helper/<helper>/`, never in `tests/unit/`; a spec driven through `@tests/lib/sim` stays in `tests/scenario/` (sim's own `harness.spec` there included). `tests/meta/architecture.spec.luau` enforces the helper tier's and the unit tier's helper rules on the files each require resolves to (`tests/meta/tiers.luau`): a unit spec loads no `tests/lib` helper but `@tests/lib/t` (c0170).
+ 
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill pickman-test --full`. Each is a mistake made before, with the question that catches it.
+diff --git a/pickman/tests/meta/architecture.spec.luau b/pickman/tests/meta/architecture.spec.luau
+index 5da13328..401846a5 100644
+--- a/pickman/tests/meta/architecture.spec.luau
++++ b/pickman/tests/meta/architecture.spec.luau
+@@ -4,6 +4,7 @@
+ local fs = require("@lune/fs")
+ local graph = require("@znile/lib/graph")
+ local t = require("@tests/lib/t")
++local tiers = require("@tests/meta/tiers")
+ 
+ local LOGIC = "src/shared/Logic"
+ 
+@@ -146,6 +147,22 @@ return t.spec("architecture", function(it)
+ 		t.expect(cycle).toBe(nil)
+ 	end)
+ 
++	it(
++		"helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper",
++		function()
++			local helpers: { [string]: boolean } = {}
++			for _, name in fs.readDir("tests/lib") do
++				local base = string.match(name, "^(.+)%.luau$")
++				if base then
++					helpers[base] = true
++				elseif fs.isFile(`tests/lib/{name}/init.luau`) then
++					helpers[name] = true -- a helper kept as a folder (design review 004 F3)
++				end
++			end
++			t.expect(table.concat(tiers.violations(g, helpers), "\n")).toBe("")
++		end
++	)
++
+ 	it("every feature has unit specs", function()
+ 		local bad = {}
+ 		for _, f in features() do
+diff --git a/pickman/tests/meta/tiers.luau b/pickman/tests/meta/tiers.luau
+new file mode 100644
+index 00000000..749a26a5
+--- /dev/null
++++ b/pickman/tests/meta/tiers.luau
+@@ -0,0 +1,133 @@
++--!strict
++-- The spec tiers' require rules that architecture.spec enforces (pickman-test skill, Spec tiers; c0170): pure, over
++-- the require graph as graph.build gives it (files and the files each one's requires resolve to, relative to
++-- pickman/; @lune/ builtins are not files and are never listed; a file outside pickman/ keeps a leading ../). It
++-- picks the specs it judges itself, every *.spec.luau under tests/helper/ and tests/unit/, so a caller cannot hand
++-- it a filtered set (design review 002 F2). Judging resolved files, not spellings, catches a relative or differently
++-- cased require of the same file (design review 001 F2).
++-- A helper is a tests/lib module, tests/lib/<helper>.luau or tests/lib/<helper>/init.luau (design review 004 F3).
++-- What a spec loads is every file it reaches: its own requires, and the requires of any file under tests/ outside
++-- tests/lib/ that it reaches (a fixture, a sibling module), followed with a visited set; a src/ file, a tests/lib/
++-- file and a file outside pickman/ end a path (design reviews 003 F3 and 004 F1, F2). Then:
++-- - a helper spec lives in tests/helper/<helper>/, <helper> a tests/lib helper, and loads that helper (its own
++--   require, at least once), tests/lib/t.luau and its own fixtures under tests/fixtures/<helper>/, nothing else;
++-- - a unit spec (tests/unit/) loads no tests/lib helper but tests/lib/t.luau, and nothing outside pickman/: a
++--   helper's specs go in tests/helper.
++-- It fails closed (design review 005 F1): a judged spec that reaches a tests/ file the graph does not list (a
++-- miscased path a case-insensitive disk still opens, such as tests/Lib/plain.luau), or that has a dynamic require
++-- (graph.build's g.dynamic), breaks the rule, since neither can be judged.
++export type Graph = { files: { string }, deps: { [string]: { string } }, dynamic: { string }? }
++
++local tiers = {}
++
++local T = "tests/lib/t.luau"
++
++local function under(path: string, dir: string): boolean
++	return string.sub(path, 1, #dir) == dir
++end
++
++-- the helper a tests/lib file is, or nil
++local function helperOf(path: string): string?
++	return string.match(path, "^tests/lib/([^/]+)%.luau$") or string.match(path, "^tests/lib/([^/]+)/")
++end
++
++-- every file the spec loads: its own deps, and the deps of every tests/ file outside tests/lib/ it reaches, in
++-- first-seen order; src/, tests/lib/ and outside files are listed but not followed
++local function reached(g: Graph, file: string): { string }
++	local out: { string } = {}
++	local seen: { [string]: boolean } = { [file] = true }
++	local function walk(f: string)
++		local deps: { string } = g.deps[f] or {}
++		for _, d in deps do
++			if not seen[d] then
++				seen[d] = true
++				table.insert(out, d)
++				if under(d, "tests/") and not under(d, "tests/lib/") then
++					walk(d)
++				end
++			end
++		end
++	end
++	walk(file)
++	return out
++end
++
++local function helperSpec(g: Graph, file: string, helpers: { [string]: boolean }, out: { string })
++	local helper = string.match(file, "^tests/helper/([^/]+)/[^/]+%.spec%.luau$")
++	if helper == nil then
++		table.insert(out, `{file}: a helper spec lives in tests/helper/<helper>/`)
++		return
++	end
++	if not helpers[helper] then
++		table.insert(out, `{file}: tests/lib has no helper named {helper}`)
++		return
++	end
++	local fixtures = `tests/fixtures/{helper}/`
++	local found = false
++	local direct: { string } = g.deps[file] or {}
++	for _, d in direct do
++		if helperOf(d) == helper then
++			found = true
++		end
++	end
++	for _, d in reached(g, file) do
++		local mine = helperOf(d) == helper or d == T or under(d, fixtures)
++		if not mine then
++			local how = if table.find(direct, d) then "loads" else "reaches, through another test file,"
++			table.insert(out, `{file}: {how} {d}; a helper spec may load only its helper, {T} and {fixtures}`)
++		end
++	end
++	if not found then
++		table.insert(out, `{file}: does not load its helper tests/lib/{helper}`)
++	end
++end
++
++-- the failures no rule can judge past: an unlisted tests/ file reached, or a dynamic require in the spec itself
++local function unjudgeable(g: Graph, file: string, listed: { [string]: boolean }, out: { string })
++	for _, d in reached(g, file) do
++		if string.lower(string.sub(d, 1, 6)) == "tests/" and not listed[d] then
++			table.insert(
++				out,
++				`{file}: loads {d}, which is not a file of the tree as listed (check its spelling)`
++			)
++		end
++	end
++	if g.dynamic and table.find(g.dynamic, file) then
++		table.insert(out, `{file}: has a dynamic require, which the tier rules cannot judge`)
++	end
++end
++
++local function unitSpec(g: Graph, file: string, out: { string })
++	for _, d in reached(g, file) do
++		local name = helperOf(d)
++		if name and d ~= T then
++			table.insert(out, `{file}: loads {d}; a helper's specs go in tests/helper/{name}/`)
++		elseif under(d, "../") then
++			table.insert(out, `{file}: loads {d}, outside pickman/; a unit spec loads its feature and {T}`)
++		end
++	end
++end
++
++-- Every rule a spec breaks, as "<file>: <why>", in the graph's file order and each spec's load order. helpers holds
++-- the tests/lib helper names (file names without .luau, and folders with an init.luau).
++function tiers.violations(g: Graph, helpers: { [string]: boolean }): { string }
++	local out: { string } = {}
++	local listed: { [string]: boolean } = {}
++	for _, file in g.files do
++		listed[file] = true
++	end
++	for _, file in g.files do
++		if string.match(file, "%.spec%.luau$") then
++			if under(file, "tests/helper/") then
++				helperSpec(g, file, helpers, out)
++				unjudgeable(g, file, listed, out)
++			elseif under(file, "tests/unit/") then
++				unitSpec(g, file, out)
++				unjudgeable(g, file, listed, out)
++			end
++		end
++	end
++	return out
++end
++
++return tiers
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 14e8f252..383cfefd 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -18,7 +18,7 @@ description: How z-nile tests and gates every project - the gate and its modes,
+ | `lune run tests/run -- --jobs N` / `PICKMAN_JOBS=N` | spec concurrency (default `min(max(cpus,2),8)`; `1` is serial, a bad value exits 2) |
+ 
+ ## Spec layout (`*.spec.luau`)
+-Each project's specs live under its home and run from it (c0120): z-nile's (the tooling's) under `z-nile/tests/`, pickman's (the game's) under `pickman/tests/`, with each home's `.luaurc` pointing `@tests` at its own `tests/` (and pickman's `@logic`, `@shared` and `@scripts` at pickman's folders). There is no `tests/` at the root. The rows below are relative to the home. The runner, `z-nile/tests/run.luau`, is shared: `pickman/tests/run.luau` runs it from `pickman/`, so a pickman spec's paths, fixtures (`pickman/.cache`) and jail are pickman's, and a z-nile spec's are `z-nile/`'s (`z-nile/.cache`). A spec that needs the repository's other files reads them from the checkout's top (`git rev-parse --show-toplevel`), and writes only under its home's `.cache`. The assertions (`z-nile/tests/lib/t`) and `renamed` are shared too (`pickman/tests/lib/` re-exports them); `sim`, `place` and `fakeengine` are pickman's. A project's own tiers (pickman's `tests/unit`, `contract`, `integration`, `scenario`, `place` and `runtime`, its `sim`, `place` and `fakeengine` helpers) are in that project's own skill: `pickman-test` for pickman. The rows below are those every project has.
++Each project's specs live under its home and run from it (c0120): z-nile's (the tooling's) under `z-nile/tests/`, pickman's (the game's) under `pickman/tests/`, with each home's `.luaurc` pointing `@tests` at its own `tests/` (and pickman's `@logic`, `@shared` and `@scripts` at pickman's folders). There is no `tests/` at the root. The rows below are relative to the home. The runner, `z-nile/tests/run.luau`, is shared: `pickman/tests/run.luau` runs it from `pickman/`, so a pickman spec's paths, fixtures (`pickman/.cache`) and jail are pickman's, and a z-nile spec's are `z-nile/`'s (`z-nile/.cache`). A spec that needs the repository's other files reads them from the checkout's top (`git rev-parse --show-toplevel`), and writes only under its home's `.cache`. The assertions (`z-nile/tests/lib/t`) and `renamed` are shared too (`pickman/tests/lib/` re-exports them); `sim`, `place`, `fakeengine` and `plain` are pickman's. A project's own tiers (pickman's `tests/unit`, `helper`, `contract`, `integration`, `scenario`, `place` and `runtime`, its `sim`, `place`, `fakeengine` and `plain` helpers) are in that project's own skill: `pickman-test` for pickman. The rows below are those every project has.
+ | dir | tier | may require |
+ |---|---|---|
+ | `tests/tooling/` (z-nile's) | the tooling's scripts (`z-nile/`, the root's `scripts/`) | scripts |

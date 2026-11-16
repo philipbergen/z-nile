@@ -1,6 +1,8 @@
 --!strict
 -- d0105 AC3: DangerHud places the radar from Hud.radarBox of the current screen on every render step,
 -- before a snapshot is required. It keeps the default anchor and does not turn a CoreGui off.
+-- Narrowed by c0159 (2026-10-31): the last case no longer requires Awareness.edgePoint, because f0158's danger ring
+-- replaces the edge glows (decided with the user, 2026-10-26); it still requires the radar and the indicators.
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
 
@@ -75,6 +77,5 @@ return t.spec("d0105 danger hud corner", function(it)
 		local src = source()
 		t.expect(string.find(src, "Awareness.radar(", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(src, "Awareness.indicators(", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(src, "Awareness.edgePoint(", 1, true) ~= nil).toBe(true)
 	end)
 end)

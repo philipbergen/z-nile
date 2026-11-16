@@ -1,0 +1,9 @@
+.luaurc
+z-nile/engine/boundcmd.luau
+z-nile/engine/main.luau
+z-nile/engine/skills.luau
+z-nile/guard-bash.luau
+z-nile/tests/lib/cachepaths.luau
+z-nile/tests/lib/home.luau
+z-nile/tests/lib/homespec.luau
+z-nile/tests/lib/t.luau

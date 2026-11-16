@@ -1,0 +1,9 @@
+- design-review-001 F1: zz-test/criterion-fails-on-todays-file
+- design-review-001 F2: z-design/checks-pass-in-a-dispatched-step, z-design/confirm-overrides-with-a-suite-run, z-design/fallbacks-classify-red-specs-by-home
+- design-review-001 F3: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F4: zz-test/specs-read-sources-through-the-selector
+- design-review-001 F5: z-design/design-the-execution-window
+- design-review-001 F6: z-design/restated-rules-move-together
+- design-review-001 F7: z-design/trace-every-way-code-runs
+- note prep found (E2) that `for _, x in t.field or {} do` is refused by the gate's type stage and only `c0116/promote`'s type check of the copied tests caught it in the prototype run: z-design/prototype-engine-edits-pass-the-type-stages
+- note re-prep 2026-11-15: this prep's note on zz-test/specs-read-sources-through-the-selector named the old path `scripts/affected.luau`, which c0114/docs.spec refuses in a lesson; it landed red on main (#400) because no spec the prep gate selected reads lessons as text (c0310's watch miss). Renamed to `z-nile/affected.luau`: zz-test/specs-read-sources-through-the-selector

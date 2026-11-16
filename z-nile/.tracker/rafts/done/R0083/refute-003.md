@@ -1,0 +1,3 @@
+- F1: deferred c0281: the fix is a spy on `boardview.rounds` with a new spec case, not a small change, and the mechanism it replaces is a source pin in a non-sequestered spec that pins the shipped code today (the reviewer's two spellings, a `name:sub` filter and a single-quoted pattern in a helper, are not in the code); the review approves; c0281 is a backlog chore.
+- F2: fixed (this commit): the spend fixture's bad row carries `<b>`, and `board-review.spec` asserts the problems note holds no `<b>` (the row is escaped); the reviewer's mutant Mh (`pr.map(String)`) is red on that assertion, the base green; consequences: none.
+- F3: fixed (this commit): c0118.md's "Deviations" line names the `captions` field instead of "none"; consequences: none.

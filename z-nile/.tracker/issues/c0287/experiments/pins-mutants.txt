@@ -1,0 +1,9 @@
+control: the unmutated copy passes
+killed marker before the step= line: MISPLACED (every CLI fake): the started marker is not between the step= line and the mode's case
+killed marker written by touch (a spawn): MISSING (every CLI fake): the started marker line, exactly once (0 found)
+killed waitreview keepalive killed at once: DIFFERS (waitreview fake): not the reviewed text (acceptance/fakecli-modes.expected)
+killed late push made without the marker: DIFFERS (late fake): not the reviewed text (acceptance/fakecli-modes.expected)
+killed orphan hold cut to 20 s: DIFFERS (orphan fake): not the reviewed text (acceptance/fakecli-modes.expected)
+killed c0279's first line changed: DIFFERS (every CLI fake): the first command after the shebang is not the FAKE_DELAY line (it spawns nothing when unset)
+killed a wait added to another c0117 spec: CENSUS (tests/acceptance/c0117/models.spec.luau): 1 wait calls, expected 0
+killed a second wait in control-cli: CENSUS (tests/acceptance/c0117/control-cli.spec.luau): 2 wait calls, expected 1

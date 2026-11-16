@@ -72,6 +72,31 @@ function Lobby.lines(p: Panel, highlightRank: number?): string
 	return table.concat(out, "\n")
 end
 
+-- The viewer's own best under the all-time panel, from what the server sent; nil on other boards or without one.
+function Lobby.bestLine(best: any, id: string?): string?
+	if id ~= "all" or type(best) ~= "table" then
+		return nil
+	end
+	local score, level = best.score, best.level
+	if type(score) ~= "number" or score < 0 or score ~= math.floor(score) or score == math.huge then
+		return nil
+	end
+	if type(level) ~= "number" or level < 1 or level ~= math.floor(level) or level == math.huge then
+		return nil
+	end
+	return `YOUR BEST {string.format("%d", score)} {string.format("%d", level)}`
+end
+
+-- The whole list text: the panel's lines, then the viewer's best line when there is one.
+function Lobby.text(p: Panel, highlightRank: number?, best: any, id: string?): string
+	local body = Lobby.lines(p, highlightRank)
+	local line = Lobby.bestLine(best, id)
+	if line == nil then
+		return body
+	end
+	return `{body}\n{line}`
+end
+
 -- How long to wait before asking again after the nth failed answer in a row: 1, 2, 4 s, then stop.
 function Lobby.retryAfter(failures: number): number?
 	if failures ~= math.floor(failures) or failures < 1 or failures > Lobby.MAX_RETRIES then

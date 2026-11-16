@@ -2,11 +2,10 @@
 -- c0114 AC8: the gate covers z-nile/ as it covered scripts/: a change there selects every spec (a .tracker/ document
 -- selects none, like tracker/), the format stage reads z-nile/.tracker/ (stylua skips hidden folders unless named), the
 -- types stage reads z-nile/ but not its sequestered specs, the repository-fence scan reads ./zn, z-nile/ and every
--- root's check.sh (not their unpromoted specs), the reviewed .cache list covers z-nile/, the stop hook gates z-nile/
--- changes, and CI runs the moved bootstrap and skips tracker-only pushes to every root. Fixtures under
--- .cache/c0114-gate.
+-- root's check.sh (not their unpromoted specs), the reviewed .cache list covers z-nile/, and CI runs the moved
+-- bootstrap and skips tracker-only pushes to every root. Fixtures under .cache/c0114-gate.
 local cachepaths = require("@tests/lib/cachepaths")
-local fixture = require("@tests/lib/fixture")
+local deploylist = require("@tests/lib/deploylist")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
@@ -22,7 +21,7 @@ local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
 end
 local function affected(path: string): string
-	local r = process.exec("lune", { "run", "z-nile/affected", "--", path }, { cwd = root }) -- c0120 override: at the top
+	local r = process.exec("lune", { "run", "z-nile/affected", "--", "--graph-only", path }, { cwd = root }) -- c0120 override: at the top
 	if not r.ok then
 		error(r.stderr)
 	end
@@ -54,27 +53,23 @@ local function luauDirs(cwd: string?): { string }
 end
 
 return t.spec("c0114 the gate covers z-nile/", function(it)
-	it(
-		"a change under z-nile/ or to ./zn selects every spec; a tracker document under any root selects none",
-		function()
-			for _, p in
-				{
-					"z-nile/engine/main.luau",
-					"z-nile/lib/fence.sh",
-					"z-nile/check.sh",
-					"z-nile/projects.toml",
-					"zn",
-				}
-			do
-				t.expect(affected(p)).toBe("ALL\n")
-			end
-			t.expect(affected("z-nile/.tracker/issues/c0001/c0001.md")).toBe("")
-			-- c0120 override: pickman's root is pickman/.tracker; tracker/ is retired, and a file there again runs
-			-- everything, so the old-roots spec reports it
-			t.expect(affected("pickman/.tracker/issues/c0001/c0001.md")).toBe("")
-			t.expect(affected("tracker/issues/c0001/c0001.md")).toBe("ALL\n")
+	it("a tracker document selects no spec, and a tooling path is never every spec", function()
+		for _, p in
+			{
+				"z-nile/engine/main.luau",
+				"z-nile/lib/fence.sh",
+				"z-nile/check.sh",
+				"z-nile/projects.toml",
+				"zn",
+			}
+		do
+			t.expect((string.find(affected(p), "ALL", 1, true))).toBe(nil)
 		end
-	)
+		t.expect(affected("z-nile/.tracker/issues/c0001/c0001.md")).toBe("")
+		t.expect(affected("pickman/.tracker/issues/c0001/c0001.md")).toBe("")
+		t.expect(affected("z-nile/skills/zz-test/SKILL.md")).toBe("")
+		t.expect((string.find(affected("tracker/issues/c0001/c0001.md"), "ALL", 1, true))).toBe(nil)
+	end)
 
 	it(
 		"the format stage checks z-nile/ and z-nile/.tracker/, which stylua skips unless it is named",
@@ -127,7 +122,8 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 					[[--platform=standard --ignore='**/.tracker/**' --ignore='**/.cache/**' "${LUNE_DIRS[@]}"]]
 				)
 			).toBe(true)
-			local plan = process.exec("bash", { "z-nile/check.sh", "--plan" }, { cwd = root })
+			-- the layout plan is the full one: an affected plan narrows to the projects this branch changed
+			local plan = process.exec("bash", { "z-nile/check.sh", "--full", "--plan" }, { cwd = root })
 			local line = string.match(plan.stdout, "types %(Lune%): ([^\n]*)") or ""
 			-- c0120 override: the root has no tests/ (z-nile's moved into z-nile/)
 			for _, d in { "scripts", "z-nile", "pickman/tests", "pickman/scripts" } do
@@ -204,61 +200,8 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 	end)
 
 	it(
-		"the stop hook gates a change under src/, tests/ or z-nile/ (no project root's documents), through scripts/check.sh",
-		function()
-			-- a tree with a stub gate at scripts/check.sh that records its call: the path both sides of the move have
-			local function tree(name: string, withRoots: boolean): string
-				local dir = `{base}/hook-{name}`
-				if fs.isDir(dir) then
-					fs.removeDir(dir)
-				end
-				fs.writeDir(dir)
-				t.expect(process.exec("git", { "init", "-q", "-b", "main", dir }).ok).toBe(true)
-				fixture.git(dir, { "config", "user.name", "c0114-gate" })
-				fixture.git(dir, { "config", "user.email", "c0114-gate@example.invalid" })
-				write(
-					`{dir}/scripts/check.sh`,
-					'#!/usr/bin/env bash\necho "$@" >> "$(dirname "$0")/../gate.log"\n'
-				)
-				process.exec("chmod", { "+x", `{dir}/scripts/check.sh` })
-				if withRoots then
-					copy(dir, { "z-nile/roots.luau", "z-nile/engine/projects.luau", "z-nile/projects.toml" })
-				end
-				write(`{dir}/readme`, "x\n")
-				fixture.git(dir, { "add", "-A" })
-				fixture.git(dir, { "commit", "-q", "-m", "base" })
-				return dir
-			end
-			local function stop(dir: string): (boolean, boolean)
-				local r = fixture.exec(
-					dir,
-					"bash",
-					{ `{root}/scripts/hooks/stop.sh` },
-					{ stdin = '{"cwd": "' .. dir .. '"}' }
-				)
-				local ran = fs.isFile(`{dir}/gate.log`)
-				if ran then
-					fs.removeFile(`{dir}/gate.log`)
-				end
-				return r.ok, ran
-			end
-			local now = tree("now", true)
-			write(`{now}/z-nile/.tracker/issues/c0001/c0001.md`, "doc\n")
-			t.expect({ stop(now) }).toEqual({ true, false }) -- a project root's document alone: no gate
-			-- code whose path merely contains a root's name is not under the root: tests/lib/tracker/ is gated
-			write(`{now}/tests/lib/tracker/x.luau`, "--!strict\nreturn 1\n")
-			t.expect({ stop(now) }).toEqual({ true, true })
-			write(`{now}/z-nile/engine/x.luau`, "--!strict\nreturn 1\n")
-			t.expect({ stop(now) }).toEqual({ true, true }) -- the engine: the gate runs
-			-- a tree from before c0114 (no z-nile/): the same hook runs that tree's own gate
-			local old = tree("old", false)
-			write(`{old}/src/x.luau`, "--!strict\nreturn 1\n")
-			t.expect({ stop(old) }).toEqual({ true, true })
-		end
-	)
-
-	it(
-		"every root of the registry reaches every gate site, so a new root needs only its registry entry",
+		-- c0183 override: the case also needs each root in deploy.yml (below), so the name says so
+		"every root of the registry reaches every gate site, so a new root needs its registry entry and its deploy.yml entry",
 		function()
 			-- the sites that read the registry follow a new root by themselves
 			local fx = `{base}/registry`
@@ -274,7 +217,7 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 			-- c0120 override: the real tree is read from its top
 			local roots = projects.roots(projects.load(root))
 			local dirs = luauDirs()
-			local wf = serde.decode("yaml", fs.readFile(`{root}/.github/workflows/check.yml`)) :: any
+			local wf = serde.decode("yaml", fs.readFile(`{root}/.github/workflows/deploy.yml`)) :: any
 			local ignored: { string } = wf["on"].push["paths-ignore"]
 			for _, r in roots do
 				t.expect(table.find(dirs, r) ~= nil).toBe(true)
@@ -285,26 +228,10 @@ return t.spec("c0114 the gate covers z-nile/", function(it)
 		end
 	)
 
-	it(
-		"CI bootstraps with z-nile/setup.sh and skips tracker-only pushes to every root and the counter",
-		function()
-			local wf = serde.decode("yaml", fs.readFile(`{root}/.github/workflows/check.yml`)) :: any
-			-- c0120 override: pickman's root moved; tracker/ (retired) is no longer ignored. The workflows are read from
-			-- the top
-			t.expect(wf["on"].push["paths-ignore"])
-				.toEqual({ "pickman/.tracker/**", "z-nile/.tracker/**", "z-nile/next" })
-			local runs = ""
-			for _, step in wf.jobs.gate.steps do
-				runs ..= (step.run or "") .. "\n"
-			end
-			-- c0120 override: the bootstrap installs the tools only; each job then runs its own project's gate
-			t.expect(has(runs, "z-nile/setup.sh --tools\n")).toBe(true)
-			t.expect(has(runs, "./zn members")).toBe(true)
-			t.expect(has(runs, "scripts/")).toBe(false)
-			-- c0120 override: the spec runs from z-nile/, its home, after the move
-			local board = fs.readFile(`{root}/.github/workflows/board.yml`)
-			t.expect(has(board, "run: ./zn board --out dist/board.html -O")).toBe(true)
-			fs.removeDir(base)
-		end
-	)
+	it("deploy.yml skips tracker-only pushes to every root and the counter", function()
+		local wf = serde.decode("yaml", fs.readFile(`{root}/.github/workflows/deploy.yml`)) :: any
+		-- c0172 override: the ignore list moved with the gate. The workflow is read from the top.
+		t.expect(wf["on"].push["paths-ignore"]).toEqual(deploylist.ignored(root)) -- c0183 override: every registered root, then the counter
+		fs.removeDir(base)
+	end)
 end)

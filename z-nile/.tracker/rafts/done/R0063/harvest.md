@@ -1,0 +1,2 @@
+- review-001 F1: z-design/rerun-skipped-checks-after-edits
+- note R0063 done rolled back: promoted merge.spec quotes the fence variable and repo-fence had no ALLOWED key: zz-test/allowlist-keys-exist, zz-test/narrow-guard-allowances

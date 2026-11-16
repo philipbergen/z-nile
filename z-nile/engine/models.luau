@@ -1,0 +1,591 @@
+--!strict
+-- .models.toml (c0117): which model runs each stage, on which CLI, and which fallbacks follow it.
+-- The files stack like .gitignore: from the repository root down to the work, a closer file replaces only the keys
+-- it sets. Pure apart from `load`/`walk`, which read the files.
+--
+-- Contract for the Python port. One shape. A role names what belongs to the stage: `model`, `cli`, `runtime`,
+-- `rank`, `max_tokens`, `effort`, and `fallbacks` (CLI names, in order). A fallback names what belongs to the
+-- model: `[fallback.<cli>]` has `model`, `runtime`, and anything only that CLI needs (`max_calls` and
+-- `max_minutes` for `agent`). A try is the role's rank, cap and effort on the fallback's model. A challenge
+-- role sets `author` to the role that wrote the text; a try whose model id equals that author's is dropped,
+-- and an empty list fails at resolve. A role or fallback that names an unknown model or CLI fails in `parse`
+-- (when the file is loaded), not when the stage runs. There is no `order` and no `[<skill>.<cli>]` table.
+--
+--   [roles.idea]
+--   model = "..."          -- a model id of `cli` (claude-…, grok-…, kimi-code-…, or the agent's id)
+--   cli = "claude"
+--   runtime = "claude-cli"
+--   rank = 2
+--   max_tokens = 300000
+--   effort = "medium"      -- the stage's: the primary and every fallback try carry it
+--   fallbacks = ["kimi", "grok", "agent"]
+--   [roles.idea-challenge]
+--   author = "idea"        -- never run this role on the author's model
+--   [fallback.kimi]
+--   model = "..."
+--   runtime = "kimi-cli"
+--   [fallback.agent]
+--   model = "..."
+--   runtime = "cursor-cli"
+--   max_calls = 200
+--   max_minutes = 240
+--   [dispatch]
+--   auto_merge = ["prep", "raft"]
+--   stall_seconds = 300
+local fs = require("@lune/fs")
+local ledger = require("./ledger")
+local serde = require("@lune/serde")
+
+local models = {}
+
+models.FILE = ".models.toml"
+-- The supported CLIs (the user's decision: `agent` is Cursor's), each with its one local runtime (the remote ones are c0142's).
+models.CLIS = { "claude", "grok", "agent", "kimi" }
+models.RUNTIMES = {
+	-- the local runtimes only: the remote ones (claude-cloud, grok-bot, cursor-app) are c0142's (the user's G8)
+	claude = { "claude-cli" },
+	grok = { "grok-cli" },
+	agent = { "cursor-cli" },
+	kimi = { "kimi-cli" },
+} :: { [string]: { string } }
+-- A model id the CLI accepts. A role that names anything else fails when the file is loaded.
+local MODEL_OF_CLI: { [string]: string } = {
+	claude = "^claude%-[%w%._%-]+$",
+	grok = "^grok%-[%w%._%-]+$",
+	kimi = "^kimi%-code%-[%w%._%-]+$",
+	agent = "^[%w%._%-]+$",
+}
+-- The merge gates the dispatcher may pass itself; the run's PR is never one of them.
+models.GATES = { "prep", "raft" }
+models.STALL_SECONDS = 300
+-- the stall limit while a tool call runs (a full gate is quiet for minutes)
+models.TOOL_SECONDS = 900
+local FIELDS = {
+	model = "string",
+	effort = "string",
+	rank = "count",
+	runtime = "string",
+	max_tokens = "count",
+	max_calls = "count",
+	max_minutes = "count",
+}
+-- the CLIs whose stream has no running token count: their step stops after `max_calls` model calls (the user's decision,
+-- 2026-10-21: "Cap model calls, record real total"); a spec of theirs without it is an error, never unlimited
+models.CALL_CAPPED = { agent = true } :: { [string]: boolean }
+local REQUIRED = { "model", "rank", "runtime", "max_tokens" }
+
+export type Spec = {
+	cli: string,
+	model: string,
+	effort: string?,
+	rank: number,
+	runtime: string,
+	maxTokens: number,
+	maxCalls: number?, -- the model-call cap of a CLI with no running token count (agent)
+	maxMinutes: number?, -- its wall-time ceiling beside max_calls (review 003 F7: fail closed)
+}
+export type Settings = { autoMerge: { string }, stallSeconds: number, toolSeconds: number }
+-- One parsed file: its dispatch settings, its roles and its fallbacks.
+export type Layer = {
+	path: string,
+	settings: { [string]: any },
+	roles: { [string]: { [string]: any } },
+	fallbacks: { [string]: { [string]: any } },
+}
+-- A skill resolved on one walk: the CLI order, the specs of the CLIs that name the skill, and the settings.
+export type Resolved = {
+	skill: string,
+	order: { string },
+	specs: { [string]: Spec },
+	settings: Settings,
+	authorModel: string?,
+	fromRoles: boolean?,
+}
+
+local function isCli(name: string): boolean
+	return table.find(models.CLIS, name) ~= nil
+end
+
+local function list(names: { string }): string
+	return table.concat(names, ", ")
+end
+
+local function firstLine(e: any): string
+	local text = tostring(e)
+	local msg = string.match(text, "TOML parse error[^\n]*\n[^\n]*\n[^\n]*\n[^\n]*\n([^\n]+)")
+	local where = string.match(text, "(TOML parse error at line %d+, column %d+)")
+	return if where then `{where}: {msg or "?"}` else (string.match(text, "^[^\n]*") or text)
+end
+
+local function count(v: any): boolean
+	return type(v) == "number" and v >= 1 and v == math.floor(v)
+end
+
+-- Parses one file's text. Every error names the file and the key: an unknown CLI, field or setting, a value of the
+-- wrong type, a runtime of another CLI. A repeated table or key is the TOML reader's error (it refuses duplicates).
+function models.parse(text: string, path: string): Layer
+	local ok, decoded = pcall(function()
+		return serde.decode("toml", text)
+	end)
+	if not ok then
+		error(`{path}: {firstLine(decoded)}`, 0)
+	end
+	local layer: Layer = { path = path, settings = {}, roles = {}, fallbacks = {} }
+	for key, value in decoded :: { [string]: any } do
+		if key == "order" then
+			error(`{path}: order is gone; a role names its cli, then its fallbacks`, 0)
+		elseif key == "dispatch" then
+			if type(value) ~= "table" then
+				error(`{path}: [dispatch] is a table`, 0)
+			end
+			for k, v in value do
+				if k == "auto_merge" then
+					if type(v) ~= "table" then
+						error(`{path}: dispatch.auto_merge is a list of gates ({list(models.GATES)})`, 0)
+					end
+					for _, g in v do
+						if type(g) ~= "string" or not table.find(models.GATES, g) then
+							error(
+								`{path}: dispatch.auto_merge names {tostring(g)}: the dispatcher may merge only {list(
+									models.GATES
+								)} (the run's PR is a human's)`,
+								0
+							)
+						end
+					end
+					layer.settings.autoMerge = table.clone(v)
+				elseif k == "stall_seconds" or k == "tool_seconds" then
+					if not count(v) then
+						error(`{path}: dispatch.{k} is a whole number of seconds, at least 1`, 0)
+					end
+					layer.settings[if k == "stall_seconds" then "stallSeconds" else "toolSeconds"] = v
+				else
+					error(
+						`{path}: dispatch.{k} is not a setting (auto_merge, stall_seconds, tool_seconds)`,
+						0
+					)
+				end
+			end
+		elseif key == "roles" or key == "fallback" then
+			if type(value) ~= "table" then
+				error(`{path}: [{key}] is a table`, 0)
+			end
+			for name, fields in value do
+				if type(name) ~= "string" or type(fields) ~= "table" then
+					error(`{path}: [{key}.{tostring(name)}] is a table`, 0)
+				end
+				local out: { [string]: any } = {}
+				for field, v in fields do
+					if key == "roles" and field == "fallbacks" then
+						if type(v) ~= "table" then
+							error(`{path}: roles.{name}.fallbacks is a list of CLIs`, 0)
+						end
+						local seen: { [string]: boolean } = {}
+						for _, cli in v do
+							if type(cli) ~= "string" or not isCli(cli) then
+								error(
+									`{path}: roles.{name}.fallbacks names {tostring(cli)}, which is not a supported CLI ({list(
+										models.CLIS
+									)})`,
+									0
+								)
+							end
+							if seen[cli] then
+								error(`{path}: roles.{name}.fallbacks names {cli} twice`, 0)
+							end
+							seen[cli] = true
+						end
+						out.fallbacks = table.clone(v)
+					elseif key == "roles" and field == "author" then
+						if type(v) ~= "string" or v == "" then
+							error(`{path}: roles.{name}.author is a role name`, 0)
+						end
+						out.author = v
+					elseif key == "roles" and field == "cli" then
+						if type(v) ~= "string" or not isCli(v) then
+							error(
+								`{path}: roles.{name}.cli is {tostring(v)}, which is not a supported CLI ({list(
+									models.CLIS
+								)})`,
+								0
+							)
+						end
+						out.cli = v
+					elseif key == "fallback" and field == "cli" then
+						error(`{path}: fallback.{name}.cli is the table name, not a field`, 0)
+					elseif
+						key == "fallback"
+						and (field == "rank" or field == "max_tokens" or field == "effort")
+					then
+						error(`{path}: fallback.{name}.{field} belongs to the role, not the fallback`, 0)
+					else
+						local want = FIELDS[field]
+						if not want then
+							error(
+								`{path}: {key}.{name}.{field} is not a field (model, effort, rank, runtime, max_tokens, max_calls, max_minutes{if key
+										== "roles"
+									then ", fallbacks, author"
+									else ""})`,
+								0
+							)
+						end
+						if want == "count" and not count(v) then
+							error(`{path}: {key}.{name}.{field} is a whole number, at least 1`, 0)
+						elseif want == "string" and (type(v) ~= "string" or v == "") then
+							error(`{path}: {key}.{name}.{field} is a non-empty string`, 0)
+						end
+						if (field == "model" or field == "effort") and not ledger.isModel(v) then
+							error(
+								`{path}: {key}.{name}.{field} is {v}, not a model id the ledger takes (letters, digits, '.', '_', '-')`,
+								0
+							)
+						end
+						out[field] = v
+					end
+				end
+				if key == "roles" and out.cli ~= nil and not isCli(out.cli) then
+					error(
+						`{path}: roles.{name}.cli is {tostring(out.cli)}, which is not a supported CLI ({list(
+							models.CLIS
+						)})`,
+						0
+					)
+				end
+				if key == "fallback" and not isCli(name) then
+					error(`{path}: [fallback.{name}]: {name} is not a supported CLI ({list(models.CLIS)})`, 0)
+				end
+				local boundCli = if key == "fallback" then name else out.cli
+				if out.model ~= nil and type(boundCli) == "string" and isCli(boundCli) then
+					if string.match(out.model, MODEL_OF_CLI[boundCli]) == nil then
+						error(`{path}: {key}.{name}.model is {out.model}, not a model of cli {boundCli}`, 0)
+					end
+				end
+				if out.runtime ~= nil and type(boundCli) == "string" and isCli(boundCli) then
+					if not table.find(models.RUNTIMES[boundCli], out.runtime) then
+						error(
+							`{path}: {key}.{name}.runtime is {out.runtime}, which is not a runtime of {boundCli} ({list(
+								models.RUNTIMES[boundCli]
+							)})`,
+							0
+						)
+					end
+				end
+				if key == "roles" then
+					layer.roles[name] = out
+				else
+					layer.fallbacks[name] = out
+				end
+			end
+		else
+			error(
+				`{path}: [{key}] is not read (the file has roles, fallback and dispatch; skill tables are gone)`,
+				0
+			)
+		end
+	end
+	return layer
+end
+
+-- The folders from the repository root down to `dir` (repo-relative, "" or "." for the root itself), root first.
+function models.folders(dir: string): { string }
+	local out = { "." }
+	local acc = ""
+	for part in string.gmatch(dir, "[^/]+") do
+		if part ~= "." then
+			acc = if acc == "" then part else `{acc}/{part}`
+			table.insert(out, acc)
+		end
+	end
+	return out
+end
+
+-- Reads every .models.toml on the walk from `repo` down to `dir`, root first.
+function models.walk(repo: string, dir: string): { Layer }
+	local layers: { Layer } = {}
+	for _, folder in models.folders(dir) do
+		local rel = if folder == "." then models.FILE else `{folder}/{models.FILE}`
+		local path = `{repo}/{rel}`
+		if fs.isFile(path) then
+			table.insert(layers, models.parse(fs.readFile(path), rel))
+		end
+	end
+	return layers
+end
+
+-- The settings on a walk, each replaced by the closest file that sets it. An unset auto_merge is no auto-merge: a
+-- merge the dispatcher makes itself must be asked for (c0117 review 001 F7).
+function models.settings(layers: { Layer }): Settings
+	local s: Settings =
+		{ autoMerge = {}, stallSeconds = models.STALL_SECONDS, toolSeconds = models.TOOL_SECONDS }
+	for _, layer in layers do
+		for _, k in { "autoMerge", "stallSeconds", "toolSeconds" } do
+			if layer.settings[k] ~= nil then
+				(s :: any)[k] = layer.settings[k]
+			end
+		end
+	end
+	return s
+end
+
+-- Every .models.toml on the walk to `dir` as tracked at a pinned commit, root first (design review 002 F5: settings,
+-- caps and models never come from the working tree). `read(path)` gives the file's text at that commit, or nil;
+-- `present(path)` says whether the working tree has one there. A working-tree file the commit doesn't track (new,
+-- untracked or ignored) is an error: only committed model files count.
+function models.walkAt(
+	dir: string,
+	read: (path: string) -> string?,
+	present: (path: string) -> boolean
+): { Layer }
+	local layers: { Layer } = {}
+	for _, folder in models.folders(dir) do
+		local rel = if folder == "." then models.FILE else `{folder}/{models.FILE}`
+		local text = read(rel)
+		if text then
+			table.insert(layers, models.parse(text :: string, rel))
+		elseif present(rel) then
+			error(
+				`{rel} is not committed: only a .models.toml on main counts (commit it through a pull request)`,
+				0
+			)
+		end
+	end
+	return layers
+end
+
+-- Which role runs a step. A review's mode picks its challenge; every other model step has one role.
+function models.roleFor(skill: string, mode: string?): string?
+	if skill == "zz-review" then
+		if mode == "design" then
+			return "design-challenge"
+		elseif mode == "final" then
+			return "final-review"
+		elseif mode == "raft" then
+			-- The raft and a review of it are both Opus in the owner's table, as design and
+			-- design-challenge are. A challenge role with author = "raft" would drop Opus and
+			-- the review would run a fallback, so the same-model stop is pointless here.
+			return "raft"
+		end
+		return "code-review"
+	end
+	local named = {
+		["z-ticket"] = "idea",
+		["z-design"] = "design",
+		["z-raft"] = "raft",
+		["z-run"] = "implementation",
+		idea = "idea",
+		["idea-challenge"] = "idea-challenge",
+	}
+	return named[skill]
+end
+
+local function specFrom(cli: any, fields: { [string]: any }, path: string, label: string): Spec
+	if type(cli) ~= "string" or cli == "" then
+		error(`{path}: {label} has no cli`, 0)
+	end
+	for _, k in REQUIRED do
+		if fields[k] == nil then
+			error(`{path}: {label} has no {k} (every model has model, rank, runtime and max_tokens)`, 0)
+		end
+	end
+	return {
+		cli = cli,
+		model = fields.model,
+		effort = fields.effort,
+		rank = fields.rank,
+		runtime = fields.runtime,
+		maxTokens = fields.max_tokens,
+		maxCalls = fields.max_calls,
+		maxMinutes = fields.max_minutes,
+	}
+end
+
+-- A fallback try: the model's id and runtime (and the CLI's own caps), the stage's rank, cap and effort.
+local function fallbackTry(
+	cli: string,
+	modelFields: { [string]: any },
+	stage: { [string]: any },
+	path: string,
+	label: string
+): Spec
+	if modelFields.model == nil or modelFields.runtime == nil then
+		error(`{path}: {label} has no model or runtime`, 0)
+	end
+	if stage.rank == nil or stage.max_tokens == nil then
+		error(`{path}: {label} has no rank or max_tokens from its role`, 0)
+	end
+	if models.CALL_CAPPED[cli] and modelFields.max_calls == nil then
+		error(
+			`{path}: {label} has no max_calls ({cli} reports no running token count, so its step stops after max_calls model calls; calls are not tokens: tune it)`,
+			0
+		)
+	end
+	if models.CALL_CAPPED[cli] and modelFields.max_minutes == nil then
+		error(
+			`{path}: {label} has no max_minutes ({cli}'s call count can miss calls, so its step also stops at a wall-time ceiling)`,
+			0
+		)
+	end
+	return {
+		cli = cli,
+		model = modelFields.model,
+		effort = stage.effort,
+		rank = stage.rank,
+		runtime = modelFields.runtime,
+		maxTokens = stage.max_tokens,
+		maxCalls = modelFields.max_calls,
+		maxMinutes = modelFields.max_minutes,
+	}
+end
+
+local function needsCallCap(spec: Spec, path: string, label: string)
+	if not models.CALL_CAPPED[spec.cli] then
+		return
+	end
+	if spec.maxCalls == nil then
+		error(
+			`{path}: {label} has no max_calls ({spec.cli} reports no running token count, so its step stops after max_calls model calls; calls are not tokens: tune it)`,
+			0
+		)
+	end
+	if spec.maxMinutes == nil then
+		error(
+			`{path}: {label} has no max_minutes ({spec.cli}'s call count can miss calls, so its step also stops at a wall-time ceiling)`,
+			0
+		)
+	end
+end
+
+-- The role on a walk. A closer file replaces only the keys it sets. The try order is the role's CLI, then its
+-- fallbacks. `author` names another role: that role's model is dropped from the tries.
+function models.resolveRole(layers: { Layer }, role: string): Resolved
+	if #layers == 0 then
+		error(`no {models.FILE} on the walk: nothing defaults (add one at the repository root)`, 0)
+	end
+	local fields: { [string]: any } = {}
+	local fallbacks: { [string]: { [string]: any } } = {}
+	local named = false
+	for _, layer in layers do
+		local mine = layer.roles[role]
+		if mine then
+			named = true
+			for k, v in mine do
+				fields[k] = v
+			end
+		end
+		for cli, f in layer.fallbacks do
+			fallbacks[cli] = fallbacks[cli] or {}
+			for k, v in f do
+				fallbacks[cli][k] = v
+			end
+		end
+	end
+	if not named then
+		error(`no {models.FILE} on the walk names role {role}`, 0)
+	end
+	local where = layers[#layers].path
+	local primary = specFrom(fields.cli, fields, where, `roles.{role}`)
+	needsCallCap(primary, where, `roles.{role}`)
+	local order = { primary.cli }
+	local specs: { [string]: Spec } = { [primary.cli] = primary }
+	for _, cli in fields.fallbacks or {} do
+		local fb = fallbacks[cli]
+		if not fb then
+			error(`{role}: fallback {cli} has no [fallback.{cli}] on the walk`, 0)
+		end
+		if specs[cli] == nil then
+			local spec = fallbackTry(cli, fb, fields, where, `fallback.{cli}`)
+			table.insert(order, cli)
+			specs[cli] = spec
+		end
+	end
+	local authorModel: string? = nil
+	if fields.author ~= nil then
+		if fields.author == role then
+			error(`{role}: author is itself; a challenge cannot name its own role`, 0)
+		end
+		local author = models.resolveRole(layers, fields.author)
+		authorModel = models.id(author.specs[author.order[1]])
+	end
+	return {
+		skill = role,
+		order = order,
+		specs = specs,
+		settings = models.settings(layers),
+		authorModel = authorModel,
+		fromRoles = true,
+	}
+end
+
+-- The role a step runs. A closer layer replaces only the keys it sets. Errors: no file on the walk, no role
+-- for the step, a spec missing a field.
+function models.resolve(layers: { Layer }, skill: string, mode: string?): Resolved
+	local role = models.roleFor(skill, mode)
+	if not role then
+		error(`{skill} is not a model step`, 0)
+	end
+	return models.resolveRole(layers, role)
+end
+
+-- The more powerful of the specs, whole: the higher rank, then the larger max_tokens; a tie keeps the first.
+function models.strongest(specs: { Spec }): Spec
+	if #specs == 0 then
+		error("strongest of no specs", 0)
+	end
+	local best = specs[1]
+	for i = 2, #specs do
+		local s = specs[i]
+		if s.rank > best.rank or (s.rank == best.rank and s.maxTokens > best.maxTokens) then
+			best = s
+		end
+	end
+	return best
+end
+
+-- A raft's step: `order` and settings from the raft's own walk, and for each CLI the strongest of its members'
+-- specs (rafts never cross projects, so the members share the walk down to their project).
+function models.forRaft(own: Resolved, members: { Resolved }): Resolved
+	if #members == 0 then
+		error(`{own.skill}: a raft with no member has no spec`, 0)
+	end
+	local specs: { [string]: Spec } = {}
+	for _, cli in models.CLIS do
+		local candidates: { Spec } = {}
+		for _, m in members do
+			if m.specs[cli] then
+				table.insert(candidates, m.specs[cli])
+			end
+		end
+		if #candidates > 0 then
+			specs[cli] = models.strongest(candidates)
+		end
+	end
+	return { skill = own.skill, order = own.order, specs = specs, settings = own.settings }
+end
+
+-- The CLIs to try, in order: those of `order` that have a spec for the skill. Empty is an error naming the skill.
+function models.tries(r: Resolved): { Spec }
+	local out: { Spec } = {}
+	for _, cli in r.order do
+		local spec = r.specs[cli]
+		if spec and (r.authorModel == nil or models.id(spec) ~= r.authorModel) then
+			table.insert(out, spec)
+		end
+	end
+	if #out == 0 and r.authorModel ~= nil then
+		error(
+			`{r.skill}: the only model left is the author's ({r.authorModel}); a challenge is never run by the model that wrote the text`,
+			0
+		)
+	end
+	if #out == 0 then
+		error(`{r.skill}: no CLI in the order ({list(r.order)}) has a spec for it`, 0)
+	end
+	return out
+end
+
+-- The model id a spend row records: the model, and its effort when the spec sets one (model, then a hyphen, then the effort).
+function models.id(spec: Spec): string
+	return if spec.effort then `{spec.model}-{spec.effort}` else spec.model
+end
+
+return models

@@ -1,0 +1,7 @@
+# Answers to design review 006 (c0189)
+
+- F1: fixed: `replace-mode.spec` runs every `replace-file.pl` call with the case's fixture folder as its working directory and asserts no entry named `--mode*` appears there; consequences: step 1's count unchanged (1 of 5), M4 now killed by the stray assertion as well as the mode assertions; checked that the spec on base code writes nothing into `z-nile/`.
+- F2: fixed: `depends_on: [c0194]`; the "true in either landing order" sentences and the "lands first" Risks bullet are replaced by the dependency and its cost; consequences: z-ready refuses c0189 until c0194 is done (R0070 is readied, one issue), c0123 (depends on c0189) waits behind it too, the lead may prefer option (b) (reported); E13 (stacked) is the one order proved. RULE unchanged.
+- F3: fixed: the zz-test sentence now covers clones of reviewed code (hook first, commits under a fixture identity before it) and clones of unguarded code (spec files only, jailed, no hook); `wiring.spec` pin, prototype patch and mutants W10 and W10b updated; consequences: none beyond the pin.
+- F4: fixed: bad values `7` and `75` added, `0644` accepted as four digits; mutant M9 (`{1,4}`) added and killed; the Design says any first digit is accepted and only the hook calls it; consequences: none (no set-id rule added).
+- F5: fixed: (a) wording corrected; (b) the c0194 bullet names step 8's note and leaves its fate to R0070's lead.

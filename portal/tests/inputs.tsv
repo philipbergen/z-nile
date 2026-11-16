@@ -1,0 +1,8 @@
+# extra inputs per spec: <spec, relative to the home>	<input: repo-relative file, folder/, * (every blob plus HEAD), or ref:<full ref>>
+tests/meta/home.spec.luau	portal/
+tests/meta/home.spec.luau	stylua.toml
+tests/meta/home.spec.luau	selene.toml
+tests/meta/fence.spec.luau	*
+tests/meta/architecture.spec.luau	portal/.tracker/architecture.md
+tests/meta/architecture.spec.luau	portal/src/
+tests/meta/architecture.spec.luau	portal/tests/

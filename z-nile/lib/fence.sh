@@ -252,3 +252,14 @@ pickman_guarded() {
   done
   echo unguarded
 }
+
+# Answers whether this process runs inside a guarded run (a spec run, or a check.sh fenced through ac.sh): prints exactly
+# `checking` or `free` and exits 0. Anything else means it could not tell, and the caller treats it as `checking`
+# (c0117: inside a check, ./zn dispatch starts no model CLI but a fake one under the checkout's .cache).
+pickman_checking() {
+  if [[ ${PICKMAN_FENCE_SPECS:-} == 1 || -n ${PICKMAN_FENCE_REAL_GIT:-} ]]; then
+    echo checking
+  else
+    echo free
+  fi
+}

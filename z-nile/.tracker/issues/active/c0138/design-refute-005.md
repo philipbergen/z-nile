@@ -1,0 +1,4 @@
+# Refute 005: c0138
+Round 5 (the final round) approved. Its one low finding is answered.
+
+- F1: fixed: `experiments/mutants.py` counts a mutant as killed only for a `FAIL <file> :: <case>` line (an assertion); a `FAIL <file>: <error>` line (a spec that could not load), a missing summary or a timeout is reported BROKEN with the error line printed, and the run exits 2; an unknown mutant name exits 2 ("NO SUCH MUTANT", checked with `M18`); the signal handler restores the engine files and kills the spec run's process group. The Design's description of the runner says so. Proven: `M18` exits 2; `M17` still dies on exactly the first-review case and the files are restored. consequences: none for the design, the specs or `check.sh` (the runner is an experiment file, not sequestered, not counted in size).

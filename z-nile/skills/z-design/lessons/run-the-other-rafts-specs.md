@@ -11,3 +11,5 @@ A rule that looks easy from this raft's side can be impossible from the other's:
 **How to apply:** read the other raft's acceptance specs for every file, name or output your rule touches, and pick a rule they already allow; if none exists, put the choice to the user before either raft is readied.
 
 **Note** (f0143 design review 001 F3, and the rerun after it): run the other issue's sequestered specs on a tree with both changes, not only your own. f0146's controls.spec read "the second-to-last intent" after pressing DPadUp then W on a stub clock of 0, so f0143's boost made it red; and the order of f0126's pick cap and the boost was semantic but unchecked until a case named both. When one issue lands after another, depend on it and prove the pair on a merged prototype.
+
+**Note** (c0265 design review 011 F1): before adding a positional parameter to a shared function (`board.build`), search the sequestered specs of every active raft for calls to it; R0083 (c0118) had already given that slot to `facts`. Prefer a new function (`board.withVerdicts`) over a new parameter when another raft is in flight on the same module.

@@ -1,0 +1,1702 @@
+diff --git a/.claude/settings.json b/.claude/settings.json
+index 36f9ee9e..9c097857 100644
+--- a/.claude/settings.json
++++ b/.claude/settings.json
+@@ -29,15 +29,36 @@
+     ]
+   },
+   "hooks": {
++    "SessionStart": [
++      {
++        "hooks": [
++          {
++            "type": "command",
++            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/session-tmp.sh"
++          }
++        ]
++      }
++    ],
+     "PostToolUse": [
+       {
+         "matcher": "Edit|Write|MultiEdit",
+-        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/post-edit.sh" }]
++        "hooks": [
++          {
++            "type": "command",
++            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/post-edit.sh"
++          }
++        ]
+       }
+     ],
+     "Stop": [
+       {
+-        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/stop.sh", "timeout": 300 }]
++        "hooks": [
++          {
++            "type": "command",
++            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/stop.sh",
++            "timeout": 300
++          }
++        ]
+       }
+     ]
+   }
+diff --git a/AGENTS.md b/AGENTS.md
+index 84e3d423..30695b43 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -2,7 +2,9 @@
+ 
+ A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune for headless tests. New machine: see `SETUP.md`. The game is the `pickman` project, in `pickman/` (its `src/`, specs, Rojo projects and issues, `pickman/.tracker/`); the tooling that tracks and gates it is `z-nile/` (zz-rules skill, Projects).
+ 
+-**Non-negotiable:** no code without a tracker issue, and work is done only when its `check.sh` passes. **Every change is made in a git worktree under `.worktree/` and lands by pull request** (a capture lands with `./zn land`, after a local full gate); the main checkout is never edited, except by `./zn` itself (`ready`, `stop`, `sync`, and the board refresh after every publish or `land`), which only fast-forwards it, clears ignored files from item folders that left it, and writes ignored files (`prompt.md`, `.cache/board.html`) (zz-rules skill, Worktrees and Landing a change). Start execution with `/z-run <R-id>` in a session in the main checkout. Before doing anything, read the skill that applies. The skills hold all the rules.
++**Non-negotiable:** no code without a tracker issue, and work is done only when its `check.sh` passes. **Every change is made in a git worktree under `.worktree/` and lands by pull request** (a capture lands with `./zn land`, after a local full gate); the main checkout is never edited, except by `./zn` itself (`ready`, `stop`, `sync`, and the board refresh after every publish or `land`), which only fast-forwards it, clears ignored files from item folders that left it, and writes ignored files (`prompt.md`, `.cache/board.html`; `./zn tmp` and the SessionStart hook write only inside `.cache/.tmp/` there, agents' scratch trees included) (zz-rules skill, Worktrees and Landing a change). Start execution with `/z-run <R-id>` in a session in the main checkout. Before doing anything, read the skill that applies. The skills hold all the rules.
++
++**Temporary trees live in `.cache/.tmp/`, never in the system temp folder.** A scratch clone (never a `git worktree add`) or any experiment's tree is made with `./zn tmp new <kind>` in the main checkout's `.cache/.tmp/` (excluded from Spotlight); a session's `TMPDIR` points there (the SessionStart hook), a plain `mktemp -d` follows it, and each tree is removed when its experiment ends (`./zn tmp rm <tree>`); a prototype worktree goes under `.worktree/`, not here. `./zn tmp sweep` removes the ones nobody works in (zz-test skill).
+ 
+ **Subagents:** don't use `fork` subagents. Delegate to a plain subagent (general-purpose) with `model: "sonnet"` and a full brief. The exceptions are design and code reviewers, which the skills pin to Opus 5.5.
+ 
+diff --git a/SETUP.md b/SETUP.md
+index 03bc1a5b..b3f2c102 100644
+--- a/SETUP.md
++++ b/SETUP.md
+@@ -36,7 +36,7 @@ z-nile/setup.sh
+ ## Agents on this host
+ - **Claude Code**: `CLAUDE.md` imports `AGENTS.md`. The hooks in `.claude/settings.json` format and lint each `.luau` edit, and gate the Stop event.
+ - **Other agents** (Grok, Codex, …): read `AGENTS.md`. For execution, give them the prompt of a readied raft, `./zn prompt <R-id>` (`/z-ready` writes it), which is self-contained.
+-- **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start Claude in the main checkout and run `/z-run R0010`, which enters the raft's worktree; every job starts in a worktree directory inside the repo, never outside it. The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone outside the repo that is not a worktree. After a PR merges, the agent removes its worktree; `./zn worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
++- **Worktrees**: every change is made in a worktree under `.worktree/` (gitignored), never in the main checkout, which stays on `main`. Start Claude in the main checkout and run `/z-run R0010`, which enters the raft's worktree; every job starts in a worktree directory inside the repo, never outside it. Scratch trees (experiment and prototype clones) go under the main checkout's `.cache/.tmp/` (`./zn tmp new <kind>`; Claude Code sessions get `TMPDIR` there from the SessionStart hook), never the system temp folder. The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone under the checkout's `.cache/.tmp/` that is not a worktree. After a PR merges, the agent removes its worktree; `./zn worktree-prune`, run from the main checkout, removes the worktrees of rafts that are done on `main`.
+ 
+ ## CI
+ Verification is local. `z-nile/check.sh --full` runs every project's gate on the machine that lands or merges (`./zn land`, `./zn done`, and zz-rules Merging). GitHub Actions does not run it, and a merge does not wait for an Actions result. Specs run from a project's home (`cd pickman && lune run tests/run`, `cd z-nile && lune run tests/run`), never from the root.
+diff --git a/pickman/scripts/deploy-beta.luau b/pickman/scripts/deploy-beta.luau
+index 301f9c3a..b4a321ee 100644
+--- a/pickman/scripts/deploy-beta.luau
++++ b/pickman/scripts/deploy-beta.luau
+@@ -9,7 +9,7 @@ local Beta = require("@scripts/lib/beta")
+ local OpenCloud = require("@scripts/lib/opencloud")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+-local sh = require("@znile/lib/sh")
++local tmpTrees = require("@znile/lib/tmp")
+ 
+ local okPlan, planned = pcall(Beta.plan, process.env)
+ if not okPlan then
+@@ -28,9 +28,13 @@ if plan.notice then
+ 	print(`::warning::{plan.notice}`)
+ end
+ 
+--- built outside the checkout: rojo writes through a symlink at its output path (R0210 review 006 F1), and the
++-- built in a fresh folder under .cache/.tmp, not at a fixed name: rojo writes through a symlink at its output path (R0210 review 006 F1), and the
+ -- project copies must not be left in the checkout
+-local tmp = sh.must("mktemp", { "-d" })
++local tmp, tmpWhy = tmpTrees.new(nil, "deploy-beta", nil)
++if not tmp then
++	print(`deploy-beta: no temporary folder: {tmpWhy}`)
++	process.exit(1)
++end
+ -- same trim as Beta.project: Lune's cwd ends in `/`, and `{root}/{file}` would be `//`
+ local root = process.cwd
+ if #root > 1 and string.sub(root, -1) == "/" then
+diff --git a/scripts/hooks/session-tmp.sh b/scripts/hooks/session-tmp.sh
+new file mode 100755
+index 00000000..d55a1da8
+--- /dev/null
++++ b/scripts/hooks/session-tmp.sh
+@@ -0,0 +1,24 @@
++#!/usr/bin/env bash
++# Claude Code SessionStart hook (c0194): every Bash command this session and its subagents run gets TMPDIR under the
++# project's .cache/.tmp (never the system temp folder, which Spotlight indexes) and z-nile/bin first on PATH, whose
++# mktemp honours TMPDIR (macOS mktemp does not). Stale trees there are swept. Quiet and fail-open: a session without
++# it is only back to the system temp folder, and the stale-tree report is `./zn tmp leftovers`.
++export PATH="$HOME/.rokit/bin:$PATH"
++top=${CLAUDE_PROJECT_DIR:-}
++[[ -n $top && -n ${CLAUDE_ENV_FILE:-} && -f $top/z-nile/lib/tmpcli.luau ]] || exit 0
++root=$(cd "$top" && lune run z-nile/lib/tmpcli -- root --dir "$top" 2>/dev/null) || root=
++case $root in
++*$'\n'* | "") root= ;;
++*/.cache/.tmp) ;;
++*) root= ;;
++esac
++if [[ -z $root ]]; then
++  echo "session-tmp: could not make $top/.cache/.tmp (run ./zn tmp root to see why); TMPDIR left as it was" >&2
++  exit 0
++fi
++{
++  printf 'export TMPDIR=%q\n' "$root"
++  printf 'case ":$PATH:" in *":%s:"*) ;; *) export PATH=%q:"$PATH" ;; esac\n' "$top/z-nile/bin" "$top/z-nile/bin"
++} >>"$CLAUDE_ENV_FILE"
++(cd "$top" && lune run z-nile/lib/tmpcli -- sweep --dir "$top" >/dev/null) || true
++exit 0
+diff --git a/z-nile/bin/mktemp b/z-nile/bin/mktemp
+new file mode 100755
+index 00000000..48ec6ae3
+--- /dev/null
++++ b/z-nile/bin/mktemp
+@@ -0,0 +1,25 @@
++#!/bin/sh
++# mktemp that honours TMPDIR (c0194). macOS mktemp ignores TMPDIR and uses the user temp folder, outside the repository
++# and so inside Spotlight's reach. With no template, or -t <prefix>, this puts the tree in $TMPDIR; a template (and
++# so -p <dir>, whose folder is the first non-option) names its place and is passed through. The runner copies this file into each run's own bin/ (tests/lib/fence.luau).
++real=/usr/bin/mktemp
++[ -x "$real" ] || real=/bin/mktemp
++f=
++p=tmp
++while [ $# -gt 0 ]; do
++  case $1 in
++  -t) p=${2:-tmp}; shift; [ $# -gt 0 ] && shift ;;
++  -?*t) f="$f ${1%t}"; p=${2:-tmp}; shift; [ $# -gt 0 ] && shift ;; # a cluster ending in t, such as -dt <prefix>
++  -*) f="$f $1"; shift ;;
++  *) exec "$real" $f "$@" ;;
++  esac
++done
++if [ -z "${TMPDIR:-}" ] || [ ! -d "$TMPDIR" ]; then
++  echo "mktemp: TMPDIR is unset or not a folder; using the system temp folder" >&2
++  exec "$real" $f
++fi
++case $TMPDIR in
++*/.cache/.tmp | */.cache/.tmp/*) ;;
++*) echo "mktemp: TMPDIR is not under a .cache/.tmp folder; the tree will be outside the repository" >&2 ;;
++esac
++exec "$real" $f "${TMPDIR%/}/$p.XXXXXXXXXX"
+diff --git a/z-nile/check.sh b/z-nile/check.sh
+index f193d40a..6ce088ec 100755
+--- a/z-nile/check.sh
++++ b/z-nile/check.sh
+@@ -92,6 +92,7 @@ else
+ fi
+ 
+ source z-nile/lib/fence.sh
++source z-nile/lib/tmp.sh
+ # The root's .cache and every home's get the fence's refusals before anything here writes there (the builds write
+ # each home's check*.rbxl), and before --plan (they only read): a symlinked or bad .cache, which an unjailed spec could
+ # leave, refuses (code review 004 F3, 005 F3). The set is fence.sh's (pickman_fence_all, code review 005 F2).
+@@ -125,19 +126,22 @@ done
+ mkdir -p .cache
+ find .cache -mindepth 1 -maxdepth 1 -type l -exec rm -f {} +
+ pickman_fence_all "$(pwd -P)" strict || exit 1
++# stale temporary trees, here and in the session's folder (c0194); what is in use is never touched
++pickman_tmp_sweep "$(pwd -P)" >&2 || true
+ defs=.cache/globalTypes.d.luau
+ if [[ ! -s $defs || -L $defs ]]; then
+-  t=$(mktemp "${TMPDIR:-/tmp}/globalTypes.XXXXXX")
++  d=$(pickman_tmp_new globaltypes) || exit 1
++  t=$d/globalTypes.d.luau
+   curl -fsSL -o "$t" https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/main/scripts/globalTypes.None.d.luau ||
+-    { rm -f "$t"; echo "check.sh: could not download the Luau global types (globalTypes.d.luau)" >&2; exit 1; }
+-  perl z-nile/lib/replace-file.pl "$defs" "$t" || { rm -f "$t"; exit 1; }
+-  rm -f "$t"
++    { rm -rf "$d"; echo "check.sh: could not download the Luau global types (globalTypes.d.luau)" >&2; exit 1; }
++  perl z-nile/lib/replace-file.pl "$defs" "$t" || { rm -rf "$d"; exit 1; }
++  rm -rf "$d"
+ fi
+ build_place() { # $1 the output file, then the build command. rojo writes through a symlink at its output path,
+   # so it builds in a fresh folder outside and the result is renamed in (replace-file.pl); the folder always goes
+   local out=$1 d rc
+   shift
+-  d=$(mktemp -d "${TMPDIR:-/tmp}/check-build.XXXXXX") || return 1
++  d=$(pickman_tmp_new check-build) || return 1
+   "$@" -o "$d/$(basename "$out")" && perl z-nile/lib/replace-file.pl "$out" "$d/$(basename "$out")"
+   rc=$?
+   rm -rf "$d"
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index c3ffdc92..d7a3db4b 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -15,6 +15,7 @@ local projects = require("./projects")
+ local publish = require("./publish")
+ local raftplan = require("./raftplan")
+ local sh = require("../lib/sh")
++local tmpTrees = require("../lib/tmp")
+ local skillsLib = require("./skills")
+ local spend = require("./spend")
+ local statusLib = require("./status")
+@@ -3079,13 +3080,13 @@ function cmd.remap()
+ 	-- Then merge origin/main against the merge base with the same map applied: every path then matches on all three
+ 	-- sides, so git never has to guess a rename (similar documents, such as stubs, get paired wrongly).
+ 	local mb = sh.git({ "merge-base", "HEAD", "origin/main" })
+-	-- in a fresh temporary folder, never at a fixed name under .cache: a spec may have swapped a link in there, and git
+-	-- would build (and remove) the worktree through it (R0026 review 001 F2)
+-	local tmpBase = string.gsub(process.env.TMPDIR or "", "/+$", "")
+-	local scratch = `{sh.must(
+-		"mktemp",
+-		{ "-d", `{if tmpBase == "" then "/tmp" else tmpBase}/tracker-remap-base.XXXXXX` }
+-	)}/base`
++	-- in a fresh temporary folder under .cache/.tmp, never at a fixed name under .cache: a spec may have swapped a
++	-- link in there, and git would build (and remove) the worktree through it (R0026 review 001 F2)
++	local scratchRoot, scratchWhy = tmpTrees.new(nil, "tracker-remap-base", nil)
++	if not scratchRoot then
++		fail(`remap: no temporary folder: {scratchWhy}`)
++	end
++	local scratch = `{scratchRoot}/base`
+ 	-- any failure here leaves the scratch worktree removed and says what to do (R0270 review 001 F5)
+ 	local built, baseTree = pcall(function(): string
+ 		sh.git({ "worktree", "add", "-q", "--detach", scratch, mb })
+diff --git a/z-nile/lib/par.sh b/z-nile/lib/par.sh
+index 3013ee83..62af887e 100644
+--- a/z-nile/lib/par.sh
++++ b/z-nile/lib/par.sh
+@@ -7,6 +7,7 @@
+ #                                           then its output; returns 1 if any stage failed; resets
+ #   par_now                                 the clock: seconds (fractional with perl, else whole)
+ 
++source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/tmp.sh"
+ PAR_DIR=""
+ PAR_N=0
+ PAR_LABELS=()
+@@ -31,7 +32,7 @@ par_start() {
+   local label=$1 i
+   shift
+   if [[ -z $PAR_DIR ]]; then
+-    PAR_DIR=$(mktemp -d "${TMPDIR:-/tmp}/par.XXXXXX")
++    PAR_DIR=$(pickman_tmp_new par) || return 1
+     trap par_abort INT TERM
+   fi
+   i=$PAR_N
+diff --git a/z-nile/lib/tmp.luau b/z-nile/lib/tmp.luau
+new file mode 100644
+index 00000000..423b93c5
+--- /dev/null
++++ b/z-nile/lib/tmp.luau
+@@ -0,0 +1,658 @@
++--!strict
++-- Temporary trees live under <checkout or home>/.cache/.tmp (c0194): the one owner of making them for Lune code and for
++-- agents, keeping them apart from every config of the checkout above them, jailing a command in one, and finding the
++-- stale ones. Pure rules first, reads and writes at the edge (zz-arch). Its command line is z-nile/lib/tmpcli.luau
++-- (`./zn tmp ...`); shell callers in the gate make their trees in shell (z-nile/lib/tmp.sh) and sweep through the command line.
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++local serde = require("@lune/serde")
++
++local tmp = {}
++
++tmp.REL = ".cache/.tmp"
++tmp.MARKER = ".metadata_never_index"
++tmp.OWNER = ".pickman-owner"
++tmp.SENTINEL = "gitdir: /nonexistent/pickman-fence\n"
++tmp.NONE = ".isolated-no-such-folder"
++tmp.OWNED_DEAD_SECONDS = 3600
++tmp.UNOWNED_SECONDS = 86400
++
++local function trim(s: string): string
++	return (string.gsub(s, "^%s+", ""):gsub("%s+$", ""))
++end
++
++-- A .luaurc key the neutralizer knows how to reset. Any other key in an ancestor refuses (fail closed): it could
++-- change how a tree below is checked, and nothing here would undo it.
++local RESETTABLE: { [string]: boolean } = { languageMode = true, aliases = true }
++
++export type Ancestor = { path: string, text: string }
++
++-- The .luaurc that keeps every ancestor's aliases out of the trees below .cache/.tmp: each alias an ancestor names
++-- (case-insensitive, so lowercased) points at a folder that does not exist, and the language mode is Luau's default.
++-- A tree's own .luaurc, nearer, sets its own again. Returns the text, or nil and why.
++function tmp.neutralizer(ancestors: { Ancestor }): (string?, string?)
++	local names: { [string]: boolean } = {}
++	for _, a in ancestors do
++		local ok, doc = pcall(function()
++			return serde.decode("json", a.text)
++		end)
++		if not ok or type(doc) ~= "table" then
++			return nil, `{a.path} is not strict JSON`
++		end
++		for key, value in doc :: { [string]: any } do
++			if not RESETTABLE[key] then
++				return nil, `{a.path} sets "{key}", which the isolation cannot reset`
++			end
++			if key == "aliases" then
++				if type(value) ~= "table" then
++					return nil, `{a.path} has aliases that are not an object`
++				end
++				for name in value :: { [string]: any } do
++					names[string.lower(name)] = true
++				end
++			end
++		end
++	end
++	local sorted: { string } = {}
++	for name in names do
++		table.insert(sorted, name)
++	end
++	table.sort(sorted)
++	local lines: { string } = {}
++	for _, name in sorted do
++		table.insert(lines, `    {serde.encode("json", name)}: "./{tmp.NONE}"`)
++	end
++	local body = if #lines > 0 then "\n" .. table.concat(lines, ",\n") .. "\n  " else ""
++	return `\{\n  "languageMode": "nonstrict",\n  "aliases": \{{body}\}\n\}\n`, nil
++end
++
++-- The tool names under [tools] in a rokit.toml, or nil and why. Every line there must be `name = "spec"`.
++function tmp.rokitTools(text: string): ({ string }?, string?)
++	local out: { string } = {}
++	local inTools = false
++	for line in string.gmatch(text, "[^\n]+") do
++		local l = trim(line)
++		if l == "" or string.sub(l, 1, 1) == "#" then
++			continue
++		end
++		local section = string.match(l, "^%[([^%]]*)%]$")
++		if section then
++			inTools = section == "tools"
++		elseif inTools then
++			local name = string.match(l, '^([%w_%.%-]+)%s*=%s*"[^"]*"$')
++			if not name then
++				return nil, `cannot read the tools line: {l}`
++			end
++			table.insert(out, name)
++		end
++	end
++	return out, nil
++end
++
++-- The tools the ancestors' manifests name that the tree's own manifests do not: Rokit merges every manifest up the
++-- path, so a tool the tree dropped would still resolve from above. Returns the list, or nil and why.
++function tmp.rokitLeaks(ancestors: { Ancestor }, own: { Ancestor }): ({ string }?, string?)
++	local have: { [string]: boolean } = {}
++	for _, o in own do
++		local tools, why = tmp.rokitTools(o.text)
++		if not tools then
++			return nil, `{o.path}: {why}`
++		end
++		for _, name in tools do
++			have[name] = true
++		end
++	end
++	local leaks: { [string]: boolean } = {}
++	for _, a in ancestors do
++		local tools, why = tmp.rokitTools(a.text)
++		if not tools then
++			return nil, `{a.path}: {why}`
++		end
++		for _, name in tools do
++			if not have[name] then
++				leaks[name] = true
++			end
++		end
++	end
++	local out: { string } = {}
++	for name in leaks do
++		table.insert(out, name)
++	end
++	table.sort(out)
++	return out, nil
++end
++
++export type Entry = { name: string, link: boolean, newest: number, owner: string?, ownerAlive: boolean }
++
++-- Whether a tree under .cache/.tmp is stale. Never a link, a name that is not plain (a dot-name is the folder's own file), a tree some process
++-- has as its working directory, or a tree whose owner is alive. A tree with a dead owner is stale after an hour
++-- unused; one with no owner (a plain mktemp) after a day.
++function tmp.stale(e: Entry, now: number, occupied: boolean): boolean
++	if e.link or occupied then
++		return false
++	end
++	if string.match(e.name, "^[%w][%w._%-]*$") == nil then
++		return false
++	end
++	local idle = now - e.newest
++	if e.owner ~= nil then
++		return not e.ownerAlive and idle >= tmp.OWNED_DEAD_SECONDS
++	end
++	return idle >= tmp.UNOWNED_SECONDS
++end
++
++-- ---------------------------------------------------------------------------------------------------- the edge
++
++local function isLink(path: string): boolean
++	return process.exec("test", { "-L", path }).ok
++end
++
++local function physical(path: string): string?
++	if path == "" then
++		return nil
++	end
++	local ok, r = pcall(process.exec, "pwd", { "-P" }, { cwd = path })
++	return if ok and r.ok then trim(r.stdout) else nil
++end
++
++local function replace(dest: string, text: string): boolean
++	local lib = string.match(debug.info(1, "s"), "^(.*)/[^/]+$") or "."
++	local r = process.exec("perl", { `{lib}/replace-file.pl`, dest }, { stdio = { stdin = text } })
++	return r.ok
++end
++
++local function readMaybe(path: string): string?
++	local ok, text = pcall(fs.readFile, path)
++	return if ok then text else nil
++end
++
++-- The files named `name` in every folder from `from` up to /, nearest first, as ancestors. `from` is physical.
++local function above(from: string, name: string, skip: string?): { Ancestor }
++	local out: { Ancestor } = {}
++	local dir: string? = from
++	while dir and dir ~= "" do
++		local path = `{dir}/{name}`
++		if path ~= skip then
++			local text = readMaybe(path)
++			if text then
++				table.insert(out, { path = path, text = text })
++			end
++		end
++		dir = string.match(dir, "^(.*)/[^/]+$")
++	end
++	local rootText = readMaybe(`/{name}`)
++	if rootText then
++		table.insert(out, { path = `/{name}`, text = rootText })
++	end
++	return out
++end
++
++-- <dir>/.cache/.tmp, made if missing: refuses a .cache or .tmp that is a link or a file (a link there would turn
++-- every write below into a write elsewhere), writes the index marker, the git sentinel and the isolation .luaurc by
++-- rename (never through a link). Returns the folder, or nil and why.
++function tmp.root(dir: string): (string?, string?)
++	local top = physical(dir)
++	if not top then
++		return nil, `{dir} is not a folder`
++	end
++	local cache = `{top}/.cache`
++	local root = `{cache}/.tmp`
++	for _, p in { cache, root } do
++		if isLink(p) or (fs.isFile(p)) then
++			return nil, `{p} is not a plain folder (a symlink or a file); refusing. Stop and report this.`
++		end
++	end
++	fs.writeDir(root)
++	local rootPhysical = physical(root)
++	if rootPhysical ~= root then
++		return nil, `{root} resolves to {rootPhysical or "nothing"}; refusing. Stop and report this.`
++	end
++	if not replace(`{root}/{tmp.MARKER}`, "") or not replace(`{root}/.git`, tmp.SENTINEL) then
++		return nil, `cannot write {root}'s marker and sentinel`
++	end
++	-- the isolation file serves the trees that need it (Merging's clone). An ancestor it cannot reset leaves it out: a stale
++	-- one is removed, `verify` says why, and the trees that don't need isolation (the gate's) still get their folder
++	local text = tmp.neutralizer(above(root, ".luaurc", `{root}/.luaurc`))
++	if not text then
++		pcall(fs.removeFile, `{root}/.luaurc`)
++	elseif readMaybe(`{root}/.luaurc`) ~= text and not replace(`{root}/.luaurc`, text) then
++		return nil, `cannot write {root}/.luaurc`
++	end
++	return root, nil
++end
++
++-- Where a new tree goes. An explicit `dir` is that checkout's (or home's) .cache/.tmp. Without one, the environment
++-- decides: a TMPDIR inside some .cache/.tmp is where this session or run keeps its trees (a spec run's own folder, an
++-- agent's session folder), so they go there, which is also the only place a jailed run may write; otherwise the
++-- checkout the command runs in.
++function tmp.place(dir: string?): (string?, string?)
++	if dir then
++		return tmp.root(dir)
++	end
++	local env = process.env.TMPDIR or ""
++	local prefix, belowMatch = string.match(env, "^(.*)/%.cache/%.tmp(/?.*)$") -- the nearest, a clone being inside another
++	local below: string = belowMatch or ""
++	if prefix and (below == "" or below == "/") then
++		return tmp.root(prefix)
++	elseif prefix and string.sub(below, 1, 1) == "/" then
++		local folder = string.gsub(env, "/+$", "")
++		if isLink(folder) or not fs.isDir(folder) then
++			return nil, `{folder} (TMPDIR) is not a plain folder; refusing. Stop and report this.`
++		end
++		return folder, nil
++	end
++	return tmp.root(process.env.ZN_TOP or ".")
++end
++
++-- The kernel's start record of a pid: the same perl as the runner's lock (tests/lib/fence.luau), pinned equal by a spec, so a
++-- run folder's owner record is read by the one format whoever wrote it, and the jail (which refuses the setuid ps) allows it.
++tmp.STARTED = table.concat({
++	"my $pid = shift; exit 2 unless defined $pid && $pid =~ /^\\d+$/;",
++	"if ($^O eq 'darwin') { my $mib = pack('i4', 1, 14, 1, $pid); my $buf = \"\\0\" x 4096;",
++	"my $len = pack('Q', length $buf); exit 2 unless syscall(202, $mib, 4, $buf, $len, 0, 0) == 0;",
++	"exit 1 unless unpack('Q', $len) > 0; my ($sec, $usec) = unpack('q l', $buf); exit 1 unless $sec > 0;",
++	'print "$sec.$usec\\n"; exit 0 }',
++	"if ($^O eq 'linux') { open(my $b, '<', '/proc/sys/kernel/random/boot_id') or exit 2; my $boot = <$b>;",
++	"close $b; chomp $boot; open(my $st, '<', \"/proc/$pid/stat\") or exit 1; my $line = <$st>; close $st;",
++	"$line =~ s/^.*\\)\\s+//s or exit 2; my $ticks = (split /\\s+/, $line)[19];",
++	"exit 2 unless $boot ne '' && defined $ticks && $ticks =~ /^\\d+$/; print \"$boot:$ticks\\n\"; exit 0 }",
++	"exit 2;",
++}, " ")
++
++-- A pid's start id (see STARTED); "" for no such process (exit 1), nil when it cannot be told (exit 2, no perl, a platform it
++-- does not know): then a caller takes the process as alive, as the runner's `fence.startOf` does.
++function tmp.startOf(pid: string): string?
++	if string.match(pid, "^%d+$") == nil then
++		return ""
++	end
++	local ok, r = pcall(process.exec, "perl", { "-e", tmp.STARTED, pid })
++	if not ok then
++		return nil
++	end
++	if r.ok then
++		return trim(r.stdout)
++	end
++	return if r.code == 1 then "" else nil
++end
++
++-- A fresh <root>/<kind>.XXXXXX, created exclusively. A caller that outlives its tree names itself as `owner` (a pid),
++-- so the stale sweep can tell a live run's tree from a dead one's; a tree with no owner is judged by use alone.
++function tmp.new(dir: string?, kind: string, owner: string?): (string?, string?)
++	if string.match(kind, "^[%a][%w_%-]*$") == nil then
++		return nil, `{kind} is not a kind of temporary tree (letters, digits, - and _)`
++	end
++	local root, why = tmp.place(dir)
++	if not root then
++		return nil, why
++	end
++	local made = process.exec("/usr/bin/env", { "mktemp", "-d", `{root}/{kind}.XXXXXX` })
++	if not made.ok then
++		return nil, `cannot make a folder in {root}: {trim(made.stderr)}`
++	end
++	local tree = trim(made.stdout)
++	if owner and string.match(owner, "^%d+$") then
++		fs.writeFile(`{tree}/{tmp.OWNER}`, `{owner}\t{tmp.startOf(owner) or "?"}\n`)
++	end
++	return tree, nil
++end
++
++-- The `.cache` folder, the `.tmp` folder and the name of a tree that is a direct child of one, from its physical path.
++local function parts(at: string): (string?, string?, string?)
++	local root, name = string.match(at, "^(.*/%.cache/%.tmp)/([%w][%w._%-]*)$")
++	if not root then
++		return nil, nil, nil
++	end
++	return string.sub(root, 1, -6), root, name
++end
++
++-- "isolated", or why not: the tree is a direct child of a .cache/.tmp (its root comes from the tree itself, never from
++-- where the command runs), that folder's .luaurc is what the folders above need today, and no ancestor Rokit manifest
++-- names a tool the manifests between the tree and the folder lack (a manifest in the folder itself is no tree's own).
++function tmp.verify(tree: string): string
++	local at = physical(tree)
++	if not at then
++		return "not isolated: the tree is missing"
++	end
++	local cache, root = parts(at)
++	if not cache or not root or isLink(tree) or isLink(root) or isLink(cache) then
++		return `not isolated: {at} is not a direct child of a {tmp.REL} folder`
++	end
++	local want, why = tmp.neutralizer(above(root, ".luaurc", `{root}/.luaurc`))
++	if not want then
++		return `not isolated: {why}`
++	end
++	if readMaybe(`{root}/.luaurc`) ~= want then
++		return `not isolated: {root}/.luaurc is not what the folders above need (run ./zn tmp root)`
++	end
++	local own: { Ancestor } = {}
++	for _, a in above(at, "rokit.toml", nil) do
++		if string.sub(a.path, 1, #root + 1) == root .. "/" and a.path ~= `{root}/rokit.toml` then
++			table.insert(own, a)
++		end
++	end
++	local leaks, lwhy = tmp.rokitLeaks(above(root, "rokit.toml", nil), own)
++	if not leaks then
++		return `not isolated: {lwhy}`
++	end
++	if #leaks > 0 then
++		return `not isolated: rokit.toml above names {table.concat(leaks, ", ")}, which the tree's own rokit.toml does not`
++	end
++	return "isolated"
++end
++
++-- Process working directories, from lsof; nil when lsof cannot answer (then nothing is swept).
++function tmp.workingDirs(): { string }?
++	local r = process.exec("lsof", { "-a", "-d", "cwd", "-Fn" })
++	if not r.ok and r.stdout == "" then
++		return nil
++	end
++	local out: { string } = {}
++	for line in string.gmatch(r.stdout, "[^\n]+") do
++		if string.sub(line, 1, 1) == "n" then
++			table.insert(out, string.sub(line, 2))
++		end
++	end
++	return out
++end
++
++-- When anything in the tree was last changed, in seconds: the folder and its entries first, then a look through the
++-- whole tree for a change within `windowMinutes` (the window of the rule that judges this tree; find stops at the first).
++local function newest(path: string, windowMinutes: number): number
++	local best = 0
++	local function see(p: string)
++		local ok, meta = pcall(fs.metadata, p)
++		if ok and meta.modifiedAt then
++			best = math.max(best, (meta.modifiedAt :: any).unixTimestamp)
++		end
++	end
++	see(path)
++	local ok, names = pcall(fs.readDir, path)
++	if ok then
++		for _, n in names do
++			see(`{path}/{n}`)
++		end
++	end
++	local recent = process.exec("find", { path, "-mmin", `-{windowMinutes}`, "-print", "-quit" })
++	if recent.ok and trim(recent.stdout) ~= "" then
++		best = math.max(best, os.time())
++	end
++	return best
++end
++
++-- Removes <root>/<name> from inside <root>, entered by its physical path: a link swapped in for `.cache` or `.tmp` since
++-- the caller checked them makes this refuse instead of deleting somewhere else. Only a plain name; a direct child.
++function tmp.remove(root: string, name: string): boolean
++	if string.match(name, "^[%w][%w._%-]*$") == nil then
++		return false
++	end
++	local script = 'cd -P -- "$1" && [ "$(pwd -P)" = "$1" ] && exec rm -rf -- "$2"'
++	return process.exec("sh", { "-c", script, "_", root, name }).ok
++end
++
++-- Removes the stale trees under <dir>/.cache/.tmp. `dryRun` removes nothing.
++-- Returns the trees removed (or that would be, with `dryRun`), each with its idle time, or nil and why when it could not
++-- tell what is in use. The caller reports them.
++export type Probes = { workingDirs: () -> { string }?, startOf: (string) -> string? }
++tmp.REAL = { workingDirs = tmp.workingDirs, startOf = tmp.startOf } :: Probes
++
++function tmp.sweep(dir: string, dryRun: boolean, probes: Probes): ({ string }?, string?)
++	local top = physical(dir)
++	local root = if top then `{top}/{tmp.REL}` else nil
++	if not root or not fs.isDir(root) or isLink(root) or isLink(`{top}/.cache`) then
++		return {}, nil
++	end
++	local cwds = probes.workingDirs()
++	if not cwds then
++		return nil, "cannot list the processes' working directories (lsof); nothing swept"
++	end
++	local now = os.time()
++	local found: { string } = {}
++	for _, name in fs.readDir(root) do
++		local path = `{root}/{name}`
++		local link = isLink(path)
++		local owner: string? = nil
++		local alive = false
++		if not link and fs.isDir(path) then
++			local rec = readMaybe(`{path}/{tmp.OWNER}`)
++			if rec then
++				owner = rec
++				local pid, start = string.match(rec, "^(%d+)\t([^\n]*)")
++				if pid then
++					local running = probes.startOf(pid)
++					alive = running == nil
++						or (running ~= "" and (start == "?" or start == "" or running == start))
++				end
++			end
++		end
++		local occupied = false
++		for _, c in cwds do
++			if c == path or string.sub(c, 1, #path + 1) == path .. "/" then
++				occupied = true
++			end
++		end
++		local entry: Entry = {
++			name = name,
++			link = link,
++			newest = if link
++				then now
++				else newest(
++					path,
++					if owner then tmp.OWNED_DEAD_SECONDS // 60 else tmp.UNOWNED_SECONDS // 60
++				),
++			owner = owner,
++			ownerAlive = alive,
++		}
++		if not link and tmp.stale(entry, now, occupied) then
++			table.insert(found, `{path} (idle {math.floor((now - entry.newest) / 3600)} h)`)
++			if not dryRun then
++				tmp.remove(root, name)
++			end
++		end
++	end
++	return found, nil
++end
++
++-- A path as a sandbox regex: every character that means something in one is escaped.
++local function regexOf(path: string): string
++	return (string.gsub(path, "[%.%[%]%*%^%$%(%)%+%?{}|\\]", "\\%0"))
++end
++
++-- The profile for a command run in a scratch tree that has no guards of its own (an unguarded-code run, zz-test). It is
++-- the spec jail's rule set applied to the clone inside the tree, so that a spec runner started there takes the clone for a
++-- fixture of a guarded checkout and its nested runs pass (the user's decision, 2026-11-01, "Make them work jailed"): the
++-- command may write `/dev`, its own TMPDIR (`<tree>/.jail-tmp`) and the contents of the `.cache` folders it is given
++-- (`caches`, the ones `prepareCaches` made: a checkout's and each project home's, as the runner guards them), never the
++-- entry of one and never a symlink at the top of one; the rest of the tree, the clone's sources and its git directory,
++-- is read-only to it, as the checkout is to a spec. No allow rule is a pattern over names: a path the command can create
++-- itself (a `.cache` folder deeper in the sources or the git directory) is never matched. No network but loopback, no
++-- signal out of the sandbox. `tree` is the tree's physical path (sandbox rules match the resolved path, so no other spelling is
++-- written); every cache is below it.
++function tmp.jailProfile(tree: string, caches: { string }): string
++	local rules = {
++		"(version 1)",
++		"(allow default)",
++		"(deny network-outbound (remote ip))",
++		'(allow network-outbound (remote ip "localhost:*"))',
++		'(deny file-write* (subpath "/"))',
++		'(allow file-write* (subpath "/dev"))',
++		`(allow file-write* (subpath "{tree}/.jail-tmp"))`,
++	}
++	for _, cache in caches do
++		table.insert(rules, `(allow file-write* (subpath "{cache}"))`)
++	end
++	for _, cache in caches do
++		table.insert(rules, `(deny file-write* (literal "{cache}"))`) -- later rules win
++		table.insert(
++			rules,
++			`(deny file-write-create (require-all (vnode-type SYMLINK) (regex #"^{regexOf(cache)}/[^/]+$")))`
++		)
++	end
++	table.insert(rules, "(deny signal (with no-log))")
++	table.insert(rules, "(allow signal (target same-sandbox))")
++	return table.concat(rules, "")
++end
++
++export type Inherited = { ceilings: string, realGit: string, common: string }
++export type JailPlan = { argv: { string }, cwd: string }
++
++-- What running `argv` in `tree` under that profile takes: the command line (sandbox-exec, then `env` with TMPDIR inside the
++-- tree and the two lists the spec runner reads to take this for a fixture of a guarded checkout: the `.cache` that holds the
++-- tree's `.tmp` joins GIT_CEILING_DIRECTORIES, and this checkout's git directory joins PICKMAN_FENCE_REAL_GIT, so a runner started in
++-- the clone does not refuse to start inside this sandbox), and the folder it runs in (the tree). Nil and why unless
++-- the tree is a direct child of a .cache/.tmp, made by `new`. It makes the `.cache` folders the profile opens first
++-- (`prepareCaches`), so a tree that is not one is never written.
++function tmp.jailPlan(tree: string, argv: { string }, inherited: Inherited): (JailPlan?, string?)
++	local at = physical(tree)
++	local cache = if at then parts(at) else nil
++	if not at or not cache or isLink(tree) then
++		return nil, `{tree} is not a tree made by ./zn tmp new (a direct child of a {tmp.REL} folder)`
++	end
++	if #argv == 0 then
++		return nil, "no command given"
++	end
++	local caches, cachesWhy = tmp.prepareCaches(at) -- made first: the jail denies the sources around them
++	if not caches then
++		return nil, cachesWhy
++	end
++	local function joined(a: string, b: string): string
++		return if a == "" then b else `{a}:{b}`
++	end
++	local out = {
++		"sandbox-exec",
++		"-p",
++		tmp.jailProfile(at, caches),
++		"env",
++		`TMPDIR={at}/.jail-tmp`,
++		`GIT_CEILING_DIRECTORIES={joined(inherited.ceilings, cache)}`,
++		`PICKMAN_FENCE_REAL_GIT={joined(inherited.realGit, inherited.common)}`,
++	}
++	for _, a in argv do
++		table.insert(out, a)
++	end
++	return { argv = out, cwd = at }, nil
++end
++
++-- The project homes of a checkout: its direct children that hold a `.tracker` (the set fence.sh fences), as paths.
++function tmp.homesOf(checkout: string): { string }
++	local out: { string } = {}
++	local ok, names = pcall(fs.readDir, checkout)
++	if ok then
++		for _, home in names do
++			local path = `{checkout}/{home}`
++			if fs.isDir(path) and not isLink(path) and fs.isDir(`{path}/.tracker`) then
++				table.insert(out, path)
++			end
++		end
++	end
++	return out
++end
++
++-- The `.cache` folders the jail will let a command write, made before it starts (the jail cannot make them: it denies
++-- the sources around them): one in every checkout inside the tree (a direct child with a `.git`) and one in each of its
++-- project homes (a direct child of the checkout that holds a `.tracker`), the set `fence.sh` fences. A `.cache` that is a
++-- link or a file refuses. Returns the folders made or found, or nil and why.
++function tmp.prepareCaches(tree: string): ({ string }?, string?)
++	local at = physical(tree)
++	if not at then
++		return nil, `{tree} is not a folder`
++	end
++	local out: { string } = {}
++	local function make(dir: string): string?
++		local cache = `{dir}/.cache`
++		if isLink(cache) or fs.isFile(cache) then
++			return `{cache} is not a plain folder (a symlink or a file); refusing. Stop and report this.`
++		end
++		fs.writeDir(cache)
++		table.insert(out, cache)
++		return nil
++	end
++	for _, name in fs.readDir(at) do
++		local checkout = `{at}/{name}`
++		if
++			fs.isDir(checkout)
++			and not isLink(checkout)
++			and process.exec("test", { "-e", `{checkout}/.git` }).ok
++		then
++			local why = make(checkout)
++			if why then
++				return nil, why
++			end
++			for _, home in tmp.homesOf(checkout) do
++				local homeWhy = make(home)
++				if homeWhy then
++					return nil, homeWhy
++				end
++			end
++		end
++	end
++	return out, nil
++end
++
++-- Removes one tree made by `new` (a direct child of a .cache/.tmp that is not a link), through `remove`.
++function tmp.removeTree(tree: string): (boolean, string?)
++	local at = physical(tree)
++	local _, root, name = parts(at or "")
++	if not at or not root or isLink(tree) then
++		return false, `{tree} is not a tree made by ./zn tmp new (a direct child of a {tmp.REL} folder)`
++	end
++	return tmp.remove(root, name :: string), nil
++end
++
++-- The trees the tooling used to leave in the system temp folder (or `base`), one report line each, for the person to
++-- look at before anything is removed. Only the names in `remove` are removed, and never one a process works in.
++function tmp.leftovers(remove: { string }, base: string?): { string }
++	local chosen: string = base or ""
++	if not base then
++		local ut = process.exec("getconf", { "DARWIN_USER_TEMP_DIR" })
++		chosen = if ut.ok and trim(ut.stdout) ~= "" then trim(ut.stdout) else (process.env.TMPDIR or "/tmp")
++	end
++	local where = (string.gsub(chosen, "/+$", ""))
++	local cwds: { string } = tmp.workingDirs() or {}
++	local patterns = {
++		"^tmp%.",
++		"^pickman%-run%.",
++		"^par%.",
++		"^tracker%-remap%-base%.",
++		"^check%-build%.",
++		"^globalTypes%.",
++		"^pickman%-guard%.",
++	}
++	local want: { [string]: boolean } = {}
++	for _, n in remove do
++		want[n] = true
++	end
++	local lines: { string } = {}
++	for _, name in fs.readDir(where) do
++		local match = false
++		for _, p in patterns do
++			if string.match(name, p) then
++				match = true
++			end
++		end
++		local path = `{where}/{name}`
++		if match and fs.isDir(path) and not isLink(path) then
++			local occupied = false
++			for _, c in cwds do
++				if c == path or string.sub(c, 1, #path + 1) == path .. "/" then
++					occupied = true
++				end
++			end
++			local size = string.match(process.exec("du", { "-sk", path }).stdout, "^%s*(%d+)") or "?"
++			local repo = fs.isDir(`{path}/repo/.git`) or fs.isDir(`{path}/.git`)
++			local idle = math.floor((os.time() - newest(path, tmp.UNOWNED_SECONDS // 60)) / 3600)
++			local removed = false
++			if want[name] and not occupied then
++				removed = tmp.remove(where, name)
++			end
++			table.insert(
++				lines,
++				`{name}\t{size} kB\t{idle} h idle\t{if repo then "repo" else "-"}\t{if occupied
++					then "IN USE"
++					else if removed then "REMOVED" else "kept"}`
++			)
++		end
++	end
++	return lines
++end
++
++return tmp
+diff --git a/z-nile/lib/tmp.sh b/z-nile/lib/tmp.sh
+new file mode 100644
+index 00000000..0c449af8
+--- /dev/null
++++ b/z-nile/lib/tmp.sh
+@@ -0,0 +1,33 @@
++# Temporary trees for shell code (c0194): everything lives under <checkout>/.cache/.tmp, never in the system temp
++# folder. Source it, then:
++#   tree=$(pickman_tmp_new <kind>)   # a fresh <kind>.XXXXXX in TMPDIR when that is inside a .cache/.tmp, else in this
++#                                      # checkout's .cache/.tmp (no owner record: the day rule sweeps a tree left behind)
++#   pickman_tmp_sweep <checkout>...             # removes the stale trees there, one report line each on stderr
++# pickman_tmp_new is shell (see below); the sweep is z-nile/lib/tmp.luau's (one owner), reached through its command line,
++# which needs lune on PATH.
++_pickman_tmp_lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
++# In shell, with no Lune: the gate runs this before its tools are known to work, and its trees need no isolation. The folder
++# is TMPDIR when that is inside a .cache/.tmp (a spec run's, a session's), else this checkout's. A .cache or .tmp that is a
++# link or a file refuses (fence.sh's rule), the Spotlight marker is written if missing, and the tree is a fresh mktemp -d.
++pickman_tmp_new() {
++  local kind=$1 root cache
++  case ${TMPDIR:-} in
++  */.cache/.tmp | */.cache/.tmp/*) root=${TMPDIR%/} ;;
++  *) root=$(pwd -P)/.cache/.tmp ;;
++  esac
++  cache=${root%/.tmp}
++  if [[ $root == */.cache/.tmp ]] && [[ -L $cache || -L $root || -f $cache || -f $root ]]; then
++    echo "tmp: $root is not a plain folder (a symlink or a file); refusing. Stop and report this." >&2
++    return 1
++  fi
++  mkdir -p "$root" || return 1
++  if [[ $root == */.cache/.tmp && ! -e $root/.metadata_never_index && ! -L $root/.metadata_never_index ]]; then
++    (set -C; : >"$root/.metadata_never_index") 2>/dev/null || true
++  fi
++  mktemp -d "$root/$kind.XXXXXX"
++}
++pickman_tmp_sweep() {
++  local args=() d
++  for d in "$@"; do args+=(--dir "$d"); done
++  lune run "$_pickman_tmp_lib/tmpcli" -- sweep ${args[@]+"${args[@]}"}
++}
+diff --git a/z-nile/lib/tmpcli.luau b/z-nile/lib/tmpcli.luau
+new file mode 100644
+index 00000000..30ec2483
+--- /dev/null
++++ b/z-nile/lib/tmpcli.luau
+@@ -0,0 +1,131 @@
++--!strict
++-- The command line of z-nile/lib/tmp.luau (c0194), run as `./zn tmp ...` or `lune run z-nile/lib/tmpcli -- ...`:
++--   new <kind> [--owner <pid>]   a fresh .cache/.tmp/<kind>.XXXXXX, printed
++--   root                         the .cache/.tmp folder itself, made safe, printed
++--   verify <tree>                "isolated", or "not isolated: <why>" (exit 1)
++--   sweep [--dry-run]            removes the stale trees, one report line each
++--   jail <tree> -- <command>...  runs a command in the tree under tmp.jailProfile, exit code passed on
++--   rm <tree>                    removes a tree made by `new` (and nothing else)
++--   leftovers [--remove <name>...]  lists the trees in the system temp folder (removes only those named)
++-- Every command takes `--dir <checkout or home>` (repeatable for sweep). Without it, the checkout whose .cache/.tmp
++-- is this shell's TMPDIR (an agent's session points it at the main checkout's), else the checkout of ./zn.
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++local stdio = require("@lune/stdio")
++local tmp = require("./tmp")
++
++local function fail(msg: string)
++	stdio.ewrite(`tmp: {msg}\n`)
++	process.exit(1)
++end
++
++local args = table.clone(process.args)
++if args[1] == "--" then
++	table.remove(args, 1)
++end
++local cmd = table.remove(args, 1)
++
++local dirs: { string } = {}
++local rest: { string } = {}
++local owner: string? = nil
++local dry = false
++local i = 1
++while args[i] do
++	local a = args[i]
++	if a == "--dir" and args[i + 1] then
++		table.insert(dirs, args[i + 1])
++		i += 1
++	elseif a == "--owner" and args[i + 1] then
++		owner = args[i + 1]
++		i += 1
++	elseif a == "--dry-run" then
++		dry = true
++	else
++		table.insert(rest, a)
++	end
++	i += 1
++end
++local explicit = if #dirs > 0 then dirs[1] else nil
++if #dirs == 0 then
++	table.insert(dirs, process.env.ZN_TOP or ".")
++end
++
++if cmd == "new" and rest[1] and rest[1] ~= "" then
++	local tree, why = tmp.new(explicit, rest[1], owner)
++	if not tree then
++		fail(why or "failed")
++	end
++	print(tree)
++elseif cmd == "root" then
++	local root, why = tmp.place(explicit)
++	if not root then
++		fail(why or "failed")
++	end
++	print(root)
++elseif cmd == "verify" and rest[1] and rest[1] ~= "" then
++	local verdict = tmp.verify(rest[1])
++	print(verdict)
++	process.exit(if verdict == "isolated" then 0 else 1)
++elseif cmd == "sweep" then
++	-- the session's own folder too (an agent's TMPDIR points at the main checkout's), whatever was named
++	local viaTmpdir = string.match(process.env.TMPDIR or "", "^(.*)/%.cache/%.tmp/?$")
++	if viaTmpdir and not table.find(dirs, viaTmpdir) then
++		table.insert(dirs, viaTmpdir)
++	end
++	-- each named checkout and its project homes: a home's folder holds that home's run folders and `deploy-beta`'s trees
++	local all: { string } = {}
++	for _, d in dirs do
++		table.insert(all, d)
++		for _, home in tmp.homesOf(d) do
++			table.insert(all, home)
++		end
++	end
++	for _, d in all do
++		local found, why = tmp.sweep(d, dry, tmp.REAL)
++		if found then
++			for _, line in found do
++				stdio.ewrite(`tmp: {if dry then "would remove" else "removed"} {line}\n`)
++			end
++		else
++			fail(why or "failed")
++		end
++	end
++elseif cmd == "jail" and rest[1] and rest[1] ~= "" then
++	local argv = table.clone(rest)
++	local tree = table.remove(argv, 1) :: string
++	if argv[1] == "--" then
++		table.remove(argv, 1)
++	end
++	local common = process.exec("git", { "rev-parse", "--path-format=absolute", "--git-common-dir" })
++	local plan, why = tmp.jailPlan(tree, argv, {
++		ceilings = process.env.GIT_CEILING_DIRECTORIES or "",
++		realGit = process.env.PICKMAN_FENCE_REAL_GIT or "",
++		common = if common.ok then (string.gsub(common.stdout, "%s+$", "")) else "",
++	})
++	if plan then
++		fs.writeDir(`{plan.cwd}/.jail-tmp`)
++		local first = table.remove(plan.argv, 1) :: string
++		process.exit(process.exec(first, plan.argv, { cwd = plan.cwd, stdio = "forward" }).code)
++	else
++		fail(why or "failed")
++	end
++elseif cmd == "rm" and rest[1] then
++	local removed, why = tmp.removeTree(rest[1])
++	if not removed then
++		fail(why or `could not remove {rest[1]}`)
++	end
++elseif cmd == "leftovers" then
++	local names: { string } = {}
++	if rest[1] == "--remove" then
++		for j = 2, #rest do
++			table.insert(names, rest[j])
++		end
++	end
++	for _, line in tmp.leftovers(names, nil) do
++		print(line)
++	end
++else
++	fail(
++		"usage: new <kind> | root | verify <tree> | sweep [--dry-run] | jail <tree> -- <command>... | rm <tree> | leftovers [--remove <name>...]  [--dir <checkout>]"
++	)
++end
+diff --git a/z-nile/setup.sh b/z-nile/setup.sh
+index 1690f2c3..b55910e9 100755
+--- a/z-nile/setup.sh
++++ b/z-nile/setup.sh
+@@ -40,7 +40,8 @@ echo "git, gh (authenticated), curl, unzip ok"
+ 
+ say "rokit $ROKIT_VERSION"
+ if ! command -v rokit >/dev/null && [[ ! -x $HOME/.rokit/bin/rokit ]]; then
+-  tmp=$(mktemp -d)
++  mkdir -p .cache/.tmp
++  tmp=$(mktemp -d "$PWD/.cache/.tmp/rokit.XXXXXX")
+   gh release download "$ROKIT_VERSION" -R rojo-rbx/rokit -p "rokit-${ROKIT_VERSION#v}-$asset.zip" -D "$tmp"
+   unzip -q "$tmp"/*.zip -d "$tmp"
+   "$tmp/rokit" self-install
+diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
+index 9baa6675..db55fd1c 100644
+--- a/z-nile/skills/z-design/SKILL.md
++++ b/z-nile/skills/z-design/SKILL.md
+@@ -27,7 +27,7 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
+ - **Touched modules**: one backticked path per bullet. Then run `lune run z-nile/affected -- <paths>` and paste its output, plus the new specs, into **Affected specs**.
+ - **Unknowns & experiments**: list every assumption you can't *prove* from the repo or from docs you've read.
+   - Each gets a pass/fail question, a method and a fallback.
+-  - **Run the cheap ones now** (Lune spikes, `rojo build` probes, doc checks) and record the results. What's left becomes the executor's Phase 1.
++  - **Run the cheap ones now** (Lune spikes, `rojo build` probes, doc checks) and record the results. An experiment that needs a clone or any scratch tree makes it with `./zn tmp new <kind>` (under `.cache/.tmp/`, never the system temp folder) and removes it when it ends. A scratch clone (never a `git worktree add`) goes under `.cache/.tmp/`; a prototype worktree goes under `.worktree/`. What's left becomes the executor's Phase 1.
+ - **Regression guard**: name the existing specs and behaviors at risk, and add regression specs to the Test plan.
+ - **Override check**: promoted specs in `tests/acceptance/` are never edited during execution, so find the conflicts now.
+   - For each Touched path, run `lune run z-nile/affected -- <path>` and `grep -rlF -e <path> tests/acceptance`, and read every spec either lists. The selector alone misses specs that read a file as text; neither sees a spec that builds paths or walks a directory, so also skim the `tests/acceptance` folder names for the area. Output `ALL` carries no list (any `scripts/` or config path): use the grep alone for that path, and repeat it with the file's basename.
+@@ -51,9 +51,9 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
+ - **Write the acceptance specs now** in the issue's `acceptance/` folder (`<root>/issues/<id>/acceptance/`, `./zn find <id>`), as real spec files with the cases that pin the behavior. Require only through aliases, and see the zz-test skill for where these live.
+   - They fail, because the code doesn't exist yet. Main stays green because the gate doesn't run them.
+   - This is what makes the checks unfakeable and sequestered.
+-  - They never change the real repository: every command that changes anything runs in a fixture under `.cache/<unique name>` with its own repository, checked before each write, committing as `<name>@example.invalid` (zz-test skill, "Specs never touch the real repository"). Before the guards exist on your branch, or while prototyping them, run them only in a clone under `$TMPDIR`.
++  - They never change the real repository: every command that changes anything runs in a fixture under `.cache/<unique name>` with its own repository, checked before each write, committing as `<name>@example.invalid` (zz-test skill, "Specs never touch the real repository"). Before the guards exist on your branch, or while prototyping them, run them only in a clone under `.cache/.tmp/` (`./zn tmp new <kind>`; `$TMPDIR` is already there in a session), jailed: every command through `./zn tmp jail <tree> -- <command>...` (zz-test, "Running specs against unguarded code"), removed when the experiment ends.
+ - **Verify the wiring**: `./zn check <id>` runs and fails *for the right reasons*: assertion failures or missing modules, not bash errors.
+-- **Mutation check** (fills the Rules and mutants `checked` column): when you prototype the change in a scratch worktree, apply each row's mutant to the prototype and run the row's spec case, which must fail on an **assertion**, not a syntax or require error. Mark the row `run` and record the outcome in Unknowns & experiments. A row you didn't run (no prototype, or a mutant you couldn't apply) is `reasoned`: say why in Unknowns & experiments, and the reviewer then judges those rows by reading them.
++- **Mutation check** (fills the Rules and mutants `checked` column): when you prototype the change in a scratch worktree, apply each row's mutant to the prototype and run the row's spec case (a mutant of guard code is unguarded code: it runs only in that jailed clone, never in a worktree, and a case that needs the live spec jail is `reasoned` and runs unmutated in the raft's own gate), which must fail on an **assertion**, not a syntax or require error. Mark the row `run` and record the outcome in Unknowns & experiments. A row you didn't run (no prototype, or a mutant you couldn't apply) is `reasoned`: say why in Unknowns & experiments, and the reviewer then judges those rows by reading them.
+ - **Dry-run the promotion**: `./zn promote-check <id>`. The only acceptable failures before implementation are requires of modules the issue will create.
+ 
+ ## 5. Adversarial design review (required)
+diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
+index 5628ff86..0c836762 100644
+--- a/z-nile/skills/zz-execute/SKILL.md
++++ b/z-nile/skills/zz-execute/SKILL.md
+@@ -18,7 +18,7 @@ Work through the phases in order and don't skip any. Wherever you are unsure, th
+    - Write down, for yourself, which files each issue touches.
+ 
+ ## Phase 1: Experiments (fail fast)
+-- For every unknown in the raft's and issues' "Unknowns & experiments" that has no recorded result: run the experiment in the issue's `experiments/` directory, and record the result in the issue document.
++- For every unknown in the raft's and issues' "Unknowns & experiments" that has no recorded result: run the experiment in the issue's `experiments/` directory, and record the result in the issue document. An experiment that needs a clone or any scratch tree makes it with `./zn tmp new <kind>` (under `.cache/.tmp/`, never the system temp folder) and removes it when it ends. A scratch clone (never a `git worktree add`) goes under `.cache/.tmp/`; a prototype worktree goes under `.worktree/`.
+ - **If an experiment fails:**
+   - Switch to the documented fallback, and note that in the issue.
+   - If there's no fallback: **stop** and escalate (see Stop conditions).
+@@ -104,7 +104,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
+ 5. Post a PR comment `Ready to merge at <short sha>` (no final report yet).
+ 
+ ## Phase 6: Merge and clean up
+-1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the zz-rules skill holds (the local full gate, `z-nile/check.sh --full`, in a clone of the exact head whose parent directories are not a checkout of this repo, and mergeable). If one can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED.
++1. Merge the PR yourself, without waiting for a human, once every condition under "Merging" in the zz-rules skill holds (the local full gate, `z-nile/check.sh --full`, in a clone of the exact head under the checkout's `.cache/.tmp/` that `./zn tmp verify` calls isolated (no `.luaurc` alias or Rokit tool of the folders above reaches it), and mergeable). If one can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED.
+ 2. After the merge and before the final report, `./zn spend R0010 --phase deliver --time <minutes from done to merged>`.
+ 3. Write the final report (below), with the merge commit sha. Post it as a comment on the merged PR (`gh pr comment <pr> --body-file -`) *before* cleanup, since cleanup removes your worktree.
+ 4. Follow Landing a change, step 4, in the zz-rules skill, last: the one chained command that updates the root's `main` (`"<root>/zn" sync`, which also rebuilds its board), removes this raft's worktree and deletes the local branch (it removes your own working directory, so nothing runs after it). Post no further commits to the branch. Then give the same report in your reply.
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index 8301ee47..da385b74 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -38,12 +38,13 @@ Each item is a directory named by its ID:
+ - **Lessons**: `<skills folder>/<skill>/lessons/<slug>.md` (the skill's real folder, `z-nile/skills/<skill>/` or `<project>/skills/<skill>/`), id `<skill>/<slug>`. Frontmatter `title`, `when` (`design`, `build` or `both`), `tags: [a, b]`, `check` (one question ending in `?`) and optional `from` (only for a source with no item folder to hold a note; each key once); the body says the rule, why, and how to apply it. **`harvest.md`**, in each reviewed item's folder, has one entry per review finding: `- design-review-001 F2: <lesson id>, <lesson id>` or `- review-001 F3: one-off: <reason>`, plus `- note <text>: <lesson ids>` for a source that is not a review finding (a subagent's candidate, a correction by the user, a failed step). A note covers no finding. A lesson's sources are the entries naming it, each once. See `./zn lessons`.
+ 
+ ## Worktrees
+-Every change is made in its own git worktree under `<repo>/.worktree/` and lands by pull request (except tracker state, see Sync and claim). The main checkout stays on `main` and is never edited. Every job runs in a worktree under `<repo>/.worktree/`, never outside the repo directory: no sibling directory next to the repo, and not the harness's own `.claude/worktrees/`. The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone outside the repo that is not a worktree.
++Every change is made in its own git worktree under `<repo>/.worktree/` and lands by pull request (except tracker state, see Sync and claim). The main checkout stays on `main` and is never edited. Every job runs in a worktree under `<repo>/.worktree/`, never outside the repo directory: no sibling directory next to the repo, and not the harness's own `.claude/worktrees/`. Scratch trees (an experiment's clone) are not jobs: a scratch clone (never a `git worktree add`) goes under the main checkout's `.cache/.tmp/` (`./zn tmp new <kind>`), never the system temp folder; a prototype worktree goes under `.worktree/`. The one exception is Merging's final check and `lune run scripts/cicd` in that clone, a clone under the checkout's `.cache/.tmp/` that is not a worktree.
+ 
+ 1. **The main checkout is read-only.** The complete list of commands that may run there:
+    - `git fetch`, `./zn sync` (a fast-forward there, which also rebuilds the board), and read-only inspection (`git status|log|diff|show|worktree list`);
+    - `git worktree add|remove|prune` and `git branch -D <merged branch>`;
+    - `z-nile/setup.sh`, once, when bootstrapping a new machine (SETUP.md);
++   - `./zn tmp new|root|verify|sweep|jail|rm|leftovers` and the SessionStart hook (`scripts/hooks/session-tmp.sh`), which write only inside `.cache/.tmp/` (the folder's dot-files, and trees: `sweep` removes only stale direct children there, never anything else); a worktree's gate and `./zn remap` write their trees into the session's folder too;
+    - `./zn ready` and `stop`, which publish to `origin/main`, fast-forward it there; `ready` writes the ignored `<root>/rafts/active/<R-id>/prompt.md` beside the raft and `stop` removes it;
+    - the read-only tracker commands `list`, `audit`, `find`, `members`, `busy`, `metrics`, `workstreams`, `status` (without a target status), `prompt <R-id>` (it reads a readied raft's prompt and writes nothing), `lessons`, `raft-plan` (without `--apply`), `skills --check` and `capture <id>` (they only read), and the worktree commands `worktree` and `worktree-prune`. (`./zn check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
+    The tracker enforces part of this: `new`, `renumber`, `migrate`, `start`, `status <id> <to>`, `fold`, `unfold`, `recombine`, `release`, `raft-plan --apply`, `compact`, `remap` and `skills` (without `--check`) refuse to run in the main checkout of a repo that has an `origin`; `ready` and `stop` refuse to run anywhere else.
+@@ -57,7 +58,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+    | rafting (z-raft) | `raft-<slug>` | `.worktree/raft-<slug>`, the same branch name |
+    | a skill, doc or config edit | `<area>-<slug>`, for example `skills-worktree-rule` | `.worktree/<area>-<slug>`, the same branch name |
+ 
+-   A change to skills, docs or tooling is still tracked work: it has an issue and normally a raft, and is executed in the raft's worktree like any other. Names are lowercase, so a prep worktree is named by the issue's slug and a rafting worktree by a short slug of its own: a new raft's id isn't known until `new raft` has run inside it. Use `./zn worktree`, not the harness's own worktree feature: its directories aren't under `.worktree/`, and `worktree-prune` never sees them (it warns about any worktree outside `.worktree/` and leaves it). A worktree inside the repo also sees the main checkout's `.luaurc` as a parent configuration, so an alias a branch renames can still resolve locally. The final check is `z-nile/check.sh --full` in a clone of the exact head whose parent directories are not a checkout of this repo.
++   A change to skills, docs or tooling is still tracked work: it has an issue and normally a raft, and is executed in the raft's worktree like any other. Names are lowercase, so a prep worktree is named by the issue's slug and a rafting worktree by a short slug of its own: a new raft's id isn't known until `new raft` has run inside it. Use `./zn worktree`, not the harness's own worktree feature: its directories aren't under `.worktree/`, and `worktree-prune` never sees them (it warns about any worktree outside `.worktree/` and leaves it). A worktree inside the repo also sees the main checkout's `.luaurc` as a parent configuration, so an alias a branch renames can still resolve locally. The final check is `z-nile/check.sh --full` in a clone of the exact head under the checkout's `.cache/.tmp/` that `./zn tmp verify` calls isolated.
+ 3. **Starting execution**: the human starts a Claude session in the main checkout (which stays on `main`) and runs `/z-run <R-id>`. The skill reads the raft's prompt (`./zn prompt <R-id> --path`) and `cd`s into `$(./zn worktree <R-id>)`. The hooks follow the session's current directory, so from then on they act in the worktree; subagents get absolute worktree paths, because a subagent's shell resets its working directory on every call. Another agent gets the same text from `./zn prompt <R-id>`.
+ 4. **Prep and rafting merge before execution.** An issue's design PR merges before z-raft groups it, and the rafting PR merges (Landing a change) before `z-ready` runs, so the raft's own worktree branches from an `origin/main` that has the prepped items in their raft. `z-ready` never creates a raft: a raftless issue goes to z-raft.
+ 
+@@ -74,6 +75,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | start | `./zn start R0010` | clean tree required. A readied raft (in `active/` on `origin/main`): creates the branch, makes an empty `tracker: start` commit, pushes, and opens a **draft** PR; it claims and moves nothing. A backlog raft (legacy): checks members are `design: ready` and every `depends_on` of a member that isn't a member of the raft is `done` on `origin/main` (an unknown id is refused too); if `start` refuses, merge `origin/main` and retry, never edit `depends_on` or move items to get past it: stop and report. It then claims, creates the branch, moves the raft and its members to `active/`, commits, pushes, and opens a **draft** PR. A worktree made before `ready` is told to `sync` first. Do this first, so the in-progress claim is visible right away. |
+ | worktree | `./zn worktree <R-id\|name>` | creates or reuses `<repo>/.worktree/<R-id\|name>` on its own branch from a freshly fetched `origin/main` and prints its path. A raft's worktree is `.worktree/R0010` (branch `R0010-<slug>`); any other is `.worktree/<name>`. Refuses a done raft, and a branch that is checked out elsewhere. For a named worktree, `--from <ref>` cuts the new branch from that ref instead of `origin/main` (used for workstream streams: `./zn worktree ws-<issue> --from <raft branch>`). |
+ | workstreams | `./zn workstreams <R-id>` | read-only plan for parallel execution (zz-execute Phase 2B): issues in waves from `depends_on` and overlapping Touched modules, and a last line `parallel: yes (wave k: …)` or `parallel: no` |
++| tmp | `./zn tmp new <kind>` \| `root` \| `verify <tree>` \| `sweep [--dry-run]` \| `jail <tree> -- <command>…` \| `rm <tree>` \| `leftovers [--remove <name>...]` | temporary trees under `.cache/.tmp/` of the checkout (`--dir <checkout>` names another): `new` prints a fresh `<kind>.XXXXXX` there, or inside `TMPDIR` when that is already in a `.cache/.tmp`; `root` makes the folder safe (refuses a link or a file, writes its Spotlight marker, git sentinel and the `.luaurc` that isolates trees below it); `verify` says `isolated` or why not; `sweep` removes trees nobody works in (no process has it as its working directory; a dead owner's after an hour, an unowned one's after a day) and says each; `jail` runs a command in a tree made by `new` under `sandbox-exec` (the spec jail's rule set for the clone: it may write `/dev`, its `TMPDIR` and the `.cache` folders in the tree, from the tree as its working directory, `TMPDIR` inside it, no network but loopback, no signals out; the spec runner takes a clone there for a fixture of this checkout); `rm` removes one tree made by `new`; `leftovers` lists the old trees in the system temp folder and removes only the names given. |
+ | board | `./zn board [--out PATH] [-O]` | writes the whole tracker as one self-contained HTML page, `.cache/board.html` by default (gitignored; the main checkout's copy is rebuilt after every tracker push to `origin/main` and every `sync` there, so reload the tab; elsewhere regenerate to refresh). Views Rafts and Issues, each split into Ready, Not ready and Done (a backlog raft is Ready only when its design is ready and its effective status is prepared; a readied raft is Ready; blocked rafts stay listed). A raft's shown type comes from its issues (one type, or mix). A row with a next command has a copy button. Cursor keys, `/` then an id to jump to it, and each item's document and dependencies rendered with the vendored marked. Then it opens the page in the default browser unless `-O` is given (`-O` only writes it, as the specs do; `--open`, the old opt-in, is still accepted and is the default). The board is the local page; GitHub Actions does not build it. Stats (a Stats button, not a third view) charts opened, closed, net, minutes and lines added and removed for the month, quarter and year, by all, feature, defect and chore, plus the defect and chore ratios and mean days in state; Table shows the same numbers with units. Without history (a shallow clone or no git) closed counts and time in state are omitted. |
+ | busy | `./zn busy [<path>...]` | read-only. Lists what holds the paths: every raft active on `origin/main` (but the current branch's own), every branch, local or on origin, that changes them since it left `origin/main` (compaction's busy-branch check), and every other worktree with uncommitted changes under them; exits 1 when anything does. Without paths it guards what compaction guards (every project root and promoted-spec folder). A move of the tree (c0120: `./zn busy tracker src tests`; c0115: `./zn busy .claude/skills z-nile/skills pickman/skills`) is readied only when it prints nothing. Each move's freeze (`FREEZES` in `z-nile/engine/main.luau`) is on only while every path given lies inside the move's own and `origin/main` still holds the move's mark; then the move's own branches, the branches listed as stacked on them, the ones the user approved by name, any branch holding the move commit, the move's own active raft, and worktrees on those branches, are named on stderr (`ignored for c0115's freeze: ...`) and not counted; without paths, with a path outside the move's, or once the move lands, nothing is exempt |
+ | capture | `./zn capture <id>` | read-only. Prints `capture <sha> <path> <subject>` and then the item's document as captured: the newest commit on `origin/main` (`HEAD` without one) whose subject is `tracker: new` with the item's id in its leading id list (`tracker: new raft …` and `tracker: scope …` are not captures), or else the document's first add. It reads the item's backlog, `active/` and `done/` folders, under the item's current id only: no id change (a compaction or a `renumber`) is followed. The header line says when the answer is weaker: it ends `(no capture commit: first add)` when no commit is a capture (a renumbered item, or one made before captures had that subject), `(ambiguous: two items held this id at once)` when the id had two copies, and `(history before <sha> not followed: it changed tracker/compaction.txt)` when the item's life starts at a commit that changed the compaction map and its document. A legacy slug-named document counts. Exit 1 for an id with no history |
+@@ -99,12 +101,12 @@ One procedure for every change: a raft, a capture, a prep or an edit.
+ 1. **Commit in the worktree**: `./zn commit` inside a raft; plain `git add` and `git commit` elsewhere.
+ 2. **Push and open the PR**: `git push -u origin <branch>`. A raft's PR is opened as a draft by `start`; any other PR is opened ready with `gh pr create`. A capture lands with `./zn land` instead (no PR): it merges `origin/main`, runs `z-nile/check.sh --full` locally, checks that only the sections, title and `depends_on` of draft backlog issue documents changed, pushes one commit to `main` (retrying a lost race) and prints the worktree-removal command.
+ 3. **Merge** a PR only when the conditions under Merging hold, with `gh pr merge --squash`. A raft additionally needs `./zn done` and a resolved review. A prep the user didn't ask for is not merged without asking, and a capture they didn't ask for is not landed without asking. (A capture has no PR: `./zn land` in step 2 is its landing.)
+-4. **After the merge, one chained command, run last**: `"<root>/zn" sync; git -C <root> worktree remove <path> && git -C <root> branch -D <branch>; git -C <root> worktree prune`. `<root>` is the first path in `git worktree list`; `sync` fast-forwards the root and rebuilds its board. When the session works inside the worktree (with z-run it started in the main checkout and `cd`'d into the worktree), removing it removes the session's own directory, so every command after it must use `-C <root>` or absolute paths, and nothing should run after this command: post the final report first. The alternative is to leave removal to `./zn worktree-prune`, run later from the main checkout.
++4. **After the merge, one chained command, run last** (remove the merge gate's clone first, with `./zn tmp rm "$dir"`, where `$dir` is the path `./zn tmp new gate` printed, since a variable does not survive between Bash calls; `rm` removes only a tree made by `./zn tmp new`): `"<root>/zn" sync; git -C <root> worktree remove <path> && git -C <root> branch -D <branch>; git -C <root> worktree prune`. `<root>` is the first path in `git worktree list`; `sync` fast-forwards the root and rebuilds its board. When the session works inside the worktree (with z-run it started in the main checkout and `cd`'d into the worktree), removing it removes the session's own directory, so every command after it must use `-C <root>` or absolute paths, and nothing should run after this command: post the final report first. The alternative is to leave removal to `./zn worktree-prune`, run later from the main checkout.
+ 
+ ## Merging
+ The agent that delivered the change merges its own PR once the evidence is in. Don't wait for a human. Merge only when **all** of these hold:
+ 1. **For a raft**, `./zn done` succeeded: the latest review round is resolved and the raft's `check.sh` passed. The PR is ready, not draft, and has no unresolved `BLOCKED:` comment. The results of the most recent review are already on the PR as a comment (zz-execute Phase 4). Only a *significant* finding in the final round's `review-NNN.md` (any high, or a failed Judged criterion) blocks the merge and engages the human; mediums and lows become follow-up issues (zz-execute Phase 4 step 7).
+-2. `z-nile/check.sh --full` passes on the final head, run by you, in a clone outside this repo. `dir=$(mktemp -d)` only when that directory's parent directories are not a checkout of this repo; if `$TMPDIR` is inside this checkout, stop. Then `git clone --no-hardlinks --no-checkout` of this checkout into `$dir`, `git remote remove origin`, and `git checkout --detach` the exact head. Spawn the gate there with `PICKMAN_FENCE_REAL_GIT` set to the real repository's git directory appended to whatever the process inherited (`${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}` plus `git rev-parse --path-format=absolute --git-common-dir` of this checkout). That is the local full gate. That is the verification. A merge does not read GitHub Actions. `./zn done`'s gate in the raft worktree is the raft's own gate and is not this check.
++2. `z-nile/check.sh --full` passes on the final head, run by you, in a clone under the checkout's `.cache/.tmp/` (the system temp folder is never used). `dir=$(./zn tmp new gate)` makes the folder: never a bare `mktemp -d` or a path of your own, because the clone must not see any configuration above it (Lune and luau-lsp merge every `.luaurc` up the path, Rokit every `rokit.toml`, and CI checks the branch out alone). Then `git clone --no-hardlinks --no-checkout` of this checkout into `$dir`, `git remote remove origin`, and `git checkout --detach` the exact head. `./zn tmp verify "$dir"` must print `isolated`: the folder's own `.luaurc` keeps every alias of the folders above out of the clone, and no `rokit.toml` above names a tool the clone's own lacks; any other answer is a stop (`./zn tmp rm "$dir"`, then post `BLOCKED:` with it). `$dir` does not survive between Bash calls: run the clone, the gate and the removal in one script, or note `$dir` in the PR comment; a tree left behind is swept after a day. Spawn the gate there with `PICKMAN_FENCE_REAL_GIT` set to the real repository's git directory appended to whatever the process inherited (`${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}` plus `git rev-parse --path-format=absolute --git-common-dir` of this checkout). That is the local full gate. That is the verification. A merge does not read GitHub Actions. `./zn done`'s gate in the raft worktree is the raft's own gate and is not this check.
+ 3. In `$dir/pickman`, on the detached head from step 2 (`git checkout --detach`), `lune run scripts/cicd` passes. It reads `~/.config/pickman/cicd.toml`, reserves the CICD places, publishes them, and runs both runtime suites. A missing file, a lease held by someone else, a publish failure, or a runtime failure stops the merge. This command is not part of `z-nile/check.sh --full`.
+ 4. `gh pr view <pr> --json mergeable,mergeStateStatus` shows `MERGEABLE` and `CLEAN` (`UNKNOWN` is GitHub still computing it right after `done`: re-poll for up to a minute before deciding); any other state (`BEHIND`, `BLOCKED`, `UNSTABLE`, `DIRTY`) is not mergeable. `done` is preceded by a merge of `origin/main` (zz-execute Phase 5), so this should hold. If `main` moved since, and the merge is a clean one, merge `origin/main` in with plain `git` (`./zn commit` needs an active raft, and `done` has moved it), repeat step 2 (rerun `z-nile/check.sh --full` in that clone) and step 3 (`lune run scripts/cicd`), push, and repeat this step. If it conflicts, or it needs anything beyond renumbering colliding IDs (`renumber` per Conflicts), post `BLOCKED:` and stop: a finished PR gets no unreviewed code changes.
+ 5. The human hasn't said to hold.
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 14e8f252..ae536108 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -89,10 +89,10 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+ - **Protected**: the main checkout, every worktree of it, and the git directory they share (config, refs and branches, HEADs and indexes, the worktree registry, objects, and every file), and the person's own git configuration (`~/.gitconfig`, `~/.config/git`). **Allowed writers**: each project home's `.cache/` (`pickman/.cache/`, `z-nile/.cache/`: fixtures and build output) and the root's `.cache/` (the board, the root fence's sentinel), the gate's `pickman/sourcemap.json`, and the transient copies that `./zn promote-check` makes in each member's project's `<home>/tests/acceptance/` and removes before it exits. The last two are written by `check.sh` files, never by specs.
+ - **Fixtures**: anything a spec changes lives under `.cache/<name>` in its home (`z-nile/.cache/<name>` for z-nile's specs), unique to the spec file, in a repository of its own (`git init`, or a `--no-hardlinks` clone through `@tests/lib/clone`). Fixtures commit as `<name>@example.invalid` (`-c user.name=… -c user.email=…`, or local config in the fixture), and never write an identity anywhere else. Run git and `./zn` in a fixture only through `@tests/lib/fixture` (`fixture.git`, `fixture.exec`): it refuses, before anything runs, a directory that isn't a fixture repository under this run's `.cache` (if the fixture's repository were missing, git would find the real one) and anything that points git elsewhere (`-C`, `--git-dir`, `--work-tree`, or a git-directory variable in `env`). Raw git only for `rev-parse`, `ls-files`, and `init` or `clone` to a named path; no shell strings (`sh -c`), no `process.create`. `retrofit.spec` keeps the twelve older fixture specs on the helper. Written before it and not converted yet: c0510's specs (R0200), and c0640's and c0650's, which check each fixture themselves; convert them when they are next edited. Against the real repository, only read: `rev-parse`, `ls-files`, `ls-tree`, `show`, `log`, `diff`, `cat-file`, `for-each-ref`, and cloning *from* it.
+ - **Enforced at run time** for every spec, by `tests/run` (`z-nile/tests/lib/fence.luau`, `z-nile/lib/fence.sh`):
+-  - **Jail (macOS)**: specs run under `sandbox-exec`. The kernel denies every write to the checkout, the main checkout, their shared git directory, every repository an outer guard protects (a copy of the tree under `.cache` runs its own gate), and the person's git configuration, except this checkout's `.cache`. In fact it denies every write outside this checkout's `.cache` (but not the `.cache` entry itself, which must stay a plain folder: the runner and `fence.sh` refuse a symlinked one), the run's own temp folder (a fresh `pickman-run.*` under the shell's temp folder, given to specs as `TMPDIR`, with a `mktemp` that uses it, and removed after the run) and `/dev`. Every other temp folder (`/tmp`, the user temp folder) is closed, because programs outside the jail run and copy files from them. `fence.sh` never deletes recursively. Also closed: the folders above the repository (none can be renamed away, written and renamed back), and the person's home (tools such as the runner itself, shell start-up files, settings, launch agents, which all run later without the jail). It also denies IP networking except loopback, so a spec's `-c protocol.allow=always` reaches nothing while local test servers work; specs also run with no proxy and with `GIT_ALLOW_PROTOCOL=file`. An outer sandbox is accepted only if probes show it closes all of that too. It must still let the root's `.cache` and every project home's `.cache` be written: a run from a home writes the root's sentinel before it enters the jail, and a `check.sh` writes its home's (c0120). It must also let every project home's `.cache` be written (`pickman/.cache` as well as the root's): the home fence waives a refused sentinel only under the runner's own jail, never on an outer sandbox's label, so where an outer sandbox closes a home's `.cache`, a `check.sh` run there (c0034's list mode) refuses, failing closed (c0120). Nothing a spec does can change the repository: git in any form, a plain file write, a missing fixture. A run that can't be jailed refuses to start, before any spec runs, unless it proves by probes that it can't write the repository (an outer sandbox denies it), or that it is a fixture of a jailed outer run (an outer guard's repositories are unwritable from it, and it lies under that checkout's `.cache`; an ancestor in `GIT_CEILING_DIRECTORIES` proves nothing). Runs can't be jailed inside another sandbox, which macOS can't nest, or without `sandbox-exec`. So in a sandboxed agent shell, run specs with that sandbox off. `PICKMAN_TEST_JAIL` says which applies, and the gate's jail case probes the same writes.
++  - **Jail (macOS)**: specs run under `sandbox-exec`. The kernel denies every write to the checkout, the main checkout, their shared git directory, every repository an outer guard protects (a copy of the tree under `.cache` runs its own gate), and the person's git configuration, except this checkout's `.cache`. In fact it denies every write outside this checkout's `.cache` (but not the `.cache` entry itself, which must stay a plain folder: the runner and `fence.sh` refuse a symlinked one), the run's own temp folder (a fresh `pickman-run.*` under this home's `.cache/.tmp/`, given to specs as `TMPDIR`, with a `mktemp` that uses it, and removed after the run) and `/dev`. Every other temp folder is closed: `/tmp`, the user temp folder, and the rest of `.cache/.tmp/` itself (the main checkout's holds agents' scratch clones, and programs outside the jail run and copy files from such trees). `fence.sh` never deletes recursively. Also closed: the folders above the repository (none can be renamed away, written and renamed back), and the person's home (tools such as the runner itself, shell start-up files, settings, launch agents, which all run later without the jail). It also denies IP networking except loopback, so a spec's `-c protocol.allow=always` reaches nothing while local test servers work; specs also run with no proxy and with `GIT_ALLOW_PROTOCOL=file`. An outer sandbox is accepted only if probes show it closes all of that too. It must still let the root's `.cache` and every project home's `.cache` be written: a run from a home writes the root's sentinel before it enters the jail, and a `check.sh` writes its home's (c0120). It must also let every project home's `.cache` be written (`pickman/.cache` as well as the root's): the home fence waives a refused sentinel only under the runner's own jail, never on an outer sandbox's label, so where an outer sandbox closes a home's `.cache`, a `check.sh` run there (c0034's list mode) refuses, failing closed (c0120). Nothing a spec does can change the repository: git in any form, a plain file write, a missing fixture. A run that can't be jailed refuses to start, before any spec runs, unless it proves by probes that it can't write the repository (an outer sandbox denies it), or that it is a fixture of a jailed outer run (an outer guard's repositories are unwritable from it, and it lies under that checkout's `.cache`; an ancestor in `GIT_CEILING_DIRECTORIES` proves nothing). Runs can't be jailed inside another sandbox, which macOS can't nest, or without `sandbox-exec`. So in a sandboxed agent shell, run specs with that sandbox off. `PICKMAN_TEST_JAIL` says which applies, and the gate's jail case probes the same writes.
+     - **Signals**: specs can signal (and probe with `kill -0`) only processes of their own sandbox (`(allow signal (target same-sandbox))`): never the runner's top process, its launcher or the watchdog. `fence.alive` counts a refused probe as alive only where signals are confined: in the jail, and in an outer sandbox (Claude Code's own allows signals only within it).
+     - **Symlinks at the top of `.cache`**: specs can't create one there, but can still swap one in for an existing file (c0077 E1). The runner unlinks every link found there (never following it) before the run, after it (in the launcher, after the specs' group is killed, so a Ctrl-C doesn't skip it, and again in the top process), and `z-nile/check.sh` does so at its start, before it writes there. An outer sandbox's link probe uses a fresh random name and counts only `Operation not permitted` as a refusal.
+-    - **Writers**: every line in `scripts/`, `z-nile/` or a home's `scripts/` that names a `.cache` path is on the reviewed list in `z-nile/tests/lib/cachepaths.luau` (`cachepaths.ALLOWED`), with how it writes safely; the gate fails on an unlisted or stale line. Writers there replace by rename, never write through: `z-nile/lib/replace-file.pl <dest> [<src>]` (a sibling temp file opened `O_CREAT|O_EXCL|O_NOFOLLOW`, then `rename(2)`, which replaces a link of any kind and refuses a real directory), used by `sh.writeReplacing`; `fence.sh`'s sentinel uses an inline `rename(2)`, because fixtures copy `fence.sh` alone. A writer of a whole directory tree (a scratch worktree, say) never works at a fixed name under `.cache`: it uses a fresh `mktemp -d` outside it, as `./zn remap` does. The list covers `scripts/` and `z-nile/` only: a write through a listed variable, or a write from the runner (`tests/lib`), is review's to catch.
++    - **Writers**: every line in `scripts/`, `z-nile/` or a home's `scripts/` that names a `.cache` path is on the reviewed list in `z-nile/tests/lib/cachepaths.luau` (`cachepaths.ALLOWED`), with how it writes safely; the gate fails on an unlisted or stale line. Writers there replace by rename, never write through: `z-nile/lib/replace-file.pl <dest> [<src>]` (a sibling temp file opened `O_CREAT|O_EXCL|O_NOFOLLOW`, then `rename(2)`, which replaces a link of any kind and refuses a real directory), used by `sh.writeReplacing`; `fence.sh`'s sentinel uses an inline `rename(2)`, because fixtures copy `fence.sh` alone. A writer of a whole directory tree (a scratch worktree, say) never works at a fixed name under `.cache`: it uses a fresh tree under `.cache/.tmp/` (`z-nile/lib/tmp.luau`), as `./zn remap` does. The list covers `scripts/` and `z-nile/` only: a write through a listed variable, or a write from the runner (`tests/lib`), is review's to catch.
+     - **Watchdog**: the launcher runs the specs in a process group of their own with a watchdog in it that waits on a pipe only the launcher holds open, so if the launcher dies, however it died, the watchdog stops the specs' group.
+     - **Sweeper**: the jail's root is a sweeper (`fence.SWEEPER`): after the specs end it stops every process of the sandbox it can signal, whatever session or group it moved to, except its own ancestors, and says how many. Its interlock refuses to sweep (exit 70) unless a signal to its parent, the launcher (outside the jail, alive until the sweep is done), is refused, so an interrupted run (Ctrl-C) is still swept. Its interlock sweeps only on macOS; an explicit pid (for specs) only inside a jailed spec run; and a test seam (`PICKMAN_SWEEP_ONLY`) that can't be read refuses instead of widening the sweep. A spec can kill the sweeper (same sandbox); the run then fails ("the jail's sweeper was killed"). A spec can also stop it (SIGSTOP): the run then hangs until the launcher is SIGKILLed, which skips the sweep. A SIGKILL of the launcher itself skips the sweep and the launcher's unlink.
+     - **pids**: the sweep covers pids up to 99999, macOS's `PID_MAX`.
+@@ -113,13 +113,14 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+ - **Caught only by review** (the zz-review skill's Repository safety item; each is **high**):
+   - **Linux**: specs there are unjailed, so a write to the real checkout's index or files (`git add`, `checkout`, `reset --hard`, `worktree remove`, `remote set-url`, a plain file write) is stopped by nothing. GitHub Actions does not run the specs. The same spec runs on developers' Macs, where the jail stops it.
+   - **`check.sh` files' own commands**: anything they run outside `tests/run`, including config writes and network actions.
++  - **Unjailed runs and `.cache/.tmp/`** (Linux, a run inside an outer sandbox): nothing closes the rest of `.cache/.tmp/` to a spec on Linux, so a spec can plant a file in another tree an unjailed process later runs or copies back. An outer sandbox is accepted only if it closes every `.cache/.tmp/` of this checkout to the specs (the main checkout's, the root's, a session's `TMPDIR`) while leaving the rest of `.cache` writable; this run's own home folder may hold nothing but run folders.
+   - **Handing work to a process outside the jail**: `open`, `osascript`, `launchctl`, or a daemon. The gate scan flags `osascript` and `launchctl`.
+   - **A process that leaves the run's process group** (`setsid`, a double fork into a new session) survives **only where specs aren't jailed** (Linux, a run inside an outer sandbox): there the runner stops only what is left in the specs' group. It then outlives the run and could change files in `.cache` that an unjailed `check.sh` later copies and runs (a copy of the tree under `.cache`). Under the jail the sweeper stops it.
+   - **Unjailed runs can signal the runner** (Linux, an outer sandbox): nothing refuses a spec's signal to the top process, the launcher or the watchdog there.
+   - **A pid above 99999**: the sweep doesn't reach it, should a future macOS raise `PID_MAX`.
+   - **The guards trust their own environment**: a caller that sets `PICKMAN_TEST_JAIL`, `PICKMAN_FENCE_SPECS` and `PICKMAN_TEST_FENCE` as the jail does makes the home fence waive a sentinel it couldn't write (a `.cache` made unwritable outside any jail), and `PICKMAN_FENCE_HOOKS` at a folder of permissive hooks switches the ref guard off (captured as c0123). Nothing in the fence tells a real jail from forged markers (c0120 code review 004 F5): review a check or spec that sets any `PICKMAN_TEST_*` or `PICKMAN_FENCE_*` variable.
+   - **AC18 trusts the `origin` it resolves** (c0120): it reads the published main with `git ls-remote origin`, so a swapped `origin` URL, a `url.*.insteadOf` or `GIT_CONFIG_*` in the environment can make any repository's main the reference. Every verdict prints the URL it resolved; check it names the project's GitHub repository (c0120 code review 009 F4).
+-- **Running specs against unguarded code**: only in a clone under `$TMPDIR`, outside every repository (`git clone --no-hardlinks . "$(mktemp -d)/repo"`). That applies when prototyping the guards themselves, or on a branch from before them. A broken fixture there can only reach the clone.
++- **Running specs against unguarded code** (this includes every mutant of guard code: the runner, `fence.luau`, `fence.sh`, the hooks, the jail): only in a clone under `.cache/.tmp/`, jailed: `tree=$(./zn tmp new unguarded)`, `git clone --no-hardlinks . "$tree/repo"`, `git -C "$tree/repo" remote remove origin`; a clone has HEAD only, so copy the prototype's uncommitted files in and commit them there (`rsync -a --exclude .git --exclude .cache --exclude .worktree ./ "$tree/repo/"`, then `git -C "$tree/repo" add -A` and a commit under an `@example.invalid` identity); then every command through `./zn tmp jail "$tree" -- <command>...`, which runs it with the tree as its working directory (`cd repo/z-nile && lune run tests/run -- <spec>`). The jail (`sandbox-exec`, macOS) is the spec jail's rule set applied to the clone: the command may write `/dev`, its `TMPDIR` and the `.cache` folders of the clone's checkout and project homes (`./zn tmp jail` makes them first), never the clone's sources or git directory (a `.cache` folder deeper in them included), with no network but loopback and no signal out, so a broken fixture, or a relative path that climbs out of the clone, cannot reach this checkout. The clone's runner prints `note: not jailed (already inside a sandbox, and macOS can't nest them); the outer sandbox protects the repository` and does not jail itself, because a sandbox cannot nest; nested runs, `fence-leftovers` and the lock specs pass there. A case that tests the live spec jail itself (`needJail` cases, the gate spec's `on macOS this run can write nothing in the checkout outside .cache`) cannot run there: the profile's rules are pinned as a pure function (`fence.profileFor`) in cases the clone runs, and the live cases run where the runner jails itself, in the raft's own gate, before code review. That applies when prototyping the guards themselves, or on a branch from before them. Where there is no `sandbox-exec` (Linux) nothing contains it: review catches it (below), and every fixture path stays absolute. Remove the tree when the experiment ends: `./zn tmp rm "$tree"`.
+ - **If the tripwire fires**, or the shared remotes, branches, worktrees or identity look wrong: stop, post `BLOCKED:` with the output, and never repair the shared repository yourself. Every worktree and session shares it.
+ 
+ ## Hooks (Claude Code only)
+diff --git a/z-nile/tests/lib/cachepaths.luau b/z-nile/tests/lib/cachepaths.luau
+index e853a6f4..5899f877 100644
+--- a/z-nile/tests/lib/cachepaths.luau
++++ b/z-nile/tests/lib/cachepaths.luau
+@@ -116,6 +116,35 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 		['mkdir -p "$here/.cache/gh-none" || return 1'] = "an empty folder for gh's configuration; mkdir -p over a link writes nothing through it",
+ 		['export GH_CONFIG_DIR="$here/.cache/gh-none" GIT_TERMINAL_PROMPT=0'] = "a path in an environment variable; gh reads no configuration there in a spec run",
+ 	},
++	["z-nile/lib/tmp.luau"] = {
++		['tmp.REL = ".cache/.tmp"'] = "the temporary trees' folder: tmp.root refuses a link or a file at .cache and at .tmp, writes by rename (replace-file.pl), and every tree is a fresh mktemp -d inside",
++		['local prefix, belowMatch = string.match(env, "^(.*)/%.cache/%.tmp(/?.*)$") -- the nearest, a clone being inside another'] = "a pattern on an environment variable; writes nothing (tmp.place)",
++
++		['local root, name = string.match(at, "^(.*/%.cache/%.tmp)/([%w][%w._%-]*)$")'] = "parts: reads a tree's physical path; writes nothing",
++		["local cache = `{dir}/.cache`"] = "prepareCaches: a plain folder is made inside the tree before the jail starts; a link or a file refuses",
++		['table.insert(rules, `(allow file-write* (regex #"^{regexOf(dir)}/(.*/)?\\\\.cache(/.*)?$"))`)'] = "the jail's profile text; writes nothing itself",
++		['table.insert(rules, `(deny file-write* (regex #"^{regexOf(dir)}/[^/]+(/[^/]+)?/\\\\.cache$"))`) -- later rules win'] = "the jail's profile text",
++		['`(deny file-write-create (require-all (vnode-type SYMLINK) (regex #"^{regexOf(dir)}/[^/]+(/[^/]+)?/\\\\.cache/[^/]+$")))`'] = "the jail's profile text",
++		["local cache = `{top}/.cache`"] = "tmp.root's check of the plain folder before it writes anything below it",
++		["if not root or not fs.isDir(root) or isLink(root) or isLink(`{top}/.cache`) then"] = "tmp.sweep's reads: it sweeps nothing through a link",
++	},
++	["scripts/hooks/session-tmp.sh"] = {
++		["*/.cache/.tmp) ;;"] = "a match on the answer of `./zn tmp root`; writes nothing",
++		['echo "session-tmp: could not make $top/.cache/.tmp (run ./zn tmp root to see why); TMPDIR left as it was" >&2'] = "a message",
++	},
++	["z-nile/lib/tmp.sh"] = {
++		["*) root=$(pwd -P)/.cache/.tmp ;;"] = "the gate's folder: made only after the link check just below",
++		["*/.cache/.tmp | */.cache/.tmp/*) root=${TMPDIR%/} ;;"] = "a match on an environment variable; the folder is checked below",
++		["if [[ $root == */.cache/.tmp && ! -e $root/.metadata_never_index && ! -L $root/.metadata_never_index ]]; then"] = "the marker is created exclusively (set -C), never through a link",
++		["if [[ $root == */.cache/.tmp ]] && [[ -L $cache || -L $root || -f $cache || -f $root ]]; then"] = "a read: refuses a .cache or .tmp that is a link or a file (fence.sh's rule)",
++	},
++	["z-nile/lib/tmpcli.luau"] = {
++		['local viaTmpdir = string.match(process.env.TMPDIR or "", "^(.*)/%.cache/%.tmp/?$")'] = "a pattern on an environment variable; writes nothing",
++	},
++	["z-nile/setup.sh"] = {
++		["mkdir -p .cache/.tmp"] = "the folder for the toolchain download, made before anything exists to check it with; the download tree is a fresh mktemp -d inside",
++		['tmp=$(mktemp -d "$PWD/.cache/.tmp/rokit.XXXXXX")'] = "a fresh folder created exclusively, never through a link",
++	},
+ 	["z-nile/engine/main.luau"] = {
+ 		["board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)"] = "usage text",
+ 		['local FOCUS_FILE = ".cache/tracker-focus"'] = `sh.writeReplacing: {RENAMED}`,
+diff --git a/z-nile/tests/lib/fence.luau b/z-nile/tests/lib/fence.luau
+index 7d70b836..cf7df8f6 100644
+--- a/z-nile/tests/lib/fence.luau
++++ b/z-nile/tests/lib/fence.luau
+@@ -133,22 +133,23 @@ local function readMaybe(path: string): string
+ 	return if ok then trim(text) else ""
+ end
+ 
+--- Prints a process's start id, or exits 1: the start the kernel recorded for it, as exact as the kernel keeps it, and
++-- Prints a process's start id, or exits 1 (no such process) or 2 (cannot tell: the kernel or the platform would not
++-- answer; c0194 review 004 F5, so a caller can keep a process it cannot read): the start the kernel recorded for it, as exact as the kernel keeps it, and
+ -- never derived from the clock, so the same process always prints the same id and a later process with the same pid
+ -- prints another. Perl, so no setuid tool is needed (the jail and any sandbox refuse the setuid /bin/ps).
+ -- macOS: sysctl kern.proc.pid.<pid>, a kinfo_proc that starts with the start time (a timeval: "<sec>.<usec>").
+ -- Linux: /proc/sys/kernel/random/boot_id and /proc/<pid>/stat field 22, the start in clock ticks after boot.
+ local STARTED = table.concat({
+-	"my $pid = shift; exit 1 unless defined $pid && $pid =~ /^\\d+$/;",
++	"my $pid = shift; exit 2 unless defined $pid && $pid =~ /^\\d+$/;",
+ 	"if ($^O eq 'darwin') { my $mib = pack('i4', 1, 14, 1, $pid); my $buf = \"\\0\" x 4096;",
+-	"my $len = pack('Q', length $buf); exit 1 unless syscall(202, $mib, 4, $buf, $len, 0, 0) == 0",
+-	"&& unpack('Q', $len) > 0; my ($sec, $usec) = unpack('q l', $buf); exit 1 unless $sec > 0;",
++	"my $len = pack('Q', length $buf); exit 2 unless syscall(202, $mib, 4, $buf, $len, 0, 0) == 0;",
++	"exit 1 unless unpack('Q', $len) > 0; my ($sec, $usec) = unpack('q l', $buf); exit 1 unless $sec > 0;",
+ 	'print "$sec.$usec\\n"; exit 0 }',
+-	"if ($^O eq 'linux') { open(my $b, '<', '/proc/sys/kernel/random/boot_id') or exit 1; my $boot = <$b>;",
++	"if ($^O eq 'linux') { open(my $b, '<', '/proc/sys/kernel/random/boot_id') or exit 2; my $boot = <$b>;",
+ 	"close $b; chomp $boot; open(my $st, '<', \"/proc/$pid/stat\") or exit 1; my $line = <$st>; close $st;",
+-	"$line =~ s/^.*\\)\\s+//s or exit 1; my $ticks = (split /\\s+/, $line)[19];",
+-	"exit 1 unless $boot ne '' && defined $ticks && $ticks =~ /^\\d+$/; print \"$boot:$ticks\\n\"; exit 0 }",
+-	"exit 1;",
++	"$line =~ s/^.*\\)\\s+//s or exit 2; my $ticks = (split /\\s+/, $line)[19];",
++	"exit 2 unless $boot ne '' && defined $ticks && $ticks =~ /^\\d+$/; print \"$boot:$ticks\\n\"; exit 0 }",
++	"exit 2;",
+ }, " ")
+ fence.STARTED = STARTED
+ 
+@@ -285,12 +286,11 @@ local function takeOverIfStale(lock: string, unownedFor: number, me: string, myI
+ 	pcall(fs.removeDir, mutex)
+ end
+ 
+-local function takeLock(lock: string)
++local function takeLock(lock: string, myId: string?)
+ 	local limit = tonumber(process.env.PICKMAN_TEST_LOCK_WAIT or "") or DEFAULT_WAIT_SECONDS
+ 	local waited, unowned, said = 0, 0, false
+ 	-- this process's own facts, read once: they don't change while it waits
+ 	local me = myPid()
+-	local myId = fence.startOf(me)
+ 	while not process.exec("mkdir", { lock }).ok do
+ 		local pids = lockPids(lock)
+ 		unowned = if #pids == 0 then unowned + 0.1 else 0
+@@ -457,7 +457,14 @@ end
+ -- and the person's home (tools such as the runner itself, shell start-up files, settings, launch agents, all run
+ -- later without the jail) are denied. No IP networking except loopback: a spec's `-c protocol.allow=always` reaches
+ -- nothing, while local test servers still work (review 001 F1 and F2, review 002 F2 and F3).
+-local function profile(cache: string, runTemp: string): string
++-- Pure (c0194): the rules for a given `.cache`, run folder and the physical paths of both, so a spec can pin them where
++-- no sandbox can be started (inside another jail, such as a jailed clone).
++function fence.profileFor(
++	cache: string,
++	cacheResolved: string,
++	runTemp: string,
++	runTempResolved: string
++): string
+ 	local rules = {
+ 		"(version 1)",
+ 		"(allow default)",
+@@ -466,13 +473,18 @@ local function profile(cache: string, runTemp: string): string
+ 		'(deny file-write* (subpath "/"))',
+ 		'(allow file-write* (subpath "/dev"))',
+ 	}
+-	for _, dir in { cache, resolved(cache) } do
++	for _, dir in { cache, cacheResolved } do
+ 		table.insert(rules, `(allow file-write* (subpath "{dir}"))`)
+ 	end
+-	for _, dir in { runTemp, resolved(runTemp) } do
++	-- the temporary trees' folder is closed (agents' scratch clones and other runs' folders live there, and
++	-- programs outside the jail run from them, review 004 F2), but for the run's own folder inside it; later rules win
++	for _, dir in { `{cache}/.tmp`, `{cacheResolved}/.tmp` } do
++		table.insert(rules, `(deny file-write* (subpath "{dir}"))`)
++	end
++	for _, dir in { runTemp, runTempResolved } do
+ 		table.insert(rules, `(allow file-write* (subpath "{dir}"))`)
+ 	end
+-	for _, dir in { cache, resolved(cache) } do
++	for _, dir in { cache, cacheResolved } do
+ 		table.insert(rules, `(deny file-write* (literal "{dir}"))`) -- later rules win
+ 		-- no symlink at the top of .cache, made or renamed there: unjailed writers (the gate's rojo build, the
+ 		-- tracker's focus and claim files, the board) would write through it into the repository (review 005 F1)
+@@ -490,6 +502,10 @@ local function profile(cache: string, runTemp: string): string
+ 	return table.concat(rules, "")
+ end
+ 
++local function profile(cache: string, runTemp: string): string
++	return fence.profileFor(cache, resolved(cache), runTemp, resolved(runTemp))
++end
++
+ -- Which protected paths this process can write: harmless probe files, removed at once.
+ local function writable(here: string): { string }
+ 	local open: { string } = {}
+@@ -706,6 +722,37 @@ local function jail(here: string, cache: string, runTemp: string): ({ string },
+ 	elseif verdict == "made" and #open == 0 then
+ 		table.insert(leaks, "a symlink at the top of .cache")
+ 	end
++	-- the rest of every .cache/.tmp of this checkout must be closed to the specs too: agents' scratch clones live in the
++	-- main checkout's, and programs outside the jail run and copy files from them (review 004 F2)
++	local folders: { TmpFolder } = {}
++	local top = git({ "rev-parse", "--show-toplevel" })
++	local common = git({ "rev-parse", "--path-format=absolute", "--git-common-dir" })
++	local sources = fence.tmpFolders(
++		here,
++		top,
++		if common then (string.gsub(common, "/%.git$", "")) else nil,
++		process.env.TMPDIR,
++		process.env.GIT_CEILING_DIRECTORIES or ""
++	)
++	for _, src in sources do
++		if fs.isDir(src.path) then
++			local probe = `{src.path}/pickman-jail-probe-{myPid()}`
++			local writable = pcall(fs.writeFile, probe, "")
++			if writable then
++				pcall(fs.removeFile, probe)
++			end
++			table.insert(folders, {
++				path = src.path,
++				writable = writable,
++				entries = fs.readDir(src.path),
++				ownHome = src.ownHome,
++				fixture = src.fixture,
++			})
++		end
++	end
++	for _, leak in fence.tmpLeaks(folders) do
++		table.insert(leaks, leak)
++	end
+ 	if #open == 0 and #leaks == 0 then
+ 		stdio.ewrite(`note: not jailed ({why}); the outer sandbox protects the repository\n`)
+ 		return {}, "outer sandbox (protects the repository)"
+@@ -762,6 +809,115 @@ local REAPER = table.concat({
+ }, " ")
+ fence.REAPER = REAPER
+ 
++export type TmpSource = { path: string, ownHome: boolean, fixture: boolean }
++
++-- Which .cache/.tmp folders an outer sandbox has to close (c0194), from what the runner reads: the folder of the home it
++-- runs in (the only one allowed to hold run folders), the checkout's root, the main checkout's root (the parent of the
++-- shared git directory: agents' clones live there) and the one TMPDIR names (its nearest `.cache/.tmp`). Each once.
++-- `fixture`: lying under a ceiling entry ending in /.cache, a fixture of a guarded checkout.
++function fence.tmpFolders(
++	here: string,
++	top: string?,
++	main: string?,
++	tmpdir: string?,
++	ceilings: string
++): { TmpSource }
++	local own = `{here}/.cache/.tmp`
++	local out: { TmpSource } = {}
++	local seen: { [string]: boolean } = {}
++	local function add(dir: string?)
++		if not dir or dir == "" then
++			return
++		end
++		local folder = `{dir}/.cache/.tmp`
++		if seen[folder] then
++			return
++		end
++		seen[folder] = true
++		local fixture = false
++		for entry in string.gmatch(ceilings, "[^:]+") do
++			if string.sub(entry, -7) == "/.cache" and string.sub(folder, 1, #entry + 1) == entry .. "/" then
++				fixture = true
++			end
++		end
++		table.insert(out, { path = folder, ownHome = folder == own, fixture = fixture })
++	end
++	add(here)
++	add(top)
++	add(main)
++	add(if tmpdir then string.match(tmpdir, "^(.*)/%.cache/%.tmp") else nil)
++	return out
++end
++
++export type TmpFolder = {
++	path: string,
++	writable: boolean,
++	entries: { string },
++	ownHome: boolean,
++	fixture: boolean,
++}
++
++-- What an outer sandbox leaves open in the .cache/.tmp folders (c0194). A folder under a guarded checkout's .cache is a
++-- fixture's and holds no agent's tree. This run's own home folder is where the runs' folders go, so it is accepted
++-- while it holds nothing but those (and the folder's dot-files); every other folder (the main checkout's, the
++-- checkout's root, a session's TMPDIR) is a leak whenever it is writable at all, whatever it holds now: a tree can
++-- appear in it any moment, and programs outside the sandbox run and copy files from such trees.
++function fence.tmpLeaks(folders: { TmpFolder }): { string }
++	local out: { string } = {}
++	for _, f in folders do
++		if f.fixture or not f.writable then
++			continue
++		end
++		if f.ownHome then
++			for _, name in f.entries do
++				if string.sub(name, 1, 1) ~= "." and string.match(name, "^pickman%-run%.") == nil then
++					table.insert(out, `another temporary tree in {f.path}`)
++					break
++				end
++			end
++		else
++			table.insert(out, `{f.path} is open to the specs`)
++		end
++	end
++	return out
++end
++
++-- Whether a folder found under .cache/.tmp at the start of a run is one of an earlier run's to clear: a run folder, not
++-- a link, whose owner no longer holds (fence.holds). A live run that is waiting for the lock owns its folder before it
++-- holds the lock, so the lock alone says nothing about it.
++function fence.clearable(name: string, link: boolean, ownerHolds: boolean): boolean
++	return not link and not ownerHolds and string.match(name, "^pickman%-run%.") ~= nil
++end
++
++-- The mktemp that puts a template-less tree in TMPDIR: the text of z-nile/bin/mktemp, which a spec pins equal (the
++-- runner copies it into each run's bin/; agents' sessions get the file itself on PATH).
++fence.MKTEMP_SHIM = [=[#!/bin/sh
++# mktemp that honours TMPDIR (c0194). macOS mktemp ignores TMPDIR and uses the user temp folder, outside the repository
++# and so inside Spotlight's reach. With no template, or -t <prefix>, this puts the tree in $TMPDIR; a template (and
++# so -p <dir>, whose folder is the first non-option) names its place and is passed through. The runner copies this file into each run's own bin/ (tests/lib/fence.luau).
++real=/usr/bin/mktemp
++[ -x "$real" ] || real=/bin/mktemp
++f=
++p=tmp
++while [ $# -gt 0 ]; do
++  case $1 in
++  -t) p=${2:-tmp}; shift; [ $# -gt 0 ] && shift ;;
++  -?*t) f="$f ${1%t}"; p=${2:-tmp}; shift; [ $# -gt 0 ] && shift ;; # a cluster ending in t, such as -dt <prefix>
++  -*) f="$f $1"; shift ;;
++  *) exec "$real" $f "$@" ;;
++  esac
++done
++if [ -z "${TMPDIR:-}" ] || [ ! -d "$TMPDIR" ]; then
++  echo "mktemp: TMPDIR is unset or not a folder; using the system temp folder" >&2
++  exec "$real" $f
++fi
++case $TMPDIR in
++*/.cache/.tmp | */.cache/.tmp/*) ;;
++*) echo "mktemp: TMPDIR is not under a .cache/.tmp folder; the tree will be outside the repository" >&2 ;;
++esac
++exec "$real" $f "${TMPDIR%/}/$p.XXXXXXXXXX"
++]=]
++
+ function fence.enter()
+ 	local here = shell("pwd -P")
+ 	if guarded(here) then
+@@ -824,25 +980,36 @@ function fence.enter()
+ 		process.exit(1)
+ 	end
+ 	-- decide the jail first: a run that must refuse does so before it takes the lock
+-	-- the run's own temp folder, outside the checkout (a spec's `mktemp -d` must land outside .cache) and fresh,
+-	-- so nothing outside the jail runs from it; removed when the run ends
+-	local base = (string.gsub(process.env.TMPDIR or "", "/+$", ""))
+-	local made = process.exec("mktemp", { "-d", `{if base == "" then "/tmp" else base}/pickman-run.XXXXXX` })
++	-- the run's own temp folder, fresh under this home's .cache/.tmp (c0194), so nothing outside the jail runs from it
++	-- and nothing is built outside the repository; removed when the run ends. Specs may write only inside it (the
++	-- jail's profile closes the rest of .cache/.tmp). Inline, not z-nile/lib/tmp: fixtures copy this harness alone
++	local tmpRoot = `{cache}/.tmp`
++	if process.exec("test", { "-L", tmpRoot }).ok or fs.isFile(tmpRoot) then
++		stdio.ewrite(
++			`{tmpRoot} is not a plain folder (a symlink or a file); refusing. Stop and report this.\n`
++		)
++		process.exit(1)
++	end
++	fs.writeDir(tmpRoot)
++	-- the Spotlight marker, exclusive and never through a link (c0194)
++	local marker = `{tmpRoot}/.metadata_never_index`
++	if not process.exec("test", { "-e", marker }).ok and not process.exec("test", { "-L", marker }).ok then
++		process.exec("sh", { "-c", 'set -C; : > "$1"', "_", marker })
++	end
++	local made = process.exec("mktemp", { "-d", `{tmpRoot}/pickman-run.XXXXXX` })
+ 	if not made.ok then
+ 		stdio.ewrite(`tests/run: could not make the run's temp folder: {made.stderr}\n`)
+ 		process.exit(1)
+ 	end
+ 	local runTemp = resolved((string.gsub(made.stdout, "%s+$", "")))
++	-- who owns this folder, written whole: a later run clears it only when this process no longer holds it
++	local ownId = fence.startOf(myPid()) -- read once: the folder's record and the lock's both use it
++	writeWhole(`{runTemp}/.pickman-owner`, `{myPid()}\t{ownId or ""}\n`, myPid())
+ 	if process.os == "macos" then
+-		-- macOS mktemp ignores TMPDIR without a template and uses the user temp folder, which the jail closes
++		-- macOS mktemp ignores TMPDIR without a template and uses the user temp folder, which the jail closes: the
++		-- shared shim is first on the specs' PATH
+ 		fs.writeDir(`{runTemp}/bin`)
+-		fs.writeFile(
+-			`{runTemp}/bin/mktemp`,
+-			"#!/bin/sh\n# the run's mktemp: with no template, into the run's own TMPDIR (the jail closes the user temp folder)\n"
+-				.. "f=; p=tmp\n"
+-				.. 'while [ $# -gt 0 ]; do case $1 in -t) p=$2; shift 2 ;; -*) f="$f $1"; shift ;; *) exec /usr/bin/mktemp $f "$@" ;; esac; done\n'
+-				.. 'exec /usr/bin/mktemp $f "$TMPDIR/$p.XXXXXXXXXX"\n'
+-		)
++		fs.writeFile(`{runTemp}/bin/mktemp`, fence.MKTEMP_SHIM)
+ 		process.exec("chmod", { "+x", `{runTemp}/bin/mktemp` })
+ 	end
+ 	local prefix, jailed = jail(here, cache, runTemp)
+@@ -851,7 +1018,19 @@ function fence.enter()
+ 		process.env.PICKMAN_TEST_JAIL = jailed
+ 	end
+ 	local lock = `{cache}/tests-run.lock`
+-	takeLock(lock)
++	takeLock(lock, ownId)
++	-- an earlier run's folder that nothing owns any more is cleared (a run waiting for the lock owns its own)
++	for _, name in fs.readDir(`{cache}/.tmp`) do
++		local stray = `{cache}/.tmp/{name}`
++		if stray ~= runTemp then
++			local pid, start = string.match(readMaybe(`{stray}/.pickman-owner`), "^(%d+)\t([^\n]*)")
++			local holds = pid ~= nil
++				and fence.holds(alive(pid), if start ~= "" then start else nil, fence.startOf(pid))
++			if fence.clearable(name, process.exec("test", { "-L", stray }).ok, holds) then
++				pcall(fs.removeDir, stray)
++			end
++		end
++	end
+ 	local before = snapshot(cache)
+ 	local argv = {
+ 		"-c",
+diff --git a/z-nile/tests/lib/fixture.luau b/z-nile/tests/lib/fixture.luau
+index eb8572d1..bee7b7c3 100644
+--- a/z-nile/tests/lib/fixture.luau
++++ b/z-nile/tests/lib/fixture.luau
+@@ -24,13 +24,22 @@ function fixture.physical(path: string): string?
+ 	return trim(r.stdout)
+ end
+ 
++-- Whether a physical path lies in the fixture zone of a checkout: under its .cache, but not under .cache/.tmp, where the
++-- temporary trees are (c0194). The prefix is a whole folder name, so .cache-x is not .cache.
++function fixture.zone(path: string, root: string): boolean
++	local p = path .. "/"
++	local cache = root .. "/.cache/"
++	return string.sub(p, 1, #cache) == cache and string.sub(p, 1, #cache + 5) ~= cache .. ".tmp/"
++end
++
+ -- Raises unless `dir` is a fixture repository: under this run's .cache folder (the spec runs at the checkout's root),
+ -- and the top of its own worktree (or a bare repository's own git directory).
+ function fixture.check(dir: string)
+ 	local here = fixture.physical(dir)
+-	local cache = `{fixture.physical(".") or "?"}/.cache/`
++	local cwd = fixture.physical(".") or "?"
++	local cache = `{cwd}/.cache/`
+ 	local fail = `refusing to run in {dir}: it is not a fixture repository under {cache}`
+-	if not here or string.sub(here .. "/", 1, #cache) ~= cache then
++	if not here or not fixture.zone(here, cwd) then
+ 		error(fail, 3)
+ 	end
+ 	local top = process.exec("git", { "rev-parse", "--show-toplevel" }, { cwd = here })
+diff --git a/z-nile/tests/tooling/repo-fence.spec.luau b/z-nile/tests/tooling/repo-fence.spec.luau
+index 6a540447..daa7726d 100644
+--- a/z-nile/tests/tooling/repo-fence.spec.luau
++++ b/z-nile/tests/tooling/repo-fence.spec.luau
+@@ -100,6 +100,30 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 		GIT_DIR = "proves the helper refuses it",
+ 		GIT_WORK_TREE = "proves the helper refuses it",
+ 	},
++	-- c0194: its runner case clears the marker so a copied runner acts as a top-level run, and asks whether the jail is on
++	["z-nile/tests/acceptance/c0194/runner.spec.luau"] = {
++		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
++		["sandbox-exec"] = "reads the jail's name to skip the cases that need it",
++	},
++	-- c0194: ./zn tmp jail runs an unguarded clone inside a sandbox of its own; it adds a jail, never lifts one
++	["z-nile/lib/tmp.luau"] = {
++		["sandbox-exec"] = "the profile and command of ./zn tmp jail",
++		GIT_CEILING_DIRECTORIES = "./zn tmp jail adds the clone's own .cache so the clone's runner takes it for a fixture of this checkout",
++		PICKMAN_FENCE_ = "./zn tmp jail adds this checkout's git directory to the real ones the clone's runner protects",
++	},
++	["z-nile/lib/tmpcli.luau"] = {
++		GIT_CEILING_DIRECTORIES = "reads the inherited list for ./zn tmp jail",
++		PICKMAN_FENCE_ = "reads the inherited list for ./zn tmp jail",
++	},
++	["z-nile/tests/acceptance/c0194/tmp.spec.luau"] = {
++		["sandbox-exec"] = "pins that ./zn tmp jail's command line is a sandbox-exec",
++		GIT_CEILING_DIRECTORIES = "pins the list ./zn tmp jail hands the clone's runner",
++		PICKMAN_FENCE_ = "pins the list ./zn tmp jail hands the clone's runner",
++	},
++	-- c0194: pins the sentence in Merging's step 2 that fences the real repository
++	["z-nile/tests/acceptance/c0194/docs.spec.luau"] = {
++		PICKMAN_FENCE_ = "reads the skill text that names PICKMAN_FENCE_REAL_GIT",
++	},
+ 	-- review 005 F2: clears the marker so a copied runner acts as a top-level run
+ 	["z-nile/tests/tooling/fence-leftovers.spec.luau"] = {
+ 		PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run",
+@@ -463,9 +487,18 @@ return t.spec("repository fence", function(it)
+ 		if process.exec("touch", { "-c", "-r", `{here}/.cache`, `{here}/.cache` }).ok then
+ 			table.insert(escaped, "the .cache entry itself")
+ 		end
+-		-- the run's TMPDIR lies outside the checkout, and a plain `mktemp -d` lands in it
++		-- the run's TMPDIR is a fresh folder under this home's .cache/.tmp, and a plain `mktemp -d` lands in it
+ 		local tmp = env.TMPDIR or ""
+-		t.expect(tmp ~= "" and string.sub(tmp .. "/", 1, #here + 1) ~= here .. "/").toBe(true)
++		t.expect(string.match(tmp, "^" .. string.gsub(here, "%p", "%%%0") .. "/%.cache/%.tmp/pickman%-run%.[%w]+$") ~= nil).toBe(true)
++		-- ... and the rest of .cache/.tmp is closed to the spec: no sibling folder, no replacing the folder itself
++		local sibling = `{here}/.cache/.tmp/pickman-jail-probe-{tag}`
++		if pcall(fs.writeFile, sibling, "") then
++			pcall(fs.removeFile, sibling)
++			table.insert(escaped, "a sibling of the run's folder in .cache/.tmp")
++		end
++		if process.exec("touch", { "-c", "-r", `{here}/.cache/.tmp`, `{here}/.cache/.tmp` }).ok then
++			table.insert(escaped, "the .cache/.tmp entry itself")
++		end
+ 		local made = trim(process.exec("mktemp", { "-d" }).stdout)
+ 		t.expect(made ~= "" and string.sub(made, 1, #tmp) == tmp).toBe(true)
+ 		pcall(fs.removeDir, made)
+diff --git a/zn b/zn
+index 426b0651..0c9531dd 100755
+--- a/zn
++++ b/zn
+@@ -12,4 +12,9 @@ esac
+ export ZN_TOP="$top" ZN_CWD="${rel#/}"
+ cd "$top"
+ export PATH="$HOME/.rokit/bin:$PATH"
++# temporary trees (c0194): ./zn tmp new|root|verify|sweep|jail|rm|leftovers, z-nile/lib/tmp.luau's command line
++if [[ ${1:-} == tmp ]]; then
++  shift
++  exec lune run z-nile/lib/tmpcli -- "$@"
++fi
+ exec lune run z-nile/engine/main -- "$@"

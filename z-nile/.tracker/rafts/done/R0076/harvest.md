@@ -1,0 +1,3 @@
+- review-001 F1: one-off: a sentence in five skills lagged the new rule it sits beside (no pin covered it)
+- note candidate lesson from reviewer 1 (a fixture copying a real spec breaks when main adds a require; the user approved a check.sh edit): zz-test/fixtures-copy-what-their-spec-requires
+- note AC6 failed at execution because the prep predated R0065 (tiers.luau): zz-test/fixtures-copy-what-their-spec-requires

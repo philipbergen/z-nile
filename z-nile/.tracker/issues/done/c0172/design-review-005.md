@@ -1,0 +1,13 @@
+# Review 005: c0172 (design mode)
+Inputs: prep worktree `prep-local-ci-only` HEAD `5c3c81399eb28d51ad56fb5e6aac51461dce7cb1` (equal to `origin/main`). Uncommitted design: `z-nile/.tracker/issues/c0172/c0172.md`, `check.sh`, `acceptance/`, `design-review-001.md` through `design-review-004.md`, `design-refute-001.md` through `design-refute-004.md`, `harvest.md`. `./zn capture c0172` is `eb7fecf12ceeb97de37fab4cb7992ab4645bbb45` with no capture marker. Prototype `proto-c0172` at `924ece430e2001f9d9c457e4f41598e402e0a9ac`; its merge-base with `origin/main` is `a1c98545f6a9e35b795e3804740447e44a29c5fc`, and that range does not change `pickman/scripts`, the runners, or the skills the specs load. Prep and prototype acceptance specs compare identical. Mutants restored by rewriting the changed lines (`acquire` again returns busy only from `planTake`; runtime-test is passed `gameVersion` and `lobbyVersion`). Lune 0.10.5 (`~/.rokit/bin/lune`). `./zn lessons --skill zz-review --full` and `./zn lessons --when design --full`.
+Dropped from design-review-004: F1, F2, F3, F4. Baseline `cicd.spec`: 21 passed, 0 failed. Baseline `merge.spec`: 17 passed, 0 failed. Both runs also printed `sweeper: processes keep appearing` and exited 71; `merge.spec` does not start the cicd children, so that line is this host. In `Lease.acquire`, after `planTake`, a stored hold whose token is not this run's returns busy, including when `until` has passed: the success case failed at `cicd.spec.luau:522` (`expected true, got false`; 20 passed, 1 failed). Passing `"3"` and `"4"` to the two suites failed at `cicd.spec.luau:531` (`expected 2, got 0`; 20 passed, 1 failed). The step 3 paragraph check is the contiguous sentence, and `merge.spec` passed with that sentence in Merging step 3. A renew is `until >= clock + 20 * 60 - 1`, and the baseline success case includes both renew checks.
+
+### F1 [low] Unknowns still says cicd.spec passed 18 cases after the suite grew to 21
+Where: `c0172.md` E7
+Evidence: E7 says `cicd.spec` passed 18 cases. `lune run tests/run -- z-nile/.tracker/issues/c0172/acceptance/cicd.spec.luau` from `proto-c0172/pickman` printed `21 passed, 0 failed`.
+Critique: The recorded count is the earlier suite. A later step that treats 18 as the current run is describing a file that no longer has that many cases. The tempting fix is to leave E7 and let the refute stand in for the record.
+Consequences: none. The cases already pass; only the recorded number changes.
+Recommendation: Add an experiment line for this round: `cicd.spec` 21 passed and `merge.spec` 17 passed, including the expired-hold failure at line 522 and the literal-version failure at line 531. Leave E7 as the earlier run.
+Lesson: z-design/prove-specs-pass-on-a-prototype
+
+Verdict: approve

@@ -16,3 +16,23 @@ root = "pickman/.tracker"
 [[project]]
 name = "z-nile"
 root = "z-nile/.tracker"
+
+[[project]]
+name = "arcade"
+root = "arcade/.tracker"
+
+[[project]]
+name = "portal"
+root = "portal/.tracker"
+
+[[project]]
+name = "snake"
+root = "snake/.tracker"
+
+[[project]]
+name = "invaders"
+root = "invaders/.tracker"
+
+[[project]]
+name = "asteroids"
+root = "asteroids/.tracker"

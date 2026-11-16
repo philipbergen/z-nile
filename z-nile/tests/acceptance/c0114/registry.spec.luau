@@ -32,12 +32,16 @@ return t.spec("c0114 the project registry", function(it)
 			local reg, err = projects.parse(fs.readFile(`{top}/z-nile/projects.toml`))
 			t.expect(err).toBe(nil)
 			local r = reg :: projects.Registry
-			t.expect(r.projects).toEqual({
-				{ name = "pickman", root = "pickman/.tracker", home = "pickman" },
-				{ name = "z-nile", root = "z-nile/.tracker", home = "z-nile" },
-			})
+			-- c0183 override: the rule, not today's list (more projects follow the first two)
+			t.expect(r.projects[1]).toEqual({ name = "pickman", root = "pickman/.tracker", home = "pickman" })
+			t.expect(r.projects[2]).toEqual({ name = "z-nile", root = "z-nile/.tracker", home = "z-nile" })
+			local rootsInOrder: { string } = {}
+			for _, p in r.projects do
+				t.expect(p).toEqual({ name = p.name, root = `{p.name}/.tracker`, home = p.name })
+				table.insert(rootsInOrder, p.root)
+			end
 			t.expect(r.retired).toEqual({ "tracker" })
-			t.expect(projects.roots(r)).toEqual({ "pickman/.tracker", "z-nile/.tracker" })
+			t.expect(projects.roots(r)).toEqual(rootsInOrder)
 		end
 	)
 

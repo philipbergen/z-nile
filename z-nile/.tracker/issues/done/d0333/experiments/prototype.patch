@@ -1,0 +1,32 @@
+diff --git a/z-nile/engine/layergit.luau b/z-nile/engine/layergit.luau
+index a81ed2fa0..8b83c4978 100644
+--- a/z-nile/engine/layergit.luau
++++ b/z-nile/engine/layergit.luau
+@@ -124,6 +124,7 @@ function layergit.isPostFinishPath(path: string, raftId: string): boolean
+ 	if name ~= nil then
+ 		if
+ 			name == "trace.md"
++			or name == "spend.md" -- d0333: every `./zn commit` rewrites the raft's snapshot
+ 			or name == `{raftId}.md`
+ 			or string.match(name, "^review%-%d+%.md$") ~= nil
+ 			or string.match(name, "^refute%-%d+%.md$") ~= nil
+diff --git a/z-nile/engine/trace.luau b/z-nile/engine/trace.luau
+index b3e9970f6..a84223179 100644
+--- a/z-nile/engine/trace.luau
++++ b/z-nile/engine/trace.luau
+@@ -443,6 +443,7 @@ local function isTrackerFileOf(path: string, raftId: string, raftDir: string, is
+ 		local name = string.sub(path, #raftPrefix + 1)
+ 		if
+ 			name == "trace.md"
++			or name == "spend.md" -- d0333: every `./zn commit` rewrites the raft's snapshot
+ 			or name == `{raftId}.md`
+ 			or string.match(name, "^review%-%d+%.md$") ~= nil
+ 			or string.match(name, "^refute%-%d+%.md$") ~= nil
+@@ -469,6 +470,7 @@ local function isAllowedAfterTrace(path: string, raftId: string, raftDir: string
+ 		local name = string.sub(path, #raftPrefix + 1)
+ 		if
+ 			name == `{raftId}.md`
++			or name == "spend.md" -- d0333
+ 			or string.match(name, "^final%-review%-%d+%.md$") ~= nil
+ 			or string.match(name, "^final%-refute%-%d+%.md$") ~= nil
+ 		then

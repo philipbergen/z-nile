@@ -1,0 +1,3 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-14 08:34	capture	0	0	capture							tokens,ai
+2026-11-14 08:34	static	0	0	test			3.958	35.120		3.958	tokens,ai

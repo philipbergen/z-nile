@@ -6,6 +6,7 @@ local clone = require("@tests/lib/clone")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local projects = require("@znile/engine/projects")
 local t = require("@tests/lib/t")
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
@@ -74,8 +75,10 @@ return t.spec("c0050 isolated clones", function(it)
 	it("no spec clones the repository with a plain git clone", function()
 		local files: { string } = {}
 		-- c0120 override: specs live in each project's home tests/ and tracker root, not the repository root's
-		for _, dir in { "z-nile/tests", "z-nile/.tracker", "pickman/tests", "pickman/.tracker" } do
-			specs(`{root}/{dir}`, files)
+		-- c0184 override: every registered project's home tests/ and tracker root
+		for _, p in projects.load(root).projects do
+			specs(`{root}/{p.home}/tests`, files)
+			specs(`{root}/{p.root}`, files)
 		end
 		local offenders: { string } = {}
 		for _, file in files do

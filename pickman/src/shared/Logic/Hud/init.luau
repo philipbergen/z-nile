@@ -160,4 +160,59 @@ function Hud.shotIcons(l: Layout, lives: number, shots: number): { Box }
 	return out
 end
 
+-- f0126: the pick under way, as a share of its time done at the shown tick (0..1), nil when there is none.
+function Hud.pickProgress(pick: Session.Pick?, shownTick: number): number?
+	if pick == nil or shownTick ~= shownTick then
+		return nil
+	end
+	return math.clamp((shownTick - pick.started) / math.max(1, pick.ticks), 0, 1)
+end
+
+-- What each boon is called on the screen.
+Hud.BOON_LABELS = table.freeze({
+	jumps = "LONGER JUMPS",
+	fastpick = "FASTER PICK",
+	pill = "GHOST PILL",
+	longpill = "LONG GHOST PILL",
+	shot = "BLASTER SHOT",
+	pellets = "PELLETS BACK",
+} :: { [string]: string })
+Hud.BOON_TICKS = 30 -- the banner shows for 2 s of real time at Session.STEP_RATE 15
+
+-- The banner for the latest boon at `tick`: its label from the step it was granted for BOON_TICKS steps, else nil.
+function Hud.boonBanner(boon: Session.BoonGrant?, tick: number): string?
+	if boon == nil or tick < boon.tick or tick >= boon.tick + Hud.BOON_TICKS then
+		return nil
+	end
+	return Hud.BOON_LABELS[boon.kind]
+end
+
+-- Where the pick's bar and the boon's banner go (f0126), in the same pixels as Hud.layout (screen pixels, inside its
+-- safe rectangle): both centred across it, the bar a little above the middle (clear of the
+-- bottom row of lives, shots, power bar, snap button and radar), the banner in the upper third (clear of the top
+-- row of score and level).
+Hud.PICK_BAR_AT = 0.4 -- of the safe rectangle's height, the bar's top: above the middle, so above the touch radar on a narrow phone
+Hud.BOON_AT = 0.3 -- of the safe rectangle's height, the banner's middle
+function Hud.pickBox(l: Layout): Box
+	local w = l.barWidth
+	local h = math.max(Hud.MIN_BAR_HEIGHT, l.barHeight)
+	return {
+		x = round(l.safeX + (l.safeW - w) / 2),
+		y = round(l.safeY + l.safeH * Hud.PICK_BAR_AT),
+		w = w,
+		h = h,
+	}
+end
+
+function Hud.boonBox(l: Layout): Box
+	local h = 2 * l.textSize
+	local w = math.min(math.max(0, l.safeW - 2 * l.margin), 16 * l.textSize)
+	return {
+		x = round(l.safeX + (l.safeW - w) / 2),
+		y = round(l.safeY + l.safeH * Hud.BOON_AT - h / 2),
+		w = w,
+		h = h,
+	}
+end
+
 return Hud

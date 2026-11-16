@@ -5,6 +5,7 @@
 -- (c0117), the new board (c0118). A short account of the five parts follows, then every skill folder by name, and
 -- the three design checklists by path, each of which exists. Reads the real tree.
 local process = require("@lune/process")
+local projects = require("@znile/engine/projects")
 local realfs = require("@lune/fs")
 -- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
@@ -25,6 +26,7 @@ local fs = {
 		return realfs.readDir(top(p))
 	end,
 }
+local skills = require("@znile/engine/skills")
 local t = require("@tests/lib/t")
 
 local README = "z-nile/README.md"
@@ -136,9 +138,9 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
 		end
 		t.expect(seen >= 10).toBe(true)
 		at(pic, 'zraft["z-raft"]', "the picture") -- c0116 override: z-raft is built
-		at(pic, "dispatcher (c0117, planned)", "the picture")
-		at(pic, ".models.toml (c0117, planned)", "the picture")
-		at(pic, "c0118, planned", "the picture")
+		at(pic, 'dispatcher["dispatcher: ./zn dispatch"]', "the picture") -- c0117 override: the dispatcher is built
+		at(pic, 'models[".models.toml: the model and CLI per step"]', "the picture") -- c0117 override
+		at(pic, 'board["board: ./zn board, a tab per project"]', "the picture") -- c0118 override: the board is built
 	end)
 
 	it("a short account of the five parts follows the picture", function()
@@ -151,8 +153,8 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
 			{
 				"\n- **The tracker.**",
 				"\n- **The skills.**",
-				"\n- **The dispatcher** (c0117, planned).",
-				"\n- **`.models.toml`** (c0117, planned).",
+				"\n- **The dispatcher.**", -- c0117 override: built
+				"\n- **`.models.toml`.**", -- c0117 override: built
 				"\n- **The board.**",
 			}
 		do
@@ -163,8 +165,9 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
 
 	it("names every skill folder and the three checklists, each of which exists", function()
 		local text = fs.readFile(README)
-		for _, base in { "z-nile/skills", "pickman/skills" } do
-			for _, name in folders(base) do
+		-- c0184 override: every project's skills folder, from the registry (the README names each)
+		for _, folder in skills.folders(projects.load(TOP)) do
+			for _, name in folders(folder.path) do
 				at(text, `\`{name}\``, "README")
 			end
 		end

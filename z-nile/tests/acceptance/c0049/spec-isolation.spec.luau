@@ -14,7 +14,10 @@ local projects = require("@znile/engine/projects")
 local t = require("@tests/lib/t")
 
 local PATTERN = "%." .. "cache/([%w_%-]+)" -- built by concatenation so this file never matches itself
-local SHARED_BY_DESIGN: { [string]: boolean } = { sim = true, ["tests-run"] = true }
+-- c0117 (an override, named in its design's Touched modules): `.cache/dispatch` is not a fixture but the dispatcher's
+-- run-state folder, which `./zn dispatch` writes inside whatever checkout it runs in; c0117's specs name it only inside
+-- their own fixtures' checkouts (`<fixture>/main/.cache/dispatch/<id>`), so two of them never share a directory
+local SHARED_BY_DESIGN: { [string]: boolean } = { sim = true, ["tests-run"] = true, dispatch = true }
 
 -- returns "<dir> used by <fileA>, <fileB>" lines, sorted, for every non-exempt dir used by 2+ files
 local function sharedDirs(texts: { [string]: string }): { string }

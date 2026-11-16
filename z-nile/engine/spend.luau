@@ -4,6 +4,7 @@
 -- tests/acceptance/ specs, which are prep work). Minutes are explicit (--time) or the
 -- wall-clock since the previous commit, capped to absorb idle gaps; multi-issue commits split
 -- minutes in proportion to lines added.
+local costrow = require("./costrow")
 local fs = require("@lune/fs")
 local ledger = require("./ledger")
 local projects = require("./projects")
@@ -229,7 +230,8 @@ function spend.readTotals(dir: string): Totals
 	return ledger.sum(parsed.rows)
 end
 
-function spend.appendRow(issue: store.Item, share: Share, subject: string, phase: string?)
+-- `model`: the model id that spent the share's tokens (c0117); nil leaves the row's model cell empty.
+function spend.appendRow(issue: store.Item, share: Share, subject: string, phase: string?, model: string?)
 	local path = `{issue.dir}/spend.md`
 	local existing = if fs.isFile(path) then fs.readFile(path) else nil
 	local title = store.readFront(issue.doc).title or issue.id
@@ -242,8 +244,28 @@ function spend.appendRow(issue: store.Item, share: Share, subject: string, phase
 		how = share.how,
 		phase = phase or "build",
 		tokens = share.tokens,
+		model = model,
 	}
 	fs.writeFile(path, ledger.append(existing, issue.id, title, row))
+end
+
+-- spend.md plus every spend.d file. Measured rows are appended to one TSV per writer; an older markdown file still counts.
+local function rowsIn(dir: string): { ledger.Row }
+	local rows: { ledger.Row } = {}
+	local path = `{dir}/spend.md`
+	if fs.isFile(path) then
+		local parsed, err = ledger.parse(fs.readFile(path))
+		if not parsed then
+			error(`{path} does not parse: {err}`, 0)
+		end
+		for _, row in parsed.rows do
+			table.insert(rows, row)
+		end
+	end
+	for _, row in costrow.readMeasured(dir) do
+		table.insert(rows, row)
+	end
+	return rows
 end
 
 -- Raft spend.md: a summary over every issue that names this raft (members and emergent), plus each
@@ -257,15 +279,7 @@ function spend.writeRaft(raft: store.Item)
 	}
 	local all: { ledger.Row } = {}
 	for _, issue in store.members(raft.id) do
-		local path = `{issue.dir}/spend.md`
-		local rows: { ledger.Row } = {}
-		if fs.isFile(path) then
-			local parsed, err = ledger.parse(fs.readFile(path))
-			if not parsed then
-				error(`{path} does not parse: {err}`, 0)
-			end
-			rows = parsed.rows
-		end
+		local rows = rowsIn(issue.dir)
 		local t = ledger.sum(rows)
 		local emergent = store.readFront(issue.doc).emergent == "true"
 		table.insert(

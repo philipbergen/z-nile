@@ -1,0 +1,3 @@
+# Refute 007: c0246
+- F1: fixed: `loadedFrom` lists with `find -iname "*.project.json"` (Rojo looks `default.project.json` up by path, which a case-insensitive disk answers for any casing; E9); AC5 gains the `src/four/Sub/DEFAULT.PROJECT.JSON` fixture, Rules row and mutant M32; consequences: the rule also reports a miscased file Rojo would not load (fails closed, same answer on every disk), none beyond that. The reviewer's mechanism question (patch, or bring the Rojo-driven check into c0246) is for the user: the user's 2026-11-07 decision keeps it a separate chore, which now names case-insensitive lookup too.
+- F2: fixed: the loop case asserts `maps $path src/loop,` has no line at all; Rules row gains M31 (a revisited folder answered as a link out); consequences: none.

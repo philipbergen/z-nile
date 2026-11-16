@@ -1,0 +1,8 @@
+- design-review-001 F1: z-raft/merged-text-read-against-captures
+- design-review-001 F2: z-raft/run-sequestered-specs-on-all-prototypes-together
+- design-review-001 F3: z-raft/order-reasons-survive-workstreams
+- design-review-001 F4: zz-test/no-vacuous-pass
+- design-review-001 F5: one-off: moot after the unfold; the Theme was drafted from c0189's capture, and zz-review item 7 already asks whether it quotes the decisions
+- design-review-001 F6: one-off: a consequence for c0189's re-prep, no rule for the raft step
+- design-review-001 F7: z-raft/run-sequestered-specs-on-all-prototypes-together
+- design-review-001 F8: one-off: in-flight prep on the same lines, noticed by search; the cross-raft search rule is z-raft/whole-tree-rule-names-inflight-items (proposed in R0072)

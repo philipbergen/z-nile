@@ -1,0 +1,6 @@
+# Refute 001: R0067
+
+- F1: deferred c0224: the landed text follows c0190's Design, and R0067's Theme forbids editing the landed capture in the raft (a wrong capture is fixed by a new batched capture after the user is told); c0224 (arcade) carries the gap to each arcade issue's prep, which may add f0187 to its Non-goals as detail; the one issue whose part touches the rename, c0210 (Z3), already names f0187 in its Non-goals.
+- F2: refuted: the split is in the landed text: f0205 (P1) shows the badge's text, "FREE GAME READY when that game's free game is due (f0207 decides when)", and f0207 (P3) owns the state and the countdown ("counts down … and flips to FREE GAME READY when it is due"), which is the ownership table's split (P1: the badge; P3: FREE GAME READY and the countdown, as state).
+- F3: refuted: f0206's "What should happen" owns E3 as an outcome ("The portal reads every game's boards within Roblox's DataStore budget (E3: a cache or a snapshot per board)"), and the ownership table's Unknowns row gives E3 to P2; the pointer sentence only says where E3 is written.
+- F4: fixed (this commit): c0190's Verification log now records the quote's source: the user's first message in the session that captured c0183 (2026-10-31), verbatim, typos kept; c0183's Problem quoted only its first part; consequences: none (documentation).

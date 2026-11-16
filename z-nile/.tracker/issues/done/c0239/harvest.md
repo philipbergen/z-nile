@@ -1,0 +1,41 @@
+- design-review-001 F1: z-design/inherited-decisions-agree
+- design-review-001 F2: z-design/declare-what-full-runs-covered
+- design-review-001 F3: one-off: the reuse mechanism it faulted is not built after the user's decision (F1)
+- design-review-001 F4: zz-test/specs-set-host-markers-explicitly
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: zz-test/helpers-that-trim-change-expected-strings
+- design-review-001 F7: zz-test/no-vacuous-pass
+- design-review-001 F8: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F9: zz-test/narrowing-pins-the-whole-file
+- design-review-001 F10: z-design/never-narrow-captured-scope
+- design-review-001 F11: z-design/restated-rules-move-together
+- design-review-001 F12: one-off: gate-speed record placement, closed by moving it out of tracked files
+- design-review-001 F13: one-off: the read-only db path is not built
+- design-review-001 F14: one-off: small inconsistencies (a nonexistent folder, a dependency sentence)
+- design-review-002 F1: z-design/narrowing-uses-the-actions-inputs
+- design-review-002 F2: z-design/spec-design-correspondence
+- design-review-002 F3: zz-test/narrowing-pins-the-whole-file
+- design-review-002 F4: zz-arch/guard-no-is-explicit
+- design-review-002 F5: z-design/restated-rules-move-together
+- design-review-002 F6: z-design/accepted-risks-checked-and-decided
+- design-review-002 F7: one-off: the recovery after a red merge gate is the user's decision (BLOCKED and stop), written into the docs
+- design-review-002 F8: z-design/touched-paths-exist
+- design-review-002 F9: one-off: a new lesson that half-repeated an existing one, folded into it as a note
+- design-review-003 F1: z-design/narrowing-substitutions-found-by-search
+- design-review-003 F2: zz-test/case-change-set-in-the-base-commit
+- design-review-003 F3: z-design/prove-specs-pass-on-a-prototype
+- design-review-003 F4: z-design/spec-design-correspondence
+- design-review-003 F5: z-design/restated-rules-move-together
+- design-review-003 F6: z-design/declare-what-full-runs-covered
+- design-review-003 F7: z-design/spec-design-correspondence
+- design-review-004 F1: z-design/confirm-overrides-with-a-suite-run
+- design-review-004 F2: zz-test/each-fail-closed-rule-has-its-own-input
+- design-review-004 F3: z-design/spec-design-correspondence
+- design-review-004 F4: z-design/new-rules-migrate-existing-work
+- design-review-004 F5: z-design/new-rules-migrate-existing-work
+- design-review-004 F6: z-design/restated-rules-move-together
+- design-review-005 F1: z-design/rerun-skipped-checks-after-edits
+- design-review-005 F2: z-design/late-pins-run-on-the-merged-deps-tree
+- design-review-005 F3: z-design/spec-design-correspondence
+- design-review-005 F4: zz-test/each-fail-closed-rule-has-its-own-input
+- design-review-005 F5: z-design/new-rules-migrate-existing-work

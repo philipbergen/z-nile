@@ -1,0 +1,6 @@
+start: 2026-11-15 12:11:55 PST  load averages: 9.36 9.59 9.82
+head: 0e79784e3  env: (none)
+bounded: the caller's CPU limit of 900 s is lower than --cpu 3600: it stays
+10 passed, 0 failed, 1 spec files
+exit: 0  seconds: 3
+end: 2026-11-15 12:11:58 PST  load averages: 9.17 9.55 9.81

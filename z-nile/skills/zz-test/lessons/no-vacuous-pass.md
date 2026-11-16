@@ -2,7 +2,7 @@
 title: A check must not pass because it found nothing
 when: both
 tags: [coverage, exit-codes]
-check: Can this check pass because it found nothing to check, or does the case prove the input is present and distinguish "not found" from "checked and clean"?
+check: Can this check pass because it found nothing to check, and does the case prove the input is present, and does "not found" differ from "checked and clean"? Does a baseline on a fresh or unchanged tree select an empty affected set and therefore prove nothing; what existing full or CI result establishes that baseline instead?
 ---
 A coverage or validation check that treats "nothing found" as success passes when its input is wrong: a missing folder, a mistyped id, or a reader that skips a location. Make "not found" an error, or a different outcome from "checked, clean", and test both.
 
@@ -21,3 +21,11 @@ A cleanup rule needs a case whose outcome differs without it (c0117 design revie
 c0137 design review 001 F1: fixing a vacuous check also guards the mechanism that hid it. Four finished greps ended `|| true`, which swallowed grep's exit 2 when c0120's move took their `.claude` operand away; giving them the right folders but keeping `|| true` would let the next move do the same unseen. Check: after the fix, does removing one operand folder turn some check red?
 
 c0134 design review 003 F1: `diff <(a) <(b)` ignores both commands' status, so two producers that fail print nothing and compare equal: a check of "unchanged" passed with its helper script missing. Write each compared text with its producer's status checked (to a file, or `x=$(…) || fail`), then compare. Check: is every producer of a compared text's exit status checked?
+
+R0053 code review 001 F1, F2: a unit case named "cached for the same holes, and rebuilt for others" never built another, so a cache that never refreshed passed it; a Touch case computed its expected zone with the rule under test, and a "same seed, same marks" case had no seed that differs. Each clause of a case's name needs an assertion that a mutant of that clause alone turns red, and an expected value is a literal, never the rule recomputed. Check: for each clause of the case's name, which mutant fails this case on its own, without the acceptance specs?
+
+c0276 design review 005 F1: failure cases that all wrote the same output file read each other's page, so a build that wrote nothing passed. A case that asserts a command wrote a file starts with that file absent, or uses a path no other case writes, and asserts content only this run could produce. Check: if this command wrote nothing, would the file this case reads still satisfy it?
+
+**Note** (R0100 design review 002 F5): a phrase an RC or AC pins to prove new text exists must be absent from `origin/main`'s file. RC5's `with no raft` was already in main's z-work step 6. Ask: does `git show origin/main:<file> | grep -cF -e <phrase>` print 0 for every phrase the check pins?
+
+**Note** (R0103 code review 001 F2): a case asserting "no S claim" looped over the claims, so a derivation that returned no claims at all passed. A negative assertion over a list also asserts the list's exact contents. Check: if every item vanished, would this loop still pass?

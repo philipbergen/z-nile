@@ -1,0 +1,5 @@
+# c0159 design refute 002
+
+- F1: fixed, by the user's decision (2026-10-31, "Tell f0158 (Recommended)"): f0102's DisplayOrder rules stay as captured, and f0158.md gains a dated `Decided with the user (2026-10-31), for c0159 …` line saying DangerHud keeps one literal order (the Ring's, below 0), the Danger screen keeps the default with no explicit `DisplayOrder = 0`, and no order through a constant; it names review 004's correct adapter it narrows. f0158 has no raft, so the line rides in this prep PR. consequences: c0159's Existing work bullet quotes the decision and the line; no spec change (the CORRECT list already avoids those spellings).
+- F2: fixed: the narrowed f0102 header and the dated AC5 note in f0102.md say the screen case reads orders, not which screen draws what, and that f0158's place.spec checks the drawn screens. consequences: f0102's digest and `narrow.patch` regenerated (22 insertions, 21 deletions); `narrowed.spec` 6 passed on the prototype.
+- F3: fixed: E5 says 6 passed; Affected specs lists the four files the selector prints and says a later change to adapter.spec alone does not select c0106's spec. consequences: none.

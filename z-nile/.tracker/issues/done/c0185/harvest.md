@@ -1,0 +1,19 @@
+- design-review-001 F1: zz-test/check-sh-executes-only-sequestered-files
+- design-review-001 F2: zz-test/narrow-guard-allowances
+- design-review-001 F3: zz-arch/one-reader-per-format
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: z-design/prep-choices-marked-and-checked
+- note ./zn capture c0185 printed the first capture (26677a3f) because the batch commit cda05ea6's subject lists "c0183-c0188", not the ids: z-ticket/capture-subject-lists-every-id
+- note a python replace after stylua silently skipped an edit and only the mutation run showed it: z-design/rerun-skipped-checks-after-edits
+- design-review-002 F1: zz-test/sentences-in-checks-are-grep-patterns, z-design/rerun-skipped-checks-after-edits
+- design-review-002 F2: z-design/new-rules-migrate-existing-work
+- design-review-002 F3: z-design/spec-design-correspondence
+- design-review-002 F4: z-design/spec-design-correspondence
+- design-review-003 F1: z-design/restated-rules-move-together
+- design-review-003 F2: zz-arch/one-reader-per-format
+- design-review-003 F3: z-design/prep-choices-marked-and-checked
+- design-review-003 F4: z-design/new-rules-migrate-existing-work
+- design-review-003 F5: z-design/one-reading-per-value
+- design-review-004 F1: z-design/spec-design-correspondence
+- design-review-004 F2: zz-arch/one-reader-per-format
