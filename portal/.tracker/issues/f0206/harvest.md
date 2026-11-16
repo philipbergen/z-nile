@@ -1,2 +1,9 @@
 - note a hand-run mutant in the prototype worktree was undone with git checkout on an intent-to-add file (emptying it) and its relative backup landed in the main checkout: z-design/prep-experiments-run-in-standalone-clones
 - note the mutation runner judged a run by the substring "0 failed", so "10 failed" read as passing (S16 looked like a survivor): z-design/mutation-runner-runs-correct-variants
+- design-review-001 F1: pickman-arch/shared-replies-keep-per-player-figures
+- design-review-001 F2: pickman-arch/shared-replies-keep-per-player-figures
+- design-review-001 F3: z-design/rate-limits-state-first-answer-latency
+- design-review-001 F4: z-design/never-narrow-captured-scope
+- design-review-001 F5: z-design/quote-other-preps-before-promising
+- design-review-001 F6: pickman-test/readable-text-has-a-number
+- design-review-001 F7: z-design/accepted-risks-checked-and-decided
