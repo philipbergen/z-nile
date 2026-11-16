@@ -3,6 +3,7 @@
 -- Touch, so the arguments it gives Hud.shotIcons (the lives shown and the shots held) are pinned by where the
 -- bars end up on the screen (the Shots frame's own place plus each bar's), and so is the re-lay when either count
 -- or the screen changes.
+local Boost = require("@logic/Boost")
 local Hud = require("@logic/Hud")
 local Session = require("@logic/Session")
 local Touch = require("@logic/Touch")
@@ -100,6 +101,7 @@ local function start(): World
 		UserInputService = { TouchEnabled = false },
 	}
 	local modules: { [string]: any } = {
+		["@game/ReplicatedStorage/Shared/Logic/Boost"] = Boost,
 		["@game/ReplicatedStorage/Shared/Logic/Hud"] = Hud,
 		["@game/ReplicatedStorage/Shared/Logic/Session"] = Session,
 		["@game/ReplicatedStorage/Shared/Logic/Touch"] = Touch,

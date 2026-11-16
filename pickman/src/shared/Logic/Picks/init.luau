@@ -7,6 +7,8 @@ local Maze = require("./Maze")
 local Movement = require("./Movement")
 
 export type Boon = "jumps" | "fastpick" | "pill" | "longpill" | "shot" | "pellets"
+-- What a finished pick grants: a rolled boon, or the bonanza of a level's last pick (f0147), never rolled.
+export type Grant = Boon | "bonanza"
 export type Picks = {
 	marked: { Maze.Tile }, -- the walls that can be picked now, in the order they were marked
 	fast: number, -- faster picks banked (the "fastpick" boon): the next pick that finishes spends one
@@ -21,6 +23,7 @@ Picks.INTENT = "Pick" -- the wire string on the Intent remote
 Picks.MARKED = 3 -- marked walls at a time: a finished pick marks the next at once (user, 2026-10-25)
 Picks.PACES = 10 -- a pick lasts as long as a hunting ghost takes to walk this many tiles (user, 2026-10-25)
 Picks.BOONS = table.freeze(BOONS)
+Picks.BONANZA = "bonanza" :: "bonanza"
 Picks.LONG_PILL_FACTOR = 2 -- the long ghost pill: a power pellet of this many times the level's time
 
 function Picks.isIntent(raw: any): boolean

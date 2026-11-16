@@ -1,0 +1,31 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-16 07:03	1 spec	0	0	test			0.822	0.540		0.822	tokens,ai
+2026-11-16 07:03	1 spec	0	0	test			0.819	0.540		0.819	tokens,ai
+2026-11-16 07:03	3 specs	0	0	test			1.040	0.820		1.040	tokens,ai
+2026-11-16 07:03	1 spec	0	0	test			0.832	0.540		0.832	tokens,ai
+2026-11-16 07:03	1 spec	0	0	test			1.033	0.690		1.033	tokens,ai
+2026-11-16 07:03	1 spec	0	0	test			0.818	0.600		0.818	tokens,ai
+2026-11-16 07:03	1 spec	0	0	test			0.813	0.560		0.813	tokens,ai
+2026-11-16 07:03	affected	0	0	test			2.469	18.720		2.469	tokens,ai
+2026-11-16 07:04	affected	0	0	test			2.270	18.580		2.270	tokens,ai
+2026-11-16 07:04	affected	0	0	test			8.476	53.990		8.476	tokens,ai
+2026-11-16 07:04	f0143: speed boost escape	354	7	build							tokens,wall,cpu,ai
+2026-11-16 07:05	affected	0	0	test			9.695	55.740		9.695	tokens,ai
+2026-11-16 07:06	affected	0	0	test			9.502	56.650		9.502	tokens,ai
+2026-11-16 07:06	1 spec	0	0	test			1.045	0.570		1.045	tokens,ai
+2026-11-16 07:06	1 spec	0	0	test			0.819	0.560		0.819	tokens,ai
+2026-11-16 07:06	3 specs	0	0	test			1.023	0.800		1.023	tokens,ai
+2026-11-16 07:06	1 spec	0	0	test			0.832	0.560		0.832	tokens,ai
+2026-11-16 07:06	1 spec	0	0	test			1.028	0.720		1.028	tokens,ai
+2026-11-16 07:06	1 spec	0	0	test			0.823	0.600		0.823	tokens,ai
+2026-11-16 07:06	1 spec	0	0	test			0.822	0.550		0.822	tokens,ai
+2026-11-16 07:06	1 spec	0	0	test			0.838	0.540		0.838	tokens,ai
+2026-11-16 07:07	1 spec	0	0	test			0.816	0.530		0.816	tokens,ai
+2026-11-16 07:07	3 specs	0	0	test			1.041	0.790		1.041	tokens,ai
+2026-11-16 07:07	1 spec	0	0	test			0.826	0.540		0.826	tokens,ai
+2026-11-16 07:07	1 spec	0	0	test			1.036	0.680		1.036	tokens,ai
+2026-11-16 07:07	1 spec	0	0	test			0.835	0.560		0.835	tokens,ai
+2026-11-16 07:07	1 spec	0	0	test			0.824	0.530		0.824	tokens,ai
+2026-11-16 07:07	261 specs	0	0	test			4.756	30.180		4.756	tokens,ai
+2026-11-16 07:07	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-16 16:25	R0094: bind f0143, f0147, f0158, f0148 claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	539	18	deliver							tokens,wall,cpu,ai
