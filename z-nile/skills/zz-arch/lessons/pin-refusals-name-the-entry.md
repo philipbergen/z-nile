@@ -3,6 +3,7 @@ title: A pin's refusal names the entry that differs, never the pin
 when: design
 tags: [guards, pins, usability]
 check: Can an ignored file the user's tools create (`.DS_Store`, an editor backup `*~`) make this guard refuse, and does the refusal name the entry that differs (unexpected, missing, changed) without printing the value that would make it pass?
+from: c0123 design review 001 F3 (c0123 withdrawn 2026-11-16)
 ---
 A content pin over a working folder also pins the ignored files in it. A guard that fails closed on a mismatch with only "refusing" leaves agents told to stop with no clue, or tempted to re-pin to get past it.
 
