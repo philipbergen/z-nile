@@ -3,7 +3,7 @@ title: A finding that is a hardening idea, a missing spec, a hypothetical or pol
 when: both
 tags: [review, findings, tickets, withdrawn, scope, backlog]
 check: Is this finding a hardening idea, a "no spec covers X", a hypothetical about unlanded work, or polish, with no incident that happened twice and no ask from the user (if so, it is not worth a ticket: say so and move on)?
-from: user ruling 2026-11-16, "appproved in full" (tracker cull of 66 z-nile backlog issues)
+from: user ruling 2026-11-16, "appproved in full" (tracker cull of 65 z-nile backlog issues)
 ---
 A review finding or a one-off incident becomes a ticket only when an incident happened twice or the user asked for it. A hardening idea, a "no spec covers X", a hypothetical about work that has not landed, and polish are noted in the review (or dropped) and not captured. When a finding like the withdrawn ones below comes up again, it is not raised again: say it was withdrawn by the user and move on.
 
@@ -14,7 +14,6 @@ A review finding or a one-off incident becomes a ticket only when an incident ha
 
 **Hardening ideas (a guard, fence or runner made stricter against a case that had not happened twice).**
 
-- c0075 Specs run in a bubblewrap jail on Linux
 - c0123 Fence trusts only its own ref guard hooks
 - c0157 Gate contention and tripwire
 - c0160 Check paths third project
