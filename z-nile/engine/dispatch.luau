@@ -36,6 +36,8 @@ dispatch.STEPS = {
 	-- worktree and with its own environment: no model, no agent credential
 	["z-land"] = { kind = "script", argv = { "done", "{id}" }, where = "run" },
 	["z-block"] = { kind = "script", argv = { "block", "{id}" }, where = "run" },
+	-- c0252: the clean-clone full gate on the bind's tree and, for a game, `scripts/cicd`, before the landing
+	["z-gate"] = { kind = "script", argv = { "land-gate", "{id}" }, where = "run" },
 } :: { [string]: Step }
 -- Skills read inside a step, never run as one.
 dispatch.READ_INSIDE = {
@@ -133,6 +135,7 @@ export type PromptInput = {
 	through: string?, -- zz-review final mode: the layers of this landing end at this issue (c0248)
 	perLanding: boolean?, -- zz-review final mode: the raft has a final review and a trace per landing (c0248)
 	itemDoc: string?, -- the item's document, where a review's `## Open to the human` goes
+	rerun: { string }?, -- c0252: z-run again after landing checks failed: the problems it runs again for
 }
 
 -- c0250: what a step does when a decision needs the user. A capture has no item yet, so z-ticket keeps c0256's local
@@ -198,6 +201,16 @@ function dispatch.prompt(p: PromptInput): string
 		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse. `./zn done` is refused here too: when your work is done, stop, and the dispatcher lands the stack.",
 		"Do not pass --time or --tokens. The dispatcher records this session's wall, CPU, tokens and model.",
 	}
+	if p.rerun and #p.rerun > 0 then
+		table.insert(
+			lines,
+			4,
+			`You are running again because the dispatcher's checks before landing {p.id} failed. Fix exactly these (read them with \`./zn land-check {p.id}\`), then stop: {table.concat(
+				p.rerun :: { string },
+				" | "
+			)}`
+		)
+	end
 	if p.exchange and #p.exchange > 0 then
 		local files = table.concat(p.exchange :: { string }, ", ")
 		local format =
@@ -281,7 +294,7 @@ export type Facts = {
 	-- c0252: the landing's verdict (landcheck.classify over `./zn land-check`), read once the run step ended ok or a
 	-- block was requested; nil otherwise. For a block request it is the verdict on the layers below the Layer.
 	land: LandFacts?,
-	blockRequest: { reason: string, layer: string? }?, -- a dispatched `./zn block` left it in the run state (G1)
+	blockRequest: { reason: string, layer: string?, tip: string? }?, -- a dispatched `./zn block` left it in the run state (G1)
 }
 export type LandFacts = {
 	action: "land" | "wait" | "redo" | "block",
@@ -291,7 +304,8 @@ export type LandFacts = {
 	problems: { any }, -- the landcheck.Problems, for the escalation note
 	reason: string?, -- block: the escalation reason
 	layer: string?, -- block: the Layer
-	tries: number, -- the redo tries already spent
+	tries: number, -- the repeats of this same failure already spent
+	sig: string, -- landcheck.signature of the failure, for the dispatcher's count
 }
 export type Action = {
 	kind: "step" | "merge" | "stop" | "land" | "block",
@@ -506,6 +520,18 @@ function dispatch.next(f: Facts): Action
 	local req = f.blockRequest
 	if req then
 		local l = f.land
+		if l and l.action == "wait" then
+			-- the green layers below still wait (CI running, a read failed): the request stays, and they land first (Q3)
+			return {
+				kind = "stop",
+				code = dispatch.EXIT.gate,
+				gate = "run",
+				why = `waiting to land the layers below {req.layer or "the block"} before it is filed: {table.concat(
+					l.lines,
+					"; "
+				)}`,
+			}
+		end
 		if l and l.action == "land" and l.through then
 			if not table.find(f.autoMerge, "run") then
 				return stop(

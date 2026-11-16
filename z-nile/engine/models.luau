@@ -43,7 +43,7 @@
 --   max_minutes = 240
 --   [dispatch]
 --   auto_merge = ["prep", "raft", "run"]   -- run: the dispatcher lands a green stack with `./zn done` (c0252)
---   merge_attempts = 2    -- worker tries after a fixable landing check fails, before the raft blocks
+--   merge_retries = 2    -- reruns of the worker for one repeated landing failure it can fix, before the raft blocks (three runs)
 --   stall_seconds = 300
 local family = require("./family")
 --   quota_cap_hours = 24   -- c0253's worker blocks the raft with `quota` when every CLI stays out past this
@@ -70,7 +70,8 @@ local MODEL_OF_CLI: { [string]: string } = {
 	kimi = "^kimi%-code%-[%w%._%-]+$",
 	agent = "^[%w%._%-]+$",
 }
--- The merge gates the dispatcher may pass itself; the run's PR is never one of them.
+-- The merge gates the dispatcher may pass itself: a prep PR, a rafting PR, and (c0252) `run`, the landing of a raft's
+-- finished stack with `./zn done`, which is not a pull request merge.
 models.GATES = { "prep", "raft", "run" }
 models.STALL_SECONDS = 300
 -- the stall limit while a tool call runs (a full gate is quiet for minutes)
@@ -182,11 +183,11 @@ function models.parse(text: string, path: string): Layer
 						error(`{path}: dispatch.{k} is a whole number of seconds, at least 1`, 0)
 					end
 					layer.settings[if k == "stall_seconds" then "stallSeconds" else "toolSeconds"] = v
-				elseif k == "merge_attempts" then
+				elseif k == "merge_retries" then
 					if not count(v) then
-						error(`{path}: dispatch.merge_attempts is a whole number of tries, at least 1`, 0)
+						error(`{path}: dispatch.merge_retries is a whole number of reruns, at least 1`, 0)
 					end
-					layer.settings.mergeAttempts = v
+					layer.settings.mergeRetries = v
 				elseif k == "quota_cap_hours" then
 					if not count(v) then
 						error(`{path}: dispatch.quota_cap_hours is a whole number of hours, at least 1`, 0)
@@ -194,7 +195,7 @@ function models.parse(text: string, path: string): Layer
 					layer.settings.quotaCapHours = v
 				else
 					error(
-						`{path}: dispatch.{k} is not a setting (auto_merge, stall_seconds, tool_seconds, quota_cap_hours, merge_attempts)`,
+						`{path}: dispatch.{k} is not a setting (auto_merge, stall_seconds, tool_seconds, quota_cap_hours, merge_retries)`,
 						0
 					)
 				end
@@ -428,14 +429,16 @@ function models.settings(layers: { Layer }): Settings
 	return s
 end
 
--- c0252: how many times the dispatcher runs the worker again after a landing check it can fix fails, before it blocks the
--- raft (a real second attempt by default).
-models.MERGE_ATTEMPTS = 2
-function models.mergeAttempts(layers: { Layer }): number
-	local n: number = models.MERGE_ATTEMPTS
+-- c0252: how many times the dispatcher runs the worker again for one repeated failure of a landing check it can fix,
+-- before it blocks the raft (2: three runs of the worker in all). The count starts again when the failure changes (the
+-- codes or the top layer's tip), and MERGE_RERUN_CAP bounds every rerun of one raft.
+models.MERGE_RERUN_CAP = 10
+models.MERGE_RETRIES = 2
+function models.mergeRetries(layers: { Layer }): number
+	local n: number = models.MERGE_RETRIES
 	for _, layer in layers do
-		if layer.settings.mergeAttempts ~= nil then
-			n = layer.settings.mergeAttempts
+		if layer.settings.mergeRetries ~= nil then
+			n = layer.settings.mergeRetries
 		end
 	end
 	return n

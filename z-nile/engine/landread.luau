@@ -4,6 +4,7 @@
 local landcheck = require("./landcheck")
 local serde = require("@lune/serde")
 local sh = require("../lib/sh")
+local trackerstate = require("./trackerstate")
 
 local landread = {}
 
@@ -58,16 +59,24 @@ function landread.pr(branch: string): (landcheck.Pr?, string?)
 	return landread.parsePr(r.stdout)
 end
 
--- The paths named by `git diff --name-only a b`, or nil when git could not say.
-function landread.diffNames(a: string, b: string): { string }?
-	local r = sh.run("git", { "diff", "--name-only", "--no-renames", a, b })
+-- The raw entries of `git diff-tree -r --raw --no-renames <a> <b>` (trackerstate's own input: a rename shows as a
+-- delete and an add), or nil and why when git could not say.
+function landread.rawEntries(a: string, b: string): ({ trackerstate.Entry }?, string?)
+	local r = sh.run("git", { "diff-tree", "-r", "--raw", "--no-renames", a, b })
 	if not r.ok then
-		return nil
+		return nil, `git diff-tree {a} {b} failed`
 	end
+	return trackerstate.parseRaw(r.stdout)
+end
+
+-- Of the entries, the paths that are not tracker state: each entry is judged alone by trackerstate.judge against the
+-- registry's roots, the one definition (an unregistered `foo/.tracker/x` and a file moved out of an item folder into
+-- the engine are code; so is anything the rule refuses for another reason).
+function landread.codePaths(entries: { trackerstate.Entry }, roots: { string }): { string }
 	local out: { string } = {}
-	for line in string.gmatch(r.stdout .. "\n", "([^\n]*)\n") do
-		if line ~= "" then
-			table.insert(out, line)
+	for _, e in entries do
+		if trackerstate.judge({ e }, roots, false) ~= nil then
+			table.insert(out, e.path)
 		end
 	end
 	return out

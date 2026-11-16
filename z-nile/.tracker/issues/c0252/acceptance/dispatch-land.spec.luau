@@ -47,6 +47,7 @@ local function land(action: string, over: { [string]: any }?): any
 		reason = nil,
 		layer = nil,
 		tries = 0,
+		sig = "ci-pending@aaaa",
 	}
 	local changes: { [string]: any } = over or {}
 	for k, v in changes do
@@ -138,6 +139,13 @@ return t.spec("c0252 the chain lands a green stack", function(it)
 			local red: any =
 				dispatch.next(facts({ blockRequest = req, land = land("redo", { through = "c0020" }) }))
 			t.expect(red.kind).toBe("block")
+			-- a prefix whose CI still runs waits at the gate and keeps the request: Q3 says the green layers land, so it
+			-- does not block now
+			local waiting: any =
+				dispatch.next(facts({ blockRequest = req, land = land("wait", { through = "c0020" }) }))
+			t.expect(waiting.kind).toBe("stop")
+			t.expect(waiting.code).toBe(dispatch.EXIT.gate)
+			t.expect(has(waiting.why or "", "before it is filed")).toBe(true)
 			-- without run in auto_merge the prefix waits for a person
 			local human = dispatch.next(
 				facts({ blockRequest = req, land = land("land", { through = "c0020" }), autoMerge = {} })
@@ -192,6 +200,16 @@ return t.spec("c0252 the chain lands a green stack", function(it)
 				"--through",
 				"c0010",
 			})
+			local gateStep = dispatch.step("z-gate")
+			t.expect(gateStep.kind).toBe("script")
+			t.expect(gateStep.where).toBe("run")
+			t.expect(dispatch.scriptArgv("z-gate", "R0010", { "--through", "c0010" })).toEqual({
+				"./zn",
+				"land-gate",
+				"R0010",
+				"--through",
+				"c0010",
+			})
 			t.expect(dispatch.scriptArgv("z-block", "R0010", { "red-gate", "--layer", "c0020" })).toEqual({
 				"./zn",
 				"block",
@@ -204,24 +222,72 @@ return t.spec("c0252 the chain lands a green stack", function(it)
 	)
 
 	it(
-		"AC6: auto_merge takes run, still refuses anything else, and merge_attempts is a whole number defaulting to 2",
+		"AC6: auto_merge takes run, still refuses anything else, and merge_retries is a whole number defaulting to 2",
 		function()
 			t.expect(table.find(models.GATES, "run") ~= nil).toBe(true)
 			local ok, layer = pcall(
 				models.parse,
-				'[dispatch]\nauto_merge = ["prep", "raft", "run"]\nmerge_attempts = 3\n',
+				'[dispatch]\nauto_merge = ["prep", "raft", "run"]\nmerge_retries = 3\n',
 				"t.toml"
 			)
 			t.expect(ok).toBe(true)
-			t.expect((layer :: any).settings.mergeAttempts).toBe(3)
-			t.expect(models.mergeAttempts({ layer :: any })).toBe(3)
-			t.expect(models.mergeAttempts({})).toBe(2)
+			t.expect((layer :: any).settings.mergeRetries).toBe(3)
+			t.expect(models.mergeRetries({ layer :: any })).toBe(3)
+			t.expect(models.mergeRetries({})).toBe(2)
+			t.expect(models.MERGE_RERUN_CAP).toBe(10)
 			local bad, why = pcall(models.parse, '[dispatch]\nauto_merge = ["merge"]\n', "t.toml")
 			t.expect(bad).toBe(false)
 			t.expect(has(tostring(why), "dispatch.auto_merge names merge")).toBe(true)
-			local zero, why0 = pcall(models.parse, "[dispatch]\nmerge_attempts = 0\n", "t.toml")
+			local zero, why0 = pcall(models.parse, "[dispatch]\nmerge_retries = 0\n", "t.toml")
 			t.expect(zero).toBe(false)
-			t.expect(has(tostring(why0), "merge_attempts")).toBe(true)
+			t.expect(has(tostring(why0), "merge_retries")).toBe(true)
+			local old, why1 = pcall(models.parse, "[dispatch]\nmerge_attempts = 2\n", "t.toml")
+			t.expect(old).toBe(false)
+			t.expect(has(tostring(why1), "not a setting")).toBe(true)
+		end
+	)
+
+	it(
+		"AC5: a rerun worker is told which checks it runs again for, and a first run is told nothing of the kind",
+		function()
+			local function prompt(rerun: { string }?): string
+				return dispatch.prompt({
+					step = "z-run",
+					id = "R0010",
+					mode = nil,
+					skillPath = "z-nile/skills/z-run/SKILL.md",
+					worktree = "/w",
+					stateDir = "/state",
+					promptPath = "/p",
+					streamWorktree = nil,
+					description = nil,
+					project = nil,
+					exchange = nil,
+					exchangeAsker = nil,
+					exchangeNoReply = nil,
+					exchangeUnknownReply = nil,
+					exchangeLastStep = nil,
+					parentExchange = nil,
+					parentStateDir = nil,
+					rerun = rerun,
+				} :: any)
+			end
+			local again = prompt({
+				"ci-failed (redo): CI failed on c0020's head: static",
+				"trace-stale (redo): row Commit is stale",
+			})
+			t.expect(
+				has(
+					again,
+					"You are running again because the dispatcher's checks before landing R0010 failed"
+				)
+			)
+				.toBe(true)
+			t.expect(has(again, "ci-failed (redo): CI failed on c0020's head: static")).toBe(true)
+			t.expect(has(again, "trace-stale (redo)")).toBe(true)
+			t.expect(has(again, "./zn land-check R0010")).toBe(true)
+			t.expect(has(prompt(nil), "running again")).toBe(false)
+			t.expect(has(prompt({}), "running again")).toBe(false)
 		end
 	)
 end)

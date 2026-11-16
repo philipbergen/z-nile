@@ -19,8 +19,8 @@ local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --sho
 local CAPTURED =
 	"## Problem\nThe marker is missing.\n\n## Solution\nStore the marker.\n\n## Acceptance criteria\n- AC1: the marker is stored\n"
 
-local function issue(id: string, title: string): string
-	return `---\nid: {id}\ntype: chore\ntitle: {title}\nslug: {id}\nraft: R0010\ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-10-06\nstatus: {PREPARED}\n---\n\n# {id}\n\n{CAPTURED}`
+local function issue(id: string, title: string, raft: string?): string
+	return `---\nid: {id}\ntype: chore\ntitle: {title}\nslug: {id}\nraft: {raft or "R0010"}\ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-10-06\nstatus: {PREPARED}\n---\n\n# {id}\n\n{CAPTURED}`
 end
 
 local RAFT =
@@ -59,17 +59,18 @@ local function has(s: string, part: string): boolean
 	return string.find(s, part, 1, true) ~= nil
 end
 -- what the fake gh answers for the layer branch `branch`: its head and checks
-local function pr(branch: string, state: string, checks: string, head: string?)
+local function pr(branch: string, mergeable: string, checks: string, head: string?, draft: boolean?)
 	local sha = head or git(f.main, { "rev-parse", `origin/{branch}` })
 	fs.writeFile(
 		`{bin}/prview-{(string.gsub(branch, "/", "_"))}.json`,
-		`\{"state":"OPEN","isDraft":false,"headRefOid":"{sha}","mergeable":"{state}","statusCheckRollup":{checks}}`
+		`\{"state":"OPEN","isDraft":{draft == true},"headRefOid":"{sha}","mergeable":"{mergeable}","statusCheckRollup":{checks}}`
 	)
 end
 local PENDING = '[{"name":"static","status":"IN_PROGRESS","conclusion":""}]'
 local FAILED = '[{"name":"static","status":"COMPLETED","conclusion":"FAILURE"}]'
 local GREEN =
 	'[{"name":"static","status":"COMPLETED","conclusion":"SUCCESS"},{"name":"deploy","conclusion":"SKIPPED"}]'
+local DEPLOY_SKIPPED = '[{"name":"deploy","conclusion":"SKIPPED"}]'
 local function checked(extra: { string }): fixture.Result
 	local args = { "land-check", "R0010" }
 	for _, a in extra do
@@ -102,6 +103,12 @@ return t.spec("c0252 land-check, done and a dispatched block", function(it)
 				["pickman/.tracker/issues/c0020/c0020.md"] = issue("c0020", "beta"),
 				["pickman/.tracker/issues/c0020/check.sh"] = CHECK,
 				["pickman/.tracker/issues/c0020/acceptance/.gitkeep"] = "",
+				-- an old single-branch raft: readied, no layer branch ever (as R0061 and R0084 are)
+				["pickman/.tracker/rafts/R0020/R0020.md"] = `---\nid: R0020\ntype: chore\ntitle: old\nslug: old\nsingle: false\nissues: [c0030]\ndesign: ready\ncreated: 2026-10-06\nstatus: {PREPARED}\n---\n\n# R0020\n\n## Order & dependencies\nc0030\n`,
+				["pickman/.tracker/rafts/R0020/check.sh"] = CHECK,
+				["pickman/.tracker/issues/c0030/c0030.md"] = issue("c0030", "gamma", "R0020"),
+				["pickman/.tracker/issues/c0030/check.sh"] = CHECK,
+				["pickman/.tracker/issues/c0030/acceptance/.gitkeep"] = "",
 			}
 			f = trackerfix.new("c0252-land-cmd-github.com", seed)
 			bin = `{f.base}/bin`
@@ -119,6 +126,7 @@ return t.spec("c0252 land-check, done and a dispatched block", function(it)
 			process.exec("chmod", { "+x", `{bin}/gh` })
 			env = { PATH = `{bin}:{process.env.PATH or ""}` }
 			must(trackerfix.tr(f, f.main, { "ready", "R0010" }, env), "ready")
+			must(trackerfix.tr(f, f.main, { "ready", "R0020" }, env), "ready R0020")
 			wt = must(trackerfix.tr(f, f.main, { "worktree", "R0010" }, env), "worktree")
 			must(zn({ "start", "R0010" }), "start 1")
 			write(wt, "pickman/src/alpha.luau", "alpha\n")
@@ -143,7 +151,7 @@ return t.spec("c0252 land-check, done and a dispatched block", function(it)
 	)
 
 	it(
-		"AC7: land-check names a pending check as a wait, a failed one as a block, and passes a green top layer",
+		"AC7: land-check names a pending check as a wait, a failed one as a redo, and passes a green top layer",
 		function()
 			local top = "R0010/2/c0020"
 			pr(top, "MERGEABLE", PENDING)
@@ -155,11 +163,20 @@ return t.spec("c0252 land-check, done and a dispatched block", function(it)
 			t.expect(failed.code).toBe(1)
 			t.expect(problems(failed)).toEqual({ "ci-failed" })
 			local j: any = serde.decode("json", failed.stdout)
-			t.expect(j.problems[1].kind).toBe("block")
+			t.expect(j.problems[1].kind).toBe("redo")
 			t.expect(j.problems[1].reason).toBe("red-gate")
 			t.expect(j.top).toBe(top)
-			-- a draft layer pull request whose only check was skipped is green, and the line is readable without --json
+			-- a draft layer pull request whose only check was skipped is green (its mergeable is UNKNOWN while it is a draft)
+			pr(top, "UNKNOWN", DEPLOY_SKIPPED, nil, true)
+			local draft = checked({})
+			t.expect(draft.ok).toBe(true)
+			t.expect(problems(draft)).toEqual({})
+			-- a non-draft one that GitHub is still computing, and one with no check registered yet, are waits
 			pr(top, "UNKNOWN", GREEN)
+			t.expect(problems(checked({}))).toEqual({ "pr-mergeable-unknown" })
+			pr(top, "MERGEABLE", "[]")
+			t.expect(problems(checked({}))).toEqual({ "ci-none" })
+			pr(top, "MERGEABLE", GREEN)
 			local green = checked({})
 			t.expect(green.ok).toBe(true)
 			t.expect(problems(green)).toEqual({})
@@ -180,6 +197,9 @@ return t.spec("c0252 land-check, done and a dispatched block", function(it)
 			t.expect(problems(checked({}))).toEqual({ "pr-head-moved" })
 			pr(top, "CONFLICTING", GREEN)
 			t.expect(problems(checked({}))).toEqual({ "pr-conflicting" })
+			-- an answer that is not JSON is the pull request unread, not a pass
+			fs.writeFile(`{bin}/prview-R0010_2_c0020.json`, "garbage")
+			t.expect(problems(checked({}))).toEqual({ "pr-unreadable" })
 			pr(top, "MERGEABLE", GREEN)
 			t.expect(problems(checked({}))).toEqual({})
 		end
@@ -204,27 +224,60 @@ return t.spec("c0252 land-check, done and a dispatched block", function(it)
 		end
 	)
 
-	it("AC8: done is refused while ZN_DISPATCH is set, and lands nothing", function()
-		pr("R0010/2/c0020", "MERGEABLE", GREEN)
-		local before = git(f.main, { "ls-remote", "origin", "refs/heads/main" })
-		local r = zn({ "done", "R0010" }, { ZN_DISPATCH = "1" })
-		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr, "done is refused while ZN_DISPATCH is set")).toBe(true)
-		t.expect(has(r.stderr, "the dispatcher lands")).toBe(true)
-		t.expect(git(f.main, { "ls-remote", "origin", "refs/heads/main" })).toBe(before)
+	it("AC7: an old single-branch raft gets an explicit no-layers answer, not a problem list", function()
+		local text = trackerfix.tr(f, f.main, { "land-check", "R0020" }, env)
+		t.expect(text.code).toBe(2)
+		t.expect(has(text.stdout, "R0020 has no layer branches")).toBe(true)
+		t.expect(has(text.stdout, "a human's merge")).toBe(true)
+		local asJson = trackerfix.tr(f, f.main, { "land-check", "R0020", "--json" }, env)
+		t.expect(asJson.code).toBe(2)
+		local j: any = serde.decode("json", asJson.stdout)
+		t.expect(j.layered).toBe(false)
+		t.expect(#j.problems).toBe(0)
 	end)
 
 	it(
-		"AC8: done refuses a stack whose top layer has a failed check, naming the code, and changes nothing",
+		"AC8: done is refused in a session that holds the agent's credential, ZN_DISPATCH or ZN_HEADLESS, and lands nothing",
 		function()
-			pr("R0010/2/c0020", "MERGEABLE", FAILED)
+			pr("R0010/2/c0020", "MERGEABLE", GREEN)
 			local before = git(f.main, { "ls-remote", "origin", "refs/heads/main" })
-			local r = zn({ "done", "R0010" })
-			t.expect(r.ok).toBe(false)
-			t.expect(has(r.stderr, "R0010 is not ready to land")).toBe(true)
-			t.expect(has(r.stderr, "ci-failed (block)")).toBe(true)
+			for _, marker in { "ZN_DISPATCH", "ZN_HEADLESS" } do
+				local r = zn({ "done", "R0010" }, { [marker] = "1" })
+				t.expect(r.ok).toBe(false)
+				t.expect(has(r.stderr, "done is refused in a session that holds the agent's credential"))
+					.toBe(true)
+				t.expect(has(r.stderr, "./zn land-check")).toBe(true)
+				t.expect(has(r.stderr, "the dispatcher lands")).toBe(true)
+			end
 			t.expect(git(f.main, { "ls-remote", "origin", "refs/heads/main" })).toBe(before)
-			t.expect(git(wt, { "branch", "--show-current" })).toBe("R0010/2/c0020")
+		end
+	)
+
+	it(
+		"AC8: done refuses every problem the dispatcher would not land on, a wait included, naming the codes, and changes nothing",
+		function()
+			local top = "R0010/2/c0020"
+			local before = git(f.main, { "ls-remote", "origin", "refs/heads/main" })
+			local cases: { { branchState: string, checks: string, code: string, gone: boolean? } } = {
+				{ branchState = "MERGEABLE", checks = FAILED, code = "ci-failed (redo)" },
+				{ branchState = "MERGEABLE", checks = PENDING, code = "ci-pending (wait)" },
+				{ branchState = "MERGEABLE", checks = "[]", code = "ci-none (wait)" },
+				{ branchState = "UNKNOWN", checks = GREEN, code = "pr-mergeable-unknown (wait)" },
+				{ branchState = "MERGEABLE", checks = GREEN, code = "pr-unreadable (wait)", gone = true },
+			}
+			for _, c in cases do
+				if c.gone then
+					fs.removeFile(`{bin}/prview-R0010_2_c0020.json`)
+				else
+					pr(top, c.branchState, c.checks)
+				end
+				local r = zn({ "done", "R0010" })
+				t.expect(r.ok).toBe(false)
+				t.expect(has(r.stderr, "R0010 is not ready to land")).toBe(true)
+				t.expect(has(r.stderr, c.code)).toBe(true)
+				t.expect(git(f.main, { "ls-remote", "origin", "refs/heads/main" })).toBe(before)
+				t.expect(git(wt, { "branch", "--show-current" })).toBe("R0010/2/c0020")
+			end
 		end
 	)
 
@@ -246,8 +299,11 @@ return t.spec("c0252 land-check, done and a dispatched block", function(it)
 			)
 			t.expect(r.ok).toBe(true)
 			t.expect(has(r.stdout, "block requested: R0010 design-gap (layer c0020)")).toBe(true)
+			local tip = git(f.main, { "rev-parse", "origin/R0010/2/c0020" })
 			t.expect(fs.readFile(`{state}/block-request`))
-				.toBe("item: R0010\nreason: design-gap\nlayer: c0020\n")
+				.toBe(`item: R0010\nreason: design-gap\nlayer: c0020\ntip: {tip}\n`)
+			-- the validated note travels with the request: the dispatcher restores it when it files the block
+			t.expect(fs.readFile(`{state}/block-note.md`)).toBe(fs.readFile(`{wt}/{dir}/escalation.md`))
 			t.expect(git(f.main, { "ls-remote", "origin", "refs/heads/main" })).toBe(before)
 			t.expect(fs.isFile(`{wt}/{dir}/escalation.md`)).toBe(true)
 			-- the note is still checked: a reason that is not one, and a note without a recommended option, are refused
@@ -270,8 +326,8 @@ return t.spec("c0252 land-check, done and a dispatched block", function(it)
 		end
 	)
 
-	it("AC8: a check still running is a person's to judge: done goes on, and lands the bind", function()
-		pr("R0010/2/c0020", "MERGEABLE", PENDING)
+	it("AC8: with a green top layer done goes on, and lands the bind", function()
+		pr("R0010/2/c0020", "MERGEABLE", GREEN)
 		local landed = must(zn({ "done", "R0010" }), "done")
 		t.expect(has(landed, "landed R0010")).toBe(true)
 		t.expect(has(git(f.main, { "log", "-1", "--format=%s", "origin/main" }), "R0010: bind c0010, c0020"))

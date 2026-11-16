@@ -164,7 +164,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 				'  "pr edit")',
 				'    if [ -n "$GH_FAIL_READY" ]; then echo "gh: boom" >&2; exit 1; fi',
 				'    git --git-dir="$GH_BARE" rev-parse "refs/heads/$GH_BRANCH" > "$GH_READY_HEAD" ;;',
-				'  "pr view") echo "body" ;;',
+				'  "pr view") case "$*" in *statusCheckRollup*) sha=$(git rev-parse "origin/$3" 2>/dev/null || git rev-parse "$3"); printf \'{"state":"OPEN","isDraft":false,"headRefOid":"%s","mergeable":"MERGEABLE","statusCheckRollup":[{"name":"static","conclusion":"SUCCESS"}]}\' "$sha"; exit 0 ;; esac; echo "body" ;;',
 				"esac",
 				"exit 0",
 				"",

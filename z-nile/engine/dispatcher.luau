@@ -103,7 +103,11 @@ export type State = {
 	detail: string?,
 	follows: string?, -- the raft an issue's chain moved on to
 	merged: { number }, -- the PRs the dispatcher merged
-	landTries: number?, -- c0252: the worker's tries since a landing check last failed with a fixable problem
+	landTries: number?, -- c0252: reruns spent on the failure `landSig` names (a repeat of the same failure)
+	landSig: string?, -- c0252: the codes and top tip of the failure the last rerun was for (landcheck.signature)
+	landRuns: number?, -- c0252: all reruns of this raft, the hard bound under models.MERGE_RERUN_CAP
+	gate: { tip: string, red: string?, wait: string? }?, -- c0252: `land-gate`'s last answer, for one top tip
+	gateOk: string?, -- c0252: the top tip whose clean-clone full gate passed
 	pushed: { string }, -- the commits its publish broker pushed to main
 	pushes: { Push }, -- every push it asked for, recorded before the push is made (c0256): which issues it made
 	history: { Attempt },
@@ -379,6 +383,20 @@ end
 local function zn(dir: string, args: { string }, quiet: boolean?): (boolean, string, string)
 	local r = process.exec(`{dir}/zn`, args, {
 		cwd = dir,
+		stdio = if quiet then "default" else { stdout = "default", stderr = "forward" },
+	})
+	return r.ok, trim(r.stdout), trim(r.stderr)
+end
+
+-- c0252: the base's engine (the main checkout's, which only fast-forwards origin/main) run against a raft's worktree:
+-- `./zn -C <worktree> ...`. What judges and lands a stack is never the stack's own `zn`.
+local function znBase(root: string, wt: string, args: { string }, quiet: boolean?): (boolean, string, string)
+	local argv: { string } = { "-C", wt }
+	for _, a in args do
+		table.insert(argv, a)
+	end
+	local r = process.exec(`{root}/zn`, argv, {
+		cwd = root,
 		stdio = if quiet then "default" else { stdout = "default", stderr = "forward" },
 	})
 	return r.ok, trim(r.stdout), trim(r.stderr)
@@ -1352,6 +1370,7 @@ function dispatcher.modelStep(
 		exchangeLastStep = exLastStep,
 		parentExchange = parentNames,
 		parentStateDir = parentDir,
+		rerun = opts["--rerun"],
 	})
 	local attempts: { Attempt } = {}
 	local function refused(spec: models.Spec, why: string)
@@ -1967,7 +1986,13 @@ function dispatcher.modelStep(
 end
 
 -- Runs a script step: `./zn <command>` in the main checkout or the step's worktree, never a model.
-function dispatcher.scriptStep(ctx: Ctx, st: State, step: string, id: string, extra: { string }?): string
+function dispatcher.scriptStep(
+	ctx: Ctx,
+	st: State,
+	step: string,
+	id: string,
+	extra: { string }?
+): (string, number)
 	local argv = dispatch.scriptArgv(step, id, extra)
 	local where = dispatch.step(step).where
 	local dir = if where == "main"
@@ -1976,8 +2001,20 @@ function dispatcher.scriptStep(ctx: Ctx, st: State, step: string, id: string, ex
 		else worktree(ctx, `raft-{id}`)
 	print(`dispatch: {step} {id}: {table.concat(argv, " ")} (in {dir})`)
 	local args = table.move(argv, 2, #argv, 1, {})
-	local r =
-		process.exec(`{dir}/zn`, args, { cwd = dir, stdio = { stdout = "forward", stderr = "forward" } })
+	local r
+	if where == "run" then
+		-- c0252: the base's engine against the raft's worktree (zn -C), with the dispatcher's own environment
+		local withDir: { string } = { "-C", dir }
+		for _, a in args do
+			table.insert(withDir, a)
+		end
+		r = process.exec(`{ctx.mainRoot()}/zn`, withDir, {
+			cwd = ctx.mainRoot(),
+			stdio = { stdout = "forward", stderr = "forward" },
+		})
+	else
+		r = process.exec(`{dir}/zn`, args, { cwd = dir, stdio = { stdout = "forward", stderr = "forward" } })
+	end
 	local outcome = if r.ok then "ok" else "failed"
 	st.step, st.cli, st.runtime, st.model, st.worktree, st.outcome = step, nil, nil, nil, dir, outcome
 	st.detail = if r.ok then "done" else `exit {r.code}`
@@ -1992,7 +2029,7 @@ function dispatcher.scriptStep(ctx: Ctx, st: State, step: string, id: string, ex
 		minutes = 0,
 	})
 	save(st)
-	return outcome
+	return outcome, r.code
 end
 
 -- `gh pr view`'s JSON as the chain's Pr, or nil.
@@ -2434,18 +2471,40 @@ function dispatcher.landFacts(
 	st: State,
 	id: string,
 	last: { step: string, outcome: string }?
-): (boolean, dispatch.LandFacts?, { reason: string, layer: string? }?)
-	local req: { reason: string, layer: string? }? = nil
+): (
+	boolean,
+	dispatch.LandFacts?,
+	{ reason: string, layer: string?, tip: string? }?
+)
+	local req: { reason: string, layer: string?, tip: string? }? = nil
 	local requestPath = `{st.dir}/block-request`
 	if fs.isFile(requestPath) then
 		local parsed = landcheck.parseRequest(fs.readFile(requestPath))
 		if parsed and parsed.item == id then
-			req = { reason = parsed.reason, layer = parsed.layer }
+			req = { reason = parsed.reason, layer = parsed.layer, tip = parsed.tip }
 		end
 	end
-	local ran = last ~= nil and last.step == "z-run" and last.outcome == "ok"
+	-- layered or not is read from git, never from an error text: a raft is layered when a layer branch of it exists
+	local layered = true
+	local okRefs, refs = git(
+		ctx.mainRoot(),
+		{ "for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin" }
+	)
+	if okRefs then
+		layered = false
+		for line in string.gmatch(refs .. "\n", "([^\n]*)\n") do
+			local l = if line == "" then nil else stack.parse(line)
+			if l and l.raft == id then
+				layered = true
+				break
+			end
+		end
+	end
+	if not layered then
+		return false, nil, req
+	end
+	local ran = last ~= nil and (last.step == "z-run" or last.step == "z-gate") and last.outcome == "ok"
 	if not ran and not req then
-		-- layered or not is read only when a verdict is due; before that the old lookup stands
 		return true, nil, nil
 	end
 	local wt = worktree(ctx, id)
@@ -2458,54 +2517,75 @@ function dispatcher.landFacts(
 		table.insert(args, req.layer :: string)
 	end
 	table.insert(args, "--json") -- last: the flag parser gives a flag the word after it
-	local _, out, err = zn(wt, args, true)
+	-- the judge is the base's engine (the main checkout's) against the raft's worktree, never the stack's own `zn`
+	local _, out, err = znBase(ctx.mainRoot(), wt, args, true)
 	local okj, j = pcall(function()
 		return serde.decode("json", out)
 	end)
-	if not okj or type(j) ~= "table" then
-		local text = out .. err
-		if string.find(text, "no layers", 1, true) or string.find(text, "single-branch", 1, true) then
-			return false, nil, req
-		end
+	local function noAnswer(
+		text: string
+	): (boolean, dispatch.LandFacts?, { reason: string, layer: string?, tip: string? }?)
 		local v: dispatch.LandFacts = {
 			action = "wait",
 			lines = { `land-check gave no answer: {string.sub(text, 1, 300)}` },
 			problems = {},
-			tries = st.landTries or 0,
+			tries = 0,
+			sig = "",
 		}
-		return true, if req then nil else v, req
+		return true, v, req
+	end
+	if not okj or type(j) ~= "table" then
+		return noAnswer(out .. err)
 	end
 	local jj: any = j
+	if type(jj.problems) ~= "table" then
+		return noAnswer("the answer has no problems list")
+	end
 	local through = if type(jj.through) == "string" and jj.through ~= "" then jj.through else nil
 	if req and not through then
 		return true, nil, req -- nothing below the Layer to land
 	end
+	local tip = if type(jj.tip) == "string" then jj.tip else ""
 	local ps: { landcheck.Problem } = {}
-	for _, row in (jj.problems or {}) :: { any } do
+	for _, row in jj.problems :: { any } do
+		-- a row that is not a problem this module knows is a wait, never a pass
+		local known = type(row) == "table" and landcheck.knownKind(row.kind)
 		table.insert(ps, {
-			code = tostring(row.code),
-			kind = row.kind,
-			text = tostring(row.text),
-			reason = tostring(row.reason),
-			layer = if row.layer ~= "" then row.layer else nil,
+			code = if type(row) == "table" then tostring(row.code) else "unknown-row",
+			kind = if known then row.kind else "wait",
+			text = if type(row) == "table"
+				then tostring(row.text)
+				else "land-check printed a row that is not a problem",
+			reason = if type(row) == "table" then tostring(row.reason) else "red-gate",
+			layer = if type(row) == "table" and row.layer ~= "" then row.layer else nil,
 		})
 	end
+	-- the clean-clone gate's last answer for this tip (land-gate), part of the same verdict
+	if st.gate and st.gate.tip == tip then
+		for _, p in landcheck.gateProblems(st.gate) do
+			table.insert(ps, p)
+		end
+	end
 	local item = store.find(id)
-	local cap = models.mergeAttempts(if item then walk(item.dir) else {})
-	local tries = st.landTries or 0
-	local verdict = landcheck.classify(ps, tries, cap)
+	local layers = if item then walk(item.dir) else {}
+	local cap = models.mergeRetries(layers)
+	local sig = landcheck.signature(ps, tip)
+	local spent = landcheck.repeats(st.landSig, st.landTries or 0, sig)
+	if (st.landRuns or 0) >= models.MERGE_RERUN_CAP then
+		spent = cap -- the hard bound on reruns of one raft: a worker that always moves the tip is still bounded
+	end
+	local verdict = landcheck.classify(ps, spent, cap)
 	return true,
 		{
 			action = verdict.action,
-			through = if req
-				then through
-				else (if type(jj.through) == "string" and jj.through ~= "" then jj.through else nil),
-			tip = if type(jj.tip) == "string" then jj.tip else nil,
+			through = through,
+			tip = if tip ~= "" then tip else nil,
 			lines = landcheck.lines(ps),
 			problems = ps,
 			reason = verdict.reason,
 			layer = verdict.layer,
-			tries = tries,
+			tries = spent,
+			sig = sig,
 		},
 		req
 end
@@ -2558,7 +2638,7 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 	local pr: dispatch.Pr? = nil
 	local land: dispatch.LandFacts? = nil
 	local layered = false
-	local blockRequest: { reason: string, layer: string? }? = nil
+	local blockRequest: { reason: string, layer: string?, tip: string? }? = nil
 	if o and kind == "raft" and o.state == "active" then
 		layered, land, blockRequest = dispatcher.landFacts(ctx, st, id, last)
 	end
@@ -2704,40 +2784,68 @@ function dispatcher.afterMerge(ctx: Ctx, number: number, pr: dispatch.Pr?, id: s
 	return nil
 end
 
--- c0252: after the dispatcher's own bind of `tip`: main's tip must be a merge whose second parent is that tip and whose
--- first parent reached main by tracker state or a pull request's merge only (the one rule vetMain uses). Then the
--- guard's mark moves to the bind, so the next vetMain does not read the bind as a foreign commit. Returns why not, or nil.
+-- c0252: after the dispatcher's own bind of `tip`: main may have gained tracker commits from other sessions since the
+-- push (a claim, a status, a spend row), so the bind is looked for on main's first-parent line between the guard's mark
+-- and its tip, not taken to be the tip. Exactly one commit on that line has `tip` as its second parent; what the mark
+-- reaches it by (mark to the bind's first parent) and what came after it (the bind to main's tip) must each be tracker
+-- state or a pull request's merge into main (trackerstate.checkEach, the rule vetMain uses). Then the guard's mark moves
+-- to main's tip. Returns why not, or nil.
 function dispatcher.afterLand(ctx: Ctx, tip: string?): string?
 	local root = ctx.mainRoot()
 	local fresh = freshMain(ctx)
 	if not fresh then
 		return "origin's main could not be fetched after the landing: look at main, then ./zn dispatch retry"
 	end
-	local okP, line = git(root, { "rev-list", "--parents", "-n", "1", fresh :: string })
-	local parts = if okP then string.split(line, " ") else {}
-	if #parts ~= 3 or not landcheck.ownBind({ parts[2], parts[3] }, tip or "") then
-		return `main's tip {fresh} is not the bind of {tip or "the layer"} that the landing made: look at main, then ./zn dispatch retry`
-	end
 	local mark = guard.mark
-	if mark and mark ~= parts[2] then
-		if not isAncestor(root, mark, parts[2]) then
-			return `main was rewritten under the landing: {mark} is not below the bind's first parent {parts[2]}`
+	local range = if mark then `{mark}..{fresh}` else fresh :: string
+	local okW, listing = git(root, { "rev-list", "--first-parent", "--parents", "-n", "500", range })
+	if not okW then
+		return `main's first-parent line from {mark or "its start"} to {fresh} could not be read: look at main, then ./zn dispatch retry`
+	end
+	local chain: { { string } } = {}
+	for line in string.gmatch(listing .. "\n", "([^\n]*)\n") do
+		if line ~= "" then
+			table.insert(chain, string.split(line, " "))
 		end
-		local why = trackerstate.checkEach(
+	end
+	local at, why = landcheck.findBind(chain, tip or "")
+	if not at then
+		return `{why}: look at main, then ./zn dispatch retry`
+	end
+	local bind = chain[at :: number]
+	local function vet(from: string, to: string): string?
+		if from == to then
+			return nil
+		end
+		if not isAncestor(root, from, to) then
+			return `main was rewritten under the landing: {from} is not below {to}`
+		end
+		local bad = trackerstate.checkEach(
 			function(a: { string }): (boolean, string)
 				return git(root, a)
 			end,
-			mark,
-			parts[2],
+			from,
+			to,
 			function(ref: string): { string }?
 				return rootsAt(ctx, ref)
 			end,
 			true,
 			ctx.prMerged
 		)
-		if why then
-			return `main has {why} below the bind, which is not tracker state or a pull request's merge into main`
+		if bad then
+			return `main has {bad} beside the bind, which is not tracker state or a pull request's merge into main`
 		end
+		return nil
+	end
+	if mark then
+		local before = vet(mark, bind[2])
+		if before then
+			return before
+		end
+	end
+	local after = vet(bind[1], fresh :: string)
+	if after then
+		return after
 	end
 	guard.mark = fresh
 	return nil
@@ -2838,6 +2946,42 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 			end
 		elseif action.kind == "land" then
 			local wt = worktree(ctx, id)
+			local throughArgs: { string }? = if action.through
+				then { "--through", action.through :: string }
+				else nil
+			local item = ctx.origin(id)
+			local folder = string.match(item and (item :: OriginItem).path or "", "^(.*)/[^/]+$") or ""
+			-- a requested block's note is already copied into the state folder (block-note.md); the file in the tree
+			-- would make the tree dirty, and `done` needs it clean
+			if f.blockRequest then
+				pcall(fs.removeFile, `{wt}/{folder}/escalation.md`)
+			end
+			-- the clean-clone full gate on the bind's tree and, for a game, scripts/cicd: once per top tip
+			if st.gateOk ~= action.tip then
+				local _, gateCode = dispatcher.scriptStep(ctx, st, "z-gate", id, throughArgs)
+				if gateCode == 0 then
+					st.gateOk, st.gate = action.tip, nil
+				elseif gateCode == 4 then
+					st.gate = {
+						tip = action.tip :: string,
+						wait = "the clean-clone gate could not run (a cicd lease is held, the publish failed, or no cicd.toml): it runs again at the next pass",
+					}
+				else
+					st.gate = {
+						tip = action.tip :: string,
+						red = `the clean-clone full gate or scripts/cicd is red on {action.tip}`,
+					}
+				end
+				-- a gate's answer is a verdict the next pass reads, not a step that failed
+				st.step, st.outcome, st.detail = "z-gate", "ok", `exit {gateCode}`
+				save(st)
+				if gateCode == 4 then
+					print(`stop: waiting to land {id}: {if st.gate then st.gate.wait else ""}`)
+					return dispatch.EXIT.gate
+				elseif gateCode ~= 0 then
+					continue
+				end
+			end
 			-- the bind lands the published top layer: the worktree is on it (done refuses any other commit)
 			local okS, switched = git(wt, { "switch", "--quiet", "--detach", action.tip or "" })
 			if not okS then
@@ -2850,27 +2994,7 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 				print(`stop: {st.detail}`)
 				return dispatch.EXIT.failure
 			end
-			-- a block's note waits aside while the green layers below land (done needs a clean tree)
-			local held: { string } = {}
-			local folder = string.match(
-				ctx.origin(id) and (ctx.origin(id) :: OriginItem).path or "",
-				"^(.*)/[^/]+$"
-			) or ""
-			local notePath = `{wt}/{folder}/escalation.md`
-			if f.blockRequest and fs.isFile(notePath) then
-				fs.move(notePath, `{st.dir}/escalation.held`)
-				table.insert(held, notePath)
-			end
-			local landArgs: { string }? = if action.through
-				then { "--through", action.through :: string }
-				else nil
-			local outcome = dispatcher.scriptStep(ctx, st, "z-land", id, landArgs)
-			for _, p in held do
-				if fs.isFile(`{st.dir}/escalation.held`) then
-					fs.writeDir(`{wt}/{folder}`)
-					fs.move(`{st.dir}/escalation.held`, p)
-				end
-			end
+			local outcome = dispatcher.scriptStep(ctx, st, "z-land", id, throughArgs)
 			if outcome ~= "ok" then
 				print(
 					`stop: z-land {id} failed (done rolls back and names why above): ./zn dispatch retry {id}`
@@ -2883,7 +3007,7 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 				print(`stop: {moved}`)
 				return dispatch.EXIT.tripwire
 			end
-			st.landTries = 0
+			st.landTries, st.landSig, st.gateOk, st.gate = 0, nil, nil, nil
 			save(st)
 			zn(ctx.mainRoot(), { "sync" }, true)
 			zn(ctx.mainRoot(), { "watch-kick" }, true)
@@ -2892,8 +3016,30 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 			local item = ctx.origin(id)
 			local folder = string.match(item and (item :: OriginItem).path or "", "^(.*)/[^/]+$") or ""
 			local reqFile = `{st.dir}/block-request`
-			if not fs.isFile(reqFile) then
-				-- a failed landing check: the dispatcher files the note itself (a worker's note stands when it asked)
+			local req = if fs.isFile(reqFile) then landcheck.parseRequest(fs.readFile(reqFile)) else nil
+			if req then
+				-- the green layers below may have landed and moved the worktree off the Layer: go back to the Layer's
+				-- published tip, where its document holds its open findings, and put the worker's note back
+				if req.tip then
+					local okS, switched = git(wt, { "switch", "--quiet", "--detach", req.tip })
+					if not okS then
+						addAttempt(
+							st,
+							"z-block",
+							"failed",
+							`could not check out the Layer's tip {req.tip}: {switched}`
+						)
+						print(`stop: {st.detail}`)
+						return dispatch.EXIT.failure
+					end
+				end
+				local kept = `{st.dir}/block-note.md`
+				if fs.isFile(kept) then
+					fs.writeDir(`{wt}/{folder}`)
+					fs.writeFile(`{wt}/{folder}/escalation.md`, fs.readFile(kept))
+				end
+			else
+				-- a failed landing check: the dispatcher files the note itself
 				fs.writeDir(`{wt}/{folder}`)
 				fs.writeFile(
 					`{wt}/{folder}/escalation.md`,
@@ -2916,7 +3062,8 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 				return dispatch.EXIT.failure
 			end
 			pcall(fs.removeFile, reqFile)
-			st.landTries = 0
+			pcall(fs.removeFile, `{st.dir}/block-note.md`)
+			st.landTries, st.landSig, st.gateOk, st.gate = 0, nil, nil, nil
 			save(st)
 			zn(ctx.mainRoot(), { "sync" }, true)
 		elseif action.step == "follow" then
@@ -2939,16 +3086,25 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 			local step = action.step :: string
 			local target = action.target or ""
 			local kind = dispatch.step(step).kind
-			if action.redo then
-				-- c0252: a landing check the worker can fix: it runs again, and the try is counted toward merge_attempts
-				st.landTries = (st.landTries or 0) + 1
+			local o3: { [string]: { string } }? = nil
+			if action.redo and f.land then
+				-- c0252: a landing check the worker can fix: it runs again with the problems named in its prompt. A repeat
+				-- of the same failure (the same codes and top tip) counts toward merge_retries; a new failure starts the
+				-- count again, and every rerun counts toward the raft's hard bound
+				st.landTries = f.land.tries + 1
+				st.landSig = f.land.sig
+				st.landRuns = (st.landRuns or 0) + 1
 				save(st)
-				print(`dispatch: try {st.landTries}: {action.why or ""}`)
+				print(`dispatch: rerun {st.landRuns} (repeat {st.landTries}): {action.why or ""}`)
+				o3 = { ["--rerun"] = f.land.lines }
 			end
 			if kind == "script" then
 				dispatcher.scriptStep(ctx, st, step, if step == "raft-plan" then id else target)
 			else
 				local o2 = table.clone(opts)
+				if o3 then
+					o2["--rerun"] = o3["--rerun"]
+				end
 				if step == "z-raft" then
 					o2["--for"] = { id }
 				end

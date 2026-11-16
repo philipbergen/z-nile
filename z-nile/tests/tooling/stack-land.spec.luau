@@ -107,7 +107,7 @@ return t.spec("a raft lands as a stack of layers", function(it)
 			.. '  "pr list") case "$*" in *number*) echo 1 ;; esac; exit 0 ;;\n'
 			.. '  "pr create") echo https://github.com/x/y/pull/1; exit 0 ;;\n'
 			.. '  "pr edit") exit 0 ;;\n'
-			.. '  "pr view") echo body; exit 0 ;;\n'
+			.. '  "pr view") case "$*" in *statusCheckRollup*) sha=$(git rev-parse "origin/$3" 2>/dev/null || git rev-parse "$3"); printf \'{"state":"OPEN","isDraft":false,"headRefOid":"%s","mergeable":"MERGEABLE","statusCheckRollup":[{"name":"static","conclusion":"SUCCESS"}]}\' "$sha"; exit 0 ;; esac; echo body; exit 0 ;;\n'
 			.. "esac\nexit 0\n"
 		fs.writeFile(`{bin}/gh`, script)
 		process.exec("chmod", { "+x", `{bin}/gh` })

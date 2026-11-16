@@ -246,7 +246,7 @@ return t.spec(
 					'#!/bin/sh\ncase "$1 $2" in\n'
 						.. '  "pr list") echo 1; exit 0 ;;\n'
 						.. '  "pr create") echo https://github.com/x/y/pull/1; exit 0 ;;\n'
-						.. '  "pr view") echo main; exit 0 ;;\n'
+						.. '  "pr view") case "$*" in *statusCheckRollup*) sha=$(git rev-parse "origin/$3" 2>/dev/null || git rev-parse "$3"); printf \'{"state":"OPEN","isDraft":false,"headRefOid":"%s","mergeable":"MERGEABLE","statusCheckRollup":[{"name":"static","conclusion":"SUCCESS"}]}\' "$sha"; exit 0 ;; esac; echo main; exit 0 ;;\n'
 						.. '  "pr edit") exit 0 ;;\n'
 						.. "esac\nexit 0\n"
 				)

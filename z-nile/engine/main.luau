@@ -5358,6 +5358,20 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
 	traceProblems(raft, true, through)
 end
 
+-- c0252 (a stand-in for d0331, which replaces it): the base the lowest unlanded layer is checked against. Layer 1 is
+-- built on the main of the day it was started, and any commit main gains afterwards (a claim, a spend row, another raft's
+-- landing) moves main's tip. `done` merges onto the newest main and gates that merged tree, so the layer needs to rest on
+-- main's history, not on its tip: the fork point of `origin/main` and the layer's tip.
+function H.forkBase(layer: stack.Layer, onto: string?): string?
+	local tip = layergit.layerTip(layer)
+	if onto == nil or tip == nil or onto ~= layergit.mainTip() then
+		return onto
+	end
+	local baseRef = if layergit.shaOf("origin/main") then "origin/main" else "main"
+	local fork = sh.run("git", { "merge-base", baseRef, tip })
+	return if fork.ok then sh.trim(fork.stdout) else onto
+end
+
 -- c0252: what `./zn land-check` and `./zn done` read for landcheck.problems: the layers a landing binds (all the unlanded
 -- ones, up to `through`, or those below `below`), their completeness, the final review and trace, the approvals, the top
 -- layer's pull request and what main gained. `partial` leaves out what `done` checks itself further on (its own
@@ -5369,8 +5383,8 @@ function H.landInput(
 	below: string?,
 	partial: boolean?
 ): (any?, string?, string?)
-	local landcheck = require("./landcheck")
 	local landread = require("./landread")
+	local landcheck = require("./landcheck")
 	local issues = layergit.orderedMembers(raft)
 	local layers = layergit.layersOf(raft.id)
 	local orderedIds: { string } = {}
@@ -5422,6 +5436,9 @@ function H.landInput(
 		else
 			topLayer = layer
 			local onto = layergit.baseFor(haveAt, landedAt, i)
+			if i == firstPos then
+				onto = H.forkBase(layer, onto)
+			end
 			if not partial then
 				incomplete = if not onto
 					then `{layer.name} has no base`
@@ -5434,11 +5451,12 @@ function H.landInput(
 		end
 		table.insert(checkLayers, { issue = id, incomplete = incomplete })
 	end
-	if not topLayer then
-		return nil, nil, `{raft.id} has no layer branch for {bindIds[#bindIds]}`
+	-- layers not yet built are `layer-incomplete` (a worker's to build); the pull request read is the highest built one's
+	local tip = if topLayer then layergit.layerTip(topLayer :: stack.Layer) or "" else ""
+	local pr: landcheck.Pr?, prError: string? = nil, "no layer branch exists yet"
+	if topLayer then
+		pr, prError = landread.pr((topLayer :: stack.Layer).name)
 	end
-	local tip = layergit.layerTip(topLayer :: stack.Layer) or ""
-	local pr, prError = landread.pr((topLayer :: stack.Layer).name)
 	local round = 0
 	if marked then
 		local onMainRounds, hereRounds = layergit.rounds(raft, "final-review")
@@ -5465,22 +5483,36 @@ function H.landInput(
 			end
 		end
 	end
+	local unreadable: { any } = {}
 	local baseRef = if layergit.shaOf("origin/main") then "origin/main" else "main"
-	local fork = sh.run("git", { "merge-base", baseRef, tip })
-	local codeMoved: { string } = {}
-	local changed: { string } = {}
-	if fork.ok then
-		local f = sh.trim(fork.stdout)
-		codeMoved = landcheck.codeOf(landread.diffNames(f, baseRef) or {})
-		changed = landread.diffNames(f, tip) or {}
-	end
+	local codePaths: { string } = {}
 	local gameRoots: { string } = {}
 	local okReg, reg = pcall(projects.load)
-	if okReg then
+	if not okReg then
+		table.insert(
+			unreadable,
+			{ code = "registry-unreadable", text = `the project registry could not be read: {reg}` }
+		)
+	else
 		for _, p in (reg :: projects.Registry).projects do
 			if p.home ~= "z-nile" and p.home ~= "." then
 				table.insert(gameRoots, p.home)
 			end
+		end
+		local fork = sh.run("git", { "merge-base", baseRef, tip })
+		local entries: any, why: any = nil, nil
+		if fork.ok then
+			entries, why = landread.rawEntries(sh.trim(fork.stdout), tip)
+		else
+			why = `git merge-base {baseRef} {tip} failed`
+		end
+		if entries then
+			codePaths = landread.codePaths(entries, projects.roots(reg :: projects.Registry))
+		else
+			table.insert(
+				unreadable,
+				{ code = "git-unreadable", text = `what the stack changes could not be read: {why}` }
+			)
 		end
 	end
 	local home = process.env.HOME or ""
@@ -5488,7 +5520,7 @@ function H.landInput(
 		raft = raft.id,
 		layers = checkLayers,
 		through = through,
-		topIssue = bindIds[#bindIds],
+		topIssue = if topLayer then (topLayer :: stack.Layer).issue else bindIds[#bindIds],
 		topTip = tip,
 		pr = pr,
 		prError = prError,
@@ -5497,11 +5529,11 @@ function H.landInput(
 		traceProblems = traceLines,
 		approvalDrift = drift,
 		verdictMissing = noVerdict,
-		codeMoved = codeMoved,
-		changedPaths = changed,
+		codePaths = codePaths,
+		unreadable = unreadable,
 		gameRoots = gameRoots,
 		cicd = fs.isFile(`{home}/.config/pickman/cicd.toml`),
-		topBranch = (topLayer :: stack.Layer).name,
+		topBranch = if topLayer then (topLayer :: stack.Layer).name else "",
 	},
 		through,
 		nil
@@ -5530,12 +5562,24 @@ cmd["land-check"] = function(pos: { string }, opts: { [string]: { string } })
 	if hasOrigin() then
 		sh.git({ "fetch", "--quiet", "origin" })
 	end
+	local asJson = opts["--json"] ~= nil
+	-- an old single-branch raft has no layer branch: it keeps its one pull request and a human's merge, and this
+	-- command says so (exit 2: not a pass, not a problem list) instead of printing a problem that is not one
+	if #layergit.layersOf(raft.id) == 0 then
+		if asJson then
+			print(serde.encode("json", { layered = false, through = "", problems = {} }))
+		else
+			print(
+				`{raft.id} has no layer branches: an old single-branch raft keeps its pull request and a human's merge (nothing here to land)`
+			)
+		end
+		process.exit(2)
+	end
 	local input, through, why = H.landInput(
 		raft,
 		if opts["--through"] then opts["--through"][1] else nil,
 		if opts["--below"] then opts["--below"][1] else nil
 	)
-	local asJson = opts["--json"] ~= nil
 	if not input then
 		if why then
 			fail(why)
@@ -5572,6 +5616,106 @@ cmd["land-check"] = function(pos: { string }, opts: { [string]: { string } })
 	end
 end
 
+-- c0252: the gate the dispatcher runs before it lands a stack, read from zz-rules Merging 2 and 3: a stack that changes
+-- a game is gated in a clean clone outside this checkout, on the tree the bind would make (origin/main with the top
+-- layer merged): `z-nile/check.sh --full` there (with PICKMAN_FENCE_REAL_GIT as Merging 2 says), then
+-- `../zn run --time 1800 -- lune run scripts/cicd`. A tooling-only stack needs neither: `done`'s affected gate on the
+-- merged tree is its merge gate. Exit 0 passes, 4 waits (no cicd.toml, a lease held, the publish failed), 1 is red.
+-- The two commands can be replaced, only inside a guarded check run (`checking()`), by ZN_LANDGATE_FULL and
+-- ZN_LANDGATE_CICD: a spec's fakes.
+cmd["land-gate"] = function(pos: { string }, opts: { [string]: { string } })
+	local landcheck = require("./landcheck")
+	for k in opts do
+		if k ~= "--through" then
+			fail(`usage: land-gate <R-id> [--through <issue>] (unknown option {k})`)
+		end
+	end
+	if #pos ~= 1 then
+		fail("usage: land-gate <R-id> [--through <issue>]")
+	end
+	local raft = store.get(pos[1])
+	if raft.kind ~= "raft" or raft.state ~= "active" then
+		fail(`{raft.id} must be an active raft`)
+	end
+	if hasOrigin() then
+		sh.git({ "fetch", "--quiet", "origin" })
+	end
+	local input, _, why =
+		H.landInput(raft, if opts["--through"] then opts["--through"][1] else nil, nil, true)
+	if not input then
+		fail(why or "nothing to land")
+	end
+	if not landcheck.touchesGame(input.codePaths, input.gameRoots) then
+		print(
+			"land-gate: a tooling stack: done's affected gate on the merged tree is its merge gate (zz-rules, Merging 2)"
+		)
+		return
+	end
+	local inCheck = checking()
+	local fullCmd = (if inCheck then process.env.ZN_LANDGATE_FULL else nil)
+		or "./zn run --time 3000 -- z-nile/check.sh --full"
+	local cicdCmd = (if inCheck then process.env.ZN_LANDGATE_CICD else nil)
+		or "./zn run --time 1800 -- lune run scripts/cicd"
+	if not input.cicd and not (inCheck and process.env.ZN_LANDGATE_CICD) then
+		print(
+			"land-gate: the stack changes a game and ~/.config/pickman/cicd.toml is missing: the cicd publish cannot run here"
+		)
+		process.exit(4)
+	end
+	local top = sh.trim(sh.git({ "rev-parse", "--show-toplevel" }))
+	local made = sh.run("mktemp", { "-d" })
+	local dir = sh.trim(made.stdout)
+	if not made.ok or dir == "" or string.sub(dir, 1, #top + 1) == top .. "/" then
+		fail(
+			"land-gate: no temporary directory outside this checkout (TMPDIR is inside it, or mktemp failed)"
+		)
+	end
+	local function done(code: number, text: string)
+		print(text)
+		pcall(fs.removeDir, dir)
+		process.exit(code)
+	end
+	local url = sh.trim(sh.git({ "remote", "get-url", "origin" }))
+	if not sh.run("git", { "clone", "--quiet", "--no-hardlinks", url, dir }).ok then
+		done(4, "land-gate: the clean clone failed")
+	end
+	local tip = input.topTip
+	local checkout = sh.run("git", { "-C", dir, "checkout", "--quiet", "--detach", "origin/main" })
+	local merged = sh.run("git", { "-C", dir, "merge", "--no-ff", "--no-commit", "--quiet", tip })
+	if not checkout.ok or not merged.ok then
+		done(1, `land-gate: {tip} does not merge onto origin/main in the clean clone`)
+	end
+	local common = sh.trim(sh.git({ "rev-parse", "--path-format=absolute", "--git-common-dir" }))
+	local inherited = process.env.PICKMAN_FENCE_REAL_GIT
+	local env: { [string]: string } = {
+		PICKMAN_FENCE_REAL_GIT = if inherited and inherited ~= "" then `{inherited}:{common}` else common,
+	}
+	for k, v in process.env do
+		if type(v) == "string" and env[k] == nil then
+			env[k] = v
+		end
+	end
+	local full = process.exec("bash", { "-c", fullCmd }, { cwd = dir, env = env, stdio = "default" })
+	if not full.ok then
+		done(
+			1,
+			`land-gate: the clean-clone full gate is red on {tip}: {string.sub(
+				full.stdout .. full.stderr,
+				-300
+			)}`
+		)
+	end
+	local cicd = process.exec("bash", { "-c", cicdCmd }, { cwd = dir, env = env, stdio = "default" })
+	if not cicd.ok then
+		local said = string.lower(cicd.stdout .. cicd.stderr)
+		if string.find(said, "lease", 1, true) or string.find(said, "publish", 1, true) then
+			done(4, `land-gate: scripts/cicd could not run on {tip} (a lease is held or the publish failed)`)
+		end
+		done(1, `land-gate: scripts/cicd is red on {tip}: {string.sub(cicd.stdout .. cicd.stderr, -300)}`)
+	end
+	done(0, `land-gate: the clean-clone full gate and scripts/cicd pass on {tip}`)
+end
+
 function cmd.done(pos: { string }, opts: { [string]: { string } })
 	refuseListMode()
 	for k in opts do
@@ -5583,10 +5727,12 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 	if through == "" then
 		fail("usage: done <R-id> [--through <issue>] (--through needs an issue id)")
 	end
-	-- c0252: the dispatcher lands (with the user's credential, after landcheck); a dispatched step never does
-	if (process.env.ZN_DISPATCH or "") ~= "" then
+	-- c0252: a session that holds the agent's credential never pushes `main`: ZN_DISPATCH is a dispatched step and
+	-- ZN_HEADLESS a headless worker (the markers the dispatcher and c0253's worker set; c0117's agent credential is
+	-- only in those environments). It reads the checks with `./zn land-check` and stops; the dispatcher lands.
+	if (process.env.ZN_DISPATCH or "") ~= "" or (process.env.ZN_HEADLESS or "") ~= "" then
 		fail(
-			"done is refused while ZN_DISPATCH is set: the dispatcher lands a green stack itself (./zn dispatch <R-id>)"
+			"done is refused in a session that holds the agent's credential (ZN_DISPATCH or ZN_HEADLESS is set): read the checks with ./zn land-check <R-id> and stop; the dispatcher lands a green stack (./zn dispatch <R-id>)"
 		)
 	end
 	local raft = store.get(pos[1] or fail("usage: done <R-id> [--through <issue>]"))
@@ -5737,6 +5883,9 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 		end
 		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
 		local onto = layergit.baseFor(haveAt, landedAt, i)
+		if i == firstPos then
+			onto = H.forkBase(layer, onto)
+		end
 		if not onto or not sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok then
 			fail(
 				`{layer.name} is not {if onto == layergit.mainTip()
@@ -5759,15 +5908,21 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 		fail(`{raft.id} trace --check failed:\n{table.concat(traceFindings, "\n")}`)
 	end
 	-- c0252: the checks the dispatcher also makes, on what done does not read itself: the top layer's pull request and
-	-- what main gained. A problem a person can see for themselves (CI still running, a pull request gh cannot read) is
-	-- not a refusal here; the dispatcher stops at it.
+	-- what the stack changes. Every problem refuses, a wait one included (CI still running, a check not yet registered,
+	-- a pull request gh cannot read): a landing never goes on a state it did not read. Two are the dispatcher's own and
+	-- are not a person's: `self-gating` (a person landing a stack that changes the gate is the way out of it) and
+	-- `cicd-missing` (Merging 3 puts the cicd run on the person who lands a game). With no GitHub origin there is no
+	-- pull request and no CI to read.
 	do
 		local landcheck = require("./landcheck")
 		local input = H.landInput(raft, through, nil, true)
 		if input then
+			local own = { ["self-gating"] = true, ["cicd-missing"] = true }
+			local github = onGitHub()
 			local refusals: { landcheck.Problem } = {}
 			for _, p in landcheck.problems(input) do
-				if p.kind ~= "wait" then
+				local pullRequest = string.sub(p.code, 1, 3) == "pr-" or string.sub(p.code, 1, 3) == "ci-"
+				if not own[p.code] and (github or not pullRequest) then
 					table.insert(refusals, p)
 				end
 			end
@@ -7074,7 +7229,19 @@ function cmd.block(pos: { string }, opts: { [string]: { string } }?)
 		if stateDir == "" then
 			fail("block under ZN_DISPATCH needs ZN_DISPATCH_DIR: the dispatcher's state folder")
 		end
-		fs.writeFile(`{stateDir}/block-request`, require("./landcheck").requestText(id, reason, layer))
+		-- the note and the Layer's published tip travel with the request: the landing of the green layers below moves the
+		-- worktree off the Layer, so the dispatcher restores both before it files the block
+		local layerTip: string? = nil
+		for _, l in layergit.layersOf(id) do
+			if l.issue == layer then
+				layerTip = layergit.layerTip(l)
+			end
+		end
+		fs.writeFile(`{stateDir}/block-note.md`, noteText)
+		fs.writeFile(
+			`{stateDir}/block-request`,
+			require("./landcheck").requestText(id, reason, layer, layerTip)
+		)
 		print(
 			`block requested: {id} {reason}{if layer then ` (layer {layer})` else ""}. The dispatcher lands the green layers below, then blocks. Stop here.`
 		)
@@ -9618,6 +9785,7 @@ local READ_ONLY: { [string]: boolean } = {
 	["promote-check"] = true,
 	stack = true,
 	["land-check"] = true,
+	["land-gate"] = true,
 	stamp = true,
 	trace = true,
 }

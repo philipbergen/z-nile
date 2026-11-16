@@ -30,8 +30,9 @@ local function clean(): any
 		traceProblems = {},
 		approvalDrift = nil,
 		verdictMissing = false,
-		codeMoved = {},
-		changedPaths = { "z-nile/engine/x.luau" },
+		codePaths = { "z-nile/engine/x.luau" },
+		unreadable = {},
+		gate = nil,
 		gameRoots = { "pickman", "snake" },
 		cicd = true,
 	}
@@ -107,17 +108,17 @@ return t.spec("c0252 landcheck: the checks before a landing", function(it)
 				end,
 			},
 			{
-				code = "main-moved",
-				kind = "redo",
+				code = "self-gating",
+				kind = "wait",
 				mutate = function(i: any)
-					i.codeMoved = { "z-nile/engine/other.luau" }
+					i.codePaths = { "z-nile/engine/x.luau", "z-nile/check.sh" }
 				end,
 			},
 			{
 				code = "cicd-missing",
 				kind = "wait",
 				mutate = function(i: any)
-					i.changedPaths = { "pickman/src/server/Game.luau" }
+					i.codePaths = { "pickman/src/server/Game.luau" }
 					i.cicd = false
 				end,
 			},
@@ -145,7 +146,7 @@ return t.spec("c0252 landcheck: the checks before a landing", function(it)
 			},
 			{
 				code = "ci-failed",
-				kind = "block",
+				kind = "redo",
 				mutate = function(i: any)
 					i.pr.checks = { { name = "static", state = "FAILURE" } }
 				end,
@@ -161,7 +162,59 @@ return t.spec("c0252 landcheck: the checks before a landing", function(it)
 				code = "pr-conflicting",
 				kind = "redo",
 				mutate = function(i: any)
+					i.pr.draft = false
 					i.pr.mergeable = "CONFLICTING"
+				end,
+			},
+			{
+				code = "pr-mergeable-unknown",
+				kind = "wait",
+				mutate = function(i: any)
+					i.pr.draft = false
+					i.pr.mergeable = "UNKNOWN"
+				end,
+			},
+			{
+				code = "pr-state-unknown",
+				kind = "wait",
+				mutate = function(i: any)
+					i.pr.state = ""
+				end,
+			},
+			{
+				code = "ci-none",
+				kind = "wait",
+				mutate = function(i: any)
+					i.pr.checks = {}
+				end,
+			},
+			{
+				code = "git-unreadable",
+				kind = "wait",
+				mutate = function(i: any)
+					i.unreadable = { { code = "git-unreadable", text = "git diff-tree failed" } }
+				end,
+			},
+			{
+				code = "registry-unreadable",
+				kind = "wait",
+				mutate = function(i: any)
+					i.unreadable =
+						{ { code = "registry-unreadable", text = "projects.toml could not be read" } }
+				end,
+			},
+			{
+				code = "full-gate-red",
+				kind = "redo",
+				mutate = function(i: any)
+					i.gate = { red = "the clean-clone full gate is red" }
+				end,
+			},
+			{
+				code = "full-gate-wait",
+				kind = "wait",
+				mutate = function(i: any)
+					i.gate = { wait = "a cicd lease is held" }
 				end,
 			},
 		}
@@ -173,27 +226,59 @@ return t.spec("c0252 landcheck: the checks before a landing", function(it)
 		end
 	end)
 
-	it("AC1: a game path with cicd present, and a tracker path in a game home, need nothing", function()
-		local i = clean()
-		i.changedPaths = { "pickman/src/server/Game.luau" }
-		t.expect(codes(i)).toEqual({})
-		i.cicd = false
-		i.changedPaths = { "pickman/.tracker/issues/c0010/c0010.md", "z-nile/engine/x.luau" }
-		t.expect(codes(i)).toEqual({})
-		t.expect(landcheck.touchesGame({ "snake/src/a.luau" }, { "pickman", "snake" })).toBe(true)
-		t.expect(landcheck.touchesGame({ "snakeish/src/a.luau" }, { "pickman", "snake" })).toBe(false)
-	end)
+	it(
+		"AC1: a draft layer's UNKNOWN mergeable is not a wait, a merged pull request is closed, and a tracker-only stack needs nothing",
+		function()
+			local i = clean()
+			t.expect(i.pr.draft).toBe(true)
+			t.expect(codes(i)).toEqual({})
+			i.pr.state = "MERGED"
+			t.expect(codes(i)).toEqual({ "pr-closed" })
+			t.expect(landcheck.touchesGame({ "snake/src/a.luau" }, { "pickman", "snake" })).toBe(true)
+			t.expect(landcheck.touchesGame({ "snakeish/src/a.luau" }, { "pickman", "snake" })).toBe(false)
+			-- a game path with cicd present needs nothing of landcheck: the clean-clone gate is `./zn land-gate`'s
+			local g = clean()
+			g.codePaths = { "pickman/src/server/Game.luau" }
+			t.expect(codes(g)).toEqual({})
+			g.cicd = false
+			g.codePaths = {}
+			t.expect(codes(g)).toEqual({})
+			t.expect(landcheck.selfGating({ "z-nile/engine/x.luau" })).toBe(nil)
+			t.expect(landcheck.selfGating({ "z-nile/lib/par.sh" })).toBe("z-nile/lib/par.sh")
+			t.expect(landcheck.selfGating({ "zn" })).toBe("zn")
+			t.expect(landcheck.selfGating({ "znx" })).toBe(nil)
+		end
+	)
 
-	it("AC1: only code main gained is a problem; tracker state main gained is not (c0152)", function()
-		t.expect(landcheck.isTracker("pickman/.tracker/issues/c0010/c0010.md")).toBe(true)
-		t.expect(landcheck.isTracker("z-nile/.tracker/rafts/R0010/R0010.md")).toBe(true)
-		t.expect(landcheck.isTracker("z-nile/engine/main.luau")).toBe(false)
-		t.expect(landcheck.isTracker("z-nile/tests/.tracker/x")).toBe(false)
-		t.expect(
-			landcheck.codeOf({ "pickman/.tracker/issues/c0010/c0010.md", "z-nile/engine/main.luau", "" })
-		)
-			.toEqual({ "z-nile/engine/main.luau" })
-	end)
+	it(
+		"AC1: tracker state is judged by trackerstate, the one definition: a file moved out of an item folder, or under an unregistered .tracker, is code",
+		function()
+			local trackerstate = require("@znile/engine/trackerstate")
+			local roots = { "pickman/.tracker", "z-nile/.tracker" }
+			local function entry(status: string, path: string): any
+				local old = if status == "A" then "000000" else "100644"
+				local new = if status == "D" then "000000" else "100644"
+				return {
+					oldMode = old,
+					newMode = new,
+					oldBlob = "a",
+					newBlob = "b",
+					status = status,
+					path = path,
+				}
+			end
+			local code: { string } = landread.codePaths({
+				entry("M", "pickman/.tracker/issues/c0010/c0010.md"),
+				entry("D", "z-nile/.tracker/issues/c0010/notes.md"),
+				entry("A", "z-nile/engine/notes.luau"),
+				entry("A", "foo/.tracker/x"),
+				entry("M", "z-nile/.tracker/rafts/R0010/R0010.md"),
+			}, roots)
+			t.expect(code).toEqual({ "z-nile/engine/notes.luau", "foo/.tracker/x" })
+			local entries = trackerstate.parseRaw(":100644 100644 aaa bbb M\tz-nile/engine/main.luau\n")
+			t.expect(landread.codePaths(entries :: any, roots)).toEqual({ "z-nile/engine/main.luau" })
+		end
+	)
 
 	it("AC2: classify lands a clean input, blocks a block problem at once, and lets a wait wait", function()
 		local ok = landcheck.classify(landcheck.problems(clean()), 0, 2)
@@ -211,6 +296,18 @@ return t.spec("c0252 landcheck: the checks before a landing", function(it)
 		end
 	end)
 
+	it("AC2: a problem of a kind the module does not know is a wait, never a landing", function()
+		local odd = { { code = "new-check", kind = "maybe", text = "x", reason = "red-gate" } }
+		t.expect(landcheck.classify(odd, 0, 2).action).toBe("wait")
+		t.expect(landcheck.knownKind("maybe")).toBe(false)
+		t.expect(landcheck.knownKind(nil)).toBe(false)
+		t.expect(landcheck.knownKind("redo")).toBe(true)
+		-- and a wait among redo problems still lets the redo through
+		local mixed =
+			{ odd[1], { code = "trace-stale", kind = "redo", text = "y", reason = "review-exhausted" } }
+		t.expect(landcheck.classify(mixed, 0, 2).action).toBe("redo")
+	end)
+
 	it("AC2: a redo problem runs the worker again until the cap, then blocks under its own reason", function()
 		local i = clean()
 		i.traceProblems = { "stale" }
@@ -219,13 +316,41 @@ return t.spec("c0252 landcheck: the checks before a landing", function(it)
 		local capped = landcheck.classify(landcheck.problems(i), 2, 2)
 		t.expect(capped.action).toBe("block")
 		t.expect(capped.reason).toBe("review-exhausted")
+		-- a red check is a redo too (c0250: blocked is a human decision, or the same check failed after a real second attempt)
+		local red = clean()
+		red.pr.checks = { { name = "static", state = "FAILURE" } }
+		t.expect(landcheck.classify(landcheck.problems(red), 0, 2).action).toBe("redo")
+		t.expect(landcheck.classify(landcheck.problems(red), 2, 2).reason).toBe("red-gate")
 		-- a redo outranks a wait: waiting on CI for a stack the worker must change is pointless
 		i.pr.checks = { { name = "static", state = "" } }
 		t.expect(landcheck.classify(landcheck.problems(i), 0, 2).action).toBe("redo")
 	end)
 
 	it(
-		"AC3: the escalation the dispatcher files parses, has one recommended option and names every problem",
+		"AC2: only a repeat of the same failure is counted: a worker that moves the codes or the tip starts the count again",
+		function()
+			local ps = landcheck.problems((function()
+				local i = clean()
+				i.traceProblems = { "stale" }
+				return i
+			end)())
+			local sig: string = landcheck.signature(ps, TIP)
+			t.expect(sig).toBe(`trace-stale@{TIP}`)
+			t.expect(landcheck.repeats(sig, 2, sig)).toBe(2)
+			t.expect(landcheck.repeats(nil, 2, sig)).toBe(0)
+			t.expect(landcheck.repeats(sig, 2, landcheck.signature(ps, "bbbb"))).toBe(0) -- the tip moved: progress
+			t.expect(landcheck.repeats(sig, 2, landcheck.signature({}, TIP))).toBe(0) -- the codes changed
+			-- the codes are sorted: the order the checks ran in is not a different failure
+			local two = {
+				{ code = "b", kind = "redo", text = "", reason = "red-gate" },
+				{ code = "a", kind = "redo", text = "", reason = "red-gate" },
+			}
+			t.expect(landcheck.signature(two, "t")).toBe("a,b@t")
+		end
+	)
+
+	it(
+		"AC3: the escalation the dispatcher files parses and names every problem; each code recommends one pinned option, never amend-design",
 		function()
 			local i = clean()
 			i.pr.checks = { { name = "static", state = "FAILURE" } }
@@ -243,31 +368,61 @@ return t.spec("c0252 landcheck: the checks before a landing", function(it)
 			local text2: string = landcheck.escalation(landcheck.problems(capped), "R0010", nil, 2)
 			local note2 = escalation.parse(text2)
 			t.expect(escalation.check(note2 :: any)).toBe(nil)
-			t.expect(string.find(text2, "after 2 tries", 1, true) ~= nil).toBe(true)
+			t.expect(string.find(text2, "after 2 repeat(s)", 1, true) ~= nil).toBe(true)
+			-- the option each problem recommends: a person's ruling is `approve`; every capped redo is `retry`
+			local table_: { [string]: string } = {
+				["open-high"] = "approve",
+				["approval-drift"] = "approve",
+				["ci-failed"] = "retry",
+				["layer-incomplete"] = "retry",
+				["trace-stale"] = "retry",
+				["pr-closed"] = "retry",
+				["full-gate-red"] = "retry",
+			}
+			for code, option in table_ do
+				local p = { { code = code, kind = "redo", text = "x", reason = "red-gate" } }
+				t.expect(landcheck.recommended(p)).toBe(option)
+				local body: string = landcheck.escalation(p, "R0010", nil, 2)
+				local parsed = escalation.parse(body)
+				t.expect(escalation.check(parsed :: any)).toBe(nil)
+				for _, o in (parsed :: any).options do
+					t.expect(o.recommended).toBe(o.decision == option)
+				end
+			end
 		end
 	)
 
 	it(
-		"AC3: the dispatcher's own bind is a merge whose second parent is the layer tip, and a block request round-trips",
+		"AC3: the bind is found on main's first-parent line even with tracker commits above it, and a block request round-trips",
 		function()
-			t.expect(landcheck.ownBind({ "p1", TIP }, TIP)).toBe(true)
-			t.expect(landcheck.ownBind({ "p1", "other" }, TIP)).toBe(false)
-			t.expect(landcheck.ownBind({ TIP }, TIP)).toBe(false)
-			t.expect(landcheck.ownBind({ "p1", TIP, "p3" }, TIP)).toBe(false)
-			t.expect(landcheck.ownBind({ "p1", "" }, "")).toBe(false)
-			local text: string = landcheck.requestText("R0010", "design-gap", "c0020")
+			-- newest first: two tracker commits above the bind, then a commit below it
+			local chain = { { "t2", "t1" }, { "t1", "bind" }, { "bind", "below", TIP }, { "below", "older" } }
+			local at, why = landcheck.findBind(chain, TIP)
+			t.expect(at).toBe(3)
+			t.expect(why).toBe(nil)
+			local none, nowhy = landcheck.findBind({ { "t1", "below" } }, TIP)
+			t.expect(none).toBe(nil)
+			t.expect(nowhy ~= nil).toBe(true)
+			local twice, twicewhy = landcheck.findBind({ { "a", "b", TIP }, { "c", "d", TIP } }, TIP)
+			t.expect(twice).toBe(nil)
+			t.expect(twicewhy ~= nil).toBe(true)
+			t.expect(landcheck.findBind({ { "a", "b", "" } }, "")).toBe(nil)
+			local text: string = landcheck.requestText("R0010", "design-gap", "c0020", "abc123")
 			local r = landcheck.parseRequest(text)
 			t.expect(r.item).toBe("R0010")
 			t.expect(r.reason).toBe("design-gap")
 			t.expect(r.layer).toBe("c0020")
-			t.expect(landcheck.parseRequest(landcheck.requestText("R0010", "quota", nil)).layer).toBe(nil)
-			t.expect(landcheck.parseRequest("item: R0010\nreason: nonsense\nlayer: \n")).toBe(nil)
+			t.expect(r.tip).toBe("abc123")
+			local bare = landcheck.parseRequest(landcheck.requestText("R0010", "quota", nil, nil))
+			t.expect(bare.layer).toBe(nil)
+			t.expect(bare.tip).toBe(nil)
+			t.expect(landcheck.parseRequest("item: R0010\nreason: nonsense\nlayer: \ntip: \n")).toBe(nil)
 			t.expect(landcheck.parseRequest("garbage")).toBe(nil)
 		end
 	)
 
 	it(
-		"AC4: green is read from the rollup: SKIPPED, NEUTRAL and SUCCESS pass; failed and still-running checks are named",
+		"AC4: green is read from the rollup: SKIPPED, NEUTRAL and SUCCESS pass; failed, cancelled and still-running checks are named",
 		function()
 			local failed, pending = landcheck.checks({
 				{ name = "a", state = "SUCCESS" },
@@ -277,9 +432,13 @@ return t.spec("c0252 landcheck: the checks before a landing", function(it)
 				{ name = "e", state = "TIMED_OUT" },
 				{ name = "f", state = "" },
 				{ name = "g", state = "IN_PROGRESS" },
+				{ name = "h", state = "CANCELLED" },
+				{ name = "i", state = "STARTUP_FAILURE" },
+				{ name = "j", state = "STALE" },
+				{ name = "k", state = "SOMETHING_NEW" },
 			})
-			t.expect(failed).toEqual({ "d", "e" })
-			t.expect(pending).toEqual({ "f", "g" })
+			t.expect(failed).toEqual({ "d", "e", "h", "i" })
+			t.expect(pending).toEqual({ "f", "g", "j", "k" })
 		end
 	)
 
@@ -302,11 +461,17 @@ return t.spec("c0252 landcheck: the checks before a landing", function(it)
 			local nohead, bad2 = landread.parsePr('{"state":"OPEN"}')
 			t.expect(nohead).toBe(nil)
 			t.expect(bad2 ~= nil).toBe(true)
-			-- an empty rollup is not "all green" by itself: no check, no failure, the head decides (landcheck)
+			-- an empty rollup reads as no check, which landcheck calls `ci-none` (a wait), never green
 			local empty = landread.parsePr(
 				'{"state":"OPEN","isDraft":false,"headRefOid":"abc","mergeable":"MERGEABLE","statusCheckRollup":[]}'
 			)
 			t.expect(#empty.checks).toBe(0)
+			-- a missing state or mergeable reads as unknown, which landcheck calls a wait
+			local nostate = landread.parsePr(
+				'{"headRefOid":"abc","statusCheckRollup":[{"name":"a","conclusion":"SUCCESS"}]}'
+			)
+			t.expect(nostate.state).toBe("")
+			t.expect(nostate.mergeable).toBe("UNKNOWN")
 		end
 	)
 end)
