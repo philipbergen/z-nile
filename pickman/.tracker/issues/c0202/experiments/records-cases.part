@@ -1,0 +1,84 @@
+
+local SHAPE = { "continues", "free", "plays", "receipts" } -- f0145's record, exactly
+
+local function keys(value: any): { string }
+	local out = {}
+	for k in value do
+		table.insert(out, k)
+	end
+	table.sort(out)
+	return out
+end
+
+return t.spec("c0202 the stored records across the switch", function(it)
+	it("a record f0145's build wrote is the library's: its held play starts a run and its continue revives it", function()
+		local a = offer("live", function(w: any)
+			w.seed(STORE, 7, { free = NOW - 120, plays = 1, continues = 1, receipts = { "R-old" } })
+		end)
+		sendContinue(a, "ask")
+		t.expect(lives(a)).toBe(Game.CONTINUE_LIVES)
+		t.expect(a.w.record(STORE, 7)).toEqual({ free = NOW - 120, plays = 0, continues = 0, receipts = { "R-old" } })
+	end)
+
+	it("every record the new build writes is f0145's four fields, so a server still on f0145 reads it", function()
+		local a = offer("live", function(w: any)
+			w.seed(STORE, 7, { free = NOW - 120, plays = 1, continues = 0, receipts = {} })
+		end)
+		t.expect(keys(a.w.record(STORE, 7))).toEqual(SHAPE) -- after the arrival
+		sendContinue(a, "ask")
+		t.expect(a.w.receipt(7, REVIVE_ID, "C1")).toBe("ProductPurchaseDecision.PurchaseGranted")
+		t.expect(keys(a.w.record(STORE, 7))).toEqual(SHAPE) -- after a grant and a revive used
+		local l = lobby("test", nil, function(x: any)
+			x.seed(TEST_STORE, 8, { free = NOW - 60, plays = 0, continues = 0, receipts = {} })
+		end)
+		local q = l.player(8)
+		press(l, q)
+		l.answer(q, "confirm")
+		t.expect(keys(l.record(TEST_STORE, 8))).toEqual(SHAPE) -- after a test grant
+		local fresh = arrive("live")
+		t.expect(keys(fresh.w.record(STORE, 7))).toEqual(SHAPE) -- a first free start
+		t.expect(type(fresh.w.record(STORE, 7).receipts)).toBe("table")
+	end)
+
+	it("a receipt f0145's build granted is not granted again when Roblox retries it on the new build", function()
+		local w = lobby("live", nil, function(x: any)
+			x.seed(STORE, 7, { free = NOW - 60, plays = 0, continues = 1, receipts = { "C-old", "P-old" } })
+		end)
+		w.player(7)
+		t.expect(w.receipt(7, PLAY_ID, "P-old")).toBe("ProductPurchaseDecision.PurchaseGranted")
+		t.expect(w.receipt(7, REVIVE_ID, "C-old")).toBe("ProductPurchaseDecision.PurchaseGranted")
+		t.expect(w.record(STORE, 7)).toEqual({
+			free = NOW - 60,
+			plays = 0,
+			continues = 1,
+			receipts = { "C-old", "P-old" },
+		})
+		t.expect(#w.teleports).toBe(0)
+	end)
+
+	it("a free start f0145's build recorded keeps its hour on the new build", function()
+		local a = arrive("live", function(w: any)
+			w.seed(STORE, 7, { free = NOW - 3599, plays = 0, continues = 0, receipts = {} })
+		end)
+		t.expect(Session.isOver(a.s, "7")).toBe(true) -- not due yet: nothing to pay with
+		local b = arrive("live", function(w: any)
+			w.seed(STORE, 7, { free = NOW - 3600, plays = 0, continues = 0, receipts = {} })
+		end)
+		t.expect(Session.isOver(b.s, "7")).toBe(false)
+		t.expect(stored(b.w, STORE, 7).free).toBe(NOW)
+	end)
+
+	it("test credits f0145's build granted are used in test mode, and never in live mode", function()
+		local a = arrive("test", function(w: any)
+			w.seed(TEST_STORE, 7, { free = NOW - 60, plays = 1, continues = 0, receipts = { "test:x" } })
+		end)
+		t.expect(Session.isOver(a.s, "7")).toBe(false)
+		t.expect(stored(a.w, TEST_STORE, 7).plays).toBe(0)
+		local b = arrive("live", function(w: any)
+			w.seed(STORE, 7, { free = NOW - 60, plays = 0, continues = 0, receipts = {} })
+			w.seed(TEST_STORE, 7, { free = NOW - 60, plays = 1, continues = 0, receipts = { "test:x" } })
+		end)
+		t.expect(Session.isOver(b.s, "7")).toBe(true)
+		t.expect(stored(b.w, TEST_STORE, 7).plays).toBe(1)
+	end)
+end)
