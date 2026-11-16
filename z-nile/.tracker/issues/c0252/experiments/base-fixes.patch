@@ -1,0 +1,78 @@
+diff --git a/z-nile/tests/lib/loops.luau b/z-nile/tests/lib/loops.luau
+index 7f1085475..97afb6d49 100644
+--- a/z-nile/tests/lib/loops.luau
++++ b/z-nile/tests/lib/loops.luau
+@@ -436,12 +436,12 @@ loops.ALLOWED = {
+ 	},
+ 	["z-nile/engine/dispatcher.luau"] = {
+ 		{
+-			loop = "while running do",
+-			why = "the heartbeat ends when its returned stop closure clears running",
++			loop = 'while taken(`{dir}/{stem}{if numbered then "" else "-"}{n}{ext}`) do',
++			why = "n grows until the first free name",
+ 		},
+ 		{
+-			loop = "while fs.isFile(`{dir}/answered-{n}.md`) do",
+-			why = "n grows until the first absent answer file",
++			loop = "while running do",
++			why = "the heartbeat ends when its returned stop closure clears running",
+ 		},
+ 		{
+ 			loop = "while true do",
+@@ -470,6 +470,11 @@ loops.ALLOWED = {
+ 			loop = "while i <= #a and i <= #b and a[i] == b[i] do",
+ 			why = "the common-prefix walk: i grows by 1 every pass and the lists are finite",
+ 		},
++		{
++			loop = "while not rebasing.ok do",
++			why = "each pass continues the rebase by one commit, or breaks when a stop cannot be settled",
++			sweep = false,
++		},
+ 		{
+ 			loop = "while #remaining > 0 do",
+ 			why = "each pass removes one id from remaining, or returns on a cycle",
+@@ -534,6 +539,11 @@ loops.ALLOWED = {
+ 			loop = "while parent[k] ~= k do",
+ 			why = "path halving up a finite union-find forest that has no cycle",
+ 		},
++		{
++			loop = "while true do",
++			why = "at moves past each match of a non-empty needle, or the loop breaks",
++			sweep = "raftplan.rerecord",
++		},
+ 	},
+ 	["z-nile/engine/reap.luau"] = {
+ 		{
+diff --git a/z-nile/tests/lib/scanners.luau b/z-nile/tests/lib/scanners.luau
+index c2362d0b7..99b201440 100644
+--- a/z-nile/tests/lib/scanners.luau
++++ b/z-nile/tests/lib/scanners.luau
+@@ -31,6 +31,12 @@ scanners.CASES = {
+ 		call = 'm.rewritePaths(text, { c0001 = "c0002" }, { "pickman", "z-nile" })',
+ 		witness = { text = "tests/acceptance/c0001/a.spec", result = "tests/acceptance/c0002/a.spec" },
+ 	},
++	{
++		name = "raftplan.rerecord",
++		module = "@znile/engine/raftplan",
++		call = 'm.rerecord(text, "c0001", "aaa", "bbb")',
++		witness = { text = "c0001@aaa and c0001@aaa", result = "c0001@bbb and c0001@bbb" },
++	},
+ 	{
+ 		name = "ids.rewrite",
+ 		module = "@znile/engine/ids",
+diff --git a/z-nile/tests/lib/seal.luau b/z-nile/tests/lib/seal.luau
+index fc57e03e9..4b2c12409 100644
+--- a/z-nile/tests/lib/seal.luau
++++ b/z-nile/tests/lib/seal.luau
+@@ -314,7 +314,10 @@ function seal.layerReview(dir: string, issueId: string)
+ 	if sha == "" then
+ 		error(`seal.layerReview: no finish commit for {issueId} in {dir}`, 2)
+ 	end
+-	fs.writeFile(`{dir}/{issueDir}/review-001.md`, `# Review 001\n\nCommit: {sha}\nVerdict: approve\n`)
++	fs.writeFile(
++		`{dir}/{issueDir}/review-001.md`,
++		`Model: claude-opus-5-5\n# Review 001\n\nCommit: {sha}\nVerdict: approve\n`
++	)
+ 	local commitEnv: { [string]: string }? = nil
+ 	if not fixture.exec(dir, "git", { "config", "user.email" }).ok then
+ 		commitEnv = {
