@@ -1,8 +1,0 @@
-- design-review-001 F1: z-design/instructions-runnable-where-they-run, z-design/reasoned-rows-claim-testable-reasons
-- design-review-001 F2: z-design/instructions-runnable-where-they-run
-- design-review-001 F3: z-design/quote-other-preps-before-promising
-- design-review-001 F4: z-design/instructions-runnable-where-they-run
-- design-review-001 F5: one-off: a sentence whose cause and effect were swapped in drafting; the pin now holds the right order
-- design-review-001 F6: z-design/restated-rules-move-together
-- design-review-001 F7: z-design/override-search-every-require-spelling
-- design-review-001 F8: z-design/probe-free-cli-lines-in-prep

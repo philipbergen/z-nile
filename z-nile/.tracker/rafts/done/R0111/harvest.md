@@ -1,0 +1,2 @@
+- final-review-001 F1: zz-review/not-stacked-is-main-moving
+- final-review-001 F2: one-off: a ticket whose layer changes no source file gets an empty results.txt, so its trace cites check.sh lines; nothing in this raft to change

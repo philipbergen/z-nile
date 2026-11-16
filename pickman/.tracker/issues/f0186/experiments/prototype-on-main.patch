@@ -1,0 +1,524 @@
+diff --git a/pickman/.tracker/architecture.md b/pickman/.tracker/architecture.md
+index 867e9d1ba..2445c521c 100644
+--- a/pickman/.tracker/architecture.md
++++ b/pickman/.tracker/architecture.md
+@@ -39,6 +39,7 @@ One `Consumer -> Provider` per line.
+ Awareness -> Maze
+ Blaster -> Maze
+ Flow -> Game
++Flow -> Lobby
+ Flow -> Session
+ Flow -> Travel
+ Game -> Levels
+diff --git a/pickman/src/client/Main.client.luau b/pickman/src/client/Main.client.luau
+index 7248ec601..6965f916b 100644
+--- a/pickman/src/client/Main.client.luau
++++ b/pickman/src/client/Main.client.luau
+@@ -14,6 +14,7 @@ local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
+ local MazeView = require("./MazeView")
+ local Pads = require("./Pads")
+ local PelletView = require("./PelletView")
++local RevivesView = require("./RevivesView")
+ local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
+ local Sticks = require("./Sticks")
+ local View = require("@game/ReplicatedStorage/Shared/Logic/View")
+@@ -60,6 +61,7 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
+ 	BlastView.push(frame)
+ 	local overlay = Flow.overlay(frame.play, RULES, FlowView.trip())
+ 	FlowView.show(overlay)
++	RevivesView.show(frame.play)
+ 	if model and overlay.flash ~= lit then
+ 		lit = overlay.flash
+ 		MazeView.flash(model, overlay.flash)
+@@ -86,6 +88,7 @@ PelletView.start()
+ Sticks.start(Pads.stick)
+ HudView.start()
+ FlowView.start()
++RevivesView.start()
+ 
+ -- listening now: tell the server, so its first snapshot reaches a client that can show it
+ ready:FireServer()
+diff --git a/pickman/src/client/RevivesView.luau b/pickman/src/client/RevivesView.luau
+new file mode 100644
+index 000000000..751859d1e
+--- /dev/null
++++ b/pickman/src/client/RevivesView.luau
+@@ -0,0 +1,44 @@
++--!strict
++-- Client adapter: the game over's revives line (f0186), the continues the run used, under FlowView's results. Flow
++-- decides the text (`Flow.revivesLine`, nil outside the game over); this only draws it.
++local Players = game:GetService("Players")
++
++local Flow = require("@game/ReplicatedStorage/Shared/Logic/Flow")
++local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
++
++local YELLOW = Color3.fromRGB(255, 255, 0)
++
++local RevivesView = {}
++
++local label: TextLabel? = nil
++
++function RevivesView.start()
++	local gui = Instance.new("ScreenGui")
++	gui.Name = "Revives"
++	gui.ResetOnSpawn = false
++	gui.IgnoreGuiInset = true
++	gui.DisplayOrder = 1 -- above Flow's fade (FlowView's gui is 0), as HudView's is: the line stays as bright as the results
++	local l = Instance.new("TextLabel")
++	l.Name = "Revives"
++	l.BackgroundTransparency = 1
++	l.Font = Enum.Font.Arcade
++	l.TextColor3 = YELLOW
++	l.TextScaled = true
++	l.Size = UDim2.fromScale(0.6, 0.05)
++	l.Position = UDim2.fromScale(0.2, 0.64) -- under FlowView's prompt (0.58 to 0.63)
++	l.Text = ""
++	l.Visible = false
++	l.Parent = gui
++	label = l
++	gui.Parent = (Players.LocalPlayer :: Player):WaitForChild("PlayerGui")
++end
++
++function RevivesView.show(play: Session.PlayFrame)
++	local line = Flow.revivesLine(play)
++	if label then
++		label.Text = line or ""
++		label.Visible = line ~= nil
++	end
++end
++
++return RevivesView
+diff --git a/pickman/src/server/HiscoreStore.luau b/pickman/src/server/HiscoreStore.luau
+index 8694fb2c0..a043153cb 100644
+--- a/pickman/src/server/HiscoreStore.luau
++++ b/pickman/src/server/HiscoreStore.luau
+@@ -101,13 +101,21 @@ local top: Hiscores.TopIo = {
+ }
+ 
+ -- Write a finished run. Returns at once; `listen` hears the run's place on the top-N list once the write is done.
+-function HiscoreStore.submit(userId: string, name: string, score: number, level: number, run: number)
++function HiscoreStore.submit(
++	userId: string,
++	name: string,
++	score: number,
++	level: number,
++	run: number,
++	_lives: number?,
++	revives: number?
++)
+ 	pending += 1
+ 	local ok, err = pcall(task.spawn, function()
+ 		local fine, failure = pcall(function()
+ 			local now = os.time()
+ 			local entry = Hiscores.topRun(
+-				{ name = name, userId = userId, level = level, score = score },
++				{ name = name, userId = userId, level = level, score = score, revives = revives },
+ 				now,
+ 				run,
+ 				(game :: any).JobId
+@@ -120,6 +128,7 @@ function HiscoreStore.submit(userId: string, name: string, score: number, level:
+ 				score = score,
+ 				run = if entry then entry.id else nil,
+ 				at = if entry then entry.at else nil,
++				revives = revives,
+ 			}
+ 			local result = Hiscores.drive(io, attempt, now, Hiscores.RETRY)
+ 			local placed = Hiscores.driveTop(top, io, entry, result.rows, Hiscores.RETRY)
+diff --git a/pickman/src/server/Submits.luau b/pickman/src/server/Submits.luau
+index aaa54660d..bce6f6d36 100644
+--- a/pickman/src/server/Submits.luau
++++ b/pickman/src/server/Submits.luau
+@@ -32,7 +32,15 @@ function Submits.step(s: any, events: { any }, here: boolean): boolean
+ 	local nextState, submission = Hiscores.onStep(h.state, events, here)
+ 	h.state = nextState
+ 	if submission then
+-		HiscoreStore.submit(h.userId, h.name, submission.score, submission.level, submission.run)
++		HiscoreStore.submit(
++			h.userId,
++			h.name,
++			submission.score,
++			submission.level,
++			submission.run,
++			nil, -- f0145's lives (the prototype is on main, without f0145)
++			submission.revives
++		)
+ 	end
+ 	if nextState.drop then
+ 		held[s] = nil
+diff --git a/pickman/src/shared/Logic/Flow/init.luau b/pickman/src/shared/Logic/Flow/init.luau
+index cdec69664..548875e3c 100644
+--- a/pickman/src/shared/Logic/Flow/init.luau
++++ b/pickman/src/shared/Logic/Flow/init.luau
+@@ -2,6 +2,7 @@
+ -- Flow: what the screen shows over the maze in each phase of a run, engine-free. The client draws it;
+ -- only the server moves a run from phase to phase, and only the server sends a player back to the lobby.
+ local Game = require("./Game")
++local Lobby = require("./Lobby")
+ local Session = require("./Session")
+ local Travel = require("./Travel")
+ 
+@@ -82,6 +83,15 @@ function Flow.overlay(play: Session.PlayFrame, rules: Game.Config, trip: Trip?):
+ 	return { fade = 0, flash = false, tap = false, cursor = false }
+ end
+ 
++-- The revives line of the GAME OVER overlay (f0186): the continues the run used, "REVIVES 0" for none; nil in every other
++-- phase. FlowView's lines and the overlay stay as they were: the client's RevivesView draws this one.
++function Flow.revivesLine(play: Session.PlayFrame): string?
++	if play.phase ~= "gameover" then
++		return nil
++	end
++	return Lobby.revivesText(play.revives)
++end
++
+ -- The extra line at the end of a run for an all-time rank the server sent. Flow does not know the board size.
+ function Flow.rankLine(rank: number?): string?
+ 	if type(rank) ~= "number" or rank < 1 or rank ~= math.floor(rank) or rank == math.huge then
+diff --git a/pickman/src/shared/Logic/Game/init.luau b/pickman/src/shared/Logic/Game/init.luau
+index 1ea053120..b6a610263 100644
+--- a/pickman/src/shared/Logic/Game/init.luau
++++ b/pickman/src/shared/Logic/Game/init.luau
+@@ -22,6 +22,7 @@ export type Event = {
+ 	score: number?,
+ 	ticks: number?,
+ 	reason: string?,
++	revives: number?, -- GameOver: the continues the run used (f0186)
+ }
+ export type Game = {
+ 	config: Config,
+@@ -32,6 +33,7 @@ export type Game = {
+ 	timer: number, -- ticks left in a pause, 0 while playing
+ 	frightened: number, -- ticks of power left
+ 	extraLifeGiven: boolean,
++	revives: number, -- continues used this run: f0145's Game.continue counts one each (f0186)
+ }
+ 
+ local Game = {}
+@@ -95,6 +97,7 @@ function Game.new(config: Config?): Game
+ 		timer = 0,
+ 		frightened = 0,
+ 		extraLifeGiven = false,
++		revives = 0,
+ 	}
+ 	ready(g)
+ 	return g
+@@ -150,6 +153,7 @@ function Game.playAgain(g: Game): ({ Event }, boolean)
+ 		return {}, false
+ 	end
+ 	g.level, g.score, g.lives, g.frightened, g.extraLifeGiven = 1, 0, g.config.lives, 0, false
++	g.revives = 0
+ 	ready(g)
+ 	return { { kind = "Ready", reason = "again", level = 1 } }, true
+ end
+@@ -177,7 +181,7 @@ function Game.step(g: Game): { Event }
+ 				return { { kind = "Ready", reason = "respawn", level = g.level } }
+ 			end
+ 			g.phase, g.timer = "gameover", 0
+-			return { { kind = "GameOver", score = g.score, level = g.level } }
++			return { { kind = "GameOver", score = g.score, level = g.level, revives = g.revives } }
+ 		end
+ 	elseif phase == "levelclear" then
+ 		g.timer -= 1
+diff --git a/pickman/src/shared/Logic/Hiscores/init.luau b/pickman/src/shared/Logic/Hiscores/init.luau
+index 3a22e9022..079ece1de 100644
+--- a/pickman/src/shared/Logic/Hiscores/init.luau
++++ b/pickman/src/shared/Logic/Hiscores/init.luau
+@@ -7,8 +7,17 @@
+ export type BoardId = "all" | "day" | "week"
+ export type Board = { id: BoardId, period: string? }
+ -- `run` and `at` name the run that made a row (its top-N list id and instant); rows written before d0124 have neither
+-export type Attempt =
+-	{ name: string, userId: string, level: number, score: number, run: string?, at: number? }
++-- `revives`: the paid revives (continues) the run used, f0186; nil is none, and so is any stored value but a whole
++-- count of at least one (rows written before f0186 have none)
++export type Attempt = {
++	name: string,
++	userId: string,
++	level: number,
++	score: number,
++	run: string?,
++	at: number?,
++	revives: number?,
++}
+ export type Companion = {
+ 	name: string,
+ 	userId: string,
+@@ -16,6 +25,7 @@ export type Companion = {
+ 	score: number,
+ 	run: string?,
+ 	at: number?,
++	revives: number?,
+ }
+ export type Row = {
+ 	rank: number,
+@@ -26,6 +36,7 @@ export type Row = {
+ 	run: string?,
+ 	at: number?,
+ 	runScore: number?, -- the companion's own score: the score of the run the row names (the page score can lag it)
++	revives: number?,
+ }
+ export type PageEntry = { key: string, score: number }
+ export type Page = { PageEntry }
+@@ -46,14 +57,22 @@ export type Retry = { attempts: number, base: number, cap: number }
+ -- rows: the all-time board read after the write
+ export type DriveResult = { wrote: { [string]: boolean }, rank: number?, rows: { Row }? }
+ export type RunState = { run: number, done: { [number]: boolean }, waited: number, drop: boolean }
+-export type Submission = { score: number, level: number, run: number }
+-export type StepEvent = { kind: string, score: number?, level: number? }
++export type Submission = { score: number, level: number, run: number, revives: number? }
++export type StepEvent = { kind: string, score: number?, level: number?, revives: number? }
+ export type CacheEntry = { at: number, rows: { Row } }
+ export type Failure = { at: number, count: number } -- consecutive failed reads of one board key
+-export type TopRun = { id: string, name: string, userId: string, score: number, level: number, at: number }
++export type TopRun = {
++	id: string,
++	name: string,
++	userId: string,
++	score: number,
++	level: number,
++	at: number,
++	revives: number?,
++}
+ export type TopIo = { update: (transform: ({ TopRun }?) -> { TopRun }?) -> (any, string?) }
+ export type TopResult = { known: boolean, place: number?, missed: number? }
+-export type Best = { score: number, level: number }
++export type Best = { score: number, level: number, revives: number? }
+ 
+ local Hiscores = {}
+ 
+@@ -177,6 +196,15 @@ function Hiscores.cleanName(raw: any): string
+ 	return name
+ end
+ 
++-- A run's revives as kept and shown: a whole count from 1 to 2^53 - 1, else nil (none). Every reader of a stored or
++-- sent count goes through it, so a junk value reads as none.
++function Hiscores.revives(x: any): number?
++	if whole(x) and x >= 1 and x <= MAX_INTEGER then
++		return x
++	end
++	return nil
++end
++
+ function Hiscores.valid(attempt: any): boolean
+ 	if type(attempt) ~= "table" then
+ 		return false
+@@ -217,6 +245,7 @@ function Hiscores.commit(stored: Companion?, attempt: Attempt): Companion?
+ 		score = attempt.score,
+ 		run = if named then attempt.run else nil,
+ 		at = if named then attempt.at else nil,
++		revives = Hiscores.revives(attempt.revives),
+ 	}
+ end
+ 
+@@ -331,6 +360,7 @@ function Hiscores.rows(pages: { Page }, lookup: (string) -> (Companion?, string?
+ 					runScore = if whole(companion.score) and companion.score >= 0
+ 						then companion.score
+ 						else nil,
++					revives = Hiscores.revives(companion.revives),
+ 				})
+ 			end
+ 		end
+@@ -361,10 +391,15 @@ function Hiscores.rankOf(rows: { Row }, userId: string): number?
+ 	return nil
+ end
+ 
+-function Hiscores.lobbyRows(rows: { Row }): { { rank: number, name: string, score: number, level: number } }
++function Hiscores.lobbyRows(
++	rows: { Row }
++): { { rank: number, name: string, score: number, level: number, revives: number? } }
+ 	local out = {}
+ 	for _, row in rows do
+-		table.insert(out, { rank = row.rank, name = row.name, score = row.score, level = row.level })
++		table.insert(
++			out,
++			{ rank = row.rank, name = row.name, score = row.score, level = row.level, revives = row.revives }
++		)
+ 	end
+ 	return out
+ end
+@@ -563,7 +598,12 @@ function Hiscores.onStep(state: RunState, events: { StepEvent }, here: boolean):
+ 			local fresh, nextDone = Hiscores.once(done, state.run)
+ 			if fresh then
+ 				done = nextDone
+-				submission = { score = event.score, level = event.level, run = state.run }
++				submission = {
++					score = event.score,
++					level = event.level,
++					run = state.run,
++					revives = Hiscores.revives(event.revives),
++				}
+ 			end
+ 		end
+ 	end
+@@ -650,6 +690,7 @@ function Hiscores.topRun(attempt: Attempt, unix: number, run: number, server: st
+ 		score = attempt.score,
+ 		level = attempt.level,
+ 		at = unix,
++		revives = Hiscores.revives(attempt.revives),
+ 	}
+ end
+ 
+@@ -690,6 +731,7 @@ local function ordered(list: any): { TopRun }
+ 				score = e.score,
+ 				level = e.level,
+ 				at = e.at,
++				revives = Hiscores.revives(e.revives),
+ 			})
+ 		end
+ 	end
+@@ -717,6 +759,7 @@ function Hiscores.bestRun(row: Row): TopRun?
+ 			score = score,
+ 			level = row.level,
+ 			at = row.at :: number,
++			revives = Hiscores.revives(row.revives),
+ 		}
+ 	end
+ 	return {
+@@ -726,6 +769,7 @@ function Hiscores.bestRun(row: Row): TopRun?
+ 		score = score,
+ 		level = row.level,
+ 		at = 0,
++		revives = Hiscores.revives(row.revives),
+ 	}
+ end
+ 
+@@ -763,7 +807,14 @@ function Hiscores.topRows(list: any): { Row }?
+ 	end
+ 	local out: { Row } = {}
+ 	for i, e in ordered(list) do
+-		table.insert(out, { rank = i, name = e.name, userId = e.userId, score = e.score, level = e.level })
++		table.insert(out, {
++			rank = i,
++			name = e.name,
++			userId = e.userId,
++			score = e.score,
++			level = e.level,
++			revives = e.revives,
++		})
+ 	end
+ 	return out
+ end
+@@ -833,7 +884,7 @@ function Hiscores.best(companion: any): Best?
+ 	if not whole(companion.level) or companion.level < 1 then
+ 		return nil
+ 	end
+-	return { score = companion.score, level = companion.level }
++	return { score = companion.score, level = companion.level, revives = Hiscores.revives(companion.revives) }
+ end
+ 
+ -- Whether a player's held best must be read again: nothing held, or a finished read that is no longer fresh. A
+diff --git a/pickman/src/shared/Logic/Lobby/init.luau b/pickman/src/shared/Logic/Lobby/init.luau
+index c0553bf6f..b4e584c27 100644
+--- a/pickman/src/shared/Logic/Lobby/init.luau
++++ b/pickman/src/shared/Logic/Lobby/init.luau
+@@ -3,7 +3,8 @@
+ -- the start button for a travel status.
+ local Travel = require("./Travel")
+ 
+-export type Row = { rank: number, name: string, score: number, level: number }
++-- `revives`: the paid revives the run used (f0186); nil is none
++export type Row = { rank: number, name: string, score: number, level: number, revives: number? }
+ export type Panel = { title: string, rows: { Row }, empty: string? }
+ export type Button = { text: string, enabled: boolean, message: string? }
+ 
+@@ -14,13 +15,19 @@ Lobby.MAX_ROWS = 10
+ Lobby.BUTTON_MIN_PX = 44 -- the smallest touch target (design: Mobile)
+ Lobby.READ_GAP = 1 -- seconds before the screen asks again after a failed answer; a copy of Hiscores.READ_GAP
+ Lobby.MAX_RETRIES = 3 -- failed answers in a row that are asked for again
++Lobby.REVIVES = "REVIVES" -- the word before a run's revive count, on every board and at the end of a run (f0186)
++-- how the price of a play is shown (f0186): the list price struck through, then the price charged, on sale
++Lobby.PRICE = table.freeze({ struck = "5 R$", price = "1 R$", sale = "SALE" })
+ 
+ -- The panel for the rows the boards give (nil or none: the empty state). Rows are shown in rank order, at most MAX_ROWS.
+ function Lobby.panel(rows: { Row }?): Panel
+ 	local shown: { Row } = {}
+ 	local given: { Row } = rows or {}
+ 	for _, r in given do
+-		table.insert(shown, { rank = r.rank, name = r.name, score = r.score, level = r.level })
++		table.insert(
++			shown,
++			{ rank = r.rank, name = r.name, score = r.score, level = r.level, revives = r.revives }
++		)
+ 	end
+ 	table.sort(shown, function(a: Row, b: Row): boolean
+ 		return a.rank < b.rank
+@@ -59,6 +66,24 @@ function Lobby.boardPanel(rows: { Row }?, id: string?): Panel
+ 	return p
+ end
+ 
++-- A run's revive count as the boards and the end of a run show it: "REVIVES n", and "REVIVES 0" for none, which is
++-- also what a row stored before f0186 (no count) or a count that is not a whole number of at least one shows.
++function Lobby.revivesText(n: any): string
++	local count = if type(n) == "number"
++			and n == n
++			and n == math.floor(n)
++			and n >= 1
++			and n <= 2 ^ 53 - 1
++		then n
++		else 0
++	return `{Lobby.REVIVES} {string.format("%d", count)}`
++end
++
++-- The price of a play as rich text: the list price struck through, the price charged and the sale word.
++function Lobby.salePrice(): string
++	return `<s>{Lobby.PRICE.struck}</s> {Lobby.PRICE.price} {Lobby.PRICE.sale}`
++end
++
+ -- The panel as text, one row per line. The highlighted rank is one the server sent, marked with "> ".
+ function Lobby.lines(p: Panel, highlightRank: number?): string
+ 	if p.empty then
+@@ -67,7 +92,7 @@ function Lobby.lines(p: Panel, highlightRank: number?): string
+ 	local out: { string } = {}
+ 	for _, r in p.rows do
+ 		local mark = if highlightRank ~= nil and r.rank == highlightRank then "> " else ""
+-		table.insert(out, `{mark}{r.rank} {r.name} {r.score} {r.level}`)
++		table.insert(out, `{mark}{r.rank} {r.name} {r.score} {r.level} {Lobby.revivesText(r.revives)}`)
+ 	end
+ 	return table.concat(out, "\n")
+ end
+@@ -84,7 +109,9 @@ function Lobby.bestLine(best: any, id: string?): string?
+ 	if type(level) ~= "number" or level < 1 or level ~= math.floor(level) or level == math.huge then
+ 		return nil
+ 	end
+-	return `YOUR BEST {string.format("%d", score)} {string.format("%d", level)}`
++	return `YOUR BEST {string.format("%d", score)} {string.format("%d", level)} {Lobby.revivesText(
++		best.revives
++	)}`
+ end
+ 
+ -- The whole list text: the panel's lines, then the viewer's best line when there is one.
+diff --git a/pickman/src/shared/Logic/Session/init.luau b/pickman/src/shared/Logic/Session/init.luau
+index 59b10a033..4a2f2a69a 100644
+--- a/pickman/src/shared/Logic/Session/init.luau
++++ b/pickman/src/shared/Logic/Session/init.luau
+@@ -76,6 +76,7 @@ export type PlayFrame = {
+ 	lives: number,
+ 	timer: number,
+ 	frightened: number,
++	revives: number?, -- continues used this run; nil while none (f0186)
+ }
+ export type Frame = {
+ 	v: number,
+@@ -115,6 +116,7 @@ export type Event = {
+ 	item: string?,
+ 	ghost: Ghosts.Name?,
+ 	heading: Maze.Heading?,
++	revives: number?,
+ }
+ export type Clock = { rate: number, maxSteps: number, acc: number }
+ 
+@@ -378,6 +380,7 @@ local function tagged(id: PlayerId, e: Game.Event): Event
+ 		score = e.score,
+ 		ticks = e.ticks,
+ 		reason = e.reason,
++		revives = e.revives,
+ 	}
+ end
+ 
+@@ -804,6 +807,7 @@ function Session.frame(s: Session, id: PlayerId): Frame
+ 			lives = play.lives,
+ 			timer = play.timer,
+ 			frightened = play.frightened,
++			revives = if play.revives > 0 then play.revives else nil,
+ 		},
+ 		pellets = Pellets.encode(s.members[id].pellets),
+ 		shots = s.members[id].blaster.shots,

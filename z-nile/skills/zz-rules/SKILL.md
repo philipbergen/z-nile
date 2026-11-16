@@ -12,7 +12,7 @@ All work is tracked in project roots, which are committed. `z-nile/projects.toml
 |---|---|---|
 | feature issue | `f` + 4 digits | `f0010` |
 | defect issue | `d` + 4 digits | `d0020` |
-| chore issue | `c` + 4 digits | `c0030` (includes every CI/test/tooling fix, even bugs; see z-ticket) |
+| chore issue | `c` + 4 digits | `c0030` (includes every fix of a wrong spec, even a bug; a z-nile command that does the wrong thing is a defect; see z-ticket) |
 | raft (epic) | `R` + 4 digits | `R0010` |
 
 - **Numbering**: `f`, `d` and `c` share one number space; rafts have their own. `z-nile/next` holds the next number of each (`issue <n> <phrase>`, `raft <n> <phrase>`). The first publish after c0114 lands moves the counter there from the old counter file, in its own lease push, and leaves a tombstone in the old file, so an engine from before c0114 refuses to number; until then the old file is the counter. `new`, `new raft`, an emergent issue and `renumber` take the counter, counting by one, and push it raised, with a fresh phrase, in a lease push to `origin/main` (a lost race is retried on the new `main`); a number already in use is always passed. Offline (`PICKMAN_PUBLISH=0`) the local counter is read but never written. A tree without `z-nile/next` (a fixture) keeps the old rule: the next multiple of 10 above the highest number in use.

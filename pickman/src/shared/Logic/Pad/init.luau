@@ -11,6 +11,7 @@ local BUTTONS: { [string]: View.Action } = {
 	ButtonR2 = "Fire",
 	ButtonY = "Pick", -- the wall pick (f0126; user, 2026-10-25: "Y / triangle")
 	ButtonR3 = "Snap",
+	ButtonL3 = "Boost", -- the left stick's click (f0143; user, 2026-10-26)
 	DPadUp = "Forward",
 	DPadDown = "Back",
 	DPadLeft = "Left",

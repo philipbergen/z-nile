@@ -32,6 +32,8 @@ export type Game = {
 	timer: number, -- ticks left in a pause, 0 while playing
 	frightened: number, -- ticks of power left
 	extraLifeGiven: boolean,
+	ramp: Levels.Ramp?, -- levels by picked walls (f0147): level 1's rules, the ramp's speeds, points times the level
+	start: number, -- the level the run started on: the extra life comes at extraLifeScore times it (f0147)
 }
 
 local Game = {}
@@ -83,21 +85,35 @@ local function ready(g: Game)
 	end
 end
 
-function Game.new(config: Config?): Game
+function Game.new(config: Config?, ramp: Levels.Ramp?, start: number?): Game
 	local c = config or Game.CLASSIC_CONFIG
 	validate(c)
+	if ramp then
+		Levels.validateRamp(ramp)
+	end
+	local first = start or 1
+	if not isWhole(first) or first < 1 or first == math.huge then
+		error(`rules: start must be a whole number >= 1, got {first}`, 0)
+	end
 	local g: Game = {
 		config = c,
 		phase = "ready",
-		level = 1,
+		level = first,
 		score = 0,
 		lives = c.lives,
 		timer = 0,
 		frightened = 0,
 		extraLifeGiven = false,
+		ramp = ramp,
+		start = first, -- f0148: the level the player chose in the lobby
 	}
 	ready(g)
 	return g
+end
+
+-- What `points` scored now are worth: with a ramp, times the level (f0147); else as they are.
+function Game.points(g: Game, points: number): number
+	return if g.ramp then points * g.level else points
 end
 
 function Game.canMove(g: Game): boolean
@@ -107,7 +123,7 @@ end
 function Game.addScore(g: Game, points: number): { Event }
 	g.score += points
 	local c = g.config
-	if c.extraLifeScore > 0 and not g.extraLifeGiven and g.score >= c.extraLifeScore then
+	if c.extraLifeScore > 0 and not g.extraLifeGiven and g.score >= c.extraLifeScore * g.start then
 		g.extraLifeGiven = true
 		g.lives += 1
 		return { { kind = "ExtraLife", lives = g.lives } }
@@ -140,7 +156,7 @@ function Game.power(g: Game, factor: number?): { Event }
 	if g.phase ~= "playing" then
 		return {}
 	end
-	local ticks = Levels.frightenedTicks(g.level, g.config.tickRate) * (factor or 1)
+	local ticks = Levels.frightenedTicks(g.level, g.config.tickRate, g.ramp) * (factor or 1)
 	g.frightened = ticks
 	return { { kind = "PowerStarted", ticks = ticks, level = g.level } }
 end
@@ -149,9 +165,9 @@ function Game.playAgain(g: Game): ({ Event }, boolean)
 	if g.phase ~= "gameover" then
 		return {}, false
 	end
-	g.level, g.score, g.lives, g.frightened, g.extraLifeGiven = 1, 0, g.config.lives, 0, false
+	g.level, g.score, g.lives, g.frightened, g.extraLifeGiven = g.start, 0, g.config.lives, 0, false
 	ready(g)
-	return { { kind = "Ready", reason = "again", level = 1 } }, true
+	return { { kind = "Ready", reason = "again", level = g.level } }, true
 end
 
 function Game.step(g: Game): { Event }

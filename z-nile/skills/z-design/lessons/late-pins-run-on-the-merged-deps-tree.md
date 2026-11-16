@@ -11,3 +11,5 @@ A source pin or stub added in a late review round is usually written against the
 **How to apply:** pin only the part of a line this issue owns (stop the pattern where another issue may add arguments), and before the round's answer is pushed, run every sequestered spec on one tree with every `depends_on` merged; record the run and what failed there that isn't yours.
 
 c0239 design review 005 F2: docs.spec pinned two Merging sentences that the readied c0194 rewrites, so whichever lands second fails its checks. Pin a sentence only up to the clause the issue owns, name the other item in Existing work, and run the pins with and without its patch applied.
+
+**Note** (c0252 prep, 2026-11-15): after merging the dependency prototypes, run each dependency's own `./zn check` on the merged tree, not only this issue's. A shared fixture helper (`tests/lib/seal.luau`'s `layerReview`) had to satisfy c0306's `Model:` rule as well as c0248's layer review, and the in-file-order loop list needed a merge-time reconciliation.

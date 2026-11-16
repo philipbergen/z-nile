@@ -1,0 +1,91 @@
+--!strict
+-- ID AC3: scripts/deploy-beta is the thin command CI runs. Not configured, it says so and succeeds;
+-- badly configured, or when the build fails, it fails before anything is sent.
+local fs = require("@lune/fs")
+local process = require("@lune/process")
+local t = require("@tests/lib/t")
+
+-- ID override: pickman's home, where its specs run (its scripts, project files and .cache are there)
+local root = (string.gsub(process.cwd, "/+$", ""))
+-- ID override: the deploy scripts moved to portal/scripts (pickman's @scripts alias points there too)
+local script = `{root}/../portal/scripts/deploy-beta`
+
+-- ID override (design review 001 F2): Lune's `env` adds to what the child inherits, so every place variable of the
+-- manifest a case does not set is given as "", and a caller's exported ROBLOX_BETA_*_PLACE_ID never reaches the command
+local PLACE_VARS = {
+	"ROBLOX_BETA_PICKMAN_PLACE_ID",
+	"ROBLOX_BETA_GAME_PLACE_ID",
+	"ROBLOX_BETA_SNAKE_PLACE_ID",
+	"ROBLOX_BETA_INVADERS_PLACE_ID",
+	"ROBLOX_BETA_ASTEROIDS_PLACE_ID",
+}
+local function hermetic(env: { [string]: string }): { [string]: string }
+	local out: { [string]: string } = {}
+	for _, var in PLACE_VARS do
+		out[var] = ""
+	end
+	for k, v in env do
+		out[k] = v
+	end
+	return out
+end
+local work = `{root}/.cache/deploy-cli`
+
+local function run(env: { [string]: string }, cwd: string?)
+	return process.exec("lune", { "run", script }, { env = hermetic(env), cwd = cwd or root })
+end
+
+return t.spec("ID scripts/deploy-beta", function(it)
+	fs.writeDir(work) -- an empty directory: no Rojo project in it
+	it("not configured: says so with a warning and succeeds, without building or sending", function()
+		local r = run({ ROBLOX_API_KEY = "", ROBLOX_BETA_UNIVERSE_ID = "", ROBLOX_BETA_PLACE_ID = "" }, work)
+		t.expect(r.ok).toBe(true)
+		t.expect(string.find(r.stdout, "not configured", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(r.stdout, "::warning::", 1, true) ~= nil).toBe(true)
+		t.expect((string.find(r.stdout, "version=", 1, true))).toBe(nil)
+	end)
+
+	it("a missing id alone is also 'not configured'", function()
+		local r =
+			run({ ROBLOX_API_KEY = "k", ROBLOX_BETA_UNIVERSE_ID = "1", ROBLOX_BETA_PLACE_ID = "" }, work)
+		t.expect(r.ok).toBe(true)
+		t.expect(string.find(r.stdout, "not configured", 1, true) ~= nil).toBe(true)
+	end)
+
+	it("an id that is not digits fails, and says which", function()
+		local r = run({
+			ROBLOX_API_KEY = "KEY-NOT-IN-OUTPUT",
+			ROBLOX_BETA_UNIVERSE_ID = "1/2",
+			ROBLOX_BETA_PLACE_ID = "3",
+		}, work)
+		t.expect(r.ok).toBe(false)
+		t.expect(string.find(r.stdout .. r.stderr, "ROBLOX_BETA_UNIVERSE_ID", 1, true) ~= nil).toBe(true)
+		t.expect((string.find(r.stdout .. r.stderr, "KEY-NOT-IN-OUTPUT", 1, true))).toBe(nil)
+	end)
+
+	it("when the build fails it fails, reports it, and never reaches the API", function()
+		-- configured, but there is no Rojo project in `work`; a valid key would otherwise be sent
+		-- ID override: the manifest is read first, so `work` gets one whose start place (Portal) builds a project file that
+		-- is not there; the failure is still the build's, reported before any request
+		fs.writeFile(
+			`{work}/experience.json`,
+			'{"places":[{"name":"Pickman","env":["ROBLOX_BETA_PICKMAN_PLACE_ID"],"build":"pickman","output":"version"},'
+				.. '{"name":"Snake","env":["ROBLOX_BETA_SNAKE_PLACE_ID"],"build":"snake","output":"snake_version"},'
+				.. '{"name":"Invaders","env":["ROBLOX_BETA_INVADERS_PLACE_ID"],"build":"invaders","output":"invaders_version"},'
+				.. '{"name":"Asteroids","env":["ROBLOX_BETA_ASTEROIDS_PLACE_ID"],"build":"asteroids","output":"asteroids_version"},'
+				.. '{"name":"Portal","env":["ROBLOX_BETA_PLACE_ID"],"build":"portal","output":"lobby_version"}],'
+				.. '"builds":{"pickman":{"project":"pickman.project.json"},"snake":{"project":"snake.project.json"},'
+				.. '"invaders":{"project":"invaders.project.json"},"asteroids":{"project":"asteroids.project.json"},'
+				.. '"portal":{"project":"default.project.json"}}}'
+		)
+		local r = run({
+			ROBLOX_API_KEY = "KEY-NOT-IN-OUTPUT",
+			ROBLOX_BETA_UNIVERSE_ID = "1",
+			ROBLOX_BETA_PLACE_ID = "2",
+		}, work)
+		t.expect(r.ok).toBe(false)
+		t.expect(string.find(r.stdout, "rojo build failed", 1, true) ~= nil).toBe(true)
+		t.expect((string.find(r.stdout .. r.stderr, "KEY-NOT-IN-OUTPUT", 1, true))).toBe(nil)
+		t.expect((string.find(r.stdout, "version=", 1, true))).toBe(nil)
+	end)
+end)

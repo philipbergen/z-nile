@@ -1,0 +1,79 @@
+--!strict
+-- ID AC6: SETUP.md says how Beta publishes two places and what the owner of the experience must do once,
+-- in order, and the testing skill lists the lobby's runtime scripts.
+local fs = require("@lune/fs")
+local t = require("@tests/lib/t")
+
+-- ID override: the spec runs from its home: the checkout's files are read from the top
+local setup = fs.readFile("../SETUP.md")
+local testing = fs.readFile("skills/pickman-test/SKILL.md")
+
+local function has(s: string, needle: string): boolean
+	return string.find(s, needle, 1, true) ~= nil
+end
+
+-- the Beta publishing section of SETUP.md
+local function beta(): string
+	local from = string.find(setup, "## Beta publishing", 1, true)
+	assert(from, "SETUP.md has a Beta publishing section")
+	local to = string.find(setup, "\n## ", from + 5, true)
+	return string.sub(setup, from, to)
+end
+
+return t.spec("ID docs for two places", function(it)
+	it(
+		"the Beta section names the game place's variable, both projects and which place gets which",
+		function()
+			local s = beta()
+			for _, needle in
+				{
+					"ROBLOX_BETA_GAME_PLACE_ID",
+					"default.project.json",
+					"lobby.project.json",
+					"GamePlaceId",
+					"start place",
+					"tests/runtime/lobby",
+					"runtime-test -- --place Portal", -- ID override: was `runtime-test -- --lobby` (--lobby is gone)
+				}
+			do
+				t.expect(has(s, needle)).toBe(true)
+			end
+		end
+	)
+
+	-- ID override: the owner's steps are now "Adding a place" (any place of the manifest, SETUP.md's example is
+	-- Snake), so step 2 names "the repository variable the manifest names for it", not the game place's variable
+	it(
+		"the owner's one-time steps (Adding a place) are a numbered list: create the place, set the variable, check the key",
+		function()
+			local s = beta()
+			t.expect(has(s, "**Adding a place**")).toBe(true)
+			local create = string.find(s, "\n%s*1%. [^\n]*Creator Dashboard[^\n]*place id")
+			local variable = string.find(s, "\n%s*2%. [^\n]*repository variable the manifest names for it")
+			local key = string.find(s, "\n%s*3%. [^\n]*ROBLOX_API_KEY")
+			t.expect(create ~= nil and variable ~= nil and key ~= nil).toBe(true)
+			t.expect((create :: number) < (variable :: number) and (variable :: number) < (key :: number))
+				.toBe(true)
+		end
+	)
+
+	-- ID override: was "without the variable the game still publishes to the start place and the lobby is not
+	-- live"; the single-place mode is gone: a place whose variable is unset is not published, and the deploy says so
+	it(
+		"says that a place whose variable is unset or empty is not published, and the deploy says so",
+		function()
+			local s = beta()
+			t.expect(
+				has(s, "A place whose variable is unset or empty is not published, and the deploy says so")
+			)
+				.toBe(true)
+			t.expect(has(s, "Without it")).toBe(false)
+			t.expect(has(s, "the lobby is not live")).toBe(false)
+		end
+	)
+
+	it("the testing skill's runtime tier names the lobby's scripts", function()
+		t.expect(has(testing, "tests/runtime/lobby/")).toBe(true)
+		t.expect(has(testing, "--place Portal")).toBe(true) -- ID override: was "--lobby" (gone)
+	end)
+end)

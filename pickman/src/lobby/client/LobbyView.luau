@@ -24,6 +24,23 @@ local function label(parent: Instance, name: string, size: UDim2, position: UDim
 	return l
 end
 
+type Picker = { level: () -> number?, changed: (() -> ()) -> () }
+local picker: Picker? = nil -- f0148: the level picker (LobbyPicker), given by usePicker; nil: as before
+local refresh: (() -> ())? = nil -- shows START again for the picker's level
+
+-- f0148: START shows the picker's level and sends it. Called after `start`.
+function LobbyView.usePicker(p: Picker)
+	picker = p
+	p.changed(function()
+		if refresh then
+			refresh()
+		end
+	end)
+	if refresh then
+		refresh()
+	end
+end
+
 function LobbyView.start()
 	local remotes = ReplicatedStorage:WaitForChild("Remotes")
 	local startGame = remotes:WaitForChild("StartGame") :: RemoteEvent
@@ -59,8 +76,11 @@ function LobbyView.start()
 	button.TextScaled = true
 	button.Parent = backdrop
 
+	local last: { phase: Travel.Phase, configured: boolean } = { phase = "idle", configured = true }
 	local function show(phase: Travel.Phase, configured: boolean)
-		local b = Lobby.button(phase, configured)
+		last.phase, last.configured = phase, configured
+		local p = picker
+		local b = Lobby.button(phase, configured, if p then p.level() else nil)
 		button.Text = b.text
 		button.Active = b.enabled
 		button.AutoButtonColor = b.enabled
@@ -72,8 +92,17 @@ function LobbyView.start()
 	show("idle", true)
 
 	button.Activated:Connect(function()
-		startGame:FireServer()
+		local p = picker
+		local level = if p then p.level() else nil
+		if level then
+			startGame:FireServer(level)
+		else
+			startGame:FireServer()
+		end
 	end)
+	refresh = function()
+		show(last.phase, last.configured)
+	end
 	status.OnClientEvent:Connect(show)
 
 	-- the board remote is made by the server script when it runs, so a screen without it keeps the empty panel

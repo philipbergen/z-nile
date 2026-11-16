@@ -3,6 +3,7 @@ title: A prep experiment that publishes from a throwaway clone first drops the d
 when: design
 tags: [experiments, dispatch, environment, safety]
 check: Does every experiment that runs a publishing `./zn` command (`status`, `land`, `new`, `ready`) in a throwaway clone unset every `ZN_` variable and `GH_CONFIG_DIR`, take `z-nile/bin` off `PATH`, and refuse to publish unless the clone's `origin` is under its temporary folder (a guard that can fail, not a re-test of what it just unset)?
+from: c0226 prep harvest (c0226 withdrawn 2026-11-16)
 ---
 Under `./zn dispatch`, a step's `./zn` sends its pushes to `main` to the dispatcher's publish broker (zz-rules, Tracker state from inside a step), which pushes them to the real origin. A clone under `mktemp -d` inherits that environment, so its tracker commands publish through the broker, not to the clone's own bare origin.
 

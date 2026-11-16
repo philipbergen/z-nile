@@ -1,1 +1,0 @@
- A pull request that carries a capture commit keeps it, by its squash subject or a merge commit (Merging).

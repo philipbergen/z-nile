@@ -23,6 +23,7 @@ export type Ghost = {
 	status: Status,
 	frightened: boolean, -- blue: set by a power pellet, cleared when eaten or when the power ends
 	reverse: boolean, -- turn back at the next centre
+	carry: number?, -- f0147: the fraction of a unit carried between steps at a ramp's fractional speed (0..1); ½ when placed
 }
 export type House = {
 	personal: { pinky: number, inky: number, clyde: number }, -- pellets eaten while each was next in line
@@ -41,9 +42,10 @@ export type Set = {
 	ghosts: { Ghost }, -- always in NAMES order
 	house: House,
 	tuning: number,
+	ramp: Levels.Ramp?, -- levels by picked walls (f0147): level 1's rules and the ramp's speeds on every level
 	open: boolean, -- ghosts start in the house (false: all four start active, for tests)
 }
-export type Options = { start: ("house" | "active")?, level: number?, tuning: number? }
+export type Options = { start: ("house" | "active")?, level: number?, tuning: number?, ramp: Levels.Ramp? }
 export type Chase = { player: Maze.Tile, heading: Maze.Heading, blinky: Maze.Tile, self: Maze.Tile }
 export type Input = {
 	player: Maze.Tile, -- the tile the player occupies
@@ -263,6 +265,7 @@ local function newGhost(name: Name, data: Classic.Data, start: "house" | "active
 	end
 	return {
 		name = name,
+		carry = 0.5, -- f0147: each ghost's own carry, ½ when placed (a new level, a new run, a death)
 		tile = tile,
 		heading = s.heading,
 		progress = 0,
@@ -297,6 +300,7 @@ function Ghosts.new(m: Maze.Maze, seed: number, opts: Options?): Set
 		ghosts = {},
 		house = { personal = { pinky = 0, inky = 0, clyde = 0 }, global = nil, idle = 0 },
 		tuning = o.tuning or Levels.GHOST_TUNING,
+		ramp = o.ramp,
 		open = (o.start or "house") == "house",
 	}
 	place(set)
@@ -343,7 +347,7 @@ function Ghosts.look(set: Set, g: Ghost): Look
 	if not g.frightened then
 		return "normal"
 	end
-	if set.frightened > 0 and set.frightened <= Levels.row(set.level).flashes * FLASH_TICKS then
+	if set.frightened > 0 and set.frightened <= Levels.row(set.level, set.ramp).flashes * FLASH_TICKS then
 		return "blinking"
 	end
 	return "frightened"
@@ -351,7 +355,7 @@ end
 
 -- While blinking: is this the white half of the flash?
 function Ghosts.flash(set: Set): boolean
-	if set.frightened <= 0 or set.frightened > Levels.row(set.level).flashes * FLASH_TICKS then
+	if set.frightened <= 0 or set.frightened > Levels.row(set.level, set.ramp).flashes * FLASH_TICKS then
 		return false
 	end
 	return math.floor((set.frightened - 1) / (FLASH_TICKS / 2)) % 2 == 0
@@ -382,13 +386,22 @@ end
 
 local function speedOf(set: Set, g: Ghost, input: Input): number
 	if g.status == "eyes" then
-		return Levels.ghostSpeed(input.baseSpeed, input.level, "eyes", set.tuning)
+		-- with a ramp the eyes follow it, but never past a tile a tick (f0147)
+		return math.min(Levels.ghostSpeed(input.baseSpeed, input.level, "eyes", set.tuning, set.ramp), UNITS)
 	end
-	if Ghosts.tunnel(set.maze, Ghosts.occupied(g)) then
-		return Levels.ghostSpeed(input.baseSpeed, input.level, "tunnel", set.tuning)
+	local kind: Levels.GhostSpeed = if Ghosts.tunnel(set.maze, Ghosts.occupied(g))
+		then "tunnel"
+		elseif g.frightened then "frightened"
+		else "normal"
+	if set.ramp and kind ~= "normal" then
+		-- the ramp's exact speed on average: whole units this step, the fraction carried to the next (f0147)
+		local total = (g.carry or 0.5) -- ½ at the start: the first step is the rate rounded
+			+ Levels.ghostRate(input.baseSpeed, input.level, kind, set.tuning, set.ramp)
+		local units = math.floor(total)
+		g.carry = total - units
+		return units
 	end
-	local kind: Levels.GhostSpeed = if g.frightened then "frightened" else "normal"
-	return Levels.ghostSpeed(input.baseSpeed, input.level, kind, set.tuning)
+	return Levels.ghostSpeed(input.baseSpeed, input.level, kind, set.tuning, set.ramp)
 end
 
 local function tickMode(set: Set, input: Input, out: { Event })
@@ -403,7 +416,7 @@ local function tickMode(set: Set, input: Input, out: { Event })
 		end
 		return -- the schedule clock stops while the ghosts are blue
 	end
-	local schedule = Levels.schedule(input.level, input.tickRate)
+	local schedule = Levels.schedule(input.level, input.tickRate, set.ramp)
 	local length = schedule[set.phase]
 	set.phaseTicks += 1
 	if length ~= nil and set.phaseTicks >= length then
@@ -445,7 +458,7 @@ local function releaseByCounters(set: Set, out: { Event })
 		if name == nil then
 			return
 		end
-		local limit = (Levels.row(set.level).dotLimits :: any)[name]
+		local limit = (Levels.row(set.level, set.ramp).dotLimits :: any)[name]
 		local personal: { [string]: number } = set.house.personal :: any
 		if personal[name] < limit then
 			return
@@ -567,7 +580,7 @@ function Ghosts.step(set: Set, input: Input): { Event }
 	local house = set.house
 	house.idle += 1
 	releaseByCounters(set, out)
-	if house.idle >= math.floor(Levels.row(input.level).idleSeconds * input.tickRate) then
+	if house.idle >= math.floor(Levels.row(input.level, set.ramp).idleSeconds * input.tickRate) then
 		local name = waiting(set)
 		if name ~= nil then
 			release(set, name :: Name, out)

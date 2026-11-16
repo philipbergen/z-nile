@@ -4,6 +4,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Awareness = require("@game/ReplicatedStorage/Shared/Logic/Awareness")
+local Boost = require("@game/ReplicatedStorage/Shared/Logic/Boost")
 local Hop = require("@game/ReplicatedStorage/Shared/Logic/Hop")
 local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
 local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
@@ -20,6 +21,7 @@ local steer: View.Steer = { look = { yaw = 0, pitch = 0 }, spring = false } -- t
 local arrows: View.Arrows = { up = false, down = false, left = false, right = false }
 local hopped: number? = nil -- the tick the latest hop started, from the server's frame (f0101)
 local hopTicks: number? = nil -- that hop's length, from the frame (f0126's longer jumps)
+local boosted: number? = nil -- the tick the latest boost started, from the server's frame (f0143)
 local yaw: number? = nil
 local padStick: ((name: string) -> (number?, number?, string?))? = nil -- the driving controller's sticks (Pads.stick)
 local cursor = false -- the mouse is free (and shown) for a prompt
@@ -74,6 +76,12 @@ end
 -- The latest hop's length in steps, as the server's frame says (nil: Hop.TICKS).
 function Camera.hopTicks(ticks: number?)
 	hopTicks = ticks
+end
+
+-- The speed boost (f0143): the tick the latest boost started, as the server's frame says (nil: none yet). The server
+-- decides the boost; the camera only widens its view while it runs.
+function Camera.boosted(tick: number?)
+	boosted = tick
 end
 
 -- The heading a shot would go now (f0100, f0104), nil before the first snapshot.
@@ -131,6 +139,7 @@ function Camera.start()
 		local target = View.headingYaw(snap.player.heading)
 		local turned = View.approachYaw(yaw or target, target, View.turnRate() * dt)
 		yaw = turned
+		camera.FieldOfView = View.SCALE.fieldOfView + Boost.fov(boosted, shown)
 
 		current = { x = pose.x, y = pose.y, yaw = turned + look.yaw }
 		local x, z = View.world(pose.x, pose.y)

@@ -2,7 +2,7 @@
 title: A new depends_on waits for everything the dependency's raft waits for
 when: design
 tags: [coordination, dependencies, rafts]
-check: When this design adds a depends_on on an issue that sits in a readied raft, what does that raft wait for (its Order), and does its executor's prompt edit my document and so turn the grouped hash of a raft holding it stale?
+check: When this design adds a depends_on on an issue that sits in a readied raft, what does that raft wait for (its Order), and does its executor's prompt edit my document and so turn the grouped hash of a raft holding it stale? When the dependency is the last layer of an active raft, does the design name the whole raft as the wait, every item downstream of this one that inherits it, and put the options (wait for the raft, take the issue out to land alone, land this first and re-prep both) with their costs to the user, rather than only adding the edge?
 ---
 A dependency is on the whole chain behind it, and a step in the other raft's prompt that edits this issue's document invalidates an earlier raft grouping.
 
