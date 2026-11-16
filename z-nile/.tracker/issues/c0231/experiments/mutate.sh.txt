@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# c0231 prep mutation check: applies each mutant to the prototype (experiments/prototype.patch applied), runs the row's
+# spec and requires an assertion failure (never a load or syntax error). Run from the repository root, through
+#   ./zn run --time 600 -- bash z-nile/.tracker/issues/c0231/experiments/mutate.sh.txt
+set -u
+F=z-nile/engine/boundcmd.luau
+A=.tracker/issues/c0231/acceptance
+BACKUP=$(mktemp)
+cp "$F" "$BACKUP"
+trap 'cp "$BACKUP" "$F"; rm -f "$BACKUP"' EXIT
+
+run() { # <id> <spec> <perl substitution>
+	local id=$1 spec=$2 sub=$3
+	cp "$BACKUP" "$F"
+	perl -0pi -e "$sub" "$F"
+	if cmp -s "$BACKUP" "$F"; then
+		echo "$id NOT APPLIED"
+		return
+	fi
+	local out
+	out=$(cd z-nile && lune run tests/run -- "$A/$spec" 2>&1)
+	if printf "%s" "$out" | grep -q " 0 failed"; then
+		echo "$id SURVIVED ($spec)"
+	else
+		echo "$id killed ($spec): $(printf "%s" "$out" | grep -m1 -iE "expected|error" | cut -c1-160)"
+	fi
+}
+
+run M1-no-rule refused.spec.luau 's/name == "yes"\n/name == "no-such-program"\n/'
+run M2-raw-name refused.spec.luau 's/name == "yes"\n/program == "yes"\n/'
+run M3-any-pipe consumers.spec.luau 's/if program == nil or basename\(program\) ~= "head" then/if program == nil then/'
+run M4-last-stage consumers.spec.luau 's/pipe = if piped then commands\[k \+ 1\] else nil/pipe = if piped then commands[#commands] else nil/'
+run M5-negative consumers.spec.luau 's/\(value ~= nil and string.sub\(value, 1, 1\) == "-"\)/false/'
+run M6-xargs consumers.spec.luau 's/if basename\(words\[k\]\) == "xargs" then/if false then/'
+run M7-redirect-ignored refused.spec.luau 's/and not stdoutAway\(args\) //'
+run M8-any-redirect allowed.spec.luau 's/string.match\(a, "\^1\?>"\)/string.match(a, "^%d*>")/'
+run M9-refuse-all allowed.spec.luau 's/after ~= nil\n(\s*)and \(after.pattern/false\n$1and (after.pattern/'
+run M10-no-case mentions.spec.luau 's/pattern = cases > 0 and ends\[k\] == "\)"/pattern = false/'
+run M11-case-never-closes mentions.spec.luau 's/elseif program == "esac" and cases > 0 then\n(\s*)cases -= 1/elseif program == "esac" and cases > 0 then\n$1cases += 0/'
+run M12-any-paren refused.spec.luau 's/pattern = cases > 0 and ends\[k\] == "\)"/pattern = ends[k] == ")"/'
+run M13-monitor contexts.spec.luau 's/name == "yes"\n(\s*)and not CTX.monitor/name == "yes"\n$1and true/'
+run M14-caffeinate-drops allowed.spec.luau 's/checkCommand\(rest, depth, nil, after\)/checkCommand(rest, depth)/'
+run M15-rule-name refused.spec.luau 's/return refuse\(\n(\s*)"follow",\n(\s*)name,\n(\s*)line,\n(\s*)`\\`yes\\`/return refuse(\n$1"unbounded",\n$2name,\n$3line,\n$4`\\`yes\\`/'
+run M16-no-head-hint refusal.spec.luau 's/\(\\`yes \| head -3\\`\)/(head)/'
+run M17-pipe-only allowed.spec.luau 's/local piped = ends\[k\] == "\|" or ends\[k\] == "\|&"/local piped = ends[k] == "|"/'
+run M18-exempt-args refused.spec.luau 's/name == "yes"\n/name == "yes" and not EXEMPT_ARG[args[1] or ""]\n/'

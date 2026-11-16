@@ -1,0 +1,131 @@
+diff --git a/z-nile/engine/boundcmd.luau b/z-nile/engine/boundcmd.luau
+index 14dd31e09..e0668a8a4 100644
+--- a/z-nile/engine/boundcmd.luau
++++ b/z-nile/engine/boundcmd.luau
+@@ -472,9 +472,49 @@ local function boundedish(words: { string }): boolean
+ 	return false
+ end
+ 
+-local checkCommand: (words: { string }, depth: number, raw: string?) -> Verdict
++-- What follows a simple command in its line (c0231): the next stage when its output is piped there (`|`, `|&`), and
++-- whether it is a pattern of a `case` (it ends in `)` between `case` and `esac`), which is no command at all
++type After = { pipe: { string }?, pattern: boolean }
+ 
+-function checkCommand(words: { string }, depth: number, raw: string?): Verdict
++-- `head` stops after its count whatever it reads, and `yes` then ends on the closed pipe. A negative count (GNU's
++-- "all but the last") reads to the end, which `yes` never gives, and `xargs head` reads all of its input first.
++local function headReads(words: { string }): boolean
++	local program, args = resolve(words)
++	if program == nil or basename(program) ~= "head" then
++		return false
++	end
++	for k = 1, #words - #args - 1 do
++		if basename(words[k]) == "xargs" then
++			return false
++		end
++	end
++	for k, a in args do
++		local value = if a == "-n" or a == "-c" or a == "--lines" or a == "--bytes" then args[k + 1] else nil
++		if
++			(value ~= nil and string.sub(value, 1, 1) == "-")
++			or string.match(a, "^%-[nc]%-")
++			or string.match(a, "^%-%-lines=%-")
++			or string.match(a, "^%-%-bytes=%-")
++		then
++			return false
++		end
++	end
++	return true
++end
++
++-- a redirection of standard output (`>f`, `> f`, `1>f`, `>>f`, `&>f`, `>&2`): the pipe after the command gets nothing
++local function stdoutAway(args: { string }): boolean
++	for _, a in args do
++		if string.match(a, "^1?>") or string.match(a, "^&>") then
++			return true
++		end
++	end
++	return false
++end
++
++local checkCommand: (words: { string }, depth: number, raw: string?, after: After?) -> Verdict
++
++function checkCommand(words: { string }, depth: number, raw: string?, after: After?): Verdict
+ 	local program, args, loop = resolve(words)
+ 	if
+ 		loop ~= nil
+@@ -510,7 +550,22 @@ function checkCommand(words: { string }, depth: number, raw: string?): Verdict
+ 		end
+ 		-- `caffeinate -t N <command>` runs the command: judge it
+ 		local rest = table.move(args, at + 2, #args, 1, {})
+-		return if #rest > 0 then checkCommand(rest, depth) else OK
++		return if #rest > 0 then checkCommand(rest, depth, nil, after) else OK
++	elseif
++		name == "yes"
++		and not CTX.monitor
++		and not (
++			after ~= nil
++			and (after.pattern or (after.pipe ~= nil and not stdoutAway(args) and headReads(after.pipe)))
++		)
++	then
++		-- `yes` writes for ever: only a `head` reading it straight from its pipe ends it (Decision 2 of c0191 names it a follow)
++		return refuse(
++			"follow",
++			name,
++			line,
++			`\`yes\` writes for ever unless a \`head\` reads it straight from its pipe (\`yes | head -3\`), and a foreground call past its timeout moves to the background and runs on. Pipe it into \`head\`, or run the whole pipeline as \`{CTX.zn} run --time <seconds> -- sh -c '<pipeline>'\` (up to 3600).`
++		)
+ 	elseif not CTX.monitor and FOLLOWERS(name, args) then
+ 		return refuse(
+ 			"follow",
+@@ -683,10 +738,14 @@ function checkText(text: string, depth: number): Verdict
+ 	if depth > 6 then
+ 		return OK -- too deep to read: the backstop covers it
+ 	end
+-	local commands, inner, _, texts = split(text)
++	local commands, inner, ends, texts = split(text)
+ 	local start = CTX.dir
++	local cases = 0 -- the `case` ... `esac` spans open at this command
+ 	for k, words in commands do
+-		local v = checkCommand(words, depth, texts[k])
++		local piped = ends[k] == "|" or ends[k] == "|&"
++		local after: After =
++			{ pipe = if piped then commands[k + 1] else nil, pattern = cases > 0 and ends[k] == ")" }
++		local v = checkCommand(words, depth, texts[k], after)
+ 		if not v.ok then
+ 			CTX.dir = start
+ 			return v
+@@ -694,6 +753,11 @@ function checkText(text: string, depth: number): Verdict
+ 		-- a `cd` moves the folder for the commands after it; an operand the scanner cannot resolve (a variable, `~`, `-`,
+ 		-- none) leaves it unknown, and an unknown folder refuses the tooling match
+ 		local program, args = resolve(words)
++		if program == "case" then
++			cases += 1
++		elseif program == "esac" and cases > 0 then
++			cases -= 1
++		end
+ 		if program ~= nil and basename(program) == "cd" and CTX.dir ~= nil then
+ 			local operand = args[1]
+ 			if operand == nil or string.find(operand, "[%$~`]") or operand == "-" then
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index a800c4198..7d9767fc3 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -146,7 +146,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+ 
+ ## Hooks (Claude Code only)
+ - After every `.luau` edit: stylua formats the file and selene lints it.
+-- Before every Bash or Monitor call (PreToolUse, `scripts/hooks/pre-bash.sh`): an interpreter with no time limit, inline Python that loops or starts an untimed process, a `while`/`until` loop, a follow (`tail -f`, `watch`), a job started with `&` and not waited for, and a background call with anything unbounded in it, are refused, naming the wrapper.
++- Before every Bash or Monitor call (PreToolUse, `scripts/hooks/pre-bash.sh`): an interpreter with no time limit, inline Python that loops or starts an untimed process, a `while`/`until` loop, a follow (`tail -f`, `watch`, a `yes` that no `head` reads), a job started with `&` and not waited for, and a background call with anything unbounded in it, are refused, naming the wrapper.
+ - At the end of a session (SessionEnd, `scripts/hooks/session-end.sh`): `./zn reap --session-end` stops what the session left running.
+ 
+ ## Lessons
+@@ -162,7 +162,7 @@ Run every probe, experiment, loop and background command you start yourself (any
+ - A `/clear` ends the background commands of the conversation it clears (the SessionEnd hook stops its tool shells).
+ - A subagent stays open while its background commands run, and a command it started stops at its own `./zn run` limit (at most an hour) or at the session's end; the session-end reaper catches anything left.
+ - `./zn run [--time S] [--cpu S] -- <command>` (`z-nile/lib/bounded.pl`, which needs `z-nile/lib/cpu.sh` beside it; started before the engine, also callable as `perl <checkout>/z-nile/lib/bounded.pl`): process group, `--time` wall-clock limit (default 60, at most 3600), `--cpu` CPU limit by `ulimit -t` (SIGXCPU; a process that ignores the signal is stopped by the wall-clock limit only; limits only ever lower), TERM then KILL, a watchdog if the runner dies, exit 124 (wall clock), 125 (CPU), 123 (the process that started it is gone), 128+n (a signal). A finished `./zn run`, gate or spec run appends one line to that checkout's `.cache/measure.tsv` and writes no tracked path. `./zn commit`, `./zn spend`, `./zn done` and `./zn land` fold the lines for the tickets they commit into `spend.d/<writer>.tsv`. A buffer that is never folded is dropped after 14 days, or when that checkout's `.cache` is deleted.
+-- **The hook** (`scripts/hooks/pre-bash.sh`, rules in `z-nile/engine/boundcmd.luau`, entry `z-nile/guard-bash.luau`; PreToolUse on `Bash|Monitor`, 10 s timeout, 2 s of CPU) refuses by class and names the exact `<checkout>/zn run` command: a bare `lune run` of anything but the gate's tooling (`TOOLING` in `boundcmd.luau`: a new Lune entry the gate runs joins it; each registered home's `tests/run` counts without an entry, from the registry, c0244), other interpreters, inline Python only when it loops or starts a process with no `timeout=` (a Python file is refused), the `perl alarm` recipe (it leaves the tool child behind), `while`/`until` loops, follows (`tail -f`, `watch`, `gh ... watch`), detachers (`nohup`, `setsid`, `disown`, `at`, `tmux new -d`, `screen -dm`, `launchctl submit`), a `&` job without `wait`, and a background call with anything unbounded in it. It **fails open** (any error exits 0): a seatbelt that can block all work on its own bug is worse than the leak it prevents, and the reaper is the backstop. A **Monitor** command is bounded by its own timeout, so loops and follows pass there; its interpreters and detachers do not. It reads one shell line, not scripts: a script run by name (`bash probe.sh`), `npm`/`make`, other interpreters, `yes` (it ends in a pipe) and spellings a one-line scanner cannot read pass. `Bash(./zn run:*)` is in `permissions.allow` (the user's decision), so **any command wrapped in `./zn run` runs without a permission prompt**; the wrapper's limits are the safeguard, not the prompt.
++- **The hook** (`scripts/hooks/pre-bash.sh`, rules in `z-nile/engine/boundcmd.luau`, entry `z-nile/guard-bash.luau`; PreToolUse on `Bash|Monitor`, 10 s timeout, 2 s of CPU) refuses by class and names the exact `<checkout>/zn run` command: a bare `lune run` of anything but the gate's tooling (`TOOLING` in `boundcmd.luau`: a new Lune entry the gate runs joins it; each registered home's `tests/run` counts without an entry, from the registry, c0244), other interpreters, inline Python only when it loops or starts a process with no `timeout=` (a Python file is refused), the `perl alarm` recipe (it leaves the tool child behind), `while`/`until` loops, follows (`tail -f`, `watch`, `gh ... watch`, and a `yes` that no `head` reads straight from its pipe, c0231), detachers (`nohup`, `setsid`, `disown`, `at`, `tmux new -d`, `screen -dm`, `launchctl submit`), a `&` job without `wait`, and a background call with anything unbounded in it. It **fails open** (any error exits 0): a seatbelt that can block all work on its own bug is worse than the leak it prevents, and the reaper is the backstop. A **Monitor** command is bounded by its own timeout, so loops and follows pass there; its interpreters and detachers do not. It reads one shell line, not scripts: a script run by name (`bash probe.sh`), `npm`/`make`, other interpreters and spellings a one-line scanner cannot read pass. `Bash(./zn run:*)` is in `permissions.allow` (the user's decision), so **any command wrapped in `./zn run` runs without a permission prompt**; the wrapper's limits are the safeguard, not the prompt.
+ - **The reaper** (`./zn reap`, `z-nile/engine/reap.luau`) treats a process as a leak only on an explicit yes, in one of three ways: *marked* (a non-system program whose environment carries a `ZN_BOUNDED_DEADLINE` that passed), *orphaned* (a tool program, interpreter, tool shell or `sleep`/`tail`/`gh`/`grep`/`watch` older than 60 s whose ancestors up to launchd are all of that kind), or *session end* (`--session-end`: the ending session's own tool shells, direct children of its `claude` process that source a shell snapshot, with everything below them; MCP servers and the status line are never touched). Scope: the user's processes, working in this repository's checkout and worktrees or its Claude session folders and the runner's temp folders (the session rule goes by ancestry wherever the shell went); never the reaper or its ancestors, a detached `git maintenance` or what runs below it, or an application (macOS's framework `Python` is read as `python3`). Call sites: `--auto` at the start of the gate and `./zn sync` (quiet, does nothing in a check run, never fails), SessionEnd (`scripts/hooks/session-end.sh`, skips `resume`, logs to `${XDG_STATE_HOME:-~/.local/state}/z-nile/reaped.log`), and by hand (`--dry-run` first). Its `ps` calls run with `LC_ALL=C`. macOS only.
+ - **CPU limits only lower** (`zn_lower_cpu` in `z-nile/lib/cpu.sh`): the spec runner puts `ulimit -t` of `PICKMAN_SPEC_CPU` (default 1200 s) on every spec process, `./zn` puts `ZN_ENGINE_CPU` (default 1800 s) on the engine, the hook entry gets 2 s and the session-end hook 15 s, and `./zn run --cpu` its own; a caller already under a lower limit keeps it. A limit is SIGXCPU only: a process that ignores the signal, or a loop that spends its time in system calls, is not stopped by it, so the wall-clock limit, the watchdog and the reaper are the other lines.
+ - **What none of this can do:** stop a command the hook cannot read, stop a process that calls `setsid` and is a system binary (the reaper cannot see its environment), or stop a syscall-heavy loop by CPU time alone. A subagent's command stops at its own `./zn run` limit.
