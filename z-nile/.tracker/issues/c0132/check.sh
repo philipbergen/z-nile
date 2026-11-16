@@ -89,9 +89,9 @@ real_readings() {
   top=$(git rev-parse --show-toplevel) || return 1
   fx="$(pwd -P)/.cache/c0132-real"
   rm -rf "$fx" && mkdir -p "$fx/repo/z-nile/tests/probe" "$fx/repo/z-nile/lib" || return 1
-  # the runner and its guards: what fence-leftovers' fixture copies, every path built from $top
+  # the runner and its guards: what fence-leftovers' fixture copies, plus bounded.pl, cpu.sh and measure.pl, which the runner starts through since R0079/c0191 (re-prep), every path built from $top
   cp -R "$top/z-nile/tests/run.luau" "$top/z-nile/tests/lib" "$fx/repo/z-nile/tests/" || return 1
-  cp -R "$top/z-nile/lib/ac.sh" "$top/z-nile/lib/fence.sh" "$top/z-nile/lib/git-hooks" "$fx/repo/z-nile/lib/" || return 1
+  cp -R "$top/z-nile/lib/ac.sh" "$top/z-nile/lib/fence.sh" "$top/z-nile/lib/bounded.pl" "$top/z-nile/lib/cpu.sh" "$top/z-nile/lib/measure.pl" "$top/z-nile/lib/git-hooks" "$fx/repo/z-nile/lib/" || return 1
   cp "$top/z-nile/.luaurc" "$fx/repo/z-nile/" && cp "$top/.luaurc" "$top/rokit.toml" "$top/.gitignore" "$fx/repo/" || return 1
   probe() { # $1: name, $2: the perl the probe spec runs (from the fixture's home, so .cache/group is the fixture's)
     printf '%s\n' '--!strict' 'local process = require("@lune/process")' 'local t = require("@tests/lib/t")' \
