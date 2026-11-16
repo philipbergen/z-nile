@@ -343,6 +343,25 @@ local function treeOf(p: Proc, procs: { Proc }): { Proc }
 	return out
 end
 
+-- Whether `p`, or an ancestor of it, is a supervisor the state file names (or the launcher shim above it): the orphan rule
+-- leaves it and its own helpers alone (the lock holder is a perl below it); the deadline rule does not.
+local function underExempt(p: Proc, exempt: { [number]: boolean }, byPid: { [number]: Proc }): boolean
+	local at: Proc? = p
+	for _ = 1, 16 do
+		if at == nil then
+			return false
+		end
+		if exempt[at.pid] then
+			return true
+		end
+		if at.ppid <= 1 then
+			return false
+		end
+		at = byPid[at.ppid]
+	end
+	return false
+end
+
 -- The leaks among `procs` (each with `cwd` filled in where it could be read), each with why and its descendants.
 function reap.decide(procs: { Proc }, opts: Options): { Target }
 	local byPid: { [number]: Proc } = {}
@@ -364,13 +383,7 @@ function reap.decide(procs: { Proc }, opts: Options): { Target }
 		end
 	end
 	for _, p in procs do
-		if
-			p.pid <= 1
-			or p.uid ~= opts.uid
-			or table.find(opts.self, p.pid)
-			or underLegitGit(p, byPid)
-			or exempt[p.pid] == true
-		then
+		if p.pid <= 1 or p.uid ~= opts.uid or table.find(opts.self, p.pid) or underLegitGit(p, byPid) then
 			continue
 		end
 		local scoped = inScope(p.cwd, opts.roots, opts.scratch)
@@ -406,6 +419,7 @@ function reap.decide(procs: { Proc }, opts: Options): { Target }
 			and (reap.ORPHANABLE[name] or reap.isToolShell(p.command))
 			and p.age >= opts.minAge
 			and ownerless(p, byPid)
+			and not underExempt(p, exempt, byPid)
 		then
 			why = "orphaned (its parent is gone)"
 		end

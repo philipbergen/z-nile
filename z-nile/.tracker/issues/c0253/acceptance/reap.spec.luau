@@ -125,4 +125,19 @@ return t.spec("c0253 the reaper leaves the supervisor alone", function(it)
 			t.expect(table.find(gone, 20) ~= nil).toBe(true)
 		end
 	)
+
+	it(
+		"AC10: the supervisor's own helper below it (its lock holder) is not an orphan, and a stray helper beside it is",
+		function()
+			local procs = {
+				proc(9, 1, SUPERVISOR),
+				proc(10, 9, "/x/lune/0.10.5/lune run z-nile/engine/main -- work run"),
+				proc(11, 10, "perl -MFcntl=:flock -e open(my $l, '>>', $ARGV[0]); sleep"),
+				proc(21, 1, "perl -MFcntl=:flock -e open(my $l, '>>', $ARGV[0]); sleep"),
+			}
+			local gone = pidsOf(procs, { 10 })
+			t.expect(table.find(gone, 11)).toBe(nil)
+			t.expect(table.find(gone, 21) ~= nil).toBe(true)
+		end
+	)
 end)
