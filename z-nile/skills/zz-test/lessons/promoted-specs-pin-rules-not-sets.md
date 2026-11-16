@@ -2,7 +2,7 @@
 title: A promoted spec pins the rule, not today's set
 when: both
 tags: [specs, regression, promotion]
-check: Does any promoted case assert the exact current set of something later work is expected to extend (skills, folders, links, registry entries, lessons), instead of the rule each member must meet?
+check: Does any promoted case assert the exact current set of something later work is expected to extend (skills, folders, links, registry entries, lessons), instead of the rule each member must meet? And for structure (a module's requires, a feature's edges, a key map), does it pin the rule (requires stay inside Logic, the needed one is among them, the edge is declared) rather than an exact count, and where an exact set is meant, does the Design call it a contract?
 ---
 A spec that says "these are exactly the ten skills" or "pickman's skills hold no lesson" is true on the day it is promoted and turns red the day a planned issue adds the eleventh skill or the first lesson. That issue must then override it, or worse, an unrelated raft's `done` gate goes red.
 
@@ -15,3 +15,5 @@ c0264 design review 009 F9: a promoted case required a label naming one capture 
 **Also:** d0297 design review 001 F3: a wiring case asserted that exactly `z-nile/engine/main.luau` holds the flag and located `function cmd.finish(` by name, while c0180 plans to split `main.luau` into one module per command. Pin where the use may be by its content (inside a selector call's argv, in the file that writes `results.txt`), and keep a correct variant that moves the function to its own module.
 
 c0230 design review 001 F5: a promoted docs spec pinned a lesson's `check` and body word for word, and c0181 is prepared to rewrite every lesson's check and cap its body, so either landing order turned one of them red. Lesson text is meant to change: pin its wording only in check.sh before `done`, and in the suite only that the lesson a tool names exists.
+
+f0208 design review 001 F8: a place spec pinned "Play requires only Card", "Modes requires only Play" and the exact edge list, though portal's meta spec already enforces declared edges and Logic-only requires; it now pins that the requires stay inside Logic (or Shared) and include the needed module, and that the edge is among the declared ones. The card's exact seven keys stay pinned on purpose: the Design calls them a contract the user rules on.
