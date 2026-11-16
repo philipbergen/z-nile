@@ -1,0 +1,71 @@
+diff --git a/z-nile/tests/acceptance/c0084/spend-command.spec.luau b/z-nile/tests/acceptance/c0084/spend-command.spec.luau
+index 2c7d4ed74..861bce204 100644
+--- a/z-nile/tests/acceptance/c0084/spend-command.spec.luau
++++ b/z-nile/tests/acceptance/c0084/spend-command.spec.luau
+@@ -1,6 +1,8 @@
+ --!strict
+ -- c0084: `tracker.sh spend` records a phase's spend (capture, prep, design-review, deliver) outside an active raft. It
+--- commits one measured row per file under the item's spend.d/ on the current branch and pushes nothing to origin/main.
++-- commits one measured row per file under the item's spend.d/ on the current branch and pushes nothing to origin/main,
++-- but for one row: a deliver row for an item that is done on origin/main is also published there (c0348; its rules
++-- are pinned in tests/acceptance/c0348/deliver-publish.spec.luau).
+ -- --time and --tokens are accepted and ignored. An existing spend.md is left as it was.
+ -- Fixture under .cache/c0084-spend: a seed with this tree's tooling, a bare origin, a main clone, a second clone, and
+ -- a prep worktree made by `tracker.sh worktree`. Ids come from `new issue` and `new raft`, never from literals.
+@@ -379,7 +381,9 @@ return t.spec("tracker spend", function(it)
+ 		trOk(prep, { "sync" })
+ 		local before, head = tip(), git(prep, { "rev-parse", "HEAD" })
+ 		trOk(prep, { "spend", g, "--phase", "deliver", "--time", "3" })
+-		t.expect(tip()).toBe(before)
++		-- c0348 override: the item is done on origin/main, so the row is published there too, as one commit
++		t.expect(git(origin, { "rev-parse", "main~1" })).toBe(before)
++		t.expect(git(origin, { "log", "-1", "--format=%s", "main" })).toBe(`tracker: spend {g} deliver`)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 		t.expect(
+ 			string.find(branchChanged(head), `pickman/.tracker/issues/done/{g}/spend.d/`, 1, true) ~= nil
+diff --git a/z-nile/tests/acceptance/d0333/commit-land.spec.luau b/z-nile/tests/acceptance/d0333/commit-land.spec.luau
+index 5be5d3e5a..d76f99264 100644
+--- a/z-nile/tests/acceptance/d0333/commit-land.spec.luau
++++ b/z-nile/tests/acceptance/d0333/commit-land.spec.luau
+@@ -368,4 +368,41 @@ return t.spec("d0333 a raft lands with ./zn commit after finish", function(it)
+ 		t.expect(has(rows, "R0010: final-review-001")).toBe(true)
+ 		t.expect(has(rows, "R0010: final-refute-001")).toBe(true)
+ 	end)
++
++	it(
++		"c0348: after done, ./zn spend --phase deliver puts its row on origin/main with no push by hand",
++		function()
++			-- zz-execute Phase 6 step 2, in the raft's worktree, as the stack was left by `./zn done`
++			local file = "pickman/.tracker/issues/done/c0010/spend.d"
++			local before = git(f.origin, { "rev-parse", "main" })
++			local head = git(wt, { "rev-parse", "HEAD" })
++			local rowsBefore = git(f.origin, { "grep", "-c", "-e", "deliver", "main", "--", file })
++			local out = znOk({ "spend", "R0010", "--phase", "deliver" })
++			-- one commit on origin's main, made by the command: nothing here pushes
++			local tip = git(f.origin, { "rev-parse", "main" })
++			t.expect(git(f.origin, { "rev-parse", "main~1" })).toBe(before)
++			t.expect(git(f.origin, { "log", "-1", "--format=%s", "main" }))
++				.toBe("tracker: spend R0010 deliver")
++			t.expect(has(out, `published R0010 deliver to origin/main {tip}`)).toBe(true)
++			-- it changes the landed issue's measured rows and nothing else, and only by adding one deliver row
++			local names = git(f.origin, { "diff", "--name-only", before, tip })
++			t.expect(
++				string.match(names, "^pickman/%.tracker/issues/done/c0010/spend%.d/[%w._%-]+%.tsv$") ~= nil
++			)
++				.toBe(true)
++			local stat = git(f.origin, { "diff", "--numstat", before, tip })
++			t.expect(string.match(stat, "^1\t0\t") ~= nil).toBe(true)
++			local added = git(f.origin, { "diff", "-U0", before, tip })
++			t.expect(string.match(added, "\n%+[^\n]*\tdeliver\t") ~= nil).toBe(true)
++			local count = function(text: string): number
++				return tonumber(string.match(text, ":(%d+)%s*$")) or -1
++			end
++			t.expect(count(git(f.origin, { "grep", "-c", "-e", "deliver", "main", "--", file })))
++				.toBe(count(rowsBefore) + 1)
++			-- the worktree holds the same row in one commit of its own, and is clean
++			t.expect(git(wt, { "rev-parse", "HEAD~1" })).toBe(head)
++			t.expect(git(wt, { "status", "--porcelain" })).toBe("")
++			t.expect(git(wt, { "show", `HEAD:{names}` })).toBe(git(f.origin, { "show", `main:{names}` }))
++		end
++	)
+ end)
