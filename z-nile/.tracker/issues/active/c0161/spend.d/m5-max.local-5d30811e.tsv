@@ -1,0 +1,20 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-16 00:04	1 spec	0	0	test			1.229	0.760		1.229	tokens,ai
+2026-11-16 00:04	1 spec	0	0	test			1.844	1.250		1.844	tokens,ai
+2026-11-16 00:05	1 spec	0	0	test			38.500	31.370		38.500	tokens,ai
+2026-11-16 00:06	1 spec	0	0	test			47.428	38.820		47.428	tokens,ai
+2026-11-16 00:06	1 spec	0	0	test			34.208	24.140		34.208	tokens,ai
+2026-11-16 00:07	1 spec	0	0	test			48.941	39.570		48.941	tokens,ai
+2026-11-16 00:07	1 spec	0	0	test			1.025	0.670		1.025	tokens,ai
+2026-11-16 00:08	1 spec	0	0	test			33.887	30.030		33.887	tokens,ai
+2026-11-16 00:08	1 spec	0	0	test			1.231	0.740		1.231	tokens,ai
+2026-11-16 00:08	1 spec	0	0	test			35.897	27.640		35.897	tokens,ai
+2026-11-16 00:08	1 spec	0	0	test			2.030	1.050		2.030	tokens,ai
+2026-11-16 00:11	5 specs	0	0	test			169.742	265.030		169.742	tokens,ai
+2026-11-16 00:12	1 spec	0	0	test			26.847	23.310		26.847	tokens,ai
+2026-11-16 00:13	1 spec	0	0	test			52.100	44.610		52.100	tokens,ai
+2026-11-16 00:14	1 spec	0	0	test			35.646	23.340		35.646	tokens,ai
+2026-11-16 00:15	1 spec	0	0	test			56.942	32.090		56.942	tokens,ai
+2026-11-16 00:16	1 spec	0	0	test			61.412	33.160		61.412	tokens,ai
+2026-11-16 00:16	5 runs	0	0	other			603.789	482.770			tokens,ai
+2026-11-16 00:19	c0161: design record engine, fixtures, skills (docs AC4 blocked)	300	14	build							tokens,wall,cpu,ai

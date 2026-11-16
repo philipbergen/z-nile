@@ -112,6 +112,7 @@ return t.spec("tracker commands publish state to origin/main (claim)", function(
 			.toBe(false)
 		local c0240 = `{cap}/pickman/.tracker/issues/c0240/c0240.md`
 		fs.writeFile(c0240, (string.gsub(fs.readFile(c0240), "design: draft", "design: ready")))
+		fs.writeFile(`{cap}/pickman/.tracker/issues/c0240/design-review-001.md`, "# Review 001\n\nVerdict: approve\n\nDesign record: " .. trOk(cap, { "design-record", "c0240" }) .. "\n")
 		trOk(cap, { "status", "c0240", "prepared" })
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(has(fs.readFile(`{cap}/pickman/.tracker/issues/c0240/c0240.md`), "status: prepared"))

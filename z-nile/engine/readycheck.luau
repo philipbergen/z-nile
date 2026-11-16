@@ -13,6 +13,7 @@ local approval = require("./approval")
 local contract = require("./contract")
 local openlist = require("./openlist")
 local raftplan = require("./raftplan")
+local statusLib = require("./status")
 local store = require("./store")
 
 local readycheck = {}
@@ -224,6 +225,12 @@ function readycheck.reason(r: Raft): (string?, boolean)
 		local memberGap = designAndCheck(m.id, m.design, m.doc, m.files)
 		if memberGap then
 			return memberGap, true
+		end
+		-- c0161, "Check at next read": a member whose newest design round quotes a record must still match it. A member
+		-- none of whose rounds quotes one predates the rule and is exempt. `./zn ready` and `./zn work next` share this.
+		local stale = statusLib.preparedReadProblem(m.files, raftplan.designRecord(m.id, m.files))
+		if stale then
+			return `{m.id} {stale}`, true
 		end
 		local parts, err = contract.build(m.doc, m.files["check.sh"] or "", m.specs)
 		if not parts then
