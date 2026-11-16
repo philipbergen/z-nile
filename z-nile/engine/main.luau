@@ -5470,7 +5470,6 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 			fail(off)
 		end
 	end
-	if not runCheck(raft) then
 	local bindEnv: { [string]: string } = {}
 	for k, v in process.env do
 		if type(v) == "string" and k ~= "ZN_BIND_EARLY" then

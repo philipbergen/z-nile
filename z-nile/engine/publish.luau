@@ -8,9 +8,9 @@ local ledger = require("./ledger")
 local pathsLib = require("./paths")
 local process = require("@lune/process")
 local projects = require("./projects")
+local provenance = require("./provenance")
 local reviewmodel = require("./reviewmodel")
 local store = require("./store")
-local provenance = require("./provenance")
 local task = require("@lune/task")
 
 local publish = {}
@@ -841,7 +841,8 @@ function publish.commit(
 			end
 			if existing then
 				local before, after =
-					withoutStatus(withoutMark(existing), escalation), withoutStatus(withoutMark(c.content), escalation)
+					withoutStatus(withoutMark(existing), escalation),
+					withoutStatus(withoutMark(c.content), escalation)
 				if not before or not after or before ~= after then
 					return fail(
 						`{c.path}: a published change to an existing document may only edit its status: line`
