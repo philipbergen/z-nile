@@ -13,18 +13,32 @@
 --   * `task.spawn`, `task.defer`, `task.delay` and `task.wait`, driven by the fake clock (`tick`);
 --   * an error in a thread the fake resumes later (a spawned or deferred function, a timer, a waiter) does not
 --     unwind whoever started it, as in Roblox, but the server call the spec made fails with it afterwards;
---   * `os.clock`, `Instance.new`, `Enum`, `UDim2`, `Vector2` and `Color3` as plain data.
+--   * `os.clock`, `Instance.new`, `Enum`, `UDim2`, `Vector2`, `Vector3` and `Color3` as plain data;
+--   * f0109: `:SetAttribute` (refusing what Roblox refuses: a name that is not 1-100 letters, digits or
+--     underscores, or one starting with RBX, which Roblox reserves, and a table, function, thread or Instance
+--     value), `:IsA` (only the classes the specs use: a class is itself, and a Part is a BasePart), and
+--     `fake.module`, which runs one client view module's real source (MazeView, DangerHud) with the real Logic, a
+--     `workspace` (with a CurrentCamera), and the client services a view asks for: GuiService (`GetInsetArea`: no
+--     insets), Players (a LocalPlayer with a PlayerGui), RunService (`RenderStepped`, a signal the spec fires) and
+--     UserInputService (`TouchEnabled`); a ScreenGui's AbsoluteSize is the screen; and, for these view modules
+--     only, `UDim`, `UDim2.fromOffset`, `Vector3` and `NumberSequence(Keypoint)` as plain data (the lobby's
+--     environment is unchanged: f0109's re-run of f0061's mutants, E8). `:SetAttribute` refuses Roblox datatypes
+--     (Color3, Vector3, UDim2 …) as values, which Roblox accepts, because they are plain tables here; no adapter
+--     stores one today (tests/place/fakeengine-attributes.spec).
 -- The fake must stay exact in both directions: it must not accept less than it does now (a correct idiom
 -- that works today must keep working), and it must not accept more (a wrong adapter that fails today must
 -- keep failing: the mutants in f0061's Rules and mutants table that depend on it are re-run, as exact
 -- substitutions, whenever it changes).
 -- It models nothing about what the real engine does with TeleportAsync (E7 in f0061).
+local Awareness = require("@logic/Awareness")
 local Flow = require("@logic/Flow")
+local Hud = require("@logic/Hud")
 local Lobby = require("@logic/Lobby")
 local Maze = require("@logic/Maze")
 local Pad = require("@logic/Pad")
 local Session = require("@logic/Session")
 local Travel = require("@logic/Travel")
+local View = require("@logic/View")
 local luau = require("@lune/luau")
 
 local fake = {}
@@ -55,8 +69,17 @@ function fake.signal(): Signal
 	return s
 end
 
-local LOGIC: { [string]: any } =
-	{ Travel = Travel, Lobby = Lobby, Flow = Flow, Maze = Maze, Pad = Pad, Session = Session }
+local LOGIC: { [string]: any } = {
+	Travel = Travel,
+	Lobby = Lobby,
+	Flow = Flow,
+	Maze = Maze,
+	Pad = Pad,
+	Session = Session,
+	View = View,
+	Awareness = Awareness,
+	Hud = Hud,
+}
 
 -- The require an adapter gets: the real Logic modules, or `overrides` for some of them (a spy on Session, say);
 -- an override can only replace a module the fake already serves.
@@ -133,6 +156,31 @@ function fake.node(className: string, name: string?): any
 	end
 	raw.GetAttribute = function(_: any, attribute: string): any
 		return raw.attributes[attribute]
+	end
+	raw.SetAttribute = function(_: any, attribute: string, value: any)
+		if
+			type(attribute) ~= "string"
+			or #attribute == 0
+			or #attribute > 100
+			or string.find(attribute, "[^%w_]")
+			or string.sub(attribute, 1, 3) == "RBX"
+		then
+			error(`fake engine: {attribute} is not a valid attribute name`, 0)
+		end
+		local kind = type(value)
+		if kind == "table" or kind == "function" or kind == "thread" or raws[value] ~= nil then
+			error(
+				`fake engine: an attribute can't hold a value of type {if raws[value]
+					then "Instance"
+					else kind}`,
+				0
+			)
+		end
+		raw.attributes[attribute] = value
+	end
+	raw.IsA = function(_: any, class: string): boolean
+		return raw.ClassName == class
+			or (class == "BasePart" and (raw.ClassName == "Part" or raw.ClassName == "WedgePart"))
 	end
 	setmetatable(proxy, {
 		__index = function(_: any, key: any): any
@@ -251,6 +299,81 @@ local function standardEnv(services: { [string]: any }, overrides: { [string]: a
 			end,
 		},
 	}
+end
+
+export type View = {
+	workspace: any,
+	playerGui: any,
+	renderStepped: Signal, -- RunService.RenderStepped: the spec fires it
+	input: { TouchEnabled: boolean },
+}
+
+-- One client view module's real source (MazeView, DangerHud) under the standard environment with the client
+-- services a view asks for; returns the module and its view world. A ScreenGui's AbsoluteSize is `screen`.
+function fake.module(source: string, name: string, screen: { X: number, Y: number }?): (any, View)
+	local size = screen or { X = 1280, Y = 720 }
+	local workspace = fake.node("Workspace", "Workspace")
+	workspace.CurrentCamera = { FieldOfView = 70 }
+	local player = fake.node("Player", "LocalPlayer")
+	local playerGui = child(player, "PlayerGui", "PlayerGui")
+	local renderStepped = fake.signal()
+	local input = { TouchEnabled = false }
+	local services = {
+		GuiService = {
+			GetInsetArea = function(_: any, _which: any): any
+				return { Min = { X = 0, Y = 0 }, Max = { X = size.X, Y = size.Y } }
+			end,
+		},
+		Players = { LocalPlayer = player },
+		RunService = { RenderStepped = renderStepped },
+		UserInputService = input,
+	}
+	local env = standardEnv(services)
+	env.workspace = workspace
+	-- the views' extra constructors, only here: the lobby's environment stays exactly as f0061 specified it (an
+	-- off-screen button placed by fromOffset must keep failing f0061's specs)
+	env.UDim = {
+		new = function(scale: number, offset: number): any
+			return { Scale = scale, Offset = offset }
+		end,
+	}
+	env.NumberSequence = {
+		new = function(points: any): any
+			return { Keypoints = points }
+		end,
+	}
+	env.NumberSequenceKeypoint = {
+		new = function(time: number, value: number): any
+			return { Time = time, Value = value }
+		end,
+	}
+	env.Vector3 = {
+		new = function(x: number, y: number, z: number): any
+			return { X = x, Y = y, Z = z }
+		end,
+	}
+	local udim2 = table.clone(env.UDim2)
+	udim2.fromOffset = function(x: number, y: number): any
+		return { X = { Scale = 0, Offset = x }, Y = { Scale = 0, Offset = y } }
+	end
+	env.UDim2 = udim2
+	local new = env.Instance.new
+	env.Instance = {
+		new = function(className: string): any
+			local n = new(className)
+			if className == "ScreenGui" then
+				n.AbsoluteSize = { X = size.X, Y = size.Y }
+			end
+			return n
+		end,
+	}
+	return load(source, env, name),
+		{
+			workspace = workspace,
+			playerGui = playerGui,
+			renderStepped = renderStepped,
+			input = input,
+		}
 end
 
 -- The server ------------------------------------------------------------------------------------------------

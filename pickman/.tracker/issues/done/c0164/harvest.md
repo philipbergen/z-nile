@@ -1,0 +1,15 @@
+- design-review-001 F1: zz-test/seed-every-enumerated-case
+- design-review-001 F2: z-design/mutation-runner-runs-correct-variants
+- design-review-001 F3: z-design/reasoned-rows-claim-testable-reasons
+- design-review-002 F1: zz-test/seed-every-enumerated-case
+- design-review-002 F2: z-design/rerun-skipped-checks-after-edits
+- design-review-003 F1: zz-test/seed-every-enumerated-case
+- design-review-003 F2: zz-test/seed-every-enumerated-case
+- design-review-003 F3: z-design/in-flight-bases-pin-their-source
+- design-review-003 F4: z-design/rerun-skipped-checks-after-edits
+- note design review 002's candidate (try a guard on each field the behaviour case holds constant, against the case, the deleted pin and every kept spec): zz-test/source-pins-name-what-the-design-names
+- design-review-004 F1: zz-test/source-pins-name-what-the-design-names, zz-test/seed-every-enumerated-case
+- design-review-004 F2: zz-test/seed-every-enumerated-case
+- design-review-005 F1: zz-test/seed-every-enumerated-case, zz-test/source-pins-name-what-the-design-names
+- design-review-005 F2: z-design/rerun-skipped-checks-after-edits
+- design-review-005 F3: zz-test/seed-every-enumerated-case

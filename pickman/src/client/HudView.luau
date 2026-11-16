@@ -18,6 +18,7 @@ local WHITE = Color3.fromRGB(255, 255, 255)
 local YELLOW = Color3.fromRGB(255, 255, 0)
 local BLUE = Color3.fromRGB(33, 33, 222)
 local CYAN = Color3.fromRGB(0, 255, 255)
+local GOLD = Color3.fromRGB(255, 215, 0) -- the marked walls' gold (f0126)
 local BLACK = Color3.fromRGB(0, 0, 0)
 
 local HudView = {}
@@ -33,11 +34,16 @@ local snapAt: Touch.Rect? = nil
 type Button = { frame: Frame, caption: TextLabel }
 local fireButton: Button? = nil
 local hopButton: Button? = nil
+local pickButton: Button? = nil
 local buttonsAt: Touch.Buttons? = nil
 -- the screen size and inset of the last layout, so a change of any of them re-lays
 type Key = { sw: number, sh: number, inset: Hud.Inset }
 local laidFor: Key? = nil
 local shots: Frame? = nil
+-- f0126: the pick bar, its fill and the boon banner, made on the first frame that needs them
+local pickBar: Frame? = nil
+local pickFill: Frame? = nil
+local banner: TextLabel? = nil
 local shownShots = 0
 
 local function label(name: string, align: Enum.TextXAlignment, parent: Instance): TextLabel
@@ -102,6 +108,13 @@ local function lay(sw: number, sh: number, inset: Hud.Inset)
 		bar.Size = UDim2.fromOffset(blocks.power.w, blocks.power.h)
 		bar.Position = UDim2.fromOffset(blocks.power.x, blocks.power.y)
 	end
+	if pickBar and banner then
+		local barBox, boonBox = Hud.pickBox(l), Hud.boonBox(l)
+		pickBar.Position = UDim2.fromOffset(barBox.x, barBox.y)
+		pickBar.Size = UDim2.fromOffset(barBox.w, barBox.h)
+		banner.Position = UDim2.fromOffset(boonBox.x, boonBox.y)
+		banner.Size = UDim2.fromOffset(boonBox.w, boonBox.h)
+	end
 	local rect = Touch.snapRect(l)
 	snapAt = rect
 	if snapFrame then
@@ -112,6 +125,7 @@ local function lay(sw: number, sh: number, inset: Hud.Inset)
 	buttonsAt = placed
 	place(fireButton, placed.fire, l.textSize)
 	place(hopButton, placed.hop, l.textSize)
+	place(pickButton, placed.pick, l.textSize)
 end
 
 -- A touch button (f0110): a drawn disc with a caption. Like the snap control it takes no input itself.
@@ -198,6 +212,7 @@ function HudView.start()
 	snapFrame = s
 	fireButton = button("Fire", "FIRE", CYAN, gui)
 	hopButton = button("Hop", "JUMP", WHITE, gui)
+	pickButton = button("Pick", "PICK", GOLD, gui) -- f0126: a wall pick, gold as the walls it picks
 	gui.Parent = (Players.LocalPlayer :: Player):WaitForChild("PlayerGui")
 	local camera = workspace.CurrentCamera :: Camera
 	-- polled: the first frames can report an empty area, and a half turn swaps the side insets without
@@ -250,6 +265,46 @@ function HudView.show(play: Session.PlayFrame)
 		bar.Visible = m.power > 0
 		fill.Size = UDim2.fromScale(m.power, 1)
 	end
+end
+
+-- f0126: the pick under way as a gold bar filling up, and the boon a finished pick granted as a banner.
+function HudView.pick(pick: Session.Pick?, boon: Session.BoonGrant?, tick: number)
+	local gui = if lives then lives.Parent else nil
+	if gui == nil then
+		return
+	end
+	if pickBar == nil then
+		local b = Instance.new("Frame")
+		b.Name = "PickBar"
+		b.BackgroundColor3 = Color3.fromRGB(60, 45, 0)
+		b.BorderSizePixel = 0
+		local f = Instance.new("Frame")
+		f.Name = "Fill"
+		f.BackgroundColor3 = GOLD
+		f.BorderSizePixel = 0
+		f.Parent = b
+		b.Parent = gui
+		pickBar, pickFill = b, f
+		local l = Instance.new("TextLabel")
+		l.Name = "Boon"
+		l.BackgroundTransparency = 1
+		l.TextScaled = true
+		l.Font = Enum.Font.Arcade
+		l.TextColor3 = GOLD
+		l.Parent = gui
+		banner = l
+		local last = laidFor
+		if last then
+			lay(last.sw, last.sh, last.inset)
+		end
+	end
+	local share = Hud.pickProgress(pick, tick)
+	local b, f, l = pickBar :: Frame, pickFill :: Frame, banner :: TextLabel
+	b.Visible = share ~= nil
+	f.Size = UDim2.fromScale(share or 0, 1)
+	local text = Hud.boonBanner(boon, tick)
+	l.Visible = text ~= nil
+	l.Text = text or ""
 end
 
 -- The shots held, from the frame (nil before a server that sends them: none).

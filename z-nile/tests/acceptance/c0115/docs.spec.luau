@@ -6,7 +6,9 @@
 -- naming rule and the `skills` command in every list a command joins; every skill's lessons paragraph names the real
 -- folder; AGENTS.md and SETUP.md name the new skills and commands; `./zn`'s usage names `skills`. Reads the real tree.
 local process = require("@lune/process")
+local projects = require("@znile/engine/projects")
 local realfs = require("@lune/fs")
+local skills = require("@znile/engine/skills")
 -- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local function top(p: string): string
@@ -70,7 +72,7 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
 		at(run, 'cd "$(./zn worktree <R>)"', "z-run")
 		at(
 			run,
-			"**Hand off.** Follow the prompt as your instructions, from its first line: it carries the zz-execute skill",
+			"**Hand off.** Follow the prompt as your instructions, from its first line: it names `z-nile/skills/zz-execute/SKILL.md`",
 			"z-run"
 		)
 		local exec = read(`{Z}/zz-execute/SKILL.md`)
@@ -78,7 +80,7 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
 		at(exec, "\n## Stop conditions", "zz-execute")
 		at(
 			read("z-nile/templates/prompt.md"),
-			"1. **Follow the `zz-execute` skill below, step by step.**",
+			"1. **Follow `z-nile/skills/zz-execute/SKILL.md` step by step.**",
 			"the prompt template"
 		)
 	end)
@@ -182,8 +184,17 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
 		for _, n in ALL do
 			table.insert(dirs, `{Z}/{n}`)
 		end
-		table.insert(dirs, "pickman/skills/pickman-arch")
-		table.insert(dirs, "pickman/skills/pickman-test")
+		-- c0184 override: every other project's skills too, from the registry
+		for _, folder in skills.folders(projects.load(TOP)) do
+			if folder.project ~= "z-nile" then
+				for _, n in realfs.readDir(`{TOP}/{folder.path}`) do
+					-- as skills.load reads it: no dot-entries (.DS_Store), only folders
+					if string.sub(n, 1, 1) ~= "." and realfs.isDir(`{TOP}/{folder.path}/{n}`) then
+						table.insert(dirs, `{folder.path}/{n}`)
+					end
+				end
+			end
+		end
 		for _, d in dirs do
 			local s = section(read(`{d}/SKILL.md`), "## Lessons")
 			at(
@@ -192,7 +203,12 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
 				d
 			)
 			at(s, "never through a `.claude/skills/` link, which git can't add through", d)
-			at(s, `./zn lessons --skill {string.match(d, "[^/]+$")} --full`, d)
+			at(
+				s,
+				"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
+				d
+			)
+			t.expect(string.find(s, "--full", 1, true) == nil).toBe(true)
 		end
 	end)
 

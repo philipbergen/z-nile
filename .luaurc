@@ -1,8 +1,6 @@
 {
   "languageMode": "strict",
   "aliases": {
-    "logic": "./pickman/src/shared/Logic",
-    "shared": "./pickman/src/shared",
     "tests": "./z-nile/tests",
     "scripts": "./scripts",
     "znile": "./z-nile",

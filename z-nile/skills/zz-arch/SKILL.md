@@ -12,6 +12,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
 |---|---|
 | `zn` | the command, at the repository root: it runs `z-nile/engine/main` |
 | `z-nile/engine/` | the tracker engine. `main.luau` is the CLI: it parses arguments and does the git, file and process work. Every other module is one concern (`store`, `publish`, `projects`, `lessons`, `skills`, `trail`, …) |
+| `z-nile/lib/bounded.pl`, `z-nile/lib/cpu.sh`, `z-nile/engine/reap.luau`, `z-nile/engine/boundcmd.luau`, `z-nile/guard-bash.luau` | the bounded runner, the reaper's rules, the hook's rules and its entry |
 | `z-nile/lib/` | what the gate, the runner and the engine share: `ac.sh` (every `check.sh`), `fence.sh` and `git-hooks/` (the repository guards), `par.sh`, `sh.luau`, `graph.luau`, `changed.luau` |
 | `z-nile/skills/` | z-nile's skills: the pipeline (`z-…`) and the skills called from inside a step (`zz-…`), linked into `.claude/skills/` by `./zn skills` |
 | `z-nile/templates/` | the item, raft and prompt templates |
@@ -29,6 +30,8 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
 7. **Guards fail closed.** A guard acts only on its one explicit "no" answer and treats every other outcome as guarded. Configuration that widens a guard is read from `origin/main`, never from the working tree a branch can edit.
 8. **Every refusal names the path, the item or the rule** it broke, so the person reading it can fix it without reading the code.
 
+A Lune entry the gate runs, and so an agent may start bare, joins `TOOLING` in `z-nile/engine/boundcmd.luau` (the PreToolUse hook refuses every other `lune run` that is not wrapped).
+
 ## Design checklist (answer these in every tooling issue's Design section)
 - **Scalability**: the git calls, file reads and processes per command, and how they grow with the items, the roots and the projects.
 - **Maintainability**: where the next project, root, skill or command plugs in, and which one reader it goes through.
@@ -36,7 +39,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
 - **Touched modules**: the exact paths, used for spend attribution and for choosing affected tests.
 
 ## Lessons
-Before you start, read this skill's lessons: `./zn lessons --skill zz-arch --full`. Each is a mistake made before, with the question that catches it.
+Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
 
 A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
 - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.

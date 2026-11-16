@@ -1,0 +1,222 @@
+diff --git a/z-nile/affected.luau b/z-nile/affected.luau
+index 613c31b5..99a9c23d 100644
+--- a/z-nile/affected.luau
++++ b/z-nile/affected.luau
+@@ -6,11 +6,16 @@
+ --   ... --project <name>                         -- that project's specs only, relative to its home
+ --   ... --static                                 -- print the projects whose static stages the change affects
+ --                                                -- ("ALL", or one name per line), not the specs
++--   ... --own-acceptance                         -- also the layer's own sequestered acceptance specs (./zn finish
++--                                                -- only: it records them in results.txt; the gate never passes it)
+ -- Prints one spec path per line (repo-relative; home-relative with --project). Prints nothing when no watch
+ -- file names a changed path. Never prints "ALL": a full run is --full, not a fallback.
+ -- On a layer branch (R0010/1/c0010), a change that includes a source file selects that ticket's
+--- acceptance specs when the ticket has no watch file yet, and only when one of its watch files names
+--- the path once the watches exist. On an old raft branch (R####-…), a source change selects that raft's.
++-- promoted acceptance specs (tests/acceptance/<id>/) when the ticket has no watch file yet, and only when one of its
++-- watch files names the path once the watches exist. On an old raft branch (R####-…), a source change selects that
++-- raft's members' promoted ones. A sequestered spec (under a project root: an item's acceptance/ or proofs/) is
++-- printed only with --own-acceptance, and then only the current layer's ticket's (every member's on an old raft
++-- branch) (d0297): the gate never runs one.
+ 
+ local changes = require("./lib/changed")
+ local context = require("./lib/context")
+@@ -26,6 +31,7 @@ local watch = require("./lib/watch")
+ local base: string? = nil
+ local only: string? = nil
+ local staticOnly = false
++local ownAcceptance = false
+ local explicit: { string } = {}
+ local i = 1
+ while i <= #process.args do
+@@ -35,6 +41,8 @@ while i <= #process.args do
+ 		i += 1
+ 	elseif a == "--static" then
+ 		staticOnly = true
++	elseif a == "--own-acceptance" then
++		ownAcceptance = true
+ 	elseif a == "--project" then
+ 		only = process.args[i + 1]
+ 		i += 1
+@@ -159,6 +167,9 @@ if built == nil then
+ end
+ local ctx = built :: sel.Context
+ ctx.current = currentSpecs(files)
++if ownAcceptance then
++	ctx.own = ctx.current
++end
+ local result = sel.affected(ctx, files, only)
+ -- A deleted spec is a changed path, and the pure selector still names it. There is nothing to run.
+ local homePrefix = ""
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index 59d6bd67..fbd613b8 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -3782,7 +3782,7 @@ function cmd.finish(pos: { string })
+ 		-- repository root is not a project's home, so it refuses every spec.
+ 		local reg = projects.load(".")
+ 		for _, project in reg.projects do
+-			local argv = { "run", "z-nile/affected", "--", "--project", project.name }
++			local argv = { "run", "z-nile/affected", "--", "--project", project.name, "--own-acceptance" }
+ 			for _, path in paths do
+ 				table.insert(argv, path)
+ 			end
+diff --git a/z-nile/lib/select.luau b/z-nile/lib/select.luau
+index fa0bf6f9..41c5c378 100644
+--- a/z-nile/lib/select.luau
++++ b/z-nile/lib/select.luau
+@@ -20,7 +20,10 @@ export type Context = {
+ 	inputs: Inputs,
+ 	places: { [string]: { string } }, -- home prefix -> its place inputs (kept for callers; selection does not read it)
+ 	watches: { [string]: { string } }?, -- repo-relative spec -> the paths in its watch file
+-	current: { string }?, -- the current raft's acceptance specs, when the change includes a source file
++	-- the current layer's (or old raft branch's) acceptance specs, when the change includes a source file; sel.affected
++	-- drops the sequestered ones among them unless `own` names them
++	current: { string }?,
++	own: { string }?, -- sequestered specs the caller names (./zn finish's own ticket, --own-acceptance); no other is kept
+ }
+ 
+ -- Changes to these root paths can affect every spec of every project, so they force a full run: ./zn, the root's
+@@ -191,14 +194,30 @@ function sel.isInput(ctx: Context, spec: string, path: string): boolean
+ end
+ 
+ -- The specs a set of changed paths reaches. `only` limits the answer to one project's specs, relative to its home.
+--- Never "ALL": a change that no watch file names selects nothing.
++-- Never "ALL": a change that no watch file names selects nothing. A spec under a project root is sequestered (an
++-- item's acceptance/ or proofs/, d0297): it is never selected, whether the change adds it or `current` names it, except
++-- the ones `own` names.
+ function sel.affected(ctx: Context, changed: { string }, only: string?): { string } | "ALL"
+ 	local bindings: { watch.Binding } = {}
+ 	local watches: { [string]: { string } } = ctx.watches or {}
+ 	for spec, paths in watches do
+ 		table.insert(bindings, { spec = spec, watch = watch.fileFor(spec), paths = paths })
+ 	end
+-	local picked = watch.select(bindings, changed, ctx.current)
++	local picked: { string } = {}
++	local kept: { [string]: boolean } = {}
++	for _, spec in watch.select(bindings, changed, ctx.current) do
++		if projects.rootOf(spec, ctx.rules.roots) == nil then
++			kept[spec] = true
++			table.insert(picked, spec)
++		end
++	end
++	local own: { string } = ctx.own or {}
++	for _, spec in own do
++		if not kept[spec] then
++			kept[spec] = true
++			table.insert(picked, spec)
++		end
++	end
+ 	local out: { string } = {}
+ 	for _, spec in picked do
+ 		local h = homeOf(ctx.rules.homes, spec)
+@@ -215,7 +234,10 @@ end
+ -- changed path lies under that project's home (its tracker root is inside it). Anything else is "ALL": a gate scoped
+ -- to a project is never narrower than the unscoped one.
+ function sel.scope(ctx: Context, changed: { string }): string
+-	local picked = sel.affected(ctx, changed)
++	-- the gate's view: never a caller's own list (d0297)
++	local plain = table.clone(ctx)
++	plain.own = nil
++	local picked = sel.affected(plain, changed)
+ 	if picked == "ALL" or #(picked :: { string }) == 0 then
+ 		return "ALL"
+ 	end
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index a800c419..6a5e0371 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -50,7 +50,7 @@ The assertions are `toBe`, `toEqual` (deep), `toBeNear`, `toBeTruthy` and `toThr
+ - **No browsers.** `tests/run` puts recording `open` and `xdg-open` stubs first on `PATH` for the whole run (workers and nested runners included, through `PICKMAN_OPEN_GUARD`) and fails the run if any is called. Run `./zn board` with `-O`; a spec that tests opening puts its own stubs first on `PATH`. A spec that sets `PATH` for a child prepends to it, never replaces it, or the guard's stubs are lost.
+ 
+ ## Affected selection
+-`z-nile/affected.luau` reads the watch map. A ticket's map is `tests/acceptance/<id>/watch.txt`, one repository-relative source path per line, written by `./zn finish` from the source files that layer's own diff changed (tracker files, documentation, skills, lessons, specs and watch files left out; a helper under `tests/` stays). Every other spec has `<name>.watch.txt` beside `<name>.spec.luau`. A change selects the specs whose watch file names one of the changed paths, the specs the change adds or edits, and, on a layer branch, that ticket's acceptance specs when the change includes a source file its watch names. A tracker file, a skill, a lesson or a document selects nothing. Nothing falls back to every spec. `lune run z-nile/affected -- --project <name>` prints one project's selection, relative to its home.
++`z-nile/affected.luau` reads the watch map. A ticket's map is `tests/acceptance/<id>/watch.txt`, one repository-relative source path per line, written by `./zn finish` from the source files that layer's own diff changed (tracker files, documentation, skills, lessons, specs and watch files left out; a helper under `tests/` stays). Every other spec has `<name>.watch.txt` beside `<name>.spec.luau`. A change selects the specs whose watch file names one of the changed paths, the specs the change adds or edits, and, on a layer branch, that ticket's promoted acceptance specs (`tests/acceptance/<id>/`) when the change includes a source file its watch names. It never selects a sequestered spec (a spec under a project root: an item's `acceptance/` or `proofs/`), so a prep branch's own specs never run in the gate (d0297). `./zn finish` alone passes `--own-acceptance`, which adds its layer's own ticket's sequestered specs, so that it records them in the layer's `results.txt`. A tracker file, a skill, a lesson or a document selects nothing. Nothing falls back to every spec. `lune run z-nile/affected -- --project <name>` prints one project's selection, relative to its home.
+ - **Full run** (`--full`) and `--slow` are unchanged, and the static stages are unchanged. Documentation, skills and lessons under `z-nile/` force no suite by themselves. `./zn`, the root's `scripts/` and root config files still force every project's static stages; a project's own harness still forces that project's. Those rules do not select specs.
+ - **Places**: a `.luaurc` or any `*.project.json` (under its home) selects a spec only when that spec's watch file names it. A spec that loads a home's place (it requires the home's `tests/lib/place.luau`) is selected when its watch file names what the place is built from: the home's project files and every `$path` they map. Verify an arcade change against its dependents with `z-nile/check.sh --affected` (every project), not `arcade/check.sh --affected` (the library's own specs).
+ - **Upkeep**: `./zn commit` rewrites a watch file when the commit renames or deletes a path it names, in that same commit. A watch file that names a missing path fails the gate (`lune run z-nile/watch-check`).
+@@ -81,7 +81,7 @@ finish
+ - **Commands**: checks may run any deterministic command, such as a spec, a `lune run` script, `rojo build`, or a `grep` that must match nothing.
+ - **Where acceptance specs live**: z-design writes them in the issue's `acceptance/` folder (`<root>/issues/<id>/acceptance/*.spec.luau`, under the issue's project root), **not** in `tests/`.
+   - They target code that doesn't exist yet, so putting them in `tests/` would turn main red.
+-  - They're formatted and linted, but not type-checked or run by the repo gate. Only `check.sh` runs them, by explicit path.
++  - They're formatted and linted, but not type-checked or run by the repo gate. Only `check.sh` runs them, by explicit path, and `./zn finish`, which records its own ticket's in `results.txt`.
+   - They must require only through aliases (`@logic/…`, `@tests/…`, `@scripts/…`), never relative paths, because they get moved.
+   - Never write literal `require("…")` text inside strings or comments. The graph scanner would treat it as a real require. Build such text by concatenation.
+   - `./zn done` **moves** them to `tests/acceptance/<id>/` in the item's project's home (`pickman/tests/acceptance/<id>/` for pickman's, `z-nile/tests/acceptance/<id>/` for z-nile's), where they become permanent regression specs. It then type-checks that project's `tests/`, runs its `tests/meta` and the promoted specs from its home, and **rolls back** if any of that fails.
+diff --git a/z-nile/tests/tooling/own-acceptance-callers.spec.luau b/z-nile/tests/tooling/own-acceptance-callers.spec.luau
+new file mode 100644
+index 00000000..2d2ef43f
+--- /dev/null
++++ b/z-nile/tests/tooling/own-acceptance-callers.spec.luau
+@@ -0,0 +1,57 @@
++--!strict
++-- d0297: no gate, hook or forwarder passes `--own-acceptance` (the flag that lets the selector print a layer's own
++-- sequestered acceptance specs; only `./zn finish` passes it). Its watch file names the files that run the selector,
++-- so a change to one of them reruns this scan; the scan itself reads every file a gate or hook runs from.
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++local t = require("@tests/lib/t")
++
++local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
++
++-- uses of the flag in code: a comment that names it is not a use (in a .luau file a `--` line or a ` -- ` line end,
++-- in any other file a `#` line or a ` # ` line end)
++local function uses(text: string, luau: boolean): number
++	local n = 0
++	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
++		local code = if luau
++			then string.gsub(string.gsub(line, "^%s*%-%-.*$", ""), "%s%-%-%s.*$", "")
++			else string.gsub(string.gsub(line, "^%s*#.*$", ""), "%s#%s.*$", "")
++		for _ in string.gmatch(code, "%-%-own%-acceptance") do
++			n += 1
++		end
++	end
++	return n
++end
++
++return t.spec("d0297 no gate, hook or forwarder passes --own-acceptance", function(it)
++	it("the files a gate, hook or forwarder runs from never use the flag", function()
++		local listed = process.exec("git", {
++			"ls-files",
++			"--",
++			"zn",
++			"scripts",
++			":(glob)z-nile/*.sh",
++			":(glob)z-nile/*.luau",
++			"z-nile/bin",
++			"z-nile/lib",
++			"z-nile/scripts",
++			".claude",
++			":(exclude,glob)**/.tracker/**",
++		}, { cwd = TOP })
++		t.expect(listed.ok).toBe(true)
++		local seen = 0
++		local holders: { string } = {}
++		for path in string.gmatch(listed.stdout, "[^\n]+") do
++			-- the selector defines the flag; it is the one file allowed to name it in code
++			if path ~= "z-nile/affected.luau" and fs.isFile(`{TOP}/{path}`) then
++				seen += 1
++				if uses(fs.readFile(`{TOP}/{path}`), string.sub(path, -5) == ".luau") > 0 then
++					table.insert(holders, path)
++				end
++			end
++		end
++		t.expect(seen > 0).toBe(true)
++		t.expect(holders).toEqual({})
++		t.expect(fs.isFile(`{TOP}/z-nile/check.sh`)).toBe(true)
++	end)
++end)
+diff --git a/z-nile/tests/tooling/own-acceptance-callers.watch.txt b/z-nile/tests/tooling/own-acceptance-callers.watch.txt
+new file mode 100644
+index 00000000..0ba8b0f4
+--- /dev/null
++++ b/z-nile/tests/tooling/own-acceptance-callers.watch.txt
+@@ -0,0 +1,7 @@
++scripts/affected.luau
++scripts/hooks/post-edit.sh
++scripts/hooks/pre-bash.sh
++scripts/hooks/session-end.sh
++z-nile/check.sh
++z-nile/specs.luau
++zn

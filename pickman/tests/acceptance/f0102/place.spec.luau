@@ -3,6 +3,14 @@
 -- the camera's field of view, the screen's aspect and inView, groups them with Awareness.glows, places each at
 -- Awareness.edgePoint through Awareness.glowBox and colours it with View.ghostColor of that ghost. The glows live in
 -- a ScreenGui of their own in the device's safe area, below the HUD. The ghost bodies use the same colours.
+-- Narrowed by c0159 (2026-10-31), because f0158's danger ring replaces the edge glows (decided with the user,
+-- 2026-10-26: "Replace edge glows"; its screen is the core-UI safe area, G8). No longer pinned: the calls to
+-- Awareness.glows, edgePoint and glowBox, a glow coloured with View.ghostColor of its ghost's name and flash (and
+-- so the names and flashes handed to Awareness), and the screen's ScreenInsets (f0158's own spec checks the drawn
+-- ring's). Still pinned: DangerHud draws the danger directions from Awareness (Awareness.glows or Awareness.ring),
+-- on a screen of its own under the radar, the Flow overlay and the HUD (its DisplayOrder rules), and colours
+-- nothing by position. As before, the screen case reads orders, not which screen draws what: dots drawn on the
+-- radar's screen, or one screen for both at -1, pass it; f0158's place.spec checks the drawn screens.
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
 
@@ -35,13 +43,9 @@ return t.spec("f0102 glow adapters", function(it)
 		end
 	end)
 
-	it("it draws the glows Awareness computes, where Awareness puts them, in View's colours", function()
+	it("it draws the danger directions Awareness computes: the edge glows, or f0158's ring", function()
 		local src = source("DangerHud")
-		for _, call in
-			{ "Awareness.glows(", "Awareness.edgePoint(", "Awareness.glowBox(", "View.ghostColor(" }
-		do
-			t.expect(has(src, call)).toBe(true)
-		end
+		t.expect(has(src, "Awareness.glows(") or has(src, "Awareness.ring(")).toBe(true)
 	end)
 
 	it("the arrows are gone", function()
@@ -51,12 +55,9 @@ return t.spec("f0102 glow adapters", function(it)
 	end)
 
 	it(
-		"the glows have their own screen, in the device's safe area, under the radar, the Flow overlay and the HUD",
+		"the danger directions have their own screen, under the radar, the Flow overlay and the HUD",
 		function()
 			local src = source("DangerHud")
-			-- the screen itself is set to the safe area (R0012 also reads DeviceSafeInsets in this file, for the radar)
-			t.expect(string.find(src, "%.ScreenInsets%s*=%s*Enum%.ScreenInsets%.DeviceSafeInsets") ~= nil)
-				.toBe(true)
 			local orders = {}
 			for n in string.gmatch(src, "DisplayOrder%s*=%s*(%-?%d+)") do
 				table.insert(orders, tonumber(n) :: number)
@@ -69,14 +70,9 @@ return t.spec("f0102 glow adapters", function(it)
 		end
 	)
 
-	it("a glow is coloured from its own ghost's name and flash, not by position", function()
+	it("DangerHud colours nothing by position", function()
 		local src = source("DangerHud")
-		t.expect(string.find(src, "View%.ghostColor%(%s*g%.name") ~= nil).toBe(true)
-		t.expect(string.find(src, "g%.flash") ~= nil).toBe(true)
 		t.expect(string.find(src, "snap%.ghosts%[") == nil).toBe(true)
-		-- the snapshot's names and flashes reach Awareness
-		t.expect(string.find(src, "name%s*=%s*g%.name") ~= nil).toBe(true)
-		t.expect(string.find(src, "flash%s*=%s*g%.flash") ~= nil).toBe(true)
 	end)
 
 	it("the HUD still does no geometry itself", function()

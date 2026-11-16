@@ -1,0 +1,10 @@
+- design-review-001 F1: z-design/spec-design-correspondence, pickman-test/same-tick-order-needs-both-due
+- design-review-001 F2: z-design/spec-design-correspondence
+- design-review-001 F3: zz-test/set-read-fields-apart, zz-test/per-member-copy-pinned-at-every-reader
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: zz-test/format-tracker-specs-by-path
+- design-review-001 F6: z-design/instructions-runnable-where-they-run
+- design-review-001 F7: z-design/spec-design-correspondence, zz-test/no-vacuous-pass
+- design-review-001 F8: z-design/specify-every-named-artifact
+- design-review-001 F9: z-design/prep-choices-marked-and-checked
+- design-review-001 F10: z-design/specify-every-named-artifact

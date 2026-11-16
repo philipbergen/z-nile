@@ -39,12 +39,10 @@ local function paragraph(text: string, lead: string): string
 end
 
 return t.spec("c0119 scope rules in the skills", function(it)
-	it("make-issue says the Problem's outcomes are the scope prep may not narrow", function()
+	it("make-issue says the idea's outcomes are the scope prep may not narrow", function()
 		local doc = read(`{TOP}/z-nile/skills/z-ticket/SKILL.md`)
-		local line = string.match(doc, "\n%s*%- %*%*Problem%*%*:[^\n]*") :: string
-		t.expect(line ~= nil).toBe(true)
-		at(line, "never narrows, defers or drops an outcome without the user")
-		at(line, "every idea the user gives under Solution")
+		at(doc, "./zn idea <id> --text")
+		at(doc, "never narrows, defers or drops an outcome without the user")
 		-- the capture lookup relies on make-issue's commit subject
 		at(doc, 'git commit -m "tracker: new <id> <title>"')
 	end)
@@ -87,21 +85,19 @@ return t.spec("c0119 scope rules in the skills", function(it)
 		at(line, "Without that line, the answer is a redesign that keeps the outcome.")
 	end)
 
-	it(
-		"ticket-prep restarts the round count after a scope reset, and checks scope before design: ready",
-		function()
-			local s5 = section(read(`{TOP}/z-nile/skills/z-design/SKILL.md`), "5.")
-			local four, five = at(s5, "\n4. "), at(s5, "\n5. ")
-			local restart = at(s5, "A re-prep after the user resets an item's scope restarts the count")
-			t.expect(restart > four and restart < five).toBe(true)
-			local check = at(s5, "Then **check the scope**")
-			t.expect(check > five and check < at(s5, "set `design: ready`")).toBe(true)
-			local line = string.sub(s5, check, (string.find(s5, "\n", check, true) :: number) - 1)
-			at(line, "compare the issue's document with `./zn capture <id>`") -- c0116 override: one issue
-			at(line, "every captured outcome has a Design and an acceptance criterion")
-			at(line, "goes to the user before `design: ready`")
-		end
-	)
+	it("ticket-prep has one review round, and checks scope before design: ready", function()
+		local s5 = section(read(`{TOP}/z-nile/skills/z-design/SKILL.md`), "5.")
+		t.expect(string.find(s5, "restarts the count", 1, true) == nil).toBe(true)
+		t.expect(string.find(s5, "There is no second reviewer round.", 1, true) ~= nil).toBe(true)
+		at(s5, "## Open to the human")
+		local five = at(s5, "\n5. ")
+		local check = at(s5, "Then **check the scope**")
+		t.expect(check > five and check < at(s5, "set `design: ready`")).toBe(true)
+		local line = string.sub(s5, check, (string.find(s5, "\n", check, true) :: number) - 1)
+		at(line, "compare the issue's document with `./zn capture <id>`") -- c0116 override: one issue
+		at(line, "every captured outcome has a Design and an acceptance criterion")
+		at(line, "goes to the user before `design: ready`")
+	end)
 
 	it("ready-raft checks each member's scope against its capture first", function()
 		local doc = read(`{TOP}/z-nile/skills/z-ready/SKILL.md`)

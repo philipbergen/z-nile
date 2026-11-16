@@ -1,0 +1,6 @@
+.github/workflows/deploy.yml
+z-nile/check.sh
+z-nile/templates/raft/check.sh
+z-nile/tests/lib/renamed.luau
+z-nile/tests/lib/t.luau
+zn

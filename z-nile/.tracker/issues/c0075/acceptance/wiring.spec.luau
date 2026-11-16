@@ -1,10 +1,9 @@
 --!strict
--- c0075 AC6: the Linux jail is wired in everywhere a Linux run starts: CI provisions it before the gate, the fence
--- sets no ref hooks under it (the kernel already denies the writes, as under macOS's jail), and the documents say what
--- is true now. Static reads, plus one run of the fence's shell half in a fixture.
+-- c0075 AC6: the Linux jail is wired in everywhere a Linux run starts: a host is told to get it before it runs the gate,
+-- the fence sets no ref hooks under it (the kernel already denies the writes, as under macOS's jail), and the documents
+-- say what is true now. Static reads, plus one run of the fence's shell half in a fixture.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
-local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
 local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
@@ -12,15 +11,6 @@ local base = `{root}/.cache/c0075-wiring`
 
 local function has(s: string, part: string): boolean
 	return string.find(s, part, 1, true) ~= nil
-end
-
-local function stepIndex(steps: any, run: string): number?
-	for i, step in steps do
-		if type(step.run) == "string" and (string.gsub(step.run, "%s+$", "")) == run then
-			return i
-		end
-	end
-	return nil
 end
 
 -- the hooks path the fence leaves in git's environment for a given jail name, in a fixture checkout
@@ -43,17 +33,27 @@ local function hooksPath(jail: string): string
 end
 
 return t.spec("c0075 the Linux jail is wired in", function(it)
-	it("CI makes bubblewrap usable before the gate runs", function()
-		local wf = serde.decode("yaml", fs.readFile(".github/workflows/check.yml"))
-		local steps = wf.jobs.gate.steps
-		local jailAt = stepIndex(steps, "scripts/linux-jail.sh --apply-sysctl")
-		local setupAt = stepIndex(steps, "scripts/setup.sh")
-		t.expect(jailAt ~= nil).toBe(true)
-		t.expect(setupAt ~= nil).toBe(true)
-		t.expect((jailAt :: number) < (setupAt :: number)).toBe(true)
-		local step = steps[jailAt :: number]
-		t.expect(step["if"]).toBe(nil) -- every gate run, pull request or dispatch
-		t.expect(step["continue-on-error"] == nil or step["continue-on-error"] == false).toBe(true)
+	-- c0173: this case used to read the CI workflow's gate job. GitHub Actions no longer runs the gate (c0172), so the
+	-- places a Linux run starts are the host's own: its owner reads SETUP.md's prerequisites before running
+	-- z-nile/setup.sh. The case checks the row, not an order. It uses only fs, t, root and has.
+	it("a Linux host's prerequisites name the jail script", function()
+		local setup = fs.readFile(`{root}/SETUP.md`)
+		local from = string.find(setup, "\n## Prerequisites", 1, true)
+		t.expect(from ~= nil).toBe(true)
+		local upto = string.find(setup, "\n## ", (from :: number) + 1, true) or (#setup + 1)
+		local named = false
+		for line in string.gmatch(string.sub(setup, from :: number, upto - 1), "[^\n]+") do
+			-- a table row `| need | macOS | Linux |`: split at the bars, the Linux cell is the fourth piece
+			local cells = string.split(line, "|")
+			if
+				string.sub(line, 1, 1) == "|"
+				and cells[4] ~= nil
+				and has(cells[4], "scripts/linux-jail.sh")
+			then
+				named = true
+			end
+		end
+		t.expect(named).toBe(true)
 	end)
 
 	it("the script is there and executable", function()

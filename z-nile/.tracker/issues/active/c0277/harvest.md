@@ -1,0 +1,17 @@
+# Harvest: c0277
+- note the hand-off kept the old worktree in place while the confirmed Idea says rename it: z-design/handoff-readings-meet-the-confirmed-idea
+- note the plain lookup recreated the bare name of a discarded worktree: zz-arch/a-moved-aside-address-is-never-reused
+- note the hand-off's spec had never run and had three holes: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F1: zz-arch/a-moved-aside-address-is-never-reused
+- design-review-001 F2: zz-arch/history-tests-survive-squash
+- design-review-001 F3: z-design/reasoned-rows-claim-testable-reasons
+- design-review-001 F4: zz-arch/joined-keys-forbid-their-separator
+- design-review-001 F5: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-001 F6: zz-test/seed-every-enumerated-case
+- design-review-001 F7: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F8: one-off: a kept branch named R####-… was read by the board and busy as the raft's own branch
+- design-review-001 F9: zz-arch/a-moved-aside-address-is-never-reused
+- design-review-001 F10: z-design/restated-rules-move-together
+- design-review-001 F11: one-off: a probe script in the real repository used a fixed name and a forced removal
+- note R0100 design-review-001 F1 (stop then ready leaves the worktree remembering the old stamp; the lookup handed it out): zz-arch/a-moved-aside-address-is-never-reused
+- note R0100 design-review-001 F2 (a discarded z-work session sent back into the taker's copy): zz-arch/a-moved-aside-address-is-never-reused

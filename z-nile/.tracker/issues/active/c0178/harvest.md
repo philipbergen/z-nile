@@ -1,0 +1,37 @@
+- design-review-001 F1: z-design/never-narrow-captured-scope
+- design-review-001 F2: z-design/spec-design-correspondence, z-design/mutation-runner-runs-correct-variants
+- design-review-001 F3: zz-test/no-vacuous-pass
+- design-review-001 F4: one-off: the claim "a passing one leaves none" overstated a mechanism that registers two helpers' folders
+- design-review-001 F5: z-design/required-steps-on-every-path
+- design-review-001 F6: z-design/spec-design-correspondence
+- design-review-001 F7: zz-arch/children-need-a-lifeline
+- design-review-001 F8: z-design/quote-other-preps-before-promising
+- design-review-001 F9: one-off: a helper's docstring claimed more than it did
+- design-review-001 F10: one-off: shared mutable state in a run-wide folder
+- design-review-001 F11: one-off: a generic runner in the harness hid a call from the retrofit scan
+- design-review-001 F12: zz-review/lists-paste-their-search
+- note proposed new lessons (the lead writes them): zz-test/key-cases-vary-one-component (a cache key that includes the code under test: vary only the component under test), zz-arch/prune-by-last-use (shared caches), zz-test/count-calls-in-poll-loops, zz-arch/no-yield-in-metamethods, zz-test/git-maintenance-outside-the-runner: zz-test/no-vacuous-pass
+- design-review-002 F1: zz-arch/children-need-a-lifeline, z-design/design-the-execution-window
+- design-review-002 F2: z-design/spec-design-correspondence, zz-test/seed-every-enumerated-case
+- design-review-002 F3: zz-arch/lock-reads-live-state
+- design-review-002 F4: one-off: a helper's validation covered only part of its input
+- design-review-002 F5: zz-test/narrow-guard-allowances
+- design-review-002 F6: z-design/new-rules-migrate-existing-work
+- design-review-002 F7: z-design/quote-other-preps-before-promising
+- design-review-002 F8: z-design/new-rules-migrate-existing-work
+- design-review-002 F9: zz-review/lists-paste-their-search
+- note proposed new lessons (the lead writes them): zz-arch/prune-before-any-user-starts (shared caches are pruned once per run, before any process of the run can use them), zz-test/cheaper-setup-commits-the-same-tree (a differential case, not a green run), zz-arch/takeover-needs-its-own-claim: zz-test/no-vacuous-pass
+- design-review-003 F1: zz-arch/children-need-a-lifeline, zz-test/seed-every-enumerated-case
+- design-review-003 F2: zz-arch/guards-trust-only-origin
+- design-review-003 F3: zz-rules/exhaustive-lists-name-new-things
+- design-review-003 F4: z-design/new-rules-migrate-existing-work
+- design-review-003 F5: z-design/restated-rules-move-together
+- design-review-003 F6: one-off: a name comparison on a case-insensitive disk
+- design-review-003 F7: one-off: a helper judged a ref before the fetch zn does
+- design-review-003 F8: one-off: reason comments left stacked by a pruning script
+- note proposed new lessons (the lead writes them): zz-arch/one-copy-per-writer (a folder shared by the whole run is checked per writer only if each writer has its own), zz-test/source-pins-pin-arguments (a pin on a call's place does not pin its argument): zz-test/no-vacuous-pass
+- design-review-004 F1: zz-test/new-commands-run-in-a-copy
+- design-review-004 F2: z-design/decided-guesses-rewrite-their-body
+- design-review-004 F3: zz-rules/exhaustive-lists-name-new-things
+- design-review-004 F4: one-off: a remote rewritten to a caller's relative spelling
+- note proposed new lesson (the lead writes it): zz-test/cases-never-aim-a-write-at-the-real-repository (a case proves a property from configuration; that the guards refuse is repo-fence's job): zz-test/new-commands-run-in-a-copy

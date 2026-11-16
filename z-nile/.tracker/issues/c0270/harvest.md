@@ -1,0 +1,6 @@
+- design-review-001 F1: z-design/instructions-runnable-where-they-run
+- design-review-001 F2: z-design/new-rules-migrate-existing-work
+- design-review-001 F3: z-design/dispatched-refusals-name-their-way-through
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/quote-other-preps-before-promising
+- design-review-001 F6: one-off: the bullet's place is held by R0100's open edits to the bullets above it; Implementation step 2 moves it above Claim it once they land

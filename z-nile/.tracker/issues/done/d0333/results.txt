@@ -1,0 +1,115 @@
+z-nile/.tracker/issues/active/d0333/acceptance/commit-land.spec.luau
+	sets up a one-ticket raft, finished
+	AC3: the Verification log committed with ./zn commit before the table leaves the layer finished
+	AC3: the trace table committed with ./zn commit leaves the layer finished and the table current
+	AC3: the final review and the final refute committed with ./zn commit leave the table current
+	AC5: a ./zn commit of any other file after the finish still unfinishes the layer
+	AC4: ./zn done lands that stack
+z-nile/.tracker/issues/active/d0333/acceptance/docs.spec.luau
+	AC7: Phase 5 commits trace.md with ./zn commit after step 1's commit, then verifies the check
+	AC7: Phase 2B says a lower layer with any commit after its finish is finished again
+z-nile/.tracker/issues/active/d0333/acceptance/post-finish.spec.luau
+	AC1: the post-finish rule takes the raft's own spend.md
+	AC1: the post-finish rule takes no other new path
+	AC2: a trace commit that also rewrites the raft's spend.md leaves the table current
+	AC2: review commits after the table that rewrite the raft's spend.md leave it current
+	AC2: any other file still makes the table stale, before and after it
+z-nile/tests/acceptance/c0117/adapters.spec.luau
+	claude runs -p with stream-json, the model, bypassed permissions and no prompts
+	grok runs -p with streaming-json in the step's folder, auto-approved, with its session id
+	agent runs -p with stream-json, forced and trusted, its own sandbox off, in the step's workspace
+	every runtime has an adapter of its own CLI, and no other name has one
+	claude: one message counted once at its usage, and the final count from modelUsage
+	grok: a usage line per model call, and the end line's total
+	agent: no running token count, its model calls counted by distinct model_call_id, the result's real total at the end
+	tracks the tool calls that are running, per CLI, for the tool limit
+	only what the CLI itself prints is read for quota or a wait, never the model's words
+	a quota or rate limit is quota: claude's rejected event, an error result, or a failed CLI's stderr
+	a non-zero exit is failed, and an exit 0 with no token count is ok
+z-nile/tests/acceptance/c0117/dispatch.spec.luau
+	ready, stop, recombine and spend are script steps; every z-nile skill is a step or read inside one
+	a script step is a ./zn command, and takes no model
+	a model step reads the design or build lessons, and its row has its phase
+	the prompt names the skill's file and the lessons search, and pastes no skill text
+	a stream review's prompt names the stream's worktree and the one review file
+	an unruled open list stops for the user and does not pick a step
+	stops first for questions.md, a failed step, and an unharvested finding after a review step
+	a commit is a pull request's merge only when GitHub says it merged into main (review 003 F6)
+	captures, designs, and waits at or passes the prep gate
+	a step that ended ok but moved nothing stops the chain
+	rafts a prepared issue: raft-plan, then z-raft, then the raft gate, then follows the raft
+	readies and runs a raft; the run's PR is always a human's to merge
+z-nile/tests/acceptance/c0117/docs.spec.luau
+	every model step's skill carries the same headless section, before its lessons
+	who reviews is the role .models.toml names, wherever a skill says so
+	z-ticket lands without asking, and a layer is reviewed in code mode
+	z-run ends at Ready to merge under the dispatcher
+	zz-rules has the Dispatch section and names the dispatcher in its lists
+	zz-test lists a model CLI started by a check as caught only by review
+	the README draws the dispatcher and .models.toml as built
+	AGENTS.md and the usage name the dispatcher
+	the raft's prompt template names skills and the architecture path and pastes neither
+z-nile/tests/acceptance/c0117/models.spec.luau
+	a closer file replaces only the keys it sets, and every try of the role carries that cap
+	a closer fallbacks list replaces the try list, and each setting is replaced on its own
+	settings come from the walk, closest first; an unset auto_merge is none, and so is any error
+	tries are the role's CLI, then its fallbacks
+	the higher rank wins whole, with its own cap
+	the same rank takes the larger max_tokens, and its model with it; a tie keeps the first
+	a raft takes, per CLI, the stronger of its members' specs, in the raft's own try list
+	refuses a CLI the file does not support, in a role or in its fallbacks
+	order and a skill table are refused at load, and so is a fallback's rank, cap or effort
+	a runtime belongs to its CLI: each CLI's one local runtime, and no other
+	a spec missing a field is an error naming the role and the field
+	agent's specs need max_calls and max_minutes, never unlimited; the other CLIs' don't
+	nothing defaults: no file, a role no file names, or a skill that is not a step is an error naming it
+	a repeated table or key is the reader's error, never a silent pick
+	the model id a row records carries its effort
+	walks from the repository root down to the folder, root first
+	the root .models.toml resolves every model step, and a fallback carries the role's cap
+z-nile/tests/acceptance/c0330/stub.spec.luau
+	AC1: a Solution of only the template, empty or absent yields no S claim and no refusal
+	AC2: a Solution with outcomes still gets one S claim per outcome, in a raft with a stub ticket
+	AC3: a captured document with no Problem outcome, or no acceptance criteria, is still refused
+	AC4: the skeleton has no S rows for a stub ticket, and the check expects none and reports no Solution refusal
+	AC5: a readied ticket takes its claims from the captured text, not from a Solution the prep wrote
+	AC6: the zz-rules trace row and the engine contract state the stub rule, not the old refusal
+	AC8: a section whose first read finds no outcome is read again with decision lines as text, in Problem and Solution alike
+	AC9: a Solution that has text but no outcome (a fence only) is still refused
+z-nile/tests/tooling/dispatch-texts.spec.luau
+	z-design, z-raft and zz-rules say a dispatched step neither asks nor merges at its PR (F5)
+	a model id the ledger refuses is refused in .models.toml, with its effort (F6)
+	no comment calls a decided guess pending, or gives a CLI two runtimes (F8)
+z-nile/tests/tooling/openlist.spec.luau
+	a refutation, an unfixed high and a failed Judged criterion need a ruling
+	a high that is fixed, and a medium that is deferred, do not
+	a ruling on the bullet or the next line closes that id
+	an older review file is not read: only the text it is given
+z-nile/tests/tooling/raftcheck.spec.luau
+	renders the template for the raft and keeps its RC0 lines as the head
+	passes the template, and RCn checks after its RC0 lines
+	refuses an RC0 line changed, and anything after them that could change the result
+z-nile/tests/tooling/trace-skeleton.spec.luau
+	Phase 5 step 3 commits the skeleton before the final review, then the filled table, then the check
+	zz-review and the final-mode prompt say the skeleton is already committed
+	two commits that touch trace.md are judged from the last of them
+z-nile/tests/tooling/trace.spec.luau
+	derives stable P, S and AC claims from captured idea and acceptance criteria, and fails on vacuous tickets
+	pure trace.staleReason covers every layer, finish, Commit: and post-finish commit condition
+	pure trace.check catches every missing link, bad file kind, unrun spec, exact case match, missing results file, missing source, none code cell, and stale commit
+z-nile/tests/tooling/work.spec.luau
+	takes the lowest claimable raft, and says why there is nothing
+	builds a start-only layer, then finishes, and does not land early
+	does not resume a held raft unless it was named, and a named raft ends
+	lands one raft, skips an unapproved one, lands the next, and stops
+	stops after two blocked releases, and a named raft still ends on its own
+	offers this project's raft from its folder, and any project from the root
+	prints the last lines of a running step's trail
+	counts a Kimi wire of this checkout only, and a Claude message id once
+	agrees with dispatch.next on the shared facts, and not on an active raft's action
+	names a tool call in the trail instead of the stream JSON
+z-nile/tests/tooling/wrapper-guards.spec.luau
+	sets up a bare origin whose main moved past a start, and a fake real gh
+	z-nile/bin/git refuses every rewind of main, a tracker-only tail included (F3)
+	decidePush refuses a forced update of main on its own, whatever the check says (code review 002 F4)
+	z-nile/bin/gh never takes an option's value for gh api's endpoint (F4)

@@ -8,6 +8,7 @@ local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 
 local trackerfix = {}
 
@@ -62,6 +63,9 @@ function trackerfix.new(name: string, seed: { [string]: string }?, opts: { noLes
 		end
 		fs.writeFile(`{source}/{path}`, text)
 	end
+	-- a design-ready issue in the seed carries an approval, so ready's check can pass. The file is part of
+	-- the seed commit, not an extra one ready makes.
+	seal.stamp(source, name)
 	fixture.git(source, { "add", "-A" })
 	fixture.git(source, { "commit", "-q", "-m", "seed" })
 	create(base, { "clone", "-q", "--bare", source, origin })

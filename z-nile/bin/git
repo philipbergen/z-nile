@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# The git a dispatched agent runs (c0117), first on the PATH ./zn dispatch gives a model step: a convenience layer, not
+# the boundary (the agent's credential and the dispatcher's tripwire are). A push, a plumbing push, any `-c` or
+# `--config-env`, and an alias go to z-nile/engine/wrap.luau, which decides from git's own dry run; every other
+# command is the real git at once.
+real="${ZN_REAL_GIT:-}"
+if [[ -z $real ]]; then
+  echo "git (z-nile wrapper): the real git is not known (run under ./zn dispatch)" >&2
+  exit 2
+fi
+wrap() { exec lune run "$(cd "$(dirname "${BASH_SOURCE[0]}")/../engine" && pwd -P)/wrap" -- git "$@"; }
+skip=0
+first=
+for a in "$@"; do
+  case "$a" in
+  push | send-pack | http-push | receive-pack | -c | -c* | --config-env | --config-env=*) wrap "$@" ;;
+  esac
+done
+for a in "$@"; do
+  if [[ $skip == 1 ]]; then skip=0; continue; fi
+  case "$a" in
+  -C | --git-dir | --work-tree | --namespace | --super-prefix) skip=1 ;;
+  -*) ;;
+  *) first=$a; break ;;
+  esac
+done
+if [[ -n $first ]] && "$real" config --get "alias.$first" >/dev/null 2>&1; then wrap "$@"; fi
+exec "$real" "$@"

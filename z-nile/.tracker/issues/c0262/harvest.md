@@ -1,0 +1,18 @@
+- note earlier prep of c0262 (PR 260, branch prep-full-force-final-review at 982f13ad, design-review-001 F3 and design-review-002 F1 and F3, old scope; the files are in git history): z-design/judged-text-comes-from-the-base
+- design-review-001 F1: z-design/rules-keyed-to-a-sha
+- design-review-001 F2: z-design/new-rules-migrate-existing-work
+- design-review-001 F3: z-design/judged-text-comes-from-the-base
+- design-review-001 F4: z-design/readers-of-user-decisions-cover-every-place-they-are-written
+- design-review-001 F5: z-design/limited-view-reviewers-start-outside-instruction-files
+- design-review-001 F6: z-design/results-land-on-every-path
+- design-review-001 F7: z-design/quote-other-preps-before-promising
+- design-review-001 F8: z-design/judged-text-comes-from-the-base
+- design-review-001 F9: z-design/quote-other-preps-before-promising
+- design-review-001 F10: one-off: two ways round the redo, fixed in the state rules
+- design-review-001 F11: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F12: one-off: parser strictness for this review format
+- design-review-001 F13: one-off: harvest owner of a review without an author round
+- design-review-001 F14: one-off: prompt line for a review with no refutation round
+- design-review-001 F15: one-off: bookkeeping filter scoped to this ticket
+- design-review-001 F16: z-design/depends-on-inherits-the-dependency-raft
+- design-review-001 F17: one-off: one clause of a criterion without a failing case

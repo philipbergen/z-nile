@@ -227,6 +227,32 @@ function Maze.parse(rows: { string }, id: string?): Maze
 	return m
 end
 
+-- A copy of the maze with one wall tile made empty (a picked hole, f0126): the same id, size and spawn, so every
+-- per-layout table (the ghost data, the pellet slots) still applies. Refuses a tile that is not a wall, and a wall
+-- on the outer edge (opening it could wrap a walkable tile into a wall). The original is unchanged.
+function Maze.open(m: Maze, tile: Tile): Maze
+	if Maze.kind(m, tile) ~= "wall" then
+		fail(`({tile.x}, {tile.y}) is not a wall`)
+	end
+	if tile.x == 0 or tile.y == 0 or tile.x == m.width - 1 or tile.y == m.height - 1 then
+		fail(`({tile.x}, {tile.y}) is on the edge`)
+	end
+	local grid = table.clone(gridOf(m))
+	grid[tile.y * m.width + tile.x + 1] = "empty"
+	local copy: Maze = table.freeze({ id = m.id, width = m.width, height = m.height, spawn = m.spawn })
+	grids[copy] = grid
+	return copy
+end
+
+-- The maze with every tile of `tiles` opened, in order (Maze.open of each). With no tiles it is `m` itself.
+function Maze.opened(m: Maze, tiles: { Tile }): Maze
+	local out = m
+	for _, tile in tiles do
+		out = Maze.open(out, tile)
+	end
+	return out
+end
+
 function Maze.layout(layoutId: string): Maze
 	local cached = cache[layoutId]
 	if cached then

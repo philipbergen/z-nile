@@ -1,0 +1,50 @@
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: a model step runs in its worktree with the wrapper first and the agent's own token, and records its spend
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:240: dispatch: z-design c0010 on claude (claude-cli, claude-opus-5-5, max_tokens 5000)
+dispatch: z-design on claude: stalled (no output for 2 s), 0 tokens
+
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: a code review prints one record: line for its author's commit, with the review's wall minutes, tokens and model, and writes no row
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:287: dispatch: zz-review c0010 on claude (claude-cli, claude-opus-5-5, max_tokens 5000)
+dispatch: zz-review on claude: stalled (no output for 2 s), 0 tokens
+
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: a design review writes its own row with its wall minutes, and prints no record: line
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:333: dispatch: zz-review c0010 on claude (claude-cli, claude-opus-5-5, max_tokens 5000)
+dispatch: zz-review on claude: stalled (no output for 2 s), 0 tokens
+
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: a design or code reviewer that writes nothing fails the step; the row is written, or the line printed
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:369: expected "failed", got "stalled"
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: a stream review: the dispatcher numbers its review.md into the raft's folder, the line names it and the issue, and round 2 is given round 1's files
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:439: dispatch: zz-review c0010 on claude (claude-cli, claude-opus-5-5, max_tokens 5000)
+dispatch: zz-review on claude: stalled (no output for 2 s), 0 tokens
+
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: a stream reviewer that writes no review fails the step, and its spend line is still printed
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:478: expected "failed", got "stalled"
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: a quota fallthrough lands one review, numbered once; the failed attempt's file is moved aside; another issue's file is never this one's
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:501: dispatch: zz-review c0010 on claude (claude-cli, claude-opus-5-5, max_tokens 5000)
+dispatch: zz-review on claude: stalled (no output for 2 s), 0 tokens
+
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: a raft review lands as design-review-NNN.md in the raft's own folder
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:521: dispatch: zz-review R0090 on claude (claude-cli, claude-opus-5-5, max_tokens 5000)
+dispatch: zz-review on claude: stalled (no output for 2 s), 0 tokens
+
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: a stale review.md from an earlier run never lands: a reviewer that writes nothing fails
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:538: expected "failed", got "stalled"
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: a failed attempt's review never lands: the next CLI writes nothing, and the step fails
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:552: expected "failed", got "stalled"
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: a CLI that is not installed is skipped, named on stderr, and the next one runs; none installed fails
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:576: dispatch: z-design c0030 on grok (grok-cli, grok-4.7-high, max_tokens 5000)
+dispatch: z-design on grok: stalled (no output for 2 s), 0 tokens
+dispatch: claude is not installed (the claude CLI): skipped
+
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: a CLI on quota and the rest not installed: the outcome is quota and the message names both
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:607: expected "quota", got "stalled"
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: moves down the order when a CLI reports quota, and records the CLI that did the work
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:621: expected true, got false
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: a failure that is not quota stops: the next CLI never starts; an exit 0 with no count fails
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:643: expected "failed", got "stalled"
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: kills the step's whole process group past max_tokens, and records what it spent
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:659: expected "cap", got "stalled"
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: dispatch stop kills the running step's group, and retry reruns the same step
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:703: expected "stopped", got "stalled"
+FAIL tests/acceptance/c0117/dispatch-cli.spec.luau :: an agent's git and gh refuse a code push to main and a merge, before the real gh runs
+     /Users/philipbergen/code/pickman/.worktree/proto-c0279-base/z-nile/tests/acceptance/c0117/dispatch-cli.spec:717: expected true, got false
+8 passed, 17 failed, 1 spec files

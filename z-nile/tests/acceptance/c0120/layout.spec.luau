@@ -158,7 +158,8 @@ return t.spec("c0120 every project's files live in its home", function(it)
 	end)
 
 	it(
-		"each home's .luaurc points its aliases at its own folders; the root keeps every alias, pointed into them",
+		-- c0184 override: the root keeps the tooling's aliases and none into a game
+		"each home's .luaurc points its aliases at its own folders; the root keeps the tooling's aliases and none into a game",
 		function()
 			local cfg = json("pickman/.luaurc")
 			t.expect(cfg.aliases.tests).toBe("./tests")
@@ -170,10 +171,12 @@ return t.spec("c0120 every project's files live in its home", function(it)
 			t.expect(z.aliases.tests).toBe("./tests")
 			t.expect(z.languageMode).toBe("strict")
 			-- an alias a worktree's own .luaurc chain left undefined would resolve through the main checkout's .luaurc
-			-- (worktrees lie inside it), so the root defines every one, pointed into its project (Guesses 8 and 15)
+			-- (worktrees lie inside it), so the root defines every alias the tooling uses (Guesses 8 and 15); the game aliases
+			-- are each home's own (c0184)
 			local rootCfg = json(".luaurc")
-			t.expect(rootCfg.aliases.logic).toBe("./pickman/src/shared/Logic")
-			t.expect(rootCfg.aliases.shared).toBe("./pickman/src/shared")
+			-- c0184 override: no alias into a game; a home that left `logic` out would otherwise resolve it into pickman
+			t.expect(rootCfg.aliases.logic).toBe(nil)
+			t.expect(rootCfg.aliases.shared).toBe(nil)
 			t.expect(rootCfg.aliases.tests).toBe("./z-nile/tests")
 			t.expect(rootCfg.aliases.znile).toBe("./z-nile")
 			t.expect(rootCfg.aliases.scripts).toBe("./scripts")

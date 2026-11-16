@@ -1,6 +1,8 @@
 --!strict
 -- f0320: the danger HUD is a thin client adapter. All the geometry is Awareness; the adapter reads the
 -- replicated snapshot and the camera's pose, draws what Awareness returns, and decides nothing.
+-- Narrowed by c0159 (2026-10-31): the second case no longer requires Awareness.edgePoint, because f0158's danger
+-- ring replaces the edge glows (decided with the user, 2026-10-26); it still requires the radar and the indicators.
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
 
@@ -29,9 +31,9 @@ return t.spec("f0320 danger hud adapter", function(it)
 		t.expect(node.ClassName).toBe("ModuleScript")
 	end)
 
-	it("it draws what Awareness computes: the radar, the indicators and the edge points", function()
+	it("it draws what Awareness computes: the radar and the indicators", function()
 		local src = source("DangerHud")
-		for _, call in { "Awareness.radar(", "Awareness.indicators(", "Awareness.edgePoint(" } do
+		for _, call in { "Awareness.radar(", "Awareness.indicators(" } do
 			t.expect(string.find(src, call, 1, true) ~= nil).toBe(true)
 		end
 	end)

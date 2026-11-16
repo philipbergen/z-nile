@@ -1,0 +1,4 @@
+- design-review-001 F1: z-raft/order-names-members-once
+- design-review-001 F2: z-raft/grouping-cost-checks-every-wait
+- design-review-001 F3: z-raft/run-sequestered-specs-on-all-prototypes-together
+- design-review-001 F4: z-raft/interface-names-every-writer

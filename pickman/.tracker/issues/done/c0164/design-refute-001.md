@@ -1,0 +1,5 @@
+# c0164 design refute 001
+
+- F1: fixed: the case now goes from edible (frightened 6, playing) straight into the level-clear flash (lit, then dark) and, separately, straight into a death, each with `frightened` 0, as the game does. consequences: three frames added (ten in all); mutants S2 (walls updated only while playing) and S2r (the radar's) added to `mutants.py` and the Rules table, run, killed; every earlier result unchanged; `views.patch` and walls.spec's digest regenerated.
+- F2: fixed: Maintainability and Existing work say the C refactors pass views.spec but not f0109's promoted place.spec, which pins the calls' text (left as it is; a refactor needs a chore for it). consequences: the runner now runs f0109's place.spec for each correct variant and reports it (P4 green, C1 and C2 red there).
+- F3: fixed: the model is checked by identity against the table Main handed `PelletView.build`; a reasoned S1 row (a stale model) explains why it is equivalent today. consequences: none beyond the row.

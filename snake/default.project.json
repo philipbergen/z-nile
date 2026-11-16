@@ -1,0 +1,24 @@
+{
+  "name": "snake",
+  "tree": {
+    "$className": "DataModel",
+    "Players": {
+      "$properties": { "CharacterAutoLoads": false }
+    },
+    "ReplicatedStorage": {
+      "Shared": { "$path": "src/shared" },
+      "Arcade": { "$path": "../arcade/src/shared" }
+    },
+    "ServerStorage": {
+      "Arcade": { "$path": "../arcade/src/server" }
+    },
+    "ServerScriptService": {
+      "Server": { "$path": "src/server" }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Client": { "$path": "src/client" }
+      }
+    }
+  }
+}

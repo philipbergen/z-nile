@@ -1,0 +1,2593 @@
+diff --git a/SETUP.md b/SETUP.md
+index b3f2c102..cce3748d 100644
+--- a/SETUP.md
++++ b/SETUP.md
+@@ -7,6 +7,9 @@ git clone git@github.com:philipbergen/pickman.git && cd pickman
+ z-nile/setup.sh
+ ```
+ 
++## The environment checks run in
++Every launcher (`./zn`, the gate, the spec runner) starts what it runs in a fixed environment (c0123, `z-nile/lib/cleanenv.list`): your shell's other variables, functions and `PATH` entries are not passed on. `PATH` becomes `~/.rokit/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`, so `git`, `gh`, `node` and `perl` must be installed in one of those directories (Homebrew, the distribution's packages and Rokit are; a tool from nvm, asdf or nix is not found). A name your setup needs (a proxy, a token) goes in the list in a reviewed change.
++
+ ## Prerequisites (manual, one time)
+ | need | macOS | Linux |
+ |---|---|---|
+diff --git a/pickman/check.sh b/pickman/check.sh
+index 91bac98c..fc545600 100755
+--- a/pickman/check.sh
++++ b/pickman/check.sh
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env bash
++#!/bin/bash -p
+ # pickman's gate (c0120): the repository's gate for this project alone. See z-nile/skills/zz-test/SKILL.md.
+ #   pickman/check.sh [--full|--affected] [--base REF]
+-exec bash "$(dirname "$0")/../z-nile/check.sh" --project pickman "$@"
++exec /bin/bash -p "${0%/*}/../z-nile/check.sh" --project pickman "$@"
+diff --git a/pickman/scripts/check.sh b/pickman/scripts/check.sh
+index c572a5e8..3fddbf9c 100755
+--- a/pickman/scripts/check.sh
++++ b/pickman/scripts/check.sh
+@@ -1,5 +1,5 @@
+-#!/usr/bin/env bash
++#!/bin/bash -p
+ # Forwarder (c0120): pickman's check.sh files run from pickman/ and name scripts/check.sh; it runs pickman's gate
+ # alone (pickman/check.sh, decided with the user: "pickman's gate only"). Kept until every raft whose sequestered
+ # check.sh calls this path is done (as scripts/check.sh).
+-exec bash "$(dirname "$0")/../check.sh" "$@"
++exec /bin/bash -p "${0%/*}/../check.sh" "$@"
+diff --git a/pickman/scripts/tracker.sh b/pickman/scripts/tracker.sh
+index 8ec88d72..8ce03585 100755
+--- a/pickman/scripts/tracker.sh
++++ b/pickman/scripts/tracker.sh
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env bash
++#!/bin/bash -p
+ # Forwarder (c0120): pickman's check.sh files run from pickman/ and name scripts/tracker.sh; the command is ./zn at
+ # the repository root. Kept until every raft whose sequestered check.sh calls this path is done (as scripts/tracker.sh).
+-exec bash "$(dirname "$0")/../../zn" "$@"
++exec /bin/bash -p "${0%/*}/../../zn" "$@"
+diff --git a/scripts/check.sh b/scripts/check.sh
+index 156d0b20..f6f18eb3 100755
+--- a/scripts/check.sh
++++ b/scripts/check.sh
+@@ -1,3 +1,3 @@
+-#!/usr/bin/env bash
++#!/bin/bash -p
+ # Forwarder (c0114): the gate is z-nile/check.sh. Kept for the check.sh files and specs that name this path.
+-exec bash "$(dirname "$0")/../z-nile/check.sh" "$@"
++exec /bin/bash -p "${0%/*}/../z-nile/check.sh" "$@"
+diff --git a/scripts/hooks/post-edit.sh b/scripts/hooks/post-edit.sh
+index 8099188b..148c09bd 100755
+--- a/scripts/hooks/post-edit.sh
++++ b/scripts/hooks/post-edit.sh
+@@ -1,6 +1,8 @@
+-#!/usr/bin/env bash
++#!/bin/bash -p
+ # Claude Code PostToolUse hook: format + lint an edited .luau file; exit 2 feeds problems back.
+-export PATH="$HOME/.rokit/bin:$PATH"
++# c0123: privileged mode (no $BASH_ENV, no imported functions), then the allow-listed environment (z-nile/lib/cleanenv.sh)
++_c=${BASH_SOURCE[0]%/*}; [[ $_c != "${BASH_SOURCE[0]}" ]] || _c=.
++. "$_c/../../z-nile/lib/cleanenv.sh" && pickman_clean_env "$0" "$@" || exit 1
+ file=$(sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+ [[ $file == *.luau && -f $file ]] || exit 0
+ # lint with the config of the tree the file lives in (a worktree has its own), not the hook's own repo
+diff --git a/scripts/hooks/session-tmp.sh b/scripts/hooks/session-tmp.sh
+index d55a1da8..cb4887d7 100755
+--- a/scripts/hooks/session-tmp.sh
++++ b/scripts/hooks/session-tmp.sh
+@@ -1,9 +1,12 @@
+-#!/usr/bin/env bash
++#!/bin/bash -p
+ # Claude Code SessionStart hook (c0194): every Bash command this session and its subagents run gets TMPDIR under the
+ # project's .cache/.tmp (never the system temp folder, which Spotlight indexes) and z-nile/bin first on PATH, whose
+ # mktemp honours TMPDIR (macOS mktemp does not). Stale trees there are swept. Quiet and fail-open: a session without
+ # it is only back to the system temp folder, and the stale-tree report is `./zn tmp leftovers`.
+-export PATH="$HOME/.rokit/bin:$PATH"
++# c0123: privileged mode (no $BASH_ENV, no imported functions), then the allow-listed environment (the two names the hook reads,
++# CLAUDE_PROJECT_DIR and CLAUDE_ENV_FILE, pass; z-nile/lib/cleanenv.sh)
++_c=${BASH_SOURCE[0]%/*}; [[ $_c != "${BASH_SOURCE[0]}" ]] || _c=.
++. "$_c/../../z-nile/lib/cleanenv.sh" && pickman_clean_env "$0" "$@" || exit 0
+ top=${CLAUDE_PROJECT_DIR:-}
+ [[ -n $top && -n ${CLAUDE_ENV_FILE:-} && -f $top/z-nile/lib/tmpcli.luau ]] || exit 0
+ root=$(cd "$top" && lune run z-nile/lib/tmpcli -- root --dir "$top" 2>/dev/null) || root=
+diff --git a/scripts/hooks/stop.sh b/scripts/hooks/stop.sh
+index fd363aea..2cc7a916 100755
+--- a/scripts/hooks/stop.sh
++++ b/scripts/hooks/stop.sh
+@@ -1,7 +1,9 @@
+-#!/usr/bin/env bash
++#!/bin/bash -p
+ # Claude Code Stop hook: if tests/, z-nile/ or a project's home (pickman/, c0120) changed, the affected gate must pass
+ # before stopping.
+-export PATH="$HOME/.rokit/bin:$PATH"
++# c0123: privileged mode (no $BASH_ENV, no imported functions), then the allow-listed environment (z-nile/lib/cleanenv.sh)
++_c=${BASH_SOURCE[0]%/*}; [[ $_c != "${BASH_SOURCE[0]}" ]] || _c=.
++. "$_c/../../z-nile/lib/cleanenv.sh" && pickman_clean_env "$0" "$@" || exit 1
+ input=$(cat)
+ # gate the tree the session is in (its repo root, even from a subdirectory); fall back to the hook's own repo
+ cwd=$(printf '%s' "$input" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+diff --git a/scripts/setup.sh b/scripts/setup.sh
+index 185d4901..9cb495d0 100755
+--- a/scripts/setup.sh
++++ b/scripts/setup.sh
+@@ -1,3 +1,3 @@
+-#!/usr/bin/env bash
++#!/bin/bash -p
+ # Forwarder (c0114): the bootstrap is z-nile/setup.sh. Kept for the check.sh files and specs that name this path.
+-exec bash "$(dirname "$0")/../z-nile/setup.sh" "$@"
++exec /bin/bash -p "${0%/*}/../z-nile/setup.sh" "$@"
+diff --git a/scripts/tracker.sh b/scripts/tracker.sh
+index f85cf2bf..ff665ea0 100755
+--- a/scripts/tracker.sh
++++ b/scripts/tracker.sh
+@@ -1,3 +1,3 @@
+-#!/usr/bin/env bash
++#!/bin/bash -p
+ # Forwarder (c0114): the command is ./zn. Kept until every raft whose sequestered check.sh calls this path is done.
+-exec bash "$(dirname "$0")/../zn" "$@"
++exec /bin/bash -p "${0%/*}/../zn" "$@"
+diff --git a/z-nile/bin/mktemp b/z-nile/bin/mktemp
+index 48ec6ae3..d217dc6e 100755
+--- a/z-nile/bin/mktemp
++++ b/z-nile/bin/mktemp
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # mktemp that honours TMPDIR (c0194). macOS mktemp ignores TMPDIR and uses the user temp folder, outside the repository
+ # and so inside Spotlight's reach. With no template, or -t <prefix>, this puts the tree in $TMPDIR; a template (and
+ # so -p <dir>, whose folder is the first non-option) names its place and is passed through. The runner copies this file into each run's own bin/ (tests/lib/fence.luau).
+diff --git a/z-nile/check.sh b/z-nile/check.sh
+index 6ce088ec..b6800e99 100755
+--- a/z-nile/check.sh
++++ b/z-nile/check.sh
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env bash
++#!/bin/bash -p
+ # The repo gate (c0114: z-nile's), one per project (c0120). See z-nile/skills/zz-test/SKILL.md.
+ #   z-nile/check.sh [--project <name>]... [--affected [--base REF] | --full]
+ #   z-nile/check.sh [--project <name>]... --plan   # print what each stage reads, run nothing, write nothing
+@@ -6,9 +6,11 @@
+ # one (pickman/check.sh is `--project pickman`). A project's specs run from its home, which z-nile/roots gives
+ # (`--projects`): z-nile/ for z-nile, pickman/ for pickman (the root belongs to no project).
+ # Static stages run concurrently (z-nile/lib/par.sh); any failure fails the gate before the tests.
++# c0123: privileged mode (no $BASH_ENV, no imported functions), then the allow-listed environment (z-nile/lib/cleanenv.sh)
++_c=${BASH_SOURCE[0]%/*}; [[ $_c != "${BASH_SOURCE[0]}" ]] || _c=.
++. "$_c/lib/cleanenv.sh" && pickman_clean_env "$0" "$@" || exit 1
+ set -euo pipefail
+ cd "$(dirname "$0")/.."
+-export PATH="$HOME/.rokit/bin:$PATH"
+ 
+ mode=affected
+ plan=
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index d7a3db4b..b7de8b21 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -213,7 +213,7 @@ local function guardRepoRoot()
+ 			end
+ 		end
+ 		local function physical(path: string): string?
+-			local r = sh.run("sh", { "-c", 'cd "$1" 2>/dev/null && pwd -P', "_", path })
++			local r = sh.run("/bin/sh", { "-p", "-c", 'cd "$1" 2>/dev/null && pwd -P', "_", path })
+ 			return if r.ok then sh.trim(r.stdout) else nil
+ 		end
+ 		local used = physical(sh.trim(dir.stdout))
+@@ -233,7 +233,8 @@ end
+ local guardedRun: boolean? = nil
+ local function guarded(): boolean
+ 	if guardedRun == nil then
+-		local ok, r = pcall(process.exec, "bash", {
++		local ok, r = pcall(process.exec, "/bin/bash", {
++			"-p",
+ 			"-c",
+ 			'[ -f z-nile/lib/fence.sh ] || { echo "z-nile/lib/fence.sh is missing" >&2; exit 3; }; '
+ 				.. 'source z-nile/lib/fence.sh && pickman_guarded "$PWD"',
+@@ -2264,7 +2265,7 @@ function cmd.land(_: { string }, opts: { [string]: { string } })
+ 			fail(refusal)
+ 		end
+ 		print(`gate: {gate}{if override then " (gate overridden: PICKMAN_LAND_GATE)" else ""}`)
+-		if not sh.stream("bash", { "-c", gate }) then
++		if not sh.stream("/bin/bash", { "-p", "-c", gate }) then
+ 			fail("the gate failed: nothing was pushed")
+ 		end
+ 		local parent = base
+@@ -2740,7 +2741,7 @@ end
+ local function runCheck(item: store.Item): boolean
+ 	refuseListMode()
+ 	print(`\n=== {item.id} check.sh`)
+-	return sh.stream("bash", { `{item.dir}/check.sh` })
++	return sh.stream("/bin/bash", { "-p", `{item.dir}/check.sh` })
+ end
+ 
+ function cmd.check(pos: { string })
+@@ -4115,7 +4116,7 @@ function cmd.done(pos: { string })
+ 		end
+ 	else
+ 		print("\n=== full gate on the done tree")
+-		if not sh.stream("bash", { "z-nile/check.sh", "--full" }) then
++		if not sh.stream("/bin/bash", { "-p", "z-nile/check.sh", "--full" }) then
+ 			rollback()
+ 			fail("the full gate fails on the done tree (rolled back); fix and retry done")
+ 		end
+diff --git a/z-nile/lib/ac.sh b/z-nile/lib/ac.sh
+index fd9c527e..64d7a359 100755
+--- a/z-nile/lib/ac.sh
++++ b/z-nile/lib/ac.sh
+@@ -5,6 +5,16 @@
+ #   finish
+ # Each check prints PASS/FAIL; finish exits non-zero if any failed.
+ # With AC_LIST set (non-empty), check only prints LIST <label> and runs nothing; finish says "listed".
++# c0123: the allow-listed environment, before anything else of ours runs (builtins only until PATH is the fixed one). A
++# check.sh the engine starts is already `bash -p` in that environment and this finds nothing to change and goes on (about 15 ms); one started by hand is
++# restarted in it, or refused when its bash ran a $BASH_ENV first. An inline `bash -c 'source ac.sh; ...'` has no
++# script to restart: a dirty environment refuses.
++_ac_here=${BASH_SOURCE[0]%/*}; [[ $_ac_here != "${BASH_SOURCE[0]}" ]] || _ac_here=.
++if [[ -f $0 ]]; then
++  . "$_ac_here/cleanenv.sh" && pickman_clean_env "$0" "$@" || exit 1
++else
++  . "$_ac_here/cleanenv.sh" && pickman_clean_env || exit 1
++fi
+ # The check.sh that sourced this (the script bash runs), as a physical path, before any cd.
+ _ac_physical() { echo "$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)/$(basename "$1")"; }
+ _ac_script=$(_ac_physical "$0")
+diff --git a/z-nile/lib/cleanenv.list b/z-nile/lib/cleanenv.list
+new file mode 100644
+index 00000000..0bd8cfb8
+--- /dev/null
++++ b/z-nile/lib/cleanenv.list
+@@ -0,0 +1,82 @@
++# The environment every launcher passes on (c0123). Readers: z-nile/lib/cleanenv.sh (the entry scripts, ac.sh) and
++# z-nile/lib/cleanenv.luau (tests/run). Anything not listed here is dropped at the first process of ours; nothing is
++# added from outside this file. One entry per line, `kind value`:
++#   allow <NAME>      kept, exactly; a trailing * keeps the family (LC_*)
++#   fence <NAME>      kept only while a fence is active here (PICKMAN_FENCE_REAL_GIT is set): the state the guards
++#                     themselves export to everything a check starts (z-nile/lib/fence.sh)
++#   path <dir>        a directory of the PATH, in this order; a leading ~ is the account's home from the passwd
++#                     database, never $HOME, so a caller cannot choose the directory; Rokit's comes first because
++#                     it pins the tools (lune, stylua, selene), as the scripts' own PATH line did
++#   internal <glob>   a PATH entry the run makes for itself (stubs, the run's temp bin, the browser guard's folder) is
++#                     kept when its name matches AND its canonical path (the spelling the filesystem stores, not the
++#                     caller's) lies inside a folder the runner registered for this run (tests-run.lock/folders, found
++#                     from this file's location, never from a variable) and its run still holds it (a live process that is not a reused
++#                     pid, so a killed run's registry proves nothing). A leftover, a folder an agent made in
++#                     .cache/.tmp and another spelling of either are dropped
++#   proof <glob>      an internal entry that matches proves a run of ours is live here: only then do the `fence` names
++#                     pass
++allow HOME
++allow USER
++allow LOGNAME
++allow SHELL
++allow TERM
++allow COLORTERM
++allow NO_COLOR
++allow CLICOLOR
++allow CLICOLOR_FORCE
++allow FORCE_COLOR
++allow LANG
++allow LC_*
++allow TZ
++allow TMPDIR
++allow __CF_USER_TEXT_ENCODING
++allow SSH_AUTH_SOCK
++allow GH_TOKEN
++allow GITHUB_TOKEN
++allow GH_ENTERPRISE_TOKEN
++allow GITHUB_ENTERPRISE_TOKEN
++allow GH_HOST
++allow GH_CONFIG_DIR
++allow http_proxy
++allow https_proxy
++allow all_proxy
++allow no_proxy
++allow HTTP_PROXY
++allow HTTPS_PROXY
++allow ALL_PROXY
++allow NO_PROXY
++allow SSL_CERT_FILE
++allow SSL_CERT_DIR
++allow CI
++allow GITHUB_ACTIONS
++allow GITHUB_PATH
++allow PWD
++allow OLDPWD
++allow SHLVL
++allow _
++allow AC_LIST
++allow ZN_*
++allow CLAUDE_PROJECT_DIR
++allow CLAUDE_ENV_FILE
++allow GIT_AUTHOR_*
++allow GIT_COMMITTER_*
++allow PICKMAN_*
++fence GIT_CEILING_DIRECTORIES
++fence GIT_CONFIG_COUNT
++fence GIT_CONFIG_KEY_*
++fence GIT_CONFIG_VALUE_*
++fence GIT_ALLOW_PROTOCOL
++fence GIT_SSH_COMMAND
++fence GIT_TERMINAL_PROMPT
++path ~/.rokit/bin
++path /opt/homebrew/bin
++path /usr/local/bin
++path /usr/bin
++path /bin
++path /usr/sbin
++path /sbin
++internal */pickman-guard.*
++internal */pickman-run.*/bin
++internal */pickman-stub.*
++proof */pickman-run.*/bin
++proof */pickman-guard.*
+diff --git a/z-nile/lib/cleanenv.luau b/z-nile/lib/cleanenv.luau
+new file mode 100644
+index 00000000..df864c2e
+--- /dev/null
++++ b/z-nile/lib/cleanenv.luau
+@@ -0,0 +1,366 @@
++--!strict
++-- The allow-listed environment (c0123), the Lune side of z-nile/lib/cleanenv.sh: both read z-nile/lib/cleanenv.list and
++-- both apply the same rules (a spec feeds them one planted environment and compares). Pure over texts and tables; the
++-- two functions at the edge (`load`, `relaunch`) read the list and start the process again.
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++
++local cleanenv = {}
++
++export type Spec = {
++	allow: { string },
++	fence: { string },
++	path: { string },
++	internal: { string },
++	proof: { string },
++}
++export type Env = { [string]: string }
++
++-- A glob (`*` matches anything) as a Lua pattern
++local function globToPattern(glob: string): string
++	local escaped = string.gsub(glob, "[%^%$%(%)%%%.%[%]%+%-%?]", "%%%0")
++	return "^" .. string.gsub(escaped, "%*", ".*") .. "$"
++end
++
++local function matches(globs: { string }, text: string): boolean
++	for _, glob in globs do
++		if string.find(text, globToPattern(glob)) then
++			return true
++		end
++	end
++	return false
++end
++
++-- Parses the list's text. Returns the spec, or nil and the problem (an unknown entry is a problem, never skipped).
++function cleanenv.parse(text: string, home: string): (Spec?, string?)
++	local spec: Spec = { allow = {}, fence = {}, path = {}, internal = {}, proof = {} }
++	for line in string.gmatch(text, "[^\n]+") do
++		if line == "" or string.sub(line, 1, 1) == "#" then
++			continue
++		end
++		local kind, value = string.match(line, "^(%S+) (.+)$")
++		if kind == nil or value == nil then
++			return nil, `cleanenv.list: unknown entry '{line}'`
++		end
++		if kind == "allow" then
++			table.insert(spec.allow, value)
++		elseif kind == "fence" then
++			table.insert(spec.fence, value)
++		elseif kind == "path" then
++			table.insert(spec.path, (string.gsub(value, "^~", home)))
++		elseif kind == "internal" then
++			table.insert(spec.internal, value)
++		elseif kind == "proof" then
++			table.insert(spec.proof, value)
++		else
++			return nil, `cleanenv.list: unknown entry '{line}'`
++		end
++	end
++	return spec, nil
++end
++
++-- The program that prints a folder's canonical path: /bin/pwd, else /usr/bin/pwd.
++local function pwdProgram(): string
++	return if fs.isFile("/bin/pwd") then "/bin/pwd" else "/usr/bin/pwd"
++end
++
++local function isName(name: string): boolean
++	return string.find(name, "^[A-Za-z_][A-Za-z0-9_]*$") ~= nil
++end
++
++-- What the account database and this module's own location say (read at the edge, never from the environment): the home,
++-- the git global config pinned from it, the trusted checkout (a copy kept under a `.cache` belongs to the checkout above
++-- it), the folders the runner registered, and the first `~` path the pinned config holds, if any.
++export type Facts = {
++	home: string,
++	gitConfigGlobal: string,
++	trust: string,
++	tildeLine: string?,
++	-- the run folders a runner registered in a tests-run.lock/folders file of this checkout's project homes, canonical
++	registered: { string },
++}
++
++-- A PATH entry is believed when its name matches an `internal` glob, its canonical path (`resolve`: `cd -P`, then the
++-- filesystem's own spelling) matches one again, and that path lies inside a folder the runner registered for this run
++-- (`facts.registered`, canonical too). `resolve` is the edge function below at run time and a stand-in in a spec.
++local function anchored(spec: Spec, facts: Facts, resolve: (string) -> string?, entry: string): string?
++	if not matches(spec.internal, entry) then
++		return nil
++	end
++	local res = resolve(entry)
++	if res == nil or not matches(spec.internal, res) then
++		return nil
++	end
++	for _, folder in facts.registered do
++		if res == folder or string.sub(res, 1, #folder + 1) == folder .. "/" then
++			return res
++		end
++	end
++	return nil
++end
++
++-- Why the cleaner must refuse here, or nil: the caller moved HOME while the account's pinned git config names a `~` path,
++-- which git would expand from the caller's HOME.
++function cleanenv.refusal(env: Env, facts: Facts): string?
++	if facts.tildeLine and env.HOME ~= facts.home then
++		return `cleanenv: {facts.gitConfigGlobal} has a ~ path ({facts.tildeLine}) and HOME is not the account's home; git would read another file. Refusing.`
++	end
++	return nil
++end
++
++-- The environment `env` becomes, and whether that changes it. Names not on the list are dropped; the `fence` names pass
++-- only while an anchored `proof` folder is on PATH; PATH keeps the anchored `internal` entries, once each, then the
++-- fixed directories.
++function cleanenv.clean(env: Env, spec: Spec, facts: Facts, resolve: (string) -> string?): (Env, boolean)
++	local out: Env = {}
++	local dirty = false
++	local parts: { string } = {}
++	local seen: { [string]: boolean } = {}
++	local live = false
++	for entry in string.gmatch(env.PATH or "", "[^:]+") do
++		local res = anchored(spec, facts, resolve, entry)
++		if res and not seen[res] then
++			seen[res] = true
++			table.insert(parts, res)
++			if matches(spec.proof, res) then
++				live = true
++			end
++		end
++	end
++	for _, dir in spec.path do
++		table.insert(parts, dir)
++	end
++	out.PATH = table.concat(parts, ":")
++	if out.PATH ~= (env.PATH or "") then
++		dirty = true
++	end
++	for name, value in env do
++		if name == "PATH" then
++			continue
++		end
++		if name == "GIT_CONFIG_GLOBAL" then
++			if value ~= facts.gitConfigGlobal then
++				dirty = true
++			end
++			continue
++		end
++		local keep = isName(name) and (matches(spec.allow, name) or (live and matches(spec.fence, name)))
++		if keep then
++			out[name] = value
++		else
++			dirty = true
++		end
++	end
++	out.GIT_CONFIG_GLOBAL = facts.gitConfigGlobal
++	if env.GIT_CONFIG_GLOBAL == nil then
++		dirty = true
++	end
++	return out, dirty
++end
++
++local FLAG = "--cleaned"
++
++-- The arguments without the restart marker, and whether it was there.
++function cleanenv.args(args: { string }): ({ string }, boolean)
++	local out: { string } = {}
++	local marked = false
++	for _, a in args do
++		if a == FLAG then
++			marked = true
++		else
++			table.insert(out, a)
++		end
++	end
++	return out, marked
++end
++
++-- The command line that starts `argv` again under exactly `clean` (an absolute `env`, which finds argv[1] in the clean PATH).
++function cleanenv.command(clean: Env, argv: { string }): { string }
++	local out = { "-i" }
++	local names: { string } = {}
++	for name in clean do
++		table.insert(names, name)
++	end
++	table.sort(names)
++	for _, name in names do
++		table.insert(out, `{name}={clean[name]}`)
++	end
++	for _, a in argv do
++		table.insert(out, a)
++	end
++	return out
++end
++
++-- Edge: the list as shipped, read from this module's own folder.
++function cleanenv.load(home: string): Spec
++	local folder = string.match(debug.info(1, "s"), "^(.*)/[^/]+$") or "z-nile/lib"
++	local spec, problem = cleanenv.parse(fs.readFile(`{folder}/cleanenv.list`), home)
++	if not spec then
++		error(problem or "cleanenv.list does not parse", 0)
++	end
++	return spec
++end
++
++-- Edge: the account's home (the passwd database's, through the shell's ~user, never $HOME) and the git global config
++-- file pinned from it: ~/.gitconfig, else ~/.config/git/config, else /dev/null.
++function cleanenv.facts(): Facts
++	local who = process.exec("/usr/bin/id", { "-un" })
++	local user = string.gsub(who.stdout, "%s+$", "")
++	if not who.ok or user == "" or string.find(user, "[^A-Za-z0-9._-]") then
++		error("cleanenv: cannot tell the account's name (id -un); refusing.", 0)
++	end
++	local home = process.exec("/bin/sh", { "-p", "-c", 'eval "echo ~$1"', "_", user })
++	local dir = string.gsub(home.stdout, "%s+$", "")
++	if not home.ok or string.sub(dir, 1, 1) ~= "/" then
++		error(`cleanenv: cannot tell {user}'s home; refusing.`, 0)
++	end
++	local config = "/dev/null"
++	if fs.isFile(`{dir}/.gitconfig`) then
++		config = `{dir}/.gitconfig`
++	elseif fs.isFile(`{dir}/.config/git/config`) then
++		config = `{dir}/.config/git/config`
++	end
++	local tilde: string? = nil
++	if config ~= "/dev/null" then
++		for line in string.gmatch(fs.readFile(config), "[^\n]+") do
++			local key, value = string.match(line, "^%s*([^=%s]*)%s*=%s*(.-)%s*$")
++			if value and string.sub(value, 1, 1) == "~" then
++				-- data files git only reads (ignore patterns, attributes, a message template) cannot run a program
++				local data =
++					{ excludesfile = true, attributesfile = true, template = true, ignorerevsfile = true }
++				if not data[string.lower(key or "")] then
++					tilde = line
++					break
++				end
++			end
++		end
++	end
++	local folder = string.match(debug.info(1, "s"), "^(.*)/[^/]+$") or "z-nile/lib"
++	local here = cleanenv.resolve(`{folder}/../..`)
++	if here == nil then
++		error("cleanenv: cannot tell where cleanenv.luau is; refusing.", 0)
++	end
++	local trust = here
++	local cut = string.find(here, "/.cache/", 1, true)
++	if cut then
++		trust = string.sub(here, 1, cut - 1)
++	end
++	local registered = cleanenv.registered({ here, trust })
++	return { home = dir, gitConfigGlobal = config, trust = trust, tildeLine = tilde, registered = registered }
++end
++
++-- Edge: the canonical path of folder `path`: `cd -P` (CDPATH unset), then /bin/pwd -P, which gives the spelling the
++-- filesystem stores (the shell's own pwd -P keeps the caller's letter case on a case-insensitive disk). Exactly one
++-- absolute line, or nil. The same command as cleanenv.sh's `_pickman_canon`. `env` is added to the environment of that
++-- shell only so a spec can show it ignores a caller's CDPATH.
++function cleanenv.resolve(path: string, env: { [string]: string }?): string?
++	local r = process.exec("/bin/sh", {
++		"-p",
++		"-c",
++		'unset CDPATH; cd -P -- "$1" 2>/dev/null && "$2" -P && printf x',
++		"_",
++		path,
++		pwdProgram(),
++	}, if env then { env = env } else nil)
++	if not r.ok or string.sub(r.stdout, -1) ~= "x" then
++		return nil
++	end
++	local out = string.sub(r.stdout, 1, -2)
++	if string.sub(out, -1) == "\n" then
++		out = string.sub(out, 1, -2)
++	end
++	if string.sub(out, 1, 1) ~= "/" or string.find(out, "\n", 1, true) then
++		return nil
++	end
++	return out
++end
++
++-- The kernel's start id of a process: the text of tests/lib/fence.luau's STARTED and of cleanenv.sh's `_pickman_startid`
++-- (cleanenv.spec pins the three equal). Exit 1: no such process; 2: cannot tell.
++cleanenv.STARTID = table.concat({
++	"my $pid = shift; exit 2 unless defined $pid && $pid =~ /^\\d+$/;",
++	"if ($^O eq 'darwin') { my $mib = pack('i4', 1, 14, 1, $pid); my $buf = \"\\0\" x 4096;",
++	"my $len = pack('Q', length $buf); exit 2 unless syscall(202, $mib, 4, $buf, $len, 0, 0) == 0;",
++	"exit 1 unless unpack('Q', $len) > 0; my ($sec, $usec) = unpack('q l', $buf); exit 1 unless $sec > 0;",
++	'print "$sec.$usec\\n"; exit 0 }',
++	"if ($^O eq 'linux') { open(my $b, '<', '/proc/sys/kernel/random/boot_id') or exit 2; my $boot = <$b>;",
++	"close $b; chomp $boot; open(my $st, '<', \"/proc/$pid/stat\") or exit 1; my $line = <$st>; close $st;",
++	"$line =~ s/^.*\\)\\s+//s or exit 2; my $ticks = (split /\\s+/, $line)[19];",
++	"exit 2 unless $boot ne '' && defined $ticks && $ticks =~ /^\\d+$/; print \"$boot:$ticks\\n\"; exit 0 }",
++	"exit 2;",
++}, "\n")
++
++-- Whether the run that registered the folder `folder` still holds it: its .pickman-owner (pid, tab, start id) names a live
++-- process that is not a reused pid. Operation not permitted (a signal across the jail's edge, another user's process)
++-- reads as alive, an id that is missing or unreadable leaves it holding (as the runner's fence.holds does), and a folder
++-- with no readable owner is dead. The same decision as cleanenv.sh's `_pickman_holds`.
++function cleanenv.holds(folder: string, env: { [string]: string }?): boolean
++	local ok, text = pcall(fs.readFile, `{folder}/.pickman-owner`)
++	if not ok then
++		return false
++	end
++	local pid, id = string.match(text, "^(%d+)\t([^\n]*)")
++	if pid == nil then
++		return false
++	end
++	if (tonumber(pid) :: number) < 1 then
++		return false
++	end
++	local alive = process.exec("/bin/sh", { "-p", "-c", 'LC_ALL=C kill -0 "$1" 2>&1', "_", pid })
++	if not alive.ok and not string.find(alive.stdout .. alive.stderr, "Operation not permitted", 1, true) then
++		return false
++	end
++	if id == nil or id == "" then
++		return true
++	end
++	-- with an empty environment: process.exec merges its env option into the parent's, so env starts perl with nothing (PERL5LIB and
++	-- PERL5OPT of the caller cannot decide the verdict); the `env` parameter is for a spec to show it
++	local r = process.exec(
++		"/usr/bin/env",
++		{ "-i", "/usr/bin/perl", "-e", cleanenv.STARTID, pid },
++		if env then { env = env } else nil
++	)
++	local current = string.gsub(r.stdout, "\n$", "")
++	return not r.ok or current == "" or current == id
++end
++
++-- Edge: the run folders registered in tests-run.lock/folders of each top's project homes (`<top>/.cache` and
++-- `<top>/<name>/.cache`, never a dot-folder: the shell reader's glob skips those), each line an absolute path made
++-- canonical; a line that is no folder, or whose run no longer holds it, is dropped.
++function cleanenv.registered(tops: { string }): { string }
++	local out: { string } = {}
++	for _, top in tops do
++		local files = { `{top}/.cache/tests-run.lock/folders` }
++		if fs.isDir(top) then
++			for _, name in fs.readDir(top) do
++				if string.sub(name, 1, 1) ~= "." and fs.isDir(`{top}/{name}`) then
++					table.insert(files, `{top}/{name}/.cache/tests-run.lock/folders`)
++				end
++			end
++		end
++		for _, file in files do
++			if fs.isFile(file) then
++				for line in string.gmatch(fs.readFile(file), "[^\n]+") do
++					local canon = if string.sub(line, 1, 1) == "/" then cleanenv.resolve(line) else nil
++					if canon and cleanenv.holds(canon) then
++						table.insert(out, canon)
++					end
++				end
++			end
++		end
++	end
++	return out
++end
++
++-- Edge: this process's environment as a table.
++function cleanenv.current(): Env
++	local env: Env = {}
++	for name, value in process.env do
++		if value ~= nil then
++			env[name] = value
++		end
++	end
++	return env
++end
++
++return cleanenv
+diff --git a/z-nile/lib/cleanenv.sh b/z-nile/lib/cleanenv.sh
+new file mode 100644
+index 00000000..ea8ef771
+--- /dev/null
++++ b/z-nile/lib/cleanenv.sh
+@@ -0,0 +1,214 @@
++# The first lines of every script a caller starts (zn, the gates, the forwarders, ac.sh) source this and call
++#   pickman_clean_env "$0" "$@"
++# (c0123). When the exported environment is not the allow-list of cleanenv.list, or PATH not the fixed one, the script
++# starts again, in place, under `env -i` with exactly the allowed names and the fixed PATH. A clean environment returns
++# after the checks (about 15 ms). Only builtins and absolute paths are used before that (PATH is not trusted until the end). Start the script
++# with `#!/bin/bash -p`: privileged mode runs no $BASH_ENV and imports no shell function, which no line of the script
++# can undo afterwards (an imported function can shadow even `unset` and `command`). A bash the caller started without
++# -p has run its $BASH_ENV before our first line: when that can be seen (BASH_ENV or ENV set) this refuses.
++# The restart carries PICKMAN_CLEANED=<its own pid> (an exec keeps the pid): a restarted shell that is still dirty
++# refuses instead of looping, and a value forged by the caller can only make it refuse.
++# What the run itself puts on PATH (stubs, the run's temp bin, the browser guard's folder) is believed by where it is,
++# never by a variable or by how its path reads: its canonical path (`cd -P`, then the filesystem's own spelling from
++# /bin/pwd -P) must lie inside a folder the runner registered for this run (tests-run.lock/folders, written by the
++# runner in a `.cache` of the checkout that holds this file, found from this file's own location), and its name must
++# match an `internal` glob. The registered folder counts only while the run that registered it holds it (its
++# .pickman-owner names a live process that is not a reused pid), so a killed run's registry proves nothing. The run's
++# `fence` names pass only while such a folder matching a `proof` glob is on PATH.
++_pickman_clean_list="${BASH_SOURCE[0]%/*}/cleanenv.list"
++_pickman_pwd=/bin/pwd
++[[ -x $_pickman_pwd ]] || _pickman_pwd=/usr/bin/pwd
++# Sets _pickman_res to the canonical absolute path of folder $1, spelled as the filesystem stores it (the builtin pwd -P
++# keeps the caller's letter case on a case-insensitive disk; the program asks the kernel), or fails: not a folder, not
++# one absolute line. CDPATH is emptied for the cd.
++_pickman_canon() {
++  local r
++  _pickman_res=
++  r=$(CDPATH= cd -P -- "$1" 2>/dev/null && "$_pickman_pwd" -P && printf x) || return 1
++  r=${r%x}
++  r=${r%$'\n'}
++  case $r in /*) ;; *) return 1 ;; esac
++  case $r in *$'\n'*) return 1 ;; esac
++  _pickman_res=$r
++}
++# The program that prints a process's start id: the text of tests/lib/fence.luau's STARTED (a spec pins them equal), the
++# kernel's own record, so a reused pid prints another id. Exit 1: no such process; 2: cannot tell.
++# (a plain string: a here-document would make bash write a temp file in TMPDIR, which a jailed caller cannot)
++_pickman_startid='my $pid = shift; exit 2 unless defined $pid && $pid =~ /^\d+$/;
++if ($^O eq '\''darwin'\'') { my $mib = pack('\''i4'\'', 1, 14, 1, $pid); my $buf = "\0" x 4096;
++my $len = pack('\''Q'\'', length $buf); exit 2 unless syscall(202, $mib, 4, $buf, $len, 0, 0) == 0;
++exit 1 unless unpack('\''Q'\'', $len) > 0; my ($sec, $usec) = unpack('\''q l'\'', $buf); exit 1 unless $sec > 0;
++print "$sec.$usec\n"; exit 0 }
++if ($^O eq '\''linux'\'') { open(my $b, '\''<'\'', '\''/proc/sys/kernel/random/boot_id'\'') or exit 2; my $boot = <$b>;
++close $b; chomp $boot; open(my $st, '\''<'\'', "/proc/$pid/stat") or exit 1; my $line = <$st>; close $st;
++$line =~ s/^.*\)\s+//s or exit 2; my $ticks = (split /\s+/, $line)[19];
++exit 2 unless $boot ne '\'''\'' && defined $ticks && $ticks =~ /^\d+$/; print "$boot:$ticks\n"; exit 0 }
++exit 2;'
++_pickman_perl=/usr/bin/perl
++# Whether the run that registered folder $1 still holds it: its .pickman-owner (pid, tab, start id) names a live
++# process, and not a reused pid. An answer of Operation not permitted (a signal across the jail's edge, or another user's
++# process) reads as alive, as the runner's own fence.alive does inside the jail; an id that is missing or cannot be read
++# now leaves it holding, as fence.holds does. A folder with no readable owner (or one naming pid 0) is dead. The probe
++# runs in the C locale (the message is translated otherwise) and perl under `env -i`, so no variable of the caller's
++# (PERL5LIB, PERL5OPT) can decide the verdict.
++_pickman_holds() {
++  local pid id cur err
++  [[ -r $1/.pickman-owner ]] || return 1
++  IFS=$'\t' read -r pid id <"$1/.pickman-owner" || [[ -n $pid ]] || return 1
++  case $pid in '' | *[!0-9]* | 0 | 00*) return 1 ;; esac
++  err=$(LC_ALL=C kill -0 "$pid" 2>&1) || case $err in *"Operation not permitted"*) ;; *) return 1 ;; esac
++  [[ -n $id ]] || return 0
++  cur=$(/usr/bin/env -i "$_pickman_perl" -e "$_pickman_startid" "$pid" 2>/dev/null) || return 0
++  [[ -z $cur || $cur == "$id" ]]
++}
++pickman_clean_env() {
++  local list=$_pickman_clean_list line kind value name f keep p rest dirty= fence_active= bad= acct acct_home gcg here trust res v ok
++  local -a allow=() fence=() fixed=() internal=() proof=() kept=() assign=() registered=()
++  # with no script to restart only a privileged shell can be trusted: in any other every builtin may be an imported function
++  if [[ $# -eq 0 && $- != *p* ]]; then
++    echo "cleanenv: used inline from a shell started without -p, whose builtins may be the caller's functions; start it with bash -p. Refusing." >&2
++    return 1
++  fi
++  if [[ $- != *p* && ( -n ${BASH_ENV+x} || -n ${ENV+x} ) ]]; then
++    echo "cleanenv: this shell was started without -p with BASH_ENV or ENV set, so it ran the caller's file before any check; start it through ./zn, or with bash -p. Refusing." >&2
++    return 1
++  fi
++  [[ -r $list ]] || { echo "cleanenv: cannot read $list; refusing." >&2; return 1; }
++  # The account's home from the passwd database (tilde expansion of ~user reads getpwnam, never $HOME), and the git
++  # global config pinned to its file: HOME and XDG_CONFIG_HOME of the caller choose neither the fixed PATH nor the
++  # config git reads.
++  acct=$(/usr/bin/id -un 2>/dev/null) || acct=
++  case $acct in '' | *[!A-Za-z0-9._-]*) echo "cleanenv: cannot tell the account's name (id -un); refusing." >&2; return 1 ;; esac
++  acct_home=$(eval "echo ~$acct") || acct_home=
++  [[ $acct_home == /* ]] || { echo "cleanenv: cannot tell $acct's home; refusing." >&2; return 1; }
++  if [[ -f $acct_home/.gitconfig ]]; then gcg=$acct_home/.gitconfig
++  elif [[ -f $acct_home/.config/git/config ]]; then gcg=$acct_home/.config/git/config
++  else gcg=/dev/null; fi
++  # git expands a leading ~ in a config path from $HOME: a caller that moved HOME must not move the account's includes
++  if [[ ${HOME-} != "$acct_home" && -f $gcg ]]; then
++    while IFS= read -r line || [[ -n $line ]]; do
++      case $line in
++      *=*)
++        v=${line#*=}; v=${v#"${v%%[![:space:]]*}"}
++        f=${line%%=*}; f=${f%"${f##*[![:space:]]}"}; f=${f#"${f%%[![:space:]]*}"}
++        # data files git only reads (ignore patterns, attributes, a message template) are not a way to run a program
++        case $v in '~'*) case $f in [Ee]xcludes[Ff]ile | [Aa]ttributes[Ff]ile | template | [Ii]gnore[Rr]evs[Ff]ile) ;; *) echo "cleanenv: $gcg has a ~ path ($line) and HOME is not the account's home; git would read another file. Refusing." >&2; return 1 ;; esac ;; esac ;;
++      esac
++    done <"$gcg"
++  fi
++  # where this checkout is, from this file's own location (a copy under a .cache belongs to the checkout above it)
++  _pickman_canon "${_pickman_clean_list%/*}/../.." && here=$_pickman_res || here=
++  [[ -n $here ]] || { echo "cleanenv: cannot tell where $list is; refusing." >&2; return 1; }
++  trust=$here
++  case $here in *"/.cache/"*) trust=${here%%/.cache/*} ;; esac
++  # the folders the runner registered for its run: tests-run.lock/folders of this checkout's project homes (a glob skips
++  # a dot-folder), each line an absolute path, kept as the filesystem spells it; a line that is no folder, or whose run no longer holds it (_pickman_holds), is dropped
++  for f in "$here"/.cache/tests-run.lock/folders "$here"/*/.cache/tests-run.lock/folders "$trust"/.cache/tests-run.lock/folders "$trust"/*/.cache/tests-run.lock/folders; do
++    [[ -f $f ]] || continue
++    while IFS= read -r line || [[ -n $line ]]; do
++      case $line in /*) _pickman_canon "$line" && _pickman_holds "$_pickman_res" && registered+=("$_pickman_res") ;; esac
++    done <"$f"
++  done
++  while IFS= read -r line || [[ -n $line ]]; do
++    case $line in '' | '#'*) continue ;; esac
++    [[ $line == *" "* ]] || { echo "cleanenv: $list: unknown entry '$line'; refusing." >&2; return 1; }
++    kind=${line%% *}
++    value=${line#* }
++    [[ -n $value ]] || { echo "cleanenv: $list: unknown entry '$line'; refusing." >&2; return 1; }
++    case $kind in
++    allow) allow+=("$value") ;;
++    fence) fence+=("$value") ;;
++    path) case $value in '~'*) value=$acct_home${value#'~'} ;; esac; fixed+=("$value") ;;
++    internal) internal+=("$value") ;;
++    proof) proof+=("$value") ;;
++    *) echo "cleanenv: $list: unknown entry '$line'; refusing." >&2; return 1 ;;
++    esac
++  done <"$list"
++  # shell functions a bash without -p imported: dropped (the shell itself is not restarted for these)
++  for f in $(compgen -A function); do
++    [[ $f == pickman_clean_env || $f == _pickman_canon || $f == _pickman_holds ]] || { unset -f "$f"; dirty=1; }
++  done
++  # PATH: this run's own entries first, each believed by where it is (see the header), then the fixed directories
++  rest=${PATH-}
++  while [[ -n $rest ]]; do
++    p=${rest%%:*}
++    if [[ $rest == *:* ]]; then rest=${rest#*:}; else rest=; fi
++    ok=
++    for f in ${internal[@]+"${internal[@]}"}; do
++      # shellcheck disable=SC2254
++      case $p in $f) ok=1 ;; esac
++    done
++    [[ -n $ok ]] || continue
++    _pickman_canon "$p" && res=$_pickman_res || continue
++    # believed again by the canonical name, and only inside a folder the runner registered for this run: a stub, guard or
++    # bin folder anywhere else (a leftover, a folder an agent made in .cache/.tmp, another spelling of either) is dropped
++    ok=
++    for f in ${internal[@]+"${internal[@]}"}; do
++      # shellcheck disable=SC2254
++      case $res in $f) ok=1 ;; esac
++    done
++    [[ -n $ok ]] || continue
++    ok=
++    for f in ${registered[@]+"${registered[@]}"}; do
++      case $res in "$f" | "$f"/*) ok=1 ;; esac
++    done
++    for f in ${kept[@]+"${kept[@]}"}; do [[ $f == "$res" ]] && ok=; done
++    [[ -n $ok ]] || continue
++    kept+=("$res")
++    for f in ${proof[@]+"${proof[@]}"}; do
++      # shellcheck disable=SC2254
++      case $res in $f) fence_active=1 ;; esac
++    done
++  done
++  for name in $(compgen -e); do
++    keep=
++    for p in ${allow[@]+"${allow[@]}"}; do
++      # shellcheck disable=SC2254
++      case $name in $p) keep=1 ;; esac
++    done
++    if [[ -z $keep && -n $fence_active ]]; then
++      for p in ${fence[@]+"${fence[@]}"}; do
++        # shellcheck disable=SC2254
++        case $name in $p) keep=1 ;; esac
++      done
++    fi
++    # a name that is not an identifier (BASH_FUNC_x%%, an imported function's carrier) is never kept
++    case $name in [A-Za-z_]*) case $name in *[!A-Za-z0-9_]*) keep= ;; esac ;; *) keep= ;; esac
++    if [[ $name == GIT_CONFIG_GLOBAL ]]; then
++      [[ ${GIT_CONFIG_GLOBAL-} == "$gcg" ]] || dirty=1
++    elif [[ -n $keep && $name != PATH && $name != PICKMAN_CLEANED ]]; then
++      assign+=("$name=${!name}")
++    elif [[ $name != PATH && $name != PICKMAN_CLEANED ]]; then
++      dirty=1
++      case $name in [A-Za-z_]*) case $name in *[!A-Za-z0-9_]*) bad=1 ;; esac ;; *) bad=1 ;; esac
++      [[ $# -gt 0 ]] || { [[ -n $bad ]] || unset "$name"; }
++    fi
++  done
++  for p in ${fixed[@]+"${fixed[@]}"}; do kept+=("$p"); done
++  value=
++  for p in ${kept[@]+"${kept[@]}"}; do value=${value:+$value:}$p; done
++  [[ ${PATH-} == "$value" ]] || dirty=1
++  [[ -n ${GIT_CONFIG_GLOBAL+x} ]] || dirty=1
++  if [[ $# -eq 0 ]]; then
++    # no script to restart (an inline `bash -c 'source ...'`): the names are unset here, PATH is set here, and only a
++    # carrier of an imported function (a name that is no identifier) cannot be removed: that refuses
++    if [[ -n $bad ]]; then
++      echo "cleanenv: this shell carries imported functions (BASH_FUNC_*) it cannot drop; start it with bash -p. Refusing." >&2
++      return 1
++    fi
++    PATH=$value
++    GIT_CONFIG_GLOBAL=$gcg
++    export PATH GIT_CONFIG_GLOBAL
++    hash -r
++    return 0
++  fi
++  if [[ -z $dirty ]]; then
++    unset PICKMAN_CLEANED
++    return 0
++  fi
++  if [[ ${PICKMAN_CLEANED-} == "$$" ]]; then
++    echo "cleanenv: the environment is still not the allow-list after a restart; refusing." >&2
++    return 1
++  fi
++  exec /usr/bin/env -i ${assign[@]+"${assign[@]}"} "PATH=$value" "GIT_CONFIG_GLOBAL=$gcg" "PICKMAN_CLEANED=$$" /bin/bash -p "$@"
++}
+diff --git a/z-nile/lib/fence.sh b/z-nile/lib/fence.sh
+index a35a9ef1..892268f2 100644
+--- a/z-nile/lib/fence.sh
++++ b/z-nile/lib/fence.sh
+@@ -12,7 +12,9 @@
+ #   - runs no background gc or maintenance (fixtures are throwaway, and are re-created mid-run).
+ # The guards accumulate: a fence set up inside another keeps the outer checkout's ceiling and ref guard.
+ # On macOS, tests/lib/fence.luau also runs specs in a jail that denies every write to the checkout outside .cache.
+-# The ref guard's hooks are the git-hooks/ folder beside this file (c0120: a project's home has none of its own).
++# The ref guard's hooks are the git-hooks/ folder beside this file (c0120: a project's home has none of its own), pinned by content (c0123).
++# CDPATH makes `cd` print the folder it reaches and resolve relative paths elsewhere: none of it is trusted (c0123)
++unset CDPATH
+ _pickman_fence_lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
+ # The fence, in four steps, each callable alone (c0120 review 002 F1); pickman_fence runs them in this order:
+ #   pickman_fence_ceiling <dir>    git never looks above <dir>/.cache: environment only, cannot fail, always first
+@@ -57,6 +59,55 @@ pickman_fence_refusals() {
+   return 0
+ }
+ 
++# SHA-256 of the ref guard's hook folder, z-nile/lib/git-hooks (c0123): every file's name and bytes, nothing else.
++# Edit a hook and this changes with it: `. z-nile/lib/fence.sh; pickman_fence_hooks_digest z-nile/lib/git-hooks`
++_PICKMAN_FENCE_HOOKS_SHA256=564078f12d2e73b87c8f8f86ec5970c24b8a3dde9905224977b9bccce009f22e
++# The names in that folder, sorted, so that a refusal can say which entry differs.
++_PICKMAN_FENCE_HOOKS_NAMES=".repo.sh applypatch-msg commit-msg post-applypatch post-checkout post-commit post-index-change post-merge post-rewrite pre-applypatch pre-auto-gc pre-commit pre-merge-commit pre-push pre-rebase prepare-commit-msg push-to-checkout reference-transaction sendemail-validate"
++# Prints the digest of folder $1, or fails: unreadable, empty, or anything in it that is not a plain file (a link or a
++# folder). Inline perl, because fixtures copy this file alone, started as `env -i /usr/bin/perl` so that nothing the
++# caller exported (PERL5LIB, PERL5OPT, a function or a PATH perl) can choose the digest it prints; a host with no
++# /usr/bin/perl cannot verify and so refuses.
++pickman_fence_hooks_digest() {
++  /usr/bin/env -i /usr/bin/perl -e '
++    use Digest::SHA; my $d = shift; opendir(my $dh, $d) or exit 1;
++    my @n = sort grep { $_ ne "." && $_ ne ".." } readdir $dh; exit 1 unless @n;
++    my $s = Digest::SHA->new(256);
++    for my $n (@n) {
++      my $p = "$d/$n"; exit 1 if -l $p or !-f $p;
++      open(my $f, "<:raw", $p) or exit 1; local $/; my $c = <$f>; close $f;
++      $s->add(length($n), "\0", $n, "\0", length($c), "\0", $c);
++    }
++    print $s->hexdigest, "\n";' "$1" 2>/dev/null
++}
++# True when folder $1 is the guard's own hooks: the pinned content, with the two guard hooks executable.
++_pickman_fence_hooks_ok() {
++  local got
++  [[ -x $1/reference-transaction && -x $1/pre-push ]] || return 1
++  got=$(pickman_fence_hooks_digest "$1") || return 1
++  [[ $got == "$_PICKMAN_FENCE_HOOKS_SHA256" ]]
++}
++
++# Why folder $1 is not the guard's own, in words (a diagnosis for a message, never the pin itself): the entries it has
++# that the guard has not, the guard's it lacks, or else that bytes, kinds or modes differ.
++_pickman_fence_hooks_why() {
++  local d=$1 f n have=$'\n' out=
++  [[ -d $d ]] || { echo "not a folder"; return 0; }
++  for f in "$d"/* "$d"/.[!.]* "$d"/..?*; do
++    [[ -e $f || -L $f ]] || continue
++    n=${f##*/}
++    have+="$n"$'\n'
++    [[ " $_PICKMAN_FENCE_HOOKS_NAMES " == *" $n "* ]] || out+=" unexpected $n;"
++  done
++  for n in $_PICKMAN_FENCE_HOOKS_NAMES; do
++    [[ $have == *$'\n'"$n"$'\n'* ]] || out+=" missing $n;"
++  done
++  [[ -n $out ]] || out=" a file differs in bytes or kind, or reference-transaction or pre-push is not executable;"
++  out=${out# }
++  echo "${out%;}"
++}
++
++
+ pickman_fence_env() {
+   local here=$1 mode=${2:-checks} jail=${3:-} real n=0 hooks=
+   # inside a spec run every guard stays a spec guard: a check.sh started there keeps the spec's limits
+@@ -64,10 +115,27 @@ pickman_fence_env() {
+   # The hooks guard refs and pushes where no jail does: Linux, check.sh files, runs nested inside a jail. Under
+   # the jail (macOS spec runs) the kernel already denies every write to the repository, and hooks would only
+   # add a process start, slow inside the sandbox, to every fixture commit; fixtures' own hooks then run natively.
++  local manage=
+   if [[ $jail != sandbox-exec ]]; then
+-    # the first guard's hook stays in force: a nested copy may lack z-nile/lib/git-hooks
+-    hooks=${PICKMAN_FENCE_HOOKS:-}
+-    [[ -n $hooks && -x $hooks/reference-transaction ]] || hooks="$_pickman_fence_lib/git-hooks"
++    manage=1
++    # Only the guard's own hooks are trusted (c0123): a folder whose files are exactly the pinned content. The first
++    # guard's folder stays in force down nested fences, so an inherited PICKMAN_FENCE_HOOKS is tried first (a nested
++    # copy that lacks z-nile/lib/git-hooks still finds it); a value that is not the guard's is ignored, never used.
++    # Each candidate is resolved to its physical path first, and the path that passes is the path used: nothing
++    # between the check and the use can name another folder (design review 002 F2)
++    local inherited=${PICKMAN_FENCE_HOOKS:-} res
++    if [[ -n $inherited ]]; then
++      res=$(cd "$inherited" 2>/dev/null && pwd -P) || res=
++      if [[ -n $res ]] && _pickman_fence_hooks_ok "$res"; then
++        hooks=$res
++      else
++        echo "fence: ignoring PICKMAN_FENCE_HOOKS=$inherited (not the ref guard's own: $(_pickman_fence_hooks_why "$inherited"))" >&2
++      fi
++    fi
++    if [[ -z $hooks ]]; then
++      res=$(cd "$_pickman_fence_lib/git-hooks" 2>/dev/null && pwd -P) || res=
++      if [[ -n $res ]] && _pickman_fence_hooks_ok "$res"; then hooks=$res; fi
++    fi
+     # no hooks there (moved, deleted): fail closed rather than run with the ref and push guards off (c0114), except
+     # inside a jailed spec run, where the kernel already refuses every write to the repository. The waiver rests on
+     # all three of the runner's markers: the jail, the spec guards, and this checkout lying under the run's own .cache
+@@ -77,8 +145,8 @@ pickman_fence_env() {
+       jailed=1
+     fi
+     # read-only, and before anything below changes the environment
+-    if [[ -z $jailed ]] && [[ ! -x $hooks/reference-transaction || ! -x $hooks/pre-push ]]; then
+-      echo "fence: no ref guard at $hooks (reference-transaction, pre-push); refusing. Stop and report this." >&2
++    if [[ -z $jailed && -z $hooks ]]; then
++      echo "fence: no ref guard at $_pickman_fence_lib/git-hooks ($(_pickman_fence_hooks_why "$_pickman_fence_lib/git-hooks")); refusing. Stop and report this." >&2
+       return 1
+     fi
+   fi
+@@ -94,7 +162,10 @@ pickman_fence_env() {
+   # From here on nothing returns early: every inherited override is replaced by the whole set at once
+   unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+   unset GIT_NAMESPACE GIT_PREFIX GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
++  # a hook finds `cat`, `env` and the like first in git's exec path, and a relative `cd` follows CDPATH (c0123)
++  unset GIT_EXEC_PATH CDPATH
+   export PICKMAN_FENCE_REAL_GIT="${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}$real"
++  [[ -z $manage ]] || unset PICKMAN_FENCE_HOOKS
+   if [[ -n $hooks ]]; then
+     export PICKMAN_FENCE_HOOKS=$hooks
+     export "GIT_CONFIG_KEY_$n=core.hooksPath" "GIT_CONFIG_VALUE_$n=$PICKMAN_FENCE_HOOKS"
+@@ -104,6 +175,10 @@ pickman_fence_env() {
+   n=$((n + 1))
+   export "GIT_CONFIG_KEY_$n=maintenance.auto" "GIT_CONFIG_VALUE_$n=false"
+   n=$((n + 1))
++  if [[ $mode != specs ]]; then
++    # a check's git uses the person's own ssh and protocols: a command or allowlist handed in is not theirs (c0123)
++    unset GIT_SSH_COMMAND GIT_ALLOW_PROTOCOL GIT_TERMINAL_PROMPT
++  fi
+   if [[ $mode == specs ]]; then
+     # a spec never reaches the network: pushes go only into local fixtures (pre-push), and there are no
+     # credentials to use: no GitHub tokens, an empty gh configuration, no git credential helper (the system
+@@ -142,7 +217,7 @@ pickman_fence_sentinel() {
+   local fresh
+   fresh=$(mktemp "$here/.cache/.sentinel.XXXXXX") || return 1 # created exclusively, before any spec runs
+   printf 'gitdir: /nonexistent/pickman-fence\n' >"$fresh" || { rm -f "$fresh"; return 1; }
+-  perl -e 'rename $ARGV[0], $ARGV[1] or die "rename: $!\n"' "$fresh" "$sentinel" || { rm -f "$fresh"; return 1; }
++  /usr/bin/env -i /usr/bin/perl -e 'rename $ARGV[0], $ARGV[1] or die "rename: $!\n"' "$fresh" "$sentinel" || { rm -f "$fresh"; return 1; }
+   if [[ ${PICKMAN_FENCE_SPECS:-} == 1 ]]; then
+     mkdir -p "$here/.cache/gh-none" || return 1
+   fi
+diff --git a/z-nile/lib/git-hooks/.repo.sh b/z-nile/lib/git-hooks/.repo.sh
+index 08fe8502..6e163ae2 100755
+--- a/z-nile/lib/git-hooks/.repo.sh
++++ b/z-nile/lib/git-hooks/.repo.sh
+@@ -23,5 +23,5 @@ repo_common() {
+     read -r _c <"$_d/commondir"
+     case $_c in /*) _d=$_c ;; *) _d=$_d/$_c ;; esac
+   fi
+-  (cd "$_d" && pwd -P)
++  (CDPATH= cd -P -- "$_d" && pwd -P)
+ }
+diff --git a/z-nile/lib/git-hooks/applypatch-msg b/z-nile/lib/git-hooks/applypatch-msg
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/applypatch-msg
++++ b/z-nile/lib/git-hooks/applypatch-msg
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/git-hooks/commit-msg b/z-nile/lib/git-hooks/commit-msg
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/commit-msg
++++ b/z-nile/lib/git-hooks/commit-msg
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/git-hooks/post-applypatch b/z-nile/lib/git-hooks/post-applypatch
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/post-applypatch
++++ b/z-nile/lib/git-hooks/post-applypatch
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/git-hooks/post-checkout b/z-nile/lib/git-hooks/post-checkout
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/post-checkout
++++ b/z-nile/lib/git-hooks/post-checkout
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/git-hooks/post-commit b/z-nile/lib/git-hooks/post-commit
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/post-commit
++++ b/z-nile/lib/git-hooks/post-commit
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/git-hooks/post-index-change b/z-nile/lib/git-hooks/post-index-change
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/post-index-change
++++ b/z-nile/lib/git-hooks/post-index-change
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/git-hooks/post-merge b/z-nile/lib/git-hooks/post-merge
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/post-merge
++++ b/z-nile/lib/git-hooks/post-merge
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/git-hooks/post-rewrite b/z-nile/lib/git-hooks/post-rewrite
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/post-rewrite
++++ b/z-nile/lib/git-hooks/post-rewrite
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/git-hooks/pre-applypatch b/z-nile/lib/git-hooks/pre-applypatch
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/pre-applypatch
++++ b/z-nile/lib/git-hooks/pre-applypatch
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/git-hooks/pre-auto-gc b/z-nile/lib/git-hooks/pre-auto-gc
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/pre-auto-gc
++++ b/z-nile/lib/git-hooks/pre-auto-gc
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/git-hooks/pre-commit b/z-nile/lib/git-hooks/pre-commit
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/pre-commit
++++ b/z-nile/lib/git-hooks/pre-commit
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/git-hooks/pre-merge-commit b/z-nile/lib/git-hooks/pre-merge-commit
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/pre-merge-commit
++++ b/z-nile/lib/git-hooks/pre-merge-commit
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/git-hooks/pre-push b/z-nile/lib/git-hooks/pre-push
+index a6254f4b..8d483dfb 100755
+--- a/z-nile/lib/git-hooks/pre-push
++++ b/z-nile/lib/git-hooks/pre-push
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Push guard for checks (zz-test skill, "Specs never touch the real repository"). It runs in the pushing
+ # repository, where z-nile/lib/fence.sh's config applies (the receiving side of a local push drops it, so the
+ # reference-transaction guard can't see a push). $2 is the URL as given. A local one (an absolute path, a path
+@@ -24,7 +24,7 @@ if [ ! -d "$url" ]; then
+   chain "$@" # a network remote, from a check.sh flow
+ fi
+ [ -n "$PICKMAN_FENCE_REAL_GIT" ] || chain "$@"
+-common=$(cd "$url" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
++common=$(CDPATH= cd -P -- "$url" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+   git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || chain "$@"
+ old_ifs=$IFS
+ IFS=:
+diff --git a/z-nile/lib/git-hooks/pre-rebase b/z-nile/lib/git-hooks/pre-rebase
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/pre-rebase
++++ b/z-nile/lib/git-hooks/pre-rebase
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/git-hooks/prepare-commit-msg b/z-nile/lib/git-hooks/prepare-commit-msg
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/prepare-commit-msg
++++ b/z-nile/lib/git-hooks/prepare-commit-msg
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/git-hooks/push-to-checkout b/z-nile/lib/git-hooks/push-to-checkout
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/push-to-checkout
++++ b/z-nile/lib/git-hooks/push-to-checkout
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/git-hooks/reference-transaction b/z-nile/lib/git-hooks/reference-transaction
+index 4cb39f4e..1a49628a 100755
+--- a/z-nile/lib/git-hooks/reference-transaction
++++ b/z-nile/lib/git-hooks/reference-transaction
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Ref guard for checks (zz-test skill, "Specs never touch the real repository"). z-nile/lib/fence.sh points
+ # every git a check runs at this directory (core.hooksPath), so this runs on every ref update. In a repository
+ # listed in PICKMAN_FENCE_REAL_GIT (the checkouts' own git directories) it refuses every update. A check.sh flow
+diff --git a/z-nile/lib/git-hooks/sendemail-validate b/z-nile/lib/git-hooks/sendemail-validate
+index 73b27f45..cae37001 100755
+--- a/z-nile/lib/git-hooks/sendemail-validate
++++ b/z-nile/lib/git-hooks/sendemail-validate
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/sh -p
+ # Runs the repository's own hook of the name it is called by. z-nile/lib/fence.sh points git at this directory
+ # (core.hooksPath) for the guards in reference-transaction and pre-push; without these stubs, every other hook a
+ # fixture installs in its .git/hooks would be skipped. The repository is the one git names (GIT_DIR), never the
+diff --git a/z-nile/lib/tmp.luau b/z-nile/lib/tmp.luau
+index 423b93c5..7e37d081 100644
+--- a/z-nile/lib/tmp.luau
++++ b/z-nile/lib/tmp.luau
+@@ -386,7 +386,7 @@ function tmp.remove(root: string, name: string): boolean
+ 		return false
+ 	end
+ 	local script = 'cd -P -- "$1" && [ "$(pwd -P)" = "$1" ] && exec rm -rf -- "$2"'
+-	return process.exec("sh", { "-c", script, "_", root, name }).ok
++	return process.exec("/bin/sh", { "-p", "-c", script, "_", root, name }).ok
+ end
+ 
+ -- Removes the stale trees under <dir>/.cache/.tmp. `dryRun` removes nothing.
+diff --git a/z-nile/scripts/check.sh b/z-nile/scripts/check.sh
+index 8ff2599a..487a0126 100755
+--- a/z-nile/scripts/check.sh
++++ b/z-nile/scripts/check.sh
+@@ -1,5 +1,5 @@
+-#!/usr/bin/env bash
++#!/bin/bash -p
+ # Forwarder (c0120): z-nile's check.sh files run from z-nile/ and name scripts/check.sh; it runs z-nile's gate alone,
+ # as a home's scripts/check.sh does for its project. Kept until every raft whose sequestered check.sh calls this path
+ # is done (as scripts/check.sh).
+-exec bash "$(dirname "$0")/../check.sh" --project z-nile "$@"
++exec /bin/bash -p "${0%/*}/../check.sh" --project z-nile "$@"
+diff --git a/z-nile/scripts/tracker.sh b/z-nile/scripts/tracker.sh
+index 4d8d10bd..e00369e0 100755
+--- a/z-nile/scripts/tracker.sh
++++ b/z-nile/scripts/tracker.sh
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env bash
++#!/bin/bash -p
+ # Forwarder (c0120): z-nile's check.sh files run from z-nile/ and name scripts/tracker.sh; the command is ./zn at the
+ # repository root. Kept until every raft whose sequestered check.sh calls this path is done (as scripts/tracker.sh).
+-exec bash "$(dirname "$0")/../../zn" "$@"
++exec /bin/bash -p "${0%/*}/../../zn" "$@"
+diff --git a/z-nile/setup.sh b/z-nile/setup.sh
+index b55910e9..f67c7543 100755
+--- a/z-nile/setup.sh
++++ b/z-nile/setup.sh
+@@ -1,6 +1,9 @@
+-#!/usr/bin/env bash
++#!/bin/bash -p
+ # Bootstrap a new host for pickman. Idempotent; safe to re-run. See SETUP.md.
+ # Usage: z-nile/setup.sh [--tools]   (--tools: install the toolchain only, skip the gate)
++# c0123: privileged mode (no $BASH_ENV, no imported functions), then the allow-listed environment (z-nile/lib/cleanenv.sh)
++_c=${BASH_SOURCE[0]%/*}; [[ $_c != "${BASH_SOURCE[0]}" ]] || _c=.
++. "$_c/lib/cleanenv.sh" && pickman_clean_env "$0" "$@" || exit 1
+ set -euo pipefail
+ cd "$(dirname "$0")/.."
+ 
+diff --git a/z-nile/skills/zz-arch/SKILL.md b/z-nile/skills/zz-arch/SKILL.md
+index 5d60a654..daa808be 100644
+--- a/z-nile/skills/zz-arch/SKILL.md
++++ b/z-nile/skills/zz-arch/SKILL.md
+@@ -12,7 +12,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
+ |---|---|
+ | `zn` | the command, at the repository root: it runs `z-nile/engine/main` |
+ | `z-nile/engine/` | the tracker engine. `main.luau` is the CLI: it parses arguments and does the git, file and process work. Every other module is one concern (`store`, `publish`, `projects`, `lessons`, `skills`, `trail`, …) |
+-| `z-nile/lib/` | what the gate, the runner and the engine share: `ac.sh` (every `check.sh`), `fence.sh` and `git-hooks/` (the repository guards), `par.sh`, `sh.luau`, `graph.luau`, `changed.luau` |
++| `z-nile/lib/` | what the gate, the runner and the engine share: `ac.sh` (every `check.sh`), `fence.sh` and `git-hooks/` (the repository guards), `cleanenv.list`, `cleanenv.sh` and `cleanenv.luau` (the allow-listed environment), `par.sh`, `sh.luau`, `graph.luau`, `changed.luau` |
+ | `z-nile/skills/` | z-nile's skills: the pipeline (`z-…`) and the skills called from inside a step (`zz-…`), linked into `.claude/skills/` by `./zn skills` |
+ | `z-nile/templates/` | the item, raft and prompt templates |
+ | `z-nile/projects.toml` | the project registry: each project's name and root (its home is the folder holding the root) |
+@@ -28,6 +28,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
+ 6. **Parsers refuse ambiguity.** A repeated single-value field, an unknown key or an out-of-shape value is a problem the parser names, with the file and the rule.
+ 7. **Guards fail closed.** A guard acts only on its one explicit "no" answer and treats every other outcome as guarded. Configuration that widens a guard is read from `origin/main`, never from the working tree a branch can edit.
+ 8. **Every refusal names the path, the item or the rule** it broke, so the person reading it can fix it without reading the code.
++9. **Launchers start children in the allow-listed environment** (c0123). The first process of ours a caller starts puts the environment on the list in `z-nile/lib/cleanenv.list` and `PATH` on the fixed directories: a script begins `#!/bin/bash -p` and calls `pickman_clean_env "$0" "$@"`, the runner restarts itself through `cleanenv.luau`, and a Lune launcher starts shells only as `/bin/bash -p` or `/bin/sh -p`. A new entry script or spawn does the same (`entries.spec` scans for it).
+ 
+ ## Design checklist (answer these in every tooling issue's Design section)
+ - **Scalability**: the git calls, file reads and processes per command, and how they grow with the items, the roots and the projects.
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index ae536108..3abdaa63 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -97,8 +97,9 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+     - **Sweeper**: the jail's root is a sweeper (`fence.SWEEPER`): after the specs end it stops every process of the sandbox it can signal, whatever session or group it moved to, except its own ancestors, and says how many. Its interlock refuses to sweep (exit 70) unless a signal to its parent, the launcher (outside the jail, alive until the sweep is done), is refused, so an interrupted run (Ctrl-C) is still swept. Its interlock sweeps only on macOS; an explicit pid (for specs) only inside a jailed spec run; and a test seam (`PICKMAN_SWEEP_ONLY`) that can't be read refuses instead of widening the sweep. A spec can kill the sweeper (same sandbox); the run then fails ("the jail's sweeper was killed"). A spec can also stop it (SIGSTOP): the run then hangs until the launcher is SIGKILLed, which skips the sweep. A SIGKILL of the launcher itself skips the sweep and the launcher's unlink.
+     - **pids**: the sweep covers pids up to 99999, macOS's `PID_MAX`.
+   - **Fence**: git never looks above `<checkout>/.cache` for a repository, and a sentinel `.cache/.git` makes git fail in `.cache` itself. A fixture whose repository is missing is an error, never the checkout. The same holds for every project home a check runs in (c0120): a spec run from `pickman/` is fenced at `pickman/.cache`, and `ac.sh` fences a home before a `check.sh` runs there with `fence.sh`'s `pickman_home_fence`, in this order (review 002 F1): its `.cache` joins the ceiling (environment only, can't fail); a `.cache` that is a symlink or a file, or a sentinel that is a folder, refuses, in every mode, spec runs and the jail included; the git and spec guards are set whole (the one refusal, no ref-guard hooks, comes before any change, so a refused fence leaves the inherited guards as they were); then the sentinel is written. The sentinel is skipped in exactly one case: its write fails while all three of the runner's jail markers are set (`PICKMAN_TEST_JAIL=sandbox-exec`, `PICKMAN_FENCE_SPECS=1`, `PICKMAN_TEST_FENCE`) and the home's `.cache` lies outside the run's own `.cache`, the one place the jail lets a spec write. The jail then refuses every write there, the fence says so on stderr, and the ceiling and every other guard hold. Any other failed write refuses, spec runs included.
++  - **Allow-listed environment** (c0123): every launcher starts what it runs in exactly the environment `z-nile/lib/cleanenv.list` names, and nothing else of the caller's: no shell function, `BASH_ENV`, `CDPATH`, `GIT_EXEC_PATH`, `SHELLOPTS`, `GIT_*` outside the fence's own state and the author and committer identity, and no unlisted name; `PATH` is the fixed directories (`~/.rokit/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`, `/bin`, `/usr/sbin`, `/sbin`), after the run's own `pickman-run.*/bin`, `pickman-guard.*` and `pickman-stub.*` folders, each kept only inside a folder the runner registered for this run while that run is alive, judged by its canonical path (a leftover or a lookalike anywhere else, in any spelling, is dropped). A script a caller starts begins with `#!/bin/bash -p` (privileged mode runs no `$BASH_ENV` and imports no function, which no later line could undo) and `pickman_clean_env "$0" "$@"` (`z-nile/lib/cleanenv.sh`), which starts it again under `env -i` with the allowed names when the environment is not the list; `ac.sh` does the same for a `check.sh`. The engine and the runner start shells only as `/bin/bash -p` and `/bin/sh -p`, and `tests/run` restarts itself under `env -i` through `z-nile/lib/cleanenv.luau` when its environment is not the list (a scan spec holds every entry script and spawn to this). Tools must therefore live in the fixed directories (SETUP.md); a spec's stub folder on `PATH` is made with `fixture.stubDir("<name>")`, a `pickman-stub.<name>` folder in the run's temp folder, a name a spec hands a launcher gets the `PICKMAN_` prefix, and anything else the list lacks is added to it in a reviewed change.
+   - **Overrides stripped**: an inherited `GIT_DIR`, `GIT_INDEX_FILE` or the like (git hooks run with them set) is unset before any spec runs. The guards read the repository they protect (`fence.sh`'s `real`, `pickman_guarded`, the runner's tripwire and protected paths) through a clean read, with every such override **and the inherited ceiling** removed for that read only (a ceiling at the checkout's root would hide the checkout from a project home; the specs keep the fence's ceiling). A read that finds no repository refuses, in every mode: it never means "nothing to protect" (c0120 code review 002).
+-  - **Ref guard**: every git a check runs has a `reference-transaction` hook (`z-nile/lib/git-hooks/`) that refuses any ref update in the real repository. Only a `check.sh` flow started outside any spec run may fetch (create or move refs under `refs/remotes/`). On Linux this is what stops a commit, branch, switch or reset there. It refuses the ref change, but those commands may already have rewritten the index or the working files. The hooks are set only where there is no jail (Linux, `check.sh` files, runs nested inside a jail): under the jail the kernel covers it, and a hook in every fixture commit would cost a slow process start. Where they are set, they then run the repository's own hook of the same name, so a fixture's hooks behave as without the guards.
++  - **Ref guard**: every git a check runs has a `reference-transaction` hook (`z-nile/lib/git-hooks/`) that refuses any ref update in the real repository. Only a `check.sh` flow started outside any spec run may fetch (create or move refs under `refs/remotes/`). On Linux this is what stops a commit, branch, switch or reset there. It refuses the ref change, but those commands may already have rewritten the index or the working files. The hooks are set only where there is no jail (Linux, `check.sh` files, runs nested inside a jail): under the jail the kernel covers it, and a hook in every fixture commit would cost a slow process start. Where they are set, they then run the repository's own hook of the same name, so a fixture's hooks behave as without the guards. The hooks must be the guard's own: `fence.sh` pins the SHA-256 of every file's name and bytes in `z-nile/lib/git-hooks/` (`_PICKMAN_FENCE_HOOKS_SHA256`, with the names in `_PICKMAN_FENCE_HOOKS_NAMES` so a refusal can say which entry differs; a spec checks both against the folder, so editing a hook means updating the pins), and uses a folder only when its files match it and `reference-transaction` and `pre-push` are executable. A stray file in the folder (an editor backup, `.DS_Store`) counts: remove it, and never change the pin to make a fence pass. An inherited `PICKMAN_FENCE_HOOKS` is used only when it matches, which is how a nested copy of the fence that lacks the folder keeps the first guard's; any other value is ignored with a message on stderr, and when no matching folder is left the fence refuses (c0123). Under the jail the fence neither reads nor changes it. A hook in the repository's own `.git/hooks` (such as c0189's) is not the guard's: in the `prepared` phase the guard runs it only after it allows the update, and it passes every other phase straight to it (so it also sees a refused update as `preparing` then `aborted`); it can only refuse more. The hooks start as `#!/bin/sh -p` (privileged mode: no `$BASH_ENV`, no imported function) and resolve paths with `CDPATH= cd -P --`, so nothing of the caller's shell reaches them.
+   - **No network for specs**: a `pre-push` hook refuses pushes into the real repository by any local URL. During spec runs it allows a push only into an existing local repository that isn't protected, so https, ssh, `host:path` and ssh aliases are all refused. With or without hooks, spec runs also allow git no network transport at all (`protocol.allow=never`, local paths and `file://` only), however a URL is spelled or aliased. Specs also get no credentials: `GH_TOKEN` and the like are unset, `GH_CONFIG_DIR` is empty, the git credential helper list is reset (no keychain), and there is no ssh agent and no ssh. A `check.sh` started from inside a spec run keeps these limits.
+   - **No publishing from checks**: a tracker command run by a check never publishes tracker state: the publisher asks `pickman_guarded` (`z-nile/lib/fence.sh`), says `not publishing`, and goes on as with `PICKMAN_PUBLISH=0`.
+   - **Lock**: one run at a time per checkout and home (`<home>/.cache/tests-run.lock`), because runs share that `.cache`'s fixtures; each home's run has its own `.cache`, lock and jail (c0120), so pickman's may run beside z-nile's. Separate worktrees still run in parallel. A second run prints `waiting for another test run (pid N)` and waits up to `PICKMAN_TEST_LOCK_WAIT` seconds (default 240). A lock is taken over when no process it records still holds it: each is gone, or is a reused pid, whose start id differs from the one recorded with it (a worker's `pid-<n>` holds its id, the top process's is in `start-<pid>`; the id is the kernel's start record, read through perl, inside the jail too, never from the clock). A live pid with no recorded start id (a lock from an older runner) or whose start id can't be read still holds.
+@@ -118,7 +119,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+   - **A process that leaves the run's process group** (`setsid`, a double fork into a new session) survives **only where specs aren't jailed** (Linux, a run inside an outer sandbox): there the runner stops only what is left in the specs' group. It then outlives the run and could change files in `.cache` that an unjailed `check.sh` later copies and runs (a copy of the tree under `.cache`). Under the jail the sweeper stops it.
+   - **Unjailed runs can signal the runner** (Linux, an outer sandbox): nothing refuses a spec's signal to the top process, the launcher or the watchdog there.
+   - **A pid above 99999**: the sweep doesn't reach it, should a future macOS raise `PID_MAX`.
+-  - **The guards trust their own environment**: a caller that sets `PICKMAN_TEST_JAIL`, `PICKMAN_FENCE_SPECS` and `PICKMAN_TEST_FENCE` as the jail does makes the home fence waive a sentinel it couldn't write (a `.cache` made unwritable outside any jail), and `PICKMAN_FENCE_HOOKS` at a folder of permissive hooks switches the ref guard off (captured as c0123). Nothing in the fence tells a real jail from forged markers (c0120 code review 004 F5): review a check or spec that sets any `PICKMAN_TEST_*` or `PICKMAN_FENCE_*` variable.
++  - **The guards trust their own environment**: a caller that sets `PICKMAN_TEST_JAIL`, `PICKMAN_FENCE_SPECS` and `PICKMAN_TEST_FENCE` as the jail does makes the home fence waive a sentinel it couldn't write (a `.cache` made unwritable outside any jail). An inherited `PICKMAN_FENCE_HOOKS` is not among them since c0123: only a folder with the guard's own files is used. A bash the caller starts itself runs its own `$BASH_ENV` and imports its functions before the first line of ours, and the first lines of a `check.sh` started by hand find `git` by the caller's `PATH`: start checks through `./zn check`, which starts `bash -p` in the allow-listed environment. A variable whose value the list admits (`HOME`, `TMPDIR`, `SSH_AUTH_SOCK`, the proxies, the tokens) is still the caller's; none of them can set the fence's own `core.hooksPath`, which the fence passes in its environment config. Nothing in the fence tells a real jail from forged markers (c0120 code review 004 F5): review a check or spec that sets any `PICKMAN_TEST_*` or `PICKMAN_FENCE_*` variable.
+   - **AC18 trusts the `origin` it resolves** (c0120): it reads the published main with `git ls-remote origin`, so a swapped `origin` URL, a `url.*.insteadOf` or `GIT_CONFIG_*` in the environment can make any repository's main the reference. Every verdict prints the URL it resolved; check it names the project's GitHub repository (c0120 code review 009 F4).
+ - **Running specs against unguarded code** (this includes every mutant of guard code: the runner, `fence.luau`, `fence.sh`, the hooks, the jail): only in a clone under `.cache/.tmp/`, jailed: `tree=$(./zn tmp new unguarded)`, `git clone --no-hardlinks . "$tree/repo"`, `git -C "$tree/repo" remote remove origin`; a clone has HEAD only, so copy the prototype's uncommitted files in and commit them there (`rsync -a --exclude .git --exclude .cache --exclude .worktree ./ "$tree/repo/"`, then `git -C "$tree/repo" add -A` and a commit under an `@example.invalid` identity); then every command through `./zn tmp jail "$tree" -- <command>...`, which runs it with the tree as its working directory (`cd repo/z-nile && lune run tests/run -- <spec>`). The jail (`sandbox-exec`, macOS) is the spec jail's rule set applied to the clone: the command may write `/dev`, its `TMPDIR` and the `.cache` folders of the clone's checkout and project homes (`./zn tmp jail` makes them first), never the clone's sources or git directory (a `.cache` folder deeper in them included), with no network but loopback and no signal out, so a broken fixture, or a relative path that climbs out of the clone, cannot reach this checkout. The clone's runner prints `note: not jailed (already inside a sandbox, and macOS can't nest them); the outer sandbox protects the repository` and does not jail itself, because a sandbox cannot nest; nested runs, `fence-leftovers` and the lock specs pass there. A case that tests the live spec jail itself (`needJail` cases, the gate spec's `on macOS this run can write nothing in the checkout outside .cache`) cannot run there: the profile's rules are pinned as a pure function (`fence.profileFor`) in cases the clone runs, and the live cases run where the runner jails itself, in the raft's own gate, before code review. That applies when prototyping the guards themselves, or on a branch from before them. Where there is no `sandbox-exec` (Linux) nothing contains it: review catches it (below), and every fixture path stays absolute. Remove the tree when the experiment ends: `./zn tmp rm "$tree"`.
+ - **If the tripwire fires**, or the shared remotes, branches, worktrees or identity look wrong: stop, post `BLOCKED:` with the output, and never repair the shared repository yourself. Every worktree and session shares it.
+diff --git a/z-nile/tests/acceptance/c0005/worktree.spec.luau b/z-nile/tests/acceptance/c0005/worktree.spec.luau
+index 1cffb725..abfc54da 100644
+--- a/z-nile/tests/acceptance/c0005/worktree.spec.luau
++++ b/z-nile/tests/acceptance/c0005/worktree.spec.luau
+@@ -24,7 +24,7 @@ local base = `{here}/.cache/wt-e2e`
+ local seed = `{base}/seed`
+ local origin = `{base}/origin.git`
+ local main = `{base}/main`
+-local fakebin = `{base}/fakebin`
++local fakebin = fixture.stubDir("c0005-gh") -- in the run's own temp folder, where the allow-listed PATH keeps a stub (c0123)
+ local ghlog = `{base}/gh.log`
+ local wt1 = `{main}/.worktree/R0010`
+ local wt2 = `{main}/.worktree/R0020`
+diff --git a/z-nile/tests/acceptance/c0008/done-order.spec.luau b/z-nile/tests/acceptance/c0008/done-order.spec.luau
+index fbe3b3ad..dde66f00 100644
+--- a/z-nile/tests/acceptance/c0008/done-order.spec.luau
++++ b/z-nile/tests/acceptance/c0008/done-order.spec.luau
+@@ -17,7 +17,7 @@ local here = fixture.physical(".") or "."
+ local base = `{here}/.cache/c0070-done`
+ local work = `{base}/work`
+ local bare = `{base}/github.com/fixture.git`
+-local bin = `{base}/bin`
++local bin = fixture.stubDir("c0008-gh") -- in the run's own temp folder, where the allow-listed PATH keeps a stub (c0123)
+ 
+ local REQ = "req" .. "uire" -- keeps literal require text out of this file (graph scanner)
+ local TRIVIAL_CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
+@@ -151,11 +151,11 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
+ 			`{bin}/gh`,
+ 			table.concat({
+ 				"#!/bin/sh",
+-				'echo "$*" >> "$GH_LOG"',
++				'echo "$*" >> "$PICKMAN_GH_LOG"',
+ 				'case "$1 $2" in',
+ 				'  "pr ready")',
+-				'    if [ -n "$GH_FAIL_READY" ]; then echo "gh: boom" >&2; exit 1; fi',
+-				'    git --git-dir="$GH_BARE" rev-parse "refs/heads/$GH_BRANCH" > "$GH_READY_HEAD" ;;',
++				'    if [ -n "$PICKMAN_GH_FAIL_READY" ]; then echo "gh: boom" >&2; exit 1; fi',
++				'    git --git-dir="$PICKMAN_GH_BARE" rev-parse "refs/heads/$PICKMAN_GH_BRANCH" > "$PICKMAN_GH_READY_HEAD" ;;',
+ 				'  "pr view") echo "body" ;;',
+ 				"esac",
+ 				"exit 0",
+@@ -168,11 +168,11 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
+ 	local function done(failReady: boolean): Result
+ 		return tr({ "done", "R0010" }, {
+ 			PATH = `{bin}:{process.env.PATH or ""}`,
+-			GH_LOG = `{base}/gh.log`,
+-			GH_BARE = bare,
+-			GH_BRANCH = "R0010-demo",
+-			GH_READY_HEAD = `{base}/ready-head`,
+-			GH_FAIL_READY = if failReady then "1" else "",
++			PICKMAN_GH_LOG = `{base}/gh.log`,
++			PICKMAN_GH_BARE = bare,
++			PICKMAN_GH_BRANCH = "R0010-demo",
++			PICKMAN_GH_READY_HEAD = `{base}/ready-head`,
++			PICKMAN_GH_FAIL_READY = if failReady then "1" else "",
+ 		})
+ 	end
+ 
+diff --git a/z-nile/tests/acceptance/c0034/locator.spec.luau b/z-nile/tests/acceptance/c0034/locator.spec.luau
+index f21dc298..48797972 100644
+--- a/z-nile/tests/acceptance/c0034/locator.spec.luau
++++ b/z-nile/tests/acceptance/c0034/locator.spec.luau
+@@ -40,7 +40,7 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
+ 		local listed = fixture.exec(
+ 			fx,
+ 			"bash",
+-			{ "-c", script, "_", ac, marker },
++			{ "-p", "-c", script, "_", ac, marker },
+ 			{ env = { AC_LIST = "1" } }
+ 		)
+ 		t.expect(listed.ok).toBe(true)
+@@ -49,7 +49,7 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
+ 		t.expect(string.find(listed.stdout, "1 criteria listed", 1, true) ~= nil).toBe(true)
+ 		t.expect((string.find(listed.stdout, "criteria passed", 1, true))).toBe(nil)
+ 		t.expect(fs.isFile(marker)).toBe(false)
+-		local ran = fixture.exec(fx, "bash", { "-c", script, "_", ac, marker })
++		local ran = fixture.exec(fx, "bash", { "-p", "-c", script, "_", ac, marker })
+ 		t.expect(ran.ok).toBe(true)
+ 		t.expect(string.find(ran.stdout, "1/1 criteria passed", 1, true) ~= nil).toBe(true)
+ 		t.expect(fs.isFile(marker)).toBe(true) -- without AC_LIST the check runs as before
+@@ -58,7 +58,7 @@ return t.spec("c0330 check.sh locates the repo after promotion", function(it)
+ 		local empty = fixture.exec(
+ 			fx,
+ 			"bash",
+-			{ "-c", 'source "$1"; finish', "_", ac },
++			{ "-p", "-c", 'source "$1"; finish', "_", ac },
+ 			{ env = { AC_LIST = "1" } }
+ 		)
+ 		t.expect(empty.ok).toBe(false)
+diff --git a/z-nile/tests/acceptance/c0055/setup-run.spec.luau b/z-nile/tests/acceptance/c0055/setup-run.spec.luau
+index 1856a365..58b3db0d 100644
+--- a/z-nile/tests/acceptance/c0055/setup-run.spec.luau
++++ b/z-nile/tests/acceptance/c0055/setup-run.spec.luau
+@@ -8,6 +8,7 @@
+ --   ones, the ones that change how bash starts) is set by the case or unset, so the run doesn't depend on where the
+ --   spec runs; everything else (the runner's own guards included) is inherited.
+ -- Every stub call and the stub gate append "<name> <args>" to one log, so a case can see what ran and in which order.
++local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local t = require("@tests/lib/t")
+@@ -18,8 +19,8 @@ type Platform = { os: string, arch: string }
+ local ROOT = `{process.cwd}.cache/c0530-setup`
+ local LOG = `{ROOT}/calls.log`
+ local STUB = `{ROOT}/stub` -- the one stub script; every tool name is a symlink to it
+-local BIN = `{ROOT}/bin` -- tool names, first on PATH
+-local SYS = `{ROOT}/sys` -- links to real system basics, second and last on PATH
++local BIN = fixture.stubDir("c0055-bin") -- tool names, first on PATH
++local SYS = fixture.stubDir("c0055-sys") -- links to real system basics, second and last on PATH
+ local HOME = `{ROOT}/home`
+ local REPO = `{ROOT}/repo`
+ 
+@@ -36,7 +37,7 @@ local STUB_TEXT = [[#!/bin/sh
+ name=${0##*/}
+ echo "$name $*" >> "@LOG@"
+ case "$name" in
+-  uname) if [ "$1" = -m ]; then echo "$STUB_ARCH"; else echo "$STUB_OS"; fi ;;
++  uname) if [ "$1" = -m ]; then echo "$PICKMAN_STUB_ARCH"; else echo "$PICKMAN_STUB_OS"; fi ;;
+   xcode-select) echo /Library/Developer/CommandLineTools ;;
+   git) if [ "$1" = --version ]; then echo "git version 2.0"; fi ;;
+   gh) # release download ... -D <dir> leaves the release zip in <dir>
+@@ -46,7 +47,7 @@ case "$name" in
+   rokit) # self-install puts rokit in ~/.rokit/bin, like the real one
+     if [ "$1" = self-install ]; then mkdir -p "$HOME/.rokit/bin"; ln -s "@STUB@" "$HOME/.rokit/bin/rokit"; fi
+     echo "rokit 1.2.0" ;;
+-  check.sh) exit "$STUB_GATE_EXIT" ;;
++  check.sh) exit "$PICKMAN_STUB_GATE_EXIT" ;;
+   *) echo "$name 1.0.0" ;;
+ esac
+ ]]
+@@ -88,6 +89,11 @@ local function build()
+ 	-- c0120 override: specs run in z-nile's home, so the script is read from the checkout's top
+ 	local top = string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+ 	fs.writeFile(`{REPO}/z-nile/setup.sh`, fs.readFile(`{top}/z-nile/setup.sh`))
++	-- c0123: the bootstrap cleans its environment first, so the sandbox holds the allow-list's files too
++	fs.writeDir(`{REPO}/z-nile/lib`)
++	for _, name in { "cleanenv.sh", "cleanenv.list" } do
++		fs.writeFile(`{REPO}/z-nile/lib/{name}`, fs.readFile(`{top}/z-nile/lib/{name}`))
++	end
+ 	built = true
+ end
+ 
+@@ -120,13 +126,23 @@ end
+ local CONTROLLED: { string } = {}
+ 
+ -- runs the sandbox's setup.sh with `args`, the variables in `env`, and every other CONTROLLED variable unset
++local top = string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+ local function setup(args: { string }, env: { [string]: string }?): Result
++	-- c0123: a host without rokit is a sandbox whose copy of the allow-list names no ~/.rokit/bin (the real list would add the
++	-- account's own, which has rokit)
++	do
++		local list = fs.readFile(`{top}/z-nile/lib/cleanenv.list`)
++		if not run.rokitInstalled then
++			list = string.gsub(list, "path ~/%.rokit/bin\n", "")
++		end
++		fs.writeFile(`{REPO}/z-nile/lib/cleanenv.list`, list)
++	end
+ 	local vars: { [string]: string } = {
+ 		PATH = `{BIN}:{SYS}`,
+ 		HOME = HOME,
+-		STUB_OS = run.platform.os,
+-		STUB_ARCH = run.platform.arch,
+-		STUB_GATE_EXIT = tostring(run.gateExit),
++		PICKMAN_STUB_OS = run.platform.os,
++		PICKMAN_STUB_ARCH = run.platform.arch,
++		PICKMAN_STUB_GATE_EXIT = tostring(run.gateExit),
+ 	}
+ 	local given: { [string]: string } = env or {}
+ 	for k, v in given do
+diff --git a/z-nile/tests/acceptance/c0057/open.spec.luau b/z-nile/tests/acceptance/c0057/open.spec.luau
+index 30a9eac0..1c8eb2fa 100644
+--- a/z-nile/tests/acceptance/c0057/open.spec.luau
++++ b/z-nile/tests/acceptance/c0057/open.spec.luau
+@@ -2,6 +2,7 @@
+ -- c0550: `tracker.sh board` opens the written page in the default browser unless `-O` is given.
+ -- Every case puts stub openers (`open`, `xdg-open`) first on PATH, so no browser ever starts; a stub
+ -- appends its arguments to a log, one line per call, and exits with the code the case chose.
++local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local t = require("@tests/lib/t")
+@@ -12,6 +13,7 @@ local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" })
+ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
+ 
+ local DIR = ".cache/c0550-open"
++local STUB = fixture.stubDir("c0057-open") -- the openers: in the run's own temp folder, where the allow-listed PATH keeps a stub (c0123)
+ -- c0120 override: ./zn resolves --out from the repository root, not from the home specs run in, and a spec may write
+ -- only under its home's .cache: the page is named by its absolute path, which is also what board prints
+ local OUT = `{process.cwd}{DIR}/page.html`
+@@ -27,10 +29,10 @@ local function fresh(code: number)
+ 	if fs.isDir(DIR) then
+ 		fs.removeDir(DIR)
+ 	end
+-	fs.writeDir(`{DIR}/bin`)
++	fs.writeDir(DIR) -- the log goes here; the stub openers are in the run's temp folder
+ 	for _, name in { "open", "xdg-open" } do
+-		fs.writeFile(`{DIR}/bin/{name}`, `#!/bin/sh\necho "$@" >> "{LOG}"\nexit {code}\n`)
+-		process.exec("chmod", { "+x", `{DIR}/bin/{name}` })
++		fs.writeFile(`{STUB}/{name}`, `#!/bin/sh\necho "$@" >> "{LOG}"\nexit {code}\n`)
++		process.exec("chmod", { "+x", `{STUB}/{name}` })
+ 	end
+ end
+ 
+@@ -40,7 +42,7 @@ local function board(args: { string }): Result
+ 		table.insert(full, a)
+ 	end
+ 	return process.exec("scripts/tracker.sh", full, {
+-		env = { PATH = `{process.cwd}{DIR}/bin:{process.env.PATH or ""}` },
++		env = { PATH = `{STUB}:{process.env.PATH or ""}` },
+ 	})
+ end
+ 
+diff --git a/z-nile/tests/acceptance/c0058/fence.spec.luau b/z-nile/tests/acceptance/c0058/fence.spec.luau
+index 39c675d0..f5fa48bc 100644
+--- a/z-nile/tests/acceptance/c0058/fence.spec.luau
++++ b/z-nile/tests/acceptance/c0058/fence.spec.luau
+@@ -107,7 +107,18 @@ local function runnerRepo(dir: string, extra: { string })
+ 	fs.writeDir(dir)
+ 	-- c0120 override: the runner, its harness and its aliases are z-nile's (z-nile/tests/, z-nile/.luaurc)
+ 	local parts = { "z-nile/tests/run.luau", "z-nile/tests/lib", "z-nile/lib/ac.sh", "z-nile/lib/fence.sh" }
+-	for _, rel in { "z-nile/lib/git-hooks", "z-nile/.luaurc", ".luaurc", "rokit.toml", ".gitignore" } do
++	for _, rel in
++		{
++			"z-nile/lib/git-hooks",
++			"z-nile/lib/cleanenv.sh",
++			"z-nile/lib/cleanenv.list",
++			"z-nile/lib/cleanenv.luau",
++			"z-nile/.luaurc",
++			".luaurc",
++			"rokit.toml",
++			".gitignore",
++		}
++	do
+ 		table.insert(parts, rel)
+ 	end
+ 	for _, rel in extra do
+@@ -394,7 +405,7 @@ return t.spec("c0640 checks never touch the real repository", function(it)
+ 		}, "\n")
+ 		local r = process.exec(
+ 			"bash",
+-			{ "-c", script, "_", `{repo}/z-nile/lib/ac.sh`, physical(repo) },
++			{ "-p", "-c", script, "_", `{repo}/z-nile/lib/ac.sh`, physical(repo) },
+ 			{ cwd = repo, env = { GIT_DIR = `{repo}/.git` } }
+ 		)
+ 		t.expect(has(branches(), "ac-escaped")).toBe(false)
+@@ -569,7 +580,7 @@ return t.spec("c0640 checks never touch the real repository", function(it)
+ 		-- as a check.sh that tracker.sh starts outside any spec run (one started by a spec keeps the spec's limits)
+ 		local check = process.exec(
+ 			"bash",
+-			{ "-c", script, "_", `{repo}/z-nile/lib/ac.sh`, physical(repo) },
++			{ "-p", "-c", script, "_", `{repo}/z-nile/lib/ac.sh`, physical(repo) },
+ 			{ cwd = repo, env = { PICKMAN_FENCE_SPECS = "" } }
+ 		)
+ 		gitTry(repo, { "update-ref", "-d", "refs/remotes/self/main" })
+@@ -671,7 +682,7 @@ return t.spec("c0640 checks never touch the real repository", function(it)
+ 		}, "\n")
+ 		local check = process.exec(
+ 			"bash",
+-			{ "-c", script, "_", `{repo}/z-nile/lib/ac.sh`, physical(repo) },
++			{ "-p", "-c", script, "_", `{repo}/z-nile/lib/ac.sh`, physical(repo) },
+ 			{ cwd = repo }
+ 		)
+ 		gitTry(repo, { "update-ref", "-d", "refs/remotes/self/kept" })
+diff --git a/z-nile/tests/acceptance/c0058/lock.spec.luau b/z-nile/tests/acceptance/c0058/lock.spec.luau
+index 635519fd..293286ac 100644
+--- a/z-nile/tests/acceptance/c0058/lock.spec.luau
++++ b/z-nile/tests/acceptance/c0058/lock.spec.luau
+@@ -159,7 +159,18 @@ return t.spec("c0640 one run at a time per checkout", function(it)
+ 			copyTree(rel)
+ 		end
+ 		-- c0120 override: the spec runs from its project's home after the move
+-		for _, rel in { "z-nile/lib/git-hooks", "z-nile/.luaurc", ".luaurc", "rokit.toml", ".gitignore" } do
++		for _, rel in
++			{
++				"z-nile/lib/git-hooks",
++				"z-nile/lib/cleanenv.sh",
++				"z-nile/lib/cleanenv.list",
++				"z-nile/lib/cleanenv.luau",
++				"z-nile/.luaurc",
++				".luaurc",
++				"rokit.toml",
++				".gitignore",
++			}
++		do
+ 			copyTree(rel)
+ 		end
+ 		if fs.isDir(`{repo}/z-nile/lib/git-hooks`) then
+diff --git a/z-nile/tests/acceptance/c0074/done-gate.spec.luau b/z-nile/tests/acceptance/c0074/done-gate.spec.luau
+index bcc34d2f..d2fa1023 100644
+--- a/z-nile/tests/acceptance/c0074/done-gate.spec.luau
++++ b/z-nile/tests/acceptance/c0074/done-gate.spec.luau
+@@ -36,8 +36,8 @@ local STUB_GATE = table.concat({
+ 	`  [[ -f {PROMOTED} ]] && echo "promoted: yes" || echo "promoted: no"`,
+ 	`  [[ -d {TR}/rafts/done/R0010 ]] && echo "raft: done" || echo "raft: not done"`,
+ 	`  [[ -d {TR}/issues/done/f0010 ]] && echo "issue: done" || echo "issue: not done"`,
+-	'} >> "$GATE_LOG"',
+-	'exit "${GATE_EXIT:-0}"',
++	'} >> "$PICKMAN_GATE_LOG"',
++	'exit "${PICKMAN_GATE_EXIT:-0}"',
+ 	"",
+ }, "\n")
+ 
+@@ -103,8 +103,8 @@ end
+ local function done(withGate: boolean, gateExit: number): Result
+ 	return tr({ "done", "R0010" }, {
+ 		PICKMAN_DONE_GATE = if withGate then "1" else "",
+-		GATE_LOG = gateLog,
+-		GATE_EXIT = tostring(gateExit),
++		PICKMAN_GATE_LOG = gateLog,
++		PICKMAN_GATE_EXIT = tostring(gateExit),
+ 	})
+ end
+ 
+diff --git a/z-nile/tests/acceptance/c0077/replace-file.spec.luau b/z-nile/tests/acceptance/c0077/replace-file.spec.luau
+index 04909e2c..4db4ce5a 100644
+--- a/z-nile/tests/acceptance/c0077/replace-file.spec.luau
++++ b/z-nile/tests/acceptance/c0077/replace-file.spec.luau
+@@ -5,6 +5,7 @@
+ -- links at the top of .cache before it writes there, and the launcher (fence.REAPER) unlinks them after the specs'
+ -- group is killed, whatever ended it. Every path here is a stand-in under .cache; nothing real is linked to.
+ local fence = require("@tests/lib/fence")
++local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local sh = require("@scripts/lib/sh")
+@@ -15,6 +16,11 @@ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
+ local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+ -- c0120 override: the stand-ins live under the home's .cache (specs run from z-nile/, and the jail refuses the top's)
+ local here = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
++local function stubOf(
++	dir: string
++): string -- in the run's own temp folder, where the allow-listed PATH keeps a stub (c0123)
++	return fixture.stubDir("c0077-" .. (string.match(dir, "[^/]+$") :: string))
++end
+ local base = `{here}/.cache/c0830-replace`
+ local REPLACE = `{root}/z-nile/lib/replace-file.pl`
+ 
+@@ -89,41 +95,41 @@ local function gateCopy(name: string): string
+ 		end
+ 	end
+ 	fs.writeDir(`{dir}/.cache`)
+-	fs.writeDir(`{dir}/bin`)
++	stubOf(dir)
+ 	fs.writeDir(`{dir}/home`)
+ 	fs.writeDir(`{dir}/tmp`)
+-	-- curl: fails when STUB_CURL_FAIL is set, else writes a stand-in definitions file to its -o path
++	-- curl: fails when PICKMAN_STUB_CURL_FAIL is set, else writes a stand-in definitions file to its -o path
+ 	fs.writeFile(
+-		`{dir}/bin/curl`,
+-		'#!/bin/sh\nif [ -n "$STUB_CURL_FAIL" ]; then echo "curl: (22) stub failure" >&2; exit 22; fi\n'
++		`{stubOf(dir)}/curl`,
++		'#!/bin/sh\nif [ -n "$PICKMAN_STUB_CURL_FAIL" ]; then echo "curl: (22) stub failure" >&2; exit 22; fi\n'
+ 			.. 'o=; while [ $# -gt 0 ]; do [ "$1" = -o ] && o=$2; shift; done; echo "-- stub defs" > "$o"\n'
+ 	)
+-	-- rojo: fails at once, so the gate stops at its first rojo call, unless STUB_ROJO_OK is set: then it writes its -o
+-	-- file, and `build` first links .cache/check.rbxl to STUB_VICTIM (so the link is there when the result lands)
++	-- rojo: fails at once, so the gate stops at its first rojo call, unless PICKMAN_STUB_ROJO_OK is set: then it writes its -o
++	-- file, and `build` first links .cache/check.rbxl to PICKMAN_STUB_VICTIM (so the link is there when the result lands)
+ 	fs.writeFile(
+-		`{dir}/bin/rojo`,
+-		'#!/bin/sh\nif [ -z "$STUB_ROJO_OK" ]; then echo "rojo: stub" >&2; exit 1; fi\n'
++		`{stubOf(dir)}/rojo`,
++		'#!/bin/sh\nif [ -z "$PICKMAN_STUB_ROJO_OK" ]; then echo "rojo: stub" >&2; exit 1; fi\n'
+ 			.. 'o=; for a; do [ "$prev" = -o ] && o=$a; prev=$a; done\n'
+-			.. 'if [ "$1" = build ] && [ "$2" = default.project.json ]; then rm -f .cache/check.rbxl; ln -s "$STUB_VICTIM" .cache/check.rbxl; fi\n'
++			.. 'if [ "$1" = build ] && [ "$2" = default.project.json ]; then rm -f .cache/check.rbxl; ln -s "$PICKMAN_STUB_VICTIM" .cache/check.rbxl; fi\n'
+ 			.. 'echo "built by $1" > "$o"\n'
+ 	)
+ 	-- the other tools pass, and lune fails at the tests stage, which comes after the build
+ 	for _, tool in { "stylua", "selene", "luau-lsp" } do
+-		fs.writeFile(`{dir}/bin/{tool}`, "#!/bin/sh\nexit 0\n")
++		fs.writeFile(`{stubOf(dir)}/{tool}`, "#!/bin/sh\nexit 0\n")
+ 	end
+ 	fs.writeFile(
+-		`{dir}/bin/lune`,
++		`{stubOf(dir)}/lune`,
+ 		'#!/bin/sh\ncase "$1" in --version) echo "lune 0.0.0" ;; setup) ;; *) echo "lune: stub" >&2; exit 1 ;; esac\n'
+ 	)
+ 	for _, tool in { "curl", "rojo", "stylua", "selene", "luau-lsp", "lune" } do
+-		process.exec("chmod", { "+x", `{dir}/bin/{tool}` })
++		process.exec("chmod", { "+x", `{stubOf(dir)}/{tool}` })
+ 	end
+ 	return dir
+ end
+ 
+ local function gate(dir: string, env: { [string]: string }?): Result
+ 	local e: { [string]: string } = {
+-		PATH = `{dir}/bin:{process.env.PATH or ""}`,
++		PATH = `{stubOf(dir)}:{process.env.PATH or ""}`,
+ 		HOME = `{dir}/home`, -- no ~/.rokit/bin in front of the stubs
+ 		TMPDIR = `{dir}/tmp`,
+ 	}
+@@ -235,7 +241,7 @@ return t.spec("c0830 writers under .cache never follow a symlink", function(it)
+ 		"the gate stops with a message when the definitions download fails, leaving no temporary file",
+ 		function()
+ 			local dir = gateCopy("gate-download")
+-			local r = gate(dir, { STUB_CURL_FAIL = "1" })
++			local r = gate(dir, { PICKMAN_STUB_CURL_FAIL = "1" })
+ 			t.expect(r.ok).toBe(false)
+ 			t.expect(has(r.stderr, "globalTypes")).toBe(true)
+ 			t.expect(has(r.stdout .. r.stderr, "rojo: stub")).toBe(false) -- it stopped before the next step
+@@ -276,7 +282,7 @@ return t.spec("c0830 writers under .cache never follow a symlink", function(it)
+ 			fs.writeDir(`{base}/build-victim`)
+ 			fs.writeFile(`{base}/build-victim/keep`, "keep")
+ 			local before = listing(`{base}/build-victim`)
+-			local r = gate(dir, { STUB_ROJO_OK = "1", STUB_VICTIM = `{base}/build-victim` })
++			local r = gate(dir, { PICKMAN_STUB_ROJO_OK = "1", PICKMAN_STUB_VICTIM = `{base}/build-victim` })
+ 			t.expect(r.ok).toBe(false) -- the stub lune stops it at the tests stage
+ 			t.expect(has(r.stdout .. r.stderr, "lune: stub")).toBe(true) -- so the build stage ran and passed
+ 			t.expect(isLink(`{dir}/.cache/check.rbxl`)).toBe(false)
+diff --git a/z-nile/tests/acceptance/c0081/allocate.spec.luau b/z-nile/tests/acceptance/c0081/allocate.spec.luau
+index 72c4a9b2..20d8aaa4 100644
+--- a/z-nile/tests/acceptance/c0081/allocate.spec.luau
++++ b/z-nile/tests/acceptance/c0081/allocate.spec.luau
+@@ -189,7 +189,7 @@ return t.spec("c0870 allocation from z-nile/next", function(it)
+ 		-- exception to the fixture rule: the shim runs raw git only in `other`, a fixture clone under this spec's
+ 		-- .cache directory.
+ 		local real = realGit()
+-		local shim = `{base}/shim`
++		local shim = fixture.stubDir("c0081-git")
+ 		local marker = `{base}/raced`
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+ 		write(
+diff --git a/z-nile/tests/acceptance/c0114/guards.spec.luau b/z-nile/tests/acceptance/c0114/guards.spec.luau
+index 5bc557f0..f8606721 100644
+--- a/z-nile/tests/acceptance/c0114/guards.spec.luau
++++ b/z-nile/tests/acceptance/c0114/guards.spec.luau
+@@ -42,7 +42,8 @@ local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --sho
+ 
+ return t.spec("c0114 the guards fail closed", function(it)
+ 	it("a check.sh whose ac.sh finds no fence.sh refuses and runs nothing", function()
+-		local dir = repo("no-fence", { "z-nile/lib/ac.sh" })
++		local dir =
++			repo("no-fence", { "z-nile/lib/ac.sh", "z-nile/lib/cleanenv.sh", "z-nile/lib/cleanenv.list" })
+ 		fs.writeFile(`{dir}/check.sh`, string.format(CHECK, "z-nile/lib/ac.sh"))
+ 		local r = fixture.exec(dir, "bash", { "check.sh" })
+ 		t.expect(r.ok).toBe(false)
+@@ -146,7 +147,15 @@ return t.spec("c0114 the guards fail closed", function(it)
+ 		-- z-nile home, whose .cache the probe writes to
+ 		local dir = repo(
+ 			"runner",
+-			{ "z-nile/tests/run.luau", "z-nile/tests/lib", "z-nile/.luaurc", ".luaurc", "rokit.toml" }
++			{
++				"z-nile/tests/run.luau",
++				"z-nile/tests/lib",
++				"z-nile/lib/cleanenv.luau",
++				"z-nile/lib/cleanenv.list",
++				"z-nile/.luaurc",
++				".luaurc",
++				"rokit.toml",
++			}
+ 		)
+ 		local home = `{dir}/z-nile`
+ 		fs.writeDir(`{home}/tests/probe`)
+diff --git a/z-nile/tests/acceptance/c0114/layout.spec.luau b/z-nile/tests/acceptance/c0114/layout.spec.luau
+index d594fc13..b5172f80 100644
+--- a/z-nile/tests/acceptance/c0114/layout.spec.luau
++++ b/z-nile/tests/acceptance/c0114/layout.spec.luau
+@@ -152,9 +152,9 @@ return t.spec("c0114 the engine and the build live in z-nile/", function(it)
+ 
+ 	it("each forwarder is one command that runs the moved file", function()
+ 		local want: { [string]: string } = {
+-			["scripts/tracker.sh"] = 'exec bash "$(dirname "$0")/../zn" "$@"',
+-			["scripts/check.sh"] = 'exec bash "$(dirname "$0")/../z-nile/check.sh" "$@"',
+-			["scripts/setup.sh"] = 'exec bash "$(dirname "$0")/../z-nile/setup.sh" "$@"',
++			["scripts/tracker.sh"] = 'exec /bin/bash -p "${0%/*}/../zn" "$@"',
++			["scripts/check.sh"] = 'exec /bin/bash -p "${0%/*}/../z-nile/check.sh" "$@"',
++			["scripts/setup.sh"] = 'exec /bin/bash -p "${0%/*}/../z-nile/setup.sh" "$@"',
+ 		}
+ 		for path, line in want do
+ 			t.expect(commands(path)).toEqual({ line })
+diff --git a/z-nile/tests/acceptance/c0120/gate-homes.spec.luau b/z-nile/tests/acceptance/c0120/gate-homes.spec.luau
+index 9997fdbc..9686cadc 100644
+--- a/z-nile/tests/acceptance/c0120/gate-homes.spec.luau
++++ b/z-nile/tests/acceptance/c0120/gate-homes.spec.luau
+@@ -8,12 +8,18 @@
+ -- places are a home's project files; and a project's specs run from its home (z-nile's from z-nile/). `--plan` prints
+ -- all of it and runs and writes nothing. These specs run from z-nile/. Fixture under .cache/c0120-gate (stub tools).
+ local engine = require("@tests/lib/engine")
++local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local t = require("@tests/lib/t")
+ 
+ local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+ local homeDir = (string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))
++local function stubOf(
++	dir: string
++): string -- in the run's own temp folder, where the allow-listed PATH keeps a stub (c0123)
++	return fixture.stubDir("c0120-" .. (string.match(dir, "[^/]+$") :: string))
++end
+ local base = `{homeDir}/.cache/c0120-gate`
+ local REGISTRY = 'retired = ["tracker"]\n\n[[project]]\nname = "pickman"\nroot = "pickman/.tracker"\n\n'
+ 	.. '[[project]]\nname = "z-nile"\nroot = "z-nile/.tracker"\n'
+@@ -68,24 +74,24 @@ local function stubbed(name: string): string
+ 	end
+ 	write(`{dir}/pickman/default.project.json`, '{ "name": "g", "tree": { "$className": "DataModel" } }\n')
+ 	write(`{dir}/pickman/lobby.project.json`, '{ "name": "l", "tree": { "$className": "DataModel" } }\n')
+-	fs.writeDir(`{dir}/bin`)
++	stubOf(dir)
+ 	fs.writeDir(`{dir}/home/.lune/.typedefs/0.10.5`)
+-	local log = 'printf "%s|%s|%s\\n" "$(pwd -P)" "$(basename "$0")" "$*" >> "$STUB_LOG"\n'
++	local log = 'printf "%s|%s|%s\\n" "$(pwd -P)" "$(basename "$0")" "$*" >> "$PICKMAN_STUB_LOG"\n'
+ 	for _, tool in { "stylua", "selene", "luau-lsp" } do
+-		write(`{dir}/bin/{tool}`, "#!/bin/sh\n" .. log .. "exit 0\n")
++		write(`{stubOf(dir)}/{tool}`, "#!/bin/sh\n" .. log .. "exit 0\n")
+ 	end
+ 	write(
+-		`{dir}/bin/rojo`,
++		`{stubOf(dir)}/rojo`,
+ 		"#!/bin/sh\n" .. log .. 'o=; for a; do [ "$prev" = -o ] && o=$a; prev=$a; done\necho "built" > "$o"\n'
+ 	)
+ 	write(
+-		`{dir}/bin/curl`,
++		`{stubOf(dir)}/curl`,
+ 		'#!/bin/sh\no=; while [ $# -gt 0 ]; do [ "$1" = -o ] && o=$2; shift; done; echo "-- defs" > "$o"\n'
+ 	)
+ 	-- lune: a spec run is logged; z-nile/roots (the registry's reader for the shell, which AC1 pins) answers as it would
+ 	-- for this fixture's registry and folders
+ 	write(
+-		`{dir}/bin/lune`,
++		`{stubOf(dir)}/lune`,
+ 		'#!/bin/sh\nif [ "$1" = --version ]; then echo "lune 0.10.5"; exit 0; fi\n'
+ 			.. 'if [ "$2" = z-nile/roots ] && [ "$4" = --projects ]; then\n'
+ 			.. '  printf "pickman\\tpickman\\tpickman/.tracker\\nz-nile\\tz-nile\\tz-nile/.tracker\\n"; exit 0\nfi\n'
+@@ -96,7 +102,7 @@ local function stubbed(name: string): string
+ 			.. "exit 0\n"
+ 	)
+ 	for _, tool in { "stylua", "selene", "luau-lsp", "rojo", "curl", "lune" } do
+-		process.exec("chmod", { "+x", `{dir}/bin/{tool}` })
++		process.exec("chmod", { "+x", `{stubOf(dir)}/{tool}` })
+ 	end
+ 	return dir
+ end
+@@ -108,9 +114,9 @@ local function gate(dir: string, args: { string }): (boolean, string, string)
+ 	local r = process.exec("bash", argv, {
+ 		cwd = dir,
+ 		env = {
+-			PATH = `{dir}/bin:{process.env.PATH or ""}`,
++			PATH = `{stubOf(dir)}:{process.env.PATH or ""}`,
+ 			HOME = `{dir}/home`,
+-			STUB_LOG = `{dir}/calls.log`,
++			PICKMAN_STUB_LOG = `{dir}/calls.log`,
+ 		},
+ 	})
+ 	local log = if fs.isFile(`{dir}/calls.log`) then fs.readFile(`{dir}/calls.log`) else ""
+diff --git a/z-nile/tests/acceptance/c0120/layout.spec.luau b/z-nile/tests/acceptance/c0120/layout.spec.luau
+index dd439caf..016ceb9e 100644
+--- a/z-nile/tests/acceptance/c0120/layout.spec.luau
++++ b/z-nile/tests/acceptance/c0120/layout.spec.luau
+@@ -207,15 +207,15 @@ return t.spec("c0120 every project's files live in its home", function(it)
+ 		function()
+ 			for _, home in { "pickman", "z-nile" } do
+ 				t.expect(commands(`{home}/scripts/tracker.sh`))
+-					.toEqual({ 'exec bash "$(dirname "$0")/../../zn" "$@"' })
++					.toEqual({ 'exec /bin/bash -p "${0%/*}/../../zn" "$@"' })
+ 			end
+ 			t.expect(commands("pickman/scripts/check.sh"))
+-				.toEqual({ 'exec bash "$(dirname "$0")/../check.sh" "$@"' })
++				.toEqual({ 'exec /bin/bash -p "${0%/*}/../check.sh" "$@"' })
+ 			t.expect(commands("pickman/check.sh")).toEqual({
+-				'exec bash "$(dirname "$0")/../z-nile/check.sh" --project pickman "$@"',
++				'exec /bin/bash -p "${0%/*}/../z-nile/check.sh" --project pickman "$@"',
+ 			})
+ 			t.expect(commands("z-nile/scripts/check.sh")).toEqual({
+-				'exec bash "$(dirname "$0")/../check.sh" --project z-nile "$@"',
++				'exec /bin/bash -p "${0%/*}/../check.sh" --project z-nile "$@"',
+ 			})
+ 			for _, f in
+ 				{
+diff --git a/z-nile/tests/acceptance/c0127/reuse.spec.luau b/z-nile/tests/acceptance/c0127/reuse.spec.luau
+index 1eeb874c..fd51ecd9 100644
+--- a/z-nile/tests/acceptance/c0127/reuse.spec.luau
++++ b/z-nile/tests/acceptance/c0127/reuse.spec.luau
+@@ -9,6 +9,7 @@
+ -- stand-in perl first on PATH for one run: it passes every call to the real perl, and either logs the pids the
+ -- reader is asked about or refuses the reader for one pid only.
+ local fence = require("@tests/lib/fence")
++local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local t = require("@tests/lib/t")
+@@ -22,7 +23,7 @@ local home = (string.gsub(process.cwd, "/+$", ""))
+ -- c0120 override: the spec runs from z-nile/, its home; its fixtures go in its home's .cache
+ local base = `{home}/.cache/c0127-reuse`
+ local repo = `{base}/real`
+-local bin = `{base}/bin`
++local bin = fixture.stubDir("c0127") -- in the run's own temp folder, where the allow-listed PATH keeps a stub (c0123)
+ local log = `{base}/asked`
+ -- c0120 override: the spec runs from z-nile/, its home; its runner copy has the homes layout
+ local lock = `{repo}/z-nile/.cache/tests-run.lock`
+@@ -225,7 +226,18 @@ return t.spec("c0127 a reused pid does not hold the test lock", function(it)
+ 			copyTree(rel)
+ 		end
+ 		-- c0120 override: the spec runs from z-nile/, its home; its runner copy has the homes layout
+-		for _, rel in { "z-nile/lib/git-hooks", ".luaurc", "z-nile/.luaurc", "rokit.toml", ".gitignore" } do
++		for _, rel in
++			{
++				"z-nile/lib/git-hooks",
++				"z-nile/lib/cleanenv.sh",
++				"z-nile/lib/cleanenv.list",
++				"z-nile/lib/cleanenv.luau",
++				".luaurc",
++				"z-nile/.luaurc",
++				"rokit.toml",
++				".gitignore",
++			}
++		do
+ 			copyTree(rel)
+ 		end
+ 		if fs.isDir(`{repo}/z-nile/lib/git-hooks`) then
+diff --git a/z-nile/tests/lib/fence.luau b/z-nile/tests/lib/fence.luau
+index cf7df8f6..dba19381 100644
+--- a/z-nile/tests/lib/fence.luau
++++ b/z-nile/tests/lib/fence.luau
+@@ -10,6 +10,7 @@
+ --   4. snapshots again, releases the lock, and fails the run if anything a check must not change did.
+ -- A run with a valid marker (a worker, or a run started from inside a run) is already guarded: it only
+ -- records its pid in the lock, so the lock stays held while any guarded process lives.
++local cleanenv = require("@znile/lib/cleanenv")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local stdio = require("@lune/stdio")
+@@ -41,8 +42,10 @@ local ROOT = string.match(normalize(debug.info(1, "s")), "^(.*)/[^/]+/[^/]+/[^/]
+ -- when it names none (a copy with neither): the runner then takes any folder one level below the root, as before the
+ -- registry named homes.
+ function fence.homes(): { string }?
+-	local r =
+-		process.exec("bash", { "-c", '. "$1/z-nile/lib/fence.sh" && pickman_fence_dirs "$1"', "_", ROOT })
++	local r = process.exec(
++		"/bin/bash",
++		{ "-p", "-c", '. "$1/z-nile/lib/fence.sh" && pickman_fence_dirs "$1"', "_", ROOT }
++	)
+ 	if not r.ok then
+ 		stdio.ewrite(`tests/run: cannot read {ROOT}'s homes: {r.stderr}refusing. Stop and report this.\n`)
+ 		process.exit(1)
+@@ -99,7 +102,7 @@ local function git(args: { string }): string?
+ end
+ 
+ local function shell(script: string): string
+-	local r = process.exec("sh", { "-c", script })
++	local r = process.exec("/bin/sh", { "-p", "-c", script })
+ 	return trim(r.stdout)
+ end
+ 
+@@ -891,7 +894,7 @@ end
+ 
+ -- The mktemp that puts a template-less tree in TMPDIR: the text of z-nile/bin/mktemp, which a spec pins equal (the
+ -- runner copies it into each run's bin/; agents' sessions get the file itself on PATH).
+-fence.MKTEMP_SHIM = [=[#!/bin/sh
++fence.MKTEMP_SHIM = [=[#!/bin/sh -p
+ # mktemp that honours TMPDIR (c0194). macOS mktemp ignores TMPDIR and uses the user temp folder, outside the repository
+ # and so inside Spotlight's reach. With no template, or -t <prefix>, this puts the tree in $TMPDIR; a template (and
+ # so -p <dir>, whose folder is the first non-option) names its place and is passed through. The runner copies this file into each run's own bin/ (tests/lib/fence.luau).
+@@ -946,7 +949,8 @@ function fence.enter()
+ 	-- owner of that set, fence.sh's pickman_fence_all (code review 005 F2): ceiling, refusals and sentinel now, while
+ 	-- unjailed (the jail lets the run write only its home's .cache); the ceiling again inside the jail's shell, from
+ 	-- the same list.
+-	local all = process.exec("bash", {
++	local all = process.exec("/bin/bash", {
++		"-p",
+ 		"-c",
+ 		'. "$1/z-nile/lib/fence.sh" && pickman_fence_all "$1" strict && pickman_fence_dirs "$1"',
+ 		"_",
+@@ -994,7 +998,7 @@ function fence.enter()
+ 	-- the Spotlight marker, exclusive and never through a link (c0194)
+ 	local marker = `{tmpRoot}/.metadata_never_index`
+ 	if not process.exec("test", { "-e", marker }).ok and not process.exec("test", { "-L", marker }).ok then
+-		process.exec("sh", { "-c", 'set -C; : > "$1"', "_", marker })
++		process.exec("/bin/sh", { "-p", "-c", 'set -C; : > "$1"', "_", marker })
+ 	end
+ 	local made = process.exec("mktemp", { "-d", `{tmpRoot}/pickman-run.XXXXXX` })
+ 	if not made.ok then
+@@ -1019,6 +1023,9 @@ function fence.enter()
+ 	end
+ 	local lock = `{cache}/tests-run.lock`
+ 	takeLock(lock, ownId)
++	-- c0123: the allow-listed environment believes a run folder in .cache/.tmp only when the runner says so here, in the lock it
++	-- holds (a file under .cache that no variable names)
++	writeWhole(`{lock}/folders`, `{runTemp}\n`, myPid())
+ 	-- an earlier run's folder that nothing owns any more is cleared (a run waiting for the lock owns its own)
+ 	for _, name in fs.readDir(`{cache}/.tmp`) do
+ 		local stray = `{cache}/.tmp/{name}`
+@@ -1033,6 +1040,7 @@ function fence.enter()
+ 	end
+ 	local before = snapshot(cache)
+ 	local argv = {
++		"-p",
+ 		"-c",
+ 		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 5 && exec lune run tests/run -- "$@"',
+ 		"_",
+@@ -1042,16 +1050,16 @@ function fence.enter()
+ 		ROOT,
+ 		ceilings,
+ 	}
+-	for _, a in process.args do
++	for _, a in (cleanenv.args(process.args)) do
+ 		if a ~= "--" then
+ 			table.insert(argv, a)
+ 		end
+ 	end
+-	local command = "bash"
++	local command = "/bin/bash"
+ 	if #prefix > 0 then
+ 		command = prefix[1]
+ 		local rest = table.move(prefix, 2, #prefix, 1, {})
+-		table.insert(rest, "bash")
++		table.insert(rest, "/bin/bash")
+ 		for _, a in argv do
+ 			table.insert(rest, a)
+ 		end
+diff --git a/z-nile/tests/lib/fixture.luau b/z-nile/tests/lib/fixture.luau
+index bee7b7c3..b1548abc 100644
+--- a/z-nile/tests/lib/fixture.luau
++++ b/z-nile/tests/lib/fixture.luau
+@@ -4,6 +4,7 @@
+ -- a .cache folder and is that directory itself: if a fixture's repository were missing, git would otherwise find
+ -- the enclosing real one. Creating a fixture (git init, git clone to a new path) needs no check: the new path is
+ -- named explicitly.
++local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ 
+ local fixture = {}
+@@ -117,4 +118,19 @@ function fixture.git(dir: string, args: { string }, options: Options?): string
+ 	return trim(r.stdout)
+ end
+ 
++-- A folder for PATH stubs in the run's own temp folder (c0123). The allow-listed environment keeps a stub, guard or bin
++-- folder only inside a folder the runner registered for this run, and TMPDIR is that folder (a leftover under a .cache is
++-- not one). Name it for the spec (`c0005-gh`): specs running together share TMPDIR and must not share a stub folder.
++function fixture.stubDir(name: string): string
++	local tmp = string.gsub(process.env.TMPDIR or "", "/+$", "")
++	if tmp == "" then
++		error("fixture.stubDir: TMPDIR is not set; a spec runs under tests/run, which sets it", 2)
++	end
++	local dir = `{tmp}/pickman-stub.{name}`
++	if not fs.isDir(dir) then
++		fs.writeDir(dir)
++	end
++	return dir
++end
++
+ return fixture
+diff --git a/z-nile/tests/run.luau b/z-nile/tests/run.luau
+index e85dc659..6181596a 100644
+--- a/z-nile/tests/run.luau
++++ b/z-nile/tests/run.luau
+@@ -17,6 +17,43 @@ local task = require("@lune/task")
+ 
+ type Spec = { name: string, cases: { { name: string, fn: () -> () } } }
+ 
++-- The allow-listed environment (c0123): before anything of ours starts a shell, a tool or a spec, a runner whose
++-- environment is not the allow-list in z-nile/lib/cleanenv.list starts itself again under exactly that, with the fixed
++-- PATH. `--cleaned` marks the restart: a restarted runner that is still dirty refuses instead of looping.
++local cleanenv = require("@znile/lib/cleanenv")
++local plainArgs, restarted = cleanenv.args(process.args)
++do
++	local facts = cleanenv.facts()
++	local spec = cleanenv.load(facts.home)
++	local current = cleanenv.current()
++	local why = cleanenv.refusal(current, facts)
++	if why then
++		stdio.ewrite(why .. "\n")
++		process.exit(1)
++	end
++	local clean, dirty = cleanenv.clean(current, spec, facts, cleanenv.resolve)
++	if dirty then
++		if restarted then
++			stdio.ewrite(
++				"tests/run: the environment is still not the allow-list after a restart; refusing.\n"
++			)
++			process.exit(1)
++		end
++		local argv = { "lune", "run", "tests/run", "--", "--cleaned" }
++		for _, a in plainArgs do
++			if a ~= "--" then
++				table.insert(argv, a)
++			end
++		end
++		local r = process.exec(
++			"/usr/bin/env",
++			cleanenv.command(clean, argv),
++			{ stdio = { stdout = "forward", stderr = "forward" } }
++		)
++		process.exit(r.code)
++	end
++end
++
+ -- Where this file is (z-nile/tests/run.luau), and so the repository root, two folders above its own: every project's
+ -- home requires it from its own tests/run.luau, and specs are loaded relative to this file, so a spec path relative to
+ -- the current folder needs the current folder's place under the root in front of it ("pickman/", "z-nile/").
+@@ -92,7 +129,7 @@ if guard == nil or guard == "" or not fs.isFile(`{guard}/open`) then
+ 		process.exec("chmod", { "+x", `{dir}/{name}` })
+ 	end
+ 	local args = { "run", "tests/run", "--" }
+-	for _, a in process.args do
++	for _, a in plainArgs do
+ 		if a ~= "--" then
+ 			table.insert(args, a)
+ 		end
+@@ -144,7 +181,7 @@ end
+ local files: { string } = {}
+ local flagJobs: number? = nil
+ do
+-	local args = process.args
++	local args = plainArgs
+ 	local i = 1
+ 	while i <= #args do
+ 		local arg = args[i]
+diff --git a/z-nile/tests/tooling/board.spec.luau b/z-nile/tests/tooling/board.spec.luau
+index 653adfc4..e3b10b13 100644
+--- a/z-nile/tests/tooling/board.spec.luau
++++ b/z-nile/tests/tooling/board.spec.luau
+@@ -1,6 +1,7 @@
+ --!strict
+ -- c0400: the board's own unit cases: the JSON writer, an empty tracker, and opening (the default, `--open` and `-O`).
+ local board = require("@scripts/tracker/board")
++local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local serde = require("@lune/serde")
+@@ -100,15 +101,15 @@ return t.spec("board unit", function(it)
+ 		if fs.isDir(dir) then
+ 			fs.removeDir(dir)
+ 		end
+-		fs.writeDir(`{dir}/bin`)
++		local stubs = fixture.stubDir("board-open") -- in the run's own temp folder, where the allow-listed PATH keeps a stub (c0123)
+ 		-- fake openers, so the gate never launches a browser
+ 		for _, name in { "open", "xdg-open" } do
+-			fs.writeFile(`{dir}/bin/{name}`, `#!/bin/sh\necho "$@" > "{HERE}/{dir}/opened"\n`)
+-			process.exec("chmod", { "+x", `{dir}/bin/{name}` })
++			fs.writeFile(`{stubs}/{name}`, `#!/bin/sh\necho "$@" > "{HERE}/{dir}/opened"\n`)
++			process.exec("chmod", { "+x", `{stubs}/{name}` })
+ 		end
+ 		local out = `{HERE}/{dir}/page.html`
+ 		local r = tracker({ "board", "--open", "--out", out }, {
+-			PATH = `{HERE}/{dir}/bin:{process.env.PATH or ""}`,
++			PATH = `{stubs}:{process.env.PATH or ""}`,
+ 		})
+ 		t.expect(r.ok).toBe(true)
+ 		t.expect(fs.isFile(out)).toBe(true)
+@@ -198,14 +199,14 @@ return t.spec("board unit", function(it)
+ 		if fs.isDir(dir) then
+ 			fs.removeDir(dir)
+ 		end
+-		fs.writeDir(`{dir}/bin`)
++		local stubs = fixture.stubDir("board-fail")
+ 		for _, name in { "open", "xdg-open" } do
+-			fs.writeFile(`{dir}/bin/{name}`, "#!/bin/sh\nexit 3\n")
+-			process.exec("chmod", { "+x", `{dir}/bin/{name}` })
++			fs.writeFile(`{stubs}/{name}`, "#!/bin/sh\nexit 3\n")
++			process.exec("chmod", { "+x", `{stubs}/{name}` })
+ 		end
+ 		local out = `{HERE}/{dir}/page.html`
+ 		local r = tracker({ "board", "--open", "--out", out }, {
+-			PATH = `{HERE}/{dir}/bin:{process.env.PATH or ""}`,
++			PATH = `{stubs}:{process.env.PATH or ""}`,
+ 		})
+ 		t.expect(r.ok).toBe(true)
+ 		t.expect(fs.isFile(out)).toBe(true)
+diff --git a/z-nile/tests/tooling/fence-cache-entry.spec.luau b/z-nile/tests/tooling/fence-cache-entry.spec.luau
+index b6d5f0cd..621cf11c 100644
+--- a/z-nile/tests/tooling/fence-cache-entry.spec.luau
++++ b/z-nile/tests/tooling/fence-cache-entry.spec.luau
+@@ -85,7 +85,17 @@ return t.spec("the guards never delete through .cache", function(it)
+ 		-- the runner and its harness live in z-nile's home and run there (c0120)
+ 		fs.writeDir(`{fx}/z-nile/tests`)
+ 		fs.writeDir(`{fx}/z-nile/lib`)
+-		for _, rel in { "z-nile/tests/run.luau", "z-nile/lib/fence.sh", "z-nile/.luaurc", ".luaurc" } do
++		for _, rel in
++			{
++				"z-nile/tests/run.luau",
++				"z-nile/lib/fence.sh",
++				"z-nile/lib/cleanenv.sh",
++				"z-nile/lib/cleanenv.list",
++				"z-nile/lib/cleanenv.luau",
++				"z-nile/.luaurc",
++				".luaurc",
++			}
++		do
+ 			fs.writeFile(`{fx}/{rel}`, fs.readFile(`{root}/{rel}`))
+ 		end
+ 		process.exec("cp", { "-R", `{root}/z-nile/tests/lib`, `{fx}/z-nile/tests/lib` })
+diff --git a/z-nile/tests/tooling/fence-leftovers.spec.luau b/z-nile/tests/tooling/fence-leftovers.spec.luau
+index a70592e4..d78bf030 100644
+--- a/z-nile/tests/tooling/fence-leftovers.spec.luau
++++ b/z-nile/tests/tooling/fence-leftovers.spec.luau
+@@ -53,6 +53,9 @@ return t.spec("a run leaves no process behind", function(it)
+ 				"z-nile/lib/ac.sh",
+ 				"z-nile/lib/fence.sh",
+ 				"z-nile/lib/git-hooks",
++				"z-nile/lib/cleanenv.sh",
++				"z-nile/lib/cleanenv.list",
++				"z-nile/lib/cleanenv.luau",
+ 			}
+ 		do
+ 			copyTree(rel)
+diff --git a/z-nile/tests/tooling/lock-start-ids.spec.luau b/z-nile/tests/tooling/lock-start-ids.spec.luau
+index a380617c..840a782c 100644
+--- a/z-nile/tests/tooling/lock-start-ids.spec.luau
++++ b/z-nile/tests/tooling/lock-start-ids.spec.luau
+@@ -5,6 +5,7 @@
+ -- as c0127's reuse.spec does; a stand-in perl first on PATH logs every pid the start reader is asked about and hands
+ -- every call to the real perl.
+ local fence = require("@tests/lib/fence")
++local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local t = require("@tests/lib/t")
+@@ -15,7 +16,7 @@ local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }
+ local home = (string.gsub(process.cwd, "/+$", ""))
+ local base = `{home}/.cache/lock-start-ids`
+ local repo = `{base}/real`
+-local bin = `{base}/bin`
++local bin = fixture.stubDir("lock-start-ids") -- in the run's own temp folder, where the allow-listed PATH keeps a stub (c0123)
+ local log = `{base}/asked`
+ local lock = `{repo}/z-nile/.cache/tests-run.lock`
+ 
+@@ -146,7 +147,18 @@ return t.spec("R0047 lock start ids", function(it)
+ 		do -- c0114: the guards moved
+ 			copyTree(rel)
+ 		end
+-		for _, rel in { "z-nile/lib/git-hooks", ".luaurc", "z-nile/.luaurc", "rokit.toml", ".gitignore" } do
++		for _, rel in
++			{
++				"z-nile/lib/git-hooks",
++				"z-nile/lib/cleanenv.sh",
++				"z-nile/lib/cleanenv.list",
++				"z-nile/lib/cleanenv.luau",
++				".luaurc",
++				"z-nile/.luaurc",
++				"rokit.toml",
++				".gitignore",
++			}
++		do
+ 			copyTree(rel)
+ 		end
+ 		if fs.isDir(`{repo}/z-nile/lib/git-hooks`) then
+diff --git a/z-nile/tests/tooling/repo-fence.spec.luau b/z-nile/tests/tooling/repo-fence.spec.luau
+index daa7726d..e838e7eb 100644
+--- a/z-nile/tests/tooling/repo-fence.spec.luau
++++ b/z-nile/tests/tooling/repo-fence.spec.luau
+@@ -166,6 +166,19 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 	["z-nile/engine/gate.luau"] = {
+ 		PICKMAN_FENCE_ = "doneGate reads PICKMAN_FENCE_SPECS to skip done's gate inside a spec run, never to switch a guard (c0074)",
+ 	},
++	-- c0123: the allow-listed environment names the fence marker it keys the `fence` entries on, and restarts under `env -i`
++	["z-nile/lib/cleanenv.luau"] = {
++		PICKMAN_FENCE_ = "keeps the `fence` entries of cleanenv.list only while PICKMAN_FENCE_REAL_GIT is set",
++		GIT_CONFIG_ = "pins GIT_CONFIG_GLOBAL to the account's own git config file (the caller's HOME and XDG_CONFIG_HOME choose none)",
++	},
++	["z-nile/lib/cleanenv.sh"] = {
++		PICKMAN_FENCE_ = "keeps the `fence` entries of cleanenv.list only while PICKMAN_FENCE_REAL_GIT is set",
++		GIT_CONFIG_ = "pins GIT_CONFIG_GLOBAL to the account's own git config file (the caller's HOME and XDG_CONFIG_HOME choose none)",
++		["env -i"] = "the restart of an entry script under exactly the allow-listed environment",
++	},
++	["z-nile/tests/run.luau"] = {
++		["env -i"] = "the runner restarts itself under exactly the allow-listed environment (through z-nile/lib/cleanenv.luau)",
++	},
+ 	-- c0120: its fixture check.sh files print the git guards they see, and one fence call in a fixture gets an empty
+ 	-- hook folder and no jail marker, to prove a refused home fence leaves the inherited guards whole; its fixture
+ 	-- check.sh runs get the jail's three markers set explicitly, so they test the same path on every host
+@@ -277,6 +290,33 @@ for _, dir in
+ do
+ 	ALLOWED[`{dir}/reuse.spec.luau`] = { PICKMAN_TEST_FENCE = "runs a copied runner as a top-level run" }
+ end
++-- c0123: its specs set and read the fence's hook folder variable for one fence call in a fixture, plant the names the
++-- allow-listed environment keeps or drops, clear the run marker for a top-level fixture run, and pin the documents
++-- that quote these names
++local C0123 = renamed.id("c0123")
++ALLOWED[`z-nile/tests/acceptance/{C0123}/inherited-hooks.spec.luau`] = {
++	PICKMAN_FENCE_ = "sets and reads the hook folder variable for one fence call in a fixture",
++	PICKMAN_TEST_FENCE = "sets the jail's markers explicitly for one fence call in a fixture",
++	["sandbox-exec"] = "sets the jail marker for the waiver and jail cases",
++	GIT_SSH_COMMAND = "plants the caller's ssh command to prove a check-mode fence drops it",
++	GIT_ALLOW_PROTOCOL = "plants the caller's protocol list to prove a check-mode fence drops it",
++}
++ALLOWED[`z-nile/tests/acceptance/{C0123}/cleanenv.spec.luau`] = {
++	GIT_CEILING_DIRECTORIES = "plants the fence's state to prove it is kept only while a fence is active",
++	GIT_CONFIG_ = "plants the fence's state to prove it is kept only while a fence is active",
++	PICKMAN_FENCE_ = "plants the fence marker the `fence` entries are keyed on",
++	GIT_SSH_COMMAND = "plants the caller's ssh command to prove a forged marker keeps it nowhere",
++	["env -i"] = "starts the shell reader under exactly a planted environment",
++}
++ALLOWED[`z-nile/tests/acceptance/{C0123}/launchers.spec.luau`] = {
++	PICKMAN_TEST_FENCE = "clears the run marker so the copied runner acts as a top-level run",
++	PICKMAN_FENCE_ = "plants a forged fence marker, run marker and permissive hook folder in a person's shell",
++	GIT_SSH_COMMAND = "plants the caller's ssh command to prove a forged marker keeps it nowhere",
++}
++ALLOWED[`z-nile/tests/acceptance/{C0123}/wording.spec.luau`] = {
++	hooksPath = "pins the sentence that says the fence's own core.hooksPath is not set by the admitted names",
++	["env -i"] = "pins the skill sentences that say the launchers restart under it",
++}
+ -- c0131's specs run the ref guard hook directly in a .cache fixture: they set PICKMAN_FENCE_REAL_GIT to the
+ -- fixture's own git directory and PICKMAN_FENCE_SPECS for that one hook process, never for git or a run
+ local C0131 = renamed.id("c0131")
+@@ -489,7 +529,10 @@ return t.spec("repository fence", function(it)
+ 		end
+ 		-- the run's TMPDIR is a fresh folder under this home's .cache/.tmp, and a plain `mktemp -d` lands in it
+ 		local tmp = env.TMPDIR or ""
+-		t.expect(string.match(tmp, "^" .. string.gsub(here, "%p", "%%%0") .. "/%.cache/%.tmp/pickman%-run%.[%w]+$") ~= nil).toBe(true)
++		t.expect(
++			string.match(tmp, "^" .. string.gsub(here, "%p", "%%%0") .. "/%.cache/%.tmp/pickman%-run%.[%w]+$")
++				~= nil
++		).toBe(true)
+ 		-- ... and the rest of .cache/.tmp is closed to the spec: no sibling folder, no replacing the folder itself
+ 		local sibling = `{here}/.cache/.tmp/pickman-jail-probe-{tag}`
+ 		if pcall(fs.writeFile, sibling, "") then
+diff --git a/z-nile/tests/tooling/run-guard-relaunch.spec.luau b/z-nile/tests/tooling/run-guard-relaunch.spec.luau
+index 3c342c9a..5c7e1d5d 100644
+--- a/z-nile/tests/tooling/run-guard-relaunch.spec.luau
++++ b/z-nile/tests/tooling/run-guard-relaunch.spec.luau
+@@ -34,19 +34,49 @@ return t.spec("tests/run guard relaunch", function(it)
+ 		fs.removeDir(DIR)
+ 	end)
+ 
+-	it("without lune on PATH, the guard fails clearly and leaves no guard directory", function()
++	it("without lune on PATH, the runner fails clearly and leaves no guard directory", function()
++		-- c0123: a runner puts its PATH on the allow-list's fixed directories first, so "no lune" is a runner whose copy of
++		-- the list names no directory with lune (a copy under .cache, with the list edited); the restart fails there,
++		-- before the browser guard is made
+ 		if fs.isDir(DIR) then
+ 			fs.removeDir(DIR)
+ 		end
+ 		fs.writeDir(`{DIR}/tmp`)
++		local copy = `{DIR}/copy`
++		fs.writeDir(`{copy}/z-nile/tests`)
++		for _, rel in
++			{
++				"z-nile/tests/run.luau",
++				"z-nile/tests/lib",
++				"z-nile/lib",
++				"z-nile/.luaurc",
++				".luaurc",
++				"rokit.toml",
++			}
++		do
++			local parent = string.match(rel, "^(.*)/[^/]+$")
++			if parent then
++				fs.writeDir(`{copy}/{parent}`)
++			end
++			process.exec("cp", { "-R", `{process.cwd}/../{rel}`, `{copy}/{rel}` })
++		end
++		fs.writeFile(
++			`{copy}/z-nile/lib/cleanenv.list`,
++			(
++				string.gsub(fs.readFile(`{copy}/z-nile/lib/cleanenv.list`), "path [^\n]*\n", "")
++				.. "path /usr/bin\npath /bin\n"
++			)
++		)
+ 		local tmp = `{process.cwd}{DIR}/tmp`
+ 		local lune = string.gsub(process.exec("sh", { "-c", "command -v lune" }).stdout, "%s+$", "")
+ 		local r = process.exec(lune, { "run", "tests/run", "--", "tests/tooling/affected.spec.luau" }, {
++			cwd = `{process.cwd}/{copy}/z-nile`,
+ 			env = { PATH = "/usr/bin:/bin", PICKMAN_OPEN_GUARD = "", TMPDIR = tmp },
+ 		})
+-		t.expect(r.code).toBe(1)
+-		t.expect(string.find(r.stderr, "could not re-run itself with the browser guard", 1, true) ~= nil)
+-			.toBe(true)
++		t.expect(r.code ~= 0).toBe(true)
++		if string.find(r.stderr, "lune", 1, true) == nil then
++			error("stderr: " .. r.stderr .. r.stdout)
++		end
+ 		t.expect(#fs.readDir(tmp)).toBe(0)
+ 		fs.removeDir(DIR)
+ 	end)
+diff --git a/z-nile/tests/tooling/run-lane-error.spec.luau b/z-nile/tests/tooling/run-lane-error.spec.luau
+index 35956204..3b840679 100644
+--- a/z-nile/tests/tooling/run-lane-error.spec.luau
++++ b/z-nile/tests/tooling/run-lane-error.spec.luau
+@@ -1,5 +1,7 @@
+ --!strict
+--- c0470 review F1: a worker that cannot be spawned is one failure per file, not a hung runner.
++-- c0470 review F1: a runner that cannot start `lune` ends clearly instead of hanging. c0123: a runner puts its PATH on the
++-- allow-list's fixed directories first, so "no lune" is a runner whose copy of the list names no directory with lune (a copy
++-- under .cache, with the list edited); it fails at its restart, before any worker, with `lune` named on stderr.
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local t = require("@tests/lib/t")
+@@ -9,33 +11,51 @@ local function trim(s: string): string
+ end
+ 
+ return t.spec("tests/run when workers cannot start", function(it)
+-	it("reports each file as a failure instead of hanging", function()
++	it("ends with a failure that names lune instead of hanging", function()
+ 		-- the runner runs from a project's home (c0120): this one, whose .cache holds the fixture
+ 		local root = trim(process.exec("pwd", { "-P" }).stdout)
+ 		local dir = `{root}/.cache/run-lane-error`
+ 		if fs.isDir(dir) then
+ 			fs.removeDir(dir)
+ 		end
+-		fs.writeDir(dir)
++		fs.writeDir(`{dir}/copy/z-nile/tests`)
++		for _, rel in
++			{
++				"z-nile/tests/run.luau",
++				"z-nile/tests/lib",
++				"z-nile/lib",
++				"z-nile/.luaurc",
++				".luaurc",
++				"rokit.toml",
++			}
++		do
++			local parent = string.match(rel, "^(.*)/[^/]+$")
++			if parent then
++				fs.writeDir(`{dir}/copy/{parent}`)
++			end
++			process.exec("cp", { "-R", `{root}/../{rel}`, `{dir}/copy/{rel}` })
++		end
++		local list = `{dir}/copy/z-nile/lib/cleanenv.list`
++		fs.writeFile(
++			list,
++			(string.gsub(fs.readFile(list), "path [^\n]*\n", "")) .. "path /usr/bin\npath /bin\n"
++		)
+ 		local body = 'return { name = "x", cases = { { name = "c", fn = function() end } } }'
+ 		fs.writeFile(`{dir}/a.spec.luau`, body)
+-		fs.writeFile(`{dir}/b.spec.luau`, body)
+-		local home = process.env.HOME or ""
+-		-- the runner itself is started by absolute path; its workers need `lune` on PATH, which is empty
++		local lune = trim(process.exec("sh", { "-c", "command -v lune" }).stdout)
+ 		local r = process.exec("perl", {
+ 			"-e",
+ 			"alarm 30; exec @ARGV",
+-			`{home}/.rokit/bin/lune`,
++			lune,
+ 			"run",
+ 			"tests/run",
+ 			"--",
+ 			"--jobs",
+ 			"2",
+-			".cache/run-lane-error/a.spec.luau",
+-			".cache/run-lane-error/b.spec.luau",
+-		}, { cwd = root, env = { PATH = "/usr/bin:/bin", PICKMAN_JOBS = "" } })
++			`{dir}/a.spec.luau`,
++		}, { cwd = `{dir}/copy/z-nile`, env = { PATH = "/usr/bin:/bin", PICKMAN_JOBS = "" } })
+ 		fs.removeDir(dir)
+-		t.expect(r.code).toBe(1)
+-		t.expect(string.find(r.stdout, "0 passed, 2 failed, 2 spec files", 1, true) ~= nil).toBe(true)
++		t.expect(r.code ~= 0).toBe(true)
++		t.expect(string.find(r.stderr, "lune", 1, true) ~= nil).toBe(true)
+ 	end)
+ end)
+diff --git a/z-nile/tests/tooling/start-pr-reuse.spec.luau b/z-nile/tests/tooling/start-pr-reuse.spec.luau
+index 8373f8ab..0ca60b88 100644
+--- a/z-nile/tests/tooling/start-pr-reuse.spec.luau
++++ b/z-nile/tests/tooling/start-pr-reuse.spec.luau
+@@ -65,7 +65,7 @@ return t.spec("a readied raft's start reuses its open pull request", function(it
+ 		end
+ 		-- the prompt's skills come with the copied tooling (z-nile/skills, c0115)
+ 		f = trackerfix.new("start-pr-reuse-github.com", seed)
+-		bin, log = `{f.base}/bin`, `{f.base}/gh.log`
++		bin, log = fixture.stubDir("start-pr-reuse"), `{f.base}/gh.log`
+ 		fs.writeDir(bin)
+ 		t.expect(
+ 			string.find(fixture.git(f.main, { "remote", "get-url", "origin" }), "github.com", 1, true) ~= nil
+diff --git a/z-nile/tests/tooling/tracker-review-guards.spec.luau b/z-nile/tests/tooling/tracker-review-guards.spec.luau
+index 897995e3..3b1698aa 100644
+--- a/z-nile/tests/tooling/tracker-review-guards.spec.luau
++++ b/z-nile/tests/tooling/tracker-review-guards.spec.luau
+@@ -77,10 +77,14 @@ return t.spec("tracker guards after review 001", function(it)
+ 		t.expect(ready).toBe(true)
+ 		local otherHead = process.exec("git", { "rev-parse", "--git-dir" }, { cwd = other })
+ 		t.expect(otherHead.ok).toBe(true)
++		-- c0123: ./zn drops the git-directory variable before the engine runs, so X		-- below the cleaner, as zn does (ZN_TOP and ZN_CWD), with the name handed in
+ 		local r = process.exec(
+-			"bash",
+-			{ "scripts/tracker.sh", "new", "issue", "c", "beta", "--project", "pickman" },
+-			{ cwd = repo, env = { PICKMAN_PUBLISH = "0", [GITDIR_VAR] = `{other}/.git` } }
++			"lune",
++			{ "run", "z-nile/engine/main", "--", "new", "issue", "c", "beta", "--project", "pickman" },
++			{
++				cwd = repo,
++				env = { PICKMAN_PUBLISH = "0", ZN_TOP = repo, ZN_CWD = "", [GITDIR_VAR] = `{other}/.git` },
++			}
+ 		)
+ 		t.expect(r.ok).toBe(false)
+ 		t.expect(string.find(r.stderr, "refusing to run", 1, true) ~= nil).toBe(true)
+diff --git a/zn b/zn
+index 0c9531dd..3051c557 100755
+--- a/zn
++++ b/zn
+@@ -1,7 +1,10 @@
+-#!/usr/bin/env bash
++#!/bin/bash -p
+ # z-nile's command (c0114): ./zn <command> ... from anywhere in the checkout. See z-nile/skills/zz-rules/SKILL.md.
+ # The directory it is run from gives the project (a command's --project overrides it): ZN_CWD is that directory
+ # relative to the checkout, and ZN_TOP the checkout, so the engine trusts ZN_CWD only when it runs in ZN_TOP.
++# c0123: privileged mode (no $BASH_ENV, no imported functions), then the allow-listed environment (z-nile/lib/cleanenv.sh)
++_c=${BASH_SOURCE[0]%/*}; [[ $_c != "${BASH_SOURCE[0]}" ]] || _c=.
++. "$_c/z-nile/lib/cleanenv.sh" && pickman_clean_env "$0" "$@" || exit 1
+ set -euo pipefail
+ top="$(cd "$(dirname "$0")" && pwd -P)"
+ here="$(pwd -P)"
+@@ -11,7 +14,6 @@ case "$here/" in
+ esac
+ export ZN_TOP="$top" ZN_CWD="${rel#/}"
+ cd "$top"
+-export PATH="$HOME/.rokit/bin:$PATH"
+ # temporary trees (c0194): ./zn tmp new|root|verify|sweep|jail|rm|leftovers, z-nile/lib/tmp.luau's command line
+ if [[ ${1:-} == tmp ]]; then
+   shift
+--- a/z-nile/tests/acceptance/c0194/callers.spec.luau
++++ b/z-nile/tests/acceptance/c0194/callers.spec.luau
+@@ -2,6 +2,7 @@
+ -- c0194: nothing the tooling runs makes a temporary tree outside .cache/.tmp. par.sh keeps its buffers in TMPDIR's
+ -- tree; the only lines that name mktemp or a system temp folder in the tooling are the reviewed ones; an agent
+ -- session gets TMPDIR and the mktemp shim from its SessionStart hook; `./zn tmp` reaches the command line.
++local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local serde = require("@lune/serde")
+@@ -50,6 +51,8 @@
+ 			"z-nile/lib/tmp.luau",
+ 			"z-nile/lib/tmpcli.luau",
+ 			"z-nile/lib/replace-file.pl",
++			"z-nile/lib/cleanenv.sh",
++			"z-nile/lib/cleanenv.list",
+ 			"z-nile/bin/mktemp",
+ 			"scripts/hooks/session-tmp.sh",
+ 			"zn",
+@@ -224,7 +227,7 @@
+ 		"the hook exports one clean line even when the command prints a warning on stderr, and refuses a stranger's answer",
+ 		function()
+ 			local proj = project("hookwarn")
+-			local stubs = `{base}/hookwarn-stubs`
++			local stubs = fixture.stubDir("c0194-hookwarn")
+ 			must(process.exec("rm", { "-rf", stubs }), "rm")
+ 			fs.writeDir(stubs)
+ 			-- a lune that warns on stderr and answers with the folder; HOME is the stand-in so the real Rokit lune is not first
+--- a/z-nile/tests/acceptance/c0194/runner.spec.luau
++++ b/z-nile/tests/acceptance/c0194/runner.spec.luau
+@@ -278,6 +278,9 @@
+ 				"z-nile/lib/ac.sh",
+ 				"z-nile/lib/fence.sh",
+ 				"z-nile/lib/git-hooks",
++				"z-nile/lib/cleanenv.sh",
++				"z-nile/lib/cleanenv.list",
++				"z-nile/lib/cleanenv.luau",
+ 				".luaurc",
+ 				"rokit.toml",
+ 				".gitignore",

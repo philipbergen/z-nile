@@ -1,7 +1,7 @@
 --!strict
--- c0111 AC5: the prompt `ready` writes carries the build and both lessons (never the design ones) in a Lessons
--- section before Work items; no lessons gives (none); a bad lesson is left out with a warning and never stops
--- `ready`. Fixtures under .cache/prompt-lessons and .cache/prompt-lessons-none (tests/lib/trackerfix).
+-- c0111 AC5: the prompt `ready` writes names files and does not carry a lessons index. A bad lesson file
+-- does not stop `ready` and is not warned about, because the prompt no longer reads lessons.
+-- Fixtures under .cache/prompt-lessons and .cache/prompt-lessons-none (tests/lib/trackerfix).
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
@@ -47,44 +47,30 @@ local function seed(withLessons: boolean): { [string]: string }
 	return s
 end
 
-local function lessonsSection(prompt: string): string
-	local start = string.find(prompt, "\n## Lessons", 1, true)
-	local work = string.find(prompt, "\n## Work items", 1, true)
-	if not start or not work or start > work then
-		error("no Lessons section before Work items", 2)
-	end
-	return string.sub(prompt, start, work)
-end
-
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
 end
 
-return t.spec("c0111 the prompt carries the build lessons", function(it)
-	it("ready lists build and both lessons, not design ones, and warns about a bad one", function()
+return t.spec("c0111 the prompt does not carry a lessons index", function(it)
+	it("ready names the search and pastes no lesson, and a bad lesson does not stop it", function()
 		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
 		local f = trackerfix.new("prompt-lessons", seed(true), { noLessons = true }) -- c0115: fixtures copy lessons
 		local r = trackerfix.tr(f, f.main, { "ready", "R0010" })
 		if not r.ok then
 			error(r.stderr .. r.stdout)
 		end
-		t.expect(has(r.stderr, "warning") and has(r.stderr, "zz-test/bad")).toBe(true)
+		t.expect(has(r.stderr, "zz-test/bad")).toBe(false)
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		local s = lessonsSection(fs.readFile(`{f.main}/pickman/.tracker/rafts/active/R0010/prompt.md`))
-		-- exactly these lines, most sources first
-		t.expect(
-			has(
-				s,
-				"\n- zz-test/pin-inputs (build, 2 sources): Are the call site's inputs pinned?\n"
-					.. "- zz-review/both-kinds (both, 1 source): Is the text consistent?\n"
-			)
-		).toBe(true)
+		local s = fs.readFile(`{f.main}/pickman/.tracker/rafts/active/R0010/prompt.md`)
+		t.expect(has(s, "Search with `./zn lessons <terms>`")).toBe(true)
+		t.expect(has(s, "pin-inputs")).toBe(false)
 		t.expect(has(s, "lifetimes")).toBe(false)
 		t.expect(has(s, "Is this ever shown?")).toBe(false)
+		t.expect(has(s, "## Lessons")).toBe(false)
 		t.expect(has(s, "{{LESSONS}}")).toBe(false)
 	end)
 
-	it("a tree with no lessons gives (none)", function()
+	it("a tree with no lessons still readies, and still does not invent an index", function()
 		-- c0120 override: pickman's items live in pickman/.tracker (engine.REGISTRY's layout)
 		local f = trackerfix.new("prompt-lessons-none", seed(false), { noLessons = true })
 		local r = trackerfix.tr(f, f.main, { "ready", "R0010" })
@@ -92,8 +78,9 @@ return t.spec("c0111 the prompt carries the build lessons", function(it)
 			error(r.stderr .. r.stdout)
 		end
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-		local s = lessonsSection(fs.readFile(`{f.main}/pickman/.tracker/rafts/active/R0010/prompt.md`))
-		t.expect(has(s, "(none)")).toBe(true)
+		local s = fs.readFile(`{f.main}/pickman/.tracker/rafts/active/R0010/prompt.md`)
+		t.expect(has(s, "Search with `./zn lessons <terms>`")).toBe(true)
+		t.expect(has(s, "## Lessons")).toBe(false)
 		t.expect(has(s, "{{LESSONS}}")).toBe(false)
 	end)
 end)

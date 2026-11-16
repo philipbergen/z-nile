@@ -9,3 +9,5 @@ A source pin or stub added in a late review round is usually written against the
 **Why:** f0143 design review 003 F1: round 002 added a camera pin naming `Hop.rise(hopped, shown)` in full, but f0126, which f0143 depends on, makes that call `Hop.rise(hopped, shown, hopTicks)`. The pin had run only on a prototype without f0126.
 
 **How to apply:** pin only the part of a line this issue owns (stop the pattern where another issue may add arguments), and before the round's answer is pushed, run every sequestered spec on one tree with every `depends_on` merged; record the run and what failed there that isn't yours.
+
+c0239 design review 005 F2: docs.spec pinned two Merging sentences that the readied c0194 rewrites, so whichever lands second fails its checks. Pin a sentence only up to the clause the issue owns, name the other item in Existing work, and run the pins with and without its patch applied.

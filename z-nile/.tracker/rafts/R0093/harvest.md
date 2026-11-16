@@ -1,0 +1,16 @@
+- design-review-001 F1: z-raft/order-names-members-once
+- design-review-001 F2: z-raft/stacked-members-cannot-override-each-other
+- design-review-001 F3: z-raft/stacked-members-cannot-override-each-other
+- design-review-001 F4: z-raft/stacked-members-cannot-override-each-other
+- design-review-001 F5: z-raft/stacked-members-cannot-override-each-other
+- design-review-001 F6: one-off: a user ruling on another issue (d0331) sends c0248 back to design
+- design-review-001 F7: one-off: earlier packaging rulings ("Keep one raft") that the new stacking decision did not name
+- design-review-001 F8: z-raft/stacked-members-cannot-override-each-other
+- design-review-001 F9: z-raft/stacked-members-cannot-override-each-other
+- design-review-001 F10: one-off: the leak needs c0262's final review, which is not in the raft of c0256 and c0247
+- design-review-001 F11: one-off: the 200-local limit breaks at c0248's layer, which is not in this raft
+- design-review-001 F12: one-off: leftover layer branches of a stopped build hold stack positions; recorded as step 0
+- design-review-001 F13: z-raft/run-sequestered-specs-on-all-prototypes-together
+- design-review-001 F14: z-raft/copied-raft-text-is-reverified
+- design-review-001 F15: z-raft/grouping-cost-checks-every-wait
+- design-review-001 F16: z-raft/copied-raft-text-is-reverified

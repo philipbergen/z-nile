@@ -1,0 +1,3 @@
+- design-review-001 F1: z-design/rewrites-keep-rafted-records
+- design-review-001 F2: z-raft/grouping-cost-checks-every-wait
+- design-review-001 F3: one-off: two statements about two members meeting in one raft, gone with the unfold

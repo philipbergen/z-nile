@@ -53,6 +53,8 @@ return t.spec("c0480 start checks depends_on", function(it)
 		end
 		clone.isolated(root, dir)
 		git({ "remote", "remove", "origin" })
+		-- c0302: the clone has no origin, so its branch is its main: on a stack layer branch `./zn start` finds no other
+		git({ "checkout", "-q", "-B", "main" })
 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
 		local listed = process.exec("git", {
 			"ls-files",

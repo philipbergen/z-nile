@@ -1,0 +1,26 @@
+- design-review-001 F1: z-design/results-land-on-every-path
+- design-review-001 F2: zz-test/no-change-claims-check-behaviour-not-the-raft-diff
+- design-review-001 F3: z-design/never-narrow-captured-scope
+- design-review-001 F4: z-design/instructions-runnable-where-they-run
+- design-review-001 F5: z-design/never-narrow-captured-scope
+- design-review-001 F6: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F7: z-design/restated-rules-move-together
+- design-review-001 F8: z-design/reasoned-rows-claim-testable-reasons
+- design-review-001 F9: z-design/confirm-overrides-with-a-suite-run
+- design-review-002 F1: z-design/results-land-on-every-path
+- design-review-002 F2: z-design/declaration-checks-use-the-exact-key
+- design-review-002 F3: zz-test/no-change-claims-check-behaviour-not-the-raft-diff
+- design-review-002 F4: z-design/instructions-runnable-where-they-run
+- design-review-002 F5: z-design/restated-rules-move-together
+- design-review-003 F1: z-design/most-specific-environment-first
+- design-review-003 F2: one-off: the reader count and time moved with R0052 and c0165 landing
+- design-review-003 F3: z-design/restated-rules-move-together
+- design-review-003 F4: z-design/instructions-runnable-where-they-run
+- design-review-004 F1: z-design/most-specific-environment-first
+- design-review-004 F2: z-design/new-rules-migrate-existing-work
+- design-review-004 F3: z-design/instructions-runnable-where-they-run
+- design-review-004 F4: z-design/instructions-runnable-where-they-run
+- design-review-004 F5: z-design/restated-rules-move-together
+- design-review-005 F1: z-design/most-specific-environment-first
+- design-review-005 F2: z-design/restated-rules-move-together
+- design-review-005 F3: one-off: OC1 wording

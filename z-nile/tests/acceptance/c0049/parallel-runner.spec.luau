@@ -5,6 +5,7 @@
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
+local task = require("@lune/task")
 
 local function trim(s: string): string
 	return (string.gsub(s, "%s+$", ""))
@@ -95,6 +96,58 @@ local function run(args: { string }, env: { [string]: string }?): Result
 	return { ok = r.ok, code = r.code, stdout = r.stdout, stderr = r.stderr }
 end
 
+local function start(args: { string }, env: { [string]: string }?): () -> Result
+	local result: Result? = nil
+	task.spawn(function()
+		result = run(args, env)
+	end)
+	return function(): Result
+		local limit = os.time() + 30
+		while result == nil and os.time() < limit do
+			task.wait(0.01)
+		end
+		if result == nil then
+			error("nested runner did not finish")
+		end
+		return result :: Result
+	end
+end
+
+local HOLD_LANES = table.concat({
+	"use Fcntl qw(LOCK_EX);",
+	"my ($dir, $held, $release) = @ARGV; my @locks;",
+	'for my $n (3 .. 8) { open(my $fh, "<", "$dir/$n") or die "$!\n";',
+	'flock($fh, LOCK_EX) or die "$!\n"; push @locks, $fh }',
+	'open(my $out, ">", $held) or die "$!\n"; close $out;',
+	"while (!-e $release) { select(undef, undef, undef, 0.02) }",
+}, " ")
+
+local function holdLanes(dir: string): () -> ()
+	local held, release = `{dir}/held`, `{dir}/release`
+	local finished, failure = false, nil :: string?
+	task.spawn(function()
+		local r = process.exec("perl", { "-e", HOLD_LANES, dir, held, release })
+		failure = if r.ok then nil else r.stderr
+		finished = true
+	end)
+	local limit = os.time() + 10
+	while not finished and not fs.isFile(held) and os.time() < limit do
+		task.wait(0.01)
+	end
+	if not fs.isFile(held) then
+		error(`could not hold test lanes: {failure or "timeout"}`)
+	end
+	return function()
+		fs.writeFile(release, "")
+		while not finished do
+			task.wait(0.01)
+		end
+		if failure ~= nil then
+			error(failure)
+		end
+	end
+end
+
 local function lastLine(s: string): string
 	local last = ""
 	for line in string.gmatch(s, "[^\n]+") do
@@ -137,6 +190,41 @@ return t.spec("tests/run runs spec files concurrently", function(it)
 		local three = run({ "--jobs", "3", a, b, c })
 		t.expect(three.ok).toBe(true)
 		t.expect(lastLine(three.stdout)).toBe("3 passed, 0 failed, 3 spec files")
+	end)
+
+	it("independent runners share the same worker lanes", function()
+		reset()
+		local lanes = `{base}/lanes`
+		fs.writeDir(lanes)
+		for n = 1, 8 do
+			fs.writeFile(`{lanes}/{n}`, "")
+		end
+		local files = {}
+		for _, n in { "a", "b", "c", "d" } do
+			files[n] = fixture(n, rendezvous(n, "a", "b", "c", "d"))
+		end
+		local release = holdLanes(lanes)
+		local env = { PICKMAN_WORKER_LANES = lanes, PICKMAN_RV_TIMEOUT = "1" }
+		local one = start({ "--jobs", "2", files.a, files.b }, env)
+		local two = start({ "--jobs", "2", files.c, files.d }, env)
+		local first, second = one(), two()
+		release()
+		-- Two free lanes cannot start all four rendezvous specs. One runner per lane would let both pairs finish.
+		t.expect(first.ok and second.ok).toBe(false)
+
+		reset()
+		fs.writeDir(lanes)
+		for n = 1, 8 do
+			fs.writeFile(`{lanes}/{n}`, "")
+		end
+		for _, n in { "a", "b", "c", "d" } do
+			files[n] = fixture(n, rendezvous(n, "a", "b", "c", "d"))
+		end
+		env.PICKMAN_RV_TIMEOUT = "5"
+		one = start({ "--jobs", "2", files.a, files.b }, env)
+		two = start({ "--jobs", "2", files.c, files.d }, env)
+		t.expect(one().ok).toBe(true)
+		t.expect(two().ok).toBe(true)
 	end)
 
 	it("--jobs 1 runs them one at a time, so the same rendezvous times out", function()
@@ -241,7 +329,7 @@ return t.spec("tests/run runs spec files concurrently", function(it)
 		t.expect(lastLine(r.stdout)).toBe("2 passed, 2 failed, 3 spec files")
 	end)
 
-	it("failures print in sorted file order, not in the order the workers finish", function()
+	it("failures print as workers finish, not in sorted file order", function()
 		reset()
 		local slow = fixture("a-slow", cases(SLEEP1 .. '; error("late-a")'))
 		local fast = fixture("b-fast", cases('error("early-b")'))
@@ -249,7 +337,7 @@ return t.spec("tests/run runs spec files concurrently", function(it)
 		local ia, ib = indexOf(r.stdout, "late-a"), indexOf(r.stdout, "early-b")
 		t.expect(lastLine(r.stdout)).toBe("0 passed, 2 failed, 2 spec files")
 		t.expect(ia ~= nil and ib ~= nil).toBe(true)
-		t.expect((ia :: number) < (ib :: number)).toBe(true)
+		t.expect((ib :: number) < (ia :: number)).toBe(true)
 	end)
 
 	it("every listed spec runs exactly once, with fewer jobs than specs", function()
@@ -267,17 +355,20 @@ return t.spec("tests/run runs spec files concurrently", function(it)
 		local r = run(args)
 		t.expect(r.ok).toBe(true)
 		t.expect(lastLine(r.stdout)).toBe("6 passed, 0 failed, 6 spec files")
-		-- the output shape: one slowest: line naming at most 3 specs, and exactly one summary line
+		-- one result per file, then one slowest: line naming at most 3 specs and exactly one aggregate summary
 		local lines = {}
 		for line in string.gmatch(r.stdout, "[^\n]+") do
 			table.insert(lines, line)
 		end
-		t.expect(#lines).toBe(2)
+		t.expect(#lines).toBe(8)
+		for i = 1, 6 do
+			t.expect(string.match(lines[i], "^PASS .+%.spec%.luau: 1 passed, 0 failed$")).toBeTruthy()
+		end
 		local entries = 0
-		for _ in string.gmatch(lines[1], "%.spec%.luau %d+%.%ds") do
+		for _ in string.gmatch(lines[7], "%.spec%.luau %d+%.%ds") do
 			entries += 1
 		end
-		t.expect(string.sub(lines[1], 1, 9)).toBe("slowest: ")
+		t.expect(string.sub(lines[7], 1, 9)).toBe("slowest: ")
 		t.expect(entries).toBe(3)
 		for i = 1, 6 do
 			t.expect(fs.isDir(`{base}/ran-{i}`)).toBe(true)

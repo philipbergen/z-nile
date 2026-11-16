@@ -1,0 +1,1 @@
+- F1: deferred c0233: the fix is in the z-nile selector (finding specs that pin a file by digest); editing the sequestered specs in this raft is not allowed, and the verdict was approve with a low finding only.

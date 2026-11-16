@@ -4,7 +4,7 @@ name: deploy
 on:
   push:
     branches: [main]
-    paths-ignore: ['pickman/.tracker/**', 'z-nile/.tracker/**', 'z-nile/next']
+    paths-ignore: ['pickman/.tracker/**', 'z-nile/.tracker/**', 'arcade/.tracker/**', 'portal/.tracker/**', 'snake/.tracker/**', 'invaders/.tracker/**', 'asteroids/.tracker/**', 'z-nile/next']
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch: {}

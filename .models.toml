@@ -1,0 +1,106 @@
+# Which model runs each stage. Files stack like .gitignore: a .models.toml closer to the work replaces only
+# the keys it sets. A role names what belongs to the stage (model, cli, runtime, rank, max_tokens, effort,
+# fallbacks). A fallback names what belongs to the model (its id, its runtime, and anything only that CLI
+# needs). A try is the role's rank, cap and effort on that model. Nothing defaults.
+# max_tokens counts input + cache writes + output (cache reads are left out); the step is killed when it passes it.
+# design-challenge names no author: the table gives it the same model as design, and naming the author would
+# drop that model. Raft-mode review uses the raft role for the same reason.
+
+[dispatch]
+# the merge gates the dispatcher passes itself when the PR is green and mergeable; the run's PR is always a human's.
+# Unset, or unreadable, means none: a closer file's `auto_merge = []` turns them off for its items.
+auto_merge = ["prep", "raft"]
+# a step that prints nothing for this long is killed (a CLI never waits for quota)
+stall_seconds = 300
+# the same limit while a tool call runs (a full gate is quiet for minutes)
+tool_seconds = 900
+
+[fallback.kimi]
+model = "kimi-code-k3.1-pro"
+runtime = "kimi-cli"
+
+[fallback.grok]
+model = "grok-4.7"
+runtime = "grok-cli"
+
+[fallback.agent]
+model = "claude-opus-5-5"
+runtime = "cursor-cli"
+# agent reports no running token count: its step stops after max_calls model calls (calls are not tokens: tune it)
+max_calls = 200
+# and a wall-time ceiling, since a stream can hide its calls (fail closed)
+max_minutes = 240
+
+[roles.idea]
+model = "claude-fable-5-2"
+cli = "claude"
+runtime = "claude-cli"
+rank = 2
+max_tokens = 300000
+effort = "medium"
+fallbacks = ["kimi", "grok", "agent"]
+
+[roles.idea-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 300000
+effort = "xhigh"
+author = "idea"
+fallbacks = ["kimi", "grok", "agent"]
+
+[roles.design]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 3000000
+effort = "high"
+fallbacks = ["kimi", "grok", "agent"]
+
+[roles.design-challenge]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 3000000
+effort = "xhigh"
+fallbacks = ["kimi", "grok", "agent"]
+
+[roles.raft]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 3000000
+effort = "high"
+fallbacks = ["kimi", "grok", "agent"]
+
+[roles.implementation]
+model = "claude-sonnet-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 12000000
+effort = "high"
+fallbacks = ["kimi", "grok", "agent"]
+
+[roles.code-review]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 2000000
+effort = "xhigh"
+author = "implementation"
+fallbacks = ["kimi", "grok", "agent"]
+
+[roles.final-review]
+model = "claude-fable-5-2"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 2000000
+effort = "xhigh"
+fallbacks = ["kimi", "grok", "agent"]

@@ -1,11 +1,13 @@
 --!strict
--- c0760: every tracker push to origin/main, and sync in the main checkout, brings the main checkout up to origin/main
--- and rebuilds its board page (never opening a browser). Fixture under .cache/c0760-board: a seed with this
+-- c0760: a tracker push does not move the main checkout or rebuild its board. `./zn sync` fast-forwards the main
+-- checkout and rebuilds the board (never opening a browser). `./zn ready` and `./zn stop` fast-forward it and do not.
+-- Fixture under .cache/c0760-board: a seed with this
 -- tree's tooling and skills, a bare origin, a main clone (the main checkout), a named worktree and a second clone.
 local engine = require("@tests/lib/engine")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
 
 type Result = { ok: boolean, code: number, stdout: string, stderr: string }
@@ -180,6 +182,7 @@ return t.spec("tracker board follows main", function(it)
 			issueDoc("c0020", "Loose", "", "", "draft", "new-a-b-c")
 		)
 		write(seed, "pickman/.tracker/issues/c0020/check.sh", simpleCheck("c0020", "issues", ""), true)
+		seal.stamp(seed, "t")
 		git(seed, { "add", "-A" })
 		git(seed, { "commit", "-q", "-m", "seed" })
 		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
@@ -192,38 +195,53 @@ return t.spec("tracker board follows main", function(it)
 		t.expect(board()).toBe(nil)
 	end)
 
-	it("new issue in a worktree brings the main checkout to origin/main and rebuilds its board", function()
+	it("a publish does not move the main checkout or rebuild its board; sync does both", function()
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		local held = git(main, { "rev-parse", "HEAD" })
 		local made = trOk(cap, { "new", "issue", "c", "zeta", "--project", "pickman" })
 		local id = string.match(made, "(c%d%d%d%d)") :: string
+		t.expect(git(main, { "rev-parse", "HEAD" })).toBe(held)
+		t.expect(board()).toBe(nil)
+		t.expect(fs.isFile(`{cap}/{BOARD}`)).toBe(false)
+		trOk(main, { "sync" })
 		t.expect(git(main, { "rev-parse", "HEAD" })).toBe(tip())
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
 		t.expect(fs.isFile(`{main}/pickman/.tracker/issues/{id}/{id}.md`)).toBe(true)
 		t.expect(has(board(), id)).toBe(true)
-		t.expect(fs.isFile(`{cap}/{BOARD}`)).toBe(false) -- the main checkout's board, not the worktree's
 	end)
 
-	it("the refreshed board equals a fresh build of the main checkout", function()
+	it("sync's board equals a fresh build of the main checkout", function()
 		current()
 	end)
 
-	it("status and new raft refresh the board", function()
+	it("status and new raft publish without rebuilding the board", function()
+		local held = board()
 		trOk(cap, { "status", "c0020", "preparing" })
-		current()
+		t.expect(board()).toBe(held)
 		trOk(cap, { "status", "c0020", "new" })
 		local made = trOk(cap, { "new", "issue", "c", "eta", "--project", "pickman" })
 		local id = string.match(made, "(c%d%d%d%d)") :: string
 		trOk(cap, { "new", "raft", "chore", "solo", id, "--single", "--project", "pickman" })
+		t.expect(board()).toBe(held)
+		trOk(main, { "sync" })
 		current()
 		t.expect(has(board(), "Solo")).toBe(true)
 	end)
 
-	it("ready and stop refresh the board", function()
+	it("ready and stop fast-forward the main checkout and do not rebuild the board", function()
 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+		local held = board()
 		trOk(main, { "ready", "R0010" })
 		t.expect(onOrigin("pickman/.tracker/rafts/active/R0010/R0010.md") ~= nil).toBe(true)
+		t.expect(git(main, { "rev-parse", "HEAD" })).toBe(tip())
+		t.expect(board()).toBe(held)
+		trOk(main, { "sync" })
 		current()
+		held = board()
 		trOk(main, { "stop", "R0010" })
+		t.expect(git(main, { "rev-parse", "HEAD" })).toBe(tip())
+		t.expect(board()).toBe(held)
+		trOk(main, { "sync" })
 		current()
 	end)
 
@@ -245,14 +263,16 @@ return t.spec("tracker board follows main", function(it)
 		t.expect(has(board(), "f0500")).toBe(true)
 	end)
 
-	it("a main checkout off main only warns, and the publish still succeeds", function()
+	it("a publish leaves a main checkout that is not on main untouched", function()
 		git(main, { "switch", "-q", "-c", "side" })
 		local head = git(main, { "rev-parse", "HEAD" })
+		local held = board()
 		local r = tr(cap, { "new", "issue", "c", "theta", "--project", "pickman" })
 		t.expect(r.ok).toBe(true)
-		t.expect(has(r.stderr, "warning: board")).toBe(true)
+		t.expect(has(r.stderr, "warning: board")).toBe(false)
 		t.expect(git(main, { "rev-parse", "HEAD" })).toBe(head)
 		t.expect(git(main, { "branch", "--show-current" })).toBe("side")
+		t.expect(board()).toBe(held)
 		git(main, { "switch", "-q", "main" })
 		trOk(main, { "sync" })
 		current()

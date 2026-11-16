@@ -9,7 +9,7 @@ local Maze = require("@logic/Maze")
 local Movement = require("@logic/Movement")
 local Pellets = require("@logic/Pellets")
 local Session = require("@logic/Session")
-local serde = require("@lune/serde")
+local plain = require("@tests/lib/plain")
 local t = require("@tests/lib/t")
 
 local classic = Maze.layout("classic")
@@ -190,7 +190,8 @@ return t.spec("f0100 drops", function(it)
 		s.members.p.blaster.shots = 2
 		frame = Session.frame(s, "p")
 		t.expect(frame.shots).toBe(2)
-		t.expect(serde.decode("json", serde.encode("json", frame))).toEqual(frame)
+		-- c0153: plain data, and a JSON round trip within 1e-9 (Lune's JSON decoder can return a number one ulp off)
+		t.expect({ plain.roundTrip(frame, 1e-9) }).toEqual({ true })
 		-- the v1 snapshot is unchanged
 		local keys = {}
 		for k in Session.snapshot(s, "p") :: any do

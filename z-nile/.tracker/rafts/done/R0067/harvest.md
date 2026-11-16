@@ -1,0 +1,4 @@
+- review-001 F1: z-ticket/split-designs-name-each-owner
+- review-001 F2: one-off: a display and its state split between two issues, stated in the landed text
+- review-001 F3: one-off: a pointer sentence's wording
+- review-001 F4: one-off: the source of a long user quote, now in the Verification log

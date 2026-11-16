@@ -1,0 +1,7 @@
+# Answers to design review 003: c0174
+- F1: fixed: c0083.md lines 146 (the planned zz-test row) and 272 (E6) state what GitHub runs and are in the patch with line 46; the Design pastes the search and the hit list, and the remaining backstop lines (132, 162, 164, 166) are listed in the Non-goal. A table row for each; "a hunk missing" is covered by the unpatched-document mutant. Consequences: `c0083-doc.patch` regenerated (9 hunks) and applies; E6 and the route states rerun clean.
+- F2: fixed with the rule written where the re-prep's author reads it (the patched c0083.md Non-goals: a re-prep started before c0174 is done also re-preps c0174 or makes it a member of R0030), plus Maintainability naming the window and the signal for every route; consequences: pinned by AC3 through the patch. The report to the lead repeats it.
+- F3: fixed: rows for the base that already holds the patch added to the Rules table, route (a) states copied into E6, "(route (b) only)" dropped from the Test plan, E1 says the harness rescans z-nile's specs only.
+- F4: fixed: step 2 runs both patches with `--dry-run` first and says to delete `*.rej` and `*.orig` under c0083's folder before stopping.
+- F5: fixed: AC1 refuses an executable spec (run: `chmod +x` makes AC1 red); the same pin is in c0173's AC1.
+- F6: noted for the lead: the lesson candidate (silent reversal by macOS `patch`; a base that already holds the edit) is in the report as a sharpening of `z-design/exact-checks-compare-against-the-merge-base`, and in harvest.md as a note.

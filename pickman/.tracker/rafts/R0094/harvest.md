@@ -1,0 +1,12 @@
+- note d0298's rafting (2026-11-12): f0147 waits on c0176 and c0177, still new with no raft, and ./zn workstreams R0094 printed nothing of it; the design subagent found it from ./zn find: z-raft/grouping-cost-checks-every-wait
+- design-review-001 F1: z-raft/grouping-cost-checks-every-wait
+- design-review-001 F2: z-raft/run-sequestered-specs-on-all-prototypes-together
+- design-review-001 F3: z-raft/rc-pins-the-claims-it-makes
+- design-review-001 F4: one-off: a margin quoted for the wrong levels; the conclusion held
+- design-review-001 F5: z-raft/member-handshakes-reach-the-order
+- note R0094 design-review-001's candidate: two of three members' prototypes were only branches and were gone at rafting: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F1: z-raft/order-names-members-once
+- design-review-002 F2: z-raft/pre-ready-results-go-in-the-raft-document
+- design-review-002 F3: one-off: a product sentence two members' designs left undecided once one could start a run past level 1; put to the user
+- design-review-002 F4: one-off: an earlier packaging decision needed one sentence once the user replaced it
+- design-review-002 F5: z-raft/copied-raft-text-is-reverified
