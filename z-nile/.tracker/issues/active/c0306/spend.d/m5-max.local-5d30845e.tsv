@@ -9,3 +9,24 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-15 23:53	26 specs	0	0	test			6.975	7.330		6.975	tokens,ai
 2026-11-15 23:56	affected	0	0	test			161.902	352.200		161.902	tokens,ai
 2026-11-15 23:56	c0306: refuse reviews off the review models (prototype applied, specs green)	698	38	build							tokens,wall,cpu,ai
+2026-11-15 23:56	1 spec	0	0	test			3.495	1.460		3.495	tokens,ai
+2026-11-15 23:56	1 spec	0	0	test			1.655	1.080		1.655	tokens,ai
+2026-11-15 23:58	1 spec	0	0	test			97.609	69.360		97.609	tokens,ai
+2026-11-15 23:58	1 spec	0	0	test			1.214	0.840		1.214	tokens,ai
+2026-11-15 23:59	1 spec	0	0	test			56.181	44.070		56.181	tokens,ai
+2026-11-16 00:00	1 spec	0	0	test			40.056	30.210		40.056	tokens,ai
+2026-11-16 00:00	1 spec	0	0	test			1.040	0.670		1.040	tokens,ai
+2026-11-16 00:00	26 specs	0	0	test			3.270	5.490		3.270	tokens,ai
+2026-11-16 00:00	1 spec	0	0	test			1.229	0.770		1.229	tokens,ai
+2026-11-16 00:00	1 spec	0	0	test			1.251	0.770		1.251	tokens,ai
+2026-11-16 00:01	1 spec	0	0	test			65.843	0.390		65.843	tokens,ai
+2026-11-16 00:01	1 spec	0	0	test			1.226	0.750		1.226	tokens,ai
+2026-11-16 00:01	1 spec	0	0	test			1.238	0.800		1.238	tokens,ai
+2026-11-16 00:02	1 spec	0	0	test			77.819	57.030		77.819	tokens,ai
+2026-11-16 00:02	1 spec	0	0	test			1.246	0.790		1.246	tokens,ai
+2026-11-16 00:03	1 spec	0	0	test			54.807	39.600		54.807	tokens,ai
+2026-11-16 00:04	1 spec	0	0	test			39.661	30.340		39.661	tokens,ai
+2026-11-16 00:04	1 spec	0	0	test			1.621	1.020		1.621	tokens,ai
+2026-11-16 00:04	26 specs	0	0	test			3.691	5.950		3.691	tokens,ai
+2026-11-16 00:06	143 specs	0	0	test			100.911	312.490		100.911	tokens,ai
+2026-11-16 00:06	c0306: watch map entries written by finish	12	0	build							tokens,wall,cpu,ai
