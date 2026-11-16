@@ -15,6 +15,7 @@ export PATH="$HOME/.rokit/bin:$PATH"
 cd "$repo"
 [[ -x ./zn ]] || { echo "fetch.sh: no ./zn in $repo" >&2; exit 2; }
 command -v lune >/dev/null || { echo "fetch.sh: lune not found (run z-nile/setup.sh --tools)" >&2; exit 3; }
+command -v python3 >/dev/null || { echo "fetch.sh: python3 is required (SETUP.md)" >&2; exit 4; }
 mkdir -p "$cache"
 
 if grep -q 'board .*--json' z-nile/engine/main.luau 2>/dev/null; then

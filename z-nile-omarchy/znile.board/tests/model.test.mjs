@@ -1,5 +1,5 @@
 // Runs Model.js (a QML `.pragma library` script) under node.
-//   node --test ~/.config/omarchy/plugins/znile.board/tests/
+//   node --test tests/model.test.mjs
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"

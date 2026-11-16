@@ -200,6 +200,7 @@ A raft is delivered as a stack: `./zn start` opens one layer per ticket (a branc
 - **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
 - **Provenance.** `<ID>/provenance.md` records who decided what that git cannot tell (append-only rows, `./zn provenance record`, checked by `./zn audit`; zz-rules skill, Provenance); the engine's merges of `origin/main` unite two writers of it, and zz-rules, Provenance, says how to merge when `./zn sync` stops, and names the actor options (`--actor`, `ZN_ACTOR`) and the session variables.
 - **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.
+- **The omarchy board app.** `z-nile-omarchy/znile.board/` (c0257) is an omarchy-shell plugin that shows the same board model in a bar icon and a tiled window on Linux. It reads the page's embedded JSON through `./zn board`, so it is a second view of the board, not a second source; it is part of the z-nile project and no registered project of its own.
 
 ## Skills
 | skill | step | what it does |

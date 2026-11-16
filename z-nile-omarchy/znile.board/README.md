@@ -13,4 +13,4 @@ A bar icon (kanban glyph + active ticket count) that opens a tiled window with e
 
 Data comes from `fetch.sh`, which reads only through `./zn board`. It uses `--json` once znile has it, and until then the JSON embedded in the rendered board page. It needs lune (`z-nile/setup.sh --tools`). The board refreshes every `refreshIntervalSec` and whenever `main` or a fetch moves.
 
-Tests: `node --test tests/`
+Tests: `node --test tests/model.test.mjs`

@@ -1,0 +1,10 @@
+.github/workflows/deploy.yml
+z-nile-omarchy/znile.board/Model.js
+z-nile-omarchy/znile.board/fetch.sh
+z-nile-omarchy/znile.board/manifest.json
+z-nile-omarchy/znile.board/prs.sh
+z-nile-omarchy/znile.board/settings.json
+z-nile/engine/board.luau
+z-nile/engine/stats.luau
+z-nile/lib/watch.luau
+z-nile/tests/lib/deploylist.luau
