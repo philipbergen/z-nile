@@ -1,0 +1,1 @@
+- note f0186's prep: price.spec read f0145's sources at its top, so on the prototype cut from main its first case never ran and the mutants L5 and L6 survived until the reads moved into the stub builder: zz-test/load-dependency-sources-in-the-case

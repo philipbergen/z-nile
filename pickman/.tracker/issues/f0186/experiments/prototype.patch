@@ -1,0 +1,645 @@
+diff --git a/pickman/.tracker/architecture.md b/pickman/.tracker/architecture.md
+index 0f8f672a6..d0d9a7f23 100644
+--- a/pickman/.tracker/architecture.md
++++ b/pickman/.tracker/architecture.md
+@@ -40,6 +40,7 @@ One `Consumer -> Provider` per line.
+ Awareness -> Maze
+ Blaster -> Maze
+ Flow -> Game
++Flow -> Lobby
+ Flow -> Session
+ Flow -> Travel
+ Game -> Levels
+diff --git a/pickman/.tracker/game-design.md b/pickman/.tracker/game-design.md
+index 8cf58bccd..102c21881 100644
+--- a/pickman/.tracker/game-design.md
++++ b/pickman/.tracker/game-design.md
+@@ -62,7 +62,7 @@ This is the source of truth for product decisions. Every raft design must agree
+ 
+ ## Hiscores
+ - **Boards:** all-time top N (N **(prep)**, e.g. 50), plus daily and weekly boards keyed by UTC period.
+-- **Entries:** the player's Roblox display name and user ID, the score and the level reached.
++- **Entries:** the player's Roblox display name and user ID, the score, the level reached and the revives the run used (f0186).
+ - **Submission:** only the server submits, from its own simulated result, at game over. Clients never send scores.
+ - **Top-10 runs (2026-10-21, d0124):** besides each player's best row on every board, the all-time board keeps one list of the ten best runs of all players, so one player can hold several places (rows: 10 plus one per player). Only all-time has it; today and this week stay one best row per player. Game over shows the run's place on that list, or that it is not in the all-time top 10. The lobby's all-time panel lists those ten runs and ends with the viewer's own best: the one personal-best line, by the user's choice. Rows stored before the list existed start it, one entry each. (R0044)
+ - **Storage:** behind a Logic-facing interface. A fake store is used in tests, and Roblox's ordered store in the adapter. Beta and production have separate stores, because they are separate experiences.
+@@ -117,7 +117,9 @@ The user's words: "Unless in playtest (it will show the screen and accept contro
+ - **one free game per hour** per player, a rolling hour from the start of the latest free game, across servers and rejoins; a free game due is used before a game bought and held (G2, G11).
+ - After that a game costs **1 Robux**, bought at START GAME in the lobby and charged on arrival in the game place (a teleport that never arrives costs nothing); a game bought and not used is held for later (G3, G9, G10).
+ - When the last life is lost the run may **continue with three new lives** for 1 Robux: CONTINUE? counts down 10 s of real time (held while a purchase screen is open), END GAME ends it at once; the score, the level, the pellets eaten, the picked holes and the extra-life flag are kept; continues are unlimited, and one bought after its offer is held for the next (G4, G5, G7, G9).
+-- Every board and the top-10 list show the **lives spent** by a run (every life it lost, continues included) as "♥n" after the level; rows stored before show none (G6).
++- **Revives on the boards (f0186)** (the user, 2026-10-31: "highscores shoudl show how many revives were used"; asked, every board, Pickman's included, shows revives used, instead of the lives a run lost): every board, the top-10 list and the viewer's best line show the revives used by a run (the continues it took, bought or held) as "REVIVES n" after the level, "REVIVES 0" for none; rows stored before f0186 show none. The game over shows the same line under the results. Revives never rank a row.
++- **A free game per game (f0186)** (the user, 2026-10-31: "the free game is one per hour per game"): one free game per hour for Pickman alone, kept in Pickman's own record (the `PaidPlay` store); playing Snake, Invaders or Asteroids never uses it, nor Pickman theirs.
++- **The price shown (f0186)** (the user, 2026-10-31: "it shoudl show 5 robux for each game witha slash through showing it is currently on sale for 1 robux"): wherever Pickman shows the price of a game (the line under START GAME, the test purchase screen) it shows "5 R$" struck through, then "1 R$ SALE"; the charge stays 1 R$. A continue's price stays "1 ROBUX".
+ - In test mode (everything but a server configured live with both product ids: Studio and the Beta included) the screens show and take their controls exactly as live and **nothing is charged**: our own test screen says so (G1). A server configured live with a product id missing or bad sells nothing and grants nothing free; free games and held credits still work ("Refuse paid play").
+ - A store that cannot be read or written lets the player in: a player the lobby let in on a failed read plays that game free; while the pass map cannot be read every arrival with nothing to pay with plays free ("Let them play free", "Let all of them play"). Any other arrival with nothing to pay with is sent back to the lobby (G10).
+ - The keys (G12): Return, KeypadEnter or ButtonA CONTINUE or BUY; Backspace or ButtonB END GAME or CANCEL; touch taps the buttons.
+diff --git a/pickman/src/client/Main.client.luau b/pickman/src/client/Main.client.luau
+index 51aa54507..96bc33dbe 100644
+--- a/pickman/src/client/Main.client.luau
++++ b/pickman/src/client/Main.client.luau
+@@ -15,6 +15,7 @@ local MazeView = require("./MazeView")
+ local OfferView = require("./OfferView")
+ local Pads = require("./Pads")
+ local PelletView = require("./PelletView")
++local RevivesView = require("./RevivesView")
+ local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
+ local Sticks = require("./Sticks")
+ local View = require("@game/ReplicatedStorage/Shared/Logic/View")
+@@ -62,6 +63,7 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
+ 	local overlay = Flow.overlay(frame.play, RULES, FlowView.trip())
+ 	FlowView.show(overlay)
+ 	OfferView.show(overlay) -- f0145: the continue offer's buttons and keys
++	RevivesView.show(frame.play) -- f0186: the revives the run used, at the game over
+ 	if model and overlay.flash ~= lit then
+ 		lit = overlay.flash
+ 		MazeView.flash(model, overlay.flash)
+@@ -89,6 +91,7 @@ Sticks.start(Pads.stick)
+ HudView.start()
+ FlowView.start()
+ OfferView.start() -- after FlowView, so its keys are asked first (f0145)
++RevivesView.start()
+ 
+ -- listening now: tell the server, so its first snapshot reaches a client that can show it
+ ready:FireServer()
+diff --git a/pickman/src/client/RevivesView.luau b/pickman/src/client/RevivesView.luau
+new file mode 100644
+index 000000000..751859d1e
+--- /dev/null
++++ b/pickman/src/client/RevivesView.luau
+@@ -0,0 +1,44 @@
++--!strict
++-- Client adapter: the game over's revives line (f0186), the continues the run used, under FlowView's results. Flow
++-- decides the text (`Flow.revivesLine`, nil outside the game over); this only draws it.
++local Players = game:GetService("Players")
++
++local Flow = require("@game/ReplicatedStorage/Shared/Logic/Flow")
++local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
++
++local YELLOW = Color3.fromRGB(255, 255, 0)
++
++local RevivesView = {}
++
++local label: TextLabel? = nil
++
++function RevivesView.start()
++	local gui = Instance.new("ScreenGui")
++	gui.Name = "Revives"
++	gui.ResetOnSpawn = false
++	gui.IgnoreGuiInset = true
++	gui.DisplayOrder = 0 -- with Flow's overlay, under the HUD
++	local l = Instance.new("TextLabel")
++	l.Name = "Revives"
++	l.BackgroundTransparency = 1
++	l.Font = Enum.Font.Arcade
++	l.TextColor3 = YELLOW
++	l.TextScaled = true
++	l.Size = UDim2.fromScale(0.6, 0.05)
++	l.Position = UDim2.fromScale(0.2, 0.64) -- under FlowView's prompt (0.58 to 0.63)
++	l.Text = ""
++	l.Visible = false
++	l.Parent = gui
++	label = l
++	gui.Parent = (Players.LocalPlayer :: Player):WaitForChild("PlayerGui")
++end
++
++function RevivesView.show(play: Session.PlayFrame)
++	local line = Flow.revivesLine(play)
++	if label then
++		label.Text = line or ""
++		label.Visible = line ~= nil
++	end
++end
++
++return RevivesView
+diff --git a/pickman/src/lobby/client/PayView.luau b/pickman/src/lobby/client/PayView.luau
+index 3e6f2003d..bcf399a78 100644
+--- a/pickman/src/lobby/client/PayView.luau
++++ b/pickman/src/lobby/client/PayView.luau
+@@ -24,6 +24,7 @@ function PayView.start()
+ 	line.Size = UDim2.fromScale(0.8, 0.06)
+ 	line.TextColor3 = Color3.fromRGB(255, 255, 255)
+ 	line.TextScaled = true
++	line.RichText = true -- f0186: the price of a play is struck through (Lobby.salePrice)
+ 	line.Text = ""
+ 	line.Parent = gui
+ 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+diff --git a/pickman/src/server/HiscoreStore.luau b/pickman/src/server/HiscoreStore.luau
+index bceef7f43..dcde423c9 100644
+--- a/pickman/src/server/HiscoreStore.luau
++++ b/pickman/src/server/HiscoreStore.luau
+@@ -100,25 +100,29 @@ local top: Hiscores.TopIo = {
+ 	end,
+ }
+ 
+--- Write a finished run (f0145: with the lives it spent, nil from an older caller). Returns at once; `listen` hears the run's place on the top-N list once the write is done.
++-- Write a finished run (f0145: with the lives it spent, nil from an older caller; f0186: and the paid revives it
++-- used, nil for none). Returns at once; `listen` hears the run's place on the top-N list once the write is done.
+ function HiscoreStore.submit(
+ 	userId: string,
+ 	name: string,
+ 	score: number,
+ 	level: number,
+ 	run: number,
+-	lives: number?
++	lives: number?,
++	revives: number?
+ )
+ 	pending += 1
+ 	local ok, err = pcall(task.spawn, function()
+ 		local fine, failure = pcall(function()
+ 			local now = os.time()
+-			local entry = Hiscores.topRun(
+-				{ name = name, userId = userId, level = level, score = score, lives = lives },
+-				now,
+-				run,
+-				(game :: any).JobId
+-			)
++			local entry = Hiscores.topRun({
++				name = name,
++				userId = userId,
++				level = level,
++				score = score,
++				lives = lives,
++				revives = revives,
++			}, now, run, (game :: any).JobId)
+ 			-- the per-player rows this run writes name it, so a server that merges this best first uses the run's id
+ 			local attempt = {
+ 				name = name,
+@@ -128,6 +132,7 @@ function HiscoreStore.submit(
+ 				run = if entry then entry.id else nil,
+ 				at = if entry then entry.at else nil,
+ 				lives = lives,
++				revives = revives,
+ 			}
+ 			local result = Hiscores.drive(io, attempt, now, Hiscores.RETRY)
+ 			local placed = Hiscores.driveTop(top, io, entry, result.rows, Hiscores.RETRY)
+diff --git a/pickman/src/server/Submits.luau b/pickman/src/server/Submits.luau
+index 07d04ad85..c851943a2 100644
+--- a/pickman/src/server/Submits.luau
++++ b/pickman/src/server/Submits.luau
+@@ -38,7 +38,8 @@ function Submits.step(s: any, events: { any }, here: boolean): boolean
+ 			submission.score,
+ 			submission.level,
+ 			submission.run,
+-			submission.lives -- f0145: the lives the run spent
++			submission.lives, -- f0145: the lives the run spent
++			submission.revives -- f0186: the paid revives it used, nil for none
+ 		)
+ 	end
+ 	if nextState.drop then
+diff --git a/pickman/src/shared/Logic/Flow/init.luau b/pickman/src/shared/Logic/Flow/init.luau
+index 3827a89ee..d9917e799 100644
+--- a/pickman/src/shared/Logic/Flow/init.luau
++++ b/pickman/src/shared/Logic/Flow/init.luau
+@@ -2,6 +2,7 @@
+ -- Flow: what the screen shows over the maze in each phase of a run, engine-free. The client draws it;
+ -- only the server moves a run from phase to phase, and only the server sends a player back to the lobby.
+ local Game = require("./Game")
++local Lobby = require("./Lobby")
+ local Session = require("./Session")
+ local Travel = require("./Travel")
+ 
+@@ -146,6 +147,15 @@ function Flow.overlay(play: Session.PlayFrame, rules: Game.Config, trip: Trip?):
+ 	return { fade = 0, flash = false, tap = false, cursor = false }
+ end
+ 
++-- The revives line of the GAME OVER overlay (f0186): the continues the run used, "REVIVES 0" for none; nil in every
++-- other phase. FlowView's lines and the overlay stay as they were: the client's RevivesView draws this one.
++function Flow.revivesLine(play: Session.PlayFrame): string?
++	if play.phase ~= "gameover" then
++		return nil
++	end
++	return Lobby.revivesText(play.revives)
++end
++
+ -- The extra line at the end of a run for an all-time rank the server sent. Flow does not know the board size.
+ function Flow.rankLine(rank: number?): string?
+ 	if type(rank) ~= "number" or rank < 1 or rank ~= math.floor(rank) or rank == math.huge then
+diff --git a/pickman/src/shared/Logic/Game/init.luau b/pickman/src/shared/Logic/Game/init.luau
+index 21c34965e..3a1f76720 100644
+--- a/pickman/src/shared/Logic/Game/init.luau
++++ b/pickman/src/shared/Logic/Game/init.luau
+@@ -23,6 +23,7 @@ export type Event = {
+ 	score: number?,
+ 	ticks: number?,
+ 	reason: string?,
++	revives: number?, -- GameOver: the continues the run used (f0186)
+ }
+ export type Game = {
+ 	config: Config,
+@@ -39,6 +40,7 @@ export type Game = {
+ 	offer: number, -- f0145: the continue offer's length in steps for this run; 0 is no offer
+ 	held: boolean, -- f0145: the offer's countdown is held (a purchase screen is open, or a receipt awaited)
+ 	waiting: number, -- f0145: steps left to wait for a bought continue's receipt
++	revives: number, -- f0186: continues the run used, one for each Game.continue that gave lives; GameOver carries it
+ }
+ 
+ local Game = {}
+@@ -118,6 +120,7 @@ function Game.new(config: Config?, ramp: Levels.Ramp?, start: number?): Game
+ 		offer = 0,
+ 		held = false,
+ 		waiting = 0,
++		revives = 0,
+ 	}
+ 	ready(g)
+ 	return g
+@@ -179,7 +182,7 @@ function Game.playAgain(g: Game): ({ Event }, boolean)
+ 		return {}, false
+ 	end
+ 	g.level, g.score, g.lives, g.frightened, g.extraLifeGiven = g.start, 0, g.config.lives, 0, false
+-	g.lost, g.held, g.waiting = 0, false, 0
++	g.lost, g.held, g.waiting, g.revives = 0, false, 0, 0
+ 	ready(g)
+ 	return { { kind = "Ready", reason = "again", level = g.level } }, true
+ end
+@@ -225,6 +228,7 @@ function Game.continue(g: Game, lives: number): ({ Event }, boolean)
+ 		return {}, false
+ 	end
+ 	g.lives, g.held, g.waiting = lives, false, 0
++	g.revives += 1
+ 	ready(g)
+ 	return { { kind = "Ready", reason = "continue", level = g.level } }, true
+ end
+@@ -262,7 +266,9 @@ function Game.step(g: Game): { Event }
+ 				return { { kind = "Offer", ticks = g.offer } }
+ 			end
+ 			g.phase, g.timer = "gameover", 0
+-			return { { kind = "GameOver", score = g.score, level = g.level, lives = g.lost } }
++			return {
++				{ kind = "GameOver", score = g.score, level = g.level, lives = g.lost, revives = g.revives },
++			}
+ 		end
+ 	elseif phase == "offer" then
+ 		if g.waiting > 0 then
+@@ -274,7 +280,15 @@ function Game.step(g: Game): { Event }
+ 			g.timer -= 1
+ 			if g.timer <= 0 then
+ 				g.phase, g.timer = "gameover", 0
+-				return { { kind = "GameOver", score = g.score, level = g.level, lives = g.lost } }
++				return {
++					{
++						kind = "GameOver",
++						score = g.score,
++						level = g.level,
++						lives = g.lost,
++						revives = g.revives,
++					},
++				}
+ 			end
+ 		end
+ 	elseif phase == "levelclear" then
+diff --git a/pickman/src/shared/Logic/Hiscores/init.luau b/pickman/src/shared/Logic/Hiscores/init.luau
+index d8f40bad0..a667bda32 100644
+--- a/pickman/src/shared/Logic/Hiscores/init.luau
++++ b/pickman/src/shared/Logic/Hiscores/init.luau
+@@ -15,6 +15,7 @@ export type Attempt = {
+ 	run: string?,
+ 	at: number?,
+ 	lives: number?,
++	revives: number?, -- f0186: the paid revives (continues) the run used; nil is none
+ }
+ export type Companion = {
+ 	name: string,
+@@ -24,6 +25,7 @@ export type Companion = {
+ 	run: string?,
+ 	at: number?,
+ 	lives: number?, -- f0145: the lives the run spent
++	revives: number?, -- f0186: the paid revives the run used; nil for none and for a row stored before f0186
+ }
+ export type Row = {
+ 	rank: number,
+@@ -35,6 +37,7 @@ export type Row = {
+ 	at: number?,
+ 	runScore: number?, -- the companion's own score: the score of the run the row names (the page score can lag it)
+ 	lives: number?, -- f0145: the lives the run spent; nil for a row stored before them
++	revives: number?, -- f0186: the paid revives the run used; nil for none
+ }
+ export type PageEntry = { key: string, score: number }
+ export type Page = { PageEntry }
+@@ -55,8 +58,8 @@ export type Retry = { attempts: number, base: number, cap: number }
+ -- rows: the all-time board read after the write
+ export type DriveResult = { wrote: { [string]: boolean }, rank: number?, rows: { Row }? }
+ export type RunState = { run: number, done: { [number]: boolean }, waited: number, drop: boolean }
+-export type Submission = { score: number, level: number, run: number, lives: number? }
+-export type StepEvent = { kind: string, score: number?, level: number?, lives: number? }
++export type Submission = { score: number, level: number, run: number, lives: number?, revives: number? }
++export type StepEvent = { kind: string, score: number?, level: number?, lives: number?, revives: number? }
+ export type CacheEntry = { at: number, rows: { Row } }
+ export type Failure = { at: number, count: number } -- consecutive failed reads of one board key
+ export type TopRun = {
+@@ -67,10 +70,11 @@ export type TopRun = {
+ 	level: number,
+ 	at: number,
+ 	lives: number?,
++	revives: number?,
+ }
+ export type TopIo = { update: (transform: ({ TopRun }?) -> { TopRun }?) -> (any, string?) }
+ export type TopResult = { known: boolean, place: number?, missed: number? }
+-export type Best = { score: number, level: number }
++export type Best = { score: number, level: number, revives: number? }
+ 
+ local Hiscores = {}
+ 
+@@ -215,6 +219,15 @@ function Hiscores.lives(x: any): number?
+ 	return if whole(x) and x >= 1 then x else nil
+ end
+ 
++-- f0186: a run's revives as kept and shown: a whole count from 1 to 2^53 - 1, else nil (none). Every reader of a
++-- stored or sent count goes through it, so a junk value reads as none.
++function Hiscores.revives(x: any): number?
++	if whole(x) and x >= 1 and x <= MAX_INTEGER then
++		return x
++	end
++	return nil
++end
++
+ -- A row is replaced only by a strictly higher score, or the same score at a strictly higher level.
+ function Hiscores.qualifies(stored: Companion?, attempt: Attempt): boolean
+ 	if not Hiscores.valid(attempt) then
+@@ -240,6 +253,7 @@ function Hiscores.commit(stored: Companion?, attempt: Attempt): Companion?
+ 		run = if named then attempt.run else nil,
+ 		at = if named then attempt.at else nil,
+ 		lives = Hiscores.lives(attempt.lives),
++		revives = Hiscores.revives(attempt.revives),
+ 	}
+ end
+ 
+@@ -355,6 +369,7 @@ function Hiscores.rows(pages: { Page }, lookup: (string) -> (Companion?, string?
+ 						then companion.score
+ 						else nil,
+ 					lives = Hiscores.lives(companion.lives),
++					revives = Hiscores.revives(companion.revives),
+ 				})
+ 			end
+ 		end
+@@ -385,15 +400,26 @@ function Hiscores.rankOf(rows: { Row }, userId: string): number?
+ 	return nil
+ end
+ 
+-function Hiscores.lobbyRows(
+-	rows: { Row }
+-): { { rank: number, name: string, score: number, level: number, lives: number? } }
++function Hiscores.lobbyRows(rows: { Row }): {
++	{
++		rank: number,
++		name: string,
++		score: number,
++		level: number,
++		lives: number?,
++		revives: number?,
++	}
++}
+ 	local out = {}
+ 	for _, row in rows do
+-		table.insert(
+-			out,
+-			{ rank = row.rank, name = row.name, score = row.score, level = row.level, lives = row.lives }
+-		)
++		table.insert(out, {
++			rank = row.rank,
++			name = row.name,
++			score = row.score,
++			level = row.level,
++			lives = row.lives,
++			revives = row.revives,
++		})
+ 	end
+ 	return out
+ end
+@@ -597,6 +623,7 @@ function Hiscores.onStep(state: RunState, events: { StepEvent }, here: boolean):
+ 					level = event.level,
+ 					run = state.run,
+ 					lives = Hiscores.lives(event.lives),
++					revives = Hiscores.revives(event.revives),
+ 				}
+ 			end
+ 		end
+@@ -686,6 +713,7 @@ function Hiscores.topRun(attempt: Attempt, unix: number, run: number, server: st
+ 		level = attempt.level,
+ 		at = unix,
+ 		lives = spent,
++		revives = Hiscores.revives(attempt.revives),
+ 	}
+ end
+ 
+@@ -727,6 +755,7 @@ local function ordered(list: any): { TopRun }
+ 				level = e.level,
+ 				at = e.at,
+ 				lives = Hiscores.lives(e.lives), -- f0145: the list's copy keeps the lives spent
++				revives = Hiscores.revives(e.revives), -- f0186: and the revives
+ 			})
+ 		end
+ 	end
+@@ -755,6 +784,7 @@ function Hiscores.bestRun(row: Row): TopRun?
+ 			level = row.level,
+ 			at = row.at :: number,
+ 			lives = Hiscores.lives(row.lives),
++			revives = Hiscores.revives(row.revives),
+ 		}
+ 	end
+ 	return {
+@@ -765,6 +795,7 @@ function Hiscores.bestRun(row: Row): TopRun?
+ 		level = row.level,
+ 		at = 0,
+ 		lives = Hiscores.lives(row.lives),
++		revives = Hiscores.revives(row.revives),
+ 	}
+ end
+ 
+@@ -802,10 +833,15 @@ function Hiscores.topRows(list: any): { Row }?
+ 	end
+ 	local out: { Row } = {}
+ 	for i, e in ordered(list) do
+-		table.insert(
+-			out,
+-			{ rank = i, name = e.name, userId = e.userId, score = e.score, level = e.level, lives = e.lives }
+-		)
++		table.insert(out, {
++			rank = i,
++			name = e.name,
++			userId = e.userId,
++			score = e.score,
++			level = e.level,
++			lives = e.lives,
++			revives = e.revives,
++		})
+ 	end
+ 	return out
+ end
+@@ -875,7 +911,7 @@ function Hiscores.best(companion: any): Best?
+ 	if not whole(companion.level) or companion.level < 1 then
+ 		return nil
+ 	end
+-	return { score = companion.score, level = companion.level }
++	return { score = companion.score, level = companion.level, revives = Hiscores.revives(companion.revives) }
+ end
+ 
+ -- Whether a player's held best must be read again: nothing held, or a finished read that is no longer fresh. A
+diff --git a/pickman/src/shared/Logic/Lobby/init.luau b/pickman/src/shared/Logic/Lobby/init.luau
+index 8e21ea2a5..b877bc4d6 100644
+--- a/pickman/src/shared/Logic/Lobby/init.luau
++++ b/pickman/src/shared/Logic/Lobby/init.luau
+@@ -4,7 +4,10 @@
+ local Pay = require("./Pay")
+ local Travel = require("./Travel")
+ 
+-export type Row = { rank: number, name: string, score: number, level: number, lives: number? }
++-- `revives`: the paid revives the run used (f0186), nil is none; `lives`: f0145's lives spent, which the rows the
++-- server sends still carry but no board shows since f0186
++export type Row =
++	{ rank: number, name: string, score: number, level: number, lives: number?, revives: number? }
+ export type Panel = { title: string, rows: { Row }, empty: string? }
+ export type Button = { text: string, enabled: boolean, message: string? }
+ 
+@@ -15,7 +18,9 @@ Lobby.MAX_ROWS = 10
+ Lobby.BUTTON_MIN_PX = 44 -- the smallest touch target (design: Mobile)
+ Lobby.READ_GAP = 1 -- seconds before the screen asks again after a failed answer; a copy of Hiscores.READ_GAP
+ Lobby.MAX_RETRIES = 3 -- failed answers in a row that are asked for again
+-Lobby.LIVES_MARK = "♥" -- f0145: before the lives a run spent, after the level
++Lobby.REVIVES = "REVIVES" -- the word before a run's revive count, on every board and at the end of a run (f0186)
++-- how the price of a play is shown (f0186): the list price struck through, then the price charged, on sale
++Lobby.PRICE = table.freeze({ struck = "5 R$", price = "1 R$", sale = "SALE" })
+ 
+ -- The panel for the rows the boards give (nil or none: the empty state). Rows are shown in rank order, at most MAX_ROWS.
+ function Lobby.panel(rows: { Row }?): Panel
+@@ -24,7 +29,7 @@ function Lobby.panel(rows: { Row }?): Panel
+ 	for _, r in given do
+ 		table.insert(
+ 			shown,
+-			{ rank = r.rank, name = r.name, score = r.score, level = r.level, lives = r.lives }
++			{ rank = r.rank, name = r.name, score = r.score, level = r.level, revives = r.revives }
+ 		)
+ 	end
+ 	table.sort(shown, function(a: Row, b: Row): boolean
+@@ -64,18 +69,22 @@ function Lobby.boardPanel(rows: { Row }?, id: string?): Panel
+ 	return p
+ end
+ 
+--- f0145: the lives a run spent, after the level (" ♥n"); nothing for a row without them (stored before f0145)
+-function Lobby.livesText(lives: number?): string
+-	if
+-		type(lives) ~= "number"
+-		or lives ~= lives
+-		or lives < 1
+-		or lives ~= math.floor(lives)
+-		or lives == math.huge
+-	then
+-		return ""
+-	end
+-	return ` {Lobby.LIVES_MARK}{string.format("%d", lives)}`
++-- A run's revive count as the boards and the end of a run show it: "REVIVES n", and "REVIVES 0" for none, which is
++-- also what a row stored before f0186 (no count) or a count that is not a whole number of at least one shows.
++function Lobby.revivesText(n: any): string
++	local count = if type(n) == "number"
++			and n == n
++			and n == math.floor(n)
++			and n >= 1
++			and n <= 2 ^ 53 - 1
++		then n
++		else 0
++	return `{Lobby.REVIVES} {string.format("%d", count)}`
++end
++
++-- The price of a play as rich text (f0186): the list price struck through, the price charged and the sale word.
++function Lobby.salePrice(): string
++	return `<s>{Lobby.PRICE.struck}</s> {Lobby.PRICE.price} {Lobby.PRICE.sale}`
+ end
+ 
+ -- f0145: the line under START GAME: a free start due, else the plays held, else the price (or the store
+@@ -91,7 +100,7 @@ function Lobby.payLine(status: Pay.Status?, mode: string?, now: number): string?
+ 	elseif status.plays > 0 then
+ 		line = if status.plays == 1 then "1 GAME YOU BOUGHT" else `{status.plays} GAMES YOU BOUGHT`
+ 	else
+-		line = if mode == "closed" then "STORE UNAVAILABLE" else "1 ROBUX A GAME"
++		line = if mode == "closed" then "STORE UNAVAILABLE" else `A GAME: {Lobby.salePrice()}`
+ 		local at = status.nextFree
+ 		if at ~= nil and at > now then
+ 			line ..= `, NEXT FREE GAME IN {math.ceil((at - now) / 60)} MIN`
+@@ -111,7 +120,7 @@ function Lobby.lines(p: Panel, highlightRank: number?): string
+ 	local out: { string } = {}
+ 	for _, r in p.rows do
+ 		local mark = if highlightRank ~= nil and r.rank == highlightRank then "> " else ""
+-		table.insert(out, `{mark}{r.rank} {r.name} {r.score} {r.level}{Lobby.livesText(r.lives)}`)
++		table.insert(out, `{mark}{r.rank} {r.name} {r.score} {r.level} {Lobby.revivesText(r.revives)}`)
+ 	end
+ 	return table.concat(out, "\n")
+ end
+@@ -128,7 +137,9 @@ function Lobby.bestLine(best: any, id: string?): string?
+ 	if type(level) ~= "number" or level < 1 or level ~= math.floor(level) or level == math.huge then
+ 		return nil
+ 	end
+-	return `YOUR BEST {string.format("%d", score)} {string.format("%d", level)}`
++	return `YOUR BEST {string.format("%d", score)} {string.format("%d", level)} {Lobby.revivesText(
++		best.revives
++	)}`
+ end
+ 
+ -- The whole list text: the panel's lines, then the viewer's best line when there is one.
+diff --git a/pickman/src/shared/Logic/Session/init.luau b/pickman/src/shared/Logic/Session/init.luau
+index 097c0b55e..69df020db 100644
+--- a/pickman/src/shared/Logic/Session/init.luau
++++ b/pickman/src/shared/Logic/Session/init.luau
+@@ -80,6 +80,7 @@ export type PlayFrame = {
+ 	power: number?, -- ticks of a power pellet's period on this level, under the session's rules (f0147)
+ 	picks: number?, -- with a ramp: the wall picks finished on this level (f0147)
+ 	picksGoal: number?, -- with a ramp: the picks that end a level
++	revives: number?, -- continues the run used; nil while none (f0186)
+ }
+ export type Frame = {
+ 	v: number,
+@@ -119,6 +120,7 @@ export type Event = {
+ 	item: string?,
+ 	ghost: Ghosts.Name?,
+ 	heading: Maze.Heading?,
++	revives: number?, -- GameOver: the continues the run used (f0186)
+ }
+ export type Clock = { rate: number, maxSteps: number, acc: number }
+ 
+@@ -398,6 +400,7 @@ local function tagged(id: PlayerId, e: Game.Event): Event
+ 		score = e.score,
+ 		ticks = e.ticks,
+ 		reason = e.reason,
++		revives = e.revives,
+ 	}
+ end
+ 
+@@ -940,6 +943,7 @@ function Session.frame(s: Session, id: PlayerId): Frame
+ 			power = Levels.frightenedTicks(play.level, Session.TICK_RATE, s.config.ramp),
+ 			picks = if s.config.ramp then s.members[id].levelPicks else nil,
+ 			picksGoal = if s.config.ramp then s.config.ramp.picks else nil,
++			revives = if play.revives > 0 then play.revives else nil,
+ 		},
+ 		pellets = Pellets.encode(s.members[id].pellets),
+ 		shots = s.members[id].blaster.shots,
+diff --git a/pickman/src/shared/TestPurchase.luau b/pickman/src/shared/TestPurchase.luau
+index a2ffbd275..4b915cb02 100644
+--- a/pickman/src/shared/TestPurchase.luau
++++ b/pickman/src/shared/TestPurchase.luau
+@@ -8,6 +8,7 @@ local Players = game:GetService("Players")
+ local ReplicatedStorage = game:GetService("ReplicatedStorage")
+ 
+ local Flow = require("@game/ReplicatedStorage/Shared/Logic/Flow")
++local Lobby = require("@game/ReplicatedStorage/Shared/Logic/Lobby")
+ 
+ local TestPurchase = {}
+ TestPurchase.NOTE = "TEST PURCHASE: NOTHING IS CHARGED"
+@@ -53,6 +54,7 @@ function TestPurchase.start()
+ 	label.Size = UDim2.fromScale(1, 0.6)
+ 	label.TextColor3 = Color3.fromRGB(255, 255, 255)
+ 	label.TextScaled = true
++	label.RichText = true -- f0186: a play's price is struck through
+ 	label.Parent = panel
+ 	local buy = Instance.new("TextButton")
+ 	buy.Name = "BUY"
+@@ -117,7 +119,9 @@ function TestPurchase.start()
+ 			if words == nil then
+ 				return
+ 			end
+-			label.Text = `{words}\n{Flow.OFFER.price}\n{TestPurchase.NOTE}`
++			-- f0186: a play's price shows on sale (Lobby.salePrice); a continue's is the offer's own
++			local price = if product == "play" then Lobby.salePrice() else Flow.OFFER.price
++			label.Text = `{words}\n{price}\n{TestPurchase.NOTE}`
+ 			gui.Enabled = true
+ 		end)
+ 	end)
