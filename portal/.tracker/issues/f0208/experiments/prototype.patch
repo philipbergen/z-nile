@@ -1,0 +1,1153 @@
+diff --git a/portal/.tracker/architecture.md b/portal/.tracker/architecture.md
+index ed28abc63..e855578f2 100644
+--- a/portal/.tracker/architecture.md
++++ b/portal/.tracker/architecture.md
+@@ -12,10 +12,21 @@ The game carousel, the portal's one screen: one card per game, scrolled by key,
+ - `src/server/Cards.luau`: which places are published (Places) and each player's free starts (Wallet), sent to that player on each ask over `ReplicatedStorage.Remotes.Cards`.
+ - `src/client/CarouselView.luau`: the screen, its inputs, and the seams the rest of the portal plugs into: `onPlay`, `focused`, `card` (its `Buttons` and `Boards` slots).
+ 
++### Play buttons (f0208)
++The card's play buttons: PLAY, ARENA on Snake, 2 PLAYERS on Invaders and Asteroids; the purchase, the entitlement and the teleport.
++- `src/shared/Logic/Play` (requires Card): the server's decision from a player's record (go, go on the portal's pass, buy, store unavailable), the client's intents and the server's statuses checked, each card's buttons and note, the keys.
++- `src/shared/Logic/Pairing` (a leaf): the 2 PLAYERS waiting lines of one portal server.
++- `src/shared/Logic/Arena` (a leaf): which shared arena (a reserved server) an ARENA player joins.
++- `src/shared/Modes.luau`: each game's play buttons. A new game is one entry.
++- `src/server/Plays.luau`: the play intents over `ReplicatedStorage.Remotes.Play`, the record check (Wallet), the purchase (Receipts, installed here), the teleport (Travel, Places), the waiting lines and the arenas.
++- `src/server/Invites.luau`: an invited friend reaches the inviter's portal server.
++- `src/client/PlayButtons.luau`: the buttons in each card's `Buttons` slot, their keys, and the invite prompt.
++
+ ## Allowed dependencies
+ 
+ One `Consumer -> Provider` per line.
+ 
+ ```deps
+-# Carousel and Card are leaves
++# Carousel and Card are leaves; so are Pairing and Arena
++Play -> Card
+ ```
+diff --git a/portal/default.project.json b/portal/default.project.json
+index c15c60bd2..fe26a7f67 100644
+--- a/portal/default.project.json
++++ b/portal/default.project.json
+@@ -10,7 +10,8 @@
+       "Arcade": { "$path": "../arcade/src/shared" },
+       "Remotes": {
+         "$className": "Folder",
+-        "Cards": { "$className": "RemoteEvent" }
++        "Cards": { "$className": "RemoteEvent" },
++        "Play": { "$className": "RemoteEvent" }
+       }
+     },
+     "ServerStorage": {
+diff --git a/portal/src/client/Main.client.luau b/portal/src/client/Main.client.luau
+index eec2d04ee..3fc171038 100644
+--- a/portal/src/client/Main.client.luau
++++ b/portal/src/client/Main.client.luau
+@@ -1,3 +1,5 @@
+ --!strict
+ -- portal's client entry (c0184 scaffold): boots the client adapters as the features arrive.
++require("@game/ReplicatedStorage/Arcade/TestPurchase").start()
+ require("./CarouselView").start()
++require("./PlayButtons").start()
+diff --git a/portal/src/client/PlayButtons.luau b/portal/src/client/PlayButtons.luau
+new file mode 100644
+index 000000000..89b1f8af2
+--- /dev/null
++++ b/portal/src/client/PlayButtons.luau
+@@ -0,0 +1,237 @@
++--!strict
++-- Portal client adapter (f0208): the play buttons in each card's Buttons slot (CarouselView, f0205). PLAY on every
++-- card, ARENA on Snake, 2 PLAYERS on Invaders and Asteroids, each with its price ("FREE", or 5 R$ struck through and
++-- 1 R$); while the player's play of a title is under way that card says so, and a 2 PLAYERS wait shows CANCEL and
++-- INVITE FRIEND. A tap, the carousel's PLAY keys (Enter, KeypadEnter, ButtonA through CarouselView.onPlay), 2 or
++-- the gamepad's X for the second button, Backspace or B to cancel and I or Y to invite only ask the server
++-- (Remotes.Play); the server decides. Nothing acts while the test purchase screen is open, and the keys pass on while
++-- the player types in a text box.
++local ContextActionService = game:GetService("ContextActionService")
++local Players = game:GetService("Players")
++local ReplicatedStorage = game:GetService("ReplicatedStorage")
++local SocialService = game:GetService("SocialService")
++local UserInputService = game:GetService("UserInputService")
++
++local Card = require("@game/ReplicatedStorage/Shared/Logic/Card")
++local CarouselView = require("./CarouselView")
++local Games = require("@game/ReplicatedStorage/Shared/Games")
++local Modes = require("@game/ReplicatedStorage/Shared/Modes")
++local Play = require("@game/ReplicatedStorage/Shared/Logic/Play")
++local Prices = require("@game/ReplicatedStorage/Arcade/Prices")
++local TestPurchase = require("@game/ReplicatedStorage/Arcade/TestPurchase")
++
++local PlayButtons = {}
++
++local KINDS = { "solo", "arena", "pair", "cancel", "invite" }
++
++local started = false
++local remote: RemoteEvent? = nil
++local states: { [string]: Card.State } = {}
++local status: Play.Status? = nil
++local waiting: { [string]: number } = {}
++local views: { [string]: Play.View } = {}
++
++local function send(kind: string, name: string)
++	if remote == nil or TestPurchase.isOpen() then
++		return
++	end
++	if kind == "cancel" or kind == "invite" then
++		remote:FireServer(kind)
++	else
++		remote:FireServer("play", name, kind)
++	end
++end
++
++local function build(name: string, slot: Instance)
++	local note = Instance.new("TextLabel")
++	note.Name = "Note"
++	note.BackgroundTransparency = 1
++	note.TextColor3 = Color3.new(1, 1, 1)
++	note.TextScaled = true
++	note.TextWrapped = true
++	note.Text = ""
++	note.Visible = false
++	note.Parent = slot
++	for _, kind in KINDS do
++		local b = Instance.new("TextButton")
++		b.Name = kind
++		b.RichText = true
++		b.TextScaled = true
++		b.TextWrapped = false -- one line each: the name, then the price under it
++		b.Selectable = false -- the gamepad's A stays the carousel's PLAY
++		b.Visible = false
++		b.Text = ""
++		b.Parent = slot
++		b.Activated:Connect(function()
++			local view = views[name]
++			if view == nil then
++				return
++			end
++			for _, button in view.buttons do
++				if button.kind == kind and button.enabled then
++					send(kind, name)
++				end
++			end
++		end)
++	end
++end
++
++local function draw()
++	for _, entry in Games.LIST do
++		local frame = CarouselView.card(entry.name)
++		local slot = if frame ~= nil then frame:FindFirstChild("Buttons") else nil
++		local modes = Modes[entry.name]
++		if slot ~= nil and modes ~= nil then
++			local view =
++				Play.view(entry.name, modes, states[entry.name], status, waiting[entry.name] or 0, Prices)
++			views[entry.name] = view
++			local note = slot:FindFirstChild("Note") :: TextLabel
++			note.Text = view.note
++			note.Visible = view.note ~= ""
++			local box = Play.noteBox(#view.buttons)
++			note.Position = UDim2.fromScale(box.x, box.y)
++			note.Size = UDim2.fromScale(box.width, box.height)
++			local places = Play.slots(#view.buttons, view.note ~= "")
++			local shown: { [string]: boolean } = {}
++			for i, button in view.buttons do
++				local b = slot:FindFirstChild(button.kind) :: TextButton
++				b.Text = if button.price ~= "" then `{button.text}\n{button.price}` else button.text
++				b.Position = UDim2.fromScale(places[i].x, places[i].y)
++				b.Size = UDim2.fromScale(places[i].width, places[i].height)
++				b.AutoButtonColor = button.enabled
++				b.Active = button.enabled
++				b.Visible = true
++				shown[button.kind] = true
++			end
++			for _, kind in KINDS do
++				if not shown[kind] then
++					(slot:FindFirstChild(kind) :: TextButton).Visible = false
++				end
++			end
++		end
++	end
++end
++
++-- the front card's button of a kind, when it shows enabled
++local function pressable(name: string, kind: string): boolean
++	local view = views[name]
++	if view == nil then
++		return false
++	end
++	for _, button in view.buttons do
++		if button.kind == kind and button.enabled then
++			return true
++		end
++	end
++	return false
++end
++
++local function key(name: string): boolean
++	local which = Play.key(name)
++	local front = CarouselView.focused()
++	if which == "second" then
++		local modes = Modes[front]
++		local second = if modes ~= nil then Play.second(modes) else nil
++		if second ~= nil and pressable(front, second) then
++			send(second, front)
++			return true
++		end
++	elseif which ~= nil and status ~= nil and status.phase == "waiting" then
++		if which == "cancel" or (which == "invite" and pressable(status.name :: string, "invite")) then
++			send(which, front)
++			return true
++		end
++	end
++	return false
++end
++
++local function invite()
++	task.spawn(function()
++		local me = Players.LocalPlayer
++		local ok, can = pcall(function(): any
++			return SocialService:CanSendGameInviteAsync(me)
++		end)
++		if ok and can == true then
++			pcall(function()
++				local options = Instance.new("ExperienceInviteOptions")
++				options.LaunchData = tostring(me.UserId)
++				SocialService:PromptGameInvite(me, options)
++			end)
++		end
++	end)
++end
++
++-- Fills each card's Buttons slot and listens; once. Call after CarouselView.start(). Returns at once.
++function PlayButtons.start()
++	if started then
++		return
++	end
++	started = true
++	for _, entry in Games.LIST do
++		local frame = CarouselView.card(entry.name)
++		local slot = if frame ~= nil then frame:FindFirstChild("Buttons") else nil
++		if slot ~= nil and Modes[entry.name] ~= nil then
++			build(entry.name, slot)
++		end
++	end
++	draw()
++	CarouselView.onPlay(function(name: string)
++		if pressable(name, "solo") then
++			send("solo", name)
++		end
++	end)
++	local keys: { any } = {}
++	for name in Play.KEYS do
++		table.insert(keys, (Enum.KeyCode :: any)[name])
++	end
++	ContextActionService:BindActionAtPriority(
++		Play.ACTION,
++		function(_: string, state: Enum.UserInputState, input: InputObject): Enum.ContextActionResult
++			if UserInputService:GetFocusedTextBox() ~= nil then
++				return Enum.ContextActionResult.Pass -- typing (the chat box): the keys are the text's
++			end
++			if
++				state == Enum.UserInputState.Begin
++				and not TestPurchase.isOpen()
++				and key(input.KeyCode.Name)
++			then
++				return Enum.ContextActionResult.Sink
++			end
++			return Enum.ContextActionResult.Pass
++		end,
++		false,
++		Play.PRIORITY,
++		table.unpack(keys)
++	)
++	task.spawn(function()
++		local remotes = ReplicatedStorage:WaitForChild("Remotes")
++		local play = remotes:WaitForChild("Play") :: RemoteEvent
++		local cards = remotes:WaitForChild("Cards") :: RemoteEvent
++		play.OnClientEvent:Connect(function(what: any, raw: any)
++			if what == "status" then
++				status = Play.parse(raw, Modes)
++				draw()
++			elseif what == "waiting" and type(raw) == "table" then
++				local out: { [string]: number } = {}
++				for name in Modes do
++					local n = raw[name]
++					if type(n) == "number" then
++						out[name] = n
++					end
++				end
++				waiting = out
++				draw()
++			elseif what == "invite" then
++				invite()
++			end
++		end)
++		cards.OnClientEvent:Connect(function(raw: any)
++			states = Card.parse(raw, Games.LIST)
++			draw()
++		end)
++		remote = play
++		cards:FireServer()
++	end)
++end
++
++return PlayButtons
+diff --git a/portal/src/server/Invites.luau b/portal/src/server/Invites.luau
+new file mode 100644
+index 000000000..461219a09
+--- /dev/null
++++ b/portal/src/server/Invites.luau
+@@ -0,0 +1,75 @@
++--!strict
++-- Invites (f0208): a friend invited to a 2 PLAYERS wait reaches the inviter's portal server. The inviter's server
++-- records the invite (MemoryStore, by the inviter's user id: this server's job id and the title), once per wait. A
++-- player who joins with an inviter's id as launch data (the invite's), and lands in another portal server while the
++-- inviter is not there, is sent to the inviter's server when the invite is on record and they are friends; there the
++-- friend presses 2 PLAYERS on that card. The launch data only names whom to look up: the record is the server's.
++local Modes = require("@game/ReplicatedStorage/Shared/Modes")
++local Play = require("@game/ReplicatedStorage/Shared/Logic/Play")
++
++local MemoryStoreService = game:GetService("MemoryStoreService")
++local Players = game:GetService("Players")
++local TeleportService = game:GetService("TeleportService")
++
++local Invites = {}
++
++Invites.MAP = "PortalInvites" -- MemoryStore hash map, key the inviter's user id
++Invites.SECONDS = 600 -- an invite is on record this long
++
++local map: any = nil
++local started = false
++
++local function invites(): any
++	if map == nil then
++		map = MemoryStoreService:GetHashMap(Invites.MAP)
++	end
++	return map
++end
++
++-- Records that `player` invites a friend to wait with them on `name` in this server.
++function Invites.offer(player: any, name: string)
++	pcall(function()
++		invites():SetAsync(tostring(player.UserId), { job = game.JobId, name = name }, Invites.SECONDS)
++	end)
++end
++
++local function follow(friend: any)
++	local okData, data = pcall(function(): any
++		return friend:GetJoinData()
++	end)
++	local inviter = if okData and type(data) == "table" then Play.inviter(data.LaunchData) else nil
++	if inviter == nil or inviter == friend.UserId or Players:GetPlayerByUserId(inviter) ~= nil then
++		return
++	end
++	local okRead, raw = pcall(function(): any
++		return invites():GetAsync(tostring(inviter))
++	end)
++	local record = if okRead then Play.invite(raw, Modes) else nil
++	if record == nil or record.job == game.JobId then
++		return
++	end
++	local okFriends, friends = pcall(function(): any
++		return friend:IsFriendsWith(inviter)
++	end)
++	if not okFriends or friends ~= true or friend.Parent == nil then
++		return
++	end
++	pcall(function()
++		local options = Instance.new("TeleportOptions")
++		options.ServerInstanceId = record.job
++		TeleportService:TeleportAsync(game.PlaceId, { friend }, options)
++	end)
++end
++
++-- Sends each invited friend who joins to the inviter's server; once per server.
++function Invites.start()
++	if started then
++		return
++	end
++	started = true
++	Players.PlayerAdded:Connect(function(player: any)
++		task.spawn(follow, player)
++	end)
++end
++
++return Invites
+diff --git a/portal/src/server/Main.server.luau b/portal/src/server/Main.server.luau
+index 6f44b16e4..50ac3b7f2 100644
+--- a/portal/src/server/Main.server.luau
++++ b/portal/src/server/Main.server.luau
+@@ -1,3 +1,4 @@
+ --!strict
+ -- portal's server entry (c0184 scaffold): boots the server adapters as the features arrive.
+ require("./Cards").start()
++require("./Plays").start()
+diff --git a/portal/src/server/Plays.luau b/portal/src/server/Plays.luau
+new file mode 100644
+index 000000000..4d27ccf27
+--- /dev/null
++++ b/portal/src/server/Plays.luau
+@@ -0,0 +1,331 @@
++--!strict
++-- Plays (f0208): the server side of the play buttons. A client only asks: play a title in a mode, cancel a wait, or
++-- invite a friend (ReplicatedStorage.Remotes.Play). The server checks the player's record through the arcade's
++-- Wallet and decides (Logic/Play): a free start due or a held play goes at once, a failed read goes on the portal's
++-- pass, else it opens the 1 R$ play product (Receipts) and goes once the grant arrives. Going is a teleport to the
++-- title's place from the place-id attributes (Places, never from the client): PLAY to a public server, ARENA to the
++-- shared arena's reserved server (Logic/Arena), 2 PLAYERS after a second player joins the title's waiting line
++-- (Logic/Pairing), both together to a fresh reserved server. Nothing is charged here: the game place consumes the
++-- entitlement on arrival (Wallet.arrive), and nothing is put in TeleportData. Receipts is installed here, once.
++local Arena = require("@game/ReplicatedStorage/Shared/Logic/Arena")
++local Games = require("@game/ReplicatedStorage/Shared/Games")
++local Invites = require("./Invites")
++local Modes = require("@game/ReplicatedStorage/Shared/Modes")
++local PaidPlay = require("@game/ReplicatedStorage/Arcade/Logic/PaidPlay")
++local Pairing = require("@game/ReplicatedStorage/Shared/Logic/Pairing")
++local Places = require("@game/ReplicatedStorage/Arcade/Places")
++local Play = require("@game/ReplicatedStorage/Shared/Logic/Play")
++local Receipts = require("@game/ServerStorage/Arcade/Receipts")
++local Travel = require("@game/ReplicatedStorage/Arcade/Logic/Travel")
++local Wallet = require("@game/ServerStorage/Arcade/Wallet")
++
++local HttpService = game:GetService("HttpService")
++local MemoryStoreService = game:GetService("MemoryStoreService")
++local Players = game:GetService("Players")
++local ReplicatedStorage = game:GetService("ReplicatedStorage")
++local RunService = game:GetService("RunService")
++local ServerScriptService = game:GetService("ServerScriptService")
++local TeleportService = game:GetService("TeleportService")
++
++type Slot = { phase: Play.Phase, name: string?, mode: Play.Mode?, flight: number, invited: boolean }
++
++local Plays = {}
++
++local started = false
++
++function Plays.start()
++	if started then
++		return
++	end
++	started = true
++	local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Play") :: RemoteEvent
++	local ids = Places.read(function(attribute: string): any
++		return ServerScriptService:GetAttribute(attribute)
++	end)
++	local destination: { [string]: number } = {}
++	for _, entry in Games.LIST do
++		local id = (ids :: any)[entry.place]
++		if id ~= nil and Modes[entry.name] ~= nil then
++			destination[entry.name] = id
++		end
++	end
++	local travel = Travel.new()
++	local slots: { [any]: Slot } = {}
++	local queue = Pairing.new()
++	local serial = 0
++	local arenas: any = nil
++
++	local function idOf(player: any): string
++		return tostring(player.UserId)
++	end
++
++	local function tell(player: any)
++		local slot = slots[player]
++		if player.Parent == nil or slot == nil then
++			return
++		end
++		remote:FireClient(player, "status", { phase = slot.phase, name = slot.name, mode = slot.mode })
++	end
++
++	local function counts(): { [string]: number }
++		local out: { [string]: number } = {}
++		for name, list in Modes do
++			if table.find(list, "pair") ~= nil then
++				out[name] = Pairing.count(queue, name)
++			end
++		end
++		return out
++	end
++
++	local function unwait(player: any)
++		queue = Pairing.leave(queue, idOf(player))
++		remote:FireAllClients("waiting", counts())
++	end
++
++	local function set(player: any, phase: Play.Phase)
++		local slot = slots[player]
++		if slot ~= nil then
++			slot.phase = phase
++			tell(player)
++		end
++	end
++
++	local function current(player: any, flight: number): boolean
++		local slot = slots[player]
++		return player.Parent ~= nil and slot ~= nil and slot.flight == flight
++	end
++
++	-- the teleport of one start: every player's travel goes, then one TeleportAsync for them all
++	local function go(players: { any }, name: string, reserved: string?)
++		for _, p in players do
++			if Travel.status(travel, idOf(p), os.clock()) ~= "idle" then
++				for _, q in players do
++					set(q, "failed")
++				end
++				return
++			end
++		end
++		local tickets: { [any]: number? } = {}
++		for _, p in players do
++			local _, ticket = Travel.request(travel, idOf(p), os.clock())
++			tickets[p] = ticket
++			set(p, "going")
++		end
++		local ok = pcall(function()
++			local options = Instance.new("TeleportOptions")
++			if reserved ~= nil then
++				options.ReservedServerId = reserved
++			end
++			TeleportService:TeleportAsync(destination[name], players, options)
++		end)
++		for _, p in players do
++			if ok then
++				Travel.answered(travel, idOf(p), os.clock(), tickets[p])
++			else
++				Travel.failed(travel, idOf(p), os.clock(), tickets[p])
++				set(p, "failed")
++			end
++		end
++	end
++
++	-- the player is entitled: go alone, to the title's shared arena, or to its waiting line
++	local function proceed(player: any, flight: number)
++		local slot = slots[player]
++		if not current(player, flight) or slot.name == nil then
++			return
++		end
++		local name = slot.name :: string
++		if slot.mode == "solo" then
++			go({ player }, name, nil)
++		elseif slot.mode == "arena" then
++			local fresh = HttpService:GenerateGUID(false)
++			local last: Arena.Record? = nil
++			local ok = pcall(function()
++				if arenas == nil then
++					arenas = MemoryStoreService:GetHashMap(Arena.MAP)
++				end
++				arenas:UpdateAsync(name, function(raw: any): any
++					last = Arena.join(raw, fresh, os.time())
++					return last
++				end, Arena.OPEN_SECONDS)
++			end)
++			if not current(player, flight) then
++				return
++			end
++			if not ok or last == nil then
++				set(player, "failed")
++				return
++			end
++			go({ player }, name, (last :: Arena.Record).id)
++		else
++			local pair
++			queue, pair = Pairing.join(queue, name, idOf(player))
++			if pair == nil then
++				set(player, "waiting")
++				remote:FireAllClients("waiting", counts())
++				return
++			end
++			remote:FireAllClients("waiting", counts())
++			local first = Players:GetPlayerByUserId(tonumber(pair[1]) :: number)
++			if first == nil or slots[first] == nil then
++				set(player, "failed")
++				return
++			end
++			go({ first, player }, name, HttpService:GenerateGUID(false))
++		end
++	end
++
++	-- the record check, reading again while another read of it is under way (at most CHECK_SECONDS); the decision as
++	-- a string, since the Roblox type pass widens a literal union across a require (f0201 E6)
++	local function check(player: any, name: string, flight: number): string?
++		local began = os.clock()
++		while true do
++			local record, problem = Wallet.read(player, name)
++			if not current(player, flight) then
++				return nil
++			end
++			local read: Play.Read? = nil
++			if record ~= nil then
++				local status = PaidPlay.status(record, os.time())
++				read = { free = status.free, plays = status.plays }
++			end
++			local decision = Play.decide(read, problem, Wallet.mode(name))
++			if decision ~= "busy" or os.clock() - began >= Play.CHECK_SECONDS then
++				return decision
++			end
++			task.wait(Play.BUSY_SECONDS)
++			if not current(player, flight) then
++				return nil
++			end
++		end
++	end
++
++	local function run(player: any, name: string, mode: Play.Mode)
++		serial += 1
++		local flight = serial
++		slots[player] = { phase = "checking", name = name, mode = mode, flight = flight, invited = false }
++		tell(player)
++		local decision = check(player, name, flight)
++		if decision == nil then
++			return
++		elseif decision == "busy" then
++			set(player, "failed")
++		elseif decision == "closed" then
++			set(player, "closed")
++		elseif decision == "buy" then
++			set(player, "buying")
++			if not Receipts.ask(player, name, "play") then
++				set(player, "failed")
++			end
++		else
++			if decision == "pass" then
++				Wallet.pass(player, name)
++			end
++			proceed(player, flight)
++		end
++	end
++
++	Receipts.start({
++		granted = function(player: any, name: string, kind: PaidPlay.Kind)
++			local slot = slots[player]
++			if kind == "play" and slot ~= nil and slot.phase == "buying" and slot.name == name then
++				proceed(player, slot.flight)
++			end
++		end,
++		closed = function(player: any, name: string, kind: PaidPlay.Kind, bought: boolean)
++			local slot = slots[player]
++			if kind ~= "play" or slot == nil or slot.phase ~= "buying" or slot.name ~= name then
++				return
++			end
++			if not bought then
++				set(player, "idle")
++				return
++			end
++			local flight = slot.flight
++			task.delay(Play.RECEIPT_SECONDS, function()
++				local now = slots[player]
++				if current(player, flight) and now.phase == "buying" then
++					set(player, "idle")
++				end
++			end)
++		end,
++	})
++	Invites.start()
++
++	remote.OnServerEvent:Connect(function(player: any, action: any, name: any, mode: any)
++		if player.Parent == nil then
++			return
++		end
++		local intent = Play.intent(action, name, mode, Modes)
++		if intent == nil then
++			return
++		end
++		local slot = slots[player]
++		if intent.action == "cancel" then
++			if slot ~= nil and slot.phase == "waiting" then
++				unwait(player)
++				set(player, "idle")
++			end
++			return
++		elseif intent.action == "invite" then
++			if slot ~= nil and slot.phase == "waiting" and slot.mode == "pair" then
++				if not slot.invited then
++					slot.invited = true
++					task.spawn(Invites.offer, player, slot.name :: string)
++				end
++				remote:FireClient(player, "invite")
++			end
++			return
++		end
++		local title = intent.name :: string
++		if destination[title] == nil then
++			return
++		end
++		if slot ~= nil and (slot.phase == "checking" or slot.phase == "buying" or slot.phase == "going") then
++			return
++		end
++		if Travel.status(travel, idOf(player), os.clock()) ~= "idle" then
++			return
++		end
++		if slot ~= nil and slot.phase == "waiting" then
++			unwait(player)
++		end
++		run(player, title, intent.mode :: Play.Mode)
++	end)
++
++	TeleportService.TeleportInitFailed:Connect(function(player: any)
++		Travel.failed(travel, idOf(player), os.clock())
++		local slot = slots[player]
++		if slot ~= nil and slot.phase == "going" then
++			set(player, "failed")
++		end
++	end)
++
++	Players.PlayerAdded:Connect(function(player: any)
++		remote:FireClient(player, "waiting", counts())
++	end)
++	Players.PlayerRemoving:Connect(function(player: any)
++		if Pairing.line(queue, idOf(player)) ~= nil then
++			unwait(player)
++		end
++		Travel.left(travel, idOf(player))
++		slots[player] = nil
++	end)
++
++	-- a start that never left times out in Travel: tell the player once a second
++	local last = 0
++	RunService.Heartbeat:Connect(function()
++		local now = os.clock()
++		if now - last < 1 then
++			return
++		end
++		last = now
++		for player, slot in slots do
++			if slot.phase == "going" and Travel.status(travel, idOf(player), now) == "cooling" then
++				set(player, "failed")
++			end
++		end
++	end)
++end
++
++return Plays
+diff --git a/portal/src/shared/Logic/Arena/init.luau b/portal/src/shared/Logic/Arena/init.luau
+new file mode 100644
+index 000000000..0a72be000
+--- /dev/null
++++ b/portal/src/shared/Logic/Arena/init.luau
+@@ -0,0 +1,43 @@
++--!strict
++-- Arena (f0208): which shared arena an ARENA player joins. The portal's servers share one record per title in a
++-- MemoryStore hash map: the reserved server's id, how many players the portal has sent there, and when it opened.
++-- An arena takes players until CAP were sent or OPEN_SECONDS passed; then the next ARENA player opens a new one.
++-- Pure: the record arrives as the stored value, the clock and the fresh server id as parameters.
++export type Record = { id: string, count: number, opened: number }
++
++local Arena = {}
++
++Arena.CAP = 24 -- players sent to one arena (snake's arena cap, f0212)
++Arena.OPEN_SECONDS = 600 -- an arena takes new players this long after it opened
++Arena.MAP = "PortalArenas" -- the MemoryStore hash map, key the title's name
++
++local function whole(n: any): boolean
++	return type(n) == "number" and n == n and n ~= math.huge and n ~= -math.huge and n == math.floor(n)
++end
++
++-- The stored arena when it still takes players at `now`: a well-formed record with fewer than CAP sent, opened no
++-- later than `now` and less than OPEN_SECONDS before it. Anything else is nil.
++function Arena.open(raw: any, now: number): Record?
++	if type(raw) ~= "table" or type(raw.id) ~= "string" or raw.id == "" then
++		return nil
++	end
++	if not whole(raw.count) or raw.count < 0 or raw.count >= Arena.CAP or not whole(raw.opened) then
++		return nil
++	end
++	if raw.opened > now or now - raw.opened >= Arena.OPEN_SECONDS then
++		return nil
++	end
++	return { id = raw.id, count = raw.count, opened = raw.opened }
++end
++
++-- The record after one more player joins: the open arena with one more sent, else a new arena `fresh` opened `now`
++-- with this player. The caller sends the player to the answer's id.
++function Arena.join(raw: any, fresh: string, now: number): Record
++	local r = Arena.open(raw, now)
++	if r ~= nil then
++		return { id = r.id, count = r.count + 1, opened = r.opened }
++	end
++	return { id = fresh, count = 1, opened = now }
++end
++
++return table.freeze(Arena)
+diff --git a/portal/src/shared/Logic/Pairing/init.luau b/portal/src/shared/Logic/Pairing/init.luau
+new file mode 100644
+index 000000000..95b1189f5
+--- /dev/null
++++ b/portal/src/shared/Logic/Pairing/init.luau
+@@ -0,0 +1,69 @@
++--!strict
++-- Pairing (f0208): the 2 PLAYERS waiting lines of one portal server, one per title. A player waits in at most one
++-- line; the second player to join a line is paired with the first one waiting there, and both leave it. Pure: ids are
++-- strings (a player's user id), and nothing mutates the queue it is given.
++export type Queue = { lines: { [string]: { string } } }
++
++local Pairing = {}
++
++function Pairing.new(): Queue
++	return { lines = {} }
++end
++
++local function without(q: Queue, id: string): { [string]: { string } }
++	local out: { [string]: { string } } = {}
++	for name, line in q.lines do
++		local kept = {}
++		for _, other in line do
++			if other ~= id then
++				table.insert(kept, other)
++			end
++		end
++		if #kept > 0 then
++			out[name] = kept
++		end
++	end
++	return out
++end
++
++-- `id` joins the line of `name`, leaving any other line first. When someone else was waiting there, the first of them
++-- and `id` are the pair (in that order) and both leave the line; else `id` waits at its end.
++function Pairing.join(q: Queue, name: string, id: string): (Queue, { string }?)
++	local lines = without(q, id)
++	local line = lines[name]
++	if line ~= nil and #line > 0 then
++		local first = line[1]
++		local rest = table.move(line, 2, #line, 1, {})
++		if #rest > 0 then
++			lines[name] = rest
++		else
++			lines[name] = nil
++		end
++		return { lines = lines }, { first, id }
++	end
++	lines[name] = { id }
++	return { lines = lines }, nil
++end
++
++-- `id` leaves whatever line it waits in.
++function Pairing.leave(q: Queue, id: string): Queue
++	return { lines = without(q, id) }
++end
++
++-- How many wait in the line of `name`.
++function Pairing.count(q: Queue, name: string): number
++	local line = q.lines[name]
++	return if line == nil then 0 else #line
++end
++
++-- The title `id` waits for, nil when it waits for none.
++function Pairing.line(q: Queue, id: string): string?
++	for name, line in q.lines do
++		if table.find(line, id) ~= nil then
++			return name
++		end
++	end
++	return nil
++end
++
++return table.freeze(Pairing)
+diff --git a/portal/src/shared/Logic/Play/init.luau b/portal/src/shared/Logic/Play/init.luau
+new file mode 100644
+index 000000000..62b9ba728
+--- /dev/null
++++ b/portal/src/shared/Logic/Play/init.luau
+@@ -0,0 +1,225 @@
++--!strict
++-- Play (f0208): what a card's play buttons do and show. Pure rules: the server's decision from a read of the
++-- player's record (play now, play on the portal's pass, buy, store unavailable, or read again), the client's intent
++-- and the server's status checked field by field, each card's buttons and note for a player, where they sit in the
++-- card's Buttons slot, and the keys. A title is a name (src/shared/Modes.luau lists each one's modes); the
++-- arcade's paid play reaches this as plain values (a status's `free` and `plays`, a mode's name), never by require.
++local Card = require("./Card")
++
++export type Mode = "solo" | "arena" | "pair"
++export type Phase = "idle" | "checking" | "buying" | "waiting" | "going" | "closed" | "failed"
++export type Decision = "go" | "pass" | "buy" | "closed" | "busy"
++-- a record's two figures that decide a play (the arcade's PaidPlay.status), nil when the read gave no record
++export type Read = { free: boolean, plays: number }
++-- what the server tells one player: the phase of their one play, and the title and mode it is for
++export type Status = { phase: Phase, name: string?, mode: Mode? }
++export type Intent = { action: "play" | "cancel" | "invite", name: string?, mode: Mode? }
++export type Kind = Mode | "cancel" | "invite"
++-- `price` is rich text: "FREE", or the struck price and the charge; "" when not known
++export type Button = { kind: Kind, text: string, price: string, enabled: boolean }
++export type View = { buttons: { Button }, note: string }
++export type Slot = { x: number, y: number, width: number, height: number } -- of the Buttons slot's size
++export type Key = "second" | "cancel" | "invite"
++export type Modes = { [string]: { Mode } }
++
++local Play = {}
++
++Play.MODES = table.freeze({ "solo", "arena", "pair" } :: { Mode })
++Play.PHASES =
++	table.freeze({ "idle", "checking", "buying", "waiting", "going", "closed", "failed" } :: { Phase })
++Play.LABEL = table.freeze({
++	solo = "PLAY",
++	arena = "ARENA",
++	pair = "2 PLAYERS",
++	cancel = "CANCEL",
++	invite = "INVITE FRIEND",
++})
++Play.NOTE = table.freeze({
++	checking = "CHECKING...",
++	buying = "COMPLETE THE PURCHASE",
++	waiting = "WAITING FOR A SECOND PLAYER",
++	going = "STARTING...",
++	closed = "STORE UNAVAILABLE",
++	failed = "COULD NOT START. TRY AGAIN.",
++	other = "A PLAYER IS WAITING",
++})
++Play.FREE = "FREE"
++-- the card's other keys (Enter, KeypadEnter and ButtonA are the carousel's PLAY, f0205): the card's second button
++-- (ARENA or 2 PLAYERS), the waiting card's CANCEL and INVITE FRIEND
++Play.KEYS = table.freeze({
++	Two = "second",
++	KeypadTwo = "second",
++	ButtonX = "second",
++	Backspace = "cancel",
++	ButtonB = "cancel",
++	I = "invite",
++	ButtonY = "invite",
++} :: { [string]: Key })
++Play.ACTION = "PortalPlay" -- the ContextActionService action name
++Play.PRIORITY = 2500 -- above the default controls' 2000, below the test purchase screen's 3000 (f0201)
++Play.GAP = 0.02 -- between buttons, of the slot's width
++Play.BUSY_SECONDS = 0.25 -- a check that finds the record being read reads again this much later
++Play.CHECK_SECONDS = 10 -- a check still busy this long fails
++Play.RECEIPT_SECONDS = 30 -- a purchase closed bought waits this long for its receipt
++
++local function has(list: { any }, v: any): boolean
++	return table.find(list, v) ~= nil
++end
++
++-- The server's decision for a play of a title, from Wallet.read's answer: nil and "busy" reads again; nil and any
++-- other answer (the store down or slow) plays on the portal's pass; a free start due, or a held play, plays; with
++-- neither, a title in closed mode cannot sell ("closed"), else the player buys.
++function Play.decide(read: Read?, problem: string?, mode: string): Decision
++	if read == nil then
++		return if problem == "busy" then "busy" else "pass"
++	end
++	if read.free == true or read.plays >= 1 then
++		return "go"
++	end
++	if mode == "closed" then
++		return "closed"
++	end
++	return "buy"
++end
++
++-- A client's message, checked: "play" with a title of `modes` and one of its modes; "cancel" and "invite" alone.
++-- Anything else is nil.
++function Play.intent(action: any, name: any, mode: any, modes: Modes): Intent?
++	if action == "cancel" or action == "invite" then
++		return { action = action }
++	end
++	if action ~= "play" or type(name) ~= "string" then
++		return nil
++	end
++	local list = modes[name]
++	if list == nil or not has(list, mode) then
++		return nil
++	end
++	return { action = "play", name = name, mode = mode }
++end
++
++-- The client's read of a status message: a table with a known phase, and a name of `modes` and a mode of it, or
++-- neither (idle has none); anything else is nil. It never raises.
++function Play.parse(raw: any, modes: Modes): Status?
++	if type(raw) ~= "table" or not has(Play.PHASES, raw.phase) then
++		return nil
++	end
++	if raw.name == nil and raw.mode == nil then
++		return { phase = raw.phase }
++	end
++	if type(raw.name) ~= "string" then
++		return nil
++	end
++	local list = modes[raw.name]
++	if list == nil or not has(list, raw.mode) then
++		return nil
++	end
++	return { phase = raw.phase, name = raw.name, mode = raw.mode }
++end
++
++-- The price line of a play button: "FREE" when the free start is due, else the struck price and the charge.
++function Play.price(state: Card.State?, prices: Card.Prices): string
++	if state == nil or state.free == nil then
++		return ""
++	elseif state.free then
++		return Play.FREE
++	end
++	return `{Card.strike(prices.struck)} {prices.price}`
++end
++
++local function button(kind: Kind, price: string, enabled: boolean): Button
++	return { kind = kind, text = Play.LABEL[kind], price = price, enabled = enabled }
++end
++
++-- One card's buttons and note for a player. A title not published shows none. While the player's own play is for
++-- this title: checking, buying and going show only the note; waiting shows the note, CANCEL and (for 2 PLAYERS)
++-- INVITE FRIEND; closed and failed show the note above the title's buttons. Otherwise one button per mode, each
++-- with the play's price, enabled once the title's state is known; `others` waiting on a 2 PLAYERS title say so. A
++-- card with a note shows its buttons' names only (the badge above says the price).
++function Play.view(
++	name: string,
++	modes: { Mode },
++	state: Card.State?,
++	status: Status?,
++	others: number,
++	prices: Card.Prices
++): View
++	if state ~= nil and not state.published then
++		return { buttons = {}, note = "" }
++	end
++	local mine = status ~= nil and status.name == name and status.phase ~= "idle"
++	local phase: Phase = if mine and status then status.phase else "idle"
++	if phase == "checking" or phase == "buying" or phase == "going" then
++		return { buttons = {}, note = Play.NOTE[phase] }
++	end
++	if phase == "waiting" then
++		local out = { button("cancel", "", true) }
++		if status and status.mode == "pair" then
++			table.insert(out, button("invite", "", true))
++		end
++		return { buttons = out, note = Play.NOTE.waiting }
++	end
++	local note = ""
++	if phase == "closed" or phase == "failed" then
++		note = Play.NOTE[phase]
++	elseif others > 0 and has(modes, "pair") then
++		note = Play.NOTE.other
++	end
++	local price = if note == "" then Play.price(state, prices) else ""
++	local enabled = state ~= nil and state.free ~= nil
++	local out = {}
++	for _, m in modes do
++		table.insert(out, button(m :: Kind, price, enabled))
++	end
++	return { buttons = out, note = note }
++end
++
++-- Where `count` buttons sit in the Buttons slot: side by side with GAP between them, the slot's full width; its full
++-- height, or its bottom half under a note.
++function Play.slots(count: number, noted: boolean): { Slot }
++	local out = {}
++	if count < 1 then
++		return out
++	end
++	local y = if noted then 0.5 else 0
++	local width = (1 - Play.GAP * (count - 1)) / count
++	for i = 1, count do
++		table.insert(out, { x = (i - 1) * (width + Play.GAP), y = y, width = width, height = 1 - y })
++	end
++	return out
++end
++
++-- Where the note sits: the whole slot when no button shows, else its top half.
++function Play.noteBox(count: number): Slot
++	return { x = 0, y = 0, width = 1, height = if count < 1 then 1 else 0.5 }
++end
++
++function Play.key(name: string): Key?
++	return Play.KEYS[name]
++end
++
++-- The mode of a card's second button (ARENA or 2 PLAYERS), nil when it has one button only.
++function Play.second(modes: { Mode }): Mode?
++	return modes[2]
++end
++
++-- An inviter's user id from an invited friend's launch data: whole decimal digits of a positive id, else nil.
++function Play.inviter(raw: any): number?
++	if type(raw) ~= "string" or not string.match(raw, "^[1-9]%d*$") or #raw > 15 then
++		return nil
++	end
++	return tonumber(raw)
++end
++
++-- An invite's record (MemoryStore): the inviting server's job id and the title the inviter waits on, else nil.
++function Play.invite(raw: any, modes: Modes): { job: string, name: string }?
++	if type(raw) ~= "table" or type(raw.job) ~= "string" or raw.job == "" or type(raw.name) ~= "string" then
++		return nil
++	end
++	if modes[raw.name] == nil then
++		return nil
++	end
++	return { job = raw.job, name = raw.name }
++end
++
++return table.freeze(Play)
+diff --git a/portal/src/shared/Modes.luau b/portal/src/shared/Modes.luau
+new file mode 100644
+index 000000000..71c3b3dc9
+--- /dev/null
++++ b/portal/src/shared/Modes.luau
+@@ -0,0 +1,15 @@
++--!strict
++-- The play buttons of each title's card (f0208), by its paid-play name (src/shared/Games.luau), in the order they
++-- show: PLAY on every card, ARENA on Snake, 2 PLAYERS on Invaders and Asteroids. A new title is one entry here.
++local Play = require("./Logic/Play")
++
++local function modes(list: { Play.Mode }): { Play.Mode }
++	return table.freeze(list)
++end
++
++return table.freeze({
++	pickman = modes({ "solo" }),
++	snake = modes({ "solo", "arena" }),
++	invaders = modes({ "solo", "pair" }),
++	asteroids = modes({ "solo", "pair" }),
++} :: Play.Modes)
+diff --git a/portal/tests/inputs.tsv b/portal/tests/inputs.tsv
+index 498848166..fb7cc9aad 100644
+--- a/portal/tests/inputs.tsv
++++ b/portal/tests/inputs.tsv
+@@ -7,3 +7,4 @@ tests/meta/architecture.spec.luau	portal/.tracker/architecture.md
+ tests/meta/architecture.spec.luau	portal/src/
+ tests/meta/architecture.spec.luau	portal/tests/
+ tests/acceptance/f0205/place.spec.luau	portal/.tracker/architecture.md
++tests/acceptance/f0208/place.spec.luau	portal/.tracker/architecture.md
+diff --git a/portal/tests/unit/Arena/arena.spec.luau b/portal/tests/unit/Arena/arena.spec.luau
+new file mode 100644
+index 000000000..349951ef2
+--- /dev/null
++++ b/portal/tests/unit/Arena/arena.spec.luau
+@@ -0,0 +1,9 @@
++--!strict
++local Arena = require("@logic/Arena")
++local t = require("@tests/lib/t")
++
++return t.spec("Arena", function(it)
++	it("with no arena open, the first player opens one", function()
++		t.expect(Arena.join(nil, "x", 100)).toEqual({ id = "x", count = 1, opened = 100 })
++	end)
++end)
+diff --git a/portal/tests/unit/Pairing/pairing.spec.luau b/portal/tests/unit/Pairing/pairing.spec.luau
+new file mode 100644
+index 000000000..dc1323a03
+--- /dev/null
++++ b/portal/tests/unit/Pairing/pairing.spec.luau
+@@ -0,0 +1,11 @@
++--!strict
++local Pairing = require("@logic/Pairing")
++local t = require("@tests/lib/t")
++
++return t.spec("Pairing", function(it)
++	it("the second player in a line is paired with the first", function()
++		local q = Pairing.join(Pairing.new(), "invaders", "1")
++		local _, pair = Pairing.join(q, "invaders", "2")
++		t.expect(pair).toEqual({ "1", "2" })
++	end)
++end)
+diff --git a/portal/tests/unit/Play/play.spec.luau b/portal/tests/unit/Play/play.spec.luau
+new file mode 100644
+index 000000000..445730298
+--- /dev/null
++++ b/portal/tests/unit/Play/play.spec.luau
+@@ -0,0 +1,9 @@
++--!strict
++local Play = require("@logic/Play")
++local t = require("@tests/lib/t")
++
++return t.spec("Play", function(it)
++	it("a held play goes at once", function()
++		t.expect(Play.decide({ free = false, plays = 1 }, nil, "live")).toBe("go")
++	end)
++end)
