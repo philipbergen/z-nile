@@ -133,14 +133,12 @@ return t.spec("c0254 the race window, ownership by stamp and the push exits", fu
 	it(
 		"AC1: a pick another worker finished meanwhile is taken, whatever step the facts would otherwise ask for",
 		function()
-			local done = dispatch.next(
-				facts({
-					status = "prepared",
-					design = "ready",
-					pick = "draft",
-					taken = "c0010 is no longer the draft it was picked as",
-				})
-			)
+			local done = dispatch.next(facts({
+				status = "prepared",
+				design = "ready",
+				pick = "draft",
+				taken = "c0010 is no longer the draft it was picked as",
+			}))
 			t.expect(done.kind).toBe("stop")
 			t.expect(done.code).toBe(dispatch.EXIT.taken)
 			-- the same facts for a plain dispatch go on to the rafting step
@@ -202,7 +200,7 @@ return t.spec("c0254 the race window, ownership by stamp and the push exits", fu
 		rafted: xhost.RaftedBy?,
 	}): any
 		return {
-			origin = function(_id: string)
+			origin = function(_id: string): any
 				if opts.stamp == nil then
 					return nil
 				end
@@ -398,7 +396,7 @@ return t.spec("c0254 the race window, ownership by stamp and the push exits", fu
 			t.expect(xhost.pushDecision(f).why).toBe(
 				"c0010's claim ended: this checkout's work is no longer the claim's; stop here (./zn lost lists lost work to pick up)"
 			)
-			t.expect(string.find(d.why, "continue", 1, true)).toBe(nil)
+			t.expect((string.find(d.why, "continue", 1, true))).toBe(nil)
 		end
 	)
 
@@ -509,7 +507,7 @@ return t.spec("c0254 the race window, ownership by stamp and the push exits", fu
 				) ~= nil
 			).toBe(true)
 			base.claimed = nil
-			t.expect(string.find(dispatch.prompt(base), "already claimed", 1, true)).toBe(nil)
+			t.expect((string.find(dispatch.prompt(base), "already claimed", 1, true))).toBe(nil)
 		end
 	)
 

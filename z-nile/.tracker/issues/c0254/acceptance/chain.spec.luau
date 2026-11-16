@@ -184,7 +184,7 @@ return t.spec("c0254 two hosts run the dispatcher's worker mode", function(it)
 			t.expect(has(fakecli.log(h), "is already claimed for this run (stamp `preparing-")).toBe(true)
 			local st = fakecli.state(h, "c0012")
 			t.expect(st.claim.stamp).toBe(stampOnOrigin("c0012"))
-			local rows = fakecli.rows(h, "c0012") or {}
+			local rows: { any } = fakecli.rows(h, "c0012") or {}
 			local seenCli = false
 			for _, row in rows do
 				if row.phase == "prep" then
