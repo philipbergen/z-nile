@@ -13,7 +13,7 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0117
 
-check "RC1: the architecture map composes both layers: the folded deps comment, Play -> Card once, every other line an edge, every edge main has kept, and f0205's then f0208's Features heading once each" bash -c '
+check "RC1: the architecture map composes the three layers: the folded deps comment, Play -> Card once, every other line an edge, every edge main has kept, and the Features headings of f0205, f0208 and f0206 once each, in that order" bash -c '
   doc=.tracker/architecture.md
   block() { awk "BEGIN{p=0} index(\$0, \"\`\`\`deps\")==1 {p=1; next} p && index(\$0, \"\`\`\`\")==1 {exit} p {print}"; }
   deps=$(block < "$doc")
@@ -29,10 +29,13 @@ check "RC1: the architecture map composes both layers: the folded deps comment, 
   lost=$(comm -23 <(printf "%s\n" "$main") <(printf "%s\n" "$here") | grep .)
   [ -z "$lost" ] || { printf "edges main has that this map lost:\n%s\n" "$lost"; exit 1; }
   heads=$(awk "BEGIN{p=0} index(\$0, \"## Features\")==1 {p=1; next} p && index(\$0, \"## \")==1 {exit} p && index(\$0, \"### \")==1 {print}" "$doc")
-  a=$(printf "%s\n" "$heads" | grep -n -x -F "### Carousel and Card (f0205)")
-  b=$(printf "%s\n" "$heads" | grep -n -x -F "### Play buttons (f0208)")
-  [ "$(printf "%s\n" "$a" | grep -c .)" = 1 ] && [ "$(printf "%s\n" "$b" | grep -c .)" = 1 ] || { printf "Features headings are:\n%s\n" "$heads"; exit 1; }
-  [ "${a%%:*}" -lt "${b%%:*}" ] || { echo "f0208 heading is before f0205 heading"; exit 1; }
+  prev=0
+  for h in "### Carousel and Card (f0205)" "### Play buttons (f0208)" "### Board (f0206)"; do
+    at=$(printf "%s\n" "$heads" | grep -n -x -F "$h")
+    [ "$(printf "%s\n" "$at" | grep -c .)" = 1 ] || { printf "Features headings are:\n%s\n" "$heads"; exit 1; }
+    [ "${at%%:*}" -gt "$prev" ] || { echo "the Features headings are out of order"; exit 1; }
+    prev=${at%%:*}
+  done
 '
 
 finish
