@@ -160,6 +160,11 @@ return t.spec("c0253 the worker's pull loop", function(it)
 			t.expect(sawHeld).toBe(true)
 			t.expect(last.state).toBe("stopped")
 			t.expect(last.held).toBe("")
+			-- and the state written right after the item ended, before the summary, already holds nothing
+			local after = f.states[#f.states - 1]
+			t.expect(after.state).toBe("working")
+			t.expect(after.item).toBe("")
+			t.expect(after.held).toBe("")
 		end
 	)
 
@@ -231,6 +236,29 @@ return t.spec("c0253 the worker's pull loop", function(it)
 		t.expect(f.nextCalls).toBe(supervise.READ_RETRIES)
 		t.expect(string.find(s.stopped, "could not resolve host", 1, true) ~= nil).toBe(true)
 	end)
+
+	it(
+		"AC9: a good read clears the failed-read count, so failures far apart never add up to a stop",
+		function()
+			local f = fake({
+				nexts = {
+					"fail",
+					"fail",
+					"fail",
+					"fail",
+					"R0010 raft rank 1",
+					"fail",
+					"fail",
+					"fail",
+					"fail",
+				},
+				stopAfterSleeps = 9,
+			})
+			local s = workloop.run(f.world, FOREVER)
+			t.expect(s.stopped).toBe("stop asked")
+			t.expect(s.moved).toEqual({ "R0010" })
+		end
+	)
 
 	it("AC9: a Lune error that exits 1 is a failed read, not an empty stack", function()
 		local f = fake({ nexts = { "trace", "trace", "trace", "trace", "trace" } })

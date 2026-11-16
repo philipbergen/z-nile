@@ -189,9 +189,16 @@ return t.spec("c0253 ./zn work's command line", function(it)
 	it(
 		"AC9: the dispatcher's own flags are booleans too: --worker and --no-run before a positional leave it in place",
 		function()
-			local r = trackerfix.tr(f, f.main, { "dispatch", "--worker", "--no-run", "status", "R0010" })
-			t.expect(r.ok).toBe(true)
-			t.expect(has(said(r), "usage")).toBe(false)
+			for _, args in
+				{
+					{ "dispatch", "--worker", "--no-run", "status", "R0010" },
+					{ "dispatch", "--no-run", "--worker", "status", "R0010" },
+				}
+			do
+				local r = trackerfix.tr(f, f.main, args)
+				t.expect(r.ok).toBe(true)
+				t.expect(has(said(r), "usage")).toBe(false)
+			end
 		end
 	)
 
