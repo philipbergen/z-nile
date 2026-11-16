@@ -1,0 +1,107 @@
+# ./zn run --time 3000 -- python3 -I portal/.tracker/issues/f0205/experiments/mutants.py (2026-11-15), then the K rows again after card.spec's accessor fix
+intended                                                         ok (green)
+C1 no wrap                                                       killed
+C2 a new row starts at the last card                             killed
+C3 a fractional step moves                                       killed
+C4 a step changes the row it is given                            killed
+C5 the left shoulder goes forward                                killed
+C6 Space plays too                                               killed
+C7 bound at the test screen's priority                           killed
+C8 the wheel the wrong way                                       killed
+C9 the rest counted from the last step                           killed
+C10 a rest of exactly WHEEL_GAP is not enough                    killed
+C11 no rest needed                                               killed
+C12 a still wheel event is no event                              killed
+C13 a time that is not a number counts                           killed
+C14 a clock that went back waits                                 killed
+C15 swipes the other way                                         killed
+C16 offsets the long way                                         killed
+C17 the opposite card counts to the left                         killed
+C18 the front card as tall as the screen                         killed
+C19 no width cap                                                 killed
+C20 neighbours overlap the front card                            killed
+C21 neighbours not dimmed                                        killed
+C22 far cards shown                                              killed
+C23 neighbours full size                                         killed
+K1 the sale's words written in                                   killed
+K2 the price not struck                                          killed
+K3 markup not escaped                                            killed
+K4 a free start shown on an unpublished card                     killed
+K5 an unread free state shows the sale                           killed
+K6 an unknown state shows coming soon                            killed
+K7 published by the entry's name                                 killed
+K8 a free state sent for an unpublished place                    killed
+K9 only published titles sent                                    ERROR (not an assertion): <clone>/portal/.tracker/issues/f0205/acceptance/card.spec:28: expected true, got false
+K10 any published value read                                     killed
+K11 any free value read                                          killed
+K12 a free state kept for an unpublished place                   killed
+K13 a message that is not a table read as one                    killed
+K14 the angle never wraps                                        killed
+K15 a time that is not a number turns the preview                killed
+K16 the buttons overlap the badge                                killed
+K17 the camera too close                                         killed
+K18 no room kept for the buttons                                 killed
+G1 a name the Catalog does not know                              killed
+G2 a place Places does not know                                  killed
+G3 a title not the Catalog's                                     killed
+G4 a part out of frame                                           killed
+G5 entries not frozen                                            killed
+G6 two games, one tagline                                        killed
+G7 a colour past 255                                             killed
+G8 the games in another order                                    killed
+S1 the attributes read on every ask                              killed
+S2 its own id check, not Places                                  killed
+S3 unpublished games read too                                    killed
+S4 a read under way read again                                   killed
+S5 the status at os.clock()                                      killed
+S6 a failed read leaves the state unknown                        killed
+S7 no answer until a read comes back                             killed
+S8 answers sent to everyone                                      killed
+S9 a player who left still sent to                               killed
+S10 an ask from a player who left read                           killed
+S12 the client's claim trusted                                   killed
+S13 started twice listens twice                                  killed
+S14 the place ids sent along                                     killed
+S15 the Wallet read by title                                     killed
+S16 the free state from the record, not its status               killed
+V1 the sale's words written in                                   killed
+V2 the struck price not rich text                                killed
+V3 bound at the test screen's priority                           killed
+V4 the wheel not bound                                           killed
+V5 keys act on the release too                                   killed
+V6 a card not published plays                                    killed
+V7 the first card always plays                                   killed
+V8 a swipe over a button ignored                                 killed
+V9 asks before it listens                                        killed
+V10 the boot waits for the remote                                killed
+V11 no new layout on a resize                                    killed
+V12 hidden previews turn too                                     killed
+V13 the preview never turns                                      killed
+V14 no safe insets                                               killed
+V15 started twice draws twice                                    killed
+V16 no Boards slot                                               killed
+V17 card() gives nothing                                         killed
+V18 an answer merged into the last                               killed
+V19 the dim the wrong way                                        killed
+V21 the preview's camera not its own                             killed
+V22 parts not anchored                                           killed
+V23 a part's size axes swapped                                   killed
+V24 the cards not where Carousel puts them                       killed
+V25 the play listeners hear only the first                       killed
+P1 the remote is a RemoteFunction                                killed
+P2 Card requires Carousel                                        killed
+P3 the server's Main does not boot Cards                         killed
+P4 the client's Main does not boot the view                      killed
+P5 Games requires Carousel too                                   killed
+P6 the view requires the Wallet                                  killed
+P7 the features not in the map                                   killed
+P8 an edge from Card                                             killed
+P9 the server adapter without the Wallet                         killed
+M1 Logic says game                                               killed
+CV1 the view requires a sibling adapter a later issue adds       ok (green)
+CV2 the server sends one more field per state                    ok (green)
+CV3 the badge gains a note                                       ok (green)
+CV4 the view adds a Note label to the badge                      ok (green)
+CV5 the server requires one more arcade module                   ok (green)
+98 mutants, 5 correct variants, 1 not as intended
+# rerun: mutants.py K -> K1 to K18 killed, intended green, 0 not as intended

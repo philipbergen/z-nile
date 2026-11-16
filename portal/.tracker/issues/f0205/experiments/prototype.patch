@@ -1,0 +1,747 @@
+diff --git a/portal/.tracker/architecture.md b/portal/.tracker/architecture.md
+index 42f51c7d6..ed28abc63 100644
+--- a/portal/.tracker/architecture.md
++++ b/portal/.tracker/architecture.md
+@@ -2,10 +2,20 @@
+ 
+ No code yet: c0184 scaffolds this home and c0185 gates code shared across homes. Shared code comes from the `arcade` library (`arcade/.tracker/architecture.md`). This file grows with the project's first design.
+ 
++## Features
++
++### Carousel and Card (f0205)
++The game carousel, the portal's one screen: one card per game, scrolled by key, wheel, swipe and shoulder.
++- `src/shared/Logic/Carousel` (a leaf): which card is in front, how the inputs move the row, and where each card sits.
++- `src/shared/Logic/Card` (a leaf): what a card shows: the price badge for a game's state (the arcade's Prices words), the states the server sends and the client's read of them, the card's regions and the preview's turn.
++- `src/shared/Games.luau`: one entry per game (its paid-play name and title, its place, its tagline, its preview's parts). A new game is one entry.
++- `src/server/Cards.luau`: which places are published (Places) and each player's free starts (Wallet), sent to that player on each ask over `ReplicatedStorage.Remotes.Cards`.
++- `src/client/CarouselView.luau`: the screen, its inputs, and the seams the rest of the portal plugs into: `onPlay`, `focused`, `card` (its `Buttons` and `Boards` slots).
++
+ ## Allowed dependencies
+ 
+ One `Consumer -> Provider` per line.
+ 
+ ```deps
+-# no features yet
++# Carousel and Card are leaves
+ ```
+diff --git a/portal/default.project.json b/portal/default.project.json
+index 453b3322a..c15c60bd2 100644
+--- a/portal/default.project.json
++++ b/portal/default.project.json
+@@ -7,7 +7,11 @@
+     },
+     "ReplicatedStorage": {
+       "Shared": { "$path": "src/shared" },
+-      "Arcade": { "$path": "../arcade/src/shared" }
++      "Arcade": { "$path": "../arcade/src/shared" },
++      "Remotes": {
++        "$className": "Folder",
++        "Cards": { "$className": "RemoteEvent" }
++      }
+     },
+     "ServerStorage": {
+       "Arcade": { "$path": "../arcade/src/server" }
+diff --git a/portal/src/client/CarouselView.luau b/portal/src/client/CarouselView.luau
+new file mode 100644
+index 000000000..c7cbcce8d
+--- /dev/null
++++ b/portal/src/client/CarouselView.luau
+@@ -0,0 +1,240 @@
++--!strict
++-- Portal client adapter (f0205): draws the carousel of game cards and moves it. Each card shows its title, tagline,
++-- a turning 3-D preview and its price badge from the server's states (Card's view models, the arcade's Prices words);
++-- A/D, the arrows, the shoulders, the wheel and a swipe move the row (Carousel); Enter, KeypadEnter or ButtonA play
++-- the front card, which the play listeners hear (f0208 starts the game). Each card keeps two empty slots, Buttons
++-- (f0208) and Boards (f0206).
++local ContextActionService = game:GetService("ContextActionService")
++local Players = game:GetService("Players")
++local ReplicatedStorage = game:GetService("ReplicatedStorage")
++local RunService = game:GetService("RunService")
++local UserInputService = game:GetService("UserInputService")
++
++local Card = require("@game/ReplicatedStorage/Shared/Logic/Card")
++local Carousel = require("@game/ReplicatedStorage/Shared/Logic/Carousel")
++local Games = require("@game/ReplicatedStorage/Shared/Games")
++local Prices = require("@game/ReplicatedStorage/Arcade/Prices")
++
++local CarouselView = {}
++
++local SHAPES: { [string]: Enum.PartType } = {
++	Ball = Enum.PartType.Ball,
++	Block = Enum.PartType.Block,
++	Cylinder = Enum.PartType.Cylinder,
++}
++
++local listeners: { (name: string) -> () } = {}
++local row = Carousel.new(#Games.LIST)
++local states: { [string]: Card.State } = {}
++local frames: { [string]: Frame } = {}
++local started = false
++
++-- Play listeners hear the front card's name when the player plays it (Enter, KeypadEnter, ButtonA).
++function CarouselView.onPlay(fn: (name: string) -> ())
++	table.insert(listeners, fn)
++end
++
++-- The front card's name.
++function CarouselView.focused(): string
++	return Games.LIST[row.index].name
++end
++
++-- A card's frame (its Buttons and Boards slots are its children), nil before start or for another name.
++function CarouselView.card(name: string): Frame?
++	return frames[name]
++end
++
++local function label(parent: Instance, name: string, region: Card.Region, text: string): TextLabel
++	local l = Instance.new("TextLabel")
++	l.Name = name
++	l.BackgroundTransparency = 1
++	l.Position = UDim2.fromScale(0.05, region.top)
++	l.Size = UDim2.fromScale(0.9, region.height)
++	l.TextColor3 = Color3.new(1, 1, 1)
++	l.Font = Enum.Font.GothamBold
++	l.TextScaled = true
++	l.Text = text
++	l.Parent = parent
++	return l
++end
++
++local function slot(parent: Instance, name: string, region: Card.Region): Frame
++	local f = Instance.new("Frame")
++	f.Name = name
++	f.BackgroundTransparency = 1
++	f.Position = UDim2.fromScale(0.05, region.top)
++	f.Size = UDim2.fromScale(0.9, region.height)
++	f.Parent = parent
++	return f
++end
++
++local function preview(parent: Instance, entry: Card.Entry): Model
++	local region = Card.REGIONS.Preview
++	local view = Instance.new("ViewportFrame")
++	view.Name = "Preview"
++	view.BackgroundTransparency = 1
++	view.Position = UDim2.fromScale(0, region.top)
++	view.Size = UDim2.fromScale(1, region.height)
++	local camera = Instance.new("Camera")
++	camera.FieldOfView = Card.CAMERA.fov
++	camera.CFrame =
++		CFrame.lookAt(Vector3.new(0, Card.CAMERA.height, Card.CAMERA.distance), Vector3.new(0, 0, 0))
++	camera.Parent = view
++	view.CurrentCamera = camera
++	local scene = Instance.new("Model")
++	scene.Name = "Scene"
++	for i, p in entry.preview do
++		local part = Instance.new("Part")
++		part.Name = `Part{i}`
++		part.Anchored = true
++		part.Shape = SHAPES[p.shape]
++		part.Size = Vector3.new(p.size[1], p.size[2], p.size[3])
++		part.Position = Vector3.new(p.at[1], p.at[2], p.at[3])
++		part.Color = Color3.fromRGB(p.color[1], p.color[2], p.color[3])
++		part.Parent = scene
++	end
++	scene.Parent = view
++	view.Parent = parent
++	return scene
++end
++
++local function build(gui: ScreenGui): { [string]: Model }
++	local backdrop = Instance.new("Frame")
++	backdrop.Name = "Backdrop"
++	backdrop.Size = UDim2.fromScale(1, 1)
++	backdrop.BackgroundColor3 = Color3.fromRGB(8, 8, 24)
++	backdrop.Parent = gui
++	local cards = Instance.new("Frame")
++	cards.Name = "Cards"
++	cards.BackgroundTransparency = 1
++	cards.Size = UDim2.fromScale(1, 1)
++	cards.Parent = gui
++	local scenes: { [string]: Model } = {}
++	for _, entry in Games.LIST do
++		local card = Instance.new("Frame")
++		card.Name = entry.name
++		card.BackgroundColor3 = Color3.fromRGB(24, 24, 60)
++		card.Parent = cards
++		label(card, "Title", Card.REGIONS.Title, entry.title)
++		label(card, "Tagline", Card.REGIONS.Tagline, entry.tagline)
++		scenes[entry.name] = preview(card, entry)
++		local badge = slot(card, "Badge", Card.REGIONS.Badge)
++		local struck = label(badge, "Struck", { top = 0, height = 1 }, "")
++		struck.Size = UDim2.fromScale(0.4, 1)
++		struck.RichText = true
++		local offer = label(badge, "Offer", { top = 0, height = 1 }, "")
++		offer.Position = UDim2.fromScale(0.42, 0)
++		offer.Size = UDim2.fromScale(0.58, 1)
++		slot(card, "Buttons", Card.REGIONS.Buttons)
++		slot(card, "Boards", Card.REGIONS.Boards)
++		local dim = Instance.new("Frame")
++		dim.Name = "Dim"
++		dim.Size = UDim2.fromScale(1, 1)
++		dim.BackgroundColor3 = Color3.new(0, 0, 0)
++		dim.ZIndex = 10
++		dim.Parent = card
++		frames[entry.name] = card
++	end
++	return scenes
++end
++
++local function draw(gui: ScreenGui)
++	local size = gui.AbsoluteSize
++	for i, entry in Games.LIST do
++		local card = frames[entry.name]
++		local box = Carousel.box(Carousel.offset(row, i), size.X, size.Y)
++		card.Position = UDim2.fromOffset(box.x, box.y)
++		card.Size = UDim2.fromOffset(box.width, box.height)
++		card.Visible = box.shown
++		local dim = card:FindFirstChild("Dim") :: Frame
++		dim.BackgroundTransparency = 1 - box.dim
++		local badge = Card.badge(states[entry.name], Prices)
++		local holder = card:FindFirstChild("Badge") :: Frame
++		local struck = holder:FindFirstChild("Struck") :: TextLabel
++		local offer = holder:FindFirstChild("Offer") :: TextLabel
++		struck.Text = badge.struck
++		offer.Text = badge.text
++	end
++end
++
++-- the intent as a string: the Roblox type pass widens a literal union across a require (f0201 E6)
++local function act(gui: ScreenGui, intent: string?)
++	if intent == "prev" then
++		row = Carousel.step(row, -1)
++		draw(gui)
++	elseif intent == "next" then
++		row = Carousel.step(row, 1)
++		draw(gui)
++	elseif intent == "play" then
++		local name = CarouselView.focused()
++		local state = states[name]
++		if state ~= nil and state.published then
++			for _, fn in listeners do
++				task.spawn(fn, name)
++			end
++		end
++	end
++end
++
++-- Builds the screen, binds the inputs and asks the server for the cards' states. Once; returns at once.
++function CarouselView.start()
++	if started then
++		return
++	end
++	started = true
++	local gui = Instance.new("ScreenGui")
++	gui.Name = "Portal"
++	gui.ResetOnSpawn = false
++	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
++	local scenes = build(gui)
++	gui.Parent = (Players.LocalPlayer :: Player):WaitForChild("PlayerGui")
++	draw(gui)
++	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
++		draw(gui)
++	end)
++
++	local inputs: { any } = { Enum.UserInputType.MouseWheel }
++	for key in Carousel.KEYS do
++		table.insert(inputs, (Enum.KeyCode :: any)[key])
++	end
++	ContextActionService:BindActionAtPriority(
++		Carousel.ACTION,
++		function(_: string, state: Enum.UserInputState, input: InputObject): Enum.ContextActionResult
++			if input.UserInputType == Enum.UserInputType.MouseWheel then
++				local intent: string?
++				row, intent = Carousel.wheel(row, input.Position.Z, os.clock())
++				act(gui, intent)
++			elseif state == Enum.UserInputState.Begin then
++				act(gui, Carousel.key(input.KeyCode.Name))
++			end
++			return Enum.ContextActionResult.Sink
++		end,
++		false,
++		Carousel.PRIORITY,
++		table.unpack(inputs)
++	)
++	-- a swipe moves the row wherever it starts, over a button or a board too
++	UserInputService.TouchSwipe:Connect(function(direction: Enum.SwipeDirection)
++		act(gui, Carousel.swipe(direction.Name))
++	end)
++
++	RunService.RenderStepped:Connect(function()
++		local angle = Card.angle(os.clock())
++		for name, scene in scenes do
++			if frames[name].Visible then
++				scene:PivotTo(CFrame.Angles(0, angle, 0))
++			end
++		end
++	end)
++
++	task.spawn(function()
++		local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Cards") :: RemoteEvent
++		remote.OnClientEvent:Connect(function(raw: any)
++			states = Card.parse(raw, Games.LIST)
++			draw(gui)
++		end)
++		remote:FireServer()
++	end)
++end
++
++return CarouselView
+diff --git a/portal/src/client/Main.client.luau b/portal/src/client/Main.client.luau
+index c79d602d6..eec2d04ee 100644
+--- a/portal/src/client/Main.client.luau
++++ b/portal/src/client/Main.client.luau
+@@ -1,2 +1,3 @@
+ --!strict
+ -- portal's client entry (c0184 scaffold): boots the client adapters as the features arrive.
++require("./CarouselView").start()
+diff --git a/portal/src/server/Cards.luau b/portal/src/server/Cards.luau
+new file mode 100644
+index 000000000..bcda3cf12
+--- /dev/null
++++ b/portal/src/server/Cards.luau
+@@ -0,0 +1,72 @@
++--!strict
++-- Portal server adapter (f0205): tells each player what their cards show. Which places are published is read once
++-- from the place-id attributes (the arcade's Places); whether a game's free start is due is the arcade's Wallet read
++-- of that player's record and PaidPlay's status, read again on each ask (Wallet bounds the store calls). A client only
++-- asks; what it sends with the ask is ignored, and no place id ever leaves the server.
++local Players = game:GetService("Players")
++local ReplicatedStorage = game:GetService("ReplicatedStorage")
++local ServerScriptService = game:GetService("ServerScriptService")
++
++local Card = require("@game/ReplicatedStorage/Shared/Logic/Card")
++local Games = require("@game/ReplicatedStorage/Shared/Games")
++local PaidPlay = require("@game/ReplicatedStorage/Arcade/Logic/PaidPlay")
++local Places = require("@game/ReplicatedStorage/Arcade/Places")
++local Wallet = require("@game/ServerStorage/Arcade/Wallet")
++
++type Slot = { free: { [string]: boolean }, reading: { [string]: boolean } }
++
++local Cards = {}
++local started = false
++
++function Cards.start()
++	if started then
++		return
++	end
++	started = true
++	local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Cards") :: RemoteEvent
++	local ids = Places.read(function(attribute: string): any
++		return ServerScriptService:GetAttribute(attribute)
++	end)
++	local published: { [string]: boolean } = {}
++	for _, entry in Games.LIST do
++		published[entry.name] = Card.published(entry, ids :: any)
++	end
++	local slots: { [Player]: Slot } = {}
++
++	local function send(player: Player, slot: Slot)
++		if player.Parent ~= nil and slots[player] == slot then
++			remote:FireClient(player, Card.states(Games.LIST, published, slot.free))
++		end
++	end
++
++	remote.OnServerEvent:Connect(function(player: Player)
++		if player.Parent == nil then
++			return
++		end
++		local slot = slots[player]
++		if slot == nil then
++			slot = { free = {}, reading = {} }
++			slots[player] = slot
++		end
++		local mine: Slot = slot
++		send(player, mine)
++		for _, entry in Games.LIST do
++			local name = entry.name
++			if published[name] and not mine.reading[name] then
++				mine.reading[name] = true
++				task.spawn(function()
++					local record = Wallet.read(player, name)
++					mine.reading[name] = nil
++					mine.free[name] = record ~= nil and PaidPlay.status(record, os.time()).free == true
++					send(player, mine)
++				end)
++			end
++		end
++	end)
++
++	Players.PlayerRemoving:Connect(function(player: Player)
++		slots[player] = nil
++	end)
++end
++
++return Cards
+diff --git a/portal/src/server/Main.server.luau b/portal/src/server/Main.server.luau
+index 3e285b2c6..6f44b16e4 100644
+--- a/portal/src/server/Main.server.luau
++++ b/portal/src/server/Main.server.luau
+@@ -1,2 +1,3 @@
+ --!strict
+ -- portal's server entry (c0184 scaffold): boots the server adapters as the features arrive.
++require("./Cards").start()
+diff --git a/portal/src/shared/Games.luau b/portal/src/shared/Games.luau
+new file mode 100644
+index 000000000..851ffc0d3
+--- /dev/null
++++ b/portal/src/shared/Games.luau
+@@ -0,0 +1,92 @@
++--!strict
++-- The portal's games (f0205), one entry each, in the carousel's order. `name` is the game's paid-play title (the
++-- arcade's Catalog), `place` its place in the arcade's Places (whose id says whether it is published), and `preview`
++-- the parts of its live 3-D preview, in studs within Card.FRAME of the centre. A new game is one entry here.
++local Card = require("./Logic/Card")
++
++local function part(shape: Card.Shape, size: { number }, at: { number }, color: { number }): Card.Part
++	return table.freeze({
++		shape = shape,
++		size = table.freeze(size),
++		at = table.freeze(at),
++		color = table.freeze(table.clone(color)),
++	})
++end
++
++local YELLOW, WHITE, RED, PINK = { 255, 221, 0 }, { 245, 245, 245 }, { 230, 40, 40 }, { 255, 150, 200 }
++local GREEN, DARK, APPLE = { 60, 200, 80 }, { 30, 140, 50 }, { 220, 30, 30 }
++local ALIEN, CANNON, BUNKER = { 120, 255, 120 }, { 80, 160, 255 }, { 60, 200, 60 }
++local ROCK, SHIP = { 140, 140, 150 }, { 235, 235, 255 }
++
++local LIST: { Card.Entry } = {
++	{
++		name = "pickman",
++		place = "Pickman",
++		title = "PICKMAN",
++		tagline = "Clear the maze from the inside. Mind the ghosts.",
++		preview = {
++			part("Ball", { 3, 3, 3 }, { -2, 0, 0 }, YELLOW),
++			part("Ball", { 0.6, 0.6, 0.6 }, { 0.5, 0, 0 }, WHITE),
++			part("Ball", { 0.6, 0.6, 0.6 }, { 1.7, 0, 0 }, WHITE),
++			part("Ball", { 1.2, 1.2, 1.2 }, { 3, 0, 0 }, WHITE),
++			part("Block", { 2, 1.6, 2 }, { 0, 0, -2.6 }, RED),
++			part("Ball", { 2, 2, 2 }, { 0, 0.8, -2.6 }, RED),
++			part("Block", { 2, 1.6, 2 }, { 2.4, 0, 2.6 }, PINK),
++			part("Ball", { 2, 2, 2 }, { 2.4, 0.8, 2.6 }, PINK),
++		},
++	},
++	{
++		name = "snake",
++		place = "Snake",
++		title = "SNAKE",
++		tagline = "Eat, grow and outlast the walls.",
++		preview = {
++			part("Block", { 1, 1, 1 }, { -3, -1, 2 }, GREEN),
++			part("Block", { 1, 1, 1 }, { -2, -1, 2 }, GREEN),
++			part("Block", { 1, 1, 1 }, { -1, -1, 2 }, GREEN),
++			part("Block", { 1, 1, 1 }, { 0, -1, 2 }, GREEN),
++			part("Block", { 1, 1, 1 }, { 0, -1, 1 }, GREEN),
++			part("Block", { 1, 1, 1 }, { 0, -1, 0 }, GREEN),
++			part("Block", { 1, 1, 1 }, { 1, -1, 0 }, DARK),
++			part("Ball", { 1, 1, 1 }, { 3, -1, 0 }, APPLE),
++			part("Block", { 7, 1, 1 }, { 0, -1, -3 }, DARK),
++		},
++	},
++	{
++		name = "invaders",
++		place = "Invaders",
++		title = "INVADERS",
++		tagline = "Hold the line against the falling waves.",
++		preview = {
++			part("Block", { 3, 1, 1 }, { 0, 2, 0 }, ALIEN),
++			part("Block", { 5, 1, 1 }, { 0, 1, 0 }, ALIEN),
++			part("Block", { 1, 1, 1 }, { -2, 0, 0 }, ALIEN),
++			part("Block", { 1, 1, 1 }, { 2, 0, 0 }, ALIEN),
++			part("Block", { 3, 1, 2 }, { -2.5, -2, 2 }, BUNKER),
++			part("Block", { 3, 1, 2 }, { 2.5, -2, 2 }, BUNKER),
++			part("Block", { 1.6, 0.8, 1 }, { 0, -3, 3 }, CANNON),
++			part("Cylinder", { 1, 0.4, 0.4 }, { 0, -2.3, 3 }, CANNON),
++		},
++	},
++	{
++		name = "asteroids",
++		place = "Asteroids",
++		title = "ASTEROIDS",
++		tagline = "Split the rocks. Dodge the saucers. Stay alive.",
++		preview = {
++			part("Ball", { 3, 3, 3 }, { -2, 1, -1 }, ROCK),
++			part("Ball", { 2, 2, 2 }, { 2, 2, 1 }, ROCK),
++			part("Ball", { 1, 1, 1 }, { 2.5, -1.5, -2 }, ROCK),
++			part("Ball", { 1, 1, 1 }, { -2.5, -2, 2 }, ROCK),
++			part("Block", { 0.8, 0.4, 2 }, { 0, -1, 2 }, SHIP),
++			part("Cylinder", { 0.3, 0.3, 0.3 }, { 0, -1, 3.2 }, SHIP),
++		},
++	},
++}
++
++for _, e in LIST do
++	table.freeze(e.preview)
++	table.freeze(e)
++end
++
++return table.freeze({ LIST = table.freeze(LIST) })
+diff --git a/portal/src/shared/Logic/Card/init.luau b/portal/src/shared/Logic/Card/init.luau
+new file mode 100644
+index 000000000..924f23d9d
+--- /dev/null
++++ b/portal/src/shared/Logic/Card/init.luau
+@@ -0,0 +1,106 @@
++--!strict
++-- Card (f0205): what one card of the portal's carousel shows. Pure view models: the price badge for a title's state,
++-- the states the server sends and the client's defensive read of them, the card's regions, and its preview's spin.
++-- A title is an `Entry` (src/shared/Games.luau holds them); the badge's sale words are the arcade's Prices table,
++-- passed in.
++export type Shape = "Ball" | "Block" | "Cylinder"
++-- one part of a preview scene, in studs around the scene's centre; colour in 0..255
++export type Part = { shape: Shape, size: { number }, at: { number }, color: { number } }
++export type Entry = { name: string, place: string, title: string, tagline: string, preview: { Part } }
++-- a title's state for one player: is its place published, and is its free start due (nil: not known yet)
++export type State = { published: boolean, free: boolean? }
++export type Kind = "none" | "sale" | "free" | "soon"
++-- `struck` is rich text (the struck-through price), "" when there is none
++export type Badge = { kind: Kind, struck: string, text: string }
++export type Prices = { struck: string, price: string, sale: string }
++export type Region = { top: number, height: number } -- of the card's height
++
++local Card = {}
++Card.FREE = "FREE GAME READY"
++Card.SOON = "COMING SOON"
++Card.ORDER = table.freeze({ "Title", "Tagline", "Preview", "Badge", "Buttons", "Boards" })
++Card.REGIONS = table.freeze({
++	Title = table.freeze({ top = 0.02, height = 0.08 }),
++	Tagline = table.freeze({ top = 0.1, height = 0.05 }),
++	Preview = table.freeze({ top = 0.16, height = 0.3 }),
++	Badge = table.freeze({ top = 0.47, height = 0.08 }),
++	Buttons = table.freeze({ top = 0.56, height = 0.09 }), -- the play buttons (f0208)
++	Boards = table.freeze({ top = 0.66, height = 0.32 }), -- the boards (f0206)
++})
++Card.SPIN = 0.5 -- the preview's turn, radians a second
++Card.FRAME = 4 -- every preview part lies within this many studs of the centre on each axis
++Card.CAMERA = table.freeze({ fov = 40, distance = 22, height = 3 }) -- the preview camera: vertical degrees, studs
++Card.SHAPES = table.freeze({ "Ball", "Block", "Cylinder" })
++
++local function escape(text: string): string
++	return (string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;"))
++end
++
++-- `text` struck through, as Roblox rich text; the text's own markup characters are escaped.
++function Card.strike(text: string): string
++	return `<s>{escape(text)}</s>`
++end
++
++-- The badge for a title's state: nothing until the state is known; COMING SOON when its place is not published;
++-- FREE GAME READY when its free start is due; else the sale: the struck price, then the price and the sale word.
++function Card.badge(state: State?, prices: Prices): Badge
++	if state == nil then
++		return { kind = "none", struck = "", text = "" }
++	elseif not state.published then
++		return { kind = "soon", struck = "", text = Card.SOON }
++	elseif state.free == true then
++		return { kind = "free", struck = "", text = Card.FREE }
++	elseif state.free == false then
++		return { kind = "sale", struck = Card.strike(prices.struck), text = `{prices.price} {prices.sale}` }
++	end
++	return { kind = "none", struck = "", text = "" }
++end
++
++-- Whether the entry's place is published: its place has an id in `ids` (Places.read's answer).
++function Card.published(entry: Entry, ids: { [string]: number? }): boolean
++	return ids[entry.place] ~= nil
++end
++
++-- What the server sends one player: each entry's state by name. A place that is not published has no free state.
++function Card.states(
++	entries: { Entry },
++	published: { [string]: boolean },
++	free: { [string]: boolean }?
++): { [string]: State }
++	local known: { [string]: boolean } = free or {}
++	local out: { [string]: State } = {}
++	for _, e in entries do
++		local p = published[e.name] == true
++		out[e.name] = { published = p, free = if p then known[e.name] else nil }
++	end
++	return out
++end
++
++-- The client's read of the server's message: each entry's state, nil where the message has none that makes sense.
++function Card.parse(raw: any, entries: { Entry }): { [string]: State }
++	local out: { [string]: State } = {}
++	if type(raw) ~= "table" then
++		return out
++	end
++	for _, e in entries do
++		local s = raw[e.name]
++		if
++			type(s) == "table"
++			and type(s.published) == "boolean"
++			and (s.free == nil or type(s.free) == "boolean")
++		then
++			out[e.name] = { published = s.published, free = if s.published then s.free else nil }
++		end
++	end
++	return out
++end
++
++-- The preview's turn after `seconds`, in radians from 0 up to 2π; 0 for a time that is not a finite number.
++function Card.angle(seconds: number): number
++	if seconds ~= seconds or seconds == math.huge or seconds == -math.huge then
++		return 0
++	end
++	return (seconds * Card.SPIN) % (2 * math.pi)
++end
++
++return Card
+diff --git a/portal/src/shared/Logic/Carousel/init.luau b/portal/src/shared/Logic/Carousel/init.luau
+new file mode 100644
+index 000000000..93463216f
+--- /dev/null
++++ b/portal/src/shared/Logic/Carousel/init.luau
+@@ -0,0 +1,117 @@
++--!strict
++-- Carousel (f0205): which card of the portal's row is in front, how the player's inputs move it, and where each card
++-- sits on the screen. Pure: inputs come in as key, wheel and swipe names and numbers, time as `now`.
++export type Intent = "prev" | "next" | "play"
++export type Carousel = { count: number, index: number, wheelAt: number? }
++-- a card's box in the screen's safe area, in pixels from its top-left corner
++export type Box = { x: number, y: number, width: number, height: number, shown: boolean, dim: number }
++
++local KEYS: { [string]: Intent } = {
++	A = "prev",
++	Left = "prev",
++	ButtonL1 = "prev",
++	D = "next",
++	Right = "next",
++	ButtonR1 = "next",
++	Return = "play",
++	KeypadEnter = "play",
++	ButtonA = "play",
++}
++
++local Carousel = {}
++Carousel.KEYS = table.freeze(KEYS)
++Carousel.ACTION = "PortalCarousel"
++Carousel.PRIORITY = 2000 -- below the test purchase screen's 3000 (f0201), so its keys win while it is open
++Carousel.WHEEL_GAP = 0.25 -- seconds the wheel must rest before a wheel event moves the row again
++Carousel.HEIGHT = 0.9 -- the front card's height, of the safe area's
++Carousel.ASPECT = 0.6 -- the front card's width over its height
++Carousel.MAX_WIDTH = 0.8 -- at most this much of the safe area's width
++Carousel.SIDE_SCALE = 0.8 -- a neighbour's size, of the front card's
++Carousel.GAP = 0.03 -- between the front card and a neighbour, of the safe area's width
++Carousel.SIDE_DIM = 0.5 -- how much a neighbour is dimmed (0 none, 1 black)
++
++local function whole(n: any): boolean
++	return type(n) == "number" and n == n and n ~= math.huge and n ~= -math.huge and n == math.floor(n)
++end
++
++local function finite(n: any): boolean
++	return type(n) == "number" and n == n and n ~= math.huge and n ~= -math.huge
++end
++
++-- A row of `count` cards with the first in front.
++function Carousel.new(count: number): Carousel
++	if not whole(count) or count < 1 then
++		error(`Carousel.new: count must be a whole number of at least 1, got {tostring(count)}`, 2)
++	end
++	return { count = count, index = 1, wheelAt = nil }
++end
++
++-- The row moved by `by` cards (negative: back), wrapping round at either end. A new table.
++function Carousel.step(c: Carousel, by: number): Carousel
++	local index = c.index
++	if whole(by) then
++		index = (c.index - 1 + by) % c.count + 1
++	end
++	return { count = c.count, index = index, wheelAt = c.wheelAt }
++end
++
++-- What a key or button does here, by its KeyCode name; nil for any other.
++function Carousel.key(name: string): Intent?
++	return KEYS[name]
++end
++
++-- A wheel event of `delta` (positive: rolled up, away from the player) at `now`: up is "prev", down is "next". It
++-- moves the row only when the wheel rested WHEEL_GAP before it, so one roll or one trackpad flick moves one card.
++-- Every wheel event, moving or not, restarts the rest.
++function Carousel.wheel(c: Carousel, delta: number, now: number): (Carousel, Intent?)
++	if not finite(now) then
++		return c, nil
++	end
++	local rested = c.wheelAt == nil or now - c.wheelAt >= Carousel.WHEEL_GAP or now < c.wheelAt
++	local after: Carousel = { count = c.count, index = c.index, wheelAt = now }
++	if not finite(delta) or delta == 0 then
++		return after, nil
++	end
++	if not rested then
++		return after, nil
++	end
++	return after, if delta > 0 then "prev" else "next"
++end
++
++-- A swipe by its SwipeDirection name: a swipe to the left brings the next card in, to the right the previous one.
++function Carousel.swipe(direction: string): Intent?
++	if direction == "Left" then
++		return "next"
++	elseif direction == "Right" then
++		return "prev"
++	end
++	return nil
++end
++
++-- Card `i`'s place relative to the front card, the short way round the row: 0 in front, -1 to its left, +1 to its
++-- right. With an even count the card opposite the front one is +count/2.
++function Carousel.offset(c: Carousel, i: number): number
++	local d = (i - c.index) % c.count
++	if d > c.count / 2 then
++		d -= c.count
++	end
++	return d
++end
++
++-- The box of a card `offset` places from the front one, in a safe area `width` x `height` pixels: the front card
++-- centred and as tall as HEIGHT allows (narrower than MAX_WIDTH), its two neighbours smaller and dimmed on either
++-- side, clear of it; every other card hidden.
++function Carousel.box(offset: number, width: number, height: number): Box
++	local h = height * Carousel.HEIGHT
++	local w = math.min(h * Carousel.ASPECT, width * Carousel.MAX_WIDTH)
++	if offset == 0 then
++		return { x = (width - w) / 2, y = (height - h) / 2, width = w, height = h, shown = true, dim = 0 }
++	end
++	local sw, sh = w * Carousel.SIDE_SCALE, h * Carousel.SIDE_SCALE
++	local centre = width / 2 + (if offset < 0 then -1 else 1) * (w / 2 + width * Carousel.GAP + sw / 2)
++	local x = centre - sw / 2
++	local shown = (offset == 1 or offset == -1) and x < width and x + sw > 0
++	return { x = x, y = (height - sh) / 2, width = sw, height = sh, shown = shown, dim = Carousel.SIDE_DIM }
++end
++
++return Carousel
+diff --git a/portal/tests/unit/Card/card.spec.luau b/portal/tests/unit/Card/card.spec.luau
+new file mode 100644
+index 000000000..40ea69746
+--- /dev/null
++++ b/portal/tests/unit/Card/card.spec.luau
+@@ -0,0 +1,10 @@
++--!strict
++local Card = require("@logic/Card")
++local t = require("@tests/lib/t")
++
++return t.spec("Card", function(it)
++	it("shows coming soon for a place that is not published", function()
++		t.expect(Card.badge({ published = false }, { struck = "a", price = "b", sale = "c" }).text)
++			.toBe(Card.SOON)
++	end)
++end)
+diff --git a/portal/tests/unit/Carousel/carousel.spec.luau b/portal/tests/unit/Carousel/carousel.spec.luau
+new file mode 100644
+index 000000000..91b704cc1
+--- /dev/null
++++ b/portal/tests/unit/Carousel/carousel.spec.luau
+@@ -0,0 +1,9 @@
++--!strict
++local Carousel = require("@logic/Carousel")
++local t = require("@tests/lib/t")
++
++return t.spec("Carousel", function(it)
++	it("wraps round", function()
++		t.expect(Carousel.step(Carousel.new(4), -1).index).toBe(4)
++	end)
++end)
