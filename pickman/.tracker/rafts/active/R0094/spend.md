@@ -7,8 +7,8 @@
 | f0148 | feature |  | 2836 | 23 | 350.0 | 670400 |
 | f0158 | feature |  | 794 | 38 | 220.0 | 710000 |
 
-**Total:** +8634 / -125 lines, 1111.0 agent-minutes, 2275346 tokens over 447 records
-<!-- totals: added=8634 removed=125 minutes=1111.0 records=447 tokens=2275346 -->
+**Total:** +8634 / -125 lines, 1111.0 agent-minutes, 2275346 tokens over 456 records
+<!-- totals: added=8634 removed=125 minutes=1111.0 records=456 tokens=2275346 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
