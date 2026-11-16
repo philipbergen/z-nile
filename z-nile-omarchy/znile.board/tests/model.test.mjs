@@ -207,3 +207,30 @@ test("cost: ticket spend, raft rollup or member sum, formatting", () => {
   assert.equal(M.fmtTokens(1177234), "1.2M")
   assert.equal(M.phaseLine(m.byId.R0002.cost), "capture 3 min · prep 2 h · design-review 0 min, 1.2M")
 })
+
+test("rank orders a column: set before unset, lower first, then the ticket number (c0249)", () => {
+  const m = M.normalize({
+    issues: [
+      { id: "c0100", type: "chore", title: "unset low number", stage: "new" },
+      { id: "c0300", type: "chore", title: "rank 5", stage: "new", rank: 5, effectiveRank: 5 },
+      { id: "c0200", type: "chore", title: "rank 20", stage: "new", rank: 20, effectiveRank: 20 },
+      { id: "c0150", type: "chore", title: "rank 20 too", stage: "new", rank: 20, effectiveRank: 20 },
+      { id: "c0400", type: "chore", title: "junk rank", stage: "new", rank: -3, effectiveRank: 2.5 },
+    ],
+  })
+  assert.equal(m.byId.c0400.rank, null)
+  assert.deepEqual(M.sortByPriority(m.issues, []).map(i => i.id), ["c0300", "c0150", "c0200", "c0100", "c0400"])
+  // a raft is placed by its effective rank (its own, else its members' best), which the engine computes
+  const r = M.normalize({ rafts: [{ id: "R0002", stage: "new", rank: null, effectiveRank: 7, issues: [] }] })
+  assert.equal(r.byId.R0002.rank, 7)
+})
+
+test("a dragged order shows a move at once, ahead of the rank order (c0249)", () => {
+  const m = M.normalize({
+    issues: [
+      { id: "c0100", type: "chore", title: "a", stage: "new", rank: 10, effectiveRank: 10 },
+      { id: "c0200", type: "chore", title: "b", stage: "new", rank: 20, effectiveRank: 20 },
+    ],
+  })
+  assert.deepEqual(M.sortByPriority(m.issues, ["c0200", "c0100"]).map(i => i.id), ["c0200", "c0100"])
+})

@@ -7,6 +7,7 @@ local history = require("./history")
 local ledger = require("./ledger")
 local process = require("@lune/process")
 local projects = require("./projects")
+local rankLib = require("./rank")
 local serde = require("@lune/serde")
 local stack = require("./stack")
 local stats = require("./stats")
@@ -32,6 +33,8 @@ export type Raft = {
 	pseudo: boolean, -- false for every raft; there is no No raft entry
 	issues: { string }, -- member issue ids, sorted
 	dependsOn: { string }, -- raft ids, sorted
+	rank: number?, -- c0249: its own rank, a backlog raft's only; nil when unset
+	effectiveRank: number?, -- the rank the order uses: its own, else the best of its members'
 	dependents: { string }, -- raft ids, sorted
 	blockedBy: { string }, -- unfinished dependencies: raft ids and raftless issue ids, sorted
 	topLevel: boolean, -- #blockedBy == 0
@@ -69,6 +72,8 @@ export type Issue = {
 	stage: string,
 	raft: string?, -- frontmatter raft; nil when empty, absent or naming a raft that does not exist
 	dependsOn: { string }, -- frontmatter depends_on ids, sorted, as written (even if they don't exist)
+	rank: number?, -- c0249: its own rank, a backlog item's only; nil when unset
+	effectiveRank: number?, -- the rank the order uses (an issue's own)
 	dependents: { string }, -- raft ids whose members depend_on a raftless issue; {} otherwise
 	emergent: boolean,
 	command: string?,
@@ -858,6 +863,10 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 
 	local issues: { Issue } = {}
 	local issueById: { [string]: Issue } = {}
+	local blockedIds: { [string]: boolean } = {} -- c0249: waits on the person (c0250's stored status)
+	for _, i in rawIssues do
+		blockedIds[i.id] = rankLib.isBlocked(i.front.status)
+	end
 	for _, i in rawIssues do
 		local named = i.front.raft
 		local issueType = if TYPES[i.front.type or ""] then i.front.type else ""
@@ -873,6 +882,8 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			stage = status.effective(i.front, i.state),
 			raft = if named and raftIds[named] then named else nil,
 			dependsOn = listOf(i.front.depends_on),
+			rank = if i.state == "backlog" then rankLib.parse(i.front.rank) else nil,
+			effectiveRank = if i.state == "backlog" then rankLib.parse(i.front.rank) else nil,
 			dependents = {},
 			emergent = i.front.emergent == "true",
 			body = i.body,
@@ -945,6 +956,8 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			pseudo = false,
 			issues = memberIds,
 			dependsOn = {},
+			rank = if r.state == "backlog" then rankLib.parse(r.front.rank) else nil,
+			effectiveRank = nil,
 			dependents = {},
 			blockedBy = {},
 			topLevel = true,
@@ -967,6 +980,20 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		end
 		table.insert(rafts, raft)
 		raftById[r.id] = raft
+	end
+
+	-- c0249: a raft's rank for the order is its own, else the best (lowest) of its members'
+	for _, raft in rafts do
+		local best = raft.rank
+		if best == nil and raft.state == "backlog" then
+			for _, id in raft.issues do
+				local m = issueById[id].rank
+				if m ~= nil and (best == nil or m < best) then
+					best = m
+				end
+			end
+		end
+		raft.effectiveRank = best
 	end
 
 	-- dependencies: raft -> raft through member issues, and raft -> raftless issue (blocks, never a raft dependency)
@@ -1088,7 +1115,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	-- c0118: columns and bands per project, from each issue's effective status and its raft's branch
 	local columns: { [string]: { [string]: { boardview.Band } } } = {}
 	for _, p in projectList do
-		local cards: { [string]: { { id: string, raft: string? } } } = {}
+		local cards: { [string]: { boardview.Card } } = {}
 		for _, c in boardview.COLUMNS do
 			cards[c] = {}
 		end
@@ -1097,7 +1124,13 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 				local raft = if issue.raft then raftById[issue.raft] else nil
 				issue.column = boardview.column(issue.stage, raft ~= nil and raft.launched)
 				issue.age = boardview.age(issue.doneAt, facts.asOf)
-				table.insert(cards[issue.column], { id = issue.id, raft = issue.raft })
+				table.insert(cards[issue.column], {
+					id = issue.id,
+					raft = issue.raft,
+					rank = issue.effectiveRank,
+					raftRank = if raft then raft.effectiveRank else nil,
+					blocked = blockedIds[issue.id] == true,
+				})
 			end
 		end
 		columns[p.name] = {}

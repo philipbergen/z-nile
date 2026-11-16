@@ -300,7 +300,7 @@ end
 
 -- c0116 (review 002 F1): what z-raft grouped. A raft records, for each prepared member it grouped, a hash of that
 -- member's document as it was then (`grouped: [c0013@1a2b3c4d5e6f, …]`), so a redesign landed inside the rafting window
--- is noticed by the carried move and by `ready`. The hash leaves out `status:` and `raft:`, the two lines ready, stop
+-- is noticed by the carried move and by `ready`. The hash leaves out `status:`, `raft:` and `rank:` (c0249), the lines ready, stop
 -- and the rafting PR itself change.
 local serde = require("@lune/serde")
 
@@ -348,7 +348,14 @@ function raftplan.designHash(text: string): string
 			seen += 1
 			inFront = seen == 1
 			table.insert(kept, line)
-		elseif inFront and (string.match(line, "^status:") or string.match(line, "^raft:")) then
+		elseif
+			inFront
+			and (
+				string.match(line, "^status:")
+				or string.match(line, "^raft:")
+				or string.match(line, "^rank:")
+			)
+		then
 			continue
 		else
 			table.insert(kept, line)
@@ -370,7 +377,7 @@ function raftplan.isDesignFile(rel: string, id: string): boolean
 end
 
 -- The record of a member: one hash over its design files (`files`: path relative to its folder -> text), sorted by
--- path, each path with its length and bytes; the document is hashed without its `status:` and `raft:` lines.
+-- path, each path with its length and bytes; the document is hashed without its `status:`, `raft:` and `rank:` lines.
 function raftplan.recordHash(id: string, files: { [string]: string }): string
 	local rels: { string } = {}
 	for rel in files do

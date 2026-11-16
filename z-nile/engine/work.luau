@@ -13,7 +13,7 @@
 -- becomes the pipeline step (or the pipeline step becomes a layer action).
 --
 -- Left for later tickets, on purpose:
---   c0249: work.rankKey is the id. Rank replaces that key, and lost work is not taken first.
+--   c0249 (landed): the rank orders the rafts here. Lost work first is `./zn next`'s (c0253 takes what it prints).
 --   c0250: questions.md is the only block signal. There is no blocked status and no resolve command.
 --   c0265: nothing beats while a raft is held. An unnamed session does not resume one, and does not take it over.
 --   c0254: the holder is the author of the ready commit, not a worker identity, and two checkouts can be
@@ -24,6 +24,8 @@
 --   A named raft ends the session.
 --   A supervisor that starts a fresh session is a later ticket. The skill counts releases in a row
 --   and passes `released`; a stop commit does not name the session, so git cannot.
+local rank = require("./rank")
+
 local work = {}
 
 export type LayerFact = {
@@ -54,6 +56,7 @@ export type RaftFact = {
 	traceOk: boolean,
 	block: string?, -- "" when ready would accept. A reason when the reader has judged and ready would refuse.
 	root: string, -- the project's tracker root, "pickman/.tracker". "" when the reader has not placed it.
+	rank: number?, -- c0249: the raft's own rank, else the best of its members'; nil when none is set (rank.effective)
 }
 
 export type Input = {
@@ -72,9 +75,10 @@ function work.blockedWhy(): string
 	return `{work.BLOCKED_IN_A_ROW} rafts in a row were released as blocked. Stop. This is more likely the worker or the tool than the rafts.`
 end
 
--- c0249 replaces this key with a rank. Lowest key is first. Today the key is the id.
-function work.rankKey(r: RaftFact): string
-	return r.id
+-- c0249: the order a session takes rafts in: a set rank before an unset one, the lower first, then the ticket number
+-- (rank.less, the one comparator `./zn next`, `list` and the board use).
+function work.before(a: RaftFact, b: RaftFact): boolean
+	return rank.less(a.rank, a.id, b.rank, b.id)
 end
 
 export type Decision = {
@@ -127,11 +131,11 @@ function work.scopeName(scope: string?): string
 	return string.match(scope, "^([^/]+)/") or scope
 end
 
--- The next raft an unnamed session may take. One function. Lowest work.rankKey, which is the id until c0249.
+-- The next raft an unnamed session may take. One function. The first in work.before's order (c0249).
 function work.nextClaimable(rafts: { RaftFact }): RaftFact?
 	local best: RaftFact? = nil
 	for _, r in rafts do
-		if work.claimable(r) and (not best or work.rankKey(r) < work.rankKey(best :: RaftFact)) then
+		if work.claimable(r) and (not best or work.before(r, best :: RaftFact)) then
 			best = r
 		end
 	end

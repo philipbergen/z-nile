@@ -8,10 +8,12 @@
 -- `git for-each-ref`, `git show` per file and `git log --grep` over all of main. `work status`
 -- is that same function, so a later call only looked faster once the page cache was warm.
 local fs = require("@lune/fs")
+local idea = require("./idea")
 local layergit = require("./layergit")
 local process = require("@lune/process")
 local projects = require("./projects")
 local raftplan = require("./raftplan")
+local rank = require("./rank")
 local readycheck = require("./readycheck")
 local sh = require("../lib/sh")
 local stack = require("./stack")
@@ -311,6 +313,17 @@ local function build(
 			end
 		end
 	end
+	local own = rank.parse(front.rank)
+	local best: number? = if at.state == "backlog" then own else nil
+	if best == nil and at.state == "backlog" then
+		for _, mid in issues do
+			local mf: { [string]: string } = memberFront[mid] or {}
+			local m = rank.parse(mf.rank)
+			if m ~= nil and (best == nil or m < best) then
+				best = m
+			end
+		end
+	end
 	local layers: { work.LayerFact } = if at.state == "active"
 		then layerFacts(id, issues, tips, mainSha)
 		else {}
@@ -334,6 +347,7 @@ local function build(
 		trace = trace,
 		traceOk = trace and final == "approved",
 		root = string.match(at.dir, "^(.*%.tracker)/") or "",
+		rank = best,
 	}
 end
 
@@ -470,6 +484,57 @@ function workread.held(): string?
 	end
 	local cwd = (string.gsub(process.cwd, "/+$", ""))
 	return string.match(cwd, "/%.worktree/(R%d%d%d%d)$")
+end
+
+-- c0249: the rank facts of every item on origin/main (rank.Fact), and the issues a worker may draft (the claim gate
+-- of z-design: idea.designRefusal, read from origin/main's document and idea-review-001.md). One ls-tree and one
+-- cat-file for the documents of the items that are not done; a done item is its id and state alone. Retired rafts are
+-- not read (slot). Nothing else is read: `next` takes the rafts' claimable verdicts from workread.collect.
+function workread.facts(): ({ rank.Fact }, { [string]: boolean })
+	local facts: { rank.Fact } = {}
+	local drafts: { [string]: boolean } = {}
+	if trim(sh.run("git", { "rev-parse", "--verify", "--quiet", "origin/main" }).stdout) == "" then
+		return facts, drafts
+	end
+	local listed = sh.run("git", { "ls-tree", "-r", "--name-only", "origin/main" })
+	if not listed.ok then
+		return facts, drafts
+	end
+	local at: { { id: string, state: string, path: string } } = {}
+	local specs: { string } = {}
+	for path in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
+		local state, id = rank.where(path)
+		if state and id and state ~= "retired" then
+			table.insert(at, { id = id, state = state, path = path })
+			if state ~= "done" then
+				table.insert(specs, `origin/main:{path}`)
+			end
+		end
+	end
+	local blobs = catBatch(specs)
+	local n = 0
+	local reviews: { string } = {}
+	local pending: { { id: string, doc: string } } = {}
+	for _, a in at do
+		local text = ""
+		if a.state ~= "done" then
+			n += 1
+			text = blobs[n] or ""
+		end
+		local fact = rank.factOf(a.path, frontText(text))
+		if fact then
+			table.insert(facts, fact)
+			if a.state == "backlog" and fact.kind == "issue" and fact.status == "new" then
+				table.insert(pending, { id = a.id, doc = text })
+				table.insert(reviews, `origin/main:{string.match(a.path, "^(.*)/[^/]+$")}/idea-review-001.md`)
+			end
+		end
+	end
+	local got = catBatch(reviews)
+	for i, p in pending do
+		drafts[p.id] = idea.designRefusal(p.doc, got[i], p.id) == nil
+	end
+	return facts, drafts
 end
 
 function workread.collect(asked: string?): work.Input

@@ -76,7 +76,7 @@ Item {
     orders = next
     var argv = Model.rankArgv(rankCommand, id, beforeId)
     if (argv.length === 0) {
-      say(id + " moved for this session only: znile has no priority yet")
+      say(id + " moved for this session only: rankCommand is empty in settings.json")
       return
     }
     if (rankProcess.running) { say("still saving the last move; try again"); return }
@@ -184,7 +184,7 @@ Item {
     workingDirectory: root.repoPath
     stderr: StdioCollector { id: rankErr; waitForEnd: true }
     onExited: function(exitCode) {
-      if (exitCode === 0) { root.say("priority saved"); root.refresh() }
+      if (exitCode === 0) { root.orders = ({}); root.say("priority saved"); root.refresh() }
       else root.say("priority not saved: " + String(rankErr.text || "").trim().split("\n").pop().slice(0, 200))
     }
   }

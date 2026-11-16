@@ -85,11 +85,11 @@ A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent`
 - A CLI that cannot read skills gets the same instructions from a `./zn` command.
 
 ### Order
-Tickets have no order today. They should: every issue and raft gets a `rank:` (integer, lower first; not the `rank` of `.models.toml`, where a higher one wins). *captured* (c0249)
+Every issue and raft can carry a `rank:` (integer, lower first; not the `rank` of `.models.toml`, where a higher one wins); unset is a valid rank. *exists* (c0249)
 - An unset `rank:` is the lowest rank, and equal or unset ranks fall back to the ticket number, so the order is always stable.
-- Lost work comes first: anything in progress whose heartbeat is stale (`./zn lost` lists it) comes before anything not yet started, whatever its rank, even when a person started it without changing its rank. *exists* (c0265)
-- The next item is the first in that order whose `depends_on` are all done, which is not blocked, and whose status is claimable. `depends_on` is a hard constraint; `rank` only orders what is free, so the order works around a blocked item without changing any rank.
-- z-ticket and z-design leave the rank unset, which appends; only a person sets one, with `./zn rank <id> top|after <id>|unset`. z-raft asks for a raft's rank when it makes the raft, and unset is a valid answer: with no one to answer, the rank stays unset. A rank given to a raft is the raft's own; an unset one takes its members' best. The board shows the stack in order.
+- Lost work comes first: anything in progress whose heartbeat is stale (`./zn lost` lists it) comes before anything not yet started, whatever its rank, even when a person started it without changing its rank. *designed* (c0265)
+- The next item is the first in that order whose `depends_on` are all done, which is not blocked, and whose status is claimable: a worker carries a raft to merge, and it may draft the design of an issue, but a person approves it. `depends_on` is a hard constraint; `rank` only orders what is free, so the order works around a blocked item without changing any rank. `./zn next` prints it.
+- z-ticket, z-design and z-raft leave the rank unset (unset by default); only a person sets one, with `./zn rank <id> top|last|before <id>|after <id>|<n>|unset` or by dragging a card in the board app. A rank given to a raft is the raft's own; an unset one takes its members' best. `./zn list` and the board show blocked items first, then the stack in order.
 - The board shows lost, parked and stale claims, lost first. *designed* (c0276)
 - The z-nile app in Omarchy shows the same order, marks lost items, and reorders by drag and drop through `./zn rank`. *captured* (c0257)
 
@@ -163,7 +163,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | remote runtimes (`claude-cloud`, `grok-bot`, `cursor-app`) | c0142 | captured |
 | `agy`, `kimi` and `deepseek` as CLIs | c0175 | captured |
 | a raft delivered as a stacked PR set, one layer per issue, each finished before the next | c0248 | designed |
-| `rank`, `./zn rank`, `./zn next`, lost first | c0249 | captured |
+| `rank`, `./zn rank`, `./zn next`, lost first | c0249 | exists |
 | `blocked`, `escalation.md`, `./zn resolve` | c0250 | designed |
 | cross-model review pool, same-family fallback | c0251 | captured |
 | the dispatcher lands a green stack | c0252 | captured |

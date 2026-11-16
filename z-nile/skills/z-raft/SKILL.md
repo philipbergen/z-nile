@@ -10,6 +10,7 @@ A raft is what `z-ready` hands out and `z-run` delivers as one PR. `z-design` de
 **The lock.** An issue's raft is its own `raft:` line. This skill writes it in its worktree, and the rafting PR carries it, so two PRs that raft the same issue edit the same line and the second cannot merge cleanly. The published claim (`preparing-…`) stamps the raft only: a prepared issue is never restamped.
 
 ## 1. Plan
+z-raft does not ask for a rank and writes none: a raft's rank stays unset unless a person sets it with `./zn rank`, and an unset one takes its members' best.
 Take `./zn lost` first: lost work comes before anything not yet started. Work in a rafting worktree: `cd "$(./zn worktree raft-<slug>)"` (any short slug, for example `raft-backlog`), then `./zn sync`.
 - **No argument**: run `./zn raft-plan`. It prints the plan as commands, one per line, and `skip <id>: <why>` for an issue it can't place. The policy is fixed and needs no judgement:
   - one type per raft and one project per raft; a raft that is not prepared in the backlog (new, being prepared, active or done) is never pulled in, and a `single: true` raft never takes another issue;

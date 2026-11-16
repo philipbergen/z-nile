@@ -1,5 +1,5 @@
 {
   "repoPath": "~/code/pickman",
   "refreshIntervalSec": 120,
-  "rankCommand": ""
+  "rankCommand": "./zn rank {id} --before {beforeId}"
 }

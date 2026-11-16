@@ -98,6 +98,11 @@ usage: ./zn <command> ...
                                                 mark a stage; the tool writes the measured row. --time and --tokens are ignored
   record --id <id> --phase <phase> [--report <file>] [--wall <s>] [--cpu <s>] [--ai <s>] [--tokens <n>]
                                                 write one measured row (the tool's own; not for typed numbers)
+  rank <id> top|last|before <id>|after <id>|<n>|unset
+                                                set the rank of a backlog issue or raft on origin/main (lower first, unset last; the
+                                                board app's form: rank <id> --before <id>). Runs in the main checkout too (c0249)
+  next                                          print the next item to take: lost work, else the claimable raft with the best rank,
+                                                else an issue to draft (exit 1 when none)
   provenance record <id> unblocked|confirmed|ranked [--actor <actor>] [--detail <k=v>]
                                                 append one row to the item's provenance.md on origin/main (c0263)
   dispatch <id> [--dry-run]                     run the chain on an item from its tracker state (ticket, design, raft,
@@ -1468,6 +1473,31 @@ local function originPaths(): { string }
 		fail(`cannot read origin/main's project roots ({projects.FILE})`)
 	end
 	return paths
+end
+
+-- c0249: the rank edge's functions in one table (main.luau's chunk is near Luau's limit of 200 locals)
+local rk = {}
+
+-- The live actor of a command that records (c0263's rule): --actor, then ZN_ACTOR, then an agent-session hint, then the
+-- git name. `provenance record` and `rank` share it.
+function rk.actor(opts: { [string]: { string } }?): string
+	local flagList = if opts then opts["--actor"] else nil
+	local ident = sh.run("git", { "var", "GIT_AUTHOR_IDENT" })
+	local name = if ident.ok then string.match(ident.stdout, "^(.-) <") else nil
+	local hint = provenance.hint({
+		CLAUDECODE = process.env.CLAUDECODE,
+		AI_AGENT = process.env.AI_AGENT,
+		CURSOR_AGENT = process.env.CURSOR_AGENT,
+		GROK_SESSION_ID = process.env.GROK_SESSION_ID,
+		ZN_DISPATCH = process.env.ZN_DISPATCH,
+		CLAUDE_EFFORT = process.env.CLAUDE_EFFORT,
+	})
+	local actor, why =
+		provenance.resolve(if flagList then flagList[1] else nil, process.env.ZN_ACTOR, hint, name)
+	if not actor then
+		fail(why or "not an actor")
+	end
+	return actor :: string
 end
 
 local hb = {} -- the heartbeat edge's functions, in one table: main.luau's chunk is near Luau's limit of 200 locals
@@ -3406,21 +3436,29 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 	table.sort(found, function(a, b)
 		return if a.id == b.id then a.path < b.path else a.id < b.id
 	end)
+	-- c0249: the stack's order (blocked items first, then a set rank before an unset one, then the ticket number); a
+	-- raft that has no rank of its own is placed by its members' best. Offline: lost work (a network read) is `./zn lost`.
+	local rankLib = require("./rank")
+	local all: { rankLib.Fact } = {}
+	local lines: { [rankLib.Fact]: string } = {}
+	local shownFacts: { rankLib.Fact } = {}
 	for _, kind in { "raft", "issue" } do
 		for _, f in found do
 			local doc = `{f.path}/{f.id}.md`
 			if f.kind == kind and idsLib.spaceOf(f.id) == kind and fs.isFile(doc) then
-				-- review 003 F3: a retired raft is shown as retired, never as a live backlog raft no command takes
-				local state = if string.find(f.path .. "/", "/rafts/retired/", 1, true)
-					then "retired"
-					else stateOfPath(f.path .. "/")
-				if not pos[1] or pos[1] == state then
-					local fm = store.readFront(doc)
-					local ftype = if kind == "issue"
-						then store.TYPES[string.sub(f.id, 1, 1)]
-						else (fm.type or "?")
-					print(
-						string.format(
+				local fm = store.readFront(doc)
+				local fact = rankLib.factOf(doc, fm)
+				if fact then
+					table.insert(all, fact)
+					-- review 003 F3: a retired raft is shown as retired, never as a live backlog raft no command takes
+					local state = if string.find(f.path .. "/", "/rafts/retired/", 1, true)
+						then "retired"
+						else stateOfPath(f.path .. "/")
+					if not pos[1] or pos[1] == state then
+						local ftype = if kind == "issue"
+							then store.TYPES[string.sub(f.id, 1, 1)]
+							else (fm.type or "?")
+						lines[fact] = string.format(
 							"%-6s %-8s %-8s %-7s %s",
 							f.id,
 							state,
@@ -3428,9 +3466,21 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 							fm.raft or "",
 							fm.title or fm.slug or ""
 						)
-					)
+						table.insert(shownFacts, fact)
+					end
 				end
 			end
+		end
+	end
+	for _, kind in { "raft", "issue" } do
+		local ofKind: { rankLib.Fact } = {}
+		for _, fact in shownFacts do
+			if fact.kind == kind then
+				table.insert(ofKind, fact)
+			end
+		end
+		for _, fact in rankLib.order(ofKind, { blockedFirst = true, world = all }) do
+			print(lines[fact])
 		end
 	end
 	local broken = 0
@@ -6798,23 +6848,7 @@ end
 function cmd.provenance(positional: { string }, options: { [string]: { string } })
 	-- The live actor of a command that records: --actor, then ZN_ACTOR, then an agent-session hint, then the git name.
 	local function liveActor(opts: { [string]: { string } }?): string
-		local flagList = if opts then opts["--actor"] else nil
-		local ident = sh.run("git", { "var", "GIT_AUTHOR_IDENT" })
-		local name = if ident.ok then string.match(ident.stdout, "^(.-) <") else nil
-		local hint = provenance.hint({
-			CLAUDECODE = process.env.CLAUDECODE,
-			AI_AGENT = process.env.AI_AGENT,
-			CURSOR_AGENT = process.env.CURSOR_AGENT,
-			GROK_SESSION_ID = process.env.GROK_SESSION_ID,
-			ZN_DISPATCH = process.env.ZN_DISPATCH,
-			CLAUDE_EFFORT = process.env.CLAUDE_EFFORT,
-		})
-		local actor, why =
-			provenance.resolve(if flagList then flagList[1] else nil, process.env.ZN_ACTOR, hint, name)
-		if not actor then
-			fail(why or "not an actor")
-		end
-		return actor :: string
+		return rk.actor(opts)
 	end
 
 	-- c0263: `provenance record <id> <event> [--actor A] [--detail k=v]` publishes one row of an item's provenance.md
@@ -6875,6 +6909,192 @@ function cmd.provenance(positional: { string }, options: { [string]: { string } 
 		table.insert(rest, positional[i])
 	end
 	recordRow(rest, options)
+end
+
+-- c0249: `rank <id> top | last | before <id> | after <id> | <n> | unset` sets the rank of a backlog issue or raft on
+-- origin/main (one commit, the changed `rank:` lines and a `ranked` row in each changed item's provenance.md), then brings
+-- it into this checkout: the main checkout fast-forwards (the board app's `rankCommand` runs there), a worktree merges
+-- origin/main. `rank <id> --before <id>` is the app's form, and `--before ""` means last. The plan is rank.plan's.
+function cmd.rank(pos: { string }, opts: { [string]: { string } })
+	local rank = require("./rank")
+	local usage =
+		'usage: rank <id> top | last | before <id> | after <id> | <n> | unset   (or rank <id> --before <id>; --before "" is last)'
+	for k in opts do
+		if k ~= "--before" and k ~= "--actor" then
+			fail(`{usage}\nunknown option {k}`)
+		end
+	end
+	local id, word, anchor = pos[1], pos[2], pos[3]
+	if not id or not (store.isIssueId(id) or store.isRaftId(id)) then
+		fail(usage)
+	end
+	local how: string, arg: (string | number)? = "", nil
+	if opts["--before"] then
+		if word or opts["--before"][2] then
+			fail(usage)
+		end
+		local b = opts["--before"][1]
+		how, arg = if b == "" then "last" else "before", if b == "" then nil else b
+	elseif word == "top" or word == "last" or word == "unset" then
+		if anchor then
+			fail(usage)
+		end
+		how = word
+	elseif word == "before" or word == "after" then
+		if not anchor or pos[4] then
+			fail(usage)
+		end
+		how, arg = word, anchor
+	elseif word and not anchor then
+		local n, why = rank.parse(word)
+		if n == nil then
+			fail(why or usage)
+		end
+		how, arg = "set", n
+	else
+		fail(usage)
+	end
+	if type(arg) == "string" and not (store.isIssueId(arg) or store.isRaftId(arg)) then
+		fail(`{arg} is not an item id\n{usage}`)
+	end
+	if not publishing() then
+		fail("rank needs an origin remote (PICKMAN_PUBLISH=0 disables it)")
+	end
+	local inMain = inMainCheckout()
+	if inMain then
+		mainCheckoutGuards("rank")
+	end
+	local actor = rk.actor(opts)
+	local when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string
+	refuseStale()
+	local changes: { rank.Change } = {}
+	local r = published(publish.commit(".", function(paths, read)
+		local facts: { rank.Fact } = {}
+		local docs: { [string]: { path: string, text: string } } = {}
+		for _, p in paths do
+			local pid, rel = publish.itemPath(p)
+			if pid and rel == `{pid}.md` then
+				local state = rank.where(p)
+				local text = if state == "done" or state == "retired" then "" else read(p) or ""
+				local fact = rank.factOf(p, frontOf(text))
+				if fact then
+					table.insert(facts, fact)
+					docs[pid] = { path = p, text = text }
+				end
+			end
+		end
+		local me: rank.Fact? = nil
+		for _, f in facts do
+			if f.id == id then
+				me = f
+			end
+		end
+		if not me then
+			return `{id} is not on origin/main`
+		elseif me.state ~= "backlog" then
+			return `{id} is {me.state}: a rank orders work that is not started (a backlog issue or raft)`
+		end
+		local planned, why = rank.plan(rank.stack(facts, me.kind), id, how, arg)
+		if not planned then
+			return why or "no plan"
+		end
+		changes = planned
+		local out: { publish.Change } = {}
+		for _, c in planned do
+			local d = docs[c.id]
+			local text = rank.withRank(d.text, c.rank)
+			if not text then
+				return `{c.id}: {d.path} has no front matter`
+			end
+			table.insert(out, { path = d.path, content = text })
+			local rec = string.gsub(d.path, "[^/]+$", "provenance.md")
+			local detail = `rank={c.rank or "unset"}; was={c.was or "unset"}`
+			if c.id ~= id then
+				detail ..= `; moved={id}`
+			end
+			local row, rowWhy = provenance.record(read(rec), c.id, "ranked", actor, detail, when)
+			if not row then
+				return rowWhy or "not a record"
+			end
+			table.insert(out, { path = rec, content = row })
+		end
+		return out
+	end, function()
+		return `tracker: rank {id} {how}{if arg ~= nil then " " .. tostring(arg) else ""}`
+	end))
+	if not r.ok then
+		fail(r.reason or "publish failed")
+	end
+	if #changes > 0 then
+		if inMain then
+			local why = pullMain()
+			if why then
+				fail(`ranked on origin/main, but pulling the main checkout failed: {why}`)
+			end
+		else
+			mergeOrigin()
+		end
+	end
+	if #changes == 0 then
+		print(`{id}: unchanged`)
+	end
+	for _, c in changes do
+		print(`{c.id} rank {c.rank or "unset"} (was {c.was or "unset"})`)
+	end
+end
+
+-- c0249: `next` prints the one item to take next, from origin/main: lost work first (c0265; `./zn lost` is the list), then
+-- the claimable raft with the best rank, and only when no raft is claimable the best-ranked issue whose design a worker
+-- may draft. A blocked item and one that waits on undone work are skipped and keep their rank. Exit 1 when there is none.
+-- The line is `<id> lost|raft|draft <why>`.
+function cmd.next(pos: { string }, _opts: { [string]: { string } })
+	if #pos > 0 then
+		fail("usage: next")
+	end
+	if not hasOrigin() then
+		fail("next reads origin/main: it needs an origin remote")
+	end
+	sh.git({ "fetch", "--quiet", "origin", "main" })
+	local rank = require("./rank")
+	local workLib = require("./work")
+	local workread = require("./workread")
+	local facts, drafts = workread.facts()
+	local claimable: { [string]: boolean } = {}
+	for _, raft in workread.collect(nil).rafts do
+		claimable[raft.id] = workLib.claimable(raft)
+	end
+	local lost: { string } = {}
+	if guarded(true) then
+		stdio.ewrite("next: lost work not read in a protected checkout (no remote is read)\n")
+	else
+		local j = hb.judgeAll(originPaths())
+		if j.beatsError or j.prsError then
+			stdio.ewrite(`next: lost work not read ({j.beatsError or j.prsError}); unknown is never lost\n`)
+		else
+			for _, v in heartbeat.order(j.verdicts) do
+				if v.kind == "lost" then
+					table.insert(lost, v.id)
+				end
+			end
+		end
+	end
+	local scoped = projects.inDir(projects.load(), hereDir())
+	local pick, why = rank.next(facts, {
+		lost = lost,
+		claimable = function(f: rank.Fact): boolean
+			return claimable[f.id] == true
+		end,
+		mayDraft = function(f: rank.Fact): boolean
+			return drafts[f.id] == true
+		end,
+		scope = if scoped then scoped.root else nil,
+	})
+	if not pick then
+		stdio.ewrite(`next: nothing to take: {why}\n`)
+		process.exit(1)
+		return
+	end
+	print(`{pick.id} {pick.kind} {pick.why}`)
 end
 
 function cmd.spend(pos: { string }, opts: { [string]: { string } })

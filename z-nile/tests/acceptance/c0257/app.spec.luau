@@ -70,11 +70,11 @@ return t.spec("c0257 AC1: the plugin's files, manifest and settings", function(i
 		t.expect(m.barWidget.allowMultiple).toBe(false)
 	end)
 
-	it("AC1: the settings carry the repository path, a refresh period and an empty rank command", function()
+	it("AC1: the settings carry the repository path, a refresh period and the rank command", function()
 		local s = serde.decode("json", fs.readFile(`{APP}/settings.json`)) :: any
 		t.expect(type(s.repoPath)).toBe("string")
 		t.expect(type(s.refreshIntervalSec) == "number" and s.refreshIntervalSec >= 30).toBe(true)
-		-- until c0249 builds ./zn rank and wires it (decided with the user, 2026-11-11), a drag keeps the order for the session
-		t.expect(s.rankCommand).toBe("")
+		-- c0249 builds ./zn rank and wires it (decided with the user, 2026-11-11): a drag persists as a rank on origin/main
+		t.expect(s.rankCommand).toBe("./zn rank {id} --before {beforeId}")
 	end)
 end)

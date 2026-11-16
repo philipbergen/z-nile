@@ -65,14 +65,13 @@ test("RULE unknown keys: keys the app does not read change nothing it shows", ()
   assert.equal(shape(extra), shape(plain))
 })
 
-// Today's behaviour: rank (c0249) and heartbeat marks (c0276, c0290) are not read. c0249 and c0290 each change this case
-// when they make the app show them; they name this spec as an override (c0257 Design, Relation to the other boards).
-test("RULE rank and heartbeat keys are ignored today (c0249 and c0290 override this case)", () => {
+// Today's behaviour: heartbeat marks (c0276, c0290) are not read. c0290 changes this case when it makes the app show them
+// (c0249 made the app read the rank and took that key out of this case; the rank order has its own cases in model.test.mjs).
+test("RULE heartbeat keys are ignored today (c0290 overrides this case)", () => {
   const plain = M.normalize(base())
   const raw = base()
   raw.issues[0].heartbeat = "lost"
   raw.issues[0].minutes = 35
-  raw.issues[1].rank = 3
   raw.rafts[0].heartbeat = "parked"
   const extra = M.normalize(raw)
   const ids = m => M.columns(m.issues, {}, {}, true).map(c => c.items.map(i => i.id))

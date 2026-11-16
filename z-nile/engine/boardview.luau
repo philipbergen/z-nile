@@ -1,6 +1,7 @@
 --!strict
 -- The board's pure rules (c0118): an issue's column, raft bands, the done window's age, the UTC week of an instant, a
 -- landed raft's review rounds, and the two charts' weekly series. No reads: board.luau gathers the inputs.
+local rank = require("./rank")
 local stats = require("./stats")
 
 local boardview = {}
@@ -60,10 +61,15 @@ function boardview.column(stage: string, launched: boolean): Column
 	error(`boardview.column: {stage} is not an effective status (new, preparing, prepared, active, done)`, 0)
 end
 
--- Cards of one column grouped into bands: one per raft, in raft id order, then the raftless cards; ids sorted.
-function boardview.bands(cards: { { id: string, raft: string? } }): { Band }
-	local byRaft: { [string]: { string } } = {}
-	local loose: { string } = {}
+-- Cards of one column grouped into bands: one per raft, then the raftless cards as one band, the bands in the stack's
+-- order (c0249: a blocked band first, then a set rank before an unset one, the lower first, then the ticket number;
+-- a raft band is placed by its raft's rank, the raftless band by its best card), the ids in a band in the same order.
+-- A card's `rank` is its own, a raft card's `raftRank` the raft's (own, else its members' best); `blocked` is a stored
+-- status the person must resolve (c0250).
+export type Card = { id: string, raft: string?, rank: number?, raftRank: number?, blocked: boolean? }
+function boardview.bands(cards: { Card }): { Band }
+	local byRaft: { [string]: { Card } } = {}
+	local loose: { Card } = {}
 	local rafts: { string } = {}
 	for _, c in cards do
 		local r = c.raft
@@ -72,20 +78,50 @@ function boardview.bands(cards: { { id: string, raft: string? } }): { Band }
 				byRaft[r] = {}
 				table.insert(rafts, r)
 			end
-			table.insert(byRaft[r], c.id)
+			table.insert(byRaft[r], c)
 		else
-			table.insert(loose, c.id)
+			table.insert(loose, c)
 		end
 	end
-	table.sort(rafts)
-	local out: { Band } = {}
+	local function before(a: Card, b: Card): boolean
+		if (a.blocked == true) ~= (b.blocked == true) then
+			return a.blocked == true
+		end
+		return rank.less(a.rank, a.id, b.rank, b.id)
+	end
+	local function ids(list: { Card }): { string }
+		table.sort(list, before)
+		local out: { string } = {}
+		for _, c in list do
+			table.insert(out, c.id)
+		end
+		return out
+	end
+	type Pending = { band: Band, key: Card }
+	local pending: { Pending } = {}
 	for _, r in rafts do
-		table.sort(byRaft[r])
-		table.insert(out, { raft = r, ids = byRaft[r] })
+		local list = byRaft[r]
+		local blocked = false
+		for _, c in list do
+			blocked = blocked or c.blocked == true
+		end
+		local key: Card = { id = r, raft = r, rank = list[1].raftRank, blocked = blocked }
+		table.insert(pending, { band = { raft = r, ids = ids(list) }, key = key })
 	end
 	if #loose > 0 then
-		table.sort(loose)
-		table.insert(out, { raft = nil, ids = loose })
+		local sorted = table.clone(loose)
+		table.sort(sorted, before)
+		local first = sorted[1]
+		-- the raftless band is keyed by its best card, after the rafts when they tie (a loose id is never an R id)
+		local key: Card = { id = "S", rank = first.rank, blocked = first.blocked }
+		table.insert(pending, { band = { raft = nil, ids = ids(loose) }, key = key })
+	end
+	table.sort(pending, function(a: Pending, b: Pending): boolean
+		return before(a.key, b.key)
+	end)
+	local out: { Band } = {}
+	for _, p in pending do
+		table.insert(out, p.band)
 	end
 	return out
 end

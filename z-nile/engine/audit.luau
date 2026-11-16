@@ -6,6 +6,7 @@ local ids = require("./ids")
 local process = require("@lune/process")
 local projects = require("./projects")
 local provenance = require("./provenance")
+local rank = require("./rank")
 
 export type Level = "error" | "warning"
 export type Problem = { level: Level, code: string, path: string, message: string }
@@ -379,6 +380,13 @@ function audit.run(root: string): { Problem }
 		local backlog = not retired
 			and not string.find(f.path, "/active/", 1, true)
 			and not string.find(f.path, "/done/", 1, true)
+		if fs.isFile(doc) then
+			-- c0249: a malformed rank (not a whole number, written twice, or in a shape the readers skip) is an error
+			local why = rank.problem(fs.readFile(doc))
+			if why then
+				add("error", "rank", f.path, `{f.id}: {why}`)
+			end
+		end
 		if retired and f.kind ~= "raft" then
 			add("error", "retired-raft", f.path, `{f.id} is in retired/: only a raft is retired`)
 		elseif retired and fs.isFile(doc) and (front(fs.readFile(doc)).retired or "") == "" then

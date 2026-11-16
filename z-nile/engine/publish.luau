@@ -143,7 +143,23 @@ local function withoutStatus(text: string): string?
 	if lines > 1 then
 		return nil
 	end
+	-- c0249: `./zn rank` publishes the `rank:` line (one at most) the same way; whether it may, for this item, is
+	-- decided where the existing document is compared (publish.commit)
+	local ranks = 0
+	kept = string.gsub(kept, "\nrank:[^\n]*", function()
+		ranks += 1
+		return ""
+	end)
+	if ranks > 1 then
+		return nil
+	end
 	return head .. kept .. rest
+end
+
+-- The `rank:` line of a document's front block ("" when it has none), for comparing two texts.
+local function rankLine(text: string): string
+	local block = string.match(text, "^%-%-%-\n(.-)\n%-%-%-") or ""
+	return string.match("\n" .. block, "\nrank:[^\n]*") or ""
 end
 
 local function git(
@@ -505,7 +521,20 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 				local before, after = withoutStatus(existing), withoutStatus(c.content)
 				if not before or not after or before ~= after then
 					return fail(
-						`{c.path}: a published change to an existing document may only edit its status: line`
+						`{c.path}: a published change to an existing document may only edit its status: line (or its rank: line, c0249)`
+					)
+				end
+				-- c0249: a rank orders work that is not started, so a published rank change is for a backlog item only
+				if
+					rankLine(existing) ~= rankLine(c.content)
+					and (
+						string.find(c.path, "/active/", 1, true)
+						or string.find(c.path, "/done/", 1, true)
+						or string.find(c.path, "/retired/", 1, true)
+					)
+				then
+					return fail(
+						`{c.path}: a rank is published for a backlog item only, not an active or done one`
 					)
 				end
 			end

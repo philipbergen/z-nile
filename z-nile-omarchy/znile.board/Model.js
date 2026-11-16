@@ -30,6 +30,11 @@ function idNumber(id) {
   return isFinite(n) ? n : 1e9
 }
 
+// The rank the engine gives (c0249): a whole number from 1 to 999999, or null when unset. Anything else is unset.
+function cleanRank(value) {
+  return typeof value === "number" && isFinite(value) && Math.floor(value) === value && value >= 1 && value <= 999999 ? value : null
+}
+
 function stageIndex(stage) {
   var i = STAGES.indexOf(String(stage))
   return i < 0 ? 0 : i
@@ -43,6 +48,7 @@ function cleanItem(raw, kind, project) {
     id: String(raw.id),
     kind: kind,
     num: idNumber(raw.id),
+    rank: cleanRank(raw.effectiveRank !== undefined ? raw.effectiveRank : raw.rank),
     project: project || "",
     type: TYPES.indexOf(String(raw.type)) >= 0 ? String(raw.type) : "",
     label: label === "mix" || TYPES.indexOf(label) >= 0 ? label : "",
@@ -165,9 +171,10 @@ function normalize(raw) {
   }
 }
 
-// Priority until znile has its own: the lower ticket number first. `order` is
-// the session's dragged order (a whole column's ids); ids in it keep that
-// order, and ids it doesn't know follow them by number.
+// Priority is znile's rank (c0249): a set rank before an unset one, the lower
+// first, then the lower ticket number. `order` is the session's dragged order
+// (a whole column's ids), which shows a move at once; ids in it keep that
+// order, and ids it doesn't know follow them by rank and number.
 function sortByPriority(items, order) {
   var rank = {}
   if (Array.isArray(order)) for (var i = 0; i < order.length; i++) rank[order[i]] = i
@@ -176,6 +183,11 @@ function sortByPriority(items, order) {
     if (ra !== undefined && rb !== undefined) return ra - rb
     if (ra !== undefined) return -1
     if (rb !== undefined) return 1
+    if (a.rank !== b.rank) {
+      if (a.rank === null || a.rank === undefined) return 1
+      if (b.rank === null || b.rank === undefined) return -1
+      return a.rank - b.rank
+    }
     return a.num - b.num || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
   })
 }
