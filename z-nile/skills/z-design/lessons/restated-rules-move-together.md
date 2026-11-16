@@ -65,3 +65,5 @@ c0273 design review 001 F2: the sweep for `*.project.json` covered the README an
 **Note (R0072 final review 001 F4):** a ruling that moves a check into the slow tier changes where the rule is enforced. Search for every sentence that says the gate runs it. Ask: after the ruling, which sentences still say the full gate runs the sweep?
 
 **Note (R0072 final review 002 F1):** a sentence in the trace that says a finding is open goes stale once the finding is fixed, and the fix's tests and recorded deviation must be cited in the row. Ask: after the revision, does any trace cell still describe the finding as open, and does the row cite the cases that pin the fix?
+
+**Note** (c0254 design refute 001): a done item's `check.sh` can still pin a document's wording (c0264's checks on the README). Before rewording a restated rule, search the `check.sh` files of done items for the sentence, and run `./zn check <id>` for each one found on the prototype; the gate does not run them.

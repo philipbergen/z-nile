@@ -3,6 +3,7 @@ title: A migration search finds the names a spec builds from parts
 when: design
 tags: [migration, guards, specs]
 check: Does the search for the names, paths or variables a new rule drops or moves also match the ones a spec assembles from parts (`"GIT_" .. "DIR"`, a path built in two pieces), because specs split guarded names to pass the guard scan, and are the specs it finds each run?
+from: c0123 design review 007 F2 (c0123 withdrawn 2026-11-16)
 ---
 A sweep that greps for the literal name misses the specs that hide it on purpose: the repository's guard scan bans some literal names in specs, so specs assemble them by concatenation. A rule that drops or renames such a name then breaks those specs and no search finds them.
 

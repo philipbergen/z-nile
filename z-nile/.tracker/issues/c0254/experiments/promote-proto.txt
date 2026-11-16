@@ -1,0 +1,9 @@
+=== c0254: dry-run promotion of acceptance specs (type check + meta)
+copied 7 acceptance specs
+[WARN] No definitions file provided by client
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/z-nile/.luaurc
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+2 passed, 0 failed, 1 spec files
+promote-check OK
