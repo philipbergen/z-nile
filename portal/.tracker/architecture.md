@@ -8,4 +8,5 @@ One `Consumer -> Provider` per line.
 
 ```deps
 # no features yet
+Play -> Card
 ```

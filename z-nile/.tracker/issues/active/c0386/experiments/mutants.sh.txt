@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# c0386 mutation check, run in the proto worktree's z-nile home. Each mutant is applied, its spec run, and reverted.
+set -u
+cd /Users/philipbergen/code/pickman/.worktree/proto-promoted-c0371-spec-trips-fence-scan/z-nile
+SP=tests/acceptance/c0371/check-paths-homes.spec.luau
+CP=tests/acceptance/c0120/checkpaths.luau
+ME=tests/acceptance/c0386/env-fixture.spec.luau
+CASE="grep's pattern is text as main reads it"
+run() { lune run tests/run -- "$@" 2>&1 | grep -E "FAIL|passed|expected|error" | head -6; }
+cp $SP "$TMPDIR/sp.bak"; cp $CP "$TMPDIR/cp.bak"
+echo "== M1: grep after a non-command word (env's option) not read: drop 'or unquoted'"
+perl -pi -e 's/if \(command or unquoted\) and \(w == "grep"/if command and (w == "grep"/' $CP
+run $SP
+echo "== M1b: M1, with the grep case's list holding only the rebuilt env entry"
+python3 - "$SP" <<'PY'
+import sys,re
+p=sys.argv[1]; s=open(p).read()
+a=s.index("'! git grep -qF")
+b=s.index("\t\t\t\t}\n\t\t\tdo",a)
+keep='"env " .. \'-i grep -qF "src/nothing" "$F"\',\n'
+s=s[:a]+keep+s[b:]
+open(p,'w').write(s)
+PY
+run $SP
+cp "$TMPDIR/cp.bak" $CP
+echo "== M1b control: only the env entry, scanner intact (expect pass)"
+run $SP
+cp "$TMPDIR/sp.bak" $SP
+echo "== M2: the literal put back (expect AC1 case 1 red)"
+perl -pi -e 's/"env " \.\. \x27-i grep/\x27env -i grep/' $SP
+grep -n "src/nothing\" \"\$F\"'," $SP | grep -i "env" | head -2
+run $ME
+cp "$TMPDIR/sp.bak" $SP
+echo "== M3: env's option dropped from the entry (expect AC1 case 2 red)"
+perl -pi -e 's/"env " \.\. \x27-i grep/"env " .. \x27grep/' $SP
+run $ME
+cp "$TMPDIR/sp.bak" $SP
+echo "== M3b: the entry removed (expect AC1 case 2 red)"
+perl -ni -e 'print unless /"env " \.\. \x27-i grep/' $SP
+run $ME
+cp "$TMPDIR/sp.bak" $SP
+echo "== M3c: the case's assertion changed to expect findings (expect AC1 case 2 red)"
+perl -pi -e 's/t\.expect\(findings\("z-nile", \{\}, text \.\. "\\n"\)\)\.toEqual\(\{\}\)/t.expect(#findings("z-nile", {}, text .. "\\n") >= 0).toBe(true)/' $SP
+run $ME
+cp "$TMPDIR/sp.bak" $SP
+echo "== restored"; git diff --stat

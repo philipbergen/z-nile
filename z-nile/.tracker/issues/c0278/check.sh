@@ -70,4 +70,7 @@ check "AC12: the promoted specs next to this chore still pass" nostep lune run t
 
 check "AC13: ./zn land refuses a capture that edits a closed issue's document or adds a closed issue to a depends_on, and zz-rules says so" nostep lune run tests/run -- "$A/close-cli.spec.luau" "$A/docs.spec.luau"
 
+# c0224 (arcade's root) is closed on this branch the same way (Design section 8, the Scope decision of 2026-11-15).
+check "AC14: c0224 is closed on this branch with its wont_do: reason by the carried close, audit reports nothing for it, and no live item on origin/main depends on it" bash -c "$(declare -f closed_here); ZN_ROOT='$ZN_ROOT'; closed_here c0224"
+
 finish
