@@ -51,7 +51,7 @@ local function withEnv(vars: { [string]: string }, unset: { string }, body: () -
 	for k, v in vars do
 		process.env[k] = v
 	end
-	local ok, err = pcall(body)
+	local ok, err = (pcall :: any)(body)
 	for _, k in names do
 		process.env[k] = saved[k]
 	end

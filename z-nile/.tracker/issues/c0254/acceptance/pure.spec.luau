@@ -241,7 +241,7 @@ return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 
 	it("AC1: a run that lost nothing prints the summary it printed before", function()
 		local text = supervise.summary({ moved = { "R0010" }, blocked = {}, stopped = "the stack is empty" })
-		t.expect(string.find(text, "claimed by another", 1, true)).toBe(nil)
+		t.expect((string.find(text, "claimed by another", 1, true))).toBe(nil)
 	end)
 
 	it("AC3: every commit on a layer or prep branch is pushed, a first push sets the upstream", function()
@@ -418,7 +418,7 @@ return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 				) ~= nil
 			).toBe(true)
 			local without = work.status({ raft(nil) })[1] :: string
-			t.expect(string.find(without, "worker", 1, true)).toBe(nil)
+			t.expect((string.find(without, "worker", 1, true))).toBe(nil)
 		end
 	)
 end)
