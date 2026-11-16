@@ -3007,6 +3007,8 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 				print(`stop: {moved}`)
 				return dispatch.EXIT.tripwire
 			end
+			-- a worker's land request for this raft (it asked for exactly this landing) is spent
+			pcall(fs.removeFile, `{ctx.mainRoot()}/{landcheck.LAND_REQUESTS}/{id}`)
 			st.landTries, st.landSig, st.gateOk, st.gate = 0, nil, nil, nil
 			save(st)
 			zn(ctx.mainRoot(), { "sync" }, true)

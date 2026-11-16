@@ -43,7 +43,8 @@ return t.spec("c0252 the texts say the dispatcher lands a green stack", function
 					"which recommends `retry`, or `approve` when a person must rule",
 					"`./zn block` writes `block-request` and a copy of the note in the state folder and stops",
 					"lands the green layers below the Layer with `./zn done --through` (waiting at the gate while their CI runs)",
-					"`./zn done` is refused in a session that holds the agent's credential (`ZN_DISPATCH` or `ZN_HEADLESS`)",
+					"`./zn done` in a session that holds the agent's credential (`ZN_DISPATCH` or `ZN_HEADLESS`) runs every check, writes a land request",
+					"the dispatcher's landing of that raft, or a person's `./zn lander`, lands it with their own credential",
 					"A raft with no layer branches keeps its one pull request and a human's merge",
 					"must keep an admin bypass for `./zn done`'s direct push of the bind",
 				}
@@ -66,7 +67,7 @@ return t.spec("c0252 the texts say the dispatcher lands a green stack", function
 			)
 			says(
 				exec,
-				"`./zn done` is refused in a session that holds the agent's credential (`ZN_DISPATCH` or `ZN_HEADLESS`)",
+				"`./zn done` in a session that holds the agent's credential (`ZN_DISPATCH` or `ZN_HEADLESS`) runs every check and leaves a land request instead of pushing",
 				"zz-execute"
 			)
 			says(
@@ -76,7 +77,11 @@ return t.spec("c0252 the texts say the dispatcher lands a green stack", function
 			)
 			lacks(exec, "the merge of the run's PR is a human's gate", "zz-execute")
 			local run = read("z-nile/skills/z-run/SKILL.md")
-			says(run, "Never run `./zn done`: it is refused here", "z-run")
+			says(
+				run,
+				"`./zn done` here runs every check and, instead of pushing, writes a land request",
+				"z-run"
+			)
 			says(run, "`./zn block` here only leaves a request: stop after it", "z-run")
 		end
 	)
@@ -96,7 +101,7 @@ return t.spec("c0252 the texts say the dispatcher lands a green stack", function
 	)
 
 	it(
-		"AC13: the root .models.toml arms the run gate and names merge_retries, and the step prompt tells a worker done is refused and a rerun why it runs",
+		"AC13: the root .models.toml arms the run gate and names merge_retries, and the step prompt tells a worker what done does and a rerun why it runs",
 		function()
 			local toml = read(".models.toml")
 			says(toml, 'auto_merge = ["prep", "raft", "run"]', ".models.toml")
@@ -128,7 +133,7 @@ return t.spec("c0252 the texts say the dispatcher lands a green stack", function
 			local first = prompt(nil)
 			says(
 				first,
-				"`./zn done` is refused here too: when your work is done, stop, and the dispatcher lands the stack.",
+				"`./zn done` here runs every check and leaves a land request instead of pushing: when your work is done, stop, and a lander lands the stack.",
 				"the z-run prompt"
 			)
 			says(first, "Never merge a pull request and never push to main yourself", "the z-run prompt")

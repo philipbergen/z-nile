@@ -445,6 +445,30 @@ function landcheck.findBind(chain: { { string } }, topTip: string): (number?, st
 	return found, nil
 end
 
+-- The land request a worker that holds the agent's credential leaves instead of pushing `main` (F4, Q2 and Q5): `done`
+-- runs every check, then writes `<main checkout>/.cache/land-requests/<R-id>` and stops. A lander (the dispatcher's chain,
+-- or a person's `./zn lander`) lands it through the base's engine with its own credential. One `key: value` line each.
+landcheck.LAND_REQUESTS = ".cache/land-requests"
+export type LandRequest = { item: string, tip: string, through: string?, worktree: string }
+function landcheck.landRequestText(item: string, tip: string, through: string?, worktree: string): string
+	return `item: {item}\ntip: {tip}\nthrough: {through or ""}\nworktree: {worktree}\n`
+end
+function landcheck.parseLandRequest(text: string): LandRequest?
+	local item = string.match(text, "^item: (R%d%d%d%d)\n")
+	local tip = string.match(text, "\ntip: (%x+)\n")
+	local through = string.match(text, "\nthrough: ([^\n]*)\n")
+	local worktree = string.match(text, "\nworktree: ([^\n]+)\n")
+	if not item or not tip or #tip < 7 or not worktree or through == nil then
+		return nil
+	end
+	return { item = item, tip = tip, through = if through ~= "" then through else nil, worktree = worktree }
+end
+-- Whether the request is still about the layer tip as it is now: a layer that moved (a push, a restack) makes the
+-- worker's checks, which were of the old tip, void.
+function landcheck.landRequestFresh(req: LandRequest, currentTip: string): boolean
+	return currentTip ~= "" and currentTip == req.tip
+end
+
 -- The block request a dispatched `./zn block` leaves for the dispatcher (G1): one `key: value` line each. `tip` is the
 -- Layer's published tip, from which the dispatcher restores the note and the open findings when it files the block.
 function landcheck.requestText(id: string, reason: string, layer: string?, tip: string?): string

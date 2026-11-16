@@ -237,19 +237,53 @@ return t.spec("c0252 land-check, done and a dispatched block", function(it)
 	end)
 
 	it(
-		"AC8: done is refused in a session that holds the agent's credential, ZN_DISPATCH or ZN_HEADLESS, and lands nothing",
+		"AC8: in a session that holds the agent's credential, ZN_DISPATCH or ZN_HEADLESS, done runs every check, writes a land request and pushes nothing",
 		function()
-			pr("R0010/2/c0020", "MERGEABLE", GREEN)
 			local before = git(f.main, { "ls-remote", "origin", "refs/heads/main" })
+			local request = `{f.main}/.cache/land-requests/R0010`
+			local tip = git(f.main, { "rev-parse", "origin/R0010/2/c0020" })
 			for _, marker in { "ZN_DISPATCH", "ZN_HEADLESS" } do
+				pr("R0010/2/c0020", "MERGEABLE", GREEN)
 				local r = zn({ "done", "R0010" }, { [marker] = "1" })
-				t.expect(r.ok).toBe(false)
-				t.expect(has(r.stderr, "done is refused in a session that holds the agent's credential"))
-					.toBe(true)
-				t.expect(has(r.stderr, "./zn land-check")).toBe(true)
-				t.expect(has(r.stderr, "the dispatcher lands")).toBe(true)
+				t.expect(r.ok).toBe(true)
+				t.expect(has(r.stdout, "R0010 passes every check and waits for a lander")).toBe(true)
+				t.expect(has(r.stdout, "Nothing was pushed")).toBe(true)
+				t.expect(has(r.stdout, "./zn lander R0010")).toBe(true)
+				t.expect(fs.readFile(request)).toBe(`item: R0010\ntip: {tip}\nthrough: \nworktree: {wt}\n`)
+				t.expect(git(f.main, { "ls-remote", "origin", "refs/heads/main" })).toBe(before)
+				fs.removeFile(request)
+				-- a check that fails is refused in that session too, and leaves no request
+				pr("R0010/2/c0020", "MERGEABLE", PENDING)
+				local pending = zn({ "done", "R0010" }, { [marker] = "1" })
+				t.expect(pending.ok).toBe(false)
+				t.expect(has(pending.stderr, "ci-pending (wait)")).toBe(true)
+				t.expect(fs.isFile(request)).toBe(false)
 			end
 			t.expect(git(f.main, { "ls-remote", "origin", "refs/heads/main" })).toBe(before)
+		end
+	)
+
+	it(
+		"AC21: the lander is refused in a session that holds the agent's credential, and with no request it lands nothing",
+		function()
+			for _, marker in { "ZN_DISPATCH", "ZN_HEADLESS" } do
+				local r = trackerfix.tr(
+					f,
+					f.main,
+					{ "lander" },
+					(function()
+						local e = table.clone(env)
+						e[marker] = "1"
+						return e
+					end)()
+				)
+				t.expect(r.ok).toBe(false)
+				t.expect(has(r.stderr, "lander is refused in a session that holds the agent's credential"))
+					.toBe(true)
+			end
+			local none = trackerfix.tr(f, f.main, { "lander" }, env)
+			t.expect(none.ok).toBe(true)
+			t.expect(has(none.stdout, "no land request waits")).toBe(true)
 		end
 	)
 

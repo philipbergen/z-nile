@@ -198,7 +198,7 @@ function dispatch.prompt(p: PromptInput): string
 		"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
 		`Work only in \`{p.worktree}\`: it is your working directory. Never edit the main checkout.`,
 		askText(p),
-		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse. `./zn done` is refused here too: when your work is done, stop, and the dispatcher lands the stack.",
+		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse. `./zn done` here runs every check and leaves a land request instead of pushing: when your work is done, stop, and a lander lands the stack.",
 		"Do not pass --time or --tokens. The dispatcher records this session's wall, CPU, tokens and model.",
 	}
 	if p.rerun and #p.rerun > 0 then

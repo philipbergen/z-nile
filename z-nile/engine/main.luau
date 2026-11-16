@@ -127,6 +127,9 @@ usage: ./zn <command> ...
   dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
   land-check <R-id> [--through <issue> | --below <issue>] [--json]
                                                 the checks before a landing, read-only (the dispatcher's and done's): one line per problem, exit 1 when any (c0252)
+  land-gate <R-id> [--through <issue>]
+                                                the dispatcher's gate for a stack that changes a game: a clean clone, the bind's tree, `check.sh --full`, then the cicd run (exit 0 passes, 4 waits, 1 red)
+  lander [<R-id>]                               land the land requests that workers holding the agent's credential left, with your own credential (refused in such a session)
   done <R-id> [--through <issue>]               land the stack, or its layers up to <issue>: one --no-ff merge onto main, one binding commit (refuses an unfinished or incomplete layer)
   watch-bootstrap                               write every spec's watch file from the commit that added it (once)
   watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
@@ -5622,6 +5625,135 @@ cmd["land-check"] = function(pos: { string }, opts: { [string]: { string } })
 	end
 end
 
+-- c0252: `./zn lander [<R-id>]` lands the land requests that workers holding the agent's credential left
+-- (`.cache/land-requests/<R-id>`), with this session's own credential and the base's engine against the worker's worktree
+-- (`./zn -C`), exactly as the dispatcher's chain lands: the request's tip must still be the layer's published tip, every
+-- check passes, a game is gated by `land-gate`, then `done`. Refused in a session that holds the agent's credential.
+cmd.lander = function(pos: { string }, opts: { [string]: { string } })
+	local landcheck = require("./landcheck")
+	local serde = require("@lune/serde")
+	for k in opts do
+		fail(`usage: lander [<R-id>] (unknown option {k})`)
+	end
+	if (process.env.ZN_DISPATCH or "") ~= "" or (process.env.ZN_HEADLESS or "") ~= "" then
+		fail(
+			"lander is refused in a session that holds the agent's credential (ZN_DISPATCH or ZN_HEADLESS is set)"
+		)
+	end
+	local root = mainRoot()
+	local dir = `{root}/{landcheck.LAND_REQUESTS}`
+	local names: { string } = {}
+	if pos[1] then
+		table.insert(names, pos[1])
+	elseif fs.isDir(dir) then
+		names = fs.readDir(dir)
+		table.sort(names)
+	end
+	if #names == 0 then
+		print("no land request waits")
+		return
+	end
+	local zn = `{root}/zn`
+	local function run(
+		wt: string,
+		args: { string }
+	): { ok: boolean, code: number, stdout: string, stderr: string }
+		local argv: { string } = { "-C", wt }
+		for _, a in args do
+			table.insert(argv, a)
+		end
+		return process.exec(zn, argv, { cwd = root })
+	end
+	local failed = false
+	for _, name in names do
+		local path = `{dir}/{name}`
+		local req = if fs.isFile(path) then landcheck.parseLandRequest(fs.readFile(path)) else nil
+		if not req or req.item ~= name then
+			stdio.ewrite(`lander: {path} is not a land request: left as it is\n`)
+			failed = true
+			continue
+		end
+		if not fs.isDir(req.worktree) then
+			stdio.ewrite(`lander: {req.item}: the worktree {req.worktree} is gone: the request is void\n`)
+			pcall(fs.removeFile, path)
+			failed = true
+			continue
+		end
+		local args = { "land-check", req.item }
+		if req.through then
+			table.insert(args, "--through")
+			table.insert(args, req.through)
+		end
+		table.insert(args, "--json")
+		local checked = run(req.worktree, args)
+		local okj, j = pcall(function()
+			return serde.decode("json", checked.stdout)
+		end)
+		local current = if okj
+				and type(j) == "table"
+				and type((j :: any).tip) == "string"
+			then (j :: any).tip
+			else ""
+		if not landcheck.landRequestFresh(req, current) then
+			stdio.ewrite(
+				`lander: {req.item}: its top layer moved since the request ({req.tip} to {if current
+						== ""
+					then "unreadable"
+					else current}): the worker's checks were of the old tip; the request is void, and the worker asks again with ./zn done\n`
+			)
+			pcall(fs.removeFile, path)
+			failed = true
+			continue
+		end
+		local lines: { string } = {}
+		for _, p in (j :: any).problems do
+			if p.code ~= "self-gating" and p.code ~= "cicd-missing" then
+				table.insert(lines, `{p.code} ({p.kind}): {p.text}`)
+			end
+		end
+		if #lines > 0 then
+			stdio.ewrite(`lander: {req.item} is not ready to land:\n{table.concat(lines, "\n")}\n`)
+			failed = true
+			continue
+		end
+		local gate = run(
+			req.worktree,
+			if req.through
+				then { "land-gate", req.item, "--through", req.through }
+				else { "land-gate", req.item }
+		)
+		if not gate.ok then
+			stdio.ewrite(
+				`lander: {req.item}: the clean-clone gate {if gate.code == 4
+					then "could not run"
+					else "is red"}: {gate.stdout}{gate.stderr}\n`
+			)
+			failed = true
+			continue
+		end
+		local switched = sh.run("git", { "-C", req.worktree, "switch", "--quiet", "--detach", req.tip })
+		if not switched.ok then
+			stdio.ewrite(`lander: {req.item}: could not check out {req.tip}: {sh.trim(switched.stderr)}\n`)
+			failed = true
+			continue
+		end
+		local landed = run(
+			req.worktree,
+			if req.through then { "done", req.item, "--through", req.through } else { "done", req.item }
+		)
+		print(landed.stdout)
+		if not landed.ok then
+			stdio.ewrite(landed.stderr)
+			failed = true
+			continue
+		end
+		pcall(fs.removeFile, path)
+		print(`lander: {req.item} landed`)
+	end
+	if failed then
+		process.exit(1)
+	end
+end
 -- c0252: the gate the dispatcher runs before it lands a stack, read from zz-rules Merging 2 and 3: a stack that changes
 -- a game is gated in a clean clone outside this checkout, on the tree the bind would make (origin/main with the top
 -- layer merged): `z-nile/check.sh --full` there (with PICKMAN_FENCE_REAL_GIT as Merging 2 says), then
@@ -5733,14 +5865,10 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 	if through == "" then
 		fail("usage: done <R-id> [--through <issue>] (--through needs an issue id)")
 	end
-	-- c0252: a session that holds the agent's credential never pushes `main`: ZN_DISPATCH is a dispatched step and
-	-- ZN_HEADLESS a headless worker (the markers the dispatcher and c0253's worker set; c0117's agent credential is
-	-- only in those environments). It reads the checks with `./zn land-check` and stops; the dispatcher lands.
-	if (process.env.ZN_DISPATCH or "") ~= "" or (process.env.ZN_HEADLESS or "") ~= "" then
-		fail(
-			"done is refused in a session that holds the agent's credential (ZN_DISPATCH or ZN_HEADLESS is set): read the checks with ./zn land-check <R-id> and stop; the dispatcher lands a green stack (./zn dispatch <R-id>)"
-		)
-	end
+	-- c0252: a session that holds the agent's credential (ZN_DISPATCH is a dispatched step, ZN_HEADLESS a headless worker:
+	-- the markers the dispatcher and c0253's worker set; c0117's agent credential is only in those environments) never
+	-- pushes `main`. It runs every check below, then leaves a land request and stops (outcome 8).
+	local agentSession = (process.env.ZN_DISPATCH or "") ~= "" or (process.env.ZN_HEADLESS or "") ~= ""
 	local raft = store.get(pos[1] or fail("usage: done <R-id> [--through <issue>]"))
 	if raft.kind ~= "raft" or raft.state ~= "active" then
 		fail(`{raft.id} must be an active raft`)
@@ -5936,6 +6064,19 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 				fail(`{raft.id} is not ready to land:\n{table.concat(landcheck.lines(refusals), "\n")}`)
 			end
 		end
+	end
+	if agentSession then
+		local landcheck = require("./landcheck")
+		local dir = `{mainRoot()}/{landcheck.LAND_REQUESTS}`
+		fs.writeDir(dir)
+		fs.writeFile(
+			`{dir}/{raft.id}`,
+			landcheck.landRequestText(raft.id, land, through, sh.git({ "rev-parse", "--show-toplevel" }))
+		)
+		print(
+			`{raft.id} passes every check and waits for a lander: its land request is {dir}/{raft.id} (tip {land}). Nothing was pushed: this session holds the agent's credential. A dispatcher lands it (./zn dispatch {raft.id}) or a person runs ./zn lander {raft.id}. Stop here.`
+		)
+		return
 	end
 	local layerBranch = sh.git({ "branch", "--show-current" })
 	local baseRef = if layergit.shaOf("origin/main")

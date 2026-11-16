@@ -467,4 +467,34 @@ return t.spec("c0252 landcheck: the checks before a landing", function(it)
 			t.expect(nostate.mergeable).toBe("UNKNOWN")
 		end
 	)
+
+	it(
+		"AC20: a land request round-trips with the raft, the tip, --through and the worktree, a malformed one is refused, and only the same tip is fresh",
+		function()
+			local text: string = landcheck.landRequestText("R0010", TIP, "c0010", "/w/R0010")
+			t.expect(text).toBe(`item: R0010\ntip: {TIP}\nthrough: c0010\nworktree: /w/R0010\n`)
+			local r = landcheck.parseLandRequest(text)
+			t.expect(r.item).toBe("R0010")
+			t.expect(r.tip).toBe(TIP)
+			t.expect(r.through).toBe("c0010")
+			t.expect(r.worktree).toBe("/w/R0010")
+			t.expect(landcheck.parseLandRequest(landcheck.landRequestText("R0010", TIP, nil, "/w")).through)
+				.toBe(nil)
+			for _, bad in
+				{
+					"garbage",
+					"item: c0010\ntip: " .. TIP .. "\nthrough: \nworktree: /w\n",
+					"item: R0010\ntip: zz\nthrough: \nworktree: /w\n",
+					"item: R0010\ntip: abc\nthrough: \nworktree: /w\n",
+					"item: R0010\ntip: " .. TIP .. "\nworktree: /w\n",
+					"item: R0010\ntip: " .. TIP .. "\nthrough: \n",
+				}
+			do
+				t.expect(landcheck.parseLandRequest(bad)).toBe(nil)
+			end
+			t.expect(landcheck.landRequestFresh(r, TIP)).toBe(true)
+			t.expect(landcheck.landRequestFresh(r, "b" .. string.sub(TIP, 2))).toBe(false)
+			t.expect(landcheck.landRequestFresh(r, "")).toBe(false)
+		end
+	)
 end)

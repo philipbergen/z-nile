@@ -57,19 +57,22 @@ local function zn(args: { string }, extra: { [string]: string }?): fixture.Resul
 	return fakecli.zn(h, args, extra)
 end
 -- ./zn in a raft's worktree (start and finish run there), with the fakes first on PATH
-local function znAt(dir: string, args: { string }): fixture.Result
+local function znAt(dir: string, args: { string }, extra: { [string]: string }?): fixture.Result
 	local argv = { "scripts/tracker.sh" }
 	for _, a in args do
 		table.insert(argv, a)
 	end
-	return fixture.exec(dir, "bash", argv, {
-		env = {
-			FAKE_DIR = h.fakes,
-			PATH = `{h.bin}:{process.env.PATH}`,
-			ZN_AGENT_TOKEN_FILE = h.token,
-			GH_TOKEN = "the-users-token",
-		},
-	})
+	local env: { [string]: string } = {
+		FAKE_DIR = h.fakes,
+		PATH = `{h.bin}:{process.env.PATH}`,
+		ZN_AGENT_TOKEN_FILE = h.token,
+		GH_TOKEN = "the-users-token",
+	}
+	local more: { [string]: string } = extra or {}
+	for k, v in more do
+		env[k] = v
+	end
+	return fixture.exec(dir, "bash", argv, { env = env })
 end
 local function must(r: fixture.Result, what: string): string
 	if not r.ok then
@@ -191,6 +194,9 @@ return t.spec("c0252 the chain lands a finished raft", function(it)
 				R0120 = { "c0130" },
 				R0130 = { "c0140", "c0150" },
 				R0140 = { "c0160" },
+				R0150 = { "c0170" },
+				R0160 = { "c0180" },
+				R0170 = { "c0190" },
 				R0099 = { "c0099" },
 			}
 			for rid, ids in rafts do
@@ -544,6 +550,79 @@ return t.spec("c0252 the chain lands a finished raft", function(it)
 			t.expect(has(r.stdout, "self-gating")).toBe(true)
 			t.expect(has(r.stdout, "z-nile/check.sh")).toBe(true)
 			t.expect(mainHead()).toBe(before)
+		end
+	)
+
+	it(
+		"AC20: a worker's land request waits (nothing lands, nothing is pushed) until a lander lands it with its own environment, and the request is spent",
+		function()
+			layer("R0150", "c0170", "rho", true)
+			seal.trace(worktrees.R0150, "R0150")
+			pr("R0150/1/c0170", GREEN)
+			local before = mainHead()
+			local request = `{h.f.main}/.cache/land-requests/R0150`
+			local asked = znAt(worktrees.R0150, { "done", "R0150" }, { ZN_HEADLESS = "1" })
+			t.expect(asked.ok).toBe(true)
+			t.expect(has(asked.stdout, "waits for a lander")).toBe(true)
+			t.expect(fs.isFile(request)).toBe(true)
+			-- with no lander, nothing lands
+			t.expect(mainHead()).toBe(before)
+			t.expect(landed("R0150")).toBe(false)
+			local runs = count(fakecli.log(h), "env GH_TOKEN=the-users-token ZN_DISPATCH= ZN_HEADLESS=")
+			local r = zn({ "lander", "R0150" })
+			t.expect(r.ok).toBe(true)
+			t.expect(has(r.stdout, "lander: R0150 landed")).toBe(true)
+			t.expect(landed("R0150")).toBe(true)
+			t.expect(fs.isFile(request)).toBe(false)
+			-- the landing was made with the lander's environment: the user's credential and neither agent marker
+			t.expect(count(fakecli.log(h), "env GH_TOKEN=the-users-token ZN_DISPATCH= ZN_HEADLESS=") > runs)
+				.toBe(true)
+		end
+	)
+
+	it("AC20: the dispatcher's landing of a raft spends the land request the worker left for it", function()
+		layer("R0170", "c0190", "sigma", true)
+		seal.trace(worktrees.R0170, "R0170")
+		pr("R0170/1/c0190", GREEN)
+		local request = `{h.f.main}/.cache/land-requests/R0170`
+		t.expect(znAt(worktrees.R0170, { "done", "R0170" }, { ZN_DISPATCH = "1" }).ok).toBe(true)
+		t.expect(fs.isFile(request)).toBe(true)
+		local r = dispatchOut("R0170")
+		t.expect(r.code).toBe(0)
+		t.expect(landed("R0170")).toBe(true)
+		t.expect(fs.isFile(request)).toBe(false)
+	end)
+
+	it(
+		"AC21: a land request whose layer tip moved is refused and spent, and the worker asks again",
+		function()
+			layer("R0160", "c0180", "tau", true)
+			seal.trace(worktrees.R0160, "R0160")
+			pr("R0160/1/c0180", GREEN)
+			local wt = worktrees.R0160
+			local request = `{h.f.main}/.cache/land-requests/R0160`
+			t.expect(znAt(wt, { "done", "R0160" }, { ZN_HEADLESS = "1" }).ok).toBe(true)
+			t.expect(fs.isFile(request)).toBe(true)
+			-- the layer is pushed again after the request: the checks were of the old tip
+			git(wt, {
+				"-c",
+				"user.name=worker",
+				"-c",
+				"user.email=worker@example.invalid",
+				"commit",
+				"-q",
+				"--allow-empty",
+				"-m",
+				"c0180: one more",
+			})
+			git(wt, { "push", "-q" })
+			local before = mainHead()
+			local r = zn({ "lander", "R0160" })
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr, "its top layer moved since the request")).toBe(true)
+			t.expect(fs.isFile(request)).toBe(false)
+			t.expect(mainHead()).toBe(before)
+			t.expect(landed("R0160")).toBe(false)
 		end
 	)
 
