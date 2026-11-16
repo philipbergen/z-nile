@@ -1,1 +1,3 @@
 - note c0371's promoted spec named a banned guard name although this lesson existed: no c0371 or R0112 document records a guard-scan run, and `./zn promote-check` runs none; the check now asks for the recorded run: zz-test/dry-run-promoted-specs-under-the-guard-scan
+- design-review-001 F1: zz-test/narrowing-pins-the-whole-file, zz-test/source-text-pins-read-the-code
+- design-review-001 F2: z-design/quote-other-preps-before-promising
