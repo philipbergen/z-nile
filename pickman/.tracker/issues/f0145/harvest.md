@@ -19,3 +19,4 @@
 - design-review-003 F3: z-design/accepted-risks-checked-and-decided
 - design-review-003 F4: z-design/reasoned-rows-claim-testable-reasons
 - design-review-003 F5: one-off: a table keyed by a Player set after a yield the player left during; the arrival now returns when the player is gone
+- note the prototype (proto-f0145, never committed as a patch) was lost by the resume of 2026-11-15, after main changed five Touched modules, so the specs could not be rerun on today's main: z-design/prove-specs-pass-on-a-prototype

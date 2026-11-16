@@ -1,11 +1,13 @@
 --!strict
 -- f0145 AC6: the places boot the paid-play adapters, and the documents say what was decided. The game server's Main
--- boots Continues with the sessions; the game client's Main boots OfferView and shows it every frame with Flow's
--- overlay; the lobby server's Main puts Paid in front of Starts (`Paid.start(Starts.start(Paid.allow))`); the lobby
--- client's Main boots PayView after LobbyView. No client script requires Purchases (the store and the purchases are
--- the server's). The remotes are made at run time, so the place files' remote lists stay as they are. game-design.md
--- states the paid play; architecture.md declares Pay, Lobby -> Pay, and the Pay row. Source pins read with comments
--- removed; what they leave to the adapters' running cases (AC5) and to OC1 and OC2: everything the adapters do.
+-- hands Continues' arrival to Sessions.made (f0148) before Sessions starts; the game client's Main boots OfferView and
+-- shows it every frame with Flow's overlay; the lobby server's Main puts Paid in front of Starts
+-- (`Paid.start(Starts.start(Paid.allow))`, with Starts an inline require or a local bound to it, as f0148's pins of
+-- the same Main accept); the lobby client's Main boots PayView after LobbyView. No client script requires Purchases
+-- (the store and the purchases are the server's). The remotes are made at run time, so the place files' remote lists
+-- stay as they are. game-design.md states the paid play; architecture.md declares Pay, Lobby -> Pay, and the Pay row.
+-- Source pins read with comments removed; what they leave to the adapters' running cases (AC5) and to OC1 and OC2:
+-- everything the adapters do.
 local fs = require("@lune/fs")
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
@@ -37,13 +39,16 @@ end
 
 return t.spec("f0145 the places and the documents", function(it)
 	it(
-		"the game server boots Continues with the sessions; the client boots OfferView and shows it each frame",
+		"the game server hands Continues to Sessions.made before Sessions starts; the client boots OfferView and shows it each frame",
 		function()
 			local server = source(gamePlace, { "ServerScriptService", "Server", "Main" })
-			t.expect(
-				string.find(server, 'require%("%./Continues"%)%.start%(%s*Sessions%.session%s*%)') ~= nil
+			-- an inline require or a local bound to it (f0148 owns the rest of this Main and its order)
+			local made = string.find(
+				server,
+				'Sessions%.made%(%s*[%w_%.%(%)"/]-Continues"?%)?%.start%(%s*Sessions%.session%s*%)%s*%)'
 			)
-				.toBe(true)
+			local start = string.find(server, "Sessions%.start%(")
+			t.expect(made ~= nil and start ~= nil and (made :: number) < (start :: number)).toBe(true)
 			local client = source(gamePlace, { "StarterPlayer", "StarterPlayerScripts", "Client", "Main" })
 			t.expect(string.find(client, "OfferView%.start%(%)") ~= nil).toBe(true)
 			t.expect(string.find(client, "OfferView%.show%(%s*overlay%s*%)") ~= nil).toBe(true)
@@ -55,8 +60,10 @@ return t.spec("f0145 the places and the documents", function(it)
 		function()
 			local server = source(lobbyPlace, { "ServerScriptService", "Lobby", "Main" })
 			t.expect(
-				string.find(server, 'Paid%.start%(%s*require%("%./Starts"%)%.start%(%s*Paid%.allow%s*%)%s*%)')
-					~= nil
+				string.find(
+					server,
+					'Paid%.start%(%s*[%w_%.%(%)"/]-Starts"?%)?%.start%(%s*Paid%.allow%s*%)%s*%)'
+				) ~= nil
 			).toBe(true)
 			local client = source(lobbyPlace, { "StarterPlayer", "StarterPlayerScripts", "Lobby", "Main" })
 			local view = string.find(client, 'require%("%./LobbyView"%)%.start%(%)')

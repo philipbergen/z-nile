@@ -5,8 +5,8 @@
 -- failed write answers NotProcessedYet and grants nothing. The lobby lets a player start when a free start is due
 -- or a play is held (the start itself is charged on arrival), and otherwise opens the purchase screen: Roblox's in
 -- live mode with the configured product, the test screen in test mode; a grant starts the game at once, and a test
--- confirmation grants only in test mode. The game place charges the start on the player's first Ready, switches the
--- continue offer on for their run, uses a held continue at once, holds the countdown while a purchase screen is
+-- confirmation grants only in test mode. The game place charges the start once per arrival (the function
+-- Continues.start returns, which Sessions.made calls with each new session: f0148), switches the continue offer on for their run, uses a held continue at once, holds the countdown while a purchase screen is
 -- open, continues on a grant during the offer, keeps a grant after the offer as a held continue, and ends the offer
 -- at the next step on a decline. The stub loader falls back to the real Logic (pickman-test stub-loaders-fall-back).
 local Game = require("@logic/Game")
@@ -407,16 +407,17 @@ local function press(w: World, p: any)
 	w.remote("StartGame").OnServerEvent.fire(p)
 end
 
-type Arena = { w: World, s: Session.Session, p: any }
+type Arena = { w: World, s: Session.Session, p: any, arrived: (any, Session.Session) -> () }
 
--- the game place with one player who has just arrived (their first Ready)
+-- the game place with one player who has just arrived (Sessions.made has told Continues of their new session)
 local function arrive(mode: string?, setup: ((World) -> ())?): Arena
 	local w = world(mode)
 	local p = w.player(7)
 	local s = Session.new(Maze.parse({ "#######", "#..P..#", "#######" }, "corridor"), 1, Session.GAME_CONFIG)
 	Session.join(s, "7")
 	local continues = luau.load(CONTINUES, { environment = w.env, debugName = "Continues" })() :: any
-	continues.start(function(player: any): Session.Session?
+	-- what Main hands to Sessions.made (f0148): the arrival, told each new session once it exists
+	local arrived = continues.start(function(player: any): Session.Session?
 		return if player == p and p.Parent ~= nil then s else nil
 	end)
 	-- as Sessions does: a departing player's run is parked and ends its offer (f0145 Session.depart)
@@ -428,15 +429,15 @@ local function arrive(mode: string?, setup: ((World) -> ())?): Arena
 	if setup then
 		setup(w)
 	end
-	w.remote("Ready").OnServerEvent.fire(p)
+	arrived(p, s) -- as Sessions.made tells it, once the player's session exists
 	w.flush()
-	return { w = w, s = s, p = p }
+	return { w = w, s = s, p = p, arrived = arrived }
 end
 
 -- the game place with one player whose run is in the continue offer
 local function arena(mode: string?, ticks: number?, setup: ((World) -> ())?): Arena
 	local a = arrive(mode, setup)
-	local w, s, p = a.w, a.s, a.p
+	local w, s, p, arrived = a.w, a.s, a.p, a.arrived
 	if ticks then
 		Session.allowOffer(s, "7", ticks)
 	end
@@ -456,7 +457,7 @@ local function arena(mode: string?, ticks: number?, setup: ((World) -> ())?): Ar
 		end
 		Session.step(s)
 	end
-	return { w = w, s = s, p = p }
+	return { w = w, s = s, p = p, arrived = arrived }
 end
 
 return t.spec("f0145 the paid-play adapters on a stub engine", function(it)
@@ -603,12 +604,13 @@ return t.spec("f0145 the paid-play adapters on a stub engine", function(it)
 		t.expect(#down.teleports).toBe(1)
 	end)
 
-	it("in the game place the start is charged on the first Ready only, and the run's offer is on", function()
+	it("in the game place the start is charged once per arrival, and the run's offer is on", function()
 		local a = arena("live")
 		local r = Pay.record(a.w.records["7"])
 		t.expect(r.free).toBe(NOW)
-		a.w.records["7"].plays = 1 -- a second Ready would use it if it charged again
-		a.w.remote("Ready").OnServerEvent.fire(a.p)
+		a.w.records["7"].plays = 1 -- a second call for the same arrival would use it if it charged again
+		a.arrived(a.p, a.s)
+		a.w.flush()
 		t.expect(Pay.record(a.w.records["7"]).free).toBe(NOW)
 		t.expect(Pay.record(a.w.records["7"]).plays).toBe(1)
 		t.expect(Session.offering(a.s, "7")).toBe(true)
@@ -623,10 +625,10 @@ return t.spec("f0145 the paid-play adapters on a stub engine", function(it)
 			Session.new(Maze.parse({ "#######", "#..P..#", "#######" }, "corridor"), 1, Session.GAME_CONFIG)
 		Session.join(s9, "9")
 		local continues = luau.load(CONTINUES, { environment = w.env, debugName = "Continues" })() :: any
-		continues.start(function(player: any): Session.Session?
+		local arrived = continues.start(function(player: any): Session.Session?
 			return if player == p then s9 else nil
 		end)
-		w.remote("Ready").OnServerEvent.fire(p)
+		arrived(p, s9)
 		w.flush()
 		t.expect(w.records["9"]).toBe(nil)
 		t.expect(s9.members["9"].play.offer).toBe(Game.OFFER_TICKS)
