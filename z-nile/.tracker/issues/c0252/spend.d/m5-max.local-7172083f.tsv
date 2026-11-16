@@ -21,3 +21,30 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-16 07:47	9 specs	0	0	test			3.300	3.590		3.300	tokens,ai
 2026-11-16 07:47	5 runs	0	0	other			59.592	92.110			tokens,ai
 2026-11-16 08:22	design-review-001	0	0	design-review							tokens,ai
+2026-11-16 10:34	static	0	0	test			4.531	44.860		4.531	tokens,ai
+2026-11-16 10:34	1 spec	0	0	test			1.239	0.760		1.239	tokens,ai
+2026-11-16 10:34	1 spec	0	0	test			1.028	0.770		1.028	tokens,ai
+2026-11-16 10:34	1 spec	0	0	test			12.152	10.710		12.152	tokens,ai
+2026-11-16 10:34	1 spec	0	0	test			1.030	0.780		1.030	tokens,ai
+2026-11-16 10:34	1 spec	0	0	test			1.228	0.770		1.228	tokens,ai
+2026-11-16 10:34	10 specs	0	0	test			4.485	5.030		4.485	tokens,ai
+2026-11-16 10:37	1 spec	0	0	test			1.020	0.670		1.020	tokens,ai
+2026-11-16 10:54	2 specs	0	0	test			2.679	3.240		2.679	tokens,ai
+2026-11-16 10:54	static	0	0	test			4.751	43.150		4.751	tokens,ai
+2026-11-16 10:54	1 spec	0	0	test			1.246	0.800		1.246	tokens,ai
+2026-11-16 10:54	1 spec	0	0	test			1.026	0.770		1.026	tokens,ai
+2026-11-16 10:54	1 spec	0	0	test			11.744	10.460		11.744	tokens,ai
+2026-11-16 10:54	1 spec	0	0	test			0.821	0.550		0.821	tokens,ai
+2026-11-16 10:54	1 spec	0	0	test			0.832	0.540		0.832	tokens,ai
+2026-11-16 10:54	10 specs	0	0	test			3.306	3.650		3.306	tokens,ai
+2026-11-16 11:06	static	0	0	test			3.509	46.560		3.509	tokens,ai
+2026-11-16 11:48	static	0	0	test			3.529	47.200		3.529	tokens,ai
+2026-11-16 11:48	1 spec	0	0	test			0.821	0.500		0.821	tokens,ai
+2026-11-16 11:48	1 spec	0	0	test			0.832	0.500		0.832	tokens,ai
+2026-11-16 11:49	1 spec	0	0	test			8.042	6.880		8.042	tokens,ai
+2026-11-16 11:49	1 spec	0	0	test			0.826	0.520		0.826	tokens,ai
+2026-11-16 11:49	1 spec	0	0	test			0.819	0.510		0.819	tokens,ai
+2026-11-16 11:49	10 specs	0	0	test			3.097	3.460		3.097	tokens,ai
+2026-11-16 11:49	1 spec	0	0	test			1.015	0.640		1.015	tokens,ai
+2026-11-16 11:06	9 runs	0	0	other			61.698	177.680			tokens,ai
+2026-11-16 11:52	design-refute-001	0	0	design-review							tokens,ai
