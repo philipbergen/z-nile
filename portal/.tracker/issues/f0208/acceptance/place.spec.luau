@@ -1,10 +1,10 @@
 --!strict
 -- f0208 AC6: the built portal place. ReplicatedStorage.Remotes.Play is the play buttons' RemoteEvent; Play, Pairing
--- and Arena are Logic features (Play requires only Card, the other two nothing) and Modes a shared config module that
--- requires only Play; the server adapters Plays and Invites are in ServerScriptService.Server, Plays reaching the
--- arcade's Wallet and Receipts, and the server's Main boots Plays; the client adapter PlayButtons is in the player's
+-- and Arena are Logic features whose requires stay inside Logic (Play requires Card) and Modes a shared config module
+-- that requires Play and nothing outside Shared; the server adapters Plays and Invites are in
+-- ServerScriptService.Server, Plays reaching the arcade's Wallet and Receipts, and the server's Main boots Plays; the client adapter PlayButtons is in the player's
 -- scripts and the client's Main boots it and the arcade's test purchase screen; nothing a client can read requires a
--- server module; portal's architecture map declares the features and the one edge, Play -> Card; and portal's
+-- server module; portal's architecture map declares the features and the edge Play -> Card; and portal's
 -- tests/inputs.tsv declares that this spec reads that map.
 local fs = require("@lune/fs")
 local place = require("@tests/lib/place")
@@ -61,27 +61,30 @@ return t.spec("f0208 place", function(it)
 	end)
 
 	it(
-		"Play, Pairing and Arena are Logic features; Play requires only Card, the other two nothing",
+		"Play, Pairing and Arena are Logic features whose requires stay inside Logic; Play requires Card",
 		function()
 			local logic = RS:FindFirstChild("Shared"):FindFirstChild("Logic")
 			for _, name in { "Play", "Pairing", "Arena" } do
 				local m = logic:FindFirstChild(name)
 				t.expect(m ~= nil and m.ClassName).toBe("ModuleScript")
+				for _, target in targets(m) do
+					t.expect(target ~= nil and under(target, logic) and target ~= m).toBe(true)
+				end
 			end
 			local play = targets(logic:FindFirstChild("Play"))
-			t.expect(#play).toBe(1)
-			t.expect(play[1]).toBe(logic:FindFirstChild("Card"))
-			t.expect(#place.requireSpecs(logic:FindFirstChild("Pairing").Source)).toBe(0)
-			t.expect(#place.requireSpecs(logic:FindFirstChild("Arena").Source)).toBe(0)
+			t.expect(table.find(play, logic:FindFirstChild("Card")) ~= nil).toBe(true)
 		end
 	)
 
-	it("Modes is a shared config module that requires only Play", function()
-		local m = RS:FindFirstChild("Shared"):FindFirstChild("Modes")
+	it("Modes is a shared config module that requires Play, and nothing outside Shared", function()
+		local shared = RS:FindFirstChild("Shared")
+		local m = shared:FindFirstChild("Modes")
 		t.expect(m ~= nil and m.ClassName).toBe("ModuleScript")
 		local found = targets(m)
-		t.expect(#found).toBe(1)
-		t.expect(found[1]).toBe(RS:FindFirstChild("Shared"):FindFirstChild("Logic"):FindFirstChild("Play"))
+		for _, target in found do
+			t.expect(target ~= nil and under(target, shared)).toBe(true)
+		end
+		t.expect(table.find(found, shared:FindFirstChild("Logic"):FindFirstChild("Play")) ~= nil).toBe(true)
 	end)
 
 	it("Plays and Invites are server adapters; Plays reaches the arcade's Wallet and Receipts", function()
@@ -139,18 +142,18 @@ return t.spec("f0208 place", function(it)
 		t.expect(table.concat(bad, "\n")).toBe("")
 	end)
 
-	it("portal's architecture map declares the play buttons, with Play -> Card its one edge", function()
+	it("portal's architecture map declares the play buttons and the edge Play -> Card", function()
 		local md = fs.readFile(".tracker/architecture.md")
 		t.expect(string.find(md, "### Play buttons (f0208)", 1, true) ~= nil).toBe(true)
 		local block = string.match(md, "```deps\n(.-)```") or ""
 		local edges = {}
 		for line in string.gmatch(block, "[^\n]+") do
 			local consumer, provider = string.match(line, "^%s*(%w+)%s*%->%s*(%w+)")
-			if consumer == "Play" or consumer == "Pairing" or consumer == "Arena" then
+			if consumer ~= nil then
 				table.insert(edges, `{consumer} -> {provider}`)
 			end
 		end
-		t.expect(edges).toEqual({ "Play -> Card" })
+		t.expect(table.find(edges, "Play -> Card") ~= nil).toBe(true)
 	end)
 
 	it("portal's tests/inputs.tsv declares that this spec reads the architecture map", function()

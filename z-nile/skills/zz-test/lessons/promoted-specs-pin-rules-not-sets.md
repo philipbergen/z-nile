@@ -1,17 +1,11 @@
 ---
-title: A promoted spec pins the rule, not today's set
-when: both
-tags: [specs, regression, promotion]
-check: Does any promoted case assert the exact current set of something later work is expected to extend (skills, folders, links, registry entries, lessons), instead of the rule each member must meet?
+title: A promoted spec pins the rule, not today's exact set
+when: design
+tags: [specs, promotion, overrides, structure]
+check: Does any sequestered case pin an exact count or set (a module's requires, a feature's edges, a list of keys) where the rule is only a bound (stays inside Logic, declares every edge, includes this one), so that a later issue's correct addition needs an override chore against a promoted spec, and where an exact set is meant, does the Design say it is a contract?
 ---
-A spec that says "these are exactly the ten skills" or "pickman's skills hold no lesson" is true on the day it is promoted and turns red the day a planned issue adds the eleventh skill or the first lesson. That issue must then override it, or worse, an unrelated raft's `done` gate goes red.
+A promoted acceptance spec is never edited, so an exact set it pins becomes a permanent wall: the next feature that adds a require, an edge or a key correctly turns it red and must file a chore just to narrow it.
 
-**Why:** c0115 prep: `layout.spec` first pinned `z-nile/skills` as exactly the ten skills and `.claude/skills` as exactly their links, and said pickman's skills hold no lesson. c0116 adds `z-raft`, and any lesson-writing raft adds a pickman lesson. Rewritten to pin presence of the ten, links equal to whatever folders exist, and no state claim. f0158 design review 003 F3: clear.spec's "every accepted overlap still happens" case, once promoted, would have made d0149's circles or a smaller FIRE an override of f0158; its exactness now runs only at f0158's check and done (an env variable only AC2's check.sh line sets).
+**Why:** f0208 design review 001 F8: the place spec pinned "Play requires only Card", "Modes requires only Play" and the exact edge list, although the portal's meta spec already enforces declared edges and Logic-only requires, and f0205 had committed to pin only what later issues keep.
 
-**How to apply:** for each set a promoted case reads, ask whether a planned or ordinary change adds to it. If so, assert membership (the named ones are there) and the rule (every member is well formed, the links equal the folders found), never equality with a literal list. Put "this change doesn't make X" claims in `check.sh`, which is not rerun after `done`.
-
-c0264 design review 009 F9: a promoted case required a label naming one capture of the day (c0305); it now asserts that the section carries a state label naming an issue, and the exact ids stay in the sequestered check.
-
-**Also:** d0297 design review 001 F3: a wiring case asserted that exactly `z-nile/engine/main.luau` holds the flag and located `function cmd.finish(` by name, while c0180 plans to split `main.luau` into one module per command. Pin where the use may be by its content (inside a selector call's argv, in the file that writes `results.txt`), and keep a correct variant that moves the function to its own module.
-
-c0230 design review 001 F5: a promoted docs spec pinned a lesson's `check` and body word for word, and c0181 is prepared to rewrite every lesson's check and cap its body, so either landing order turned one of them red. Lesson text is meant to change: pin its wording only in check.sh before `done`, and in the suite only that the lesson a tool names exists.
+**How to apply:** pin the rule (requires resolve inside Logic or Shared, the needed module is among them, the edge is declared) and keep a mutant per rule; where an exact set is the point (a key map the user rules on), say in the Design that it is a contract and that a change goes through its own chore.

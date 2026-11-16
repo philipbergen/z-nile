@@ -32,6 +32,7 @@ local function world(): any
 		errors = {},
 		teleports = {},
 		sets = {},
+		removes = {},
 		gets = {},
 		data = {},
 		players = {},
@@ -71,6 +72,13 @@ local function world(): any
 		table.insert(w.sets, { key = key, value = value, expiration = expiration })
 		w.data[key] = value
 		return true
+	end
+	map.RemoveAsync = function(_: any, key: string)
+		if w.down then
+			error("memory store down")
+		end
+		table.insert(w.removes, key)
+		w.data[key] = nil
 	end
 	map.GetAsync = function(_: any, key: string): any
 		table.insert(w.gets, key)
@@ -129,6 +137,9 @@ local function world(): any
 	function w.offer(player: any, name: string)
 		spawn(w.Invites.offer, player, name)
 	end
+	function w.withdraw(player: any)
+		spawn(w.Invites.withdraw, player)
+	end
 
 	function w.player(id: number, launch: any): any
 		local p: any = { Name = `p{id}`, UserId = id, Parent = playersService }
@@ -167,6 +178,17 @@ return t.spec("f0208 invites", function(it)
 		t.expect(w.sets)
 			.toEqual({ { key = "7", value = { job = "job-here", name = "invaders" }, expiration = 600 } })
 		t.expect(w.Invites.SECONDS).toBe(600)
+		clean(w)
+	end)
+
+	it("a withdrawn invite is removed from the map; a map that fails throws nothing", function()
+		local w = world()
+		w.offer({ UserId = 7 }, "invaders")
+		w.withdraw({ UserId = 7 })
+		t.expect(w.data["7"]).toBe(nil)
+		t.expect(w.removes).toEqual({ "7" })
+		w.down = true
+		w.withdraw({ UserId = 8 })
 		clean(w)
 	end)
 

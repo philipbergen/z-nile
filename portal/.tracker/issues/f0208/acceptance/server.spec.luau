@@ -10,6 +10,7 @@
 -- reserved server. One play per player at a time, Travel's cool-down after a failure, nothing for a player who left,
 -- nothing in TeleportData. Receipts is installed here once.
 local PaidPlay = require("@arcade/Logic/PaidPlay")
+local Play = require("@logic/Play")
 local luau = require("@lune/luau")
 local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
@@ -69,10 +70,25 @@ local function world(attributes: { [string]: any }?): any
 		teleportFails = false,
 		memoryDown = false,
 		races = {},
+		withdrawals = {},
+		calls = {}, -- every UpdateAsync begun, held or not
+		held = {}, -- writes made to wait until the case releases them, by kind ("arena", "pass")
+		waits = {}, -- the threads waiting in a held write, by kind
+		auto = nil, -- a record every read answers at once with, when set
+		heartbeats = 0,
 	}
+	-- a held write of `kind` waits here until w.release(kind)
+	local function hold(kind: string)
+		if w.held[kind] then
+			w.waits[kind] = w.waits[kind] or {}
+			table.insert(w.waits[kind], coroutine.running())
+			coroutine.yield()
+		end
+	end
 
-	local function spawn(fn: (...any) -> (), ...: any)
-		local co = coroutine.create(fn)
+	-- task.spawn: a function in a new thread, or a waiting thread resumed (as Roblox's does)
+	local function spawn(fn: any, ...: any)
+		local co = if type(fn) == "thread" then fn else coroutine.create(fn)
 		local ok, err = coroutine.resume(co, ...)
 		if not ok then
 			table.insert(w.errors, tostring(err))
@@ -177,6 +193,8 @@ local function world(attributes: { [string]: any }?): any
 		if map == nil then
 			map = { data = {} }
 			map.UpdateAsync = function(_: any, key: string, fn: (any) -> any, expiration: number): any
+				table.insert(w.calls, { map = name, key = key })
+				hold("arena")
 				if w.memoryDown then
 					error("memory store down")
 				end
@@ -235,6 +253,10 @@ local function world(attributes: { [string]: any }?): any
 
 	local wallet: any = standin()
 	wallet.read = function(player: any, name: string): (any, any)
+		if w.auto ~= nil then
+			table.insert(w.reads, { player = player, name = name, done = true })
+			return w.auto
+		end
 		table.insert(w.reads, { player = player, name = name, co = coroutine.running(), done = false })
 		return coroutine.yield()
 	end
@@ -243,6 +265,7 @@ local function world(attributes: { [string]: any }?): any
 	end
 	wallet.pass = function(player: any, name: string): boolean
 		table.insert(w.passes, { player = player, name = name, teleports = #w.teleports })
+		hold("pass")
 		return true
 	end
 	local receipts: any = standin()
@@ -261,6 +284,9 @@ local function world(attributes: { [string]: any }?): any
 	end
 	invites.offer = function(player: any, name: string)
 		table.insert(w.offers, { player = player, name = name })
+	end
+	invites.withdraw = function(player: any)
+		table.insert(w.withdrawals, player)
 	end
 
 	local env: { [string]: any } = {}
@@ -401,19 +427,55 @@ local function world(attributes: { [string]: any }?): any
 		t.expect(#w.teleports >= i).toBe(true)
 		return w.teleports[i]
 	end
+	-- the waiting counts everyone has heard after the next heartbeat (they are sent at most once a second)
+	function w.counts(): any
+		w.heartbeat(1)
+		return w.lastAll()[2]
+	end
 	function w.lastAll(): any
 		t.expect(#w.all > 0).toBe(true)
 		return w.all[#w.all]
 	end
+	-- Receipts' handlers, each in a thread of its own as Receipts spawns them
 	function w.grant(p: any, name: string, kind: string)
-		w.handlers.granted(p, name, kind)
+		spawn(w.handlers.granted, p, name, kind)
 	end
 	function w.closed(p: any, name: string, kind: string, bought: boolean)
-		w.handlers.closed(p, name, kind, bought)
+		spawn(w.handlers.closed, p, name, kind, bought)
 	end
 	function w.heartbeat(dt: number)
 		w.advance(dt)
+		w.heartbeats += 1
 		services.RunService.Heartbeat.fire(dt)
+	end
+	-- lets every held write of `kind` go on, in the order they began
+	function w.release(kind: string)
+		w.held[kind] = false
+		local list = w.waits[kind] or {}
+		w.waits[kind] = {}
+		for _, co in list do
+			spawn(co)
+		end
+	end
+	-- the MemoryStore writes the portal caused for `p`: arena seats begun, passes and invite sets and removals
+	function w.writesOf(p: any): number
+		local n = #w.calls -- every arena write is the one player's in the cases that count them
+		for _, x in w.passes do
+			if x.player == p then
+				n += 1
+			end
+		end
+		for _, x in w.offers do
+			if x.player == p then
+				n += 1
+			end
+		end
+		for _, x in w.withdrawals do
+			if x == p then
+				n += 1
+			end
+		end
+		return n
 	end
 	return w
 end
@@ -652,7 +714,7 @@ return t.spec("f0208 server", function(it)
 		clean(w)
 	end)
 
-	it("a check still busy after CHECK_SECONDS fails, with no teleport and no pass", function()
+	it("a check still busy after CHECK_SECONDS (a slow store) writes the pass, then teleports", function()
 		local w = world()
 		local p = w.join("ann", 1)
 		w.press(p, "play", "pickman", "solo")
@@ -663,9 +725,10 @@ return t.spec("f0208 server", function(it)
 			w.answer(p, "pickman", nil, "busy")
 			w.advance(0.25)
 		end
-		t.expect(w.phase(p)).toBe("failed")
-		t.expect(#w.teleports).toBe(0)
-		t.expect(#w.passes).toBe(0)
+		t.expect(#w.passes).toBe(1)
+		t.expect(w.passes[1].teleports).toBe(0)
+		t.expect(#w.teleports).toBe(1)
+		t.expect(w.phase(p)).toBe("going")
 		t.expect(w.readCount(p) <= 42).toBe(true)
 		t.expect(w.readCount(p) >= 39).toBe(true)
 		clean(w)
@@ -734,17 +797,19 @@ return t.spec("f0208 server", function(it)
 			local p = w.join("ann", 1)
 			w.press(p, "play", "pickman", "solo")
 			w.answer(p, "pickman", FREE)
-			t.expect(#w.teleports).toBe(1)
+			w.advance(1)
+			t.expect(#w.teleports).toBe(2)
 			t.expect(w.phase(p)).toBe("failed")
 			w.teleportFails = false
 			w.advance(2.9)
 			w.press(p, "play", "pickman", "solo")
 			t.expect(#w.reads).toBe(1)
-			w.advance(0.2)
+			w.heartbeat(0.2)
+			t.expect(w.phase(p)).toBe("idle")
 			w.press(p, "play", "pickman", "solo")
 			t.expect(#w.reads).toBe(2)
 			w.answer(p, "pickman", FREE)
-			t.expect(#w.teleports).toBe(2)
+			t.expect(#w.teleports).toBe(3)
 			clean(w)
 		end
 	)
@@ -926,6 +991,7 @@ return t.spec("f0208 server", function(it)
 			w.answer(p, "invaders", FREE)
 			t.expect(w.about(p)).toBe("waiting invaders pair")
 			t.expect(#w.teleports).toBe(0)
+			w.heartbeat(1)
 			local m = w.lastAll()
 			t.expect(m[1]).toBe("waiting")
 			t.expect(m[2].invaders).toBe(1)
@@ -957,7 +1023,7 @@ return t.spec("f0208 server", function(it)
 			t.expect(type(call.options.ReservedServerId)).toBe("string")
 			t.expect(w.phase(p)).toBe("going")
 			t.expect(w.phase(q)).toBe("going")
-			t.expect(w.lastAll()[2].invaders).toBe(0)
+			t.expect(w.counts().invaders).toBe(0)
 			local r = w.join("cy", 3)
 			local s = w.join("di", 4)
 			w.press(r, "play", "invaders", "pair")
@@ -1012,7 +1078,7 @@ return t.spec("f0208 server", function(it)
 		w.answer(p, "invaders", FREE)
 		w.press(p, "cancel")
 		t.expect(w.phase(p)).toBe("idle")
-		t.expect(w.lastAll()[2].invaders).toBe(0)
+		t.expect(w.counts().invaders).toBe(0)
 		w.press(q, "play", "invaders", "pair")
 		w.answer(q, "invaders", FREE)
 		t.expect(#w.teleports).toBe(0)
@@ -1026,7 +1092,7 @@ return t.spec("f0208 server", function(it)
 		w.press(p, "play", "invaders", "pair")
 		w.answer(p, "invaders", FREE)
 		w.leave(p)
-		t.expect(w.lastAll()[2].invaders).toBe(0)
+		t.expect(w.counts().invaders).toBe(0)
 		local q = w.join("bob", 2)
 		w.press(q, "play", "invaders", "pair")
 		w.answer(q, "invaders", FREE)
@@ -1040,14 +1106,14 @@ return t.spec("f0208 server", function(it)
 		w.press(p, "play", "invaders", "pair")
 		w.answer(p, "invaders", FREE)
 		w.press(p, "play", "pickman", "solo")
-		t.expect(w.lastAll()[2].invaders).toBe(0)
+		t.expect(w.counts().invaders).toBe(0)
 		t.expect(w.phase(p)).toBe("checking")
 		w.answer(p, "pickman", FREE)
 		t.expect(w.call(1).place).toBe(101)
 		clean(w)
 	end)
 
-	it("a party teleport that errors fails both; neither is left waiting", function()
+	it("a party teleport that errors is tried once more, then fails both; neither is left waiting", function()
 		local w = world()
 		w.teleportFails = true
 		local p = w.join("ann", 1)
@@ -1056,9 +1122,14 @@ return t.spec("f0208 server", function(it)
 		w.answer(p, "invaders", FREE)
 		w.press(q, "play", "invaders", "pair")
 		w.answer(q, "invaders", FREE)
+		t.expect(w.phase(p)).toBe("going")
+		w.advance(1) -- tried once more, both together, then both fail
+		t.expect(#w.teleports).toBe(2)
+		t.expect(w.call(2).players).toEqual({ p, q })
+		t.expect(w.call(2).options.ReservedServerId).toBe(w.call(1).options.ReservedServerId)
 		t.expect(w.phase(p)).toBe("failed")
 		t.expect(w.phase(q)).toBe("failed")
-		t.expect(w.lastAll()[2].invaders).toBe(0)
+		t.expect(w.counts().invaders).toBe(0)
 		clean(w)
 	end)
 
@@ -1095,4 +1166,290 @@ return t.spec("f0208 server", function(it)
 		t.expect(#w.offers).toBe(0)
 		clean(w)
 	end)
+
+	it(
+		"a client looping 2 PLAYERS, INVITE and CANCEL for a minute causes at most WRITES writes and 61 broadcasts",
+		function()
+			local w = world()
+			w.auto = FREE
+			local p = w.join("ann", 1)
+			local q = w.join("bob", 2)
+			for _ = 1, 240 do
+				w.press(p, "play", "invaders", "pair")
+				w.press(p, "invite")
+				w.press(p, "cancel")
+				w.heartbeat(0.25)
+			end
+			t.expect(w.writesOf(p) <= Play.WRITES).toBe(true)
+			t.expect(w.writesOf(p) >= 1).toBe(true)
+			t.expect(#w.all <= 61).toBe(true)
+			-- another player's budget is their own
+			w.press(q, "play", "invaders", "pair")
+			w.press(q, "invite")
+			local theirs = 0
+			for _, x in w.offers do
+				if x.player == q then
+					theirs += 1
+				end
+			end
+			t.expect(theirs).toBe(1)
+			clean(w)
+		end
+	)
+
+	it("the write budget comes back WRITE_SPAN after the writes", function()
+		local w = world()
+		w.auto = FREE
+		local p = w.join("ann", 1)
+		for _ = 1, 20 do
+			w.press(p, "play", "invaders", "pair")
+			w.press(p, "invite")
+			w.press(p, "cancel")
+		end
+		local before = w.writesOf(p)
+		t.expect(before).toBe(Play.WRITES)
+		w.heartbeat(Play.WRITE_SPAN)
+		w.press(p, "play", "invaders", "pair")
+		w.press(p, "invite")
+		t.expect(w.writesOf(p)).toBe(before + 1)
+		clean(w)
+	end)
+
+	it("an invite is withdrawn when the wait ends: a cancel, a pair, another play or a leave", function()
+		local w = world()
+		w.auto = FREE
+		local p = w.join("ann", 1)
+		local q = w.join("bob", 2)
+		w.press(p, "play", "invaders", "pair")
+		w.press(p, "invite")
+		w.press(p, "cancel")
+		t.expect(w.withdrawals).toEqual({ p })
+		w.press(p, "play", "invaders", "pair")
+		w.press(p, "invite")
+		w.press(q, "play", "invaders", "pair")
+		t.expect(w.withdrawals).toEqual({ p, p })
+		local r = w.join("cy", 3)
+		w.press(r, "play", "asteroids", "pair")
+		w.press(r, "invite")
+		w.press(r, "play", "pickman", "solo")
+		t.expect(w.withdrawals).toEqual({ p, p, r })
+		local s2 = w.join("di", 4)
+		w.press(s2, "play", "asteroids", "pair")
+		w.press(s2, "invite")
+		w.leave(s2)
+		t.expect(w.withdrawals).toEqual({ p, p, r, s2 })
+		-- a wait with no invite withdraws nothing
+		local u = w.join("ed", 5)
+		w.press(u, "play", "asteroids", "pair")
+		w.press(u, "cancel")
+		t.expect(#w.withdrawals).toBe(4)
+		clean(w)
+	end)
+
+	it("a player who leaves during the arena write is sent nothing; their rejoin plays at once", function()
+		local w = world()
+		w.held.arena = true
+		local p = w.join("ann", 1)
+		w.press(p, "play", "snake", "arena")
+		w.answer(p, "snake", FREE)
+		t.expect(#w.calls).toBe(1)
+		local told = #w.sent
+		w.leave(p)
+		w.release("arena")
+		t.expect(#w.teleports).toBe(0)
+		for i = told + 1, #w.sent do
+			t.expect(w.sent[i].player ~= p).toBe(true)
+		end
+		local again = w.join("ann", 1)
+		w.press(again, "play", "pickman", "solo")
+		w.answer(again, "pickman", FREE)
+		t.expect(#w.teleports).toBe(1)
+		t.expect(w.call(1).players).toEqual({ again })
+		-- a leave while a start is under way: the next join is not held by it
+		w.leave(again)
+		local third = w.join("ann", 1)
+		w.press(third, "play", "pickman", "solo")
+		t.expect(w.waitingReads(third)).toBe(1)
+		w.answer(third, "pickman", FREE)
+		t.expect(#w.teleports).toBe(2)
+		clean(w)
+	end)
+
+	it("during the arena write a second grant and every press do nothing: one write, one teleport", function()
+		local w = world()
+		w.held.arena = true
+		local p = w.join("ann", 1)
+		w.press(p, "play", "snake", "arena")
+		w.answer(p, "snake", NONE)
+		w.grant(p, "snake", "play")
+		t.expect(#w.calls).toBe(1)
+		t.expect(w.phase(p)).toBe("going")
+		w.grant(p, "snake", "play")
+		w.press(p, "play", "pickman", "solo")
+		w.press(p, "play", "snake", "arena")
+		t.expect(#w.calls).toBe(1)
+		t.expect(#w.reads).toBe(1)
+		w.release("arena")
+		t.expect(#w.teleports).toBe(1)
+		t.expect(#w.calls).toBe(1)
+		clean(w)
+	end)
+
+	it(
+		"an arena write not back within WRITE_SECONDS fails the start; its late answer starts nothing",
+		function()
+			local w = world()
+			w.held.arena = true
+			local p = w.join("ann", 1)
+			w.press(p, "play", "snake", "arena")
+			w.answer(p, "snake", FREE)
+			w.advance(Play.WRITE_SECONDS - 0.1)
+			t.expect(w.phase(p)).toBe("going")
+			w.advance(0.1)
+			t.expect(w.phase(p)).toBe("failed")
+			w.release("arena")
+			t.expect(#w.teleports).toBe(0)
+			t.expect(w.phase(p)).toBe("failed")
+			clean(w)
+		end
+	)
+
+	it(
+		"during the pass write a press does nothing; a pass write not back within WRITE_SECONDS still goes",
+		function()
+			local w = world()
+			w.held.pass = true
+			local p = w.join("ann", 1)
+			w.press(p, "play", "pickman", "solo")
+			w.answer(p, "pickman", nil, "down")
+			t.expect(#w.passes).toBe(1)
+			t.expect(w.phase(p)).toBe("going")
+			w.press(p, "play", "pickman", "solo")
+			t.expect(#w.reads).toBe(1)
+			w.advance(Play.WRITE_SECONDS - 0.1)
+			t.expect(#w.teleports).toBe(0)
+			w.advance(0.1)
+			t.expect(#w.teleports).toBe(1)
+			w.release("pass")
+			t.expect(#w.teleports).toBe(1)
+			clean(w)
+		end
+	)
+
+	it("a later purchase stays open when an earlier purchase's receipt wait ends", function()
+		local w = world()
+		local p = w.join("ann", 1)
+		w.press(p, "play", "snake", "solo")
+		w.answer(p, "snake", NONE)
+		w.closed(p, "snake", "play", true)
+		w.advance(1)
+		w.teleportFails = true
+		w.grant(p, "snake", "play")
+		w.advance(1)
+		t.expect(w.phase(p)).toBe("failed")
+		w.teleportFails = false
+		w.heartbeat(3.5)
+		w.press(p, "play", "invaders", "solo")
+		w.answer(p, "invaders", NONE)
+		t.expect(w.phase(p)).toBe("buying")
+		w.heartbeat(30)
+		t.expect(w.about(p)).toBe("buying invaders solo")
+		w.grant(p, "invaders", "play")
+		t.expect(w.call(#w.teleports).place).toBe(103)
+		clean(w)
+	end)
+
+	it(
+		"every failure rests the title COOL_SECONDS: a press then is dropped; then the card is idle again",
+		function()
+			local w = world()
+			w.memoryDown = true
+			local p = w.join("ann", 1)
+			w.press(p, "play", "snake", "arena")
+			w.answer(p, "snake", FREE)
+			t.expect(w.phase(p)).toBe("failed")
+			t.expect(#w.calls).toBe(1)
+			w.heartbeat(Play.COOL_SECONDS - 0.5)
+			t.expect(w.phase(p)).toBe("failed")
+			w.press(p, "play", "snake", "arena")
+			t.expect(#w.reads).toBe(1)
+			t.expect(#w.calls).toBe(1)
+			w.heartbeat(1)
+			t.expect(w.phase(p)).toBe("idle")
+			w.memoryDown = false
+			w.press(p, "play", "snake", "arena")
+			w.answer(p, "snake", FREE)
+			t.expect(#w.calls).toBe(2)
+			t.expect(#w.teleports).toBe(1)
+			clean(w)
+		end
+	)
+
+	it(
+		"a teleport that raises is tried once more RETRY_SECONDS later, and a second try that works goes",
+		function()
+			local w = world()
+			w.teleportFails = true
+			local p = w.join("ann", 1)
+			w.press(p, "play", "pickman", "solo")
+			w.answer(p, "pickman", FREE)
+			t.expect(#w.teleports).toBe(1)
+			t.expect(w.phase(p)).toBe("going")
+			w.teleportFails = false
+			w.advance(Play.RETRY_SECONDS - 0.1)
+			t.expect(#w.teleports).toBe(1)
+			w.advance(0.1)
+			t.expect(#w.teleports).toBe(2)
+			t.expect(w.phase(p)).toBe("going")
+			clean(w)
+		end
+	)
+
+	it("a pair whose partner leaves before the second try is not tried again; the one left fails", function()
+		local w = world()
+		w.teleportFails = true
+		local p = w.join("ann", 1)
+		local q = w.join("bob", 2)
+		w.press(p, "play", "invaders", "pair")
+		w.answer(p, "invaders", FREE)
+		w.press(q, "play", "invaders", "pair")
+		w.answer(q, "invaders", FREE)
+		w.leave(p)
+		w.advance(1)
+		t.expect(#w.teleports).toBe(1)
+		t.expect(w.phase(q)).toBe("failed")
+		clean(w)
+	end)
+
+	it(
+		"a purchase whose screen never reports closing ends BUY_SECONDS after it opened; its grant is then held",
+		function()
+			local w = world()
+			local p = w.join("ann", 1)
+			w.press(p, "play", "snake", "solo")
+			w.answer(p, "snake", NONE)
+			w.advance(Play.BUY_SECONDS - 1)
+			t.expect(w.phase(p)).toBe("buying")
+			w.advance(1)
+			t.expect(w.phase(p)).toBe("idle")
+			w.grant(p, "snake", "play")
+			t.expect(#w.teleports).toBe(0)
+			clean(w)
+		end
+	)
+
+	it(
+		"the grant starts its own play with no read of the record (a read in flight may still hold the old one)",
+		function()
+			local w = world()
+			local p = w.join("ann", 1)
+			w.press(p, "play", "snake", "solo")
+			w.answer(p, "snake", NONE)
+			t.expect(#w.reads).toBe(1)
+			w.grant(p, "snake", "play")
+			t.expect(#w.reads).toBe(1)
+			t.expect(#w.teleports).toBe(1)
+			clean(w)
+		end
+	)
 end)

@@ -117,9 +117,15 @@ return t.spec("f0208 Pairing and Arena", function(it)
 			.toEqual({ id = "fresh", count = 1, opened = 1600 })
 	end)
 
-	it("an arena opened after now (another server's clock ahead) is not open", function()
-		t.expect(Arena.join({ id = "a1", count = 1, opened = 1001 }, "fresh", 1000).id).toBe("fresh")
-	end)
+	it(
+		"an arena opened up to SKEW_SECONDS after now (another server's clock ahead) counts as open; further is not",
+		function()
+			t.expect(Arena.SKEW_SECONDS).toBe(30)
+			t.expect(Arena.join({ id = "a1", count = 1, opened = 1001 }, "fresh", 1000).id).toBe("a1")
+			t.expect(Arena.join({ id = "a1", count = 1, opened = 1030 }, "fresh", 1000).id).toBe("a1")
+			t.expect(Arena.join({ id = "a1", count = 1, opened = 1031 }, "fresh", 1000).id).toBe("fresh")
+		end
+	)
 
 	it("a stored record that makes no sense is no arena", function()
 		for _, bad in

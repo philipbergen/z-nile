@@ -38,33 +38,45 @@ end
 return t.spec("f0208 Play", function(it)
 	it("a free start due goes at once, in every mode, closed included", function()
 		for _, mode in { "live", "test", "closed" } do
-			t.expect(Play.decide({ free = true, plays = 0 }, nil, mode)).toBe("go")
+			t.expect(Play.decide({ free = true, plays = 0 }, nil, mode, 0)).toBe("go")
 		end
 	end)
 
 	it("a held play goes at once, in every mode, closed included", function()
 		for _, mode in { "live", "test", "closed" } do
-			t.expect(Play.decide({ free = false, plays = 1 }, nil, mode)).toBe("go")
-			t.expect(Play.decide({ free = false, plays = 3 }, nil, mode)).toBe("go")
+			t.expect(Play.decide({ free = false, plays = 1 }, nil, mode, 0)).toBe("go")
+			t.expect(Play.decide({ free = false, plays = 3 }, nil, mode, 0)).toBe("go")
 		end
 	end)
 
 	it(
 		"with no free start due and nothing held the player buys; in closed mode the store is unavailable",
 		function()
-			t.expect(Play.decide({ free = false, plays = 0 }, nil, "live")).toBe("buy")
-			t.expect(Play.decide({ free = false, plays = 0 }, nil, "test")).toBe("buy")
-			t.expect(Play.decide({ free = false, plays = 0 }, nil, "closed")).toBe("closed")
+			t.expect(Play.decide({ free = false, plays = 0 }, nil, "live", 0)).toBe("buy")
+			t.expect(Play.decide({ free = false, plays = 0 }, nil, "test", 0)).toBe("buy")
+			t.expect(Play.decide({ free = false, plays = 0 }, nil, "closed", 0)).toBe("closed")
 		end
 	)
 
 	it("a read that failed goes on the portal's pass, in every mode; a busy read reads again", function()
 		for _, mode in { "live", "test", "closed" } do
-			t.expect(Play.decide(nil, "down", mode)).toBe("pass")
-			t.expect(Play.decide(nil, "busy", mode)).toBe("busy")
+			t.expect(Play.decide(nil, "down", mode, 0)).toBe("pass")
+			t.expect(Play.decide(nil, "busy", mode, 0)).toBe("busy")
 		end
-		t.expect(Play.decide(nil, nil, "live")).toBe("pass")
+		t.expect(Play.decide(nil, nil, "live", 0)).toBe("pass")
 	end)
+
+	it(
+		"a read still busy after CHECK_SECONDS of checking is a slow store: it goes on the pass, in every mode",
+		function()
+			t.expect(Play.CHECK_SECONDS > 5).toBe(true) -- more than the Wallet's WAIT_SECONDS, so the late read allows a pass
+			for _, mode in { "live", "test", "closed" } do
+				t.expect(Play.decide(nil, "busy", mode, Play.CHECK_SECONDS - 0.01)).toBe("busy")
+				t.expect(Play.decide(nil, "busy", mode, Play.CHECK_SECONDS)).toBe("pass")
+			end
+			t.expect(Play.decide({ free = false, plays = 0 }, nil, "live", 60)).toBe("buy")
+		end
+	)
 
 	it("a client's play names a title and one of that title's modes", function()
 		t.expect(Play.intent("play", "invaders", "pair", Modes))
@@ -184,7 +196,7 @@ return t.spec("f0208 Play", function(it)
 		t.expect(shape(v)).toEqual({ "cancel|CANCEL||true", "invite|INVITE FRIEND||true" })
 	end)
 
-	it("a play that could not start, or a closed store, shows its note beside the buttons", function()
+	it("a play that could not start, or a closed store, shows its note above the buttons", function()
 		local state = { published = true, free = false }
 		local failed = Play.view(
 			"pickman",
@@ -195,7 +207,7 @@ return t.spec("f0208 Play", function(it)
 			Prices
 		)
 		t.expect(failed.note).toBe("COULD NOT START. TRY AGAIN.")
-		t.expect(shape(failed)).toEqual({ "solo|PLAY||true" })
+		t.expect(shape(failed)).toEqual({ "solo|PLAY||false" }) -- resting: its cool-down
 		local closed = Play.view(
 			"pickman",
 			Modes.pickman,
@@ -333,6 +345,44 @@ return t.spec("f0208 Play", function(it)
 		end
 	)
 
+	it(
+		"a player's MemoryStore writes: WRITES within WRITE_SPAN seconds, the oldest freeing a place as it ages out",
+		function()
+			local times = {}
+			local ok
+			for i = 1, Play.WRITES do
+				ok, times = Play.spend(times, 100 + i)
+				t.expect(ok).toBe(true)
+			end
+			local before = table.clone(times)
+			ok, times = Play.spend(times, 100 + Play.WRITES + 1)
+			t.expect(ok).toBe(false)
+			t.expect(#times).toBe(Play.WRITES)
+			t.expect(times).toEqual(before) -- a refused write is not counted
+			ok = Play.spend(times, 101 + Play.WRITE_SPAN - 0.01)
+			t.expect(ok).toBe(false)
+			ok, times = Play.spend(times, 101 + Play.WRITE_SPAN)
+			t.expect(ok).toBe(true)
+			t.expect(#times).toBe(Play.WRITES)
+		end
+	)
+
+	it("spending never changes the list it is given", function()
+		local times = { 1, 2 }
+		Play.spend(times, 3)
+		Play.spend(times, 1000)
+		t.expect(times).toEqual({ 1, 2 })
+	end)
+
+	it(
+		"the card's keys are clear of the boards' tab keys (f0206: W, S, Up, Down, ButtonL2, ButtonR2)",
+		function()
+			for _, key in { "W", "S", "Up", "Down", "ButtonL2", "ButtonR2" } do
+				t.expect(Play.KEYS[key]).toBe(nil)
+			end
+		end
+	)
+
 	it("a card's second button is its second mode", function()
 		t.expect(Play.second(Modes.snake)).toBe("arena")
 		t.expect(Play.second(Modes.invaders)).toBe("pair")
@@ -361,6 +411,12 @@ return t.spec("f0208 Play", function(it)
 		t.expect(Play.BUSY_SECONDS).toBe(0.25)
 		t.expect(Play.CHECK_SECONDS).toBe(10)
 		t.expect(Play.RECEIPT_SECONDS).toBe(30)
+		t.expect(Play.BUY_SECONDS).toBe(120)
+		t.expect(Play.COOL_SECONDS).toBe(3)
+		t.expect(Play.WRITE_SECONDS).toBe(5)
+		t.expect(Play.WRITES).toBe(6)
+		t.expect(Play.WRITE_SPAN).toBe(60)
+		t.expect(Play.RETRY_SECONDS).toBe(1)
 	end)
 
 	it("Modes: PLAY on every title, ARENA on Snake, 2 PLAYERS on Invaders and Asteroids, frozen", function()

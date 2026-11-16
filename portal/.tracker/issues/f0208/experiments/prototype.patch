@@ -294,16 +294,17 @@ index 000000000..89b1f8af2
 +return PlayButtons
 diff --git a/portal/src/server/Invites.luau b/portal/src/server/Invites.luau
 new file mode 100644
-index 000000000..461219a09
+index 000000000..0bc09c2b6
 --- /dev/null
 +++ b/portal/src/server/Invites.luau
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,83 @@
 +--!strict
 +-- Invites (f0208): a friend invited to a 2 PLAYERS wait reaches the inviter's portal server. The inviter's server
 +-- records the invite (MemoryStore, by the inviter's user id: this server's job id and the title), once per wait. A
 +-- player who joins with an inviter's id as launch data (the invite's), and lands in another portal server while the
 +-- inviter is not there, is sent to the inviter's server when the invite is on record and they are friends; there the
 +-- friend presses 2 PLAYERS on that card. The launch data only names whom to look up: the record is the server's.
++-- The record goes when the wait ends (Invites.withdraw); Plays bounds how often either is written.
 +local Modes = require("@game/ReplicatedStorage/Shared/Modes")
 +local Play = require("@game/ReplicatedStorage/Shared/Logic/Play")
 +
@@ -330,6 +331,13 @@ index 000000000..461219a09
 +function Invites.offer(player: any, name: string)
 +	pcall(function()
 +		invites():SetAsync(tostring(player.UserId), { job = game.JobId, name = name }, Invites.SECONDS)
++	end)
++end
++
++-- Removes `player`'s invite: their wait ended, so a friend is no longer sent to this server for it.
++function Invites.withdraw(player: any)
++	pcall(function()
++		invites():RemoveAsync(tostring(player.UserId))
 +	end)
 +end
 +
@@ -384,19 +392,21 @@ index 6f44b16e4..50ac3b7f2 100644
 +require("./Plays").start()
 diff --git a/portal/src/server/Plays.luau b/portal/src/server/Plays.luau
 new file mode 100644
-index 000000000..4d27ccf27
+index 000000000..119707a73
 --- /dev/null
 +++ b/portal/src/server/Plays.luau
-@@ -0,0 +1,331 @@
+@@ -0,0 +1,440 @@
 +--!strict
 +-- Plays (f0208): the server side of the play buttons. A client only asks: play a title in a mode, cancel a wait, or
 +-- invite a friend (ReplicatedStorage.Remotes.Play). The server checks the player's record through the arcade's
-+-- Wallet and decides (Logic/Play): a free start due or a held play goes at once, a failed read goes on the portal's
-+-- pass, else it opens the 1 R$ play product (Receipts) and goes once the grant arrives. Going is a teleport to the
-+-- title's place from the place-id attributes (Places, never from the client): PLAY to a public server, ARENA to the
-+-- shared arena's reserved server (Logic/Arena), 2 PLAYERS after a second player joins the title's waiting line
-+-- (Logic/Pairing), both together to a fresh reserved server. Nothing is charged here: the game place consumes the
-+-- entitlement on arrival (Wallet.arrive), and nothing is put in TeleportData. Receipts is installed here, once.
++-- Wallet and decides (Logic/Play): a free start due or a held play goes at once, a failed or slow read goes on the
++-- portal's pass, else it opens the 1 R$ play product (Receipts) and goes once the grant arrives. Going is a teleport
++-- to the title's place from the place-id attributes (Places, never from the client): PLAY to a public server, ARENA
++-- to the shared arena's reserved server (Logic/Arena), 2 PLAYERS after a second player joins the title's waiting
++-- line (Logic/Pairing), both together to a fresh reserved server. Nothing is charged here: the game place consumes
++-- the entitlement on arrival (Wallet.arrive), and nothing is put in TeleportData. Receipts is installed here, once.
++-- One player's MemoryStore writes are bounded in number (Play.spend) and each in time (Play.WRITE_SECONDS); the
++-- waiting counts go to everyone at most once a second; every failure rests the title's buttons COOL_SECONDS.
 +local Arena = require("@game/ReplicatedStorage/Shared/Logic/Arena")
 +local Games = require("@game/ReplicatedStorage/Shared/Games")
 +local Invites = require("./Invites")
@@ -417,11 +427,44 @@ index 000000000..4d27ccf27
 +local ServerScriptService = game:GetService("ServerScriptService")
 +local TeleportService = game:GetService("TeleportService")
 +
-+type Slot = { phase: Play.Phase, name: string?, mode: Play.Mode?, flight: number, invited: boolean }
++type Slot = {
++	phase: Play.Phase,
++	name: string?,
++	mode: Play.Mode?,
++	flight: number,
++	invited: boolean,
++	cool: number, -- os.clock() before which a failed play's buttons rest
++}
 +
 +local Plays = {}
 +
 +local started = false
++
++-- Runs `fn` in a thread of its own and waits at most `seconds` for it: true and whether it raised nothing when it
++-- ended in time, false when it did not (it goes on, and what it does later is its own).
++local function within(seconds: number, fn: () -> ()): (boolean, boolean)
++	local co = coroutine.running()
++	local done, ok, waiting = false, false, false
++	task.spawn(function()
++		ok = pcall(fn)
++		done = true
++		if waiting then
++			waiting = false
++			task.spawn(co)
++		end
++	end)
++	if not done then
++		waiting = true
++		task.delay(seconds, function()
++			if waiting then
++				waiting = false
++				task.spawn(co)
++			end
++		end)
++		coroutine.yield()
++	end
++	return done, ok
++end
 +
 +function Plays.start()
 +	if started then
@@ -441,7 +484,10 @@ index 000000000..4d27ccf27
 +	end
 +	local travel = Travel.new()
 +	local slots: { [any]: Slot } = {}
++	local writes: { [any]: { number } } = {} -- each player's recent MemoryStore writes, kept across plays
++	local offered: { [any]: boolean } = {} -- an invite on record for the player, not withdrawn yet
 +	local queue = Pairing.new()
++	local dirty = false -- the waiting counts changed since they were last sent
 +	local serial = 0
 +	local arenas: any = nil
 +
@@ -467,16 +513,43 @@ index 000000000..4d27ccf27
 +		return out
 +	end
 +
++	-- one more MemoryStore write for the player, if their budget allows it
++	local function spend(player: any): boolean
++		local ok, kept = Play.spend(writes[player] or {}, os.clock())
++		writes[player] = kept
++		return ok
++	end
++
++	-- the player's invite record goes when their wait ends (a cancel, a pair, another play, a leave)
++	local function withdraw(player: any)
++		if offered[player] then
++			offered[player] = nil
++			if spend(player) then
++				task.spawn(Invites.withdraw, player)
++			end
++		end
++	end
++
 +	local function unwait(player: any)
 +		queue = Pairing.leave(queue, idOf(player))
-+		remote:FireAllClients("waiting", counts())
++		dirty = true
++		withdraw(player)
 +	end
 +
 +	local function set(player: any, phase: Play.Phase)
 +		local slot = slots[player]
-+		if slot ~= nil then
++		if slot ~= nil and slot.phase ~= phase then
 +			slot.phase = phase
 +			tell(player)
++		end
++	end
++
++	-- a failure: COULD NOT START, and the title's buttons rest COOL_SECONDS
++	local function fail(player: any)
++		local slot = slots[player]
++		if slot ~= nil then
++			slot.cool = os.clock() + Play.COOL_SECONDS
++			set(player, "failed")
 +		end
 +	end
 +
@@ -485,12 +558,13 @@ index 000000000..4d27ccf27
 +		return player.Parent ~= nil and slot ~= nil and slot.flight == flight
 +	end
 +
-+	-- the teleport of one start: every player's travel goes, then one TeleportAsync for them all
++	-- the teleport of one start: every player's travel goes, then one TeleportAsync for them all, tried once more
++	-- RETRY_SECONDS later when it raises (Roblox advises retrying, reserved servers above all)
 +	local function go(players: { any }, name: string, reserved: string?)
 +		for _, p in players do
 +			if Travel.status(travel, idOf(p), os.clock()) ~= "idle" then
 +				for _, q in players do
-+					set(q, "failed")
++					fail(q)
 +				end
 +				return
 +			end
@@ -501,36 +575,56 @@ index 000000000..4d27ccf27
 +			tickets[p] = ticket
 +			set(p, "going")
 +		end
-+		local ok = pcall(function()
-+			local options = Instance.new("TeleportOptions")
-+			if reserved ~= nil then
-+				options.ReservedServerId = reserved
++		local function attempt(): boolean
++			return pcall(function()
++				local options = Instance.new("TeleportOptions")
++				if reserved ~= nil then
++					options.ReservedServerId = reserved
++				end
++				TeleportService:TeleportAsync(destination[name], players, options)
++			end)
++		end
++		local ok = attempt()
++		if not ok then
++			task.wait(Play.RETRY_SECONDS)
++			local all = true
++			for _, p in players do
++				local slot = slots[p]
++				if p.Parent == nil or slot == nil or slot.phase ~= "going" then
++					all = false
++				end
 +			end
-+			TeleportService:TeleportAsync(destination[name], players, options)
-+		end)
++			ok = all and attempt()
++		end
 +		for _, p in players do
 +			if ok then
 +				Travel.answered(travel, idOf(p), os.clock(), tickets[p])
 +			else
 +				Travel.failed(travel, idOf(p), os.clock(), tickets[p])
-+				set(p, "failed")
++				fail(p)
 +			end
 +		end
 +	end
 +
-+	-- the player is entitled: go alone, to the title's shared arena, or to its waiting line
++	-- the player is entitled: go alone, to the title's shared arena, or to its waiting line. The slot says going
++	-- before anything yields, so a press or a second grant meanwhile does nothing.
 +	local function proceed(player: any, flight: number)
 +		local slot = slots[player]
 +		if not current(player, flight) or slot.name == nil then
 +			return
 +		end
 +		local name = slot.name :: string
++		set(player, "going")
 +		if slot.mode == "solo" then
 +			go({ player }, name, nil)
 +		elseif slot.mode == "arena" then
++			if not spend(player) then
++				fail(player)
++				return
++			end
 +			local fresh = HttpService:GenerateGUID(false)
 +			local last: Arena.Record? = nil
-+			local ok = pcall(function()
++			local _, ok = within(Play.WRITE_SECONDS, function()
 +				if arenas == nil then
 +					arenas = MemoryStoreService:GetHashMap(Arena.MAP)
 +				end
@@ -542,31 +636,32 @@ index 000000000..4d27ccf27
 +			if not current(player, flight) then
 +				return
 +			end
-+			if not ok or last == nil then
-+				set(player, "failed")
++			if not ok or last == nil then -- failed, or not back within WRITE_SECONDS
++				fail(player)
 +				return
 +			end
 +			go({ player }, name, (last :: Arena.Record).id)
 +		else
 +			local pair
 +			queue, pair = Pairing.join(queue, name, idOf(player))
++			dirty = true
 +			if pair == nil then
 +				set(player, "waiting")
-+				remote:FireAllClients("waiting", counts())
 +				return
 +			end
-+			remote:FireAllClients("waiting", counts())
 +			local first = Players:GetPlayerByUserId(tonumber(pair[1]) :: number)
++			withdraw(player)
 +			if first == nil or slots[first] == nil then
-+				set(player, "failed")
++				fail(player)
 +				return
 +			end
++			withdraw(first)
 +			go({ first, player }, name, HttpService:GenerateGUID(false))
 +		end
 +	end
 +
-+	-- the record check, reading again while another read of it is under way (at most CHECK_SECONDS); the decision as
-+	-- a string, since the Roblox type pass widens a literal union across a require (f0201 E6)
++	-- the record check, reading again while another read of it is under way; after CHECK_SECONDS of that the
++	-- decision is the pass. The decision as a string: the Roblox type pass widens a literal union across a require
 +	local function check(player: any, name: string, flight: number): string?
 +		local began = os.clock()
 +		while true do
@@ -579,8 +674,8 @@ index 000000000..4d27ccf27
 +				local status = PaidPlay.status(record, os.time())
 +				read = { free = status.free, plays = status.plays }
 +			end
-+			local decision = Play.decide(read, problem, Wallet.mode(name))
-+			if decision ~= "busy" or os.clock() - began >= Play.CHECK_SECONDS then
++			local decision = Play.decide(read, problem, Wallet.mode(name), os.clock() - began)
++			if decision ~= "busy" then
 +				return decision
 +			end
 +			task.wait(Play.BUSY_SECONDS)
@@ -593,23 +688,32 @@ index 000000000..4d27ccf27
 +	local function run(player: any, name: string, mode: Play.Mode)
 +		serial += 1
 +		local flight = serial
-+		slots[player] = { phase = "checking", name = name, mode = mode, flight = flight, invited = false }
++		slots[player] =
++			{ phase = "checking", name = name, mode = mode, flight = flight, invited = false, cool = 0 }
 +		tell(player)
 +		local decision = check(player, name, flight)
 +		if decision == nil then
 +			return
-+		elseif decision == "busy" then
-+			set(player, "failed")
 +		elseif decision == "closed" then
 +			set(player, "closed")
 +		elseif decision == "buy" then
 +			set(player, "buying")
 +			if not Receipts.ask(player, name, "play") then
-+				set(player, "failed")
++				fail(player)
++				return
 +			end
++			task.delay(Play.BUY_SECONDS, function()
++				local now = slots[player]
++				if current(player, flight) and now.phase == "buying" then
++					set(player, "idle")
++				end
++			end)
 +		else
-+			if decision == "pass" then
-+				Wallet.pass(player, name)
++			set(player, "going")
++			if decision == "pass" and spend(player) then
++				within(Play.WRITE_SECONDS, function()
++					Wallet.pass(player, name)
++				end)
 +			end
 +			proceed(player, flight)
 +		end
@@ -661,7 +765,10 @@ index 000000000..4d27ccf27
 +			if slot ~= nil and slot.phase == "waiting" and slot.mode == "pair" then
 +				if not slot.invited then
 +					slot.invited = true
-+					task.spawn(Invites.offer, player, slot.name :: string)
++					if spend(player) then
++						offered[player] = true
++						task.spawn(Invites.offer, player, slot.name :: string)
++					end
 +				end
 +				remote:FireClient(player, "invite")
 +			end
@@ -674,7 +781,7 @@ index 000000000..4d27ccf27
 +		if slot ~= nil and (slot.phase == "checking" or slot.phase == "buying" or slot.phase == "going") then
 +			return
 +		end
-+		if Travel.status(travel, idOf(player), os.clock()) ~= "idle" then
++		if slot ~= nil and slot.phase == "failed" and os.clock() < slot.cool then
 +			return
 +		end
 +		if slot ~= nil and slot.phase == "waiting" then
@@ -687,7 +794,7 @@ index 000000000..4d27ccf27
 +		Travel.failed(travel, idOf(player), os.clock())
 +		local slot = slots[player]
 +		if slot ~= nil and slot.phase == "going" then
-+			set(player, "failed")
++			fail(player)
 +		end
 +	end)
 +
@@ -700,9 +807,12 @@ index 000000000..4d27ccf27
 +		end
 +		Travel.left(travel, idOf(player))
 +		slots[player] = nil
++		writes[player] = nil
++		offered[player] = nil
 +	end)
 +
-+	-- a start that never left times out in Travel: tell the player once a second
++	-- once a second: the waiting counts to everyone when they changed; a start that never left times out in Travel;
++	-- a failed play's buttons come back once its cool-down and Travel's are over
 +	local last = 0
 +	RunService.Heartbeat:Connect(function()
 +		local now = os.clock()
@@ -710,9 +820,16 @@ index 000000000..4d27ccf27
 +			return
 +		end
 +		last = now
++		if dirty then
++			dirty = false
++			remote:FireAllClients("waiting", counts())
++		end
 +		for player, slot in slots do
-+			if slot.phase == "going" and Travel.status(travel, idOf(player), now) == "cooling" then
-+				set(player, "failed")
++			local phase = Travel.status(travel, idOf(player), now)
++			if slot.phase == "going" and phase == "cooling" then
++				fail(player)
++			elseif slot.phase == "failed" and now >= slot.cool and phase == "idle" then
++				set(player, "idle")
 +			end
 +		end
 +	end)
@@ -721,10 +838,10 @@ index 000000000..4d27ccf27
 +return Plays
 diff --git a/portal/src/shared/Logic/Arena/init.luau b/portal/src/shared/Logic/Arena/init.luau
 new file mode 100644
-index 000000000..0a72be000
+index 000000000..5e51b07e6
 --- /dev/null
 +++ b/portal/src/shared/Logic/Arena/init.luau
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,45 @@
 +--!strict
 +-- Arena (f0208): which shared arena an ARENA player joins. The portal's servers share one record per title in a
 +-- MemoryStore hash map: the reserved server's id, how many players the portal has sent there, and when it opened.
@@ -737,13 +854,15 @@ index 000000000..0a72be000
 +Arena.CAP = 24 -- players sent to one arena (snake's arena cap, f0212)
 +Arena.OPEN_SECONDS = 600 -- an arena takes new players this long after it opened
 +Arena.MAP = "PortalArenas" -- the MemoryStore hash map, key the title's name
++Arena.SKEW_SECONDS = 30 -- another portal server's clock may run this far ahead of this one's
 +
 +local function whole(n: any): boolean
 +	return type(n) == "number" and n == n and n ~= math.huge and n ~= -math.huge and n == math.floor(n)
 +end
 +
-+-- The stored arena when it still takes players at `now`: a well-formed record with fewer than CAP sent, opened no
-+-- later than `now` and less than OPEN_SECONDS before it. Anything else is nil.
++-- The stored arena when it still takes players at `now`: a well-formed record with fewer than CAP sent, opened less
++-- than OPEN_SECONDS before `now`, and no more than SKEW_SECONDS after it (another server's clock ahead of this one's
++-- counts as now). Anything else is nil.
 +function Arena.open(raw: any, now: number): Record?
 +	if type(raw) ~= "table" or type(raw.id) ~= "string" or raw.id == "" then
 +		return nil
@@ -751,7 +870,7 @@ index 000000000..0a72be000
 +	if not whole(raw.count) or raw.count < 0 or raw.count >= Arena.CAP or not whole(raw.opened) then
 +		return nil
 +	end
-+	if raw.opened > now or now - raw.opened >= Arena.OPEN_SECONDS then
++	if raw.opened > now + Arena.SKEW_SECONDS or now - raw.opened >= Arena.OPEN_SECONDS then
 +		return nil
 +	end
 +	return { id = raw.id, count = raw.count, opened = raw.opened }
@@ -845,10 +964,10 @@ index 000000000..95b1189f5
 +return table.freeze(Pairing)
 diff --git a/portal/src/shared/Logic/Play/init.luau b/portal/src/shared/Logic/Play/init.luau
 new file mode 100644
-index 000000000..62b9ba728
+index 000000000..6a0f4c421
 --- /dev/null
 +++ b/portal/src/shared/Logic/Play/init.luau
-@@ -0,0 +1,225 @@
+@@ -0,0 +1,249 @@
 +--!strict
 +-- Play (f0208): what a card's play buttons do and show. Pure rules: the server's decision from a read of the
 +-- player's record (play now, play on the portal's pass, buy, store unavailable, or read again), the client's intent
@@ -910,19 +1029,26 @@ index 000000000..62b9ba728
 +Play.PRIORITY = 2500 -- above the default controls' 2000, below the test purchase screen's 3000 (f0201)
 +Play.GAP = 0.02 -- between buttons, of the slot's width
 +Play.BUSY_SECONDS = 0.25 -- a check that finds the record being read reads again this much later
-+Play.CHECK_SECONDS = 10 -- a check still busy this long fails
++Play.CHECK_SECONDS = 10 -- a check still busy this long goes on the pass (more than Wallet's WAIT_SECONDS, 5)
 +Play.RECEIPT_SECONDS = 30 -- a purchase closed bought waits this long for its receipt
++Play.BUY_SECONDS = 120 -- a purchase whose screen never reports closing ends this long after it opened
++Play.COOL_SECONDS = 3 -- after any failure the title's buttons rest this long (Travel's own cool-down)
++Play.WRITE_SECONDS = 5 -- a MemoryStore write a player waits for counts as failed when not back by then
++Play.WRITES = 6 -- MemoryStore writes one player may cause (an arena seat, a pass, an invite set or removed)
++Play.WRITE_SPAN = 60 -- ... within this many seconds
++Play.RETRY_SECONDS = 1 -- a teleport that raises is tried once more this much later
 +
 +local function has(list: { any }, v: any): boolean
 +	return table.find(list, v) ~= nil
 +end
 +
-+-- The server's decision for a play of a title, from Wallet.read's answer: nil and "busy" reads again; nil and any
-+-- other answer (the store down or slow) plays on the portal's pass; a free start due, or a held play, plays; with
-+-- neither, a title in closed mode cannot sell ("closed"), else the player buys.
-+function Play.decide(read: Read?, problem: string?, mode: string): Decision
++-- The server's decision for a play of a title, from Wallet.read's answer after `waited` seconds of checking: nil and
++-- "busy" reads again until CHECK_SECONDS have passed, then plays on the portal's pass (a read that long under way is
++-- a slow store); nil and any other answer (the store down or slow) plays on the pass; a free start due, or a held
++-- play, plays; with neither, a title in closed mode cannot sell ("closed"), else the player buys.
++function Play.decide(read: Read?, problem: string?, mode: string, waited: number): Decision
 +	if read == nil then
-+		return if problem == "busy" then "busy" else "pass"
++		return if problem == "busy" and waited < Play.CHECK_SECONDS then "busy" else "pass"
 +	end
 +	if read.free == true or read.plays >= 1 then
 +		return "go"
@@ -984,7 +1110,7 @@ index 000000000..62b9ba728
 +
 +-- One card's buttons and note for a player. A title not published shows none. While the player's own play is for
 +-- this title: checking, buying and going show only the note; waiting shows the note, CANCEL and (for 2 PLAYERS)
-+-- INVITE FRIEND; closed and failed show the note above the title's buttons. Otherwise one button per mode, each
++-- INVITE FRIEND; closed and failed show the note above the title's buttons (failed ones disabled: its cool-down). Otherwise one button per mode, each
 +-- with the play's price, enabled once the title's state is known; `others` waiting on a 2 PLAYERS title say so. A
 +-- card with a note shows its buttons' names only (the badge above says the price).
 +function Play.view(
@@ -1017,7 +1143,7 @@ index 000000000..62b9ba728
 +		note = Play.NOTE.other
 +	end
 +	local price = if note == "" then Play.price(state, prices) else ""
-+	local enabled = state ~= nil and state.free ~= nil
++	local enabled = state ~= nil and state.free ~= nil and phase ~= "failed"
 +	local out = {}
 +	for _, m in modes do
 +		table.insert(out, button(m :: Kind, price, enabled))
@@ -1043,6 +1169,23 @@ index 000000000..62b9ba728
 +-- Where the note sits: the whole slot when no button shows, else its top half.
 +function Play.noteBox(count: number): Slot
 +	return { x = 0, y = 0, width = 1, height = if count < 1 then 1 else 0.5 }
++end
++
++-- One more MemoryStore write for a player whose recent writes are `times` (os.clock() instants): allowed while fewer
++-- than WRITES fall within the last WRITE_SPAN seconds. Answers whether it is allowed, and the times kept (the old
++-- ones dropped, `now` added when allowed). Never changes the list it is given.
++function Play.spend(times: { number }, now: number): (boolean, { number })
++	local kept = {}
++	for _, at in times do
++		if now - at < Play.WRITE_SPAN and at <= now then
++			table.insert(kept, at)
++		end
++	end
++	if #kept >= Play.WRITES then
++		return false, kept
++	end
++	table.insert(kept, now)
++	return true, kept
 +end
 +
 +function Play.key(name: string): Key?
@@ -1138,7 +1281,7 @@ index 000000000..dc1323a03
 +end)
 diff --git a/portal/tests/unit/Play/play.spec.luau b/portal/tests/unit/Play/play.spec.luau
 new file mode 100644
-index 000000000..445730298
+index 000000000..29bb8268f
 --- /dev/null
 +++ b/portal/tests/unit/Play/play.spec.luau
 @@ -0,0 +1,9 @@
@@ -1148,6 +1291,6 @@ index 000000000..445730298
 +
 +return t.spec("Play", function(it)
 +	it("a held play goes at once", function()
-+		t.expect(Play.decide({ free = false, plays = 1 }, nil, "live")).toBe("go")
++		t.expect(Play.decide({ free = false, plays = 1 }, nil, "live", 0)).toBe("go")
 +	end)
 +end)
