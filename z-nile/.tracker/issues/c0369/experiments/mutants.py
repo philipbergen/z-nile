@@ -1,0 +1,124 @@
+"""Mutation check for c0369: MUT_WT=<a throwaway copy of the prototype> python3 mutants.py ["<mutant id>" ...]
+
+MUT_WT is required: a worktree or clone of proto-c0369 that holds this issue's specs in
+z-nile/.tracker/issues/c0369/acceptance and nothing worth keeping. Each entry replaces one text there, runs the row's
+spec and restores the file (also when the run is stopped by a signal). A mutant is killed when the run fails; the
+output line says on what. An entry whose text is not found exactly once, or that survives, exits non-zero.
+Run it bounded: MUT_WT=... ./zn run --time 3500 -- python3 <this file>"""
+import os
+import signal
+import subprocess
+import sys
+
+P = os.environ.get('MUT_WT', '')
+Z = P + '/z-nile'
+A = '.tracker/issues/c0369/acceptance/'
+PL, AR, DC = A + 'place.spec.luau', A + 'approve.spec.luau', A + 'docs.spec.luau'
+PLACE, MAIN, APPROVAL = 'engine/approveplace.luau', 'engine/main.luau', 'engine/approval.luau'
+RULES, DESIGN, AGENTS = 'skills/zz-rules/SKILL.md', 'skills/z-design/SKILL.md', '../AGENTS.md'
+TO_MAIN = 'if not publishOnly and main and main.ready and main.state ~= "holds" then'
+M = [
+    ("place: a worktree that holds main's own design is taken", PLACE, 'if main and main.ready and main.hash == hash then', 'if false then', PL),
+    ('place: a worktree that is only behind main is taken', PLACE, 'return w.base ~= hash and not w.landed', 'return not w.landed', PL),
+    ('place: a prep that already merged is taken', PLACE, 'return w.base ~= hash and not w.landed', 'return w.base ~= hash', PL),
+    ('place: a draft in a worktree is taken', PLACE, 'if not w.copy.ready or hash == nil then', 'if hash == nil then', PL),
+    ("place: main's unapproved design wins over a worktree's own", PLACE, 'if not publishOnly and #waiting > 0 then', 'if not publishOnly and #waiting > 0 and not (main and main.ready) then', PL),
+    ('place: the prep wins over the worktree the command runs in', PLACE, '\t\tif w.here then\n', '\t\tif false then\n', PL),
+    ('place: an approved worktree is approved again', PLACE, 'if mine and w.copy.state ~= "holds" then', 'if mine then', PL),
+    ('place: --publish records a new approval in a worktree', PLACE, 'if not publishOnly and #waiting > 0 then', 'if #waiting > 0 then', PL),
+    ("place: --publish records a new approval of main's design", PLACE, TO_MAIN, 'if main and main.ready and main.state ~= "holds" then', PL),
+    ("place: an approval held for main's design is recorded again", PLACE, 'elseif forMain(main, w) then', 'elseif false then', PL),
+    ("place: an approval held for main's approved design is published again", PLACE, '\t\tand main.state ~= "holds"\n', '\t\tand true\n', PL),
+    ("place: a record of a design that is nobody's is retried", PLACE, 'elseif mine and w.copy.state == "holds" then', 'elseif w.copy.state == "holds" then', PL),
+    ('place: a pushed approval is retried', PLACE, 'table.insert(if w.pushed then pushed else recorded, w)', 'table.insert(recorded, w)', PL),
+    ('place: an approved main is approved again', PLACE, TO_MAIN, 'if not publishOnly and main and main.ready then', PL),
+    ('place: a draft on main is approved', PLACE, TO_MAIN, 'if not publishOnly and main and main.state ~= "holds" then', PL),
+    ('approve: it records in the checkout it runs in', MAIN, '\t\tif target ~= top then\n', '\t\tif false then\n', AR),
+    ('approve: nothing is published after recording', MAIN, 'print(`approved {id} {hash} in {where}`)\n\tif hasOrigin() then', 'print(`approved {id} {hash} in {where}`)\n\tif false then', AR),
+    ('approve: a draft on main with the same text takes the approval', MAIN, 'if not doc or frontOf(doc).design ~= "ready" then', 'if not doc then', AR),
+    ("approve: the command's worktree stays after publishing", MAIN, 'if ran.ok and target == scratch and detached then', 'if false then', AR),
+    ("approve: the command's worktree is removed after a failed publish", MAIN, 'if ran.ok and target == scratch and detached then', 'if target == scratch and detached then', AR),
+    ('approve: a taken worktree path is reused', MAIN, 'if not detached or not dirty.ok or sh.trim(dirty.stdout) ~= "" then', 'if false then', AR),
+    ('approve: a failed push is reported as done', MAIN, '\t\t\tif not pushed.ok then\n\t\t\t\tnotYet(', '\t\t\tif false then\n\t\t\t\tnotYet(', AR),
+    ('approve: a failed publish is reported as done', MAIN, '\t\tif not result.ok then\n\t\t\tnotYet(', '\t\tif false then\n\t\t\tnotYet(', AR),
+    ('approve: --publish does not look for the record', MAIN, 'places.choose(id, mainCopy, seen, publishOnly)', 'places.choose(id, mainCopy, seen, false)', AR),
+    ('approve: a held approval is recorded a second time', MAIN, '\t\t\tif not chosen.record then\n', '\t\t\tif false then\n', AR),
+    ('approve: publishing off is ignored', MAIN, '\t\tif not publishing() then\n\t\t\tnotYet(', '\t\tif false then\n\t\t\tnotYet(', AR),
+    ('approve: ZN_APPROVE_IN skips the refusals', MAIN, '\tlocal onlyCheck = opts["--check"] ~= nil\n\tif not onlyCheck then', '\tlocal onlyCheck = opts["--check"] ~= nil\n\tif not onlyCheck and (process.env.ZN_APPROVE_IN or "") == "" then', AR),
+    ('approve: a placed run records in the main checkout', MAIN, '\t\trefuseInMainCheckout("approve")\n', '\t\tlocal _ = refuseInMainCheckout\n', AR),
+    ("approve: the worktree's whole approval.md replaces main's", MAIN, 'local changes = { { path = path, content = publishText } }', 'local changes = { { path = path, content = localText } }', AR),
+    ('approve: the place is not said', MAIN, '"approving in" else "publishing from"', '"" else ""', AR),
+    ('load: the history of main is not read', PLACE, 'w.landed = held(path, (string.gsub(base, "%s+$", "")), id, copy.hash :: string)', 'w.landed = false', AR),
+    ('load: the merge-base is not read', PLACE, 'w.base = if at and at.ready then at.hash else nil', 'w.base = nil', AR),
+    ("load: a draft at the merge-base counts as main's design", PLACE, 'w.base = if at and at.ready then at.hash else nil', 'w.base = if at then at.hash else nil', AR),
+    ('load: a pushed branch is not seen', PLACE, 'w.pushed = theirs ~= nil and theirs == git(path, { "rev-parse", "HEAD" })', 'w.pushed = false', AR),
+    ('load: every worktree is read', PLACE, 'if i > 1 and (prep or path == here or path == scratch) and fs.isDir(path) then', 'if i > 1 and fs.isDir(path) then', AR),
+    ('load: the prep branch is not looked for', PLACE, 'local prep = slug ~= "" and tree.branch == `prep-{slug}`', 'local prep = false', AR),
+    ('docs: zz-rules still sends the person to a worktree', RULES, '| one command, with a terminal on stdin,', '| in the worktree where the design is, with a terminal on stdin,', DC),
+    ('docs: zz-rules forgets the main checkout is never written', RULES, 'the main checkout is never written', 'the main checkout is rarely written', DC),
+    ('docs: zz-rules forgets which worktrees are read', RULES, 'No other worktree is read, so a prototype or a copy is approved only by running the command inside it', 'Every worktree is read', DC),
+    ('docs: zz-rules forgets the retry', RULES, '`./zn approve <id> --publish` retries it from anywhere', '`./zn approve <id> --publish` retries it', DC),
+    ('docs: z-design still says this worktree', DESIGN, 'in a terminal of their own, from anywhere in the checkout: it finds this worktree, records the approval and pushes the branch', 'in a terminal of their own in this worktree', DC),
+    ('docs: AGENTS.md still says the prep worktree', AGENTS, 'run in their own terminal, from anywhere in the checkout (it finds the design, records the approval and publishes it); it is refused', 'run in their own terminal in the prep worktree; it is refused', DC),
+    ('docs: ready still names two commands', APPROVAL, 'run ./zn approve {id} in a terminal, from anywhere in the checkout. This is', 'run ./zn approve {id}, then ./zn approve {id} --publish, from the worktree that holds the design. This is', DC),
+    ('docs: a refusal tells the person to go into a worktree', PLACE, 'Run ./zn approve {id}.`', 'Run ./zn approve {id} inside the one you mean.`', DC),
+]
+
+restore = None  # (path, text) of the file a mutant is in
+
+
+def put_back(*_):
+    if restore:
+        open(restore[0], 'w').write(restore[1])
+
+
+def stopped(signum, _frame):
+    put_back()
+    sys.exit(128 + signum)
+
+
+def main() -> int:
+    global restore
+    if not P or not os.path.isdir(Z):
+        print('MUT_WT must name a throwaway copy of the prototype')
+        return 2
+    dirty = subprocess.run(['git', '-C', P, 'status', '--porcelain'], capture_output=True, text=True, timeout=60)
+    if dirty.returncode != 0 or dirty.stdout.strip():
+        print('refusing: the prototype copy is dirty or unreadable: ' + P)
+        return 2
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, stopped)
+    wanted = sys.argv[1:]
+    bad = 0
+    for name, rel, old, new, spec in M:
+        if wanted and name not in wanted:
+            continue
+        path = os.path.normpath(Z + '/' + rel)
+        text = open(path).read()
+        if text.count(old) != 1:
+            print('NOT APPLIED  ' + name + ' (' + str(text.count(old)) + ' matches)', flush=True)
+            bad += 1
+            continue
+        restore = (path, text)
+        open(path, 'w').write(text.replace(old, new))
+        try:
+            r = subprocess.run(['lune', 'run', 'tests/run', '--', spec], cwd=Z, capture_output=True, text=True, timeout=900)
+            out = r.stdout + r.stderr
+        finally:
+            put_back()
+            restore = None
+        if r.returncode == 0:
+            print('SURVIVED     ' + name, flush=True)
+            bad += 1
+            continue
+        why = ''
+        lines = out.splitlines()
+        for i, line in enumerate(lines):
+            if line.startswith('FAIL') and ' :: ' in line:
+                why = line.split(' :: ', 1)[1] + ' | ' + (lines[i + 1].strip()[-150:] if i + 1 < len(lines) else '')
+                break
+        print('killed       ' + name + '  <-  ' + (why or out.strip()[-200:]), flush=True)
+    return 1 if bad else 0
+
+
+sys.exit(main())
