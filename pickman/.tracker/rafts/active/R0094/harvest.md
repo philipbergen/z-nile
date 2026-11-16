@@ -10,3 +10,11 @@
 - design-review-002 F3: one-off: a product sentence two members' designs left undecided once one could start a run past level 1; put to the user
 - design-review-002 F4: one-off: an earlier packaging decision needed one sentence once the user replaced it
 - design-review-002 F5: z-raft/copied-raft-text-is-reverified
+- review-001 F1: z-ready/human-steps-before-ready-have-a-result
+- review-001 F2: pickman-arch/per-step-listeners-read-events-first
+- review-001 F3: one-off: a comment named the wrong HUD block
+- review-001 F4: one-off: a literal stood beside its constant because the type checker reads the constant as a string; a cast keeps the constant
+- note ws-f0143 (a new unit spec needs its watch file before `./zn finish` can write one; the implementer wrote it by hand): zz-review/finish-watch-is-generated
+- note lead (a layer that is not finished cannot be restacked when main moves; it was brought up with a merge of origin/main, or moved by hand when it held only its start commit): zz-execute/rerun-derivations-on-the-finished-layer
+- final-review-001 F1: one-off: origin/main gained a tracker-only commit 18 seconds after the trace skeleton, so the stack was restacked and the table's commit updated
+- final-review-001 F2: z-design/restated-rules-move-together

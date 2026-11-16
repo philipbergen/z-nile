@@ -85,23 +85,27 @@ local function ready(g: Game)
 	end
 end
 
-function Game.new(config: Config?, ramp: Levels.Ramp?): Game
+function Game.new(config: Config?, ramp: Levels.Ramp?, start: number?): Game
 	local c = config or Game.CLASSIC_CONFIG
 	validate(c)
 	if ramp then
 		Levels.validateRamp(ramp)
 	end
+	local first = start or 1
+	if not isWhole(first) or first < 1 or first == math.huge then
+		error(`rules: start must be a whole number >= 1, got {first}`, 0)
+	end
 	local g: Game = {
 		config = c,
 		phase = "ready",
-		level = 1,
+		level = first,
 		score = 0,
 		lives = c.lives,
 		timer = 0,
 		frightened = 0,
 		extraLifeGiven = false,
 		ramp = ramp,
-		start = 1,
+		start = first, -- f0148: the level the player chose in the lobby
 	}
 	ready(g)
 	return g

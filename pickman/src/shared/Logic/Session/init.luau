@@ -262,7 +262,8 @@ function Session.new(maze: Maze.Maze, seed: number, config: Config?): Session
 	return { tick = 0, maze = maze, seed = seed, config = c, members = {} }
 end
 
-function Session.join(s: Session, id: PlayerId)
+-- `start` (f0148): the level the run starts on, 1 when nil; the server decides it from the player's stored best.
+function Session.join(s: Session, id: PlayerId, start: number?)
 	if s.members[id] then
 		error(`session: player {id} already joined`, 0)
 	end
@@ -270,11 +271,15 @@ function Session.join(s: Session, id: PlayerId)
 		move = Movement.spawn(s.maze),
 		queue = {},
 		jumpTick = -1,
-		play = Game.new(s.config.play or Game.IMMEDIATE_CONFIG, s.config.ramp),
+		play = Game.new(s.config.play or Game.IMMEDIATE_CONFIG, s.config.ramp, start),
 		pellets = Pellets.new(s.maze),
 		stall = 0,
 		ghosts = if s.config.ghosts and Ghosts.available(s.maze)
-			then Ghosts.new(s.maze, s.seed, { tuning = s.config.ghostTuning, ramp = s.config.ramp })
+			then Ghosts.new(
+				s.maze,
+				s.seed,
+				{ tuning = s.config.ghostTuning, ramp = s.config.ramp, level = start }
+			)
 			else nil,
 		ghostJump = {},
 		blaster = Blaster.new(s.seed),
@@ -604,7 +609,7 @@ local function finishPick(s: Session, id: PlayerId, member: Member, out: { Event
 		-- the level's last pick: the bonanza instead of a roll, carried into the next level, then the level clears
 		member.picks.fast += 1
 		member.bonanza = true
-		local kind: Picks.Grant = "bonanza" -- Picks.BONANZA
+		local kind: Picks.Grant = Picks.BONANZA :: Picks.Grant
 		member.boon = { tick = s.tick, kind = kind }
 		table.insert(
 			out,

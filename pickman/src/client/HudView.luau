@@ -26,7 +26,7 @@ local HudView = {}
 
 local score: TextLabel? = nil
 local level: TextLabel? = nil
-local picks: TextLabel? = nil -- the level's finished wall picks, under the level (f0147)
+local picks: TextLabel? = nil -- the level's finished wall picks, under the score (f0147)
 local lives: Frame? = nil
 local bar: Frame? = nil
 local fill: Frame? = nil
