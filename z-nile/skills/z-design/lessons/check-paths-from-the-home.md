@@ -21,3 +21,5 @@ check: Does every path a check.sh builds from `./zn find` or `./zn members` outp
 **Note (c0175's prep, 2026-11-15):** a check.sh may name only paths that exist today. The gate's `c0120/check-paths` spec fails a check that names a dependency's specs before that dependency lands, as d0362 shows for c0283. So c0175's AC13 lists only today's fast specs. Its unlanded dependencies' specs (c0306, c0325, c0251) are covered by the gate at `done`, and the Design says so.
 
 **Note** (c0249 prep, 2026-11-16): a `check.sh` label or a spec case name that spells a repository-root file literally (the agents instruction file) trips c0120's `check-paths` scan too, not only a path the check reads. Name it in words.
+
+**Note** (c0254 design refute 001): a `check.sh` that runs another item's specs resolves their folder at run time with `./zn find <id>` held in a variable, since that item moves between `backlog/`, `active/` and `done/`, and a literal path trips `check-paths` (`c0120`).
