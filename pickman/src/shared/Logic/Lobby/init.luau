@@ -106,7 +106,8 @@ function Lobby.retryAfter(failures: number): number?
 end
 
 -- The start button: live only when a destination is set and nothing is under way.
-function Lobby.button(status: Travel.Phase, configured: boolean): Button
+-- `level` (f0148): the picker's level when it is shown; the idle button then says which level it starts.
+function Lobby.button(status: Travel.Phase, configured: boolean, level: number?): Button
 	if not configured then
 		return { text = "UNAVAILABLE", enabled = false, message = "Starting is not set up yet." }
 	elseif status == "going" then
@@ -114,7 +115,7 @@ function Lobby.button(status: Travel.Phase, configured: boolean): Button
 	elseif status == "cooling" then
 		return { text = "START GAME", enabled = false, message = "Could not start. Try again in a moment." }
 	end
-	return { text = "START GAME", enabled = true, message = nil }
+	return { text = if level then `START LEVEL {level}` else "START GAME", enabled = true, message = nil }
 end
 
 return Lobby

@@ -1,0 +1,6 @@
+base: proto-c0253 tip a9e383730779307e86757a09fbcb81efe37074e6 ("proto c0253 v2: the quota block case runs under ./zn run")
+  which is base 228a2c544 = origin/main 26265fa3a ("tracker: prep c0252 ... (#529)") + proto-c0252 816ce819a, plus c0253's prototype commits
+copied into the prototype (hunks, not merges): heartbeat.holds and heartbeat.staleMember from origin/R0100/5/c0277 acf480f21 (z-nile/engine/heartbeat.luau), verbatim
+c0254 = prototype.patch = git diff a9e383730 proto-c0254 -- . ':(exclude)z-nile/.tracker/issues/c0254'  (it includes the three edits to c0253's sequestered specs: the Overrides)
+git apply --check on a clean checkout of a9e383730: ok
+prep tree: origin/main da4502514 (tracker: c0254 preparing)

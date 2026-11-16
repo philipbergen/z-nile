@@ -1,0 +1,103 @@
+=== c0254: dry-run promotion of acceptance specs (type check + meta)
+copied 7 acceptance specs
+[WARN] No definitions file provided by client
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.luaurc
+z-nile/tests/acceptance/c0254/pick.spec.luau(9,19): TypeError: Unknown require: /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/engine/heartbeat.lua
+z-nile/tests/acceptance/c0254/pick.spec.luau(10,19): TypeError: Unknown require: /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/engine/supervise.lua
+z-nile/tests/acceptance/c0254/pick.spec.luau(12,18): TypeError: Unknown require: /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/engine/workloop.lua
+z-nile/tests/acceptance/c0254/pick.spec.luau(13,15): TypeError: Unknown require: /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/engine/xhost.lua
+z-nile/tests/acceptance/c0254/pick.spec.luau(17,68): TypeError: Unknown type 'xhost.Seen'
+z-nile/tests/acceptance/c0254/pick.spec.luau(115,30): TypeError: Key 'taken' not found in table '{ done: number, failure: number, gate: number, tripwire: number, user: number }'
+z-nile/tests/acceptance/c0254/pick.spec.luau(125,29): TypeError: Key 'taken' not found in table '{ done: number, failure: number, gate: number, tripwire: number, user: number }'
+z-nile/tests/acceptance/c0254/pick.spec.luau(129,34): TypeError: Key 'taken' not found in table '{ done: number, failure: number, gate: number, tripwire: number, user: number }'
+z-nile/tests/acceptance/c0254/pick.spec.luau(143,29): TypeError: Key 'taken' not found in table '{ done: number, failure: number, gate: number, tripwire: number, user: number }'
+z-nile/tests/acceptance/c0254/pick.spec.luau(200,11): TypeError: Unknown type 'xhost.RaftedBy'
+z-nile/tests/acceptance/c0254/pick.spec.luau(231,13): TypeError: Key 'claimVerdict' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pick.spec.luau(235,13): TypeError: Key 'claimVerdict' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pick.spec.luau(238,13): TypeError: Key 'claimVerdict' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pick.spec.luau(250,5): TypeError: Key 'claimVerdict' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pick.spec.luau(254,13): TypeError: Key 'claimVerdict' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pick.spec.luau(256,13): TypeError: Key 'claimVerdict' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pick.spec.luau(260,5): TypeError: Key 'claimVerdict' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pick.spec.luau(275,4): TypeError: Key 'recordClaim' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pick.spec.luau(286,4): TypeError: Key 'recordClaim' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pick.spec.luau(301,46): TypeError: Key 'pushRefused' not found in table '{ done: number, failure: number, gate: number, tripwire: number, user: number }'
+z-nile/tests/acceptance/c0254/pick.spec.luau(308,6): TypeError: Unknown type 'workloop.World'
+z-nile/tests/acceptance/c0254/pick.spec.luau(308,48): TypeError: Unknown type 'supervise.State'
+z-nile/tests/acceptance/c0254/pick.spec.luau(311,19): TypeError: Unknown type 'supervise.State'
+z-nile/tests/acceptance/c0254/pick.spec.luau(313,12): TypeError: Unknown type 'workloop.World'
+z-nile/tests/acceptance/c0254/pick.spec.luau(364,35): TypeError: Unknown type 'supervise.State'
+z-nile/tests/acceptance/c0254/pick.spec.luau(368,16): TypeError: Unknown type 'supervise.State'
+z-nile/tests/acceptance/c0254/pick.spec.luau(380,13): TypeError: Unknown type 'xhost.PushFacts'
+z-nile/tests/acceptance/c0254/pick.spec.luau(395,38): TypeError: Expected this to be 'string', but got 'nil'
+z-nile/tests/acceptance/c0254/pick.spec.luau(406,13): TypeError: Unknown type 'xhost.PushFacts'
+z-nile/tests/acceptance/c0254/pick.spec.luau(460,13): TypeError: Key 'pushRefused' not found in table '{ done: number, failure: number, gate: number, tripwire: number, user: number }'
+z-nile/tests/acceptance/c0254/pick.spec.luau(461,13): TypeError: Key 'pushRefused' not found in table '{ done: number, failure: number, gate: number, tripwire: number, user: number }'
+z-nile/tests/acceptance/c0254/pick.spec.luau(461,42): TypeError: Key 'taken' not found in table '{ done: number, failure: number, gate: number, tripwire: number, user: number }'
+z-nile/tests/acceptance/c0254/pick.spec.luau(499,4): TypeError: Cannot add property 'claimed' to table 'PromptInput'
+z-nile/tests/acceptance/c0254/pick.spec.luau(509,4): TypeError: Cannot add property 'claimed' to table 'PromptInput'
+z-nile/tests/acceptance/c0254/pick.spec.luau(515,12): TypeError: Key 'reviewRecordLine' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pick.spec.luau(517,12): TypeError: Key 'reviewRecordLine' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pick.spec.luau(520,12): TypeError: Key 'reviewRecordLine' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pure.spec.luau(7,19): TypeError: Unknown require: /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/engine/heartbeat.lua
+z-nile/tests/acceptance/c0254/pure.spec.luau(8,19): TypeError: Unknown require: /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/engine/supervise.lua
+z-nile/tests/acceptance/c0254/pure.spec.luau(11,18): TypeError: Unknown require: /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/engine/workloop.lua
+z-nile/tests/acceptance/c0254/pure.spec.luau(12,15): TypeError: Unknown require: /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/engine/xhost.lua
+z-nile/tests/acceptance/c0254/pure.spec.luau(14,68): TypeError: Unknown type 'xhost.Seen'
+z-nile/tests/acceptance/c0254/pure.spec.luau(21,10): TypeError: Unknown type 'xhost.Seen'
+z-nile/tests/acceptance/c0254/pure.spec.luau(22,9): TypeError: Unknown type 'xhost.Seen'
+z-nile/tests/acceptance/c0254/pure.spec.luau(78,12): TypeError: Key 'claimVerdict' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pure.spec.luau(79,12): TypeError: Key 'claimVerdict' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pure.spec.luau(80,12): TypeError: Key 'claimVerdict' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pure.spec.luau(82,12): TypeError: Key 'claimVerdict' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pure.spec.luau(90,12): TypeError: Key 'claimVerdict' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pure.spec.luau(100,3): TypeError: Key 'dropLostAttempt' not found in table 'dispatcher'
+z-nile/tests/acceptance/c0254/pure.spec.luau(137,3): TypeError: Cannot add property 'worker' to table 'Facts'
+z-nile/tests/acceptance/c0254/pure.spec.luau(143,3): TypeError: Cannot add property 'worker' to table 'Facts'
+z-nile/tests/acceptance/c0254/pure.spec.luau(143,47): TypeError: Cannot add property 'owned' to table 'Facts'
+z-nile/tests/acceptance/c0254/pure.spec.luau(153,12): TypeError: Key 'taken' not found in table '{ done: number, failure: number, gate: number, tripwire: number, user: number }'
+z-nile/tests/acceptance/c0254/pure.spec.luau(154,39): TypeError: Key 'taken' not found in table '{ done: number, failure: number, gate: number, tripwire: number, user: number }'
+z-nile/tests/acceptance/c0254/pure.spec.luau(165,6): TypeError: Unknown type 'workloop.World'
+z-nile/tests/acceptance/c0254/pure.spec.luau(169,12): TypeError: Unknown type 'workloop.World'
+z-nile/tests/acceptance/c0254/pure.spec.luau(237,15): TypeError: Unknown type 'xhost.PushFacts'
+z-nile/tests/acceptance/c0254/pure.spec.luau(272,12): TypeError: Unknown type 'xhost.PushFacts'
+z-nile/tests/acceptance/c0254/pure.spec.luau(281,14): TypeError: Expected this to be 'number', but got 'nil'
+z-nile/tests/acceptance/c0254/pure.spec.luau(289,12): TypeError: Unknown type 'xhost.PushFacts'
+z-nile/tests/acceptance/c0254/pure.spec.luau(302,14): TypeError: Expected this to be 'string', but got 'nil'
+z-nile/tests/acceptance/c0254/pure.spec.luau(377,5): TypeError: Table type '{| block: string?, blocked: nil, codeModel: nil, codeReview: string, depsMet: boolean, designReady: boolean, finalReview: string, holder: string, id: string, issues: {string}, layers: {LayerFact}, root: string, since: string, stacked: boolean, status: string, title: string, trace: boolean, traceOk: boolean, where: string, worker: string? |}' not compatible with type 'RaftFact' because the former is missing field 'questions'
+z-nile/tests/acceptance/c0254/spend.spec.luau(67,27): TypeError: Key 'HEADER_WHO' not found in table 'buffer'
+z-nile/tests/acceptance/c0254/spend.spec.luau(70,12): TypeError: Key 'host' not found in table 'Row'
+z-nile/tests/acceptance/c0254/spend.spec.luau(71,12): TypeError: Key 'cli' not found in table 'Row'
+z-nile/tests/acceptance/c0254/spend.spec.luau(83,13): TypeError: Key 'host' not found in table 'Row'
+z-nile/tests/acceptance/c0254/spend.spec.luau(84,13): TypeError: Key 'cli' not found in table 'Row'
+z-nile/tests/acceptance/c0254/spend.spec.luau(88,13): TypeError: Key 'host' not found in table 'Row'
+z-nile/tests/acceptance/c0254/spend.spec.luau(89,13): TypeError: Key 'host' not found in table 'Row'
+z-nile/tests/acceptance/c0254/spend.spec.luau(90,13): TypeError: Key 'cli' not found in table 'Row'
+z-nile/tests/acceptance/c0254/spend.spec.luau(115,14): TypeError: Key 'cli' not found in table 'Row'
+z-nile/tests/acceptance/c0254/spend.spec.luau(118,18): TypeError: Key 'host' not found in table 'Row'
+z-nile/tests/acceptance/c0254/spend.spec.luau(139,13): TypeError: Key 'host' not found in table 'Row'
+z-nile/tests/acceptance/c0254/spend.spec.luau(140,13): TypeError: Key 'cli' not found in table 'Row'
+z-nile/tests/acceptance/c0254/spend.spec.luau(161,14): TypeError: Key 'cli' not found in table 'Row'
+z-nile/tests/acceptance/c0254/spend.spec.luau(185,13): TypeError: Key 'cli' not found in table 'Line'
+z-nile/tests/acceptance/c0254/spend.spec.luau(187,13): TypeError: Key 'cli' not found in table 'Row'
+z-nile/tests/acceptance/c0254/spend.spec.luau(189,4): TypeError: Cannot add property 'cli' to table 'Line'
+z-nile/tests/acceptance/c0254/spend.spec.luau(213,20): TypeError: Key 'cli' not found in table 'Row'
+z-nile/tests/acceptance/c0254/race.spec.luau(14,15): TypeError: Unknown require: /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/engine/xhost.lua
+z-nile/tests/acceptance/c0254/race.spec.luau(109,33): TypeError: Key 'workers' not found in table 'Facts'
+z-nile/tests/acceptance/c0254/race.spec.luau(120,16): TypeError: Key 'held' not found in table 'Issue'
+z-nile/tests/acceptance/c0254/race.spec.luau(121,26): TypeError: Key 'workers' not found in table 'Facts'
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+FAIL tests/meta/architecture.spec.luau :: every require under tests/ resolves
+     /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/tests/meta/architecture.spec:16: expected "", got "tests/acceptance/c0254/pick.spec.luau: require(\"@znile/engine/heartbeat\")\
+tests/acceptance/c0254/pick.spec.luau: require(\"@znile/engine/supervise\")\
+tests/acceptance/c0254/pick.spec.luau: require(\"@znile/engine/workloop\")\
+tests/acceptance/c0254/pick.spec.luau: require(\"@znile/engine/xhost\")\
+tests/acceptance/c0254/pure.spec.luau: require(\"@znile/engine/heartbeat\")\
+tests/acceptance/c0254/pure.spec.luau: require(\"@znile/engine/supervise\")\
+tests/acceptance/c0254/pure.spec.luau: require(\"@znile/engine/workloop\")\
+tests/acceptance/c0254/pure.spec.luau: require(\"@znile/engine/xhost\")\
+tests/acceptance/c0254/race.spec.luau: require(\"@znile/engine/xhost\")"
+1 passed, 1 failed, 1 spec files
+promoted acceptance specs would break tests/ (see above)

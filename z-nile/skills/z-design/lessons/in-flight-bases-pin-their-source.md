@@ -15,3 +15,5 @@ f0126 design review 010: the specs hashed were proto-f0109's copies; they matche
 f0126 design review 012 F1: f0109's new green (the user's 14, 64, 14) was already in proto-f0109's working tree while the brief still called it pending; the runner refused, as designed, and the base was recut.
 
 f0126 design review 013 F1: f0109 moved again during round 3; each round's recut was dated by f0109's next round.
+
+**Note** (c0249 prep, 2026-11-16): cut the base from current `origin/main` plus each dependency's freshest implementation branch, pinning every sha. Another layer's older prototype (`proto-c0248`) conflicted with today's main in nine of its own files. When the base simulates a dependency's promotion, carry its watch map and its documentation hunks too, or that dependency's own specs fail on the base.

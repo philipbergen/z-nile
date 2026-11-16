@@ -9,6 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local Blaster = require("@game/ReplicatedStorage/Shared/Logic/Blaster")
+local Boost = require("@game/ReplicatedStorage/Shared/Logic/Boost")
 local Hop = require("@game/ReplicatedStorage/Shared/Logic/Hop")
 local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
 local Movement = require("@game/ReplicatedStorage/Shared/Logic/Movement")
@@ -50,6 +51,10 @@ function Controls.start(
 		end
 	end
 
+	-- the double tap of forward (f0143): one fold for the keys and the D-pad, one for touch swipes (the stick's own
+	-- is Sticks'); a pair asks the server for a boost, after the Forward both presses already sent
+	local keyTaps, touchTaps = Boost.taps(), Boost.taps()
+
 	local function handle(
 		_name: string,
 		state: Enum.UserInputState,
@@ -62,6 +67,15 @@ function Controls.start(
 				onSnap()
 			elseif Movement.isIntent(action) then
 				intent:FireServer(action)
+				if action == "Forward" then
+					local pair: boolean
+					keyTaps, pair = Boost.tap(keyTaps, os.clock())
+					if pair then
+						intent:FireServer(Boost.INTENT)
+					end
+				end
+			elseif action == "Boost" then
+				intent:FireServer(Boost.INTENT) -- the left stick's click, alone
 			elseif action == "Fire" then
 				fire()
 			elseif action == "Jump" then
@@ -168,6 +182,13 @@ function Controls.start(
 		for _, effect in effects do
 			if effect.kind == "turn" then
 				intent:FireServer(effect.intent)
+				if effect.intent == "Forward" then
+					local pair: boolean
+					touchTaps, pair = Boost.tap(touchTaps, os.clock())
+					if pair then
+						intent:FireServer(Boost.INTENT)
+					end
+				end
 			elseif effect.kind == "look" then
 				if onLook then
 					onLook(effect.dx, effect.dy)

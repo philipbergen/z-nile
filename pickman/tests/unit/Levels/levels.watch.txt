@@ -47,6 +47,7 @@ pickman/src/shared/Logic/Maze/Layouts.luau
 pickman/src/shared/Logic/Maze/init.luau
 pickman/src/shared/Logic/Movement/init.luau
 pickman/src/shared/Logic/Pellets/init.luau
+pickman/src/shared/Logic/Picks/init.luau
 pickman/src/shared/Logic/Session/init.luau
 pickman/src/shared/Logic/Touch/init.luau
 pickman/src/shared/Logic/Travel/init.luau

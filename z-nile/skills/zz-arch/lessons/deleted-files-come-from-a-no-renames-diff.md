@@ -3,6 +3,7 @@ title: Deleted files are read from a diff that pairs no renames
 when: both
 tags: [git, diff, deletions]
 check: When code reads which files a range deleted, does it ask git for them with `--no-renames --diff-filter=D`, rather than take them from a `--name-only` list, where a deleted file that resembles an added one is a rename and only the new path appears?
+from: c0301 prep note (c0301 withdrawn 2026-11-16)
 ---
 `git diff --name-only <a> <b>` detects renames by default: a deleted file whose text is close to a file added in the same range is reported as a rename, and `--name-only` prints only the new path. The deletion is not in the list at all.
 

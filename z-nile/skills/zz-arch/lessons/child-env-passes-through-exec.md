@@ -2,6 +2,7 @@
 title: A value meant for child processes goes in the exec's env, never in a process.env assignment
 when: both
 tags: [lune, env, processes, runner]
+from: c0230 design review 001 F2 and prep note (ticket withdrawn 2026-11-16)
 check: Does every value this code means a child process to see reach it through the `env` option of the `process.exec` that starts it (or the child's argv), rather than through a `process.env.X = ...` assignment, which Lune 0.10.5 does not pass to children?
 ---
 In Lune 0.10.5 (the version `rokit.toml` pins), `process.env.X = v` changes only the Lune table: a child started afterwards, with or without an `env` option, does not see X.
