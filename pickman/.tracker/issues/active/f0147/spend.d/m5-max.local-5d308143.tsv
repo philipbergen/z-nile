@@ -1,0 +1,66 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-16 07:08	1 spec	0	0	test			0.835	0.570		0.835	tokens,ai
+2026-11-16 07:08	1 spec	0	0	test			1.036	0.580		1.036	tokens,ai
+2026-11-16 07:08	1 spec	0	0	test			0.830	0.590		0.830	tokens,ai
+2026-11-16 07:08	1 spec	0	0	test			0.820	0.540		0.820	tokens,ai
+2026-11-16 07:08	5 specs	0	0	test			1.030	1.080		1.030	tokens,ai
+2026-11-16 07:08	1 spec	0	0	test			1.044	0.700		1.044	tokens,ai
+2026-11-16 07:09	1 spec	0	0	test			1.047	0.510		1.047	tokens,ai
+2026-11-16 07:09	1 spec	0	0	test			1.040	0.530		1.040	tokens,ai
+2026-11-16 07:09	1 spec	0	0	test			1.023	0.540		1.023	tokens,ai
+2026-11-16 07:10	1 spec	0	0	test			0.826	0.540		0.826	tokens,ai
+2026-11-16 07:10	1 spec	0	0	test			1.860	0.800		1.860	tokens,ai
+2026-11-16 07:10	1 spec	0	0	test			1.233	0.720		1.233	tokens,ai
+2026-11-16 07:10	1 spec	0	0	test			0.825	0.610		0.825	tokens,ai
+2026-11-16 07:10	1 spec	0	0	test			0.825	0.550		0.825	tokens,ai
+2026-11-16 07:10	5 specs	0	0	test			1.025	1.150		1.025	tokens,ai
+2026-11-16 07:10	1 spec	0	0	test			1.047	0.730		1.047	tokens,ai
+2026-11-16 07:10	1 spec	0	0	test			0.820	0.550		0.820	tokens,ai
+2026-11-16 07:10	1 spec	0	0	test			0.828	0.560		0.828	tokens,ai
+2026-11-16 07:10	3 specs	0	0	test			1.019	0.850		1.019	tokens,ai
+2026-11-16 07:10	1 spec	0	0	test			1.866	0.750		1.866	tokens,ai
+2026-11-16 07:10	1 spec	0	0	test			2.055	0.980		2.055	tokens,ai
+2026-11-16 07:10	1 spec	0	0	test			1.015	0.700		1.015	tokens,ai
+2026-11-16 07:10	1 spec	0	0	test			1.021	0.660		1.021	tokens,ai
+2026-11-16 07:10	affected	0	0	test			2.274	19.280		2.274	tokens,ai
+2026-11-16 07:11	affected	0	0	test			2.283	19.040		2.283	tokens,ai
+2026-11-16 07:11	affected	0	0	test			8.044	54.580		8.044	tokens,ai
+2026-11-16 07:11	1 spec	0	0	test			0.821	0.550		0.821	tokens,ai
+2026-11-16 07:11	1 spec	0	0	test			0.835	0.570		0.835	tokens,ai
+2026-11-16 07:11	affected	0	0	test			2.077	18.530		2.077	tokens,ai
+2026-11-16 07:11	1 spec	0	0	test			0.829	0.580		0.829	tokens,ai
+2026-11-16 07:11	1 spec	0	0	test			0.820	0.590		0.820	tokens,ai
+2026-11-16 07:11	1 spec	0	0	test			0.827	0.590		0.827	tokens,ai
+2026-11-16 07:11	1 spec	0	0	test			0.834	0.550		0.834	tokens,ai
+2026-11-16 07:11	5 specs	0	0	test			1.044	1.100		1.044	tokens,ai
+2026-11-16 07:11	1 spec	0	0	test			1.040	0.750		1.040	tokens,ai
+2026-11-16 07:11	1 spec	0	0	test			0.823	0.580		0.823	tokens,ai
+2026-11-16 07:11	1 spec	0	0	test			0.827	0.540		0.827	tokens,ai
+2026-11-16 07:11	3 specs	0	0	test			1.022	0.830		1.022	tokens,ai
+2026-11-16 07:11	1 spec	0	0	test			1.666	0.730		1.666	tokens,ai
+2026-11-16 07:11	1 spec	0	0	test			1.879	0.970		1.879	tokens,ai
+2026-11-16 07:11	1 spec	0	0	test			1.025	0.670		1.025	tokens,ai
+2026-11-16 07:11	1 spec	0	0	test			1.016	0.640		1.016	tokens,ai
+2026-11-16 07:12	affected	0	0	test			9.910	58.840		9.910	tokens,ai
+2026-11-16 07:12	f0147: levels by picked walls	346	49	build							tokens,wall,cpu,ai
+2026-11-16 07:12	1 spec	0	0	test			1.232	0.600		1.232	tokens,ai
+2026-11-16 07:13	1 spec	0	0	test			1.031	0.640		1.031	tokens,ai
+2026-11-16 07:13	1 spec	0	0	test			1.231	0.640		1.231	tokens,ai
+2026-11-16 07:13	1 spec	0	0	test			1.042	0.580		1.042	tokens,ai
+2026-11-16 07:13	5 specs	0	0	test			1.239	1.170		1.239	tokens,ai
+2026-11-16 07:13	1 spec	0	0	test			1.024	0.750		1.024	tokens,ai
+2026-11-16 07:13	1 spec	0	0	test			1.019	0.630		1.019	tokens,ai
+2026-11-16 07:13	1 spec	0	0	test			1.031	0.650		1.031	tokens,ai
+2026-11-16 07:13	3 specs	0	0	test			1.038	0.930		1.038	tokens,ai
+2026-11-16 07:13	1 spec	0	0	test			1.042	0.660		1.042	tokens,ai
+2026-11-16 07:13	1 spec	0	0	test			1.032	0.710		1.032	tokens,ai
+2026-11-16 07:13	1 spec	0	0	test			1.033	0.620		1.033	tokens,ai
+2026-11-16 07:13	1 spec	0	0	test			1.031	0.660		1.031	tokens,ai
+2026-11-16 07:13	1 spec	0	0	test			1.027	0.670		1.027	tokens,ai
+2026-11-16 07:13	1 spec	0	0	test			1.029	0.710		1.029	tokens,ai
+2026-11-16 07:13	1 spec	0	0	test			1.028	0.600		1.028	tokens,ai
+2026-11-16 07:13	1 spec	0	0	test			0.835	0.540		0.835	tokens,ai
+2026-11-16 07:13	5 specs	0	0	test			1.033	1.070		1.033	tokens,ai
+2026-11-16 07:13	1 spec	0	0	test			1.031	0.680		1.031	tokens,ai
+2026-11-16 07:13	250 specs	0	0	test			4.969	31.840		4.969	tokens,ai
+2026-11-16 07:13	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai

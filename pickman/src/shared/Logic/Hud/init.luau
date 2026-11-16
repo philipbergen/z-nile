@@ -8,6 +8,7 @@ export type Model = {
 	level: string, -- "LEVEL n"
 	lives: number, -- lives left, the one in play included
 	power: number, -- 0..1: the share of the level's frightened time still to run
+	picks: string?, -- with levels by picked walls (f0147): "PICKS done/goal", else nil
 }
 -- Sizes in pixels, and the safe rectangle (the viewport less its inset) the HUD blocks sit in.
 export type Layout = {
@@ -58,13 +59,21 @@ local function side(v: number): number
 end
 
 function Hud.model(play: Session.PlayFrame): Model
-	local total = Levels.frightenedTicks(play.level, Session.TICK_RATE)
+	-- the frame's own period when it carries one (the session's rules, f0147), else the classic table's
+	local total = play.power or Levels.frightenedTicks(play.level, Session.TICK_RATE)
 	return {
 		score = string.format("%d", play.score),
 		level = `LEVEL {play.level}`,
 		lives = play.lives,
 		power = if total > 0 then math.clamp(play.frightened / total, 0, 1) else 0,
+		picks = if play.picks and play.picksGoal then `PICKS {play.picks}/{play.picksGoal}` else nil,
 	}
+end
+
+-- The pick counter's place (f0147): the row under the score, its size, left-aligned like it. Not under the level:
+-- on short touch screens the radar rises to just under the top row on the right (Hud.radarBox).
+function Hud.picksBox(score: Box): Box
+	return { x = score.x, y = score.y + score.h, w = score.w, h = score.h }
 end
 
 -- Whole-pixel sizes for a viewport of `width` x `height` pixels, from its smaller side, and the safe rectangle
@@ -187,6 +196,7 @@ Hud.BOON_LABELS = table.freeze({
 	longpill = "LONG GHOST PILL",
 	shot = "BLASTER SHOT",
 	pellets = "PELLETS BACK",
+	bonanza = "BONANZA!", -- a level's last pick (f0147)
 } :: { [string]: string })
 Hud.BOON_TICKS = 30 -- the banner shows for 2 s of real time at Session.STEP_RATE 15
 

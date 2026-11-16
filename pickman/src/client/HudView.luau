@@ -26,6 +26,7 @@ local HudView = {}
 
 local score: TextLabel? = nil
 local level: TextLabel? = nil
+local picks: TextLabel? = nil -- the level's finished wall picks, under the level (f0147)
 local lives: Frame? = nil
 local bar: Frame? = nil
 local fill: Frame? = nil
@@ -82,6 +83,12 @@ local function lay(sw: number, sh: number, inset: Hud.Inset)
 		score.Position = UDim2.fromOffset(blocks.score.x, blocks.score.y)
 		level.Size = UDim2.fromOffset(blocks.level.w, blocks.level.h)
 		level.Position = UDim2.fromOffset(blocks.level.x, blocks.level.y)
+	end
+	if picks then
+		local box = Hud.picksBox(blocks.score)
+		picks.TextSize = l.textSize
+		picks.Size = UDim2.fromOffset(box.w, box.h)
+		picks.Position = UDim2.fromOffset(box.x, box.y)
 	end
 	if lives then
 		lives.Position = UDim2.fromOffset(blocks.lives.x, blocks.lives.y)
@@ -181,6 +188,9 @@ function HudView.start()
 	gui.SafeAreaCompatibility = Enum.SafeAreaCompatibility.None
 	score = label("Score", Enum.TextXAlignment.Left, gui)
 	level = label("Level", Enum.TextXAlignment.Right, gui)
+	local pl = label("Picks", Enum.TextXAlignment.Left, gui)
+	pl.Visible = false
+	picks = pl
 	local lf = Instance.new("Frame")
 	lf.Name = "Lives"
 	lf.BackgroundTransparency = 1
@@ -256,6 +266,10 @@ function HudView.show(play: Session.PlayFrame)
 	if score and level then
 		score.Text = m.score
 		level.Text = m.level
+	end
+	if picks then
+		picks.Visible = m.picks ~= nil
+		picks.Text = m.picks or ""
 	end
 	if lives and m.lives ~= shownLives then
 		shownLives = m.lives

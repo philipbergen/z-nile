@@ -51,6 +51,7 @@ export type Config = {
 	eatSlowdown: boolean?, -- eating stops the player for a moment, as in the arcade
 	ghosts: boolean?, -- the four ghosts hunt the player (mazes with ghost data only)
 	ghostTuning: number?, -- the ghosts' speed factor; nil is Levels.GHOST_TUNING
+	ramp: Levels.Ramp?, -- levels by picked walls (f0147): nil keeps the classic tables and the last pellet's clear
 }
 export type Speeds = { player: number, ghost: number, tunnel: number, frightened: number, eyes: number }
 export type PlayerSnapshot = {
@@ -84,6 +85,9 @@ export type PlayFrame = {
 	lives: number,
 	timer: number,
 	frightened: number,
+	power: number?, -- ticks of a power pellet's period on this level, under the session's rules (f0147)
+	picks: number?, -- with a ramp: the wall picks finished on this level (f0147)
+	picksGoal: number?, -- with a ramp: the picks that end a level
 }
 export type Frame = {
 	v: number,
@@ -107,7 +111,7 @@ export type Frame = {
 export type Walls = { opened: { Maze.Tile }, marked: { Maze.Tile } }
 -- wall: the marked wall being picked; started: the step that began it; ticks: steps it needs after that one
 export type Pick = { wall: Maze.Tile, started: number, ticks: number, fast: boolean }
-export type BoonGrant = { tick: number, kind: Picks.Boon }
+export type BoonGrant = { tick: number, kind: Picks.Grant }
 -- tick: the tick whose step took it; from: the tile the shot started from (the player's, before that step's move)
 export type Shot = { tick: number, heading: Maze.Heading, from: Maze.Tile }
 export type Event = {
@@ -148,6 +152,9 @@ type Member = {
 	armed: number, -- steps a pick request stays pending (0: none)
 	pick: Pick?,
 	longHops: boolean, -- the jumps boon, until the maze is fresh again
+	levelPicks: number, -- with a ramp: wall picks finished on this level (f0147)
+	bonanza: boolean, -- the tenth pick's bonanza, carried into the next level
+	bonanzaPill: boolean, -- the bonanza's long ghost pill, taken in the next level's first step in play
 	boon: BoonGrant?,
 	boost: boolean, -- a boost asked for this tick (f0143)
 	boosted: number?, -- the tick the latest boost started
@@ -180,27 +187,32 @@ local GAME_CONFIG: Config = {
 	play = Game.CLASSIC_CONFIG,
 	eatSlowdown = true,
 	ghosts = true,
-	ghostTuning = 1 / 1.1,
+	ghostTuning = 1 / 1.1, -- f0125 (user, 2026-10-25): the player 10% faster relative to the ghosts
+	ramp = Levels.RAMP, -- levels by picked walls, the speed ramp and the points multiplier (f0147)
 }
 Session.GAME_CONFIG = table.freeze(GAME_CONFIG)
 
+-- the player's speed (frightened or not) and the ghosts' speeds on `level` under config `c` (f0125, f0147): the
+-- session's stepping and its ghosts use exactly these.
 function Session.speeds(c: Config, level: number, frightened: boolean?): Speeds
 	local base = c.movement.speed
-	local tuning = c.ghostTuning or Levels.GHOST_TUNING
+	local k = c.ghostTuning or Levels.GHOST_TUNING
+	local r = c.ramp
 	return {
-		player = Levels.playerSpeed(base, level, frightened),
-		ghost = Levels.ghostSpeed(base, level, "normal", tuning),
-		tunnel = Levels.ghostSpeed(base, level, "tunnel", tuning),
-		frightened = Levels.ghostSpeed(base, level, "frightened", tuning),
-		eyes = Levels.ghostSpeed(base, level, "eyes", tuning),
+		player = Levels.playerSpeed(base, level, frightened, r),
+		ghost = Levels.ghostSpeed(base, level, "normal", k, r),
+		tunnel = Levels.ghostRate(base, level, "tunnel", k, r), -- with a ramp, a fraction the ghosts carry (f0147)
+		frightened = Levels.ghostRate(base, level, "frightened", k, r),
+		eyes = math.min(Levels.ghostSpeed(base, level, "eyes", k, r), Movement.UNITS), -- as Ghosts caps them (f0147)
 	}
 end
 
 -- a speed that would cover more than one tile in a tick on some level is refused up front
-local function checkLevelSpeeds(base: number)
-	for level = 1, Levels.COUNT do
+local function checkLevelSpeeds(base: number, ramp: Levels.Ramp?)
+	local last = if ramp then ramp.top else Levels.COUNT
+	for level = 1, last do
 		for _, frightened in { false, true } do
-			local speed = Levels.playerSpeed(base, level, frightened)
+			local speed = Levels.playerSpeed(base, level, frightened, ramp)
 			if speed > Movement.UNITS then
 				error(
 					`session: speed {base} is too fast: level {level} would be {speed} > {Movement.UNITS}`,
@@ -213,7 +225,7 @@ end
 
 local function checkGhostSpeeds(c: Config)
 	local tuning = c.ghostTuning or Levels.GHOST_TUNING
-	for level = 1, Levels.COUNT do
+	for level = 1, if c.ramp then c.ramp.top else Levels.COUNT do
 		local speeds = Session.speeds(c, level)
 		for _, speed in { speeds.ghost, speeds.tunnel, speeds.frightened } do
 			if speed > Movement.UNITS then
@@ -235,6 +247,9 @@ function Session.new(maze: Maze.Maze, seed: number, config: Config?): Session
 	if c.play and c.play.tickRate ~= Session.TICK_RATE then
 		error(`session: play.tickRate must be {Session.TICK_RATE}, got {c.play.tickRate}`, 0)
 	end
+	if c.ramp then
+		Levels.validateRamp(c.ramp)
+	end
 	local tuning = c.ghostTuning
 	if
 		tuning ~= nil
@@ -242,7 +257,7 @@ function Session.new(maze: Maze.Maze, seed: number, config: Config?): Session
 	then
 		error(`session: ghostTuning must be a positive finite number, got {tuning}`, 0)
 	end
-	checkLevelSpeeds(c.movement.speed)
+	checkLevelSpeeds(c.movement.speed, c.ramp)
 	checkGhostSpeeds(c)
 	return { tick = 0, maze = maze, seed = seed, config = c, members = {} }
 end
@@ -255,11 +270,11 @@ function Session.join(s: Session, id: PlayerId)
 		move = Movement.spawn(s.maze),
 		queue = {},
 		jumpTick = -1,
-		play = Game.new(s.config.play or Game.IMMEDIATE_CONFIG),
+		play = Game.new(s.config.play or Game.IMMEDIATE_CONFIG, s.config.ramp),
 		pellets = Pellets.new(s.maze),
 		stall = 0,
 		ghosts = if s.config.ghosts and Ghosts.available(s.maze)
-			then Ghosts.new(s.maze, s.seed, { tuning = s.config.ghostTuning })
+			then Ghosts.new(s.maze, s.seed, { tuning = s.config.ghostTuning, ramp = s.config.ramp })
 			else nil,
 		ghostJump = {},
 		blaster = Blaster.new(s.seed),
@@ -275,6 +290,9 @@ function Session.join(s: Session, id: PlayerId)
 		boon = nil,
 		boost = false,
 		boosted = nil,
+		levelPicks = 0,
+		bonanza = false,
+		bonanzaPill = false,
 	}
 	Picks.reset(s.members[id].picks, s.maze)
 end
@@ -371,6 +389,7 @@ end
 local function freshMaze(s: Session, member: Member)
 	member.opened = {}
 	member.longHops = false
+	member.levelPicks = 0
 	Picks.reset(member.picks, mazeOf(s, member))
 end
 
@@ -429,7 +448,7 @@ local function eat(s: Session, id: PlayerId, member: Member, tile: Maze.Tile, sp
 		return
 	end
 	local kind: Pellets.Kind = eaten :: Pellets.Kind
-	local points = Pellets.points(kind)
+	local points = Game.points(member.play, Pellets.points(kind))
 	local event: Event =
 		{ kind = "PelletEaten", player = id, x = tile.x, y = tile.y, item = kind, points = points }
 	table.insert(out, event)
@@ -444,7 +463,7 @@ local function eat(s: Session, id: PlayerId, member: Member, tile: Maze.Tile, sp
 			table.insert(out, tagged(id, e))
 		end
 	end
-	if Pellets.remaining(member.pellets) == 0 then
+	if s.config.ramp == nil and Pellets.remaining(member.pellets) == 0 then
 		for _, e in Game.cleared(member.play) do
 			table.insert(out, tagged(id, e))
 		end
@@ -529,7 +548,7 @@ local function stepGhosts(
 		return
 	end
 	for _, name: Ghosts.Name in eaten do
-		local points = Ghosts.eat(set, name)
+		local points = Game.points(member.play, Ghosts.eat(set, name))
 		local event: Event = { kind = "GhostEaten", player = id, ghost = name, points = points }
 		table.insert(out, event)
 		for _, e in Game.addScore(member.play, points) do
@@ -561,7 +580,7 @@ local function shoot(s: Session, id: PlayerId, member: Member, heading: Maze.Hea
 		return
 	end
 	local name: Ghosts.Name = set.ghosts[hit].name
-	local points = Ghosts.eat(set, name)
+	local points = Game.points(member.play, Ghosts.eat(set, name))
 	table.insert(out, { kind = "Shot", player = id, heading = heading, ghost = name, points = points })
 	for _, e in Game.addScore(member.play, points) do
 		table.insert(out, tagged(id, e))
@@ -578,6 +597,26 @@ local function finishPick(s: Session, id: PlayerId, member: Member, out: { Event
 	Picks.mark(member.picks, mazeOf(s, member))
 	if pick.fast then
 		member.picks.fast -= 1
+	end
+	member.levelPicks += 1
+	local ramp = s.config.ramp
+	if ramp and member.levelPicks >= ramp.picks then
+		-- the level's last pick: the bonanza instead of a roll, carried into the next level, then the level clears
+		member.picks.fast += 1
+		member.bonanza = true
+		local kind: Picks.Grant = "bonanza" -- Picks.BONANZA
+		member.boon = { tick = s.tick, kind = kind }
+		table.insert(
+			out,
+			{ kind = "WallPicked", player = id, x = pick.wall.x, y = pick.wall.y, item = Picks.BONANZA }
+		)
+		if Blaster.gain(member.blaster) then
+			table.insert(out, { kind = "ShotGained", player = id })
+		end
+		for _, e in Game.cleared(member.play) do
+			table.insert(out, tagged(id, e))
+		end
+		return
 	end
 	local boon: Picks.Boon = Picks.roll(member.picks)
 	member.boon = { tick = s.tick, kind = boon }
@@ -608,7 +647,8 @@ local function startPick(s: Session, id: PlayerId, member: Member, wall: Maze.Ti
 	local fast = member.picks.fast > 0
 	-- ten paces of this member's own ghosts: their tuning (f0125's slower ghosts) included
 	local tuning = if member.ghosts then member.ghosts.tuning else nil
-	local ghost = Levels.ghostSpeed(s.config.movement.speed, member.play.level, "normal", tuning)
+	local ghost =
+		Levels.ghostSpeed(s.config.movement.speed, member.play.level, "normal", tuning, s.config.ramp)
 	local ticks = Picks.ticks(ghost, fast)
 	member.armed = 0
 	member.pick = { wall = { x = wall.x, y = wall.y }, started = s.tick, ticks = ticks, fast = fast }
@@ -638,6 +678,11 @@ function Session.step(s: Session): { Event }
 					Pellets.reset(member.pellets) -- a new level or a new run: every pellet is back
 					freshMaze(s, member)
 				end
+				-- the bonanza reaches the next level: long hops for all of it, and a long pill when play starts
+				if e.reason == "level" and member.bonanza then
+					member.longHops, member.bonanzaPill = true, true
+				end
+				member.bonanza = false
 				teleport(s, member, s.tick)
 				resetGhosts(member, e.reason, s.tick)
 			end
@@ -649,6 +694,12 @@ function Session.step(s: Session): { Event }
 			continue
 		end
 		local before = #out
+		if member.bonanzaPill then
+			member.bonanzaPill = false
+			for _, e in Game.power(member.play, Picks.LONG_PILL_FACTOR) do
+				table.insert(out, tagged(id, e))
+			end
+		end
 		-- a pick that has stood its time finishes first, before this step's keys can waste it
 		local pick = member.pick
 		if pick and s.tick >= pick.started + pick.ticks then
@@ -839,6 +890,9 @@ function Session.frame(s: Session, id: PlayerId): Frame
 			lives = play.lives,
 			timer = play.timer,
 			frightened = play.frightened,
+			power = Levels.frightenedTicks(play.level, Session.TICK_RATE, s.config.ramp),
+			picks = if s.config.ramp then s.members[id].levelPicks else nil,
+			picksGoal = if s.config.ramp then s.config.ramp.picks else nil,
 		},
 		pellets = Pellets.encode(s.members[id].pellets),
 		shots = s.members[id].blaster.shots,
