@@ -29,3 +29,5 @@ c0276 design review 005 F1: failure cases that all wrote the same output file re
 **Note** (R0100 design review 002 F5): a phrase an RC or AC pins to prove new text exists must be absent from `origin/main`'s file. RC5's `with no raft` was already in main's z-work step 6. Ask: does `git show origin/main:<file> | grep -cF -e <phrase>` print 0 for every phrase the check pins?
 
 **Note** (R0103 code review 001 F2): a case asserting "no S claim" looped over the claims, so a derivation that returned no claims at all passed. A negative assertion over a list also asserts the list's exact contents. Check: if every item vanished, would this loop still pass?
+
+**Note** (c0252 prep, 2026-11-16): a case meant to tell two implementations apart must be shown to fail for the wrong one before it is trusted. c0252's first case for "the base's engine lands, not the stack's own `zn`" passed with either engine, and its mutant M53 survived. A second case, in which a layer rewords its own bind message, killed it.
