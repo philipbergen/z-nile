@@ -1373,7 +1373,10 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 					end
 					kinds[st] = true
 					if st == "prepared" then
-						local stale = preparedRead(id, treeFolderFiles(paths, read, string.sub(path, 1, #path - #id - 4)))
+						local stale = preparedRead(
+							id,
+							treeFolderFiles(paths, read, string.sub(path, 1, #path - #id - 4))
+						)
 						if stale then
 							return stale
 						end
@@ -4268,7 +4271,12 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
 		-- (--apply would stop half way, after earlier commands published their claims)
 		local planned = issues[#issues]
 		-- (only when origin/main exists: offline the plan is printed as before, and the commands it prints refuse there)
-		if hasOriginMain and planned.status == "prepared" and planned.raft == "" and planned.state == "backlog" then
+		if
+			hasOriginMain
+			and planned.status == "prepared"
+			and planned.raft == ""
+			and planned.state == "backlog"
+		then
 			local files = originFolderFiles(it.dir)
 			planned.stale = statusLib.preparedReadProblem(files, raftplan.designRecord(it.id, files))
 		end

@@ -18,3 +18,4 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-16 00:16	1 spec	0	0	test			61.412	33.160		61.412	tokens,ai
 2026-11-16 00:16	5 runs	0	0	other			603.789	482.770			tokens,ai
 2026-11-16 00:19	c0161: design record engine, fixtures, skills (docs AC4 blocked)	300	14	build							tokens,wall,cpu,ai
+2026-11-16 00:20	c0161: format, commands-prep keeps the tree clean	69	13	build							tokens,wall,cpu,ai

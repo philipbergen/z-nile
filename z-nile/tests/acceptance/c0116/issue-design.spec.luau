@@ -104,7 +104,10 @@ return t.spec("c0116 z-design designs one issue with no raft; its reviews roll u
 		assert(s and e, "design: line")
 		fs.writeFile(path, string.sub(text, 1, s) .. "design: ready\n" .. string.sub(text, e + 1))
 		local mid = fixture.git(f.origin, { "rev-parse", "main" })
-		write(`{dir}/design-review-001.md`, REVIEW .. `\nDesign record: {trackerfix.trOk(f, wt, { "design-record", id })}\n`)
+		write(
+			`{dir}/design-review-001.md`,
+			REVIEW .. `\nDesign record: {trackerfix.trOk(f, wt, { "design-record", id })}\n`
+		)
 		trackerfix.trOk(f, wt, { "status", id, "prepared" })
 		t.expect(fixture.git(f.origin, { "rev-parse", "main" })).toBe(mid)
 		t.expect(string.match(fs.readFile(path), "\nstatus: prepared%-%a+%-%a+%-%a+\n") ~= nil).toBe(true)

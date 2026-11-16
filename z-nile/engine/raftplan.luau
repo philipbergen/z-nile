@@ -382,7 +382,10 @@ function raftplan.recordPaths(id: string, files: { [string]: string }, specsOnly
 	local rels: { string } = {}
 	for rel in files do
 		local spec = rel == "check.sh" or string.sub(rel, 1, #"acceptance/") == "acceptance/"
-		if spec or (not specsOnly and (rel == `{id}.md` or string.sub(rel, 1, #"experiments/") == "experiments/")) then
+		if
+			spec
+			or (not specsOnly and (rel == `{id}.md` or string.sub(rel, 1, #"experiments/") == "experiments/"))
+		then
 			table.insert(rels, rel)
 		end
 	end
@@ -398,7 +401,9 @@ end
 function raftplan.designRecord(id: string, files: { [string]: string }): string
 	local parts: { string } = {}
 	for _, rel in raftplan.recordPaths(id, files) do
-		local text = if rel == `{id}.md` then withoutFront(files[rel], { "status", "raft", "design" }) else files[rel]
+		local text = if rel == `{id}.md`
+			then withoutFront(files[rel], { "status", "raft", "design" })
+			else files[rel]
 		table.insert(parts, `{rel}\0{#text}\0{text}`)
 	end
 	return string.sub(serde.hash("sha256", table.concat(parts, "\0")), 1, 12)
