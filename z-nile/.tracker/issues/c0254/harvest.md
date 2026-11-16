@@ -1,0 +1,23 @@
+# Harvest: c0254
+
+- note c0253's prep committed a prototype patch of the whole stack below it, 1 MB, which inflated its prep line count (lead, 2026-11-16): z-design/prove-specs-pass-on-a-prototype
+- note the prototype found that `{ X = nil }` cannot unset a variable in a fixture's environment, and that mutants died on a nil index or survived behind a stricter rule (prep, 2026-11-16): zz-test/specs-set-host-markers-explicitly, zz-test/implied-conditions-make-equivalent-mutants
+- design-review-001 F1: zz-arch/locks-detect-change
+- design-review-001 F2: zz-test/pin-fail-safes-where-they-act
+- design-review-001 F3: zz-arch/automatic-effects-have-an-end-and-a-subject-check
+- design-review-001 F4: z-design/instructions-runnable-where-they-run
+- design-review-001 F5: zz-arch/fresh-fetch-defeats-force-with-lease
+- design-review-001 F6: z-design/new-rules-migrate-existing-work
+- design-review-001 F7: z-design/quote-other-preps-before-promising
+- design-review-001 F8: zz-test/pin-call-site-arguments
+- design-review-001 F9: z-design/instructions-runnable-where-they-run
+- design-review-001 F10: z-design/results-land-on-every-path
+- design-review-001 F11: zz-arch/verify-the-value-you-use
+- design-review-001 F12: zz-test/source-text-pins-read-the-code
+- design-review-001 F13: z-design/guards-name-slow-tier-specs
+- design-review-001 F14: z-design/never-narrow-captured-scope
+- design-review-001 F15: z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F16: z-design/spec-design-correspondence
+- design-review-001 F17: z-design/restated-rules-move-together
+- design-review-001 F18: z-design/a-new-state-says-what-the-last-outcome-means
+- note design-refute-001 (prep, 2026-11-16): zz-arch/fresh-fetch-defeats-force-with-lease, zz-test/no-vacuous-pass, z-design/new-rules-migrate-existing-work, zz-test/specs-type-check-without-the-code, z-design/check-paths-from-the-home, z-design/restated-rules-move-together, zz-arch/locks-detect-change

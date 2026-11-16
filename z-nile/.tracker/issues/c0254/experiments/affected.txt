@@ -1,0 +1,189 @@
+PASS .tracker/issues/c0253/acceptance/reap.spec.luau: 7 passed, 0 failed
+PASS .tracker/issues/c0253/acceptance/models.spec.luau: 3 passed, 0 failed
+PASS .tracker/issues/c0253/acceptance/loop.spec.luau: 20 passed, 0 failed
+PASS .tracker/issues/c0253/acceptance/pure.spec.luau: 18 passed, 0 failed
+PASS .tracker/issues/c0253/acceptance/docs.spec.luau: 3 passed, 0 failed
+PASS .tracker/issues/c0254/acceptance/docs.spec.luau: 5 passed, 0 failed
+PASS .tracker/issues/c0254/acceptance/pick.spec.luau: 22 passed, 0 failed
+PASS .tracker/issues/c0254/acceptance/pure.spec.luau: 20 passed, 0 failed
+PASS .tracker/issues/c0253/acceptance/board.spec.luau: 3 passed, 0 failed
+PASS .tracker/issues/c0254/acceptance/spend.spec.luau: 7 passed, 0 failed
+PASS .tracker/issues/c0254/acceptance/layer.spec.luau: 6 passed, 0 failed
+PASS .tracker/issues/c0253/acceptance/command.spec.luau: 14 passed, 0 failed
+PASS tests/acceptance/c0263/remap-shapes.spec.luau: 5 passed, 0 failed
+PASS .tracker/issues/c0253/acceptance/session.spec.luau: 4 passed, 0 failed
+FAIL tests/tooling/dispatch-adopt.spec.luau :: F1a: the issue keeps its own run (z-design's attempt), gains the capture's exchange and seal
+FAIL tests/tooling/dispatch-adopt.spec.luau :: F1b: an issue whose run is live is not adopted; nothing moves
+FAIL tests/tooling/dispatch-adopt.spec.luau :: F1c: a capture that died holding a question has it set aside, and the slot takes new words
+FAIL tests/tooling/dispatch-adopt.spec.luau :: F2: a relative --answer-file is read from where ./zn was run, not from the checkout's root
+FAIL tests/tooling/dispatch-adopt.spec.luau: 1 passed, 4 failed
+FAIL tests/acceptance/c0263/restack.spec.luau :: a layer that moved the item's folder while main appended: the record follows the move
+FAIL tests/acceptance/c0263/restack.spec.luau :: a conflict in a file beside the records still stops the restack, with the layer as it was
+FAIL tests/acceptance/c0263/restack.spec.luau :: a record main deleted (an id changed) stops the restack, naming the id, with the layer as it was
+FAIL tests/acceptance/c0263/restack.spec.luau: 2 passed, 3 failed
+PASS tests/acceptance/c0263/publish.spec.luau: 3 passed, 0 failed
+PASS tests/acceptance/c0263/remap.spec.luau: 8 passed, 0 failed
+PASS tests/acceptance/c0049/par-stages.spec.luau: 9 passed, 0 failed
+PASS tests/acceptance/c0111/metrics-lessons.spec.luau: 5 passed, 0 failed
+FAIL tests/acceptance/d0333/commit-land.spec.luau :: AC3: the trace table committed with ./zn commit leaves the layer finished and the table current
+FAIL tests/acceptance/d0333/commit-land.spec.luau :: AC3: the final review and the final refute committed with ./zn commit leave the table current
+FAIL tests/acceptance/d0333/commit-land.spec.luau :: AC5: a ./zn commit of any other file after the finish still unfinishes the layer
+FAIL tests/acceptance/d0333/commit-land.spec.luau :: AC4: ./zn done lands that stack
+FAIL tests/acceptance/d0333/commit-land.spec.luau: 2 passed, 4 failed
+PASS tests/acceptance/c0116/promote.spec.luau: 3 passed, 0 failed
+PASS .tracker/issues/c0254/acceptance/chain.spec.luau: 7 passed, 0 failed
+PASS tests/acceptance/c0073/history.spec.luau: 6 passed, 0 failed
+PASS tests/tooling/wrapper-guards.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0115/lessons.spec.luau: 13 passed, 0 failed
+PASS tests/acceptance/c0120/layout.spec.luau: 8 passed, 0 failed
+PASS tests/acceptance/c0007/changed.spec.luau: 9 passed, 0 failed
+PASS tests/acceptance/c0115/trusted-base.spec.luau: 7 passed, 0 failed
+PASS tests/acceptance/c0191/engine-cpu.spec.luau: 3 passed, 0 failed
+FAIL tests/tooling/repo-fence.spec.luau :: no spec, check.sh or script switches a guard off or points git elsewhere
+FAIL tests/tooling/repo-fence.spec.luau: 9 passed, 1 failed
+PASS tests/tooling/fence-inherited-env.spec.luau: 8 passed, 0 failed
+PASS tests/acceptance/c0073/board-stats.spec.luau: 8 passed, 0 failed
+PASS tests/acceptance/c0118/real.spec.luau: 2 passed, 0 failed
+PASS tests/acceptance/c0191/hooks.spec.luau: 5 passed, 0 failed
+PASS tests/tooling/tracker-review-guards.spec.luau: 5 passed, 0 failed
+PASS tests/acceptance/c0114/layout.spec.luau: 7 passed, 0 failed
+PASS tests/acceptance/c0118/model.spec.luau: 16 passed, 0 failed
+PASS tests/acceptance/c0184/generic.spec.luau: 2 passed, 0 failed
+PASS tests/tooling/lock-start-ids.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0114/registry.spec.luau: 7 passed, 0 failed
+PASS .tracker/issues/c0254/acceptance/race.spec.luau: 18 passed, 0 failed
+PASS tests/acceptance/c0055/setup-run.spec.luau: 8 passed, 0 failed
+PASS tests/acceptance/c0006/clone.spec.luau: 5 passed, 0 failed
+PASS tests/acceptance/c0077/replace-file.spec.luau: 14 passed, 0 failed
+PASS tests/acceptance/c0060/fixture.spec.luau: 11 passed, 0 failed
+PASS tests/acceptance/c0120/runner-home.spec.luau: 11 passed, 0 failed
+PASS tests/tooling/audit-spec-left.spec.luau: 1 passed, 0 failed
+PASS tests/tooling/gate-home-cache.spec.luau: 1 passed, 0 failed
+PASS tests/acceptance/c0120/check-paths.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0120/old-roots.spec.luau: 6 passed, 0 failed
+PASS tests/acceptance/c0115/layout.spec.luau: 7 passed, 0 failed
+PASS tests/tooling/metrics-rounds.spec.luau: 3 passed, 0 failed
+PASS tests/acceptance/c0084/metrics-phases.spec.luau: 6 passed, 0 failed
+PASS tests/tooling/fence-leftovers.spec.luau: 1 passed, 0 failed
+PASS tests/acceptance/c0119/scope-lessons.spec.luau: 1 passed, 0 failed
+PASS tests/acceptance/c0052/new-spacing.spec.luau: 3 passed, 0 failed
+PASS tests/acceptance/c0165/results.spec.luau: 3 passed, 0 failed
+PASS tests/tooling/migrate-odd.spec.luau: 2 passed, 0 failed
+PASS tests/tooling/claim-taken.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0184/homes.spec.luau: 5 passed, 0 failed
+PASS tests/acceptance/c0131/accept.spec.luau: 3 passed, 0 failed
+PASS tests/tooling/measure.spec.luau: 5 passed, 0 failed
+PASS tests/acceptance/c0078/jail-signals.spec.luau: 8 passed, 0 failed
+PASS tests/acceptance/c0115/absence.spec.luau: 6 passed, 0 failed
+PASS tests/acceptance/c0191/boundcmd.spec.luau: 12 passed, 0 failed
+PASS tests/acceptance/c0131/refuse.spec.luau: 3 passed, 0 failed
+PASS tests/tooling/fence-cache-entry.spec.luau: 8 passed, 0 failed
+PASS tests/acceptance/c0082/audit.spec.luau: 9 passed, 0 failed
+PASS tests/acceptance/c0117/docs.spec.luau: 9 passed, 0 failed
+PASS tests/acceptance/c0115/docs.spec.luau: 7 passed, 0 failed
+PASS tests/acceptance/c0042/smoke.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0082/real-tree.spec.luau: 1 passed, 0 failed
+PASS tests/tooling/board-review.spec.luau: 5 passed, 0 failed
+PASS tests/tooling/run-guard-relaunch.spec.luau: 2 passed, 0 failed
+PASS tests/acceptance/c0107/page.spec.luau: 3 passed, 0 failed
+PASS tests/tooling/fixture-elsewhere.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0244/homes.spec.luau: 9 passed, 0 failed
+PASS tests/acceptance/c0042/page.spec.luau: 7 passed, 0 failed
+PASS tests/acceptance/c0118/page.spec.luau: 15 passed, 0 failed
+PASS tests/acceptance/c0114/docs.spec.luau: 6 passed, 0 failed
+PASS tests/meta/architecture.spec.luau: 2 passed, 0 failed
+PASS tests/acceptance/c0049/spec-isolation.spec.luau: 5 passed, 0 failed
+PASS tests/acceptance/c0042/model.spec.luau: 10 passed, 0 failed
+PASS tests/acceptance/c0107/keep.spec.luau: 3 passed, 0 failed
+PASS tests/acceptance/c0193/tree.spec.luau: 5 passed, 0 failed
+PASS tests/tooling/audit-raft-roots.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0044/guard.spec.luau: 1 passed, 0 failed
+PASS tests/acceptance/c0107/label.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0107/views.spec.luau: 5 passed, 0 failed
+PASS tests/tooling/run-lane-error.spec.luau: 1 passed, 0 failed
+PASS tests/tooling/slow-tier.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0120/docs.spec.luau: 7 passed, 0 failed
+PASS tests/tooling/sweeper-interlock.spec.luau: 5 passed, 0 failed
+PASS tests/meta/scanning-loops.spec.luau: 1 passed, 0 failed
+PASS tests/acceptance/c0042/vendor.spec.luau: 3 passed, 0 failed
+PASS tests/acceptance/c0077/cache-paths.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0191/docs.spec.luau: 11 passed, 0 failed
+FAIL tests/tooling/trace-skeleton.spec.luau :: Phase 5 step 3 commits the skeleton before the final review, then the filled table, then the check
+FAIL tests/tooling/trace-skeleton.spec.luau :: zz-review and the final-mode prompt say the skeleton is already committed
+FAIL tests/tooling/trace-skeleton.spec.luau: 1 passed, 2 failed
+PASS tests/acceptance/c0117/dispatch.spec.luau: 12 passed, 0 failed
+PASS tests/acceptance/c0118/docs.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0120/registry-home.spec.luau: 5 passed, 0 failed
+PASS tests/acceptance/c0127/rules.spec.luau: 3 passed, 0 failed
+PASS tests/acceptance/c0193/texts.spec.luau: 7 passed, 0 failed
+PASS tests/acceptance/c0001/ci-workflow.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0263/provenance.spec.luau: 7 passed, 0 failed
+PASS tests/acceptance/c0043/format.spec.luau: 5 passed, 0 failed
+PASS tests/acceptance/c0043/review-skill.spec.luau: 3 passed, 0 failed
+PASS tests/acceptance/c0043/table.spec.luau: 1 passed, 0 failed
+PASS tests/acceptance/c0043/ticket-prep.spec.luau: 2 passed, 0 failed
+PASS tests/acceptance/c0047/override-check.spec.luau: 5 passed, 0 failed
+PASS tests/acceptance/c0048/board-workflow.spec.luau: 1 passed, 0 failed
+PASS tests/acceptance/c0048/board-docs.spec.luau: 1 passed, 0 failed
+PASS tests/acceptance/c0052/skill-doc.spec.luau: 5 passed, 0 failed
+PASS tests/acceptance/c0081/next-file.spec.luau: 1 passed, 0 failed
+PASS tests/acceptance/c0081/renamed.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0081/skill-doc.spec.luau: 6 passed, 0 failed
+FAIL tests/acceptance/c0111/skill-docs.spec.luau :: every skill ends with the same Lessons paragraph and the three roles
+FAIL tests/acceptance/c0111/skill-docs.spec.luau: 4 passed, 1 failed
+PASS tests/acceptance/c0115/readme.spec.luau: 5 passed, 0 failed
+PASS tests/acceptance/c0116/docs.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0119/scope-docs.spec.luau: 9 passed, 0 failed
+PASS tests/acceptance/c0118/metrics.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0127/skill.spec.luau: 1 passed, 0 failed
+PASS tests/acceptance/c0120/ci.spec.luau: 3 passed, 0 failed
+PASS tests/acceptance/c0117/models.spec.luau: 17 passed, 0 failed
+PASS tests/acceptance/c0184/docs.spec.luau: 2 passed, 0 failed
+PASS tests/acceptance/c0193/docs.spec.luau: 2 passed, 0 failed
+FAIL tests/acceptance/d0333/docs.spec.luau :: AC7: Phase 5 commits trace.md with ./zn commit after step 1's commit, then verifies the check
+FAIL tests/acceptance/d0333/docs.spec.luau: 1 passed, 1 failed
+PASS tests/acceptance/c0239/done.spec.luau: 2 passed, 0 failed
+PASS tests/acceptance/c0239/docs.spec.luau: 6 passed, 0 failed
+PASS tests/acceptance/d0333/post-finish.spec.luau: 5 passed, 0 failed
+PASS tests/tooling/affected.spec.luau: 10 passed, 0 failed
+PASS tests/tooling/lessons-hidden.spec.luau: 1 passed, 0 failed
+PASS tests/tooling/raftcheck.spec.luau: 3 passed, 0 failed
+PASS tests/tooling/bounded-review.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0060/retrofit.spec.luau: 3 passed, 0 failed
+PASS tests/tooling/dispatch-texts.spec.luau: 3 passed, 0 failed
+PASS tests/tooling/work.spec.luau: 10 passed, 0 failed
+PASS tests/acceptance/c0073/stats.spec.luau: 7 passed, 0 failed
+PASS tests/acceptance/c0073/chart.spec.luau: 11 passed, 0 failed
+PASS tests/acceptance/c0081/publish-guard.spec.luau: 2 passed, 0 failed
+PASS tests/acceptance/c0084/ledger.spec.luau: 10 passed, 0 failed
+PASS tests/acceptance/c0111/harvest.spec.luau: 8 passed, 0 failed
+PASS tests/acceptance/c0111/lesson-format.spec.luau: 3 passed, 0 failed
+PASS tests/acceptance/c0111/trail.spec.luau: 7 passed, 0 failed
+PASS tests/acceptance/c0116/plan.spec.luau: 17 passed, 0 failed
+PASS tests/acceptance/c0117/adapters.spec.luau: 11 passed, 0 failed
+PASS tests/acceptance/c0111/select.spec.luau: 3 passed, 0 failed
+PASS tests/acceptance/c0118/view.spec.luau: 17 passed, 0 failed
+PASS tests/acceptance/c0165/select.spec.luau: 1 passed, 0 failed
+PASS tests/acceptance/c0193/loops.spec.luau: 19 passed, 0 failed
+PASS tests/acceptance/c0193/problems.spec.luau: 10 passed, 0 failed
+PASS tests/acceptance/c0191/reap.spec.luau: 18 passed, 0 failed
+PASS tests/acceptance/c0239/land.spec.luau: 1 passed, 0 failed
+PASS tests/tooling/game-roots.spec.luau: 3 passed, 0 failed
+PASS tests/tooling/dispatch-ask-prompt.spec.luau: 2 passed, 0 failed
+PASS tests/tooling/loops-writes.spec.luau: 13 passed, 0 failed
+PASS tests/tooling/roles.spec.luau: 6 passed, 0 failed
+PASS tests/tooling/select-scope.spec.luau: 6 passed, 0 failed
+PASS tests/tooling/trace.spec.luau: 3 passed, 0 failed
+PASS tests/tooling/tracker-guarded.spec.luau: 2 passed, 0 failed
+PASS tests/tooling/spend.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0067/paths.spec.luau: 3 passed, 0 failed
+PASS tests/acceptance/c0053/status.spec.luau: 11 passed, 0 failed
+PASS tests/tooling/watch.spec.luau: 8 passed, 0 failed
+PASS tests/tooling/openlist.spec.luau: 4 passed, 0 failed
+PASS tests/acceptance/c0081/ids.spec.luau: 17 passed, 0 failed
+PASS tests/acceptance/c0193/scan.spec.luau: 5 passed, 0 failed
+PASS tests/tooling/status-fresh.spec.luau: 4 passed, 0 failed
+PASS .tracker/issues/c0253/acceptance/dispatch.spec.luau: 10 passed, 0 failed
+PASS tests/acceptance/c0263/record.spec.luau: 39 passed, 0 failed
+slowest: tests/acceptance/c0263/record.spec.luau 141.1s, .tracker/issues/c0253/acceptance/dispatch.spec.luau 78.1s, .tracker/issues/c0254/acceptance/race.spec.luau 62.4s
+1076 passed, 16 failed, 171 spec files
