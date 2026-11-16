@@ -1,0 +1,2 @@
+z-nile/tests/acceptance/c0120/checkpaths.luau
+z-nile/tests/inputs.tsv
