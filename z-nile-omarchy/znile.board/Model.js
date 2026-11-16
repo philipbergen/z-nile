@@ -194,7 +194,9 @@ function reorder(ids, id, beforeId) {
 function matches(item, filters) {
   filters = filters || {}
   if (filters.projects && filters.projects.length > 0 && filters.projects.indexOf(item.project) < 0) return false
-  if (filters.blocked && item.blockedBy.length === 0 && item.blockedMembers.length === 0) return false
+  var blocked = item.blockedBy.length > 0 || item.blockedMembers.length > 0
+  if (filters.blocked && !blocked) return false
+  if (filters.unblocked && blocked) return false
   if (filters.types && filters.types.length > 0) {
     var t = item.type || item.label
     if (filters.types.indexOf(t) < 0 && !(t === "mix" && filters.types.length > 0)) return false

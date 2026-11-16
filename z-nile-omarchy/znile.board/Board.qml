@@ -44,7 +44,7 @@ Item {
     var item = model.byId[id]
     if (!item) { if (service) service.say(id + " isn't on the board"); return }
     if (!Model.matches(item, filters)) {
-      blockedOnly = false; projectFilter = []; typeFilter = []; search.text = ""
+      blockedOnly = false; unblockedOnly = false; projectFilter = []; typeFilter = []; search.text = ""
     }
     var wanted = item.kind === "raft" ? "rafts" : "tickets"
     if (view !== wanted) view = wanted
@@ -112,8 +112,11 @@ Item {
   readonly property var items: view === "rafts" ? model.rafts : model.issues // znile calls tickets "issues"
   property bool blockedOnly: false
   property bool maximized: false
-  readonly property var filters: ({ projects: projectFilter, types: typeFilter, query: query, blocked: blockedOnly })
+  // Blocked and unblocked are a pair: turning one on turns the other off.
+  property bool unblockedOnly: false
+  readonly property var filters: ({ projects: projectFilter, types: typeFilter, query: query, blocked: blockedOnly, unblocked: unblockedOnly })
   readonly property int blockedCount: Model.stageCounts(items.filter(function(it) { return it.stage !== "done" }), { blocked: true }).total
+  readonly property int unblockedCount: Model.stageCounts(items.filter(function(it) { return it.stage !== "done" }), { unblocked: true }).total
   readonly property var orders: {
     var out = {}
     if (!service) return out
@@ -621,7 +624,17 @@ Item {
             active: root.blockedOnly
             interactive: true
             fontSize: Style.font.bodySmall
-            onClicked: root.blockedOnly = !root.blockedOnly
+            onClicked: { root.blockedOnly = !root.blockedOnly; if (root.blockedOnly) root.unblockedOnly = false }
+          }
+
+          Chip {
+            glyph: ""
+            label: "unblocked  " + root.unblockedCount
+            tint: Commons.Color.accent
+            active: root.unblockedOnly
+            interactive: true
+            fontSize: Style.font.bodySmall
+            onClicked: { root.unblockedOnly = !root.unblockedOnly; if (root.unblockedOnly) root.blockedOnly = false }
           }
 
           Repeater {

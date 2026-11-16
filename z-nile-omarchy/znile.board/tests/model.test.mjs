@@ -127,6 +127,12 @@ test("blocking: outside deps block, in-raft deps only order; rafts list blocked 
   assert.equal(m.byId.c0002.url, "https://github.com/o/r/blob/main/z/.tracker/issues/c0002/c0002.md")
   assert.equal(m.byId.c0003.url, "")
   assert.equal(M.stageCounts(m.issues.concat(m.rafts), { blocked: true }).total, 2)
+  // Unblocked is the complement: nothing open in the way, itself or a member.
+  const all = m.issues.concat(m.rafts)
+  assert.equal(M.stageCounts(all, { unblocked: true }).total, all.length - 2)
+  assert.ok(M.matches(m.byId.c0003, { unblocked: true }))
+  assert.ok(!M.matches(m.byId.c0002, { unblocked: true }))
+  assert.ok(!M.matches(m.byId.R0002, { unblocked: true }))
 })
 
 test("styled code spans: our own span, ticket text escaped for HTML and markdown", () => {
