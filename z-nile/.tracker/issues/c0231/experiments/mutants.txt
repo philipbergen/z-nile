@@ -1,18 +1,19 @@
-M1-no-rule killed (refused.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/refused.spec:11: expected "yes: follow", got 
-M2-raw-name killed (refused.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/refused.spec:11: expected "/usr/bin/yes: foll
-M3-any-pipe killed (refused.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/refused.spec:11: expected "yes | cat: follow"
-M4-last-stage killed (refused.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/refused.spec:11: expected "yes | sort | head 
-M5-negative killed (refused.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/refused.spec:11: expected "yes | head -n -3: 
-M6-xargs killed (refused.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/refused.spec:11: expected "yes | xargs head: 
-M7-redirect-ignored killed (refused.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/refused.spec:11: expected "yes 1>/dev/null | 
-M8-any-redirect killed (allowed.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/allowed.spec:11: expected "yes 2>/dev/null | 
-M9-refuse-all killed (allowed.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/allowed.spec:11: expected "yes | head -3: ok"
-M10-no-case killed (allowed.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/allowed.spec:11: expected "case \"$a\" in no)
-M11-case-never-closes killed (allowed.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/allowed.spec:79: expected "follow", got "ok"
-M12-any-paren killed (refused.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/refused.spec:11: expected "(yes): follow", go
-M13-monitor killed (allowed.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/allowed.spec:11: expected "yes: ok", got "yes
-M14-caffeinate-drops killed (allowed.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/allowed.spec:11: expected "caffeinate -t 5 ye
-M15-rule-name killed (refused.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/refused.spec:11: expected "yes: follow", got 
-M16-no-head-hint killed (refusal.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/refusal.spec:25: expected true, got false
-M17-pipe-only killed (allowed.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/allowed.spec:11: expected "yes |& head -1: ok
-M18-exempt-args killed (refused.spec.luau):      z-nile/.tracker/issues/c0231/acceptance/refused.spec:11: expected "yes --version: fol
+M1-no-rule killed (refused.spec.luau):      refused.spec:11: expected "yes: follow", got 
+M2-raw-name killed (refused.spec.luau):      refused.spec:11: expected "/usr/bin/yes: foll
+M3-any-pipe killed (consumers.spec.luau):      consumers.spec:10: expected "yes | cat: follo
+M4-last-stage killed (consumers.spec.luau):      consumers.spec:10: expected "yes | sort | hea
+M5-negative killed (consumers.spec.luau):      consumers.spec:10: expected "yes | head -n -3
+M6-xargs killed (consumers.spec.luau):      consumers.spec:10: expected "yes | xargs head
+M7-redirect-ignored killed (refused.spec.luau):      refused.spec:11: expected "yes 1>/dev/null | 
+M8-any-redirect killed (allowed.spec.luau):      allowed.spec:10: expected "yes 2>/dev/null | 
+M9-refuse-all killed (allowed.spec.luau):      allowed.spec:10: expected "yes | head -3: ok"
+M10-no-case killed (mentions.spec.luau):      mentions.spec:10: expected "case \"$a\" in no
+M11-case-never-closes killed (mentions.spec.luau):      mentions.spec:35: expected "follow", got "ok"
+M12-any-paren killed (refused.spec.luau):      refused.spec:11: expected "(yes): follow", go
+M13-monitor killed (contexts.spec.luau):      contexts.spec:10: expected "yes: ok", got "ye
+M14-caffeinate-drops killed (allowed.spec.luau):      allowed.spec:10: expected "caffeinate -t 5 ye
+M15-rule-name killed (refused.spec.luau):      refused.spec:11: expected "yes: follow", got 
+M16-no-head-hint killed (refusal.spec.luau):      refusal.spec:25: expected true, got false
+M17-pipe-only killed (allowed.spec.luau):      allowed.spec:10: expected "yes |& head -1: ok
+M18-exempt-args killed (refused.spec.luau):      refused.spec:11: expected "yes --version: fol
+M19-bounded-stage-ignored killed (allowed.spec.luau):      allowed.spec:10: expected "yes | ./zn run --t

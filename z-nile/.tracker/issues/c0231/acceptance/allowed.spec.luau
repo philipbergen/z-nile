@@ -48,6 +48,17 @@ return t.spec("c0231 a yes that head reads passes", function(it)
 		})
 	end)
 
+	it("AC2: a pipe into a command bounded by its own means (the wrapper, ./zn, a check.sh) ends yes and passes", function()
+		expectOk({
+			"yes | ./zn run --time 5 -- cat",
+			"yes | ./zn status c0231",
+			"yes | /Users/me/code/pickman/zn run -- cat",
+			"yes | z-nile/lib/bounded.pl --time 5 -- cat",
+			"yes | bash z-nile/check.sh --affected",
+			"yes n | ./zn run --time 5 -- cat | head -1",
+		})
+	end)
+
 	it("AC2: the wrapper runs any yes pipeline", function()
 		expectOk({
 			"./zn run --time 10 -- sh -c 'yes | rm -i a'",

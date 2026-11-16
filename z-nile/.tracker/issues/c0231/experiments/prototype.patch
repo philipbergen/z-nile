@@ -1,8 +1,8 @@
 diff --git a/z-nile/engine/boundcmd.luau b/z-nile/engine/boundcmd.luau
-index 14dd31e09..e0668a8a4 100644
+index 14dd31e09..783266c6e 100644
 --- a/z-nile/engine/boundcmd.luau
 +++ b/z-nile/engine/boundcmd.luau
-@@ -472,9 +472,49 @@ local function boundedish(words: { string }): boolean
+@@ -472,9 +472,50 @@ local function boundedish(words: { string }): boolean
  	return false
  end
  
@@ -12,7 +12,8 @@ index 14dd31e09..e0668a8a4 100644
 +type After = { pipe: { string }?, pattern: boolean }
  
 -function checkCommand(words: { string }, depth: number, raw: string?): Verdict
-+-- `head` stops after its count whatever it reads, and `yes` then ends on the closed pipe. A negative count (GNU's
++-- `head` stops after its count whatever it reads, and `yes` then ends on the closed pipe; so does a stage bounded by its own
++-- means (`boundedish`: the wrapper, `./zn …`, a check.sh), which ends and closes the pipe. A negative count (GNU's
 +-- "all but the last") reads to the end, which `yes` never gives, and `xargs head` reads all of its input first.
 +local function headReads(words: { string }): boolean
 +	local program, args = resolve(words)
@@ -54,7 +55,7 @@ index 14dd31e09..e0668a8a4 100644
  	local program, args, loop = resolve(words)
  	if
  		loop ~= nil
-@@ -510,7 +550,22 @@ function checkCommand(words: { string }, depth: number, raw: string?): Verdict
+@@ -510,7 +551,29 @@ function checkCommand(words: { string }, depth: number, raw: string?): Verdict
  		end
  		-- `caffeinate -t N <command>` runs the command: judge it
  		local rest = table.move(args, at + 2, #args, 1, {})
@@ -65,7 +66,14 @@ index 14dd31e09..e0668a8a4 100644
 +		and not CTX.monitor
 +		and not (
 +			after ~= nil
-+			and (after.pattern or (after.pipe ~= nil and not stdoutAway(args) and headReads(after.pipe)))
++			and (
++				after.pattern
++				or (
++					after.pipe ~= nil
++					and not stdoutAway(args)
++					and (headReads(after.pipe) or boundedish(after.pipe))
++				)
++			)
 +		)
 +	then
 +		-- `yes` writes for ever: only a `head` reading it straight from its pipe ends it (Decision 2 of c0191 names it a follow)
@@ -78,7 +86,7 @@ index 14dd31e09..e0668a8a4 100644
  	elseif not CTX.monitor and FOLLOWERS(name, args) then
  		return refuse(
  			"follow",
-@@ -683,10 +738,14 @@ function checkText(text: string, depth: number): Verdict
+@@ -683,10 +746,14 @@ function checkText(text: string, depth: number): Verdict
  	if depth > 6 then
  		return OK -- too deep to read: the backstop covers it
  	end
@@ -95,7 +103,7 @@ index 14dd31e09..e0668a8a4 100644
  		if not v.ok then
  			CTX.dir = start
  			return v
-@@ -694,6 +753,11 @@ function checkText(text: string, depth: number): Verdict
+@@ -694,6 +761,11 @@ function checkText(text: string, depth: number): Verdict
  		-- a `cd` moves the folder for the commands after it; an operand the scanner cannot resolve (a variable, `~`, `-`,
  		-- none) leaves it unknown, and an unknown folder refuses the tooling match
  		local program, args = resolve(words)

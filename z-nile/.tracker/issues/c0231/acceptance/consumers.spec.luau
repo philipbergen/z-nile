@@ -31,6 +31,14 @@ return t.spec("c0231 only a head that stops ends yes", function(it)
 		end
 	)
 
+	it("AC3: the wrapper after the pipe is no excuse for yes when its own output is sent away", function()
+		expectRefused({
+			"yes > out | ./zn run --time 5 -- cat",
+			"yes 2>&1 >/dev/null | ./zn run --time 5 -- cat",
+			"echo ./zn | yes | cat",
+		})
+	end)
+
 	it("AC3: only the stage straight after yes counts: a head later in the pipeline does not", function()
 		expectRefused({
 			"yes | sort | head -3",
