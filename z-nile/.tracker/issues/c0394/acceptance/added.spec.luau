@@ -1,13 +1,12 @@
 --!strict
--- c0394 AC1: added.luau (pure) places added issues in a raft's order and plans what lands, what blocks and what is above
--- the blocker, and refuses an unknown `waits:` value and a `before:` that names no unlanded member.
--- Waiting is `waits: approval`, not approved, not done. `members` is the raft's unlanded members.
+-- c0394 AC1: added.luau (pure) places added issues in a raft's order, names the first waiting member and the member
+-- below it, and refuses an unknown `waits:` value and a `before:` that names an added issue or no member.
+-- Waiting is `waits: approval`, not approved, not landed. A landed issue is never judged.
 local added = require("@znile/engine/added")
 local t = require("@tests/lib/t")
 
 local function fact(id: string, over: { [string]: any }?): added.Fact
-	local f: { [string]: any } =
-		{ id = id, state = "active", waits = nil, before = nil, approved = false, finished = false }
+	local f: { [string]: any } = { id = id, landed = false, waits = nil, before = nil, approved = false }
 	local overrides: { [string]: any } = over or {}
 	for k, v in overrides do
 		f[k] = v
@@ -19,13 +18,14 @@ local function has(s: string, part: string): boolean
 	return string.find(s, part, 1, true) ~= nil
 end
 
-return t.spec("c0394 added: place and plan a raft's order", function(it)
+return t.spec("c0394 added: place and blocker over a raft's order", function(it)
 	it("a waits value other than approval is a problem", function()
-		local members = { "c0010", "c0200" }
-		t.expect(added.problem(fact("c0200", { waits = "approval" }), members)).toBe(nil)
-		t.expect(added.problem(fact("c0010"), members)).toBe(nil)
+		local ok = fact("c0200", { waits = "approval" })
+		t.expect(added.problem(ok, { fact("c0010"), ok })).toBe(nil)
+		t.expect(added.problem(fact("c0010"), { fact("c0010") })).toBe(nil)
 		for _, bad in { "later", "Approval", "approve", "yes" } do
-			local why = added.problem(fact("c0200", { waits = bad }), members)
+			local odd = fact("c0200", { waits = bad })
+			local why = added.problem(odd, { fact("c0010"), odd })
 			t.expect(why ~= nil).toBe(true)
 			-- the refusal names the item and the rule
 			t.expect(has(why :: string, "c0200")).toBe(true)
@@ -38,19 +38,27 @@ return t.spec("c0394 added: place and plan a raft's order", function(it)
 		t.expect(added.isWaiting(fact("c0200", { waits = "approval" }))).toBe(true)
 	end)
 
-	it("a before naming a landed member or no member is a problem", function()
-		-- c0010 has landed, so it is not among the unlanded members
-		local unlanded = { "c0020", "c0200" }
-		local ok = added.problem(fact("c0200", { waits = "approval", before = "c0020" }), unlanded)
-		t.expect(ok).toBe(nil)
-		for _, named in { "c0010", "c9999" } do
-			local why = added.problem(fact("c0200", { waits = "approval", before = named }), unlanded)
-			t.expect(why ~= nil).toBe(true)
-			t.expect(has(why :: string, "c0200")).toBe(true)
-			t.expect(has(why :: string, named)).toBe(true)
-			t.expect(has(why :: string, "before")).toBe(true)
+	it(
+		"a before naming an added issue or no member is a problem, and a landed issue is not judged",
+		function()
+			local t1 = fact("c0010")
+			local front = fact("c0200", { waits = "approval", before = "c0010" })
+			local second = fact("c0201", { waits = "approval", before = "c0200" }) -- names an added issue
+			local nowhere = fact("c0202", { waits = "approval", before = "c9999" }) -- names no member
+			local facts = { t1, front, second, nowhere }
+			t.expect(added.problem(front, facts)).toBe(nil)
+			for _, bad in { second, nowhere } do
+				local why = added.problem(bad, facts)
+				t.expect(why ~= nil).toBe(true)
+				t.expect(has(why :: string, bad.id)).toBe(true)
+				t.expect(has(why :: string, "before")).toBe(true)
+				t.expect(has(why :: string, bad.before :: string)).toBe(true)
+			end
+			-- after the first landing T2 is in done/ and its `before: c0010` names a landed member: not judged
+			local landed = fact("c0203", { landed = true, waits = "approval", before = "c9999" })
+			t.expect(added.problem(landed, { landed, t1 })).toBe(nil)
 		end
-	end)
+	)
 
 	it("place puts an added issue before the member it names, else last, lowest id first", function()
 		local facts = {
@@ -77,59 +85,46 @@ return t.spec("c0394 added: place and plan a raft's order", function(it)
 		t.expect(added.place({}, {})).toEqual({})
 	end)
 
-	it("plan lands the finished members below the first waiting one", function()
+	it("blocker is the first waiting member and names the member below it", function()
 		local facts = {
-			fact("c0001", { state = "done" }),
-			fact("c0002", { finished = true }),
-			fact("c0003", { finished = true }),
+			fact("c0001", { landed = true }),
+			fact("c0002"),
+			fact("c0003"),
 			fact("c0004", { waits = "approval" }),
-			fact("c0005", { finished = true }),
+			fact("c0005"),
 			fact("c0006", { waits = "approval" }),
 		}
-		local plan = added.plan({ "c0001", "c0002", "c0003", "c0004", "c0005", "c0006" }, facts)
-		t.expect(plan.order).toEqual({ "c0001", "c0002", "c0003", "c0004", "c0005", "c0006" })
-		t.expect(plan.landed).toEqual({ "c0001" })
-		t.expect(plan.lands).toEqual({ "c0002", "c0003" })
-		t.expect(plan.blocker).toBe("c0004")
-		t.expect(plan.unfinished).toBe(nil)
-		t.expect(plan.above).toEqual({ "c0005", "c0006" })
-		-- a blocker first: nothing lands, everything else is above it
-		local front = added.plan({ "c0004", "c0002", "c0003" }, { facts[4], facts[2], facts[3] })
-		t.expect(#front.lands).toBe(0)
-		t.expect(front.blocker).toBe("c0004")
-		t.expect(front.above).toEqual({ "c0002", "c0003" })
+		local order = { "c0001", "c0002", "c0003", "c0004", "c0005", "c0006" }
+		local blocker, below = added.blocker(order, facts)
+		t.expect(blocker).toBe("c0004")
+		t.expect(below).toBe("c0003") -- what `done` lands through
+		-- a blocker first: there is nothing below it
+		local first, none = added.blocker({ "c0004", "c0002" }, { facts[4], facts[2] })
+		t.expect(first).toBe("c0004")
+		t.expect(none).toBe(nil)
+		-- everything below it has landed: nothing to land through
+		local landedBelow, nothing = added.blocker(
+			{ "c0001", "c0004", "c0005" },
+			{ facts[1], facts[4], facts[5] }
+		)
+		t.expect(landedBelow).toBe("c0004")
+		t.expect(nothing).toBe(nil)
+		-- no waiting member: no blocker, and the raft lands as c0248 lands it
+		local clear, empty = added.blocker({ "c0001", "c0002" }, { facts[1], facts[2] })
+		t.expect(clear).toBe(nil)
+		t.expect(empty).toBe(nil)
 	end)
 
 	it("an approved added issue is not a blocker", function()
 		t.expect(added.isWaiting(fact("c0004", { waits = "approval", approved = true }))).toBe(false)
-		t.expect(added.isWaiting(fact("c0004", { waits = "approval", state = "done" }))).toBe(false)
+		t.expect(added.isWaiting(fact("c0004", { waits = "approval", landed = true }))).toBe(false)
 		local facts = {
-			fact("c0002", { finished = true }),
-			fact("c0004", { waits = "approval", approved = true, finished = true }),
-			fact("c0005", { finished = true }),
-		}
-		local plan = added.plan({ "c0002", "c0004", "c0005" }, facts)
-		t.expect(plan.blocker).toBe(nil)
-		t.expect(plan.unfinished).toBe(nil)
-		t.expect(plan.lands).toEqual({ "c0002", "c0004", "c0005" })
-		t.expect(#plan.above).toBe(0)
-	end)
-
-	it("plan names the first unfinished member below the blocker", function()
-		local facts = {
-			fact("c0001", { state = "done" }),
 			fact("c0002"),
-			fact("c0003", { finished = true }),
-			fact("c0004", { waits = "approval" }),
-			fact("c0005"),
+			fact("c0004", { waits = "approval", approved = true }),
+			fact("c0005", { waits = "approval" }),
 		}
-		local plan = added.plan({ "c0001", "c0002", "c0003", "c0004", "c0005" }, facts)
-		-- c0005 is above the blocker: it is not asked for
-		t.expect(plan.unfinished).toBe("c0002")
-		t.expect(plan.blocker).toBe("c0004")
-		t.expect(plan.landed).toEqual({ "c0001" })
-		-- with nothing unfinished below the blocker there is none to name
-		facts[2] = fact("c0002", { finished = true })
-		t.expect(added.plan({ "c0001", "c0002", "c0003", "c0004", "c0005" }, facts).unfinished).toBe(nil)
+		local blocker, below = added.blocker({ "c0002", "c0004", "c0005" }, facts)
+		t.expect(blocker).toBe("c0005")
+		t.expect(below).toBe("c0004")
 	end)
 end)

@@ -1,5 +1,5 @@
 --!strict
--- c0394 AC11 to AC14: the skills, AGENTS.md, the README, the idea challenger's prompt and the usage text say what c0394's
+-- c0394 AC13 to AC16: the skills, AGENTS.md, the README, the idea challenger's prompt and the usage text say what c0394's
 -- Design says. zz-rules gains Findings (the four ends of a finding and the 50-line threshold, stated once) in place of
 -- Emergent issues; no skill tells an agent to open a backlog issue for a finding or a lesson; every skill's Lessons
 -- section has the Every lead bullet; zz-execute's report names the added issues; z-ticket and the idea challenger state
@@ -169,11 +169,15 @@ return t.spec("c0394 the skills say where a finding goes", function(it)
 		t.expect(has(agents, "must capture a new lesson as an issue")).toBe(false)
 	end)
 
-	it("zz-execute's report has Added issues waiting for approval and no Follow-ups filed", function()
+	it("zz-execute has the Added comment line and the report line, and no Follow-ups filed", function()
 		local execute = read("z-nile/skills/zz-execute/SKILL.md")
 		local report = section(execute, "Final report format")
 		missing("zz-execute report", report, {
 			"Added issues waiting for approval: <id>: <title> (found <where>; <before <id> | last>; <n> guesses) | none",
+		})
+		-- the pull-request comment that tells the user (zz-execute prescribes it)
+		missing("zz-execute", execute, {
+			"Added <id> (<title>), found <where>, <before <issue> | last>: waits for approval, <n> guesses",
 		})
 		t.expect(has(execute, "Follow-ups filed")).toBe(false)
 		-- the review answers it lists: dropped and added in place of deferred
@@ -188,7 +192,7 @@ return t.spec("c0394 the skills say where a finding goes", function(it)
 	end)
 
 	it(
-		"z-ticket states the z-nile ticket rule and the challenge prompt asks for it for z-nile only",
+		"z-ticket states the z-nile ticket rule and the challenge prompt asks for it for z-nile only and not for a finding",
 		function()
 			local ticket = read("z-nile/skills/z-ticket/SKILL.md")
 			missing("z-ticket", ticket, {
@@ -204,10 +208,14 @@ return t.spec("c0394 the skills say where a finding goes", function(it)
 				"not a ticket: a first incident is a lesson (zz-rules, Findings)",
 			})
 			t.expect(has(challenge(doc, "pickman"), "not a ticket: a first incident is a lesson")).toBe(false)
+			local finding =
+				"---\nid: c0002\nidea: finding\nfound: R0010 c0010 layer\n---\n\n# c0002\n\n## Problem\nA finding.\n"
+			t.expect(has(challenge(finding, "z-nile"), "not a ticket: a first incident is a lesson"))
+				.toBe(false)
 		end
 	)
 
-	it("usage lists --wait, --before, --found, --with, members --all and reject", function()
+	it("usage lists --wait, --before, --found, --with and reject", function()
 		local main = read("z-nile/engine/main.luau")
 		local usage = string.match(main, "local USAGE = %[%[\n(.-)%]%]") :: string
 		t.expect(usage ~= nil).toBe(true)
@@ -232,8 +240,6 @@ return t.spec("c0394 the skills say where a finding goes", function(it)
 		end
 		local newIssue = entry("new issue")
 		missing("usage new issue", newIssue, { "--wait", "--before", "--found", "--with" })
-		local members = entry("members")
-		missing("usage members", members, { "--all" })
 		local reject = entry("reject")
 		missing("usage reject", reject, { "reject <id> --lesson" })
 	end)
