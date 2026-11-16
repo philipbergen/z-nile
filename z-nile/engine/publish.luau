@@ -2,6 +2,7 @@
 -- Pushes a tracker-only commit to origin/main with git plumbing (mktree, no index). Never touches the caller's working
 -- tree, index, HEAD or branch. See c0510.
 local broker = require("./broker")
+local buffer = require("./buffer")
 local ids = require("./ids")
 local ledger = require("./ledger")
 local pathsLib = require("./paths")
@@ -113,12 +114,62 @@ function publish.allowed(path: string, roots: { string }, counter: string?): boo
 		return false
 	end
 	if string.find(rel, "/", 1, true) then
-		return false
+		-- a done issue's measured rows, spend.d/<writer>.tsv, published append-only (c0348): the one file below an
+		-- item's own folder a publish may write, and only once the issue is in done/
+		return isIssue(id)
+			and string.match(rel, "^spend%.d/[%w._%-]+%.tsv$") ~= nil
+			and path == `{root}/issues/done/{id}/{rel}`
 	end
 	-- an issue's spend.md is published append-only; a raft's summary stays on its branch
 	return rel == `{id}.md`
 		or rel == "check.sh"
 		or (isIssue(id) and (rel == "spend.md" or rel == "approval.md"))
+end
+
+-- Why `content` may not replace `existing` (origin/main's text, nil when the file is new there) as a done issue's
+-- spend.d file, or nil when it may: rows are only ever appended, so origin's bytes stay as its start, at least one row
+-- follows them, and the whole file parses as measured rows (c0348).
+function publish.measuredReason(existing: string?, content: string): string?
+	local had = existing or ""
+	if string.sub(content, 1, #had) ~= had then
+		return "not an append to its rows on origin/main (run ./zn sync, then record again)"
+	end
+	if #content == #had then
+		return "no new row"
+	end
+	if string.sub(content, -1) ~= "\n" then
+		return "the last row has no newline"
+	end
+	local rows, err = buffer.parseTsv(content)
+	if not rows then
+		return `does not parse as measured rows ({err})`
+	end
+	-- only `./zn spend --phase deliver` publishes rows, and what it appends always holds its deliver row
+	local before = if had == "" then {} else buffer.parseTsv(had)
+	if not before then
+		return "its rows on origin/main do not parse"
+	end
+	for i = #before + 1, #rows do
+		if rows[i].phase == "deliver" then
+			return nil
+		end
+	end
+	return "no deliver row among the new rows"
+end
+
+-- How a checkout's copy of a measured-rows file (`mine`, nil when it has none) stands to origin/main's (`origin`):
+-- "same", "behind" (origin holds more rows after mine), "ahead" (mine holds more after origin's) or "diverged".
+-- By bytes: rows are only ever appended.
+function publish.rowsRelation(mine: string?, origin: string?): "same" | "behind" | "ahead" | "diverged"
+	local a, b = mine or "", origin or ""
+	if a == b then
+		return "same"
+	elseif string.sub(b, 1, #a) == a then
+		return "behind"
+	elseif string.sub(a, 1, #b) == b then
+		return "ahead"
+	end
+	return "diverged"
 end
 
 -- The directory of an item file: `path` without its `/<rel>`.
@@ -455,6 +506,19 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 					else ""
 				if not approved or not onOrigin[beside] then
 					return fail(`{c.path}: no issue document beside it on origin/main`)
+				end
+				continue
+			end
+			if string.find(c.path, "/spend.d/", 1, true) then
+				-- `allowed` took only <root>/issues/done/<id>/spend.d/<writer>.tsv
+				local reason = publish.measuredReason(existing, c.content)
+				if reason then
+					return fail(`{c.path}: {reason}`)
+				end
+				local id = string.match(c.path, "/done/([fdc]%d%d%d%d)/spend%.d/") or ""
+				local doc = string.gsub(c.path, "/spend%.d/[^/]+$", `/{id}.md`)
+				if not onOrigin[doc] then
+					return fail(`{c.path}: no {id}.md beside it in done/ on origin/main`)
 				end
 				continue
 			end
