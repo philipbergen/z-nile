@@ -2,7 +2,7 @@
 
 ## Findings
 
-- F1: Problem 1 says the net "fails at once" and Solution 1 says it "fails to start", but neither gives a time window. If a net is still alive when the kick returns and dies a few seconds later, a reader can't tell whether that case is covered. So you can't judge whether Solution 1 holds, or whether the kick should exit non-zero then. State the limit, for example "exits within N seconds of the kick" or "before the kick returns", so the sentence can be checked true or false.
+- F1: Solution 3 is the only sentence a reader can't mark true or false. "Shown as stale in a place a worker or the user already looks" names no place, and "a stated limit" doesn't say where the limit is stated. Any display anywhere would pass. Name the surface (for example, the board, or what `./zn work` prints) and where the limit lives. The other sentences can be checked, and Problem 3 holds: `z-nile/watch-passed` records only the commit of the last pass, with no time, and nothing in `z-nile/engine/watchcmd.luau` reports how long ago that was.
 
 ## Verdict
 
