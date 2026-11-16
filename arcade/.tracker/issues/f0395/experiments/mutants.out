@@ -1,0 +1,38 @@
+CONTROL f0395 and f0201 (narrowed) specs on the prototype: green (118, 0, 9)
+BASE f0395's specs on f0201 alone: (0, 9, 3); failing cases: 9; load errors: False
+  FAIL tests/acceptance/f0395/docs.spec.luau :: the Prices bullet names a revive's price, nothing struck
+  FAIL tests/acceptance/f0395/docs.spec.luau :: the TestPurchase bullet says its lines are rich text, a play's price line struck
+  FAIL tests/acceptance/f0395/lines.spec.luau :: a play's price line strikes the badge's struck price, then the price and the sale
+  FAIL tests/acceptance/f0395/lines.spec.luau :: a play's price line is built from the prices it is given
+  FAIL tests/acceptance/f0395/lines.spec.luau :: a revive's price line is the revive's own price, with nothing struck
+  FAIL tests/acceptance/f0395/lines.spec.luau :: every text in a line shows as it is: &, < and > become entities, the play's <s> is the only markup
+  FAIL tests/acceptance/f0395/lines.spec.luau :: Prices is one frozen table: 5 R$ struck, 1 R$, SALE, and the revive's 1 R$, the charge
+  FAIL tests/acceptance/f0395/client.spec.luau :: a play's lines: every line label is rich text and shows the line as sent, the struck price marked
+  FAIL tests/acceptance/f0395/client.spec.luau :: a revive's lines and escaped text: every line label is rich text, the entities kept as sent
+BASE f0201's narrowed specs on f0201 alone: green (109, 0, 6)
+Y1 lines.spec.luau :: a play's price line strikes: killed (assertion)
+Y2 lines.spec.luau :: a play's price line strikes: killed (assertion)
+Y3 lines.spec.luau :: built from the prices it is given: killed (assertion)
+Y4 lines.spec.luau :: a revive's price line is the revive's own: killed (assertion)
+Y5 lines.spec.luau :: a revive's price line is the revive's own: killed (assertion)
+Y6 lines.spec.luau :: a revive's price line is the revive's own: killed (assertion)
+Y7 lines.spec.luau :: every text in a line shows as it is: killed (assertion)
+Y8 lines.spec.luau :: every text in a line shows as it is: killed (assertion)
+Y9 lines.spec.luau :: every text in a line shows as it is: killed (assertion)
+Y10 lines.spec.luau :: every text in a line shows as it is: killed (assertion)
+Y11 lines.spec.luau :: every text in a line shows as it is: killed (assertion)
+Y12 lines.spec.luau :: every text in a line shows as it is: killed (assertion)
+P1 lines.spec.luau :: Prices is one frozen table: killed (assertion)
+P2 lines.spec.luau :: Prices is one frozen table: killed (assertion)
+P3 lines.spec.luau :: Prices is one frozen table: killed (assertion)
+C1 client.spec.luau :: a play's lines: killed (assertion)
+C2 client.spec.luau :: a play's lines: killed (assertion)
+C3 client.spec.luau :: a play's lines: killed (assertion)
+C4 client.spec.luau :: a revive's lines and escaped text: killed (assertion)
+D1 docs.spec.luau :: the Prices bullet names: killed (assertion)
+D2 docs.spec.luau :: the TestPurchase bullet says: killed (assertion)
+D3 docs.spec.luau :: the TestPurchase bullet says: killed (assertion)
+V1 correct variant: green (118, 0, 9)
+V2 correct variant: green (118, 0, 9)
+V3 correct variant: green (118, 0, 9)
+V4 correct variant: green (118, 0, 9)

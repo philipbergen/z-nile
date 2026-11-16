@@ -1,0 +1,76 @@
+diff --git a/arcade/.tracker/architecture.md b/arcade/.tracker/architecture.md
+index f7448a8ed..a6543546e 100644
+--- a/arcade/.tracker/architecture.md
++++ b/arcade/.tracker/architecture.md
+@@ -72,8 +72,8 @@ The cost model every game shares (f0145's, per game: one free start per rolling
+ - `src/server/Catalog.luau`: one entry per game (its name, title, its two stores, the attribute names of its two product ids). A new game is one entry and two Developer Products; no code changes.
+ - `src/server/Wallet.luau`: a player's records (stored in f0145's shape) through one `UpdateAsync` per decision (the arrival's claim, a revive used, a refund, a grant), the portal's passes (MemoryStore, only after a failed read), the run's revive count, and the guards, per player and game, that bound what one client can make it spend.
+ - `src/server/Receipts.luau`: installed by **every place** (E4): `ProcessReceipt` for every game's products (a receipt grants into the product's own game record by user id, wherever it is processed), the purchase prompts, and the test purchase screen's server side.
+-- `src/shared/Prices.luau`: the badge text ("5 R$" struck through, "1 R$", "SALE"), the one config table the portal and the screens print.
+-- `src/shared/TestPurchase.luau`: the test purchase screen, a client adapter module every place's client boots. It is the one client adapter in the library: it wires nothing into a game's screen, it stands in for Roblox's own purchase dialog in test mode. A place's own handlers of Return, KeypadEnter, ButtonA, Backspace, ButtonB and taps act through ContextActionService bindings below priority 3000, or skip processed input, or check `TestPurchase.isOpen()`; a device tracker is exempt.
++- `src/shared/Prices.luau`: the badge text ("5 R$" struck through, "1 R$", "SALE") and a revive's price ("1 R$", nothing struck; f0395), the one config table the portal and the screens print.
++- `src/shared/TestPurchase.luau`: the test purchase screen, a client adapter module every place's client boots. It is the one client adapter in the library: it wires nothing into a game's screen, it stands in for Roblox's own purchase dialog in test mode. A place's own handlers of Return, KeypadEnter, ButtonA, Backspace, ButtonB and taps act through ContextActionService bindings below priority 3000, or skip processed input, or check `TestPurchase.isOpen()`; a device tracker is exempt. Its lines are rich text: a play's price line strikes the badge's struck price (f0395).
+ - Roblox's `ServerScriptService` attributes set by the publisher: `PaidPlay` (`"live"` for live mode) and each catalog entry's two product ids.
+ 
+ ## Allowed dependencies
+diff --git a/arcade/src/shared/Logic/PaidPlay/init.luau b/arcade/src/shared/Logic/PaidPlay/init.luau
+index 28b9cadb5..97bfbc71e 100644
+--- a/arcade/src/shared/Logic/PaidPlay/init.luau
++++ b/arcade/src/shared/Logic/PaidPlay/init.luau
+@@ -26,7 +26,7 @@ export type Ids = { play: number?, revive: number? }
+ export type Product = { name: string, kind: Kind }
+ export type Title = { entry: Entry, mode: Mode, ids: Ids }
+ export type Config = { titles: { [string]: Title }, products: { [number]: Product } }
+-export type Prices = { struck: string, price: string, sale: string }
++export type Prices = { struck: string, price: string, sale: string, revive: string }
+ 
+ local PaidPlay = {}
+ 
+@@ -226,12 +226,21 @@ function PaidPlay.arrive(start: Start?, passed: boolean): Verdict
+ 	return "play"
+ end
+ 
+--- The test purchase screen's lines: what is bought, its price as the badge says it, and that nothing is charged.
++-- A text as rich text shows it: &, < and > as entities, so only the markup testLines adds is markup.
++local function plain(text: string): string
++	return (string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;"))
++end
++
++-- The test purchase screen's lines, as rich text: what is bought, its price, and that nothing is charged. A play's
++-- price is the badge's, the struck price marked for strike-through (f0395); a revive's is its own, nothing struck.
+ function PaidPlay.testLines(title: string, kind: Kind, prices: Prices): { string }
++	local price = if kind == "play"
++		then `<s>{plain(prices.struck)}</s> {plain(prices.price)} {plain(prices.sale)}`
++		else plain(prices.revive)
+ 	return {
+-		`{title}: {PaidPlay.KIND_TEXT[kind]}`,
+-		`{prices.struck} {prices.price} {prices.sale}`,
+-		PaidPlay.TEST_NOTE,
++		plain(`{title}: {PaidPlay.KIND_TEXT[kind]}`),
++		price,
++		plain(PaidPlay.TEST_NOTE),
+ 	}
+ end
+ 
+diff --git a/arcade/src/shared/Prices.luau b/arcade/src/shared/Prices.luau
+index 7258c0920..d23e20a26 100644
+--- a/arcade/src/shared/Prices.luau
++++ b/arcade/src/shared/Prices.luau
+@@ -6,4 +6,5 @@ return table.freeze({
+ 	struck = "5 R$", -- shown struck through
+ 	price = "1 R$", -- what is charged
+ 	sale = "SALE",
++	revive = "1 R$", -- a revive's price (f0395): its own, nothing struck
+ })
+diff --git a/arcade/src/shared/TestPurchase.luau b/arcade/src/shared/TestPurchase.luau
+index 65be3dc3f..67f644815 100644
+--- a/arcade/src/shared/TestPurchase.luau
++++ b/arcade/src/shared/TestPurchase.luau
+@@ -81,6 +81,7 @@ local function listen(remote: any, playerGui: any)
+ 		for i, line in lines do
+ 			local label = Instance.new("TextLabel")
+ 			label.Name = `Line{i}`
++			label.RichText = true -- the lines are rich text: a play's struck price (f0395)
+ 			label.Text = line
+ 			label.TextScaled = true
+ 			label.Size = UDim2.fromScale(0.9, 0.18)
