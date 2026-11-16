@@ -6966,8 +6966,8 @@ function cmd.rank(pos: { string }, opts: { [string]: { string } })
 	end
 	local actor = rk.actor(opts)
 	local when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string
-	refuseStale()
 	local changes: { rank.Change } = {}
+	refuseStale()
 	local r = published(publish.commit(".", function(paths, read)
 		local facts: { rank.Fact } = {}
 		local docs: { [string]: { path: string, text: string } } = {}
