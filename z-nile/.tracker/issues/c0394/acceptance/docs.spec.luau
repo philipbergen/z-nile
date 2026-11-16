@@ -88,7 +88,7 @@ local BACKLOG_FOR_LESSON = {
 
 return t.spec("c0394 the skills say where a finding goes", function(it)
 	it(
-		"zz-rules has Findings with the four ends and the 50-line threshold, and no Emergent issues section",
+		"zz-rules has Findings with the four ends, the 50-line threshold and the in-front-or-last question, and no Emergent issues section",
 		function()
 			local rules = read("z-nile/skills/zz-rules/SKILL.md")
 			t.expect(has(rules, "\n## Emergent issues")).toBe(false)
@@ -99,6 +99,8 @@ return t.spec("c0394 the skills say where a finding goes", function(it)
 				"50 changed lines", -- the threshold
 				"--raft", -- end 1: a must-fix emergent issue, as today
 				"--wait", -- end 4, found while delivering a raft
+				"--found",
+				"--before", -- in front of the layer that found it; else last
 				"--with", -- end 4, found while designing an issue
 			})
 			-- the threshold is stated once: here, and in no other skill
@@ -170,11 +172,9 @@ return t.spec("c0394 the skills say where a finding goes", function(it)
 	it("zz-execute's report has Added issues waiting for approval and no Follow-ups filed", function()
 		local execute = read("z-nile/skills/zz-execute/SKILL.md")
 		local report = section(execute, "Final report format")
-		missing(
-			"zz-execute report",
-			report,
-			{ "Added issues waiting for approval: <id>: <title> (<n> guesses) | none" }
-		)
+		missing("zz-execute report", report, {
+			"Added issues waiting for approval: <id>: <title> (found <where>; <before <id> | last>; <n> guesses) | none",
+		})
 		t.expect(has(execute, "Follow-ups filed")).toBe(false)
 		-- the review answers it lists: dropped and added in place of deferred
 		missing(
@@ -187,23 +187,27 @@ return t.spec("c0394 the skills say where a finding goes", function(it)
 		missing("z-design", read("z-nile/skills/z-design/SKILL.md"), { "Added issues waiting for approval" })
 	end)
 
-	it("z-ticket states the z-nile ticket rule and the challenge prompt asks for it", function()
-		local ticket = read("z-nile/skills/z-ticket/SKILL.md")
-		missing("z-ticket", ticket, {
-			"the user asked for it",
-			"happened twice",
-			"first one-off incident gets a lesson",
-			"(zz-rules, Findings)",
-		})
-		local prompt =
-			idea.challengePrompt("---\nid: c0001\n---\n\n# c0001\n\n## Problem\nA thing broke once.\n")
-		missing("idea.challengePrompt", prompt, {
-			"z-nile",
-			"not a ticket: a first incident is a lesson (zz-rules, Findings)",
-		})
-	end)
+	it(
+		"z-ticket states the z-nile ticket rule and the challenge prompt asks for it for z-nile only",
+		function()
+			local ticket = read("z-nile/skills/z-ticket/SKILL.md")
+			missing("z-ticket", ticket, {
+				"the user asked for it",
+				"happened twice",
+				"first one-off incident gets a lesson",
+				"(zz-rules, Findings)",
+			})
+			-- the prompt takes the issue's project: the rule is asked of z-nile only
+			local doc = "---\nid: c0001\n---\n\n# c0001\n\n## Problem\nA thing broke once.\n"
+			local challenge = idea.challengePrompt :: any
+			missing("idea.challengePrompt", challenge(doc, "z-nile"), {
+				"not a ticket: a first incident is a lesson (zz-rules, Findings)",
+			})
+			t.expect(has(challenge(doc, "pickman"), "not a ticket: a first incident is a lesson")).toBe(false)
+		end
+	)
 
-	it("usage lists --wait, --with, members --all and reject", function()
+	it("usage lists --wait, --before, --found, --with, members --all and reject", function()
 		local main = read("z-nile/engine/main.luau")
 		local usage = string.match(main, "local USAGE = %[%[\n(.-)%]%]") :: string
 		t.expect(usage ~= nil).toBe(true)
@@ -227,7 +231,7 @@ return t.spec("c0394 the skills say where a finding goes", function(it)
 			return table.concat(out, "\n")
 		end
 		local newIssue = entry("new issue")
-		missing("usage new issue", newIssue, { "--wait", "--with" })
+		missing("usage new issue", newIssue, { "--wait", "--before", "--found", "--with" })
 		local members = entry("members")
 		missing("usage members", members, { "--all" })
 		local reject = entry("reject")

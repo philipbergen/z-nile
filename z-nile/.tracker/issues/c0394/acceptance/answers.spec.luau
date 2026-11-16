@@ -137,17 +137,36 @@ return t.spec("c0394 done judges dropped and added answers, and calls deferred l
 		trackerfix.trOk(f, f.main, { "ready", "R0010" })
 		wt = trackerfix.trOk(f, f.main, { "worktree", "R0010" })
 		zn(wt, { "start", "R0010" })
-		local made = tr(wt, { "new", "issue", "c", "found-one", "--raft", "R0010", "--wait" })
+		local made = tr(wt, {
+			"new",
+			"issue",
+			"c",
+			"found-one",
+			"--raft",
+			"R0010",
+			"--wait",
+			"--found",
+			"R0010 review-001 F3 high",
+		})
 		t.expect(made.ok).toBe(true)
-		added = string.match(made.stdout, "(c%d%d%d%d)") or ""
+		added = string.match(made.stdout, "(c%d%d%d%d) waits for approval")
+			or string.match(made.stdout, "(c%d%d%d%d)/c%d%d%d%d%.md")
+			or ""
 		t.expect(added ~= "").toBe(true)
-		-- patch what the tool should have written: waits: approval, and the raft's issues: line
+		-- patch what the tool should have written: waits: approval, found:, and the raft's issues: line
 		local docPath = `{wt}/{ROOT}/issues/active/{added}/{added}.md`
 		local doc = fs.readFile(docPath)
 		if not has(doc, "\nwaits: approval\n") then
 			fs.writeFile(
 				docPath,
-				(string.gsub(doc, "\nemergent: true\n", "\nemergent: true\nwaits: approval\n", 1))
+				(
+					string.gsub(
+						doc,
+						"\nemergent: true\n",
+						"\nemergent: true\nwaits: approval\nfound: R0010 review-001 F3 high\n",
+						1
+					)
+				)
 			)
 		end
 		local raftPath = `{wt}/{RAFT_DIR}/R0010.md`
@@ -206,7 +225,7 @@ return t.spec("c0394 done judges dropped and added answers, and calls deferred l
 		)
 	end)
 
-	it("added needs a waiting member of this raft", function()
+	it("added needs a waiting member of this raft and takes a high finding", function()
 		-- an issue that exists but is not a member of this raft, a member that does not wait, and one that is missing
 		refused(
 			attempt({ `- F1: {FIXED}`, "- F2: added c0030: later", `- F3: {FIXED}`, `- F4: {FIXED}` }),
@@ -223,19 +242,22 @@ return t.spec("c0394 done judges dropped and added answers, and calls deferred l
 			"F2",
 			"c9999"
 		)
-		-- a high finding cannot be added either
-		refused(
-			attempt({ `- F1: added {added}: later`, `- F2: {FIXED}`, `- F3: {FIXED}`, `- F4: {FIXED}` }),
-			"F1",
-			"high"
-		)
+		-- a high finding may be added: only the invalid F2 is refused, F1 is not named
+		local high = attempt({
+			`- F1: added {added}: later`,
+			"- F2: added c0030: later",
+			`- F3: {FIXED}`,
+			`- F4: {FIXED}`,
+		})
+		refused(high, "F2", "c0030")
+		t.expect(has(say(high), "F1")).toBe(false)
 	end)
 
 	it("a deferred answer is still accepted and called legacy", function()
 		local r = attempt({
-			`- F1: {FIXED}`,
+			`- F1: added {added}: main is worse off without it`,
 			"- F2: dropped idle-finding: not worth it",
-			`- F3: added {added}: needs its own design`,
+			`- F3: {FIXED}`,
 			"- F4: deferred c0030: same follow-up",
 		})
 		if not r.ok then

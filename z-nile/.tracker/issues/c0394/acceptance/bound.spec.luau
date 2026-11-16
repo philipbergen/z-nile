@@ -62,15 +62,31 @@ local function onOrigin(f: trackerfix.Fixture, path: string): string?
 end
 
 return t.spec("c0394 a bound issue travels with its issue", function(it)
-	it("new issue --with needs a preparing issue and writes with and waits", function()
+	it("new issue --with needs a preparing issue and --found, and writes with, waits and found", function()
 		local seed = seedFrom({})
 		seedIssue(seed, "c0110", issue("c0110", "", "", PREPARING, "draft")) -- being prepared: the prep that finds
 		seedIssue(seed, "c0120", issue("c0120", "", "size: 100\n")) -- prepared: no prep is running on it
 		-- R0010 and R0020 are the rafts of the later cases; their members are seeded here
 		seedIssue(seed, "c0070", issue("c0070", "R0010", "size: 100\n"))
-		seedIssue(seed, "f0080", issue("f0080", "R0010", "size: 100\nwith: c0070\nwaits: approval\n"))
+		seedIssue(
+			seed,
+			"f0080",
+			issue(
+				"f0080",
+				"R0010",
+				"size: 100\nwith: c0070\nwaits: approval\nfound: c0070 design F1 medium\n"
+			)
+		)
 		seedIssue(seed, "c0090", issue("c0090", "R0020", "size: 100\n"))
-		seedIssue(seed, "f0100", issue("f0100", "R0020", "size: 100\nwith: c0090\nwaits: approval\n"))
+		seedIssue(
+			seed,
+			"f0100",
+			issue(
+				"f0100",
+				"R0020",
+				"size: 100\nwith: c0090\nwaits: approval\nfound: c0090 design F1 medium\n"
+			)
+		)
 		seed["pickman/.tracker/rafts/R0010/R0010.md"] = raftDoc("R0010", "c0070, f0080")
 		seed["pickman/.tracker/rafts/R0010/check.sh"] = CHECK
 		seed["pickman/.tracker/rafts/R0020/R0020.md"] = raftDoc("R0020", "c0090, f0100")
@@ -83,11 +99,18 @@ return t.spec("c0394 a bound issue travels with its issue", function(it)
 		fixture.git(raft.main, { "push", "-q", "origin", "HEAD:main" })
 
 		W = trackerfix.trOk(raft, raft.main, { "worktree", "bound-w" })
-		local r = trackerfix.tr(
-			raft,
-			W,
-			{ "new", "issue", "c", "found-by-prep", "--with", "c0110", "--project", "pickman" }
-		)
+		local r = trackerfix.tr(raft, W, {
+			"new",
+			"issue",
+			"c",
+			"found-by-prep",
+			"--with",
+			"c0110",
+			"--found",
+			"c0110 design F1 medium",
+			"--project",
+			"pickman",
+		})
 		t.expect(r.ok).toBe(true)
 		local id = string.match(r.stdout, "(c%d%d%d%d)/c%d%d%d%d%.md") or ""
 		t.expect(id ~= "").toBe(true)
@@ -95,24 +118,46 @@ return t.spec("c0394 a bound issue travels with its issue", function(it)
 		t.expect(doc ~= nil).toBe(true) -- the stub is published
 		t.expect(has(doc :: string, "\nwith: c0110\n")).toBe(true)
 		t.expect(has(doc :: string, "\nwaits: approval\n")).toBe(true)
+		t.expect(has(doc :: string, "\nfound: c0110 design F1 medium\n")).toBe(true)
 
 		-- an issue that is prepared, one that does not exist, and --with without an issue are refused; nothing is made
 		local tip = fixture.git(raft.origin, { "rev-parse", "main" })
-		local prepared = trackerfix.tr(
-			raft,
-			W,
-			{ "new", "issue", "c", "found-late", "--with", "c0120", "--project", "pickman" }
-		)
+		local prepared = trackerfix.tr(raft, W, {
+			"new",
+			"issue",
+			"c",
+			"found-late",
+			"--with",
+			"c0120",
+			"--found",
+			"c0120 design F1 medium",
+			"--project",
+			"pickman",
+		})
 		t.expect(prepared.ok).toBe(false)
 		t.expect(has(prepared.stderr, "--with c0120: an added issue is made by the prep that found it"))
 			.toBe(true)
-		local missing = trackerfix.tr(
-			raft,
-			W,
-			{ "new", "issue", "c", "found-none", "--with", "c9999", "--project", "pickman" }
-		)
+		local missing = trackerfix.tr(raft, W, {
+			"new",
+			"issue",
+			"c",
+			"found-none",
+			"--with",
+			"c9999",
+			"--found",
+			"c9999 design F1 medium",
+			"--project",
+			"pickman",
+		})
 		t.expect(missing.ok).toBe(false)
 		t.expect(has(missing.stderr, "--with c9999")).toBe(true)
+		local unfound = trackerfix.tr(
+			raft,
+			W,
+			{ "new", "issue", "c", "found-silent", "--with", "c0110", "--project", "pickman" }
+		)
+		t.expect(unfound.ok).toBe(false)
+		t.expect(has(unfound.stderr, "--found")).toBe(true)
 		t.expect(fixture.git(raft.origin, { "rev-parse", "main" })).toBe(tip)
 	end)
 
@@ -120,14 +165,28 @@ return t.spec("c0394 a bound issue travels with its issue", function(it)
 		local seed = seedFrom({})
 		seedIssue(seed, "c0010", issue("c0010", "", "size: 100\n"))
 		-- a feature and a defect bound to a chore: other types, one of them far over the size cap
-		seedIssue(seed, "f0020", issue("f0020", "", "size: 50\nwith: c0010\nwaits: approval\n"))
-		seedIssue(seed, "d0030", issue("d0030", "", "size: 5000\nwith: c0010\nwaits: approval\n"))
+		seedIssue(
+			seed,
+			"f0020",
+			issue("f0020", "", "size: 50\nwith: c0010\nwaits: approval\nfound: c0010 design F1 medium\n")
+		)
+		seedIssue(
+			seed,
+			"d0030",
+			issue("d0030", "", "size: 5000\nwith: c0010\nwaits: approval\nfound: c0010 design F1 medium\n")
+		)
 		-- a bound issue that is not prepared: neither it nor its issue is planned
 		seedIssue(seed, "c0040", issue("c0040", "", "size: 100\n"))
 		seedIssue(
 			seed,
 			"f0050",
-			issue("f0050", "", "size: 100\nwith: c0040\nwaits: approval\n", PREPARING, "draft")
+			issue(
+				"f0050",
+				"",
+				"size: 100\nwith: c0040\nwaits: approval\nfound: c0040 design F1 medium\n",
+				PREPARING,
+				"draft"
+			)
 		)
 		plan = trackerfix.new("c0394-bound-plan", seed)
 		local out = trackerfix.trOk(plan, plan.main, { "raft-plan" })
