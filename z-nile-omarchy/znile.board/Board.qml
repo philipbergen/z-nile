@@ -100,7 +100,7 @@ Item {
     window.visible = false
   }
   // Esc from anywhere, the search box included, steps back one level.
-  function escape() {
+  function stepBack() {
     var step = Model.escapeStep({ maximized: maximized, selected: selectedId, query: search.text })
     if (step === "shrink") maximized = false
     else if (step === "deselect") selectedId = ""
@@ -306,7 +306,7 @@ Item {
         if (plain && event.key === Qt.Key_R) { root.view = "rafts"; root.selectedId = ""; event.accepted = true; return }
         if (plain && event.key === Qt.Key_T) { root.view = "tickets"; root.selectedId = ""; event.accepted = true; return }
         if (event.key === Qt.Key_Escape) {
-          root.escape()
+          root.stepBack()
           event.accepted = true
         } else if (root.selectedId !== "" && root.scrollBody(event.key)) {
           event.accepted = true
@@ -603,7 +603,7 @@ Item {
               font.pixelSize: Style.font.body
               clip: true
               onTextChanged: root.query = text
-              Keys.onEscapePressed: root.escape()
+              Keys.onEscapePressed: root.stepBack()
               PlainLabel {
                 visible: search.text === ""
                 text: "Search id, title, raft…  ( / )"
