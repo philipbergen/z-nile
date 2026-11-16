@@ -11,11 +11,14 @@ local Pellets = require("@logic/Pellets")
 local Session = require("@logic/Session")
 local plain = require("@tests/lib/plain")
 local t = require("@tests/lib/t")
+-- c0176: the shipped rules less f0147's ramp, so these cases keep the classic level 1 and the last pellet's clear
+local CLASSIC_GAME = table.clone(Session.GAME_CONFIG) :: any
+CLASSIC_GAME.ramp = nil
 
 local classic = Maze.layout("classic")
 
 local function new(seed: number): Session.Session
-	local s = Session.new(classic, seed, Session.GAME_CONFIG)
+	local s = Session.new(classic, seed, CLASSIC_GAME)
 	Session.join(s, "p")
 	return s
 end

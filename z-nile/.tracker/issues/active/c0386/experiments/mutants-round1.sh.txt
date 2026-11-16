@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# c0386 round-1 mutation check (design review 001 F1, F2), run on the proto worktree; every mutant is reverted.
+set -u
+Q=/Users/philipbergen/code/pickman/.worktree/proto-promoted-c0371-spec-trips-fence-scan
+SCR=/private/tmp/claude-501/-Users-philipbergen-code-pickman/d810cee1-2a54-48c7-85af-0839e7c5c119/scratchpad
+cd "$Q"
+SP=z-nile/tests/acceptance/c0371/check-paths-homes.spec.luau
+NP=z-nile/.tracker/issues/c0386/acceptance/narrow.py
+cp $SP "$SCR/sp.bak"
+ac2() { python3 $NP "$Q" >"$SCR/ac2.out" 2>&1; echo "$1: AC2 exit=$? $(head -c 160 "$SCR/ac2.out")"; cp "$SCR/sp.bak" $SP; }
+ac2 "fix alone"
+perl -pi -e 's/^(\t+)("env " \.\. \x27-i grep)/$1-- $2/' $SP; ac2 "M5 entry made a comment"
+perl -ni -e 'print unless /^\t+"env " \.\. \x27-i grep/' $SP
+perl -0pi -e 's/(\t\t\t\tt\.expect\(findings\("z-nile", \{\}, text \.\. "\\n"\)\)\.toEqual\(\{\}\)\n\t\t\tend\n)/$1\t\t\tlocal _ = "env " .. \x27-i grep -qF "src\/nothing" "\$F"\x27\n/' $SP; ac2 "M6 entry moved after the loop"
+perl -0pi -e 's/\t\t\tt\.expect\(findings\("z-nile", \{\}, \x27foo "grep" tests\/gone\.md\\n\x27\)\)\n\t\t\t\t\.toEqual\(\{ bad\("z-nile", "tests\/gone\.md"\) \}\)\n//' $SP; grep -c 'foo "grep" tests/gone.md' $SP; ac2 "M7 positive control deleted"
+perl -0pi -e 's/(an unquoted grep after git, a wrapper or an option \(review 004 F1\)",\n\t\tfunction\(\)\n)/$1\t\t\tdo return end\n/' $SP; grep -c "do return end" $SP; ac2 "M8 do return end at the top of the case"
+perl -0pi -e 's/\(c0386\)\n\t+("env " \.\. )/(c0386) $1/' $SP; ac2 "M9 entry joined onto the comment above"
+perl -pi -e 's/\n$/\r\n/ if $. == 1' $SP; ac2 "M10 a CRLF line ending"
+echo "== M11 base already patched: scratch clone whose origin main holds the fix"
+X="$SCR/c0386-basepatched"; B="$SCR/c0386-base.git"; rm -rf "$X" "$B"
+git clone -q --shared --no-checkout "$Q" "$X" && git init -q --bare "$B"
+HEADC=$(git rev-parse HEAD)
+git -C "$X" reset -q "$HEADC" && git -C "$X" checkout -q "$HEADC" -- $SP
+git -C "$X" push -q "$B" "$HEADC:refs/heads/main" && git -C "$X" remote set-url origin "$B" && git -C "$X" fetch -q origin
+python3 $NP "$X"; echo "M11: AC2 exit=$?"
+rm -rf "$X" "$B"
+echo "== F2: AC6 on the scan file"
+RF=z-nile/tests/tooling/repo-fence.spec.luau
+cp $RF "$SCR/rf.bak"
+ac6() { (cd z-nile && bash -c 'f=tests/tooling/repo-fence.spec.luau
+    grep -qE "^[[:space:]]*\"env -[i]\"," "$f" \
+      && ! grep -vE "^[[:space:]]*--" "$f" | grep -qE "renamed\.id\(\"c0371\"\)|acceptance/c0371/|check-paths-homes|touched-from-home|uses-module"'); echo "$1: AC6 exit=$?"; cp "$SCR/rf.bak" $RF; }
+ins() { perl -0pi -e "s/(\t-- c0191: the reaper lists)/$1\n\$1/" $RF; }
+ac6 "fix alone"
+ins '\tALLOWED[`z-nile\/tests\/acceptance\/{renamed.id("c0371")}\/check-paths-homes.spec.luau`] = { ["env -i"] = "x" },'; ac6 "M4 allowance through renamed.id"
+ins '\t["z-nile\/tests\/acceptance\/c0371\/check-paths-homes.spec.luau"] = { ["env -i"] = "x" },'; ac6 "M4p allowance keyed by the literal path"
+perl -ni -e 'print unless /^\t"env -i",$/' $RF; ac6 "M4b NAMES entry removed"
+perl -pi -e 's/^\t"env -i",$/\t"env  -i",/' $RF; ac6 "M4c NAMES entry respelled with two spaces"
+ins '\t["z-nile\/tests\/run.luau"] = { ["env -i"] = "c0123-like" },'; ac6 "control: another file's allowance"
+ins '\t-- c0387: a spec under tests\/ selects this one (c0371 check-paths-homes reached main unselected)'; ac6 "control: a comment naming c0371 and check-paths-homes"
+git status --short

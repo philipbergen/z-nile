@@ -1,0 +1,2166 @@
+# proto-c0251 tip efd5269951935dcc80cc226a11d8109be6836613 on base ef5a9e9f24bcc22d8db5a3d41e0e333132cf5a99 (proto-c0325b e4b36147f merged with origin/main); everything but z-nile/.tracker/issues/c0251.
+# Applies on top of c0306 and c0325 once they have landed (it needs reviewmodel, reviewfiles, authorread and authorship).
+diff --git a/.models.toml b/.models.toml
+index 72fd251ef..029dc3d3c 100644
+--- a/.models.toml
++++ b/.models.toml
+@@ -1,10 +1,27 @@
+ # Which model runs each stage. Files stack like .gitignore: a .models.toml closer to the work replaces only
+ # the keys it sets. A role names what belongs to the stage (model, cli, runtime, rank, max_tokens, effort,
+-# fallbacks). A fallback names what belongs to the model (its id, its runtime, and anything only that CLI
+-# needs). A try is the role's rank, cap and effort on that model. Nothing defaults.
++# pool, fallbacks, rotate). A fallback names what belongs to the model (its id, its runtime, and anything only
++# that CLI needs). A member is a named extra model of a CLI (several models may run on one CLI). A try is the
++# role's rank, cap and effort on that model. Nothing defaults.
+ # max_tokens counts input + cache writes + output (cache reads are left out); the step is killed when it passes it.
+-# design-challenge names no author: the table gives it the same model as design, and naming the author would
+-# drop that model. Raft-mode review uses the raft role for the same reason.
++# A role's tries are its own model, the members its `pool` lists (in that order), then its `fallbacks`. Pool members and
++# rotation are for review steps: a step that authors on the same role (z-raft on `raft`) tries the role's model, then its fallbacks.
++# A role with rotate = true is ordered by family (the picker, reviewpool.luau): a review goes first to a model line that
++# differs from the one that wrote the text and from the previous round's reviewer (tier 1), then to one that
++# differs from the writer only (tier 2), and last to the writer's own line, the exact model that wrote it at the very
++# end (tier 3: the flagged fallback, which never blocks the chain). `author` names the role whose first choice stands in
++# for the writer when no spend row records it; no try is dropped for it.
++# [families] maps a model line to its id prefixes (the longest prefix wins): add a line when a CLI brings new ids.
++# design-challenge names no author: the table gives it the same model as design. Raft-mode review uses the raft role.
++
++[families]
++opus = ["claude-opus-"]
++fable = ["claude-fable-"]
++sonnet = ["claude-sonnet-"]
++haiku = ["claude-haiku-"]
++kimi = ["kimi-"]
++grok = ["grok-"]
++deepseek = ["deepseek-"] # reachable once opencode is added as a CLI
+ 
+ [dispatch]
+ # the merge gates the dispatcher passes itself when the PR is green and mergeable; the run's PR is always a human's.
+@@ -31,6 +48,23 @@ max_calls = 200
+ # and a wall-time ceiling, since a stream can hide its calls (fail closed)
+ max_minutes = 240
+ 
++# a second Claude model on the same CLI, tried after a role's own model and before its fallbacks
++[member.fable]
++cli = "claude"
++model = "claude-fable-5-2"
++runtime = "claude-cli"
++
++[member.opus]
++cli = "claude"
++model = "claude-opus-5-5"
++runtime = "claude-cli"
++
++# the cheap second model of a stream review (a Haiku-written layer is reviewed by Sonnet)
++[member.sonnet]
++cli = "claude"
++model = "claude-sonnet-5-5"
++runtime = "claude-cli"
++
+ [roles.idea]
+ model = "claude-fable-5-2"
+ cli = "claude"
+@@ -48,6 +82,7 @@ rank = 4
+ max_tokens = 300000
+ effort = "xhigh"
+ author = "idea"
++rotate = true
+ fallbacks = ["kimi", "grok", "agent"]
+ 
+ [roles.design]
+@@ -66,6 +101,8 @@ runtime = "claude-cli"
+ rank = 4
+ max_tokens = 3000000
+ effort = "xhigh"
++rotate = true
++pool = ["fable"]
+ fallbacks = ["kimi", "grok", "agent"]
+ 
+ [roles.raft]
+@@ -75,6 +112,8 @@ runtime = "claude-cli"
+ rank = 3
+ max_tokens = 3000000
+ effort = "high"
++rotate = true
++pool = ["fable"]
+ fallbacks = ["kimi", "grok", "agent"]
+ 
+ [roles.implementation]
+@@ -94,6 +133,8 @@ rank = 4
+ max_tokens = 2000000
+ effort = "xhigh"
+ author = "implementation"
++rotate = true
++pool = ["fable"]
+ fallbacks = ["kimi", "grok", "agent"]
+ 
+ [roles.final-review]
+@@ -103,4 +144,19 @@ runtime = "claude-cli"
+ rank = 4
+ max_tokens = 2000000
+ effort = "xhigh"
++rotate = true
++pool = ["opus"]
+ fallbacks = ["kimi", "grok", "agent"]
++
++# the one cheap review: a stream review of a layer, on a model line other than the Sonnet that writes the code. Its second
++# model is the cheap Sonnet member (kimi and grok are not cheap); opencode (DeepSeek) joins as a fallback once it is a CLI.
++[roles.stream-review]
++model = "claude-haiku-5-5"
++cli = "claude"
++runtime = "claude-cli"
++rank = 2
++max_tokens = 1000000
++effort = "medium"
++rotate = true
++pool = ["sonnet"]
++fallbacks = []
+diff --git a/z-nile/.tracker/issues/active/c0306/acceptance/dispatch-review.spec.luau b/z-nile/.tracker/issues/active/c0306/acceptance/dispatch-review.spec.luau
+index 6cacd28a0..0a51ab4e4 100644
+--- a/z-nile/.tracker/issues/active/c0306/acceptance/dispatch-review.spec.luau
++++ b/z-nile/.tracker/issues/active/c0306/acceptance/dispatch-review.spec.luau
+@@ -52,6 +52,15 @@ max_tokens = 5000
+ effort = "medium"
+ fallbacks = []
+ 
++[roles.stream-review]
++model = "claude-opus-5-5"
++cli = "claude"
++runtime = "claude-cli"
++rank = 4
++max_tokens = 5000
++effort = "high"
++fallbacks = ["grok"]
++
+ [roles.final-review]
+ model = "claude-fable-5-2"
+ cli = "claude"
+@@ -67,7 +76,7 @@ effort = "high"
+ fallbacks = ["grok", "agent"]
+ ]]
+ local ONLY_GROK_CODE = [[
+-[roles.code-review]
++[roles.stream-review]
+ model = "grok-4.7"
+ cli = "grok"
+ runtime = "grok-cli"
+diff --git a/z-nile/.tracker/issues/c0325/acceptance/match.spec.luau b/z-nile/.tracker/issues/c0325/acceptance/match.spec.luau
+index 4ba44c831..47b627343 100644
+--- a/z-nile/.tracker/issues/c0325/acceptance/match.spec.luau
++++ b/z-nile/.tracker/issues/c0325/acceptance/match.spec.luau
+@@ -157,7 +157,7 @@ return t.spec("c0325: a record is cut to its model, and the match normalises bot
+ 	end)
+ 
+ 	it(
+-		"AC8: `models.tries` returns the same tries or error for every input, including a fallback author",
++		"AC8: `models.tries` returns the same tries for every input, including a fallback author (c0251: the author is never dropped)",
+ 		function()
+ 			local review = models.resolveRole({ layer }, "code-review")
+ 			t.expect(review.authorModel).toBe("claude-sonnet-5-5-high")
+@@ -177,7 +177,8 @@ return t.spec("c0325: a record is cut to its model, and the match normalises bot
+ 			t.expect(ids(models.tries(fb)))
+ 				.toEqual({ "claude-opus-5-5-low", "kimi-code-k3.1-pro-low", "grok-4.7-low" })
+ 			fb.authorModel = "kimi-code-k3.1-pro-low"
+-			t.expect(ids(models.tries(fb))).toEqual({ "claude-opus-5-5-low", "grok-4.7-low" })
++			t.expect(ids(models.tries(fb)))
++				.toEqual({ "claude-opus-5-5-low", "kimi-code-k3.1-pro-low", "grok-4.7-low" })
+ 			-- the only model left is the author's: the error, word for word
+ 			local solo = models.parse(
+ 				[[
+@@ -202,16 +203,10 @@ fallbacks = []
+ ]],
+ 				".models.toml"
+ 			)
+-			local ok, err = pcall(models.tries, models.resolveRole({ solo }, "code-review"))
+-			t.expect(ok).toBe(false)
+-			t.expect(
+-				string.find(
+-					tostring(err),
+-					"code-review: the only model left is the author's (claude-sonnet-5-5-high); a challenge is never run by the model that wrote the text",
+-					1,
+-					true
+-				) ~= nil
+-			).toBe(true)
++			-- c0251: the only model left is the author's: it still runs (the picker flags it), the chain never stops
++			local ok, only = pcall(models.tries, models.resolveRole({ solo }, "code-review"))
++			t.expect(ok).toBe(true)
++			t.expect(ids(only :: { models.Spec })).toEqual({ "claude-sonnet-5-5-high" })
+ 		end
+ 	)
+ end)
+diff --git a/z-nile/README.md b/z-nile/README.md
+index c9c837102..e009360d7 100644
+--- a/z-nile/README.md
++++ b/z-nile/README.md
+@@ -104,14 +104,14 @@ A worker claims an item by landing the status change on `origin/main`, as `statu
+ Unless something blocks, once a person has approved its design, an item is rafted, executed, code-reviewed, full-force reviewed, tested and landed with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the stack is green and regression-free. This replaces c0117's "stops at a merge" gate: the stack lands through `./zn done`, with the dispatcher's credential, after its own checks. *captured* (c0252)
+ 
+ ### Models per command and activity
+-`.models.toml` names a real model for each stage in its `[roles.*]` table: `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `code-review` and `final-review`, each with its CLI, rank, token cap and effort and a fallback list, and spend records the model. No level has a name. *exists*
+-- Every review runs on an expensive role: `idea-challenge`, `design-challenge`, `code-review`, `final-review`, and `raft` for a raft's review. `idea-challenge` and `code-review` name the role that wrote the text as their `author`, which drops that model; `design-challenge` and a raft's review run on the same model as their author. The cheaper `implementation` role builds and the `idea` role drafts. *exists*
++`.models.toml` names a real model for each stage in its `[roles.*]` table: `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `code-review`, `stream-review` and `final-review`, each with its CLI, rank, token cap and effort and a fallback list, and spend records the model. No level has a name. *exists*
++- Every review runs on an expensive role: `idea-challenge`, `design-challenge`, `code-review`, `final-review`, and `raft` for a raft's review, except a stream review, which runs on the cheap `stream-review` role. Which model of the role reviews is the picker's, away from the model that wrote the text (below). The cheaper `implementation` role builds and the `idea` role drafts. *exists*
+ - A command refuses a design review or a final review recorded off its role's kind of model. *designed* (c0306)
+ - The cheapest do the waiting: the dispatcher no longer stops at a gate just to wait, and polls it on the cheapest model of the CLI, so no expensive model waits on a gate. *captured* (c0305)
+ - Metrics show the cost per model, from the real model on each spend row. *captured* (c0307)
+ 
+ ### Reviews by different models
+-- A reviewer should run on a different model family than the author, and successive rounds rotate. `.models.toml` names a review pool; the dispatcher takes the first member whose family differs from the author's and the previous reviewer's. *captured* (c0251); today `idea-challenge` and `code-review` name an `author`, which drops that model from their lists. *exists*
++- A reviewer should run on a different model family than the author, and successive rounds rotate. `.models.toml` names a review pool and its model lines (`[families]`); the dispatcher takes the first member whose family differs from the author's and the previous reviewer's. *exists* (c0251); a role's `author` only stands in for the writer when no spend row records it, and drops nothing. *exists*
+ - Same-family review (Opus reviewing Opus) is fine, but it is the fallback and never the only choice: it runs only when no different-family CLI can (out of tokens or quota, CLI missing). It never blocks the chain.
+ - Every review records its model and whether it was a fallback. The board flags fallback reviews so you can ask for a cross-model re-review when tokens return. Every finding is still harvested into a skill's lessons.
+ 
+@@ -165,7 +165,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
+ | a raft delivered as a stacked PR set, one layer per issue, each finished before the next | c0248 | designed |
+ | `rank`, `./zn rank`, `./zn next`, lost first | c0249 | captured |
+ | `blocked`, `escalation.md`, `./zn resolve` | c0250 | designed |
+-| cross-model review pool, same-family fallback | c0251 | captured |
++| cross-model review pool, same-family fallback | c0251 | exists |
+ | the dispatcher lands a green stack | c0252 | captured |
+ | `./zn work` pull loop (the interactive session worker exists; the headless loop does not) | c0253 | captured |
+ | workers on several hosts, worker identity in spend | c0254 | captured |
+diff --git a/z-nile/engine/board.html b/z-nile/engine/board.html
+index 1c3c98f11..77945dc40 100644
+--- a/z-nile/engine/board.html
++++ b/z-nile/engine/board.html
+@@ -46,6 +46,7 @@ a.jump { color: #2563eb; cursor: pointer; font-family: ui-monospace, monospace;
+ .s-prepared { background: #22c55e33; }
+ .s-preparing { background: #f59e0b33; }
+ .s-new { background: #d1d5db33; }
++.s-fallback { background: #ef444433; }
+ .md pre, .md code { background: var(--code); border-radius: 4px; }
+ .md pre { padding: 8px 12px; overflow-x: auto; }
+ .md code { padding: 0 4px; }
+@@ -152,6 +153,21 @@ dl.run dd { margin: 0; }
+     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+   }
+   function badge(s) { return s ? '<span class="badge s-' + esc(s) + '">' + esc(s) + "</span>" : ""; }
++  // c0251: the newest review round of a kind was run by the writer's own model line (a Fallback: line in the file)
++  function fallbackBadge(it) {
++    return it.fallbackReviews && it.fallbackReviews.length
++      ? '<span class="badge s-fallback" title="' + esc(it.fallbackReviews.join(", ")) + '">fallback review</span>'
++      : "";
++  }
++  function fallbackNote(it) {
++    if (!it.fallbackReviews || !it.fallbackReviews.length) return "";
++    return "<ul class=\"links\">" + it.fallbackReviews.map(function (f) {
++      var route = it.rereview && it.rereview[f];
++      return "<li>" + esc(f) + (route
++        ? ": ask for a cross-model re-review: <code>" + esc(route) + "</code>"
++        : ": a fallback review, kept as history (no re-review can be asked from here)") + "</li>";
++    }).join("") + "</ul>";
++  }
+   function idLink(id) {
+     var it = has(byId, id) ? byId[id] : has(issueById, id) ? issueById[id] : null;
+     return '<a class="jump" data-id="' + esc(id) + '" href="#' + esc(id) + '">' + esc(id) + "</a>" + (it ? " " + esc(it.title) + " " + badge(it.stage) : "");
+@@ -246,7 +262,7 @@ dl.run dd { margin: 0; }
+           : "";
+         html += '<li class="row ' + g + (n === sel ? " sel" : "") + '" data-id="' + esc(id) + '"><span class="id">' +
+           esc(it.id) + '</span> <span class="title">' + esc(it.title) + '</span> <span class="type t-' + esc(it.label) + '">' +
+-          esc(it.label) + "</span> " + badge(it.stage) + copy + "</li>";
++          esc(it.label) + "</span> " + badge(it.stage) + fallbackBadge(it) + copy + "</li>";
+         n++;
+       });
+     });
+@@ -309,8 +325,8 @@ dl.run dd { margin: 0; }
+     var meta = [];
+     if (issue.label) meta.push(issue.label);
+     if (issue.design) meta.push("design " + issue.design);
+-    var h = '<h2><span class="id">' + esc(issue.id) + "</span> " + esc(issue.title) + " " + badge(issue.stage) + "</h2>" +
+-      '<p class="meta">' + esc(meta.join(" · ")) + "</p>";
++    var h = '<h2><span class="id">' + esc(issue.id) + "</span> " + esc(issue.title) + " " + badge(issue.stage) + fallbackBadge(issue) + "</h2>" +
++      '<p class="meta">' + esc(meta.join(" · ")) + "</p>" + fallbackNote(issue);
+     if (issue.raft) h += "<p>Raft " + idLink(issue.raft) + "</p>";
+     h += runOfIssue(issue);
+     h += group("Depends on", issue.dependsOn) + group("Dependents", issue.dependents);
+@@ -327,8 +343,8 @@ dl.run dd { margin: 0; }
+     if (r.label) meta.push(r.label);
+     if (r.single) meta.push("single issue");
+     if (r.design) meta.push("design " + r.design);
+-    var h = '<h2><span class="id">' + esc(r.id) + "</span> " + esc(r.title) + " " + badge(r.stage) + "</h2>" +
+-      '<p class="meta">' + esc(meta.join(" · ")) + "</p>" +
++    var h = '<h2><span class="id">' + esc(r.id) + "</span> " + esc(r.title) + " " + badge(r.stage) + fallbackBadge(r) + "</h2>" +
++      '<p class="meta">' + esc(meta.join(" · ")) + "</p>" + fallbackNote(r) +
+       group("Waiting for", r.blockedBy) + group("Depends on", r.dependsOn) + group("Dependents", r.dependents);
+     if (r.issues.length) {
+       h += "<h3>Issues</h3><ul class=\"links\">" + r.issues.map(function (iid) {
+diff --git a/z-nile/engine/board.luau b/z-nile/engine/board.luau
+index fdcf1ecfe..b20b06326 100644
+--- a/z-nile/engine/board.luau
++++ b/z-nile/engine/board.luau
+@@ -44,6 +44,8 @@ export type Raft = {
+ 	doneAt: number?, -- first arrival in done/, UTC epoch seconds (history, else the members' newest spend row)
+ 	doneFrom: string?, -- "history" or "spend": where doneAt came from
+ 	rounds: { design: number, code: number }, -- review files of it, its members and the rafts retired into it
++	fallbackReviews: { string }, -- c0251: the newest round of a kind that the writer's own model line ran (a Fallback: line)
++	rereview: { [string]: string }, -- c0251: for each of those files, the command that asks for the cross-model re-review from here
+ 	dispatch: Dispatch?,
+ 	pr: Pr?, -- c0121 fills these on the served page; the static page leaves them nil
+ 	checks: Checks?,
+@@ -77,6 +79,8 @@ export type Issue = {
+ 	doneFrom: string?,
+ 	age: number?, -- seconds between doneAt and the model's asOf
+ 	spend: Spend, -- from its spend.md (ledger.parse)
++	fallbackReviews: { string }, -- c0251, as on Raft
++	rereview: { [string]: string }, -- c0251, as on Raft
+ 	dispatch: Dispatch?,
+ 	pr: Pr?, -- c0121's, as on Raft
+ 	checks: Checks?,
+@@ -764,6 +768,18 @@ local function reviewFiles(dir: string, into: { string })
+ 	end
+ end
+ 
++-- c0251: the text of each review file among `paths` (path -> text), for boardview.fallbacks. Which paths are review files
++-- is boardview.reviewPaths' alone.
++local function reviewTexts(paths: { string }): { [string]: string }
++	local out: { [string]: string } = {}
++	for _, path in boardview.reviewPaths(paths) do
++		if fs.isFile(path) then
++			out[path] = fs.readFile(path)
++		end
++	end
++	return out
++end
++
+ -- Every retired raft (`<root>/rafts/retired/<R-id>`, c0116) with the keeper its `retired:` names.
+ local function retiredOf(base: string): { { id: string, dir: string, keeper: string } }
+ 	local out = {}
+@@ -875,8 +891,26 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
+ 			doneFrom = if doneAt[i.id] then "history" else nil,
+ 			age = nil,
+ 			spend = spendOf(spendRows(spendPath(i.root, i.state, i.id), problems)),
++			fallbackReviews = (function(): { string }
++				local own: { string } = {}
++				reviewFiles(i.dir, own)
++				return boardview.fallbacks(reviewTexts(own))
++			end)(),
++			rereview = {},
+ 			dispatch = facts.dispatch[i.id],
+ 		}
++		for _, file in issue.fallbackReviews do
++			local route = boardview.rereview({
++				kind = "issue",
++				state = i.state,
++				id = i.id,
++				slug = i.front.slug or "",
++				raft = issue.raft,
++			}, file)
++			if route then
++				issue.rereview[file] = route
++			end
++		end
+ 		table.insert(issues, issue)
+ 		issueById[i.id] = issue
+ 	end
+@@ -950,6 +984,8 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
+ 			doneAt = doneAt[r.id],
+ 			doneFrom = if doneAt[r.id] then "history" else nil,
+ 			rounds = { design = 0, code = 0 },
++			fallbackReviews = {},
++			rereview = {},
+ 			dispatch = facts.dispatch[r.id],
+ 		}
+ 		local branch = branchOf(r.id, facts.refs, if hist and hist.activeAt then hist.activeAt[r.id] else nil)
+@@ -1132,6 +1168,16 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
+ 	for _, raft in rafts do
+ 		local design, code = boardview.rounds(files[raft.id])
+ 		raft.rounds = { design = design, code = code }
++		raft.fallbackReviews = boardview.fallbacks(reviewTexts(files[raft.id]))
++		for _, file in raft.fallbackReviews do
++			local route = boardview.rereview(
++				{ kind = "raft", state = rawRaftById[raft.id].state, id = raft.id, slug = "", raft = nil },
++				file
++			)
++			if route then
++				raft.rereview[file] = route
++			end
++		end
+ 	end
+ 	local charts: { [string]: ProjectCharts } = {}
+ 	for _, p in projectList do
+diff --git a/z-nile/engine/boardview.luau b/z-nile/engine/boardview.luau
+index 1e5a4a653..b4cb8dd88 100644
+--- a/z-nile/engine/boardview.luau
++++ b/z-nile/engine/boardview.luau
+@@ -1,6 +1,7 @@
+ --!strict
+ -- The board's pure rules (c0118): an issue's column, raft bands, the done window's age, the UTC week of an instant, a
+ -- landed raft's review rounds, and the two charts' weekly series. No reads: board.luau gathers the inputs.
++local reviewmodel = require("./reviewmodel")
+ local stats = require("./stats")
+ 
+ local boardview = {}
+@@ -153,6 +154,50 @@ function boardview.rounds(paths: { string }): (number, number)
+ 	return design, code
+ end
+ 
++-- c0251: the paths among `paths` that are review files (design-review, review, final-review, idea-review and stream-review rounds): the one pattern of them
++-- the board has, beside `rounds`.
++function boardview.reviewPaths(paths: { string }): { string }
++	local out: { string } = {}
++	for _, p in paths do
++		local name = string.match(p, "([^/]+)$") or p
++		if
++			string.match(name, "^design%-review%-%d+%.md$")
++			or string.match(name, "^review%-%d+%.md$")
++			or string.match(name, "^final%-review%-%d+%.md$")
++			or string.match(name, "^idea%-review%-%d+%.md$")
++			or string.match(name, "^stream%-review%-.+%-%d+%.md$")
++		then
++			table.insert(out, p)
++		end
++	end
++	return out
++end
++
++-- c0251: the review files whose newest round of a kind carries a `Fallback:` line. `files` is path -> text of the review
++-- files of one folder set; the newest round of each kind is taken per folder (reviewmodel.newest), so an older flagged round
++-- with a clean newer one is not listed. The paths, sorted.
++function boardview.fallbacks(files: { [string]: string }): { string }
++	local byDir: { [string]: { string } } = {}
++	for path in files do
++		local dir = string.match(path, "^(.*)/[^/]+$") or ""
++		byDir[dir] = byDir[dir] or {}
++		table.insert(byDir[dir], string.match(path, "([^/]+)$") or path)
++	end
++	local out: { string } = {}
++	for dir, names in byDir do
++		for _, kind in { "design", "code", "idea", "stream" } do
++			for _, name in reviewmodel.newest(names, kind) do
++				local path = if dir == "" then name else `{dir}/{name}`
++				if reviewmodel.fallbackOf(files[path]) ~= nil then
++					table.insert(out, path)
++				end
++			end
++		end
++	end
++	table.sort(out)
++	return out
++end
++
+ -- The range's first instant: `asOf` minus its days, or the earliest of `ats` for all history (nil when empty).
+ local function start(ats: { number }, asOf: number, days: number?): number?
+ 	if days then
+@@ -326,4 +371,51 @@ function boardview.rowInstant(when: string): number?
+ 	return stats.seconds(stamp)
+ end
+ 
++-- c0251: what a person can run to ask for the cross-model re-review of a flagged file, from where the board is read, or nil
++-- when the flag is history. The route is the worktree where the item is still being worked: an issue in the backlog is in
++-- its prep worktree, an issue or raft in a launched raft in the raft's worktree; a done item's flag is informational.
++-- `item` is the card ("issue" or "raft") with its folder state, id, slug and raft.
++function boardview.rereview(
++	item: { kind: string, state: string, id: string, slug: string, raft: string? },
++	file: string
++): string?
++	local name = string.match(file, "([^/]+)$") or file
++	if item.state == "done" or (item.kind == "raft" and item.state ~= "active") then
++		return nil
++	end
++	if string.match(name, "^idea%-review%-%d+%.md$") then
++		return if item.kind == "issue" and item.state == "backlog"
++			then `cd "$(./zn worktree prep-{item.slug})" && ./zn idea {item.id}`
++			else nil
++	end
++	local mode: string
++	if string.match(name, "^design%-review%-%d+%.md$") then
++		mode = if item.kind == "raft" then "raft" else "design"
++	elseif string.match(name, "^final%-review%-%d+%.md$") then
++		mode = "final"
++	elseif string.match(name, "^stream%-review%-.+%-%d+%.md$") then
++		mode = "stream"
++	elseif string.match(name, "^review%-%d+%.md$") then
++		mode = "code"
++	else
++		return nil
++	end
++	local target = item.id
++	if mode == "stream" then
++		target = string.match(name, "^stream%-review%-(.+)%-%d+%.md$") or item.id
++	end
++	local where: string?
++	if item.kind == "raft" then
++		where = item.id
++	elseif item.state == "backlog" then
++		where = `prep-{item.slug}`
++	elseif item.raft then
++		where = item.raft
++	end
++	if where == nil then
++		return nil
++	end
++	return `cd "$(./zn worktree {where})" && ./zn dispatch zz-review {target} --mode {mode}`
++end
++
+ return boardview
+diff --git a/z-nile/engine/dispatch.luau b/z-nile/engine/dispatch.luau
+index e102b7291..fece635fd 100644
+--- a/z-nile/engine/dispatch.luau
++++ b/z-nile/engine/dispatch.luau
+@@ -3,6 +3,7 @@
+ -- and the chain: from an item's tracker state, the next step, merge or stop. dispatcher.luau reads the state, runs the
+ -- steps and records their spend; it never reads a model's prose to decide.
+ local models = require("./models")
++local reviewpool = require("./reviewpool")
+ local serde = require("@lune/serde")
+ 
+ local dispatch = {}
+@@ -390,17 +391,39 @@ function dispatch.next(f: Facts): Action
+ 	return { kind = "step", step = "z-run", target = f.id }
+ end
+ 
+--- One line per CLI a model step would try, for --dry-run.
+-function dispatch.describe(r: models.Resolved): { string }
++-- The lines `--dry-run` prints for a model step (c0251): the pool line (who wrote the text, how sure, who reviewed last),
++-- one line per try in the order the run would take them with its tier, family and whether it would be a fallback, and the
++-- pick (the first try). The run and the dry run use one plan, so they agree.
++function dispatch.describe(plan: reviewpool.Plan): { string }
+ 	local out: { string } = {}
+-	for i, spec in models.tries(r) do
++	if plan.rotate then
++		local authors = if #plan.authors == 0 then "unknown" else table.concat(plan.authors, ",")
++		local previous = if #plan.priors == 0 then "none" else table.concat(plan.priors, ",")
++		table.insert(out, `pool: author={authors} ({plan.provenance} via {plan.via}) previous={previous}`)
++	else
++		table.insert(out, "pool: no rotation (the role is tried in the order of .models.toml)")
++	end
++	for i, p in plan.picks do
++		local spec = p.spec
+ 		table.insert(
+ 			out,
+ 			`try={i} cli={spec.cli} runtime={spec.runtime} model={models.id(spec)} rank={spec.rank} max_tokens={spec.maxTokens}`
+ 				.. (if spec.maxCalls then ` max_calls={spec.maxCalls}` else "")
+ 				.. (if spec.maxMinutes then ` max_minutes={spec.maxMinutes}` else "")
++				.. (if spec.member then ` member={spec.member}` else "")
++				.. ` tier={p.tier} family={p.family or "none"} fallback={if reviewpool.fallbackReason(
++						p,
++						plan.provenance,
++						plan.via
++					)
++					then "yes"
++					else "no"}`
+ 		)
+ 	end
++	local first = plan.picks[1]
++	if first then
++		table.insert(out, `pick: {first.spec.cli} {first.spec.model}`)
++	end
+ 	return out
+ end
+ 
+diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
+index 1b314f39f..40b5af18c 100644
+--- a/z-nile/engine/dispatcher.luau
++++ b/z-nile/engine/dispatcher.luau
+@@ -14,12 +14,15 @@
+ -- and <step>-<mode>-<n>/ for a step a step dispatched (a review), with its own state; .cache/dispatch/broker/.
+ local adapters = require("./adapters")
+ local audit = require("./audit")
++local authorread = require("./authorread")
++local authorship = require("./authorship")
+ local broker = require("./broker")
+ local buffer = require("./buffer")
+ local costrow = require("./costrow")
+ local cred = require("./credential")
+ local dispatch = require("./dispatch")
+ local fs = require("@lune/fs")
++local ledger = require("./ledger")
+ local models = require("./models")
+ local modelstep = require("./modelstep")
+ local openlist = require("./openlist")
+@@ -27,6 +30,7 @@ local process = require("@lune/process")
+ local projects = require("./projects")
+ local raftcheck = require("./raftcheck")
+ local reviewmodel = require("./reviewmodel")
++local reviewpool = require("./reviewpool")
+ local runner = require("./runner")
+ local serde = require("@lune/serde")
+ local sh = require("../lib/sh")
+@@ -769,6 +773,126 @@ local function keepBeating(dir: string): () -> ()
+ 	end
+ end
+ 
++-- c0251: the item folders a review mode reads its writers from (authorread) and its previous rounds from (reviewfiles.priors).
++local function reviewDirs(id: string): { string }
++	local item = store.get(id)
++	if item.kind == "issue" then
++		return { item.dir }
++	end
++	local out: { string } = {}
++	for _, m in store.members(id) do
++		table.insert(out, m.dir)
++	end
++	return out
++end
++
++-- c0251: the one plan of a model step: the tries in the order to run them, with each one's tier. `resolved` is the step's
++-- role (given, or resolved here). A role without `rotate` runs in the toml order, all tier 1 (as before c0251). A role
++-- with it is ordered by reviewpool.order over the writers of the mode's last step (authorread; `authorOpt` or ZN_MODEL
++-- is the live author) and the previous round's reviewers (a stream review and an idea review have none).
++function dispatcher.plan(
++	step: string,
++	id: string,
++	project: string?,
++	mode: string?,
++	authorOpt: string?,
++	given: models.Resolved?,
++	layersGiven: { models.Layer }?
++): reviewpool.Plan
++	if authorOpt ~= nil and authorOpt ~= "" and not ledger.isModel(authorOpt) then
++		error(`--author takes one model id (letters, digits, '.', '_' and '-'), not {authorOpt}`, 0)
++	end
++	local resolved = given or dispatcher.resolve(step, id, project, mode)
++	local tries = models.tries(resolved)
++	local families = resolved.families or {}
++	local reviewMode = if step == "zz-review" then (mode or "code") else mode
++	if not resolved.rotate or id == "" or reviewMode == nil or authorship.STEPS[reviewMode] == nil then
++		local picks: { reviewpool.Pick } = {}
++		for _, spec in tries do
++			table.insert(picks, { spec = spec, tier = 1, exact = false, family = nil })
++		end
++		return {
++			picks = picks,
++			authors = {},
++			authorFamilies = {},
++			priors = {},
++			priorFamilies = {},
++			provenance = "none",
++			via = "",
++			families = families,
++			rotate = false,
++		}
++	end
++	local item = store.get(id)
++	local layers = layersGiven or walk(item.dir)
++	-- the live author: `--author`, else ZN_MODEL; "" (an interactive stamp with neither typed) reads only ZN_MODEL. It is the
++	-- writer of the step the mode reads (the last: build for code, stream and final), whatever the rows say; with none, the
++	-- spend rows, then the role's first choice (provenance `assumed`)
++	local live = if authorOpt ~= nil and authorOpt ~= "" then authorOpt else process.env.ZN_MODEL
++	local dirs = reviewDirs(id)
++	local a = authorread.read(reviewMode, dirs, layers, nil, resolved.authorModel)
++	local steps = authorship.STEPS[reviewMode]
++	local last = steps[#steps]
++	local authors: { string } = {}
++	local provenance, via = a.provenance, a.via
++	if live ~= nil and live ~= "" then
++		authors = { models.modelOf(live, models.knownModels(layers)) }
++		provenance, via = "recorded", "live"
++	else
++		for _, w in a.writers do
++			if w.step == last and not table.find(authors, w.model) then
++				table.insert(authors, w.model)
++			end
++		end
++	end
++	local priors: { string } = {}
++	if reviewMode ~= "stream" and reviewMode ~= "idea" then
++		local upto = ({ design = 1, raft = 2, code = 3, final = 4 } :: { [string]: number })[reviewMode] or 0
++		local folders: { { kind: string, dir: string } } = {}
++		if item.kind == "raft" then
++			table.insert(folders, { kind = "coherence", dir = item.dir })
++			table.insert(folders, { kind = "code", dir = item.dir })
++		end
++		for _, dir in dirs do
++			if dir ~= item.dir then
++				table.insert(folders, { kind = "design", dir = dir })
++				table.insert(folders, { kind = "code", dir = dir })
++			end
++		end
++		if item.kind == "issue" then
++			table.insert(folders, { kind = "design", dir = item.dir })
++			table.insert(folders, { kind = "code", dir = item.dir })
++		end
++		priors = require("./reviewfiles").priors(folders, upto)
++	end
++	local picks = reviewpool.order(tries, families, authors, priors)
++	local authorFamilies, priorFamilies = {}, {}
++	for _, m in authors do
++		local f = require("./family").of(m, families)
++		if f and not table.find(authorFamilies, f) then
++			table.insert(authorFamilies, f)
++		end
++	end
++	for _, m in priors do
++		local f = require("./family").of(m, families)
++		if f and not table.find(priorFamilies, f) then
++			table.insert(priorFamilies, f)
++		end
++	end
++	return {
++		picks = picks,
++		authors = authors,
++		authorFamilies = authorFamilies,
++		priors = priors,
++		priorFamilies = priorFamilies,
++		provenance = provenance,
++		via = via,
++		families = families,
++		rotate = true,
++		walk = if layersGiven then "checkout" else "main",
++	}
++end
++
+ function dispatcher.modelStep(
+ 	ctx: Ctx,
+ 	st: State,
+@@ -779,7 +903,13 @@ function dispatcher.modelStep(
+ 	local mode = opts["--mode"] and opts["--mode"][1]
+ 	local project = opts["--project"] and opts["--project"][1]
+ 	local resolved = dispatcher.resolve(step, id, project, mode)
+-	local tries = models.tries(resolved)
++	local plan = dispatcher.plan(step, id, project, mode, opts["--author"] and opts["--author"][1], resolved)
++	local picked: { [models.Spec]: reviewpool.Pick } = {}
++	local tries: { models.Spec } = {}
++	for _, pick in plan.picks do
++		picked[pick.spec] = pick
++		table.insert(tries, pick.spec)
++	end
+ 	local stateDir = st.dir
+ 	local cwd: string
+ 	if step == "zz-review" then
+@@ -898,7 +1028,7 @@ function dispatcher.modelStep(
+ 		end
+ 	end
+ 	local outcome = "failed"
+-	local filedBy: { model: string, effort: string? }? = nil -- c0306: the attempt that wrote the review
++	local filedBy: { model: string, effort: string?, fallback: string? }? = nil -- c0306: the attempt that wrote the review
+ 	fs.writeDir(stateDir)
+ 	local landing = `{stateDir}/review.md`
+ 	if land then
+@@ -1058,7 +1188,14 @@ function dispatcher.modelStep(
+ 		})
+ 		print(`dispatch: {step} on {spec.cli}: {outcomeNow} ({detail}), {result.tokens} tokens`)
+ 		outcome = outcomeNow
+-		filedBy = { model = spec.model, effort = spec.effort }
++		-- c0251: a try of the writers' own line is a fallback: the file records why, and the board flags it
++		local reason = if picked[spec]
++			then reviewpool.fallbackReason(picked[spec], plan.provenance, plan.via)
++			else nil
++		filedBy = { model = spec.model, effort = spec.effort, fallback = reason }
++		if reason and outcomeNow == "ok" then
++			stdio.ewrite(`dispatch: fallback review: {reason}\n`)
++		end
+ 		-- a failed attempt's review is moved aside, so only the attempt that ends the step can land one
+ 		if land and outcomeNow ~= "ok" and fs.isFile(landing) then
+ 			local aside = `{stateDir}/review-attempt-{#attempts}.md`
+@@ -1139,11 +1276,19 @@ function dispatcher.modelStep(
+ 			-- c0306 (F2): in a marked item a new round takes the next number when the newest round of its kind is one
+ 			-- the judge refuses; otherwise the one-round rule stands
+ 			local supersedes = false
+-			if last >= 1 and l.prefix ~= "" and not streamDir then
++			if last >= 1 and l.prefix ~= "" then
+ 				local newest = `{cwd}/{l.dir}/{l.prefix}{string.format("%03d", last)}.md`
+-				supersedes = fs.isFile(newest)
+-					and require("./reviewfiles").markedFolder(`{cwd}/{l.dir}`)
+-					and reviewmodel.refused(fs.readFile(newest))
++				if fs.isFile(newest) then
++					local text = fs.readFile(newest)
++					-- c0251: a round that carries Fallback: is superseded in any item and any mode (the cross-model re-review);
++					-- c0306: a refused round only in a marked item, never a stream review's
++					supersedes = reviewmodel.fallbackOf(text) ~= nil
++						or (
++							not streamDir
++							and require("./reviewfiles").markedFolder(`{cwd}/{l.dir}`)
++							and reviewmodel.refused(text)
++						)
++				end
+ 			end
+ 			if last >= 1 and not supersedes then
+ 				-- one round. Historical files stay where they are; a new one is not added.
+@@ -1165,7 +1310,7 @@ function dispatcher.modelStep(
+ 			else
+ 				local name = string.format("%s%03d.md", l.prefix, last + 1)
+ 				-- c0306: the dispatcher records the model and effort that wrote the review; the reviewer never does
+-				local by = filedBy :: { model: string, effort: string? }
++				local by = filedBy :: { model: string, effort: string?, fallback: string? }
+ 				local written = fs.readFile(landing)
+ 				-- a reviewer's own record fails the step in a marked item; an unmarked one is filed as the reviewer wrote it
+ 				local stamped: string?, refusal: string?
+@@ -1175,7 +1320,7 @@ function dispatcher.modelStep(
+ 				then
+ 					stamped = written
+ 				else
+-					stamped, refusal = reviewmodel.stamp(written, by.model, by.effort)
++					stamped, refusal = reviewmodel.stamp(written, by.model, by.effort, by.fallback)
+ 				end
+ 				if stamped then
+ 					fs.writeFile(`{cwd}/{l.dir}/{name}`, stamped)
+@@ -1884,9 +2029,10 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } },
+ 			if action.kind == "step" and action.step and dispatch.STEPS[action.step] then
+ 				local s = dispatch.STEPS[action.step :: string]
+ 				if s.kind == "model" then
+-					local okr, r = pcall(dispatcher.resolve, action.step :: string, action.target or "", nil)
++					local okr, r =
++						pcall(dispatcher.plan, action.step :: string, action.target or "", nil, nil, nil)
+ 					if okr then
+-						for _, line in dispatch.describe(r :: models.Resolved) do
++						for _, line in dispatch.describe(r :: reviewpool.Plan) do
+ 							print(line)
+ 						end
+ 					else
+@@ -2186,7 +2332,8 @@ function dispatcher.oneStep(
+ 		if s.kind == "script" then
+ 			print(`run={table.concat(dispatch.scriptArgv(step, id), " ")}`)
+ 		else
+-			for _, line in dispatch.describe(dispatcher.resolve(step, id, nil, mode)) do
++			local plan = dispatcher.plan(step, id, nil, mode, opts["--author"] and opts["--author"][1])
++			for _, line in dispatch.describe(plan) do
+ 				print(line)
+ 			end
+ 		end
+diff --git a/z-nile/engine/family.luau b/z-nile/engine/family.luau
+new file mode 100644
+index 000000000..6e12ccdd3
+--- /dev/null
++++ b/z-nile/engine/family.luau
+@@ -0,0 +1,38 @@
++--!strict
++-- c0251: which model line an id belongs to. A family is a model line (opus, fable, sonnet, kimi, grok, deepseek), kept as a
++-- prefix table in `.models.toml` (`[families]`) the user edits. Pure: ids and the table in, a family out. This is the one
++-- function that maps an id to a family; every other module (the picker, the dry-run, the board) asks it.
++
++local family = {}
++
++export type Families = { [string]: { string } } -- family -> id prefixes
++
++-- `models.bareModel` (one trailing context marker `[...]` removed), spelt here because models.luau requires this module.
++local function bare(id: string): string
++	return (string.gsub(id, "%[[^%[%]]*%]$", ""))
++end
++
++-- The family of the longest prefix that matches the bare model id, or nil when none matches. Two families holding the same
++-- prefix (two files can) are broken by name, so the answer never depends on table order.
++function family.of(id: string, f: Families): string?
++	local model = bare(id)
++	local best: string? = nil
++	local bestLen = 0
++	for name, prefixes in f do
++		for _, prefix in prefixes do
++			if prefix ~= "" and string.sub(model, 1, #prefix) == prefix then
++				if #prefix > bestLen or (#prefix == bestLen and best ~= nil and name < best) then
++					best, bestLen = name, #prefix
++				end
++			end
++		end
++	end
++	return best
++end
++
++-- True when both sides name a family and it is the same one: an unknown family is never the same as anything.
++function family.same(a: string?, b: string?): boolean
++	return a ~= nil and b ~= nil and a == b
++end
++
++return family
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index a41d532d2..aaa4d2b92 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -94,10 +94,11 @@ usage: ./zn <command> ...
+   stack <R-id>                                  print the layers, from git (read-only)
+   trace <R-id> [--check]                        print the final review's traceability table skeleton, or verify trace.md
+   focus <issue-id>                              attribute following commits to this issue
+-  commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>]
++  commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>] [--author <id>]
+                                                 (--phase build records the model that wrote the layer: --model, or ZN_MODEL under dispatch; a marked item refuses none)
+                                                 stage all, record spend, commit, push. --time and --tokens are ignored
+-  spend <id> --phase capture|prep|design-review|deliver [--begin] [--model <id>] [--note <text>]
++                                                (--author is the lead's own model: the writer a code-review's Fallback: line is derived against)
++  spend <id> --phase capture|prep|design-review|deliver [--begin] [--model <id>] [--author <id>] [--note <text>]
+                                                 mark a stage; the tool writes the measured row. --time and --tokens are ignored
+                                                 (--phase capture|prep records the model that wrote the work: --model, or ZN_MODEL under dispatch; a marked item refuses none)
+   record --id <id> --phase <phase> [--report <file>] [--wall <s>] [--cpu <s>] [--ai <s>] [--tokens <n>]
+@@ -4437,6 +4438,48 @@ local function modelOption(what: string, opts: { [string]: { string } }, phase:
+ 	return raw
+ end
+ 
++-- c0251: the reason an interactive review on `model` is a fallback, from the pool's plan for the item `id` and the review
++-- `mode` (design, raft, code, final); nil when it is not one, and nil when no plan can be built (no rotating role, no
++-- .models.toml on main, an unknown item). The lead types no reason: the tool derives it.
++local function interactiveFallback(id: string, mode: string, model: string, author: string?): string?
++	local dispatcher = require("./dispatcher")
++	-- the plan of `./zn dispatch zz-review --dry-run`: the pinned walk of main. Without an origin (an offline checkout) the
++	-- checkout's own .models.toml files stand in, and the reason says so.
++	local ok, plan = pcall(function()
++		return dispatcher.plan("zz-review", id, nil, mode, author or "")
++	end)
++	if not ok then
++		ok, plan = pcall(function()
++			local layers = models.walk(".", store.get(id).dir)
++			return dispatcher.plan(
++				"zz-review",
++				id,
++				nil,
++				mode,
++				author or "",
++				models.resolve(layers, "zz-review", mode),
++				layers
++			)
++		end)
++	end
++	if not ok or not (plan :: any).rotate then
++		return nil
++	end
++	return require("./reviewpool").interactiveReason(plan :: any, model)
++end
++
++-- c0251: `--author <model id>` of spend and commit: the lead's own model, the live author of the text under review.
++local function authorOption(what: string, opts: { [string]: { string } }): string?
++	local raw = opts["--author"]
++	if not raw then
++		return nil
++	end
++	if #raw > 1 or not ledger.isModel(raw[1]) then
++		fail(`{what} --author takes one model id (letters, digits, '.', '_' and '-')`)
++	end
++	return raw[1]
++end
++
+ -- The issues a commit is attributed to: the ones named, else the focus, else the raft's members.
+ local function commitIssues(raft: store.Item, issueIds: { string }): ({ store.Item }, string)
+ 	local issues: { store.Item } = {}
+@@ -4605,11 +4648,24 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
+ 	end
+ 	-- c0306: the review files this commit carries are stamped with --model under --phase code-review, and refused in a
+ 	-- marked item without it (under any other phase, at all)
++	local authorOpt = authorOption("commit", opts)
+ 	local refused = require("./reviewfiles").commitReviews(
+ 		phase,
+ 		model,
+ 		require("./reviewfiles").effortOption(opts, model),
+-		require("./reviewfiles").typedEffort(opts)
++		require("./reviewfiles").typedEffort(opts),
++		function(path: string): string?
++			local base = string.match(path, "([^/]+)$") or ""
++			local folder = string.match(path, "([^/]+)/[^/]+$")
++			local mode = if string.sub(base, 1, 13) == "final-review-"
++				then "final"
++				elseif string.sub(base, 1, 7) == "review-" then "code"
++				else nil
++			if not folder or not mode or not string.match(folder, "^[fdcR]%d%d%d%d$") then
++				return nil
++			end
++			return interactiveFallback(folder, mode :: string, model :: string, authorOpt)
++		end
+ 	)
+ 	if refused then
+ 		fail(refused)
+@@ -6566,7 +6622,13 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
+ 		local why = require("./reviewfiles").stampFile(
+ 			`{dir}/{reviewFile}.md`,
+ 			model :: string,
+-			require("./reviewfiles").effortOption(opts, model)
++			require("./reviewfiles").effortOption(opts, model),
++			interactiveFallback(
++				id,
++				if raftItem then "raft" else "design",
++				model :: string,
++				authorOption("spend", opts)
++			)
+ 		)
+ 		if why then
+ 			fail(why)
+@@ -6938,8 +7000,9 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
+ 		resolved: models.Resolved,
+ 		prompt: string,
+ 		phase: string,
+-		accept: (string) -> boolean
+-	): (string, string)
++		accept: (string) -> boolean,
++		order: (({ models.Spec }) -> { models.Spec })?
++	): (string, string, models.Spec?)
+ 		local okDrive, drivenOrErr = pcall(function()
+ 			return modelstep.drive({
+ 				resolved = resolved,
+@@ -6948,6 +7011,7 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
+ 				stateDir = `.cache/idea-run/{id}/{phase}`,
+ 				path = process.env.PATH or "/usr/bin:/bin",
+ 				guard = guard,
++				order = order,
+ 				accept = function(raw)
+ 					return accept(idea.prose(raw))
+ 				end,
+@@ -6996,7 +7060,8 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
+ 			fail(`idea: {phase}: {driven.detail}`)
+ 			return "", ""
+ 		end
+-		return idea.prose(driven.prose), driven.model
++		local lastAttempt = driven.attempts[#driven.attempts]
++		return idea.prose(driven.prose), driven.model, if lastAttempt then lastAttempt.spec else nil
+ 	end
+ 	local drafted: idea.Draft? = nil
+ 	local prose, wrote = run(models.resolve(layers, "idea"), idea.authorPrompt(rough), "idea", function(text)
+@@ -7007,12 +7072,27 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
+ 	challenge.authorModel = wrote
+ 	local findings: { idea.Finding } = {}
+ 	local verdict: string? = nil
+-	run(challenge, idea.challengePrompt(prose), "idea-challenge", function(text)
++	-- c0251: the challenge takes the same picker as every review, with the model that really wrote the draft as the author
++	local writer = models.modelOf(wrote, models.knownModels(layers))
++	local ordering: (({ models.Spec }) -> { models.Spec })? = nil
++	local picked: { [models.Spec]: any } = {}
++	local reviewpool = require("./reviewpool")
++	if challenge.rotate then
++		ordering = function(tries: { models.Spec }): { models.Spec }
++			local ordered: { models.Spec } = {}
++			for _, pick in reviewpool.order(tries, challenge.families or {}, { writer }, {}) do
++				picked[pick.spec] = pick
++				table.insert(ordered, pick.spec)
++			end
++			return ordered
++		end
++	end
++	local _, _, challenger = run(challenge, idea.challengePrompt(prose), "idea-challenge", function(text)
+ 		local found, said = idea.parseReview(text)
+ 		findings = found
+ 		verdict = said
+ 		return said == "approve" or said == "revise"
+-	end)
++	end, ordering)
+ 	local body = drafted :: idea.Draft
+ 	local answers: { [string]: string } = {}
+ 	if not (verdict == "approve" and #findings == 0) then
+@@ -7027,7 +7107,17 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
+ 	local openLines = idea.openLines(findings, answers)
+ 	local reviewPath = `{here.dir}/idea-review-001.md`
+ 	fs.writeFile(here.doc, withFront(idea.apply(doc, body, openLines), "idea", "challenged"))
+-	fs.writeFile(reviewPath, idea.reviewText(findings, verdict or "revise"))
++	-- c0251: the challenge records its model, and why when it was a fallback (c0306 judges no idea review)
++	local reviewText = idea.reviewText(findings, verdict or "revise")
++	if challenger then
++		local reason = if picked[challenger]
++			then reviewpool.fallbackReason(picked[challenger], "recorded", "draft")
++			else nil
++		local stamped =
++			require("./reviewmodel").stamp(reviewText, challenger.model, challenger.effort, reason)
++		reviewText = stamped or reviewText
++	end
++	fs.writeFile(reviewPath, reviewText)
+ 	local refutePath = `{here.dir}/idea-refute-001.md`
+ 	if #findings > 0 then
+ 		fs.writeFile(refutePath, idea.refuteText(findings, answers))
+diff --git a/z-nile/engine/models.luau b/z-nile/engine/models.luau
+index 33ac540e1..c11416462 100644
+--- a/z-nile/engine/models.luau
++++ b/z-nile/engine/models.luau
+@@ -6,10 +6,14 @@
+ -- Contract for the Python port. One shape. A role names what belongs to the stage: `model`, `cli`, `runtime`,
+ -- `rank`, `max_tokens`, `effort`, and `fallbacks` (CLI names, in order). A fallback names what belongs to the
+ -- model: `[fallback.<cli>]` has `model`, `runtime`, and anything only that CLI needs (`max_calls` and
+--- `max_minutes` for `agent`). A try is the role's rank, cap and effort on the fallback's model. A challenge
+--- role sets `author` to the role that wrote the text; a try whose model id equals that author's is dropped,
+--- and an empty list fails at resolve. A role or fallback that names an unknown model or CLI fails in `parse`
+--- (when the file is loaded), not when the stage runs. There is no `order` and no `[<skill>.<cli>]` table.
++-- `max_minutes` for `agent`). A try is the role's rank, cap and effort on the fallback's model. A role's pool may
++-- hold several models on one CLI (c0251): `[member.<name>]` has `cli`, `model`, `runtime` (and the caps), and a
++-- role's `pool = [names]` lists them, tried after the role's own model and before its CLI `fallbacks`. `[families]`
++-- maps a model line to its id prefixes (family.luau). A role with `rotate = true` is ordered by the picker
++-- (reviewpool.luau); `author` is only the stand-in for the model that wrote the text when no record says
++-- (authorship.luau): no try is dropped for it and the chain never stops on it. A role, fallback or member that
++-- names an unknown model or CLI fails in `parse` (when the file is loaded), not when the stage runs. There is no
++-- `order` and no `[<skill>.<cli>]` table.
+ --
+ --   [roles.idea]
+ --   model = "..."          -- a model id of `cli` (claude-…, grok-…, kimi-code-…, or the agent's id)
+@@ -20,7 +24,15 @@
+ --   effort = "medium"      -- the stage's: the primary and every fallback try carry it
+ --   fallbacks = ["kimi", "grok", "agent"]
+ --   [roles.idea-challenge]
+---   author = "idea"        -- never run this role on the author's model
++--   author = "idea"        -- the role whose first choice stands in for the text's writer
++--   rotate = true          -- order the tries by family away from the writer (reviewpool)
++--   pool = ["fable"]       -- more models on a CLI, after the role's own, before its fallbacks
++--   [member.fable]
++--   cli = "claude"
++--   model = "claude-fable-5-2"
++--   runtime = "claude-cli"
++--   [families]
++--   opus = ["claude-opus-"]
+ --   [fallback.kimi]
+ --   model = "..."
+ --   runtime = "kimi-cli"
+@@ -32,6 +44,7 @@
+ --   [dispatch]
+ --   auto_merge = ["prep", "raft"]
+ --   stall_seconds = 300
++local family = require("./family")
+ local fs = require("@lune/fs")
+ local ledger = require("./ledger")
+ local serde = require("@lune/serde")
+@@ -83,23 +96,30 @@ export type Spec = {
+ 	maxTokens: number,
+ 	maxCalls: number?, -- the model-call cap of a CLI with no running token count (agent)
+ 	maxMinutes: number?, -- its wall-time ceiling beside max_calls (review 003 F7: fail closed)
++	member: string?, -- c0251: the `[member.<name>]` this try came from
+ }
+ export type Settings = { autoMerge: { string }, stallSeconds: number, toolSeconds: number }
+--- One parsed file: its dispatch settings, its roles and its fallbacks.
++-- One parsed file: its dispatch settings, its roles, its fallbacks, its pool members and its families.
+ export type Layer = {
+ 	path: string,
+ 	settings: { [string]: any },
+ 	roles: { [string]: { [string]: any } },
+ 	fallbacks: { [string]: { [string]: any } },
++	members: { [string]: { [string]: any } },
++	families: family.Families,
+ }
+--- A skill resolved on one walk: the CLI order, the specs of the CLIs that name the skill, and the settings.
++-- A skill resolved on one walk: the tries in order (`pool`), the per-CLI view of them (`order`: the CLIs in the order of
++-- their first try; `specs`: each CLI's first try), and the settings.
+ export type Resolved = {
+ 	skill: string,
+ 	order: { string },
+ 	specs: { [string]: Spec },
++	pool: { Spec },
+ 	settings: Settings,
+ 	authorModel: string?,
+ 	fromRoles: boolean?,
++	rotate: boolean?, -- c0251: order the tries by family (reviewpool)
++	families: family.Families?, -- the walk's family table, for the picker
+ }
+ 
+ local function isCli(name: string): boolean
+@@ -130,7 +150,8 @@ function models.parse(text: string, path: string): Layer
+ 	if not ok then
+ 		error(`{path}: {firstLine(decoded)}`, 0)
+ 	end
+-	local layer: Layer = { path = path, settings = {}, roles = {}, fallbacks = {} }
++	local layer: Layer =
++		{ path = path, settings = {}, roles = {}, fallbacks = {}, members = {}, families = {} }
+ 	for key, value in decoded :: { [string]: any } do
+ 		if key == "order" then
+ 			error(`{path}: order is gone; a role names its cli, then its fallbacks`, 0)
+@@ -166,7 +187,35 @@ function models.parse(text: string, path: string): Layer
+ 					)
+ 				end
+ 			end
+-		elseif key == "roles" or key == "fallback" then
++		elseif key == "families" then
++			if type(value) ~= "table" then
++				error(`{path}: [families] is a table of family = [id prefixes]`, 0)
++			end
++			local owner: { [string]: string } = {}
++			for name, prefixes in value do
++				if type(name) ~= "string" or name == "" then
++					error(`{path}: families has a family with no name`, 0)
++				end
++				if type(prefixes) ~= "table" or #(prefixes :: { any }) == 0 then
++					error(`{path}: families.{name} is a list of id prefixes`, 0)
++				end
++				local out: { string } = {}
++				for _, prefix in prefixes :: { any } do
++					if type(prefix) ~= "string" or prefix == "" then
++						error(`{path}: families.{name} has an empty or non-string prefix`, 0)
++					end
++					if owner[prefix] ~= nil then
++						error(
++							`{path}: families.{name} lists the prefix {prefix}, which families.{owner[prefix]} already lists`,
++							0
++						)
++					end
++					owner[prefix] = name
++					table.insert(out, prefix)
++				end
++				layer.families[name] = out
++			end
++		elseif key == "roles" or key == "fallback" or key == "member" then
+ 			if type(value) ~= "table" then
+ 				error(`{path}: [{key}] is a table`, 0)
+ 			end
+@@ -176,7 +225,27 @@ function models.parse(text: string, path: string): Layer
+ 				end
+ 				local out: { [string]: any } = {}
+ 				for field, v in fields do
+-					if key == "roles" and field == "fallbacks" then
++					if key == "roles" and field == "rotate" then
++						if type(v) ~= "boolean" then
++							error(`{path}: roles.{name}.rotate is true or false`, 0)
++						end
++						out.rotate = v
++					elseif key == "roles" and field == "pool" then
++						if type(v) ~= "table" then
++							error(`{path}: roles.{name}.pool is a list of [member.<name>] names`, 0)
++						end
++						local seenMember: { [string]: boolean } = {}
++						for _, member in v do
++							if type(member) ~= "string" or member == "" then
++								error(`{path}: roles.{name}.pool names a member that is not a name`, 0)
++							end
++							if seenMember[member] then
++								error(`{path}: roles.{name}.pool names {member} twice`, 0)
++							end
++							seenMember[member] = true
++						end
++						out.pool = table.clone(v)
++					elseif key == "roles" and field == "fallbacks" then
+ 						if type(v) ~= "table" then
+ 							error(`{path}: roles.{name}.fallbacks is a list of CLIs`, 0)
+ 						end
+@@ -211,21 +280,31 @@ function models.parse(text: string, path: string): Layer
+ 							)
+ 						end
+ 						out.cli = v
++					elseif key == "member" and field == "cli" then
++						if type(v) ~= "string" or not isCli(v) then
++							error(
++								`{path}: member.{name}.cli is {tostring(v)}, which is not a supported CLI ({list(
++									models.CLIS
++								)})`,
++								0
++							)
++						end
++						out.cli = v
+ 					elseif key == "fallback" and field == "cli" then
+ 						error(`{path}: fallback.{name}.cli is the table name, not a field`, 0)
+ 					elseif
+-						key == "fallback"
++						(key == "fallback" or key == "member")
+ 						and (field == "rank" or field == "max_tokens" or field == "effort")
+ 					then
+-						error(`{path}: fallback.{name}.{field} belongs to the role, not the fallback`, 0)
++						error(`{path}: {key}.{name}.{field} belongs to the role, not the {key}`, 0)
+ 					else
+ 						local want = FIELDS[field]
+ 						if not want then
+ 							error(
+ 								`{path}: {key}.{name}.{field} is not a field (model, effort, rank, runtime, max_tokens, max_calls, max_minutes{if key
+ 										== "roles"
+-									then ", fallbacks, author"
+-									else ""})`,
++									then ", fallbacks, author, rotate, pool"
++									else if key == "member" then ", cli" else ""})`,
+ 								0
+ 							)
+ 						end
+@@ -254,6 +333,14 @@ function models.parse(text: string, path: string): Layer
+ 				if key == "fallback" and not isCli(name) then
+ 					error(`{path}: [fallback.{name}]: {name} is not a supported CLI ({list(models.CLIS)})`, 0)
+ 				end
++				if key == "member" then
++					if isCli(name) then
++						error(
++							`{path}: [member.{name}]: {name} is a CLI name; a member has a name of its own (a [fallback.{name}] is the CLI's)`,
++							0
++						)
++					end
++				end
+ 				local boundCli = if key == "fallback" then name else out.cli
+ 				if out.model ~= nil and type(boundCli) == "string" and isCli(boundCli) then
+ 					if string.match(out.model, MODEL_OF_CLI[boundCli]) == nil then
+@@ -272,13 +359,15 @@ function models.parse(text: string, path: string): Layer
+ 				end
+ 				if key == "roles" then
+ 					layer.roles[name] = out
++				elseif key == "member" then
++					layer.members[name] = out
+ 				else
+ 					layer.fallbacks[name] = out
+ 				end
+ 			end
+ 		else
+ 			error(
+-				`{path}: [{key}] is not read (the file has roles, fallback and dispatch; skill tables are gone)`,
++				`{path}: [{key}] is not read (the file has roles, fallback, member, families and dispatch; skill tables are gone)`,
+ 				0
+ 			)
+ 		end
+@@ -361,9 +450,11 @@ function models.roleFor(skill: string, mode: string?): string?
+ 			return "final-review"
+ 		elseif mode == "raft" then
+ 			-- The raft and a review of it are both Opus in the owner's table, as design and
+-			-- design-challenge are. A challenge role with author = "raft" would drop Opus and
+-			-- the review would run a fallback, so the same-model stop is pointless here.
++			-- design-challenge are; the picker (reviewpool) rotates the review away from the writer.
+ 			return "raft"
++		elseif mode == "stream" then
++			-- c0251: a stream review is the one cheap review, on a role of its own
++			return "stream-review"
+ 		end
+ 		return "code-review"
+ 	end
+@@ -455,14 +546,28 @@ local function needsCallCap(spec: Spec, path: string, label: string)
+ 	end
+ end
+ 
+--- The role on a walk. A closer file replaces only the keys it sets. The try order is the role's CLI, then its
+--- fallbacks. `author` names another role: that role's model is dropped from the tries.
+-function models.resolveRole(layers: { Layer }, role: string): Resolved
++-- c0251: the family table of a walk: a closer file replaces only the family keys it sets.
++function models.families(layers: { Layer }): family.Families
++	local out: family.Families = {}
++	for _, layer in layers do
++		for name, prefixes in layer.families do
++			out[name] = table.clone(prefixes)
++		end
++	end
++	return out
++end
++
++-- The role on a walk. A closer file replaces only the keys it sets. The tries are the role's own model, the `pool`
++-- members in the order listed, then the `fallbacks` CLIs in order. `order` and `specs` are the per-CLI view of them
++-- (the CLIs in the order of their first try, and each CLI's first try). `author` names another role whose first choice
++-- stands in for the model that wrote the text (authorship): no try is dropped for it.
++function models.resolveRole(layers: { Layer }, role: string, authoring: boolean?): Resolved
+ 	if #layers == 0 then
+ 		error(`no {models.FILE} on the walk: nothing defaults (add one at the repository root)`, 0)
+ 	end
+ 	local fields: { [string]: any } = {}
+ 	local fallbacks: { [string]: { [string]: any } } = {}
++	local members: { [string]: { [string]: any } } = {}
+ 	local named = false
+ 	for _, layer in layers do
+ 		local mine = layer.roles[role]
+@@ -478,6 +583,12 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
+ 				fallbacks[cli][k] = v
+ 			end
+ 		end
++		for name, f in layer.members do
++			members[name] = members[name] or {}
++			for k, v in f do
++				members[name][k] = v
++			end
++		end
+ 	end
+ 	if not named then
+ 		error(`no {models.FILE} on the walk names role {role}`, 0)
+@@ -485,17 +596,48 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
+ 	local where = layers[#layers].path
+ 	local primary = specFrom(fields.cli, fields, where, `roles.{role}`)
+ 	needsCallCap(primary, where, `roles.{role}`)
+-	local order = { primary.cli }
+-	local specs: { [string]: Spec } = { [primary.cli] = primary }
++	local pool: { Spec } = { primary }
++	local function add(spec: Spec, label: string)
++		for _, had in pool do
++			if had.cli == spec.cli and had.model == spec.model then
++				error(
++					`{where}: {role}: {label} repeats {spec.cli} {spec.model}, which another try of the role already is`,
++					0
++				)
++			end
++		end
++		table.insert(pool, spec)
++	end
++	-- c0251: pool members and rotation are for review steps; an authoring step of the same role (z-raft on `raft`) is tried as
++	-- before, the role's model and then its fallbacks
++	local reviewing = authoring ~= true
++	for _, name in if reviewing then (fields.pool or {}) else {} do
++		local m = members[name]
++		if not m then
++			error(`{where}: {role}: pool names {name}, which has no [member.{name}] on the walk`, 0)
++		end
++		if m.cli == nil then
++			error(`{where}: member.{name} has no cli`, 0)
++		end
++		local spec = fallbackTry(m.cli, m, fields, where, `member.{name}`)
++		spec.member = name
++		add(spec, `member.{name}`)
++	end
+ 	for _, cli in fields.fallbacks or {} do
+ 		local fb = fallbacks[cli]
+ 		if not fb then
+ 			error(`{role}: fallback {cli} has no [fallback.{cli}] on the walk`, 0)
+ 		end
+-		if specs[cli] == nil then
+-			local spec = fallbackTry(cli, fb, fields, where, `fallback.{cli}`)
+-			table.insert(order, cli)
+-			specs[cli] = spec
++		if cli ~= primary.cli then
++			add(fallbackTry(cli, fb, fields, where, `fallback.{cli}`), `fallback.{cli}`)
++		end
++	end
++	local order: { string } = {}
++	local specs: { [string]: Spec } = {}
++	for _, spec in pool do
++		if specs[spec.cli] == nil then
++			specs[spec.cli] = spec
++			table.insert(order, spec.cli)
+ 		end
+ 	end
+ 	local authorModel: string? = nil
+@@ -506,13 +648,27 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
+ 		local author = models.resolveRole(layers, fields.author)
+ 		authorModel = models.id(author.specs[author.order[1]])
+ 	end
++	local families = models.families(layers)
++	if fields.rotate == true and reviewing then
++		for _, spec in pool do
++			if family.of(spec.model, families) == nil then
++				error(
++					`{where}: {role} has rotate = true and {spec.model} belongs to no family: add its id prefix to [families]`,
++					0
++				)
++			end
++		end
++	end
+ 	return {
+ 		skill = role,
+ 		order = order,
+ 		specs = specs,
++		pool = pool,
+ 		settings = models.settings(layers),
+ 		authorModel = authorModel,
+ 		fromRoles = true,
++		rotate = fields.rotate == true and reviewing,
++		families = families,
+ 	}
+ end
+ 
+@@ -523,7 +679,8 @@ function models.resolve(layers: { Layer }, skill: string, mode: string?): Resolv
+ 	if not role then
+ 		error(`{skill} is not a model step`, 0)
+ 	end
+-	return models.resolveRole(layers, role)
++	-- a review step (zz-review, the idea challenge) uses the role's pool and rotation; every other step authors
++	return models.resolveRole(layers, role, skill ~= "zz-review" and skill ~= "idea-challenge")
+ end
+ 
+ -- The more powerful of the specs, whole: the higher rank, then the larger max_tokens; a tie keeps the first.
+@@ -541,8 +698,9 @@ function models.strongest(specs: { Spec }): Spec
+ 	return best
+ end
+ 
+--- A raft's step: `order` and settings from the raft's own walk, and for each CLI the strongest of its members'
+--- specs (rafts never cross projects, so the members share the walk down to their project).
++-- A raft's step: `order`, `pool` and settings from the raft's own walk, and for each try (keyed by CLI and model) the
++-- strongest of its members' same-keyed specs (rafts never cross projects, so the members share the walk down to their
++-- project). A try only a member has is ignored, as a CLI only a member has is.
+ function models.forRaft(own: Resolved, members: { Resolved }): Resolved
+ 	if #members == 0 then
+ 		error(`{own.skill}: a raft with no member has no spec`, 0)
+@@ -559,28 +717,41 @@ function models.forRaft(own: Resolved, members: { Resolved }): Resolved
+ 			specs[cli] = models.strongest(candidates)
+ 		end
+ 	end
+-	return { skill = own.skill, order = own.order, specs = specs, settings = own.settings }
++	local pool: { Spec } = {}
++	for _, spec in own.pool do
++		local candidates: { Spec } = {}
++		for _, m in members do
++			for _, theirs in m.pool do
++				if theirs.cli == spec.cli and theirs.model == spec.model then
++					table.insert(candidates, theirs)
++				end
++			end
++		end
++		if #candidates > 0 then
++			table.insert(pool, models.strongest(candidates))
++		elseif specs[spec.cli] ~= nil then
++			table.insert(pool, spec)
++		end -- a CLI no member has is not tried, as before
++	end
++	return {
++		skill = own.skill,
++		order = own.order,
++		specs = specs,
++		pool = pool,
++		settings = own.settings,
++		rotate = own.rotate,
++		families = own.families,
++	}
+ end
+ 
+--- The CLIs to try, in order: those of `order` that have a spec for the skill. Empty is an error naming the skill.
++-- The tries, in order: the role's pool (its own model, its members, its CLI fallbacks). Empty is an error naming the
++-- skill. c0251: no try is dropped for the model that wrote the text, and the chain never stops on it; a role with
++-- `rotate` is ordered by reviewpool.order over this list.
+ function models.tries(r: Resolved): { Spec }
+-	local out: { Spec } = {}
+-	for _, cli in r.order do
+-		local spec = r.specs[cli]
+-		if spec and (r.authorModel == nil or models.id(spec) ~= r.authorModel) then
+-			table.insert(out, spec)
+-		end
+-	end
+-	if #out == 0 and r.authorModel ~= nil then
+-		error(
+-			`{r.skill}: the only model left is the author's ({r.authorModel}); a challenge is never run by the model that wrote the text`,
+-			0
+-		)
+-	end
+-	if #out == 0 then
++	if #r.pool == 0 then
+ 		error(`{r.skill}: no CLI in the order ({list(r.order)}) has a spec for it`, 0)
+ 	end
+-	return out
++	return table.clone(r.pool)
+ end
+ 
+ -- The model id a spend row records: the model, and its effort when the spec sets one (model, then a hyphen, then the effort).
+@@ -599,7 +770,7 @@ function models.knownModels(layers: { Layer }): { string }
+ 	local seen: { [string]: boolean } = {}
+ 	local out: { string } = {}
+ 	for _, layer in layers do
+-		for _, group in { layer.roles, layer.fallbacks } do
++		for _, group in { layer.roles, layer.fallbacks, layer.members } do
+ 			for _, fields in group do
+ 				local model = fields.model
+ 				if type(model) == "string" and model ~= "" then
+diff --git a/z-nile/engine/modelstep.luau b/z-nile/engine/modelstep.luau
+index ed586070d..3b2d96227 100644
+--- a/z-nile/engine/modelstep.luau
++++ b/z-nile/engine/modelstep.luau
+@@ -32,6 +32,7 @@ export type Drive = {
+ 	path: string,
+ 	guard: ((bin: string) -> string?)?,
+ 	accept: ((prose: string) -> boolean)?,
++	order: (({ models.Spec }) -> { models.Spec })?, -- c0251: the tries reordered (the picker); identity when nil
+ }
+ 
+ export type Driven = {
+@@ -93,6 +94,9 @@ end
+ -- call and the next model runs. The last attempt's outcome is the result when none is ok.
+ function modelstep.drive(d: Drive): Driven
+ 	local tries = models.tries(d.resolved)
++	if d.order then
++		tries = d.order(tries)
++	end
+ 	local attempts: { Attempt } = {}
+ 	local outcome, detail, prose, model = "failed", "no model produced a usable answer", "", ""
+ 	for i, spec in tries do
+diff --git a/z-nile/engine/reviewfiles.luau b/z-nile/engine/reviewfiles.luau
+index f1c5ed57f..35d8cc0be 100644
+--- a/z-nile/engine/reviewfiles.luau
++++ b/z-nile/engine/reviewfiles.luau
+@@ -45,12 +45,23 @@ function reviewfiles.judgeDone(dirs: { { id: string, dir: string } }): string?
+ 	return nil
+ end
+ 
+--- Stamps the review file at `path` with the model and effort, or returns the refusal.
+-function reviewfiles.stampFile(path: string, model: string, effort: string?): string?
++-- c0251: the models of the previous round across `folders` (each `{ kind, dir }`, kind design, coherence or code),
++-- up to the rank `upto`: the files are read with `read`, the ranking is reviewmodel.priorsOf.
++function reviewfiles.priors(folders: { { kind: string, dir: string } }, upto: number): { string }
++	local read: { { kind: string, files: { [string]: string } } } = {}
++	for _, f in folders do
++		-- stamped rounds count in any item, marked or not: c0306 stamps every review it files
++		table.insert(read, { kind = f.kind, files = reviewfiles.read(f.dir) })
++	end
++	return reviewmodel.priorsOf(read, upto)
++end
++
++-- Stamps the review file at `path` with the model and effort (and the fallback reason, c0251), or returns the refusal.
++function reviewfiles.stampFile(path: string, model: string, effort: string?, fallback: string?): string?
+ 	if not fs.isFile(path) then
+ 		return `{path} does not exist`
+ 	end
+-	local stamped, why = reviewmodel.stamp(fs.readFile(path), model, effort)
++	local stamped, why = reviewmodel.stamp(fs.readFile(path), model, effort, fallback)
+ 	if not stamped then
+ 		return `{path} {why}`
+ 	end
+@@ -78,7 +89,8 @@ function reviewfiles.commitReviews(
+ 	phase: string,
+ 	model: string?,
+ 	effort: string?,
+-	typedEffort: string?
++	typedEffort: string?,
++	fallbackFor: ((path: string) -> string?)?
+ ): string?
+ 	local status = sh.run("git", { "status", "--porcelain", "--untracked-files=all" })
+ 	if not status.ok then
+@@ -118,7 +130,8 @@ function reviewfiles.commitReviews(
+ 	end
+ 	if phase == "code-review" and model then
+ 		for _, u in unstamped do
+-			local why = reviewfiles.stampFile(u.path, model, effort)
++			local why =
++				reviewfiles.stampFile(u.path, model, effort, if fallbackFor then fallbackFor(u.path) else nil)
+ 			if why then
+ 				return why
+ 			end
+diff --git a/z-nile/engine/reviewmodel.luau b/z-nile/engine/reviewmodel.luau
+index a2c0e3839..1ee46e946 100644
+--- a/z-nile/engine/reviewmodel.luau
++++ b/z-nile/engine/reviewmodel.luau
+@@ -70,16 +70,52 @@ function reviewmodel.read(text: string): (string?, string?)
+ 	return model, effort
+ end
+ 
+--- The text with `Model:` (and `Effort:` when given) prepended, or nil and the refusal when it already records a model.
+-function reviewmodel.stamp(text: string, model: string, effort: string?): (string?, string?)
++-- c0251: the longest reason a `Fallback:` line carries.
++reviewmodel.FALLBACK_MAX = 120
++
++-- The recorded fallback reason: the first `Fallback:` line within the first 12 lines (the same window as `read`), or nil
++-- when there is none or its reason is empty. The one reader of the line (the dispatcher's supersede rule and the board).
++function reviewmodel.fallbackOf(text: string): string?
++	local n = 0
++	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
++		n += 1
++		if n > HEAD_LINES then
++			break
++		end
++		local f = string.match(line, "^Fallback:%s*(.-)%s*$")
++		if f then
++			return if f == "" then nil else f
++		end
++	end
++	return nil
++end
++
++-- The text with `Model:` (and `Effort:`, then `Fallback:` when given) prepended, or nil and the refusal when it already
++-- records a model or the reason is not one short line.
++function reviewmodel.stamp(
++	text: string,
++	model: string,
++	effort: string?,
++	fallback: string?
++): (string?, string?)
+ 	local had = reviewmodel.read(text)
+ 	if had ~= nil then
+ 		return nil, `already records {had}: a review is recorded once; run a new round`
+ 	end
++	if
++		fallback ~= nil
++		and (string.find(fallback, "\n", 1, true) or #fallback > reviewmodel.FALLBACK_MAX or fallback == "")
++	then
++		return nil,
++			`has a fallback reason that is not one line of at most {reviewmodel.FALLBACK_MAX} characters`
++	end
+ 	local head = `Model: {model}\n`
+ 	if effort and effort ~= "" then
+ 		head ..= `Effort: {effort}\n`
+ 	end
++	if fallback then
++		head ..= `Fallback: {fallback}\n`
++	end
+ 	return head .. text, nil
+ end
+ 
+@@ -120,6 +156,33 @@ end
+ -- the newest `design-review-NNN.md`; for the code kind the newest `review-NNN.md` and the newest `final-review-NNN.md`,
+ -- apart. `names` are the folder's files; the result is in file order (review before final).
+ function reviewmodel.newest(names: { string }, kind: string): { string }
++	-- c0251: an idea challenge is `idea-review-NNN.md`; a stream review is `stream-review-<id>-NNN.md`, one line of rounds per layer
++	if kind == "idea" or kind == "stream" then
++		local best: { [string]: number } = {}
++		local bestName: { [string]: string } = {}
++		for _, name in names do
++			local id: string?, n: number?
++			if kind == "idea" then
++				id, n = "", number(name, "^idea%-review%-(%d+)%.md$")
++			else
++				local layer, round = string.match(name, "^stream%-review%-(.+)%-(%d+)%.md$")
++				id, n = layer, tonumber(round)
++			end
++			if id and n and n > (best[id] or -1) then
++				best[id], bestName[id] = n, name
++			end
++		end
++		local ids: { string } = {}
++		for id in bestName do
++			table.insert(ids, id)
++		end
++		table.sort(ids)
++		local out: { string } = {}
++		for _, id in ids do
++			table.insert(out, bestName[id])
++		end
++		return out
++	end
+ 	local groups: { { string } } = if kind == "code"
+ 		then { { "^review%-(%d+)%.md$" }, { "^final%-review%-(%d+)%.md$" } }
+ 		else { { "^design%-review%-(%d+)%.md$" } }
+@@ -213,4 +276,75 @@ function reviewmodel.problem(
+ 	return nil
+ end
+ 
++-- c0251: a kind's place in the lifecycle (idea, then design, coherence, code, final). A previous reviewer is one of the
++-- highest rank up to the kind being written.
++reviewmodel.RANK = { design = 1, coherence = 2, code = 3, final = 4 } :: { [string]: number }
++
++-- The rank and round of a review file in a folder of `kind` (design: an issue's; coherence: a raft's own; code: a member's
++-- or a raft's code and final reviews), or nil for any other name.
++local function rankOf(kind: string, name: string): (number?, number?)
++	if kind == "code" then
++		local c = number(name, "^review%-(%d+)%.md$")
++		if c then
++			return reviewmodel.RANK.code, c
++		end
++		local f = number(name, "^final%-review%-(%d+)%.md$")
++		if f then
++			return reviewmodel.RANK.final, f
++		end
++		return nil, nil
++	end
++	local d = number(name, "^design%-review%-(%d+)%.md$")
++	if d then
++		return reviewmodel.RANK[kind], d
++	end
++	return nil, nil
++end
++
++-- The models of the previous round. `folders` is each folder's kind and its review files (name -> text); `upto` the rank
++-- of the kind being written. Files that record no model are skipped; a refused or flagged round counts. The top rank is
++-- the highest rank up to `upto` that any folder holds. In each folder (an entry of `folders`) the newest round at that
++-- rank is a previous reviewer: round numbers are never compared between folders (c0248 numbers each layer's reviews from
++-- 001). Bare ids, each once, in folder order.
++function reviewmodel.priorsOf(
++	folders: { { kind: string, files: { [string]: string } } },
++	upto: number
++): { string }
++	type Hit = { folder: number, rank: number, round: number, model: string }
++	local hits: { Hit } = {}
++	local top = 0
++	for i, folder in folders do
++		for name, text in folder.files do
++			local rank, round = rankOf(folder.kind, name)
++			if rank ~= nil and round ~= nil and rank <= upto then
++				local model = reviewmodel.read(text)
++				if model ~= nil and model ~= "" then
++					table.insert(hits, {
++						folder = i,
++						rank = rank,
++						round = round,
++						model = (string.gsub(model, "%[[^%[%]]*%]$", "")),
++					})
++					top = math.max(top, rank)
++				end
++			end
++		end
++	end
++	local newest: { [number]: Hit } = {}
++	for _, hit in hits do
++		local had = newest[hit.folder]
++		if hit.rank == top and (had == nil or hit.round > had.round) then
++			newest[hit.folder] = hit
++		end
++	end
++	local out: { string } = {}
++	for i = 1, #folders do
++		local hit = newest[i]
++		if hit and not table.find(out, hit.model) then
++			table.insert(out, hit.model)
++		end
++	end
++	return out
++end
++
+ return reviewmodel
+diff --git a/z-nile/engine/reviewpool.luau b/z-nile/engine/reviewpool.luau
+new file mode 100644
+index 000000000..196014cef
+--- /dev/null
++++ b/z-nile/engine/reviewpool.luau
+@@ -0,0 +1,130 @@
++--!strict
++-- c0251: which model line reviews, away from the one that wrote the text. Pure: a role's tries, the family table, the
++-- text's writers and the previous round's reviewers in, the tries in the order to run them out. Whether a CLI is
++-- installed or out of quota stays the dispatcher's loop.
++--
++-- Three tiers over the tries (a stable partition, the role's order inside each):
++--   1  the model line differs from every writer and from the previous round's reviewers
++--   2  it differs from the writers only (the previous round's line, or a line the table does not name)
++--   3  it is the writers' line: the flagged fallback, the writer's exact model last
++-- A review never blocks: a tier 3 try is kept, last. An unknown family is never "different": it is tier 2 when a writer's
++-- line is known, tier 1 when no writer's line is (there is nothing to differ from, and no flag).
++local family = require("./family")
++local models = require("./models")
++
++local reviewpool = {}
++
++export type Tier = number -- 1, 2 or 3
++export type Pick = { spec: models.Spec, tier: Tier, exact: boolean, family: string? }
++export type Plan = {
++	picks: { Pick },
++	authors: { string }, -- bare model ids of the writers
++	authorFamilies: { string },
++	priors: { string }, -- bare model ids of the previous round's reviewers
++	priorFamilies: { string },
++	provenance: string, -- authorship.Provenance, or "none" when the role does not rotate
++	via: string, -- where the writers came from (authorship.Authorship.via)
++	families: family.Families,
++	rotate: boolean,
++	walk: string?, -- "main" (the pinned walk) or "checkout" (the working tree's .models.toml files)
++}
++
++local function bare(id: string): string
++	return (string.gsub(id, "%[[^%[%]]*%]$", ""))
++end
++
++local function familiesOf(ids: { string }, f: family.Families): { string }
++	local out: { string } = {}
++	for _, id in ids do
++		local fam = family.of(id, f)
++		if fam ~= nil and not table.find(out, fam) then
++			table.insert(out, fam)
++		end
++	end
++	return out
++end
++
++-- The tries in tier order, each with its tier. `authors` and `priors` are model ids (a context marker is ignored).
++function reviewpool.order(
++	tries: { models.Spec },
++	families: family.Families,
++	authors: { string },
++	priors: { string }
++): { Pick }
++	local authorIds: { string } = {}
++	for _, a in authors do
++		table.insert(authorIds, bare(a))
++	end
++	local authorFams = familiesOf(authors, families)
++	local priorFams = familiesOf(priors, families)
++	local groups: { { Pick } } = { {}, {}, {}, {} } -- tier 1, tier 2, tier 3 (not exact), tier 3 exact
++	for _, spec in tries do
++		local fam = family.of(spec.model, families)
++		local exact = table.find(authorIds, bare(spec.model)) ~= nil
++		local tier: Tier = 1
++		if exact or (fam ~= nil and table.find(authorFams, fam) ~= nil) then
++			tier = 3
++		elseif (#authorFams > 0 and fam == nil) or (fam ~= nil and table.find(priorFams, fam) ~= nil) then
++			tier = 2
++		else
++			tier = 1
++		end
++		local group = if tier == 3 and exact then 4 else tier
++		table.insert(groups[group], { spec = spec, tier = tier, exact = exact, family = fam })
++	end
++	local out: { Pick } = {}
++	for _, group in groups do
++		for _, pick in group do
++			table.insert(out, pick)
++		end
++	end
++	return out
++end
++
++local function cut(text: string): string
++	return if #text > 120 then string.sub(text, 1, 117) .. "..." else text
++end
++
++-- Why a tier 3 pick is a fallback, in one short line for the `Fallback:` stamp; nil for any other tier. `provenance` and
++-- `via` say how sure the tool is of the writer: when it only assumed or did not know, the reason says so.
++function reviewpool.fallbackReason(p: Pick, provenance: string, via: string): string?
++	if p.tier ~= 3 then
++		return nil
++	end
++	local model = bare(p.spec.model)
++	local what = if p.exact
++		then `the model that wrote the text ran the review ({model})`
++		else `the writer's model line ({p.family or "?"}) ran the review ({model})`
++	if provenance == "assumed" or provenance == "unknown" then
++		what ..= `; author {provenance} via {via}`
++	end
++	return cut(what)
++end
++
++-- Whether an interactive review on `ran` (the model id the lead typed) is a fallback: it is the writers' line, or the
++-- pool's first pick was not a Claude model and a different one ran (the lead stayed on a Claude subagent). nil when not.
++function reviewpool.interactiveReason(plan: Plan, ran: string): string?
++	local model = bare(ran)
++	local fam = family.of(model, plan.families)
++	local walked = if plan.walk == "checkout" then "; plan from the checkout's .models.toml" else ""
++	local exact = table.find(plan.authors, model) ~= nil
++	if exact or (fam ~= nil and table.find(plan.authorFamilies, fam) ~= nil) then
++		local what = if exact
++			then `the model that wrote the text ran the review ({model})`
++			else `the writer's model line ({fam or "?"}) ran the review ({model})`
++		if plan.provenance == "assumed" or plan.provenance == "unknown" then
++			what ..= `; author {plan.provenance} via {plan.via}`
++		end
++		return cut(what .. walked)
++	end
++	local first = plan.picks[1]
++	if first ~= nil then
++		local pick = bare(first.spec.model)
++		if string.sub(pick, 1, 7) ~= "claude-" and pick ~= model then
++			return cut(`the pool picked {pick}; {model} ran the review instead{walked}`)
++		end
++	end
++	return nil
++end
++
++return reviewpool
+diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
+index d320c4854..35f3ffbbe 100644
+--- a/z-nile/skills/z-design/SKILL.md
++++ b/z-nile/skills/z-design/SKILL.md
+@@ -57,10 +57,10 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
+ - **Dry-run the promotion**: `./zn promote-check <id>`. The only acceptable failures before implementation are requires of modules the issue will create.
+ 
+ ## 5. Adversarial design review (required)
+-One clean reviewer, one round. The designer answers every finding once, fixed or refuted, in one revision. There is no second reviewer round. The one exception: a review the review-model rule refuses is superseded by a new round at the next number (zz-review).
++One clean reviewer, one round. The designer answers every finding once, fixed or refuted, in one revision. There is no second reviewer round. The one exception: a review the review-model rule refuses, or one flagged `Fallback:`, is superseded by a new round at the next number (zz-review).
+ 
+ 1. Search with `./zn lessons <terms>` when you are about to do something a lesson might cover. Mark the issue `design: reviewed` once the author considers the draft complete. Use `tracker` frontmatter edits.
+-2. Start a **clean** reviewer, with none of your context: a fresh subagent, given the `zz-review` skill (design mode), the issue's path, and read access to the repo. It writes `design-review-001.md` in the issue's folder (an older item may already hold `design-review-NNN.md` files; they still parse, and this review is the next number only when the folder has none). A dispatched reviewer writes `review.md` in its state folder instead, and the dispatcher places it there; a second review of the same kind is refused. Run the reviewer on the **design-challenge role** `.models.toml` names, never on the model that wrote the design: `./zn dispatch zz-review <id> --mode design` starts it on that role and records its spend row itself (a headless run always uses it); in an interactive session start a fresh subagent on that role's model, and don't substitute another role's model. As soon as a subagent reviewer returns, `./zn spend <id> --phase design-review --note design-review-NNN` (the tool measures the span; do not pass `--time` or `--tokens`), adding `--model <the reviewer's model id>` and `--effort <level>`: the call is refused without `--model`, and a typed `--model` wins over the session's own.
++2. Start a **clean** reviewer, with none of your context: a fresh subagent, given the `zz-review` skill (design mode), the issue's path, and read access to the repo. It writes `design-review-001.md` in the issue's folder (an older item may already hold `design-review-NNN.md` files; they still parse, and this review is the next number only when the folder has none). A dispatched reviewer writes `review.md` in its state folder instead, and the dispatcher places it there; a second review of the same kind is refused. Run the reviewer on the **design-challenge role** `.models.toml` names, on the model line the picker chooses away from the one that wrote the design (zz-review, Who reviews): `./zn dispatch zz-review <id> --mode design` starts it on that role and records its spend row itself (a headless run always uses it); in an interactive session run `./zn dispatch zz-review <id> --mode design --dry-run --author <your model id>` and start the reviewer subagent on the `pick:` model (or run the review with `--author <your model id>`), and don't substitute another role's model. As soon as a subagent reviewer returns, `./zn spend <id> --phase design-review --note design-review-NNN` (the tool measures the span; do not pass `--time` or `--tokens`), adding `--model <the reviewer's model id>`, `--effort <level>` and `--author <your model id>`: the call is refused without `--model`, and a typed `--model` wins over the session's own.
+ 3. Answer every finding once. Before editing, run the **consequence step** on your own fix: what new rules, state, edge cases or user decisions does it bring? Add their Rules and mutants rows and spec cases in the same change, and put any decisions to the user now, all at once.
+    - Fix it in the documents, specs or `check.sh`.
+    - Or rebut it in `design-refute-NNN.md` (`- F2: refuted: <evidence>` or `- F2: fixed: <what>; consequences: <handled how, or none>`). Once the round is answered, `./zn spend <id> --phase design-review --note design-refute-NNN` (the tool measures the span; do not pass `--time` or `--tokens`).
+diff --git a/z-nile/skills/z-raft/SKILL.md b/z-nile/skills/z-raft/SKILL.md
+index 2f0935a72..9c5e3c114 100644
+--- a/z-nile/skills/z-raft/SKILL.md
++++ b/z-nile/skills/z-raft/SKILL.md
+@@ -38,7 +38,7 @@ In each raft document this branch changes (`R<NNNN>.md`):
+ Then set the raft's `design: ready`. z-raft sets a raft's `design:`; z-design sets an issue's.
+ 
+ ## 4. Coherence review (a raft of several issues)
+-A raft that groups two or more issues gets one short, raft-only coherence review before it is prepared, always for features that share a surface, whenever this rafting changed its record (a raft that only retired an orphan, kept the rest of a partial recombine, or unfolded members needs none). Start a clean reviewer with the zz-review skill in **raft mode** on the **raft role** `.models.toml` names (as z-design step 5.2 says: `./zn dispatch zz-review <R-id> --mode raft`). That role names no author: the owner's table gives the review the same Opus as the raft, and naming the author would drop it. It writes `design-review-NNN.md` in the raft's folder. A dispatched reviewer writes `review.md` in its state folder instead, and the dispatcher places it there. Answer every finding once, in the raft document or in `design-refute-NNN.md`, and harvest it into the raft's `harvest.md` (z-design step 5.3), then `./zn lessons --uncovered <R-id>` and `./zn lessons --check`. A finding whose fix needs a member's own design to change takes that member out of the raft instead (`./zn unfold <R-id> <id>`) and sends it back to z-design; this skill never edits a member's design. One challenge of this record, then the human (z-design, The design review, step 4, in the raft document): anything you refute, or any high you could not close, goes under `## Open to the human`. There is no second reviewer, except that a coherence review the review-model rule refuses is superseded by a new round at the next number (zz-review). A later fold that changes the grouped record is a new record and needs its own one review; an `unfold` alone needs none. The reviewer quotes the record it read (`Grouped: [...]`), a review file is never edited after it is written, and the carried move and `ready` refuse a raft of several issues whose reviews quote no record covering the current one.
++A raft that groups two or more issues gets one short, raft-only coherence review before it is prepared, always for features that share a surface, whenever this rafting changed its record (a raft that only retired an orphan, kept the rest of a partial recombine, or unfolded members needs none). Start a clean reviewer with the zz-review skill in **raft mode** on the **raft role** `.models.toml` names (as z-design step 5.2 says: `./zn dispatch zz-review <R-id> --mode raft`). The picker chooses the model line away from the one that wrote the raft (zz-review, Who reviews), so a raft Opus wrote is reviewed first by Fable, and the Opus is the flagged fallback; z-raft's own authoring step on the `raft` role is not a review, and tries that role's model and then its fallbacks. It writes `design-review-NNN.md` in the raft's folder. A dispatched reviewer writes `review.md` in its state folder instead, and the dispatcher places it there. Answer every finding once, in the raft document or in `design-refute-NNN.md`, and harvest it into the raft's `harvest.md` (z-design step 5.3), then `./zn lessons --uncovered <R-id>` and `./zn lessons --check`. A finding whose fix needs a member's own design to change takes that member out of the raft instead (`./zn unfold <R-id> <id>`) and sends it back to z-design; this skill never edits a member's design. One challenge of this record, then the human (z-design, The design review, step 4, in the raft document): anything you refute, or any high you could not close, goes under `## Open to the human`. There is no second reviewer, except that a coherence review the review-model rule refuses, or one flagged `Fallback:`, is superseded by a new round at the next number (zz-review). A later fold that changes the grouped record is a new record and needs its own one review; an `unfold` alone needs none. The reviewer quotes the record it read (`Grouped: [...]`), a review file is never edited after it is written, and the carried move and `ready` refuse a raft of several issues whose reviews quote no record covering the current one.
+ As soon as a subagent reviewer returns, `./zn spend <R-id> --phase design-review --note design-review-NNN --model <the reviewer's model id> --effort <level>` (it shares the row among the members this branch gives the raft; a review started with `./zn dispatch zz-review` records its own row). Mark your own answering span with `./zn spend <R-id> --phase design-review --begin` when you start and `./zn spend <R-id> --phase design-review` when you stop. Do not pass `--time` or `--tokens`.
+ 
+ **Review models.** Every review but a stream review runs on a review model: an id starting `claude-opus-`, `claude-fable-` or `kimi-code-k3`, or starting `grok-` at effort `xhigh`. The tool records the model in the review file as `Model: <id>` and `Effort: <level>` within its first 12 lines: the dispatcher stamps a review it files, and for an interactive review the lead types the reviewer's model id (`claude-opus-5-5`, never the alias `opus`) on `./zn spend <id> --phase design-review --note design-review-NNN --model <id> --effort <level>` (a design or coherence review) or `./zn commit -m "<id>: review-NNN" --phase code-review --model <id> --effort <level>` (a code or final review); `--effort` defaults to `CLAUDE_EFFORT` for a `claude-` id only, and a `grok-` id needs it typed. The reviewer never writes them, and a review is recorded once: a refused review is superseded by a new round. An item marked `reviews: judged` (written by the tool at an issue's claim and when a raft is made) is judged on the newest round of each kind and refused: `./zn status <id> prepared` judges the newest design review, `./zn ready <R-id>` and `./zn work next` the raft's newest coherence review and each member's newest design review, and `./zn done <R-id>` the newest `review-NNN.md` and the newest `final-review-NNN.md` of the raft and its members (a stream review is never judged), each refused when it is off the review models or records none; a later round on a review model clears it, and the dispatcher files a new round at the next number only then. In a marked item `./zn spend --phase design-review --note design-review-NNN` is refused without `--model` (a refute note, or none, records as today and stamps nothing), `./zn commit` refuses an unstamped review file without `--model` under `--phase code-review`, and with any other phase at all, and a review step starts no try the rule would refuse. An unmarked item is exempt: it records and commits as before, and stamps when given `--model`.
+diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
+index 8408ee70a..bbfc48c4e 100644
+--- a/z-nile/skills/zz-execute/SKILL.md
++++ b/z-nile/skills/zz-execute/SKILL.md
+@@ -67,7 +67,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
+    - the raft and issue documents and `check.sh` files;
+    - read access to the repo.
+    In Claude Code, that's a fresh subagent. For other agents, use a new session or context that receives only those inputs.
+-   Run the reviewer on the **code-review role** `.models.toml` names, never on the model that wrote the code. `./zn dispatch zz-review <R-id> --mode code` starts it on that role and prints the `./zn commit … --phase code-review --model <id>` line for step 3 (a headless run always uses it). In an interactive session, start the reviewer subagent on that role's model. Say which model reviewed in the review PR comment. Tell a subagent reviewer to write only `review-NNN.md`: no commits, pushes, PR comments or stray files (a dispatched one writes `review.md` in its state folder, and the dispatcher places it as `review-NNN.md`).
++   Run the reviewer on the **code-review role** `.models.toml` names, on the model line the picker chooses away from the one that wrote the code (zz-review, Who reviews). `./zn dispatch zz-review <R-id> --mode code` starts it on that role and prints the `./zn commit … --phase code-review --model <id>` line for step 3 (a headless run always uses it). In an interactive session, run `./zn dispatch zz-review <R-id> --mode code --dry-run --author <your model id>` and start the reviewer subagent on the `pick:` model (or run the review with `--author <your model id>`); `./zn commit --phase code-review --model <id> --author <your model id>` stamps `Fallback:` itself when the model that ran is the writer's line, or the pick was not a Claude model and another ran. Say which model reviewed in the review PR comment. Tell a subagent reviewer to write only `review-NNN.md`: no commits, pushes, PR comments or stray files (a dispatched one writes `review.md` in its state folder, and the dispatcher places it as `review-NNN.md`).
+ 3. The reviewer writes `review-NNN.md` in the raft directory (starting at 001), including a ruling on every Judged criterion. **When the reviewer finishes**, you commit it: `./zn commit -m "R0010: review-NNN" --phase code-review --model <reviewer model> --effort <level>` (this pushes; the model comes from the one `record:` line `./zn dispatch zz-review` printed. Do not pass `--time` or `--tokens`). Then comment with the verdict and the finding count by severity, listing each `F<n> [severity] <claim>`. A dispatched review that fails with "the reviewer wrote no review" still prints its `record:` line: commit that line alone (the commit is its spend row), then rerun the review, which is still the same round.
+    **Review models.** Every review but a stream review runs on a review model: an id starting `claude-opus-`, `claude-fable-` or `kimi-code-k3`, or starting `grok-` at effort `xhigh`. The tool records the model in the review file as `Model: <id>` and `Effort: <level>` within its first 12 lines: the dispatcher stamps a review it files, and for an interactive review the lead types the reviewer's model id (`claude-opus-5-5`, never the alias `opus`) on `./zn spend <id> --phase design-review --note design-review-NNN --model <id> --effort <level>` (a design or coherence review) or `./zn commit -m "<id>: review-NNN" --phase code-review --model <id> --effort <level>` (a code or final review); `--effort` defaults to `CLAUDE_EFFORT` for a `claude-` id only, and a `grok-` id needs it typed. The reviewer never writes them, and a review is recorded once: a refused review is superseded by a new round. An item marked `reviews: judged` (written by the tool at an issue's claim and when a raft is made) is judged on the newest round of each kind and refused: `./zn status <id> prepared` judges the newest design review, `./zn ready <R-id>` and `./zn work next` the raft's newest coherence review and each member's newest design review, and `./zn done <R-id>` the newest `review-NNN.md` and the newest `final-review-NNN.md` of the raft and its members (a stream review is never judged), each refused when it is off the review models or records none; a later round on a review model clears it, and the dispatcher files a new round at the next number only then. In a marked item `./zn spend --phase design-review --note design-review-NNN` is refused without `--model` (a refute note, or none, records as today and stamps nothing), `./zn commit` refuses an unstamped review file without `--model` under `--phase code-review`, and with any other phase at all, and a review step starts no try the rule would refuse. An unmarked item is exempt: it records and commits as before, and stamps when given `--model`.
+ 
+@@ -78,12 +78,12 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
+    - `- F3: deferred <id>: <why>`, only for a medium or low finding (a high cannot be deferred).
+    Only refute when you can show the reviewer is wrong: a test, a spec, or the design text. Everything else gets fixed. Before each fix, take it one step further, as z-design's consequence step does; `./zn done` refuses a fixed answer without `consequences:`.
+ 5. Commit each fix as you make it (pushed by `./zn commit --phase code-review`). **Harvest the round** as z-design step 5.3 does: one entry per finding of `review-NNN.md` in the raft's `harvest.md` (any lesson, design ones included; a new one is usually `when: build` or `both`), then `./zn lessons --uncovered R0010` and `./zn lessons --check`. Then commit the refute file, the ledger and the lessons the same way. Post a comment `Review NNN addressed`, pasting the refute file's lines.
+-6. **Then the human.** There is no second reviewer, except that a round the review-model rule refuses is superseded by a new round at the next number (zz-review). After this one revision, anything you refuted, any high finding you could not close (not answered `fixed`), and any Judged criterion ruled fail, goes in the raft document under `## Open to the human`, one bullet each: `- F2: <the finding>. Answer: <your answer>. Decision: <what the human must decide>` (a failed Judged criterion uses its `JC<n>` id). The raft can be `done` when that list is empty or every bullet carries `Ruled (user, YYYY-MM-DD): <their decision>`. Do not guess a ruling. A medium or low finding you fixed, or deferred to a backlog issue (`- F<n>: deferred <id>: <why>`; `./zn done` accepts that only for a medium or low finding), does not go on the list. Quote every deferred line in the PR comment. Then continue to Phase 5.
++6. **Then the human.** There is no second reviewer, except that a round the review-model rule refuses, or one flagged `Fallback:`, is superseded by a new round at the next number (zz-review). After this one revision, anything you refuted, any high finding you could not close (not answered `fixed`), and any Judged criterion ruled fail, goes in the raft document under `## Open to the human`, one bullet each: `- F2: <the finding>. Answer: <your answer>. Decision: <what the human must decide>` (a failed Judged criterion uses its `JC<n>` id). The raft can be `done` when that list is empty or every bullet carries `Ruled (user, YYYY-MM-DD): <their decision>`. Do not guess a ruling. A medium or low finding you fixed, or deferred to a backlog issue (`- F<n>: deferred <id>: <why>`; `./zn done` accepts that only for a medium or low finding), does not go on the list. Quote every deferred line in the PR comment. Then continue to Phase 5.
+ 
+ ## Phase 5: Done
+ 1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit with `./zn commit --phase deliver`.
+ 2. If `main` moved, `./zn restack <R-id>` (renumber colliding IDs, rerun `z-nile/check.sh --affected`, commit with `./zn commit --phase deliver`), so the stack is on that main before `done`.
+-3. **Trace skeleton, then the final review (idea = design = test = code)**: after the last layer is finished and restacked (steps 1 and 2), print the trace skeleton with `./zn trace <R-id>` and commit that skeleton as `trace.md` with `./zn commit`. Then run the final review once on the finished stack (`./zn dispatch zz-review <R-id> --mode final`, or a fresh subagent on the review model of the CLI in final mode) given the skeleton, the tickets' documents and `git diff origin/main...HEAD`. The reviewer fills `<raft-dir>/trace.md` and writes `final-review-001.md` with a verdict and findings. Answer any findings once in `final-refute-001.md` (if a fix changes a layer, `./zn finish` and `./zn restack <R-id>`, and update `trace.md` for the new top-layer commit; anything still open goes under `## Open to the human`). Commit `trace.md` and the final review files with `./zn commit --phase code-review --model <reviewer model>`, after step 1's commit (an issue document committed after the table makes it stale), then verify that `./zn trace <R-id> --check` passes: before the skeleton is committed the check reports the commits after the finish as added before `trace.md`.
++3. **Trace skeleton, then the final review (idea = design = test = code)**: after the last layer is finished and restacked (steps 1 and 2), print the trace skeleton with `./zn trace <R-id>` and commit that skeleton as `trace.md` with `./zn commit`. Then run the final review once on the finished stack (`./zn dispatch zz-review <R-id> --mode final`, or a fresh subagent on the `pick:` model of its `--dry-run`) given the skeleton, the tickets' documents and `git diff origin/main...HEAD`. The reviewer fills `<raft-dir>/trace.md` and writes `final-review-001.md` with a verdict and findings. Answer any findings once in `final-refute-001.md` (if a fix changes a layer, `./zn finish` and `./zn restack <R-id>`, and update `trace.md` for the new top-layer commit; anything still open goes under `## Open to the human`). Commit `trace.md` and the final review files with `./zn commit --phase code-review --model <reviewer model>`, after step 1's commit (an issue document committed after the table makes it stale), then verify that `./zn trace <R-id> --check` passes: before the skeleton is committed the check reports the commits after the finish as added before `trace.md`.
+ 4. **Confirm the harvest**: first harvest anything `./zn lessons --uncovered R0010` still lists, as Phase 4 step 5 says. That includes the design reviews of a raft prepped before lessons existed, which are harvested here by you. Then `./zn lessons --uncovered R0010` and `./zn lessons --check` must pass. Commit with `./zn commit --phase deliver`.
+ 5. `./zn done R0010` lands the stack. It refuses a checkout that is not the published top-layer commit, an unfinished or unstacked layer, a changed contract, a failing or stale `./zn trace <R-id> --check`, and a final review with no `Verdict:` line or whose verdict is not `approve` while an open finding has no human ruling in `## Open to the human`. The binding commit records the final review's `Verdict:` line and `Trace: <done-raft-dir>/trace.md`. The human runs `./zn approve <id>` again when the contract changed, then `./zn done`.
+ 6. Post a PR comment `Ready to merge at <short sha>` (no final report yet).
+diff --git a/z-nile/skills/zz-review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
+index dee6d9588..e48113bf8 100644
+--- a/z-nile/skills/zz-review/SKILL.md
++++ b/z-nile/skills/zz-review/SKILL.md
+@@ -15,7 +15,9 @@ You have no shared context with the author. Judge only what's in front of you:
+ - in code mode, the diff.
+ 
+ ## Who reviews
+-A review runs on the role `.models.toml` names for the mode: `design-challenge` for design, `raft` for a raft, `code-review` for code and stream, `final-review` for the final review. `./zn dispatch zz-review <id> --mode design|raft|code|stream` (and `--mode final` on the finished stack) starts it from the author's worktree on that role. An interactive session starts its reviewer subagent on the same role's model. A challenge is never run by the model that wrote the text. `idea-challenge` names `author = "idea"` and `code-review` names `author = "implementation"`, so that model is dropped. `design-challenge` names no author, and raft-mode review uses the `raft` role: the owner's table gives both sides Opus, and naming the author would drop it.
++A review runs on the role `.models.toml` names for the mode: `design-challenge` for design, `raft` for a raft, `code-review` for code, `stream-review` for a stream review, `final-review` for the final review. `./zn dispatch zz-review <id> --mode design|raft|code|stream` (and `--mode final` on the finished stack) starts it from the author's worktree on that role. An interactive session asks for the pick instead (below). A review is run by a model line other than the one that wrote the text, and other than the previous round's reviewer. The picker (`reviewpool`) orders the role's tries, which are its model, the `pool` members it lists and its CLI `fallbacks`, in three tiers: tier 1 differs from the author and from the previous round; tier 2 differs from the author only; tier 3 is the author's own family, the flagged fallback, with the exact model that wrote the text last, and it never stops the chain. A model line (a family) is a prefix in `.models.toml`'s `[families]`. The author is the writer of the mode's last step (design for design, raft for raft, build for code, stream and final, idea for the idea challenge), read from the spend rows (the author record below); a role's `author = ` key stands in only when no row says. The previous reviewer is the newest stamped review of the item in lifecycle order (design, coherence, code, final), up to the kind being written; a stream review reads none.
++
++**Interactive pick.** An interactive lead runs `./zn dispatch zz-review <id> --mode <m> --dry-run --author <its model id>` and reads the `pool:` line, each try's `tier`, `family` and `fallback`, and the `pick:` line. The author the pick is made against is, in this order, the `--author` typed, `ZN_MODEL`, the spend rows, and the writing role's first choice, which the `pool:` line shows as `assumed`; a lead gives its own id so a design or raft no spend row records yet is not taken for the role's model. It starts a subagent on the `pick:` model when that is a `claude-` id (a Fable pick for an Opus design is Claude, so the review is unflagged); otherwise it runs `./zn dispatch zz-review <id> --mode <m> --author <its model id>` for it (preferred) or stays on a Claude subagent, and the review is then flagged. `Fallback: <reason>` is a stamped line the tool writes (the dispatcher in the same call as `Model:`; `./zn spend … --author <its model id>` and `./zn commit … --author <its model id>` derive it from the typed model against the same author), never the reviewer and never typed. The board flags a raft or issue whose newest round of a kind (design, code, final, idea or stream) carries it. The re-review is the same command run again from the worktree where the item is still worked (the board prints it: `cd "$(./zn worktree <name>)" && ./zn dispatch zz-review <id> --mode <m>`); for a landed or done item the flag is history.
+ 
+ **Review models.** Every review but a stream review runs on a review model: an id starting `claude-opus-`, `claude-fable-` or `kimi-code-k3`, or starting `grok-` at effort `xhigh`. The tool records the model in the review file as `Model: <id>` and `Effort: <level>` within its first 12 lines: the dispatcher stamps a review it files, and for an interactive review the lead types the reviewer's model id (`claude-opus-5-5`, never the alias `opus`) on `./zn spend <id> --phase design-review --note design-review-NNN --model <id> --effort <level>` (a design or coherence review) or `./zn commit -m "<id>: review-NNN" --phase code-review --model <id> --effort <level>` (a code or final review); `--effort` defaults to `CLAUDE_EFFORT` for a `claude-` id only, and a `grok-` id needs it typed. The reviewer never writes them, and a review is recorded once: a refused review is superseded by a new round. An item marked `reviews: judged` (written by the tool at an issue's claim and when a raft is made) is judged on the newest round of each kind and refused: `./zn status <id> prepared` judges the newest design review, `./zn ready <R-id>` and `./zn work next` the raft's newest coherence review and each member's newest design review, and `./zn done <R-id>` the newest `review-NNN.md` and the newest `final-review-NNN.md` of the raft and its members (a stream review is never judged), each refused when it is off the review models or records none; a later round on a review model clears it, and the dispatcher files a new round at the next number only then. In a marked item `./zn spend --phase design-review --note design-review-NNN` is refused without `--model` (a refute note, or none, records as today and stamps nothing), `./zn commit` refuses an unstamped review file without `--model` under `--phase code-review`, and with any other phase at all, and a review step starts no try the rule would refuse. An unmarked item is exempt: it records and commits as before, and stamps when given `--model`. The reviewer never writes the `Model:` and `Effort:` lines: the tool does, so in a marked item a review that opens with them is refused at filing (an unmarked item's is filed as written).
+ 
+@@ -32,13 +34,13 @@ One short pass, before any design. `./zn idea` runs it. Judge only the Problem,
+ approve
+ ```
+ 
+-`approve` when nothing is disputed. `revise` when a finding remains. Do not rewrite the idea. The command writes `idea-review-001.md` from this reply, unchanged. An approval with no findings does not call the author again. Otherwise the author answers each finding by id in `idea-refute-001.md` (`revised`, or `disputed: <reason>`). A finding answered `revised` is closed. A finding disputed or not answered goes under `## Open to the human`.
++`approve` when nothing is disputed. `revise` when a finding remains. Do not rewrite the idea. The command writes `idea-review-001.md` from this reply, unchanged except for the `Model:`, `Effort:` and `Fallback:` lines it records (c0306 judges no idea review, and the idea's challenge is picked like every review). An approval with no findings does not call the author again. Otherwise the author answers each finding by id in `idea-refute-001.md` (`revised`, or `disputed: <reason>`). A finding answered `revised` is closed. A finding disputed or not answered goes under `## Open to the human`.
+ 
+ ## Output file
+ - Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue); in raft mode, in the raft's folder. `./zn metrics` counts both and rolls an issue's rounds up to its raft through `raft:`.
+ - Code mode: `review-NNN.md`, in the raft directory.
+ - Final mode: `final-review-NNN.md`, in the raft directory, alongside `trace.md`.
+-- The file is `001` when the folder has none of that name. A second review of the same kind is refused, except in a marked item whose newest review of that kind is off the review models or records none: the new round takes the next number and the older one stays as history. An older item's higher numbers still parse and still count in `./zn metrics`.
++- The file is `001` when the folder has none of that name. A second review of the same kind is refused, except in a marked item whose newest review of that kind is off the review models, records none, or carries a `Fallback:` line (the cross-model re-review, which any item, marked or not, and a stream review allow): the new round takes the next number and the older one stays as history. An older item's higher numbers still parse and still count in `./zn metrics`.
+ - Under `./zn dispatch`, in every mode, write your review to `$ZN_DISPATCH_DIR/review.md` (your own state folder) and nothing else: the dispatcher numbers it with the mode's file name and moves it into the mode's folder, and a step that wrote no review fails. The names above and in Visible record are the interactive path's, where you write the file yourself.
+ 
+ ```markdown
+@@ -76,6 +78,7 @@ Don't pad the review. Zero findings with `Verdict: approve` is a valid result. U
+ In code mode the PR shows the review as it happens: the author pushes and posts a "started" comment before you begin, and commits, pushes and summarizes `review-NNN.md` when you finish. So:
+ - Write `review-NNN.md` in full (under `./zn dispatch`, `$ZN_DISPATCH_DIR/review.md`, as Output file says); findings that exist only in your reply are lost. Write only that file: don't commit, push, comment on the PR or leave other files in the tree (the author's commit uses `git add -A`).
+ - Every `### F<n>` heading is a finding the author answers once. Ids start at F1. An older `review-NNN.md` still parses and is still harvested. `./zn done` reads `final-review-NNN.md` only; a per-layer `review-NNN.md` does not stand in for it.
++- A review the tool stamped `Fallback: <reason>` (the writer's own model line ran it, written beside `Model:` and `Effort:`) is flagged on the board with the command that re-reviews it; the next round supersedes it.
+ - Design mode runs in the prep worktree before any PR exists, so it is exempt; its files are committed with the prep commit and ride in the prep PR.
+ 
+ ## Raft mode (from z-raft)
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index d0c596ff4..ada19b589 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -97,8 +97,8 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | release | `./zn release <R-id> [--force]` | in a worktree. Gives a rafting claim back in one published commit: every backlog item carrying the raft's `preparing-…` stamp on `origin/main` (the raft, recombine's other raft, the issues an old-style `new raft` stamped) goes back to `prepared` when its design there is ready, else `new`. It also gives back the issue claims this checkout remembers for the raft's members (`status <id> preparing` here). Refuses a claim this checkout does not remember (`.cache/tracker-claim-<R-id>`) unless `--force`. This branch's own commits are left as they are |
+ | prune | `./zn worktree-prune` | removes the worktree and branch of every raft that is in `done/` on `origin/main` (any merge strategy); keeps the rest, never forces, and lists named worktrees |
+ | focus | `./zn focus f0010` | the following commits are attributed to that issue |
+-| commit | `./zn commit -m "msg" [--issue f0010]... [--phase build|code-review|deliver] [--model <id>] [--effort <level>]` (`--phase build` records the model that wrote the layer: `--model`, else `ZN_MODEL`, and a marked item refuses none; `--phase code-review` stamps each new review file with `--model` and `--effort`, and refuses a new review file without `--model`) | `git add -A`, then folds this checkout's measure buffer into `spend.d/<writer>.tsv` (one appended line per row; `./zn run` rows of one stage become one `other` row) together with the commit's line counts, and the raft's summary, **in the same commit**. A line for another ticket stays until that ticket is committed. A buffer nobody folds is dropped after 14 days, or when that checkout's `.cache` is deleted. Adds `Issue:` trailers and pushes. `--phase` defaults to build; capture, prep and design-review use `./zn spend`. `--time` and `--tokens` are ignored: cost is measured |
+-| spend | `./zn spend <id> --phase capture, prep, design-review or deliver [--begin] [--note <text>] [--model <id>] [--effort <level>]` (`--phase capture|prep` records the model that wrote the work: `--model`, else `ZN_MODEL`, else the measured one, and a marked item refuses none; `--phase design-review --note design-review-NNN` needs `--model` and stamps that review file; a typed `--model` wins over the session's measured one) | marks the stage. `--begin` appends the start to the checkout's measure buffer and does not commit. The next call reads the CLI transcripts for that span, folds this ticket's buffer lines into `spend.d/<writer>.tsv`, and commits that file on the current branch; it pushes nothing. A call with no start writes the row with `unmeasured` where the tool could not read a session. `--time` and `--tokens` are ignored. Refuses in the main checkout (run it in the worktree, `./zn worktree <id>`), and refuses an item that is already active |
++| commit | `./zn commit -m "msg" [--issue f0010]... [--phase build|code-review|deliver] [--model <id>] [--effort <level>]` (`--phase build` records the model that wrote the layer: `--model`, else `ZN_MODEL`, and a marked item refuses none; `--phase code-review` stamps each new review file with `--model` and `--effort`, and a `Fallback:` line it derives itself against `--author <the lead's model id>` (else `ZN_MODEL`, else the rows) when the model is the writer's line or a non-Claude pick was not the one run (no flag to type), and refuses a new review file without `--model`) | `git add -A`, then folds this checkout's measure buffer into `spend.d/<writer>.tsv` (one appended line per row; `./zn run` rows of one stage become one `other` row) together with the commit's line counts, and the raft's summary, **in the same commit**. A line for another ticket stays until that ticket is committed. A buffer nobody folds is dropped after 14 days, or when that checkout's `.cache` is deleted. Adds `Issue:` trailers and pushes. `--phase` defaults to build; capture, prep and design-review use `./zn spend`. `--time` and `--tokens` are ignored: cost is measured |
++| spend | `./zn spend <id> --phase capture, prep, design-review or deliver [--begin] [--note <text>] [--model <id>] [--effort <level>]` (`--phase capture|prep` records the model that wrote the work: `--model`, else `ZN_MODEL`, else the measured one, and a marked item refuses none; `--phase design-review --note design-review-NNN` needs `--model` and stamps that review file, with a derived `Fallback:` line when it was the writer's line (`--author <the lead's model id>` names the writer a row does not yet record); a typed `--model` wins over the session's measured one) | marks the stage. `--begin` appends the start to the checkout's measure buffer and does not commit. The next call reads the CLI transcripts for that span, folds this ticket's buffer lines into `spend.d/<writer>.tsv`, and commits that file on the current branch; it pushes nothing. A call with no start writes the row with `unmeasured` where the tool could not read a session. `--time` and `--tokens` are ignored. Refuses in the main checkout (run it in the worktree, `./zn worktree <id>`), and refuses an item that is already active |
+ | trace | `./zn trace <R-id> [--check]` | read-only. Without `--check`, derives every ticket's claims (`<id>:P<n>`, `<id>:S<n>` from `./zn capture <id>` (none for a ticket captured with only the template under `## Solution`, which is not refused), and `<id>:AC<n>` from `## Acceptance criteria`; a missing captured `## Problem`, a missing `## Acceptance criteria` (read from the ticket's document at the commit) or a Solution of text with no outcome (only a fence) fails naming the ticket and section; a captured section whose first read, which ends at a `Decided with the user`, `**Scope decision` or `(Added in prep` line, finds no outcome is read again with those lines as text) and every changed source file of the stack, and prints the skeleton of `<raft-dir>/trace.md` pinned to the top layer's finished commit. With `--check`, verifies `<raft-dir>/trace.md` against the top layer's commit: every derived claim is a row and no unknown claim appears; every `file:line` exists at that commit and is of the right kind for its column (`design` in the ticket's doc or `not met: "<ruling>"` quoted from `## Open to the human`, `test` in a spec or `check.sh` of that ticket that ran green in the ticket's `<issue-dir>/results.txt` at that commit with an exact case match, `code` in a source file the stack changed or `none` when the stack changed no source file); every changed source file appears under `## Source files` naming valid claims and no unchanged file appears; and the table is not stale (`trace.md` and `final-review-NNN.md` are committed on the top layer after its finish commit touching only the raft's and tickets' tracker files, `Commit:` names the top layer's finish commit, and nothing is added after the table or rewritten). Each failure names the row and the cell, and exits 1 |
+ | done | `./zn done R0010` | requires `./zn trace R0010 --check` to pass for the commit it lands and the final review (`final-review-NNN.md`; `review-NNN.md` is for the per-layer code review only and cannot stand in) to be resolved (verdict `approve`, or every open finding — each finding answered `fixed <sha>: <what>; consequences: <what the fix could break, and how that was checked, or none>`, `refuted`, or, for a medium or low finding and only as zz-execute Phase 4 step 7 allows, `deferred <id>: <why>` naming a backlog issue — ruled by the human in `## Open to the human`) and the raft's `check.sh` to pass. Refuses a member whose approval no longer matches the contract (the design sections, the acceptance specs and `check.sh`); a member with no approval is not sent back. The checkout must be the published top-layer commit; a lower layer or a top layer behind origin is refused, naming the layer and both shas. Refuses a layer that is not finished, not stacked on the one below, or whose contract changed. Refuses when `./zn trace R0010 --check` fails (missing, failing or stale `trace.md`) or when `final-review-NNN.md` is missing or has no `Verdict:` line. Merges that commit with `--no-ff`, promotes acceptance specs, moves the items to `done/`, runs the affected gate (`z-nile/check.sh --affected`) on that tree. A failing gate rolls the tree back by itself. Inside a spec run it skips the gate, says so, and checks only the promoted specs, and commits one binding commit (`<raft>: bind <id>, <id>`, the final review's `Verdict: <word>`, and `Trace: <done-raft-dir>/trace.md`). Then `gh pr view <n> --json baseRefName -q .baseRefName` and `gh pr edit <n> --base main` for each layer, and `git push origin HEAD:refs/heads/main`. A failing gate or a failed retarget rolls back and does not push. A failed push puts each pull request's base back and rolls the tree back. |
+ 
+@@ -178,7 +178,7 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
+ - **What the guards are** (the user's "Keep same user, accept detection", 2026-10-21). Unattended agents run as the user's own OS user. Every guard below (the wrapper, the broker, the tripwire and the merge gates) detects honest mistakes and casual misbehaviour; none is a security boundary against a determined agent, which can read the user's credentials, rewrite the repository's configuration between runs, or merge with the user's token. Known limits are said where each guard is.
+ - **Steps.** Model steps: `z-ticket`, `z-design`, `z-raft`, `z-run` and `zz-review` (modes `design`, `raft`, `code`, `stream`). Script steps, which the dispatcher runs itself and never starts a model for: `z-ready` (`./zn ready`), `z-stop` (`./zn stop`), `raft-plan --apply`, `recombine`, `fold`, `release`, `spend` and `zz-stats` (`./zn metrics`). `zz-rules`, `zz-arch`, `zz-test`, `zz-execute` (the protocol z-work follows) and a project's skills are read inside a step and are never one. `z-work` is a person's session and is never a dispatch step. Any other name is an error.
+ - **`.models.toml`.** At the repository root, and optionally closer to the work (a project's home, an issue's folder). It stacks like `.gitignore`: a closer file replaces only the keys it sets (each `[dispatch]` setting, each field of each `[roles.<name>]`, each field of each `[fallback.<cli>]`). the supported CLIs are `claude`, `grok` and `agent` (Cursor), and `kimi`, and a table naming any other is an error. A role has `model`, `cli`, `runtime`, `rank` and `max_tokens` (and optionally `effort` and `fallbacks`), and an `agent` role or fallback also `max_calls` and `max_minutes`: Cursor's `agent` reports no running token count, so its step stops after `max_calls` model calls (distinct `model_call_id`s, and each turn that carries none) and the spend row takes the result's real total; a stream with three turns in a row and no `model_call_id`, or a line it doesn't know, stops as `cap-unknown` (fail closed); calls are not tokens, so the user tunes it, and an `agent` role or fallback without it is an error, never unlimited (the user's "Cap model calls, record real total"); a call count can miss calls, so the step also stops (`cap`) after `max_minutes` of wall time; the runtime belongs to its CLI: `claude-cli`, `grok-cli` and `cursor-cli`, and `kimi-cli` (the remote runtimes are c0142's). Nothing defaults: a role no file names, a missing field, or no file at all is an error naming it. A step about one issue walks to that issue's folder; a step about a raft walks to each member's and takes, per CLI, the stronger spec whole (higher `rank`, then larger `max_tokens`), in the raft's own walk's try list; z-ticket walks to the project's home. The `[dispatch]` settings (`auto_merge`, `stall_seconds`, `tool_seconds`) come from the item's own walk; an unset or unreadable `auto_merge` is none. Every file is read as committed on `main` (fetched once per run), never from the working tree: an uncommitted `.models.toml` on the walk is an error, so a new one takes effect once its PR has merged. A `.models.toml` is never tracker state: it changes only by a reviewed PR that a human merges (the broker and the gates refuse it; a step that wants an item-level spec asks in `questions.md`).
+-- **Roles.** Each role names the stage: `model`, `cli`, `runtime`, `rank`, `max_tokens`, `effort` and `fallbacks` (CLI names, in order). A fallback names the model: `[fallback.<cli>]` has `model`, `runtime`, and for `agent` `max_calls` and `max_minutes`. A fallback try uses the role's rank, cap and effort. `rank`, `max_tokens` and `effort` on a fallback are refused when the file is loaded, and so are `order` and a `[<skill>.<cli>]` table. A challenge role may set `author` to the role that wrote the text; a try whose model is that author's is dropped, and an empty list fails when the role is resolved. `design-challenge` names no author, and raft-mode review uses the `raft` role: the owner's table gives both sides Opus, and naming the author would drop it. A role or fallback that names an unknown model or CLI fails when the file is loaded. The roles are `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `code-review` and `final-review`. `./zn idea` is the idea stage: its calls go through the same supervised model step as `./zn dispatch`.
++- **Roles.** Each role names the stage: `model`, `cli`, `runtime`, `rank`, `max_tokens`, `effort` and `fallbacks` (CLI names, in order). A fallback names the model: `[fallback.<cli>]` has `model`, `runtime`, and for `agent` `max_calls` and `max_minutes`. A fallback try uses the role's rank, cap and effort. `rank`, `max_tokens` and `effort` on a fallback are refused when the file is loaded, and so are `order` and a `[<skill>.<cli>]` table. A role's `pool` lists `[member.<name>]` models (cli, model, runtime), tried after the role's own model and before its fallbacks, so several models may run on one CLI. A role with `rotate = true` is ordered by the picker (`reviewpool`): tier 1 differs in model line (`[families]`, a prefix table) from the author and the previous round, tier 2 from the author only, tier 3 is the author's line, the flagged fallback, its exact model last; no try is dropped for the author and the chain never stops on it. `author` only names the role whose first choice stands in for the writer when no row records it. A role, fallback or member that names an unknown model or CLI fails when the file is loaded. The roles are `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `code-review`, `stream-review` and `final-review`. `./zn idea` is the idea stage: its calls go through the same supervised model step as `./zn dispatch`.
+ - **The agent credential** (the user's "Bot token, no bypass"). A model step runs with the agent's own GitHub token (a fine-grained token or a GitHub App's, read from `$ZN_AGENT_TOKEN_FILE`, else `~/.config/zn/agent-token`, else the keychain item `zn-dispatch-agent`); without one no CLI starts. It can push branches and open pull requests and can't merge, bypass `main`'s protection or write protection or rulesets. The step's `GH_TOKEN` and `GITHUB_TOKEN` are that token, gh reads an empty configuration folder of the step's own, and git's credential helpers answer with that token only. Not enforceable: the agent runs as the user, so a process that goes looking can still read the user's own credentials (the keychain, `~/.config/gh`); only a separate OS user would stop that, and the tripwire during a run and the server's protection of `main` are what catch its use.
+ - **Tracker state** has one definition (`z-nile/engine/trackerstate.luau`), which the wrapper, the broker, the tripwire and the merge gates all use: git's raw diff with renames off (`diff-tree -r --raw --no-renames`), every path under a project root's folder (with the slash) or exactly `z-nile/next`, plain (ASCII, no empty, `.`, `..` or `.git` component), only regular files (no symlink, no submodule), no `.gitattributes`, `.gitmodules` or `.models.toml` in any case, no added path that differs only in case from another; and each item's sequestered files (its `check.sh` and `acceptance/`, in that exact case) judged per item: the same set, each unchanged or, when the item's folder moved, as `paths.rewrite` writes it for that move; only a new item adds them.
+ - **Tracker state from inside a step.** `./zn`'s pushes to `main` (`publish`, `land`) from inside a step go to the publish broker of the dispatcher that runs the step (a folder of that run's own, `ZN_PUBLISH_BROKER`, its requests bound by a run token): it pushes them with the user's credential, to origin's URL as the run pinned it at its start, only as a fast-forward of a freshly fetched `main`, never forced, and only when every commit is tracker state against its parent (as the tripwire judges it during a run). Nothing else in a step is meant to push to `main`.
+diff --git a/z-nile/tests/acceptance/c0117/dispatch-cli.spec.luau b/z-nile/tests/acceptance/c0117/dispatch-cli.spec.luau
+index 0d2e9843c..138a25e3e 100644
+--- a/z-nile/tests/acceptance/c0117/dispatch-cli.spec.luau
++++ b/z-nile/tests/acceptance/c0117/dispatch-cli.spec.luau
+@@ -56,6 +56,15 @@ max_tokens = 5000
+ effort = "xhigh"
+ fallbacks = ["grok"]
+ 
++[roles.stream-review]
++model = "claude-haiku-5-5"
++cli = "claude"
++runtime = "claude-cli"
++rank = 4
++max_tokens = 5000
++effort = "xhigh"
++fallbacks = ["grok"]
++
+ [roles.raft]
+ model = "claude-opus-5-5"
+ cli = "claude"
+@@ -192,9 +201,11 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
+ 			t.expect(r.ok).toBe(true)
+ 			t.expect(string.split(string.gsub(r.stdout, "%s+$", ""), "\n")).toEqual({
+ 				"step=z-design id=c0010 kind=model",
+-				"try=1 cli=claude runtime=claude-cli model=claude-opus-5-5-high rank=3 max_tokens=5000",
+-				"try=2 cli=grok runtime=grok-cli model=grok-4.7-high rank=3 max_tokens=5000",
+-				"try=3 cli=agent runtime=cursor-cli model=claude-opus-5-5-high rank=3 max_tokens=5000 max_calls=30 max_minutes=60",
++				"pool: no rotation (the role is tried in the order of .models.toml)",
++				"try=1 cli=claude runtime=claude-cli model=claude-opus-5-5-high rank=3 max_tokens=5000 tier=1 family=none fallback=no",
++				"try=2 cli=grok runtime=grok-cli model=grok-4.7-high rank=3 max_tokens=5000 tier=1 family=none fallback=no",
++				"try=3 cli=agent runtime=cursor-cli model=claude-opus-5-5-high rank=3 max_tokens=5000 max_calls=30 max_minutes=60 tier=1 family=none fallback=no",
++				"pick: claude claude-opus-5-5",
+ 			})
+ 			local closer = zn({ "dispatch", "z-design", "c0020", "--dry-run" })
+ 			t.expect(
+@@ -446,7 +457,7 @@ return t.spec("c0117 ./zn dispatch runs one step with fake CLIs", function(it)
+ 			local lines = recordLines(r.stdout)
+ 			t.expect(#lines).toBe(1)
+ 			t.expect(lines[1]).toBe(
+-				'record: ./zn commit -m "c0010: stream-review-001" --phase code-review --model claude-opus-5-5-xhigh --issue c0010'
++				'record: ./zn commit -m "c0010: stream-review-001" --phase code-review --model claude-haiku-5-5-xhigh --issue c0010'
+ 			)
+ 			t.expect(#(fakecli.rows(h, "c0010") or {})).toBe(before)
+ 			-- the prompt names the stream's own worktree (the call site's argument, design review 008 F3)
+diff --git a/z-nile/tests/acceptance/c0117/models.spec.luau b/z-nile/tests/acceptance/c0117/models.spec.luau
+index 7a81fa1b2..201a92e72 100644
+--- a/z-nile/tests/acceptance/c0117/models.spec.luau
++++ b/z-nile/tests/acceptance/c0117/models.spec.luau
+@@ -356,7 +356,8 @@ return t.spec("c0117 .models.toml", function(it)
+ 			for _, cli in { "claude", "kimi", "grok", "agent" } do
+ 				t.expect(r.specs[cli] ~= nil).toBe(true)
+ 			end
+-			t.expect(#models.tries(r)).toBe(4)
++			-- c0251: a review (zz-review: code-review) lists a Fable member beside the four CLIs; authoring steps do not
++			t.expect(#models.tries(r)).toBe(if skill == "zz-review" then 5 else 4)
+ 		end
+ 		local idea = models.resolve(layers, "z-ticket")
+ 		t.expect(idea.specs.claude.model).toBe("claude-fable-5-2")
+@@ -374,5 +375,6 @@ return t.spec("c0117 .models.toml", function(it)
+ 		t.expect(review.specs.grok.rank).toBe(4)
+ 		t.expect(models.roleFor("zz-review", "raft")).toBe("raft")
+ 		t.expect(models.roleFor("zz-review", "design")).toBe("design-challenge")
++		t.expect(models.roleFor("zz-review", "stream")).toBe("stream-review")
+ 	end)
+ end)
+diff --git a/z-nile/tests/tooling/idea.spec.luau b/z-nile/tests/tooling/idea.spec.luau
+index 03446db46..cef494214 100644
+--- a/z-nile/tests/tooling/idea.spec.luau
++++ b/z-nile/tests/tooling/idea.spec.luau
+@@ -1,6 +1,6 @@
+ --!strict
+ -- The idea stage: design refuses an unchallenged idea, an older ticket has no idea key, a failed
+--- first model falls through, and the author's model is never its own challenger. Stub CLIs only.
++-- first model falls through, and the author's model is its own challenger only when nothing else is left (c0251). Stub CLIs only.
+ local fs = require("@lune/fs")
+ local idea = require("@znile/engine/idea")
+ local process = require("@lune/process")
+@@ -234,7 +234,7 @@ return t.spec("idea: challenged before design, and a fallback is the model the r
+ 		t.expect(trackerfix.trOk(f, wt, { "status", id })).toBe("preparing")
+ 	end)
+ 
+-	it("a failed first model falls through, and the author is refused as its own challenger", function()
++	it("a failed first model falls through, and the author is its own challenger when alone", function()
+ 		local f = trackerfix.new("idea-stage", { [".models.toml"] = ROLES })
+ 		local bin = `{f.base}/bin`
+ 		fs.writeDir(bin)
+@@ -273,13 +273,12 @@ return t.spec("idea: challenged before design, and a fallback is the model the r
+ 			{ "idea", other, "--text", "Same model." },
+ 			{ PATH = `{bin}:{path}` }
+ 		)
++		-- c0251: the author's own model is never dropped and the chain never stops on it: the challenge runs on Fable (the stub
++		-- answers a Fable challenge with a draft, not a review, so the step then fails on the answer's shape)
+ 		t.expect(refused.ok).toBe(false)
+-		t.expect(
+-			has(
+-				refused.stderr,
+-				"idea-challenge: the only model left is the author's (claude-fable-5-2); a challenge is never run by the model that wrote the text"
+-			)
+-		).toBe(true)
++		t.expect(has(refused.stdout, "idea: idea-challenge model claude-fable-5-2")).toBe(true)
++		t.expect(has(refused.stderr, "the only model left is the author's")).toBe(false)
++		t.expect(has(refused.stderr, "idea-challenge: the answer was not in the required shape")).toBe(true)
+ 		-- an approval with no findings does not call the author again
+ 		local ideaLines = 0
+ 		local from = 1
+diff --git a/z-nile/tests/tooling/roles.spec.luau b/z-nile/tests/tooling/roles.spec.luau
+index 710e5aef6..10835230a 100644
+--- a/z-nile/tests/tooling/roles.spec.luau
++++ b/z-nile/tests/tooling/roles.spec.luau
+@@ -1,5 +1,6 @@
+ --!strict
+--- The roles table: an unknown model fails when the file is loaded, and a challenge drops the author's model.
++-- The roles table: an unknown model fails when the file is loaded, and a challenge keeps the author's model (c0251: the picker
++-- orders it last, nothing drops it or stops the chain).
+ local models = require("@znile/engine/models")
+ local t = require("@tests/lib/t")
+ 
+@@ -44,7 +45,7 @@ effort = "high"
+ fallbacks = ["kimi", "grok"]
+ ]]
+ 
+-return t.spec("roles: the model table fails at load, and a challenge skips its author", function(it)
++return t.spec("roles: the model table fails at load, and a challenge keeps its author", function(it)
+ 	it("an unknown model fails when the file is loaded", function()
+ 		local ok, err = parse([[
+ [roles.idea]
+@@ -78,7 +79,7 @@ max_tokens = 300000
+ 		t.expect(string.find(err, "not a supported CLI", 1, true) ~= nil).toBe(true)
+ 	end)
+ 
+-	it("tries are the role, then its fallbacks, and the author's model is dropped", function()
++	it("tries are the role, then its fallbacks, and the author's model stays in the list", function()
+ 		local layer = models.parse(ROLES, ".models.toml")
+ 		local idea = models.resolve({ layer }, "idea")
+ 		local ids = {}
+@@ -92,10 +93,10 @@ max_tokens = 300000
+ 		for _, spec in models.tries(challenge) do
+ 			table.insert(left, models.id(spec))
+ 		end
+-		t.expect(left).toEqual({ "claude-opus-5-5", "grok-4.7" })
++		t.expect(left).toEqual({ "claude-opus-5-5", "kimi-code-k3.1-pro", "grok-4.7" })
+ 	end)
+ 
+-	it("stops when the only model left is the author's", function()
++	it("does not stop when the only model left is the author's", function()
+ 		local layer = models.parse(
+ 			[[
+ [roles.idea]
+@@ -118,16 +119,10 @@ fallbacks = []
+ 			".models.toml"
+ 		)
+ 		local challenge = models.resolve({ layer }, "idea-challenge")
+-		local ok, err = pcall(models.tries, challenge)
+-		t.expect(ok).toBe(false)
+-		t.expect(
+-			string.find(
+-				tostring(err),
+-				"idea-challenge: the only model left is the author's (claude-fable-5-2); a challenge is never run by the model that wrote the text",
+-				1,
+-				true
+-			) ~= nil
+-		).toBe(true)
++		local ok, tries = pcall(models.tries, challenge)
++		t.expect(ok).toBe(true)
++		t.expect(#(tries :: { models.Spec })).toBe(1)
++		t.expect((tries :: { models.Spec })[1].model).toBe("claude-fable-5-2")
+ 	end)
+ 
+ 	it("a fallback's rank, cap and effort are refused at load", function()

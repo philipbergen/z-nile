@@ -1,0 +1,29 @@
+# Review 001: R0101 (final mode)
+Inputs: the finished stack at 8f8a49bfbf5c (layer 2, `R0101/2/c0177`, finish commit "c0177: Narrow f0125 speed pins for ramp") over 38e1b752c573 (layer 1, `R0101/1/c0176`), on origin/main c3b111ee31b2 after `./zn sync --fetch`; `git diff origin/main...HEAD` (20 files); `./zn trace R0101`; R0101.md and its check.sh; c0176.md and c0177.md with their check.sh, `acceptance/` and `experiments/narrow.patch`; `./zn capture c0176` and `./zn capture c0177` (both a confirmed capture, 942d2a0c0ede, no marker); review-001.md and refute-001.md; `z-nile/engine/trace.luau`.
+
+Trace: `trace.md` is filled (18 claim rows; the Source files table has no rows, because the stack changes no source file, so every code cell is `none`). `./zn trace R0101 --check` prints `ok: R0101`. The skeleton committed in the stack named an older finish commit (bade7658); its `Commit:` line is now the one `./zn trace R0101` prints, 8f8a49bf.
+
+Checks run:
+- `./zn check c0176` 2/2, `./zn check c0177` 2/2, `./zn check R0101` 5/5 (RC0 gate, both members, promote-check, RC1). `z-nile/check.sh --affected`: GATE PASSED (pickman 82 passed, 0 failed, 6 spec files; every other home selects nothing).
+- The spec diff of each layer is the reviewed `experiments/narrow.patch` exactly (both compares empty with the `index` lines ignored).
+- Sequestration: the zz-review item-2 command lists only the two `acceptance/watch.txt` files `./zn finish` writes (each holds `pickman/tests/lib/t.luau`). No `check.sh` and no acceptance spec changed.
+- On f0147's ramp, rebuilt for this review in a `git clone --no-hardlinks` under `$TMPDIR` (origin pointed at a path that does not exist; HEAD 8f8a49bf plus f0147's `experiments/prototype.patch` with `--3way`, the one conflicted file `Session/init.luau` resolved to f0147's side in all five hunks and main's older `Session.speeds` removed, as c0176's Unknowns describes): the six changed specs pass, 82 of 82 (speeds 9, session-ghosts 18, drops 9, shots 18, airborne 21, golden 7). With the five narrowed files put back to origin/main's text in the same clone: 35 red cases, 3, 1, 14 and 12 in c0176's four files (the capture's 30, and E3's split) and 5 of 9 in speeds.spec (E1's five). The clone was deleted afterwards. So the claims the trace can only cite as one-time runs (c0176:P2, c0177:P2) hold on this stack's text.
+- Scope: each member's Problem and Solution are the capture's, word for word. c0177's Solution has two more bullets (the carried rates and the eyes' title), each naming the f0147 design review it came from; both are detail gained, and both are in the diff (the `ghostRate or ghostSpeed` read, `allEqual`'s floor, ceiling and mean, the retitled case). Nothing was dropped, deferred or moved into Non-goals.
+- Nothing extra in the diff: the six spec files are the two patches; the rest is what the protocol writes (two Verification-log lines, `results.txt`, `watch.txt`, spend, review-001 and its refutation, two harvest lines, the trace skeleton) and one paragraph added to the lesson `zz-execute/measure-from-a-kept-copy`, which harvest.md records for review-001 F1. No file under `pickman/src`, no Rojo project, no script, no guard.
+- review-001's two findings are answered: F1's log line now says 1/2 before the patch and why the first 0/2 is not relied on (c0176.md:143); F2 is captured as c0342 (`pickman/.tracker/issues/c0342`, on main).
+
+Substance of the cited rows, read against the code:
+- c0176:S1, S2, AC1: the three-line clone sits after the `t` require in each of the four files, all eight `Session.new` calls take `CLASSIC_GAME`, and the one remaining `Session.GAME_CONFIG.ghosts` read is the case that is about the shipped config. No line inside a case changes otherwise. c0153's golden.spec changes one digest and gains one comment line.
+- c0177:S1: both edge compares use `untunedOf(Session.GAME_CONFIG)`, the per-level loop runs to `levelsOf(...) + 1` and the average over `levelsOf(...)`; both bands are the old ones. S2: the eyes equal the untuned config's on every level, and the classic loop keeps `2 * movement.speed`. S3: the three compares pass `set.tuning, ramp`, with `ramp` read from the set and asserted to be the shipped config's. S4: `fast` and `double` drop the ramp; `untuned`, `at` and `over` are clones of `fast`.
+- The test cells cite the members' `check.sh` lines, not spec cases: each member's own spec (`acceptance/narrowed.spec.luau`) is sequestered, so it is not in `results.txt`, and the promoted specs the stack changes belong to other items (f0023, f0100, f0101, c0153, f0125), which the trace checker does not accept for these tickets. Both check lines ran green here.
+
+No findings.
+
+## Notes (not findings)
+- Rows c0176:AC3, c0176:AC4, c0177:AC3 and c0177:AC4 are the words "None." under `### Judged` and `### Observed`: the skeleton makes a claim of each. They cite the "None." line and the check's closing `finish` line, since there is nothing to run. See the lesson candidate.
+- refute-001.md says F1 was "fixed b97186c3a". That commit was folded into layer 1's finish commit by the re-finish and restack, so it is not in the stack's history (the object still exists locally). The fix itself is in the stack (c0176.md:143).
+
+## Lesson candidate (for the lead)
+- zz-arch (the trace, `z-nile/engine/trace.luau` `deriveClaims`): a criteria section whose whole body is "None." is not a claim. Why: R0101's skeleton has four rows (`AC3: None.`, `AC4: None.`, twice) that no design, test or code can answer, and the checker still requires a file and line in each of their cells, so the reviewer has to cite a line that proves nothing (here `check.sh`'s `finish`). Check: does every row of the skeleton state something a test could fail for, and is "None." under Judged or Observed left out of the claims? I did not find an issue that captures this (a quick search of z-nile's tracker only).
+
+Verdict: approve

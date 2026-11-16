@@ -1,0 +1,10 @@
+start: 2026-11-15 11:38:31 PST  load averages: 23.41 19.49 17.47
+head: 0e79784e3  env: (none)
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+PASS tests/tooling/repo-fence.spec.luau: 10 passed, 0 failed
+PASS tests/tooling/dispatch-guards.spec.luau: 6 passed, 0 failed
+PASS tests/acceptance/c0117/dispatch-cli.spec.luau: 26 passed, 0 failed
+slowest: tests/acceptance/c0117/dispatch-cli.spec.luau 156.0s, tests/tooling/dispatch-guards.spec.luau 118.9s, tests/tooling/repo-fence.spec.luau 1.8s
+42 passed, 0 failed, 3 spec files
+exit: 0  seconds: 157
+end: 2026-11-15 11:41:08 PST  load averages: 12.32 16.84 16.76

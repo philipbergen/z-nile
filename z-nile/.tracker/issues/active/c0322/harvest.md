@@ -1,0 +1,6 @@
+- design-review-001 F1: z-design/never-narrow-captured-scope
+- design-review-001 F2: zz-test/narrowing-pins-the-whole-file, z-design/quote-other-preps-before-promising
+- design-review-001 F3: zz-test/pin-call-site-arguments, z-design/spec-design-correspondence
+- design-review-001 F4: zz-test/pin-call-site-arguments
+- design-review-001 F5: z-design/restated-rules-move-together
+- design-review-001 F6: one-off: a module-placement call (zz-arch rule 4 and the layout table already say one concern per module)

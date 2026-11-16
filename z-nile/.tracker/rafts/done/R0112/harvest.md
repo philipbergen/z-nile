@@ -1,0 +1,10 @@
+- review-001 F1: zz-test/an-option-that-gives-the-pattern-moves-the-file-operand
+- review-001 F2: zz-arch/an-end-condition-names-the-nesting-level-it-applies-at
+- review-001 F3: zz-test/measure-hand-written-readers-on-the-corpus
+- review-001 F4: zz-test/measure-hand-written-readers-on-the-corpus
+- note the prep's prototype module failed the gate's type stage in the raft (nine luau-lsp errors) although the design recorded types clean: z-design/rerun-skipped-checks-after-edits
+- note c0225's check.sh, merged while c0120's check-paths spec was already red, added a second report nobody saw: zz-test/measure-hand-written-readers-on-the-corpus
+- final-review-001 F1: zz-review/not-stacked-is-main-moving
+- final-review-001 F2: zz-test/an-option-that-gives-the-pattern-moves-the-file-operand
+- final-review-001 F3: zz-test/an-option-that-gives-the-pattern-moves-the-file-operand
+- final-review-001 F4: zz-test/measure-hand-written-readers-on-the-corpus
