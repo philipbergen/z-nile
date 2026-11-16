@@ -3,6 +3,7 @@ title: When a guard believes a record, a spec pins what the real writer writes
 when: both
 tags: [specs, guards, registry]
 check: Is there a case that reads the record (a registry, a lock, a marker file) the real writer made during a real run and asserts its exact content, and a mutant of the writer?
+from: c0123 design review 009 F1 (c0123 withdrawn 2026-11-16)
 ---
 Readers tested on a record the spec plants pass with a writer that records too much: the guard's decision lives in two halves, and the half that carries the user's decision is the one nobody pinned.
 
