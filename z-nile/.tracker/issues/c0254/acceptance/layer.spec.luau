@@ -124,6 +124,8 @@ return t.spec("c0254 a raft's layer on two hosts", function(it)
 			-- what c0277's numbered copy is: the taker's tip on the old branch's name, with no claim memory
 			fixture.git(f.main, { "branch", "-m", BRANCH, `{BRANCH}-discarded-1` })
 			fixture.git(copy, { "switch", "-q", "-c", BRANCH })
+			fs.writeDir(`{copy}/.cache`)
+			fs.writeFile(`{copy}/.cache/fresh`, "1700000000") -- what c0277's takeover leaves in a numbered copy
 			fs.writeFile(`{copy}/copy.txt`, "copy\n")
 			local r = trackerfix.tr(f, copy, { "commit", "-m", "from a copy that holds no claim" })
 			t.expect(r.code).toBe(7)

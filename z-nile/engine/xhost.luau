@@ -132,6 +132,7 @@ export type PushFacts = {
 	claim: string, -- heartbeat.holds (c0265) for the claim of the branch's item: held, unheld, taken or ended
 	owner: string?, -- the item whose claim it is (the raft of a layer, the issue of a prep)
 	originStamp: string?, -- the claim stamp origin/main shows for it now
+	copy: boolean?, -- this worktree is a numbered copy a takeover made (the fresh marker c0277 leaves) or is marked discarded, and holds no claim
 }
 export type PushDecision = { action: string, why: string } -- action: push, push-new, skip or refuse
 
@@ -181,8 +182,14 @@ function xhost.pushDecision(f: PushFacts): PushDecision
 		return { action = "refuse", why = xhost.lostText(owner, f.originStamp) }
 	elseif f.claim == "ended" then
 		return { action = "refuse", why = xhost.lostText(owner, nil) }
-	elseif f.claim == "unheld" and f.originStamp ~= nil and xhost.isClaim(f.originStamp) then
-		-- a checkout that remembers no claim (a numbered copy c0277 made, a stranger) never pushes an item that is under a live claim
+	elseif
+		f.claim == "unheld"
+		and f.copy == true
+		and f.originStamp ~= nil
+		and xhost.isClaim(f.originStamp)
+	then
+		-- a numbered copy that remembers no claim (what c0277's takeover leaves) never pushes an item that is under a live claim;
+		-- a person's own worktree that never claimed it is not a copy and pushes as it always did
 		return {
 			action = "refuse",
 			why = `{owner} is claimed on origin/main ({f.originStamp}) and this checkout holds no claim on it: not pushing {f.branch}; stop here (./zn lost lists lost work to pick up)`,

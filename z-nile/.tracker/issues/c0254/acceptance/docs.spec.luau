@@ -92,7 +92,7 @@ return t.spec("c0254 the docs say what a worker on several hosts does", function
 				"If a commit exits 7, the push was refused because your claim was taken over: stop",
 				"z-design"
 			)
-			at(design, "under `./zn dispatch --worker` the dispatcher has already claimed it", "z-design")
+			at(design, "Under `./zn dispatch --worker` the dispatcher has already claimed it", "z-design")
 			absent(design, "as one commit with `./zn commit", "z-design")
 		end
 	)

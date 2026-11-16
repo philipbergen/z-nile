@@ -369,7 +369,7 @@ return t.spec("c0254 the race window, ownership by stamp and the push exits", fu
 	)
 
 	it(
-		"AC2: a checkout that holds no claim never pushes an item that is under a live claim, a layer's included",
+		"AC2: a numbered copy that holds no claim never pushes an item that is under a live claim, a layer's included",
 		function()
 			local f: xhost.PushFacts = {
 				publishing = true,

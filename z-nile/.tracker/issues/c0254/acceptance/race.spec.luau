@@ -288,6 +288,8 @@ return t.spec("c0254 two hosts claim one issue", function(it)
 			fixture.git(f.main, { "worktree", "add", "--detach", copy, "origin/prep-c0010" })
 			fixture.git(f.main, { "branch", "-m", "prep-c0010", "prep-c0010-discarded-1" })
 			fixture.git(copy, { "switch", "-q", "-c", "prep-c0010" })
+			fs.writeDir(`{copy}/.cache`)
+			fs.writeFile(`{copy}/.cache/fresh`, "1700000000") -- what c0277's takeover leaves in a numbered copy
 			fs.writeFile(`{copy}/pickman/.tracker/issues/c0010/copy.md`, "copy\n")
 			local r = trackerfix.tr(f, copy, { "commit", "-m", "from a copy that holds no claim" })
 			t.expect(r.code).toBe(7)

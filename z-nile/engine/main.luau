@@ -1627,6 +1627,7 @@ function H.branchPushFacts(): xhost.PushFacts
 		originHas = false,
 		behind = 0,
 		claim = "unheld",
+		copy = fs.isFile(".cache/fresh") or fs.isFile(H.DISCARDED),
 	}
 	if kind == "other" or not facts.publishing then
 		return facts
@@ -1702,8 +1703,9 @@ function H.pushAfterCommit(): number
 	elseif d.action == "refuse" then
 		stdio.ewrite(`push: {d.why}\n`)
 		if (process.env.ZN_DISPATCH or "") ~= "" then
+			local note = branch .. "\t" .. d.why .. "\n"
 			pcall(fs.writeDir, ".cache")
-			pcall(sh.writeReplacing, ".cache/push-refused", `{branch}\t{d.why}\n`)
+			pcall(sh.writeReplacing, ".cache/push-refused", note)
 		end
 		return H.EXIT_PUSH_REFUSED
 	end

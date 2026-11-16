@@ -42,7 +42,7 @@ ac1() {
 check "AC1: In worker mode the claim is the push and a rejected claim means taking the next raft, at every point of the race window: the dispatcher reads the pick on \`origin/main\` before any step and ends the run with exit 6 (\`taken\`) when a draft is no longer new or ours, a raft is no longer prepared in the backlog or ours, or a rafting issue is listed by a raft that is not ours; a worker owns a claim by the stamp its claim step recorded, never by the run state's history; it claims an issue with its own \`claim\` step before any model starts (and takes a lost pick over by \`claim\`, or \`z-stop\` then \`z-ready\`); a failed claim step is judged on \`origin/main\` as ours (the claim landed: adopted, the chain goes on), lost (exit 6, no failed step in the run state, no worktree or branch left on the losing host) or a failure; two hosts rafting one issue meet at the lease and the second is refused; a model's own \`./zn status <id> preparing\` after the dispatcher's claim is an idempotent success; and the supervisor counts a lost race, asks \`./zn next\` again at once (waiting one idle period only when the same item is lost twice with nothing between), does not count it as an item taken and clears a held raft that turns out taken." ac1
 ac2() {
 	fixtureSpec pure 'AC2, AC3: a worker whose claim was taken over or ended never pushes the branch' 'AC2, AC3: nothing is pushed over commits origin has, or when they cannot be counted' 'AC2: the claim states xhost reads are heartbeat.holds'\''s'
-	fixtureSpec pick 'AC2: a lost worker is told c0274'\''s own words and to stop, never to continue on the taker'\''s branch' 'AC2: a checkout that holds no claim never pushes an item that is under a live claim, a layer'\''s included' 'AC2, AC7: staleMember is c0277'\''s rule: a worktree is stale when a claim it remembers is over and none is still its own'
+	fixtureSpec pick 'AC2: a lost worker is told c0274'\''s own words and to stop, never to continue on the taker'\''s branch' 'AC2: a numbered copy that holds no claim never pushes an item that is under a live claim, a layer'\''s included' 'AC2, AC7: staleMember is c0277'\''s rule: a worktree is stale when a claim it remembers is over and none is still its own'
 	fixtureSpec race 'AC2: host B'\''s stale worktree, made by its lost claim step, is brought forward to host A'\''s push, not discarded' 'AC2: a local branch that has diverged from the pushed one is refused, and nothing local is discarded' 'AC2, AC3: host A'\''s next commit stands, is refused with c0274'\''s words and exit 7, and origin keeps the taker'\''s tip' 'AC2: a numbered copy of the lost worktree remembers no claim and does not push the taken prep either'
 	fixtureSpec layer --run 'AC2, AC3: host A'\''s next commit stands, is refused with c0274'\''s words, exits 7, and origin keeps the taker'\''s tip' 'AC2: host A'\''s finish and restack are refused before they touch anything, and the taker'\''s commit survives' 'AC2: a numbered copy of the lost worktree remembers no claim and does not push the taken layer either'
 }
@@ -78,15 +78,17 @@ ac7() {
 check "AC7: Q5's leftover on the lost host: \`./zn sync\` marks a layer or prep worktree whose claim another host took over (or that ended) as discarded, with no copy; it is kept while the taker's claim lives and when it holds uncommitted files or commits no origin ref has (and listed), and removed once the work has ended and nothing is left to recover; a host's own claims are never marked." ac7
 # AC8: c0253's acceptance specs (sequestered, or promoted after its done) and the tooling specs that read the files this touches
 ac8() {
-	local c53=() d
-	for d in tests/acceptance/c0253 .tracker/issues/c0253/acceptance .tracker/issues/active/c0253/acceptance; do
+	# c0253's specs are in its folder while it is sequestered or active, and in its project's tests/acceptance once it is done
+	local c53=() d id=c0253 item
+	item="$(cd "$ZN_ROOT" && "$ZN_ROOT/zn" find "$id" | head -1)"
+	for d in "$ZN_ROOT/$item/acceptance" "$PWD/tests/acceptance/$id"; do
 		if [[ -d $d ]]; then
 			c53=("$d"/*.spec.luau)
 			break
 		fi
 	done
 	((${#c53[@]} > 0)) || { echo "c0253's acceptance specs were not found"; return 1; }
-	lune run tests/run -- "${c53[@]}" tests/tooling/spend.spec.luau tests/tooling/board.spec.luau tests/tooling/work.spec.luau tests/tooling/dispatch-texts.spec.luau tests/tooling/measure.spec.luau tests/tooling/claim-taken.spec.luau tests/tooling/status-fresh.spec.luau tests/tooling/dispatch-guards.spec.luau tests/tooling/worktree-fetch.spec.luau tests/tooling/stack-land.spec.luau tests/tooling/start-pr-reuse.spec.luau
+	lune run tests/run -- "${c53[@]#"$PWD"/}" tests/tooling/spend.spec.luau tests/tooling/board.spec.luau tests/tooling/work.spec.luau tests/tooling/dispatch-texts.spec.luau tests/tooling/measure.spec.luau tests/tooling/claim-taken.spec.luau tests/tooling/status-fresh.spec.luau tests/tooling/dispatch-guards.spec.luau tests/tooling/worktree-fetch.spec.luau tests/tooling/stack-land.spec.luau tests/tooling/start-pr-reuse.spec.luau
 }
 check "AC8: The specs this change stands on still pass: c0253's acceptance specs (the supervisor, the dispatcher's worker mode, the board row, the loop), run in whichever place they are, and the tracker, board, spend, work, dispatch and measurement specs that read the files it touches." ac8
 

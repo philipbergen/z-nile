@@ -139,6 +139,14 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['export GH_CONFIG_DIR="$here/.cache/gh-none" GIT_TERMINAL_PROMPT=0'] = "a path in an environment variable; gh reads no configuration there in a spec run",
 	},
 	["z-nile/engine/main.luau"] = {
+		['H.DISCARDED = ".cache/discarded"'] = "c0254: the marker a lost host's sweep writes in a worktree it discards (the prototype's stand-in for c0277's)",
+		['copy = fs.isFile(".cache/fresh") or fs.isFile(H.DISCARDED),'] = "c0254: a read of the two markers that name a numbered copy",
+		["local f = `.cache/tracker-stamp-{id}`"] = "c0254: a read of c0274's claim memory",
+		["local f = `{dir}/.cache/{name}`"] = "c0254: a read of a checkout's claim memory (the dispatcher's ctx.memoryIn)",
+		["local f = `{w.path}/.cache/{name}`"] = "c0254: a read of a worktree's claim memory (the lost host's sweep)",
+		['pcall(fs.writeDir, ".cache")'] = "c0254: the folder itself (fs.writeDir of an existing folder writes nothing)",
+		["pcall(fs.writeDir, `{w.path}/.cache`)"] = "c0254: the folder itself (a discarded worktree's own .cache)",
+		['pcall(sh.writeReplacing, ".cache/push-refused", note)'] = "c0254: the refused-push note, through sh.writeReplacing (a rename, never a write through a link), in the worktree's own .cache; the dispatcher reads it and removes it",
 		["board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)"] = "usage text",
 		['local FOCUS_FILE = ".cache/tracker-focus"'] = `sh.writeReplacing: {RENAMED}`,
 		["return `.cache/tracker-claim-{raftId}`"] = `the claim file, written with sh.writeReplacing: {RENAMED}`,
@@ -162,11 +170,17 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		["local home = `{dir}/.cache/dispatch`"] = "c0118: the board reads the dispatcher's run state (state.json, questions.md) to show it on a card; nothing is written",
 	},
 	["z-nile/engine/dispatcher.luau"] = {
+		['local refusedFile = `{st.worktree or ""}/.cache/push-refused`'] = "c0254: a read of the refused-push note ./zn commit wrote in the step's worktree, then removed; nothing else is written",
+		["pcall(fs.writeDir, `{dir}/.cache`)"] = "c0254: the folder itself (the work worktree's .cache, fs.writeDir of an existing folder writes nothing)",
+		["pcall(fs.writeFile, `{dir}/.cache/tracker-stamp-{target}`, stamp)"] = "c0254: c0274's claim memory of the work worktree: one stamp, written by the dispatcher when its claim landed; the fence checks the folder",
 		["checking: () -> boolean, -- inside a guarded run (a spec or a check.sh): only a CLI under .cache may start"] = "a comment in a type",
 		['local HOME = ".cache/dispatch"'] = `the dispatcher's run state (c0117) in the main checkout: state.json and the markers through sh.writeReplacing ({RENAMED}); the runner's pid file is a nested file the launcher creates`,
 		['local at = string.find(here, "/.cache/", 1, true)'] = "a prefix compared with a CLI's real path (c0117: only a fake under .cache starts inside a check); nothing is written",
 		['return if at then string.sub(here, 1, at + 7) else here .. ".cache/"'] = "the same prefix; nothing is written",
 		["`refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
+	},
+	["z-nile/engine/supervise.luau"] = {
+		['why = "a push was refused under a live claim (the commit stands): the worker stops; read .cache/push-refused in the item\'s worktree",'] = "c0254: a message",
 	},
 	["z-nile/engine/workedge.luau"] = {
 		['workedge.DIR = ".cache/work"'] = "c0253: the supervisor's own state folder in the main checkout (state through sh.writeReplacing, the stop file, the log and the lock files); gitignored, read by ./zn work status and stop, the reaper and the board",
