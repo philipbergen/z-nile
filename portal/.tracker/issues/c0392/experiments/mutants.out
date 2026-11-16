@@ -1,0 +1,101 @@
+# E2: ./zn run --time 1800 -- python3 -I -u mutants.py, in .worktree/proto-narrow-c0210-lobby-pin at 4dd7260bd (2026-11-16)
+unmutated: lobby-start ('survived', '3 passed, 0 failed, 1 spec files') others ('survived', '79 passed, 0 failed, 10 spec files')
+L1 (the start place publishes the portal (f0209's switch, early)): lobby-start killed (0 passed, 3 failed, 1 spec files); others survived (79 passed, 0 failed, 10 spec files)
+L2 (the lobby is not told GamePlaceId): lobby-start killed (1 passed, 2 failed, 1 spec files); others survived (79 passed, 0 failed, 10 spec files)
+L3 (the lobby's GamePlaceId is Snake's id): lobby-start killed (1 passed, 2 failed, 1 spec files); others survived (79 passed, 0 failed, 10 spec files)
+L4 (the lobby build has no runtime folder (--place Portal skips)): lobby-start killed (2 passed, 1 failed, 1 spec files); others survived (79 passed, 0 failed, 10 spec files)
+L5 (the lobby is told LobbyPlaceId too): lobby-start killed (1 passed, 2 failed, 1 spec files); others survived (79 passed, 0 failed, 10 spec files)
+L6 (the start place's output renamed): lobby-start killed (1 passed, 2 failed, 1 spec files); others killed (78 passed, 1 failed, 10 spec files)
+    FAIL tests/acceptance/c0210/manifest.spec.luau :: Pickman's outputs keep their names: version for Pickman, lobby_version for the start place
+L7 (the outputs written last place first): lobby-start killed (1 passed, 2 failed, 1 spec files); others killed (78 passed, 1 failed, 10 spec files)
+    FAIL tests/acceptance/c0210/deploy.spec.luau :: publishes every place whose variable is set, the games first and the start place last, each told every id
+L8 (the start place published first): lobby-start killed (1 passed, 2 failed, 1 spec files); others killed (73 passed, 6 failed, 10 spec files)
+    FAIL tests/acceptance/c0210/way-back.spec.luau :: with ROBLOX_BETA_GAME_PLACE_ID: the game is told LobbyPlaceId, the start place's id
+    FAIL tests/acceptance/c0210/way-back.spec.luau :: with ROBLOX_BETA_PICKMAN_PLACE_ID: the game is told LobbyPlaceId, the start place's id
+    FAIL tests/acceptance/c0210/pickman.spec.luau :: with ROBLOX_BETA_GAME_PLACE_ID: the game first, to its id, from pickman's project, its version as version
+    FAIL tests/acceptance/c0210/pickman.spec.luau :: with ROBLOX_BETA_PICKMAN_PLACE_ID: the game first, to its id, from pickman's project, its version as version
+
+# E3: ./zn run --time 3000 -- python3 -I -u sweep.py, same worktree at bf6a536a5 (2026-11-16); its first portal list was the folder 'tests', which the runner does not take (the '0 passed, 1 failed, 1 spec files' lines), so portal was rerun with every portal spec: sweep.py portal, below
+pickman: 19 specs
+z-nile: 18 specs
+unmutated pickman: 150 passed, 0 failed, 19 spec files
+unmutated z-nile: 158 passed, 0 failed, 18 spec files
+L1 (the start place publishes the portal (f0209's switch, early)) pickman: 150 passed, 0 failed, 19 spec files; new failures: 0
+L1 (the start place publishes the portal (f0209's switch, early)) z-nile: 157 passed, 1 failed, 18 spec files; new failures: 1
+    FAIL tests/acceptance/c0172/cicd.spec.luau :: publishes the file's places, not the inherited universe, and runs both suites
+L2 (the lobby is not told GamePlaceId) pickman: 150 passed, 0 failed, 19 spec files; new failures: 0
+L2 (the lobby is not told GamePlaceId) z-nile: 158 passed, 0 failed, 18 spec files; new failures: 0
+L3 (the lobby's GamePlaceId is Snake's id) pickman: 150 passed, 0 failed, 19 spec files; new failures: 0
+L3 (the lobby's GamePlaceId is Snake's id) z-nile: 158 passed, 0 failed, 18 spec files; new failures: 0
+L4 (the lobby build has no runtime folder (--place Portal skips)) pickman: 150 passed, 0 failed, 19 spec files; new failures: 0
+L4 (the lobby build has no runtime folder (--place Portal skips)) z-nile: 157 passed, 1 failed, 18 spec files; new failures: 1
+    FAIL tests/acceptance/c0172/cicd.spec.luau :: publishes the file's places, not the inherited universe, and runs both suites
+L5 (the lobby is told LobbyPlaceId too) pickman: 150 passed, 0 failed, 19 spec files; new failures: 0
+L5 (the lobby is told LobbyPlaceId too) z-nile: 158 passed, 0 failed, 18 spec files; new failures: 0
+portal: 19 specs
+unmutated portal: 109 passed, 0 failed, 19 spec files
+L1 (the start place publishes the portal (f0209's switch, early)) portal: 109 passed, 0 failed, 19 spec files; new failures: 0
+L2 (the lobby is not told GamePlaceId) portal: 109 passed, 0 failed, 19 spec files; new failures: 0
+L3 (the lobby's GamePlaceId is Snake's id) portal: 109 passed, 0 failed, 19 spec files; new failures: 0
+L4 (the lobby build has no runtime folder (--place Portal skips)) portal: 109 passed, 0 failed, 19 spec files; new failures: 0
+L5 (the lobby is told LobbyPlaceId too) portal: 109 passed, 0 failed, 19 spec files; new failures: 0
+
+# L1 and L4 in z-nile's c0172/cicd.spec, run alone: cicd.spec:536: expected 2, got 1 (the start place's runtime tasks), an assertion
+
+# E4: ./zn run --time 300 -- python3 -I -u narrow-mutants.py, in .worktree/proto-narrow-c0210-lobby-pin-portal (B) at 453288419 (after design review 001: lessons/ excluded, N13 to N15)
+unmutated: exit 0 
+N1 (an assertion deleted from pickman.spec): killed: portal/tests/acceptance/c0210/pickman.spec.luau is blob 0647ebbd, not c0210's e7a1f99b
+N2 (a line joined onto the comment above it in way-back.spec): killed: portal/tests/acceptance/c0210/way-back.spec.luau is blob 6a4ab4ae, not c0210's 5c383490
+N3 (`do return end` added to an overrides.spec case): killed: portal/tests/acceptance/c0210/overrides.spec.luau is blob d63c5348, not c0210's 04c17f85
+N4 (one line ending of a golden made CRLF): killed: portal/tests/acceptance/c0210/override-01.txt is blob 1936c71a, not c0210's 5052f65c
+N5 (c0210's check.sh still runs AC11 (the pre-ready PR missing)): killed: portal/.tracker/issues/done/c0210/check.sh still runs AC11: c0392's pre-ready tracker PR is missing
+N6 (AC10 dropped from c0210's check.sh too): killed: portal/.tracker/issues/done/c0210/check.sh is blob 6558c829, not 259b5159 (the prepared file with only the AC11 check removed)
+N7 (lobby-start.spec left in the promoted folder): killed: portal/tests/acceptance/c0210/lobby-start.spec.luau is still there
+N8 (lobby-start.spec kept under another name): killed: portal/tests/acceptance/c0210/lobby.spec.luau is not one of c0210's reviewed files
+N9 (a kept spec removed): killed: portal/tests/acceptance/c0210/build.spec.luau is missing
+N10 (another tests/ file names it): killed: portal/tests/unit/Nothing/nothing.luau names lobby-start
+N11 (a check.sh under a tracker runs it): killed: portal/.tracker/issues/f0209/check.sh names lobby-start.spec.luau
+N12 (c0210's sequestered acceptance folder left in done/): killed: portal/.tracker/issues/done/c0210/acceptance exists: its check.sh would run that folder
+N15 (a skill outside lessons/ names it): killed: portal/skills/portal-test/SKILL.md names lobby-start
+N13 (a lesson file names lobby-start): passes, as it must: (no output)
+N14 (a tracker document names lobby-start): passes, as it must: (no output)
+
+# Option (b) of design review 001 F1 (2026-11-16), .worktree/proto-narrow-c0210-lobby-pin-optb: 4dd7260bd + experiments/option-b.patch (7e809cecc, lobby build), then f0209's prototype.patch 48709e84…2115 and its folder at 75664306e (245d18cf2, portal build)
+# mutants.py at 7e809cecc (lobby-start.spec is the narrowed file):
+unmutated: lobby-start ('survived', '2 passed, 0 failed, 1 spec files') others ('survived', '79 passed, 0 failed, 10 spec files')
+L1 (the start place publishes the portal (f0209's switch, early)): lobby-start survived (2 passed, 0 failed, 1 spec files); others survived (79 passed, 0 failed, 10 spec files)
+L2 (the lobby is not told GamePlaceId): lobby-start survived (2 passed, 0 failed, 1 spec files); others survived (79 passed, 0 failed, 10 spec files)
+L3 (the lobby's GamePlaceId is Snake's id): lobby-start survived (2 passed, 0 failed, 1 spec files); others survived (79 passed, 0 failed, 10 spec files)
+L4 (the lobby build has no runtime folder (--place Portal skips)): lobby-start survived (2 passed, 0 failed, 1 spec files); others survived (79 passed, 0 failed, 10 spec files)
+L5 (the lobby is told LobbyPlaceId too): lobby-start survived (2 passed, 0 failed, 1 spec files); others survived (79 passed, 0 failed, 10 spec files)
+L6 (the start place's output renamed): lobby-start survived (2 passed, 0 failed, 1 spec files); others killed (78 passed, 1 failed, 10 spec files)
+    FAIL tests/acceptance/c0210/manifest.spec.luau :: Pickman's outputs keep their names: version for Pickman, lobby_version for the start place
+L7 (the outputs written last place first): lobby-start killed (0 passed, 2 failed, 1 spec files); others killed (78 passed, 1 failed, 10 spec files)
+    FAIL tests/acceptance/c0210/deploy.spec.luau :: publishes every place whose variable is set, the games first and the start place last, each told every id
+L8 (the start place published first): lobby-start killed (0 passed, 2 failed, 1 spec files); others killed (73 passed, 6 failed, 10 spec files)
+    FAIL tests/acceptance/c0210/way-back.spec.luau :: with ROBLOX_BETA_GAME_PLACE_ID: the game is told LobbyPlaceId, the start place's id
+    FAIL tests/acceptance/c0210/way-back.spec.luau :: with ROBLOX_BETA_PICKMAN_PLACE_ID: the game is told LobbyPlaceId, the start place's id
+    FAIL tests/acceptance/c0210/pickman.spec.luau :: with ROBLOX_BETA_GAME_PLACE_ID: the game first, to its id, from pickman's project, its version as version
+    FAIL tests/acceptance/c0210/pickman.spec.luau :: with ROBLOX_BETA_PICKMAN_PLACE_ID: the game first, to its id, from pickman's project, its version as version
+unmutated: lobby-start ('survived', '2 passed, 0 failed, 1 spec files') others ('survived', '79 passed, 0 failed, 10 spec files')
+L9 (no place is told the start place's id): lobby-start killed (0 passed, 2 failed, 1 spec files); others killed (75 passed, 4 failed, 10 spec files)
+    FAIL tests/acceptance/c0210/plan.spec.luau :: every published place is told every place's id, 0 for a place not published
+    FAIL tests/acceptance/c0210/pickman.spec.luau :: with ROBLOX_BETA_GAME_PLACE_ID: the game first, to its id, from pickman's project, its version as version
+    FAIL tests/acceptance/c0210/pickman.spec.luau :: with ROBLOX_BETA_PICKMAN_PLACE_ID: the game first, to its id, from pickman's project, its version as version
+    FAIL tests/acceptance/c0210/deploy.spec.luau :: publishes every place whose variable is set, the games first and the start place last, each told every id
+L10 (every place published to the first place's id): lobby-start killed (0 passed, 2 failed, 1 spec files); others killed (77 passed, 2 failed, 10 spec files)
+    FAIL tests/acceptance/c0210/deploy.spec.luau :: publishes every place whose variable is set, the games first and the start place last, each told every id
+    FAIL tests/acceptance/c0210/deploy.spec.luau :: a refused publish stops the rest, says which went out, and writes no version
+# ./zn check c0210 at 7e809cecc: ---- 11/12 criteria passed (AC9: c0193/tree only); at 245d18cf2: ---- 11/12 criteria passed (AC9: c0193/tree only)
+# ./zn check f0209 at 245d18cf2: ---- 5/6 criteria passed (AC6: c0193/tree only); portal --full: 111 passed, 0 failed, 20 spec files
+
+# L9 and L10 against the original file, .worktree/proto-narrow-c0210-lobby-pin-pre (0e8ee8817 + this prep's folder, 8a942419b):
+unmutated: lobby-start ('survived', '3 passed, 0 failed, 1 spec files') others ('survived', '79 passed, 0 failed, 10 spec files')
+L9 (no place is told the start place's id): lobby-start killed (1 passed, 2 failed, 1 spec files); others killed (75 passed, 4 failed, 10 spec files)
+    FAIL tests/acceptance/c0210/plan.spec.luau :: every published place is told every place's id, 0 for a place not published
+    FAIL tests/acceptance/c0210/pickman.spec.luau :: with ROBLOX_BETA_GAME_PLACE_ID: the game first, to its id, from pickman's project, its version as version
+    FAIL tests/acceptance/c0210/pickman.spec.luau :: with ROBLOX_BETA_PICKMAN_PLACE_ID: the game first, to its id, from pickman's project, its version as version
+    FAIL tests/acceptance/c0210/deploy.spec.luau :: publishes every place whose variable is set, the games first and the start place last, each told every id
+L10 (every place published to the first place's id): lobby-start killed (1 passed, 2 failed, 1 spec files); others killed (77 passed, 2 failed, 10 spec files)
+    FAIL tests/acceptance/c0210/deploy.spec.luau :: publishes every place whose variable is set, the games first and the start place last, each told every id
+    FAIL tests/acceptance/c0210/deploy.spec.luau :: a refused publish stops the rest, says which went out, and writes no version
