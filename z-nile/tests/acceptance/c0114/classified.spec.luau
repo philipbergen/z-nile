@@ -299,6 +299,8 @@ local function filed(list: { [string]: { string } }, root: string): { string }
 				table.insert(wrong, `{kind} {slug}: not found`)
 			elseif item.root ~= root then
 				table.insert(wrong, `{kind} {slug} ({item.id}): in {item.root}`)
+			-- c0266 override: z-nile's root holds all three types; the items c0114 moved were chores, and this keeps that
+			-- record of them, not a rule for the root
 			elseif root == "z-nile/.tracker" and store.typeOf(item) ~= "chore" then
 				table.insert(wrong, `{kind} {slug} ({item.id}): a {store.typeOf(item)} in z-nile's root`)
 			end
@@ -323,12 +325,24 @@ return t.spec("c0114 every item is filed in its project", function(it)
 		t.expect(table.concat(filed(PICKMAN, "pickman/.tracker"), "\n")).toBe("")
 	end)
 
-	it("no feature or defect is filed in z-nile's root", function()
+	-- c0266 override: z-nile's root holds chores, features and defects (Scope decision, user, 2026-11-12), so the case
+	-- pins each issue's `type:` to its id's letter there, and the defect main-red-specs-after-cuts stays one
+	it("z-nile's root holds chores, features and defects, each typed by its id", function()
+		local wrong: { string } = {}
+		local defect = false
 		for _, item in allItems("issue") do -- c0120 override: read at the top
 			if item.root == "z-nile/.tracker" then
-				t.expect(string.sub(item.id, 1, 1)).toBe("c")
+				local typed = store.readFront(item.doc).type
+				if typed ~= store.typeOf(item) then
+					table.insert(wrong, `{item.id}: type {typed or "(none)"}`)
+				end
+				if item.slug == "main-red-specs-after-cuts" then
+					defect = store.typeOf(item) == "defect"
+				end
 			end
 		end
+		t.expect(table.concat(wrong, "\n")).toBe("")
+		t.expect(defect).toBe(true)
 	end)
 
 	-- List mode is proven first (as c0034's locator does): a check.sh that ignored AC_LIST would run every raft's full
