@@ -116,9 +116,9 @@ ac16() {
 check "AC16: After the layers finish, \`main\` gains a tracker commit and a code commit that does not conflict, and the dispatcher still lands one bind and keeps both commits." ac16
 ac17() {
 	fixtureSpec land-cmd "AC17: zn -C runs this checkout's engine against another worktree of the same repository and refuses a directory of another repository"
-	fixtureSpec land-chain "AC17: a layer that rewrites landcheck.luau so that it finds no problem does not judge its own landing: the base's engine still files the failed check" "AC17: a stack that changes the gate's own driver is a wait for a person (self-gating), whatever its checks say"
+	fixtureSpec land-chain "AC17: a layer that rewrites landcheck.luau so that it finds no problem does not judge its own landing: the base's engine still files the failed check" "AC17: the bind is made by the base's engine: a layer that changes how its own raft's bind is worded does not get its wording" "AC17: a stack that changes the gate's own driver is a wait for a person (self-gating), whatever its checks say"
 }
-check "AC17: The landing is judged and performed by the base's engine: a layer that rewrites \`landcheck.luau\` so that it finds no problem does not judge its own landing, a stack that changes the gate's own driver is a wait for a person, and \`zn -C\` runs this checkout's engine only against a worktree of the same repository." ac17
+check "AC17: The landing is judged and performed by the base's engine: a layer that rewrites \`landcheck.luau\` so that it finds no problem does not judge its own landing, a layer that rewrites how its own raft's bind is worded does not get its wording, a stack that changes the gate's own driver is a wait for a person, and \`zn -C\` runs this checkout's engine only against a worktree of the same repository." ac17
 ac18() {
 	fixtureSpec land-chain "AC18: a game stack waits without cicd.toml and while a cicd lease is held, and lands after the clean-clone full gate and scripts/cicd pass on the bind's tree" "AC18: a red clean-clone full gate is a failure the worker can fix: it runs again twice and the raft then blocks under red-gate, landing nothing"
 }

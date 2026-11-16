@@ -461,6 +461,7 @@ function dispatch.next(f: Facts): Action
 		and f.kind == "raft"
 		and f.where == "active"
 		and f.layered ~= true
+		and f.blockRequest == nil
 		and (not f.pr or f.pr.draft)
 	then
 		return stop(

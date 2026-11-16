@@ -188,6 +188,22 @@ return t.spec("c0252 the chain lands a green stack", function(it)
 	)
 
 	it(
+		"AC5: a worker's block request on a raft with no layer branches is filed, not stopped as a run that left a draft",
+		function()
+			local filed: any = dispatch.next(
+				facts({ layered = false, pr = nil, blockRequest = { reason = "red-gate" }, land = nil })
+			)
+			t.expect(filed.kind).toBe("block")
+			t.expect(filed.reason).toBe("red-gate")
+			t.expect(filed.layer).toBe(nil)
+			-- without a request the same facts are the old raft's run that ended with no pull request
+			local stopped = dispatch.next(facts({ layered = false, pr = nil, land = nil }))
+			t.expect(stopped.kind).toBe("stop")
+			t.expect(stopped.code).toBe(dispatch.EXIT.failure)
+		end
+	)
+
+	it(
 		"AC6: the landing and the block are script steps of the raft's own worktree, with the dispatcher's environment",
 		function()
 			local landStep = dispatch.step("z-land")
