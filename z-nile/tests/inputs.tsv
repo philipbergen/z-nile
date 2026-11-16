@@ -304,3 +304,11 @@ tests/meta/bound-every-probe.spec.luau	z-nile/tests/acceptance/c0191/docs.spec.l
 tests/meta/bound-every-probe.spec.luau	z-nile/lib/bounded.pl
 tests/meta/bound-every-probe.spec.luau	scripts/hooks/pre-bash.sh
 tests/meta/bound-every-probe.spec.luau	z-nile/engine/reap.luau
+tests/acceptance/c0348/docs.spec.luau	z-nile/skills/zz-execute/SKILL.md
+tests/acceptance/c0348/docs.spec.luau	z-nile/skills/zz-rules/SKILL.md
+tests/acceptance/c0348/docs.spec.luau	z-nile/skills/
+tests/acceptance/c0348/docs.spec.luau	z-nile/engine/main.luau
+tests/acceptance/c0348/overrides.spec.luau	z-nile/tests/acceptance/c0084/spend-command.spec.luau
+tests/acceptance/c0348/overrides.spec.luau	z-nile/tests/acceptance/d0333/commit-land.spec.luau
+tests/acceptance/c0348/overrides.spec.luau	z-nile/.tracker/issues/done/c0084/check.sh
+tests/acceptance/c0348/overrides.spec.luau	z-nile/.tracker/issues/done/d0333/check.sh

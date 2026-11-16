@@ -1,0 +1,15 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-16 06:33	1 spec	0	0	test			10.341	8.960		10.341	tokens,ai
+2026-11-16 06:33	1 spec	0	0	test			17.291	15.070		17.291	tokens,ai
+2026-11-16 06:33	1 spec	0	0	test			1.022	0.630		1.022	tokens,ai
+2026-11-16 06:33	1 spec	0	0	test			1.429	0.770		1.429	tokens,ai
+2026-11-16 06:33	1 spec	0	0	test			1.013	0.680		1.013	tokens,ai
+2026-11-16 06:34	1 spec	0	0	test			24.409	20.100		24.409	tokens,ai
+2026-11-16 06:34	1 spec	0	0	test			21.516	18.920		21.516	tokens,ai
+2026-11-16 06:34	1 spec	0	0	test			1.018	0.570		1.018	tokens,ai
+2026-11-16 06:34	1 spec	0	0	test			1.018	0.550		1.018	tokens,ai
+2026-11-16 06:35	1 spec	0	0	test			25.420	22.600		25.420	tokens,ai
+2026-11-16 06:35	affected	0	0	test			38.596	170.220		38.596	tokens,ai
+2026-11-16 06:36	c0348: spend publishes a landed deliver row; the publisher takes a done issue's measured rows	213	17	build							tokens,wall,cpu,ai
+2026-11-16 06:37	11 specs	0	0	test			68.849	300.170		68.849	tokens,ai
+2026-11-16 06:37	1 run	0	0	other			69.145	300.300			tokens,ai
