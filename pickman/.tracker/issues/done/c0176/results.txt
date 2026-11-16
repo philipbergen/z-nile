@@ -1,0 +1,78 @@
+pickman/tests/acceptance/c0153/golden.spec.luau
+	the five specs are still there, and their items' check.sh files still run them
+	tests/acceptance/f0013/snapshot.spec.luau is exactly the narrowed file
+	tests/acceptance/f0018/frame.spec.luau is exactly the narrowed file
+	tests/acceptance/f0030/frame.spec.luau is exactly the narrowed file
+	tests/acceptance/f0032/frame.spec.luau is exactly the narrowed file
+	tests/acceptance/f0100/drops.spec.luau is exactly the narrowed file
+	a check joined onto the comment line above it changes the pinned text
+pickman/tests/acceptance/f0023/session-ghosts.spec.luau
+	the ghosts are on in GAME_CONFIG and off in the default config, and a maze without ghost data has none
+	the ghosts stand still through the ready pause and begin when the run is in play
+	a normal ghost arriving on the player takes a life, names itself, and the run starts dying
+	nothing moves while the player is dying, and after the pause everything is home: the player at the spawn, the ghosts at their starts, the pellets as they were
+	a blue ghost on the player is eaten for 200, the next for 400, and the score and the ghost follow
+	a normal ghost and a blue one at the same moment: the life is lost and nothing is eaten
+	the last pellet clears the level even when a ghost arrives on the same tick
+	a power pellet turns the ghosts blue, and their blue time ends the very tick the run's power does
+	events about a ghost carry its name, and the house's first release is announced
+	a new run starts everything over: the ghosts at their starts and the timetable at scatter
+	every pellet the player eats counts for the house: the ghost next in line counts them
+	a ghost and the player that swap tiles within one tick, through real movement, are a meeting
+	a power pellet eaten on the tile where a normal ghost arrives makes it a blue ghost that is eaten
+	a blue ghost met on the very tick the power ends is a normal ghost again: the life is lost
+	two blue ghosts met in one tick are eaten in the order of the ghosts, 200 then 400
+	a ghost and the player pass each other across the tunnel's edge and are a meeting
+	each ghost's jump tick is recorded: a tunnel wrap now, every ghost at a reset
+	a snapshot of a ghost-less session is exactly what it was before
+pickman/tests/acceptance/f0100/drops.spec.luau
+	a ghost eaten on contact that rolls a drop gives a shot, with a ShotGained event
+	one that rolls no drop gives nothing
+	the session's drops are its seed's Blaster rolls, eat after eat
+	a ghost that is shot rolls no drop
+	no more than three are held: a drop at three is lost
+	shots outlive a death
+	shots outlive a cleared level
+	a new run starts with none
+	every frame carries the count as a number, plain data for replication
+pickman/tests/acceptance/f0100/shots.spec.luau
+	accepts the four fire intents beside the movement intents, and still nothing else
+	a fire counts toward the per-tick limit, and only one is taken a tick
+	a shot eats the nearest active ghost on the line for the chain's points, and costs one shot
+	shots in a row climb the chain: 200, then 400, then 800
+	a blue ghost that is shot is eaten on the same chain as one eaten on contact
+	the chain restarts when the power runs out, so the next shot pays 200
+	a miss spends the shot and scores nothing
+	a wall stops the shot: a ghost beyond it on the same row is safe
+	eyes on the line are passed through, and the active ghost behind them is hit
+	the shot is taken before anyone moves: a ghost on the player's own tile is eaten, not a killer
+	with no shot held, a fire does nothing
+	a fire in a pause is ignored and spends nothing, and is not kept for when play starts
+	a session without ghosts takes no shot and spends nothing
+	only the first fire of a tick is taken, and the shot applies once
+	a shot ghost comes back by the house like an eaten one, and is dangerous again
+	a moving player shoots from the tile it holds before this step's move, not after it
+	the frame names the latest shot the server took, by its step's tick and heading
+	a fire the server drops leaves the frame's shot alone: none held, a pause, a second fire in a tick
+pickman/tests/acceptance/f0101/airborne.spec.luau
+	accepts "Hop" beside the other intents, and still not "Jump" or any other spelling
+	a hop counts toward the per-tick limit, and only one is taken a tick
+	in play a hop starts this step: a Hopped event, and the frame says the tick
+	outside play a hop does nothing, and is not kept for later
+	the next hop starts no sooner than Hop.TICKS + Hop.COOLDOWN steps after the last
+	an active ghost on the player catches them, except in the 2nd to the 11th step of a hop
+	a blue ghost met while airborne is passed over, not eaten; on the ground it is eaten
+	pellets passed over while airborne are not eaten and stay; the player still moves along the rail
+	a shot taken while airborne still eats the ghost on the line
+	running head-on into a ghost: a hop 2 to 9 steps before the meeting carries the player over it
+	the ghosts move on exactly as without the hop
+	each player has their own hop
+	leaving play before step 2 of a hop forgets it, so the pause does not play the arc
+	the last pellet, eaten the step after take-off, forgets the hop for the level-clear pause
+	a catch on the landing step keeps the hop until the respawn
+	the last life, caught on take-off, is game over with no hop and no respawn
+	a take-off catch forgets only that player's hop
+	a hop and a shot in one tick both happen, and each counts toward the limit
+	Session.kill right after take-off forgets the hop, so the pause does not play the arc
+	Session.kill after the step after take-off forgets the hop, so the pause does not play the arc
+	Session.kill after step 2 of a hop keeps it until the respawn

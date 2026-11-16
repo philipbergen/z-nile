@@ -34,7 +34,8 @@ local PINS: { { path: string, sha: string } } = {
 	},
 	{
 		path = "tests/acceptance/f0100/drops.spec.luau",
-		sha = "bd7fe073fa4193702568cf6e415b925b6e5d305fa2608d98b880af2bab1bc249",
+		-- c0176: its sessions are built without f0147's ramp (three lines and one call); the round trip is as it was
+		sha = "611b2ed37535ad74fb53fc216693f6e13708e18bb9b106e2079ebbca0a89feb7",
 	},
 }
 

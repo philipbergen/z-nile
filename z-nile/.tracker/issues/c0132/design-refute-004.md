@@ -1,0 +1,7 @@
+# Answers to design review 004: c0132
+
+Verdict approve; no round 005 (z-design step 5.4: round 4 had no high finding, and these answers change wording and one check, adding no rule, interface or case).
+
+- F1: fixed: the Problem gains the fourth occurrence (c0160's prep gate, pickman 1450/1450, the z-nile stage killed with signal 9, the retry passing at 1232/1232), and each occurrence now quotes its gate's last lines and its log's times instead of citing scratchpad paths. A new **When they died** paragraph dates the kills: within the first minute or two of z-nile's suite, while the slowest-first schedule had its longest files in flight. "Both of the day's kills" is now "all three", and the Timing bullet says "all four". Consequences: none for the design; c0167 gets the dated datum.
+- F2: fixed: OC1 and "The sender itself stays unknown" say the spec files are listed when the specs still run (the pid-alone reading), and that the inside reading lists none. Both, and the skill sentence in the Design, tell c0167 to narrow an inside reading's spec by the report's seconds against the slowest-first schedule. Consequences: the skill text gains one clause; AC6's pins are unchanged and still hold.
+- F3: fixed: `whole_run` requires the summary's `<n> failed` to equal the number of `FAIL … :: ` lines, and fails, printing the run's tail, when they differ. Consequences: none; checked on the prototype (`./zn check c0132` 7/7, M17 still red).

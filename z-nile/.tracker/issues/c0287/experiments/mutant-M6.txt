@@ -1,0 +1,13 @@
+start: 2026-11-15 11:36:02 PST  load averages: 18.03 17.76 16.68
+head: 0e79784e3  env: FAKE_START_DELAY=12
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+FAIL tests/acceptance/c0117/control-cli-mut.spec.luau :: an author waiting on a long nested review stays alive by its heartbeat; a quiet one still stalls
+     /Users/philipbergen/code/pickman/.worktree/mut-c0287-b/z-nile/tests/acceptance/c0117/control-cli-mut.spec:168: expected "ok", got "stalled"
+FAIL tests/acceptance/c0117/control-cli-mut.spec.luau :: a reviewer silent but within its own limits keeps its author alive past the author's own limit
+     /Users/philipbergen/code/pickman/.worktree/mut-c0287-b/z-nile/tests/acceptance/c0117/control-cli-mut.spec:198: expected "ok", got "stalled"
+1 passed, 2 failed, 1 spec files
+exit: 1  seconds: 28
+end: 2026-11-15 11:36:30 PST  load averages: 15.48 17.19 16.51
+mutant: M6
+ z-nile/tests/lib/fakecli.luau | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)

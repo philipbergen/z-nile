@@ -1,0 +1,141 @@
+diff --git a/z-nile/tests/acceptance/c0117/control-cli.spec.luau b/z-nile/tests/acceptance/c0117/control-cli.spec.luau
+--- a/z-nile/tests/acceptance/c0117/control-cli.spec.luau
++++ b/z-nile/tests/acceptance/c0117/control-cli.spec.luau
+ local MODELS = [[
+ [dispatch]
+ auto_merge = ["prep"]
+-stall_seconds = 3
++stall_seconds = 120
++tool_seconds = 240
+ 
+ [fallback.grok]
+ model = "grok-4.7"
+ local function onOrigin(path: string): string
+ 	return fixture.git(h.f.origin, { "show", `main:{path}` })
+ end
+-local function absentAfter(path: string, seconds: number): boolean
+-	local waited = 0
+-	while waited < seconds do
+-		if fs.isFile(path) then
++-- Whether `event` comes true within `seconds` of wall clock: it returns the moment it does, and runs long only when it
++-- never comes. The one way this file waits for anything.
++local function within(seconds: number, event: () -> boolean): boolean
++	local started = os.time()
++	while not event() do
++		if os.time() - started >= seconds then
+ 			return false
+ 		end
+-		waited += task.wait(0.1)
++		task.wait(0.1)
+ 	end
+-	return not fs.isFile(path)
++	return true
++end
++-- a process is dead only when `kill -0` says so ("No such process"): a permission error or a missing kill is no death
++local function dead(pid: string): () -> boolean
++	return function()
++		local r = process.exec("kill", { "-0", pid })
++		return not r.ok and string.find(r.stderr, "No such process", 1, true) ~= nil
++	end
++end
++-- a lock nobody holds (its holder is gone): what the next run on that folder needs
++local function free(path: string): () -> boolean
++	return function()
++		return not runner.held(path)
++	end
++end
++-- the pid a fake's grandchild wrote before the step was killed
++local function grandchildPid(name: string): string
++	return (string.gsub(fs.readFile(`{h.fakes}/{name}.pid`), "%s+", ""))
+ end
+ 
+ return t.spec("c0117 the dispatcher's control of a run", function(it)
+ 			["pickman/.tracker/issues/c0091/c0091.md"] = issue("c0091", "tenth-thing"),
+ 			["pickman/.tracker/issues/c0101/c0101.md"] = issue("c0101", "conc-one"),
+ 			["pickman/.tracker/issues/c0095/c0095.md"] = issue("c0095", "long-review"),
+-			["pickman/.tracker/issues/c0095/.models.toml"] = "[dispatch]\ntool_seconds = 8\nstall_seconds = 8\n",
++			-- the two issues whose cases test a stall keep short limits (10 s, which a starved machine does not reach)
++			["pickman/.tracker/issues/c0095/.models.toml"] = "[dispatch]\ntool_seconds = 10\nstall_seconds = 10\n",
+ 			["pickman/.tracker/issues/c0097/c0097.md"] = issue("c0097", "silent-review"),
+-			["pickman/.tracker/issues/c0097/.models.toml"] = "[dispatch]\ntool_seconds = 24\nstall_seconds = 10\n",
++			["pickman/.tracker/issues/c0097/.models.toml"] = "[dispatch]\ntool_seconds = 30\nstall_seconds = 10\n",
+ 			["pickman/.tracker/issues/c0096/c0096.md"] = string.gsub(
+ 				trackerfix.stub("c0096", "rafted-thing", "prepared-quiet-copper-falcon"),
+ 				"design: draft",
+ 					done += 1
+ 				end)
+ 			end
+-			local waited = 0
+-			while done < 2 and waited < 240 do
+-				waited += task.wait(0.2)
+-			end
++			local finished = within(600, function()
++				return done == 2
++			end)
+ 			fs.removeFile(`{lockDir}/main.lock`)
+-			t.expect(done).toBe(2)
++			t.expect(finished).toBe(true)
+ 			t.expect(results.c0101.code).toBe(0)
+ 			t.expect(results.c0102.code).toBe(0)
+ 			t.expect(count(fakecli.log(h), "published=0")).toBe(10)
+ 	it(
+ 		"an author waiting on a long nested review stays alive by its heartbeat; a quiet one still stalls",
+ 		function()
+-			-- review 004 F2: the author waits on one shell command (its review) for longer than tool_seconds (5 s here)
++			-- review 004 F2: the author waits on one shell command (its review) for longer than tool_seconds (10 s here), once
++			-- the review's CLI has started (the fake's keepalive covers the nested ./zn's start)
+ 			fakecli.clear(h)
+ 			mode("claude.z-design", "waitreview")
+ 			mode("claude.zz-review", "slowreview")
+ 		"a reviewer silent but within its own limits keeps its author alive past the author's own limit",
+ 		function()
+ 			-- review 005 F3: a beat says "alive and within my limits"; here the author's limit is stall_seconds = 10 and
+-			-- the reviewer is silent 18 s inside one tool call, within its tool_seconds = 24
++			-- the reviewer is silent 18 s inside one tool call, within its tool_seconds = 30
+ 			fakecli.clear(h)
+ 			mode("claude.z-design", "waitplain")
+ 			mode("claude.zz-review", "silenttool")
+ 		mode("claude", "late")
+ 		local r = zn({ "dispatch", "z-design", "c0060" })
+ 		t.expect(r.ok).toBe(true)
+-		local waited = 0
+-		while
+-			waited < 10
+-			and fixture.exec(h.f.origin, "git", { "cat-file", "-e", "main:late.lua" }).ok == false
+-		do
+-			waited += task.wait(0.2)
+-		end
+-		t.expect(fixture.exec(h.f.origin, "git", { "cat-file", "-e", "main:late.lua" }).ok).toBe(true)
++		-- the step's run has returned: only now does the detached process push
++		fs.writeFile(`{h.fakes}/late-go`, "")
++		t.expect(within(60, function()
++			return fixture.exec(h.f.origin, "git", { "cat-file", "-e", "main:late.lua" }).ok
++		end)).toBe(true)
+ 		mode("claude", nil)
+ 		local nextRun = zn({ "dispatch", "z-design", "c0060" })
+ 		t.expect(nextRun.code).toBe(0)
+ 		t.expect(fakecli.state(h, "c0050").outcome).toBe("running")
+ 		t.expect(fs.isFile(`{dir}/stop`)).toBe(true);
+ 		(held :: any).stdin:close()
++		t.expect(within(60, free(`{dir}/lock`))).toBe(true)
+ 		fs.removeFile(`{dir}/stop`)
+ 		fs.writeFile(
+ 			`{dir}/state.json`,
+ 			mode("claude", "orphan")
+ 			local r = zn({ "dispatch", "z-design", "c0050" })
+ 			t.expect(r.ok).toBe(false)
+-			t.expect(absentAfter(`{h.fakes}/grandchild-orphan`, 5)).toBe(true)
++			t.expect(within(60, dead(grandchildPid("grandchild-orphan")))).toBe(true)
++			-- a dead dispatcher's lock is free, and its supervisor (which holds the step's own lock) is gone
++			t.expect(within(60, free(`{dirOf("c0050")}/lock`))).toBe(true)
++			t.expect(within(60, free(`{dirOf("c0050")}/run.lock`))).toBe(true)
+ 			local again = zn({ "dispatch", "z-design", "c0050" })
+ 			t.expect(again.ok).toBe(false)
+ 			t.expect(has(again.stdout, "lost")).toBe(true)
+ 		t.expect(has(r.stdout, "is being dispatched")).toBe(true)
+ 		t.expect(fakecli.log(h)).toBe("");
+ 		(holder :: any).stdin:close()
++		t.expect(within(60, free(`{dir}/lock`))).toBe(true)
+ 	end)
+ 
+ 	it("stop signals only a group that is still the run's, and never a group id of 1", function()
