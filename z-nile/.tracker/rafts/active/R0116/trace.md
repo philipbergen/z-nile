@@ -1,0 +1,21 @@
+# Trace: R0116
+
+Commit: 4b88730b33e14c1d6d20d92a8aa3d9b9cec310e7
+
+## Claims
+
+| claim | design | test | code |
+|---|---|---|---|
+| c0386:P1: On origin/main cd308d633, `z-nile/tests/tooling/repo-fence.spec.luau` and the `tests/meta/fence.spec.luau` of all six project homes (pickman, arcade, portal, snake, invaders, asteroids) fail with "checks must not override the repository guards: z-nile/tests/acceptance/c0371/check-paths-homes.spec.luau names env -i", because line 694 of that promoted spec holds the fixture text `env -i grep -qF "src/nothing" "$F"`. | z-nile/.tracker/issues/active/c0386/c0386.md:28 (the failure verified again: 1 of 10 cases in z-nile's fence spec and the same in the six homes, the literal at line 694), z-nile/.tracker/issues/active/c0386/c0386.md:30 (the fix for that line) | z-nile/.tracker/issues/active/c0386/check.sh:19 (AC4, z-nile's fence spec, red before the change), z-nile/.tracker/issues/active/c0386/check.sh:20 (AC5, the six homes' fence specs, red before the change) | none |
+| c0386:S1: The promoted spec no longer trips the fence scan (the fixture text is built from parts, or the spec gets an ALLOWED entry in `repo-fence.spec.luau` with its reason), its case "grep's pattern is text as main reads it" still asserts that an unquoted `grep` after `env -i` gives no findings, and all seven fence specs pass on main. | z-nile/.tracker/issues/active/c0386/c0386.md:30 (built from two literals, the first of the Solution's two options), z-nile/.tracker/issues/active/c0386/c0386.md:35 (the value handed to the reader is byte for byte the old one), z-nile/.tracker/issues/active/c0386/c0386.md:39 (why no ALLOWED entry), z-nile/.tracker/issues/active/c0386/c0386.md:41 (the grep case still fails for the regression it guards, through the rebuilt entry) | z-nile/.tracker/issues/active/c0386/check.sh:12 (AC1, the spec names the option nowhere), z-nile/.tracker/issues/active/c0386/check.sh:16 (AC2, the file is its base with only that entry respelled, so the entry is still in the case's list), z-nile/.tracker/issues/active/c0386/check.sh:18 (AC3, the 28 cases pass, the grep case among them), z-nile/.tracker/issues/active/c0386/check.sh:19 (AC4), z-nile/.tracker/issues/active/c0386/check.sh:20 (AC5); the seven pass on this layer, and on main only the one full gate at the merge proves it | none |
+| c0386:AC1: c0371's promoted spec names the banned env option nowhere. | z-nile/.tracker/issues/active/c0386/c0386.md:30, z-nile/.tracker/issues/active/c0386/c0386.md:35 | z-nile/.tracker/issues/active/c0386/check.sh:12 (runs the acceptance spec env-fixture, one case, a case-insensitive search of the whole file) | none |
+| c0386:AC2: c0371's promoted spec is its merge base with only the fixture entry respelled, byte for byte. | z-nile/.tracker/issues/active/c0386/c0386.md:37 (the whole file pinned against its merge base by one anchored substitution, bytes compared) | z-nile/.tracker/issues/active/c0386/check.sh:16 (narrow.py) | none |
+| c0386:AC3: c0371's promoted check-paths spec passes. | z-nile/.tracker/issues/active/c0386/c0386.md:41 (what the case guards), z-nile/.tracker/issues/active/c0386/c0386.md:46 (the scanner untouched, 28 cases still pass) | z-nile/.tracker/issues/active/c0386/check.sh:18 | none |
+| c0386:AC4: z-nile's repository fence spec passes. | z-nile/.tracker/issues/active/c0386/c0386.md:28 (the failing case), z-nile/.tracker/issues/active/c0386/c0386.md:30 (the fix that removes the literal the scan refuses) | z-nile/.tracker/issues/active/c0386/check.sh:19 | none |
+| c0386:AC5: the fence spec of each of the six game and library homes passes. | z-nile/.tracker/issues/active/c0386/c0386.md:28 (the six homes require the same spec), z-nile/.tracker/issues/active/c0386/c0386.md:55 (why the seven are run by name: the affected gate does not select them) | z-nile/.tracker/issues/active/c0386/check.sh:20 | none |
+| c0386:AC6: the scan still lists env's banned option, and no allowance or exemption key names c0371's spec files. | z-nile/.tracker/issues/active/c0386/c0386.md:39 (no allowance anywhere, the ban kept to the letter), z-nile/.tracker/issues/active/c0386/c0386.md:52 (the scan and its lists are not touched) | z-nile/.tracker/issues/active/c0386/check.sh:29 | none |
+
+## Source files
+
+| file | claims |
+|---|---|
