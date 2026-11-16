@@ -1,0 +1,71 @@
+# c0380 mutation check, 2026-11-15, after design review 001 (E3): ./zn run --time 1800 -- python3 -I mutants.py <clone> <a|b>.
+# Base a: clone of proto-c0380 1a8d82ee4; base b: clone of proto-c0380-revives e8d8860e8 (f0186's prepared prototype, f588be80).
+## base a
+BASE .tracker/issues/c0380/acceptance/narrowed.spec.luau pass 13 passed, 0 failed, 1 spec files
+BASE tests/acceptance/d0124/lobby.spec.luau pass 4 passed, 0 failed, 1 spec files
+BASE tests/acceptance/f0026/lobby.spec.luau pass 5 passed, 0 failed, 1 spec files
+BASE tests/acceptance/f0145/views.spec.luau pass 6 passed, 0 failed, 1 spec files
+N1 killed | tests/acceptance/d0124/lobby.spec.luau is exactly the narrowed file
+N2 killed | tests/acceptance/f0026/lobby.spec.luau is exactly the narrowed file; every board text is compared up to the level, and nothing f0186 removes is pinned
+N3 killed | tests/acceptance/d0124/lobby.spec.luau is exactly the narrowed file; a line joined onto the comment above it changes the pinned text
+N4 killed | tests/acceptance/f0145/views.spec.luau is exactly the narrowed file
+N5 killed | tests/acceptance/c0128/golden.spec.luau is exactly the narrowed file; every board text is compared up to the level, and nothing f0186 removes is pinned
+N6 killed | the ten specs are still there, and their items' check.sh files still run them
+N7 killed | tests/acceptance/f0145/place.spec.luau is exactly the narrowed file
+N8 killed | tests/acceptance/f0026/endtoend.spec.luau is exactly the narrowed file
+C1 killed | the highlight is a rank, not the first row, and an empty panel keeps its message
+C2 killed | the list text is the panel's lines, then the best line
+C3 killed | the highlight is a rank, not the first row, and an empty panel keeps its message
+C4 killed | the same run submits once, and the rank line is that run's all-time place
+C5 killed | the best line starts with the score and the level, on the all-time board only; the list text is the panel's lines, then the best line; an empty all-time board still shows the viewer's best under its message
+C6 killed | the best line starts with the score and the level, on the all-time board only; the list text is the panel's lines, then the best line
+C7 killed | the list text is the panel's lines, then the best line; an empty all-time board still shows the viewer's best under its message
+C8 killed | the list text is the panel's lines, then the best line
+C9 killed | LobbyView adds the best line under the all-time panel only
+C10 killed | the lobby screen asks for all once at start and draws the answer, marking the rank it was sent
+C11 killed | the lobby's line: free, else what is held, else the price and the minutes to the next free start; in test mode the lobby's line says nothing is charged
+C12 killed | the lobby's line: free, else what is held, else the price and the minutes to the next free start
+C13 killed | in test mode the lobby's line says nothing is charged
+C14 killed | the lobby's line: free, else what is held, else the price and the minutes to the next free start
+C15 killed | the lobby's panel keeps each row's rank, name, score and level first, and no lives mark for a row without lives
+C16 killed | a run's entry on the list carries its lives; the lobby's rows read from the list keep its order
+C17 killed | LobbyView adds the best line under the all-time panel only
+W1 SURVIVED (gap); unit boards.spec kills it | 
+W2 SURVIVED (gap) | 
+W3 SURVIVED (gap) | 
+## base b
+BASE .tracker/issues/f0186/acceptance/boards.spec.luau pass 4 passed, 0 failed, 1 spec files
+BASE .tracker/issues/f0186/acceptance/count.spec.luau pass sweeper: stopped 1 process(es) the specs left running
+BASE .tracker/issues/f0186/acceptance/docs.spec.luau pass 3 passed, 0 failed, 1 spec files
+BASE .tracker/issues/f0186/acceptance/gameover.spec.luau pass 4 passed, 0 failed, 1 spec files
+BASE .tracker/issues/f0186/acceptance/price.spec.luau pass sweeper: stopped 1 process(es) the specs left running
+BASE .tracker/issues/f0186/acceptance/rows.spec.luau pass 8 passed, 0 failed, 1 spec files
+BASE .tracker/issues/f0186/acceptance/submit.spec.luau pass 3 passed, 0 failed, 1 spec files
+BASE .tracker/issues/c0380/acceptance/narrowed.spec.luau pass 13 passed, 0 failed, 1 spec files
+BASE tests/acceptance/d0124/lobby.spec.luau pass 4 passed, 0 failed, 1 spec files
+BASE tests/acceptance/f0026/lobby.spec.luau pass 5 passed, 0 failed, 1 spec files
+BASE tests/acceptance/f0145/views.spec.luau pass 6 passed, 0 failed, 1 spec files
+N1 killed | tests/acceptance/d0124/lobby.spec.luau is exactly the narrowed file
+N2 killed | tests/acceptance/f0026/lobby.spec.luau is exactly the narrowed file; every board text is compared up to the level, and nothing f0186 removes is pinned
+N3 killed | tests/acceptance/d0124/lobby.spec.luau is exactly the narrowed file; a line joined onto the comment above it changes the pinned text
+N4 killed | tests/acceptance/f0145/views.spec.luau is exactly the narrowed file
+N5 killed | tests/acceptance/c0128/golden.spec.luau is exactly the narrowed file; every board text is compared up to the level, and nothing f0186 removes is pinned
+N6 killed | the ten specs are still there, and their items' check.sh files still run them
+N7 killed | tests/acceptance/f0145/place.spec.luau is exactly the narrowed file
+N8 killed | tests/acceptance/f0026/endtoend.spec.luau is exactly the narrowed file
+C1 killed | the highlight is a rank, not the first row, and an empty panel keeps its message
+C2 killed | the list text is the panel's lines, then the best line
+C3 killed | the highlight is a rank, not the first row, and an empty panel keeps its message
+C4 killed | the same run submits once, and the rank line is that run's all-time place
+C5 killed | the best line starts with the score and the level, on the all-time board only; the list text is the panel's lines, then the best line; an empty all-time board still shows the viewer's best under its message
+C6 killed | the best line starts with the score and the level, on the all-time board only; the list text is the panel's lines, then the best line
+C7 killed | the list text is the panel's lines, then the best line; an empty all-time board still shows the viewer's best under its message
+C8 killed | the list text is the panel's lines, then the best line
+C9 killed | LobbyView adds the best line under the all-time panel only
+C10 killed | the lobby screen asks for all once at start and draws the answer, marking the rank it was sent
+C11 killed | the lobby's line: free, else what is held, else the price and the minutes to the next free start; in test mode the lobby's line says nothing is charged
+C12 killed | the lobby's line: free, else what is held, else the price and the minutes to the next free start
+C13 killed | in test mode the lobby's line says nothing is charged
+C14 killed | the lobby's line: free, else what is held, else the price and the minutes to the next free start
+C16 killed | a run's entry on the list carries its lives; the lobby's rows read from the list keep its order
+C17 killed | LobbyView adds the best line under the all-time panel only
