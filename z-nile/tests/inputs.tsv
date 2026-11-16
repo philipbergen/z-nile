@@ -296,3 +296,11 @@ tests/acceptance/c0239/docs.spec.luau	SETUP.md
 tests/acceptance/c0239/done.spec.luau	z-nile/engine/main.luau
 tests/acceptance/c0239/land.spec.luau	z-nile/engine/main.luau
 tests/acceptance/c0269/titles.spec.luau	z-nile/tests/
+tests/acceptance/c0371/check-paths-homes.spec.luau	*
+# The selector does not read these lines (c0310). They do not select the meta case.
+tests/meta/bound-every-probe.spec.luau	AGENTS.md
+tests/meta/bound-every-probe.spec.luau	z-nile/skills/zz-review/lessons/bound-every-probe.md
+tests/meta/bound-every-probe.spec.luau	z-nile/tests/acceptance/c0191/docs.spec.luau
+tests/meta/bound-every-probe.spec.luau	z-nile/lib/bounded.pl
+tests/meta/bound-every-probe.spec.luau	scripts/hooks/pre-bash.sh
+tests/meta/bound-every-probe.spec.luau	z-nile/engine/reap.luau

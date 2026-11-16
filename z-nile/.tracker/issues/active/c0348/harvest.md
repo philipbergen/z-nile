@@ -1,0 +1,8 @@
+- design-review-001 F1: zz-arch/validators-restrict-which-rows, zz-test/a-reset-before-every-case-hides-what-a-command-leaves
+- design-review-001 F2: zz-arch/restoring-files-after-a-failed-commit-also-unstages-them, z-design/reasoned-rows-claim-testable-reasons
+- design-review-001 F3: z-design/restated-rules-move-together
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/restated-rules-move-together
+- design-review-001 F6: z-design/declare-what-full-runs-covered
+- design-review-001 F7: z-design/prep-experiments-run-in-standalone-clones
+- design-review-001 F8: z-design/design-the-execution-window

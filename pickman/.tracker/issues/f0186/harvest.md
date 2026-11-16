@@ -1,0 +1,7 @@
+- note f0186's prep: price.spec read f0145's sources at its top, so on the prototype cut from main its first case never ran and the mutants L5 and L6 survived until the reads moved into the stub builder: zz-test/load-dependency-sources-in-the-case
+- design-review-001 F1: z-design/quote-other-preps-before-promising
+- design-review-001 F2: one-off: a second full-screen ScreenGui's order against Flow's fade; HudView already states the rule in code, and no other view of this shape is in flight
+- design-review-001 F3: z-design/accepted-risks-checked-and-decided
+- design-review-001 F4: zz-test/load-dependency-sources-in-the-case
+- design-review-001 F5: z-design/restated-rules-move-together
+- design-review-001 F6: z-design/spec-design-correspondence
