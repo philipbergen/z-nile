@@ -115,6 +115,36 @@ MUTANTS = [
     ("F15", [(KTEST, " before f0209, or after a rollback of it; the portal's own are `portal/tests/runtime/`", "")], A + "docs.spec.luau"),
     ("F16", [("pickman/.tracker/game-design.md", " Since f0209 the experience's start place is the portal", " The lobby stays")], A + "docs.spec.luau"),
     ("F17", [("portal/" + A + "deploy.spec.luau", '\t\te[var] = ""\n', "\t\tlocal _ = var\n")], A + "deploy.spec.luau"),
+    (
+        "F18",
+        [
+            (
+                SETUP,
+                "so every deploy whose event comes after the merge of f0209 publishes the portal there; a run queued or still running at the merge publishes its own older merge (the lobby), and the next deploy corrects it.",
+                "so from the merge of f0209 every deploy publishes the portal there.",
+            )
+        ],
+        A + "docs.spec.luau",
+    ),
+    ("F19", [(RTS, 'for _, attribute in { "PickmanPlaceId", "PortalPlaceId" } do', 'for _, attribute in { "PickmanPlaceId" } do')], A + "runtime.spec.luau"),
+    ("F20", [(RTS, 'for _, attribute in { "PickmanPlaceId", "PortalPlaceId" } do', 'for _, attribute in { "PortalPlaceId" } do')], A + "runtime.spec.luau"),
+    ("F21", [(RTS, 'type(id) == "number" and id >= 1 and id == math.floor(id)', 'type(id) == "number" and id >= 1')], A + "runtime.spec.luau"),
+    ("F22", [(RTS, 'type(id) == "number" and id >= 1 and id == math.floor(id)', 'type(id) == "number"')], A + "runtime.spec.luau"),
+    ("F23", [(RTS, 'assert(type(sss:GetAttribute("PaidPlay")) == "string"', "assert(true")], A + "runtime.spec.luau"),
+    ("F24", [(RTS, 'assert(game:GetService("Players").CharacterAutoLoads == false', "assert(true")], A + "runtime.spec.luau"),
+    ("F25", [(RTS, 'assert(game:GetService("ReplicatedStorage"):FindFirstChild("Arcade")', "assert(true")], A + "runtime.spec.luau"),
+    ("F26", [(RTS, 'assert(game:GetService("ServerStorage"):FindFirstChild("Arcade")', "assert(true")], A + "runtime.spec.luau"),
+    ("F27", [(RTS, 'sss:FindFirstChild("Lobby") == nil', "true")], A + "runtime.spec.luau"),
+    ("F28", [(RTS, 'assert(remotes:FindFirstChild("Snapshot") == nil', "assert(true")], A + "runtime.spec.luau"),
+    ("F29", [(RTS, 'assert(server, "ServerScriptService.Server is missing")', "local _ = server")], A + "runtime.spec.luau"),
+    ("F30", [(RTS, 'assert(remotes, "ReplicatedStorage.Remotes is missing")', "local _ = remotes")], A + "runtime.spec.luau"),
+    ("F31", [(SETUP, " The fix's chore narrows or removes f0209's promoted specs", " The fix's chore narrows what it must")], A + "docs.spec.luau"),
+    (
+        "F32",
+        [(PTEST, " A change that renames a module, a remote or a `Players` property that `tests/runtime/structure.luau` names updates it in the same change.", "")],
+        A + "docs.spec.luau",
+    ),
+    ("F33", [(PTEST, " A script added to or removed from `tests/runtime/` makes z-nile's `c0172/cicd.spec` red under the full gate", " More scripts are welcome")], A + "docs.spec.luau"),
 ]
 
 SPECS = ["start", "deploy", "runtime", "rollback", "docs"]

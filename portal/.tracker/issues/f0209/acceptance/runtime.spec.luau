@@ -138,6 +138,118 @@ return t.spec("f0209 the start place's runtime tests are the portal's", function
 		end
 	end)
 
+	it(
+		"the structure check fails, naming what is missing, for each thing the publish or the project gives the start place",
+		function()
+			local sss = published:GetService("ServerScriptService")
+			local rs = published:GetService("ReplicatedStorage")
+			local players = published:GetService("Players")
+			-- each change returns the undo that puts the published place back as it was
+			local function attribute(name: string, value: any): () -> () -> ()
+				return function()
+					local was = sss:GetAttribute(name)
+					sss:SetAttribute(name, value)
+					return function()
+						sss:SetAttribute(name, was)
+					end
+				end
+			end
+			local function unparent(parent: any, name: string): () -> () -> ()
+				return function()
+					local child = parent:FindFirstChild(name)
+					assert(child, `the published place has no {name} to take away`)
+					child.Parent = nil
+					return function()
+						child.Parent = parent
+					end
+				end
+			end
+			local function add(parent: any, class: string, name: string): () -> () -> ()
+				return function()
+					local extra = roblox.Instance.new(class)
+					extra.Name = name
+					extra.Parent = parent
+					return function()
+						extra.Parent = nil
+					end
+				end
+			end
+			local CHANGES: { { label: string, needle: string, change: () -> () -> () } } = {
+				{
+					label = "PortalPlaceId unset",
+					needle = "PortalPlaceId",
+					change = attribute("PortalPlaceId", nil),
+				},
+				{
+					label = "PortalPlaceId 0",
+					needle = "PortalPlaceId",
+					change = attribute("PortalPlaceId", 0),
+				},
+				{
+					label = "PortalPlaceId 1.5",
+					needle = "PortalPlaceId",
+					change = attribute("PortalPlaceId", 1.5),
+				},
+				{
+					label = "PickmanPlaceId 0",
+					needle = "PickmanPlaceId",
+					change = attribute("PickmanPlaceId", 0),
+				},
+				{ label = "PaidPlay unset", needle = "PaidPlay", change = attribute("PaidPlay", nil) },
+				{
+					label = "CharacterAutoLoads true",
+					needle = "CharacterAutoLoads",
+					change = function()
+						players.CharacterAutoLoads = true
+						return function()
+							players.CharacterAutoLoads = false
+						end
+					end,
+				},
+				{
+					label = "no ReplicatedStorage.Arcade",
+					needle = "ReplicatedStorage.Arcade",
+					change = unparent(rs, "Arcade"),
+				},
+				{
+					label = "no ServerStorage.Arcade",
+					needle = "ServerStorage.Arcade",
+					change = unparent(published:GetService("ServerStorage"), "Arcade"),
+				},
+				{
+					label = "no ServerScriptService.Server",
+					needle = "ServerScriptService.Server",
+					change = unparent(sss, "Server"),
+				},
+				{
+					label = "no ReplicatedStorage.Remotes",
+					needle = "ReplicatedStorage.Remotes",
+					change = unparent(rs, "Remotes"),
+				},
+				{
+					label = "a Lobby beside the portal's server",
+					needle = "ServerScriptService.Lobby",
+					change = add(sss, "Folder", "Lobby"),
+				},
+				{
+					label = "pickman's Snapshot among the remotes",
+					needle = "Remotes.Snapshot",
+					change = add(rs:FindFirstChild("Remotes"), "RemoteEvent", "Snapshot"),
+				},
+			}
+			for _, row in CHANGES do
+				local undo = row.change()
+				local ok, err = runIn(STRUCTURE, published)
+				undo()
+				local named = string.find(tostring(err), row.needle, 1, true) ~= nil
+				t.expect(`{row.label}: {ok} {named}`).toBe(`{row.label}: false true`)
+			end
+			-- every change was undone: the published place passes again
+			local ok, result = runIn(STRUCTURE, published)
+			t.expect(`{ok} {tostring(result)}`).toBe("true PASS")
+		end
+	)
+
 	it("the structure check fails in a portal the publish told nothing, naming Pickman's id", function()
 		local ok, err = runIn(STRUCTURE, untold)
 		t.expect(ok).toBe(false)

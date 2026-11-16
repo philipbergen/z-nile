@@ -1,3 +1,11 @@
 - note f0209's prep found the Beta deploy publishes each ready pull request's merge with main (deploy log of #514), so a start-place switch flips while other pull requests deploy before the merge: z-design/beta-shows-the-last-deployed-merge
 - note a prototype stacked from other preps' patches (c0210 on f0201, f0199's stand-in, f0205, f0208) moved under the runner when c0210's lead began answering its review; the runner refused, as the lesson designs it: z-design/in-flight-bases-pin-their-source
 - note c0210 answered its design review and landed prepared (PR #525) while this prep waited; its moved base made the mutation runner refuse, and the base was recut on c0210 as on main (proto2-portal-start-place): z-design/in-flight-bases-pin-their-source
+- design-review-001 F1: z-design/beta-shows-the-last-deployed-merge
+- design-review-001 F2: zz-test/checkers-fail-one-change-at-a-time
+- design-review-001 F3: zz-test/specs-read-sources-through-the-selector
+- design-review-001 F4: z-design/reasoned-rows-claim-testable-reasons
+- design-review-001 F5: z-design/interfaces-name-where-they-hold
+- design-review-001 F6: one-off: the record lagged the recut (Affected specs, absent dependencies, the F17 row); fixed in the same revision
+- design-review-001 F7: z-design/restated-rules-move-together
+- note c0392's design (the lead, 2026-11-16) showed f0209's prototype kept c0210's sequestered acceptance folder instead of emulating its done, and that c0172/cicd.spec's runtime count depends on the portal's runtime folder size: z-design/in-flight-bases-pin-their-source

@@ -89,11 +89,14 @@ local function place(body: string): any
 	return roblox.deserializePlace(body)
 end
 
--- the script names Rojo gives portal/src/server's files (Main.server.luau is the Script "Main")
+-- the names Rojo gives portal/src/server's entries: a folder by its name, a .luau file by its stem (Main.server.luau
+-- is the Script "Main"); any other file kind is not read
 local function portalServer(): { string }
 	local out: { string } = {}
-	for _, file in fs.readDir("src/server") do
-		local name = string.match(file, "^(.-)%.server%.luau$") or string.match(file, "^(.-)%.luau$")
+	for _, entry in fs.readDir("src/server") do
+		local name = if fs.isDir(`src/server/{entry}`)
+			then entry
+			else string.match(entry, "^(.-)%.server%.luau$") or string.match(entry, "^(.-)%.luau$")
 		if name ~= nil then
 			table.insert(out, name)
 		end
@@ -102,13 +105,19 @@ local function portalServer(): { string }
 	return out
 end
 
-local function children(instance: any): { string }
-	local out: { string } = {}
-	for _, child in instance:GetChildren() do
-		table.insert(out, child.Name)
+-- every name of portal/src/server is a child of the published place's ServerScriptService.Server (the rule, not the
+-- set: a child Rojo adds from another file kind does not fail it)
+local function holdsPortalServer(server: any): string
+	if server == nil then
+		return "no ServerScriptService.Server"
 	end
-	table.sort(out)
-	return out
+	local missing: { string } = {}
+	for _, name in portalServer() do
+		if server:FindFirstChild(name) == nil then
+			table.insert(missing, name)
+		end
+	end
+	return if #missing == 0 then "the portal's server" else `missing {table.concat(missing, ", ")}`
 end
 
 local function has(s: string, needle: string): boolean
@@ -136,7 +145,7 @@ return t.spec("f0209 the deploy publishes the portal at the start place", functi
 				-- the portal's own server, and nothing of pickman's lobby
 				t.expect(sss:FindFirstChild("Lobby")).toBe(nil)
 				t.expect(sss:FindFirstChild("Server") ~= nil).toBe(true)
-				t.expect(children(sss:FindFirstChild("Server"))).toEqual(portalServer())
+				t.expect(holdsPortalServer(sss:FindFirstChild("Server"))).toBe("the portal's server")
 				t.expect(start:GetService("ReplicatedStorage"):FindFirstChild("Arcade") ~= nil).toBe(true)
 				-- told where Pickman is and that it is the start place; paid play's test mode
 				t.expect(sss:GetAttribute("PickmanPlaceId")).toBe(333)
@@ -178,7 +187,7 @@ return t.spec("f0209 the deploy publishes the portal at the start place", functi
 		t.expect(#seen).toBe(1)
 		t.expect(seen[1].path).toBe("/universes/v1/111/places/222/versions")
 		local sss = place(seen[1].body):GetService("ServerScriptService")
-		t.expect(children(sss:FindFirstChild("Server"))).toEqual(portalServer())
+		t.expect(holdsPortalServer(sss:FindFirstChild("Server"))).toBe("the portal's server")
 		t.expect(sss:FindFirstChild("Lobby")).toBe(nil)
 		t.expect(sss:GetAttribute("PickmanPlaceId")).toBe(0)
 		t.expect(fs.readFile(`{work}/github-output`)).toBe("lobby_version=1222\n")

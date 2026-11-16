@@ -13,11 +13,11 @@ check "AC1: in portal/experience.json the start place (the one place reading ROB
 	lune run tests/run -- "$A/start.spec.luau"
 check "AC2: deploy-beta with the checked-in manifest and the real projects publishes Pickman's game and then the portal to ROBLOX_BETA_PLACE_ID, never pickman's lobby: the start place holds the portal's own server and no lobby, told Pickman's and its own id; the game is told the start place's id; the outputs are version and lobby_version; no variable from the caller's shell reaches it." \
 	lune run tests/run -- "$A/deploy.spec.luau"
-check "AC3: portal/tests/runtime holds a structure check that passes in the portal the deploy publishes at the start place and fails in an untold portal, in pickman's lobby and in pickman's game; runtime-test --place Portal runs exactly those scripts at the start place's id." \
+check "AC3: portal/tests/runtime holds a structure check that passes in the portal the deploy publishes at the start place and fails in an untold portal, in pickman's lobby and in pickman's game, and, naming what is missing, for each thing the publish or the project gives the start place, changed one at a time; runtime-test --place Portal runs exactly those scripts at the start place's id." \
 	lune run tests/run -- "$A/runtime.spec.luau"
 check "AC4: the switch is one line of the manifest, and that line set back publishes pickman's lobby to the start place told GamePlaceId, as before f0209." \
 	lune run tests/run -- "$A/rollback.spec.luau"
-check "AC5: SETUP.md, pickman's game design, portal-test and pickman-test say the start place is the portal since f0209, how it is rolled back, and that its runtime tests are portal/tests/runtime." \
+check "AC5: SETUP.md, pickman's game design, portal-test and pickman-test say the start place is the portal since f0209 (published by every deploy whose event comes after the merge, the build that went out read from the run's merge commit), how it is rolled back and that the rollback's chore overrides f0209's five specs, that its runtime tests are portal/tests/runtime, and that a portal change renaming what structure.luau names updates it in the same change." \
 	lune run tests/run -- "$A/docs.spec.luau"
 # the deploy area's promoted specs, from their homes: c0210's (with lobby-start.spec removed by c0392, which would be
 # red here otherwise), and the promoted specs c0210 overrides or guards in pickman and z-nile (c0210's AC9 list); c0210

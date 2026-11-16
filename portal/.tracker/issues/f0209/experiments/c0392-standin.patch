@@ -1,7 +1,7 @@
-diff --git a/portal/.tracker/issues/c0210/check.sh b/portal/.tracker/issues/c0210/check.sh
+diff --git a/portal/.tracker/issues/done/c0210/check.sh b/portal/.tracker/issues/done/c0210/check.sh
 index 0fefecb37..259b51593 100755
---- a/portal/.tracker/issues/c0210/check.sh
-+++ b/portal/.tracker/issues/c0210/check.sh
+--- a/portal/.tracker/issues/done/c0210/check.sh
++++ b/portal/.tracker/issues/done/c0210/check.sh
 @@ -35,8 +35,6 @@ overrides() {
  check "AC9: the deploy area's promoted specs, as this issue changes them (its Overrides), c0193's loops lint and c0194's callers and docs pass from their homes" overrides
  check "AC10: until f0187, Pickman's game place is told LobbyPlaceId, the start place's id (f0187's chore removes this check)" \
@@ -11,10 +11,10 @@ index 0fefecb37..259b51593 100755
  check "AC12: every promoted spec this issue rewrites is exactly its reviewed golden, every other file of those promoted folders exactly as reviewed, and none added or removed (watch files aside)" \
  	lune run tests/run -- "$A/overrides.spec.luau"
  
-diff --git a/portal/.tracker/issues/c0210/acceptance/lobby-start.spec.luau b/portal/.tracker/issues/c0210/acceptance/lobby-start.spec.luau
+diff --git a/portal/tests/acceptance/c0210/lobby-start.spec.luau b/portal/tests/acceptance/c0210/lobby-start.spec.luau
 deleted file mode 100644
 index 2efc8d8af..000000000
---- a/portal/.tracker/issues/c0210/acceptance/lobby-start.spec.luau
+--- a/portal/tests/acceptance/c0210/lobby-start.spec.luau
 +++ /dev/null
 @@ -1,162 +0,0 @@
 ---!strict

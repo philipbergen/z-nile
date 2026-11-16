@@ -34,8 +34,12 @@ return t.spec("f0209 the documents name the portal as the start place", function
 			"which Pickman's game reads as `LobbyPlaceId` for its way back, leads to the portal",
 			"pickman's lobby is no longer published",
 			"A pull request's deploy publishes its merge with `main`",
+			"every deploy whose event comes after the merge of f0209 publishes the portal there",
+			"a run queued or still running at the merge publishes its own older merge (the lobby), and the next deploy corrects it",
+			'`git show <m>:portal/experience.json` shows the Portal place\'s `"build"`',
 		})
 		t.expect(has(s, "until the portal replaces it")).toBe(false)
+		t.expect(has(s, "from the merge of f0209 every deploy publishes the portal")).toBe(false)
 	end)
 
 	it("SETUP.md's Beta section: rolling the start place back is the one line, until c0188", function()
@@ -43,6 +47,8 @@ return t.spec("f0209 the documents name the portal as the start place", function
 			"**Rolling the start place back** (until c0188 deletes the lobby)",
 			'`"build": "portal"` to `"build": "lobby"` on the Portal place',
 			"told `GamePlaceId`, as before f0209",
+			"The fix's chore narrows or removes f0209's promoted specs",
+			"`start`, `deploy`, `runtime`, `rollback` and `docs`",
 		})
 	end)
 
@@ -64,6 +70,9 @@ return t.spec("f0209 the documents name the portal as the start place", function
 			"`tests/runtime/` holds the start place's runtime scripts (f0209)",
 			"lune run scripts/runtime-test -- --place Portal <version>",
 			'returns `"PASS"`, requires nothing',
+			"A change that renames a module, a remote or a `Players` property that `tests/runtime/structure.luau` names updates it in the same change",
+			"Only the full gate and the merge's `cicd` run f0209's specs that build the real places for such a change",
+			"A script added to or removed from `tests/runtime/` makes z-nile's `c0172/cicd.spec` red under the full gate",
 		})
 	end)
 
