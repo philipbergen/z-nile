@@ -17,3 +17,23 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-16 06:01	1 spec	0	0	test			3.456	3.290		3.456	tokens,ai
 2026-11-16 06:01	1 spec	0	0	test			1.023	0.630		1.023	tokens,ai
 2026-11-16 06:01	R0072: trace names the finish commit	0	0	deliver							tokens,wall,cpu,ai
+2026-11-16 06:01	affected	0	0	test			15.087	68.720		15.087	tokens,ai
+2026-11-16 06:01	1 spec	0	0	test			1.018	0.620		1.018	tokens,ai
+2026-11-16 06:01	1 spec	0	0	test			1.016	0.610		1.016	tokens,ai
+2026-11-16 06:01	1 spec	0	0	test			1.017	0.630		1.017	tokens,ai
+2026-11-16 06:01	1 spec	0	0	test			9.791	7.230		9.791	tokens,ai
+2026-11-16 06:02	1 spec	0	0	test			1.023	0.620		1.023	tokens,ai
+2026-11-16 06:02	1 spec	0	0	test			1.026	0.610		1.026	tokens,ai
+2026-11-16 06:02	2 specs	0	0	test			1.022	0.860		1.022	tokens,ai
+2026-11-16 06:02	1 spec	0	0	test			3.469	3.320		3.469	tokens,ai
+2026-11-16 06:02	1 spec	0	0	test			1.019	0.610		1.019	tokens,ai
+2026-11-16 06:02	1 spec	0	0	test			1.026	0.740		1.026	tokens,ai
+2026-11-16 06:02	1 spec	0	0	test			0.822	0.590		0.822	tokens,ai
+2026-11-16 06:02	1 spec	0	0	test			1.039	0.630		1.039	tokens,ai
+2026-11-16 06:02	1 spec	0	0	test			9.489	6.870		9.489	tokens,ai
+2026-11-16 06:02	1 spec	0	0	test			1.027	0.620		1.027	tokens,ai
+2026-11-16 06:02	1 spec	0	0	test			1.034	0.610		1.034	tokens,ai
+2026-11-16 06:02	2 specs	0	0	test			1.043	0.860		1.043	tokens,ai
+2026-11-16 06:02	1 spec	0	0	test			3.699	3.370		3.699	tokens,ai
+2026-11-16 06:02	1 spec	0	0	test			1.027	0.610		1.027	tokens,ai
+2026-11-16 06:03	R0072: trace names the finish commit	0	0	deliver							tokens,wall,cpu,ai
