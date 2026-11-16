@@ -100,6 +100,30 @@ return t.spec("c0210 the deploy lives in portal/", function(it)
 		t.expect(has(beta, "in `pickman/`")).toBe(false)
 	end)
 
+	-- c0210 design review 001 F5: the skills that say where @scripts points move with the alias
+	it("zz-test and pickman-test say @scripts is portal's scripts/", function()
+		t.expect(
+			has(
+				read("z-nile/skills/zz-test/SKILL.md"),
+				"(and pickman's `@logic` and `@shared` at pickman's folders, and `@scripts` at portal's `scripts/` (c0210), where the deploy lives)"
+			)
+		).toBe(true)
+		t.expect(
+			has(
+				read("pickman/skills/pickman-test/SKILL.md"),
+				"where `pickman/.luaurc` points `@tests`, `@logic` and `@shared` at pickman's own folders, and `@scripts` at portal's `scripts/` (c0210), where the deploy lives."
+			)
+		).toBe(true)
+		t.expect(has(read("z-nile/skills/zz-test/SKILL.md"), "`@shared` and `@scripts` at pickman's folders"))
+			.toBe(false)
+		t.expect(
+			has(
+				read("pickman/skills/pickman-test/SKILL.md"),
+				"`@shared` and `@scripts` at pickman's own folders"
+			)
+		).toBe(false)
+	end)
+
 	it("pickman-test's runtime row runs the runner from portal/ with --place", function()
 		local testing = read("pickman/skills/pickman-test/SKILL.md")
 		t.expect(has(testing, "lune run scripts/runtime-test -- --place Pickman <version>")).toBe(true)

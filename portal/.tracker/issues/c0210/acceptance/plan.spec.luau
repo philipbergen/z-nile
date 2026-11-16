@@ -187,6 +187,22 @@ return t.spec("c0210 the Beta publish's plan", function(it)
 		end
 	)
 
+	-- c0210 design review 001 F7: the attributes the plan writes are exactly those the reader keeps extras off
+	it(
+		"the attributes every place is told are exactly the reader's reserved names: every place id, PaidPlay, the catalog ids",
+		function()
+			local told: { string } = {}
+			for name in Beta.attributes({}) do
+				table.insert(told, name)
+			end
+			table.sort(told)
+			local reserved = table.clone(Experience.reserved())
+			table.sort(reserved)
+			t.expect(told).toEqual(reserved)
+			t.expect(#told).toBe(5 + 1 + 8)
+		end
+	)
+
 	it("the old ROBLOX_BETA_GAME_PLACE_ID is still Pickman's place id", function()
 		local p = plan({ ROBLOX_BETA_GAME_PLACE_ID = "333" })
 		t.expect(names(p)).toEqual({ "Pickman@333", "Portal@222" })

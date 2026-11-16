@@ -1,6 +1,7 @@
 --!strict
 -- c0210 AC5: scripts/runtime-test -- [--place <name>] <version> [files...] over a fixture experience (a manifest under
 -- .cache/c0210-runtime), against a local fake of Roblox's Luau Execution API that passes a script with "PASS-ME" in it.
+local Experience = require("@scripts/lib/experience")
 local fs = require("@lune/fs")
 local net = require("@lune/net")
 local process = require("@lune/process")
@@ -76,17 +77,29 @@ local MANIFEST = [[
 }
 ]]
 
+-- c0210 design review 001 F2: Lune's `env` adds to what the child inherits, so every variable the manifest names is
+-- given, "" unless the case sets it: a caller's exported ROBLOX_BETA_*_PLACE_ID never reaches the command
+local function blanks(): { [string]: string }
+	local manifest = Experience.parse(MANIFEST) :: Experience.Manifest
+	local out: { [string]: string } = {}
+	for _, place in manifest.places do
+		for _, var in place.env do
+			out[var] = ""
+		end
+	end
+	return out
+end
+
 local function run(args: { string }, extra: { [string]: string }, port: number?, cwd: string?)
 	local argv = { "run", script, "--" }
 	for _, a in args do
 		table.insert(argv, a)
 	end
-	local env: { [string]: string } = {
-		ROBLOX_API_KEY = KEY,
-		ROBLOX_BETA_UNIVERSE_ID = "111",
-		ROBLOX_BETA_PLACE_ID = "222",
-		OPENCLOUD_BASE = if port then `http://127.0.0.1:{port}` else "",
-	}
+	local env = blanks()
+	env.ROBLOX_API_KEY = KEY
+	env.ROBLOX_BETA_UNIVERSE_ID = "111"
+	env.ROBLOX_BETA_PLACE_ID = "222"
+	env.OPENCLOUD_BASE = if port then `http://127.0.0.1:{port}` else ""
 	for k, v in extra do
 		env[k] = v
 	end
@@ -119,8 +132,39 @@ return t.spec("c0210 scripts/runtime-test --place", function(it)
 	fs.writeFile(`{work}/suites/pickman/a.luau`, 'return "PASS-ME pickman a"')
 	fs.writeFile(`{work}/one.luau`, 'return "PASS-ME one"')
 
+	it(
+		"the child's environment names every variable of the manifest, blank unless the case sets it",
+		function()
+			local env = blanks()
+			local names: { string } = {}
+			for name, value in env do
+				table.insert(names, name)
+				t.expect(value).toBe("")
+			end
+			table.sort(names)
+			t.expect(names).toEqual({
+				"ROBLOX_BETA_ASTEROIDS_PLACE_ID",
+				"ROBLOX_BETA_GAME_PLACE_ID",
+				"ROBLOX_BETA_INVADERS_PLACE_ID",
+				"ROBLOX_BETA_PICKMAN_PLACE_ID",
+				"ROBLOX_BETA_PLACE_ID",
+				"ROBLOX_BETA_SNAKE_PLACE_ID",
+			})
+		end
+	)
+
 	it("usage, exit 2: --place with no name, a version that is not a whole number >= 1", function()
-		for _, args in { { "--place" }, { "--place", "Snake" }, { "--place", "Snake", "0" }, { "1.5" }, {} } do
+		-- c0210 design review 001 F7: `--place 7` is a place named 7 with no version, never version 7
+		for _, args in
+			{
+				{ "--place" },
+				{ "--place", "7" },
+				{ "--place", "Snake" },
+				{ "--place", "Snake", "0" },
+				{ "1.5" },
+				{},
+			}
+		do
 			local r = run(args, {})
 			t.expect(r.code).toBe(2)
 			t.expect(has(r.stdout, "usage: lune run scripts/runtime-test -- [--place <name>] <version>"))

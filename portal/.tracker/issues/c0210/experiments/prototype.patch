@@ -29,7 +29,7 @@ index 346aaa9da..d2a3c0901 100644
          run: |
            gh pr comment "$PR" --edit-last --create-if-none \
 diff --git a/SETUP.md b/SETUP.md
-index 6688a9af3..e2402d002 100644
+index 6cc0fcc7c..0a6943c6d 100644
 --- a/SETUP.md
 +++ b/SETUP.md
 @@ -51,18 +51,18 @@ Verification is local. A game pull request's merge runs `z-nile/check.sh --full`
@@ -327,9 +327,18 @@ index 76509e835..000000000
 -print(`{suite.passed} passed, {suite.failed} failed, {#scripts} runtime scripts`)
 -process.exit(if suite.failed == 0 then 0 else 1)
 diff --git a/pickman/skills/pickman-test/SKILL.md b/pickman/skills/pickman-test/SKILL.md
-index 9f74e760d..18a247a28 100644
+index 9f74e760d..893f73ec5 100644
 --- a/pickman/skills/pickman-test/SKILL.md
 +++ b/pickman/skills/pickman-test/SKILL.md
+@@ -8,7 +8,7 @@ description: How pickman's game is tested - its spec tiers (unit, helper, contra
+ This is pickman's half of testing. The gate, the runner, `check.sh` files, sequestration, the affected-spec selector and the repository guards are z-nile's, in the zz-test skill, and bind here too. The arcade's projects extend this skill (`extends: pickman-test`, c0184): a rule changed here changes theirs, so a change names its effect on them.
+ 
+ ## Running pickman's specs
+-Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run -- tests/unit/Maze`, or `pickman/check.sh` for pickman's whole gate (zz-test skill, Running tests). Every path below is relative to `pickman/`, where `pickman/.luaurc` points `@tests`, `@logic`, `@shared` and `@scripts` at pickman's own folders. `sim`, `place`, `fakeengine` and `plain` are pickman's helpers; the assertions (`@tests/lib/t`) and `renamed` are shared, re-exported from `pickman/tests/lib/`, and so is `place` (the Rojo-built place, `z-nile/tests/lib/place.luau`, c0185). `@arcade` is the library's `src/shared` (`../arcade/src/shared`).
++Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run -- tests/unit/Maze`, or `pickman/check.sh` for pickman's whole gate (zz-test skill, Running tests). Every path below is relative to `pickman/`, where `pickman/.luaurc` points `@tests`, `@logic` and `@shared` at pickman's own folders, and `@scripts` at portal's `scripts/` (c0210), where the deploy lives. `sim`, `place`, `fakeengine` and `plain` are pickman's helpers; the assertions (`@tests/lib/t`) and `renamed` are shared, re-exported from `pickman/tests/lib/`, and so is `place` (the Rojo-built place, `z-nile/tests/lib/place.luau`, c0185). `@arcade` is the library's `src/shared` (`../arcade/src/shared`).
+ 
+ ## Spec tiers
+ | dir | tier | may require |
 @@ -18,7 +18,7 @@ Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run
  | `tests/contract/<Consumer>__<Provider>.spec.luau` | the Provider API exactly as the Consumer relies on it | the Provider only |
  | `tests/integration/` | a few headless cross-feature checks that don't step time (see Simulations) | several features |
@@ -363,16 +372,36 @@ index cb8e211cf..0b38838e9 100644
 +portal/scripts/lib/opencloud.luau
 +portal/scripts/runtime-test.luau
 diff --git a/pickman/tests/acceptance/c0003/runner-e2e.spec.luau b/pickman/tests/acceptance/c0003/runner-e2e.spec.luau
-index 4dc502632..8d1fdbd3b 100644
+index 4dc502632..362e90559 100644
 --- a/pickman/tests/acceptance/c0003/runner-e2e.spec.luau
 +++ b/pickman/tests/acceptance/c0003/runner-e2e.spec.luau
-@@ -9,10 +9,33 @@ local t = require("@tests/lib/t")
+@@ -9,10 +9,53 @@ local t = require("@tests/lib/t")
  
  -- c0120 override: pickman's home, where its specs run (its scripts, project files and .cache are there)
  local root = (string.gsub(process.cwd, "/+$", ""))
 -local script = `{root}/scripts/runtime-test`
 +-- c0210 override: the deploy scripts moved to portal/scripts (pickman's @scripts alias points there too)
 +local script = `{root}/../portal/scripts/runtime-test`
++
++-- c0210 override (design review 001 F2): Lune's `env` adds to what the child inherits, so every place variable of the
++-- manifest a case does not set is given as "", and a caller's exported ROBLOX_BETA_*_PLACE_ID never reaches the command
++local PLACE_VARS = {
++	"ROBLOX_BETA_PICKMAN_PLACE_ID",
++	"ROBLOX_BETA_GAME_PLACE_ID",
++	"ROBLOX_BETA_SNAKE_PLACE_ID",
++	"ROBLOX_BETA_INVADERS_PLACE_ID",
++	"ROBLOX_BETA_ASTEROIDS_PLACE_ID",
++}
++local function hermetic(env: { [string]: string }): { [string]: string }
++	local out: { [string]: string } = {}
++	for _, var in PLACE_VARS do
++		out[var] = ""
++	end
++	for k, v in env do
++		out[k] = v
++	end
++	return out
++end
  local work = `{root}/.cache/runner-e2e`
  local KEY = "KEY-NOT-IN-OUTPUT"
  
@@ -401,7 +430,7 @@ index 4dc502632..8d1fdbd3b 100644
  -- a fake: creating a task answers with a path, and polling it completes at once with PASS when the script
  -- text has "PASS-ME" in it, else with "nope"
  local function serve(): (number, { string }, () -> ())
-@@ -59,24 +82,37 @@ local function serve(): (number, { string }, () -> ())
+@@ -59,24 +102,37 @@ local function serve(): (number, { string }, () -> ())
  	error("no free port")
  end
  
@@ -440,7 +469,7 @@ index 4dc502632..8d1fdbd3b 100644
 +			env[k] = v
 +		end
 +	end
-+	return process.exec("lune", argv, { cwd = cwd or work, env = env })
++	return process.exec("lune", argv, { cwd = cwd or work, env = hermetic(env) })
  end
  
  return t.spec("c0030 scripts/runtime-test end to end", function(it)
@@ -449,7 +478,7 @@ index 4dc502632..8d1fdbd3b 100644
  	fs.writeFile(`{work}/good.luau`, 'return "PASS-ME"')
  	fs.writeFile(`{work}/bad.luau`, 'return "something else"')
  
-@@ -100,13 +136,24 @@ return t.spec("c0030 scripts/runtime-test end to end", function(it)
+@@ -100,13 +156,24 @@ return t.spec("c0030 scripts/runtime-test end to end", function(it)
  		t.expect(string.find(r.stdout, "2 passed, 1 failed", 1, true) ~= nil).toBe(true)
  	end)
  
@@ -482,19 +511,48 @@ index 4dc502632..8d1fdbd3b 100644
  	it("the version is part of the request: a different one is not found", function()
  		local port, _, stop = serve()
 diff --git a/pickman/tests/acceptance/c0003/runner.spec.luau b/pickman/tests/acceptance/c0003/runner.spec.luau
-index e32ab3697..2cabd1c0b 100644
+index e32ab3697..5df9e9ac7 100644
 --- a/pickman/tests/acceptance/c0003/runner.spec.luau
 +++ b/pickman/tests/acceptance/c0003/runner.spec.luau
-@@ -6,7 +6,8 @@ local t = require("@tests/lib/t")
+@@ -6,7 +6,28 @@ local t = require("@tests/lib/t")
  
  -- c0120 override: pickman's home, where its specs run (its scripts, project files and .cache are there)
  local root = (string.gsub(process.cwd, "/+$", ""))
 -local script = `{root}/scripts/runtime-test`
 +-- c0210 override: the deploy scripts moved to portal/scripts (pickman's @scripts alias points there too)
 +local script = `{root}/../portal/scripts/runtime-test`
++
++-- c0210 override (design review 001 F2): Lune's `env` adds to what the child inherits, so every place variable of the
++-- manifest a case does not set is given as "", and a caller's exported ROBLOX_BETA_*_PLACE_ID never reaches the command
++local PLACE_VARS = {
++	"ROBLOX_BETA_PICKMAN_PLACE_ID",
++	"ROBLOX_BETA_GAME_PLACE_ID",
++	"ROBLOX_BETA_SNAKE_PLACE_ID",
++	"ROBLOX_BETA_INVADERS_PLACE_ID",
++	"ROBLOX_BETA_ASTEROIDS_PLACE_ID",
++}
++local function hermetic(env: { [string]: string }): { [string]: string }
++	local out: { [string]: string } = {}
++	for _, var in PLACE_VARS do
++		out[var] = ""
++	end
++	for k, v in env do
++		out[k] = v
++	end
++	return out
++end
  
  local NONE = { ROBLOX_API_KEY = "", ROBLOX_BETA_UNIVERSE_ID = "", ROBLOX_BETA_PLACE_ID = "" }
  
+@@ -15,7 +36,7 @@ local function run(args: { string }, env: { [string]: string })
+ 	for _, a in args do
+ 		table.insert(argv, a)
+ 	end
+-	return process.exec("lune", argv, { env = env, cwd = root })
++	return process.exec("lune", argv, { env = hermetic(env), cwd = root })
+ end
+ 
+ return t.spec("c0030 scripts/runtime-test", function(it)
 diff --git a/pickman/tests/acceptance/c0003/watch.txt b/pickman/tests/acceptance/c0003/watch.txt
 index cb8e211cf..0b38838e9 100644
 --- a/pickman/tests/acceptance/c0003/watch.txt
@@ -542,20 +600,45 @@ index cb8e211cf..0b38838e9 100644
 +portal/scripts/lib/opencloud.luau
 +portal/scripts/runtime-test.luau
 diff --git a/pickman/tests/acceptance/c0015/deploy-cli.spec.luau b/pickman/tests/acceptance/c0015/deploy-cli.spec.luau
-index c45977918..3537fe47a 100644
+index c45977918..5850b371f 100644
 --- a/pickman/tests/acceptance/c0015/deploy-cli.spec.luau
 +++ b/pickman/tests/acceptance/c0015/deploy-cli.spec.luau
-@@ -7,7 +7,8 @@ local t = require("@tests/lib/t")
+@@ -7,11 +7,32 @@ local t = require("@tests/lib/t")
  
  -- c0120 override: pickman's home, where its specs run (its scripts, project files and .cache are there)
  local root = (string.gsub(process.cwd, "/+$", ""))
 -local script = `{root}/scripts/deploy-beta`
 +-- c0210 override: the deploy scripts moved to portal/scripts (pickman's @scripts alias points there too)
 +local script = `{root}/../portal/scripts/deploy-beta`
++
++-- c0210 override (design review 001 F2): Lune's `env` adds to what the child inherits, so every place variable of the
++-- manifest a case does not set is given as "", and a caller's exported ROBLOX_BETA_*_PLACE_ID never reaches the command
++local PLACE_VARS = {
++	"ROBLOX_BETA_PICKMAN_PLACE_ID",
++	"ROBLOX_BETA_GAME_PLACE_ID",
++	"ROBLOX_BETA_SNAKE_PLACE_ID",
++	"ROBLOX_BETA_INVADERS_PLACE_ID",
++	"ROBLOX_BETA_ASTEROIDS_PLACE_ID",
++}
++local function hermetic(env: { [string]: string }): { [string]: string }
++	local out: { [string]: string } = {}
++	for _, var in PLACE_VARS do
++		out[var] = ""
++	end
++	for k, v in env do
++		out[k] = v
++	end
++	return out
++end
  local work = `{root}/.cache/deploy-cli`
  
  local function run(env: { [string]: string }, cwd: string?)
-@@ -44,6 +45,19 @@ return t.spec("c0140 scripts/deploy-beta", function(it)
+-	return process.exec("lune", { "run", script }, { env = env, cwd = cwd or root })
++	return process.exec("lune", { "run", script }, { env = hermetic(env), cwd = cwd or root })
+ end
+ 
+ return t.spec("c0140 scripts/deploy-beta", function(it)
+@@ -44,6 +65,19 @@ return t.spec("c0140 scripts/deploy-beta", function(it)
  
  	it("when the build fails it fails, reports it, and never reaches the API", function()
  		-- configured, but there is no Rojo project in `work`; a valid key would otherwise be sent
@@ -576,10 +659,10 @@ index c45977918..3537fe47a 100644
  			ROBLOX_API_KEY = "KEY-NOT-IN-OUTPUT",
  			ROBLOX_BETA_UNIVERSE_ID = "1",
 diff --git a/pickman/tests/acceptance/c0015/deploy-e2e.spec.luau b/pickman/tests/acceptance/c0015/deploy-e2e.spec.luau
-index d3da011ad..28feeb7ab 100644
+index d3da011ad..312225b6e 100644
 --- a/pickman/tests/acceptance/c0015/deploy-e2e.spec.luau
 +++ b/pickman/tests/acceptance/c0015/deploy-e2e.spec.luau
-@@ -5,14 +5,44 @@
+@@ -5,14 +5,64 @@
  local fs = require("@lune/fs")
  local net = require("@lune/net")
  local process = require("@lune/process")
@@ -591,6 +674,26 @@ index d3da011ad..28feeb7ab 100644
 -local script = `{root}/scripts/deploy-beta`
 +-- c0210 override: the deploy scripts moved to portal/scripts (pickman's @scripts alias points there too)
 +local script = `{root}/../portal/scripts/deploy-beta`
++
++-- c0210 override (design review 001 F2): Lune's `env` adds to what the child inherits, so every place variable of the
++-- manifest a case does not set is given as "", and a caller's exported ROBLOX_BETA_*_PLACE_ID never reaches the command
++local PLACE_VARS = {
++	"ROBLOX_BETA_PICKMAN_PLACE_ID",
++	"ROBLOX_BETA_GAME_PLACE_ID",
++	"ROBLOX_BETA_SNAKE_PLACE_ID",
++	"ROBLOX_BETA_INVADERS_PLACE_ID",
++	"ROBLOX_BETA_ASTEROIDS_PLACE_ID",
++}
++local function hermetic(env: { [string]: string }): { [string]: string }
++	local out: { [string]: string } = {}
++	for _, var in PLACE_VARS do
++		out[var] = ""
++	end
++	for k, v in env do
++		out[k] = v
++	end
++	return out
++end
  local work = `{root}/.cache/deploy-e2e`
  local KEY = "KEY-NOT-IN-OUTPUT"
  
@@ -625,7 +728,16 @@ index d3da011ad..28feeb7ab 100644
  type Seen = {
  	method: string,
  	path: string,
-@@ -73,6 +103,7 @@ return t.spec("c0140 scripts/deploy-beta end to end", function(it)
+@@ -64,7 +114,7 @@ local function run(port: number, extra: { [string]: string }?)
+ 			env[k] = v
+ 		end
+ 	end
+-	return process.exec("lune", { "run", script }, { env = env, cwd = work })
++	return process.exec("lune", { "run", script }, { env = hermetic(env), cwd = work })
+ end
+ 
+ return t.spec("c0140 scripts/deploy-beta end to end", function(it)
+@@ -73,6 +123,7 @@ return t.spec("c0140 scripts/deploy-beta end to end", function(it)
  		`{work}/default.project.json`,
  		'{"name":"fixture","tree":{"$className":"DataModel","ReplicatedStorage":{"$className":"ReplicatedStorage"}}}'
  	)
@@ -749,7 +861,7 @@ index cb8e211cf..0b38838e9 100644
 +portal/scripts/lib/opencloud.luau
 +portal/scripts/runtime-test.luau
 diff --git a/pickman/tests/acceptance/c0064/deploy.spec.luau b/pickman/tests/acceptance/c0064/deploy.spec.luau
-index 038b975dd..cf9a93731 100644
+index 038b975dd..e0dbb8e79 100644
 --- a/pickman/tests/acceptance/c0064/deploy.spec.luau
 +++ b/pickman/tests/acceptance/c0064/deploy.spec.luau
 @@ -1,5 +1,6 @@
@@ -770,7 +882,19 @@ index 038b975dd..cf9a93731 100644
  local work = `{root}/.cache/c0064-deploy`
  local KEY = "KEY-NOT-IN-OUTPUT"
  local GAME_PATH = "/universes/v1/111/places/333/versions"
-@@ -67,11 +69,34 @@ local function has(s: string, needle: string): boolean
+@@ -57,6 +59,11 @@ local function run(dir: string, port: number, game: string?, output: string?)
+ 			ROBLOX_BETA_UNIVERSE_ID = "111",
+ 			ROBLOX_BETA_PLACE_ID = "222",
+ 			ROBLOX_BETA_GAME_PLACE_ID = game or "",
++			-- c0210 override (design review 001 F2): every other place variable blank, so the caller's shell never reaches it
++			ROBLOX_BETA_PICKMAN_PLACE_ID = "",
++			ROBLOX_BETA_SNAKE_PLACE_ID = "",
++			ROBLOX_BETA_INVADERS_PLACE_ID = "",
++			ROBLOX_BETA_ASTEROIDS_PLACE_ID = "",
+ 			OPENCLOUD_BASE = `http://127.0.0.1:{port}`,
+ 			GITHUB_OUTPUT = output or "",
+ 		},
+@@ -67,11 +74,34 @@ local function has(s: string, needle: string): boolean
  	return string.find(s, needle, 1, true) ~= nil
  end
  
@@ -805,7 +929,7 @@ index 038b975dd..cf9a93731 100644
  	fs.writeFile(`{dir}/game/Main.server.luau`, 'print("game")')
  	fs.writeFile(`{dir}/lobby/Main.server.luau`, 'print("lobby")')
  	fs.writeFile(
-@@ -118,10 +143,18 @@ return t.spec("c0064 scripts/deploy-beta with two places", function(it)
+@@ -118,10 +148,18 @@ return t.spec("c0064 scripts/deploy-beta with two places", function(it)
  		t.expect(game:FindFirstChild("Server") ~= nil).toBe(true)
  		t.expect(game:GetAttribute("GamePlaceId")).toBe(nil)
  		t.expect(game:GetAttribute("LobbyPlaceId")).toBe(222) -- the way back (f0065)
@@ -824,7 +948,7 @@ index 038b975dd..cf9a93731 100644
  		t.expect(has(r.stdout, "lobby_version=42")).toBe(true)
  		t.expect(fs.readFile(out)).toBe("existing=1\nversion=41\nlobby_version=42\n")
  		t.expect(has(r.stdout .. r.stderr, KEY)).toBe(false)
-@@ -132,8 +165,10 @@ return t.spec("c0064 scripts/deploy-beta with two places", function(it)
+@@ -132,8 +170,10 @@ return t.spec("c0064 scripts/deploy-beta with two places", function(it)
  	end)
  
  	it(
@@ -836,7 +960,7 @@ index 038b975dd..cf9a93731 100644
  			fs.writeFile(out, "")
  			local port, seen, stop = serve({ [LOBBY_PATH] = { status = 200, body = '{"versionNumber":7}' } })
  			local r = run(good, port, nil, out)
-@@ -141,12 +176,15 @@ return t.spec("c0064 scripts/deploy-beta with two places", function(it)
+@@ -141,12 +181,15 @@ return t.spec("c0064 scripts/deploy-beta with two places", function(it)
  			t.expect(r.ok).toBe(true)
  			t.expect(#seen).toBe(1)
  			t.expect(seen[1].path).toBe(LOBBY_PATH) -- the start place
@@ -1100,7 +1224,7 @@ index 08e9837f2..53a74768d 100644
  	end)
  end)
 diff --git a/pickman/tests/acceptance/c0064/runtime.spec.luau b/pickman/tests/acceptance/c0064/runtime.spec.luau
-index c76423ec0..9c5b8a311 100644
+index c76423ec0..290fff4f6 100644
 --- a/pickman/tests/acceptance/c0064/runtime.spec.luau
 +++ b/pickman/tests/acceptance/c0064/runtime.spec.luau
 @@ -1,8 +1,8 @@
@@ -1149,7 +1273,7 @@ index c76423ec0..9c5b8a311 100644
  local function has(s: string, needle: string): boolean
  	return string.find(s, needle, 1, true) ~= nil
  end
-@@ -115,7 +138,7 @@ local function run(port: number, args: { string }, game: string?)
+@@ -115,12 +138,17 @@ local function run(port: number, args: { string }, game: string?)
  		table.insert(argv, a)
  	end
  	return process.exec("lune", argv, {
@@ -1158,7 +1282,17 @@ index c76423ec0..9c5b8a311 100644
  		env = {
  			ROBLOX_API_KEY = KEY,
  			ROBLOX_BETA_UNIVERSE_ID = "111",
-@@ -128,6 +151,7 @@ end
+ 			ROBLOX_BETA_PLACE_ID = "222",
+ 			ROBLOX_BETA_GAME_PLACE_ID = game or "",
++			-- c0210 override (design review 001 F2): every other place variable blank, so the caller's shell never reaches it
++			ROBLOX_BETA_PICKMAN_PLACE_ID = "",
++			ROBLOX_BETA_SNAKE_PLACE_ID = "",
++			ROBLOX_BETA_INVADERS_PLACE_ID = "",
++			ROBLOX_BETA_ASTEROIDS_PLACE_ID = "",
+ 			OPENCLOUD_BASE = `http://127.0.0.1:{port}`,
+ 		},
+ 	})
+@@ -128,6 +156,7 @@ end
  
  return t.spec("c0064 runtime tests per place", function(it)
  	fs.writeDir(work)
@@ -1166,7 +1300,7 @@ index c76423ec0..9c5b8a311 100644
  	fs.writeFile(`{work}/good.luau`, 'return "PASS-ME"')
  	fs.writeFile(
  		`{work}/lobby.project.json`,
-@@ -229,10 +253,10 @@ return t.spec("c0064 runtime tests per place", function(it)
+@@ -229,10 +258,10 @@ return t.spec("c0064 runtime tests per place", function(it)
  	)
  
  	it(
@@ -1179,7 +1313,7 @@ index c76423ec0..9c5b8a311 100644
  			stop()
  			local sent = posts(calls)
  			t.expect(#sent).toBe(#lobbyScripts())
-@@ -250,37 +274,54 @@ return t.spec("c0064 runtime tests per place", function(it)
+@@ -250,37 +279,54 @@ return t.spec("c0064 runtime tests per place", function(it)
  		end
  	)
  
@@ -2895,13 +3029,13 @@ index 4b26456a7..4d21954b7 100644
  if lobby.stderr ~= "" then
  	print(lobby.stderr)
 diff --git a/pickman/scripts/deploy-beta.luau b/portal/scripts/deploy-beta.luau
-similarity index 56%
+similarity index 58%
 rename from pickman/scripts/deploy-beta.luau
 rename to portal/scripts/deploy-beta.luau
-index 301f9c3aa..44b2fb529 100644
+index b4a321ee2..9a0dbdc05 100644
 --- a/pickman/scripts/deploy-beta.luau
 +++ b/portal/scripts/deploy-beta.luau
-@@ -1,41 +1,58 @@
+@@ -1,31 +1,53 @@
  --!strict
 --- Builds the places with Rojo and publishes them to the Pickman Beta experience (c0064: the plan is
 --- scripts/lib/beta). Configured by the environment (ROBLOX_API_KEY, ROBLOX_BETA_UNIVERSE_ID, ROBLOX_BETA_PLACE_ID,
@@ -2921,7 +3055,7 @@ index 301f9c3aa..44b2fb529 100644
  local OpenCloud = require("@scripts/lib/opencloud")
  local fs = require("@lune/fs")
  local process = require("@lune/process")
- local sh = require("@znile/lib/sh")
+ local tmpTrees = require("@znile/lib/tmp")
  
 -local okPlan, planned = pcall(Beta.plan, process.env)
 -if not okPlan then
@@ -2948,7 +3082,7 @@ index 301f9c3aa..44b2fb529 100644
 +	print(`{Experience.FILE} is missing in {root}: run this from the portal's home`)
 +	process.exit(1)
 +end
-+local manifest, manifestErr = Experience.parse(fs.readFile(manifestPath))
++local manifest, manifestErr = Experience.parse(fs.readFile(manifestPath), root)
 +if manifest == nil then
 +	print(manifestErr)
 +	process.exit(1)
@@ -2967,9 +3101,11 @@ index 301f9c3aa..44b2fb529 100644
 +	print(line)
  end
  
- -- built outside the checkout: rojo writes through a symlink at its output path (R0210 review 006 F1), and the
- -- project copies must not be left in the checkout
- local tmp = sh.must("mktemp", { "-d" })
+ -- built in a fresh folder under .cache/.tmp, not at a fixed name: rojo writes through a symlink at its output path (R0210 review 006 F1), and the
+@@ -35,11 +57,6 @@ if not tmp then
+ 	print(`deploy-beta: no temporary folder: {tmpWhy}`)
+ 	process.exit(1)
+ end
 --- same trim as Beta.project: Lune's cwd ends in `/`, and `{root}/{file}` would be `//`
 -local root = process.cwd
 -if #root > 1 and string.sub(root, -1) == "/" then
@@ -2978,7 +3114,7 @@ index 301f9c3aa..44b2fb529 100644
  local files: { string } = {}
  for _, target in plan.targets do
  	local source = `{root}/{target.project}`
-@@ -43,16 +60,16 @@ for _, target in plan.targets do
+@@ -47,16 +64,16 @@ for _, target in plan.targets do
  		print(`rojo build failed ({target.project}): the project file is missing`)
  		process.exit(1)
  	end
@@ -2998,7 +3134,7 @@ index 301f9c3aa..44b2fb529 100644
  	local built = process.exec("rojo", { "build", projectCopy, "-o", out })
  	if not built.ok then
  		print(`rojo build failed ({target.project}):\n{built.stderr}{built.stdout}`)
-@@ -73,7 +90,7 @@ for i, target in plan.targets do
+@@ -77,7 +94,7 @@ for i, target in plan.targets do
  		end
  		process.exit(1)
  	end
@@ -3220,10 +3356,10 @@ rename from pickman/scripts/lib/cicdconfig.luau
 rename to portal/scripts/lib/cicdconfig.luau
 diff --git a/portal/scripts/lib/experience.luau b/portal/scripts/lib/experience.luau
 new file mode 100644
-index 000000000..fdbc22c5a
+index 000000000..30a5f8ae9
 --- /dev/null
 +++ b/portal/scripts/lib/experience.luau
-@@ -0,0 +1,241 @@
+@@ -0,0 +1,288 @@
 +--!strict
 +-- The experience's manifest, portal/experience.json (c0210): every place of the experience, the variable that holds its
 +-- Beta place id, the build it publishes and the name of its version in the deploy's output; and every build: its Rojo
@@ -3291,14 +3427,46 @@ index 000000000..fdbc22c5a
 +	return nil
 +end
 +
-+-- how many times `"<field>":` appears in the text: the decoder keeps the last of a repeated key, so each field is
-+-- counted in the text and compared with the objects that hold it
-+local function occurrences(text: string, field: string): number
++-- how many times `"<key>":` appears in the text: the decoder keeps the last of a repeated key, so every key it
++-- returned is counted in the text and compared with the objects that hold it (c0210 design review 001 F3). Every key
++-- has passed its name's pattern by then; `-` (in a build's name) is the one magic character among them.
++local function occurrences(text: string, key: string): number
 +	local n = 0
-+	for _ in string.gmatch(text, `"{field}"%s*:`) do
++	for _ in string.gmatch(text, `"{string.gsub(key, "%-", "%%-")}"%s*:`) do
 +		n += 1
 +	end
 +	return n
++end
++
++-- the number of objects holding each key, over the whole decoded document (lists are walked, not counted)
++local function keys(node: any, into: { [string]: number })
++	if type(node) ~= "table" then
++		return
++	end
++	if isArray(node) then
++		for _, v in node do
++			keys(v, into)
++		end
++		return
++	end
++	for k, v in node do
++		into[k] = (into[k] or 0) + 1
++		keys(v, into)
++	end
++end
++
++-- a project path in one spelling: `.` and empty segments dropped, `<dir>/..` folded, against `dir` when given
++local function normal(dir: string?, path: string): string
++	local parts: { string } = {}
++	local full = if dir then `{dir}/{path}` else path
++	for seg in string.gmatch(full, "[^/]+") do
++		if seg == ".." and #parts > 0 and parts[#parts] ~= ".." then
++			table.remove(parts)
++		elseif seg ~= "." then
++			table.insert(parts, seg)
++		end
++	end
++	return (if dir and string.sub(dir, 1, 1) == "/" then "/" else "") .. table.concat(parts, "/")
 +end
 +
 +-- every attribute the publish writes itself: each place's id and paid play's (f0201's Catalog)
@@ -3315,7 +3483,11 @@ index 000000000..fdbc22c5a
 +	return out
 +end
 +
-+function Experience.parse(text: string): (Manifest?, string?)
++-- `dir`, when given, is the manifest's folder: two builds' projects are compared as files under it.
++function Experience.parse(text: string, dir: string?): (Manifest?, string?)
++	if string.find(text, "\\", 1, true) then
++		return fail("a backslash escape is not allowed")
++	end
 +	local ok, decoded = pcall(serde.decode, "json" :: "json", text)
 +	if not ok or not isObject(decoded) then
 +		return fail("not a JSON object")
@@ -3331,10 +3503,16 @@ index 000000000..fdbc22c5a
 +	if not isObject(doc.builds) then
 +		return fail("builds must be an object of builds")
 +	end
-+	local counted: { [string]: number } = { places = 1, builds = 1 }
 +	local builds: { [string]: Build } = {}
 +	local reserved = Experience.reserved()
-+	for key, raw in doc.builds :: { [string]: any } do
++	local projects: { [string]: string } = {}
++	local buildNames: { string } = {}
++	for key in doc.builds :: { [string]: any } do
++		table.insert(buildNames, key)
++	end
++	table.sort(buildNames)
++	for _, key in buildNames do
++		local raw = (doc.builds :: { [string]: any })[key]
 +		if not string.match(key, "^[a-z][a-z0-9-]*$") or table.find(FIELDS, key) then
 +			return fail(
 +				`build {key}: a build's name is lowercase letters, digits and dashes, and not a field's name`
@@ -3355,20 +3533,22 @@ index 000000000..fdbc22c5a
 +		then
 +			return fail(`build {key}: project must be a relative path to a *.project.json`)
 +		end
-+		counted.project = (counted.project or 0) + 1
++		local same = projects[normal(dir, project)]
++		if same then
++			return fail(`build {key}: project {project} is also build {same}'s`)
++		end
++		projects[normal(dir, project)] = key
 +		local runtime = raw.runtime
 +		if runtime ~= nil then
 +			if type(runtime) ~= "string" or runtime == "" or string.sub(runtime, 1, 1) == "/" then
 +				return fail(`build {key}: runtime must be a relative folder`)
 +			end
-+			counted.runtime = (counted.runtime or 0) + 1
 +		end
 +		local attributes: { [string]: string } = {}
 +		if raw.attributes ~= nil then
 +			if not isObject(raw.attributes) then
 +				return fail(`build {key}: attributes must be an object`)
 +			end
-+			counted.attributes = (counted.attributes or 0) + 1
 +			for attribute, place in raw.attributes :: { [string]: any } do
 +				if not string.match(attribute, "^[A-Z][A-Za-z0-9]*$") then
 +					return fail(`build {key}: attribute {attribute} must be a capitalized name`)
@@ -3452,13 +3632,16 @@ index 000000000..fdbc22c5a
 +	if starts ~= 1 then
 +		return fail(`exactly one place reads {Experience.START_VAR}, the start place`)
 +	end
-+	counted.name = #places
-+	counted.env = #places
-+	counted.build = #places
-+	counted.output = #places
-+	for _, field in FIELDS do
-+		if occurrences(text, field) ~= (counted[field] or 0) then
-+			return fail(`a key {field} is repeated`)
++	local counted: { [string]: number } = {}
++	keys(doc, counted)
++	local all: { string } = {}
++	for key in counted do
++		table.insert(all, key)
++	end
++	table.sort(all)
++	for _, key in all do
++		if occurrences(text, key) ~= counted[key] then
++			return fail(`a key {key} is repeated`)
 +		end
 +	end
 +	return { places = places, builds = builds }, nil
@@ -3479,7 +3662,7 @@ rename from pickman/scripts/lib/opencloud.luau
 rename to portal/scripts/lib/opencloud.luau
 diff --git a/portal/scripts/runtime-test.luau b/portal/scripts/runtime-test.luau
 new file mode 100644
-index 000000000..fc1e4c8aa
+index 000000000..04c66f5e2
 --- /dev/null
 +++ b/portal/scripts/runtime-test.luau
 @@ -0,0 +1,116 @@
@@ -3541,7 +3724,7 @@ index 000000000..fc1e4c8aa
 +	print(`{Experience.FILE} is missing in {root}: run this from the portal's home`)
 +	process.exit(1)
 +end
-+local manifest, manifestErr = Experience.parse(fs.readFile(manifestPath))
++local manifest, manifestErr = Experience.parse(fs.readFile(manifestPath), root)
 +if manifest == nil then
 +	print(manifestErr)
 +	process.exit(1)
@@ -3612,18 +3795,31 @@ index 505226b73..729499172 100644
  - A tier folder (`tests/unit/<Feature>`, `contract`, `scenario`, `place`) appears with its first spec. The helpers `sim` and `fakeengine` are pickman's (`pickman/tests/lib/`): a portal spec never requires another home's helper. One that needs a helper asks for its move into the shared harness (`z-nile/tests/lib/`), as c0185 did for `place` (`tests/lib/place.luau` re-exports it, and `tests/place/library.spec.luau` is this home's place tier).
  
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index 36e1464e0..be0f41016 100644
+index bdf9de14f..5b117973c 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
-@@ -114,7 +114,7 @@ One procedure for every change: a raft, a capture, a prep or an edit.
+@@ -116,7 +116,7 @@ One procedure for every change: a raft, a capture, a prep or an edit.
  The agent that delivered the change merges its own PR once the evidence is in. Don't wait for a human. Merge only when **all** of these hold:
  1. **For a raft**, `./zn done` succeeded: the one code review is answered and the raft's `check.sh` passed. The PR is ready, not draft, and has no unresolved `BLOCKED:` comment. The review is already on the PR as a comment (zz-execute Phase 4). A refuted finding, a high finding that was not fixed, or a failed Judged criterion stays open until the raft document's `## Open to the human` records `Ruled (user, YYYY-MM-DD):` for it; `./zn done` refuses before that. A medium or low finding that is fixed, or deferred to a backlog issue, does not block (zz-execute Phase 4 step 6).
- 2. The gate depends on what the pull request changes. A pull request that changes only tooling (no path under a game home — `pickman`, `arcade`, `portal`, `snake`, `invaders`, `asteroids` — outside `<home>/.tracker/`) is gated by `z-nile/check.sh --affected` on the branch: no clean clone and no Roblox publish. A pull request that changes a game keeps the clean-clone full gate, run by you, outside this repo. `dir=$(mktemp -d)` only when that directory's parent directories are not a checkout of this repo; if `$TMPDIR` is inside this checkout, stop. Then `git clone --no-hardlinks --no-checkout` of this checkout into `$dir`, `git remote remove origin`, and `git checkout --detach` the exact head. Spawn `z-nile/check.sh --full` there with `PICKMAN_FENCE_REAL_GIT` set to the real repository's git directory appended to whatever the process inherited (`${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}` plus `git rev-parse --path-format=absolute --git-common-dir` of this checkout). That is the local full gate. That is the verification. A merge does not read GitHub Actions. `./zn done`'s gate in the raft worktree is the raft's own gate and is not this check. A red full gate here is BLOCKED: zz-execute Phase 6 step 1 says what to post and file.
+ 2. The gate depends on what the pull request changes. A pull request that changes only tooling (no path under a game home — `pickman`, `arcade`, `portal`, `snake`, `invaders`, `asteroids` — outside `<home>/.tracker/`) is gated by `z-nile/check.sh --affected` on the branch: no clean clone and no Roblox publish. A pull request that changes a game keeps the clean-clone full gate, run by you, in a clone under the checkout's `.cache/.tmp/` (the system temp folder is never used). `dir=$(./zn tmp new gate)` makes the folder: never a bare `mktemp -d` or a path of your own, because the clone must not see any configuration above it (Lune and luau-lsp merge every `.luaurc` up the path, Rokit every `rokit.toml`, and CI checks the branch out alone). Then `git clone --no-hardlinks --no-checkout` of this checkout into `$dir`, `git remote remove origin`, and `git checkout --detach` the exact head. `./zn tmp verify "$dir"` must print `isolated`: the folder's own `.luaurc` keeps every alias of the folders above out of the clone, and no `rokit.toml` above names a tool the clone's own lacks; any other answer is a stop (`./zn tmp rm "$dir"`, then post `BLOCKED:` with it). `$dir` does not survive between Bash calls: run the clone, the gate and the removal in one script, or note `$dir` in the PR comment; a tree left behind is swept after a day. Spawn `z-nile/check.sh --full` there with `PICKMAN_FENCE_REAL_GIT` set to the real repository's git directory appended to whatever the process inherited (`${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}` plus `git rev-parse --path-format=absolute --git-common-dir` of this checkout). That is the local full gate. That is the verification. A merge does not read GitHub Actions. `./zn done`'s gate in the raft worktree is the raft's own gate and is not this check. A red full gate here is BLOCKED: zz-execute Phase 6 step 1 says what to post and file.
 -3. When the pull request changes a game: In `$dir/pickman`, on the detached head from step 2 (`git checkout --detach`), `lune run scripts/cicd` passes. Run it as `../zn run --time 1800 -- lune run scripts/cicd` from `$dir/pickman`, where the clone's `zn` is `../zn` (a bare `lune run` of it is refused by the PreToolUse hook: it runs the minutes-long runtime suites). It reads `~/.config/pickman/cicd.toml`, reserves the CICD places, publishes them, and runs both runtime suites. A missing file, a lease held by someone else, a publish failure, or a runtime failure stops the merge. This command is not part of `z-nile/check.sh --full`. A tooling pull request does not run it.
 +3. When the pull request changes a game: In `$dir/portal`, on the detached head from step 2 (`git checkout --detach`), `lune run scripts/cicd` passes. Run it as `../zn run --time 1800 -- lune run scripts/cicd` from `$dir/portal`, where the clone's `zn` is `../zn` (a bare `lune run` of it is refused by the PreToolUse hook: it runs the minutes-long runtime suites). It reads `~/.config/pickman/cicd.toml`, reserves the CICD places, publishes them, and runs both runtime suites. A missing file, a lease held by someone else, a publish failure, or a runtime failure stops the merge. This command is not part of `z-nile/check.sh --full`. A tooling pull request does not run it.
  4. `gh pr view <pr> --json mergeable,mergeStateStatus` shows `MERGEABLE` and `CLEAN` (`UNKNOWN` is GitHub still computing it right after `done`: re-poll for up to a minute before deciding); any other state (`BEHIND`, `BLOCKED`, `UNSTABLE`, `DIRTY`) is not mergeable. `done` is preceded by a merge of `origin/main` (zz-execute Phase 5), so this should hold. If `main` moved since, and the merge is a clean one, merge `origin/main` in with plain `git` (`./zn commit` needs an active raft, and `done` has moved it). A re-run is required only when `git diff --name-only <the main you gated> <the main you merged>` names a path that selects a spec for this pull request (`lune run z-nile/affected --` those paths). Commits that touch only tracker documents (a project root, or `z-nile/next`) select none and need no re-run. When a re-run is required, a tooling pull request reruns `z-nile/check.sh --affected` on the branch, and a game pull request must rerun `z-nile/check.sh --full` in that clone and `lune run scripts/cicd` (wrapped as in step 3); then push, and repeat this step. If it conflicts, or it needs anything beyond renumbering colliding IDs (`renumber` per Conflicts), post `BLOCKED:` and stop: a finished PR gets no unreviewed code changes.
  5. The human hasn't said to hold.
  
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 7b1256111..af5f093d8 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -32,7 +32,7 @@ description: How z-nile tests and gates every project - the gate and its modes,
+ | a red merge gate | BLOCKED: failing specs named, a watch-miss chore for each spec the affected selection did not list |
+ 
+ ## Spec layout (`*.spec.luau`)
+-Each project's specs live under its home and run from it (c0120): z-nile's (the tooling's) under `z-nile/tests/`, pickman's (the game's) under `pickman/tests/`, with each home's `.luaurc` pointing `@tests` at its own `tests/` (and pickman's `@logic`, `@shared` and `@scripts` at pickman's folders). There is no `tests/` at the root. The rows below are relative to the home. The runner, `z-nile/tests/run.luau`, is shared: `pickman/tests/run.luau` runs it from `pickman/`, so a pickman spec's paths, fixtures (`pickman/.cache`) and jail are pickman's, and a z-nile spec's are `z-nile/`'s (`z-nile/.cache`). A spec that needs the repository's other files reads them from the checkout's top (`git rev-parse --show-toplevel`), and writes only under its home's `.cache`. The assertions (`z-nile/tests/lib/t`) and `renamed` are shared too (`pickman/tests/lib/` re-exports them); `sim`, `place`, `fakeengine` and `plain` are pickman's; `place` re-exports the shared harness's (`z-nile/tests/lib/place.luau`, c0185), which reads its script roots from the project file, as every home's `tests/lib/place.luau` does. A project's own tiers (pickman's `tests/unit`, `helper`, `contract`, `integration`, `scenario`, `place` and `runtime`, its `sim`, `place`, `fakeengine` and `plain` helpers) are in that project's own skill: `pickman-test` for pickman. The rows below are those every project has. Every project with a home except z-nile has the same `tests/run.luau`, `tests/lib/t.luau` and `renamed.luau`, `tests/meta/architecture.spec.luau`, `fence.spec.luau` and `home.spec.luau` (z-nile/README.md, A project's home), and the same place tier: `tests/lib/place.luau` and `tests/place/library.spec.luau`, which build the home's place and judge it. A spec that loads the place requires it as `@tests/lib/place`, never the shared file, so the selector knows which home's place it loads.
++Each project's specs live under its home and run from it (c0120): z-nile's (the tooling's) under `z-nile/tests/`, pickman's (the game's) under `pickman/tests/`, with each home's `.luaurc` pointing `@tests` at its own `tests/` (and pickman's `@logic` and `@shared` at pickman's folders, and `@scripts` at portal's `scripts/` (c0210), where the deploy lives). There is no `tests/` at the root. The rows below are relative to the home. The runner, `z-nile/tests/run.luau`, is shared: `pickman/tests/run.luau` runs it from `pickman/`, so a pickman spec's paths, fixtures (`pickman/.cache`) and jail are pickman's, and a z-nile spec's are `z-nile/`'s (`z-nile/.cache`). A spec that needs the repository's other files reads them from the checkout's top (`git rev-parse --show-toplevel`), and writes only under its home's `.cache`. The assertions (`z-nile/tests/lib/t`) and `renamed` are shared too (`pickman/tests/lib/` re-exports them); `sim`, `place`, `fakeengine` and `plain` are pickman's; `place` re-exports the shared harness's (`z-nile/tests/lib/place.luau`, c0185), which reads its script roots from the project file, as every home's `tests/lib/place.luau` does. A project's own tiers (pickman's `tests/unit`, `helper`, `contract`, `integration`, `scenario`, `place` and `runtime`, its `sim`, `place`, `fakeengine` and `plain` helpers) are in that project's own skill: `pickman-test` for pickman. The rows below are those every project has. Every project with a home except z-nile has the same `tests/run.luau`, `tests/lib/t.luau` and `renamed.luau`, `tests/meta/architecture.spec.luau`, `fence.spec.luau` and `home.spec.luau` (z-nile/README.md, A project's home), and the same place tier: `tests/lib/place.luau` and `tests/place/library.spec.luau`, which build the home's place and judge it. A spec that loads the place requires it as `@tests/lib/place`, never the shared file, so the selector knows which home's place it loads.
+ | dir | tier | may require |
+ |---|---|---|
+ | `tests/tooling/` (z-nile's) | the tooling's scripts (`z-nile/`, the root's `scripts/`) | scripts |
 diff --git a/z-nile/tests/acceptance/c0120/ci.spec.luau b/z-nile/tests/acceptance/c0120/ci.spec.luau
 index 386d26b3e..8ec2febd8 100644
 --- a/z-nile/tests/acceptance/c0120/ci.spec.luau
@@ -3789,7 +3985,7 @@ index 0de8fb546..f17587d7a 100644
  		t.expect(again.ok).toBe(true)
  		t.expect(has(output(again), "HTTP 204")).toBe(false)
 diff --git a/z-nile/tests/acceptance/c0172/merge.spec.luau b/z-nile/tests/acceptance/c0172/merge.spec.luau
-index f29f5bab7..9b79ba3ef 100644
+index f5c15e935..b59c64726 100644
 --- a/z-nile/tests/acceptance/c0172/merge.spec.luau
 +++ b/z-nile/tests/acceptance/c0172/merge.spec.luau
 @@ -155,10 +155,11 @@ return t.spec("c0172 local merge", function(it)
@@ -3858,6 +4054,20 @@ index 1ca2732fb..6a04527ca 100644
  	},
  }
  
+diff --git a/z-nile/tests/acceptance/c0194/callers.spec.luau b/z-nile/tests/acceptance/c0194/callers.spec.luau
+index a9a0981d1..1c191402f 100644
+--- a/z-nile/tests/acceptance/c0194/callers.spec.luau
++++ b/z-nile/tests/acceptance/c0194/callers.spec.luau
+@@ -127,7 +127,8 @@ local function scan(): { string }
+ 			end
+ 		end
+ 	end
+-	for _, d in { "z-nile", "scripts", "pickman/scripts" } do
++	-- c0210 override: the deploy scripts moved from pickman/scripts to portal/scripts
++	for _, d in { "z-nile", "scripts", "portal/scripts" } do
+ 		walk(d)
+ 	end
+ 	table.sort(out)
 diff --git a/z-nile/tests/inputs.tsv b/z-nile/tests/inputs.tsv
 index c3025fb63..0225cee21 100644
 --- a/z-nile/tests/inputs.tsv

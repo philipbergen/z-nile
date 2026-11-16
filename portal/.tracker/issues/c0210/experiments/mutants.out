@@ -1,120 +1,157 @@
-M1: killed (14 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
+M1: killed (17 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
     FAIL every place of Places.NAMES once, and nothing else
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x000000096ecfcd60
-M2: killed (14 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x000000083cd045b0
+M2: killed (17 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
     FAIL a place's variables are Beta place-id variables, each a place's alone
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x000000098c4a4c10
-M3: killed (14 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x000000078acdc0a0
+M3: killed (17 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
     FAIL a place's variables are Beta place-id variables, each a place's alone
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x000000092ccde1a0
-M4: killed (14 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x0000000c5c464670
+M4: killed (17 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
     FAIL exactly one place, the start place, reads ROBLOX_BETA_PLACE_ID, and it alone
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x0000000bcccd8250
-M5: killed (14 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x0000000caa4825c0
+M5: killed (17 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
     FAIL a place's build is a build no other place publishes; its output a name of its own
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x0000000974cdc4c0
-M6: killed (14 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x0000000946d01e70
+M6: killed (17 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
     FAIL an extra attribute never overrides one the publish writes itself
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x000000080643acb0
-M7: killed (14 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x00000008064a4a00
+M7: killed (16 passed, 2 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
     FAIL a repeated key is refused, not read as its last value
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x00000007624546a0
-M8: killed (14 passed, 1 failed, 1 spec files) portal/experience.json -> .tracker/issues/c0210/acceptance/manifest.spec.luau
+    FAIL a repeated attribute name or build name is refused too
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x0000000c48435d80
+M8: killed (17 passed, 1 failed, 1 spec files) portal/experience.json -> .tracker/issues/c0210/acceptance/manifest.spec.luau
     FAIL each place reads the variable the architecture names; Pickman the new one first, then the old
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:320: expected deep-equal values, got table: 0x0000000c3a437a30
-M9: killed (1 passed, 2 failed, 1 spec files) portal/experience.json -> .tracker/issues/c0210/acceptance/lobby.spec.luau
-    FAIL with ROBLOX_BETA_GAME_PLACE_ID: the game to its id, then the lobby to the start place, as before c0210
-    FAIL with ROBLOX_BETA_PICKMAN_PLACE_ID: the game to its id, then the lobby to the start place, as before c0210
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/lobby.spec:134: expected "version=1333\
-P1: killed (16 passed, 1 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:392: expected deep-equal values, got table: 0x0000000ada4f6470
+M9: killed (1 passed, 2 failed, 1 spec files) portal/experience.json -> .tracker/issues/c0210/acceptance/lobby-start.spec.luau
+    FAIL with ROBLOX_BETA_GAME_PLACE_ID: the game then the lobby, told the game's id, to the start place, as before c0210
+    FAIL with ROBLOX_BETA_PICKMAN_PLACE_ID: the game then the lobby, told the game's id, to the start place, as before c0210
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/lobby-start.spec:136: expected "version=1333\
+P1: killed (17 passed, 1 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
     FAIL an empty variable is unset
       beta: ROBLOX_BETA_PICKMAN_PLACE_ID must be a place id: digits, 1 to 2^53-1
-P2: killed (14 passed, 3 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
+P2: killed (15 passed, 3 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
     FAIL a place is published from the moment its variable is set; the games in the manifest's order, the start place last
     FAIL the old ROBLOX_BETA_GAME_PLACE_ID is still Pickman's place id
     FAIL Pickman's two variables set to the same id: published once, from the first
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/plan.spec:107: expected deep-equal values, got table: 0x000000095642bcd0
-P3: killed (16 passed, 1 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/plan.spec:107: expected deep-equal values, got table: 0x00000007f24b6e30
+P3: killed (16 passed, 2 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
     FAIL every published place is told every place's id, 0 for a place not published
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/plan.spec:137: expected 0, got nil
-P4: killed (13 passed, 4 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
+    FAIL the attributes every place is told are exactly the reader's reserved names: every place id, PaidPlay, the catalog ids
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/plan.spec:137: expected 0, got nil
+P4: killed (14 passed, 4 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
     FAIL the old ROBLOX_BETA_GAME_PLACE_ID is still Pickman's place id
     FAIL Pickman's two variables set to different ids: refused, naming both
     FAIL a bad legacy value is refused too, even when the new variable is set
     FAIL two places with one id are refused, naming both variables: no project goes to another place's id
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/plan.spec:192: expected deep-equal values, got table: 0x0000000c44d01090
-P5: killed (16 passed, 1 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/plan.spec:208: expected deep-equal values, got table: 0x0000000cb849f640
+P5: killed (17 passed, 1 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
     FAIL Pickman's two variables set to different ids: refused, naming both
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/plan.spec:59: expected false, got true
-P6: killed (15 passed, 2 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/plan.spec:59: expected false, got true
+P6: killed (16 passed, 2 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
     FAIL a value that is not a place id is refused, naming its variable and never the key
     FAIL a start place id that is not a place id is refused
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/plan.spec:59: expected false, got true
-P7: killed (16 passed, 1 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/plan.spec:59: expected false, got true
+P7: killed (17 passed, 1 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
     FAIL two places with one id are refused, naming both variables: no project goes to another place's id
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/plan.spec:59: expected false, got true
-P8: killed (16 passed, 1 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/plan.spec:59: expected false, got true
+P8: killed (16 passed, 2 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
     FAIL every published place is in paid play's test mode with no product: PaidPlay test, each catalog id 0
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/plan.spec:171: expected "test", got nil
-P9: killed (1 passed, 2 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/lobby.spec.luau
-    FAIL with ROBLOX_BETA_GAME_PLACE_ID: the game to its id, then the lobby to the start place, as before c0210
-    FAIL with ROBLOX_BETA_PICKMAN_PLACE_ID: the game to its id, then the lobby to the start place, as before c0210
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/lobby.spec:121: expected 222, got 0
-D1: killed (3 passed, 4 failed, 1 spec files) portal/scripts/deploy-beta.luau -> .tracker/issues/c0210/acceptance/deploy.spec.luau
+    FAIL the attributes every place is told are exactly the reader's reserved names: every place id, PaidPlay, the catalog ids
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/plan.spec:171: expected "test", got nil
+P9: killed (0 passed, 2 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/way-back.spec.luau
+    FAIL with ROBLOX_BETA_GAME_PLACE_ID: the game is told LobbyPlaceId, the start place's id
+    FAIL with ROBLOX_BETA_PICKMAN_PLACE_ID: the game is told LobbyPlaceId, the start place's id
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/way-back.spec:109: expected 222, got 0
+D1: killed (4 passed, 4 failed, 1 spec files) portal/scripts/deploy-beta.luau -> .tracker/issues/c0210/acceptance/deploy.spec.luau
     FAIL publishes every place whose variable is set, the games first and the start place last, each told every id
     FAIL a place not published is not built: an Asteroids project that cannot build stops nothing while unset
     FAIL one place that does not build stops every publish, naming its project
     FAIL a refused publish stops the rest, says which went out, and writes no version
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/deploy.spec:148: expected 3, got 6
-D2: killed (4 passed, 3 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/deploy.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/deploy.spec:182: expected 3, got 6
+D2: killed (5 passed, 3 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/deploy.spec.luau
     FAIL publishes every place whose variable is set, the games first and the start place last, each told every id
     FAIL a place not published is not built: an Asteroids project that cannot build stops nothing while unset
     FAIL a refused publish stops the rest, says which went out, and writes no version
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/deploy.spec:147: expected true, got false
-D3: killed (5 passed, 2 failed, 1 spec files) portal/scripts/deploy-beta.luau -> .tracker/issues/c0210/acceptance/deploy.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/deploy.spec:181: expected true, got false
+D3: killed (6 passed, 2 failed, 1 spec files) portal/scripts/deploy-beta.luau -> .tracker/issues/c0210/acceptance/deploy.spec.luau
     FAIL publishes every place whose variable is set, the games first and the start place last, each told every id
     FAIL a refused publish stops the rest, says which went out, and writes no version
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/deploy.spec:173: expected "existing=1\
-D4: killed (2 passed, 5 failed, 1 spec files) portal/scripts/deploy-beta.luau -> .tracker/issues/c0210/acceptance/deploy.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/deploy.spec:207: expected "existing=1\
+D4: killed (3 passed, 5 failed, 1 spec files) portal/scripts/deploy-beta.luau -> .tracker/issues/c0210/acceptance/deploy.spec.luau
     FAIL publishes every place whose variable is set, the games first and the start place last, each told every id
     FAIL a place not published is not built: an Asteroids project that cannot build stops nothing while unset
     FAIL one place that does not build stops every publish, naming its project
     FAIL a refused publish stops the rest, says which went out, and writes no version
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/deploy.spec:147: expected true, got false
-R1: killed (9 passed, 1 failed, 1 spec files) portal/scripts/runtime-test.luau -> .tracker/issues/c0210/acceptance/runtime.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/deploy.spec:181: expected true, got false
+R1: killed (10 passed, 1 failed, 1 spec files) portal/scripts/runtime-test.luau -> .tracker/issues/c0210/acceptance/runtime.spec.luau
     FAIL without --place it is Pickman's place
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/runtime.spec:205: expected 2, got 0
-R2: killed (9 passed, 1 failed, 1 spec files) portal/scripts/runtime-test.luau -> .tracker/issues/c0210/acceptance/runtime.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/runtime.spec:249: expected 2, got 0
+R2: killed (10 passed, 1 failed, 1 spec files) portal/scripts/runtime-test.luau -> .tracker/issues/c0210/acceptance/runtime.spec.luau
     FAIL a place whose variable is unset: a warning and success, nothing sent
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/runtime.spec:149: expected true, got false
-R3: killed (9 passed, 1 failed, 1 spec files) portal/scripts/runtime-test.luau -> .tracker/issues/c0210/acceptance/runtime.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/runtime.spec:193: expected true, got false
+R3: killed (10 passed, 1 failed, 1 spec files) portal/scripts/runtime-test.luau -> .tracker/issues/c0210/acceptance/runtime.spec.luau
     FAIL a name that is no place of the manifest: exit 2, naming it
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/runtime.spec:133: expected 2, got 0
-R4: killed (9 passed, 1 failed, 1 spec files) portal/scripts/runtime-test.luau -> .tracker/issues/c0210/acceptance/runtime.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/runtime.spec:177: expected 2, got 0
+R4: killed (10 passed, 1 failed, 1 spec files) portal/scripts/runtime-test.luau -> .tracker/issues/c0210/acceptance/runtime.spec.luau
     FAIL with no files, the build's runtime folder's *.luau in order, named relative to the manifest's folder
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/runtime.spec:196: expected true, got false
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/runtime.spec:240: expected true, got false
 W1: killed (2 passed, 1 failed, 1 spec files) .github/workflows/deploy.yml -> .tracker/issues/c0210/acceptance/workflow.spec.luau
     FAIL every variable of the manifest is passed from the repository's variables, and the key from its secret
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/workflow.spec:43: expected deep-equal values, got table: 0x0000000758c70610
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/workflow.spec:43: expected deep-equal values, got table: 0x0000000a5ecfb430
 W2: killed (2 passed, 1 failed, 1 spec files) .github/workflows/deploy.yml -> .tracker/issues/c0210/acceptance/workflow.spec.luau
     FAIL the publish runs lune run scripts/deploy-beta from portal/
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/workflow.spec:26: expected "portal", got "pickman"
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/workflow.spec:26: expected "portal", got "pickman"
 B1: killed (0 passed, 6 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/build.spec.luau
     FAIL the asteroids build
     FAIL the invaders build
     FAIL the lobby build
     FAIL the pickman build
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/build.spec:63: expected "test", got 0
-L1: killed (0 passed, 3 failed, 1 spec files) portal/experience.json -> .tracker/issues/c0210/acceptance/lobby.spec.luau
-    FAIL with ROBLOX_BETA_GAME_PLACE_ID: the game to its id, then the lobby to the start place, as before c0210
-    FAIL with ROBLOX_BETA_PICKMAN_PLACE_ID: the game to its id, then the lobby to the start place, as before c0210
-    FAIL the runtime runner: --place Portal runs pickman's lobby scripts at the start place, Pickman's its game's at its id
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/lobby.spec:124: expected true, got false
-X1: killed (5 passed, 1 failed, 1 spec files) SETUP.md -> .tracker/issues/c0210/acceptance/layout.spec.luau
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/build.spec:63: expected "test", got 0
+L1: killed (0 passed, 3 failed, 1 spec files) portal/experience.json -> .tracker/issues/c0210/acceptance/lobby-start.spec.luau
+    FAIL with ROBLOX_BETA_GAME_PLACE_ID: the game then the lobby, told the game's id, to the start place, as before c0210
+    FAIL with ROBLOX_BETA_PICKMAN_PLACE_ID: the game then the lobby, told the game's id, to the start place, as before c0210
+    FAIL --place Portal runs pickman's lobby scripts at the start place
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/lobby-start.spec:130: expected true, got false
+X1: killed (6 passed, 1 failed, 1 spec files) SETUP.md -> .tracker/issues/c0210/acceptance/layout.spec.luau
     FAIL SETUP.md names the manifest, every variable, portal/ and --place
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/portal/.tracker/issues/c0210/acceptance/layout.spec:94: expected "`lune run scripts/runtime-test -- --place Portal <lobby version>`: tru
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/layout.spec:94: expected "`lune run scripts/runtime-test -- --place Portal <lobby version>`: tr
 C1: killed (18 passed, 3 failed, 1 spec files) portal/scripts/cicd.luau -> tests/acceptance/c0172/cicd.spec.luau
     FAIL publishes the file's places, not the inherited universe, and runs both suites
     FAIL a versioned tombstone is replaced and the command still publishes
     FAIL a versionless tombstone is re-read once and then replaced
-      /Users/philipbergen/code/pickman/.worktree/proto-n-place-deploy/z-nile/tests/acceptance/c0172/cicd.spec:526: expected true, got false
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/z-nile/tests/acceptance/c0172/cicd.spec:526: expected true, got false
+O1: killed (2 passed, 1 failed, 1 spec files) pickman/tests/acceptance/c0064/plan.spec.luau -> .tracker/issues/c0210/acceptance/overrides.spec.luau
+    FAIL each overridden promoted spec is exactly its reviewed golden
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/overrides.spec:337: expected "pickman/tests/acceptance/c0064/plan.spec.luau: true", got "pickma
+O2: killed (2 passed, 1 failed, 1 spec files) pickman/tests/acceptance/c0015/deploy-e2e.spec.luau -> .tracker/issues/c0210/acceptance/overrides.spec.luau
+    FAIL each overridden promoted spec is exactly its reviewed golden
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/overrides.spec:337: expected "pickman/tests/acceptance/c0015/deploy-e2e.spec.luau: true", got "
+O3: killed (2 passed, 1 failed, 1 spec files) pickman/tests/acceptance/c0003/runner-e2e.spec.luau -> .tracker/issues/c0210/acceptance/overrides.spec.luau
+    FAIL each overridden promoted spec is exactly its reviewed golden
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/overrides.spec:337: expected "pickman/tests/acceptance/c0003/runner-e2e.spec.luau: true", got "
+O4: killed (2 passed, 1 failed, 1 spec files) pickman/tests/acceptance/c0051/retry.spec.luau -> .tracker/issues/c0210/acceptance/overrides.spec.luau
+    FAIL every other file of those folders is exactly as reviewed
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/overrides.spec:345: expected "pickman/tests/acceptance/c0051/retry.spec.luau: d2f2c0320fac967fc
+E1: killed (7 passed, 1 failed, 1 spec files) portal/.tracker/issues/c0210/acceptance/deploy.spec.luau -> .tracker/issues/c0210/acceptance/deploy.spec.luau
+    FAIL the child's environment names every variable of the manifest, blank unless the case sets it
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/deploy.spec:156: expected deep-equal values, got table: 0x0000000c90cfd750
+E2: killed (10 passed, 1 failed, 1 spec files) portal/.tracker/issues/c0210/acceptance/runtime.spec.luau -> .tracker/issues/c0210/acceptance/runtime.spec.luau
+    FAIL the child's environment names every variable of the manifest, blank unless the case sets it
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/runtime.spec:144: expected deep-equal values, got table: 0x0000000aa0cfdf00
+M10: killed (17 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
+    FAIL a backslash escape is refused anywhere, so no key or value hides behind one
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:53: expected "a backslash escape is not allowed: true", got "a backslash escape i
+M11: killed (17 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
+    FAIL a repeated attribute name or build name is refused too
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x00000007ce4e3100
+M12: killed (17 passed, 1 failed, 1 spec files) portal/scripts/lib/experience.luau -> .tracker/issues/c0210/acceptance/manifest.spec.luau
+    FAIL one project file under two builds is refused, however it is spelled
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/manifest.spec:50: expected nil, got table: 0x0000000c904f0910
+R5: killed (10 passed, 1 failed, 1 spec files) portal/scripts/runtime-test.luau -> .tracker/issues/c0210/acceptance/runtime.spec.luau
+    FAIL usage, exit 2: --place with no name, a version that is not a whole number >= 1
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/runtime.spec:169: expected 2, got 0
+P10: killed (16 passed, 2 failed, 1 spec files) portal/scripts/lib/beta.luau -> .tracker/issues/c0210/acceptance/plan.spec.luau
+    FAIL every published place is in paid play's test mode with no product: PaidPlay test, each catalog id 0
+    FAIL the attributes every place is told are exactly the reader's reserved names: every place id, PaidPlay, the catalog ids
+      /Users/philipbergen/code/pickman/.worktree/proto2-n-place-deploy/portal/.tracker/issues/c0210/acceptance/plan.spec:184: expected 0, got nil

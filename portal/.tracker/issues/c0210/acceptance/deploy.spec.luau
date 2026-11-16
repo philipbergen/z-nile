@@ -2,6 +2,7 @@
 -- c0210 AC3 (end to end): scripts/deploy-beta over a fixture experience (a manifest and five tiny projects under
 -- .cache/c0210-deploy), against a local fake of Roblox, with the real Rojo. What reaches the fake (which places, in
 -- which order, and each built place), what the command prints and what it appends to $GITHUB_OUTPUT is checked.
+local Experience = require("@scripts/lib/experience")
 local fs = require("@lune/fs")
 local net = require("@lune/net")
 local process = require("@lune/process")
@@ -67,6 +68,19 @@ local MANIFEST = [[
 }
 ]]
 
+-- c0210 design review 001 F2: Lune's `env` adds to what the child inherits, so every variable the manifest names is
+-- given, "" unless the case sets it: a caller's exported ROBLOX_BETA_*_PLACE_ID never reaches the command
+local function blanks(): { [string]: string }
+	local manifest = Experience.parse(MANIFEST) :: Experience.Manifest
+	local out: { [string]: string } = {}
+	for _, place in manifest.places do
+		for _, var in place.env do
+			out[var] = ""
+		end
+	end
+	return out
+end
+
 local function project(dir: string, folder: string, attributes: string?)
 	fs.writeDir(`{dir}/{folder}`)
 	fs.writeFile(`{dir}/{folder}/Main.server.luau`, `print("{folder}")`)
@@ -98,13 +112,12 @@ local function fixture(name: string, manifest: string?): string
 end
 
 local function run(dir: string, port: number, extra: { [string]: string }, output: string?)
-	local env: { [string]: string } = {
-		ROBLOX_API_KEY = KEY,
-		ROBLOX_BETA_UNIVERSE_ID = "111",
-		ROBLOX_BETA_PLACE_ID = "222",
-		OPENCLOUD_BASE = `http://127.0.0.1:{port}`,
-		GITHUB_OUTPUT = output or "",
-	}
+	local env = blanks()
+	env.ROBLOX_API_KEY = KEY
+	env.ROBLOX_BETA_UNIVERSE_ID = "111"
+	env.ROBLOX_BETA_PLACE_ID = "222"
+	env.OPENCLOUD_BASE = `http://127.0.0.1:{port}`
+	env.GITHUB_OUTPUT = output or ""
 	for k, v in extra do
 		env[k] = v
 	end
@@ -130,6 +143,27 @@ return t.spec("c0210 scripts/deploy-beta over the experience's manifest", functi
 	fs.writeDir(work)
 	local good = fixture("good")
 	local out = `{work}/github-output`
+
+	it(
+		"the child's environment names every variable of the manifest, blank unless the case sets it",
+		function()
+			local env = blanks()
+			local names: { string } = {}
+			for name, value in env do
+				table.insert(names, name)
+				t.expect(value).toBe("")
+			end
+			table.sort(names)
+			t.expect(names).toEqual({
+				"ROBLOX_BETA_ASTEROIDS_PLACE_ID",
+				"ROBLOX_BETA_GAME_PLACE_ID",
+				"ROBLOX_BETA_INVADERS_PLACE_ID",
+				"ROBLOX_BETA_PICKMAN_PLACE_ID",
+				"ROBLOX_BETA_PLACE_ID",
+				"ROBLOX_BETA_SNAKE_PLACE_ID",
+			})
+		end
+	)
 
 	it(
 		"publishes every place whose variable is set, the games first and the start place last, each told every id",
@@ -256,7 +290,13 @@ return t.spec("c0210 scripts/deploy-beta over the experience's manifest", functi
 		local none = fixture("unconfigured", "")
 		local r = process.exec("lune", { "run", script }, {
 			cwd = none,
-			env = { ROBLOX_API_KEY = "", ROBLOX_BETA_UNIVERSE_ID = "111", ROBLOX_BETA_PLACE_ID = "222" },
+			env = (function()
+				local env = blanks()
+				env.ROBLOX_API_KEY = ""
+				env.ROBLOX_BETA_UNIVERSE_ID = "111"
+				env.ROBLOX_BETA_PLACE_ID = "222"
+				return env
+			end)(),
 		})
 		t.expect(r.ok).toBe(true)
 		t.expect(has(r.stdout, "::warning::")).toBe(true)

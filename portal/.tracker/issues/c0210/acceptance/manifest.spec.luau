@@ -291,6 +291,75 @@ return t.spec("c0210 the experience's manifest", function(it)
 		refuses(project, "a key project is repeated")
 	end)
 
+	-- c0210 design review 001 F3: every key the decoder returned is counted, and no key can hide behind an escape
+	it("a repeated attribute name or build name is refused too", function()
+		local text = variant()
+		local attribute =
+			string.gsub(text, '"GamePlaceId":"Pickman"', '"GamePlaceId":"Pickman","GamePlaceId":"Snake"', 1)
+		refuses(attribute, "a key GamePlaceId is repeated")
+		local build = string.gsub(
+			text,
+			'"spare":{"project":"x/default.project.json"}',
+			'"spare":{"project":"x/default.project.json"},"spare":{"project":"y/default.project.json"}',
+			1
+		)
+		t.expect(build ~= text).toBe(true)
+		-- the second "spare" also repeats "project", which is counted first (keys in sorted order)
+		refuses(build, "is repeated")
+	end)
+
+	it("a backslash escape is refused anywhere, so no key or value hides behind one", function()
+		local text = variant()
+		local escaped = string.gsub(
+			text,
+			'"project":"s/default.project.json"',
+			'"project":"s/default.project.json","proj\\u0065ct":"p/default.project.json"',
+			1
+		)
+		t.expect(escaped ~= text).toBe(true)
+		refuses(escaped, "a backslash escape is not allowed")
+		refuses(string.gsub(text, "s/default", "s\\/default", 1), "a backslash escape is not allowed")
+	end)
+
+	it("one project file under two builds is refused, however it is spelled", function()
+		refuses(
+			variant(function(d)
+				d.builds.spare.project = "s/default.project.json"
+			end),
+			"project s/default.project.json is also build"
+		)
+		refuses(
+			variant(function(d)
+				d.builds.spare.project = "./i/../s/default.project.json"
+			end),
+			"is also build"
+		)
+		-- against the manifest's folder, `../portal/x` is `x` when the folder is portal/
+		local m, err = Experience.parse(
+			variant(function(d)
+				d.builds.spare.project = "../portal/default.project.json"
+			end),
+			"/checkout/portal"
+		)
+		t.expect(m).toBe(nil)
+		t.expect(
+			string.find(
+				tostring(err),
+				"build start: project default.project.json is also build spare's",
+				1,
+				true
+			) ~= nil
+		).toBe(true)
+		local elsewhere, why = Experience.parse(
+			variant(function(d)
+				d.builds.spare.project = "../other/default.project.json"
+			end),
+			"/checkout/portal"
+		)
+		t.expect(why).toBe(nil)
+		t.expect(elsewhere ~= nil).toBe(true)
+	end)
+
 	it("the checked-in manifest reads", function()
 		local m, err = Experience.parse(real)
 		t.expect(err).toBe(nil)
