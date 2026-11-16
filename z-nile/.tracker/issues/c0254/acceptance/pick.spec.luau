@@ -380,10 +380,14 @@ return t.spec("c0254 the race window, ownership by stamp and the push exits", fu
 				claim = "unheld",
 				owner = "R0010",
 				originStamp = "active-x-y-z",
+				copy = true,
 			}
 			local d = xhost.pushDecision(f)
 			t.expect(d.action).toBe("refuse")
 			t.expect(string.find(d.why, "holds no claim", 1, true) ~= nil).toBe(true)
+			-- a person's own worktree that never claimed it is not a copy, and pushes as it always did
+			f.copy = false
+			t.expect(xhost.pushDecision(f).action).toBe("push")
 			-- a layer under a claim this checkout holds is pushed; an item nobody claims is a person's
 			f.claim = "held"
 			t.expect(xhost.pushDecision(f).action).toBe("push")
@@ -474,4 +478,14 @@ return t.spec("c0254 the race window, ownership by stamp and the push exits", fu
 			t.expect(string.find(dispatch.prompt(base), "already claimed", 1, true)).toBe(nil)
 		end
 	)
+
+	it("AC4: a code review's record line carries the reviewer's own CLI next to its model", function()
+		t.expect(dispatcher.reviewRecordLine("c0010", "review-001", "grok-4.7", "grok", false))
+			.toBe('record: ./zn commit -m "c0010: review-001" --phase code-review --model grok-4.7 --cli grok')
+		t.expect(dispatcher.reviewRecordLine("c0010", "review-001", "grok-4.7", "grok", true)).toBe(
+			'record: ./zn commit -m "c0010: review-001" --phase code-review --model grok-4.7 --cli grok --issue c0010'
+		)
+		t.expect(dispatcher.reviewRecordLine("c0010", "review-001", "grok-4.7", nil, false))
+			.toBe('record: ./zn commit -m "c0010: review-001" --phase code-review --model grok-4.7')
+	end)
 end)

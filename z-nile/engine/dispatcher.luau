@@ -708,6 +708,20 @@ local function publishMeasured(ctx: Ctx, row: Row): (boolean, string, string)
 	return true, out, ""
 end
 
+-- The `record:` line a code review prints for its author's `./zn commit` (c0254: the reviewer's own CLI rides with its model, so
+-- the review's row is never labelled with the author's CLI).
+function dispatcher.reviewRecordLine(
+	id: string,
+	note: string,
+	model: string,
+	cli: string?,
+	stream: boolean
+): string
+	return `record: ./zn commit -m "{id}: {note}" --phase code-review --model {model}{if cli
+		then ` --cli {cli}`
+		else ""}{if stream then ` --issue {id}` else ""}`
+end
+
 local function record(
 	ctx: Ctx,
 	st: State,
@@ -741,11 +755,7 @@ local function record(
 			end
 		end
 		if model then
-			print(
-				`record: ./zn commit -m "{id}: {note}" --phase code-review --model {model}{if cli
-					then ` --cli {cli}`
-					else ""}{if stream then ` --issue {id}` else ""}`
-			)
+			print(dispatcher.reviewRecordLine(id, note, model, cli, stream))
 			local flags: { string } = {}
 			if not sawWall then
 				table.insert(flags, "wall")

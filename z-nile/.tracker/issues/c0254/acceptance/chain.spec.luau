@@ -92,7 +92,7 @@ return t.spec("c0254 two hosts run the dispatcher's worker mode", function(it)
 			["pickman/.tracker/issues/c0020/c0020.md"] = `---\nid: c0020\ntype: chore\ntitle: c0020\nslug: c0020\nraft: R0010\ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-11-10\nstatus: {PREPARED}\n---\n\n# c0020\n`,
 			["pickman/.tracker/issues/c0020/check.sh"] = CHECK,
 		}
-		for _, id in { "c0010", "c0011", "c0012" } do
+		for _, id in { "c0010", "c0011", "c0012", "c0013" } do
 			seed[`pickman/.tracker/issues/{id}/{id}.md`] = draft(id)
 			seed[`pickman/.tracker/issues/{id}/check.sh`] = CHECK
 		end
@@ -192,6 +192,26 @@ return t.spec("c0254 two hosts run the dispatcher's worker mode", function(it)
 				end
 			end
 			t.expect(seenCli).toBe(true)
+		end
+	)
+
+	it(
+		"AC3: a push the session's own commit was refused under a taken claim ends the run with exit 7, naming it",
+		function()
+			fakecli.clear(h)
+			fakecli.mode(h, "grok", "script")
+			-- inside the session: host B takes the claim over (a restamp pushed to origin by B's clone), then the session commits
+			fs.writeFile(
+				`{h.fakes}/script.sh`,
+				`cd "{h.f.other}" && "$ZN_REAL_GIT" pull -q origin main && f=pickman/.tracker/issues/c0013/c0013.md && sed -i.bak 's/^status: .*/status: preparing-taken-by-other/' "$f" && rm -f "$f.bak" && "$ZN_REAL_GIT" -c user.name=o -c user.email=o@example.invalid commit -qam takeover && "$ZN_REAL_GIT" push -q origin HEAD:main\ncd "$OLDPWD" && echo late > pickman/.tracker/issues/c0013/late.md && ./zn commit -m "tracker: prep c0013 late"; echo "commit=$?"\n`
+			)
+			local r = fakecli.zn(h, { "dispatch", "c0013", "--worker", "--pick", "draft" })
+			local out = r.stdout .. r.stderr
+			t.expect(r.code).toBe(7)
+			t.expect(has(out, "a push was refused under a live claim")).toBe(true)
+			t.expect(has(fakecli.log(h), "commit=7")).toBe(true)
+			t.expect(fakecli.state(h, "c0013").outcome).toBe("push-refused")
+			t.expect(fs.isFile(`{h.f.main}/.worktree/prep-c0013/.cache/push-refused`)).toBe(false)
 		end
 	)
 end)
