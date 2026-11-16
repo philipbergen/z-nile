@@ -123,6 +123,7 @@ usage: ./zn <command> ...
   work status                                   who holds which raft in that same set, which layer, since when
   capture <id>                                  print the item's document as captured (read-only)
   idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
+  design-record <issue-id>                      print the record of the design a design review round reads (read-only)
   metrics [<id>] [--include-active]            cost per issue and rework %; with an id, its approvals
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
@@ -1059,8 +1060,49 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
 			end
 		end
 	end
+	-- c0161: the `Design record:` lines of an issue's design reviews that matched its design before the rewrite are
+	-- re-recorded after it, like `Grouped:` lines: the rewrite changes the ids inside the design, not what the round read.
+	-- A line that did not match before still does not. It runs BEFORE the `grouped:` re-record below: a member's grouped
+	-- record hashes its reviews, so it must see the re-recorded lines. Only folders that hold a design review are read.
+	local quoting: { { id: string, name: string, hash: string } } = {}
+	for iid, dir in before do
+		if not store.isRaftId(iid) and fs.isFile(`{dir}/{iid}.md`) then
+			local rounds = false
+			for _, name in fs.readDir(dir) do
+				if string.match(name, "^design%-review%-%d+%.md$") then
+					rounds = true
+				end
+			end
+			if rounds then
+				local files = gitFolderFiles(dir)
+				local current = raftplan.designRecord(iid, files)
+				for name, text in files do
+					if string.match(name, "^design%-review%-%d+%.md$") then
+						local _, hash = statusLib.roundLines(text)
+						if hash ~= nil and hash == current then
+							table.insert(quoting, { id = iid, name = name, hash = hash })
+						end
+					end
+				end
+			end
+		end
+	end
 	rewrite()
 	local after = byId()
+	for _, q in quoting do
+		local dir = after[idMap[q.id] or q.id]
+		if dir then
+			local fresh = raftplan.designRecord(idMap[q.id] or q.id, gitFolderFiles(dir))
+			local p = `{dir}/{q.name}`
+			if fs.isFile(p) then
+				local text = fs.readFile(p)
+				local out = statusLib.rewriteRecord(text, q.hash, fresh)
+				if out ~= text then
+					fs.writeFile(p, out)
+				end
+			end
+		end
+	end
 	for _, k in kept do
 		local rid, mid = idMap[k.raft] or k.raft, idMap[k.id] or k.id
 		local rdir, mdir = after[rid], after[mid]
@@ -1114,6 +1156,14 @@ local function reviewCovers(files: { [string]: string }, map: { [string]: string
 		end
 	end
 	return false
+end
+
+-- c0161, "Check at next read": a prepared issue whose newest design round quotes a record must still match it as the
+-- issue is on origin/main (`files`: its folder there). An issue none of whose rounds quotes a record predates the rule
+-- and is exempt. Used by `new raft`, `fold`, `recombine` and `ready`.
+local function preparedRead(id: string, files: { [string]: string }): string?
+	local problem = statusLib.preparedReadProblem(files, raftplan.designRecord(id, files))
+	return if problem then `{id} {problem}` else nil
 end
 
 local cmd = {}
@@ -1322,6 +1372,15 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 						return `{id} is {st} on origin/main, not new or prepared`
 					end
 					kinds[st] = true
+					if st == "prepared" then
+						local stale = preparedRead(
+							id,
+							treeFolderFiles(paths, read, string.sub(path, 1, #path - #id - 4))
+						)
+						if stale then
+							return stale
+						end
+					end
 					if front.solo == "true" then
 						solo = id
 					end
@@ -1599,6 +1658,15 @@ local function setStatus(id: string, to: string)
 				if gap then
 					return `{t}: {gap}`
 				end
+				if not store.isRaftId(t) then
+					-- c0161: an approving design review round that read this design, in the issue's own folder (the work
+					-- tree as git sees it, so reviews written before the prep commit count)
+					local own = gitFolderFiles(localItem.dir)
+					local problem = statusLib.designReviewProblem(own, raftplan.designRecord(t, own))
+					if problem then
+						return `{t} {problem}`
+					end
+				end
 			end
 			if
 				not (
@@ -1788,6 +1856,10 @@ local function refuseUnraftable(issue: store.Item, raft: store.Item)
 	end
 	if issue.root ~= raft.root then
 		fail(`a raft holds issues of one project: {issue.id} is in {issue.root}, not {raft.root}`)
+	end
+	local stale = preparedRead(issue.id, originFolderFiles(issue.dir))
+	if stale then
+		fail(stale)
 	end
 end
 
@@ -4176,6 +4248,7 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
 	if opts["--apply"] then
 		refuseInMainCheckout("raft-plan --apply")
 	end
+	local hasOriginMain = sh.run("git", { "rev-parse", "--verify", "-q", "origin/main" }).ok
 	local issues: { raftplan.Issue } = {}
 	local slugOf: { [string]: string } = {}
 	for _, it in store.all("issue") do
@@ -4192,7 +4265,21 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
 			size = raftplan.parseSize(front.size),
 			solo = front.solo == "true",
 			touched = touchedModules(it),
+			stale = nil,
 		})
+		-- c0161, "Check at next read": a prepared, raftless issue edited after its quoted round is skipped, not planned
+		-- (--apply would stop half way, after earlier commands published their claims)
+		local planned = issues[#issues]
+		-- (only when origin/main exists: offline the plan is printed as before, and the commands it prints refuse there)
+		if
+			hasOriginMain
+			and planned.status == "prepared"
+			and planned.raft == ""
+			and planned.state == "backlog"
+		then
+			local files = originFolderFiles(it.dir)
+			planned.stale = statusLib.preparedReadProblem(files, raftplan.designRecord(it.id, files))
+		end
 	end
 	local rafts: { raftplan.Raft } = {}
 	for _, r in store.all("raft") do
@@ -5945,12 +6032,17 @@ function cmd.ready(pos: { string })
 				for _, m in members do
 					local mp = docPath(paths, m.id)
 					if mp then
+						local mfiles = treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4))
+						local stale = preparedRead(m.id, mfiles)
+						if stale then
+							return stale
+						end
 						table.insert(built, {
 							id = m.id,
 							design = "",
 							doc = "",
 							deps = {},
-							files = treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4)),
+							files = mfiles,
 							specs = {},
 							approval = nil,
 							approvalFile = "",
@@ -6740,6 +6832,20 @@ local function metricsLessons()
 	print(
 		string.format("| after | %d | %d | %.1f |", split.after.rafts, split.after.rounds, split.after.mean)
 	)
+end
+
+-- design-record <id> (c0161): the record of the design a design review round reads, read-only: the hash the reviewer of
+-- every design round quotes (`Design record: <hash>`). It refuses in the main checkout, where no preparing design lives. It is computed over the
+-- folder as git sees the work tree (tracked, and untracked that are not ignored), the view `status <id> prepared` takes.
+cmd["design-record"] = function(pos: { string }, _opts: { [string]: { string } })
+	-- a preparing issue's design lives in its prep worktree, never in the main checkout: run it there (design review 004 F4)
+	refuseInMainCheckout("design-record")
+	local id = pos[1]
+	if not id or not string.match(id, "^[fdc]%d%d%d%d$") or #pos > 1 then
+		fail("usage: design-record <issue-id>")
+	end
+	local item = store.get(id)
+	print(raftplan.designRecord(id, gitFolderFiles(item.dir)))
 end
 
 -- capture <id> (c0119): the item's document as captured, read-only. The capture is the newest commit on origin/main
