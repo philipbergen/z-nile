@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Assembles c0202's server specs from the shared stub engine and each spec's cases (prep only: a sequestered spec
-# requires only through aliases, so each is a self-contained file).
+# requires only through aliases, so each is a self-contained file). PREP ONLY: it rewrites this issue's sequestered
+# acceptance/*.spec.luau in place, so it is never run during execution (the specs are sequestered then).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 header() {

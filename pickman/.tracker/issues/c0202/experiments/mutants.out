@@ -31,6 +31,7 @@ M30 lobby :: a read that answers down: killed
 M31 lobby :: a press while the player's read is under way: killed
 M32 lobby :: a player joining is told: killed
 M33 lobby :: a play held goes: killed
+M34 clients :: reads the revives held: killed
 M35 clients :: do nothing while the library's screen is open: killed
 M36 clients :: OfferView boots the library's test screen: killed
 M37 clients :: PayView draws the line: killed
@@ -41,5 +42,7 @@ M41 place :: both places map the library: killed
 M42 place :: pickman keeps no copy: killed
 M43 place :: architecture.md no longer declares Pay: killed
 M44 records :: every record the new build writes: killed
+M46 lobby :: granted while the read on joining is under way: killed
+M47 lobby :: a press after the library's READ_SECONDS: killed
 M45 clients :: do nothing while the library's screen is open: killed
-M34 clients :: reads the revives held: killed (rerun after the mutant's text was fixed)
+M48 place :: architecture.md no longer declares Pay: killed

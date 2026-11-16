@@ -194,11 +194,12 @@ local function world(mode: any?, shared: any?): any
 					end,
 					GetAsync = function(_: any, key: string): any
 						w.reads += 1
+						local value = held[key] -- what the store held when the read began: a held read returns it
 						hold("get")
 						if w.fail.get then
 							error("store down", 0)
 						end
-						return held[key]
+						return value
 					end,
 				}
 			end,

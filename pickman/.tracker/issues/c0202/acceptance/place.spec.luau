@@ -130,7 +130,18 @@ return t.spec("c0202 Pickman's paid play is the arcade library's", function(it)
 			local deps = "\n" .. (string.match(arch, "```deps\n(.-)```") or "")
 			t.expect(has(deps, "-> Pay\n")).toBe(false)
 			t.expect(has(arch, "\n| Pay |")).toBe(false)
-			t.expect(has(arch, "c0202")).toBe(true)
+			for _, phrase in
+				{
+					"Paid play is the arcade library's",
+					"since c0202",
+					"as the title `pickman`",
+					"no feature here requires it",
+				}
+			do
+				if not has(arch, phrase) then
+					error(`architecture.md lacks: {phrase}`)
+				end
+			end
 			local design = fs.readFile(".tracker/game-design.md")
 			for _, phrase in
 				{

@@ -1,12 +1,35 @@
 #!/usr/bin/env python3
-# c0202's mutation check (prep only): applies each mutant to the prototype tree, runs its row's spec, and records
-# whether the named case fails on an assertion (killed), passes (SURVIVED), or the spec does not load (NO RUN).
-# Run from the prototype's checkout root: ./zn run --time 1800 -- python3 -I <this file> <checkout root>
+# c0202's mutation check (prep only): applies each mutant to a throwaway clone of the prototype, runs its row's spec,
+# and records whether the named case fails on an assertion (killed), passes (SURVIVED), or the spec does not load
+# (NO RUN). It never writes the tree it is given: it refuses any root that is not a .worktree/proto-* checkout, and
+# refuses to run when a base patch the prototype was built from has moved (design review 001 F5, F10).
+# Run: ./zn run --time 1800 -- python3 -I <this file> <prototype root> [mutant ids...]
+import hashlib
 import os
 import subprocess
 import sys
+import tempfile
 
-ROOT = sys.argv[1]
+PROTO = os.path.realpath(sys.argv[1])
+if "/.worktree/proto-" not in PROTO + "/":
+    sys.exit(f"refused: {PROTO} is not a .worktree/proto-* checkout")
+
+# the patches the prototype's base was built from (E1), as committed in it; a moved one means a re-prep
+BASES = {
+    "pickman/.tracker/issues/done/f0145/experiments/deps.patch": "78e94ea9bee17366ce97afb1ccd7362edbe89a91c12011c1a5da8f885c664cff",
+    "pickman/.tracker/issues/done/f0145/experiments/prototype.patch": "a46e2258db2c32496bc88149387cb129ceb7517ac74d00f71aff870f98dac90b",
+    "pickman/.tracker/issues/done/f0186/experiments/prototype.patch": "f588be80b42dbb88043383be1819b4ca676461c4c3434c204295c25672a3f791",
+    "arcade/.tracker/issues/f0201/experiments/prototype.patch": "f99bd914ff800cfc3403ab4000109951694ebebaa2b6d8381d7b8879d6afce7b",
+    "z-nile/.tracker/issues/active/c0156/experiments/prototype.patch": "ed053dfdd1b177bd0cce96f90f4b61ac5b11392a1b36b63e65e6a854536e2f6c",
+    "pickman/.tracker/issues/done/c0380/experiments/prototype.patch": "78cd528c26754809a3c224b032cb5fc3a08ebec60ad64496a8fbf1a392cb5c80",
+}
+for rel, want in BASES.items():
+    got = hashlib.sha256(open(os.path.join(PROTO, rel), "rb").read()).hexdigest()
+    if got != want:
+        sys.exit(f"refused: {rel} moved ({got}); rebuild the prototype (E1) and rerun")
+
+ROOT = os.path.join(tempfile.mkdtemp(prefix="c0202-mut-"), "repo")
+subprocess.run(["git", "clone", "-q", "--no-hardlinks", PROTO, ROOT], check=True)
 HOME = os.path.join(ROOT, "pickman")
 A = ".tracker/issues/c0202/acceptance/"
 CONT = "pickman/src/server/Continues.luau"
@@ -61,6 +84,9 @@ M = [
     ("M42", CONT, "local Continues = {}\n", "local Continues = {}\ngame:GetService(\"MarketplaceService\").ProcessReceipt = nil\n", "place", "pickman keeps no copy"),
     ("M43", "pickman/.tracker/architecture.md", "Lobby -> Travel\n", "Lobby -> Pay\nLobby -> Travel\n", "place", "architecture.md no longer declares Pay"),
     ("M44", "arcade/src/shared/Logic/PaidPlay/init.luau", "continues = r.revives", "revives = r.revives", "records", "every record the new build writes"),
+    ("M46", PAID, "\tif bought[player] then\n\t\tbought[player] = nil -- the play just granted goes, whatever a read under way would say\n\t\treturn true\n\tend\n", "", "lobby", "granted while the read on joining is under way"),
+    ("M47", PAID, "\ttell(player, record)\n\tlocal now = PaidPlay.status", "\tlocal now = PaidPlay.status", "lobby", "a press after the library's READ_SECONDS"),
+    ("M48", "pickman/.tracker/architecture.md", "Paid play is the arcade library's", "Paid play is pickman's", "place", "architecture.md no longer declares Pay"),
     ("M45", OFFER, "\t\tif up and not TestPurchase.isOpen() then\n\t\t\tsend(\"decline\")", "\t\tif up then\n\t\t\tsend(\"decline\")", "clients", "do nothing while the library's screen is open"),
 ]
 
@@ -89,7 +115,7 @@ for mid, rel, old, new, spec, case in M:
     try:
         out = run(spec)
     finally:
-        open(path, "w").write(text)
+        open(path, "w").write(text)  # the clone is thrown away; this keeps each mutant alone
     if "could not load" in out:
         verdict = "NO RUN (load error)"
     elif any(l.startswith("FAIL ") and "::" in l and case in l for l in out.splitlines()):

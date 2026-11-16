@@ -152,10 +152,10 @@ index bcf399a78..06090b966 100644
  		end)
  	end)
 diff --git a/pickman/src/lobby/server/Paid.luau b/pickman/src/lobby/server/Paid.luau
-index 3c3ef0107..7a194156f 100644
+index 3c3ef0107..675f3bb4e 100644
 --- a/pickman/src/lobby/server/Paid.luau
 +++ b/pickman/src/lobby/server/Paid.luau
-@@ -1,102 +1,91 @@
+@@ -1,102 +1,102 @@
  --!strict
 --- Lobby server adapter (f0145): the gate in front of START GAME. A free start due or a play held lets the player go
 --- (the lobby charges nothing: the arrival does); otherwise it opens the purchase screen and refuses. A store that
@@ -169,7 +169,9 @@ index 3c3ef0107..7a194156f 100644
 +-- (Wallet.pass, `pickman/<user id>`), so the arrival lets that one game go free (decided with the user, 2026-10-26);
 +-- a read already under way ("busy") drops the press. The library bounds the reads (one at a time, answered from the
 +-- record seen for READ_SECONDS, none for RETRY_SECONDS after a failure). A play granted here presses START for the
-+-- player at once. The status goes to the player on PayStatus. Receipts is installed here, once.
++-- player at once, and that press goes without a read: the grant is the fact, and a read under way (the one on joining,
++-- say) would answer "busy", or later the record it began with, from before the grant. The status goes to the player on
++-- PayStatus. Receipts is installed here, once.
  local Players = game:GetService("Players")
 +local ReplicatedStorage = game:GetService("ReplicatedStorage")
  
@@ -188,8 +190,12 @@ index 3c3ef0107..7a194156f 100644
 -local asking: { [Player]: boolean } = {} -- a read under way
 -local kept: { [Player]: Seen } = {} -- the last read, and every grant heard since
  local pressFor: ((Player) -> ())? = nil
++local bought: { [Player]: boolean } = {} -- a play granted on this server that no press has used yet
 +local statusRemote: RemoteEvent? = nil
-+
+ 
+-local function tell(player: Player, record: Pay.Record)
+-	if player.Parent ~= nil then
+-		Purchases.remote("PayStatus"):FireClient(player, Purchases.mode(), Pay.status(record, os.time()))
 +-- the remote of that name under ReplicatedStorage.Remotes, made at run time (the place file's list stays)
 +local function remote(name: string): RemoteEvent
 +	local folder = ReplicatedStorage:WaitForChild("Remotes")
@@ -202,10 +208,7 @@ index 3c3ef0107..7a194156f 100644
 +	made.Parent = folder
 +	return made
 +end
- 
--local function tell(player: Player, record: Pay.Record)
--	if player.Parent ~= nil then
--		Purchases.remote("PayStatus"):FireClient(player, Purchases.mode(), Pay.status(record, os.time()))
++
 +local function tell(player: Player, record: PaidPlay.Record)
 +	if player.Parent ~= nil and statusRemote then
 +		statusRemote:FireClient(player, Wallet.mode(Paid.TITLE), PaidPlay.status(record, os.time()))
@@ -215,6 +218,10 @@ index 3c3ef0107..7a194156f 100644
  -- Whether this press may go. It may yield (the store's read).
  function Paid.allow(player: Player): boolean
 -	if asking[player] then
++	if bought[player] then
++		bought[player] = nil -- the play just granted goes, whatever a read under way would say
++		return true
++	end
 +	local record, problem = Wallet.read(player, Paid.TITLE)
 +	if player.Parent == nil then
  		return false
@@ -285,17 +292,20 @@ index 3c3ef0107..7a194156f 100644
 -		elseif answer == "cancel" then
 -			Purchases.cancel(player)
 -		end
--	end)
 +			local record = Wallet.read(player, Paid.TITLE) -- the grant's record, seen by this server
 +			if record then
 +				tell(player, record)
 +			end
++			bought[player] = true
 +			local go = pressFor
 +			if go and player.Parent ~= nil then
 +				go(player) -- a bought game starts at once
 +			end
 +		end,
 +	})
++	Players.PlayerRemoving:Connect(function(player: Player)
++		bought[player] = nil
+ 	end)
  	Players.PlayerAdded:Connect(function(player: Player)
 -		-- the line under START GAME from the start (this read is not kept: a press reads for itself)
 -		local record, ok = Purchases.read(player.UserId)

@@ -110,6 +110,36 @@ return t.spec("c0202 Pickman's lobby sells Pickman on the arcade's paid play", f
 		t.expect(w.reads - reads).toBe(1)
 	end)
 
+	it("a play receipt granted while the read on joining is under way starts the game once", function()
+		local w = lobby("live", nil, function(x: any)
+			spent(x, 7)
+		end)
+		w.hold.get = true
+		local p = w.player(7) -- the read on joining began before the purchase, and is held
+		t.expect(w.receipt(7, PLAY_ID, "P1")).toBe("ProductPurchaseDecision.PurchaseGranted")
+		t.expect(#w.teleports).toBe(1) -- the grant's own press goes, though the read is under way
+		w.release() -- the read ends with the record from before the grant
+		press(w, p)
+		t.expect(#w.teleports).toBe(1) -- once: the start is under way
+		t.expect(#w.prompts).toBe(0)
+		t.expect(stored(w, STORE, 7).plays).toBe(1) -- held for the arrival
+	end)
+
+	it("a press after the library's READ_SECONDS reads the record again and tells what it says now", function()
+		local w = lobby("live", nil, function(x: any)
+			spent(x, 7)
+		end)
+		local p = w.player(7)
+		local told = w.sentOn("PayStatus", p)
+		t.expect(told[#told][2].plays).toBe(0)
+		w.seed(STORE, 7, { free = NOW - 60, plays = 2, continues = 0, receipts = { "P8" } }) -- another server's grant
+		w.advance(w.wallet().READ_SECONDS + 1)
+		press(w, p)
+		t.expect(#w.teleports).toBe(1)
+		told = w.sentOn("PayStatus", p)
+		t.expect(told[#told][2].plays).toBe(2)
+	end)
+
 	it("presses while the test screen is open open no second screen and start nothing", function()
 		local w = lobby("test", nil, function(x: any)
 			x.seed(TEST_STORE, 7, { free = NOW - 60, plays = 0, continues = 0, receipts = {} })

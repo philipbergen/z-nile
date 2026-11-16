@@ -1,23 +1,27 @@
-diff --git a/pickman/.tracker/issues/done/f0145/check.sh b/pickman/.tracker/issues/done/f0145/check.sh
-index b25ce18..f37c1b7 100644
---- a/pickman/.tracker/issues/done/f0145/check.sh
-+++ b/pickman/.tracker/issues/done/f0145/check.sh
-@@ -9,11 +9,10 @@ A="$HERE/acceptance"
- 
- # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
- # `./zn members` and other cheap reads; everything else goes inside `check`.
--check "AC1: Pay: one free start per rolling hour, then a held play, else buy; a receipt granted once; continues held and used once, and given back as their own credit; live only for exactly live with both product ids, closed for live with an id missing or bad, else test; a store per mode; an arrival plays when charged, when its write failed or with the lobby's pass, else goes back" lune run tests/run -- "$A/pay.spec.luau"
- check "AC2: the continue offer: switched on per run, the last life opens it for OFFER_TICKS steps, held while a purchase screen is open and for a bound while a bought continue's receipt is awaited, a decline ends it, leaving (Session.depart) ends it, a refused run is over with no game over; a continue gives three new lives keeping the score, level and pellets; the lives lost are carried to the game over" bash -c 'lune run tests/run -- "$1/offer.spec.luau" "$1/runs.spec.luau"' _ "$A"
- check "AC3: a run's lives spent reach its submission, the stored row (through Submits and HiscoreStore) and the rows read back, and the lobby's panel shows them; rows without them show none" bash -c 'lune run tests/run -- "$1/lives.spec.luau" "$1/runs.spec.luau"' _ "$A"
- check "AC4: the offer's overlay (CONTINUE?, three new lives, the seconds left, the buttons), the price under it (or store unavailable when closed), and the lobby's line under START GAME" lune run tests/run -- "$A/views.spec.luau"
--check "AC5: the paid-play adapters on a stub engine: receipts granted once (also against another server's write), the lobby's gate (one read at a time) and purchase screens, test confirms only for a screen this server opened, the start charged on arrival, buy arrivals refused and sent back (kicked when the teleport fails) unless they hold the lobby's pass, taken on every arrival, a closed server selling nothing, the continue offer's purchases, holds, declines and receipt waits, one continue in flight per player, a player's store calls bounded over time (asks and presses back to back), the countdown held while a continue is written, and the offer and the test screen by key, controller button and tap" bash -c 'lune run tests/run -- "$1/adapters.spec.luau" "$1/clients.spec.luau"' _ "$A"
-+check "AC5: the paid-play adapters on a stub engine: receipts granted once (also against another server's write), the lobby's gate (one read at a time) and purchase screens, test confirms only for a screen this server opened, the start charged on arrival, buy arrivals refused and sent back (kicked when the teleport fails) unless they hold the lobby's pass, taken on every arrival, a closed server selling nothing, the continue offer's purchases, holds, declines and receipt waits, one continue in flight per player, a player's store calls bounded over time (asks and presses back to back), the countdown held while a continue is written, and the offer and the test screen by key, controller button and tap" lune run tests/run -- "$A/clients.spec.luau"
- check "AC6: the places boot the adapters, no client requires Purchases, the remote lists stay, and the documents state the paid play" lune run tests/run -- "$A/place.spec.luau"
- check "AC7: d0124's top-10 list of runs carries each run's lives spent (once d0124 has landed)" lune run tests/run -- "$A/top.spec.luau"
- check "AC8: Logic stays engine-free, every dependency is declared, and every feature has unit specs" lune run tests/run -- tests/meta/architecture.spec.luau
+diff --git a/pickman/tests/acceptance/c0380/narrowed.spec.luau b/pickman/tests/acceptance/c0380/narrowed.spec.luau
+index 1c147e5a5..fb305eaab 100644
+--- a/pickman/tests/acceptance/c0380/narrowed.spec.luau
++++ b/pickman/tests/acceptance/c0380/narrowed.spec.luau
+@@ -55,12 +55,14 @@ local PINS: { { path: string, sha: string, cuts: number } } = {
+ 	},
+ 	{
+ 		path = "tests/acceptance/f0145/views.spec.luau",
+-		sha = "c3dd409a1f2e42b3e235287ede1559ad652c9aff7059bc3da679ee5e0bda1a37",
++		-- c0202: every Lobby.payLine call passes the arcade library's Prices
++		sha = "7783e4a23124e5524dfc66d5a44c3367dec3c440a4a79f0eb28954a7078dc99c",
+ 		cuts = 0,
+ 	},
+ 	{
+ 		path = "tests/acceptance/f0145/place.spec.luau",
+-		sha = "f66efcf08fb129b3c2a5cff0ffde724909f5994bc336c2943276dc6b70955ff9",
++		-- c0202: architecture.md's Pay row and Lobby -> Pay are no longer pinned (paid play is the library's)
++		sha = "44eb0b2df25b2bff04208d154a42255ba1c51a8bb0b42f5912afa4a594d6673c",
+ 		cuts = 0,
+ 	},
+ 	-- c0128's whole-file pin of f0026's adapters.spec, whose digest moved with the narrowing
 diff --git a/pickman/tests/acceptance/f0145/adapters.spec.luau b/pickman/tests/acceptance/f0145/adapters.spec.luau
 deleted file mode 100644
-index f97995e..0000000
+index f97995e15..000000000
 --- a/pickman/tests/acceptance/f0145/adapters.spec.luau
 +++ /dev/null
 @@ -1,1112 +0,0 @@
@@ -1134,7 +1138,7 @@ index f97995e..0000000
 -	)
 -end)
 diff --git a/pickman/tests/acceptance/f0145/clients.spec.luau b/pickman/tests/acceptance/f0145/clients.spec.luau
-index 8275c93..1af62cb 100644
+index 8275c9382..1af62cbd7 100644
 --- a/pickman/tests/acceptance/f0145/clients.spec.luau
 +++ b/pickman/tests/acceptance/f0145/clients.spec.luau
 @@ -1,11 +1,11 @@
@@ -1236,7 +1240,7 @@ index 8275c93..1af62cb 100644
  end)
 diff --git a/pickman/tests/acceptance/f0145/pay.spec.luau b/pickman/tests/acceptance/f0145/pay.spec.luau
 deleted file mode 100644
-index a3faac5..0000000
+index a3faac558..000000000
 --- a/pickman/tests/acceptance/f0145/pay.spec.luau
 +++ /dev/null
 @@ -1,209 +0,0 @@
@@ -1450,10 +1454,20 @@ index a3faac5..0000000
 -	end)
 -end)
 diff --git a/pickman/tests/acceptance/f0145/place.spec.luau b/pickman/tests/acceptance/f0145/place.spec.luau
-index 47f6f29..fb829e5 100644
+index 47f6f2918..b8487fa5e 100644
 --- a/pickman/tests/acceptance/f0145/place.spec.luau
 +++ b/pickman/tests/acceptance/f0145/place.spec.luau
-@@ -106,9 +106,6 @@ return t.spec("f0145 the places and the documents", function(it)
+@@ -5,7 +5,8 @@
+ -- (`Paid.start(Starts.start(Paid.allow))`, with Starts an inline require or a local bound to it, as f0148's pins of
+ -- the same Main accept); the lobby client's Main boots PayView after LobbyView. No client script requires Purchases
+ -- (the store and the purchases are the server's). The remotes are made at run time, so the place files' remote lists
+--- stay as they are. game-design.md states the paid play; architecture.md declares Pay, Lobby -> Pay, and the Pay row.
++-- stay as they are. game-design.md states the paid play (architecture.md's Pay row and Lobby -> Pay are gone since
++-- c0202 moved paid play into the arcade library; c0202's own place.spec pins that).
+ -- Source pins read with comments removed; what they leave to the adapters' running cases (AC5) and to OC1 and OC2:
+ -- everything the adapters do.
+ local fs = require("@lune/fs")
+@@ -106,9 +107,5 @@ return t.spec("f0145 the places and the documents", function(it)
  				error(`game-design.md lacks: {phrase}`)
  			end
  		end
@@ -1461,22 +1475,27 @@ index 47f6f29..fb829e5 100644
 -		local deps = "\n" .. (string.match(arch, "```deps\n(.-)```") or "")
 -		t.expect(has(deps, "\nLobby -> Pay\n")).toBe(true)
 -		t.expect(has(arch, "\n| Pay |")).toBe(true)
-+		-- c0202: Pay is the arcade library's now; architecture.md no longer declares it (c0202's place.spec)
  	end)
  end)
 diff --git a/pickman/tests/acceptance/f0145/views.spec.luau b/pickman/tests/acceptance/f0145/views.spec.luau
-index 2bfd85e..2a35901 100644
+index 8a1e739f8..628eb94ec 100644
 --- a/pickman/tests/acceptance/f0145/views.spec.luau
 +++ b/pickman/tests/acceptance/f0145/views.spec.luau
-@@ -8,6 +8,7 @@
+@@ -6,10 +6,12 @@
+ -- GAME: a free start due, else the plays held, else the price and the minutes to the next free start, with the test
+ -- note in test mode; nothing before the server has said anything. Narrowed by c0380: f0186 shows the price of a game
+ -- on sale, so the price is pinned only as a line of its own (none of the others, no test note in live mode), with the
+--- minutes to the next free start and the test note after it as before.
++-- minutes to the next free start and the test note after it as before. Narrowed by c0202: the price words are the
++-- arcade library's Prices, which every Lobby.payLine call passes in.
  local Flow = require("@logic/Flow")
  local Game = require("@logic/Game")
  local Lobby = require("@logic/Lobby")
-+local Prices = require("@arcade/Prices") -- c0202: the price words are the library's
++local Prices = require("@arcade/Prices")
  local Session = require("@logic/Session")
  local t = require("@tests/lib/t")
  
-@@ -69,38 +70,47 @@ return t.spec("f0145 the offer and the price on screen", function(it)
+@@ -71,14 +73,16 @@ return t.spec("f0145 the offer and the price on screen", function(it)
  	it(
  		"the lobby's line: free, else what is held, else the price and the minutes to the next free start",
  		function()
@@ -1494,20 +1513,22 @@ index 2bfd85e..2a35901 100644
 -			t.expect(Lobby.payLine({ free = false, plays = 3, continues = 0 }, "live", NOW))
 +			t.expect(Lobby.payLine({ free = false, plays = 3, continues = 0 }, "live", NOW, Prices))
  				.toBe("3 GAMES YOU BOUGHT")
- 			local buy = Lobby.payLine(
- 				{ free = false, nextFree = NOW + 41 * 60 + 5, plays = 0, continues = 0 },
- 				"live",
--				NOW
-+				NOW,
-+				Prices
- 			) or ""
- 			t.expect(string.find(buy, ", NEXT FREE GAME IN 42 MIN$") ~= nil).toBe(true) -- c0380
--			t.expect(Lobby.payLine({ free = false, plays = 0, continues = 0 }, "live", NOW) ~= nil).toBe(true)
-+			t.expect(Lobby.payLine({ free = false, plays = 0, continues = 0 }, "live", NOW, Prices) ~= nil)
-+				.toBe(true)
+-			local buy = Lobby.payLine({ free = false, plays = 0, continues = 0 }, "live", NOW) or ""
++			local buy = Lobby.payLine({ free = false, plays = 0, continues = 0 }, "live", NOW, Prices) or ""
+ 			t.expect(buy ~= "").toBe(true)
+ 			for _, other in { "FREE GAME", "1 GAME YOU BOUGHT", "3 GAMES YOU BOUGHT", "STORE UNAVAILABLE" } do
+ 				t.expect(string.find(buy, other, 1, true) == nil).toBe(true)
+@@ -89,7 +93,8 @@ return t.spec("f0145 the offer and the price on screen", function(it)
+ 				Lobby.payLine(
+ 					{ free = false, nextFree = NOW + 41 * 60 + 5, plays = 0, continues = 0 },
+ 					"live",
+-					NOW
++					NOW,
++					Prices
+ 				)
+ 			).toBe(`{buy}, NEXT FREE GAME IN 42 MIN`)
  		end
- 	)
- 
+@@ -98,20 +103,25 @@ return t.spec("f0145 the offer and the price on screen", function(it)
  	it("a closed server's lobby line says the store is unavailable, free and held as ever", function()
  		-- decided with the user, 2026-10-26: "Refuse paid play"
  		t.expect(
@@ -1533,13 +1554,16 @@ index 2bfd85e..2a35901 100644
 -		t.expect(Lobby.payLine({ free = true, plays = 0, continues = 0 }, "test", NOW))
 +		t.expect(Lobby.payLine({ free = true, plays = 0, continues = 0 }, "test", NOW, Prices))
  			.toBe("FREE GAME (TEST: NOTHING IS CHARGED)")
--		local line = Lobby.payLine({ free = false, plays = 0, continues = 0 }, nil, NOW) or ""
-+		local line = Lobby.payLine({ free = false, plays = 0, continues = 0 }, nil, NOW, Prices) or ""
- 		t.expect(string.find(line, " %(TEST: NOTHING IS CHARGED%)$") ~= nil).toBe(true) -- c0380
+-		local buy = Lobby.payLine({ free = false, plays = 0, continues = 0 }, "live", NOW) or ""
++		local buy = Lobby.payLine({ free = false, plays = 0, continues = 0 }, "live", NOW, Prices) or ""
+ 		t.expect(buy ~= "").toBe(true)
+-		t.expect(Lobby.payLine({ free = false, plays = 0, continues = 0 }, nil, NOW))
++		t.expect(Lobby.payLine({ free = false, plays = 0, continues = 0 }, nil, NOW, Prices))
+ 			.toBe(`{buy} (TEST: NOTHING IS CHARGED)`)
  	end)
  end)
 diff --git a/pickman/tests/acceptance/f0186/docs.spec.luau b/pickman/tests/acceptance/f0186/docs.spec.luau
-index 6e0b311..7ac6a19 100644
+index 6e0b311ed..7ac6a198a 100644
 --- a/pickman/tests/acceptance/f0186/docs.spec.luau
 +++ b/pickman/tests/acceptance/f0186/docs.spec.luau
 @@ -5,7 +5,10 @@
@@ -1582,7 +1606,7 @@ index 6e0b311..7ac6a19 100644
  	end)
  end)
 diff --git a/pickman/tests/acceptance/f0186/price.spec.luau b/pickman/tests/acceptance/f0186/price.spec.luau
-index de523ef..64f7326 100644
+index de523ef2d..64f7326e0 100644
 --- a/pickman/tests/acceptance/f0186/price.spec.luau
 +++ b/pickman/tests/acceptance/f0186/price.spec.luau
 @@ -1,21 +1,20 @@
