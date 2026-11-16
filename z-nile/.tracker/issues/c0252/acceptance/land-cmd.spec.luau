@@ -36,7 +36,8 @@ local function git(dir: string, args: { string }): string
 end
 local function zn(args: { string }, extra: { [string]: string }?): fixture.Result
 	local e = table.clone(env)
-	for k, v in extra or {} do
+	local more: { [string]: string } = extra or {}
+	for k, v in more do
 		e[k] = v
 	end
 	return trackerfix.tr(f, wt, args, e)

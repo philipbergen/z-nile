@@ -48,7 +48,8 @@ local function land(action: string, over: { [string]: any }?): any
 		layer = nil,
 		tries = 0,
 	}
-	for k, v in over or {} do
+	local changes: { [string]: any } = over or {}
+	for k, v in changes do
 		l[k] = v
 	end
 	return l

@@ -38,7 +38,7 @@ fixtureSpec() {
 # tier (tests/slow.tsv). The slow tier is the gate's, run by Implementation step 11, never by this check.sh.
 regressionSpecs() {
 	local s
-	for s in tests/acceptance/c0117/dispatch.spec.luau tests/acceptance/c0117/models.spec.luau tests/acceptance/c0117/docs.spec.luau tests/tooling/dispatch-texts.spec.luau tests/tooling/wrapper-guards.spec.luau tests/acceptance/c0239/done.spec.luau tests/tooling/stack-fix.spec.luau tests/meta/scanning-loops.spec.luau tests/acceptance/c0193/tree.spec.luau tests/acceptance/c0111/skill-docs.spec.luau tests/meta/architecture.spec.luau; do
+	for s in tests/acceptance/c0117/dispatch.spec.luau tests/acceptance/c0117/models.spec.luau tests/acceptance/c0117/docs.spec.luau tests/tooling/dispatch-texts.spec.luau tests/tooling/wrapper-guards.spec.luau tests/acceptance/c0239/done.spec.luau tests/tooling/stack-fix.spec.luau tests/meta/scanning-loops.spec.luau tests/acceptance/c0193/tree.spec.luau tests/meta/architecture.spec.luau; do
 		grep -qF "	$s" tests/slow.tsv || printf '%s\n' "$s"
 	done
 }

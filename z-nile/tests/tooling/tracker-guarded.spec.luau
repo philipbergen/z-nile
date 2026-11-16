@@ -27,6 +27,7 @@ return t.spec("tracker commands that change a repository are guarded", function(
 			"audit",
 			"board",
 			"find",
+			"land-check",
 			"list",
 			"members",
 			"metrics",
