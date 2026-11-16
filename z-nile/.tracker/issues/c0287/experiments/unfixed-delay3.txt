@@ -1,0 +1,36 @@
+start: 2026-11-15 11:32:54 PST  load averages: 35.56 19.44 16.93
+head: 16c72d743  env: FAKE_DELAY=3
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+PASS tests/acceptance/c0117/trackerstate.spec.luau: 12 passed, 0 failed
+FAIL tests/acceptance/c0117/control-cli.spec.luau :: stops the chain at questions.md, starts nothing more, and retry keeps the answers and reruns
+     /Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/tests/acceptance/c0117/control-cli.spec:140: expected 3, got 1
+FAIL tests/acceptance/c0117/control-cli.spec.luau :: a review the author starts through the dispatcher runs on its own CLI, with the real git and its own state
+     /Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/tests/acceptance/c0117/control-cli.spec:183: dispatch: z-design c0020 on claude (claude-cli, claude-opus-5-5-high, max_tokens 5000)
+dispatch: z-design on claude: quota (rate limit rejected (five_hour, resets 1)), 0 tokens
+dispatch: z-design c0020 on grok (grok-cli, grok-4.7-high, max_tokens 5000)
+dispatch: z-design on grok: stalled (no output for 3 s), 0 tokens
+claude step=z-design mode=quota cwd=/Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/.cache/c0117-control/main/.worktree/prep-second-thing
+args=-p You are running the z-nile step z-design for c0020, headless and unattended, under ./zn dispatch.
+Read `z-nile/skills/z-design/SKILL.md` and follow it for c0020.
+Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
+Work only in `/Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/.cache/c0117-control/main/.worktree/prep-second-thing`: it is your working directory. Never edit the main checkout.
+Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write `/Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/.cache/c0117-control/main/.cache/dispatch/c0020/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. A review that leaves a refutation or an unclosed high is not a guess: write `## Open to the human` in the item's document, one bullet per finding (`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>`), do not rule on it yourself, and stop.
+Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse.
+Do not pass --time or --tokens. The dispatcher records this session's wall, CPU, tokens and model.
+ --output-format stream-json --verbose --model claude-opus-5-5 --permission-mode bypassPermissions --permission-prompts none --session-id d5bc86e4-6ae2-4dc9-a5e6-8de88cfe0ef5 --settings {"sandbox":{"enabled":false}} --effort high
+dir=/Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/.cache/c0117-control/main/.cache/dispatch/c0020
+path0=/Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/.cache/c0117-control/main/z-nile/bin
+token=fake-agent-token fake-agent-token
+ghdir=/Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/.cache/c0117-control/main/.cache/dispatch/c0020/gh
+broker=/Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/.cache/c0117-control/main/.cache/dispatch/c0020/broker
+bashmax=7200000
+FAIL tests/acceptance/c0117/control-cli.spec.luau :: a code push past the wrapper (the real git) trips the wire: exit 5, and the step's spend is kept
+     /Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/tests/acceptance/c0117/control-cli.spec:237: expected 5, got 1
+FAIL tests/acceptance/c0117/control-cli.spec.luau :: a detached process's late code push after a step does not stop the next run
+     /Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/tests/acceptance/c0117/control-cli.spec:508: expected true, got false
+FAIL tests/acceptance/c0117/control-cli.spec.luau :: a cursor step stops after max_calls model calls, and a finished one records the real total
+     /Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/tests/acceptance/c0117/control-cli.spec:640: expected "cap", got "stalled"
+FAIL tests/acceptance/c0117/control-cli.spec.luau: 19 passed, 5 failed
+slowest: tests/acceptance/c0117/control-cli.spec.luau 294.9s, tests/acceptance/c0117/trackerstate.spec.luau 7.0s
+31 passed, 5 failed, 2 spec files
+sweeper: stopped 2 process(es) the specs left running

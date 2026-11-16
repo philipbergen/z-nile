@@ -1,0 +1,7 @@
+control: AC3 passes on the prototype
+killed silenttool cut to 8 s
+killed slowreview cut to 8 beats
+killed quietreview cut to 9 s
+killed within true at its bound
+killed a misspelt lock path
+killed dead on any kill failure

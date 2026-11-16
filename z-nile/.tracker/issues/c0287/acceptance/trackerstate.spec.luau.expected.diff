@@ -1,0 +1,16 @@
+diff --git a/z-nile/tests/acceptance/c0117/trackerstate.spec.luau b/z-nile/tests/acceptance/c0117/trackerstate.spec.luau
+--- a/z-nile/tests/acceptance/c0117/trackerstate.spec.luau
++++ b/z-nile/tests/acceptance/c0117/trackerstate.spec.luau
+ 				done += 1
+ 			end)
+ 		end
+-		local waited = 0
+-		while done < 2 and waited < 5 do
+-			waited += task.wait(0.05)
++		-- on the wall clock: it ends the moment both are done, and runs long only when one never is
++		local started = os.time()
++		while done < 2 and os.time() - started < 60 do
++			task.wait(0.05)
+ 		end
+ 		t.expect(done).toBe(2)
+ 		for i = 1, 8 do
