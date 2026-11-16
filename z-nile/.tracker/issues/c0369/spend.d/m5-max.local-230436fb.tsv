@@ -1,0 +1,29 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-16 05:15	1 spec	0	0	test			1.221	0.880		1.221	tokens,ai
+2026-11-16 05:15	1 spec	0	0	test			26.570	20.200		26.570	tokens,ai
+2026-11-16 05:16	1 spec	0	0	test			30.822	21.690		30.822	tokens,ai
+2026-11-16 05:17	1 spec	0	0	test			44.370	31.220		44.370	tokens,ai
+2026-11-16 05:17	1 spec	0	0	test			35.146	31.620		35.146	tokens,ai
+2026-11-16 05:17	1 spec	0	0	test			1.421	0.980		1.421	tokens,ai
+2026-11-16 05:18	8 specs	0	0	test			33.899	63.380		33.899	tokens,ai
+2026-11-16 05:18	1 spec	0	0	test			2.230	1.320		2.230	tokens,ai
+2026-11-16 05:19	1 spec	0	0	test			37.528	30.350		37.528	tokens,ai
+2026-11-16 05:19	1 spec	0	0	test			28.226	23.150		28.226	tokens,ai
+2026-11-16 05:20	1 spec	0	0	test			44.003	37.770		44.003	tokens,ai
+2026-11-16 05:20	1 spec	0	0	test			35.179	31.320		35.179	tokens,ai
+2026-11-16 05:20	1 spec	0	0	test			1.223	0.870		1.223	tokens,ai
+2026-11-16 05:21	8 specs	0	0	test			27.628	61.860		27.628	tokens,ai
+2026-11-16 05:21	1 spec	0	0	test			1.223	0.790		1.223	tokens,ai
+2026-11-16 05:30	static	0	0	test			5.764	47.750		5.764	tokens,ai
+2026-11-16 05:30	6 runs	0	0	other			940.228	779.640			tokens,ai
+2026-11-16 05:40	5 runs design-review	0	0	other			23.763	19.630			tokens,ai
+2026-11-16 05:42	design-review-001 claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	design-review							tokens,ai
+2026-11-16 06:57	9 runs	0	0	other			284.760	235.530			tokens,ai
+2026-11-16 06:57	design-refute-001	0	0	design-review							tokens,ai
+2026-11-16 07:10	static	0	0	test			3.920	46.040		3.920	tokens,ai
+2026-11-16 07:10	affected	0	0	test			7.037	70.930		7.037	tokens,ai
+2026-11-16 07:11	affected	0	0	test			23.426	62.460		23.426	tokens,ai
+2026-11-16 07:11	affected	0	0	test			19.823	61.520		19.823	tokens,ai
+2026-11-16 07:12	affected	0	0	test			22.015	62.680		22.015	tokens,ai
+2026-11-16 07:10	7 runs	0	0	other			656.648	545.100			tokens,ai
+2026-11-16 07:12	prep	1620	1	prep							tokens,ai
