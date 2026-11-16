@@ -165,7 +165,7 @@ Rectangle {
     Flow {
       width: parent.width
       spacing: Style.space(5)
-      visible: chipRaft.visible || chipMembers.visible || chipBlocked.visible || chipPartly.visible || chipAfter.visible || chipDeps.visible || prRepeater.count > 0
+      visible: chipRaft.visible || chipMembers.visible || chipBlocked.visible || chipPartly.visible || chipAfter.visible || chipDeps.visible || chipGuesses.visible || chipGuessMembers.visible || prRepeater.count > 0
 
       // Open pull requests: green when ready, dim while draft.
       Repeater {
@@ -186,6 +186,9 @@ Rectangle {
       IdChip { id: chipBlocked; visible: tile.blocked; glyph: "\uf023"; prefix: "blocked by"; ids: tile.item ? tile.item.blockedBy : []; tint: Commons.Color.urgent; onOpen: function(id) { tile.openId(id) } }
       IdChip { id: chipPartly; visible: !!tile.item && tile.item.kind === "raft" && tile.item.issues.length > 1 && tile.item.blockedMembers.length > 0; glyph: "\uf023"; prefix: tile.item ? tile.item.blockedMembers.length + " of " + tile.item.issues.length + " blocked:" : ""; ids: tile.item ? tile.item.blockedMembers.map(function(b) { return b.id }) : []; tint: Commons.Color.urgent; onOpen: function(id) { tile.openId(id) } }
       IdChip { id: chipAfter; visible: !!tile.item && tile.item.after.length > 0; glyph: "\uf160"; prefix: "after"; ids: tile.item ? tile.item.after : []; tint: Commons.Color.foreground; onOpen: function(id) { tile.openId(id) } }
+      // Guesses the user hasn't ruled on: on a ticket its count, on a raft which tickets.
+      Chip { id: chipGuesses; visible: !!tile.item && tile.item.guesses > 0; glyph: ""; label: tile.item ? tile.item.guesses + (tile.item.guesses === 1 ? " guess to review" : " guesses to review") : ""; tint: tile.board ? tile.board.hue("cyan", Commons.Color.accent) : Commons.Color.accent }
+      IdChip { id: chipGuessMembers; visible: !!tile.item && tile.item.guessMembers.length > 0; glyph: ""; prefix: "guesses to review in"; ids: tile.item ? tile.item.guessMembers : []; tint: tile.board ? tile.board.hue("cyan", Commons.Color.accent) : Commons.Color.accent; onOpen: function(id) { tile.openId(id) } }
       Chip { id: chipDeps; visible: !!tile.item && !tile.blocked && tile.item.after.length === 0 && tile.item.dependsOn.length > 0; glyph: "\uf0c1"; label: tile.item ? String(tile.item.dependsOn.length) : ""; tint: Commons.Color.foreground }
     }
 

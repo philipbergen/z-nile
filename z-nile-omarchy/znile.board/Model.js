@@ -35,6 +35,16 @@ function stageIndex(stage) {
   return i < 0 ? 0 : i
 }
 
+// Guesses a prep made that the user hasn't ruled on yet: each
+// `Guess (pending user, <date>)` marker in the whole body (z-design). A ruled
+// guess is rewritten as the decision, so its marker is gone. A marker quoted
+// in backticks is a mention of the form, not a guess.
+var GUESS_RE = /(^|[^`])Guess \(pending user\b/g
+function pendingGuesses(body) {
+  var m = String(body || "").match(GUESS_RE)
+  return m ? m.length : 0
+}
+
 function cleanItem(raw, kind, project) {
   if (!raw || !ID_RE.test(String(raw.id))) return null
   var stage = STAGES.indexOf(String(raw.stage)) >= 0 ? String(raw.stage) : "new"
@@ -60,6 +70,8 @@ function cleanItem(raw, kind, project) {
     blockedMembers: [],
     needsApproval: false,
     approvalMembers: [],
+    guesses: kind === "issue" ? pendingGuesses(raw.body) : 0,
+    guessMembers: [],
     path: "",
     url: "",
     prs: [],
@@ -124,6 +136,10 @@ function normalize(raw) {
     for (var ar = 0; ar < rafts.length; ar++) {
       rafts[ar].approvalMembers = rafts[ar].issues.filter(function(id) { return byId[id] !== undefined && byId[id].needsApproval })
     }
+  }
+  // A raft's tickets that still have guesses for the user to review.
+  for (var gr = 0; gr < rafts.length; gr++) {
+    rafts[gr].guessMembers = rafts[gr].issues.filter(function(id) { return byId[id] !== undefined && byId[id].guesses > 0 })
   }
   // Cost: a ticket's own spend; a raft's own rollup once it has one, else
   // the sum of its tickets'. Phases add up the same way.

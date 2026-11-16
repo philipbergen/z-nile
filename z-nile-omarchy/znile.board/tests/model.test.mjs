@@ -243,3 +243,21 @@ test("needs approval: a ready design not yet approved; a raft with such a ticket
   // Without the list (an older fetch.sh) nothing is claimed to need approval.
   assert.equal(M.matches(M.normalize(base).byId.c0010, { approval: true }), false)
 })
+
+test("guesses: each Guess (pending user) line counts until ruled; a raft lists its tickets with guesses", () => {
+  const long = "x".repeat(20000)
+  const m = M.normalize({
+    issues: [
+      { id: "f0020", type: "feature", title: "a", stage: "prepared", raft: "R0020",
+        body: "- Guess (pending user, 2026-11-15): one\n" + long + "\nGuess (pending user, 2026-11-16): two, past the clip" },
+      { id: "f0021", type: "feature", title: "b", stage: "prepared", raft: "R0020",
+        body: "Decided with the user (2026-11-15): was a guess. It mentions the `Guess (pending user, …)` form in code." },
+      { id: "f0022", type: "feature", title: "c", stage: "new" },
+    ],
+    rafts: [{ id: "R0020", type: "feature", stage: "prepared", issues: ["f0020", "f0021"] }],
+  })
+  assert.equal(m.byId.f0020.guesses, 2, "counted in the whole body, not the clipped one")
+  assert.equal(m.byId.f0021.guesses, 0, "a ruled guess and a quoted form don't count")
+  assert.equal(m.byId.f0022.guesses, 0, "no body")
+  assert.deepEqual(m.byId.R0020.guessMembers, ["f0020"])
+})
