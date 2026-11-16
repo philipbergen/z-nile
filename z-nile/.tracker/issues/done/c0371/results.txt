@@ -1,0 +1,216 @@
+z-nile/.tracker/issues/active/c0371/acceptance/check-paths-homes.spec.luau
+	a Touched entry still covers the path of its own work, from either convention (c0141's reading)
+	a path covered by no entry is still reported, also when it exists elsewhere in the repository
+	a command after cd to the repository root is read from the root until its group or script closes
+	the root reading goes on over the lines of its script and its file, and ends where the script or group does
+	a word in a code span is prose, all of the span, and a bare path next to it is still read
+	the message of an echo or printf is prose, in command position only, and the next command is still read
+	the quoted arguments of a search helper the check defines are text, across line continuations
+	a for list that is only matched as text is prose; one the loop opens as a file is read
+	a comment is not shell, so an apostrophe in one changes no quoting (review 002 F1)
+	a group that closes at the end of its line ends the root reading (review 002 F2)
+	a top-level cd holds for the quoted words and the scripts after it, and a script's idiom keeps its cd (review 002 F3)
+	the command that check runs, and a continued line that starts with an operator, are in command position (review 002 F4)
+	a for list is text only when the loop only matches it (review 002 F5)
+	an echo's message stops at a command substitution, and a one-word echo is a value (review 002 F6)
+	what each remaining rule must keep reading (review 002 F7)
+	a heredoc body, a $'...' string and the quotes inside $(...) change no quoting (review 003 F1)
+	directory frames follow bash: subshells, literal cds, double-quoted scripts, splices, comments in quotes, case patterns (review 003 F2)
+	a value that echo or printf prints is a path the check runs (review 003 F3)
+	rules L and H read keywords and commands, not words (review 003 F4)
+	command position reaches past assignments, timeout and a check that does not start its line (review 003 F5)
+	the grep forms and the ${NAME} use are read (review 003 F6)
+	grep's pattern is text as main reads it: an unquoted grep after git, a wrapper or an option (review 004 F1)
+	a comment line or a ` # ` tail in a heredoc body or a script hides its words, as main reads them (review 004 F3)
+	a cd that goes on after the named form is no root cd, and a label after --check is no label (review 004 F3)
+	a function that names grep in a comment or a message is no search helper (review 004 F4)
+	what the Design names stays pinned: script quotes, case bodies, a helper call that ends with its script (review 004 F5)
+	the remaining rules the Design names stay pinned (review 005 F3)
+	the live tree passes, every check.sh read
+z-nile/.tracker/issues/active/c0371/acceptance/touched-from-home.spec.luau
+	folds a home-relative path to the checkout's top, and refuses one that climbs above it
+	reads a document's Touched entries by the document's convention, never the disk's
+	the verdict doesn't change when the item's own work creates the path (design review 002's probe)
+	in a fixture, a path the item creates is exempt from any home and through a cd; others are reported
+z-nile/.tracker/issues/active/c0371/acceptance/uses-module.spec.luau
+	c0120's promoted spec takes its scan from the module and keeps no scanner of its own (F2)
+z-nile/tests/acceptance/c0117/adapters.spec.luau
+	claude runs -p with stream-json, the model, bypassed permissions and no prompts
+	grok runs -p with streaming-json in the step's folder, auto-approved, with its session id
+	agent runs -p with stream-json, forced and trusted, its own sandbox off, in the step's workspace
+	every runtime has an adapter of its own CLI, and no other name has one
+	claude: one message counted once at its usage, and the final count from modelUsage
+	grok: a usage line per model call, and the end line's total
+	agent: no running token count, its model calls counted by distinct model_call_id, the result's real total at the end
+	tracks the tool calls that are running, per CLI, for the tool limit
+	only what the CLI itself prints is read for quota or a wait, never the model's words
+	a quota or rate limit is quota: claude's rejected event, an error result, or a failed CLI's stderr
+	a non-zero exit is failed, and an exit 0 with no token count is ok
+z-nile/tests/acceptance/c0117/dispatch.spec.luau
+	ready, stop, recombine and spend are script steps; every z-nile skill is a step or read inside one
+	a script step is a ./zn command, and takes no model
+	a model step reads the design or build lessons, and its row has its phase
+	the prompt names the skill's file and the lessons search, and pastes no skill text
+	a stream review's prompt names the stream's worktree and the one review file
+	an unruled open list stops for the user and does not pick a step
+	stops first for questions.md, a failed step, and an unharvested finding after a review step
+	a commit is a pull request's merge only when GitHub says it merged into main (review 003 F6)
+	captures, designs, and waits at or passes the prep gate
+	a step that ended ok but moved nothing stops the chain
+	rafts a prepared issue: raft-plan, then z-raft, then the raft gate, then follows the raft
+	readies and runs a raft; the run's PR is always a human's to merge
+z-nile/tests/acceptance/c0117/docs.spec.luau
+	every model step's skill carries the same headless section, before its lessons
+	who reviews is the role .models.toml names, wherever a skill says so
+	z-ticket lands without asking, and a layer is reviewed in code mode
+	z-run ends at Ready to merge under the dispatcher
+	zz-rules has the Dispatch section and names the dispatcher in its lists
+	zz-test lists a model CLI started by a check as caught only by review
+	the README draws the dispatcher and .models.toml as built
+	AGENTS.md and the usage name the dispatcher
+	the raft's prompt template names skills and the architecture path and pastes neither
+z-nile/tests/acceptance/c0117/models.spec.luau
+	a closer file replaces only the keys it sets, and every try of the role carries that cap
+	a closer fallbacks list replaces the try list, and each setting is replaced on its own
+	settings come from the walk, closest first; an unset auto_merge is none, and so is any error
+	tries are the role's CLI, then its fallbacks
+	the higher rank wins whole, with its own cap
+	the same rank takes the larger max_tokens, and its model with it; a tie keeps the first
+	a raft takes, per CLI, the stronger of its members' specs, in the raft's own try list
+	refuses a CLI the file does not support, in a role or in its fallbacks
+	order and a skill table are refused at load, and so is a fallback's rank, cap or effort
+	a runtime belongs to its CLI: each CLI's one local runtime, and no other
+	a spec missing a field is an error naming the role and the field
+	agent's specs need max_calls and max_minutes, never unlimited; the other CLIs' don't
+	nothing defaults: no file, a role no file names, or a skill that is not a step is an error naming it
+	a repeated table or key is the reader's error, never a silent pick
+	the model id a row records carries its effort
+	walks from the repository root down to the folder, root first
+	the root .models.toml resolves every model step, and a fallback carries the role's cap
+z-nile/tests/acceptance/c0118/docs.spec.luau
+	the board row describes tabs, columns, bands, the done window, the card and both charts
+	the old row's words stay: the views, Stats and -O
+	the README draws the built board and names the served one as planned
+	the board spec declares both tracker folders of every registered project, the registry and the map
+z-nile/tests/acceptance/c0118/metrics.spec.luau
+	the body finder reads a nested function to its own end
+	the reading sees through comments and every spelling of a round-file pattern (design review 007 F2)
+	metrics' designRoundsIn counts through boardview.rounds and keeps no pattern of its own
+	metrics' codeRounds counts through boardview.rounds and keeps no pattern of its own
+z-nile/tests/acceptance/c0118/model.spec.luau
+	sets up a two-project repository with landed, running, readied, prepared and new work
+	has one tab per project, in registry order, and tags every item with its project
+	puts each issue in its column, with each raft a band and the raftless cards last
+	a raft runs when a branch <R-id>-…, local or on origin, has a commit after its latest ready; look-alikes and a branch left from before do not count
+	dates landings from history, and an arrival under a compaction from the newest spend row
+	counts a raft's rounds over its folder, its members' and its retired rafts' (followed through), once each
+	draws each project's rounds chart for every range from that project's landed rafts only
+	draws the tokens chart from review rows by model, the unrecorded series included, build rows not
+	gives each card its spend, models and dispatcher state
+	names a spend.md that does not parse, and still builds
+	opens on the Board with a 24-hour done window and a 90-day chart range, and keeps the old views
+	without an as-of time there are no done ages and no charts
+	readFacts reads HEAD's time, the branches, the worktrees and the dispatcher's state, writing nothing
+	without git history every done item is dated by its newest spend row, and the model says so
+	reserves pr and checks for the served page: nil in every model c0118 builds
+	cleans up
+z-nile/tests/acceptance/c0118/page.spec.luau
+	builds a two-project page
+	opens on the Board of the first project, with a tab per project and the list hidden
+	draws each raft as a band behind its cards, in its column
+	shows done cards while their age is within the window: 24 hours by default, 1 hour up to 30 days
+	shows both charts for the chosen range, 90 days by default
+	a card click shows its column, model, spend and document, and says PR and checks are live elsewhere
+	a project tab shows that project's columns only, and names it in the link
+	a search for another project's card switches to that project and stays on the Board
+	the arrow keys cycle Board, Rafts and Issues, and the lists show the selected project only
+	a #project link opens that project's Board
+	znBoard.load swaps the model and keeps the project and the done window
+	znBoard.load keeps the range and the selected card, and replaces the Stats section when given one
+	a card shows the PR and checks a served model carries, and the static page says where they live
+	without git history the done column says its times come from spend rows
+	cleans up
+z-nile/tests/acceptance/c0118/real.spec.luau
+	has one tab per project in z-nile/projects.toml, in its order
+	puts every issue on exactly one column of its own project
+z-nile/tests/acceptance/c0118/view.spec.luau
+	maps each effective status to its column, and active by the raft's branch to ready or run
+	has six columns in pipeline order
+	refuses a status that is not an effective status, naming it
+	bands a column by raft in id order, the raftless cards last, ids sorted
+	ages a done card from the page's as-of time, never below zero, and unknown when either time is
+	the done window is 24 hours by default and runs from 1 hour to 30 days
+	the charts' range is 90 days by default and opens to all history
+	weeks are ISO weeks in UTC: a Sunday-evening landing in -07:00 is the next week
+	counts a raft's rounds from its files: design reviews and code reviews, each path once, nothing else
+	review rounds by week cover every week of the range, landed rafts in their UTC week, none outside
+	a raft that landed exactly at the range's start counts, one second earlier does not
+	all history starts at the earliest landing, and nothing landed gives no weeks
+	tokens by model read only design-review and code-review rows with tokens, dated in the range
+	ties between models go by id, and models past the cap are summed as other models
+	models with equal totals are ordered by id
+	scales a tall token axis to k or M tokens, and leaves a short one alone
+	reads a spend row's UTC minute, or a bare day, and nothing else
+z-nile/tests/acceptance/c0120/check-paths.spec.luau
+	finds the literal paths of a check.sh, and nothing else
+	in a fixture, each check.sh is read from its home, and a vanished path is reported
+	every unfinished item's check.sh, in every project root, names only paths that exist from its home
+	the restamped check.sh files are exempt only as they are now
+z-nile/tests/acceptance/c0165/results.spec.luau
+	AC6: concurrent workers: every file's cases, a dead worker not loaded, output and exit code unchanged
+	AC6: in process (one job): the same record, and output unchanged
+	AC6: a passing run exits 0 and records every file; a path outside the home's .cache is never written
+z-nile/tests/acceptance/c0165/select.spec.luau
+	a watched source file selects that spec and no other, and a skill selects nothing
+z-nile/tests/acceptance/c0239/docs.spec.luau
+	AC1: zz-test holds the rule table and no stop hook line
+	AC1: the stale gate lines are gone and their new text is pinned
+	AC1: the other files restate each step's gate
+	AC2: the raft template's RC0 runs the affected gate and nothing tells the author to run --full early
+	AC3: Phase 0 runs no gate, Phases 3 to 5 use the affected gate, the merge keeps the one full gate
+	AC1: z-nile/tests/inputs.tsv declares what docs.spec, done.spec and land.spec read
+z-nile/tests/acceptance/c0239/done.spec.luau
+	AC4: the done decision is affected (its promoted branch is c0074/done-gate's)
+	AC4: done's gate command and messages
+z-nile/tests/acceptance/c0239/land.spec.luau
+	AC5: land's default gate is the static stages
+z-nile/tests/acceptance/c0269/titles.spec.luau
+	AC2: the scan finds the old rule in a title, a comment and a string
+	AC2: no spec file under z-nile/tests repeats the old rule
+	AC2: inputs.tsv declares what this spec reads
+z-nile/tests/tooling/board-review.spec.luau
+	sets up a done raft whose only review spend is one model's 12 million tokens
+	F1: the tokens caption names the scaled unit and the lone series; the rounds caption stays plain
+	F1: the page draws each figure's own caption (the node run of the page's script), and sizes the charts apart from Stats
+	F2: a spend.md that does not parse is named in the model, and the page shows it and redraws it on load
+	F3: board.luau keeps no round-file pattern of its own: reviewFiles matches nothing, boardview.rounds counts
+z-nile/tests/tooling/checkpaths-review.spec.luau
+	reads the list when the pattern is given by -e or --regexp and the variable is the file
+	reads the list when the variable is a patterns file
+	keeps the list as text when the variable is the pattern
+	still reads a file operand after a plain pattern
+z-nile/tests/tooling/dispatch-texts.spec.luau
+	z-design, z-raft and zz-rules say a dispatched step neither asks nor merges at its PR (F5)
+	a model id the ledger refuses is refused in .models.toml, with its effort (F6)
+	no comment calls a decided guess pending, or gives a CLI two runtimes (F8)
+z-nile/tests/tooling/raftcheck.spec.luau
+	renders the template for the raft and keeps its RC0 lines as the head
+	passes the template, and RCn checks after its RC0 lines
+	refuses an RC0 line changed, and anything after them that could change the result
+z-nile/tests/tooling/select-scope.spec.luau
+	a watched source file inside one project names it
+	an empty change set and an unwatched path are ALL
+	an unwatched engine or project file does not name a project by itself
+	a changed path outside the project's home keeps ALL
+	watch files in two projects are ALL
+	a changed spec is selected even when no watch file names it yet
+z-nile/tests/tooling/slow-tier.spec.luau
+	names 99 existing z-nile specs with their recorded seconds
+	has at least the 25 slowest recorded specs
+	keep drops the slow tier or keeps only it
+	refuses --slow together with --exclude-slow before taking the suite lock
+z-nile/tests/tooling/wrapper-guards.spec.luau
+	sets up a bare origin whose main moved past a start, and a fake real gh
+	z-nile/bin/git refuses every rewind of main, a tracker-only tail included (F3)
+	decidePush refuses a forced update of main on its own, whatever the check says (code review 002 F4)
+	z-nile/bin/gh never takes an option's value for gh api's endpoint (F4)
