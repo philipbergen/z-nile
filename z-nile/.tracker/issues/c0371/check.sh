@@ -23,7 +23,8 @@ check "AC4: c0120's check-paths spec passes on the live tree with the check.sh o
 
 check "AC5: the branch edits no other item's check.sh (only this item's and the raft's)" \
   bash -c 'cd "$ZN_ROOT" && base=$(git merge-base origin/main HEAD) || { echo "no origin/main to compare with"; exit 1; }
-    other=$(git diff --name-only "$base" HEAD -- ":(glob)**/check.sh" | grep -v -e "/c0371/" -e "/rafts/")
+    own=$(sed -n "s/^raft: *//p" "$(./zn find c0371)/c0371.md" | head -1)
+    other=$(git diff --name-only "$base" HEAD -- ":(glob)**/check.sh" | grep -v -e "/c0371/" -e "/${own:-NO-RAFT}/")
     [[ -z $other ]] || { echo "check.sh files changed: $other"; exit 1; }'
 
 check "AC6: zz-test says how the scan reads a root cd, a search helper, a code span, an echo or printf message and a text-only for list; z-design says a Touched list has one convention; tests/inputs.tsv declares c0371's live spec" \

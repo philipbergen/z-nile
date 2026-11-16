@@ -37,3 +37,7 @@
 - design-review-004 F5: zz-test/seed-every-enumerated-case
 - design-review-004 F6: z-design/restated-rules-move-together
 - design-review-004 F7: zz-test/shell-rules-key-on-command-position
+- design-review-005 F1: zz-test/measure-hand-written-readers-on-the-corpus
+- design-review-005 F2: z-design/restated-rules-move-together
+- design-review-005 F3: zz-test/seed-every-enumerated-case
+- design-review-005 F4: z-design/spec-design-correspondence

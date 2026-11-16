@@ -853,6 +853,78 @@ return t.spec("c0371 check-paths reads homes right", function(it)
 		end
 	)
 
+	it("the remaining rules the Design names stay pinned (review 005 F3)", function()
+		-- a case test's `in` after a `;` or `(` on the line
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'(cd "$ZN_ROOT"; case "$x" in a) true ;; esac; test -f tests/run.luau); test -f z-nile/roots.luau\n'
+			)
+		).toEqual({ bad("z-nile", "tests/run.luau", ROOT), bad("z-nile", "z-nile/roots.luau") })
+		-- a loop nested after then / else
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'for f in tests/gone.md; do if true; then for g in a; do case "$g" in *"$f"*) ;; esac; done; fi; test -f "$f"; done\n'
+			)
+		).toEqual({ bad("z-nile", "tests/gone.md") })
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'for f in tests/gone.md; do if false; then :; else for g in a; do case "$g" in *"$f"*) ;; esac; done; fi; test -f "$f"; done\n'
+			)
+		).toEqual({ bad("z-nile", "tests/gone.md") })
+		-- an echo message stops at a backtick
+		t.expect(findings("z-nile", {}, 'echo "found `cat src/gone.luau`"\n'))
+			.toEqual({ bad("z-nile", "src/gone.luau") })
+		-- a literal cd in a double-quoted script does not join the root frame
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'cd "$ZN_ROOT"\ncheck "AC1" bash -c "cd pickman && test -d src/server"\ntest -f z-nile/roots.luau\n'
+			)
+		).toEqual({ bad("z-nile", "src/server", ROOT) }) -- a Known edge: the dq cd is not followed
+		-- a helper's name as an argument is no call
+		t.expect(findings("z-nile", {}, HAS .. 'foo has "tests/gone.md"\n'))
+			.toEqual({ bad("z-nile", "tests/gone.md") })
+		-- a text-only for list ends at its `;`
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'for f in a; do case "$E" in *"$f"*) ;; esac; test -f src/gone.luau; done\n'
+			)
+		)
+			.toEqual({ bad("z-nile", "src/gone.luau") })
+		-- a script in a root subshell starts from the subshell's frame
+		t.expect(findings("z-nile", {}, [=[(cd "$ZN_ROOT" && bash -c 'test -f z-nile/roots.luau')]=] .. "\n"))
+			.toEqual({})
+		-- a << inside double quotes starts no heredoc
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'grep -qF "cat <<EOF" "$F"\n(cd "$ZN_ROOT" && test -f z-nile/roots.luau)\n'
+			)
+		)
+			.toEqual({})
+		-- grep in a single-quoted message makes no helper
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				[=[fail() { echo 'grep "$1" failed'; return 1; }]=]
+					.. "\n"
+					.. [=[fail "src/gone.luau"]=]
+					.. "\n"
+			)
+		).toEqual({ bad("z-nile", "src/gone.luau") })
+	end)
+
 	it("the live tree passes, every check.sh read", function()
 		-- the check.sh files c0120 exempts by their blob id (its RESTAMPED list), read from its spec
 		local exempt: { [string]: boolean } = {}
