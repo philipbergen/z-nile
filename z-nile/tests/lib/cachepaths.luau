@@ -158,6 +158,7 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['print("watch-net: started, log at .cache/watch-net.log")'] = "a message naming the log",
 	},
 	["z-nile/engine/board.luau"] = {
+		["local workState = `{dir}/.cache/work/state`"] = "c0253: the board reads the supervisor's state file to show it on a card; nothing is written",
 		["local home = `{dir}/.cache/dispatch`"] = "c0118: the board reads the dispatcher's run state (state.json, questions.md) to show it on a card; nothing is written",
 	},
 	["z-nile/engine/dispatcher.luau"] = {
@@ -166,6 +167,9 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['local at = string.find(here, "/.cache/", 1, true)'] = "a prefix compared with a CLI's real path (c0117: only a fake under .cache starts inside a check); nothing is written",
 		['return if at then string.sub(here, 1, at + 7) else here .. ".cache/"'] = "the same prefix; nothing is written",
 		["`refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
+	},
+	["z-nile/engine/workedge.luau"] = {
+		['workedge.DIR = ".cache/work"'] = "c0253: the supervisor's own state folder in the main checkout (state through sh.writeReplacing, the stop file, the log and the lock files); gitignored, read by ./zn work status and stop, the reaper and the board",
 	},
 	["z-nile/engine/costrow.luau"] = {
 		["local path = `{root}/.cache/measure.tsv`"] = "the checkout's measure buffer; gitignored, appended by a gate, a spec run or ./zn run, and folded into a ticket only by commit, spend, done or land",

@@ -25,6 +25,7 @@ local dispatch = require("./dispatch")
 local escalation = require("./escalation")
 local exchange = require("./exchange")
 local fs = require("@lune/fs")
+local heartbeat = require("./heartbeat")
 local landcheck = require("./landcheck")
 local layergit = require("./layergit")
 local ledger = require("./ledger")
@@ -42,6 +43,7 @@ local sh = require("../lib/sh")
 local stack = require("./stack")
 local stdio = require("@lune/stdio")
 local store = require("./store")
+local supervise = require("./supervise")
 local task = require("@lune/task")
 local trackerstate = require("./trackerstate")
 
@@ -61,6 +63,7 @@ export type Ctx = {
 	onGitHub: () -> boolean,
 	checking: () -> boolean, -- inside a guarded run (a spec or a check.sh): only a CLI under .cache may start
 	origin: (id: string) -> OriginItem?,
+	memoryIn: ((dir: string, id: string) -> string)?, -- c0275: the claim stamp the checkout at `dir` remembers for `id`, "" for none
 	prView: (branch: string) -> string?, -- `gh pr view <branch> --json …`'s output, or nil
 	prMerged: (sha: string) -> boolean, -- `sha` is a pull request's merge commit on GitHub
 }
@@ -114,8 +117,14 @@ export type State = {
 	pending: { Row },
 	sealed: { [string]: string }?, -- the sha256 of each exchange file the dispatcher wrote (c0256)
 	answering: string?, -- the sha256 of the questions.md an answer was written for, until it is set aside
+	session: { cli: string, id: string }?, -- c0253 worker mode: the CLI session the raft's z-run step last ran (Q3), resumed on a rerun
+	quotaSince: number?, -- c0253 worker mode: when the outage that has every CLI of a step out of quota began
 }
 
+-- c0253: worker mode, set once in `main` from `--worker`, `--cli` and `--no-run`: the supervisor's runs resume one CLI session per
+-- raft, start the person's CLI first, wait for quota before switching, and leave the `run` gate (the landing) off on a host
+-- that does not land. A plain `./zn dispatch` leaves all of it off.
+local worker = { on = false, cli = nil :: string?, noRun = false }
 local HOME = ".cache/dispatch"
 -- the state folder of a step that another step dispatched (a review from its author), set once in `main`
 local nested: string? = nil
@@ -1068,6 +1077,56 @@ local function reviewDirs(id: string): { string }
 	return out
 end
 
+-- c0275: while a model step works an item, the dispatcher beats for it, so a claim whose model thinks for minutes between
+-- two `./zn` commands never reads lost. Every INTERVAL one child (`zn beat <id> --adopt --stamp <S>` under `./zn run
+-- --time 60`, one at a time; a hung remote cannot stall the supervising loop because the child runs in a task of its own)
+-- beats the claim `S` the step's worktree remembers, else the one main showed when the step started. A claim restamped
+-- mid-step is refused by the child: the dispatcher stops beating and says so once. Returns the function that stops it.
+function dispatcher.claimBeat(ctx: Ctx, id: string, cwd: string, started: string?): () -> ()
+	local running = true
+	if id == "" then
+		return function() end
+	end
+	task.spawn(function()
+		local every = heartbeat.setting(process.env, "ZN_BEAT_EVERY", heartbeat.INTERVAL, ctx.checking())
+		local last: number? = nil
+		local said = false
+		while running do
+			local at = os.time()
+			if heartbeat.due(last, at, every) then
+				last = at
+				local remembered = if ctx.memoryIn then ctx.memoryIn(cwd, id) else ""
+				local s = heartbeat.dispatchStamp(started, remembered)
+				if s then
+					local root = ctx.mainRoot()
+					-- ZN_MEASURED: a beat is not measured work of the claim (`./zn run` would add a line to the main checkout's buffer each time)
+					local r = process.exec(
+						`{root}/zn`,
+						{ "run", "--time", "60", "--", `{root}/zn`, "beat", id, "--adopt", "--stamp", s },
+						{
+							cwd = root,
+							env = { ZN_MEASURED = "1" },
+						}
+					)
+					local ok, err = r.ok, trim(r.stderr)
+					local outcome = heartbeat.dispatchOutcome(ok, err)
+					if outcome == "lost" then
+						stdio.ewrite(`dispatch: {err}: not beating {id} any more\n`)
+						return
+					elseif outcome == "failed" and not said then
+						said = true
+						stdio.ewrite(`dispatch: beat {id}: {err}\n`)
+					end
+				end
+			end
+			task.wait(1)
+		end
+	end)
+	return function()
+		running = false
+	end
+end
+
 -- c0251: the one plan of a model step: the tries in the order to run them, with each one's tier. `resolved` is the step's
 -- role (given, or resolved here). A role without `rotate` runs in the toml order, all tier 1 (as before c0251). A role
 -- with it is ordered by reviewpool.order over the writers of the mode's last step (authorread; `authorOpt` or ZN_MODEL
@@ -1216,6 +1275,30 @@ function dispatcher.finishCapture(ctx: Ctx, st: State, stateDir: string, target:
 		save(st) -- the moved exchange and its seal are saved together, before the spend is recorded
 	end
 	return nil
+end
+
+-- c0253 worker mode: wait `seconds` with no model running, beating the claim (c0275's claimBeat) and leaving at once when the run is
+-- stopped. In a check run ZN_WORK_QUOTA_WAIT (whole seconds) replaces the time, so a spec need not wait a minute.
+function dispatcher.workerWait(ctx: Ctx, id: string, cwd: string, stateDir: string, seconds: number)
+	local scale = heartbeat.setting(process.env, "ZN_WORK_QUOTA_WAIT", 0, ctx.checking())
+	local total = if scale > 0 then scale else seconds
+	local started: string? = nil
+	if id ~= "" then
+		local found = pcall(function()
+			started = heartbeat.stampIn(store.readFront(store.get(id).doc).status)
+		end)
+		if not found then
+			started = nil
+		end
+	end
+	local stopBeat = dispatcher.claimBeat(ctx, id, cwd, started)
+	for _ = 1, math.ceil(total) do
+		if fs.isFile(`{stateDir}/{runner.STOP}`) then
+			break
+		end
+		task.wait(1)
+	end
+	stopBeat()
 end
 
 function dispatcher.modelStep(
@@ -1471,19 +1554,69 @@ function dispatcher.modelStep(
 			tries = {}
 		end
 	end
-	for _, spec in tries do
+	-- c0253 worker mode: the person's CLI first (an author step, never a review's pool), and the first CLI waited for once on
+	-- quota (`[work.<cli>] quota_wait_minutes`) before the next is tried (Q9). A plain run keeps the role's order.
+	local layers: { models.Layer } = if worker.on and id ~= "" then walk(store.get(id).dir) else {}
+	local quotaWaits = if worker.on then models.quotaWaits(layers) else {}
+	local slots = supervise.order(
+		tries,
+		function(s: models.Spec): string
+			return s.cli
+		end,
+		if worker.on and step ~= "zz-review" then worker.cli else nil,
+		if worker.on and step ~= "zz-review" then quotaWaits else {}
+	)
+	for _, slot in slots do
+		local spec = slot.spec
+		if slot.afterWait then
+			if outcome ~= "quota" then
+				continue
+			end
+			stdio.ewrite(
+				`dispatch: {spec.cli} is out of quota: waiting {quotaWaits[spec.cli] or 0}s for it before the next CLI\n`
+			)
+			dispatcher.workerWait(ctx, id, cwd, stateDir, quotaWaits[spec.cli] or 0)
+		end
 		if onlyReviewModels and not reviewmodel.ok(spec.model, spec.effort) then
 			skipped(spec, `{spec.model} at effort {spec.effort or "none"} is not a review model: skipped`)
 			continue
 		end
 		local adapter = adapters.get(spec.runtime)
+		-- c0253 (Q3): in worker mode the raft's z-run session is one session: a rerun on the same CLI resumes it; on another CLI
+		-- (Q9) a new session is told to read the raft's notes. Every prompt names the skill and the raft.
+		local sessionId = string.lower(trim(process.exec("uuidgen", {}).stdout))
+		local sessionMode = "new"
+		local tryPrompt = prompt
+		if worker.on and step == "z-run" then
+			sessionMode = supervise.sessionMode(st.session, spec.cli)
+			if sessionMode == "resume" then
+				sessionId = (st.session :: { cli: string, id: string }).id
+			end
+			tryPrompt = prompt
+				.. supervise.sessionPrompt(
+					sessionMode,
+					id,
+					skillPath,
+					supervise.notesPath(store.get(id).dir),
+					if st.session then st.session.cli else ""
+				)
+		end
 		local argv = adapter.argv({
-			prompt = prompt,
+			prompt = tryPrompt,
 			model = spec.model,
 			effort = spec.effort,
 			cwd = cwd,
-			session = string.lower(trim(process.exec("uuidgen", {}).stdout)),
+			session = sessionId,
 		})
+		if sessionMode == "resume" then
+			local resumedArgv, why = supervise.withSession(argv, spec.cli, sessionId, true)
+			if not resumedArgv then
+				outcome = "failed"
+				refused(spec, why or "no resume row")
+				break
+			end
+			argv = resumedArgv
+		end
 		local bin = resolveBin(argv[1], basePath)
 		if not token then
 			outcome = "failed"
@@ -1555,6 +1688,16 @@ function dispatcher.modelStep(
 			end
 			return ok, said
 		end
+		local startedStamp: string? = nil
+		if id ~= "" then
+			local found = pcall(function()
+				startedStamp = heartbeat.stampIn(store.readFront(store.get(id).doc).status)
+			end)
+			if not found then
+				startedStamp = nil
+			end
+		end
+		local stopClaimBeat = dispatcher.claimBeat(ctx, id, cwd, startedStamp)
 		local trailPath = `{stateDir}/trail.log`
 		local trail = if fs.isFile(trailPath) then fs.readFile(trailPath) else ""
 		local function noteLine(line: string, tokens: number)
@@ -1592,6 +1735,7 @@ function dispatcher.modelStep(
 				else nil,
 			onLine = noteLine,
 		})
+		stopClaimBeat()
 		holdBeat() -- the review still lands and the spend is recorded: beat through it
 		local outcomeNow: string = result.outcome
 		local detail = result.detail
@@ -1616,6 +1760,14 @@ function dispatcher.modelStep(
 			cpu = result.cpu,
 		})
 		print(`dispatch: {step} on {spec.cli}: {outcomeNow} ({detail}), {result.tokens} tokens`)
+		-- c0253: a session that ran (it spent tokens or ended ok) is the raft's session from here on; one that never started is not
+		if worker.on and step == "z-run" and (result.tokens > 0 or outcomeNow == "ok") then
+			st.session = { cli = spec.cli, id = result.session or sessionId }
+			if outcomeNow == "ok" then
+				st.quotaSince = nil -- an outage that a working session ended is forgotten (the cap counts one unbroken outage)
+			end
+			save(st)
+		end
 		outcome = outcomeNow
 		-- c0251: a try of the writers' own line is a fallback: the file records why, and the board flags it
 		local reason = if picked[spec]
@@ -2691,7 +2843,7 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 		openHuman = openHuman,
 		last = last,
 		uncovered = uncovered,
-		autoMerge = settings.autoMerge,
+		autoMerge = supervise.gates(settings.autoMerge, worker.noRun),
 		description = description,
 		layered = layered,
 		land = land,
@@ -3112,6 +3264,61 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 				end
 				local oldDir = st.dir
 				dispatcher.modelStep(ctx, st, step, target, o2)
+				-- c0253 (Q9, c0250): every CLI of the raft's step is out of quota: wait with no model, beating, and run the step
+				-- again, until the outage (one unbroken stretch) passes `quota_cap_hours`; then block the raft with `quota`
+				local blockedOnQuota = false
+				if worker.on and step == "z-run" then
+					for _ = 1, 1000000 do
+						if st.outcome ~= "quota" then
+							st.quotaSince = nil
+							break
+						end
+						local capHours = models.quotaCapHours(walk(store.get(target).dir))
+						local verdict = supervise.allOut(
+							st.quotaSince,
+							os.time(),
+							if capHours then capHours * 3600 else nil
+						)
+						st.quotaSince = verdict.since
+						save(st)
+						if verdict.kind == "block" then
+							local wt = worktree(ctx, target)
+							local item = ctx.origin(target)
+							local folder = string.match(
+								item and (item :: OriginItem).path or "",
+								"^(.*)/[^/]+$"
+							) or ""
+							fs.writeDir(`{wt}/{folder}`)
+							fs.writeFile(
+								`{wt}/{folder}/escalation.md`,
+								supervise.quotaEscalation(
+									target,
+									dispatcher.resolve("z-run", target, nil, nil).order,
+									os.time() - verdict.since
+								)
+							)
+							local blocked = dispatcher.scriptStep(ctx, st, "z-block", target, { "quota" })
+							if blocked ~= "ok" then
+								print(`stop: z-block {target} failed: ./zn dispatch retry {target}`)
+								return dispatch.EXIT.failure
+							end
+							st.quotaSince = nil
+							save(st)
+							blockedOnQuota = true
+							break
+						end
+						local recheck = supervise.QUOTA_RECHECK_SECONDS
+						stdio.ewrite(
+							`dispatch: every CLI is out of quota: waiting {recheck}s with no model, then trying again\n`
+						)
+						dispatcher.workerWait(ctx, target, st.worktree or ctx.mainRoot(), st.dir, recheck)
+						dispatcher.modelStep(ctx, st, step, target, o2)
+					end
+				end
+				if blockedOnQuota then
+					zn(ctx.mainRoot(), { "sync" }, true)
+					continue
+				end
 				if step == "z-ticket" and st.outcome == "ok" then
 					id = st.id
 					description = nil
@@ -3173,6 +3380,9 @@ local mainInner: (ctx: Ctx, pos: { string }, opts: { [string]: { string } }) -> 
 
 -- `./zn dispatch …`; its own fetch refs go at its end, whatever happened (review 005 F1)
 function dispatcher.main(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): number
+	worker.on = opts["--worker"] ~= nil
+	worker.cli = if opts["--cli"] then opts["--cli"][1] else nil
+	worker.noRun = opts["--no-run"] ~= nil
 	local ok, code = pcall(mainInner, ctx, pos, opts)
 	pcall(dropRefs, ctx.mainRoot())
 	if not ok then

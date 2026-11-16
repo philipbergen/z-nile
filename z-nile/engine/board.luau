@@ -13,6 +13,7 @@ local stack = require("./stack")
 local stats = require("./stats")
 local status = require("./status")
 local store = require("./store")
+local supervise = require("./supervise")
 
 local board = {}
 
@@ -700,6 +701,21 @@ function board.readFacts(dir: string): Facts
 					}
 				end
 			end
+		end
+	end
+	-- c0253: the live supervisor's item shows as the card's dispatch row (step "worker", its CLI as the model), unless the
+	-- dispatcher has a row for it. A stopped supervisor, a dead one and a state file that cannot be read show nothing.
+	local workState = `{dir}/.cache/work/state`
+	if fs.isFile(workState) then
+		local s = supervise.parseState(fs.readFile(workState))
+		if
+			s
+			and s.item ~= ""
+			and s.state ~= "stopped"
+			and process.exec("kill", { "-0", tostring(s.pid) }).ok
+		then
+			facts.dispatch[s.item] = facts.dispatch[s.item]
+				or { step = "worker", outcome = s.state, model = s.cli, questions = false }
 		end
 	end
 	return facts

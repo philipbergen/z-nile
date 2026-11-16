@@ -43,6 +43,7 @@ export type Options = {
 	scratch: { string }, -- prefixes of this repository's Claude session folders and the spec runner's temp folders
 	self: { number }, -- the reaper's pid and its ancestors
 	under: number?, -- an ending session's process: its tool shells, and what runs below them, are leaks too
+	keep: { number }?, -- c0253: the pid of the supervisor the main checkout's state file names (and only when its command is one)
 	sessionAnywhere: boolean, -- the session rule needs no folder in scope: the shells are the session's by ancestry (the default scope; an explicit --root keeps the folder test)
 }
 
@@ -241,6 +242,15 @@ local function underLegitGit(p: Proc, byPid: { [number]: Proc }): boolean
 	return false
 end
 
+-- The worker's supervisor (c0253, `./zn work --detach`) is meant to outlive the session that started it: it runs
+-- `lune run z-nile/engine/main -- work run …` with no parent. It is exempt from the ORPHANED rule only when the main
+-- checkout's `.cache/work/state` names its pid (`opts.keep`) and its command is that one; anything below it keeps every rule,
+-- the deadline rule included, and a process whose arguments merely say `work run` is not exempt.
+function reap.isSupervisor(p: Proc): boolean
+	return reap.name(p.command) == "lune"
+		and string.find(p.command, "engine/main -- work run", 1, true) ~= nil
+end
+
 -- ZN_BOUNDED_DEADLINE per pid, from `ps -axww -E -o pid=,command=`: the environment follows the arguments,
 -- space-separated, so only the text after the arguments `parse` already has for that pid is read (a process whose
 -- arguments merely spell `ZN_BOUNDED_DEADLINE=...` has no such variable, and one that changed between the two `ps`
@@ -342,7 +352,13 @@ function reap.decide(procs: { Proc }, opts: Options): { Target }
 	local targets: { Target } = {}
 	local taken: { [number]: boolean } = {}
 	for _, p in procs do
-		if p.pid <= 1 or p.uid ~= opts.uid or table.find(opts.self, p.pid) or underLegitGit(p, byPid) then
+		if
+			p.pid <= 1
+			or p.uid ~= opts.uid
+			or table.find(opts.self, p.pid)
+			or underLegitGit(p, byPid)
+			or (opts.keep ~= nil and table.find(opts.keep, p.pid) ~= nil and reap.isSupervisor(p))
+		then
 			continue
 		end
 		local scoped = inScope(p.cwd, opts.roots, opts.scratch)

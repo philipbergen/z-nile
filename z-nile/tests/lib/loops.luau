@@ -444,6 +444,10 @@ loops.ALLOWED = {
 			why = "the heartbeat ends when its returned stop closure clears running",
 		},
 		{
+			loop = "while running do",
+			why = "c0275's claimBeat ends when its returned stop closure clears running",
+		},
+		{
 			loop = "while true do",
 			why = "breaks when mkdir claims a unique folder, otherwise n raises past 1000",
 		},

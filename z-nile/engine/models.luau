@@ -110,6 +110,7 @@ export type Layer = {
 	fallbacks: { [string]: { [string]: any } },
 	members: { [string]: { [string]: any } },
 	families: family.Families,
+	work: { [string]: number }, -- c0253: [work.<cli>] quota_wait_minutes, per CLI
 }
 -- A skill resolved on one walk: the tries in order (`pool`), the per-CLI view of them (`order`: the CLIs in the order of
 -- their first try; `specs`: each CLI's first try), and the settings.
@@ -153,8 +154,15 @@ function models.parse(text: string, path: string): Layer
 	if not ok then
 		error(`{path}: {firstLine(decoded)}`, 0)
 	end
-	local layer: Layer =
-		{ path = path, settings = {}, roles = {}, fallbacks = {}, members = {}, families = {} }
+	local layer: Layer = {
+		path = path,
+		settings = {},
+		roles = {},
+		fallbacks = {},
+		members = {},
+		families = {},
+		work = {},
+	}
 	for key, value in decoded :: { [string]: any } do
 		if key == "order" then
 			error(`{path}: order is gone; a role names its cli, then its fallbacks`, 0)
@@ -227,6 +235,32 @@ function models.parse(text: string, path: string): Layer
 					table.insert(out, prefix)
 				end
 				layer.families[name] = out
+			end
+		elseif key == "work" then
+			if type(value) ~= "table" then
+				error(`{path}: [work] is a table`, 0)
+			end
+			for name, fields in value do
+				if type(name) ~= "string" or not isCli(name) or type(fields) ~= "table" then
+					error(
+						`{path}: [work.{tostring(name)}] is a table named by a supported CLI ({list(
+							models.CLIS
+						)})`,
+						0
+					)
+				end
+				for field, v in fields do
+					if field ~= "quota_wait_minutes" then
+						error(`{path}: work.{name}.{field} is not a setting (quota_wait_minutes)`, 0)
+					end
+					if not count(v) then
+						error(
+							`{path}: work.{name}.quota_wait_minutes is a whole number of minutes, at least 1`,
+							0
+						)
+					end
+					layer.work[name] = v
+				end
 			end
 		elseif key == "roles" or key == "fallback" or key == "member" then
 			if type(value) ~= "table" then
@@ -454,6 +488,17 @@ function models.quotaCapHours(layers: { Layer }): number?
 		end
 	end
 	return cap
+end
+
+-- The seconds the raft waits for each CLI that said quota (c0253, Q9), the closest file that sets one winning.
+function models.quotaWaits(layers: { Layer }): { [string]: number }
+	local out: { [string]: number } = {}
+	for _, layer in layers do
+		for cli, minutes in layer.work do
+			out[cli] = minutes * 60
+		end
+	end
+	return out
 end
 
 -- Every .models.toml on the walk to `dir` as tracked at a pinned commit, root first (design review 002 F5: settings,

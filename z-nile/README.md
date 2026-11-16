@@ -38,14 +38,14 @@ flowchart LR
   subgraph eng["engineer end: any AI CLI, interactive"]
     direction TB
     cap["z-ticket: interview, idea, idea review, confirm"]
-    des["z-design: design, acceptance tests, review, approve"]
+    des["approve the drafted design (./zn approve), or design by hand: z-design"]
     res["resolve blocks: ./zn resolve"]
     cap --> des
   end
   stack[("ranked stack on origin: tickets, rafts and state on main, heartbeats on branches")]
   subgraph wrk["worker end: any AI CLI running z-work"]
     direction TB
-    loop["claim the top raft: lost first, then rank"]
+    loop["claim the top raft: lost first, then rank; none claimable: draft the design of a confirmed idea"]
     layer["one ticket at a time: build, review, full-force review, finish its layer"]
     final["final review of the stack, then ./zn done lands it"]
     loop --> layer
@@ -62,7 +62,7 @@ flowchart LR
 
 ### Two ends, one stack
 - **The engineer end.** You sit in any AI CLI (`claude` and `agent` today; another CLI once its skill support is checked, c0115) in the main checkout and run the front of the pipeline: `z-ticket` to capture, `z-design` to sharpen an idea into a prepared issue, the design review. Everything you produce is tracker state landed on `main`: by pull request, or, for a capture or a claim, pushed straight to it (`./zn land`, `./zn status`). *exists*
-- **The worker end.** Any AI CLI runs the back of the pipeline: you start one by hand and run `z-work` in it, or a wrapper launches one headless (`./zn work`), on the same host or another. *captured* (c0253), on top of c0117's dispatcher (`./zn dispatch`, its chain, `.models.toml`, quota fallback, spend), which *exists* (c0117).
+- **The worker end.** Any AI CLI runs the back of the pipeline: you start one by hand and run `z-work` in it, or run `./zn work run` (a supervisor: no model, it runs each pick through the dispatcher), on the same host or another. *exists* (c0253), on top of c0117's dispatcher (`./zn dispatch`, its chain, `.models.toml`, quota fallback, spend), which *exists* (c0117).
 - **The only shared thing is `origin/main` and GitHub.** No daemon, no queue server. A worker on another machine needs a clone, its CLIs and a bot credential; the engineer sees it work on the board. *captured* (c0254)
 
 ### The idea stage
@@ -73,11 +73,13 @@ z-ticket writes an idea as checkable outcomes and challenges it once before anyt
 - c0247, which has z-ticket confirm intent before it creates a ticket, comes first, and c0260 builds on it.
 
 ### The worker
-Today a person can run `z-work` in the CLI they opened: that session takes the next prepared raft, or the one named (`./zn work <R>`), says what it took, and carries it layer by layer to `./zn done`. With a raft named it then stops; with none named it goes on to the next raft ready would accept, in the same context, and stops when none is claimable or after two rafts in a row are released as blocked. *exists*
+What each way in does. `z-work` in a CLI the person opened starts the supervisor, `./zn work --detach --cli <that CLI>`, and reports its progress: the supervisor takes what `./zn next` prints and runs each pick through the dispatcher's chain (`./zn dispatch <id> --worker`) in a new headless session of that CLI, with the dispatcher's wrapper, broker, tripwire, measured rows and gates, resumes a raft's session for each later step, and ends it when the raft merges or is blocked: ending the session is the clearing. `z-work --here` and `/z-run <R>` keep the person's own session as the worker for one raft: it takes the next prepared raft (or the one named), says what it took, carries it layer by layer to `./zn done`, and stops at the raft's end; the person starts a fresh session for the next. A person at a terminal runs `./zn work run --cli <name>` in the foreground, or asks a CLI session to be the window (closing or clearing the CLI stops it). *exists* (c0253)
 
-A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent` or `deepseek`. *captured* (c0253); the CLIs beyond `claude`, `grok` and `agent`, `deepseek` through `opencode`: *captured* (c0175).
+`./zn work [--cli <name>] [--once] [--max-items N] [--detach]` and `./zn work run` are the supervisor, started only in the main checkout and never inside a headless or dispatched session. It beats nothing itself: a dispatched step beats its claim (c0275) and a claim at a gate is parked. When nothing is claimable it waits, polling `origin/main` with no model running, until it is stopped (`./zn work stop`; `./zn work status` shows it, and the board shows the raft it holds). A CLI that runs out of quota is waited for up to `[work.<cli>] quota_wait_minutes`, then the next CLI continues in a new session that reads the raft's `notes.md`; with every CLI out it waits and blocks the raft with `quota` past `quota_cap_hours`. `ZN_ENGINE_CPU` (1800 s of CPU) limits the supervisor itself, which sleeps nearly always, so that is weeks of waiting. A host whose `~/.config/zn/host.toml` says `[work] land = false` never passes the landing gate. *exists* (c0253)
+
+A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent` or `deepseek`. *exists* (c0253); the CLIs beyond `claude`, `grok` and `agent`, `deepseek` through `opencode`: *captured* (c0175).
 - It claims the first raft in the order and stays with it all the way to merge, delivering it as a PR stack, one ticket at a time.
-- It keeps one context for the whole raft, so what it learned on one ticket carries to the next.
+- It keeps one context for the whole raft (one CLI session, resumed for each later step), so what it learned on one ticket carries to the next, and clears it when the raft ends.
 - A worker clears its context and picks up the next raft whenever a raft ends: when the raft is merged, or when it is blocked and the worker lets it go. No context carries from one raft to the next.
 - It lets go of a raft only when the raft is blocked.
 - When no raft is claimable the worker waits, polling `origin/main` from a plain `./zn` loop with no model running, and it may draft the design of a confirmed idea, which stops at a person's `./zn approve`.

@@ -143,6 +143,7 @@ usage: ./zn <command> ...
   work [<R-id>]                                 print the z-work skill (the worker a person starts). With a raft id, that raft.
   work next [--released <n>] [<R-id>]           the one next action. No raft: the next claimable one in this folder's project, or any project from the checkout root
   work queue                                    one line per raft in that same set that work next will not take, the first reason
+  next                                          the one item to take next, from origin/main: `<id> lost|raft|rafting|draft <why>` (exit 1 and `next: nothing to take: <why>` on stderr when none; c0249)
   work status                                   who holds which raft in that same set, which layer, since when
   capture <id>                                  print the item's document as captured (read-only)
   idea <id> [--text <rough>]                    write the idea as checkable outcomes, challenge it once, revise once
@@ -911,6 +912,10 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--session-end"
 			or a == "--begin"
 			or a == "--sessions"
+			or a == "--once"
+			or a == "--detach"
+			or a == "--worker"
+			or a == "--no-run"
 		then
 			opts[a] = { "true" }
 		elseif string.sub(a, 1, 1) == "-" then
@@ -9638,6 +9643,14 @@ local function reapRun(opts: { [string]: { string } }): boolean
 		if temp ~= "" then "/private" .. (string.gsub(temp, "/+$", "")) else "",
 		roots
 	)
+	-- c0253: the supervisor the main checkout's state file names is not a leak
+	local keepPids: { number } = {}
+	local okState, workState = pcall(function()
+		return require("./workedge").readState(require("./workedge").mainRoot())
+	end)
+	if okState and workState and (workState :: any).state ~= "stopped" then
+		table.insert(keepPids, (workState :: any).pid)
+	end
 	local options: reapLib.Options = {
 		uid = tonumber(sh.trim(sh.must("id", { "-u" }))) :: number,
 		now = os.time(),
@@ -9647,6 +9660,7 @@ local function reapRun(opts: { [string]: { string } }): boolean
 		scratch = scope.scratch,
 		self = self,
 		under = under,
+		keep = keepPids,
 		sessionAnywhere = scope.sessionAnywhere,
 	}
 	local want = reapLib.wantCwd(procs, options)
@@ -9819,10 +9833,15 @@ end
 function cmd.work(pos: { string }, opts: { [string]: { string } })
 	local workLib = require("./work")
 	local workread = require("./workread")
+	local SUPERVISOR_FLAGS: { [string]: boolean } =
+		{ ["--cli"] = true, ["--once"] = true, ["--max-items"] = true, ["--detach"] = true }
+	local supervising = pos[1] == "run"
 	for k in opts do
-		if k ~= "--released" then
+		if SUPERVISOR_FLAGS[k] then
+			supervising = true
+		elseif k ~= "--released" then
 			fail(
-				`usage: work [<R-id>] | next [--released <n>] [<R-id>] | queue | status (unknown option {k})`
+				`usage: work [<R-id>] | next [--released <n>] [<R-id>] | queue | status | stop | run [--cli <name>] [--once] [--max-items <n>] [--detach] (unknown option {k})`
 			)
 		end
 	end
@@ -9852,6 +9871,70 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		local p = projects.inDir(projects.load(), hereDir())
 		return if p then p.root else nil
 	end
+	if supervising then
+		-- the supervisor (c0253): `./zn work` with a supervisor flag, or `./zn work run`
+		if (#pos > 1) or (#pos == 1 and sub ~= "run") or opts["--released"] then
+			fail("usage: ./zn work run [--cli <name>] [--once] [--max-items <n>] [--detach]")
+		end
+		local workedge = require("./workedge")
+		local supervise = require("./supervise")
+		local maxItems: number? = nil
+		if opts["--max-items"] then
+			local n = tonumber(opts["--max-items"][1])
+			if not n or n < 1 or n ~= math.floor(n) then
+				fail("usage: --max-items takes a whole number, at least 1")
+			end
+			maxItems = n
+		end
+		local cliOpt = opts["--cli"] and opts["--cli"][1]
+		if opts["--detach"] then
+			-- the refusals and the CLI check are the foreground run's too: made before anything starts
+			local top = workedge.mainRoot()
+			local refused = supervise.refusal({
+				headless = process.env.ZN_HEADLESS,
+				dispatch = process.env.ZN_DISPATCH,
+				checking = checking(),
+				detach = true,
+				here = sh.trim(process.exec("pwd", { "-P" }).stdout),
+				main = top,
+			})
+			if refused then
+				fail(refused)
+			end
+			-- the command's own arguments, in the order typed (a map of the options has none)
+			local raw: { string } = {}
+			local seen = false
+			for _, a in process.args do
+				if seen then
+					table.insert(raw, a)
+				elseif a == "work" then
+					seen = true
+				end
+			end
+			print(workedge.detach(top, raw))
+			return
+		end
+		local summary, why = workedge.run({
+			cli = cliOpt,
+			once = opts["--once"] ~= nil,
+			maxItems = maxItems,
+			detach = false,
+		})
+		if not summary then
+			fail(why or "the supervisor did not start")
+		end
+		if #(summary :: supervise.Summary).blocked > 0 and #(summary :: supervise.Summary).moved == 0 then
+			process.exit(1)
+		end
+		return
+	end
+	if sub == "stop" then
+		if #pos ~= 1 then
+			fail("usage: ./zn work stop")
+		end
+		print(require("./workedge").stop(require("./workedge").mainRoot()))
+		return
+	end
 	if sub == "queue" then
 		if #pos ~= 1 or opts["--released"] then
 			fail("usage: ./zn work queue")
@@ -9872,6 +9955,9 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 			sh.git({ "fetch", "--quiet", "origin", "main" })
 		end
 		local lines = workLib.status(workLib.kept(workread.collect(nil).rafts, scopeOf()))
+		for _, line in require("./workedge").statusLines(require("./workedge").mainRoot()) do
+			print(line)
+		end
 		if #lines == 0 then
 			print("nobody holds a raft")
 		else
@@ -9906,6 +9992,46 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 	if sub then
 		print(`This session's raft is {sub}. Pass it to every ./zn work next.`)
 	end
+end
+
+-- c0249: `next` prints the one item to take next, from origin/main: lost work first (c0265), then the claimable raft with
+-- the best rank, then an approved issue in no raft (rafting), and only when none of those exists the best-ranked issue whose
+-- design a worker may draft. Exit 1 with `next: nothing to take: <why>` on stderr when there is none (a Lune error exits 1
+-- too, but never with that line). PROTOTYPE: c0249's code (rank.luau, workread.facts, this function), except that lost work is
+-- empty here, because c0265's heartbeat edge (`rk.lost`) is in R0100 and not on main; c0249 replaces this function whole.
+function cmd.next(pos: { string }, _opts: { [string]: { string } })
+	if #pos > 0 then
+		fail("usage: next")
+	end
+	if not hasOrigin() then
+		fail("next reads origin/main: it needs an origin remote")
+	end
+	sh.git({ "fetch", "--quiet", "origin", "main" })
+	local rank = require("./rank")
+	local workLib = require("./work")
+	local workread = require("./workread")
+	local facts, drafts = workread.facts()
+	local claimable: { [string]: boolean } = {}
+	for _, raft in workread.collect(nil).rafts do
+		claimable[raft.id] = workLib.claimable(raft)
+	end
+	local scoped = projects.inDir(projects.load(), hereDir())
+	local pick, why = rank.next(facts, {
+		lost = {},
+		claimable = function(f: rank.Fact): boolean
+			return claimable[f.id] == true
+		end,
+		mayDraft = function(f: rank.Fact): boolean
+			return drafts[f.id] == true
+		end,
+		scope = if scoped then scoped.root else nil,
+	})
+	if not pick then
+		stdio.ewrite(`next: nothing to take: {why}\n`)
+		process.exit(1)
+		return
+	end
+	print(`{pick.id} {pick.kind} {pick.why}`)
 end
 
 local args = table.clone(process.args)
