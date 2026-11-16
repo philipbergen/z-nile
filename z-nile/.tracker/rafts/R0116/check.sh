@@ -13,6 +13,6 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0116
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: z-nile's repository fence spec passes" lune run tests/run -- tests/tooling/repo-fence.spec.luau
 
 finish
