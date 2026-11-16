@@ -6,8 +6,10 @@
 local Beta = require("@scripts/lib/beta")
 local Experience = require("@scripts/lib/experience")
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
+local root = (string.gsub(process.cwd, "/+$", ""))
 local SWITCH = '"build": "portal"'
 local BACK = '"build": "lobby"'
 
@@ -45,7 +47,7 @@ return t.spec("f0209 the start place goes back to the lobby by one line", functi
 
 	it("set back, the start place publishes pickman's lobby, told GamePlaceId, as before f0209", function()
 		local _, back = rolledBack()
-		local manifest, err = Experience.parse(back)
+		local manifest, err = Experience.parse(back, root)
 		t.expect(err).toBe(nil)
 		local plan = Beta.plan({
 			ROBLOX_API_KEY = "KEY",

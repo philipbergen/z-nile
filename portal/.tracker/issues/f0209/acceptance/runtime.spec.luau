@@ -109,7 +109,7 @@ end
 
 return t.spec("f0209 the start place's runtime tests are the portal's", function(it)
 	fs.writeDir(work)
-	local manifest = Experience.parse(fs.readFile("experience.json")) :: Experience.Manifest
+	local manifest = Experience.parse(fs.readFile("experience.json"), root) :: Experience.Manifest
 	local plan = Beta.plan(ENV, manifest) :: Beta.Plan
 	local start = Beta.target(plan, "Portal") :: Beta.Target
 	local game = Beta.target(plan, "Pickman") :: Beta.Target

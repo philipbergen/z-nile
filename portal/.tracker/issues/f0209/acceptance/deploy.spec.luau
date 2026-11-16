@@ -45,7 +45,7 @@ end
 -- every variable the checked-in manifest names: a child's environment adds to the caller's, so each is given, as ""
 -- when the case does not set it, and a variable exported in the shell that runs the specs never reaches the deploy
 local function variables(): { string }
-	local m = Experience.parse(fs.readFile("experience.json")) :: Experience.Manifest
+	local m = Experience.parse(fs.readFile("experience.json"), root) :: Experience.Manifest
 	local out: { string } = {}
 	for _, p in m.places do
 		for _, var in p.env do

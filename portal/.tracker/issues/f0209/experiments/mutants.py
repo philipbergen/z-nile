@@ -1,55 +1,60 @@
 #!/usr/bin/env python3
-# f0209 prep's mutation check. Run from the top of the prototype worktree (.worktree/proto-portal-start-place: origin/main
-# a722ca909 with f0201's, f0199's stand-in, f0205's and f0208's prototype patches, then c0210's prototype.patch and its
-# acceptance specs, then experiments/prototype.patch, with c0210's specs promoted and its lobby.spec narrowed as
-# experiments/c0392-standin.patch does, and this issue's acceptance specs in portal/.tracker/issues/f0209/acceptance/):
+# f0209 prep's mutation check. Run from the top of the prototype worktree (.worktree/proto2-portal-start-place): c0210's
+# own prototype base 4441ae454 (origin/main df6859dbf, R0070's c0194 layer 3c1dee913 merged, f0201's prototype, f0199's
+# stand-in, c0194's specs as promoted), then c0210's experiments/prototype.patch, then f0205's and f0208's prototype
+# patches without their tracker hunks, then c0210's acceptance specs promoted with lobby-start.spec removed and the AC11
+# line dropped from its check.sh (experiments/c0392-standin.patch), then experiments/prototype.patch, with this issue's
+# acceptance specs in portal/.tracker/issues/f0209/acceptance/:
 #   ./zn run --time 2400 -- python3 -u <this file> [F1 F2 ...]   (no names: every mutant)
 # It refuses to run anywhere else, and refuses when a base it was cut from moved (in-flight bases pin their source):
-# the four patches on origin/main and c0210's prototype.patch and acceptance specs in its prep worktree. Before any
+# the five patches and c0210's acceptance folder on origin/main, the base commit, and R0070's c0194 layer. Before any
 # mutant it runs this issue's specs and c0210's promoted specs on the unmutated prototype and refuses unless all pass.
 # Each mutant replaces texts in files, runs one spec file from portal/, and is "killed" only when the run reports a
 # failed case whose message is an assertion ("expected ... got") or a refusal the code raised ("experience.json: ",
-# "beta: ", "is not set", "is missing", "is at the start place"), never a load, syntax or require error. Every file is
-# restored after its run.
-import glob, hashlib, os, re, subprocess, sys
+# "beta: "), never a load, syntax or require error. Every file is restored after its run.
+import hashlib, os, re, subprocess, sys
 
 TOP = os.getcwd()
-REPO = os.path.dirname(os.path.dirname(TOP))  # <repo>/.worktree/<name> -> <repo>
-if not TOP.endswith("/.worktree/proto-portal-start-place"):
-    sys.exit(f"mutants: run from the top of .worktree/proto-portal-start-place, not {TOP}")
+if not TOP.endswith("/.worktree/proto2-portal-start-place"):
+    sys.exit(f"mutants: run from the top of .worktree/proto2-portal-start-place, not {TOP}")
 
 ON_MAIN = {
     "arcade/.tracker/issues/f0201/experiments/prototype.patch": "f99bd914ff800cfc3403ab4000109951694ebebaa2b6d8381d7b8879d6afce7b",
     "portal/.tracker/issues/f0205/experiments/f0199-standin.patch": "feb5ffd388a941f7fe546b66b8922fb16dbe9a3aaef04342b4f566927000a7d6",
     "portal/.tracker/issues/f0205/experiments/prototype.patch": "f6eacbebe360e671ff77379728ab4e6a3449657db5baa006a21ef331bcb1f318",
     "portal/.tracker/issues/f0208/experiments/prototype.patch": "90815701522d457ad49cadaa126a479365f9947dc9014505872f614cf3ab37a2",
+    "portal/.tracker/issues/c0210/experiments/prototype.patch": "32d0d930954ad8304a0d4202f5cb8325de8cff535a2c2162425acb7dde3347a3",
 }
-C0210 = os.path.join(REPO, ".worktree/prep-n-place-deploy/portal/.tracker/issues/c0210")
-C0210_PATCH = "95cf573c3476914b67048c46fd44e774cf4c1a8e06904654b76c626599a823c9"
-C0210_SPECS = "e2cd0c8a863b2c38472f2658b967d12040a56db11f50c84d74233ce6b60f8e9b"
+C0210_SPECS = "6d54e84f09f93d74bd67af0a285d3865c7f3c0904541ef4d45dde5c675f9bd51"
+BASE = "4441ae454"
+C0194 = ("origin/R0070/1/c0194", "3c1dee913643069edc5b97f10096d8b5fd540bff")
 
 
 def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def git(*args) -> bytes:
+    return subprocess.run(["git", *args], capture_output=True, check=True).stdout
+
+
 def refuse_moved_bases():
     for path, want in ON_MAIN.items():
-        got = sha(subprocess.run(["git", "show", f"origin/main:{path}"], capture_output=True, check=True).stdout)
+        got = sha(git("show", f"origin/main:{path}"))
         if got != want:
             sys.exit(f"mutants: {path} on origin/main moved ({got}): recut the base")
-    if not os.path.isdir(C0210):
-        sys.exit(f"mutants: c0210's prep is not at {C0210}: read its patch from where it is now and recut")
-    got = sha(open(os.path.join(C0210, "experiments/prototype.patch"), "rb").read())
-    if got != C0210_PATCH:
-        sys.exit(f"mutants: c0210's prototype.patch moved ({got}): recut the base")
     # the same digest as `find acceptance -type f | sort | xargs shasum -a 256 | shasum -a 256` in c0210's folder
-    lines = ""
-    for f in sorted(glob.glob(os.path.join(C0210, "acceptance", "*"))):
-        lines += f"{sha(open(f, 'rb').read())}  acceptance/{os.path.basename(f)}\n"
+    folder = "portal/.tracker/issues/c0210/acceptance"
+    names = sorted(git("ls-tree", "--name-only", f"origin/main:{folder}").decode().split())
+    lines = "".join(f"{sha(git('show', f'origin/main:{folder}/{n}'))}  acceptance/{n}\n" for n in names)
     got = sha(lines.encode())
     if got != C0210_SPECS:
-        sys.exit(f"mutants: c0210's acceptance specs moved ({got}): recut the base")
+        sys.exit(f"mutants: c0210's acceptance specs on origin/main moved ({got}): recut the base")
+    if subprocess.run(["git", "merge-base", "--is-ancestor", BASE, "HEAD"]).returncode != 0:
+        sys.exit(f"mutants: HEAD is not built on {BASE}")
+    r = subprocess.run(["git", "rev-parse", C0194[0]], capture_output=True, text=True)
+    if r.returncode != 0 or r.stdout.strip() != C0194[1]:
+        sys.exit(f"mutants: {C0194[0]} moved or is gone ({r.stdout.strip() or r.stderr.strip()}): recut the base")
 
 
 A = ".tracker/issues/f0209/acceptance/"  # relative to portal/, where these specs run
@@ -128,7 +133,7 @@ def counts(out):
 
 
 refuse_moved_bases()
-base = run([A + f"{s}.spec.luau" for s in SPECS] + [p[len("portal/") :] for p in sorted(glob.glob("portal/tests/acceptance/c0210/*.spec.luau"))])
+base = run([A + f"{s}.spec.luau" for s in SPECS] + sorted("tests/acceptance/c0210/" + n for n in os.listdir("portal/tests/acceptance/c0210") if n.endswith(".spec.luau")))
 passed, failed = counts(base)
 print(f"base: {passed} passed, {failed} failed")
 if failed != 0 or passed <= 0:

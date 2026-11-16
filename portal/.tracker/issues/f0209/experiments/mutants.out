@@ -1,5 +1,5 @@
-base: 89 passed, 0 failed
-F1: killed (7 failed) .tracker/issues/f0209/acceptance/start.spec.luau
+base: 104 passed, 0 failed
+F1: killed (8 failed) .tracker/issues/f0209/acceptance/start.spec.luau
     FAIL .tracker/issues/f0209/acceptance/start.spec.luau :: the start place is the Portal place, and it publishes the portal's own project
     FAIL .tracker/issues/f0209/acceptance/start.spec.luau :: the portal's build runs the portal's runtime folder, which exists, and adds no attribute
     FAIL .tracker/issues/f0209/acceptance/start.spec.luau :: no place publishes pickman's lobby
@@ -10,11 +10,11 @@ F3: killed (3 failed) .tracker/issues/f0209/acceptance/start.spec.luau
     FAIL .tracker/issues/f0209/acceptance/start.spec.luau :: the portal's build runs the portal's runtime folder, which exists, and adds no attribute
     FAIL .tracker/issues/f0209/acceptance/start.spec.luau :: with ROBLOX_BETA_GAME_PLACE_ID: Pickman's game first, told the start place's id, then the portal at the start place
     FAIL .tracker/issues/f0209/acceptance/start.spec.luau :: with ROBLOX_BETA_PICKMAN_PLACE_ID: Pickman's game first, told the start place's id, then the portal at the start place
-F4: killed (4 failed) .tracker/issues/f0209/acceptance/start.spec.luau
+F4: killed (8 failed) .tracker/issues/f0209/acceptance/start.spec.luau
+    FAIL .tracker/issues/f0209/acceptance/start.spec.luau :: the start place is the Portal place, and it publishes the portal's own project
     FAIL .tracker/issues/f0209/acceptance/start.spec.luau :: the portal's build runs the portal's runtime folder, which exists, and adds no attribute
+    FAIL .tracker/issues/f0209/acceptance/start.spec.luau :: no place publishes pickman's lobby
     FAIL .tracker/issues/f0209/acceptance/start.spec.luau :: the switch is the start place's build: its output keeps its name, lobby_version
-    FAIL .tracker/issues/f0209/acceptance/start.spec.luau :: with ROBLOX_BETA_GAME_PLACE_ID: Pickman's game first, told the start place's id, then the portal at the start place
-    FAIL .tracker/issues/f0209/acceptance/start.spec.luau :: with ROBLOX_BETA_PICKMAN_PLACE_ID: Pickman's game first, told the start place's id, then the portal at the start place
 F5: killed (3 failed) .tracker/issues/f0209/acceptance/deploy.spec.luau
     FAIL .tracker/issues/f0209/acceptance/deploy.spec.luau :: with ROBLOX_BETA_GAME_PLACE_ID: Pickman's game to its id, then the portal to the start place, and no lobby
     FAIL .tracker/issues/f0209/acceptance/deploy.spec.luau :: with ROBLOX_BETA_PICKMAN_PLACE_ID: Pickman's game to its id, then the portal to the start place, and no lobby
@@ -43,5 +43,5 @@ F15: killed (1 failed) .tracker/issues/f0209/acceptance/docs.spec.luau
     FAIL .tracker/issues/f0209/acceptance/docs.spec.luau :: pickman-test: the lobby's runtime scripts are the start place's only before f0209 or after a rollback
 F16: killed (1 failed) .tracker/issues/f0209/acceptance/docs.spec.luau
     FAIL .tracker/issues/f0209/acceptance/docs.spec.luau :: pickman's game design says the start place is the portal since f0209
-F17 (by hand, 2026-11-15, after c0210's lead began answering its design review, so the runner refuses its moved base): killed (1 failed) .tracker/issues/f0209/acceptance/deploy.spec.luau
+F17: killed (1 failed) .tracker/issues/f0209/acceptance/deploy.spec.luau
     FAIL .tracker/issues/f0209/acceptance/deploy.spec.luau :: the deploy's environment names every variable of the manifest, empty unless the case sets it

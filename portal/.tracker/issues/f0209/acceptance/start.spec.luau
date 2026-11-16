@@ -7,14 +7,17 @@
 local Beta = require("@scripts/lib/beta")
 local Experience = require("@scripts/lib/experience")
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
+-- the manifest's folder, portal/, where these specs run: the reader compares projects as files under it
+local root = (string.gsub(process.cwd, "/+$", ""))
 local LOBBY = "../pickman/lobby.project.json"
 local START = "222"
 local GAME = "333"
 
 local function manifest(): Experience.Manifest
-	local m, err = Experience.parse(fs.readFile("experience.json"))
+	local m, err = Experience.parse(fs.readFile("experience.json"), root)
 	assert(m, `experience.json is refused: {err}`)
 	return m :: Experience.Manifest
 end

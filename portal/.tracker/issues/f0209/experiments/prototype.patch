@@ -1,5 +1,5 @@
 diff --git a/SETUP.md b/SETUP.md
-index e2402d002..833ee815e 100644
+index 0a6943c6d..74df9385f 100644
 --- a/SETUP.md
 +++ b/SETUP.md
 @@ -54,15 +54,17 @@ Verification is local. A game pull request's merge runs `z-nile/check.sh --full`
@@ -36,7 +36,7 @@ index 4975bcfa9..3f681e0f4 100644
  | Hiscores | A **global all-time top N**, plus **daily** and **weekly** boards. No personal-best feature for now, except the lobby's "your best" line under the all-time board (user, 2026-10-21, d0124), and each player's best level reached, which the lobby's level picker offers (f0148, see *Start on any level up to your best*). The all-time board also keeps a top-10 list of runs (see Hiscores). |
  | Platforms | Desktop (keyboard and mouse), mobile (touch) and gamepad: every input produces the same intents, and every feature supports keyboard, console and touch (f0146). |
 diff --git a/pickman/skills/pickman-test/SKILL.md b/pickman/skills/pickman-test/SKILL.md
-index 18a247a28..be1cf1008 100644
+index 893f73ec5..d3a424d33 100644
 --- a/pickman/skills/pickman-test/SKILL.md
 +++ b/pickman/skills/pickman-test/SKILL.md
 @@ -18,7 +18,7 @@ Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run

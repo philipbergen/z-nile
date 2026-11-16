@@ -19,14 +19,15 @@ check "AC4: the switch is one line of the manifest, and that line set back publi
 	lune run tests/run -- "$A/rollback.spec.luau"
 check "AC5: SETUP.md, pickman's game design, portal-test and pickman-test say the start place is the portal since f0209, how it is rolled back, and that its runtime tests are portal/tests/runtime." \
 	lune run tests/run -- "$A/docs.spec.luau"
-# the deploy area's promoted specs, from their homes: c0210's (its lobby.spec as the chore narrowed it), and the specs
-# c0210 changed in pickman and z-nile; c0210 is done before this issue runs, so its folder is named from the root
+# the deploy area's promoted specs, from their homes: c0210's (with lobby-start.spec removed by c0392, which would be
+# red here otherwise), and the promoted specs c0210 overrides or guards in pickman and z-nile (c0210's AC9 list); c0210
+# is done before this issue runs, so its folder is named from the root
 deploy_area() {
 	local p="$ZN_ROOT/pickman/tests/acceptance" z="$ZN_ROOT/z-nile/tests/acceptance"
 	(cd "$ZN_ROOT/portal" && lune run tests/run -- "$ZN_ROOT"/portal/tests/acceptance/c0210/*.spec.luau) || return 1
 	(cd "$ZN_ROOT/pickman" && lune run tests/run -- "$p"/c0003/*.spec.luau "$p"/c0015/*.spec.luau "$p"/c0051/*.spec.luau "$p"/c0064/*.spec.luau) || return 1
-	(cd "$ZN_ROOT/z-nile" && lune run tests/run -- "$z"/c0120/ci.spec.luau "$z"/c0120/layout.spec.luau "$z"/c0120/docs.spec.luau "$z"/c0172/*.spec.luau) || return 1
+	(cd "$ZN_ROOT/z-nile" && lune run tests/run -- "$z"/c0120/ci.spec.luau "$z"/c0120/layout.spec.luau "$z"/c0120/docs.spec.luau "$z"/c0172/*.spec.luau "$z"/c0193/tree.spec.luau "$z"/c0194/callers.spec.luau "$z"/c0194/docs.spec.luau) || return 1
 }
-check "AC6: c0210's promoted specs (its lobby.spec as c0392 narrows it) and the deploy area's promoted specs in pickman and z-nile pass from their homes." deploy_area
+check "AC6: c0210's promoted specs (lobby-start.spec removed by c0392) and the deploy area's promoted specs in pickman and z-nile pass from their homes." deploy_area
 
 finish
