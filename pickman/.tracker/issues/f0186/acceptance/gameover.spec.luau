@@ -133,6 +133,11 @@ return t.spec("f0186 the game over shows the revives", function(it)
 		t.expect(label.Visible).toBe(true)
 		-- under FlowView's lines (its prompt ends at 0.63 of the screen's height), inside the screen
 		t.expect(label.Position.y >= 0.63).toBe(true)
+		-- above Flow's fade: FlowView's ScreenGui (with its full-screen black Fade) is DisplayOrder 0 and unchanged, so a
+		-- tie would leave the line's place to the engine's order of equal guis (HudView's 1 is the precedent)
+		local screen = find(gui, "Revives", "ScreenGui")
+		t.expect(screen ~= nil).toBe(true)
+		t.expect(type(screen.DisplayOrder) == "number" and screen.DisplayOrder > 0).toBe(true)
 		t.expect(label.Position.y + label.Size.y <= 1).toBe(true)
 	end)
 

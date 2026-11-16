@@ -5,7 +5,6 @@
 -- play shows as 5 R$ struck through, on sale for 1 R$; the Hiscores entries name the revives. architecture.md declares
 -- Flow -> Lobby (Flow's revives line uses Lobby's words). Pickman's paid-play records stay in pickman's own stores,
 -- the names the arcade library's catalog gives pickman (f0201), so no other title's play spends its free hour.
-local Pay = require("@logic/Pay")
 local fs = require("@lune/fs")
 local t = require("@tests/lib/t")
 
@@ -57,6 +56,7 @@ return t.spec("f0186 the documents and pickman's own free game", function(it)
 	end)
 
 	it("pickman's paid-play records stay in pickman's own stores, keyed by user id", function()
+		local Pay = require("@logic/Pay") -- f0145's: required here, so the other cases run on a tree without it
 		t.expect(Pay.STORE).toBe("PaidPlay")
 		t.expect(Pay.TEST_STORE).toBe("PaidPlayTest")
 		t.expect(Pay.store("live")).toBe("PaidPlay")

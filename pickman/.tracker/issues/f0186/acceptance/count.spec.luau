@@ -71,6 +71,13 @@ return t.spec("f0186 a run counts its revives", function(it)
 		Game.allowOffer(g, 50)
 		lose(g, "offer")
 		t.expect(g.revives).toBe(0) -- the offer itself is no revive
+		-- a continue that gives no lives (a bad count) is refused and counts nothing, in the offer too
+		for _, bad in { 0, 2.5, -1 } do
+			local _, given = Game.continue(g, bad)
+			t.expect(given).toBe(false)
+			t.expect(g.revives).toBe(0)
+		end
+		t.expect(g.phase).toBe("offer")
 		local _, ok = Game.continue(g, Game.CONTINUE_LIVES)
 		t.expect(ok).toBe(true)
 		t.expect(g.revives).toBe(1)

@@ -64,7 +64,7 @@ index 51aa54507..96bc33dbe 100644
  ready:FireServer()
 diff --git a/pickman/src/client/RevivesView.luau b/pickman/src/client/RevivesView.luau
 new file mode 100644
-index 000000000..751859d1e
+index 000000000..362b05715
 --- /dev/null
 +++ b/pickman/src/client/RevivesView.luau
 @@ -0,0 +1,44 @@
@@ -87,7 +87,7 @@ index 000000000..751859d1e
 +	gui.Name = "Revives"
 +	gui.ResetOnSpawn = false
 +	gui.IgnoreGuiInset = true
-+	gui.DisplayOrder = 0 -- with Flow's overlay, under the HUD
++	gui.DisplayOrder = 1 -- above Flow's fade (FlowView's gui is 0), as HudView's is: the line stays as bright as the results
 +	local l = Instance.new("TextLabel")
 +	l.Name = "Revives"
 +	l.BackgroundTransparency = 1

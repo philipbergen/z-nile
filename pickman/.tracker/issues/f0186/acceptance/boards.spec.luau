@@ -15,6 +15,8 @@ return t.spec("f0186 the boards show revives", function(it)
 		t.expect(Lobby.REVIVES).toBe("REVIVES")
 		t.expect(Lobby.revivesText(1)).toBe("REVIVES 1")
 		t.expect(Lobby.revivesText(12)).toBe("REVIVES 12")
+		t.expect(Lobby.revivesText(2 ^ 53 - 1)).toBe(`REVIVES {string.format("%d", 2 ^ 53 - 1)}`)
+		t.expect(Lobby.revivesText(2 ^ 53)).toBe("REVIVES 0") -- past the largest count a row may hold
 		for _, none in { nil, 0, -1, 1.5, 0 / 0, math.huge, "2", true } :: { any } do
 			t.expect(Lobby.revivesText(none)).toBe("REVIVES 0")
 		end

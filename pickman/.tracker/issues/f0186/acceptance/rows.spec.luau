@@ -119,6 +119,15 @@ return t.spec("f0186 revives in the hiscore entries", function(it)
 		t.expect((run :: Hiscores.TopRun).revives).toBe(2)
 		local plain = Hiscores.topRun({ name = "Bea", userId = "2", level = 3, score = 800 }, NOW + 5, 1, "s")
 		t.expect((plain :: Hiscores.TopRun).revives).toBe(nil)
+		for _, junk in { "2", 0, -1, 1.5 } :: { any } do
+			local made = Hiscores.topRun(
+				{ name = "Ada", userId = "7", level = 3, score = 800, revives = junk } :: any,
+				NOW,
+				1,
+				"s"
+			)
+			t.expect((made :: Hiscores.TopRun).revives).toBe(nil)
+		end
 		-- the list's own copy keeps them; the earlier run keeps the tied place, whatever its revives
 		local list = Hiscores.addRun((Hiscores.addRun({}, plain :: Hiscores.TopRun)), run :: Hiscores.TopRun)
 		t.expect(list[1].revives).toBe(2)
@@ -159,6 +168,29 @@ return t.spec("f0186 revives in the hiscore entries", function(it)
 			revives = 4,
 		})
 		t.expect((unnamed :: Hiscores.TopRun).revives).toBe(4)
+		-- a junk count on the row reads as none on both branches
+		local junkNamed = Hiscores.bestRun({
+			rank = 1,
+			name = "Ada",
+			userId = "7",
+			score = 800,
+			level = 3,
+			runScore = 800,
+			run = "7:1:1:s",
+			at = 1,
+			revives = 1.5,
+		})
+		t.expect((junkNamed :: Hiscores.TopRun).revives).toBe(nil)
+		local junkUnnamed = Hiscores.bestRun({
+			rank = 1,
+			name = "Ada",
+			userId = "7",
+			score = 800,
+			level = 3,
+			runScore = 800,
+			revives = 1.5,
+		})
+		t.expect((junkUnnamed :: Hiscores.TopRun).revives).toBe(nil)
 		local merged = Hiscores.mergeRun({}, plain :: Hiscores.TopRun, {
 			{ rank = 1, name = "Cy", userId = "3", score = 900, level = 3, runScore = 900, revives = 1 },
 		})
