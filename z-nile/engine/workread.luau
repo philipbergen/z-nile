@@ -319,7 +319,7 @@ local function build(
 		for _, mid in issues do
 			local mf: { [string]: string } = memberFront[mid] or {}
 			local m = rank.parse(mf.rank)
-			if m ~= nil and (best == nil or m < best) then
+			if m ~= nil and not rank.isAuto(mf.rank) and (best == nil or m < best) then
 				best = m
 			end
 		end
@@ -502,8 +502,14 @@ function workread.facts(): ({ rank.Fact }, { [string]: boolean })
 	end
 	local at: { { id: string, state: string, path: string } } = {}
 	local specs: { string } = {}
+	local roots = projects.roots(projects.load("."))
+	local approvalDirs: { [string]: boolean } = {}
 	for path in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
-		local state, id = rank.where(path)
+		local approvedDir = string.match(path, "^(.*)/approval%.md$")
+		if approvedDir then
+			approvalDirs[approvedDir] = true
+		end
+		local state, id = rank.where(path, roots)
 		if state and id and state ~= "retired" then
 			table.insert(at, { id = id, state = state, path = path })
 			if state ~= "done" then
@@ -521,8 +527,9 @@ function workread.facts(): ({ rank.Fact }, { [string]: boolean })
 			n += 1
 			text = blobs[n] or ""
 		end
-		local fact = rank.factOf(a.path, frontText(text))
+		local fact = rank.factOf(a.path, frontText(text), roots)
 		if fact then
+			fact.approved = approvalDirs[string.match(a.path, "^(.*)/[^/]+$") or ""] == true
 			table.insert(facts, fact)
 			if a.state == "backlog" and fact.kind == "issue" and fact.status == "new" then
 				table.insert(pending, { id = a.id, doc = text })

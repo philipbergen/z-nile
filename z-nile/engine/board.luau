@@ -864,8 +864,12 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	local issues: { Issue } = {}
 	local issueById: { [string]: Issue } = {}
 	local blockedIds: { [string]: boolean } = {} -- c0249: waits on the person (c0250's stored status)
-	for _, i in rawIssues do
-		blockedIds[i.id] = rankLib.isBlocked(i.front.status)
+	local autoIds: { [string]: boolean } = {} -- c0249: its rank was written by a move (` auto`)
+	for _, list in { rawIssues, rawRafts } do
+		for _, i in list do
+			blockedIds[i.id] = rankLib.isBlocked(i.front.status)
+			autoIds[i.id] = rankLib.isAuto(i.front.rank)
+		end
 	end
 	for _, i in rawIssues do
 		local named = i.front.raft
@@ -982,13 +986,14 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		raftById[r.id] = raft
 	end
 
-	-- c0249: a raft's rank for the order is its own, else the best (lowest) of its members'
+	-- c0249: a raft's rank for the order is its own, else the best (lowest) a person set on one of its members' (a rank a
+	-- move wrote, ` auto`, does not count: rank.effective's rule)
 	for _, raft in rafts do
 		local best = raft.rank
 		if best == nil and raft.state == "backlog" then
 			for _, id in raft.issues do
 				local m = issueById[id].rank
-				if m ~= nil and (best == nil or m < best) then
+				if m ~= nil and not autoIds[id] and (best == nil or m < best) then
 					best = m
 				end
 			end
@@ -1062,12 +1067,20 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		end
 		table.insert(views.issues[bucket], issue.id)
 	end
-	table.sort(views.rafts.ready)
-	table.sort(views.rafts["not"])
-	table.sort(views.rafts.done)
-	table.sort(views.issues.ready)
-	table.sort(views.issues["not"])
-	table.sort(views.issues.done)
+	-- c0249: the views list their items in the stack's order too (blocked first, a set rank before an unset one, the ticket
+	-- number as the tiebreak), the same order the columns use; c0276's withVerdicts then moves lost work first in each bucket
+	local function stackOrder(list: { string }, items: { [string]: { effectiveRank: number? } })
+		table.sort(list, function(a: string, b: string): boolean
+			if blockedIds[a] ~= blockedIds[b] then
+				return blockedIds[a] == true
+			end
+			return rankLib.less(items[a].effectiveRank, a, items[b].effectiveRank, b)
+		end)
+	end
+	for _, name in { "ready", "not", "done" } do
+		stackOrder((views.rafts :: any)[name], raftById :: any)
+		stackOrder((views.issues :: any)[name], issueById :: any)
+	end
 
 	local home: { [string]: string } = {}
 	for _, raft in rafts do

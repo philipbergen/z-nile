@@ -68,8 +68,10 @@ usage: ./zn <command> ...
                                                 stop this user's leaked tool processes: orphans, commands past their
                                                 ./zn run deadline, and (at a session end) the session's own
   find <id>                                     print the item's current directory (from where ./zn was run)
-  list [backlog|active|done] [--project <name>] list items: of --project, of the project whose folder you are
-                                                in, or of every project at the checkout's root
+  list [backlog|active|done] [--project <name>] [--no-lost]
+                                                list items: of --project, of the project whose folder you are in, or of every
+                                                project at the checkout's root; blocked items first, then lost work (read from
+                                                the remote; --no-lost skips it), then the stack in rank order
   members <R-id>                                print directories of every issue in the raft (from where ./zn was run)
   busy [<path>...]                              list what holds <path>s (default: every project root and promoted-spec
                                                 folder): rafts active on origin/main, branches and worktrees that
@@ -862,6 +864,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--watch"
 			or a == "--begin"
 			or a == "--sessions"
+			or a == "--no-lost"
 		then
 			opts[a] = { "true" }
 		elseif string.sub(a, 1, 1) == "-" then
@@ -1875,6 +1878,47 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
 		end
 		require("@lune/task").wait(every)
 	end
+end
+
+-- c0249: lost work in the heartbeat's order (the ids whose claim is stale with no pull request naming it), for `list` and
+-- `next`. Nothing is lost when it cannot be read (unknown is never lost), and then `who` says why on stderr: in a protected
+-- checkout (no remote is read), with unreadable heartbeats or pull requests, or when the remote cannot be asked. With no
+-- origin, or PICKMAN_PUBLISH=0, there is nobody to ask and it says nothing.
+function rk.lost(who: string): { string }
+	local ok, found = pcall(function(): { string }
+		if not hasOrigin() or not publishing() then
+			return {}
+		end
+		if guarded(true) then
+			stdio.ewrite(`{who}: lost work not read in a protected checkout (no remote is read)\n`)
+			return {}
+		end
+		sh.run("git", { "fetch", "--quiet", "origin", "main" })
+		local readable, paths = originTree()
+		if not readable then
+			stdio.ewrite(
+				`{who}: lost work not read (cannot read origin/main's project roots); unknown is never lost\n`
+			)
+			return {}
+		end
+		local j = hb.judgeAll(paths)
+		if j.beatsError or j.prsError then
+			stdio.ewrite(`{who}: lost work not read ({j.beatsError or j.prsError}); unknown is never lost\n`)
+			return {}
+		end
+		local out: { string } = {}
+		for _, v in heartbeat.order(j.verdicts) do
+			if v.kind == "lost" then
+				table.insert(out, v.id)
+			end
+		end
+		return out
+	end)
+	if not ok then
+		stdio.ewrite(`{who}: lost work not read ({found}); unknown is never lost\n`)
+		return {}
+	end
+	return found :: { string }
 end
 
 function cmd.lost()
@@ -3436,52 +3480,46 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 	table.sort(found, function(a, b)
 		return if a.id == b.id then a.path < b.path else a.id < b.id
 	end)
-	-- c0249: the stack's order (blocked items first, then a set rank before an unset one, then the ticket number); a
-	-- raft that has no rank of its own is placed by its members' best. Offline: lost work (a network read) is `./zn lost`.
+	-- c0249: the stack in order, as `rank.listOrder` gives it: every blocked item first (rafts, then issues: c0250's
+	-- shape), then lost work (the heartbeat's order; read as `./zn lost` reads it, and not read, with a word on stderr, when
+	-- it cannot be), then the rafts and then the issues, a set rank before an unset one, the ticket number as the tiebreak.
 	local rankLib = require("./rank")
+	local roots = store.roots()
 	local all: { rankLib.Fact } = {}
 	local lines: { [rankLib.Fact]: string } = {}
 	local shownFacts: { rankLib.Fact } = {}
-	for _, kind in { "raft", "issue" } do
-		for _, f in found do
-			local doc = `{f.path}/{f.id}.md`
-			if f.kind == kind and idsLib.spaceOf(f.id) == kind and fs.isFile(doc) then
-				local fm = store.readFront(doc)
-				local fact = rankLib.factOf(doc, fm)
-				if fact then
-					table.insert(all, fact)
-					-- review 003 F3: a retired raft is shown as retired, never as a live backlog raft no command takes
-					local state = if string.find(f.path .. "/", "/rafts/retired/", 1, true)
-						then "retired"
-						else stateOfPath(f.path .. "/")
-					if not pos[1] or pos[1] == state then
-						local ftype = if kind == "issue"
-							then store.TYPES[string.sub(f.id, 1, 1)]
-							else (fm.type or "?")
-						lines[fact] = string.format(
-							"%-6s %-8s %-8s %-7s %s",
-							f.id,
-							state,
-							ftype,
-							fm.raft or "",
-							fm.title or fm.slug or ""
-						)
-						table.insert(shownFacts, fact)
-					end
+	for _, f in found do
+		local doc = `{f.path}/{f.id}.md`
+		if idsLib.spaceOf(f.id) == f.kind and fs.isFile(doc) then
+			local fm = store.readFront(doc)
+			local fact = rankLib.factOf(doc, fm, roots)
+			if fact then
+				table.insert(all, fact)
+				-- review 003 F3: a retired raft is shown as retired, never as a live backlog raft no command takes
+				local state = if string.find(f.path .. "/", "/rafts/retired/", 1, true)
+					then "retired"
+					else stateOfPath(f.path .. "/")
+				if not pos[1] or pos[1] == state then
+					local ftype = if f.kind == "issue"
+						then store.TYPES[string.sub(f.id, 1, 1)]
+						else (fm.type or "?")
+					lines[fact] = string.format(
+						"%-6s %-8s %-8s %-7s %s",
+						f.id,
+						state,
+						ftype,
+						fm.raft or "",
+						fm.title or fm.slug or ""
+					)
+					table.insert(shownFacts, fact)
 				end
 			end
 		end
 	end
-	for _, kind in { "raft", "issue" } do
-		local ofKind: { rankLib.Fact } = {}
-		for _, fact in shownFacts do
-			if fact.kind == kind then
-				table.insert(ofKind, fact)
-			end
-		end
-		for _, fact in rankLib.order(ofKind, { blockedFirst = true, world = all }) do
-			print(lines[fact])
-		end
+	-- reading lost work asks the remote (a fetch of main and of the heartbeat branches: seconds, not milliseconds);
+	-- --no-lost skips it, and so does a repository with no origin or PICKMAN_PUBLISH=0
+	for _, fact in rankLib.listOrder(shownFacts, if opts["--no-lost"] then {} else rk.lost("list"), all) do
+		print(lines[fact])
 	end
 	local broken = 0
 	for _, p in audit.run(".") do
@@ -6968,19 +7006,35 @@ function cmd.rank(pos: { string }, opts: { [string]: { string } })
 	local when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string
 	local changes: { rank.Change } = {}
 	refuseStale()
-	local r = published(publish.commit(".", function(paths, read)
+	local note: string? = nil
+	local r = published(publish.commit(".", function(paths, read, roots, _counter, readMany)
+		-- the plan is made here, from the files of the base this attempt fetched, so a lost race plans again
 		local facts: { rank.Fact } = {}
 		local docs: { [string]: { path: string, text: string } } = {}
+		local wanted: { string } = {}
+		local places: { [string]: string } = {}
 		for _, p in paths do
 			local pid, rel = publish.itemPath(p)
 			if pid and rel == `{pid}.md` then
-				local state = rank.where(p)
-				local text = if state == "done" or state == "retired" then "" else read(p) or ""
-				local fact = rank.factOf(p, frontOf(text))
-				if fact then
-					table.insert(facts, fact)
-					docs[pid] = { path = p, text = text }
+				local state = rank.where(p, roots)
+				if state == "done" then
+					local fact = rank.factOf(p, {}, roots)
+					if fact then
+						table.insert(facts, fact)
+					end
+				elseif state == "backlog" or state == "active" then
+					table.insert(wanted, p)
+					places[p] = pid
 				end
+			end
+		end
+		local texts = (readMany :: ({ string }) -> { string? })(wanted)
+		for i, p in wanted do
+			local text = texts[i] or ""
+			local fact = rank.factOf(p, frontOf(text), roots)
+			if fact then
+				table.insert(facts, fact)
+				docs[places[p]] = { path = p, text = text }
 			end
 		end
 		local me: rank.Fact? = nil
@@ -6994,21 +7048,25 @@ function cmd.rank(pos: { string }, opts: { [string]: { string } })
 		elseif me.state ~= "backlog" then
 			return `{id} is {me.state}: a rank orders work that is not started (a backlog issue or raft)`
 		end
-		local planned, why = rank.plan(rank.stack(facts, me.kind), id, how, arg)
+		local planned, why, planNote = rank.plan(rank.stack(facts, me.kind), id, how, arg)
 		if not planned then
 			return why or "no plan"
 		end
-		changes = planned
+		changes, note = planned, planNote
 		local out: { publish.Change } = {}
 		for _, c in planned do
 			local d = docs[c.id]
-			local text = rank.withRank(d.text, c.rank)
+			local text = rank.withRank(d.text, c.rank, c.auto)
 			if not text then
 				return `{c.id}: {d.path} has no front matter`
 			end
 			table.insert(out, { path = d.path, content = text })
 			local rec = string.gsub(d.path, "[^/]+$", "provenance.md")
-			local detail = `rank={c.rank or "unset"}; was={c.was or "unset"}`
+			local shownRank = if c.rank == nil
+				then "unset"
+				elseif c.auto then `{c.rank} auto`
+				else tostring(c.rank)
+			local detail = `rank={shownRank}; was={c.was or "unset"}`
 			if c.id ~= id then
 				detail ..= `; moved={id}`
 			end
@@ -7025,21 +7083,35 @@ function cmd.rank(pos: { string }, opts: { [string]: { string } })
 	if not r.ok then
 		fail(r.reason or "publish failed")
 	end
+	-- the rank is on origin/main from here: bringing it into this checkout can fail (a lock a sibling holds), and then
+	-- the command still succeeded; it says so on stderr and exits 0, so the board app does not report "not saved"
 	if #changes > 0 then
+		local brought: string? = nil
 		if inMain then
-			local why = pullMain()
-			if why then
-				fail(`ranked on origin/main, but pulling the main checkout failed: {why}`)
-			end
+			brought = pullMain()
 		else
-			mergeOrigin()
+			local okMerge, mergeWhy = mergerecords.mergeRef("origin/main")
+			brought = if okMerge then nil else tostring(mergeWhy)
+		end
+		if brought then
+			stdio.ewrite(
+				`rank: saved on origin/main, but this checkout could not be brought up to date: {brought}\n`
+			)
 		end
 	end
 	if #changes == 0 then
 		print(`{id}: unchanged`)
 	end
 	for _, c in changes do
-		print(`{c.id} rank {c.rank or "unset"} (was {c.was or "unset"})`)
+		print(
+			`{c.id} rank {if c.rank == nil
+				then "unset"
+				elseif c.auto then `{c.rank} auto`
+				else tostring(c.rank)} (was {c.was or "unset"})`
+		)
+	end
+	if note then
+		print(`{id}: {note}`)
 	end
 end
 
@@ -7063,21 +7135,7 @@ function cmd.next(pos: { string }, _opts: { [string]: { string } })
 	for _, raft in workread.collect(nil).rafts do
 		claimable[raft.id] = workLib.claimable(raft)
 	end
-	local lost: { string } = {}
-	if guarded(true) then
-		stdio.ewrite("next: lost work not read in a protected checkout (no remote is read)\n")
-	else
-		local j = hb.judgeAll(originPaths())
-		if j.beatsError or j.prsError then
-			stdio.ewrite(`next: lost work not read ({j.beatsError or j.prsError}); unknown is never lost\n`)
-		else
-			for _, v in heartbeat.order(j.verdicts) do
-				if v.kind == "lost" then
-					table.insert(lost, v.id)
-				end
-			end
-		end
-	end
+	local lost = rk.lost("next")
 	local scoped = projects.inDir(projects.load(), hereDir())
 	local pick, why = rank.next(facts, {
 		lost = lost,

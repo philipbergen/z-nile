@@ -182,9 +182,16 @@ Item {
   Process {
     id: rankProcess
     workingDirectory: root.repoPath
+    stdout: StdioCollector { id: rankOut; waitForEnd: true }
     stderr: StdioCollector { id: rankErr; waitForEnd: true }
     onExited: function(exitCode) {
-      if (exitCode === 0) { root.orders = ({}); root.say("priority saved"); root.refresh() }
+      if (exitCode === 0) {
+        // a drop below the unset cards unsets the card: `./zn rank` says so on its last line, and so does the notice
+        var last = String(rankOut.text || "").trim().split("\n").pop()
+        root.orders = ({})
+        root.say(last.indexOf("dropped below the unset items") >= 0 ? "priority saved: " + last.slice(0, 200) : "priority saved")
+        root.refresh()
+      }
       else root.say("priority not saved: " + String(rankErr.text || "").trim().split("\n").pop().slice(0, 200))
     }
   }

@@ -2,12 +2,15 @@
 -- The rank of an issue or a raft (c0249): the `rank:` front-matter line, the order it gives, the move that edits it
 -- and the pick `./zn next` prints. Pure over texts and facts; main.luau reads origin/main and the checkout and writes.
 --
--- The order (one comparator, `rank.before`), best first:
+-- The order (one comparator, `rank.less`), best first:
 --   1. blocked items, when the caller asks (`list` and the board: they wait on the person; `next` skips them instead);
 --   2. lost work, in the order the heartbeat gives (c0265: longest silent first), whatever its rank;
 --   3. a set rank before an unset one, then the lower rank;
 --   4. the ticket number (a raft before an issue, then the number, then the id), so the order is always stable.
+-- `rank.listOrder` is what `./zn list` prints: every blocked item first (rafts, then issues), then lost work, then the rafts
+-- and then the issues, each in this order (c0250's shape for the blocked part, which its work-board spec pins).
 -- A rank only orders work that is not started: an item that is not in the backlog counts as unset.
+local publish = require("./publish")
 local statusLib = require("./status")
 
 local rank = {}
@@ -25,19 +28,32 @@ export type Fact = {
 	members: { string }, -- a raft's member ids
 	dependsOn: { string }, -- an issue's depends_on ids
 	root: string, -- the project root that holds it
+	auto: boolean?, -- the rank was written by a move that renumbered the item, not set by a person (`rank: 30 auto`)
+	design: string?, -- front `design:` (the rafting pick needs `ready`)
+	approved: boolean?, -- an approval.md sits beside the document on origin/main (the rafting pick)
 	ownRank: number?, -- set by rank.stack only: its own rank, while `rank` holds the one the order uses
+	ownAuto: boolean?, -- set by rank.stack only: whether its own rank is a moved-written one
 }
 
--- The rank a front-matter value gives: (nil, nil) for none (the line is missing or empty), (n, nil), or (nil, why).
+-- The rank a front-matter value gives: (nil, nil) for none (the line is missing or empty), (n, nil), or (nil, why). The
+-- value is a whole number, plain (a person set it) or followed by ` auto` (a move that renumbered the item wrote it).
 function rank.parse(value: string?): (number?, string?)
 	if value == nil or value == "" then
 		return nil, nil
 	end
-	if #value > 6 or not string.match(value, "^[1-9]%d*$") then
+	local digits = string.match(value, "^(%d+) auto$") or value
+	if #digits > 6 or not string.match(digits, "^[1-9]%d*$") then
 		return nil,
-			`rank: {value} is not a whole number from 1 to {rank.MAX} (no sign, no leading zero, no fraction); leave it empty or remove the line to unset it`
+			`rank: {value} is not a whole number from 1 to {rank.MAX} (no sign, no leading zero, no fraction; `
+				.. "optionally followed by ` auto`); leave it empty or remove the line to unset it"
 	end
-	return tonumber(value), nil
+	return tonumber(digits), nil
+end
+
+-- Whether a front-matter value carries the ` auto` mark (a moved-written rank). A raft takes its members' best rank
+-- from the plain ones only, so a move that renumbers items never reorders the rafts (Q5, F2 of the design review).
+function rank.isAuto(value: string?): boolean
+	return value ~= nil and string.match(value, "^%d+ auto$") ~= nil
 end
 
 -- What is wrong with the rank lines of a document, or nil. The front block is read as store.readFront reads it (the
@@ -65,9 +81,11 @@ function rank.problem(text: string): string?
 	return why
 end
 
--- The document with its rank set to `value` (a whole number) or removed (nil). Every `rank:` line goes; a set rank is
--- written once, just before `status:` (the template's last key) or, without one, last. Nil when there is no front block.
-function rank.withRank(text: string, value: number?): string?
+-- The document with its rank set to `value` (a whole number, ` auto` when `auto`) or removed (nil). Every `rank:` line
+-- goes; a set rank is written once, right after `id:` (at the top of the block when there is none): the line every prep
+-- branch leaves alone, so a rank published while a prep is open merges without a conflict (`status:` and `design:` are
+-- the lines a prep edits, and a line beside them conflicts). Nil when there is no front block.
+function rank.withRank(text: string, value: number?, auto: boolean?): string?
 	local head, block, rest = string.match(text, "^(%-%-%-\n)(.-\n)(%-%-%-.*)$")
 	if not head or not block or not rest then
 		return nil
@@ -79,14 +97,14 @@ function rank.withRank(text: string, value: number?): string?
 		end
 	end
 	if value ~= nil then
-		local at = #kept + 1
+		local at = 1
 		for i, line in kept do
-			if string.match(line, "^status:") then
-				at = i
+			if string.match(line, "^id:") then
+				at = i + 1
 				break
 			end
 		end
-		table.insert(kept, at, `rank: {value}`)
+		table.insert(kept, at, if auto then `rank: {value} auto` else `rank: {value}`)
 	end
 	local body = table.concat(kept, "\n")
 	if #kept > 0 then
@@ -104,18 +122,24 @@ function rank.number(id: string): number
 	return tonumber(string.sub(id, 2)) or 0
 end
 
--- (state, id, root) of an item's document path (`<root>/issues/[active/|done/|retired/]<id>/<id>.md`, rafts alike);
--- nil for any other path.
-function rank.where(path: string): (string?, string?, string?)
-	for _, k in { { "issues", "[fdc]" }, { "rafts", "R" } } do
-		for _, st in
-			{ { "active/", "active" }, { "done/", "done" }, { "retired/", "retired" }, { "", "backlog" } }
-		do
-			local root, id, file =
-				string.match(path, `^(.*)/{k[1]}/{st[1]}({k[2]}%d%d%d%d)/({k[2]}%d%d%d%d)%.md$`)
-			if root and id and id == file then
-				return st[2], id, root
-			end
+-- (state, id, root) of an item's document path, for the roots a registry lists (origin/main's, for a publish; the
+-- working tree's, for a reader): publish.itemPath's reading of `<root>/(issues|rafts)/[active/|done/]<id>/<id>.md`, and a
+-- retired raft's (`<root>/rafts/retired/<id>/<id>.md`, which a publish never sees). nil for any other path.
+function rank.where(path: string, roots: { string }): (string?, string?, string?)
+	local id, rel, root = publish.itemPath(path)
+	if id and rel == `{id}.md` and root and table.find(roots, root) then
+		local under = string.sub(path, #root + 2)
+		local state = if string.find(under, "^issues/active/") or string.find(under, "^rafts/active/")
+			then "active"
+			elseif string.find(under, "^issues/done/") or string.find(under, "^rafts/done/") then "done"
+			else "backlog"
+		return state, id, root
+	end
+	for _, r in roots do
+		local escaped = string.gsub(r, "%p", "%%%0")
+		local a, b = string.match(path, `^{escaped}/rafts/retired/(R%d%d%d%d)/(R%d%d%d%d)%.md$`)
+		if a and a == b then
+			return "retired", a, r
 		end
 	end
 	return nil, nil, nil
@@ -123,8 +147,8 @@ end
 
 -- The fact of one document: `front` is its front matter as a key -> value table (any reader's). The status word is the
 -- effective one (status.effective), or the stored `blocked`. A done item is its id and state alone.
-function rank.factOf(path: string, front: { [string]: string }): Fact?
-	local state, id, root = rank.where(path)
+function rank.factOf(path: string, front: { [string]: string }, roots: { string }): Fact?
+	local state, id, root = rank.where(path, roots)
 	if not state or not id or not root then
 		return nil
 	end
@@ -160,10 +184,12 @@ function rank.factOf(path: string, front: { [string]: string }): Fact?
 		state = state,
 		status = word,
 		rank = own,
+		auto = own ~= nil and rank.isAuto(front.rank),
 		raft = if (front.raft or "") ~= "" then front.raft else nil,
 		members = ids(front.issues),
 		dependsOn = ids(front.depends_on),
 		root = root,
+		design = front.design,
 	}
 end
 
@@ -193,7 +219,8 @@ function rank.less(ar: number?, aid: string, br: number?, bid: string): boolean
 	return aid < bid
 end
 
--- A raft's rank for ordering: its own, else the best (lowest) rank of its members; an issue's is its own. nil: unset.
+-- A raft's rank for ordering: its own, else the best (lowest) rank a person set on one of its members (a rank a move
+-- wrote, ` auto`, does not count: an unrelated move must not reorder the rafts); an issue's is its own. nil: unset.
 function rank.effective(f: Fact, byId: { [string]: Fact }): number?
 	local own = ranked(f)
 	if own ~= nil or f.kind ~= "raft" then
@@ -202,7 +229,7 @@ function rank.effective(f: Fact, byId: { [string]: Fact }): number?
 	local best: number? = nil
 	for _, mid in f.members do
 		local m = byId[mid]
-		local r = if m then ranked(m) else nil
+		local r = if m and not m.auto then ranked(m) else nil
 		if r ~= nil and (best == nil or r < best) then
 			best = r
 		end
@@ -282,7 +309,7 @@ function rank.depsMet(f: Fact, byId: { [string]: Fact }): boolean
 	return true
 end
 
-export type Pick = { id: string, kind: string, why: string } -- kind: "lost" | "raft" | "draft"
+export type Pick = { id: string, kind: string, why: string } -- kind: "lost" | "raft" | "rafting" | "draft"
 
 export type Context = {
 	lost: { string }?,
@@ -302,8 +329,10 @@ end
 -- The next item to take, or nil and why there is none:
 --   lost work first, whatever its rank (the heartbeat's order);
 --   else the claimable raft with the best rank;
---   else, only when no raft is claimable, the best-ranked issue whose design a worker may draft.
--- A blocked item, or one whose dependencies are not all done, is skipped and keeps its rank.
+--   else the best-ranked approved issue that is in no raft (a worker rafts it: `./zn raft-plan --apply`);
+--   else the best-ranked issue whose design a worker may draft.
+-- A blocked item, or one whose dependencies are not all done, is skipped and keeps its rank. (A blocked item has the
+-- stored status `blocked`, so the status tests below leave it out; only lost work needs the check.)
 function rank.next(facts: { Fact }, ctx: Context): (Pick?, string)
 	local byId = byIdOf(facts)
 	local function free(f: Fact): boolean
@@ -323,6 +352,7 @@ function rank.next(facts: { Fact }, ctx: Context): (Pick?, string)
 		end
 	end
 	local rafts: { Fact } = {}
+	local approved: { Fact } = {}
 	local issues: { Fact } = {}
 	for _, f in facts do
 		if f.state ~= "backlog" or not free(f) then
@@ -330,22 +360,74 @@ function rank.next(facts: { Fact }, ctx: Context): (Pick?, string)
 		end
 		if f.kind == "raft" and f.status == "prepared" and ctx.claimable(f) then
 			table.insert(rafts, f)
-		elseif f.kind == "issue" and f.status == "new" and (f.raft or "") == "" and ctx.mayDraft(f) then
-			table.insert(issues, f)
+		elseif f.kind == "issue" and (f.raft or "") == "" then
+			if f.status == "prepared" and f.design == "ready" and f.approved == true then
+				table.insert(approved, f)
+			elseif f.status == "new" and ctx.mayDraft(f) then
+				table.insert(issues, f)
+			end
 		end
 	end
 	local nextRaft = rank.order(rafts, { world = facts })[1]
 	if nextRaft then
 		return { id = nextRaft.id, kind = "raft", why = `rank {shown(rank.effective(nextRaft, byId))}` }, ""
 	end
+	local nextApproved = rank.order(approved, { world = facts })[1]
+	if nextApproved then
+		return { id = nextApproved.id, kind = "rafting", why = "approved, in no raft" }, ""
+	end
 	local nextIssue = rank.order(issues, { world = facts })[1]
 	if nextIssue then
 		return { id = nextIssue.id, kind = "draft", why = `rank {shown(nextIssue.rank)}` }, ""
 	end
-	return nil, "no lost work, no claimable raft and no issue to draft"
+	return nil, "no lost work, no claimable raft, no approved issue to raft and no issue to draft"
 end
 
-export type Change = { id: string, rank: number?, was: number? }
+-- What `./zn list` prints, in order: every blocked item (rafts, then issues, each in the stack's order), then lost work
+-- (the heartbeat's order, any kind), then the rest: the rafts, then the issues, each in the stack's order. `world` is
+-- every fact (a raft's rank reads its members').
+function rank.listOrder(facts: { Fact }, lost: { string }?, world: { Fact }?): { Fact }
+	local byId = byIdOf(world or facts)
+	local blocked: { Fact } = {}
+	local rest: { Fact } = {}
+	for _, f in facts do
+		table.insert(if rank.isBlocked(f.status) then blocked else rest, f)
+	end
+	local out: { Fact } = {}
+	local function kinds(list: { Fact })
+		for _, kind in { "raft", "issue" } do
+			local ofKind: { Fact } = {}
+			for _, f in list do
+				if f.kind == kind then
+					table.insert(ofKind, f)
+				end
+			end
+			for _, f in rank.order(ofKind, { world = world or facts }) do
+				table.insert(out, f)
+			end
+		end
+	end
+	kinds(blocked)
+	local taken: { [Fact]: boolean } = {}
+	local lostList: { string } = lost or {}
+	for _, id in lostList do
+		local f = byId[id]
+		if f and not taken[f] and table.find(rest, f) then
+			taken[f] = true
+			table.insert(out, f)
+		end
+	end
+	local others: { Fact } = {}
+	for _, f in rest do
+		if not taken[f] then
+			table.insert(others, f)
+		end
+	end
+	kinds(others)
+	return out
+end
+
+export type Change = { id: string, rank: number?, was: number?, auto: boolean? } -- auto: a moved-written rank (` auto`)
 
 -- The facts a move can place: the backlog items of the kind, in the order a rank gives them (no lost, no blocked).
 function rank.stack(facts: { Fact }, kind: string): { Fact }
@@ -355,6 +437,7 @@ function rank.stack(facts: { Fact }, kind: string): { Fact }
 		if f.kind == kind and f.state == "backlog" then
 			local c = table.clone(f)
 			c.ownRank = f.rank
+			c.ownAuto = f.auto
 			c.rank = rank.effective(f, byId)
 			table.insert(mine, c)
 		end
@@ -391,14 +474,23 @@ local function same(a: { string }, b: { string }): boolean
 end
 
 -- What a move writes. `stack` is rank.stack(...) of the item's kind, `id` is in it, and `how` is one of:
---   "top", "last"            the first or the last place
+--   "top"                    the first place
+--   "last"                   the end: below the unset items the moved item is unset (it then sorts among them by number,
+--                            which the third result says); with every item ranked it goes after the last
 --   "before", "after"        next to the item `arg` names (another item of the stack)
 --   "set"                    the whole number `arg`
 --   "unset"                  no rank
--- The moved item is given a rank in a gap (the neighbours' ranks 10 apart, so one move edits one file); when there is no
--- room, or the item goes among unset ones, the items from the top through the moved one are renumbered 10, 20, 30 ... in
--- one change. Items below stay as they are. An empty result changes nothing.
-function rank.plan(stack: { Fact }, id: string, how: string, arg: (string | number)?): ({ Change }?, string?)
+-- The moved item is given a plain rank in a gap (its neighbours' ranks 10 apart, so one move edits one file). Dropped
+-- among or after unset items, it is given a rank with the unset items above it in the stack, in steps of 10 after the
+-- highest rank there is, and they are marked ` auto` (a person did not set them: a raft's rank ignores them); no rank that
+-- exists changes. Only when there is no room between two ranked neighbours are the ranked items renumbered 10, 20, 30 ...
+-- from the top (a person-set rank stays plain, an auto one stays auto). An empty result changes nothing.
+function rank.plan(
+	stack: { Fact },
+	id: string,
+	how: string,
+	arg: (string | number)?
+): ({ Change }?, string?, string?)
 	local me: Fact? = nil
 	for _, f in stack do
 		if f.id == id then
@@ -413,17 +505,28 @@ function rank.plan(stack: { Fact }, id: string, how: string, arg: (string | numb
 		if n < 1 or n > rank.MAX or n ~= math.floor(n) then
 			return nil, `rank {n} is not a whole number from 1 to {rank.MAX}`
 		end
-		return if me.ownRank == n then {} else { { id = id, rank = n, was = me.ownRank } }, nil
+		if me.ownRank == n and not me.ownAuto then
+			return {}, nil
+		end
+		return { { id = id, rank = n, was = me.ownRank, auto = false } }, nil
 	elseif how == "unset" then
 		return if me.ownRank == nil then {} else { { id = id, rank = nil, was = me.ownRank } }, nil
 	end
+	local byId: { [string]: Fact } = {}
 	local others: { string } = {}
 	local current: { string } = {}
+	local anyUnset = false
 	for _, f in stack do
+		byId[f.id] = f
 		table.insert(current, f.id)
 		if f.id ~= id then
 			table.insert(others, f.id)
+			anyUnset = anyUnset or f.rank == nil
 		end
+	end
+	if how == "last" and anyUnset then
+		local note = "dropped below the unset items: it sorts among them by number, and nothing is renumbered"
+		return if me.ownRank == nil then {} else { { id = id, rank = nil, was = me.ownRank } }, nil, note
 	end
 	local at: number
 	if how == "top" then
@@ -447,15 +550,56 @@ function rank.plan(stack: { Fact }, id: string, how: string, arg: (string | numb
 	local want = table.clone(others)
 	table.insert(want, at, id)
 	if same(want, current) then
+		-- already there; but asking for the place makes an auto rank the person's own
+		if me.ownRank ~= nil and me.ownAuto then
+			return { { id = id, rank = me.ownRank, was = me.ownRank, auto = false } }, nil
+		end
 		return {}, nil
-	end
-	local byId: { [string]: Fact } = {}
-	for _, f in stack do
-		byId[f.id] = f
 	end
 	local function rankOf(i: number): number?
 		local f = byId[want[i]]
 		return if f then f.rank else nil
+	end
+	local function keeps(changes: { Change }): { Change }?
+		local assigned: { [string]: number? } = {}
+		for _, c in changes do
+			assigned[c.id] = c.rank
+		end
+		if same(orderIds(stack, assigned), want) then
+			return changes
+		end
+		return nil
+	end
+	-- the moved item among the unset ones: rank it, and the unset items above it, after the highest rank
+	if at > 1 and rankOf(at - 1) == nil then
+		local first = at
+		for i = 1, at - 1 do
+			if rankOf(i) == nil then
+				first = i
+				break
+			end
+		end
+		local base = 0
+		for i = 1, first - 1 do
+			base = math.max(base, rankOf(i) or 0)
+		end
+		if base + (at - first + 1) * rank.GAP > rank.MAX then
+			return nil, `{at - first + 1} items do not fit above {rank.MAX}`
+		end
+		local changes: { Change } = {}
+		for i = first, at do
+			table.insert(changes, {
+				id = want[i],
+				rank = base + (i - first + 1) * rank.GAP,
+				was = byId[want[i]].ownRank,
+				auto = i ~= at,
+			})
+		end
+		local checked = keeps(changes)
+		if checked then
+			return checked, nil
+		end
+		return nil, `{id}: the ranks do not give the order asked for (a bug: report it)`
 	end
 	-- one edit, in a gap
 	local above, below = if at > 1 then rankOf(at - 1) else nil, rankOf(at + 1)
@@ -476,11 +620,12 @@ function rank.plan(stack: { Fact }, id: string, how: string, arg: (string | numb
 		end
 	end
 	if pick ~= nil and pick >= 1 and pick <= rank.MAX then
-		if same(orderIds(stack, { [id] = pick }), want) then
-			return if me.ownRank == pick then {} else { { id = id, rank = pick, was = me.ownRank } }, nil
+		local one = keeps({ { id = id, rank = pick, was = me.ownRank, auto = false } })
+		if one then
+			return if me.ownRank == pick and not me.ownAuto then {} else one, nil
 		end
 	end
-	-- renumber from the top through the moved item, and through the last ranked item below it
+	-- no room: renumber the ranked items from the top, through the moved item
 	local last = at
 	for i, wid in want do
 		if byId[wid].rank ~= nil then
@@ -491,18 +636,19 @@ function rank.plan(stack: { Fact }, id: string, how: string, arg: (string | numb
 		return nil, `{last} ranked items do not fit below {rank.MAX}`
 	end
 	local changes: { Change } = {}
-	local assigned: { [string]: number? } = {}
 	for i = 1, last do
 		local wid = want[i]
-		assigned[wid] = i * rank.GAP
-		if byId[wid].ownRank ~= i * rank.GAP then
-			table.insert(changes, { id = wid, rank = i * rank.GAP, was = byId[wid].ownRank })
+		local f = byId[wid]
+		local plain = wid == id or (f.ownRank ~= nil and not f.ownAuto)
+		if f.ownRank ~= i * rank.GAP or (wid == id and f.ownAuto) then
+			table.insert(changes, { id = wid, rank = i * rank.GAP, was = f.ownRank, auto = not plain })
 		end
 	end
-	if not same(orderIds(stack, assigned), want) then
-		return nil, `{id}: the renumbering does not give the order asked for (a bug: report it)`
+	local checked = keeps(changes)
+	if checked then
+		return checked, nil
 	end
-	return changes, nil
+	return nil, `{id}: the renumbering does not give the order asked for (a bug: report it)`
 end
 
 return rank

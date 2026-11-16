@@ -21,7 +21,8 @@ export type Build = (
 	paths: { string },
 	read: (string) -> string?,
 	roots: { string },
-	counter: string
+	counter: string,
+	readMany: (({ string }) -> { string? })?
 ) -> { Change } | string
 
 local function isIssue(id: string): boolean
@@ -422,7 +423,36 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 				end
 			end
 		end
-		local out = build(paths, buildRead, roots, counter)
+		-- c0249: many files of the base in one `git cat-file --batch` (a build that reads hundreds of documents)
+		local function readMany(list: { string }): { string? }
+			local out: { string? } = {}
+			if #list == 0 then
+				return out
+			end
+			local specs: { string } = {}
+			for _, p in list do
+				table.insert(specs, `{base}:{p}`)
+			end
+			local r = git(cwd, { "cat-file", "--batch" }, nil, table.concat(specs, "\n") .. "\n")
+			local text = if r.ok then r.stdout else ""
+			local at = 1
+			for i = 1, #list do
+				local nl = string.find(text, "\n", at, true)
+				if not nl then
+					out[i] = nil
+					continue
+				end
+				local size = string.match(string.sub(text, at, nl - 1), "^%x+ %w+ (%d+)$")
+				at = nl + 1
+				if size then
+					local n = tonumber(size) :: number
+					out[i] = string.sub(text, at, at + n - 1)
+					at += n + 1
+				end
+			end
+			return out
+		end
+		local out = build(paths, buildRead, roots, counter, readMany)
 		if type(out) == "string" then
 			return fail(out)
 		end
@@ -527,11 +557,7 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 				-- c0249: a rank orders work that is not started, so a published rank change is for a backlog item only
 				if
 					rankLine(existing) ~= rankLine(c.content)
-					and (
-						string.find(c.path, "/active/", 1, true)
-						or string.find(c.path, "/done/", 1, true)
-						or string.find(c.path, "/retired/", 1, true)
-					)
+					and (string.find(c.path, "/active/", 1, true) or string.find(c.path, "/done/", 1, true))
 				then
 					return fail(
 						`{c.path}: a rank is published for a backlog item only, not an active or done one`
