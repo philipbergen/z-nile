@@ -1,0 +1,21 @@
+# Harvest: c0252
+
+- note the prototype merged three dependency prototypes (15 files conflicted), and then a shared fixture helper (`seal.layerReview`) broke c0306's `Model:` rule and the loop list needed reconciling (prep, 2026-11-15): z-design/late-pins-run-on-the-merged-deps-tree
+- design-review-001 F1: zz-arch/guards-trust-only-origin
+- design-review-001 F2: z-design/no-open-question-in-a-reviewed-design
+- design-review-001 F3: z-design/design-the-execution-window
+- design-review-001 F4: z-design/never-narrow-captured-scope
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: zz-arch/guard-no-is-explicit
+- design-review-001 F7: z-design/inherited-decisions-agree
+- design-review-001 F8: z-ticket/a-repeating-outcome-states-its-limit
+- design-review-001 F9: z-design/quote-other-preps-before-promising
+- design-review-001 F10: zz-arch/several-writers-check-the-subject
+- design-review-001 F11: zz-arch/one-definition-of-tracker-state
+- design-review-001 F12: zz-test/pin-call-site-arguments
+- design-review-001 F13: z-design/prep-choices-marked-and-checked
+- design-review-001 F14: z-design/limits-name-the-iterations-they-count
+- design-review-001 F15: z-design/spec-design-correspondence
+- design-review-001 F16: z-design/quote-other-preps-before-promising
+- design-review-001 F17: z-design/instructions-runnable-where-they-run
+- note the revision found that the first engine case could not tell the two engines apart (M53 survived), that a remembered wait blocked the retry, that a check.sh label spelling a scanned path trips check-paths, and that c0250's own dispatch case caught a rework of how "layered" is read (prep, 2026-11-16): zz-test/no-vacuous-pass, z-design/a-new-state-says-what-the-last-outcome-means, z-design/check-paths-from-the-home, z-design/late-pins-run-on-the-merged-deps-tree
