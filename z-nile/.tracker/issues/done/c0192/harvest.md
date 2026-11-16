@@ -12,3 +12,4 @@
 - design-review-004 F1: zz-test/no-vacuous-pass
 - design-review-004 F2: z-design/no-check-red-between-steps
 - design-review-004 F3: z-design/restated-rules-move-together
+- note a code review's probes ran 14 h at 100% CPU on three cores (PR #125) (erred zz-review): zz-review/bound-every-probe
