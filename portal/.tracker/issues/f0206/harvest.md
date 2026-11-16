@@ -1,0 +1,2 @@
+- note a hand-run mutant in the prototype worktree was undone with git checkout on an intent-to-add file (emptying it) and its relative backup landed in the main checkout: z-design/prep-experiments-run-in-standalone-clones
+- note the mutation runner judged a run by the substring "0 failed", so "10 failed" read as passing (S16 looked like a survivor): z-design/mutation-runner-runs-correct-variants

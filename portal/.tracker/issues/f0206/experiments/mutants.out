@@ -98,7 +98,7 @@ V19 labels scaled to their boxes                                 killed
 V20 the rows' text size not set                                  killed
 V21 the tab keys act while the player types                      killed
 V22 YOUR BEST in the name column only                            killed
-V23 the layout with a glyph width of its own                     SURVIVED
+V23 the layout with a glyph width of its own                     killed
 V24 the best line never hidden                                   killed
 V18 a long name not cut                                          killed
 X1 the server's Main never starts the relay                      killed
@@ -115,4 +115,4 @@ CV4 the relay requires one more arcade module                    ok (green)
 CV5 the client's Main starts the view before the carousel        ok (green)
 CV7 Board requires Card for its text model                       ok (green)
 CV6 the tab bar's buttons in a list layout                       ok (green)
-109 mutants, 7 correct variants, 1 not as intended
+109 mutants, 7 correct variants, 0 not as intended
