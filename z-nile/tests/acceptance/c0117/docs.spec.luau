@@ -206,7 +206,7 @@ return t.spec("c0117 docs", function(it)
 				"input + cache writes + output, cache reads left out",
 				"- **Spend.**",
 				"- **The chain.**",
-				"always a human's",
+				"the `run` gate",
 				"`./zn lessons --uncovered <id>`",
 				"- **Run state.**",
 				"- **The wrapper.**",

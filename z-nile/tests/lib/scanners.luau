@@ -32,6 +32,12 @@ scanners.CASES = {
 		witness = { text = "tests/acceptance/c0001/a.spec", result = "tests/acceptance/c0002/a.spec" },
 	},
 	{
+		name = "raftplan.rerecord",
+		module = "@znile/engine/raftplan",
+		call = 'm.rerecord(text, "c0001", "aaa", "bbb")',
+		witness = { text = "c0001@aaa and c0001@aaa", result = "c0001@bbb and c0001@bbb" },
+	},
+	{
 		name = "ids.rewrite",
 		module = "@znile/engine/ids",
 		call = 'm.rewrite(text, { c0001 = "c0002" })',

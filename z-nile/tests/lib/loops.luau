@@ -436,12 +436,12 @@ loops.ALLOWED = {
 	},
 	["z-nile/engine/dispatcher.luau"] = {
 		{
-			loop = "while running do",
-			why = "the heartbeat ends when its returned stop closure clears running",
+			loop = 'while taken(`{dir}/{stem}{if numbered then "" else "-"}{n}{ext}`) do',
+			why = "n grows until the first free name",
 		},
 		{
-			loop = "while fs.isFile(`{dir}/answered-{n}.md`) do",
-			why = "n grows until the first absent answer file",
+			loop = "while running do",
+			why = "the heartbeat ends when its returned stop closure clears running",
 		},
 		{
 			loop = "while true do",
@@ -469,6 +469,11 @@ loops.ALLOWED = {
 		{
 			loop = "while i <= #a and i <= #b and a[i] == b[i] do",
 			why = "the common-prefix walk: i grows by 1 every pass and the lists are finite",
+		},
+		{
+			loop = "while not rebasing.ok do",
+			why = "each pass continues the rebase by one commit, or breaks when a stop cannot be settled",
+			sweep = false,
 		},
 		{
 			loop = "while #remaining > 0 do",
@@ -533,6 +538,11 @@ loops.ALLOWED = {
 		{
 			loop = "while parent[k] ~= k do",
 			why = "path halving up a finite union-find forest that has no cycle",
+		},
+		{
+			loop = "while true do",
+			why = "at moves past each match of a non-empty needle, or the loop breaks",
+			sweep = "raftplan.rerecord",
 		},
 	},
 	["z-nile/engine/reap.luau"] = {

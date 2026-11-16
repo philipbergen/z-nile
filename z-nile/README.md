@@ -101,7 +101,7 @@ A worker claims an item by landing the status change on `origin/main`, as `statu
 - A takeover discards the old worker's worktree, and a numbered copy recovers its work: the old worker's work is kept, and a numbered copy of it continues the work. *designed* (c0277)
 
 ### Autonomous delivery
-Unless something blocks, once a person has approved its design, an item is rafted, executed, code-reviewed, full-force reviewed, tested and landed with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the stack is green and regression-free. This replaces c0117's "stops at a merge" gate: the stack lands through `./zn done`, with the dispatcher's credential, after its own checks. *captured* (c0252)
+Unless something blocks, once a person has approved its design, an item is rafted, executed, code-reviewed, full-force reviewed, tested and landed with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the stack is green and regression-free. This replaces c0117's "stops at a merge" gate: the stack lands through `./zn done`, with the dispatcher's credential, after its own checks. *exists* (c0252)
 
 ### Models per command and activity
 `.models.toml` names a real model for each stage in its `[roles.*]` table: `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `code-review`, `stream-review` and `final-review`, each with its CLI, rank, token cap and effort and a fallback list, and spend records the model. No level has a name. *exists*
@@ -165,7 +165,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | `rank`, `./zn rank`, `./zn next`, lost first | c0249 | captured |
 | `blocked`, `escalation.md`, `./zn resolve` | c0250 | exists |
 | cross-model review pool, same-family fallback | c0251 | exists |
-| the dispatcher lands a green stack | c0252 | captured |
+| the dispatcher lands a green stack | c0252 | exists |
 | `./zn work` pull loop (the interactive session worker exists; the headless loop does not) | c0253 | captured |
 | workers on several hosts, worker identity in spend | c0254 | captured |
 | the z-nile app in Omarchy: order, lost items, drag and drop | c0257 | captured |

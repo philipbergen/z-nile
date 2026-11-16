@@ -105,7 +105,7 @@ return t.spec("c0117 .models.toml", function(it)
 			t.expect(models.settings({}).toolSeconds).toBe(900)
 			t.expect(has(
 				errorOf(function()
-					layer('[dispatch]\nauto_merge = ["run"]\n')
+					layer('[dispatch]\nauto_merge = ["merge"]\n')
 				end),
 				"only prep, raft"
 			)).toBe(true)

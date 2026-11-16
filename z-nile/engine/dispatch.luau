@@ -195,7 +195,7 @@ function dispatch.prompt(p: PromptInput): string
 		"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
 		`Work only in \`{p.worktree}\`: it is your working directory. Never edit the main checkout.`,
 		askText(p),
-		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse.",
+		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse. `./zn done` is refused here too: when your work is done, stop, and the dispatcher lands the stack.",
 		"Do not pass --time or --tokens. The dispatcher records this session's wall, CPU, tokens and model.",
 	}
 	if p.exchange and #p.exchange > 0 then
@@ -386,7 +386,7 @@ end
 
 -- The next thing the chain does for the item. Stops first: questions.md, a failed step, a review step that left an
 -- unharvested finding. Then by state: capture, design, the prep gate, raft-plan, z-raft, the rafting gate, ready,
--- run, the run's gate (always a human's), done.
+-- run, then the landing (landcheck.classify over `./zn land-check`; the old single-branch raft's pull request stays a human's), done.
 function dispatch.next(f: Facts): Action
 	if f.status == "blocked" then
 		return stop(

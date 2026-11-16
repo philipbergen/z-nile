@@ -2449,7 +2449,7 @@ function dispatcher.landFacts(
 		return true, nil, nil
 	end
 	local wt = worktree(ctx, id)
-	local args = { "land-check", id, "--json" }
+	local args = { "land-check", id }
 	if req then
 		if not req.layer then
 			return true, nil, req
@@ -2457,6 +2457,7 @@ function dispatcher.landFacts(
 		table.insert(args, "--below")
 		table.insert(args, req.layer :: string)
 	end
+	table.insert(args, "--json") -- last: the flag parser gives a flag the word after it
 	local _, out, err = zn(wt, args, true)
 	local okj, j = pcall(function()
 		return serde.decode("json", out)
