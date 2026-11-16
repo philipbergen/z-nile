@@ -23,6 +23,7 @@ local COPIES: { { string } } = {
 	{ "-c", "core.abbrev=12", "branch", "-c", "main", "evil" },
 	{ "--no-pager", "branch", "-C", "main", "evil" },
 	{ "--namespace", "x", "--attr-source", "HEAD", "branch", "-c", "main", "evil" },
+	{ "--shallow-file", "status", "branch", "-c", "main", "evil" }, -- git takes `status` as the option's value
 }
 
 local base = h.fresh("copy")

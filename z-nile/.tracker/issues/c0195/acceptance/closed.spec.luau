@@ -63,13 +63,48 @@ return t.spec("c0195 the fence's git fails closed", function(it)
 					`{base}/c`,
 					"perl",
 					{ "-e", "alarm 20; exec @ARGV", `{h.HOOKS}/git`, "rev-parse", "HEAD" },
-					{ env = { PICKMAN_FENCE_GIT = value } }
+					{ env = { PICKMAN_FENCE_GIT = value, PICKMAN_FENCE_GIT_BUILTINS = "rev-parse" } } -- a builtin, so a start-itself loops by exec in one process (the alarm ends it), never by fork
 				)
 				t.expect(r.ok).toBe(false)
 				t.expect(h.has(r.stderr, "the real git is not known")).toBe(true)
 			end
 		end
 	)
+
+	it("AC7: the fence's git refuses a copy it can't place, and a second start of itself", function()
+		local g = h.GITS[1]
+		h.makeRepo(`{base}/d`, g)
+		-- a real git that fails the question "which repository?" (as a fork failure or an old git would) and records any other call
+		local stub = `{base}/stub-git`
+		fs.writeFile(
+			stub,
+			`#!/bin/sh\ncase "$*" in *rev-parse*) exit 128 ;; esac\necho called >> {base}/marker\nexit 0\n`
+		)
+		t.expect(process.exec("chmod", { "+x", stub }).ok).toBe(true)
+		local env = {
+			PICKMAN_FENCE_GIT = stub,
+			PICKMAN_FENCE_GIT_BUILTINS = "branch",
+			PICKMAN_FENCE_REAL_GIT = `{base}/d/.git`,
+		}
+		local r = fixture.exec(`{base}/d`, `{h.HOOKS}/git`, { "branch", "-c", "main", "evil" }, { env = env })
+		t.expect(r.ok).toBe(false)
+		t.expect(h.has(r.stderr, "could not tell which repository")).toBe(true)
+		t.expect(fs.isFile(`{base}/marker`)).toBe(false)
+		-- an option the fence's git does not know before the command is no harmless flag
+		local r2 = fixture.exec(
+			`{base}/d`,
+			`{h.HOOKS}/git`,
+			{ "--unknown-flag", "x", "status" },
+			{ env = env }
+		)
+		t.expect(r2.ok).toBe(false)
+		t.expect(fs.isFile(`{base}/marker`)).toBe(false)
+		-- a second start while the first asks its question
+		env.PICKMAN_FENCE_DEPTH = "1"
+		local r3 = fixture.exec(`{base}/d`, `{h.HOOKS}/git`, { "status" }, { env = env })
+		t.expect(r3.ok).toBe(false)
+		t.expect(h.has(r3.stderr, "started by its own question")).toBe(true)
+	end)
 
 	it("cleans up", function()
 		h.remove(base)

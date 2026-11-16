@@ -135,7 +135,7 @@ local function runForms(base: string, g: Git, name: string, forms: { Form }): Ba
 	for _, f in forms do
 		local words = { f.where }
 		for _, a in f.args do
-			local w = string.gsub(a, "@REAL@", real)
+			local w = string.gsub(string.gsub(a, "@REALUP@", string.upper(real)), "@REAL@", real)
 			table.insert(words, w)
 		end
 		table.insert(lines, table.concat(words, "\t"))

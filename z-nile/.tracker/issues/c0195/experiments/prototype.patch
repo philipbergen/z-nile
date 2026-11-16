@@ -110,65 +110,83 @@ index 71b88fa5d..6ab390363 100644
    export "GIT_CONFIG_KEY_$n=maintenance.auto" "GIT_CONFIG_VALUE_$n=false"
 diff --git a/z-nile/lib/git-hooks/git b/z-nile/lib/git-hooks/git
 new file mode 100755
-index 000000000..732622447
+index 000000000..294bdc686
 --- /dev/null
 +++ b/z-nile/lib/git-hooks/git
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,95 @@
 +#!/bin/sh -p
 +# The fence's git (c0195): z-nile/lib/fence.sh puts this folder, the ref guard's hooks, first on the PATH wherever
 +# it sets them (no jail: check.sh flows, Linux spec runs); git runs no hook named git. Some ref writes run no reference-transaction hook (git 2.50 and
 +# 2.54: `git branch -c`/`-C` copy a branch outside a ref transaction, and a refused `branch -m`/`-M` still moves the
 +# branch's reflog aside), so in a repository the fence protects (PICKMAN_FENCE_REAL_GIT) this refuses them before
 +# git starts, and refuses every command that is not one of git's own (an alias or an external command, whose
-+# expansion it can't see). Everything else, and everything in a fixture, is the real git (PICKMAN_FENCE_GIT) at once.
++# Fails closed: where it can't tell which repository a branch copy/move or a non-builtin acts on, it refuses.
++# The question it asks git (below) is the only git it starts besides the command, and never starts this file again.
++if [ "${PICKMAN_FENCE_DEPTH:-}" = 1 ]; then
++  echo "fence: the fence's git was started by its own question; refusing. Stop and report this." >&2
++  exit 1
++fi
 +real=${PICKMAN_FENCE_GIT:-}
 +if [ -z "$real" ] || [ ! -x "$real" ] || [ "$real" -ef "$0" ]; then
 +  echo "fence: the real git is not known (PICKMAN_FENCE_GIT); refusing. Stop and report this." >&2
 +  exit 1
 +fi
-+# the command: the first word past git's own options (those that take a separate value skip it)
-+k=0 skip= sub=
++# the command: the first word past git's own options. A closed list: an option not on it (it may take a value) makes
++# what follows unknown, and the command is then asked of the repository like a non-builtin.
++k=0 skip= sub= unk=
 +for a do
 +  k=$((k + 1))
 +  if [ -n "$skip" ]; then skip=; continue; fi
 +  case $a in
-+  -C | -c | --git-dir | --work-tree | --namespace | --config-env | --attr-source) skip=1 ;;
-+  -*) ;;
++  -C | -c | --git-dir | --work-tree | --namespace | --config-env | --attr-source | --shallow-file) skip=1 ;;
++  --git-dir=* | --work-tree=* | --namespace=* | --config-env=* | --attr-source=* | --shallow-file=*) ;;
++  --super-prefix=* | --exec-path=* | --list-cmds=* | --exec-path | --html-path | --man-path | --info-path) ;;
++  -v | --version | -h | --help | -p | --paginate | -P | --no-pager | --bare | --no-replace-objects) ;;
++  --no-lazy-fetch | --no-optional-locks | --no-advice | --literal-pathspecs | --glob-pathspecs) ;;
++  --noglob-pathspecs | --icase-pathspecs) ;;
++  -*) unk=1 ;;
 +  *) sub=$a; break ;;
 +  esac
 +done
-+[ -n "$sub" ] || exec "$real" "$@"
-+case " ${PICKMAN_FENCE_GIT_BUILTINS:-} " in
-+*" $sub "*)
-+  [ "$sub" = branch ] || exec "$real" "$@"
-+  # branch: only a copy or a move (any spelling parse-options accepts) needs the repository's name
-+  found= i=0
-+  for a do
-+    i=$((i + 1))
-+    [ "$i" -gt "$k" ] || continue
-+    case $a in
-+    --) break ;;
-+    --cop | --copy | --mo | --mov | --move) found=1 ;;
-+    --*) ;;
-+    -?*)
-+      # a cluster of short options: -u takes the rest of the cluster as its value
-+      c=${a#-}
-+      while [ -n "$c" ]; do
-+        case $c in
-+        u*) break ;;
-+        [cCmM]*) found=1; break ;;
-+        esac
-+        c=${c#?}
-+      done
-+      ;;
-+    esac
-+  done
-+  [ -n "$found" ] || exec "$real" "$@"
-+  what="copy or rename a branch (git writes it outside the ref guard's hook)"
-+  ;;
-+*) what="run '$sub', which is not one of git's own commands (an alias or an external command)" ;;
-+esac
-+# the repository the command would act on: the same options before the command, the same environment
++[ -n "$sub" ] || [ -n "$unk" ] || exec "$real" "$@"
++if [ -n "$unk" ]; then
++  what="use an option before the command that the fence's git does not know"
++else
++  case " ${PICKMAN_FENCE_GIT_BUILTINS:-} " in
++  *" $sub "*)
++    [ "$sub" = branch ] || exec "$real" "$@"
++    found= i=0
++    for a do
++      i=$((i + 1))
++      [ "$i" -gt "$k" ] || continue
++      case $a in
++      --) break ;;
++      --cop | --copy | --mo | --mov | --move) found=1 ;;
++      --*) ;;
++      -?*)
++        c=${a#-}
++        while [ -n "$c" ]; do
++          case $c in
++          u*) break ;;
++          [cCmM]*) found=1; break ;;
++          esac
++          c=${c#?}
++        done
++        ;;
++      esac
++    done
++    [ -n "$found" ] || exec "$real" "$@"
++    what="copy or rename a branch (git writes it outside the ref guard's hook)"
++    ;;
++  *) what="run '$sub', which is not one of git's own commands (an alias or an external command)" ;;
++  esac
++fi
++# the repository the command would act on: the same options, the same environment. Only an answer that succeeded,
++# is not empty and matches no protected repository lets the command run; any other outcome refuses.
++unsure() {
++  echo "fence: could not tell which repository the command acts on, so it is refused ($what); refused" >&2
++  exit 1
++}
 +common=$(
 +  i=0 n=$#
 +  for a do
@@ -176,14 +194,15 @@ index 000000000..732622447
 +    [ "$i" -lt "$k" ] && set -- "$@" "$a"
 +  done
 +  shift "$n"
-+  "$real" "$@" rev-parse --path-format=absolute --git-common-dir 2>/dev/null
-+) || exec "$real" "$@"
-+common=$(cd "$common" 2>/dev/null && pwd -P) || exec "$real" "$@"
++  PICKMAN_FENCE_DEPTH=1 "$real" "$@" rev-parse --path-format=absolute --git-common-dir 2>/dev/null
++) || unsure
++[ -n "$common" ] || unsure
 +old_ifs=$IFS
 +IFS=:
 +for p in ${PICKMAN_FENCE_REAL_GIT:-}; do
 +  IFS=$old_ifs
-+  if [ "$common" = "$(cd "$p" 2>/dev/null && pwd -P)" ]; then
++  # the same folder by identity (device and inode), not by spelling: a case-folding volume keeps the caller's letters
++  if [ -n "$p" ] && [ "$common" -ef "$p" ]; then
 +    echo "fence: a check tried to $what in the real repository ($common); refused" >&2
 +    exit 1
 +  fi

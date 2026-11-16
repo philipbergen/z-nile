@@ -1,0 +1,10 @@
+- design-review-001 F1: zz-arch/guard-no-is-explicit
+- design-review-001 F2: zz-arch/guards-decide-from-the-tools-resolution
+- design-review-001 F3: zz-arch/compare-canonical-spellings
+- design-review-001 F4: zz-arch/allow-list-entries-are-not-caller-chosen, z-design/quote-other-preps-before-promising
+- design-review-001 F5: zz-arch/not-this-class-is-proven-per-command-and-flag
+- design-review-001 F6: zz-arch/a-start-itself-case-loops-by-exec-never-by-fork
+- design-review-001 F7: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F8: one-off: plausible mutants without a case, listed for the user
+- design-review-001 F9: one-off: Linux host not available in this session
+- design-review-001 F10: one-off: record keeping
