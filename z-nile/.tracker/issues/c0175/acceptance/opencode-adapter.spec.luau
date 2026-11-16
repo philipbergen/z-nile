@@ -311,14 +311,14 @@ return t.spec("c0175 the opencode-cli adapter", function(it)
 				LOGPREFIX
 					.. 'message=evaluated permission=bash pattern="grep -n quota rate limit try again engine.luau"'
 			)
-			t.expect(acc.waiting).toBe(nil)
+			t.expect((acc :: any).waiting).toBe(nil)
 			t.expect(acc.quota).toBe(nil)
 			feedErr(acc, LOGERR)
-			t.expect(acc.waiting).toBe("AI_APICallError: Rate limit exceeded: too many requests")
+			t.expect((acc :: any).waiting).toBe("AI_APICallError: Rate limit exceeded: too many requests")
 			-- a stream error that is no quota error is not a wait
 			local other = adapters.newAcc()
 			feedErr(other, (string.gsub(LOGERR, "Rate limit exceeded: too many requests", "Unauthorized")))
-			t.expect(other.waiting).toBe(nil)
+			t.expect((other :: any).waiting).toBe(nil)
 			-- the error line is quoted with the same prefix by a model's command: only the CLI's own ERROR line counts
 			local quoted = adapters.newAcc()
 			feedErr(
@@ -326,7 +326,7 @@ return t.spec("c0175 the opencode-cli adapter", function(it)
 				LOGPREFIX
 					.. 'message=evaluated permission=bash pattern="level=ERROR message="stream error" rate limit"'
 			)
-			t.expect(quoted.waiting).toBe(nil)
+			t.expect((quoted :: any).waiting).toBe(nil)
 		end
 	)
 
@@ -337,12 +337,12 @@ return t.spec("c0175 the opencode-cli adapter", function(it)
 			local feedErr = (adapter :: any).feedErr
 			local acc = adapters.newAcc()
 			feedErr(acc, CREATED_PARENT)
-			t.expect(#acc.children).toBe(0)
+			t.expect(#(acc :: any).children).toBe(0)
 			feedErr(acc, CREATED_CHILD)
-			t.expect(acc.children).toEqual({ "ses_e1d09271fffeT7DtBgHC6Zrm9I" })
+			t.expect((acc :: any).children).toEqual({ "ses_e1d09271fffeT7DtBgHC6Zrm9I" })
 			-- a grandchild is a child of the child: it is named too
 			feedErr(acc, (string.gsub(CREATED_CHILD, "ses_e1d09271fffeT7DtBgHC6Zrm9I", "ses_grand1")))
-			t.expect(#acc.children).toBe(2)
+			t.expect(#(acc :: any).children).toBe(2)
 		end
 	)
 
