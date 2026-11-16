@@ -1,0 +1,186 @@
+
+local function holding(a: any): boolean
+	return Session.holding(a.s, "7")
+end
+
+local function noFree(w: any, continues: number?)
+	w.seed(STORE, 7, { free = NOW - 60, plays = 1, continues = continues or 0, receipts = {} })
+end
+
+return t.spec("c0202 Pickman's continue offer on the arcade's revives", function(it)
+	it("a revive held is used at once: three new lives, and the record holds one less", function()
+		local a = offer("live", function(w: any)
+			noFree(w, 2)
+		end)
+		t.expect(Session.offering(a.s, "7")).toBe(true)
+		sendContinue(a, "ask")
+		t.expect(Session.offering(a.s, "7")).toBe(false)
+		t.expect(lives(a)).toBe(Game.CONTINUE_LIVES)
+		t.expect(stored(a.w, STORE, 7).revives).toBe(1)
+		t.expect(#a.w.prompts).toBe(0)
+		local told = a.w.sentOn("PayStatus", a.p)
+		t.expect(told[#told][2].revives).toBe(1)
+	end)
+
+	it("with none held, live mode holds the countdown and prompts Pickman's revive product; a receipt continues", function()
+		local a = offer("live", noFree)
+		local writes = a.w.writes
+		sendContinue(a, "ask")
+		t.expect(a.w.writes).toBe(writes) -- none known held: no write
+		t.expect(#a.w.prompts).toBe(1)
+		t.expect(a.w.prompts[1].id).toBe(REVIVE_ID)
+		t.expect(holding(a)).toBe(true)
+		sendContinue(a, "ask") -- an ask while the screen is open is dropped
+		t.expect(#a.w.prompts).toBe(1)
+		local timer = Session.frame(a.s, "7").play.timer
+		for _ = 1, 20 do
+			Session.step(a.s)
+		end
+		t.expect(Session.frame(a.s, "7").play.timer).toBe(timer)
+		t.expect(a.w.receipt(7, REVIVE_ID, "C1")).toBe("ProductPurchaseDecision.PurchaseGranted")
+		t.expect(Session.offering(a.s, "7")).toBe(false)
+		t.expect(lives(a)).toBe(Game.CONTINUE_LIVES)
+		local r = stored(a.w, STORE, 7)
+		t.expect(r.revives).toBe(0)
+		t.expect(r.receipts).toEqual({ "C1" })
+	end)
+
+	it("Roblox's screen closed without buying lets the countdown run; closed bought, it waits for the receipt", function()
+		local a = offer("live", noFree)
+		sendContinue(a, "ask")
+		a.w.finished(7, REVIVE_ID, false)
+		t.expect(holding(a)).toBe(false)
+		local b = offer("live", noFree)
+		sendContinue(b, "ask")
+		b.w.finished(7, REVIVE_ID, true)
+		t.expect(holding(b)).toBe(true)
+		for _ = 1, Game.RECEIPT_WAIT_TICKS - 1 do
+			Session.step(b.s)
+		end
+		t.expect(b.w.receipt(7, REVIVE_ID, "C2")).toBe("ProductPurchaseDecision.PurchaseGranted")
+		t.expect(lives(b)).toBe(Game.CONTINUE_LIVES)
+		-- another title's product closing changes nothing
+		local c = offer("live", noFree)
+		sendContinue(c, "ask")
+		c.w.finished(7, 202, false)
+		t.expect(holding(c)).toBe(true)
+	end)
+
+	it("with none held, test mode opens the library's test screen for Pickman's revive; BUY continues, CANCEL releases", function()
+		local a = offer("test", noFree)
+		sendContinue(a, "ask")
+		t.expect(#a.w.prompts).toBe(0)
+		t.expect(a.w.sentOn("TestPurchase", a.p)).toEqual({
+			{ "open", PaidPlay.testLines("PICKMAN", "revive", Prices) :: any },
+		})
+		a.w.answer(a.p, "confirm")
+		t.expect(lives(a)).toBe(Game.CONTINUE_LIVES)
+		t.expect(stored(a.w, TEST_STORE, 7).revives).toBe(0)
+		t.expect(a.w.record(STORE, 7).continues).toBe(0) -- the live record is untouched
+		local b = offer("test", noFree)
+		sendContinue(b, "ask")
+		b.w.answer(b.p, "cancel")
+		t.expect(holding(b)).toBe(false)
+		t.expect(Session.offering(b.s, "7")).toBe(true)
+	end)
+
+	it("a closed server sells no revive and holds nothing; a revive held is still used", function()
+		local a = offer("live", function(w: any)
+			noFree(w)
+			w.attributes.ContinueProductId = nil
+		end)
+		sendContinue(a, "ask")
+		t.expect(#a.w.prompts).toBe(0)
+		t.expect(#a.w.sentOn("TestPurchase", a.p)).toBe(0)
+		t.expect(holding(a)).toBe(false)
+		local b = offer("live", function(w: any)
+			noFree(w, 1)
+			w.attributes.PlayProductId = 0
+		end)
+		sendContinue(b, "ask")
+		t.expect(lives(b)).toBe(Game.CONTINUE_LIVES)
+	end)
+
+	it("a decline during a revive's write gives the revive back and ends the run at the next step", function()
+		local a = offer("live", function(w: any)
+			noFree(w, 1)
+		end)
+		a.w.hold.update = true
+		sendContinue(a, "ask")
+		t.expect(holding(a)).toBe(true) -- judged at the ask
+		sendContinue(a, "decline")
+		a.w.release()
+		t.expect(stored(a.w, STORE, 7).revives).toBe(1) -- used, then given back
+		Session.step(a.s)
+		t.expect(Session.isOver(a.s, "7")).toBe(true)
+	end)
+
+	it("a second ask while a revive's write is under way is dropped: one write, one continue", function()
+		local a = offer("live", function(w: any)
+			noFree(w, 2)
+		end)
+		local writes = a.w.writes
+		a.w.hold.update = true
+		sendContinue(a, "ask")
+		for _ = 1, 20 do
+			sendContinue(a, "ask")
+		end
+		a.w.release()
+		t.expect(a.w.writes - writes).toBe(1)
+		t.expect(stored(a.w, STORE, 7).revives).toBe(1)
+		t.expect(#a.w.prompts).toBe(0)
+		t.expect(lives(a)).toBe(Game.CONTINUE_LIVES)
+	end)
+
+	it("a revive bought just after a use that found none is used once the library's span allows it", function()
+		-- the arrival's claim failed, so nothing was known: the first ask writes (and finds none), then the purchase
+		local a = offer("live", function(w: any)
+			w.fail.update = true
+		end)
+		sendContinue(a, "ask") -- the write fails: nothing known, the product is offered
+		t.expect(#a.w.prompts).toBe(1)
+		a.w.fail.update = false
+		a.w.finished(7, REVIVE_ID, true)
+		a.w.advance(1)
+		t.expect(a.w.receipt(7, REVIVE_ID, "C3")).toBe("ProductPurchaseDecision.PurchaseGranted")
+		t.expect(Session.offering(a.s, "7")).toBe(true) -- within the span after the last use's write
+		a.w.advance(a.w.wallet().USE_SECONDS)
+		t.expect(Session.offering(a.s, "7")).toBe(false)
+		t.expect(lives(a)).toBe(Game.CONTINUE_LIVES)
+		t.expect(stored(a.w, STORE, 7).revives).toBe(0)
+	end)
+
+	it("a play bought during the offer is held for a later game and revives nothing", function()
+		local a = offer("live", function(w: any)
+			noFree(w, 1)
+		end)
+		t.expect(a.w.receipt(7, PLAY_ID, "P5")).toBe("ProductPurchaseDecision.PurchaseGranted")
+		t.expect(Session.offering(a.s, "7")).toBe(true)
+		local r = stored(a.w, STORE, 7)
+		t.expect(r.plays).toBe(1)
+		t.expect(r.revives).toBe(1)
+	end)
+
+	it("a revive granted after its offer ended is held for the next one", function()
+		local a = offer("live", noFree)
+		sendContinue(a, "decline")
+		Session.step(a.s)
+		t.expect(a.w.receipt(7, REVIVE_ID, "C9")).toBe("ProductPurchaseDecision.PurchaseGranted")
+		t.expect(stored(a.w, STORE, 7).revives).toBe(1)
+	end)
+
+	it("a player who leaves during a revive's write keeps the revive and the run ends", function()
+		local a = offer("live", function(w: any)
+			noFree(w, 1)
+		end)
+		a.w.hold.update = true
+		sendContinue(a, "ask")
+		a.w.leave(a.p)
+		a.w.release()
+		t.expect(stored(a.w, STORE, 7).revives).toBe(1)
+		for _ = 1, 3 do
+			Session.step(a.s)
+		end
+		t.expect(Session.isOver(a.s, "7")).toBe(true)
+	end)
+end)
