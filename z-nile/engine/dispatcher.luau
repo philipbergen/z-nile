@@ -1299,7 +1299,7 @@ function dispatcher.workerWait(ctx: Ctx, id: string, cwd: string, stateDir: stri
 		task.wait(1)
 	end
 	stopBeat()
-	stdio.ewrite(`dispatch: waited {total}s with no model running\n`)
+	stdio.ewrite(`dispatch: waited {total}s with no model running, beating {started or "no claim"}\n`)
 end
 
 function dispatcher.modelStep(

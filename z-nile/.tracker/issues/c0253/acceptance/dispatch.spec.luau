@@ -144,7 +144,7 @@ return t.spec("c0253 the dispatcher's worker mode", function(it)
 			t.expect(count(log, "claude step=")).toBe(2) -- the try, and the retry after the wait
 			t.expect(count(log, "grok step=")).toBe(1)
 			t.expect(has(out, "claude is out of quota: waiting 60s for it before the next CLI")).toBe(true)
-			t.expect(has(out, "dispatch: waited 6s with no model running")).toBe(true)
+			t.expect(has(out, "dispatch: waited 6s with no model running, beating active-")).toBe(true)
 			t.expect(has(log, "taken over from a session on claude")).toBe(true)
 			t.expect(has(log, "pickman/.tracker/rafts/active/R0010/notes.md")).toBe(true)
 			t.expect(fakecli.state(h, "R0010").session.cli).toBe("grok")
