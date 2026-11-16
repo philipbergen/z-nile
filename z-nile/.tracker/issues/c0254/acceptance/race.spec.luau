@@ -129,8 +129,10 @@ return t.spec("c0254 two hosts claim one issue", function(it)
 			t.expect(c1.code).toBe(0)
 			t.expect(tip("prep-c0010")).toBe(head(wtA))
 			-- the first push sets the upstream to the branch's own ref on origin
-			t.expect(fixture.git(wtA, { "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}" }))
-				.toBe("origin/prep-c0010")
+			local upstream =
+				fixture.exec(wtA, "git", { "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}" })
+			t.expect(upstream.ok).toBe(true)
+			t.expect((string.gsub(upstream.stdout, "%s+$", ""))).toBe("origin/prep-c0010")
 			local c2 = commitIn(wtA, "c0010", "notes-2", HOST_A)
 			t.expect(c2.code).toBe(0)
 			t.expect(tip("prep-c0010")).toBe(head(wtA))
