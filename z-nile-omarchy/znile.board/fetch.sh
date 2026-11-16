@@ -102,6 +102,13 @@ for entry, doc in paths.items():
     }
 model["spend"] = spend
 
+# Which items have an approval record (`./zn approve` writes approval.md
+# beside the document). Only whether it exists: whether its hash still
+# matches the design is `./zn approve <id> --check`'s to say.
+model["approved"] = sorted(
+    entry for entry, doc in paths.items()
+    if os.path.isfile(os.path.join(repo, os.path.dirname(doc), "approval.md")))
+
 model.pop("home", None)
 model["projects"] = projects
 model["projectOrder"] = order

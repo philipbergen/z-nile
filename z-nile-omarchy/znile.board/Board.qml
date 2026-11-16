@@ -44,7 +44,7 @@ Item {
     var item = model.byId[id]
     if (!item) { if (service) service.say(id + " isn't on the board"); return }
     if (!Model.matches(item, filters)) {
-      blockedOnly = false; unblockedOnly = false; projectFilter = []; typeFilter = []; search.text = ""
+      blockedOnly = false; unblockedOnly = false; approvalOnly = false; projectFilter = []; typeFilter = []; search.text = ""
     }
     var wanted = item.kind === "raft" ? "rafts" : "tickets"
     if (view !== wanted) view = wanted
@@ -123,7 +123,9 @@ Item {
   property bool maximized: false
   // Blocked and unblocked are a pair: turning one on turns the other off.
   property bool unblockedOnly: false
-  readonly property var filters: ({ projects: projectFilter, types: typeFilter, query: query, blocked: blockedOnly, unblocked: unblockedOnly })
+  property bool approvalOnly: false
+  readonly property var filters: ({ projects: projectFilter, types: typeFilter, query: query, blocked: blockedOnly, unblocked: unblockedOnly, approval: approvalOnly })
+  readonly property int approvalCount: Model.stageCounts(items.filter(function(it) { return it.stage !== "done" }), { approval: true }).total
   readonly property int blockedCount: Model.stageCounts(items.filter(function(it) { return it.stage !== "done" }), { blocked: true }).total
   readonly property int unblockedCount: Model.stageCounts(items.filter(function(it) { return it.stage !== "done" }), { unblocked: true }).total
   readonly property var orders: {
@@ -643,6 +645,17 @@ Item {
             interactive: true
             fontSize: Style.font.bodySmall
             onClicked: { root.unblockedOnly = !root.unblockedOnly; if (root.unblockedOnly) root.blockedOnly = false }
+          }
+
+          // Ready designs waiting on a person's `./zn approve`.
+          Chip {
+            glyph: ""
+            label: "needs approval  " + root.approvalCount
+            tint: Commons.Color.foreground
+            active: root.approvalOnly
+            interactive: true
+            fontSize: Style.font.bodySmall
+            onClicked: root.approvalOnly = !root.approvalOnly
           }
 
           Repeater {

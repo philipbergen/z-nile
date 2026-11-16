@@ -58,6 +58,8 @@ function cleanItem(raw, kind, project) {
     blockedBy: idList(raw.blockedBy),
     after: [],
     blockedMembers: [],
+    needsApproval: false,
+    approvalMembers: [],
     path: "",
     url: "",
     prs: [],
@@ -107,6 +109,20 @@ function normalize(raw) {
       var mem = byId[rafts[b].issues[c]]
       if (mem && mem.kind === "issue" && mem.blockedBy.length > 0)
         rafts[b].blockedMembers.push({ id: mem.id, by: mem.blockedBy })
+    }
+  }
+  // Needs approval: a ticket whose design is ready, not yet active, with no
+  // `./zn approve` record (fetch.sh's `approved` list). A raft needs it while
+  // any of its tickets does. Without the list nothing is claimed.
+  if (Array.isArray(raw.approved)) {
+    var approved = {}
+    for (var ai = 0; ai < raw.approved.length; ai++) approved[String(raw.approved[ai])] = true
+    for (var an = 0; an < issues.length; an++) {
+      var iss = issues[an]
+      iss.needsApproval = iss.design === "ready" && (iss.stage === "preparing" || iss.stage === "prepared") && !approved[iss.id]
+    }
+    for (var ar = 0; ar < rafts.length; ar++) {
+      rafts[ar].approvalMembers = rafts[ar].issues.filter(function(id) { return byId[id] !== undefined && byId[id].needsApproval })
     }
   }
   // Cost: a ticket's own spend; a raft's own rollup once it has one, else
@@ -206,6 +222,7 @@ function matches(item, filters) {
   var blocked = item.blockedBy.length > 0 || item.blockedMembers.length > 0
   if (filters.blocked && !blocked) return false
   if (filters.unblocked && blocked) return false
+  if (filters.approval && !(item.needsApproval || item.approvalMembers.length > 0)) return false
   if (filters.types && filters.types.length > 0) {
     var t = item.type || item.label
     if (filters.types.indexOf(t) < 0 && !(t === "mix" && filters.types.length > 0)) return false

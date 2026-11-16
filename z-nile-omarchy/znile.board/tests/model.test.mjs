@@ -214,3 +214,32 @@ test("escape steps back one level: big view, then the card, then the search, the
   assert.equal(M.escapeStep({ maximized: false, selected: "", query: "x" }), "clearSearch")
   assert.equal(M.escapeStep({ maximized: false, selected: "", query: "" }), "close")
 })
+
+test("needs approval: a ready design not yet approved; a raft with such a ticket", () => {
+  const base = {
+    issues: [
+      { id: "c0010", type: "chore", title: "a", stage: "prepared", design: "ready", raft: "R0010" },
+      { id: "c0011", type: "chore", title: "b", stage: "prepared", design: "ready", raft: "R0011" },
+      { id: "c0012", type: "chore", title: "c", stage: "preparing", design: "draft" },
+      { id: "c0013", type: "chore", title: "d", stage: "active", design: "ready" },
+      { id: "c0014", type: "chore", title: "e", stage: "preparing", design: "ready" },
+    ],
+    rafts: [
+      { id: "R0010", type: "chore", stage: "prepared", issues: ["c0010"] },
+      { id: "R0011", type: "chore", stage: "prepared", issues: ["c0011"] },
+    ],
+  }
+  const m = M.normalize({ ...base, approved: ["c0011"] })
+  const needs = id => M.matches(m.byId[id], { approval: true })
+  assert.equal(needs("c0010"), true)
+  assert.equal(needs("c0011"), false, "approved")
+  assert.equal(needs("c0012"), false, "design not ready")
+  assert.equal(needs("c0013"), false, "already active")
+  assert.equal(needs("c0014"), true, "design ready, still preparing")
+  assert.equal(needs("R0010"), true)
+  assert.equal(needs("R0011"), false)
+  assert.deepEqual(m.byId.R0010.approvalMembers, ["c0010"])
+  assert.equal(M.matches(m.byId.c0011, {}), true, "off means no filter")
+  // Without the list (an older fetch.sh) nothing is claimed to need approval.
+  assert.equal(M.matches(M.normalize(base).byId.c0010, { approval: true }), false)
+})
