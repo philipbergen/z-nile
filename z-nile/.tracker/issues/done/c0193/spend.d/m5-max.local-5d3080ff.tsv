@@ -582,3 +582,4 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-16 06:01	R0072: trace names the finish commit	0	0	deliver							tokens,wall,cpu,ai
 2026-11-16 06:03	R0072: trace names the finish commit	0	0	deliver							tokens,wall,cpu,ai
 2026-11-16 06:04	R0072: bind c0192, c0193	1375	3	deliver							tokens,wall,cpu,ai
+2026-11-16 06:04	deliver	0	0	deliver							tokens,ai
