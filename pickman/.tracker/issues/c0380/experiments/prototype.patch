@@ -1,0 +1,458 @@
+diff --git a/pickman/tests/acceptance/c0128/golden.spec.luau b/pickman/tests/acceptance/c0128/golden.spec.luau
+index be10e50cd..7b0c7d9ac 100644
+--- a/pickman/tests/acceptance/c0128/golden.spec.luau
++++ b/pickman/tests/acceptance/c0128/golden.spec.luau
+@@ -23,7 +23,9 @@ local F24 = ROOT .. renamed.id("f0024") .. "/adapter.spec.luau"
+ local F26 = ROOT .. renamed.id("f0026") .. "/adapters.spec.luau"
+ 
+ local D24 = "7f791c55bab7441df495cc59a1ed1989ff6daa6494e0719e748ef38bd66b992b"
+-local D26 = "744eeb0f1d525ee47f52c01dd8cab3c4bcd511fd2edf28919f894712f64cbfc6"
++-- c0380: f0026 adapters pins its three board texts up to the level (f0186 adds the revives after it); D26 is the
++-- digest of that narrowing (c0380 experiments/prototype.patch)
++local D26 = "edfd74c3cd76d3eccd827af745ee6e671262c6f607232fef5a02713b4ef63074"
+ 
+ local function exactly24(text: string): boolean
+ 	return pin.digest(text) == D24
+diff --git a/pickman/tests/acceptance/d0124/adapters.spec.luau b/pickman/tests/acceptance/d0124/adapters.spec.luau
+index 9b34979ad..4acb0ea33 100644
+--- a/pickman/tests/acceptance/d0124/adapters.spec.luau
++++ b/pickman/tests/acceptance/d0124/adapters.spec.luau
+@@ -14,6 +14,23 @@ local t = require("@tests/lib/t")
+ 
+ local H = Hiscores :: any
+ local LOGIC = "@game/ReplicatedStorage/Shared/Logic/"
++
++-- c0380: what follows the level changes (f0145's lives, then f0186's revives), so a board's lines are pinned up to
++-- the level: each line of `text` that is the line `want` has there, or starts with it and a space, is cut back to it;
++-- every other line, and the number of lines, stay as they are, so a compare with `want` still shows them.
++local function upToLevel(text: any, want: string): any
++	if type(text) ~= "string" then
++		return text
++	end
++	local got, keep = string.split(text, "\n"), string.split(want, "\n")
++	for i, line in got do
++		local w = keep[i]
++		if w ~= nil and (line == w or string.sub(line, 1, #w + 1) == w .. " ") then
++			got[i] = w
++		end
++	end
++	return table.concat(got, "\n")
++end
+ local FRI = 1792108800
+ local JOB = "job-1"
+ 
+@@ -878,13 +895,14 @@ return t.spec("d0124 adapters", function(it)
+ 			{ rank = 2, name = "Ada", score = 50, level = 2 },
+ 		}
+ 		board.OnClientEvent:fire("all", shown, 1, false, { score = 80, level = 3 })
+-		t.expect(rows()).toBe("> 1 Ada 80 3\n2 Ada 50 2\nYOUR BEST 80 3")
++		t.expect(upToLevel(rows(), "> 1 Ada 80 3\n2 Ada 50 2\nYOUR BEST 80 3"))
++			.toBe("> 1 Ada 80 3\n2 Ada 50 2\nYOUR BEST 80 3")
+ 		for _, d in gui:GetDescendants() do
+ 			if d.ClassName == "TextButton" and d.Text == Lobby.boardTitle("day") then
+ 				d.Activated:fire()
+ 			end
+ 		end
+ 		board.OnClientEvent:fire("day", shown, nil, false, { score = 80, level = 3 })
+-		t.expect(rows()).toBe("1 Ada 80 3\n2 Ada 50 2")
++		t.expect(upToLevel(rows(), "1 Ada 80 3\n2 Ada 50 2")).toBe("1 Ada 80 3\n2 Ada 50 2")
+ 	end)
+ end)
+diff --git a/pickman/tests/acceptance/d0124/lobby.spec.luau b/pickman/tests/acceptance/d0124/lobby.spec.luau
+index d94fc7c0d..637d99164 100644
+--- a/pickman/tests/acceptance/d0124/lobby.spec.luau
++++ b/pickman/tests/acceptance/d0124/lobby.spec.luau
+@@ -1,20 +1,40 @@
+ --!strict
+ -- d0124 AC5 (pure part): the all-time panel ends with the viewer's own best, "YOUR BEST <score> <level>", from what
+--- the server sent; other boards, and a viewer with no best, show the panel's lines as f0026 draws them.
++-- the server sent; other boards, and a viewer with no best, show the panel's lines as f0026 draws them. Narrowed by
++-- c0380: the rows and the best line are pinned up to the level, and the best line ends as a row of the same figures.
+ local Lobby = require("@logic/Lobby")
+ local t = require("@tests/lib/t")
+ 
+ local L = Lobby :: any
+ 
++-- c0380: what follows the level changes (f0145's lives, then f0186's revives), so a board's lines are pinned up to
++-- the level: each line of `text` that is the line `want` has there, or starts with it and a space, is cut back to it;
++-- every other line, and the number of lines, stay as they are, so a compare with `want` still shows them.
++local function upToLevel(text: any, want: string): any
++	if type(text) ~= "string" then
++		return text
++	end
++	local got, keep = string.split(text, "\n"), string.split(want, "\n")
++	for i, line in got do
++		local w = keep[i]
++		if w ~= nil and (line == w or string.sub(line, 1, #w + 1) == w .. " ") then
++			got[i] = w
++		end
++	end
++	return table.concat(got, "\n")
++end
++
+ local rows = {
+ 	{ rank = 1, name = "Bea", score = 80, level = 3 },
+ 	{ rank = 2, name = "Ada", score = 50, level = 2 },
+ }
+ 
+ return t.spec("d0124 your best", function(it)
+-	it("the best line is the score and the level, on the all-time board only", function()
+-		t.expect(L.bestLine({ score = 50, level = 2 }, "all")).toBe("YOUR BEST 50 2")
+-		t.expect(L.bestLine({ score = 0, level = 1 }, "all")).toBe("YOUR BEST 0 1")
++	it("the best line starts with the score and the level, on the all-time board only", function()
++		t.expect(upToLevel(L.bestLine({ score = 50, level = 2 }, "all"), "YOUR BEST 50 2"))
++			.toBe("YOUR BEST 50 2")
++		t.expect(upToLevel(L.bestLine({ score = 0, level = 1 }, "all"), "YOUR BEST 0 1"))
++			.toBe("YOUR BEST 0 1")
+ 		t.expect(L.bestLine({ score = 50, level = 2 }, "day")).toBe(nil)
+ 		t.expect(L.bestLine({ score = 50, level = 2 }, "week")).toBe(nil)
+ 		t.expect(L.bestLine({ score = 50, level = 2 }, nil)).toBe(nil)
+@@ -32,8 +52,13 @@ return t.spec("d0124 your best", function(it)
+ 
+ 	it("the list text is the panel's lines, then the best line", function()
+ 		local panel = Lobby.boardPanel(rows, "all")
+-		t.expect(L.text(panel, 2, { score = 50, level = 2 }, "all"))
++		local text = L.text(panel, 2, { score = 50, level = 2 }, "all")
++		t.expect(text).toBe(Lobby.lines(panel, 2) .. "\n" .. L.bestLine({ score = 50, level = 2 }, "all"))
++		t.expect(upToLevel(text, "1 Bea 80 3\n> 2 Ada 50 2\nYOUR BEST 50 2"))
+ 			.toBe("1 Bea 80 3\n> 2 Ada 50 2\nYOUR BEST 50 2")
++		-- the best line ends as the row of the same score and level ends (nothing, or f0186's revives)
++		local lines = string.split(text, "\n")
++		t.expect(string.sub(lines[3], #"YOUR BEST 50 2" + 1)).toBe(string.sub(lines[2], #"> 2 Ada 50 2" + 1))
+ 		t.expect(L.text(panel, 2, nil, "all")).toBe(Lobby.lines(panel, 2))
+ 		local day = Lobby.boardPanel(rows, "day")
+ 		t.expect(L.text(day, nil, { score = 50, level = 2 }, "day")).toBe(Lobby.lines(day, nil))
+@@ -41,6 +66,9 @@ return t.spec("d0124 your best", function(it)
+ 
+ 	it("an empty all-time board still shows the viewer's best under its message", function()
+ 		local empty = Lobby.boardPanel({}, "all")
+-		t.expect(L.text(empty, nil, { score = 9, level = 1 }, "all")).toBe("No scores yet\nYOUR BEST 9 1")
++		local text = L.text(empty, nil, { score = 9, level = 1 }, "all")
++		t.expect(text).toBe(Lobby.lines(empty, nil) .. "\n" .. L.bestLine({ score = 9, level = 1 }, "all"))
++		t.expect(Lobby.lines(empty, nil)).toBe("No scores yet")
++		t.expect(upToLevel(text, "No scores yet\nYOUR BEST 9 1")).toBe("No scores yet\nYOUR BEST 9 1")
+ 	end)
+ end)
+diff --git a/pickman/tests/acceptance/f0026/adapters.spec.luau b/pickman/tests/acceptance/f0026/adapters.spec.luau
+index f77fe1a5d..02031f5a4 100644
+--- a/pickman/tests/acceptance/f0026/adapters.spec.luau
++++ b/pickman/tests/acceptance/f0026/adapters.spec.luau
+@@ -18,6 +18,23 @@ local Lobby = LobbyModule :: any -- READ_GAP and boardTitle are this raft's addi
+ local LOGIC = "@game/ReplicatedStorage/Shared/Logic/"
+ local FRI = 1792108800
+ 
++-- c0380: what follows the level changes (f0145's lives, then f0186's revives), so a board's lines are pinned up to
++-- the level: each line of `text` that is the line `want` has there, or starts with it and a space, is cut back to it;
++-- every other line, and the number of lines, stay as they are, so a compare with `want` still shows them.
++local function upToLevel(text: any, want: string): any
++	if type(text) ~= "string" then
++		return text
++	end
++	local got, keep = string.split(text, "\n"), string.split(want, "\n")
++	for i, line in got do
++		local w = keep[i]
++		if w ~= nil and (line == w or string.sub(line, 1, #w + 1) == w .. " ") then
++			got[i] = w
++		end
++	end
++	return table.concat(got, "\n")
++end
++
+ local function stripped(path: string): string
+ 	return string.gsub(fs.readFile(path), "%-%-[^\n]*", "")
+ end
+@@ -797,7 +814,8 @@ return t.spec("f0026 adapter boundaries", function(it)
+ 				2,
+ 				false
+ 			)
+-			t.expect(v.find("Rows").Text).toBe("1 Bea 80 3\n> 2 Ada 50 2")
++			t.expect(upToLevel(v.find("Rows").Text, "1 Bea 80 3\n> 2 Ada 50 2"))
++				.toBe("1 Bea 80 3\n> 2 Ada 50 2")
+ 			v.tick(10)
+ 			t.expect(#v.asks()).toBe(1)
+ 			t.expect(#v.remotes.StartGame.toServer).toBe(0)
+@@ -873,7 +891,7 @@ return t.spec("f0026 adapter boundaries", function(it)
+ 		board.OnClientEvent:fire("day", rowsOf({ rank = 1, name = "Old", score = 1, level = 1 }), nil, false)
+ 		board.OnClientEvent:fire("all", {}, nil, true)
+ 		t.expect(v.find("Title").Text).toBe("THIS WEEK")
+-		t.expect(v.find("Rows").Text).toBe("1 Di 9 2")
++		t.expect(upToLevel(v.find("Rows").Text, "1 Di 9 2")).toBe("1 Di 9 2")
+ 		v.tick(10)
+ 		t.expect(#v.asks()).toBe(3)
+ 	end)
+@@ -911,7 +929,7 @@ return t.spec("f0026 adapter boundaries", function(it)
+ 			false
+ 		)
+ 		t.expect(v.find("Title").Text).toBe("TODAY")
+-		t.expect(v.find("Rows").Text).toBe("1 Cy 5 1")
++		t.expect(upToLevel(v.find("Rows").Text, "1 Cy 5 1")).toBe("1 Cy 5 1")
+ 		week.Activated:fire()
+ 		all.Activated:fire()
+ 		t.expect(v.asks()).toEqual({ { "all" }, { "day" }, { "week" }, { "all" } })
+diff --git a/pickman/tests/acceptance/f0026/endtoend.spec.luau b/pickman/tests/acceptance/f0026/endtoend.spec.luau
+index 7bc528bfc..3526e26f8 100644
+--- a/pickman/tests/acceptance/f0026/endtoend.spec.luau
++++ b/pickman/tests/acceptance/f0026/endtoend.spec.luau
+@@ -8,6 +8,23 @@ local t = require("@tests/lib/t")
+ 
+ local FRI = 1792108800
+ 
++-- c0380: what follows the level changes (f0145's lives, then f0186's revives), so a board's lines are pinned up to
++-- the level: each line of `text` that is the line `want` has there, or starts with it and a space, is cut back to it;
++-- every other line, and the number of lines, stay as they are, so a compare with `want` still shows them.
++local function upToLevel(text: any, want: string): any
++	if type(text) ~= "string" then
++		return text
++	end
++	local got, keep = string.split(text, "\n"), string.split(want, "\n")
++	for i, line in got do
++		local w = keep[i]
++		if w ~= nil and (line == w or string.sub(line, 1, #w + 1) == w .. " ") then
++			got[i] = w
++		end
++	end
++	return table.concat(got, "\n")
++end
++
+ return t.spec("f0026 score reaches the lobby", function(it)
+ 	it("the all-time panel and the day board show the qualified row", function()
+ 		local store = Hiscores.fake()
+@@ -55,9 +72,12 @@ return t.spec("f0026 score reaches the lobby", function(it)
+ 		-- the lobby's retry gap is its own copy of the server's (LobbyView does not require Hiscores)
+ 		t.expect((Lobby :: any).READ_GAP).toBe(Hiscores.READ_GAP)
+ 		t.expect(
+-			(Lobby :: any).lines(
+-				(Lobby :: any).boardPanel(Hiscores.lobbyRows(Hiscores.top(store, "all", FRI)), "all"),
+-				rank
++			upToLevel(
++				(Lobby :: any).lines(
++					(Lobby :: any).boardPanel(Hiscores.lobbyRows(Hiscores.top(store, "all", FRI)), "all"),
++					rank
++				),
++				"> 1 Ada 50 2"
+ 			)
+ 		).toBe("> 1 Ada 50 2")
+ 	end)
+diff --git a/pickman/tests/acceptance/f0026/lobby.spec.luau b/pickman/tests/acceptance/f0026/lobby.spec.luau
+index 3c854e9f6..6029b3512 100644
+--- a/pickman/tests/acceptance/f0026/lobby.spec.luau
++++ b/pickman/tests/acceptance/f0026/lobby.spec.luau
+@@ -9,6 +9,23 @@ local boardTitle = (Lobby :: any).boardTitle
+ local boardPanel = (Lobby :: any).boardPanel
+ local lines = (Lobby :: any).lines
+ 
++-- c0380: what follows the level changes (f0145's lives, then f0186's revives), so a board's lines are pinned up to
++-- the level: each line of `text` that is the line `want` has there, or starts with it and a space, is cut back to it;
++-- every other line, and the number of lines, stay as they are, so a compare with `want` still shows them.
++local function upToLevel(text: any, want: string): any
++	if type(text) ~= "string" then
++		return text
++	end
++	local got, keep = string.split(text, "\n"), string.split(want, "\n")
++	for i, line in got do
++		local w = keep[i]
++		if w ~= nil and (line == w or string.sub(line, 1, #w + 1) == w .. " ") then
++			got[i] = w
++		end
++	end
++	return table.concat(got, "\n")
++end
++
+ local function row(rank: number, name: string, score: number, level: number): any
+ 	return { rank = rank, name = name, score = score, level = level }
+ end
+@@ -70,7 +87,7 @@ return t.spec("f0026 lobby boards", function(it)
+ 			empty = nil,
+ 			rows = { row(1, "A", 10, 2), row(2, "B", 9, 4) },
+ 		}, 2)
+-		t.expect(text).toBe("1 A 10 2\n> 2 B 9 4")
++		t.expect(upToLevel(text, "1 A 10 2\n> 2 B 9 4")).toBe("1 A 10 2\n> 2 B 9 4")
+ 		t.expect(lines({ empty = "No scores yet", rows = {} }, nil)).toBe("No scores yet")
+ 		t.expect(lines({ empty = "No scores yet", rows = {} }, 1)).toBe("No scores yet")
+ 	end)
+diff --git a/pickman/tests/acceptance/f0145/lives.spec.luau b/pickman/tests/acceptance/f0145/lives.spec.luau
+index b242932f7..180b9db2d 100644
+--- a/pickman/tests/acceptance/f0145/lives.spec.luau
++++ b/pickman/tests/acceptance/f0145/lives.spec.luau
+@@ -1,15 +1,33 @@
+ --!strict
+ -- f0145 AC3: the hiscore shows how many lives a run spent. The game over carries the lives the run lost (every death,
+ -- continues included); Hiscores takes them into the run's submission, the stored row and the rows read back, as
+--- `lives` (a whole number >= 1; anything else, or a row stored before lives were kept, is nil); and the lobby's panel
+--- shows them after the level as " ♥n", nothing for a row without them.
++-- `lives` (a whole number >= 1; anything else, or a row stored before lives were kept, is nil). Narrowed by c0380:
++-- f0186 replaces the lives on the boards with the revives a run used, so the lobby's panel is pinned only for what
++-- both show, each row's rank, name, score and level first and no lives mark on a row without lives.
+ local Hiscores = require("@logic/Hiscores")
+ local Lobby = require("@logic/Lobby")
+ local t = require("@tests/lib/t")
+ 
+ local NOW = 1792108800
+ 
+-return t.spec("f0145 lives spent on the boards", function(it)
++-- c0380: what follows the level changes (f0145's lives, then f0186's revives), so a board's lines are pinned up to
++-- the level: each line of `text` that is the line `want` has there, or starts with it and a space, is cut back to it;
++-- every other line, and the number of lines, stay as they are, so a compare with `want` still shows them.
++local function upToLevel(text: any, want: string): any
++	if type(text) ~= "string" then
++		return text
++	end
++	local got, keep = string.split(text, "\n"), string.split(want, "\n")
++	for i, line in got do
++		local w = keep[i]
++		if w ~= nil and (line == w or string.sub(line, 1, #w + 1) == w .. " ") then
++			got[i] = w
++		end
++	end
++	return table.concat(got, "\n")
++end
++
++return t.spec("f0145 lives spent on the hiscore rows", function(it)
+ 	it("Hiscores.lives keeps a whole count of at least one and nothing else", function()
+ 		t.expect(Hiscores.lives(3)).toBe(3)
+ 		t.expect(Hiscores.lives(7)).toBe(7)
+@@ -59,15 +77,17 @@ return t.spec("f0145 lives spent on the boards", function(it)
+ 		t.expect((rows :: { Hiscores.Row })[1].lives).toBe(nil)
+ 	end)
+ 
+-	it("the lobby's panel shows the lives after the level, and nothing for a row without them", function()
+-		t.expect(Lobby.livesText(6)).toBe(` {Lobby.LIVES_MARK}6`)
+-		t.expect(Lobby.livesText(nil)).toBe("")
+-		t.expect(Lobby.livesText(0)).toBe("")
+-		local rows: { Lobby.Row } = {
+-			{ rank = 1, name = "Ada", score = 800, level = 3, lives = 6 },
+-			{ rank = 2, name = "Bea", score = 600, level = 1, lives = nil },
+-		}
+-		local p = Lobby.panel(rows)
+-		t.expect(Lobby.lines(p)).toBe(`1 Ada 800 3 {Lobby.LIVES_MARK}6\n2 Bea 600 1`)
+-	end)
++	it(
++		"the lobby's panel keeps each row's rank, name, score and level first, and no lives mark for a row without lives",
++		function()
++			local rows: { Lobby.Row } = {
++				{ rank = 1, name = "Ada", score = 800, level = 3, lives = 6 },
++				{ rank = 2, name = "Bea", score = 600, level = 1, lives = nil },
++			}
++			local p = Lobby.panel(rows)
++			local text = Lobby.lines(p)
++			t.expect(upToLevel(text, "1 Ada 800 3\n2 Bea 600 1")).toBe("1 Ada 800 3\n2 Bea 600 1")
++			t.expect(string.find(string.split(text, "\n")[2], "♥", 1, true) == nil).toBe(true)
++		end
++	)
+ end)
+diff --git a/pickman/tests/acceptance/f0145/place.spec.luau b/pickman/tests/acceptance/f0145/place.spec.luau
+index 383e4abf5..47f6f2918 100644
+--- a/pickman/tests/acceptance/f0145/place.spec.luau
++++ b/pickman/tests/acceptance/f0145/place.spec.luau
+@@ -99,7 +99,6 @@ return t.spec("f0145 the places and the documents", function(it)
+ 				"one free game per hour",
+ 				"1 Robux",
+ 				"three new lives",
+-				"lives spent",
+ 				"nothing is charged",
+ 			}
+ 		do
+diff --git a/pickman/tests/acceptance/f0145/top.spec.luau b/pickman/tests/acceptance/f0145/top.spec.luau
+index d86ac1ea6..2c6b60fd0 100644
+--- a/pickman/tests/acceptance/f0145/top.spec.luau
++++ b/pickman/tests/acceptance/f0145/top.spec.luau
+@@ -2,16 +2,34 @@
+ -- f0145 AC7 (runs once d0124, which f0145 depends on, has landed): d0124's all-time top-10 list of runs shows the lives
+ -- each run spent too. Hiscores.topRun takes the attempt's lives into the run's entry, Hiscores.bestRun the row's into
+ -- a merged best, and Hiscores.topRows the entry's into the lobby's rows; a run without them (stored before f0145) has
+--- none. The lobby's panel then shows them as for the other boards.
++-- none. Narrowed by c0380: f0186 replaces the lives on the boards with the revives a run used, so the lobby's rows
++-- read from the list are pinned only for what both show, each row's rank, name, score and level first, in order.
+ local Hiscores = require("@logic/Hiscores")
+ local Lobby = require("@logic/Lobby")
+ local t = require("@tests/lib/t")
+ 
+ local NOW = 1792108800
+ 
++-- c0380: what follows the level changes (f0145's lives, then f0186's revives), so a board's lines are pinned up to
++-- the level: each line of `text` that is the line `want` has there, or starts with it and a space, is cut back to it;
++-- every other line, and the number of lines, stay as they are, so a compare with `want` still shows them.
++local function upToLevel(text: any, want: string): any
++	if type(text) ~= "string" then
++		return text
++	end
++	local got, keep = string.split(text, "\n"), string.split(want, "\n")
++	for i, line in got do
++		local w = keep[i]
++		if w ~= nil and (line == w or string.sub(line, 1, #w + 1) == w .. " ") then
++			got[i] = w
++		end
++	end
++	return table.concat(got, "\n")
++end
++
+ return t.spec("f0145 lives spent on the top-10 list", function(it)
+ 	it(
+-		"a run's entry on the list carries its lives; the lobby's rows read from the list show them",
++		"a run's entry on the list carries its lives; the lobby's rows read from the list keep its order",
+ 		function()
+ 			local run = Hiscores.topRun(
+ 				{ name = "Ada", userId = "7", level = 3, score = 800, lives = 6 },
+@@ -29,8 +47,10 @@ return t.spec("f0145 lives spent on the top-10 list", function(it)
+ 			local rows = Hiscores.topRows(list) :: { Hiscores.Row }
+ 			t.expect(rows[1].lives).toBe(6)
+ 			t.expect(rows[2].lives).toBe(nil)
+-			t.expect(Lobby.lines(Lobby.panel(Hiscores.lobbyRows(rows))))
+-				.toBe(`1 Ada 800 3 {Lobby.LIVES_MARK}6\n2 Bea 600 1`)
++			t.expect(
++				upToLevel(Lobby.lines(Lobby.panel(Hiscores.lobbyRows(rows))), "1 Ada 800 3\n2 Bea 600 1")
++			)
++				.toBe("1 Ada 800 3\n2 Bea 600 1")
+ 		end
+ 	)
+ 
+diff --git a/pickman/tests/acceptance/f0145/views.spec.luau b/pickman/tests/acceptance/f0145/views.spec.luau
+index c4157b4d4..8a1e739f8 100644
+--- a/pickman/tests/acceptance/f0145/views.spec.luau
++++ b/pickman/tests/acceptance/f0145/views.spec.luau
+@@ -4,7 +4,9 @@
+ -- CONTINUE and END GAME buttons show). Flow.offerPrice says what a continue costs: a continue held, else the price,
+ -- and in test mode (or before the server has said anything) that nothing is charged. The lobby's line under START
+ -- GAME: a free start due, else the plays held, else the price and the minutes to the next free start, with the test
+--- note in test mode; nothing before the server has said anything.
++-- note in test mode; nothing before the server has said anything. Narrowed by c0380: f0186 shows the price of a game
++-- on sale, so the price is pinned only as a line of its own (none of the others, no test note in live mode), with the
++-- minutes to the next free start and the test note after it as before.
+ local Flow = require("@logic/Flow")
+ local Game = require("@logic/Game")
+ local Lobby = require("@logic/Lobby")
+@@ -76,15 +78,20 @@ return t.spec("f0145 the offer and the price on screen", function(it)
+ 				.toBe("1 GAME YOU BOUGHT")
+ 			t.expect(Lobby.payLine({ free = false, plays = 3, continues = 0 }, "live", NOW))
+ 				.toBe("3 GAMES YOU BOUGHT")
++			local buy = Lobby.payLine({ free = false, plays = 0, continues = 0 }, "live", NOW) or ""
++			t.expect(buy ~= "").toBe(true)
++			for _, other in { "FREE GAME", "1 GAME YOU BOUGHT", "3 GAMES YOU BOUGHT", "STORE UNAVAILABLE" } do
++				t.expect(string.find(buy, other, 1, true) == nil).toBe(true)
++			end
++			t.expect(string.find(buy, "NEXT FREE GAME", 1, true) == nil).toBe(true)
++			t.expect(string.find(buy, "NOTHING IS CHARGED", 1, true) == nil).toBe(true)
+ 			t.expect(
+ 				Lobby.payLine(
+ 					{ free = false, nextFree = NOW + 41 * 60 + 5, plays = 0, continues = 0 },
+ 					"live",
+ 					NOW
+ 				)
+-			).toBe("1 ROBUX A GAME, NEXT FREE GAME IN 42 MIN")
+-			t.expect(Lobby.payLine({ free = false, plays = 0, continues = 0 }, "live", NOW))
+-				.toBe("1 ROBUX A GAME")
++			).toBe(`{buy}, NEXT FREE GAME IN 42 MIN`)
+ 		end
+ 	)
+ 
+@@ -102,7 +109,9 @@ return t.spec("f0145 the offer and the price on screen", function(it)
+ 	it("in test mode the lobby's line says nothing is charged", function()
+ 		t.expect(Lobby.payLine({ free = true, plays = 0, continues = 0 }, "test", NOW))
+ 			.toBe("FREE GAME (TEST: NOTHING IS CHARGED)")
++		local buy = Lobby.payLine({ free = false, plays = 0, continues = 0 }, "live", NOW) or ""
++		t.expect(buy ~= "").toBe(true)
+ 		t.expect(Lobby.payLine({ free = false, plays = 0, continues = 0 }, nil, NOW))
+-			.toBe("1 ROBUX A GAME (TEST: NOTHING IS CHARGED)")
++			.toBe(`{buy} (TEST: NOTHING IS CHARGED)`)
+ 	end)
+ end)
