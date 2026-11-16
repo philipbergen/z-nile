@@ -66,7 +66,7 @@ local PINS: { { path: string, sha: string, cuts: number } } = {
 	-- c0128's whole-file pin of f0026's adapters.spec, whose digest moved with the narrowing
 	{
 		path = "tests/acceptance/c0128/golden.spec.luau",
-		sha = "198f762f5d51309d7079094a5c52b6a8121b8484e9a966466bcdf0d23dc64423",
+		sha = "9ba74b18c59a619bf956f3bae5e5ac5a9fc4679df6f6c1b5f245eb153f57d178",
 		cuts = 0,
 	},
 }

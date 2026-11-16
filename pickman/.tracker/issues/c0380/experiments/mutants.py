@@ -1,13 +1,16 @@
-# Mutation check for c0380. Usage: python3 -I mutants.py <clone> <a|b> [ids...]
+# Mutation check for c0380. Usage: ./zn run --time 1800 -- python3 -I mutants.py <clone> <a|b> [ids...]
 # <clone> is a separate clone under the temp folder of a prototype commit (E2): `a` is origin/main with c0156's test
 # parts, f0145's deps.patch and prototype.patch, f0145 done (specs promoted) and experiments/prototype.patch; `b` is
-# the same plus f0186's prototype.patch. Never run it on a checkout of the repository: it refuses one.
+# the same plus f0186's prototype.patch as prepared on main. Never run it on a checkout of the repository: it refuses
+# one. It also refuses when a patch the bases were cut from (SOURCES) no longer hashes, on this repository's
+# origin/main, to the value it had: the bases are then stale and need rebuilding (lesson
+# z-design/in-flight-bases-pin-their-source). On base b it first runs f0186's own specs unmutated.
 # N rows weaken a narrowed spec (or a check.sh); acceptance/narrowed.spec must fail on an assertion.
 # C rows are code mutants; the narrowed spec named must still fail on an assertion (what the narrowing keeps).
 # W rows are the window's gaps (c0380 done, f0186 not yet): they must SURVIVE the narrowed spec, and the spec named
 # after them (or none) is where they are caught.
 # Prints, per mutant, killed or SURVIVED and the cases that failed.
-import os, subprocess, sys, tempfile
+import hashlib, os, subprocess, sys, tempfile
 
 clone, base = os.path.realpath(sys.argv[1]), sys.argv[2]
 tmp = os.path.realpath(tempfile.gettempdir())
@@ -23,6 +26,24 @@ here = common(os.path.dirname(os.path.abspath(__file__)))
 there = common(clone) if os.path.isdir(clone) else ""
 if not clone.startswith(tmp + os.sep) or not there or there == here or base not in ("a", "b"):
     sys.exit(f"refused: {clone} is not a separate clone under {tmp}, or the base is not a or b")
+# the patches the bases were built from, by item and file, with the sha256 each had when they were built
+SOURCES = {
+    ("f0145", "deps.patch"): "78e94ea9bee17366ce97afb1ccd7362edbe89a91c12011c1a5da8f885c664cff",
+    ("f0145", "prototype.patch"): "a46e2258db2c32496bc88149387cb129ceb7517ac74d00f71aff870f98dac90b",
+    ("c0156", "prototype.patch"): "ed053dfdd1b177bd0cce96f90f4b61ac5b11392a1b36b63e65e6a854536e2f6c",
+    ("f0186", "prototype.patch"): "f588be80b42dbb88043383be1819b4ca676461c4c3434c204295c25672a3f791",
+}
+mine = os.path.dirname(os.path.abspath(__file__))
+names = subprocess.run(["git", "ls-tree", "-r", "--full-tree", "--name-only", "origin/main"], capture_output=True, text=True,
+                       cwd=mine).stdout.splitlines()
+for (item, name), want in SOURCES.items():
+    found = [n for n in names if n.endswith(f"/{item}/experiments/{name}") and "/.tracker/issues/" in n]
+    if len(found) != 1:
+        sys.exit(f"refused: {item}'s experiments/{name} is not on origin/main exactly once ({found})")
+    blob = subprocess.run(["git", "show", f"origin/main:{found[0]}"], capture_output=True, cwd=mine).stdout
+    got = hashlib.sha256(blob).hexdigest()
+    if got != want:
+        sys.exit(f"refused: {found[0]} is {got[:8]}… on origin/main, the bases were cut from {want[:8]}…: rebuild them")
 home = os.path.join(clone, "pickman")
 NARROWED = ".tracker/issues/c0380/acceptance/narrowed.spec.luau"
 A = lambda p: f"tests/acceptance/{p}.spec.luau"
@@ -101,9 +122,15 @@ def run(spec):
     return r.returncode, r.stdout + r.stderr
 
 
-for spec in (NARROWED, A("d0124/lobby"), A("f0026/lobby"), A("f0145/views")):
+FIRST = [NARROWED, A("d0124/lobby"), A("f0026/lobby"), A("f0145/views")]
+if base == "b":
+    own = os.path.join(home, ".tracker/issues/f0186/acceptance")
+    FIRST = [f".tracker/issues/f0186/acceptance/{f}" for f in sorted(os.listdir(own)) if f.endswith(".spec.luau")] + FIRST
+for spec in FIRST:
     code, out = run(spec)
     print("BASE", spec, "pass" if code == 0 else "FAIL", out.strip().splitlines()[-1])
+    if code != 0:
+        sys.exit("refused: the unmutated base is not green")
 for mid in (sys.argv[3:] or list(M)):
     bases, rel, old, new, spec, want = M[mid]
     if base not in bases:

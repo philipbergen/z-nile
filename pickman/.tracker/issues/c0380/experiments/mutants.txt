@@ -1,4 +1,5 @@
-# c0380 mutation check, 2026-11-15 (E3). Base a: clone of proto-c0380 084935271; base b: clone of proto-c0380-revives 4302193d2.
+# c0380 mutation check, 2026-11-15, after design review 001 (E3): ./zn run --time 1800 -- python3 -I mutants.py <clone> <a|b>.
+# Base a: clone of proto-c0380 1a8d82ee4; base b: clone of proto-c0380-revives e8d8860e8 (f0186's prepared prototype, f588be80).
 ## base a
 BASE .tracker/issues/c0380/acceptance/narrowed.spec.luau pass 13 passed, 0 failed, 1 spec files
 BASE tests/acceptance/d0124/lobby.spec.luau pass 4 passed, 0 failed, 1 spec files
@@ -27,12 +28,19 @@ C12 killed | the lobby's line: free, else what is held, else the price and the m
 C13 killed | in test mode the lobby's line says nothing is charged
 C14 killed | the lobby's line: free, else what is held, else the price and the minutes to the next free start
 C15 killed | the lobby's panel keeps each row's rank, name, score and level first, and no lives mark for a row without lives
+C16 killed | a run's entry on the list carries its lives; the lobby's rows read from the list keep its order
 C17 killed | LobbyView adds the best line under the all-time panel only
 W1 SURVIVED (gap); unit boards.spec kills it | 
 W2 SURVIVED (gap) | 
 W3 SURVIVED (gap) | 
-C16 killed | a run's entry on the list carries its lives; the lobby's rows read from the list keep its order (rerun with its anchor shortened)
 ## base b
+BASE .tracker/issues/f0186/acceptance/boards.spec.luau pass 4 passed, 0 failed, 1 spec files
+BASE .tracker/issues/f0186/acceptance/count.spec.luau pass sweeper: stopped 1 process(es) the specs left running
+BASE .tracker/issues/f0186/acceptance/docs.spec.luau pass 3 passed, 0 failed, 1 spec files
+BASE .tracker/issues/f0186/acceptance/gameover.spec.luau pass 4 passed, 0 failed, 1 spec files
+BASE .tracker/issues/f0186/acceptance/price.spec.luau pass sweeper: stopped 1 process(es) the specs left running
+BASE .tracker/issues/f0186/acceptance/rows.spec.luau pass 8 passed, 0 failed, 1 spec files
+BASE .tracker/issues/f0186/acceptance/submit.spec.luau pass 3 passed, 0 failed, 1 spec files
 BASE .tracker/issues/c0380/acceptance/narrowed.spec.luau pass 13 passed, 0 failed, 1 spec files
 BASE tests/acceptance/d0124/lobby.spec.luau pass 4 passed, 0 failed, 1 spec files
 BASE tests/acceptance/f0026/lobby.spec.luau pass 5 passed, 0 failed, 1 spec files
@@ -59,5 +67,5 @@ C11 killed | the lobby's line: free, else what is held, else the price and the m
 C12 killed | the lobby's line: free, else what is held, else the price and the minutes to the next free start
 C13 killed | in test mode the lobby's line says nothing is charged
 C14 killed | the lobby's line: free, else what is held, else the price and the minutes to the next free start
-C16 killed | a run's entry on the list carries its lives; the lobby's rows read from the list keep its order (rerun)
-C17 killed | LobbyView adds the best line under the all-time panel only (rerun)
+C16 killed | a run's entry on the list carries its lives; the lobby's rows read from the list keep its order
+C17 killed | LobbyView adds the best line under the all-time panel only
