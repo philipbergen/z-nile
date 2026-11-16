@@ -120,3 +120,5 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-16 06:56	1 spec	0	0	test			2.037	1.740		2.037	tokens,ai
 2026-11-16 06:56	affected	0	0	test			7.331	50.640		7.331	tokens,ai
 2026-11-16 06:56	R0116: bind c0386 claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	deliver							tokens,wall,cpu,ai
+2026-11-16 06:57	full	0	0	test			49.807	220.250		49.807	tokens,ai
+2026-11-16 06:58	deliver	0	0	deliver							tokens,ai
