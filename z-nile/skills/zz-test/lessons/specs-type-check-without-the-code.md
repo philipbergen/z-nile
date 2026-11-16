@@ -13,3 +13,5 @@ check: Does every sequestered spec type-check with none of the issue's code pres
 **Note (c0325's prep, 2026-11-15):** a loop like `for _, x in t.field or {}` over a `{ string }` field read through `any` fails `promote-check`'s type check. Bind it to a typed local first.
 
 **Note (c0251's prep, round 2, 2026-11-15):** `t.expect(next(x))` and `t.expect(string.find(...))` pass two values, so `promote-check` refuses the spec. Wrap the call in parentheses to keep one value.
+
+**Note** (c0249 prep, 2026-11-16): `t.expect(f())` where `f` returns two values fails `promote-check`'s type check. Wrap the call in parentheses, `t.expect((f()))`, to keep the first value.

@@ -1,0 +1,92 @@
+# latest outcome per mutant; pass 1 on the first full run, later passes re-ran the mutants whose code or spec moved
+S01 feaf6f22 killed pure :: AC9: every other outcome of next is a failed read, never a pick and never nothing | expected "failed", got "pick"
+S02 753d814d killed pure :: AC9: every other outcome of next is a failed read, never a pick and never nothing | expected "failed", got "none"
+S04 308b51b4 killed pure :: AC1: a pick is run by one dispatcher call, in the documented argument order | expected deep-equal values, got table: 0x0000000a10cfb2b0
+S05 ddea7f7e killed pure :: AC1: a pick is run by one dispatcher call, in the documented argument order | expected deep-equal values, got table: 0x000000075ecfe500
+S06 0a3f0125 killed pure :: AC4: what a dispatch run's exit code asks of the loop | expected "park", got "wait"
+S07 9b0a9b8d killed pure :: AC4: what a dispatch run's exit code asks of the loop | expected "stop", got "retry"
+S08 980c3ce0 killed pure :: AC4: what a dispatch run's exit code asks of the loop | expected "blocked", got "stop"
+S09 cca7c24a killed pure :: AC6: the dispatcher child starts without the starter's markers and session ids | expected true, got false
+S10 35e00049 killed pure :: AC6: the dispatcher child starts without the starter's markers and session ids | expected true, got false
+S11 e6d26550 killed pure :: AC9: the CLI the person started is the one the supervisor runs, and it must be one every r | expected "claude", got nil
+S12 35220082 killed pure :: AC9: the CLI the person started is the one the supervisor runs, and it must be one every r | invalid argument #1 to 'find' (string expected, got nil)
+S13 ffd67df0 killed pure :: AC9: the supervisor starts only in the main checkout and never inside a session or (detach | invalid argument #1 to 'find' (string expected, got nil)
+S14 511f875d killed pure :: AC9: the supervisor starts only in the main checkout and never inside a session or (detach | invalid argument #1 to 'find' (string expected, got nil)
+S15 8c25bb74 killed pure :: AC9: the supervisor starts only in the main checkout and never inside a session or (detach | invalid argument #1 to 'find' (string expected, got nil)
+S16 b6c90824 killed pure :: AC8: a host the person marked as one that does not land keeps the run gate off; anything u | expected false, got true
+S17 9b63707e killed pure :: AC8: the run gate (the landing) is the only gate a host that does not land drops | expected deep-equal values, got table: 0x00000008e8cd8b80
+S18 6d9ce57e killed pure :: AC5: the person's CLI is tried first, and the first is waited for once before the next | expected "kimi", got "claude"
+S19 20229971 killed pure :: AC5: the person's CLI is tried first, and the first is waited for once before the next | expected 4, got 3
+S20 d04d8971 killed pure :: AC5: an outage is one unbroken stretch, and only past the cap is it a block; the note it f | expected "block", got "wait"
+S21 5cf11543 killed pure :: AC5: an outage is one unbroken stretch, and only past the cap is it a block; the note it f | expected "block", got "wait"
+S22 5c09bb32 killed pure :: AC2: one CLI session per raft: the same CLI resumes it, another CLI starts a new one that  | expected "resume", got "switched"
+S23 2b1d0d65 killed pure :: AC5: every prompt of a worker session names its skill and the notes, a resumed one says it | expected true, got false
+S24 73002789 killed pure :: AC5: every prompt of a worker session names its skill and the notes, a resumed one says it | expected true, got false
+S25 f8631f17 killed pure :: AC6: every supported CLI has a resume row, and a resumed session swaps or appends the flag | expected nil, got 4
+S26 ebd54be3 killed pure :: AC6: every supported CLI has a resume row, and a resumed session swaps or appends the flag | expected true, got false
+S27 8c38c5d8 killed pure :: AC10: the state file reads back what was written, and a stale one is called ended | expected true, got false
+S28 1b4d54d8 killed pure :: AC10: the state file reads back what was written, and a stale one is called ended | expected true, got false
+S29 fc70926b killed pure :: AC10: the state file reads back what was written, and a stale one is called ended | expected nil, got table: 0x0000000878cdc520
+S30 1b3c3cff killed pure :: AC10: the detached start leaves its own session, clears the markers and keeps the flags in | expected deep-equal values, got table: 0x0000000b60cdc160
+S31 22f0be93 killed pure :: AC10: the detached start leaves its own session, clears the markers and keeps the flags in | expected deep-equal values, got table: 0x000000092acf01c0
+S32 01b50a0d killed pure :: AC10: the detached start leaves its own session, clears the markers and keeps the flags in | expected deep-equal values, got table: 0x0000000ac8cf8190
+S33 be290590 killed pure :: AC5: an outage is one unbroken stretch, and only past the cap is it a block; the note it f | expected nil, got "exactly one option ends with (recommended), not 0"
+S34 a5ce3492 killed pure :: AC2: one CLI session per raft: the same CLI resumes it, another CLI starts a new one that  | active/R0010/notes.md", got "z-nile/.tracker/rafts/active/R0010/NOTES"
+S35 42fe390e killed pure :: AC10: the summary names what moved and what blocked | expected true, got false
+S36 8f2bb58f killed pure :: AC1: a pick is run by one dispatcher call, in the documented argument order | expected deep-equal values, got table: 0x0000000772cfa500
+S37 b66ed876 killed pure :: AC1: a pick is run by one dispatcher call, in the documented argument order | expected deep-equal values, got table: 0x00000008c6cd9bd0
+L01 6f0e7c0a killed loop :: AC2: a raft the previous run held is carried on before next is asked | expected "dispatch R0010 --worker", got "dispatch R0020 --worker"
+L02 3c808d51 killed loop :: AC2: the state file names the item held while its chain runs, and nothing held when it end | expected "", got "R0010"
+L03 68287d51 killed loop :: AC3: an item another worker holds is not taken, and the loop waits instead of spinning | expected 0, got 2
+L04 3c57cd50 killed loop :: AC3: a stop asked ends the worker after the dispatch run in progress and the raft stays he | expected deep-equal values, got table: 0x0000000ae400ccd0
+L05 5be4f84b killed loop :: AC4: a failed chain is run again once with retry, and a second failure stops the worker na | expected deep-equal values, got table: 0x0000000acecb5c90
+L06 d109eed8 killed loop :: AC7: a raft's pending gate is waited for and dispatched again, bounded by the clock, not b | expected true, got false
+L08 49af8d84 killed loop :: AC7: a draft that waits for the person's approval is parked and the loop takes the next pi | expected deep-equal values, got table: 0x00000009cecf10c0
+L09 1d610ff6 killed loop :: AC4: two blocked items in a row stop the worker | kely the worker or the tool than the rafts.", got "the stack is empty"
+L10 34d80796 killed loop :: AC9: reads that keep failing stop the worker naming the error | expected 5, got 1000000
+L11 3630b465 killed loop :: AC9: a good read clears the failed-read count, so failures far apart never add up to a sto | xt exited 128: fatal: unable to access origin: could not resolve host"
+L12 3dc01759 killed loop :: AC3: with nothing claimable the loop waits between polls with no dispatch run, and --once  | expected 0, got 1000000
+L13 8199cad4 killed loop :: AC2: a raft the previous run held is carried on before next is asked | expected 1, got 999999
+L14 88b28636 killed loop :: AC3: with nothing claimable the loop waits between polls with no dispatch run, and --once  | expected deep-equal values, got table: 0x0000000786cfe170
+L15 f02b310e killed loop :: AC9: a failed read of next is retried after a wait, never read as a pick or as nothing | expected deep-equal values, got table: 0x0000000bd6cdfc10
+L17 85852e1d killed loop :: AC3: a stop asked ends the worker after the dispatch run in progress and the raft stays he | expected "R0010", got ""
+L20 f6105e26 killed loop :: AC4: a failed chain is run again once with retry, and a second failure stops the worker na | expected deep-equal values, got table: 0x00000008d4cf9390
+L21 a581f74e killed loop :: AC2: a pick goes to the dispatcher's chain with the person's CLI, and a finished chain is  | expected deep-equal values, got table: 0x0000000b48cda500
+L22 6d6095cd killed loop :: AC8: a host that does not land passes --no-run, so the run gate (the landing) stays off | expected deep-equal values, got table: 0x00000009f0e423e0
+E01 04f1f3d3 killed command :: AC9: the supervisor runs only in the main checkout | expected false, got true
+E02 86196529 killed command :: AC9: refuses a bad --max-items, an unknown option, and a CLI the roles do not name, before | expected false, got true
+E04 2bd56863 killed command :: AC10: a stale stop file does not stop the next supervisor | expected true, got false
+E05 3403cf60 killed command :: AC10: a second supervisor in one clone is refused while the first holds the lock | expected true, got false
+E06 99274ec9 killed command :: AC10: stop with no supervisor says so and writes nothing; status calls a dead one ended | expected true, got false
+E07 a4d73901 killed session :: AC6: the session has the dispatcher's wrapper, broker and the agent's token, and not the p | expected true, got false
+E08 c87a9b00 killed command :: AC9: .models.toml is read from origin/main, never from the working tree | expected false, got true
+E10 7e85ffbf killed command :: AC2: a run that finds the previous run's held raft in the state file dispatches it before  | expected true, got false
+N01 ae521438 killed command :: AC9: a boolean supervisor flag before a positional leaves the positional in place | expected false, got true
+N02 a2a506fb killed command :: AC9: a boolean supervisor flag before a positional leaves the positional in place | expected true, got false
+N03 470e7bb8 killed command :: AC9: the dispatcher's own flags are booleans too: --worker and --no-run before a positiona | expected true, got false
+N04 3447f31c killed command :: AC9: the dispatcher's own flags are booleans too: --worker and --no-run before a positiona | expected true, got false
+N05 f60ae83f killed command :: AC9: a bare ./zn work and ./zn work <R-id> print the z-work skill, as before | expected true, got false
+N06 5fa3f3e0 killed command :: AC9: refuses a bad --max-items, an unknown option, and a CLI the roles do not name, before | expected false, got true
+N07 e5faaecd killed command :: AC9: refuses a bad --max-items, an unknown option, and a CLI the roles do not name, before | expected false, got true
+N08 fe15c3e0 killed command :: AC9: a boolean supervisor flag before a positional leaves the positional in place | expected false, got true
+P01 9ff9dfc3 killed reap :: AC10: a supervisor-looking process the state file does not name is a leak, and so is a nam | expected true, got false
+P02 b54a4ccd killed reap :: AC10: a supervisor-looking process the state file does not name is a leak, and so is a nam | expected true, got false
+P03 2bb40324 killed reap :: AC10: the supervisor is recognised by the command it runs, and only by that | expected false, got true
+B01 7c9d06bc killed board :: AC10: a stopped, a dead and an unreadable supervisor show nothing | expected nil, got table: 0x0000000c46477e50
+B02 cf0ba078 killed board :: AC10: a stopped, a dead and an unreadable supervisor show nothing | expected nil, got table: 0x0000000c34ce7070
+B03 acae3d42 killed board :: AC10: the dispatcher's own row for the item wins | expected "z-run", got "worker"
+K01 4b472f57 killed models :: AC11: is read per CLI, in seconds, the closest file winning | expected deep-equal values, got table: 0x0000000738cfb190
+K02 8fa98454 killed models :: AC11: refuses a CLI it does not support, an unknown key and a value that is not whole minu | expected false, got true
+K03 2f2578da killed models :: AC11: refuses a CLI it does not support, an unknown key and a value that is not whole minu | expected false, got true
+D01 cde46166 killed dispatch :: AC2: a raft's z-run session is new at first and resumed on a rerun, on the CLI that ran it | expected true, got false
+D02 23829d27 killed dispatch :: AC2: a raft's z-run session is new at first and resumed on a rerun, on the CLI that ran it | attempt to index nil with 'cli'
+D03 138a19ef killed dispatch :: AC5: the person's CLI is tried first | expected "grok", got "claude"
+D04 87e3763d killed dispatch :: AC5: a CLI out of quota is waited for once, then the next CLI starts a new session that re | expected true, got false
+D05 667ae227 killed dispatch :: AC5: a plain dispatch run keeps the role's order, with no wait and no session record | expected false, got true
+D07 84ab75f6 killed dispatch :: AC5: with every CLI out past the cap the raft is blocked with quota and a note escalation. | expected true, got false
+D08 8fc72e6b killed dispatch :: AC5: an outage that a working session ended is forgotten: the cap counts one unbroken stre | expected nil, got 1000
+D10 0e99f70d killed dispatch :: AC5: a CLI out of quota is waited for once, then the next CLI starts a new session that re | expected true, got false
+D11 52c0d66e killed dispatch :: AC5: with every CLI out past the cap the raft is blocked with quota and a note escalation. |  path 'pickman/.tracker/rafts/R0010/R0010.md' does not exist in 'main'
+D12 95ee840f killed dispatch :: AC5: every prompt of a worker session names its skill, the raft and the notes; a resumed o | expected true, got false
+P04 d9d81136 killed reap :: AC10: the launcher shim above the named supervisor (the same command, its parent) is kept  | expected nil, got 1
+P05 f453e325 killed reap :: AC10: the orphaned supervisor the state file names is kept, and a stray orphan beside it i | expected nil, got 1

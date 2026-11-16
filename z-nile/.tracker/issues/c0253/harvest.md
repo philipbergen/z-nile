@@ -1,0 +1,27 @@
+# Harvest: c0253
+
+- note c0252's and c0249's preps found that a boolean flag missing from `main.luau`'s `flags` list takes the next word as its value, and c0253 adds flags (prep, 2026-11-16): zz-arch/new-boolean-flags-join-the-parsers-list
+- note the prototype's detached supervisor was listed as an orphan by the reaper and its re-exec printed the skill, a new engine file tripped the reviewed `.cache` and credential lists, and the guard against starting a real CLI could not be mutated safely (prep, 2026-11-16): zz-test/detached-helpers-meet-the-reaper, zz-arch/cache-literal-trips-the-reviewed-list, z-design/reasoned-rows-claim-testable-reasons
+- design-review-001 F1: zz-arch/model-step-starters-share-the-dispatchers-duties
+- design-review-001 F2: zz-arch/guard-state-out-of-reach-or-checked
+- design-review-001 F3: z-design/never-narrow-captured-scope
+- design-review-001 F4: z-design/give-backs-that-are-not-blocks-reoffer
+- design-review-001 F5: z-design/quote-other-preps-before-promising
+- design-review-001 F6: zz-test/stand-ins-answer-only-named-arguments
+- design-review-001 F7: z-design/quote-other-preps-before-promising
+- design-review-001 F8: z-design/results-land-on-every-path
+- design-review-001 F9: zz-arch/child-exit-status-counts
+- design-review-001 F10: z-design/never-narrow-captured-scope
+- design-review-001 F11: z-design/instructions-runnable-where-they-run
+- design-review-001 F12: z-design/never-narrow-captured-scope
+- design-review-001 F13: z-design/peers-scans-run-on-the-prototype
+- design-review-001 F14: zz-arch/verify-the-value-you-use
+- design-review-001 F15: z-design/liveness-names-held-not-worked-states
+- design-review-001 F16: z-design/most-specific-environment-first
+- design-review-001 F17: zz-test/terminal-fixtures-clear-the-agent-session
+- design-review-001 F18: z-design/prep-choices-marked-and-checked
+- design-review-001 F19: z-design/probe-free-cli-lines-in-prep
+- design-review-001 F20: zz-test/stand-ins-answer-only-named-arguments
+- design-review-001 F21: z-design/spec-design-correspondence
+- design-review-001 F22: z-design/limits-name-the-iterations-they-count
+- note the revision found a log line other paths also print, a lock helper the reaper would stop, and mutants that changed nothing or never ended (prep, 2026-11-16): zz-test/no-vacuous-pass, zz-test/detached-helpers-meet-the-reaper, zz-test/mutants-follow-the-code-after-a-rework

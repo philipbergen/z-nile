@@ -9,3 +9,5 @@ A chain that remembers the last step's outcome reads it again after the item mov
 **Why:** c0250's prototype (prep, 2026-11-13): after `resolve`, `./zn dispatch <id>` stopped on the old outcome until the copy of the resolution also cleared it, as `retry` does. The open-list fallback stop also fired again until it dropped the ids the resolution ruled.
 
 **How to apply:** list every stored fact a step leaves (its outcome, its open list, its exchange), and for each way the item re-enters the chain say whether the fact is cleared, kept or replaced, with a case for each.
+
+**Note** (c0252 prep, 2026-11-16): a remembered outcome decides what the next pass does, so remember only outcomes that should block a repeat. c0252's dispatcher first remembered a `wait` (CI pending) as the last landing problem, and a retry then counted it as the same failure. Only red results are remembered now.
