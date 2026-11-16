@@ -79,7 +79,7 @@ return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 		t.expect(dispatcher.claimVerdict(ctx, st, "z-ready", "R0010", "backlog", "prepared", 1)).toBe("lost")
 		t.expect(dispatcher.claimVerdict(ctx, st, "z-ready", "R0010", "backlog", "prepared", 0)).toBe("won")
 		local before = reads
-		t.expect(dispatcher.claimVerdict(ctx, st, "raft-plan", "c0010", "backlog", "new", 1)).toBe("failed")
+		t.expect(dispatcher.claimVerdict(ctx, st, "z-stop", "c0010", "backlog", "new", 1)).toBe("failed")
 		t.expect(reads).toBe(before)
 		local own = {
 			origin = ctx.origin,

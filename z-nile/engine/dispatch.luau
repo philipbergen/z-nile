@@ -509,10 +509,7 @@ function dispatch.next(f: Facts): Action
 		if f.worker == true and f.status == "preparing" and not f.owned then
 			return stop(dispatch.EXIT.taken, `{f.id} is claimed by another worker`)
 		end
-		if
-			f.status == "new"
-			or (f.status == "preparing" and (if f.worker == true then f.owned == true else f.ownClaim))
-		then
+		if f.status == "new" or (f.status == "preparing" and (f.worker == true or f.ownClaim)) then
 			if f.pr then
 				return gate(f, "prep", f.pr)
 			end

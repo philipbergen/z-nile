@@ -130,6 +130,27 @@ return t.spec("c0254 the race window, ownership by stamp and the push exits", fu
 		end
 	)
 
+	it(
+		"AC1: a pick another worker finished meanwhile is taken, whatever step the facts would otherwise ask for",
+		function()
+			local done = dispatch.next(
+				facts({
+					status = "prepared",
+					design = "ready",
+					pick = "draft",
+					taken = "c0010 is no longer the draft it was picked as",
+				})
+			)
+			t.expect(done.kind).toBe("stop")
+			t.expect(done.code).toBe(dispatch.EXIT.taken)
+			-- the same facts for a plain dispatch go on to the rafting step
+			t.expect(
+				dispatch.next(facts({ worker = false, status = "prepared", design = "ready", taken = "" })).step
+			)
+				.toBe("raft-plan")
+		end
+	)
+
 	it("AC1: a plain dispatch of the same facts behaves as before", function()
 		t.expect(dispatch.next(facts({ worker = false, status = "preparing", ownClaim = true })).step)
 			.toBe("z-design")
@@ -256,7 +277,12 @@ return t.spec("c0254 the race window, ownership by stamp and the push exits", fu
 			dispatcher.recordClaim(c, st, "R0010", BASE)
 			t.expect(st.claim.id).toBe("R0010")
 			t.expect(st.claim.stamp).toBe("active-x-y-z")
-			t.expect(fs.readFile(`{BASE}/.cache/tracker-stamp-R0010`)).toBe("active-x-y-z")
+			t.expect(fs.isFile(`{BASE}/.cache/tracker-stamp-R0010`)).toBe(true)
+			t.expect(
+				if fs.isFile(`{BASE}/.cache/tracker-stamp-R0010`)
+					then fs.readFile(`{BASE}/.cache/tracker-stamp-R0010`)
+					else ""
+			).toBe("active-x-y-z")
 			-- a stamp that is not a claim (the item moved on) records nothing
 			local st2 = { worktree = BASE } :: any
 			dispatcher.recordClaim(ctxWith({ stamp = "prepared-a-b-c" }), st2, "R0011", BASE)
@@ -340,6 +366,14 @@ return t.spec("c0254 the race window, ownership by stamp and the push exits", fu
 		local last = states[#states] :: supervise.State
 		t.expect(last.held).toBe("")
 		t.expect(last.state).toBe("stopped")
+		-- and right after the item ended `taken`, before anything else is asked of next
+		local after: supervise.State? = nil
+		for _, s in states do
+			if s.state == "working" and s.item == "" then
+				after = s
+			end
+		end
+		t.expect(after ~= nil and after.held or "x").toBe("")
 	end)
 
 	it(

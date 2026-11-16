@@ -128,6 +128,9 @@ return t.spec("c0254 two hosts claim one issue", function(it)
 			local c1 = commitIn(wtA, "c0010", "notes-1", HOST_A)
 			t.expect(c1.code).toBe(0)
 			t.expect(tip("prep-c0010")).toBe(head(wtA))
+			-- the first push sets the upstream to the branch's own ref on origin
+			t.expect(fixture.git(wtA, { "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}" }))
+				.toBe("origin/prep-c0010")
 			local c2 = commitIn(wtA, "c0010", "notes-2", HOST_A)
 			t.expect(c2.code).toBe(0)
 			t.expect(tip("prep-c0010")).toBe(head(wtA))
@@ -381,14 +384,13 @@ return t.spec("c0254 two hosts claim one issue", function(it)
 
 	it("AC5: the rafting claim names its worker too, the raft and the member it stamped", function()
 		local out = fixture.git(f.origin, { "log", "main", "-1", "--format=%B", "--grep=^tracker: new raft" })
-		local rid = string.match(out, "tracker: new raft (R%d+)") :: string
+		local rid = string.match(out, "tracker: new raft (R%d+)")
 		t.expect(rid ~= nil).toBe(true)
-		local mine = xhost.attemptOf(
-			{ "Worker: " .. (string.match(out, "Worker: ([^\n]+)") :: string) },
-			rid,
-			string.match(out, "Worker: " .. rid .. " (%S+)") :: string
-		)
-		t.expect(mine).toBe("tokA")
-		t.expect(has(out, `Worker: c0020 `)).toBe(true)
+		t.expect(has(out, "Worker: ")).toBe(true)
+		local line = string.match(out, "(Worker: " .. (rid or "R0") .. " [^\n]+)")
+		t.expect(line ~= nil).toBe(true)
+		local who = xhost.parseTrailer(line or "")
+		t.expect(who ~= nil and who.attempt or "").toBe("tokA")
+		t.expect(has(out, "Worker: c0020 ")).toBe(true)
 	end)
 end)

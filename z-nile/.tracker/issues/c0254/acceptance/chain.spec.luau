@@ -180,6 +180,8 @@ return t.spec("c0254 two hosts run the dispatcher's worker mode", function(it)
 			t.expect(has(line, "cli=claude")).toBe(false)
 			-- the model's own `./zn status c0012 preparing` in its session was refused by nobody
 			t.expect(has(fakecli.log(h), "claim=0")).toBe(true)
+			-- and the session was told, in its prompt, that the issue is already claimed
+			t.expect(has(fakecli.log(h), "is already claimed for this run (stamp `preparing-")).toBe(true)
 			local st = fakecli.state(h, "c0012")
 			t.expect(st.claim.stamp).toBe(stampOnOrigin("c0012"))
 			local rows = fakecli.rows(h, "c0012") or {}
