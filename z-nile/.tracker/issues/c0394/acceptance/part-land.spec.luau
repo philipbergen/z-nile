@@ -1,8 +1,8 @@
 --!strict
 -- c0394 AC2 to AC9, on c0248's layers: an added issue is published to origin/main, placed in the raft's order, never
 -- committed on a layer, and shown on main while it waits; nothing lands above a waiting issue; `done` lands through the
--- member below the first waiting one and the raft stays active; reject is one published commit; stop refuses a raft
--- that holds a waiting added issue. Real git in a fixture under .cache/c0394-part-land (a bare origin whose path
+-- member below the first waiting one and the raft stays active; reject is one published commit; stop gives a waiting added issue
+-- back with the rest of its raft. Real git in a fixture under .cache/c0394-part-land (a bare origin whose path
 -- contains github.com, a worktree per raft and a `gh` stub that keeps each PR's base), built as c0248's own
 -- tests/acceptance/c0248/layers-land.spec.luau builds its rafts: a layer is start, work, finish, a tool-stamped review
 -- committed in the issue's folder, and a landing is a final-review-NNN.md and trace-NNN.md in the raft folder.
@@ -656,22 +656,6 @@ return t.spec(
 				.toBe(true)
 		end)
 
-		it("stop refuses a raft that holds a waiting added issue", function()
-			git(f.main, { "pull", "-q", "origin", "main" })
-			local r = tr(f.main, { "stop", "R0010" })
-			t.expect(r.ok).toBe(false)
-			t.expect(
-				has(
-					say(r),
-					`R0010 holds {T3}, which waits: ./zn approve {T3}, or ./zn reject {T3}, then stop`
-				)
-			)
-				.toBe(true)
-			t.expect(onOrigin(`{ROOT}/rafts/active/R0010/R0010.md`) ~= nil).toBe(true)
-			t.expect(onOrigin(`{ROOT}/issues/done/{T1}/{T1}.md`) ~= nil).toBe(true)
-			t.expect(onOrigin(`{ROOT}/issues/active/{T3}/{T3}.md`) ~= nil).toBe(true)
-		end)
-
 		it("after approve, T3's layer starts on origin/main and done lands the raft", function()
 			designOnMain(T3)
 			approveOnMain(T3)
@@ -715,6 +699,38 @@ return t.spec(
 			t.expect(onOrigin(`{ROOT}/issues/done/c0030/c0030.md`) ~= nil).toBe(true)
 			t.expect(onOrigin(`{ROOT}/rafts/active/R0020/R0020.md`) ~= nil).toBe(true)
 		end)
+
+		it(
+			"stop gives a waiting added issue back with the rest, still a member of its raft, and ready takes it back",
+			function()
+				-- R0020 has landed V1 (c0030) and W waits, last; W's design is a stub (draft)
+				git(f.main, { "pull", "-q", "origin", "main" })
+				local stopped = tr(f.main, { "stop", "R0020" })
+				t.expect(stopped.ok).toBe(true)
+				-- the landed member stays in done/; the added issue is out of active/, a backlog issue of the same raft
+				t.expect(onOrigin(`{ROOT}/issues/done/c0030/c0030.md`) ~= nil).toBe(true)
+				t.expect(onOrigin(`{ROOT}/issues/active/{W}/{W}.md`)).toBe(nil)
+				local back = onOrigin(`{ROOT}/issues/{W}/{W}.md`) or ""
+				t.expect(back ~= "").toBe(true)
+				for _, line in { "raft: R0020", "waits: approval", "found: R0020 c0030 layer" } do
+					t.expect(has(back, `\n{line}\n`)).toBe(true)
+				end
+				t.expect(has(back, "\nstatus: new")).toBe(true) -- its design is not ready
+				local raftLine = string.match(
+					onOrigin(`{ROOT}/rafts/R0020/R0020.md`) or "",
+					"\nissues: %[([^\n]*)%]"
+				) or ""
+				t.expect(has(raftLine, W)).toBe(true)
+				-- ready takes it back to active/ with the others, although its design is a draft, because it waits
+				local readied = tr(f.main, { "ready", "R0020" })
+				if not readied.ok then
+					error(`ready R0020 refused: {say(readied)}`, 0)
+				end
+				t.expect(onOrigin(`{ROOT}/issues/active/{W}/{W}.md`) ~= nil).toBe(true)
+				t.expect(onOrigin(`{ROOT}/rafts/active/R0020/R0020.md`) ~= nil).toBe(true)
+				t.expect(onOrigin(`{ROOT}/issues/done/c0030/c0030.md`) ~= nil).toBe(true)
+			end
+		)
 
 		it("sets up R0030 with Z in front of X1", function()
 			wt3 = begin("R0030")
