@@ -11,8 +11,10 @@
 # f0201's check.sh on a-n, and acceptance/narrow.py on a (red), a-n and b-n (green).
 # C rows: code mutants on a-n and b-n; the row's narrowed case must fail on an assertion (killed), not pass
 # (SURVIVED) or fail to load (NO RUN). W rows: the window's gaps (expected to survive f0201's specs).
-# N rows: narrowed-file mutants on a-n; acceptance/narrow.py must be red. V rows: changes it must stay green for.
-# It refuses when f0201's or f0395's patch or specs moved (lesson z-design/in-flight-bases-pin-their-source).
+# N rows: narrowed-file mutants on a-n; acceptance/narrow.py must be red (N13: c0397's check.sh, its digest pin of
+# narrow.py). V rows: changes it must stay green for. Last, c0397's whole check.sh on a-n (2/2).
+# It refuses when f0201's or f0395's patch or specs moved (f0395's: c0397 design review 001 F2; lesson
+# z-design/in-flight-bases-pin-their-source).
 # Run from the repository root: ./zn run --time 1800 -- python3 -I <this file>
 import hashlib, os, re, shutil, subprocess, sys, tempfile
 
@@ -33,6 +35,9 @@ PINS = {
     F0201 + "acceptance/receipts.spec.luau": "e531907a48ddb0ee9f87417a9a28bab9f80bfac0209626bf0bd4eb8dfc732e7c",
     F0201 + "acceptance/wallet.spec.luau": "eb9d28573e239789e79365ed8d3687b1e5df01ed1711aa2dcf30b75a6f67e443",
     F0395 + "experiments/prototype.patch": "f2a54c44b12b484e4e163c1c5f942ad75d8fec272229ecc3e7047476bf143deb",
+    F0395 + "acceptance/client.spec.luau": "12d389f9c3e7004cfcca0083c839cfa7864f14263ec37a0318993c2fcc388711",
+    F0395 + "acceptance/docs.spec.luau": "ede223595cfe20e2daaae7f47057e1048c3dfd18800cf77d763ecb2a6204d955",
+    F0395 + "acceptance/lines.spec.luau": "33a3be705de3f3f5b99ae05eba3a432bb7336a6627a7fac7004dc10ac12ae464",
 }
 for rel, want in PINS.items():
     got = hashlib.sha256(open(os.path.join(SRC, rel), "rb").read()).hexdigest()
@@ -286,5 +291,21 @@ try:
     open(w, "w").write(keep)
     git("checkout", "-q", "--detach", BN)
     print(f"V2: narrow.py {'green' if narrow()[0] == 0 else 'RED'} - f0395's change in the tree (origin main = a)", flush=True)
+    # c0397's own check.sh in the clone, as `./zn check c0397` runs it on the raft's branch (a-n, origin main = a)
+    git("checkout", "-q", "--detach", AN)
+    mine = os.path.join(ROOT, "arcade/.tracker/issues/c0397")
+    shutil.copyfile(os.path.join(ISSUE, "check.sh"), os.path.join(mine, "check.sh"))
+    shutil.copytree(os.path.join(ISSUE, "acceptance"), os.path.join(mine, "acceptance"), dirs_exist_ok=True)
+
+    def check():
+        p = subprocess.run(["bash", os.path.join(mine, "check.sh")], cwd=ROOT, capture_output=True, text=True, timeout=900)
+        return [l[:60] for l in p.stdout.splitlines() if l.startswith(("PASS", "FAIL", "----"))]
+
+    print(f"CONTROL a-n: c0397's check.sh {check()}", flush=True)
+    stub = os.path.join(mine, "acceptance/narrow.py")
+    keep = open(stub, "rb").read()
+    open(stub, "w").write("import sys\nsys.exit(0)\n")
+    print(f"N13: c0397's check.sh with narrow.py a stub that exits 0: {check()}", flush=True)
+    open(stub, "wb").write(keep)
 finally:
     shutil.rmtree(TMP, ignore_errors=True)

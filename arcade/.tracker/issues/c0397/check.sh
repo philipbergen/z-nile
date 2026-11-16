@@ -13,7 +13,9 @@ A="$HERE/acceptance"
 # origin is review's to catch
 echo "AC1 base: $(git -C "$ZN_ROOT" ls-remote --get-url origin) refs/heads/main"
 check "AC1: f0201's promoted config.spec and receipts.spec are f0201's prepared files with exactly c0397's three cases narrowed, byte for byte, and every other file of f0201's promoted folder and its finished check.sh is unchanged" \
-	python3 -I "$A/narrow.py" "$ZN_ROOT"
+	bash -c 'test "$(shasum -a 256 < "$1" | cut -d" " -f1)" = 65f66165f8604cab287ca499ee274f9b835325cfb12c0a823fe570dbd5169217 \
+		|| { echo "narrow.py is not the reviewed file (its sha256 is pinned here, so the approval binds it)"; exit 1; }
+		python3 -I "$1" "$2"' _ "$A/narrow.py" "$ZN_ROOT"
 check "AC2: f0201's acceptance checks pass from its finished folder, the three narrowed cases among them" \
 	bash -c 'bash "$("$ZN_ROOT/zn" find f0201)/check.sh"'
 

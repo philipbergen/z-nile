@@ -1,4 +1,4 @@
-bases: a 0939678ba, b 270e8373b, a-n 5af96636b, b-n a3a242749 (from d78055c0a)
+bases: a 5f9777002, b bf789bc5d, a-n 2bf642c36, b-n 9b668f7d7 (from 9413fc5bd)
 CONTROL a: f0201's six specs: (109, 0, 6); failing cases: []; load errors: False
 CONTROL a: narrow.py (1, "arcade/tests/acceptance/f0201/config.spec.luau is not narrowed: it is still f0201's prepared file | arcade/tests/acceptance/f0201/receipts.spec.luau is not narrowed: it is still f0201's prepared file")
 CONTROL b: f0201's six specs, un-narrowed, with f0395: (106, 3, 6); failing cases: ['ask in test mode opens the test screen with its lines and never prompts Roblox', 'the badge text is one config table: 5 R$ struck through, on sale for 1 R$, which is the charge', "the test screen's lines: the title and product, the badge, and that nothing is charged"]; load errors: False
@@ -54,7 +54,9 @@ N7: narrow.py red (arcade/tests/acceptance/f0201/client.spec.luau differs from t
 N8: narrow.py red (arcade/.tracker/issues/done/f0201/check.sh differs from the base: c0397 changes no other file of f0201's); specs (51, 0, 3) - f0201's check.sh no longer runs receipts.spec
 N9: narrow.py red (arcade/tests/acceptance/f0201/receipts.spec.luau is not exactly f0201's file with c0397's three narrowed cases (blob 3d3e8970, want 3e9e5007); if another item i); specs (50, 1, 3) - the receipts comparison changed
 N10: narrow.py red - a file added to f0201's folder
-N11: narrow.py red (f0201 is not done at the base d78055c0: arcade/.tracker/issues/done/f0201/check.sh and its promoted specs under arcade/t) - f0201 not done at the base
+N11: narrow.py red (f0201 is not done at the base 9413fc5b: arcade/.tracker/issues/done/f0201/check.sh and its promoted specs under arcade/t) - f0201 not done at the base
 N12: narrow.py red (arcade/tests/acceptance/f0201/config.spec.luau at the base is blob 4d20b213, not f0201's prepared f09b9d38 that c0397 wa) - the base already holds the narrowing
 V1: narrow.py green - f0201's watch.txt rewritten
 V2: narrow.py green - f0395's change in the tree (origin main = a)
+CONTROL a-n: c0397's check.sh ["PASS  AC1: f0201's promoted config.spec and receipts.spec ar", "PASS  AC2: f0201's acceptance checks pass from its finished ", '---- 2/2 criteria passed']
+N13: c0397's check.sh with narrow.py a stub that exits 0: ["FAIL  AC1: f0201's promoted config.spec and receipts.spec ar", "PASS  AC2: f0201's acceptance checks pass from its finished ", '---- 1/2 criteria passed']
