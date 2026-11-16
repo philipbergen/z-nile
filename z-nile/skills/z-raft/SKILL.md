@@ -10,7 +10,7 @@ A raft is what `z-ready` hands out and `z-run` delivers as one PR. `z-design` de
 **The lock.** An issue's raft is its own `raft:` line. This skill writes it in its worktree, and the rafting PR carries it, so two PRs that raft the same issue edit the same line and the second cannot merge cleanly. The published claim (`preparing-…`) stamps the raft only: a prepared issue is never restamped.
 
 ## 1. Plan
-Work in a rafting worktree: `cd "$(./zn worktree raft-<slug>)"` (any short slug, for example `raft-backlog`), then `./zn sync`.
+Take `./zn lost` first: lost work comes before anything not yet started. Work in a rafting worktree: `cd "$(./zn worktree raft-<slug>)"` (any short slug, for example `raft-backlog`), then `./zn sync`.
 - **No argument**: run `./zn raft-plan`. It prints the plan as commands, one per line, and `skip <id>: <why>` for an issue it can't place. The policy is fixed and needs no judgement:
   - one type per raft and one project per raft; a raft that is not prepared in the backlog (new, being prepared, active or done) is never pulled in, and a `single: true` raft never takes another issue;
   - defects fold into one open prepared defect raft (the lowest id that still fits), and chores fold the same way;
@@ -22,6 +22,7 @@ Work in a rafting worktree: `cd "$(./zn worktree raft-<slug>)"` (any short slug,
 - **With arguments, it does what was asked**: which issues and rafts are grouped is the caller's choice, overriding the fold and surface rules and the cap. The tracker's rules always hold, because the commands enforce them: one type, backlog only, one project, and solo issues alone. So `z-raft c0001 c0002` is `./zn new raft <type> <slug> c0001 c0002 --project <name>`, `z-raft R0010 c0003` is `./zn fold R0010 c0003`, and `z-raft recombine R0010 R0020 [<issue>…]` is `./zn recombine R0010 R0020 [<issue>…]`.
 
 ## 2. Claim and group
+Keep your claim alive while you work: start `./zn run --time 3600 -- ./zn beat <id> --watch` in the background (it beats every 5 minutes and stops by itself; start it again when it reports its bound), or run `./zn beat <id>` yourself at least every 15 minutes.
 Run the plan's commands in order (`./zn raft-plan --apply` runs them all), or the ones the arguments name:
 - `./zn new raft <type> <slug> <ids…> [--single] --project <name>` makes a raft of prepared issues: it publishes the raft with a fresh `preparing-…` stamp, leaves the issues' status as it is, and writes their `raft:` here.
 - `./zn fold <R-id> <ids…>` claims a prepared raft (its status only, published) and writes the issues' `raft:` and the raft's `issues:` here.
