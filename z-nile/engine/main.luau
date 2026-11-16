@@ -125,6 +125,8 @@ usage: ./zn <command> ...
                                                 run one step: a model step on .models.toml's CLIs, a script step itself
   dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it; retry takes --answer "<text>" | --answer-file <path>, and --forget-exchange sets a damaged exchange aside
   dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
+  land-check <R-id> [--through <issue> | --below <issue>] [--json]
+                                                the checks before a landing, read-only (the dispatcher's and done's): one line per problem, exit 1 when any (c0252)
   done <R-id> [--through <issue>]               land the stack, or its layers up to <issue>: one --no-ff merge onto main, one binding commit (refuses an unfinished or incomplete layer)
   watch-bootstrap                               write every spec's watch file from the commit that added it (once)
   watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
@@ -5356,6 +5358,220 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
 	traceProblems(raft, true, through)
 end
 
+-- c0252: what `./zn land-check` and `./zn done` read for landcheck.problems: the layers a landing binds (all the unlanded
+-- ones, up to `through`, or those below `below`), their completeness, the final review and trace, the approvals, the top
+-- layer's pull request and what main gained. `partial` leaves out what `done` checks itself further on (its own
+-- review, trace, approval and layer checks) so a manual `done` adds only the pull-request and main checks.
+-- Returns the input, the layer it lands through, or nil and why (a `below` with nothing under it gives neither).
+function H.landInput(
+	raft: store.Item,
+	through: string?,
+	below: string?,
+	partial: boolean?
+): (any?, string?, string?)
+	local landcheck = require("./landcheck")
+	local landread = require("./landread")
+	local issues = layergit.orderedMembers(raft)
+	local layers = layergit.layersOf(raft.id)
+	local orderedIds: { string } = {}
+	local landedMap: { [string]: boolean } = {}
+	local landedAt: { [number]: boolean } = {}
+	for i, issue in issues do
+		table.insert(orderedIds, issue.id)
+		landedMap[issue.id] = layergit.landed(issue.id)
+		landedAt[i] = landedMap[issue.id]
+	end
+	if below ~= nil then
+		local prev: string? = nil
+		for _, id in orderedIds do
+			if id == below then
+				break
+			end
+			if not landedMap[id] then
+				prev = id
+			end
+		end
+		if prev == nil then
+			return nil, nil, nil
+		end
+		through = prev
+	end
+	local bindIds, whyBind = stack.bindMembers(orderedIds, landedMap, through)
+	if not bindIds then
+		return nil, nil, whyBind
+	end
+	local marked = layergit.marked(raft)
+	local haveAt: { [number]: stack.Layer } = {}
+	for _, layer in layers do
+		haveAt[layer.position] = layer
+	end
+	local firstPos = 1
+	for i, issue in issues do
+		if issue.id == bindIds[1] then
+			firstPos = i
+		end
+	end
+	local checkLayers: { any } = {}
+	local topLayer: stack.Layer? = nil
+	for n, id in bindIds do
+		local i = firstPos + n - 1
+		local layer = haveAt[i]
+		local incomplete: string? = nil
+		if not layer then
+			incomplete = `{id} has no layer branch: ./zn start {raft.id}`
+		else
+			topLayer = layer
+			local onto = layergit.baseFor(haveAt, landedAt, i)
+			if not partial then
+				incomplete = if not onto
+					then `{layer.name} has no base`
+					elseif marked then layergit.completeReason(raft, layer, onto :: string)
+					elseif
+						not layergit.layerFinished(layer, onto :: string)
+					then `{id} is not finished: ./zn finish {id}`
+					else nil
+			end
+		end
+		table.insert(checkLayers, { issue = id, incomplete = incomplete })
+	end
+	if not topLayer then
+		return nil, nil, `{raft.id} has no layer branch for {bindIds[#bindIds]}`
+	end
+	local tip = layergit.layerTip(topLayer :: stack.Layer) or ""
+	local pr, prError = landread.pr((topLayer :: stack.Layer).name)
+	local round = 0
+	if marked then
+		local onMainRounds, hereRounds = layergit.rounds(raft, "final-review")
+		round = stack.nextRound(onMainRounds, hereRounds)
+	end
+	local reviewWhy: string? = nil
+	local traceLines: { string } = {}
+	local drift: string? = nil
+	local openHigh: { string } = {}
+	local noVerdict = false
+	if not partial then
+		reviewWhy = reviewProblem(raft)
+		local traceName = if marked then string.format("trace-%03d.md", round) else "trace.md"
+		traceLines = traceProblems(raft, nil, through, traceName)
+		noVerdict = layergit.reviewVerdict(raft) == nil
+		if fs.isFile(raft.doc) then
+			openHigh = openlist.pending(fs.readFile(raft.doc))
+		end
+		for _, m in store.members(raft.id) do
+			if table.find(bindIds, m.id) then
+				local onMain =
+					sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{approval.file(m)}` }).ok
+				drift = drift or approval.refusal(".", m, onMain)
+			end
+		end
+	end
+	local baseRef = if layergit.shaOf("origin/main") then "origin/main" else "main"
+	local fork = sh.run("git", { "merge-base", baseRef, tip })
+	local codeMoved: { string } = {}
+	local changed: { string } = {}
+	if fork.ok then
+		local f = sh.trim(fork.stdout)
+		codeMoved = landcheck.codeOf(landread.diffNames(f, baseRef) or {})
+		changed = landread.diffNames(f, tip) or {}
+	end
+	local gameRoots: { string } = {}
+	local okReg, reg = pcall(projects.load)
+	if okReg then
+		for _, p in (reg :: projects.Registry).projects do
+			if p.home ~= "z-nile" and p.home ~= "." then
+				table.insert(gameRoots, p.home)
+			end
+		end
+	end
+	local home = process.env.HOME or ""
+	return {
+		raft = raft.id,
+		layers = checkLayers,
+		through = through,
+		topIssue = bindIds[#bindIds],
+		topTip = tip,
+		pr = pr,
+		prError = prError,
+		reviewProblem = reviewWhy,
+		openHigh = openHigh,
+		traceProblems = traceLines,
+		approvalDrift = drift,
+		verdictMissing = noVerdict,
+		codeMoved = codeMoved,
+		changedPaths = changed,
+		gameRoots = gameRoots,
+		cicd = fs.isFile(`{home}/.config/pickman/cicd.toml`),
+		topBranch = (topLayer :: stack.Layer).name,
+	},
+		through,
+		nil
+end
+
+-- c0252: the checks before a landing, read-only: `land-check <R-id> [--through <issue> | --below <issue>] [--json]`.
+-- Prints one line per problem (`code (kind): text`), or with --json the layer it would land through, the top layer's
+-- branch and tip and the problems; exit 0 when every check passes. The dispatcher runs it in the raft's worktree.
+cmd["land-check"] = function(pos: { string }, opts: { [string]: { string } })
+	local landcheck = require("./landcheck")
+	local serde = require("@lune/serde")
+	for k in opts do
+		if k ~= "--through" and k ~= "--below" and k ~= "--json" then
+			fail(
+				`usage: land-check <R-id> [--through <issue> | --below <issue>] [--json] (unknown option {k})`
+			)
+		end
+	end
+	if #pos ~= 1 or (opts["--through"] and opts["--below"]) then
+		fail("usage: land-check <R-id> [--through <issue> | --below <issue>] [--json]")
+	end
+	local raft = store.get(pos[1])
+	if raft.kind ~= "raft" or raft.state ~= "active" then
+		fail(`{raft.id} must be an active raft`)
+	end
+	if hasOrigin() then
+		sh.git({ "fetch", "--quiet", "origin" })
+	end
+	local input, through, why = H.landInput(
+		raft,
+		if opts["--through"] then opts["--through"][1] else nil,
+		if opts["--below"] then opts["--below"][1] else nil
+	)
+	local asJson = opts["--json"] ~= nil
+	if not input then
+		if why then
+			fail(why)
+		end
+		if asJson then
+			print(serde.encode("json", { through = "", problems = {} }))
+		else
+			print("nothing below to land")
+		end
+		return
+	end
+	local problems = landcheck.problems(input)
+	if asJson then
+		local rows: { any } = {}
+		for _, p in problems do
+			table.insert(
+				rows,
+				{ code = p.code, kind = p.kind, text = p.text, reason = p.reason, layer = p.layer or "" }
+			)
+		end
+		print(
+			serde.encode(
+				"json",
+				{ through = through or "", top = input.topBranch, tip = input.topTip, problems = rows }
+			)
+		)
+	else
+		for _, line in landcheck.lines(problems) do
+			print(line)
+		end
+	end
+	if #problems > 0 then
+		process.exit(1)
+	end
+end
+
 function cmd.done(pos: { string }, opts: { [string]: { string } })
 	refuseListMode()
 	for k in opts do
@@ -5366,6 +5582,12 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 	local through = if opts["--through"] then opts["--through"][1] else nil
 	if through == "" then
 		fail("usage: done <R-id> [--through <issue>] (--through needs an issue id)")
+	end
+	-- c0252: the dispatcher lands (with the user's credential, after landcheck); a dispatched step never does
+	if (process.env.ZN_DISPATCH or "") ~= "" then
+		fail(
+			"done is refused while ZN_DISPATCH is set: the dispatcher lands a green stack itself (./zn dispatch <R-id>)"
+		)
 	end
 	local raft = store.get(pos[1] or fail("usage: done <R-id> [--through <issue>]"))
 	if raft.kind ~= "raft" or raft.state ~= "active" then
@@ -5535,6 +5757,24 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 	local traceFindings = traceProblems(raft, nil, through, traceName)
 	if #traceFindings > 0 then
 		fail(`{raft.id} trace --check failed:\n{table.concat(traceFindings, "\n")}`)
+	end
+	-- c0252: the checks the dispatcher also makes, on what done does not read itself: the top layer's pull request and
+	-- what main gained. A problem a person can see for themselves (CI still running, a pull request gh cannot read) is
+	-- not a refusal here; the dispatcher stops at it.
+	do
+		local landcheck = require("./landcheck")
+		local input = H.landInput(raft, through, nil, true)
+		if input then
+			local refusals: { landcheck.Problem } = {}
+			for _, p in landcheck.problems(input) do
+				if p.kind ~= "wait" then
+					table.insert(refusals, p)
+				end
+			end
+			if #refusals > 0 then
+				fail(`{raft.id} is not ready to land:\n{table.concat(landcheck.lines(refusals), "\n")}`)
+			end
+		end
 	end
 	local layerBranch = sh.git({ "branch", "--show-current" })
 	local baseRef = if layergit.shaOf("origin/main")
@@ -6826,6 +7066,19 @@ function cmd.block(pos: { string }, opts: { [string]: { string } }?)
 				end
 			end
 		end
+	end
+	-- c0252: under the dispatcher the step only asks: the dispatcher lands the green layers below the Layer, then runs
+	-- this command itself (its own environment has no ZN_DISPATCH), so a block never strands code that could land
+	if isRaft and runFrom == "active" and (process.env.ZN_DISPATCH or "") ~= "" then
+		local stateDir = process.env.ZN_DISPATCH_DIR or ""
+		if stateDir == "" then
+			fail("block under ZN_DISPATCH needs ZN_DISPATCH_DIR: the dispatcher's state folder")
+		end
+		fs.writeFile(`{stateDir}/block-request`, require("./landcheck").requestText(id, reason, layer))
+		print(
+			`block requested: {id} {reason}{if layer then ` (layer {layer})` else ""}. The dispatcher lands the green layers below, then blocks. Stop here.`
+		)
+		return
 	end
 	local when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string
 	local stamped = esc.lib.stamp(noteText, {
@@ -9364,6 +9617,7 @@ local READ_ONLY: { [string]: boolean } = {
 	workstreams = true,
 	["promote-check"] = true,
 	stack = true,
+	["land-check"] = true,
 	stamp = true,
 	trace = true,
 }

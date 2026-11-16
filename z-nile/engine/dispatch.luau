@@ -13,7 +13,7 @@ export type Step = {
 	lessons: string?, -- "design" or "build": the lessons a model step reads (`./zn lessons --when <it>`)
 	phase: string?, -- the spend phase of the step's own session row
 	argv: { string }?, -- a script step: the ./zn command ("{id}" is the item)
-	where: string?, -- a script step runs in the main checkout ("main") or the step's worktree ("worktree")
+	where: string?, -- a script step runs in the main checkout ("main"), the rafting worktree ("worktree") or the raft's own ("run")
 }
 
 -- Every z-nile skill and every script the chain runs, classified. Ready, stop, recombine and recording spend need
@@ -32,6 +32,10 @@ dispatch.STEPS = {
 	["release"] = { kind = "script", argv = { "release", "{id}" }, where = "worktree" },
 	["spend"] = { kind = "script", argv = { "spend", "{id}" }, where = "worktree" },
 	["zz-stats"] = { kind = "script", argv = { "metrics" }, where = "main" },
+	-- c0252: the dispatcher lands a stack (or the green layers below a block) and files a block, in the raft's own
+	-- worktree and with its own environment: no model, no agent credential
+	["z-land"] = { kind = "script", argv = { "done", "{id}" }, where = "run" },
+	["z-block"] = { kind = "script", argv = { "block", "{id}" }, where = "run" },
 } :: { [string]: Step }
 -- Skills read inside a step, never run as one.
 dispatch.READ_INSIDE = {
@@ -272,9 +276,30 @@ export type Facts = {
 	uncovered: { string }, -- `./zn lessons --uncovered <id>` in the step's worktree, after a review step
 	autoMerge: { string },
 	description: string?, -- `dispatch new`'s words
+	-- c0252: a layered raft (layer branches exist); an old single-branch raft keeps `pr` and the human's merge
+	layered: boolean?,
+	-- c0252: the landing's verdict (landcheck.classify over `./zn land-check`), read once the run step ended ok or a
+	-- block was requested; nil otherwise. For a block request it is the verdict on the layers below the Layer.
+	land: LandFacts?,
+	blockRequest: { reason: string, layer: string? }?, -- a dispatched `./zn block` left it in the run state (G1)
+}
+export type LandFacts = {
+	action: "land" | "wait" | "redo" | "block",
+	through: string?, -- the layer the landing stops at (nil: the whole stack)
+	tip: string?, -- the published tip of the top layer bound: what the bind must be
+	lines: { string }, -- one line per problem
+	problems: { any }, -- the landcheck.Problems, for the escalation note
+	reason: string?, -- block: the escalation reason
+	layer: string?, -- block: the Layer
+	tries: number, -- the redo tries already spent
 }
 export type Action = {
-	kind: "step" | "merge" | "stop",
+	kind: "step" | "merge" | "stop" | "land" | "block",
+	through: string?, -- kind land: the layer to land through
+	tip: string?, -- kind land: the top layer's tip the bind must carry
+	reason: string?, -- kind block: the escalation reason
+	layer: string?, -- kind block: the Layer
+	redo: boolean?, -- kind step z-run after a failed landing check: counts as a try
 	step: string?, -- kind step: the step to run
 	target: string?, -- the item it runs on
 	gate: string?, -- kind merge or a gate stop: "prep", "raft" or "run"
@@ -417,7 +442,13 @@ function dispatch.next(f: Facts): Action
 		return stop(dispatch.EXIT.failure, `raft-plan put {f.id} in no raft (see its skip line)`)
 	elseif done == "z-ready" and f.kind == "raft" and f.where == "backlog" then
 		return stop(dispatch.EXIT.failure, `z-ready ended but {f.id} is not active on origin/main`)
-	elseif done == "z-run" and f.kind == "raft" and f.where == "active" and (not f.pr or f.pr.draft) then
+	elseif
+		done == "z-run"
+		and f.kind == "raft"
+		and f.where == "active"
+		and f.layered ~= true
+		and (not f.pr or f.pr.draft)
+	then
 		return stop(
 			dispatch.EXIT.failure,
 			`z-run ended but {f.id}'s PR is still a draft: ./zn done did not run`
@@ -469,9 +500,62 @@ function dispatch.next(f: Facts): Action
 		end
 		return stop(dispatch.EXIT.failure, `{f.id} is {f.status} in the backlog: z-raft prepares it first`)
 	end
-	-- active: z-run, until its PR leaves draft (`./zn done`); the merge is always a human's
-	if f.pr and f.pr.state == "OPEN" and not f.pr.draft then
+	-- active. c0252: a dispatched block waits for the layers below it to land (G1), then files; a finished run is landed
+	-- by the dispatcher when landcheck passes and `run` is in dispatch.auto_merge, else it waits (exit 4) or the worker
+	-- runs again (a counted try) or the raft blocks.
+	local req = f.blockRequest
+	if req then
+		local l = f.land
+		if l and l.action == "land" and l.through then
+			if not table.find(f.autoMerge, "run") then
+				return stop(
+					dispatch.EXIT.gate,
+					`the layers below {req.layer or "the block"} are green but dispatch.auto_merge leaves the landing to a human (./zn done {f.id} --through {l.through}, then ./zn dispatch retry {f.id})`
+				)
+			end
+			return {
+				kind = "land",
+				target = f.id,
+				through = l.through,
+				tip = l.tip,
+				why = "the green layers below the block",
+			}
+		end
+		return { kind = "block", target = f.id, reason = req.reason, layer = req.layer }
+	end
+	if f.layered ~= true and f.pr and f.pr.state == "OPEN" and not f.pr.draft then
+		-- an old single-branch raft: its pull request's merge is a human's
 		return gate(f, "run", f.pr)
+	end
+	local l = f.land
+	if l then
+		if l.action == "land" then
+			if not table.find(f.autoMerge, "run") then
+				return {
+					kind = "stop",
+					code = dispatch.EXIT.gate,
+					gate = "run",
+					why = `ready to land: every check of {f.id} passes and dispatch.auto_merge leaves the landing to a human (./zn done {f.id}, then ./zn dispatch {f.id})`,
+				}
+			end
+			return { kind = "land", target = f.id, through = l.through, tip = l.tip }
+		elseif l.action == "wait" then
+			return {
+				kind = "stop",
+				code = dispatch.EXIT.gate,
+				gate = "run",
+				why = `waiting to land {f.id}: {table.concat(l.lines, "; ")}`,
+			}
+		elseif l.action == "redo" then
+			return {
+				kind = "step",
+				step = "z-run",
+				target = f.id,
+				redo = true,
+				why = table.concat(l.lines, "; "),
+			}
+		end
+		return { kind = "block", target = f.id, reason = l.reason, layer = l.layer }
 	end
 	return { kind = "step", step = "z-run", target = f.id }
 end

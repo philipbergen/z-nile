@@ -42,7 +42,8 @@
 --   max_calls = 200
 --   max_minutes = 240
 --   [dispatch]
---   auto_merge = ["prep", "raft"]
+--   auto_merge = ["prep", "raft", "run"]   -- run: the dispatcher lands a green stack with `./zn done` (c0252)
+--   merge_attempts = 2    -- worker tries after a fixable landing check fails, before the raft blocks
 --   stall_seconds = 300
 local family = require("./family")
 --   quota_cap_hours = 24   -- c0253's worker blocks the raft with `quota` when every CLI stays out past this
@@ -70,7 +71,7 @@ local MODEL_OF_CLI: { [string]: string } = {
 	agent = "^[%w%._%-]+$",
 }
 -- The merge gates the dispatcher may pass itself; the run's PR is never one of them.
-models.GATES = { "prep", "raft" }
+models.GATES = { "prep", "raft", "run" }
 models.STALL_SECONDS = 300
 -- the stall limit while a tool call runs (a full gate is quiet for minutes)
 models.TOOL_SECONDS = 900
@@ -170,7 +171,7 @@ function models.parse(text: string, path: string): Layer
 							error(
 								`{path}: dispatch.auto_merge names {tostring(g)}: the dispatcher may merge only {list(
 									models.GATES
-								)} (the run's PR is a human's)`,
+								)} (run is the landing of a green stack: the dispatcher's own ./zn done)`,
 								0
 							)
 						end
@@ -181,6 +182,11 @@ function models.parse(text: string, path: string): Layer
 						error(`{path}: dispatch.{k} is a whole number of seconds, at least 1`, 0)
 					end
 					layer.settings[if k == "stall_seconds" then "stallSeconds" else "toolSeconds"] = v
+				elseif k == "merge_attempts" then
+					if not count(v) then
+						error(`{path}: dispatch.merge_attempts is a whole number of tries, at least 1`, 0)
+					end
+					layer.settings.mergeAttempts = v
 				elseif k == "quota_cap_hours" then
 					if not count(v) then
 						error(`{path}: dispatch.quota_cap_hours is a whole number of hours, at least 1`, 0)
@@ -188,7 +194,7 @@ function models.parse(text: string, path: string): Layer
 					layer.settings.quotaCapHours = v
 				else
 					error(
-						`{path}: dispatch.{k} is not a setting (auto_merge, stall_seconds, tool_seconds, quota_cap_hours)`,
+						`{path}: dispatch.{k} is not a setting (auto_merge, stall_seconds, tool_seconds, quota_cap_hours, merge_attempts)`,
 						0
 					)
 				end
@@ -420,6 +426,19 @@ function models.settings(layers: { Layer }): Settings
 		end
 	end
 	return s
+end
+
+-- c0252: how many times the dispatcher runs the worker again after a landing check it can fix fails, before it blocks the
+-- raft (a real second attempt by default).
+models.MERGE_ATTEMPTS = 2
+function models.mergeAttempts(layers: { Layer }): number
+	local n: number = models.MERGE_ATTEMPTS
+	for _, layer in layers do
+		if layer.settings.mergeAttempts ~= nil then
+			n = layer.settings.mergeAttempts
+		end
+	end
+	return n
 end
 
 -- c0250: the cap, in whole hours, on how long every CLI may stay out of quota before c0253's worker blocks the raft
