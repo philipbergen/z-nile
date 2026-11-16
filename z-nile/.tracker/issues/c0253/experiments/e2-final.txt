@@ -1,0 +1,24 @@
+supervisor started, detached: ./zn work status shows it, ./zn work stop ends it, its log is .cache/work/log
+supervisor pid 55867: idle since 2026-11-16 05:59:34; moved 0, blocked 0
+nobody holds a raft
+--- processes
+55852     1 lune run z-nile/engine/main -- work run
+55867 55852 /Users/philipbergen/.rokit/tool-storage/lune-org/lune/0.10.5/lune run z-nile/engine/main -- work run
+59713 57719 lune run z-nile/engine/main -- ready R0010
+--- reap dry-run (min-age 0)
+reap: no leaked processes
+--- reap session-end dry-run
+reap: would stop pid 91666 +1 child(ren), age 1m45s, cpu 0m00s, started by the session that is ending, cwd /Users/philipbergen/code/pickman/.worktree/prep-worker-pull-loop: /bin/zsh -c source /Users/philipbergen/.claude/shell-snapshots/snapshot-zsh-1794445417162-qtz07r.sh ...
+reap: would stop pid 95591 +1 child(ren), age 2m29s, cpu 0m00s, started by the session that is ending, cwd /Users/philipbergen/code/pickman/.worktree/prep-worker-pull-loop: /bin/zsh -c source /Users/philipbergen/.claude/shell-snapshots/snapshot-zsh-1794445417162-qtz07r.sh ...
+reap: would stop pid 96359 +1 child(ren), age 1m43s, cpu 0m00s, started by the session that is ending, cwd /Users/philipbergen/code/pickman/.worktree/prep-worker-pull-loop: /bin/zsh -c source /Users/philipbergen/.claude/shell-snapshots/snapshot-zsh-1794445417162-qtz07r.sh ...
+stop asked: supervisor pid 55867 ends after its current dispatch run
+supervisor pid 55867: stopped since 2026-11-16 05:59:34; moved 0, blocked 0
+nobody holds a raft
+--- log
+worker stopped: stop asked
+moved: nothing
+blocked: nothing
+--- processes after
+63518 57719 lune run z-nile/engine/main -- dispatch z-run R0010 --worker --cli grok
+63548 63518 /Users/philipbergen/.rokit/tool-storage/lune-org/lune/0.10.5/lune run z-nile/engine/main -- dispatch z-run R0010 --worker --cli grok
+65899  4719 /bin/zsh -c source /Users/philipbergen/.claude/shell-snapshots/snapshot-zsh-1794445417162-qtz07r.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \builtin unalias -- 'which'; \builtin unset -f -- 'which'; } >/dev/null 2>&1 || true && { \builtin unalias -- 'unsetenv'; \builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'cd /Users/philipbergen/code/pickman/.worktree/prep-worker-pull-loop/z-nile/.tracker/issues/c0253/experiments && ../../../../../zn run --time 60 -- python3 -I - <<'"'"'EOF'"'"'\012p='"'"'mutate.py'"'"'\012s=open(p).read()\012old='"'"''"'"''"'"'            r = subprocess.run(["../zn", "run", "--time", "290", "--", "lune", "run", "tests/run", "--", SPEC[spec]],\012                               cwd=z, capture_output=True, text=True, timeout=420)\012            out = r.stdout + r.stderr'"'"''"'"''"'"'\012new='"'"''"'"''"'"'            # the output goes to a file, not a pipe: a mutant that makes a dispatch loop never end leaves a child holding a pipe\012            # open, and the run would wait for it; the leak is stopped by name after the run (these are this script'"'"'s own)\012            log = os.path.join(z, ".cache", "mutant.out")\012            os.makedirs(os.path.dirname(log), exist_ok=True)\012            with open(log, "w") as fh:\012                subprocess.run(["../zn", "run", "--time", "290", "--", "lune", "run", "tests/run", "--", SPEC[spec]],\012                               cwd=z, stdout=fh, stderr=subprocess.STDOUT, timeout=420)\012            out = open(log).read()'"'"''"'"''"'"'\012assert old in s\012s=s.replace(old,new,1)\012old2='"'"''"'"''"'"'        finally:\012            open(path, "w").write(text)'"'"''"'"''"'"'\012new2='"'"''"'"''"'"'        finally:\012            open(path, "w").write(text)\012            if spec in ("dispatch", "session"):\012                subprocess.run(["pkill", "-f", "engine/main -- dispatch R0010"], capture_output=True)'"'"''"'"''"'"'\012assert old2 in s\012s=s.replace(old2,new2,1)\012open(p,'"'"'w'"'"').write(s)\012EOF\012cd /Users/philipbergen/code/pickman/.worktree/prep-worker-pull-loop && S=/private/tmp/claude-501/-Users-philipbergen-code-pickman/41230970-d794-4c57-af1d-137b4b7bbbef/scratchpad/c0253 && cp ../proto-c0253-scratch/z-nile/.tracker/issues/c0253/acceptance/*.luau ../proto-c0253-mut/z-nile/.tracker/issues/c0253/acceptance/ 2>&1 | head -1; git -C ../proto-c0253-mut status --short | head -3; ./zn run --time 3550 -- sh -c "python3 -I z-nile/.tracker/issues/c0253/experiments/mutate.py /Users/philipbergen/code/pickman/.worktree/proto-c0253-mut L02,L11,E08,N03,P01,P02,P03,P04,P05,D01,D02,D03,D04,D05,D07,D08,D10,D11,D12 > $S/mut-pass2.txt 2>&1; echo DONE >> $S/mut-pass2.txt"' && pwd -P >| /tmp/claude-16f6-cwd

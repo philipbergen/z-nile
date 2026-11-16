@@ -1,0 +1,9 @@
+FAIL tests/acceptance/c0263/restack.spec.luau: 2 passed, 3 failed
+FAIL tests/acceptance/d0333/commit-land.spec.luau: 2 passed, 4 failed
+FAIL tests/tooling/dispatch-adopt.spec.luau: 1 passed, 4 failed
+FAIL tests/tooling/repo-fence.spec.luau: 9 passed, 1 failed
+FAIL tests/acceptance/c0111/skill-docs.spec.luau: 4 passed, 1 failed
+FAIL tests/tooling/trace-skeleton.spec.luau: 1 passed, 2 failed
+FAIL tests/acceptance/d0333/docs.spec.luau: 1 passed, 1 failed
+1084 passed, 16 failed, 176 spec files
+EXIT 1
