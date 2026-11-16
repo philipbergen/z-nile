@@ -72,47 +72,53 @@ return t.spec("c0254 spend rows say who spent them", function(it)
 		t.expect(rows[1].model).toBe("claude-opus-5-5")
 	end)
 
-	it("AC4: a file with the old header still reads, and takes new rows without losing their host and CLI", function()
-		local old = buffer.appendTsv(nil, { row("build", "m1", nil, nil) })
-		t.expect(string.split(old, "\n")[1]).toBe(buffer.HEADER)
-		local rows = buffer.parseTsv(old) :: { ledger.Row }
-		t.expect(rows[1].host).toBe(nil)
-		t.expect(rows[1].cli).toBe(nil)
-		local grown = buffer.appendTsv(old, { row("build", "m2", "h2", "grok") })
-		local both = buffer.parseTsv(grown) :: { ledger.Row }
-		t.expect(#both).toBe(2)
-		t.expect(both[1].host).toBe(nil)
-		t.expect(both[2].host).toBe("h2")
-		t.expect(both[2].cli).toBe("grok")
-		-- the rows already in the file are byte for byte as they were
-		t.expect(string.sub(grown, 1, #old)).toBe(old)
-	end)
-
-	it("AC4: the fold stamps every row it writes with this host and the step's CLI, next to its model", function()
-		local root = `{BASE}/fold`
-		if fs.isDir(root) then
-			fs.removeDir(root)
+	it(
+		"AC4: a file with the old header still reads, and takes new rows without losing their host and CLI",
+		function()
+			local old = buffer.appendTsv(nil, { row("build", "m1", nil, nil) })
+			t.expect(string.split(old, "\n")[1]).toBe(buffer.HEADER)
+			local rows = buffer.parseTsv(old) :: { ledger.Row }
+			t.expect(rows[1].host).toBe(nil)
+			t.expect(rows[1].cli).toBe(nil)
+			local grown = buffer.appendTsv(old, { row("build", "m2", "h2", "grok") })
+			local both = buffer.parseTsv(grown) :: { ledger.Row }
+			t.expect(#both).toBe(2)
+			t.expect(both[1].host).toBe(nil)
+			t.expect(both[2].host).toBe("h2")
+			t.expect(both[2].cli).toBe("grok")
+			-- the rows already in the file are byte for byte as they were
+			t.expect(string.sub(grown, 1, #old)).toBe(old)
 		end
-		fs.writeDir(`{root}/item`)
-		withEnv({ ZN_CLI = "grok", ZN_MODEL = "grok-4.7" }, { "CLAUDECODE" }, function()
-			local planned = costrow.plan(
-				root,
-				{ c0010 = `{root}/item` },
-				{ c0010 = { row("build", "grok-4.7", nil, nil) } },
-				false
-			)
-			t.expect(#planned.files).toBe(1)
-			local file = planned.files[1]
-			t.expect(string.find(file.path, "/item/spend.d/", 1, true) ~= nil).toBe(true)
-			local rows = buffer.parseTsv(file.text) :: { ledger.Row }
-			t.expect(rows[1].cli).toBe("grok")
-			t.expect(rows[1].model).toBe("grok-4.7")
-			-- the host is the machine's, the same word the file name starts with
-			local host = rows[1].host :: string
-			t.expect(host ~= "").toBe(true)
-			t.expect(string.sub(string.match(file.path, "([^/]+)%.tsv$") :: string, 1, #host)).toBe(host)
-		end)
-	end)
+	)
+
+	it(
+		"AC4: the fold stamps every row it writes with this host and the step's CLI, next to its model",
+		function()
+			local root = `{BASE}/fold`
+			if fs.isDir(root) then
+				fs.removeDir(root)
+			end
+			fs.writeDir(`{root}/item`)
+			withEnv({ ZN_CLI = "grok", ZN_MODEL = "grok-4.7" }, { "CLAUDECODE" }, function()
+				local planned = costrow.plan(
+					root,
+					{ c0010 = `{root}/item` },
+					{ c0010 = { row("build", "grok-4.7", nil, nil) } },
+					false
+				)
+				t.expect(#planned.files).toBe(1)
+				local file = planned.files[1]
+				t.expect(string.find(file.path, "/item/spend.d/", 1, true) ~= nil).toBe(true)
+				local rows = buffer.parseTsv(file.text) :: { ledger.Row }
+				t.expect(rows[1].cli).toBe("grok")
+				t.expect(rows[1].model).toBe("grok-4.7")
+				-- the host is the machine's, the same word the file name starts with
+				local host = rows[1].host :: string
+				t.expect(host ~= "").toBe(true)
+				t.expect(string.sub(string.match(file.path, "([^/]+)%.tsv$") :: string, 1, #host)).toBe(host)
+			end)
+		end
+	)
 
 	it("AC4: a row that already says its host and CLI keeps them", function()
 		local root = `{BASE}/keep`

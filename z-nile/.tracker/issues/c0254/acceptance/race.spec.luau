@@ -61,7 +61,12 @@ return t.spec("c0254 two hosts claim one issue", function(it)
 		local stamp = stampOnOrigin()
 		t.expect(string.sub(stamp, 1, 10)).toBe("preparing-")
 		local tip = fixture.git(f.origin, { "rev-parse", "main" })
-		local b = trackerfix.tr(f, wtB, { "status", "c0010", "preparing" }, { ZN_CLI = "grok", ZN_MODEL = "grok-4.7" })
+		local b = trackerfix.tr(
+			f,
+			wtB,
+			{ "status", "c0010", "preparing" },
+			{ ZN_CLI = "grok", ZN_MODEL = "grok-4.7" }
+		)
 		t.expect(b.ok).toBe(false)
 		t.expect(has(b.stderr, "cannot move to preparing")).toBe(true)
 		t.expect(fixture.git(f.origin, { "rev-parse", "main" })).toBe(tip)
@@ -70,7 +75,8 @@ return t.spec("c0254 two hosts claim one issue", function(it)
 	end)
 
 	it("AC5: the claim commit says who made it, and the board reads it back", function()
-		local body = fixture.git(f.origin, { "log", "main", "-1", "--format=%B", "--grep=^tracker: c0010 preparing" })
+		local body =
+			fixture.git(f.origin, { "log", "main", "-1", "--format=%B", "--grep=^tracker: c0010 preparing" })
 		local line = string.match(body, "(Worker: [^\n]+)") :: string
 		t.expect(line ~= nil).toBe(true)
 		local who = xhost.parseTrailer(line)
@@ -118,34 +124,42 @@ return t.spec("c0254 two hosts claim one issue", function(it)
 		t.expect(fixture.git(wtA, { "status", "--porcelain" })).toBe("")
 	end)
 
-	it("AC2, AC3: once host B holds the claim, host A's next commit stays local and origin keeps B's branch", function()
-		local taker = trackerfix.trOk(f, f.other, { "worktree", "prep-c0010" })
-		-- the takeover as the heartbeat raft publishes it: the old claim gives way and host B claims in one step
-		local gave = trackerfix.tr(f, taker, { "status", "c0010", "new" })
-		t.expect(gave.ok).toBe(true)
-		local took = trackerfix.tr(
-			f,
-			taker,
-			{ "status", "c0010", "preparing" },
-			{ ZN_CLI = "grok", ZN_MODEL = "grok-4.7" }
-		)
-		t.expect(took.ok).toBe(true)
-		fs.writeFile(`{taker}/pickman/.tracker/issues/c0010/notes-3.md`, "from the taker\n")
-		local pushedB = trackerfix.tr(f, taker, { "commit", "-m", "tracker: prep c0010 draft 3" }, { ZN_CLI = "grok" })
-		t.expect(pushedB.ok).toBe(true)
-		local tipB = fixture.git(taker, { "rev-parse", "HEAD" })
-		t.expect(fixture.git(f.origin, { "rev-parse", "prep-c0010" })).toBe(tipB)
-		-- host A wakes up and commits: the commit stands, the push is refused and says why
-		fs.writeFile(`{wtA}/pickman/.tracker/issues/c0010/notes-late.md`, "late\n")
-		local late = trackerfix.tr(f, wtA, { "commit", "-m", "tracker: prep c0010 late" }, HOST_A)
-		t.expect(late.ok).toBe(true)
-		t.expect(has(late.stderr, "was taken over by another worker")).toBe(true)
-		t.expect(fixture.git(f.origin, { "rev-parse", "prep-c0010" })).toBe(tipB)
-		t.expect(fixture.git(wtA, { "rev-parse", "HEAD" }) ~= tipB).toBe(true)
-		-- the board now names host B's worker, not host A's
-		fixture.git(f.main, { "fetch", "-q", "origin" })
-		local facts = board.readFacts(f.main)
-		local holders = xhost.holders(facts.workers or {}, { c0010 = stampOnOrigin() })
-		t.expect(holders.c0010.cli).toBe("grok")
-	end)
+	it(
+		"AC2, AC3: once host B holds the claim, host A's next commit stays local and origin keeps B's branch",
+		function()
+			local taker = trackerfix.trOk(f, f.other, { "worktree", "prep-c0010" })
+			-- the takeover as the heartbeat raft publishes it: the old claim gives way and host B claims in one step
+			local gave = trackerfix.tr(f, taker, { "status", "c0010", "new" })
+			t.expect(gave.ok).toBe(true)
+			local took = trackerfix.tr(
+				f,
+				taker,
+				{ "status", "c0010", "preparing" },
+				{ ZN_CLI = "grok", ZN_MODEL = "grok-4.7" }
+			)
+			t.expect(took.ok).toBe(true)
+			fs.writeFile(`{taker}/pickman/.tracker/issues/c0010/notes-3.md`, "from the taker\n")
+			local pushedB = trackerfix.tr(
+				f,
+				taker,
+				{ "commit", "-m", "tracker: prep c0010 draft 3" },
+				{ ZN_CLI = "grok" }
+			)
+			t.expect(pushedB.ok).toBe(true)
+			local tipB = fixture.git(taker, { "rev-parse", "HEAD" })
+			t.expect(fixture.git(f.origin, { "rev-parse", "prep-c0010" })).toBe(tipB)
+			-- host A wakes up and commits: the commit stands, the push is refused and says why
+			fs.writeFile(`{wtA}/pickman/.tracker/issues/c0010/notes-late.md`, "late\n")
+			local late = trackerfix.tr(f, wtA, { "commit", "-m", "tracker: prep c0010 late" }, HOST_A)
+			t.expect(late.ok).toBe(true)
+			t.expect(has(late.stderr, "was taken over by another worker")).toBe(true)
+			t.expect(fixture.git(f.origin, { "rev-parse", "prep-c0010" })).toBe(tipB)
+			t.expect(fixture.git(wtA, { "rev-parse", "HEAD" }) ~= tipB).toBe(true)
+			-- the board now names host B's worker, not host A's
+			fixture.git(f.main, { "fetch", "-q", "origin" })
+			local facts = board.readFacts(f.main)
+			local holders = xhost.holders(facts.workers or {}, { c0010 = stampOnOrigin() })
+			t.expect(holders.c0010.cli).toBe("grok")
+		end
+	)
 end)

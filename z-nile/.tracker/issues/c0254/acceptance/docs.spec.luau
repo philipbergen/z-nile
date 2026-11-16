@@ -31,15 +31,18 @@ return t.spec("c0254 the docs say what a worker on several hosts does", function
 		at(s, "exit 6 (`taken`)", "README")
 	end)
 
-	it("AC6: the paragraph names the pushes, the trailer, the spend cells and where who-holds-what shows", function()
-		local s = read("z-nile/README.md")
-		at(s, "pushes its layer branch and a prep branch after every commit", "README")
-		at(s, "builds its own worktree from the pushed branch", "README")
-		at(s, "never pushes that branch again", "README")
-		at(s, "`Worker:` trailer with the worker's host, CLI and model", "README")
-		at(s, "spend rows record the host, the CLI and the model", "README")
-		at(s, '("held by") and `./zn work status`', "README")
-	end)
+	it(
+		"AC6: the paragraph names the pushes, the trailer, the spend cells and where who-holds-what shows",
+		function()
+			local s = read("z-nile/README.md")
+			at(s, "pushes its layer branch and a prep branch after every commit", "README")
+			at(s, "builds its own worktree from the pushed branch", "README")
+			at(s, "never pushes that branch again", "README")
+			at(s, "`Worker:` trailer with the worker's host, CLI and model", "README")
+			at(s, "spend rows record the host, the CLI and the model", "README")
+			at(s, '("held by") and `./zn work status`', "README")
+		end
+	)
 
 	it("AC6: the capability table lists the feature as built", function()
 		at(

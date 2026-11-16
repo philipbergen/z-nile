@@ -19,28 +19,53 @@ local BEFORE = seen("backlog", "new", "new-aaa-bbb-ccc")
 
 return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 	it("AC1: a claim step that exits 0 is won", function()
-		t.expect(xhost.claimOutcome(0, BEFORE, seen("backlog", "preparing", "preparing-x-y-z"), "preparing-x-y-z"))
+		t.expect(
+			xhost.claimOutcome(0, BEFORE, seen("backlog", "preparing", "preparing-x-y-z"), "preparing-x-y-z")
+		)
 			.toBe("won")
 	end)
 
-	it("AC1: a failed claim is lost only when origin/main shows the item moved under another stamp", function()
-		local after = seen("backlog", "preparing", "preparing-x-y-z")
-		t.expect(xhost.claimOutcome(1, BEFORE, after, "")).toBe("lost")
-		t.expect(xhost.claimOutcome(1, BEFORE, after, "preparing-other-one-two")).toBe("lost")
-		t.expect(xhost.claimOutcome(1, seen("backlog", "prepared", "p"), seen("active", "active", "active-a-b-c"), ""))
-			.toBe("lost")
-		t.expect(xhost.claimOutcome(1, seen("backlog", "prepared", "p"), seen("done", "done", "done-a-b-c"), ""))
-			.toBe("lost")
-	end)
+	it(
+		"AC1: a failed claim is lost only when origin/main shows the item moved under another stamp",
+		function()
+			local after = seen("backlog", "preparing", "preparing-x-y-z")
+			t.expect(xhost.claimOutcome(1, BEFORE, after, "")).toBe("lost")
+			t.expect(xhost.claimOutcome(1, BEFORE, after, "preparing-other-one-two")).toBe("lost")
+			t.expect(
+				xhost.claimOutcome(
+					1,
+					seen("backlog", "prepared", "p"),
+					seen("active", "active", "active-a-b-c"),
+					""
+				)
+			).toBe("lost")
+			t.expect(
+				xhost.claimOutcome(
+					1,
+					seen("backlog", "prepared", "p"),
+					seen("done", "done", "done-a-b-c"),
+					""
+				)
+			)
+				.toBe("lost")
+		end
+	)
 
 	it(
 		"AC1: a failed claim that moved nothing, that cannot be read, or whose stamp is this worker's is a failure",
 		function()
-			t.expect(xhost.claimOutcome(1, BEFORE, seen("backlog", "new", "new-aaa-bbb-ccc"), "")).toBe("failed")
+			t.expect(xhost.claimOutcome(1, BEFORE, seen("backlog", "new", "new-aaa-bbb-ccc"), ""))
+				.toBe("failed")
 			t.expect(xhost.claimOutcome(1, BEFORE, nil, "")).toBe("failed")
 			-- the push landed and the step failed afterwards: the claim is this worker's own
-			t.expect(xhost.claimOutcome(1, BEFORE, seen("backlog", "preparing", "preparing-x-y-z"), "preparing-x-y-z"))
-				.toBe("failed")
+			t.expect(
+				xhost.claimOutcome(
+					1,
+					BEFORE,
+					seen("backlog", "preparing", "preparing-x-y-z"),
+					"preparing-x-y-z"
+				)
+			).toBe("failed")
 		end
 	)
 
@@ -49,7 +74,12 @@ return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 		local ctx = {
 			origin = function(_id: string)
 				reads += 1
-				return { path = "p", state = "backlog", status = "preparing", front = { status = "preparing-x-y-z" } }
+				return {
+					path = "p",
+					state = "backlog",
+					status = "preparing",
+					front = { status = "preparing-x-y-z" },
+				}
 			end,
 			memoryIn = function(_dir: string, _id: string)
 				return ""
@@ -125,7 +155,10 @@ return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 		t.expect(supervise.afterDispatch("raft", 1, 1).kind).toBe("stop")
 	end)
 
-	local function world(nexts: { string }, codes: { [string]: number }): (workloop.World, { string }, { number })
+	local function world(
+		nexts: { string },
+		codes: { [string]: number }
+	): (workloop.World, { string }, { number })
 		local calls: { string } = {}
 		local sleeps: { number } = {}
 		local n = 0
@@ -165,19 +198,24 @@ return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 		return w, calls, sleeps
 	end
 
-	it("AC1: a lost race takes the next pick at once, is not a failure and is not counted as an item taken", function()
-		local w, calls, sleeps = world({ "R0010 raft first", "R0020 raft second" }, { R0010 = 6 })
-		local summary = workloop.run(w, { once = false, maxItems = 1 })
-		t.expect(#calls).toBe(2)
-		t.expect(string.find(calls[1] :: string, "R0010", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(calls[2] :: string, "R0020", 1, true) ~= nil).toBe(true)
-		t.expect(#sleeps).toBe(0)
-		t.expect(summary.moved[1]).toBe("R0020")
-		t.expect((summary.lost :: { string })[1]).toBe("R0010")
-		t.expect(#summary.blocked).toBe(0)
-		t.expect(string.find(supervise.summary(summary), "claimed by another worker first: R0010", 1, true) ~= nil)
-			.toBe(true)
-	end)
+	it(
+		"AC1: a lost race takes the next pick at once, is not a failure and is not counted as an item taken",
+		function()
+			local w, calls, sleeps = world({ "R0010 raft first", "R0020 raft second" }, { R0010 = 6 })
+			local summary = workloop.run(w, { once = false, maxItems = 1 })
+			t.expect(#calls).toBe(2)
+			t.expect(string.find(calls[1] :: string, "R0010", 1, true) ~= nil).toBe(true)
+			t.expect(string.find(calls[2] :: string, "R0020", 1, true) ~= nil).toBe(true)
+			t.expect(#sleeps).toBe(0)
+			t.expect(summary.moved[1]).toBe("R0020")
+			t.expect((summary.lost :: { string })[1]).toBe("R0010")
+			t.expect(#summary.blocked).toBe(0)
+			t.expect(
+				string.find(supervise.summary(summary), "claimed by another worker first: R0010", 1, true)
+					~= nil
+			).toBe(true)
+		end
+	)
 
 	it("AC1: the same item lost twice in a row waits one idle period instead of spinning", function()
 		local w, _calls, sleeps = world({ "R0010 raft a", "R0010 raft b", "R0020 raft c" }, { R0010 = 6 })
@@ -300,22 +338,29 @@ return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 		t.expect(xhost.identity({ ZN_MODEL = "x y" }, "h").model).toBe("")
 	end)
 
-	it("AC5: the Worker trailer round-trips and reads the newest holder of the item's current stamp", function()
-		local a = xhost.trailer("c0010", "preparing-a-b-c", { host = "h1", cli = "claude", model = "claude-opus-5-5" })
-		local b = xhost.trailer("c0010", "preparing-d-e-f", { host = "h2", cli = "grok", model = "" })
-		t.expect(a).toBe("Worker: c0010 preparing-a-b-c host=h1 cli=claude model=claude-opus-5-5")
-		local parsed = xhost.parseTrailer(b)
-		t.expect(parsed ~= nil and parsed.model or "x").toBe("")
-		t.expect(xhost.parseTrailer("Worker: nonsense")).toBe(nil)
-		-- newest first: b (the takeover) is the holder of the current stamp; a's stamp is gone
-		local holders = xhost.holders({ b, a }, { c0010 = "preparing-d-e-f" })
-		t.expect(holders.c0010.host).toBe("h2")
-		t.expect(xhost.holderText(holders.c0010)).toBe("h2 (grok)")
-		-- a stamp nobody's trailer names has no holder
-		t.expect(xhost.holders({ b, a }, { c0010 = "preparing-z-z-z" }).c0010).toBe(nil)
-		t.expect(xhost.holderText(xhost.holders({ a }, { c0010 = "preparing-a-b-c" }).c0010))
-			.toBe("h1 (claude, claude-opus-5-5)")
-	end)
+	it(
+		"AC5: the Worker trailer round-trips and reads the newest holder of the item's current stamp",
+		function()
+			local a = xhost.trailer(
+				"c0010",
+				"preparing-a-b-c",
+				{ host = "h1", cli = "claude", model = "claude-opus-5-5" }
+			)
+			local b = xhost.trailer("c0010", "preparing-d-e-f", { host = "h2", cli = "grok", model = "" })
+			t.expect(a).toBe("Worker: c0010 preparing-a-b-c host=h1 cli=claude model=claude-opus-5-5")
+			local parsed = xhost.parseTrailer(b)
+			t.expect(parsed ~= nil and parsed.model or "x").toBe("")
+			t.expect(xhost.parseTrailer("Worker: nonsense")).toBe(nil)
+			-- newest first: b (the takeover) is the holder of the current stamp; a's stamp is gone
+			local holders = xhost.holders({ b, a }, { c0010 = "preparing-d-e-f" })
+			t.expect(holders.c0010.host).toBe("h2")
+			t.expect(xhost.holderText(holders.c0010)).toBe("h2 (grok)")
+			-- a stamp nobody's trailer names has no holder
+			t.expect(xhost.holders({ b, a }, { c0010 = "preparing-z-z-z" }).c0010).toBe(nil)
+			t.expect(xhost.holderText(xhost.holders({ a }, { c0010 = "preparing-a-b-c" }).c0010))
+				.toBe("h1 (claude, claude-opus-5-5)")
+		end
+	)
 
 	it(
 		"AC5: ./zn work status names the worker that holds each raft, and says nothing extra when none is known",
@@ -346,9 +391,13 @@ return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 			end
 			local with = work.status({ raft("h2 (grok, grok-4.7)") })[1] :: string
 			t.expect(
-				string.find(with, "holder Ann <ann@example.invalid> worker h2 (grok, grok-4.7) since", 1, true) ~= nil
-			)
-				.toBe(true)
+				string.find(
+					with,
+					"holder Ann <ann@example.invalid> worker h2 (grok, grok-4.7) since",
+					1,
+					true
+				) ~= nil
+			).toBe(true)
 			local without = work.status({ raft(nil) })[1] :: string
 			t.expect(string.find(without, "worker", 1, true)).toBe(nil)
 		end
