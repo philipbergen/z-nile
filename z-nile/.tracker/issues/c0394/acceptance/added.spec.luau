@@ -39,26 +39,43 @@ return t.spec("c0394 added: place and blocker over a raft's order", function(it)
 	end)
 
 	it(
-		"a before naming an added issue or no member is a problem, and a landed issue is not judged",
+		"a before naming no unlanded member, itself or a ring is a problem, and a landed issue is not judged",
 		function()
+			local gone = fact("c0001", { landed = true })
 			local t1 = fact("c0010")
 			local front = fact("c0200", { waits = "approval", before = "c0010" })
-			local second = fact("c0201", { waits = "approval", before = "c0200" }) -- names an added issue
-			local nowhere = fact("c0202", { waits = "approval", before = "c9999" }) -- names no member
-			local facts = { t1, front, second, nowhere }
+			local onAdded = fact("c0201", { waits = "approval", before = "c0200" }) -- names another added issue: allowed
+			local onLanded = fact("c0202", { waits = "approval", before = "c0001" }) -- names a landed member
+			local nowhere = fact("c0203", { waits = "approval", before = "c9999" }) -- names no member
+			local itself = fact("c0204", { waits = "approval", before = "c0204" })
+			local ringA = fact("c0205", { waits = "approval", before = "c0206" })
+			local ringB = fact("c0206", { waits = "approval", before = "c0205" })
+			local facts = { gone, t1, front, onAdded, onLanded, nowhere, itself, ringA, ringB }
 			t.expect(added.problem(front, facts)).toBe(nil)
-			for _, bad in { second, nowhere } do
+			t.expect(added.problem(onAdded, facts)).toBe(nil)
+			for _, bad in { onLanded, nowhere, itself, ringA, ringB } do
 				local why = added.problem(bad, facts)
 				t.expect(why ~= nil).toBe(true)
 				t.expect(has(why :: string, bad.id)).toBe(true)
 				t.expect(has(why :: string, "before")).toBe(true)
-				t.expect(has(why :: string, bad.before :: string)).toBe(true)
 			end
 			-- after the first landing T2 is in done/ and its `before: c0010` names a landed member: not judged
-			local landed = fact("c0203", { landed = true, waits = "approval", before = "c9999" })
+			local landed = fact("c0207", { landed = true, waits = "approval", before = "c9999" })
 			t.expect(added.problem(landed, { landed, t1 })).toBe(nil)
 		end
 	)
+
+	it("place puts an added issue before another added issue", function()
+		local facts = {
+			fact("c0010"),
+			fact("c0200", { waits = "approval", before = "c0010" }),
+			fact("c0201", { waits = "approval", before = "c0200" }),
+			fact("c0202", { waits = "approval" }),
+			fact("c0203", { waits = "approval", before = "c0202" }),
+		}
+		-- X2 before X1 before T1, and a pair placed last
+		t.expect(added.place({ "c0010" }, facts)).toEqual({ "c0201", "c0200", "c0010", "c0203", "c0202" })
+	end)
 
 	it("place puts an added issue before the member it names, else last, lowest id first", function()
 		local facts = {

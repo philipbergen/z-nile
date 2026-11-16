@@ -65,8 +65,11 @@ exit 0
 local f: trackerfix.Fixture
 local log, state = "", ""
 local env: { [string]: string } = {}
-local wt1, wt2, wt3 = "", "", ""
-local T2, T3, W, Z = "", "", "", "" -- the added issues
+local wt1, wt2, wt3, wt4 = "", "", "", ""
+local X = "" -- the added issue of R0040
+local patchC = ""
+local reviewsC: { string } = {}
+local T2, T3, W, Z, Z2 = "", "", "", "", "" -- the added issues
 
 local function must(r: fixture.Result, what: string): string
 	if not r.ok then
@@ -282,11 +285,12 @@ local function restacked(dir: string, raft: string)
 	git(dir, { "reset", "-q", "--hard", `origin/{branch}` })
 end
 
--- ./zn new issue c <slug> --raft <raft> --wait --found <found> [--before]
-local function add(dir: string, raft: string, slug: string, found: string, front: boolean): fixture.Result
+-- ./zn new issue c <slug> --raft <raft> --wait --found <found> [--before <id>]
+local function add(dir: string, raft: string, slug: string, found: string, before: string?): fixture.Result
 	local args = { "new", "issue", "c", slug, "--raft", raft, "--wait", "--found", found }
-	if front then
+	if before then
 		table.insert(args, "--before")
+		table.insert(args, before)
 	end
 	return tr(dir, args)
 end
@@ -364,7 +368,7 @@ end
 return t.spec(
 	"c0394 an added issue is placed in the raft, and the raft lands as far as its place allows",
 	function(it)
-		it("sets up three readied rafts behind a local github-shaped origin", function()
+		it("sets up four readied rafts behind a local github-shaped origin", function()
 			local seed: { [string]: string } = {
 				[".gitignore"] = fs.readFile(`{fixture.physical(".")}/../.gitignore`),
 				["pickman/.tracker/architecture.md"] = "# Architecture\n",
@@ -382,6 +386,14 @@ return t.spec(
 				seed[`{ROOT}/issues/{id}/check.sh`] = CHECK
 				seed[`{ROOT}/issues/{id}/acceptance/.gitkeep`] = ""
 			end
+			-- R0040 holds A (c0060), B (c0070) and C (c0080)
+			seed[`{ROOT}/rafts/R0040/R0040.md`] = raftDoc("R0040", "delta", "c0060, c0070, c0080")
+			seed[`{ROOT}/rafts/R0040/check.sh`] = CHECK
+			for _, id in { "c0060", "c0070", "c0080" } do
+				seed[`{ROOT}/issues/{id}/{id}.md`] = issue(id, "delta", "R0040")
+				seed[`{ROOT}/issues/{id}/check.sh`] = CHECK
+				seed[`{ROOT}/issues/{id}/acceptance/.gitkeep`] = ""
+			end
 			f = trackerfix.new("c0394-part-land-github.com", seed)
 			local bin = `{f.base}/bin`
 			log, state = `{f.base}/gh.log`, `{f.base}/gh-state`
@@ -390,7 +402,7 @@ return t.spec(
 			fs.writeFile(`{bin}/gh`, (string.gsub((string.gsub(GH, "@LOG@", log)), "@STATE@", state)))
 			process.exec("chmod", { "+x", `{bin}/gh` })
 			env = { PATH = `{bin}:{process.env.PATH or ""}` }
-			for _, raft in { "R0010", "R0020", "R0030" } do
+			for _, raft in { "R0010", "R0020", "R0030", "R0040" } do
 				trackerfix.trOk(f, f.main, { "ready", raft })
 			end
 			wt1 = begin("R0010")
@@ -407,13 +419,13 @@ return t.spec(
 				-- T1's layer is open with work on it. T2 breaks with T1 (in front of the layer you are on); T3 can wait (last)
 				work(wt1, T1, "alpha")
 				local layerCommits = git(wt1, { "rev-list", "--count", "origin/main..HEAD" })
-				local r2 = add(wt1, "R0010", "found-in-front", FOUND2, true)
+				local r2 = add(wt1, "R0010", "found-in-front", FOUND2, T1)
 				T2 = idOf(r2)
 				t.expect(T2 ~= "").toBe(true)
 				-- each publication moves origin/main: put the layer back on it before the next
 				ensurePublished(wt1, "R0010", T2, FOUND2, T1)
 				restacked(wt1, "R0010")
-				local r3 = add(wt1, "R0010", "found-last", FOUND3, false)
+				local r3 = add(wt1, "R0010", "found-last", FOUND3, nil)
 				T3 = idOf(r3)
 				t.expect(T3 ~= "").toBe(true)
 				ensurePublished(wt1, "R0010", T3, FOUND3, nil)
@@ -615,11 +627,11 @@ return t.spec(
 			t.expect(git(f.origin, { "rev-parse", "main" })).toBe(before)
 		end)
 
-		it("--wait needs --raft and --found, and --before needs a layer of the raft", function()
+		it("--wait needs --raft and --found, and --before needs an unlanded member", function()
 			local before = git(f.origin, { "rev-parse", "main" })
 			local bare = tr(wt1, { "new", "issue", "c", "found-bare", "--wait", "--found", FOUND3 })
 			local noFound = tr(wt1, { "new", "issue", "c", "found-unplaced", "--raft", "R0010", "--wait" })
-			-- wt1 is on T1's layer, which has landed: it is not a layer you can put an issue in front of
+			-- T1 has landed: it is not an unlanded member any more
 			local landed = tr(wt1, {
 				"new",
 				"issue",
@@ -631,6 +643,20 @@ return t.spec(
 				"--found",
 				FOUND3,
 				"--before",
+				T1,
+			})
+			local nowhere = tr(wt1, {
+				"new",
+				"issue",
+				"c",
+				"found-nowhere",
+				"--raft",
+				"R0010",
+				"--wait",
+				"--found",
+				FOUND3,
+				"--before",
+				"c9999",
 			})
 			local unchanged = git(f.origin, { "rev-parse", "main" }) == before
 			-- a tool that does not refuse leaves stray issues behind: clean the worktree so the cases below stand alone
@@ -644,7 +670,9 @@ return t.spec(
 			t.expect(noFound.ok).toBe(false)
 			t.expect(has(say(noFound), "--found")).toBe(true)
 			t.expect(landed.ok).toBe(false)
-			t.expect(has(say(landed), "--before puts the issue in front of the layer you are on")).toBe(true)
+			t.expect(has(say(landed), `--before {T1}: {T1} is not an unlanded member of R0010`)).toBe(true)
+			t.expect(nowhere.ok).toBe(false)
+			t.expect(has(say(nowhere), "--before c9999: c9999 is not an unlanded member of R0010")).toBe(true)
 			t.expect(unchanged).toBe(true)
 		end)
 
@@ -683,10 +711,83 @@ return t.spec(
 			t.expect(has(tree(), `{ROOT}/rafts/done/R0010/trace-002.md`)).toBe(true)
 		end)
 
+		it("sets up R0040 with C built above a waiting X, and A and B landed", function()
+			-- A, B, C in order; X is added in front of C while B is open, so the raft is A, B, X, C
+			wt4 = begin("R0040")
+			work(wt4, "c0060", "a")
+			zn(wt4, { "finish", "c0060" })
+			review(wt4, "c0060")
+			zn(wt4, { "start", "R0040" })
+			work(wt4, "c0070", "b")
+			local rx = add(wt4, "R0040", "found-before-c", "R0040 c0070 layer", "c0080")
+			X = idOf(rx)
+			t.expect(X ~= "").toBe(true)
+			ensurePublished(wt4, "R0040", X, "R0040 c0070 layer", "c0080")
+			restacked(wt4, "R0040")
+			zn(wt4, { "finish", "c0070" })
+			review(wt4, "c0070")
+			-- work goes on above the waiting X: C's layer opens, and is finished and reviewed
+			zn(wt4, { "start", "R0040" })
+			t.expect(git(wt4, { "branch", "--show-current" })).toBe("R0040/3/c0080")
+			work(wt4, "c0080", "c")
+			zn(wt4, { "finish", "c0080" })
+			review(wt4, "c0080")
+			patchC = patchOf(wt4, finishSha(wt4, "c0080"))
+			reviewsC = reviewFiles(wt4, "c0080")
+			-- A and B land (through B, the member below X); C does not
+			git(wt4, { "switch", "-q", "R0040/2/c0070" })
+			sealBind(wt4, "R0040", nil)
+			local landed = tr(wt4, { "done", "R0040" })
+			t.expect(landed.ok).toBe(true)
+			t.expect(onOrigin(`{ROOT}/issues/done/c0060/c0060.md`) ~= nil).toBe(true)
+			t.expect(onOrigin(`{ROOT}/issues/done/c0070/c0070.md`) ~= nil).toBe(true)
+			t.expect(onOrigin(`{ROOT}/issues/done/c0080/c0080.md`)).toBe(nil)
+		end)
+
+		it(
+			"a layer finished above a waiting issue stays finished when the layers below land, and is restacked on the issue once it is approved",
+			function()
+				git(wt4, { "fetch", "-q", "origin" })
+				-- C's layer is as it was: the landing below did not touch it
+				git(wt4, { "switch", "-q", "R0040/3/c0080" })
+				git(wt4, { "reset", "-q", "--hard", "origin/R0040/3/c0080" })
+				t.expect(patchOf(wt4, finishSha(wt4, "c0080"))).toBe(patchC)
+				t.expect(reviewFiles(wt4, "c0080")).toEqual(reviewsC)
+				-- X is approved and built; it is cut from origin/main, below C
+				designOnMain(X)
+				approveOnMain(X)
+				git(wt4, { "fetch", "-q", "origin" })
+				local started = tr(wt4, { "start", "R0040" })
+				t.expect(started.ok).toBe(true)
+				t.expect(git(wt4, { "branch", "--show-current" })).toBe(`R0040/4/{X}`)
+				t.expect(has(fs.readFile(log), `--base main --head R0040/4/{X}`)).toBe(true)
+				work(wt4, X, "x")
+				zn(wt4, { "finish", X })
+				review(wt4, X)
+				-- restack puts C on X without a conflict
+				local restack = tr(wt4, { "restack", "R0040" })
+				t.expect(restack.ok).toBe(true)
+				git(wt4, { "fetch", "-q", "origin" })
+				local below = fixture.exec(
+					f.main,
+					"git",
+					{ "merge-base", "--is-ancestor", `origin/R0040/4/{X}`, "origin/R0040/3/c0080" }
+				)
+				t.expect(below.ok).toBe(true)
+				-- C is finished again on its new base, its patch and review are the same
+				git(wt4, { "switch", "-q", "R0040/3/c0080" })
+				git(wt4, { "reset", "-q", "--hard", "origin/R0040/3/c0080" })
+				zn(wt4, { "finish", "c0080" })
+				t.expect(patchOf(wt4, finishSha(wt4, "c0080"))).toBe(patchC)
+				t.expect(reviewFiles(wt4, "c0080")).toEqual(reviewsC)
+				t.expect(has(stackLine("R0040", "c0080"), " complete")).toBe(true)
+			end
+		)
+
 		it("sets up R0020 landed through V1 with W last waiting", function()
 			wt2 = begin("R0020")
 			work(wt2, "c0030", "beta")
-			local rw = add(wt2, "R0020", "found-last", "R0020 c0030 layer", false)
+			local rw = add(wt2, "R0020", "found-last", "R0020 c0030 layer", nil)
 			W = idOf(rw)
 			t.expect(W ~= "").toBe(true)
 			ensurePublished(wt2, "R0020", W, "R0020 c0030 layer", nil)
@@ -732,13 +833,19 @@ return t.spec(
 			end
 		)
 
-		it("sets up R0030 with Z in front of X1", function()
+		it("sets up R0030 with Z2 in front of Z in front of X1", function()
 			wt3 = begin("R0030")
 			work(wt3, "c0040", "gamma")
-			local rz = add(wt3, "R0030", "found-in-front", "R0030 c0040 review-001 F1 high", true)
+			local rz = add(wt3, "R0030", "found-in-front", "R0030 c0040 review-001 F1 high", "c0040")
 			Z = idOf(rz)
 			t.expect(Z ~= "").toBe(true)
 			ensurePublished(wt3, "R0030", Z, "R0030 c0040 review-001 F1 high", "c0040")
+			restacked(wt3, "R0030")
+			-- Z2 goes in front of Z: an added issue placed before another added issue
+			local rz2 = add(wt3, "R0030", "found-before-found", "R0030 c0040 review-001 F2 high", Z)
+			Z2 = idOf(rz2)
+			t.expect(Z2 ~= "").toBe(true)
+			ensurePublished(wt3, "R0030", Z2, "R0030 c0040 review-001 F2 high", Z)
 			restacked(wt3, "R0030")
 			zn(wt3, { "finish", "c0040" })
 			review(wt3, "c0040")
@@ -782,15 +889,32 @@ return t.spec(
 			end
 		)
 
-		it("reject of an issue in front lets the layer behind it land", function()
-			-- Z waits in front of X1: nothing lands
-			t.expect(tr(wt3, { "done", "R0030" }).ok).toBe(false)
+		it("reject re-points an issue placed before the rejected one", function()
+			-- Z2 waits in front of Z, which waits in front of X1; rejecting Z takes Z2 to Z's own place
 			git(wt3, { "fetch", "-q", "origin" })
 			local rejected = human(wt3, { "reject", Z, "--lesson", "idle-finding" })
 			t.expect(rejected.ok).toBe(true)
+			t.expect(has(say(rejected), Z2)).toBe(true) -- the command says Z2 was re-pointed
+			t.expect(has(say(rejected), "before")).toBe(true)
 			t.expect(onOrigin(`{ROOT}/issues/active/{Z}/{Z}.md`)).toBe(nil)
 			t.expect(git(f.origin, { "log", "-1", "--format=%s", "main" }))
 				.toBe(`tracker: reject {Z} (idle-finding)`)
+			local doc = onOrigin(`{ROOT}/issues/active/{Z2}/{Z2}.md`) or ""
+			t.expect(doc ~= "").toBe(true)
+			t.expect(has(doc, `\nbefore: {Z}\n`)).toBe(false)
+			-- Z's own before: was c0040: Z2 takes it (or, with no before:, the key is gone and Z2 goes last)
+			t.expect(has(doc, "\nbefore: c0040\n") or not has(doc, "\nbefore: ")).toBe(true)
+		end)
+
+		it("reject of an issue in front lets the layer behind it land", function()
+			-- Z2 still waits in front of X1: nothing lands
+			t.expect(tr(wt3, { "done", "R0030" }).ok).toBe(false)
+			git(wt3, { "fetch", "-q", "origin" })
+			local rejected = human(wt3, { "reject", Z2, "--lesson", "idle-finding" })
+			t.expect(rejected.ok).toBe(true)
+			t.expect(onOrigin(`{ROOT}/issues/active/{Z2}/{Z2}.md`)).toBe(nil)
+			t.expect(git(f.origin, { "log", "-1", "--format=%s", "main" }))
+				.toBe(`tracker: reject {Z2} (idle-finding)`)
 			t.expect(onOrigin(`{ROOT}/rafts/active/R0030/R0030.md`) ~= nil).toBe(true) -- X1 has not landed yet
 			-- main moved: restack, write the landing's final review and trace again, and land the raft
 			zn(wt3, { "restack", "R0030" })

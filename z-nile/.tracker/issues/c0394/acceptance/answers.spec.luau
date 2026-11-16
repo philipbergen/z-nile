@@ -221,11 +221,12 @@ local function restacked(dir: string, raft: string)
 	git(dir, { "reset", "-q", "--hard", `origin/{branch}` })
 end
 
--- ./zn new issue c <slug> --raft <raft> --wait --found <found> [--before]
-local function add(dir: string, raft: string, slug: string, found: string, front: boolean): fixture.Result
+-- ./zn new issue c <slug> --raft <raft> --wait --found <found> [--before <id>]
+local function add(dir: string, raft: string, slug: string, found: string, before: string?): fixture.Result
 	local args = { "new", "issue", "c", slug, "--raft", raft, "--wait", "--found", found }
-	if front then
+	if before then
 		table.insert(args, "--before")
+		table.insert(args, before)
 	end
 	return tr(dir, args)
 end
@@ -342,11 +343,11 @@ return t.spec("c0394 review answers: dropped, added, and a legacy deferred", fun
 			.toBe(true)
 		-- Y goes in front of c0010 and X last, both made while c0010's layer is open; each is published to origin/main
 		work(wt, "c0010", "alpha")
-		local ry = add(wt, "R0010", "found-in-front", "R0010 c0010 review-001 F1 high", true)
+		local ry = add(wt, "R0010", "found-in-front", "R0010 c0010 review-001 F1 high", "c0010")
 		Y = idOf(ry)
 		ensurePublished(wt, "R0010", Y, "R0010 c0010 review-001 F1 high", "c0010")
 		restacked(wt, "R0010")
-		local rx = add(wt, "R0010", "found-last", "R0010 c0010 layer", false)
+		local rx = add(wt, "R0010", "found-last", "R0010 c0010 layer", nil)
 		X = idOf(rx)
 		ensurePublished(wt, "R0010", X, "R0010 c0010 layer", nil)
 		restacked(wt, "R0010")
@@ -438,7 +439,7 @@ return t.spec("c0394 review answers: dropped, added, and a legacy deferred", fun
 
 			-- c0030's layer: Z is added last and a high is answered with it. Refused until the user rules it
 			work(wt, "c0030", "beta")
-			local rz = add(wt, "R0010", "found-late", "R0010 c0030 layer", false)
+			local rz = add(wt, "R0010", "found-late", "R0010 c0030 layer", nil)
 			Z = idOf(rz)
 			ensurePublished(wt, "R0010", Z, "R0010 c0030 layer", nil)
 			restacked(wt, "R0010")
