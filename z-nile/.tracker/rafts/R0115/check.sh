@@ -13,6 +13,12 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0115
 
-# check "RC1: <end-to-end statement>" <command>
+# RC1: the real engine on this branch's tree reads both carried closes (c0278, Design section 8).
+closed_in() {
+  local project=$1 id=$2
+  "$ZN_ROOT/zn" list closed --project "$project" | grep -qw -e "$id" || { echo "list closed --project $project does not name $id"; return 1; }
+  if "$ZN_ROOT/zn" list --project "$project" | grep -qw -e "$id"; then echo "list --project $project still offers $id"; return 1; fi
+}
+check "RC1: the engine lists c0268 and c0224 as closed and no longer offers them" bash -c "$(declare -f closed_in); ZN_ROOT='$ZN_ROOT'; closed_in z-nile c0268 && closed_in arcade c0224"
 
 finish
