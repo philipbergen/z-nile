@@ -2773,6 +2773,13 @@ function dispatcher.claimVerdict(
 	)
 end
 
+-- c0254: the lost attempt leaves no failed step behind: the item may come back to this worker when the other releases it, and
+-- a run state that ended `failed` would stop that chain.
+function dispatcher.dropLostAttempt(st: State)
+	table.remove(st.history)
+	st.step, st.outcome, st.detail = nil, nil, "lost the claim: another worker holds it"
+end
+
 function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?): dispatch.Facts
 	local o = if id ~= "" then ctx.origin(id) else nil
 	local kind = if not o then "none" elseif store.isRaftId(id) then "raft" else "issue"
@@ -3296,10 +3303,7 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 					print(
 						`dispatch: {target} was claimed by another worker first; the next pick is the caller's`
 					)
-					-- the lost attempt leaves no failed step behind: the item may come back to this worker when the
-					-- other releases it, and a run state that ended `failed` would stop that chain
-					table.remove(st.history)
-					st.step, st.outcome, st.detail = nil, nil, "lost the claim: another worker holds it"
+					dispatcher.dropLostAttempt(st)
 					save(st)
 					return dispatch.EXIT.taken
 				end

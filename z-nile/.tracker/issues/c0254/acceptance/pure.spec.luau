@@ -101,6 +101,21 @@ return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 		t.expect(dispatcher.claimVerdict(own, st, "claim", "c0010", "backlog", "new", 1)).toBe("failed")
 	end)
 
+	it("AC1: a lost claim leaves no failed step behind in the run state", function()
+		local st = {
+			history = { { step = "z-design", outcome = "ok" }, { step = "claim", outcome = "failed" } },
+			step = "claim",
+			outcome = "failed",
+			detail = "exit 1",
+		} :: any
+		dispatcher.dropLostAttempt(st)
+		t.expect(#st.history).toBe(1)
+		t.expect(st.history[1].step).toBe("z-design")
+		t.expect(st.step).toBe(nil)
+		t.expect(st.outcome).toBe(nil)
+		t.expect(string.find(st.detail, "lost the claim", 1, true) ~= nil).toBe(true)
+	end)
+
 	it("AC1: a worker's issue is claimed by its own step before any model starts", function()
 		local facts: dispatch.Facts = {
 			folder = "",

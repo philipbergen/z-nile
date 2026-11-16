@@ -95,6 +95,20 @@ return t.spec("c0254 two hosts claim one issue", function(it)
 		t.expect(xhost.holders(facts.workers or {}, { c0010 = "preparing-not-the-one" }).c0010).toBe(nil)
 	end)
 
+	it("AC5: the board's card for the issue says which worker holds it", function()
+		fixture.git(f.main, { "pull", "-q", "origin", "main" })
+		local facts = board.readFacts(f.main)
+		local model = board.collect(`{f.main}/pickman/.tracker`, f.main, facts)
+		local card
+		for _, issue in model.issues do
+			if issue.id == "c0010" then
+				card = issue
+			end
+		end
+		t.expect(card ~= nil).toBe(true)
+		t.expect(string.find(card.held or "", "(claude, claude-opus-5-5)", 1, true) ~= nil).toBe(true)
+	end)
+
 	it("AC3: host A's prep commits are pushed one by one, the first sets the upstream", function()
 		fs.writeFile(`{wtA}/pickman/.tracker/issues/c0010/notes-1.md`, "first\n")
 		local c1 = trackerfix.tr(f, wtA, { "commit", "-m", "tracker: prep c0010 draft 1" }, HOST_A)
