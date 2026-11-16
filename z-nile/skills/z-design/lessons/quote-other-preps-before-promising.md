@@ -42,4 +42,6 @@ c0267 design review 001 F1: c0267's specs were searched only for other preps' sp
 
 **Note** (c0253 design review 001 F5, F6, F7): an "unknown" about a prepared layer is answered from that layer's document before it is listed as not determined. c0253 listed "how `./zn lander` behaves on pending checks" as unknown although c0252's design says it refuses, misread c0250's `block` (it needs `escalation.md` and the raft's worktree) and c0274's beat (refused from the main checkout).
 
+**Note (c0394 prep, 2026-11-16):** c0394 designed landing a raft in part without searching the prepared issues for the mechanism. c0248, prepared and approved, already designed it with the user's rulings, and design review 001 F6 found four contradictions; the engine half was redesigned on c0248. Before designing a mechanism, `git grep -il` its plain words (here "lands", "part", "below a block") over every `*/.tracker/issues/*/*.md` outside `done/`, and read each hit's Problem and decisions.
+
 **Also** (c0254 design review 001 F7): a part of an outcome that two issues hand to each other belongs to nobody. c0277's Non-goal gave "several hosts" to c0254, and c0254's G9 gave the lost host's leftover back to c0277. When a design hands a piece to another issue, quote that issue's line that accepts it.
