@@ -1,0 +1,296 @@
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index 59d6bd67c..3a2af6c48 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -6414,10 +6414,15 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
+ 		end
+ 		return `{target} was readied before its {phase} spend was recorded: record nothing and report it`
+ 	end
+-	-- The row is committed on this branch and pushed nowhere. It reaches main with the branch (a pull request, or
+-	-- `./zn land` when the commit is already in the capture tree). An item that is active on origin/main is still
+-	-- refused: inside a raft, `./zn commit --phase` records it.
++	-- The row is committed on this branch. It reaches main with the branch (a pull request, or `./zn land` when the
++	-- commit is already in the capture tree), except a deliver row for landed work, which is published below. An item
++	-- that is active on origin/main is still refused: inside a raft, `./zn commit --phase` records it.
+ 	refuseStale()
++	-- A deliver row for work that is done on origin/main has no branch left to ride: the raft has landed. That one
++	-- row is published (c0348). `landed` stays true only when the raft (if one was named) and every issue the row
++	-- is shared over are in done/ there.
++	local landed = phase == "deliver" and not opts["--begin"]
++	local unlanded = false -- landed work, but this branch holds rows of it that origin/main does not
+ 	if publishing() then
+ 		local fetched = sh.run("git", { "fetch", "-q", "origin", "main" })
+ 		if not fetched.ok then
+@@ -6437,6 +6442,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
+ 			if doc and text and activeThere(doc, text) then
+ 				fail(activeReason(id))
+ 			end
++			landed = landed and doc ~= nil and stateOfPath(doc) == "done"
+ 		end
+ 		for _, share in kept do
+ 			local doc = docPath(pathsOnOrigin, share.id)
+@@ -6456,7 +6462,10 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
+ 					`{share.id} is {stateOfPath(doc :: string)} on origin/main and {(localItem :: store.Item).state} in this checkout: run ./zn sync first`
+ 				)
+ 			end
++			landed = landed and stateOfPath(doc :: string) == "done"
+ 		end
++	else
++		landed = false
+ 	end
+ 	local top = sh.git({ "rev-parse", "--show-toplevel" })
+ 	local branch, head = costrow.branchOf(top)
+@@ -6565,10 +6574,63 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
+ 		end
+ 	end
+ 	local planned = costrow.plan(top, homes, extra, true)
++	local topPrefix = top .. "/"
++	local function fromTop(path: string): string
++		return if string.sub(path, 1, #topPrefix) == topPrefix then string.sub(path, #topPrefix + 1) else path
++	end
++	if landed then
++		-- Only this call's rows are published: each file must hold, before the call, exactly what origin/main holds.
++		-- Rows this branch recorded and has not landed ride the branch, and the deliver row with them.
++		for _, file in planned.files do
++			local rel = fromTop(file.path)
++			local shown = sh.run("git", { "show", `origin/main:{rel}` })
++			local relation = publish.rowsRelation(file.previous, if shown.ok then shown.stdout else nil)
++			if relation == "behind" then
++				fail(
++					`spend: {rel} has rows on origin/main that this checkout lacks; nothing was recorded: run ./zn sync, then record again`
++				)
++			elseif relation == "diverged" then
++				fail(
++					`spend: {rel} differs from origin/main's rows (neither holds the other's); nothing was recorded: run ./zn sync and settle that file, then record again`
++				)
++			elseif relation == "ahead" then
++				landed = false
++				unlanded = true
++			end
++		end
++	end
+ 	local wrote = costrow.writeFiles(planned)
+ 	if #wrote == 0 then
+ 		fail("spend: could not write the measured row")
+ 	end
++	local publishedSha: string? = nil
++	if landed then
++		-- published before the local commit: a publish that fails leaves the files and the measure buffer as they
++		-- were, so the same command can be run again and records one row
++		refuseStale()
++		local r = published(publish.commit(".", function(_paths, _read, _roots, _counter)
++			local changes: { publish.Change } = {}
++			for _, file in planned.files do
++				table.insert(changes, { path = fromTop(file.path), content = file.text })
++			end
++			return changes
++		end, `tracker: spend {id} {phase}`))
++		if not r.ok then
++			costrow.restore(planned)
++			fail(
++				`spend: could not publish {id}'s deliver row to origin/main ({r.reason}); nothing was recorded, so run it again once that is fixed`
++			)
++		end
++		publishedSha = r.sha
++	elseif unlanded then
++		stdio.ewrite(
++			`spend: {id}'s rows on this branch are not on origin/main yet, so its deliver row stays on this branch and reaches main with it\n`
++		)
++	elseif phase == "deliver" then
++		stdio.ewrite(
++			`spend: {id} is not done on origin/main, so its deliver row stays on this branch and reaches main with it\n`
++		)
++	end
+ 	local addArgs = { "add", "--" }
+ 	local commitArgs = { "commit", "-q", "--only", "-m", `tracker: spend {id} {phase}`, "--" }
+ 	for _, path in wrote do
+@@ -6576,19 +6638,40 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
+ 		table.insert(commitArgs, path)
+ 	end
+ 	local added = sh.run("git", addArgs)
+-	if not added.ok then
+-		costrow.restore(planned)
+-		fail(`spend: could not stage the row: {sh.trim(added.stderr)}`)
+-	end
+-	local committed = sh.run("git", commitArgs)
+-	if not committed.ok then
++	local committed = if added.ok then sh.run("git", commitArgs) else added
++	if not added.ok or not committed.ok then
++		-- back to the tree as it was before the command: unstaged, then restored
++		local resetArgs = { "reset", "-q", "--" }
++		for _, path in wrote do
++			table.insert(resetArgs, path)
++		end
++		local unstaged = sh.run("git", resetArgs)
+ 		costrow.restore(planned)
+-		fail(`spend: could not commit the row: {sh.trim(committed.stderr .. committed.stdout)}`)
++		local why = sh.trim(committed.stderr .. committed.stdout)
++		local byHand = if unstaged.ok
++			then ""
++			else ` (the index still holds it: git reset -q -- {table.concat(wrote, " ")})`
++		if not publishedSha then
++			fail(
++				(
++					if added.ok
++						then `spend: could not commit the row: {why}`
++						else `spend: could not stage the row: {sh.trim(added.stderr)}`
++				) .. byHand
++			)
++		end
++		-- the row is recorded: it is on origin/main. Failing here would invite a second, duplicate row.
++		stdio.ewrite(
++			`spend: the row is on origin/main ({publishedSha}) but could not be committed here ({why}){byHand}. This checkout does not hold it: ./zn sync brings it. Do not record it again.\n`
++		)
+ 	end
+ 	costrow.writeBuffer(top, planned)
+ 	for _, share in kept do
+ 		print(string.format("%s %s +%d/-%d measured", share.id, phase, share.added, share.removed))
+ 	end
++	if publishedSha then
++		print(`published {id} {phase} to origin/main {publishedSha}`)
++	end
+ 	print(sh.git({ "rev-parse", "HEAD" }))
+ end
+ 
+diff --git a/z-nile/engine/publish.luau b/z-nile/engine/publish.luau
+index bfc90ba8e..5e2410dd5 100644
+--- a/z-nile/engine/publish.luau
++++ b/z-nile/engine/publish.luau
+@@ -2,6 +2,7 @@
+ -- Pushes a tracker-only commit to origin/main with git plumbing (mktree, no index). Never touches the caller's working
+ -- tree, index, HEAD or branch. See c0510.
+ local broker = require("./broker")
++local buffer = require("./buffer")
+ local ids = require("./ids")
+ local ledger = require("./ledger")
+ local pathsLib = require("./paths")
+@@ -113,7 +114,11 @@ function publish.allowed(path: string, roots: { string }, counter: string?): boo
+ 		return false
+ 	end
+ 	if string.find(rel, "/", 1, true) then
+-		return false
++		-- a done issue's measured rows, spend.d/<writer>.tsv, published append-only (c0348): the one file below an
++		-- item's own folder a publish may write, and only once the issue is in done/
++		return isIssue(id)
++			and string.match(rel, "^spend%.d/[%w._%-]+%.tsv$") ~= nil
++			and path == `{root}/issues/done/{id}/{rel}`
+ 	end
+ 	-- an issue's spend.md is published append-only; a raft's summary stays on its branch
+ 	return rel == `{id}.md`
+@@ -121,6 +126,52 @@ function publish.allowed(path: string, roots: { string }, counter: string?): boo
+ 		or (isIssue(id) and (rel == "spend.md" or rel == "approval.md"))
+ end
+ 
++-- Why `content` may not replace `existing` (origin/main's text, nil when the file is new there) as a done issue's
++-- spend.d file, or nil when it may: rows are only ever appended, so origin's bytes stay as its start, at least one row
++-- follows them, and the whole file parses as measured rows (c0348).
++function publish.measuredReason(existing: string?, content: string): string?
++	local had = existing or ""
++	if string.sub(content, 1, #had) ~= had then
++		return "not an append to its rows on origin/main (run ./zn sync, then record again)"
++	end
++	if #content == #had then
++		return "no new row"
++	end
++	if string.sub(content, -1) ~= "\n" then
++		return "the last row has no newline"
++	end
++	local rows, err = buffer.parseTsv(content)
++	if not rows then
++		return `does not parse as measured rows ({err})`
++	end
++	-- only `./zn spend --phase deliver` publishes rows, and what it appends always holds its deliver row
++	local before = if had == "" then {} else buffer.parseTsv(had)
++	if not before then
++		return "its rows on origin/main do not parse"
++	end
++	for i = #before + 1, #rows do
++		if rows[i].phase == "deliver" then
++			return nil
++		end
++	end
++	return "no deliver row among the new rows"
++end
++
++-- How a checkout's copy of a measured-rows file (`mine`, nil when it has none) stands to origin/main's (`origin`):
++-- "same", "behind" (origin holds more rows after mine), "ahead" (mine holds more after origin's) or "diverged".
++-- By bytes: rows are only ever appended.
++function publish.rowsRelation(mine: string?, origin: string?): "same" | "behind" | "ahead" | "diverged"
++	local a, b = mine or "", origin or ""
++	if a == b then
++		return "same"
++	elseif string.sub(b, 1, #a) == a then
++		return "behind"
++	elseif string.sub(a, 1, #b) == b then
++		return "ahead"
++	end
++	return "diverged"
++end
++
+ -- The directory of an item file: `path` without its `/<rel>`.
+ local function itemDir(path: string, rel: string): string
+ 	return string.sub(path, 1, #path - #rel - 1)
+@@ -458,6 +509,19 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
+ 				end
+ 				continue
+ 			end
++			if string.find(c.path, "/spend.d/", 1, true) then
++				-- `allowed` took only <root>/issues/done/<id>/spend.d/<writer>.tsv
++				local reason = publish.measuredReason(existing, c.content)
++				if reason then
++					return fail(`{c.path}: {reason}`)
++				end
++				local id = string.match(c.path, "/done/([fdc]%d%d%d%d)/spend%.d/") or ""
++				local doc = string.gsub(c.path, "/spend%.d/[^/]+$", `/{id}.md`)
++				if not onOrigin[doc] then
++					return fail(`{c.path}: no {id}.md beside it in done/ on origin/main`)
++				end
++				continue
++			end
+ 			if string.sub(c.path, -9) == "/spend.md" then
+ 				-- moves (c.from) already continued: a ready/stop carries the file byte for byte
+ 				local id = string.match(c.path, "/([fdc]%d%d%d%d)/spend%.md$")
+diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
+index e6e9312ed..3fcb2b0b9 100644
+--- a/z-nile/skills/zz-execute/SKILL.md
++++ b/z-nile/skills/zz-execute/SKILL.md
+@@ -88,7 +88,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
+ ## Phase 6: Merge and clean up
+ Under `./zn dispatch` (headless) the run ends at Phase 5's `Ready to merge` comment: the merge of the run's PR is a human's gate, and the dispatcher records the run's spend after it. Skip this phase.
+ 1. `./zn done` already landed the stack (one `--no-ff` merge). Do not merge again and do not squash. After the merge, `./zn watch-kick`: it returns at once, starts the net under `./zn run`, and writes `.cache/watch-net.log` in that checkout. It does not delay the merge, and a failure there does not fail it. A pull request that changes only tooling is gated by `z-nile/check.sh --affected` on the branch. A pull request that changes a game is gated by the local full gate, `z-nile/check.sh --full`, in a clone of the exact head whose parent directories are not a checkout of this repo, and by `lune run scripts/cicd` there. The PR is mergeable. Record the **gate wall time** and the `slowest:` specs of the merge's gate in the final report and its PR comment. If the merge's gate fails, post a `BLOCKED:` comment naming the failing specs and stop with the PR ready and unmerged; in the raft worktree at the PR head, for each failing spec that `lune run z-nile/affected -- --base $(git merge-base origin/main HEAD)` does not list, file a watch-miss chore (zz-test, Watch miss) and say so in the comment, unless the spec also fails on `origin/main` (then it is a red `main`: say that instead). If another condition can't be met, post a `BLOCKED:` comment and stop; the final report then says BLOCKED. A re-run after main moves is required only when the merged-in commits select a spec for this pull request; tracker-only commits require none (zz-rules, Merging).
+-2. After the merge and before the final report, `./zn spend R0010 --phase deliver`. Do not pass `--time` or `--tokens`.
++2. After the merge and before the final report, `./zn spend R0010 --phase deliver` in the raft's worktree. It commits the row there and publishes it to `origin/main` itself (`published R0010 deliver to origin/main <sha>`): the raft has landed, so no pull request carries the row. If it says it could not publish, nothing was recorded: fix what it names and run it again before the cleanup. If it says the row stays on this branch, the cleanup would lose it: do not clean up, post a `BLOCKED:` comment quoting that line, and stop. Do not pass `--time` or `--tokens`.
+ 3. Write the final report (below), with the merge commit sha. Post it as a comment on the merged PR (`gh pr comment <pr> --body-file -`) *before* cleanup, since cleanup removes your worktree.
+ 4. Follow Landing a change, step 4, in the zz-rules skill, last: the one chained command that updates the root's `main` (`"<root>/zn" sync`, which also rebuilds its board), removes this raft's worktree and deletes the local branch (it removes your own working directory, so nothing runs after it). Post no further commits to the branch. Then give the same report in your reply.
+ 
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index 36e1464e0..cb16b3b0c 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -95,7 +95,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | prune | `./zn worktree-prune` | removes the worktree and branch of every raft that is in `done/` on `origin/main` (any merge strategy); keeps the rest, never forces, and lists named worktrees |
+ | focus | `./zn focus f0010` | the following commits are attributed to that issue |
+ | commit | `./zn commit -m "msg" [--issue f0010]... [--phase build|code-review|deliver] [--model <id>]` | `git add -A`, then folds this checkout's measure buffer into `spend.d/<writer>.tsv` (one appended line per row; `./zn run` rows of one stage become one `other` row) together with the commit's line counts, and the raft's summary, **in the same commit**. A line for another ticket stays until that ticket is committed. A buffer nobody folds is dropped after 14 days, or when that checkout's `.cache` is deleted. Adds `Issue:` trailers and pushes. `--phase` defaults to build; capture, prep and design-review use `./zn spend`. `--time` and `--tokens` are ignored: cost is measured |
+-| spend | `./zn spend <id> --phase capture, prep, design-review or deliver [--begin] [--note <text>]` | marks the stage. `--begin` appends the start to the checkout's measure buffer and does not commit. The next call reads the CLI transcripts for that span, folds this ticket's buffer lines into `spend.d/<writer>.tsv`, and commits that file on the current branch; it pushes nothing. A call with no start writes the row with `unmeasured` where the tool could not read a session. `--time` and `--tokens` are ignored. Refuses in the main checkout (run it in the worktree, `./zn worktree <id>`), and refuses an item that is already active |
++| spend | `./zn spend <id> --phase capture, prep, design-review or deliver [--begin] [--note <text>]` | marks the stage. `--begin` appends the start to the checkout's measure buffer and does not commit. The next call reads the CLI transcripts for that span, folds this ticket's buffer lines into `spend.d/<writer>.tsv`, and commits that file on the current branch. It pushes nothing, with one exception: a `deliver` row for work that is done on `origin/main` is also published there, as one commit that appends the row (c0348). A call with no start writes the row with `unmeasured` where the tool could not read a session. `--time` and `--tokens` are ignored. Refuses in the main checkout (run it in the worktree, `./zn worktree <id>`), and refuses an item that is already active |
+ | trace | `./zn trace <R-id> [--check]` | read-only. Without `--check`, derives every ticket's claims (`<id>:P<n>`, `<id>:S<n>` from `./zn capture <id>` (none for a ticket captured with only the template under `## Solution`, which is not refused), and `<id>:AC<n>` from `## Acceptance criteria`; a missing captured `## Problem`, a missing `## Acceptance criteria` (read from the ticket's document at the commit) or a Solution of text with no outcome (only a fence) fails naming the ticket and section; a captured section whose first read, which ends at a `Decided with the user`, `**Scope decision` or `(Added in prep` line, finds no outcome is read again with those lines as text) and every changed source file of the stack, and prints the skeleton of `<raft-dir>/trace.md` pinned to the top layer's finished commit. With `--check`, verifies `<raft-dir>/trace.md` against the top layer's commit: every derived claim is a row and no unknown claim appears; every `file:line` exists at that commit and is of the right kind for its column (`design` in the ticket's doc or `not met: "<ruling>"` quoted from `## Open to the human`, `test` in a spec or `check.sh` of that ticket that ran green in the ticket's `<issue-dir>/results.txt` at that commit with an exact case match, `code` in a source file the stack changed or `none` when the stack changed no source file); every changed source file appears under `## Source files` naming valid claims and no unchanged file appears; and the table is not stale (`trace.md` and `final-review-NNN.md` are committed on the top layer after its finish commit touching only the raft's and tickets' tracker files, `Commit:` names the top layer's finish commit, and nothing is added after the table or rewritten). Each failure names the row and the cell, and exits 1 |
+ | done | `./zn done R0010` | requires `./zn trace R0010 --check` to pass for the commit it lands and the final review (`final-review-NNN.md`; `review-NNN.md` is for the per-layer code review only and cannot stand in) to be resolved (verdict `approve`, or every open finding — each finding answered `fixed <sha>: <what>; consequences: <what the fix could break, and how that was checked, or none>`, `refuted`, or, for a medium or low finding and only as zz-execute Phase 4 step 7 allows, `deferred <id>: <why>` naming a backlog issue — ruled by the human in `## Open to the human`) and the raft's `check.sh` to pass. Refuses a member whose approval no longer matches the contract (the design sections, the acceptance specs and `check.sh`); a member with no approval is not sent back. The checkout must be the published top-layer commit; a lower layer or a top layer behind origin is refused, naming the layer and both shas. Refuses a layer that is not finished, not stacked on the one below, or whose contract changed. Refuses when `./zn trace R0010 --check` fails (missing, failing or stale `trace.md`) or when `final-review-NNN.md` is missing or has no `Verdict:` line. Merges that commit with `--no-ff`, promotes acceptance specs, moves the items to `done/`, runs the affected gate (`z-nile/check.sh --affected`) on that tree. A failing gate rolls the tree back by itself. Inside a spec run it skips the gate, says so, and checks only the promoted specs, and commits one binding commit (`<raft>: bind <id>, <id>`, the final review's `Verdict: <word>`, and `Trace: <done-raft-dir>/trace.md`). Then `gh pr view <n> --json baseRefName -q .baseRefName` and `gh pr edit <n> --base main` for each layer, and `git push origin HEAD:refs/heads/main`. A failing gate or a failed retarget rolls back and does not push. A failed push puts each pull request's base back and rolls the tree back. |
+ 
+@@ -132,7 +132,7 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
+ - `design-review`: `./zn spend <issue> --phase design-review` for the reviewer's run and again for the answering time; z-raft's coherence review is `./zn spend <R-id> --phase design-review` (shared among the members). No lines. Design reviews live where they ran (the issue's folder, or the raft's for the coherence review), and `./zn metrics` rolls an issue's up to its raft through `raft:`.
+ - `build`: `./zn commit` (the default phase). Lines are the staged diff.
+ - `code-review`: `./zn commit --phase code-review`, including the reviewer's tokens when the harness reports them. Lines are the staged diff.
+-- `deliver`: `./zn commit --phase deliver`, `done`'s own commit. `./zn spend <R-id> --phase deliver` commits its row on the current branch and pushes nothing, so record it before the merge if it should reach main with that pull request. Lines are the staged diff, or none after the merge.
++- `deliver`: `./zn commit --phase deliver`, `done`'s own commit, and `./zn spend <R-id> --phase deliver` after `./zn done`, in the raft's worktree (zz-execute Phase 6). The raft is done on `origin/main` by then and no branch is left to carry the row, so the command publishes the row to `origin/main` as well as committing it in the worktree. For an item that is not done, or whose rows on this branch have not landed, it commits on the current branch only, and says so. Lines are the staged diff, or none after the merge.
+ - **Lines**: the staged diff, excluding every project root, except the `prep` phase above. On the `done` commit, the promoted `tests/acceptance/` specs are also excluded, because they're prep work. Later edits to them, for example a defect fix, do count.
+ - **Attribution**:
+   1. `--issue` flags if given;
+@@ -193,7 +193,7 @@ Tracker state is shared the moment it changes, not when a PR merges, so parallel
+ - **Statuses** (`status:` in an item's frontmatter): `new -> preparing -> prepared -> active -> done`. `design:` (draft, reviewed, ready) stays the design review's field. A missing `status:` is derived: `done/` is done, `active/` is active, `design: ready` is prepared, a draft item in a raft (or a draft raft) is preparing, anything else is new. `./zn status` lists them from `origin/main`; `status <id>` prints one; `status <id> <to>` moves one, checked against `origin/main`. `done` is only ever set by `./zn done`, and only `ready` (or the legacy `start` of a backlog raft) claims `active`, and `stop` gives a readied raft back.
+ - **Every write is stamped**: the stored value is `<state>-<three words>` (for example `preparing-quiet-copper-falcon`) and each write uses fresh words, so two terminals making the same move conflict in git instead of merging silently.
+ - **Published or carried.** These moves are pushed straight to `origin/main` as a tiny commit: `new issue` (the stub, `--desc "<line>"` is its Problem), `new raft` (claims the raft, and its members when they are `new`), `fold` and `recombine` (claim their rafts), `release`, `status <id> preparing|new`, `status <id> prepared` back from `active`, and the claim made by `ready` (or by a legacy `start`). An emergent `new issue --raft <R-id>` and `renumber <id>` without `<new>` push a counter-only commit (the raised `z-nile/next`) and then work locally. The move to `prepared` is **carried by the prep PR**: it only edits the local documents.
+-- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), and `z-nile/next`, whose counters may only go up. An issue's `spend.md` is not pushed by `./zn spend`: the command commits the appended row on the current branch, and the row reaches main with that branch. `publish.commit` still accepts an appended `spend.md` when a tracker commit carries one (a directory move keeps it byte for byte). The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after the static stages (`z-nile/check.sh --static`). Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
++- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), and `z-nile/next`, whose counters may only go up. An issue's `spend.md` is never pushed by `./zn spend`, and its measured rows are pushed in one case only: `./zn spend <id> --phase deliver` for work that is done on `origin/main` publishes a done issue's `spend.d/<writer>.tsv`, rows appended only and only with a `deliver` row among them (c0348). Every other row the command commits on the current branch, and it reaches main with that branch. `publish.commit` still accepts an appended `spend.md` when a tracker commit carries one (a directory move keeps it byte for byte). The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after the static stages (`z-nile/check.sh --static`). Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
+ - **Claims.** z-design claims one issue with `./zn status <id> preparing` and gives it back with `status <id> new`. The old prep's `new raft` over `new` issues still claims them with the raft's stamp, and `./zn status <R-id> preparing` claims an existing draft raft with its unprepared members. A raft move (`status <R-id> preparing|new`) never restamps a member that is `prepared` on `origin/main`, and refuses a member another raft holds there. `ready` (and a legacy `start`) refuses a raft unless it and its members are `prepared` on `origin/main`; the claim is made by `ready`, not `start`.
+ - **Rafting** (z-raft). An issue's raft is its own `raft:` line, edited only in the rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly, and its sync shows the conflict. The published claim (`new raft` over prepared issues, `fold`, `recombine`, `status <R-id> preparing`) stamps the raft only, with a fresh `preparing-…` value; recombine gives its two rafts one value, and that shared stamp is what lets the carried `status <keeper> prepared` take a member whose `raft:` on `origin/main` still names the other raft. The carried move takes a member that is prepared on `origin/main` as it is, refuses one another raft holds there, and takes a `preparing` member only when it carries the raft's own stamp or a claim this checkout made (`status <id> preparing` here); any other `preparing` member is another terminal's live claim and is refused, naming it. z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (z-raft takes it out first with `./zn unfold <R-id> <id>`), and `ready` refuses a raft while a member is `preparing`. A raft's `grouped:` line records a hash of each prepared member's design as z-raft grouped it (its document without `status:` and `raft:`, `check.sh`, `acceptance/`, and its design reviews, refutes and `harvest.md`); the carried move and `ready` refuse a member whose design changed on `origin/main` since (a redesign landed inside the rafting window), a member this rafting grouped with no entry, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering the current one. `compact` and `renumber` re-record every entry that matched before they rewrote its ids, and `remap` does the same. `./zn release <R-id>` is the published give-back. An issue whose `raft:` names a retired or missing raft (audit's `dead-raft` error) is cleared by the command the error names for its state: in the backlog, `./zn unfold <R-id> <id>`, which claims nothing (there is no raft to claim) and rides in the rafting PR; in `active/`, `./zn stop <id>` first (main checkout), which gives that one issue back to the backlog as `stop` gives a member back, and `unfold` after it. An active issue with no `raft:` (`raftless-active`) goes back with `./zn stop <id>` too. A conflict on `raft:` or `depends_on:` (they are adjacent lines) after a sync means rerun z-raft for that issue: take `main`'s line and drop the issue from your raft, or take both edits when it was only `depends_on:`.
+ - **A failed start.** `start` runs every local check before it claims. If a step after the claim fails (branch push, `gh pr create`), the local state is consistent: finish by hand (`git push -u origin <branch>`, `gh pr create --draft`), or give **your own** claim back with `status <R-id> prepared` (a raft started the legacy way, still in the backlog; a readied raft is given back only by `./zn stop <R-id>`). The same terminal can re-run `start` if it died before moving anything (it remembers the claim in `.cache/tracker-claim-<R-id>`); another terminal is refused.
