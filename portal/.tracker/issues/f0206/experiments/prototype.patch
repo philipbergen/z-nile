@@ -560,10 +560,10 @@ index 6f44b16e4..2fdb811d7 100644
 +require("./BoardRelay").start()
 diff --git a/portal/src/shared/Logic/Board/init.luau b/portal/src/shared/Logic/Board/init.luau
 new file mode 100644
-index 000000000..6486cb780
+index 000000000..b2dba72ea
 --- /dev/null
 +++ b/portal/src/shared/Logic/Board/init.luau
-@@ -0,0 +1,468 @@
+@@ -0,0 +1,478 @@
 +--!strict
 +-- Board (f0206): a card's hiscores. Pure view models and rules: the three tabs and the keys that step them, what a row,
 +-- the header and the "your best" line say (revives used, "—" for none; the best not known yet told apart from no best),
@@ -640,7 +640,8 @@ index 000000000..6486cb780
 +Board.LOADING = "LOADING"
 +Board.EMPTY = "NO SCORES YET"
 +Board.DOWN = "SCORES UNAVAILABLE"
-+Board.BEST = "YOUR BEST"
++Board.BEST = "YOUR BEST" -- the your-best line on the all-time board
++Board.BEST_EVER = "BEST EVER" -- the same line on today's and this week's: the best is all-time
 +-- the columns: each shows `chars` characters whole (a rank to 10, a name's first 7, a score to 6 digits, LEVEL, REVIVES)
 +-- in a box GUTTER characters wider, so neighbouring texts never touch; CHARS is the line's whole width in characters
 +Board.GUTTER = 0.4
@@ -745,18 +746,25 @@ index 000000000..6486cb780
 +	return { int(row.rank), row.name, int(row.score), int(row.level), Board.revives(row.revives) }
 +end
 +
-+-- The "your best" line, one text per column like a row: YOUR BEST where the name goes (it spans the rank's column
++-- The label of the "your best" line on a board: YOUR BEST on the all-time board, BEST EVER on the others (the best is
++-- the player's all-time one, never the day's or the week's).
++function Board.bestLabel(id: Id): string
++	return if id == "all" then Board.BEST else Board.BEST_EVER
++end
++
++-- The "your best" line, one text per column like a row: its label where the name goes (it spans the rank's column
 +-- too), then the score, the figure and the revives; a dash in each for a player with no best.
-+function Board.bestCells(best: Best?): { string }
++function Board.bestCells(best: Best?, id: Id): { string }
++	local label = Board.bestLabel(id)
 +	if best == nil then
-+		return { "", Board.BEST, Board.NONE, Board.NONE, Board.NONE }
++		return { "", label, Board.NONE, Board.NONE, Board.NONE }
 +	end
-+	return { "", Board.BEST, int(best.score), int(best.level), Board.revives(best.revives) }
++	return { "", label, int(best.score), int(best.level), Board.revives(best.revives) }
 +end
 +
 +-- The "your best" line while the player's best is not known yet: the pending mark in each figure's place.
-+function Board.pendingCells(): { string }
-+	return { "", Board.BEST, Board.PENDING, Board.PENDING, Board.PENDING }
++function Board.pendingCells(id: Id): { string }
++	return { "", Board.bestLabel(id), Board.PENDING, Board.PENDING, Board.PENDING }
 +end
 +
 +-- What a card's board shows for the answer held for its tab and the player's own all-time best on its title: the
@@ -781,7 +789,9 @@ index 000000000..6486cb780
 +		else
 +			note = Board.EMPTY
 +		end
-+		best = if mine ~= nil and mine.known then Board.bestCells(mine.best) else Board.pendingCells()
++		best = if mine ~= nil and mine.known
++			then Board.bestCells(mine.best, answer.id)
++			else Board.pendingCells(answer.id)
 +	end
 +	return { header = Board.header(progress), lines = lines, note = note, best = best }
 +end

@@ -605,8 +605,8 @@ return t.spec("f0206 client", function(it)
 		end
 		t.expect(w.note("pickman")).toBe("LOADING")
 		t.expect(w.texts(w.line("snake", 1))).toBe("1|Day|10|1|—")
-		-- the your-best line stays below the board under TODAY: the player's all-time best on that title
-		t.expect(w.best("snake")).toBe("|YOUR BEST|—|—|—")
+		-- the your-best line stays below the board under TODAY: the player's all-time best on that title, BEST EVER
+		t.expect(w.best("snake")).toBe("|BEST EVER|—|—|—")
 		w.frame(1.1)
 		t.expect(w.asks())
 			.toBe(

@@ -166,11 +166,11 @@ return t.spec("f0206 board", function(it)
 		"the your-best line, in the columns: YOUR BEST, then score, figure and revives, or dashes for no best",
 		function()
 			t.expect(Board.BEST).toBe("YOUR BEST")
-			t.expect(table.concat(Board.bestCells({ score = 1200, level = 3, revives = 2 }), "|"))
+			t.expect(table.concat(Board.bestCells({ score = 1200, level = 3, revives = 2 }, "all"), "|"))
 				.toBe("|YOUR BEST|1200|3|2")
-			t.expect(table.concat(Board.bestCells({ score = 80, level = 1, revives = 0 }), "|"))
+			t.expect(table.concat(Board.bestCells({ score = 80, level = 1, revives = 0 }, "all"), "|"))
 				.toBe("|YOUR BEST|80|1|—")
-			t.expect(table.concat(Board.bestCells(nil), "|")).toBe("|YOUR BEST|—|—|—")
+			t.expect(table.concat(Board.bestCells(nil, "all"), "|")).toBe("|YOUR BEST|—|—|—")
 		end
 	)
 
@@ -178,14 +178,14 @@ return t.spec("f0206 board", function(it)
 		"a best not heard yet is pending, drawn with its own mark and never as the dashes of no best",
 		function()
 			t.expect(Board.PENDING ~= Board.NONE).toBe(true)
-			t.expect(table.concat(Board.pendingCells(), "|"))
+			t.expect(table.concat(Board.pendingCells("all"), "|"))
 				.toBe(`|YOUR BEST|{Board.PENDING}|{Board.PENDING}|{Board.PENDING}`)
 			local a = answer("ok", { row(1, "Ada", 900, 4, 1) }, nil)
 			t.expect(table.concat(Board.view(a, "Level", nil).best or {}, "|"))
-				.toBe(table.concat(Board.pendingCells(), "|"))
+				.toBe(table.concat(Board.pendingCells("all"), "|"))
 			local unknown: Board.Mine = { known = false, best = nil }
 			t.expect(table.concat(Board.view(a, "Level", unknown).best or {}, "|"))
-				.toBe(table.concat(Board.pendingCells(), "|"))
+				.toBe(table.concat(Board.pendingCells("all"), "|"))
 			t.expect(table.concat(Board.view(a, "Level", NONE).best or {}, "|"))
 				.toBe("|YOUR BEST|—|—|—")
 		end
@@ -281,8 +281,21 @@ return t.spec("f0206 board", function(it)
 				local a = answer("ok", { row(1, "Ada", 900, 4, 0) }, 1)
 				a.id = id
 				t.expect(table.concat(Board.view(a, "Level", KNOWN).best or {}, "|"))
-					.toBe("|YOUR BEST|600|2|—")
+					.toBe(`|{Board.bestLabel(id)}|600|2|—`)
 			end
+		end
+	)
+
+	it(
+		"off the all-time board the line says BEST EVER, so it is never read as today's or this week's best",
+		function()
+			t.expect(Board.BEST_EVER).toBe("BEST EVER")
+			t.expect(Board.bestLabel("all")).toBe("YOUR BEST")
+			t.expect(Board.bestLabel("day")).toBe("BEST EVER")
+			t.expect(Board.bestLabel("week")).toBe("BEST EVER")
+			t.expect(table.concat(Board.bestCells(nil, "day"), "|")).toBe("|BEST EVER|—|—|—")
+			t.expect(table.concat(Board.pendingCells("week"), "|"))
+				.toBe(`|BEST EVER|{Board.PENDING}|{Board.PENDING}|{Board.PENDING}`)
 		end
 	)
 
@@ -363,6 +376,7 @@ return t.spec("f0206 board", function(it)
 				local rank, named = Board.COLUMNS[1], Board.COLUMNS[2]
 				local span = (named.x + named.width - rank.x) * w
 				t.expect(Card.textSize(Board.BEST, span, l.line, false) >= l.text).toBe(true)
+				t.expect(Card.textSize(Board.BEST_EVER, span, l.line, false) >= l.text).toBe(true)
 				-- each tab's word in a third of the slot, the tab bar tall
 				for _, id in Board.TABS do
 					t.expect(Card.textSize(Board.TAB_TEXT[id], w / 3, Board.TAB_PX, false) >= l.text)
