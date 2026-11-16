@@ -1,0 +1,54 @@
+diff --git a/arcade/tests/acceptance/f0201/config.spec.luau b/arcade/tests/acceptance/f0201/config.spec.luau
+index f09b9d38e..4d20b2130 100644
+--- a/arcade/tests/acceptance/f0201/config.spec.luau
++++ b/arcade/tests/acceptance/f0201/config.spec.luau
+@@ -169,19 +169,26 @@ return t.spec("f0201 paid-play configuration", function(it)
+ 	it(
+ 		"the badge text is one config table: 5 R$ struck through, on sale for 1 R$, which is the charge",
+ 		function()
+-			t.expect(Prices).toEqual({ struck = "5 R$", price = "1 R$", sale = "SALE" })
++			-- field by field (c0397): the table may hold more than the badge's three words (f0395 adds a revive's price)
++			t.expect(Prices.struck).toBe("5 R$")
++			t.expect(Prices.price).toBe("1 R$")
++			t.expect(Prices.sale).toBe("SALE")
+ 			t.expect(Prices.price).toBe(`{PaidPlay.PRICE} R$`)
+ 			t.expect(table.isfrozen(Prices)).toBe(true)
+ 		end
+ 	)
+ 
+ 	it("the test screen's lines: the title and product, the badge, and that nothing is charged", function()
+-		t.expect(PaidPlay.testLines("SNAKE", "play", Prices)).toEqual({
+-			"SNAKE: 1 GAME",
+-			"5 R$ 1 R$ SALE",
+-			"TEST PURCHASE: NOTHING IS CHARGED",
+-		})
++		-- the price line, the second, is not pinned here (c0397): f0395 strikes it and its own specs pin it
++		local lines = PaidPlay.testLines("SNAKE", "play", Prices)
++		t.expect(#lines).toBe(3)
++		t.expect(lines[1]).toBe("SNAKE: 1 GAME")
++		t.expect(lines[3]).toBe("TEST PURCHASE: NOTHING IS CHARGED")
+ 		t.expect(PaidPlay.testLines("PICKMAN", "revive", Prices)[1]).toBe("PICKMAN: REVIVE: 3 NEW LIVES")
++		-- a revive's screen has the same three lines, the note last (receipts.spec compares Receipts' through testLines)
++		local revive = PaidPlay.testLines("PICKMAN", "revive", Prices)
++		t.expect(#revive).toBe(3)
++		t.expect(revive[3]).toBe("TEST PURCHASE: NOTHING IS CHARGED")
+ 	end)
+ 
+ 	it(
+diff --git a/arcade/tests/acceptance/f0201/receipts.spec.luau b/arcade/tests/acceptance/f0201/receipts.spec.luau
+index d298dee9f..3e9e50078 100644
+--- a/arcade/tests/acceptance/f0201/receipts.spec.luau
++++ b/arcade/tests/acceptance/f0201/receipts.spec.luau
+@@ -615,10 +615,8 @@ return t.spec("f0201 Receipts on a stub engine", function(it)
+ 		t.expect(#w.prompts).toBe(0)
+ 		t.expect(#w.sent).toBe(1)
+ 		t.expect(w.sent[1].player).toBe(p)
+-		local expected: { any } = {
+-			"open",
+-			{ "INVADERS: REVIVE: 3 NEW LIVES", "5 R$ 1 R$ SALE", "TEST PURCHASE: NOTHING IS CHARGED" },
+-		}
++		-- the lines are the library's for the title and kind (c0397): config.spec pins them, f0395 changes the price line
++		local expected: { any } = { "open", PaidPlay.testLines("INVADERS", "revive", Prices) }
+ 		t.expect(w.sent[1].args).toEqual(expected)
+ 		t.expect(w.folder("ArcadePaidPlay")).toBeTruthy()
+ 		t.expect(w.remote("TestPurchase")).toBeTruthy()
