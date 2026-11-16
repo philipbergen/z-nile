@@ -190,6 +190,7 @@ return t.spec("c0252 the chain lands a finished raft", function(it)
 				R0110 = { "c0120" },
 				R0120 = { "c0130" },
 				R0130 = { "c0140", "c0150" },
+				R0140 = { "c0160" },
 				R0099 = { "c0099" },
 			}
 			for rid, ids in rafts do
@@ -502,6 +503,30 @@ return t.spec("c0252 the chain lands a finished raft", function(it)
 			t.expect(has(r.stdout, "R0060 is blocked (red-gate)")).toBe(true)
 			t.expect(landed("R0060")).toBe(false)
 			t.expect(has(onOrigin("pickman/.tracker/rafts/R0060/escalation.md"), "ci-failed")).toBe(true)
+		end
+	)
+
+	it(
+		"AC17: the bind is made by the base's engine: a layer that changes how its own raft's bind is worded does not get its wording",
+		function()
+			local own = fs.readFile(`{worktrees.R0140}/z-nile/engine/stack.luau`)
+			local signature =
+				"function stack.bindMessage(raftId: string, issueIds: { string }, verdict: string, tracePath: string?): string\n"
+			t.expect(has(own, signature)).toBe(true)
+			layer("R0140", "c0160", "pi", true, nil, nil, {
+				["z-nile/engine/stack.luau"] = (string.gsub(
+					own,
+					signature,
+					signature .. '\tif raftId == "R0140" then\n\t\treturn "R0140: OWN ENGINE bind"\n\tend\n',
+					1
+				)),
+			})
+			seal.trace(worktrees.R0140, "R0140")
+			pr("R0140/1/c0160", GREEN)
+			local r = dispatchOut("R0140")
+			t.expect(r.code).toBe(0)
+			t.expect(landed("R0140")).toBe(true)
+			t.expect(has(git(h.f.origin, { "log", "--format=%s", "main" }), "OWN ENGINE")).toBe(false)
 		end
 	)
 
