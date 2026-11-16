@@ -1,0 +1,6 @@
+z-nile/engine/scan.luau
+z-nile/tests/inputs.tsv
+z-nile/tests/lib/hostile.luau
+z-nile/tests/lib/loops.luau
+z-nile/tests/lib/scanners.luau
+z-nile/tests/slow.tsv
