@@ -307,7 +307,7 @@ end
 function rank.next(facts: { Fact }, ctx: Context): (Pick?, string)
 	local byId = byIdOf(facts)
 	local function free(f: Fact): boolean
-		return inScope(f, ctx.scope) and not rank.isBlocked(f.status) and rank.depsMet(f, byId)
+		return inScope(f, ctx.scope) and rank.depsMet(f, byId)
 	end
 	local lostList: { string } = ctx.lost or {}
 	for _, id in lostList do
