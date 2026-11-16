@@ -95,7 +95,7 @@ local PINNED = {
 		"pickman",
 		"c0015",
 		"workflow.spec.luau",
-		"8107ba9fb712fad54191c941a1842833082f90e83684858f11a9b463b176fc8f",
+		"58a071a591cbb823990493ee3d3ff516eacf7ed74c657dd38af3f2b9292df7c3",
 	},
 	{
 		"pickman",

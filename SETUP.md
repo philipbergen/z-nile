@@ -15,6 +15,8 @@ z-nile/setup.sh
 | GitHub auth | `gh auth login` (the tracker opens draft PRs with `gh`) | same |
 | curl, unzip | preinstalled | distro packages |
 | Node.js (`node`) | `brew install node` | distro packages; preinstalled on GitHub runners. The full gate needs it: the raft board's page script is tested under node (`z-nile/tests/acceptance/c0042/smoke.spec.luau`) |
+| Python 3 (`python3`) | preinstalled | distro packages; preinstalled on GitHub runners and on Omarchy. The full gate needs it: the omarchy board app's `fetch.sh` runs it, and `z-nile/tests/acceptance/c0257/fetch.spec.luau` tests that script |
+| Omarchy board app (optional, an omarchy machine) | not run | `z-nile-omarchy/` is an omarchy-shell plugin (Quickshell): it needs `lune` (`z-nile/setup.sh --tools`), `python3`, a signed-in `gh` for the pull-request chips, and one of the AI CLIs `agents.sh` knows. Install steps: `z-nile-omarchy/README.md`; its model tests run with `node --test z-nile-omarchy/znile.board/tests/model.test.mjs` |
 
 ## What `z-nile/setup.sh` does
 1. **Rokit** (the toolchain manager, v1.2.0): downloads the prebuilt release asset with `gh release download -R rojo-rbx/rokit`, then runs `rokit self-install`.
