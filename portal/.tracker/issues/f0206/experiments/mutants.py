@@ -3,7 +3,7 @@
 # order, all in-repo, each three-way with any conflict resolved by keeping both sides: f0201's prototype (arcade's
 # PaidPlay, Prices, Wallet, Catalog), f0205's f0199-standin.patch and prototype.patch (f0205, prepared and on main since
 # PR #494), f0197's prototype (arcade's Hiscores, Boards, HiscoreGames) and this issue's prototype.patch (its portal
-# code). f0208 (prepared, PR #512) is not applied here; E12 runs the two together. It runs the intended state, then applies each mutant (and each correct variant) to that
+# code), with f0208's prototype (prepared, PR #512) applied before this issue's, as R0117 lands them. It runs the intended state, then applies each mutant (and each correct variant) to that
 # clone, runs the row's spec files from the clone's portal/, restores the file, and deletes the clone at the end.
 # A mutant is killed when its spec run reports a FAIL whose message is an assertion ("expected ..."), not a syntax,
 # type or require error. A correct variant (CV) must stay green.
@@ -172,6 +172,8 @@ M = [
     ("X2 Board requires outside Logic", BO, "local Board = {}\n", "local _ = require(\"../Games\")\nlocal Board = {}\n", PLC),
     ("X3 no Boards remote", PJ, ',\n        "Boards": { "$className": "RemoteEvent" }', "", PLC),
     ("X4 the client's Main starts the view twice", CMAIN, 'require("./BoardsView").start()', 'require("./BoardsView").start()\nrequire("./BoardsView").start()', PLC),
+    ("J6 the play buttons booted before the carousel", CMAIN, 'require("./CarouselView").start()\nrequire("./PlayButtons").start()', 'require("./PlayButtons").start()\nrequire("./CarouselView").start()', PLC),
+    ("X7 the board booted before the carousel", CMAIN, 'require("./CarouselView").start()\nrequire("./PlayButtons").start()\nrequire("./BoardsView").start()', 'require("./BoardsView").start()\nrequire("./CarouselView").start()\nrequire("./PlayButtons").start()', PLC),
     ("X5 not in the map", AM, "### Board (f0206)", "### Boards", PLC),
     ("X6 the view requires the arcade's Boards", VI, 'local HiscoreGames = require("@game/ReplicatedStorage/Arcade/HiscoreGames")',
      'local HiscoreGames = require("@game/ReplicatedStorage/Arcade/HiscoreGames")\nlocal _ = require("@game/ServerStorage/Arcade/Boards")', PLC),
@@ -184,7 +186,9 @@ CV = [
     ("CV2 the server's answer gains a field", RE, "Board.status(snap), mineOf(slot, name))", "Board.status(snap), mineOf(slot, name), \"extra\")", SRV + BUD),
     ("CV3 the view gains a field", BO, "return { header = Board.header(progress), lines = lines, note = note, best = best }", "return { header = Board.header(progress), lines = lines, note = note, best = best, title = \"\" } :: any", BRD + CLI),
     ("CV4 the relay requires one more arcade module", RE, 'local Boards = require("@game/ServerStorage/Arcade/Boards")', 'local Boards = require("@game/ServerStorage/Arcade/Boards")\nlocal _ = require("@game/ServerStorage/Arcade/Receipts")', SRV + PLC),
-    ("CV5 the client's Main starts the view before the carousel", CMAIN, 'require("./CarouselView").start()\nrequire("./BoardsView").start()', 'require("./BoardsView").start()\nrequire("./CarouselView").start()', PLC),
+    ("CV5 the board booted before the play buttons", CMAIN, 'require("./PlayButtons").start()\nrequire("./BoardsView").start()', 'require("./BoardsView").start()\nrequire("./PlayButtons").start()', PLC),
+    ("CV8 a local holds the carousel module", CMAIN, 'require("./CarouselView").start()', 'local carousel = require("./CarouselView")\ncarousel.start()', PLC),
+    ("CV9 another adapter booted first", CMAIN, 'require("@game/ReplicatedStorage/Arcade/TestPurchase").start()', 'require("./Later").start()\nrequire("@game/ReplicatedStorage/Arcade/TestPurchase").start()', PLC),
     ("CV7 Board requires Card for its text model", BO, "local Board = {}\n", "local _Card = require(\"./Card\")\nlocal Board = {}\n", BRD + PLC),
     ("CV6 the tab bar's buttons in a list layout", VI, '\t\tb.Position = UDim2.fromScale((i - 1) / #Board.TABS, 0)', '\t\tb.Position = UDim2.new((i - 1) / #Board.TABS, 0, 0, 0)', CLI),
 ]
@@ -223,6 +227,7 @@ def main():
         os.path.join(HOME, ".tracker", "issues", "f0205", "experiments", "f0199-standin.patch"),
         os.path.join(HOME, ".tracker", "issues", "f0205", "experiments", "prototype.patch"),
         os.path.join(CLONE, "arcade", ".tracker", "issues", "f0197", "experiments", "prototype.patch"),
+        os.path.join(HOME, ".tracker", "issues", "f0208", "experiments", "prototype.patch"),
         os.path.join(HERE, "prototype.patch"),
     ]
     for patch in bases:
@@ -235,7 +240,9 @@ def main():
             if not f.startswith(TMP + os.sep):
                 sys.exit(f"refusing to write outside the clone: {f}")
             text = open(f).read()
-            text = re.sub(r"^<<<<<<< [^\n]*\n(.*?)^=======\n(.*?)^>>>>>>> [^\n]*\n", lambda m: m.group(1) + m.group(2), text, flags=re.S | re.M)
+            # a JSON line that gains a following sibling gets its comma
+            join = (lambda m: m.group(1).rstrip("\n") + ",\n" + m.group(2)) if rel.endswith(".json") else (lambda m: m.group(1) + m.group(2))
+            text = re.sub(r"^<<<<<<< [^\n]*\n(.*?)^=======\n(.*?)^>>>>>>> [^\n]*\n", join, text, flags=re.S | re.M)
             open(f, "w").write(text)
         subprocess.run(["git", "-C", CLONE, "add", "-A"], check=True, timeout=60)
     only = sys.argv[1:]

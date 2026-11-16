@@ -77,6 +77,30 @@ local function starts(main: any, target: string): number
 	return count
 end
 
+-- runs a Main's real source where each of `targets` is a spy, and answers the targets' starts in the order they ran
+-- (a module held in a local and started later counts when its start runs, not when it was required)
+local function bootOrder(main: any, targets: { string }): { string }
+	local order: { string } = {}
+	local env: { [string]: any } = {
+		game = standin(),
+		script = standin(),
+		print = function() end,
+		warn = function() end,
+		require = function(spec: string): any
+			if table.find(targets, spec) then
+				return {
+					start = function()
+						table.insert(order, spec)
+					end,
+				}
+			end
+			return standin() -- another boot (TestPurchase, a later issue's adapter)
+		end,
+	}
+	luau.load(main.Source, { debugName = main.Name, environment = env })()
+	return order
+end
+
 return t.spec("f0206 place", function(it)
 	it("ReplicatedStorage.Remotes.Boards is a RemoteEvent, beside the cards' remote", function()
 		local remotes = RS:FindFirstChild("Remotes")
@@ -131,6 +155,31 @@ return t.spec("f0206 place", function(it)
 			local main = client:FindFirstChild("Main")
 			t.expect(main ~= nil and main.ClassName).toBe("LocalScript")
 			t.expect(starts(main, "./" .. "BoardsView")).toBe(1)
+		end
+	)
+
+	it(
+		"the client's Main starts CarouselView before every adapter that fills its slots: PlayButtons and BoardsView",
+		function()
+			-- R0117 F1, ruled (c): PlayButtons (f0208) and BoardsView read CarouselView.card(name), nil before its start
+			local main = client:FindFirstChild("Main")
+			t.expect(main ~= nil and main.ClassName).toBe("LocalScript")
+			local carousel, buttons, boards =
+				"./" .. "CarouselView", "./" .. "PlayButtons", "./" .. "BoardsView"
+			local order = bootOrder(main, { carousel, buttons, boards })
+			-- each started once; the carousel before both (their own order is free)
+			for _, name in { carousel, buttons, boards } do
+				local n = 0
+				for _, started in order do
+					if started == name then
+						n += 1
+					end
+				end
+				t.expect(n == 1 and name).toBe(name)
+			end
+			local at = table.find(order, carousel) :: number
+			t.expect(at < (table.find(order, buttons) :: number)).toBe(true)
+			t.expect(at < (table.find(order, boards) :: number)).toBe(true)
 		end
 	)
 
