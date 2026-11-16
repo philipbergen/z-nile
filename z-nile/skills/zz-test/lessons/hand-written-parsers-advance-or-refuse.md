@@ -10,4 +10,4 @@ A word reader that stops at a character the caller does not handle makes the cal
 
 **How to apply:** give a tokenizer a case for every character class it treats specially at every position (bare, quoted, after a word), refuse what it does not understand (fail closed), and add a progress guard to the loop (`if next <= at then refuse`), so a later slip refuses instead of looping.
 
-See also c0193, which plans the general rule (`zz-arch/scanning-loops-advance`); its executor merges the two into one lesson.
+See also `zz-arch/scanning-loops-advance`, the general check (its Enforced by files). The two lessons stay separate until c0181's consolidation, which c0193's Non-goals name.

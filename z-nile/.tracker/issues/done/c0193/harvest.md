@@ -34,3 +34,4 @@
 - design-review-005 F3: one-off: an over-wide claim in a comment (every text reaches the loop), no coverage lost
 - design-review-005 F4: z-design/no-check-red-between-steps
 - design-review-005 F5: z-design/probe-free-cli-lines-in-prep
+- note raftcheck word() spun on an unquoted backslash (PR #125): zz-arch/scanning-loops-advance
