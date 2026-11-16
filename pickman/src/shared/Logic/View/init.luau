@@ -84,6 +84,10 @@ View.WALL_EDIBLE_COLOR = table.freeze({ r = 14, g = 64, b = 14 } :: Rgb)
 -- f0126: a wall that can be picked is gold (user, 2026-10-25), and stays gold while the walls are green
 View.WALL_MARKED_COLOR = table.freeze({ r = 255, g = 215, b = 0 } :: Rgb)
 
+-- f0158: the danger ring's one warning colour (user, 2026-10-26: "just a red"): the red with the best worst-case
+-- contrast (2.5 or more) against the blue, edible green, white and gold walls it can sit over.
+View.DANGER_COLOR = table.freeze({ r = 255, g = 60, b = 30 } :: Rgb)
+
 -- The walls' colour: the level-clear flash wins, then a marked wall's gold (f0126), then green while the ghosts are
 -- edible, else blue.
 function View.wallColor(lit: boolean, edible: boolean, marked: boolean?): Rgb
