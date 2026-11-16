@@ -1,7 +1,7 @@
 --!strict
 -- c0251 AC4: the previous round's reviewers are the stamped reviews of the highest lifecycle rank up to the kind being written
 -- (design, coherence, code, final), then the highest round number at that rank; a refused or flagged round counts, an
--- unstamped file is skipped, ties across a raft's member folders all count, and an unmarked item has none. Folders under .cache.
+-- unstamped file is skipped, each folder's newest round counts (round numbers are never compared across folders), and unmarked items count too. Folders under .cache.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local reviewmodel = require("@znile/engine/reviewmodel")
@@ -143,19 +143,43 @@ return t.spec("c0251 the previous round's reviewers", function(it)
 			{ kind = "design", dir = d },
 		}, CODE)
 		t.expect(sorted(got)).toEqual({ "claude-opus-5-5", "grok-4.7", "kimi-code-k3.1-pro" })
-		-- a member with a newer round at the same rank wins over the others' older ones
+		-- round numbers are never compared between folders: a member's review-002 does not hide the others' review-001
 		local newer = folder("c0114", { ["review-002.md"] = stamped("claude-fable-5-2") })
-		t.expect(F.priors({ { kind = "code", dir = a }, { kind = "code", dir = newer } }, CODE))
-			.toEqual({ "claude-fable-5-2" })
+		t.expect(sorted(F.priors({ { kind = "code", dir = a }, { kind = "code", dir = newer } }, CODE)))
+			.toEqual({ "claude-fable-5-2", "claude-opus-5-5" })
 	end)
 
-	it("AC4: an unmarked item has no previous reviewer", function()
+	it(
+		"AC4: inside one folder only the newest round at the top rank counts, and each folder contributes its own",
+		function()
+			-- layer 1 was reviewed twice (Opus, then Fable); layers 2 and 3 once each: c0248 numbers each folder from 001
+			local one = folder("c0118", {
+				["review-001.md"] = stamped("claude-opus-5-5", "xhigh"),
+				["review-002.md"] = stamped("claude-fable-5-2"),
+			})
+			local two = folder("c0119", { ["review-001.md"] = stamped("kimi-code-k3.1-pro", "high") })
+			local three = folder("c0120", { ["review-001.md"] = stamped("grok-4.7", "xhigh") })
+			local got = F.priors(
+				{ { kind = "code", dir = one }, { kind = "code", dir = two }, { kind = "code", dir = three } },
+				FINAL
+			)
+			t.expect(sorted(got)).toEqual({ "claude-fable-5-2", "grok-4.7", "kimi-code-k3.1-pro" })
+			-- a final review outranks the layer reviews of the other folders
+			local final = folder("c0121", { ["final-review-001.md"] = stamped("claude-sonnet-5-5", "high") })
+			t.expect(F.priors({ { kind = "code", dir = one }, { kind = "code", dir = final } }, FINAL))
+				.toEqual({ "claude-sonnet-5-5" })
+		end
+	)
+
+	it("AC4: an unmarked item's stamped rounds count too: c0306 stamps every review it files", function()
 		local dir = folder("c0115", { ["review-001.md"] = stamped("claude-opus-5-5", "xhigh") }, true)
-		t.expect(F.priors({ { kind = "code", dir = dir } }, CODE)).toEqual({})
-		-- a marked folder beside it still counts
+		t.expect(F.priors({ { kind = "code", dir = dir } }, CODE)).toEqual({ "claude-opus-5-5" })
 		local marked = folder("c0116", { ["review-001.md"] = stamped("claude-fable-5-2") })
-		t.expect(F.priors({ { kind = "code", dir = dir }, { kind = "code", dir = marked } }, CODE))
-			.toEqual({ "claude-fable-5-2" })
+		t.expect(sorted(F.priors({ { kind = "code", dir = dir }, { kind = "code", dir = marked } }, CODE)))
+			.toEqual({ "claude-fable-5-2", "claude-opus-5-5" })
+		-- an unmarked item with no stamped file has none
+		local bare = folder("c0122", { ["review-001.md"] = "# Review\n" }, true)
+		t.expect(F.priors({ { kind = "code", dir = bare } }, CODE)).toEqual({})
 	end)
 
 	it(

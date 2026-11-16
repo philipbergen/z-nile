@@ -160,9 +160,13 @@ dl.run dd { margin: 0; }
       : "";
   }
   function fallbackNote(it) {
-    return it.fallbackReviews && it.fallbackReviews.length
-      ? '<p class="note">ask for a cross-model re-review: <code>./zn dispatch zz-review ' + esc(it.id) + " --mode &lt;m&gt;</code></p>"
-      : "";
+    if (!it.fallbackReviews || !it.fallbackReviews.length) return "";
+    return "<ul class=\"links\">" + it.fallbackReviews.map(function (f) {
+      var route = it.rereview && it.rereview[f];
+      return "<li>" + esc(f) + (route
+        ? ": ask for a cross-model re-review: <code>" + esc(route) + "</code>"
+        : ": a fallback review, kept as history (no re-review can be asked from here)") + "</li>";
+    }).join("") + "</ul>";
   }
   function idLink(id) {
     var it = has(byId, id) ? byId[id] : has(issueById, id) ? issueById[id] : null;

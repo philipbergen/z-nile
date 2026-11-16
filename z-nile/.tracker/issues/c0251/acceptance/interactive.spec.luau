@@ -53,6 +53,11 @@ cli = "claude"
 model = "claude-fable-5-2"
 runtime = "claude-cli"
 
+[member.opus]
+cli = "claude"
+model = "claude-opus-5-5"
+runtime = "claude-cli"
+
 [roles.design]
 model = "claude-opus-5-5"
 cli = "claude"
@@ -93,14 +98,36 @@ author = "implementation"
 rotate = true
 pool = ["fable"]
 fallbacks = ["kimi", "grok"]
+
+[roles.raft]
+model = "claude-opus-5-5"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+effort = "xhigh"
+rotate = true
+pool = ["fable"]
+fallbacks = ["kimi"]
+
+[roles.final-review]
+model = "claude-fable-5-2"
+cli = "claude"
+runtime = "claude-cli"
+rank = 4
+max_tokens = 5000
+effort = "xhigh"
+rotate = true
+pool = ["opus"]
+fallbacks = ["kimi"]
 ]]
 
 local NO_POOL = "[roles.design-challenge]\npool = []\n"
 local NO_ROTATE = "[roles.design-challenge]\nrotate = false\n"
 
 local HEADER = "when\tsubject\tadded\tremoved\tphase\ttokens\tmodel\twall\tcpu\tai\ttest\tunmeasured\n"
-local function rowsFor(phase: string, model: string): string
-	return HEADER .. `2026-11-15 08:00\t{phase}\t0\t0\t{phase}\t\t{model}\t\t\t\t\t\n`
+local function rowsFor(phase: string, model: string, subject: string?): string
+	return HEADER .. `2026-11-15 08:00\t{subject or phase}\t0\t0\t{phase}\t\t{model}\t\t\t\t\t\n`
 end
 
 local function has(text: string, needle: string): boolean
@@ -239,17 +266,45 @@ local function zn(dir: string, args: { string }, extra: { [string]: string }?): 
 	return fixture.exec(dir, "./zn", args, { env = out })
 end
 
-local function spendReview(id: string, model: string, effort: string?): string
-	local args = { "spend", id, "--phase", "design-review", "--note", "design-review-001", "--model", model }
+local function spendWith(
+	id: string,
+	note: string,
+	model: string,
+	effort: string?,
+	author: string?,
+	extra: { [string]: string }?
+): fixture.Result
+	local args = { "spend", id, "--phase", "design-review", "--note", note, "--model", model }
 	if effort then
 		table.insert(args, "--effort")
 		table.insert(args, effort)
 	end
-	local r = zn(prep, args)
+	if author then
+		table.insert(args, "--author")
+		table.insert(args, author)
+	end
+	local r = zn(prep, args, extra)
 	if not r.ok then
 		error(`./zn {table.concat(args, " ")} failed ({r.code}): {say(r)}`, 2)
 	end
+	return r
+end
+
+local function spendReview(
+	id: string,
+	model: string,
+	effort: string?,
+	author: string?,
+	extra: { [string]: string }?
+): string
+	spendWith(id, "design-review-001", model, effort, author, extra)
 	return fs.readFile(`{prep}/{ROOT}/issues/{id}/design-review-001.md`)
+end
+
+local function spendRaftReview(id: string, model: string, effort: string?, note: string?): string
+	local name = note or "design-review-001"
+	spendWith(id, name, model, effort, nil, nil)
+	return fs.readFile(`{prep}/{ROOT}/rafts/{id}/{name}.md`)
 end
 
 -- ---------------------------------------------------------------- the commit fixture (AC10)
@@ -333,26 +388,34 @@ local function setup(name: string)
 end
 
 local n = 0
--- a review file in the raft's folder, committed with --phase code-review and the typed model
-local function commitReview(model: string): string
+-- a review file in the raft's folder, committed with --phase code-review and the typed model (and the lead's own, when given)
+local function commitFile(name: string, model: string, author: string?): string
 	n += 1
-	local path = `{ROOT}/rafts/active/{raft}/review-{string.format("%03d", n)}.md`
+	local path = `{ROOT}/rafts/active/{raft}/{name}-{string.format("%03d", n)}.md`
 	write(path, REVIEW)
-	must(
-		run("./zn", {
-			"commit",
-			"-m",
-			`{raft}: review-{string.format("%03d", n)}`,
-			"--phase",
-			"code-review",
-			"--model",
-			model,
-			"--effort",
-			"xhigh",
-		}),
-		"commit"
-	)
+	local args = {
+		"commit",
+		"-m",
+		`{raft}: {name}-{string.format("%03d", n)}`,
+		"--phase",
+		"code-review",
+		"--model",
+		model,
+		"--effort",
+		"xhigh",
+	}
+	if author then
+		table.insert(args, "--author")
+		table.insert(args, author)
+	end
+	must(run("./zn", args), "commit")
 	return read(path)
+end
+local function commitReview(model: string, author: string?): string
+	return commitFile("review", model, author)
+end
+local function commitFinal(model: string, author: string?): string
+	return commitFile("final-review", model, author)
 end
 
 return t.spec("c0251 the interactive pick and its derived Fallback: stamp", function(it)
@@ -389,6 +452,10 @@ return t.spec("c0251 the interactive pick and its derived Fallback: stamp", func
 		t.expect(#tries).toBe(5)
 		t.expect(has(tries[1], "cli=claude runtime=claude-cli model=claude-fable-5-2-xhigh")).toBe(true)
 		t.expect(has(tries[1], "tier=1 family=fable fallback=no")).toBe(true)
+		-- a try from a [member.*] table names it; the role's own model and its CLI fallbacks do not
+		t.expect(has(tries[1], " member=fable ")).toBe(true)
+		t.expect(has(tries[4], "member=")).toBe(false)
+		t.expect(has(tries[2], "member=")).toBe(false)
 		t.expect(has(tries[2], "tier=1 family=kimi fallback=no")).toBe(true)
 		t.expect(has(tries[3], "tier=1 family=grok fallback=no")).toBe(true)
 		t.expect(has(tries[4], "model=claude-opus-5-5-xhigh")).toBe(true)
@@ -450,7 +517,7 @@ return t.spec("c0251 the interactive pick and its derived Fallback: stamp", func
 	)
 
 	it(
-		"sets up the spend fixture: a github-shaped origin, marked designs with their writers' rows, and a gh stub",
+		"sets up the spend fixture: a github-shaped origin, designs whose rows differ from the role's first choice, a raft, and a gh stub",
 		function()
 			local seed: { [string]: string } = {
 				[".gitignore"] = fs.readFile(`{TOP}/.gitignore`),
@@ -458,23 +525,43 @@ return t.spec("c0251 the interactive pick and its derived Fallback: stamp", func
 				["z-nile/next"] = "issue 400 quiet-copper-falcon\nraft 70 quiet-copper-falcon\n",
 				[".models.toml"] = MODELS,
 			}
-			local function design(id: string, writer: string, closer: string?)
+			-- a design under review: its review file, the writer's prep row (none when `writer` is nil) and a closer file
+			local function design(id: string, writer: string?, closer: string?)
 				seed[`{ROOT}/issues/{id}/{id}.md`] = issue(id, PREPARING)
 				seed[`{ROOT}/issues/{id}/check.sh`] = CHECK
 				seed[`{ROOT}/issues/{id}/design-review-001.md`] = REVIEW
-				seed[`{ROOT}/issues/{id}/spend.d/m.local-1.tsv`] = rowsFor("prep", writer)
+				if writer then
+					seed[`{ROOT}/issues/{id}/spend.d/m.local-1.tsv`] = rowsFor("prep", writer)
+				end
 				if closer then
 					seed[`{ROOT}/issues/{id}/.models.toml`] = closer
 				end
 			end
-			for _, id in { "c0300", "c0301", "c0302", "c0303", "c0304", "c0305", "c0306" } do
-				design(
-					id,
-					"claude-opus-5-5-high",
-					if id == "c0303" or id == "c0304" or id == "c0305" then NO_POOL else nil
-				)
-			end
+			-- the design role's first choice is Opus: none of these rows, bar c0302's and the kimi-pick ones, says Opus
+			design("c0300", "claude-fable-5-2-high") -- the rows: Fable wrote it
+			design("c0301", "claude-fable-5-2-high")
+			design("c0302", "claude-opus-5-5-high") -- the rows say Opus, the lead says Fable
+			design("c0303", nil) -- no rows, the lead says Fable
+			design("c0304", nil) -- no rows, no author: the role's first choice, assumed
+			design("c0305", nil)
+			design("c0306", nil) -- no rows, ZN_MODEL says Fable
 			design("c0307", "claude-opus-5-5-high", NO_ROTATE)
+			design("c0308", "claude-opus-5-5-high", NO_POOL) -- the pick is kimi
+			design("c0309", "claude-opus-5-5-high", NO_POOL)
+			design("c0310", "claude-opus-5-5-high", NO_POOL)
+			-- a raft written by Fable (its members' raft-prep rows), with a coherence review file in its folder
+			seed[`{ROOT}/rafts/R0300/R0300.md`] =
+				"---\nid: R0300\ntype: chore\ntitle: R0300\nslug: r0300\nsingle: false\nissues: [c0312, c0313]\ndesign: ready\nreviews: judged\nrank: 3\ncreated: 2026-11-10\nstatus: preparing-quiet-copper-falcon\n---\n\n# R0300\n\n## Theme\nT.\n\n## Order & dependencies\nc0312\nc0313\n"
+			seed[`{ROOT}/rafts/R0300/check.sh`] = CHECK
+			seed[`{ROOT}/rafts/R0300/design-review-001.md`] = REVIEW
+			for _, id in { "c0312", "c0313" } do
+				seed[`{ROOT}/issues/{id}/{id}.md`] = (
+					string.gsub(issue(id, "prepared-quiet-copper-falcon"), "raft: \n", "raft: R0300\n", 1)
+				)
+				seed[`{ROOT}/issues/{id}/check.sh`] = CHECK
+			end
+			seed[`{ROOT}/issues/c0312/spend.d/m.local-1.tsv`] =
+				rowsFor("prep", "claude-fable-5-2-high", "raft-prep")
 			f = trackerfix.new("c0251-interactive-github.com", seed)
 			local bin = `{f.base}/bin`
 			fs.writeDir(bin)
@@ -487,51 +574,85 @@ return t.spec("c0251 the interactive pick and its derived Fallback: stamp", func
 	)
 
 	it(
-		"AC10: spend --phase design-review --model stamps Fallback: when the typed model is the writer's line",
+		"AC10: a spend stamps Fallback: when the typed model is the writer's line, the writer read from the rows",
 		function()
-			local text = spendReview("c0300", "claude-opus-5-5", "xhigh")
-			t.expect(string.sub(text, 1, #"Model: claude-opus-5-5\nEffort: xhigh\nFallback: "))
-				.toBe("Model: claude-opus-5-5\nEffort: xhigh\nFallback: ")
-			t.expect(has(string.match(text, "\nFallback: ([^\n]*)\n") :: string, "claude-opus-5-5"))
+			-- the rows say Fable wrote c0300, though the design role's first choice is Opus
+			local text = spendReview("c0300", "claude-fable-5-2", "xhigh")
+			t.expect(string.sub(text, 1, #"Model: claude-fable-5-2\nEffort: xhigh\nFallback: "))
+				.toBe("Model: claude-fable-5-2\nEffort: xhigh\nFallback: ")
+			t.expect(has(string.match(text, "\nFallback: ([^\n]*)\n") :: string, "claude-fable-5-2"))
 				.toBe(true)
-			-- another model of the same line is the writer's line too
-			local older = spendReview("c0306", "claude-opus-5-4", "high")
-			t.expect(has(older, "\nFallback: ")).toBe(true)
+			t.expect(has(string.match(text, "\nFallback: ([^\n]*)\n") :: string, "assumed")).toBe(false)
+			-- and an Opus reviewer of that Fable design is not flagged
+			t.expect(spendReview("c0301", "claude-opus-5-5", "xhigh"))
+				.toBe("Model: claude-opus-5-5\nEffort: xhigh\n" .. REVIEW)
 		end
 	)
 
-	it("AC10: it stamps none when the typed model is the pick, and the lead types no reason", function()
-		-- Opus wrote the design; the pick is Fable, a Claude model
-		local text = spendReview("c0301", "claude-fable-5-2", "xhigh")
-		t.expect(text).toBe("Model: claude-fable-5-2\nEffort: xhigh\n" .. REVIEW)
-		-- a Claude model other than the pick and not the writer's: the pick was a Claude id, so no flag
-		local sonnet = spendReview("c0302", "claude-sonnet-5-5", "high")
-		t.expect(has(sonnet, "Fallback:")).toBe(false)
+	it(
+		"AC10: --author is the live author: it beats the rows, so a Fable lead's Opus review is unflagged",
+		function()
+			-- c0302's rows say Opus wrote it; the lead is Fable (--author): Opus reviewing is not the writer's line
+			t.expect(spendReview("c0302", "claude-opus-5-5", "xhigh", "claude-fable-5-2"))
+				.toBe("Model: claude-opus-5-5\nEffort: xhigh\n" .. REVIEW)
+			-- c0303 has no row at all: a Fable subagent reviewing a Fable lead's design is flagged, the writer being the lead
+			local same = spendReview("c0303", "claude-fable-5-2", "xhigh", "claude-fable-5-2")
+			t.expect(has(same, "\nFallback: ")).toBe(true)
+			t.expect(has(string.match(same, "\nFallback: ([^\n]*)\n") :: string, "assumed")).toBe(false)
+		end
+	)
+
+	it("AC10: with no --author the writer is assumed from the role, and the reason says so", function()
+		-- c0304: no row, no author; an Opus review is the assumed writer's line
+		local assumed = spendReview("c0304", "claude-opus-5-5", "xhigh")
+		t.expect(has(string.match(assumed, "\nFallback: ([^\n]*)\n") :: string, "author assumed via role"))
+			.toBe(true)
+		-- c0305: a Fable review of a design nobody recorded is not flagged: the honour system's limit, named in zz-review
+		t.expect(spendReview("c0305", "claude-fable-5-2", "xhigh"))
+			.toBe("Model: claude-fable-5-2\nEffort: xhigh\n" .. REVIEW)
+	end)
+
+	it("AC10: ZN_MODEL is the live author when no --author is typed", function()
+		local text = spendReview("c0306", "claude-fable-5-2", "xhigh", nil, { ZN_MODEL = "claude-fable-5-2" })
+		t.expect(has(text, "\nFallback: ")).toBe(true)
+		t.expect(has(string.match(text, "\nFallback: ([^\n]*)\n") :: string, "assumed")).toBe(false)
 	end)
 
 	it(
 		"AC10: it stamps Fallback: when the pick was not a claude- id and a different model was typed",
 		function()
 			-- without the Fable member the Opus-written design's pick is kimi
-			local viaFable = spendReview("c0303", "claude-fable-5-2", "xhigh")
+			local viaFable = spendReview("c0308", "claude-fable-5-2", "xhigh")
 			t.expect(has(viaFable, "\nFallback: ")).toBe(true)
 			t.expect(has(string.match(viaFable, "\nFallback: ([^\n]*)\n") :: string, "kimi-code-k3.1-pro"))
 				.toBe(true)
-			local onPick = spendReview("c0304", "kimi-code-k3.1-pro", "high")
-			t.expect(onPick).toBe("Model: kimi-code-k3.1-pro\nEffort: high\n" .. REVIEW)
+			t.expect(spendReview("c0309", "kimi-code-k3.1-pro", "high"))
+				.toBe("Model: kimi-code-k3.1-pro\nEffort: high\n" .. REVIEW)
 			-- a typed model that is the writer's line is a fallback even when the pick was not Claude
-			local onAuthor = spendReview("c0305", "claude-opus-5-5", "xhigh")
-			t.expect(has(onAuthor, "\nFallback: ")).toBe(true)
+			t.expect(has(spendReview("c0310", "claude-opus-5-5", "xhigh"), "\nFallback: ")).toBe(true)
 		end
 	)
 
+	it("AC10: a typed id whose role does not rotate stamps no Fallback:", function()
+		t.expect(spendReview("c0307", "claude-opus-5-5", "xhigh"))
+			.toBe("Model: claude-opus-5-5\nEffort: xhigh\n" .. REVIEW)
+	end)
+
 	it(
-		"AC10: a typed id whose plan cannot be built, or whose role does not rotate, stamps no Fallback:",
+		"AC10: a spend on a raft's folder is a raft-mode review, read against the members' raft-prep writer",
 		function()
-			local text = spendReview("c0307", "claude-opus-5-5", "xhigh")
-			t.expect(text).toBe("Model: claude-opus-5-5\nEffort: xhigh\n" .. REVIEW)
+			-- Fable wrote the raft (c0312's raft-prep row); the design role's Opus is not its writer
+			t.expect(spendRaftReview("R0300", "claude-opus-5-5", "xhigh"))
+				.toBe("Model: claude-opus-5-5\nEffort: xhigh\n" .. REVIEW)
 		end
 	)
+
+	it("AC10: the same raft reviewed by the writer's own line is flagged", function()
+		-- a second review file: the first was stamped
+		fs.writeFile(`{prep}/{ROOT}/rafts/R0300/design-review-002.md`, REVIEW)
+		local text = spendRaftReview("R0300", "claude-fable-5-2", "xhigh", "design-review-002")
+		t.expect(has(text, "\nFallback: ")).toBe(true)
+	end)
 
 	it(
 		"AC10: commit --phase code-review --model stamps Fallback: when the typed model is the layer writer's line",
@@ -550,6 +671,47 @@ return t.spec("c0251 the interactive pick and its derived Fallback: stamp", func
 			t.expect(has(commitReview("claude-fable-5-2"), "Fallback:")).toBe(false)
 		end
 	)
+
+	it("AC10: commit's --author is the live author of the layer, whatever the build row says", function()
+		-- the build row says Sonnet; the lead is Opus: an Opus review is then the writer's line, and a Fable one is not
+		local flagged = commitReview("claude-opus-5-5", "claude-opus-5-5")
+		t.expect(has(flagged, "\nFallback: ")).toBe(true)
+		t.expect(has(string.match(flagged, "\nFallback: ([^\n]*)\n") :: string, "assumed")).toBe(false)
+		t.expect(has(commitReview("claude-fable-5-2", "claude-opus-5-5"), "Fallback:")).toBe(false)
+		-- an --author that is no model id is refused before anything is committed
+		write(`{ROOT}/rafts/active/{raft}/review-099.md`, REVIEW)
+		local bad = run("./zn", {
+			"commit",
+			"-m",
+			"bad",
+			"--phase",
+			"code-review",
+			"--model",
+			"claude-opus-5-5",
+			"--effort",
+			"xhigh",
+			"--author",
+			"not a model",
+		})
+		t.expect(bad.ok).toBe(false)
+		t.expect(has(say(bad), "--author")).toBe(true)
+		fs.removeFile(`{dir}/{ROOT}/rafts/active/{raft}/review-099.md`)
+	end)
+
+	it("AC10: a final review file is read in final mode, whose role is final-review", function()
+		-- the raft's own .models.toml makes kimi the final-review role's only model; the code-review role is untouched (Opus)
+		write(
+			`{ROOT}/rafts/active/{raft}/.models.toml`,
+			'[roles.final-review]\nmodel = "kimi-code-k3.1-pro"\ncli = "kimi"\nruntime = "kimi-cli"\npool = []\nfallbacks = []\n'
+		)
+		local final = commitFinal("claude-opus-5-5", "claude-sonnet-5-5")
+		t.expect(has(final, "\nFallback: ")).toBe(true)
+		t.expect(has(string.match(final, "\nFallback: ([^\n]*)\n") :: string, "kimi-code-k3.1-pro"))
+			.toBe(true)
+		-- the same Opus as a code review of that layer is not flagged: that role's pick is Opus
+		t.expect(has(commitReview("claude-opus-5-5", "claude-sonnet-5-5"), "Fallback:")).toBe(false)
+		fs.removeFile(`{dir}/{ROOT}/rafts/active/{raft}/.models.toml`)
+	end)
 
 	it("AC10: a non-Claude pick that was not the model that ran is flagged on a commit too", function()
 		-- the raft's own .models.toml makes kimi the code-review role's only model, so the pick is not a claude- id
@@ -628,6 +790,12 @@ return t.spec("c0251 the interactive pick and its derived Fallback: stamp", func
 			local flagged = pool.interactiveReason(kimiFirst, "claude-fable-5-2") :: string
 			t.expect(has(flagged, "kimi-code-k3.1-pro")).toBe(true)
 			t.expect(has(flagged, "claude-fable-5-2")).toBe(true)
+			-- a plan made from the checkout's own .models.toml says so
+			local walked: any = table.clone(kimiFirst)
+			walked.walk = "checkout"
+			t.expect(has(pool.interactiveReason(walked, "claude-fable-5-2") :: string, "checkout")).toBe(true)
+			t.expect(has(pool.interactiveReason(kimiFirst, "claude-fable-5-2") :: string, "checkout"))
+				.toBe(false)
 			-- an assumed author is named in the writer's-line reason
 			t.expect(has(pool.interactiveReason(kimiFirst, "claude-opus-5-5") :: string, "assumed"))
 				.toBe(true)

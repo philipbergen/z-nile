@@ -825,16 +825,24 @@ function dispatcher.plan(
 	end
 	local item = store.get(id)
 	local layers = layersGiven or walk(item.dir)
-	-- "" is an interactive stamp: no live author, whatever ZN_MODEL holds
-	local live = if authorOpt ~= nil then authorOpt else process.env.ZN_MODEL
+	-- the live author: `--author`, else ZN_MODEL; "" (an interactive stamp with neither typed) reads only ZN_MODEL. It is the
+	-- writer of the step the mode reads (the last: build for code, stream and final), whatever the rows say; with none, the
+	-- spend rows, then the role's first choice (provenance `assumed`)
+	local live = if authorOpt ~= nil and authorOpt ~= "" then authorOpt else process.env.ZN_MODEL
 	local dirs = reviewDirs(id)
-	local a = authorread.read(reviewMode, dirs, layers, live, resolved.authorModel)
+	local a = authorread.read(reviewMode, dirs, layers, nil, resolved.authorModel)
 	local steps = authorship.STEPS[reviewMode]
 	local last = steps[#steps]
 	local authors: { string } = {}
-	for _, w in a.writers do
-		if w.step == last and not table.find(authors, w.model) then
-			table.insert(authors, w.model)
+	local provenance, via = a.provenance, a.via
+	if live ~= nil and live ~= "" then
+		authors = { models.modelOf(live, models.knownModels(layers)) }
+		provenance, via = "recorded", "live"
+	else
+		for _, w in a.writers do
+			if w.step == last and not table.find(authors, w.model) then
+				table.insert(authors, w.model)
+			end
 		end
 	end
 	local priors: { string } = {}
@@ -877,10 +885,11 @@ function dispatcher.plan(
 		authorFamilies = authorFamilies,
 		priors = priors,
 		priorFamilies = priorFamilies,
-		provenance = a.provenance,
-		via = a.via,
+		provenance = provenance,
+		via = via,
 		families = families,
 		rotate = true,
+		walk = if layersGiven then "checkout" else "main",
 	}
 end
 
@@ -1267,14 +1276,19 @@ function dispatcher.modelStep(
 			-- c0306 (F2): in a marked item a new round takes the next number when the newest round of its kind is one
 			-- the judge refuses; otherwise the one-round rule stands
 			local supersedes = false
-			if last >= 1 and l.prefix ~= "" and not streamDir then
+			if last >= 1 and l.prefix ~= "" then
 				local newest = `{cwd}/{l.dir}/{l.prefix}{string.format("%03d", last)}.md`
-				supersedes = fs.isFile(newest)
-					and require("./reviewfiles").markedFolder(`{cwd}/{l.dir}`)
-					and (
-						reviewmodel.refused(fs.readFile(newest))
-						or reviewmodel.fallbackOf(fs.readFile(newest)) ~= nil
-					)
+				if fs.isFile(newest) then
+					local text = fs.readFile(newest)
+					-- c0251: a round that carries Fallback: is superseded in any item and any mode (the cross-model re-review);
+					-- c0306: a refused round only in a marked item, never a stream review's
+					supersedes = reviewmodel.fallbackOf(text) ~= nil
+						or (
+							not streamDir
+							and require("./reviewfiles").markedFolder(`{cwd}/{l.dir}`)
+							and reviewmodel.refused(text)
+						)
+				end
 			end
 			if last >= 1 and not supersedes then
 				-- one round. Historical files stay where they are; a new one is not added.

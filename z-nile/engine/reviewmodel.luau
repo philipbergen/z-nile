@@ -156,6 +156,33 @@ end
 -- the newest `design-review-NNN.md`; for the code kind the newest `review-NNN.md` and the newest `final-review-NNN.md`,
 -- apart. `names` are the folder's files; the result is in file order (review before final).
 function reviewmodel.newest(names: { string }, kind: string): { string }
+	-- c0251: an idea challenge is `idea-review-NNN.md`; a stream review is `stream-review-<id>-NNN.md`, one line of rounds per layer
+	if kind == "idea" or kind == "stream" then
+		local best: { [string]: number } = {}
+		local bestName: { [string]: string } = {}
+		for _, name in names do
+			local id: string?, n: number?
+			if kind == "idea" then
+				id, n = "", number(name, "^idea%-review%-(%d+)%.md$")
+			else
+				local layer, round = string.match(name, "^stream%-review%-(.+)%-(%d+)%.md$")
+				id, n = layer, tonumber(round)
+			end
+			if id and n and n > (best[id] or -1) then
+				best[id], bestName[id] = n, name
+			end
+		end
+		local ids: { string } = {}
+		for id in bestName do
+			table.insert(ids, id)
+		end
+		table.sort(ids)
+		local out: { string } = {}
+		for _, id in ids do
+			table.insert(out, bestName[id])
+		end
+		return out
+	end
 	local groups: { { string } } = if kind == "code"
 		then { { "^review%-(%d+)%.md$" }, { "^final%-review%-(%d+)%.md$" } }
 		else { { "^design%-review%-(%d+)%.md$" } }
@@ -275,41 +302,45 @@ local function rankOf(kind: string, name: string): (number?, number?)
 end
 
 -- The models of the previous round. `folders` is each folder's kind and its review files (name -> text); `upto` the rank
--- of the kind being written. Files that record no model are skipped; a refused or flagged round counts. The previous round
--- is the highest rank up to `upto`, then the highest round number at that rank, across all the folders; every folder that
--- ties on both contributes its model. Bare ids, each once, in folder then file order.
+-- of the kind being written. Files that record no model are skipped; a refused or flagged round counts. The top rank is
+-- the highest rank up to `upto` that any folder holds. In each folder (an entry of `folders`) the newest round at that
+-- rank is a previous reviewer: round numbers are never compared between folders (c0248 numbers each layer's reviews from
+-- 001). Bare ids, each once, in folder order.
 function reviewmodel.priorsOf(
 	folders: { { kind: string, files: { [string]: string } } },
 	upto: number
 ): { string }
-	local best, bestRound = 0, 0
-	type Hit = { rank: number, round: number, model: string }
+	type Hit = { folder: number, rank: number, round: number, model: string }
 	local hits: { Hit } = {}
-	for _, folder in folders do
-		local names: { string } = {}
-		for name in folder.files do
-			table.insert(names, name)
-		end
-		table.sort(names)
-		for _, name in names do
+	local top = 0
+	for i, folder in folders do
+		for name, text in folder.files do
 			local rank, round = rankOf(folder.kind, name)
 			if rank ~= nil and round ~= nil and rank <= upto then
-				local model = reviewmodel.read(folder.files[name])
+				local model = reviewmodel.read(text)
 				if model ~= nil and model ~= "" then
-					table.insert(
-						hits,
-						{ rank = rank, round = round, model = (string.gsub(model, "%[[^%[%]]*%]$", "")) }
-					)
-					if rank > best or (rank == best and round > bestRound) then
-						best, bestRound = rank, round
-					end
+					table.insert(hits, {
+						folder = i,
+						rank = rank,
+						round = round,
+						model = (string.gsub(model, "%[[^%[%]]*%]$", "")),
+					})
+					top = math.max(top, rank)
 				end
 			end
 		end
 	end
-	local out: { string } = {}
+	local newest: { [number]: Hit } = {}
 	for _, hit in hits do
-		if hit.rank == best and hit.round == bestRound and not table.find(out, hit.model) then
+		local had = newest[hit.folder]
+		if hit.rank == top and (had == nil or hit.round > had.round) then
+			newest[hit.folder] = hit
+		end
+	end
+	local out: { string } = {}
+	for i = 1, #folders do
+		local hit = newest[i]
+		if hit and not table.find(out, hit.model) then
 			table.insert(out, hit.model)
 		end
 	end

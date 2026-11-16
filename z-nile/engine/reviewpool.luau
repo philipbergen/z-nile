@@ -26,6 +26,7 @@ export type Plan = {
 	via: string, -- where the writers came from (authorship.Authorship.via)
 	families: family.Families,
 	rotate: boolean,
+	walk: string?, -- "main" (the pinned walk) or "checkout" (the working tree's .models.toml files)
 }
 
 local function bare(id: string): string
@@ -105,6 +106,7 @@ end
 function reviewpool.interactiveReason(plan: Plan, ran: string): string?
 	local model = bare(ran)
 	local fam = family.of(model, plan.families)
+	local walked = if plan.walk == "checkout" then "; plan from the checkout's .models.toml" else ""
 	local exact = table.find(plan.authors, model) ~= nil
 	if exact or (fam ~= nil and table.find(plan.authorFamilies, fam) ~= nil) then
 		local what = if exact
@@ -113,13 +115,13 @@ function reviewpool.interactiveReason(plan: Plan, ran: string): string?
 		if plan.provenance == "assumed" or plan.provenance == "unknown" then
 			what ..= `; author {plan.provenance} via {plan.via}`
 		end
-		return cut(what)
+		return cut(what .. walked)
 	end
 	local first = plan.picks[1]
 	if first ~= nil then
 		local pick = bare(first.spec.model)
 		if string.sub(pick, 1, 7) ~= "claude-" and pick ~= model then
-			return cut(`the pool picked {pick}; {model} ran the review instead`)
+			return cut(`the pool picked {pick}; {model} ran the review instead{walked}`)
 		end
 	end
 	return nil

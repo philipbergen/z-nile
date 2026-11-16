@@ -51,6 +51,11 @@ cli = "claude"
 model = "claude-opus-5-5"
 runtime = "claude-cli"
 
+[member.sonnet]
+cli = "claude"
+model = "claude-sonnet-5-5"
+runtime = "claude-cli"
+
 [roles.design]
 model = "claude-opus-5-5"
 cli = "claude"
@@ -104,12 +109,14 @@ pool = ["opus"]
 fallbacks = ["kimi", "grok"]
 
 [roles.raft]
-model = "claude-fable-5-2"
+model = "claude-opus-5-5"
 cli = "claude"
 runtime = "claude-cli"
 rank = 4
 max_tokens = 5000
 effort = "xhigh"
+rotate = true
+pool = ["fable"]
 fallbacks = ["kimi"]
 
 [roles.stream-review]
@@ -120,12 +127,15 @@ rank = 2
 max_tokens = 5000
 effort = "medium"
 rotate = true
-fallbacks = ["kimi", "grok"]
+pool = ["sonnet"]
+fallbacks = []
 ]]
 
 -- the design-challenge role without its Fable member
 local NO_POOL = "[roles.design-challenge]\npool = []\n"
 -- the code-review role at effort high: a grok- try is not a review model there (c0306), so it is skipped
+-- no rotate on the final-review role: it is tried in the toml order, its pool member after its own model
+local PLAIN_FINAL = "[roles.final-review]\nrotate = false\n"
 local AT_HIGH = '[roles.code-review]\neffort = "high"\n'
 -- the code-review role with nothing but its own model
 local OPUS_ONLY = "[roles.code-review]\npool = []\nfallbacks = []\n"
@@ -209,8 +219,16 @@ local function stamped(model: string, effort: string?, extra: string?): string
 end
 
 local ITEMS: { [string]: string } = {}
-local function item(id: string, rows: { { string } }?, files: { [string]: string }?, closer: string?)
-	ITEMS[`pickman/.tracker/issues/{id}/{id}.md`] = marked(id)
+local function item(
+	id: string,
+	rows: { { string } }?,
+	files: { [string]: string }?,
+	closer: string?,
+	unmarked: boolean?
+)
+	ITEMS[`pickman/.tracker/issues/{id}/{id}.md`] = if unmarked
+		then trackerfix.stub(id, id, "new-quiet-copper-falcon")
+		else marked(id)
 	if rows then
 		ITEMS[`pickman/.tracker/issues/{id}/spend.d/m.local-1.tsv`] = spendRows(rows)
 	end
@@ -257,28 +275,30 @@ local KIMI = table.concat({
 	"",
 }, "\n")
 
-local function znIn(args: { string }): fixture.Result
+local function znIn(args: { string }, extra: { [string]: string }?): fixture.Result
 	local argv = { "scripts/tracker.sh" }
 	for _, a in args do
 		table.insert(argv, a)
 	end
-	return fixture.exec(wt, "bash", argv, {
-		env = {
-			FAKE_DIR = h.fakes,
-			PATH = `{h.bin}:{process.env.PATH}`,
-			ZN_AGENT_TOKEN_FILE = h.token,
-			GH_TOKEN = "the-users-token",
-			CLAUDECODE = "",
-			AI_AGENT = "",
-			CLAUDE_EFFORT = "",
-			ZN_DISPATCH = "",
-			ZN_HEADLESS = "",
-			ZN_MODEL = "",
-			CLAUDE_CODE_SESSION_ID = "",
-			KIMI_SESSION_ID = "",
-			KIMI_CODE_SESSION_ID = "",
-		},
-	})
+	local env: { [string]: string } = {
+		FAKE_DIR = h.fakes,
+		PATH = `{h.bin}:{process.env.PATH}`,
+		ZN_AGENT_TOKEN_FILE = h.token,
+		GH_TOKEN = "the-users-token",
+		CLAUDECODE = "",
+		AI_AGENT = "",
+		CLAUDE_EFFORT = "",
+		ZN_DISPATCH = "",
+		ZN_HEADLESS = "",
+		ZN_MODEL = "",
+		CLAUDE_CODE_SESSION_ID = "",
+		KIMI_SESSION_ID = "",
+		KIMI_CODE_SESSION_ID = "",
+	}
+	for k, v in extra or {} do
+		env[k] = v
+	end
+	return fixture.exec(wt, "bash", argv, { env = env })
 end
 
 -- the reviewer (whichever model is asked) writes this review, never a record
@@ -297,11 +317,16 @@ local function modes(m: { [string]: string })
 	reviewer()
 end
 
-local function review(id: string, mode: string): fixture.Result
-	return znIn({ "dispatch", "zz-review", id, "--mode", mode })
+local function review(id: string, mode: string, author: string?, env: { [string]: string }?): fixture.Result
+	local args = { "dispatch", "zz-review", id, "--mode", mode }
+	if author then
+		table.insert(args, "--author")
+		table.insert(args, author)
+	end
+	return znIn(args, env)
 end
-local function reviewOk(id: string, mode: string): fixture.Result
-	local r = review(id, mode)
+local function reviewOk(id: string, mode: string, author: string?, env: { [string]: string }?): fixture.Result
+	local r = review(id, mode, author, env)
 	if not r.ok then
 		error(`dispatch zz-review {id} --mode {mode} failed: {r.stdout}{r.stderr}`, 2)
 	end
@@ -384,16 +409,43 @@ return t.spec("c0251 the dispatcher runs reviews through the picker", function(i
 			-- AC11: a Sonnet-written layer (c0019, with a stamped earlier review that a stream review must not read) and a Haiku one (c0020)
 			item("c0019", SONNET_BUILD, { ["review-001.md"] = stamped("claude-haiku-5-5", "medium") })
 			item("c0020", { { "build", "claude-haiku-5-5-medium" } })
+			-- AC11: a Haiku-written layer whose cheap Sonnet is refused is reviewed by Haiku itself, flagged (c0027)
+			item("c0027", { { "build", "claude-haiku-5-5-medium" } })
+			-- AC4, AC7 in an unmarked item: stamped rounds are priors, and a flagged round is superseded (c0029); an unflagged one is not (c0030)
+			item("c0029", SONNET_BUILD, {
+				["review-001.md"] = stamped(
+					"claude-opus-5-5",
+					"xhigh",
+					"Fallback: the model that wrote the text ran the review\n"
+				),
+			}, nil, true)
+			item(
+				"c0030",
+				SONNET_BUILD,
+				{ ["review-001.md"] = stamped("claude-opus-5-5", "xhigh") },
+				nil,
+				true
+			)
+			-- AC17 (the live author): the rows say Opus wrote the design, the lead says Fable (c0031 by --author, c0032 by ZN_MODEL)
+			item("c0031", OPUS_DESIGN)
+			item("c0032", OPUS_DESIGN)
 			-- AC3 final: idea by Fable, design by Opus, build by Sonnet; the final review's author is the build's only
 			item("c0023", {
 				{ "idea", "claude-fable-5-2-medium", "c0023 ok" },
 				{ "prep", "claude-opus-5-5-high" },
 				{ "build", "claude-sonnet-5-5-high" },
 			})
-			-- AC14: the raft R0093 was written by Fable (its raft-prep row), and the raft role has no rotate
-			item("c0024", { { "prep", "claude-fable-5-2-high", "raft-prep" } })
+			-- AC14: the final review of R0093 (built by Fable) runs on a role with no rotate
+			item("c0024", { { "build", "claude-fable-5-2-high" } })
+			-- raft-mode review with rotate: R0094's raft was written by Fable and its coherence round was Opus's; R0095's has no round
+			item("c0033", { { "prep", "claude-fable-5-2-high", "raft-prep" } })
+			item("c0034", { { "prep", "claude-fable-5-2-high", "raft-prep" } })
 			ITEMS["pickman/.tracker/rafts/R0092/R0092.md"] = raftDoc("R0092", "c0023")
 			ITEMS["pickman/.tracker/rafts/R0093/R0093.md"] = raftDoc("R0093", "c0024")
+			ITEMS["pickman/.tracker/rafts/R0093/.models.toml"] = PLAIN_FINAL
+			ITEMS["pickman/.tracker/rafts/R0094/R0094.md"] = raftDoc("R0094", "c0033")
+			ITEMS["pickman/.tracker/rafts/R0094/design-review-001.md"] = stamped("claude-opus-5-5", "xhigh")
+			ITEMS["pickman/.tracker/rafts/R0095/R0095.md"] = raftDoc("R0095", "c0034")
 			ITEMS[".models.toml"] = MODELS
 			h = fakecli.new("c0251-dispatch-pool", ITEMS)
 			fs.writeFile(`{h.bin}/claude`, modelAware(fakecli.script("claude")))
@@ -407,13 +459,18 @@ return t.spec("c0251 the dispatcher runs reviews through the picker", function(i
 				local doc = `{wt}/{folder(id)}/{id}.md`
 				fs.writeFile(doc, (string.gsub(fs.readFile(doc), "\nraft:[^\n]*", `\nraft: {raft}`, 1)))
 			end
-			for _, id in { "c0019", "c0020" } do
+			for _, id in { "c0019", "c0020", "c0027" } do
 				toRaft(id, "R0091")
 			end
+			toRaft("c0033", "R0094")
+			toRaft("c0034", "R0095")
 			toRaft("c0023", "R0092")
 			toRaft("c0024", "R0093")
 			fs.writeDir(`{wt}/pickman/.tracker/rafts/R0091`)
-			fs.writeFile(`{wt}/pickman/.tracker/rafts/R0091/R0091.md`, raftDoc("R0091", "c0019, c0020"))
+			fs.writeFile(
+				`{wt}/pickman/.tracker/rafts/R0091/R0091.md`,
+				raftDoc("R0091", "c0019, c0020, c0027")
+			)
 			-- the model-aware claude is the one on PATH; the kimi is new
 			t.expect(fs.isFile(`{h.bin}/kimi`)).toBe(true)
 		end
@@ -586,6 +643,71 @@ return t.spec("c0251 the dispatcher runs reviews through the picker", function(i
 		end
 	)
 
+	it("AC17: a dispatched run orders by --author, the lead's own model, not by the rows", function()
+		-- the rows say Opus wrote c0031's design; the lead is Fable, so Opus reviews first and nothing is flagged
+		modes({ ["claude.zz-review"] = "script" })
+		local out = dry("c0031", "design", "claude-fable-5-2")
+		t.expect(has(out, "pool: author=claude-fable-5-2 (recorded via live) previous=none")).toBe(true)
+		reviewOk("c0031", "design", "claude-fable-5-2")
+		t.expect(started()).toEqual({ "claude:claude-opus-5-5" })
+		t.expect(filed(`{folder("c0031")}/design-review-001.md`))
+			.toBe("Model: claude-opus-5-5\nEffort: xhigh\n# Review\n\nVerdict: approve\n")
+	end)
+
+	it("AC17: a dispatched run with no --author takes ZN_MODEL, else the rows, and says which", function()
+		modes({ ["claude.zz-review"] = "script" })
+		reviewOk("c0032", "design", nil, { ZN_MODEL = "claude-fable-5-2" })
+		t.expect(started()).toEqual({ "claude:claude-opus-5-5" })
+		-- the typed --author wins over ZN_MODEL
+		local out = znIn({
+			"dispatch",
+			"zz-review",
+			"c0010",
+			"--mode",
+			"design",
+			"--dry-run",
+			"--author",
+			"claude-opus-5-5",
+		}, {
+			ZN_MODEL = "claude-fable-5-2",
+		})
+		t.expect(has(out.stdout, "pool: author=claude-opus-5-5 (recorded via live)")).toBe(true)
+		-- no author at all: the rows
+		t.expect(has(dry("c0010", "design"), "(recorded via row)")).toBe(true)
+		-- no row either: the role's first choice, and the pool line says assumed
+		t.expect(has(dry("c0015", "design"), "(assumed via role)")).toBe(true)
+	end)
+
+	it("AC17: the live author applies to the step a final review reads, the build", function()
+		-- R0092's rows say Sonnet built it; a Fable lead's final review goes to Opus first and Fable is the fallback
+		local out = dry("R0092", "final", "claude-fable-5-2")
+		t.expect(has(out, "pool: author=claude-fable-5-2 (recorded via live)")).toBe(true)
+		t.expect(has(out, "pick: claude claude-opus-5-5")).toBe(true)
+		t.expect(has(out, "tier=3 family=fable fallback=yes")).toBe(true)
+	end)
+
+	it(
+		"AC4: an unmarked item's stamped round is a previous reviewer, and a flagged one is superseded",
+		function()
+			local out = dry("c0029", "code")
+			t.expect(has(out, "previous=claude-opus-5-5")).toBe(true)
+			t.expect(has(out, "pick: claude claude-fable-5-2")).toBe(true)
+			modes({ ["claude.zz-review"] = "script" })
+			reviewOk("c0029", "code")
+			t.expect(filed(`{folder("c0029")}/review-002.md`))
+				.toBe("Model: claude-fable-5-2\nEffort: xhigh\n# Review\n\nVerdict: approve\n")
+			t.expect(started()).toEqual({ "claude:claude-fable-5-2" })
+		end
+	)
+
+	it("AC7: an unmarked item's unflagged round still allows no second one", function()
+		modes({ ["claude.zz-review"] = "script" })
+		local r = review("c0030", "code")
+		t.expect(r.ok).toBe(false)
+		t.expect(has(r.stdout .. r.stderr, "there is no second round")).toBe(true)
+		t.expect(exists(`{folder("c0030")}/review-002.md`)).toBe(false)
+	end)
+
 	it(
 		"AC11: a stream review runs on stream-review, picks away from the author's family and reads no priors",
 		function()
@@ -601,13 +723,33 @@ return t.spec("c0251 the dispatcher runs reviews through the picker", function(i
 		end
 	)
 
-	it("AC11: a Haiku-written layer's stream review goes to the next line, kimi, first", function()
-		modes({ ["claude.zz-review"] = "script", ["kimi.zz-review"] = "script" })
+	it("AC11: a Haiku-written layer's stream review goes to the cheap Sonnet first, unflagged", function()
+		modes({ ["claude.zz-review"] = "script" })
 		reviewOk("c0020", "stream")
-		t.expect(started()).toEqual({ "kimi:kimi-code/k3.1-pro" })
+		t.expect(started()).toEqual({ "claude:claude-sonnet-5-5" })
 		t.expect(filed("pickman/.tracker/rafts/R0091/stream-review-c0020-001.md"))
-			.toBe("Model: kimi-code-k3.1-pro\nEffort: medium\n# Review\n\nVerdict: approve\n")
+			.toBe("Model: claude-sonnet-5-5\nEffort: medium\n# Review\n\nVerdict: approve\n")
 	end)
+
+	it(
+		"AC11: a stream review run by the layer writer's own line records Fallback:, and the next round supersedes it",
+		function()
+			modes({ ["claude.zz-review"] = "script", ["claude-sonnet"] = "fail" })
+			local r = reviewOk("c0027", "stream")
+			t.expect(started()).toEqual({ "claude:claude-sonnet-5-5", "claude:claude-haiku-5-5" })
+			local text = filed("pickman/.tracker/rafts/R0091/stream-review-c0027-001.md")
+			t.expect(string.sub(text, 1, #"Model: claude-haiku-5-5\nEffort: medium\nFallback: "))
+				.toBe("Model: claude-haiku-5-5\nEffort: medium\nFallback: ")
+			t.expect(has(r.stderr .. r.stdout, "fallback review: ")).toBe(true)
+			-- a flagged stream review is superseded: the cross-model re-review files round 2, with Sonnet back
+			modes({ ["claude.zz-review"] = "script" })
+			reviewOk("c0027", "stream")
+			t.expect(filed("pickman/.tracker/rafts/R0091/stream-review-c0027-002.md"))
+				.toBe("Model: claude-sonnet-5-5\nEffort: medium\n# Review\n\nVerdict: approve\n")
+			t.expect(has(filed("pickman/.tracker/rafts/R0091/stream-review-c0027-001.md"), "Fallback:"))
+				.toBe(true)
+		end
+	)
 
 	it(
 		"AC3: a final review's author is the writers of the build only, not the idea's and the design's",
@@ -621,19 +763,62 @@ return t.spec("c0251 the dispatcher runs reviews through the picker", function(i
 	)
 
 	it("AC14: a role with no rotate tries in the toml order, whoever wrote the text", function()
-		-- R0093's raft was written by Fable and the raft role has no rotate: Fable is still the first pick, with no tier above 1
-		local out = dry("R0093", "raft")
+		-- R0093 was built by Fable and its final-review role has rotate = false: Fable is still the first pick, with no tier above 1
+		local out = dry("R0093", "final")
 		t.expect(has(out, "pool: no rotation")).toBe(true)
 		t.expect(has(out, "tier=2")).toBe(false)
 		t.expect(has(out, "tier=3")).toBe(false)
 		t.expect(has(out, "pick: claude claude-fable-5-2")).toBe(true)
-		-- and the run keeps the order: Fable refused, then kimi
-		modes({ ["claude.zz-review"] = "script", ["claude-fable"] = "fail", ["kimi.zz-review"] = "script" })
-		reviewOk("R0093", "raft")
-		t.expect(started()).toEqual({ "claude:claude-fable-5-2", "kimi:kimi-code/k3.1-pro" })
-		t.expect(filed("pickman/.tracker/rafts/R0093/design-review-001.md"))
-			.toBe("Model: kimi-code-k3.1-pro\nEffort: xhigh\n# Review\n\nVerdict: approve\n")
+		-- and the run keeps the order: Fable refused, then the pool member, Opus
+		modes({ ["claude.zz-review"] = "script", ["claude-fable"] = "fail" })
+		reviewOk("R0093", "final")
+		t.expect(started()).toEqual({ "claude:claude-fable-5-2", "claude:claude-opus-5-5" })
+		t.expect(filed("pickman/.tracker/rafts/R0093/final-review-001.md"))
+			.toBe("Model: claude-opus-5-5\nEffort: xhigh\n# Review\n\nVerdict: approve\n")
 	end)
+
+	it(
+		"AC14: a z-raft authoring step on a role that carries pool and rotate is tried in the toml order",
+		function()
+			-- the same `raft` role reviews a raft (pool and rotation) and authors one (its model, then its fallbacks)
+			local layers = { M.parse(MODELS, ".models.toml") }
+			local authoring = M.resolve(layers, "z-raft")
+			local ids = {}
+			for _, s in M.tries(authoring) do
+				table.insert(ids, `{s.cli}:{s.model}`)
+			end
+			t.expect(ids).toEqual({ "claude:claude-opus-5-5", "kimi:kimi-code-k3.1-pro" })
+			t.expect(authoring.rotate).toBe(false)
+			local reviewing = M.resolve(layers, "zz-review", "raft")
+			t.expect(#M.tries(reviewing)).toBe(3)
+			t.expect(reviewing.rotate).toBe(true)
+			-- the dispatcher's plan for the z-raft step agrees: no pool member, no tiers
+			local plan = znIn({ "dispatch", "z-raft", "R0093", "--dry-run" })
+			t.expect(plan.ok).toBe(true)
+			t.expect(has(plan.stdout, "pool: no rotation")).toBe(true)
+			t.expect(has(plan.stdout, "member=")).toBe(false)
+			t.expect(has(plan.stdout, "claude-fable-5-2")).toBe(false)
+		end
+	)
+
+	it(
+		"AC14: a raft-mode review rotates on the raft's writer and on the raft's previous coherence round",
+		function()
+			-- R0095: the raft was written by Fable (the members' raft-prep rows), so Opus reviews it first, unflagged
+			modes({ ["claude.zz-review"] = "script" })
+			local out = dry("R0095", "raft")
+			t.expect(has(out, "pool: author=claude-fable-5-2 (recorded via row) previous=none")).toBe(true)
+			reviewOk("R0095", "raft")
+			t.expect(started()).toEqual({ "claude:claude-opus-5-5" })
+			t.expect(filed("pickman/.tracker/rafts/R0095/design-review-001.md"))
+				.toBe("Model: claude-opus-5-5\nEffort: xhigh\n# Review\n\nVerdict: approve\n")
+			-- R0094: the same writer, and its coherence round was Opus's, so kimi (a line that is neither) is the pick
+			local second = dry("R0094", "raft")
+			t.expect(has(second, "previous=claude-opus-5-5")).toBe(true)
+			t.expect(has(second, "pick: kimi kimi-code-k3.1-pro")).toBe(true)
+			t.expect(has(second, "tier=3 family=fable fallback=yes")).toBe(true)
+		end
+	)
 
 	it("AC14: a fixture with no [families] and no rotate loads and tries in the toml order", function()
 		local text = [[
@@ -666,7 +851,7 @@ fallbacks = ["kimi"]
 	end)
 
 	it(
-		"AC12: the idea challenge orders through the same picker with the draft's real writer as the author, and its review stays unstamped",
+		"AC12: the idea challenge orders through the same picker with the draft's real writer as the author, and its review records the model and the fallback",
 		function()
 			local f = trackerfix.new("c0251-idea-pool", { [".models.toml"] = IDEA_MODELS })
 			local bin = `{f.base}/bin`
@@ -705,9 +890,11 @@ fallbacks = ["kimi"]
 			t.expect(kimiAt ~= nil).toBe(true)
 			t.expect((opusAt :: number) < (kimiAt :: number)).toBe(true)
 			local ideaReview = fs.readFile(`{ideaWt}/pickman/.tracker/issues/{id}/idea-review-001.md`)
-			t.expect(has(ideaReview, "Model:")).toBe(false)
-			t.expect(has(ideaReview, "Fallback:")).toBe(false)
-			-- with no refusal the other line (Opus) challenges Fable's draft first, and the review is unstamped as well
+			-- kimi challenged its own draft: the review says so
+			t.expect(string.sub(ideaReview, 1, #"Model: kimi-code-k3.1-pro\nFallback: "))
+				.toBe("Model: kimi-code-k3.1-pro\nFallback: ")
+			t.expect(has(ideaReview, "# Idea review 001")).toBe(true)
+			-- with no refusal the other line (Opus) challenges Fable's draft first, and its review records no fallback
 			local other = newIdea("fable-wrote-it")
 			local second = trackerfix.tr(
 				f,
@@ -721,10 +908,11 @@ fallbacks = ["kimi"]
 			t.expect(has(second.stdout, "idea: idea model claude-fable-5-2")).toBe(true)
 			t.expect(has(second.stdout, "idea: idea-challenge model claude-opus-5-5")).toBe(true)
 			t.expect(has(second.stdout, "idea: idea-challenge model kimi-code-k3.1-pro")).toBe(false)
-			t.expect(
-				has(fs.readFile(`{ideaWt}/pickman/.tracker/issues/{other}/idea-review-001.md`), "Model:")
-			)
-				.toBe(false)
+			-- Opus is not the writer's line: the review is stamped with its model and no fallback
+			local clean = fs.readFile(`{ideaWt}/pickman/.tracker/issues/{other}/idea-review-001.md`)
+			t.expect(string.sub(clean, 1, #"Model: claude-opus-5-5\n# Idea review 001"))
+				.toBe("Model: claude-opus-5-5\n# Idea review 001")
+			t.expect(has(clean, "Fallback:")).toBe(false)
 			fixture.git(f.main, { "worktree", "remove", "--force", ideaWt })
 			fs.removeDir(f.base)
 		end

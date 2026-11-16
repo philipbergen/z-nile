@@ -46,15 +46,12 @@ function reviewfiles.judgeDone(dirs: { { id: string, dir: string } }): string?
 end
 
 -- c0251: the models of the previous round across `folders` (each `{ kind, dir }`, kind design, coherence or code),
--- up to the rank `upto`: the files are read with `read`, the ranking is reviewmodel.priorsOf. A folder of an item that
--- is not marked `reviews: judged` contributes nothing.
+-- up to the rank `upto`: the files are read with `read`, the ranking is reviewmodel.priorsOf.
 function reviewfiles.priors(folders: { { kind: string, dir: string } }, upto: number): { string }
 	local read: { { kind: string, files: { [string]: string } } } = {}
 	for _, f in folders do
-		-- an unmarked item rotates on its writers only: its stamped files are no previous round
-		if reviewfiles.markedFolder(f.dir) then
-			table.insert(read, { kind = f.kind, files = reviewfiles.read(f.dir) })
-		end
+		-- stamped rounds count in any item, marked or not: c0306 stamps every review it files
+		table.insert(read, { kind = f.kind, files = reviewfiles.read(f.dir) })
 	end
 	return reviewmodel.priorsOf(read, upto)
 end

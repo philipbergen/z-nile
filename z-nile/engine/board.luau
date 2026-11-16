@@ -45,6 +45,7 @@ export type Raft = {
 	doneFrom: string?, -- "history" or "spend": where doneAt came from
 	rounds: { design: number, code: number }, -- review files of it, its members and the rafts retired into it
 	fallbackReviews: { string }, -- c0251: the newest round of a kind that the writer's own model line ran (a Fallback: line)
+	rereview: { [string]: string }, -- c0251: for each of those files, the command that asks for the cross-model re-review from here
 	dispatch: Dispatch?,
 	pr: Pr?, -- c0121 fills these on the served page; the static page leaves them nil
 	checks: Checks?,
@@ -79,6 +80,7 @@ export type Issue = {
 	age: number?, -- seconds between doneAt and the model's asOf
 	spend: Spend, -- from its spend.md (ledger.parse)
 	fallbackReviews: { string }, -- c0251, as on Raft
+	rereview: { [string]: string }, -- c0251, as on Raft
 	dispatch: Dispatch?,
 	pr: Pr?, -- c0121's, as on Raft
 	checks: Checks?,
@@ -894,8 +896,21 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 				reviewFiles(i.dir, own)
 				return boardview.fallbacks(reviewTexts(own))
 			end)(),
+			rereview = {},
 			dispatch = facts.dispatch[i.id],
 		}
+		for _, file in issue.fallbackReviews do
+			local route = boardview.rereview({
+				kind = "issue",
+				state = i.state,
+				id = i.id,
+				slug = i.front.slug or "",
+				raft = issue.raft,
+			}, file)
+			if route then
+				issue.rereview[file] = route
+			end
+		end
 		table.insert(issues, issue)
 		issueById[i.id] = issue
 	end
@@ -970,6 +985,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			doneFrom = if doneAt[r.id] then "history" else nil,
 			rounds = { design = 0, code = 0 },
 			fallbackReviews = {},
+			rereview = {},
 			dispatch = facts.dispatch[r.id],
 		}
 		local branch = branchOf(r.id, facts.refs, if hist and hist.activeAt then hist.activeAt[r.id] else nil)
@@ -1153,6 +1169,15 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		local design, code = boardview.rounds(files[raft.id])
 		raft.rounds = { design = design, code = code }
 		raft.fallbackReviews = boardview.fallbacks(reviewTexts(files[raft.id]))
+		for _, file in raft.fallbackReviews do
+			local route = boardview.rereview(
+				{ kind = "raft", state = rawRaftById[raft.id].state, id = raft.id, slug = "", raft = nil },
+				file
+			)
+			if route then
+				raft.rereview[file] = route
+			end
+		end
 	end
 	local charts: { [string]: ProjectCharts } = {}
 	for _, p in projectList do

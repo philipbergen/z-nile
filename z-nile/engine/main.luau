@@ -94,10 +94,11 @@ usage: ./zn <command> ...
   stack <R-id>                                  print the layers, from git (read-only)
   trace <R-id> [--check]                        print the final review's traceability table skeleton, or verify trace.md
   focus <issue-id>                              attribute following commits to this issue
-  commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>]
+  commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>] [--author <id>]
                                                 (--phase build records the model that wrote the layer: --model, or ZN_MODEL under dispatch; a marked item refuses none)
                                                 stage all, record spend, commit, push. --time and --tokens are ignored
-  spend <id> --phase capture|prep|design-review|deliver [--begin] [--model <id>] [--note <text>]
+                                                (--author is the lead's own model: the writer a code-review's Fallback: line is derived against)
+  spend <id> --phase capture|prep|design-review|deliver [--begin] [--model <id>] [--author <id>] [--note <text>]
                                                 mark a stage; the tool writes the measured row. --time and --tokens are ignored
                                                 (--phase capture|prep records the model that wrote the work: --model, or ZN_MODEL under dispatch; a marked item refuses none)
   record --id <id> --phase <phase> [--report <file>] [--wall <s>] [--cpu <s>] [--ai <s>] [--tokens <n>]
@@ -4440,24 +4441,43 @@ end
 -- c0251: the reason an interactive review on `model` is a fallback, from the pool's plan for the item `id` and the review
 -- `mode` (design, raft, code, final); nil when it is not one, and nil when no plan can be built (no rotating role, no
 -- .models.toml on main, an unknown item). The lead types no reason: the tool derives it.
-local function interactiveFallback(id: string, mode: string, model: string): string?
+local function interactiveFallback(id: string, mode: string, model: string, author: string?): string?
+	local dispatcher = require("./dispatcher")
+	-- the plan of `./zn dispatch zz-review --dry-run`: the pinned walk of main. Without an origin (an offline checkout) the
+	-- checkout's own .models.toml files stand in, and the reason says so.
 	local ok, plan = pcall(function()
-		-- the checkout's own .models.toml files: the lead types the model, so this only decides a flag, and needs no origin
-		local layers = models.walk(".", store.get(id).dir)
-		return require("./dispatcher").plan(
-			"zz-review",
-			id,
-			nil,
-			mode,
-			"",
-			models.resolve(layers, "zz-review", mode),
-			layers
-		)
+		return dispatcher.plan("zz-review", id, nil, mode, author or "")
 	end)
+	if not ok then
+		ok, plan = pcall(function()
+			local layers = models.walk(".", store.get(id).dir)
+			return dispatcher.plan(
+				"zz-review",
+				id,
+				nil,
+				mode,
+				author or "",
+				models.resolve(layers, "zz-review", mode),
+				layers
+			)
+		end)
+	end
 	if not ok or not (plan :: any).rotate then
 		return nil
 	end
 	return require("./reviewpool").interactiveReason(plan :: any, model)
+end
+
+-- c0251: `--author <model id>` of spend and commit: the lead's own model, the live author of the text under review.
+local function authorOption(what: string, opts: { [string]: { string } }): string?
+	local raw = opts["--author"]
+	if not raw then
+		return nil
+	end
+	if #raw > 1 or not ledger.isModel(raw[1]) then
+		fail(`{what} --author takes one model id (letters, digits, '.', '_' and '-')`)
+	end
+	return raw[1]
 end
 
 -- The issues a commit is attributed to: the ones named, else the focus, else the raft's members.
@@ -4628,6 +4648,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	end
 	-- c0306: the review files this commit carries are stamped with --model under --phase code-review, and refused in a
 	-- marked item without it (under any other phase, at all)
+	local authorOpt = authorOption("commit", opts)
 	local refused = require("./reviewfiles").commitReviews(
 		phase,
 		model,
@@ -4643,7 +4664,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 			if not folder or not mode or not string.match(folder, "^[fdcR]%d%d%d%d$") then
 				return nil
 			end
-			return interactiveFallback(folder, mode :: string, model :: string)
+			return interactiveFallback(folder, mode :: string, model :: string, authorOpt)
 		end
 	)
 	if refused then
@@ -6602,7 +6623,12 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 			`{dir}/{reviewFile}.md`,
 			model :: string,
 			require("./reviewfiles").effortOption(opts, model),
-			interactiveFallback(id, if raftItem then "raft" else "design", model :: string)
+			interactiveFallback(
+				id,
+				if raftItem then "raft" else "design",
+				model :: string,
+				authorOption("spend", opts)
+			)
 		)
 		if why then
 			fail(why)
@@ -6976,7 +7002,7 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		phase: string,
 		accept: (string) -> boolean,
 		order: (({ models.Spec }) -> { models.Spec })?
-	): (string, string)
+	): (string, string, models.Spec?)
 		local okDrive, drivenOrErr = pcall(function()
 			return modelstep.drive({
 				resolved = resolved,
@@ -7034,7 +7060,8 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 			fail(`idea: {phase}: {driven.detail}`)
 			return "", ""
 		end
-		return idea.prose(driven.prose), driven.model
+		local lastAttempt = driven.attempts[#driven.attempts]
+		return idea.prose(driven.prose), driven.model, if lastAttempt then lastAttempt.spec else nil
 	end
 	local drafted: idea.Draft? = nil
 	local prose, wrote = run(models.resolve(layers, "idea"), idea.authorPrompt(rough), "idea", function(text)
@@ -7048,17 +7075,19 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	-- c0251: the challenge takes the same picker as every review, with the model that really wrote the draft as the author
 	local writer = models.modelOf(wrote, models.knownModels(layers))
 	local ordering: (({ models.Spec }) -> { models.Spec })? = nil
+	local picked: { [models.Spec]: any } = {}
+	local reviewpool = require("./reviewpool")
 	if challenge.rotate then
-		local reviewpool = require("./reviewpool")
 		ordering = function(tries: { models.Spec }): { models.Spec }
 			local ordered: { models.Spec } = {}
 			for _, pick in reviewpool.order(tries, challenge.families or {}, { writer }, {}) do
+				picked[pick.spec] = pick
 				table.insert(ordered, pick.spec)
 			end
 			return ordered
 		end
 	end
-	run(challenge, idea.challengePrompt(prose), "idea-challenge", function(text)
+	local _, _, challenger = run(challenge, idea.challengePrompt(prose), "idea-challenge", function(text)
 		local found, said = idea.parseReview(text)
 		findings = found
 		verdict = said
@@ -7078,7 +7107,17 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	local openLines = idea.openLines(findings, answers)
 	local reviewPath = `{here.dir}/idea-review-001.md`
 	fs.writeFile(here.doc, withFront(idea.apply(doc, body, openLines), "idea", "challenged"))
-	fs.writeFile(reviewPath, idea.reviewText(findings, verdict or "revise"))
+	-- c0251: the challenge records its model, and why when it was a fallback (c0306 judges no idea review)
+	local reviewText = idea.reviewText(findings, verdict or "revise")
+	if challenger then
+		local reason = if picked[challenger]
+			then reviewpool.fallbackReason(picked[challenger], "recorded", "draft")
+			else nil
+		local stamped =
+			require("./reviewmodel").stamp(reviewText, challenger.model, challenger.effort, reason)
+		reviewText = stamped or reviewText
+	end
+	fs.writeFile(reviewPath, reviewText)
 	local refutePath = `{here.dir}/idea-refute-001.md`
 	if #findings > 0 then
 		fs.writeFile(refutePath, idea.refuteText(findings, answers))

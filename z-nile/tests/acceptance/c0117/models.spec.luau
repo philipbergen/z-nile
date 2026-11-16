@@ -356,8 +356,8 @@ return t.spec("c0117 .models.toml", function(it)
 			for _, cli in { "claude", "kimi", "grok", "agent" } do
 				t.expect(r.specs[cli] ~= nil).toBe(true)
 			end
-			-- c0251: the raft and code-review roles list a Fable member beside the four CLIs
-			t.expect(#models.tries(r)).toBe(if skill == "z-raft" or skill == "zz-review" then 5 else 4)
+			-- c0251: a review (zz-review: code-review) lists a Fable member beside the four CLIs; authoring steps do not
+			t.expect(#models.tries(r)).toBe(if skill == "zz-review" then 5 else 4)
 		end
 		local idea = models.resolve(layers, "z-ticket")
 		t.expect(idea.specs.claude.model).toBe("claude-fable-5-2")

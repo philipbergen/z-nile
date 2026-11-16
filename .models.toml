@@ -4,7 +4,8 @@
 # that CLI needs). A member is a named extra model of a CLI (several models may run on one CLI). A try is the
 # role's rank, cap and effort on that model. Nothing defaults.
 # max_tokens counts input + cache writes + output (cache reads are left out); the step is killed when it passes it.
-# A role's tries are its own model, the members its `pool` lists (in that order), then its `fallbacks`.
+# A role's tries are its own model, the members its `pool` lists (in that order), then its `fallbacks`. Pool members and
+# rotation are for review steps: a step that authors on the same role (z-raft on `raft`) tries the role's model, then its fallbacks.
 # A role with rotate = true is ordered by family (the picker, reviewpool.luau): a review goes first to a model line that
 # differs from the one that wrote the text and from the previous round's reviewer (tier 1), then to one that
 # differs from the writer only (tier 2), and last to the writer's own line, the exact model that wrote it at the very
@@ -56,6 +57,12 @@ runtime = "claude-cli"
 [member.opus]
 cli = "claude"
 model = "claude-opus-5-5"
+runtime = "claude-cli"
+
+# the cheap second model of a stream review (a Haiku-written layer is reviewed by Sonnet)
+[member.sonnet]
+cli = "claude"
+model = "claude-sonnet-5-5"
 runtime = "claude-cli"
 
 [roles.idea]
@@ -141,8 +148,8 @@ rotate = true
 pool = ["opus"]
 fallbacks = ["kimi", "grok", "agent"]
 
-# the one cheap review: a stream review of a layer, on a model line other than the Sonnet that writes the code. Its
-# fallbacks are cheap families; opencode (DeepSeek) joins them when it is added as a CLI.
+# the one cheap review: a stream review of a layer, on a model line other than the Sonnet that writes the code. Its second
+# model is the cheap Sonnet member (kimi and grok are not cheap); opencode (DeepSeek) joins as a fallback once it is a CLI.
 [roles.stream-review]
 model = "claude-haiku-5-5"
 cli = "claude"
@@ -151,4 +158,5 @@ rank = 2
 max_tokens = 1000000
 effort = "medium"
 rotate = true
-fallbacks = ["kimi", "grok"]
+pool = ["sonnet"]
+fallbacks = []

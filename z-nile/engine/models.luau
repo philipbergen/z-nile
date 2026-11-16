@@ -561,7 +561,7 @@ end
 -- members in the order listed, then the `fallbacks` CLIs in order. `order` and `specs` are the per-CLI view of them
 -- (the CLIs in the order of their first try, and each CLI's first try). `author` names another role whose first choice
 -- stands in for the model that wrote the text (authorship): no try is dropped for it.
-function models.resolveRole(layers: { Layer }, role: string): Resolved
+function models.resolveRole(layers: { Layer }, role: string, authoring: boolean?): Resolved
 	if #layers == 0 then
 		error(`no {models.FILE} on the walk: nothing defaults (add one at the repository root)`, 0)
 	end
@@ -608,7 +608,10 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
 		end
 		table.insert(pool, spec)
 	end
-	for _, name in fields.pool or {} do
+	-- c0251: pool members and rotation are for review steps; an authoring step of the same role (z-raft on `raft`) is tried as
+	-- before, the role's model and then its fallbacks
+	local reviewing = authoring ~= true
+	for _, name in if reviewing then (fields.pool or {}) else {} do
 		local m = members[name]
 		if not m then
 			error(`{where}: {role}: pool names {name}, which has no [member.{name}] on the walk`, 0)
@@ -646,7 +649,7 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
 		authorModel = models.id(author.specs[author.order[1]])
 	end
 	local families = models.families(layers)
-	if fields.rotate == true then
+	if fields.rotate == true and reviewing then
 		for _, spec in pool do
 			if family.of(spec.model, families) == nil then
 				error(
@@ -664,7 +667,7 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
 		settings = models.settings(layers),
 		authorModel = authorModel,
 		fromRoles = true,
-		rotate = fields.rotate == true,
+		rotate = fields.rotate == true and reviewing,
 		families = families,
 	}
 end
@@ -676,7 +679,8 @@ function models.resolve(layers: { Layer }, skill: string, mode: string?): Resolv
 	if not role then
 		error(`{skill} is not a model step`, 0)
 	end
-	return models.resolveRole(layers, role)
+	-- a review step (zz-review, the idea challenge) uses the role's pool and rotation; every other step authors
+	return models.resolveRole(layers, role, skill ~= "zz-review" and skill ~= "idea-challenge")
 end
 
 -- The more powerful of the specs, whole: the higher rank, then the larger max_tokens; a tie keeps the first.

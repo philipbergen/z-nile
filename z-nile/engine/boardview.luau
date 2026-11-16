@@ -154,7 +154,7 @@ function boardview.rounds(paths: { string }): (number, number)
 	return design, code
 end
 
--- c0251: the paths among `paths` that are review files (design-review, review, final-review rounds): the one pattern of them
+-- c0251: the paths among `paths` that are review files (design-review, review, final-review, idea-review and stream-review rounds): the one pattern of them
 -- the board has, beside `rounds`.
 function boardview.reviewPaths(paths: { string }): { string }
 	local out: { string } = {}
@@ -164,6 +164,8 @@ function boardview.reviewPaths(paths: { string }): { string }
 			string.match(name, "^design%-review%-%d+%.md$")
 			or string.match(name, "^review%-%d+%.md$")
 			or string.match(name, "^final%-review%-%d+%.md$")
+			or string.match(name, "^idea%-review%-%d+%.md$")
+			or string.match(name, "^stream%-review%-.+%-%d+%.md$")
 		then
 			table.insert(out, p)
 		end
@@ -183,7 +185,7 @@ function boardview.fallbacks(files: { [string]: string }): { string }
 	end
 	local out: { string } = {}
 	for dir, names in byDir do
-		for _, kind in { "design", "code" } do
+		for _, kind in { "design", "code", "idea", "stream" } do
 			for _, name in reviewmodel.newest(names, kind) do
 				local path = if dir == "" then name else `{dir}/{name}`
 				if reviewmodel.fallbackOf(files[path]) ~= nil then
@@ -367,6 +369,53 @@ function boardview.rowInstant(when: string): number?
 	local hh, mi = string.match(rest :: string, "^[ T](%d%d):(%d%d)")
 	local stamp = `{y}-{m}-{d}T{hh or "00"}:{mi or "00"}:00Z`
 	return stats.seconds(stamp)
+end
+
+-- c0251: what a person can run to ask for the cross-model re-review of a flagged file, from where the board is read, or nil
+-- when the flag is history. The route is the worktree where the item is still being worked: an issue in the backlog is in
+-- its prep worktree, an issue or raft in a launched raft in the raft's worktree; a done item's flag is informational.
+-- `item` is the card ("issue" or "raft") with its folder state, id, slug and raft.
+function boardview.rereview(
+	item: { kind: string, state: string, id: string, slug: string, raft: string? },
+	file: string
+): string?
+	local name = string.match(file, "([^/]+)$") or file
+	if item.state == "done" or (item.kind == "raft" and item.state ~= "active") then
+		return nil
+	end
+	if string.match(name, "^idea%-review%-%d+%.md$") then
+		return if item.kind == "issue" and item.state == "backlog"
+			then `cd "$(./zn worktree prep-{item.slug})" && ./zn idea {item.id}`
+			else nil
+	end
+	local mode: string
+	if string.match(name, "^design%-review%-%d+%.md$") then
+		mode = if item.kind == "raft" then "raft" else "design"
+	elseif string.match(name, "^final%-review%-%d+%.md$") then
+		mode = "final"
+	elseif string.match(name, "^stream%-review%-.+%-%d+%.md$") then
+		mode = "stream"
+	elseif string.match(name, "^review%-%d+%.md$") then
+		mode = "code"
+	else
+		return nil
+	end
+	local target = item.id
+	if mode == "stream" then
+		target = string.match(name, "^stream%-review%-(.+)%-%d+%.md$") or item.id
+	end
+	local where: string?
+	if item.kind == "raft" then
+		where = item.id
+	elseif item.state == "backlog" then
+		where = `prep-{item.slug}`
+	elseif item.raft then
+		where = item.raft
+	end
+	if where == nil then
+		return nil
+	end
+	return `cd "$(./zn worktree {where})" && ./zn dispatch zz-review {target} --mode {mode}`
 end
 
 return boardview
