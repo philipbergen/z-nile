@@ -1,11 +1,12 @@
 --!strict
 -- Client adapter (f0146): the left stick turns. Every frame it reads the driving controller's left stick (Pads.stick,
 -- the one tracker), folds it through Pad.steer, which emits one turn intent a push, and sends that intent on the
--- Intent remote. The right stick's look is the camera's. A boost from the stick is f0143's (it owns every boost
--- trigger).
+-- Intent remote. The right stick's look is the camera's. A quick double push of the stick up boosts (f0143: it
+-- owns every boost trigger): every Forward the fold emits is a push, folded through the stick's own Boost.Taps.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local Boost = require("@game/ReplicatedStorage/Shared/Logic/Boost")
 local Movement = require("@game/ReplicatedStorage/Shared/Logic/Movement")
 local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
 
@@ -14,6 +15,7 @@ local Sticks = {}
 function Sticks.start(stick: (name: string) -> (number?, number?, string?))
 	local intent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Intent") :: RemoteEvent
 	local steer = Pad.steerStart()
+	local taps = Boost.taps() -- the stick's own double-push fold; it shares nothing with Controls' keys
 	local source: string? = nil -- the controller the fold's state came from
 	RunService.Heartbeat:Connect(function()
 		local x, y, from = stick("Thumbstick1")
@@ -30,6 +32,13 @@ function Sticks.start(stick: (name: string) -> (number?, number?, string?))
 		steer, emitted = Pad.steer(steer, x, y)
 		if emitted then
 			intent:FireServer(emitted)
+			if emitted == "Forward" then
+				local pair: boolean
+				taps, pair = Boost.tap(taps, os.clock())
+				if pair then
+					intent:FireServer(Boost.INTENT)
+				end
+			end
 		end
 	end)
 end

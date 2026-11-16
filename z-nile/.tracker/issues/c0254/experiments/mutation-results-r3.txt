@@ -1,0 +1,3 @@
+R3a	KILLED	engine/dispatch.luau	sha256:2128705a7024	pick::AC1: a pick another worker finished meanwhile	/Users/philipbergen/code/pickman/.worktree/proto-c0254/z-nile/.tracker/issues/c0254/acceptance/pick.spec:144: expected "stop", got "step"
+R27	KILLED	engine/main.luau	sha256:9eee4495300b	race::AC2, AC3: host A's next commit stands	/Users/philipbergen/code/pickman/.worktree/proto-c0254/z-nile/.tracker/issues/c0254/acceptance/race.spec:272: expected true, got false
+R37	KILLED	engine/main.luau	sha256:d4ee33e22ad6	race::AC3: host A's prep commits are pushed one by one	/Users/philipbergen/code/pickman/.worktree/proto-c0254/z-nile/.tracker/issues/c0254/acceptance/race.spec:134: expected true, got false

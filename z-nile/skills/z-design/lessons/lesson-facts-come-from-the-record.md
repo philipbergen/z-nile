@@ -2,6 +2,7 @@
 title: A lesson's incident and examples come from the landed record and the tool's code
 when: design
 tags: [lessons, evidence, history]
+from: c0294 design review 001 F1, F5 (ticket withdrawn 2026-11-16)
 check: For each quote, owner and tool rule a lesson chore's text states (its Why, its How to apply, its examples), does it match, word for word, the final landed record it cites (not an intermediate round's fix) or the code that enforces the rule, and does a check read each quote from the lesson itself and find it in that record?
 ---
 A lesson chore's Why is written from the capture's one-line summary, which paraphrases. The paraphrase then reads as a quote, an owner settled in an early round reads as the outcome, and an example states a tool rule from memory. A check that greps a short substring of its own choosing passes all three.

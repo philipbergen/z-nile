@@ -1,0 +1,22 @@
+PASS  AC1: `landcheck.problems` returns one named problem, with its ki
+PASS  AC2: `landcheck.classify` lands a clean input, blocks a block pr
+PASS  AC3: The `escalation.md` the dispatcher files for a block is a n
+PASS  AC4: "Green" is read from the pull request's rollup: SUCCESS, NE
+PASS  AC5: `dispatch.next` on an active raft lands a finished raft who
+PASS  AC6: `z-land`, `z-block` and `z-gate` are script steps run in th
+PASS  AC7: `./zn land-check <R-id> [--through <issue> | --below <issue
+PASS  AC8: `./zn done` in a session that holds the agent's credential 
+PASS  AC9: Under `ZN_DISPATCH`, `./zn block` on a raft checks the reas
+PASS  AC10: `./zn dispatch <R-id>` lands a finished raft whose top lay
+PASS  AC11: The chain stops at the gate (exit 4) with the reason on a 
+PASS  AC12: A block the worker requests lands the green layers below t
+PASS  AC13: zz-rules, zz-execute, every headless skill section, the RE
+PASS  AC14: After the dispatcher's own bind the guard's mark moves to 
+PASS  AC15: The promoted specs of the dispatcher, the models, the wrap
+PASS  AC16: After the layers finish, `main` gains a tracker commit and
+PASS  AC17: The landing is judged and performed by the base's engine: 
+PASS  AC18: A stack that changes a game waits (exit 4) without `cicd.t
+PASS  AC19: An old single-branch raft with an open pull request keeps 
+PASS  AC20: A land request carries the raft, the layer tip, `--through
+PASS  AC21: A land request whose layer tip moved since the worker's ch
+---- 21/21 criteria passed

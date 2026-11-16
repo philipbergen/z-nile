@@ -3,6 +3,7 @@ title: A fail-closed report on a file the reader cannot parse says it cannot par
 when: design
 tags: [usability, fail-closed, formats]
 check: Where a reader fails closed on a file it cannot parse, does the report say that it could not parse it and the likely cause (a comment, a trailing comma), or does it only state a symptom that is false of the file (it maps nothing, it is not a project)?
+from: c0273 design review 001 F5 (c0273 withdrawn 2026-11-16)
 ---
 A fail-closed line keeps a bad file from passing, but if it names a symptom of the reader's failure ("maps no $path") instead of the failure, the author is told something false about a file that maps several paths, and looks in the wrong place.
 

@@ -1,0 +1,7 @@
+-- c0210 E3: ./zn run --time 30 -- lune run E3-dup-keys.luau (from a copy outside the checkout)
+local serde = require("@lune/serde")
+local ok, v = pcall(serde.decode, "json", '{"a": 1, "a": 2}')
+print(ok, ok and (v :: any).a or v)
+local ok2, v2 = pcall(serde.decode, "json", '{"a": 108477097003426}')
+print(ok2, string.format("%.0f", (v2 :: any).a))
+print(serde.encode("json", { x = 108477097003426, y = 0, s = "test" }))

@@ -2,6 +2,7 @@
 title: A read a rule runs at every step names its trimmed form
 when: design
 tags: [cost, commands, github]
+from: c0271 design review 001 F5 (ticket withdrawn 2026-11-16)
 check: What does this per-step read (before every push, report or commit) print on the busiest real case, and is it trimmed to what the rule decides on?
 ---
 A rule that makes an agent run a read before every push or report pays the read's whole output into the agent's context each time, and a dispatched step is killed when it passes `max_tokens`.

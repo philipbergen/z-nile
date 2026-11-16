@@ -2,7 +2,7 @@
 title: Readable text is a number checked on every screen, from the layout's own constants
 when: design
 tags: [ui, layout, proxies]
-check: For each text a screen shows (titles, taglines, badges, rows), does a pure case compute its size from the layout's boxes and regions and a stated glyph-width model, on every screen shape the layout claims to fit (a landscape phone included), and require at least a stated minimum, so that a layout constant that shrinks a label below it turns the case red?
+check: For each text a screen shows (titles, taglines, badges, rows), does a pure case compute its size from the layout's boxes and regions and a stated glyph-width model, on every screen shape the layout claims to fit (a landscape phone included), and require at least a stated minimum, so that a layout constant that shrinks a label below it turns the case red? And where labels sit side by side (a table's columns), does the case also require a stated gap between neighbours at that size, and name each label's alignment?
 ---
 "Fits every screen" is checked by boxes staying inside the area. That says nothing about the text in them: a card that fits a landscape phone can hold a tagline drawn at 6 px, unreadable, while every layout case stays green.
 

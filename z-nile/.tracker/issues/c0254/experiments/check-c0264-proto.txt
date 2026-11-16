@@ -1,0 +1,53 @@
+
+=== c0264 check.sh
+PASS  AC1: ## Intent comes after the opening picture and before How it should work
+PASS  AC2: the intent names the two human stages, the worker, the full-force review, the economy and the names
+PASS  AC3: the intent claims nothing as built
+PASS  AC4: the idea stage, the worker, models per command and activity, the full-force review and provenance are sub-sections, each labelled with its issue
+PASS  AC5: a worker clears its context and takes the next raft whenever a raft ends, merged or blocked
+FAIL  AC6: the README states the rules of the worker model, and names no tiers, and no model names where it speaks of the models to use
+      README lacks: marks the raft blocked
+FAIL  AC7: every roadmap row and every issue-labelled sentence has the state the tracker shows for its issue
+      10a10,11
+      > The worker|c0253
+      > The worker|c0253
+      43a45
+      > Stacked delivery|c0248
+      roadmap issues differ:
+      4d3
+      < c0175
+      c0253: README says exists, tracker says captured
+      c0253: README says exists, tracker says captured
+      c0253: README says exists, tracker says captured
+      c0253: README says exists, tracker says captured
+      c0175: README says captured, tracker says designed
+      c0249: README says captured, tracker says designed
+      c0254: README says exists, tracker says captured
+      c0252: README says exists, tracker says designed
+      c0251: README says exists, tracker says designed
+      c0250: README says exists, tracker says designed
+      c0248: README says exists, tracker says designed
+      c0248: README says exists, tracker says designed
+      c0249: README says captured, tracker says designed
+      c0250: README says exists, tracker says designed
+      c0251: README says exists, tracker says designed
+      c0252: README says exists, tracker says designed
+      c0254: README says exists, tracker says captured
+FAIL  AC8: the README changes only in Intent and How it should work
+      28c28
+      < - **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a blocked item and at a failure, and records each step's tokens and model on its spend row. A running step appends one short line per action (the tool and its target, or the first words of a message) to `.cache/dispatch/<id>/trail.log`, and `./zn dispatch status <id>` prints the last of those lines and the running token count before the step's JSON. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. A run accepts `main` as it is when it starts, and during the run a rewritten `main` or a commit that is not tracker state and not a pull request's merge stops it. The rules are in the zz-rules skill, Dispatch.
+      ---
+      > - **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. A running step appends one short line per action (the tool and its target, or the first words of a message) to `.cache/dispatch/<id>/trail.log`, and `./zn dispatch status <id>` prints the last of those lines and the running token count before the step's JSON. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. A run accepts `main` as it is when it starts, and during the run a rewritten `main` or a commit that is not tracker state and not a pull request's merge stops it. The rules are in the zz-rules skill, Dispatch.
+      30d29
+      < - **Provenance.** `<ID>/provenance.md` records who decided what that git cannot tell (append-only rows, `./zn provenance record`, checked by `./zn audit`; zz-rules skill, Provenance); the engine's merges of `origin/main` unite two writers of it, and zz-rules, Provenance, says how to merge when `./zn sync` stops, and names the actor options (`--actor`, `ZN_ACTOR`) and the session variables.
+FAIL  AC9: the workflow diagram is the reviewed one, word for word: the interview, the approval, z-work, lost first, one ticket at a time, the full-force review, and both ways a raft ends as edges back into claiming
+      6c6
+      <     des["approve the drafted design (./zn approve), or design by hand: z-design"]
+      ---
+      >     des["z-design: design, acceptance tests, review, approve"]
+      13c13
+      <     loop["claim the top raft: lost first, then rank; none claimable: draft the design of a confirmed idea"]
+      ---
+      >     loop["claim the top raft: lost first, then rank"]
+PASS  AC10: no issue id has more than one Roadmap row
+---- 6/10 criteria passed
