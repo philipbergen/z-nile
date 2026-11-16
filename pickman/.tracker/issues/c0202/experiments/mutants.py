@@ -22,6 +22,10 @@ BASES = {
     "arcade/.tracker/issues/f0201/experiments/prototype.patch": "f99bd914ff800cfc3403ab4000109951694ebebaa2b6d8381d7b8879d6afce7b",
     "z-nile/.tracker/issues/active/c0156/experiments/prototype.patch": "ed053dfdd1b177bd0cce96f90f4b61ac5b11392a1b36b63e65e6a854536e2f6c",
     "pickman/.tracker/issues/done/c0380/experiments/prototype.patch": "78cd528c26754809a3c224b032cb5fc3a08ebec60ad64496a8fbf1a392cb5c80",
+    # f0395 has no prototype yet: these are the three library files after its emulation (experiments/f0395-emulation.patch)
+    "arcade/src/shared/Logic/PaidPlay/init.luau": "fc9d6e00314e28f4a3e1533a6b351b2086b20f0d49a0e7cadd4ecf0056a16007",
+    "arcade/src/shared/Prices.luau": "8da7dc8c0c3f9ea7c7f0c11443045da26338077f4d743f737c512979aac1e4d7",
+    "arcade/src/shared/TestPurchase.luau": "51221e07a65ed1b9f05755bfd20047db4330927937c51a0ae53262ff0bb9c65e",
 }
 for rel, want in BASES.items():
     got = hashlib.sha256(open(os.path.join(PROTO, rel), "rb").read()).hexdigest()
@@ -87,6 +91,9 @@ M = [
     ("M46", PAID, "\tif bought[player] then\n\t\tbought[player] = nil -- the play just granted goes, whatever a read under way would say\n\t\treturn true\n\tend\n", "", "lobby", "granted while the read on joining is under way"),
     ("M47", PAID, "\ttell(player, record)\n\tlocal now = PaidPlay.status", "\tlocal now = PaidPlay.status", "lobby", "a press after the library's READ_SECONDS"),
     ("M48", "pickman/.tracker/architecture.md", "Paid play is the arcade library's", "Paid play is pickman's", "place", "architecture.md no longer declares Pay"),
+    ("M49", "arcade/src/shared/Logic/PaidPlay/init.luau", "then `<s>{prices.struck}</s> {prices.price} {prices.sale}`", "then `{prices.struck} {prices.price} {prices.sale}`", "lobby", "a play's test screen strikes the list price"),
+    ("M50", "arcade/src/shared/Logic/PaidPlay/init.luau", "else prices.revive or prices.price,", "else `<s>{prices.struck}</s> {prices.price} {prices.sale}`,", "offer", "a revive's test screen strikes nothing"),
+    ("M51", "arcade/src/shared/Logic/PaidPlay/init.luau", "else prices.revive or prices.price,", "else `{prices.struck} {prices.price} {prices.sale}`,", "offer", "a revive's test screen strikes nothing"),
     ("M45", OFFER, "\t\tif up and not TestPurchase.isOpen() then\n\t\t\tsend(\"decline\")", "\t\tif up then\n\t\t\tsend(\"decline\")", "clients", "do nothing while the library's screen is open"),
 ]
 

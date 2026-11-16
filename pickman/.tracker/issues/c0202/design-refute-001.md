@@ -10,3 +10,4 @@
 - F9: fixed: OC1a (Studio, the game place alone, API access off) and OC1b (Beta, the lobby through to the game, the controller step).
 - F10: fixed: `mutants.py` clones the prototype into a fresh `mktemp -d` and mutates only the clone, refusing a root that is not a `.worktree/proto-*` checkout; `assemble.sh`'s header says it is prep-only and never run during execution.
 - F11: fixed: the citation is `zz-test/store-stubs-race-the-transform`.
+- F1, after the ruling (user, 2026-11-16): (1) (a) through f0395, a new arcade issue after f0201: `depends_on` gains f0395, §9 quotes its captured Solution, and two cases pin it on Pickman's screen (lobby: a play's lines strike `Prices.struck`; offer: a revive's strike nothing and its price line is not a play's), rows M49 to M51; (2) (i), the window accepted, no bridge code. consequences: the revive's words stay f0395's guess (f0186's G3), which c0202's specs do not read.

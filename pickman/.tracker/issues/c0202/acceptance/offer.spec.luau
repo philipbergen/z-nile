@@ -590,6 +590,22 @@ return t.spec("c0202 Pickman's continue offer on the arcade's revives", function
 		end
 	)
 
+	it(
+		"a revive's test screen strikes nothing and shows no list price: its price line is not a play's (f0395)",
+		function()
+			local a = offer("test", noFree)
+			sendContinue(a, "ask")
+			local opened = a.w.sentOn("TestPurchase", a.p)
+			t.expect(#opened).toBe(1)
+			local lines = opened[1][2]
+			for _, line in lines do
+				t.expect((string.find(line, "<s>", 1, true))).toBe(nil)
+				t.expect((string.find(line, Prices.struck, 1, true))).toBe(nil) -- a play's list price, struck or not
+			end
+			t.expect(lines[2] ~= PaidPlay.testLines("PICKMAN", "play", Prices)[2]).toBe(true)
+		end
+	)
+
 	it("a closed server sells no revive and holds nothing; a revive held is still used", function()
 		local a = offer("live", function(w: any)
 			noFree(w)

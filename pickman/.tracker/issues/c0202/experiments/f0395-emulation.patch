@@ -1,0 +1,46 @@
+diff --git a/arcade/src/shared/Logic/PaidPlay/init.luau b/arcade/src/shared/Logic/PaidPlay/init.luau
+index 28b9cadb5..74691b051 100644
+--- a/arcade/src/shared/Logic/PaidPlay/init.luau
++++ b/arcade/src/shared/Logic/PaidPlay/init.luau
+@@ -26,7 +26,7 @@ export type Ids = { play: number?, revive: number? }
+ export type Product = { name: string, kind: Kind }
+ export type Title = { entry: Entry, mode: Mode, ids: Ids }
+ export type Config = { titles: { [string]: Title }, products: { [number]: Product } }
+-export type Prices = { struck: string, price: string, sale: string }
++export type Prices = { struck: string, price: string, sale: string, revive: string? } -- f0395 (emulated): a revive's own price
+ 
+ local PaidPlay = {}
+ 
+@@ -230,7 +230,9 @@ end
+ function PaidPlay.testLines(title: string, kind: Kind, prices: Prices): { string }
+ 	return {
+ 		`{title}: {PaidPlay.KIND_TEXT[kind]}`,
+-		`{prices.struck} {prices.price} {prices.sale}`,
++		if kind == "play"
++			then `<s>{prices.struck}</s> {prices.price} {prices.sale}`
++			else prices.revive or prices.price,
+ 		PaidPlay.TEST_NOTE,
+ 	}
+ end
+diff --git a/arcade/src/shared/Prices.luau b/arcade/src/shared/Prices.luau
+index 7258c0920..c0a6a26d7 100644
+--- a/arcade/src/shared/Prices.luau
++++ b/arcade/src/shared/Prices.luau
+@@ -6,4 +6,5 @@ return table.freeze({
+ 	struck = "5 R$", -- shown struck through
+ 	price = "1 R$", -- what is charged
+ 	sale = "SALE",
++	revive = "1 R$", -- f0395 (emulated; its guess): a revive's price, nothing struck
+ })
+diff --git a/arcade/src/shared/TestPurchase.luau b/arcade/src/shared/TestPurchase.luau
+index 65be3dc3f..9ed9f7201 100644
+--- a/arcade/src/shared/TestPurchase.luau
++++ b/arcade/src/shared/TestPurchase.luau
+@@ -83,6 +83,7 @@ local function listen(remote: any, playerGui: any)
+ 			label.Name = `Line{i}`
+ 			label.Text = line
+ 			label.TextScaled = true
++			label.RichText = true -- f0395 (emulated): the struck price shows
+ 			label.Size = UDim2.fromScale(0.9, 0.18)
+ 			label.Position = UDim2.fromScale(0.05, 0.04 + (i - 1) * 0.2)
+ 			label.Parent = frame

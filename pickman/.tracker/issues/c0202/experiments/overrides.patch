@@ -1606,7 +1606,7 @@ index 6e0b311ed..7ac6a198a 100644
  	end)
  end)
 diff --git a/pickman/tests/acceptance/f0186/price.spec.luau b/pickman/tests/acceptance/f0186/price.spec.luau
-index de523ef2d..64f7326e0 100644
+index de523ef2d..eab3814ec 100644
 --- a/pickman/tests/acceptance/f0186/price.spec.luau
 +++ b/pickman/tests/acceptance/f0186/price.spec.luau
 @@ -1,21 +1,20 @@
@@ -1623,7 +1623,7 @@ index de523ef2d..64f7326e0 100644
 +-- GAME (f0145's Lobby.payLine) uses it where it showed "1 ROBUX A GAME"; its free, held and closed lines are as they
 +-- were. The continue's own price line (Flow.OFFER.price) is as it was (a guess pending the user: the capture names the
 +-- price of a play). The lobby's pay line is drawn as rich text (PayView). The test purchase screen is the library's
-+-- since c0202, pinned by f0201's specs.
++-- since c0202 (f0201's specs pin it, f0395's and c0202's its struck price).
  local Flow = require("@logic/Flow")
  local Lobby = require("@logic/Lobby")
 -local luau = require("@lune/luau")
@@ -1638,7 +1638,7 @@ index de523ef2d..64f7326e0 100644
  local lobbyPlace = place.load("lobby.project.json")
  
  local function sourceAt(root: any, path: { string }): string
-@@ -27,152 +26,10 @@ local function sourceAt(root: any, path: { string }): string
+@@ -27,152 +26,15 @@ local function sourceAt(root: any, path: { string }): string
  	return node.Source
  end
  
@@ -1788,12 +1788,17 @@ index de523ef2d..64f7326e0 100644
 -		t.expect(Lobby.PRICE).toEqual({ struck = "5 R$", price = "1 R$", sale = "SALE" })
 -		t.expect(table.isfrozen(Lobby.PRICE)).toBe(true)
 -		t.expect(Lobby.salePrice()).toBe(SALE)
-+		t.expect(Prices).toEqual({ struck = "5 R$", price = "1 R$", sale = "SALE" })
++		-- the library's words for a play (f0395 may add a revive's own value beside them)
++		t.expect({ struck = Prices.struck, price = Prices.price, sale = Prices.sale }).toEqual({
++			struck = "5 R$",
++			price = "1 R$",
++			sale = "SALE",
++		})
 +		t.expect(Lobby.salePrice(Prices)).toBe(SALE)
  	end)
  
  	it("the lobby's line shows that price wherever it showed the price of a play", function()
-@@ -180,53 +37,42 @@ return t.spec("f0186 the price of a play shows on sale", function(it)
+@@ -180,53 +42,42 @@ return t.spec("f0186 the price of a play shows on sale", function(it)
  			Lobby.payLine(
  				{ free = false, nextFree = NOW + 41 * 60 + 5, plays = 0, continues = 0 },
  				"live",

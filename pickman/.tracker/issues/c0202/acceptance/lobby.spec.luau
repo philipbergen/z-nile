@@ -549,6 +549,24 @@ return t.spec("c0202 Pickman's lobby sells Pickman on the arcade's paid play", f
 		t.expect(test.record(STORE, 7)).toBe(nil)
 	end)
 
+	it("a play's test screen strikes the list price (f0395)", function()
+		local w = lobby("test", nil, function(x: any)
+			x.seed(TEST_STORE, 7, { free = NOW - 60, plays = 0, continues = 0, receipts = {} })
+		end)
+		local p = w.player(7)
+		press(w, p)
+		local opened = w.sentOn("TestPurchase", p)
+		t.expect(#opened).toBe(1)
+		local struck = "<s>" .. Prices.struck .. "</s>"
+		local found = false
+		for _, line in opened[1][2] do
+			if string.find(line, struck, 1, true) then
+				found = true
+			end
+		end
+		t.expect(found).toBe(true)
+	end)
+
 	it("a closed server sells nothing and says so; a free start still goes", function()
 		local w = lobby("live", nil, function(x: any)
 			x.attributes.PlayProductId = nil
