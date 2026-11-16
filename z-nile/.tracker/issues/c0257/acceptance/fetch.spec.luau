@@ -2,6 +2,7 @@
 -- c0257 AC7: fetch.sh turns the board's JSON into the model the app reads, through ./zn only, and fails with its own codes. It
 -- runs against a fixture repository under .cache with stub `zn` and `lune` programs (the real ones are never started), HOME
 -- and XDG_CACHE_HOME pointing into the fixture so the script writes only there.
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local serde = require("@lune/serde")
@@ -12,12 +13,21 @@ local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" })
 local APP = `{process.env.ZN_C0257_TREE or TOP}/z-nile-omarchy/znile.board`
 local DIR = ".cache/c0257-fetch"
 
-local MODEL = {
+local MODEL: any = {
 	issues = {
 		{ id = "f0002", type = "feature", title = "Two", stage = "new", dependsOn = { "c0001" }, body = "x" },
 		{ id = "c0001", type = "chore", title = "One", stage = "active", raft = "R0001", dependsOn = {} },
+	} :: { any },
+	rafts = {
+		{
+			id = "R0001",
+			type = "chore",
+			label = "chore",
+			title = "Raft",
+			stage = "active",
+			issues = { "c0001" },
+		},
 	},
-	rafts = { { id = "R0001", type = "chore", label = "chore", title = "Raft", stage = "active", issues = { "c0001" } } },
 	home = "/home/someone/elsewhere",
 }
 
@@ -36,7 +46,7 @@ local function write(path: string, text: string)
 	fs.writeFile(path, text)
 end
 
-local function build(withJsonFlag: boolean, page: string?)
+local function build(withJsonFlag: boolean, page: string?, remote: string?)
 	if fs.isDir(DIR) then
 		fs.removeDir(DIR)
 	end
@@ -45,8 +55,14 @@ local function build(withJsonFlag: boolean, page: string?)
 	write(`{DIR}/repo/z-nile/.tracker/issues/active/c0001/c0001.md`, "---\nid: c0001\n---\n")
 	write(`{DIR}/repo/z-nile/.tracker/issues/active/c0001/spend.md`, SPEND)
 	write(`{DIR}/repo/z-nile/.tracker/rafts/active/R0001/R0001.md`, "---\nid: R0001\n---\n")
-	write(`{DIR}/repo/z-nile/engine/main.luau`, if withJsonFlag then "-- board [--json] board --json\n" else "-- board [--out PATH] [-O]\n")
-	write(`{DIR}/page.html`, page or `<html><script type="application/json" id="board-data">{json}</script></html>`)
+	write(
+		`{DIR}/repo/z-nile/engine/main.luau`,
+		if withJsonFlag then "-- board [--json] board --json\n" else "-- board [--out PATH] [-O]\n"
+	)
+	write(
+		`{DIR}/page.html`,
+		page or `<html><script type="application/json" id="board-data">{json}</script></html>`
+	)
 	write(`{DIR}/model.json`, json)
 	-- the stub ./zn: writes the page for `board -O --out X`, prints the model for `board --json`
 	write(
@@ -57,13 +73,21 @@ local function build(withJsonFlag: boolean, page: string?)
 		`{DIR}/home/.rokit/bin/lune`,
 		'#!/usr/bin/env bash\nif [[ "$*" == "run z-nile/roots -- --projects" ]]; then\n  printf "pickman\\t/h/pickman\\tpickman/.tracker\\nz-nile\\t/h/z-nile\\tz-nile/.tracker\\n"\nelse echo "unexpected lune $*" >&2; exit 9; fi\n'
 	)
-	process.exec("chmod", { "+x", `{DIR}/repo/zn`, `{DIR}/home/.rokit/bin/lune` })
+	-- a stub gh that cannot answer, for prs.sh
+	write(`{DIR}/bin/gh`, "#!/usr/bin/env bash\necho gh: not signed in >&2\nexit 1\n")
+	process.exec("chmod", { "+x", `{DIR}/repo/zn`, `{DIR}/home/.rokit/bin/lune`, `{DIR}/bin/gh` })
+	if remote then
+		-- a repository of its own in the fixture (git would otherwise find none and print no remote)
+		process.exec("git", { "init", "-q", `{DIR}/repo` })
+		fixture.git(`{DIR}/repo`, { "remote", "add", "origin", remote })
+	end
 end
 
-local function fetch(): process.ExecResult
+local function fetch(path: string?): process.ExecResult
 	local abs = (string.gsub(process.exec("pwd", {}).stdout, "%s+$", ""))
 	return process.exec("bash", { `{APP}/fetch.sh`, `{abs}/{DIR}/repo` }, {
 		env = {
+			PATH = path or process.env.PATH or "/usr/bin:/bin",
 			HOME = `{abs}/{DIR}/home`,
 			XDG_CACHE_HOME = `{abs}/{DIR}/home/cache`,
 			STUB_MODEL = `{abs}/{DIR}/model.json`,
@@ -111,5 +135,39 @@ return t.spec("c0257: fetch.sh builds the app's model", function(it)
 		fs.removeFile(`{DIR}/repo/zn`)
 		local r = fetch()
 		t.expect(r.code).toBe(2)
+	end)
+
+	it("AC7: without lune it exits 3 with its own message", function()
+		build(false)
+		fs.removeFile(`{DIR}/home/.rokit/bin/lune`)
+		local r = fetch("/usr/bin:/bin")
+		t.expect(r.code).toBe(3)
+		t.expect(string.find(r.stderr, "lune not found", 1, true) ~= nil).toBe(true)
+	end)
+
+	it(
+		"AC7: the web base comes from a github remote in its three spellings, and from no other host",
+		function()
+			for _, remote in
+				{ "https://github.com/o/r.git", "git@github.com:o/r.git", "ssh://git@github.com/o/r" }
+			do
+				build(false, nil, remote)
+				local m = serde.decode("json", fetch().stdout) :: any
+				t.expect(`{remote} -> {m.webBase}`).toBe(`{remote} -> https://github.com/o/r/blob/main/`)
+			end
+			build(false, nil, "https://example.invalid/o/r.git")
+			local other = serde.decode("json", fetch().stdout) :: any
+			t.expect(other.webBase).toBe("")
+		end
+	)
+
+	it("AC7: prs.sh prints an empty list when gh cannot answer, so the board still loads", function()
+		build(false)
+		local abs = (string.gsub(process.exec("pwd", {}).stdout, "%s+$", ""))
+		local r = process.exec("bash", { `{APP}/prs.sh`, `{abs}/{DIR}/repo` }, {
+			env = { PATH = `{abs}/{DIR}/bin:/usr/bin:/bin` },
+		})
+		t.expect(r.ok).toBe(true)
+		t.expect(serde.decode("json", r.stdout)).toEqual({})
 	end)
 end)
