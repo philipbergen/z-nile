@@ -11,7 +11,6 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 local seal = require("@tests/lib/seal")
 local t = require("@tests/lib/t")
-local trackerfix = require("@tests/lib/trackerfix")
 
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
 local PREPARED = "prepared-quiet-copper-falcon"

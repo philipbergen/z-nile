@@ -314,7 +314,10 @@ function seal.layerReview(dir: string, issueId: string)
 	if sha == "" then
 		error(`seal.layerReview: no finish commit for {issueId} in {dir}`, 2)
 	end
-	fs.writeFile(`{dir}/{issueDir}/review-001.md`, `Model: claude-opus-5-5\n# Review 001\n\nCommit: {sha}\nVerdict: approve\n`)
+	fs.writeFile(
+		`{dir}/{issueDir}/review-001.md`,
+		`Model: claude-opus-5-5\n# Review 001\n\nCommit: {sha}\nVerdict: approve\n`
+	)
 	local commitEnv: { [string]: string }? = nil
 	if not fixture.exec(dir, "git", { "config", "user.email" }).ok then
 		commitEnv = {

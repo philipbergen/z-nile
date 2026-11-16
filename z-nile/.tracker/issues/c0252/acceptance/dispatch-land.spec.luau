@@ -181,9 +181,9 @@ return t.spec("c0252 the chain lands a green stack", function(it)
 	it(
 		"AC6: the landing and the block are script steps of the raft's own worktree, with the dispatcher's environment",
 		function()
-			local land = dispatch.step("z-land")
-			t.expect(land.kind).toBe("script")
-			t.expect(land.where).toBe("run")
+			local landStep = dispatch.step("z-land")
+			t.expect(landStep.kind).toBe("script")
+			t.expect(landStep.where).toBe("run")
 			t.expect(dispatch.scriptArgv("z-land", "R0010", { "--through", "c0010" })).toEqual({
 				"./zn",
 				"done",
