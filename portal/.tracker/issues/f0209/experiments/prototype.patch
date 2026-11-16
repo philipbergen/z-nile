@@ -1,0 +1,124 @@
+diff --git a/SETUP.md b/SETUP.md
+index e2402d002..833ee815e 100644
+--- a/SETUP.md
++++ b/SETUP.md
+@@ -54,15 +54,17 @@ Verification is local. A game pull request's merge runs `z-nile/check.sh --full`
+ `.github/workflows/deploy.yml` is the only workflow. It publishes a pull request that is ready for review from this repo to the private **Pickman (Beta)** experience by running `lune run scripts/deploy-beta` from `portal/`. A push to `main` and a manual dispatch start the workflow and skip the job. It does not run the gate or the runtime tests. A pull-request comment names the published version and commit.
+ - **Repo secret** `ROBLOX_API_KEY`: an Open Cloud key scoped to that experience, with `universe-places` write and, for the runtime tests, `luau-execution-sessions` read and write, plus `datastore.control:create` and data-store entry read, create, update and delete for the reservation. The live publish's copy is a GitHub Actions secret. The merging machine keeps its own in `~/.config/pickman/cicd.toml`, mode `600`, outside the repo.
+ - **Repo variables** `ROBLOX_BETA_UNIVERSE_ID` and `ROBLOX_BETA_PLACE_ID`: plain digits. `ROBLOX_BETA_PLACE_ID` is the experience's start place.
+-- **Every place** (c0210): `portal/experience.json` lists the experience's places (the start place, Pickman, Snake, Invaders and Asteroids), each with the repo variable that holds its Beta place id and the build it publishes: `ROBLOX_BETA_PLACE_ID` the start place (pickman's lobby, `pickman/lobby.project.json`, until the portal replaces it), `ROBLOX_BETA_PICKMAN_PLACE_ID` Pickman's game (`pickman/default.project.json`; the old `ROBLOX_BETA_GAME_PLACE_ID` is still read, and the two may not name different ids), `ROBLOX_BETA_SNAKE_PLACE_ID`, `ROBLOX_BETA_INVADERS_PLACE_ID` and `ROBLOX_BETA_ASTEROIDS_PLACE_ID` each game's `default.project.json`. A place whose variable is unset or empty is not published, and the deploy says so; it is published from the moment its variable is set. Every place it publishes is told every place's id on `ServerScriptService` (`PortalPlaceId`, `PickmanPlaceId`, `SnakePlaceId`, `InvadersPlaceId`, `AsteroidsPlaceId`; 0 for a place not published), paid play's test mode (`PaidPlay` = `test`, each product id 0), and the ids pickman's two places read (`LobbyPlaceId` on the game, the start place's id; `GamePlaceId` on the lobby, Pickman's id), in a copy of each project built outside the checkout (the checked-in values stay 0). A variable that is not a place id, two places with one id, or Pickman's two variables with different ids stop the deploy before anything is built. Every place is built before any is published; the games are published first, then the start place.
++- **Every place** (c0210): `portal/experience.json` lists the experience's places (the start place, Pickman, Snake, Invaders and Asteroids), each with the repo variable that holds its Beta place id and the build it publishes: `ROBLOX_BETA_PLACE_ID` the start place (the portal, `portal/default.project.json`, since f0209; before it pickman's lobby, `pickman/lobby.project.json`), `ROBLOX_BETA_PICKMAN_PLACE_ID` Pickman's game (`pickman/default.project.json`; the old `ROBLOX_BETA_GAME_PLACE_ID` is still read, and the two may not name different ids), `ROBLOX_BETA_SNAKE_PLACE_ID`, `ROBLOX_BETA_INVADERS_PLACE_ID` and `ROBLOX_BETA_ASTEROIDS_PLACE_ID` each game's `default.project.json`. A place whose variable is unset or empty is not published, and the deploy says so; it is published from the moment its variable is set. Every place it publishes is told every place's id on `ServerScriptService` (`PortalPlaceId`, `PickmanPlaceId`, `SnakePlaceId`, `InvadersPlaceId`, `AsteroidsPlaceId`; 0 for a place not published), paid play's test mode (`PaidPlay` = `test`, each product id 0), and the ids pickman's two places read (`LobbyPlaceId` on the game, the start place's id; `GamePlaceId` on the lobby, Pickman's id), in a copy of each project built outside the checkout (the checked-in values stay 0). A variable that is not a place id, two places with one id, or Pickman's two variables with different ids stop the deploy before anything is built. Every place is built before any is published; the games are published first, then the start place.
+ - **Adding a place** (once, by the owner of the experience; nothing in the repo can do it):
+   1. Creator Dashboard, Pickman (Beta), Places: create a new place (for example "Snake") and copy its place id (the digits in its URL). Leave the existing place as the start place.
+   2. GitHub, Settings, Secrets and variables, Actions, Variables: add the repository variable the manifest names for it (for example `ROBLOX_BETA_SNAKE_PLACE_ID`) with that id.
+   3. Check the key: `ROBLOX_API_KEY` must cover the new place too (`universe-places` write and `luau-execution-sessions` read and write for the experience, not for one place). A key limited to the old places fails the new publish with HTTP 403.
+   4. The next pull request that is ready for review publishes it. The job does not run the runtime suites. Its log names every version.
++- **The start place is the portal** (f0209): the Portal place of `portal/experience.json` publishes the `portal` build, so `ROBLOX_BETA_PLACE_ID`, which Pickman's game reads as `LobbyPlaceId` for its way back, leads to the portal, and pickman's lobby is no longer published. A pull request's deploy publishes its merge with `main`, so from the merge of f0209 every deploy publishes the portal there. Servers of the lobby that were running keep running the old build until they empty (Creator Dashboard, Restart servers, "only servers with outdated versions", moves their players to the portal at once).
++- **Rolling the start place back** (until c0188 deletes the lobby): a tracked fix whose pull request changes that one line back, `"build": "portal"` to `"build": "lobby"` on the Portal place. Its deploy, once it is ready for review, publishes pickman's lobby to the start place, told `GamePlaceId`, as before f0209; Pickman's game keeps `LobbyPlaceId`, so its game over returns to the lobby. Nothing stored moves: plays, free games and passes are in the same records both places read.
+ - If any of the three is missing the job skips with a warning instead of failing. Forks never get the secret, and the secret is only in the environment of the steps that need it.
+ - Publishes happen one at a time (`beta-deploy`, and a running publish is not cancelled). The comment names the pull request's commit.
+ - The job has a 20-minute timeout, because it holds the shared `beta-deploy` lock.
+ - The job installs only the tools (`z-nile/setup.sh --tools`).
+ - By hand: export the three settings (and each place's variable) and run `lune run scripts/deploy-beta` in `portal/` (the job runs its steps there too). That publishes to Beta.
+-- A merge of a pull request that changes a game runs `lune run scripts/cicd` from `portal/`. A tooling pull request does not. It reads `~/.config/pickman/cicd.toml`, reserves the CICD places, publishes them (Pickman's game and the start place), and runs both runtime suites. A missing file or a failed suite stops the merge. The command is not part of the gate. By hand, after a version exists: `lune run scripts/runtime-test -- --place Pickman <version>` for the game place (`pickman/tests/runtime/`), and `lune run scripts/runtime-test -- --place Portal <lobby version>` for the start place (pickman's lobby, `pickman/tests/runtime/lobby`), from `portal/`. They skip with a warning when the settings are missing or the place is not published. The comment's version is the game place's.
++- A merge of a pull request that changes a game runs `lune run scripts/cicd` from `portal/`. A tooling pull request does not. It reads `~/.config/pickman/cicd.toml`, reserves the CICD places, publishes them (Pickman's game and the start place), and runs both runtime suites. A missing file or a failed suite stops the merge. The command is not part of the gate. By hand, after a version exists: `lune run scripts/runtime-test -- --place Pickman <version>` for the game place (`pickman/tests/runtime/`), and `lune run scripts/runtime-test -- --place Portal <lobby version>` for the start place (its build's runtime folder: the portal's `portal/tests/runtime/` since f0209, pickman's lobby's `pickman/tests/runtime/lobby` before it and after a rollback), from `portal/`. They skip with a warning when the settings are missing or the place is not published. The comment's version is the game place's.
+diff --git a/pickman/.tracker/game-design.md b/pickman/.tracker/game-design.md
+index 4975bcfa9..3f681e0f4 100644
+--- a/pickman/.tracker/game-design.md
++++ b/pickman/.tracker/game-design.md
+@@ -13,7 +13,7 @@ This is the source of truth for product decisions. Every raft design must agree
+ | Movement | **Rail movement with free look**, described below |
+ | Players | **Solo mazes.** Each player gets their own maze instance (with their own ghosts) inside a shared server. Other players' mazes aren't visible. Logic should still allow N players per maze later. |
+ | Authority | The **server** simulates every maze. Clients send intents and render the replicated state. A session starts only when its client signals it's ready (user, 2026-09-29). |
+-| Two places (2026-10-02) | The experience has two places. The **lobby** (the existing place, the experience's start place) shows a hiscore list and a START GAME button, and a click teleports the player to the **game place** (on the level the picker shows, once the player has reached level 2: f0148), which hosts the actual game. At game over an overlay shows the results and waits for a tap, then teleports back to the lobby (f0065, after c0063). The hiscore list is an empty panel until R0011 fills it. Both places live in the Beta experience (a repo variable for the game place's id); production stays undecided. (R0024, f0061; c0064) |
++| Two places (2026-10-02) | The experience has two places. The **lobby** (the existing place, the experience's start place) shows a hiscore list and a START GAME button, and a click teleports the player to the **game place** (on the level the picker shows, once the player has reached level 2: f0148), which hosts the actual game. At game over an overlay shows the results and waits for a tap, then teleports back to the lobby (f0065, after c0063). The hiscore list is an empty panel until R0011 fills it. Both places live in the Beta experience (a repo variable for the game place's id); production stays undecided. (R0024, f0061; c0064) Since f0209 the experience's start place is the portal (`portal/.tracker/game-design.md`), so the way back leads there and the lobby is no longer published (c0188 retires it). |
+ | Deploy | A separate, private **Pickman Beta** experience. Every PR that becomes ready for review is published there (last one wins). Production publishing will be decided later. |
+ | Hiscores | A **global all-time top N**, plus **daily** and **weekly** boards. No personal-best feature for now, except the lobby's "your best" line under the all-time board (user, 2026-10-21, d0124), and each player's best level reached, which the lobby's level picker offers (f0148, see *Start on any level up to your best*). The all-time board also keeps a top-10 list of runs (see Hiscores). |
+ | Platforms | Desktop (keyboard and mouse), mobile (touch) and gamepad: every input produces the same intents, and every feature supports keyboard, console and touch (f0146). |
+diff --git a/pickman/skills/pickman-test/SKILL.md b/pickman/skills/pickman-test/SKILL.md
+index 18a247a28..be1cf1008 100644
+--- a/pickman/skills/pickman-test/SKILL.md
++++ b/pickman/skills/pickman-test/SKILL.md
+@@ -18,7 +18,7 @@ Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run
+ | `tests/contract/<Consumer>__<Provider>.spec.luau` | the Provider API exactly as the Consumer relies on it | the Provider only |
+ | `tests/integration/` | a few headless cross-feature checks that don't step time (see Simulations) | several features |
+ | `tests/scenario/` | story-style simulations through `@tests/lib/sim` | Logic features, `@tests/lib/sim`, `@tests/lib/t`, `@tests/fixtures/...`. Never adapters (they use Roblox globals) |
+-| `tests/runtime/` | scripts that run inside a real Roblox server of a published place, through Open Cloud's Luau Execution API (from `portal/`, the deploy's home since c0210: `./zn run --time 600 -- lune run scripts/runtime-test -- --place Pickman <version>`, because the PreToolUse hook refuses a bare `lune run` of it; `tests/runtime/lobby/` holds the lobby's, run with `--place Portal <version>` while the start place publishes the lobby (c0064, c0210); `portal/experience.json` names each place's runtime folder). A merge runs `lune run scripts/cicd` from `portal/`, which publishes the CICD places and runs both suites. Each returns `"PASS"`, requires nothing, and is strict Luau | nothing (Roblox globals only, via `getfenv()`) |
++| `tests/runtime/` | scripts that run inside a real Roblox server of a published place, through Open Cloud's Luau Execution API (from `portal/`, the deploy's home since c0210: `./zn run --time 600 -- lune run scripts/runtime-test -- --place Pickman <version>`, because the PreToolUse hook refuses a bare `lune run` of it; `tests/runtime/lobby/` holds the lobby's, run with `--place Portal <version>` while the start place publishes the lobby (c0064, c0210: before f0209, or after a rollback of it; the portal's own are `portal/tests/runtime/`); `portal/experience.json` names each place's runtime folder). A merge runs `lune run scripts/cicd` from `portal/`, which publishes the CICD places and runs both suites. Each returns `"PASS"`, requires nothing, and is strict Luau | nothing (Roblox globals only, via `getfenv()`) |
+ | `tests/place/` | the Rojo-built DataModel, loaded headlessly via `@tests/lib/place` (structure, script classes, require resolution as Roblox does it). Selected for every change to what the place is built from: a project file of the home and every folder it maps, the library's included (c0185). `place.load()` is the game place, `place.load("lobby.project.json")` the lobby; each is built once per process | `@tests/lib/place` |
+ 
+ A spec file looks like this:
+diff --git a/portal/experience.json b/portal/experience.json
+index a258172ca..cdf81e0bf 100644
+--- a/portal/experience.json
++++ b/portal/experience.json
+@@ -4,7 +4,7 @@
+     { "name": "Snake", "env": ["ROBLOX_BETA_SNAKE_PLACE_ID"], "build": "snake", "output": "snake_version" },
+     { "name": "Invaders", "env": ["ROBLOX_BETA_INVADERS_PLACE_ID"], "build": "invaders", "output": "invaders_version" },
+     { "name": "Asteroids", "env": ["ROBLOX_BETA_ASTEROIDS_PLACE_ID"], "build": "asteroids", "output": "asteroids_version" },
+-    { "name": "Portal", "env": ["ROBLOX_BETA_PLACE_ID"], "build": "lobby", "output": "lobby_version" }
++    { "name": "Portal", "env": ["ROBLOX_BETA_PLACE_ID"], "build": "portal", "output": "lobby_version" }
+   ],
+   "builds": {
+     "pickman": {
+@@ -17,7 +17,7 @@
+       "runtime": "../pickman/tests/runtime/lobby",
+       "attributes": { "GamePlaceId": "Pickman" }
+     },
+-    "portal": { "project": "default.project.json" },
++    "portal": { "project": "default.project.json", "runtime": "tests/runtime" },
+     "snake": { "project": "../snake/default.project.json" },
+     "invaders": { "project": "../invaders/default.project.json" },
+     "asteroids": { "project": "../asteroids/default.project.json" }
+diff --git a/portal/skills/portal-test/SKILL.md b/portal/skills/portal-test/SKILL.md
+index 729499172..f75948e1a 100644
+--- a/portal/skills/portal-test/SKILL.md
++++ b/portal/skills/portal-test/SKILL.md
+@@ -15,6 +15,7 @@ Specs run from portal's home, `portal/`: `cd portal && lune run tests/run -- tes
+ - `tests/meta/architecture.spec.luau` runs pickman's structural rules from this home (the pickman-arch rules, on `portal/src`).
+ - `tests/meta/fence.spec.luau` proves the run is guarded and jailed to `portal/.cache`, as pickman's does.
+ - `scripts/` is the experience's Beta publish (c0210): `experience.json` is its manifest, `scripts/lib/experience` its reader and `scripts/lib/beta` the plan; `deploy-beta`, `runtime-test --place <name>` and `cicd` run from this home. Their promoted specs are this home's and pickman's (pickman's `.luaurc` points `@scripts` here).
++- `tests/runtime/` holds the start place's runtime scripts (f0209): each runs inside a real Roblox server of the published portal, through Open Cloud's Luau Execution API, with `./zn run --time 600 -- lune run scripts/runtime-test -- --place Portal <version>` from this home (the merge's `cicd` runs it on the CICD start place). As pickman's (pickman-test, `tests/runtime/`), each returns `"PASS"`, requires nothing, is strict Luau and reaches Roblox's globals through `getfenv()`; `structure.luau` checks the place is the portal and was told Pickman's id.
+ - `tests/meta/home.spec.luau` checks this home against the home rule (z-nile/README.md, A project's home), so a missing file or a wrong setting fails its gate.
+ - A tier folder (`tests/unit/<Feature>`, `contract`, `scenario`, `place`) appears with its first spec. The helpers `sim` and `fakeengine` are pickman's (`pickman/tests/lib/`): a portal spec never requires another home's helper. One that needs a helper asks for its move into the shared harness (`z-nile/tests/lib/`), as c0185 did for `place` (`tests/lib/place.luau` re-exports it, and `tests/place/library.spec.luau` is this home's place tier).
+ 
+diff --git a/portal/tests/runtime/structure.luau b/portal/tests/runtime/structure.luau
+new file mode 100644
+index 000000000..bc0d15f70
+--- /dev/null
++++ b/portal/tests/runtime/structure.luau
+@@ -0,0 +1,34 @@
++--!strict
++-- Runs inside a real Roblox server of the published start place (Open Cloud Luau Execution, `runtime-test --place
++-- Portal`), not under Lune (f0209). Returns "PASS"; anything else, or an error, fails. It proves the start place runs
++-- the portal, not pickman's lobby or game, and that the publish told it where Pickman is.
++local game: any = (getfenv() :: any).game -- Roblox's global; the Lune type definitions don't declare it
++
++local sss = game:GetService("ServerScriptService")
++assert(
++	sss:FindFirstChild("Lobby") == nil,
++	"pickman's lobby (ServerScriptService.Lobby) is at the start place"
++)
++local server = sss:FindFirstChild("Server")
++assert(server, "ServerScriptService.Server is missing")
++for _, name in { "Main", "Cards", "Plays" } do
++	assert(server:FindFirstChild(name), "Server." .. name .. " is missing: this is not the portal")
++end
++local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
++assert(remotes, "ReplicatedStorage.Remotes is missing")
++for _, name in { "Cards", "Play" } do
++	assert(remotes:FindFirstChild(name), "Remotes." .. name .. " is missing")
++end
++assert(remotes:FindFirstChild("Snapshot") == nil, "pickman's game (Remotes.Snapshot) is at the start place")
++assert(game:GetService("ReplicatedStorage"):FindFirstChild("Arcade"), "ReplicatedStorage.Arcade is missing")
++assert(game:GetService("ServerStorage"):FindFirstChild("Arcade"), "ServerStorage.Arcade is missing")
++for _, attribute in { "PickmanPlaceId", "PortalPlaceId" } do
++	local id = sss:GetAttribute(attribute)
++	assert(
++		type(id) == "number" and id >= 1 and id == math.floor(id),
++		"ServerScriptService." .. attribute .. " is not set to a place id"
++	)
++end
++assert(type(sss:GetAttribute("PaidPlay")) == "string", "ServerScriptService.PaidPlay is not set")
++assert(game:GetService("Players").CharacterAutoLoads == false, "CharacterAutoLoads must be false")
++return "PASS"

@@ -1,0 +1,2 @@
+- note f0209's prep found the Beta deploy publishes each ready pull request's merge with main (deploy log of #514), so a start-place switch flips while other pull requests deploy before the merge: z-design/beta-shows-the-last-deployed-merge
+- note a prototype stacked from other preps' patches (c0210 on f0201, f0199's stand-in, f0205, f0208) moved under the runner when c0210's lead began answering its review; the runner refused, as the lesson designs it: z-design/in-flight-bases-pin-their-source

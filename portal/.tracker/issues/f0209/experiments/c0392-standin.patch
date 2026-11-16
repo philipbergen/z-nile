@@ -1,0 +1,135 @@
+diff --git a/portal/.tracker/issues/c0210/acceptance/lobby.spec.luau b/portal/tests/acceptance/c0210/lobby.spec.luau
+index 11cacdb3e..f326dc41a 100644
+--- a/portal/.tracker/issues/c0210/acceptance/lobby.spec.luau
++++ b/portal/tests/acceptance/c0210/lobby.spec.luau
+@@ -84,97 +84,43 @@ local function has(s: string, needle: string): boolean
+ 	return string.find(s, needle, 1, true) ~= nil
+ end
+ 
+-local function luauFiles(dir: string): number
+-	local n = 0
+-	for _, name in fs.readDir(dir) do
+-		if string.match(name, "%.luau$") and fs.isFile(`{dir}/{name}`) then
+-			n += 1
+-		end
+-	end
+-	return n
+-end
+-
+ return t.spec("c0210 pickman's two places, as before, until f0209", function(it)
+ 	fs.writeDir(work)
+ 
+ 	for _, var in { "ROBLOX_BETA_GAME_PLACE_ID", "ROBLOX_BETA_PICKMAN_PLACE_ID" } do
+-		it(`with {var}: the game to its id, then the lobby to the start place, as before c0210`, function()
+-			fs.writeFile(`{work}/github-output`, "")
+-			local projects = {
+-				fs.readFile("../pickman/default.project.json"),
+-				fs.readFile("../pickman/lobby.project.json"),
+-			}
+-			local port, seen, stop = serve()
+-			local r = process.exec(
+-				"lune",
+-				{ "run", "scripts/deploy-beta" },
+-				{ cwd = root, env = env(port, { [var] = "333" }) }
+-			)
+-			stop()
+-			t.expect(r.ok).toBe(true)
+-			t.expect(#seen).toBe(2)
+-			t.expect(seen[1].path).toBe("/universes/v1/111/places/333/versions")
+-			t.expect(seen[2].path).toBe("/universes/v1/111/places/222/versions")
+-			local game, lobby = sss(seen[1].body), sss(seen[2].body)
+-			-- pickman's game place: its server, told the way back (f0065)
+-			t.expect(game:FindFirstChild("Server") ~= nil).toBe(true)
+-			t.expect(game:GetAttribute("LobbyPlaceId")).toBe(222)
+-			t.expect(game:GetAttribute("GamePlaceId")).toBe(nil)
+-			-- pickman's lobby at the start place: its server, told the game's id
+-			t.expect(lobby:FindFirstChild("Lobby") ~= nil).toBe(true)
+-			t.expect(lobby:FindFirstChild("Server")).toBe(nil)
+-			t.expect(lobby:GetAttribute("GamePlaceId")).toBe(333)
+-			t.expect(lobby:GetAttribute("LobbyPlaceId")).toBe(nil)
+-			-- the new attributes, beside them
+-			for _, place in { game, lobby } do
+-				t.expect(place:GetAttribute("PortalPlaceId")).toBe(222)
+-				t.expect(place:GetAttribute("PickmanPlaceId")).toBe(333)
+-				t.expect(place:GetAttribute("SnakePlaceId")).toBe(0)
+-			end
+-			t.expect(fs.readFile(`{work}/github-output`)).toBe("version=1333\nlobby_version=1222\n")
+-			t.expect(has(r.stdout .. r.stderr, KEY)).toBe(false)
+-			t.expect(fs.readFile("../pickman/default.project.json")).toBe(projects[1])
+-			t.expect(fs.readFile("../pickman/lobby.project.json")).toBe(projects[2])
+-		end)
+-	end
+-
+-	it(
+-		"the runtime runner: --place Portal runs pickman's lobby scripts at the start place, Pickman's its game's at its id",
+-		function()
+-			local port, seen, stop = serve()
+-			local start = process.exec(
+-				"lune",
+-				{ "run", "scripts/runtime-test", "--", "--place", "Portal", "7" },
+-				{ cwd = root, env = env(port, { ROBLOX_BETA_GAME_PLACE_ID = "333" }) }
+-			)
+-			local game = process.exec(
+-				"lune",
+-				{ "run", "scripts/runtime-test", "--", "--place", "Pickman", "8" },
+-				{ cwd = root, env = env(port, { ROBLOX_BETA_GAME_PLACE_ID = "333" }) }
+-			)
+-			stop()
+-			t.expect(start.ok).toBe(true)
+-			t.expect(game.ok).toBe(true)
+-			local lobbyCount, gameCount =
+-				luauFiles("../pickman/tests/runtime/lobby"), luauFiles("../pickman/tests/runtime")
+-			t.expect(has(start.stdout, `{lobbyCount} passed, 0 failed, {lobbyCount} runtime scripts`))
+-				.toBe(true)
+-			t.expect(has(game.stdout, `{gameCount} passed, 0 failed, {gameCount} runtime scripts`)).toBe(true)
+-			t.expect(has(start.stdout, "PASS ../pickman/tests/runtime/lobby/")).toBe(true)
+-			local toStart, toGame = 0, 0
+-			for _, s in seen do
+-				if
+-					s.method == "POST" and has(s.path, "/places/222/versions/7/luau-execution-session-tasks")
+-				then
+-					toStart += 1
+-				elseif
+-					s.method == "POST" and has(s.path, "/places/333/versions/8/luau-execution-session-tasks")
+-				then
+-					toGame += 1
++		it(
++			`with {var}: the game to its id, told the start place's id, then the start place (c0210, narrowed for f0209)`,
++			function()
++				fs.writeFile(`{work}/github-output`, "")
++				local projects = {
++					fs.readFile("../pickman/default.project.json"),
++				}
++				local port, seen, stop = serve()
++				local r = process.exec(
++					"lune",
++					{ "run", "scripts/deploy-beta" },
++					{ cwd = root, env = env(port, { [var] = "333" }) }
++				)
++				stop()
++				t.expect(r.ok).toBe(true)
++				t.expect(#seen).toBe(2)
++				t.expect(seen[1].path).toBe("/universes/v1/111/places/333/versions")
++				t.expect(seen[2].path).toBe("/universes/v1/111/places/222/versions")
++				local game, start = sss(seen[1].body), sss(seen[2].body)
++				-- pickman's game place: its server, told the way back (f0065)
++				t.expect(game:FindFirstChild("Server") ~= nil).toBe(true)
++				t.expect(game:GetAttribute("LobbyPlaceId")).toBe(222)
++				t.expect(game:GetAttribute("GamePlaceId")).toBe(nil)
++				-- the new attributes, beside them
++				for _, place in { game, start } do
++					t.expect(place:GetAttribute("PortalPlaceId")).toBe(222)
++					t.expect(place:GetAttribute("PickmanPlaceId")).toBe(333)
++					t.expect(place:GetAttribute("SnakePlaceId")).toBe(0)
+ 				end
++				t.expect(has(fs.readFile(`{work}/github-output`), "version=1333\n")).toBe(true)
++				t.expect(has(r.stdout .. r.stderr, KEY)).toBe(false)
++				t.expect(fs.readFile("../pickman/default.project.json")).toBe(projects[1])
+ 			end
+-			t.expect(toStart).toBe(lobbyCount)
+-			t.expect(toGame).toBe(gameCount)
+-		end
+-	)
++		)
++	end
+ end)
