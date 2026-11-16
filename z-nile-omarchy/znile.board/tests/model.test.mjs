@@ -136,14 +136,28 @@ test("blocking: outside deps block, in-raft deps only order; rafts list blocked 
 })
 
 test("styled code spans: our own span, ticket text escaped for HTML and markdown", () => {
-  const style = { color: "#e0af68", background: "#292e42" }
+  const style = { color: "#e0af68" }
   const md = M.safeMarkdown("x `a<b>_*c` y <i>", style)
   assert.equal(md,
-    'x <span style="color:#e0af68;background-color:#292e42;font-family:monospace;font-weight:600">&nbsp;a&lt;b&gt;\\_\\*c&nbsp;</span> y &lt;i>')
+    'x <span style="color:#e0af68;font-family:monospace;font-weight:600">&nbsp;a&lt;b&gt;\\_\\*c&nbsp;</span> y &lt;i>')
   // a bad colour never reaches the style attribute
-  assert.equal(M.safeMarkdown("`q`", { color: "red\" onx=\"", background: "#000000" }), "`q`")
+  assert.equal(M.safeMarkdown("`q`", { color: "red\" onx=\"" }), "`q`")
   // a quote inside code can't end the attribute: it's text between the tags
   assert.ok(!/style="[^"]*"[^>]*"/.test(M.safeMarkdown('`a"b`', style)))
+})
+
+// Qt 6.12 crashes the whole shell (QSGBatchRenderer::prepareAlphaBatches) when
+// it lays out again markdown with background-tinted spans or tables (d0389).
+test("safeMarkdown never emits what crashes Qt: no span backgrounds, no tables", () => {
+  const style = { color: "#e0af68", background: "#292e42" }
+  assert.ok(!/background/.test(M.safeMarkdown("a `b` c", style)), "no background, even when one is offered")
+  const table = "| a | `b` |\n|---|:-:|\n| 1 | <i> |"
+  assert.equal(M.safeMarkdown("x\n" + table + "\ny", style), "x\n```\n" + table + "\n```\ny")
+  // a pipe line with no separator row under it is prose, not a table
+  assert.equal(M.safeMarkdown("| just a pipe", style), "| just a pipe")
+  // a table at the end, and one inside a fence, stay well formed
+  assert.equal(M.safeMarkdown(table), "```\n" + table + "\n```")
+  assert.equal(M.safeMarkdown("```\n" + table + "\n```"), "```\n" + table + "\n```")
 })
 
 test("PRs attach by branch and title ids; tickets get their raft's PR", () => {

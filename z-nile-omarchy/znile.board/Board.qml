@@ -148,10 +148,10 @@ Item {
   readonly property color surface: hue("lighter_background", Util.alpha(fg, 0.05))
   readonly property color sunken: hue("dark_background", Qt.darker(bg, 1.15))
 
-  // Inline `code` in descriptions: the theme's orange on its selection tint.
+  // Inline `code` in descriptions: the theme's orange. No tint behind it:
+  // Qt crashes laying tinted spans out again (d0389).
   readonly property var codeStyle: ({
-    color: hex(hue("orange", hue("yellow", Commons.Color.accent))),
-    background: hex(hue("selection", hue("lighter_background", Util.alpha(fg, 0.12))))
+    color: hex(hue("orange", hue("yellow", Commons.Color.accent)))
   })
   function hex(c) {
     var q = Qt.color(c)

@@ -360,19 +360,34 @@ function safeMarkdown(body, style) {
       continue
     }
     if (m) { fence = m[1]; out.push(line); continue }
+    // A table goes out as a code block: Qt crashes laying tables out again (d0389).
+    if (line.indexOf("|") >= 0 && i + 1 < lines.length && TABLE_RULE.test(lines[i + 1])) {
+      var rows = [line, lines[i + 1]]
+      i += 2
+      while (i < lines.length && lines[i].indexOf("|") >= 0 && lines[i].trim() !== "") rows.push(lines[i++])
+      i--
+      var ticks = 3, runs = rows.join("\n").match(/`+/g) || []
+      for (var r = 0; r < runs.length; r++) ticks = Math.max(ticks, runs[r].length + 1)
+      var bar = new Array(ticks + 1).join("`")
+      out.push(bar, rows.join("\n"), bar)
+      continue
+    }
     out.push(safeInline(line, style))
   }
   return out.join("\n")
 }
 
+// A table's rule row under its header: `|---|:-:|`, or `---|---` with no outer pipes.
+var TABLE_RULE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/
+
 var HEX = /^#[0-9a-fA-F]{6}$/
 
 // Outside code: `<` -> `&lt;`, `![` -> `\![`. A code span stays as markdown
-// code, or, given `style` ({ color, background } as #rrggbb), becomes a
+// code, or, given `style` ({ color } as #rrggbb), becomes a
 // tinted monospace span the board generates itself; its text is escaped for
 // both HTML and markdown, so nothing from the ticket turns into markup.
 function safeInline(line, style) {
-  var styled = style && HEX.test(style.color) && HEX.test(style.background)
+  var styled = style && HEX.test(style.color)
   var parts = String(line).split(/(`+[^`]*?`+)/)
   for (var i = 0; i < parts.length; i++) {
     var code = /^(`+)([^`]*?)(`+)$/.exec(parts[i])
@@ -391,7 +406,8 @@ function codeSpan(text, style) {
   t = t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/([\\`*_\[\]{}()#+\-.!|~])/g, "\\$1")
     .replace(/ /g, "&nbsp;")
-  return "<span style=\"color:" + style.color + ";background-color:" + style.background
+  // No background-color: Qt crashes laying tinted spans out again (d0389).
+  return "<span style=\"color:" + style.color
     + ";font-family:monospace;font-weight:600\">&nbsp;" + t + "&nbsp;</span>"
 }
 
