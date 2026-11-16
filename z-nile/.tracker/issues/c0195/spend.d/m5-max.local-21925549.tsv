@@ -1,0 +1,31 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-15 20:41	1 spec	0	0	test			8.856	6.540		8.856	tokens,ai
+2026-11-15 20:54	1 spec	0	0	test			5.278	3.090		5.278	tokens,ai
+2026-11-15 20:54	1 spec	0	0	test			5.286	3.160		5.286	tokens,ai
+2026-11-15 20:54	1 spec	0	0	test			6.500	3.460		6.500	tokens,ai
+2026-11-15 20:57	1 spec	0	0	test			7.929	5.170		7.929	tokens,ai
+2026-11-15 20:57	1 spec	0	0	test			1.422	0.680		1.422	tokens,ai
+2026-11-15 20:58	13 specs	0	0	test			43.020	79.260		43.020	tokens,ai
+2026-11-16 03:41	1 spec	0	0	test			2.448	1.980		2.448	tokens,ai
+2026-11-16 03:41	1 spec	0	0	test			2.444	1.950		2.444	tokens,ai
+2026-11-16 03:41	1 spec	0	0	test			1.426	1.130		1.426	tokens,ai
+2026-11-16 03:41	1 spec	0	0	test			2.040	1.550		2.040	tokens,ai
+2026-11-16 03:41	1 spec	0	0	test			1.622	1.260		1.622	tokens,ai
+2026-11-16 03:41	1 spec	0	0	test			1.221	0.800		1.221	tokens,ai
+2026-11-16 03:41	1 spec	0	0	test			1.022	0.720		1.022	tokens,ai
+2026-11-16 03:41	1 spec	0	0	test			0.812	0.510		0.812	tokens,ai
+2026-11-16 03:41	12 specs	0	0	test			20.914	47.570		20.914	tokens,ai
+2026-11-16 03:41	1 spec	0	0	test			2.441	2.070		2.441	tokens,ai
+2026-11-16 03:41	1 spec	0	0	test			2.851	2.110		2.851	tokens,ai
+2026-11-16 03:42	1 spec	0	0	test			1.622	1.200		1.622	tokens,ai
+2026-11-16 03:42	1 spec	0	0	test			2.235	1.700		2.235	tokens,ai
+2026-11-16 03:42	1 spec	0	0	test			1.835	1.320		1.835	tokens,ai
+2026-11-16 03:42	1 spec	0	0	test			1.015	0.760		1.015	tokens,ai
+2026-11-16 03:42	1 spec	0	0	test			1.014	0.690		1.014	tokens,ai
+2026-11-16 03:42	1 spec	0	0	test			0.811	0.530		0.811	tokens,ai
+2026-11-16 03:42	12 specs	0	0	test			20.294	49.290		20.294	tokens,ai
+2026-11-16 03:42	2 specs	0	0	test			2.440	3.150		2.440	tokens,ai
+2026-11-16 03:57	1 spec	0	0	test			1.020	0.670		1.020	tokens,ai
+2026-11-16 04:17	1 spec	0	0	test			1.032	0.640		1.032	tokens,ai
+2026-11-16 04:15	26 runs	0	0	other			1216.204	891.970			tokens,ai
+2026-11-16 04:17	design-review-001	0	0	design-review							tokens,ai
