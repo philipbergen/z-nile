@@ -9,3 +9,5 @@ A mutant only tests a rule while it changes the code the command runs. When a re
 **Why:** c0306 prep, round 3 (2026-11-14). When `reviewmodel.problem` moved from `files` to `newest`, M16–M18, M68, M69 and M85 survived because they still mutated `files`. M102 and M105 survived because `effortOption` already gave nil for a non-claude id, so their mutated branch was unreachable. All were rewritten, against `newest` and against the read of `CLAUDE_EFFORT`, and were then killed.
 
 **How to apply:** after each round that moves code, grep the mutant definitions for the functions the round stopped calling, and rewrite those mutants on the new path. For a survivor, ask first whether the code can still reach the mutated line.
+
+**Note** (c0253 revision): after a rework, check that each mutant still changes the path the assertion observes. Two of c0253's mutants were no-ops and one read the index instead of the working tree. A mutant that can make a loop never end must be bounded by the case itself (`./zn run --time`, or a fake clock), with its output sent to a file rather than a pipe, or it leaks a process and reads as a timeout.

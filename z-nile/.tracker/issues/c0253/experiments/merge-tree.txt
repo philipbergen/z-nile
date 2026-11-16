@@ -1,0 +1,48 @@
+== origin/proto-c0249 (50e609156)
+content: AGENTS.md
+content: z-nile/.tracker/issues/c0249/check.sh
+content: z-nile/README.md
+content: z-nile/engine/audit.luau
+content: z-nile/engine/boardview.luau
+add/add: z-nile/engine/heartbeat.luau
+content: z-nile/engine/main.luau
+content: z-nile/engine/publish.luau
+content: z-nile/engine/raftplan.luau
+content: z-nile/engine/work.luau
+content: z-nile/skills/z-work/SKILL.md
+content: z-nile/skills/zz-rules/SKILL.md
+== origin/R0100/5/c0277 (acf480f21)
+content: z-nile/README.md
+content: z-nile/engine/board.html
+content: z-nile/engine/dispatcher.luau
+add/add: z-nile/engine/heartbeat.luau
+content: z-nile/engine/main.luau
+content: z-nile/engine/work.luau
+content: z-nile/skills/z-design/lessons/rerun-skipped-checks-after-edits.md
+content: z-nile/skills/z-stop/SKILL.md
+content: z-nile/skills/z-work/SKILL.md
+content: z-nile/skills/zz-rules/SKILL.md
+content: z-nile/skills/zz-test/SKILL.md
+content: z-nile/tests/tooling/stack-land.spec.luau
+== origin/proto-c0175 (b2f9e001b)
+content: z-nile/README.md
+content: z-nile/engine/models.luau
+content: z-nile/skills/z-work/SKILL.md
+== origin/proto-c0325 (33c94a1c7)
+add/add: z-nile/.tracker/issues/c0325/acceptance/match.spec.luau
+content: z-nile/.tracker/issues/c0325/check.sh
+content: z-nile/engine/models.luau
+== origin/proto-c0260 (6cb75b10d)
+content: z-nile/.tracker/issues/c0260/acceptance/audit.spec.luau
+content: z-nile/.tracker/issues/c0260/acceptance/claim.spec.luau
+content: z-nile/.tracker/issues/c0260/acceptance/exempt.spec.luau
+add/add: z-nile/.tracker/issues/c0260/acceptance/land-marked.spec.luau
+content: z-nile/.tracker/issues/c0260/acceptance/land.spec.luau
+add/add: z-nile/.tracker/issues/c0260/acceptance/loop.spec.luau
+add/add: z-nile/.tracker/issues/c0260/acceptance/provenance.spec.luau
+add/add: z-nile/.tracker/issues/c0260/acceptance/record.spec.luau
+content: z-nile/.tracker/issues/c0260/acceptance/shape.spec.luau
+content: z-nile/.tracker/issues/c0260/acceptance/skills-restated.spec.luau
+content: z-nile/.tracker/issues/c0260/acceptance/skills-ticket.spec.luau
+content: z-nile/README.md
+== origin/proto-c0283 (15acaa372)
