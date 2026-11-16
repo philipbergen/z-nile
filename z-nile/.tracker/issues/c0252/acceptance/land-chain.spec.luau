@@ -512,15 +512,14 @@ return t.spec("c0252 the chain lands a finished raft", function(it)
 			local own = fs.readFile(`{worktrees.R0140}/z-nile/engine/stack.luau`)
 			local signature =
 				"function stack.bindMessage(raftId: string, issueIds: { string }, verdict: string, tracePath: string?): string\n"
-			t.expect(has(own, signature)).toBe(true)
-			layer("R0140", "c0160", "pi", true, nil, nil, {
-				["z-nile/engine/stack.luau"] = (string.gsub(
-					own,
-					signature,
-					signature .. '\tif raftId == "R0140" then\n\t\treturn "R0140: OWN ENGINE bind"\n\tend\n',
-					1
-				)),
-			})
+			local at, to = string.find(own, signature, 1, true)
+			t.expect(at ~= nil).toBe(true)
+			local changed = string.sub(own, 1, to :: number)
+				.. '\tif raftId == "R0140" then\n\t\treturn "R0140: OWN ENGINE bind"\n\tend\n'
+				.. string.sub(own, (to :: number) + 1)
+			layer("R0140", "c0160", "pi", true, nil, nil, { ["z-nile/engine/stack.luau"] = changed })
+			-- the stack's own copy does word its bind that way
+			t.expect(has(fs.readFile(`{worktrees.R0140}/z-nile/engine/stack.luau`), "OWN ENGINE")).toBe(true)
 			seal.trace(worktrees.R0140, "R0140")
 			pr("R0140/1/c0160", GREEN)
 			local r = dispatchOut("R0140")
