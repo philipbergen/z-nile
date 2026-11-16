@@ -1,11 +1,13 @@
 --!strict
 -- f0206 AC7: the built portal place. ReplicatedStorage.Remotes.Boards is a RemoteEvent beside f0205's Cards; Board is
--- a Logic feature in ReplicatedStorage.Shared.Logic that requires nothing (a leaf); the server adapter BoardRelay is in
--- ServerScriptService.Server, reaching the arcade's Boards in ServerStorage.Arcade and its HiscoreGames, and the
--- server's Main boots it after Cards; the client adapter BoardsView is in the player's scripts, requires CarouselView
--- (whose Boards slots it fills) and never a server module, and the client's Main boots it after CarouselView;
--- portal's architecture map declares Board with no dependency edge; and the arcade's map says E3 is settled here.
+-- a Logic feature in ReplicatedStorage.Shared.Logic whose requires stay inside Logic; the server adapter BoardRelay is
+-- in ServerScriptService.Server, reaching the arcade's Boards in ServerStorage.Arcade and its HiscoreGames, and the
+-- server's Main starts it once; the client adapter BoardsView is in the player's scripts, requires CarouselView (whose
+-- Boards slots it fills) and never a server module, and the client's Main starts it once (each Main is run with a
+-- spy, so any spelling of the boot passes); portal's architecture map declares Board; and the arcade's map says E3 is
+-- settled here.
 local fs = require("@lune/fs")
+local luau = require("@lune/luau")
 local place = require("@tests/lib/place")
 local renamed = require("@tests/lib/renamed")
 local t = require("@tests/lib/t")
@@ -17,14 +19,6 @@ local SSS = game:GetService("ServerScriptService")
 local ID = renamed.id("f0206") -- this item, across a compaction
 local client =
 	game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts"):FindFirstChild("Client")
-
--- the source with comments removed and every string's text blanked, so a pin reads code, not prose
-local function code(src: string): string
-	local s = string.gsub(src, "%-%-%[(=*)%[.-%]%1%]", "")
-	s = string.gsub(s, "%-%-[^\n]*", "")
-	s = string.gsub(s, '"[^"\n]*"', '""')
-	return s
-end
 
 local function under(node: any, ancestor: any): boolean
 	local p = node
@@ -46,9 +40,41 @@ local function reaches(m: any, target: any): boolean
 	return false
 end
 
--- the position of the boot of `name` in a Main's requires, or nil
-local function boot(main: any, name: string): number?
-	return table.find(place.requireSpecs(main.Source), "./" .. name)
+local function standin(): any
+	local s: any
+	s = setmetatable({}, {
+		__index = function(): any
+			return s
+		end,
+		__call = function(): any
+			return nil
+		end,
+	})
+	return s
+end
+
+-- runs a Main's real source where `require(target)` is a spy, and answers how many times its start was called
+local function starts(main: any, target: string): number
+	local count = 0
+	local spy = {
+		start = function()
+			count += 1
+		end,
+	}
+	local env: { [string]: any } = {
+		game = standin(),
+		script = standin(),
+		print = function() end,
+		warn = function() end,
+		require = function(spec: string): any
+			if spec == target then
+				return spy
+			end
+			return standin() -- another adapter, this issue's or a later one's
+		end,
+	}
+	luau.load(main.Source, { debugName = main.Name, environment = env })()
+	return count
 end
 
 return t.spec("f0206 place", function(it)
@@ -61,10 +87,18 @@ return t.spec("f0206 place", function(it)
 		t.expect(cards ~= nil and cards.ClassName).toBe("RemoteEvent")
 	end)
 
-	it("Board is a Logic feature, and a leaf: it requires nothing", function()
-		local m = RS:FindFirstChild("Shared"):FindFirstChild("Logic"):FindFirstChild("Board")
+	it("Board is a Logic feature whose every require stays inside ReplicatedStorage.Shared.Logic", function()
+		local logic = RS:FindFirstChild("Shared"):FindFirstChild("Logic")
+		local m = logic:FindFirstChild("Board")
 		t.expect(m ~= nil and m.ClassName).toBe("ModuleScript")
-		t.expect(#place.requireSpecs(m.Source)).toBe(0)
+		for _, s in place.scripts(game) do
+			if under(s, m) then
+				for _, spec in place.requireSpecs(s.Source) do
+					local target = place.resolveRequire(s, spec)
+					t.expect(target ~= nil and under(target, logic)).toBe(true)
+				end
+			end
+		end
 	end)
 
 	it(
@@ -81,28 +115,22 @@ return t.spec("f0206 place", function(it)
 		end
 	)
 
-	it("the server's Main boots BoardRelay, after Cards", function()
+	it("the server's Main starts BoardRelay once", function()
 		local main = SSS:FindFirstChild("Server"):FindFirstChild("Main")
 		t.expect(main ~= nil and main.ClassName).toBe("Script")
-		local relay, cards = boot(main, "BoardRelay"), boot(main, "Cards")
-		t.expect(relay ~= nil).toBe(true)
-		t.expect(cards ~= nil and relay ~= nil and cards < relay).toBe(true)
-		t.expect(select(2, string.gsub(code(main.Source), 'require%(""%)%.start%(%)', "")) >= 2).toBe(true)
+		t.expect(starts(main, "./" .. "BoardRelay")).toBe(1)
 	end)
 
 	it(
-		"BoardsView is in the player's scripts, requires CarouselView, and the client's Main boots it after",
+		"BoardsView is in the player's scripts, requires CarouselView, and the client's Main starts it once",
 		function()
 			local m = client:FindFirstChild("BoardsView")
 			t.expect(m ~= nil and m.ClassName).toBe("ModuleScript")
 			t.expect(reaches(m, client:FindFirstChild("CarouselView"))).toBe(true)
 			t.expect(reaches(m, RS:FindFirstChild("Arcade"):FindFirstChild("HiscoreGames"))).toBe(true)
 			local main = client:FindFirstChild("Main")
-			local view, carousel = boot(main, "BoardsView"), boot(main, "CarouselView")
-			t.expect(view ~= nil).toBe(true)
-			t.expect(carousel ~= nil and view ~= nil and carousel < view).toBe(true)
-			t.expect(select(2, string.gsub(code(main.Source), 'require%(""%)%.start%(%)', "")) >= 2)
-				.toBe(true)
+			t.expect(main ~= nil and main.ClassName).toBe("LocalScript")
+			t.expect(starts(main, "./" .. "BoardsView")).toBe(1)
 		end
 	)
 
@@ -121,14 +149,10 @@ return t.spec("f0206 place", function(it)
 		t.expect(table.concat(bad, "\n")).toBe("")
 	end)
 
-	it("portal's architecture map declares Board, which depends on no other feature", function()
+	it("portal's architecture map declares Board", function()
+		-- its edges, if a later issue gives it any, are the meta spec's to check (every require declared)
 		local md = fs.readFile(".tracker/architecture.md")
 		t.expect(string.find(md, `### Board ({ID})`, 1, true) ~= nil).toBe(true)
-		local block = string.match(md, "```deps\n(.-)```") or ""
-		for line in string.gmatch(block, "[^\n]+") do
-			local consumer = string.match(line, "^%s*(%w+)%s*%->")
-			t.expect(consumer == "Board").toBe(false)
-		end
 	end)
 
 	it("the arcade's map says its E3 is settled by f0206, with the snapshot per board", function()

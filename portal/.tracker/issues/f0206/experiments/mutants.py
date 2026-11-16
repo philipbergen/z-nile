@@ -1,15 +1,14 @@
 # f0206 prep: the mutation check. It never touches the tree it is run from: it clones this repository into a fresh
 # folder under $TMPDIR, checks out this checkout's HEAD there, copies this item's folder in, and applies the bases in
-# order: f0201's prototype (arcade's PaidPlay, Prices, Wallet, Catalog, in-repo), f0199-standin.patch and
-# f0205-prototype.patch (copied from f0205's prep, prep-game-carousel at 0254f95fd; their sha256 are checked below, so a
-# moved copy refuses to run), f0197's prototype (arcade's Hiscores, Boards, HiscoreGames, in-repo) and prototype.patch
-# (this issue's portal code). It runs the intended state, then applies each mutant (and each correct variant) to that
+# order, all in-repo: f0201's prototype (arcade's PaidPlay, Prices, Wallet, Catalog), f0205's f0199-standin.patch and
+# prototype.patch (f0205, prepared and on main since PR #494), f0197's prototype (arcade's Hiscores, Boards,
+# HiscoreGames) and this issue's prototype.patch (its portal code). It runs the intended state, then applies each mutant (and each correct variant) to that
 # clone, runs the row's spec files from the clone's portal/, restores the file, and deletes the clone at the end.
 # A mutant is killed when its spec run reports a FAIL whose message is an assertion ("expected ..."), not a syntax,
 # type or require error. A correct variant (CV) must stay green.
 # Usage, from the repository root:
 #   ./zn run --time 1800 -- python3 -I portal/.tracker/issues/f0206/experiments/mutants.py [id prefixes...]
-import hashlib, os, re, shutil, subprocess, sys, tempfile
+import os, re, shutil, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = subprocess.run(["git", "-C", HERE, "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
@@ -17,10 +16,6 @@ HEAD = subprocess.run(["git", "-C", HERE, "rev-parse", "HEAD"], capture_output=T
 TMP = os.path.realpath(tempfile.mkdtemp(prefix="f0206-mutants-"))
 CLONE = os.path.join(TMP, "repo")
 HOME = os.path.join(CLONE, "portal")
-PINNED = {
-    "f0199-standin.patch": "feb5ffd388a941f7fe546b66b8922fb16dbe9a3aaef04342b4f566927000a7d6",
-    "f0205-prototype.patch": "b581efc4ca292ca1eb9a31009dc5929d97d2e9a7d50fef3d19089c0d66684fa2",
-}
 A = ".tracker/issues/f0206/acceptance/"
 BRD = [A + "board.spec.luau"]
 PAR = [A + "parse.spec.luau"]
@@ -47,23 +42,28 @@ M = [
     ("B4 W steps forward", BO, "Board.KEYS = table.freeze({ W = -1,", "Board.KEYS = table.freeze({ W = 1,", BRD),
     ("B5 Tab steps too", BO, "S = 1, Down = 1, ButtonR2 = 1 })", "S = 1, Down = 1, ButtonR2 = 1, Tab = 1 })", BRD),
     ("B6 bound at the default controls' priority", BO, "Board.PRIORITY = 2500", "Board.PRIORITY = 2000", BRD),
+    ("B6b bound at the test screen's priority", BO, "Board.PRIORITY = 2500", "Board.PRIORITY = 3000", BRD),
     ("B7 no revives shows 0", BO, "\tif whole(n) and n >= 1 then\n\t\treturn int(n)", "\tif whole(n) and n >= 0 then\n\t\treturn int(n)", BRD),
     ("B8 junk revives shown", BO, "\tif whole(n) and n >= 1 then\n\t\treturn int(n)", "\tif type(n) == \"number\" and n >= 1 then\n\t\treturn tostring(n)", BRD),
     ("B9 the figure not upper case", BO, 'return { "#", "NAME", "SCORE", string.upper(progress), "REVIVES" }', 'return { "#", "NAME", "SCORE", progress, "REVIVES" }', BRD),
     ("B10 score and figure swapped", BO, "return { int(row.rank), row.name, int(row.score), int(row.level), Board.revives(row.revives) }",
      "return { int(row.rank), row.name, int(row.level), int(row.score), Board.revives(row.revives) }", BRD),
-    ("B11 no best says nothing", BO, "\tif best == nil then\n\t\treturn `{Board.BEST} {Board.NONE}`", "\tif best == nil then\n\t\treturn \"\"", BRD),
-    ("B12 the best's revives as a bare count", BO, "REVIVES {Board.revives(\n\t\tbest.revives\n\t)}`", "REVIVES {int(best.revives)}`", BRD),
+    ("B11 no best shows no line", BO, "\t\treturn { \"\", Board.BEST, Board.NONE, Board.NONE, Board.NONE }", "\t\treturn { \"\", \"\", \"\", \"\", \"\" }", BRD),
+    ("B12 the best's revives as a bare count", BO, "int(best.level), Board.revives(best.revives) }", "int(best.level), int(best.revives) }", BRD),
     ("B13 a wait shows its rows", BO, "\tif answer ~= nil and answer.status ~= \"wait\" then", "\tif answer ~= nil then", BRD),
     ("B14 a failed empty board says no scores", BO, "\t\telseif answer.status == \"failed\" then\n\t\t\tnote = Board.DOWN", "\t\telseif false then\n\t\t\tnote = Board.DOWN", BRD),
     ("B15 the player's row never marked", BO, "mine = answer.rank ~= nil and row.rank == answer.rank", "mine = false", BRD),
-    ("B16 the best on every tab", BO, "\t\tif tab == \"all\" then\n\t\t\tbest = Board.bestLine", "\t\tif true then\n\t\t\tbest = Board.bestLine", BRD),
+    ("B16 the best on every tab", BO, "\t\tif tab == \"all\" then\n\t\t\tbest = Board.bestCells", "\t\tif true then\n\t\t\tbest = Board.bestCells", BRD),
     ("B17 no smallest line", BO, "math.clamp((h - Board.TAB_PX) / (Board.N + 2), Board.MIN_LINE_PX, Board.MAX_LINE_PX)",
      "math.min((h - Board.TAB_PX) / (Board.N + 2), Board.MAX_LINE_PX)", BRD),
     ("B18 the tab bar not left out of the lines", BO, "math.clamp((h - Board.TAB_PX) / (Board.N + 2),", "math.clamp(h / (Board.N + 2),", BRD),
     ("B19 a wait waits REASK", BO, "(if last.wait then Board.WAIT_RETRY else Board.REASK)", "Board.REASK", BRD),
     ("B20 a clock that went back waits", BO, "last.id ~= id or now < last.at then", "last.id ~= id then", BRD),
     ("B21 a new tab not asked for", BO, "last.name ~= name or last.id ~= id or", "last.name ~= name or", BRD),
+    ("T1 the text as tall as the line, whatever the width", BO, "text = math.floor(math.min(line, w / (g * Board.CHARS))),", "text = math.floor(line),", BRD),
+    ("T2 the glyph width ignored", BO, "\tlocal g = if finite(glyph) and glyph > 0 then glyph else 1\n", "\tlocal g = 0.5\n", BRD),
+    ("T3 a name column too narrow", BO, "local CHARS = { Rank = 2, Name = 8, Score = 7, Progress = 5, Revives = 7 }", "local CHARS = { Rank = 2, Name = 6, Score = 7, Progress = 5, Revives = 9 }", BRD),
+    ("T4 a text size that is not whole", BO, "text = math.floor(math.min(line, w / (g * Board.CHARS))),", "text = math.min(line, w / (g * Board.CHARS)),", BRD),
     ("B22 the view's rows not cut at the header", BO, "view = math.max(0, h - Board.TAB_PX - 2 * line),", "view = math.max(0, h - Board.TAB_PX),", BRD),
     # Board.parse: the client's read
     ("P1 any title read", BO, "\tif type(name) ~= \"string\" or names[name] ~= true then", "\tif type(name) ~= \"string\" then", PAR),
@@ -140,12 +140,18 @@ M = [
     ("V15 the chosen tab not shown", VI, "button.BackgroundTransparency = if id == tab then 0 else 0.6", "button.BackgroundTransparency = 0.6", CLI),
     ("V16 rows placed at a fixed line", VI, "\t\tline.frame.Position = UDim2.fromOffset(0, (i - 1) * layout.line)", "\t\tline.frame.Position = UDim2.fromOffset(0, (i - 1) * Board.MIN_LINE_PX)", CLI),
     ("V17 an answer not read through parse", VI, "\t\t\tlocal answer = Board.parse(names, ...)", "\t\t\tlocal raw = table.pack(...)\n\t\t\tlocal answer: any = { name = raw[1], id = raw[2], rows = raw[3] or {}, rank = raw[4], status = raw[5], best = raw[6] }", CLI),
+    ("V19 labels scaled to their boxes", VI, "\tl.TextScaled = false", "\tl.TextScaled = true", CLI),
+    ("V20 the rows' text size not set", VI, "\tfor _, line in p.lines do\n\t\tfor _, cell in line.cells do\n\t\t\tcell.TextSize = layout.text", "\tfor _, line in p.lines do\n\t\tfor _, cell in line.cells do\n\t\t\tcell.TextSize = 14", CLI),
+    ("V21 the tab keys act while the player types", VI, "\t\t\tif UserInputService:GetFocusedTextBox() ~= nil then", "\t\t\tif false then", CLI),
+    ("V22 YOUR BEST in the name column only", VI, "\tbestCells[2].Position = UDim2.fromScale(0, 0)\n", "", CLI),
+    ("V23 the layout with a glyph width of its own", VI, "p.slot.AbsoluteSize.Y, Card.GLYPH)", "p.slot.AbsoluteSize.Y, 0.5)", CLI),
+    ("V24 the best line never hidden", VI, "\tp.best.frame.Visible = best ~= nil\n", "", CLI),
     ("V18 a long name not cut", VI, "\tl.TextTruncate = Enum.TextTruncate.AtEnd\n", "", CLI),
     # the place
-    ("X1 the relay booted before Cards", SMAIN, 'require("./Cards").start()\nrequire("./BoardRelay").start()', 'require("./BoardRelay").start()\nrequire("./Cards").start()', PLC),
-    ("X2 Board requires Carousel", BO, "local Board = {}\n", "local _ = require(\"./Carousel\")\nlocal Board = {}\n", PLC),
+    ("X1 the server's Main never starts the relay", SMAIN, 'require("./BoardRelay").start()', 'local _ = require("./BoardRelay")', PLC),
+    ("X2 Board requires outside Logic", BO, "local Board = {}\n", "local _ = require(\"../Games\")\nlocal Board = {}\n", PLC),
     ("X3 no Boards remote", PJ, ',\n        "Boards": { "$className": "RemoteEvent" }', "", PLC),
-    ("X4 the view booted before the carousel", CMAIN, 'require("./CarouselView").start()\nrequire("./BoardsView").start()', 'require("./BoardsView").start()\nrequire("./CarouselView").start()', PLC),
+    ("X4 the client's Main starts the view twice", CMAIN, 'require("./BoardsView").start()', 'require("./BoardsView").start()\nrequire("./BoardsView").start()', PLC),
     ("X5 not in the map", AM, "### Board (f0206)", "### Boards", PLC),
     ("X6 the view requires the arcade's Boards", VI, 'local HiscoreGames = require("@game/ReplicatedStorage/Arcade/HiscoreGames")',
      'local HiscoreGames = require("@game/ReplicatedStorage/Arcade/HiscoreGames")\nlocal _ = require("@game/ServerStorage/Arcade/Boards")', PLC),
@@ -158,7 +164,8 @@ CV = [
     ("CV2 the server's answer gains a field", RE, "\t\t\t\tif id == \"all\" then best else nil\n\t\t\t)", "\t\t\t\tif id == \"all\" then best else nil,\n\t\t\t\t\"extra\"\n\t\t\t)", SRV + BUD),
     ("CV3 the view gains a field", BO, "return { header = Board.header(progress), lines = lines, note = note, best = best }", "return { header = Board.header(progress), lines = lines, note = note, best = best, title = \"\" } :: any", BRD + CLI),
     ("CV4 the relay requires one more arcade module", RE, 'local Boards = require("@game/ServerStorage/Arcade/Boards")', 'local Boards = require("@game/ServerStorage/Arcade/Boards")\nlocal _ = require("@game/ServerStorage/Arcade/Receipts")', SRV + PLC),
-    ("CV5 the client's Main boots one more adapter", CMAIN, 'require("./BoardsView").start()', 'require("./BoardsView").start()\nrequire("./CarouselView").start()', PLC),
+    ("CV5 the client's Main starts the view before the carousel", CMAIN, 'require("./CarouselView").start()\nrequire("./BoardsView").start()', 'require("./BoardsView").start()\nrequire("./CarouselView").start()', PLC),
+    ("CV7 Board requires Card for its text model", BO, "local Board = {}\n", "local _Card = require(\"./Card\")\nlocal Board = {}\n", BRD + PLC),
     ("CV6 the tab bar's buttons in a list layout", VI, '\t\tb.Position = UDim2.fromScale((i - 1) / #Board.TABS, 0)', '\t\tb.Position = UDim2.new((i - 1) / #Board.TABS, 0, 0, 0)', CLI),
 ]
 
@@ -186,10 +193,6 @@ def verdict(out, correct):
 
 
 def main():
-    for name, want in PINNED.items():
-        got = hashlib.sha256(open(os.path.join(HERE, name), "rb").read()).hexdigest()
-        if got != want:
-            sys.exit(f"{name} moved (sha256 {got}): re-cut it from f0205's prep and update PINNED")
     subprocess.run(["git", "clone", "--quiet", "--no-hardlinks", REPO, CLONE], check=True)
     subprocess.run(["git", "-C", CLONE, "checkout", "--quiet", HEAD], check=True)
     item = os.path.join(HOME, ".tracker", "issues", "f0206")
@@ -197,8 +200,8 @@ def main():
     shutil.copytree(os.path.dirname(HERE), item)
     bases = [
         os.path.join(CLONE, "arcade", ".tracker", "issues", "f0201", "experiments", "prototype.patch"),
-        os.path.join(HERE, "f0199-standin.patch"),
-        os.path.join(HERE, "f0205-prototype.patch"),
+        os.path.join(HOME, ".tracker", "issues", "f0205", "experiments", "f0199-standin.patch"),
+        os.path.join(HOME, ".tracker", "issues", "f0205", "experiments", "prototype.patch"),
         os.path.join(CLONE, "arcade", ".tracker", "issues", "f0197", "experiments", "prototype.patch"),
         os.path.join(HERE, "prototype.patch"),
     ]

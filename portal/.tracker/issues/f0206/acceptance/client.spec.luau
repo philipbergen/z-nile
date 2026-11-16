@@ -2,12 +2,14 @@
 -- f0206 AC6: the portal's boards screen (StarterPlayerScripts.Client.BoardsView), run from its real source on a stub
 -- client, with a stand-in for the carousel (f0205's CarouselView: start, card(name) with its Boards slot, focused()).
 -- It starts the carousel, then fills every card's Boards slot: three tabs, a header naming the title's progress
--- figure (HiscoreGames), ten row lines, a note and the "your best" line, laid out by Board.layout for the slot's size.
+-- figure (HiscoreGames), ten row lines, a note and the "your best" line, laid out by Board.layout for the slot's size
+-- with Card's glyph width, every text at the layout's one size.
 -- One tab is chosen for every card, by a tap or by W/S, Up/Down and the triggers through one ContextActionService
 -- binding below the test purchase screen's priority. Each frame it asks the server for the front card's board when the
 -- front card or the tab changed, REASK after its last ask, or WAIT_RETRY after a wait; every answer is read through
 -- Board.parse and drawn on its own card.
 local Board = require("@logic/Board")
+local Card = require("@logic/Card")
 local Games = require("@shared/Games")
 local HiscoreGames = require("@arcade/HiscoreGames")
 local luau = require("@lune/luau")
@@ -255,7 +257,14 @@ local function world(options: { slow: boolean?, missing: string? }?): any
 		},
 		ReplicatedStorage = replicated,
 		RunService = { Heartbeat = heartbeat, RenderStepped = rendered },
-		UserInputService = { TouchSwipe = signal(), InputBegan = signal(), InputEnded = signal() },
+		UserInputService = {
+			TouchSwipe = signal(),
+			InputBegan = signal(),
+			InputEnded = signal(),
+			GetFocusedTextBox = function(): any
+				return w.focused -- a TextBox the player is typing in (the chat box), nil when none
+			end,
+		},
 		Players = { LocalPlayer = { Name = "me", UserId = 1 } },
 	}
 	local enum = enumProxy()
@@ -391,8 +400,14 @@ local function world(options: { slow: boolean?, missing: string? }?): any
 	function w.note(name: string): string
 		return w.part(name, "Note").Text
 	end
-	function w.best(name: string): string
-		return w.part(name, "Best").Text
+	-- the your-best line's texts in the columns' order, or nil while it is hidden
+	function w.best(name: string): string?
+		local b = w.part(name, "Best")
+		t.expect(b.ClassName).toBe("Frame")
+		if b.Visible == false then
+			return nil
+		end
+		return w.texts(b)
 	end
 	function w.answer(...: any)
 		remote.OnClientEvent.fire(...)
@@ -468,7 +483,7 @@ return t.spec("f0206 client", function(it)
 			t.expect(name ~= nil and name.TextTruncate).toBe(w.Enum.TextTruncate.AtEnd)
 			t.expect(name.TextWrapped == true).toBe(false)
 			t.expect(w.part(e.name, "Note").ClassName).toBe("TextLabel")
-			t.expect(w.part(e.name, "Best").ClassName).toBe("TextLabel")
+			t.expect(w.part(e.name, "Best").ClassName).toBe("Frame")
 		end
 	end)
 
@@ -485,7 +500,7 @@ return t.spec("f0206 client", function(it)
 		local w = started()
 		for _, e in Games.LIST do
 			t.expect(w.note(e.name)).toBe("LOADING")
-			t.expect(w.best(e.name)).toBe("")
+			t.expect(w.best(e.name)).toBe(nil)
 			for i = 1, Board.N do
 				t.expect(w.line(e.name, i).Visible).toBe(false)
 			end
@@ -528,7 +543,7 @@ return t.spec("f0206 client", function(it)
 			t.expect(w.line("pickman", 4).Visible).toBe(false)
 			t.expect(w.line("pickman", 2).BackgroundTransparency < 1).toBe(true)
 			t.expect(w.line("pickman", 1).BackgroundTransparency).toBe(1)
-			t.expect(w.best("pickman")).toBe("YOUR BEST 600 · LEVEL 2 · REVIVES —")
+			t.expect(w.best("pickman")).toBe("|YOUR BEST|600|2|—")
 			t.expect(w.note("snake")).toBe("LOADING")
 		end
 	)
@@ -537,7 +552,7 @@ return t.spec("f0206 client", function(it)
 		local w = started()
 		w.answer("snake", "all", {}, nil, "ok", nil)
 		t.expect(w.note("snake")).toBe("NO SCORES YET")
-		t.expect(w.best("snake")).toBe("YOUR BEST —")
+		t.expect(w.best("snake")).toBe("|YOUR BEST|—|—|—")
 		w.answer("invaders", "all", {}, nil, "failed", nil)
 		t.expect(w.note("invaders")).toBe("SCORES UNAVAILABLE")
 		w.answer("asteroids", "all", { row(1, "Ada", 5, 1, 0) }, nil, "wait", nil)
@@ -572,7 +587,7 @@ return t.spec("f0206 client", function(it)
 			t.expect(w.tab(e.name, "all").BackgroundTransparency > 0).toBe(true)
 		end
 		t.expect(w.note("pickman")).toBe("LOADING")
-		t.expect(w.best("pickman")).toBe("")
+		t.expect(w.best("pickman")).toBe(nil)
 		t.expect(w.texts(w.line("snake", 1))).toBe("1|Day|10|1|—")
 		w.frame(1.1)
 		t.expect(w.asks()).toBe("pickman:all pickman:day")
@@ -619,6 +634,17 @@ return t.spec("f0206 client", function(it)
 		t.expect(w.tab("snake", "week").BackgroundTransparency).toBe(0)
 	end)
 
+	it("while the player types in a text box the tab keys do nothing and pass on", function()
+		local w = started()
+		w.focused = { ClassName = "TextBox" }
+		t.expect(w.press("S")).toBe(w.Enum.ContextActionResult.Pass)
+		w.press("Down")
+		t.expect(w.tab("pickman", "all").BackgroundTransparency).toBe(0)
+		w.focused = nil
+		t.expect(w.press("S")).toBe(w.Enum.ContextActionResult.Sink)
+		t.expect(w.tab("pickman", "day").BackgroundTransparency).toBe(0)
+	end)
+
 	it("a new front card is asked for on the next frame", function()
 		local w = started()
 		w.frame(1)
@@ -656,8 +682,8 @@ return t.spec("f0206 client", function(it)
 
 	it("lays the slot out by Board.layout for its size, and again when the size changes", function()
 		local w = started()
-		local function check(height: number)
-			local l = Board.layout(height)
+		local function check(width: number, height: number)
+			local l = Board.layout(width, height, Card.GLYPH)
 			local header = w.part("pickman", "Header")
 			t.expect(header.Position.Y.Scale).toBe(0)
 			t.expect(header.Position.Y.Offset).toBeNear(l.tabs, 1e-9)
@@ -678,14 +704,29 @@ return t.spec("f0206 client", function(it)
 			t.expect(best.Position.Y.Offset + best.Size.Y.Offset).toBeNear(0, 1e-9)
 			t.expect(best.Size.Y.Offset - best.Size.Y.Scale * height).toBeNear(l.line, 1e-9)
 			t.expect(w.part("pickman", "Tabs").Size.Y.Offset).toBe(Board.TAB_PX)
+			-- every text one size, the layout's; none scaled to its box
+			local labels = { w.tab("pickman", "day"), w.part("pickman", "Note") }
+			for _, frame in { header, w.line("pickman", 1), w.line("pickman", 10), best } do
+				for _, c in Board.COLUMNS do
+					table.insert(labels, frame:FindFirstChild(c.name))
+				end
+			end
+			for _, label in labels do
+				t.expect(label.TextSize).toBe(l.text)
+				t.expect(label.TextScaled == true).toBe(false)
+			end
+			-- YOUR BEST takes the rank's and the name's columns
+			local name = best:FindFirstChild("Name")
+			t.expect(name.Position.X.Scale).toBe(0)
+			t.expect(name.Size.X.Scale).toBeNear(Board.COLUMNS[1].width + Board.COLUMNS[2].width, 1e-9)
 		end
-		check(SLOT_Y)
+		check(300, SLOT_Y)
 		local slot = w.slot("pickman")
-		slot.AbsoluteSize = { X = 250, Y = 112 }
+		slot.AbsoluteSize = { X = 200, Y = 112 } -- narrow: the width, through Card.GLYPH, sets the text size
 		local resized = slot.changed.AbsoluteSize
 		t.expect(resized ~= nil).toBe(true)
 		resized.fire()
-		check(112)
+		check(200, 112)
 		t.expect(w.part("pickman", "Rows").ScrollingEnabled).toBe(true)
 	end)
 

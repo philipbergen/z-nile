@@ -5,11 +5,12 @@ B3 a step that is not whole moves                                killed
 B4 W steps forward                                               killed
 B5 Tab steps too                                                 killed
 B6 bound at the default controls' priority                       killed
+B6b bound at the test screen's priority                          killed
 B7 no revives shows 0                                            killed
 B8 junk revives shown                                            killed
 B9 the figure not upper case                                     killed
 B10 score and figure swapped                                     killed
-B11 no best says nothing                                         killed
+B11 no best shows no line                                        killed
 B12 the best's revives as a bare count                           killed
 B13 a wait shows its rows                                        killed
 B14 a failed empty board says no scores                          killed
@@ -20,6 +21,10 @@ B18 the tab bar not left out of the lines                        killed
 B19 a wait waits REASK                                           killed
 B20 a clock that went back waits                                 killed
 B21 a new tab not asked for                                      killed
+T1 the text as tall as the line, whatever the width              killed
+T2 the glyph width ignored                                       killed
+T3 a name column too narrow                                      killed
+T4 a text size that is not whole                                 killed
 B22 the view's rows not cut at the header                        killed
 P1 any title read                                                killed
 P2 any status read                                               killed
@@ -89,10 +94,17 @@ V14 started twice fills twice                                    killed
 V15 the chosen tab not shown                                     killed
 V16 rows placed at a fixed line                                  killed
 V17 an answer not read through parse                             killed
-X1 the relay booted before Cards                                 killed
-X2 Board requires Carousel                                       killed
+V19 labels scaled to their boxes                                 killed
+V20 the rows' text size not set                                  killed
+V21 the tab keys act while the player types                      killed
+V22 YOUR BEST in the name column only                            killed
+V23 the layout with a glyph width of its own                     SURVIVED
+V24 the best line never hidden                                   killed
+V18 a long name not cut                                          killed
+X1 the server's Main never starts the relay                      killed
+X2 Board requires outside Logic                                  killed
 X3 no Boards remote                                              killed
-X4 the view booted before the carousel                           killed
+X4 the client's Main starts the view twice                       killed
 X5 not in the map                                                killed
 X6 the view requires the arcade's Boards                         killed
 M1 a comment says game                                           killed
@@ -100,6 +112,7 @@ CV1 the view requires a sibling adapter a later issue adds       ok (green)
 CV2 the server's answer gains a field                            ok (green)
 CV3 the view gains a field                                       ok (green)
 CV4 the relay requires one more arcade module                    ok (green)
-CV5 the client's Main boots one more adapter                     ok (green)
+CV5 the client's Main starts the view before the carousel        ok (green)
+CV7 Board requires Card for its text model                       ok (green)
 CV6 the tab bar's buttons in a list layout                       ok (green)
-97 mutants, 6 correct variants, 0 not as intended
+109 mutants, 7 correct variants, 1 not as intended

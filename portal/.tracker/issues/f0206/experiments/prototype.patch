@@ -1,5 +1,5 @@
 diff --git a/portal/.tracker/architecture.md b/portal/.tracker/architecture.md
-index ed28abc63..24b07ca9a 100644
+index ed28abc63..a875a18c4 100644
 --- a/portal/.tracker/architecture.md
 +++ b/portal/.tracker/architecture.md
 @@ -12,10 +12,16 @@ The game carousel, the portal's one screen: one card per game, scrolled by key,
@@ -8,7 +8,7 @@ index ed28abc63..24b07ca9a 100644
  
 +### Board (f0206)
 +Each card's hiscores, read within the DataStore budget (the arcade's E3).
-+- `src/shared/Logic/Board` (a leaf): what a board shows (the tabs, the header named by the title's progress figure, the rows with revives used, "—" for none, the "your best" line), the client's read of an answer, the layout in the card's Boards slot, when the client asks again, and the server's read policy (`Board.plan`: refresh, forward or answer).
++- `src/shared/Logic/Board` (a leaf; Card's text model reaches it as a parameter): what a board shows (the tabs, the header named by the title's progress figure, the rows with revives used, "—" for none, the "your best" line, every text at least Card.MIN_TEXT), the client's read of an answer, the layout in the card's Boards slot, when the client asks again, and the server's read policy (`Board.plan`: refresh, forward or answer).
 +- `src/server/BoardRelay.luau`: serves each title's arcade `Boards` on a server-only relay and answers the clients' asks over `ReplicatedStorage.Remotes.Boards` with (title, board id, rows, rank, status, best).
 +- `src/client/BoardsView.luau`: the tabs, rows and best line in every card's `Boards` slot (CarouselView's `card`), one tab for every card, asking for the front card's board (`focused`).
 +
@@ -36,10 +36,10 @@ index c15c60bd2..f5c33cf76 100644
      "ServerStorage": {
 diff --git a/portal/src/client/BoardsView.luau b/portal/src/client/BoardsView.luau
 new file mode 100644
-index 000000000..36f085f1b
+index 000000000..0e9c84389
 --- /dev/null
 +++ b/portal/src/client/BoardsView.luau
-@@ -0,0 +1,243 @@
+@@ -0,0 +1,271 @@
 +--!strict
 +-- Portal client adapter (f0206): fills each card's Boards slot (CarouselView, f0205) with the title's hiscores: three
 +-- tabs (ALL-TIME, TODAY, THIS WEEK), a header naming the title's progress figure, ten rows (rank, name, score, the
@@ -51,8 +51,10 @@ index 000000000..36f085f1b
 +local ContextActionService = game:GetService("ContextActionService")
 +local ReplicatedStorage = game:GetService("ReplicatedStorage")
 +local RunService = game:GetService("RunService")
++local UserInputService = game:GetService("UserInputService")
 +
 +local Board = require("@game/ReplicatedStorage/Shared/Logic/Board")
++local Card = require("@game/ReplicatedStorage/Shared/Logic/Card")
 +local CarouselView = require("./CarouselView")
 +local Games = require("@game/ReplicatedStorage/Shared/Games")
 +local HiscoreGames = require("@game/ReplicatedStorage/Arcade/HiscoreGames")
@@ -65,7 +67,7 @@ index 000000000..36f085f1b
 +	rows: ScrollingFrame,
 +	lines: { Line },
 +	note: TextLabel,
-+	best: TextLabel,
++	best: Line,
 +}
 +
 +local BoardsView = {}
@@ -84,7 +86,7 @@ index 000000000..36f085f1b
 +	l.BackgroundTransparency = 1
 +	l.TextColor3 = Color3.new(1, 1, 1)
 +	l.Font = Enum.Font.GothamBold
-+	l.TextScaled = true
++	l.TextScaled = false -- one size for the board (Board.layout), so a long name is cut, never shrunk
 +	l.TextTruncate = Enum.TextTruncate.AtEnd
 +	l.Text = ""
 +	l.Parent = parent
@@ -111,7 +113,7 @@ index 000000000..36f085f1b
 +end
 +
 +local function place(p: Parts)
-+	local layout = Board.layout(p.slot.AbsoluteSize.Y)
++	local layout = Board.layout(p.slot.AbsoluteSize.X, p.slot.AbsoluteSize.Y, Card.GLYPH)
 +	local header = p.header[1].Parent :: Frame
 +	header.Position = UDim2.fromOffset(0, layout.tabs)
 +	header.Size = UDim2.new(1, 0, 0, layout.line)
@@ -125,8 +127,22 @@ index 000000000..36f085f1b
 +	end
 +	p.note.Position = UDim2.fromOffset(0, layout.tabs + layout.line)
 +	p.note.Size = UDim2.new(1, 0, 0, math.min(layout.view, 2 * layout.line))
-+	p.best.Position = UDim2.new(0, 0, 1, -layout.line)
-+	p.best.Size = UDim2.new(1, 0, 0, layout.line)
++	p.best.frame.Position = UDim2.new(0, 0, 1, -layout.line)
++	p.best.frame.Size = UDim2.new(1, 0, 0, layout.line)
++	for _, button in p.tabs do
++		button.TextSize = layout.text
++	end
++	p.note.TextSize = layout.text
++	for _, cells in { p.header, p.best.cells } do
++		for _, cell in cells do
++			cell.TextSize = layout.text
++		end
++	end
++	for _, line in p.lines do
++		for _, cell in line.cells do
++			cell.TextSize = layout.text
++		end
++	end
 +end
 +
 +local function draw(name: string)
@@ -152,7 +168,11 @@ index 000000000..36f085f1b
 +		end
 +	end
 +	p.note.Text = view.note
-+	p.best.Text = view.best
++	local best = view.best
++	p.best.frame.Visible = best ~= nil
++	for c, cell in p.best.cells do
++		cell.Text = if best ~= nil then best[c] else ""
++	end
 +end
 +
 +local function drawAll()
@@ -181,7 +201,7 @@ index 000000000..36f085f1b
 +		b.BackgroundColor3 = Color3.fromRGB(255, 221, 0)
 +		b.TextColor3 = Color3.new(0, 0, 0)
 +		b.Font = Enum.Font.GothamBold
-+		b.TextScaled = true
++		b.TextScaled = false
 +		b.Text = (Board.TAB_TEXT :: any)[id]
 +		b.Parent = bar
 +		b.Activated:Connect(function()
@@ -203,7 +223,12 @@ index 000000000..36f085f1b
 +		table.insert(lines, { frame = frame, cells = cells })
 +	end
 +	local note = text(slot, "Note")
-+	local best = text(slot, "Best")
++	note.TextWrapped = true
++	local bestFrame, bestCells = columns(slot, "Best")
++	-- YOUR BEST takes the rank's column too
++	bestCells[2].Position = UDim2.fromScale(0, 0)
++	bestCells[2].Size = UDim2.fromScale(Board.COLUMNS[1].width + Board.COLUMNS[2].width, 1)
++	local best: Line = { frame = bestFrame, cells = bestCells }
 +	local p: Parts =
 +		{ slot = slot, tabs = tabs, header = header, rows = rows, lines = lines, note = note, best = best }
 +	parts[name] = p
@@ -238,6 +263,9 @@ index 000000000..36f085f1b
 +	ContextActionService:BindActionAtPriority(
 +		Board.ACTION,
 +		function(_: string, state: Enum.UserInputState, input: InputObject): Enum.ContextActionResult
++			if UserInputService:GetFocusedTextBox() ~= nil then
++				return Enum.ContextActionResult.Pass -- typing (the chat box): the keys are the text's
++			end
 +			if state == Enum.UserInputState.Begin then
 +				local step = Board.step(input.KeyCode.Name)
 +				if step ~= nil then
@@ -516,10 +544,10 @@ index 6f44b16e4..2fdb811d7 100644
 +require("./BoardRelay").start()
 diff --git a/portal/src/shared/Logic/Board/init.luau b/portal/src/shared/Logic/Board/init.luau
 new file mode 100644
-index 000000000..8385eb6fe
+index 000000000..10bd32f55
 --- /dev/null
 +++ b/portal/src/shared/Logic/Board/init.luau
-@@ -0,0 +1,373 @@
+@@ -0,0 +1,382 @@
 +--!strict
 +-- Board (f0206): a card's hiscores. Pure view models and rules: the three tabs and the keys that step them, what a row,
 +-- the header and the "your best" line say (revives used, "—" for none), the client's defensive read of an answer, the
@@ -527,7 +555,8 @@ index 000000000..8385eb6fe
 +-- arcade's Boards read the stores (a refresh, under a read allowance and the engine's request budget), when it only
 +-- joins the arcade's fresh cache (a forward), and when the server answers from the rows it holds. A title is a card's
 +-- `name` (src/shared/Games.luau); the arcade's Hiscores and HiscoreGames reach this module only as values the
-+-- adapters pass in.
++-- adapters pass in. The text size follows Card's text model, whose glyph width the view passes in (`glyph`).
++
 +-- a board id, one of TABS ("all", "day", "week"); a string because the Roblox type pass widens a literal union across
 +-- a require (f0201 E6)
 +export type Id = string
@@ -538,9 +567,11 @@ index 000000000..8385eb6fe
 +export type Status = "ok" | "failed" | "wait"
 +export type Answer = { name: string, id: Id, rows: { Row }, rank: number?, status: Status, best: Best? }
 +export type Line = { cells: { string }, mine: boolean }
-+export type View = { header: { string }, lines: { Line }, note: string, best: string }
-+-- pixels in the Boards slot: the tab bar, one text line, the rows' visible height and their whole height
-+export type Layout = { tabs: number, line: number, view: number, canvas: number }
++-- best: the your-best line's cells, one per column (nil: no line)
++export type View = { header: { string }, lines: { Line }, note: string, best: { string }? }
++-- pixels in the Boards slot: the tab bar, one text line, the rows' visible height, their whole height, and the size of
++-- every text on the board
++export type Layout = { tabs: number, line: number, view: number, canvas: number, text: number }
 +-- the client's last ask: which title and tab, when (os.clock), and whether its answer said wait
 +export type Asked = { name: string, id: Id, at: number, wait: boolean }
 +-- the server's rows of one board: when its last refresh began (os.time), what the last answer said, and the rows
@@ -574,13 +605,16 @@ index 000000000..8385eb6fe
 +Board.EMPTY = "NO SCORES YET"
 +Board.DOWN = "SCORES UNAVAILABLE"
 +Board.BEST = "YOUR BEST"
-+-- the columns left to right, by name; widths are of the slot's width and sum to 1
++-- the columns left to right, by name, each `chars` characters wide at the board's text size (a rank to 10, a name's
++-- first 8, a score to 7 digits, LEVEL, REVIVES); `width` is its share of the slot's width
++local CHARS = { Rank = 2, Name = 8, Score = 7, Progress = 5, Revives = 7 }
++Board.CHARS = 29 -- the characters of one line: the columns' sum
 +Board.COLUMNS = table.freeze({
-+	table.freeze({ name = "Rank", width = 0.1 }),
-+	table.freeze({ name = "Name", width = 0.38 }),
-+	table.freeze({ name = "Score", width = 0.2 }),
-+	table.freeze({ name = "Progress", width = 0.14 }),
-+	table.freeze({ name = "Revives", width = 0.18 }),
++	table.freeze({ name = "Rank", chars = CHARS.Rank, width = CHARS.Rank / 29 }),
++	table.freeze({ name = "Name", chars = CHARS.Name, width = CHARS.Name / 29 }),
++	table.freeze({ name = "Score", chars = CHARS.Score, width = CHARS.Score / 29 }),
++	table.freeze({ name = "Progress", chars = CHARS.Progress, width = CHARS.Progress / 29 }),
++	table.freeze({ name = "Revives", chars = CHARS.Revives, width = CHARS.Revives / 29 }),
 +})
 +-- the tab keys, by KeyCode name: W, Up and the left trigger the tab before; S, Down and the right trigger the next
 +Board.KEYS = table.freeze({ W = -1, Up = -1, ButtonL2 = -1, S = 1, Down = 1, ButtonR2 = 1 })
@@ -589,7 +623,7 @@ index 000000000..8385eb6fe
 +Board.REASK = 30 -- seconds between the client's asks while one board stays in front
 +Board.WAIT_RETRY = 2 -- seconds before the client asks again after a "wait" answer
 +Board.TAB_PX = 44 -- the tab bar's height: the smallest touch target
-+Board.MIN_LINE_PX = 13
++Board.MIN_LINE_PX = 13 -- at least Card.MIN_TEXT (f0205)
 +Board.MAX_LINE_PX = 28
 +Board.REFRESH = 30 -- seconds a board's rows are held before an ask may read them again
 +Board.MARGIN = 2 -- seconds short of the arcade's cache time in which a forward still finds its cache fresh
@@ -656,14 +690,13 @@ index 000000000..8385eb6fe
 +	return { int(row.rank), row.name, int(row.score), int(row.level), Board.revives(row.revives) }
 +end
 +
-+-- The "your best" line: the score, the figure and the revives, or "YOUR BEST —" for a player with no best.
-+function Board.bestLine(best: Best?, progress: string): string
++-- The "your best" line, one text per column like a row: YOUR BEST where the name goes (it spans the rank's column
++-- too), then the score, the figure and the revives; a dash in each for a player with no best.
++function Board.bestCells(best: Best?): { string }
 +	if best == nil then
-+		return `{Board.BEST} {Board.NONE}`
++		return { "", Board.BEST, Board.NONE, Board.NONE, Board.NONE }
 +	end
-+	return `{Board.BEST} {int(best.score)} · {string.upper(progress)} {int(best.level)} · REVIVES {Board.revives(
-+		best.revives
-+	)}`
++	return { "", Board.BEST, int(best.score), int(best.level), Board.revives(best.revives) }
 +end
 +
 +-- What a card's board shows for the answer held for its tab: the header, a line per row (the player's own marked),
@@ -672,7 +705,7 @@ index 000000000..8385eb6fe
 +function Board.view(answer: Answer?, tab: Id, progress: string): View
 +	local lines: { Line } = {}
 +	local note = Board.LOADING
-+	local best = ""
++	local best: { string }? = nil
 +	if answer ~= nil and answer.status ~= "wait" then
 +		for _, row in answer.rows do
 +			table.insert(
@@ -688,7 +721,7 @@ index 000000000..8385eb6fe
 +			note = Board.EMPTY
 +		end
 +		if tab == "all" then
-+			best = Board.bestLine(answer.best, progress)
++			best = Board.bestCells(answer.best)
 +		end
 +	end
 +	return { header = Board.header(progress), lines = lines, note = note, best = best }
@@ -773,17 +806,21 @@ index 000000000..8385eb6fe
 +	}
 +end
 +
-+-- The board's layout in a slot `height` pixels tall: the tab bar, then the header line, the rows' view and the best
-+-- line, each line between MIN_LINE_PX and MAX_LINE_PX. The rows' whole height (canvas) scrolls in the view when it is
-+-- taller.
-+function Board.layout(height: number): Layout
++-- The board's layout in a slot `width` x `height` pixels: the tab bar, then the header line, the rows' view and the
++-- best line, each line between MIN_LINE_PX and MAX_LINE_PX; the rows' whole height (canvas) scrolls in the view when
++-- it is taller. Every text is one size, whole pixels: the line's height, or less where a line of CHARS characters
++-- would not fit the width (Card's text model: a character is `glyph` of the size wide; the view passes Card.GLYPH).
++function Board.layout(width: number, height: number, glyph: number): Layout
++	local w = if finite(width) and width > 0 then width else 0
 +	local h = if finite(height) and height > 0 then height else 0
++	local g = if finite(glyph) and glyph > 0 then glyph else 1
 +	local line = math.clamp((h - Board.TAB_PX) / (Board.N + 2), Board.MIN_LINE_PX, Board.MAX_LINE_PX)
 +	return {
 +		tabs = Board.TAB_PX,
 +		line = line,
 +		view = math.max(0, h - Board.TAB_PX - 2 * line),
 +		canvas = Board.N * line,
++		text = math.floor(math.min(line, w / (g * Board.CHARS))),
 +	}
 +end
 +
@@ -893,6 +930,16 @@ index 000000000..8385eb6fe
 +end
 +
 +return table.freeze(Board)
+diff --git a/portal/tests/inputs.tsv b/portal/tests/inputs.tsv
+index 498848166..c6b7e9606 100644
+--- a/portal/tests/inputs.tsv
++++ b/portal/tests/inputs.tsv
+@@ -7,3 +7,5 @@ tests/meta/architecture.spec.luau	portal/.tracker/architecture.md
+ tests/meta/architecture.spec.luau	portal/src/
+ tests/meta/architecture.spec.luau	portal/tests/
+ tests/acceptance/f0205/place.spec.luau	portal/.tracker/architecture.md
++tests/acceptance/f0206/place.spec.luau	portal/.tracker/architecture.md
++tests/acceptance/f0206/place.spec.luau	arcade/.tracker/architecture.md
 diff --git a/portal/tests/unit/Board/board.spec.luau b/portal/tests/unit/Board/board.spec.luau
 new file mode 100644
 index 000000000..bc1d4760f
