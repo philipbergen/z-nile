@@ -6,6 +6,7 @@ local UserInputService = game:GetService("UserInputService")
 local Awareness = require("@game/ReplicatedStorage/Shared/Logic/Awareness")
 local Hop = require("@game/ReplicatedStorage/Shared/Logic/Hop")
 local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
+local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
 local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
 local View = require("@game/ReplicatedStorage/Shared/Logic/View")
 
@@ -18,7 +19,9 @@ local look: View.Look = { yaw = 0, pitch = 0 }
 local steer: View.Steer = { look = { yaw = 0, pitch = 0 }, spring = false } -- the arrow look, as of the last frame
 local arrows: View.Arrows = { up = false, down = false, left = false, right = false }
 local hopped: number? = nil -- the tick the latest hop started, from the server's frame (f0101)
+local hopTicks: number? = nil -- that hop's length, from the frame (f0126's longer jumps)
 local yaw: number? = nil
+local padStick: ((name: string) -> (number?, number?, string?))? = nil -- the driving controller's sticks (Pads.stick)
 local cursor = false -- the mouse is free (and shown) for a prompt
 local current: Awareness.Pose? = nil
 -- a touch looked, or a finger went down or came up, since the last render step; and a finger is down (the
@@ -68,6 +71,11 @@ function Camera.hopped(tick: number?)
 	hopped = tick
 end
 
+-- The latest hop's length in steps, as the server's frame says (nil: Hop.TICKS).
+function Camera.hopTicks(ticks: number?)
+	hopTicks = ticks
+end
+
 -- The heading a shot would go now (f0100, f0104), nil before the first snapshot.
 function Camera.aim(): Maze.Heading?
 	local last = latest
@@ -80,6 +88,11 @@ end
 -- Frees the mouse and shows it (true), or locks it to the centre and hides it (false), from the next frame.
 function Camera.setCursor(free: boolean)
 	cursor = free
+end
+
+-- The driving controller's sticks (f0146: Pads.stick, the one tracker Sticks reads too).
+function Camera.pad(read: (name: string) -> (number?, number?, string?))
+	padStick = read
 end
 
 function Camera.start()
@@ -98,6 +111,14 @@ function Camera.start()
 		end
 		-- cleared here, after the guard read it: a touch that began and ended before this step still counts
 		lookedThisFrame = false
+		-- the right stick looks (f0146), at a rate, and stays where it is left, like the mouse
+		local read = padStick
+		if read then
+			local x, y = read("Thumbstick2")
+			if x and y then
+				look = View.look(look, Pad.look(x, y, dt))
+			end
+		end
 		steer = View.steer(steer, look, arrows, dt)
 		look = steer.look
 
@@ -113,7 +134,7 @@ function Camera.start()
 
 		current = { x = pose.x, y = pose.y, yaw = turned + look.yaw }
 		local x, z = View.world(pose.x, pose.y)
-		camera.CFrame = CFrame.new(x, View.SCALE.eyeHeight + Hop.rise(hopped, shown), z)
+		camera.CFrame = CFrame.new(x, View.SCALE.eyeHeight + Hop.rise(hopped, shown, hopTicks), z)
 			* CFrame.Angles(0, turned + look.yaw, 0)
 			* CFrame.Angles(look.pitch, 0, 0)
 	end)

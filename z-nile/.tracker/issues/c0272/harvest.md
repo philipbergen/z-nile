@@ -1,0 +1,8 @@
+- note E1's first run in a throwaway clone published through the dispatcher's broker (ZN_PUBLISH_BROKER inherited), which refused it as not a fast-forward of the real main (c0272's prep, 2026-11-15) (erred z-design): z-design/clone-experiments-drop-the-step-environment
+- design-review-001 F1: z-design/design-the-execution-window, zz-test/no-vacuous-pass
+- design-review-001 F2: z-design/instructions-runnable-where-they-run, zz-arch/lock-reads-live-state
+- design-review-001 F3: zz-test/no-vacuous-pass, zz-test/order-pins-anchor-unique-text
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/quote-other-preps-before-promising
+- design-review-001 F6: z-design/instructions-runnable-where-they-run
+- design-review-001 F7: z-design/clone-experiments-drop-the-step-environment, zz-test/no-vacuous-pass

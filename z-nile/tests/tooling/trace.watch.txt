@@ -1,0 +1,6 @@
+z-nile/engine/layergit.luau
+z-nile/engine/main.luau
+z-nile/engine/stack.luau
+z-nile/engine/trace.luau
+z-nile/engine/trail.luau
+z-nile/lib/watch.luau

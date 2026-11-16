@@ -1,7 +1,8 @@
 --!strict
 -- Client adapter: binds the key map from View and relays intents to the server. The movement keys, the fire key
 -- and the jump (a hop, f0101) send intents; the arrow look is the camera's, handed in through Controls.keys (f0104). On a touch
--- screen it feeds every finger through Touch's fold and applies what it emits.
+-- screen it feeds every finger through Touch's fold and applies what it emits: the fire and hop buttons (f0110) send
+-- the same intents as E and Space.
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService") :: any -- the type library lacks GetInsetArea
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,6 +12,7 @@ local Blaster = require("@game/ReplicatedStorage/Shared/Logic/Blaster")
 local Hop = require("@game/ReplicatedStorage/Shared/Logic/Hop")
 local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
 local Movement = require("@game/ReplicatedStorage/Shared/Logic/Movement")
+local Pad = require("@game/ReplicatedStorage/Shared/Logic/Pad")
 local Touch = require("@game/ReplicatedStorage/Shared/Logic/Touch")
 local View = require("@game/ReplicatedStorage/Shared/Logic/View")
 
@@ -34,29 +36,38 @@ function Controls.start(
 	onSnap: () -> (),
 	onLook: ((dx: number, dy: number) -> ())?,
 	snapRect: (() -> Touch.Rect?)?,
-	onTouch: ((held: boolean) -> ())?
+	onTouch: ((held: boolean) -> ())?,
+	buttons: (() -> Touch.Buttons?)?
 )
 	local intent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Intent") :: RemoteEvent
+
+	-- the shot goes the way Camera.aim says now; nothing before the first snapshot or without Controls.keys
+	local function fire()
+		local k = keys
+		local h: Maze.Heading? = if k then k.aim() else nil
+		if h then
+			intent:FireServer(Blaster.intent(h))
+		end
+	end
 
 	local function handle(
 		_name: string,
 		state: Enum.UserInputState,
 		input: InputObject
 	): Enum.ContextActionResult
-		local action: View.Action? = View.action(input.KeyCode.Name)
+		local action: View.Action? = View.action(input.KeyCode.Name) or Pad.action(input.KeyCode.Name)
 		local k = keys
 		if state == Enum.UserInputState.Begin then
 			if action == "Snap" then
 				onSnap()
 			elseif Movement.isIntent(action) then
 				intent:FireServer(action)
-			elseif action == "Fire" and k then
-				local h: Maze.Heading? = k.aim()
-				if h then
-					intent:FireServer(Blaster.intent(h))
-				end
+			elseif action == "Fire" then
+				fire()
 			elseif action == "Jump" then
 				intent:FireServer(Hop.INTENT)
+			elseif action == "Pick" then
+				intent:FireServer(View.PICK_INTENT)
 			end
 		end
 		-- the arrows are held: they look while down, and a cancelled input (focus lost) lets go
@@ -75,11 +86,18 @@ function Controls.start(
 				end
 			end
 		end
+		-- the pad's continue is FlowView's too (f0146): it jumps here and goes on to FlowView's binding
+		if input.KeyCode.Name == Pad.CONTINUE then
+			return Enum.ContextActionResult.Pass
+		end
 		return Enum.ContextActionResult.Sink
 	end
 
 	local codes: { EnumItem } = {}
 	for name in View.KEYS do
+		table.insert(codes, (Enum.KeyCode :: any)[name])
+	end
+	for name in Pad.BUTTONS do
 		table.insert(codes, (Enum.KeyCode :: any)[name])
 	end
 	ContextActionService:BindActionAtPriority(
@@ -138,12 +156,15 @@ function Controls.start(
 			camera.ViewportSize.Y
 		)
 		local rect = if snapRect then snapRect() else nil
+		local placed = if buttons then buttons() else nil
 		local effects
-		fingers, effects = Touch.track(
-			fingers,
-			{ id = id, phase = phase, x = sx, y = sy },
-			{ width = sw, snap = rect }
-		)
+		fingers, effects = Touch.track(fingers, { id = id, phase = phase, x = sx, y = sy }, {
+			width = sw,
+			snap = rect,
+			fire = placed and placed.fire,
+			hop = placed and placed.hop,
+			pick = placed and placed.pick,
+		})
 		for _, effect in effects do
 			if effect.kind == "turn" then
 				intent:FireServer(effect.intent)
@@ -153,6 +174,12 @@ function Controls.start(
 				end
 			elseif effect.kind == "snap" then
 				onSnap()
+			elseif effect.kind == "fire" then
+				fire()
+			elseif effect.kind == "hop" then
+				intent:FireServer(Hop.INTENT)
+			elseif effect.kind == "pick" then
+				intent:FireServer(View.PICK_INTENT) -- the PICK button (f0126), as F and Y send it
 			end
 		end
 		hold()

@@ -1,0 +1,89 @@
+- note prototype subagent: gate.spec's fixture shadowed by rokit's real tools, a rokit shim broken by the fixture HOME, sourcemap.json dirtying the digest, no runner copied: zz-test/gate-fixtures-own-their-home
+- note prototype subagent: `cd && cmd &` made `$!` a subshell, and a rokit shim's child carried the owner pid: zz-test/background-pid-is-the-owner
+- note lead: gate.spec passed on Homebrew lune 0.11.1 and failed under ./zn check on rokit's 0.10.5: zz-test/run-the-pinned-tools
+- design-review-001 F1: zz-arch/child-exit-status-counts
+- design-review-001 F2: zz-test/promoted-commands-read-no-local-state
+- design-review-001 F3: z-design/never-narrow-captured-scope
+- design-review-001 F4: zz-arch/guard-no-is-explicit
+- design-review-001 F5: z-design/run-examples-through-the-reader
+- design-review-001 F6: z-design/never-narrow-captured-scope
+- design-review-001 F7: z-design/instructions-runnable-where-they-run
+- design-review-001 F8: z-design/spec-design-correspondence
+- design-review-001 F9: z-design/restated-rules-move-together
+- design-review-001 F10: zz-test/split-checks-share-one-boundary
+- design-review-001 F11: zz-test/seed-every-enumerated-case
+- design-review-001 F12: zz-arch/children-need-a-lifeline
+- design-review-001 F13: one-off: a per-item cap needs a total cap when items multiply (learning trials per miss)
+- design-review-001 F14: one-off: a list introduced by "all of" whose items start with "or"
+- design-review-001 F15: one-off: an "exactly when" invariant whose input set changes with the change itself
+- design-review-001 F16: one-off: a skipped step must still show the output a later instruction reads
+- note prototype subagent (round 1): a nested fixture runner inherited PICKMAN_OPEN_GUARD and left the browser guard to the outer run: zz-test/gate-fixtures-own-their-home
+- note prototype subagent (round 1): two spec type errors (a multi-return call inside t.expect, string? into a typed table) showed only in promote-check: z-design/rerun-skipped-checks-after-edits
+- note prototype subagent (round 1): the newline guard was masked by the hash batch's own failure until a case bypassed that layer: z-design/reasoned-rows-claim-testable-reasons
+- note prototype subagent (round 1): the clone lacked the new lessons harvest.md names, so the lessons audit failed in its full gate: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F1: zz-arch/children-need-a-lifeline
+- design-review-002 F2: z-design/declare-what-full-runs-covered
+- design-review-002 F3: zz-arch/guard-state-out-of-reach-or-checked
+- design-review-002 F4: zz-test/seed-every-enumerated-case
+- design-review-002 F5: zz-test/hold-on-markers-not-sleeps
+- design-review-002 F6: one-off: a wrapper that captures a long child's output needs a sign of life
+- design-review-002 F7: one-off: a poll loop's cost scales with what it waits on
+- design-review-002 F8: z-design/restated-rules-move-together
+- design-review-002 F9: one-off: a slow sequestered spec is split by mechanism so promotion adds no gate floor
+- design-review-002 F10: zz-arch/guards-trust-only-origin
+- design-review-002 F11: z-design/decided-guesses-rewrite-their-body
+- note inventory subagent (round 2): specs that clone HEAD or read git history depend on state no path's content shows: z-design/declare-what-full-runs-covered
+- note prototype subagent (round 2): the design's own names collided with the promoted repo-fence scan, and the `*` entries changed two promoted selector pins, found only by running them on the prototype: z-design/prove-specs-pass-on-a-prototype
+- note prototype subagent (round 2): a pure table test passed while the call site ignored it (records), and end-state checks missed forwarded output and the clone's remote: zz-test/pin-call-site-arguments
+- note prototype subagent (round 2): an unused local in a new spec failed selene, which stops the full gate at its lint stage; the spec runs and promote-check passed: z-design/rerun-skipped-checks-after-edits
+- design-review-003 F1: zz-test/no-vacuous-pass
+- design-review-003 F2: z-design/declare-what-full-runs-covered
+- design-review-003 F3: z-design/declare-what-full-runs-covered
+- design-review-003 F4: zz-arch/companion-writes-share-the-record-gate
+- design-review-003 F5: z-design/declare-what-full-runs-covered
+- design-review-003 F6: zz-test/pin-call-site-arguments
+- design-review-003 F7: z-design/spec-design-correspondence
+- design-review-003 F8: z-design/spec-design-correspondence
+- design-review-003 F9: zz-arch/guard-no-is-explicit
+- design-review-004 F1: zz-arch/project-gates-use-selector-forcing
+- design-review-004 F2: zz-test/no-vacuous-pass
+- design-review-004 F3: z-design/declare-what-full-runs-covered
+- design-review-004 F4: z-design/declare-what-full-runs-covered
+- design-review-004 F5: zz-test/count-calls-in-poll-loops
+- design-review-004 F6: zz-test/new-commands-run-in-a-copy
+- design-review-004 F7: z-design/reasoned-rows-claim-testable-reasons
+- design-review-004 F8: z-design/declare-what-full-runs-covered, zz-test/no-vacuous-pass
+- design-review-005 F1: zz-rules/main-checkout-tools-span-the-move
+- design-review-005 F2: z-design/spec-design-correspondence
+- design-review-005 F3: z-design/rerun-skipped-checks-after-edits
+- design-review-005 F4: z-design/accepted-risks-checked-and-decided
+- design-review-005 F5: z-design/spec-design-correspondence
+- design-review-005 F6: z-design/spec-design-correspondence
+- design-review-006 F1: z-design/exact-checks-compare-against-the-merge-base
+- design-review-006 F2: z-design/restated-rules-move-together
+- design-review-006 F3: z-design/spec-design-correspondence
+- design-review-006 F4: zz-test/seed-every-enumerated-case
+- design-review-006 F5: z-design/restated-rules-move-together
+- design-review-006 F6: z-design/spec-design-correspondence
+- design-review-007 F1: z-design/rerun-shipped-audits-at-execution, z-design/new-rules-migrate-existing-work
+- design-review-007 F2: z-design/spec-design-correspondence
+- design-review-007 F3: zz-test/promoted-specs-pin-rules-not-sets, zz-review/recommendations-pick-spec-or-check
+- design-review-007 F4: z-design/quote-other-preps-before-promising, z-ticket/split-designs-name-each-owner
+- design-review-007 F5: z-design/resplit-folded-specs-remeasure-lanes
+- design-review-007 F6: one-off: a function designed and tested but with no call site never runs (name the call site and add a case that a normal run reaches it)
+- design-review-007 F7: zz-test/refusals-tested-on-both-sides, zz-test/no-vacuous-pass
+- note subagent audit (round 1 of the re-prep): the first E9 audit had missed six older specs, found only by checking every read path against the real selector (`affected` must print ALL or the spec): z-design/rerun-shipped-audits-at-execution
+- design-review-008 F1: z-design/rerun-shipped-audits-at-execution, z-design/full-enforcement-means-every-clause, z-design/run-the-other-rafts-specs
+- design-review-008 F2: zz-arch/allow-list-entries-are-not-caller-chosen
+- design-review-008 F3: z-ticket/split-designs-name-each-owner
+- design-review-008 F4: one-off: a cleanup that removes by glob removes a concurrent run's marker (remove only what you wrote); a design says "refuses" where the case expects exit 0; reviewed data cut mid-word; a comment contradicting the library it reads
+- design-review-008 F5: one-off: noted, no change (whole-gate reuse is a captured outcome: a later step skips rerunning a gate that already passed on the same code)
+- note re-prep round 2: the registry-driven specs (12 now `*`, two with a line per project) were found while pre-classifying c0184; the first audit had declared them for two of seven homes: z-design/rerun-shipped-audits-at-execution
+- design-review-009 F1: z-design/run-the-other-rafts-specs, zz-test/narrowing-pins-the-whole-file
+- design-review-009 F2: z-design/rerun-shipped-audits-at-execution, z-design/full-enforcement-means-every-clause
+- design-review-009 F3: one-off: a promoted copy of a spec is scanned by repo-fence, which promote-check does not run, so an absence pin that names banned names needs ALLOWED entries and an environment change a spec makes must be restored when the call errors
+- design-review-009 F4: one-off: a floor that reads as a z-nile-only cost was new for game work; state a cost as a measured comparison against today and record the user's decision (c0242 follows up)
+- design-review-009 F5: one-off: wording a literal executor can get wrong (a backlog path after z-ready, a re-key list that omits the issue's own edits, a rule pinned as a set instead of a rule)
+- design-review-010 F1: z-design/rerun-shipped-audits-at-execution
+- design-review-010 F2: one-off: covered by the F1 decision
+- design-review-010 F3: zz-review/lists-paste-their-search, zz-test/narrow-guard-allowances

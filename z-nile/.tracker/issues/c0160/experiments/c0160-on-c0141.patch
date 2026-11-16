@@ -1,0 +1,169 @@
+diff --git a/z-nile/tests/acceptance/c0120/checkpaths.luau b/z-nile/tests/acceptance/c0120/checkpaths.luau
+index c3749ab6..0295e082 100644
+--- a/z-nile/tests/acceptance/c0120/checkpaths.luau
++++ b/z-nile/tests/acceptance/c0120/checkpaths.luau
+@@ -7,6 +7,7 @@
+ -- exempt.
+ -- It lives in c0120's promoted folder (c0141 design review 001 F3), so it stays under "never edit promoted specs".
+ local fs = require("@lune/fs")
++local process = require("@lune/process")
+ local projects = require("@znile/engine/projects")
+ 
+ local checkpaths = {}
+@@ -55,8 +56,33 @@ function checkpaths.owned(home: string, entries: { string }, homes: { string }):
+ 	return out
+ end
+ 
+-local PREFIXES =
+-	{ "src/", "tests/", "scripts/", "z-nile/", "pickman/", "tracker/", ".tracker/", ".github/", ".claude/" }
++-- The top-level folders a literal path may start with besides the projects' homes. The homes come from the registry
++-- (c0160): those of the checkout a scan reads, or, for `literals` called alone, of the checkout this module runs in;
++-- never a hand list, so a third project's `<home>/…` paths are read like pickman's and z-nile's.
++local FOLDER_PREFIXES = { "src/", "tests/", "scripts/", "tracker/", ".tracker/", ".github/", ".claude/" }
++
++-- every registered project's home folder in the registry of the checkout at `top` ("" or "." for the current folder)
++local function homesAt(top: string): { string }
++	local reg = projects.load(if top == "" then "." else top, true)
++	local out: { string } = {}
++	for _, r in projects.roots(reg) do
++		local folder = projects.folderOf(r)
++		if folder then
++			table.insert(out, folder)
++		end
++	end
++	return out
++end
++
++-- the homes of the checkout this module runs in, read once (the default for `literals` called without homes)
++local ownHomes: { string }? = nil
++local function checkoutHomes(): { string }
++	if ownHomes == nil then
++		local r = process.exec("git", { "rev-parse", "--show-toplevel" })
++		ownHomes = homesAt(if r.ok then (string.gsub(r.stdout, "%s+$", "")) else ".")
++	end
++	return ownHomes :: { string }
++end
+ -- A file named alone (no folder) is a path only outside double quotes: in quotes it is a message, a case's name or
+ -- a grep pattern (c0099's), found by running the finished checks by hand
+ local FILES = {
+@@ -126,8 +152,13 @@ local function patternWords(line: string, raw: { string }, starts: { number }):
+ 	return marked
+ end
+ 
+--- the literal paths of a check.sh, in order (a path may repeat)
+-local function literals(text: string): { string }
++-- the literal paths of a check.sh, in order (a path may repeat); `homes` are the projects' home folders a path may
++-- start with (c0160), by default the registry's of the checkout this module runs in
++local function literals(text: string, homes: { string }?): { string }
++	local prefixes = table.clone(FOLDER_PREFIXES)
++	for _, h in homes or checkoutHomes() do
++		table.insert(prefixes, h .. "/")
++	end
+ 	local out: { string } = {}
+ 	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+ 		if not string.match(line, "^%s*#") then
+@@ -203,7 +234,7 @@ local function literals(text: string): { string }
+ 					then
+ 						path = w
+ 					else
+-						for _, p in PREFIXES do
++						for _, p in prefixes do
+ 							if string.sub(w, 1, #p) == p and #w > #p then
+ 								path = w
+ 							end
+@@ -294,13 +325,7 @@ end
+ local function scan(base: string, skip: (text: string) -> boolean): Scan
+ 	local reg = projects.load(if base == "" then "." else string.sub(base, 1, -2), true)
+ 	local all = items(base)
+-	local homes: { string } = {}
+-	for _, r in projects.roots(reg) do
+-		local folder = projects.folderOf(r)
+-		if folder then
+-			table.insert(homes, folder)
+-		end
+-	end
++	local homes = homesAt(if base == "" then "." else string.sub(base, 1, -2))
+ 	local byRaft: { [string]: { { string } } } = {}
+ 	for _, i in all do
+ 		if i.raft ~= "" then
+@@ -324,7 +349,7 @@ local function scan(base: string, skip: (text: string) -> boolean): Scan
+ 						table.insert(own, o)
+ 					end
+ 				end
+-				for _, p in literals(text) do
++				for _, p in literals(text, homes) do
+ 					local at = checkpaths.repoPath(home, p)
+ 					if not present(base, home, p) and not (at and under(at, own)) then
+ 						table.insert(out.bad, `{file}: {p} (from {home})`)
+diff --git a/z-nile/tests/acceptance/c0120/rewrites.luau b/z-nile/tests/acceptance/c0120/rewrites.luau
+index 87ab0190..f309335a 100644
+--- a/z-nile/tests/acceptance/c0120/rewrites.luau
++++ b/z-nile/tests/acceptance/c0120/rewrites.luau
+@@ -8,6 +8,7 @@
+ -- finished.spec.luau (the rule and its fixture) and finished.luau (each finished file is its pre-move text, rewritten),
+ -- and once by the executor to make the rewrite (z-nile/.tracker/issues/c0120/rewrite-finished.luau).
+ local process = require("@lune/process")
++local projects = require("@znile/engine/projects")
+ 
+ local rewrites = {}
+ 
+@@ -17,8 +18,26 @@ rewrites.MARK = "tracker/rafts/done/R0001/check.sh"
+ 
+ -- What a word must look like to be a literal path (the same reading as check-paths.spec.luau's): no `$`, not absolute
+ -- or an option, and either after `lune run` (then with .luau), a root file of a home, or under a top-level folder.
+-local PREFIXES =
+-	{ "src/", "tests/", "scripts/", "z-nile/", "pickman/", "tracker/", ".tracker/", ".github/", ".claude/" }
++-- The projects' homes come from the checkout's registry (c0160), never a hand list.
++local FOLDER_PREFIXES = { "src/", "tests/", "scripts/", "tracker/", ".tracker/", ".github/", ".claude/" }
++
++-- every registered project's home folder in the registry of the checkout this module runs in, read once
++local ownHomes: { string }? = nil
++local function checkoutHomes(): { string }
++	if ownHomes == nil then
++		local r = process.exec("git", { "rev-parse", "--show-toplevel" })
++		local reg = projects.load(if r.ok then (string.gsub(r.stdout, "%s+$", "")) else ".", true)
++		local out: { string } = {}
++		for _, root in projects.roots(reg) do
++			local folder = projects.folderOf(root)
++			if folder then
++				table.insert(out, folder)
++			end
++		end
++		ownHomes = out
++	end
++	return ownHomes :: { string }
++end
+ -- A file named alone (no folder) is a path only outside double quotes: in quotes it is a message, a case's name or
+ -- a grep pattern (c0099's), found by running the finished checks by hand
+ local FILES = {
+@@ -93,7 +112,12 @@ export type Literal = { line: number, first: number, last: number, word: string,
+ 
+ -- The literal paths of `text` with where each word sits: its line, its first and last byte in that line, the word as
+ -- written, the path it names (with .luau after `lune run`), and the folder an earlier `cd` on the line moved to.
+-function rewrites.literals(text: string): { Literal }
++-- `homes` are the projects' home folders a path may start with (c0160), by default the checkout's registry's.
++function rewrites.literals(text: string, homes: { string }?): { Literal }
++	local prefixes = table.clone(FOLDER_PREFIXES)
++	for _, h in homes or checkoutHomes() do
++		table.insert(prefixes, h .. "/")
++	end
+ 	local out: { Literal } = {}
+ 	local n = 0
+ 	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+@@ -190,7 +214,7 @@ function rewrites.literals(text: string): { Literal }
+ 			elseif finding and FOLDERS[w] then
+ 				path = w
+ 			else
+-				for _, p in PREFIXES do
++				for _, p in prefixes do
+ 					if string.sub(w, 1, #p) == p and #w > #p then
+ 						path = w
+ 					end
+@@ -492,6 +516,7 @@ end
+ 
+ -- `text` (a finished check.sh) rewritten for its item's home `home` ("pickman", "z-nile").
+ function rewrites.rewrite(text: string, home: string, world: World): string
++	-- the homes of the checkout this runs in, not of the one `world` reads (identical for every caller today; c0160)
+ 	local lits = rewrites.literals(text)
+ 	local byLine: { [number]: { Literal } } = {}
+ 	for _, l in lits do

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# The gh a dispatched agent runs (c0117): every call goes to z-nile/engine/wrap.luau, which allows the skills' own
+# commands (no merge, no alias edits, gh api reads and comments) and runs the real gh. A convenience layer: the agent's
+# credential can't merge or bypass main's protection.
+real="${ZN_REAL_GH:-}"
+if [[ -z $real ]]; then
+  echo "gh (z-nile wrapper): the real gh is not known (run under ./zn dispatch)" >&2
+  exit 2
+fi
+exec lune run "$(cd "$(dirname "${BASH_SOURCE[0]}")/../engine" && pwd -P)/wrap" -- gh "$@"

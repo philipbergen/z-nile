@@ -1,0 +1,799 @@
+diff --git a/.luaurc b/.luaurc
+index 2590359a..90fef1d9 100644
+--- a/.luaurc
++++ b/.luaurc
+@@ -1,8 +1,6 @@
+ {
+   "languageMode": "strict",
+   "aliases": {
+-    "logic": "./pickman/src/shared/Logic",
+-    "shared": "./pickman/src/shared",
+     "tests": "./z-nile/tests",
+     "scripts": "./scripts",
+     "znile": "./z-nile",
+diff --git a/AGENTS.md b/AGENTS.md
+index e7cb2351..e5a1ad1a 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -1,6 +1,6 @@
+ # pickman
+ 
+-A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune for headless tests. New machine: see `SETUP.md`. The game is the `pickman` project, in `pickman/` (its `src/`, specs, Rojo projects and issues, `pickman/.tracker/`); the tooling that tracks and gates it is `z-nile/` (zz-rules skill, Projects). The arcade's projects are registered too (c0183): `arcade/` (the library every place shares), `portal/` (the experience's start place) and the games `snake/`, `invaders/` and `asteroids/`; each keeps its product decisions in `<name>/.tracker/game-design.md`, and the library its design in `arcade/.tracker/architecture.md`.
++A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune for headless tests. New machine: see `SETUP.md`. The game is the `pickman` project, in `pickman/` (its `src/`, specs, Rojo projects and issues, `pickman/.tracker/`); the tooling that tracks and gates it is `z-nile/` (zz-rules skill, Projects). The arcade's projects are registered too (c0183): `arcade/` (the library every place shares), `portal/` (the experience's start place) and the games `snake/`, `invaders/` and `asteroids/`; each keeps its product decisions in `<name>/.tracker/game-design.md`, and the library its design in `arcade/.tracker/architecture.md`. Every project with code has the same home as `pickman/` (c0184): `check.sh`, `.luaurc`, `default.project.json`, `src/`, `tests/` and `skills/`, which the gate checks for each registered project (z-nile/README.md, A project's home).
+ 
+ **Non-negotiable:** no code without a tracker issue, and work is done only when its `check.sh` passes. **Every change is made in a git worktree under `.worktree/` and lands by pull request** (a capture lands with `./zn land`, after a local full gate); the main checkout is never edited, except by `./zn` itself (`ready`, `stop`, `sync`, and the board refresh after every publish or `land`), which only fast-forwards it, clears ignored files from item folders that left it, and writes ignored files (`prompt.md`, `.cache/board.html`) (zz-rules skill, Worktrees and Landing a change). Start execution with `/z-run <R-id>` in a session in the main checkout. Before doing anything, read the skill that applies. The skills hold all the rules.
+ 
+@@ -26,6 +26,8 @@ The skills are z-nile's (`z-nile/skills/`) and each project's (`<project>/skills
+ | `z-nile/skills/zz-stats/SKILL.md` | cost and rework reporting |
+ | `pickman/skills/pickman-arch/SKILL.md` | designing or writing anything in `pickman/src/` |
+ | `pickman/skills/pickman-test/SKILL.md` | writing pickman's game specs (with zz-test) |
++| `<name>/skills/<name>-arch/SKILL.md`, for `arcade`, `portal`, `snake`, `invaders` and `asteroids` | designing or writing anything in that project's `src/` (each follows pickman-arch's rules with the changes it states, arcade's for a library) |
++| `<name>/skills/<name>-test/SKILL.md`, for the same five | writing that project's specs (with zz-test and pickman-test) |
+ 
+ The `z-` skills are the pipeline, in order; the `zz-` skills are called from inside a step. The `zz-` and `z-` prefixes are z-nile's: a project's skills are named `<project>-…`.
+ 
+diff --git a/pickman/skills/pickman-arch/SKILL.md b/pickman/skills/pickman-arch/SKILL.md
+index 390a8ab3..8b315fc3 100644
+--- a/pickman/skills/pickman-arch/SKILL.md
++++ b/pickman/skills/pickman-arch/SKILL.md
+@@ -6,7 +6,7 @@ description: Code structure rules for pickman's game (strict Luau, pure Logic fe
+ # Architecture (pickman)
+ 
+ ## Layout (Rojo: `default.project.json` is the game place, `lobby.project.json` the lobby)
+-The game is pickman's, in its home `pickman/` (c0120): every path in this skill is relative to `pickman/`, where its specs and `check.sh` files run (`pickman/src/shared/Logic/...` in the repository).
++The game is pickman's, in its home `pickman/` (c0120): every path in this skill is relative to `pickman/`, where its specs and `check.sh` files run (`pickman/src/shared/Logic/...` in the repository). The arcade's projects extend this skill (`extends: pickman-arch`, c0184): a rule changed here changes theirs, so a change names its effect on them.
+ | path | Roblox location | contains |
+ |---|---|---|
+ | `src/shared/Logic/<Feature>/` | ReplicatedStorage.Shared.Logic | **pure game logic**: no engine access, fully unit-tested in Lune |
+diff --git a/pickman/skills/pickman-test/SKILL.md b/pickman/skills/pickman-test/SKILL.md
+index 9556d019..d8739b3c 100644
+--- a/pickman/skills/pickman-test/SKILL.md
++++ b/pickman/skills/pickman-test/SKILL.md
+@@ -5,7 +5,7 @@ description: How pickman's game is tested - its spec tiers (unit, contract, inte
+ 
+ # Testing the game (pickman)
+ 
+-This is pickman's half of testing. The gate, the runner, `check.sh` files, sequestration, the affected-spec selector and the repository guards are z-nile's, in the zz-test skill, and bind here too.
++This is pickman's half of testing. The gate, the runner, `check.sh` files, sequestration, the affected-spec selector and the repository guards are z-nile's, in the zz-test skill, and bind here too. The arcade's projects extend this skill (`extends: pickman-test`, c0184): a rule changed here changes theirs, so a change names its effect on them.
+ 
+ ## Running pickman's specs
+ Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run -- tests/unit/Maze`, or `pickman/check.sh` for pickman's whole gate (zz-test skill, Running tests). Every path below is relative to `pickman/`, where `pickman/.luaurc` points `@tests`, `@logic`, `@shared` and `@scripts` at pickman's own folders. `sim`, `place` and `fakeengine` are pickman's helpers; the assertions (`@tests/lib/t`) and `renamed` are shared, re-exported from `pickman/tests/lib/`.
+diff --git a/scripts/hooks/stop.sh b/scripts/hooks/stop.sh
+index fd363aea..01438854 100755
+--- a/scripts/hooks/stop.sh
++++ b/scripts/hooks/stop.sh
+@@ -10,10 +10,28 @@ top=""
+ if [[ -n $top ]]; then cd "$top" || exit 0; else cd "$(dirname "$0")/../.."; fi
+ # Block at most once per stop attempt to avoid loops.
+ [[ $input == *'"stop_hook_active":true'* || $input == *'"stop_hook_active": true'* ]] && exit 0
+-# z-nile/ is the engine and the gate (c0114); every project root holds documents, which select no spec. A tree from
+-# before c0114 has no z-nile/roots.luau and no root under these folders. pickman/ is the game's home (c0120); src/ is
+-# its old place: a change there again is gated too, and the gate's old-roots check fails on it.
+-changed=$( { git diff --name-only HEAD; git ls-files --others --exclude-standard; } 2>/dev/null | grep -E '^(src|tests|z-nile|pickman)/' || true)
++# z-nile/ is the engine and the gate (c0114); every project root holds documents, which select no spec. The folders
++# whose changes are gated are src/, tests/, z-nile/ and every project's home, which the registry names (pickman/, and
++# the arcade's, c0184). A tree from before c0114 has no z-nile/roots.luau and no root under these folders: it keeps the
++# folders it had, with pickman/ (c0120) the game's home. A registry that does not parse gates every change, and the
++# gate then reports it.
++gated='src|tests|z-nile|pickman'
++if [[ -f z-nile/roots.luau ]]; then
++  # name, home and root per line; any other output (a registry reader from before c0120 prints roots only), a failure,
++  # or a home that is no plain folder name gates every change
++  if projects=$(lune run z-nile/roots -- --projects 2>/dev/null); then
++    gated=$(printf '%s\n' "$projects" | awk -F'\t' '
++      NF != 3 || $2 !~ /^(\.|[A-Za-z0-9_-]+)$/ { bad = 1 }
++      NF == 3 && $2 != "." && $2 != "z-nile" && $2 ~ /^[A-Za-z0-9_-]+$/ { homes = homes "|" $2 }
++      END { if (bad) print "[^/]+"; else print "src|tests|z-nile" homes }')
++  else
++    gated='[^/]+'
++  fi
++fi
++listed=$( { git diff --name-only HEAD; git ls-files --others --exclude-standard; } 2>/dev/null)
++changed=$(printf '%s\n' "$listed" | grep -E "^($gated)/")
++# grep's status 1 is "nothing matched"; any other status (a bad pattern) gates the whole list
++[[ $? -le 1 ]] || changed=$listed
+ if [[ -f z-nile/roots.luau ]]; then
+   while read -r root; do
+     # a path under the root, by its prefix: tests/lib/tracker/x.luau is not under the root tracker
+diff --git a/z-nile/README.md b/z-nile/README.md
+index ce40841a..7ef8ff22 100644
+--- a/z-nile/README.md
++++ b/z-nile/README.md
+@@ -45,6 +45,19 @@ z-nile is the tooling that tracks, designs, gates and delivers the work of every
+ | `zz-test` | every step | the gate, the spec runner, `check.sh`, sequestration and the guards |
+ | `zz-stats` | on demand | cost per issue and the rework rate |
+ | `pickman-arch`, `pickman-test` | pickman's design and build | pickman's code structure, and its game spec tiers |
++| `arcade-arch`, `arcade-test`, `portal-arch`, `portal-test`, `snake-arch`, `snake-test`, `invaders-arch`, `invaders-test`, `asteroids-arch`, `asteroids-test` | the arcade's design and build (c0184) | each project's code structure (pickman's rules, with the changes the skill states) and its spec tiers |
++
++## A project's home
++A project with code has a home, `<name>/`, which also holds its `.tracker/` root. `pickman/` and the arcade's five (`arcade/`, `portal/`, `snake/`, `invaders/` and `asteroids/`, c0184) have the same home; the gate checks it for every project of `z-nile/projects.toml` except z-nile, whose home holds the tooling:
++- `check.sh`: the project's gate, `exec bash "$(dirname "$0")/../z-nile/check.sh" --project <name> "$@"`.
++- `.luaurc`, with the aliases `logic`, `shared`, `tests` and `znile` pointed at the home's own folders (`znile` at `../z-nile`), and `stylua.toml` and `selene.toml`, the root's.
++- `default.project.json`, and any other `*.project.json`: the places the home builds. Every `$path` is a folder of the home (c0185 adds the library's).
++- `src/shared/Logic/` and `src/server/`, and `src/client/` for a place with a client.
++- `tests/run.luau` (the shared runner, run from the home), `tests/lib/t.luau` and `renamed.luau` (its re-exports), and `tests/meta/architecture.spec.luau`, `fence.spec.luau` and `home.spec.luau`: the structural rules of pickman-arch, the repository-fence spec and this home rule, each run from the home.
++- `skills/<name>-arch/SKILL.md` and `skills/<name>-test/SKILL.md`, linked into `.claude/skills/` by `./zn skills`.
++- In its root, `architecture.md`, with one `deps` block.
++
++A new project with code needs its registry entry, its root and `deploy.yml` entry (zz-rules skill, Projects) and this home. Make the home by copying a sibling's and renaming it; the gate's home rule names whatever is missing.
+ 
+ ## Design checklists
+ z-design reads the checklist for the issue's type before it writes the Design:
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index c3ffdc92..23405d31 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -4165,9 +4165,10 @@ local function buildLessons(project: string?): string
+ 	local tree = lessonsLib.load(".")
+ 	local sources = lessonsLib.sources(tree.items)
+ 	local mine = {}
++	local bases = skillsLib.bases(skillsLib.plan(skillsLib.load(".")), project)
+ 	for _, l in parsedLessons(tree) do
+ 		local owner = tree.owners and tree.owners[l.skill]
+-		if not owner or owner == skillsLib.ZNILE or owner == project then
++		if not owner or owner == skillsLib.ZNILE or owner == project or bases[l.skill] then
+ 			table.insert(mine, l)
+ 		end
+ 	end
+@@ -4383,28 +4384,9 @@ local function projectOfRoot(root: string): string?
+ 	return p and p.name
+ end
+ 
+--- The SKILL.md files a raft's prompt inlines (c0115): z-nile's skills.INLINED, then every skill of the raft's
+--- project (none more for z-nile's own rafts). Real paths, never through .claude/skills.
++-- The SKILL.md files a raft's prompt inlines (c0115, c0184): skills.inlined over the skills found.
+ local function inlinedSkills(project: string?): { string }
+-	local found = skillsLib.load(".")
+-	local list = skillsLib.plan(found)
+-	local out: { string } = {}
+-	local byName: { [string]: skillsLib.Skill } = {}
+-	for _, sk in list do
+-		byName[sk.name] = sk
+-	end
+-	for _, name in skillsLib.INLINED do
+-		local sk = byName[name]
+-		table.insert(out, if sk then `{sk.dir}/SKILL.md` else `{skillsLib.ZNILE}/skills/{name}/SKILL.md`)
+-	end
+-	if project and project ~= skillsLib.ZNILE then
+-		for _, sk in list do
+-			if sk.project == project then
+-				table.insert(out, `{sk.dir}/SKILL.md`)
+-			end
+-		end
+-	end
+-	return out
++	return skillsLib.inlined(skillsLib.plan(skillsLib.load(".")), project)
+ end
+ 
+ -- The execution prompt of a raft: the template with the documents, check.sh files, sequestered specs, skills,
+diff --git a/z-nile/engine/skills.luau b/z-nile/engine/skills.luau
+index 14db687b..c66fba02 100644
+--- a/z-nile/engine/skills.luau
++++ b/z-nile/engine/skills.luau
+@@ -21,7 +21,8 @@ export type Folder = { project: string, path: string }
+ export type Entry = { name: string, text: string? }
+ export type Found = { folder: Folder, entries: { Entry } }
+ -- A skill: its name, its project and its real folder ("z-nile/skills/zz-test").
+-export type Skill = { name: string, project: string, dir: string }
++-- `extends` (c0184) is the name of the skill whose rules this one defers to: a raft prompt inlines it after the project's own.
++export type Skill = { name: string, project: string, dir: string, extends: string? }
+ -- What .claude/skills holds: per entry name, the link's target, or false for anything that is not a link.
+ export type Present = { [string]: string | false }
+ 
+@@ -39,14 +40,14 @@ function skills.folders(reg: projects.Registry): { Folder }
+ 	return out
+ end
+ 
+--- The `name:` of a SKILL.md's frontmatter, or nil.
+-function skills.frontName(text: string): string?
++-- The value of `key:` in a SKILL.md's frontmatter, or nil.
++local function frontValue(text: string, key: string): string?
+ 	local front = string.match(text, "^%-%-%-\n(.-)\n%-%-%-")
+ 	if not front then
+ 		return nil
+ 	end
+ 	for line in string.gmatch(front, "[^\n]+") do
+-		local v = string.match(line, "^name:%s*(.-)%s*$")
++		local v = string.match(line, `^{key}:%s*(.-)%s*$`)
+ 		if v then
+ 			return v
+ 		end
+@@ -54,6 +55,11 @@ function skills.frontName(text: string): string?
+ 	return nil
+ end
+ 
++-- The `name:` of a SKILL.md's frontmatter, or nil.
++function skills.frontName(text: string): string?
++	return frontValue(text, "name")
++end
++
+ local function starts(s: string, prefix: string): boolean
+ 	return string.sub(s, 1, #prefix) == prefix
+ end
+@@ -100,13 +106,93 @@ function skills.plan(found: { Found }): ({ Skill }, { string })
+ 				continue
+ 			end
+ 			where[e.name] = dir
+-			table.insert(out, { name = e.name, project = f.folder.project, dir = dir })
++			table.insert(out, {
++				name = e.name,
++				project = f.folder.project,
++				dir = dir,
++				extends = frontValue(e.text :: string, "extends"),
++			})
+ 		end
+ 	end
+ 	table.sort(out, function(a, b)
+ 		return a.name < b.name
+ 	end)
+-	return out, problems
++	-- a skill that extends another names a skill that is there, not itself and not itself an extender (one level), and a
++	-- z-nile skill extends nothing (c0184)
++	local extOf: { [string]: string } = {}
++	for _, sk in out do
++		if sk.extends then
++			extOf[sk.name] = sk.extends
++		end
++	end
++	local kept: { Skill } = {}
++	for _, sk in out do
++		local base = sk.extends
++		local why: string? = nil
++		if base then
++			if sk.project == skills.ZNILE then
++				why = "a z-nile skill extends nothing"
++			elseif base == sk.name or not where[base] then
++				why = `extends {base}, which is no other skill`
++			elseif extOf[base] then
++				why = `extends {base}, which itself extends {extOf[base]}: one level only`
++			end
++		end
++		if why then
++			table.insert(problems, `{sk.dir}/SKILL.md: {why}`)
++		else
++			table.insert(kept, sk)
++		end
++	end
++	return kept, problems
++end
++
++-- The names of the skills the project's skills extend (c0184): the rules they defer to, which a raft's prompt carries
++-- with its own (its skills, and their lessons). Pure.
++function skills.bases(list: { Skill }, project: string?): { [string]: boolean }
++	local out: { [string]: boolean } = {}
++	for _, sk in list do
++		if sk.project == project and project ~= skills.ZNILE and sk.extends then
++			out[sk.extends] = true
++		end
++	end
++	return out
++end
++
++-- The SKILL.md files a raft's prompt inlines, real paths (c0115): z-nile's `INLINED`, then every skill of the raft's
++-- project (none more for z-nile's own rafts), then each skill those extend (c0184), once each. Pure.
++function skills.inlined(list: { Skill }, project: string?): { string }
++	local byName: { [string]: Skill } = {}
++	for _, sk in list do
++		byName[sk.name] = sk
++	end
++	local out: { string } = {}
++	local seen: { [string]: boolean } = {}
++	local function add(name: string, fallback: string)
++		if seen[name] then
++			return
++		end
++		seen[name] = true
++		local sk = byName[name]
++		table.insert(out, if sk then `{sk.dir}/SKILL.md` else fallback)
++	end
++	for _, name in skills.INLINED do
++		add(name, `{skills.ZNILE}/skills/{name}/SKILL.md`)
++	end
++	if project and project ~= skills.ZNILE then
++		for _, sk in list do
++			if sk.project == project then
++				add(sk.name, "")
++			end
++		end
++		local bases = skills.bases(list, project)
++		for _, sk in list do
++			if bases[sk.name] then
++				add(sk.name, "")
++			end
++		end
++	end
++	return out
+ end
+ 
+ -- The relative target of a skill's link in .claude/skills.
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+index aae9a04c..d8ba22c0 100644
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -34,7 +34,7 @@ Each item is a directory named by its ID:
+ <ID>/spend.md           written by `./zn commit` and `./zn spend`; never edit by hand
+ ```
+ 
+-- **Skills**: z-nile's skills live in `z-nile/skills/<name>/SKILL.md`, a project's own in `<project>/skills/<name>/SKILL.md` (its name in `z-nile/projects.toml`: `pickman/skills/`). The harnesses find them through `.claude/skills/<name>`, a committed relative link to the real folder (`../../z-nile/skills/<name>`), which `./zn skills` writes and `./zn skills --check` (in the gate) checks: one link per skill, nothing else in `.claude/skills/`. Names are unique across the repository and equal the `name:` in the skill's frontmatter. The `z-` (pipeline) and `zz-` (called from inside a step) prefixes are z-nile's alone: a project's skill is named `<project>-…`, and `./zn skills` refuses any other. Git can't add a path through a link, so every tool, spec, Touched path and edit uses the real folder, never `.claude/skills/<name>/…`.
++- **Skills**: z-nile's skills live in `z-nile/skills/<name>/SKILL.md`, a project's own in `<project>/skills/<name>/SKILL.md` (its name in `z-nile/projects.toml`: `pickman/skills/`). The harnesses find them through `.claude/skills/<name>`, a committed relative link to the real folder (`../../z-nile/skills/<name>`), which `./zn skills` writes and `./zn skills --check` (in the gate) checks: one link per skill, nothing else in `.claude/skills/`. Names are unique across the repository and equal the `name:` in the skill's frontmatter. A project's skill may name one other skill in `extends:`, the skill whose rules it defers to (`snake-arch` extends `pickman-arch`): a raft's prompt inlines it after the project's own skills, and `./zn skills` refuses a name that is no other skill. The `z-` (pipeline) and `zz-` (called from inside a step) prefixes are z-nile's alone: a project's skill is named `<project>-…`, and `./zn skills` refuses any other. Git can't add a path through a link, so every tool, spec, Touched path and edit uses the real folder, never `.claude/skills/<name>/…`.
+ - **Lessons**: `<skills folder>/<skill>/lessons/<slug>.md` (the skill's real folder, `z-nile/skills/<skill>/` or `<project>/skills/<skill>/`), id `<skill>/<slug>`. Frontmatter `title`, `when` (`design`, `build` or `both`), `tags: [a, b]`, `check` (one question ending in `?`) and optional `from` (only for a source with no item folder to hold a note; each key once); the body says the rule, why, and how to apply it. **`harvest.md`**, in each reviewed item's folder, has one entry per review finding: `- design-review-001 F2: <lesson id>, <lesson id>` or `- review-001 F3: one-off: <reason>`, plus `- note <text>: <lesson ids>` for a source that is not a review finding (a subagent's candidate, a correction by the user, a failed step). A note covers no finding. A lesson's sources are the entries naming it, each once. See `./zn lessons`.
+ 
+ ## Worktrees
+@@ -164,7 +164,7 @@ Tracker state is shared the moment it changes, not when a PR merges, so parallel
+ - **Statuses** (`status:` in an item's frontmatter): `new -> preparing -> prepared -> active -> done`. `design:` (draft, reviewed, ready) stays the design review's field. A missing `status:` is derived: `done/` is done, `active/` is active, `design: ready` is prepared, a draft item in a raft (or a draft raft) is preparing, anything else is new. `./zn status` lists them from `origin/main`; `status <id>` prints one; `status <id> <to>` moves one, checked against `origin/main`. `done` is only ever set by `./zn done`, and only `ready` (or the legacy `start` of a backlog raft) claims `active`, and `stop` gives a readied raft back.
+ - **Every write is stamped**: the stored value is `<state>-<three words>` (for example `preparing-quiet-copper-falcon`) and each write uses fresh words, so two terminals making the same move conflict in git instead of merging silently.
+ - **Published or carried.** These moves are pushed straight to `origin/main` as a tiny commit: `new issue` (the stub, `--desc "<line>"` is its Problem), `new raft` (claims the raft, and its members when they are `new`), `fold` and `recombine` (claim their rafts), `release`, `status <id> preparing|new`, `status <id> prepared` back from `active`, and the claim made by `ready` (or by a legacy `start`). An emergent `new issue --raft <R-id>` and `renumber <id>` without `<new>` push a counter-only commit (the raised `z-nile/next`) and then work locally. The move to `prepared` is **carried by the prep PR**: it only edits the local documents.
+-- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), an issue's `spend.md`, rows appended only (`./zn spend`), and `z-nile/next`, whose counters may only go up. The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after a local full gate. Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list.
++- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), an issue's `spend.md`, rows appended only (`./zn spend`), and `z-nile/next`, whose counters may only go up. The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after a local full gate. Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
+ - **Claims.** z-design claims one issue with `./zn status <id> preparing` and gives it back with `status <id> new`. The old prep's `new raft` over `new` issues still claims them with the raft's stamp, and `./zn status <R-id> preparing` claims an existing draft raft with its unprepared members. A raft move (`status <R-id> preparing|new`) never restamps a member that is `prepared` on `origin/main`, and refuses a member another raft holds there. `ready` (and a legacy `start`) refuses a raft unless it and its members are `prepared` on `origin/main`; the claim is made by `ready`, not `start`.
+ - **Rafting** (z-raft). An issue's raft is its own `raft:` line, edited only in the rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly, and its sync shows the conflict. The published claim (`new raft` over prepared issues, `fold`, `recombine`, `status <R-id> preparing`) stamps the raft only, with a fresh `preparing-…` value; recombine gives its two rafts one value, and that shared stamp is what lets the carried `status <keeper> prepared` take a member whose `raft:` on `origin/main` still names the other raft. The carried move takes a member that is prepared on `origin/main` as it is, refuses one another raft holds there, and takes a `preparing` member only when it carries the raft's own stamp or a claim this checkout made (`status <id> preparing` here); any other `preparing` member is another terminal's live claim and is refused, naming it. z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (z-raft takes it out first with `./zn unfold <R-id> <id>`), and `ready` refuses a raft while a member is `preparing`. A raft's `grouped:` line records a hash of each prepared member's design as z-raft grouped it (its document without `status:` and `raft:`, `check.sh`, `acceptance/`, and its design reviews, refutes and `harvest.md`); the carried move and `ready` refuse a member whose design changed on `origin/main` since (a redesign landed inside the rafting window), a member this rafting grouped with no entry, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering the current one. `compact` and `renumber` re-record every entry that matched before they rewrote its ids, and `remap` does the same. `./zn release <R-id>` is the published give-back. An issue whose `raft:` names a retired or missing raft (audit's `dead-raft` error) is cleared by the command the error names for its state: in the backlog, `./zn unfold <R-id> <id>`, which claims nothing (there is no raft to claim) and rides in the rafting PR; in `active/`, `./zn stop <id>` first (main checkout), which gives that one issue back to the backlog as `stop` gives a member back, and `unfold` after it. An active issue with no `raft:` (`raftless-active`) goes back with `./zn stop <id>` too. A conflict on `raft:` or `depends_on:` (they are adjacent lines) after a sync means rerun z-raft for that issue: take `main`'s line and drop the issue from your raft, or take both edits when it was only `depends_on:`.
+ - **A failed start.** `start` runs every local check before it claims. If a step after the claim fails (branch push, `gh pr create`), the local state is consistent: finish by hand (`git push -u origin <branch>`, `gh pr create --draft`), or give **your own** claim back with `status <R-id> prepared` (a raft started the legacy way, still in the backlog; a readied raft is given back only by `./zn stop <R-id>`). The same terminal can re-run `start` if it died before moving anything (it remembers the claim in `.cache/tracker-claim-<R-id>`); another terminal is refused.
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 14e8f252..1a5c8183 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -18,7 +18,7 @@ description: How z-nile tests and gates every project - the gate and its modes,
+ | `lune run tests/run -- --jobs N` / `PICKMAN_JOBS=N` | spec concurrency (default `min(max(cpus,2),8)`; `1` is serial, a bad value exits 2) |
+ 
+ ## Spec layout (`*.spec.luau`)
+-Each project's specs live under its home and run from it (c0120): z-nile's (the tooling's) under `z-nile/tests/`, pickman's (the game's) under `pickman/tests/`, with each home's `.luaurc` pointing `@tests` at its own `tests/` (and pickman's `@logic`, `@shared` and `@scripts` at pickman's folders). There is no `tests/` at the root. The rows below are relative to the home. The runner, `z-nile/tests/run.luau`, is shared: `pickman/tests/run.luau` runs it from `pickman/`, so a pickman spec's paths, fixtures (`pickman/.cache`) and jail are pickman's, and a z-nile spec's are `z-nile/`'s (`z-nile/.cache`). A spec that needs the repository's other files reads them from the checkout's top (`git rev-parse --show-toplevel`), and writes only under its home's `.cache`. The assertions (`z-nile/tests/lib/t`) and `renamed` are shared too (`pickman/tests/lib/` re-exports them); `sim`, `place` and `fakeengine` are pickman's. A project's own tiers (pickman's `tests/unit`, `contract`, `integration`, `scenario`, `place` and `runtime`, its `sim`, `place` and `fakeengine` helpers) are in that project's own skill: `pickman-test` for pickman. The rows below are those every project has.
++Each project's specs live under its home and run from it (c0120): z-nile's (the tooling's) under `z-nile/tests/`, pickman's (the game's) under `pickman/tests/`, with each home's `.luaurc` pointing `@tests` at its own `tests/` (and pickman's `@logic`, `@shared` and `@scripts` at pickman's folders). There is no `tests/` at the root. The rows below are relative to the home. The runner, `z-nile/tests/run.luau`, is shared: `pickman/tests/run.luau` runs it from `pickman/`, so a pickman spec's paths, fixtures (`pickman/.cache`) and jail are pickman's, and a z-nile spec's are `z-nile/`'s (`z-nile/.cache`). A spec that needs the repository's other files reads them from the checkout's top (`git rev-parse --show-toplevel`), and writes only under its home's `.cache`. The assertions (`z-nile/tests/lib/t`) and `renamed` are shared too (`pickman/tests/lib/` re-exports them); `sim`, `place` and `fakeengine` are pickman's. A project's own tiers (pickman's `tests/unit`, `contract`, `integration`, `scenario`, `place` and `runtime`, its `sim`, `place` and `fakeengine` helpers) are in that project's own skill: `pickman-test` for pickman. The rows below are those every project has. Every project with a home except z-nile has the same `tests/run.luau`, `tests/lib/t.luau` and `renamed.luau`, `tests/meta/architecture.spec.luau`, `fence.spec.luau` and `home.spec.luau` (z-nile/README.md, A project's home).
+ | dir | tier | may require |
+ |---|---|---|
+ | `tests/tooling/` (z-nile's) | the tooling's scripts (`z-nile/`, the root's `scripts/`) | scripts |
+@@ -108,7 +108,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+     - its HEAD lost history or gained commits a fixture wrote;
+     - a worktree appeared under `.cache`;
+     - a ref whose tip a fixture identity wrote appeared.
+-  - **Gate spec**: `tests/tooling/repo-fence.spec.luau` proves in every gate that the guards are on, the jail included (harmless probe writes outside `.cache` must fail). It scans what runs as a check (`tests/`, `scripts/`, `z-nile/`, `./zn` and every `check.sh`; a prepared acceptance spec once it is promoted into `tests/`), case-insensitively. It fails if any of them names a way to switch the guards off (`GIT_CEILING_DIRECTORIES`, `GIT_DIR`, `GIT_CONFIG_*`, `core.hooksPath`, `--no-verify`, `sandbox-exec`, `env -i`, `osascript`, `launchctl`, and the network and credential settings `protocol.*allow`, `credential.*`, `extraheader`, `GIT_SSH_COMMAND`, …), or commits as anything but `@example.invalid` (in `user.email` or an `*_EMAIL` variable). Extensionless files (hooks, tools) are read too; the guards themselves (`z-nile/lib/git-hooks/`, `fence.sh`, `fence.luau`) are exempt. A file with a real need to name one (a fixture hook that unsets what git exports to it, the fixture helper that refuses them) gets an entry in the spec's `ALLOWED` table: that file, those names only, and the reason. The review checks every entry.
++  - **Gate spec**: `tests/tooling/repo-fence.spec.luau` proves in every gate that the guards are on, the jail included (harmless probe writes outside `.cache` must fail). It scans what runs as a check (the root's `scripts/`, every registered project's home, `z-nile/`'s included, `./zn` and every `check.sh`; a prepared acceptance spec once it is promoted into `tests/`), case-insensitively. It fails if any of them names a way to switch the guards off (`GIT_CEILING_DIRECTORIES`, `GIT_DIR`, `GIT_CONFIG_*`, `core.hooksPath`, `--no-verify`, `sandbox-exec`, `env -i`, `osascript`, `launchctl`, and the network and credential settings `protocol.*allow`, `credential.*`, `extraheader`, `GIT_SSH_COMMAND`, …), or commits as anything but `@example.invalid` (in `user.email` or an `*_EMAIL` variable). Extensionless files (hooks, tools) are read too; the guards themselves (`z-nile/lib/git-hooks/`, `fence.sh`, `fence.luau`) are exempt. A file with a real need to name one (a fixture hook that unsets what git exports to it, the fixture helper that refuses them) gets an entry in the spec's `ALLOWED` table: that file, those names only, and the reason. The review checks every entry.
+ - **`check.sh` files** get the fence, the override stripping and the ref and push guards through `ac.sh`, but no jail: they legitimately write the checkout (`sourcemap.json`, `promote-check`) The specs they start are jailed.
+ - **Caught only by review** (the zz-review skill's Repository safety item; each is **high**):
+   - **Linux**: specs there are unjailed, so a write to the real checkout's index or files (`git add`, `checkout`, `reset --hard`, `worktree remove`, `remote set-url`, a plain file write) is stopped by nothing. GitHub Actions does not run the specs. The same spec runs on developers' Macs, where the jail stops it.
+@@ -124,7 +124,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+ 
+ ## Hooks (Claude Code only)
+ - After every `.luau` edit: stylua formats the file and selene lints it.
+-- On stop: the affected gate runs (`--affected`, through the old gate path's forwarder, so a worktree from before c0114 still runs its own gate) if a file outside every registry root changed under `src/`, `tests/`, `z-nile/` or `pickman/` (c0120: the game's home).
++- On stop: the affected gate runs (`--affected`, through the old gate path's forwarder, so a worktree from before c0114 still runs its own gate) if a file outside every registry root changed under `src/`, `tests/`, `z-nile/` or the home of a registered project (c0184: `pickman/`, `snake/`, and the rest, from the registry; a registry that does not parse gates every change).
+ 
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill zz-test --full`. Each is a mistake made before, with the question that catches it.
+diff --git a/z-nile/templates/prompt.md b/z-nile/templates/prompt.md
+index 7bd5fb6c..11d926d9 100644
+--- a/z-nile/templates/prompt.md
++++ b/z-nile/templates/prompt.md
+@@ -36,12 +36,12 @@ If it says `parallel: yes`, follow zz-execute Phase 2B unless the human told you
+ ## Architecture map ({{ARCHITECTURE_PATH}})
+ {{ARCHITECTURE}}
+ 
+-## Lessons (build and both, from z-nile's skills and the {{PROJECT}} project's)
++## Lessons (build and both, from z-nile's skills and the {{PROJECT}} project's, with the skills they extend)
+ Apply each before you write the code it concerns; its full text is `./zn lessons --full <id>`.
+ {{LESSONS}}
+ 
+ ## Work items (verbatim from {{ROOT}}/)
+ {{ITEMS}}
+ 
+-## Skills (verbatim from z-nile/skills/ and the {{PROJECT}} project's skills/, the binding rules)
++## Skills (verbatim from z-nile/skills/ and the {{PROJECT}} project's skills/, with the skills they extend, the binding rules)
+ {{SKILLS}}
+diff --git a/z-nile/tests/acceptance/c0006/clone.spec.luau b/z-nile/tests/acceptance/c0006/clone.spec.luau
+index 16d1c0f8..64793997 100644
+--- a/z-nile/tests/acceptance/c0006/clone.spec.luau
++++ b/z-nile/tests/acceptance/c0006/clone.spec.luau
+@@ -6,6 +6,7 @@ local clone = require("@tests/lib/clone")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
++local projects = require("@znile/engine/projects")
+ local t = require("@tests/lib/t")
+ 
+ local root = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+@@ -74,8 +75,10 @@ return t.spec("c0050 isolated clones", function(it)
+ 	it("no spec clones the repository with a plain git clone", function()
+ 		local files: { string } = {}
+ 		-- c0120 override: specs live in each project's home tests/ and tracker root, not the repository root's
+-		for _, dir in { "z-nile/tests", "z-nile/.tracker", "pickman/tests", "pickman/.tracker" } do
+-			specs(`{root}/{dir}`, files)
++		-- c0184 override: every registered project's home tests/ and tracker root
++		for _, p in projects.load(root).projects do
++			specs(`{root}/{p.home}/tests`, files)
++			specs(`{root}/{p.root}`, files)
+ 		end
+ 		local offenders: { string } = {}
+ 		for _, file in files do
+diff --git a/z-nile/tests/acceptance/c0111/skill-docs.spec.luau b/z-nile/tests/acceptance/c0111/skill-docs.spec.luau
+index 3fd389a0..8ca57bc1 100644
+--- a/z-nile/tests/acceptance/c0111/skill-docs.spec.luau
++++ b/z-nile/tests/acceptance/c0111/skill-docs.spec.luau
+@@ -4,17 +4,27 @@
+ -- execute-raft harvest every round; review, tracker, ready-raft, metrics, AGENTS.md and the prompt template say what
+ -- c0111's Design specifies. Reads the real files; writes nothing.
+ local fs = require("@lune/fs")
++local projects = require("@znile/engine/projects")
++local skills = require("@znile/engine/skills")
+ local t = require("@tests/lib/t")
+ -- c0120 override: specs run from their project's home (z-nile/); the repository's files are read from the checkout's top
+ local TOP = (
+ 	string.gsub(require("@lune/process").exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")
+ )
+ 
+--- c0115 override: the skills' real folders, z-nile's and pickman's (never through the .claude/skills links), as
++-- c0184 override: the skills' folders come from the one reader of them, over the registry's projects
++local function skillBases(top: string): { string }
++	local out: { string } = {}
++	for _, folder in skills.folders(projects.load(top)) do
++		table.insert(out, folder.path)
++	end
++	return out
++end
++-- c0115 override: the skills' real folders, every project's (never through the .claude/skills links), as
+ -- repository-relative folders ("z-nile/skills/zz-rules")
+ local function skillDirs(): { string }
+ 	local out = {}
+-	for _, base in { "z-nile/skills", "pickman/skills" } do
++	for _, base in skillBases(TOP) do
+ 		local names = fs.readDir(`{TOP}/{base}`)
+ 		table.sort(names)
+ 		for _, name in names do
+diff --git a/z-nile/tests/acceptance/c0114/docs.spec.luau b/z-nile/tests/acceptance/c0114/docs.spec.luau
+index a1e333ee..349e36e4 100644
+--- a/z-nile/tests/acceptance/c0114/docs.spec.luau
++++ b/z-nile/tests/acceptance/c0114/docs.spec.luau
+@@ -2,16 +2,26 @@
+ -- c0114 AC9: the skills, AGENTS.md, SETUP.md and the templates name `./zn` and the moved paths, never the old ones
+ -- (scripts/tracker.sh is named once, as the forwarder), and they state the project-root rules the engine follows.
+ local fs = require("@lune/fs")
++local projects = require("@znile/engine/projects")
+ -- c0120 override: the spec runs from z-nile/, its home, after the move
+ local process = require("@lune/process")
+ local serde = require("@lune/serde")
++local skills = require("@znile/engine/skills")
+ local t = require("@tests/lib/t")
+ 
+--- c0115 override: the skills' real folders, z-nile's and pickman's (never through the .claude/skills links); each
++-- c0184 override: the skills' folders come from the one reader of them, over the registry's projects
++local function skillBases(top: string): { string }
++	local out: { string } = {}
++	for _, folder in skills.folders(projects.load(top)) do
++		table.insert(out, folder.path)
++	end
++	return out
++end
++-- c0115 override: the skills' real folders, every project's (never through the .claude/skills links); each
+ -- entry is a repository-relative skill folder ("z-nile/skills/zz-rules")
+ local function skillDirs(top: string): { string }
+ 	local out = {}
+-	for _, base in { "z-nile/skills", "pickman/skills" } do
++	for _, base in skillBases(top) do
+ 		local names = fs.readDir(`{top}/{base}`)
+ 		table.sort(names)
+ 		for _, name in names do
+diff --git a/z-nile/tests/acceptance/c0115/absence.spec.luau b/z-nile/tests/acceptance/c0115/absence.spec.luau
+index 6915fa5c..d5183fb4 100644
+--- a/z-nile/tests/acceptance/c0115/absence.spec.luau
++++ b/z-nile/tests/acceptance/c0115/absence.spec.luau
+@@ -8,6 +8,7 @@
+ -- folder. And no live file cites an old lesson id (`testing/no-vacuous-pass`) whose renamed lesson exists. Plain finds
+ -- only (lesson zz-test/plain-find-for-literals); `scan` and `oldLessonIds` are also run on planted texts.
+ local process = require("@lune/process")
++local projects = require("@znile/engine/projects")
+ local realfs = require("@lune/fs")
+ -- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
+ local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+@@ -90,7 +91,23 @@ local function tracked(): { string }
+ end
+ 
+ local LIVE_TOP = { "AGENTS.md", "SETUP.md", "zn" }
+-local LIVE_DIRS = { "z-nile/", "pickman/", ".claude/", "scripts/", ".github/" }
++-- c0184 override: every registered project's home, from the registry, not pickman's alone
++local LIVE_DIRS = { "z-nile/", ".claude/", "scripts/", ".github/" }
++local HOMES: { string } = {}
++for _, p in projects.load(TOP).projects do
++	table.insert(HOMES, `{p.home}/`)
++	if p.home ~= "z-nile" then
++		table.insert(LIVE_DIRS, `{p.home}/`)
++	end
++end
++local function promotedHome(path: string): boolean
++	for _, h in HOMES do
++		if starts(path, `{h}tests/acceptance/`) then
++			return true
++		end
++	end
++	return false
++end
+ local function live(path: string): boolean
+ 	if string.find(path, "/.tracker/", 1, true) or starts(path, "tracker/") then
+ 		return false
+@@ -99,6 +116,7 @@ local function live(path: string): boolean
+ 		-- promoted specs are sequestered, every project's (z-nile's home is z-nile/, c0120)
+ 		starts(path, "z-nile/tests/acceptance/")
+ 		or starts(path, "pickman/tests/acceptance/")
++		or promotedHome(path)
+ 		or starts(path, "z-nile/vendor/")
+ 	then
+ 		return false
+diff --git a/z-nile/tests/acceptance/c0115/docs.spec.luau b/z-nile/tests/acceptance/c0115/docs.spec.luau
+index 70f84707..0a19ea51 100644
+--- a/z-nile/tests/acceptance/c0115/docs.spec.luau
++++ b/z-nile/tests/acceptance/c0115/docs.spec.luau
+@@ -6,7 +6,9 @@
+ -- naming rule and the `skills` command in every list a command joins; every skill's lessons paragraph names the real
+ -- folder; AGENTS.md and SETUP.md name the new skills and commands; `./zn`'s usage names `skills`. Reads the real tree.
+ local process = require("@lune/process")
++local projects = require("@znile/engine/projects")
+ local realfs = require("@lune/fs")
++local skills = require("@znile/engine/skills")
+ -- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
+ local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+ local function top(p: string): string
+@@ -182,8 +184,14 @@ return t.spec("c0115 the renamed skills say what they hold", function(it)
+ 		for _, n in ALL do
+ 			table.insert(dirs, `{Z}/{n}`)
+ 		end
+-		table.insert(dirs, "pickman/skills/pickman-arch")
+-		table.insert(dirs, "pickman/skills/pickman-test")
++		-- c0184 override: every other project's skills too, from the registry
++		for _, folder in skills.folders(projects.load(TOP)) do
++			if folder.project ~= "z-nile" then
++				for _, n in realfs.readDir(`{TOP}/{folder.path}`) do
++					table.insert(dirs, `{folder.path}/{n}`)
++				end
++			end
++		end
+ 		for _, d in dirs do
+ 			local s = section(read(`{d}/SKILL.md`), "## Lessons")
+ 			at(
+diff --git a/z-nile/tests/acceptance/c0115/layout.spec.luau b/z-nile/tests/acceptance/c0115/layout.spec.luau
+index 7fc1defb..39787ae2 100644
+--- a/z-nile/tests/acceptance/c0115/layout.spec.luau
++++ b/z-nile/tests/acceptance/c0115/layout.spec.luau
+@@ -6,7 +6,9 @@
+ -- else, the old architecture lessons are zz-arch's, .claude/README.md is gone, and z-design
+ -- has its three checklists. Reads the real tree only (fs, git ls-files, git show).
+ local process = require("@lune/process")
++local projects = require("@znile/engine/projects")
+ local realfs = require("@lune/fs")
++local skills = require("@znile/engine/skills")
+ -- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
+ local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+ local function top(p: string): string
+@@ -135,15 +137,24 @@ return t.spec("c0115 the skills are renamed and live in their projects' folders"
+ 			if mode == "120000" and string.match(path :: string, "^%.claude/skills/[^/]+$") then
+ 				local name = string.match(path :: string, "[^/]+$") :: string
+ 				table.insert(links, name)
+-				local base = if fs.isDir(`pickman/skills/{name}`) then "pickman" else "z-nile"
+-				t.expect(git({ "show", `HEAD:{path}` })).toBe(`../../{base}/skills/{name}`)
++				-- c0184 override: the skill's folder is the one of whichever project's skills folder holds it
++				local base = "z-nile/skills"
++				for _, folder in skills.folders(projects.load(TOP)) do
++					if fs.isDir(`{folder.path}/{name}`) then
++						base = folder.path
++					end
++				end
++				t.expect(git({ "show", `HEAD:{path}` })).toBe(`../../{base}/{name}`)
+ 			elseif string.sub(path :: string, 1, #".claude/skills/") == ".claude/skills/" then
+ 				table.insert(others, path :: string)
+ 			end
+ 		end
+-		local all = folders("z-nile/skills")
+-		for _, n in folders("pickman/skills") do
+-			table.insert(all, n)
++		-- c0184 override: every project's skills folder, from the registry
++		local all: { string } = {}
++		for _, folder in skills.folders(projects.load(TOP)) do
++			for _, n in folders(folder.path) do
++				table.insert(all, n)
++			end
+ 		end
+ 		t.expect(#all >= #ZNILE + #PICKMAN).toBe(true)
+ 		t.expect(sorted(links)).toEqual(sorted(all))
+diff --git a/z-nile/tests/acceptance/c0115/readme.spec.luau b/z-nile/tests/acceptance/c0115/readme.spec.luau
+index c0621731..4657e4bc 100644
+--- a/z-nile/tests/acceptance/c0115/readme.spec.luau
++++ b/z-nile/tests/acceptance/c0115/readme.spec.luau
+@@ -5,6 +5,7 @@
+ -- (c0117), the new board (c0118). A short account of the five parts follows, then every skill folder by name, and
+ -- the three design checklists by path, each of which exists. Reads the real tree.
+ local process = require("@lune/process")
++local projects = require("@znile/engine/projects")
+ local realfs = require("@lune/fs")
+ -- c0115 runs from its project's home, z-nile/ (c0120): every path this spec reads is the repository's, from its top
+ local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+@@ -25,6 +26,7 @@ local fs = {
+ 		return realfs.readDir(top(p))
+ 	end,
+ }
++local skills = require("@znile/engine/skills")
+ local t = require("@tests/lib/t")
+ 
+ local README = "z-nile/README.md"
+@@ -163,8 +165,9 @@ return t.spec("c0115 the z-nile README opens with the picture", function(it)
+ 
+ 	it("names every skill folder and the three checklists, each of which exists", function()
+ 		local text = fs.readFile(README)
+-		for _, base in { "z-nile/skills", "pickman/skills" } do
+-			for _, name in folders(base) do
++		-- c0184 override: every project's skills folder, from the registry (the README names each)
++		for _, folder in skills.folders(projects.load(TOP)) do
++			for _, name in folders(folder.path) do
+ 				at(text, `\`{name}\``, "README")
+ 			end
+ 		end
+diff --git a/z-nile/tests/acceptance/c0120/docs.spec.luau b/z-nile/tests/acceptance/c0120/docs.spec.luau
+index 202c5358..ee41ffa3 100644
+--- a/z-nile/tests/acceptance/c0120/docs.spec.luau
++++ b/z-nile/tests/acceptance/c0120/docs.spec.luau
+@@ -7,14 +7,24 @@
+ -- These specs run from z-nile/: the documents are read from the checkout's top.
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
++local projects = require("@znile/engine/projects")
++local skills = require("@znile/engine/skills")
+ local t = require("@tests/lib/t")
+ 
+ local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+--- c0115 override: the skills' real folders, z-nile's and pickman's (never through the .claude/skills links), as
++-- c0184 override: the skills' folders come from the one reader of them, over the registry's projects
++local function skillBases(top: string): { string }
++	local out: { string } = {}
++	for _, folder in skills.folders(projects.load(top)) do
++		table.insert(out, folder.path)
++	end
++	return out
++end
++-- c0115 override: the skills' real folders, every project's (never through the .claude/skills links), as
+ -- repository-relative folders ("z-nile/skills/zz-rules")
+ local function skillDirs(): { string }
+ 	local out = {}
+-	for _, base in { "z-nile/skills", "pickman/skills" } do
++	for _, base in skillBases(TOP) do
+ 		local names = fs.readDir(`{TOP}/{base}`)
+ 		table.sort(names)
+ 		for _, name in names do
+diff --git a/z-nile/tests/acceptance/c0120/graph-homes.spec.luau b/z-nile/tests/acceptance/c0120/graph-homes.spec.luau
+index 36f9f9f5..9b8c9780 100644
+--- a/z-nile/tests/acceptance/c0120/graph-homes.spec.luau
++++ b/z-nile/tests/acceptance/c0120/graph-homes.spec.luau
+@@ -60,7 +60,8 @@ return t.spec("c0120 the graph and the selector know the homes", function(it)
+ 		t.expect(map.x).toBe(`{base}/a/b/BX`)
+ 		t.expect(map.y).toBe(`{base}/a/Y`)
+ 		t.expect(map.tests).toBe("tests") -- this home's (z-nile/.luaurc), inherited
+-		t.expect(map.logic).toBe("../pickman/src/shared/Logic") -- the root's, inherited, above the current folder
++		-- c0184 override: the root keeps no alias into a game, so the inherited one shown is the root's scripts
++		t.expect(map.scripts).toBe("../scripts") -- the root's, inherited, above the current folder
+ 		t.expect(graph.aliases(`{base}/a`).x).toBe(`{base}/a/X`)
+ 	end)
+ 
+diff --git a/z-nile/tests/acceptance/c0120/layout.spec.luau b/z-nile/tests/acceptance/c0120/layout.spec.luau
+index dd439caf..2f89042c 100644
+--- a/z-nile/tests/acceptance/c0120/layout.spec.luau
++++ b/z-nile/tests/acceptance/c0120/layout.spec.luau
+@@ -158,7 +158,8 @@ return t.spec("c0120 every project's files live in its home", function(it)
+ 	end)
+ 
+ 	it(
+-		"each home's .luaurc points its aliases at its own folders; the root keeps every alias, pointed into them",
++		-- c0184 override: the root keeps the tooling's aliases and none into a game
++		"each home's .luaurc points its aliases at its own folders; the root keeps the tooling's aliases and none into a game",
+ 		function()
+ 			local cfg = json("pickman/.luaurc")
+ 			t.expect(cfg.aliases.tests).toBe("./tests")
+@@ -170,10 +171,12 @@ return t.spec("c0120 every project's files live in its home", function(it)
+ 			t.expect(z.aliases.tests).toBe("./tests")
+ 			t.expect(z.languageMode).toBe("strict")
+ 			-- an alias a worktree's own .luaurc chain left undefined would resolve through the main checkout's .luaurc
+-			-- (worktrees lie inside it), so the root defines every one, pointed into its project (Guesses 8 and 15)
++			-- (worktrees lie inside it), so the root defines every alias the tooling uses (Guesses 8 and 15); the game aliases
++			-- are each home's own (c0184)
+ 			local rootCfg = json(".luaurc")
+-			t.expect(rootCfg.aliases.logic).toBe("./pickman/src/shared/Logic")
+-			t.expect(rootCfg.aliases.shared).toBe("./pickman/src/shared")
++			-- c0184 override: no alias into a game; a home that left `logic` out would otherwise resolve it into pickman
++			t.expect(rootCfg.aliases.logic).toBe(nil)
++			t.expect(rootCfg.aliases.shared).toBe(nil)
+ 			t.expect(rootCfg.aliases.tests).toBe("./z-nile/tests")
+ 			t.expect(rootCfg.aliases.znile).toBe("./z-nile")
+ 			t.expect(rootCfg.aliases.scripts).toBe("./scripts")
+diff --git a/z-nile/tests/acceptance/c0172/narrowed.spec.luau b/z-nile/tests/acceptance/c0172/narrowed.spec.luau
+index 83240b8b..5fbbb6ea 100644
+--- a/z-nile/tests/acceptance/c0172/narrowed.spec.luau
++++ b/z-nile/tests/acceptance/c0172/narrowed.spec.luau
+@@ -77,7 +77,7 @@ local PINNED = {
+ 		"z-nile",
+ 		"c0120",
+ 		"docs.spec.luau",
+-		"a9c5f2a2c47d32b1aa5ad13300621b9ab941f81c13ff65c3c8284c0221d98c12",
++		"d56347352d2dea63cc8e7c524c1723ec06a4b5b2a9a55923d2a44aa29b4bfe1c",
+ 	},
+ 	{
+ 		"pickman",
+diff --git a/z-nile/tests/lib/cachepaths.luau b/z-nile/tests/lib/cachepaths.luau
+index e853a6f4..1e2b94eb 100644
+--- a/z-nile/tests/lib/cachepaths.luau
++++ b/z-nile/tests/lib/cachepaths.luau
+@@ -1,5 +1,6 @@
+ --!strict
+--- The reviewed list of .cache paths in scripts/, z-nile/ and pickman/scripts/ (c0077, c0114, c0120). Unjailed writers under .cache must never
++-- The reviewed list of .cache paths in scripts/, z-nile/ and every project home's scripts/ (c0077, c0114, c0120, c0184).
++-- Unjailed writers under .cache must never
+ -- write through a symlink a spec swapped in there (the jail can't refuse a swap, c0077 E1), so every line in those
+ -- folders that names a .cache path is listed here with how it stays safe: through z-nile/lib/replace-file.pl (a
+ -- rename, never a write through a link), a `mkdir -p` of a plain folder the fence checks, a read, or a message. A new
+@@ -15,10 +16,22 @@ local cachepaths = {}
+ cachepaths.TOP = string.match(debug.info(1, "s"), "^(.*)/[^/]+/[^/]+/[^/]+/[^/]+$") or "."
+ -- The folders whose .luau and .sh files the list covers, and the ones inside them it skips: tracker documents, and
+ -- z-nile's own specs and harness (z-nile/tests, c0120), which are specs, not writers. Every .cache is skipped too.
+-cachepaths.ROOTS = { "scripts", "z-nile", "pickman/scripts" }
++-- The folders are the root's scripts/, z-nile/ and the scripts/ of every other project's home, from the registry
++-- (c0184): a new project's writers join the scan without an edit here. Pure over a parsed registry.
++function cachepaths.rootsOf(reg: projects.Registry): { string }
++	local out = { "scripts", "z-nile" }
++	for _, p in reg.projects do
++		if p.home ~= "." and p.home ~= "z-nile" then
++			table.insert(out, `{p.home}/scripts`)
++		end
++	end
++	return out
++end
++local registry = projects.load(cachepaths.TOP)
++cachepaths.ROOTS = cachepaths.rootsOf(registry)
+ -- every project root of the registry (design review 001 F5): a new root is skipped without an edit here
+ cachepaths.SKIP = { ["z-nile/tests"] = true } :: { [string]: boolean }
+-for _, r in projects.roots(projects.load(cachepaths.TOP)) do
++for _, r in projects.roots(registry) do
+ 	cachepaths.SKIP[r] = true
+ end
+ 
+diff --git a/z-nile/tests/tooling/repo-fence.spec.luau b/z-nile/tests/tooling/repo-fence.spec.luau
+index 6a540447..3b9447ea 100644
+--- a/z-nile/tests/tooling/repo-fence.spec.luau
++++ b/z-nile/tests/tooling/repo-fence.spec.luau
+@@ -200,6 +200,10 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 	["z-nile/tests/acceptance/c0114/gate-cover.spec.luau"] = {
+ 		PICKMAN_TEST_FENCE = "runs the copied gate as a top-level run",
+ 	},
++	-- c0184: its fence-scan case runs a copied runner with the marker cleared, so the copy acts as a top-level run
++	["z-nile/tests/acceptance/c0184/generic.spec.luau"] = {
++		PICKMAN_TEST_FENCE = "runs the copied runner as a top-level run",
++	},
+ 	-- c0114: one fence call in a fixture gets the hook folder cleared and the jail marker unset or set, to prove the
+ 	-- fence refuses a checkout with no hooks outside the jail; this run's own environment is never changed
+ 	["z-nile/tests/acceptance/c0114/guards.spec.luau"] = {
+@@ -225,13 +229,23 @@ local EXEMPT: { [string]: boolean } = {
+ -- fixtures copy only tests/ and z-nile/lib/) uses the roots c0114 shipped with; an engine that is there but fails to
+ -- load is an error, never a narrower scan (design review 002 F4).
+ local ROOTS: { string } = { "tracker", "z-nile/.tracker" }
++-- the folders that run as checks besides the root's scripts/ (c0120): every project's home, from the registry (c0184);
++-- a copy with no engine keeps the two homes c0120 shipped with
++local HOMES: { string } = { "z-nile", "pickman" }
+ -- the checkout's registry, read at its root (c0120: this spec also runs from pickman/, see `checkout`)
+ if fs.isFile(`{checkout}/z-nile/engine/projects.luau`) then
+ 	local okP, lib = pcall(require, "@znile/engine/projects")
+ 	if not okP then
+ 		error(`repo-fence: z-nile/engine/projects.luau does not load: {lib}`)
+ 	end
+-	ROOTS = (lib :: any).roots((lib :: any).load(checkout))
++	local reg = (lib :: any).load(checkout)
++	ROOTS = (lib :: any).roots(reg)
++	HOMES = {}
++	for _, p in reg.projects do
++		if p.home ~= "." then
++			table.insert(HOMES, p.home)
++		end
++	end
+ end
+ -- c0640 lives in z-nile's tracker root since c0114; every root and state is listed so a move never unexempts it
+ local C0640_DIRS = { "z-nile/tests/acceptance/" .. C0640 }
+@@ -318,7 +332,8 @@ local function sources(): { string }
+ 		skip[r] = true
+ 	end
+ 	-- c0120: every home runs as a check (its specs, scripts, gate entry and forwarders)
+-	for _, dir in { "scripts", "z-nile", "pickman" } do
++	files("scripts", all, skip)
++	for _, dir in HOMES do
+ 		files(dir, all, skip)
+ 	end
+ 	local checks: { string } = {}

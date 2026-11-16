@@ -1,0 +1,16 @@
+# Harvest: R0044
+- design-review-001 F1: z-design/new-rules-migrate-existing-work
+- design-review-001 F2: zz-arch/client-triggered-reads-guarded
+- design-review-001 F3: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F4: one-off: the listener waited for drive only because of F1's write order, which F1's fix reversed
+- design-review-002 F1: zz-arch/one-id-per-thing
+- design-review-002 F2: zz-arch/one-id-per-thing
+- design-review-002 F3: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F4: z-design/restated-rules-move-together
+- design-review-003 F1: zz-arch/one-id-per-thing
+- design-review-003 F2: zz-arch/one-id-per-thing
+- design-review-003 F3: z-design/restated-rules-move-together
+- design-review-004 F1: z-design/spec-design-correspondence
+- design-review-004 F2: z-design/never-narrow-captured-scope
+- design-review-005 F1: z-design/prove-specs-pass-on-a-prototype
+- review-001 F1: one-off: two comment lines past StyLua's 110 columns, caught by the reviewer; format check is in the gate

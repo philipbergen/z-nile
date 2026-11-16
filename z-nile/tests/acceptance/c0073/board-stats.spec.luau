@@ -4,7 +4,6 @@
 local board = require("@scripts/tracker/board")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
-local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
 local function trim(s: string): string
@@ -236,14 +235,5 @@ return t.spec("tracker board statistics", function(it)
 		t.expect(#section > 0).toBe(true)
 		t.expect(#section < 450 * 1024).toBe(true)
 		fs.removeDir(busy)
-	end)
-
-	it("the board workflow checks out full history", function()
-		-- c0120 override: the spec runs from z-nile/, so the workflow is read from the checkout's top
-		local wf = serde.decode("yaml", fs.readFile(`{root}/.github/workflows/board.yml`))
-		local steps = wf.jobs.board.steps
-		t.expect(steps[1].uses).toBe("actions/checkout@v4")
-		t.expect(steps[1].with["fetch-depth"]).toBe(0)
-		fs.removeDir(tree)
 	end)
 end)

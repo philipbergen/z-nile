@@ -12,7 +12,7 @@ done
 check "RC0: acceptance specs will survive promotion into tests/" ../zn promote-check R0025
 
 check "RC1: no make-prompt or ./zn launch remains in the skills, docs, templates or scripts" bash -c '
-  bad=$(grep -rnF -e "make-prompt" -e "./zn launch" .claude ../AGENTS.md ../SETUP.md ./templates scripts || true)
+  bad=$(grep -rnF -e "make-prompt" -e "./zn launch" skills ../pickman/skills ../AGENTS.md ../SETUP.md ./templates scripts) || [ $? -eq 1 ] || { echo "a folder this scan reads is missing"; exit 1; }
   [ -z "$bad" ] || { echo "$bad"; exit 1; }'
 check "RC3: .gitignore ignores every readied raft's prompt.md" grep -qxF "/tracker/rafts/active/*/prompt.md" ../.gitignore
 check "RC4: the usage text lists ready, stop and prompt <R-id> [--path], and no launch" bash -c '

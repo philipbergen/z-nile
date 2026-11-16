@@ -27,11 +27,15 @@ local function copyTree(): string
 		fs.removeDir(TREE)
 	end
 	fs.writeDir(TREE)
-	local listed = process.exec(
-		"git",
-		{ "ls-files", "-co", "--exclude-standard", "zn", "scripts", "z-nile", "pickman/.tracker" },
-		{ cwd = TOP }
-	)
+	-- c0183 override: every registered root, so the fence (which refuses a home missing from the tree) finds each
+	-- home
+	local args = { "ls-files", "-co", "--exclude-standard", "zn", "scripts", "z-nile" }
+	for _, root in projects.roots(projects.load(TOP)) do
+		if root ~= "z-nile/.tracker" then
+			table.insert(args, root)
+		end
+	end
+	local listed = process.exec("git", args, { cwd = TOP })
 	t.expect(listed.ok).toBe(true)
 	for path in string.gmatch(listed.stdout, "[^\n]+") do
 		if fs.isFile(`{TOP}/{path}`) then

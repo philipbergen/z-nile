@@ -1,0 +1,19 @@
+- design-review-001 F1: z-design/spec-design-correspondence
+- design-review-001 F2: z-design/restated-rules-move-together
+- design-review-001 F3: z-design/quote-other-preps-before-promising
+- note user 2026-10-27, c0172 does not wait on c0117's ruleset: z-design/quote-other-preps-before-promising
+- design-review-001 F4: z-design/prove-specs-pass-on-a-prototype
+- design-review-002 F1: z-design/restated-rules-move-together
+- design-review-002 F2: z-design/quote-other-preps-before-promising
+- design-review-002 F3: z-design/never-narrow-captured-scope
+- design-review-003 F1: zz-test/seed-every-enumerated-case
+- design-review-003 F2: zz-test/pin-call-site-arguments
+- design-review-003 F3: zz-test/guards-move-with-the-working-directory
+- design-review-003 F4: z-design/restated-rules-move-together
+- design-review-003 F5: zz-test/seed-every-enumerated-case
+- design-review-003 F6: z-design/spec-design-correspondence
+- design-review-004 F1: zz-test/seed-every-enumerated-case
+- design-review-004 F2: zz-test/pin-call-site-arguments
+- design-review-004 F3: z-design/restated-rules-move-together
+- design-review-004 F4: one-off: the one-second gap is two os.time samples in this fake, not a set another raft walks
+- design-review-005 F1: z-design/prove-specs-pass-on-a-prototype

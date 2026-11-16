@@ -1,0 +1,6 @@
+
+=== c0279 check.sh
+PASS  AC1: the stop and cap cases prove the kill by the grandchild's pid, the stall limit only a real stall reaches, the fakes hold
+PASS  AC2: with the fakes delayed 3 s the whole dispatch spec passes
+PASS  AC3: the dispatch-cli spec is the reviewed text and differs from main by exactly the reviewed diff
+---- 3/3 criteria passed

@@ -14,11 +14,14 @@ local Movement = require("@logic/Movement")
 local Pellets = require("@logic/Pellets")
 local Session = require("@logic/Session")
 local t = require("@tests/lib/t")
+-- c0176: the shipped rules less f0147's ramp, so these cases keep the classic level 1 and the last pellet's clear
+local CLASSIC_GAME = table.clone(Session.GAME_CONFIG) :: any
+CLASSIC_GAME.ramp = nil
 
 local classic = Maze.layout("classic")
 
 local function new(): Session.Session
-	local s = Session.new(classic, 1, Session.GAME_CONFIG)
+	local s = Session.new(classic, 1, CLASSIC_GAME)
 	Session.join(s, "p")
 	return s
 end
@@ -289,7 +292,7 @@ return t.spec("f0101 the hop in a session", function(it)
 	end)
 
 	it("each player has their own hop", function()
-		local s = Session.new(classic, 1, Session.GAME_CONFIG)
+		local s = Session.new(classic, 1, CLASSIC_GAME)
 		Session.join(s, "p")
 		Session.join(s, "q")
 		for _ = 1, 101 do
@@ -398,7 +401,7 @@ return t.spec("f0101 the hop in a session", function(it)
 	end)
 
 	it("a take-off catch forgets only that player's hop", function()
-		local s = Session.new(classic, 1, Session.GAME_CONFIG)
+		local s = Session.new(classic, 1, CLASSIC_GAME)
 		Session.join(s, "p")
 		Session.join(s, "q")
 		for _ = 1, 101 do

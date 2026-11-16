@@ -1,0 +1,6 @@
+# c0170 design refute 003
+
+- F1: fixed: `local deps: { string } = g.deps[file] or {}` in tiers.luau; the full gate (every project, types included) rerun on a committed clone after the fix: pickman 1510, z-nile 1265 passed, 0 failed. consequences: E5 records the run and its date.
+- F2: fixed: AC5 runs the selector from the root with the home and `tests/` added inside its function (`h=pickman`, `"$h/tests/$1"`), so check-paths sees no literal path missing from pickman/; z-nile's `c0120/check-paths.spec` in the prep worktree: 4 passed; AC5 passes in a clone built by the steps. consequences: a comment in check.sh says why; Design records it.
+- F3: fixed: tiers follows what a spec reaches through `tests/` files outside `tests/lib/` (fixtures, sibling modules), with a visited set; a unit spec may reach no helper but t, a helper spec's fixtures may reach only its own helper and t; `src/` and `tests/lib/` end a path. consequences: a tiers.spec case (a fixture, a sibling module in a cycle, a helper's fixture reaching another helper, a feature's own requires not counted); mutants Q1 (direct deps only), Q2 (through-fixture check removed), Q3 (only fixtures followed), run, killed.
+- F4: fixed: AC2's label and text say the tier case hands tiers the whole graph; selection is AC5. consequences: none.

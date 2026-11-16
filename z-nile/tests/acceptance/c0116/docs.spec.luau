@@ -44,8 +44,8 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 			"z-design makes no raft: it ends at a prepared issue with no raft, and z-raft groups it later.",
 			w
 		)
-		at(s, "It writes `design-review-NNN.md` in the issue's folder.", w)
-		at(s, "`./zn spend <id> --phase design-review --time <reviewer minutes>", w)
+		at(s, "It writes `design-review-001.md` in the issue's folder", w)
+		at(s, "`./zn spend <id> --phase design-review --note design-review-NNN`", w)
 		at(s, "to `harvest.md` in the issue's folder", w)
 		at(s, "`./zn promote-check <id>`", w)
 		at(s, "`./zn lessons --uncovered <id>`", w)
@@ -58,7 +58,7 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 			"An issue already in a raft is redesigned through its raft: the claim refuses it until z-raft takes it out (`./zn unfold <R-id> <id>`).",
 			w
 		)
-		at(s, "`./zn spend <id> --phase prep --time", w)
+		at(s, "`./zn spend <id> --phase prep`", w)
 		at(s, "- **Next step**: `/z-raft` (it groups prepared issues), then `/z-ready <R-id>`.", w)
 	end)
 
@@ -134,7 +134,7 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 			)
 			at(s, "zz-review skill in **raft mode**", w)
 			at(s, "this skill never edits a member's design", w)
-			at(s, "One round per grouping", w)
+			at(s, "One challenge of this record", w)
 			at(s, "a review file is never edited after it is written", w)
 			at(s, "an `unfold` alone needs none", w)
 			at(s, "the engine refuses the raft until a review quotes the new record", w)
@@ -215,7 +215,7 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
 		local review = read(`{SKILLS}/zz-review/SKILL.md`)
 		at(review, "## Raft mode (from z-raft)", "zz-review")
 		at(review, "as `Grouped: [<the value>]`", "zz-review")
-		at(review, "Never edit a review once it is written: a new round is a new file.", "zz-review")
+		at(review, "Never edit a review once it is written.", "zz-review")
 		at(
 			review,
 			"- Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue)",

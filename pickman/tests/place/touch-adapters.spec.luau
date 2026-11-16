@@ -7,6 +7,7 @@ local Blaster = require("@logic/Blaster")
 local Hop = require("@logic/Hop")
 local Maze = require("@logic/Maze")
 local Movement = require("@logic/Movement")
+local Pad = require("@logic/Pad")
 local Touch = require("@logic/Touch")
 local View = require("@logic/View")
 local luau = require("@lune/luau")
@@ -153,6 +154,7 @@ local function start(rect: Touch.Rect?, keys: Keys?): World
 	}
 	local modules: { [string]: any } = {
 		["@game/ReplicatedStorage/Shared/Logic/Blaster"] = Blaster,
+		["@game/ReplicatedStorage/Shared/Logic/Pad"] = Pad,
 		["@game/ReplicatedStorage/Shared/Logic/Hop"] = Hop,
 		["@game/ReplicatedStorage/Shared/Logic/Maze"] = Maze,
 		["@game/ReplicatedStorage/Shared/Logic/Movement"] = Movement,
@@ -276,24 +278,38 @@ return t.spec("touch adapters", function(it)
 		return { up = up, down = down, left = left, right = right }
 	end
 
-	it("Controls binds exactly the keys of View.KEYS and sinks every one", function()
-		local w = start(nil)
-		local names = {}
-		for _, code in w.bound.codes do
-			table.insert(names, code.Name)
+	it(
+		"Controls binds exactly the keys of View.KEYS and Pad.BUTTONS, and sinks every one but the pad's continue",
+		function()
+			local w = start(nil)
+			local names = {}
+			for _, code in w.bound.codes do
+				table.insert(names, code.Name)
+			end
+			table.sort(names)
+			local wantNames = {}
+			for name in View.KEYS do
+				table.insert(wantNames, name)
+			end
+			for name in Pad.BUTTONS do
+				table.insert(wantNames, name)
+			end
+			table.sort(wantNames)
+			t.expect(names).toEqual(wantNames)
+			for name in View.KEYS do
+				t.expect(press(w, name, "Begin")).toBe(w.enum.ContextActionResult.Sink)
+				t.expect(press(w, name, "End")).toBe(w.enum.ContextActionResult.Sink)
+			end
+			-- the pad's buttons too (R0058 review 001 F5): sunk, but the continue passed on, going down and up
+			for name in Pad.BUTTONS do
+				local want = if name == Pad.CONTINUE
+					then w.enum.ContextActionResult.Pass
+					else w.enum.ContextActionResult.Sink
+				t.expect(press(w, name, "Begin")).toBe(want)
+				t.expect(press(w, name, "End")).toBe(want)
+			end
 		end
-		table.sort(names)
-		local wantNames = {}
-		for name in View.KEYS do
-			table.insert(wantNames, name)
-		end
-		table.sort(wantNames)
-		t.expect(names).toEqual(wantNames)
-		for name in View.KEYS do
-			t.expect(press(w, name, "Begin")).toBe(w.enum.ContextActionResult.Sink)
-			t.expect(press(w, name, "End")).toBe(w.enum.ContextActionResult.Sink)
-		end
-	end)
+	)
 
 	it("Controls sends W A S D as movement intents on the key going down only", function()
 		local w = start(nil)

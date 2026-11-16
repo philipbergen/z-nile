@@ -1,0 +1,8 @@
+- design-review-001 F1: zz-test/dry-run-promoted-specs-under-the-guard-scan
+- design-review-001 F2: zz-test/timing-margins-above-jitter
+- design-review-001 F3: zz-test/seams-feed-inputs-never-add-branches
+- design-review-001 F4: zz-test/specs-never-burn-real-resources
+- design-review-001 F5: z-design/limits-name-the-iterations-they-count
+- design-review-001 F6: z-design/quote-other-preps-before-promising
+- design-review-001 F7: z-design/instructions-runnable-where-they-run
+- design-review-001 F8: one-off: the seam parse's exact pattern, fixed in the regex and its case

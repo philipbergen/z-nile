@@ -2,16 +2,26 @@
 -- c0114 AC9: the skills, AGENTS.md, SETUP.md and the templates name `./zn` and the moved paths, never the old ones
 -- (scripts/tracker.sh is named once, as the forwarder), and they state the project-root rules the engine follows.
 local fs = require("@lune/fs")
+local projects = require("@znile/engine/projects")
 -- c0120 override: the spec runs from z-nile/, its home, after the move
 local process = require("@lune/process")
 local serde = require("@lune/serde")
+local skills = require("@znile/engine/skills")
 local t = require("@tests/lib/t")
 
--- c0115 override: the skills' real folders, z-nile's and pickman's (never through the .claude/skills links); each
+-- c0184 override: the skills' folders come from the one reader of them, over the registry's projects
+local function skillBases(top: string): { string }
+	local out: { string } = {}
+	for _, folder in skills.folders(projects.load(top)) do
+		table.insert(out, folder.path)
+	end
+	return out
+end
+-- c0115 override: the skills' real folders, every project's (never through the .claude/skills links); each
 -- entry is a repository-relative skill folder ("z-nile/skills/zz-rules")
 local function skillDirs(top: string): { string }
 	local out = {}
-	for _, base in { "z-nile/skills", "pickman/skills" } do
+	for _, base in skillBases(top) do
 		local names = fs.readDir(`{top}/{base}`)
 		table.sort(names)
 		for _, name in names do
@@ -159,7 +169,7 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 		-- c0120 override: the spec runs from z-nile/, its home: the checkout's files are read from the top
 		at(
 			raft,
-			'check "RC0: project gate passes (full)" "$ZN_ROOT/z-nile/check.sh" --project {{PROJECT}} --full'
+			'check "RC0: project gate passes (affected)" "$ZN_ROOT/z-nile/check.sh" --project {{PROJECT}} --affected'
 		)
 		at(raft, 'for dir in $("$ZN_ROOT/zn" members {{ID}}); do')
 		at(raft, '"$ZN_ROOT/zn" promote-check {{ID}}')
@@ -191,7 +201,8 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 		)
 		at(make, "Tooling work (the tracker, the gate, the guards, the skills, CI) is `--project z-nile`")
 		-- c0120 override: pickman has its folder now, pickman/; at the root game work still names --project pickman
-		at(make, "game work is `--project pickman`, or a capture run in `pickman/`")
+		-- c0183 override: a game's, the portal's or the library's work is its own project's, pickman one of them
+		at(make, "the work of a game, the portal or the arcade library is its project's (`--project pickman`")
 		at(tracker, "the directory gives the project unless `--project` names one")
 		at(
 			tracker,
@@ -243,9 +254,8 @@ return t.spec("c0114 the docs name ./zn and the moved paths", function(it)
 				end
 			end
 			t.expect(old > 0).toBe(true)
-			-- the hooks are unchanged: they still run scripts/hooks/
-			t.expect(settings.hooks.Stop[1].hooks[1].command)
-				.toBe('"$CLAUDE_PROJECT_DIR"/scripts/hooks/stop.sh')
+			-- the Stop gate is gone; the other hooks still run scripts/hooks/
+			t.expect(settings.hooks.Stop).toBe(nil)
 			t.expect(settings.hooks.PostToolUse[1].hooks[1].command)
 				.toBe('"$CLAUDE_PROJECT_DIR"/scripts/hooks/post-edit.sh')
 		end

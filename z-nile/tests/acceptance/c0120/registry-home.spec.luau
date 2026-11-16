@@ -28,12 +28,17 @@ return t.spec("c0120 every project's home is the folder holding its root", funct
 			local reg, err = projects.parse(fs.readFile(`{TOP}/z-nile/projects.toml`))
 			t.expect(err).toBe(nil)
 			local r = reg :: projects.Registry
-			t.expect(r.projects).toEqual({
-				{ name = "pickman", root = "pickman/.tracker", home = "pickman" },
-				{ name = "z-nile", root = "z-nile/.tracker", home = "z-nile" },
-			})
+			-- c0183 override: the rule, not today's list (more projects follow the first two)
+			t.expect(r.projects[1]).toEqual({ name = "pickman", root = "pickman/.tracker", home = "pickman" })
+			t.expect(r.projects[2]).toEqual({ name = "z-nile", root = "z-nile/.tracker", home = "z-nile" })
+			local rootsInOrder: { string } = {}
+			for _, p in r.projects do
+				t.expect(p).toEqual({ name = p.name, root = `{p.name}/.tracker`, home = p.name })
+				table.insert(rootsInOrder, p.root)
+			end
 			t.expect(r.retired).toEqual({ "tracker" })
-			t.expect(projects.allRoots(r)).toEqual({ "pickman/.tracker", "z-nile/.tracker", "tracker" })
+			table.insert(rootsInOrder, "tracker")
+			t.expect(projects.allRoots(r)).toEqual(rootsInOrder)
 			-- no project's home is the repository root
 			for _, p in r.projects do
 				t.expect(p.home ~= ".").toBe(true)
@@ -88,7 +93,13 @@ return t.spec("c0120 every project's home is the folder holding its root", funct
 		function()
 			local r = process.exec("lune", { "run", "z-nile/roots", "--", "--projects" }, { cwd = TOP })
 			t.expect(r.ok).toBe(true)
-			t.expect(r.stdout).toBe("pickman\tpickman\tpickman/.tracker\nz-nile\tz-nile\tz-nile/.tracker\n")
+			-- c0183 override: one line per registered project, in registry order, derived from the registry
+			local reg = projects.parse(fs.readFile(`{TOP}/z-nile/projects.toml`)) :: projects.Registry
+			local want = ""
+			for _, p in reg.projects do
+				want ..= `{p.name}\t{p.home}\t{p.root}\n`
+			end
+			t.expect(r.stdout).toBe(want)
 		end
 	)
 end)

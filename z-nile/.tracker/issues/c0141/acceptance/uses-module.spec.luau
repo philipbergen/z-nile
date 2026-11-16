@@ -14,7 +14,10 @@ return t.spec("c0141 c0120's check-paths spec runs the module's scan", function(
 		local function has(needle: string): boolean
 			return string.find(code, needle, 1, true) ~= nil
 		end
-		t.expect(has('require("./checkpaths")')).toBe(true)
+		-- the needle is built from parts, so the require graph's scanner doesn't read it as a require of this spec
+		-- (c0160's designer found that `./checkpaths` doesn't resolve from tests/acceptance/c0141/)
+		local REQ = "req" .. "uire"
+		t.expect(has(REQ .. '("./checkpaths")')).toBe(true)
 		-- the wrapper's body is the module's scan
 		t.expect(
 			string.match(code, "local function scanFrom%([^)]*%)[^\n]*\n%s*return checkpaths%.scan%(base,")

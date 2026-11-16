@@ -1,0 +1,10 @@
+- design-review-001 F1: z-design/mutation-runner-runs-correct-variants, zz-test/source-pins-name-what-the-design-names
+- design-review-001 F2: z-design/quote-other-preps-before-promising
+- design-review-001 F3: z-design/mutation-runner-runs-correct-variants
+- note c0155 design review 001 F2 and F3 (assertion anchor, check-line test) applied to this spec before its first round: zz-test/no-vacuous-pass
+- design-review-002 F1: z-design/quote-other-preps-before-promising
+- design-review-002 F2: zz-test/source-pins-name-what-the-design-names
+- design-review-002 F3: z-design/rerun-skipped-checks-after-edits
+- design-review-003 F1: z-design/spec-design-correspondence
+- design-review-003 F2: z-design/spec-design-correspondence
+- design-review-003 F3: z-design/rerun-skipped-checks-after-edits

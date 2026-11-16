@@ -1,0 +1,54 @@
+diff --git a/z-nile/tests/lib/fakecli.luau b/z-nile/tests/lib/fakecli.luau
+--- a/z-nile/tests/lib/fakecli.luau
++++ b/z-nile/tests/lib/fakecli.luau
+ 		[[[ -z "${FAKE_DELAY:-}" ] || sleep "$FAKE_DELAY"]],
+ 		'step=$(printf "%s" "$*" | sed -n "s/.*z-nile step \\([a-z-]*\\).*/\\1/p" | head -n 1)',
+ 		'id=$(printf "%s" "$*" | sed -n "s/.* for \\([cfdR][0-9][0-9][0-9][0-9]\\).*/\\1/p" | head -n 1)',
++		-- the step's CLI has started (a builtin redirection: nothing is spawned); an author holds its keepalive on it
++		'[ -z "$step" ] || : > "$FAKE_DIR/started.$step"',
+ 		'mode=ok; [ -f "$FAKE_DIR/' .. cli .. '" ] && mode=$(cat "$FAKE_DIR/' .. cli .. '")',
+ 		'[ -f "$FAKE_DIR/' .. cli .. '.$step" ] && mode=$(cat "$FAKE_DIR/' .. cli .. '.$step")',
+ 		'{ echo "'
+ 		"stall) echo 'thinking'; sleep 20 ;;",
+ 		-- a cursor stream with no model_call_id at all: four turns, then quiet (the call cap can't be trusted)
+ 		[[noids) for c in 1 2 3 4; do echo '{"type":"thinking","subtype":"delta"}'; echo '{"type":"tool_call","subtype":"started","call_id":"x'$c'"}'; echo '{"type":"tool_call","subtype":"completed","call_id":"x'$c'"}'; done; sleep 20 ;;]],
+-		-- a detached process pushes code to main after the step has ended (a later run accepts main as it is)
+-		[[late) git fetch -q origin main; git checkout -q -B late FETCH_HEAD; echo late > late.lua; git add late.lua; git -c user.name=c0117-fake -c user.email=c0117-fake@example.invalid commit -q -m late; perl -e 'setpgrp(0,0); exec @ARGV' sh -c "sleep 1; \"$ZN_REAL_GIT\" push -q origin HEAD:main" > /dev/null 2>&1 < /dev/null & ]]
++		-- a detached process pushes code to main after the step has ended: it waits (at least 60 s) for the spec's
++		-- <fakes>/late-go, written once the step's run has returned, and pushes only then (a later run accepts main as it is)
++		[[late) git fetch -q origin main; git checkout -q -B late FETCH_HEAD; echo late > late.lua; git add late.lua; git -c user.name=c0117-fake -c user.email=c0117-fake@example.invalid commit -q -m late; perl -e 'setpgrp(0,0); exec @ARGV' sh -c 'n=0; while [ ! -f "$FAKE_DIR/late-go" ] && [ $n -lt 600 ]; do sleep 0.1; n=$((n+1)); done; [ -f "$FAKE_DIR/late-go" ] && "$ZN_REAL_GIT" push -q origin HEAD:main' > /dev/null 2>&1 < /dev/null & ]]
+ 			.. OK.claude
+ 			.. " ;;",
+ 		-- three model calls (distinct model_call_id), then quiet: a cursor step's max_calls is what stops it
+ 		-- in a stall, never in the exit it would otherwise reach
+ 		[[stop) echo '{"type":"system"}'; sh -c 'echo $$ > "$FAKE_DIR/grandchild-stop.pid"; exec sleep 3600' & n=0; while [ ! -s "$FAKE_DIR/grandchild-stop.pid" ] && [ $n -lt 600 ]; do sleep 0.1; n=$((n+1)); done; sleep ${FAKE_DELAY:-0}; ./zn dispatch stop "$FAKE_STOP" >> "$FAKE_DIR/log" 2>&1; sleep 3600 ;;]],
+ 		-- the dispatcher dies mid-step: the supervisor's lifeline kills the group
+-		'orphan) ( sleep 3; touch "$FAKE_DIR/grandchild-orphan" ) & echo \'{"type":"system"}\'; kill -9 "$ZN_DISPATCHER_PID"; sleep 20 ;;',
++		-- the grandchild records its pid and outlives any wait, and the step holds an hour: only the lifeline ends them
++		[[orphan) sh -c 'echo $$ > "$FAKE_DIR/grandchild-orphan.pid"; exec sleep 3600' & n=0; while [ ! -s "$FAKE_DIR/grandchild-orphan.pid" ] && [ $n -lt 600 ]; do sleep 0.1; n=$((n+1)); done; echo '{"type":"system"}'; kill -9 "$ZN_DISPATCHER_PID"; sleep 3600 ;;]],
+ 		'ticket) ( while :; do echo \'{"type":"system"}\'; sleep 0.5; done ) & hb=$!; ./zn new issue c dispatched-thing --project pickman --desc \'from the fake\' >> "$FAKE_DIR/log" 2>&1; kill $hb; '
+ 			.. ok
+ 			.. " ;;",
+ 		'script) ( while :; do echo \'{"type":"system"}\'; sleep 0.5; done ) & hb=$!; id="$id" step="$step" sh "$FAKE_DIR/script.sh" >> "$FAKE_DIR/log" 2>&1; echo "script=$?" >> "$FAKE_DIR/log"; kill $hb; '
+ 			.. ok
+ 			.. " ;;",
+-		-- an author that runs a tool (its review, one shell command) and waits on it in silence, as a real CLI does
+-		[[waitreview) echo '{"type":"assistant","message":{"id":"m9","content":[{"type":"tool_use","id":"t1","name":"Bash"}]}}'; ./zn dispatch zz-review "$id" --mode design >> "$FAKE_DIR/log" 2>&1; echo "review=$?" >> "$FAKE_DIR/log"; echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}'; ]]
++		-- an author that runs a tool (its review, one shell command) and waits on it in silence, as a real CLI does, once
++		-- the review's CLI has started: until then a keepalive covers the nested ./zn's start (FAKE_START_DELAY seconds
++		-- longer when set: a check.sh run simulates a slow start with it)
++		[[waitreview) echo '{"type":"assistant","message":{"id":"m9","content":[{"type":"tool_use","id":"t1","name":"Bash"}]}}'; ( n=0; while [ ! -f "$FAKE_DIR/started.zz-review" ] && [ $n -lt 1200 ]; do echo '{"type":"system"}'; sleep 0.5; n=$((n+1)); done ) & hb=$!; [ -z "${FAKE_START_DELAY:-}" ] || sleep "$FAKE_START_DELAY"; ./zn dispatch zz-review "$id" --mode design >> "$FAKE_DIR/log" 2>&1; echo "review=$?" >> "$FAKE_DIR/log"; kill $hb 2>/dev/null; echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}'; ]]
+ 			.. ok
+ 			.. " ;;",
+ 		-- a reviewer that works for 16 s, printing every second, then writes its review
+ 		'slowreview) for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do echo \'{"type":"system"}\'; sleep 1; done; printf "# Review 001\\n\\nVerdict: approve\\n" > "$ZN_DISPATCH_DIR/review.md"; '
+ 			.. ok
+ 			.. " ;;",
+-		-- an author that waits on its review outside any tool call (its own limit is stall_seconds)
+-		[[waitplain) echo '{"type":"system"}'; ./zn dispatch zz-review "$id" --mode design >> "$FAKE_DIR/log" 2>&1; echo "review=$?" >> "$FAKE_DIR/log"; ]]
++		-- an author that waits on its review outside any tool call (its own limit is stall_seconds), in silence once the
++		-- review's CLI has started (the same keepalive as waitreview's before that)
++		[[waitplain) echo '{"type":"system"}'; ( n=0; while [ ! -f "$FAKE_DIR/started.zz-review" ] && [ $n -lt 1200 ]; do echo '{"type":"system"}'; sleep 0.5; n=$((n+1)); done ) & hb=$!; [ -z "${FAKE_START_DELAY:-}" ] || sleep "$FAKE_START_DELAY"; ./zn dispatch zz-review "$id" --mode design >> "$FAKE_DIR/log" 2>&1; echo "review=$?" >> "$FAKE_DIR/log"; kill $hb 2>/dev/null; ]]
+ 			.. ok
+ 			.. " ;;",
+ 		-- a reviewer silent for 18 s inside one tool call (within its tool_seconds), then its review

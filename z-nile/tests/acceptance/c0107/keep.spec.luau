@@ -68,6 +68,8 @@ vm.createContext(sandbox);
 for (const s of scripts) if (!/type="application\/json"/.test(s[1])) { loadingAt = s.index; vm.runInContext(s[2], sandbox); }
 loadingAt = -1;
 doc.dispatch("DOMContentLoaded", { target: doc, preventDefault() {} });
+// c0118: the page opens on the Board view; these cases drive the Rafts and Issues lists, so they open Rafts first
+els["tab-rafts"].dispatch("click", { target: els["tab-rafts"], preventDefault() {} });
 const out = { pane: els.pane.innerHTML };
 els.search.value = "f9100";
 els.search.dispatch("keydown", { key: "Enter", target: els.search });
@@ -123,8 +125,9 @@ return t.spec("c0107 board keep", function(it)
 		t.expect(string.find(nav, 'id="tab-issues"', 1, true) ~= nil).toBe(true)
 	end)
 
-	it("the tracker skill's board row names Rafts, Issues and mix, and still names the artifact", function()
+	it("the tracker skill's board row names Rafts and Issues, and the local page", function()
 		-- c0120 override: the skill is read from the checkout's top
+		-- c0172 override: the board is the local page. The artifact tokens are gone.
 		local row = ""
 		for line in string.gmatch(fs.readFile(`{TOP}/z-nile/skills/zz-rules/SKILL.md`), "[^\n]+") do
 			if string.sub(line, 1, 10) == "| board | " then
@@ -137,8 +140,12 @@ return t.spec("c0107 board keep", function(it)
 		t.expect((string.find(row, "not a fourth tab", 1, true))).toBe(nil)
 		t.expect(string.find(row, "mix", 1, true) ~= nil).toBe(true)
 		t.expect((string.find(row, "Tabs Active / Waiting / Done", 1, true))).toBe(nil)
+		t.expect(
+			string.find(row, "The board is the local page; GitHub Actions does not build it.", 1, true) ~= nil
+		)
+			.toBe(true)
 		for _, token in { "board.yml", "tracker-board", "gh run download", "rm -rf .cache/board-ci" } do
-			t.expect(string.find(row, token, 1, true) ~= nil).toBe(true)
+			t.expect((string.find(row, token, 1, true))).toBe(nil)
 		end
 	end)
 

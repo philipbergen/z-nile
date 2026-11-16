@@ -144,6 +144,33 @@ local function decide(m: Maze.Maze, s: State)
 	end
 end
 
+-- Distance in units to the next tile centre ahead, and that tile: 0 and the player's own tile when on a centre.
+function Movement.nextCentre(m: Maze.Maze, s: State): (number, Maze.Tile)
+	if s.progress == 0 then
+		return 0, { x = s.tile.x, y = s.tile.y }
+	end
+	return UNITS - s.progress, (Maze.neighbor(m, s.tile, s.heading))
+end
+
+-- Stops the player where they stand, on a tile centre (a wall pick, f0126): no buffered turn survives it, and the
+-- straight run starts over. Refuses a player between centres.
+function Movement.halt(s: State)
+	if s.progress ~= 0 then
+		error("movement: halt between tile centres", 0)
+	end
+	s.moving = false
+	s.run = 0
+	s.leftCentre = false
+	clearBuffer(s)
+end
+
+-- Lets a halted player go on: moving again when the way ahead is open, still stopped facing a wall.
+function Movement.resume(m: Maze.Maze, s: State)
+	if s.progress == 0 and not s.moving then
+		s.moving = open(m, s.tile, s.heading)
+	end
+end
+
 function Movement.step(m: Maze.Maze, s: State, intents: { Intent }, c: Config): { Event }
 	local wasMoving = s.moving
 	local before = Movement.occupied(m, s)

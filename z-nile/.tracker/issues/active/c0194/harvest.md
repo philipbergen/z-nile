@@ -1,0 +1,49 @@
+- design-review-001 F1: zz-test/guards-move-with-the-working-directory
+- design-review-001 F2: z-design/accepted-risks-checked-and-decided
+- design-review-001 F3: z-design/run-the-other-rafts-specs
+- design-review-001 F4: z-design/rerun-skipped-checks-after-edits
+- design-review-001 F5: zz-test/guard-needs-its-own-case
+- design-review-001 F6: z-design/never-narrow-captured-scope
+- design-review-001 F7: zz-arch/lock-reads-live-state
+- design-review-001 F8: z-design/spec-design-correspondence
+- design-review-001 F9: zz-rules/exhaustive-lists-name-new-things
+- design-review-001 F10: z-design/restated-rules-move-together
+- design-review-001 F11: zz-arch/guard-state-out-of-reach-or-checked
+- design-review-001 F12: z-design/quote-other-preps-before-promising
+- design-review-001 F13: one-off: a clustered short option in a 24-line shim
+- design-review-001 F14: one-off: stderr folded into a captured value in one hook
+- design-review-001 F15: z-design/restated-rules-move-together
+- note user 2026-11-01 "Jail the clone" and "c0194 first": z-design/accepted-risks-checked-and-decided, z-design/run-the-other-rafts-specs
+- note prep (the premise that TMPDIR moves a plain mktemp on macOS was false; the answer was one free experiment): z-design/probe-free-cli-lines-in-prep
+- design-review-002 F1: z-design/instructions-runnable-where-they-run
+- design-review-002 F2: z-design/instructions-runnable-where-they-run
+- design-review-002 F3: z-design/run-the-other-rafts-specs
+- design-review-002 F4: zz-test/guard-needs-its-own-case
+- design-review-002 F5: z-design/required-steps-on-every-path
+- design-review-002 F6: zz-rules/exhaustive-lists-name-new-things
+- design-review-002 F7: zz-arch/guard-no-is-explicit
+- design-review-002 F8: z-design/restated-rules-move-together
+- design-review-003 F1: z-design/instructions-runnable-where-they-run
+- design-review-003 F2: z-design/accepted-risks-checked-and-decided
+- design-review-003 F3: zz-test/guard-needs-its-own-case
+- design-review-003 F4: zz-test/guard-needs-its-own-case
+- design-review-003 F5: zz-arch/one-reader-per-format
+- design-review-003 F6: z-design/prove-specs-pass-on-a-prototype
+- design-review-003 F7: z-design/restated-rules-move-together
+- design-review-003 F8: z-design/new-refusals-reach-every-caller
+- note proposed new lesson z-design/read-why-before-moving-a-guard (full text in experiments/proposed-lessons.md): z-design/accepted-risks-checked-and-decided
+- note proposed new lesson zz-test/sequestered-allowlists-match-fragments (full text in experiments/proposed-lessons.md): zz-test/guard-needs-its-own-case
+- note proposed new lesson z-design/read-back-every-prototype-edit (full text in experiments/proposed-lessons.md): z-design/rerun-skipped-checks-after-edits
+- design-review-004 F1: z-design/spec-design-correspondence, zz-test/jail-allows-name-folders
+- note proposed new lesson zz-test/jail-allows-name-folders (full text in experiments/proposed-lessons.md): z-design/spec-design-correspondence
+- design-review-004 F2: z-design/restated-rules-move-together
+- design-review-004 F3: z-design/mutation-runner-runs-correct-variants
+- design-review-004 F4: z-design/restated-rules-move-together
+- design-review-004 F5: zz-arch/one-reader-per-format, zz-arch/guard-no-is-explicit
+- design-review-005 F1: zz-test/specs-set-host-markers-explicitly, zz-test/live-jail-case-returns-off-host
+- note proposed new lesson zz-test/live-jail-case-returns-off-host (full text in experiments/proposed-lessons.md): zz-test/specs-set-host-markers-explicitly
+- design-review-005 F2: z-design/restated-rules-move-together
+- design-review-005 F3: zz-test/pin-fail-safes-where-they-act
+- note callers.spec's first allow-list named exact lines of tmp.luau, so a reworded line failed the scan with nothing an executor may edit: zz-test/sequestered-allowlists-match-fragments
+- note c0194's prep moved the runner's temp folder into .cache only after reading why R0210 review 004 F2 had kept it outside: z-design/read-why-before-moving-a-guard
+- note a scripted replace in c0194's prototype silently did not apply after the formatter reflowed its anchor, and round 1 F4 found the sweep printing nothing: z-design/read-back-every-prototype-edit

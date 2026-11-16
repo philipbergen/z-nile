@@ -5,6 +5,7 @@
 local Ghosts = require("@logic/Ghosts")
 local Maze = require("@logic/Maze")
 local Session = require("@logic/Session")
+local plain = require("@tests/lib/plain")
 local serde = require("@lune/serde")
 local t = require("@tests/lib/t")
 
@@ -142,8 +143,8 @@ return t.spec("f0310 ghosts in the snapshot and the frame", function(it)
 		local frame = Session.frame(s, "p")
 		t.expect(frame.ghosts).toEqual(snap.ghosts)
 		t.expect(type(frame.play)).toBe("table")
-		local text = serde.encode("json", frame :: any)
-		t.expect(serde.decode("json", text)).toEqual(frame)
+		-- c0153: plain data, and a JSON round trip within 1e-9 (Lune's JSON decoder can return a number one ulp off)
+		t.expect({ plain.roundTrip(frame, 1e-9) }).toEqual({ true })
 		-- four ghosts are a few hundred bytes a step
 		t.expect(#serde.encode("json", (frame :: any).ghosts) < 700).toBe(true)
 	end)

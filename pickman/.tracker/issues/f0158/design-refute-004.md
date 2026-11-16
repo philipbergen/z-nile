@@ -1,0 +1,4 @@
+# Refute 004: f0158 (design mode)
+
+- F1: fixed: the "ring has its own screen" source case is deleted, along with its `ScreenInsets` spelling needle and its count of `DisplayOrder =` assignments. The real-source case already reads the drawn Ring screen (ScreenInsets, IgnoreGuiInset, DisplayOrder < 0, the Danger screen's nil or 0), and now also compares FlowView's DisplayOrder (if set) with the drawn `ring.DisplayOrder`, and checks HudView's 1. Rows R11, R25 and R31 point there. Re-run on the prototype: R11 (DisplayOrder 2), R25 (DeviceSafeInsets) and R31 (DisplayOrder 0) each fail place (2 passed, 1 failed). The two correct adapters the review named, `gui.DisplayOrder = 0` on the Danger screen and the insets through a local, pass (3/0).
+- F2: fixed: E1 says ring 8, place 3, colors 3, clear 4. The Regression guard says c0159's fill, all five cases, is on main (#169, 311cce4c). The Test plan drops the deleted case.

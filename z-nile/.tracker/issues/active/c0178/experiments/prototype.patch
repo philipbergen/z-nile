@@ -1,0 +1,3204 @@
+diff --git a/z-nile/lib/image-key.pl b/z-nile/lib/image-key.pl
+new file mode 100644
+index 00000000..dd85bb2b
+--- /dev/null
++++ b/z-nile/lib/image-key.pl
+@@ -0,0 +1,57 @@
++#!/usr/bin/perl
++# The content key of a fixture image (c0178): one digest of what the image is built from.
++#   perl z-nile/lib/image-key.pl <root> [<path>...] [--skip <path>]... [--also <file>]... [--salt <text>]
++# Walks each <path> (a file or a folder, relative to <root>) and hashes every entry's relative path, whether a file is
++# executable, and its bytes; a symlink is hashed by its target text and never followed; a <path> that does not exist
++# is an error naming it. A path given after --skip, relative to <root>, is left out with everything under it.
++# Each --also file (an absolute path: the harness code that builds the image) is hashed by its bytes alone, and each
++# --salt text (something else the image depends on, such as a commit) by itself. Prints one
++# 40-hex digest and writes nothing. Exits 1, naming the path, on anything it cannot read.
++use strict;
++use warnings;
++use Digest::SHA;
++
++my $root = shift @ARGV;
++die "usage: image-key.pl <root> [<path>...] [--skip <path>]... [--also <file>]... [--salt <text>]\n" unless defined $root && @ARGV;
++my (@paths, @also, @salt, %skip);
++while (@ARGV) {
++    my $a = shift @ARGV;
++    if ($a eq '--skip' || $a eq '--also' || $a eq '--salt') {
++        my $v = shift @ARGV;
++        die "image-key: $a needs a value\n" unless defined $v;
++        if ($a eq '--skip') { $skip{$v} = 1 } elsif ($a eq '--also') { push @also, $v } else { push @salt, $v }
++    } else {
++        push @paths, $a;
++    }
++}
++my $all = Digest::SHA->new(1);
++sub file_digest {
++    my ($abs) = @_;
++    open(my $fh, '<:raw', $abs) or die "image-key: $abs: $!\n";
++    my $d = Digest::SHA->new(1);
++    $d->addfile($fh);
++    close $fh;
++    return $d->hexdigest;
++}
++sub add {
++    my ($rel) = @_;
++    return if $skip{$rel};
++    my $abs = "$root/$rel";
++    if (-l $abs) {
++        $all->add("L $rel -> " . readlink($abs) . "\n");
++    } elsif (-d $abs) {
++        opendir(my $dh, $abs) or die "image-key: $abs: $!\n";
++        my @names = sort grep { $_ ne '.' && $_ ne '..' } readdir $dh;
++        closedir $dh;
++        $all->add("D $rel\n");
++        add("$rel/$_") for @names;
++    } elsif (-f $abs) {
++        $all->add("F $rel " . (-x $abs ? "x" : "-") . " " . file_digest($abs) . "\n");
++    } else {
++        die "image-key: $abs: not found\n";
++    }
++}
++add($_) for @paths;
++$all->add("C " . file_digest($_) . "\n") for @also;
++$all->add("S $_\n") for @salt;
++print $all->hexdigest, "\n";
+diff --git a/z-nile/skills/zz-arch/SKILL.md b/z-nile/skills/zz-arch/SKILL.md
+index 5d60a654..0f539e03 100644
+--- a/z-nile/skills/zz-arch/SKILL.md
++++ b/z-nile/skills/zz-arch/SKILL.md
+@@ -12,7 +12,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
+ |---|---|
+ | `zn` | the command, at the repository root: it runs `z-nile/engine/main` |
+ | `z-nile/engine/` | the tracker engine. `main.luau` is the CLI: it parses arguments and does the git, file and process work. Every other module is one concern (`store`, `publish`, `projects`, `lessons`, `skills`, `trail`, …) |
+-| `z-nile/lib/` | what the gate, the runner and the engine share: `ac.sh` (every `check.sh`), `fence.sh` and `git-hooks/` (the repository guards), `par.sh`, `sh.luau`, `graph.luau`, `changed.luau` |
++| `z-nile/lib/` | what the gate, the runner and the engine share: `ac.sh` (every `check.sh`), `fence.sh` and `git-hooks/` (the repository guards), `par.sh`, `sh.luau`, `graph.luau`, `changed.luau`, `image-key.pl` (the content key of a fixture image) |
+ | `z-nile/skills/` | z-nile's skills: the pipeline (`z-…`) and the skills called from inside a step (`zz-…`), linked into `.claude/skills/` by `./zn skills` |
+ | `z-nile/templates/` | the item, raft and prompt templates |
+ | `z-nile/projects.toml` | the project registry: each project's name and root (its home is the folder holding the root) |
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index 14e8f252..dd9560c0 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -83,6 +83,7 @@ A standing rule, not a one-off. Tests and checks run very often, so they must ru
+ - **What exists**: `z-nile/lib/par.sh` runs the independent static stages together (`par_start` / `par_wait`: buffered, timed, reported in start order); `tests/run` runs spec files in concurrent workers (`--jobs N`, `PICKMAN_JOBS`), slowest first by the durations it records in the home's `.cache/spec-durations.tsv` (files with no recorded time first, ties by path; c0154), so a long spec no longer starts late and holds the gate open at the end; the report stays in path order, and a run in-process (`--jobs 1`, one file) neither reads nor writes the record. `PICKMAN_JOBS=1` restores serial runs when you suspect an ordering bug.
+ - **Monitor continuously**: every gate run prints per-stage times, a `slowest:` line and `gate wall time:`, and whoever runs it looks at them. A stage or spec that dominates, or a time that creeps up between runs, is a gate defect: **optimise** it now if it is in your Touched modules, otherwise file a chore (`./zn new issue c gate-slow-<what> --project z-nile`). Never add a serial dependency between stages without a reason.
+ - **Writing specs for speed**: no wall-clock assertions and no fixed sleeps to let something finish (a bounded poll or rendezvous with a timeout is fine). Shell-heavy fixtures own a unique `.cache/<name>` (a literal `.cache/<dir>` in two spec files under `tests/` fails the gate, a mere mention counts, and `sim` is exempt). No shared mutable state across spec files. Prefer in-process Logic specs, and split or stub a spec that takes more than about a second. Two suites in one checkout queue on the runner's lock; separate worktrees run in parallel (see "Specs never touch the real repository").
++- **Fixture images** (c0178): a fixture is cloned or copied from an image, never built again. `@tests/lib/images` keeps one folder per image under `images.dir()` (the home's `.cache/images`, per checkout), named `<kind>-<digest>` by a digest of what it is built from (file bytes, executable bits and the harness code) and published by one rename, so concurrent workers build it once and nobody sees half of one. `trackerfix.new` clones the packed seed repository (`engine.seed`; its options `copy` and `executable` cover what hand-built fixtures added), `engine.copy` copies the tooling tree (`engine.image`) with one `cp` and puts the seed's packs into a destination that is already a repository, and `clone.isolated` clones this checkout's repository from its image, with `paths` (and `tooling`) writing only the paths the spec reads to the working tree, and `engine.empty` keeping a sparse clone's staged tree the full clone's. A spec asks those, never `images.dir()`, and never writes into an image. `trackerfix`'s `other` clone is made, at the seed, when a fixture helper is first asked to work in it. A folder a helper registers with `@tests/lib/swept` is removed when its spec file passes (kept when a case failed; one that cannot be removed fails the run). `@tests/lib/tally` counts the files and processes the helpers write and start, and the runner prints `fixtures: N files written, M processes started` beside `slowest:` (a lower bound: the processes a fixture's own commands start are not counted). The launcher prunes `images.dir()` once per run, under the run's lock, before any spec starts (`pruning.run`; `ensure` removes nothing). The runner gives every spec a `GIT_TEMPLATE_DIR` with an empty `hooks/` and `info/` (a spec that writes into it is named and fails the run), so a `git init` or `git clone` writes no sample hook.
+ 
+ ## Specs never touch the real repository
+ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture git commands then ran in the real repository, removed `origin` for every session, and committed an agent's work onto a fixture branch. While these guards were being built, a spec run against the unguarded runner did it again: it rewrote the shared identity and committed onto a branch. So the repository a check runs in is off limits to every spec, `check.sh` and script a check runs.
+diff --git a/z-nile/tests/acceptance/c0001/tracker-lifecycle.spec.luau b/z-nile/tests/acceptance/c0001/tracker-lifecycle.spec.luau
+index bee6aa75..994537b1 100644
+--- a/z-nile/tests/acceptance/c0001/tracker-lifecycle.spec.luau
++++ b/z-nile/tests/acceptance/c0001/tracker-lifecycle.spec.luau
+@@ -67,7 +67,34 @@ return t.spec("tracker lifecycle", function(it)
+ 		if fs.isDir(dir) then
+ 			fs.removeDir(dir)
+ 		end
+-		clone.isolated(root, dir)
++		-- c0178: was `clone.isolated(root, dir)` (a full checkout, ~2,500 files); now only these paths are written, the rest
++		-- stays in the index. Each entry says why it is needed; add a path here when `git add -A` names it as outside the checkout.
++		clone.isolated(root, dir, {
++			tooling = true, -- c0178: ./zn, scripts/, .gitignore and z-nile/ but its tracker state: what the overlay below writes
++			paths = {
++				".luaurc", -- the promoted-spec run in `done` loads the root Luau config
++				"pickman/.luaurc", -- pickman's aliases (@tests, @logic) for the promoted-spec run in `done`
++				"pickman/tests/run.luau", -- pickman's runner, which `done` runs the promoted spec with
++				"pickman/tests/lib/", -- @tests/lib/t and the harness the promoted spec and meta specs require
++				"pickman/tests/meta/", -- meta specs `done` runs beside the promoted one
++				"pickman/tests/unit/", -- meta spec 'every feature has unit specs' lists tests/unit/<feature>
++				"pickman/src/", -- meta specs scan the sources; fakeengine requires @logic
++				"pickman/default.project.json", -- meta spec resolves @game requires through it
++				"pickman/.tracker/architecture.md", -- meta spec reads the declared feature dependencies
++				"pickman/.tracker/issues/active/.gitkeep", -- engine.empty rewrites it; `done`'s rollback resets the tree and must not drop the folder
++				"pickman/.tracker/issues/done/.gitkeep", -- same, for issues/done (git mv target of `done`)
++				"pickman/.tracker/rafts/active/.gitkeep", -- same, for rafts/active
++				"pickman/.tracker/rafts/done/.gitkeep", -- same, for rafts/done
++				"z-nile/.tracker/issues/done/.gitkeep", -- engine.empty writes it; untracked in the repository, so `git add -A` needs it inside the checkout
++				"z-nile/.tracker/rafts/done/.gitkeep", -- same, for rafts/done
++				"**/f0010/", -- item folders of the ids this spec creates, moves and promotes (any root or state, incl. pickman/tests/acceptance/f0010/): the real items with these ids are deleted by engine.empty and the new ones are committed
++				"**/d0020/", -- item folders of the ids this spec creates, moves and promotes (any root or state, incl. pickman/tests/acceptance/f0010/): the real items with these ids are deleted by engine.empty and the new ones are committed
++				"**/f0030/", -- item folders of the ids this spec creates, moves and promotes (any root or state, incl. pickman/tests/acceptance/f0010/): the real items with these ids are deleted by engine.empty and the new ones are committed
++				"**/f0031/", -- item folders of the ids this spec creates, moves and promotes (any root or state, incl. pickman/tests/acceptance/f0010/): the real items with these ids are deleted by engine.empty and the new ones are committed
++				"**/R0010/", -- item folders of the ids this spec creates, moves and promotes (any root or state, incl. pickman/tests/acceptance/f0010/): the real items with these ids are deleted by engine.empty and the new ones are committed
++				"notes/", -- the commit case writes notes/alpha, notes/gamma; `git add -A` needs them inside the checkout
++			},
++		})
+ 		git({ "remote", "remove", "origin" })
+ 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
+ 		local listed = process.exec("git", {
+diff --git a/z-nile/tests/acceptance/c0005/worktree.spec.luau b/z-nile/tests/acceptance/c0005/worktree.spec.luau
+index 1cffb725..a3721a86 100644
+--- a/z-nile/tests/acceptance/c0005/worktree.spec.luau
++++ b/z-nile/tests/acceptance/c0005/worktree.spec.luau
+@@ -124,7 +124,23 @@ return t.spec("worktrees", function(it)
+ 			fs.removeDir(base)
+ 		end
+ 		fs.writeDir(base)
+-		clone.isolated(root, seed)
++		-- c0178: was `clone.isolated(root, seed)` (a full checkout, ~2,500 files); now only these paths are written, the rest
++		-- stays in the index. Each entry says why it is needed; add a path here when `git add -A` names it as outside the checkout.
++		clone.isolated(root, seed, {
++			tooling = true, -- c0178: ./zn, scripts/, .gitignore and z-nile/ but its tracker state: what the overlay below writes
++			paths = {
++				"pickman/.tracker/issues/active/.gitkeep", -- engine.roots writes the empty roots' folders
++				"pickman/.tracker/issues/done/.gitkeep",
++				"pickman/.tracker/rafts/active/.gitkeep",
++				"pickman/.tracker/rafts/done/.gitkeep",
++				"z-nile/.tracker/issues/active/.gitkeep",
++				"z-nile/.tracker/issues/done/.gitkeep",
++				"z-nile/.tracker/rafts/active/.gitkeep",
++				"z-nile/.tracker/rafts/done/.gitkeep",
++				"pickman/.tracker/issues/f00[1-5]0/", -- the item folders the spec writes (engine.empty cleared the real ones)
++				"pickman/.tracker/rafts/R00[1-4]0/",
++			},
++		})
+ 		identity(seed)
+ 		-- whatever the source was (a feature branch, or CI's detached HEAD), the fixture is on main
+ 		git(seed, { "checkout", "-q", "-B", "main" })
+diff --git a/z-nile/tests/acceptance/c0008/done-order.spec.luau b/z-nile/tests/acceptance/c0008/done-order.spec.luau
+index fbe3b3ad..70d190b9 100644
+--- a/z-nile/tests/acceptance/c0008/done-order.spec.luau
++++ b/z-nile/tests/acceptance/c0008/done-order.spec.luau
+@@ -3,6 +3,7 @@
+ -- drafts) runs on the final head. Driven for real in a throwaway clone whose origin is a local bare
+ -- repository under a `github.com` path (so `done` takes its GitHub branch), with a fake `gh` that
+ -- records the branch head on origin at the moment `gh pr ready` is called.
++local clone = require("@tests/lib/clone")
+ local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+@@ -73,7 +74,48 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
+ 			fs.removeDir(base)
+ 		end
+ 		fs.writeDir(base)
+-		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
++		-- c0178: a sparse clone (git writes only `paths` to the working tree) in place of the full checkout of ~2,580 files;
++		-- the tooling overlay below writes the rest.
++		clone.isolated(root, work, {
++			paths = {
++				-- the tooling ./zn runs: a `git reset --hard` (the spec's own, or done's rollback) deletes the overlay's files outside the sparse set
++				"zn",
++				"scripts/", -- c0178: the whole folder, so a script the engine newly runs is in a reset clone
++				"z-nile/lib/", -- same, for the libraries the engine requires
++				-- the tooling ./zn runs: a `git reset --hard` (the spec's own, or done's rollback) deletes the overlay's files outside the sparse set: the raft's check.sh sources it
++				"z-nile/engine/",
++				-- what the meta specs run from pickman/ read: the require graph
++				"z-nile/roots.luau",
++				"z-nile/projects.toml",
++				-- the base aliases (a missing base config fails the type check of the promoted specs)
++				".luaurc",
++				-- the promoted-spec run from pickman/ (done, promote-check): its runner and the shared runner it requires
++				"pickman/tests/run.luau",
++				-- pickman's meta spec, which done runs on the promoted tree with its fence spec (z-nile/tests/tooling is not in the overlay)
++				"pickman/tests/meta/",
++				"z-nile/tests/run.luau",
++				"z-nile/tests/lib/",
++				"z-nile/tests/tooling/repo-fence.spec.luau",
++				-- pickman's architecture meta spec scans every Logic feature, its unit specs and the declared dependencies
++				"pickman/src/shared/Logic/",
++				"pickman/tests/unit/",
++				"pickman/.tracker/architecture.md",
++				-- ./zn commit runs `git add -A` on each root, which refuses a root with nothing of it in the clone
++				"z-nile/.tracker/issues/active/.gitkeep",
++				-- done/ folders git keeps when a reset empties them (git mv does not create its destination folder)
++				"pickman/.tracker/issues/done/.gitkeep",
++				"pickman/.tracker/rafts/done/.gitkeep",
++				-- the item folders the spec creates and ./zn moves (start, done): a plain `git add -A` and `git mv` need them in the sparse set
++				"pickman/.tracker/issues/f0010/",
++				"pickman/.tracker/rafts/R0010/",
++				"pickman/.tracker/issues/active/f0010/",
++				"pickman/.tracker/rafts/active/R0010/",
++				"pickman/.tracker/issues/done/f0010/",
++				"pickman/.tracker/rafts/done/R0010/",
++				-- done's promoted spec
++				"pickman/tests/acceptance/f0010/",
++			},
++		})
+ 		git({ "remote", "remove", "origin" })
+ 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
+ 		local listed = process.exec("git", {
+@@ -101,7 +143,8 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
+ 		-- c0120 override: engine.empty lays the clone out on the final layout (pickman's items in pickman/.tracker, so done
+ 		-- checks the promoted specs from pickman/, their home, with the clone's own pickman/tests/run.luau)
+ 		engine.empty(work)
+-		git({ "add", "-A" })
++		-- c0178: --sparse, so the overlay (all on disk, mostly outside the sparse clone's paths) is committed as before
++		git({ "add", "-A", "--sparse" })
+ 		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
+ 		must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue")
+ 		must(
+diff --git a/z-nile/tests/acceptance/c0038/deferred.spec.luau b/z-nile/tests/acceptance/c0038/deferred.spec.luau
+index cc822bf8..9d78934d 100644
+--- a/z-nile/tests/acceptance/c0038/deferred.spec.luau
++++ b/z-nile/tests/acceptance/c0038/deferred.spec.luau
+@@ -3,6 +3,7 @@
+ -- when <id> is an existing backlog issue, and refuses it in every other case. Driven for real in a
+ -- throwaway clone (no remote, so done skips push and gh).
+ local cleanup = require("@tests/lib/cleanup")
++local clone = require("@tests/lib/clone")
+ local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+@@ -77,7 +78,24 @@ return t.spec("c0360 done accepts deferred answers", function(it)
+ 		if fs.isDir(work) then
+ 			fs.removeDir(work)
+ 		end
+-		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
++		-- c0178: a sparse clone (git writes only `paths` to the working tree) in place of the full checkout of ~2,580 files;
++		-- the tooling overlay below writes the rest.
++		clone.isolated(root, work, {
++			tooling = true, -- c0178: the overlay below writes tooling that a reset (done's rollback) must not delete
++			paths = {
++				-- ./zn commit runs `git add -A` on each root, which refuses a root with nothing of it in the clone
++				"z-nile/.tracker/issues/active/.gitkeep",
++				-- the item folders the spec creates and ./zn moves (start, done): a plain `git add -A` and `git mv` need them in the sparse set
++				"pickman/.tracker/issues/f0010/",
++				"pickman/.tracker/rafts/R0010/",
++				"pickman/.tracker/issues/active/f0010/",
++				"pickman/.tracker/rafts/active/R0010/",
++				"pickman/.tracker/issues/done/f0010/",
++				"pickman/.tracker/rafts/done/R0010/",
++				-- the backlog follow-up issue the spec creates
++				"pickman/.tracker/issues/c0020/",
++			},
++		})
+ 		git({ "remote", "remove", "origin" })
+ 		local listed = process.exec("git", {
+ 			"ls-files",
+@@ -104,7 +122,8 @@ return t.spec("c0360 done accepts deferred answers", function(it)
+ 		git({ "config", "gc.auto", "0" })
+ 		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+ 		engine.empty(work)
+-		git({ "add", "-A" })
++		-- c0178: --sparse, so the overlay (all on disk, mostly outside the sparse clone's paths) is committed as before
++		git({ "add", "-A", "--sparse" })
+ 		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
+ 		must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue")
+ 		must(tr({ "new", "issue", "c", "followup", "--project", "pickman" }), "new follow-up")
+diff --git a/z-nile/tests/acceptance/c0044/naming.spec.luau b/z-nile/tests/acceptance/c0044/naming.spec.luau
+index aa8dba60..109b0f78 100644
+--- a/z-nile/tests/acceptance/c0044/naming.spec.luau
++++ b/z-nile/tests/acceptance/c0044/naming.spec.luau
+@@ -86,7 +86,30 @@ return t.spec("document naming", function(it)
+ 			fs.removeDir(base)
+ 		end
+ 		fs.writeDir(base)
+-		clone.isolated(root, seed)
++		-- c0178: was `clone.isolated(root, seed)` (a full checkout, ~2,500 files); now only these paths are written, the rest
++		-- stays in the index. Each entry says why it is needed; add a path here when `git add -A` names it as outside the checkout.
++		clone.isolated(root, seed, {
++			tooling = true, -- c0178: ./zn, scripts/, .gitignore and z-nile/ but its tracker state: what the overlay below writes
++			paths = {
++				"z-nile/.tracker/issues/done/.gitkeep", -- engine.empty writes it; untracked in the repository, so `git add -A` needs it inside the checkout
++				"z-nile/.tracker/rafts/done/.gitkeep", -- same, for rafts/done
++				"**/c0040/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
++				"**/c0050/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
++				"**/c0080/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
++				"**/d0030/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
++				"**/d0031/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
++				"**/d0060/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
++				"**/d0070/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
++				"**/d0080/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
++				"**/f0010/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
++				"**/f0020/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
++				"**/f0025/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
++				"**/R0010/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
++				"**/R0020/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
++				"**/R0030/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
++				"**/R0040/", -- item folders of the ids this spec creates or writes (any root or state): the real items with these ids are deleted by engine.empty, the new ones committed
++			},
++		})
+ 		git({ "config", "user.name", "e2e" })
+ 		git({ "config", "user.email", "e2e@example.invalid" })
+ 		git({ "checkout", "-q", "-B", "main" })
+diff --git a/z-nile/tests/acceptance/c0045/workstreams.spec.luau b/z-nile/tests/acceptance/c0045/workstreams.spec.luau
+index 9629eaaf..3b333824 100644
+--- a/z-nile/tests/acceptance/c0045/workstreams.spec.luau
++++ b/z-nile/tests/acceptance/c0045/workstreams.spec.luau
+@@ -106,7 +106,25 @@ return t.spec("workstreams", function(it)
+ 			fs.removeDir(base)
+ 		end
+ 		fs.writeDir(base)
+-		clone.isolated(root, seed)
++		-- c0178: was `clone.isolated(root, seed)` (a full checkout, ~2,500 files); now only these paths are written, the rest
++		-- stays in the index. Each entry says why it is needed; add a path here when `git add -A` names it as outside the checkout.
++		clone.isolated(root, seed, {
++			tooling = true, -- c0178: ./zn, scripts/, .gitignore and z-nile/ but its tracker state: what the overlay below writes
++			paths = {
++				"pickman/.tracker/issues/active/.gitkeep", -- engine.roots writes the empty roots' folders
++				"pickman/.tracker/issues/done/.gitkeep",
++				"pickman/.tracker/rafts/active/.gitkeep",
++				"pickman/.tracker/rafts/done/.gitkeep",
++				"z-nile/.tracker/issues/active/.gitkeep",
++				"z-nile/.tracker/issues/done/.gitkeep",
++				"z-nile/.tracker/rafts/active/.gitkeep",
++				"z-nile/.tracker/rafts/done/.gitkeep",
++				"pickman/.tracker/issues/f00[1-9]0/", -- the item folders the spec writes (engine.empty cleared the real ones)
++				"pickman/.tracker/issues/f01[0-9]0/",
++				"pickman/.tracker/issues/f0200/",
++				"pickman/.tracker/rafts/R00[1-7]0/",
++			},
++		})
+ 		identity(seed)
+ 		git(seed, { "checkout", "-q", "-B", "main" })
+ 		git(seed, { "remote", "remove", "origin" })
+diff --git a/z-nile/tests/acceptance/c0046/launch.spec.luau b/z-nile/tests/acceptance/c0046/launch.spec.luau
+index daa3cae8..6e9355e4 100644
+--- a/z-nile/tests/acceptance/c0046/launch.spec.luau
++++ b/z-nile/tests/acceptance/c0046/launch.spec.luau
+@@ -71,7 +71,19 @@ return t.spec("launch", function(it)
+ 			fs.removeDir(base)
+ 		end
+ 		fs.writeDir(base)
+-		clone.isolated(root, seed)
++		-- c0178: was `clone.isolated(root, seed)` (a full checkout, ~2,500 files); now only these paths are written, the rest
++		-- stays in the index. Each entry says why it is needed; add a path here when `git add -A` names it as outside the checkout.
++		clone.isolated(root, seed, {
++			tooling = true, -- c0178: ./zn, scripts/, .gitignore and z-nile/ but its tracker state: what the overlay below writes
++			paths = {
++				"z-nile/.tracker/issues/done/.gitkeep", -- engine.empty writes it; untracked in the repository, so `git add -A` needs it inside the checkout
++				"z-nile/.tracker/rafts/done/.gitkeep", -- same, for rafts/done
++				"**/f0010/", -- item folders of the ids this spec creates and moves to done (any root or state)
++				"**/f0020/", -- item folders of the ids this spec creates and moves to done (any root or state)
++				"**/R0010/", -- item folders of the ids this spec creates and moves to done (any root or state)
++				"**/R0020/", -- item folders of the ids this spec creates and moves to done (any root or state)
++			},
++		})
+ 		git(seed, { "config", "user.name", "e2e" })
+ 		git(seed, { "config", "user.email", "e2e@example.invalid" })
+ 		git(seed, { "checkout", "-q", "-B", "main" })
+diff --git a/z-nile/tests/acceptance/c0050/start-depends.spec.luau b/z-nile/tests/acceptance/c0050/start-depends.spec.luau
+index 8f109552..7969b2d4 100644
+--- a/z-nile/tests/acceptance/c0050/start-depends.spec.luau
++++ b/z-nile/tests/acceptance/c0050/start-depends.spec.luau
+@@ -51,7 +51,27 @@ return t.spec("c0480 start checks depends_on", function(it)
+ 		if fs.isDir(dir) then
+ 			fs.removeDir(dir)
+ 		end
+-		clone.isolated(root, dir)
++		-- c0178: was `clone.isolated(root, dir)` (a full checkout, ~2,500 files); now only these paths are written, the rest
++		-- stays in the index. Each entry says why it is needed; add a path here when `git add -A` names it as outside the checkout.
++		clone.isolated(root, dir, {
++			tooling = true, -- c0178: ./zn, scripts/, .gitignore and z-nile/ but its tracker state: what the overlay below writes
++			paths = {
++				"z-nile/.tracker/issues/done/.gitkeep", -- engine.empty writes it; untracked in the repository, so `git add -A` needs it inside the checkout
++				"z-nile/.tracker/rafts/done/.gitkeep", -- same, for rafts/done
++				"**/f0010/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
++				"**/f0020/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
++				"**/f0030/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
++				"**/f0040/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
++				"**/f0050/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
++				"**/f0060/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
++				"**/f0070/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
++				"**/R0010/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
++				"**/R0020/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
++				"**/R0030/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
++				"**/R0040/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
++				"**/R0050/", -- item folders of the ids this spec creates (any root or state): the real items with these ids are deleted by engine.empty
++			},
++		})
+ 		git({ "remote", "remove", "origin" })
+ 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
+ 		local listed = process.exec("git", {
+diff --git a/z-nile/tests/acceptance/c0067/ready.spec.luau b/z-nile/tests/acceptance/c0067/ready.spec.luau
+index da1c114a..4a07beeb 100644
+--- a/z-nile/tests/acceptance/c0067/ready.spec.luau
++++ b/z-nile/tests/acceptance/c0067/ready.spec.luau
+@@ -3,11 +3,11 @@
+ -- check.sh paths rewritten, pulls the main checkout and writes the ignored prompt.md; `start` then only branches.
+ -- Fixture under .cache/c0730-ready: a seed with this tree's tooling and skills, a bare origin, a main clone (the main
+ -- checkout) and worktrees made by `tracker.sh worktree`. A recording pbcopy is first on PATH. Cases run in order.
+-local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local t = require("@tests/lib/t")
++local trackerfix = require("@tests/lib/trackerfix")
+ 
+ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
+ 
+@@ -17,7 +17,8 @@ end
+ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
+ -- c0120 override: fixtures live under the home's .cache (z-nile/.cache); root stays the checkout to copy from
+ local base = `{fixture.physical(".") or "."}/.cache/c0730-ready`
+-local seed, origin, main = `{base}/seed`, `{base}/origin.git`, `{base}/main`
++-- c0178: the folders are the shared fixture's (trackerfix.new makes them in the setup case); there is no seed folder
++local origin, main = `{base}/origin.git`, `{base}/main`
+ local bin, clipLog = `{base}/bin`, `{base}/pbcopy.log`
+ 
+ local function env(extra: { [string]: string }?): { [string]: string }
+@@ -119,185 +120,138 @@ local readiedStamp = ""
+ 
+ return t.spec("tracker ready", function(it)
+ 	it("sets up an origin with prepared, draft and blocked rafts, and a main checkout", function()
+-		if fs.isDir(base) then
+-			fs.removeDir(base)
+-		end
+-		fs.writeDir(seed)
+-		fs.writeDir(bin)
+-		write(bin, "pbcopy", `#!/bin/sh\ncat >> "{clipLog}"\n`, true)
+-		write(bin, "gh", "#!/bin/sh\necho gh is not available in this fixture >&2\nexit 1\n", true)
+-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
+-		git(seed, { "config", "user.name", "t" })
+-		git(seed, { "config", "user.email", "t@example.invalid" })
+-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
+-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
+-		end
+-		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		fs.writeDir(`{seed}/pickman/.tracker`)
+-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+-		-- c0120 override: the checkout keeps pickman's architecture.md in pickman/.tracker, the fixtures' pickman root too
+-		process.exec(
+-			"cp",
+-			{ `{root}/pickman/.tracker/architecture.md`, `{seed}/pickman/.tracker/architecture.md` }
+-		)
+-		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-			write(seed, `pickman/.tracker/{d}/.gitkeep`, "")
++		-- c0178: the item documents are collected and written over the shared fixture (trackerfix.new) below, which
++		-- replaces the hand-built seed repository (git init, engine.copy, the copied .claude/.luaurc/.gitignore/architecture.md,
++		-- engine.roots' folders, the seed commit and the bare/main clones)
++		local extras: { [string]: string } = {}
++		local executable: { string } = {}
++		local function add(path: string, text: string, exec: boolean?)
++			extras[path] = text
++			if exec then
++				table.insert(executable, path)
++			end
+ 		end
++		-- c0178: the checkout's real .gitignore stays the fixture's (the default is only ".cache/" and ".worktree/")
++		extras[".gitignore"] = fs.readFile(`{root}/.gitignore`)
+ 		-- R0010: prepared, members c0010 (acceptance spec, executable experiment) and c0020
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/rafts/R0010/R0010.md",
+ 			raftDoc("R0010", "Readied", "readied", "c0010, c0020", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add("pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/issues/c0010/c0010.md",
+ 			issueDoc("c0010", "Alpha", "R0010", "", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/issues/c0010/check.sh", c0010Check(""), true)
+-		write(seed, "pickman/.tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
+-		write(seed, "pickman/.tracker/issues/c0010/experiments/E1.sh", "#!/bin/sh\necho e1\n", true)
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add("pickman/.tracker/issues/c0010/check.sh", c0010Check(""), true)
++		add("pickman/.tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
++		add("pickman/.tracker/issues/c0010/experiments/E1.sh", "#!/bin/sh\necho e1\n", true)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/issues/c0020/c0020.md",
+ 			issueDoc("c0020", "Beta", "R0010", "", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/issues/c0020/check.sh", simpleCheck("c0020", "issues", ""), true)
++		add("pickman/.tracker/issues/c0020/check.sh", simpleCheck("c0020", "issues", ""), true)
+ 		-- R0020: still being prepared
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/rafts/R0020/R0020.md",
+ 			raftDoc("R0020", "Draft", "draft", "c0050", "draft", "preparing-a-b-c")
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/rafts/R0020/check.sh", simpleCheck("R0020", "rafts", ""), true)
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add("pickman/.tracker/rafts/R0020/check.sh", simpleCheck("R0020", "rafts", ""), true)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/issues/c0050/c0050.md",
+ 			issueDoc("c0050", "Drafty", "R0020", "", "draft", "preparing-a-b-c")
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/issues/c0050/check.sh", simpleCheck("c0050", "issues", ""), true)
++		add("pickman/.tracker/issues/c0050/check.sh", simpleCheck("c0050", "issues", ""), true)
+ 		-- R0030: prepared, but its member depends on c0090, which is not done
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/rafts/R0030/R0030.md",
+ 			raftDoc("R0030", "Blocked", "blocked", "c0030", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/rafts/R0030/check.sh", simpleCheck("R0030", "rafts", ""), true)
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add("pickman/.tracker/rafts/R0030/check.sh", simpleCheck("R0030", "rafts", ""), true)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/issues/c0030/c0030.md",
+ 			issueDoc("c0030", "Gamma", "R0030", "c0090", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/issues/c0030/check.sh", simpleCheck("c0030", "issues", ""), true)
+-		write(
+-			seed,
++		add("pickman/.tracker/issues/c0030/check.sh", simpleCheck("c0030", "issues", ""), true)
++		add(
+ 			"pickman/.tracker/issues/c0090/c0090.md",
+ 			issueDoc("c0090", "Loose", "", "", "draft", "new-a-b-c")
+ 		)
+-		write(seed, "pickman/.tracker/issues/c0090/check.sh", simpleCheck("c0090", "issues", ""), true)
++		add("pickman/.tracker/issues/c0090/check.sh", simpleCheck("c0090", "issues", ""), true)
+ 		-- R0040: prepared, one member
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/rafts/R0040/R0040.md",
+ 			raftDoc("R0040", "Second", "second", "c0040", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/rafts/R0040/check.sh", simpleCheck("R0040", "rafts", ""), true)
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add("pickman/.tracker/rafts/R0040/check.sh", simpleCheck("R0040", "rafts", ""), true)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/issues/c0040/c0040.md",
+ 			issueDoc("c0040", "Delta", "R0040", "", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/issues/c0040/check.sh", simpleCheck("c0040", "issues", ""), true)
++		add("pickman/.tracker/issues/c0040/check.sh", simpleCheck("c0040", "issues", ""), true)
+ 		-- R0050: prepared, but its member's check.sh has no check (only a commented one)
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/rafts/R0050/R0050.md",
+ 			raftDoc("R0050", "Unchecked", "unchecked", "c0060", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/rafts/R0050/check.sh", simpleCheck("R0050", "rafts", ""), true)
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add("pickman/.tracker/rafts/R0050/check.sh", simpleCheck("R0050", "rafts", ""), true)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/issues/c0060/c0060.md",
+ 			issueDoc("c0060", "Epsilon", "R0050", "", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(
+-			seed,
+-			"pickman/.tracker/issues/c0060/check.sh",
+-			HEAD .. '# check "AC1: later" true\nfinish\n',
+-			true
+-		)
++		add("pickman/.tracker/issues/c0060/check.sh", HEAD .. '# check "AC1: later" true\nfinish\n', true)
+ 		-- R0060: prepared, its two members depend on each other (the workstream plan can't be built)
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/rafts/R0060/R0060.md",
+ 			raftDoc("R0060", "Cyclic", "cyclic", "c0070, c0080", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/rafts/R0060/check.sh", simpleCheck("R0060", "rafts", ""), true)
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add("pickman/.tracker/rafts/R0060/check.sh", simpleCheck("R0060", "rafts", ""), true)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/issues/c0070/c0070.md",
+ 			issueDoc("c0070", "Zeta", "R0060", "c0080", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/issues/c0070/check.sh", simpleCheck("c0070", "issues", ""), true)
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add("pickman/.tracker/issues/c0070/check.sh", simpleCheck("c0070", "issues", ""), true)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/issues/c0080/c0080.md",
+ 			issueDoc("c0080", "Eta", "R0060", "c0070", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/issues/c0080/check.sh", simpleCheck("c0080", "issues", ""), true)
++		add("pickman/.tracker/issues/c0080/check.sh", simpleCheck("c0080", "issues", ""), true)
+ 		-- R0070: prepared on paper, but its member's design is only reviewed
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/rafts/R0070/R0070.md",
+ 			raftDoc("R0070", "Unready", "unready", "c0110", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/rafts/R0070/check.sh", simpleCheck("R0070", "rafts", ""), true)
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add("pickman/.tracker/rafts/R0070/check.sh", simpleCheck("R0070", "rafts", ""), true)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/issues/c0110/c0110.md",
+ 			issueDoc("c0110", "Theta", "R0070", "", "reviewed", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/issues/c0110/check.sh", simpleCheck("c0110", "issues", ""), true)
+-		git(seed, { "add", "-A" })
+-		git(seed, { "commit", "-q", "-m", "seed" })
+-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
+-		process.exec("git", { "clone", "-q", origin, main })
+-		git(main, { "config", "user.name", "t" })
+-		git(main, { "config", "user.email", "t@example.invalid" })
++		add("pickman/.tracker/issues/c0110/check.sh", simpleCheck("c0110", "issues", ""), true)
++		-- c0178: one trackerfix.new replaces git init/add/commit, the bare origin and the main clone; its main clone is
++		-- committed as <name> (the old setup's "t" identity is not pinned by a case)
++		trackerfix.new("c0730-ready", extras, {
++			copy = { ".claude", ".luaurc", "pickman/.tracker/architecture.md" },
++			executable = executable,
++		})
++		fs.writeDir(bin)
++		write(bin, "pbcopy", `#!/bin/sh\ncat >> "{clipLog}"\n`, true)
++		write(bin, "gh", "#!/bin/sh\necho gh is not available in this fixture >&2\nexit 1\n", true)
+ 		cap = trOk(main, { "worktree", "cap-a" })
+ 		early = trOk(main, { "worktree", "R0060" })
+ 		-- Finder litter, ignored as a Mac's global gitignore would: it must never block or break ready
+diff --git a/z-nile/tests/acceptance/c0068/stop.spec.luau b/z-nile/tests/acceptance/c0068/stop.spec.luau
+index 1b7ce6a9..1e9297a1 100644
+--- a/z-nile/tests/acceptance/c0068/stop.spec.luau
++++ b/z-nile/tests/acceptance/c0068/stop.spec.luau
+@@ -3,11 +3,11 @@
+ -- active/ on origin/main with their check.sh paths rewritten back, removes prompt.md and leaves the branch and PR.
+ -- Fixture under .cache/c0740-stop: a seed with this tree's tooling and skills, a bare origin, a main clone (the main
+ -- checkout) and worktrees made by `tracker.sh worktree`. Cases share the fixture and run in order.
+-local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local t = require("@tests/lib/t")
++local trackerfix = require("@tests/lib/trackerfix")
+ 
+ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
+ 
+@@ -18,7 +18,8 @@ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout
+ -- c0120 override: the fixture lives under the home's .cache (specs run from z-nile/, and the jail refuses the top's)
+ local here = trim(process.exec("pwd", { "-P" }).stdout)
+ local base = `{here}/.cache/c0740-stop`
+-local seed, origin, main = `{base}/seed`, `{base}/origin.git`, `{base}/main`
++-- c0178: the folders are the shared fixture's (trackerfix.new makes them in the setup case); there is no seed folder
++local origin, main = `{base}/origin.git`, `{base}/main`
+ local bin = `{base}/bin`
+ 
+ local function env(extra: { [string]: string }?): { [string]: string }
+@@ -141,79 +142,60 @@ end
+ 
+ return t.spec("tracker stop", function(it)
+ 	it("sets up an origin with two prepared rafts and a main checkout", function()
+-		if fs.isDir(base) then
+-			fs.removeDir(base)
+-		end
+-		fs.writeDir(seed)
+-		fs.writeDir(bin)
+-		write(bin, "gh", "#!/bin/sh\necho gh is not available in this fixture >&2\nexit 1\n", true)
+-		write(bin, "pbcopy", "#!/bin/sh\ncat > /dev/null\n", true) -- never the real clipboard
+-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
+-		git(seed, { "config", "user.name", "t" })
+-		git(seed, { "config", "user.email", "t@example.invalid" })
+-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
+-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
+-		end
+-		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		fs.writeDir(`{seed}/pickman/.tracker`)
+-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+-		-- c0120 override: the repository's architecture document is pickman's, at pickman/.tracker/
+-		process.exec(
+-			"cp",
+-			{ `{root}/pickman/.tracker/architecture.md`, `{seed}/pickman/.tracker/architecture.md` }
+-		)
+-		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-			write(seed, `pickman/.tracker/{d}/.gitkeep`, "")
++		-- c0178: the item documents are collected and written over the shared fixture (trackerfix.new) below, which
++		-- replaces the hand-built seed repository (git init, engine.copy, the copied .claude/.luaurc/.gitignore/architecture.md,
++		-- engine.roots' folders, the seed commit and the bare/main clones)
++		local extras: { [string]: string } = {}
++		local executable: { string } = {}
++		local function add(path: string, text: string, exec: boolean?)
++			extras[path] = text
++			if exec then
++				table.insert(executable, path)
++			end
+ 		end
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		-- c0178: the checkout's real .gitignore stays the fixture's (the default is only ".cache/" and ".worktree/")
++		extras[".gitignore"] = fs.readFile(`{root}/.gitignore`)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/rafts/R0010/R0010.md",
+ 			raftDoc("R0010", "Readied", "readied", "c0010, c0020", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add("pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/issues/c0010/c0010.md",
+ 			issueDoc("c0010", "Alpha", "R0010", "", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/issues/c0010/check.sh", c0010Check(""), true)
+-		write(seed, "pickman/.tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
+-		write(seed, "pickman/.tracker/issues/c0010/experiments/E1.sh", "#!/bin/sh\necho e1\n", true)
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add("pickman/.tracker/issues/c0010/check.sh", c0010Check(""), true)
++		add("pickman/.tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
++		add("pickman/.tracker/issues/c0010/experiments/E1.sh", "#!/bin/sh\necho e1\n", true)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/issues/c0020/c0020.md",
+ 			issueDoc("c0020", "Beta", "R0010", "", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/issues/c0020/check.sh", simpleCheck("c0020", "issues", ""), true)
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add("pickman/.tracker/issues/c0020/check.sh", simpleCheck("c0020", "issues", ""), true)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/rafts/R0030/R0030.md",
+ 			raftDoc("R0030", "Legacy", "legacy", "c0030", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/rafts/R0030/check.sh", simpleCheck("R0030", "rafts", ""), true)
+-		write(
+-			seed,
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
++		add("pickman/.tracker/rafts/R0030/check.sh", simpleCheck("R0030", "rafts", ""), true)
++		add( -- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+ 			"pickman/.tracker/issues/c0030/c0030.md",
+ 			issueDoc("c0030", "Gamma", "R0030", "", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		write(seed, "pickman/.tracker/issues/c0030/check.sh", simpleCheck("c0030", "issues", ""), true)
+-		git(seed, { "add", "-A" })
+-		git(seed, { "commit", "-q", "-m", "seed" })
+-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
+-		process.exec("git", { "clone", "-q", origin, main })
+-		git(main, { "config", "user.name", "t" })
+-		git(main, { "config", "user.email", "t@example.invalid" })
++		add("pickman/.tracker/issues/c0030/check.sh", simpleCheck("c0030", "issues", ""), true)
++		-- c0178: one trackerfix.new replaces git init/add/commit, the bare origin and the main clone; its main clone is
++		-- committed as <name> (the old setup's "t" identity is not pinned by a case)
++		trackerfix.new("c0740-stop", extras, {
++			copy = { ".claude", ".luaurc", "pickman/.tracker/architecture.md" },
++			executable = executable,
++		})
++		fs.writeDir(bin)
++		write(bin, "gh", "#!/bin/sh\necho gh is not available in this fixture >&2\nexit 1\n", true)
++		write(bin, "pbcopy", "#!/bin/sh\ncat > /dev/null\n", true) -- never the real clipboard
+ 		cap = trOk(main, { "worktree", "cap-a" })
+ 		seeded = snapshot()
+ 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+diff --git a/z-nile/tests/acceptance/c0069/prompt.spec.luau b/z-nile/tests/acceptance/c0069/prompt.spec.luau
+index 4cf4250f..653dfd53 100644
+--- a/z-nile/tests/acceptance/c0069/prompt.spec.luau
++++ b/z-nile/tests/acceptance/c0069/prompt.spec.luau
+@@ -2,11 +2,11 @@
+ -- c0750: `tracker.sh prompt <R>` reads a readied raft's prompt.md from the main checkout (the launch-raft skill's
+ -- input), and `tracker.sh launch` is gone. Fixture under .cache/c0750-prompt: a seed with this tree's tooling and
+ -- skills, a bare origin, a main clone (the main checkout), a named worktree. A recording `claude` is first on PATH.
+-local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local t = require("@tests/lib/t")
++local trackerfix = require("@tests/lib/trackerfix")
+ 
+ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
+ 
+@@ -16,7 +16,8 @@ end
+ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
+ -- c0120 override: fixtures live under the home's .cache (z-nile/.cache); root stays the checkout to copy from
+ local base = `{trim(process.exec("pwd", { "-P" }).stdout)}/.cache/c0750-prompt`
+-local seed, origin, main = `{base}/seed`, `{base}/origin.git`, `{base}/main`
++-- c0178: the folders are the shared fixture's (trackerfix.new makes them in the setup case); there is no seed folder
++local origin, main = `{base}/origin.git`, `{base}/main`
+ local bin, agentLog = `{base}/bin`, `{base}/claude.log`
+ 
+ local function env(extra: { [string]: string }?): { [string]: string }
+@@ -117,68 +118,58 @@ local promptFile = ""
+ return t.spec("tracker prompt", function(it)
+ 	it("sets up an origin with a readied and a prepared raft", function()
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		if fs.isDir(base) then
+-			fs.removeDir(base)
+-		end
+-		fs.writeDir(seed)
+-		fs.writeDir(bin)
+-		write(bin, "claude", `#!/bin/sh\necho "$PWD $*" >> "{agentLog}"\n`, true)
+-		write(bin, "gh", "#!/bin/sh\necho gh is not available in this fixture >&2\nexit 1\n", true)
+-		write(bin, "pbcopy", "#!/bin/sh\ncat > /dev/null\n", true) -- never the real clipboard
+-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
+-		git(seed, { "config", "user.name", "t" })
+-		git(seed, { "config", "user.email", "t@example.invalid" })
+-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
+-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
++		-- c0178: the item documents are collected and written over the shared fixture (trackerfix.new) below, which
++		-- replaces the hand-built seed repository (git init, engine.copy, the copied .claude/.luaurc/.gitignore/architecture.md,
++		-- engine.roots' folders, the seed commit and the bare/main clones)
++		local extras: { [string]: string } = {}
++		local executable: { string } = {}
++		local function add(path: string, text: string, exec: boolean?)
++			extras[path] = text
++			if exec then
++				table.insert(executable, path)
++			end
+ 		end
+-		-- c0120 override: the spec runs from its project's home after the move
+-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+-		-- c0120 override: the fixture is on the final layout: pickman's root is pickman/.tracker (engine.roots lays out
+-		-- every root's folders), and pickman's architecture.md lives there
+-		engine.roots(seed)
+-		process.exec(
+-			"cp",
+-			{ `{root}/pickman/.tracker/architecture.md`, `{seed}/pickman/.tracker/architecture.md` }
+-		)
++		-- c0178: the checkout's real .gitignore stays the fixture's (the default is only ".cache/" and ".worktree/")
++		extras[".gitignore"] = fs.readFile(`{root}/.gitignore`)
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		write(
+-			seed,
++		add(
+ 			"pickman/.tracker/rafts/R0010/R0010.md",
+ 			raftDoc("R0010", "Readied", "readied", "c0010", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		write(seed, "pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
++		add("pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		write(
+-			seed,
++		add(
+ 			"pickman/.tracker/issues/c0010/c0010.md",
+ 			issueDoc("c0010", "Alpha", "R0010", "", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		write(seed, "pickman/.tracker/issues/c0010/check.sh", c0010Check(""), true)
+-		write(seed, "pickman/.tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
++		add("pickman/.tracker/issues/c0010/check.sh", c0010Check(""), true)
++		add("pickman/.tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		write(
+-			seed,
++		add(
+ 			"pickman/.tracker/rafts/R0020/R0020.md",
+ 			raftDoc("R0020", "Waiting", "waiting", "c0020", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		write(seed, "pickman/.tracker/rafts/R0020/check.sh", simpleCheck("R0020", "rafts", ""), true)
++		add("pickman/.tracker/rafts/R0020/check.sh", simpleCheck("R0020", "rafts", ""), true)
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		write(
+-			seed,
++		add(
+ 			"pickman/.tracker/issues/c0020/c0020.md",
+ 			issueDoc("c0020", "Beta", "R0020", "", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		write(seed, "pickman/.tracker/issues/c0020/check.sh", simpleCheck("c0020", "issues", ""), true)
+-		git(seed, { "add", "-A" })
+-		git(seed, { "commit", "-q", "-m", "seed" })
+-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
+-		process.exec("git", { "clone", "-q", origin, main })
+-		git(main, { "config", "user.name", "t" })
+-		git(main, { "config", "user.email", "t@example.invalid" })
++		add("pickman/.tracker/issues/c0020/check.sh", simpleCheck("c0020", "issues", ""), true)
++		-- c0178: one trackerfix.new replaces git init/add/commit, the bare origin and the main clone; its main clone is
++		-- committed as <name> (the old setup's "t" identity is not pinned by a case)
++		trackerfix.new("c0750-prompt", extras, {
++			copy = { ".claude", ".luaurc", "pickman/.tracker/architecture.md" },
++			executable = executable,
++		})
++		fs.writeDir(bin)
++		write(bin, "claude", `#!/bin/sh\necho "$PWD $*" >> "{agentLog}"\n`, true)
++		write(bin, "gh", "#!/bin/sh\necho gh is not available in this fixture >&2\nexit 1\n", true)
++		write(bin, "pbcopy", "#!/bin/sh\ncat > /dev/null\n", true) -- never the real clipboard
+ 		cap = trOk(main, { "worktree", "cap-a" })
+ 		trOk(main, { "ready", "R0010" })
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+diff --git a/z-nile/tests/acceptance/c0070/board-refresh.spec.luau b/z-nile/tests/acceptance/c0070/board-refresh.spec.luau
+index ed4f7775..16920ecf 100644
+--- a/z-nile/tests/acceptance/c0070/board-refresh.spec.luau
++++ b/z-nile/tests/acceptance/c0070/board-refresh.spec.luau
+@@ -2,11 +2,11 @@
+ -- c0760: every tracker push to origin/main, and sync in the main checkout, brings the main checkout up to origin/main
+ -- and rebuilds its board page (never opening a browser). Fixture under .cache/c0760-board: a seed with this
+ -- tree's tooling and skills, a bare origin, a main clone (the main checkout), a named worktree and a second clone.
+-local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local t = require("@tests/lib/t")
++local trackerfix = require("@tests/lib/trackerfix")
+ 
+ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
+ 
+@@ -16,7 +16,8 @@ end
+ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
+ -- c0120 override: the fixture lives under the home's .cache (the spec's working directory); root stays for reading
+ local base = `{trim(process.exec("pwd", { "-P" }).stdout)}/.cache/c0760-board`
+-local seed, origin, main, other = `{base}/seed`, `{base}/origin.git`, `{base}/main`, `{base}/other`
++-- c0178: the folders are the shared fixture's (trackerfix.new makes them in the setup case); there is no seed folder
++local origin, main, other = `{base}/origin.git`, `{base}/main`, `{base}/other`
+ local bin, openLog = `{base}/bin`, `{base}/open.log`
+ 
+ local function env(extra: { [string]: string }?): { [string]: string }
+@@ -132,62 +133,52 @@ end
+ return t.spec("tracker board follows main", function(it)
+ 	it("sets up an origin with a prepared raft, a main checkout, a worktree and another clone", function()
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		if fs.isDir(base) then
+-			fs.removeDir(base)
++		-- c0178: the item documents are collected and written over the shared fixture (trackerfix.new) below, which
++		-- replaces the hand-built seed repository (git init, engine.copy, the copied .claude/.luaurc/.gitignore/architecture.md,
++		-- engine.roots' folders, the seed commit and the bare/main clones)
++		local extras: { [string]: string } = {}
++		local executable: { string } = {}
++		local function add(path: string, text: string, exec: boolean?)
++			extras[path] = text
++			if exec then
++				table.insert(executable, path)
++			end
+ 		end
+-		fs.writeDir(seed)
+-		fs.writeDir(bin)
+-		for _, opener in { "open", "xdg-open" } do
+-			write(bin, opener, `#!/bin/sh\necho "$*" >> "{openLog}"\n`, true)
+-		end
+-		write(bin, "gh", "#!/bin/sh\necho gh is not available in this fixture >&2\nexit 1\n", true)
+-		write(bin, "pbcopy", "#!/bin/sh\ncat > /dev/null\n", true) -- never the real clipboard
+-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
+-		git(seed, { "config", "user.name", "t" })
+-		git(seed, { "config", "user.email", "t@example.invalid" })
+-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
+-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
+-		end
+-		-- c0120 override: the spec runs from its project's home after the move
+-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+-		-- c0120 override: the fixture is on the final layout: pickman's root is pickman/.tracker (engine.roots lays out
+-		-- every root's folders), and pickman's architecture.md lives there
+-		engine.roots(seed)
+-		process.exec(
+-			"cp",
+-			{ `{root}/pickman/.tracker/architecture.md`, `{seed}/pickman/.tracker/architecture.md` }
+-		)
++		-- c0178: the checkout's real .gitignore stays the fixture's (the default is only ".cache/" and ".worktree/")
++		extras[".gitignore"] = fs.readFile(`{root}/.gitignore`)
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		write(
+-			seed,
++		add(
+ 			"pickman/.tracker/rafts/R0010/R0010.md",
+ 			raftDoc("R0010", "Readied", "readied", "c0010", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		write(seed, "pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
++		add("pickman/.tracker/rafts/R0010/check.sh", r0010Check(""), true)
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		write(
+-			seed,
++		add(
+ 			"pickman/.tracker/issues/c0010/c0010.md",
+ 			issueDoc("c0010", "Alpha", "R0010", "", "ready", PREPARED)
+ 		)
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		write(seed, "pickman/.tracker/issues/c0010/check.sh", c0010Check(""), true)
+-		write(seed, "pickman/.tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
+-		write(
+-			seed,
++		add("pickman/.tracker/issues/c0010/check.sh", c0010Check(""), true)
++		add("pickman/.tracker/issues/c0010/acceptance/a.spec.luau", SPEC)
++		add(
+ 			"pickman/.tracker/issues/c0020/c0020.md",
+ 			issueDoc("c0020", "Loose", "", "", "draft", "new-a-b-c")
+ 		)
+-		write(seed, "pickman/.tracker/issues/c0020/check.sh", simpleCheck("c0020", "issues", ""), true)
+-		git(seed, { "add", "-A" })
+-		git(seed, { "commit", "-q", "-m", "seed" })
+-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
+-		for _, c in { main, other } do
+-			process.exec("git", { "clone", "-q", origin, c })
+-			git(c, { "config", "user.name", "t" })
+-			git(c, { "config", "user.email", "t@example.invalid" })
++		add("pickman/.tracker/issues/c0020/check.sh", simpleCheck("c0020", "issues", ""), true)
++		-- c0178: one trackerfix.new replaces git init/add/commit, the bare origin and the main clone; its main clone is
++		-- committed as <name> (the old setup's "t" identity is not pinned by a case)
++		-- (`other`, the second clone, is made at the seed by the first helper that works in it)
++		trackerfix.new("c0760-board", extras, {
++			copy = { ".claude", ".luaurc", "pickman/.tracker/architecture.md" },
++			executable = executable,
++		})
++		fs.writeDir(bin)
++		for _, opener in { "open", "xdg-open" } do
++			write(bin, opener, `#!/bin/sh\necho "$*" >> "{openLog}"\n`, true)
+ 		end
++		write(bin, "gh", "#!/bin/sh\necho gh is not available in this fixture >&2\nexit 1\n", true)
++		write(bin, "pbcopy", "#!/bin/sh\ncat > /dev/null\n", true) -- never the real clipboard
+ 		cap = trOk(main, { "worktree", "cap-a" })
+ 		t.expect(board()).toBe(nil)
+ 	end)
+diff --git a/z-nile/tests/acceptance/c0072/land.spec.luau b/z-nile/tests/acceptance/c0072/land.spec.luau
+index cca1f946..cd6be23c 100644
+--- a/z-nile/tests/acceptance/c0072/land.spec.luau
++++ b/z-nile/tests/acceptance/c0072/land.spec.luau
+@@ -3,11 +3,11 @@
+ -- backlog issue documents change, push one commit on top of origin/main, retry a lost race. Fixture under
+ -- .cache/c0780-land: a seed with this tree's tooling, a bare origin, a main clone, a second clone and capture
+ -- worktrees. The gate is PICKMAN_LAND_GATE (a command), so no case runs the real gate.
+-local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local t = require("@tests/lib/t")
++local trackerfix = require("@tests/lib/trackerfix")
+ 
+ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
+ 
+@@ -18,7 +18,8 @@ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout
+ -- c0120 override: fixtures live under the home's .cache (the jail refuses the checkout top's)
+ local here = fixture.physical(".") or "."
+ local base = `{here}/.cache/c0780-land`
+-local seed, origin, main, other = `{base}/seed`, `{base}/origin.git`, `{base}/main`, `{base}/other`
++-- c0178: the folders are the shared fixture's (trackerfix.new makes them in the setup case); there is no seed folder
++local origin, main, other = `{base}/origin.git`, `{base}/main`, `{base}/other`
+ 
+ local function git(cwd: string, args: { string }): string
+ 	return fixture.git(cwd, args)
+@@ -70,25 +71,14 @@ end
+ 
+ return t.spec("tracker land", function(it)
+ 	it("sets up a bare origin, a main checkout and a second clone", function()
+-		if fs.isDir(base) then
+-			fs.removeDir(base)
+-		end
+-		fs.writeDir(seed)
+-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
+-		identity(seed)
+-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
+-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
+-		end
+-		-- c0120 override: the spec runs from its project's home after the move
+-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+-		engine.roots(seed) -- c0120 override: the fixture is on the final layout (engine.roots lays out every root)
+-		git(seed, { "add", "-A" })
+-		git(seed, { "commit", "-q", "-m", "seed" })
+-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
+-		for _, c in { main, other } do
+-			process.exec("git", { "clone", "-q", origin, c })
+-			identity(c)
+-		end
++		-- c0178: one trackerfix.new replaces git init, engine.copy, engine.roots, the copied .claude/.luaurc/.gitignore, the
++		-- seed commit and the bare origin with its clones. The checkout's real .gitignore stays the fixture's (the default is
++		-- only ".cache/" and ".worktree/"). main and `other` are committed as the fixture name instead of "land"; `other`
++		-- is made at the seed by the first helper that works in it (the race gate below runs raw git in it, after the earlier
++		-- cases made it)
++		trackerfix.new("c0780-land", { [".gitignore"] = fs.readFile(`{root}/.gitignore`) }, {
++			copy = { ".claude", ".luaurc" },
++		})
+ 		t.expect(git(main, { "branch", "--show-current" })).toBe("main")
+ 	end)
+ 
+diff --git a/z-nile/tests/acceptance/c0074/done-gate.spec.luau b/z-nile/tests/acceptance/c0074/done-gate.spec.luau
+index bcc34d2f..40310ab4 100644
+--- a/z-nile/tests/acceptance/c0074/done-gate.spec.luau
++++ b/z-nile/tests/acceptance/c0074/done-gate.spec.luau
+@@ -4,6 +4,7 @@
+ -- fixture specs that drive done clone tests/, so a gate there would run them again) unless PICKMAN_DONE_GATE=1
+ -- adds it, as here, where the gate is a stub; it then checks the promoted specs instead. Driven in a throwaway clone (no origin, so no gh) whose z-nile/check.sh is a stub that records
+ -- what it saw; each case starts from the same reviewed commit.
++local clone = require("@tests/lib/clone")
+ local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+@@ -118,7 +119,49 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
+ 			fs.removeDir(base)
+ 		end
+ 		fs.writeDir(base)
+-		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
++		-- c0178: a sparse clone (git writes only `paths` to the working tree) in place of the full checkout of ~2,580 files;
++		-- the tooling overlay below writes the rest.
++		clone.isolated(root, work, {
++			paths = {
++				-- the tooling ./zn runs: a `git reset --hard` (the spec's own, or done's rollback) deletes the overlay's files outside the sparse set
++				"zn",
++				"scripts/", -- c0178: the whole folder, so a script the engine newly runs is in a reset clone
++				"z-nile/lib/", -- same, for the libraries the engine requires
++				"z-nile/engine/",
++				-- what the meta specs run from pickman/ read: the require graph
++				"z-nile/roots.luau",
++				"z-nile/projects.toml",
++				-- the stub gate the spec commits (it would not survive a reset outside the sparse set)
++				"z-nile/check.sh",
++				-- the base aliases (a missing base config fails the type check of the promoted specs)
++				".luaurc",
++				-- the promoted-spec run from pickman/ (done, promote-check): its runner and the shared runner it requires
++				"pickman/tests/run.luau",
++				-- pickman's meta spec, which done runs on the promoted tree with its fence spec (z-nile/tests/tooling is not in the overlay)
++				"pickman/tests/meta/",
++				"z-nile/tests/run.luau",
++				"z-nile/tests/lib/",
++				"z-nile/tests/tooling/repo-fence.spec.luau",
++				-- pickman's architecture meta spec scans every Logic feature, its unit specs and the declared dependencies
++				"pickman/src/shared/Logic/",
++				"pickman/tests/unit/",
++				"pickman/.tracker/architecture.md",
++				-- ./zn commit runs `git add -A` on each root, which refuses a root with nothing of it in the clone
++				"z-nile/.tracker/issues/active/.gitkeep",
++				-- done/ folders git keeps when a reset empties them (git mv does not create its destination folder)
++				"pickman/.tracker/issues/done/.gitkeep",
++				"pickman/.tracker/rafts/done/.gitkeep",
++				-- the item folders the spec creates and ./zn moves (start, done): a plain `git add -A` and `git mv` need them in the sparse set
++				"pickman/.tracker/issues/f0010/",
++				"pickman/.tracker/rafts/R0010/",
++				"pickman/.tracker/issues/active/f0010/",
++				"pickman/.tracker/rafts/active/R0010/",
++				"pickman/.tracker/issues/done/f0010/",
++				"pickman/.tracker/rafts/done/R0010/",
++				-- done's promoted spec
++				"pickman/tests/acceptance/f0010/",
++			},
++		})
+ 		git({ "remote", "remove", "origin" })
+ 		-- overlay the working tree's tooling so uncommitted tracker changes are what gets tested
+ 		local listed = process.exec("git", {
+@@ -142,7 +185,8 @@ return t.spec("c0800 done runs the full gate after promotion", function(it)
+ 		git({ "config", "gc.auto", "0" })
+ 		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+ 		engine.empty(work)
+-		git({ "add", "-A" })
++		-- c0178: --sparse, so the overlay (all on disk, mostly outside the sparse clone's paths) is committed as before
++		git({ "add", "-A", "--sparse" })
+ 		git({ "commit", "-qm", "empty tracker, stub gate", "--allow-empty" })
+ 		must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue")
+ 		-- c0120 override: pickman's raft on the fixtures' layout (see TR)
+diff --git a/z-nile/tests/acceptance/c0080/consequences.spec.luau b/z-nile/tests/acceptance/c0080/consequences.spec.luau
+index cb459144..9d8affcd 100644
+--- a/z-nile/tests/acceptance/c0080/consequences.spec.luau
++++ b/z-nile/tests/acceptance/c0080/consequences.spec.luau
+@@ -3,6 +3,7 @@
+ -- ("; consequences: ..."), naming the finding; refuted answers need none. Driven in a throwaway clone (no origin,
+ -- so no gh), inside this spec run (so done skips the full gate, c0800); each case starts from the same commit,
+ -- a started raft with a two-finding review.
++local clone = require("@tests/lib/clone")
+ local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+@@ -83,7 +84,32 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
+ 			fs.removeDir(base)
+ 		end
+ 		fs.writeDir(base)
+-		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
++		-- c0178: a sparse clone (git writes only `paths` to the working tree) in place of the full checkout of ~2,580 files;
++		-- the tooling overlay below writes the rest.
++		clone.isolated(root, work, {
++			paths = {
++				-- the tooling ./zn runs: a `git reset --hard` (the spec's own, or done's rollback) deletes the overlay's files outside the sparse set
++				"zn",
++				"scripts/", -- c0178: the whole folder, so a script the engine newly runs is in a reset clone
++				"z-nile/lib/", -- same, for the libraries the engine requires
++				-- the tooling ./zn runs: a `git reset --hard` (the spec's own, or done's rollback) deletes the overlay's files outside the sparse set: the raft's check.sh sources it
++				"z-nile/engine/",
++				"z-nile/roots.luau",
++				"z-nile/projects.toml",
++				-- ./zn commit runs `git add -A` on each root, which refuses a root with nothing of it in the clone
++				"z-nile/.tracker/issues/active/.gitkeep",
++				-- done/ folders git keeps when a reset empties them (git mv does not create its destination folder)
++				"pickman/.tracker/issues/done/.gitkeep",
++				"pickman/.tracker/rafts/done/.gitkeep",
++				-- the item folders the spec creates and ./zn moves (start, done): a plain `git add -A` and `git mv` need them in the sparse set
++				"pickman/.tracker/issues/f0010/",
++				"pickman/.tracker/rafts/R0010/",
++				"pickman/.tracker/issues/active/f0010/",
++				"pickman/.tracker/rafts/active/R0010/",
++				"pickman/.tracker/issues/done/f0010/",
++				"pickman/.tracker/rafts/done/R0010/",
++			},
++		})
+ 		git({ "remote", "remove", "origin" })
+ 		local listed = process.exec("git", {
+ 			"ls-files",
+@@ -104,7 +130,8 @@ return t.spec("c0860 fixed answers carry their consequences", function(it)
+ 		git({ "config", "gc.auto", "0" })
+ 		-- c0114 override: every project root is emptied, and the counter moved to z-nile/next
+ 		engine.empty(work)
+-		git({ "add", "-A" })
++		-- c0178: --sparse, so the overlay (all on disk, mostly outside the sparse clone's paths) is committed as before
++		git({ "add", "-A", "--sparse" })
+ 		git({ "commit", "-qm", "empty tracker", "--allow-empty" })
+ 		must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue")
+ 		must(
+diff --git a/z-nile/tests/acceptance/c0081/allocate.spec.luau b/z-nile/tests/acceptance/c0081/allocate.spec.luau
+index 72c4a9b2..04bf4b7f 100644
+--- a/z-nile/tests/acceptance/c0081/allocate.spec.luau
++++ b/z-nile/tests/acceptance/c0081/allocate.spec.luau
+@@ -3,13 +3,13 @@
+ -- (with a fresh phrase) in the same commit as what it creates; a lost race is a rejected lease push, retried on the
+ -- new origin/main. Without z-nile/next the numbering is unchanged (next multiple of 10). Fixture under
+ -- .cache/c0870-allocate: a seed with this tree's tooling, a bare origin, a main clone and a second clone.
+-local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local ids = require("@scripts/tracker/ids")
+ local process = require("@lune/process")
+ local publish = require("@scripts/tracker/publish")
+ local t = require("@tests/lib/t")
++local trackerfix = require("@tests/lib/trackerfix")
+ 
+ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
+ 
+@@ -20,7 +20,8 @@ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout
+ -- c0120 override: fixtures live under the spec's home's .cache (the jail refuses the checkout top's)
+ local here = trim(process.exec("pwd", { "-P" }).stdout)
+ local base = `{here}/.cache/c0870-allocate`
+-local seed, origin, main, other = `{base}/seed`, `{base}/origin.git`, `{base}/main`, `{base}/other`
++-- c0178: the folders are the shared fixture's (trackerfix.new makes them in the setup case); there is no seed folder
++local origin, main, other = `{base}/origin.git`, `{base}/main`, `{base}/other`
+ local SEED_NEXT = "issue 891 seed-seed-seed\nraft 271 seed-seed-seed\n"
+ 
+ local function git(cwd: string, args: { string }): string
+@@ -102,32 +103,20 @@ local phrases: { string } = {}
+ return t.spec("c0870 allocation from z-nile/next", function(it)
+ 	it("sets up a bare origin holding z-nile/next, a main checkout and a second clone", function()
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		if fs.isDir(base) then
+-			fs.removeDir(base)
+-		end
+-		fs.writeDir(seed)
+-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
+-		identity(seed)
+-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
+-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
+-		end
+-		-- c0120 override: the spec runs from its project's home after the move
+-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+-		engine.roots(seed) -- c0120 override: the fixture is on the final layout (engine.roots lays out every root)
+-		write(`{seed}/{ids.FILE}`, SEED_NEXT)
+-		write(`{seed}/pickman/.tracker/issues/c0890/c0890.md`, stub("c0890", "older"))
+-		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		write(
+-			`{seed}/pickman/.tracker/rafts/done/R0270/R0270.md`,
+-			"---\nid: R0270\ntype: chore\ntitle: Old\nslug: old\nissues: []\ndesign: ready\n---\n\n# R0270\n"
+-		)
+-		git(seed, { "add", "-A" })
+-		git(seed, { "commit", "-q", "-m", "seed" })
+-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
+-		for _, c in { main, other } do
+-			process.exec("git", { "clone", "-q", origin, c }) -- raw: clone to a named path
+-			identity(c)
+-		end
++		-- c0178: one trackerfix.new replaces git init, engine.copy, engine.roots, the copied .claude/.luaurc/.gitignore, the
++		-- seed files, the seed commit and the bare origin with its clones. The checkout's real .gitignore stays the fixture's
++		-- (the default is only ".cache/" and ".worktree/"). main and `other` are committed as the fixture name instead of
++		-- "alloc"; `other` is made at the seed by the first helper that works in it (the git shim below needs it to exist:
++		-- the cases before it have used it through `elsewhere`)
++		trackerfix.new("c0870-allocate", {
++			[".gitignore"] = fs.readFile(`{root}/.gitignore`),
++			[ids.FILE] = SEED_NEXT,
++			["pickman/.tracker/issues/c0890/c0890.md"] = stub("c0890", "older"),
++			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
++			["pickman/.tracker/rafts/done/R0270/R0270.md"] = "---\nid: R0270\ntype: chore\ntitle: Old\nslug: old\nissues: []\ndesign: ready\n---\n\n# R0270\n",
++		}, {
++			copy = { ".claude", ".luaurc" },
++		})
+ 		table.insert(phrases, phraseOf(SEED_NEXT))
+ 		t.expect(counters().issue).toBe(891)
+ 	end)
+diff --git a/z-nile/tests/acceptance/c0081/compact.spec.luau b/z-nile/tests/acceptance/c0081/compact.spec.luau
+index 9a4587d1..00b5269a 100644
+--- a/z-nile/tests/acceptance/c0081/compact.spec.luau
++++ b/z-nile/tests/acceptance/c0081/compact.spec.luau
+@@ -2,12 +2,12 @@
+ -- c0870: `tracker.sh compact [--force]` renumbers every item from 0001 (issues f/d/c in one space, rafts in their
+ -- own), in a worktree cut from origin/main, as one local commit. It refuses while another branch changes tracker/
+ -- or tests/acceptance/ (unless --force), and on a malformed tree. Fixture under .cache/c0870-compact.
+-local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local ids = require("@scripts/tracker/ids")
+ local process = require("@lune/process")
+ local t = require("@tests/lib/t")
++local trackerfix = require("@tests/lib/trackerfix")
+ -- test data spells `tests/acceptance/` in two parts: the real compaction rewrites every literal path to a
+ -- promoted folder in the repository, these specs included, and would change their data
+ local TA = "tests/" .. "acceptance/"
+@@ -17,11 +17,11 @@ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
+ local function trim(s: string): string
+ 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
+ end
+-local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
+ -- c0120 override: fixtures live under the spec's home's .cache (the jail refuses the checkout top's)
+ local here = trim(process.exec("pwd", { "-P" }).stdout)
+ local base = `{here}/.cache/c0870-compact`
+-local seed, origin, main, other = `{base}/seed`, `{base}/origin.git`, `{base}/main`, `{base}/other`
++-- c0178: no seed folder any more (trackerfix.new, in the setup case)
++local origin, main, other = `{base}/origin.git`, `{base}/main`, `{base}/other`
+ 
+ local function git(cwd: string, args: { string }): string
+ 	return fixture.git(cwd, args)
+@@ -98,70 +98,42 @@ local busyWt = ""
+ return t.spec("c0870 compact", function(it)
+ 	it("sets up an origin with items, promoted specs and references to them", function()
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		if fs.isDir(base) then
+-			fs.removeDir(base)
+-		end
+-		fs.writeDir(seed)
+-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
+-		identity(seed)
+-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
+-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
+-		end
+-		-- c0120 override: the spec runs from its project's home after the move
+-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+-		engine.roots(seed) -- c0120 override: the fixture is on the final layout (engine.roots lays out every root)
++		-- c0178: trackerfix.new makes the four repositories (tooling, empty tracker roots, the checkout's .claude, .luaurc and
++		-- .gitignore, and the files below as one commit "seed") that this setup used to build by hand (init, copy, add,
++		-- commit, bare clone, two clones, identities)
++		local extra: { [string]: string } = {}
+ 		-- a template that names ids which the compaction moves: templates are never rewritten
+-		write(`{seed}/z-nile/templates/issue/example.md`, "For example c0010, f0001 and R0020.\n")
+-		write(`{seed}/z-nile/next`, "issue 501 a-b-c\nraft 281 a-b-c\n")
++		extra["z-nile/templates/issue/example.md"] = "For example c0010, f0001 and R0020.\n"
++		extra["z-nile/next"] = "issue 501 a-b-c\nraft 281 a-b-c\n"
+ 		for _, i in ISSUES do
+-			write(
+-				`{seed}/{i[1]}/{i[2]}.md`,
+-				doc(i[2], i[3], `Blocks c0100; see c0010 and R0280 (not c00100).`)
+-			)
+-			write(`{seed}/{i[1]}/check.sh`, checkSh(i[2]))
++			extra[`{i[1]}/{i[2]}.md`] = doc(i[2], i[3], `Blocks c0100; see c0010 and R0280 (not c00100).`)
++			extra[`{i[1]}/check.sh`] = checkSh(i[2])
+ 		end
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		write(
+-			`{seed}/pickman/.tracker/issues/c0100/acceptance/a.spec.luau`,
+-			'local P = "' .. TA .. 'c0010/x.spec.luau" -- c0010 stays: ids in .luau are not rewritten\n'
+-		)
+-		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		write(`{seed}/pickman/.tracker/issues/c0100/experiments/e1.txt`, "c0100 and c0010 stay here\n")
+-		write(`{seed}/pickman/.tracker/rafts/done/R0020/R0020.md`, doc("R0020", "issues: [c0010]\n", "Done."))
+-		write(
+-			`{seed}/pickman/.tracker/rafts/R0280/R0280.md`,
++		extra["pickman/.tracker/issues/c0100/acceptance/a.spec.luau"] = 'local P = "'
++			.. TA
++			.. 'c0010/x.spec.luau" -- c0010 stays: ids in .luau are not rewritten\n'
++		extra["pickman/.tracker/issues/c0100/experiments/e1.txt"] = "c0100 and c0010 stay here\n"
++		extra["pickman/.tracker/rafts/done/R0020/R0020.md"] = doc("R0020", "issues: [c0010]\n", "Done.")
++		extra["pickman/.tracker/rafts/R0280/R0280.md"] =
+ 			doc("R0280", "issues: [c0100, d0500]\n", "After R0020.")
+-		)
+-		write(`{seed}/pickman/.tracker/architecture.md`, "# Architecture\n\nc0100 added the store.\n")
++		extra["pickman/.tracker/architecture.md"] = "# Architecture\n\nc0100 added the store.\n"
+ 		-- promoted specs: a fixture path inside one must stay as it is
+ 		-- c0120 override: pickman's promoted specs (and its other specs) live in its home, pickman/tests/
+-		write(
+-			`{seed}/pickman/tests/acceptance/c0010/x.spec.luau`,
++		extra["pickman/tests/acceptance/c0010/x.spec.luau"] =
+ 			"local inside = `{dir}/tests/acceptance/c0010/y` -- c0100\n"
+-		)
+-		-- c0120 override: pickman's files live in pickman/ (its home)
+-		write(`{seed}/pickman/tests/acceptance/f0001/y.spec.luau`, "return 1\n")
+-		write(`{seed}/pickman/tests/acceptance/f0002/z.spec.luau`, "return 2\n")
+-		-- c0120 override: pickman's files live in pickman/ (its home)
+-		write(
+-			`{seed}/pickman/tests/tooling/ref.spec.luau`,
+-			'-- See c0010.\nlocal LIST = { "'
+-				.. TA
+-				.. 'c0010/x.spec.luau", "'
+-				.. TA
+-				.. 'f0002/z.spec.luau" }\n'
+-		)
+-		write(`{seed}/docs.md`, "Run `" .. TA .. "f0001/y.spec.luau` (c0100).\n")
+-		git(seed, { "add", "-A" })
+-		git(seed, { "commit", "-q", "-m", "seed" })
+-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
+-		for _, c in { main, other } do
+-			process.exec("git", { "clone", "-q", origin, c }) -- raw: clone to a named path
+-			identity(c)
+-		end
+-		local files = string.split(git(seed, { "ls-files", "z-nile/templates" }), "\n")
++		extra["pickman/tests/acceptance/f0001/y.spec.luau"] = "return 1\n"
++		extra["pickman/tests/acceptance/f0002/z.spec.luau"] = "return 2\n"
++		extra["pickman/tests/tooling/ref.spec.luau"] = '-- See c0010.\nlocal LIST = { "'
++			.. TA
++			.. 'c0010/x.spec.luau", "'
++			.. TA
++			.. 'f0002/z.spec.luau" }\n'
++		extra["docs.md"] = "Run `" .. TA .. "f0001/y.spec.luau` (c0100).\n"
++		trackerfix.new("c0870-compact", extra, { copy = { ".claude", ".luaurc", ".gitignore" } })
++		local files = string.split(git(main, { "ls-files", "z-nile/templates" }), "\n")
+ 		for _, f in files do
+-			templatesBefore ..= f .. "\n" .. fs.readFile(`{seed}/{f}`)
++			templatesBefore ..= f .. "\n" .. fs.readFile(`{main}/{f}`)
+ 		end
+ 	end)
+ 
+diff --git a/z-nile/tests/acceptance/c0081/remap.spec.luau b/z-nile/tests/acceptance/c0081/remap.spec.luau
+index 4eeed127..2c12ad4d 100644
+--- a/z-nile/tests/acceptance/c0081/remap.spec.luau
++++ b/z-nile/tests/acceptance/c0081/remap.spec.luau
+@@ -2,23 +2,23 @@
+ -- c0870: `tracker.sh remap` brings a branch that was in flight during a compaction onto the new ids: it applies
+ -- origin/main's z-nile/compaction.txt to the branch, numbers the branch's own unmapped items from origin's counter,
+ -- commits, then merges origin/main itself against the remapped merge base. Fixture under .cache/c0870-remap.
+-local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local ids = require("@scripts/tracker/ids")
+ local process = require("@lune/process")
+ local t = require("@tests/lib/t")
++local trackerfix = require("@tests/lib/trackerfix")
+ 
+ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
+ 
+ local function trim(s: string): string
+ 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
+ end
+-local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
+ -- c0120 override: fixtures live under the spec's home's .cache (the jail refuses the checkout top's)
+ local here = trim(process.exec("pwd", { "-P" }).stdout)
+ local base = `{here}/.cache/c0870-remap`
+-local seed, origin, main = `{base}/seed`, `{base}/origin.git`, `{base}/main`
++-- c0178: no seed folder any more (trackerfix.new, in the setup case)
++local origin, main = `{base}/origin.git`, `{base}/main`
+ 
+ local function git(cwd: string, args: { string }): string
+ 	return fixture.git(cwd, args)
+@@ -36,10 +36,6 @@ end
+ local function has(text: string?, needle: string): boolean
+ 	return text ~= nil and string.find(text, needle, 1, true) ~= nil
+ end
+-local function write(path: string, text: string)
+-	fs.writeDir(string.match(path, "^(.*)/[^/]+$") :: string)
+-	fs.writeFile(path, text)
+-end
+ local function identity(dir: string)
+ 	git(dir, { "config", "user.name", "remap" })
+ 	git(dir, { "config", "user.email", "remap@example.invalid" })
+@@ -65,30 +61,18 @@ local branch = ""
+ 
+ return t.spec("c0870 remap", function(it)
+ 	it("sets up an origin and a branch with its own edits and an item of its own", function()
++		-- c0178: trackerfix.new makes the repositories (tooling, empty tracker roots, the checkout's .claude, .luaurc and
++		-- .gitignore, and the files below as one commit "seed") that this setup built by hand (init, copy, add, commit, bare
++		-- clone, clone, identities)
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-		if fs.isDir(base) then
+-			fs.removeDir(base)
+-		end
+-		fs.writeDir(seed)
+-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
+-		identity(seed)
+-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
+-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
+-		end
+-		-- c0120 override: the spec runs from its project's home after the move
+-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+-		engine.roots(seed) -- c0120 override: the fixture is on the final layout (engine.roots lays out every root)
+-		write(`{seed}/z-nile/next`, "issue 41 a-b-c\nraft 31 a-b-c\n")
+-		write(`{seed}/pickman/.tracker/issues/c0010/c0010.md`, doc("c0010", "raft: R0030\n"))
+-		write(`{seed}/pickman/.tracker/issues/f0020/f0020.md`, doc("f0020", "raft: R0030\n"))
+-		write(`{seed}/pickman/.tracker/rafts/R0030/R0030.md`, doc("R0030", "issues: [c0010, f0020]\n"))
+-		-- c0120 override: pickman's promoted specs live in its home, pickman/tests/acceptance
+-		write(`{seed}/pickman/tests/acceptance/c0010/a.spec.luau`, "return 1\n")
+-		git(seed, { "add", "-A" })
+-		git(seed, { "commit", "-q", "-m", "seed" })
+-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
+-		process.exec("git", { "clone", "-q", origin, main }) -- raw: clone to a named path
+-		identity(main)
++		trackerfix.new("c0870-remap", {
++			["z-nile/next"] = "issue 41 a-b-c\nraft 31 a-b-c\n",
++			["pickman/.tracker/issues/c0010/c0010.md"] = doc("c0010", "raft: R0030\n"),
++			["pickman/.tracker/issues/f0020/f0020.md"] = doc("f0020", "raft: R0030\n"),
++			["pickman/.tracker/rafts/R0030/R0030.md"] = doc("R0030", "issues: [c0010, f0020]\n"),
++			-- c0120 override: pickman's promoted specs live in its home, pickman/tests/acceptance
++			["pickman/tests/acceptance/c0010/a.spec.luau"] = "return 1\n",
++		}, { copy = { ".claude", ".luaurc", ".gitignore" } })
+ 		branch = worktree("prep-y")
+ 		-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+ 		local c10 = `{branch}/pickman/.tracker/issues/c0010/c0010.md`
+diff --git a/z-nile/tests/acceptance/c0084/spend-command.spec.luau b/z-nile/tests/acceptance/c0084/spend-command.spec.luau
+index c39e181c..098175ad 100644
+--- a/z-nile/tests/acceptance/c0084/spend-command.spec.luau
++++ b/z-nile/tests/acceptance/c0084/spend-command.spec.luau
+@@ -10,6 +10,7 @@ local ledger = require("@scripts/tracker/ledger")
+ local process = require("@lune/process")
+ local publish = require("@scripts/tracker/publish")
+ local t = require("@tests/lib/t")
++local trackerfix = require("@tests/lib/trackerfix")
+ 
+ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
+ 
+@@ -19,7 +20,8 @@ end
+ local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
+ -- c0120 override: fixtures live under the home's .cache (z-nile/.cache); root stays the checkout to copy from
+ local base = `{trim(process.exec("pwd", { "-P" }).stdout)}/.cache/c0084-spend`
+-local seed, origin, main, other = `{base}/seed`, `{base}/origin.git`, `{base}/main`, `{base}/other`
++-- c0178: no seed folder any more (trackerfix.new, in the setup case)
++local origin, main, other = `{base}/origin.git`, `{base}/main`, `{base}/other`
+ 
+ local function git(cwd: string, args: { string }): string
+ 	return fixture.git(cwd, args)
+@@ -70,34 +72,12 @@ local a, b, raft = "", "", ""
+ 
+ return t.spec("tracker spend", function(it)
+ 	it("sets up an origin, a main checkout, a second clone and a prep worktree with a raft of two", function()
+-		if fs.isDir(base) then
+-			fs.removeDir(base)
+-		end
+-		fs.writeDir(seed)
+-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
+-		identity(seed)
+-		for _, p in { ".claude", ".luaurc", ".gitignore", "rokit.toml" } do
+-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
+-		end
+-		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-		fs.writeDir(`{seed}/pickman/.tracker`)
+-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+-		-- c0120 override: the checkout keeps pickman's architecture.md in pickman/.tracker, the fixtures' pickman root too
+-		process.exec(
+-			"cp",
+-			{ `{root}/pickman/.tracker/architecture.md`, `{seed}/pickman/.tracker/architecture.md` }
+-		) -- ready's prompt
+-		for _, d in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
+-			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+-			write(`{seed}/pickman/.tracker/{d}/.gitkeep`, "")
+-		end
+-		git(seed, { "add", "-A" })
+-		git(seed, { "commit", "-q", "-m", "seed" })
+-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
+-		for _, c in { main, other } do
+-			process.exec("git", { "clone", "-q", origin, c }) -- raw: clone to a named path
+-			identity(c)
+-		end
++		-- c0178: trackerfix.new makes the repositories (tooling, empty tracker roots, the checkout's .claude, .luaurc,
++		-- .gitignore, rokit.toml and pickman's architecture.md (ready's prompt) as one commit "seed") that this setup built by
++		-- hand (init, copy, empty tracker folders, add, commit, bare clone, two clones, identities)
++		trackerfix.new("c0084-spend", nil, {
++			copy = { ".claude", ".luaurc", ".gitignore", "rokit.toml", "pickman/.tracker/architecture.md" },
++		})
+ 		prep = trOk(main, { "worktree", "prep-demo" })
+ 		identity(prep)
+ 		a = string.match(
+diff --git a/z-nile/tests/acceptance/c0116/claims.spec.luau b/z-nile/tests/acceptance/c0116/claims.spec.luau
+index 6cdb36a8..ba3d481d 100644
+--- a/z-nile/tests/acceptance/c0116/claims.spec.luau
++++ b/z-nile/tests/acceptance/c0116/claims.spec.luau
+@@ -165,26 +165,50 @@ return t.spec(
+ 			seed["pickman/.tracker/rafts/R0090/check.sh"] = CHECK
+ 			seed["pickman/.tracker/rafts/R0100/check.sh"] = CHECK
+ 			f = trackerfix.new("c0116-claims", seed)
+-			A = trOk(f.main, { "worktree", "raft-a" })
+-			B = trOk(f.main, { "worktree", "raft-b" })
+-			C = trOk(f.main, { "worktree", "raft-c" })
+-			D = trOk(f.main, { "worktree", "raft-d" })
+-			E = trOk(f.main, { "worktree", "raft-e" })
+-			F = trOk(f.main, { "worktree", "raft-f" })
+-			G = trOk(f.main, { "worktree", "prep-g" })
+-			H = trOk(f.main, { "worktree", "raft-h" })
+-			J = trOk(f.main, { "worktree", "raft-j" })
+-			K = trOk(f.main, { "worktree", "prep-k" })
+-			L = trOk(f.main, { "worktree", "raft-l" })
+-			M = trOk(f.main, { "worktree", "prep-m" })
+-			N = trOk(f.main, { "worktree", "raft-n" })
+-			O = trOk(f.main, { "worktree", "raft-o" })
+-			P = trOk(f.main, { "worktree", "raft-p" })
+-			Q = trOk(f.main, { "worktree", "prep-q" })
+-			S = trOk(f.main, { "worktree", "raft-s" })
+-			U = trOk(f.main, { "worktree", "raft-u" })
+-			V = trOk(f.main, { "worktree", "raft-v" })
+-			X = trOk(f.main, { "worktree", "raft-x" })
++			-- c0178 override: the twenty worktrees are one checkout of the tooling and nineteen copies of it
++			local made = trackerfix.worktrees(f, {
++				"raft-a",
++				"raft-b",
++				"raft-c",
++				"raft-d",
++				"raft-e",
++				"raft-f",
++				"prep-g",
++				"raft-h",
++				"raft-j",
++				"prep-k",
++				"raft-l",
++				"prep-m",
++				"raft-n",
++				"raft-o",
++				"raft-p",
++				"prep-q",
++				"raft-s",
++				"raft-u",
++				"raft-v",
++				"raft-x",
++			})
++			A, B, C, D, E, F, G, H, J, K, L, M, N, O, P, Q, S, U, V, X =
++				made[1],
++				made[2],
++				made[3],
++				made[4],
++				made[5],
++				made[6],
++				made[7],
++				made[8],
++				made[9],
++				made[10],
++				made[11],
++				made[12],
++				made[13],
++				made[14],
++				made[15],
++				made[16],
++				made[17],
++				made[18],
++				made[19],
++				made[20]
+ 			t.expect(trOk(A, { "status", "c0010" })).toBe("prepared")
+ 		end)
+ 
+diff --git a/z-nile/tests/acceptance/c0116/promote.spec.luau b/z-nile/tests/acceptance/c0116/promote.spec.luau
+index d6c7fe68..e108af81 100644
+--- a/z-nile/tests/acceptance/c0116/promote.spec.luau
++++ b/z-nile/tests/acceptance/c0116/promote.spec.luau
+@@ -4,6 +4,7 @@
+ -- the meta spec, and removes the copies whatever the result; a spec that breaks the type check fails it. Run in a
+ -- clone of this checkout under .cache/c0116-promote (its tooling overlaid from the working tree, its tracker emptied),
+ -- never in the real checkout.
++local clone = require("@tests/lib/clone")
+ local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+@@ -72,7 +73,21 @@ return t.spec("c0116 promote-check takes an issue's own acceptance specs", funct
+ 			fs.removeDir(base)
+ 		end
+ 		fs.writeDir(base)
+-		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
++		-- c0178: a sparse clone (git writes only `paths` to the working tree) in place of the full checkout of ~2,580 files;
++		-- the tooling overlay below writes the rest.
++		clone.isolated(root, work, {
++			tooling = true, -- c0178: what the overlay below writes, new files of the working tree included
++			paths = {
++				-- the type check's base config (promote-check)
++				".luaurc",
++				-- the two issues the spec writes (git add -A refuses new files outside the sparse set)
++				"z-nile/.tracker/issues/c0010/",
++				"z-nile/.tracker/issues/c0020/",
++				-- engine.roots' .gitkeep files for z-nile's root, new to the index
++				"z-nile/.tracker/issues/done/.gitkeep",
++				"z-nile/.tracker/rafts/done/.gitkeep",
++			},
++		})
+ 		must(fixture.exec(work, "git", { "remote", "remove", "origin" }), "remote remove")
+ 		-- the tooling as this checkout has it, committed or not
+ 		local args = { "ls-files", "-co", "--exclude-standard" }
+diff --git a/z-nile/tests/acceptance/c0120/promote-home.spec.luau b/z-nile/tests/acceptance/c0120/promote-home.spec.luau
+index abbfa166..f9deb095 100644
+--- a/z-nile/tests/acceptance/c0120/promote-home.spec.luau
++++ b/z-nile/tests/acceptance/c0120/promote-home.spec.luau
+@@ -6,6 +6,7 @@
+ -- compaction renames pickman's promoted folders and rewrites the paths that name them. Fixture under
+ -- .cache/c0120-promote: a clone of the repository with its tooling, pickman's items in pickman/.tracker, a stub gate.
+ local audit = require("@znile/engine/audit")
++local clone = require("@tests/lib/clone")
+ local compact = require("@znile/engine/compact")
+ local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+@@ -81,7 +82,44 @@ return t.spec("c0120 done promotes into the item's home", function(it)
+ 			fs.removeDir(base)
+ 		end
+ 		fs.writeDir(base)
+-		must(process.exec("git", { "clone", "-q", "--no-hardlinks", root, work }), "clone")
++		-- c0178: a sparse clone (git writes only `paths` to the working tree) in place of the full checkout of 2,580 files.
++		clone.isolated(root, work, {
++			tooling = true, -- c0178: the overlay below writes tooling that a reset (done's rollback) must not delete
++			paths = {
++				-- pickman's architecture meta spec scans every Logic feature, its unit specs and the declared dependencies
++				"pickman/src/shared/Logic/",
++				"pickman/tests/unit/",
++				"pickman/.tracker/architecture.md",
++				-- pickman's meta spec, which done runs on the promoted tree with its fence spec (z-nile/tests/tooling is not in the overlay)
++				"z-nile/tests/tooling/repo-fence.spec.luau",
++				-- ./zn commit runs `git add -A` on each root, which refuses a root with nothing of it in the clone
++				"z-nile/.tracker/issues/active/.gitkeep",
++				-- the item folders the spec creates and ./zn moves (start, done): a plain `git add -A` and `git mv` need them in the sparse set
++				"pickman/.tracker/issues/f0010/",
++				"pickman/.tracker/rafts/R0010/",
++				"pickman/.tracker/issues/active/f0010/",
++				"pickman/.tracker/rafts/active/R0010/",
++				"pickman/.tracker/issues/done/f0010/",
++				"pickman/.tracker/rafts/done/R0010/",
++				-- where a compaction renames the items (through f0001.compacting)
++				"pickman/.tracker/issues/done/f0001/",
++				-- where a compaction renames the items (through R0001.compacting)
++				"pickman/.tracker/rafts/done/R0001/",
++				"pickman/.tracker/issues/done/f0001.compacting/",
++				"pickman/.tracker/rafts/done/R0001.compacting/",
++				-- done's promoted spec
++				"pickman/tests/acceptance/f0010/",
++				-- where a compaction renames the promoted folder (through f0001.compacting)
++				"pickman/tests/acceptance/f0001/",
++				"pickman/tests/acceptance/f0001.compacting/",
++				-- files the spend and compaction cases write and `git add`
++				"pickman/tests/acceptance/f0099/",
++				"z-nile/tests/acceptance/c0099/",
++				"pickman/src/counted.luau",
++				"notes.md",
++				"pickman/notes.md",
++			},
++		})
+ 		git({ "remote", "remove", "origin" })
+ 		local listed = process.exec("git", {
+ 			"ls-files",
+@@ -114,7 +152,8 @@ return t.spec("c0120 done promotes into the item's home", function(it)
+ 		for _, state in { "issues/active", "issues/done", "rafts/active", "rafts/done" } do
+ 			write(`pickman/.tracker/{state}/.gitkeep`, "")
+ 		end
+-		git({ "add", "-A" })
++		-- c0178: --sparse, so the overlay (all on disk, mostly outside the sparse clone's paths) is committed as before
++		git({ "add", "-A", "--sparse" })
+ 		git({ "commit", "-qm", "empty tracker, pickman's home", "--allow-empty" })
+ 		t.expect(must(tr({ "new", "issue", "f", "alpha", "--project", "pickman" }), "new issue"))
+ 			.toBe("pickman/.tracker/issues/f0010/f0010.md")
+diff --git a/z-nile/tests/lib/clone.luau b/z-nile/tests/lib/clone.luau
+index 304dc99b..e88618e4 100644
+--- a/z-nile/tests/lib/clone.luau
++++ b/z-nile/tests/lib/clone.luau
+@@ -1,16 +1,118 @@
+ --!strict
++local engine = require("@tests/lib/engine")
++local fixture = require("@tests/lib/fixture")
++local fs = require("@lune/fs")
++local images = require("@tests/lib/images")
+ local process = require("@lune/process")
++local swept = require("@tests/lib/swept")
++local tally = require("@tests/lib/tally")
++
++-- process.exec, counted (tally.started) beside the call.
++local function counted(
++	cmd: string,
++	args: { string }?,
++	options: any?
++): { ok: boolean, code: number, stdout: string, stderr: string }
++	tally.started(1)
++	return process.exec(cmd, args, options)
++end
+ 
+ local clone = {}
+ 
++-- The packed bare image of the repository at `root` at its HEAD (c0178): one `--no-hardlinks` clone per run and HEAD,
++-- built by the first spec that clones it, and cloned by the rest. `repo.git` inside it.
++function clone.imageOf(root: string, options: { dir: string? }?): string
++	local head = counted("git", { "rev-parse", "HEAD" }, { cwd = root })
++	if not head.ok or not string.match(head.stdout, "^%x+%s*$") then
++		error(`clone.imageOf: no HEAD in {root}: {head.stderr}`, 2)
++	end
++	local dir = images.ensure({
++		name = "repo",
++		root = root,
++		inputs = {},
++		skip = {},
++		code = { `{engine.TOP}/z-nile/tests/lib/images.luau`, `{engine.TOP}/z-nile/tests/lib/clone.luau` },
++		salt = `{root}\n{string.gsub(head.stdout, "%s+$", "")}`,
++		build = function(dest: string)
++			local r = counted("git", { "clone", "-q", "--bare", "--no-hardlinks", root, `{dest}/repo.git` })
++			if not r.ok then
++				error(`git clone --bare {root} failed: {r.stderr}`, 2)
++			end
++			fixture.git(`{dest}/repo.git`, { "remote", "remove", "origin" })
++			fixture.git(`{dest}/repo.git`, { "repack", "-a", "-d", "-q" })
++			fixture.git(`{dest}/repo.git`, { "prune", "--expire=now" }) -- unreachable loose objects the source had
++			tally.files(tally.count(`{dest}/repo.git`))
++		end,
++	}, { dir = options and options.dir })
++	return `{dir}/repo.git`
++end
++
++-- The image of this checkout's own repository.
++function clone.image(): string
++	return clone.imageOf(engine.TOP)
++end
++
+ -- `git clone --no-hardlinks`: a plain local clone hardlinks the object files of `source`, so the
+ -- throwaway copy would share inodes with the real object store. Raises if the clone fails; returns
+--- `dest` (so `pcall(clone.isolated, …)` has a typed second result in strict mode).
+-function clone.isolated(source: string, dest: string): string
+-	local r = process.exec("git", { "clone", "-q", "--no-hardlinks", source, dest })
++-- `dest` (so `pcall(clone.isolated, …)` has a typed second result in strict mode). The repository this harness is
++-- in is cloned from its image, not again from itself. `dest` is swept when its spec file passes.
++-- `paths`: when given, only these paths of the repository (repository-relative; a trailing "/" is a folder) are in the
++-- clone's working tree: the rest is in its index and not on disk (a sparse checkout), so a spec that reads a few folders
++-- does not write 2,500 files. The clone is made with --no-checkout and then checked out through them.
++export type Options = {
++	paths: { string }?, -- repository-relative paths written to the working tree (nil: all of it)
++	tooling: boolean?, -- with `paths`: also the tooling a spec overlays (./zn, scripts/, z-nile/ but its tracker state, .gitignore)
++}
++
++-- The tooling the specs that clone the repository overlay with the working tree's (engine.PATHSPECS), as clone paths: `zn`,
++-- `scripts/`, `.gitignore` and every entry of z-nile/ but its tracker state, read from the checkout, so a new entry joins
++-- without an edit here.
++local function toolingPaths(): { string }
++	local list = { "zn", "scripts/", ".gitignore" }
++	for _, name in fs.readDir(`{engine.TOP}/z-nile`) do
++		if name ~= ".tracker" and name ~= "next" and name ~= "compaction.txt" and name ~= ".cache" then
++			table.insert(list, `z-nile/{name}{if fs.isDir(`{engine.TOP}/z-nile/{name}`) then "/" else ""}`)
++		end
++	end
++	return list
++end
++
++function clone.isolated(source: string, dest: string, opts: Options?): string
++	local from = if source == engine.TOP then clone.image() else source
++	local args = { "clone", "-q", "--no-hardlinks" }
++	local paths = opts and opts.paths
++	if paths then
++		table.insert(args, "--no-checkout")
++	end
++	table.insert(args, from)
++	table.insert(args, dest)
++	local r = counted("git", args)
+ 	if not r.ok then
+ 		error(`git clone of {source} into {dest} failed ({r.code}): {r.stderr}`, 2)
+ 	end
++	if paths then
++		local set = { "sparse-checkout", "set", "--no-cone" }
++		local all = table.clone(paths)
++		if opts and opts.tooling then
++			for _, p in toolingPaths() do
++				table.insert(all, p)
++			end
++		end
++		for _, p in all do
++			table.insert(set, "/" .. string.gsub(p, "^/", ""))
++		end
++		fixture.git(dest, set)
++		fixture.git(dest, { "checkout", "-q" })
++	end
++	-- the clone's origin is the source it was asked for, not the image it was made from (a push from a fixture must never reach
++	-- an image); for the repository itself that is the real repository, which the pre-push guard refuses
++	if source == engine.TOP then
++		fixture.git(dest, { "remote", "set-url", "origin", engine.TOP })
++	end
++	tally.files(tally.count(dest))
++	if fs.isDir(dest) then
++		swept.register(dest)
++	end
+ 	return dest
+ end
+ 
+diff --git a/z-nile/tests/lib/engine.luau b/z-nile/tests/lib/engine.luau
+index 7764c936..886487e6 100644
+--- a/z-nile/tests/lib/engine.luau
++++ b/z-nile/tests/lib/engine.luau
+@@ -2,8 +2,23 @@
+ -- The tooling a fixture copies to run ./zn and the gate (c0114): the ./zn entry, scripts/ (the forwarders and the
+ -- game's scripts) and z-nile/ without the repository's tracker state (its .tracker/ items, the id counter and the
+ -- compaction map), so a fixture starts with no items and the old numbering unless it seeds them.
++local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
++local images = require("@tests/lib/images")
+ local process = require("@lune/process")
++local pruning = require("@tests/lib/pruning")
++local swept = require("@tests/lib/swept")
++local tally = require("@tests/lib/tally")
++
++-- process.exec, counted (tally.started) beside the call.
++local function counted(
++	cmd: string,
++	args: { string }?,
++	options: any?
++): { ok: boolean, code: number, stdout: string, stderr: string }
++	tally.started(1)
++	return process.exec(cmd, args, options)
++end
+ 
+ local engine = {}
+ 
+@@ -56,12 +71,12 @@ function engine.registry(dest: string)
+ 	fs.writeFile(`{dest}/z-nile/projects.toml`, engine.REGISTRY)
+ end
+ 
+--- Copies the tooling from the checkout `root` into `dest` (an existing folder under .cache). Raises when a copy fails.
+--- A `root` with no ./zn (a project's home, where specs run since c0120) means the checkout that holds this harness.
+-function engine.copy(given: string, dest: string)
+-	local root = if fs.isFile(`{given}/zn`) then given else engine.TOP
++-- Lays the tooling of the checkout `root` out in `dest`, an existing folder: ./zn, scripts/, z-nile/ without its tracker
++-- state, and the registry. What an image of the tooling holds, and what a tree that is not this checkout's own is built
++-- with. Raises when a copy fails.
++function engine.build(root: string, dest: string)
+ 	local function cp(from: string, to: string)
+-		local r = process.exec("cp", { "-R", from, to })
++		local r = counted("cp", { "-R", from, to })
+ 		if not r.ok then
+ 			error(`engine.copy: cp {from} {to} failed: {r.stderr}`, 2)
+ 		end
+@@ -83,6 +98,126 @@ function engine.copy(given: string, dest: string)
+ 	fs.writeFile(`{dest}/z-nile/projects.toml`, engine.REGISTRY)
+ end
+ 
++-- What an image of this checkout's tooling is made from and keyed by: the files engine.build copies, and the code of
++-- the harness that lays them out and builds the images (images.luau, engine.luau).
++local function imageSpec(name: string, build: (dest: string) -> ()): images.Spec
++	local skip = {}
++	for state in engine.STATE do
++		table.insert(skip, `z-nile/{state}`)
++	end
++	table.sort(skip)
++	return {
++		name = name,
++		root = engine.TOP,
++		inputs = { "zn", "scripts", "z-nile" },
++		skip = skip,
++		code = { `{engine.TOP}/z-nile/tests/lib/images.luau`, `{engine.TOP}/z-nile/tests/lib/engine.luau` },
++		build = build,
++	}
++end
++
++-- The image of this checkout's tooling: a folder laid out as engine.build lays it out, built once per content.
++function engine.image(): string
++	return images.ensure(imageSpec("tooling", function(dest: string)
++		engine.build(engine.TOP, dest)
++	end))
++end
++
++-- The packed seed repository of this checkout's tooling (c0178): a bare repository `seed.git` in the image, one
++-- commit "seed" on main holding the tooling, the empty tracker folders of every root and .gitignore; with the skills'
++-- lessons, or without them (`noLessons`, trackerfix.new's option). A fixture clones it instead of building one.
++function engine.seed(noLessons: boolean): string
++	local spec = imageSpec(if noLessons then "seed-nolessons" else "seed", function(dest: string)
++		local work = `{dest}/work`
++		fs.writeDir(work)
++		local init = counted("git", { "init", "-q", "-b", "main", work })
++		if not init.ok then
++			error(`git init {work} failed: {init.stderr}`, 2)
++		end
++		engine.build(engine.TOP, work)
++		if noLessons then
++			engine.clearLessons(work)
++		end
++		engine.roots(work)
++		fs.writeFile(`{work}/.gitignore`, ".cache/\n.worktree/\n")
++		fixture.git(work, { "add", "-A" })
++		fixture.git(work, {
++			"-c",
++			"user.name=images",
++			"-c",
++			"user.email=images@example.invalid",
++			"commit",
++			"-q",
++			"-m",
++			"seed",
++		})
++		fixture.git(work, { "repack", "-a", "-d", "-q" })
++		local bare = counted("git", { "clone", "-q", "--bare", "--no-hardlinks", work, `{dest}/seed.git` })
++		if not bare.ok then
++			error(`git clone --bare {work} failed: {bare.stderr}`, 2)
++		end
++		fixture.git(`{dest}/seed.git`, { "remote", "remove", "origin" })
++		fs.removeDir(work)
++	end)
++	return `{images.ensure(spec)}/seed.git`
++end
++
++-- A fixture folder is swept when its spec file passes (@tests/lib/swept): the `.cache/<name>` a destination lies in,
++-- when it lies in one (specs name their folder `.cache/<name>`, one per spec file); any other destination is left.
++local function registerFixture(dest: string)
++	local top = string.match(dest, "^(.*/%.cache/[^/]+)")
++	if top ~= nil and top ~= pruning.dir() then
++		pcall(swept.register, top)
++	end
++end
++
++local fileCounts: { [string]: number } = {}
++local function imageFiles(image: string): number
++	local n = fileCounts[image]
++	if n == nil then
++		n = tally.count(image)
++		fileCounts[image] = n
++	end
++	return n
++end
++
++-- Copies the tooling from the checkout `given` into `dest` (an existing folder under .cache). Raises when a copy fails.
++-- A `given` with no ./zn (a project's home, where specs run since c0120) means the checkout that holds this harness.
++-- This checkout's tooling comes from its image (copy-on-write where the filesystem has it): one process, nothing laid
++-- out again. When `dest` already holds a repository, the seed image's packed objects go into it too, so the `git add`
++-- the caller runs next writes no loose object for a file of the tooling. Any other tree is laid out directly.
++function engine.copy(given: string, dest: string)
++	registerFixture(dest)
++	local root = if fs.isFile(`{given}/zn`) then given else engine.TOP
++	if root ~= engine.TOP then
++		engine.build(root, dest)
++		return
++	end
++	local image = engine.image()
++	local r = counted("cp", { "-cR", `{image}/.`, dest })
++	if not r.ok then
++		r = counted("cp", { "-R", `{image}/.`, dest }) -- no copy-on-write here (Linux, another volume)
++	end
++	if not r.ok then
++		error(`engine.copy: cp {image} {dest} failed: {r.stderr}`, 2)
++	end
++	tally.files(imageFiles(image))
++	if fs.isDir(`{dest}/.git/objects/pack`) then
++		local packs = `{engine.seed(false)}/objects/pack`
++		local args = {}
++		for _, name in fs.readDir(packs) do
++			if string.match(name, "%.pack$") or string.match(name, "%.idx$") then
++				table.insert(args, `{packs}/{name}`)
++			end
++		end
++		table.insert(args, `{dest}/.git/objects/pack/`)
++		local p = counted("cp", args)
++		if not p.ok then
++			error(`engine.copy: cp {packs} {dest}/.git/objects/pack failed: {p.stderr}`, 2)
++		end
++	end
++end
++
+ -- c0115: fixtures copy the skills with their lessons (the user's decision, 2026-10-21). A spec that needs an exact set
+ -- of lessons clears the copied ones first (trackerfix.new's `noLessons`), then seeds its own.
+ function engine.clearLessons(dest: string)
+@@ -108,6 +243,46 @@ function engine.roots(dest: string)
+ 	end
+ end
+ 
++-- A sparse clone (clone.isolated with paths) keeps the real items in its index, off disk, where the deletions above never
++-- reach: they would stay in the fixture's first commit. Take them out of the index as the deletions take them out of a
++-- full clone: every item folder of every root, and the counters (c0178, design review 002 F2).
++local function dropFromSparseIndex(dir: string)
++	if not fs.isFile(`{dir}/.git/info/sparse-checkout`) then
++		return
++	end
++	local listed = counted("git", { "ls-files", "-z" }, { cwd = dir })
++	local doomed: { string } = {}
++	local seen: { [string]: boolean } = {}
++	for path in string.gmatch(listed.stdout, "([^%z]+)") do
++		local folder = string.match(path, "^(.-/[fdcR]%d%d%d%d)/")
++		local isItemFolder = false
++		if folder then
++			for _, root in engine.CLONE_ROOTS do
++				for _, kind in { "issues", "rafts" } do
++					for _, state in { "", "active/", "done/", "retired/" } do
++						if string.sub(folder, 1, #root + #kind + #state + 2) == `{root}/{kind}/{state}` then
++							local rest = string.sub(folder, #root + #kind + #state + 3)
++							isItemFolder = isItemFolder or string.match(rest, "^[fdcR]%d%d%d%d$") ~= nil
++						end
++					end
++				end
++			end
++		end
++		if isItemFolder and not seen[folder :: string] then
++			seen[folder :: string] = true
++			table.insert(doomed, folder :: string)
++		end
++	end
++	for _, counter in engine.COUNTERS do
++		table.insert(doomed, counter)
++	end
++	local args = { "rm", "-r", "-q", "--cached", "--sparse", "--ignore-unmatch", "--" }
++	for _, path in doomed do
++		table.insert(args, path)
++	end
++	fixture.git(dir, args)
++end
++
+ -- A clone of the repository with no items: every item folder under every root removed, and the counter too (wherever it is) (ids
+ -- then follow the old rule, the next multiple of 10, c0870), on the fixtures' layout (engine.REGISTRY).
+ function engine.empty(dir: string)
+@@ -134,6 +309,7 @@ function engine.empty(dir: string)
+ 			fs.removeFile(`{dir}/{counter}`)
+ 		end
+ 	end
++	dropFromSparseIndex(dir)
+ 	-- the fixtures' roots, laid out (a clone's tracker/ holds only the old counter's tombstone since c0120)
+ 	if fs.isDir(`{dir}/z-nile`) then
+ 		engine.roots(dir)
+diff --git a/z-nile/tests/lib/fence.luau b/z-nile/tests/lib/fence.luau
+index 7d70b836..338e6f96 100644
+--- a/z-nile/tests/lib/fence.luau
++++ b/z-nile/tests/lib/fence.luau
+@@ -12,6 +12,7 @@
+ -- records its pid in the lock, so the lock stays held while any guarded process lives.
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
++local pruning = require("@tests/lib/pruning")
+ local stdio = require("@lune/stdio")
+ local task = require("@lune/task")
+ 
+@@ -845,6 +846,10 @@ function fence.enter()
+ 		)
+ 		process.exec("chmod", { "+x", `{runTemp}/bin/mktemp` })
+ 	end
++	-- git's template for the repositories specs make: empty hooks/ and info/ folders and none of the 16 sample files, so
++	-- a fixture repository costs those files no more (c0178); folders because specs write hooks into .git/hooks
++	fs.writeDir(`{runTemp}/git-templates/hooks`)
++	fs.writeDir(`{runTemp}/git-templates/info`)
+ 	local prefix, jailed = jail(here, cache, runTemp)
+ 	if string.sub(jailed, 1, 14) == "outer sandbox " then
+ 		-- the lock code runs here, inside that sandbox: fence.alive must read its refusals as "alive" (review 001 F3)
+@@ -852,10 +857,11 @@ function fence.enter()
+ 	end
+ 	local lock = `{cache}/tests-run.lock`
+ 	takeLock(lock)
++	pruning.run(pruning.dir()) -- only this run is in the home now, and no spec has started (c0178)
+ 	local before = snapshot(cache)
+ 	local argv = {
+ 		"-c",
+-		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" PATH="$3/bin:$PATH" && shift 5 && exec lune run tests/run -- "$@"',
++		'unset PICKMAN_REAP_SWEPT PICKMAN_REAP_CACHE; . "$4/z-nile/lib/fence.sh" && { old=$IFS; IFS=:; for d in $5; do pickman_fence_ceiling "$d" || exit 1; done; IFS=$old; } && pickman_fence "$1" specs "$2" && export PICKMAN_TEST_FENCE="$1" PICKMAN_TEST_JAIL="$2" TMPDIR="$3" GIT_TEMPLATE_DIR="$3/git-templates" PATH="$3/bin:$PATH" && shift 5 && exec lune run tests/run -- "$@"',
+ 		"_",
+ 		here,
+ 		jailed,
+diff --git a/z-nile/tests/lib/fixture.luau b/z-nile/tests/lib/fixture.luau
+index eb8572d1..31e8ad8f 100644
+--- a/z-nile/tests/lib/fixture.luau
++++ b/z-nile/tests/lib/fixture.luau
+@@ -5,6 +5,17 @@
+ -- the enclosing real one. Creating a fixture (git init, git clone to a new path) needs no check: the new path is
+ -- named explicitly.
+ local process = require("@lune/process")
++local tally = require("@tests/lib/tally")
++
++-- process.exec, counted (tally.started) beside the call.
++local function counted(
++	cmd: string,
++	args: { string }?,
++	options: any?
++): { ok: boolean, code: number, stdout: string, stderr: string }
++	tally.started(1)
++	return process.exec(cmd, args, options)
++end
+ 
+ local fixture = {}
+ 
+@@ -17,31 +28,52 @@ end
+ 
+ -- The path with its symlinks resolved, or nil when it isn't a directory.
+ function fixture.physical(path: string): string?
+-	local ok, r = pcall(process.exec, "pwd", { "-P" }, { cwd = path })
++	local ok, r = pcall(counted, "pwd", { "-P" }, { cwd = path })
+ 	if not ok or not r.ok then
+ 		return nil
+ 	end
+ 	return trim(r.stdout)
+ end
+ 
++-- Folders a helper promised and has not made yet (c0178): the first fixture helper asked to work in one makes it, so a
++-- fixture a spec may never touch (trackerfix's `other`) costs nothing until it is used.
++local deferred: { [string]: () -> () } = {}
++
++-- Registers `make`, which creates the fixture repository at `dir`, to run the first time a helper below is given `dir`.
++function fixture.defer(dir: string, make: () -> ())
++	deferred[dir] = make
++end
++
++-- The home's physical path, read once per process (c0178, a prep choice for the reviewer): a Lune process never changes its
++-- folder, so only a renamed ancestor could change it, and then every live `here` below disagrees with it and the check
++-- refuses (it fails closed). Everything about `dir` itself stays live on every call.
++local home: string? = nil
++local function homeOf(): string?
++	if home == nil then
++		home = fixture.physical(".")
++	end
++	return home
++end
++
+ -- Raises unless `dir` is a fixture repository: under this run's .cache folder (the spec runs at the checkout's root),
+ -- and the top of its own worktree (or a bare repository's own git directory).
+ function fixture.check(dir: string)
++	local make = deferred[dir]
++	if make then
++		deferred[dir] = nil
++		make() -- creates the folder; the checks below judge what it made like any other
++	end
+ 	local here = fixture.physical(dir)
+-	local cache = `{fixture.physical(".") or "?"}/.cache/`
++	local cache = `{homeOf() or "?"}/.cache/`
+ 	local fail = `refusing to run in {dir}: it is not a fixture repository under {cache}`
+ 	if not here or string.sub(here .. "/", 1, #cache) ~= cache then
+ 		error(fail, 3)
+ 	end
+-	local top = process.exec("git", { "rev-parse", "--show-toplevel" }, { cwd = here })
++	local top = counted("git", { "rev-parse", "--show-toplevel" }, { cwd = here })
+ 	if top.ok and trim(top.stdout) == here then
+ 		return
+ 	end
+-	local bare = process.exec(
+-		"git",
+-		{ "rev-parse", "--is-bare-repository", "--absolute-git-dir" },
+-		{ cwd = here }
+-	)
++	local bare = counted("git", { "rev-parse", "--is-bare-repository", "--absolute-git-dir" }, { cwd = here })
+ 	local lines = string.split(trim(bare.stdout), "\n")
+ 	if bare.ok and lines[1] == "true" and fixture.physical(lines[2] or "") == here then
+ 		return
+@@ -93,15 +125,14 @@ function fixture.exec(dir: string, cmd: string, args: { string }, options: Optio
+ 		error(`refusing to run in {dir}: {away} would point git at another repository`, 2)
+ 	end
+ 	if o.stdin then
+-		return process.exec(cmd, args, { cwd = dir, env = o.env, stdio = { stdin = o.stdin } })
++		return counted(cmd, args, { cwd = dir, env = o.env, stdio = { stdin = o.stdin } })
+ 	end
+-	return process.exec(cmd, args, { cwd = dir, env = o.env })
++	return counted(cmd, args, { cwd = dir, env = o.env })
+ end
+ 
+ -- git in the fixture `dir`; raises with git's output when it fails, and returns trimmed stdout.
+ function fixture.git(dir: string, args: { string }, options: Options?): string
+-	fixture.check(dir)
+-	local r = fixture.exec(dir, "git", args, options)
++	local r = fixture.exec(dir, "git", args, options) -- exec checks `dir` itself, once (c0178)
+ 	if not r.ok then
+ 		error(`git {table.concat(args, " ")} in {dir} failed ({r.code}): {r.stderr}{r.stdout}`, 2)
+ 	end
+diff --git a/z-nile/tests/lib/images.luau b/z-nile/tests/lib/images.luau
+new file mode 100644
+index 00000000..1b02c390
+--- /dev/null
++++ b/z-nile/tests/lib/images.luau
+@@ -0,0 +1,218 @@
++--!strict
++-- Fixture images (c0178): a folder built once from the tooling, named by a digest of the content it is built from, and
++-- copied into every fixture that needs it, so a fixture no longer lays out the tooling, hashes its objects and
++-- clones them again. Images live in one folder, images.dir(), under the home's .cache.
++local DateTime = require("@lune/datetime")
++local fence = require("@tests/lib/fence")
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++local pruning = require("@tests/lib/pruning")
++local tally = require("@tests/lib/tally")
++local task = require("@lune/task")
++
++-- process.exec, counted (tally.started) beside the call.
++local function counted(
++	cmd: string,
++	args: { string }?,
++	options: any?
++): { ok: boolean, code: number, stdout: string, stderr: string }
++	tally.started(1)
++	return process.exec(cmd, args, options)
++end
++
++local images = {}
++
++export type Spec = {
++	name: string, -- the image's kind, lowercase letters, digits and "-": "tooling", "seed", "seed-nolessons"
++	root: string, -- the checkout the inputs are read from
++	inputs: { string }, -- root-relative files and folders the image is made from
++	skip: { string }, -- root-relative paths inside the inputs that are left out of the key
++	code: { string }, -- absolute paths of the harness files that build it: their bytes are part of the key
++	salt: string?, -- something else the image depends on (the commit an image of a repository is of), part of the key
++	build: (dest: string) -> (), -- fills the empty folder `dest` with the whole image
++}
++-- Seams for the specs, and the defaults for everyone else (seconds): a build lock older than `stale` no longer holds
++-- anyone off, and a caller waits `wait` for another's build before it builds for itself. Nothing here removes an
++-- image: that is pruning.run, once per run, before any spec starts.
++export type Options = {
++	dir: string?,
++	stale: number?,
++	wait: number?,
++	beforeLock: ((final: string) -> ())?, -- called between looking for the image and taking the lock
++}
++
++-- Three folders above this file: the checkout that holds the harness (as engine.TOP)
++local TOP = string.match(debug.info(1, "s"), "^(.*)/[^/]+/[^/]+/[^/]+/[^/]+$") or "."
++local KEY_LENGTH = 24
++local built = 0
++local memo: { [string]: string } = {}
++
++-- The folder the images live in, <home>/.cache/images, for the run's current folder (a project's home). The one place
++-- that decides where images are; nothing else builds an image path.
++function images.dir(): string
++	return pruning.dir()
++end
++
++-- How many images this process has built (a seam for the specs: a second call for the same content builds nothing).
++function images.builds(): number
++	return built
++end
++
++local function keyOf(spec: Spec): string
++	if not string.match(spec.name, "^[a-z][a-z0-9%-]*$") then
++		error(`images: {spec.name} is not an image name (lowercase letters, digits and -)`, 3)
++	end
++	local args = { `{TOP}/z-nile/lib/image-key.pl`, spec.root }
++	for _, p in spec.inputs do
++		table.insert(args, p)
++	end
++	for _, p in spec.skip do
++		table.insert(args, "--skip")
++		table.insert(args, p)
++	end
++	for _, p in spec.code do
++		table.insert(args, "--also")
++		table.insert(args, p)
++	end
++	if spec.salt ~= nil then
++		table.insert(args, "--salt")
++		table.insert(args, spec.salt)
++	end
++	local r = counted("perl", args)
++	local digest = string.match(r.stdout, "^(%x+)%s*$")
++	if not r.ok or not digest then
++		error(`images: the key of {spec.name} could not be read: {r.stderr}`, 3)
++	end
++	return string.sub(digest, 1, KEY_LENGTH)
++end
++
++-- Seconds since `path` last changed, by the wall clock of both (the file's mtime and now); nil when it is gone.
++local function age(path: string): number?
++	local ok, meta = pcall(fs.metadata, path)
++	if not ok or meta.modifiedAt == nil then
++		return nil
++	end
++	return os.time() - (meta.modifiedAt :: any).unixTimestamp
++end
++
++-- The text a builder writes into its lock: its pid and the start id of that process (fence.startOf), so a waiter can
++-- tell a live builder from a dead one and from a reused pid.
++local function ownerRecord(): string
++	local r = counted("sh", { "-c", "echo $PPID" })
++	local pid = string.match(r.stdout, "^(%d+)")
++	if not r.ok or pid == nil then
++		return ""
++	end
++	return `{pid} {fence.startOf(pid) or ""}`
++end
++
++-- Whether the lock's recorded owner is gone. A lock with no record yet, or one that cannot be read, is not dead.
++local function ownerDead(lock: string): boolean
++	local ok, text = pcall(fs.readFile, `{lock}/owner`)
++	if not ok then
++		return false
++	end
++	local pid, start = string.match(text :: string, "^(%d+) ?(%S*)")
++	if pid == nil then
++		return false
++	end
++	return not fence.holds(fence.alive(pid), if start ~= "" then start else nil, fence.startOf(pid))
++end
++
++-- The folder of the image `spec` describes, built on first use. Safe to call from any number of processes at once: a
++-- build is published by one rename, so nobody sees half an image, and the lock only keeps the others from repeating
++-- the work (it is advisory: a lock older than `stale`, or a wait longer than `wait`, is not obeyed, and the rename
++-- still lets only one build win).
++function images.ensure(spec: Spec, options: Options?): string
++	local opts: Options = options or {}
++	local home = opts.dir or images.dir()
++	local memoKey = table.concat({
++		spec.name,
++		spec.root,
++		table.concat(spec.inputs, "\0"),
++		table.concat(spec.skip, "\0"),
++		table.concat(spec.code, "\0"),
++		spec.salt or "",
++	}, "\n")
++	local key = memo[memoKey]
++	if not key then
++		key = keyOf(spec)
++		memo[memoKey] = key
++	end
++	local id = `{spec.name}-{key}`
++	local final = `{home}/{id}`
++	if fs.isDir(final) then
++		return final
++	end
++	fs.writeDir(home)
++	local lock = `{home}/{id}.lock`
++	local stale, wait = opts.stale or 60, opts.wait or 180
++	local began = DateTime.now().unixTimestampMillis
++	local mine = false
++	while true do
++		if fs.isDir(final) then
++			return final
++		end
++		if opts.beforeLock then
++			opts.beforeLock(final)
++		end
++		if not fs.isDir(lock) then
++			if counted("mkdir", { lock }).ok then
++				if fs.isDir(final) then -- published between our look and our lock: nothing left to build
++					pcall(fs.removeDir, lock)
++					return final
++				end
++				pcall(fs.writeFile, `{lock}/owner`, ownerRecord())
++				mine = true
++				break
++			end
++		else
++			local held = age(lock)
++			if
++				(held ~= nil and held >= stale)
++				or DateTime.now().unixTimestampMillis - began >= wait * 1000
++			then
++				break -- not obeyed any more: build, and let the rename decide
++			elseif ownerDead(lock) then
++				break -- its builder is gone: build, and let the rename decide (a few duplicate builds at worst)
++			end
++		end
++		task.wait(0.2)
++	end
++	local made = counted("mktemp", { "-d", `{home}/.build.XXXXXX` })
++	if not made.ok then
++		if mine then
++			pcall(fs.removeDir, lock)
++		end
++		error(`images: cannot make a build folder in {home}: {made.stderr}`, 2)
++	end
++	local build = (string.gsub(made.stdout, "%s+$", ""))
++	local ok, err = pcall(function(): any
++		spec.build(build)
++		return nil
++	end)
++	if ok then
++		built += 1
++	end
++	if not ok then
++		pcall(fs.removeDir, build)
++		if mine then
++			pcall(fs.removeDir, lock)
++		end
++		error(`images: building {id} failed: {err}`, 2)
++	end
++	local moved = pcall(fs.move, build, final, false)
++	if mine then
++		pcall(fs.removeDir, lock)
++	end
++	if not moved then
++		pcall(fs.removeDir, build) -- another caller published first: theirs is the image
++		if not fs.isDir(final) then
++			error(`images: {id} could not be published to {final}`, 2)
++		end
++	else
++	end
++	return final
++end
++
++return images
+diff --git a/z-nile/tests/lib/pruning.luau b/z-nile/tests/lib/pruning.luau
+new file mode 100644
+index 00000000..d8e2c9da
+--- /dev/null
++++ b/z-nile/tests/lib/pruning.luau
+@@ -0,0 +1,65 @@
++--!strict
++-- What a run clears out of the images folder before any spec starts (c0178). Run once, by the launcher, under the run's
++-- lock: nothing in the run is using an image yet, which is the only time removing one is safe (design review 002 F1).
++-- Images of a kind beyond the newest `keep` that are older than `minAge` go, and so do build folders and locks older than
++-- `minAge`. The kind is the whole id minus its 24-hex key, so "seed" never matches "seed-nolessons".
++local DateTime = require("@lune/datetime")
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++
++local pruning = {}
++
++local KEY_LENGTH = 24
++
++local function age(path: string): number
++	local ok, meta = pcall(fs.metadata, path)
++	if not ok or meta.modifiedAt == nil then
++		return 0
++	end
++	return DateTime.now().unixTimestamp - (meta.modifiedAt :: any).unixTimestamp
++end
++
++-- Returns how many folders it removed.
++-- The images folder of the run's current folder (a project's home): <home>/.cache/images, from the kernel's own path. The one
++-- place that decides where images live; images.dir() and the launcher's prune both read it.
++function pruning.dir(): string
++	return `{string.gsub(process.cwd, "/+$", "")}/.cache/images`
++end
++
++function pruning.run(home: string, keep: number?, minAge: number?): number
++	if not fs.isDir(home) then
++		return 0
++	end
++	local keepN, old = keep or 2, minAge or 3600
++	local kinds: { [string]: { { path: string, age: number } } } = {}
++	local removed = 0
++	for _, entry in fs.readDir(home) do
++		local path = `{home}/{entry}`
++		local name, key = string.match(entry, "^(.+)%-(%x+)$")
++		if name ~= nil and key ~= nil and #key == KEY_LENGTH then
++			local list = kinds[name] or {}
++			table.insert(list, { path = path, age = age(path) })
++			kinds[name] = list
++		elseif
++			(string.sub(entry, 1, 7) == ".build." or string.find(entry, ".lock", 1, true) ~= nil)
++			and age(path) > old
++		then
++			if pcall(fs.removeDir, path) then
++				removed += 1
++			end
++		end
++	end
++	for _, list in kinds do
++		table.sort(list, function(a, b)
++			return a.age < b.age -- newest first
++		end)
++		for i = keepN + 1, #list do
++			if list[i].age > old and pcall(fs.removeDir, list[i].path) then
++				removed += 1
++			end
++		end
++	end
++	return removed
++end
++
++return pruning
+diff --git a/z-nile/tests/lib/swept.luau b/z-nile/tests/lib/swept.luau
+new file mode 100644
+index 00000000..a131a187
+--- /dev/null
++++ b/z-nile/tests/lib/swept.luau
+@@ -0,0 +1,67 @@
++--!strict
++-- Fixtures a passing spec file removes (c0178): a helper that makes a folder for a spec registers it here, and the
++-- runner sweeps the registered folders when every case of the file passed. A file with a failing case keeps its
++-- folders to look at. Only folders strictly inside the home's .cache are registered, and never an image.
++local cleanup = require("@tests/lib/cleanup")
++local process = require("@lune/process")
++
++local swept = {}
++
++local registered: { string } = {}
++
++-- <home>/.cache/ for the run's current folder (the kernel's, so symlinks are resolved), without starting a process.
++local function cache(): string
++	return `{string.gsub(process.cwd, "/+$", "")}/.cache/`
++end
++
++-- The first segment of a path inside the home's .cache that is never a fixture: the images, the runner's own state and
++-- anything hidden (the fence's sentinel, c0194's .tmp).
++local OWN = { images = true, ["tests-run.lock"] = true, ["spec-durations.tsv"] = true }
++
++-- Registers `path`, an absolute folder strictly inside the home's .cache. Raises, naming it, for anything else: a path
++-- with an empty, "." or ".." segment, one whose first segment under .cache is hidden, an image folder or a runner file.
++function swept.register(path: string)
++	local root = cache()
++	local bad = string.sub(path, 1, #root) ~= root or #path == #root
++	if not bad then
++		local first = true
++		for segment in string.gmatch(string.sub(path, #root + 1) .. "/", "([^/]*)/") do
++			if segment == "" or segment == "." or segment == ".." then
++				bad = true
++			elseif first and (OWN[string.lower(segment)] or string.sub(segment, 1, 1) == ".") then
++				bad = true
++			end
++			first = false
++		end
++	end
++	if bad then
++		error(
++			`swept: {path} is not a folder inside {root} (a fixture's own, not an image, a hidden or a runner file): refusing to register it`,
++			2
++		)
++	end
++	table.insert(registered, path)
++end
++
++-- The folders waiting to be swept, in registration order.
++function swept.pending(): { string }
++	return table.clone(registered)
++end
++
++-- Removes every registered folder (one already gone is fine) and forgets them. Returns how many it removed and, for each
++-- folder it could not remove, "<path>: <error>" (a process still writing into it, say): the caller shows those.
++function swept.sweep(): (number, { string })
++	local n, failed = 0, {}
++	for _, path in registered do
++		local ok, err = pcall(cleanup.removeTree, path)
++		if ok then
++			n += 1
++		else
++			table.insert(failed, `{path}: {err}`)
++		end
++	end
++	table.clear(registered)
++	return n, failed
++end
++
++return swept
+diff --git a/z-nile/tests/lib/tally.luau b/z-nile/tests/lib/tally.luau
+new file mode 100644
+index 00000000..d9543613
+--- /dev/null
++++ b/z-nile/tests/lib/tally.luau
+@@ -0,0 +1,98 @@
++--!strict
++-- What the fixture helpers cost a spec file (c0178): files written and processes started. Each helper counts the
++-- processes it starts with tally.started and the files it makes with tally.files; the runner flushes each spec file's
++-- counts into the run's tally folder and prints the sums beside `slowest:`. A lower bound: the processes a fixture's own
++-- commands start (tracker.sh, ./zn and everything they run) are not counted.
++local fs = require("@lune/fs")
++local process = require("@lune/process")
++
++local tally = {}
++
++local started, written = 0, 0
++
++-- Adds `n` processes started: a helper calls this beside each process it starts itself.
++function tally.started(n: number)
++	started += n
++end
++
++-- Adds `n` files written.
++function tally.files(n: number)
++	written += n
++end
++
++-- The number of regular files under `dir` (links are not followed or counted), by one `find`: not a helper's own
++-- process, so not counted as one.
++function tally.count(dir: string): number
++	local r = process.exec("find", { dir, "-type", "f" })
++	if not r.ok then
++		return 0
++	end
++	local n = 0
++	for _ in string.gmatch(r.stdout, "[^\n]+") do
++		n += 1
++	end
++	return n
++end
++
++-- This process's counts so far, as (files, processes).
++function tally.read(): (number, number)
++	return written, started
++end
++
++-- The folder this run's counts are flushed into: made by tally.begin in the runner that prints them, or handed down to
++-- a worker through PICKMAN_TALLY.
++local current: string? = nil
++
++local function folder(): string?
++	if current then
++		return current
++	end
++	local given = process.env.PICKMAN_TALLY
++	if given ~= nil and given ~= "" then
++		return given
++	end
++	return nil
++end
++
++-- Starts a tally for this run: a fresh folder in the run's temp folder, which workers are given in PICKMAN_TALLY.
++-- Returns it, or nil when there is no run temp folder (nothing is counted then).
++function tally.begin(): string?
++	local tmp = process.env.TMPDIR
++	if tmp == nil or tmp == "" then
++		return nil
++	end
++	local dir =
++		`{string.gsub(tmp, "/+$", "")}/tally/{math.random(1, 1e9)}-{string.format("%.0f", os.clock() * 1e6)}`
++	fs.writeDir(dir)
++	current = dir
++	return dir
++end
++
++-- Writes this process's counts, if any, as one file of the run's tally, and starts again from zero.
++function tally.flush()
++	local dir = folder()
++	if dir and (written > 0 or started > 0) then
++		fs.writeDir(dir)
++		fs.writeFile(
++			`{dir}/{math.random(1, 1e9)}-{string.format("%.0f", os.clock() * 1e6)}`,
++			`{written} {started}\n`
++		)
++	end
++	written, started = 0, 0
++end
++
++-- The sums of everything flushed into the run's tally, as (files, processes).
++function tally.total(): (number, number)
++	local dir = folder()
++	local files, procs = 0, 0
++	if dir and fs.isDir(dir) then
++		for _, name in fs.readDir(dir) do
++			local a, b = string.match(fs.readFile(`{dir}/{name}`), "^(%d+) (%d+)")
++			files += tonumber(a) or 0
++			procs += tonumber(b) or 0
++		end
++	end
++	return files, procs
++end
++
++return tally
+diff --git a/z-nile/tests/lib/trackerfix.luau b/z-nile/tests/lib/trackerfix.luau
+index 12153928..c3e120fe 100644
+--- a/z-nile/tests/lib/trackerfix.luau
++++ b/z-nile/tests/lib/trackerfix.luau
+@@ -8,6 +8,18 @@ local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
++local swept = require("@tests/lib/swept")
++local tally = require("@tests/lib/tally")
++
++-- process.exec, counted (tally.started) beside the call.
++local function counted(
++	cmd: string,
++	args: { string }?,
++	options: any?
++): { ok: boolean, code: number, stdout: string, stderr: string }
++	tally.started(1)
++	return process.exec(cmd, args, options)
++end
+ 
+ local trackerfix = {}
+ 
+@@ -19,21 +31,41 @@ end
+ 
+ -- Runs `git` at `cwd`, a folder that is not a repository yet, to make the one at the path `args` names.
+ local function create(cwd: string, args: { string })
+-	local r = process.exec("git", args, { cwd = cwd })
++	local r = counted("git", args, { cwd = cwd })
+ 	if not r.ok then
+ 		error(`git {table.concat(args, " ")} failed ({r.code}): {r.stderr}{r.stdout}`, 3)
+ 	end
+ end
+ 
+-local function identity(dir: string, name: string)
+-	fixture.git(dir, { "config", "user.name", name })
+-	fixture.git(dir, { "config", "user.email", `{name}@example.invalid` })
++-- A non-bare clone of `from` at `to`, committing as the fixture `name`. Copies, never hardlinks: nothing a spec does to
++-- a fixture's objects can reach the image it came from.
++local function cloneAs(cwd: string, name: string, from: string, to: string, bare: boolean)
++	local args = { "clone", "-q", "--no-hardlinks" }
++	if bare then
++		table.insert(args, "--bare")
++	else
++		for _, a in { "-c", `user.name={name}`, "-c", `user.email={name}@example.invalid` } do
++			table.insert(args, a)
++		end
++	end
++	table.insert(args, from)
++	table.insert(args, to)
++	create(cwd, args)
+ end
+ 
+--- Builds `.cache/<name>`: a seed commit (the tooling, with the skills' lessons unless `opts.noLessons`, empty tracker
+--- folders, and `seed`'s extra files),
+--- a bare origin made from it, and two clones of the origin. Removes what an earlier run left.
+-function trackerfix.new(name: string, seed: { [string]: string }?, opts: { noLessons: boolean? }?): Fixture
++-- Builds `.cache/<name>`: a bare origin and a main clone of it, and a second terminal's clone (`other`, made the first time a
++-- fixture helper is asked to work in it), all holding one commit "seed" on main: the tooling (with the skills' lessons unless
++-- `opts.noLessons`), empty tracker folders, `opts.copy`'s paths from the checkout, and `seed`'s extra files (those in
++-- `opts.executable` executable). The tooling and its packed objects come from the
++-- seed image (engine.seed), built once per content, not from the checkout. Removes what an earlier run left, and is
++-- removed by the runner when the spec file passes (@tests/lib/swept).
++export type Options = {
++	noLessons: boolean?, -- no lessons in the copied skills (the spec seeds its own)
++	copy: { string }?, -- paths of the checkout, relative to its top, copied into the seed with their modes and links
++	executable: { string }?, -- seeded paths made executable before the seed commit
++}
++
++function trackerfix.new(name: string, seed: { [string]: string }?, opts: Options?): Fixture
+ 	local root = fixture.physical(".")
+ 	if not root then
+ 		error("trackerfix.new: the current directory is not readable", 2)
+@@ -43,32 +75,66 @@ function trackerfix.new(name: string, seed: { [string]: string }?, opts: { noLes
+ 	if fs.isDir(base) then
+ 		fs.removeDir(base)
+ 	end
+-	local source = `{base}/seed`
+-	fs.writeDir(`{source}/tracker`)
+-	create(base, { "init", "-q", "-b", "main", source })
+-	identity(source, name)
+-	-- ./zn, scripts/ and z-nile/'s tooling, with no items, counter or map; empty folders under both project roots
+-	engine.copy(root, source)
+-	if opts and opts.noLessons then
+-		engine.clearLessons(source) -- the copied skills' lessons; the seed adds the spec's own
++	fs.writeDir(base)
++	swept.register(base)
++	-- main first: the image's commit made the fixture's own (authored by `name`, holding the extra files) ...
++	cloneAs(base, name, engine.seed(opts ~= nil and opts.noLessons == true), main, false)
++	if opts and opts.copy then
++		for _, rel in opts.copy do
++			local parent = string.match(rel, "^(.*)/[^/]+$")
++			if parent then
++				fs.writeDir(`{main}/{parent}`)
++			end
++			local r = counted("cp", { "-R", `{engine.TOP}/{rel}`, `{main}/{rel}` })
++			if not r.ok then
++				error(`trackerfix.new: copying {rel} from the checkout failed: {r.stderr}`, 2)
++			end
++		end
+ 	end
+-	engine.roots(source)
+-	fs.writeFile(`{source}/.gitignore`, ".cache/\n.worktree/\n")
+ 	local extra: { [string]: string } = seed or {}
+ 	for path, text in extra do
+ 		local parent = string.match(path, "^(.*)/[^/]+$")
+ 		if parent then
+-			fs.writeDir(`{source}/{parent}`)
++			fs.writeDir(`{main}/{parent}`)
++		end
++		fs.writeFile(`{main}/{path}`, text)
++	end
++	if opts and opts.executable then
++		for _, rel in opts.executable do
++			local r = counted("chmod", { "+x", `{main}/{rel}` })
++			if not r.ok then
++				error(`trackerfix.new: making {rel} executable failed: {r.stderr}`, 2)
++			end
+ 		end
+-		fs.writeFile(`{source}/{path}`, text)
+ 	end
+-	fixture.git(source, { "add", "-A" })
+-	fixture.git(source, { "commit", "-q", "-m", "seed" })
+-	create(base, { "clone", "-q", "--bare", source, origin })
+-	create(base, { "clone", "-q", origin, main })
+-	create(base, { "clone", "-q", origin, other })
+-	identity(main, name)
+-	identity(other, name)
++	fixture.git(main, { "add", "-A" })
++	fixture.git(main, { "commit", "-q", "--amend", "--reset-author", "-m", "seed" })
++	local seedSha = fixture.git(main, { "rev-parse", "HEAD" })
++	-- ... then the origin made from it (no second copy of the objects is ever pushed), and main pointed at the origin
++	cloneAs(base, name, main, origin, true)
++	fixture.git(origin, { "remote", "remove", "origin" })
++	fixture.git(main, { "remote", "set-url", "origin", origin })
++	fixture.git(main, { "fetch", "-q", "origin" })
++	tally.files(tally.count(base))
++	-- `other`, the second terminal, is made when a helper is first asked to work in it: most specs never do
++	-- and as the terminal the old setup made: at the seed, however far the origin has moved since, with only the seed's
++	-- remote branch known
++	fixture.defer(other, function()
++		cloneAs(base, name, origin, other, false)
++		fixture.git(other, { "reset", "-q", "--hard", seedSha })
++		fixture.git(other, { "update-ref", "refs/remotes/origin/main", seedSha })
++		for ref in
++			string.gmatch(
++				fixture.git(other, { "for-each-ref", "--format=%(refname)", "refs/remotes/origin" }),
++				"[^\n]+"
++			)
++		do
++			if ref ~= "refs/remotes/origin/main" and ref ~= "refs/remotes/origin/HEAD" then
++				fixture.git(other, { "update-ref", "-d", ref })
++			end
++		end
++		tally.files(tally.count(other))
++	end)
+ 	return { base = base, origin = origin, main = main, other = other }
+ end
+ 
+@@ -90,6 +156,70 @@ function trackerfix.trOk(f: Fixture, cwd: string, args: { string }): string
+ 	return trim(r.stdout)
+ end
+ 
++-- The fresh named worktrees `names` of the fixture's main checkout, made as `./zn worktree <name>` makes a fresh one (a new branch
++-- off origin/main with no upstream, under main's .worktree/), their paths in order. The first goes through tracker.sh;
++-- the rest are its tree copied (copy-on-write where there is one) under their own git metadata, not checked out again
++-- (c0178). Only names `./zn worktree` takes for a named worktree: lowercase, digits and -.
++function trackerfix.worktrees(f: Fixture, names: { string }): { string }
++	-- every name is judged before anything is made: its shape, a branch or an origin branch of that name, a folder of that
++	-- name, and the list itself
++	fixture.git(f.main, { "fetch", "-q", "--prune", "origin" }) -- as ./zn worktree does, so origin's branches are known
++	local seen: { [string]: boolean } = {}
++	for _, name in names do
++		if not string.match(name, "^[a-z][a-z0-9%-]*$") or #name > 60 then
++			error(`trackerfix.worktrees: {name} is not a named worktree (lowercase letters, digits and -)`, 2)
++		elseif seen[name] then
++			error(`trackerfix.worktrees: {name} is listed twice`, 2)
++		end
++		seen[name] = true
++		for _, ref in { `refs/heads/{name}`, `refs/remotes/origin/{name}` } do
++			if fixture.exec(f.main, "git", { "show-ref", "--verify", "--quiet", ref }).ok then
++				error(
++					`trackerfix.worktrees: {name} already exists as {ref}: only fresh named worktrees are made this way`,
++					2
++				)
++			end
++		end
++		if fs.isDir(`{f.main}/.worktree/{name}`) then
++			error(
++				`trackerfix.worktrees: {name} already exists as {f.main}/.worktree/{name}: only fresh named worktrees are made this way`,
++				2
++			)
++		end
++	end
++	local paths: { string } = {}
++	for i, name in names do
++		if i == 1 then
++			table.insert(paths, trackerfix.trOk(f, f.main, { "worktree", name }))
++			continue
++		end
++		local first = paths[1]
++		local path = `{string.match(first, "^(.*)/[^/]+$")}/{name}`
++		fixture.git(
++			f.main,
++			{ "worktree", "add", "-q", "--no-checkout", "--no-track", "-b", name, path, "origin/main" }
++		)
++		local args = { "-cR" }
++		for _, entry in fs.readDir(first) do
++			if entry ~= ".git" then
++				table.insert(args, `{first}/{entry}`)
++			end
++		end
++		table.insert(args, `{path}/`)
++		local r = counted("cp", args)
++		if not r.ok then
++			args[1] = "-R"
++			r = counted("cp", args)
++		end
++		if not r.ok then
++			error(`trackerfix.worktrees: copying {first} into {path} failed: {r.stderr}`, 2)
++		end
++		fixture.git(path, { "reset", "-q" }) -- the index, from HEAD: the files are the ones HEAD holds
++		table.insert(paths, path)
++	end
++	return paths
++end
++
+ -- Another terminal pushes a commit with these files straight to origin's main.
+ function trackerfix.elsewhere(f: Fixture, files: { [string]: string }, message: string)
+ 	fixture.git(f.other, { "pull", "-q", "origin", "main" })
+diff --git a/z-nile/tests/run.luau b/z-nile/tests/run.luau
+index e85dc659..85a95c4a 100644
+--- a/z-nile/tests/run.luau
++++ b/z-nile/tests/run.luau
+@@ -13,6 +13,8 @@ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local schedule = require("./lib/schedule")
+ local stdio = require("@lune/stdio")
++local swept = require("./lib/swept")
++local tally = require("./lib/tally")
+ local task = require("@lune/task")
+ 
+ type Spec = { name: string, cases: { { name: string, fn: () -> () } } }
+@@ -192,6 +194,7 @@ end
+ -- Coordinator: `jobs` lanes pull the next file in schedule order and run it as a one-file, one-job runner process.
+ local function runConcurrently()
+ 	local outcomes: { Outcome } = {}
++	local counts = tally.begin()
+ 	local queue = schedule.order(files, recorded())
+ 	local nextIndex, running = 1, math.min(jobs, #files)
+ 	for _ = 1, math.min(jobs, #files) do
+@@ -201,7 +204,25 @@ local function runConcurrently()
+ 				nextIndex += 1
+ 				local file = files[index]
+ 				local started = os.clock()
+-				local ok, r = pcall(process.exec, "lune", { "run", "tests/run", "--", "--jobs", "1", file })
++				-- git's template for this file alone: what another file's spec writes into its own can never be blamed on this one
++				local template = process.env.GIT_TEMPLATE_DIR
++				local own = if template ~= nil and template ~= "" then `{template}-{index}` else ""
++				if own ~= "" then
++					fs.writeDir(`{own}/hooks`)
++					fs.writeDir(`{own}/info`)
++				end
++				local ok, r = pcall(
++					process.exec,
++					"lune",
++					{ "run", "tests/run", "--", "--jobs", "1", file },
++					{
++						env = {
++							PICKMAN_WORKER = "1",
++							PICKMAN_TALLY = counts or "",
++							GIT_TEMPLATE_DIR = if own ~= "" then own else nil,
++						},
++					}
++				)
+ 				outcomes[index] = {
+ 					file = file,
+ 					seconds = os.clock() - started,
+@@ -289,6 +310,10 @@ local function runConcurrently()
+ 		table.insert(slowest, string.format("%s %.1fs", bySpeed[i].file, bySpeed[i].seconds))
+ 	end
+ 	print(`slowest: {table.concat(slowest, ", ")}`)
++	local written, started = tally.total()
++	if written > 0 or started > 0 then
++		print(`fixtures: {written} files written, {started} processes started (by the fixture helpers)`)
++	end
+ 	print(`{passed} passed, {failed} failed, {#files} spec files`)
+ 	process.exit(if failed == 0 then 0 else 1)
+ end
+@@ -297,7 +322,30 @@ if jobs > 1 and #files >= 2 then
+ 	runConcurrently()
+ end
+ 
++-- Anything in the run's git template folder but its empty hooks/ and info/ (the folder GIT_TEMPLATE_DIR names).
++local function templateExtras(): { string }
++	local dir = process.env.GIT_TEMPLATE_DIR
++	local extras: { string } = {}
++	if dir == nil or dir == "" or not fs.isDir(dir) then
++		return extras
++	end
++	for _, name in fs.readDir(dir) do
++		if (name == "hooks" or name == "info") and fs.isDir(`{dir}/{name}`) then
++			for _, inner in fs.readDir(`{dir}/{name}`) do
++				table.insert(extras, `{dir}/{name}/{inner}`)
++			end
++		else
++			table.insert(extras, `{dir}/{name}`)
++		end
++	end
++	return extras
++end
++
+ local passed, failed = 0, 0
++local sweepFailed = false
++if process.env.PICKMAN_TALLY == nil or process.env.PICKMAN_TALLY == "" then
++	tally.begin()
++end
+ for _, file in files do
+ 	-- require paths are relative to this file (z-nile/tests/run.luau); a spec path is relative to the folder the run
+ 	-- started in (a project's home, c0120)
+@@ -308,6 +356,7 @@ for _, file in files do
+ 		print(`FAIL {file}: could not load spec: {spec}`)
+ 		continue
+ 	end
++	local failedBefore = failed
+ 	for _, case in (spec :: Spec).cases do
+ 		local err: any = nil
+ 		local cOk = xpcall(case.fn, function(e: any)
+@@ -320,9 +369,33 @@ for _, file in files do
+ 			print(`FAIL {file} :: {case.name}\n     {err}`)
+ 		end
+ 	end
++	-- git's template must still be the empty hooks/ and info/ the run made: a spec that wrote into it is named, the
++	-- template is restored, and the run fails (c0178)
++	for _, extra in templateExtras() do
++		print(`FAIL {file}: git template changed: {extra}`)
++		pcall(fs.removeDir, extra)
++		pcall(fs.removeFile, extra)
++		failed += 1
++	end
++	-- the fixtures a passing file's helpers registered go; a failing file keeps them to look at (c0178)
++	if failed == failedBefore then
++		local _, stuck = swept.sweep()
++		for _, line in stuck do
++			print(`swept: could not remove {line}`)
++			sweepFailed = true
++		end
++	end
++	tally.flush()
++end
++
++if process.env.PICKMAN_WORKER == nil or process.env.PICKMAN_WORKER == "" then
++	local written, started = tally.total()
++	if written > 0 or started > 0 then
++		print(`fixtures: {written} files written, {started} processes started (by the fixture helpers)`)
++	end
+ end
+ 
+ print(`{passed} passed, {failed} failed, {#files} spec files`)
+-process.exit(if failed == 0 then 0 else 1)
++process.exit(if failed == 0 and not sweepFailed then 0 else 1)
+ -- a project home requires this file as its own runner (pickman/tests/run.luau, c0120); a module returns one value
+ return nil
+diff --git a/z-nile/tests/tooling/remap-once.spec.luau b/z-nile/tests/tooling/remap-once.spec.luau
+index 17f847d0..4008783d 100644
+--- a/z-nile/tests/tooling/remap-once.spec.luau
++++ b/z-nile/tests/tooling/remap-once.spec.luau
+@@ -2,21 +2,21 @@
+ -- R0270 review 001 F6: a remap whose merge of origin/main conflicts keeps its remap commit, and a second remap must
+ -- then refuse: the branch has no local compaction map yet, but its ids are already the new ones, and remapping again
+ -- would renumber them a second time. Fixture under .cache/remap-once.
+-local engine = require("@tests/lib/engine")
+ local fixture = require("@tests/lib/fixture")
+ local fs = require("@lune/fs")
+ local process = require("@lune/process")
+ local t = require("@tests/lib/t")
++local trackerfix = require("@tests/lib/trackerfix")
+ 
+ type Result = { ok: boolean, code: number, stdout: string, stderr: string }
+ 
+ local function trim(s: string): string
+ 	return (string.gsub(string.gsub(s, "^%s+", ""), "%s+$", ""))
+ end
+-local root = trim(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout)
+--- fixtures under this home's .cache (the working directory, c0120); root is for reading the tooling
++-- fixtures under this home's .cache (the working directory, c0120)
+ local base = `{(string.gsub(process.exec("pwd", { "-P" }).stdout, "%s+$", ""))}/.cache/remap-once`
+-local seed, origin, main = `{base}/seed`, `{base}/origin.git`, `{base}/main`
++-- c0178: no seed folder, and origin is only reached through the branch (trackerfix.new, in the setup case)
++local main = `{base}/main`
+ 
+ local function git(cwd: string, args: { string }): string
+ 	return fixture.git(cwd, args)
+@@ -34,10 +34,6 @@ end
+ local function has(text: string?, needle: string): boolean
+ 	return text ~= nil and string.find(text, needle, 1, true) ~= nil
+ end
+-local function write(path: string, text: string)
+-	fs.writeDir(string.match(path, "^(.*)/[^/]+$") :: string)
+-	fs.writeFile(path, text)
+-end
+ local function identity(dir: string)
+ 	git(dir, { "config", "user.name", "remap-once" })
+ 	git(dir, { "config", "user.email", "remap-once@example.invalid" })
+@@ -65,25 +61,14 @@ local branch = ""
+ 
+ return t.spec("remap runs once, even after a conflicting merge", function(it)
+ 	it("sets up an origin and a branch that edits a line main will edit too", function()
+-		if fs.isDir(base) then
+-			fs.removeDir(base)
+-		end
+-		fs.writeDir(seed)
+-		process.exec("git", { "init", "-q", "-b", "main", seed }) -- raw: init to a named path
+-		identity(seed)
+-		for _, p in { ".claude", ".luaurc", ".gitignore" } do
+-			process.exec("cp", { "-R", `{root}/{p}`, `{seed}/{p}` })
+-		end
+-		fs.writeDir(`{seed}/pickman/.tracker`)
+-		engine.copy(root, seed) -- c0114 override: ./zn, scripts/ and z-nile/ (the engine, the gate, the templates)
+-		write(`{seed}/z-nile/next`, "issue 41 a-b-c\nraft 31 a-b-c\n")
+-		write(`{seed}/pickman/.tracker/issues/c0010/c0010.md`, doc("c0010", "raft: R0030\n"))
+-		write(`{seed}/pickman/.tracker/rafts/R0030/R0030.md`, doc("R0030", "issues: [c0010]\n"))
+-		git(seed, { "add", "-A" })
+-		git(seed, { "commit", "-q", "-m", "seed" })
+-		process.exec("git", { "clone", "-q", "--bare", seed, origin }) -- raw: clone to a named path
+-		process.exec("git", { "clone", "-q", origin, main }) -- raw: clone to a named path
+-		identity(main)
++		-- c0178: trackerfix.new makes the repositories (tooling, empty tracker roots, the checkout's .claude, .luaurc and
++		-- .gitignore, and the files below as one commit "seed") that this setup built by hand (init, copy, add, commit, bare
++		-- clone, clone, identities)
++		trackerfix.new("remap-once", {
++			["z-nile/next"] = "issue 41 a-b-c\nraft 31 a-b-c\n",
++			["pickman/.tracker/issues/c0010/c0010.md"] = doc("c0010", "raft: R0030\n"),
++			["pickman/.tracker/rafts/R0030/R0030.md"] = doc("R0030", "issues: [c0010]\n"),
++		}, { copy = { ".claude", ".luaurc", ".gitignore" } })
+ 		branch = worktree("prep-x")
+ 		edit(`{branch}/pickman/.tracker/issues/c0010/c0010.md`, "line b", "line b, the branch's version")
+ 		git(branch, { "add", "-A" })
+diff --git a/z-nile/tests/tooling/worktree-fetch.spec.luau b/z-nile/tests/tooling/worktree-fetch.spec.luau
+index 35fc8fdc..8a93d8d6 100644
+--- a/z-nile/tests/tooling/worktree-fetch.spec.luau
++++ b/z-nile/tests/tooling/worktree-fetch.spec.luau
+@@ -66,7 +66,15 @@ return t.spec("worktree and stale remote refs", function(it)
+ 			fs.removeDir(base)
+ 		end
+ 		fs.writeDir(base)
+-		clone.isolated(root, seed)
++		-- c0178: was `clone.isolated(root, seed)` (a full checkout, ~2,500 files); now only the paths the overlay below writes
++		-- (its ls-files pathspec: scripts and .gitignore) are written, the rest stays in the index. `main` (a clone of the
++		-- seed commit) and its worktrees still get the whole tree, as before.
++		clone.isolated(root, seed, {
++			paths = {
++				"scripts/", -- overlay writes scripts/ (tracker.sh and its libs); `git add -A` needs them inside the checkout
++				".gitignore", -- overlay writes .gitignore
++			},
++		})
+ 		identity(seed)
+ 		git(seed, { "checkout", "-q", "-B", "main" })
+ 		git(seed, { "remote", "remove", "origin" })

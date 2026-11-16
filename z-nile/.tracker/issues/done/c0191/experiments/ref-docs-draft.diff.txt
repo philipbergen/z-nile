@@ -1,0 +1,165 @@
+diff --git a/AGENTS.md b/AGENTS.md
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -6,6 +6,8 @@ A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune
+ 
+ **Subagents:** don't use `fork` subagents. Delegate to a plain subagent (general-purpose) with `model: "sonnet"` and a full brief. The exceptions are design and code reviewers, which the skills pin to Opus 5.5.
+ 
++**Processes:** Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do. A PreToolUse hook refuses a bare `lune run` of a probe, a loop that never ends and a background job nothing bounds, and `./zn reap` stops what still leaks. A `/clear` ends the background commands of the conversation it clears (the SessionEnd hook stops its tool shells). A subagent stays open while its background commands run, and a command it started stops at its own `./zn run` limit (at most an hour) or at the session's end; the session-end reaper catches anything left. The zz-test skill's "Bounded commands" has the rest.
++
+ **No check may ever change the real repository.** Specs, `check.sh` files and the scripts they run change only throwaway fixtures under `.cache/`. The runner enforces it. On macOS it runs specs in a jail that denies every write to the repository outside `.cache`; a run that can't be jailed (inside another sandbox) refuses to start unless that sandbox already protects the repository. Everywhere it fences git into `.cache`, refuses ref updates and pushes into the real repository, runs one suite per checkout and project home at a time, and fails any run during which the remotes, config, branch or history changed. What it can't see (unjailed runs on Linux, `check.sh` files' own commands, work handed to processes outside the jail), review must catch (zz-test skill, "Specs never touch the real repository"). If its tripwire fires, stop and report: never repair the shared git configuration yourself.
+ 
+ The skills are z-nile's (`z-nile/skills/`) and each project's (`<project>/skills/`); `.claude/skills/<name>` links to each one (`./zn skills`). `z-nile/README.md` is the map: the flow, the five parts and every skill.
+diff --git a/pickman/skills/pickman-test/SKILL.md b/pickman/skills/pickman-test/SKILL.md
+--- a/pickman/skills/pickman-test/SKILL.md
++++ b/pickman/skills/pickman-test/SKILL.md
+@@ -17,7 +17,7 @@ Pickman's specs run from its home, `pickman/`: `cd pickman && lune run tests/run
+ | `tests/contract/<Consumer>__<Provider>.spec.luau` | the Provider API exactly as the Consumer relies on it | the Provider only |
+ | `tests/integration/` | a few headless cross-feature checks that don't step time (see Simulations) | several features |
+ | `tests/scenario/` | story-style simulations through `@tests/lib/sim` | Logic features, `@tests/lib/sim`, `@tests/lib/t`, `@tests/fixtures/...`. Never adapters (they use Roblox globals) |
+-| `tests/runtime/` | scripts that run inside a real Roblox server of a published place, through Open Cloud's Luau Execution API (`lune run scripts/runtime-test -- <version>`; `tests/runtime/lobby/` holds the lobby's, run with `--lobby <version>` once both places are published (c0064)). A merge runs `lune run scripts/cicd` from `pickman/`, which publishes the CICD places and runs both suites. Each returns `"PASS"`, requires nothing, and is strict Luau | nothing (Roblox globals only, via `getfenv()`) |
++| `tests/runtime/` | scripts that run inside a real Roblox server of a published place, through Open Cloud's Luau Execution API (`./zn run --time 600 -- lune run scripts/runtime-test -- <version>`, because the PreToolUse hook refuses a bare `lune run` of it; `tests/runtime/lobby/` holds the lobby's, run with `--lobby <version>` once both places are published (c0064)). A merge runs `lune run scripts/cicd` from `pickman/`, which publishes the CICD places and runs both suites. Each returns `"PASS"`, requires nothing, and is strict Luau | nothing (Roblox globals only, via `getfenv()`) |
+ | `tests/place/` | the Rojo-built DataModel, loaded headlessly via `@tests/lib/place` (structure, script classes, require resolution as Roblox does it). Selected for every `src/`, `default.project.json` or `lobby.project.json` change. `place.load()` is the game place, `place.load("lobby.project.json")` the lobby; each is built once per process | `@tests/lib/place` |
+ 
+ A spec file looks like this:
+diff --git a/z-nile/check.sh b/z-nile/check.sh
+--- a/z-nile/check.sh
++++ b/z-nile/check.sh
+@@ -53,6 +53,7 @@ picked() { # picked <name>: is the project in this run?
+   return 1
+ }
+ 
++[[ -n $plan ]] || ./zn reap --auto || true # leaks of other sessions, reported where people look (c0191)
+ source z-nile/lib/par.sh
+ gate_start=$(par_now)
+ 
+diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
+--- a/z-nile/skills/z-design/SKILL.md
++++ b/z-nile/skills/z-design/SKILL.md
+@@ -27,7 +27,7 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
+ - **Touched modules**: one backticked path per bullet. Then run `lune run z-nile/affected -- <paths>` and paste its output, plus the new specs, into **Affected specs**.
+ - **Unknowns & experiments**: list every assumption you can't *prove* from the repo or from docs you've read.
+   - Each gets a pass/fail question, a method and a fallback.
+-  - **Run the cheap ones now** (Lune spikes, `rojo build` probes, doc checks) and record the results. What's left becomes the executor's Phase 1.
++  - **Run the cheap ones now** (Lune spikes, `rojo build` probes, doc checks) and record the results. What's left becomes the executor's Phase 1. Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do.
+ - **Regression guard**: name the existing specs and behaviors at risk, and add regression specs to the Test plan.
+ - **Override check**: promoted specs in `tests/acceptance/` are never edited during execution, so find the conflicts now.
+   - For each Touched path, run `lune run z-nile/affected -- <path>` and `grep -rlF -e <path> tests/acceptance`, and read every spec either lists. The selector alone misses specs that read a file as text; neither sees a spec that builds paths or walks a directory, so also skim the `tests/acceptance` folder names for the area. Output `ALL` carries no list (any `scripts/` or config path): use the grep alone for that path, and repeat it with the file's basename.
+diff --git a/z-nile/skills/z-design/lessons/probe-free-cli-lines-in-prep.md b/z-nile/skills/z-design/lessons/probe-free-cli-lines-in-prep.md
+--- a/z-nile/skills/z-design/lessons/probe-free-cli-lines-in-prep.md
++++ b/z-nile/skills/z-design/lessons/probe-free-cli-lines-in-prep.md
+@@ -10,4 +10,4 @@ An unproven command line left for execution's Phase 1 carries a wrong guess thro
+ 
+ **How to apply:** for each unproven CLI line, read the subcommand's own help and try the call with a flag set that fails fast (the CLI validates its options before it spends anything); record the result as an experiment. Leave for Phase 1 only what needs a real, paid run, and say what it costs.
+ 
+-Keep the probe free when the guess might be right (c0117 design review 006): a call that succeeds starts the paid thing (`claude --cloud` without `-p` opens a cloud session). Prefer the subcommand's own `--help`; run any real call under an alarm, in a scratch folder outside the repository, with flags that make the CLI refuse before it spends.
++Keep the probe free when the guess might be right (c0117 design review 006): a call that succeeds starts the paid thing (`claude --cloud` without `-p` opens a cloud session). Prefer the subcommand's own `--help`; run any real call through `./zn run`, in a scratch folder outside the repository, with flags that make the CLI refuse before it spends.
+diff --git a/z-nile/skills/zz-arch/SKILL.md b/z-nile/skills/zz-arch/SKILL.md
+--- a/z-nile/skills/zz-arch/SKILL.md
++++ b/z-nile/skills/zz-arch/SKILL.md
+@@ -12,6 +12,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
+ |---|---|
+ | `zn` | the command, at the repository root: it runs `z-nile/engine/main` |
+ | `z-nile/engine/` | the tracker engine. `main.luau` is the CLI: it parses arguments and does the git, file and process work. Every other module is one concern (`store`, `publish`, `projects`, `lessons`, `skills`, `trail`, …) |
++| `z-nile/lib/bounded.pl`, `z-nile/lib/cpu.sh`, `z-nile/engine/reap.luau`, `z-nile/engine/boundcmd.luau`, `z-nile/guard-bash.luau` | the bounded runner, the reaper's rules, the hook's rules and its entry |
+ | `z-nile/lib/` | what the gate, the runner and the engine share: `ac.sh` (every `check.sh`), `fence.sh` and `git-hooks/` (the repository guards), `par.sh`, `sh.luau`, `graph.luau`, `changed.luau` |
+ | `z-nile/skills/` | z-nile's skills: the pipeline (`z-…`) and the skills called from inside a step (`zz-…`), linked into `.claude/skills/` by `./zn skills` |
+ | `z-nile/templates/` | the item, raft and prompt templates |
+@@ -29,6 +30,8 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
+ 7. **Guards fail closed.** A guard acts only on its one explicit "no" answer and treats every other outcome as guarded. Configuration that widens a guard is read from `origin/main`, never from the working tree a branch can edit.
+ 8. **Every refusal names the path, the item or the rule** it broke, so the person reading it can fix it without reading the code.
+ 
++A Lune entry the gate runs, and so an agent may start bare, joins `TOOLING` in `z-nile/engine/boundcmd.luau` (the PreToolUse hook refuses every other `lune run` that is not wrapped).
++
+ ## Design checklist (answer these in every tooling issue's Design section)
+ - **Scalability**: the git calls, file reads and processes per command, and how they grow with the items, the roots and the projects.
+ - **Maintainability**: where the next project, root, skill or command plugs in, and which one reader it goes through.
+diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
+--- a/z-nile/skills/zz-execute/SKILL.md
++++ b/z-nile/skills/zz-execute/SKILL.md
+@@ -18,6 +18,7 @@ Work through the phases in order and don't skip any. Wherever you are unsure, th
+    - Write down, for yourself, which files each issue touches.
+ 
+ ## Phase 1: Experiments (fail fast)
++- Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do. A `/clear` ends the background commands of the conversation it clears (the SessionEnd hook stops its tool shells).
+ - For every unknown in the raft's and issues' "Unknowns & experiments" that has no recorded result: run the experiment in the issue's `experiments/` directory, and record the result in the issue document.
+ - **If an experiment fails:**
+   - Switch to the documented fallback, and note that in the issue.
+diff --git a/z-nile/skills/zz-review/SKILL.md b/z-nile/skills/zz-review/SKILL.md
+--- a/z-nile/skills/zz-review/SKILL.md
++++ b/z-nile/skills/zz-review/SKILL.md
+@@ -81,6 +81,7 @@ Attack all of the following:
+ 9. **Repository safety**: could any spec, `check.sh` or script in this raft change the real repository (zz-test skill, "Specs never touch the real repository")? Every command that changes anything must run in a fixture under `.cache/<unique name>` with its own repository, committing as `@example.invalid`. Check especially what the runner can't enforce (that section's "Caught only by review" list). Any path to the real repository, or any weakening of its guards, is **high**.
+ 10. **Lessons**: run `./zn lessons --when design --full` and ask each lesson's `check` of the draft. A draft that repeats a lesson's defect is a finding, with that lesson on its `Lesson:` line. Then judge the lessons the author added since the last round (`harvest.md`): each must be a lesson a different raft could fail, not a restated finding; a restated finding is a low finding.
+ 11. **Scope fidelity**: for each item, print its capture (`./zn capture <id>`) and compare the document with it (z-design, **Scope is what was captured**). Its title, Problem and Solution ideas may only gain detail, `Scope decision (user, YYYY-MM-DD)` lines and `Decided with the user (YYYY-MM-DD)` lines. Then check that every captured outcome has a Design and an acceptance criterion: Checked, or Judged or Observed only where the zz-test skill allows it. An outcome dropped, deferred, moved into Non-goals, reworded away or left without a criterion, with no `Scope decision` or `Decided with the user` line, or a Problem rewritten to match a smaller design, is **high**. A capture carrying any marker (`(no capture commit: …)`, `(ambiguous: …)` or `(history before … not followed: …)`) is not a confirmed capture: say so, and judge the scope from the item's history.
++12. **Bounded commands**: Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do. Did the experiments and probes in the draft (and their recorded results) run that way, and does any step tell the executor to run something unbounded?
+ 
+ ## Stream mode (zz-execute Phase 2B)
+ A stream review is a cheap first filter on **one issue's** work, run by a clean **Sonnet** subagent before the lead merges the stream. It never replaces the code review of the whole raft (Code mode, Opus).
+@@ -101,6 +102,7 @@ A code-mode Recommendation never asks the author to edit sequestered `check.sh`
+ 8. **Repository safety**: no spec, `check.sh` or script in the diff may change the real repository, run a command that changes anything outside a `.cache` fixture, or weaken a guard: `tests/lib/fence.luau`, `z-nile/lib/fence.sh`, `z-nile/lib/git-hooks/`, the fence in `z-nile/lib/ac.sh`, `tests/tooling/repo-fence.spec.luau`. Check the "Caught only by review" list in the zz-test skill's "Specs never touch the real repository" section line by line. Any such path is **high**.
+ 9. **Fix delta** (re-review rounds): review the fix delta as well as the whole diff: `git diff <the previous review's commit>..HEAD` (the commit that added the previous `review-NNN.md`). For each fix, what new behaviour does it add, and what does that break or open? A defect in a fix is a finding like any other.
+ 10. **Lessons**: the same as design mode's item 10, with `./zn lessons --when build --full`.
++11. **Bounded commands**: Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do. Does any script, spec or step in the diff start a process nothing stops (`nohup`, `setsid`, `perl -e alarm` around `lune`, a bare `lune run` in a `check.sh`), and did the probes the author reports run through `./zn run`?
+ 
+ ## Lessons
+ Before you start, read this skill's lessons: `./zn lessons --skill zz-review --full`. Each is a mistake made before, with the question that catches it.
+diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
+--- a/z-nile/skills/zz-rules/SKILL.md
++++ b/z-nile/skills/zz-rules/SKILL.md
+@@ -44,6 +44,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+    - `git fetch`, `./zn sync` (a fast-forward there, which also rebuilds the board), and read-only inspection (`git status|log|diff|show|worktree list`);
+    - `git worktree add|remove|prune` and `git branch -D <merged branch>`;
+    - `z-nile/setup.sh`, once, when bootstrapping a new machine (SETUP.md);
++   - `run` and `reap`, which touch no repository (`./zn run` runs a bounded command, only a command that is itself allowed there; `./zn reap` stops this user's leaked processes);
+    - `./zn ready` and `stop`, which publish to `origin/main`, fast-forward it there; `ready` writes the ignored `<root>/rafts/active/<R-id>/prompt.md` beside the raft and `stop` removes it;
+    - the read-only tracker commands `list`, `audit`, `find`, `members`, `busy`, `metrics`, `workstreams`, `status` (without a target status), `prompt <R-id>` (it reads a readied raft's prompt and writes nothing), `lessons`, `raft-plan` (without `--apply`), `skills --check` and `capture <id>` (they only read), and the worktree commands `worktree` and `worktree-prune`. (`./zn check` runs an item's checks and, for a raft, the full gate, so it runs in a worktree.)
+    The tracker enforces part of this: `new`, `renumber`, `migrate`, `start`, `status <id> <to>`, `fold`, `unfold`, `recombine`, `release`, `raft-plan --apply`, `compact`, `remap` and `skills` (without `--check`) refuse to run in the main checkout of a repo that has an `origin`; `ready` and `stop` refuse to run anywhere else.
+@@ -105,11 +106,11 @@ One procedure for every change: a raft, a capture, a prep or an edit.
+ The agent that delivered the change merges its own PR once the evidence is in. Don't wait for a human. Merge only when **all** of these hold:
+ 1. **For a raft**, `./zn done` succeeded: the latest review round is resolved and the raft's `check.sh` passed. The PR is ready, not draft, and has no unresolved `BLOCKED:` comment. The results of the most recent review are already on the PR as a comment (zz-execute Phase 4). Only a *significant* finding in the final round's `review-NNN.md` (any high, or a failed Judged criterion) blocks the merge and engages the human; mediums and lows become follow-up issues (zz-execute Phase 4 step 7).
+ 2. `z-nile/check.sh --full` passes on the final head, run by you, in a clone outside this repo. `dir=$(mktemp -d)` only when that directory's parent directories are not a checkout of this repo; if `$TMPDIR` is inside this checkout, stop. Then `git clone --no-hardlinks --no-checkout` of this checkout into `$dir`, `git remote remove origin`, and `git checkout --detach` the exact head. Spawn the gate there with `PICKMAN_FENCE_REAL_GIT` set to the real repository's git directory appended to whatever the process inherited (`${PICKMAN_FENCE_REAL_GIT:+$PICKMAN_FENCE_REAL_GIT:}` plus `git rev-parse --path-format=absolute --git-common-dir` of this checkout). That is the local full gate. That is the verification. A merge does not read GitHub Actions. `./zn done`'s gate in the raft worktree is the raft's own gate and is not this check.
+-3. In `$dir/pickman`, on the detached head from step 2 (`git checkout --detach`), `lune run scripts/cicd` passes. It reads `~/.config/pickman/cicd.toml`, reserves the CICD places, publishes them, and runs both runtime suites. A missing file, a lease held by someone else, a publish failure, or a runtime failure stops the merge. This command is not part of `z-nile/check.sh --full`.
+-4. `gh pr view <pr> --json mergeable,mergeStateStatus` shows `MERGEABLE` and `CLEAN` (`UNKNOWN` is GitHub still computing it right after `done`: re-poll for up to a minute before deciding); any other state (`BEHIND`, `BLOCKED`, `UNSTABLE`, `DIRTY`) is not mergeable. `done` is preceded by a merge of `origin/main` (zz-execute Phase 5), so this should hold. If `main` moved since, and the merge is a clean one, merge `origin/main` in with plain `git` (`./zn commit` needs an active raft, and `done` has moved it), repeat step 2 (rerun `z-nile/check.sh --full` in that clone) and step 3 (`lune run scripts/cicd`), push, and repeat this step. If it conflicts, or it needs anything beyond renumbering colliding IDs (`renumber` per Conflicts), post `BLOCKED:` and stop: a finished PR gets no unreviewed code changes.
++3. In `$dir/pickman`, on the detached head from step 2 (`git checkout --detach`), `../zn run --time 1800 -- lune run scripts/cicd` passes (run from `$dir/pickman`, where the clone's `zn` is `../zn`; a bare `lune run` of it is refused by the PreToolUse hook: it runs the minutes-long runtime suites). It reads `~/.config/pickman/cicd.toml`, reserves the CICD places, publishes them, and runs both runtime suites. A missing file, a lease held by someone else, a publish failure, or a runtime failure stops the merge. This command is not part of `z-nile/check.sh --full`.
++4. `gh pr view <pr> --json mergeable,mergeStateStatus` shows `MERGEABLE` and `CLEAN` (`UNKNOWN` is GitHub still computing it right after `done`: re-poll for up to a minute before deciding); any other state (`BEHIND`, `BLOCKED`, `UNSTABLE`, `DIRTY`) is not mergeable. `done` is preceded by a merge of `origin/main` (zz-execute Phase 5), so this should hold. If `main` moved since, and the merge is a clean one, merge `origin/main` in with plain `git` (`./zn commit` needs an active raft, and `done` has moved it), repeat step 2 (rerun `z-nile/check.sh --full` in that clone) and step 3 (`../zn run --time 1800 -- lune run scripts/cicd`), push, and repeat this step. If it conflicts, or it needs anything beyond renumbering colliding IDs (`renumber` per Conflicts), post `BLOCKED:` and stop: a finished PR gets no unreviewed code changes.
+ 5. The human hasn't said to hold.
+ 
+-Then `gh pr merge <pr> --squash --subject "<raft>: <title> (#<pr>)" --body $'<summary>\n\n<the Co-Authored-By line from your commit instructions>'` (the `$'...'` form makes the newlines real, so the trailer is a trailer). Get the merge sha with `gh pr view <pr> --json mergeCommit -q .mergeCommit.oid`. Then follow Landing a change, step 4. This repo may have no branch protection, so these conditions are the only gate: you enforce them. Never use `--admin`, and never merge on a red or missing local full gate, a red or missing `lune run scripts/cicd`, an unresolved review, or a stop condition. If any condition can't be met, leave the PR as it is, post a `BLOCKED:` comment saying which, and stop.
++Then `gh pr merge <pr> --squash --subject "<raft>: <title> (#<pr>)" --body $'<summary>\n\n<the Co-Authored-By line from your commit instructions>'` (the `$'...'` form makes the newlines real, so the trailer is a trailer). Get the merge sha with `gh pr view <pr> --json mergeCommit -q .mergeCommit.oid`. Then follow Landing a change, step 4. This repo may have no branch protection, so these conditions are the only gate: you enforce them. Never use `--admin`, and never merge on a red or missing local full gate, a red or missing step 3 (`scripts/cicd`), an unresolved review, or a stop condition. If any condition can't be met, leave the PR as it is, post a `BLOCKED:` comment saying which, and stop.
+ 
+ Observed criteria (human Studio playtests) do not block the merge. Put them in the final report and PR comment, and file any failure the human finds later as a defect issue.
+ 
+@@ -157,6 +158,7 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
+ - `./zn raft-plan [--apply]`, `./zn fold <R-id> <issue>...`, `./zn unfold <R-id> <issue>...`, `./zn recombine <keeper> <other> [<issue>...]`, `./zn release <R-id> [--force]`
+ - `./zn compact [--force]`
+ - `./zn remap`
++- `./zn run [--time S] [--cpu S] -- <command>`, `./zn reap [--dry-run]`
+ 
+ ## Sync and claim
+ Tracker state is shared the moment it changes, not when a PR merges, so parallel terminals see each other's work.
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -124,6 +124,8 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+ 
+ ## Hooks (Claude Code only)
+ - After every `.luau` edit: stylua formats the file and selene lints it.
++- Before every Bash or Monitor call (PreToolUse, `scripts/hooks/pre-bash.sh`): an interpreter with no time limit, inline Python that loops or starts an untimed process, a `while`/`until` loop, a follow (`tail -f`, `watch`), a job started with `&` and not waited for, and a background call with anything unbounded in it, are refused, naming the wrapper.
++- At the end of a session (SessionEnd, `scripts/hooks/session-end.sh`): `./zn reap --session-end` stops what the session left running.
+ - On stop: the affected gate runs (`--affected`, through the old gate path's forwarder, so a worktree from before c0114 still runs its own gate) if a file outside every registry root changed under `src/`, `tests/`, `z-nile/` or `pickman/` (c0120: the game's home).
+ 
+ ## Lessons
+@@ -133,3 +135,12 @@ A new lesson (from a review finding, a correction by the user, or a step that fa
+ - **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
+ - **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
+ - **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
++
++## Bounded commands
++Run every probe, experiment, loop and background command you start yourself (anything that is not the gate, a check, a `./zn` command or the spec runner) through `./zn run --time <seconds> -- <command>`: it stops at its limit, when it ends and when you do.
++- A `/clear` ends the background commands of the conversation it clears (the SessionEnd hook stops its tool shells).
++- A subagent stays open while its background commands run, and a command it started stops at its own `./zn run` limit (at most an hour) or at the session's end; the session-end reaper catches anything left.
++- `./zn run [--time S] [--cpu S] -- <command>` (`z-nile/lib/bounded.pl`, which needs `z-nile/lib/cpu.sh` beside it; started before the engine, also callable as `perl <checkout>/z-nile/lib/bounded.pl`): process group, `--time` wall-clock limit (default 60, at most 3600), `--cpu` CPU limit by `ulimit -t` (SIGXCPU; a process that ignores the signal is stopped by the wall-clock limit only; limits only ever lower), TERM then KILL, a watchdog if the runner dies, exit 124 (wall clock), 125 (CPU), 123 (the process that started it is gone), 128+n (a signal).
++- The hook (`scripts/hooks/pre-bash.sh`, rules in `z-nile/engine/boundcmd.luau`, entry `z-nile/guard-bash.luau`) fails open; `scripts/hooks/session-end.sh` runs the reaper at a session's end.
++- `./zn reap` (`z-nile/engine/reap.luau`): orphans, expired `./zn run` commands, the ending session's tool processes; also at `sync` and the gate start (`--auto`).
++- The spec runner sets `ulimit -t` on every spec process: `PICKMAN_SPEC_CPU`, default 1200 s.

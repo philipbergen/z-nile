@@ -1,0 +1,26 @@
+M1 killed by AC1 (lesson at another path): no lesson at proto-c0294/z-nile/skills/z-ticket/lessons/moved-part-rewrites-the-owner.md
+M2 killed by AC1 (when: design): when: is 'design', not both
+M3 killed by AC5 (when: design (build listing)): z-ticket/moved-part-rewrites-the-owner is not listed for --when design
+M4 killed by AC1 (tag dependencies dropped): the lesson lacks the tag dependencies
+M5 killed by AC1 (captured question reworded): the check lost the captured question: For each answer that moves a part or adds an edge, does the other ticket name its owner, and can each of its outcomes still be built? And is each ticket this capture cannot edit named to the user?
+M6 killed by AC1 (added clause dropped): the check does not end with the clause on tickets the capture cannot edit: For each answer that moves a part or adds an edge, does the other ticket name the new owner, and can each of its outcomes still be built?
+M7 killed by AC1 (body padded over 1,200 bytes): body is 1305 bytes (over 1,200)
+M8 killed by AC1 (a 13th line): the lesson has 14 lines (distinct_from: aside), at most 12
+M9 killed by AC1 (another title): title: is 'Moved parts rewrite owners'
+M10 killed by AC2 (edge direction reversed): missing: adds a `depends_on` edge from B to A (B waits for A)
+M11 killed by AC2 (F5 placed in round 2): missing: c0249's idea review round 1, F5
+M12 killed by AC2 (the stranded outcome dropped): missing: c0257's captured "
+M13 killed by AC3 (no Owners line): missing: an Owners line for what you settle beyond it
+M14 killed by AC3 (outcomes not walked in the new order): missing: move each it cannot build to the ticket that can (both texts say so)
+M15 killed by AC3 (uneditable tickets not named to the user): missing: as c0276's Non-goal was in draft PR #281)
+M15b killed by AC3 (the land wording put back): missing: name to the user each ticket whose text it cannot rewrite (past draft, or on a prep branch,
+M16 killed by AC5 (no harvest note): z-ticket/moved-part-rewrites-the-owner: no source: no harvest entry names it and it has no from
+M17 killed by AC5 (note without its step): harvest.md has no note on 0e91b4d7 naming z-ticket/moved-part-rewrites-the-owner (erred z-ticket)
+M19 killed by AC1 (an extra sentence between the question and the clause): the check adds more than the one clause: For each answer that moves a part or adds an edge, does the other ticket name the new owner, and can each of its outcomes still be built? Also, is it ranked? And is each ticket this capture cannot edit named to the user?
+M20 killed by AC3 (not in the same capture): missing: **How to apply:** for each such answer, in the same capture, add to the other ticket's Problem
+M21 killed by AC3 (a decision line that does not quote the option): missing: a decision line that quotes the option picked
+M22 killed by AC4 (the capture's paraphrase put back as the quote): c0257's capture does not say: orders by the order c0249 defines
+M23 killed by AC2 (round 1's overturned fix told as the outcome): missing: lost work first stayed c0290's
+M24 passes AC1 as it should (the c0181-first text plus a distinct_from: line)
+M25 killed by AC1 (the c0181-first text plus a 13th line): the lesson has 14 lines (distinct_from: aside), at most 12
+M18 killed by AC6 (c0181 landed, lesson has no not_codifiable line): the lesson has no not_codifiable: line of the reference text

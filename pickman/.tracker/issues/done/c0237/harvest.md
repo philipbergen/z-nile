@@ -1,0 +1,4 @@
+- note the fix merged as a plain PR (#230) and left c0237 open; the user asked how it merged and said to learn it: zz-rules/a-tracked-fix-lands-through-its-raft
+- design-review-001 F1: zz-test/no-vacuous-pass
+- design-review-001 F2: z-design/restated-rules-move-together
+- design-review-001 F3: one-off: a proxy named as the evidence for a stated outcome

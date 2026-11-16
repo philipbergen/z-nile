@@ -1,0 +1,14 @@
+- design-review-001 F1: zz-test/seed-every-enumerated-case
+- design-review-001 F2: zz-test/no-vacuous-pass
+- design-review-001 F3: zz-test/no-vacuous-pass
+- design-review-001 F4: one-off: a prep-only experiment script; the rule it broke (probe only in a clone under $TMPDIR) is already zz-test's "Running specs against unguarded code"
+- note prep E2: renamed.id("f0110") read f0012's folder, because the compaction map names an older f0110: zz-test/split-paths-still-need-renamed-id
+- design-review-002 F1: zz-test/seed-every-enumerated-case
+- design-review-003 F1: zz-test/seed-every-enumerated-case
+- design-review-003 F2: zz-test/narrowing-keeps-each-members-check
+- design-review-003 F3: zz-test/kill-mutants-where-the-value-is-built
+- design-review-003 F4: z-design/quote-other-preps-before-promising
+- design-review-004 F1: zz-test/pin-call-site-arguments, zz-test/narrowing-keeps-each-members-check
+- design-review-004 F2: z-design/rerun-skipped-checks-after-edits
+- design-review-005 F1: z-design/quote-other-preps-before-promising
+- design-review-005 F2: z-design/rerun-skipped-checks-after-edits

@@ -1,0 +1,30 @@
+# Review 001: R0061 (design mode, raft coherence)
+Inputs: raft-g-chores at 00ec90ec (R0061.md, R0061/check.sh; c0134, c0135, c0137 documents, check.sh and acceptance specs; c0135 prototype.patch); origin/main 8a58bb11
+Grouped: [c0134@f7930714033c, c0135@28de0d4265ff, c0137@169b1c23165d]
+
+Simulation (scratch clone of 00ec90ec, outside the repository): c0135's `prototype.patch` applied with `git apply --3way` (all eight files clean) and c0134's header applied exactly as its Design gives it, in one commit. Then `./zn check c0134` 3/3, `./zn check c0135` 3/3, `./zn check c0137` 3/3 (AC3 runs c0044 AC9, c0067 AC10 and R0025 RC1 whole over c0135's skill and `engine/main.luau` edits: green). A second clone simulated the three `done`s (folders moved to `issues/done/`, `acceptance/` moved to `tests/acceptance/<id>`), so the newly promoted c0137 `scans.spec` and the finished-file specs judge c0134's and c0135's now-finished `check.sh` files: `lune run tests/run -- tests/acceptance/c0137/scans.spec.luau tests/acceptance/c0120/finished.spec.luau tests/acceptance/c0115/absence.spec.luau tests/acceptance/c0044/guard.spec.luau` 20 passed, 0 failed. Main's changes since the raft's base (3cfc2fcb..8a58bb11) touch none of the members' paths. The Theme's claims hold: no Touched path is shared, no `depends_on`, no `architecture.md` edge, and no member's check breaks after another's change. The full z-nile gate was not run here (c0135's prep ran it on its prototype, 1222/0; RC0 runs it).
+
+### F1 [low] The Order's stated reason is not what execution does: the workstream plan runs all three members at once
+Where: R0061.md, Order & dependencies ("c0137 runs last so its AC1 and AC3 read the skills after c0135's edits") and Whole-raft design ("running c0137's check after c0135's commit proves it (Order)")
+Evidence: `./zn workstreams R0061` prints `c0134 wave 1`, `c0135 wave 1`, `c0137 wave 1`, `parallel: yes (wave 1: c0134 c0135 c0137)`. In zz-execute Phase 2B (the default when the plan says `parallel: yes`) every stream is cut from the raft branch before any merge, so c0137's stream runs `./zn check c0137` on a tree without c0135's skill edits. What actually proves the coupling is Phase 2B step 6 (Integrate: every member's `./zn check` after the last merge) and RC0 (every member's check.sh).
+Critique: The coupling is proven either way, so nothing wrong ships. But the raft document tells the executor that the order provides the proof, and the order does not. The tempting fix is adding `depends_on: [c0135]` to c0137, which would force a second wave. That changes a member's design, and it would also put a 0-line stream behind the 200-line one.
+Consequences: none, as long as the text names step 6 and RC0, which hold whether the streams run in sequence or in parallel.
+Recommendation: In Order & dependencies and in Whole-raft design, say that the coupling is proven by the post-merge member checks (zz-execute Phase 2B step 6, or Phase 2A's order) and by RC0, and that the id order is only the sequential order. Change no member.
+
+### F2 [low] The coupling list misses that c0067 AC10 also reads `engine/main.luau`, a c0135 module, and that c0044 AC9 bans the phrase c0135's audit hint uses
+Where: R0061.md, Whole-raft design, first bullet ("c0137's check.sh reads every skills folder")
+Evidence: c0067 `check.sh:59-63` runs the 13-phrase grep over `skills ../pickman/skills ./templates ../AGENTS.md ../SETUP.md engine/main.luau`, and c0135 rewrites `engine/main.luau` (the four refusals and their messages). c0044 `check.sh:56` bans `<id>-<slug>` in `skills ../pickman/skills scripts ./templates ../SETUP.md ../AGENTS.md`. c0135's raft hint text, `never in a raft that has its <id>-<slug> branch` (prototype `engine/audit.luau:344`), is that exact phrase. On the simulated tree both greps return exit 1 (clean): `13-phrase rc=1`, `c0044 rc=1`, because the hint lives in `audit.luau`, which no scan reads. Copying the hint into the zz-rules **Slugs** bullet, an easy restatement, would turn c0137 AC3 red.
+Critique: This is a coupling the members don't own: c0135's design doesn't know which texts c0137's AC3 bans. The raft's interface section is the place that should name it, and it names only the skills folders.
+Consequences: none. RC0 already catches a breach; this only tells the executor where it would come from.
+Recommendation: Add both facts to the Whole-raft design's first bullet: c0137 AC3 also scans `engine/main.luau` for c0005's 13 phrases, and bans `<ID>-<slug>`/`<id>-<slug>` in the skills, so c0135's audit hint (`<id>-<slug> branch`) stays in engine text and is never copied into a SKILL.md.
+
+### F3 [low] The Theme omits one user decision and part of c0135's Touched paths
+Where: R0061.md, Theme
+Evidence: The c0137 line quotes "G1, G3: the user's decisions", but c0137's Guesses also hold G2, "Decided with the user (2026-10-25): \"don't widen\"", and its Design relies on it (the scans read the skills and docs only). The Touched list for c0135 gives `z-nile/engine/{audit,main,publish,raftplan}.luau` and the two SKILL.md files. It leaves out `z-nile/tests/acceptance/c0082/audit.spec.luau`, `.../c0082/cli.spec.luau` and `z-nile/tests/acceptance/c0135`, which c0135's own Touched modules list (the Whole-raft design mentions c0082 later). The "share no Touched path" claim still holds with them included.
+Critique: z-raft §3 asks the Theme for the user decisions the designs quote and for the members' Touched surface. A reader who checks the overlap from the Theme alone misses three paths.
+Consequences: none.
+Recommendation: Add c0137 G2 to its Theme line, and the three c0135 paths to the Touched sentence.
+
+Candidate lesson (for the lead to harvest): z-raft: an Order's stated reason must survive `./zn workstreams`. Check: when the Order says "X runs after Y so X's check sees Y's change", does `./zn workstreams <R-id>` put them in different waves? If it doesn't, name the post-merge checks (Phase 2B step 6, RC0) as the proof instead.
+
+Verdict: approve

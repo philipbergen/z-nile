@@ -7,14 +7,24 @@
 -- These specs run from z-nile/: the documents are read from the checkout's top.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local projects = require("@znile/engine/projects")
+local skills = require("@znile/engine/skills")
 local t = require("@tests/lib/t")
 
 local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
--- c0115 override: the skills' real folders, z-nile's and pickman's (never through the .claude/skills links), as
+-- c0184 override: the skills' folders come from the one reader of them, over the registry's projects
+local function skillBases(top: string): { string }
+	local out: { string } = {}
+	for _, folder in skills.folders(projects.load(top)) do
+		table.insert(out, folder.path)
+	end
+	return out
+end
+-- c0115 override: the skills' real folders, every project's (never through the .claude/skills links), as
 -- repository-relative folders ("z-nile/skills/zz-rules")
 local function skillDirs(): { string }
 	local out = {}
-	for _, base in { "z-nile/skills", "pickman/skills" } do
+	for _, base in skillBases(TOP) do
 		local names = fs.readDir(`{TOP}/{base}`)
 		table.sort(names)
 		for _, name in names do
@@ -66,14 +76,15 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 			"`./zn check` runs a pickman item's `check.sh` from `pickman/` and a z-nile item's from `z-nile/`",
 			w
 		)
-		at(s, "CI runs one gate job per project, `gate (<project>)`, and branch protection requires each", w)
-		at(s, "adding a project means a registry entry, a CI matrix entry and a new required check", w)
+		-- c0183 override: a new root also joins deploy.yml's ignore list (c0114's gate-cover spec requires it)
+		at(s, "Adding a project needs its registry entry and its root in that `deploy.yml` list.", w)
 		at(s, "`./zn find` and `members` print paths from the folder you run them in", w)
 		at(s, "`tracker/` is a retired root (c0120)", w)
 		at(s, "`./zn audit` and the gate fail if anything else appears there", w)
 		at(
 			s,
-			"`check.yml` ignores `pickman/.tracker/**`, `z-nile/.tracker/**` and `z-nile/next` on `push`",
+			-- c0183 override: every root, in registry order
+			"`deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`.",
 			w
 		)
 		at(s, "a branch from before c0120 that added a file in a pickman item's folder", w)
@@ -158,15 +169,17 @@ return t.spec("c0120 the documents say where pickman lives", function(it)
 		local raft = read("z-nile/templates/raft/check.sh")
 		at(
 			raft,
-			'check "RC0: project gate passes (full)" "$ZN_ROOT/z-nile/check.sh" --project {{PROJECT}} --full',
+			'check "RC0: project gate passes (affected)" "$ZN_ROOT/z-nile/check.sh" --project {{PROJECT}} --affected',
 			"raft check.sh"
 		)
 		at(raft, 'for dir in $("$ZN_ROOT/zn" members {{ID}}); do', "raft check.sh")
 		at(raft, '"$ZN_ROOT/zn" promote-check {{ID}}', "raft check.sh")
 		at(read("z-nile/templates/issue/check.sh"), "# cds to the item's project home", "issue check.sh")
 		local prompt = read("z-nile/templates/prompt.md")
-		at(prompt, "## Architecture map ({{ARCHITECTURE_PATH}})", "prompt.md")
-		at(prompt, "## Work items (verbatim from {{ROOT}}/)", "prompt.md")
+		at(prompt, "## Architecture", "prompt.md")
+		at(prompt, "{{ARCHITECTURE}}", "prompt.md")
+		at(prompt, "{{ARCHITECTURE_PATH}}", "prompt.md")
+		at(prompt, "## Issues ({{ISSUE_IDS}})", "prompt.md")
 	end)
 
 	-- design review 005 F5: no ../zn settings entries (a settings entry is a prefix match, so `../zn` would allow it from

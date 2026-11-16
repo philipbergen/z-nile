@@ -9,13 +9,16 @@ local Maze = require("@logic/Maze")
 local Movement = require("@logic/Movement")
 local Pellets = require("@logic/Pellets")
 local Session = require("@logic/Session")
-local serde = require("@lune/serde")
+local plain = require("@tests/lib/plain")
 local t = require("@tests/lib/t")
+-- c0176: the shipped rules less f0147's ramp, so these cases keep the classic level 1 and the last pellet's clear
+local CLASSIC_GAME = table.clone(Session.GAME_CONFIG) :: any
+CLASSIC_GAME.ramp = nil
 
 local classic = Maze.layout("classic")
 
 local function new(seed: number): Session.Session
-	local s = Session.new(classic, seed, Session.GAME_CONFIG)
+	local s = Session.new(classic, seed, CLASSIC_GAME)
 	Session.join(s, "p")
 	return s
 end
@@ -190,7 +193,8 @@ return t.spec("f0100 drops", function(it)
 		s.members.p.blaster.shots = 2
 		frame = Session.frame(s, "p")
 		t.expect(frame.shots).toBe(2)
-		t.expect(serde.decode("json", serde.encode("json", frame))).toEqual(frame)
+		-- c0153: plain data, and a JSON round trip within 1e-9 (Lune's JSON decoder can return a number one ulp off)
+		t.expect({ plain.roundTrip(frame, 1e-9) }).toEqual({ true })
 		-- the v1 snapshot is unchanged
 		local keys = {}
 		for k in Session.snapshot(s, "p") :: any do

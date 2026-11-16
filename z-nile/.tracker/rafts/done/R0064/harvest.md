@@ -1,0 +1,1 @@
+- review-001 F1: one-off: the Verification log entry was left for after the review; zz-execute Phase 2 step 4 already says to write it when the check passes

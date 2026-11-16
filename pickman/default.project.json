@@ -7,6 +7,7 @@
     },
     "ReplicatedStorage": {
       "Shared": { "$path": "src/shared" },
+      "Arcade": { "$path": "../arcade/src/shared" },
       "Remotes": {
         "$className": "Folder",
         "Ready": { "$className": "RemoteEvent" },
@@ -15,6 +16,9 @@
         "ToLobby": { "$className": "RemoteEvent" },
         "LobbyStatus": { "$className": "RemoteEvent" }
       }
+    },
+    "ServerStorage": {
+      "Arcade": { "$path": "../arcade/src/server" }
     },
     "ServerScriptService": {
       "$attributes": { "LobbyPlaceId": 0 },

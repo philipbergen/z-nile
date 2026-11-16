@@ -1,0 +1,11 @@
+# Harvest: c0284
+- design-review-001 F1: z-design/check-paths-from-the-home
+- design-review-001 F2: zz-test/source-pins-name-what-the-design-names
+- design-review-001 F3: z-design/mutation-runner-runs-correct-variants
+- design-review-001 F4: zz-test/count-processes-by-their-own-arguments, z-design/mutation-runner-runs-correct-variants
+- design-review-001 F5: zz-test/one-mutant-per-wiring-point
+- design-review-001 F6: zz-arch/batch-git-reads-per-event
+- design-review-001 F7: z-design/sibling-views-refuse-the-same-inputs
+- design-review-001 F8: z-design/prototype-reference-is-the-layers-own-diff
+- design-review-001 F9: z-design/quote-other-preps-before-promising, zz-arch/per-poll-work-meets-the-cpu-limit
+- note the reviewer's three candidate lessons (design-review-001): z-design/check-paths-from-the-home, zz-test/count-processes-by-their-own-arguments, z-design/mutation-runner-runs-correct-variants

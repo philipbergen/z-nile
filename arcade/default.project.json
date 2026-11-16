@@ -1,0 +1,12 @@
+{
+  "name": "arcade",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "Arcade": { "$path": "src/shared" }
+    },
+    "ServerStorage": {
+      "Arcade": { "$path": "src/server" }
+    }
+  }
+}

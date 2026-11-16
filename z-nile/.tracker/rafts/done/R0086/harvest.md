@@ -1,0 +1,2 @@
+- review-001 F1: zz-execute/log-each-cross-prep-run-and-how-it-was-applied
+- review-001 F2: one-off: stale case titles in promoted specs that AC8 forbids editing; deferred to c0269

@@ -1,0 +1,16 @@
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+FAIL tests/acceptance/c0117/trackerstate.spec.luau :: sets up a fixture repository with a bare origin
+     /Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/tests/acceptance/c0117/trackerstate.spec:205: git push -q origin main in /Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/.cache/c0117-trackerstate/repo failed (1): git (z-nile wrapper): git push to main refused: could not fetch a fresh copy of main (open a pull request; only ./zn publishes to main)
+FAIL tests/acceptance/c0117/trackerstate.spec.luau :: the broker pushes a fast-forward of tracker state, and refuses code, sequestered edits and a rewind
+     /Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/tests/acceptance/c0117/trackerstate.spec:228: expected true, got false
+FAIL tests/acceptance/c0117/trackerstate.spec.luau :: the broker refuses the decoy move, a .models.toml, a .GITATTRIBUTES, and a history that is not tracker state
+     /Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/tests/acceptance/c0117/trackerstate.spec:254: git rev-parse main in /Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/.cache/c0117-trackerstate/origin.git failed (128): fatal: ambiguous argument 'main': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+main
+FAIL tests/acceptance/c0117/trackerstate.spec.luau :: a ready that rewrites its own check.sh's paths passes the broker; any other change to it does not
+     /Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/tests/acceptance/c0117/trackerstate.spec:290: git rev-parse main in /Users/philipbergen/code/pickman/.worktree/prep-control-cli-orphan-wait-on-wall-clock/z-nile/.cache/c0117-trackerstate/origin.git failed (128): fatal: ambiguous argument 'main': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+main
+FAIL tests/acceptance/c0117/trackerstate.spec.luau: 8 passed, 4 failed

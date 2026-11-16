@@ -1,0 +1,3 @@
+# Refute 003: c0137 (design mode)
+
+- F1: fixed: the whole-criterion run left scans.spec (its `criterion` helper and `CRITERIA` with it) for check.sh AC3, `whole_criteria`: an awk extraction of each criterion's `bash -c` script, run from the home, expected exit 0 and silent. It runs at c0137's `./zn check` and `done` only; nothing about it is promoted. AC1 no longer claims the whole criteria. M9 (`^name: ready-raft$` left in c0067 AC10) and M10 (a banned phrase in a lesson) each turn AC3 red in a clone. The Design sentence, Test plan, Rules row, E6 and the lesson's How to apply (now: a check.sh AC, not a promoted spec) say so. consequences: after `done`, a later rename can redden c0067 AC10 unseen, as for every finished check (the reviewer's point; not widened, G2).
