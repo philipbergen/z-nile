@@ -1,0 +1,29 @@
+z-nile/tests/acceptance/c0371/check-paths-homes.spec.luau
+	a Touched entry still covers the path of its own work, from either convention (c0141's reading)
+	a path covered by no entry is still reported, also when it exists elsewhere in the repository
+	a command after cd to the repository root is read from the root until its group or script closes
+	the root reading goes on over the lines of its script and its file, and ends where the script or group does
+	a word in a code span is prose, all of the span, and a bare path next to it is still read
+	the message of an echo or printf is prose, in command position only, and the next command is still read
+	the quoted arguments of a search helper the check defines are text, across line continuations
+	a for list that is only matched as text is prose; one the loop opens as a file is read
+	a comment is not shell, so an apostrophe in one changes no quoting (review 002 F1)
+	a group that closes at the end of its line ends the root reading (review 002 F2)
+	a top-level cd holds for the quoted words and the scripts after it, and a script's idiom keeps its cd (review 002 F3)
+	the command that check runs, and a continued line that starts with an operator, are in command position (review 002 F4)
+	a for list is text only when the loop only matches it (review 002 F5)
+	an echo's message stops at a command substitution, and a one-word echo is a value (review 002 F6)
+	what each remaining rule must keep reading (review 002 F7)
+	a heredoc body, a $'...' string and the quotes inside $(...) change no quoting (review 003 F1)
+	directory frames follow bash: subshells, literal cds, double-quoted scripts, splices, comments in quotes, case patterns (review 003 F2)
+	a value that echo or printf prints is a path the check runs (review 003 F3)
+	rules L and H read keywords and commands, not words (review 003 F4)
+	command position reaches past assignments, timeout and a check that does not start its line (review 003 F5)
+	the grep forms and the ${NAME} use are read (review 003 F6)
+	grep's pattern is text as main reads it: an unquoted grep after git, a wrapper or an option (review 004 F1)
+	a comment line or a ` # ` tail in a heredoc body or a script hides its words, as main reads them (review 004 F3)
+	a cd that goes on after the named form is no root cd, and a label after --check is no label (review 004 F3)
+	a function that names grep in a comment or a message is no search helper (review 004 F4)
+	what the Design names stays pinned: script quotes, case bodies, a helper call that ends with its script (review 004 F5)
+	the remaining rules the Design names stay pinned (review 005 F3)
+	the live tree passes, every check.sh read

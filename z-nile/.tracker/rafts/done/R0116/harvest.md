@@ -1,0 +1,2 @@
+- final-review-001 F1: one-off: the selection hole it names is the whole subject of c0387, which the design already cites; no new rule
+- note the trace check reports every check.sh cell as not green when the layer is merely unstacked because main moved: zz-review/not-stacked-is-main-moving
