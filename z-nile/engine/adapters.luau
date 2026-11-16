@@ -43,6 +43,9 @@ export type Acc = {
 	errorText: string?,
 	cliText: string, -- the last text the CLI itself printed (not the model's words): a stall's wait message
 	open: { [string]: boolean }, -- the tool calls started and not finished yet
+	running: number, -- opencode: tool calls its stderr log shows started and its stdout has not shown finished
+	waiting: string?, -- the CLI's own log says it is retrying a provider's quota error (a stall after it is quota)
+	children: { string }, -- opencode: the child sessions (subagents) its log named; their tokens are read after the step
 	calls: number, -- model calls seen (agent: distinct model_call_id values, and turns that carry none)
 	callIds: { [string]: boolean },
 	turns: number,
@@ -61,6 +64,7 @@ export type Adapter = {
 	argv: (Request) -> { string },
 	feed: (Acc, string) -> (),
 	feedErr: ((Acc, string) -> ())?, -- a CLI whose stdout hides a running tool reads its stderr log too (opencode)
+	isLog: ((string) -> boolean)?, -- which stderr lines are that log: the runner feeds only these to feedErr and keeps the rest
 }
 
 -- What a CLI prints when it is out of quota or rate limited (any of these, case-insensitive).
@@ -78,6 +82,12 @@ adapters.QUOTA = {
 	"status 429",
 	"error 429",
 	"http 429",
+	-- the words the binaries themselves match (agy: RESOURCE_EXHAUSTED, "exhausted your capacity"; opencode: "resource
+	-- exhausted", Zen's "Free usage exceeded"); no recording of a real exhausted quota exists for agy or opencode (c0175 E3, E5)
+	"resource_exhausted",
+	"resource exhausted",
+	"exhausted your capacity",
+	"free usage exceeded",
 }
 -- What a CLI prints while it waits for quota instead of failing: a stall after one of these is a quota failure.
 adapters.WAITING = { "retrying in", "retry in", "waiting for", "try again", "resets at", "reset at" }
@@ -102,6 +112,9 @@ function adapters.newAcc(): Acc
 		errorText = nil,
 		cliText = "",
 		open = {},
+		running = 0,
+		waiting = nil,
+		children = {},
 		calls = 0,
 		callIds = {},
 		turns = 0,
@@ -192,7 +205,7 @@ end
 
 -- Whether a tool call is running: the stall timer gives way to the tool ceiling while one is (c0117 review 001 F8).
 function adapters.toolRunning(acc: Acc): boolean
-	return next(acc.open) ~= nil
+	return next(acc.open) ~= nil or acc.running > 0
 end
 
 local function claudeFeed(acc: Acc, line: string)
@@ -448,7 +461,7 @@ local function agyFeed(acc: Acc, line: string)
 			acc.session = u.conversation_id
 		end
 		local key = `step{tostring(u.step_index)}`
-		if u.step_type == "tool" then
+		if u.step_type == "tool" or u.step_type == "subagent" then
 			if u.state == "ACTIVE" then
 				acc.open[key] = true
 				local name = if type(u.tool_name) == "string" and u.tool_name ~= ""
@@ -513,9 +526,53 @@ local function opencodeTokens(t: any): number
 end
 
 -- The ledger id `opencode-<provider>-<model>` is opencode's `<provider>/<model>`. The provider is the one word after the
--- prefix (a `_` in it is the hyphen of a name such as github-copilot); the model is the rest, as opencode names it.
+-- prefix (a `_` in it is the hyphen of a name such as github-copilot). The model is opencode's own name written in the
+-- ledger's alphabet (letters, digits, `.`, `-`, `_`) with `_` as the one escape, so every name can be written and read back:
+-- `__` is `_`, `_s` is `/`, `_c` is `:`, `_a` is `@`, and `_xHH` is any other byte (HH two hex digits).
+local ESCAPES = { ["/"] = "_s", [":"] = "_c", ["@"] = "_a", ["_"] = "__" } :: { [string]: string }
+local UNESCAPES = { ["_"] = "_", s = "/", c = ":", a = "@" } :: { [string]: string }
+
+function adapters.opencodeModelPart(model: string): string
+	return (
+		string.gsub(model, "[^%w%.%-]", function(ch: string): string
+			return ESCAPES[ch] or string.format("_x%02x", string.byte(ch))
+		end)
+	)
+end
+
+-- The model name a ledger model part stands for; nil when the part has an escape no encoder writes.
+function adapters.opencodeUnmodelPart(part: string): string?
+	local out: { string } = {}
+	local i = 1
+	while i <= #part do
+		local ch = string.sub(part, i, i)
+		if ch ~= "_" then
+			table.insert(out, ch)
+			i += 1
+		else
+			local nxt = string.sub(part, i + 1, i + 1)
+			if UNESCAPES[nxt] ~= nil then
+				table.insert(out, UNESCAPES[nxt])
+				i += 2
+			elseif nxt == "x" and string.match(string.sub(part, i + 2, i + 3), "^%x%x$") then
+				table.insert(out, string.char(tonumber(string.sub(part, i + 2, i + 3), 16) :: number))
+				i += 4
+			else
+				return nil
+			end
+		end
+	end
+	return table.concat(out)
+end
+
+-- The ledger id of opencode's `<provider>/<model>` (the inverse of opencodeModel): the provider's hyphens become `_`.
+function adapters.opencodeId(provider: string, model: string): string
+	return `opencode-{string.gsub(provider, "-", "_")}-{adapters.opencodeModelPart(model)}`
+end
+
 function adapters.opencodeModel(id: string): string
-	local provider, model = string.match(id, "^opencode%-([%w_%.]+)%-(.+)$")
+	local provider, part = string.match(id, "^opencode%-([%w_%.]+)%-(.+)$")
+	local model = if part ~= nil then adapters.opencodeUnmodelPart(part) else nil
 	if provider == nil or model == nil then
 		return id
 	end
@@ -538,9 +595,9 @@ local function opencodeFeed(acc: Acc, line: string)
 		local id = if type(part.id) == "string" then part.id else `step{acc.turns}`
 		acc.byMessage[id] = opencodeTokens(part.tokens)
 		sumLive(acc)
-		acc.open["permission"] = nil
+		acc.running = 0
 	elseif j.type == "tool_use" then
-		acc.open["permission"] = nil
+		acc.running = math.max(0, acc.running - 1)
 		local state = if type(part.state) == "table" then part.state else {}
 		local name = if type(part.tool) == "string" and part.tool ~= "" then part.tool else "tool"
 		local target = targetOf(state.input)
@@ -554,17 +611,44 @@ local function opencodeFeed(acc: Acc, line: string)
 		acc.errorText = text
 		acc.cliText = text
 		-- the provider's own words can be in the whole error object (a 429 body), not only its message
-		if mentions(text, adapters.QUOTA) or mentions(line, adapters.QUOTA) then
+		-- the whole line too: a provider's 429 body (`responseBody`) and `statusCode` come beside a message with no quota word
+		if
+			mentions(text, adapters.QUOTA)
+			or mentions(line, adapters.QUOTA)
+			or string.find(line, '"statusCode":429', 1, true)
+		then
 			acc.quota = text
 		end
 	end
 end
 
--- opencode's stdout prints a tool only once it has finished, so a quiet tool shows only in its `--print-logs` stderr: a
--- permission check ("evaluated permission=bash …") starts one, and the step's end (`step_finish`) closes it.
+-- opencode's log lines (`--print-logs --log-level INFO`): `timestamp=… level=… run=… message=…`. The runner feeds only these to
+-- `opencodeFeedErr` and keeps every other stderr line for the quota and failure words, so a command the model runs (which the
+-- permission lines quote) is never taken for the CLI's own words.
+local function opencodeIsLog(line: string): boolean
+	return string.match(line, "^timestamp=%S+ level=%u+ run=%S+ ") ~= nil
+end
+
+-- opencode's stdout prints a tool only once it has finished, so what is running shows only in its log: a permission check
+-- ("evaluated permission=bash …") starts one (counted: tools run in parallel, and the first to finish must not hide a long
+-- sibling), `tool_use` ends one and `step_finish` ends all. A `created … parentID=ses_…` line names a child session (a
+-- subagent): its tokens are never on stdout, so the runner reads them after the step. An ERROR "stream error" line with a quota
+-- word is the CLI retrying a provider's 429 (silently on stdout, for as long as a retry-after header asks): a stall after it is quota.
 local function opencodeFeedErr(acc: Acc, line: string)
 	if string.find(line, "evaluated permission=", 1, true) then
-		acc.open["permission"] = true
+		acc.running += 1
+		return
+	end
+	local child = string.match(line, "message=created id=(ses_%w+) .-parentID=(ses_%w+)")
+	if child ~= nil then
+		table.insert(acc.children, child)
+		return
+	end
+	if
+		string.match(line, '^timestamp=%S+ level=ERROR run=%S+ message="stream error"')
+		and mentions(line, adapters.QUOTA)
+	then
+		acc.waiting = acc.waiting or (string.match(line, 'error%.error="([^"]*)"') or "provider quota error")
 	end
 end
 
@@ -579,6 +663,9 @@ adapters.CLAUDE_SETTINGS = '{"sandbox":{"enabled":false}}'
 -- headless section tells the author to pass a two-hour timeout on its review command alone. E15 measures the rest.
 adapters.STEP_ENV = {
 	["claude-cli"] = { BASH_MAX_TIMEOUT_MS = "7200000" },
+	-- opencode (c0175 E6, E15): no snapshot tracking (it would run git over the worktree each step, through the git wrapper), and
+	-- no title call (a small model call outside the step's session, whose tokens nothing counts)
+	["opencode-cli"] = { OPENCODE_CONFIG_CONTENT = '{"snapshot":false,"agent":{"title":{"disable":true}}}' },
 } :: { [string]: { [string]: string } }
 
 local function withEffort(args: { string }, flag: string, effort: string?): { string }
@@ -696,6 +783,7 @@ local ADAPTERS: { [string]: Adapter } = {
 		end,
 		feed = opencodeFeed,
 		feedErr = opencodeFeedErr,
+		isLog = opencodeIsLog,
 	},
 	["cursor-cli"] = {
 		cli = "agent",

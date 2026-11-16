@@ -37,6 +37,19 @@ local AGY_OK = table.concat({
 local AGY_QUOTA =
 	[[{"event":"result","result":{"conversation_id":"c-1","status":"ERROR","response":"","error":"RESOURCE_EXHAUSTED: quota exceeded for this model","finished_reason":"error"}}]]
 
+local function perm(command: string): string
+	return `timestamp=2026-11-16T04:58:05.329Z level=INFO run=ab12cd34 message=evaluated permission=bash pattern="{command}" action.action=allow`
+end
+local LOGERR =
+	'timestamp=2026-11-16T06:07:11.753Z level=ERROR run=befeb02f message="stream error" providerID=fake modelID=m error.error="AI_APICallError: Rate limit exceeded: too many requests"'
+local UNKNOWN_ERR =
+	`\{"type":"error","sessionID":"{SES}","error":\{"name":"UnknownError","data":\{"message":"Unexpected server error. Check server logs for details."}}}`
+local function created(id: string, parent: string): string
+	return `timestamp=2026-11-16T06:06:30.624Z level=INFO run=9e6b6f7a message=created id={id} slug=neon-moon version=1.18.31 projectID=6dda path="" parentID={parent} title="child"`
+end
+local function exportOf(id: string, input: number, output: number): string
+	return `Exporting session: {id}\n\{"info":\{"id":"{id}","tokens":\{"input":{input},"output":{output},"reasoning":0,"cache":\{"write":0,"read":9000}}},"messages":[]}`
+end
 local AGY_NOCOUNT = [[{"event":"init","conversation_id":"ses_agy9","init":{}}]]
 
 local function mkdir(path: string)
@@ -225,6 +238,136 @@ return t.spec("c0175 the runner on agy and opencode", function(it)
 			t.expect(r.outcome).toBe("ok")
 			t.expect(r.detail).toBe("no token count (agy-cli)")
 			t.expect((string.find(logged(), "export", 1, true))).toBe(nil)
+		end
+	)
+	it(
+		"AC6: parallel tools: the first to finish does not hide a long sibling, so a quiet gate is not a stall",
+		function()
+			reset()
+			local oc = fake(
+				"opencode",
+				`echo '{perm("a")}' >&2\necho '{perm("b")}' >&2\nsleep 1\ncat <<'EOF'\n{TOOL}\nEOF\nsleep 3\ncat <<'EOF'\n{TOOL}\n{STEP_FINISH}\nEOF`
+			)
+			local r = run("oc-par", oc, "opencode-cli", { stall = 2, tool = 30 })
+			t.expect(r.outcome).toBe("ok")
+			t.expect(r.tokens).toBe(6709 + 38)
+		end
+	)
+
+	it(
+		"AC6: a command the model runs, quoted in opencode's log, is not the CLI's quota: the step still fails as failed",
+		function()
+			reset()
+			local oc = fake(
+				"opencode",
+				`echo '{perm("grep -n quota rate limit engine.luau")}' >&2\ncat <<'EOF'\n{UNKNOWN_ERR}\nEOF\nexit 1`
+			)
+			local r = run("oc-quoted", oc, "opencode-cli")
+			t.expect(r.outcome).toBe("failed")
+			-- named by the error event's message, not by a log line
+			t.expect(string.find(r.detail, "Unexpected server error", 1, true) ~= nil).toBe(true)
+			t.expect((string.find(r.detail, "evaluated permission", 1, true))).toBe(nil)
+		end
+	)
+
+	it(
+		"AC6: words of waiting in a quoted command, then silence, are a stall, not a wait for quota",
+		function()
+			reset()
+			local oc = fake(
+				"opencode",
+				`echo 'timestamp=2026-11-16T06:06:30.624Z level=INFO run=ab12cd34 message=loop session.id=ses_x pattern="try again later, waiting for the gate, retry in 5s"' >&2\nsleep 20`
+			)
+			local r = run("oc-prose", oc, "opencode-cli", { stall = 1, tool = 20 })
+			t.expect(r.outcome).toBe("stalled")
+		end
+	)
+
+	it(
+		"AC6: opencode's own stream error with a quota word, then silence past the stall limit, is a wait for quota",
+		function()
+			reset()
+			local oc = fake("opencode", `echo '{LOGERR}' >&2\nsleep 20`)
+			local r = run("oc-wait", oc, "opencode-cli", { stall = 1, tool = 20 })
+			t.expect(r.outcome).toBe("quota")
+			t.expect(string.find(r.detail, "waited for quota", 1, true) ~= nil).toBe(true)
+			t.expect(string.find(r.detail, "Rate limit exceeded", 1, true) ~= nil).toBe(true)
+		end
+	)
+
+	it("AC6: a CLI's own non-log error text with quota words and a failing exit is quota", function()
+		reset()
+		local oc = fake("opencode", `echo 'Error: rate limit exceeded (too many requests)' >&2\nexit 1`)
+		local r = run("oc-stderr-quota", oc, "opencode-cli")
+		t.expect(r.outcome).toBe("quota")
+	end)
+
+	it(
+		"AC6: a kimi step that hits its monthly limit ends as quota (kimi's real error text, recorded 2026-11-15)",
+		function()
+			reset()
+			local kimi = fake(
+				"kimi",
+				[[echo '{"role":"meta","type":"system.version","version":"2.6.0"}'
+echo "error: failed to run prompt: provider.api_error: You've reached your monthly usage limit for this billing cycle. Your quota will reset in the next cycle." >&2
+exit 1]]
+			)
+			local r = run("kimi-quota", kimi, "kimi-cli")
+			t.expect(r.outcome).toBe("quota")
+		end
+	)
+
+	it(
+		"AC7: subagents' tokens are read after the step, once per child session, and the live cap is the parent's only",
+		function()
+			reset()
+			local oc = fake(
+				"opencode",
+				`if [ "$1" = export ]; then case "$2" in ses_kid1) cat <<'EOF'\n{exportOf(
+					"ses_kid1",
+					5000,
+					50
+				)}\nEOF\n;; ses_kid2) cat <<'EOF'\n{exportOf("ses_kid2", 700, 0)}\nEOF\n;; *) exit 1;; esac; exit 0; fi\n`
+					.. `echo '{created("ses_kid1", SES)}' >&2\necho '{created("ses_kid1", SES)}' >&2\necho '{created(
+						"ses_kid2",
+						"ses_kid1"
+					)}' >&2\n`
+					.. `echo 'timestamp=2026-11-16T06:06:30.624Z level=INFO run=9e6b6f7a message=created id=ses_main slug=a parentID=undefined' >&2\n`
+					.. `cat <<'EOF'\n{STEP_FINISH}\nEOF`
+			)
+			local r = run("oc-kids", oc, "opencode-cli", { cap = 7000 })
+			t.expect(r.outcome).toBe("ok")
+			t.expect(r.tokens).toBe(6709 + 38 + 5050 + 700)
+			t.expect(
+				string.find(r.detail, "+5750 tokens of 3 child sessions, read after the step", 1, true) ~= nil
+			)
+				.toBe(true)
+			t.expect(string.find(r.detail, "over max_tokens 7000", 1, true) ~= nil).toBe(true)
+			-- each child was exported once; the parent was not (its stream carried a count); a child that cannot be read adds nothing
+			local calls = logged()
+			t.expect(string.find(calls, "export ses_kid1", 1, true) ~= nil).toBe(true)
+			t.expect(string.find(calls, "export ses_kid2", 1, true) ~= nil).toBe(true)
+			t.expect((string.find(calls, `export {SES}`, 1, true))).toBe(nil)
+			local _, n = string.gsub(calls, "export ses_kid1", "")
+			t.expect(n).toBe(1)
+			-- under the cap the detail only says what was added
+			local r2 = run("oc-kids-under", oc, "opencode-cli", { cap = 100000 })
+			t.expect((string.find(r2.detail, "over max_tokens", 1, true))).toBe(nil)
+			t.expect(r2.tokens).toBe(6709 + 38 + 5750)
+		end
+	)
+
+	it(
+		"AC7: an id that is not an opencode session id never reaches the CLI: the CLI is not started at all",
+		function()
+			reset()
+			local oc = fake("opencode", "exit 0")
+			t.expect(U.lines("opencode-cli", "--help", oc, {}, base)).toEqual({})
+			t.expect(U.children("opencode-cli", { "--help", "ses_a;b", "" }, oc, {}, base)).toEqual({})
+			t.expect(logged()).toBe("")
+			-- and a real one does start it
+			t.expect(#U.lines("opencode-cli", "ses_ok", oc, {}, base)).toBe(0)
+			t.expect(string.find(logged(), "export ses_ok", 1, true) ~= nil).toBe(true)
 		end
 	)
 end)

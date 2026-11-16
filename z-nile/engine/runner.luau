@@ -9,6 +9,7 @@
 -- the specs' jail, and an flock can't be fooled by pid reuse). The adapter
 -- (adapters.luau) is pure; this is the one place that starts a model CLI.
 local adapters = require("./adapters")
+local cliguard = require("./cliguard")
 local costrow = require("./costrow")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -165,6 +166,7 @@ function runner.run(r: Request): Result
 		table.insert(args, a)
 	end
 	-- the supervisor's stdin stays open until this function returns: it is the lifeline
+	cliguard.seal(r.adapter.runtime, r.cwd, r.env)
 	local child = process.create("perl", args, { cwd = r.cwd, env = r.env })
 	local acc = adapters.newAcc()
 	local quiet = 0 -- seconds since the last line on stdout
@@ -203,8 +205,9 @@ function runner.run(r: Request): Result
 			if chunk == nil or chunk == "" then
 				break
 			end
-			stderrTail = string.sub(stderrTail .. chunk, -4096)
-			-- a CLI whose stdout hides a running tool is read on its stderr too, line by line (feedErr)
+			-- a CLI whose stdout hides a running tool is read on its stderr too, line by line (feedErr): its log lines go to
+			-- the adapter and never to the tail the quota and failure words are read from (a command the model runs is quoted
+			-- in them); every other line is the CLI's own and stays in the tail
 			local feedErr = r.adapter.feedErr
 			if feedErr then
 				errPending ..= chunk
@@ -215,12 +218,20 @@ function runner.run(r: Request): Result
 					end
 					local line = string.sub(errPending, 1, nl - 1)
 					errPending = string.sub(errPending, nl + 1)
-					if line ~= "" then
+					local isLog = r.adapter.isLog
+					if line ~= "" and isLog ~= nil and isLog(line) then
 						feedErr(acc, line)
+					elseif line ~= "" then
+						stderrTail = string.sub(stderrTail .. line .. "\n", -4096)
 					end
 				end
 				errPending = string.sub(errPending, -4096)
+			else
+				stderrTail = string.sub(stderrTail .. chunk, -4096)
 			end
+		end
+		if errPending ~= "" then
+			stderrTail = string.sub(stderrTail .. errPending, -4096)
 		end
 		errDone = true
 	end)
@@ -284,7 +295,8 @@ function runner.run(r: Request): Result
 			early, detail = "quota", acc.quota :: string
 		elseif quiet >= limit then
 			-- only what the CLI itself printed counts as a wait for quota, never the model's words
-			local waiting = adapters.mentions(acc.cliText .. "\n" .. stderrTail, adapters.WAITING)
+			local waiting = acc.waiting
+				or adapters.mentions(acc.cliText .. "\n" .. stderrTail, adapters.WAITING)
 			if waiting then
 				early, detail = "quota", `waited for quota ("{waiting}") with no output for {limit} s`
 			else
@@ -317,6 +329,23 @@ function runner.run(r: Request): Result
 			r.adapter.feed(acc, line)
 		end
 	end
+	cliguard.seal(r.adapter.runtime, r.cwd, r.env)
+	-- The child sessions the CLI's log named (opencode subagents) print nothing on stdout: their tokens are read after the
+	-- step, from the CLI's own store, and are on the row. The live cap saw the parent only, so a step that was over max_tokens
+	-- only with its children is not killed; its detail says so.
+	local kidNote = ""
+	if #acc.children > 0 then
+		local before = acc.live
+		for _, line in sessionusage.children(r.adapter.runtime, acc.children, r.argv[1] or "", r.env, r.cwd) do
+			r.adapter.feed(acc, line)
+		end
+		if acc.live > before then
+			kidNote = ` (+{acc.live - before} tokens of {#acc.children} child sessions, read after the step)`
+			if acc.live > r.cap then
+				kidNote ..= `, over max_tokens {r.cap}`
+			end
+		end
+	end
 	local tokens = adapters.tokens(acc)
 	local wall, cpu = nil, nil
 	if fs.isFile(reportFile) then
@@ -325,7 +354,7 @@ function runner.run(r: Request): Result
 	if early then
 		return {
 			outcome = early :: Outcome,
-			detail = detail,
+			detail = detail .. kidNote,
 			tokens = tokens,
 			final = acc.final,
 			session = acc.session,
@@ -346,7 +375,7 @@ function runner.run(r: Request): Result
 	end
 	return {
 		outcome = outcome,
-		detail = why,
+		detail = why .. kidNote,
 		tokens = tokens,
 		final = acc.final,
 		session = acc.session,

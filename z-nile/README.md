@@ -75,7 +75,7 @@ z-ticket writes an idea as checkable outcomes and challenges it once before anyt
 ### The worker
 Today a person can run `z-work` in the CLI they opened: that session takes the next prepared raft, or the one named (`./zn work <R>`), says what it took, and carries it layer by layer to `./zn done`. With a raft named it then stops; with none named it goes on to the next raft ready would accept, in the same context, and stops when none is claimable or after two rafts in a row are released as blocked. *exists*
 
-A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent` or `deepseek`. *captured* (c0253); `kimi`, `agy` and `opencode` (DeepSeek and the other models it reaches) run a dispatched step: *exists* (c0175).
+A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent` or `opencode` (DeepSeek and the other models it reaches). *captured* (c0253); `kimi`, `agy` and `opencode` (DeepSeek and the other models it reaches) run a dispatched step: *exists* (c0175).
 - It claims the first raft in the order and stays with it all the way to merge, delivering it as a PR stack, one ticket at a time.
 - It keeps one context for the whole raft, so what it learned on one ticket carries to the next.
 - A worker clears its context and picks up the next raft whenever a raft ends: when the raft is merged, or when it is blocked and the worker lets it go. No context carries from one raft to the next.

@@ -180,4 +180,23 @@ return t.spec("c0175 agy and opencode in .models.toml", function(it)
 		local r = M.resolve({ l }, "z-design")
 		t.expect(M.id(r.specs.agy)).toBe("claude-opus-5-5-high")
 	end)
+	it(
+		"AC1: an opencode id with an escaped / : or @ in its model parses, so every model opencode reaches can be named",
+		function()
+			local l = layer(table.concat({
+				'[fallback.opencode]\nmodel = "opencode-openrouter-anthropic_sclaude-3.5-sonnet_cbeta"\nruntime = "opencode-cli"\n',
+				'[member.hf]\ncli = "opencode"\nmodel = "opencode-huggingface-Qwen_sQwen3-Coder-480B_afp8"\nruntime = "opencode-cli"\n',
+			}, "\n"))
+			t.expect(l.fallbacks.opencode.model)
+				.toBe("opencode-openrouter-anthropic_sclaude-3.5-sonnet_cbeta")
+			t.expect(l.members.hf.cli).toBe("opencode")
+			-- the raw name with a slash is not a ledger id
+			local e = errorOf(function()
+				layer(
+					'[fallback.opencode]\nmodel = "opencode-openrouter-anthropic/claude"\nruntime = "opencode-cli"\n'
+				)
+			end)
+			t.expect(has(e, "not a model id the ledger takes")).toBe(true)
+		end
+	)
 end)

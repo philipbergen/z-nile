@@ -105,4 +105,13 @@ return t.spec("c0175 the shared fake CLIs", function(it)
 			t.expect(adapters.tokens(acc)).toBe(1001)
 		end
 	end)
+	it("AC12: the harness writes an executable fake for each of the six CLIs, and a gh and a git", function()
+		local h = F.new("c0175-fakes-new", {})
+		for _, name in { "claude", "grok", "agent", "kimi", "agy", "opencode", "gh", "git" } do
+			t.expect(process.exec("test", { "-x", `{h.bin}/{name}` }).ok).toBe(true)
+		end
+		-- the fake it wrote is the library's script, not a stub
+		t.expect(fs.readFile(`{h.bin}/agy`)).toBe(F.script("agy"))
+		t.expect(fs.readFile(`{h.bin}/opencode`)).toBe(F.script("opencode"))
+	end)
 end)

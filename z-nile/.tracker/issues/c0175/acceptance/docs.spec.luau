@@ -135,4 +135,47 @@ return t.spec("c0175 the documents name the six CLIs", function(it)
 		at(file, "opencode's models are recorded as opencode-<provider>-<model>", ".models.toml")
 		absent(file, "reachable once opencode is added", ".models.toml")
 	end)
+	it(
+		"AC11: zz-rules states opencode's run: subagent tokens read after the step, the cap, the retry wait, the log lines, the project file",
+		function()
+			local rules = skill("zz-rules")
+			at(rules, "**opencode's run.**", "zz-rules")
+			at(rules, "turns its snapshots and its title call off (`OPENCODE_CONFIG_CONTENT`", "zz-rules")
+			at(
+				rules,
+				"the runner reads their tokens with `opencode export` after the step and puts them on the row",
+				"zz-rules"
+			)
+			at(rules, "the live `max_tokens` cap sees the parent only", "zz-rules")
+			at(rules, "`over max_tokens` in its detail, not killed", "zz-rules")
+			at(rules, "agy's subagents are not counted (their steps carry no usage)", "zz-rules")
+			at(rules, "up to five times and as long as a `retry-after` header asks", "zz-rules")
+			at(
+				rules,
+				"its log lines are kept apart from the stderr the quota and failure words are read from",
+				"zz-rules"
+			)
+			at(rules, "the runner makes an existing file read-only before and after the step", "zz-rules")
+			at(rules, "`_s`, `_c`, `_a` and `__`, any other byte `_xHH`", "zz-rules")
+		end
+	)
+
+	it(
+		"AC11: z-work says what agy's and opencode's rows record, and the README worker line names opencode, not deepseek",
+		function()
+			at(
+				skill("z-work"),
+				"agy's conversations (`~/.gemini/antigravity-cli/conversations`) and opencode's sessions",
+				"z-work"
+			)
+			at(skill("z-work"), "their rows say unmeasured", "z-work")
+			local readme = read("z-nile/README.md")
+			at(
+				readme,
+				"`kimi`, `agy`, `claude`, `grok`, `agent` or `opencode` (DeepSeek and the other models it reaches). *captured* (c0253);",
+				"README"
+			)
+			absent(readme, "`agent` or `deepseek`", "README")
+		end
+	)
 end)

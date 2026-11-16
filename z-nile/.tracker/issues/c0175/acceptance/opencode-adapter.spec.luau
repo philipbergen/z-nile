@@ -27,6 +27,18 @@ local LIMITED =
 	`\{"type":"error","timestamp":9,"sessionID":"{SES}","error":\{"name":"APIError","data":\{"message":"Rate limit reached for deepseek-v4-pro: retry in 30s","statusCode":429}}}`
 local STATUS_ONLY =
 	`\{"type":"error","timestamp":9,"sessionID":"{SES}","error":\{"name":"APIError","data":\{"message":"Too Many Requests","statusCode":429}}}`
+local LOGPREFIX = "timestamp=2026-11-16T06:07:11.753Z level=INFO run=befeb02f "
+local LOGERR =
+	'timestamp=2026-11-16T06:07:11.753Z level=ERROR run=befeb02f message="stream error" providerID=fake modelID=m session.id=ses_x small=false agent=build mode=primary error.error="AI_APICallError: Rate limit exceeded: too many requests"'
+-- E5 (recorded against a loopback provider that answers 429): the log line `created … parentID=` of a subagent's session
+local CREATED_PARENT =
+	'timestamp=2026-11-16T06:06:29.794Z level=INFO run=9e6b6f7a message=created id=ses_e1d092a5dffe3Tw1Cu5JmfOwXI slug=swift-panda version=1.18.31 projectID=6dda path="" workspaceID=undefined parentID=undefined title="New session" agent=undefined'
+local CREATED_CHILD =
+	'timestamp=2026-11-16T06:06:30.624Z level=INFO run=9e6b6f7a message=created id=ses_e1d09271fffeT7DtBgHC6Zrm9I slug=neon-moon version=1.18.31 projectID=6dda path="" workspaceID=undefined parentID=ses_e1d092a5dffe3Tw1Cu5JmfOwXI title="child (@general subagent)" agent=undefined'
+local BODY_429 =
+	`\{"type":"error","sessionID":"{SES}","error":\{"name":"APIError","data":\{"message":"Provider returned error","responseBody":"\{\\"error\\":\{\\"code\\":\\"rate_limit_exceeded\\"}}"}}}`
+local STATUS_429 =
+	`\{"type":"error","sessionID":"{SES}","error":\{"name":"APIError","data":\{"message":"Provider returned error","statusCode":429}}}`
 local PERMISSION =
 	'timestamp=2026-11-16T04:58:05.329Z level=INFO run=f6cdde9a message=evaluated permission=bash pattern="sleep 6" action.permission=* action.action=allow action.pattern=*'
 
@@ -198,4 +210,155 @@ return t.spec("c0175 the opencode-cli adapter", function(it)
 			end
 		end
 	)
+	it(
+		"AC4: every name opencode reaches is written in the ledger's alphabet and read back: / : @ _ and any other byte",
+		function()
+			for _, case in
+				{
+					{ "deepseek", "deepseek-v4-pro", "opencode-deepseek-deepseek-v4-pro" },
+					{ "xai", "grok-4.7", "opencode-xai-grok-4.7" },
+					{
+						"openrouter",
+						"anthropic/claude-3.5-sonnet:beta",
+						"opencode-openrouter-anthropic_sclaude-3.5-sonnet_cbeta",
+					},
+					{
+						"huggingface",
+						"Qwen/Qwen3-Coder-480B@fp8",
+						"opencode-huggingface-Qwen_sQwen3-Coder-480B_afp8",
+					},
+					{ "vercel", "openai/gpt_5_mini", "opencode-vercel-openai_sgpt__5__mini" },
+					{ "github-copilot", "gpt-5", "opencode-github_copilot-gpt-5" },
+					{ "x", "a b+c", "opencode-x-a_x20b_x2bc" },
+				}
+			do
+				local id = A.opencodeId(case[1], case[2])
+				t.expect(id).toBe(case[3])
+				t.expect(ledger.isModel(id)).toBe(true)
+				t.expect(A.opencodeModel(id)).toBe(`{case[1]}/{case[2]}`)
+			end
+			-- an escape no encoder writes is passed through for the CLI to refuse
+			t.expect(A.opencodeModel("opencode-x-a_zb")).toBe("opencode-x-a_zb")
+			t.expect(A.opencodeModel("opencode-x-a_")).toBe("opencode-x-a_")
+		end
+	)
+
+	it(
+		"AC4: the step's environment turns opencode's snapshots and title call off, and leaves the other CLIs' as they were",
+		function()
+			local env = (A.STEP_ENV :: any)["opencode-cli"]
+			local ok, cfg = pcall(function()
+				return require("@lune/serde").decode("json", env.OPENCODE_CONFIG_CONTENT)
+			end)
+			t.expect(ok).toBe(true)
+			t.expect((cfg :: any).snapshot).toBe(false)
+			t.expect((cfg :: any).agent.title.disable).toBe(true)
+			-- subagents stay on (their tokens are read after the step): no permission is denied
+			t.expect((cfg :: any).permission).toBe(nil)
+			t.expect((A.STEP_ENV :: any)["claude-cli"].BASH_MAX_TIMEOUT_MS).toBe("7200000")
+			t.expect((A.STEP_ENV :: any)["agy-cli"]).toBe(nil)
+		end
+	)
+
+	it(
+		"AC5: tools run in parallel: the first to finish does not hide a long sibling, and the step's end ends them all",
+		function()
+			local adapter = adapters.get("opencode-cli")
+			local feedErr = (adapter :: any).feedErr
+			local acc = adapters.newAcc()
+			feedErr(acc, PERMISSION)
+			feedErr(acc, PERMISSION)
+			adapter.feed(acc, TOOL)
+			t.expect(adapters.toolRunning(acc)).toBe(true) -- two started, one finished
+			adapter.feed(acc, TOOL)
+			t.expect(adapters.toolRunning(acc)).toBe(false)
+			adapter.feed(acc, TOOL) -- a tool_use with nothing running does not go below zero
+			feedErr(acc, PERMISSION)
+			t.expect(adapters.toolRunning(acc)).toBe(true)
+			-- a tool that checked two permissions stays running until the step ends: bounded by the tool limit
+			feedErr(acc, PERMISSION)
+			adapter.feed(acc, TOOL)
+			t.expect(adapters.toolRunning(acc)).toBe(true)
+			adapter.feed(acc, FINISH1)
+			t.expect(adapters.toolRunning(acc)).toBe(false)
+		end
+	)
+
+	it(
+		"AC5: isLog tells opencode's log lines from the CLI's own text, and only a log line is a permission check",
+		function()
+			local adapter = adapters.get("opencode-cli") :: any
+			t.expect(adapter.isLog(PERMISSION)).toBe(true)
+			t.expect(adapter.isLog(LOGERR)).toBe(true)
+			t.expect(adapter.isLog("Error: rate limit exceeded")).toBe(false)
+			t.expect(adapter.isLog('evaluated permission=bash pattern="x"')).toBe(false)
+			t.expect(adapter.isLog("")).toBe(false)
+			-- the other adapters keep no log lines apart
+			for _, rt in { "claude-cli", "grok-cli", "kimi-cli", "cursor-cli", "agy-cli" } do
+				t.expect((adapters.get(rt) :: any).isLog).toBe(nil)
+			end
+		end
+	)
+
+	it(
+		"AC5: a log line that quotes a quota word in a command is not a wait; the CLI's own stream error is",
+		function()
+			local adapter = adapters.get("opencode-cli")
+			local feedErr = (adapter :: any).feedErr
+			local acc = adapters.newAcc()
+			feedErr(
+				acc,
+				LOGPREFIX
+					.. 'message=evaluated permission=bash pattern="grep -n quota rate limit try again engine.luau"'
+			)
+			t.expect(acc.waiting).toBe(nil)
+			t.expect(acc.quota).toBe(nil)
+			feedErr(acc, LOGERR)
+			t.expect(acc.waiting).toBe("AI_APICallError: Rate limit exceeded: too many requests")
+			-- a stream error that is no quota error is not a wait
+			local other = adapters.newAcc()
+			feedErr(other, (string.gsub(LOGERR, "Rate limit exceeded: too many requests", "Unauthorized")))
+			t.expect(other.waiting).toBe(nil)
+			-- the error line is quoted with the same prefix by a model's command: only the CLI's own ERROR line counts
+			local quoted = adapters.newAcc()
+			feedErr(
+				quoted,
+				LOGPREFIX
+					.. 'message=evaluated permission=bash pattern="level=ERROR message="stream error" rate limit"'
+			)
+			t.expect(quoted.waiting).toBe(nil)
+		end
+	)
+
+	it(
+		"AC5: a created line with a parentID names a child session (a subagent); one without does not",
+		function()
+			local adapter = adapters.get("opencode-cli")
+			local feedErr = (adapter :: any).feedErr
+			local acc = adapters.newAcc()
+			feedErr(acc, CREATED_PARENT)
+			t.expect(#acc.children).toBe(0)
+			feedErr(acc, CREATED_CHILD)
+			t.expect(acc.children).toEqual({ "ses_e1d09271fffeT7DtBgHC6Zrm9I" })
+			-- a grandchild is a child of the child: it is named too
+			feedErr(acc, (string.gsub(CREATED_CHILD, "ses_e1d09271fffeT7DtBgHC6Zrm9I", "ses_grand1")))
+			t.expect(#acc.children).toBe(2)
+		end
+	)
+
+	it("AC5: an error whose message has no quota word but whose body or status says 429 is quota", function()
+		for _, line in { BODY_429, STATUS_429 } do
+			local acc = feedAll({ START, line })
+			t.expect((adapters.finish(acc, false, "", "opencode-cli"))).toBe("quota")
+		end
+		-- opencode's and agy's own words
+		for _, text in { "Free usage exceeded, subscribe to Go", "Resource exhausted", "RESOURCE_EXHAUSTED" } do
+			local acc = feedAll({
+				`\{"type":"error","sessionID":"{SES}","error":\{"name":"APIError","data":\{"message":"{text}"}}}`,
+			})
+			t.expect((adapters.finish(acc, false, "", "opencode-cli"))).toBe("quota")
+		end
+		-- an error with none of it is a failure
+		t.expect((adapters.finish(feedAll({ START, UNKNOWN }), false, "", "opencode-cli"))).toBe("failed")
+	end)
 end)

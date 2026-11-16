@@ -17,7 +17,7 @@ sessionusage.EXPORT_SECONDS = 20
 
 -- The one `step_finish` line an `opencode export` text gives (a heading line, then the session as JSON), or nil when the
 -- text holds no session with tokens.
-function sessionusage.opencodeLine(text: string): string?
+function sessionusage.opencodeLine(text: string, id: string?): string?
 	local from = string.find(text, "{", 1, true)
 	if from == nil then
 		return nil
@@ -32,7 +32,10 @@ function sessionusage.opencodeLine(text: string): string?
 	if type(info) ~= "table" or type(info.tokens) ~= "table" then
 		return nil
 	end
-	return serde.encode("json", { type = "step_finish", part = { id = "export", tokens = info.tokens } })
+	return serde.encode(
+		"json",
+		{ type = "step_finish", part = { id = id or "export", tokens = info.tokens } }
+	)
 end
 
 local function kimiLines(session: string): { string }
@@ -66,6 +69,37 @@ local function opencodeLines(session: string, bin: string, env: { [string]: stri
 	)
 	local line = if r.ok then sessionusage.opencodeLine(r.stdout) else nil
 	return if line ~= nil then { line } else {}
+end
+
+-- The lines for the child sessions a step's log named (`opencode export` of each, one `step_finish` line with its own id each,
+-- so a child is counted once); none for a runtime with no children to read.
+function sessionusage.children(
+	runtime: string,
+	ids: { string },
+	bin: string,
+	env: { [string]: string },
+	cwd: string
+): { string }
+	local out: { string } = {}
+	if runtime ~= "opencode-cli" then
+		return out
+	end
+	local seen: { [string]: boolean } = {}
+	for _, id in ids do
+		if not seen[id] and string.match(id, "^ses_%w+$") then
+			seen[id] = true
+			local r = process.exec(
+				"perl",
+				{ "-e", `alarm {sessionusage.EXPORT_SECONDS}; exec @ARGV`, bin, "export", id },
+				{ env = env, cwd = cwd }
+			)
+			local line = if r.ok then sessionusage.opencodeLine(r.stdout, `child-{id}`) else nil
+			if line ~= nil then
+				table.insert(out, line)
+			end
+		end
+	end
+	return out
 end
 
 -- The lines to feed `runtime`'s adapter for `session`, from the CLI's own store; none when the runtime keeps no reader, the

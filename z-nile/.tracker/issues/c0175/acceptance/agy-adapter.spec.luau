@@ -28,8 +28,25 @@ local BAD_MODEL =
 	[[{"event":"result","result":{"conversation_id":"","status":"ERROR","response":"","error":"invalid model selection (--model \"nosuch-model\" --effort \"\"): model nosuch-model is not recognized as a known model or custom model in settings","duration_seconds":0,"num_turns":0,"usage":{"input_tokens":0,"output_tokens":0,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":0},"finished_reason":"error"}}]]
 local NO_EFFORT =
 	[[{"event":"result","result":{"conversation_id":"","status":"ERROR","response":"","error":"invalid model selection (--model \"gemini-3.8-flash\" --effort \"max\"): gemini-3.8-flash has no \"max\" effort (available: low, medium, high)","duration_seconds":0,"num_turns":0,"usage":{"input_tokens":0,"output_tokens":0,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":0},"finished_reason":"error"}}]]
+-- agy's own quota patterns (strings of the 1.5.7 binary: QUOTA_RE = RESOURCE_EXHAUSTED|quota|429|exhausted your capacity|rate limit).
+-- No real exhausted quota could be provoked (E3), so these three lines are built from those words and are not recordings.
+local EXHAUSTED =
+	[[{"event":"result","result":{"conversation_id":"c1","status":"ERROR","response":"","error":"rpc error: code = RESOURCE_EXHAUSTED","finished_reason":"error"}}]]
+local CAPACITY =
+	[[{"event":"result","result":{"conversation_id":"c1","status":"ERROR","response":"","error":"You have exhausted your capacity on this model.","finished_reason":"error"}}]]
 local QUOTA =
-	[[{"event":"result","result":{"conversation_id":"c1","status":"ERROR","response":"","error":"RESOURCE_EXHAUSTED: quota exceeded for this model, try again later","finished_reason":"error"}}]]
+	[[{"event":"result","result":{"conversation_id":"c1","status":"ERROR","response":"","error":"daily quota reached","finished_reason":"error"}}]]
+-- E16 (recorded, trimmed): a subagent step is ACTIVE then DONE, carries no usage, and the result is the parent's own steps'
+local SUB_ON =
+	[[{"event":"step_update","step_update":{"conversation_id":"5d888c0b","step_index":2,"state":"ACTIVE","step_type":"subagent","tool_name":"invoke_subagent","subagent_info":{"subagents":[{"type_name":"self","role":"Pong Responder"}]}}}]]
+local SUB_OFF =
+	[[{"event":"step_update","step_update":{"conversation_id":"5d888c0b","step_index":2,"state":"DONE","step_type":"subagent","tool_name":"invoke_subagent","duration_seconds":0.39,"subagent_info":{"subagents":[{"type_name":"self","role":"Pong Responder","conversation_id":"2e38cc08"}]}}}]]
+local SUB_STEP1 =
+	[[{"event":"step_update","step_update":{"conversation_id":"5d888c0b","step_index":1,"state":"DONE","step_type":"agent_response","usage":{"input_tokens":8781,"output_tokens":82,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":8863}}}]]
+local SUB_STEP3 =
+	[[{"event":"step_update","step_update":{"conversation_id":"5d888c0b","step_index":3,"state":"DONE","step_type":"agent_response","usage":{"input_tokens":2493,"output_tokens":23,"thinking_tokens":0,"cache_read_tokens":6737,"total_tokens":2516}}}]]
+local SUB_RESULT =
+	[[{"event":"result","result":{"conversation_id":"5d888c0b","status":"SUCCESS","response":"pong","usage":{"input_tokens":11274,"output_tokens":105,"thinking_tokens":0,"cache_read_tokens":6737,"total_tokens":11379}}}]]
 
 local function feedAll(lines: { string }): any
 	local adapter = adapters.get("agy-cli")
@@ -169,15 +186,36 @@ return t.spec("c0175 the agy-cli adapter", function(it)
 	)
 
 	it("AC3: an error result that says quota is a quota failure, not a failed step", function()
-		local acc = feedAll({ INIT, STEP1, QUOTA })
-		local outcome, why = adapters.finish(acc, false, "", "agy-cli")
-		t.expect(outcome).toBe("quota")
-		t.expect(string.find(why, "quota exceeded", 1, true) ~= nil).toBe(true)
-		-- what it spent first still counts
-		t.expect(adapters.tokens(acc)).toBe(8861)
+		for _, line in { EXHAUSTED, CAPACITY, QUOTA } do
+			local acc = feedAll({ INIT, STEP1, line })
+			local outcome = adapters.finish(acc, false, "", "agy-cli")
+			t.expect(outcome).toBe("quota")
+			-- what it spent first still counts
+			t.expect(adapters.tokens(acc)).toBe(8861)
+		end
 		-- and the words on stderr, with a non-zero exit, are quota too
-		local plain = feedAll({ INIT })
-		local o2 = adapters.finish(plain, false, "error: 429 Too Many Requests", "agy-cli")
+		local o2 = adapters.finish(feedAll({ INIT }), false, "error: 429 Too Many Requests", "agy-cli")
 		t.expect(o2).toBe("quota")
+		local o3 = adapters.finish(feedAll({ INIT }), false, "RESOURCE_EXHAUSTED", "agy-cli")
+		t.expect(o3).toBe("quota")
 	end)
+	it(
+		"AC3: a subagent step is running like a tool, and the stream carries no usage for it: the count is the parent's steps",
+		function()
+			local adapter = adapters.get("agy-cli")
+			local acc = adapters.newAcc()
+			adapter.feed(acc, SUB_STEP1)
+			adapter.feed(acc, SUB_ON)
+			t.expect(adapters.toolRunning(acc)).toBe(true)
+			t.expect(acc.note).toBe("invoke_subagent")
+			adapter.feed(acc, SUB_OFF)
+			t.expect(adapters.toolRunning(acc)).toBe(false)
+			adapter.feed(acc, SUB_STEP3)
+			adapter.feed(acc, SUB_RESULT)
+			-- the result is exactly the two parent steps (8781 + 2493 input, 82 + 23 output): the subagent's own model call is in
+			-- neither, which is the known undercount of an agy step that starts subagents
+			t.expect(acc.live).toBe(8781 + 82 + 2493 + 23)
+			t.expect(adapters.tokens(acc)).toBe(11379)
+		end
+	)
 end)
