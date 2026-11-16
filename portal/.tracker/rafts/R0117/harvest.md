@@ -1,0 +1,4 @@
+- design-review-001 F1: z-raft/raft-checks-live-where-the-engine-guards-them, z-raft/joints-are-guarded-by-promoted-specs
+- design-review-001 F2: z-design/design-the-execution-window, zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F3: z-raft/rc-lines-pass-the-raft-check-judge
+- note the first RC2 spec ran the client Main in a coroutine, and a Lune require inside it yielded, so the boot stopped silently and every case failed on a missing binding: pickman-test/load-modules-before-a-boot-thread

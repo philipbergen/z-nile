@@ -13,19 +13,26 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0117
 
-check "RC1: the architecture map composes both layers: f0205's then f0208's Features heading, and a deps block of exactly the folded comment and Play -> Card" bash -c '
+check "RC1: the architecture map composes both layers: the folded deps comment, Play -> Card once, every other line an edge, every edge main has kept, and f0205's then f0208's Features heading once each" bash -c '
   doc=.tracker/architecture.md
-  deps=$(awk "BEGIN{p=0} index(\$0, \"\`\`\`deps\")==1 {p=1; next} p && index(\$0, \"\`\`\`\")==1 {exit} p {print}" "$doc")
-  want=$(printf "%s\n" "# Carousel and Card are leaves; so are Pairing and Arena" "Play -> Card")
-  [ "$deps" = "$want" ] || { printf "deps block is:\n%s\n" "$deps"; exit 1; }
-  feat=$(awk "BEGIN{p=0} index(\$0, \"## Features\")==1 {p=1; next} p && index(\$0, \"## \")==1 {exit} p && index(\$0, \"### \")==1 {print}" "$doc")
-  want=$(printf "%s\n" "### Carousel and Card (f0205)" "### Play buttons (f0208)")
-  [ "$feat" = "$want" ] || { printf "Features headings are:\n%s\n" "$feat"; exit 1; }
-'
-
-check "RC2: Enter, KeypadEnter and A on the front card send the request its PLAY sends, through the real client boot (f0205's captured \"Enter or A plays\", true through f0208)" bash -c '
-  dir=$("$ZN_ROOT/zn" find R0117) || exit 1
-  lune run tests/run -- "$dir/checks/play-keys.spec.luau"
+  block() { awk "BEGIN{p=0} index(\$0, \"\`\`\`deps\")==1 {p=1; next} p && index(\$0, \"\`\`\`\")==1 {exit} p {print}"; }
+  deps=$(block < "$doc")
+  comments=$(printf "%s\n" "$deps" | grep "^#")
+  [ "$comments" = "# Carousel and Card are leaves; so are Pairing and Arena" ] || { printf "deps comment lines are:\n%s\n" "$comments"; exit 1; }
+  [ "$(printf "%s\n" "$deps" | grep -c -x -F "Play -> Card")" = 1 ] || { echo "Play -> Card is not there exactly once"; exit 1; }
+  odd=$(printf "%s\n" "$deps" | grep -v "^#" | grep -v "^[[:space:]]*$" | grep -v -E "^[A-Za-z][A-Za-z0-9]* -> [A-Za-z][A-Za-z0-9]*$")
+  [ -z "$odd" ] || { printf "not an edge:\n%s\n" "$odd"; exit 1; }
+  edges() { grep -E "^[A-Za-z][A-Za-z0-9]* -> [A-Za-z][A-Za-z0-9]*$" | sort -u; }
+  mainmap=$(git show "origin/main:./$doc") || { echo "cannot read origin/main map"; exit 1; }
+  main=$(printf "%s\n" "$mainmap" | block | edges)
+  here=$(printf "%s\n" "$deps" | edges)
+  lost=$(comm -23 <(printf "%s\n" "$main") <(printf "%s\n" "$here") | grep .)
+  [ -z "$lost" ] || { printf "edges main has that this map lost:\n%s\n" "$lost"; exit 1; }
+  heads=$(awk "BEGIN{p=0} index(\$0, \"## Features\")==1 {p=1; next} p && index(\$0, \"## \")==1 {exit} p && index(\$0, \"### \")==1 {print}" "$doc")
+  a=$(printf "%s\n" "$heads" | grep -n -x -F "### Carousel and Card (f0205)")
+  b=$(printf "%s\n" "$heads" | grep -n -x -F "### Play buttons (f0208)")
+  [ "$(printf "%s\n" "$a" | grep -c .)" = 1 ] && [ "$(printf "%s\n" "$b" | grep -c .)" = 1 ] || { printf "Features headings are:\n%s\n" "$heads"; exit 1; }
+  [ "${a%%:*}" -lt "${b%%:*}" ] || { echo "f0208 heading is before f0205 heading"; exit 1; }
 '
 
 finish
