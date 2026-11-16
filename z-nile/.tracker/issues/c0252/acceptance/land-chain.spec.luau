@@ -548,7 +548,7 @@ return t.spec("c0252 the chain lands a finished raft", function(it)
 	)
 
 	it(
-		"AC18: a game stack waits without cicd.toml and while a cicd lease is held, and lands after the clean-clone full gate and scripts/cicd pass on the bind's tree",
+		"AC18: a game stack waits without cicd.toml and while a cicd lease is held, and lands after the clean-clone full gate and the cicd run pass on the bind's tree",
 		function()
 			layer("R0080", "c0090", "iota", true, "pickman/src")
 			seal.trace(worktrees.R0080, "R0080")
