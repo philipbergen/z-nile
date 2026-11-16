@@ -5189,6 +5189,10 @@ local function traceProblems(
 		if firstPos > 1 then
 			baseTip = layergit.baseFor(have, landedAt, firstPos) or baseTip
 		end
+		-- c0252 (d0331's stand-in): the lowest unlanded layer rests on main's history, not on its tip
+		if have[firstPos] then
+			baseTip = H.forkBase(have[firstPos], baseTip) or baseTip
+		end
 		issues = scopedIssues
 		layers = scopedLayers
 	end
@@ -5515,7 +5519,9 @@ function H.landInput(
 			)
 		end
 	end
-	local home = process.env.HOME or ""
+	-- where the cicd publish's configuration is (a guarded check run can name another file: G13)
+	local cicdFile = (if checking() then process.env.ZN_CICD_TOML else nil)
+		or `{process.env.HOME or ""}/.config/pickman/cicd.toml`
 	return {
 		raft = raft.id,
 		layers = checkLayers,
@@ -5532,7 +5538,7 @@ function H.landInput(
 		codePaths = codePaths,
 		unreadable = unreadable,
 		gameRoots = gameRoots,
-		cicd = fs.isFile(`{home}/.config/pickman/cicd.toml`),
+		cicd = fs.isFile(cicdFile),
 		topBranch = if topLayer then (topLayer :: stack.Layer).name else "",
 	},
 		through,

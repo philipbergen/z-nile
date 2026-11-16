@@ -210,13 +210,6 @@ return t.spec("c0252 landcheck: the checks before a landing", function(it)
 					i.gate = { red = "the clean-clone full gate is red" }
 				end,
 			},
-			{
-				code = "full-gate-wait",
-				kind = "wait",
-				mutate = function(i: any)
-					i.gate = { wait = "a cicd lease is held" }
-				end,
-			},
 		}
 		for _, c in cases do
 			local i = clean()

@@ -282,6 +282,31 @@ return t.spec("c0252 land-check, done and a dispatched block", function(it)
 	)
 
 	it(
+		"AC17: zn -C runs this checkout's engine against another worktree of the same repository and refuses a directory of another repository",
+		function()
+			local ok = trackerfix.tr(f, f.main, { "-C", wt, "land-check", "R0010", "--json" }, env)
+			local j: any = serde.decode("json", ok.stdout)
+			t.expect(j.top).toBe("R0010/2/c0020")
+			local other = fixture.exec(
+				f.main,
+				"bash",
+				{ "zn", "-C", TOP, "land-check", "R0010" },
+				{ env = env }
+			)
+			t.expect(other.ok).toBe(false)
+			t.expect(has(other.stderr, "is not a worktree of this repository")).toBe(true)
+			local missing = fixture.exec(
+				f.main,
+				"bash",
+				{ "zn", "-C", `{f.base}/nowhere`, "land-check", "R0010" },
+				{ env = env }
+			)
+			t.expect(missing.ok).toBe(false)
+			t.expect(has(missing.stderr, "is not a directory")).toBe(true)
+		end
+	)
+
+	it(
 		"AC9: under ZN_DISPATCH, block validates the note and leaves a request for the dispatcher, publishing nothing",
 		function()
 			local dir = "pickman/.tracker/rafts/active/R0010"

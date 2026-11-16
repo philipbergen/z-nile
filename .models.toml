@@ -25,10 +25,11 @@ deepseek = ["deepseek-"] # reachable once opencode is added as a CLI
 
 [dispatch]
 # the gates the dispatcher passes itself: prep and raft merge a green, mergeable PR; run lands a raft's finished stack
-# with `./zn done` once landcheck passes (c0252). merge_attempts: the worker's tries after a fixable check fails.
+# with `./zn done` once landcheck passes (c0252). merge_retries: reruns of the worker for one repeated failure it can fix
+# (2: three runs in all) before the raft blocks.
 # Unset, or unreadable, means none: a closer file's `auto_merge = []` turns them off for its items.
 auto_merge = ["prep", "raft", "run"]
-merge_attempts = 2
+merge_retries = 2
 # a step that prints nothing for this long is killed (a CLI never waits for quota)
 stall_seconds = 300
 # the same limit while a tool call runs (a full gate is quiet for minutes)

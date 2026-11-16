@@ -106,7 +106,7 @@ export type State = {
 	landTries: number?, -- c0252: reruns spent on the failure `landSig` names (a repeat of the same failure)
 	landSig: string?, -- c0252: the codes and top tip of the failure the last rerun was for (landcheck.signature)
 	landRuns: number?, -- c0252: all reruns of this raft, the hard bound under models.MERGE_RERUN_CAP
-	gate: { tip: string, red: string?, wait: string? }?, -- c0252: `land-gate`'s last answer, for one top tip
+	gate: { tip: string, red: string? }?, -- c0252: `land-gate`'s last answer, for one top tip
 	gateOk: string?, -- c0252: the top tip whose clean-clone full gate passed
 	pushed: { string }, -- the commits its publish broker pushed to main
 	pushes: { Push }, -- every push it asked for, recorded before the push is made (c0256): which issues it made
@@ -2962,10 +2962,8 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 				if gateCode == 0 then
 					st.gateOk, st.gate = action.tip, nil
 				elseif gateCode == 4 then
-					st.gate = {
-						tip = action.tip :: string,
-						wait = "the clean-clone gate could not run (a cicd lease is held, the publish failed, or no cicd.toml): it runs again at the next pass",
-					}
+					-- a gate that could not run is not remembered: it runs again at the next pass
+					st.gate = nil
 				else
 					st.gate = {
 						tip = action.tip :: string,
@@ -2976,7 +2974,9 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 				st.step, st.outcome, st.detail = "z-gate", "ok", `exit {gateCode}`
 				save(st)
 				if gateCode == 4 then
-					print(`stop: waiting to land {id}: {if st.gate then st.gate.wait else ""}`)
+					print(
+						`stop: waiting to land {id}: the clean-clone gate could not run (no cicd.toml, a cicd lease is held, or the publish failed); it runs again at the next pass`
+					)
 					return dispatch.EXIT.gate
 				elseif gateCode ~= 0 then
 					continue

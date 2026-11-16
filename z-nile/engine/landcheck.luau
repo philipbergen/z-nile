@@ -47,7 +47,7 @@ export type Input = {
 	gameRoots: { string }, -- project homes whose game code needs the cicd publish (zz-rules Merging 3)
 	cicd: boolean, -- ~/.config/pickman/cicd.toml exists
 	unreadable: { Unreadable }, -- reads that failed (git, the registry): each is a wait, never a pass
-	gate: { red: string?, wait: string? }?, -- the clean-clone full gate and cicd run before the landing (`land-gate`)
+	gate: { red: string? }?, -- the clean-clone full gate and cicd run before the landing (`land-gate`)
 }
 export type Unreadable = { code: string, text: string }
 
@@ -118,15 +118,13 @@ function landcheck.checks(checks: { Check }): ({ string }, { string })
 	return failed, pending
 end
 
--- The problems of the clean-clone full gate and the cicd run (`./zn land-gate`), which the dispatcher remembers per tip:
--- a red run is a redo like any red check, a lease held or a publish failure is a wait.
-function landcheck.gateProblems(gate: { red: string?, wait: string? }?): { Problem }
+-- The problem of the clean-clone full gate and the cicd run (`./zn land-gate`), which the dispatcher remembers per tip: a
+-- red run is a redo like any red check. A gate that could not run (no cicd.toml, a lease held, the publish failed) is not
+-- remembered: it stops the chain at the gate (exit 4) and runs again at the next pass.
+function landcheck.gateProblems(gate: { red: string? }?): { Problem }
 	local out: { Problem } = {}
 	if gate and gate.red then
 		table.insert(out, problem("full-gate-red", "redo", gate.red, "red-gate", nil))
-	end
-	if gate and gate.wait then
-		table.insert(out, problem("full-gate-wait", "wait", gate.wait, "red-gate", nil))
 	end
 	return out
 end

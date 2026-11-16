@@ -25,24 +25,33 @@ end
 
 return t.spec("c0252 the texts say the dispatcher lands a green stack", function(it)
 	it(
-		"AC13: zz-rules Dispatch: the chain lands a finished raft through land-check and done, and names the run gate",
+		"AC13: zz-rules Dispatch: the chain judges and lands a finished raft with the base's engine, gates a game stack in a clean clone, and names the run gate",
 		function()
 			local rules = read("z-nile/skills/zz-rules/SKILL.md")
 			for _, phrase in
 				{
-					"runs `./zn land-check <R-id>`",
-					"lands the stack itself with `./zn done` in the raft's worktree, with its own environment (the `run` gate)",
-					"up to `merge_attempts` tries (default 2), then blocks under the problem's reason",
-					"a failed check or an unruled high finding blocks at once",
-					"`./zn block` writes `block-request` in the state folder and stops",
-					"lands the green layers below the Layer with `./zn done --through`, then files the block",
-					"`./zn done` is refused while `ZN_DISPATCH` is set",
-					"a raft with no layer branches keeps its one pull request and a human's merge",
+					"with the base's engine (the main checkout's, run as `./zn -C <worktree> …`, never the stack's own `zn`)",
+					"`./zn land-check <R-id>` reads the checks before a landing",
+					"Every read that fails (git, the registry, gh, an answer it cannot read) is a wait, never a pass",
+					"gated by `./zn land-gate` in a clean clone outside the checkout",
+					"a tooling-only stack by `done`'s affected gate on the merged tree (Merging 2)",
+					"lands it itself with `./zn done` in the raft's worktree with its own environment (the `run` gate)",
+					"or a stack that changes the gate's own driver",
+					"up to `merge_retries` reruns (default 2: three runs) of one repeated failure",
+					"a failed read is never counted",
+					"An unruled high finding or approval drift blocks at once",
+					"which recommends `retry`, or `approve` when a person must rule",
+					"`./zn block` writes `block-request` and a copy of the note in the state folder and stops",
+					"lands the green layers below the Layer with `./zn done --through` (waiting at the gate while their CI runs)",
+					"`./zn done` is refused in a session that holds the agent's credential (`ZN_DISPATCH` or `ZN_HEADLESS`)",
+					"A raft with no layer branches keeps its one pull request and a human's merge",
+					"must keep an admin bypass for `./zn done`'s direct push of the bind",
 				}
 			do
 				says(rules, phrase, "zz-rules Dispatch")
 			end
 			lacks(rules, "and that PR is the `run` gate, always a human's", "zz-rules Dispatch")
+			lacks(rules, "merge_attempts", "zz-rules")
 		end
 	)
 
@@ -55,7 +64,11 @@ return t.spec("c0252 the texts say the dispatcher lands a green stack", function
 				"the dispatcher lands the stack itself with `./zn done` once its checks pass (`./zn land-check`)",
 				"zz-execute"
 			)
-			says(exec, "and `./zn done` is refused while `ZN_DISPATCH` is set", "zz-execute")
+			says(
+				exec,
+				"`./zn done` is refused in a session that holds the agent's credential (`ZN_DISPATCH` or `ZN_HEADLESS`)",
+				"zz-execute"
+			)
 			says(
 				exec,
 				"under the dispatcher it only leaves a request, you stop, and the dispatcher lands the green layers below the Layer before it files the block",
@@ -69,48 +82,57 @@ return t.spec("c0252 the texts say the dispatcher lands a green stack", function
 	)
 
 	it(
-		"AC13: the README marks the dispatcher's landing as existing, and keeps the person-approval clause",
+		"AC13: the README marks the dispatcher's landing as existing and keeps the person-approval clause the scope decision asks for",
 		function()
 			local readme = read("z-nile/README.md")
 			says(readme, "| the dispatcher lands a green stack | c0252 | exists |", "README table")
 			says(readme, "*exists* (c0252)", "README autonomous delivery")
 			lacks(readme, "*captured* (c0252)", "README")
+			-- c0264's words: a worker drafts and a person approves (the 2026-11-08 scope decision), and nobody rafts by hand
+			says(readme, "once a person has approved its design", "README autonomous delivery")
+			says(readme, "stops at a person's `./zn approve`", "README")
 			lacks(readme, "a person rafts", "README")
 		end
 	)
 
 	it(
-		"AC13: the root .models.toml arms the run gate and names merge_attempts, and the step prompt tells a worker done is refused",
+		"AC13: the root .models.toml arms the run gate and names merge_retries, and the step prompt tells a worker done is refused and a rerun why it runs",
 		function()
 			local toml = read(".models.toml")
 			says(toml, 'auto_merge = ["prep", "raft", "run"]', ".models.toml")
-			says(toml, "merge_attempts = 2", ".models.toml")
+			says(toml, "merge_retries = 2", ".models.toml")
+			lacks(toml, "merge_attempts", ".models.toml")
 			lacks(toml, "the run's PR is always a human's", ".models.toml")
-			local prompt = dispatch.prompt({
-				step = "z-run",
-				id = "R0010",
-				mode = nil,
-				skillPath = "z-nile/skills/z-run/SKILL.md",
-				worktree = "/w",
-				stateDir = "/state",
-				promptPath = "/p",
-				streamWorktree = nil,
-				description = nil,
-				project = nil,
-				exchange = nil,
-				exchangeAsker = nil,
-				exchangeNoReply = nil,
-				exchangeUnknownReply = nil,
-				exchangeLastStep = nil,
-				parentExchange = nil,
-				parentStateDir = nil,
-			})
+			local function prompt(rerun: { string }?): string
+				return dispatch.prompt({
+					step = "z-run",
+					id = "R0010",
+					mode = nil,
+					skillPath = "z-nile/skills/z-run/SKILL.md",
+					worktree = "/w",
+					stateDir = "/state",
+					promptPath = "/p",
+					streamWorktree = nil,
+					description = nil,
+					project = nil,
+					exchange = nil,
+					exchangeAsker = nil,
+					exchangeNoReply = nil,
+					exchangeUnknownReply = nil,
+					exchangeLastStep = nil,
+					parentExchange = nil,
+					parentStateDir = nil,
+					rerun = rerun,
+				} :: any)
+			end
+			local first = prompt(nil)
 			says(
-				prompt,
+				first,
 				"`./zn done` is refused here too: when your work is done, stop, and the dispatcher lands the stack.",
 				"the z-run prompt"
 			)
-			says(prompt, "Never merge a pull request and never push to main yourself", "the z-run prompt")
+			says(first, "Never merge a pull request and never push to main yourself", "the z-run prompt")
+			says(prompt({ "ci-failed (redo): x" }), "ci-failed (redo): x", "the rerun prompt")
 		end
 	)
 end)
