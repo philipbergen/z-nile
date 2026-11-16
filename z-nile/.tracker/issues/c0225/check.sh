@@ -85,7 +85,7 @@ real_run() {
   git -C "$rr_fx/repo" add -A && git -C "$rr_fx/repo" -c user.name=dev -c user.email=dev@example.invalid commit -qm runner || { rr_cleanup; return 1; }
   # a top-level run of the fixture's runner, which jails itself; a CPU cap bounds it apart from the runner it tests.
   # ZN_MEASURED=1: the runner's one-time measurement wrapper (z-nile/lib/bounded.pl) is not part of what is tested
-  (cd "$rr_fx/repo/z-nile" && ulimit -t 120 && ZN_MEASURED=1 lune run tests/run -- tests/probe/real.spec.luau) >"$rr_out/out" 2>&1
+  (cd "$rr_fx/repo/z-nile" && ulimit -t 120 && ZN_MEASURED=1 lune run tests/run -- "$PWD/tests/probe/real.spec.luau") >"$rr_out/out" 2>&1
   echo "$?" >"$rr_out/rc"
   # the leftover is gone only after five failed probes in a row, 50 ms apart (one probe can miss it), within 3 s
   pid=$(cat "$rr_fx/repo/z-nile/.cache/left.pid" 2>/dev/null)

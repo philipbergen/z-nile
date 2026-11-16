@@ -1,0 +1,43 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-16 03:54	2 specs	0	0	test			0.816	0.590		0.816	tokens,ai
+2026-11-16 03:54	2 specs	0	0	test			0.818	0.590		0.818	tokens,ai
+2026-11-16 03:54	c0266: classified case holds all three types; six texts say the rule	28	14	build							tokens,wall,cpu,ai
+2026-11-16 03:55	1 spec	0	0	test			0.813	0.550		0.813	tokens,ai
+2026-11-16 03:55	1 spec	0	0	test			0.819	0.520		0.819	tokens,ai
+2026-11-16 03:56	1 spec	0	0	test			78.784	67.110		78.784	tokens,ai
+2026-11-16 03:56	1 spec	0	0	test			0.817	0.470		0.817	tokens,ai
+2026-11-16 03:56	1 spec	0	0	test			1.013	0.510		1.013	tokens,ai
+2026-11-16 03:56	1 spec	0	0	test			0.819	0.480		0.819	tokens,ai
+2026-11-16 03:56	45 specs	0	0	test			11.182	56.300		11.182	tokens,ai
+2026-11-16 03:57	1 spec	0	0	test			1.834	1.480		1.834	tokens,ai
+2026-11-16 03:57	1 spec	0	0	test			1.628	1.440		1.628	tokens,ai
+2026-11-16 03:57	1 spec	0	0	test			1.841	1.460		1.841	tokens,ai
+2026-11-16 03:58	1 spec	0	0	test			0.817	0.560		0.817	tokens,ai
+2026-11-16 03:58	1 spec	0	0	test			1.021	0.550		1.021	tokens,ai
+2026-11-16 03:59	1 spec	0	0	test			78.700	67.880		78.700	tokens,ai
+2026-11-16 03:59	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-16 04:15	R0111: harvest	0	0	code-review							tokens,wall,cpu,ai
+2026-11-16 04:15	1 spec	0	0	test			0.829	0.540		0.829	tokens,ai
+2026-11-16 04:15	1 spec	0	0	test			0.829	0.530		0.829	tokens,ai
+2026-11-16 04:17	1 spec	0	0	test			78.359	66.770		78.359	tokens,ai
+2026-11-16 04:17	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-16 04:17	R0111: review-001	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-16 04:17	R0111: final verification log	0	0	deliver							tokens,wall,cpu,ai
+2026-11-16 04:17	R0111: trace skeleton	0	0	deliver							tokens,wall,cpu,ai
+2026-11-16 04:17	R0111: final-review-001, final-refute-001 and the filled trace	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-16 04:17	affected	0	0	test			6.412	46.210		6.412	tokens,ai
+2026-11-16 04:17	1 spec	0	0	test			0.830	0.520		0.830	tokens,ai
+2026-11-16 04:17	1 spec	0	0	test			0.825	0.540		0.825	tokens,ai
+2026-11-16 04:19	1 spec	0	0	test			78.483	67.110		78.483	tokens,ai
+2026-11-16 04:19	1 spec	0	0	test			1.036	0.680		1.036	tokens,ai
+2026-11-16 04:19	1 spec	0	0	test			0.821	0.530		0.821	tokens,ai
+2026-11-16 04:19	1 spec	0	0	test			0.828	0.550		0.828	tokens,ai
+2026-11-16 04:20	1 spec	0	0	test			77.265	66.310		77.265	tokens,ai
+2026-11-16 04:20	R0111: trace names the restacked finish commit	0	0	deliver							tokens,wall,cpu,ai
+2026-11-16 04:21	affected	0	0	test			5.908	46.460		5.908	tokens,ai
+2026-11-16 04:21	1 spec	0	0	test			0.813	0.520		0.813	tokens,ai
+2026-11-16 04:21	1 spec	0	0	test			1.017	0.560		1.017	tokens,ai
+2026-11-16 04:22	1 spec	0	0	test			79.727	68.330		79.727	tokens,ai
+2026-11-16 04:22	1 spec	0	0	test			1.025	0.660		1.025	tokens,ai
+2026-11-16 04:22	affected	0	0	test			6.306	47.180		6.306	tokens,ai
+2026-11-16 04:22	R0111: bind c0266 claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	12	12	deliver							tokens,wall,cpu,ai
