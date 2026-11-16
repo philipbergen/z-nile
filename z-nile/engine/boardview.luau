@@ -154,6 +154,23 @@ function boardview.rounds(paths: { string }): (number, number)
 	return design, code
 end
 
+-- c0251: the paths among `paths` that are review files (design-review, review, final-review rounds): the one pattern of them
+-- the board has, beside `rounds`.
+function boardview.reviewPaths(paths: { string }): { string }
+	local out: { string } = {}
+	for _, p in paths do
+		local name = string.match(p, "([^/]+)$") or p
+		if
+			string.match(name, "^design%-review%-%d+%.md$")
+			or string.match(name, "^review%-%d+%.md$")
+			or string.match(name, "^final%-review%-%d+%.md$")
+		then
+			table.insert(out, p)
+		end
+	end
+	return out
+end
+
 -- c0251: the review files whose newest round of a kind carries a `Fallback:` line. `files` is path -> text of the review
 -- files of one folder set; the newest round of each kind is taken per folder (reviewmodel.newest), so an older flagged round
 -- with a clean newer one is not listed. The paths, sorted.

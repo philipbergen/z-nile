@@ -766,18 +766,12 @@ local function reviewFiles(dir: string, into: { string })
 	end
 end
 
--- c0251: the text of each review file among `paths` (path -> text), for boardview.fallbacks.
+-- c0251: the text of each review file among `paths` (path -> text), for boardview.fallbacks. Which paths are review files
+-- is boardview.reviewPaths' alone.
 local function reviewTexts(paths: { string }): { [string]: string }
 	local out: { [string]: string } = {}
-	for _, path in paths do
-		local name = string.match(path, "([^/]+)$") or path
-		if
-			(
-				string.match(name, "^design%-review%-%d+%.md$")
-				or string.match(name, "^review%-%d+%.md$")
-				or string.match(name, "^final%-review%-%d+%.md$")
-			) and fs.isFile(path)
-		then
+	for _, path in boardview.reviewPaths(paths) do
+		if fs.isFile(path) then
 			out[path] = fs.readFile(path)
 		end
 	end
