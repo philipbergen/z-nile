@@ -1,0 +1,14 @@
+PASS  AC1: The supervisor takes exactly what `./zn next` prints (`<id>
+PASS  AC2: A raft is one CLI session: the dispatcher's worker mode sta
+PASS  AC3: With nothing claimable the loop waits between polls with no
+PASS  AC4: The loop reads a dispatch run only by its exit code: done i
+PASS  AC5: A CLI that says quota is waited for once, up to its `quota_
+PASS  AC6: Every session is the dispatcher's own step: the dispatcher'
+PASS  AC7: A raft's pending gate (CI, a merge) is waited for and dispa
+PASS  AC8: The supervisor never lands: the dispatcher's `run` gate doe
+PASS  AC9: `./zn work` with a supervisor flag (`--cli`, `--once`, `--m
+PASS  AC10: The supervisor writes its state (`.cache/work/state`, with
+PASS  AC11: `.models.toml` reads `[work.<cli>] quota_wait_minutes` per
+PASS  AC12: The z-work skill (the headless session first; the supervis
+PASS  AC13: The specs the change stands on stay green: the work and di
+---- 13/13 criteria passed
