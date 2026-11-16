@@ -224,15 +224,15 @@ return t.spec("c0251 the board flags fallback reviews", function(it)
 			t.expect(all.R0010.rereview[`{TRACKER}/rafts/active/R0010/stream-review-c0011-001.md`])
 				.toBe('cd "$(./zn worktree R0010)" && ./zn dispatch zz-review c0011 --mode stream')
 			-- an issue in no raft that is no longer a backlog issue has no worktree to name
-			t.expect(next(all.c0013.rereview)).toBe(nil)
+			t.expect((next(all.c0013.rereview))).toBe(nil)
 			-- landed work is flagged as history: a flag, and no command
 			t.expect(rel(all.R0011.fallbackReviews)).toEqual({
 				"issues/done/c0015/review-001.md",
 				"rafts/done/R0011/final-review-001.md",
 			})
-			t.expect(next(all.R0011.rereview)).toBe(nil)
+			t.expect((next(all.R0011.rereview))).toBe(nil)
 			t.expect(rel(all.c0015.fallbackReviews)).toEqual({ "issues/done/c0015/review-001.md" })
-			t.expect(next(all.c0015.rereview)).toBe(nil)
+			t.expect((next(all.c0015.rereview))).toBe(nil)
 			-- the pure rule: a raft's coherence review is raft mode
 			t.expect(
 				BV.rereview(
