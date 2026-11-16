@@ -4,7 +4,9 @@
 -- resumed on a rerun; the person's CLI is tried first; a CLI out of quota is waited for once and then the next CLI starts a
 -- new session that reads the raft's notes; every session leaves a measured row; every prompt names the skill. No real CLI
 -- starts (the dispatcher refuses any outside .cache in a check run), and the waits are one second (ZN_WORK_QUOTA_WAIT).
+local escalation = require("@znile/engine/escalation")
 local fakecli = require("@tests/lib/fakecli")
+local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -164,4 +166,40 @@ return t.spec("c0253 the dispatcher's worker mode", function(it)
 		t.expect(has(log, "--resume")).toBe(false)
 		t.expect(has(log, "Keep `")).toBe(false)
 	end)
+
+	it(
+		"AC5: an outage that a working session ended is forgotten: the cap counts one unbroken stretch",
+		function()
+			fakecli.clear(h)
+			local path = `{h.f.main}/.cache/dispatch/R0010/state.json`
+			local text = fs.readFile(path)
+			fs.writeFile(path, (string.gsub(text, '"session"', '"quotaSince": 1000, "session"', 1)))
+			t.expect(fakecli.state(h, "R0010").quotaSince).toBe(1000)
+			step({ "--cli", "claude" })
+			t.expect(fakecli.state(h, "R0010").quotaSince).toBe(nil)
+		end
+	)
+
+	it(
+		"AC5: with every CLI out past the cap the raft is blocked with quota and a note escalation.parse accepts",
+		function()
+			fakecli.clear(h)
+			fakecli.mode(h, "claude", "spentquota")
+			fakecli.mode(h, "grok", "quota")
+			local r = fakecli.zn(h, { "dispatch", "R0010", "--worker", "--cli", "claude" }, {
+				ZN_WORK_QUOTA_WAIT = "3",
+				ZN_WORK_QUOTA_CAP = "5",
+				ZN_BEAT_EVERY = "1",
+			})
+			local out = r.stdout .. r.stderr
+			t.expect(has(out, "every CLI is out of quota: waiting")).toBe(true)
+			local doc = fixture.git(h.f.origin, { "show", "main:pickman/.tracker/rafts/R0010/R0010.md" })
+			t.expect(has(doc, "blocked: quota")).toBe(true)
+			local note =
+				fixture.git(h.f.origin, { "show", "main:pickman/.tracker/rafts/R0010/escalation.md" })
+			local parsed, why = escalation.parse(note)
+			t.expect(why).toBe(nil)
+			t.expect(escalation.check(parsed :: escalation.Note)).toBe(nil)
+		end
+	)
 end)

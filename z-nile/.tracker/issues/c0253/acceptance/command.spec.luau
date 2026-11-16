@@ -174,4 +174,37 @@ return t.spec("c0253 ./zn work's command line", function(it)
 		t.expect(r.ok).toBe(false)
 		t.expect(has(said(r), "already runs")).toBe(true)
 	end)
+
+	it("AC9: .models.toml is read from origin/main, never from the working tree", function()
+		-- an edit of the main checkout's file that adds kimi to a role changes nothing the supervisor trusts
+		local path = `{f.main}/.models.toml`
+		local original = fs.readFile(path)
+		fs.writeFile(path, (string.gsub(original, "fallbacks = %[%]", 'fallbacks = ["kimi"]')))
+		local r = trackerfix.tr(f, f.main, { "work", "run", "--cli", "kimi", "--once" })
+		fs.writeFile(path, original)
+		t.expect(r.ok).toBe(false)
+		t.expect(has(said(r), "kimi")).toBe(true)
+	end)
+
+	it(
+		"AC9: the dispatcher's own flags are booleans too: --worker and --no-run before a positional leave it in place",
+		function()
+			local r = trackerfix.tr(f, f.main, { "dispatch", "--worker", "--no-run", "status", "R0010" })
+			t.expect(r.ok).toBe(true)
+			t.expect(has(said(r), "usage")).toBe(false)
+		end
+	)
+
+	it(
+		"AC2: a run that finds the previous run's held raft in the state file dispatches it before it asks next",
+		function()
+			fs.writeFile(
+				`{f.main}/.cache/work/state`,
+				"pid: 99999999\nstate: working\nitem: R0010\ncli: claude\nsince: t\nmoved: 0\nblocked: 0\nheld: R0010\n"
+			)
+			local r = trackerfix.tr(f, f.main, { "work", "run", "--once" })
+			t.expect(has(said(r), "R0010")).toBe(true)
+			t.expect(has(r.stdout, "nothing claimable")).toBe(false)
+		end
+	)
 end)

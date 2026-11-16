@@ -3274,11 +3274,13 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 							break
 						end
 						local capHours = models.quotaCapHours(walk(store.get(target).dir))
-						local verdict = supervise.allOut(
-							st.quotaSince,
-							os.time(),
-							if capHours then capHours * 3600 else nil
-						)
+						-- a check run may set the cap in seconds (ZN_WORK_QUOTA_CAP), so a spec need not wait an hour
+						local capSpec = heartbeat.setting(process.env, "ZN_WORK_QUOTA_CAP", 0, ctx.checking())
+						local capSeconds = if capSpec > 0
+							then capSpec
+							elseif capHours then capHours * 3600
+							else nil
+						local verdict = supervise.allOut(st.quotaSince, os.time(), capSeconds)
 						st.quotaSince = verdict.since
 						save(st)
 						if verdict.kind == "block" then
