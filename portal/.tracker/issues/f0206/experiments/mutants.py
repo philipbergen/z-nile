@@ -1,8 +1,9 @@
 # f0206 prep: the mutation check. It never touches the tree it is run from: it clones this repository into a fresh
 # folder under $TMPDIR, checks out this checkout's HEAD there, copies this item's folder in, and applies the bases in
-# order, all in-repo: f0201's prototype (arcade's PaidPlay, Prices, Wallet, Catalog), f0205's f0199-standin.patch and
-# prototype.patch (f0205, prepared and on main since PR #494), f0197's prototype (arcade's Hiscores, Boards,
-# HiscoreGames) and this issue's prototype.patch (its portal code). It runs the intended state, then applies each mutant (and each correct variant) to that
+# order, all in-repo, each three-way with any conflict resolved by keeping both sides: f0201's prototype (arcade's
+# PaidPlay, Prices, Wallet, Catalog), f0205's f0199-standin.patch and prototype.patch (f0205, prepared and on main since
+# PR #494), f0197's prototype (arcade's Hiscores, Boards, HiscoreGames) and this issue's prototype.patch (its portal
+# code). f0208 (prepared, PR #512) is not applied here; E12 runs the two together. It runs the intended state, then applies each mutant (and each correct variant) to that
 # clone, runs the row's spec files from the clone's portal/, restores the file, and deletes the clone at the end.
 # A mutant is killed when its spec run reports a FAIL whose message is an assertion ("expected ..."), not a syntax,
 # type or require error. A correct variant (CV) must stay green.
@@ -225,7 +226,18 @@ def main():
         os.path.join(HERE, "prototype.patch"),
     ]
     for patch in bases:
-        subprocess.run(["git", "-C", CLONE, "apply", patch], check=True)
+        # three-way, and each conflict resolved by keeping both sides, the tree's first: the rule the design states for
+        # lines two issues add at one place (f0205's map line beside f0208's `Play -> Card`, which main already has)
+        subprocess.run(["git", "-C", CLONE, "apply", "-3", patch], capture_output=True, text=True, timeout=120)
+        listed = subprocess.run(["git", "-C", CLONE, "diff", "--name-only", "--diff-filter=U"], capture_output=True, text=True, timeout=60).stdout.split()
+        for rel in listed:
+            f = os.path.realpath(os.path.join(CLONE, rel))
+            if not f.startswith(TMP + os.sep):
+                sys.exit(f"refusing to write outside the clone: {f}")
+            text = open(f).read()
+            text = re.sub(r"^<<<<<<< [^\n]*\n(.*?)^=======\n(.*?)^>>>>>>> [^\n]*\n", lambda m: m.group(1) + m.group(2), text, flags=re.S | re.M)
+            open(f, "w").write(text)
+        subprocess.run(["git", "-C", CLONE, "add", "-A"], check=True, timeout=60)
     only = sys.argv[1:]
     out = run(ALL)
     print("intended".ljust(64), verdict(out, True)[0], flush=True)
