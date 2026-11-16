@@ -13,6 +13,6 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0112
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: c0120's check-paths spec passes on the live tree" lune run tests/run -- tests/acceptance/c0120/check-paths.spec.luau
 
 finish
