@@ -9,6 +9,9 @@ A="$HERE/acceptance"
 
 # Work outside `check` is limited to running a spec through `tests/run` (which AC_LIST=1 list mode refuses),
 # `./zn members` and other cheap reads; everything else goes inside `check`.
-# check "AC1: <statement>" lune run tests/run -- "$A/<name>.spec.luau"
+check "AC1: c0210's promoted folder and finished check.sh are exactly its reviewed files with lobby-start.spec and the AC11 check removed, nothing added (watch files aside), and nothing outside the trackers, and no check.sh, names the removed file" \
+	python3 -I "$A/narrow.py" "$ZN_ROOT"
+check "AC2: c0210's acceptance checks pass from its finished folder, without lobby-start.spec" \
+	bash -c 'bash "$("$ZN_ROOT/zn" find c0210)/check.sh"'
 
 finish
