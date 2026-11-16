@@ -275,3 +275,26 @@ test("guesses: each Guess (pending user) line counts until ruled; a raft lists i
   assert.equal(m.byId.f0022.guesses, 0, "no body")
   assert.deepEqual(m.byId.R0020.guessMembers, ["f0020"])
 })
+
+test("filter chips cycle through their states and wrap", () => {
+  const blocked = ["all", "blocked", "unblocked"]
+  assert.equal(M.nextState(blocked, "all"), "blocked")
+  assert.equal(M.nextState(blocked, "blocked"), "unblocked")
+  assert.equal(M.nextState(blocked, "unblocked"), "all")
+  assert.equal(M.nextState(blocked, "bogus"), "blocked", "an unknown state starts over")
+})
+
+test("does not need approval is the complement of needs approval", () => {
+  const m = M.normalize({
+    issues: [
+      { id: "c0030", type: "chore", title: "a", stage: "prepared", design: "ready" },
+      { id: "c0031", type: "chore", title: "b", stage: "prepared", design: "ready" },
+      { id: "c0032", type: "chore", title: "c", stage: "new", design: "draft" },
+    ],
+    rafts: [], approved: ["c0031"],
+  })
+  const not = id => M.matches(m.byId[id], { noApproval: true })
+  assert.equal(not("c0030"), false)
+  assert.equal(not("c0031"), true)
+  assert.equal(not("c0032"), true)
+})

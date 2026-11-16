@@ -232,13 +232,22 @@ function escapeStep(state) {
   return "close"
 }
 
+// A filter chip's next state on a click: through `states` in order, then back
+// to the first ("all"). An unknown state counts as the first.
+function nextState(states, current) {
+  var at = states.indexOf(current)
+  return states[(Math.max(at, 0) + 1) % states.length]
+}
+
 function matches(item, filters) {
   filters = filters || {}
   if (filters.projects && filters.projects.length > 0 && filters.projects.indexOf(item.project) < 0) return false
   var blocked = item.blockedBy.length > 0 || item.blockedMembers.length > 0
   if (filters.blocked && !blocked) return false
   if (filters.unblocked && blocked) return false
-  if (filters.approval && !(item.needsApproval || item.approvalMembers.length > 0)) return false
+  var needsApproval = item.needsApproval || item.approvalMembers.length > 0
+  if (filters.approval && !needsApproval) return false
+  if (filters.noApproval && needsApproval) return false
   if (filters.types && filters.types.length > 0) {
     var t = item.type || item.label
     if (filters.types.indexOf(t) < 0 && !(t === "mix" && filters.types.length > 0)) return false

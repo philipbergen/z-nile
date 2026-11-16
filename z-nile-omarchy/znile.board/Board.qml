@@ -44,7 +44,7 @@ Item {
     var item = model.byId[id]
     if (!item) { if (service) service.say(id + " isn't on the board"); return }
     if (!Model.matches(item, filters)) {
-      blockedOnly = false; unblockedOnly = false; approvalOnly = false; projectFilter = []; typeFilter = []; search.text = ""
+      blockedMode = "all"; approvalMode = "all"; projectFilter = []; typeFilter = []; search.text = ""
     }
     var wanted = item.kind === "raft" ? "rafts" : "tickets"
     if (view !== wanted) view = wanted
@@ -119,15 +119,20 @@ Item {
 
   readonly property var model: service ? service.model : Model.normalize({})
   readonly property var items: view === "rafts" ? model.rafts : model.issues // znile calls tickets "issues"
-  property bool blockedOnly: false
   property bool maximized: false
-  // Blocked and unblocked are a pair: turning one on turns the other off.
-  property bool unblockedOnly: false
-  property bool approvalOnly: false
-  readonly property var filters: ({ projects: projectFilter, types: typeFilter, query: query, blocked: blockedOnly, unblocked: unblockedOnly, approval: approvalOnly })
-  readonly property int approvalCount: Model.stageCounts(items.filter(function(it) { return it.stage !== "done" }), { approval: true }).total
-  readonly property int blockedCount: Model.stageCounts(items.filter(function(it) { return it.stage !== "done" }), { blocked: true }).total
-  readonly property int unblockedCount: Model.stageCounts(items.filter(function(it) { return it.stage !== "done" }), { unblocked: true }).total
+  // Each filter chip cycles all -> one side -> the other side -> all.
+  readonly property var blockedStates: ["all", "blocked", "unblocked"]
+  readonly property var approvalStates: ["all", "needs", "not"]
+  property string blockedMode: "all"
+  property string approvalMode: "all"
+  readonly property var filters: ({ projects: projectFilter, types: typeFilter, query: query,
+    blocked: blockedMode === "blocked", unblocked: blockedMode === "unblocked",
+    approval: approvalMode === "needs", noApproval: approvalMode === "not" })
+  function openCount(f) { return Model.stageCounts(items.filter(function(it) { return it.stage !== "done" }), f).total }
+  readonly property int blockedCount: openCount({ blocked: true })
+  readonly property int unblockedCount: openCount({ unblocked: true })
+  readonly property int approvalCount: openCount({ approval: true })
+  readonly property int noApprovalCount: openCount({ noApproval: true })
   readonly property var orders: {
     var out = {}
     if (!service) return out
@@ -628,34 +633,28 @@ Item {
           Item { width: Style.space(10); height: 1 }
 
           Chip {
-            glyph: "\uf023"
-            label: "blocked  " + root.blockedCount
-            tint: Commons.Color.urgent
-            active: root.blockedOnly
+            glyph: root.blockedMode === "unblocked" ? "\uf09c" : "\uf023"
+            label: root.blockedMode === "blocked" ? "blocked  " + root.blockedCount
+              : root.blockedMode === "unblocked" ? "unblocked  " + root.unblockedCount
+              : "blocked " + root.blockedCount + " · unblocked " + root.unblockedCount
+            tint: root.blockedMode === "unblocked" ? Commons.Color.accent : Commons.Color.urgent
+            active: root.blockedMode !== "all"
             interactive: true
             fontSize: Style.font.bodySmall
-            onClicked: { root.blockedOnly = !root.blockedOnly; if (root.blockedOnly) root.unblockedOnly = false }
+            onClicked: root.blockedMode = Model.nextState(root.blockedStates, root.blockedMode)
           }
 
+          // Ready designs waiting on a person's `./zn approve`, or the rest.
           Chip {
-            glyph: ""
-            label: "unblocked  " + root.unblockedCount
-            tint: Commons.Color.accent
-            active: root.unblockedOnly
-            interactive: true
-            fontSize: Style.font.bodySmall
-            onClicked: { root.unblockedOnly = !root.unblockedOnly; if (root.unblockedOnly) root.blockedOnly = false }
-          }
-
-          // Ready designs waiting on a person's `./zn approve`.
-          Chip {
-            glyph: ""
-            label: "needs approval  " + root.approvalCount
+            glyph: "\uf00c"
+            label: root.approvalMode === "needs" ? "needs approval  " + root.approvalCount
+              : root.approvalMode === "not" ? "no approval needed  " + root.noApprovalCount
+              : "approval: " + root.approvalCount + " need · " + root.noApprovalCount + " don't"
             tint: Commons.Color.foreground
-            active: root.approvalOnly
+            active: root.approvalMode !== "all"
             interactive: true
             fontSize: Style.font.bodySmall
-            onClicked: root.approvalOnly = !root.approvalOnly
+            onClicked: root.approvalMode = Model.nextState(root.approvalStates, root.approvalMode)
           }
 
           Repeater {
