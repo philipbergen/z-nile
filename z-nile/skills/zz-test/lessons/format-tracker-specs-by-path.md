@@ -13,3 +13,5 @@ check: Was every sequestered spec formatted with `stylua <root>/.tracker/issues/
 **Note (c0306's prep, 2026-11-14):** one pass is not always enough. stylua's wrapping of a long `it(` call is not idempotent, so the first pass left a diff. The format stage then failed and aborted a `--slow` run after a batch of mutants had already run on the unformatted file. Run `stylua --check` on the spec folder right before the mutation check and the slow run, and format again until it is clean.
 
 **Note (c0325's prep, 2026-11-15):** running `stylua .` from inside the issue folder silently reformats the specs with another config (the spec hashes changed). Run it from `z-nile/` only. `check.sh --slow` runs the format, lint and type stages before any spec, so one stylua or selene error in an issue folder hides every slow result.
+
+**Note** (c0249 prep, 2026-11-16): run `stylua` from a folder that holds `stylua.toml` (the repository root or `z-nile/`), passing the spec path. Started from inside the issue folder, it does not search the parent folders, formats with its defaults, and rewrites the specs differently on every run.
