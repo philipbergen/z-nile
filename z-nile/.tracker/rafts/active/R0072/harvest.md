@@ -5,3 +5,24 @@
 - design-review-001 F5: zz-test/no-vacuous-pass
 - design-review-001 F6: one-off: counts quoted from a design that its own references had outgrown; the executors re-measure
 - note d0298's rafting (2026-11-12): after folding c0189, R0072's text still placed c0189 in R0070 and waited on c0191 (done); the design subagent rewrote both from ./zn find: z-raft/grouping-cost-checks-every-wait
+- review-001 F1: zz-arch/assignment-forms-void-proofs
+- review-001 F2: zz-test/specs-never-burn-real-resources, z-ready/ready-rechecks-sequestered-lessons
+- review-001 F3: zz-test/specs-read-sources-through-the-selector
+- review-001 F4: zz-arch/guard-no-is-explicit
+- review-001 F5: one-off: two exemption reasons named termination rather than the literal non-empty needles; corrected without a new rule
+- review-001 F6: one-off: the PR and verification log now give the landed-loop count by source
+- note review-001's finish-generated acceptance watch file was not a sequestration edit: zz-review/finish-watch-is-generated
+- note c0193 finish failed slow-tier.spec after the promoted hang specs were listed while still sequestered: zz-test/slow-tier-names-unpromoted-spec
+- review-002 F1: zz-arch/assignment-forms-void-proofs
+- review-002 F2: zz-test/source-text-pins-read-the-code
+- review-002 F3: zz-arch/guard-no-is-explicit
+- review-002 F4: zz-test/specs-read-sources-through-the-selector
+- review-002 F5: zz-test/hand-written-parsers-advance-or-refuse
+- review-002 F6: zz-review/finish-watch-is-generated
+- final-review-001 F1: zz-arch/assignment-forms-void-proofs
+- final-review-001 F2: zz-test/source-text-pins-read-the-code
+- final-review-001 F3: zz-review/not-stacked-is-main-moving
+- final-review-001 F4: z-design/restated-rules-move-together
+- final-review-002 F1: z-design/restated-rules-move-together
+- final-review-002 F2: zz-test/source-text-pins-read-the-code
+- final-review-002 F3: one-off: the sweep case's witness matches the design (c0193.md:45); the follow-up is in c0376

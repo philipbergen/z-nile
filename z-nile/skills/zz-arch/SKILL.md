@@ -20,7 +20,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
 | `z-nile/check.sh`, `affected.luau`, `roots.luau`, `setup.sh` | the gate, the affected-spec selector, the registry's shell reader and the bootstrap |
 | `z-nile/tests/run.luau`, `lib/`, `tooling/`, `meta/`, `acceptance/` | the shared runner and harness, the tooling's specs, its structural rules and z-nile's promoted specs; they run from z-nile's home, `z-nile/` |
 
-## Rules (the first and third are enforced by `z-nile/tests/meta/architecture.spec.luau`)
+## Rules (the first and third are enforced by `z-nile/tests/meta/architecture.spec.luau`, the ninth by `z-nile/tests/acceptance/c0193/tree.spec.luau`)
 1. **`--!strict` is the first line of every Luau file**, `.tracker/` folders aside.
 2. **The tooling is Luau on Lune.** Shell only where a shell must run it: `zn`, `check.sh` files, `ac.sh`, `fence.sh` and the hooks.
 3. **Requires are relative, or through the root `.luaurc` aliases** (`@znile`, `@tests`, `@scripts`, `@lune`); `@znile` names `z-nile/`, because an alias can't hold a hyphen. Every require under `z-nile/tests/` resolves. Specs require only through aliases, because `done` moves them.
@@ -29,6 +29,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
 6. **Parsers refuse ambiguity.** A repeated single-value field, an unknown key or an out-of-shape value is a problem the parser names, with the file and the rule.
 7. **Guards fail closed.** A guard acts only on its one explicit "no" answer and treats every other outcome as guarded. Configuration that widens a guard is read from `origin/main`, never from the working tree a branch can edit.
 8. **Every refusal names the path, the item or the rule** it broke, so the person reading it can fix it without reading the code.
+9. **Every scanning loop advances on every pass, or fails closed.** A `while` or `repeat` loop steps its position by a literal at its top level (`i += 1`) or through `scan.advance(i, next)` (`z-nile/engine/scan.luau`); any other loop is listed with why it ends in `z-nile/tests/lib/loops.luau`. "Proven" means no write that the loop's own lines show; a loop that reads text is never proven, always listed and swept, because a write through a call, a closure or an alias is the reviewer's question. A function that walks a text gets a case in `z-nile/tests/lib/scanners.luau`, with a witness (an input and the result only the scanner's work gives), which runs it over every short hostile text under a limit (`z-nile/tests/lib/hostile.luau`, through the bounded runner of zz-test).
 
 A Lune entry the gate runs, and so an agent may start bare, joins `TOOLING` in `z-nile/engine/boundcmd.luau` (the PreToolUse hook refuses every other `lune run` that is not wrapped).
 
