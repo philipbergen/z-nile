@@ -169,7 +169,15 @@ return t.spec("c0117 dispatch rules", function(it)
 		t.expect(has(p, "## Open to the human")).toBe(true)
 		t.expect(has(p, "for c0010")).toBe(true)
 		t.expect(has(p, "`/w/.worktree/prep-x`")).toBe(true)
-		t.expect(has(p, "`/w/.cache/dispatch/c0010/questions.md`")).toBe(true)
+		-- c0250: a step on an item blocks it with escalation.md; the state folder's questions.md is a capture's
+		t.expect(has(p, "write `escalation.md` in c0010's folder")).toBe(true)
+		t.expect(
+			has(
+				p,
+				"run `./zn block c0010 <review-exhausted|design-gap|needs-decision|red-gate|quota|tripwire>`"
+			)
+		).toBe(true)
+		t.expect(has(p, "`/w/.cache/dispatch/c0010/questions.md`")).toBe(false)
 		t.expect(has(p, "Never merge a pull request and never push to main")).toBe(true)
 		t.expect(has(p, "Do not pass --time or --tokens")).toBe(true)
 		-- no line of the skill itself

@@ -78,6 +78,12 @@ check() {
     printf 'LIST  %s\n' "$label"
     return 0
   fi
+  # c0248: `./zn done` of an early landing (layers stay unlanded) sets ZN_BIND_EARLY; the raft-wide lines RC1 and up
+  # run at the last landing, so an early landing is not blocked by a check on layers that are not in it
+  if [[ -n ${ZN_BIND_EARLY:-} && $label =~ ^(RC[1-9][0-9]*): ]]; then
+    printf 'SKIP %s: an early landing; it runs at the last landing\n' "${BASH_REMATCH[1]}"
+    return 0
+  fi
   local out
   if out=$("$@" 2>&1); then
     printf 'PASS  %s\n' "$label"

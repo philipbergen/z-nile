@@ -31,6 +31,8 @@ auto_merge = ["prep", "raft"]
 stall_seconds = 300
 # the same limit while a tool call runs (a full gate is quiet for minutes)
 tool_seconds = 900
+# quota_cap_hours = <whole hours, at least 1>: c0253's worker blocks the raft with `quota` (./zn block) when every CLI
+# stays out of quota past this many hours. Unset, the worker has no cap yet.
 
 [fallback.kimi]
 model = "kimi-code-k3.1-pro"

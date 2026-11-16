@@ -223,6 +223,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 		)
 		must(tr({ "commit", "-m", "failing spec", "--model", "claude-sonnet-5-5", "--time", "1" }), "commit")
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.layerReview(work, "f0010") -- c0248: a layer is complete before the next starts or done binds it
 		seal.trace(work, "R0010")
 		local promoted = done(false)
 		t.expect(promoted.ok).toBe(false)
@@ -242,6 +243,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 	it("rolls back and stays active when the layer pull request cannot be retargeted", function()
 		installGh()
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.layerReview(work, "f0010") -- c0248: a layer is complete before the next starts or done binds it
 		seal.trace(work, "R0010")
 		local before = git({ "rev-parse", "HEAD" })
 		local r = done(true)
@@ -267,6 +269,7 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 			"commit"
 		)
 		must(tr({ "finish", "f0010" }), "finish")
+		seal.layerReview(work, "f0010") -- c0248: a layer is complete before the next starts or done binds it
 		seal.trace(work, "R0010")
 		local before = git({ "rev-parse", "HEAD" })
 		local r = done(false)

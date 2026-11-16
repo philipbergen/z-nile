@@ -300,11 +300,13 @@ return t.spec("tracker lifecycle", function(it)
 			"commit"
 		)
 		must(tr({ "finish", "f0010" }), "finish f0010")
+		seal.layerReview(dir, "f0010") -- c0248: a layer is complete before the next starts or done binds it
 		must(tr({ "start", "R0010" }), "start f0031")
 		write("notes/f0031.txt", "gamma\n")
 		git({ "add", "-A" })
 		git({ "commit", "-qm", "f0031 work" })
 		must(tr({ "finish", "f0031" }), "finish f0031")
+		seal.layerReview(dir, "f0031") -- c0248: a layer is complete before the next starts or done binds it
 		seal.trace(dir, "R0010")
 		local head = git({ "rev-parse", "HEAD" })
 		local r = tr({ "done", "R0010" })
@@ -322,6 +324,7 @@ return t.spec("tracker lifecycle", function(it)
 			"commit"
 		)
 		must(tr({ "finish", "f0031" }), "finish the fix")
+		seal.layerReview(dir, "f0031") -- c0248: a layer is complete before the next starts or done binds it
 		seal.trace(dir, "R0010")
 	end)
 

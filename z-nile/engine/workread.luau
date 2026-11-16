@@ -85,8 +85,7 @@ end
 type At = { path: string, state: string, dir: string }
 
 local function sideFile(name: string): boolean
-	return name == "questions.md"
-		or name == "trace.md"
+	return name == "trace.md"
 		or string.match(name, "^review%-%d+%.md$") ~= nil
 		or string.match(name, "^final%-review%-%d+%.md$") ~= nil
 end
@@ -324,7 +323,7 @@ local function build(
 		status = statusLib.effective(front, at.state),
 		designReady = ready,
 		depsMet = deps,
-		questions = sides["questions.md"] ~= nil,
+		blocked = front.blocked,
 		issues = issues,
 		layers = layers,
 		holder = if holder then holder.who else "",
@@ -392,7 +391,6 @@ local function blockFor(
 			design = front.design or "",
 			doc = text,
 			grouped = front.grouped,
-			questions = docs[`{at.dir}/questions.md`] ~= nil,
 			listed = {},
 			members = {},
 			files = {},
@@ -452,7 +450,6 @@ local function blockFor(
 		design = front.design or "",
 		doc = text,
 		grouped = front.grouped,
-		questions = docs[`{at.dir}/questions.md`] ~= nil,
 		listed = listed,
 		members = members,
 		files = raftFiles,

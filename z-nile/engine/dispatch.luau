@@ -119,7 +119,30 @@ export type PromptInput = {
 	streamWorktree: string?, -- zz-review in stream mode: the stream's worktree (ws-<issue>), read only
 	description: string?, -- z-ticket: the user's words
 	project: string?, -- z-ticket: the project to capture into
+	exchange: { string }?, -- the run's exchange files, in order (c0256): a step reads them first
+	exchangeAsker: string?, -- the step that asked the latest question
+	exchangeNoReply: boolean?, -- the latest answer says no reply was given
+	exchangeUnknownReply: boolean?, -- the latest answer says the question was copied at the retry
+	exchangeLastStep: string?, -- the step the item's last attempt ran
+	parentExchange: { string }?, -- a nested step: the files of the run that started it, read only
+	parentStateDir: string?,
+	through: string?, -- zz-review final mode: the layers of this landing end at this issue (c0248)
+	perLanding: boolean?, -- zz-review final mode: the raft has a final review and a trace per landing (c0248)
+	itemDoc: string?, -- the item's document, where a review's `## Open to the human` goes
 }
+
+-- c0250: what a step does when a decision needs the user. A capture has no item yet, so z-ticket keeps c0256's local
+-- questions.md; a step on an item files an escalation note and blocks the item, which every host and the board see.
+local function askText(p: PromptInput): string
+	local open =
+		"A review that leaves a refutation or an unclosed high is not a guess: write `## Open to the human` in the item's document, one bullet per finding (`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>`), do not rule on it yourself, and stop."
+	if p.id == "" then
+		return `Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`{p.stateDir}/questions.md\`, one \`## Q<n>\` heading per question with the options and what each costs, and stop. {open}`
+	elseif p.step == "zz-review" then
+		return `Nobody will answer a question. A review never blocks the item: when a decision needs the user, say so in your review, and the item's author blocks it. {open}`
+	end
+	return `Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`escalation.md\` in {p.id}'s folder (\`## Question\`, \`## What was tried\`, \`## Open findings or error\` and \`## Options\`, each option a bullet that starts with one of amend-design, approve, split, retry or abort and exactly one ending (recommended)) and run \`./zn block {p.id} <review-exhausted|design-gap|needs-decision|red-gate|quota|tripwire>\`, then stop. Under ./zn dispatch, do not run \`./zn done\`: the dispatcher lands the layers below (c0252). A review that leaves a refutation or an unclosed high is review-exhausted: write \`## Open to the human\` in the item's document (one bullet per finding: \`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>\`), copy those bullets verbatim under \`## Open findings or error\` in \`escalation.md\`, run \`./zn block {p.id} review-exhausted\`, and never rule on them yourself. After the user resolves it, run \`./zn rulings {p.id}\` before you go on.`
+end
 
 -- The prompt of a model step. It names the skill's file, which every CLI reads itself; no skill text,
 -- architecture map or other issue is pasted (the user's "Name the files in the prompt").
@@ -138,8 +161,21 @@ function dispatch.prompt(p: PromptInput): string
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in stream mode. This is the one round. Read the stream's diff and run its checks in \`{p.streamWorktree or `.worktree/ws-{p.id}`}\` (read only there). Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into the raft's folder as \`stream-review-{p.id}-001.md\`.`
 	elseif p.step == "zz-review" and p.mode == "final" then
+		local scope = if p.through then ` --through {p.through}` else ""
+		if p.perLanding then
+			what =
+				`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode, for the layers of this landing only. Run \`./zn trace {p.id}{scope}\`, fill its table, and write the filled table to \`{p.stateDir}/trace.md\` and your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers them and moves them into the raft's folder as \`final-review-NNN.md\` and \`trace-NNN.md\` (the same NNN, one more than the last landing's). Findings you leave for the human go under \`## Open to the human\` in the raft document{if p.itemDoc
+					then ` (\`{p.itemDoc}\`)`
+					else ""}.`
+		else
+			what =
+				`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. Run \`./zn trace {p.id}\`, fill \`trace.md\` in {p.id}'s folder, verify it with \`./zn trace {p.id} --check\`, and write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.`
+		end
+	elseif p.step == "zz-review" and p.mode == "code" then
 		what =
-			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.`
+			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in code mode: the diff of {p.id}'s layer. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it, stamps it with the layer's \`Commit:\` and \`Patch:\`, and moves it into {p.id}'s folder as \`review-NNN.md\`. A finding that must wait for the human goes under \`## Open to the human\` in the issue's document{if p.itemDoc
+				then ` (\`{p.itemDoc}\`)`
+				else ""}, not the raft's.`
 	elseif p.step == "zz-review" then
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as that mode's file ({if p.mode
@@ -149,15 +185,55 @@ function dispatch.prompt(p: PromptInput): string
 	else
 		what = `Read \`{p.skillPath}\` and follow it for {p.id}.`
 	end
-	local lines = {
+	local lines: { string } = {
 		`You are running the z-nile step {p.step}{if p.id ~= "" then ` for {p.id}` else ""}, headless and unattended, under ./zn dispatch.`,
 		what,
 		"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
 		`Work only in \`{p.worktree}\`: it is your working directory. Never edit the main checkout.`,
-		`Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`{p.stateDir}/questions.md\`, one \`## Q<n>\` heading per question with the options and what each costs, and stop. A review that leaves a refutation or an unclosed high is not a guess: write \`## Open to the human\` in the item's document, one bullet per finding (\`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>\`), do not rule on it yourself, and stop.`,
+		askText(p),
 		"Never merge a pull request and never push to main yourself: the dispatcher merges at its gates, and `git` and `gh` refuse.",
 		"Do not pass --time or --tokens. The dispatcher records this session's wall, CPU, tokens and model.",
 	}
+	if p.exchange and #p.exchange > 0 then
+		local files = table.concat(p.exchange :: { string }, ", ")
+		local format =
+			`Each starts with \`date: <UTC time>\` (a question also has a \`step:\` line naming the step that asked) and a blank line; the rest is the message exactly as it was written. An \`-ask\` is the user's own request, a \`-question\` is what a step stopped to ask (a restatement is a question), and an \`-answer\` is the user's reply to the question before it (an approval or a correction).`
+		local last = (p.exchange :: { string })[#(p.exchange :: { string })]
+		local lastIsAnswer = string.find(last, "%-answer%.md$") ~= nil
+		local text: string
+		if #(p.exchange :: { string }) == 1 and string.find(last, "%-ask%.md$") ~= nil then
+			-- only the user's request so far: no step has exchanged anything (code review 001 F5)
+			text =
+				`The user's own request for this run, word for word, is \`{p.stateDir}/exchange/{last}\`: read it before you start. It starts with \`date: <UTC time>\` and a blank line; the rest is the request exactly as it was written. No step has asked the user anything yet.`
+		elseif p.exchangeAsker == p.step and p.exchangeLastStep == p.step and lastIsAnswer then
+			text = `This is a re-run: you stopped this run with a question and the user has been asked. Before you start, read every file in \`{p.stateDir}/exchange/\`, in this order: {files}. {format} `
+				.. (
+					if p.exchangeNoReply
+						then "The last file says the user gave no reply: your question stands unanswered, so decide whether you can go on without it, and if not ask again the way your instructions say and stop."
+						elseif
+							p.exchangeUnknownReply
+						then "The last file says your question was copied when the user retried: read the question file. Text the user added to your question is their answer. If it holds only your question, the user gave no reply and your question stands, so decide whether you can go on without it, and if not ask again the way your instructions say and stop."
+						else "The last file is an answer: it replies to your latest question, so do not ask again what it settles."
+				)
+		elseif p.exchangeAsker == p.step and p.exchangeLastStep == p.step then
+			text =
+				`This is a re-run: you stopped this run with a question. Before you start, read every file in \`{p.stateDir}/exchange/\`, in this order: {files}. {format} The last file is a question: it has no reply.`
+		else
+			text =
+				`Earlier steps of this run have already exchanged messages with the user. Before you start, read every file in \`{p.stateDir}/exchange/\`, in this order: {files}. {format} They settle those steps' questions, not yours: an approval there is not an answer to a question you must ask the user.`
+		end
+		table.insert(lines, 4, text)
+	end
+	if p.parentExchange and #p.parentExchange > 0 then
+		table.insert(
+			lines,
+			4,
+			`The run that started you has exchanged messages with the user too: read every file in \`{p.parentStateDir}/exchange/\`, in this order: {table.concat(
+				p.parentExchange :: { string },
+				", "
+			)}. An answer there may settle a question you asked before. You only read them.`
+		)
+	end
 	return table.concat(lines, "\n") .. "\n"
 end
 
@@ -190,6 +266,7 @@ export type Facts = {
 	localRaft: string, -- the raft: line in the rafting worktree, when the dispatcher rafted it ("" when none)
 	pr: Pr?, -- the PR of the step that holds the item now (prep, rafting or run)
 	questions: boolean, -- the run state holds questions.md
+	blocked: string?, -- c0250: the reason when the item is blocked on origin/main (its escalation.md names the question)
 	openHuman: { string }, -- unruled ids under ## Open to the human in the step's worktree document
 	last: { step: string, outcome: string }?, -- the last step's outcome in the run state
 	uncovered: { string }, -- `./zn lessons --uncovered <id>` in the step's worktree, after a review step
@@ -286,16 +363,24 @@ end
 -- unharvested finding. Then by state: capture, design, the prep gate, raft-plan, z-raft, the rafting gate, ready,
 -- run, the run's gate (always a human's), done.
 function dispatch.next(f: Facts): Action
+	if f.status == "blocked" then
+		return stop(
+			dispatch.EXIT.user,
+			`{f.id} is blocked ({f.blocked or "no reason"}): ./zn resolve {f.id} <decision> (amend-design, approve, split, retry or abort)`
+		)
+	end
 	if f.questions then
 		return stop(
 			dispatch.EXIT.user,
-			"needs the user: answer questions.md, then ./zn dispatch retry " .. f.id
+			"needs the user: read questions.md, then ./zn dispatch retry "
+				.. f.id
+				.. ' --answer "<your answer>" (or --answer-file <path>, or write your answer into questions.md)'
 		)
 	end
 	if #f.openHuman > 0 then
 		return stop(
 			dispatch.EXIT.user,
-			`needs the user: {f.id} has {table.concat(f.openHuman, ", ")} under ## Open to the human with no ruling; rule on each in the document, then ./zn dispatch retry {f.id}`
+			`needs the user: {f.id} has {table.concat(f.openHuman, ", ")} under ## Open to the human with no ruling; write escalation.md with them under ## Open findings or error and run ./zn block {f.id} review-exhausted (the user rules with ./zn resolve {f.id} <decision> --rule <Fn>=\"<ruling>\", then ./zn rulings {f.id})`
 		)
 	end
 	if f.last and f.last.outcome == "tripwire" and f.last.step == "merge-check" then

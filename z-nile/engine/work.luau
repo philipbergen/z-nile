@@ -8,13 +8,12 @@
 -- merge. It does not read layers. This function chooses the one action inside that z-run (implement,
 -- finish, restack, review, trace, final-review, done) from the layer facts. It does not read the pull
 -- request. One function for both would hide either the merge gate or which layer action the session does.
--- The shared facts agree: questions stop both, a done raft stops both, and a prepared backlog raft is
+-- The shared facts agree: a blocked raft stops both, a done raft stops both, and a prepared backlog raft is
 -- `ready` here and `z-ready` there. A spec fails when those diverge, or when an active raft's action
 -- becomes the pipeline step (or the pipeline step becomes a layer action).
 --
 -- Left for later tickets, on purpose:
 --   c0249: work.rankKey is the id. Rank replaces that key, and lost work is not taken first.
---   c0250: questions.md is the only block signal. There is no blocked status and no resolve command.
 --   c0265: nothing beats while a raft is held. An unnamed session does not resume one, and does not take it over.
 --   c0254: the holder is the author of the ready commit, not a worker identity, and two checkouts can be
 --     told to build the same active raft if both name it.
@@ -42,7 +41,7 @@ export type RaftFact = {
 	status: string,
 	designReady: boolean,
 	depsMet: boolean,
-	questions: boolean,
+	blocked: string?, -- the reason, when the raft is blocked (status blocked): a human resolves it
 	issues: { string },
 	layers: { LayerFact },
 	holder: string,
@@ -100,10 +99,13 @@ local function find(rafts: { RaftFact }, id: string): RaftFact?
 end
 
 function work.claimable(r: RaftFact): boolean
+	if r.status == "blocked" then
+		return false
+	end
 	if r.block ~= nil then
 		return r.block == ""
 	end
-	return r.where == "backlog" and r.status == "prepared" and r.designReady and r.depsMet and not r.questions
+	return r.where == "backlog" and r.status == "prepared" and r.designReady and r.depsMet
 end
 
 -- The rafts an unnamed session may see. A scope is one project's tracker root; nil or "" is every project.
@@ -151,8 +153,8 @@ function work.oneReason(r: RaftFact): string?
 		return "is held"
 	end
 	if r.where == "backlog" then
-		if r.questions then
-			return "needs a human (questions.md)"
+		if r.status == "blocked" then
+			return `is blocked ({r.blocked or "no reason"}): a human resolves it with ./zn resolve`
 		elseif r.status ~= "prepared" or not r.designReady then
 			return `is {r.status}, design not ready`
 		elseif not r.depsMet then
@@ -212,20 +214,11 @@ function work.forRaft(r: RaftFact): Decision
 			nil
 		)
 	end
-	if r.questions and r.where == "backlog" then
+	if r.status == "blocked" then
 		return of(
 			r,
 			"end",
-			`{r.id} was released and needs a human (questions.md). Stop. Tell the person to start a fresh session (or /clear) and run z-work again.`,
-			"",
-			nil
-		)
-	end
-	if r.questions and r.where == "active" then
-		return of(
-			r,
-			"release",
-			`questions.md is in {r.id}. From the main checkout run ./zn stop {r.id}, tell the person, then ask again.`,
+			`{r.id} is blocked: start a fresh session. It needs a human ({r.blocked or "no reason"}): ./zn resolve {r.id} <decision>. Stop. Tell the person to start a fresh session (or /clear) and run z-work again.`,
 			"",
 			nil
 		)
@@ -277,7 +270,7 @@ function work.forRaft(r: RaftFact): Decision
 			return of(
 				r,
 				"finish",
-				`Run ./zn finish {issue}. If the check is red, fix the code and run finish again. The same check failing after a real second attempt is blocked: write questions.md, commit it, ./zn stop {r.id}, and ask again.`,
+				`Run ./zn finish {issue}. If the check is red, fix the code and run finish again. The same check failing after a real second attempt is blocked: land the green layers below with ./zn done {r.id} --through <issue>, write escalation.md in {r.id}'s folder, run ./zn block {r.id} <reason> in this worktree, tell the person, and ask again.`,
 				issue,
 				layer
 			)
