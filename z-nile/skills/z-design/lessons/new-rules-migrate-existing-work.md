@@ -37,3 +37,5 @@ c0286 design review 001 F1: the migration's list of families the user tied came 
 **Also:** f0201 design review 001 F3: the arcade's PaidPlay read f0145's `continues` but wrote `revives`, so an old f0145 Pickman server (which outlives a publish) would read none of the arcade's credits and its next write would drop them. When two builds share a store, the new one writes the old shape exactly, and a case pins the stored keys.
 
 **Also:** c0288 design review 001 F6: the Non-goals named the search but listed only part of what it found, leaving out two `proofs/` files. Quote the search's whole result, then say which hits are out of scope and why.
+
+**Note (c0251's prep, 2026-11-15):** fixture configuration counts as existing data. `roleFor("zz-review", "stream")` now resolves to a new `stream-review` role, and `.models.toml` defaults nothing. So every fixture `.models.toml` that runs a stream review fails: five `c0117/dispatch-cli` cases and c0306's `dispatch-review` spec. List the fixtures that run a mode whose role changes, as Overrides.

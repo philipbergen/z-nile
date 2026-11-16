@@ -1,0 +1,23 @@
+- design-review-001 F1: pickman-arch/new-phases-meet-the-leave-rules
+- design-review-001 F2: pickman-arch/purchase-close-before-receipt
+- design-review-001 F3: zz-test/refusals-tested-on-both-sides
+- design-review-001 F4: zz-test/refusals-tested-on-both-sides
+- design-review-001 F5: zz-test/store-stubs-race-the-transform
+- design-review-001 F6: z-design/accepted-risks-checked-and-decided
+- design-review-001 F7: zz-test/pin-call-site-arguments
+- design-review-001 F8: z-design/fallbacks-name-the-modes-they-cover
+- design-review-001 F9: z-design/specify-every-named-artifact
+- design-review-001 F10: z-design/spec-design-correspondence
+- design-review-002 F1: pickman-arch/new-names-defined-once
+- design-review-002 F2: zz-arch/spends-recheck-after-the-write
+- design-review-002 F3: pickman-arch/send-away-stops-the-run
+- design-review-002 F4: z-design/accepted-risks-checked-and-decided
+- design-review-002 F5: z-design/fallbacks-name-the-modes-they-cover
+- design-review-002 F6: z-design/spec-design-correspondence
+- design-review-003 F1: zz-arch/client-triggered-reads-guarded
+- design-review-003 F2: zz-arch/spends-recheck-after-the-write
+- design-review-003 F3: z-design/accepted-risks-checked-and-decided
+- design-review-003 F4: z-design/reasoned-rows-claim-testable-reasons
+- design-review-003 F5: one-off: a table keyed by a Player set after a yield the player left during; the arrival now returns when the player is gone
+- note the prototype (proto-f0145, never committed as a patch) was lost by the resume of 2026-11-15, after main changed five Touched modules, so the specs could not be rerun on today's main: z-design/prove-specs-pass-on-a-prototype
+- note the rebuilt prototype (2026-11-15) found two rows the old run had reported killed that the new code left unreachable or unstated (P12, a closed guard checked twice; the lobby's join read, now Q10), fixed in the design and the prototype: z-design/prove-specs-pass-on-a-prototype
