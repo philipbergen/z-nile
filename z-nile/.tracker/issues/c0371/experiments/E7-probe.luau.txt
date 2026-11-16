@@ -1,0 +1,9 @@
+--!strict
+-- E7: print what literals() reads from a check.sh (path, and "@root" for a root reading); the path is the first argument
+local checkpaths = require("@tests/acceptance/c0120/checkpaths")
+local fs = require("@lune/fs")
+local process = require("@lune/process")
+local text = fs.readFile(process.args[1] :: string)
+for _, lit in checkpaths.literals(text) do
+	print(`{lit.path}{if lit.root then " @root" else ""}`)
+end
