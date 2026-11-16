@@ -79,6 +79,7 @@ M = [
     ("Y10", PP, PLAY, "`<s>{prices.struck}</s> {prices.price} {prices.sale}`", LINES, "every text in a line shows as it is"),
     ("Y11", PP, "else plain(prices.revive)", "else prices.revive", LINES, "every text in a line shows as it is"),
     ("Y12", PP, ESC, 'return (string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"))', LINES, "every text in a line shows as it is"),
+    ("Y13", PP, ESC, 'return (string.gsub(string.gsub(string.gsub(text, "&", "&amp;", 1), "<", "&lt;", 1), ">", "&gt;", 1))', LINES, "every text in a line shows as it is"),
     ("P1", PR, '\trevive = "1 R$", -- a revive\'s price (f0395): its own, nothing struck\n', "", LINES, "Prices is one frozen table"),
     ("P2", PR, 'revive = "1 R$",', 'revive = "1 R$ SALE",', LINES, "Prices is one frozen table"),
     ("P3", PR, "return table.freeze({", "return ({", LINES, "Prices is one frozen table"),

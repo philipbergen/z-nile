@@ -61,15 +61,19 @@ return t.spec("f0395 the test screen strikes the price", function(it)
 	it(
 		"every text in a line shows as it is: &, < and > become entities, the play's <s> is the only markup",
 		function()
-			local odd: PaidPlay.Prices = { struck = "<5 & 6>", price = "&1", sale = "S>", revive = "<r&>" }
-			t.expect(PaidPlay.testLines("A<B>&C", "play", odd)).toEqual({
-				"A&lt;B&gt;&amp;C: 1 GAME",
-				"<s>&lt;5 &amp; 6&gt;</s> &amp;1 S&gt;",
+			-- every special character at least twice, side by side, in the title and in every price word, so an
+			-- escaper that replaces only the first of each fails (design review 001 F1)
+			local odd: PaidPlay.Prices =
+				{ struck = "<<5 && 6>>", price = "&&1", sale = "S>>", revive = "<<r&&>>" }
+			local title = "A<<B>>&&C"
+			t.expect(PaidPlay.testLines(title, "play", odd)).toEqual({
+				"A&lt;&lt;B&gt;&gt;&amp;&amp;C: 1 GAME",
+				"<s>&lt;&lt;5 &amp;&amp; 6&gt;&gt;</s> &amp;&amp;1 S&gt;&gt;",
 				"TEST PURCHASE: NOTHING IS CHARGED",
 			})
-			t.expect(PaidPlay.testLines("A<B>&C", "revive", odd)).toEqual({
-				"A&lt;B&gt;&amp;C: REVIVE: 3 NEW LIVES",
-				"&lt;r&amp;&gt;",
+			t.expect(PaidPlay.testLines(title, "revive", odd)).toEqual({
+				"A&lt;&lt;B&gt;&gt;&amp;&amp;C: REVIVE: 3 NEW LIVES",
+				"&lt;&lt;r&amp;&amp;&gt;&gt;",
 				"TEST PURCHASE: NOTHING IS CHARGED",
 			})
 			-- an entity already in a text is shown as typed, not read as an entity
