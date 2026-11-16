@@ -82,3 +82,4 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-16 07:14	1 spec	0	0	test			0.834	0.580		0.834	tokens,ai
 2026-11-16 07:14	1 spec	0	0	test			0.829	0.560		0.829	tokens,ai
 2026-11-16 16:25	R0094: bind f0143, f0147, f0158, f0148	529	44	deliver							tokens,wall,cpu,ai
+2026-11-16 16:26	deliver	0	0	deliver							tokens,ai
