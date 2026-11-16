@@ -1,0 +1,5 @@
+dispatch: zz-review c0287 on claude (claude-cli, claude-opus-5-5-xhigh, max_tokens 3000000)
+dispatch: zz-review on claude: ok (done), 372461 tokens
+dispatch: the review is z-nile/.tracker/issues/c0287/design-review-001.md
+spend: c0287 design-review 372461 tokens claude-opus-5-5-xhigh
+exit=0

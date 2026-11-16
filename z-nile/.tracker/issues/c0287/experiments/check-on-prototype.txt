@@ -1,0 +1,7 @@
+
+=== c0287 check.sh
+PASS  AC1: the orphan, late and review-waiting fakes hold the reviewed shape, every fake marks its start, c0279's pins hold, and c0117's specs outside dispatch-cli wait only through their wall-clock helpers
+PASS  AC2: with the fakes delayed (FAKE_DELAY=3, FAKE_START_DELAY=12) control-cli and trackerstate pass
+PASS  AC3: control-cli and trackerstate differ from main by exactly the reviewed diffs
+---- 3/3 criteria passed
+exit=0
