@@ -7,3 +7,4 @@
 - design-review-001 F5: z-design/quote-other-preps-before-promising
 - design-review-001 F6: pickman-test/readable-text-has-a-number
 - design-review-001 F7: z-design/accepted-risks-checked-and-decided
+- note raft R0117 F1 (ruled (c), 2026-11-16): the client boot order shared by f0205, f0208 and this issue was pinned by no member's spec, and this issue added the place case: z-design/quote-other-preps-before-promising

@@ -43,6 +43,7 @@ F6b the rank aligned left                                        killed
 F6c the view aligns nothing                                      killed
 F6d labels placed without their inset                            killed
 F7 a refresh charged one sorted read                             killed
+B23 the all-time label on every board                            killed
 B22 the view's rows not cut at the header                        killed
 P1 any title read                                                killed
 P2 any status read                                               killed
@@ -124,6 +125,8 @@ X1 the server's Main never starts the relay                      killed
 X2 Board requires outside Logic                                  killed
 X3 no Boards remote                                              killed
 X4 the client's Main starts the view twice                       killed
+J6 the play buttons booted before the carousel                   killed
+X7 the board booted before the carousel                          killed
 X5 not in the map                                                killed
 X6 the view requires the arcade's Boards                         killed
 M1 a comment says game                                           killed
@@ -131,7 +134,9 @@ CV1 the view requires a sibling adapter a later issue adds       ok (green)
 CV2 the server's answer gains a field                            ok (green)
 CV3 the view gains a field                                       ok (green)
 CV4 the relay requires one more arcade module                    ok (green)
-CV5 the client's Main starts the view before the carousel        ok (green)
+CV5 the board booted before the play buttons                     ok (green)
+CV8 a local holds the carousel module                            ok (green)
+CV9 another adapter booted first                                 ok (green)
 CV7 Board requires Card for its text model                       ok (green)
 CV6 the tab bar's buttons in a list layout                       ok (green)
-128 mutants, 7 correct variants, 0 not as intended
+131 mutants, 9 correct variants, 0 not as intended
