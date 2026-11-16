@@ -1,0 +1,39 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-16 08:41	1 spec	0	0	test			0.829	0.530		0.829	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			0.833	0.560		0.833	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			1.027	0.750		1.027	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			1.647	1.190		1.647	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			0.824	0.600		0.824	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			0.829	0.550		0.829	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			0.830	0.530		0.830	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			0.822	0.550		0.822	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			1.245	0.790		1.245	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			1.657	1.350		1.657	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			1.028	0.660		1.028	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			0.823	0.590		0.823	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			0.813	0.570		0.813	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			0.831	0.590		0.831	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			1.234	0.810		1.234	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			1.651	1.260		1.651	tokens,ai
+2026-11-16 08:41	1 spec	0	0	test			1.029	0.620		1.029	tokens,ai
+2026-11-16 08:43	static	0	0	test			4.352	46.770		4.352	tokens,ai
+2026-11-16 08:44	static	0	0	test			3.934	47.710		3.934	tokens,ai
+2026-11-16 08:44	1 spec	0	0	test			1.027	0.680		1.027	tokens,ai
+2026-11-16 08:45	1 spec	0	0	test			0.833	0.640		0.833	tokens,ai
+2026-11-16 09:04	static	0	0	test			3.711	46.030		3.711	tokens,ai
+2026-11-16 09:04	1 spec	0	0	test			0.830	0.570		0.830	tokens,ai
+2026-11-16 09:05	1 spec	0	0	test			11.549	10.200		11.549	tokens,ai
+2026-11-16 09:05	1 spec	0	0	test			1.038	0.800		1.038	tokens,ai
+2026-11-16 09:05	1 spec	0	0	test			1.654	1.280		1.654	tokens,ai
+2026-11-16 09:05	1 spec	0	0	test			0.822	0.610		0.822	tokens,ai
+2026-11-16 09:05	1 spec	0	0	test			0.817	0.580		0.817	tokens,ai
+2026-11-16 09:05	1 spec	0	0	test			1.036	0.720		1.036	tokens,ai
+2026-11-16 09:05	1 spec	0	0	test			1.033	0.720		1.033	tokens,ai
+2026-11-16 09:20	1 spec	0	0	test			0.818	0.540		0.818	tokens,ai
+2026-11-16 09:20	1 spec	0	0	test			11.344	10.060		11.344	tokens,ai
+2026-11-16 09:20	1 spec	0	0	test			1.029	0.760		1.029	tokens,ai
+2026-11-16 09:20	1 spec	0	0	test			1.648	1.200		1.648	tokens,ai
+2026-11-16 09:20	1 spec	0	0	test			0.822	0.580		0.822	tokens,ai
+2026-11-16 09:20	1 spec	0	0	test			0.826	0.530		0.826	tokens,ai
+2026-11-16 09:23	30 runs	0	0	other			1721.543	173.170			tokens,ai
+2026-11-16 09:31	design-review-001	0	0	design-review							tokens,ai
