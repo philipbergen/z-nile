@@ -1,0 +1,11 @@
+start: 2026-11-15 11:38:31 PST  load averages: 23.41 19.49 17.47
+head: 0e79784e3  env: (none)
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+FAIL tests/acceptance/c0117/control-cli-mut.spec.luau :: an author waiting on a long nested review stays alive by its heartbeat; a quiet one still stalls
+     /Users/philipbergen/code/pickman/.worktree/mut-c0287-b/z-nile/tests/acceptance/c0117/control-cli-mut.spec:184: expected "stalled", got "failed"
+1 passed, 1 failed, 1 spec files
+exit: 1  seconds: 52
+end: 2026-11-15 11:39:23 PST  load averages: 18.50 18.71 17.30
+mutant: M10
+ z-nile/tests/acceptance/c0117/control-cli.spec.luau | 1 -
+ 1 file changed, 1 deletion(-)

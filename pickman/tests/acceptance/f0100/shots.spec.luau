@@ -12,12 +12,15 @@ local Movement = require("@logic/Movement")
 local Pellets = require("@logic/Pellets")
 local Session = require("@logic/Session")
 local t = require("@tests/lib/t")
+-- c0176: the shipped rules less f0147's ramp, so these cases keep the classic level 1 and the last pellet's clear
+local CLASSIC_GAME = table.clone(Session.GAME_CONFIG) :: any
+CLASSIC_GAME.ramp = nil
 
 local classic = Maze.layout("classic")
 local CORRIDOR = Maze.parse({ "###############", "#            P#", "###############" }, "corridor")
 
 local function new(seed: number?): Session.Session
-	local s = Session.new(classic, seed or 1, Session.GAME_CONFIG)
+	local s = Session.new(classic, seed or 1, CLASSIC_GAME)
 	Session.join(s, "p")
 	return s
 end
@@ -274,7 +277,7 @@ return t.spec("f0100 shots in a session", function(it)
 	end)
 
 	it("a session without ghosts takes no shot and spends nothing", function()
-		local s = Session.new(CORRIDOR, 1, Session.GAME_CONFIG)
+		local s = Session.new(CORRIDOR, 1, CLASSIC_GAME)
 		Session.join(s, "p")
 		for _ = 1, 61 do
 			Session.step(s)

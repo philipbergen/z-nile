@@ -1,0 +1,94 @@
+--!strict
+-- rv4: E5 against main: for every open worktree, main's scan (origin/main's literals, read from the home, Touched
+-- entries compared as written, members' entries pooled) and the prototype's scan; prints the reports that differ.
+local fs = require("@lune/fs")
+local process = require("@lune/process")
+local serde = require("@lune/serde")
+local projects = require("@znile/engine/projects")
+local checkpaths = require("@tests/acceptance/c0120/checkpaths")
+local old = require("./e8-old")
+local WT = process.args[1] :: string
+local top = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")) .. "/"
+local exempt: { [string]: boolean } = {}
+for id in string.gmatch(fs.readFile(`{top}z-nile/tests/acceptance/c0120/check-paths.spec.luau`), '%["(%x+)"%]%s*=') do
+	exempt[id] = true
+end
+local function skip(text: string): boolean
+	return exempt[serde.hash("sha1", `blob {#text}\0{text}`)] == true
+end
+local function mainScan(base: string): { [string]: boolean }
+	local reg = projects.load(string.sub(base, 1, -2), true)
+	local all = checkpaths.items(base)
+	local byRaft: { [string]: { string } } = {}
+	for _, i in all do
+		if i.raft ~= "" then
+			byRaft[i.raft] = byRaft[i.raft] or {}
+			for _, o in checkpaths.touched(`{base}{i.dir}/{i.id}.md`) do
+				table.insert(byRaft[i.raft], o)
+			end
+		end
+	end
+	local out: { [string]: boolean } = {}
+	for _, i in all do
+		local file = `{i.dir}/check.sh`
+		if fs.isFile(base .. file) then
+			local text = fs.readFile(base .. file)
+			if not skip(text) then
+				local home = projects.homeOf(reg, file)
+				local own = checkpaths.touched(`{base}{i.dir}/{i.id}.md`)
+				for _, o in byRaft[i.id] or {} do
+					table.insert(own, o)
+				end
+				for _, p in old.literals(text) do
+					if not checkpaths.present(base, home, p) and not checkpaths.under(p, own) then
+						out[`{file}: {p}`] = true
+					end
+				end
+			end
+		end
+	end
+	return out
+end
+local trees, gainedTotal, lostTotal = 0, 0, 0
+local gainedSeen: { [string]: number } = {}
+local lostSeen: { [string]: number } = {}
+for _, name in fs.readDir(WT) do
+	local base = `{WT}/{name}/`
+	if fs.isFile(`{base}z-nile/projects.toml`) then
+		local okm, m = pcall(mainScan, base)
+		local okn, s = pcall(checkpaths.scan, base, skip)
+		if not okm or not okn then
+			print(`{name}: scan failed ({if okm then "" else tostring(m)} {if okn then "" else tostring(s)})`)
+			continue
+		end
+		trees += 1
+		local newSet: { [string]: boolean } = {}
+		for _, line in (s :: any).bad do
+			local key = string.gsub(line, " %(from [^)]*%)$", "")
+			newSet[key] = true
+			if not (m :: any)[key] then
+				gainedTotal += 1
+				gainedSeen[line] = (gainedSeen[line] or 0) + 1
+			end
+		end
+		for key in m :: any do
+			if not newSet[key] then
+				lostTotal += 1
+				lostSeen[key] = (lostSeen[key] or 0) + 1
+			end
+		end
+	end
+end
+print(`worktrees: {trees}; reports gained against main: {gainedTotal}; lost: {lostTotal}`)
+local function dump(t: { [string]: number }, tag: string)
+	local keys = {}
+	for k in t do
+		table.insert(keys, k)
+	end
+	table.sort(keys)
+	for _, k in keys do
+		print(`{tag} {t[k]}x {k}`)
+	end
+end
+dump(gainedSeen, "GAINED")
+dump(lostSeen, "LOST")

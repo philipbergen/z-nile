@@ -1,6 +1,6 @@
 # Design checklist: chore
 
-Answer each in the issue's Design before the first review round (z-design step 3). CI, test and tooling fixes are chores even when they fix a bug.
+Answer each in the issue's Design before the first review round (z-design step 3). A fix of a wrong spec is a chore even when it fixes a bug; a z-nile command, gate or guard that does the wrong thing is a defect (z-ticket, Classify the work).
 - **No behaviour change** for players: say which behaviour stays exactly as it is, and which spec shows it.
 - **Overrides**: every promoted spec the chore changes, named on its `Overrides:` line with what it still pins (a chore may change promoted specs in its own raft).
 - **Existing work**: which prepared, active or mid-prep items, open branches and sequestered `check.sh` files fail the new rule or layout on the day it lands, and what each does then (lesson z-design/new-rules-migrate-existing-work).

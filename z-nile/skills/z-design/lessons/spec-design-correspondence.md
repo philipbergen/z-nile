@@ -28,6 +28,8 @@ c0260 design reviews 006 and 007: beside every refusal case add one where the ac
 **Also:** c0279 design review 002 F3: a Rules row's mutant has to die because of that row's rule: the row for the silent hold after a stop named a mutant (the stop replaced by `true`, no marker) that fails with or without the hold. Weaken the rule's mechanism (the hold from 120 s to 20 s) and check that the row's mutant then survives; if it still dies, it tests something else.
 Note (c0246 round 7): when a function's answer gains a value (a boolean becomes "nested" | "link" | nil), re-derive each row's mutant for the new value, and make a fixture that must stay clean assert no line at all, not only the absence of one line.
 
+Note (d0331 design review 001 F1, F4): a decision tested only as a pure function is not tested at the command. Each value of each input the caller computes (main moved, bases put back, the attempt) needs a case through the command, or a caller that hard-codes one input passes. And a criterion whose check runs a whole spec file is only as narrow as the file: run a fixture spec once with `--out` and let each criterion name its own cases.
+
 c0302 design review 001 F5: a Non-goal ("mainTip keeps its refusal") was a rule with no Rules row, and the spec the Design cited for it had never existed. The design's own rejected option passed every check. A Non-goal that says existing behaviour stays names the spec that pins it, checked with `ls`, or adds one.
 
 c0270 design review 001 F4: the sentences that decide whether a hit stops the session (yours, "or none", "a merged one is history") had no needle, so four plausible rewrites passed every case. The classification is the rule: pin each sentence.

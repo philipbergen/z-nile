@@ -1,0 +1,12 @@
+start: 2026-11-15 12:12:00 PST  load averages: 9.17 9.55 9.81
+head: 0e79784e3  env: (none)
+bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+FAIL tests/acceptance/c0117/control-cli-mut.spec.luau :: a step dies with its dispatcher; the dead run is lost, never resumed, and retry takes it over
+     /private/var/folders/b1/97q05hyx277_zqbc5mcchvlw0000gn/T/c0287-mut.s7Fg5e/r/z-nile/tests/acceptance/c0117/control-cli-mut.spec:162: expected true, got false
+1 passed, 1 failed, 1 spec files
+sweeper: stopped 4 process(es) the specs left running
+exit: 1  seconds: 65
+end: 2026-11-15 12:13:05 PST  load averages: 9.90 9.73 9.85
+mutant: M2 (a clone of 0e79784e3 under $TMPDIR)
+ z-nile/engine/runner.luau | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)

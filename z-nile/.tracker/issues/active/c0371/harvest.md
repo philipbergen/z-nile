@@ -1,0 +1,43 @@
+- design-review-001 F1: z-design/one-reading-per-value
+- design-review-001 F2: zz-test/shell-readers-carry-state-across-lines
+- design-review-001 F3: z-design/never-narrow-captured-scope
+- design-review-001 F4: zz-test/shell-rules-key-on-command-position
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: z-design/declare-what-full-runs-covered
+- design-review-001 F7: zz-test/moved-rules-pin-the-old-caller
+- design-review-001 F8: z-design/new-rules-migrate-existing-work
+- design-review-001 F9: one-off: the size field was left out of the first draft
+- design-review-001 F10: one-off: the Affected specs section pasted grep hits as the selector's output
+- design-review-001 F11: one-off: an experiment reasoned that a cheap run could answer
+- design-review-001 F12: z-design/check-paths-from-the-home
+- design-review-001 F13: z-design/spec-design-correspondence
+- note a prep that changes a promoted spec searched the unfinished items for it only after the review found c0141: z-design/quote-other-preps-before-promising
+- design-review-002 F1: zz-test/shell-readers-carry-state-across-lines
+- design-review-002 F2: zz-test/shell-readers-carry-state-across-lines
+- design-review-002 F3: zz-test/shell-readers-carry-state-across-lines
+- design-review-002 F4: zz-test/shell-rules-key-on-command-position
+- design-review-002 F5: zz-test/one-rule-one-function
+- design-review-002 F6: z-design/spec-design-correspondence
+- design-review-002 F7: zz-test/seed-every-enumerated-case
+- design-review-002 F8: z-design/design-the-execution-window
+- design-review-002 F9: z-design/restated-rules-move-together
+- note a live-tree case that stays green after a rule change was re-run with each defect fixed alone (c0292 passed only because two defects cancelled): zz-test/shell-readers-carry-state-across-lines
+- design-review-003 F1: zz-test/shell-readers-carry-state-across-lines
+- design-review-003 F2: zz-test/shell-readers-carry-state-across-lines
+- design-review-003 F3: z-design/one-reading-per-value
+- design-review-003 F4: zz-test/one-rule-one-function
+- design-review-003 F5: zz-test/shell-rules-key-on-command-position
+- design-review-003 F6: zz-test/seed-every-enumerated-case
+- design-review-003 F7: z-design/spec-design-correspondence
+- note a hand-written shell reader is not proven by review rounds (four rounds, each found a construct it did not model; the user chose known edges): zz-test/measure-hand-written-readers-on-the-corpus
+- design-review-004 F1: zz-test/shell-rules-key-on-command-position
+- design-review-004 F2: zz-test/measure-hand-written-readers-on-the-corpus
+- design-review-004 F3: zz-test/shell-readers-carry-state-across-lines
+- design-review-004 F4: zz-test/one-rule-one-function
+- design-review-004 F5: zz-test/seed-every-enumerated-case
+- design-review-004 F6: z-design/restated-rules-move-together
+- design-review-004 F7: zz-test/shell-rules-key-on-command-position
+- design-review-005 F1: zz-test/measure-hand-written-readers-on-the-corpus
+- design-review-005 F2: z-design/restated-rules-move-together
+- design-review-005 F3: zz-test/seed-every-enumerated-case
+- design-review-005 F4: z-design/spec-design-correspondence
