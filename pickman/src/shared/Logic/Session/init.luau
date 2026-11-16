@@ -25,7 +25,15 @@
 -- tick that was in play decides: this step's tick when the step began in play, and the previous tick when it
 -- began already paused (Session.kill happens between steps, after Session.step has moved the clock). A hop that
 -- has reached step 2 keeps its tick, so the descent still shows.
+--
+-- A boost intent (Boost.INTENT, f0143) shares that limit too, at most one per tick, and also queues a Forward, so it
+-- cancels a buffered turn as W does whatever input sent it. It starts a boost at the start of the player's play in
+-- the step (after the shot and the hop, before the move) if the run is in play and the last boost has run and cooled
+-- down (Boost.canStart); otherwise it does nothing and is not kept. While Boost.active the step's speed is the
+-- level's times Boost.FACTOR, never more than a tile; a wall pick's stop caps it after that. A respawn, a new level
+-- and a new run end the boost and start with one ready.
 local Blaster = require("./Blaster")
+local Boost = require("./Boost")
 local Game = require("./Game")
 local Ghosts = require("./Ghosts")
 local Hop = require("./Hop")
@@ -92,6 +100,7 @@ export type Frame = {
 	walls: Walls?, -- the picked holes and the marked walls (f0126; always set by Session.frame)
 	pick: Pick?, -- the pick under way, nil when none
 	boon: BoonGrant?, -- the latest boon a finished pick granted, nil before any
+	boosted: number?, -- the tick the latest boost started (f0143), nil before any
 }
 -- f0126: `opened` are the walls picked open since the maze was fresh, in the order they opened; `marked` the walls
 -- that can be picked now.
@@ -140,6 +149,8 @@ type Member = {
 	pick: Pick?,
 	longHops: boolean, -- the jumps boon, until the maze is fresh again
 	boon: BoonGrant?,
+	boost: boolean, -- a boost asked for this tick (f0143)
+	boosted: number?, -- the tick the latest boost started
 }
 export type Session = {
 	tick: number, -- steps completed
@@ -262,6 +273,8 @@ function Session.join(s: Session, id: PlayerId)
 		pick = nil,
 		longHops = false,
 		boon = nil,
+		boost = false,
+		boosted = nil,
 	}
 	Picks.reset(s.members[id].picks, s.maze)
 end
@@ -287,7 +300,8 @@ function Session.submit(s: Session, id: PlayerId, raw: any): (boolean, string?)
 	local fire: Maze.Heading? = Blaster.heading(raw)
 	local hop = Hop.isIntent(raw)
 	local pick = Picks.isIntent(raw)
-	if fire == nil and not hop and not pick and not Movement.isIntent(raw) then
+	local boost = Boost.isIntent(raw)
+	if fire == nil and not hop and not pick and not boost and not Movement.isIntent(raw) then
 		return false, "invalid intent"
 	end
 	if pick then
@@ -301,6 +315,14 @@ function Session.submit(s: Session, id: PlayerId, raw: any): (boolean, string?)
 	local pending = #member.queue + (if member.fire then 1 else 0) + (if member.hop then 1 else 0)
 	if pending >= s.config.maxIntentsPerTick then
 		return false, "rate limited"
+	end
+	if boost then
+		if member.boost then
+			return false, "rate limited" -- one boost a tick
+		end
+		member.boost = true
+		table.insert(member.queue, "Forward") -- cancels a buffered turn as W does, and counts toward the limit
+		return true, nil
 	end
 	if hop then
 		if member.hop then
@@ -337,6 +359,8 @@ local function teleport(s: Session, member: Member, jumpTick: number)
 	member.fire = nil
 	member.hop = false
 	member.hopped = nil
+	member.boost = false
+	member.boosted = nil
 	member.jumpTick = jumpTick
 	member.stall = 0
 	member.armed = 0
@@ -602,6 +626,8 @@ function Session.step(s: Session): { Event }
 		member.fire = nil
 		local hop = member.hop
 		member.hop = false
+		local boost = member.boost
+		member.boost = false
 		-- whether the player moves this tick is decided before the run's phase changes
 		local moving = Game.canMove(member.play)
 		local frightened = member.play.frightened > 0
@@ -637,11 +663,20 @@ function Session.step(s: Session): { Event }
 			table.insert(out, { kind = "Hopped", player = id })
 			stopPick(s, member, id, "hopped", out)
 		end
+		if boost and Boost.canStart(member.boosted, s.tick) then
+			member.boosted = s.tick
+			table.insert(out, { kind = "Boosted", player = id })
+		end
 		if member.pick and #queue > 0 then
 			stopPick(s, member, id, "moved", out) -- any movement key leaves the wall
 		end
 		local airborne = Hop.airborne(member.hopped, s.tick, member.hopTicks)
-		local speed = Session.speeds(s.config, member.play.level, frightened).player
+		-- the boost first, then a pick's stop below caps the step at the distance to the centre
+		local speed = Boost.speed(
+			Session.speeds(s.config, member.play.level, frightened).player,
+			Boost.active(member.boosted, s.tick),
+			Movement.UNITS
+		)
 		-- an eating pause is owed distance: this step covers what is left of the speed
 		local owed = math.min(member.stall, speed)
 		member.stall -= owed
@@ -816,6 +851,7 @@ function Session.frame(s: Session, id: PlayerId): Frame
 			else nil,
 		hopped = s.members[id].hopped,
 		hopTicks = s.members[id].hopTicks,
+		boosted = s.members[id].boosted,
 		walls = wallsOf(s.members[id]),
 		pick = if s.members[id].pick
 			then {

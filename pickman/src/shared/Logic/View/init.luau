@@ -17,6 +17,7 @@ export type Action =
 	| "Jump"
 	| "Fire"
 	| "Pick"
+	| "Boost" -- no key maps to it; the pad's L3 does (f0143)
 	| "LookUp"
 	| "LookDown"
 	| "LookLeft"
