@@ -1,0 +1,10 @@
+pickman/tests/acceptance/f0125/speeds.spec.luau
+	on every level the shipped config's edge over a hunting ghost is the untuned config's edge times 1.07 to 1.13
+	averaged over the config's levels the gain is 9% to 13%
+	the default config keeps the classic tables exactly
+	the eyes returning home are the untuned config's: f0125's tuning never changes them
+	the player's speed in the shipped config stays within one tile a tick on every level, frightened or not
+	a shipped session's ghosts run at the speeds Session.speeds gives
+	a shipped session's ghosts move exactly the units Session.speeds gives, on level 1 and level 5
+	a ghost tuning that would move a ghost more than one tile a tick is refused; the shipped and default configs are not
+	a ghost tuning that is not a positive finite number is refused when the session is made

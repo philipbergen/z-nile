@@ -2,3 +2,5 @@
 - design-review-001 F2: z-raft/rc-pins-the-claims-it-makes
 - design-review-001 F3: one-off: two wording slips in this raft's own text (a step number and an incomplete list of what a prep landed), with no rule behind them
 - design-review-001 F4: z-raft/grouping-cost-checks-every-wait
+- review-001 F1: zz-execute/measure-from-a-kept-copy
+- review-001 F2: one-off: a case the design deliberately left unchanged, whose title only becomes loose after a later feature; captured as c0342

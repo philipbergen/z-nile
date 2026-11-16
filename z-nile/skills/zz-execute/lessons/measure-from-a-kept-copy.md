@@ -9,3 +9,5 @@ A Verification-log figure computed from a file the tooling rewrites (a duration 
 **Why:** R0055 code review 001 F2: JC1's 730.0 s / 565.6 s were computed from `z-nile/.cache/spec-durations.tsv`, which R0055's own RC0 run rewrote an hour later; the reviewer's recomputation gave 442.2 s / 311.2 s, and the log had no command to say how either was made.
 
 **How to apply:** log the command (or the few lines of code) with each figure, note when its input was written, and copy the input into the item's folder when the figure is an acceptance measurement.
+
+R0101 code review 001 F1: c0176's log said `./zn check` gave 0/2 before the patch, where the design's wiring note expects 1/2; reruns at the base gave 1/2 and the first run's output had not been kept. When a "before the change" result differs from the design's wiring note, keep its output and rerun it at the base in a clone before logging it. Ask: does every "before" figure in the Verification log match the design, and where it does not, does the log say why?
