@@ -11,3 +11,5 @@ A refusal is only as good as its way out. When the way out it names is itself re
 **How to apply:** for each refusal, list the rules its way out must pass, and follow it to a pass in a spec using only the commands the refusal names. If an existing rule blocks every way out, the exception it needs is a decision for the user, made at prep.
 
 **Note (c0306's prep, round 4, 2026-11-14):** follow the way out once for each caller of the refusal, since callers can differ. `ready`'s "make it in a worktree, land it by pull request" was right for a raft's own coherence review. For a grouped member's design review it was wrong: a new round changes the member's design record, and `ready` then refuses it as "changed since grouped". The member's route is unfold, redo the round in its prep, and fold it back.
+
+**Note (c0251's prep, 2026-11-15, design review 001 F5):** the same holds for any command printed on a page, such as the board's re-review command for a flagged round. It must run from the checkout where a person reads it, the main checkout, or say which worktree it needs. The dispatcher refuses zz-review in the main checkout.
