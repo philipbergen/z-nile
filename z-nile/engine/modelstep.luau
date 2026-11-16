@@ -32,6 +32,7 @@ export type Drive = {
 	path: string,
 	guard: ((bin: string) -> string?)?,
 	accept: ((prose: string) -> boolean)?,
+	order: (({ models.Spec }) -> { models.Spec })?, -- c0251: the tries reordered (the picker); identity when nil
 }
 
 export type Driven = {
@@ -93,6 +94,9 @@ end
 -- call and the next model runs. The last attempt's outcome is the result when none is ok.
 function modelstep.drive(d: Drive): Driven
 	local tries = models.tries(d.resolved)
+	if d.order then
+		tries = d.order(tries)
+	end
 	local attempts: { Attempt } = {}
 	local outcome, detail, prose, model = "failed", "no model produced a usable answer", "", ""
 	for i, spec in tries do

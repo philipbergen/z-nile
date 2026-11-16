@@ -1,5 +1,6 @@
 --!strict
--- The roles table: an unknown model fails when the file is loaded, and a challenge drops the author's model.
+-- The roles table: an unknown model fails when the file is loaded, and a challenge keeps the author's model (c0251: the picker
+-- orders it last, nothing drops it or stops the chain).
 local models = require("@znile/engine/models")
 local t = require("@tests/lib/t")
 
@@ -44,7 +45,7 @@ effort = "high"
 fallbacks = ["kimi", "grok"]
 ]]
 
-return t.spec("roles: the model table fails at load, and a challenge skips its author", function(it)
+return t.spec("roles: the model table fails at load, and a challenge keeps its author", function(it)
 	it("an unknown model fails when the file is loaded", function()
 		local ok, err = parse([[
 [roles.idea]
@@ -78,7 +79,7 @@ max_tokens = 300000
 		t.expect(string.find(err, "not a supported CLI", 1, true) ~= nil).toBe(true)
 	end)
 
-	it("tries are the role, then its fallbacks, and the author's model is dropped", function()
+	it("tries are the role, then its fallbacks, and the author's model stays in the list", function()
 		local layer = models.parse(ROLES, ".models.toml")
 		local idea = models.resolve({ layer }, "idea")
 		local ids = {}
@@ -92,10 +93,10 @@ max_tokens = 300000
 		for _, spec in models.tries(challenge) do
 			table.insert(left, models.id(spec))
 		end
-		t.expect(left).toEqual({ "claude-opus-5-5", "grok-4.7" })
+		t.expect(left).toEqual({ "claude-opus-5-5", "kimi-code-k3.1-pro", "grok-4.7" })
 	end)
 
-	it("stops when the only model left is the author's", function()
+	it("does not stop when the only model left is the author's", function()
 		local layer = models.parse(
 			[[
 [roles.idea]
@@ -118,16 +119,10 @@ fallbacks = []
 			".models.toml"
 		)
 		local challenge = models.resolve({ layer }, "idea-challenge")
-		local ok, err = pcall(models.tries, challenge)
-		t.expect(ok).toBe(false)
-		t.expect(
-			string.find(
-				tostring(err),
-				"idea-challenge: the only model left is the author's (claude-fable-5-2); a challenge is never run by the model that wrote the text",
-				1,
-				true
-			) ~= nil
-		).toBe(true)
+		local ok, tries = pcall(models.tries, challenge)
+		t.expect(ok).toBe(true)
+		t.expect(#(tries :: { models.Spec })).toBe(1)
+		t.expect((tries :: { models.Spec })[1].model).toBe("claude-fable-5-2")
 	end)
 
 	it("a fallback's rank, cap and effort are refused at load", function()

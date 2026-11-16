@@ -44,6 +44,7 @@ export type Raft = {
 	doneAt: number?, -- first arrival in done/, UTC epoch seconds (history, else the members' newest spend row)
 	doneFrom: string?, -- "history" or "spend": where doneAt came from
 	rounds: { design: number, code: number }, -- review files of it, its members and the rafts retired into it
+	fallbackReviews: { string }, -- c0251: the newest round of a kind that the writer's own model line ran (a Fallback: line)
 	dispatch: Dispatch?,
 	pr: Pr?, -- c0121 fills these on the served page; the static page leaves them nil
 	checks: Checks?,
@@ -77,6 +78,7 @@ export type Issue = {
 	doneFrom: string?,
 	age: number?, -- seconds between doneAt and the model's asOf
 	spend: Spend, -- from its spend.md (ledger.parse)
+	fallbackReviews: { string }, -- c0251, as on Raft
 	dispatch: Dispatch?,
 	pr: Pr?, -- c0121's, as on Raft
 	checks: Checks?,
@@ -764,6 +766,24 @@ local function reviewFiles(dir: string, into: { string })
 	end
 end
 
+-- c0251: the text of each review file among `paths` (path -> text), for boardview.fallbacks.
+local function reviewTexts(paths: { string }): { [string]: string }
+	local out: { [string]: string } = {}
+	for _, path in paths do
+		local name = string.match(path, "([^/]+)$") or path
+		if
+			(
+				string.match(name, "^design%-review%-%d+%.md$")
+				or string.match(name, "^review%-%d+%.md$")
+				or string.match(name, "^final%-review%-%d+%.md$")
+			) and fs.isFile(path)
+		then
+			out[path] = fs.readFile(path)
+		end
+	end
+	return out
+end
+
 -- Every retired raft (`<root>/rafts/retired/<R-id>`, c0116) with the keeper its `retired:` names.
 local function retiredOf(base: string): { { id: string, dir: string, keeper: string } }
 	local out = {}
@@ -875,6 +895,11 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			doneFrom = if doneAt[i.id] then "history" else nil,
 			age = nil,
 			spend = spendOf(spendRows(spendPath(i.root, i.state, i.id), problems)),
+			fallbackReviews = (function(): { string }
+				local own: { string } = {}
+				reviewFiles(i.dir, own)
+				return boardview.fallbacks(reviewTexts(own))
+			end)(),
 			dispatch = facts.dispatch[i.id],
 		}
 		table.insert(issues, issue)
@@ -950,6 +975,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			doneAt = doneAt[r.id],
 			doneFrom = if doneAt[r.id] then "history" else nil,
 			rounds = { design = 0, code = 0 },
+			fallbackReviews = {},
 			dispatch = facts.dispatch[r.id],
 		}
 		local branch = branchOf(r.id, facts.refs, if hist and hist.activeAt then hist.activeAt[r.id] else nil)
@@ -1132,6 +1158,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	for _, raft in rafts do
 		local design, code = boardview.rounds(files[raft.id])
 		raft.rounds = { design = design, code = code }
+		raft.fallbackReviews = boardview.fallbacks(reviewTexts(files[raft.id]))
 	end
 	local charts: { [string]: ProjectCharts } = {}
 	for _, p in projectList do

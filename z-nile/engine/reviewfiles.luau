@@ -45,12 +45,26 @@ function reviewfiles.judgeDone(dirs: { { id: string, dir: string } }): string?
 	return nil
 end
 
--- Stamps the review file at `path` with the model and effort, or returns the refusal.
-function reviewfiles.stampFile(path: string, model: string, effort: string?): string?
+-- c0251: the models of the previous round across `folders` (each `{ kind, dir }`, kind design, coherence or code),
+-- up to the rank `upto`: the files are read with `read`, the ranking is reviewmodel.priorsOf. A folder of an item that
+-- is not marked `reviews: judged` contributes nothing.
+function reviewfiles.priors(folders: { { kind: string, dir: string } }, upto: number): { string }
+	local read: { { kind: string, files: { [string]: string } } } = {}
+	for _, f in folders do
+		-- an unmarked item rotates on its writers only: its stamped files are no previous round
+		if reviewfiles.markedFolder(f.dir) then
+			table.insert(read, { kind = f.kind, files = reviewfiles.read(f.dir) })
+		end
+	end
+	return reviewmodel.priorsOf(read, upto)
+end
+
+-- Stamps the review file at `path` with the model and effort (and the fallback reason, c0251), or returns the refusal.
+function reviewfiles.stampFile(path: string, model: string, effort: string?, fallback: string?): string?
 	if not fs.isFile(path) then
 		return `{path} does not exist`
 	end
-	local stamped, why = reviewmodel.stamp(fs.readFile(path), model, effort)
+	local stamped, why = reviewmodel.stamp(fs.readFile(path), model, effort, fallback)
 	if not stamped then
 		return `{path} {why}`
 	end
@@ -78,7 +92,8 @@ function reviewfiles.commitReviews(
 	phase: string,
 	model: string?,
 	effort: string?,
-	typedEffort: string?
+	typedEffort: string?,
+	fallbackFor: ((path: string) -> string?)?
 ): string?
 	local status = sh.run("git", { "status", "--porcelain", "--untracked-files=all" })
 	if not status.ok then
@@ -118,7 +133,8 @@ function reviewfiles.commitReviews(
 	end
 	if phase == "code-review" and model then
 		for _, u in unstamped do
-			local why = reviewfiles.stampFile(u.path, model, effort)
+			local why =
+				reviewfiles.stampFile(u.path, model, effort, if fallbackFor then fallbackFor(u.path) else nil)
 			if why then
 				return why
 			end

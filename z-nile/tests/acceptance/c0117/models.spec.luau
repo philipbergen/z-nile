@@ -356,7 +356,8 @@ return t.spec("c0117 .models.toml", function(it)
 			for _, cli in { "claude", "kimi", "grok", "agent" } do
 				t.expect(r.specs[cli] ~= nil).toBe(true)
 			end
-			t.expect(#models.tries(r)).toBe(4)
+			-- c0251: the raft and code-review roles list a Fable member beside the four CLIs
+			t.expect(#models.tries(r)).toBe(if skill == "z-raft" or skill == "zz-review" then 5 else 4)
 		end
 		local idea = models.resolve(layers, "z-ticket")
 		t.expect(idea.specs.claude.model).toBe("claude-fable-5-2")
@@ -374,5 +375,6 @@ return t.spec("c0117 .models.toml", function(it)
 		t.expect(review.specs.grok.rank).toBe(4)
 		t.expect(models.roleFor("zz-review", "raft")).toBe("raft")
 		t.expect(models.roleFor("zz-review", "design")).toBe("design-challenge")
+		t.expect(models.roleFor("zz-review", "stream")).toBe("stream-review")
 	end)
 end)

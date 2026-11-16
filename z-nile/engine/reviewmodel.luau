@@ -70,15 +70,51 @@ function reviewmodel.read(text: string): (string?, string?)
 	return model, effort
 end
 
--- The text with `Model:` (and `Effort:` when given) prepended, or nil and the refusal when it already records a model.
-function reviewmodel.stamp(text: string, model: string, effort: string?): (string?, string?)
+-- c0251: the longest reason a `Fallback:` line carries.
+reviewmodel.FALLBACK_MAX = 120
+
+-- The recorded fallback reason: the first `Fallback:` line within the first 12 lines (the same window as `read`), or nil
+-- when there is none or its reason is empty. The one reader of the line (the dispatcher's supersede rule and the board).
+function reviewmodel.fallbackOf(text: string): string?
+	local n = 0
+	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+		n += 1
+		if n > HEAD_LINES then
+			break
+		end
+		local f = string.match(line, "^Fallback:%s*(.-)%s*$")
+		if f then
+			return if f == "" then nil else f
+		end
+	end
+	return nil
+end
+
+-- The text with `Model:` (and `Effort:`, then `Fallback:` when given) prepended, or nil and the refusal when it already
+-- records a model or the reason is not one short line.
+function reviewmodel.stamp(
+	text: string,
+	model: string,
+	effort: string?,
+	fallback: string?
+): (string?, string?)
 	local had = reviewmodel.read(text)
 	if had ~= nil then
 		return nil, `already records {had}: a review is recorded once; run a new round`
 	end
+	if
+		fallback ~= nil
+		and (string.find(fallback, "\n", 1, true) or #fallback > reviewmodel.FALLBACK_MAX or fallback == "")
+	then
+		return nil,
+			`has a fallback reason that is not one line of at most {reviewmodel.FALLBACK_MAX} characters`
+	end
 	local head = `Model: {model}\n`
 	if effort and effort ~= "" then
 		head ..= `Effort: {effort}\n`
+	end
+	if fallback then
+		head ..= `Fallback: {fallback}\n`
 	end
 	return head .. text, nil
 end
@@ -211,6 +247,73 @@ function reviewmodel.problem(
 		return `{owner}: {name} records {recorded}, which is not a review model (review models: {reviewmodel.describe()}). To go on, {ways}`
 	end
 	return nil
+end
+
+-- c0251: a kind's place in the lifecycle (idea, then design, coherence, code, final). A previous reviewer is one of the
+-- highest rank up to the kind being written.
+reviewmodel.RANK = { design = 1, coherence = 2, code = 3, final = 4 } :: { [string]: number }
+
+-- The rank and round of a review file in a folder of `kind` (design: an issue's; coherence: a raft's own; code: a member's
+-- or a raft's code and final reviews), or nil for any other name.
+local function rankOf(kind: string, name: string): (number?, number?)
+	if kind == "code" then
+		local c = number(name, "^review%-(%d+)%.md$")
+		if c then
+			return reviewmodel.RANK.code, c
+		end
+		local f = number(name, "^final%-review%-(%d+)%.md$")
+		if f then
+			return reviewmodel.RANK.final, f
+		end
+		return nil, nil
+	end
+	local d = number(name, "^design%-review%-(%d+)%.md$")
+	if d then
+		return reviewmodel.RANK[kind], d
+	end
+	return nil, nil
+end
+
+-- The models of the previous round. `folders` is each folder's kind and its review files (name -> text); `upto` the rank
+-- of the kind being written. Files that record no model are skipped; a refused or flagged round counts. The previous round
+-- is the highest rank up to `upto`, then the highest round number at that rank, across all the folders; every folder that
+-- ties on both contributes its model. Bare ids, each once, in folder then file order.
+function reviewmodel.priorsOf(
+	folders: { { kind: string, files: { [string]: string } } },
+	upto: number
+): { string }
+	local best, bestRound = 0, 0
+	type Hit = { rank: number, round: number, model: string }
+	local hits: { Hit } = {}
+	for _, folder in folders do
+		local names: { string } = {}
+		for name in folder.files do
+			table.insert(names, name)
+		end
+		table.sort(names)
+		for _, name in names do
+			local rank, round = rankOf(folder.kind, name)
+			if rank ~= nil and round ~= nil and rank <= upto then
+				local model = reviewmodel.read(folder.files[name])
+				if model ~= nil and model ~= "" then
+					table.insert(
+						hits,
+						{ rank = rank, round = round, model = (string.gsub(model, "%[[^%[%]]*%]$", "")) }
+					)
+					if rank > best or (rank == best and round > bestRound) then
+						best, bestRound = rank, round
+					end
+				end
+			end
+		end
+	end
+	local out: { string } = {}
+	for _, hit in hits do
+		if hit.rank == best and hit.round == bestRound and not table.find(out, hit.model) then
+			table.insert(out, hit.model)
+		end
+	end
+	return out
 end
 
 return reviewmodel

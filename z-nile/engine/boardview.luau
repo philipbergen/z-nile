@@ -1,6 +1,7 @@
 --!strict
 -- The board's pure rules (c0118): an issue's column, raft bands, the done window's age, the UTC week of an instant, a
 -- landed raft's review rounds, and the two charts' weekly series. No reads: board.luau gathers the inputs.
+local reviewmodel = require("./reviewmodel")
 local stats = require("./stats")
 
 local boardview = {}
@@ -151,6 +152,31 @@ function boardview.rounds(paths: { string }): (number, number)
 		end
 	end
 	return design, code
+end
+
+-- c0251: the review files whose newest round of a kind carries a `Fallback:` line. `files` is path -> text of the review
+-- files of one folder set; the newest round of each kind is taken per folder (reviewmodel.newest), so an older flagged round
+-- with a clean newer one is not listed. The paths, sorted.
+function boardview.fallbacks(files: { [string]: string }): { string }
+	local byDir: { [string]: { string } } = {}
+	for path in files do
+		local dir = string.match(path, "^(.*)/[^/]+$") or ""
+		byDir[dir] = byDir[dir] or {}
+		table.insert(byDir[dir], string.match(path, "([^/]+)$") or path)
+	end
+	local out: { string } = {}
+	for dir, names in byDir do
+		for _, kind in { "design", "code" } do
+			for _, name in reviewmodel.newest(names, kind) do
+				local path = if dir == "" then name else `{dir}/{name}`
+				if reviewmodel.fallbackOf(files[path]) ~= nil then
+					table.insert(out, path)
+				end
+			end
+		end
+	end
+	table.sort(out)
+	return out
 end
 
 -- The range's first instant: `asOf` minus its days, or the earliest of `ats` for all history (nil when empty).

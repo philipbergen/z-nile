@@ -6,10 +6,14 @@
 -- Contract for the Python port. One shape. A role names what belongs to the stage: `model`, `cli`, `runtime`,
 -- `rank`, `max_tokens`, `effort`, and `fallbacks` (CLI names, in order). A fallback names what belongs to the
 -- model: `[fallback.<cli>]` has `model`, `runtime`, and anything only that CLI needs (`max_calls` and
--- `max_minutes` for `agent`). A try is the role's rank, cap and effort on the fallback's model. A challenge
--- role sets `author` to the role that wrote the text; a try whose model id equals that author's is dropped,
--- and an empty list fails at resolve. A role or fallback that names an unknown model or CLI fails in `parse`
--- (when the file is loaded), not when the stage runs. There is no `order` and no `[<skill>.<cli>]` table.
+-- `max_minutes` for `agent`). A try is the role's rank, cap and effort on the fallback's model. A role's pool may
+-- hold several models on one CLI (c0251): `[member.<name>]` has `cli`, `model`, `runtime` (and the caps), and a
+-- role's `pool = [names]` lists them, tried after the role's own model and before its CLI `fallbacks`. `[families]`
+-- maps a model line to its id prefixes (family.luau). A role with `rotate = true` is ordered by the picker
+-- (reviewpool.luau); `author` is only the stand-in for the model that wrote the text when no record says
+-- (authorship.luau): no try is dropped for it and the chain never stops on it. A role, fallback or member that
+-- names an unknown model or CLI fails in `parse` (when the file is loaded), not when the stage runs. There is no
+-- `order` and no `[<skill>.<cli>]` table.
 --
 --   [roles.idea]
 --   model = "..."          -- a model id of `cli` (claude-…, grok-…, kimi-code-…, or the agent's id)
@@ -20,7 +24,15 @@
 --   effort = "medium"      -- the stage's: the primary and every fallback try carry it
 --   fallbacks = ["kimi", "grok", "agent"]
 --   [roles.idea-challenge]
---   author = "idea"        -- never run this role on the author's model
+--   author = "idea"        -- the role whose first choice stands in for the text's writer
+--   rotate = true          -- order the tries by family away from the writer (reviewpool)
+--   pool = ["fable"]       -- more models on a CLI, after the role's own, before its fallbacks
+--   [member.fable]
+--   cli = "claude"
+--   model = "claude-fable-5-2"
+--   runtime = "claude-cli"
+--   [families]
+--   opus = ["claude-opus-"]
 --   [fallback.kimi]
 --   model = "..."
 --   runtime = "kimi-cli"
@@ -32,6 +44,7 @@
 --   [dispatch]
 --   auto_merge = ["prep", "raft"]
 --   stall_seconds = 300
+local family = require("./family")
 local fs = require("@lune/fs")
 local ledger = require("./ledger")
 local serde = require("@lune/serde")
@@ -83,23 +96,30 @@ export type Spec = {
 	maxTokens: number,
 	maxCalls: number?, -- the model-call cap of a CLI with no running token count (agent)
 	maxMinutes: number?, -- its wall-time ceiling beside max_calls (review 003 F7: fail closed)
+	member: string?, -- c0251: the `[member.<name>]` this try came from
 }
 export type Settings = { autoMerge: { string }, stallSeconds: number, toolSeconds: number }
--- One parsed file: its dispatch settings, its roles and its fallbacks.
+-- One parsed file: its dispatch settings, its roles, its fallbacks, its pool members and its families.
 export type Layer = {
 	path: string,
 	settings: { [string]: any },
 	roles: { [string]: { [string]: any } },
 	fallbacks: { [string]: { [string]: any } },
+	members: { [string]: { [string]: any } },
+	families: family.Families,
 }
--- A skill resolved on one walk: the CLI order, the specs of the CLIs that name the skill, and the settings.
+-- A skill resolved on one walk: the tries in order (`pool`), the per-CLI view of them (`order`: the CLIs in the order of
+-- their first try; `specs`: each CLI's first try), and the settings.
 export type Resolved = {
 	skill: string,
 	order: { string },
 	specs: { [string]: Spec },
+	pool: { Spec },
 	settings: Settings,
 	authorModel: string?,
 	fromRoles: boolean?,
+	rotate: boolean?, -- c0251: order the tries by family (reviewpool)
+	families: family.Families?, -- the walk's family table, for the picker
 }
 
 local function isCli(name: string): boolean
@@ -130,7 +150,8 @@ function models.parse(text: string, path: string): Layer
 	if not ok then
 		error(`{path}: {firstLine(decoded)}`, 0)
 	end
-	local layer: Layer = { path = path, settings = {}, roles = {}, fallbacks = {} }
+	local layer: Layer =
+		{ path = path, settings = {}, roles = {}, fallbacks = {}, members = {}, families = {} }
 	for key, value in decoded :: { [string]: any } do
 		if key == "order" then
 			error(`{path}: order is gone; a role names its cli, then its fallbacks`, 0)
@@ -166,7 +187,35 @@ function models.parse(text: string, path: string): Layer
 					)
 				end
 			end
-		elseif key == "roles" or key == "fallback" then
+		elseif key == "families" then
+			if type(value) ~= "table" then
+				error(`{path}: [families] is a table of family = [id prefixes]`, 0)
+			end
+			local owner: { [string]: string } = {}
+			for name, prefixes in value do
+				if type(name) ~= "string" or name == "" then
+					error(`{path}: families has a family with no name`, 0)
+				end
+				if type(prefixes) ~= "table" or #(prefixes :: { any }) == 0 then
+					error(`{path}: families.{name} is a list of id prefixes`, 0)
+				end
+				local out: { string } = {}
+				for _, prefix in prefixes :: { any } do
+					if type(prefix) ~= "string" or prefix == "" then
+						error(`{path}: families.{name} has an empty or non-string prefix`, 0)
+					end
+					if owner[prefix] ~= nil then
+						error(
+							`{path}: families.{name} lists the prefix {prefix}, which families.{owner[prefix]} already lists`,
+							0
+						)
+					end
+					owner[prefix] = name
+					table.insert(out, prefix)
+				end
+				layer.families[name] = out
+			end
+		elseif key == "roles" or key == "fallback" or key == "member" then
 			if type(value) ~= "table" then
 				error(`{path}: [{key}] is a table`, 0)
 			end
@@ -176,7 +225,27 @@ function models.parse(text: string, path: string): Layer
 				end
 				local out: { [string]: any } = {}
 				for field, v in fields do
-					if key == "roles" and field == "fallbacks" then
+					if key == "roles" and field == "rotate" then
+						if type(v) ~= "boolean" then
+							error(`{path}: roles.{name}.rotate is true or false`, 0)
+						end
+						out.rotate = v
+					elseif key == "roles" and field == "pool" then
+						if type(v) ~= "table" then
+							error(`{path}: roles.{name}.pool is a list of [member.<name>] names`, 0)
+						end
+						local seenMember: { [string]: boolean } = {}
+						for _, member in v do
+							if type(member) ~= "string" or member == "" then
+								error(`{path}: roles.{name}.pool names a member that is not a name`, 0)
+							end
+							if seenMember[member] then
+								error(`{path}: roles.{name}.pool names {member} twice`, 0)
+							end
+							seenMember[member] = true
+						end
+						out.pool = table.clone(v)
+					elseif key == "roles" and field == "fallbacks" then
 						if type(v) ~= "table" then
 							error(`{path}: roles.{name}.fallbacks is a list of CLIs`, 0)
 						end
@@ -211,21 +280,31 @@ function models.parse(text: string, path: string): Layer
 							)
 						end
 						out.cli = v
+					elseif key == "member" and field == "cli" then
+						if type(v) ~= "string" or not isCli(v) then
+							error(
+								`{path}: member.{name}.cli is {tostring(v)}, which is not a supported CLI ({list(
+									models.CLIS
+								)})`,
+								0
+							)
+						end
+						out.cli = v
 					elseif key == "fallback" and field == "cli" then
 						error(`{path}: fallback.{name}.cli is the table name, not a field`, 0)
 					elseif
-						key == "fallback"
+						(key == "fallback" or key == "member")
 						and (field == "rank" or field == "max_tokens" or field == "effort")
 					then
-						error(`{path}: fallback.{name}.{field} belongs to the role, not the fallback`, 0)
+						error(`{path}: {key}.{name}.{field} belongs to the role, not the {key}`, 0)
 					else
 						local want = FIELDS[field]
 						if not want then
 							error(
 								`{path}: {key}.{name}.{field} is not a field (model, effort, rank, runtime, max_tokens, max_calls, max_minutes{if key
 										== "roles"
-									then ", fallbacks, author"
-									else ""})`,
+									then ", fallbacks, author, rotate, pool"
+									else if key == "member" then ", cli" else ""})`,
 								0
 							)
 						end
@@ -254,6 +333,14 @@ function models.parse(text: string, path: string): Layer
 				if key == "fallback" and not isCli(name) then
 					error(`{path}: [fallback.{name}]: {name} is not a supported CLI ({list(models.CLIS)})`, 0)
 				end
+				if key == "member" then
+					if isCli(name) then
+						error(
+							`{path}: [member.{name}]: {name} is a CLI name; a member has a name of its own (a [fallback.{name}] is the CLI's)`,
+							0
+						)
+					end
+				end
 				local boundCli = if key == "fallback" then name else out.cli
 				if out.model ~= nil and type(boundCli) == "string" and isCli(boundCli) then
 					if string.match(out.model, MODEL_OF_CLI[boundCli]) == nil then
@@ -272,13 +359,15 @@ function models.parse(text: string, path: string): Layer
 				end
 				if key == "roles" then
 					layer.roles[name] = out
+				elseif key == "member" then
+					layer.members[name] = out
 				else
 					layer.fallbacks[name] = out
 				end
 			end
 		else
 			error(
-				`{path}: [{key}] is not read (the file has roles, fallback and dispatch; skill tables are gone)`,
+				`{path}: [{key}] is not read (the file has roles, fallback, member, families and dispatch; skill tables are gone)`,
 				0
 			)
 		end
@@ -361,9 +450,11 @@ function models.roleFor(skill: string, mode: string?): string?
 			return "final-review"
 		elseif mode == "raft" then
 			-- The raft and a review of it are both Opus in the owner's table, as design and
-			-- design-challenge are. A challenge role with author = "raft" would drop Opus and
-			-- the review would run a fallback, so the same-model stop is pointless here.
+			-- design-challenge are; the picker (reviewpool) rotates the review away from the writer.
 			return "raft"
+		elseif mode == "stream" then
+			-- c0251: a stream review is the one cheap review, on a role of its own
+			return "stream-review"
 		end
 		return "code-review"
 	end
@@ -455,14 +546,28 @@ local function needsCallCap(spec: Spec, path: string, label: string)
 	end
 end
 
--- The role on a walk. A closer file replaces only the keys it sets. The try order is the role's CLI, then its
--- fallbacks. `author` names another role: that role's model is dropped from the tries.
+-- c0251: the family table of a walk: a closer file replaces only the family keys it sets.
+function models.families(layers: { Layer }): family.Families
+	local out: family.Families = {}
+	for _, layer in layers do
+		for name, prefixes in layer.families do
+			out[name] = table.clone(prefixes)
+		end
+	end
+	return out
+end
+
+-- The role on a walk. A closer file replaces only the keys it sets. The tries are the role's own model, the `pool`
+-- members in the order listed, then the `fallbacks` CLIs in order. `order` and `specs` are the per-CLI view of them
+-- (the CLIs in the order of their first try, and each CLI's first try). `author` names another role whose first choice
+-- stands in for the model that wrote the text (authorship): no try is dropped for it.
 function models.resolveRole(layers: { Layer }, role: string): Resolved
 	if #layers == 0 then
 		error(`no {models.FILE} on the walk: nothing defaults (add one at the repository root)`, 0)
 	end
 	local fields: { [string]: any } = {}
 	local fallbacks: { [string]: { [string]: any } } = {}
+	local members: { [string]: { [string]: any } } = {}
 	local named = false
 	for _, layer in layers do
 		local mine = layer.roles[role]
@@ -478,6 +583,12 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
 				fallbacks[cli][k] = v
 			end
 		end
+		for name, f in layer.members do
+			members[name] = members[name] or {}
+			for k, v in f do
+				members[name][k] = v
+			end
+		end
 	end
 	if not named then
 		error(`no {models.FILE} on the walk names role {role}`, 0)
@@ -485,17 +596,45 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
 	local where = layers[#layers].path
 	local primary = specFrom(fields.cli, fields, where, `roles.{role}`)
 	needsCallCap(primary, where, `roles.{role}`)
-	local order = { primary.cli }
-	local specs: { [string]: Spec } = { [primary.cli] = primary }
+	local pool: { Spec } = { primary }
+	local function add(spec: Spec, label: string)
+		for _, had in pool do
+			if had.cli == spec.cli and had.model == spec.model then
+				error(
+					`{where}: {role}: {label} repeats {spec.cli} {spec.model}, which another try of the role already is`,
+					0
+				)
+			end
+		end
+		table.insert(pool, spec)
+	end
+	for _, name in fields.pool or {} do
+		local m = members[name]
+		if not m then
+			error(`{where}: {role}: pool names {name}, which has no [member.{name}] on the walk`, 0)
+		end
+		if m.cli == nil then
+			error(`{where}: member.{name} has no cli`, 0)
+		end
+		local spec = fallbackTry(m.cli, m, fields, where, `member.{name}`)
+		spec.member = name
+		add(spec, `member.{name}`)
+	end
 	for _, cli in fields.fallbacks or {} do
 		local fb = fallbacks[cli]
 		if not fb then
 			error(`{role}: fallback {cli} has no [fallback.{cli}] on the walk`, 0)
 		end
-		if specs[cli] == nil then
-			local spec = fallbackTry(cli, fb, fields, where, `fallback.{cli}`)
-			table.insert(order, cli)
-			specs[cli] = spec
+		if cli ~= primary.cli then
+			add(fallbackTry(cli, fb, fields, where, `fallback.{cli}`), `fallback.{cli}`)
+		end
+	end
+	local order: { string } = {}
+	local specs: { [string]: Spec } = {}
+	for _, spec in pool do
+		if specs[spec.cli] == nil then
+			specs[spec.cli] = spec
+			table.insert(order, spec.cli)
 		end
 	end
 	local authorModel: string? = nil
@@ -506,13 +645,27 @@ function models.resolveRole(layers: { Layer }, role: string): Resolved
 		local author = models.resolveRole(layers, fields.author)
 		authorModel = models.id(author.specs[author.order[1]])
 	end
+	local families = models.families(layers)
+	if fields.rotate == true then
+		for _, spec in pool do
+			if family.of(spec.model, families) == nil then
+				error(
+					`{where}: {role} has rotate = true and {spec.model} belongs to no family: add its id prefix to [families]`,
+					0
+				)
+			end
+		end
+	end
 	return {
 		skill = role,
 		order = order,
 		specs = specs,
+		pool = pool,
 		settings = models.settings(layers),
 		authorModel = authorModel,
 		fromRoles = true,
+		rotate = fields.rotate == true,
+		families = families,
 	}
 end
 
@@ -541,8 +694,9 @@ function models.strongest(specs: { Spec }): Spec
 	return best
 end
 
--- A raft's step: `order` and settings from the raft's own walk, and for each CLI the strongest of its members'
--- specs (rafts never cross projects, so the members share the walk down to their project).
+-- A raft's step: `order`, `pool` and settings from the raft's own walk, and for each try (keyed by CLI and model) the
+-- strongest of its members' same-keyed specs (rafts never cross projects, so the members share the walk down to their
+-- project). A try only a member has is ignored, as a CLI only a member has is.
 function models.forRaft(own: Resolved, members: { Resolved }): Resolved
 	if #members == 0 then
 		error(`{own.skill}: a raft with no member has no spec`, 0)
@@ -559,28 +713,41 @@ function models.forRaft(own: Resolved, members: { Resolved }): Resolved
 			specs[cli] = models.strongest(candidates)
 		end
 	end
-	return { skill = own.skill, order = own.order, specs = specs, settings = own.settings }
+	local pool: { Spec } = {}
+	for _, spec in own.pool do
+		local candidates: { Spec } = {}
+		for _, m in members do
+			for _, theirs in m.pool do
+				if theirs.cli == spec.cli and theirs.model == spec.model then
+					table.insert(candidates, theirs)
+				end
+			end
+		end
+		if #candidates > 0 then
+			table.insert(pool, models.strongest(candidates))
+		elseif specs[spec.cli] ~= nil then
+			table.insert(pool, spec)
+		end -- a CLI no member has is not tried, as before
+	end
+	return {
+		skill = own.skill,
+		order = own.order,
+		specs = specs,
+		pool = pool,
+		settings = own.settings,
+		rotate = own.rotate,
+		families = own.families,
+	}
 end
 
--- The CLIs to try, in order: those of `order` that have a spec for the skill. Empty is an error naming the skill.
+-- The tries, in order: the role's pool (its own model, its members, its CLI fallbacks). Empty is an error naming the
+-- skill. c0251: no try is dropped for the model that wrote the text, and the chain never stops on it; a role with
+-- `rotate` is ordered by reviewpool.order over this list.
 function models.tries(r: Resolved): { Spec }
-	local out: { Spec } = {}
-	for _, cli in r.order do
-		local spec = r.specs[cli]
-		if spec and (r.authorModel == nil or models.id(spec) ~= r.authorModel) then
-			table.insert(out, spec)
-		end
-	end
-	if #out == 0 and r.authorModel ~= nil then
-		error(
-			`{r.skill}: the only model left is the author's ({r.authorModel}); a challenge is never run by the model that wrote the text`,
-			0
-		)
-	end
-	if #out == 0 then
+	if #r.pool == 0 then
 		error(`{r.skill}: no CLI in the order ({list(r.order)}) has a spec for it`, 0)
 	end
-	return out
+	return table.clone(r.pool)
 end
 
 -- The model id a spend row records: the model, and its effort when the spec sets one (model, then a hyphen, then the effort).
@@ -599,7 +766,7 @@ function models.knownModels(layers: { Layer }): { string }
 	local seen: { [string]: boolean } = {}
 	local out: { string } = {}
 	for _, layer in layers do
-		for _, group in { layer.roles, layer.fallbacks } do
+		for _, group in { layer.roles, layer.fallbacks, layer.members } do
 			for _, fields in group do
 				local model = fields.model
 				if type(model) == "string" and model ~= "" then

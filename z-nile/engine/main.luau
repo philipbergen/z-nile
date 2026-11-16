@@ -4437,6 +4437,29 @@ local function modelOption(what: string, opts: { [string]: { string } }, phase: 
 	return raw
 end
 
+-- c0251: the reason an interactive review on `model` is a fallback, from the pool's plan for the item `id` and the review
+-- `mode` (design, raft, code, final); nil when it is not one, and nil when no plan can be built (no rotating role, no
+-- .models.toml on main, an unknown item). The lead types no reason: the tool derives it.
+local function interactiveFallback(id: string, mode: string, model: string): string?
+	local ok, plan = pcall(function()
+		-- the checkout's own .models.toml files: the lead types the model, so this only decides a flag, and needs no origin
+		local layers = models.walk(".", store.get(id).dir)
+		return require("./dispatcher").plan(
+			"zz-review",
+			id,
+			nil,
+			mode,
+			"",
+			models.resolve(layers, "zz-review", mode),
+			layers
+		)
+	end)
+	if not ok or not (plan :: any).rotate then
+		return nil
+	end
+	return require("./reviewpool").interactiveReason(plan :: any, model)
+end
+
 -- The issues a commit is attributed to: the ones named, else the focus, else the raft's members.
 local function commitIssues(raft: store.Item, issueIds: { string }): ({ store.Item }, string)
 	local issues: { store.Item } = {}
@@ -4609,7 +4632,19 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 		phase,
 		model,
 		require("./reviewfiles").effortOption(opts, model),
-		require("./reviewfiles").typedEffort(opts)
+		require("./reviewfiles").typedEffort(opts),
+		function(path: string): string?
+			local base = string.match(path, "([^/]+)$") or ""
+			local folder = string.match(path, "([^/]+)/[^/]+$")
+			local mode = if string.sub(base, 1, 13) == "final-review-"
+				then "final"
+				elseif string.sub(base, 1, 7) == "review-" then "code"
+				else nil
+			if not folder or not mode or not string.match(folder, "^[fdcR]%d%d%d%d$") then
+				return nil
+			end
+			return interactiveFallback(folder, mode :: string, model :: string)
+		end
 	)
 	if refused then
 		fail(refused)
@@ -6566,7 +6601,8 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
 		local why = require("./reviewfiles").stampFile(
 			`{dir}/{reviewFile}.md`,
 			model :: string,
-			require("./reviewfiles").effortOption(opts, model)
+			require("./reviewfiles").effortOption(opts, model),
+			interactiveFallback(id, if raftItem then "raft" else "design", model :: string)
 		)
 		if why then
 			fail(why)
@@ -6938,7 +6974,8 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		resolved: models.Resolved,
 		prompt: string,
 		phase: string,
-		accept: (string) -> boolean
+		accept: (string) -> boolean,
+		order: (({ models.Spec }) -> { models.Spec })?
 	): (string, string)
 		local okDrive, drivenOrErr = pcall(function()
 			return modelstep.drive({
@@ -6948,6 +6985,7 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 				stateDir = `.cache/idea-run/{id}/{phase}`,
 				path = process.env.PATH or "/usr/bin:/bin",
 				guard = guard,
+				order = order,
 				accept = function(raw)
 					return accept(idea.prose(raw))
 				end,
@@ -7007,12 +7045,25 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 	challenge.authorModel = wrote
 	local findings: { idea.Finding } = {}
 	local verdict: string? = nil
+	-- c0251: the challenge takes the same picker as every review, with the model that really wrote the draft as the author
+	local writer = models.modelOf(wrote, models.knownModels(layers))
+	local ordering: (({ models.Spec }) -> { models.Spec })? = nil
+	if challenge.rotate then
+		local reviewpool = require("./reviewpool")
+		ordering = function(tries: { models.Spec }): { models.Spec }
+			local ordered: { models.Spec } = {}
+			for _, pick in reviewpool.order(tries, challenge.families or {}, { writer }, {}) do
+				table.insert(ordered, pick.spec)
+			end
+			return ordered
+		end
+	end
 	run(challenge, idea.challengePrompt(prose), "idea-challenge", function(text)
 		local found, said = idea.parseReview(text)
 		findings = found
 		verdict = said
 		return said == "approve" or said == "revise"
-	end)
+	end, ordering)
 	local body = drafted :: idea.Draft
 	local answers: { [string]: string } = {}
 	if not (verdict == "approve" and #findings == 0) then

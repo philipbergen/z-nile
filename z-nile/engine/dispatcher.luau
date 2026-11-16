@@ -14,12 +14,15 @@
 -- and <step>-<mode>-<n>/ for a step a step dispatched (a review), with its own state; .cache/dispatch/broker/.
 local adapters = require("./adapters")
 local audit = require("./audit")
+local authorread = require("./authorread")
+local authorship = require("./authorship")
 local broker = require("./broker")
 local buffer = require("./buffer")
 local costrow = require("./costrow")
 local cred = require("./credential")
 local dispatch = require("./dispatch")
 local fs = require("@lune/fs")
+local ledger = require("./ledger")
 local models = require("./models")
 local modelstep = require("./modelstep")
 local openlist = require("./openlist")
@@ -27,6 +30,7 @@ local process = require("@lune/process")
 local projects = require("./projects")
 local raftcheck = require("./raftcheck")
 local reviewmodel = require("./reviewmodel")
+local reviewpool = require("./reviewpool")
 local runner = require("./runner")
 local serde = require("@lune/serde")
 local sh = require("../lib/sh")
@@ -769,6 +773,117 @@ local function keepBeating(dir: string): () -> ()
 	end
 end
 
+-- c0251: the item folders a review mode reads its writers from (authorread) and its previous rounds from (reviewfiles.priors).
+local function reviewDirs(id: string): { string }
+	local item = store.get(id)
+	if item.kind == "issue" then
+		return { item.dir }
+	end
+	local out: { string } = {}
+	for _, m in store.members(id) do
+		table.insert(out, m.dir)
+	end
+	return out
+end
+
+-- c0251: the one plan of a model step: the tries in the order to run them, with each one's tier. `resolved` is the step's
+-- role (given, or resolved here). A role without `rotate` runs in the toml order, all tier 1 (as before c0251). A role
+-- with it is ordered by reviewpool.order over the writers of the mode's last step (authorread; `authorOpt` or ZN_MODEL
+-- is the live author) and the previous round's reviewers (a stream review and an idea review have none).
+function dispatcher.plan(
+	step: string,
+	id: string,
+	project: string?,
+	mode: string?,
+	authorOpt: string?,
+	given: models.Resolved?,
+	layersGiven: { models.Layer }?
+): reviewpool.Plan
+	if authorOpt ~= nil and authorOpt ~= "" and not ledger.isModel(authorOpt) then
+		error(`--author takes one model id (letters, digits, '.', '_' and '-'), not {authorOpt}`, 0)
+	end
+	local resolved = given or dispatcher.resolve(step, id, project, mode)
+	local tries = models.tries(resolved)
+	local families = resolved.families or {}
+	local reviewMode = if step == "zz-review" then (mode or "code") else mode
+	if not resolved.rotate or id == "" or reviewMode == nil or authorship.STEPS[reviewMode] == nil then
+		local picks: { reviewpool.Pick } = {}
+		for _, spec in tries do
+			table.insert(picks, { spec = spec, tier = 1, exact = false, family = nil })
+		end
+		return {
+			picks = picks,
+			authors = {},
+			authorFamilies = {},
+			priors = {},
+			priorFamilies = {},
+			provenance = "none",
+			via = "",
+			families = families,
+			rotate = false,
+		}
+	end
+	local item = store.get(id)
+	local layers = layersGiven or walk(item.dir)
+	-- "" is an interactive stamp: no live author, whatever ZN_MODEL holds
+	local live = if authorOpt ~= nil then authorOpt else process.env.ZN_MODEL
+	local dirs = reviewDirs(id)
+	local a = authorread.read(reviewMode, dirs, layers, live, resolved.authorModel)
+	local steps = authorship.STEPS[reviewMode]
+	local last = steps[#steps]
+	local authors: { string } = {}
+	for _, w in a.writers do
+		if w.step == last and not table.find(authors, w.model) then
+			table.insert(authors, w.model)
+		end
+	end
+	local priors: { string } = {}
+	if reviewMode ~= "stream" and reviewMode ~= "idea" then
+		local upto = ({ design = 1, raft = 2, code = 3, final = 4 } :: { [string]: number })[reviewMode] or 0
+		local folders: { { kind: string, dir: string } } = {}
+		if item.kind == "raft" then
+			table.insert(folders, { kind = "coherence", dir = item.dir })
+			table.insert(folders, { kind = "code", dir = item.dir })
+		end
+		for _, dir in dirs do
+			if dir ~= item.dir then
+				table.insert(folders, { kind = "design", dir = dir })
+				table.insert(folders, { kind = "code", dir = dir })
+			end
+		end
+		if item.kind == "issue" then
+			table.insert(folders, { kind = "design", dir = item.dir })
+			table.insert(folders, { kind = "code", dir = item.dir })
+		end
+		priors = require("./reviewfiles").priors(folders, upto)
+	end
+	local picks = reviewpool.order(tries, families, authors, priors)
+	local authorFamilies, priorFamilies = {}, {}
+	for _, m in authors do
+		local f = require("./family").of(m, families)
+		if f and not table.find(authorFamilies, f) then
+			table.insert(authorFamilies, f)
+		end
+	end
+	for _, m in priors do
+		local f = require("./family").of(m, families)
+		if f and not table.find(priorFamilies, f) then
+			table.insert(priorFamilies, f)
+		end
+	end
+	return {
+		picks = picks,
+		authors = authors,
+		authorFamilies = authorFamilies,
+		priors = priors,
+		priorFamilies = priorFamilies,
+		provenance = a.provenance,
+		via = a.via,
+		families = families,
+		rotate = true,
+	}
+end
+
 function dispatcher.modelStep(
 	ctx: Ctx,
 	st: State,
@@ -779,7 +894,13 @@ function dispatcher.modelStep(
 	local mode = opts["--mode"] and opts["--mode"][1]
 	local project = opts["--project"] and opts["--project"][1]
 	local resolved = dispatcher.resolve(step, id, project, mode)
-	local tries = models.tries(resolved)
+	local plan = dispatcher.plan(step, id, project, mode, opts["--author"] and opts["--author"][1], resolved)
+	local picked: { [models.Spec]: reviewpool.Pick } = {}
+	local tries: { models.Spec } = {}
+	for _, pick in plan.picks do
+		picked[pick.spec] = pick
+		table.insert(tries, pick.spec)
+	end
 	local stateDir = st.dir
 	local cwd: string
 	if step == "zz-review" then
@@ -898,7 +1019,7 @@ function dispatcher.modelStep(
 		end
 	end
 	local outcome = "failed"
-	local filedBy: { model: string, effort: string? }? = nil -- c0306: the attempt that wrote the review
+	local filedBy: { model: string, effort: string?, fallback: string? }? = nil -- c0306: the attempt that wrote the review
 	fs.writeDir(stateDir)
 	local landing = `{stateDir}/review.md`
 	if land then
@@ -1058,7 +1179,14 @@ function dispatcher.modelStep(
 		})
 		print(`dispatch: {step} on {spec.cli}: {outcomeNow} ({detail}), {result.tokens} tokens`)
 		outcome = outcomeNow
-		filedBy = { model = spec.model, effort = spec.effort }
+		-- c0251: a try of the writers' own line is a fallback: the file records why, and the board flags it
+		local reason = if picked[spec]
+			then reviewpool.fallbackReason(picked[spec], plan.provenance, plan.via)
+			else nil
+		filedBy = { model = spec.model, effort = spec.effort, fallback = reason }
+		if reason and outcomeNow == "ok" then
+			stdio.ewrite(`dispatch: fallback review: {reason}\n`)
+		end
 		-- a failed attempt's review is moved aside, so only the attempt that ends the step can land one
 		if land and outcomeNow ~= "ok" and fs.isFile(landing) then
 			local aside = `{stateDir}/review-attempt-{#attempts}.md`
@@ -1143,7 +1271,10 @@ function dispatcher.modelStep(
 				local newest = `{cwd}/{l.dir}/{l.prefix}{string.format("%03d", last)}.md`
 				supersedes = fs.isFile(newest)
 					and require("./reviewfiles").markedFolder(`{cwd}/{l.dir}`)
-					and reviewmodel.refused(fs.readFile(newest))
+					and (
+						reviewmodel.refused(fs.readFile(newest))
+						or reviewmodel.fallbackOf(fs.readFile(newest)) ~= nil
+					)
 			end
 			if last >= 1 and not supersedes then
 				-- one round. Historical files stay where they are; a new one is not added.
@@ -1165,7 +1296,7 @@ function dispatcher.modelStep(
 			else
 				local name = string.format("%s%03d.md", l.prefix, last + 1)
 				-- c0306: the dispatcher records the model and effort that wrote the review; the reviewer never does
-				local by = filedBy :: { model: string, effort: string? }
+				local by = filedBy :: { model: string, effort: string?, fallback: string? }
 				local written = fs.readFile(landing)
 				-- a reviewer's own record fails the step in a marked item; an unmarked one is filed as the reviewer wrote it
 				local stamped: string?, refusal: string?
@@ -1175,7 +1306,7 @@ function dispatcher.modelStep(
 				then
 					stamped = written
 				else
-					stamped, refusal = reviewmodel.stamp(written, by.model, by.effort)
+					stamped, refusal = reviewmodel.stamp(written, by.model, by.effort, by.fallback)
 				end
 				if stamped then
 					fs.writeFile(`{cwd}/{l.dir}/{name}`, stamped)
@@ -1884,9 +2015,10 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 			if action.kind == "step" and action.step and dispatch.STEPS[action.step] then
 				local s = dispatch.STEPS[action.step :: string]
 				if s.kind == "model" then
-					local okr, r = pcall(dispatcher.resolve, action.step :: string, action.target or "", nil)
+					local okr, r =
+						pcall(dispatcher.plan, action.step :: string, action.target or "", nil, nil, nil)
 					if okr then
-						for _, line in dispatch.describe(r :: models.Resolved) do
+						for _, line in dispatch.describe(r :: reviewpool.Plan) do
 							print(line)
 						end
 					else
@@ -2186,7 +2318,8 @@ function dispatcher.oneStep(
 		if s.kind == "script" then
 			print(`run={table.concat(dispatch.scriptArgv(step, id), " ")}`)
 		else
-			for _, line in dispatch.describe(dispatcher.resolve(step, id, nil, mode)) do
+			local plan = dispatcher.plan(step, id, nil, mode, opts["--author"] and opts["--author"][1])
+			for _, line in dispatch.describe(plan) do
 				print(line)
 			end
 		end

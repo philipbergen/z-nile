@@ -3,6 +3,7 @@
 -- and the chain: from an item's tracker state, the next step, merge or stop. dispatcher.luau reads the state, runs the
 -- steps and records their spend; it never reads a model's prose to decide.
 local models = require("./models")
+local reviewpool = require("./reviewpool")
 local serde = require("@lune/serde")
 
 local dispatch = {}
@@ -390,16 +391,38 @@ function dispatch.next(f: Facts): Action
 	return { kind = "step", step = "z-run", target = f.id }
 end
 
--- One line per CLI a model step would try, for --dry-run.
-function dispatch.describe(r: models.Resolved): { string }
+-- The lines `--dry-run` prints for a model step (c0251): the pool line (who wrote the text, how sure, who reviewed last),
+-- one line per try in the order the run would take them with its tier, family and whether it would be a fallback, and the
+-- pick (the first try). The run and the dry run use one plan, so they agree.
+function dispatch.describe(plan: reviewpool.Plan): { string }
 	local out: { string } = {}
-	for i, spec in models.tries(r) do
+	if plan.rotate then
+		local authors = if #plan.authors == 0 then "unknown" else table.concat(plan.authors, ",")
+		local previous = if #plan.priors == 0 then "none" else table.concat(plan.priors, ",")
+		table.insert(out, `pool: author={authors} ({plan.provenance} via {plan.via}) previous={previous}`)
+	else
+		table.insert(out, "pool: no rotation (the role is tried in the order of .models.toml)")
+	end
+	for i, p in plan.picks do
+		local spec = p.spec
 		table.insert(
 			out,
 			`try={i} cli={spec.cli} runtime={spec.runtime} model={models.id(spec)} rank={spec.rank} max_tokens={spec.maxTokens}`
 				.. (if spec.maxCalls then ` max_calls={spec.maxCalls}` else "")
 				.. (if spec.maxMinutes then ` max_minutes={spec.maxMinutes}` else "")
+				.. (if spec.member then ` member={spec.member}` else "")
+				.. ` tier={p.tier} family={p.family or "none"} fallback={if reviewpool.fallbackReason(
+						p,
+						plan.provenance,
+						plan.via
+					)
+					then "yes"
+					else "no"}`
 		)
+	end
+	local first = plan.picks[1]
+	if first then
+		table.insert(out, `pick: {first.spec.cli} {first.spec.model}`)
 	end
 	return out
 end

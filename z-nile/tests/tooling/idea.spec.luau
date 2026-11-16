@@ -1,6 +1,6 @@
 --!strict
 -- The idea stage: design refuses an unchallenged idea, an older ticket has no idea key, a failed
--- first model falls through, and the author's model is never its own challenger. Stub CLIs only.
+-- first model falls through, and the author's model is its own challenger only when nothing else is left (c0251). Stub CLIs only.
 local fs = require("@lune/fs")
 local idea = require("@znile/engine/idea")
 local process = require("@lune/process")
@@ -234,7 +234,7 @@ return t.spec("idea: challenged before design, and a fallback is the model the r
 		t.expect(trackerfix.trOk(f, wt, { "status", id })).toBe("preparing")
 	end)
 
-	it("a failed first model falls through, and the author is refused as its own challenger", function()
+	it("a failed first model falls through, and the author's model still challenges when it is all that is left", function()
 		local f = trackerfix.new("idea-stage", { [".models.toml"] = ROLES })
 		local bin = `{f.base}/bin`
 		fs.writeDir(bin)
@@ -273,13 +273,12 @@ return t.spec("idea: challenged before design, and a fallback is the model the r
 			{ "idea", other, "--text", "Same model." },
 			{ PATH = `{bin}:{path}` }
 		)
+		-- c0251: the author's own model is never dropped and the chain never stops on it: the challenge runs on Fable (the stub
+		-- answers a Fable challenge with a draft, not a review, so the step then fails on the answer's shape)
 		t.expect(refused.ok).toBe(false)
-		t.expect(
-			has(
-				refused.stderr,
-				"idea-challenge: the only model left is the author's (claude-fable-5-2); a challenge is never run by the model that wrote the text"
-			)
-		).toBe(true)
+		t.expect(has(refused.stdout, "idea: idea-challenge model claude-fable-5-2")).toBe(true)
+		t.expect(has(refused.stderr, "the only model left is the author's")).toBe(false)
+		t.expect(has(refused.stderr, "idea-challenge: the answer was not in the required shape")).toBe(true)
 		-- an approval with no findings does not call the author again
 		local ideaLines = 0
 		local from = 1

@@ -111,7 +111,7 @@ Unless something blocks, once a person has approved its design, an item is rafte
 - Metrics show the cost per model, from the real model on each spend row. *captured* (c0307)
 
 ### Reviews by different models
-- A reviewer should run on a different model family than the author, and successive rounds rotate. `.models.toml` names a review pool; the dispatcher takes the first member whose family differs from the author's and the previous reviewer's. *captured* (c0251); today `idea-challenge` and `code-review` name an `author`, which drops that model from their lists. *exists*
+- A reviewer should run on a different model family than the author, and successive rounds rotate. `.models.toml` names a review pool and its model lines (`[families]`); the dispatcher takes the first member whose family differs from the author's and the previous reviewer's. *exists* (c0251); a role's `author` only stands in for the writer when no spend row records it, and drops nothing.
 - Same-family review (Opus reviewing Opus) is fine, but it is the fallback and never the only choice: it runs only when no different-family CLI can (out of tokens or quota, CLI missing). It never blocks the chain.
 - Every review records its model and whether it was a fallback. The board flags fallback reviews so you can ask for a cross-model re-review when tokens return. Every finding is still harvested into a skill's lessons.
 
@@ -165,7 +165,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | a raft delivered as a stacked PR set, one layer per issue, each finished before the next | c0248 | designed |
 | `rank`, `./zn rank`, `./zn next`, lost first | c0249 | captured |
 | `blocked`, `escalation.md`, `./zn resolve` | c0250 | designed |
-| cross-model review pool, same-family fallback | c0251 | captured |
+| cross-model review pool, same-family fallback | c0251 | exists |
 | the dispatcher lands a green stack | c0252 | captured |
 | `./zn work` pull loop (the interactive session worker exists; the headless loop does not) | c0253 | captured |
 | workers on several hosts, worker identity in spend | c0254 | captured |
