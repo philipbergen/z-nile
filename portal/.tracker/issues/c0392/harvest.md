@@ -1,0 +1,5 @@
+- design-review-001 F1: z-design/never-narrow-captured-scope
+- design-review-001 F2: z-design/orders-the-design-needs-are-depends-on, z-design/depends-on-inherits-the-dependency-raft
+- design-review-001 F3: zz-test/absence-searches-skip-record-folders
+- design-review-001 F4: z-design/contradicting-results-are-unknowns
+- design-review-001 F5: one-off: an Existing work line pointed at "the report" instead of naming the other item's sentence; the rule that disagreements with in-flight preps are quoted is z-design/quote-other-preps-before-promising, which the design already followed for every other claim

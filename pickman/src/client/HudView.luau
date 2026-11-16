@@ -10,6 +10,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+local Boost = require("@game/ReplicatedStorage/Shared/Logic/Boost")
 local Hud = require("@game/ReplicatedStorage/Shared/Logic/Hud")
 local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
 local Touch = require("@game/ReplicatedStorage/Shared/Logic/Touch")
@@ -25,6 +26,7 @@ local HudView = {}
 
 local score: TextLabel? = nil
 local level: TextLabel? = nil
+local picks: TextLabel? = nil -- the level's finished wall picks, under the score (f0147)
 local lives: Frame? = nil
 local bar: Frame? = nil
 local fill: Frame? = nil
@@ -45,6 +47,8 @@ local pickBar: Frame? = nil
 local pickFill: Frame? = nil
 local banner: TextLabel? = nil
 local shownShots = 0
+local chevron: TextLabel? = nil -- f0143: the boost's ">>" after the shot bars, hidden until the first status
+local GREY = Color3.fromRGB(90, 90, 90)
 
 local function label(name: string, align: Enum.TextXAlignment, parent: Instance): TextLabel
 	local l = Instance.new("TextLabel")
@@ -80,6 +84,12 @@ local function lay(sw: number, sh: number, inset: Hud.Inset)
 		level.Size = UDim2.fromOffset(blocks.level.w, blocks.level.h)
 		level.Position = UDim2.fromOffset(blocks.level.x, blocks.level.y)
 	end
+	if picks then
+		local box = Hud.picksBox(blocks.score)
+		picks.TextSize = l.textSize
+		picks.Size = UDim2.fromOffset(box.w, box.h)
+		picks.Position = UDim2.fromOffset(box.x, box.y)
+	end
 	if lives then
 		lives.Position = UDim2.fromOffset(blocks.lives.x, blocks.lives.y)
 		lives.Size = UDim2.fromOffset(blocks.lives.w, blocks.lives.h)
@@ -103,6 +113,12 @@ local function lay(sw: number, sh: number, inset: Hud.Inset)
 				icon.Size = UDim2.fromOffset(box.w, box.h)
 			end
 		end
+	end
+	if chevron then
+		local box = Hud.boostIcon(l, math.max(shownLives, 0), shownShots)
+		chevron.Position = UDim2.fromOffset(blocks.lives.x + box.x, blocks.lives.y + box.y)
+		chevron.Size = UDim2.fromOffset(box.w, box.h)
+		chevron.TextSize = l.textSize
 	end
 	if bar then
 		bar.Size = UDim2.fromOffset(blocks.power.w, blocks.power.h)
@@ -172,6 +188,9 @@ function HudView.start()
 	gui.SafeAreaCompatibility = Enum.SafeAreaCompatibility.None
 	score = label("Score", Enum.TextXAlignment.Left, gui)
 	level = label("Level", Enum.TextXAlignment.Right, gui)
+	local pl = label("Picks", Enum.TextXAlignment.Left, gui)
+	pl.Visible = false
+	picks = pl
 	local lf = Instance.new("Frame")
 	lf.Name = "Lives"
 	lf.BackgroundTransparency = 1
@@ -182,6 +201,10 @@ function HudView.start()
 	sf.BackgroundTransparency = 1
 	sf.Parent = gui
 	shots = sf
+	local ch = label("Boost", Enum.TextXAlignment.Left, gui)
+	ch.Text = ">>"
+	ch.Visible = false
+	chevron = ch
 	local b = Instance.new("Frame")
 	b.Name = "Power"
 	b.BackgroundColor3 = BLUE
@@ -244,6 +267,10 @@ function HudView.show(play: Session.PlayFrame)
 		score.Text = m.score
 		level.Text = m.level
 	end
+	if picks then
+		picks.Visible = m.picks ~= nil
+		picks.Text = m.picks or ""
+	end
 	if lives and m.lives ~= shownLives then
 		shownLives = m.lives
 		lives:ClearAllChildren()
@@ -265,6 +292,17 @@ function HudView.show(play: Session.PlayFrame)
 		bar.Visible = m.power > 0
 		fill.Size = UDim2.fromScale(m.power, 1)
 	end
+end
+
+-- f0143: the boost's chevron after the shot bars: yellow when a boost is ready, white while boosting, grey while it
+-- cools down. It stays hidden until the first status.
+function HudView.boost(status: Boost.Status)
+	local c = chevron
+	if c == nil then
+		return
+	end
+	c.Visible = true
+	c.TextColor3 = if status == "ready" then YELLOW elseif status == "boosting" then WHITE else GREY
 end
 
 -- f0126: the pick under way as a gold bar filling up, and the boon a finished pick granted as a banner.
