@@ -1,0 +1,11 @@
+- design-review-001 F1: pickman-arch/open-stores-guarded
+- design-review-001 F2: zz-arch/client-triggered-reads-guarded
+- design-review-001 F3: zz-arch/spends-recheck-after-the-write, pickman-arch/open-stores-guarded
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/instructions-runnable-where-they-run
+- design-review-001 F6: z-design/interfaces-name-where-they-hold
+- design-review-001 F7: z-design/prep-choices-marked-and-checked
+- design-review-001 F8: zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F9: one-off: a tolerance for clock skew between portal servers on one MemoryStore record, specific to the arena record's opening time
+- design-review-001 F10: pickman-arch/purchase-close-before-receipt
+- note the session lead relayed c0202's review: f0201's Wallet.read can overwrite a newer record with an older one for 60 s; the portal's grant path already starts with no read, now pinned: zz-arch/spends-recheck-after-the-write
