@@ -79,9 +79,9 @@ ac7() {
 }
 check "AC7: \`./zn land-check <R-id> [--through <issue> | --below <issue>] [--json]\` reads a real raft: a pending check is a wait, a failed one a redo, an unreadable pull request, a head that is not the layer tip, a conflict, a check not yet registered and a mergeable GitHub is still computing are named, a draft layer whose only check was skipped and a green top layer pass with exit 0, \`--below\` judges the layers under a Layer on their own top, and a raft with no layer branches gets an explicit no-layers answer (exit 2)." ac7
 ac8() {
-	fixtureSpec land-cmd "AC8: done is refused in a session that holds the agent's credential, ZN_DISPATCH or ZN_HEADLESS, and lands nothing" "AC8: done refuses every problem the dispatcher would not land on, a wait included, naming the codes, and changes nothing" "AC8: with a green top layer done goes on, and lands the bind"
+	fixtureSpec land-cmd "AC8: in a session that holds the agent's credential, ZN_DISPATCH or ZN_HEADLESS, done runs every check, writes a land request and pushes nothing" "AC8: done refuses every problem the dispatcher would not land on, a wait included, naming the codes, and changes nothing" "AC8: with a green top layer done goes on, and lands the bind"
 }
-check "AC8: \`./zn done\` is refused in a session that holds the agent's credential (\`ZN_DISPATCH\` or \`ZN_HEADLESS\`), refuses every problem the dispatcher would not land on for a person, a wait included (CI running, no check registered, GitHub still computing, a pull request it cannot read), naming the codes and changing nothing, and lands a stack whose top layer is green." ac8
+check "AC8: \`./zn done\` in a session that holds the agent's credential (\`ZN_DISPATCH\` or \`ZN_HEADLESS\`) runs every check, writes a land request and pushes nothing, and refuses a failed check there too; in a person's session it refuses every problem the dispatcher would not land on for a person, a wait included (CI running, no check registered, GitHub still computing, a pull request it cannot read), naming the codes and changing nothing, and lands a stack whose top layer is green." ac8
 ac9() {
 	fixtureSpec land-cmd "AC9: under ZN_DISPATCH, block validates the note and leaves a request for the dispatcher, publishing nothing"
 }
@@ -99,9 +99,9 @@ ac12() {
 }
 check "AC12: A block the worker requests lands the green layers below the Layer first (\`done --through\`), after waiting at the gate while their CI runs, then files the block on the Layer's tip with the worker's own note, committed on the layer or not, and the Layer's open finding ids, and the raft is left blocked." ac12
 ac13() {
-	fixtureSpec docs --run "AC13: zz-rules Dispatch: the chain judges and lands a finished raft with the base's engine, gates a game stack in a clean clone, and names the run gate" "AC13: zz-execute Phase 6 and z-run Headless: a worker stops after its work, never runs done, and blocks by request" "AC13: the README marks the dispatcher's landing as existing and keeps the person-approval clause the scope decision asks for" "AC13: the root .models.toml arms the run gate and names merge_retries, and the step prompt tells a worker done is refused and a rerun why it runs"
+	fixtureSpec docs --run "AC13: zz-rules Dispatch: the chain judges and lands a finished raft with the base's engine, gates a game stack in a clean clone, and names the run gate" "AC13: zz-execute Phase 6 and z-run Headless: a worker stops after its work, never runs done, and blocks by request" "AC13: the README marks the dispatcher's landing as existing and keeps the person-approval clause the scope decision asks for" "AC13: the root .models.toml arms the run gate and names merge_retries, and the step prompt tells a worker what done does and a rerun why it runs"
 }
-check "AC13: zz-rules, zz-execute, every headless skill section, the README, the root \`.models.toml\` and the step prompt say that the dispatcher judges and lands a green stack with the base's engine and \`./zn done\` after its checks, that \`done\` is refused in an agent-credential session, that a worker's block is a request, and that a rerun is told why it runs; the README keeps the person-approval clause (\`once a person has approved its design\`, \`stops at a person's ./zn approve\`)." ac13
+check "AC13: zz-rules, zz-execute, every headless skill section, the README, the root \`.models.toml\` and the step prompt say that the dispatcher judges and lands a green stack with the base's engine and \`./zn done\` after its checks, that \`done\` in an agent-credential session leaves a land request for a lander, that a worker's block is a request, and that a rerun is told why it runs; the README keeps the person-approval clause (\`once a person has approved its design\`, \`stops at a person's ./zn approve\`)." ac13
 ac14() {
 	fixtureSpec land-chain "AC14: after the dispatcher's own bind the guard's mark moves to it, so main is vetted; tracker commits other sessions published after the bind do not trip it, and a foreign commit still does"
 }
@@ -127,5 +127,15 @@ ac19() {
 	fixtureSpec land-chain "AC19: an old single-branch raft with an open pull request keeps its human's merge end to end: the chain stops at it without running the worker"
 }
 check "AC19: An old single-branch raft with an open pull request keeps a human's merge end to end: the chain stops at it without running the worker." ac19
+ac20() {
+	fixtureSpec landcheck "AC20: a land request round-trips with the raft, the tip, --through and the worktree, a malformed one is refused, and only the same tip is fresh"
+	fixtureSpec land-chain "AC20: a worker's land request waits (nothing lands, nothing is pushed) until a lander lands it with its own environment, and the request is spent" "AC20: the dispatcher's landing of a raft spends the land request the worker left for it"
+}
+check "AC20: A land request carries the raft, the layer tip, \`--through\` and the worktree, and waits:  with no lander nothing lands and nothing is pushed; \`./zn lander\` lands it through the base's engine with its own environment (the user's credential, no agent marker) and spends the request, and the dispatcher's landing of the raft spends it too." ac20
+ac21() {
+	fixtureSpec land-cmd "AC21: the lander is refused in a session that holds the agent's credential, and with no request it lands nothing"
+	fixtureSpec land-chain "AC21: a land request whose layer tip moved is refused and spent, and the worker asks again"
+}
+check "AC21: A land request whose layer tip moved since the worker's checks is refused and spent, and \`./zn lander\` is refused in a session that holds the agent's credential, and lands nothing when no request waits." ac21
 
 finish
