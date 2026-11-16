@@ -4974,8 +4974,9 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 			local mine = sh.run("git", { "rev-parse", "--verify", "--quiet", `refs/heads/{branch}` })
 			if theirs.ok and mine.ok and sh.trim(theirs.stdout) ~= sh.trim(mine.stdout) then
 				local tip, tipMine = sh.trim(theirs.stdout), sh.trim(mine.stdout)
+				-- local ahead of origin: keep it, nothing to bring
 				if sh.run("git", { "merge-base", "--is-ancestor", tip, tipMine }).ok then
-					-- local is ahead: keep it
+					tip = tipMine
 				elseif sh.run("git", { "merge-base", "--is-ancestor", tipMine, tip }).ok then
 					sh.git({ "branch", "-f", branch, `origin/{branch}` })
 				else
@@ -10032,7 +10033,7 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
 			return nil
 		end,
 		-- c0254: the attempt token of the Worker trailer on the claim commit that set `stamp` on `id` (origin/main's history)
-		claimAttempt = function(id: string, stamp: string): string?
+		claimAttempt = function(id: string, wanted: string): string?
 			local log = sh.run("git", {
 				"log",
 				"origin/main",
@@ -10048,7 +10049,7 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
 			for line in string.gmatch(log.stdout, "[^\n]+") do
 				table.insert(lines, "Worker: " .. line)
 			end
-			return xhost.attemptOf(lines, id, stamp)
+			return xhost.attemptOf(lines, id, wanted)
 		end,
 		-- a PR's state for the chain's gates (c0117): only on a GitHub origin, through the real gh
 		-- a pull request's merge commit (c0117: a commit on main that is vetted without being tracker state)

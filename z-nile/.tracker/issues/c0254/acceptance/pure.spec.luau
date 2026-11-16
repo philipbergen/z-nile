@@ -254,14 +254,14 @@ return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 	end)
 
 	it("AC2, AC3: a worker whose claim was taken over or ended never pushes the branch", function()
-		for _, claim in { "taken", "ended" } do
+		for _, state in { "taken", "ended" } do
 			local d = xhost.pushDecision({
 				publishing = true,
 				branch = "prep-hello",
 				hasUpstream = true,
 				originHas = true,
 				behind = 0,
-				claim = claim,
+				claim = state,
 			})
 			t.expect(d.action).toBe("refuse")
 			t.expect(string.find(d.why, "stop here", 1, true) ~= nil).toBe(true)
