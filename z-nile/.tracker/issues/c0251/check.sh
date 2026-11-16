@@ -43,8 +43,10 @@ ac2() {
 }
 check "AC2: \`.models.toml\` parses \`[families]\` (a closer file replaces only the keys it sets; a prefix under two families is refused) and \`rotate\`; \`roleFor(\"zz-review\",\"stream\")\` is \`stream-review\`; a \`rotate\` role whose model has no family fails at resolve." ac2
 ac3() {
-	fixtureSpec reviewpool --run "AC3: an Opus author sends the review to the other lines first and keeps Opus last, the exact model after" "AC3: the author's exact model goes after the other models of its line" "AC3: the previous round's line goes to tier 2, after tier 1 and before the author's own" "AC3: tier 1 needs both a different line from the author and from the previous round" "AC3: the order inside a tier is the role's order, not the model ids' order" "AC3: no try is ever dropped, so the list is empty only when the tries are" "AC3: a context marker on the author's id changes nothing" "AC3: an unknown family is never tier 1 against a known author" "AC3: an unknown author gives every try tier 1 and no reason, and the order is the role's" && \
-	fixtureSpec dispatch-pool --run "AC3: a final review's author is the writers of the build only, not the idea's and the design's"
+	local rc=0
+	fixtureSpec reviewpool --run "AC3: an Opus author sends the review to the other lines first and keeps Opus last, the exact model after" "AC3: the author's exact model goes after the other models of its line" "AC3: the previous round's line goes to tier 2, after tier 1 and before the author's own" "AC3: tier 1 needs both a different line from the author and from the previous round" "AC3: the order inside a tier is the role's order, not the model ids' order" "AC3: no try is ever dropped, so the list is empty only when the tries are" "AC3: a context marker on the author's id changes nothing" "AC3: an unknown family is never tier 1 against a known author" "AC3: an unknown author gives every try tier 1 and no reason, and the order is the role's" || rc=1
+	fixtureSpec dispatch-pool --run "AC3: a final review's author is the writers of the build only, not the idea's and the design's" || rc=1
+	return $rc
 }
 check "AC3: \`reviewpool.order\` is a stable partition into tier 1 (differs from the author and the previous round), tier 2 (differs from the author), tier 3 (the author's family, its exact model last), never drops a try, and treats an unknown family as not different." ac3
 ac4() {
@@ -56,8 +58,10 @@ ac5() {
 }
 check "AC5: a dispatched review runs the first runnable pick (an Opus-written design goes to kimi or grok first, a Sonnet-written code review to Opus), falls to the next on quota, skips c0306's refused tries, and runs the author's exact model when it is the only one left." ac5
 ac6() {
-	fixtureSpec stamp --run "AC6: stamp prepends Fallback: after Model: and Effort:, in the same call" "AC6: a stamped review reads back its model, effort and fallback, and a file that records a model is never stamped again" "AC6: a reason that is not one short line is refused" "AC6: fallbackOf reads the line within 12 lines, beside Commit: and Patch:" "AC6: only a tier 3 pick has a reason, and it names the exact model" "AC6: a same-line model that is not the exact one names the line" "AC6: the reason says assumed or unknown when the author is not recorded, and stays one short line" && \
-	fixtureSpec dispatch-pool "AC17: with Fable refused kimi runs next, and AC6: the fall-through to a tier 1 pick stamps no Fallback:" "AC17: with every other line refused, Opus runs last and the file carries Fallback: with the exact-model reason, and AC6: only the attempt that wrote it counts" "AC6: Fallback: is stamped in the same call as Model:, naming an assumed author when no row records it"
+	local rc=0
+	fixtureSpec stamp --run "AC6: stamp prepends Fallback: after Model: and Effort:, in the same call" "AC6: a stamped review reads back its model, effort and fallback, and a file that records a model is never stamped again" "AC6: a reason that is not one short line is refused" "AC6: fallbackOf reads the line within 12 lines, beside Commit: and Patch:" "AC6: only a tier 3 pick has a reason, and it names the exact model" "AC6: a same-line model that is not the exact one names the line" "AC6: the reason says assumed or unknown when the author is not recorded, and stays one short line" || rc=1
+	fixtureSpec dispatch-pool "AC17: with Fable refused kimi runs next, and AC6: the fall-through to a tier 1 pick stamps no Fallback:" "AC17: with every other line refused, Opus runs last and the file carries Fallback: with the exact-model reason, and AC6: only the attempt that wrote it counts" "AC6: Fallback: is stamped in the same call as Model:, naming an assumed author when no row records it" || rc=1
+	return $rc
 }
 check "AC6: the dispatcher stamps \`Fallback: <reason>\` in the same call as \`Model:\`, only when the attempt that wrote the review was tier 3, and \`reviewmodel.fallbackOf\` reads it within 12 lines beside \`Commit:\`/\`Patch:\`." ac6
 ac7() {
@@ -85,9 +89,10 @@ ac12() {
 }
 check "AC12: the idea challenge orders through the same picker with the real writer as the author and its review stays unstamped." ac12
 ac13() {
-	fixtureSpec docs --run "AC13: zz-review states the tier rule, the interactive pick and the Fallback: line" "AC13: z-design, z-raft, zz-execute and zz-rules restate who reviews" "AC13: the review-model rule and the visible record keep their text, and zz-review's record names the flag" "AC13: the README says the pool exists and its c0251 markers read exists" "AC13: .models.toml's header comment states the pool, the tiers and the picker" "AC13: AGENTS.md carries none of the new rule text (it is c0332's)" && \
-	# AGENTS.md is c0332's: unchanged since the branch left main
-	[[ -z "$(git -C "$ZN_ROOT" diff --name-only "$(git -C "$ZN_ROOT" merge-base origin/main HEAD)" -- AGENTS.md)" ]] || { echo "AGENTS.md changed: it is c0332's"; return 1; }
+	local rc=0
+	fixtureSpec docs --run "AC13: zz-review states the tier rule, the interactive pick and the Fallback: line" "AC13: z-design, z-raft, zz-execute and zz-rules restate who reviews" "AC13: the review-model rule and the visible record keep their text, and zz-review's record names the flag" "AC13: the README says the pool exists and its c0251 markers read exists" "AC13: .models.toml's header comment states the pool, the tiers and the picker" "AC13: AGENTS.md carries none of the new rule text (it is c0332's)" || rc=1
+	[[ -z "$(git -C "$ZN_ROOT" diff --name-only "$(git -C "$ZN_ROOT" merge-base origin/main HEAD)" -- AGENTS.md)" ]] || { echo "AGENTS.md changed: it is c0332's"; rc=1; }
+	return $rc
 }
 check "AC13: the skills, \`.models.toml\` comments and README state the tier rule, the README markers read \`*exists*\`, and AGENTS.md is unchanged." ac13
 ac14() {

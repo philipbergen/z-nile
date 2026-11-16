@@ -48,7 +48,7 @@ fallbacks = ["kimi", "grok", "agent"]
 ]]
 
 local function errorOf(f: () -> ()): string
-	local ok, e = pcall(f)
+	local ok, e = pcall(f :: any)
 	return if ok then "" else tostring(e)
 end
 local function has(text: string, needle: string): boolean

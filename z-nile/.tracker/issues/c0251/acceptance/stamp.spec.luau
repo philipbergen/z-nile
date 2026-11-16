@@ -99,7 +99,7 @@ return t.spec("c0251 the Fallback: stamp and its reason", function(it)
 		t.expect(has(reason, "claude-opus-5-5")).toBe(true)
 		t.expect(has(reason, "assumed")).toBe(false)
 		t.expect(#reason <= 120).toBe(true)
-		t.expect(string.find(reason, "\n", 1, true)).toBe(nil)
+		t.expect((string.find(reason, "\n", 1, true))).toBe(nil)
 	end)
 
 	it("AC6: a same-line model that is not the exact one names the line", function()

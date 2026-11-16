@@ -163,7 +163,7 @@ return t.spec("c0251 the previous round's reviewers", function(it)
 		function()
 			local dir = folder("c0117", { ["review-001.md"] = stamped("claude-opus-5-5", "xhigh") })
 			t.expect(F.priors({ { kind = "code", dir = dir } }, 0)).toEqual({})
-			t.expect(RM.priorsOf({
+			local mixed: { { kind: string, files: { [string]: string } } } = {
 				{ kind = "design", files = { ["design-review-001.md"] = stamped("claude-opus-5-5") } },
 				{
 					kind = "code",
@@ -172,7 +172,8 @@ return t.spec("c0251 the previous round's reviewers", function(it)
 						["notes.md"] = stamped("grok-4.7"),
 					},
 				},
-			}, CODE)).toEqual({ "kimi-code-k3.1-pro" })
+			}
+			t.expect(RM.priorsOf(mixed, CODE)).toEqual({ "kimi-code-k3.1-pro" })
 			t.expect(RM.priorsOf({}, CODE)).toEqual({})
 		end
 	)

@@ -210,7 +210,7 @@ local function started(): { string }
 	local out = {}
 	local positions: { { at: number, cli: string } } = {}
 	for at, cli in string.gmatch(log, "()(%a+) step=%S+ mode=%S+ cwd=") do
-		table.insert(positions, { at = at, cli = cli })
+		table.insert(positions, { at = at, cli = cli :: string })
 	end
 	for i, p in positions do
 		local chunk = string.sub(log, p.at, (positions[i + 1] and positions[i + 1].at or #log + 1) - 1)
@@ -360,7 +360,9 @@ return t.spec("c0251 the interactive pick and its derived Fallback: stamp", func
 		"sets up the dry-run fixture: marked designs written by Opus and by Fable, and the fake CLIs",
 		function()
 			local seed: { [string]: string } = { [".models.toml"] = MODELS }
-			for id, model in { c0030 = "claude-opus-5-5-high", c0031 = "claude-fable-5-2-high" } do
+			local writers: { [string]: string } =
+				{ c0030 = "claude-opus-5-5-high", c0031 = "claude-fable-5-2-high" }
+			for id, model in writers do
 				seed[`{ROOT}/issues/{id}/{id}.md`] = issue(id, "new-quiet-copper-falcon")
 				seed[`{ROOT}/issues/{id}/spend.d/m.local-1.tsv`] = rowsFor("prep", model)
 			end

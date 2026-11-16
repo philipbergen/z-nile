@@ -214,7 +214,8 @@ local function item(id: string, rows: { { string } }?, files: { [string]: string
 	if rows then
 		ITEMS[`pickman/.tracker/issues/{id}/spend.d/m.local-1.tsv`] = spendRows(rows)
 	end
-	for name, text in files or {} do
+	local more: { [string]: string } = files or {}
+	for name, text in more do
 		ITEMS[`pickman/.tracker/issues/{id}/{name}`] = text
 	end
 	if closer then
@@ -335,7 +336,7 @@ local function started(): { string }
 	local out = {}
 	local positions: { { at: number, cli: string } } = {}
 	for at, cli in string.gmatch(log, "()(%a+) step=%S+ mode=%S+ cwd=") do
-		table.insert(positions, { at = at, cli = cli })
+		table.insert(positions, { at = at, cli = cli :: string })
 	end
 	for i, p in positions do
 		local chunk = string.sub(log, p.at, (positions[i + 1] and positions[i + 1].at or #log + 1) - 1)

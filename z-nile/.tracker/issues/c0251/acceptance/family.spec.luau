@@ -8,7 +8,7 @@ local family: any = require("@znile/engine/family")
 local M: any = models
 
 local function errorOf(f: () -> ()): string
-	local ok, e = pcall(f)
+	local ok, e = pcall(f :: any)
 	if ok then
 		return ""
 	end
