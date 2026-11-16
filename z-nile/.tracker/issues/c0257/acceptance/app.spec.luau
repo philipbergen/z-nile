@@ -11,9 +11,14 @@ local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" })
 local ROOT = `{process.env.ZN_C0257_TREE or TOP}/z-nile-omarchy`
 local APP = `{ROOT}/znile.board`
 
--- the 21 files of the prototype (e467e31), relative to z-nile-omarchy/
+-- the 21 files of the prototype (38f73347) and the home's check.sh and two skills (G1, ruled: its own project),
+-- relative to z-nile-omarchy/; its root .tracker/ is the home rule's (AC12) and holds the app's tickets, and .cache/ is
+-- the home's ignored scratch (the gate's fence puts its sentinel there), so neither is walked here
 local EXPECTED = {
 	"README.md",
+	"check.sh",
+	"skills/z-nile-omarchy-arch/SKILL.md",
+	"skills/z-nile-omarchy-test/SKILL.md",
 	"znile.board/BarWidget.qml",
 	"znile.board/Board.qml",
 	"znile.board/Chip.qml",
@@ -38,7 +43,9 @@ local EXPECTED = {
 
 local function walk(dir: string, prefix: string, out: { string })
 	for _, name in fs.readDir(dir) do
-		if fs.isDir(`{dir}/{name}`) then
+		if prefix == "" and (name == ".tracker" or name == ".cache") then
+			continue
+		elseif fs.isDir(`{dir}/{name}`) then
 			walk(`{dir}/{name}`, `{prefix}{name}/`, out)
 		else
 			table.insert(out, prefix .. name)

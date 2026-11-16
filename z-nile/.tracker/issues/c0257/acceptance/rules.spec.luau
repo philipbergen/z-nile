@@ -21,7 +21,7 @@ return t.spec("c0257 AC3: the model's rules", function(it)
 			local ok, r = pcall(
 				process.exec,
 				"node",
-				{ "--test", `{HERE}/rules.test.mjs` },
+				{ "--test", "--test-reporter=tap", `{HERE}/rules.test.mjs` },
 				{ env = { C0257_APP = APP } }
 			)
 			if not ok then

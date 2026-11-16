@@ -1,5 +1,6 @@
 --!strict
 -- c0257 AC4: the place-deploy workflow ignores pushes that touch only the plugin, and keeps the tracker roots it ignored.
+local deploylist = require("@tests/lib/deploylist")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
@@ -24,10 +25,17 @@ return t.spec("c0257 AC4: deploy.yml ignores the plugin", function(it)
 		end
 	)
 
-	it("AC4: the one copy of the list the specs compare against names it too", function()
-		local list = fs.readFile(`{TREE}/z-nile/tests/lib/deploylist.luau`)
-		t.expect(has(list, 'table.insert(out, "z-nile-omarchy/**")')).toBe(true)
-	end)
+	it(
+		"AC4: the one copy of the list the specs compare against derives it from the registry (an app's whole home)",
+		function()
+			local list = fs.readFile(`{TREE}/z-nile/tests/lib/deploylist.luau`)
+			t.expect(has(list, "z-nile-omarchy")).toBe(false)
+			local ignored = deploylist.ignored(TREE)
+			t.expect(ignored[#ignored]).toBe("z-nile/next")
+			t.expect(ignored[#ignored - 1]).toBe("z-nile-omarchy/**")
+			t.expect(table.find(ignored, "z-nile-omarchy/.tracker/**")).toBe(nil)
+		end
+	)
 
 	it("AC4: pickman's entry-shape spec allows exactly that entry, and no other glob", function()
 		local spec = fs.readFile(`{TREE}/pickman/tests/acceptance/c0015/workflow.spec.luau`)

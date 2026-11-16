@@ -18,7 +18,7 @@ return t.spec("c0257 AC2: the model's own tests under node", function(it)
 	it("AC2: normalize, blocking, sorting, PR matching, sanitizer and agent argv tests pass", function()
 		local file = `{APP}/tests/model.test.mjs`
 		t.expect(fs.isFile(file)).toBe(true)
-		local ok, r = pcall(process.exec, "node", { "--test", file })
+		local ok, r = pcall(process.exec, "node", { "--test", "--test-reporter=tap", file })
 		if not ok then
 			error("node is required for c0257's model specs (SETUP.md): " .. tostring(r))
 		end

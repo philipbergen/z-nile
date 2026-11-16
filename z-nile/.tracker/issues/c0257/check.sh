@@ -19,7 +19,7 @@ check "AC7: fetch.sh builds the model through ./zn only, derives the web base fr
 check "AC8: the board page's model is what the app reads" lune run tests/run -- "$A/contract.spec.luau"
 # AC9 is this landing's only: the plugin is the reviewed prototype, byte for byte, but the files this issue changes. It is
 # not a promoted spec, because c0249 and c0290 change these files after. A read of git objects, nothing is written.
-PROTO=e467e31017007f60dccd73e7550cf6b23547a880
+PROTO=38f7334788efc7b3f3701a7d1ae905f9dbaf3ae3
 check "AC9: the plugin's files equal the reviewed prototype's but the four this issue changes" bash -c '
   cd "$ZN_ROOT" || exit 1
   git cat-file -e "$0^{commit}" 2>/dev/null || git fetch -q origin "$0" || exit 1
@@ -30,5 +30,8 @@ check "AC9: the plugin's files equal the reviewed prototype's but the four this 
   done
 ' "$PROTO"
 check "AC10: a change to the app selects c0257's specs through the watch map" lune run tests/run -- "$A/watch.spec.luau"
+check "AC11: the registry has an app kind, z-nile-omarchy is one, and z-nile/roots lists the apps and keeps their homes out of the Luau folders" lune run tests/run -- "$A/registry.spec.luau"
+check "AC12: the home rule checks an app home for its gate, its root and its two skills, and nothing of a Luau home" lune run tests/run -- "$A/homerule.spec.luau"
+check "AC13: the gate runs an app's node tests, fails when one fails or there are none, and runs no Luau stage over its home" lune run tests/run -- "$A/gate.spec.luau"
 
 finish

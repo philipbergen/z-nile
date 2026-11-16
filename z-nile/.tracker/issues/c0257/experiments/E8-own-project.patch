@@ -1,0 +1,520 @@
+diff --git i/.claude/skills/z-nile-omarchy-arch w/.claude/skills/z-nile-omarchy-arch
+new file mode 120000
+index 00000000..b8ccd824
+--- /dev/null
++++ w/.claude/skills/z-nile-omarchy-arch
+@@ -0,0 +1 @@
++../../z-nile-omarchy/skills/z-nile-omarchy-arch
+\ No newline at end of file
+diff --git i/.claude/skills/z-nile-omarchy-test w/.claude/skills/z-nile-omarchy-test
+new file mode 120000
+index 00000000..7627b51b
+--- /dev/null
++++ w/.claude/skills/z-nile-omarchy-test
+@@ -0,0 +1 @@
++../../z-nile-omarchy/skills/z-nile-omarchy-test
+\ No newline at end of file
+diff --git i/.github/workflows/deploy.yml w/.github/workflows/deploy.yml
+index 346aaa9d..63a662a6 100644
+--- i/.github/workflows/deploy.yml
++++ w/.github/workflows/deploy.yml
+@@ -4,7 +4,7 @@ name: deploy
+ on:
+   push:
+     branches: [main]
+-    paths-ignore: ['pickman/.tracker/**', 'z-nile/.tracker/**', 'arcade/.tracker/**', 'portal/.tracker/**', 'snake/.tracker/**', 'invaders/.tracker/**', 'asteroids/.tracker/**', 'z-nile/next']
++    paths-ignore: ['pickman/.tracker/**', 'z-nile/.tracker/**', 'arcade/.tracker/**', 'portal/.tracker/**', 'snake/.tracker/**', 'invaders/.tracker/**', 'asteroids/.tracker/**', 'z-nile-omarchy/**', 'z-nile/next']
+   pull_request:
+     types: [opened, synchronize, reopened, ready_for_review]
+   workflow_dispatch: {}
+diff --git i/AGENTS.md w/AGENTS.md
+index 8b2e42f6..6e15c41f 100644
+--- i/AGENTS.md
++++ w/AGENTS.md
+@@ -1,6 +1,6 @@
+ # pickman
+ 
+-A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune for headless tests. New machine: see `SETUP.md`. The game is the `pickman` project, in `pickman/` (its `src/`, specs, Rojo projects and issues, `pickman/.tracker/`); the tooling that tracks and gates it is `z-nile/` (zz-rules skill, Projects). The arcade's projects are registered too (c0183): `arcade/` (the library every place shares), `portal/` (the experience's start place) and the games `snake/`, `invaders/` and `asteroids/`; each keeps its product decisions in `<name>/.tracker/game-design.md`, and the library its design in `arcade/.tracker/architecture.md`. Every project with code has the same home as `pickman/` (c0184): `check.sh`, `.luaurc`, `default.project.json`, `src/`, `tests/` and `skills/`, which the gate checks for each registered project (z-nile/README.md, A project's home).
++A first-person Pac-Man clone for Roblox, built with Rojo, strict Luau, and Lune for headless tests. New machine: see `SETUP.md`. The game is the `pickman` project, in `pickman/` (its `src/`, specs, Rojo projects and issues, `pickman/.tracker/`); the tooling that tracks and gates it is `z-nile/` (zz-rules skill, Projects). The arcade's projects are registered too (c0183): `arcade/` (the library every place shares), `portal/` (the experience's start place) and the games `snake/`, `invaders/` and `asteroids/`; each keeps its product decisions in `<name>/.tracker/game-design.md`, and the library its design in `arcade/.tracker/architecture.md`. Every project with code has the same home as `pickman/` (c0184): `check.sh`, `.luaurc`, `default.project.json`, `src/`, `tests/` and `skills/`, which the gate checks for each registered project (z-nile/README.md, A project's home). The omarchy board app, `z-nile-omarchy/`, is a project of the app kind (c0257): no Luau, its node tests run by the gate, never deployed.
+ 
+ **Non-negotiable:** no code without a tracker issue, and work is done only when its `check.sh` passes. **Every change is made in a git worktree under `.worktree/` and lands by pull request** (a capture lands with `./zn land`, after a local full gate); the main checkout is never edited, except by `./zn` itself (`ready`, `stop`, `sync`, and the board refresh after every publish or `land`), which only fast-forwards it, clears ignored files from item folders that left it, and writes ignored files (`prompt.md`, `.cache/board.html`, the dispatcher's run state in `.cache/dispatch/`) (zz-rules skill, Worktrees and Landing a change). Start execution with `/z-run <R-id>` in a session in the main checkout: that is z-work with that raft named (`./zn work <R-id>`). With no raft named, run `./zn work`. The unattended launcher stays `./zn dispatch <id>` (zz-rules skill, Dispatch; `.models.toml` names the models). Before doing anything, read the skill that applies. The skills hold all the rules.
+ 
+@@ -31,6 +31,7 @@ The skills are z-nile's (`z-nile/skills/`) and each project's (`<project>/skills
+ | `pickman/skills/pickman-test/SKILL.md` | writing pickman's game specs (with zz-test) |
+ | `<name>/skills/<name>-arch/SKILL.md`, for `arcade`, `portal`, `snake`, `invaders` and `asteroids` | designing or writing anything in that project's `src/` (each follows pickman-arch's rules with the changes it states, arcade's for a library) |
+ | `<name>/skills/<name>-test/SKILL.md`, for the same five | writing that project's specs (with zz-test and pickman-test) |
++| `z-nile-omarchy/skills/z-nile-omarchy-arch/SKILL.md` and `z-nile-omarchy/skills/z-nile-omarchy-test/SKILL.md`, for `z-nile-omarchy` | designing, writing or testing the omarchy board app (an app project: QML, JS and shell, tested under node) |
+ 
+ The `z-` skills are the pipeline, in order; the `zz-` skills are called from inside a step. The `zz-` and `z-` prefixes are z-nile's: a project's skills are named `<project>-…`.
+ 
+diff --git i/SETUP.md w/SETUP.md
+index 6688a9af..6f9b76e3 100644
+--- i/SETUP.md
++++ w/SETUP.md
+@@ -15,6 +15,8 @@ z-nile/setup.sh
+ | GitHub auth | `gh auth login` (the tracker opens draft PRs with `gh`) | same |
+ | curl, unzip | preinstalled | distro packages |
+ | Node.js (`node`) | `brew install node` | distro packages; preinstalled on GitHub runners. The full gate needs it: the raft board's page script is tested under node (`z-nile/tests/acceptance/c0042/smoke.spec.luau`) |
++| Python 3 (`python3`) | preinstalled | distro packages; preinstalled on GitHub runners and on Omarchy. The full gate needs it: the omarchy board app's `fetch.sh` runs it, and `z-nile/tests/acceptance/c0257/fetch.spec.luau` tests that script |
++| Omarchy board app (optional, an omarchy machine) | not run | `z-nile-omarchy/` is an omarchy-shell plugin (Quickshell): it needs `lune` (`z-nile/setup.sh --tools`), `python3`, a signed-in `gh` for the pull-request chips, and one of the AI CLIs `agents.sh` knows. Install steps: `z-nile-omarchy/README.md`; its model tests run with `node --test z-nile-omarchy/znile.board/tests/model.test.mjs` |
+ 
+ ## What `z-nile/setup.sh` does
+ 1. **Rokit** (the toolchain manager, v1.2.0): downloads the prebuilt release asset with `gh release download -R rojo-rbx/rokit`, then runs `rokit self-install`.
+diff --git i/pickman/tests/acceptance/c0015/workflow.spec.luau w/pickman/tests/acceptance/c0015/workflow.spec.luau
+index 09adc543..cb883b22 100644
+--- i/pickman/tests/acceptance/c0015/workflow.spec.luau
++++ w/pickman/tests/acceptance/c0015/workflow.spec.luau
+@@ -83,12 +83,16 @@ return t.spec("c0140 deploy job", function(it)
+ 			t.expect(on.push.branches).toEqual({ "main" })
+ 			-- c0183 override: pickman's own concern, the shape of the list: its root and the counter are ignored, and every
+ 			-- other entry is a project root `<name>/.tracker/**` (the exact list, against the registry, is gate-cover's and ci's)
++			-- c0257 override: or the omarchy board app's folder, `z-nile-omarchy/**`, which is no project
+ 			local ignored: { string } = on.push["paths-ignore"]
+ 			t.expect(table.find(ignored, "pickman/.tracker/**") ~= nil).toBe(true)
+ 			t.expect(table.find(ignored, "z-nile/next") ~= nil).toBe(true)
+ 			for _, e in ignored do
+-				t.expect(e == "z-nile/next" or string.match(e, "^[a-z][a-z0-9%-]*/%.tracker/%*%*$") ~= nil)
+-					.toBe(true)
++				t.expect(
++					e == "z-nile/next"
++						or e == "z-nile-omarchy/**"
++						or string.match(e, "^[a-z][a-z0-9%-]*/%.tracker/%*%*$") ~= nil
++				).toBe(true)
+ 			end
+ 			t.expect(on.pull_request)
+ 				.toEqual({ types = { "opened", "synchronize", "reopened", "ready_for_review" } })
+diff --git i/z-nile-omarchy/.tracker/architecture.md w/z-nile-omarchy/.tracker/architecture.md
+new file mode 100644
+index 00000000..d73e8ffc
+--- /dev/null
++++ w/z-nile-omarchy/.tracker/architecture.md
+@@ -0,0 +1 @@
++# z-nile-omarchy architecture
+diff --git i/z-nile-omarchy/.tracker/issues/.gitkeep w/z-nile-omarchy/.tracker/issues/.gitkeep
+new file mode 100644
+index 00000000..e69de29b
+diff --git i/z-nile-omarchy/.tracker/rafts/.gitkeep w/z-nile-omarchy/.tracker/rafts/.gitkeep
+new file mode 100644
+index 00000000..e69de29b
+diff --git i/z-nile-omarchy/check.sh w/z-nile-omarchy/check.sh
+new file mode 100755
+index 00000000..c87550b7
+--- /dev/null
++++ w/z-nile-omarchy/check.sh
+@@ -0,0 +1,2 @@
++#!/usr/bin/env bash
++exec bash "$(dirname "$0")/../z-nile/check.sh" --project z-nile-omarchy "$@"
+diff --git i/z-nile-omarchy/skills/z-nile-omarchy-arch/SKILL.md w/z-nile-omarchy/skills/z-nile-omarchy-arch/SKILL.md
+new file mode 100644
+index 00000000..0cbe87e5
+--- /dev/null
++++ w/z-nile-omarchy/skills/z-nile-omarchy-arch/SKILL.md
+@@ -0,0 +1,34 @@
++---
++name: z-nile-omarchy-arch
++description: Structure rules for the omarchy board app (z-nile-omarchy/, an app project with no Luau) - pure Model.js versus QML that only renders, external programs as argument arrays, tracker text as untrusted, and the Qt 6.12 markdown rule. Read before designing or writing anything in z-nile-omarchy/.
++---
++
++# The omarchy board app's structure
++
++`z-nile-omarchy/` is a registered project of the **app** kind (c0257): an omarchy-shell plugin, `znile.board/`, in QML, JavaScript and shell, with no Luau. Its home holds `check.sh`, its root `.tracker/`, these skills, the top `README.md` and the plugin. z-nile's own rules (zz-arch) do not apply here; these do.
++
++## Pure model, thin QML
++- Every rule lives in `Model.js` (`.pragma library`): normalizing the board model, blockers, columns and order, filters, the approval and guess counts, markdown neutralizing, pull-request matching, agent argv, cost and the chart. It reads no file and starts no process, so its node tests (`tests/model.test.mjs`) can pin every rule.
++- The QML files render and wire processes. A rule written in QML has no test: move it into `Model.js` and test it there.
++- Data comes only through `fetch.sh` (which reads only through `./zn`, never a second tracker parser), `prs.sh` and `agents.sh`. The app never writes tracker state itself.
++
++## External programs
++- Every external program starts from an argument array (`Process.command`, `Quickshell.execDetached`), one value per element. Never a shell string (`sh -c`, `bash -c`, `eval`) or a shell in an argument array (`"bash", "-c"`, `-lc`). c0257's AC5 scans every file for these.
++- An AI CLI starts in its normal ask-first mode: no auto-approve flag in any agent's argv.
++
++## Untrusted text
++- Every title, body and id comes from tracker files anyone can edit. Titles render as plain text. Descriptions render only through `Model.safeMarkdown` (HTML and images neutralized). Ids are matched against `^[fdcR][0-9]{4}$` before any use. Links are built only from a `https://github.com/<owner>/<repo>/blob/main/` base or a github pull-request URL. A document path with `..` is dropped.
++
++## Qt 6.12 markdown (d0389)
++- Qt 6.12's scene graph crashes the whole shell (`QSGBatchRenderer::prepareAlphaBatches`) when it lays out again markdown that holds background-tinted spans or tables. The details popup therefore never draws a background colour in markdown (inline code is coloured monospace only) and shows a markdown table as a code block (`safeMarkdown`). Keep both until a Qt release that fixes it is the omarchy one, and test any markdown change in a standalone `qml` probe before it reaches the shell.
++
++## Shell scripts
++- `fetch.sh`, `prs.sh` and `agents.sh` start with a shebang and `set -euo pipefail`, are executable, and write only under the user's cache or state folders (`$XDG_CACHE_HOME/znile-board`, `~/.local/state/znile-board`).
++
++## Lessons
++Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
++
++A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
++- **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
++- **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
++- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
+diff --git i/z-nile-omarchy/skills/z-nile-omarchy-test/SKILL.md w/z-nile-omarchy/skills/z-nile-omarchy-test/SKILL.md
+new file mode 100644
+index 00000000..1e68e5da
+--- /dev/null
++++ w/z-nile-omarchy/skills/z-nile-omarchy-test/SKILL.md
+@@ -0,0 +1,21 @@
++---
++name: z-nile-omarchy-test
++description: How the omarchy board app (z-nile-omarchy/) is tested - node tests of the pure model, run by the gate's node stage, and what only a person on an omarchy machine can check. Read before writing or running the app's tests.
++---
++
++# Testing the omarchy board app
++
++- **Node tests.** `znile.board/tests/model.test.mjs` loads `Model.js` (a QML `.pragma library` script) with `new Function` and tests it with `node:test`. Run it with a file path, not a folder (a folder fails on node 22): `./zn run --time 60 -- node --test z-nile-omarchy/znile.board/tests/model.test.mjs` from the checkout's top. A test that reads node's summary asks for `--test-reporter=tap` (node 26 prints another summary by default).
++- **The gate.** `z-nile-omarchy/check.sh` (`z-nile/check.sh --project z-nile-omarchy`) runs the app's node stage: `node --test` on every `*/tests/*.test.mjs` of the home, sorted. It fails when a test fails or when there are none, and it runs none of the Luau stages over the home (README, A project's home). `--full`, and `--affected` when a path under the home changed, run it too.
++- **Write the test first.** Every rule a change adds or changes in `Model.js` gets a case in `tests/model.test.mjs` that fails without it.
++- **Acceptance.** A ticket of this project has node tests and `check.sh` checks as its acceptance. An app home has no Lune runner, so it cannot promote Luau specs (`./zn done` would fail on them).
++- **What only a person can check.** The QML (rendering, drag, the details popup, the terminal launch) runs only in omarchy-shell. Install by linking `znile.board/` into `~/.config/omarchy/plugins/`, then `./zn run --time 60 -- omarchy restart shell`. A crash of the shell leaves a report in `~/.cache/quickshell/crashes/`. Reproduce a rendering crash in a standalone `/usr/lib/qt6/bin/qml` probe before changing the app.
++- **Probes** go through `./zn run --time <seconds> -- <command>`, like every other command you start yourself.
++
++## Lessons
++Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
++
++A new lesson (from a review finding, a correction by the user, or a step that failed in a way a rule would have prevented) is handled by your role, not by the skill you are reading:
++- **A subagent** (a stream, a reviewer, any agent working from a brief) never writes a lesson file or runs `./zn new`. It puts the candidate (the rule, why, and the question that catches it) in its review or final report.
++- **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md` (the real folder: `z-nile/skills/` for z-nile's skills, `<project>/skills/` for a project's, never through a `.claude/skills/` link, which git can't add through; format: zz-rules skill, Items), and records where it came from in its own `harvest.md`: review findings through the harvest (z-design step 5.3, zz-execute Phase 4 step 5), and anything else (a subagent's candidate, a correction by the user, a failed step) as `- note <what happened>: <lesson ids>`. It adds a note to an existing lesson when one fits, writes a new file only when none does, and commits both with its work.
++- **Any other lead** (in the main checkout, a capture, or a metrics report) captures it: `./zn new issue c lesson-<slug> --project z-nile --desc "<skill>: <the rule>, because <what happened>; check: <the question>"` (z-ticket skill). The prep that takes the issue writes the file.
+diff --git i/z-nile/README.md w/z-nile/README.md
+index 0171d3a6..f7fcf0ca 100644
+--- i/z-nile/README.md
++++ w/z-nile/README.md
+@@ -199,6 +199,7 @@ A raft is delivered as a stack: `./zn start` opens one layer per ticket (a branc
+ - **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. A running step appends one short line per action (the tool and its target, or the first words of a message) to `.cache/dispatch/<id>/trail.log`, and `./zn dispatch status <id>` prints the last of those lines and the running token count before the step's JSON. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. A run accepts `main` as it is when it starts, and during the run a rewritten `main` or a commit that is not tracker state and not a pull request's merge stops it. The rules are in the zz-rules skill, Dispatch.
+ - **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
+ - **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.
++- **The omarchy board app.** `z-nile-omarchy/znile.board/` (c0257) is an omarchy-shell plugin that shows the same board model in a bar icon and a tiled window on Linux. It reads the page's embedded JSON through `./zn board`, so it is a second view of the board, not a second source; it is a registered project of its own, of the app kind (A project's home).
+ 
+ ## Skills
+ | skill | step | what it does |
+@@ -218,6 +219,7 @@ A raft is delivered as a stack: `./zn start` opens one layer per ticket (a branc
+ | `zz-stats` | on demand | cost per issue and the rework rate |
+ | `pickman-arch`, `pickman-test` | pickman's design and build | pickman's code structure, and its game spec tiers |
+ | `arcade-arch`, `arcade-test`, `portal-arch`, `portal-test`, `snake-arch`, `snake-test`, `invaders-arch`, `invaders-test`, `asteroids-arch`, `asteroids-test` | the arcade's design and build (c0184) | each project's code structure (pickman's rules, with the changes the skill states) and its spec tiers |
++| `z-nile-omarchy-arch`, `z-nile-omarchy-test` | the omarchy board app (c0257) | the app's structure (pure `Model.js`, QML that only renders, argument arrays, untrusted text, the Qt 6.12 markdown rule) and its node tests |
+ 
+ ## A project's home
+ A project with code has a home, `<name>/`, which also holds its `.tracker/` root. `pickman/` and the arcade's five (`arcade/`, `portal/`, `snake/`, `invaders/` and `asteroids/`, c0184) have the same home; the gate checks it for every project of `z-nile/projects.toml` except z-nile, whose home holds the tooling:
+@@ -231,6 +233,8 @@ A project with code has a home, `<name>/`, which also holds its `.tracker/` root
+ 
+ A new project with code needs its registry entry, its root and `deploy.yml` entry (zz-rules skill, Projects) and this home. Make the home by copying a sibling's and renaming it; the gate's home rule names whatever is missing.
+ 
++An **app** project (`kind = "app"` in `z-nile/projects.toml`, c0257: `z-nile-omarchy/`, the omarchy board app) has no Luau: its home holds `check.sh` (the same line), its root with `issues/` and `rafts/`, the skills `skills/<name>-arch` and `skills/<name>-test`, and its app; no `.luaurc`, `src/`, `tests/` or project file. The gate runs none of the Luau stages over it and runs its node tests (`node --test` on every `*/tests/*.test.mjs` of the home) instead. It never publishes a place: `deploy.yml` ignores its whole home. Its tickets' acceptance is node tests and `check.sh` checks: an app home cannot promote Luau specs.
++
+ ## Design checklists
+ z-design reads the checklist for the issue's type before it writes the Design:
+ - `z-nile/skills/z-design/checklists/feature.md`
+diff --git i/z-nile/check.sh w/z-nile/check.sh
+index 504e3f99..509071bd 100755
+--- i/z-nile/check.sh
++++ w/z-nile/check.sh
+@@ -72,6 +72,16 @@ if [[ -f z-nile/roots.luau ]]; then
+ else
+   registry=$'pickman\t.\ttracker'
+ fi
++# The app projects (c0257): homes with no Luau. The gate runs their node tests and none of the Luau stages over them.
++apps=()
++if [[ -f z-nile/roots.luau ]]; then
++  while IFS= read -r a; do [[ -n $a ]] && apps+=("$a"); done < <(lune run z-nile/roots -- --apps) ||
++    { echo "check.sh: z-nile/projects.toml does not parse (lune run z-nile/roots -- --apps)" >&2; exit 1; }
++fi
++is_app() { local a; for a in ${apps[@]+"${apps[@]}"}; do [[ $a == "$1" ]] && return 0; done; return 1; }
++node_tests() { # node_tests <home>: an app's node test files, sorted, one per line
++  find "$1" -mindepth 3 -maxdepth 3 -path "$1/*/tests/*.test.mjs" -type f | LC_ALL=C sort
++}
+ names=() homes=() roots=()
+ while IFS=$'\t' read -r n h r; do
+   [[ -n $n ]] || continue
+@@ -128,6 +138,7 @@ places=() # "<home>|<project file>"
+ srcs=()   # "<home>"
+ for i in "${!names[@]}"; do
+   picked "${names[$i]}" || continue
++  is_app "${names[$i]}" && continue
+   h=${homes[$i]} p=$(prefix "${homes[$i]}")
+   if [[ $h == . || -d ${p}src ]]; then
+     for d in "${p}tests" "${p}scripts"; do [[ -d $d ]] && LUNE_DIRS+=("$d"); done
+@@ -168,6 +179,10 @@ if [[ -n $plan ]]; then
+   { [[ $mode == full ]] || picked z-nile; } && [[ -d z-nile/skills ]] && printf 'skills: %s\n' .claude/skills
+   for i in "${!names[@]}"; do
+     picked "${names[$i]}" || continue
++    if is_app "${names[$i]}"; then
++      printf 'node: %s\n' "$(node_tests "${homes[$i]}" | tr '\n' ' ' | sed 's/ $//')"
++      continue
++    fi
+     [[ -d $(prefix "${homes[$i]}")tests ]] && printf 'specs: %s, from %s\n' "${names[$i]}" "${homes[$i]}"
+   done
+   exit 0
+@@ -287,6 +302,15 @@ for i in "${!names[@]}"; do
+     picked "${names[$i]}" || continue
+   fi
+   n=${names[$i]} h=${homes[$i]}
++  if is_app "$n"; then
++    picked "$n" || continue
++    stage "node ($mode): $n"
++    tests=()
++    while IFS= read -r f; do tests+=("$f"); done < <(node_tests "$h")
++    [[ ${#tests[@]} -gt 0 ]] || { echo "check.sh: app $n has no */tests/*.test.mjs" >&2; exit 1; }
++    node --test "${tests[@]}" || exit 1
++    continue
++  fi
+   [[ -d $(prefix "$h")tests ]] || { stage "tests ($mode): $n has no tests/"; continue; }
+   stage "tests ($mode): $n"
+   if [[ $mode == full ]]; then
+diff --git i/z-nile/engine/projects.luau w/z-nile/engine/projects.luau
+index f9d983f1..9911f64f 100644
+--- i/z-nile/engine/projects.luau
++++ w/z-nile/engine/projects.luau
+@@ -10,7 +10,9 @@ local serde = require("@lune/serde")
+ local projects = {}
+ 
+ export type Project = { name: string, root: string, home: string }
+-export type Registry = { projects: { Project }, retired: { string } }
++-- `apps` (c0257): the names of the projects of kind "app", in registry order: a home with no Luau, whose gate runs its
++-- node tests. Optional in the type, so a registry built by hand (a fixture) needs none; `parse` always sets it.
++export type Registry = { projects: { Project }, retired: { string }, apps: { string }? }
+ 
+ projects.FILE = "z-nile/projects.toml"
+ -- The one root a tree had before c0114. A tree or a commit with no registry has exactly this root.
+@@ -57,12 +59,13 @@ function projects.parse(text: string): (Registry?, string?)
+ 	local out: { Project } = {}
+ 	local names: { [string]: boolean } = {}
+ 	local roots: { [string]: boolean } = {}
++	local apps: { string } = {}
+ 	for i, p in list do
+ 		if type(p) ~= "table" then
+ 			return nil, `{projects.FILE}: project {i} is not a table`
+ 		end
+ 		for k in p do
+-			if k ~= "name" and k ~= "root" then
++			if k ~= "name" and k ~= "root" and k ~= "kind" then
+ 				return nil, `{projects.FILE}: project {i} has an unknown key {k}`
+ 			end
+ 		end
+@@ -70,6 +73,12 @@ function projects.parse(text: string): (Registry?, string?)
+ 		if type(name) ~= "string" or not nameOk(name) then
+ 			return nil, `{projects.FILE}: project {i} needs a name of lowercase words joined by hyphens`
+ 		end
++		if p.kind ~= nil and (p.kind ~= "app" or name == "z-nile") then
++			return nil, `{projects.FILE}: {name}'s kind must be "app" (z-nile has none)`
++		end
++		if p.kind == "app" then
++			table.insert(apps, name)
++		end
+ 		if type(root) ~= "string" or not (root == projects.LEGACY or root == `{name}/.tracker`) then
+ 			return nil, `{projects.FILE}: {name}'s root must be "{name}/.tracker" or "{projects.LEGACY}"`
+ 		end
+@@ -103,7 +112,7 @@ function projects.parse(text: string): (Registry?, string?)
+ 			table.insert(retired, r)
+ 		end
+ 	end
+-	return { projects = out, retired = retired }, nil
++	return { projects = out, retired = retired, apps = apps }, nil
+ end
+ 
+ -- The current roots, in registry order.
+diff --git i/z-nile/engine/skills.luau w/z-nile/engine/skills.luau
+index cd5da1ef..e9b4ec70 100644
+--- i/z-nile/engine/skills.luau
++++ w/z-nile/engine/skills.luau
+@@ -92,7 +92,17 @@ function skills.plan(found: { Found }): ({ Skill }, { string })
+ 					`{dir}: a z-nile skill is named z-… (the pipeline) or zz-… (inside a step)`
+ 				)
+ 				continue
+-			elseif f.folder.project ~= skills.ZNILE and zn then
++			elseif
++				f.folder.project ~= skills.ZNILE
++				and zn
++				-- a project whose own name starts z- (c0257: z-nile-omarchy) names its skills <project>-…; a project
++				-- named z or zz still may not take z-nile's prefixes
++				and not (
++					starts(e.name, f.folder.project .. "-")
++					and f.folder.project ~= "z"
++					and f.folder.project ~= "zz"
++				)
++			then
+ 				table.insert(
+ 					problems,
+ 					`{dir}: the z- and zz- prefixes are z-nile's; a {f.folder.project} skill is named {f.folder.project}-…`
+diff --git i/z-nile/lib/watch.luau w/z-nile/lib/watch.luau
+index 0560c381..1aadd79b 100644
+--- i/z-nile/lib/watch.luau
++++ w/z-nile/lib/watch.luau
+@@ -95,7 +95,11 @@ function watch.forSuite(spec: string, paths: { string }): { string }
+ 	for _, p in paths do
+ 		local home = string.match(p, "^([^/]+)/") or ""
+ 		local keep = if tooling
+-			then home == "" or home == "z-nile" or home == "scripts" or string.sub(p, 1, 8) == ".github/"
++			then home == "" or home == "z-nile" or home == "z-nile-omarchy" or home == "scripts" or string.sub(
++				p,
++				1,
++				8
++			) == ".github/"
+ 			else GAME_HOME[home] == true
+ 		if keep then
+ 			table.insert(out, p)
+diff --git i/z-nile/projects.toml w/z-nile/projects.toml
+index 128fee99..f9273230 100644
+--- i/z-nile/projects.toml
++++ w/z-nile/projects.toml
+@@ -36,3 +36,8 @@ root = "invaders/.tracker"
+ [[project]]
+ name = "asteroids"
+ root = "asteroids/.tracker"
++
++[[project]]
++name = "z-nile-omarchy"
++root = "z-nile-omarchy/.tracker"
++kind = "app"
+diff --git i/z-nile/roots.luau w/z-nile/roots.luau
+index 4accc632..ac945d8f 100644
+--- i/z-nile/roots.luau
++++ w/z-nile/roots.luau
+@@ -3,6 +3,7 @@
+ -- scripts, ac.sh and the stop hook take every root and home from here, so a new project needs no edit to them.
+ --   lune run z-nile/roots                             -- every current root, one per line
+ --   lune run z-nile/roots -- --projects               -- name, home and root per project, tab-separated (c0120)
++--   lune run z-nile/roots -- --apps                   -- the app projects' names, one per line (c0257)
+ --   lune run z-nile/roots -- --luau-dirs [<name>...]  -- the format and lint stages' folders, space-separated: each
+ --                                                       named project's (every project's without a name)
+ -- A registry that does not parse is an error (exit 1): the gate never guesses its folders.
+@@ -27,6 +28,12 @@ if args[1] == "--projects" then
+ 	for _, p in registry.projects do
+ 		print(`{p.name}\t{p.home}\t{p.root}`)
+ 	end
++elseif args[1] == "--apps" then
++	-- the app projects (c0257), one per line: homes with no Luau, whose gate runs their node tests
++	local apps: { string } = registry.apps or {}
++	for _, name in apps do
++		print(name)
++	end
+ elseif args[1] == "--luau-dirs" then
+ 	-- A project's folders (c0120): a game's home's src/, tests/ and scripts/; the tooling's (a home with no src/,
+ 	-- z-nile/) whole home, its engine and libraries with its tests; for z-nile also the root's scripts/, c0114's shims,
+@@ -49,11 +56,13 @@ elseif args[1] == "--luau-dirs" then
+ 	for _, p in registry.projects do
+ 		if #args < 2 or wanted[p.name] then
+ 			local prefix = if p.home == "." then "" else p.home .. "/"
+-			if p.home == "." or fs.isDir(prefix .. "src") then
++			local apps: { string } = registry.apps or {}
++			-- an app's home has no Luau (c0257): only its root is read
++			if table.find(apps, p.name) == nil and (p.home == "." or fs.isDir(prefix .. "src")) then
+ 				for _, d in { "src", "tests", "scripts" } do
+ 					add(prefix .. d)
+ 				end
+-			else
++			elseif table.find(apps, p.name) == nil then
+ 				add(p.home)
+ 			end
+ 			if p.home == "." then
+diff --git i/z-nile/skills/zz-rules/SKILL.md w/z-nile/skills/zz-rules/SKILL.md
+index 36e1464e..78f97ab6 100644
+--- i/z-nile/skills/zz-rules/SKILL.md
++++ w/z-nile/skills/zz-rules/SKILL.md
+@@ -193,7 +193,7 @@ Tracker state is shared the moment it changes, not when a PR merges, so parallel
+ - **Statuses** (`status:` in an item's frontmatter): `new -> preparing -> prepared -> active -> done`. `design:` (draft, reviewed, ready) stays the design review's field. A missing `status:` is derived: `done/` is done, `active/` is active, `design: ready` is prepared, a draft item in a raft (or a draft raft) is preparing, anything else is new. `./zn status` lists them from `origin/main`; `status <id>` prints one; `status <id> <to>` moves one, checked against `origin/main`. `done` is only ever set by `./zn done`, and only `ready` (or the legacy `start` of a backlog raft) claims `active`, and `stop` gives a readied raft back.
+ - **Every write is stamped**: the stored value is `<state>-<three words>` (for example `preparing-quiet-copper-falcon`) and each write uses fresh words, so two terminals making the same move conflict in git instead of merging silently.
+ - **Published or carried.** These moves are pushed straight to `origin/main` as a tiny commit: `new issue` (the stub, `--desc "<line>"` is its Problem), `new raft` (claims the raft, and its members when they are `new`), `fold` and `recombine` (claim their rafts), `release`, `status <id> preparing|new`, `status <id> prepared` back from `active`, and the claim made by `ready` (or by a legacy `start`). An emergent `new issue --raft <R-id>` and `renumber <id>` without `<new>` push a counter-only commit (the raised `z-nile/next`) and then work locally. The move to `prepared` is **carried by the prep PR**: it only edits the local documents.
+-- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), and `z-nile/next`, whose counters may only go up. An issue's `spend.md` is not pushed by `./zn spend`: the command commits the appended row on the current branch, and the row reaches main with that branch. `publish.commit` still accepts an appended `spend.md` when a tracker commit carries one (a directory move keeps it byte for byte). The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after the static stages (`z-nile/check.sh --static`). Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
++- **The direct-push exception.** Everything else lands by pull request. A published change is a tracker-only commit: only `<root>/(issues|rafts)/<ID>/<ID>.md` and `check.sh`, under a root that `origin/main`'s `z-nile/projects.toml` lists (never the working tree's), a `check.sh` only when it is created, an existing document only in its `status:` line (what `status`, `new raft` and `start` publish), and `z-nile/next`, whose counters may only go up. An issue's `spend.md` is not pushed by `./zn spend`: the command commits the appended row on the current branch, and the row reaches main with that branch. `publish.commit` still accepts an appended `spend.md` when a tracker commit carries one (a directory move keeps it byte for byte). The one other kind is a whole-directory move by `ready` or `stop`: every file of an item directory moves between the backlog and `active/` of its own root (never `done/`, never to another root), byte for byte, except the document's `status:` line and the item paths in `check.sh`, which `paths.rewrite` changes to the new directory; publish recomputes both and refuses anything else. `./zn land` also pushes a capture's edits to draft backlog issue documents (their sections, `title` and `depends_on`; design stays draft, every other frontmatter line unchanged) after the static stages (`z-nile/check.sh --static`). Designs, reviews, code and acceptance specs never ride it. A commit that skips the deploy for the many tiny pushes is intended: `deploy.yml` ignores every project root (`<root>/**`: `pickman/.tracker/**`, `z-nile/.tracker/**` and the rest, in registry order) and `z-nile/next` on `push`. An app project (`kind = "app"`, c0257: `z-nile-omarchy/`, the omarchy board app) is listed by its whole home instead (`z-nile-omarchy/**`), since an app never publishes a place. Adding a project needs its registry entry and its root in that `deploy.yml` list. A project with code also needs its home (z-nile/README.md, A project's home), which the gate checks for every project.
+ - **Claims.** z-design claims one issue with `./zn status <id> preparing` and gives it back with `status <id> new`. The old prep's `new raft` over `new` issues still claims them with the raft's stamp, and `./zn status <R-id> preparing` claims an existing draft raft with its unprepared members. A raft move (`status <R-id> preparing|new`) never restamps a member that is `prepared` on `origin/main`, and refuses a member another raft holds there. `ready` (and a legacy `start`) refuses a raft unless it and its members are `prepared` on `origin/main`; the claim is made by `ready`, not `start`.
+ - **Rafting** (z-raft). An issue's raft is its own `raft:` line, edited only in the rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly, and its sync shows the conflict. The published claim (`new raft` over prepared issues, `fold`, `recombine`, `status <R-id> preparing`) stamps the raft only, with a fresh `preparing-…` value; recombine gives its two rafts one value, and that shared stamp is what lets the carried `status <keeper> prepared` take a member whose `raft:` on `origin/main` still names the other raft. The carried move takes a member that is prepared on `origin/main` as it is, refuses one another raft holds there, and takes a `preparing` member only when it carries the raft's own stamp or a claim this checkout made (`status <id> preparing` here); any other `preparing` member is another terminal's live claim and is refused, naming it. z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (z-raft takes it out first with `./zn unfold <R-id> <id>`), and `ready` refuses a raft while a member is `preparing`. A raft's `grouped:` line records a hash of each prepared member's design as z-raft grouped it (its document without `status:` and `raft:`, `check.sh`, `acceptance/`, and its design reviews, refutes and `harvest.md`); the carried move and `ready` refuse a member whose design changed on `origin/main` since (a redesign landed inside the rafting window), a member this rafting grouped with no entry, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering the current one. `compact` and `renumber` re-record every entry that matched before they rewrote its ids, and `remap` does the same. `./zn release <R-id>` is the published give-back. An issue whose `raft:` names a retired or missing raft (audit's `dead-raft` error) is cleared by the command the error names for its state: in the backlog, `./zn unfold <R-id> <id>`, which claims nothing (there is no raft to claim) and rides in the rafting PR; in `active/`, `./zn stop <id>` first (main checkout), which gives that one issue back to the backlog as `stop` gives a member back, and `unfold` after it. An active issue with no `raft:` (`raftless-active`) goes back with `./zn stop <id>` too. A conflict on `raft:` or `depends_on:` (they are adjacent lines) after a sync means rerun z-raft for that issue: take `main`'s line and drop the issue from your raft, or take both edits when it was only `depends_on:`.
+ - **A failed start.** `start` runs every local check before it claims. If a step after the claim fails (branch push, `gh pr create`), the local state is consistent: finish by hand (`git push -u origin <branch>`, `gh pr create --draft`), or give **your own** claim back with `status <R-id> prepared` (a raft started the legacy way, still in the backlog; a readied raft is given back only by `./zn stop <R-id>`). The same terminal can re-run `start` if it died before moving anything (it remembers the claim in `.cache/tracker-claim-<R-id>`); another terminal is refused.
+diff --git i/z-nile/tests/acceptance/c0172/narrowed.spec.luau w/z-nile/tests/acceptance/c0172/narrowed.spec.luau
+index 1ca2732f..da3a346d 100644
+--- i/z-nile/tests/acceptance/c0172/narrowed.spec.luau
++++ w/z-nile/tests/acceptance/c0172/narrowed.spec.luau
+@@ -95,7 +95,7 @@ local PINNED = {
+ 		"pickman",
+ 		"c0015",
+ 		"workflow.spec.luau",
+-		"8107ba9fb712fad54191c941a1842833082f90e83684858f11a9b463b176fc8f",
++		"58a071a591cbb823990493ee3d3ff516eacf7ed74c657dd38af3f2b9292df7c3",
+ 	},
+ 	{
+ 		"pickman",
+diff --git i/z-nile/tests/acceptance/c0184/homes.spec.luau w/z-nile/tests/acceptance/c0184/homes.spec.luau
+index 66e81cb8..0f4cbb1b 100644
+--- i/z-nile/tests/acceptance/c0184/homes.spec.luau
++++ w/z-nile/tests/acceptance/c0184/homes.spec.luau
+@@ -33,9 +33,11 @@ return t.spec("c0184 every project's home is scaffolded", function(it)
+ 	it(
+ 		"AC1: every registered project but z-nile has the wrapper that runs the home rule, pickman among them",
+ 		function()
++			-- c0257 override: an app project's home has no Luau runner; the rule judges it from z-nile (the next case)
+ 			local names: { string } = {}
+-			for _, p in projects.load(TOP).projects do
+-				if p.name ~= "z-nile" then
++			local reg = projects.load(TOP)
++			for _, p in reg.projects do
++				if p.name ~= "z-nile" and not table.find(reg.apps or {}, p.name) then
+ 					table.insert(names, p.name)
+ 					t.expect(fs.isFile(`{TOP}/{p.home}/tests/meta/home.spec.luau`)).toBe(true)
+ 				end
+diff --git i/z-nile/tests/inputs.tsv w/z-nile/tests/inputs.tsv
+index c3025fb6..d8712193 100644
+--- i/z-nile/tests/inputs.tsv
++++ w/z-nile/tests/inputs.tsv
+@@ -255,6 +255,8 @@ tests/tooling/board.spec.luau	invaders/.tracker/issues/
+ tests/tooling/board.spec.luau	invaders/.tracker/rafts/
+ tests/tooling/board.spec.luau	asteroids/.tracker/issues/
+ tests/tooling/board.spec.luau	asteroids/.tracker/rafts/
++tests/tooling/board.spec.luau	z-nile-omarchy/.tracker/issues/
++tests/tooling/board.spec.luau	z-nile-omarchy/.tracker/rafts/
+ tests/tooling/board.spec.luau	z-nile/projects.toml
+ tests/tooling/board.spec.luau	z-nile/compaction.txt
+ tests/tooling/fence-inherited-env.spec.luau	.gitignore
+diff --git i/z-nile/tests/lib/deploylist.luau w/z-nile/tests/lib/deploylist.luau
+index ce21de62..c4750b0d 100644
+--- i/z-nile/tests/lib/deploylist.luau
++++ w/z-nile/tests/lib/deploylist.luau
+@@ -1,6 +1,7 @@
+ --!strict
+ -- c0183: deploy.yml's push paths-ignore as the registry implies it: every project root `<root>/**`, in registry
+--- order, then the counter `z-nile/next`. The one copy of that list for the specs that pin it (c0114's gate-cover,
++-- order, an app project's whole home `<home>/**` instead (c0257: an app never publishes a place), then the
++-- counter `z-nile/next`. The one copy of that list for the specs that pin it (c0114's gate-cover,
+ -- c0120's ci), so a new project needs its deploy.yml entry and no spec edit.
+ local projects = require("@znile/engine/projects")
+ 
+@@ -9,8 +10,9 @@ local deploylist = {}
+ -- the list for the checkout whose top is `top`
+ function deploylist.ignored(top: string): { string }
+ 	local out: { string } = {}
+-	for _, r in projects.roots(projects.load(top)) do
+-		table.insert(out, `{r}/**`)
++	local reg = projects.load(top)
++	for _, p in reg.projects do
++		table.insert(out, if table.find(reg.apps or {}, p.name) then `{p.home}/**` else `{p.root}/**`)
+ 	end
+ 	table.insert(out, "z-nile/next")
+ 	return out
+diff --git i/z-nile/tests/lib/home.luau w/z-nile/tests/lib/home.luau
+index 319bc761..ccdb73bf 100644
+--- i/z-nile/tests/lib/home.luau
++++ w/z-nile/tests/lib/home.luau
+@@ -15,7 +15,7 @@ local home = {}
+ -- required, because c0120 keeps a z-nile engine change from selecting any other project's specs, and each home runs
+ -- this rule from its own folder.
+ export type Project = { name: string, root: string, home: string }
+-export type Registry = { projects: { Project } }
++export type Registry = { projects: { Project }, apps: { string }? }
+ 
+ -- The `name:` of a SKILL.md's frontmatter, or nil (the reader of skill folders is engine/skills.luau, which the engine's
+ -- own specs run; a name that differs from the folder's is also refused by `./zn skills --check`).
+@@ -176,6 +176,20 @@ function home.problems(top: string, reg: Registry, only: string?): ({ string },
+ 		then
+ 			bad(h, "check.sh is not executable")
+ 		end
++		-- an app's home (c0257) has no Luau: its gate, its root's folders and its two skills, nothing more
++		if table.find(reg.apps or {}, p.name) then
++			for _, d in { "issues", "rafts" } do
++				if not fs.isDir(`{top}/{p.root}/{d}`) then
++					bad(h, `missing {string.sub(p.root, #h + 2)}/{d}/`)
++				end
++			end
++			for _, kind in { "arch", "test" } do
++				if not fs.isFile(`{top}/{h}/skills/{p.name}-{kind}/SKILL.md`) then
++					bad(h, `missing skills/{p.name}-{kind}/SKILL.md`)
++				end
++			end
++			continue
++		end
+ 		-- the aliases and the root's formatter and linter configuration
+ 		local luaurc = read(`{top}/{h}/.luaurc`)
+ 		if not luaurc then
