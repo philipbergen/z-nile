@@ -2,6 +2,7 @@
 title: A threshold chosen from a measurement says the load it was measured at, and is remeasured at a gate's load
 when: design
 tags: [measurement, budgets, load, defaults, questions]
+from: c0230 prep note (the F3 ruling, E13) (ticket withdrawn 2026-11-16)
 check: For each default or limit this design picks from a measured number (CPU, wall, files), what was the machine's load when it was measured, and was it measured again at a busy gate's load before the option's cost was put to the user?
 ---
 CPU per process rises with load as wall time does, only less, so a number from a quiet machine understates what a gate sees.

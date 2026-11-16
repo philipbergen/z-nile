@@ -2,6 +2,7 @@
 title: A knob that changes a runner's output is a flag, never an inherited environment variable
 when: both
 tags: [runner, specs, env, nested]
+from: c0230 design review 001 F2 (ticket withdrawn 2026-11-16)
 check: When the caller sets this knob, does the output of any nested run a spec starts (and pins) change, and if the knob is an environment variable, why is it not a flag the runner never passes to its workers?
 ---
 Every nested run a spec starts inherits the environment of the run that started it, so a variable that changes what a runner prints changes the output every spec that pins a nested run's output reads.
