@@ -46,12 +46,15 @@ local NAMES: { [string]: { string } } = {
 		"`asteroids/.tracker/architecture.md`",
 	},
 }
--- the root's own paragraphs, which no project's file repeats
+-- the root's own paragraphs, which no project's file repeats. Their leads are root.spec's KEPT, plus the
+-- Non-negotiable paragraph and the skill rows: a lead added to KEPT is added here.
 local ROOT_ONLY = {
 	"**Non-negotiable:**",
 	"**Subagents:**",
 	"**Processes:**",
 	"**No check may ever change the real repository.**",
+	"**Temporary trees live in `.cache/.tmp/`",
+	"**Design approval:**",
 	"| `z-nile/skills/",
 }
 

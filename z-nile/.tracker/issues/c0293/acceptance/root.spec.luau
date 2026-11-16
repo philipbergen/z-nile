@@ -21,7 +21,8 @@ local TABLE = table.concat({
 	"| `z-nile/skills/z-design/SKILL.md` | `/z-design <id>`, on a captured issue | designing one issue to prepared (includes the design review) |",
 	"| `z-nile/skills/z-raft/SKILL.md` | `/z-raft`, or `/z-raft <ids>` to group as asked | grouping prepared issues into rafts, recombining backlog rafts |",
 	"| `z-nile/skills/z-ready/SKILL.md` | `/z-ready <R-id>`, from the main checkout | readying a raft: claim, move to active/, write its prompt |",
-	"| `z-nile/skills/z-run/SKILL.md` | `/z-run <R-id>`, in a session started in the main checkout | launching a readied raft from the main checkout (`/z-run R0010`) |",
+	"| `z-nile/skills/z-work/SKILL.md` | `./zn work`, or `./zn work <R-id>`, in a session started in the main checkout | the worker a person starts (`./zn work`, or `./zn work R0010`) |",
+	"| `z-nile/skills/z-run/SKILL.md` | `/z-run <R-id>`, in a session started in the main checkout | `/z-run R0010` is z-work with that raft named; under dispatch it is the headless run step |",
 	"| `z-nile/skills/z-stop/SKILL.md` | `/z-stop <R-id>`, from the main checkout | undoing z-ready or aborting a raft |",
 }, "\n")
 -- the map paragraph ends with every registered project's folder but z-nile's, in the registry's order, so a project
@@ -51,12 +52,15 @@ end
 local MAP = mapFor({ "pickman", "arcade", "portal", "snake", "invaders", "asteroids" })
 local NONNEG = "**Non-negotiable:**"
 -- the shared rules the user kept in the root (c0293's Problem, both decisions of 2026-11-10); the first three are
--- required, and c0194's lands before c0293 (depends_on)
+-- required, c0194's lands before c0293 (depends_on), and the fifth is c0283's `**Design approval:**` paragraph, which
+-- may land on either side of c0293 (Guess pending the user, c0293.md Open to the human F3). KEPT changes together with
+-- homes.spec's ROOT_ONLY, which lists the same leads: a lead added here is added there.
 local KEPT = {
 	"**Subagents:**",
 	"**Processes:**",
 	"**No check may ever change the real repository.**",
 	"**Temporary trees live in `.cache/.tmp/`",
+	"**Design approval:**",
 }
 local REQUIRED = 3
 -- the base paragraphs c0293 drops or moves, by how each starts (c0293's Design, Dropped and moved)
@@ -271,6 +275,7 @@ return t.spec("c0293 root AGENTS.md", function(it)
 			"**Processes:** is missing"
 		)
 		some(shape(GOOD .. "\n" .. PROC .. "\n", MAP), "appears twice")
+		none(shape(GOOD .. "\n**Design approval:** a human approves every design.\n", MAP)) -- an optional shared rule
 		some(
 			shape((string.gsub(GOOD, "^# Engaging the pipeline", "# pickman")), MAP),
 			"paragraph 1 is not c0293's text"
@@ -303,6 +308,20 @@ return t.spec("c0293 root AGENTS.md", function(it)
 			local temp =
 				"**Temporary trees live in `.cache/.tmp/`, never in the system temp folder.** Use `./zn tmp new`."
 			some(carry(OLD .. "\n" .. temp .. "\n", GOOD, MAP), "not carried byte for byte")
+			-- c0283's paragraph, in the base or not: carried when present, optional when absent
+			local approval = "**Design approval:** a human approves every design with `./zn approve <id>`."
+			local WITH =
+				table.concat({ TITLE, INTRO, NONNEG_P, TABLE, MAP, approval, SUB, PROC, NOCHECK }, "\n\n")
+			local OLD_WITH = (
+				string.gsub(
+					OLD,
+					"\n\n%*%*Subagents",
+					"\n\n" .. string.gsub(approval, "%%", "%%%%") .. "\n\n**Subagents"
+				)
+			)
+			none(carry(OLD_WITH, WITH, MAP))
+			none(carry(OLD, GOOD, MAP))
+			some(carry(OLD_WITH, GOOD, MAP), "not carried byte for byte")
 		end
 	)
 
@@ -312,13 +331,16 @@ return t.spec("c0293 root AGENTS.md", function(it)
 			if process.env.ZN_C0293_CARRY == nil then
 				return -- the gate's copy: AC2's check line sets ZN_C0293_CARRY, so the carry runs at check and `done`
 			end
-			local tip = string.gsub(git({ "rev-parse", "HEAD" }), "%s+$", "")
 			local b = process.exec(
 				"git",
 				{ "merge-base", "HEAD", "refs/remotes/origin/main" },
 				{ cwd = root }
 			)
-			local base = if b.ok then (string.gsub(b.stdout, "%s+$", "")) else tip
+			if not b.ok then
+				-- the merge base is the only honest base: the file compared with itself passes whatever it says
+				error("cannot find the merge base with origin/main: the carry compares against it")
+			end
+			local base = (string.gsub(b.stdout, "%s+$", ""))
 			none(
 				carry(
 					git({ "show", `{base}:AGENTS.md` }),

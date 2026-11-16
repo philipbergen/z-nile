@@ -51,6 +51,25 @@ return t.spec("c0293 dropped rules stay stated", function(it)
 		end
 	end)
 
+	it("AC5: every skill carries c0136's lead-in, and zz-review the question it adds", function()
+		-- c0136's exact sentences run at its `done` and never again (its check.sh); the root's copy of the rule is
+		-- dropped here, so they are pinned for good
+		local all = skills()
+		if #all < 24 then
+			error(`found {#all} skills, fewer than the 24 of c0293's day`)
+		end
+		for _, rel in all do
+			says(
+				rel,
+				"A lesson goes to the step that erred: the skill whose instructions the author was following when the mistake was made"
+			)
+		end
+		says(
+			"z-nile/skills/zz-review/SKILL.md",
+			"Ask: which step made this mistake, and which earlier step should have caught it?"
+		)
+	end)
+
 	it("AC5: z-design and zz-execute harvest every review finding", function()
 		says("z-nile/skills/z-design/SKILL.md", "**Harvest the round**")
 		says("z-nile/skills/zz-execute/SKILL.md", "**Harvest the round**")

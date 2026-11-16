@@ -1,0 +1,14 @@
+# Harvest: c0293
+- design-review-001 F1: z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F2: z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F3: z-design/new-rules-migrate-existing-work, z-design/peers-scans-run-on-the-prototype, z-design/quote-other-preps-before-promising
+- design-review-001 F4: z-design/prep-experiments-run-in-standalone-clones
+- design-review-001 F5: z-design/narrowing-substitutions-found-by-search
+- design-review-001 F6: zz-test/no-change-claims-check-behaviour-not-the-raft-diff
+- design-review-001 F7: z-design/instructions-runnable-where-they-run
+- design-review-001 F8: zz-test/specs-read-sources-through-the-selector
+- design-review-001 F9: zz-test/no-vacuous-pass
+- design-review-001 F10: z-design/restated-rules-move-together
+- design-review-001 F11: one-off: whether z-nile gets an AGENTS.md of its own is the user's call; the capture's wording does not settle it
+- design-review-001 F12: z-design/restated-rules-move-together
+- note re-grounded after 422 commits of main (the review answered five days late; AGENTS.md, z-work, c0261, c0283 moved): z-design/design-the-execution-window
