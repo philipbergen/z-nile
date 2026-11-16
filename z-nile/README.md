@@ -97,7 +97,7 @@ Tickets have no order today. They should: every issue and raft gets a `rank:` (i
 A worker claims an item by landing the status change on `origin/main`, as `status <id> preparing` and z-ready already do. The push is the lock: a lost race means taking the next item. Each step runs in its own worktree under `.worktree/` on the worker's host, and a worker pushes its layer branch after every commit, so a taker on any host recovers all committed work. The worker's identity (host, CLI, model) goes on its spend rows. *captured* (c0254) (the claim itself *exists*)
 - A worker that holds an item beats a heartbeat on it every 5 minutes, as a commit on a heartbeat branch, not on `main`; the branch is deleted when the heartbeat drops or the task completes. An item in progress whose heartbeat is stale is lost. *exists* (c0265)
 - Agents keep their claims alive without remembering to beat: the claim paths, every `./zn` command in a worktree, long commands and the dispatcher beat. *designed* (c0275)
-- A lost claim is taken over by the next worker as a normal claim, which resumes it and is recorded, and its old owner is refused and told: the takeover deletes the old heartbeat branch and creates a new one, so a worker that comes back learns it lost the claim. *designed* (c0274)
+- A lost claim is taken over by the next worker as a normal claim, which resumes it and is recorded, and its old owner is refused and told: the takeover deletes the old heartbeat branch and creates a new one, so a worker that comes back learns it lost the claim. *exists* (c0274)
 - A takeover discards the old worker's worktree, and a numbered copy recovers its work: the old worker's work is kept, and a numbered copy of it continues the work. *designed* (c0277)
 
 ### Autonomous delivery
@@ -175,7 +175,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | the full-force review: limited view, verdict, redo | c0262 | designed |
 | provenance: the record and its command | c0263 | designed |
 | the heartbeat branch, `./zn beat`, lost work | c0265 | exists |
-| take over a lost claim, the old owner told | c0274 | designed |
+| take over a lost claim, the old owner told | c0274 | exists |
 | automatic heartbeats | c0275 | designed |
 | the board shows lost work | c0276 | designed |
 | discard and recover a worktree: the numbered copy | c0277 | designed |
