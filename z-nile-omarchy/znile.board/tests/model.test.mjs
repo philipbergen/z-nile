@@ -207,3 +207,10 @@ test("cost: ticket spend, raft rollup or member sum, formatting", () => {
   assert.equal(M.fmtTokens(1177234), "1.2M")
   assert.equal(M.phaseLine(m.byId.R0002.cost), "capture 3 min · prep 2 h · design-review 0 min, 1.2M")
 })
+
+test("escape steps back one level: big view, then the card, then the search, then the window", () => {
+  assert.equal(M.escapeStep({ maximized: true, selected: "c0001", query: "x" }), "shrink")
+  assert.equal(M.escapeStep({ maximized: false, selected: "c0001", query: "x" }), "deselect")
+  assert.equal(M.escapeStep({ maximized: false, selected: "", query: "x" }), "clearSearch")
+  assert.equal(M.escapeStep({ maximized: false, selected: "", query: "" }), "close")
+})

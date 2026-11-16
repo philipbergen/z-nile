@@ -191,6 +191,15 @@ function reorder(ids, id, beforeId) {
   return out
 }
 
+// What Esc does: it steps back one level at a time. The big view goes back
+// to card size, an open card closes, then the search clears, then the window closes.
+function escapeStep(state) {
+  if (state.maximized) return "shrink"
+  if (state.selected) return "deselect"
+  if (state.query) return "clearSearch"
+  return "close"
+}
+
 function matches(item, filters) {
   filters = filters || {}
   if (filters.projects && filters.projects.length > 0 && filters.projects.indexOf(item.project) < 0) return false

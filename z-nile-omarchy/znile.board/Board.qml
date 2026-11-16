@@ -99,6 +99,15 @@ Item {
     closingFromHost = true
     window.visible = false
   }
+  // Esc from anywhere, the search box included, steps back one level.
+  function escape() {
+    var step = Model.escapeStep({ maximized: maximized, selected: selectedId, query: search.text })
+    if (step === "shrink") maximized = false
+    else if (step === "deselect") selectedId = ""
+    else if (step === "clearSearch") search.text = ""
+    else close()
+    keys.forceActiveFocus()
+  }
 
   // ---- view state
   property string view: "tickets"      // "tickets" | "rafts"
@@ -183,6 +192,8 @@ Item {
   property Item anchorTile: null
   property var anchorRect: null
   function select(id, tile) {
+    // A card click takes the keys back from the search box, so Esc steps back from the card.
+    keys.forceActiveFocus()
     // Clicking the open card again toggles the big view.
     if (selectedId === id) { maximized = !maximized; return }
     selectedId = id
@@ -293,10 +304,7 @@ Item {
         if (plain && event.key === Qt.Key_R) { root.view = "rafts"; root.selectedId = ""; event.accepted = true; return }
         if (plain && event.key === Qt.Key_T) { root.view = "tickets"; root.selectedId = ""; event.accepted = true; return }
         if (event.key === Qt.Key_Escape) {
-          if (root.maximized) root.maximized = false
-          else if (root.selectedId !== "") root.selectedId = ""
-          else if (search.text !== "") search.text = ""
-          else root.close()
+          root.escape()
           event.accepted = true
         } else if (root.selectedId !== "" && root.scrollBody(event.key)) {
           event.accepted = true
@@ -593,7 +601,7 @@ Item {
               font.pixelSize: Style.font.body
               clip: true
               onTextChanged: root.query = text
-              Keys.onEscapePressed: { text = ""; keys.forceActiveFocus() }
+              Keys.onEscapePressed: root.escape()
               PlainLabel {
                 visible: search.text === ""
                 text: "Search id, title, raft…  ( / )"
@@ -870,7 +878,7 @@ Item {
         MouseArea {
           anchors.fill: parent
           acceptedButtons: Qt.LeftButton
-          onClicked: root.maximized = !root.maximized
+          onClicked: { root.maximized = !root.maximized; keys.forceActiveFocus() }
           onWheel: function(w) { w.accepted = true }
         }
 
@@ -1013,7 +1021,7 @@ Item {
               MouseArea {
                 width: bodyFlick.contentWidth
                 height: Math.max(bodyFlick.height, bodyFlick.contentHeight)
-                onClicked: root.maximized = !root.maximized
+                onClicked: { root.maximized = !root.maximized; keys.forceActiveFocus() }
               }
 
               // Markdown from a tracker file: Model.safeMarkdown has already
