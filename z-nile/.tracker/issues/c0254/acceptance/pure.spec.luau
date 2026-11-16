@@ -370,6 +370,10 @@ return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 			local holders = xhost.holders({ b, a }, { c0010 = "preparing-d-e-f" })
 			t.expect(holders.c0010.host).toBe("h2")
 			t.expect(xhost.holderText(holders.c0010)).toBe("h2 (grok)")
+			-- two trailers for one stamp (a claim restated): the newest, listed first, is the holder
+			local newer =
+				xhost.trailer("c0010", "preparing-d-e-f", { host = "h3", cli = "agent", model = "" })
+			t.expect(xhost.holders({ newer, b }, { c0010 = "preparing-d-e-f" }).c0010.host).toBe("h3")
 			-- a stamp nobody's trailer names has no holder
 			t.expect(xhost.holders({ b, a }, { c0010 = "preparing-z-z-z" }).c0010).toBe(nil)
 			t.expect(xhost.holderText(xhost.holders({ a }, { c0010 = "preparing-a-b-c" }).c0010))

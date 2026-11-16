@@ -40,12 +40,12 @@ ac1() {
 check "AC1: In worker mode the claim is the push and a rejected claim means taking the next raft: the dispatcher claims an issue with its own \`claim\` step before any model starts; a failed \`claim\` or \`z-ready\` step is asked about on \`origin/main\` and counts as lost only when the item left the state it was picked in under a stamp that is not the worker's own (any other failure stays a failure); a lost race ends the run with exit 6 (\`taken\`) and leaves no failed step in the run state; the supervisor counts it, asks \`./zn next\` again at once (one idle period only when the same item is lost twice running) and does not count it as an item taken; and with two clones of one origin the first claim wins and the second is refused and publishes nothing." ac1
 ac2() {
 	fixtureSpec pure 'AC2, AC3: a worker whose claim was taken over or ended never pushes the branch' 'AC2, AC3: nothing is pushed over commits origin has, or when they cannot be counted' 'AC2: the claim states xhost reads are heartbeat.holds'\''s'
-	fixtureSpec race 'AC2: a taker on host B continues in a worktree of its own, built from the pushed branch' 'AC2, AC3: once host B holds the claim, host A'\''s next commit stays local and origin keeps B'\''s branch'
+	fixtureSpec race 'AC2: a taker on host B continues in a worktree of its own, built from the pushed branch' 'AC2, AC3: once host B holds the claim, host A'\''s next commit stays local and origin keeps B'\''s branch' 'AC2, AC3: a worker that still holds its claim does not push over commits origin has and it lacks'
 }
 check "AC2: The lost worker's worktree is not reused by another host: a taker on another host builds a worktree of its own, in its own clone, from the branch the lost worker pushed (it has every pushed commit and the lost worker's worktree is untouched), and a worker whose claim was taken over or has ended is never pushed again, so it cannot move the taker's branch." ac2
 ac3() {
 	fixtureSpec pure 'AC3: every commit on a layer or prep branch is pushed, a first push sets the upstream' 'AC2, AC3: a worker whose claim was taken over or ended never pushes the branch' 'AC2, AC3: nothing is pushed over commits origin has, or when they cannot be counted' 'AC3: any other branch keeps today'\''s rule: pushed only with an upstream, and never main' 'AC3: branch kinds, and the claim each is keyed by'
-	fixtureSpec race 'AC3: host A'\''s prep commits are pushed one by one, the first sets the upstream' 'AC2, AC3: once host B holds the claim, host A'\''s next commit stays local and origin keeps B'\''s branch'
+	fixtureSpec race 'AC3: host A'\''s prep commits are pushed one by one, the first sets the upstream' 'AC2, AC3: once host B holds the claim, host A'\''s next commit stays local and origin keeps B'\''s branch' 'AC2, AC3: a worker that still holds its claim does not push over commits origin has and it lacks'
 }
 check "AC3: Every commit is pushed, for layers and preps alike: after each \`./zn commit\` on a layer branch or in a \`prep-<slug>\` worktree the branch is pushed and the first push sets its upstream; nothing is pushed for a taken or ended claim, over commits origin has and the worktree lacks, or when that cannot be counted; any other branch keeps today's rule (pushed only with an upstream, never main); a refused push is said and the commit stands." ac3
 ac4() {
@@ -55,7 +55,7 @@ ac4() {
 check "AC4: Spend rows record host, CLI and model: a row written by a fold carries this machine's host and the CLI of the step (\`ZN_CLI\`, set by the dispatcher for each attempt, else the CLI's markers, else \`unknown\`) beside its model cell; a row that already names them keeps them; an old file with the old header still reads and takes new rows, and the rows already in it are not changed." ac4
 ac5() {
 	fixtureSpec pure 'AC5: the Worker trailer round-trips and reads the newest holder of the item'\''s current stamp' 'AC5: ./zn work status names the worker that holds each raft, and says nothing extra when none is known'
-	fixtureSpec race 'AC5: the claim commit says who made it, and the board reads it back'
+	fixtureSpec race 'AC5: the claim commit says who made it, and the board reads it back' 'AC5: the board'\''s card for the issue says which worker holds it'
 }
 check "AC5: The board shows which worker holds what: a claim commit carries a \`Worker: <id> <stamp> host=<h> cli=<c> model=<m>\` trailer, and the board's card and \`./zn work status\` name the worker of the newest trailer that carries the item's current stamp (host, CLI, model); a claim taken over names the new worker, and a stamp no trailer carries has no holder." ac5
 ac6() {

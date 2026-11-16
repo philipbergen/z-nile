@@ -14,6 +14,7 @@ local xhost = require("@znile/engine/xhost")
 local DOC = "pickman/.tracker/issues/c0010/c0010.md"
 local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
 	.. 'check "AC1: ok" true\nfinish\n'
+local DOC2 = "pickman/.tracker/issues/c0011/c0011.md"
 local DRAFT =
 	"---\nid: c0010\ntype: chore\ntitle: c0010\nslug: c0010\nraft: \ndepends_on: []\nemergent: false\ndesign: draft\ncreated: 2026-10-20\nstatus: new-amber-otter-lynx\n---\n\n# c0010\n"
 
@@ -35,6 +36,11 @@ local function claimCommits(): number
 	end
 	return n
 end
+-- origin's tip of a branch, or "" when it has none (so a missing push is a failed assertion, not a git error)
+local function originTip(branch: string): string
+	local r = fixture.exec(f.origin, "git", { "rev-parse", "--verify", "--quiet", branch })
+	return if r.ok then (string.gsub(r.stdout, "%s+$", "")) else ""
+end
 local function has(text: string?, needle: string): boolean
 	return text ~= nil and string.find(text, needle, 1, true) ~= nil
 end
@@ -46,6 +52,8 @@ return t.spec("c0254 two hosts claim one issue", function(it)
 			["pickman/.tracker/architecture.md"] = "# Architecture\n",
 			[DOC] = DRAFT,
 			["pickman/.tracker/issues/c0010/check.sh"] = CHECK,
+			[DOC2] = (string.gsub(DRAFT, "c0010", "c0011")),
+			["pickman/.tracker/issues/c0011/check.sh"] = CHECK,
 		})
 		wtA = trackerfix.trOk(f, f.main, { "worktree", "prep-c0010" })
 		wtB = trackerfix.trOk(f, f.other, { "worktree", "prep-c0010" })
@@ -114,13 +122,13 @@ return t.spec("c0254 two hosts claim one issue", function(it)
 		local c1 = trackerfix.tr(f, wtA, { "commit", "-m", "tracker: prep c0010 draft 1" }, HOST_A)
 		t.expect(c1.ok).toBe(true)
 		local tip1 = fixture.git(wtA, { "rev-parse", "HEAD" })
-		t.expect(fixture.git(f.origin, { "rev-parse", "prep-c0010" })).toBe(tip1)
+		t.expect(originTip("prep-c0010")).toBe(tip1)
 		fs.writeFile(`{wtA}/pickman/.tracker/issues/c0010/notes-2.md`, "second\n")
 		local c2 = trackerfix.tr(f, wtA, { "commit", "-m", "tracker: prep c0010 draft 2" }, HOST_A)
 		t.expect(c2.ok).toBe(true)
 		local tip2 = fixture.git(wtA, { "rev-parse", "HEAD" })
 		t.expect(tip2 ~= tip1).toBe(true)
-		t.expect(fixture.git(f.origin, { "rev-parse", "prep-c0010" })).toBe(tip2)
+		t.expect(originTip("prep-c0010")).toBe(tip2)
 	end)
 
 	it("AC2: a taker on host B continues in a worktree of its own, built from the pushed branch", function()
@@ -161,19 +169,45 @@ return t.spec("c0254 two hosts claim one issue", function(it)
 			)
 			t.expect(pushedB.ok).toBe(true)
 			local tipB = fixture.git(taker, { "rev-parse", "HEAD" })
-			t.expect(fixture.git(f.origin, { "rev-parse", "prep-c0010" })).toBe(tipB)
+			t.expect(originTip("prep-c0010")).toBe(tipB)
 			-- host A wakes up and commits: the commit stands, the push is refused and says why
 			fs.writeFile(`{wtA}/pickman/.tracker/issues/c0010/notes-late.md`, "late\n")
 			local late = trackerfix.tr(f, wtA, { "commit", "-m", "tracker: prep c0010 late" }, HOST_A)
 			t.expect(late.ok).toBe(true)
 			t.expect(has(late.stderr, "was taken over by another worker")).toBe(true)
-			t.expect(fixture.git(f.origin, { "rev-parse", "prep-c0010" })).toBe(tipB)
+			t.expect(originTip("prep-c0010")).toBe(tipB)
 			t.expect(fixture.git(wtA, { "rev-parse", "HEAD" }) ~= tipB).toBe(true)
 			-- the board now names host B's worker, not host A's
 			fixture.git(f.main, { "fetch", "-q", "origin" })
 			local facts = board.readFacts(f.main)
 			local holders = xhost.holders(facts.workers or {}, { c0010 = stampOnOrigin() })
 			t.expect(holders.c0010.cli).toBe("grok")
+		end
+	)
+
+	it(
+		"AC2, AC3: a worker that still holds its claim does not push over commits origin has and it lacks",
+		function()
+			local a = trackerfix.trOk(f, f.main, { "worktree", "prep-c0011" })
+			t.expect(trackerfix.tr(f, a, { "status", "c0011", "preparing" }, HOST_A).ok).toBe(true)
+			fs.writeFile(`{a}/pickman/.tracker/issues/c0011/n-1.md`, "one\n")
+			t.expect(trackerfix.tr(f, a, { "commit", "-m", "tracker: prep c0011 one" }, HOST_A).ok).toBe(true)
+			local pushed = originTip("prep-c0011")
+			t.expect(pushed).toBe(fixture.git(a, { "rev-parse", "HEAD" }))
+			-- another worker (a person on host B) pushes a commit to the same branch
+			local b = trackerfix.trOk(f, f.other, { "worktree", "prep-c0011" })
+			fs.writeFile(`{b}/pickman/.tracker/issues/c0011/n-b.md`, "from b\n")
+			fixture.git(b, { "add", "-A" })
+			fixture.git(b, { "commit", "-q", "-m", "b adds a file" })
+			fixture.git(b, { "push", "-q", "origin", "HEAD:prep-c0011" })
+			local theirs = originTip("prep-c0011")
+			t.expect(theirs ~= pushed).toBe(true)
+			-- host A, claim intact, commits again: the commit stands and the push is refused
+			fs.writeFile(`{a}/pickman/.tracker/issues/c0011/n-2.md`, "two\n")
+			local c = trackerfix.tr(f, a, { "commit", "-m", "tracker: prep c0011 two" }, HOST_A)
+			t.expect(c.ok).toBe(true)
+			t.expect(has(c.stderr, "commit(s) this checkout lacks")).toBe(true)
+			t.expect(originTip("prep-c0011")).toBe(theirs)
 		end
 	)
 end)

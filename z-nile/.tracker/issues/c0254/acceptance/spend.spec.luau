@@ -77,7 +77,9 @@ return t.spec("c0254 spend rows say who spent them", function(it)
 		function()
 			local old = buffer.appendTsv(nil, { row("build", "m1", nil, nil) })
 			t.expect(string.split(old, "\n")[1]).toBe(buffer.HEADER)
-			local rows = buffer.parseTsv(old) :: { ledger.Row }
+			local parsed = buffer.parseTsv(old)
+			t.expect(parsed ~= nil).toBe(true)
+			local rows = parsed :: { ledger.Row }
 			t.expect(rows[1].host).toBe(nil)
 			t.expect(rows[1].cli).toBe(nil)
 			local grown = buffer.appendTsv(old, { row("build", "m2", "h2", "grok") })
