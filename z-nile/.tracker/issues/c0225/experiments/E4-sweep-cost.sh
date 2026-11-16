@@ -2,6 +2,7 @@
 # E4: what an unseamed sweep of a clean run costs (every pid 2..99999, nothing left), for the sweeper texts given, in
 # the launcher form, each run $N times in a fresh jail with the runner's signal rules. Prints wall seconds per run
 # (median, max) and the CPU the sweeper used (user+sys, summed over the runs).
+# Run: ./zn run --time 300 -- experiments/E4-sweep-cost.sh 20 <old.pl> <new.pl>
 set -u
 N=$1; shift
 P="(version 1)(allow default)(deny signal (with no-log))(allow signal (target same-sandbox))"

@@ -3,6 +3,8 @@
 # with the runner's profile (writes only under $3), the sweep narrowed to the looper through the seam. $4 (default
 # 0.2) is how long the swept command waits after starting the looper; $5 = file makes the looper re-exec a script
 # file ($0, as c0168 review 002's looper did) instead of `perl -e`.
+# Run: ./zn run --time 600 -- experiments/E2-sweep-looper.sh <sweeper.pl> 30 <dir> [wait] [e|file]  (dump the sweeper
+# with dump-sweeper.luau under `./zn run --time 60 -- lune run`).
 # Prints one line per sweep that left the looper alive, then a total. The looper stops by itself after 20 s.
 set -u
 SW=$1; N=$2; DIR=$(cd "$3" && pwd -P); WAIT=${4:-0.2}; MODE=${5:-e}; OUT=$$

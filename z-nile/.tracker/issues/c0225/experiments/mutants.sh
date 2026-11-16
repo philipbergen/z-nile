@@ -2,6 +2,7 @@
 # The prep's mutation check: in the prototype clone $1 (a clone under $TMPDIR with the prototype applied), apply each
 # mutant to fence.SWEEPER (a literal text replaced, refused unless it occurs exactly once), read the change back, run
 # the acceptance spec, print the failing cases and their messages, and restore the prototype.
+# Run: ./zn run --time 600 -- bash mutants.sh <clone>   (about 3 minutes)
 set -u
 P=$1; F=$P/z-nile/tests/lib/fence.luau; cp "$F" "$F.proto"
 mutate() { # mutate <name> <literal> <replacement>
@@ -20,7 +21,9 @@ mutate "M2 ends on the fourth empty scan" '++$quiet >= 5' '++$quiet >= 4'
 mutate "M3 ends on the sixth empty scan" '++$quiet >= 5' '++$quiet >= 6'
 mutate "M4 a stopping scan does not restart the count" '"$quiet = 0; kill' '"kill'
 mutate "M5 no pause between empty scans" '"select(undef, undef, undef, 0.05); next }"' '"next }"'
-mutate "M6 the seam takes any number in an entry" 'next unless /^(\\d+)(?:@(\\d+))?$/;' 'next unless /(\\d+)(?:@(\\d+))?/;'
-mutate "M7 the seam ignores @n" '$from{$1} = $2 // 1' '$from{$1} = 1'
-mutate "M8 hidden pids are candidates from the first scan" '(%from ? grep { $from{$_} <= $scan } @cand : @cand)' '@cand'
+mutate "M6 the seam takes any number in an entry" '/^([1-9]\\d*)(?:@([1-9]\\d*))?$/;' '/(\\d+)(?:@(\\d+))?/;'
+mutate "M7 the seam ignores @n" '$from{0 + $1} = 0 + ($2 // 1)' '$from{0 + $1} = 1'
+mutate "M8 hidden pids are candidates from the first scan" 'if ($later{$_} <= $scan)' 'if (1)'
+mutate "M9 a 10 ms pause after an empty scan" '"select(undef, undef, undef, 0.05); next }"' '"select(undef, undef, undef, 0.01); next }"'
+# M10 (the limit of 50 counts every scan) is only seen by check.sh's real run (AC9): see mutants-result.txt
 cp "$F.proto" "$F"; rm -f "$F.proto"

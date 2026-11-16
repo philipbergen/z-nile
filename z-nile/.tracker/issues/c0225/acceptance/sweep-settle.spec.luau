@@ -198,7 +198,8 @@ return t.spec("c0225 the sweep ends only after five empty scans in a row", funct
 		stopping({ a, b, w }, function()
 			-- scan 1 stops A, scans 2 to 5 are empty, scan 6 finds B: between the two deaths come the pause after A's
 			-- kill, four pauses after empty scans and B's re-probe, 50 ms each (0.3 s); with no pause after an empty
-			-- scan only 0.1 s. Both deaths are timed by their parent, inside the loop, not by start-up times.
+			-- scan only 0.1 s, with a 10 ms pause 0.14 s.
+			-- The bar, 0.25 s, sits between. Both deaths are timed by their parent, inside the loop, not by start-up times.
 			local r = sweep(`{a}@1 {b}@6\n`, "exit 0")
 			t.expect(r.code).toBe(0)
 			t.expect(has(r.stderr, "sweeper: stopped 2 process(es) the specs left running")).toBe(true)
@@ -208,7 +209,7 @@ return t.spec("c0225 the sweep ends only after five empty scans in a row", funct
 				at[pid] = tonumber(time) :: number
 			end
 			t.expect(at[a] ~= nil and at[b] ~= nil).toBe(true)
-			t.expect(at[b] - at[a] >= 0.2).toBe(true)
+			t.expect(at[b] - at[a] >= 0.25).toBe(true)
 		end)
 	end)
 

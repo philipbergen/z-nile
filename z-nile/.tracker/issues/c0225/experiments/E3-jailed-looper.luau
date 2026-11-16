@@ -1,6 +1,7 @@
 --!strict
 -- E3 (prep experiment, not a check; copy it to a `.spec.luau` name to run it with tests/run): inside a real jailed spec run, does fence.SWEEPER leave a detached, exec-looping
 -- leftover running? PICKMAN_E3_SWEEPS sweeps (default 60), each narrowed to the looper through the seam. Prints the
+-- Run (from z-nile/, as a spec under .cache): PICKMAN_E3_SWEEPS=30 lune run tests/run -- <the .spec.luau copy> (the spec runner needs no wrapper; its jail stops the run's processes, and the looper its own 20 s deadline).
 -- tally; the looper stops by itself after 20 s and is killed at once when it outlives a sweep.
 local fence = require("@tests/lib/fence")
 local fs = require("@lune/fs")
