@@ -121,13 +121,11 @@ return t.spec("c0252 the chain lands a green stack", function(it)
 		"AC5: a block request lands the green layers below first, then files the block; a red prefix lands nothing",
 		function()
 			local req = { reason = "design-gap", layer = "c0030" }
-			local first: any = dispatch.next(
-				facts({
-					blockRequest = req,
-					land = land("land", { through = "c0020" }),
-					last = { step = "z-run", outcome = "ok" },
-				})
-			)
+			local first: any = dispatch.next(facts({
+				blockRequest = req,
+				land = land("land", { through = "c0020" }),
+				last = { step = "z-run", outcome = "ok" },
+			}))
 			t.expect(first.kind).toBe("land")
 			t.expect(first.through).toBe("c0020")
 			-- after that landing nothing is below: the block is filed
