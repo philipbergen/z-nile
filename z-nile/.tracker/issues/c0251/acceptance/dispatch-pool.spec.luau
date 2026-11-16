@@ -703,9 +703,9 @@ fallbacks = ["kimi"]
 			t.expect(opusAt ~= nil).toBe(true)
 			t.expect(kimiAt ~= nil).toBe(true)
 			t.expect((opusAt :: number) < (kimiAt :: number)).toBe(true)
-			local review = fs.readFile(`{ideaWt}/pickman/.tracker/issues/{id}/idea-review-001.md`)
-			t.expect(has(review, "Model:")).toBe(false)
-			t.expect(has(review, "Fallback:")).toBe(false)
+			local ideaReview = fs.readFile(`{ideaWt}/pickman/.tracker/issues/{id}/idea-review-001.md`)
+			t.expect(has(ideaReview, "Model:")).toBe(false)
+			t.expect(has(ideaReview, "Fallback:")).toBe(false)
 			-- with no refusal the other line (Opus) challenges Fable's draft first, and the review is unstamped as well
 			local other = newIdea("fable-wrote-it")
 			local second = trackerfix.tr(
