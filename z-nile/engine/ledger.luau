@@ -26,6 +26,8 @@ export type Row = {
 	phase: string,
 	tokens: number?,
 	model: string?,
+	host: string?, -- c0254: the host and CLI that spent the row (spend.d rows written since c0254)
+	cli: string?,
 	wall: number?,
 	cpu: number?,
 	ai: number?,

@@ -10,6 +10,9 @@ local buffer = {}
 -- fold drops lines older than this, or until its .cache is deleted.
 buffer.AGE_MS = 14 * 24 * 60 * 60 * 1000
 buffer.HEADER = "when\tsubject\tadded\tremoved\tphase\ttokens\tmodel\twall\tcpu\tai\ttest\tunmeasured"
+-- c0254: a new file starts with the host and the CLI as two more cells. A file that starts with the old header is read
+-- as before and gets 14-cell rows appended (a row's cells are counted, not the header's).
+buffer.HEADER_WHO = buffer.HEADER .. "\thost\tcli"
 
 local FLAG_ORDER = { "tokens", "wall", "cpu", "ai", "test" }
 
@@ -342,7 +345,7 @@ end
 
 function buffer.renderRow(row: ledger.Row): string
 	local flags = buffer.flags(row.unmeasured)
-	return table.concat({
+	local cells = {
 		cell(row.when),
 		cell(row.subject),
 		tostring(row.added),
@@ -355,7 +358,13 @@ function buffer.renderRow(row: ledger.Row): string
 		shown(flags, "ai", row.ai, false),
 		shown(flags, "test", row.test, false),
 		cell(flags),
-	}, "\t")
+	}
+	-- c0254: the two cells that say who spent the row are written only when the row has them
+	if row.host or row.cli then
+		table.insert(cells, cell(row.host))
+		table.insert(cells, cell(row.cli))
+	end
+	return table.concat(cells, "\t")
 end
 
 function buffer.parseTsv(text: string): ({ ledger.Row }?, string?)
@@ -365,7 +374,7 @@ function buffer.parseTsv(text: string): ({ ledger.Row }?, string?)
 		if raw ~= "" then
 			if first then
 				first = false
-				if raw ~= buffer.HEADER then
+				if raw ~= buffer.HEADER and raw ~= buffer.HEADER_WHO then
 					return nil, "not a measured tsv"
 				end
 			else
@@ -395,6 +404,8 @@ function buffer.parseTsv(text: string): ({ ledger.Row }?, string?)
 					ai = numOr("ai", parts[10]),
 					test = numOr("test", parts[11]),
 					unmeasured = flags,
+					host = if parts[13] ~= nil and parts[13] ~= "" then parts[13] else nil,
+					cli = if parts[14] ~= nil and parts[14] ~= "" then parts[14] else nil,
 				})
 			end
 		end
@@ -415,7 +426,11 @@ function buffer.appendTsv(existing: string?, rows: { ledger.Row }): string
 		chunk ..= "\n"
 	end
 	if not existing or existing == "" then
-		return buffer.HEADER .. "\n" .. chunk
+		local who = false
+		for _, row in rows do
+			who = who or row.host ~= nil or row.cli ~= nil
+		end
+		return (if who then buffer.HEADER_WHO else buffer.HEADER) .. "\n" .. chunk
 	end
 	if string.sub(existing, -1) ~= "\n" then
 		existing ..= "\n"

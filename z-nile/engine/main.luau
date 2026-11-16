@@ -12,6 +12,7 @@ local contract = require("./contract")
 local costrow = require("./costrow")
 local dispatchLib = require("./dispatch")
 local dispatcherLib = require("./dispatcher")
+local heartbeat = require("./heartbeat")
 local H = {} -- top-level helpers kept in one table (this file is at Luau's limit of 200 locals)
 local esc = {
 	lib = require("./escalation"),
@@ -47,6 +48,7 @@ local stdio = require("@lune/stdio")
 local store = require("./store")
 local trailLib = require("./trail")
 local watchcmd = require("./watchcmd")
+local xhost = require("./xhost")
 
 -- a space name as the union ids expects: the callers only ever hold "issue" or "raft"
 local function asSpace(s: string): idsLib.Space
@@ -187,12 +189,6 @@ end
 
 function H.hasUpstream(): boolean
 	return sh.run("git", { "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}" }).ok
-end
-
-local function push()
-	if H.hasUpstream() then
-		sh.git({ "push", "--quiet" })
-	end
 end
 
 local function move(item: store.Item, state: store.State): store.Item
@@ -675,6 +671,16 @@ end
 
 local function claimStamp(): string
 	return freshStamp("active")
+end
+
+-- c0254: a claim commit says who made it. The message gets a `Worker:` trailer (host, CLI, model) when it carries the claim's
+-- stamp; the board and `work status` read it back (xhost.holders). Any other message is returned as it is.
+local function withWorker(message: string, id: string, stampValue: string): string
+	if stampValue == "" then
+		return message
+	end
+	local who = xhost.identity(process.env, costrow.hostName())
+	return `{message}\n\n{xhost.trailer(id, stampValue, who)}`
 end
 
 local function phrase(): string
@@ -1551,6 +1557,54 @@ local function originPaths(): { string }
 	return paths
 end
 
+-- c0254 (Q3, Q5): after every commit on a layer or prep branch the branch is pushed, so a taker on any host continues from
+-- all committed work. xhost.pushDecision holds the rule; this reads its facts (origin's copy of the branch, the claim's stamp)
+-- and runs the push. A refusal is said and the commit stands: it never fails the commit, never forces, never pushes main.
+local function pushAfterCommit()
+	local branch = sh.git({ "branch", "--show-current" })
+	local kind = xhost.branchKind(branch)
+	local hasUp = H.hasUpstream()
+	local facts: xhost.PushFacts = {
+		publishing = publishing(),
+		branch = if branch == "" then nil else branch,
+		hasUpstream = hasUp,
+		originHas = false,
+		behind = 0,
+		claim = "unheld",
+	}
+	if kind ~= "other" and facts.publishing then
+		sh.run("git", { "fetch", "--quiet", "origin", branch })
+		facts.originHas =
+			sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok
+		if facts.originHas then
+			local n = sh.run("git", { "rev-list", "--count", `HEAD..origin/{branch}` })
+			facts.behind = if n.ok then tonumber(sh.trim(n.stdout)) else nil
+		end
+		local owner: string? = xhost.raftOfLayer(branch)
+		if kind == "prep" then
+			owner = nil
+			for _, i in store.all("issue") do
+				if `prep-{i.slug}` == branch then
+					owner = i.id
+				end
+			end
+		end
+		if owner then
+			local op = docPath(originPaths(), owner)
+			local at = if op then frontOf(sh.git({ "show", `origin/main:{op}` })).status else nil
+			facts.claim = heartbeat.holds(rememberedClaim(owner), at)
+		end
+	end
+	local d = xhost.pushDecision(facts)
+	if d.action == "push" then
+		sh.git({ "push", "--quiet" })
+	elseif d.action == "push-new" then
+		sh.git({ "push", "--quiet", "-u", "origin", "HEAD" })
+	elseif d.action == "refuse" then
+		stdio.ewrite(`push: {d.why}\n`)
+	end
+end
+
 -- Publishes `to` for `id` (and, for a raft, its members) on origin/main and brings it into this checkout. Shared by
 -- `status` and by `stop`'s give-back of a legacy-started raft.
 -- The latest `<prefix>-NNN.md` in a folder (design-review or review), or 0 when there is none.
@@ -1586,6 +1640,7 @@ end
 local function setStatus(id: string, to: string)
 	local moved: { { id: string, from: string } } = {}
 	local carried = false
+	local claimedStamp = "" -- c0254: the stamp this attempt writes, for the worker trailer of a claim
 	refuseStale()
 	local r = published(publish.commit(".", function(paths, read)
 		moved = {}
@@ -1609,6 +1664,7 @@ local function setStatus(id: string, to: string)
 			end
 		end
 		local value = stamp(to)
+		claimedStamp = value
 		local changes: { publish.Change } = {}
 		local rafted = false -- c0116: a member that was prepared on origin (z-raft grouped it)
 		local originHashes: { [string]: string? } = {} -- c0116 (review 002 F1, 003 F1): each member's record on origin
@@ -1780,7 +1836,7 @@ local function setStatus(id: string, to: string)
 		end
 		return changes
 	end, function()
-		return `tracker: {id} {to}`
+		return withWorker(`tracker: {id} {to}`, id, if to == "preparing" then claimedStamp else "")
 	end))
 	if not r.ok then
 		fail(r.reason or "publish failed")
@@ -4843,13 +4899,25 @@ local function recordAndCommit(
 	end
 	costrow.writeBuffer(top, planned)
 	print(`committed: {message}\n  {table.concat(trailers, "\n  ")}`)
-	push()
+	pushAfterCommit()
 end
 
 function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	local message = opts["-m"] and opts["-m"][1]
 	if not message or message == "" then
 		fail("usage: commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>]")
+	end
+	-- c0254: a commit in an issue's prep worktree (no active raft) records no build row (prep is recorded with ./zn spend)
+	-- and is pushed like a layer's, so a taker on another host gets the draft
+	if currentRaft() == nil and xhost.branchKind(sh.git({ "branch", "--show-current" })) == "prep" then
+		if sh.git({ "ls-files", "-u" }) ~= "" then
+			fail("unmerged paths: resolve the merge first")
+		end
+		sh.git({ "add", "-A" })
+		sh.git({ "commit", "--quiet", "-m", message })
+		print(`committed: {message}`)
+		pushAfterCommit()
+		return
 	end
 	layergit.stampLayerReviews()
 	-- phase and tokens are checked before anything is staged
@@ -6954,11 +7022,16 @@ function cmd.ready(pos: { string })
 		for _, id in ids do
 			table.insert(all, id)
 		end
+		local readyStamp = claimStamp()
 		local r = moveOnOrigin(
 			all,
 			"active",
-			claimStamp(),
-			`tracker: ready {raft.id} {store.readFront(raft.doc).title or raft.slug}`,
+			readyStamp,
+			withWorker(
+				`tracker: ready {raft.id} {store.readFront(raft.doc).title or raft.slug}`,
+				raft.id,
+				readyStamp
+			),
 			function(id: string, cur: string): string?
 				if not statusLib.canMove(cur, "active") then
 					return `{id} is {cur} on origin/main, not prepared`

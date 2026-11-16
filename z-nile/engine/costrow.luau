@@ -9,6 +9,7 @@ local ledger = require("./ledger")
 local process = require("@lune/process")
 local projects = require("./projects")
 local store = require("./store")
+local xhost = require("./xhost")
 
 local costrow = {}
 
@@ -58,10 +59,14 @@ function costrow.branchOf(root: string): (string, string)
 	return name, sha
 end
 
-function costrow.writer(root: string): string
+-- The machine's name as `hostname` prints it, nil when it cannot be read.
+function costrow.hostName(): string?
 	local host = process.exec("hostname", {})
-	local name = if host.ok then string.match(host.stdout, "%S+") or "host" else "host"
-	name = (string.gsub(string.lower(name), "[^%w._%-]", "-"))
+	return if host.ok then host.stdout else nil
+end
+
+function costrow.writer(root: string): string
+	local name = xhost.hostPart(costrow.hostName())
 	local sum = 0
 	for i = 1, #root do
 		sum = (sum * 33 + (string.byte(root, i) :: number)) % 4294967296
@@ -119,6 +124,14 @@ function costrow.plan(
 		end
 	end
 	local writer = costrow.writer(root)
+	-- c0254: every row written here says which host and which CLI spent it
+	local who = xhost.identity(process.env, costrow.hostName())
+	for _, list in byId do
+		for _, row in list do
+			row.host = row.host or who.host
+			row.cli = row.cli or who.cli
+		end
+	end
 	local files: { PlannedFile } = {}
 	for id, list in byId do
 		local dir = homes[id]

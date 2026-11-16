@@ -96,7 +96,7 @@ Tickets have no order today. They should: every issue and raft gets a `rank:` (i
 - The z-nile app in Omarchy shows the same order, marks lost items, and reorders by drag and drop through `./zn rank`. *captured* (c0257)
 
 ### Claiming across hosts
-A worker claims an item by landing the status change on `origin/main`, as `status <id> preparing` and z-ready already do. The push is the lock: a lost race means taking the next item. Each step runs in its own worktree under `.worktree/` on the worker's host, and a worker pushes its layer branch after every commit, so a taker on any host recovers all committed work. The worker's identity (host, CLI, model) goes on its spend rows. *captured* (c0254) (the claim itself *exists*)
+A worker claims a raft (or an issue whose design it drafts) by landing the status change on `origin/main`, as `z-ready` and `status <id> preparing` already do. The push is the lock: a lost race means taking the next raft. The dispatcher's `claim` step (an issue) and its `z-ready` step (a raft) ask `origin/main` after a failed claim, and an item another worker holds now ends the run with exit 6 (`taken`), which the supervisor counts and answers by asking `./zn next` again at once. A `preparing` claim means a worker drafting the design for a person to approve. Each step runs in its own worktree under `.worktree/` on the worker's host, and a worker pushes its layer branch and a prep branch after every commit, so a taker on any host continues from all committed work and builds its own worktree from the pushed branch; a worker whose claim was taken over, or has ended, never pushes that branch again. A claim commit carries a `Worker:` trailer with the worker's host, CLI and model, spend rows record the host, the CLI and the model, and the board's card ("held by") and `./zn work status` show which worker holds what. *exists* (c0254)
 - A worker that holds an item beats a heartbeat on it every 5 minutes, as a commit on a heartbeat branch, not on `main`; the branch is deleted when the heartbeat drops or the task completes. An item in progress whose heartbeat is stale is lost. *designed* (c0265)
 - Agents keep their claims alive without remembering to beat: the claim paths, every `./zn` command in a worktree, long commands and the dispatcher beat. *designed* (c0275)
 - A lost claim is taken over by the next worker as a normal claim, which resumes it and is recorded, and its old owner is refused and told: the takeover deletes the old heartbeat branch and creates a new one, so a worker that comes back learns it lost the claim. *designed* (c0274)
@@ -169,7 +169,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | cross-model review pool, same-family fallback | c0251 | exists |
 | the dispatcher lands a green stack | c0252 | exists |
 | `./zn work` pull loop (the interactive session worker exists; the headless loop does not) | c0253 | captured |
-| workers on several hosts, worker identity in spend | c0254 | captured |
+| workers on several hosts, worker identity in spend | c0254 | exists |
 | the z-nile app in Omarchy: order, lost items, drag and drop | c0257 | captured |
 | `./zn land` usage and a cheap retry | c0258 | designed |
 | the capture interview, idea review and confirmation | c0260 | designed |

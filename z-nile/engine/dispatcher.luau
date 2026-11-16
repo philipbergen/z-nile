@@ -46,6 +46,7 @@ local store = require("./store")
 local supervise = require("./supervise")
 local task = require("@lune/task")
 local trackerstate = require("./trackerstate")
+local xhost = require("./xhost")
 
 local dispatcher = {}
 
@@ -1659,6 +1660,7 @@ function dispatcher.modelStep(
 		for k, v in extra do
 			env[k] = v
 		end
+		env.ZN_CLI = spec.cli -- c0254: spend rows say which CLI spent them
 		env.ZN_MODEL = spec.model -- c0325: this attempt's own model; ./zn spend and commit record it for the author's phases
 		local t0 = os.time()
 		print(
@@ -2151,6 +2153,7 @@ function dispatcher.scriptStep(
 	local dir = if where == "main"
 		then ctx.mainRoot()
 		elseif where == "run" then worktree(ctx, id)
+		elseif where == "prep" then worktree(ctx, `prep-{store.get(id).slug}`)
 		else worktree(ctx, `raft-{id}`)
 	print(`dispatch: {step} {id}: {table.concat(argv, " ")} (in {dir})`)
 	local args = table.move(argv, 2, #argv, 1, {})
@@ -2743,13 +2746,40 @@ function dispatcher.landFacts(
 		req
 end
 
+-- c0254: whether a failed claim step (`claim` for an issue, `z-ready` for a raft) lost to another worker: asks origin/main what
+-- the item is now and whether the stamp on it is this worker's (the stamp the step's checkout remembers). "won", "lost" or
+-- "failed" (xhost.claimOutcome); anything the dispatcher cannot read is "failed", never "lost".
+function dispatcher.claimVerdict(
+	ctx: Ctx,
+	st: State,
+	step: string,
+	target: string,
+	beforeState: string,
+	beforeStatus: string,
+	code: number
+): string
+	if step ~= "claim" and step ~= "z-ready" then
+		return "failed"
+	end
+	local after = ctx.origin(target)
+	local mine = if ctx.memoryIn and st.worktree then ctx.memoryIn(st.worktree :: string, target) else ""
+	return xhost.claimOutcome(
+		code,
+		{ state = beforeState, status = beforeStatus, stamp = "" },
+		if after
+			then { state = after.state, status = after.status, stamp = after.front.status or "" }
+			else nil,
+		mine
+	)
+end
+
 function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?): dispatch.Facts
 	local o = if id ~= "" then ctx.origin(id) else nil
 	local kind = if not o then "none" elseif store.isRaftId(id) then "raft" else "issue"
 	local front: { [string]: string } = if o then o.front else {}
 	local own = false
 	for _, a in st.history do
-		if a.step == "z-design" then
+		if a.step == "z-design" or (a.step == "claim" and a.outcome == "ok") then
 			own = true
 		end
 	end
@@ -2836,6 +2866,7 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 		design = front.design or "",
 		raft = front.raft or "",
 		ownClaim = own,
+		worker = worker.on,
 		localRaft = localRaft,
 		pr = pr,
 		-- c0250: a question on an item is its block (escalation.md); questions.md is a capture's alone
@@ -3254,7 +3285,24 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 				o3 = { ["--rerun"] = f.land.lines }
 			end
 			if kind == "script" then
-				dispatcher.scriptStep(ctx, st, step, if step == "raft-plan" then id else target)
+				local outcome, code =
+					dispatcher.scriptStep(ctx, st, step, if step == "raft-plan" then id else target)
+				-- c0254: a worker whose claim attempt failed asks origin/main whether another worker got there first
+				if
+					worker.on
+					and outcome ~= "ok"
+					and dispatcher.claimVerdict(ctx, st, step, target, f.where, f.status, code) == "lost"
+				then
+					print(
+						`dispatch: {target} was claimed by another worker first; the next pick is the caller's`
+					)
+					-- the lost attempt leaves no failed step behind: the item may come back to this worker when the
+					-- other releases it, and a run state that ended `failed` would stop that chain
+					table.remove(st.history)
+					st.step, st.outcome, st.detail = nil, nil, "lost the claim: another worker holds it"
+					save(st)
+					return dispatch.EXIT.taken
+				end
 			else
 				local o2 = table.clone(opts)
 				if o3 then

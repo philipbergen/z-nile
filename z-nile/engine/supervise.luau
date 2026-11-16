@@ -16,7 +16,7 @@ supervise.QUOTA_RECHECK_SECONDS = 300 -- the dispatcher's worker mode tries a CL
 supervise.QUOTA_WAIT_SECONDS = 600 -- the raft's own CLI is waited for this long when `.models.toml` names none (Q9)
 
 -- The exit codes of `./zn dispatch` (dispatch.EXIT): the loop reads these and never the dispatcher's prose.
-supervise.EXIT = { done = 0, failure = 1, user = 3, gate = 4, tripwire = 5 }
+supervise.EXIT = { done = 0, failure = 1, user = 3, gate = 4, tripwire = 5, taken = 6 }
 
 export type Pick = { id: string, kind: string, why: string }
 export type Read = { kind: string, pick: Pick?, why: string } -- kind: "pick", "none" or "failed"
@@ -98,6 +98,8 @@ export type Move = { kind: string, why: string }
 function supervise.afterDispatch(kind: string, code: number, tries: number): Move
 	if code == supervise.EXIT.done then
 		return { kind = "done", why = "the chain ended" }
+	elseif code == supervise.EXIT.taken then
+		return { kind = "taken", why = "another worker claimed it first" }
 	elseif code == supervise.EXIT.user then
 		return { kind = "blocked", why = "the item is blocked or needs the user" }
 	elseif code == supervise.EXIT.gate then
@@ -325,7 +327,7 @@ function supervise.detachArgv(
 	return argv
 end
 
-export type Summary = { moved: { string }, blocked: { string }, stopped: string }
+export type Summary = { moved: { string }, blocked: { string }, stopped: string, lost: { string }? } -- lost (c0254): items another worker claimed first
 
 function supervise.summary(s: Summary): string
 	local lines = {
@@ -333,6 +335,10 @@ function supervise.summary(s: Summary): string
 		`moved: {if #s.moved == 0 then "nothing" else table.concat(s.moved, ", ")}`,
 		`blocked: {if #s.blocked == 0 then "nothing" else table.concat(s.blocked, ", ")}`,
 	}
+	-- c0254: a line only when a race was lost, so a run on one host reads as before
+	if s.lost ~= nil and #s.lost > 0 then
+		table.insert(lines, `claimed by another worker first: {table.concat(s.lost, ", ")}`)
+	end
 	return table.concat(lines, "\n")
 end
 

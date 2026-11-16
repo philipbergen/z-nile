@@ -14,6 +14,7 @@ local stats = require("./stats")
 local status = require("./status")
 local store = require("./store")
 local supervise = require("./supervise")
+local xhost = require("./xhost")
 
 local board = {}
 
@@ -49,6 +50,7 @@ export type Raft = {
 	fallbackReviews: { string }, -- c0251: the newest round of a kind that the writer's own model line ran (a Fallback: line)
 	rereview: { [string]: string }, -- c0251: for each of those files, the command that asks for the cross-model re-review from here
 	dispatch: Dispatch?,
+	held: string?, -- c0254: who holds the claim, from the claim commit's Worker trailer on origin/main
 	blocked: Blocked?, -- c0250: the raft is blocked (status blocked)
 	pr: Pr?, -- c0121 fills these on the served page; the static page leaves them nil
 	checks: Checks?,
@@ -87,6 +89,7 @@ export type Issue = {
 	fallbackReviews: { string }, -- c0251, as on Raft
 	rereview: { [string]: string }, -- c0251, as on Raft
 	dispatch: Dispatch?,
+	held: string?, -- c0254, as on Raft
 	blocked: Blocked?, -- c0250: the issue, or its raft, is blocked
 	pr: Pr?, -- c0121's, as on Raft
 	checks: Checks?,
@@ -101,6 +104,7 @@ export type Facts = {
 	refs: { Ref },
 	worktrees: { { path: string, branch: string } },
 	dispatch: { [string]: Dispatch },
+	workers: { string }?, -- c0254: the Worker trailers of origin/main's recent claim commits, newest first
 }
 export type ProjectCharts = {
 	rounds: { [string]: string },
@@ -703,6 +707,20 @@ function board.readFacts(dir: string): Facts
 			end
 		end
 	end
+	-- c0254: who made the claims on origin/main now: the `Worker:` trailers of the newest claim commits (one read, no network)
+	local trailers = run(dir, {
+		"log",
+		"origin/main",
+		"-n",
+		"500",
+		"--grep=^Worker: ",
+		"--format=%(trailers:key=Worker,valueonly,separator=%x0a)",
+	})
+	local workers: { string } = {}
+	for line in string.gmatch(trailers or "", "[^\n]+") do
+		table.insert(workers, "Worker: " .. line)
+	end
+	facts.workers = workers
 	-- c0253: the live supervisor's item shows as the card's dispatch row (step "worker", its CLI as the model), unless the
 	-- dispatcher has a row for it. A stopped supervisor, a dead one and a state file that cannot be read show nothing.
 	local workState = `{dir}/.cache/work/state`
@@ -922,6 +940,18 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 		raftIds[r.id] = true
 	end
 
+	-- c0254: the holder of each claimed item, by the claim stamp the item carries now
+	local stamps: { [string]: string } = {}
+	for _, i in rawIssues do
+		stamps[i.id] = i.front.status or ""
+	end
+	for _, r in rawRafts do
+		stamps[r.id] = r.front.status or ""
+	end
+	local heldOf: { [string]: string } = {}
+	for id, h in xhost.holders(facts.workers or {}, stamps) do
+		heldOf[id] = xhost.holderText(h)
+	end
 	local issues: { Issue } = {}
 	local issueById: { [string]: Issue } = {}
 	for _, i in rawIssues do
@@ -955,6 +985,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			end)(),
 			rereview = {},
 			dispatch = facts.dispatch[i.id],
+			held = heldOf[i.id],
 			blocked = nil,
 		}
 		for _, file in issue.fallbackReviews do
@@ -1045,6 +1076,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			fallbackReviews = {},
 			rereview = {},
 			dispatch = facts.dispatch[r.id],
+			held = heldOf[r.id],
 			blocked = blockedOf[r.id],
 		}
 		local branch = branchOf(r.id, facts.refs, if hist and hist.activeAt then hist.activeAt[r.id] else nil)

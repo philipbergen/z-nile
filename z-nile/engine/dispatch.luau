@@ -13,7 +13,7 @@ export type Step = {
 	lessons: string?, -- "design" or "build": the lessons a model step reads (`./zn lessons --when <it>`)
 	phase: string?, -- the spend phase of the step's own session row
 	argv: { string }?, -- a script step: the ./zn command ("{id}" is the item)
-	where: string?, -- a script step runs in the main checkout ("main"), the rafting worktree ("worktree") or the raft's own ("run")
+	where: string?, -- a script step runs in the main checkout ("main"), the rafting worktree ("worktree"), the raft's own ("run") or the issue's prep worktree ("prep")
 }
 
 -- Every z-nile skill and every script the chain runs, classified. Ready, stop, recombine and recording spend need
@@ -25,6 +25,8 @@ dispatch.STEPS = {
 	["z-run"] = { kind = "model", lessons = "build", phase = "deliver" },
 	["zz-review"] = { kind = "model", lessons = "design", phase = "design-review" },
 	["z-ready"] = { kind = "script", argv = { "ready", "{id}" }, where = "main" },
+	-- c0254: in worker mode an issue is claimed before any model starts, so a lost race costs no session
+	["claim"] = { kind = "script", argv = { "status", "{id}", "preparing" }, where = "prep" },
 	["z-stop"] = { kind = "script", argv = { "stop", "{id}" }, where = "main" },
 	["raft-plan"] = { kind = "script", argv = { "raft-plan", "--apply" }, where = "worktree" },
 	["recombine"] = { kind = "script", argv = { "recombine" }, where = "worktree" },
@@ -280,6 +282,7 @@ export type Facts = {
 	design: string, -- origin/main's design: line
 	raft: string, -- origin/main's raft: line (an issue)
 	ownClaim: boolean, -- the preparing claim is the one this checkout's dispatcher made
+	worker: boolean?, -- c0254: a worker's run (--worker): an issue is claimed by its own step before any model starts
 	localRaft: string, -- the raft: line in the rafting worktree, when the dispatcher rafted it ("" when none)
 	pr: Pr?, -- the PR of the step that holds the item now (prep, rafting or run)
 	questions: boolean, -- the run state holds questions.md
@@ -326,7 +329,8 @@ export type Action = {
 -- the most actions one chain run takes before it stops
 dispatch.MAX_ACTIONS = 30
 
-dispatch.EXIT = { done = 0, failure = 1, user = 3, gate = 4, tripwire = 5 }
+-- taken (c0254): another worker claimed the item first; the caller takes the next one
+dispatch.EXIT = { done = 0, failure = 1, user = 3, gate = 4, tripwire = 5, taken = 6 }
 
 local REVIEW_STEPS = { ["z-design"] = true, ["z-raft"] = true, ["z-run"] = true, ["zz-review"] = true }
 
@@ -445,7 +449,9 @@ function dispatch.next(f: Facts): Action
 	end
 	-- a step that ended ok but moved nothing stops the chain instead of running again
 	local done = f.last and f.last.outcome == "ok" and f.last.step or nil
-	if done == "z-design" and f.kind == "issue" and f.status == "new" then
+	if done == "claim" and f.kind == "issue" and f.status == "new" then
+		return stop(dispatch.EXIT.failure, `the claim step ended but {f.id} is still new on origin/main`)
+	elseif done == "z-design" and f.kind == "issue" and f.status == "new" then
 		return stop(
 			dispatch.EXIT.failure,
 			`z-design ended but {f.id} is still new on origin/main: it claimed nothing`
@@ -481,6 +487,9 @@ function dispatch.next(f: Facts): Action
 		end
 		if f.raft ~= "" and (f.where == "active" or f.status == "prepared") then
 			return { kind = "step", step = "follow", target = f.raft }
+		end
+		if f.status == "new" and f.worker == true then
+			return { kind = "step", step = "claim", target = f.id }
 		end
 		if f.status == "new" or (f.status == "preparing" and f.ownClaim) then
 			if f.pr then

@@ -45,6 +45,7 @@ export type RaftFact = {
 	issues: { string },
 	layers: { LayerFact },
 	holder: string,
+	worker: string?, -- c0254: host (CLI, model) of the worker that made the claim, "" or nil when unknown
 	since: string,
 	stacked: boolean,
 	codeReview: string, -- none, open, resolved
@@ -429,7 +430,8 @@ function work.status(rafts: { RaftFact }): { string }
 			else "claimed"
 		local who = if r.holder ~= "" then r.holder else "unknown"
 		local since = if r.since ~= "" then r.since else "unknown"
-		table.insert(out, `{r.id} {place} holder {who} since {since}`)
+		local worker = if r.worker ~= nil and r.worker ~= "" then ` worker {r.worker}` else ""
+		table.insert(out, `{r.id} {place} holder {who}{worker} since {since}`)
 	end
 	return out
 end

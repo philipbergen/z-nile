@@ -58,4 +58,18 @@ function heartbeat.stampIn(status: string?): string?
 	return if kind == "preparing" or kind == "active" then status else nil
 end
 
+-- Whom a claim stamp belongs to (copied verbatim from R0100/5/c0277 acf480f21, `heartbeat.holds`; c0254 reads it for the push
+-- rule): "held" (the same), "unheld" (this checkout remembers none), "taken" (origin shows another stamp), "ended" (origin shows
+-- no claim).
+function heartbeat.holds(remembered: string?, originStamp: string?): string
+	if remembered == nil or remembered == "" then
+		return "unheld"
+	elseif originStamp == nil then
+		return "ended"
+	elseif originStamp == remembered then
+		return "held"
+	end
+	return "taken"
+end
+
 return heartbeat

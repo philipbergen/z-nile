@@ -29,7 +29,7 @@ export type Options = {
 	maxItems: number?, -- --max-items
 }
 
-type Tally = { moved: { string }, blocked: { string } }
+type Tally = { moved: { string }, blocked: { string }, lost: { string } }
 
 local function publish(world: World, state: string, item: string, held: string, tally: Tally)
 	world.state({
@@ -73,6 +73,9 @@ function workloop.item(world: World, pick: supervise.Pick, tally: Tally): (strin
 		elseif move.kind == "blocked" then
 			result, why = "blocked", move.why
 			break
+		elseif move.kind == "taken" then
+			result, why = "taken", move.why
+			break
 		elseif move.kind == "park" then
 			result, why = "park", move.why
 			break
@@ -106,7 +109,8 @@ end
 
 -- The pull loop. Returns the summary.
 function workloop.run(world: World, opts: Options): supervise.Summary
-	local tally: Tally = { moved = {}, blocked = {} }
+	local tally: Tally = { moved = {}, blocked = {}, lost = {} }
+	local lastLost = ""
 	local stopped = "the stack is empty"
 	local blockedInARow = 0
 	local taken = 0
@@ -170,6 +174,16 @@ function workloop.run(world: World, opts: Options): supervise.Summary
 		elseif r == "blocked" then
 			table.insert(tally.blocked, p.id)
 			blockedInARow += 1
+		elseif r == "taken" then
+			-- c0254: another worker holds it: not an item this worker took, nothing to wait for, the next pick is asked at once.
+			-- The same item lost twice in a row (a stale read of origin/main) waits one idle period instead of spinning.
+			table.insert(tally.lost, p.id)
+			taken -= 1
+			if lastLost == p.id then
+				world.sleep(world.idleSeconds or supervise.IDLE_SECONDS)
+			end
+			lastLost = p.id
+			continue
 		elseif r == "park" then
 			blockedInARow = 0
 		elseif r == "stopped" then
@@ -190,7 +204,8 @@ function workloop.run(world: World, opts: Options): supervise.Summary
 			break
 		end
 	end
-	local summary = { moved = tally.moved, blocked = tally.blocked, stopped = stopped }
+	local summary: supervise.Summary =
+		{ moved = tally.moved, blocked = tally.blocked, stopped = stopped, lost = tally.lost }
 	publish(world, "stopped", "", heldAtEnd, tally)
 	world.say(supervise.summary(summary))
 	return summary

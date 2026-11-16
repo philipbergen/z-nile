@@ -21,6 +21,7 @@ local stack = require("./stack")
 local statusLib = require("./status")
 local store = require("./store")
 local work = require("./work")
+local xhost = require("./xhost")
 
 local workread = {}
 
@@ -245,25 +246,35 @@ local function stacked(
 	return true
 end
 
-local function holdersOf(): { [string]: { who: string, when: string } }
-	local out: { [string]: { who: string, when: string } } = {}
+local function holdersOf(): { [string]: { who: string, when: string, worker: string } }
+	local out: { [string]: { who: string, when: string, worker: string } } = {}
 	local r = sh.run("git", {
 		"log",
 		"origin/main",
-		"--format=%s%x09%an <%ae>%x09%cI",
+		"--format=%s%x09%an <%ae>%x09%cI%x09%(trailers:key=Worker,valueonly,separator=%x20)",
 		"--grep=^tracker: ready",
 	})
 	if not r.ok then
 		return out
 	end
 	for line in string.gmatch(r.stdout .. "\n", "([^\n]*)\n") do
-		local subject, who, when = string.match(line, "^(.-)\t(.-)\t(.+)$")
+		local subject, who, when, worker = string.match(line, "^(.-)\t(.-)\t([^\t]+)\t?(.*)$")
 		local id = if subject then string.match(subject, "^tracker: ready (R%d%d%d%d)") else nil
 		if id and who and when and not out[id] then
-			out[id] = { who = who, when = when }
+			out[id] = { who = who, when = when, worker = worker or "" }
 		end
 	end
 	return out
+end
+
+-- c0254: the host, CLI and model of the worker that made the claim now on the raft (its ready commit's Worker trailer), or ""
+-- when the trailer names another stamp or there is none.
+local function workerOf(holder: { who: string, when: string, worker: string }?, stampValue: string?): string
+	local h = if holder and holder.worker ~= "" then xhost.parseTrailer("Worker: " .. holder.worker) else nil
+	if h and h.stamp == stampValue then
+		return xhost.holderText(h)
+	end
+	return ""
 end
 
 local function build(
@@ -273,7 +284,7 @@ local function build(
 	byId: { [string]: At },
 	docs: { [string]: string },
 	sides: { [string]: string },
-	holder: { who: string, when: string }?,
+	holder: { who: string, when: string, worker: string }?,
 	tips: { [number]: Tip },
 	mainSha: string
 ): work.RaftFact
@@ -330,6 +341,7 @@ local function build(
 		layers = layers,
 		holder = if holder then holder.who else "",
 		since = if holder then holder.when else "",
+		worker = workerOf(holder, front.status),
 		stacked = if at.state == "active" then stacked(issues, layers, tips, mainSha) else false,
 		codeReview = reviewState(sides, "review%-", "resolved"),
 		codeModel = if reviewmodel.judged(front) then reviewmodel.problem(sides, "code", id) else nil,
