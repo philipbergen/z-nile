@@ -102,6 +102,10 @@ end
 local RENAMED = "written through replace-file.pl (a rename onto the path, never through a link)"
 
 local ALLOWED: { [string]: { [string]: string } } = {
+	-- c0252: the folder of the land requests a worker holding the agent's credential leaves for a lander
+	["z-nile/engine/landcheck.luau"] = {
+		['landcheck.LAND_REQUESTS = ".cache/land-requests"'] = "the land requests folder in the main checkout: written by done under an agent marker, read and removed by ./zn lander and the dispatcher (c0252)",
+	},
 	-- c0165: the orchestrator runs unjailed and names the files a run leaves in a home's .cache
 	["z-nile/specs.luau"] = {
 		["local resultsFile = `{ROOT}/{prefix}.cache/spec-results-{fence.myPid()}.json`"] = "the run's results file, named for the orchestrator's pid; the runner (inside the jail) writes it, this reads and removes it, and the runner writes only a path below its own .cache (c0165)",
