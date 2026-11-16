@@ -11,3 +11,7 @@ A reader of shell text (the check-paths scan) models some forms and fails open o
 **How to apply:** keep an experiment in the issue's `experiments/` that builds the old reader from `origin/main`, runs both over every check.sh in the checkout and prints the literals lost and gained and which would be reports (E8); fix every regression against the old reader with a case and a mutant; list each unmodelled form as a known edge; do not write "fails closed" for a reader that reads text with heuristics.
 
 Run the old reader beside the new one on every corpus the design cites, the open worktrees included (c0371 design review 004 F2: the first experiment compared the checkout only, and c0261's `git grep` line, open in 48 worktrees, was a regression it did not see).
+
+The corpus shows only the shapes that exist today: R0112 code review 001 found four more unmodelled shapes by reading the module (a root cd inside a heredoc body, `$(( 1 << 2 ))` taken for a heredoc, a quoted lone `{` pushed as a brace group, `grep -q "^$f$"` counted as a use), none in the 671 files E8 read. They go to the Known edges or to a follow-up with a case each (c0381), and the experiment stays the regression measure, not the proof.
+
+R0112 final review 001 F4 is one more of the same kind: a use of the loop variable found by a prefix match (`$fx`) or inside a comment. A reader's "does the body use the variable" test is a word test in the body's own context, and needs a case for a longer name and for a comment (c0382).
