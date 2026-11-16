@@ -372,7 +372,8 @@ function reap.decide(procs: { Proc }, opts: Options): { Target }
 	local taken: { [number]: boolean } = {}
 	-- the supervisor the state file names, and the launcher processes above it that are the same command (rokit's lune shim)
 	local exempt: { [number]: boolean } = {}
-	for _, pid in opts.keep or {} do
+	local named: { number } = opts.keep or {}
+	for _, pid in named do
 		local at: Proc? = byPid[pid]
 		for _ = 1, 8 do
 			if at == nil or not reap.isSupervisor(at) then
