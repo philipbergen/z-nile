@@ -1,0 +1,23 @@
+-- the game place with one player (user 7) whose session exists; `setup` runs before the place boots
+local function arrive(mode: any?, setup: ((any) -> ())?, shared: any?): any
+	local w = world(mode, shared)
+	local p = w.player(7)
+	local s = Session.new(Maze.parse({ "#######", "#..P..#", "#######" }, "corridor"), 1, Session.GAME_CONFIG)
+	Session.join(s, "7")
+	if setup then
+		setup(w) -- before the place boots: the attributes are read once, at Receipts.start
+	end
+	local continues = w.load("Continues", CONTINUES)
+	local arrived = continues.start(function(player: any): Session.Session?
+		return if player == p and p.Parent ~= nil then s else nil
+	end)
+	-- as Sessions does: a departing player's run ends its offer (f0145's Session.depart)
+	w.removing:Connect(function(player: any)
+		if player == p then
+			Session.depart(s, "7")
+		end
+	end)
+	arrived(p, s)
+	return { w = w, s = s, p = p, arrived = arrived, continues = continues }
+end
+
