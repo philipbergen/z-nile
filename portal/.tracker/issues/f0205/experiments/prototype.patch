@@ -43,10 +43,10 @@ index 453b3322a..c15c60bd2 100644
        "Arcade": { "$path": "../arcade/src/server" }
 diff --git a/portal/src/client/CarouselView.luau b/portal/src/client/CarouselView.luau
 new file mode 100644
-index 000000000..c7cbcce8d
+index 000000000..c8de8a6a8
 --- /dev/null
 +++ b/portal/src/client/CarouselView.luau
-@@ -0,0 +1,240 @@
+@@ -0,0 +1,248 @@
 +--!strict
 +-- Portal client adapter (f0205): draws the carousel of game cards and moves it. Each card shows its title, tagline,
 +-- a turning 3-D preview and its price badge from the server's states (Card's view models, the arcade's Prices words);
@@ -54,6 +54,7 @@ index 000000000..c7cbcce8d
 +-- the front card, which the play listeners hear (f0208 starts the game). Each card keeps two empty slots, Buttons
 +-- (f0208) and Boards (f0206).
 +local ContextActionService = game:GetService("ContextActionService")
++local GuiService = game:GetService("GuiService")
 +local Players = game:GetService("Players")
 +local ReplicatedStorage = game:GetService("ReplicatedStorage")
 +local RunService = game:GetService("RunService")
@@ -97,8 +98,8 @@ index 000000000..c7cbcce8d
 +	local l = Instance.new("TextLabel")
 +	l.Name = name
 +	l.BackgroundTransparency = 1
-+	l.Position = UDim2.fromScale(0.05, region.top)
-+	l.Size = UDim2.fromScale(0.9, region.height)
++	l.Position = UDim2.fromScale(Card.INSET, region.top)
++	l.Size = UDim2.fromScale(1 - 2 * Card.INSET, region.height)
 +	l.TextColor3 = Color3.new(1, 1, 1)
 +	l.Font = Enum.Font.GothamBold
 +	l.TextScaled = true
@@ -111,8 +112,8 @@ index 000000000..c7cbcce8d
 +	local f = Instance.new("Frame")
 +	f.Name = name
 +	f.BackgroundTransparency = 1
-+	f.Position = UDim2.fromScale(0.05, region.top)
-+	f.Size = UDim2.fromScale(0.9, region.height)
++	f.Position = UDim2.fromScale(Card.INSET, region.top)
++	f.Size = UDim2.fromScale(1 - 2 * Card.INSET, region.height)
 +	f.Parent = parent
 +	return f
 +end
@@ -165,15 +166,17 @@ index 000000000..c7cbcce8d
 +		card.BackgroundColor3 = Color3.fromRGB(24, 24, 60)
 +		card.Parent = cards
 +		label(card, "Title", Card.REGIONS.Title, entry.title)
-+		label(card, "Tagline", Card.REGIONS.Tagline, entry.tagline)
++		local tagline = label(card, "Tagline", Card.REGIONS.Tagline, entry.tagline)
++		tagline.TextWrapped = true
 +		scenes[entry.name] = preview(card, entry)
 +		local badge = slot(card, "Badge", Card.REGIONS.Badge)
 +		local struck = label(badge, "Struck", { top = 0, height = 1 }, "")
-+		struck.Size = UDim2.fromScale(0.4, 1)
++		struck.Position = UDim2.fromScale(0, 0)
++		struck.Size = UDim2.fromScale(Card.BADGE.struck, 1)
 +		struck.RichText = true
 +		local offer = label(badge, "Offer", { top = 0, height = 1 }, "")
-+		offer.Position = UDim2.fromScale(0.42, 0)
-+		offer.Size = UDim2.fromScale(0.58, 1)
++		offer.Position = UDim2.fromScale(Card.BADGE.struck + Card.BADGE.gap, 0)
++		offer.Size = UDim2.fromScale(Card.BADGE.offer, 1)
 +		slot(card, "Buttons", Card.REGIONS.Buttons)
 +		slot(card, "Boards", Card.REGIONS.Boards)
 +		local dim = Instance.new("Frame")
@@ -197,7 +200,7 @@ index 000000000..c7cbcce8d
 +		card.Visible = box.shown
 +		local dim = card:FindFirstChild("Dim") :: Frame
 +		dim.BackgroundTransparency = 1 - box.dim
-+		local badge = Card.badge(states[entry.name], Prices)
++		local badge = Card.badge(states[entry.name], Prices, Card.WORDS)
 +		local holder = card:FindFirstChild("Badge") :: Frame
 +		local struck = holder:FindFirstChild("Struck") :: TextLabel
 +		local offer = holder:FindFirstChild("Offer") :: TextLabel
@@ -231,6 +234,8 @@ index 000000000..c7cbcce8d
 +		return
 +	end
 +	started = true
++	-- no character here: the platform thumbstick and jump button would only sit over the cards and take their touches
++	GuiService.TouchControlsEnabled = false
 +	local gui = Instance.new("ScreenGui")
 +	gui.Name = "Portal"
 +	gui.ResetOnSpawn = false
@@ -249,6 +254,9 @@ index 000000000..c7cbcce8d
 +	ContextActionService:BindActionAtPriority(
 +		Carousel.ACTION,
 +		function(_: string, state: Enum.UserInputState, input: InputObject): Enum.ContextActionResult
++			if UserInputService:GetFocusedTextBox() ~= nil then
++				return Enum.ContextActionResult.Pass -- typing (the chat box): the keys are the text's
++			end
 +			if input.UserInputType == Enum.UserInputType.MouseWheel then
 +				local intent: string?
 +				row, intent = Carousel.wheel(row, input.Position.Z, os.clock())
@@ -297,15 +305,17 @@ index c79d602d6..eec2d04ee 100644
 +require("./CarouselView").start()
 diff --git a/portal/src/server/Cards.luau b/portal/src/server/Cards.luau
 new file mode 100644
-index 000000000..bcda3cf12
+index 000000000..722c5f295
 --- /dev/null
 +++ b/portal/src/server/Cards.luau
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,126 @@
 +--!strict
 +-- Portal server adapter (f0205): tells each player what their cards show. Which places are published is read once
 +-- from the place-id attributes (the arcade's Places); whether a game's free start is due is the arcade's Wallet read
-+-- of that player's record and PaidPlay's status, read again on each ask (Wallet bounds the store calls). A client only
-+-- asks; what it sends with the ask is ignored, and no place id ever leaves the server.
++-- of that player's record and PaidPlay's status. Each ask (asks closer than Card.ASK_GAP answered together) is
++-- answered at once and reads every published game again; a busy or failed read is read again later (Card.answer),
++-- one retry at a time per game. A client only asks; what it sends with the ask is ignored, and no place id ever
++-- leaves the server.
 +local Players = game:GetService("Players")
 +local ReplicatedStorage = game:GetService("ReplicatedStorage")
 +local ServerScriptService = game:GetService("ServerScriptService")
@@ -316,7 +326,13 @@ index 000000000..bcda3cf12
 +local Places = require("@game/ReplicatedStorage/Arcade/Places")
 +local Wallet = require("@game/ServerStorage/Arcade/Wallet")
 +
-+type Slot = { free: { [string]: boolean }, reading: { [string]: boolean } }
++type Slot = {
++	reads: { [string]: Card.Read },
++	reading: { [string]: boolean },
++	retry: { [string]: number }, -- the current retry's token per game; a timer with an older one does nothing
++	asked: number?, -- os.clock() of the last answered ask
++	waiting: boolean, -- an ask is held for the end of ASK_GAP
++}
 +
 +local Cards = {}
 +local started = false
@@ -334,11 +350,58 @@ index 000000000..bcda3cf12
 +	for _, entry in Games.LIST do
 +		published[entry.name] = Card.published(entry, ids :: any)
 +	end
++	local waits: Card.Waits =
++		{ busy = Wallet.WAIT_SECONDS, down = Wallet.RETRY_SECONDS, most = Wallet.READ_SECONDS }
 +	local slots: { [Player]: Slot } = {}
 +
++	local function live(player: Player, slot: Slot): boolean
++		return player.Parent ~= nil and slots[player] == slot
++	end
++
 +	local function send(player: Player, slot: Slot)
-+		if player.Parent ~= nil and slots[player] == slot then
-+			remote:FireClient(player, Card.states(Games.LIST, published, slot.free))
++		if live(player, slot) then
++			local free: { [string]: boolean } = {}
++			for name, r in slot.reads do
++				if r.free ~= nil then
++					free[name] = r.free
++				end
++			end
++			remote:FireClient(player, Card.states(Games.LIST, published, free))
++		end
++	end
++
++	local function read(player: Player, slot: Slot, name: string)
++		if not published[name] or slot.reading[name] then
++			return
++		end
++		slot.reading[name] = true
++		task.spawn(function()
++			local record, reason = Wallet.read(player, name)
++			slot.reading[name] = nil
++			if not live(player, slot) then
++				return
++			end
++			local due = if record ~= nil then PaidPlay.status(record, os.time()).free == true else nil
++			local after, delay = Card.answer(slot.reads[name], due, reason, waits)
++			slot.reads[name] = after
++			local token = (slot.retry[name] or 0) + 1
++			slot.retry[name] = token
++			send(player, slot)
++			if delay ~= nil then
++				task.delay(delay, function()
++					if live(player, slot) and slot.retry[name] == token then
++						read(player, slot, name)
++					end
++				end)
++			end
++		end)
++	end
++
++	local function answer(player: Player, slot: Slot)
++		slot.asked = os.clock()
++		send(player, slot)
++		for _, entry in Games.LIST do
++			read(player, slot, entry.name)
 +		end
 +	end
 +
@@ -348,22 +411,21 @@ index 000000000..bcda3cf12
 +		end
 +		local slot = slots[player]
 +		if slot == nil then
-+			slot = { free = {}, reading = {} }
++			slot = { reads = {}, reading = {}, retry = {}, asked = nil, waiting = false }
 +			slots[player] = slot
 +		end
 +		local mine: Slot = slot
-+		send(player, mine)
-+		for _, entry in Games.LIST do
-+			local name = entry.name
-+			if published[name] and not mine.reading[name] then
-+				mine.reading[name] = true
-+				task.spawn(function()
-+					local record = Wallet.read(player, name)
-+					mine.reading[name] = nil
-+					mine.free[name] = record ~= nil and PaidPlay.status(record, os.time()).free == true
-+					send(player, mine)
-+				end)
-+			end
++		local wait = Card.asked(mine.asked, os.clock())
++		if wait == nil then
++			answer(player, mine)
++		elseif not mine.waiting then
++			mine.waiting = true
++			task.delay(wait, function()
++				mine.waiting = false
++				if live(player, mine) then
++					answer(player, mine)
++				end
++			end)
 +		end
 +	end)
 +
@@ -481,10 +543,10 @@ index 000000000..851ffc0d3
 +return table.freeze({ LIST = table.freeze(LIST) })
 diff --git a/portal/src/shared/Logic/Card/init.luau b/portal/src/shared/Logic/Card/init.luau
 new file mode 100644
-index 000000000..924f23d9d
+index 000000000..70328f727
 --- /dev/null
 +++ b/portal/src/shared/Logic/Card/init.luau
-@@ -0,0 +1,106 @@
+@@ -0,0 +1,154 @@
 +--!strict
 +-- Card (f0205): what one card of the portal's carousel shows. Pure view models: the price badge for a title's state,
 +-- the states the server sends and the client's defensive read of them, the card's regions, and its preview's spin.
@@ -500,16 +562,21 @@ index 000000000..924f23d9d
 +-- `struck` is rich text (the struck-through price), "" when there is none
 +export type Badge = { kind: Kind, struck: string, text: string }
 +export type Prices = { struck: string, price: string, sale: string }
++-- the badge's own words, besides the sale's (Prices): passed in, so they can live in any config table
++export type Words = { free: string, soon: string }
 +export type Region = { top: number, height: number } -- of the card's height
++-- the server's record of one title's free state for one player: what it knows, and the reads that failed in a row
++export type Read = { free: boolean?, busy: number, down: number }
++-- how long to wait before reading again: after a busy read, after the first failed one, and at most
++export type Waits = { busy: number, down: number, most: number }
 +
 +local Card = {}
-+Card.FREE = "FREE GAME READY"
-+Card.SOON = "COMING SOON"
++Card.WORDS = table.freeze({ free = "FREE GAME READY", soon = "COMING SOON" }) -- the words the portal shows
 +Card.ORDER = table.freeze({ "Title", "Tagline", "Preview", "Badge", "Buttons", "Boards" })
 +Card.REGIONS = table.freeze({
 +	Title = table.freeze({ top = 0.02, height = 0.08 }),
-+	Tagline = table.freeze({ top = 0.1, height = 0.05 }),
-+	Preview = table.freeze({ top = 0.16, height = 0.3 }),
++	Tagline = table.freeze({ top = 0.1, height = 0.08 }),
++	Preview = table.freeze({ top = 0.19, height = 0.27 }),
 +	Badge = table.freeze({ top = 0.47, height = 0.08 }),
 +	Buttons = table.freeze({ top = 0.56, height = 0.09 }), -- the play buttons (f0208)
 +	Boards = table.freeze({ top = 0.66, height = 0.32 }), -- the boards (f0206)
@@ -518,6 +585,11 @@ index 000000000..924f23d9d
 +Card.FRAME = 4 -- every preview part lies within this many studs of the centre on each axis
 +Card.CAMERA = table.freeze({ fov = 40, distance = 22, height = 3 }) -- the preview camera: vertical degrees, studs
 +Card.SHAPES = table.freeze({ "Ball", "Block", "Cylinder" })
++Card.INSET = 0.05 -- each label's margin either side, of the card's width (a label is 1 - 2 INSET wide)
++Card.BADGE = table.freeze({ struck = 0.4, gap = 0.02, offer = 0.58 }) -- the badge's two labels, of its width
++Card.GLYPH = 0.65 -- a bold glyph's width, of its text size (the text-size model)
++Card.MIN_TEXT = 12 -- pixels: the smallest text a card may show
++Card.ASK_GAP = 1 -- seconds: asks closer than this are answered together, at its end
 +
 +local function escape(text: string): string
 +	return (string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;"))
@@ -528,15 +600,15 @@ index 000000000..924f23d9d
 +	return `<s>{escape(text)}</s>`
 +end
 +
-+-- The badge for a title's state: nothing until the state is known; COMING SOON when its place is not published;
-+-- FREE GAME READY when its free start is due; else the sale: the struck price, then the price and the sale word.
-+function Card.badge(state: State?, prices: Prices): Badge
++-- The badge for a title's state: nothing until the state is known; the `soon` word when its place is not published;
++-- the `free` word when its free start is due; else the sale: the struck price, then the price and the sale word.
++function Card.badge(state: State?, prices: Prices, words: Words): Badge
 +	if state == nil then
 +		return { kind = "none", struck = "", text = "" }
 +	elseif not state.published then
-+		return { kind = "soon", struck = "", text = Card.SOON }
++		return { kind = "soon", struck = "", text = words.soon }
 +	elseif state.free == true then
-+		return { kind = "free", struck = "", text = Card.FREE }
++		return { kind = "free", struck = "", text = words.free }
 +	elseif state.free == false then
 +		return { kind = "sale", struck = Card.strike(prices.struck), text = `{prices.price} {prices.sale}` }
 +	end
@@ -582,6 +654,44 @@ index 000000000..924f23d9d
 +	return out
 +end
 +
++-- A read's answer folded into what the server knows of one title (`read` nil: nothing yet). `due` is PaidPlay's
++-- free state when the read gave a record, nil when it did not. A record: that state, and no read again. A first busy
++-- answer (another read of the same record under way) keeps what was known and reads again after `waits.busy`. Any
++-- other answer without a record (down, or busy twice in a row) is the sale, read again after `waits.down`, doubling
++-- with each failure in a row up to `waits.most`.
++function Card.answer(read: Read?, due: boolean?, reason: string?, waits: Waits): (Read, number?)
++	local was: Read = read or { free = nil, busy = 0, down = 0 }
++	if due ~= nil then
++		return { free = due, busy = 0, down = 0 }, nil
++	elseif reason == "busy" and was.busy == 0 then
++		return { free = was.free, busy = 1, down = was.down }, waits.busy
++	end
++	local down = was.down + 1
++	return { free = false, busy = 0, down = down }, math.min(waits.down * 2 ^ (down - 1), waits.most)
++end
++
++-- How long an ask at `now` waits, nil to be answered at once: at once when the last answered ask is ASK_GAP old (or
++-- none, or a clock that went back), else at the end of that gap.
++function Card.asked(last: number?, now: number): number?
++	if last == nil or now < last or now - last >= Card.ASK_GAP then
++		return nil
++	end
++	return Card.ASK_GAP - (now - last)
++end
++
++-- The text size a label of `width` x `height` pixels gives `text` (TextScaled), by the GLYPH model: one line, or,
++-- `wrap`ped, the best of one to four lines.
++function Card.textSize(text: string, width: number, height: number, wrap: boolean): number
++	local n = math.max(#text, 1)
++	local best = math.min(height, width / (Card.GLYPH * n))
++	if wrap then
++		for lines = 2, 4 do
++			best = math.max(best, math.min(height / lines, width * lines / (Card.GLYPH * n)))
++		end
++	end
++	return best
++end
++
 +-- The preview's turn after `seconds`, in radians from 0 up to 2π; 0 for a time that is not a finite number.
 +function Card.angle(seconds: number): number
 +	if seconds ~= seconds or seconds == math.huge or seconds == -math.huge then
@@ -593,7 +703,7 @@ index 000000000..924f23d9d
 +return Card
 diff --git a/portal/src/shared/Logic/Carousel/init.luau b/portal/src/shared/Logic/Carousel/init.luau
 new file mode 100644
-index 000000000..93463216f
+index 000000000..9a3c102b3
 --- /dev/null
 +++ b/portal/src/shared/Logic/Carousel/init.luau
 @@ -0,0 +1,117 @@
@@ -620,10 +730,10 @@ index 000000000..93463216f
 +local Carousel = {}
 +Carousel.KEYS = table.freeze(KEYS)
 +Carousel.ACTION = "PortalCarousel"
-+Carousel.PRIORITY = 2000 -- below the test purchase screen's 3000 (f0201), so its keys win while it is open
++Carousel.PRIORITY = 2500 -- above the default controls (2000), below the test purchase screen (3000, f0201)
 +Carousel.WHEEL_GAP = 0.25 -- seconds the wheel must rest before a wheel event moves the row again
 +Carousel.HEIGHT = 0.9 -- the front card's height, of the safe area's
-+Carousel.ASPECT = 0.6 -- the front card's width over its height
++Carousel.ASPECT = 0.75 -- the front card's width over its height
 +Carousel.MAX_WIDTH = 0.8 -- at most this much of the safe area's width
 +Carousel.SIDE_SCALE = 0.8 -- a neighbour's size, of the front card's
 +Carousel.GAP = 0.03 -- between the front card and a neighbour, of the safe area's width
@@ -714,9 +824,18 @@ index 000000000..93463216f
 +end
 +
 +return Carousel
+diff --git a/portal/tests/inputs.tsv b/portal/tests/inputs.tsv
+index 95224a0a9..498848166 100644
+--- a/portal/tests/inputs.tsv
++++ b/portal/tests/inputs.tsv
+@@ -6,3 +6,4 @@ tests/meta/fence.spec.luau	*
+ tests/meta/architecture.spec.luau	portal/.tracker/architecture.md
+ tests/meta/architecture.spec.luau	portal/src/
+ tests/meta/architecture.spec.luau	portal/tests/
++tests/acceptance/f0205/place.spec.luau	portal/.tracker/architecture.md
 diff --git a/portal/tests/unit/Card/card.spec.luau b/portal/tests/unit/Card/card.spec.luau
 new file mode 100644
-index 000000000..40ea69746
+index 000000000..f848c4c7a
 --- /dev/null
 +++ b/portal/tests/unit/Card/card.spec.luau
 @@ -0,0 +1,10 @@
@@ -726,8 +845,8 @@ index 000000000..40ea69746
 +
 +return t.spec("Card", function(it)
 +	it("shows coming soon for a place that is not published", function()
-+		t.expect(Card.badge({ published = false }, { struck = "a", price = "b", sale = "c" }).text)
-+			.toBe(Card.SOON)
++		local b = Card.badge({ published = false }, { struck = "a", price = "b", sale = "c" }, Card.WORDS)
++		t.expect(b.text).toBe(Card.WORDS.soon)
 +	end)
 +end)
 diff --git a/portal/tests/unit/Carousel/carousel.spec.luau b/portal/tests/unit/Carousel/carousel.spec.luau

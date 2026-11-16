@@ -1,13 +1,15 @@
 --!strict
 -- f0205 AC5: the portal's carousel screen (StarterPlayerScripts.Client.CarouselView), run from its real source on a
--- stub client. It draws one card per game in a ScreenGui inside the safe insets: the title, the tagline, a turning
--- 3-D preview of the game's parts, the price badge (empty until the server answers, then COMING SOON, FREE GAME READY
--- or the sale in the arcade's Prices words, struck through as rich text) and two empty slots, Buttons and Boards, for
--- the play buttons and the boards. The cards sit where Carousel's boxes say, again when the screen's size changes.
--- One ContextActionService binding below the test purchase screen's priority takes the nine keys and the wheel: A,
--- Left and the left shoulder go back, D, Right and the right shoulder forward, on the press; the wheel one card per
--- roll; a swipe moves the row wherever it starts. Enter, KeypadEnter or ButtonA tell the play listeners the front
--- card's name, for a published card only. It asks the server once, after it listens, and start returns at once.
+-- stub client. It turns the platform's touch controls off and draws one card per game in a ScreenGui inside the safe
+-- insets: the title and the wrapped tagline at their regions, a turning 3-D preview of the game's parts through its own
+-- camera CAMERA.height up and CAMERA.distance back looking at the centre, the price badge (empty until the server
+-- answers, then the words Card.WORDS gives or the sale in the arcade's Prices words, struck through as rich text, its
+-- two labels at Card.BADGE) and two slots, Buttons and Boards, for the play buttons and the boards. The cards sit where
+-- Carousel's boxes say, again when the screen's size changes. One ContextActionService binding at Carousel.PRIORITY
+-- takes the nine keys and the wheel: A, Left and the left shoulder go back, D, Right and the right shoulder forward,
+-- on the press; the wheel one card per roll; all sunk, and all passed on while the player types in a text box. A swipe
+-- moves the row wherever it starts. Enter, KeypadEnter or ButtonA tell the play listeners the front card's name, for
+-- a published card only. It asks the server once, after it listens, and start returns at once.
 local Card = require("@logic/Card")
 local Carousel = require("@logic/Carousel")
 local Games = require("@shared/Games")
@@ -24,6 +26,9 @@ local SOURCE = (built :: any)
 
 -- the arcade's Prices as this spec hands it over: words no card holds, so the badge must print what Prices says
 local PRICES = table.freeze({ struck = "9 X", price = "2 X", sale = "DEAL" })
+-- the real Card, but with badge words no card holds, so the view must print the words Card gives it
+local WORDS = table.freeze({ free = "GO!", soon = "LATER" })
+local CARD = setmetatable({ WORDS = WORDS }, { __index = Card })
 
 type Signal = { Connect: (any, (...any) -> ()) -> any, fire: (...any) -> (), count: () -> number }
 
@@ -173,8 +178,15 @@ local function world(slow: boolean?): any
 	end
 	w.node = node
 
+	local localPlayer = node("Player")
+	localPlayer.Name = "me"
+	localPlayer.UserId = 1
 	local playerGui = node("PlayerGui")
+	playerGui.Name = "PlayerGui"
+	playerGui.Parent = localPlayer
 	w.playerGui = playerGui
+	local guiService: any = { TouchControlsEnabled = true }
+	w.guiService = guiService
 	local remote: any = node("RemoteEvent")
 	remote.Name = "Cards"
 	remote.OnClientEvent = signal()
@@ -222,17 +234,8 @@ local function world(slow: boolean?): any
 			end,
 			UnbindAction = function() end,
 		},
-		Players = {
-			LocalPlayer = {
-				Name = "me",
-				UserId = 1,
-				PlayerGui = playerGui,
-				WaitForChild = function(_: any, name: string): any
-					assert(name == "PlayerGui", name)
-					return playerGui
-				end,
-			},
-		},
+		Players = { LocalPlayer = localPlayer },
+		GuiService = guiService,
 		ReplicatedStorage = replicated,
 		RunService = {
 			RenderStepped = rendered,
@@ -249,6 +252,9 @@ local function world(slow: boolean?): any
 			LastInputTypeChanged = signal(),
 			GetLastInputType = function(): any
 				return nil
+			end,
+			GetFocusedTextBox = function(): any
+				return w.focused -- a TextBox the player is typing in (the chat box), nil when none
 			end,
 		},
 	}
@@ -271,15 +277,22 @@ local function world(slow: boolean?): any
 			return made
 		end,
 	}
+	-- every UDim2 is one normalised value whatever builds it: X and Y, each a Scale and an Offset
+	local function udim2(xs: number?, xo: number?, ys: number?, yo: number?): any
+		return table.freeze({
+			X = table.freeze({ Scale = xs or 0, Offset = xo or 0 }),
+			Y = table.freeze({ Scale = ys or 0, Offset = yo or 0 }),
+		})
+	end
 	env.UDim2 = {
-		new = function(...: any): any
-			return value("new", ...)
+		new = function(xs: number?, xo: number?, ys: number?, yo: number?): any
+			return udim2(xs, xo, ys, yo)
 		end,
-		fromScale = function(...: any): any
-			return value("scale", ...)
+		fromScale = function(xs: number?, ys: number?): any
+			return udim2(xs, 0, ys, 0)
 		end,
-		fromOffset = function(...: any): any
-			return value("offset", ...)
+		fromOffset = function(xo: number?, yo: number?): any
+			return udim2(0, xo, 0, yo)
 		end,
 	}
 	env.UDim = {
@@ -297,20 +310,28 @@ local function world(slow: boolean?): any
 			return table.freeze({ kind = "v3", X = x or 0, Y = y or 0, Z = z or 0 })
 		end,
 	}
+	-- a colour is its three channels in 0..1, whatever builds it
 	env.Color3 = {
-		new = function(...: any): any
-			return value("rgb01", ...)
+		new = function(r: number?, g: number?, b: number?): any
+			return table.freeze({ R = r or 0, G = g or 0, B = b or 0 })
 		end,
-		fromRGB = function(...: any): any
-			return value("rgb", ...)
+		fromRGB = function(r: number?, g: number?, b: number?): any
+			return table.freeze({ R = (r or 0) / 255, G = (g or 0) / 255, B = (b or 0) / 255 })
 		end,
 	}
+	-- a CFrame keeps where it is and the point it looks at, whatever builds it (lookAt, or new with a target)
+	local function frame(eye: any, target: any): any
+		return table.freeze({ kind = "frame", Position = eye, target = target })
+	end
 	env.CFrame = {
-		new = function(...: any): any
-			return value("cf", ...)
+		new = function(a: any, b: any, c: any): any
+			if type(a) == "table" then
+				return frame(a, b)
+			end
+			return frame(env.Vector3.new(a, b, c), nil)
 		end,
-		lookAt = function(...: any): any
-			return value("lookAt", ...)
+		lookAt = function(eye: any, target: any): any
+			return frame(eye, target)
 		end,
 		Angles = function(...: any): any
 			return value("angles", ...)
@@ -339,6 +360,9 @@ local function world(slow: boolean?): any
 	}
 	env.require = function(spec: string): any
 		local logic = string.match(spec, "^@game/ReplicatedStorage/Shared/Logic/(%w+)$")
+		if logic == "Card" then
+			return CARD
+		end
 		if logic then
 			return (require :: any)("@logic/" .. logic)
 		end
@@ -428,9 +452,10 @@ local function world(slow: boolean?): any
 			local p = w.card(e.name).Position
 			if
 				p
-				and p.kind == "offset"
-				and math.abs(p.args[1] - box.x) < 1e-6
-				and math.abs(p.args[2] - box.y) < 1e-6
+				and p.X.Scale == 0
+				and p.Y.Scale == 0
+				and math.abs(p.X.Offset - box.x) < 1e-6
+				and math.abs(p.Y.Offset - box.y) < 1e-6
 			then
 				return e.name
 			end
@@ -455,6 +480,25 @@ local function started(slow: boolean?): any
 	end
 	w.booted = coroutine.status(boot) == "dead"
 	return w
+end
+
+-- a frame at a region of its parent: scale positions, `x` from the left, `width` wide
+local function region(f: any, r: Card.Region, x: number, width: number)
+	t.expect(f.Position ~= nil and f.Size ~= nil).toBe(true)
+	t.expect(f.Position.X.Scale).toBeNear(x, 1e-9)
+	t.expect(f.Position.Y.Scale).toBeNear(r.top, 1e-9)
+	t.expect(f.Size.X.Scale).toBeNear(width, 1e-9)
+	t.expect(f.Size.Y.Scale).toBeNear(r.height, 1e-9)
+	t.expect(f.Position.X.Offset + f.Position.Y.Offset + f.Size.X.Offset + f.Size.Y.Offset).toBe(0)
+end
+
+-- a card placed at a box, in pixels
+local function pixels(c: any, box: any)
+	t.expect(c.Position.X.Scale + c.Position.Y.Scale + c.Size.X.Scale + c.Size.Y.Scale).toBe(0)
+	t.expect(c.Position.X.Offset).toBeNear(box.x, 1e-6)
+	t.expect(c.Position.Y.Offset).toBeNear(box.y, 1e-6)
+	t.expect(c.Size.X.Offset).toBeNear(box.width, 1e-6)
+	t.expect(c.Size.Y.Offset).toBeNear(box.height, 1e-6)
 end
 
 local ALL_SALE = {
@@ -518,10 +562,9 @@ return t.spec("f0205 client", function(it)
 				t.expect(made.Position.X).toBe(p.at[1])
 				t.expect(made.Position.Y).toBe(p.at[2])
 				t.expect(made.Position.Z).toBe(p.at[3])
-				t.expect(made.Color.kind).toBe("rgb")
-				t.expect(made.Color.args[1]).toBe(p.color[1])
-				t.expect(made.Color.args[2]).toBe(p.color[2])
-				t.expect(made.Color.args[3]).toBe(p.color[3])
+				t.expect(made.Color.R * 255).toBeNear(p.color[1], 1e-9)
+				t.expect(made.Color.G * 255).toBeNear(p.color[2], 1e-9)
+				t.expect(made.Color.B * 255).toBeNear(p.color[3], 1e-9)
 				t.expect(made.Anchored).toBe(true)
 			end
 		end
@@ -534,10 +577,7 @@ return t.spec("f0205 client", function(it)
 				local f = w.card(e.name):FindFirstChild(name)
 				t.expect(f ~= nil and f.ClassName).toBe("Frame")
 				local r = Card.REGIONS[name]
-				t.expect(f.Position.kind).toBe("scale")
-				t.expect(f.Position.args[2]).toBe(r.top)
-				t.expect(f.Size.kind).toBe("scale")
-				t.expect(f.Size.args[2]).toBe(r.height)
+				region(f, r, Card.INSET, 1 - 2 * Card.INSET)
 			end
 			t.expect(#w.card(e.name):FindFirstChild("Buttons").children).toBe(0)
 			t.expect(#w.card(e.name):FindFirstChild("Boards").children).toBe(0)
@@ -586,10 +626,10 @@ return t.spec("f0205 client", function(it)
 			t.expect(offer.Text).toBe("2 X DEAL")
 			struck, offer = w.badge("snake")
 			t.expect(struck.Text).toBe("")
-			t.expect(offer.Text).toBe("FREE GAME READY")
+			t.expect(offer.Text).toBe(WORDS.free)
 			struck, offer = w.badge("invaders")
 			t.expect(struck.Text).toBe("")
-			t.expect(offer.Text).toBe("COMING SOON")
+			t.expect(offer.Text).toBe(WORDS.soon)
 			struck, offer = w.badge("asteroids")
 			t.expect(struck.Text).toBe("")
 			t.expect(offer.Text).toBe("")
@@ -606,7 +646,7 @@ return t.spec("f0205 client", function(it)
 			asteroids = { published = true, free = false },
 		})
 		local _, offer = w.badge("pickman")
-		t.expect(offer.Text).toBe("FREE GAME READY")
+		t.expect(offer.Text).toBe(WORDS.free)
 		local struck
 		struck, offer = w.badge("snake")
 		t.expect(struck.Text).toBe("")
@@ -627,12 +667,7 @@ return t.spec("f0205 client", function(it)
 			for i, e in Games.LIST do
 				local c = w.card(e.name)
 				local box = Carousel.box(Carousel.offset(Carousel.new(#Games.LIST), i), size.X, size.Y)
-				t.expect(c.Position.kind).toBe("offset")
-				t.expect(c.Position.args[1]).toBeNear(box.x, 1e-6)
-				t.expect(c.Position.args[2]).toBeNear(box.y, 1e-6)
-				t.expect(c.Size.kind).toBe("offset")
-				t.expect(c.Size.args[1]).toBeNear(box.width, 1e-6)
-				t.expect(c.Size.args[2]).toBeNear(box.height, 1e-6)
+				pixels(c, box)
 				t.expect(c.Visible).toBe(box.shown)
 				t.expect(c:FindFirstChild("Dim").BackgroundTransparency).toBeNear(1 - box.dim, 1e-9)
 			end
@@ -650,8 +685,7 @@ return t.spec("f0205 client", function(it)
 		resized.fire()
 		local box = Carousel.box(0, 390, 844)
 		local c = w.card("pickman")
-		t.expect(c.Position.args[1]).toBeNear(box.x, 1e-6)
-		t.expect(c.Size.args[1]).toBeNear(box.width, 1e-6)
+		pixels(c, box)
 		t.expect(w.front()).toBe("pickman")
 	end)
 
@@ -817,5 +851,80 @@ return t.spec("f0205 client", function(it)
 		t.expect(#w.binds).toBe(1)
 		t.expect(#w.sent).toBe(1)
 		t.expect(#w.errors).toBe(0)
+	end)
+	it(
+		"the title and tagline sit at their regions, the tagline wrapped; the preview spans its region's width",
+		function()
+			local w = started()
+			local inner = 1 - 2 * Card.INSET
+			for _, e in Games.LIST do
+				local c = w.card(e.name)
+				local title, tagline = c:FindFirstChild("Title"), c:FindFirstChild("Tagline")
+				region(title, Card.REGIONS.Title, Card.INSET, inner)
+				region(tagline, Card.REGIONS.Tagline, Card.INSET, inner)
+				t.expect(tagline.TextWrapped).toBe(true)
+				t.expect(title.TextScaled).toBe(true)
+				t.expect(tagline.TextScaled).toBe(true)
+				region(c:FindFirstChild("Preview"), Card.REGIONS.Preview, 0, 1)
+			end
+		end
+	)
+
+	it("the badge's struck price and offer share its width as Card.BADGE says", function()
+		local w = started()
+		local full = { top = 0, height = 1 }
+		for _, e in Games.LIST do
+			local struck, offer = w.badge(e.name)
+			region(struck, full, 0, Card.BADGE.struck)
+			region(offer, full, Card.BADGE.struck + Card.BADGE.gap, Card.BADGE.offer)
+		end
+	end)
+
+	it(
+		"each preview's camera sits CAMERA.height up and CAMERA.distance back, looking at the scene's centre",
+		function()
+			local w = started()
+			for _, e in Games.LIST do
+				local cam = w.card(e.name):FindFirstChild("Preview").CurrentCamera
+				t.expect(cam ~= nil).toBe(true)
+				local cf = cam.CFrame
+				t.expect(cf ~= nil and cf.kind).toBe("frame")
+				t.expect(cf.Position.X).toBe(0)
+				t.expect(cf.Position.Y).toBe(Card.CAMERA.height)
+				t.expect(cf.Position.Z).toBe(Card.CAMERA.distance)
+				t.expect(cf.target ~= nil).toBe(true)
+				t.expect(cf.target.X).toBe(0)
+				t.expect(cf.target.Y).toBe(0)
+				t.expect(cf.target.Z).toBe(0)
+			end
+		end
+	)
+
+	it("the platform's touch controls are off: no thumbstick or jump button over the cards", function()
+		local w = started()
+		t.expect(w.guiService.TouchControlsEnabled).toBe(false)
+	end)
+
+	it(
+		"while the player types in a text box (the chat), the keys and the wheel move nothing and pass on",
+		function()
+			local w = started()
+			w.answer(ALL_SALE)
+			w.focused = w.node("TextBox")
+			t.expect(w.press("D")).toBe(w.Enum.ContextActionResult.Pass)
+			t.expect(w.press("Return")).toBe(w.Enum.ContextActionResult.Pass)
+			t.expect(w.wheel(-1, 10)).toBe(w.Enum.ContextActionResult.Pass)
+			t.expect(w.front()).toBe("pickman")
+			t.expect(#w.played).toBe(0)
+			w.focused = nil
+			w.press("D")
+			t.expect(w.front()).toBe("snake")
+		end
+	)
+
+	it("the wheel's input is sunk too, so nothing below the binding zooms on it", function()
+		local w = started()
+		t.expect(w.wheel(-1, 10)).toBe(w.Enum.ContextActionResult.Sink)
+		t.expect(w.wheel(-1, 10.125)).toBe(w.Enum.ContextActionResult.Sink)
 	end)
 end)

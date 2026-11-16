@@ -37,7 +37,7 @@ local function standin(): any
 end
 
 local function world(attributes: { [string]: any }): any
-	local w: any = { sent = {}, reads = {}, errors = {}, players = {} }
+	local w: any = { sent = {}, reads = {}, errors = {}, players = {}, timers = {}, clock = 5 }
 
 	local function spawn(fn: (...any) -> (), ...: any)
 		local co = coroutine.create(fn)
@@ -109,6 +109,10 @@ local function world(attributes: { [string]: any }): any
 	}
 
 	local wallet: any = standin()
+	-- the Wallet's bounds as this stub gives them: numbers no other module holds, so the waits must come from here
+	wallet.WAIT_SECONDS = 7
+	wallet.RETRY_SECONDS = 11
+	wallet.READ_SECONDS = 50
 	wallet.read = function(player: any, name: string): (any, any)
 		table.insert(w.reads, { player = player, name = name, co = coroutine.running(), done = false })
 		return coroutine.yield()
@@ -124,7 +128,12 @@ local function world(attributes: { [string]: any }): any
 	env.task = {
 		spawn = spawn,
 		defer = spawn,
-		delay = function() end,
+		delay = function(seconds: number, fn: (...any) -> (), ...: any)
+			table.insert(
+				w.timers,
+				{ at = w.clock + seconds, fn = fn, args = table.pack(...), wait = seconds }
+			)
+		end,
 		wait = function()
 			return 0
 		end,
@@ -134,7 +143,7 @@ local function world(attributes: { [string]: any }): any
 			return NOW
 		end,
 		clock = function(): number
-			return 5
+			return w.clock
 		end,
 	}
 	env.require = function(spec: string): any
@@ -189,6 +198,35 @@ local function world(attributes: { [string]: any }): any
 			end
 		end
 		error(`no read of {name} waiting`)
+	end
+	-- the waits of the timers set and not yet run, in the order set
+	function w.pending(): { number }
+		local out = {}
+		for _, tm in w.timers do
+			if not tm.ran then
+				table.insert(out, tm.wait)
+			end
+		end
+		return out
+	end
+	-- moves the stub's clock on by `seconds`, running every timer that comes due, in the order they come due
+	function w.advance(seconds: number)
+		local stop = w.clock + seconds
+		while true do
+			local due: any = nil
+			for _, tm in w.timers do
+				if not tm.ran and tm.at <= stop and (due == nil or tm.at < due.at) then
+					due = tm
+				end
+			end
+			if due == nil then
+				break
+			end
+			due.ran = true
+			w.clock = due.at
+			spawn(due.fn, table.unpack(due.args, 1, due.args.n))
+		end
+		w.clock = stop
 	end
 	function w.readsOf(p: any): { string }
 		local out = {}
@@ -309,8 +347,9 @@ return t.spec("f0205 server", function(it)
 		local s = w.last(p)
 		t.expect(s.snake.free).toBe(true)
 		t.expect(s.pickman.free).toBe(nil)
-		t.expect(Card.badge(Card.parse(s, Games.LIST).snake, { struck = "a", price = "b", sale = "c" }).kind)
-			.toBe("free")
+		t.expect(
+			Card.badge(Card.parse(s, Games.LIST).snake, { struck = "a", price = "b", sale = "c" }, Card.WORDS).kind
+		).toBe("free")
 	end)
 
 	it("each read is answered as it comes back: one more answer per read", function()
@@ -342,17 +381,129 @@ return t.spec("f0205 server", function(it)
 		end
 	)
 
-	it("a read that failed or was busy shows the sale, never a free game", function()
+	it("a read that failed shows the sale, never a free game", function()
 		local w = started()
 		local p = w.join("p", 1)
 		w.ask(p)
 		w.answer(p, "pickman", nil, "down")
-		w.answer(p, "snake", nil, "busy")
 		local s = w.last(p)
 		t.expect(s.pickman.free).toBe(false)
-		t.expect(s.snake.free).toBe(false)
 		t.expect(#w.errors).toBe(0)
 	end)
+
+	it("a busy read (another read of the record under way) keeps what was known", function()
+		local w = started({ PickmanPlaceId = 101, SnakePlaceId = 102 })
+		local p = w.join("p", 1)
+		w.ask(p)
+		w.answer(p, "pickman", fresh())
+		w.answer(p, "snake", nil, "busy") -- nothing known yet: still nothing
+		t.expect(w.last(p).snake.free).toBe(nil)
+		w.advance(1)
+		w.ask(p)
+		w.answer(p, "pickman", nil, "busy") -- known free: still free
+		t.expect(w.last(p).pickman.free).toBe(true)
+	end)
+
+	it("a busy read is read again once, after the Wallet's WAIT_SECONDS, and not before", function()
+		local w = started({ PickmanPlaceId = 101 })
+		local p = w.join("p", 1)
+		w.ask(p)
+		w.answer(p, "pickman", nil, "busy")
+		t.expect(table.concat(w.pending(), " ")).toBe("7")
+		w.advance(6.5)
+		t.expect(#w.readsOf(p)).toBe(1)
+		w.advance(0.5)
+		t.expect(#w.readsOf(p)).toBe(2)
+		w.answer(p, "pickman", fresh())
+		t.expect(w.last(p).pickman.free).toBe(true)
+		t.expect(#w.pending()).toBe(0)
+	end)
+
+	it("a second busy read in a row is a failure: the sale, then the down back-off", function()
+		local w = started({ PickmanPlaceId = 101 })
+		local p = w.join("p", 1)
+		w.ask(p)
+		w.answer(p, "pickman", fresh())
+		w.advance(1)
+		w.ask(p)
+		w.answer(p, "pickman", nil, "busy")
+		w.advance(7)
+		w.answer(p, "pickman", nil, "busy")
+		t.expect(w.last(p).pickman.free).toBe(false)
+		t.expect(table.concat(w.pending(), " ")).toBe("11")
+	end)
+
+	it(
+		"a failed read is read again after RETRY_SECONDS, doubling up to READ_SECONDS, while it fails",
+		function()
+			local w = started({ PickmanPlaceId = 101 })
+			local p = w.join("p", 1)
+			w.ask(p)
+			local waits = {}
+			for _ = 1, 5 do
+				w.answer(p, "pickman", nil, "down")
+				local pend = w.pending()
+				t.expect(#pend).toBe(1)
+				table.insert(waits, pend[1])
+				w.advance(pend[1] - 0.25)
+				t.expect(#w.pending()).toBe(1) -- not before its time
+				w.advance(0.25)
+			end
+			t.expect(table.concat(waits, " ")).toBe("11 22 44 50 50")
+			w.answer(p, "pickman", fresh())
+			t.expect(w.last(p).pickman.free).toBe(true)
+			t.expect(#w.pending()).toBe(0)
+		end
+	)
+
+	it("one retry at a time per game: an ask's read that comes back replaces the retry waiting", function()
+		local w = started({ PickmanPlaceId = 101 })
+		local p = w.join("p", 1)
+		w.ask(p)
+		w.answer(p, "pickman", nil, "down")
+		w.advance(2)
+		w.ask(p)
+		w.answer(p, "pickman", fresh())
+		w.advance(60)
+		t.expect(#w.readsOf(p)).toBe(2) -- the old retry read nothing
+	end)
+
+	it("a player who leaves stops the retries, and a retry's answer goes to the asker only", function()
+		local w = started({ PickmanPlaceId = 101 })
+		local a, b = w.join("a", 1), w.join("b", 2)
+		w.ask(a)
+		w.answer(a, "pickman", nil, "down")
+		w.advance(11)
+		t.expect(#w.readsOf(a)).toBe(2)
+		w.answer(a, "pickman", fresh())
+		t.expect(#w.sentTo(b)).toBe(0)
+		w.ask(b)
+		w.answer(b, "pickman", nil, "down")
+		w.leave(b)
+		w.advance(200)
+		t.expect(#w.readsOf(b)).toBe(1)
+		t.expect(#w.errors).toBe(0)
+	end)
+
+	it(
+		"asks closer than ASK_GAP are answered together: a burst gets one answer at once and one at its end",
+		function()
+			local w = started({ PickmanPlaceId = 101 })
+			local p = w.join("p", 1)
+			w.ask(p)
+			w.answer(p, "pickman", fresh())
+			local before = #w.sentTo(p)
+			for _ = 1, 10 do
+				w.advance(0.05)
+				w.ask(p)
+			end
+			t.expect(#w.sentTo(p)).toBe(before)
+			t.expect(#w.readsOf(p)).toBe(1)
+			w.advance(1)
+			t.expect(#w.sentTo(p)).toBe(before + 1)
+			t.expect(#w.readsOf(p)).toBe(2)
+		end
+	)
 
 	it(
 		"an ask while a game's read is under way starts no second read of it, and is answered at once",
@@ -361,6 +512,7 @@ return t.spec("f0205 server", function(it)
 			local p = w.join("p", 1)
 			w.ask(p)
 			w.answer(p, "pickman", fresh())
+			w.advance(1)
 			w.ask(p)
 			t.expect(table.concat(w.readsOf(p), " ")).toBe("pickman snake pickman")
 			t.expect(#w.sentTo(p)).toBe(3)
@@ -373,6 +525,7 @@ return t.spec("f0205 server", function(it)
 		local p = w.join("p", 1)
 		w.ask(p)
 		w.answer(p, "pickman", fresh())
+		w.advance(1)
 		w.ask(p)
 		t.expect(#w.readsOf(p)).toBe(2)
 		w.answer(p, "pickman", playedAt(NOW))

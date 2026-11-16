@@ -104,11 +104,11 @@ return t.spec("f0205 carousel", function(it)
 	end)
 
 	it(
-		"its bindings sit below the test purchase screen's priority, 3000 (f0201), under one action name",
+		"its bindings sit above the default controls (2000) and below the test purchase screen (3000, f0201), under one action name",
 		function()
 			t.expect(type(Carousel.PRIORITY)).toBe("number")
 			t.expect(Carousel.PRIORITY < 3000).toBe(true)
-			t.expect(Carousel.PRIORITY > 0).toBe(true)
+			t.expect(Carousel.PRIORITY > 2000).toBe(true)
 			t.expect(Carousel.ACTION).toBe("PortalCarousel")
 		end
 	)
@@ -148,6 +148,11 @@ return t.spec("f0205 carousel", function(it)
 		t.expect(i2).toBe(nil)
 		local _, nan = Carousel.wheel(Carousel.new(4), 0 / 0, 10)
 		t.expect(nan).toBe(nil)
+		-- a delta that is not a number still counts as rolling: a roll inside WHEEL_GAP after it moves nothing
+		local d, i3
+		d = Carousel.wheel(Carousel.new(4), 0 / 0, 20)
+		d, i3 = Carousel.wheel(d, -1, 20.125)
+		t.expect(i3).toBe(nil)
 	end)
 
 	it("the wheel never moves the row itself, and keeps the index it was given", function()
@@ -216,10 +221,17 @@ return t.spec("f0205 carousel", function(it)
 	end)
 
 	it("the front card is as wide as ASPECT allows, or MAX_WIDTH of a narrow screen", function()
-		local wide = Carousel.box(0, 1920, 1080)
-		t.expect(wide.width).toBeNear(1080 * 0.9 * 0.6, 1e-9)
-		local tall = Carousel.box(0, 390, 844)
-		t.expect(tall.width).toBeNear(390 * 0.8, 1e-9)
+		local capped = 0
+		for _, s in SCREENS do
+			local w, h = s[1], s[2]
+			local want = math.min(h * Carousel.HEIGHT * Carousel.ASPECT, w * Carousel.MAX_WIDTH)
+			t.expect(Carousel.box(0, w, h).width).toBeNear(want, 1e-9)
+			if want < h * Carousel.HEIGHT * Carousel.ASPECT then
+				capped += 1
+			end
+		end
+		t.expect(capped > 0).toBe(true) -- a narrow screen among them meets the cap
+		t.expect(capped < #SCREENS).toBe(true) -- and a wide one does not
 	end)
 
 	it("its neighbours sit either side, smaller, dimmed and clear of it, partly on screen", function()

@@ -7,7 +7,7 @@
 # A mutant is killed when its spec run reports a FAIL whose message is an assertion ("expected ..."), not a syntax,
 # type or require error. A correct variant (CV) must stay green.
 # Usage, from the repository root: ./zn run --time 1800 -- python3 -I portal/.tracker/issues/f0205/experiments/mutants.py [id prefixes...]
-import os, shutil, subprocess, sys, tempfile
+import os, re, shutil, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = subprocess.run(["git", "-C", HERE, "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
@@ -41,7 +41,8 @@ M = [
     ("C4 a step changes the row it is given", CA, "\treturn { count = c.count, index = index, wheelAt = c.wheelAt }", "\tc.index = index\n\treturn c", CAR),
     ("C5 the left shoulder goes forward", CA, "\tButtonL1 = \"prev\",", "\tButtonL1 = \"next\",", CAR),
     ("C6 Space plays too", CA, "\tButtonA = \"play\",", "\tButtonA = \"play\",\n\tSpace = \"play\",", CAR),
-    ("C7 bound at the test screen's priority", CA, "Carousel.PRIORITY = 2000", "Carousel.PRIORITY = 3000", CAR),
+    ("C7 bound at the test screen's priority", CA, "Carousel.PRIORITY = 2500", "Carousel.PRIORITY = 3000", CAR),
+    ("C7b bound at the default controls' priority", CA, "Carousel.PRIORITY = 2500", "Carousel.PRIORITY = 2000", CAR),
     ("C8 the wheel the wrong way", CA, "return after, if delta > 0 then \"prev\" else \"next\"", "return after, if delta > 0 then \"next\" else \"prev\"", CAR),
     ("C9 the rest counted from the last step", CA, "local after: Carousel = { count = c.count, index = c.index, wheelAt = now }",
      "local after: Carousel = {\n\t\tcount = c.count,\n\t\tindex = c.index,\n\t\twheelAt = if rested and finite(delta) and delta ~= 0 then now else c.wheelAt,\n\t}", CAR),
@@ -59,6 +60,9 @@ M = [
     ("C20 neighbours overlap the front card", CA, "(w / 2 + width * Carousel.GAP + sw / 2)", "(w / 2 + sw / 2 - width * Carousel.GAP)", CAR),
     ("C21 neighbours not dimmed", CA, "shown = shown, dim = Carousel.SIDE_DIM", "shown = shown, dim = 0", CAR),
     ("C22 far cards shown", CA, "local shown = (offset == 1 or offset == -1) and x < width", "local shown = x < width", CAR),
+    ("C24 a narrower card: text too small on a landscape phone", CA, "Carousel.ASPECT = 0.75", "Carousel.ASPECT = 0.6", CARD),
+    ("C25 a delta that is not a number is no event", CA, "\tif not finite(delta) or delta == 0 then\n\t\treturn after, nil\n\tend",
+     "\tif not finite(delta) then\n\t\treturn c, nil\n\tend\n\tif delta == 0 then\n\t\treturn after, nil\n\tend", CAR),
     ("C23 neighbours full size", CA, "local sw, sh = w * Carousel.SIDE_SCALE, h * Carousel.SIDE_SCALE", "local sw, sh = w, h", CAR),
     # Card
     ("K1 the sale's words written in", CD, "text = `{prices.price} {prices.sale}`", "text = \"1 R$ SALE\"", CARD),
@@ -66,7 +70,7 @@ M = [
     ("K3 markup not escaped", CD, "\treturn (string.gsub(string.gsub(string.gsub(text, \"&\", \"&amp;\"), \"<\", \"&lt;\"), \">\", \"&gt;\"))", "\treturn text", CARD),
     ("K4 a free start shown on an unpublished card", CD, "\telseif not state.published then", "\telseif not state.published and state.free ~= true then", CARD),
     ("K5 an unread free state shows the sale", CD, "\telseif state.free == false then", "\telseif state.free ~= true then", CARD),
-    ("K6 an unknown state shows coming soon", CD, "\tif state == nil then\n\t\treturn { kind = \"none\", struck = \"\", text = \"\" }", "\tif state == nil then\n\t\treturn { kind = \"soon\", struck = \"\", text = Card.SOON }", CARD),
+    ("K6 an unknown state shows coming soon", CD, "\tif state == nil then\n\t\treturn { kind = \"none\", struck = \"\", text = \"\" }", "\tif state == nil then\n\t\treturn { kind = \"soon\", struck = \"\", text = words.soon }", CARD),
     ("K7 published by the entry's name", CD, "return ids[entry.place] ~= nil", "return ids[entry.name] ~= nil", CARD),
     ("K8 a free state sent for an unpublished place", CD, "free = if p then known[e.name] else nil", "free = known[e.name]", CARD),
     ("K9 only published titles sent", CD, "\t\tout[e.name] = { published = p, free = if p then known[e.name] else nil }",
@@ -81,6 +85,17 @@ M = [
     ("K17 the camera too close", CD, "distance = 22", "distance = 12", CARD),
     ("K18 no room kept for the buttons", CD, "Card.ORDER = table.freeze({ \"Title\", \"Tagline\", \"Preview\", \"Badge\", \"Buttons\", \"Boards\" })",
      "Card.ORDER = table.freeze({ \"Title\", \"Tagline\", \"Preview\", \"Badge\", \"Boards\" })", CARD),
+    ("K19 the free word written in", CD, "return { kind = \"free\", struck = \"\", text = words.free }", "return { kind = \"free\", struck = \"\", text = \"FREE GAME READY\" }", CARD),
+    ("K20 a busy answer forgets what was known", CD, "return { free = was.free, busy = 1, down = was.down }, waits.busy", "return { free = nil, busy = 1, down = was.down }, waits.busy", CARD),
+    ("K21 busy read again for ever", CD, "elseif reason == \"busy\" and was.busy == 0 then", "elseif reason == \"busy\" then", CARD),
+    ("K22 no doubling", CD, "math.min(waits.down * 2 ^ (down - 1), waits.most)", "math.min(waits.down, waits.most)", CARD),
+    ("K23 no cap", CD, "math.min(waits.down * 2 ^ (down - 1), waits.most)", "waits.down * 2 ^ (down - 1)", CARD),
+    ("K24 a record keeps the failure count", CD, "return { free = due, busy = 0, down = 0 }, nil", "return { free = due, busy = 0, down = was.down }, nil", CARD),
+    ("K25 an ask exactly ASK_GAP after waits", CD, "now - last >= Card.ASK_GAP", "now - last > Card.ASK_GAP", CARD),
+    ("K26 a clock that went back waits", CD, "if last == nil or now < last or", "if last == nil or", CARD),
+    ("K27 the tagline region too short to read", CD, "Tagline = table.freeze({ top = 0.1, height = 0.08 })", "Tagline = table.freeze({ top = 0.1, height = 0.05 })", CARD),
+    ("K28 the text model ignores wrapping", CD, "\tif wrap then\n\t\tfor lines = 2, 4 do", "\tif false then\n\t\tfor lines = 2, 4 do", CARD),
+    ("K29 an answer changes the record given", CD, "\tlocal down = was.down + 1\n", "\twas.down += 1\n\tlocal down = was.down\n", CARD),
     # Games
     ("G1 a name the Catalog does not know", GA, "\t\tname = \"pickman\",", "\t\tname = \"pacman\",", GAMES),
     ("G2 a place Places does not know", GA, "\t\tplace = \"Invaders\",", "\t\tplace = \"Invader\",", GAMES),
@@ -99,23 +114,30 @@ M = [
      "\t\tids = Places.read(function(attribute: string): any\n\t\t\treturn ServerScriptService:GetAttribute(attribute)\n\t\tend)\n\t\tfor _, entry in Games.LIST do\n\t\t\tpublished[entry.name] = Card.published(entry, ids :: any)\n\t\tend\n\t\tlocal slot = slots[player]\n", SRV),
     ("S2 its own id check, not Places", SV, "published[entry.name] = Card.published(entry, ids :: any)",
      "published[entry.name] = (tonumber(ServerScriptService:GetAttribute(entry.place .. \"PlaceId\")) or 0) > 0", SRV),
-    ("S3 unpublished games read too", SV, "if published[name] and not mine.reading[name] then", "if not mine.reading[name] then", SRV),
-    ("S4 a read under way read again", SV, "if published[name] and not mine.reading[name] then", "if published[name] then", SRV),
+    ("S3 unpublished games read too", SV, "if not published[name] or slot.reading[name] then", "if slot.reading[name] then", SRV),
+    ("S4 a read under way read again", SV, "if not published[name] or slot.reading[name] then", "if not published[name] then", SRV),
     ("S5 the status at os.clock()", SV, "PaidPlay.status(record, os.time())", "PaidPlay.status(record, os.clock())", SRV),
-    ("S6 a failed read leaves the state unknown", SV, "\t\t\t\t\tmine.free[name] = record ~= nil and PaidPlay.status(record, os.time()).free == true",
-     "\t\t\t\t\tif record ~= nil then\n\t\t\t\t\t\tmine.free[name] = PaidPlay.status(record, os.time()).free == true\n\t\t\t\t\tend", SRV),
-    ("S7 no answer until a read comes back", SV, "\t\tlocal mine: Slot = slot\n\t\tsend(player, mine)\n", "\t\tlocal mine: Slot = slot\n", SRV),
-    ("S8 answers sent to everyone", SV, "remote:FireClient(player, Card.states(Games.LIST, published, slot.free))", "remote:FireAllClients(Card.states(Games.LIST, published, slot.free))", SRV),
-    ("S9 a player who left still sent to", SV, "if player.Parent ~= nil and slots[player] == slot then", "if true then", SRV),
+    ("S7 no answer until a read comes back", SV, "\t\tslot.asked = os.clock()\n\t\tsend(player, slot)\n", "\t\tslot.asked = os.clock()\n", SRV),
+    ("S8 answers sent to everyone", SV, "remote:FireClient(player, Card.states(Games.LIST, published, free))", "remote:FireAllClients(Card.states(Games.LIST, published, free))", SRV),
+    ("S9 a player who left still sent to: no presence check and no drop on leave", SV, [
+        ("return player.Parent ~= nil and slots[player] == slot", "return slots[player] == slot"),
+        ("\tPlayers.PlayerRemoving:Connect(function(player: Player)\n\t\tslots[player] = nil\n", "\tPlayers.PlayerRemoving:Connect(function(player: Player)\n"),
+    ], None, SRV),
     ("S10 an ask from a player who left read", SV, "\t\tif player.Parent == nil then\n\t\t\treturn\n\t\tend\n\t\tlocal slot", "\t\tlocal slot", SRV),
     ("S12 the client's claim trusted", SV, "remote.OnServerEvent:Connect(function(player: Player)\n",
      "remote.OnServerEvent:Connect(function(player: Player, claim: any)\n\t\tif type(claim) == \"table\" then\n\t\t\tfor k, v in claim do\n\t\t\t\tpublished[k] = type(v) == \"table\" and v.published == true\n\t\t\tend\n\t\tend\n", SRV),
     ("S13 started twice listens twice", SV, "\tif started then\n\t\treturn\n\tend\n\tstarted = true\n\tlocal remote", "\tstarted = true\n\tlocal remote", SRV),
-    ("S14 the place ids sent along", SV, "remote:FireClient(player, Card.states(Games.LIST, published, slot.free))", "remote:FireClient(player, Card.states(Games.LIST, published, slot.free), ids)", SRV),
-    ("S15 the Wallet read by title", SV, "local record = Wallet.read(player, name)", "local record = Wallet.read(player, entry.title)", SRV),
+    ("S14 the place ids sent along", SV, "remote:FireClient(player, Card.states(Games.LIST, published, free))", "remote:FireClient(player, Card.states(Games.LIST, published, free), ids)", SRV),
+    ("S15 the Wallet read by title", SV, "local record, reason = Wallet.read(player, name)", "local record, reason = Wallet.read(player, string.upper(name))", SRV),
     ("S16 the free state from the record, not its status", SV, "PaidPlay.status(record, os.time()).free == true", "(record :: any).free == nil", SRV),
+    ("S17 the waits written in, not the Wallet's", SV, "{ busy = Wallet.WAIT_SECONDS, down = Wallet.RETRY_SECONDS, most = Wallet.READ_SECONDS }", "{ busy = 5, down = 6, most = 60 }", SRV),
+    ("S18 every failure starts a retry chain of its own", SV, "if live(player, slot) and slot.retry[name] == token then", "if live(player, slot) then", SRV),
+    ("S19 retries go on after a leave", SV, "if live(player, slot) and slot.retry[name] == token then", "if slot.retry[name] == token then", SRV),
+    ("S20 every ask answered at once", SV, "local wait = Card.asked(mine.asked, os.clock())", "local wait = nil", SRV),
+    ("S21 a held ask dropped", SV, "\t\t\t\tmine.waiting = false\n\t\t\t\tif live(player, mine) then\n\t\t\t\t\tanswer(player, mine)", "\t\t\t\tmine.waiting = false\n\t\t\t\tif false then\n\t\t\t\t\tanswer(player, mine)", SRV),
+    ("S22 the read's reason dropped", SV, "local record, reason = Wallet.read(player, name)", "local record = Wallet.read(player, name)\n\t\t\tlocal reason = nil", SRV),
     # Client
-    ("V1 the sale's words written in", CV_, "local badge = Card.badge(states[entry.name], Prices)", "local badge = Card.badge(states[entry.name], { struck = \"5 R$\", price = \"1 R$\", sale = \"SALE\" })", CLI),
+    ("V1 the sale's words written in", CV_, "Card.badge(states[entry.name], Prices, Card.WORDS)", "Card.badge(states[entry.name], { struck = \"5 R$\", price = \"1 R$\", sale = \"SALE\" }, Card.WORDS)", CLI),
     ("V2 the struck price not rich text", CV_, "\t\tstruck.RichText = true\n", "", CLI),
     ("V3 bound at the test screen's priority", CV_, "\t\tCarousel.PRIORITY,\n", "\t\t3000,\n", CLI),
     ("V4 the wheel not bound", CV_, "local inputs: { any } = { Enum.UserInputType.MouseWheel }", "local inputs: { any } = {}", CLI),
@@ -136,7 +158,7 @@ M = [
     ("V12 hidden previews turn too", CV_, "\t\t\tif frames[name].Visible then\n", "\t\t\tif true then\n", CLI),
     ("V13 the preview never turns", CV_, "local angle = Card.angle(os.clock())", "local angle = Card.angle(0)", CLI),
     ("V14 no safe insets", CV_, "\tgui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets\n", "", CLI),
-    ("V15 started twice draws twice", CV_, "\tif started then\n\t\treturn\n\tend\n\tstarted = true\n\tlocal gui", "\tstarted = true\n\tlocal gui", CLI),
+    ("V15 started twice draws twice", CV_, "\tif started then\n\t\treturn\n\tend\n\tstarted = true\n\t-- no character", "\tstarted = true\n\t-- no character", CLI),
     ("V16 no Boards slot", CV_, "\t\tslot(card, \"Boards\", Card.REGIONS.Boards)\n", "", CLI),
     ("V17 card() gives nothing", CV_, "\treturn frames[name]\n", "\treturn nil\n", CLI),
     ("V18 an answer merged into the last", CV_, "\t\t\tstates = Card.parse(raw, Games.LIST)\n", "\t\t\tfor k, v in Card.parse(raw, Games.LIST) do\n\t\t\t\tstates[k] = v\n\t\t\tend\n", CLI),
@@ -146,15 +168,27 @@ M = [
     ("V23 a part's size axes swapped", CV_, "part.Size = Vector3.new(p.size[1], p.size[2], p.size[3])", "part.Size = Vector3.new(p.size[1], p.size[3], p.size[2])", CLI),
     ("V24 the cards not where Carousel puts them", CV_, "local box = Carousel.box(Carousel.offset(row, i), size.X, size.Y)", "local box = Carousel.box(i - row.index, size.X, size.Y)", CLI),
     ("V25 the play listeners hear only the first", CV_, "\t\t\tfor _, fn in listeners do\n\t\t\t\ttask.spawn(fn, name)\n\t\t\tend", "\t\t\tif listeners[1] then\n\t\t\t\ttask.spawn(listeners[1], name)\n\t\t\tend", CLI),
+    ("V26 the touch controls left on", CV_, "\tGuiService.TouchControlsEnabled = false\n", "", CLI),
+    ("V27 typing in the chat moves the row", CV_, "if UserInputService:GetFocusedTextBox() ~= nil then", "if false then", CLI),
+    ("V28 the camera left at the scene's centre", CV_, "\tcamera.CFrame =\n\t\tCFrame.lookAt(Vector3.new(0, Card.CAMERA.height, Card.CAMERA.distance), Vector3.new(0, 0, 0))\n", "", CLI),
+    ("V29 the camera's height and distance swapped", CV_, "CFrame.lookAt(Vector3.new(0, Card.CAMERA.height, Card.CAMERA.distance)", "CFrame.lookAt(Vector3.new(0, Card.CAMERA.distance, Card.CAMERA.height)", CLI),
+    ("V30 the preview over the whole card", CV_, "view.Size = UDim2.fromScale(1, region.height)", "view.Size = UDim2.fromScale(1, 1)", CLI),
+    ("V31 the title over the boards", CV_, "label(card, \"Title\", Card.REGIONS.Title, entry.title)", "label(card, \"Title\", Card.REGIONS.Boards, entry.title)", CLI),
+    ("V32 the tagline not wrapped", CV_, "\t\ttagline.TextWrapped = true\n", "", CLI),
+    ("V33 the badge's words written in at the call", CV_, "Card.badge(states[entry.name], Prices, Card.WORDS)", "Card.badge(states[entry.name], Prices, { free = \"FREE GAME READY\", soon = \"COMING SOON\" })", CLI),
+    ("V34 the wheel passed on", CV_, "\t\t\t\tact(gui, intent)\n", "\t\t\t\tact(gui, intent)\n\t\t\t\treturn Enum.ContextActionResult.Pass\n", CLI),
+    ("V35 the offer over the struck price", CV_, "offer.Position = UDim2.fromScale(Card.BADGE.struck + Card.BADGE.gap, 0)", "offer.Position = UDim2.fromScale(Card.BADGE.struck - 0.05, 0)", CLI),
     # Place
     ("P1 the remote is a RemoteFunction", PJ, "\"Cards\": { \"$className\": \"RemoteEvent\" }", "\"Cards\": { \"$className\": \"RemoteFunction\" }", PLC),
-    ("P2 Card requires Carousel", CD, "local Card = {}\n", "local Card = {}\nlocal _row = require(\"./Carousel\")\n", PLC),
+    ("P2 Card requires Carousel, undeclared", CD, "local Card = {}\n", "local Card = {}\nlocal _row = require(\"./Carousel\")\n", META),
+    ("P2b Card requires the arcade's Prices from Logic", CD, "local Card = {}\n", "local Card = {}\nlocal _p = require(\"../../../Arcade/Prices\")\n", PLC),
     ("P3 the server's Main does not boot Cards", SMAIN, "require(\"./Cards\").start()", "local _ = require(\"./Cards\")", PLC),
     ("P4 the client's Main does not boot the view", CMAIN, "require(\"./CarouselView\").start()", "local _ = require(\"./CarouselView\")", PLC),
-    ("P5 Games requires Carousel too", GA, "local Card = require(\"./Logic/Card\")\n", "local Card = require(\"./Logic/Card\")\nlocal _row = require(\"./Logic/Carousel\")\n", PLC),
+    ("P5 Games requires a module outside Shared", GA, "local Card = require(\"./Logic/Card\")\n", "local Card = require(\"./Logic/Card\")\nlocal _p = require(\"@game/ReplicatedStorage/Arcade/Prices\")\n", PLC),
     ("P6 the view requires the Wallet", CV_, "local Prices = require(\"@game/ReplicatedStorage/Arcade/Prices\")\n", "local Prices = require(\"@game/ReplicatedStorage/Arcade/Prices\")\nlocal _w = require(\"@game/ServerStorage/Arcade/Wallet\")\n", PLC),
     ("P7 the features not in the map", AM, "### Carousel and Card (f0205)", "### Carousel (f0205)", PLC),
-    ("P8 an edge from Card", AM, "# Carousel and Card are leaves", "# Carousel and Card are leaves\nCard -> Carousel", PLC),
+    ("P10 the server's Main starts Cards twice", SMAIN, "require(\"./Cards\").start()", "require(\"./Cards\").start()\nrequire(\"./Cards\").start()", PLC),
+    ("P11 the map's read not declared", "tests/inputs.tsv", "tests/acceptance/f0205/place.spec.luau\tportal/.tracker/architecture.md\n", "", PLC),
     ("P9 the server adapter without the Wallet", SV, "local Wallet = require(\"@game/ServerStorage/Arcade/Wallet\")",
      "local Wallet = { read = function(_: Player, _: string): any\n\treturn nil\nend }", PLC),
     # Meta
@@ -170,6 +204,10 @@ CV = [
      "return { kind = \"sale\", struck = Card.strike(prices.struck), text = `{prices.price} {prices.sale}`, note = \"\" } :: any", CARD + CLI),
     ("CV4 the view adds a Note label to the badge", CV_, "\t\tslot(card, \"Buttons\", Card.REGIONS.Buttons)\n",
      "\t\tlabel(badge, \"Note\", { top = 0, height = 1 }, \"\")\n\t\tslot(card, \"Buttons\", Card.REGIONS.Buttons)\n", CLI),
+    ("CV6 the server's Main keeps Cards in a local first", SMAIN, "require(\"./Cards\").start()", "local Cards = require(\"./Cards\")\nCards.start()", PLC),
+    ("CV7 the slots built with UDim2.new", CV_, "\tf.Position = UDim2.fromScale(Card.INSET, region.top)", "\tf.Position = UDim2.new(Card.INSET, 0, region.top, 0)", CLI),
+    ("CV8 the camera built with CFrame.new(eye, target)", CV_, "CFrame.lookAt(Vector3.new(0, Card.CAMERA.height, Card.CAMERA.distance), Vector3.new(0, 0, 0))", "CFrame.new(Vector3.new(0, Card.CAMERA.height, Card.CAMERA.distance), Vector3.new(0, 0, 0))", CLI),
+    ("CV9 the client's Main boots another adapter first", CMAIN, "require(\"./CarouselView\").start()", "require(\"./BoardsView\").start()\nrequire(\"./CarouselView\").start()", PLC),
     ("CV5 the server requires one more arcade module", SV, "local Wallet = require(\"@game/ServerStorage/Arcade/Wallet\")\n",
      "local Wallet = require(\"@game/ServerStorage/Arcade/Wallet\")\nlocal _receipts = require(\"@game/ServerStorage/Arcade/Receipts\")\n", SRV),
 ]
@@ -186,7 +224,8 @@ def verdict(out, correct):
     lines = out.strip().splitlines()
     sums = [l for l in lines if " passed, " in l and " failed, " in l and "spec files" in l]
     last = sums[-1] if sums else (lines[-1] if lines else "NO OUTPUT")
-    failed = "0 failed" not in last
+    m = re.search(r"\b(\d+) failed", last)
+    failed = m is None or int(m.group(1)) > 0  # "20 failed" is a failure: never a substring test
     if correct:
         return ("ok (green)" if not failed else "RED: " + last), not failed
     if not failed:
@@ -229,7 +268,10 @@ def main():
             continue
         open(f, "w").write(edited)
         try:
-            msg, good = verdict(run(specs), mid.startswith("CV"))
+            out = run(specs)
+            if os.environ.get("F0205_SHOW"):
+                print(out[-3000:])
+            msg, good = verdict(out, mid.startswith("CV"))
         finally:
             open(f, "w").write(src)
         if not good:
