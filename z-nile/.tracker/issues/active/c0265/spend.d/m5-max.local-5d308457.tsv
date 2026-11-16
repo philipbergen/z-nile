@@ -73,3 +73,35 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-14 18:27	1 spec	0	0	test			24.541	21.110		24.541	tokens,ai
 2026-11-14 18:27	3 runs	0	0	other			26.244	21.860			tokens,ai
 2026-11-14 18:27	c0274: done drops the claim memory after the push (review-002 F1, F2, F3)	6	1	build							tokens,wall,cpu,ai
+2026-11-14 18:08	static	0	0	test			4.335	38.680		4.335	tokens,ai
+2026-11-14 18:08	2 specs	0	0	test			1.441	1.080		1.441	tokens,ai
+2026-11-14 18:10	1 spec	0	0	test			79.108	63.920		79.108	tokens,ai
+2026-11-14 18:10	3 specs	0	0	test			34.422	31.880		34.422	tokens,ai
+2026-11-14 18:15	6 specs	0	0	test			210.775	457.560		210.775	tokens,ai
+2026-11-14 18:16	affected	0	0	test			82.018	172.170		82.018	tokens,ai
+2026-11-14 18:17	6 runs	0	0	other			414.104	766.580			tokens,ai
+2026-11-14 18:18	c0275: automatic heartbeats	150	7	build							tokens,wall,cpu,ai
+2026-11-14 18:23	R0100: review-002	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-14 22:20	1 spec	0	0	test			6.231	4.450		6.231	tokens,ai
+2026-11-14 22:20	1 spec	0	0	test			6.225	4.640		6.225	tokens,ai
+2026-11-14 22:21	1 spec	0	0	test			10.131	5.980		10.131	tokens,ai
+2026-11-14 22:21	1 spec	0	0	test			9.908	5.960		9.908	tokens,ai
+2026-11-14 22:21	1 spec	0	0	test			10.113	6.010		10.113	tokens,ai
+2026-11-14 22:22	1 spec	0	0	test			11.585	6.780		11.585	tokens,ai
+2026-11-14 22:22	1 spec	0	0	test			10.323	6.930		10.323	tokens,ai
+2026-11-14 22:22	1 spec	0	0	test			11.195	6.500		11.195	tokens,ai
+2026-11-14 22:22	1 spec	0	0	test			10.923	6.650		10.923	tokens,ai
+2026-11-14 22:23	1 spec	0	0	test			11.814	7.230		11.814	tokens,ai
+2026-11-14 22:23	1 spec	0	0	test			11.787	7.280		11.787	tokens,ai
+2026-11-14 22:23	1 spec	0	0	test			11.796	7.300		11.796	tokens,ai
+2026-11-14 22:23	2 specs	0	0	test			1.029	0.740		1.029	tokens,ai
+2026-11-14 22:24	1 spec	0	0	test			63.474	48.770		63.474	tokens,ai
+2026-11-14 22:25	3 specs	0	0	test			32.209	29.920		32.209	tokens,ai
+2026-11-14 22:25	17 runs	0	0	other			400.404	359.860			tokens,ai
+2026-11-14 22:25	c0275: review-005 and final-review F6 fixes	67	11	code-review							tokens,wall,cpu,ai
+2026-11-14 22:25	1 run	0	0	other			1.235	0.530			tokens,ai
+2026-11-14 22:26	c0275: keep the design text, record the old-engine window in the log	0	0	code-review							tokens,wall,cpu,ai
+2026-11-14 22:43	affected	0	0	test			7.666	42.760		7.666	tokens,ai
+2026-11-14 22:45	affected	0	0	test			79.967	177.310		79.967	tokens,ai
+2026-11-14 22:45	3 runs	0	0	other			260.161	431.640			tokens,ai
+2026-11-14 22:45	c0275: lint and format of the review-005 fixes	16	12	code-review							tokens,wall,cpu,ai

@@ -288,6 +288,34 @@ function reap.isToolShell(command: string): boolean
 	return string.find(command, "/shell-snapshots/", 1, true) ~= nil
 end
 
+-- A claim's background beater (c0275): `./zn beat <id> --watch` under `./zn run`, started detached by the claim and held
+-- to its bound by that runner, so it is not a leak while it lives (macOS withholds the environment of `perl`, so the
+-- deadline marker cannot show it: the command line does). It and everything below it are spared the orphan rule only; a
+-- beater past its deadline is still stopped by the marked rule (its `lune` child shows the marker), and a session end
+-- by the session rule.
+function reap.isBeater(command: string): boolean
+	return string.find(command, "bounded%.pl .-%-%- %S+/zn beat [%w%-]+ %-%-watch") ~= nil
+end
+
+-- The session pid a beater's command line carries (`--session <pid>`), nil for none (another CLI's, or unreadable).
+function reap.beaterSession(command: string): number?
+	local pid = string.match(command, "%-%-watch %-%-session (%d+)")
+	return if reap.isBeater(command) and pid then tonumber(pid) else nil
+end
+
+local function underBeater(p: Proc, byPid: { [number]: Proc }): boolean
+	local at: Proc? = p
+	local seen = 0
+	while at ~= nil and at.pid > 1 and seen < 64 do
+		if reap.isBeater(at.command) then
+			return true
+		end
+		seen += 1
+		at = byPid[at.ppid]
+	end
+	return false
+end
+
 -- Whether every ancestor up to launchd is one of CHAIN; false when one is not, or is missing from the table
 local function ownerless(p: Proc, byPid: { [number]: Proc }): boolean
 	local seen = 0
@@ -352,7 +380,12 @@ function reap.decide(procs: { Proc }, opts: Options): { Target }
 			and p.ppid == opts.under
 			and reap.isToolShell(p.command)
 			and (scoped or opts.sessionAnywhere)
-		if not scoped and not sessionShell then
+		-- a beater tied to the session that is ending (`/clear` ends a session and keeps its `claude` process, so the pid check
+		-- alone never stops it; c0275 design review F2)
+		local sessionBeater = opts.under ~= nil
+			and reap.beaterSession(p.command) == opts.under
+			and (scoped or opts.sessionAnywhere)
+		if not scoped and not sessionShell and not sessionBeater then
 			continue
 		end
 		local name = reap.name(p.command)
@@ -371,13 +404,14 @@ function reap.decide(procs: { Proc }, opts: Options): { Target }
 			)
 		then
 			why = `past its ./zn run deadline by {opts.now - stamp}s`
-		elseif sessionShell then
+		elseif sessionShell or sessionBeater then
 			why = "started by the session that is ending"
 		elseif
 			scoped
 			and (reap.ORPHANABLE[name] or reap.isToolShell(p.command))
 			and p.age >= opts.minAge
 			and ownerless(p, byPid)
+			and not underBeater(p, byPid)
 		then
 			why = "orphaned (its parent is gone)"
 		end
