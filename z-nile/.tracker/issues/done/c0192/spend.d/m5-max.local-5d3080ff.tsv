@@ -39,3 +39,6 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-16 06:03	R0072: trace names the finish commit	0	0	deliver							tokens,wall,cpu,ai
 2026-11-16 06:04	affected	0	0	test			12.606	55.280		12.606	tokens,ai
 2026-11-16 06:04	R0072: bind c0192, c0193 claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	191	2	deliver							tokens,wall,cpu,ai
+2026-11-14 00:08	review-001	0	0	code-review	286694	claude-opus-5-5-xhigh	809.415	128.810	809.415		
+2026-11-16 02:31	final-review-001	0	0	code-review	1219914	grok-4.7-xhigh	8934.157	179.880	8934.157		
+2026-11-16 06:04	deliver	0	0	deliver							tokens,ai
