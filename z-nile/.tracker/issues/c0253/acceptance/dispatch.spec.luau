@@ -58,7 +58,8 @@ local function count(text: string, needle: string): number
 end
 local function step(extra: { string }?): string
 	local args = { "dispatch", "z-run", "R0010", "--worker" }
-	for _, a in extra or {} do
+	local more: { string } = extra or {}
+	for _, a in more do
 		table.insert(args, a)
 	end
 	local r = fakecli.zn(h, args, WAIT)

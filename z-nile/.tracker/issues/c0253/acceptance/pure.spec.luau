@@ -289,7 +289,7 @@ return t.spec("c0253 the supervisor's pure rules", function(it)
 			end
 			t.expect(supervise.RESUME.agy ~= nil and supervise.RESUME.opencode ~= nil).toBe(true)
 			local claude = { "claude", "-p", "prompt", "--session-id", "S1", "--model", "m" }
-			t.expect(supervise.withSession(claude, "claude", "S1", false)).toEqual(claude)
+			t.expect((supervise.withSession(claude, "claude", "S1", false))).toEqual(claude)
 			local resumed = supervise.withSession(claude, "claude", "S1", true) :: { string }
 			t.expect(table.find(resumed, "--session-id")).toBe(nil)
 			t.expect(resumed[table.find(resumed, "--resume") :: number + 1]).toBe("S1")
