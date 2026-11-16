@@ -37,7 +37,7 @@ local AGY_OK = table.concat({
 local AGY_QUOTA =
 	[[{"event":"result","result":{"conversation_id":"c-1","status":"ERROR","response":"","error":"RESOURCE_EXHAUSTED: quota exceeded for this model","finished_reason":"error"}}]]
 
-local AGY_NOCOUNT = [[{"event":"init","conversation_id":"c-9","init":{}}]]
+local AGY_NOCOUNT = [[{"event":"init","conversation_id":"ses_agy9","init":{}}]]
 
 local function mkdir(path: string)
 	process.exec("mkdir", { "-p", path })
@@ -215,11 +215,11 @@ return t.spec("c0175 the runner on agy and opencode", function(it)
 		"AC7: only kimi and opencode keep a reader: agy's conversations are protobuf, so its steps stay unmeasured",
 		function()
 			reset()
-			t.expect(U.lines("agy-cli", "c-1", "agy", {}, base)).toEqual({})
-			t.expect(U.lines("claude-cli", "s", "claude", {}, base)).toEqual({})
-			t.expect(U.lines("opencode-cli", "", "opencode", {}, base)).toEqual({})
+			t.expect(U.lines("agy-cli", "ses_agy9", `{base}/no-such-agy`, {}, base)).toEqual({})
+			t.expect(U.lines("claude-cli", "ses_s", `{base}/no-such-claude`, {}, base)).toEqual({})
+			t.expect(U.lines("opencode-cli", "", `{base}/no-such-opencode`, {}, base)).toEqual({})
 			-- an id that is not an opencode session id never reaches the CLI
-			t.expect(U.lines("opencode-cli", "--help", "opencode", {}, base)).toEqual({})
+			t.expect(U.lines("opencode-cli", "--help", `{base}/no-such-opencode`, {}, base)).toEqual({})
 			local agy = fake("agy", `cat <<'EOF'\n{AGY_NOCOUNT}\nEOF`)
 			local r = run("agy-none", agy, "agy-cli")
 			t.expect(r.outcome).toBe("ok")
