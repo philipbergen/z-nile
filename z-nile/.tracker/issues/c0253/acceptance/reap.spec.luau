@@ -110,4 +110,19 @@ return t.spec("c0253 the reaper leaves the supervisor alone", function(it)
 			t.expect(table.find(pids, 40)).toBe(nil)
 		end
 	)
+
+	it(
+		"AC10: the launcher shim above the named supervisor (the same command, its parent) is kept with it",
+		function()
+			local procs = {
+				proc(9, 1, SUPERVISOR),
+				proc(10, 9, "/x/lune/0.10.5/lune run z-nile/engine/main -- work run --cli claude"),
+				proc(20, 1, "lune run probe.luau"),
+			}
+			local gone = pidsOf(procs, { 10 })
+			t.expect(table.find(gone, 9)).toBe(nil)
+			t.expect(table.find(gone, 10)).toBe(nil)
+			t.expect(table.find(gone, 20) ~= nil).toBe(true)
+		end
+	)
 end)

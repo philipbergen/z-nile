@@ -351,13 +351,25 @@ function reap.decide(procs: { Proc }, opts: Options): { Target }
 	end
 	local targets: { Target } = {}
 	local taken: { [number]: boolean } = {}
+	-- the supervisor the state file names, and the launcher processes above it that are the same command (rokit's lune shim)
+	local exempt: { [number]: boolean } = {}
+	for _, pid in opts.keep or {} do
+		local at: Proc? = byPid[pid]
+		for _ = 1, 8 do
+			if at == nil or not reap.isSupervisor(at) then
+				break
+			end
+			exempt[at.pid] = true
+			at = byPid[at.ppid]
+		end
+	end
 	for _, p in procs do
 		if
 			p.pid <= 1
 			or p.uid ~= opts.uid
 			or table.find(opts.self, p.pid)
 			or underLegitGit(p, byPid)
-			or (opts.keep ~= nil and table.find(opts.keep, p.pid) ~= nil and reap.isSupervisor(p))
+			or exempt[p.pid] == true
 		then
 			continue
 		end
