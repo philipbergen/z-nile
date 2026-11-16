@@ -4,8 +4,10 @@
 -- the title's HiscoreGames prefix and serves each on a relay of its own (never the client's remote). A client asks on
 -- ReplicatedStorage.Remotes.Boards with (title, board id); Board.plan decides: a refresh or a forward goes to that
 -- title's arcade boards as (player, id), and the arcade's answer comes back to the asker as (title, id, rows, rank,
--- status, best) and is held; any other ask is answered from the held rows. The engine's budget is read for standard
--- and sorted reads before each ask. A player who left hears nothing, and a player who rejoins starts afresh.
+-- status, best) and is held; any other ask is answered from the held rows. Every answer carries the player's all-time
+-- best on that title once the arcade's all-time answer has reached them, and `false` (pending) until then; a held rank
+-- lasts while the held rows are the ones it was heard with. The engine's budget is read for standard and sorted reads
+-- before each ask. A player who left hears nothing, and a player who rejoins starts afresh.
 local Games = require("@shared/Games")
 local HiscoreGames = require("@arcade/HiscoreGames")
 local Hiscores = require("@arcade/Logic/Hiscores")
@@ -379,6 +381,7 @@ return t.spec("f0206 server", function(it)
 			local other = w.ask(c, "pickman", "day")
 			t.expect(#other).toBe(1)
 			t.expect(other[1][5]).toBe(nil) -- c never heard a rank
+			t.expect(other[1][7]).toBe(false) -- nor their best: pending, not "no run"
 			t.expect(#other[1][4]).toBe(2)
 		end
 	)
@@ -432,23 +435,117 @@ return t.spec("f0206 server", function(it)
 		t.expect(out[1][6]).toBe("wait")
 	end)
 
-	it("the best goes with all-time answers only, and a held answer carries the best last heard", function()
+	it(
+		"every answer carries the player's best once the arcade's all-time answer brought it, pending before",
+		function()
+			local w = world()
+			local a = w.join(1)
+			w.ask(a, "pickman", "day")
+			local day = w.reply("", a, "day", rows("x"), nil, false, nil)
+			t.expect(#day).toBe(1)
+			t.expect(day[1][7]).toBe(false)
+			w.ask(a, "pickman", "all")
+			local best = { score = 5, level = 3, revives = 1 }
+			local all = w.reply("", a, "all", rows("x"), nil, false, best)
+			t.expect(#all).toBe(1)
+			t.expect(all[1][7]).toBe(best)
+			w.now += 20
+			local held = w.ask(a, "pickman", "all")
+			t.expect(#held).toBe(1)
+			t.expect(held[1][7]).toBe(best)
+			local heldDay = w.ask(a, "pickman", "day")
+			t.expect(#heldDay).toBe(1)
+			t.expect(heldDay[1][7]).toBe(best)
+			-- another title's best is its own: still pending
+			w.ask(a, "snake", "week")
+			local snake = w.reply(HiscoreGames.snake.prefix, a, "week", rows("y"), nil, false, nil)
+			t.expect(#snake).toBe(1)
+			t.expect(snake[1][7]).toBe(false)
+		end
+	)
+
+	it("a player whose all-time ask went to the arcade but was not answered yet is still pending", function()
 		local w = world()
 		local a = w.join(1)
+		w.ask(a, "pickman", "all") -- a refresh; the arcade's answer has not come
+		t.expect(w.forwarded()).toBe(1)
+		w.now += 20 -- after the window: answered from the held rows
+		local out = w.ask(a, "pickman", "all")
+		t.expect(#out).toBe(1)
+		t.expect(out[1][7]).toBe(false)
+	end)
+
+	it(
+		"a player with no run is told so once the arcade's all-time answer says it: nil, not pending",
+		function()
+			local w = world()
+			local a = w.join(1)
+			w.ask(a, "invaders", "all")
+			local out = w.reply(HiscoreGames.invaders.prefix, a, "all", rows("x"), nil, false, nil)
+			t.expect(#out).toBe(1)
+			t.expect(out[1][7]).toBe(nil)
+			w.now += 20
+			local held = w.ask(a, "invaders", "all")
+			t.expect(#held).toBe(1)
+			t.expect(held[1][7]).toBe(nil)
+		end
+	)
+
+	it(
+		"a player whose asks land between another's refreshes is answered pending, then forwarded in the next window",
+		function()
+			local w = world()
+			local a, b = w.join(1), w.join(2)
+			w.ask(a, "pickman", "all") -- a's refresh at 0
+			w.reply("", a, "all", rows("x", "y"), 1, false, { score = 9, level = 1, revives = 0 })
+			w.now += 20 -- after the window, before REFRESH
+			local out = w.ask(b, "pickman", "all")
+			t.expect(#out).toBe(1)
+			t.expect(out[1][7]).toBe(false) -- pending: b has never heard the arcade's all-time answer
+			t.expect(w.forwarded()).toBe(1)
+			w.now += 10 -- 30: a's next refresh
+			w.ask(a, "pickman", "all")
+			t.expect(w.forwarded()).toBe(2)
+			w.reply("", a, "all", rows("x", "y"), 1, false, { score = 9, level = 1, revives = 0 })
+			w.now += 2 -- b asks again at WAIT_RETRY, inside the new window
+			w.ask(b, "pickman", "all")
+			t.expect(w.forwarded()).toBe(3)
+			t.expect(w.forwards[3].player).toBe(b)
+			local mine = { score = 4, level = 2, revives = 1 }
+			local heard = w.reply("", b, "all", rows("x", "y"), 2, false, mine)
+			t.expect(#heard).toBe(1)
+			t.expect(heard[1][7]).toBe(mine)
+			t.expect(heard[1][5]).toBe(2)
+		end
+	)
+
+	it("a refresh that brings the same rows keeps every player's rank on the held answers", function()
+		local w = world()
+		local a, b = w.join(1), w.join(2)
+		w.ask(b, "pickman", "day")
+		w.reply("", b, "day", rows("x", "y"), 2, false, nil)
+		w.now += 30
+		w.ask(a, "pickman", "day") -- a's refresh
+		w.reply("", a, "day", rows("x", "y"), nil, false, nil) -- the same rows
+		w.now += 15 -- after the window: answered from the held rows
+		local out = w.ask(b, "pickman", "day")
+		t.expect(#out).toBe(1)
+		t.expect(out[1][5]).toBe(2)
+	end)
+
+	it("a refresh that brings other rows drops a rank heard with the old ones", function()
+		local w = world()
+		local a, b = w.join(1), w.join(2)
+		w.ask(b, "pickman", "day")
+		w.reply("", b, "day", rows("x", "y"), 2, false, nil)
+		w.now += 30
 		w.ask(a, "pickman", "day")
-		local day = w.reply("", a, "day", rows("x"), nil, false, { score = 1, level = 1, revives = 0 })
-		t.expect(#day).toBe(1)
-		t.expect(day[1][7]).toBe(nil)
-		w.ask(a, "pickman", "all")
-		local best = { score = 5, level = 3, revives = 1 }
-		w.reply("", a, "all", rows("x"), nil, false, best)
-		w.now += 20
-		local held = w.ask(a, "pickman", "all")
-		t.expect(#held).toBe(1)
-		t.expect(held[1][7]).toBe(best)
-		local heldDay = w.ask(a, "pickman", "day")
-		t.expect(#heldDay).toBe(1)
-		t.expect(heldDay[1][7]).toBe(nil)
+		w.reply("", a, "day", rows("x", "z", "y"), nil, false, nil) -- a new run entered the board
+		w.now += 15
+		local out = w.ask(b, "pickman", "day")
+		t.expect(#out).toBe(1)
+		t.expect(#out[1][4]).toBe(3)
+		t.expect(out[1][5]).toBe(nil)
 	end)
 
 	it("a title it does not serve, a board id that is none, or a player who left: nothing at all", function()

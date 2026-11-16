@@ -1,12 +1,15 @@
 --!strict
--- f0206 AC5: the portal reads every title's boards within Roblox's DataStore budget (the arcade's E3). The portal's
--- real BoardRelay and the arcade's real Boards (f0197), both from the built portal place, run together on a stub
--- server whose DataStoreService counts every read. Runs are written through the arcade's own submit; then players ask
--- every board of every title every second for five minutes, far more than the portal's screen asks. The sorted reads
--- stay inside the portal's allowance (BURST, then RATE a minute per player), which is below the engine's per-server
--- budget of 5 + 2 a player a minute; the standard reads stay inside 60 + 40 a player a minute; no board is read twice
--- inside REFRESH; and every player is still answered with the stored rows. A player who keeps one board in front, as
--- the screen asks (every REASK seconds), sees a new run on it within two REFRESH periods.
+-- f0206 AC5: the portal reads every title's boards within Roblox's DataStore budget (the arcade's E3), and answers
+-- every player promptly. The portal's real BoardRelay and the arcade's real Boards (f0197), both from the built portal
+-- place, run together on a stub server whose DataStoreService counts every read. Runs are written through the arcade's
+-- own submit. Flooded (every board of every title every second for five minutes, by 1, 4 and 20 players), the sorted
+-- reads stay inside the portal's allowance (BURST, then the larger of RATE a minute per player and FLOOR), which is
+-- below the engine's per-server budget of 5 + 2 a player a minute; the standard reads stay inside 60 + 40 a player a
+-- minute; no board is read twice inside REFRESH; every player is still answered with the stored rows. At the screen's
+-- own cadence (BoardsView's asks, modelled with Board.wants, askDue, parse and learn): a lone player sees every card's
+-- board the first time they choose its tab, within WAIT_RETRY; players arriving at every phase of the cache's cycle
+-- each see their own best within REFRESH + WAIT_RETRY of their first ask, and never "no best"; a board kept in front
+-- shows a new run within two REFRESH periods.
 local Board = require("@logic/Board")
 local Games = require("@shared/Games")
 local HiscoreGames = require("@arcade/HiscoreGames")
@@ -277,6 +280,69 @@ local function flood(w: any, players: number, seconds: number): { [any]: any }
 	return last
 end
 
+-- the screen of one player, as BoardsView asks: every card's board on its tab (and a card's all-time board while its
+-- best is unknown), each again after REASK, or WAIT_RETRY after a wait or a pending best
+type Screen = {
+	p: any,
+	tab: string,
+	asked: { [string]: Board.Asked },
+	mine: { [string]: Board.Mine },
+	seen: { [string]: number }, -- "<title>|<id>" -> when its first answer that was not a wait came
+	knownAt: { [string]: number }, -- title -> when the player's own best on it was first known
+	answers: { Board.Answer },
+}
+local NAMES: { [string]: boolean } = {}
+local ORDER: { string } = {}
+for _, e in Games.LIST do
+	NAMES[e.name] = true
+	table.insert(ORDER, e.name)
+end
+
+local function screen(w: any, userId: number): Screen
+	return { p = w.join(userId), tab = "all", asked = {}, mine = {}, seen = {}, knownAt = {}, answers = {} }
+end
+
+local function tick(w: any, s: Screen)
+	for _, want in Board.wants(s.tab, ORDER, s.mine) do
+		local key = `{want.name}|{want.id}`
+		if Board.askDue(s.asked[key], w.now) then
+			s.asked[key] = { at = w.now, wait = false }
+			local before = #w.fired
+			w.remote.OnServerEvent.fire(s.p, want.name, want.id)
+			for i = before + 1, #w.fired do
+				local f = w.fired[i]
+				if f[1] == s.p then
+					local a = Board.parse(NAMES, table.unpack(f, 2, f.n))
+					if a ~= nil then
+						table.insert(s.answers, a)
+						s.mine[a.name] = Board.learn(s.mine[a.name], a)
+						if s.mine[a.name].known and s.knownAt[a.name] == nil then
+							s.knownAt[a.name] = w.now
+						end
+						local k = `{a.name}|{a.id}`
+						if s.asked[k] ~= nil then
+							s.asked[k].wait = a.status == "wait" or a.pending
+						end
+						if a.status ~= "wait" and s.seen[k] == nil then
+							s.seen[k] = w.now
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+local function noRepeatInsideRefresh(w: any)
+	for key, times in w.sortedBy do
+		for i = 2, #times do
+			if times[i] - times[i - 1] < Board.REFRESH then
+				error(`{key} read at {times[i - 1] - START} and {times[i] - START}`)
+			end
+		end
+	end
+end
+
 return t.spec("f0206 budget", function(it)
 	for _, n in { 1, 4, 20 } do
 		it(
@@ -286,9 +352,14 @@ return t.spec("f0206 budget", function(it)
 				flood(w, n, 300)
 				t.expect(#w.errors).toBe(0)
 				-- sorted reads: the allowance, below the engine's 5 + 2 a player a minute
-				t.expect(w.reads.sorted <= Board.BURST + Board.RATE * n * 5 + 1e-9).toBe(true)
+				t.expect(w.reads.sorted <= Board.BURST + math.max(Board.RATE * n, Board.FLOOR) * 5 + 1e-9)
+					.toBe(true)
 				t.expect(w.reads.sorted <= (5 + 2 * n) * 5).toBe(true)
 				t.expect(w.reads.sorted > 0).toBe(true)
+				-- and the allowance grows with the players: a busy server reads its boards more often than FLOOR allows
+				if Board.RATE * n >= 4 * Board.FLOOR then
+					t.expect(w.reads.sorted > Board.BURST + Board.FLOOR * 5).toBe(true)
+				end
 				-- standard reads: inside 60 + 40 a player a minute, leaving the wallet's four a minute per player (f0205)
 				t.expect(w.reads.get <= (60 + 36 * n) * 5).toBe(true)
 				-- no board's sorted page is read twice inside REFRESH
@@ -318,6 +389,103 @@ return t.spec("f0206 budget", function(it)
 			end
 		end
 	end)
+
+	for _, n in { 1, 2 } do
+		it(
+			`{n} player(s) choosing each tab in turn see every card's board the first time they choose it`,
+			function()
+				local w = seeded()
+				local screens = {}
+				for i = 1, n do
+					table.insert(screens, screen(w, i))
+				end
+				-- ALL-TIME at the screen's open, TODAY five seconds later, THIS WEEK five more, then back
+				local plan = { [0] = "all", [5] = "day", [10] = "week", [40] = "all", [70] = "day" }
+				local chosen: { [string]: number } = {}
+				for s = 0, 120 do
+					local tab = plan[s]
+					if tab ~= nil then
+						for _, sc in screens do
+							sc.tab = tab
+						end
+						if chosen[tab] == nil then
+							chosen[tab] = w.now
+						end
+					end
+					for _, sc in screens do
+						tick(w, sc)
+					end
+					w.now += 1
+				end
+				t.expect(#w.errors).toBe(0)
+				for _, sc in screens do
+					for tab, at in chosen do
+						for _, name in ORDER do
+							local seen = sc.seen[`{name}|{tab}`]
+							local label = `{name} {tab}`
+							t.expect(seen ~= nil and label).toBe(label)
+							t.expect((seen :: number) - at <= Board.WAIT_RETRY and label).toBe(label)
+						end
+					end
+				end
+				-- both budgets, over these two minutes
+				t.expect(w.reads.sorted <= Board.BURST + math.max(Board.RATE * n, Board.FLOOR) * 2 + 1e-9)
+					.toBe(true)
+				t.expect(w.reads.sorted <= (5 + 2 * n) * 2 + Board.BURST).toBe(true)
+				t.expect(w.reads.get <= (60 + 36 * n) * 2).toBe(true)
+				noRepeatInsideRefresh(w)
+			end
+		)
+	end
+
+	it(
+		"players arriving at every phase of the cache's cycle each see their own best within REFRESH + WAIT_RETRY",
+		function()
+			local w = seeded()
+			-- each player has a run on every title, at a score of their own
+			for userId = 1, 8 do
+				for _, e in Games.LIST do
+					w.run(e.name, userId, 50 + userId, 1, userId % 3)
+				end
+			end
+			w.reads.get, w.reads.sorted = 0, 0
+			w.sortedBy = {}
+			local screens: { Screen } = {}
+			local joined: { [any]: number } = {}
+			for s = 0, 240 do
+				-- a player joins every 4 s for 32 s: every phase of a 30 s refresh cycle
+				if s % 4 == 0 and #screens < 8 then
+					local sc = screen(w, #screens + 1)
+					table.insert(screens, sc)
+					joined[sc] = w.now
+				end
+				for _, sc in screens do
+					tick(w, sc)
+				end
+				w.now += 1
+			end
+			t.expect(#w.errors).toBe(0)
+			for i, sc in screens do
+				for _, name in ORDER do
+					for _, a in sc.answers do
+						if a.name == name and a.status ~= "wait" then
+							-- never "no best": the player has a run on every title
+							t.expect(a.pending or a.best ~= nil).toBe(true)
+							if a.best ~= nil then
+								t.expect((a.best :: Board.Best).score).toBe(50 + i)
+							end
+						end
+					end
+					local at = sc.knownAt[name]
+					local label = `player {i} {name}`
+					t.expect(at ~= nil and label).toBe(label)
+					t.expect((at :: number) - joined[sc] <= Board.REFRESH + Board.WAIT_RETRY and label)
+						.toBe(label)
+				end
+			end
+			noRepeatInsideRefresh(w)
+		end
+	)
 
 	it("a player keeping one board in front sees a new run on it within two REFRESH periods", function()
 		local w = seeded()

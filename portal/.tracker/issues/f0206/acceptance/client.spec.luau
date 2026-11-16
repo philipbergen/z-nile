@@ -3,11 +3,12 @@
 -- client, with a stand-in for the carousel (f0205's CarouselView: start, card(name) with its Boards slot, focused()).
 -- It starts the carousel, then fills every card's Boards slot: three tabs, a header naming the title's progress
 -- figure (HiscoreGames), ten row lines, a note and the "your best" line, laid out by Board.layout for the slot's size
--- with Card's glyph width, every text at the layout's one size.
--- One tab is chosen for every card, by a tap or by W/S, Up/Down and the triggers through one ContextActionService
--- binding below the test purchase screen's priority. Each frame it asks the server for the front card's board when the
--- front card or the tab changed, REASK after its last ask, or WAIT_RETRY after a wait; every answer is read through
--- Board.parse and drawn on its own card.
+-- with Card's glyph width, every text at the layout's one size, each column aligned and inset by its gutter, nothing
+-- gamepad-selectable. One tab is chosen for every card, by a tap or by W/S, Up/Down and the triggers through one
+-- ContextActionService binding between the default controls and the test purchase screen, passed on while the player
+-- types. Each frame it asks the server for every card's board on the chosen tab (and a card's all-time board while its
+-- best is not known), each again after REASK, or WAIT_RETRY after a wait or a pending best; every answer is read
+-- through Board.parse and drawn on its own card, the player's best under every tab.
 local Board = require("@logic/Board")
 local Card = require("@logic/Card")
 local Games = require("@shared/Games")
@@ -468,9 +469,12 @@ return t.spec("f0206 client", function(it)
 		for _, e in Games.LIST do
 			for _, id in Board.TABS do
 				t.expect(w.tab(e.name, id).Text).toBe(Board.TAB_TEXT[id])
+				-- never gamepad-selected, so ButtonA stays the carousel's PLAY (f0208)
+				t.expect(w.tab(e.name, id).Selectable).toBe(false)
 			end
 			local rows = w.part(e.name, "Rows")
 			t.expect(rows.ClassName).toBe("ScrollingFrame")
+			t.expect(rows.Selectable).toBe(false)
 			local lines = 0
 			for _, c in rows.children do
 				if c.ClassName == "Frame" then
@@ -484,6 +488,15 @@ return t.spec("f0206 client", function(it)
 			t.expect(name.TextWrapped == true).toBe(false)
 			t.expect(w.part(e.name, "Note").ClassName).toBe("TextLabel")
 			t.expect(w.part(e.name, "Best").ClassName).toBe("Frame")
+			-- each column's label at its inset place, aligned as Board says
+			for _, frame in { w.part(e.name, "Header"), w.line(e.name, 1), w.line(e.name, 10) } do
+				for _, c in Board.COLUMNS do
+					local l = frame:FindFirstChild(c.name)
+					t.expect(l.Position.X.Scale).toBeNear(c.x, 1e-9)
+					t.expect(l.Size.X.Scale).toBeNear(c.width, 1e-9)
+					t.expect(l.TextXAlignment).toBe(w.Enum.TextXAlignment[c.align])
+				end
+			end
 		end
 	end)
 
@@ -516,16 +529,16 @@ return t.spec("f0206 client", function(it)
 		t.expect(#w.sent).toBe(0)
 		w.release()
 		w.frame(2)
-		t.expect(w.asks()).toBe("pickman:all")
+		t.expect(w.asks()).toBe("pickman:all snake:all invaders:all asteroids:all")
 		t.expect(#w.errors).toBe(0)
 	end)
 
-	it("asks for the front card's board once, and not again on the next frames", function()
+	it("asks for every card's board on the chosen tab once, and not again on the next frames", function()
 		local w = started()
 		w.frame(1)
 		w.frame(1.5)
 		w.frame(10)
-		t.expect(w.asks()).toBe("pickman:all")
+		t.expect(w.asks()).toBe("pickman:all snake:all invaders:all asteroids:all")
 	end)
 
 	it(
@@ -545,6 +558,7 @@ return t.spec("f0206 client", function(it)
 			t.expect(w.line("pickman", 1).BackgroundTransparency).toBe(1)
 			t.expect(w.best("pickman")).toBe("|YOUR BEST|600|2|—")
 			t.expect(w.note("snake")).toBe("LOADING")
+			t.expect(w.best("snake")).toBe(nil)
 		end
 	)
 
@@ -576,10 +590,13 @@ return t.spec("f0206 client", function(it)
 		t.expect(w.note("pickman")).toBe("LOADING")
 	end)
 
-	it("a tap on TODAY chooses it on every card, draws the boards held for it, and asks for it", function()
+	it("a tap on TODAY chooses it on every card, draws the boards held for it, and asks for them", function()
 		local w = started()
 		w.frame(1)
-		w.answer("pickman", "all", FOUR, 2, "ok", { score = 600, level = 2, revives = 0 })
+		local best = { score = 600, level = 2, revives = 0 }
+		for _, e in Games.LIST do
+			w.answer(e.name, "all", FOUR, 2, "ok", if e.name == "pickman" then best else nil)
+		end
 		w.answer("snake", "day", { row(1, "Day", 10, 1, 0) }, nil, "ok", nil)
 		w.tab("pickman", "day").Activated.fire()
 		for _, e in Games.LIST do
@@ -587,13 +604,46 @@ return t.spec("f0206 client", function(it)
 			t.expect(w.tab(e.name, "all").BackgroundTransparency > 0).toBe(true)
 		end
 		t.expect(w.note("pickman")).toBe("LOADING")
-		t.expect(w.best("pickman")).toBe(nil)
 		t.expect(w.texts(w.line("snake", 1))).toBe("1|Day|10|1|—")
+		-- the your-best line stays below the board under TODAY: the player's all-time best on that title
+		t.expect(w.best("snake")).toBe("|YOUR BEST|—|—|—")
 		w.frame(1.1)
-		t.expect(w.asks()).toBe("pickman:all pickman:day")
+		t.expect(w.asks())
+			.toBe(
+				"pickman:all snake:all invaders:all asteroids:all pickman:day snake:day invaders:day asteroids:day"
+			)
 		w.tab("snake", "all").Activated.fire()
 		t.expect(w.texts(w.line("pickman", 1))).toBe("1|Ada|900|4|1")
+		t.expect(w.best("pickman")).toBe("|YOUR BEST|600|2|—")
 	end)
+
+	it("under TODAY, a card whose best is not known yet asks for its all-time board too", function()
+		local w = started()
+		w.answer("pickman", "all", FOUR, nil, "ok", nil) -- known: no run
+		w.tab("pickman", "week").Activated.fire()
+		w.frame(1)
+		t.expect(w.asks())
+			.toBe("pickman:week snake:week snake:all invaders:week invaders:all asteroids:week asteroids:all")
+	end)
+
+	it(
+		"a pending best shows its own mark, never the dashes of no best, and is asked again after WAIT_RETRY",
+		function()
+			local w = started()
+			w.frame(1)
+			w.answer("pickman", "all", FOUR, nil, "ok", false)
+			t.expect(w.best("pickman")).toBe(`|YOUR BEST|{Board.PENDING}|{Board.PENDING}|{Board.PENDING}`)
+			w.frame(1 + Board.WAIT_RETRY - 0.1)
+			t.expect(#w.sent).toBe(4)
+			w.frame(1 + Board.WAIT_RETRY)
+			t.expect(w.asks()).toBe("pickman:all snake:all invaders:all asteroids:all pickman:all")
+			w.answer("pickman", "all", FOUR, nil, "ok", { score = 5, level = 1, revives = 0 })
+			t.expect(w.best("pickman")).toBe("|YOUR BEST|5|1|—")
+			-- a later pending answer does not forget the best
+			w.answer("pickman", "all", FOUR, nil, "ok", false)
+			t.expect(w.best("pickman")).toBe("|YOUR BEST|5|1|—")
+		end
+	)
 
 	it("one binding below the test purchase screen's priority takes the six tab keys", function()
 		local w = started()
@@ -645,39 +695,32 @@ return t.spec("f0206 client", function(it)
 		t.expect(w.tab("pickman", "day").BackgroundTransparency).toBe(0)
 	end)
 
-	it("a new front card is asked for on the next frame", function()
-		local w = started()
-		w.frame(1)
-		w.front = "snake"
-		w.frame(1.02)
-		w.front = "invaders"
-		w.frame(1.04)
-		t.expect(w.asks()).toBe("pickman:all snake:all invaders:all")
-	end)
-
 	it("the same board is asked again after REASK, or WAIT_RETRY after a wait", function()
 		local w = started()
 		w.frame(1)
 		w.frame(1 + Board.REASK - 0.1)
-		t.expect(#w.sent).toBe(1)
+		t.expect(#w.sent).toBe(4)
 		w.frame(1 + Board.REASK)
-		t.expect(#w.sent).toBe(2)
+		t.expect(#w.sent).toBe(8)
 		w.answer("pickman", "all", {}, nil, "wait", nil)
 		w.frame(1 + Board.REASK + Board.WAIT_RETRY - 0.1)
-		t.expect(#w.sent).toBe(2)
+		t.expect(#w.sent).toBe(8)
 		w.frame(1 + Board.REASK + Board.WAIT_RETRY)
-		t.expect(#w.sent).toBe(3)
+		t.expect(#w.sent).toBe(9)
+		t.expect(w.sent[9][1]).toBe("pickman")
 		w.answer("pickman", "all", {}, nil, "ok", nil)
 		w.frame(1 + Board.REASK + 2 * Board.WAIT_RETRY)
-		t.expect(#w.sent).toBe(3)
+		t.expect(#w.sent).toBe(9)
 	end)
 
-	it("a wait for another board does not hurry the asks for the front one", function()
+	it("a wait hurries only the board it was for", function()
 		local w = started()
 		w.frame(1)
 		w.answer("snake", "all", {}, nil, "wait", nil)
 		w.frame(1 + Board.WAIT_RETRY)
-		t.expect(#w.sent).toBe(1)
+		t.expect(#w.sent).toBe(5)
+		t.expect(w.sent[5][1]).toBe("snake")
+		t.expect(w.sent[5][2]).toBe("all")
 	end)
 
 	it("lays the slot out by Board.layout for its size, and again when the size changes", function()
@@ -715,10 +758,11 @@ return t.spec("f0206 client", function(it)
 				t.expect(label.TextSize).toBe(l.text)
 				t.expect(label.TextScaled == true).toBe(false)
 			end
-			-- YOUR BEST takes the rank's and the name's columns
+			-- YOUR BEST from the rank's left edge to the name's right one
 			local name = best:FindFirstChild("Name")
-			t.expect(name.Position.X.Scale).toBe(0)
-			t.expect(name.Size.X.Scale).toBeNear(Board.COLUMNS[1].width + Board.COLUMNS[2].width, 1e-9)
+			local rank, named = Board.COLUMNS[1], Board.COLUMNS[2]
+			t.expect(name.Position.X.Scale).toBeNear(rank.x, 1e-9)
+			t.expect(name.Size.X.Scale).toBeNear(named.x + named.width - rank.x, 1e-9)
 		end
 		check(300, SLOT_Y)
 		local slot = w.slot("pickman")
@@ -742,7 +786,7 @@ return t.spec("f0206 client", function(it)
 		end
 		t.expect(tabs).toBe(1)
 		w.frame(1)
-		t.expect(#w.sent).toBe(1)
+		t.expect(#w.sent).toBe(4)
 		t.expect(#w.errors).toBe(0)
 	end)
 

@@ -1,21 +1,22 @@
 --!strict
 -- f0206 AC3: the server's read policy (Board.plan, pure). An ask may make the arcade's Boards read its stores only as
 -- a refresh: REFRESH after the board's last one (or never read, or a clock that went back), with a token of the read
--- allowance (RATE a minute per player, at most BURST) and the engine's request budget holding COST above RESERVE. While
+-- allowance (RATE a minute per player and at least FLOOR, at most BURST) and the engine's request budget holding COST
+-- above RESERVE. While
 -- the last refresh is inside the arcade's cache time (ttl - MARGIN) and its answer did not fail, an ask is forwarded:
 -- the arcade answers from its cache or the read under way. A forward of the all-time board that would read the
 -- player's best needs one standard read above RESERVE and waits BEST_GAP. Every other ask the server answers from the
--- rows it holds. Over ten minutes of asks on every board every second, the reads stay inside the allowance and the
--- engine's per-server budget.
+-- rows it holds, each player's rank kept while the rows it was heard with are the rows held. Over ten minutes of asks
+-- on every board every second, the reads stay inside the allowance and the engine's per-server budget.
 local Board = require("@logic/Board")
 local t = require("@tests/lib/t")
 
 local TTL = 15 -- the arcade's Hiscores.CACHE_TTL
 local PLENTY: Board.Budget = { standard = 1000, sorted = 1000 }
-local FULL: Board.Bucket = { tokens = 4, at = 0 }
+local FULL: Board.Bucket = { tokens = Board.BURST, at = 0 }
 
 local function snap(at: number?, failed: boolean?): Board.Snap
-	return { at = at, failed = failed == true, known = at ~= nil, rows = {} }
+	return { at = at, failed = failed == true, known = at ~= nil, rows = {}, version = 1 }
 end
 
 local function ask(over: { [string]: any }): Board.Ask
@@ -41,9 +42,10 @@ return t.spec("f0206 plan", function(it)
 		t.expect(Board.MARGIN).toBe(2)
 		t.expect(Board.BEST_GAP).toBe(60)
 		t.expect(Board.RATE).toBe(1.5)
-		t.expect(Board.BURST).toBe(4)
+		t.expect(Board.BURST).toBe(12)
 		t.expect(Board.COST.standard).toBe(12)
-		t.expect(Board.COST.sorted).toBe(1)
+		t.expect(Board.COST.sorted).toBe(2) -- the arcade tries a rejected page size once more (f0197)
+		t.expect(Board.FLOOR).toBe(4)
 		t.expect(Board.RESERVE.standard).toBe(20)
 		t.expect(Board.RESERVE.sorted).toBe(2)
 		t.expect(Board.REFRESH >= TTL).toBe(true)
@@ -52,7 +54,7 @@ return t.spec("f0206 plan", function(it)
 	it("the first ask of a board is a refresh, and takes one token", function()
 		local p = Board.plan(ask({ snap = nil }))
 		t.expect(p.act).toBe("refresh")
-		t.expect(p.bucket.tokens).toBeNear(3, 1e-9)
+		t.expect(p.bucket.tokens).toBeNear(Board.BURST - 1, 1e-9)
 		t.expect(Board.plan(ask({ snap = snap(nil) })).act).toBe("refresh")
 	end)
 
@@ -60,7 +62,7 @@ return t.spec("f0206 plan", function(it)
 		for _, dt in { 0, 1, 12 } do
 			local p = Board.plan(ask({ snap = snap(100), now = 100 + dt }))
 			t.expect(p.act).toBe("forward")
-			t.expect(p.bucket.tokens).toBeNear(4, 1e-9)
+			t.expect(p.bucket.tokens).toBeNear(Board.BURST, 1e-9)
 			t.expect(p.best).toBe(false)
 		end
 	end)
@@ -102,42 +104,45 @@ return t.spec("f0206 plan", function(it)
 	it("BURST refreshes at once, then none until the allowance refills", function()
 		local bucket: Board.Bucket = { tokens = 0, at = nil }
 		local acts = {}
-		for _ = 1, 5 do
+		for _ = 1, Board.BURST + 1 do
 			local p = Board.plan(ask({ snap = nil, bucket = bucket, now = 0 }))
 			bucket = p.bucket
 			table.insert(acts, p.act)
 		end
-		t.expect(table.concat(acts, " ")).toBe("refresh refresh refresh refresh answer")
+		t.expect(table.concat(acts, " ")).toBe(string.rep("refresh ", Board.BURST) .. "answer")
 	end)
 
-	it("a board with rows refreshes only while KEEP more tokens are left for a board with none", function()
-		t.expect(Board.KEEP).toBe(1)
-		local one: Board.Bucket = { tokens = 1, at = 0 }
-		local known: Board.Snap = { at = 100, failed = false, known = true, rows = {} }
-		t.expect(Board.plan(ask({ snap = known, now = 130, bucket = { tokens = 1.9, at = 130 } })).act)
+	it("a board with rows refreshes only while KEEP more tokens are left for boards with none", function()
+		t.expect(Board.KEEP).toBe(4)
+		local known: Board.Snap = { at = 100, failed = false, known = true, rows = {}, version = 1 }
+		t.expect(Board.plan(ask({ snap = known, now = 130, bucket = { tokens = 4.9, at = 130 } })).act)
 			.toBe("answer")
-		t.expect(Board.plan(ask({ snap = known, now = 130, bucket = { tokens = 2, at = 130 } })).act)
+		t.expect(Board.plan(ask({ snap = known, now = 130, bucket = { tokens = 5, at = 130 } })).act)
 			.toBe("refresh")
-		t.expect(Board.plan(ask({ snap = nil, now = 0, bucket = one })).act).toBe("refresh")
-		local unknown: Board.Snap = { at = 100, failed = false, known = false, rows = {} }
+		t.expect(Board.plan(ask({ snap = nil, now = 0, bucket = { tokens = 1, at = 0 } })).act)
+			.toBe("refresh")
+		local unknown: Board.Snap = { at = 100, failed = false, known = false, rows = {}, version = 0 }
 		t.expect(Board.plan(ask({ snap = unknown, now = 130, bucket = { tokens = 1, at = 130 } })).act)
 			.toBe("refresh")
 	end)
 
-	it("the allowance refills RATE a minute per player, at least one, up to BURST", function()
+	it("the allowance refills RATE a minute per player, never under FLOOR a minute, up to BURST", function()
 		local empty: Board.Bucket = { tokens = 0, at = 0 }
-		t.expect(Board.fill(empty, 40, 1).tokens).toBeNear(1, 1e-9)
-		t.expect(Board.fill(empty, 39, 1).tokens < 1).toBe(true)
+		-- one player: FLOOR, a token every 15 s
+		t.expect(Board.fill(empty, 15, 1).tokens).toBeNear(1, 1e-9)
+		t.expect(Board.fill(empty, 14, 1).tokens < 1).toBe(true)
+		t.expect(Board.fill(empty, 15, 0).tokens).toBeNear(1, 1e-9)
+		-- four players: RATE x 4 = 6 a minute, a token every 10 s
 		t.expect(Board.fill(empty, 10, 4).tokens).toBeNear(1, 1e-9)
-		t.expect(Board.fill(empty, 40, 0).tokens).toBeNear(1, 1e-9)
+		t.expect(Board.fill(empty, 9, 4).tokens < 1).toBe(true)
 		t.expect(Board.fill(empty, 100000, 50).tokens).toBe(Board.BURST)
 		t.expect(Board.fill({ tokens = 0, at = nil }, 7, 1).tokens).toBe(Board.BURST)
 		local back = Board.fill({ tokens = 1.5, at = 100 }, 50, 3)
 		t.expect(back.tokens).toBe(1.5)
 		t.expect(back.at).toBe(50)
-		t.expect(Board.plan(ask({ snap = nil, bucket = { tokens = 0, at = 0 }, now = 39 })).act)
+		t.expect(Board.plan(ask({ snap = nil, bucket = { tokens = 0, at = 0 }, now = 14 })).act)
 			.toBe("answer")
-		t.expect(Board.plan(ask({ snap = nil, bucket = { tokens = 0, at = 0 }, now = 40 })).act)
+		t.expect(Board.plan(ask({ snap = nil, bucket = { tokens = 0, at = 0 }, now = 15 })).act)
 			.toBe("refresh")
 	end)
 
@@ -151,7 +156,7 @@ return t.spec("f0206 plan", function(it)
 		t.expect(Board.plan(ask({ budget = atStandard })).act).toBe("refresh")
 		t.expect(Board.plan(ask({ budget = belowStandard })).act).toBe("answer")
 		local p = Board.plan(ask({ budget = belowSorted }))
-		t.expect(p.bucket.tokens).toBeNear(4, 1e-9)
+		t.expect(p.bucket.tokens).toBeNear(Board.BURST, 1e-9)
 	end)
 
 	it("an all-time ask the arcade would answer with a fresh read of the player's best is marked", function()
@@ -207,18 +212,38 @@ return t.spec("f0206 plan", function(it)
 
 	it("the held rows' status: wait before an answer, failed after a failed one, else ok", function()
 		t.expect(Board.status(nil)).toBe("wait")
-		t.expect(Board.status({ at = 5, failed = false, known = false, rows = {} })).toBe("wait")
-		t.expect(Board.status({ at = 5, failed = true, known = true, rows = {} })).toBe("failed")
-		t.expect(Board.status({ at = 5, failed = false, known = true, rows = {} })).toBe("ok")
+		t.expect(Board.status({ at = 5, failed = false, known = false, rows = {}, version = 0 })).toBe("wait")
+		t.expect(Board.status({ at = 5, failed = true, known = true, rows = {}, version = 0 })).toBe("failed")
+		t.expect(Board.status({ at = 5, failed = false, known = true, rows = {}, version = 0 })).toBe("ok")
 	end)
 
-	it("a player's held rank counts only when heard since the board's last refresh began", function()
+	it("a player's held rank counts while it was heard with the rows held now", function()
 		local s = snap(100)
-		t.expect(Board.rankFor({ rank = 3, at = 100 }, s)).toBe(3)
-		t.expect(Board.rankFor({ rank = 3, at = 120 }, s)).toBe(3)
-		t.expect(Board.rankFor({ rank = 3, at = 99 }, s)).toBe(nil)
+		t.expect(Board.rankFor({ rank = 3, version = 1 }, s)).toBe(3)
+		t.expect(Board.rankFor({ rank = 3, version = 0 }, s)).toBe(nil)
+		t.expect(Board.rankFor({ rank = 3, version = 2 }, s)).toBe(nil)
 		t.expect(Board.rankFor(nil, s)).toBe(nil)
-		t.expect(Board.rankFor({ rank = 3, at = 99 }, nil)).toBe(nil)
+		t.expect(Board.rankFor({ rank = 3, version = 1 }, nil)).toBe(nil)
+	end)
+
+	it("two lists of rows are the same when every row's rank, name, score, figure and revives are", function()
+		local function rows(...: number): { Board.Row }
+			local out = {}
+			for i, score in { ... } do
+				table.insert(out, { rank = i, name = `p{i}`, score = score, level = 2, revives = 0 })
+			end
+			return out
+		end
+		t.expect(Board.sameRows(rows(9, 8), rows(9, 8))).toBe(true)
+		t.expect(Board.sameRows({}, {})).toBe(true)
+		t.expect(Board.sameRows(rows(9, 8), rows(9, 7))).toBe(false)
+		t.expect(Board.sameRows(rows(9, 8), rows(9))).toBe(false)
+		for _, field in { "rank", "name", "level", "revives" } do
+			local changed = rows(9, 8)
+			local r: any = changed[2]
+			r[field] = if field == "name" then "other" else 5
+			t.expect(Board.sameRows(rows(9, 8), changed)).toBe(false)
+		end
 	end)
 
 	it(
@@ -250,13 +275,15 @@ return t.spec("f0206 plan", function(it)
 									tooSoon += 1
 								end
 								lastRefresh[key] = now
-								snaps[key] = { at = now, failed = false, known = true, rows = {} }
+								snaps[key] =
+									{ at = now, failed = false, known = true, rows = {}, version = 1 }
 							end
 						end
 					end
 				end
 				-- each refresh is at most one sorted read: the allowance, and below 5 + 2 a player a minute
-				t.expect(refreshes <= Board.BURST + Board.RATE * players * 10 + 1e-9).toBe(true)
+				t.expect(refreshes <= Board.BURST + math.max(Board.RATE * players, Board.FLOOR) * 10 + 1e-9)
+					.toBe(true)
 				t.expect(refreshes <= (5 + 2 * players) * 10).toBe(true)
 				t.expect(tooSoon).toBe(0)
 				t.expect(refreshes > 0).toBe(true)

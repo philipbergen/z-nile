@@ -1,10 +1,12 @@
 --!strict
--- f0206 AC1: what a card's board shows (Logic/Board, pure). Three tabs, ALL-TIME, TODAY and THIS WEEK, stepped by W,
--- Up and the left trigger back and S, Down and the right trigger forward, wrapping; a header naming the title's
--- progress figure; one line per row: rank, name, score, the figure and the revives used ("—" for none); a note for a
--- board not answered yet, empty or unreadable; the "your best" line on the all-time tab; a layout that keeps every
--- line readable in the card's Boards slot on every screen the carousel fits, scrolling the rows where they do not fit;
--- and when the client asks again.
+-- f0206 AC1: what a card's board shows and which boards the client asks for (Logic/Board, pure). Three tabs, ALL-TIME,
+-- TODAY and THIS WEEK, stepped by W, Up and the left trigger back and S, Down and the right trigger forward, wrapping; a
+-- header naming the title's progress figure; one line per row: rank, name, score, the figure and the revives used ("—"
+-- for none); a note for a board not answered yet, empty or unreadable; the "your best" line under every tab, the best
+-- not heard yet shown pending and never as "no best"; columns that keep every text whole with a gap between them, and
+-- every text at least Card.MIN_TEXT pixels in the card's Boards slot on every screen the carousel fits, the rows
+-- scrolling where they do not fit; every card's board asked for, each again after REASK, or WAIT_RETRY after a wait or
+-- while the best is pending.
 local Board = require("@logic/Board")
 local Card = require("@logic/Card")
 local Carousel = require("@logic/Carousel")
@@ -22,27 +24,33 @@ local function slot(width: number, height: number): (number, number)
 end
 
 -- the widest text each column must show whole at the board's text size: headers, the largest values, a name's
--- first eight characters
+-- first seven characters, the dash and the pending mark
 local WIDEST: { [string]: { string } } = {
 	Rank = { "#", "10" },
-	Name = { "NAME", "ABCDEFGH" },
-	Score = { "SCORE", "1234567" },
-	Progress = { "LEVEL", "WAVE", "MAP", "999" },
-	Revives = { "REVIVES", "99", "—" },
+	Name = { "NAME", "ABCDEFG" },
+	Score = { "SCORE", "123456", Board.NONE, Board.PENDING },
+	Progress = { "LEVEL", "WAVE", "MAP", "999", Board.NONE, Board.PENDING },
+	Revives = { "REVIVES", "99", Board.NONE, Board.PENDING },
 }
 
 local function row(rank: number, name: string, score: number, level: number, revives: number): Board.Row
 	return { rank = rank, name = name, score = score, level = level, revives = revives }
 end
 
-local function answer(
-	status: Board.Status,
-	rows: { Board.Row },
-	rank: number?,
-	best: Board.Best?
-): Board.Answer
-	return { name = "pickman", id = "all", rows = rows, rank = rank, status = status, best = best }
+local function answer(status: Board.Status, rows: { Board.Row }, rank: number?): Board.Answer
+	return {
+		name = "pickman",
+		id = "all",
+		rows = rows,
+		rank = rank,
+		status = status,
+		best = nil,
+		pending = false,
+	}
 end
+
+local KNOWN: Board.Mine = { known = true, best = { score = 600, level = 2, revives = 0 } }
+local NONE: Board.Mine = { known = true, best = nil }
 
 return t.spec("f0206 board", function(it)
 	it("three tabs, ALL-TIME, TODAY and THIS WEEK, left to right, and no other board id", function()
@@ -76,9 +84,13 @@ return t.spec("f0206 board", function(it)
 		for _, key in { "S", "Down", "ButtonR2" } do
 			t.expect(Board.step(key)).toBe(1)
 		end
-		for _, key in
-			{ "A", "D", "Left", "Right", "Return", "ButtonA", "ButtonL1", "ButtonR1", "Tab", "Space" }
-		do
+		-- the carousel's keys (f0205) and the play buttons' (f0208: 2, keypad 2, X, Backspace, B, I, Y) are not tab keys
+		local others =
+			{ "Tab", "Space", "Two", "KeypadTwo", "ButtonX", "Backspace", "ButtonB", "I", "ButtonY" }
+		for key in Carousel.KEYS do
+			table.insert(others, key)
+		end
+		for _, key in others do
 			t.expect(Board.step(key)).toBe(nil)
 		end
 		local keys = {}
@@ -119,18 +131,36 @@ return t.spec("f0206 board", function(it)
 	it("a row shows rank, name, score, the figure and the revives used, in the columns' order", function()
 		t.expect(table.concat(Board.cells(row(1, "Ada", 12340, 7, 2)), "|")).toBe("1|Ada|12340|7|2")
 		t.expect(table.concat(Board.cells(row(10, "Bea", 0, 1, 0)), "|")).toBe("10|Bea|0|1|—")
-		local names = {}
-		local sum, chars = 0, 0
+		local names, aligns = {}, {}
 		for _, c in Board.COLUMNS do
 			table.insert(names, c.name)
-			sum += c.width
-			chars += c.chars
-			t.expect(c.width).toBeNear(c.chars / Board.CHARS, 1e-9)
+			table.insert(aligns, c.align)
 		end
 		t.expect(table.concat(names, " ")).toBe("Rank Name Score Progress Revives")
-		t.expect(sum).toBeNear(1, 1e-9)
-		t.expect(chars).toBe(Board.CHARS)
+		-- the name reads from the left, every number and the figures from the right
+		t.expect(table.concat(aligns, " ")).toBe("Right Left Right Right Right")
 	end)
+
+	it(
+		"the columns: each label its characters wide, a GUTTER between neighbours, the line CHARS wide",
+		function()
+			t.expect(Board.GUTTER > 0).toBe(true)
+			local chars = 0
+			for i, c in Board.COLUMNS do
+				t.expect(c.width).toBeNear(c.chars / Board.CHARS, 1e-9)
+				chars += c.chars + Board.GUTTER
+				if i > 1 then
+					local before = Board.COLUMNS[i - 1]
+					-- the gap from one label's right edge to the next one's left edge
+					t.expect(c.x - (before.x + before.width)).toBeNear(Board.GUTTER / Board.CHARS, 1e-9)
+				end
+			end
+			t.expect(chars).toBeNear(Board.CHARS, 1e-9)
+			local first, last = Board.COLUMNS[1], Board.COLUMNS[#Board.COLUMNS]
+			t.expect(first.x >= 0).toBe(true)
+			t.expect(last.x + last.width <= 1 + 1e-9).toBe(true)
+		end
+	)
 
 	it(
 		"the your-best line, in the columns: YOUR BEST, then score, figure and revives, or dashes for no best",
@@ -144,9 +174,70 @@ return t.spec("f0206 board", function(it)
 		end
 	)
 
+	it(
+		"a best not heard yet is pending, drawn with its own mark and never as the dashes of no best",
+		function()
+			t.expect(Board.PENDING ~= Board.NONE).toBe(true)
+			t.expect(table.concat(Board.pendingCells(), "|"))
+				.toBe(`|YOUR BEST|{Board.PENDING}|{Board.PENDING}|{Board.PENDING}`)
+			local a = answer("ok", { row(1, "Ada", 900, 4, 1) }, nil)
+			t.expect(table.concat(Board.view(a, "Level", nil).best or {}, "|"))
+				.toBe(table.concat(Board.pendingCells(), "|"))
+			local unknown: Board.Mine = { known = false, best = nil }
+			t.expect(table.concat(Board.view(a, "Level", unknown).best or {}, "|"))
+				.toBe(table.concat(Board.pendingCells(), "|"))
+			t.expect(table.concat(Board.view(a, "Level", NONE).best or {}, "|"))
+				.toBe("|YOUR BEST|—|—|—")
+		end
+	)
+
+	it(
+		"the player's own best is learnt from any answer that is not pending, and a pending one leaves it",
+		function()
+			local a = answer("ok", {}, nil)
+			local learnt = Board.learn(nil, {
+				name = a.name,
+				id = "day",
+				rows = {},
+				rank = nil,
+				status = "ok",
+				best = { score = 9, level = 1, revives = 0 },
+				pending = false,
+			})
+			t.expect(learnt.known).toBe(true)
+			t.expect(learnt.best ~= nil).toBe(true)
+			t.expect((learnt.best :: Board.Best).score).toBe(9)
+			local kept = Board.learn(learnt, {
+				name = a.name,
+				id = "all",
+				rows = {},
+				rank = nil,
+				status = "ok",
+				best = nil,
+				pending = true,
+			})
+			t.expect(kept.known).toBe(true)
+			t.expect(kept.best ~= nil).toBe(true)
+			t.expect((kept.best :: Board.Best).score).toBe(9)
+			local none = Board.learn(learnt, a)
+			t.expect(none.known).toBe(true)
+			t.expect(none.best).toBe(nil)
+			local still = Board.learn(nil, {
+				name = a.name,
+				id = "all",
+				rows = {},
+				rank = nil,
+				status = "ok",
+				best = nil,
+				pending = true,
+			})
+			t.expect(still.known).toBe(false)
+		end
+	)
+
 	it("before an answer, and on a wait, the board says LOADING and shows no rows and no best", function()
-		for _, a in { nil :: Board.Answer?, answer("wait", { row(1, "Ada", 5, 1, 0) }, 1, nil) } do
-			local v = Board.view(a, "all", "Level")
+		for _, a in { nil :: Board.Answer?, answer("wait", { row(1, "Ada", 5, 1, 0) }, 1) } do
+			local v = Board.view(a, "Level", KNOWN)
 			t.expect(v.note).toBe("LOADING")
 			t.expect(#v.lines).toBe(0)
 			t.expect(v.best).toBe(nil)
@@ -156,14 +247,9 @@ return t.spec("f0206 board", function(it)
 
 	it("an answer's rows show in order, the player's own row marked, and the best line below", function()
 		local v = Board.view(
-			answer(
-				"ok",
-				{ row(1, "Ada", 900, 4, 1), row(2, "Bea", 600, 2, 0) },
-				2,
-				{ score = 600, level = 2, revives = 0 }
-			),
-			"all",
-			"Level"
+			answer("ok", { row(1, "Ada", 900, 4, 1), row(2, "Bea", 600, 2, 0) }, 2),
+			"Level",
+			KNOWN
 		)
 		t.expect(v.note).toBe("")
 		t.expect(#v.lines).toBe(2)
@@ -174,26 +260,31 @@ return t.spec("f0206 board", function(it)
 		t.expect(table.concat(v.best or {}, "|")).toBe("|YOUR BEST|600|2|—")
 	end)
 
-	it("with no rank no row is marked; an all-time answer with no best says YOUR BEST —", function()
-		local v = Board.view(answer("ok", { row(1, "Ada", 900, 4, 1) }, nil, nil), "all", "Wave")
+	it("with no rank no row is marked; a player with no run has dashes in the best line", function()
+		local v = Board.view(answer("ok", { row(1, "Ada", 900, 4, 1) }, nil), "Wave", NONE)
 		t.expect(v.lines[1].mine).toBe(false)
 		t.expect(table.concat(v.best or {}, "|")).toBe("|YOUR BEST|—|—|—")
 	end)
 
 	it("an empty board says NO SCORES YET; a failed read with no rows says SCORES UNAVAILABLE", function()
-		t.expect(Board.view(answer("ok", {}, nil, nil), "all", "Level").note).toBe("NO SCORES YET")
-		t.expect(Board.view(answer("failed", {}, nil, nil), "all", "Level").note).toBe("SCORES UNAVAILABLE")
-		local held = Board.view(answer("failed", { row(1, "Ada", 900, 4, 0) }, nil, nil), "all", "Level")
+		t.expect(Board.view(answer("ok", {}, nil), "Level", KNOWN).note).toBe("NO SCORES YET")
+		t.expect(Board.view(answer("failed", {}, nil), "Level", KNOWN).note).toBe("SCORES UNAVAILABLE")
+		local held = Board.view(answer("failed", { row(1, "Ada", 900, 4, 0) }, nil), "Level", KNOWN)
 		t.expect(held.note).toBe("")
 		t.expect(#held.lines).toBe(1)
 	end)
 
-	it("the best line shows on the all-time tab only", function()
-		local a = answer("ok", { row(1, "Ada", 900, 4, 0) }, 1, { score = 900, level = 4, revives = 0 })
-		t.expect(Board.view(a, "day", "Level").best).toBe(nil)
-		t.expect(Board.view(a, "week", "Level").best).toBe(nil)
-		t.expect(Board.view(a, "all", "Level").best ~= nil).toBe(true)
-	end)
+	it(
+		"the best line shows under every board an answer was heard for: TODAY's and THIS WEEK's too",
+		function()
+			for _, id in Board.TABS do
+				local a = answer("ok", { row(1, "Ada", 900, 4, 0) }, 1)
+				a.id = id
+				t.expect(table.concat(Board.view(a, "Level", KNOWN).best or {}, "|"))
+					.toBe("|YOUR BEST|600|2|—")
+			end
+		end
+	)
 
 	it(
 		"the layout: a touch-sized tab bar, then the header, the rows' view and the best line, filling the slot",
@@ -247,7 +338,7 @@ return t.spec("f0206 board", function(it)
 	end)
 
 	it(
-		"every text on the front card's board is at least Card.MIN_TEXT pixels, whole, on every screen",
+		"every text on the front card's board is at least Card.MIN_TEXT pixels, whole, with a gap, on every screen",
 		function()
 			t.expect(Board.MIN_LINE_PX >= Card.MIN_TEXT).toBe(true)
 			for _, s in SCREENS do
@@ -262,8 +353,15 @@ return t.spec("f0206 board", function(it)
 						t.expect(Card.textSize(text, c.width * w, l.line, false) >= l.text and at).toBe(at)
 					end
 				end
-				-- YOUR BEST over the rank's and the name's columns
-				local span = (Board.COLUMNS[1].width + Board.COLUMNS[2].width) * w
+				-- between two labels, at least GUTTER characters at that size
+				for i = 2, #Board.COLUMNS do
+					local before, c = Board.COLUMNS[i - 1], Board.COLUMNS[i]
+					t.expect((c.x - before.x - before.width) * w >= Board.GUTTER * Card.GLYPH * l.text - 1e-9)
+						.toBe(true)
+				end
+				-- YOUR BEST from the rank's left edge to the name's right one
+				local rank, named = Board.COLUMNS[1], Board.COLUMNS[2]
+				local span = (named.x + named.width - rank.x) * w
 				t.expect(Card.textSize(Board.BEST, span, l.line, false) >= l.text).toBe(true)
 				-- each tab's word in a third of the slot, the tab bar tall
 				for _, id in Board.TABS do
@@ -279,28 +377,48 @@ return t.spec("f0206 board", function(it)
 	)
 
 	it(
-		"the client asks for a new title or tab at once, then again after REASK, or WAIT_RETRY after a wait",
+		"the client asks for every card's board on the chosen tab, and the all-time one while its best is unknown",
+		function()
+			local names = { "pickman", "snake", "invaders", "asteroids" }
+			local function keys(list: { Board.Want }): string
+				local out = {}
+				for _, w in list do
+					table.insert(out, `{w.name}:{w.id}`)
+				end
+				return table.concat(out, " ")
+			end
+			t.expect(keys(Board.wants("all", names, {})))
+				.toBe("pickman:all snake:all invaders:all asteroids:all")
+			local mine: { [string]: Board.Mine } =
+				{ pickman = KNOWN, snake = NONE, invaders = { known = false, best = nil } }
+			t.expect(keys(Board.wants("day", names, mine)))
+				.toBe("pickman:day snake:day invaders:day invaders:all asteroids:day asteroids:all")
+			t.expect(keys(Board.wants("week", names, mine)))
+				.toBe("pickman:week snake:week invaders:week invaders:all asteroids:week asteroids:all")
+		end
+	)
+
+	it(
+		"each board is asked for at once, then again after REASK, or WAIT_RETRY after a wait or a pending best",
 		function()
 			t.expect(Board.REASK).toBe(30)
 			t.expect(Board.WAIT_RETRY).toBe(2)
-			t.expect(Board.askDue(nil, "pickman", "all", 5)).toBe(true)
-			local last: Board.Asked = { name = "pickman", id = "all", at = 100, wait = false }
-			t.expect(Board.askDue(last, "pickman", "all", 100)).toBe(false)
-			t.expect(Board.askDue(last, "pickman", "all", 129.9)).toBe(false)
-			t.expect(Board.askDue(last, "pickman", "all", 130)).toBe(true)
-			t.expect(Board.askDue(last, "snake", "all", 100.1)).toBe(true)
-			t.expect(Board.askDue(last, "pickman", "day", 100.1)).toBe(true)
-			local waited: Board.Asked = { name = "pickman", id = "all", at = 100, wait = true }
-			t.expect(Board.askDue(waited, "pickman", "all", 101.9)).toBe(false)
-			t.expect(Board.askDue(waited, "pickman", "all", 102)).toBe(true)
+			t.expect(Board.askDue(nil, 5)).toBe(true)
+			local last: Board.Asked = { at = 100, wait = false }
+			t.expect(Board.askDue(last, 100)).toBe(false)
+			t.expect(Board.askDue(last, 129.9)).toBe(false)
+			t.expect(Board.askDue(last, 130)).toBe(true)
+			local waited: Board.Asked = { at = 100, wait = true }
+			t.expect(Board.askDue(waited, 101.9)).toBe(false)
+			t.expect(Board.askDue(waited, 102)).toBe(true)
 		end
 	)
 
 	it("a clock that went back asks again; a time that is not finite asks nothing", function()
-		local last: Board.Asked = { name = "pickman", id = "all", at = 100, wait = false }
-		t.expect(Board.askDue(last, "pickman", "all", 99)).toBe(true)
-		t.expect(Board.askDue(last, "pickman", "all", 0 / 0)).toBe(false)
-		t.expect(Board.askDue(nil, "pickman", "all", math.huge)).toBe(false)
+		local last: Board.Asked = { at = 100, wait = false }
+		t.expect(Board.askDue(last, 99)).toBe(true)
+		t.expect(Board.askDue(last, 0 / 0)).toBe(false)
+		t.expect(Board.askDue(nil, math.huge)).toBe(false)
 	end)
 
 	it("its tables are frozen", function()

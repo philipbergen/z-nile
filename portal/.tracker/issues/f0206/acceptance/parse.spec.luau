@@ -2,8 +2,8 @@
 -- f0206 AC2: the client's read of the server's answer (Board.parse). An answer is (title, board id, rows, rank,
 -- status, best). It is read only for a title the client knows, a board id and a status of ok, failed or wait; rows that
 -- make no sense are dropped and the rest sorted by rank and cut to ten; a row with junk revives reads as none; a rank
--- is kept only when it is a row's; the best is kept for the all-time board only, and a best that makes no sense is no
--- best. It never raises.
+-- is kept only when it is a row's; every board's answer carries the player's all-time best on that title: false is pending
+-- (not heard yet), nil or a best that makes no sense is none. It never raises.
 local Board = require("@logic/Board")
 local t = require("@tests/lib/t")
 
@@ -30,15 +30,28 @@ return t.spec("f0206 parse", function(it)
 		t.expect(got.best).toBe(nil)
 	end)
 
-	it("an all-time answer keeps the player's best; another board's best is dropped", function()
+	it("every board's answer carries the player's best, and false says it is pending", function()
 		local best = { score = 500, level = 3, revives = 2 }
 		local all = Board.parse(NAMES, "pickman", "all", {}, nil, "ok", best) :: Board.Answer
 		t.expect(all.best ~= nil).toBe(true)
 		t.expect((all.best :: Board.Best).score).toBe(500)
 		t.expect((all.best :: Board.Best).level).toBe(3)
 		t.expect((all.best :: Board.Best).revives).toBe(2)
+		t.expect(all.pending).toBe(false)
 		local week = Board.parse(NAMES, "pickman", "week", {}, nil, "ok", best) :: Board.Answer
-		t.expect(week.best).toBe(nil)
+		t.expect(week.best ~= nil).toBe(true)
+		t.expect((week.best :: Board.Best).score).toBe(500)
+		for _, id in Board.TABS do
+			local pending = Board.parse(NAMES, "snake", id, {}, nil, "ok", false) :: Board.Answer
+			t.expect(pending.pending).toBe(true)
+			t.expect(pending.best).toBe(nil)
+			local none = Board.parse(NAMES, "snake", id, {}, nil, "ok", nil) :: Board.Answer
+			t.expect(none.pending).toBe(false)
+			t.expect(none.best).toBe(nil)
+		end
+		-- a best that makes no sense is none, never pending
+		t.expect((Board.parse(NAMES, "snake", "all", {}, nil, "ok", "best") :: Board.Answer).pending)
+			.toBe(false)
 	end)
 
 	it("a title it does not know, a board id that is none, or a status that is none: no answer", function()
