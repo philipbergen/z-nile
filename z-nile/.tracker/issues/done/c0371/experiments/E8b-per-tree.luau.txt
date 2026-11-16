@@ -1,0 +1,99 @@
+--!strict
+-- rv5: E8 judged per file against ITS OWN tree (the checkout, or the worktree the file is in), as reports:
+-- main's report = a main literal missing from the home; the new report = a new literal missing from where it is read
+-- (root or home). Prints every report gained or lost, and every literal lost (with presence) for reading.
+local fs = require("@lune/fs")
+local serde = require("@lune/serde")
+local process = require("@lune/process")
+local projects = require("@znile/engine/projects")
+local checkpaths = require("@tests/acceptance/c0120/checkpaths")
+local old = require("./e8-old")
+
+local top = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", "")) .. "/"
+local reg = projects.load(string.sub(top, 1, -2), true)
+local files = 0
+local seen: { [string]: boolean } = {}
+local gained, lost, lostLits = {}, {}, {}
+local function walk(base: string, dir: string, rel: string, label: string)
+	for _, name in fs.readDir(dir) do
+		local full, r = `{dir}/{name}`, `{rel}{name}`
+		if name == "check.sh" and string.find(r, ".tracker/", 1, true) then
+			local text = fs.readFile(full)
+			local key = r .. "\0" .. serde.hash("sha1", text)
+			if seen[key] then
+				continue
+			end
+			seen[key] = true
+			files += 1
+			local from = if label == "" then r else `{r} [{label}]`
+			local home = projects.homeOf(reg, r)
+			local mainRep: { [string]: number } = {}
+			local mainLit: { [string]: number } = {}
+			for _, p in old.literals(text) do
+				mainLit[p] = (mainLit[p] or 0) + 1
+				if not checkpaths.present(base, home, p) then
+					mainRep[p] = (mainRep[p] or 0) + 1
+				end
+			end
+			local newRep: { [string]: number } = {}
+			for _, lit in checkpaths.literals(text) do
+				local k = if lit.root then lit.path .. " (root)" else lit.path
+				if not lit.root and (mainLit[lit.path] or 0) > 0 then
+					mainLit[lit.path] -= 1
+				end
+				local fromDir = if lit.root then "." else home
+				if not checkpaths.present(base, fromDir, lit.path) then
+					newRep[k] = (newRep[k] or 0) + 1
+				end
+			end
+			for p, n in mainLit do
+				if n > 0 then
+					table.insert(lostLits, `{from}: {p} x{n} present={checkpaths.present(base, home, p)}`)
+				end
+			end
+			for k, n in newRep do
+				local m = mainRep[k] or 0
+				if n > m then
+					table.insert(gained, `{from}: {k} x{n - m}`)
+				end
+			end
+			for p, n in mainRep do
+				local m = newRep[p] or 0
+				if n > m then
+					table.insert(lost, `{from}: {p} x{n - m}`)
+				end
+			end
+		elseif fs.isDir(full) and name ~= ".git" and name ~= ".cache" and name ~= ".worktree" and name ~= "node_modules" then
+			walk(base, full, r .. "/", label)
+		end
+	end
+end
+walk(top, string.sub(top, 1, -2), "", "")
+local wts = `{top}.worktree`
+if fs.isDir(wts) then
+	for _, name in fs.readDir(wts) do
+		local wt = `{wts}/{name}`
+		if fs.isDir(wt) then
+			local ok, err = pcall(walk, wt .. "/", wt, "", name)
+			if not ok then
+				print("skip " .. name .. ": " .. tostring(err))
+			end
+		end
+	end
+end
+table.sort(gained)
+table.sort(lost)
+table.sort(lostLits)
+print(`files: {files}`)
+print(`reports gained (new reports, main silent): {#gained}`)
+for _, l in gained do
+	print("  " .. l)
+end
+print(`reports lost (main reports, new silent): {#lost}`)
+for _, l in lost do
+	print("  " .. l)
+end
+print(`literals lost: {#lostLits}`)
+for _, l in lostLits do
+	print("  " .. l)
+end

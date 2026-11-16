@@ -1,0 +1,5 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-16 05:43	c0387 ok	0	0	idea	15524	claude-fable-5-2-medium	4.256	1.350			
+2026-11-16 05:44	c0387 ok	0	0	idea-challenge	52500	claude-opus-5-5-xhigh	117.624	3.840			
+2026-11-16 05:45	c0387 ok	0	0	idea	20955	claude-fable-5-2-medium	8.076	1.690			
+2026-11-16 05:45	capture	0	0	capture							tokens,ai

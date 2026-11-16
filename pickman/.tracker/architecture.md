@@ -39,6 +39,7 @@ One `Consumer -> Provider` per line.
 Awareness -> Maze
 Blaster -> Maze
 Flow -> Game
+Flow -> Lobby
 Flow -> Session
 Flow -> Travel
 Game -> Levels

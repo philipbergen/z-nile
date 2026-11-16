@@ -15,3 +15,9 @@ When behaviour can't tell a copy from the shared rule (two counters with identic
 **Note (R0083 code review 003 F1):** a source pin patched twice for another spelling of the same forbidden filter is the signal to stop: observe the protected call instead. A spy on the shared function that asserts every input reaches it goes red for any spelling of a pre-filter. Ask: has this pin been widened for a second spelling, and can a spy or a fixture see the call?
 
 **Also:** f0201 design review 001 F11: place.spec pinned the literal `remote.OnServerEvent:Connect(answer)` and searched raw source, comments included, for `TeleportData`; a correct adapter with another handler name or a header comment would fail, and `player["GetJoin" .. "Data"]` would pass. Where the code runs on a stub engine, a spy on the engine call (GetJoinData counted, connections counted) replaces the text pin, and the Design states the engine surface the stub serves.
+
+**Note (R0072 review 002 F2):** a line lint that classifies a line by its last word (` end$`, `do$`) strips the trailing `--` comment first. A header comment that ends in that word otherwise hides the body. Ask: what does the lint decide for this header with a comment ending in the word it looks for?
+
+**Note (R0072 final review 001 F2):** a line lint that proves something from one statement refuses to prove once the body opens a long bracket, because a line inside `--[[ ]]` or `[[ ]]` is not code. Ask: what does the lint decide when the line it looks for sits inside a block comment?
+
+**Note (R0072 final review 002 F2):** a lint that refuses to prove inside a long bracket has the same duty for every other way a string spans lines or hides the characters it counts. Ask: for each character the lint counts or strips (a paren, `--`), what does it decide when that character sits inside a string literal?
