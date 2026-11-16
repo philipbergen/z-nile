@@ -16,3 +16,5 @@ check: For each Rules and mutants row marked `reasoned`, is its stated reason (w
 **Also:** c0246 design review 001 / R0088 code review 001 F1: row N15 said a file name with a newline cannot be made in a throwaway fixture; `fs.writeFile` makes one in a line, and the PATH stub the neighbouring case already used reached the other branch. Eight design rounds passed the reason unchallenged.
 
 **Note** (c0348 design review 001 F2): "no fixture can make it fail" is rarely true of a git step. A hook in the fixture repository's own hooks folder (`pre-commit` for a local commit, `pre-receive` on the bare origin for a push) fails that one step alone, and the fence's hook stubs run it. Ask: before marking a failure path reasoned because it cannot be produced, has a hook in the fixture's own repository been tried?
+
+**Note** (c0253 prep, 2026-11-16): a mutant that removes the guard against starting a real model CLI must stay `reasoned`, never run, because running it starts the user's real `claude`. Say so in the row, and pin the guard with a case that uses a fake CLI.

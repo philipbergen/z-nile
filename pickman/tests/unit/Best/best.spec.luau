@@ -1,0 +1,25 @@
+--!strict
+local Best = require("@logic/Best")
+local t = require("@tests/lib/t")
+
+return t.spec("Best", function(it)
+	it("decodes a stored record, and anything else as a fresh one", function()
+		t.expect(Best.decode(nil)).toEqual({ best = 1 })
+		t.expect(Best.decode({ best = 4, next = 2 })).toEqual({ best = 4, next = 2 })
+		t.expect(Best.decode({ best = 0 })).toEqual({ best = 1 })
+		t.expect(Best.decode({ best = 3, next = 2.5 })).toEqual({ best = 3 })
+	end)
+
+	it("raises the best and never lowers it", function()
+		t.expect(Best.reached({ best = 3 }, 5).best).toBe(5)
+		t.expect(Best.reached({ best = 5 }, 3).best).toBe(5)
+	end)
+
+	it("claims an allowed choice once, else level 1", function()
+		local start, kept = Best.claim({ best = 4, next = 3 })
+		t.expect(start).toBe(3)
+		t.expect(kept).toEqual({ best = 4 })
+		t.expect((Best.claim({ best = 4 }))).toBe(1)
+		t.expect((Best.claim({ best = 2, next = 5 }))).toBe(1)
+	end)
+end)

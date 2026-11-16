@@ -2,7 +2,7 @@
 title: Every product choice a prep makes is marked (prep) and checked against the decisions file
 when: design
 tags: [scope, product-decisions, docs]
-check: Is every word of a decisions-file entry before its (prep) marker traceable to the capture or to a user line, and has each prep choice (a colour, a gesture, a timing, a trade-off) been checked against what that file already records about the user (how they see a colour, an open decision it touches), with its cost stated so the user can veto it?
+check: Is every word of a decisions-file entry before its (prep) marker traceable to the capture or to a user line, and has each prep choice (a colour, a gesture, a timing, a trade-off) been checked against what that file already records about the user (how they see a colour, an open decision it touches), with its cost stated so the user can veto it? And when a prep choice decides which of two users' flows wins a race (an invited friend against a stranger), are the options and their costs written beside it for the user to rule on?
 ---
 A project's decisions file (pickman's `game-design.md`) is the user's. When a prep writes its own choices there without the **(prep)** marker, or before it, they read as the user's and nobody knows they can veto them. A choice made without reading what the file already says about the user can contradict it.
 
@@ -11,3 +11,7 @@ A project's decisions file (pickman's `game-design.md`) is the user's. When a pr
 **How to apply:** start the entry with only what the capture says, then the **(prep)** marker and every choice after it, each with its cost. Search the decisions file for the choice's terms (the colour value, the control, the timing) and answer what you find; link the choice from any open decision it now depends on.
 
 **Note (c0261 design review 010 F1):** a (prep) default that reverses a rule the skills attribute to the user ("the user's rule": reviewers run on the strongest model, never the author's) is an escalation, not a (prep) default, even when the Problem's words ("middle rounds run cheap") allow the reading. Ask: does any sentence the new docs spec pins absent carry "(the user's rule)", and does a veto turn promoted or sequestered cases red (then it is a new contract, not one line)?
+
+- f0208 design review 001 F7: an invite did not hold the inviter for the friend, so a stranger pressing 2 PLAYERS first took the pairing the inviter chose; the design now states it as a Guess with three options and their costs, and removes the invite record when the wait ends.
+
+**Note** (c0252 design review 001 F13): a choice a recorded user ruling already settles is not a prep guess. Cite the ruling's words and where they are recorded, so the reader does not take the user's decision for the prep's own.

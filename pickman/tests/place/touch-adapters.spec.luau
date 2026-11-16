@@ -4,6 +4,7 @@
 -- stub engine (touch signals, one inset area, a recording Intent remote) with the real Touch and View, so its
 -- wiring is pinned by what it does. Camera and HudView keep source pins for one line each.
 local Blaster = require("@logic/Blaster")
+local Boost = require("@logic/Boost")
 local Hop = require("@logic/Hop")
 local Maze = require("@logic/Maze")
 local Movement = require("@logic/Movement")
@@ -154,6 +155,7 @@ local function start(rect: Touch.Rect?, keys: Keys?): World
 	}
 	local modules: { [string]: any } = {
 		["@game/ReplicatedStorage/Shared/Logic/Blaster"] = Blaster,
+		["@game/ReplicatedStorage/Shared/Logic/Boost"] = Boost,
 		["@game/ReplicatedStorage/Shared/Logic/Pad"] = Pad,
 		["@game/ReplicatedStorage/Shared/Logic/Hop"] = Hop,
 		["@game/ReplicatedStorage/Shared/Logic/Maze"] = Maze,
@@ -172,6 +174,11 @@ local function start(rect: Touch.Rect?, keys: Keys?): World
 		require = function(spec: string): any
 			return assert(modules[spec], spec)
 		end,
+		os = {
+			clock = function(): number
+				return 0 -- Controls reads the client's clock on a forward press (f0143)
+			end,
+		},
 	}
 	local Controls = luau.load(script("Controls").Source, { environment = env, debugName = "Controls" })()
 	if keys then

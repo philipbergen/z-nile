@@ -1,0 +1,60 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-16 07:15	1 spec	0	0	test			0.831	0.510		0.831	tokens,ai
+2026-11-16 07:15	1 spec	0	0	test			0.832	0.550		0.832	tokens,ai
+2026-11-16 07:15	1 spec	0	0	test			0.837	0.570		0.837	tokens,ai
+2026-11-16 07:15	1 spec	0	0	test			0.827	0.550		0.827	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			0.828	0.550		0.828	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			0.837	0.550		0.837	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			0.827	0.580		0.827	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			0.824	0.520		0.824	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			0.822	0.540		0.822	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			0.838	0.530		0.838	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			0.830	0.570		0.830	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			0.831	0.520		0.831	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			0.835	0.530		0.835	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			0.837	0.550		0.837	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			0.828	0.570		0.828	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			0.832	0.540		0.832	tokens,ai
+2026-11-16 07:16	f0158: danger radar ring	87	36	build							tokens,wall,cpu,ai
+2026-11-16 07:16	1 spec	0	0	test			0.821	0.540		0.821	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			0.830	0.540		0.830	tokens,ai
+2026-11-16 07:16	3 specs	0	0	test			1.029	0.790		1.029	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			1.028	0.700		1.028	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			1.220	0.870		1.220	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			1.031	0.630		1.031	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			1.034	0.580		1.034	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			0.826	0.550		0.826	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			1.037	0.610		1.037	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			1.036	0.600		1.036	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			1.026	0.550		1.026	tokens,ai
+2026-11-16 07:16	5 specs	0	0	test			1.029	1.070		1.029	tokens,ai
+2026-11-16 07:16	1 spec	0	0	test			1.246	0.730		1.246	tokens,ai
+2026-11-16 07:16	affected	0	0	test			1.852	18.590		1.852	tokens,ai
+2026-11-16 07:17	affected	0	0	test			1.880	18.610		1.880	tokens,ai
+2026-11-16 07:17	affected	0	0	test			8.682	52.460		8.682	tokens,ai
+2026-11-16 07:17	f0158: verification log	9	1	build							tokens,wall,cpu,ai
+2026-11-16 07:17	1 spec	0	0	test			0.837	0.530		0.837	tokens,ai
+2026-11-16 07:17	1 spec	0	0	test			0.834	0.540		0.834	tokens,ai
+2026-11-16 07:17	1 spec	0	0	test			0.821	0.570		0.821	tokens,ai
+2026-11-16 07:17	1 spec	0	0	test			0.825	0.540		0.825	tokens,ai
+2026-11-16 07:17	1 spec	0	0	test			0.820	0.550		0.820	tokens,ai
+2026-11-16 07:17	1 spec	0	0	test			0.839	0.570		0.839	tokens,ai
+2026-11-16 07:17	1 spec	0	0	test			0.832	0.560		0.832	tokens,ai
+2026-11-16 07:17	1 spec	0	0	test			0.838	0.520		0.838	tokens,ai
+2026-11-16 07:17	5 specs	0	0	test			1.031	1.040		1.031	tokens,ai
+2026-11-16 07:17	1 spec	0	0	test			1.030	0.680		1.030	tokens,ai
+2026-11-16 07:17	1 spec	0	0	test			0.825	0.540		0.825	tokens,ai
+2026-11-16 07:17	1 spec	0	0	test			0.818	0.540		0.818	tokens,ai
+2026-11-16 07:17	3 specs	0	0	test			1.035	0.770		1.035	tokens,ai
+2026-11-16 07:17	1 spec	0	0	test			0.819	0.530		0.819	tokens,ai
+2026-11-16 07:18	1 spec	0	0	test			1.024	0.670		1.024	tokens,ai
+2026-11-16 07:18	1 spec	0	0	test			0.834	0.560		0.834	tokens,ai
+2026-11-16 07:18	1 spec	0	0	test			0.821	0.540		0.821	tokens,ai
+2026-11-16 07:18	1 spec	0	0	test			0.835	0.520		0.835	tokens,ai
+2026-11-16 07:18	1 spec	0	0	test			0.819	0.540		0.819	tokens,ai
+2026-11-16 07:18	1 spec	0	0	test			0.837	0.570		0.837	tokens,ai
+2026-11-16 07:18	1 spec	0	0	test			0.828	0.540		0.828	tokens,ai
+2026-11-16 07:18	244 specs	0	0	test			4.555	29.340		4.555	tokens,ai
+2026-11-16 07:18	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-16 16:25	R0094: bind f0143, f0147, f0158, f0148	261	38	deliver							tokens,wall,cpu,ai
+2026-11-16 16:26	deliver	0	0	deliver							tokens,ai

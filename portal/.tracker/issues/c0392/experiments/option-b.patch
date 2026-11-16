@@ -1,0 +1,102 @@
+diff --git a/portal/tests/acceptance/c0210/lobby-start.spec.luau b/portal/tests/acceptance/c0210/lobby-start.spec.luau
+index 2efc8d8af..00c0efd96 100644
+--- a/portal/tests/acceptance/c0210/lobby-start.spec.luau
++++ b/portal/tests/acceptance/c0210/lobby-start.spec.luau
+@@ -1,8 +1,9 @@
+ --!strict
+--- c0210 AC11: until f0209, the start place publishes pickman's lobby as before c0210, with the checked-in manifest and
+--- the real projects: after the game, the lobby goes to the start place told GamePlaceId, the output is exactly
+--- version and lobby_version, the checked-in lobby project is unchanged, and --place Portal runs the lobby's runtime
+--- scripts at the start place. f0209 makes the start place publish the portal; its chore removes this file.
++-- c0210 AC11, as c0392 narrowed it: with the checked-in manifest and the real projects, the start place is published
++-- second, after the game, to its own id, and told PortalPlaceId and PickmanPlaceId; the output starts with the game's
++-- version. It names no build, so it holds whether the start place publishes pickman's lobby (until f0209) or the portal
++-- (from f0209). c0392 removed what was the lobby's alone: its structure, GamePlaceId and no LobbyPlaceId, the
++-- lobby_version line, the lobby project unchanged, and --place Portal running the lobby's runtime scripts.
+ local Experience = require("@scripts/lib/experience")
+ local fs = require("@lune/fs")
+ local net = require("@lune/net")
+@@ -87,20 +88,6 @@ local function sss(body: string): any
+ 	return roblox.deserializePlace(body):GetService("ServerScriptService")
+ end
+ 
+-local function has(s: string, needle: string): boolean
+-	return string.find(s, needle, 1, true) ~= nil
+-end
+-
+-local function luauFiles(dir: string): number
+-	local n = 0
+-	for _, name in fs.readDir(dir) do
+-		if string.match(name, "%.luau$") and fs.isFile(`{dir}/{name}`) then
+-			n += 1
+-		end
+-	end
+-	return n
+-end
+-
+ local function deploy(var: string): (any, { Seen })
+ 	fs.writeFile(`{work}/github-output`, "")
+ 	local port, seen, stop = serve()
+@@ -113,50 +100,20 @@ local function deploy(var: string): (any, { Seen })
+ 	return r, seen
+ end
+ 
+-return t.spec("c0210 pickman's lobby at the start place, until f0209", function(it)
++return t.spec("c0210 the start place after the game, with the real manifest", function(it)
+ 	fs.writeDir(work)
+ 
+ 	for _, var in { "ROBLOX_BETA_GAME_PLACE_ID", "ROBLOX_BETA_PICKMAN_PLACE_ID" } do
+-		it(
+-			`with {var}: the game then the lobby, told the game's id, to the start place, as before c0210`,
+-			function()
+-				local lobbyProject = fs.readFile("../pickman/lobby.project.json")
+-				local r, seen = deploy(var)
+-				t.expect(r.ok).toBe(true)
+-				t.expect(#seen).toBe(2)
+-				t.expect(seen[1].path).toBe("/universes/v1/111/places/333/versions")
+-				t.expect(seen[2].path).toBe("/universes/v1/111/places/222/versions")
+-				local lobby = sss(seen[2].body)
+-				t.expect(lobby:FindFirstChild("Lobby") ~= nil).toBe(true)
+-				t.expect(lobby:FindFirstChild("Server")).toBe(nil)
+-				t.expect(lobby:GetAttribute("GamePlaceId")).toBe(333)
+-				t.expect(lobby:GetAttribute("LobbyPlaceId")).toBe(nil)
+-				t.expect(lobby:GetAttribute("PortalPlaceId")).toBe(222)
+-				t.expect(lobby:GetAttribute("PickmanPlaceId")).toBe(333)
+-				t.expect(fs.readFile(`{work}/github-output`)).toBe("version=1333\nlobby_version=1222\n")
+-				t.expect(fs.readFile("../pickman/lobby.project.json")).toBe(lobbyProject)
+-			end
+-		)
++		it(`with {var}: the game, then the start place to its own id, told every place's id`, function()
++			local r, seen = deploy(var)
++			t.expect(r.ok).toBe(true)
++			t.expect(#seen).toBe(2)
++			t.expect(seen[1].path).toBe("/universes/v1/111/places/333/versions")
++			t.expect(seen[2].path).toBe("/universes/v1/111/places/222/versions")
++			local start = sss(seen[2].body)
++			t.expect(start:GetAttribute("PortalPlaceId")).toBe(222)
++			t.expect(start:GetAttribute("PickmanPlaceId")).toBe(333)
++			t.expect(string.sub(fs.readFile(`{work}/github-output`), 1, 13)).toBe("version=1333\n")
++		end)
+ 	end
+-
+-	it("--place Portal runs pickman's lobby scripts at the start place", function()
+-		local port, seen, stop = serve()
+-		local start = process.exec(
+-			"lune",
+-			{ "run", "scripts/runtime-test", "--", "--place", "Portal", "7" },
+-			{ cwd = root, env = env(port, { ROBLOX_BETA_GAME_PLACE_ID = "333" }) }
+-		)
+-		stop()
+-		t.expect(start.ok).toBe(true)
+-		local lobbyCount = luauFiles("../pickman/tests/runtime/lobby")
+-		t.expect(has(start.stdout, `{lobbyCount} passed, 0 failed, {lobbyCount} runtime scripts`)).toBe(true)
+-		t.expect(has(start.stdout, "PASS ../pickman/tests/runtime/lobby/")).toBe(true)
+-		local toStart = 0
+-		for _, s in seen do
+-			if s.method == "POST" and has(s.path, "/places/222/versions/7/luau-execution-session-tasks") then
+-				toStart += 1
+-			end
+-		end
+-		t.expect(toStart).toBe(lobbyCount)
+-	end)
+ end)

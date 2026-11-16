@@ -1,0 +1,104 @@
+bounded: the caller's CPU limit of 600 s is lower than --cpu 3600: it stays
+Created sourcemap at sourcemap.json
+Created sourcemap at sourcemap.json
+Created sourcemap at sourcemap.json
+Created sourcemap at sourcemap.json
+Created sourcemap at sourcemap.json
+Created sourcemap at sourcemap.json
+
+== format (stylua --check) (4.9s)
+
+== lint (selene) (4.2s)
+Results:
+0 errors
+0 warnings
+0 parse errors
+
+== types (luau-lsp analyze, pickman/src with Roblox definitions) (1.2s)
+[INFO] Loading definitions file: @roblox - ../.cache/globalTypes.d.luau
+[WARN] client does not allow didChangeWatchedFiles registration - automatic updating on sourcemap changes disabled
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/pickman/.luaurc
+
+== types (luau-lsp analyze, arcade/src with Roblox definitions) (1.2s)
+[INFO] Loading definitions file: @roblox - ../.cache/globalTypes.d.luau
+[WARN] client does not allow didChangeWatchedFiles registration - automatic updating on sourcemap changes disabled
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/arcade/.luaurc
+
+== types (luau-lsp analyze, portal/src with Roblox definitions) (1.1s)
+[INFO] Loading definitions file: @roblox - ../.cache/globalTypes.d.luau
+[WARN] client does not allow didChangeWatchedFiles registration - automatic updating on sourcemap changes disabled
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/portal/.luaurc
+
+== types (luau-lsp analyze, snake/src with Roblox definitions) (1.1s)
+[INFO] Loading definitions file: @roblox - ../.cache/globalTypes.d.luau
+[WARN] client does not allow didChangeWatchedFiles registration - automatic updating on sourcemap changes disabled
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/snake/.luaurc
+
+== types (luau-lsp analyze, invaders/src with Roblox definitions) (1.2s)
+[INFO] Loading definitions file: @roblox - ../.cache/globalTypes.d.luau
+[WARN] client does not allow didChangeWatchedFiles registration - automatic updating on sourcemap changes disabled
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/invaders/.luaurc
+
+== types (luau-lsp analyze, asteroids/src with Roblox definitions) (1.2s)
+[INFO] Loading definitions file: @roblox - ../.cache/globalTypes.d.luau
+[WARN] client does not allow didChangeWatchedFiles registration - automatic updating on sourcemap changes disabled
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/asteroids/.luaurc
+
+== types (luau-lsp analyze, pickman/tests pickman/scripts z-nile scripts arcade/tests portal/tests snake/tests invaders/tests asteroids/tests with Lune definitions) (2.1s)
+[WARN] No definitions file provided by client
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/pickman/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/z-nile/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/arcade/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/portal/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/snake/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/invaders/.luaurc
+[INFO] Loading Luau configuration from /Users/philipbergen/code/pickman/.worktree/proto-c0254/asteroids/.luaurc
+
+== build (rojo pickman/default.project.json) (0.2s)
+Building project 'pickman'
+Built project to check.rbxl
+
+== build (rojo pickman/lobby.project.json) (0.1s)
+Building project 'pickman-lobby'
+Built project to check-lobby.rbxl
+
+== build (rojo arcade/default.project.json) (0.1s)
+Building project 'arcade'
+Built project to check.rbxl
+
+== build (rojo portal/default.project.json) (0.1s)
+Building project 'portal'
+Built project to check.rbxl
+
+== build (rojo snake/default.project.json) (0.1s)
+Building project 'snake'
+Built project to check.rbxl
+
+== build (rojo invaders/default.project.json) (0.1s)
+Building project 'invaders'
+Built project to check.rbxl
+
+== build (rojo asteroids/default.project.json) (0.0s)
+Building project 'asteroids'
+Built project to check.rbxl
+
+== skills (./zn skills --check) (1.0s)
+skills: 25 skills, one link each, ok
+
+gate wall time: 5.2s
+
+GATE PASSED (static)

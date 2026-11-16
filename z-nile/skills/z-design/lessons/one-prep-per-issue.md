@@ -1,0 +1,12 @@
+---
+title: Before claiming or resuming a prep, find any other prep of the issue, and join it or stop rather than prep it twice
+when: design
+tags: [coordination, claims, process]
+from: c0270 (lesson ticket, withdrawn 2026-11-16)
+check: Do `git branch -r --list '*<id>*'`, `gh pr list --state all --search <id>` and `./zn status <id>` name another worker or branch for this issue? And did the branch search also take the slug (`'*<slug>*'`), the PR search name the repository with `--repo`, and `git worktree list` show no other worktree for it?
+---
+A prep already under way on another branch or in another session is joined, with its owner's say, or you stop; it is never designed a second time beside it.
+
+**Why:** c0264 was prepped twice at once: 4 rounds by hand on `prep-c0264-readme-intent`, and 9 by an agent that claimed it (2026-11-07 19:44 PST) on `prep-readme-states-znile-intent`, PR #256. The user kept the hand prep and closed #256, and the agent's work was lost. A search by id alone misses the agent's branch (a prep branch is `prep-<slug>`), and where `origin` still names the repository before its rename, `gh pr list --search` finds nothing without `--repo` (c0270's prep, 2026-11-15).
+
+**How to apply:** before `./zn status <id> preparing`, and again at every resume, search the remote branches by id and by slug, every PR of the repository (`--repo "$(gh repo view --json nameWithOwner -q .nameWithOwner)"`, open and closed), `git worktree list` and the claim, and sort each hit. Yours: this worktree's branch and PR, and every prototype the issue document names. Another prep: a branch, worktree or PR that holds a design of the issue (its copy of the issue document has a Design section or `acceptance/` files that main's lacks), with or without a PR. Only read: a PR that merely mentions the id (its comments may name the live prep), a capture's worktree, a closed or merged PR (follow what its comments say). At a resume the claim alone proves nothing, because nothing records who made it. On another prep, ask the user (join it, or stop and take another issue); under the dispatcher, first read earlier rulings in `$ZN_DISPATCH_DIR/answered-*.md`, else write the hits and the choices (the user ends the other prep; the user keeps it and carries it on in a terminal; the user rules a hit is not a prep of this issue) to `questions.md` and stop. Claim ownership is documented, not checked (zz-rules, Whose claim), so nothing else stops a second prep.
