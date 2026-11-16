@@ -1,0 +1,238 @@
+diff --git a/z-nile/lib/fence.sh b/z-nile/lib/fence.sh
+index 71b88fa5d..6ab390363 100644
+--- a/z-nile/lib/fence.sh
++++ b/z-nile/lib/fence.sh
+@@ -9,6 +9,9 @@
+ #   - ignores inherited repository overrides (GIT_DIR, GIT_INDEX_FILE, ... are unset);
+ #   - refuses ref updates in the real repository (check.sh flows may still fetch into refs/remotes/)
+ #     (z-nile/lib/git-hooks/reference-transaction), and pushes into it by any local URL (pre-push);
++#   - where it sets those hooks, finds git first in their folder (git-hooks/git, c0195), which refuses there the ref
++#     writes git makes outside a ref transaction (`branch -c`/`-C`, and `-m`/`-M`, whose refusal by the hook still
++#     moves the branch's reflog aside) and any command that is not one of git's own (an alias, an external command);
+ #   - runs no background gc or maintenance (fixtures are throwaway, and are re-created mid-run).
+ # The guards accumulate: a fence set up inside another keeps the outer checkout's ceiling and ref guard.
+ # On macOS, tests/lib/fence.luau also runs specs in a jail that denies every write to the checkout outside .cache.
+@@ -32,6 +35,45 @@ _pickman_fence_git() {
+     -u GIT_CEILING_DIRECTORIES git "$@"
+ }
+ 
++# PATH without the folder <dir> (every entry naming it, by path or as the same folder)
++_pickman_fence_path_without() {
++  local out= e old=$IFS
++  IFS=:
++  for e in $PATH; do
++    [[ -n $e && ( $e == "$1" || $e -ef $1 ) ]] && continue
++    out=${out:+$out:}$e
++  done
++  IFS=$old
++  printf '%s' "$out"
++}
++
++# The first git on the PATH that is not the fence's own (in <hooks>, or in the git-hooks folder beside this file)
++_pickman_fence_real_git() {
++  local e old=$IFS
++  IFS=:
++  for e in $PATH; do
++    [[ -n $e && $e != "$1" && ! $e -ef $1 && ! $e -ef $_pickman_fence_lib/git-hooks && -x $e/git && ! -d $e/git ]] || continue
++    IFS=$old
++    printf '%s\n' "$e/git"
++    return 0
++  done
++  IFS=$old
++  return 1
++}
++
++# The commands <git> runs itself (no alias can hide one), less the deprecated ones an alias may still replace
++_pickman_fence_builtins() {
++  local all dep= w out=
++  all=$("$1" --list-cmds=builtins 2>/dev/null) || return 1
++  # git 2.50 has no such list (and lets no alias replace a command); 2.54 names pack-redundant and whatchanged
++  for w in $("$1" --list-cmds=deprecated 2>/dev/null); do dep="$dep $w "; done
++  for w in $all; do
++    [[ $dep == *" $w "* ]] && continue
++    out="$out $w"
++  done
++  printf '%s\n' "${out# }"
++}
++
+ pickman_fence_ceiling() {
+   case ":${GIT_CEILING_DIRECTORIES:-}:" in
+   *":$1/.cache:"*) ;;
+@@ -58,7 +100,7 @@ pickman_fence_refusals() {
+ }
+ 
+ pickman_fence_env() {
+-  local here=$1 mode=${2:-checks} jail=${3:-} real n=0 hooks=
++  local here=$1 mode=${2:-checks} jail=${3:-} real n=0 hooks= gitreal= builtins= unshim=
+   # inside a spec run every guard stays a spec guard: a check.sh started there keeps the spec's limits
+   [[ ${PICKMAN_FENCE_SPECS:-} == 1 ]] && mode=specs
+   # The hooks guard refs and pushes where no jail does: Linux, check.sh files, runs nested inside a jail. Under
+@@ -81,6 +123,23 @@ pickman_fence_env() {
+       echo "fence: no ref guard at $hooks (reference-transaction, pre-push); refusing. Stop and report this." >&2
+       return 1
+     fi
++    # the fence's git (c0195) is the file git in the hooks' folder, so it is inherited with them
++    if [[ -z $jailed && ! -x $hooks/git ]]; then
++      echo "fence: no ref guard at $hooks (git); refusing. Stop and report this." >&2
++      return 1
++    fi
++    # the git the fence's git runs: the first on the PATH that is not a fence's git, read before any change
++    if [[ -x $hooks/git ]]; then
++      gitreal=$(_pickman_fence_real_git "$hooks") || gitreal=
++      [[ -n $gitreal ]] && builtins=$(_pickman_fence_builtins "$gitreal") || builtins=
++      if [[ -z $gitreal || -z $builtins ]]; then
++        echo "fence: no git on the PATH besides the fence's own, or it can't list its commands; refusing. Stop and report this." >&2
++        return 1
++      fi
++    fi
++  else
++    # no hooks, so no fence's git either, not even one an outer fence put on the PATH (c0195)
++    unshim=1
+   fi
+   # The repository this fence protects, read once and read-only, before anything changes: in a clean environment
+   # for that one read (every inherited override, which could redirect it, code review 001 F1, and the inherited
+@@ -100,6 +159,16 @@ pickman_fence_env() {
+     export "GIT_CONFIG_KEY_$n=core.hooksPath" "GIT_CONFIG_VALUE_$n=$PICKMAN_FENCE_HOOKS"
+     n=$((n + 1))
+   fi
++  # the fence's git first on the PATH, once (c0195); under the jail, none: the kernel refuses those writes, and a
++  # process start per git is slow inside the sandbox
++  if [[ -n $gitreal ]]; then
++    export PICKMAN_FENCE_GIT=$gitreal PICKMAN_FENCE_GIT_BUILTINS=$builtins
++    PATH="$hooks:$(_pickman_fence_path_without "$hooks")"
++  elif [[ -n $unshim ]]; then
++    [[ -n ${PICKMAN_FENCE_HOOKS:-} ]] && PATH=$(_pickman_fence_path_without "$PICKMAN_FENCE_HOOKS")
++    PATH=$(_pickman_fence_path_without "$_pickman_fence_lib/git-hooks")
++  fi
++  export PATH
+   export "GIT_CONFIG_KEY_$n=gc.auto" "GIT_CONFIG_VALUE_$n=0"
+   n=$((n + 1))
+   export "GIT_CONFIG_KEY_$n=maintenance.auto" "GIT_CONFIG_VALUE_$n=false"
+diff --git a/z-nile/lib/git-hooks/git b/z-nile/lib/git-hooks/git
+new file mode 100755
+index 000000000..732622447
+--- /dev/null
++++ b/z-nile/lib/git-hooks/git
+@@ -0,0 +1,76 @@
++#!/bin/sh -p
++# The fence's git (c0195): z-nile/lib/fence.sh puts this folder, the ref guard's hooks, first on the PATH wherever
++# it sets them (no jail: check.sh flows, Linux spec runs); git runs no hook named git. Some ref writes run no reference-transaction hook (git 2.50 and
++# 2.54: `git branch -c`/`-C` copy a branch outside a ref transaction, and a refused `branch -m`/`-M` still moves the
++# branch's reflog aside), so in a repository the fence protects (PICKMAN_FENCE_REAL_GIT) this refuses them before
++# git starts, and refuses every command that is not one of git's own (an alias or an external command, whose
++# expansion it can't see). Everything else, and everything in a fixture, is the real git (PICKMAN_FENCE_GIT) at once.
++real=${PICKMAN_FENCE_GIT:-}
++if [ -z "$real" ] || [ ! -x "$real" ] || [ "$real" -ef "$0" ]; then
++  echo "fence: the real git is not known (PICKMAN_FENCE_GIT); refusing. Stop and report this." >&2
++  exit 1
++fi
++# the command: the first word past git's own options (those that take a separate value skip it)
++k=0 skip= sub=
++for a do
++  k=$((k + 1))
++  if [ -n "$skip" ]; then skip=; continue; fi
++  case $a in
++  -C | -c | --git-dir | --work-tree | --namespace | --config-env | --attr-source) skip=1 ;;
++  -*) ;;
++  *) sub=$a; break ;;
++  esac
++done
++[ -n "$sub" ] || exec "$real" "$@"
++case " ${PICKMAN_FENCE_GIT_BUILTINS:-} " in
++*" $sub "*)
++  [ "$sub" = branch ] || exec "$real" "$@"
++  # branch: only a copy or a move (any spelling parse-options accepts) needs the repository's name
++  found= i=0
++  for a do
++    i=$((i + 1))
++    [ "$i" -gt "$k" ] || continue
++    case $a in
++    --) break ;;
++    --cop | --copy | --mo | --mov | --move) found=1 ;;
++    --*) ;;
++    -?*)
++      # a cluster of short options: -u takes the rest of the cluster as its value
++      c=${a#-}
++      while [ -n "$c" ]; do
++        case $c in
++        u*) break ;;
++        [cCmM]*) found=1; break ;;
++        esac
++        c=${c#?}
++      done
++      ;;
++    esac
++  done
++  [ -n "$found" ] || exec "$real" "$@"
++  what="copy or rename a branch (git writes it outside the ref guard's hook)"
++  ;;
++*) what="run '$sub', which is not one of git's own commands (an alias or an external command)" ;;
++esac
++# the repository the command would act on: the same options before the command, the same environment
++common=$(
++  i=0 n=$#
++  for a do
++    i=$((i + 1))
++    [ "$i" -lt "$k" ] && set -- "$@" "$a"
++  done
++  shift "$n"
++  "$real" "$@" rev-parse --path-format=absolute --git-common-dir 2>/dev/null
++) || exec "$real" "$@"
++common=$(cd "$common" 2>/dev/null && pwd -P) || exec "$real" "$@"
++old_ifs=$IFS
++IFS=:
++for p in ${PICKMAN_FENCE_REAL_GIT:-}; do
++  IFS=$old_ifs
++  if [ "$common" = "$(cd "$p" 2>/dev/null && pwd -P)" ]; then
++    echo "fence: a check tried to $what in the real repository ($common); refused" >&2
++    exit 1
++  fi
++done
++IFS=$old_ifs
++exec "$real" "$@"
+diff --git a/z-nile/skills/zz-arch/SKILL.md b/z-nile/skills/zz-arch/SKILL.md
+index e6561647f..51ac35b69 100644
+--- a/z-nile/skills/zz-arch/SKILL.md
++++ b/z-nile/skills/zz-arch/SKILL.md
+@@ -13,7 +13,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
+ | `zn` | the command, at the repository root: it runs `z-nile/engine/main` |
+ | `z-nile/engine/` | the tracker engine. `main.luau` is the CLI: it parses arguments and does the git, file and process work. Every other module is one concern (`store`, `publish`, `projects`, `lessons`, `skills`, `trail`, …) |
+ | `z-nile/lib/bounded.pl`, `z-nile/lib/cpu.sh`, `z-nile/engine/reap.luau`, `z-nile/engine/boundcmd.luau`, `z-nile/guard-bash.luau` | the bounded runner, the reaper's rules, the hook's rules and its entry |
+-| `z-nile/lib/` | what the gate, the runner and the engine share: `ac.sh` (every `check.sh`), `fence.sh` and `git-hooks/` (the repository guards), `par.sh`, `sh.luau`, `graph.luau`, `changed.luau` |
++| `z-nile/lib/` | what the gate, the runner and the engine share: `ac.sh` (every `check.sh`), `fence.sh` and `git-hooks/` (the repository guards; `git-hooks/git` (the fence's git, c0195) is first on a fenced `PATH`), `par.sh`, `sh.luau`, `graph.luau`, `changed.luau` |
+ | `z-nile/skills/` | z-nile's skills: the pipeline (`z-…`) and the skills called from inside a step (`zz-…`), linked into `.claude/skills/` by `./zn skills` |
+ | `z-nile/templates/` | the item, raft and prompt templates |
+ | `z-nile/projects.toml` | the project registry: each project's name and root (its home is the folder holding the root) |
+diff --git a/z-nile/skills/zz-test/SKILL.md b/z-nile/skills/zz-test/SKILL.md
+index a800c4198..dc4831a81 100644
+--- a/z-nile/skills/zz-test/SKILL.md
++++ b/z-nile/skills/zz-test/SKILL.md
+@@ -119,6 +119,7 @@ On 2026-09-30 two suites in one worktree deleted each other's fixtures. Fixture
+   - **Fence**: git never looks above `<checkout>/.cache` for a repository, and a sentinel `.cache/.git` makes git fail in `.cache` itself. A fixture whose repository is missing is an error, never the checkout. The same holds for every project home a check runs in (c0120): a spec run from `pickman/` is fenced at `pickman/.cache`, and `ac.sh` fences a home before a `check.sh` runs there with `fence.sh`'s `pickman_home_fence`, in this order (review 002 F1): its `.cache` joins the ceiling (environment only, can't fail); a `.cache` that is a symlink or a file, or a sentinel that is a folder, refuses, in every mode, spec runs and the jail included; the git and spec guards are set whole (the one refusal, no ref-guard hooks, comes before any change, so a refused fence leaves the inherited guards as they were); then the sentinel is written. The sentinel is skipped in exactly one case: its write fails while all three of the runner's jail markers are set (`PICKMAN_TEST_JAIL=sandbox-exec`, `PICKMAN_FENCE_SPECS=1`, `PICKMAN_TEST_FENCE`) and the home's `.cache` lies outside the run's own `.cache`, the one place the jail lets a spec write. The jail then refuses every write there, the fence says so on stderr, and the ceiling and every other guard hold. Any other failed write refuses, spec runs included.
+   - **Overrides stripped**: an inherited `GIT_DIR`, `GIT_INDEX_FILE` or the like (git hooks run with them set) is unset before any spec runs. The guards read the repository they protect (`fence.sh`'s `real`, `pickman_guarded`, the runner's tripwire and protected paths) through a clean read, with every such override **and the inherited ceiling** removed for that read only (a ceiling at the checkout's root would hide the checkout from a project home; the specs keep the fence's ceiling). A read that finds no repository refuses, in every mode: it never means "nothing to protect" (c0120 code review 002).
+   - **Ref guard**: every git a check runs has a `reference-transaction` hook (`z-nile/lib/git-hooks/`) that refuses any ref update in the real repository. Only a `check.sh` flow started outside any spec run may fetch (create or move refs under `refs/remotes/`). On Linux this is what stops a commit, branch, switch or reset there. It refuses the ref change, but those commands may already have rewritten the index or the working files. The hooks are set only where there is no jail (Linux, `check.sh` files, runs nested inside a jail): under the jail the kernel covers it, and a hook in every fixture commit would cost a slow process start. Where they are set, they then run the repository's own hook of the same name, so a fixture's hooks behave as without the guards.
++  - **Fence's git**: where the hooks are set, the fence also puts their folder first on the `PATH`, so `git` is `z-nile/lib/git-hooks/git` (c0195). Git writes some refs outside a ref transaction, which no hook sees: `git branch -c`/`-C` copy a branch without calling `reference-transaction` at all, and a `git branch -m`/`-M` the hook refuses has already moved the branch's reflog aside. So in a repository the fence protects, the fence's git refuses a branch copy or rename in any spelling, and any command that is not one of git's own (an alias or an external command, whose expansion it can't see), before git starts; everything else, and everything in a fixture, goes straight to the real git. It can't see a git that git itself starts (hooks, `!` aliases, `rebase --exec`, editors and filters find git's own exec path first on their `PATH`), nor one called by its full path: review catches those.
+   - **No network for specs**: a `pre-push` hook refuses pushes into the real repository by any local URL. During spec runs it allows a push only into an existing local repository that isn't protected, so https, ssh, `host:path` and ssh aliases are all refused. With or without hooks, spec runs also allow git no network transport at all (`protocol.allow=never`, local paths and `file://` only), however a URL is spelled or aliased. Specs also get no credentials: `GH_TOKEN` and the like are unset, `GH_CONFIG_DIR` is empty, the git credential helper list is reset (no keychain), and there is no ssh agent and no ssh. A `check.sh` started from inside a spec run keeps these limits.
+   - **No publishing from checks**: a tracker command run by a check never publishes tracker state: the publisher asks `pickman_guarded` (`z-nile/lib/fence.sh`), says `not publishing`, and goes on as with `PICKMAN_PUBLISH=0`.
+   - **Lock**: one run at a time per checkout and home (`<home>/.cache/tests-run.lock`), because runs share that `.cache`'s fixtures; each home's run has its own `.cache`, lock and jail (c0120), so pickman's may run beside z-nile's. Separate worktrees still run in parallel. A second run prints `waiting for another test run (pid N)` and waits up to `PICKMAN_TEST_LOCK_WAIT` seconds (default 240). A lock is taken over when no process it records still holds it: each is gone, or is a reused pid, whose start id differs from the one recorded with it (a worker's `pid-<n>` holds its id, the top process's is in `start-<pid>`; the id is the kernel's start record, read through perl, inside the jail too, never from the clock). A live pid with no recorded start id (a lock from an older runner) or whose start id can't be read still holds.
+diff --git a/z-nile/tests/tooling/repo-fence.spec.luau b/z-nile/tests/tooling/repo-fence.spec.luau
+index 480aff43e..4fd94f2cf 100644
+--- a/z-nile/tests/tooling/repo-fence.spec.luau
++++ b/z-nile/tests/tooling/repo-fence.spec.luau
+@@ -250,6 +250,16 @@ local ALLOWED: { [string]: { [string]: string } } = {
+ 		["sandbox-exec"] = "tests whether it runs jailed",
+ 	},
+ }
++-- c0195's specs fence .cache fixtures in one bash process: wiring.spec once as the jailed runner does (to prove the
++-- jail's fence takes the fence's git off the PATH), closed.spec with no hook folder inherited for one fence call and
++-- the fence's git run with its real git unset, missing or itself; never in the run's own environment
++local C0195 = renamed.id("c0195")
++ALLOWED[`z-nile/tests/acceptance/{C0195}/wiring.spec.luau`] = {
++	["sandbox-exec"] = "fences a .cache fixture as the jailed runner does, to prove the jail's fence takes the fence's git off the PATH (c0195)",
++}
++ALLOWED[`z-nile/tests/acceptance/{C0195}/closed.spec.luau`] = {
++	PICKMAN_FENCE_ = "clears PICKMAN_FENCE_HOOKS for one fence call in a fixture, and runs the fence's git with PICKMAN_FENCE_GIT unset, missing or itself (c0195)",
++}
+ -- c0640, by the id it has now (c0870: the user's compaction renumbers it); no literal path, so compaction's path
+ -- rewrite never maps it a second time
+ local C0640 = renamed.id("c0640")
