@@ -7005,8 +7005,8 @@ function cmd.rank(pos: { string }, opts: { [string]: { string } })
 	local actor = rk.actor(opts)
 	local when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string
 	local changes: { rank.Change } = {}
-	refuseStale()
 	local note: string? = nil
+	refuseStale()
 	local r = published(publish.commit(".", function(paths, read, roots, _counter, readMany)
 		-- the plan is made here, from the files of the base this attempt fetched, so a lost race plans again
 		local facts: { rank.Fact } = {}

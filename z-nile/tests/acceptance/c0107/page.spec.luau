@@ -355,7 +355,8 @@ return t.spec("c0107 board page", function(it)
 		t.expect(string.find(choreRow, 'class="type t-chore"', 1, true) ~= nil).toBe(true)
 		t.expect(string.find(shown.afterRight, 'data-command="/z-design c9102"', 1, true) ~= nil).toBe(true)
 		t.expect((string.find(shown.afterRight, 'data-id="R9100"', 1, true))).toBe(nil)
-		t.expect(string.find(shown.afterRightPane, "MixedChore", 1, true) ~= nil).toBe(true)
+		-- c0249: the first row of the Issues view is f9100 (the ticket number order), not c9101
+		t.expect(string.find(shown.afterRightPane, "ReadyFeature", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(shown.preparingPane, ">R9104<", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(shown.preparingPane, ">preparing<", 1, true) ~= nil).toBe(true)
 		for _, html in
