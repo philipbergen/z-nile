@@ -9,3 +9,5 @@ A reader of shell text (the check-paths scan) models some forms and fails open o
 **Why:** c0371 design reviews 001 to 003 found structural highs in the reader every round (cross-line state, comments, `)` at a line end, quote contexts, heredocs and `$'…'`, bash scopes for `cd`, separate tokenizers). The user ruled "land with known edges".
 
 **How to apply:** keep an experiment in the issue's `experiments/` that builds the old reader from `origin/main`, runs both over every check.sh in the checkout and prints the literals lost and gained and which would be reports (E8); fix every regression against the old reader with a case and a mutant; list each unmodelled form as a known edge; do not write "fails closed" for a reader that reads text with heuristics.
+
+Run the old reader beside the new one on every corpus the design cites, the open worktrees included (c0371 design review 004 F2: the first experiment compared the checkout only, and c0261's `git grep` line, open in 48 worktrees, was a regression it did not see).

@@ -1,6 +1,6 @@
 --!strict
 -- E5: the scan (c0141's module with c0371's rules) over every open worktree's unfinished check.sh files: which ones
--- it reports, by worktree. Run from z-nile/: lune run .tracker/issues/c0371/experiments/E5-worktrees
+-- it reports, by worktree. Run from z-nile/ as ../zn run --time 290 -- lune run <this file as .cache/e5.luau> (it only lists the scan's reports; E8 is the comparison with main)
 local checkpaths = require("@tests/acceptance/c0120/checkpaths")
 local fs = require("@lune/fs")
 local process = require("@lune/process")

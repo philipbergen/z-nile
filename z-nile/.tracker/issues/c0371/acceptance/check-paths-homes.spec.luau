@@ -370,6 +370,7 @@ return t.spec("c0371 check-paths reads homes right", function(it)
 				)
 			).toEqual({})
 			t.expect(findings("z-nile", {}, 'x=$(foo \\\n  | grep -qF "src/nothing")\n')).toEqual({})
+			t.expect(findings("z-nile", {}, 'x=$(foo \\\n  | echo "src/nothing is gone")\n')).toEqual({})
 			-- every word that introduces a command, with a pattern that must stay text after it
 			for _, intro in
 				{
@@ -392,6 +393,7 @@ return t.spec("c0371 check-paths reads homes right", function(it)
 				}
 			do
 				t.expect(findings("z-nile", {}, intro .. ' grep -qF "src/nothing" "$F"\n')).toEqual({})
+				t.expect(findings("z-nile", {}, intro .. ' echo "src/nothing is gone"\n')).toEqual({})
 			end
 		end
 	)
@@ -474,18 +476,18 @@ return t.spec("c0371 check-paths reads homes right", function(it)
 	it(
 		"a heredoc body, a $'...' string and the quotes inside $(...) change no quoting (review 003 F1)",
 		function()
-			local label = 'check "AC9: the item\'s diff" git diff --quiet -- default.project.json\n'
-			local gone = { bad("z-nile", "default.project.json") }
+			local grp = 'check "AC1" bash -c \'cd "$ZN_ROOT" && true\'\ntest -f z-nile/roots.luau\n'
+			local gone = { bad("z-nile", "z-nile/roots.luau") }
 			t.expect(
 				findings(
 					"z-nile",
 					{},
-					"read -r -d '' PARA <<'EOF'\nthe user's dispatcher's skill's prose\nEOF\n" .. label
+					"read -r -d '' PARA <<'EOF'\nthe user's dispatcher's skill's prose\nEOF\n" .. grp
 				)
 			).toEqual(gone)
-			t.expect(findings("z-nile", {}, "cat <<-EOF\n\tit's here\n\tEOF\n" .. label)).toEqual(gone)
-			t.expect(findings("z-nile", {}, "x=$'it\\'s'\n" .. label)).toEqual(gone)
-			t.expect(findings("z-nile", {}, 'x="$(echo "it\'s")"\n' .. label)).toEqual(gone)
+			t.expect(findings("z-nile", {}, "cat <<-EOF\n\tit's here\n\tEOF\n" .. grp)).toEqual(gone)
+			t.expect(findings("z-nile", {}, "x=$'it\\'s'\n" .. grp)).toEqual(gone)
+			t.expect(findings("z-nile", {}, 'x="$(echo "it\'s")"\n' .. grp)).toEqual(gone)
 			t.expect(
 				findings(
 					"z-nile",
@@ -542,7 +544,7 @@ return t.spec("c0371 check-paths reads homes right", function(it)
 					{},
 					'(cd "$ZN_ROOT" && grep -qF "a # b" AGENTS.md)\ntest -f z-nile/roots.luau\n'
 				)
-			).toEqual({ bad("z-nile", "AGENTS.md", ROOT), bad("z-nile", "z-nile/roots.luau") })
+			).toEqual({ bad("z-nile", "z-nile/roots.luau") })
 			-- a case pattern's parenthesis closes nothing
 			t.expect(
 				findings(
@@ -658,8 +660,12 @@ return t.spec("c0371 check-paths reads homes right", function(it)
 		"command position reaches past assignments, timeout and a check that does not start its line (review 003 F5)",
 		function()
 			t.expect(findings("z-nile", {}, 'LC_ALL=C grep -qF "src/nothing" "$F"\n')).toEqual({})
+			t.expect(findings("z-nile", {}, 'LC_ALL=C echo "src/nothing is gone"\n')).toEqual({})
+			t.expect(findings("z-nile", {}, 'timeout 10 echo "src/nothing is gone"\n')).toEqual({})
+			t.expect(findings("z-nile", {}, 'true; check "AC2: y" echo "src/nothing is gone"\n')).toEqual({})
 			for _, wrap in { "nice", "nohup", "sudo" } do
 				t.expect(findings("z-nile", {}, wrap .. ' grep -qF "src/nothing" "$F"\n')).toEqual({})
+				t.expect(findings("z-nile", {}, wrap .. ' echo "src/nothing is gone"\n')).toEqual({})
 			end
 			t.expect(findings("z-nile", {}, 'timeout 10 grep -qF "src/nothing" "$F"\n')).toEqual({})
 			t.expect(findings("z-nile", {}, 'true; check "AC2: y" grep -qF "src/nothing" "$F"\n')).toEqual({})
@@ -675,6 +681,177 @@ return t.spec("c0371 check-paths reads homes right", function(it)
 		t.expect(findings("z-nile", {}, 'for f in src/gone.luau; do test -f "${f}"; done\n'))
 			.toEqual({ bad("z-nile", "src/gone.luau") })
 	end)
+
+	it(
+		"grep's pattern is text as main reads it: an unquoted grep after git, a wrapper or an option (review 004 F1)",
+		function()
+			for _, text in
+				{
+					'! git grep -qF "tests/old.spec.luau" -- .',
+					'git -C "$ZN_ROOT" grep -qF "scripts/old.sh"',
+					'quiet grep -qF "src/nothing" "$F"',
+					'timeout -s KILL 10 grep -qF "src/nothing" "$F"',
+					'env -i grep -qF "src/nothing" "$F"',
+					'xargs -r grep -qF "src/nothing" "$F"',
+					[=[check "AC1" bash -c "specs=\$(git grep -lE 'a|(engine|scripts/tracker)/x' -- tests)"]=],
+				}
+			do
+				t.expect(findings("z-nile", {}, text .. "\n")).toEqual({})
+			end
+			t.expect(findings("z-nile", {}, 'foo "grep" tests/gone.md\n'))
+				.toEqual({ bad("z-nile", "tests/gone.md") })
+		end
+	)
+
+	it(
+		"a comment line or a ` # ` tail in a heredoc body or a script hides its words, as main reads them (review 004 F3)",
+		function()
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					"cat > x <<'EOF'\n# tests/gone.md\nsee the note # tests/gone.md\nEOF\n"
+				)
+			)
+				.toEqual({})
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					"check \"AC1\" bash -c '\n# tests/gone.md is made by the fixture\ntrue # tests/gone.md here\ntrue'\n"
+				)
+			).toEqual({})
+			t.expect(findings("z-nile", {}, 'check "AC1" bash -c "\n  # tests/gone.md\n  true"\n'))
+				.toEqual({})
+			-- a here-string starts no heredoc, whatever follows it
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					'grep -q x <<< "abc"\ncheck "AC1" bash -c \'cd "$ZN_ROOT" && true\'\ntest -f z-nile/roots.luau\n'
+				)
+			).toEqual({ bad("z-nile", "z-nile/roots.luau") })
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					"grep -q x <<< abc\n# tests/old.md was removed\ntest -f src/gone.luau\n"
+				)
+			)
+				.toEqual({ bad("z-nile", "src/gone.luau") })
+			-- <<\EOF quotes its delimiter; <<- strips tabs from the terminator
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					'cat <<\\EOF\nit\'s\nEOF\ncheck "AC1" bash -c \'cd "$ZN_ROOT" && true\'\ntest -f z-nile/roots.luau\n'
+				)
+			).toEqual({ bad("z-nile", "z-nile/roots.luau") })
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					'cat <<-EOF\n\tit\'s\n\tEOF\ncheck "AC1" bash -c \'cd "$ZN_ROOT" && true\'\ntest -f z-nile/roots.luau\n'
+				)
+			).toEqual({ bad("z-nile", "z-nile/roots.luau") })
+			-- a root file of the home on an inner line of a double-quoted script is a path, as main reads it
+			t.expect(
+				findings("z-nile", {}, 'check "AC1" bash -c "\n  git diff --quiet -- default.project.json"\n')
+			)
+				.toEqual({ bad("z-nile", "default.project.json") })
+		end
+	)
+
+	it(
+		"a cd that goes on after the named form is no root cd, and a label after --check is no label (review 004 F3)",
+		function()
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					'cd "$(git rev-parse --show-toplevel)/z-nile" && test -f tests/run.luau\n'
+				)
+			).toEqual({})
+			t.expect(findings("z-nile", {}, 'cd "$ZN_ROOT"/z-nile && test -f tests/run.luau\n')).toEqual({})
+			t.expect(findings("z-nile", {}, 'H=z-nile; cd "$ZN_ROOT/$H" && test -f tests/run.luau\n'))
+				.toEqual({})
+			t.expect(findings("z-nile", {}, 'stylua --check "src/gone.luau"\n'))
+				.toEqual({ bad("z-nile", "src/gone.luau") })
+		end
+	)
+
+	it("a function that names grep in a comment or a message is no search helper (review 004 F4)", function()
+		t.expect(
+			findings(
+				"z-nile",
+				{},
+				'lint() {\n  # like grep "$1", but runs the linter\n  lune run "$1"\n}\nlint "src/gone.luau"\n'
+			)
+		).toEqual({ bad("z-nile", "src/gone.luau") })
+		t.expect(
+			findings("z-nile", {}, 'fail() { echo "grep $1 failed"; return 1; }\nfail "src/gone.luau"\n')
+		)
+			.toEqual({ bad("z-nile", "src/gone.luau") })
+	end)
+
+	it(
+		"what the Design names stays pinned: script quotes, case bodies, a helper call that ends with its script (review 004 F5)",
+		function()
+			-- a backslash does not escape a quote inside a script
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					"x='a\\'\ncheck \"AC1\" bash -c 'cd \"$ZN_ROOT\" && true'\ntest -f z-nile/roots.luau\n"
+				)
+			).toEqual({ bad("z-nile", "z-nile/roots.luau") })
+			-- a multi-line case inside a root subshell: patterns start lines and follow ;;, and close nothing
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					'(cd "$ZN_ROOT"\ncase "$x" in\n  a) true ;;\n  b|c) false ;;\nesac\ntest -f tests/run.luau)\ntest -f z-nile/roots.luau\n'
+				)
+			).toEqual({ bad("z-nile", "tests/run.luau", ROOT), bad("z-nile", "z-nile/roots.luau") })
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					'(cd "$ZN_ROOT"\ncase "$x" in a) true ;; b) false ;; esac\ntest -f tests/run.luau)\ntest -f z-nile/roots.luau\n'
+				)
+			).toEqual({ bad("z-nile", "tests/run.luau", ROOT), bad("z-nile", "z-nile/roots.luau") })
+			-- a ` # ` tail in a script hides a parenthesis: its ) pops nothing
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					'check "AC1" bash -c \'(cd "$ZN_ROOT"\ntrue # )\ntest -f tests/run.luau)\'\n'
+				)
+			).toEqual({ bad("z-nile", "tests/run.luau", ROOT) })
+			-- a $( level returns to the double quotes it was opened in
+			t.expect(
+				findings("z-nile", {}, 'x="$(true)"\n(cd "$ZN_ROOT" && true); test -f z-nile/roots.luau\n')
+			)
+				.toEqual({ bad("z-nile", "z-nile/roots.luau") })
+			t.expect(
+				findings("z-nile", {}, [=[x="$(true)"]=] .. "\n" .. [=[foo \`src/a\` tests/gone.md]=] .. "\n")
+			)
+				.toEqual({ bad("z-nile", "src/a"), bad("z-nile", "tests/gone.md") })
+			-- (and one that opens)
+			t.expect(
+				findings(
+					"z-nile",
+					{},
+					'check "AC1" bash -c \'(cd "$ZN_ROOT" && true) # (comment\ntest -f z-nile/roots.luau\'\n'
+				)
+			).toEqual({ bad("z-nile", "z-nile/roots.luau") })
+			-- a helper call ends with its script
+			t.expect(
+				findings("z-nile", {}, HAS .. 'check "AC1" bash -c \'has "$F" "x"\' _ "tests/gone.md"\n')
+			)
+				.toEqual({ bad("z-nile", "tests/gone.md") })
+		end
+	)
 
 	it("the live tree passes, every check.sh read", function()
 		-- the check.sh files c0120 exempts by their blob id (its RESTAMPED list), read from its spec

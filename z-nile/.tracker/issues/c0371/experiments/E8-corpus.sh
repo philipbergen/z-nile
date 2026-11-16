@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# E8: run from z-nile/ as `../zn run --time 280 -- bash .tracker/issues/c0371/experiments/E8-corpus.sh` once
+# E8: run from z-nile/ as `../zn run --time 900 -- bash .tracker/issues/c0371/experiments/E8-corpus.sh` once
 # z-nile/tests/acceptance/c0120/checkpaths.luau exists (the prototype's, or the executor's). It builds main's reader from
 # origin/main's c0120 check-paths spec (the scanner part, up to `present`) and compares the two over every check.sh.
 set -euo pipefail

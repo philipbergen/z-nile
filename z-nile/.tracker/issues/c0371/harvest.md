@@ -30,3 +30,10 @@
 - design-review-003 F6: zz-test/seed-every-enumerated-case
 - design-review-003 F7: z-design/spec-design-correspondence
 - note a hand-written shell reader is not proven by review rounds (four rounds, each found a construct it did not model; the user chose known edges): zz-test/measure-hand-written-readers-on-the-corpus
+- design-review-004 F1: zz-test/shell-rules-key-on-command-position
+- design-review-004 F2: zz-test/measure-hand-written-readers-on-the-corpus
+- design-review-004 F3: zz-test/shell-readers-carry-state-across-lines
+- design-review-004 F4: zz-test/one-rule-one-function
+- design-review-004 F5: zz-test/seed-every-enumerated-case
+- design-review-004 F6: z-design/restated-rules-move-together
+- design-review-004 F7: zz-test/shell-rules-key-on-command-position
