@@ -1,0 +1,9 @@
+- design-review-001 F1: zz-arch/separator-reuse-specs-every-position
+- design-review-001 F2: z-design/prep-experiments-run-in-standalone-clones, zz-test/no-vacuous-pass
+- design-review-001 F3: zz-test/refusals-tested-on-both-sides
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/restated-rules-move-together
+- design-review-001 F6: one-off: reasons for two judgement calls restated, no rule
+- design-review-001 F7: one-off: platform-specific head behaviour of this rule
+- design-review-001 F8: one-off: three missing mutant rows
+- design-review-001 F9: one-off: wrong finding id cited from the capture

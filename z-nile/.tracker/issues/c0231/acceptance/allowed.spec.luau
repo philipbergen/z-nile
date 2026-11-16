@@ -45,19 +45,25 @@ return t.spec("c0231 a yes that head reads passes", function(it)
 			"eval 'yes | head -3'",
 			"cd d && yes | head -3; echo done",
 			"bash <<EOF\nyes | head -2\nEOF",
+			-- review 001 F5 (written, not run): a pipe after the shell carries into its text
+			"sh -c 'yes' | head -3",
+			"eval 'yes' | head -3",
 		})
 	end)
 
-	it("AC2: a pipe into a command bounded by its own means (the wrapper, ./zn, a check.sh) ends yes and passes", function()
-		expectOk({
-			"yes | ./zn run --time 5 -- cat",
-			"yes | ./zn status c0231",
-			"yes | /Users/me/code/pickman/zn run -- cat",
-			"yes | z-nile/lib/bounded.pl --time 5 -- cat",
-			"yes | bash z-nile/check.sh --affected",
-			"yes n | ./zn run --time 5 -- cat | head -1",
-		})
-	end)
+	it(
+		"AC2: a pipe into a command bounded by its own means (the wrapper, ./zn, a check.sh) ends yes and passes",
+		function()
+			expectOk({
+				"yes | ./zn run --time 5 -- cat",
+				"yes | ./zn status c0231",
+				"yes | /Users/me/code/pickman/zn run -- cat",
+				"yes | z-nile/lib/bounded.pl --time 5 -- cat",
+				"yes | bash z-nile/check.sh --affected",
+				"yes n | ./zn run --time 5 -- cat | head -1",
+			})
+		end
+	)
 
 	it("AC2: the wrapper runs any yes pipeline", function()
 		expectOk({

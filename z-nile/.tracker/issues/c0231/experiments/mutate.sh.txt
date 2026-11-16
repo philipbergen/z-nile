@@ -1,31 +1,44 @@
 #!/usr/bin/env bash
-# c0231 prep mutation check: applies each mutant to the prototype (experiments/prototype.patch applied), runs the row's
-# spec and requires an assertion failure (never a load or syntax error). Run from the repository root, through
-#   ./zn run --time 600 -- bash z-nile/.tracker/issues/c0231/experiments/mutate.sh.txt
+# c0231 mutation check (REWRITTEN after design review 001 F2; written, not run, 2026-11-15). Applies each mutant to the
+# prototype inside a throwaway COPY of the z-nile home under <checkout>/.cache, never in the checkout, runs the row's
+# spec there and counts a kill only on a real assertion failure. Run from a worktree root, bounded:
+#   ./zn run --time 600 -- bash <this file>
+# The fixture needs the prototype applied: experiments/prototype.patch is applied to the copy (never to the checkout).
 set -u
-F=z-nile/engine/boundcmd.luau
-A=.tracker/issues/c0231/acceptance
-BACKUP=$(mktemp)
+ROOT=$(git rev-parse --show-toplevel) || exit 2
+cd "$ROOT" || exit 2
+HOME_DIR=
+for d in z-nile/.tracker/issues/c0231 z-nile/.tracker/issues/active/c0231; do [[ -d $d/acceptance ]] && HOME_DIR=$d && break; done
+if [[ -z $HOME_DIR && -d z-nile/tests/acceptance/c0231 ]]; then HOME_DIR=z-nile/tests/acceptance/c0231; fi
+[[ -n $HOME_DIR ]] || { echo "NO ACCEPTANCE FOLDER FOUND"; exit 2; }
+FIX=$(mktemp -d "$ROOT/.cache/c0231-mutants-XXXXXX") || exit 2
+trap 'rm -rf "$FIX"' EXIT
+cp -R z-nile "$FIX/z-nile"
+cp "$ROOT/.luaurc" "$FIX/.luaurc" 2>/dev/null
+mkdir -p "$FIX/acc"
+cp "$HOME_DIR"/acceptance/*.luau "$FIX/acc/" 2>/dev/null || cp "$HOME_DIR"/*.luau "$FIX/acc/"
+PATCH=$ROOT/z-nile/.tracker/issues/c0231/experiments/prototype.patch
+[[ -f $PATCH ]] || PATCH=$(find "$ROOT/z-nile" -path '*c0231/experiments/prototype.patch' | head -1)
+(cd "$FIX" && git init -q . && git apply "$PATCH") || { echo "PROTOTYPE DOES NOT APPLY"; exit 2; }
+F=$FIX/z-nile/engine/boundcmd.luau
+BACKUP=$(mktemp "$FIX/backup-XXXXXX")
 cp "$F" "$BACKUP"
-trap 'cp "$BACKUP" "$F"; rm -f "$BACKUP"' EXIT
 
 run() { # <id> <spec> <perl substitution>
 	local id=$1 spec=$2 sub=$3
 	cp "$BACKUP" "$F"
 	perl -0pi -e "$sub" "$F"
-	if cmp -s "$BACKUP" "$F"; then
-		echo "$id NOT APPLIED"
-		return
-	fi
+	if cmp -s "$BACKUP" "$F"; then echo "$id NOT APPLIED"; return; fi
 	local out
-	out=$(cd z-nile && lune run tests/run -- "$A/$spec" 2>&1)
-	if printf "%s" "$out" | grep -q " 0 failed"; then
-		echo "$id SURVIVED ($spec)"
+	out=$(cd "$FIX/z-nile" && lune run tests/run -- "$FIX/acc/$spec" 2>&1)
+	if printf "%s" "$out" | grep -qiE "syntax|could not load|attempt to|unknown require"; then
+		echo "$id NO RUN ($spec): load or syntax error"
+	elif printf "%s" "$out" | grep -qE "[1-9][0-9]* failed"; then
+		echo "$id killed ($spec): $(printf "%s" "$out" | grep -m1 -E "expected" | cut -c1-140)"
 	else
-		echo "$id killed ($spec): $(printf "%s" "$out" | grep -m1 -iE "expected|error" | cut -c1-160)"
+		echo "$id SURVIVED ($spec)"
 	fi
 }
-
 run M1-no-rule refused.spec.luau 's/name == "yes"\n/name == "no-such-program"\n/'
 run M2-raw-name refused.spec.luau 's/name == "yes"\n/program == "yes"\n/'
 run M3-any-pipe consumers.spec.luau 's/if program == nil or basename\(program\) ~= "head" then/if program == nil then/'
@@ -45,3 +58,7 @@ run M16-no-head-hint refusal.spec.luau 's/\(\\`yes \| head -3\\`\)/(head)/'
 run M17-pipe-only allowed.spec.luau 's/local piped = ends\[k\] == "\|" or ends\[k\] == "\|&"/local piped = ends[k] == "|"/'
 run M18-exempt-args refused.spec.luau 's/name == "yes"\n/name == "yes" and not EXEMPT_ARG[args[1] or ""]\n/'
 run M19-bounded-stage-ignored allowed.spec.luau 's/ or boundedish\(after.pipe\)//'
+# review 001 F8 (written, not run): rows added
+run M20-head-raw-name allowed.spec.luau 's/if program == nil or basename\(program\) ~= "head" then/if basename(words[1]) ~= "head" then/'
+run M21-no-next-stage refused.spec.luau 's/pipe = if piped then commands\[k \+ 1\] else nil/pipe = if piped then (commands[k + 1] or {"head"}) else nil/'
+run M22-gt-only refused.spec.luau 's/string.match\(a, "\^&>"\)/false/'

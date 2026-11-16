@@ -27,6 +27,11 @@ return t.spec("c0231 a yes that is no command passes", function(it)
 			'case "$a" in y|yes) echo y;; *) echo n;; esac',
 			'case "$a" in (yes) echo y;; esac',
 			'case "$a" in\n  no) echo n ;;\n  yes) echo y ;;\nesac',
+			-- review 001 F1 (written, not run): yes first or between alternatives; the same inside a here-document
+			'case "$a" in\n  yes|y) echo y ;;\nesac',
+			'case "$a" in no) :;; yes|y) :;; esac',
+			'case "$a" in no) :;; "yes"|n) :;; esac',
+			"bash <<EOF\ncase $1 in\n  yes|y) echo;;\nesac\nEOF",
 		})
 	end)
 

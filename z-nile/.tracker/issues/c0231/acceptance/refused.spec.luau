@@ -1,5 +1,5 @@
 --!strict
--- c0231 AC1: the seatbelt refuses a `yes` whose output no `head` reads straight from its pipe (R0071 review 001 F4;
+-- c0231 AC1: the seatbelt refuses a `yes` whose output no `head` reads straight from its pipe (R0079 review-001 F3, c0191's raft, earlier R0071;
 -- c0191's Decision 2 lists `yes` as a follow), by the `follow` rule, however the program is reached, whatever ends its
 -- command, wherever it is nested and wherever its standard output goes.
 local boundcmd = require("@znile/engine/boundcmd")
@@ -59,6 +59,22 @@ return t.spec("c0231 a yes that no head reads is refused", function(it)
 			"bash <<EOF\nyes\nEOF",
 		})
 	end)
+
+	-- review 001 F1, F3 (written, not run): only a pattern position is a pattern, and a leading redirection hides nothing
+	it(
+		"AC1: a command inside a case body is no pattern, and a redirection before yes hides nothing",
+		function()
+			expectRefused({
+				'case "$a" in x) (yes) ;; esac',
+				'case "$a" in x) yes | (cat) ;; esac',
+				'case "$a" in x) yes | cat ;; esac',
+				">/dev/null yes",
+				"2>/dev/null yes",
+				"> out yes",
+				"env >/dev/null yes",
+			})
+		end
+	)
 
 	it("AC1: a yes whose standard output goes elsewhere is refused even before a pipe", function()
 		expectRefused({

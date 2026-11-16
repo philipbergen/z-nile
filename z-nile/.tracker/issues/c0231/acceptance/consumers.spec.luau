@@ -56,6 +56,10 @@ return t.spec("c0231 only a head that stops ends yes", function(it)
 				"yes | head -c -1",
 				"yes | head --lines=-2",
 				"yes | head --bytes=-2",
+				-- review 001 F7 (written, not run): option clusters and abbreviations that carry a negative count
+				"yes | head -qn -3",
+				"yes | head -vn-3",
+				"yes | head --lin=-3",
 				"yes | head --lines -2",
 				"yes | xargs head",
 				"yes | xargs -n1 head -1",

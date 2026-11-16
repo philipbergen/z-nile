@@ -36,6 +36,17 @@ return t.spec("c0231 zz-test restates the yes rule", function(it)
 		end
 	)
 
+	-- review 001 F4, F5 (written, not run): the allow-list exception and the unread spellings are stated
+	it(
+		"AC7: the hook paragraph says yes needs a recognised consumer and names the group and here-document limits",
+		function()
+			local test = read("z-nile/skills/zz-test/SKILL.md")
+			local hook = string.match(test, "%- %*%*The hook%*%*[^\n]*") or ""
+			t.expect(has(hook, "`yes` is the one rule that needs a recognised consumer")).toBe(true)
+			t.expect(has(hook, "a `yes` in a group or subshell piped on")).toBe(true)
+		end
+	)
+
 	it("AC7: the Hooks list names a yes no head reads among the follows", function()
 		local test = read("z-nile/skills/zz-test/SKILL.md")
 		local hooks = string.match(test, "## Hooks %(Claude Code only%).-\n## ") or ""
