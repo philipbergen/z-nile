@@ -16,7 +16,7 @@ supervise.QUOTA_RECHECK_SECONDS = 300 -- the dispatcher's worker mode tries a CL
 supervise.QUOTA_WAIT_SECONDS = 600 -- the raft's own CLI is waited for this long when `.models.toml` names none (Q9)
 
 -- The exit codes of `./zn dispatch` (dispatch.EXIT): the loop reads these and never the dispatcher's prose.
-supervise.EXIT = { done = 0, failure = 1, user = 3, gate = 4, tripwire = 5, taken = 6 }
+supervise.EXIT = { done = 0, failure = 1, user = 3, gate = 4, tripwire = 5, taken = 6, pushRefused = 7 }
 
 export type Pick = { id: string, kind: string, why: string }
 export type Read = { kind: string, pick: Pick?, why: string } -- kind: "pick", "none" or "failed"
@@ -78,6 +78,9 @@ function supervise.dispatchArgs(pick: Pick, o: DispatchOpts): { string }
 	end
 	table.insert(args, pick.id)
 	table.insert(args, "--worker")
+	-- c0254: what `next` called the item, so the dispatcher can tell before any step that another worker got there first
+	table.insert(args, "--pick")
+	table.insert(args, pick.kind)
 	if o.cli and o.cli ~= "" then
 		table.insert(args, "--cli")
 		table.insert(args, o.cli)
@@ -100,6 +103,11 @@ function supervise.afterDispatch(kind: string, code: number, tries: number): Mov
 		return { kind = "done", why = "the chain ended" }
 	elseif code == supervise.EXIT.taken then
 		return { kind = "taken", why = "another worker claimed it first" }
+	elseif code == supervise.EXIT.pushRefused then
+		return {
+			kind = "stop",
+			why = "a push was refused under a live claim (the commit stands): the worker stops; read .cache/push-refused in the item's worktree",
+		}
 	elseif code == supervise.EXIT.user then
 		return { kind = "blocked", why = "the item is blocked or needs the user" }
 	elseif code == supervise.EXIT.gate then

@@ -13,6 +13,8 @@ local xhost = require("./xhost")
 
 local costrow = {}
 
+local AUTHORING: { [string]: boolean } = { capture = true, prep = true, build = true }
+
 export type PlannedFile = { path: string, text: string, previous: string? }
 export type Planned = { files: { PlannedFile }, bufferText: string, bufferPrevious: string? }
 
@@ -129,7 +131,11 @@ function costrow.plan(
 	for _, list in byId do
 		for _, row in list do
 			row.host = row.host or who.host
-			row.cli = row.cli or who.cli
+			-- the CLI comes from the row (a dispatched step's own attempt); this process's environment names it only for the
+			-- authoring phases, as c0325 does for the model: a reviewer's row is never labelled with the author's CLI
+			if row.cli == nil and AUTHORING[row.phase] then
+				row.cli = who.cli
+			end
 		end
 	end
 	local files: { PlannedFile } = {}

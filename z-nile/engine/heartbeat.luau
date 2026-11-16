@@ -72,4 +72,22 @@ function heartbeat.holds(remembered: string?, originStamp: string?): string
 	return "taken"
 end
 
+export type ClaimFact = { id: string, remembered: string, current: string? }
+
+-- Whether a worktree is the stale one of a claim that is over (copied verbatim from R0100/5/c0277 acf480f21, `heartbeat.staleMember`,
+-- without its verdict field): at least one claim it remembers is over (origin/main shows another stamp or none) and none is still
+-- its own. c0254 asks it of every local layer and prep worktree, to find the ones another host took over.
+function heartbeat.staleMember(facts: { ClaimFact }): boolean
+	local over = false
+	for _, f in facts do
+		local held = heartbeat.holds(f.remembered, f.current)
+		if held == "held" then
+			return false
+		elseif held == "taken" or held == "ended" then
+			over = true
+		end
+	end
+	return over
+end
+
 return heartbeat

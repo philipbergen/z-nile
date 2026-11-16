@@ -138,6 +138,7 @@ export type PromptInput = {
 	perLanding: boolean?, -- zz-review final mode: the raft has a final review and a trace per landing (c0248)
 	itemDoc: string?, -- the item's document, where a review's `## Open to the human` goes
 	rerun: { string }?, -- c0252: z-run again after landing checks failed: the problems it runs again for
+	claimed: string?, -- c0254: a worker's run: the claim stamp the dispatcher already made for this item (a z-design step must not claim again)
 }
 
 -- c0250: what a step does when a decision needs the user. A capture has no item yet, so z-ticket keeps c0256's local
@@ -193,6 +194,9 @@ function dispatch.prompt(p: PromptInput): string
 				else "`design-review-NNN.md`"}).`
 	else
 		what = `Read \`{p.skillPath}\` and follow it for {p.id}.`
+		if p.step == "z-design" and p.claimed and p.claimed ~= "" then
+			what ..= ` {p.id} is already claimed for this run (stamp \`{p.claimed}\`): skip the claim in step 1; do not claim it again.`
+		end
 	end
 	local lines: { string } = {
 		`You are running the z-nile step {p.step}{if p.id ~= "" then ` for {p.id}` else ""}, headless and unattended, under ./zn dispatch.`,
@@ -283,6 +287,9 @@ export type Facts = {
 	raft: string, -- origin/main's raft: line (an issue)
 	ownClaim: boolean, -- the preparing claim is the one this checkout's dispatcher made
 	worker: boolean?, -- c0254: a worker's run (--worker): an issue is claimed by its own step before any model starts
+	pick: string?, -- c0254: what `./zn next` called the item (draft, raft, rafting, lost), passed by the supervisor
+	owned: boolean?, -- c0254: this run recorded the claim stamp it made and origin still shows that stamp
+	taken: string?, -- c0254: why a worker's pick is no longer the worker's, read from origin/main before any step ("" or nil: it is)
 	localRaft: string, -- the raft: line in the rafting worktree, when the dispatcher rafted it ("" when none)
 	pr: Pr?, -- the PR of the step that holds the item now (prep, rafting or run)
 	questions: boolean, -- the run state holds questions.md
@@ -330,7 +337,7 @@ export type Action = {
 dispatch.MAX_ACTIONS = 30
 
 -- taken (c0254): another worker claimed the item first; the caller takes the next one
-dispatch.EXIT = { done = 0, failure = 1, user = 3, gate = 4, tripwire = 5, taken = 6 }
+dispatch.EXIT = { done = 0, failure = 1, user = 3, gate = 4, tripwire = 5, taken = 6, pushRefused = 7 }
 
 local REVIEW_STEPS = { ["z-design"] = true, ["z-raft"] = true, ["z-run"] = true, ["zz-review"] = true }
 
@@ -406,6 +413,10 @@ end
 -- unharvested finding. Then by state: capture, design, the prep gate, raft-plan, z-raft, the rafting gate, ready,
 -- run, then the landing (landcheck.classify over `./zn land-check`; the old single-branch raft's pull request stays a human's), done.
 function dispatch.next(f: Facts): Action
+	-- c0254: a worker's item that another worker holds ends the run at once with the `taken` exit, before any step
+	if f.worker == true and f.taken ~= nil and f.taken ~= "" then
+		return stop(dispatch.EXIT.taken, f.taken)
+	end
 	if f.status == "blocked" then
 		return stop(
 			dispatch.EXIT.user,
@@ -488,10 +499,20 @@ function dispatch.next(f: Facts): Action
 		if f.raft ~= "" and (f.where == "active" or f.status == "prepared") then
 			return { kind = "step", step = "follow", target = f.raft }
 		end
-		if f.status == "new" and f.worker == true then
+		if
+			f.worker == true
+			and (f.status == "new" or (f.status == "preparing" and f.pick == "lost" and not f.owned))
+		then
+			-- a worker claims before it spends a session; a lost issue is taken over by the same step (c0274's lease decides)
 			return { kind = "step", step = "claim", target = f.id }
 		end
-		if f.status == "new" or (f.status == "preparing" and f.ownClaim) then
+		if f.worker == true and f.status == "preparing" and not f.owned then
+			return stop(dispatch.EXIT.taken, `{f.id} is claimed by another worker`)
+		end
+		if
+			f.status == "new"
+			or (f.status == "preparing" and (if f.worker == true then f.owned == true else f.ownClaim))
+		then
 			if f.pr then
 				return gate(f, "prep", f.pr)
 			end
@@ -523,6 +544,14 @@ function dispatch.next(f: Facts): Action
 			return { kind = "step", step = "z-ready", target = f.id }
 		end
 		return stop(dispatch.EXIT.failure, `{f.id} is {f.status} in the backlog: z-raft prepares it first`)
+	end
+	-- c0254: a worker never runs a raft that is active under a claim this run did not record (the stamp, never the history).
+	-- A lost raft is taken over the way c0274 says: stop it, then ready it again.
+	if f.worker == true and not f.owned then
+		if f.pick == "lost" then
+			return { kind = "step", step = "z-stop", target = f.id }
+		end
+		return stop(dispatch.EXIT.taken, `{f.id} is claimed by another worker`)
 	end
 	-- active. c0252: a dispatched block waits for the layers below it to land (G1), then files; a finished run is landed
 	-- by the dispatcher when landcheck passes and `run` is in dispatch.auto_merge, else it waits (exit 4) or the worker

@@ -15,13 +15,22 @@ local function seen(state: string, status: string, stamp: string): xhost.Seen
 	return { state = state, status = status, stamp = stamp }
 end
 
+-- xhost.claimOutcome with `ours` (the attempt token matched) false unless a case says so
+local function claim(
+	code: number,
+	before: xhost.Seen,
+	after: xhost.Seen?,
+	mine: string,
+	ours: boolean?
+): string
+	return xhost.claimOutcome(code, before, after, mine, ours == true)
+end
+
 local BEFORE = seen("backlog", "new", "new-aaa-bbb-ccc")
 
 return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 	it("AC1: a claim step that exits 0 is won", function()
-		t.expect(
-			xhost.claimOutcome(0, BEFORE, seen("backlog", "preparing", "preparing-x-y-z"), "preparing-x-y-z")
-		)
+		t.expect(claim(0, BEFORE, seen("backlog", "preparing", "preparing-x-y-z"), "preparing-x-y-z"))
 			.toBe("won")
 	end)
 
@@ -29,43 +38,23 @@ return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 		"AC1: a failed claim is lost only when origin/main shows the item moved under another stamp",
 		function()
 			local after = seen("backlog", "preparing", "preparing-x-y-z")
-			t.expect(xhost.claimOutcome(1, BEFORE, after, "")).toBe("lost")
-			t.expect(xhost.claimOutcome(1, BEFORE, after, "preparing-other-one-two")).toBe("lost")
-			t.expect(
-				xhost.claimOutcome(
-					1,
-					seen("backlog", "prepared", "p"),
-					seen("active", "active", "active-a-b-c"),
-					""
-				)
-			).toBe("lost")
-			t.expect(
-				xhost.claimOutcome(
-					1,
-					seen("backlog", "prepared", "p"),
-					seen("done", "done", "done-a-b-c"),
-					""
-				)
-			)
+			t.expect(claim(1, BEFORE, after, "")).toBe("lost")
+			t.expect(claim(1, BEFORE, after, "preparing-other-one-two")).toBe("lost")
+			t.expect(claim(1, seen("backlog", "prepared", "p"), seen("active", "active", "active-a-b-c"), ""))
+				.toBe("lost")
+			t.expect(claim(1, seen("backlog", "prepared", "p"), seen("done", "done", "done-a-b-c"), ""))
 				.toBe("lost")
 		end
 	)
 
 	it(
-		"AC1: a failed claim that moved nothing, that cannot be read, or whose stamp is this worker's is a failure",
+		"AC1: a failed claim that moved nothing or that cannot be read is a failure, and one whose stamp is this worker's is ours",
 		function()
-			t.expect(xhost.claimOutcome(1, BEFORE, seen("backlog", "new", "new-aaa-bbb-ccc"), ""))
-				.toBe("failed")
-			t.expect(xhost.claimOutcome(1, BEFORE, nil, "")).toBe("failed")
+			t.expect(claim(1, BEFORE, seen("backlog", "new", "new-aaa-bbb-ccc"), "")).toBe("failed")
+			t.expect(claim(1, BEFORE, nil, "")).toBe("failed")
 			-- the push landed and the step failed afterwards: the claim is this worker's own
-			t.expect(
-				xhost.claimOutcome(
-					1,
-					BEFORE,
-					seen("backlog", "preparing", "preparing-x-y-z"),
-					"preparing-x-y-z"
-				)
-			).toBe("failed")
+			t.expect(claim(1, BEFORE, seen("backlog", "preparing", "preparing-x-y-z"), "preparing-x-y-z"))
+				.toBe("ours")
 		end
 	)
 
@@ -98,7 +87,7 @@ return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 				return "preparing-x-y-z"
 			end,
 		} :: any
-		t.expect(dispatcher.claimVerdict(own, st, "claim", "c0010", "backlog", "new", 1)).toBe("failed")
+		t.expect(dispatcher.claimVerdict(own, st, "claim", "c0010", "backlog", "new", 1)).toBe("ours")
 	end)
 
 	it("AC1: a lost claim leaves no failed step behind in the run state", function()
@@ -151,7 +140,7 @@ return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 		t.expect(table.concat(dispatch.scriptArgv("claim", "c0010"), " ")).toBe("./zn status c0010 preparing")
 		t.expect(dispatch.step("claim").where).toBe("prep")
 		-- once claimed, the chain reaches z-design
-		facts.worker, facts.status, facts.ownClaim = true, "preparing", true
+		facts.worker, facts.status, facts.ownClaim, facts.owned = true, "preparing", false, true
 		t.expect((dispatch.next(facts)).step).toBe("z-design")
 		-- a claim step that ended ok with the issue still new stops the chain
 		facts.status, facts.ownClaim, facts.last = "new", false, { step = "claim", outcome = "ok" }
@@ -275,7 +264,7 @@ return t.spec("c0254 workers on several hosts: the pure rules", function(it)
 				claim = claim,
 			})
 			t.expect(d.action).toBe("refuse")
-			t.expect(string.find(d.why, "not pushing prep-hello", 1, true) ~= nil).toBe(true)
+			t.expect(string.find(d.why, "stop here", 1, true) ~= nil).toBe(true)
 		end
 	end)
 

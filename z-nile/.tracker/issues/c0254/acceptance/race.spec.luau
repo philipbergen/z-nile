@@ -1,9 +1,11 @@
 --!strict
--- c0254 AC1, AC2, AC3, AC5: two hosts, one origin. Two clones of one bare origin under .cache/c0254-race stand for two machines
--- (a fixture, never a real host or remote). Both start from the same origin/main; host A claims a draft issue; host B's claim
--- of the same issue is refused and publishes nothing; the claim commit says who made it; the lost host's prep branch is
--- pushed after every commit and stops being pushed once its claim is taken over; the taker on host B continues in a worktree of
--- its own from the pushed branch.
+-- c0254 AC1, AC2, AC3, AC5, AC7: two hosts, one origin. Two clones of one bare origin under .cache/c0254-race stand for two
+-- machines (a fixture, never a real host or remote). Host B starts a prep worktree for an issue, then host A claims it: host B's
+-- claim is refused and publishes nothing. The claim commit says who made it, A's prep branch is pushed after every commit to its
+-- own branch name, and B's stale worktree is brought forward to A's push, never discarded. When B takes the claim over, A's
+-- next commit stands but is refused with c0274's words and exit 7, a numbered copy that remembers no claim is refused, and A's
+-- idle worktree is marked discarded, kept while B's claim lives, kept when it holds an unpushed commit, and removed once
+-- the work has ended and nothing is left to recover. A push that fails is exit 8. Two hosts rafting one issue meet at the lease.
 local board = require("@znile/engine/board")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
@@ -11,101 +13,102 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 local xhost = require("@znile/engine/xhost")
 
-local DOC = "pickman/.tracker/issues/c0010/c0010.md"
 local CHECK = 'source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/scripts/lib/ac.sh"\n'
 	.. 'check "AC1: ok" true\nfinish\n'
-local DOC2 = "pickman/.tracker/issues/c0011/c0011.md"
-local DRAFT =
-	"---\nid: c0010\ntype: chore\ntitle: c0010\nslug: c0010\nraft: \ndepends_on: []\nemergent: false\ndesign: draft\ncreated: 2026-10-20\nstatus: new-amber-otter-lynx\n---\n\n# c0010\n"
+local function draft(id: string): string
+	return `---\nid: {id}\ntype: chore\ntitle: {id}\nslug: {id}\nraft: \ndepends_on: []\nemergent: false\ndesign: draft\ncreated: 2026-10-20\nstatus: new-amber-otter-lynx\n---\n\n# {id}\n`
+end
+local function prepared(id: string): string
+	return `---\nid: {id}\ntype: chore\ntitle: {id}\nslug: {id}\nraft: \ndepends_on: []\nemergent: false\ndesign: ready\ncreated: 2026-10-20\nsize: 100\nstatus: prepared-quiet-copper-falcon\n---\n\n# {id}\n`
+end
+local function doc(id: string): string
+	return `pickman/.tracker/issues/{id}/{id}.md`
+end
 
 local f: trackerfix.Fixture
 local wtA, wtB = "", ""
-local HOST_A = { ZN_CLI = "claude", ZN_MODEL = "claude-opus-5-5" }
+local HOST_A = { ZN_CLI = "claude", ZN_MODEL = "claude-opus-5-5", ZN_ATTEMPT = "tokA" }
+local HOST_B = { ZN_CLI = "grok", ZN_MODEL = "grok-4.7", ZN_ATTEMPT = "tokB" }
 
-local function onOrigin(path: string): string
-	return fixture.git(f.origin, { "show", `main:{path}` })
+local function tip(branch: string): string
+	local r = fixture.exec(f.origin, "git", { "rev-parse", "--verify", "--quiet", branch })
+	return if r.ok then (string.gsub(r.stdout, "%s+$", "")) else ""
 end
-local function stampOnOrigin(): string
-	return string.match(onOrigin(DOC), "\nstatus: (%S+)\n") or ""
+local function head(dir: string): string
+	return fixture.git(dir, { "rev-parse", "HEAD" })
 end
-local function claimCommits(): number
-	local out = fixture.git(f.origin, { "log", "main", "--format=%s", "--grep=^tracker: c0010 preparing" })
+local function stampOf(id: string): string
+	return string.match(fixture.git(f.origin, { "show", `main:{doc(id)}` }), "\nstatus: (%S+)\n") or ""
+end
+local function claimCommits(id: string): number
+	local out = fixture.git(f.origin, { "log", "main", "--format=%s", `--grep=^tracker: {id} preparing` })
 	local n = 0
 	for _ in string.gmatch(out, "[^\n]+") do
 		n += 1
 	end
 	return n
 end
--- origin's tip of a branch, or "" when it has none (so a missing push is a failed assertion, not a git error)
-local function originTip(branch: string): string
-	local r = fixture.exec(f.origin, "git", { "rev-parse", "--verify", "--quiet", branch })
-	return if r.ok then (string.gsub(r.stdout, "%s+$", "")) else ""
-end
 local function has(text: string?, needle: string): boolean
 	return text ~= nil and string.find(text, needle, 1, true) ~= nil
 end
+local function commitIn(wt: string, id: string, name: string, env: { [string]: string }): fixture.Result
+	fs.writeFile(`{wt}/pickman/.tracker/issues/{id}/{name}.md`, `{name}\n`)
+	return trackerfix.tr(f, wt, { "commit", "-m", `tracker: prep {id} {name}` }, env)
+end
 
 return t.spec("c0254 two hosts claim one issue", function(it)
-	it("sets up one origin, two clones and a prep worktree on each", function()
-		f = trackerfix.new("c0254-race", {
-			[".gitignore"] = ".cache/\n.worktree/\n.DS_Store\n",
-			["pickman/.tracker/architecture.md"] = "# Architecture\n",
-			[DOC] = DRAFT,
-			["pickman/.tracker/issues/c0010/check.sh"] = CHECK,
-			[DOC2] = (string.gsub(DRAFT, "c0010", "c0011")),
-			["pickman/.tracker/issues/c0011/check.sh"] = CHECK,
-		})
-		wtA = trackerfix.trOk(f, f.main, { "worktree", "prep-c0010" })
-		wtB = trackerfix.trOk(f, f.other, { "worktree", "prep-c0010" })
-		t.expect(wtA ~= wtB).toBe(true)
-	end)
+	it(
+		"sets up one origin, two clones, and host B's prep worktree made by its claim step before host A claims",
+		function()
+			local seed: { [string]: string } = {
+				[".gitignore"] = ".cache/\n.worktree/\n.DS_Store\n",
+				["pickman/.tracker/architecture.md"] = "# Architecture\n",
+			}
+			for _, id in { "c0010", "c0011", "c0012", "c0013", "c0014" } do
+				seed[doc(id)] = draft(id)
+				seed[`pickman/.tracker/issues/{id}/check.sh`] = CHECK
+			end
+			for _, id in { "c0020", "c0021" } do
+				seed[doc(id)] = prepared(id)
+				seed[`pickman/.tracker/issues/{id}/check.sh`] = CHECK
+			end
+			f = trackerfix.new("c0254-race", seed)
+			wtB = trackerfix.trOk(f, f.other, { "worktree", "prep-c0010" })
+			wtA = trackerfix.trOk(f, f.main, { "worktree", "prep-c0010" })
+			t.expect(wtA ~= wtB).toBe(true)
+		end
+	)
 
 	it("AC1: the claim is the push: host A wins, host B is refused and publishes nothing", function()
-		local before = claimCommits()
-		t.expect(before).toBe(0)
-		local a = trackerfix.tr(f, wtA, { "status", "c0010", "preparing" }, HOST_A)
-		t.expect(a.ok).toBe(true)
-		t.expect(claimCommits()).toBe(1)
-		local stamp = stampOnOrigin()
+		t.expect(claimCommits("c0010")).toBe(0)
+		t.expect(trackerfix.tr(f, wtA, { "status", "c0010", "preparing" }, HOST_A).ok).toBe(true)
+		t.expect(claimCommits("c0010")).toBe(1)
+		local stamp = stampOf("c0010")
 		t.expect(string.sub(stamp, 1, 10)).toBe("preparing-")
-		local tip = fixture.git(f.origin, { "rev-parse", "main" })
-		local b = trackerfix.tr(
-			f,
-			wtB,
-			{ "status", "c0010", "preparing" },
-			{ ZN_CLI = "grok", ZN_MODEL = "grok-4.7" }
-		)
+		local main0 = tip("main")
+		local b = trackerfix.tr(f, wtB, { "status", "c0010", "preparing" }, HOST_B)
 		t.expect(b.ok).toBe(false)
 		t.expect(has(b.stderr, "cannot move to preparing")).toBe(true)
-		t.expect(fixture.git(f.origin, { "rev-parse", "main" })).toBe(tip)
-		t.expect(claimCommits()).toBe(1)
-		t.expect(stampOnOrigin()).toBe(stamp)
+		t.expect(tip("main")).toBe(main0)
+		t.expect(claimCommits("c0010")).toBe(1)
+		t.expect(stampOf("c0010")).toBe(stamp)
 	end)
 
-	it("AC5: the claim commit says who made it, and the board reads it back", function()
+	it("AC5: the claim commit says who made it, with the attempt, and the board reads it back", function()
 		local body =
 			fixture.git(f.origin, { "log", "main", "-1", "--format=%B", "--grep=^tracker: c0010 preparing" })
 		local line = string.match(body, "(Worker: [^\n]+)") :: string
-		t.expect(line ~= nil).toBe(true)
 		local who = xhost.parseTrailer(line)
 		t.expect(who ~= nil and who.id or "").toBe("c0010")
 		t.expect(who ~= nil and who.cli or "").toBe("claude")
 		t.expect(who ~= nil and who.model or "").toBe("claude-opus-5-5")
-		t.expect(who ~= nil and who.stamp or "").toBe(stampOnOrigin())
-		t.expect(who ~= nil and who.host ~= "" or false).toBe(true)
-		-- the board's read, from a clone that fetched
-		fixture.git(f.other, { "fetch", "-q", "origin" })
-		local facts = board.readFacts(f.other)
-		local holders = xhost.holders(facts.workers or {}, { c0010 = stampOnOrigin() })
-		t.expect(holders.c0010 ~= nil).toBe(true)
-		t.expect(holders.c0010.cli).toBe("claude")
-		-- and no holder for a stamp that is not the one on origin now
-		t.expect(xhost.holders(facts.workers or {}, { c0010 = "preparing-not-the-one" }).c0010).toBe(nil)
-	end)
-
-	it("AC5: the board's card for the issue says which worker holds it", function()
+		t.expect(who ~= nil and who.attempt or "").toBe("tokA")
+		t.expect(who ~= nil and who.stamp or "").toBe(stampOf("c0010"))
 		fixture.git(f.main, { "pull", "-q", "origin", "main" })
 		local facts = board.readFacts(f.main)
+		local holders = xhost.holders(facts.workers or {}, { c0010 = stampOf("c0010") })
+		t.expect(holders.c0010 ~= nil).toBe(true)
+		t.expect(holders.c0010.cli).toBe("claude")
 		local model = board.collect(`{f.main}/pickman/.tracker`, f.main, facts)
 		local card
 		for _, issue in model.issues do
@@ -114,100 +117,276 @@ return t.spec("c0254 two hosts claim one issue", function(it)
 			end
 		end
 		t.expect(card ~= nil).toBe(true)
-		t.expect(string.find(card.held or "", "(claude, claude-opus-5-5)", 1, true) ~= nil).toBe(true)
-	end)
-
-	it("AC3: host A's prep commits are pushed one by one, the first sets the upstream", function()
-		fs.writeFile(`{wtA}/pickman/.tracker/issues/c0010/notes-1.md`, "first\n")
-		local c1 = trackerfix.tr(f, wtA, { "commit", "-m", "tracker: prep c0010 draft 1" }, HOST_A)
-		t.expect(c1.ok).toBe(true)
-		local tip1 = fixture.git(wtA, { "rev-parse", "HEAD" })
-		t.expect(originTip("prep-c0010")).toBe(tip1)
-		fs.writeFile(`{wtA}/pickman/.tracker/issues/c0010/notes-2.md`, "second\n")
-		local c2 = trackerfix.tr(f, wtA, { "commit", "-m", "tracker: prep c0010 draft 2" }, HOST_A)
-		t.expect(c2.ok).toBe(true)
-		local tip2 = fixture.git(wtA, { "rev-parse", "HEAD" })
-		t.expect(tip2 ~= tip1).toBe(true)
-		t.expect(originTip("prep-c0010")).toBe(tip2)
-	end)
-
-	it("AC2: a taker on host B continues in a worktree of its own, built from the pushed branch", function()
-		local tipA = fixture.git(wtA, { "rev-parse", "HEAD" })
-		-- host B's earlier prep worktree knows nothing of A's work; the taker's is built from origin's branch in B's own clone
-		fixture.git(f.other, { "worktree", "remove", "--force", wtB })
-		fixture.git(f.other, { "branch", "-D", "prep-c0010" })
-		local taker = trackerfix.trOk(f, f.other, { "worktree", "prep-c0010" })
-		t.expect(string.sub(taker, 1, #f.other + 1)).toBe(f.other .. "/")
-		t.expect(taker ~= wtA).toBe(true)
-		t.expect(fixture.git(taker, { "rev-parse", "HEAD" })).toBe(tipA)
-		t.expect(fs.isFile(`{taker}/pickman/.tracker/issues/c0010/notes-2.md`)).toBe(true)
-		-- host A's worktree is as it was: nothing of host B reached it
-		t.expect(fixture.git(wtA, { "rev-parse", "HEAD" })).toBe(tipA)
-		t.expect(fixture.git(wtA, { "status", "--porcelain" })).toBe("")
+		t.expect(has(card.held, "(claude, claude-opus-5-5)")).toBe(true)
+		t.expect(xhost.holders(facts.workers or {}, { c0010 = "preparing-not-the-one" }).c0010).toBe(nil)
 	end)
 
 	it(
-		"AC2, AC3: once host B holds the claim, host A's next commit stays local and origin keeps B's branch",
+		"AC3: host A's prep commits are pushed one by one to the branch's own name, the first sets the upstream",
 		function()
-			local taker = trackerfix.trOk(f, f.other, { "worktree", "prep-c0010" })
-			-- the takeover as the heartbeat raft publishes it: the old claim gives way and host B claims in one step
-			local gave = trackerfix.tr(f, taker, { "status", "c0010", "new" })
-			t.expect(gave.ok).toBe(true)
-			local took = trackerfix.tr(
-				f,
-				taker,
-				{ "status", "c0010", "preparing" },
-				{ ZN_CLI = "grok", ZN_MODEL = "grok-4.7" }
-			)
-			t.expect(took.ok).toBe(true)
-			fs.writeFile(`{taker}/pickman/.tracker/issues/c0010/notes-3.md`, "from the taker\n")
-			local pushedB = trackerfix.tr(
-				f,
-				taker,
-				{ "commit", "-m", "tracker: prep c0010 draft 3" },
-				{ ZN_CLI = "grok" }
-			)
-			t.expect(pushedB.ok).toBe(true)
-			local tipB = fixture.git(taker, { "rev-parse", "HEAD" })
-			t.expect(originTip("prep-c0010")).toBe(tipB)
-			-- host A wakes up and commits: the commit stands, the push is refused and says why
-			fs.writeFile(`{wtA}/pickman/.tracker/issues/c0010/notes-late.md`, "late\n")
-			local late = trackerfix.tr(f, wtA, { "commit", "-m", "tracker: prep c0010 late" }, HOST_A)
-			t.expect(late.ok).toBe(true)
-			t.expect(has(late.stderr, "was taken over by another worker")).toBe(true)
-			t.expect(originTip("prep-c0010")).toBe(tipB)
-			t.expect(fixture.git(wtA, { "rev-parse", "HEAD" }) ~= tipB).toBe(true)
-			-- the board now names host B's worker, not host A's
-			fixture.git(f.main, { "fetch", "-q", "origin" })
-			local facts = board.readFacts(f.main)
-			local holders = xhost.holders(facts.workers or {}, { c0010 = stampOnOrigin() })
-			t.expect(holders.c0010.cli).toBe("grok")
+			local main0 = tip("main")
+			local c1 = commitIn(wtA, "c0010", "notes-1", HOST_A)
+			t.expect(c1.code).toBe(0)
+			t.expect(tip("prep-c0010")).toBe(head(wtA))
+			local c2 = commitIn(wtA, "c0010", "notes-2", HOST_A)
+			t.expect(c2.code).toBe(0)
+			t.expect(tip("prep-c0010")).toBe(head(wtA))
+			t.expect(tip("main")).toBe(main0)
 		end
 	)
 
 	it(
-		"AC2, AC3: a worker that still holds its claim does not push over commits origin has and it lacks",
+		"AC2: host B's stale worktree, made by its lost claim step, is brought forward to host A's push, not discarded",
+		function()
+			local tipA = head(wtA)
+			t.expect(head(wtB) ~= tipA).toBe(true)
+			local again = trackerfix.trOk(f, f.other, { "worktree", "prep-c0010" })
+			t.expect(again).toBe(wtB)
+			t.expect(head(wtB)).toBe(tipA)
+			t.expect(fs.isFile(`{wtB}/pickman/.tracker/issues/c0010/notes-2.md`)).toBe(true)
+			-- host A's worktree is as it was
+			t.expect(head(wtA)).toBe(tipA)
+			t.expect(fixture.git(wtA, { "status", "--porcelain" })).toBe("")
+		end
+	)
+
+	it(
+		"AC2: a local branch that has diverged from the pushed one is refused, and nothing local is discarded",
+		function()
+			local a = trackerfix.trOk(f, f.main, { "worktree", "prep-c0012" })
+			t.expect(trackerfix.tr(f, a, { "status", "c0012", "preparing" }, HOST_A).ok).toBe(true)
+			t.expect(commitIn(a, "c0012", "one", HOST_A).code).toBe(0)
+			local b = trackerfix.trOk(f, f.other, { "worktree", "prep-c0012" })
+			fs.writeFile(`{b}/pickman/.tracker/issues/c0012/local.md`, "b's own\n")
+			fixture.git(b, { "add", "-A" })
+			fixture.git(b, { "commit", "-q", "-m", "b's own commit" })
+			local own = head(b)
+			t.expect(commitIn(a, "c0012", "two", HOST_A).code).toBe(0)
+			local r = trackerfix.tr(f, f.other, { "worktree", "prep-c0012" })
+			t.expect(r.ok).toBe(false)
+			t.expect(has(r.stderr, "has diverged from origin/prep-c0012")).toBe(true)
+			t.expect(head(b)).toBe(own)
+		end
+	)
+
+	it(
+		"AC3: a worker that still holds its claim does not push over commits origin has and it lacks",
 		function()
 			local a = trackerfix.trOk(f, f.main, { "worktree", "prep-c0011" })
 			t.expect(trackerfix.tr(f, a, { "status", "c0011", "preparing" }, HOST_A).ok).toBe(true)
-			fs.writeFile(`{a}/pickman/.tracker/issues/c0011/n-1.md`, "one\n")
-			t.expect(trackerfix.tr(f, a, { "commit", "-m", "tracker: prep c0011 one" }, HOST_A).ok).toBe(true)
-			local pushed = originTip("prep-c0011")
-			t.expect(pushed).toBe(fixture.git(a, { "rev-parse", "HEAD" }))
-			-- another worker (a person on host B) pushes a commit to the same branch
+			t.expect(commitIn(a, "c0011", "n-1", HOST_A).code).toBe(0)
+			local pushed = tip("prep-c0011")
+			t.expect(pushed).toBe(head(a))
 			local b = trackerfix.trOk(f, f.other, { "worktree", "prep-c0011" })
 			fs.writeFile(`{b}/pickman/.tracker/issues/c0011/n-b.md`, "from b\n")
 			fixture.git(b, { "add", "-A" })
 			fixture.git(b, { "commit", "-q", "-m", "b adds a file" })
 			fixture.git(b, { "push", "-q", "origin", "HEAD:prep-c0011" })
-			local theirs = originTip("prep-c0011")
+			local theirs = tip("prep-c0011")
 			t.expect(theirs ~= pushed).toBe(true)
-			-- host A, claim intact, commits again: the commit stands and the push is refused
-			fs.writeFile(`{a}/pickman/.tracker/issues/c0011/n-2.md`, "two\n")
-			local c = trackerfix.tr(f, a, { "commit", "-m", "tracker: prep c0011 two" }, HOST_A)
-			t.expect(c.ok).toBe(true)
+			local c = commitIn(a, "c0011", "n-2", HOST_A)
+			t.expect(c.code).toBe(7)
 			t.expect(has(c.stderr, "commit(s) this checkout lacks")).toBe(true)
-			t.expect(originTip("prep-c0011")).toBe(theirs)
+			t.expect(tip("prep-c0011")).toBe(theirs)
+			t.expect(has(c.stdout, `committed: tracker: prep c0011 n-2`)).toBe(true)
 		end
 	)
+
+	it(
+		"AC1: a claim this checkout already holds is an idempotent success, so a session's own claim passes",
+		function()
+			local a = trackerfix.trOk(f, f.main, { "worktree", "prep-c0013" })
+			t.expect(trackerfix.tr(f, a, { "status", "c0013", "preparing" }, HOST_A).ok).toBe(true)
+			local stamp = stampOf("c0013")
+			local again = trackerfix.tr(f, a, { "status", "c0013", "preparing" }, HOST_A)
+			t.expect(again.ok).toBe(true)
+			t.expect(has(again.stdout, "already claimed by this checkout")).toBe(true)
+			t.expect(stampOf("c0013")).toBe(stamp)
+			t.expect(claimCommits("c0013")).toBe(1)
+		end
+	)
+
+	it(
+		"AC3: the push goes to the branch's own name whatever push.default and the upstream say, and main does not move",
+		function()
+			local a = f.main .. "/.worktree/prep-c0013"
+			fixture.git(a, { "branch", "--set-upstream-to=origin/main" })
+			fixture.git(f.main, { "config", "push.default", "upstream" })
+			local main0 = tip("main")
+			local c = commitIn(a, "c0013", "one", HOST_A)
+			t.expect(c.code).toBe(0)
+			t.expect(tip("prep-c0013")).toBe(head(a))
+			t.expect(tip("main")).toBe(main0)
+			fixture.git(f.main, { "config", "--unset", "push.default" })
+		end
+	)
+
+	it("AC3: a push that fails exits 8 after the commit, says so, and the next commit pushes both", function()
+		local a = trackerfix.trOk(f, f.main, { "worktree", "prep-c0014" })
+		t.expect(trackerfix.tr(f, a, { "status", "c0014", "preparing" }, HOST_A).ok).toBe(true)
+		fixture.git(f.main, { "config", "remote.origin.pushurl", `{f.base}/nowhere.git` })
+		local c = commitIn(a, "c0014", "one", HOST_A)
+		t.expect(c.code).toBe(8)
+		t.expect(has(c.stderr, "not pushed:")).toBe(true)
+		t.expect(has(c.stderr, "the next ./zn commit retries")).toBe(true)
+		t.expect(tip("prep-c0014")).toBe("")
+		fixture.git(f.main, { "config", "--unset", "remote.origin.pushurl" })
+		t.expect(commitIn(a, "c0014", "two", HOST_A).code).toBe(0)
+		t.expect(tip("prep-c0014")).toBe(head(a))
+	end)
+
+	it(
+		"sets up host B as the taker of c0010 and of c0013: each gives the claim back and claims it again",
+		function()
+			for _, id in { "c0010", "c0013" } do
+				local b = trackerfix.trOk(f, f.other, { "worktree", `prep-{id}` })
+				t.expect(trackerfix.tr(f, b, { "status", id, "new" }).ok).toBe(true)
+				t.expect(trackerfix.tr(f, b, { "status", id, "preparing" }, HOST_B).ok).toBe(true)
+			end
+			t.expect(commitIn(wtB, "c0010", "taker", HOST_B).code).toBe(0)
+			t.expect(tip("prep-c0010")).toBe(head(wtB))
+		end
+	)
+
+	it(
+		"AC2, AC3: host A's next commit stands, is refused with c0274's words and exit 7, and origin keeps the taker's tip",
+		function()
+			local theirs = tip("prep-c0010")
+			local seenByA = fixture.exec(
+				wtA,
+				"git",
+				{ "rev-parse", "--verify", "--quiet", "refs/remotes/origin/prep-c0010" }
+			)
+			local c = commitIn(wtA, "c0010", "late", HOST_A)
+			t.expect(c.code).toBe(7)
+			t.expect(
+				has(
+					c.stderr,
+					`c0010's claim was taken over (now {stampOf("c0010")}): this checkout's work is no longer the claim's; stop here (./zn lost lists lost work to pick up)`
+				)
+			).toBe(true)
+			t.expect(has(c.stderr, "continue")).toBe(false)
+			t.expect(has(c.stdout, "committed: tracker: prep c0010 late")).toBe(true)
+			t.expect(tip("prep-c0010")).toBe(theirs)
+			t.expect(head(wtA) ~= theirs).toBe(true)
+			-- the per-commit read did not refresh the lease ref
+			local after = fixture.exec(
+				wtA,
+				"git",
+				{ "rev-parse", "--verify", "--quiet", "refs/remotes/origin/prep-c0010" }
+			)
+			t.expect(after.stdout).toBe(seenByA.stdout)
+		end
+	)
+
+	it(
+		"AC2: a numbered copy of the lost worktree remembers no claim and does not push the taken prep either",
+		function()
+			local theirs = tip("prep-c0010")
+			local copy = f.main .. "/.worktree/prep-c0010-1"
+			fixture.git(f.main, { "fetch", "-q", "origin" })
+			fixture.git(f.main, { "worktree", "add", "--detach", copy, "origin/prep-c0010" })
+			fixture.git(f.main, { "branch", "-m", "prep-c0010", "prep-c0010-discarded-1" })
+			fixture.git(copy, { "switch", "-q", "-c", "prep-c0010" })
+			fs.writeFile(`{copy}/pickman/.tracker/issues/c0010/copy.md`, "copy\n")
+			local r = trackerfix.tr(f, copy, { "commit", "-m", "from a copy that holds no claim" })
+			t.expect(r.code).toBe(7)
+			t.expect(has(r.stderr, "holds no claim")).toBe(true)
+			t.expect(tip("prep-c0010")).toBe(theirs)
+			fixture.git(f.main, { "worktree", "remove", "--force", copy })
+			fixture.git(f.main, { "branch", "-D", "prep-c0010" })
+			fixture.git(f.main, { "branch", "-m", "prep-c0010-discarded-1", "prep-c0010" })
+		end
+	)
+
+	it(
+		"AC7: host A's sync marks its worktrees whose claims host B took over as discarded, with no copy",
+		function()
+			local r = trackerfix.tr(f, f.main, { "sync" })
+			t.expect(r.ok).toBe(true)
+			t.expect(has(r.stdout, `discarded worktree {wtA}: c0010's claim was taken over`)).toBe(true)
+			t.expect(fs.isFile(`{wtA}/.cache/discarded`)).toBe(true)
+			local c13 = f.main .. "/.worktree/prep-c0013"
+			t.expect(fs.isFile(`{c13}/.cache/discarded`)).toBe(true)
+			-- B's own worktrees hold their claims: nothing of B's is marked on host B
+			local rb = trackerfix.tr(f, f.other, { "sync" })
+			t.expect(rb.ok).toBe(true)
+			t.expect(fs.isFile(`{wtB}/.cache/discarded`)).toBe(false)
+		end
+	)
+
+	it("AC7: a discarded worktree is kept while the taker's claim lives, and listed", function()
+		local r = trackerfix.tr(f, f.main, { "sync" })
+		t.expect(
+			has(
+				r.stdout,
+				`leftover worktree {wtA}: holds the discarded work of c0010 (its claim is still live)`
+			)
+		).toBe(true)
+		t.expect(fs.isDir(wtA)).toBe(true)
+	end)
+
+	it(
+		"AC7: when the work ends, a clean worktree whose commits are all on origin is removed, and one holding an unpushed commit is kept and listed",
+		function()
+			local b10 = f.other .. "/.worktree/prep-c0010"
+			local b13 = f.other .. "/.worktree/prep-c0013"
+			t.expect(trackerfix.tr(f, b10, { "status", "c0010", "new" }).ok).toBe(true)
+			t.expect(trackerfix.tr(f, b13, { "status", "c0013", "new" }).ok).toBe(true)
+			local r = trackerfix.tr(f, f.main, { "sync" })
+			t.expect(r.ok).toBe(true)
+			local c13 = f.main .. "/.worktree/prep-c0013"
+			t.expect(has(r.stdout, `removed discarded worktree {c13}`)).toBe(true)
+			t.expect(fs.isDir(c13)).toBe(false)
+			t.expect(
+				has(
+					r.stdout,
+					`leftover worktree {wtA}: the work of c0010 ended, kept: 1 commit(s) on no origin ref`
+				)
+			).toBe(true)
+			t.expect(fs.isDir(wtA)).toBe(true)
+		end
+	)
+
+	it(
+		"AC1: two hosts rafting one approved issue meet at the lease: the second `new raft` is refused and publishes nothing",
+		function()
+			local ra = trackerfix.trOk(f, f.main, { "worktree", "raft-pair-a" })
+			local rb = trackerfix.trOk(f, f.other, { "worktree", "raft-pair-b" })
+			local a = trackerfix.tr(
+				f,
+				ra,
+				{ "new", "raft", "chore", "pair", "c0020", "--project", "pickman" },
+				HOST_A
+			)
+			t.expect(a.ok).toBe(true)
+			local raftsBefore =
+				fixture.git(f.origin, { "ls-tree", "-r", "--name-only", "main", "pickman/.tracker/rafts" })
+			local b = trackerfix.tr(
+				f,
+				rb,
+				{ "new", "raft", "chore", "pair2", "c0020", "--project", "pickman" },
+				HOST_B
+			)
+			t.expect(b.ok).toBe(false)
+			t.expect(has(b.stderr, "is being rafted by")).toBe(true)
+			t.expect(
+				fixture.git(f.origin, { "ls-tree", "-r", "--name-only", "main", "pickman/.tracker/rafts" })
+			)
+				.toBe(raftsBefore)
+		end
+	)
+
+	it("AC5: the rafting claim names its worker too, the raft and the member it stamped", function()
+		local out = fixture.git(f.origin, { "log", "main", "-1", "--format=%B", "--grep=^tracker: new raft" })
+		local rid = string.match(out, "tracker: new raft (R%d+)") :: string
+		t.expect(rid ~= nil).toBe(true)
+		local mine = xhost.attemptOf(
+			{ "Worker: " .. (string.match(out, "Worker: ([^\n]+)") :: string) },
+			rid,
+			string.match(out, "Worker: " .. rid .. " (%S+)") :: string
+		)
+		t.expect(mine).toBe("tokA")
+		t.expect(has(out, `Worker: c0020 `)).toBe(true)
+	end)
 end)

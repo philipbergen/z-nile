@@ -163,9 +163,59 @@ return t.spec("c0254 spend rows say who spent them", function(it)
 		)
 	end)
 
-	it("AC4: the dispatcher sets the CLI of each attempt next to its model", function()
-		local text = fs.readFile("engine/dispatcher.luau")
-		t.expect(string.find(text, "env.ZN_CLI = spec.cli", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(text, "env.ZN_MODEL = spec.model", 1, true) ~= nil).toBe(true)
-	end)
+	it(
+		"AC4: a line a dispatched step wrote carries that step's CLI through the buffer and into the row",
+		function()
+			local line: buffer.Line = {
+				ms = 1700000000000,
+				kind = "row",
+				phase = "design-review",
+				subject = "design-review-001",
+				tokens = 100,
+				model = "claude-opus-5-5",
+				cli = "claude",
+				unmeasured = "wall,cpu,ai",
+				id = "c0010",
+				branch = "b",
+				head = "h",
+			}
+			local text = buffer.render(line)
+			t.expect(#string.split(text, "\t")).toBe(15)
+			local parsed = buffer.parse(text)
+			t.expect(parsed[1].cli).toBe("claude")
+			local folded = buffer.fold(parsed, { "c0010" }, "b", "h", 1700000001000, false)
+			t.expect(folded.rows.c0010[1].cli).toBe("claude")
+			-- a line that names no CLI renders as it always did
+			line.cli = nil
+			t.expect(#string.split(buffer.render(line), "\t")).toBe(14)
+		end
+	)
+
+	it(
+		"AC4: the environment names the CLI only for the authoring phases, never for a reviewer's row",
+		function()
+			local root = `{BASE}/phases`
+			if fs.isDir(root) then
+				fs.removeDir(root)
+			end
+			fs.writeDir(`{root}/item`)
+			withEnv({ ZN_CLI = "claude" }, {}, function()
+				local planned = costrow.plan(root, { c0010 = `{root}/item` }, {
+					c0010 = {
+						row("design-review", "grok-4.7", nil, nil),
+						row("prep", "m", nil, nil),
+						row("build", "m", nil, nil),
+					},
+				}, false)
+				local rows = buffer.parseTsv(planned.files[1].text) :: { ledger.Row }
+				local by: { [string]: string? } = {}
+				for _, r in rows do
+					by[r.phase] = r.cli
+				end
+				t.expect(by["design-review"]).toBe(nil)
+				t.expect(by.prep).toBe("claude")
+				t.expect(by.build).toBe("claude")
+			end)
+		end
+	)
 end)

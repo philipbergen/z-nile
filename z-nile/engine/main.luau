@@ -108,7 +108,7 @@ usage: ./zn <command> ...
   stack <R-id>                                  print the layers, from git (read-only)
   trace <R-id> [--through <issue>] [--check]    print the final review's traceability table skeleton, or verify trace.md
   focus <issue-id>                              attribute following commits to this issue
-  commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>] [--author <id>]
+  commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>] [--cli <name>] [--author <id>]
                                                 (--phase build records the model that wrote the layer: --model, or ZN_MODEL under dispatch; a marked item refuses none)
                                                 stage all, record spend, commit, push. --time and --tokens are ignored
                                                 (--author is the lead's own model: the writer a code-review's Fallback: line is derived against)
@@ -469,6 +469,34 @@ local function idsOf(paths: { string }, kind: string): { string }
 	return out
 end
 
+-- c0254 (F1b): the preparing raft on `paths`'s origin/main that lists issue `member`, other than `self`. A worker's rafting
+-- claim is its raft's claim, so two hosts that pick one approved issue meet here: the second `new raft`/`fold` is refused
+-- inside the publish build, which runs again on every lease retry.
+function H.raftHolding(
+	paths: { string },
+	read: (string) -> string?,
+	member: string,
+	self: string
+): (string?, string?)
+	for _, rid in idsOf(paths, "raft") do
+		if rid ~= self then
+			local rp = docPath(paths, rid)
+			local rt = rp and read(rp)
+			if rp and rt then
+				local rf = frontOf(rt)
+				if statusLib.effective(rf, stateOfPath(rp)) == "preparing" then
+					for _, m in store.idList(rf.issues) do
+						if m == member then
+							return rid, rf.status
+						end
+					end
+				end
+			end
+		end
+	end
+	return nil, nil
+end
+
 -- origin/main's project registry as it is (no fetch), or nil and why: what the guards and every origin read trust
 -- (c0114), never the working tree's. Nil and why when origin/main can't be read, has no registry (before c0114 lands:
 -- the main checkout's older engine works there until then) or has one that does not parse.
@@ -675,12 +703,21 @@ end
 
 -- c0254: a claim commit says who made it. The message gets a `Worker:` trailer (host, CLI, model) when it carries the claim's
 -- stamp; the board and `work status` read it back (xhost.holders). Any other message is returned as it is.
-local function withWorker(message: string, id: string, stampValue: string): string
+function H.withWorkers(message: string, ids: { string }, stampValue: string): string
 	if stampValue == "" then
 		return message
 	end
 	local who = xhost.identity(process.env, costrow.hostName())
-	return `{message}\n\n{xhost.trailer(id, stampValue, who)}`
+	local attempt = process.env.ZN_ATTEMPT
+	local lines: { string } = {}
+	for _, id in ids do
+		table.insert(lines, xhost.trailer(id, stampValue, who, attempt))
+	end
+	return `{message}\n\n{table.concat(lines, "\n")}`
+end
+
+function H.withWorker(message: string, id: string, stampValue: string): string
+	return H.withWorkers(message, { id }, stampValue)
 end
 
 local function phrase(): string
@@ -1425,6 +1462,12 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				if kinds.new and kinds.prepared then
 					return "a raft is made of new issues (claimed with it) or of prepared ones (z-raft), not both"
 				end
+				for _, id in ids do
+					local holder = H.raftHolding(paths, read, id, chosen)
+					if holder then
+						return `{id} is being rafted by {holder} on origin/main (another worker's claim): take another issue`
+					end
+				end
 				if solo and #ids > 1 then
 					return `{solo} is solo: true (a recorded user decision): it is rafted alone`
 				end
@@ -1456,7 +1499,11 @@ function cmd.new(pos: { string }, opts: { [string]: { string } })
 				end
 				return changes
 			end, function()
-				return `tracker: new raft {chosen} {slug}`
+				local carriers = { chosen }
+				for _, id in ids do
+					table.insert(carriers, id)
+				end
+				return H.withWorkers(`tracker: new raft {chosen} {slug}`, carriers, claim)
 			end))
 			if not r.ok then
 				fail(`new raft: {r.reason}`)
@@ -1557,51 +1604,128 @@ local function originPaths(): { string }
 	return paths
 end
 
--- c0254 (Q3, Q5): after every commit on a layer or prep branch the branch is pushed, so a taker on any host continues from
--- all committed work. xhost.pushDecision holds the rule; this reads its facts (origin's copy of the branch, the claim's stamp)
--- and runs the push. A refusal is said and the commit stands: it never fails the commit, never forces, never pushes main.
-local function pushAfterCommit()
+-- c0254: the claim memory a worktree holds for an item: c0274's `.cache/tracker-stamp-<id>` (written by a claim, and by the
+-- dispatcher when it claims for a worker), else c0116's `.cache/tracker-claim-<id>` (a worktree that claimed before).
+function H.stampMemory(id: string): string
+	local f = `.cache/tracker-stamp-{id}`
+	if fs.isFile(f) then
+		return sh.trim(fs.readFile(f))
+	end
+	return rememberedClaim(id)
+end
+
+-- c0254 (Q3, Q5): the facts of the branch this worktree is on, for every engine push of a layer or prep branch. The tip of
+-- origin's copy is read into a private ref (refs/zn/seen/<branch>), never into refs/remotes/origin/<branch>: finish and
+-- restack lease against that one, and a fetch that refreshed it would empty their lease (the taker's commit would be overwritten).
+function H.branchPushFacts(): xhost.PushFacts
 	local branch = sh.git({ "branch", "--show-current" })
 	local kind = xhost.branchKind(branch)
-	local hasUp = H.hasUpstream()
 	local facts: xhost.PushFacts = {
 		publishing = publishing(),
 		branch = if branch == "" then nil else branch,
-		hasUpstream = hasUp,
+		hasUpstream = H.hasUpstream(),
 		originHas = false,
 		behind = 0,
 		claim = "unheld",
 	}
-	if kind ~= "other" and facts.publishing then
-		sh.run("git", { "fetch", "--quiet", "origin", branch })
-		facts.originHas =
-			sh.run("git", { "show-ref", "--verify", "--quiet", `refs/remotes/origin/{branch}` }).ok
-		if facts.originHas then
-			local n = sh.run("git", { "rev-list", "--count", `HEAD..origin/{branch}` })
+	if kind == "other" or not facts.publishing then
+		return facts
+	end
+	local listed = sh.run("git", { "ls-remote", "--heads", "origin", `refs/heads/{branch}` })
+	if not listed.ok then
+		facts.originHas, facts.behind = true, nil -- origin cannot be read: not counted, so not pushed
+	elseif sh.trim(listed.stdout) ~= "" then
+		facts.originHas = true
+		local got = sh.run("git", {
+			"fetch",
+			"--quiet",
+			"--refmap=", -- no opportunistic update of refs/remotes/origin/<branch>, the ref finish and restack lease against
+			"origin",
+			`+refs/heads/{branch}:refs/zn/seen/{branch}`,
+		})
+		if got.ok then
+			local n = sh.run("git", { "rev-list", "--count", `HEAD..refs/zn/seen/{branch}` })
 			facts.behind = if n.ok then tonumber(sh.trim(n.stdout)) else nil
-		end
-		local owner: string? = xhost.raftOfLayer(branch)
-		if kind == "prep" then
-			owner = nil
-			for _, i in store.all("issue") do
-				if `prep-{i.slug}` == branch then
-					owner = i.id
-				end
-			end
-		end
-		if owner then
-			local op = docPath(originPaths(), owner)
-			local at = if op then frontOf(sh.git({ "show", `origin/main:{op}` })).status else nil
-			facts.claim = heartbeat.holds(rememberedClaim(owner), at)
+		else
+			facts.behind = nil
 		end
 	end
-	local d = xhost.pushDecision(facts)
-	if d.action == "push" then
-		sh.git({ "push", "--quiet" })
-	elseif d.action == "push-new" then
-		sh.git({ "push", "--quiet", "-u", "origin", "HEAD" })
+	local owner: string? = xhost.raftOfLayer(branch)
+	if kind == "prep" then
+		owner = nil
+		for _, i in store.all("issue") do
+			if `prep-{i.slug}` == branch then
+				owner = i.id
+			end
+		end
+	end
+	if owner then
+		facts.owner = owner
+		local read = pcall(function()
+			local op = docPath(originPaths(), owner)
+			facts.originStamp = if op then frontOf(sh.git({ "show", `origin/main:{op}` })).status else nil
+		end)
+		if read then
+			facts.claim = heartbeat.holds(H.stampMemory(owner), facts.originStamp)
+		else
+			facts.claim = "taken" -- origin/main cannot be read: a claim this checkout cannot vouch for is not pushed
+		end
+	end
+	return facts
+end
+
+-- The commit stands whatever happens to the push; the exit status says what happened to the push (the step that cannot be
+-- undone has already been done, so the status follows the push, not the commit): 0 pushed or skipped by rule, 7 refused
+-- under a claim or over another worker's commits, 8 failed (git's words are printed; the next ./zn commit retries). A
+-- refusal under dispatch is also written to `.cache/push-refused`, which the dispatcher reads after the step.
+H.EXIT_PUSH_REFUSED, H.EXIT_PUSH_FAILED = 7, 8
+function H.pushAfterCommit(): number
+	local f = H.branchPushFacts()
+	local d = xhost.pushDecision(f)
+	local branch = f.branch or ""
+	-- the remote ref is always the branch's own name, whatever push.default or the upstream says; never main
+	local target = `refs/heads/{branch}`
+	if d.action == "push" or d.action == "push-new" then
+		local args = { "push", "--quiet" }
+		if d.action == "push-new" then
+			table.insert(args, "-u")
+		end
+		for _, a in { "origin", `HEAD:{target}` } do
+			table.insert(args, a)
+		end
+		local r = sh.run("git", args)
+		if not r.ok then
+			stdio.ewrite(`not pushed: {sh.trim(r.stderr .. r.stdout)}; the next ./zn commit retries\n`)
+			return H.EXIT_PUSH_FAILED
+		end
+		return 0
 	elseif d.action == "refuse" then
 		stdio.ewrite(`push: {d.why}\n`)
+		if (process.env.ZN_DISPATCH or "") ~= "" then
+			pcall(fs.writeDir, ".cache")
+			pcall(sh.writeReplacing, ".cache/push-refused", `{branch}\t{d.why}\n`)
+		end
+		return H.EXIT_PUSH_REFUSED
+	end
+	return 0
+end
+
+-- c0254 (F5): finish and restack force-push a layer with a lease; a worker whose claim was taken over, or has ended, runs
+-- neither. Asked before anything else they do.
+function H.refuseLostLayer()
+	local f = H.branchPushFacts()
+	if xhost.branchKind(f.branch) == "other" then
+		return
+	end
+	-- only a claim this checkout remembers and origin shows taken or ended stops them: a checkout that never adopted the claim
+	-- (a person's own session) is refused at the push by ./zn commit, but its finish and restack are not this rule's to stop
+	if f.claim ~= "taken" and f.claim ~= "ended" then
+		return
+	end
+	f.originHas, f.behind = false, 0
+	local d = xhost.pushDecision(f)
+	if d.action == "refuse" then
+		fail(d.why)
 	end
 end
 
@@ -1641,6 +1765,7 @@ local function setStatus(id: string, to: string)
 	local moved: { { id: string, from: string } } = {}
 	local carried = false
 	local claimedStamp = "" -- c0254: the stamp this attempt writes, for the worker trailer of a claim
+	local claimHeld = false -- c0254: the claim asked for is the one this checkout already holds: nothing to publish
 	refuseStale()
 	local r = published(publish.commit(".", function(paths, read)
 		moved = {}
@@ -1665,6 +1790,7 @@ local function setStatus(id: string, to: string)
 		end
 		local value = stamp(to)
 		claimedStamp = value
+		claimHeld = false
 		local changes: { publish.Change } = {}
 		local rafted = false -- c0116: a member that was prepared on origin (z-raft grouped it)
 		local originHashes: { [string]: string? } = {} -- c0116 (review 002 F1, 003 F1): each member's record on origin
@@ -1688,6 +1814,19 @@ local function setStatus(id: string, to: string)
 			if t ~= id and carried and store.isRaftId(id) then
 				originHashes[t] =
 					raftplan.recordHash(t, treeFolderFiles(paths, read, string.sub(tp, 1, #tp - #t - 4)))
+			end
+			-- c0254 (F9): a claim this checkout already holds is an idempotent success, so z-design's step 1 passes in a worker's
+			-- session after the dispatcher claimed: the stamp this worktree remembers is the one origin shows
+			if
+				t == id
+				and not store.isRaftId(id)
+				and to == "preparing"
+				and cur == "preparing"
+				and (tf.status or "") ~= ""
+				and tf.status == H.stampMemory(t)
+			then
+				claimHeld = true
+				continue
 			end
 			-- c0116 (review 001 F1): an issue in a raft is redesigned through its raft, never claimed past it
 			if t == id and not store.isRaftId(id) and to == "preparing" and (tf.raft or "") ~= "" then
@@ -1836,10 +1975,17 @@ local function setStatus(id: string, to: string)
 		end
 		return changes
 	end, function()
-		return withWorker(`tracker: {id} {to}`, id, if to == "preparing" then claimedStamp else "")
+		local carriers: { string } = {}
+		for _, m in moved do
+			table.insert(carriers, m.id)
+		end
+		return H.withWorkers(`tracker: {id} {to}`, carriers, if to == "preparing" then claimedStamp else "")
 	end))
 	if not r.ok then
 		fail(r.reason or "publish failed")
+	end
+	if claimHeld then
+		print(`{id} is already claimed by this checkout (stamp unchanged)`)
 	end
 	if carried then
 		local value = stamp(to)
@@ -2049,12 +2195,16 @@ function cmd.fold(pos: { string })
 			if owner ~= "" then
 				return `{id} already belongs to {owner} on origin/main`
 			end
+			local holder = H.raftHolding(paths, read, id, raftId)
+			if holder then
+				return `{id} is being rafted by {holder} on origin/main (another worker's claim)`
+			end
 		end
 		if resumed then
 			return {}
 		end
 		return { { path = rp, content = withFront(rt, "status", claim) } }
-	end, `tracker: fold into {raftId} (claim)`))
+	end, H.withWorker(`tracker: fold into {raftId} (claim)`, raftId, claim)))
 	if not r.ok then
 		fail(`fold: {r.reason}`)
 	end
@@ -2161,7 +2311,7 @@ function cmd.unfold(pos: { string })
 			return `{raftId} is {st} on origin/main: unfold takes a prepared raft (or one this checkout claimed)`
 		end
 		return { { path = rp, content = withFront(rt, "status", claim) } }
-	end, `tracker: unfold from {raftId} (claim)`))
+	end, H.withWorker(`tracker: unfold from {raftId} (claim)`, raftId, claim)))
 	if not r.ok then
 		fail(`unfold: {r.reason}`)
 	end
@@ -2287,7 +2437,7 @@ function cmd.recombine(pos: { string })
 			end
 		end
 		return changes
-	end, `tracker: recombine {otherId} into {keeperId} (claim)`))
+	end, H.withWorker(`tracker: recombine {otherId} into {keeperId} (claim)`, keeperId, claim)))
 	if not r.ok then
 		fail(`recombine: {r.reason}`)
 	end
@@ -2459,6 +2609,154 @@ local function reapAuto()
 	cmd.reap({}, { ["--auto"] = { "true" } })
 end
 
+-- c0254 (F7, Q5): the leftover on a lost host. A takeover on another host writes its discard marker on that host's disk, never
+-- on this one, so a layer or prep worktree here whose claim another host took over (or that ended) is found by what this
+-- checkout remembers against what origin/main shows (heartbeat.staleMember, c0277's rule), and marked discarded. The marked
+-- worktree is kept until the work it was discarded for ends (the prep merged or was given back, the raft merged or was
+-- stopped), then removed; one that still holds uncommitted files or commits no origin ref has is kept and listed, never
+-- removed. This is the prototype's stand-in for c0277's `hb.discard` marker and `hb.sweepDiscarded`: the marker is
+-- `.cache/discarded` (items and the date), and the rules are c0277's own (Design, Interactions).
+H.DISCARDED = ".cache/discarded"
+
+function H.lostHostSweep(
+	remove: boolean
+): { marked: { string }, removed: { string }, left: { string }, holding: { string } }
+	local out = {
+		marked = {} :: { string },
+		removed = {} :: { string },
+		left = {} :: { string },
+		holding = {} :: { string },
+	}
+	if not publishing() then
+		return out
+	end
+	local here = sh.trim(sh.run("git", { "rev-parse", "--show-toplevel" }).stdout)
+	local candidates = {}
+	for _, w in worktrees() do
+		if w.branch and w.path ~= here and xhost.branchKind(w.branch) ~= "other" then
+			table.insert(candidates, w)
+		end
+	end
+	if #candidates == 0 then
+		return out
+	end
+	local read, paths = pcall(originPaths)
+	if not read then
+		return out -- origin/main cannot be read: no claim is known to be over
+	end
+	for _, w in candidates do
+		local branch = w.branch :: string
+		local owner: string? = xhost.raftOfLayer(branch)
+		if xhost.branchKind(branch) == "prep" then
+			owner = nil
+			for _, i in store.all("issue") do
+				if `prep-{i.slug}` == branch then
+					owner = i.id
+				end
+			end
+		end
+		if not owner then
+			continue
+		end
+		local op = docPath(paths, owner)
+		local current: string? = nil
+		if op then
+			local shown = sh.run("git", { "show", `origin/main:{op}` })
+			if shown.ok then
+				local stampValue = frontOf(shown.stdout).status
+				current = if stampValue and xhost.isClaim(stampValue) then stampValue else nil
+			end
+		end
+		local remembered = ""
+		for _, name in { `tracker-stamp-{owner}`, `tracker-claim-{owner}` } do
+			local f = `{w.path}/.cache/{name}`
+			if remembered == "" and fs.isFile(f) then
+				remembered = sh.trim(fs.readFile(f))
+			end
+		end
+		local marker = `{w.path}/{H.DISCARDED}`
+		if not fs.isFile(marker) then
+			if
+				remembered ~= ""
+				and heartbeat.staleMember({ { id = owner, remembered = remembered, current = current } })
+			then
+				pcall(fs.writeDir, `{w.path}/.cache`)
+				sh.writeReplacing(
+					marker,
+					`items: {owner}\nsince: {os.time()}\nclaim: {remembered}\nnow: {current or "none"}\n`
+				)
+				table.insert(out.marked, `{w.path}: {xhost.lostText(owner, current)}`)
+			end
+		else
+			local alive = current ~= nil
+			if alive then
+				table.insert(
+					out.holding,
+					`{w.path}: holds the discarded work of {owner} (its claim is still live)`
+				)
+			else
+				local dirty = sh.run("git", { "-C", w.path, "status", "--porcelain" })
+				local unreachable = sh.run(
+					"git",
+					{ "-C", w.path, "rev-list", "--count", "HEAD", "--not", "--remotes=origin" }
+				)
+				local files = if dirty.ok then sh.trim(dirty.stdout) ~= "" else true
+				local commits = if unreachable.ok then (tonumber(sh.trim(unreachable.stdout)) or 1) else 1
+				if commits > 0 then
+					-- landing rewrites shas (a prep is squash-merged and its branch deleted): recovered work is judged by
+					-- content, as c0277 does: merging the commits into origin/main changes nothing
+					local merged =
+						sh.run("git", { "-C", w.path, "merge-tree", "--write-tree", "origin/main", "HEAD" })
+					local mainTree = sh.run("git", { "-C", w.path, "rev-parse", "origin/main^{tree}" })
+					if
+						merged.ok
+						and mainTree.ok
+						and string.match(merged.stdout, "^%x+") == sh.trim(mainTree.stdout)
+					then
+						commits = 0
+					end
+				end
+				if files or commits > 0 then
+					table.insert(
+						out.left,
+						`{w.path}: the work of {owner} ended, kept: {if files
+							then "uncommitted files"
+							else `{commits} commit(s) on no origin ref`}`
+					)
+				elseif remove then
+					local r = sh.run("git", { "worktree", "remove", "--force", w.path })
+					if r.ok then
+						table.insert(out.removed, w.path)
+					else
+						table.insert(
+							out.left,
+							`{w.path}: the work of {owner} ended, kept: {sh.trim(r.stderr)}`
+						)
+					end
+				else
+					table.insert(out.left, `{w.path}: the work of {owner} ended, nothing left to recover`)
+				end
+			end
+		end
+	end
+	return out
+end
+
+function H.sweepSay(r: { marked: { string }, removed: { string }, left: { string }, holding: { string } })
+	for _, l in r.marked do
+		print(`discarded worktree {l}`)
+	end
+	for _, l in r.removed do
+		print(`removed discarded worktree {l}`)
+	end
+	for _, l in r.left do
+		print(`leftover worktree {l}`)
+	end
+	for _, l in r.holding do
+		print(`leftover worktree {l}`)
+	end
+end
+
 -- `sync` brings origin/main into this checkout (a merge in a worktree, a fast-forward in the main
 -- checkout). `sync --fetch` only updates origin/main: reviewers and stream agents use it, because
 -- a merge would add a commit and change the diff they judge.
@@ -2471,6 +2769,12 @@ function cmd.sync(_: { string }, opts: { [string]: { string } })
 			sh.git({ "pull", "--quiet", "--ff-only" })
 			sweepStale(mainRoot(), before, sh.git({ "rev-parse", "HEAD" }))
 			buildBoard(mainRoot())
+			-- c0254: the layer and prep worktrees on this host whose claim another host took over are marked, and the ones whose
+			-- work ended are removed (or kept and listed when they hold unrecovered work)
+			local swept, r = pcall(H.lostHostSweep, true)
+			if swept then
+				H.sweepSay(r :: any)
+			end
 		else
 			mergeOrigin()
 		end
@@ -3994,6 +4298,7 @@ end
 -- One commit for the layer the working tree is on. Worker commits stay until this.
 function cmd.finish(pos: { string })
 	local id = pos[1] or fail("usage: finish <issue-id>")
+	H.refuseLostLayer()
 	if sh.git({ "status", "--porcelain" }) ~= "" then
 		fail("commit everything first (./zn commit); finish needs a clean tree")
 	end
@@ -4154,6 +4459,7 @@ end
 
 -- Rebase every layer onto the tip below it. A conflict or a red check.sh stops at that layer.
 function cmd.restack(pos: { string })
+	H.refuseLostLayer()
 	local raft = store.get(pos[1] or fail("usage: restack <R-id>"))
 	if raft.kind ~= "raft" then
 		fail(`{raft.id} is not a raft`)
@@ -4598,8 +4904,51 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 	if hasOrigin() then
 		sh.run("git", { "fetch", "--quiet", "--prune", "origin" })
 	end
+	-- c0254 (F6): a layer or prep branch that origin is ahead of (another host pushed it) is brought forward before it is handed
+	-- out, so a worktree never continues from a stale start: a clean branch that is an ancestor of origin/<branch> is
+	-- fast-forwarded, and a diverged one is refused (nothing local is ever discarded)
+	local function followOrigin(dir: string?)
+		if not branch or xhost.branchKind(branch) == "other" then
+			return
+		end
+		local at = if dir then { "-C", dir } else {}
+		local function g(args: { string }): { ok: boolean, stdout: string }
+			local all = table.clone(at)
+			for _, a in args do
+				table.insert(all, a)
+			end
+			local r = sh.run("git", all)
+			return { ok = r.ok, stdout = sh.trim(r.stdout) }
+		end
+		local theirs = sh.run("git", { "rev-parse", "--verify", "--quiet", `refs/remotes/origin/{branch}` })
+		local mine = g({ "rev-parse", "--verify", "--quiet", "HEAD" })
+		if not theirs.ok or not mine.ok or sh.trim(theirs.stdout) == mine.stdout then
+			return
+		end
+		local tip = sh.trim(theirs.stdout)
+		if g({ "merge-base", "--is-ancestor", tip, mine.stdout }).ok then
+			return -- local is ahead: nothing to bring
+		end
+		if g({ "merge-base", "--is-ancestor", mine.stdout, tip }).ok then
+			if dir then
+				if g({ "status", "--porcelain" }).stdout ~= "" then
+					fail(
+						`{branch} is behind origin/{branch} and {dir} has uncommitted files: commit or stash them, then git -C {dir} merge --ff-only origin/{branch}`
+					)
+				end
+				g({ "merge", "--ff-only", "--quiet", `origin/{branch}` })
+			else
+				sh.git({ "branch", "-f", branch :: string, `origin/{branch}` })
+			end
+			return
+		end
+		fail(
+			`{branch} has diverged from origin/{branch} (commits on both): ./zn worktree does not discard either; compare them (git log {branch}...origin/{branch}), then merge or rebase by hand`
+		)
+	end
 	for _, w in worktrees() do
 		if w.path == path then
+			followOrigin(path)
 			print(path)
 			return
 		elseif branch and w.branch == branch then
@@ -4618,6 +4967,23 @@ function cmd.worktree(pos: { string }, opts: { [string]: { string } })
 			stdio.ewrite(
 				`warning: the upstream of {branch} is gone (merged?); resuming it anyway: git branch -D {branch} gives a fresh start\n`
 			)
+		end
+		if branch and xhost.branchKind(branch) ~= "other" then
+			local theirs =
+				sh.run("git", { "rev-parse", "--verify", "--quiet", `refs/remotes/origin/{branch}` })
+			local mine = sh.run("git", { "rev-parse", "--verify", "--quiet", `refs/heads/{branch}` })
+			if theirs.ok and mine.ok and sh.trim(theirs.stdout) ~= sh.trim(mine.stdout) then
+				local tip, tipMine = sh.trim(theirs.stdout), sh.trim(mine.stdout)
+				if sh.run("git", { "merge-base", "--is-ancestor", tip, tipMine }).ok then
+					-- local is ahead: keep it
+				elseif sh.run("git", { "merge-base", "--is-ancestor", tipMine, tip }).ok then
+					sh.git({ "branch", "-f", branch, `origin/{branch}` })
+				else
+					fail(
+						`{branch} has diverged from origin/{branch} (commits on both): ./zn worktree does not discard either; compare them (git log {branch}...origin/{branch}), then merge or rebase by hand`
+					)
+				end
+			end
 		end
 		sh.git({ "worktree", "add", path, branch })
 	elseif
@@ -4726,6 +5092,19 @@ local function modelOption(what: string, opts: { [string]: { string } }, phase: 
 	return raw
 end
 
+-- c0254: `--cli <name>` on a commit names the CLI that spent the row (the dispatcher prints it on the `record:` line of a code
+-- review, so the reviewer's row carries the reviewer's CLI, not the author's). One CLI name.
+function H.cliOption(what: string, opts: { [string]: { string } }): string?
+	if not opts["--cli"] then
+		return nil
+	end
+	local raw = opts["--cli"][1]
+	if #opts["--cli"] > 1 or not string.match(raw, "^[%a][%w%-]*$") then
+		fail(`{what} --cli takes one CLI name (letters, digits and '-')`)
+	end
+	return raw
+end
+
 -- c0251: the reason an interactive review on `model` is a fallback, from the pool's plan for the item `id` and the review
 -- `mode` (design, raft, code, final); nil when it is not one, and nil when no plan can be built (no rotating role, no
 -- .models.toml on main, an unknown item). The lead types no reason: the tool derives it.
@@ -4782,6 +5161,8 @@ local function commitIssues(raft: store.Item, issueIds: { string }): ({ store.It
 	end
 	return store.members(raft.id), "raft"
 end
+
+H.commitCli = nil :: string? -- c0254: --cli of the running ./zn commit
 
 local function recordAndCommit(
 	raft: store.Item,
@@ -4854,6 +5235,7 @@ local function recordAndCommit(
 			phase = phase :: string,
 			tokens = rowTokens,
 			model = rowModel,
+			cli = H.commitCli,
 			ai = rowAi,
 			unmeasured = rowFlags,
 		}
@@ -4899,7 +5281,10 @@ local function recordAndCommit(
 	end
 	costrow.writeBuffer(top, planned)
 	print(`committed: {message}\n  {table.concat(trailers, "\n  ")}`)
-	pushAfterCommit()
+	local pushed = H.pushAfterCommit()
+	if pushed ~= 0 then
+		process.exit(pushed)
+	end
 end
 
 function cmd.commit(_pos: { string }, opts: { [string]: { string } })
@@ -4916,7 +5301,10 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 		sh.git({ "add", "-A" })
 		sh.git({ "commit", "--quiet", "-m", message })
 		print(`committed: {message}`)
-		pushAfterCommit()
+		local pushed = H.pushAfterCommit()
+		if pushed ~= 0 then
+			process.exit(pushed)
+		end
 		return
 	end
 	layergit.stampLayerReviews()
@@ -4934,6 +5322,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 		stdio.ewrite("commit: --time and --tokens are ignored; cost is measured\n")
 	end
 	local model = modelOption("commit", opts, phase)
+	H.commitCli = H.cliOption("commit", opts)
 	-- c0325: a build commit records the model that wrote its layer; a marked item (c0306's mark) refuses the omission
 	local raftHere = H.activeRaft()
 	if phase == "build" and model == nil then
@@ -7027,7 +7416,7 @@ function cmd.ready(pos: { string })
 			all,
 			"active",
 			readyStamp,
-			withWorker(
+			H.withWorker(
 				`tracker: ready {raft.id} {store.readFront(raft.doc).title or raft.slug}`,
 				raft.id,
 				readyStamp
@@ -9606,6 +9995,61 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
 		onGitHub = onGitHub,
 		checking = checking,
 		origin = origin,
+		-- c0254: the claim memory of the checkout at `dir`: c0274's stamp file, else c0116's claim file
+		memoryIn = function(dir: string, id: string): string
+			for _, name in { `tracker-stamp-{id}`, `tracker-claim-{id}` } do
+				local f = `{dir}/.cache/{name}`
+				if fs.isFile(f) then
+					return sh.trim(fs.readFile(f))
+				end
+			end
+			return ""
+		end,
+		-- c0254: the preparing raft on origin/main that lists issue `id` (a rafting claim), with its stamp
+		raftedBy = function(id: string): xhost.RaftedBy?
+			if not hasOrigin() then
+				return nil
+			end
+			sh.run("git", { "fetch", "-q", "origin", "main" })
+			local readTree, files = originTree()
+			if not readTree then
+				return nil
+			end
+			for _, rid in idsOf(files, "raft") do
+				local rp = docPath(files, rid)
+				local shown = if rp then sh.run("git", { "show", `origin/main:{rp}` }) else nil
+				if rp and shown and shown.ok then
+					local rf = frontOf(shown.stdout)
+					if statusLib.effective(rf, stateOfPath(rp)) == "preparing" then
+						for _, m in store.idList(rf.issues) do
+							if m == id then
+								return { id = rid, stamp = rf.status or "" }
+							end
+						end
+					end
+				end
+			end
+			return nil
+		end,
+		-- c0254: the attempt token of the Worker trailer on the claim commit that set `stamp` on `id` (origin/main's history)
+		claimAttempt = function(id: string, stamp: string): string?
+			local log = sh.run("git", {
+				"log",
+				"origin/main",
+				"-n",
+				"200",
+				"--grep=^Worker: ",
+				"--format=%(trailers:key=Worker,valueonly,separator=%x0a)",
+			})
+			if not log.ok then
+				return nil
+			end
+			local lines: { string } = {}
+			for line in string.gmatch(log.stdout, "[^\n]+") do
+				table.insert(lines, "Worker: " .. line)
+			end
+			return xhost.attemptOf(lines, id, stamp)
+		end,
 		-- a PR's state for the chain's gates (c0117): only on a GitHub origin, through the real gh
 		-- a pull request's merge commit (c0117: a commit on main that is vetted without being tracker state)
 		prMerged = function(sha: string): boolean
@@ -9888,7 +10332,13 @@ end
 
 function cmd.reap(_: { string }, opts: { [string]: { string } })
 	if opts["--auto"] == nil then
-		if reapRun(opts) then
+		local leaked = reapRun(opts)
+		-- c0254: the discarded worktrees this host still holds are listed (the user's rule: reap lists leftovers)
+		local swept, r = pcall(H.lostHostSweep, false)
+		if swept then
+			H.sweepSay(r :: any)
+		end
+		if leaked then
 			process.exit(1)
 		end
 		return

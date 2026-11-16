@@ -188,15 +188,27 @@ return t.spec("c0253 the dispatcher's worker mode", function(it)
 			fakecli.clear(h)
 			fakecli.mode(h, "claude", "spentquota")
 			fakecli.mode(h, "grok", "quota")
-			local r = fakecli.zn(
-				h,
-				{ "run", "--time", "90", "--", "./zn", "dispatch", "R0010", "--worker", "--cli", "claude" },
-				{
-					ZN_WORK_QUOTA_WAIT = "3",
-					ZN_WORK_QUOTA_CAP = "5",
-					ZN_BEAT_EVERY = "1",
-				}
-			)
+			-- c0254: a worker runs only a raft whose claim it made, so the chain readies it again itself (the raft was readied by
+			-- hand in the setup, which is another worker's claim to a worker)
+			t.expect(fakecli.zn(h, { "stop", "R0010" }).ok).toBe(true)
+			local r = fakecli.zn(h, {
+				"run",
+				"--time",
+				"90",
+				"--",
+				"./zn",
+				"dispatch",
+				"R0010",
+				"--worker",
+				"--pick",
+				"raft",
+				"--cli",
+				"claude",
+			}, {
+				ZN_WORK_QUOTA_WAIT = "3",
+				ZN_WORK_QUOTA_CAP = "5",
+				ZN_BEAT_EVERY = "1",
+			})
 			local out = r.stdout .. r.stderr
 			t.expect(has(out, "every CLI is out of quota: waiting")).toBe(true)
 			local doc = fixture.git(h.f.origin, { "show", "main:pickman/.tracker/rafts/R0010/R0010.md" })

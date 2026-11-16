@@ -168,6 +168,9 @@ function workloop.run(world: World, opts: Options): supervise.Summary
 		local p = pick :: supervise.Pick
 		taken += 1
 		local r, why = workloop.item(world, p, tally)
+		if r ~= "taken" then
+			lastLost = "" -- "the same item lost twice in a row" means with nothing between the two losses
+		end
 		if r == "done" then
 			table.insert(tally.moved, p.id)
 			blockedInARow = 0

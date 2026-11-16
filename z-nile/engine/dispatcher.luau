@@ -64,6 +64,8 @@ export type Ctx = {
 	onGitHub: () -> boolean,
 	checking: () -> boolean, -- inside a guarded run (a spec or a check.sh): only a CLI under .cache may start
 	origin: (id: string) -> OriginItem?,
+	raftedBy: ((id: string) -> xhost.RaftedBy?)?, -- c0254: the preparing raft on origin/main that lists issue `id`, if any
+	claimAttempt: ((id: string, stamp: string) -> string?)?, -- c0254: the attempt token of the Worker trailer that set `stamp` on `id`
 	memoryIn: ((dir: string, id: string) -> string)?, -- c0275: the claim stamp the checkout at `dir` remembers for `id`, "" for none
 	prView: (branch: string) -> string?, -- `gh pr view <branch> --json …`'s output, or nil
 	prMerged: (sha: string) -> boolean, -- `sha` is a pull request's merge commit on GitHub
@@ -85,6 +87,7 @@ export type Row = {
 	phase: string,
 	tokens: number,
 	model: string,
+	cli: string?, -- c0254: the CLI of the attempt that spent the row
 	minutes: number,
 	note: string,
 	wall: number?,
@@ -120,12 +123,14 @@ export type State = {
 	answering: string?, -- the sha256 of the questions.md an answer was written for, until it is set aside
 	session: { cli: string, id: string }?, -- c0253 worker mode: the CLI session the raft's z-run step last ran (Q3), resumed on a rerun
 	quotaSince: number?, -- c0253 worker mode: when the outage that has every CLI of a step out of quota began
+	attempt: string?, -- c0254 worker mode: the token of the claim step that ran last (its Worker trailer carries it)
+	claim: { id: string, stamp: string }?, -- c0254 worker mode: the claim stamp this run's claim step landed, read from origin/main
 }
 
 -- c0253: worker mode, set once in `main` from `--worker`, `--cli` and `--no-run`: the supervisor's runs resume one CLI session per
 -- raft, start the person's CLI first, wait for quota before switching, and leave the `run` gate (the landing) off on a host
 -- that does not land. A plain `./zn dispatch` leaves all of it off.
-local worker = { on = false, cli = nil :: string?, noRun = false }
+local worker = { on = false, cli = nil :: string?, noRun = false, pick = nil :: string? }
 local HOME = ".cache/dispatch"
 -- the state folder of a step that another step dispatched (a review from its author), set once in `main`
 local nested: string? = nil
@@ -654,6 +659,7 @@ local function rowLine(root: string, row: Row): buffer.Line
 		ai = row.wall,
 		tokens = row.tokens,
 		model = if row.model ~= "" then row.model else nil,
+		cli = if row.cli ~= nil and row.cli ~= "" then row.cli else nil,
 		unmeasured = if #flags > 0 then table.concat(flags, ",") else nil,
 		id = row.id,
 		branch = branch,
@@ -715,6 +721,7 @@ local function record(
 )
 	if phase == "code-review" then
 		local model = nil :: string?
+		local cli = nil :: string?
 		local tokens = 0
 		local wall, cpu = 0, 0
 		local sawWall, sawCpu = false, false
@@ -722,6 +729,7 @@ local function record(
 			tokens += a.tokens
 			if a.tokens > 0 then
 				model = a.model
+				cli = a.cli
 			end
 			if a.wall then
 				wall += a.wall
@@ -734,9 +742,9 @@ local function record(
 		end
 		if model then
 			print(
-				`record: ./zn commit -m "{id}: {note}" --phase code-review --model {model}{if stream
-					then ` --issue {id}`
-					else ""}`
+				`record: ./zn commit -m "{id}: {note}" --phase code-review --model {model}{if cli
+					then ` --cli {cli}`
+					else ""}{if stream then ` --issue {id}` else ""}`
 			)
 			local flags: { string } = {}
 			if not sawWall then
@@ -755,6 +763,7 @@ local function record(
 				subject = note,
 				tokens = tokens,
 				model = model,
+				cli = cli,
 				wall = if sawWall then wall else nil,
 				cpu = if sawCpu then cpu else nil,
 				ai = if sawWall then wall else nil,
@@ -773,6 +782,7 @@ local function record(
 				phase = phase,
 				tokens = a.tokens,
 				model = a.model,
+				cli = a.cli,
 				minutes = if reviewer then a.minutes else 0,
 				note = note,
 				wall = a.wall,
@@ -1456,6 +1466,7 @@ function dispatcher.modelStep(
 		parentExchange = parentNames,
 		parentStateDir = parentDir,
 		rerun = opts["--rerun"],
+		claimed = if worker.on and st.claim and st.claim.id == id then st.claim.stamp else nil,
 	})
 	local attempts: { Attempt } = {}
 	local function refused(spec: models.Spec, why: string)
@@ -2141,6 +2152,27 @@ function dispatcher.modelStep(
 end
 
 -- Runs a script step: `./zn <command>` in the main checkout or the step's worktree, never a model.
+-- c0254: the CLI and model of the model step a claim is made for (z-design after a claim, z-run after a ready, z-raft after
+-- raft-plan): the first try of its role, the person's CLI first (the order the step itself will use). When nothing can be
+-- resolved the CLI is the worker's own, else "unknown", and the model is empty.
+function dispatcher.nextIdentity(step: string, id: string): { cli: string, model: string }
+	local follows =
+		{ claim = "z-design", ["z-ready"] = "z-run", ["z-stop"] = "z-run", ["raft-plan"] = "z-raft" }
+	local ok, res = pcall(function(): { cli: string, model: string }
+		local role = models.roleFor(follows[step], nil) :: string
+		local resolved = models.resolveRole(walk(store.get(id).dir), role, true)
+		local slots = supervise.order(models.tries(resolved), function(sp: models.Spec): string
+			return sp.cli
+		end, worker.cli, {})
+		local spec = slots[1].spec
+		return { cli = spec.cli, model = models.bareModel(spec.model) }
+	end)
+	if ok then
+		return res :: { cli: string, model: string }
+	end
+	return { cli = worker.cli or "unknown", model = "" }
+end
+
 function dispatcher.scriptStep(
 	ctx: Ctx,
 	st: State,
@@ -2157,6 +2189,18 @@ function dispatcher.scriptStep(
 		else worktree(ctx, `raft-{id}`)
 	print(`dispatch: {step} {id}: {table.concat(argv, " ")} (in {dir})`)
 	local args = table.move(argv, 2, #argv, 1, {})
+	-- c0254: a worker's claim step runs as the worker that will run the step after it: its CLI and model are the ones
+	-- the claim commit's Worker trailer names, and its attempt token lets a step that fails after its push find its claim
+	local stepEnv: { [string]: string }? = nil
+	st.attempt = nil
+	if worker.on and (step == "claim" or step == "z-ready" or step == "z-stop" or step == "raft-plan") then
+		local who = dispatcher.nextIdentity(step, id)
+		st.attempt = string.lower(string.sub(trim(process.exec("uuidgen", {}).stdout), 1, 8))
+		stepEnv = { ZN_CLI = who.cli, ZN_ATTEMPT = st.attempt :: string }
+		if who.model ~= "" then
+			(stepEnv :: { [string]: string }).ZN_MODEL = who.model
+		end
+	end
 	local r
 	if where == "run" then
 		-- c0252: the base's engine against the raft's worktree (zn -C), with the dispatcher's own environment
@@ -2166,10 +2210,15 @@ function dispatcher.scriptStep(
 		end
 		r = process.exec(`{ctx.mainRoot()}/zn`, withDir, {
 			cwd = ctx.mainRoot(),
+			env = stepEnv,
 			stdio = { stdout = "forward", stderr = "forward" },
 		})
 	else
-		r = process.exec(`{dir}/zn`, args, { cwd = dir, stdio = { stdout = "forward", stderr = "forward" } })
+		r = process.exec(`{dir}/zn`, args, {
+			cwd = dir,
+			env = stepEnv,
+			stdio = { stdout = "forward", stderr = "forward" },
+		})
 	end
 	local outcome = if r.ok then "ok" else "failed"
 	st.step, st.cli, st.runtime, st.model, st.worktree, st.outcome = step, nil, nil, nil, dir, outcome
@@ -2746,9 +2795,12 @@ function dispatcher.landFacts(
 		req
 end
 
--- c0254: whether a failed claim step (`claim` for an issue, `z-ready` for a raft) lost to another worker: asks origin/main what
--- the item is now and whether the stamp on it is this worker's (the stamp the step's checkout remembers). "won", "lost" or
--- "failed" (xhost.claimOutcome); anything the dispatcher cannot read is "failed", never "lost".
+-- c0254: the claim steps: an issue's claim, a raft's ready, a rafting (raft-plan) and a takeover of a lost raft (z-ready after z-stop).
+local CLAIM_STEPS = { claim = true, ["z-ready"] = true, ["raft-plan"] = true }
+
+-- c0254: whether a failed claim step lost to another worker, asked of origin/main (never of prose): "won", "ours" (the claim
+-- landed and the step failed after it: adopted), "lost" or "failed" (xhost.claimOutcome). A rafting step is lost when a
+-- preparing raft on origin that is not ours lists the issue.
 function dispatcher.claimVerdict(
 	ctx: Ctx,
 	st: State,
@@ -2756,28 +2808,64 @@ function dispatcher.claimVerdict(
 	target: string,
 	beforeState: string,
 	beforeStatus: string,
-	code: number
+	code: number,
+	attempt: string?
 ): string
-	if step ~= "claim" and step ~= "z-ready" then
+	if not CLAIM_STEPS[step] then
 		return "failed"
 	end
+	if code == 0 then
+		return "won"
+	end
+	if step == "raft-plan" then
+		local by = if ctx.raftedBy then ctx.raftedBy(target) else nil
+		local mine = if st.claim then st.claim.stamp else ""
+		return if by ~= nil and by.stamp ~= mine then "lost" else "failed"
+	end
 	local after = ctx.origin(target)
-	local mine = if ctx.memoryIn and st.worktree then ctx.memoryIn(st.worktree :: string, target) else ""
+	local mine = if st.claim and st.claim.id == target
+		then st.claim.stamp
+		elseif ctx.memoryIn and st.worktree then ctx.memoryIn(st.worktree :: string, target)
+		else ""
+	local seenStamp = if after then (after.front.status or "") else ""
+	local token = if ctx.claimAttempt and after and attempt then ctx.claimAttempt(target, seenStamp) else nil
 	return xhost.claimOutcome(
 		code,
 		{ state = beforeState, status = beforeStatus, stamp = "" },
-		if after
-			then { state = after.state, status = after.status, stamp = after.front.status or "" }
-			else nil,
-		mine
+		if after then { state = after.state, status = after.status, stamp = seenStamp } else nil,
+		mine,
+		token ~= nil and attempt ~= nil and token == attempt
 	)
 end
 
--- c0254: the lost attempt leaves no failed step behind: the item may come back to this worker when the other releases it, and
--- a run state that ended `failed` would stop that chain.
-function dispatcher.dropLostAttempt(st: State)
+-- c0254: a claim that landed is recorded: in the run state (the stamp origin shows), and in c0274's claim memory
+-- (`.cache/tracker-stamp-<id>` of the worktree the work happens in), so the push rule and the beat know whose claim it is.
+function dispatcher.recordClaim(ctx: Ctx, st: State, target: string, dir: string)
+	local after = ctx.origin(target)
+	local stamp = if after then (after.front.status or "") else ""
+	if stamp == "" or not xhost.isClaim(stamp) then
+		return
+	end
+	st.claim = { id = target, stamp = stamp }
+	pcall(fs.writeDir, `{dir}/.cache`)
+	pcall(fs.writeFile, `{dir}/.cache/tracker-stamp-{target}`, stamp)
+end
+
+-- c0254: the lost attempt leaves nothing behind on the losing host: no failed step in the run state (the item may come back to
+-- this worker when the other releases it), and no worktree or branch the claim step made for itself. A worktree is removed
+-- only when it is clean and its branch holds no commit beyond origin/main (the dispatcher made both for the claim alone).
+function dispatcher.dropLostAttempt(st: State, ctx: Ctx?, dir: string?, branch: string?)
 	table.remove(st.history)
 	st.step, st.outcome, st.detail = nil, nil, "lost the claim: another worker holds it"
+	if ctx and dir and branch and fs.isDir(dir) then
+		local clean = process.exec("git", { "-C", dir, "status", "--porcelain" })
+		local ahead = process.exec("git", { "-C", dir, "rev-list", "--count", "origin/main..HEAD" })
+		if clean.ok and trim(clean.stdout) == "" and ahead.ok and trim(ahead.stdout) == "0" then
+			local mainRoot = ctx.mainRoot()
+			process.exec("git", { "-C", mainRoot, "worktree", "remove", dir })
+			process.exec("git", { "-C", mainRoot, "branch", "-d", branch })
+		end
+	end
 end
 
 function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?): dispatch.Facts
@@ -2788,6 +2876,29 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 	for _, a in st.history do
 		if a.step == "z-design" or (a.step == "claim" and a.outcome == "ok") then
 			own = true
+		end
+	end
+	-- c0254: in worker mode a claim is the worker's by its stamp, never by what the run state's history says
+	local seen: xhost.Seen? = if o
+		then { state = o.state, status = o.status, stamp = o.front.status or "" }
+		else nil
+	local owned = worker.on
+		and st.claim ~= nil
+		and st.claim.id == id
+		and xhost.stillMine(seen, st.claim.stamp)
+	local takenWhy = ""
+	if worker.on and o and id ~= "" then
+		if st.claim ~= nil and st.claim.id == id then
+			if not owned then
+				takenWhy =
+					`{id} is claimed by another worker (origin/main shows {seen and seen.stamp or "nothing"}, not this run's {st.claim.stamp})`
+			end
+		elseif #st.history == 0 then
+			local by = if worker.pick == "rafting" and ctx.raftedBy then ctx.raftedBy(id) else nil
+			local mem = if ctx.memoryIn then ctx.memoryIn(ctx.mainRoot(), id) else ""
+			if xhost.pickHeld(worker.pick or "", seen, mem, by) == "taken" then
+				takenWhy = `{id} is no longer the {worker.pick} it was picked as: another worker holds it`
+			end
 		end
 	end
 	local localRaft = ""
@@ -2874,6 +2985,9 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 		raft = front.raft or "",
 		ownClaim = own,
 		worker = worker.on,
+		pick = worker.pick,
+		owned = owned,
+		taken = takenWhy,
 		localRaft = localRaft,
 		pr = pr,
 		-- c0250: a question on an item is its block (escalation.md); questions.md is a capture's alone
@@ -3292,18 +3406,38 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 				o3 = { ["--rerun"] = f.land.lines }
 			end
 			if kind == "script" then
-				local outcome, code =
+				local _, code =
 					dispatcher.scriptStep(ctx, st, step, if step == "raft-plan" then id else target)
-				-- c0254: a worker whose claim attempt failed asks origin/main whether another worker got there first
-				if
-					worker.on
-					and outcome ~= "ok"
-					and dispatcher.claimVerdict(ctx, st, step, target, f.where, f.status, code) == "lost"
-				then
+				-- c0254: a worker's claim step is judged by origin/main, never by its exit code alone: the claim landed (won, or
+				-- ours when the step failed after its push), or another worker holds the item (lost: the run ends `taken`)
+				local verdict = if worker.on
+					then dispatcher.claimVerdict(ctx, st, step, target, f.where, f.status, code, st.attempt)
+					else "failed"
+				if verdict == "won" or verdict == "ours" then
+					if step == "claim" then
+						dispatcher.recordClaim(ctx, st, target, st.worktree :: string)
+					elseif step == "z-ready" then
+						dispatcher.recordClaim(ctx, st, target, worktree(ctx, target))
+					end
+					if verdict == "ours" then
+						-- the claim is this worker's: the step failed after its push, so the attempt is adopted and the chain goes on
+						local last = st.history[#st.history]
+						if last then
+							last.outcome = "ok"
+						end
+						st.outcome, st.detail = "ok", "adopted: the claim landed and the step failed after it"
+						print(
+							`dispatch: {step} {target} failed after its claim landed: the claim is this worker's, going on`
+						)
+						save(st)
+					end
+				elseif verdict == "lost" then
 					print(
 						`dispatch: {target} was claimed by another worker first; the next pick is the caller's`
 					)
-					dispatcher.dropLostAttempt(st)
+					local prepDir = if step == "claim" then st.worktree else nil
+					local prepBranch = if step == "claim" then `prep-{store.get(target).slug}` else nil
+					dispatcher.dropLostAttempt(st, ctx, prepDir, prepBranch)
 					save(st)
 					return dispatch.EXIT.taken
 				end
@@ -3317,6 +3451,17 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 				end
 				local oldDir = st.dir
 				dispatcher.modelStep(ctx, st, step, target, o2)
+				-- c0254 (F10): a push the session's ./zn commit was refused under a live claim is never silent: the run stops
+				-- naming it (the commit stands; a person decides)
+				local refusedFile = `{st.worktree or ""}/.cache/push-refused`
+				if worker.on and st.worktree and fs.isFile(refusedFile) then
+					local said = trim(fs.readFile(refusedFile))
+					pcall(fs.removeFile, refusedFile)
+					print(`dispatch: a push was refused under a live claim: {said}`)
+					st.outcome, st.detail = "push-refused", said
+					save(st)
+					return dispatch.EXIT.pushRefused
+				end
 				-- c0253 (Q9, c0250): every CLI of the raft's step is out of quota: wait with no model, beating, and run the step
 				-- again, until the outage (one unbroken stretch) passes `quota_cap_hours`; then block the raft with `quota`
 				local blockedOnQuota = false
@@ -3438,6 +3583,7 @@ function dispatcher.main(ctx: Ctx, pos: { string }, opts: { [string]: { string }
 	worker.on = opts["--worker"] ~= nil
 	worker.cli = if opts["--cli"] then opts["--cli"][1] else nil
 	worker.noRun = opts["--no-run"] ~= nil
+	worker.pick = if opts["--pick"] then opts["--pick"][1] else nil
 	local ok, code = pcall(mainInner, ctx, pos, opts)
 	pcall(dropRefs, ctx.mainRoot())
 	if not ok then

@@ -27,6 +27,7 @@ export type Line = {
 	test: number?,
 	tokens: number?,
 	model: string?,
+	cli: string?, -- c0254: the CLI of the attempt that spent the line (a dispatched step's own, never the folding process's)
 	unmeasured: string?,
 	id: string,
 	branch: string,
@@ -87,7 +88,7 @@ local function flagged(flags: string?, name: string): boolean
 end
 
 function buffer.render(line: Line): string
-	return table.concat({
+	local cells = {
 		tostring(math.floor(line.ms)),
 		cell(line.kind),
 		cell(line.phase),
@@ -102,7 +103,12 @@ function buffer.render(line: Line): string
 		cell(line.id),
 		cell(line.branch),
 		cell(line.head),
-	}, "\t")
+	}
+	-- c0254: a fifteenth cell only for a line that names its CLI, so every other line renders as it did
+	if line.cli then
+		table.insert(cells, cell(line.cli))
+	end
+	return table.concat(cells, "\t")
 end
 
 local function optNum(s: string): number?
@@ -142,6 +148,7 @@ function buffer.parse(text: string): { Line }
 					id = parts[12],
 					branch = parts[13],
 					head = parts[14],
+					cli = if parts[15] ~= nil and parts[15] ~= "" then parts[15] else nil,
 				})
 			end
 		end
@@ -175,6 +182,7 @@ local function rowFrom(line: Line, phase: string, subject: string): ledger.Row
 		phase = phase,
 		tokens = line.tokens,
 		model = line.model,
+		cli = line.cli,
 		wall = line.wall,
 		cpu = line.cpu,
 		ai = line.ai,

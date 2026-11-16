@@ -62,7 +62,8 @@ local function fake(cfg: Cfg): Fake
 			if not ok then
 				error(`the fake ./zn dispatch does not know: {joined}`)
 			end
-			table.insert(f.calls, joined)
+			-- c0254: the supervisor also names what `next` called the pick (`--pick <kind>`); these cases pin the rest of the line
+			table.insert(f.calls, (string.gsub(joined, " %-%-pick %S+", "")))
 			local id = string.match(joined, "^dispatch retry (%S+)")
 				or string.match(joined, "^dispatch (%S+)") :: string
 			runs[id] = (runs[id] or 0) + 1
