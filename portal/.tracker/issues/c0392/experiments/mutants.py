@@ -6,7 +6,7 @@
 # Each mutant replaces one text in one file (refused unless it occurs exactly once), runs lobby-start.spec, then the
 # other c0210 specs in one run, from portal/, and restores the file. A run kills only when it reports a failed case
 # with an assertion ("expected ... got") or a refusal of the code under test ("beta: ", "experience.json: ") and no
-# load error. Every file is restored after its run, and the tree must be clean before and after.
+# load error. L9 and L10 (option (b) of design review 001 F1) pin what the narrowed file keeps. Every file is restored after its run, and the tree must be clean before and after.
 import glob, re, subprocess, sys
 
 MAN = "portal/experience.json"
@@ -24,6 +24,8 @@ MUTANTS = [
     ("L6", MAN, '"output": "lobby_version"', '"output": "start_version"', "the start place's output renamed"),
     ("L7", DEPLOY, "\ttable.insert(lines, `{target.output}={result}`)", "\ttable.insert(lines, 1, `{target.output}={result}`)", "the outputs written last place first"),
     ("L8", DEPLOY, "for i, target in plan.targets do\n\tlocal placeCfg", "for i = #plan.targets, 1, -1 do\n\tlocal target = plan.targets[i]\n\tlocal placeCfg", "the start place published first"),
+    ("L9", "portal/scripts/lib/beta.luau", "\t\tout[Places.attribute(name :: Places.Name)] = ids[name] or 0", "\t\tout[Places.attribute(name :: Places.Name)] = if name == \"Portal\" then 0 else ids[name] or 0", "no place is told the start place's id"),
+    ("L10", DEPLOY, "\tplaceCfg.placeId = target.placeId", "\tplaceCfg.placeId = plan.targets[1].placeId", "every place published to the first place's id"),
 ]
 
 

@@ -51,6 +51,13 @@ MUTANTS = [
     ("N10", "another tests/ file names it", add(R / "portal/tests/unit/Nothing/nothing.luau", b"-- runs lobby-start.spec\n"), "names lobby-start"),
     ("N11", "a check.sh under a tracker runs it", edit(R / "portal/.tracker/issues/f0209/check.sh", b"\nfinish\n", b'\ncheck "X" lune run tests/run -- tests/acceptance/c0210/lobby-start.spec.luau\nfinish\n'), "names lobby-start.spec.luau"),
     ("N12", "c0210's sequestered acceptance folder left in done/", add(R / "portal/.tracker/issues/done/c0210/acceptance/build.spec.luau", b"x"), "acceptance exists"),
+    ("N15", "a skill outside lessons/ names it", edit(R / "portal/skills/portal-test/SKILL.md", b"\n## Lessons\n", b"\nRun lobby-start.spec.\n\n## Lessons\n"), "names lobby-start"),
+]
+
+# AC1 must pass these: records may name the removed file (c0392 design review 001 F3)
+PASSES = [
+    ("N13", "a lesson file names lobby-start", add(R / "z-nile/skills/z-design/lessons/zz-c0392-probe.md", b"c0392 design review 001: lobby-start.spec removed\n")),
+    ("N14", "a tracker document names lobby-start", add(R / "portal/.tracker/issues/c0392/zz-probe.md", b"lobby-start.spec.luau removed\n")),
 ]
 
 
@@ -61,7 +68,7 @@ def narrow():
 
 def restore():
     subprocess.run(["git", "checkout", "--", "portal"], check=True)
-    for extra in [C / "lobby-start.spec.luau", C / "lobby.spec.luau", R / "portal/tests/unit/Nothing", R / "portal/.tracker/issues/done/c0210/acceptance"]:
+    for extra in [R / "z-nile/skills/z-design/lessons/zz-c0392-probe.md", R / "portal/.tracker/issues/c0392/zz-probe.md", C / "lobby-start.spec.luau", C / "lobby.spec.luau", R / "portal/tests/unit/Nothing", R / "portal/.tracker/issues/done/c0210/acceptance"]:
         if extra.is_dir():
             shutil.rmtree(extra)
         elif extra.exists():
@@ -81,6 +88,14 @@ for name, what, apply, words in MUTANTS:
     finally:
         restore()
     verdict = "killed" if code == 1 and words in out else "SURVIVED"
+    print(f"{name} ({what}): {verdict}: {out.strip().splitlines()[0] if out.strip() else '(no output)'}")
+for name, what, apply in PASSES:
+    try:
+        apply()
+        code, out = narrow()
+    finally:
+        restore()
+    verdict = "passes, as it must" if code == 0 else "RED"
     print(f"{name} ({what}): {verdict}: {out.strip().splitlines()[0] if out.strip() else '(no output)'}")
 if subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout.strip():
     sys.exit("the tree was left changed")

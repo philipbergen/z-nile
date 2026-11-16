@@ -7,8 +7,9 @@
 #   them), so lobby-start.spec is gone and nothing is added;
 # - c0210's finished check.sh is its prepared blob 0fefecb3 with exactly the two lines of the AC11 check removed, which
 #   is blob 259b5159 (c0392's pre-ready tracker PR, experiments/c0210-check.patch);
-# - outside every project's .tracker/ folder (and this file's own folder) no tracked or untracked file names
-#   lobby-start, and no check.sh anywhere names lobby-start.spec.luau.
+# - outside every record folder (each project's .tracker/, and every skill's lessons/, which harvests write: c0392
+#   design review 001 F3) and this file's own folder, no tracked or untracked file names lobby-start, and no
+#   check.sh anywhere names lobby-start.spec.luau.
 # It holds from c0392's finish on, until the next item that changes c0210's files (f0187's chore removes way-back.spec
 # and AC10). It is no spec: only c0392's check.sh runs it, so it charges no later editor of these files.
 # Usage: python3 -I narrow.py <checkout>.
@@ -111,9 +112,17 @@ for name in KEEP:
     if name not in names:
         problems.append(f"portal/tests/acceptance/c0210/{name} is missing")
 
-# nothing outside the trackers names the removed file, and no check.sh runs it
+# nothing outside the records (trackers, lessons) names the removed file, and no check.sh runs it
 mine = os.path.relpath(os.path.dirname(os.path.realpath(__file__)), os.path.realpath(R))
-for path in grep("--untracked", "lobby-start", "--", ".", ":(exclude,glob)**/.tracker/**", f":(exclude){mine}"):
+for path in grep(
+    "--untracked",
+    "lobby-start",
+    "--",
+    ".",
+    ":(exclude,glob)**/.tracker/**",
+    ":(exclude,glob)**/lessons/**",
+    f":(exclude){mine}",
+):
     problems.append(f"{path} names lobby-start")
 for path in grep("--untracked", GONE, "--", ":(glob)**/check.sh", f":(exclude){mine}"):
     problems.append(f"{path} names {GONE}")
