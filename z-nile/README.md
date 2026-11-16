@@ -75,7 +75,7 @@ z-ticket writes an idea as checkable outcomes and challenges it once before anyt
 ### The worker
 Today a person can run `z-work` in the CLI they opened: that session takes the next prepared raft, or the one named (`./zn work <R>`), says what it took, and carries it layer by layer to `./zn done`. With a raft named it then stops; with none named it goes on to the next raft ready would accept, in the same context, and stops when none is claimable or after two rafts in a row are released as blocked. *exists*
 
-A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent` or `deepseek`. *captured* (c0253); the CLIs beyond `claude`, `grok` and `agent`, `deepseek` through `opencode`: *captured* (c0175).
+A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent` or `deepseek`. *captured* (c0253); `kimi`, `agy` and `opencode` (DeepSeek and the other models it reaches) run a dispatched step: *exists* (c0175).
 - It claims the first raft in the order and stays with it all the way to merge, delivering it as a PR stack, one ticket at a time.
 - It keeps one context for the whole raft, so what it learned on one ticket carries to the next.
 - A worker clears its context and picks up the next raft whenever a raft ends: when the raft is merged, or when it is blocked and the worker lets it go. No context carries from one raft to the next.
@@ -161,7 +161,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
 | `.models.toml`, dispatcher, chain, quota fallback, bot credential | c0117 | exists |
 | board, a tab per project | c0118 | exists |
 | remote runtimes (`claude-cloud`, `grok-bot`, `cursor-app`) | c0142 | captured |
-| `agy`, `kimi` and `deepseek` as CLIs | c0175 | captured |
+| `agy`, `kimi` and `opencode` (deepseek) as CLIs | c0175 | exists |
 | a raft delivered as a stacked PR set, one layer per issue, each finished before the next | c0248 | designed |
 | `rank`, `./zn rank`, `./zn next`, lost first | c0249 | captured |
 | `blocked`, `escalation.md`, `./zn resolve` | c0250 | designed |
@@ -197,7 +197,7 @@ A raft is delivered as a stack: `./zn start` opens one layer per ticket (a branc
 - **The tracker.** `./zn` at the repository root runs the engine in `z-nile/engine/`. Each project keeps its issues and rafts in its own root, `<project>/.tracker/` (z-nile's in `z-nile/.tracker/`), listed in `z-nile/projects.toml`. One counter, `z-nile/next`, numbers every project. The rules are in the zz-rules skill.
 - **The skills.** z-nile's skills live in `z-nile/skills/`, and a project's own in `<project>/skills/`. `.claude/skills/<name>` is a committed relative link to each, written by `./zn skills` and checked by `./zn skills --check` in the gate. The `z-` skills are the pipeline, in the order above; the `zz-` skills are called only from inside a step. Both prefixes are z-nile's: a project's skills are named `<project>-…`.
 - **The dispatcher.** `./zn dispatch <id>` runs the chain on an item from its tracker state (ticket, design, raft, ready, run), headless and unattended, up to the run's pull request: script steps (`ready`, `raft-plan`, `spend`, …) it runs itself, model steps on the CLIs `.models.toml` orders, moving down the order only when a CLI fails on quota. It stops at a merge gate, at a step's `questions.md` and at a failure, and records each step's tokens and model on its spend row. A running step appends one short line per action (the tool and its target, or the first words of a message) to `.cache/dispatch/<id>/trail.log`, and `./zn dispatch status <id>` prints the last of those lines and the running token count before the step's JSON. Agents run with `z-nile/bin/git` and `gh` first on their PATH. Agents run as your own OS user, so its guards (the wrapper, the publish broker, the tripwire, the merge gates) detect honest mistakes and casual misbehaviour; none of them is a security boundary against a determined agent. A run accepts `main` as it is when it starts, and during the run a rewritten `main` or a commit that is not tracker state and not a pull request's merge stops it. The rules are in the zz-rules skill, Dispatch.
-- **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
+- **`.models.toml`.** It says, per model step and CLI (`claude`, `grok`, `agent`, `kimi`, `agy`, `opencode`), the model, its rank, runtime and `max_tokens`, and the CLI priority order, stacking from the repository root down to the work, as `.gitignore` does.
 - **The board.** `./zn board` writes the whole tracker as one page (`.cache/board.html`): a tab per project, its issues as cards in the pipeline's columns with each raft a band behind its members, the review charts, and the next command for each row (c0118). `./zn board --serve` (c0121, planned) serves the same page live.
 
 ## Skills

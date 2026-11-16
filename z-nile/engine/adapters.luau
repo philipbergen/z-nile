@@ -16,6 +16,14 @@
 -- reads that session's wire and feeds its `usage.record` lines here. Claude, grok and agent still report a
 -- count on a successful stream (the probes above). An exit 0 with no count from any of them is ok and
 -- unmeasured (`finish` says "no token count"): missing measurement is not a failed stage.
+-- agy 1.5.7 (probed 2026-11-15, c0175 E1): `agy -p <prompt> --output-format stream-json --model <bare id> --effort <e>
+-- --dangerously-skip-permissions` prints `step_update` events (a tool step is ACTIVE, then DONE; an agent_response step
+-- carries `usage` when DONE) and a final `result` with `usage` (input_tokens + output_tokens: thinking is inside output,
+-- cache_read_tokens stays out). An error is `result.status == "ERROR"` with `error`, exit 1.
+-- opencode 1.18.31 (E4): `opencode run <prompt> -m <provider>/<model> --format json --auto --dir <cwd> --print-logs
+-- --log-level INFO` prints `step_finish` events with `tokens` (input + cache.write + output + reasoning; cache.read out),
+-- a `tool_use` event only once the tool has finished, so its stderr log line `evaluated permission=` is what shows a tool
+-- running, and `{"type":"error"}` on failure. The ledger id is `opencode-<provider>-<model>`.
 local serde = require("@lune/serde")
 
 local adapters = {}
@@ -52,6 +60,7 @@ export type Adapter = {
 	callCapped: boolean, -- no running token count: the step stops on max_calls, and the row takes the final total
 	argv: (Request) -> { string },
 	feed: (Acc, string) -> (),
+	feedErr: ((Acc, string) -> ())?, -- a CLI whose stdout hides a running tool reads its stderr log too (opencode)
 }
 
 -- What a CLI prints when it is out of quota or rate limited (any of these, case-insensitive).
@@ -414,6 +423,151 @@ local function agentFeed(acc: Acc, line: string)
 	end
 end
 
+-- agy's usage object: input + output (output holds the thinking tokens), cache reads left out.
+local function agyUsage(u: any): number
+	if type(u) ~= "table" then
+		return 0
+	end
+	return num(u.input_tokens) + num(u.output_tokens)
+end
+
+local function agyFeed(acc: Acc, line: string)
+	acc.note = ""
+	local j = decode(line)
+	if not j then
+		acc.cliText = line
+		return
+	end
+	if j.event == "init" and type(j.init) == "table" then
+		if type(j.conversation_id) == "string" then
+			acc.session = j.conversation_id
+		end
+	elseif j.event == "step_update" and type(j.step_update) == "table" then
+		local u = j.step_update
+		if type(u.conversation_id) == "string" and u.conversation_id ~= "" then
+			acc.session = u.conversation_id
+		end
+		local key = `step{tostring(u.step_index)}`
+		if u.step_type == "tool" then
+			if u.state == "ACTIVE" then
+				acc.open[key] = true
+				local name = if type(u.tool_name) == "string" and u.tool_name ~= ""
+					then u.tool_name
+					else "tool"
+				local params = if type(u.tool_info) == "table" then u.tool_info.parameters else nil
+				local target = targetOf(params)
+				if target == "" and type(params) == "table" then
+					for _, k in { "CommandLine", "AbsolutePath", "TargetFile", "Query", "Url" } do
+						if type(params[k]) == "string" and params[k] ~= "" then
+							target = words(params[k], 72)
+							break
+						end
+					end
+				end
+				acc.note = if target ~= "" then `{name} {target}` else name
+			else
+				acc.open[key] = nil
+			end
+		elseif u.state == "DONE" and type(u.usage) == "table" then
+			-- one count per step, however often its event repeats
+			acc.byMessage[key] = agyUsage(u.usage)
+			sumLive(acc)
+		end
+	elseif j.event == "result" and type(j.result) == "table" then
+		local r = j.result
+		if type(r.conversation_id) == "string" and r.conversation_id ~= "" then
+			acc.session = r.conversation_id
+		end
+		if type(r.usage) == "table" then
+			local n = agyUsage(r.usage)
+			if n > 0 then
+				acc.final = n
+			end
+		end
+		if r.status ~= "SUCCESS" then
+			local text = if type(r.error) == "string" and r.error ~= ""
+				then r.error
+				else tostring(r.finished_reason or r.status or "error")
+			acc.errorText = text
+			acc.cliText = text
+			if mentions(text, adapters.QUOTA) then
+				acc.quota = text
+			end
+		end
+	elseif type(j.error) == "string" then
+		acc.errorText = j.error
+		acc.cliText = j.error
+		if mentions(j.error, adapters.QUOTA) then
+			acc.quota = j.error
+		end
+	end
+end
+
+-- opencode's `tokens` object: input + cache writes + output + reasoning; cache reads stay out.
+local function opencodeTokens(t: any): number
+	if type(t) ~= "table" then
+		return 0
+	end
+	local cache = if type(t["cache"]) == "table" then t["cache"] else {}
+	return num(t.input) + num(cache.write) + num(t.output) + num(t.reasoning)
+end
+
+-- The ledger id `opencode-<provider>-<model>` is opencode's `<provider>/<model>`. The provider is the one word after the
+-- prefix (a `_` in it is the hyphen of a name such as github-copilot); the model is the rest, as opencode names it.
+function adapters.opencodeModel(id: string): string
+	local provider, model = string.match(id, "^opencode%-([%w_%.]+)%-(.+)$")
+	if provider == nil or model == nil then
+		return id
+	end
+	return `{string.gsub(provider, "_", "-")}/{model}`
+end
+
+local function opencodeFeed(acc: Acc, line: string)
+	acc.note = ""
+	local j = decode(line)
+	if not j then
+		acc.cliText = line
+		return
+	end
+	if type(j.sessionID) == "string" and j.sessionID ~= "" then
+		acc.session = j.sessionID
+	end
+	local part = if type(j.part) == "table" then j.part else {}
+	if j.type == "step_finish" then
+		acc.turns += 1
+		local id = if type(part.id) == "string" then part.id else `step{acc.turns}`
+		acc.byMessage[id] = opencodeTokens(part.tokens)
+		sumLive(acc)
+		acc.open["permission"] = nil
+	elseif j.type == "tool_use" then
+		acc.open["permission"] = nil
+		local state = if type(part.state) == "table" then part.state else {}
+		local name = if type(part.tool) == "string" and part.tool ~= "" then part.tool else "tool"
+		local target = targetOf(state.input)
+		acc.note = if target ~= "" then `{name} {target}` else name
+	elseif j.type == "text" and type(part.text) == "string" then
+		acc.note = words(part.text, 72)
+	elseif j.type == "error" then
+		local err = if type(j.error) == "table" then j.error else {}
+		local data = if type(err.data) == "table" then err.data else {}
+		local text = tostring(data.message or err.message or err.name or line)
+		acc.errorText = text
+		acc.cliText = text
+		-- the provider's own words can be in the whole error object (a 429 body), not only its message
+		if mentions(text, adapters.QUOTA) or mentions(line, adapters.QUOTA) then
+			acc.quota = text
+		end
+	end
+end
+
+-- opencode's stdout prints a tool only once it has finished, so a quiet tool shows only in its `--print-logs` stderr: a
+-- permission check ("evaluated permission=bash …") starts one, and the step's end (`step_finish`) closes it.
+local function opencodeFeedErr(acc: Acc, line: string)
+	if string.find(line, "evaluated permission=", 1, true) then
+		acc.open["permission"] = true
+	end
+end
+
 -- claude's own sandbox off, whatever the user's settings say, so the gate's jail can engage inside the step
 -- (programme review E6; macOS can't nest sandboxes)
 adapters.CLAUDE_SETTINGS = '{"sandbox":{"enabled":false}}'
@@ -500,6 +654,48 @@ local ADAPTERS: { [string]: Adapter } = {
 			}
 		end,
 		feed = kimiFeed,
+	},
+	["agy-cli"] = {
+		cli = "agy",
+		runtime = "agy-cli",
+		callCapped = false,
+		argv = function(r: Request): { string }
+			return withEffort({
+				"agy",
+				"-p",
+				r.prompt,
+				"--output-format",
+				"stream-json",
+				"--model",
+				r.model,
+				"--dangerously-skip-permissions",
+			}, "--effort", r.effort)
+		end,
+		feed = agyFeed,
+	},
+	["opencode-cli"] = {
+		cli = "opencode",
+		runtime = "opencode-cli",
+		callCapped = false,
+		argv = function(r: Request): { string }
+			return withEffort({
+				"opencode",
+				"run",
+				r.prompt,
+				"-m",
+				adapters.opencodeModel(r.model),
+				"--format",
+				"json",
+				"--auto",
+				"--dir",
+				r.cwd,
+				"--print-logs",
+				"--log-level",
+				"INFO",
+			}, "--variant", r.effort)
+		end,
+		feed = opencodeFeed,
+		feedErr = opencodeFeedErr,
 	},
 	["cursor-cli"] = {
 		cli = "agent",

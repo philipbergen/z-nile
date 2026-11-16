@@ -16,7 +16,8 @@
 -- `order` and no `[<skill>.<cli>]` table.
 --
 --   [roles.idea]
---   model = "..."          -- a model id of `cli` (claude-…, grok-…, kimi-code-…, or the agent's id)
+--   model = "..."          -- a model id of `cli` (claude-…, grok-…, kimi-code-…, gemini-…/claude-…/gpt-… for agy,
+--                          -- opencode-<provider>-<model> for opencode, or the agent's id)
 --   cli = "claude"
 --   runtime = "claude-cli"
 --   rank = 2
@@ -36,6 +37,12 @@
 --   [fallback.kimi]
 --   model = "..."
 --   runtime = "kimi-cli"
+--   [fallback.agy]         -- agy (Antigravity): a bare model id; its effort is clamped to what the model offers
+--   model = "claude-opus-5-5"
+--   runtime = "agy-cli"
+--   [fallback.opencode]    -- opencode: ledger id opencode-<provider>-<model>, tried on authoring and stream reviews
+--   model = "opencode-deepseek-deepseek-v4-pro"
+--   runtime = "opencode-cli"
 --   [fallback.agent]
 --   model = "..."
 --   runtime = "cursor-cli"
@@ -53,21 +60,49 @@ local models = {}
 
 models.FILE = ".models.toml"
 -- The supported CLIs (the user's decision: `agent` is Cursor's), each with its one local runtime (the remote ones are c0142's).
-models.CLIS = { "claude", "grok", "agent", "kimi" }
+models.CLIS = { "claude", "grok", "agent", "kimi", "agy", "opencode" }
 models.RUNTIMES = {
 	-- the local runtimes only: the remote ones (claude-cloud, grok-bot, cursor-app) are c0142's (the user's G8)
 	claude = { "claude-cli" },
 	grok = { "grok-cli" },
 	agent = { "cursor-cli" },
 	kimi = { "kimi-cli" },
+	agy = { "agy-cli" },
+	opencode = { "opencode-cli" },
 } :: { [string]: { string } }
 -- A model id the CLI accepts. A role that names anything else fails when the file is loaded.
-local MODEL_OF_CLI: { [string]: string } = {
-	claude = "^claude%-[%w%._%-]+$",
-	grok = "^grok%-[%w%._%-]+$",
-	kimi = "^kimi%-code%-[%w%._%-]+$",
-	agent = "^[%w%._%-]+$",
+-- (a list: an id fits when any pattern of its CLI matches). agy offers Gemini, Claude and GPT-OSS models, by their bare names
+-- (`claude-opus-5-5`, the effort goes beside it as `--effort`). opencode's ledger id is `opencode-<provider>-<model>`: the
+-- provider is one word (a hyphen in its name is written `_`: `github_copilot`), the model is what opencode calls it.
+local MODEL_OF_CLI: { [string]: { string } } = {
+	claude = { "^claude%-[%w%._%-]+$" },
+	grok = { "^grok%-[%w%._%-]+$" },
+	kimi = { "^kimi%-code%-[%w%._%-]+$" },
+	agent = { "^[%w%._%-]+$" },
+	agy = { "^gemini%-[%w%._%-]+$", "^claude%-[%w%._%-]+$", "^gpt%-[%w%._%-]+$" },
+	opencode = { "^opencode%-[%w_%.]+%-[%w%._%-]+$" },
 }
+local function modelFits(cli: string, model: string): boolean
+	for _, pattern in MODEL_OF_CLI[cli] do
+		if string.match(model, pattern) ~= nil then
+			return true
+		end
+	end
+	return false
+end
+
+-- The efforts agy offers per model line (`agy models`, 2026-11-15; a model it names is bare and takes `--effort`, and the
+-- CLI refuses an effort the model lacks). The longest prefix that matches the model gives the list.
+local AGY_EFFORTS: { { prefix: string, efforts: { string } } } = {
+	{ prefix = "claude-opus-", efforts = { "low", "medium", "high" } },
+	{ prefix = "claude-sonnet-", efforts = { "low", "medium", "high" } },
+	{ prefix = "gemini-4-hydrogen", efforts = { "low", "medium", "high", "xhigh" } },
+	{ prefix = "gemini-4-argon", efforts = { "low", "medium", "high" } },
+	{ prefix = "gemini-3.8-flash", efforts = { "low", "medium", "high" } },
+	{ prefix = "gemini-pro-orchestrator", efforts = {} },
+	{ prefix = "gpt-oss-", efforts = { "medium" } },
+}
+local EFFORT_ORDER = { "low", "medium", "high", "xhigh", "max" }
 -- The merge gates the dispatcher may pass itself; the run's PR is never one of them.
 models.GATES = { "prep", "raft" }
 models.STALL_SECONDS = 300
@@ -343,7 +378,7 @@ function models.parse(text: string, path: string): Layer
 				end
 				local boundCli = if key == "fallback" then name else out.cli
 				if out.model ~= nil and type(boundCli) == "string" and isCli(boundCli) then
-					if string.match(out.model, MODEL_OF_CLI[boundCli]) == nil then
+					if not modelFits(boundCli, out.model) then
 						error(`{path}: {key}.{name}.model is {out.model}, not a model of cli {boundCli}`, 0)
 					end
 				end
@@ -469,6 +504,38 @@ function models.roleFor(skill: string, mode: string?): string?
 	return named[skill]
 end
 
+-- The effort a CLI can run a model at. agy offers few efforts per model (Opus tops out at `high`), so a stage's higher
+-- effort becomes the highest one the model offers, a lower one the lowest, and a model with none takes none; the spend row
+-- then records the effort that ran (`models.id`), never one the CLI refused or never saw. Every other CLI keeps the stage's.
+function models.effortFor(cli: string, model: string, effort: string?): string?
+	if cli ~= "agy" or effort == nil then
+		return effort
+	end
+	local best: { string }? = nil
+	local bestLen = 0
+	for _, line in AGY_EFFORTS do
+		if string.sub(model, 1, #line.prefix) == line.prefix and #line.prefix > bestLen then
+			best, bestLen = line.efforts, #line.prefix
+		end
+	end
+	local offered = best
+	local want = table.find(EFFORT_ORDER, effort)
+	if offered == nil or want == nil then
+		return effort
+	end
+	if #offered == 0 then
+		return nil
+	end
+	local pick = offered[1]
+	for _, e in offered do
+		local at = table.find(EFFORT_ORDER, e)
+		if at ~= nil and at <= want then
+			pick = e
+		end
+	end
+	return pick
+end
+
 local function specFrom(cli: any, fields: { [string]: any }, path: string, label: string): Spec
 	if type(cli) ~= "string" or cli == "" then
 		error(`{path}: {label} has no cli`, 0)
@@ -481,7 +548,7 @@ local function specFrom(cli: any, fields: { [string]: any }, path: string, label
 	return {
 		cli = cli,
 		model = fields.model,
-		effort = fields.effort,
+		effort = models.effortFor(cli, fields.model, fields.effort),
 		rank = fields.rank,
 		runtime = fields.runtime,
 		maxTokens = fields.max_tokens,
@@ -519,7 +586,7 @@ local function fallbackTry(
 	return {
 		cli = cli,
 		model = modelFields.model,
-		effort = stage.effort,
+		effort = models.effortFor(cli, modelFields.model, stage.effort),
 		rank = stage.rank,
 		runtime = modelFields.runtime,
 		maxTokens = stage.max_tokens,

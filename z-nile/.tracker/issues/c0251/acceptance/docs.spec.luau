@@ -2,7 +2,7 @@
 -- c0251 AC13 and AC18: the skills, `.models.toml`'s comments and the README state the tier rule and no longer say a challenge is
 -- never run by the model that wrote the text; the README's c0251 markers read `*exists*`; AGENTS.md is untouched (c0332's);
 -- and the root `.models.toml` names Fable in the design-challenge, raft and code-review pools, Opus in final-review's, and
--- `stream-review` on `claude-haiku-5-5` with fallbacks `kimi` and `grok`.
+-- `stream-review` on `claude-haiku-5-5` (c0175: with Sonnet, Gemini flash and DeepSeek flash members and the opencode fallback).
 local fs = require("@lune/fs")
 local models = require("@znile/engine/models")
 local process = require("@lune/process")
@@ -202,7 +202,21 @@ return t.spec("c0251 docs and the root .models.toml", function(it)
 		t.expect(layer.roles["code-review"].author).toBe("implementation")
 		-- the model lines
 		local families = M.families(layers)
-		for _, name in { "opus", "fable", "sonnet", "haiku", "kimi", "grok", "deepseek" } do
+		for _, name in
+			{
+				"opus",
+				"fable",
+				"sonnet",
+				"haiku",
+				"kimi",
+				"grok",
+				"gemini",
+				"gpt",
+				"opencode-deepseek",
+				"opencode-xai",
+				"opencode-opencode",
+			}
+		do
 			t.expect(families[name] ~= nil).toBe(true)
 		end
 		t.expect(families.opus).toEqual({ "claude-opus-" })
@@ -218,6 +232,7 @@ return t.spec("c0251 docs and the root .models.toml", function(it)
 				"kimi:kimi-code-k3.1-pro",
 				"grok:grok-4.7",
 				"agent:claude-opus-5-5",
+				"agy:claude-opus-5-5",
 			})
 			t.expect(tryIds(layers, "zz-review", "code")).toEqual(tryIds(layers, "zz-review", "design"))
 			t.expect(tryIds(layers, "zz-review", "raft")).toEqual(tryIds(layers, "zz-review", "design"))
@@ -227,6 +242,7 @@ return t.spec("c0251 docs and the root .models.toml", function(it)
 				"kimi:kimi-code-k3.1-pro",
 				"grok:grok-4.7",
 				"agent:claude-opus-5-5",
+				"agy:claude-opus-5-5",
 			})
 			-- the authoring roles keep their order: no member, no rotation
 			t.expect(tryIds(layers, "z-run")).toEqual({
@@ -234,6 +250,8 @@ return t.spec("c0251 docs and the root .models.toml", function(it)
 				"kimi:kimi-code-k3.1-pro",
 				"grok:grok-4.7",
 				"agent:claude-opus-5-5",
+				"agy:claude-opus-5-5",
+				"opencode:opencode-deepseek-deepseek-v4-pro",
 			})
 			t.expect(tryIds(layers, "z-design")[2]).toBe("kimi:kimi-code-k3.1-pro")
 			-- z-raft authors on the `raft` role, which a raft review gives a Fable member: the authoring step does not
@@ -242,6 +260,7 @@ return t.spec("c0251 docs and the root .models.toml", function(it)
 				"kimi:kimi-code-k3.1-pro",
 				"grok:grok-4.7",
 				"agent:claude-opus-5-5",
+				"agy:claude-opus-5-5",
 			})
 		end
 	)
@@ -255,9 +274,10 @@ return t.spec("c0251 docs and the root .models.toml", function(it)
 			t.expect(stream.model).toBe("claude-haiku-5-5")
 			t.expect(stream.cli).toBe("claude")
 			t.expect(stream.runtime).toBe("claude-cli")
-			-- the cheap second model is Sonnet; kimi and grok are not cheap, so the role has no CLI fallback
-			t.expect(stream.pool).toEqual({ "sonnet" })
-			t.expect(stream.fallbacks).toEqual({})
+			-- c0175: the cheap models are Sonnet, Gemini flash (agy) and DeepSeek flash (opencode); kimi and grok are not cheap,
+			-- so the only CLI fallback is opencode's stronger DeepSeek
+			t.expect(stream.pool).toEqual({ "sonnet", "gemini-flash", "deepseek-flash" })
+			t.expect(stream.fallbacks).toEqual({ "opencode" })
 			t.expect(layer.members.sonnet.model).toBe("claude-sonnet-5-5")
 			t.expect(layer.members.sonnet.cli).toBe("claude")
 			t.expect(stream.rotate).toBe(true)
@@ -266,6 +286,9 @@ return t.spec("c0251 docs and the root .models.toml", function(it)
 			t.expect(tryIds(layers, "zz-review", "stream")).toEqual({
 				"claude:claude-haiku-5-5",
 				"claude:claude-sonnet-5-5",
+				"agy:gemini-3.8-flash",
+				"opencode:opencode-deepseek-deepseek-flash",
+				"opencode:opencode-deepseek-deepseek-v4-pro",
 			})
 			-- the code-review role is no longer the stream's
 			t.expect(r.specs.claude.model == M.resolve(layers, "zz-review", "code").specs.claude.model)

@@ -218,6 +218,8 @@ return t.spec("c0117 .models.toml", function(it)
 			grok = "grok-4.7",
 			kimi = "kimi-code-k3.1-pro",
 			agent = "claude-opus-5-5",
+			agy = "claude-opus-5-5",
+			opencode = "opencode-deepseek-deepseek-v4-pro",
 		}
 		for cli, runtimes in models.RUNTIMES do
 			for _, rt in runtimes do
@@ -234,6 +236,8 @@ return t.spec("c0117 .models.toml", function(it)
 			grok = { "grok-cli" },
 			agent = { "cursor-cli" },
 			kimi = { "kimi-cli" },
+			agy = { "agy-cli" },
+			opencode = { "opencode-cli" },
 		})
 		t.expect(has(
 			errorOf(function()
@@ -353,11 +357,12 @@ return t.spec("c0117 .models.toml", function(it)
 		for _, skill in { "z-ticket", "z-design", "z-raft", "z-run", "zz-review" } do
 			local r = models.resolve(layers, skill)
 			t.expect(r.fromRoles).toBe(true)
-			for _, cli in { "claude", "kimi", "grok", "agent" } do
+			for _, cli in { "claude", "kimi", "grok", "agent", "agy" } do
 				t.expect(r.specs[cli] ~= nil).toBe(true)
 			end
-			-- c0251: a review (zz-review: code-review) lists a Fable member beside the four CLIs; authoring steps do not
-			t.expect(#models.tries(r)).toBe(if skill == "zz-review" then 5 else 4)
+			-- c0175: agy ends every role's CLIs; opencode ends idea, design and implementation (it never passes a review
+			-- kind, and the raft role also reviews). c0251: a review (zz-review: code-review) lists a Fable member beside them
+			t.expect(#models.tries(r)).toBe(if skill == "z-raft" then 5 else 6)
 		end
 		local idea = models.resolve(layers, "z-ticket")
 		t.expect(idea.specs.claude.model).toBe("claude-fable-5-2")

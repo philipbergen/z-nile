@@ -11,8 +11,8 @@
 local adapters = require("./adapters")
 local costrow = require("./costrow")
 local fs = require("@lune/fs")
-local kimisession = require("./kimisession")
 local process = require("@lune/process")
+local sessionusage = require("./sessionusage")
 local task = require("@lune/task")
 
 local runner = {}
@@ -196,6 +196,7 @@ function runner.run(r: Request): Result
 		end
 		outDone = true
 	end)
+	local errPending = ""
 	task.spawn(function()
 		while true do
 			local chunk = child.stderr:read()
@@ -203,6 +204,23 @@ function runner.run(r: Request): Result
 				break
 			end
 			stderrTail = string.sub(stderrTail .. chunk, -4096)
+			-- a CLI whose stdout hides a running tool is read on its stderr too, line by line (feedErr)
+			local feedErr = r.adapter.feedErr
+			if feedErr then
+				errPending ..= chunk
+				while true do
+					local nl = string.find(errPending, "\n", 1, true)
+					if not nl then
+						break
+					end
+					local line = string.sub(errPending, 1, nl - 1)
+					errPending = string.sub(errPending, nl + 1)
+					if line ~= "" then
+						feedErr(acc, line)
+					end
+				end
+				errPending = string.sub(errPending, -4096)
+			end
 		end
 		errDone = true
 	end)
@@ -290,22 +308,13 @@ function runner.run(r: Request): Result
 	end
 	child.stdin:close()
 	local status = child:status()
-	-- A headless kimi stream names its session and prints no usage. The session's wire holds the records.
-	if r.adapter.runtime == "kimi-cli" and acc.final == nil and acc.session ~= nil and acc.session ~= "" then
-		local root = process.env.PICKMAN_KIMI_SESSIONS
-		if root == nil or root == "" then
-			local home = process.env.HOME
-			if home ~= nil and home ~= "" then
-				root = `{home}/.kimi-code/sessions`
-			end
-		end
-		local text = if root ~= nil and root ~= "" then kimisession.read(root, acc.session :: string) else nil
-		if text ~= nil then
-			for line in string.gmatch(text, "[^\n]+") do
-				if string.find(line, '"usage.record"', 1, true) then
-					r.adapter.feed(acc, line)
-				end
-			end
+	-- A stream that carried no count (a headless kimi's names its session and prints no usage) is read back from the CLI's
+	-- own session store (sessionusage.luau): the lines its adapter counts.
+	if acc.final == nil and acc.live == 0 and acc.session ~= nil and acc.session ~= "" then
+		for _, line in
+			sessionusage.lines(r.adapter.runtime, acc.session :: string, r.argv[1] or "", r.env, r.cwd)
+		do
+			r.adapter.feed(acc, line)
 		end
 	end
 	local tokens = adapters.tokens(acc)

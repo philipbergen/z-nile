@@ -1,5 +1,5 @@
 --!strict
--- Fake model CLIs for the dispatcher's specs (c0117): `claude`, `grok` and `agent` scripts that print the stream
+-- Fake model CLIs for the dispatcher's specs (c0117, c0175): `claude`, `grok`, `agent`, `kimi`, `agy` and `opencode` scripts that print the stream
 -- lines each real CLI prints (from c0117's probes) and act as a mode file says: `<fakes>/<cli>.<step>`, else
 -- `<fakes>/<cli>`, else `ok`. Each logs how it was started to `<fakes>/log`. No real CLI and no network: a spec puts
 -- the fakes first on PATH, under its own .cache folder, and the dispatcher refuses any CLI outside .cache in a check.
@@ -20,6 +20,14 @@ echo '{"type":"result","subtype":"success","is_error":false,"modelUsage":{"m":{"
 	grok = [[echo '{"type":"usage","usage":{"input_tokens":200,"cache_creation_input_tokens":0,"cache_read_input_tokens":900,"output_tokens":7}}'
 echo '{"type":"end","usage":{"input_tokens":200,"cache_creation_input_tokens":0,"cache_read_input_tokens":900,"output_tokens":7}}']],
 	agent = [[echo '{"type":"result","subtype":"success","is_error":false,"usage":{"inputTokens":300,"outputTokens":9,"cacheReadTokens":0,"cacheWriteTokens":0}}']],
+	-- kimi's headless stream names its session and prints no usage (the wire holds it): an unmeasured ok
+	kimi = [[echo '{"type":"session.resume_hint","session_id":"session_fake"}']],
+	-- agy's DONE agent_response step carries usage; the result repeats the total (input + output, cache reads out)
+	agy = [[echo '{"event":"init","conversation_id":"fake-conversation","init":{"model":"fake"}}'
+echo '{"event":"step_update","step_update":{"conversation_id":"fake-conversation","step_index":1,"state":"DONE","step_type":"agent_response","usage":{"input_tokens":400,"output_tokens":11,"thinking_tokens":0,"cache_read_tokens":900,"total_tokens":411}}}'
+echo '{"event":"result","result":{"conversation_id":"fake-conversation","status":"SUCCESS","response":"ok","usage":{"input_tokens":400,"output_tokens":11,"thinking_tokens":0,"cache_read_tokens":900,"total_tokens":411}}}']],
+	-- opencode's step_finish carries the step's tokens (cache reads out)
+	opencode = [[echo '{"type":"step_finish","sessionID":"ses_fake","part":{"id":"prt_1","type":"step-finish","tokens":{"total":9000,"input":500,"output":13,"reasoning":0,"cache":{"write":0,"read":8487}}}}']],
 }
 
 -- The script of the fake `cli`.
@@ -34,6 +42,12 @@ function fakecli.script(cli: string): string
 		else [[echo "Error: rate limit exceeded (too many requests)" >&2; exit 1]]
 	local heavy = if cli == "claude"
 		then [[echo "{\"type\":\"assistant\",\"message\":{\"id\":\"m$i\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":1}}}"]]
+		elseif
+			cli == "agy"
+		then [[echo "{\"event\":\"step_update\",\"step_update\":{\"step_index\":$i,\"state\":\"DONE\",\"step_type\":\"agent_response\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":1}}}"]]
+		elseif
+			cli == "opencode"
+		then [[echo "{\"type\":\"step_finish\",\"part\":{\"id\":\"p$i\",\"tokens\":{\"input\":1000,\"output\":1}}}"]]
 		else [[echo "{\"type\":\"usage\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":1}}"]]
 	local commit = "git -c user.name=c0117-fake -c user.email=c0117-fake@example.invalid commit -q -m"
 	return table.concat({
@@ -146,13 +160,13 @@ export type Harness = {
 	token: string, -- the agent's token file
 }
 
--- A tracker fixture `.cache/<name>` with `seed`, the three fakes, a fake gh and an agent token file.
+-- A tracker fixture `.cache/<name>` with `seed`, the six fakes, a fake gh and an agent token file.
 function fakecli.new(name: string, seed: { [string]: string }): Harness
 	local f = trackerfix.new(name, seed)
 	local bin, fakes = `{f.base}/bin`, `{f.base}/fakes`
 	fs.writeDir(bin)
 	fs.writeDir(fakes)
-	for _, cli in { "claude", "grok", "agent" } do
+	for _, cli in { "claude", "grok", "agent", "kimi", "agy", "opencode" } do
 		fs.writeFile(`{bin}/{cli}`, fakecli.script(cli))
 		process.exec("chmod", { "+x", `{bin}/{cli}` })
 	end
