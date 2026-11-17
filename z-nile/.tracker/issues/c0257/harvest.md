@@ -1,0 +1,16 @@
+# Harvest: c0257
+- design-review-001 F1: zz-test/specs-find-siblings-by-own-path, zz-test/no-vacuous-pass
+- design-review-001 F2: z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F3: zz-test/format-tracker-specs-by-path, z-design/rerun-skipped-checks-after-edits
+- design-review-001 F4: zz-test/absence-scans-cover-every-form, zz-test/no-vacuous-pass
+- design-review-001 F5: z-design/spec-design-correspondence
+- design-review-001 F6: zz-test/no-vacuous-pass
+- design-review-001 F7: z-design/spec-design-correspondence
+- design-review-001 F8: zz-test/specs-read-sources-through-the-selector
+- design-review-001 F9: z-design/spec-design-correspondence
+- design-review-001 F10: zz-test/seed-every-enumerated-case
+- design-review-001 F11: z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F12: z-design/restated-rules-move-together, z-design/specify-every-named-artifact
+- design-review-001 F13: z-design/quote-other-preps-before-promising
+- design-review-001 F14: one-off: a forwarder slated for removal
+- design-review-001 F15: one-off: a bare node call in a step that z-run runs under the bounded-command hook
