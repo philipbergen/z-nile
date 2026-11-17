@@ -22,6 +22,12 @@ The card's play buttons: PLAY, ARENA on Snake, 2 PLAYERS on Invaders and Asteroi
 - `src/server/Invites.luau`: an invited friend reaches the inviter's portal server.
 - `src/client/PlayButtons.luau`: the buttons in each card's `Buttons` slot, their keys, and the invite prompt.
 
+### Board (f0206)
+Each card's hiscores, read within the DataStore budget (the arcade's E3).
+- `src/shared/Logic/Board` (a leaf; Card's text model reaches it as a parameter): what a board shows (the tabs, the header named by the title's progress figure, the rows with revives used, "—" for none, the "your best" line under every tab, pending until heard, every text at least Card.MIN_TEXT), the client's read of an answer, the layout in the card's Boards slot, when the client asks again, and the server's read policy (`Board.plan`: refresh, forward or answer).
+- `src/server/BoardRelay.luau`: serves each title's arcade `Boards` on a server-only relay and answers the clients' asks over `ReplicatedStorage.Remotes.Boards` with (title, board id, rows, rank, status, best).
+- `src/client/BoardsView.luau`: the tabs, rows and best line in every card's `Boards` slot (CarouselView's `card`), one tab for every card, asking for every card's board on it.
+
 ## Allowed dependencies
 
 One `Consumer -> Provider` per line.

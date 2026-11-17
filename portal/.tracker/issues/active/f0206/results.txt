@@ -1,0 +1,290 @@
+arcade/tests/meta/architecture.spec.luau
+	Logic never touches the Roblox engine
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	every Luau file is --!strict
+	every feature has unit specs
+	every require resolves
+	features are only used through their init.luau
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+arcade/tests/meta/fence.spec.luau
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+	every git this run starts refuses ref updates in this repository
+	git finds no repository in .cache, nor in a folder below it that has none
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	on macOS this run can write nothing in the checkout outside .cache
+	specs have no GitHub credentials and push only into fixtures
+	this run is guarded for this checkout
+	when jailed, a spec can't signal the run's top process
+arcade/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+arcade/tests/place/library.spec.luau
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders
+asteroids/tests/meta/architecture.spec.luau
+	every require resolves
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	every Luau file is --!strict
+	Logic never touches the Roblox engine
+	features are only used through their init.luau
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	every feature has unit specs
+asteroids/tests/meta/fence.spec.luau
+	this run is guarded for this checkout
+	git finds no repository in .cache, nor in a folder below it that has none
+	every git this run starts refuses ref updates in this repository
+	on macOS this run can write nothing in the checkout outside .cache
+	when jailed, a spec can't signal the run's top process
+	specs have no GitHub credentials and push only into fixtures
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+asteroids/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+asteroids/tests/place/library.spec.luau
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+invaders/tests/meta/architecture.spec.luau
+	Logic never touches the Roblox engine
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	every Luau file is --!strict
+	every feature has unit specs
+	every require resolves
+	features are only used through their init.luau
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+invaders/tests/meta/fence.spec.luau
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+	every git this run starts refuses ref updates in this repository
+	git finds no repository in .cache, nor in a folder below it that has none
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	on macOS this run can write nothing in the checkout outside .cache
+	specs have no GitHub credentials and push only into fixtures
+	this run is guarded for this checkout
+	when jailed, a spec can't signal the run's top process
+invaders/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+invaders/tests/place/library.spec.luau
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders
+pickman/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+pickman/tests/place/library.spec.luau
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders
+portal/.tracker/issues/active/f0206/acceptance/board.spec.luau
+	W, Up and the left trigger step back; S, Down and the right trigger forward; nothing else
+	a best not heard yet is pending, drawn with its own mark and never as the dashes of no best
+	a clock that went back asks again; a time that is not finite asks nothing
+	a row shows rank, name, score, the figure and the revives used, in the columns' order
+	a slot of no size, or a size that is not finite, lays out at the smallest line
+	a tab step moves one tab and wraps both ways; a step that is not whole stays
+	an answer's rows show in order, the player's own row marked, and the best line below
+	an empty board says NO SCORES YET; a failed read with no rows says SCORES UNAVAILABLE
+	before an answer, and on a wait, the board says LOADING and shows no rows and no best
+	each board is asked for at once, then again after REASK, or WAIT_RETRY after a wait or a pending best
+	every line is readable on every screen the carousel fits; the rows scroll only where they do not fit
+	every text on the front card's board is at least Card.MIN_TEXT pixels, whole, with a gap, on every screen
+	its tables are frozen
+	off the all-time board the line says BEST EVER, so it is never read as today's or this week's best
+	revives show their count, and none shows a dash: 0, or a count that is not whole
+	the best line shows under every board an answer was heard for: TODAY's and THIS WEEK's too
+	the client asks for every card's board on the chosen tab, and the all-time one while its best is unknown
+	the columns: each label its characters wide, a GUTTER between neighbours, the line CHARS wide
+	the header names the title's progress figure between score and revives
+	the layout: a touch-sized tab bar, then the header, the rows' view and the best line, filling the slot
+	the player's own best is learnt from any answer that is not pending, and a pending one leaves it
+	the tab keys sit under one action of their own, above the default controls, below the test purchase screen
+	the your-best line, in the columns: YOUR BEST, then score, figure and revives, or dashes for no best
+	three tabs, ALL-TIME, TODAY and THIS WEEK, left to right, and no other board id
+	with no rank no row is marked; a player with no run has dashes in the best line
+portal/.tracker/issues/active/f0206/acceptance/budget.spec.luau
+	1 player(s) asking every board every second for five minutes stay inside the read budgets
+	1 player(s) choosing each tab in turn see every card's board the first time they choose it
+	2 player(s) choosing each tab in turn see every card's board the first time they choose it
+	20 player(s) asking every board every second for five minutes stay inside the read budgets
+	4 player(s) asking every board every second for five minutes stay inside the read budgets
+	a player keeping one board in front sees a new run on it within two REFRESH periods
+	every player is still answered with the stored rows and their revives
+	players arriving at every phase of the cache's cycle each see their own best within REFRESH + WAIT_RETRY
+portal/.tracker/issues/active/f0206/acceptance/client.spec.luau
+	S chooses the next tab on the press; the release adds nothing; the binding sinks the key
+	W goes back, round from ALL-TIME to THIS WEEK; Down, Up and the triggers step too
+	a card the carousel does not give is left out, and the others are drawn
+	a pending best shows its own mark, never the dashes of no best, and is asked again after WAIT_RETRY
+	a tap on TODAY chooses it on every card, draws the boards held for it, and asks for them
+	a wait hurries only the board it was for
+	an answer draws its rows: the columns, a dash for no revives, the player's row marked, the best
+	an answer for a card that is not in front is held and drawn on that card
+	an answer that makes no sense changes nothing
+	an empty board says NO SCORES YET; a failed read with no rows says SCORES UNAVAILABLE
+	asks for every card's board on the chosen tab once, and not again on the next frames
+	before an answer every card says LOADING, shows no rows and no best, with ALL-TIME chosen
+	each slot holds three tabs, a header, ten row lines, a note and a best line
+	lays the slot out by Board.layout for its size, and again when the size changes
+	one binding below the test purchase screen's priority takes the six tab keys
+	start returns at once while the server's remote is not there, and asks only once it is
+	started twice it fills each slot once, binds once and asks once
+	starts the carousel first, then fills the Boards slot it gives for each card
+	the header names each title's progress figure
+	the same board is asked again after REASK, or WAIT_RETRY after a wait
+	under TODAY, a card whose best is not known yet asks for its all-time board too
+	while the player types in a text box the tab keys do nothing and pass on
+portal/.tracker/issues/active/f0206/acceptance/parse.spec.luau
+	a best that makes no sense is no best; junk revives in a best read as none
+	a row whose revives are junk reads as a row with none
+	a title it does not know, a board id that is none, or a status that is none: no answer
+	drops every row that makes no sense, and keeps the rest
+	each status reads as itself
+	every board's answer carries the player's best, and false says it is pending
+	keeps the rank only when it is a row's rank
+	never raises, whatever it is sent
+	reads back an answer as the server sent it
+	rows that are not a list read as no rows
+	sorts the rows by rank and keeps at most ten
+portal/.tracker/issues/active/f0206/acceptance/place.spec.luau
+	Board is a Logic feature whose every require stays inside ReplicatedStorage.Shared.Logic
+	BoardRelay is in ServerScriptService.Server and reaches the arcade's Boards and HiscoreGames
+	BoardsView is in the player's scripts, requires CarouselView, and the client's Main starts it once
+	ReplicatedStorage.Remotes.Boards is a RemoteEvent, beside the cards' remote
+	nothing a client can read requires a server module
+	portal's architecture map declares Board
+	the arcade's map says its E3 is settled by f0206, with the snapshot per board
+	the client's Main starts CarouselView before every adapter that fills its slots: PlayButtons and BoardsView
+	the server's Main starts BoardRelay once
+portal/.tracker/issues/active/f0206/acceptance/plan.spec.luau
+	BURST refreshes at once, then none until the allowance refills
+	a board with rows refreshes only while KEEP more tokens are left for boards with none
+	a clock that went back refreshes; a time that is not finite answers and leaves the allowance
+	a failed answer closes the window until the next refresh
+	a forward that reads the best needs one standard read above RESERVE
+	a player's held rank counts while it was heard with the rows held now
+	a refresh needs the engine's budget to hold COST above RESERVE, of both kinds
+	after the window and before REFRESH the server answers from its rows; at REFRESH it refreshes
+	an all-time ask the arcade would answer with a fresh read of the player's best is marked
+	an all-time forward while the arcade still holds the player's best reads none
+	an all-time refresh is marked unless the arcade still holds the player's best
+	another board never reads the best: its forwards and refreshes are never marked
+	between the arcade's hold and BEST_GAP an all-time ask is answered from the rows, not forwarded
+	inside the arcade's cache time an ask is forwarded and takes no token
+	its numbers
+	ten minutes of asks on all twelve boards every second stay inside the allowance and the budget
+	the allowance refills RATE a minute per player, never under FLOOR a minute, up to BURST
+	the first ask of a board is a refresh, and takes one token
+	the forward window ends MARGIN short of the arcade's cache time
+	the held rows' status: wait before an answer, failed after a failed one, else ok
+	two lists of rows are the same when every row's rank, name, score, figure and revives are
+portal/.tracker/issues/active/f0206/acceptance/server.spec.luau
+	REFRESH after the last refresh, an ask is forwarded again
+	a budget that cannot be read reads nothing: the ask is answered wait
+	a failed arcade answer reaches the asker as failed, with the rows the arcade held
+	a first ask goes to that title's arcade boards as (player, id), and nothing is answered yet
+	a new day is a new board: its first ask refreshes, though yesterday's was read seconds ago
+	a player who leaves and joins again starts afresh
+	a player whose all-time ask went to the arcade but was not answered yet is still pending
+	a player whose asks land between another's refreshes is answered pending, then forwarded in the next window
+	a player with no run is told so once the arcade's all-time answer says it: nil, not pending
+	a refresh that brings other rows drops a rank heard with the old ones
+	a refresh that brings the same rows keeps every player's rank on the held answers
+	a title it does not serve, a board id that is none, or a player who left: nothing at all
+	a title whose boards cannot be opened is left out with a warning; the others are served
+	after the cache time and before REFRESH an ask is answered from the held rows, not forwarded
+	an all-time ask inside BEST_GAP whose best the arcade would read again is answered, not forwarded
+	an answer for a player who left is not sent, but its rows are held for the next asker
+	another player's ask inside the arcade's cache time is forwarded too, and hears their own rank
+	answers go to the asker alone, never to every client
+	every answer carries the player's best once the arcade's all-time answer brought it, pending before
+	every card's title has its boards in HiscoreGames, with its progress figure named
+	opens every card's title by its HiscoreGames prefix, once, and serves each on a relay of its own
+	reads the engine's budget for standard and sorted reads on each ask
+	start is once per server: a second start opens and listens to nothing more
+	the arcade's answer reaches the asker as (title, id, rows, rank, ok, best)
+	with the engine's budget below its reserve, a first ask is answered wait and nothing is read
+portal/tests/meta/architecture.spec.luau
+	Logic never touches the Roblox engine
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	every Luau file is --!strict
+	every feature has unit specs
+	every require resolves
+	features are only used through their init.luau
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+portal/tests/meta/fence.spec.luau
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+	every git this run starts refuses ref updates in this repository
+	git finds no repository in .cache, nor in a folder below it that has none
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	on macOS this run can write nothing in the checkout outside .cache
+	specs have no GitHub credentials and push only into fixtures
+	this run is guarded for this checkout
+	when jailed, a spec can't signal the run's top process
+portal/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+portal/tests/place/library.spec.luau
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders
+portal/tests/unit/Arena/arena.spec.luau
+	with no arena open, the first player opens one
+portal/tests/unit/Board/board.spec.luau
+	shows a dash for a row with no revives
+portal/tests/unit/Card/card.spec.luau
+	shows coming soon for a place that is not published
+portal/tests/unit/Carousel/carousel.spec.luau
+	wraps round
+portal/tests/unit/Pairing/pairing.spec.luau
+	the second player in a line is paired with the first
+portal/tests/unit/Play/play.spec.luau
+	a held play goes at once
+snake/tests/meta/architecture.spec.luau
+	Logic never touches the Roblox engine
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	every Luau file is --!strict
+	every feature has unit specs
+	every require resolves
+	features are only used through their init.luau
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+snake/tests/meta/fence.spec.luau
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+	every git this run starts refuses ref updates in this repository
+	git finds no repository in .cache, nor in a folder below it that has none
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	on macOS this run can write nothing in the checkout outside .cache
+	specs have no GitHub credentials and push only into fixtures
+	this run is guarded for this checkout
+	when jailed, a spec can't signal the run's top process
+snake/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+snake/tests/place/library.spec.luau
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders

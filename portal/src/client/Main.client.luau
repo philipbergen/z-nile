@@ -3,3 +3,4 @@
 require("@game/ReplicatedStorage/Arcade/TestPurchase").start()
 require("./CarouselView").start()
 require("./PlayButtons").start()
+require("./BoardsView").start()

@@ -11,7 +11,8 @@
       "Remotes": {
         "$className": "Folder",
         "Cards": { "$className": "RemoteEvent" },
-        "Play": { "$className": "RemoteEvent" }
+        "Play": { "$className": "RemoteEvent" },
+        "Boards": { "$className": "RemoteEvent" }
       }
     },
     "ServerStorage": {
