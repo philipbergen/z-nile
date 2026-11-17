@@ -38,9 +38,17 @@ return t.spec("c0253 the docs say what the supervisor does", function(it)
 			at(s, "`./zn work status`", "z-work")
 			at(s, "`./zn work stop`", "z-work")
 			at(s, "`z-work --here` (this session loops across rafts)", "z-work")
-			at(s, "`/z-run <R-id>` / `./zn work <R-id>` (this session carries the one raft named, then stops)", "z-work")
-			at(s, "\"Session loops across rafts\"", "z-work")
-			at(s, "A `z-work --here` session says one line (what landed or was released, and what it takes next), then runs `./zn work next` with no raft", "z-work")
+			at(
+				s,
+				"`/z-run <R-id>` / `./zn work <R-id>` (this session carries the one raft named, then stops)",
+				"z-work"
+			)
+			at(s, '"Session loops across rafts"', "z-work")
+			at(
+				s,
+				"A `z-work --here` session says one line (what landed or was released, and what it takes next), then runs `./zn work next` with no raft",
+				"z-work"
+			)
 			at(s, "A release adds one to the count you pass as `--released`", "z-work")
 			at(s, "Neither a headless session nor a session given a raft takes a second raft", "z-work")
 			at(s, "`/z-run <R-id>` is the person's own worker and does not start the supervisor", "z-work")
