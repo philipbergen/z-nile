@@ -42,7 +42,8 @@ return t.spec("c0369 the texts", function(it)
 			"the worktree of the issue's prep branch (`prep-<slug>`), or the worktree the command is run in",
 			"with a contract of its own (not `origin/main`'s, not the one it branched from, not one `origin/main` held since) and no matching approval",
 			"else `origin/main`, when the design is merged there with no matching approval",
-			"For an issue in `active/` on `origin/main` it also reads its raft's worktree (`.worktree/<R-id>`), where a contract changed on the raft's branch is approved.",
+			"For an issue in `active/` on `origin/main` its one place is its raft's worktree (`.worktree/<R-id>`), found from anywhere: it records only when that worktree is on the raft's top layer with a clean tree, and pushes that layer, never forced",
+			"otherwise it refuses, naming the top layer's branch, never a directory.",
 			"No other worktree is read, so a prototype or a copy is approved only by running the command inside it",
 			"It says where it acts, records there and makes the approval count in the same command",
 			"is published (this row appended to `origin/main`'s `approval.md`, one commit), any other is pushed on its branch and counts when its pull request merges",
@@ -53,7 +54,7 @@ return t.spec("c0369 the texts", function(it)
 			"`./zn approve <id> --publish` retries it from anywhere",
 			"`--check` reads the checkout it runs in",
 			"Only the prep branch, or a branch already on origin, is pushed, and never forced",
-			"on a raft's layer branch nothing is pushed: the record counts for `./zn finish` in that worktree, and for `./zn done` once the layer is finished and pushed again",
+			"a raft's layer branch is pushed, never forced.",
 			"An `approval.md` on `origin/main` that does not parse is replaced by the approval (its rows cannot be read); a worktree on no branch is refused before anything is recorded.",
 			"While a worktree it reads holds a design of its own, `origin/main`'s older design is not approved behind it.",
 		})).toEqual({})

@@ -2,7 +2,7 @@
 -- c0369 AC3: one `./zn approve <id>` of a design that is not on origin/main yet, run from the main checkout, records it
 -- in the worktree of the issue's prep branch and pushes that branch (never forced); any other worktree is read only
 -- when the command runs inside it, and its branch is pushed only when it is already on origin; a raft's layer branch
--- is never pushed; while a worktree holds a design of its own, main's older design is not approved behind it. A failed
+-- is pushed (the user's ruling of 2026-11-17); while a worktree holds a design of its own, main's older design is not approved behind it. A failed
 -- push keeps the record and names `./zn approve <id> --publish`. The fixture is .cache/c0369-approve-branch.
 -- Approving goes through `script` as in approve-main.spec: a terminal, `yes y |` for f0339's question, an explainer
 -- page with every ready design, stub openers first on PATH, and the agent markers cleared.
@@ -379,21 +379,16 @@ return t.spec("c0369 one approve from anywhere records and pushes an unmerged de
 		end
 	)
 
-	it("records on a raft's layer branch and pushes nothing: it counts for finish and done there", function()
+	it("records on a raft's layer branch and pushes that branch, never forced", function()
 		local LAYER = `R0001/1/{ID}`
 		fixture.git(g.main, { "fetch", "-q", "origin" })
 		fixture.git(g.main, { "worktree", "add", "-q", "-b", LAYER, wt("R0001"), "origin/main" })
 		design("R0001", "A change on the layer.")
 		local mainBefore = mainOf()
 		local out = must(approve(wt("R0001")))
-		t.expect(
-			has(
-				out,
-				`{ID}: approved on the layer branch {LAYER}: nothing is pushed; it counts for ./zn finish in `
-			)
-		).toBe(true)
+		t.expect(has(out, `pushed {LAYER}: the approval lands with R0001`)).toBe(true)
 		t.expect(tip("R0001")).toBe(`tracker: approve {ID}`)
-		t.expect(onOrigin(LAYER)).toBe(nil)
+		t.expect(onOrigin(LAYER)).toBe(headOf("R0001"))
 		t.expect(mainOf()).toBe(mainBefore)
 		t.expect(fixture.exec(wt("R0001"), "./zn", { "approve", ID, "--check" }).ok).toBe(true)
 	end)

@@ -22,10 +22,10 @@ index dc2720272..da377c64c 100644
  -- The refusal, naming the issue. `required` is ready's rule (a missing approval refuses). done and land
 diff --git a/z-nile/engine/approveplace.luau b/z-nile/engine/approveplace.luau
 new file mode 100644
-index 000000000..039648b10
+index 000000000..8c8f23640
 --- /dev/null
 +++ b/z-nile/engine/approveplace.luau
-@@ -0,0 +1,360 @@
+@@ -0,0 +1,431 @@
 +--!strict
 +-- Where `./zn approve <id>` acts (c0369): the one worktree under .worktree/ that holds a design of its own with no
 +-- matching approval, or origin/main. `choose` is pure over what `load` read; `load`, `atRev` and `inTree` are the edge.
@@ -36,6 +36,7 @@ index 000000000..039648b10
 +local process = require("@lune/process")
 +local projects = require("./projects")
 +local readycheck = require("./readycheck")
++local stack = require("./stack")
 +local store = require("./store")
 +
 +local approveplace = {}
@@ -146,6 +147,41 @@ index 000000000..039648b10
 +	seen: { Seen },
 +	publishOnly: boolean
 +): (Choice?, string?)
++	-- an issue in active/ (the user's ruling of 2026-11-17 on design review 003 F1, f0399's rule): its one place is its
++	-- raft's worktree; the acting run then records only on the raft's top layer with a clean tree and pushes it
++	if main and main.active then
++		local raftName = main.raft or ""
++		local raftW: Seen? = nil
++		for _, w in seen do
++			if w.raft then
++				raftW = w
++			end
++		end
++		if raftW then
++			local w = raftW :: Seen
++			if w.copy.state == "holds" then
++				if main.state == "holds" and w.copy.hash == main.hash then
++					return { kind = "approved", path = nil, name = "origin/main", record = false }, nil
++				end
++				if not w.pushed then
++					return { kind = "worktree", path = w.path, name = w.name, record = false }, nil
++				end
++				return { kind = "pushed", path = nil, name = w.name, record = false }, nil
++			end
++			if publishOnly then
++				return nil, `{id} has no recorded approval to publish. Run ./zn approve {id}.`
++			end
++			if not w.copy.ready then
++				return nil, `{id}: nothing to approve: its copy in {w.name} is not design: ready`
++			end
++			return { kind = "worktree", path = w.path, name = w.name, record = true }, nil
++		end
++		if main.state == "holds" then
++			return { kind = "approved", path = nil, name = "origin/main", record = false }, nil
++		end
++		return nil,
++			`{id} is active in {raftName}, and no worktree of {raftName} is on this machine: run ./zn worktree {raftName}, then ./zn approve {id}`
++	end
 +	local waiting: { Seen } = {}
 +	local recorded: { Seen } = {}
 +	local pushed: { Seen } = {}
@@ -326,6 +362,30 @@ index 000000000..039648b10
 +
 +export type Tree = { path: string, branch: string? }
 +
++-- The top layer of `raft` as a ref `cwd` can read (the local branch, else origin's), or nil when it has none.
++local function topLayer(cwd: string, raft: string): (string?, string?)
++	local listed =
++		git(cwd, { "for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin" })
++	local best: stack.Layer? = nil
++	local localNames: { [string]: boolean } = {}
++	for line in string.gmatch((listed or "") .. "\n", "([^\n]*)\n") do
++		local layer = if line == "" then nil else stack.parse(line)
++		if layer and layer.raft == raft then
++			if string.sub(line, 1, 7) ~= "origin/" then
++				localNames[layer.name] = true
++			end
++			if best == nil or layer.position > (best :: stack.Layer).position then
++				best = layer
++			end
++		end
++	end
++	if best == nil then
++		return nil, nil
++	end
++	local name = (best :: stack.Layer).name
++	return name, if localNames[name] then name else `origin/{name}`
++end
++
 +-- origin/main's copy and the worktrees the command may act in. `trees` is `git worktree list`'s order: the main
 +-- checkout first, which is never a place. Of the others only these are read: the one on prep-<slug>, for an issue in
 +-- active/ on origin/main its raft's .worktree/<R-id>, the one the command runs in (`here`) and the command's own
@@ -347,7 +407,15 @@ index 000000000..039648b10
 +		-- an issue in active/ on origin/main is changed on its raft's branches, in the raft's own worktree
 +		local raft = raftName ~= "" and path == `{trees[1].path}/.worktree/{raftName}`
 +		if i > 1 and (prep or raft or path == here or path == scratch) and fs.isDir(path) then
-+			local copy = approveplace.inTree(path, id)
++			-- the raft's worktree is judged by the raft's top layer, the one an approval is recorded on, whatever the
++			-- worktree has checked out (the acting run then refuses any other branch, naming that one)
++			local top, topRef = nil, nil
++			if raft then
++				top, topRef = topLayer(path, raftName)
++			end
++			local copy = if topRef
++				then approveplace.atRev(path, topRef :: string, id)
++				else approveplace.inTree(path, id)
 +			if copy then
 +				local w: Seen = {
 +					name = if string.sub(path, 1, #prefix) == prefix
@@ -363,7 +431,10 @@ index 000000000..039648b10
 +					landed = false,
 +					pushed = false,
 +				}
-+				if tree.branch then
++				if top then
++					local theirs = git(path, { "rev-parse", "-q", "--verify", `refs/remotes/origin/{top}` })
++					w.pushed = theirs ~= nil and theirs == git(path, { "rev-parse", topRef :: string })
++				elseif tree.branch then
 +					local theirs =
 +						git(path, { "rev-parse", "-q", "--verify", `refs/remotes/origin/{tree.branch}` })
 +					w.pushed = theirs ~= nil and theirs == git(path, { "rev-parse", "HEAD" })
@@ -386,8 +457,26 @@ index 000000000..039648b10
 +end
 +
 +return approveplace
+diff --git a/z-nile/engine/layergit.luau b/z-nile/engine/layergit.luau
+index 18f984d14..0b71e04be 100644
+--- a/z-nile/engine/layergit.luau
++++ b/z-nile/engine/layergit.luau
+@@ -134,6 +134,13 @@ function layergit.isPostFinishPath(path: string, raftId: string): boolean
+ 			return true
+ 		end
+ 	end
++	-- c0369: an approval recorded on the top layer after its finish (the person's ./zn approve) keeps the layer finished
++	if
++		string.match(path, "/issues/active/[fdc]%d%d%d%d/approval%.md$")
++		or string.match(path, "/issues/[fdc]%d%d%d%d/approval%.md$")
++	then
++		return true
++	end
+ 	local issueDoc = string.match(path, "/issues/active/([fdc]%d%d%d%d)/([fdc]%d%d%d%d)%.md$")
+ 		or string.match(path, "/issues/([fdc]%d%d%d%d)/([fdc]%d%d%d%d)%.md$")
+ 	if issueDoc ~= nil then
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 59d6bd67c..784228d08 100644
+index 59d6bd67c..1c8210c43 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -5706,8 +5706,11 @@ local function contractDirty(paths: { string }): string?
@@ -404,7 +493,7 @@ index 59d6bd67c..784228d08 100644
  function cmd.approve(pos: { string }, opts: { [string]: { string } })
  	for k in opts do
  		if k ~= "--check" and k ~= "--publish" then
-@@ -5723,25 +5726,148 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
+@@ -5723,25 +5726,157 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
  		local dispatched = process.env.ZN_DISPATCH
  		if dispatched and dispatched ~= "" then
  			fail(
@@ -524,11 +613,15 @@ index 59d6bd67c..784228d08 100644
 +				notYet(`{top} is on no branch, so there is nothing to push`)
 +			end
 +			local name = sh.trim(branch.stdout)
-+			-- a raft's layer branch is the executor's: its record counts for ./zn finish and ./zn done in this checkout
-+			if string.match(name, "^R%d+/%d+/") then
-+				print(
-+					`{id}: approved on the layer branch {name}: nothing is pushed; it counts for ./zn finish in {where}, and ./zn done once the layer is finished and pushed again`
-+				)
++			-- a raft's layer branch: pushed (never forced), so the layer stays finished for ./zn done (approval.md is a
++			-- post-finish path) and the approval lands with the raft (the user's ruling of 2026-11-17, f0399's rule)
++			local layer = stack.parse(name)
++			if layer then
++				local layerPush = sh.run("git", { "push", "-q", "origin", `HEAD:refs/heads/{name}` })
++				if not layerPush.ok then
++					notYet(`git push origin {name} failed: {sh.trim(layerPush.stderr)}`)
++				end
++				print(`pushed {name}: the approval lands with {layer.raft}`)
 +				return
 +			end
 +			-- only the prep branch, or a branch already on origin, is pushed: no branch is created on origin for a prototype
@@ -555,10 +648,15 @@ index 59d6bd67c..784228d08 100644
 +		-- the worktree that holds it is kept for the retry
 +		if not publishing() then
 +			notYet("publishing is off (PICKMAN_PUBLISH=0, or inside a check)")
++		end
++		-- an issue in active/ is approved on its raft's top layer and lands with the raft: never published to main
++		if item.state == "active" then
++			pushBranch()
++			return
  		end
  		local localText = fs.readFile(path)
  		local function show(rel: string): string?
-@@ -5749,8 +5875,10 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
+@@ -5749,8 +5884,10 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
  			return if got.ok then got.stdout else nil
  		end
  		local doc = show(item.doc)
@@ -571,7 +669,7 @@ index 59d6bd67c..784228d08 100644
  		end
  		local checkRel = `{item.dir}/check.sh`
  		local check = show(checkRel) or ""
-@@ -5801,21 +5929,49 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
+@@ -5801,21 +5938,49 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
  		end
  		local problem = approval.reasonOf(id, path, parts :: contract.Parts, localText, true)
  		if problem then
@@ -628,7 +726,7 @@ index 59d6bd67c..784228d08 100644
  		return
  	end
  	if onlyCheck then
-@@ -5866,6 +6022,27 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
+@@ -5866,6 +6031,49 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
  	if dirty then
  		fail(`{id}: commit the contract first ({dirty}), then ./zn approve {id}`)
  	end
@@ -639,6 +737,28 @@ index 59d6bd67c..784228d08 100644
 +		if not branch.ok or sh.trim(branch.stdout) == "" then
 +			fail(
 +				`{id}: {top} is on no branch (a rebase or another operation may be in progress): nothing recorded`
++			)
++		end
++	end
++	-- an issue in active/ is recorded only on its raft's top layer with a clean tree (the user's ruling of 2026-11-17,
++	-- f0399's rule); the refusal names the branch, never a directory
++	if item.state == "active" then
++		local raftId = front.raft or ""
++		local layers = layergit.layersOf(raftId)
++		local top = layers[#layers]
++		local on = sh.run("git", { "symbolic-ref", "--short", "-q", "HEAD" })
++		local branch = if on.ok then sh.trim(on.stdout) else ""
++		if not top or branch ~= top.name then
++			fail(
++				`{id} is active in {raftId}: approve records on its top layer{if top
++					then ", " .. top.name
++					else ""}, and {where} is on {if branch ~= "" then branch else "no branch"}`
++			)
++		end
++		local status = sh.run("git", { "status", "--porcelain" })
++		if not status.ok or sh.trim(status.stdout) ~= "" then
++			fail(
++				`{id} is active in {raftId}: {where} has uncommitted changes; commit them, then ./zn approve {id}`
 +			)
 +		end
 +	end
@@ -656,7 +776,7 @@ index 59d6bd67c..784228d08 100644
  	local when = os.date("!%Y-%m-%dT%H:%M:%SZ") :: string
  	local text, aerr = approval.append(".", item, who, when)
  	if not text then
-@@ -5877,8 +6054,10 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
+@@ -5877,8 +6085,10 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
  	sh.git({ "commit", "-q", "-m", `tracker: approve {id}`, "--", path })
  	local rows = contract.parse(text :: string)
  	local hash = if rows then rows[#rows].hash else ""
@@ -696,7 +816,7 @@ index b9ebe094b..79deeaf23 100644
     - The acceptance specs that each `check.sh` names exist. `ready` doesn't check this one, so look before you run it.
     - `./zn status <R-id>` prints `prepared`: the prep PR has merged and main is current.
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index 36e1464e0..88309b8e9 100644
+index 36e1464e0..f7a5d5396 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -75,7 +75,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
@@ -704,7 +824,7 @@ index 36e1464e0..88309b8e9 100644
  | step | command | effect |
  |---|---|---|
 -| approve | `./zn approve <issue-id> [--check]` | in the worktree where the design is, with a terminal on stdin, and not while `ZN_DISPATCH` is set. Records a hash of the design sections (Problem, Solution, Design, Acceptance criteria, Test plan), the acceptance specs and `check.sh` in the issue's `approval.md`, and keeps earlier rows. `--check` says whether that hash still holds and which part changed. |
-+| approve | `./zn approve <issue-id> [--check\|--publish]` | one command, with a terminal on stdin, and not while `ZN_DISPATCH` is set. **It finds the design itself**, from the main checkout or any worktree: the worktree of the issue's prep branch (`prep-<slug>`), or the worktree the command is run in, when it holds the issue `design: ready` with a contract of its own (not `origin/main`'s, not the one it branched from, not one `origin/main` held since) and no matching approval; else `origin/main`, when the design is merged there with no matching approval. For an issue in `active/` on `origin/main` it also reads its raft's worktree (`.worktree/<R-id>`), where a contract changed on the raft's branch is approved. No other worktree is read, so a prototype or a copy is approved only by running the command inside it. It says where it acts, records there and makes the approval count in the same command. It records a hash of the design sections (Problem, Solution, Design, Acceptance criteria, Test plan), the acceptance specs and `check.sh` in the issue's `approval.md`, and keeps earlier rows. A design that is `design: ready` on `origin/main` with the same contract is published (this row appended to `origin/main`'s `approval.md`, one commit), any other is pushed on its branch and counts when its pull request merges. Only the prep branch, or a branch already on origin, is pushed, and never forced; a branch that is not on origin is left as it is (the record counts when its design reaches `origin/main`), and on a raft's layer branch nothing is pushed: the record counts for `./zn finish` in that worktree, and for `./zn done` once the layer is finished and pushed again. An `approval.md` on `origin/main` that does not parse is replaced by the approval (its rows cannot be read); a worktree on no branch is refused before anything is recorded. While a worktree it reads holds a design of its own, `origin/main`'s older design is not approved behind it. A merged design is recorded in a detached worktree the command makes at `.worktree/.approve-<id>` and removes once published; the main checkout is never written. An approval a worktree already holds for the design `origin/main` holds is published as it is, never recorded twice. When the publish or push fails, or publishing is off, the record stays, the command fails saying it does not count yet, and `./zn approve <id> --publish` retries it from anywhere. `--check` reads the checkout it runs in: it says whether that hash still holds and which part changed. |
++| approve | `./zn approve <issue-id> [--check\|--publish]` | one command, with a terminal on stdin, and not while `ZN_DISPATCH` is set. **It finds the design itself**, from the main checkout or any worktree: the worktree of the issue's prep branch (`prep-<slug>`), or the worktree the command is run in, when it holds the issue `design: ready` with a contract of its own (not `origin/main`'s, not the one it branched from, not one `origin/main` held since) and no matching approval; else `origin/main`, when the design is merged there with no matching approval. For an issue in `active/` on `origin/main` its one place is its raft's worktree (`.worktree/<R-id>`), found from anywhere: it records only when that worktree is on the raft's top layer with a clean tree, and pushes that layer, never forced (the approval lands with the raft; `approval.md` counts as written after the layer's finish, so the layer stays finished for `./zn done`); otherwise it refuses, naming the top layer's branch, never a directory. No other worktree is read, so a prototype or a copy is approved only by running the command inside it. It says where it acts, records there and makes the approval count in the same command. It records a hash of the design sections (Problem, Solution, Design, Acceptance criteria, Test plan), the acceptance specs and `check.sh` in the issue's `approval.md`, and keeps earlier rows. A design that is `design: ready` on `origin/main` with the same contract is published (this row appended to `origin/main`'s `approval.md`, one commit), any other is pushed on its branch and counts when its pull request merges. Only the prep branch, or a branch already on origin, is pushed, and never forced; a branch that is not on origin is left as it is (the record counts when its design reaches `origin/main`), and a raft's layer branch is pushed, never forced. An `approval.md` on `origin/main` that does not parse is replaced by the approval (its rows cannot be read); a worktree on no branch is refused before anything is recorded. While a worktree it reads holds a design of its own, `origin/main`'s older design is not approved behind it. A merged design is recorded in a detached worktree the command makes at `.worktree/.approve-<id>` and removes once published; the main checkout is never written. An approval a worktree already holds for the design `origin/main` holds is published as it is, never recorded twice. When the publish or push fails, or publishing is off, the record stays, the command fails saying it does not count yet, and `./zn approve <id> --publish` retries it from anywhere. `--check` reads the checkout it runs in: it says whether that hash still holds and which part changed. |
  | ready | `./zn ready <R-id\|issue-id>` | main checkout only, on a clean `main`, with an origin (z-ready skill). Checks the raft and every member are `design: ready` with a `check.sh` that has a check, and that every `depends_on` outside the raft is `done`. Refuses a member with no approval, or whose contract hash no longer matches (`./zn approve <id>`); an item prepared before approval is told to take that one-time step. Claims the raft, publishes one tracker-only commit that moves it and its members to `active/` on `origin/main` (every `check.sh` item path rewritten), pulls the main checkout, and writes the ignored `<root>/rafts/active/<R-id>/prompt.md` (it inlines the project's `<root>/architecture.md`, pickman's map; a project without one gets a line saying so). On an active raft it regenerates the prompt and makes no commit. |
  | stop | `./zn stop <R-id>` | main checkout only, on a clean `main`, with an origin (z-stop skill). It gives back exactly the issues that carry the raft's own claim stamp (`ready` and `start` stamp the raft and every issue they claim with one `active-…` value); an issue only listed in `issues:`, or one filed naming the raft after the claim, is never touched (the latter is named in a warning). Every claim stamp is new on `origin/main` (redrawn until no item carries it), and a raft with no `active-…` stamp is refused, to be given back by hand. Gives back a readied raft: publishes one tracker-only commit that moves it and its members from `active/` back to the backlog, stamped `prepared-…` (every `check.sh` item path rewritten back), removes `prompt.md`, pulls the main checkout, and names the raft's branch and PR, which it leaves as they are. A raft claimed by the legacy `start` (backlog, status `active`) gets a status-only publish and no move. A member in `done/` refuses. |
  | start | `./zn start R0010` | clean tree required. Opens the next layer (`R0010/1/c0010`: an empty `tracker: start` commit, a push, and a **draft** PR based on the layer below, or on main). The next layer waits until `./zn finish` has made the one below a single commit. A readied raft claims and moves nothing. A backlog raft (legacy) still claims and moves to `active/` on that layer branch: members must be `design: ready`, and every `depends_on` outside the raft must be `done` on `origin/main`. If it refuses, merge `origin/main` and retry, never edit `depends_on` to get past it: stop and report. Do this first, so the claim is visible to another machine. |

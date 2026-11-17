@@ -1,14 +1,17 @@
 --!strict
--- c0369 AC7 (design review 002 F2, the user's ruling of 2026-11-17): for an issue in active/ on origin/main whose
--- contract changed on its raft's branch, one `./zn approve <id>` from the main checkout finds the raft's own worktree
--- (.worktree/<R-id>), records there and pushes nothing, so `./zn finish` and `./zn done` count it there. No other
--- worktree named like a raft's is read, and an issue that is not in active/ never has its raft's worktree read.
+-- c0369 AC7 (design review 002 F2 and 003 F1, the user's rulings of 2026-11-17): for an issue in active/ on origin/main
+-- whose contract changed on its raft's branch, one `./zn approve <id>` from the main checkout finds the raft's own
+-- worktree (.worktree/<R-id>), records there only on the raft's top layer with a clean tree, and pushes that layer,
+-- never forced; approval.md counts as written after a finish, so the layer stays finished for `./zn done`. A lower
+-- layer or a dirty tree is refused, naming the branch, never a directory. No other worktree named like a raft's is
+-- read, and an issue that is not in active/ never has its raft's worktree read.
 -- The fixture is .cache/c0369-approve-raft. Approving goes through `script` as in approve-main.spec: a terminal,
 -- `yes y |` for f0339's question, an explainer page with every ready design, stub openers first on PATH, and the
 -- agent markers cleared.
 local contract = require("@znile/engine/contract")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
+local layergit = require("@znile/engine/layergit")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
@@ -102,6 +105,10 @@ return t.spec("c0369 approve finds an active issue's raft worktree", function(it
 	local function mainOf(): string
 		return fixture.git(f.origin, { "rev-parse", "main" })
 	end
+	local function onOrigin(name: string): string?
+		local r = fixture.exec(f.origin, "git", { "rev-parse", "-q", "--verify", `refs/heads/{name}` })
+		return if r.ok then (string.gsub(r.stdout, "%s+$", "")) else nil
+	end
 	-- a worktree on a layer branch of origin/main with a changed design of `id` in `dir`
 	local function changed(name: string, branch: string, dir: string, id: string, raft: string, text: string)
 		fixture.git(f.main, { "fetch", "-q", "origin" })
@@ -120,6 +127,9 @@ return t.spec("c0369 approve finds an active issue's raft worktree", function(it
 			for rel, body in issueFiles(`{ROOT}/issues/c0002`, "c0002", "Hash it too.", "R0003") do
 				seed[rel] = body
 			end
+			for rel, body in issueFiles(`{ROOT}/issues/c0003`, "c0003", "Readied before approval.", "") do
+				seed[rel] = body
+			end
 			f = trackerfix.new(NAME, seed) -- ready seeds in the backlog are sealed: each carries a matching approval.md
 			stubs = `{f.base}/stubs`
 			fs.writeDir(stubs)
@@ -135,6 +145,14 @@ return t.spec("c0369 approve finds an active issue's raft worktree", function(it
 			fs.writeFile(
 				`{wt("ready")}/{ACTIVE}/c0001.md`,
 				(string.gsub(moved, "\nraft: \n", "\nraft: R0001\n", 1))
+			)
+			-- and c0003, readied in R0001 with no approval yet (a raft that lands once the person approves)
+			fixture.git(wt("ready"), { "mv", `{ROOT}/issues/c0003`, `{ROOT}/issues/active/c0003` })
+			fixture.git(wt("ready"), { "rm", "-q", "-f", `{ROOT}/issues/active/c0003/approval.md` })
+			local third = fs.readFile(`{wt("ready")}/{ROOT}/issues/active/c0003/c0003.md`)
+			fs.writeFile(
+				`{wt("ready")}/{ROOT}/issues/active/c0003/c0003.md`,
+				(string.gsub(third, "\nraft: \n", "\nraft: R0001\n", 1))
 			)
 			fixture.git(wt("ready"), { "add", "-A" })
 			fixture.git(wt("ready"), { "commit", "-q", "-m", "ready R0001" })
@@ -160,33 +178,90 @@ return t.spec("c0369 approve finds an active issue's raft worktree", function(it
 	end)
 
 	it(
-		"from the main checkout approves a changed contract in the raft's worktree and pushes nothing",
+		"from the main checkout approves a changed contract on the raft's top layer and pushes the layer",
 		function()
 			changed("R0001", "R0001/1/c0001", ACTIVE, "c0001", "R0001", "A change on the raft's layer.")
 			local mainBefore = mainOf()
 			local out = must(approve(f.main, "c0001"))
 			t.expect(has(out, "c0001: approving in .worktree/R0001")).toBe(true)
-			t.expect(
-				has(
-					out,
-					"c0001: approved on the layer branch R0001/1/c0001: nothing is pushed; it counts for ./zn finish in "
-				)
-			).toBe(true)
-			t.expect(has(out, "and ./zn done once the layer is finished and pushed again")).toBe(true)
+			t.expect(has(out, "pushed R0001/1/c0001: the approval lands with R0001")).toBe(true)
 			t.expect(tip("R0001")).toBe("tracker: approve c0001")
+			t.expect(onOrigin("R0001/1/c0001")).toBe(fixture.git(wt("R0001"), { "rev-parse", "HEAD" }))
 			t.expect(tip("R0002")).toBe("layer: A change on another raft.")
 			t.expect(mainOf()).toBe(mainBefore)
 			t.expect(fs.isDir(wt(".approve-c0001"))).toBe(false)
 			t.expect(fixture.exec(wt("R0001"), "./zn", { "approve", "c0001", "--check" }).ok).toBe(true)
-			-- asked again, it records nothing new and still pushes nothing
+			-- asked again, it records nothing new: the approval waits on the pushed layer
 			local rows = lines(fs.readFile(`{wt("R0001")}/{ACTIVE}/approval.md`))
 			local again = must(approve(f.main, "c0001"))
-			t.expect(has(again, "c0001: publishing from .worktree/R0001")).toBe(true)
+			t.expect(has(again, "c0001 is approved in .worktree/R0001")).toBe(true)
 			t.expect(lines(fs.readFile(`{wt("R0001")}/{ACTIVE}/approval.md`))).toBe(rows)
 			t.expect(tip("R0001")).toBe("tracker: approve c0001")
 			t.expect(mainOf()).toBe(mainBefore)
 		end
 	)
+
+	it(
+		"approves an active issue whose design is main's on the raft's top layer, never on origin/main",
+		function()
+			local mainBefore = mainOf()
+			local out = must(approve(f.main, "c0003"))
+			t.expect(has(out, "c0003: approving in .worktree/R0001")).toBe(true)
+			t.expect(has(out, "pushed R0001/1/c0001: the approval lands with R0001")).toBe(true)
+			t.expect(has(out, "published")).toBe(false)
+			t.expect(mainOf()).toBe(mainBefore)
+			t.expect(fs.isDir(wt(".approve-c0003"))).toBe(false)
+			t.expect(onOrigin("R0001/1/c0001")).toBe(fixture.git(wt("R0001"), { "rev-parse", "HEAD" }))
+		end
+	)
+
+	it("refuses a raft worktree with uncommitted changes, and records nothing", function()
+		for rel, body in issueFiles(ACTIVE, "c0001", "A second change on the layer.", "R0001") do
+			fs.writeFile(`{wt("R0001")}/{rel}`, body)
+		end
+		fixture.git(wt("R0001"), { "add", "-A" })
+		fixture.git(wt("R0001"), { "commit", "-q", "-m", "layer: a second change" })
+		fs.writeFile(`{wt("R0001")}/stray.txt`, "not committed\n")
+		local refused = approve(f.main, "c0001")
+		t.expect(refused.ok).toBe(false)
+		t.expect(has(say(refused), "c0001 is active in R0001: ")).toBe(true)
+		t.expect(has(say(refused), " has uncommitted changes; commit them, then ./zn approve c0001"))
+			.toBe(true)
+		t.expect(tip("R0001")).toBe("layer: a second change")
+		fs.removeFile(`{wt("R0001")}/stray.txt`)
+	end)
+
+	it("refuses a layer below the top, naming the top layer's branch and no directory", function()
+		-- the top layer holds the second change; the worktree is on the layer below, whose copy was approved and pushed
+		fixture.git(f.main, { "branch", "R0001/2/c0001", "R0001/1/c0001" })
+		fixture.git(wt("R0001"), { "reset", "-q", "--hard", "HEAD~1" })
+		local refused = approve(f.main, "c0001")
+		t.expect(refused.ok).toBe(false)
+		t.expect(
+			has(
+				say(refused),
+				"c0001 is active in R0001: approve records on its top layer, R0001/2/c0001, and "
+			)
+		)
+			.toBe(true)
+		t.expect(has(say(refused), " is on R0001/1/c0001")).toBe(true)
+		t.expect(has(say(refused), "cd ")).toBe(false)
+		t.expect(tip("R0001")).toBe("tracker: approve c0003") -- nothing recorded on the layer below
+		fixture.git(wt("R0001"), { "reset", "-q", "--hard", "R0001/2/c0001" })
+		fixture.git(f.main, { "branch", "-D", "R0001/2/c0001" })
+	end)
+
+	it("counts approval.md, in an issue's folder, as written after a layer's finish", function()
+		t.expect(layergit.isPostFinishPath("z-nile/.tracker/issues/active/c0001/approval.md", "R0001"))
+			.toBe(true)
+		t.expect(layergit.isPostFinishPath("z-nile/.tracker/issues/c0001/approval.md", "R0001")).toBe(true)
+		t.expect(layergit.isPostFinishPath("z-nile/.tracker/issues/active/c0001/check.sh", "R0001"))
+			.toBe(false)
+		t.expect(
+			layergit.isPostFinishPath("z-nile/.tracker/issues/active/c0001/acceptance/approval.md", "R0001")
+		)
+			.toBe(false)
+	end)
 
 	it("records nothing in a raft worktree on no branch (a rebase in progress), and says so", function()
 		fixture.git(wt("R0001"), { "checkout", "-q", "--detach" })

@@ -204,4 +204,68 @@ return t.spec("c0369 the place an approval is recorded in", function(it)
 			end
 		end
 	)
+
+	it(
+		"for an issue in active/, takes only its raft's worktree, and refuses with no directory when there is none",
+		function()
+			local function active(state: string, hash: string): approveplace.Copy
+				return {
+					ready = true,
+					slug = "hold",
+					state = state,
+					hash = hash,
+					active = true,
+					raft = "R0001",
+				}
+			end
+			local function raftW(state: string, hash: string, pushed: boolean): approveplace.Seen
+				local w = seen("here", copy(true, state, hash), "old")
+				w.name = ".worktree/R0001"
+				w.path = "/repo/.worktree/R0001"
+				w.here = false
+				w.raft = true
+				w.pushed = pushed
+				return w
+			end
+			local RAFT: approveplace.Choice =
+				{ kind = "worktree", path = "/repo/.worktree/R0001", name = ".worktree/R0001", record = true }
+			-- a changed contract on the raft's worktree is recorded there, whatever a prep worktree holds
+			local prep = seen("prep", copy(true, "none", "other"), "old")
+			t.expect(
+				approveplace.choose(
+					ID,
+					active("holds", "old"),
+					{ prep, raftW("changed", "new", false) },
+					false
+				)
+			)
+				.toEqual(RAFT)
+			-- an approval it holds is pushed, then said to wait; one of main's own design is main's approval
+			t.expect(approveplace.choose(ID, active("holds", "old"), { raftW("holds", "new", false) }, false))
+				.toEqual({
+					kind = "worktree",
+					path = "/repo/.worktree/R0001",
+					name = ".worktree/R0001",
+					record = false,
+				})
+			t.expect(approveplace.choose(ID, active("holds", "old"), { raftW("holds", "new", true) }, true))
+				.toEqual({ kind = "pushed", path = nil, name = ".worktree/R0001", record = false })
+			t.expect(approveplace.choose(ID, active("holds", "old"), { raftW("holds", "old", true) }, false))
+				.toEqual(APPROVED)
+			-- an unapproved active issue whose raft has no worktree here is never recorded on origin/main
+			local _, none = approveplace.choose(ID, active("none", "old"), { prep }, false)
+			t.expect(
+				has(
+					none,
+					"c0001 is active in R0001, and no worktree of R0001 is on this machine: run ./zn worktree R0001, then ./zn approve c0001"
+				)
+			).toBe(true)
+			t.expect(has(none, "cd ")).toBe(false)
+			t.expect(approveplace.choose(ID, active("holds", "old"), {}, false)).toEqual(APPROVED)
+			-- --publish never records there
+			local _, nothing =
+				approveplace.choose(ID, active("holds", "old"), { raftW("changed", "new", false) }, true)
+			t.expect(has(nothing, "c0001 has no recorded approval to publish")).toBe(true)
+		end
+	)
 end)
