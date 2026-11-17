@@ -1,11 +1,12 @@
 --!strict
 -- Game: one player's run as a pure state machine, stepped once per tick and told what happened.
 -- ready -> playing -> dying -> (ready | gameover), and playing -> levelclear -> ready for the next
--- level. It holds lives, level, score, the frightened counter and the extra-life rule; it never looks
+-- level. With the continue offer switched on for the run (f0145), the last life's dying pause ends in the offer
+-- (offer -> ready on a continue, offer -> gameover when it runs out or is declined). It holds lives, level, score, the frightened counter and the extra-life rule; it never looks
 -- at a maze. A pause of zero ticks is no pause.
 local Levels = require("./Levels")
 
-export type Phase = "ready" | "playing" | "dying" | "levelclear" | "gameover"
+export type Phase = "ready" | "playing" | "dying" | "levelclear" | "offer" | "gameover"
 export type Config = {
 	lives: number,
 	extraLifeScore: number, -- 0 means never
@@ -34,9 +35,16 @@ export type Game = {
 	extraLifeGiven: boolean,
 	ramp: Levels.Ramp?, -- levels by picked walls (f0147): level 1's rules, the ramp's speeds, points times the level
 	start: number, -- the level the run started on: the extra life comes at extraLifeScore times it (f0147)
+	lost: number, -- f0145: lives lost in the run, every death (continues included); GameOver carries it
+	offer: number, -- f0145: the continue offer's length in steps for this run; 0 is no offer
+	held: boolean, -- f0145: the offer's countdown is held (a purchase screen is open, or a receipt awaited)
+	waiting: number, -- f0145: steps left to wait for a bought continue's receipt
 }
 
 local Game = {}
+Game.OFFER_TICKS = 150 -- f0145 (G7): the continue offer, 10 s of real time at the server's 15 steps a second
+Game.CONTINUE_LIVES = 3 -- f0145: the lives a continue gives
+Game.RECEIPT_WAIT_TICKS = 450 -- f0145: 30 s of real time to wait for a bought continue's receipt
 Game.CLASSIC_CONFIG = table.freeze({
 	lives = 3,
 	extraLifeScore = 10000,
@@ -106,6 +114,10 @@ function Game.new(config: Config?, ramp: Levels.Ramp?, start: number?): Game
 		extraLifeGiven = false,
 		ramp = ramp,
 		start = first, -- f0148: the level the player chose in the lobby
+		lost = 0,
+		offer = 0,
+		held = false,
+		waiting = 0,
 	}
 	ready(g)
 	return g
@@ -144,6 +156,7 @@ function Game.died(g: Game): { Event }
 		return {}
 	end
 	g.lives -= 1
+	g.lost += 1
 	g.phase, g.timer, g.frightened = "dying", g.config.dyingTicks, 0
 	return { { kind = "LifeLost", lives = g.lives } }
 end
@@ -166,8 +179,60 @@ function Game.playAgain(g: Game): ({ Event }, boolean)
 		return {}, false
 	end
 	g.level, g.score, g.lives, g.frightened, g.extraLifeGiven = g.start, 0, g.config.lives, 0, false
+	g.lost, g.held, g.waiting = 0, false, 0
 	ready(g)
 	return { { kind = "Ready", reason = "again", level = g.level } }, true
+end
+
+-- f0145: switch the continue offer on for this run (ticks > 0), or off (0); any other length changes nothing
+function Game.allowOffer(g: Game, ticks: number)
+	if isWhole(ticks) and ticks >= 0 then
+		g.offer = ticks
+	end
+end
+
+-- f0145: hold or release the offer's countdown (a purchase screen is open); only during the offer
+function Game.hold(g: Game, on: boolean)
+	if g.phase == "offer" then
+		g.held = on
+		if not on then
+			g.waiting = 0
+		end
+	end
+end
+
+-- f0145: the purchase screen closed bought before its receipt came: hold the countdown for at most
+-- RECEIPT_WAIT_TICKS steps, then let it run again
+function Game.awaitReceipt(g: Game)
+	if g.phase == "offer" then
+		g.held, g.waiting = true, Game.RECEIPT_WAIT_TICKS
+	end
+end
+
+-- f0145: end the offer at the next step (so GameOver still comes out of a step); false outside the offer
+function Game.decline(g: Game): boolean
+	if g.phase ~= "offer" then
+		return false
+	end
+	g.timer, g.held, g.waiting = 1, false, 0
+	return true
+end
+
+-- f0145: during the offer, `lives` new lives and a respawn; the score, the level, the extra life's flag and the
+-- lives lost are kept. Outside the offer it does nothing.
+function Game.continue(g: Game, lives: number): ({ Event }, boolean)
+	if g.phase ~= "offer" or not isWhole(lives) or lives < 1 then
+		return {}, false
+	end
+	g.lives, g.held, g.waiting = lives, false, 0
+	ready(g)
+	return { { kind = "Ready", reason = "continue", level = g.level } }, true
+end
+
+-- f0145: the run is refused (a player sent back to the lobby): over at once, with no GameOver event
+function Game.refuse(g: Game)
+	g.phase, g.offer, g.held, g.waiting = "gameover", 0, false, 0
+	g.timer = 0
 end
 
 function Game.step(g: Game): { Event }
@@ -192,8 +257,25 @@ function Game.step(g: Game): { Event }
 				ready(g)
 				return { { kind = "Ready", reason = "respawn", level = g.level } }
 			end
+			if g.offer > 0 then
+				g.phase, g.timer, g.held, g.waiting = "offer", g.offer, false, 0
+				return { { kind = "Offer", ticks = g.offer } }
+			end
 			g.phase, g.timer = "gameover", 0
-			return { { kind = "GameOver", score = g.score, level = g.level } }
+			return { { kind = "GameOver", score = g.score, level = g.level, lives = g.lost } }
+		end
+	elseif phase == "offer" then
+		if g.waiting > 0 then
+			g.waiting -= 1
+			if g.waiting == 0 then
+				g.held = false
+			end
+		elseif not g.held then
+			g.timer -= 1
+			if g.timer <= 0 then
+				g.phase, g.timer = "gameover", 0
+				return { { kind = "GameOver", score = g.score, level = g.level, lives = g.lost } }
+			end
 		end
 	elseif phase == "levelclear" then
 		g.timer -= 1

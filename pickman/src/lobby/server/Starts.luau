@@ -19,7 +19,9 @@ function Starts.choosing(fn: (Player, any) -> ())
 	choose = fn
 end
 
-function Starts.start()
+-- `allow` (f0145's paid-play gate, optional) is asked before a request goes, while the player's travel is idle; it
+-- may yield. Returns the press function, for a press the server makes (a game bought in the lobby).
+function Starts.start(allow: ((Player) -> boolean)?): (Player) -> ()
 	local remotes = ReplicatedStorage:WaitForChild("Remotes")
 	local startGame = remotes:WaitForChild("StartGame") :: RemoteEvent
 	local status = remotes:WaitForChild("Status") :: RemoteEvent
@@ -48,13 +50,16 @@ function Starts.start()
 	-- f0145's after a purchase, carries no level of its own)
 	local held: { [Player]: any } = {}
 
-	startGame.OnServerEvent:Connect(function(player: Player, requested: any)
+	local function press(player: Player, requested: any)
 		local id = tostring(player.UserId)
 		if requested ~= nil then
 			held[player] = requested
 		end
 		if destination == nil then
 			push(player, "idle")
+			return
+		end
+		if allow and Travel.status(travel, id, os.clock()) == "idle" and not allow(player) then
 			return
 		end
 		local answer, ticket = Travel.request(travel, id, os.clock())
@@ -74,7 +79,8 @@ function Starts.start()
 				sync(player)
 			end
 		end
-	end)
+	end
+	startGame.OnServerEvent:Connect(press)
 
 	TeleportService.TeleportInitFailed:Connect(function(player: Player)
 		Travel.failed(travel, tostring(player.UserId), os.clock())
@@ -101,6 +107,9 @@ function Starts.start()
 			end
 		end
 	end)
+	return function(player: Player)
+		press(player, nil)
+	end
 end
 
 return Starts
