@@ -185,4 +185,18 @@ function ids.parseMap(text: string): { [string]: string }?
 	return map
 end
 
+-- The ids a compaction map renames: those on either side of a pair whose sides differ (`X Y`, X ~= Y). The old side is
+-- an id renumbered away, which the counter may hand out again; the new side names another item now. A pair whose sides
+-- agree renames nothing.
+function ids.renamedIn(map: { [string]: string }): { [string]: boolean }
+	local out: { [string]: boolean } = {}
+	for old, new in map do
+		if old ~= new then
+			out[old] = true
+			out[new] = true
+		end
+	end
+	return out
+end
+
 return ids

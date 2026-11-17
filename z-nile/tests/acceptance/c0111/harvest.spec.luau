@@ -70,7 +70,7 @@ return t.spec("c0111 harvest ledgers", function(it)
 				.. "- design-review-001 F1: review/text\n" -- duplicate
 				.. "- review-001 F2: one-off:\n" -- no reason
 				.. "- review-001 F3: Not An Id\n" -- neither
-				.. "- stream-review-c0010-001 F1: testing/pin\n" -- not a review stem
+				.. "- stream-review-c0010-1 F1: testing/pin\n" -- not a review stem (c0136: stream-review-c0010-001 is one)
 				.. "- design-review-001: testing/pin\n" -- no finding
 		)
 		t.expect(#problems).toBe(5)
@@ -78,7 +78,7 @@ return t.spec("c0111 harvest ledgers", function(it)
 		t.expect(has(problems, "design-review-001 F1")).toBe(true)
 		t.expect(has(problems, "review-001 F2")).toBe(true)
 		t.expect(has(problems, "review-001 F3")).toBe(true)
-		t.expect(has(problems, "stream-review-c0010-001")).toBe(true)
+		t.expect(has(problems, "stream-review-c0010-1")).toBe(true)
 	end)
 
 	it("uncovered findings are listed in item, review and number order", function()

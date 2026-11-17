@@ -76,7 +76,7 @@ return t.spec("c0111 skills search lessons and route new ones by role", function
 					s,
 					"- **The lead of a prep or raft** writes it in `<skills folder>/<the skill the lesson improves>/lessons/<slug>.md`"
 				)
-				at(s, "as `- note <what happened>: <lesson ids>`")
+				at(s, "as `- note <what happened> (erred <skill>): <lesson ids>`") -- c0136 override: a note names its step
 				at(s, "- **Any other lead** (")
 				at(s, "./zn new issue c lesson-")
 				t.expect(string.find(s, "never writes a lesson file itself", 1, true) == nil).toBe(true)
@@ -119,8 +119,8 @@ return t.spec("c0111 skills search lessons and route new ones by role", function
 			-- written as each report or stream review arrives, before step 1, so no later path can skip them
 			t.expect(at(p2b, "**Candidate lessons are written as they arrive**") < at(p2b, "\n1. "))
 				.toBe(true)
-			at(p2b, "`- note ws-<issue>: <lesson ids>`")
-			at(p2b, "`- note stream-review-<issue>-NNN: <lesson ids>`")
+			at(p2b, "`- note ws-<issue> (erred <skill>): <lesson ids>`") -- c0136 override: every entry names its step
+			at(p2b, "`- stream-review-<issue>-NNN F<n>: <lesson ids>`") -- c0136 override: its findings are entries, not notes
 			local p4 = section(text, "Phase 4")
 			t.expect(at(p4, "harvest.md") < at(p4, "\n6. ")).toBe(true) -- before the human, the one answer's harvest
 			local p5 = section(text, "Phase 5")

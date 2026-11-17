@@ -7,7 +7,7 @@
 #   - finds no repository above <checkout>/.cache (GIT_CEILING_DIRECTORIES, plus a sentinel .cache/.git that
 #     fails git run in .cache itself), so a fixture whose own repository is missing is an error;
 #   - ignores inherited repository overrides (GIT_DIR, GIT_INDEX_FILE, ... are unset);
-#   - refuses ref updates in the real repository (check.sh flows may still fetch into refs/remotes/)
+#   - refuses ref updates in the real repository (check.sh flows may still fetch into refs/remotes/, even a fetch with nothing new)
 #     (z-nile/lib/git-hooks/reference-transaction), and pushes into it by any local URL (pre-push);
 #   - runs no background gc or maintenance (fixtures are throwaway, and are re-created mid-run).
 # The guards accumulate: a fence set up inside another keeps the outer checkout's ceiling and ref guard.

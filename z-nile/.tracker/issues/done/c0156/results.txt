@@ -1,0 +1,34 @@
+pickman/tests/acceptance/c0103/narrowed.spec.luau
+	a deleted assertion is not the narrowed spec, and another line ending is
+	a line joined onto the comment line above it is not the narrowed spec
+	the spec is exactly the narrowed one: W, A, S and D, unbound keys, the shape of the map
+	the spec is still there, and f0014's check.sh still runs it
+pickman/tests/acceptance/c0128/golden.spec.luau
+	f0024 adapter is exactly the narrowed file
+	f0024: a line joined onto the comment above it, or a deleted assertion, is not the narrowed file
+	f0026 adapters is exactly the narrowed file
+	the pins and the joins do not depend on the files' line endings
+	the review's two joins in f0026 adapters, or a deleted assertion, are not the narrowed file
+z-nile/.tracker/issues/active/c0156/acceptance/docs.spec.luau
+	the testing skill lists pin among the shared libraries, with what it does
+	the narrowing lesson points to pin.digest and says both pins are fixed
+z-nile/.tracker/issues/active/c0156/acceptance/pin.spec.luau
+	every line break counts: turning any one into a space changes the text
+	a vertical tab or a form feed, which a Luau comment runs through, is kept as it is: no space, no line break
+	blank lines are kept: one more or one fewer changes the text
+	runs of spaces and tabs within a line are one space, and a line's trailing whitespace goes
+	CRLF and a lone CR are line breaks like LF
+	item ids are masked, as whole words of f, d, c or R
+	a comma before a closing brace goes, across at most one line break
+	the blank lines at the start and end of the text go
+	nothing else is tolerated: a changed token, a deleted line, a comment prefix, a swapped order
+	normalising twice is normalising once
+	the digest is the SHA-256 of the normalised text, as lowercase hex
+	joined: the line after the comment goes onto it, with one space, and nothing else changes
+	joined reads its text and its comment through the normaliser: line endings, ids, indentation
+	joined refuses a comment no line ends in, and a comment followed by a blank line
+	without: deletes the one occurrence, read through the normaliser, and nothing else changes
+	without refuses a piece that is empty, absent or repeated
+z-nile/tests/tooling/pin-rule.spec.luau
+	normalises the sample to exactly the expected text
+	hashes the sample to exactly the expected digest
