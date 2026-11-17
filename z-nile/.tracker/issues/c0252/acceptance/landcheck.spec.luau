@@ -5,6 +5,7 @@
 local escalation = require("@znile/engine/escalation")
 local t = require("@tests/lib/t")
 
+local frontier: any = require("@znile/engine/frontier")
 local landcheck: any = require("@znile/engine/landcheck")
 local landread: any = require("@znile/engine/landread")
 
@@ -30,6 +31,7 @@ local function clean(): any
 		traceProblems = {},
 		approvalDrift = nil,
 		verdictMissing = false,
+		frontier = { met = true, listed = {} },
 		codePaths = { "z-nile/engine/x.luau" },
 		unreadable = {},
 		gate = nil,
@@ -495,6 +497,155 @@ return t.spec("c0252 landcheck: the checks before a landing", function(it)
 			t.expect(landcheck.landRequestFresh(r, TIP)).toBe(true)
 			t.expect(landcheck.landRequestFresh(r, "b" .. string.sub(TIP, 2))).toBe(false)
 			t.expect(landcheck.landRequestFresh(r, "")).toBe(false)
+		end
+	)
+	-- c0251's frontier floor (user, 2026-11-16): the problem is c0251's code on c0251's verdict, with a kind of its own
+	local UNMET = {
+		met = false,
+		code = "no-frontier-review",
+		problem = "no-frontier-review: no review of the landed code ran on a frontier model (frontier: claude-fable-5-2); found final-review-001.md on claude-sonnet-5-5",
+		listed = { "claude-fable-5-2" },
+	}
+	local function unmet(): any
+		local i = clean()
+		i.frontier = UNMET
+		return i
+	end
+
+	it(
+		"AC22: an unmet frontier floor is the one problem no-frontier-review, c0251's own code, of kind review and not a block or a redo",
+		function()
+			t.expect(landcheck.knownKind("review")).toBe(true)
+			t.expect(frontier.CODE).toBe("no-frontier-review")
+			t.expect(codes(unmet())).toEqual({ "no-frontier-review" })
+			t.expect(kindOf(unmet(), "no-frontier-review")).toBe("review")
+			local p = landcheck.problems(unmet())[1]
+			-- the code is printed once (by `lines`), and the text names the command the dispatcher runs
+			t.expect(string.find(p.text, "no-frontier-review", 1, true)).toBe(nil)
+			t.expect(string.find(p.text, "found final-review-001.md on claude-sonnet-5-5", 1, true) ~= nil)
+				.toBe(true)
+			t.expect(
+				string.find(p.text, "./zn dispatch zz-review R0010 --mode final --frontier)", 1, true) ~= nil
+			)
+				.toBe(true)
+			-- for a prefix landing the command carries --through
+			local prefix = unmet()
+			prefix.through = "c0010"
+			t.expect(
+				string.find(
+					landcheck.problems(prefix)[1].text,
+					"zz-review R0010 --mode final --frontier --through c0010)",
+					1,
+					true
+				) ~= nil
+			).toBe(true)
+			t.expect(landcheck.lines(landcheck.problems(unmet()))[1]:sub(1, 33))
+				.toBe("no-frontier-review (review): no r")
+			-- a met floor, and no list at all (frontier.check: an empty list sets no floor), give none
+			local met = clean()
+			met.frontier = frontier.check({}, {})
+			t.expect(codes(met)).toEqual({})
+			t.expect(codes((function()
+				local i = clean()
+				i.frontier = frontier.check(
+					{ { file = "final-review-001.md", model = "claude-fable-5-2" } },
+					{ "claude-fable-5-2" }
+				)
+				return i
+			end)())).toEqual({})
+		end
+	)
+
+	it(
+		"AC22: classify runs the extra round for a review problem: a block and a redo outrank it, it outranks a wait, and it never blocks by itself",
+		function()
+			local v = landcheck.classify(landcheck.problems(unmet()), 0, 2)
+			t.expect(v.action).toBe("review")
+			t.expect(v.reason).toBe(nil)
+			-- however often the worker has already rerun, the verdict is the same round (the cap is for redo)
+			t.expect(landcheck.classify(landcheck.problems(unmet()), 9, 2).action).toBe("review")
+			-- a wait (CI running) is outranked: the round pushes a review, which moves the head and restarts CI
+			local w = unmet()
+			w.pr.checks = { { name = "static", state = "" } }
+			t.expect(landcheck.classify(landcheck.problems(w), 0, 2).action).toBe("review")
+			-- a redo outranks the round (the worker is about to change the code), a block outranks everything
+			local r = unmet()
+			r.traceProblems = { "stale" }
+			t.expect(landcheck.classify(landcheck.problems(r), 0, 2).action).toBe("redo")
+			local b = unmet()
+			b.openHigh = { "F2" }
+			t.expect(landcheck.classify(landcheck.problems(b), 0, 2).action).toBe("block")
+			-- the round is not a failure to repeat: it adds a code, so a worker's signature moves with it, nothing more
+			t.expect(landcheck.signature(landcheck.problems(unmet()), TIP)).toBe(`no-frontier-review@{TIP}`)
+		end
+	)
+
+	it(
+		"AC22: afterRound: once the round ran at this tip a review problem still open is a block under needs-decision, never a second round",
+		function()
+			local ps = landcheck.problems(unmet())
+			t.expect(landcheck.afterRound(ps, false)[1].kind).toBe("review")
+			local after = landcheck.afterRound(ps, true)
+			t.expect(#after).toBe(1)
+			t.expect(after[1].code).toBe("no-frontier-review")
+			t.expect(after[1].kind).toBe("block")
+			t.expect(after[1].reason).toBe("needs-decision")
+			t.expect(
+				string.find(after[1].text, "the extra round ran and the floor is still unmet", 1, true) ~= nil
+			)
+				.toBe(true)
+			local v = landcheck.classify(after, 0, 2)
+			t.expect(v.action).toBe("block")
+			t.expect(v.reason).toBe("needs-decision")
+			-- other problems pass through untouched
+			local mixed = unmet()
+			mixed.pr.checks = { { name = "static", state = "" } }
+			local out = landcheck.afterRound(landcheck.problems(mixed), true)
+			t.expect(#out).toBe(2)
+			local kinds: { string } = {}
+			for _, p in out do
+				table.insert(kinds, p.code .. ":" .. p.kind)
+			end
+			table.sort(kinds)
+			t.expect(kinds).toEqual({ "ci-pending:wait", "no-frontier-review:block" })
+		end
+	)
+
+	it(
+		"AC22: the note filed when the round did not clear the floor parses, names the round it ran, and recommends retry (a retry runs the round again after the list or the model is fixed)",
+		function()
+			local ps = landcheck.afterRound(landcheck.problems(unmet()), true)
+			local body: string = landcheck.escalation(ps, "R0010", nil, 0)
+			local note, why = escalation.parse(body)
+			t.expect(why).toBe(nil)
+			t.expect(note ~= nil).toBe(true)
+			t.expect(escalation.check(note :: any)).toBe(nil)
+			t.expect(
+				string.find(
+					body,
+					"the frontier floor is still unmet after the one extra review round",
+					1,
+					true
+				) ~= nil
+			).toBe(true)
+			t.expect(string.find(body, "--mode final --frontier once for this tip", 1, true) ~= nil)
+				.toBe(true)
+			t.expect(string.find(body, "- no-frontier-review: the extra round ran", 1, true) ~= nil)
+				.toBe(true)
+			t.expect(landcheck.recommended(ps)).toBe("retry")
+			t.expect(
+				string.find(
+					body,
+					"amend-design: the design has to change to make the check pass (recommended)",
+					1,
+					true
+				)
+			).toBe(nil)
+			-- a note for any other block does not talk of the round
+			local other = clean()
+			other.openHigh = { "F2" }
+			local plain: string = landcheck.escalation(landcheck.problems(other), "R0010", nil, 0)
+			t.expect(string.find(plain, "frontier", 1, true)).toBe(nil)
 		end
 	)
 end)

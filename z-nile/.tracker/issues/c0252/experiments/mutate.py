@@ -112,6 +112,47 @@ end''',1),
  'M71':(E+'dispatcher.luau','local verdict = landcheck.classify(ps, spent, cap)','local verdict = landcheck.classify(ps, 0, cap)',1),
  'M73':(E+'dispatch.luau','\t\tand f.blockRequest == nil\n','',1),
  'M72':(E+'dispatcher.luau','if not okj or type(j) ~= "table" then\n\t\treturn noAnswer(out .. err)','if not okj or type(j) ~= "table" then\n\t\treturn true, nil, req',1),
+ 'M90':(LC,'''				frontier.CODE,
+				"review",''','''				frontier.CODE,
+				"redo",''',1),
+ 'M91':(LC,'if not i.frontier.met then','if false then',1),
+ 'M92':(LC,'''	if firstReview then
+		return { action = "review", problems = ps }
+	end''','''	if false then
+		return { action = "review", problems = ps }
+	end''',1),
+ 'M93':(LC,'''	if firstRedo then
+		if tries >= cap then''','''	if firstReview then
+		return { action = "review", problems = ps }
+	end
+	if firstRedo then
+		if tries >= cap then''',1),
+ 'M94':(LC,'if p.kind == "block" and not firstBlock then','if (p.kind == "block" or p.kind == "review") and not firstBlock then',1),
+ 'M95':(LC,'''	if not ran then
+		return ps
+	end''','''	if true then
+		return ps
+	end''',1),
+ 'M96':(LC,'''				reason = "needs-decision",
+				layer = p.layer,''','''				reason = "review-exhausted",
+				layer = p.layer,''',1),
+ 'M97':(E+'dispatch.luau','''local function reviewAction(f: Facts, l: LandFacts): Action
+	if not table.find(f.autoMerge, "run") then''','''local function reviewAction(f: Facts, l: LandFacts): Action
+	if false then''',1),
+ 'M98':(E+'dispatch.luau','if l and l.action == "review" then','if false then',1),
+ 'M99':(E+'dispatch.luau','elseif l.action == "review" then','elseif false then',1),
+ 'M100':(E+'dispatcher.luau','ps = landcheck.afterRound(ps, tip == fr.from or tip == fr.after)','ps = ps',1),
+ 'M101':(E+'dispatcher.luau','st.frontierRan = { through = action.through or "", from = action.tip or "" }','st.frontierRan = nil',1),
+ 'M102':(E+'dispatcher.luau','if ended == "waiting" or st.outcome == "waiting" then','if false then',1),
+ 'M103':(E+'dispatcher.luau','''			if action.through then
+				ro["--through"] = { action.through :: string }''','''			if false then
+				ro["--through"] = { action.through :: string }''',1),
+ 'M104':(E+'dispatcher.luau','local committed = dispatcher.scriptStep(ctx, st, "z-commit", id, commitArgs)','local committed = "ok"',1),
+ 'M105':(E+'main.luau','''	local floor =
+		require("./reviewfiles").frontierVerdict(floorDirs, models.frontier(models.walk(".", raft.dir)))''','''	local floor = { met = true, listed = {} }''',1),
+ 'M106':(E+'main.luau','''		if table.find(bindIds, m.id) then
+			table.insert(floorDirs, m.dir)''','''		if true then
+			table.insert(floorDirs, m.dir)''',1),
 }
 def main():
     mid=sys.argv[1]
