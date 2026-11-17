@@ -64,10 +64,26 @@ This repo only takes work through its tracker (AGENTS.md: no code without an iss
 - **E6:** a Lune benchmark of a 24-player Snake arena (step cost and snapshot bytes) to set the player cap.
 - **E7:** drawing the Asteroids wrap-around in first person: the cost of rendering the tiled field (nearby copies only) and whether it reads clearly in a Studio prototype.
 
+## Features
+
+### PaidPlay and Receipts (f0201)
+The cost model every game shares (f0145's, per game: one free start per rolling hour per game, then 1 R$ a play, a revive for 1 R$, playtests never charge).
+- `src/shared/Logic/PaidPlay` (a leaf: it requires nothing): the record of one player in one game (`free`, `plays`, `revives`, the last 50 receipt ids), the free-hour claim, the receipt ledger, the mode (`live`, `test`, `closed`) and the catalog's product map. It never names a game: a game is a catalog entry passed in.
+- `src/server/Catalog.luau`: one entry per game (its name, title, its two stores, the attribute names of its two product ids). A new game is one entry and two Developer Products; no code changes.
+- `src/server/Wallet.luau`: a player's records (stored in f0145's shape) through one `UpdateAsync` per decision (the arrival's claim, a revive used, a refund, a grant), the portal's passes (MemoryStore, only after a failed read), the run's revive count, and the guards, per player and game, that bound what one client can make it spend.
+- `src/server/Receipts.luau`: installed by **every place** (E4): `ProcessReceipt` for every game's products (a receipt grants into the product's own game record by user id, wherever it is processed), the purchase prompts, and the test purchase screen's server side.
+- `src/shared/Prices.luau`: the badge text ("5 R$" struck through, "1 R$", "SALE"), the one config table the portal and the screens print.
+- `src/shared/TestPurchase.luau`: the test purchase screen, a client adapter module every place's client boots. It is the one client adapter in the library: it wires nothing into a game's screen, it stands in for Roblox's own purchase dialog in test mode. A place's own handlers of Return, KeypadEnter, ButtonA, Backspace, ButtonB and taps act through ContextActionService bindings below priority 3000, or skip processed input, or check `TestPurchase.isOpen()`; a device tracker is exempt.
+- Roblox's `ServerScriptService` attributes set by the publisher: `PaidPlay` (`"live"` for live mode) and each catalog entry's two product ids.
+
+### Travel and Places (f0199)
+- `src/shared/Logic/Travel` (the leaf, the copied rules): pickman's Travel, byte for byte (the teleport request, its timeout, cool-down and place-id check), so every place teleports by the same rules. Until c0200 switches pickman and deletes its copy, a change to either copy is made to both.
+- `src/shared/Places.luau` (the place list and the attribute read, the one place in the library that names the experience's places; `src/server/Catalog.luau` names the games' paid-play entries): `Places.read(read)` reads `PortalPlaceId`, `PickmanPlaceId`, `SnakePlaceId`, `InvadersPlaceId` and `AsteroidsPlaceId` through the read a place's adapter passes in, each value through `Travel.destination`; a place that is not published is absent from the answer.
+
 ## Allowed dependencies
 
 One `Consumer -> Provider` per line.
 
 ```deps
-# no features yet
+# PaidPlay and Travel are leaves
 ```

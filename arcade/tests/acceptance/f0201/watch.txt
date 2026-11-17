@@ -1,0 +1,6 @@
+arcade/src/server/Catalog.luau
+arcade/src/server/Receipts.luau
+arcade/src/server/Wallet.luau
+arcade/src/shared/Logic/PaidPlay/init.luau
+arcade/src/shared/Prices.luau
+arcade/src/shared/TestPurchase.luau
