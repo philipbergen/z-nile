@@ -864,11 +864,13 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	local issues: { Issue } = {}
 	local issueById: { [string]: Issue } = {}
 	local blockedIds: { [string]: boolean } = {} -- c0249: waits on the person (c0250's stored status)
-	local autoIds: { [string]: boolean } = {} -- c0249: its rank was written by a move (` auto`)
+	local movedIds: { [string]: boolean } = {} -- c0249: its rank was written by a move (`moved=` in its provenance.md)
 	for _, list in { rawIssues, rawRafts } do
 		for _, i in list do
 			blockedIds[i.id] = rankLib.isBlocked(i.front.status)
-			autoIds[i.id] = rankLib.isAuto(i.front.rank)
+			-- one record read per item that has a rank
+			local record = `{i.dir}/provenance.md`
+			movedIds[i.id] = (i.front.rank or "") ~= "" and fs.isFile(record) and rankLib.movedBy(fs.readFile(record))
 		end
 	end
 	for _, i in rawIssues do
@@ -987,13 +989,13 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 	end
 
 	-- c0249: a raft's rank for the order is its own, else the best (lowest) a person set on one of its members' (a rank a
-	-- move wrote, ` auto`, does not count: rank.effective's rule)
+	-- move wrote, `moved=` in its provenance.md, does not count: rank.effective's rule)
 	for _, raft in rafts do
 		local best = raft.rank
 		if best == nil and raft.state == "backlog" then
 			for _, id in raft.issues do
 				local m = issueById[id].rank
-				if m ~= nil and not autoIds[id] and (best == nil or m < best) then
+				if m ~= nil and not movedIds[id] and (best == nil or m < best) then
 					best = m
 				end
 			end

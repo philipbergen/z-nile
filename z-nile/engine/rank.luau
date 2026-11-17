@@ -10,6 +10,7 @@
 -- `rank.listOrder` is what `./zn list` prints: every blocked item first (rafts, then issues), then lost work, then the rafts
 -- and then the issues, each in this order (c0250's shape for the blocked part, which its work-board spec pins).
 -- A rank only orders work that is not started: an item that is not in the backlog counts as unset.
+local provenance = require("./provenance")
 local publish = require("./publish")
 local statusLib = require("./status")
 
@@ -28,32 +29,52 @@ export type Fact = {
 	members: { string }, -- a raft's member ids
 	dependsOn: { string }, -- an issue's depends_on ids
 	root: string, -- the project root that holds it
-	auto: boolean?, -- the rank was written by a move that renumbered the item, not set by a person (`rank: 30 auto`)
+	moved: boolean?, -- its latest `ranked` row in provenance.md carries `moved=`: a move that renumbered it wrote the rank, a person did not set it
 	design: string?, -- front `design:` (the rafting pick needs `ready`)
 	approved: boolean?, -- an approval.md sits beside the document on origin/main (the rafting pick)
 	ownRank: number?, -- set by rank.stack only: its own rank, while `rank` holds the one the order uses
-	ownAuto: boolean?, -- set by rank.stack only: whether its own rank is a moved-written one
+	ownMoved: boolean?, -- set by rank.stack only: whether its own rank is a moved-written one
 }
 
 -- The rank a front-matter value gives: (nil, nil) for none (the line is missing or empty), (n, nil), or (nil, why). The
--- value is a whole number, plain (a person set it) or followed by ` auto` (a move that renumbered the item wrote it).
+-- value is a bare whole number: who set it is in the item's provenance.md, never in the line (`rank.movedBy`).
 function rank.parse(value: string?): (number?, string?)
 	if value == nil or value == "" then
 		return nil, nil
 	end
-	local digits = string.match(value, "^(%d+) auto$") or value
-	if #digits > 6 or not string.match(digits, "^[1-9]%d*$") then
+	if #value > 6 or not string.match(value, "^[1-9]%d*$") then
 		return nil,
-			`rank: {value} is not a whole number from 1 to {rank.MAX} (no sign, no leading zero, no fraction; `
-				.. "optionally followed by ` auto`); leave it empty or remove the line to unset it"
+			`rank: {value} is not a whole number from 1 to {rank.MAX} (no sign, no leading zero, no fraction); `
+				.. "leave it empty or remove the line to unset it"
 	end
-	return tonumber(digits), nil
+	return tonumber(value), nil
 end
 
--- Whether a front-matter value carries the ` auto` mark (a moved-written rank). A raft takes its members' best rank
--- from the plain ones only, so a move that renumbers items never reorders the rafts (Q5, F2 of the design review).
-function rank.isAuto(value: string?): boolean
-	return value ~= nil and string.match(value, "^%d+ auto$") ~= nil
+-- Whether a rank was written by a move that renumbered the item rather than set by a person, read from the item's
+-- provenance.md (`text`, nil when there is none): its latest `ranked` row carries a `moved=` field (the move writes the
+-- row of every item it renumbers with `moved=<the item it moved>`). A person-set rank has a latest `ranked` row with no
+-- `moved=`, or no row at all (a hand edit). A raft takes its members' best rank from the person-set ones only, so a move
+-- that renumbers items never reorders the rafts (Q5, F2 of the design review). A record that does not parse counts as
+-- person-set (the audit refuses it).
+function rank.movedBy(text: string?): boolean
+	if text == nil or text == "" then
+		return false
+	end
+	local rows = provenance.parse(text)
+	if not rows then
+		return false
+	end
+	for i = #rows, 1, -1 do
+		if rows[i].event == "ranked" then
+			for part in string.gmatch(rows[i].detail, "[^;]+") do
+				if string.match(part, "^%s*moved=") then
+					return true
+				end
+			end
+			return false
+		end
+	end
+	return false
 end
 
 -- What is wrong with the rank lines of a document, or nil. The front block is read as store.readFront reads it (the
@@ -81,11 +102,11 @@ function rank.problem(text: string): string?
 	return why
 end
 
--- The document with its rank set to `value` (a whole number, ` auto` when `auto`) or removed (nil). Every `rank:` line
+-- The document with its rank set to `value` (a whole number) or removed (nil). Every `rank:` line
 -- goes; a set rank is written once, right after `id:` (at the top of the block when there is none): the line every prep
 -- branch leaves alone, so a rank published while a prep is open merges without a conflict (`status:` and `design:` are
 -- the lines a prep edits, and a line beside them conflicts). Nil when there is no front block.
-function rank.withRank(text: string, value: number?, auto: boolean?): string?
+function rank.withRank(text: string, value: number?): string?
 	local head, block, rest = string.match(text, "^(%-%-%-\n)(.-\n)(%-%-%-.*)$")
 	if not head or not block or not rest then
 		return nil
@@ -104,7 +125,7 @@ function rank.withRank(text: string, value: number?, auto: boolean?): string?
 				break
 			end
 		end
-		table.insert(kept, at, if auto then `rank: {value} auto` else `rank: {value}`)
+		table.insert(kept, at, `rank: {value}`)
 	end
 	local body = table.concat(kept, "\n")
 	if #kept > 0 then
@@ -146,8 +167,9 @@ function rank.where(path: string, roots: { string }): (string?, string?, string?
 end
 
 -- The fact of one document: `front` is its front matter as a key -> value table (any reader's). The status word is the
--- effective one (status.effective), or the stored `blocked`. A done item is its id and state alone.
-function rank.factOf(path: string, front: { [string]: string }, roots: { string }): Fact?
+-- effective one (status.effective), or the stored `blocked`. A done item is its id and state alone. `record` is the text
+-- of the item's provenance.md, when the caller has read it (it needs it only for an item that has a rank).
+function rank.factOf(path: string, front: { [string]: string }, roots: { string }, record: string?): Fact?
 	local state, id, root = rank.where(path, roots)
 	if not state or not id or not root then
 		return nil
@@ -184,7 +206,7 @@ function rank.factOf(path: string, front: { [string]: string }, roots: { string 
 		state = state,
 		status = word,
 		rank = own,
-		auto = own ~= nil and rank.isAuto(front.rank),
+		moved = own ~= nil and rank.movedBy(record),
 		raft = if (front.raft or "") ~= "" then front.raft else nil,
 		members = ids(front.issues),
 		dependsOn = ids(front.depends_on),
@@ -220,7 +242,7 @@ function rank.less(ar: number?, aid: string, br: number?, bid: string): boolean
 end
 
 -- A raft's rank for ordering: its own, else the best (lowest) rank a person set on one of its members (a rank a move
--- wrote, ` auto`, does not count: an unrelated move must not reorder the rafts); an issue's is its own. nil: unset.
+-- wrote, `moved=` in its provenance.md, does not count: an unrelated move must not reorder the rafts); an issue's is its own.
 function rank.effective(f: Fact, byId: { [string]: Fact }): number?
 	local own = ranked(f)
 	if own ~= nil or f.kind ~= "raft" then
@@ -229,7 +251,7 @@ function rank.effective(f: Fact, byId: { [string]: Fact }): number?
 	local best: number? = nil
 	for _, mid in f.members do
 		local m = byId[mid]
-		local r = if m and not m.auto then ranked(m) else nil
+		local r = if m and not m.moved then ranked(m) else nil
 		if r ~= nil and (best == nil or r < best) then
 			best = r
 		end
@@ -427,7 +449,7 @@ function rank.listOrder(facts: { Fact }, lost: { string }?, world: { Fact }?): {
 	return out
 end
 
-export type Change = { id: string, rank: number?, was: number?, auto: boolean? } -- auto: a moved-written rank (` auto`)
+export type Change = { id: string, rank: number?, was: number?, moved: boolean? } -- moved: its `ranked` row carries `moved=`
 
 -- The facts a move can place: the backlog items of the kind, in the order a rank gives them (no lost, no blocked).
 function rank.stack(facts: { Fact }, kind: string): { Fact }
@@ -437,7 +459,7 @@ function rank.stack(facts: { Fact }, kind: string): { Fact }
 		if f.kind == kind and f.state == "backlog" then
 			local c = table.clone(f)
 			c.ownRank = f.rank
-			c.ownAuto = f.auto
+			c.ownMoved = f.moved
 			c.rank = rank.effective(f, byId)
 			table.insert(mine, c)
 		end
@@ -482,9 +504,10 @@ end
 --   "unset"                  no rank
 -- The moved item is given a plain rank in a gap (its neighbours' ranks 10 apart, so one move edits one file). Dropped
 -- among or after unset items, it is given a rank with the unset items above it in the stack, in steps of 10 after the
--- highest rank there is, and they are marked ` auto` (a person did not set them: a raft's rank ignores them); no rank that
--- exists changes. Only when there is no room between two ranked neighbours are the ranked items renumbered 10, 20, 30 ...
--- from the top (a person-set rank stays plain, an auto one stays auto). An empty result changes nothing.
+-- highest rank there is, and their `ranked` rows carry `moved=` (a person did not set them: a raft's rank ignores them); no
+-- rank that exists changes. Only when there is no room between two ranked neighbours are the ranked items renumbered 10, 20,
+-- 30 ... from the top, each but the moved one with `moved=` in its row. An empty result changes nothing; asking for the
+-- place a moved-written rank already has changes no line but writes a row without `moved=`, which makes it the person's.
 function rank.plan(
 	stack: { Fact },
 	id: string,
@@ -505,10 +528,10 @@ function rank.plan(
 		if n < 1 or n > rank.MAX or n ~= math.floor(n) then
 			return nil, `rank {n} is not a whole number from 1 to {rank.MAX}`
 		end
-		if me.ownRank == n and not me.ownAuto then
+		if me.ownRank == n and not me.ownMoved then
 			return {}, nil
 		end
-		return { { id = id, rank = n, was = me.ownRank, auto = false } }, nil
+		return { { id = id, rank = n, was = me.ownRank, moved = false } }, nil
 	elseif how == "unset" then
 		return if me.ownRank == nil then {} else { { id = id, rank = nil, was = me.ownRank } }, nil
 	end
@@ -550,9 +573,9 @@ function rank.plan(
 	local want = table.clone(others)
 	table.insert(want, at, id)
 	if same(want, current) then
-		-- already there; but asking for the place makes an auto rank the person's own
-		if me.ownRank ~= nil and me.ownAuto then
-			return { { id = id, rank = me.ownRank, was = me.ownRank, auto = false } }, nil
+		-- already there; but asking for the place makes a moved-written rank the person's own
+		if me.ownRank ~= nil and me.ownMoved then
+			return { { id = id, rank = me.ownRank, was = me.ownRank, moved = false } }, nil
 		end
 		return {}, nil
 	end
@@ -592,7 +615,7 @@ function rank.plan(
 				id = want[i],
 				rank = base + (i - first + 1) * rank.GAP,
 				was = byId[want[i]].ownRank,
-				auto = i ~= at,
+				moved = i ~= at,
 			})
 		end
 		local checked = keeps(changes)
@@ -620,9 +643,9 @@ function rank.plan(
 		end
 	end
 	if pick ~= nil and pick >= 1 and pick <= rank.MAX then
-		local one = keeps({ { id = id, rank = pick, was = me.ownRank, auto = false } })
+		local one = keeps({ { id = id, rank = pick, was = me.ownRank, moved = false } })
 		if one then
-			return if me.ownRank == pick and not me.ownAuto then {} else one, nil
+			return if me.ownRank == pick and not me.ownMoved then {} else one, nil
 		end
 	end
 	-- no room: renumber the ranked items from the top, through the moved item
@@ -639,9 +662,8 @@ function rank.plan(
 	for i = 1, last do
 		local wid = want[i]
 		local f = byId[wid]
-		local plain = wid == id or (f.ownRank ~= nil and not f.ownAuto)
-		if f.ownRank ~= i * rank.GAP or (wid == id and f.ownAuto) then
-			table.insert(changes, { id = wid, rank = i * rank.GAP, was = f.ownRank, auto = not plain })
+		if f.ownRank ~= i * rank.GAP or (wid == id and f.ownMoved) then
+			table.insert(changes, { id = wid, rank = i * rank.GAP, was = f.ownRank, moved = wid ~= id })
 		end
 	end
 	local checked = keeps(changes)

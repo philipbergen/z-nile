@@ -319,7 +319,10 @@ local function build(
 		for _, mid in issues do
 			local mf: { [string]: string } = memberFront[mid] or {}
 			local m = rank.parse(mf.rank)
-			if m ~= nil and not rank.isAuto(mf.rank) and (best == nil or m < best) then
+			-- a rank a move wrote (`moved=` in the member's provenance.md) does not count: one record read per ranked member
+			local found = byId[mid]
+			local record = if found then docs[(string.gsub(found.path, "[^/]+$", "provenance.md"))] else nil
+			if m ~= nil and not rank.movedBy(record) and (best == nil or m < best) then
 				best = m
 			end
 		end
@@ -518,6 +521,24 @@ function workread.facts(): ({ rank.Fact }, { [string]: boolean })
 		end
 	end
 	local blobs = catBatch(specs)
+	-- who set a rank is in the item's provenance.md (c0249): one more batch, for the backlog items that have a rank
+	local recordSpecs: { string } = {}
+	local recordIndex: { [string]: number } = {}
+	do
+		local k = 0
+		for _, a in at do
+			if a.state == "backlog" then
+				k += 1
+				if (frontText(blobs[k] or "").rank or "") ~= "" then
+					table.insert(recordSpecs, `origin/main:{(string.gsub(a.path, "[^/]+$", "provenance.md"))}`)
+					recordIndex[a.path] = #recordSpecs
+				end
+			elseif a.state ~= "done" then
+				k += 1
+			end
+		end
+	end
+	local recordBlobs = catBatch(recordSpecs)
 	local n = 0
 	local reviews: { string } = {}
 	local pending: { { id: string, doc: string } } = {}
@@ -527,7 +548,7 @@ function workread.facts(): ({ rank.Fact }, { [string]: boolean })
 			n += 1
 			text = blobs[n] or ""
 		end
-		local fact = rank.factOf(a.path, frontText(text), roots)
+		local fact = rank.factOf(a.path, frontText(text), roots, recordBlobs[recordIndex[a.path] or 0])
 		if fact then
 			fact.approved = approvalDirs[string.match(a.path, "^(.*)/[^/]+$") or ""] == true
 			table.insert(facts, fact)
@@ -715,6 +736,26 @@ function workread.collect(asked: string?): work.Input
 		local extra = catBatch(extraSpecs)
 		for i, path in more do
 			docs[path] = extra[i] or ""
+		end
+	end
+	-- c0249: who set a rank is in the member's provenance.md; read the record of each backlog issue that has a rank
+	do
+		local recordPaths: { string } = {}
+		for id, at in byId do
+			if store.isIssueId(id) and at.state == "backlog" then
+				local raw = docs[at.path]
+				if raw and (frontText(raw).rank or "") ~= "" then
+					table.insert(recordPaths, (string.gsub(at.path, "[^/]+$", "provenance.md")))
+				end
+			end
+		end
+		local recordSpecs: { string } = {}
+		for _, path in recordPaths do
+			table.insert(recordSpecs, `origin/main:{path}`)
+		end
+		local recordBlobs = catBatch(recordSpecs)
+		for i, path in recordPaths do
+			docs[path] = recordBlobs[i] or ""
 		end
 	end
 	local promoted: { [string]: { [string]: string } } = {}

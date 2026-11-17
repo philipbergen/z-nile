@@ -68,10 +68,11 @@ usage: ./zn <command> ...
                                                 stop this user's leaked tool processes: orphans, commands past their
                                                 ./zn run deadline, and (at a session end) the session's own
   find <id>                                     print the item's current directory (from where ./zn was run)
-  list [backlog|active|done] [--project <name>] [--no-lost]
+  list [backlog|active|done] [--project <name>] [--lost]
                                                 list items: of --project, of the project whose folder you are in, or of every
-                                                project at the checkout's root; blocked items first, then lost work (read from
-                                                the remote; --no-lost skips it), then the stack in rank order
+                                                project at the checkout's root; offline by default: blocked items first, then the
+                                                stack in rank order (--lost also reads lost work from the remote and puts it
+                                                after the blocked items)
   members <R-id>                                print directories of every issue in the raft (from where ./zn was run)
   busy [<path>...]                              list what holds <path>s (default: every project root and promoted-spec
                                                 folder): rafts active on origin/main, branches and worktrees that
@@ -864,7 +865,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--watch"
 			or a == "--begin"
 			or a == "--sessions"
-			or a == "--no-lost"
+			or a == "--lost"
 		then
 			opts[a] = { "true" }
 		elseif string.sub(a, 1, 1) == "-" then
@@ -3481,8 +3482,9 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 		return if a.id == b.id then a.path < b.path else a.id < b.id
 	end)
 	-- c0249: the stack in order, as `rank.listOrder` gives it: every blocked item first (rafts, then issues: c0250's
-	-- shape), then lost work (the heartbeat's order; read as `./zn lost` reads it, and not read, with a word on stderr, when
-	-- it cannot be), then the rafts and then the issues, a set rank before an unset one, the ticket number as the tiebreak.
+	-- shape), then, only with --lost, lost work (the heartbeat's order; read as `./zn lost` reads it, and not read, with a word
+	-- on stderr, when it cannot be), then the rafts and then the issues, a set rank before an unset one, the ticket number as
+	-- the tiebreak. Without --lost the command stays offline (decided with the user, 2026-11-16: "Stay offline, fast").
 	local rankLib = require("./rank")
 	local roots = store.roots()
 	local all: { rankLib.Fact } = {}
@@ -3492,7 +3494,10 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 		local doc = `{f.path}/{f.id}.md`
 		if idsLib.spaceOf(f.id) == f.kind and fs.isFile(doc) then
 			local fm = store.readFront(doc)
-			local fact = rankLib.factOf(doc, fm, roots)
+			local recordPath = `{f.path}/provenance.md`
+			-- who set a rank is in the item's record: read it only for an item that has a rank (c0249)
+			local record = if (fm.rank or "") ~= "" and fs.isFile(recordPath) then fs.readFile(recordPath) else nil
+			local fact = rankLib.factOf(doc, fm, roots, record)
 			if fact then
 				table.insert(all, fact)
 				-- review 003 F3: a retired raft is shown as retired, never as a live backlog raft no command takes
@@ -3516,9 +3521,9 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 			end
 		end
 	end
-	-- reading lost work asks the remote (a fetch of main and of the heartbeat branches: seconds, not milliseconds);
-	-- --no-lost skips it, and so does a repository with no origin or PICKMAN_PUBLISH=0
-	for _, fact in rankLib.listOrder(shownFacts, if opts["--no-lost"] then {} else rk.lost("list"), all) do
+	-- reading lost work asks the remote (a fetch of main and of the heartbeat branches: seconds, not milliseconds), so only
+	-- --lost does; `list` is offline otherwise, and so is a repository with no origin or PICKMAN_PUBLISH=0
+	for _, fact in rankLib.listOrder(shownFacts, if opts["--lost"] then rk.lost("list") else {}, all) do
 		print(lines[fact])
 	end
 	local broken = 0
@@ -7013,6 +7018,7 @@ function cmd.rank(pos: { string }, opts: { [string]: { string } })
 		local docs: { [string]: { path: string, text: string } } = {}
 		local wanted: { string } = {}
 		local places: { [string]: string } = {}
+		local recordOf: { [string]: string } = {}
 		for _, p in paths do
 			local pid, rel = publish.itemPath(p)
 			if pid and rel == `{pid}.md` then
@@ -7029,9 +7035,23 @@ function cmd.rank(pos: { string }, opts: { [string]: { string } })
 			end
 		end
 		local texts = (readMany :: ({ string }) -> { string? })(wanted)
+		-- who set a rank is in the item's provenance.md: read the record of each item that has a rank, in one batch
+		local records: { string } = {}
+		for i, p in wanted do
+			if (frontOf(texts[i] or "").rank or "") ~= "" then
+				local rec = string.gsub(p, "[^/]+$", "provenance.md")
+				recordOf[p] = rec
+				table.insert(records, rec)
+			end
+		end
+		local recordTexts = (readMany :: ({ string }) -> { string? })(records)
+		local recordAt: { [string]: string } = {}
+		for i, rec in records do
+			recordAt[rec] = recordTexts[i] or ""
+		end
 		for i, p in wanted do
 			local text = texts[i] or ""
-			local fact = rank.factOf(p, frontOf(text), roots)
+			local fact = rank.factOf(p, frontOf(text), roots, if recordOf[p] then recordAt[recordOf[p]] else nil)
 			if fact then
 				table.insert(facts, fact)
 				docs[places[p]] = { path = p, text = text }
@@ -7056,18 +7076,17 @@ function cmd.rank(pos: { string }, opts: { [string]: { string } })
 		local out: { publish.Change } = {}
 		for _, c in planned do
 			local d = docs[c.id]
-			local text = rank.withRank(d.text, c.rank, c.auto)
+			local text = rank.withRank(d.text, c.rank)
 			if not text then
 				return `{c.id}: {d.path} has no front matter`
 			end
-			table.insert(out, { path = d.path, content = text })
+			-- asking for the place a moved-written rank has changes no line: only its row (without `moved=`) is written
+			if text ~= d.text then
+				table.insert(out, { path = d.path, content = text })
+			end
 			local rec = string.gsub(d.path, "[^/]+$", "provenance.md")
-			local shownRank = if c.rank == nil
-				then "unset"
-				elseif c.auto then `{c.rank} auto`
-				else tostring(c.rank)
-			local detail = `rank={shownRank}; was={c.was or "unset"}`
-			if c.id ~= id then
+			local detail = `rank={if c.rank == nil then "unset" else tostring(c.rank)}; was={c.was or "unset"}`
+			if c.moved then
 				detail ..= `; moved={id}`
 			end
 			local row, rowWhy = provenance.record(read(rec), c.id, "ranked", actor, detail, when)
@@ -7104,10 +7123,7 @@ function cmd.rank(pos: { string }, opts: { [string]: { string } })
 	end
 	for _, c in changes do
 		print(
-			`{c.id} rank {if c.rank == nil
-				then "unset"
-				elseif c.auto then `{c.rank} auto`
-				else tostring(c.rank)} (was {c.was or "unset"})`
+			`{c.id} rank {if c.rank == nil then "unset" else tostring(c.rank)} (was {c.was or "unset"})`
 		)
 	end
 	if note then
