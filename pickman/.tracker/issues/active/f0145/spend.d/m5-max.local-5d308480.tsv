@@ -356,3 +356,31 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-17 01:39	276 specs	0	0	test			5.880	36.000		5.880	tokens,ai
 2026-11-17 01:39	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
 2026-11-17 01:39	R0118: trace names the finish commit	0	0	deliver							tokens,wall,cpu,ai
+2026-11-17 01:39	1 spec	0	0	test			1.020	0.610		1.020	tokens,ai
+2026-11-17 01:39	2 specs	0	0	test			1.015	0.780		1.015	tokens,ai
+2026-11-17 01:39	2 specs	0	0	test			1.016	0.720		1.016	tokens,ai
+2026-11-17 01:39	1 spec	0	0	test			0.818	0.540		0.818	tokens,ai
+2026-11-17 01:39	2 specs	0	0	test			1.021	0.790		1.021	tokens,ai
+2026-11-17 01:39	1 spec	0	0	test			1.019	0.560		1.019	tokens,ai
+2026-11-17 01:39	1 spec	0	0	test			0.821	0.530		0.821	tokens,ai
+2026-11-17 01:39	1 spec	0	0	test			1.016	0.740		1.016	tokens,ai
+2026-11-17 01:39	affected	0	0	test			8.962	56.160		8.962	tokens,ai
+2026-11-17 01:39	1 spec	0	0	test			0.815	0.530		0.815	tokens,ai
+2026-11-17 01:39	2 specs	0	0	test			1.017	0.700		1.017	tokens,ai
+2026-11-17 01:39	2 specs	0	0	test			1.025	0.690		1.025	tokens,ai
+2026-11-17 01:39	1 spec	0	0	test			0.813	0.560		0.813	tokens,ai
+2026-11-17 01:39	2 specs	0	0	test			1.020	0.780		1.020	tokens,ai
+2026-11-17 01:39	1 spec	0	0	test			0.819	0.560		0.819	tokens,ai
+2026-11-17 01:39	1 spec	0	0	test			0.817	0.530		0.817	tokens,ai
+2026-11-17 01:39	1 spec	0	0	test			1.022	0.700		1.022	tokens,ai
+2026-11-17 01:39	1 spec	0	0	test			1.017	0.700		1.017	tokens,ai
+2026-11-17 01:40	affected	0	0	test			12.021	106.110		12.021	tokens,ai
+2026-11-17 14:36	1 spec	0	0	test			1.019	0.730		1.019	tokens,ai
+2026-11-17 14:36	2 specs	0	0	test			1.212	0.930		1.212	tokens,ai
+2026-11-17 14:36	2 specs	0	0	test			1.415	0.930		1.415	tokens,ai
+2026-11-17 14:36	1 spec	0	0	test			1.217	0.790		1.217	tokens,ai
+2026-11-17 14:36	2 specs	0	0	test			1.214	1.040		1.214	tokens,ai
+2026-11-17 14:36	1 spec	0	0	test			1.218	0.840		1.218	tokens,ai
+2026-11-17 14:36	1 spec	0	0	test			1.011	0.670		1.011	tokens,ai
+2026-11-17 14:36	1 spec	0	0	test			1.212	0.840		1.212	tokens,ai
+2026-11-17 14:36	R0118: trace names the restacked finish commit	0	0	deliver							tokens,wall,cpu,ai
