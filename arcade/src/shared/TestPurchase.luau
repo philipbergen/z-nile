@@ -81,6 +81,7 @@ local function listen(remote: any, playerGui: any)
 		for i, line in lines do
 			local label = Instance.new("TextLabel")
 			label.Name = `Line{i}`
+			label.RichText = true -- the lines are rich text: a play's struck price (f0395)
 			label.Text = line
 			label.TextScaled = true
 			label.Size = UDim2.fromScale(0.9, 0.18)

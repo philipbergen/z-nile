@@ -26,7 +26,7 @@ export type Ids = { play: number?, revive: number? }
 export type Product = { name: string, kind: Kind }
 export type Title = { entry: Entry, mode: Mode, ids: Ids }
 export type Config = { titles: { [string]: Title }, products: { [number]: Product } }
-export type Prices = { struck: string, price: string, sale: string }
+export type Prices = { struck: string, price: string, sale: string, revive: string }
 
 local PaidPlay = {}
 
@@ -226,12 +226,21 @@ function PaidPlay.arrive(start: Start?, passed: boolean): Verdict
 	return "play"
 end
 
--- The test purchase screen's lines: what is bought, its price as the badge says it, and that nothing is charged.
+-- A text as rich text shows it: &, < and > as entities, so only the markup testLines adds is markup.
+local function plain(text: string): string
+	return (string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;"))
+end
+
+-- The test purchase screen's lines, as rich text: what is bought, its price, and that nothing is charged. A play's
+-- price is the badge's, the struck price marked for strike-through (f0395); a revive's is its own, nothing struck.
 function PaidPlay.testLines(title: string, kind: Kind, prices: Prices): { string }
+	local price = if kind == "play"
+		then `<s>{plain(prices.struck)}</s> {plain(prices.price)} {plain(prices.sale)}`
+		else plain(prices.revive)
 	return {
-		`{title}: {PaidPlay.KIND_TEXT[kind]}`,
-		`{prices.struck} {prices.price} {prices.sale}`,
-		PaidPlay.TEST_NOTE,
+		plain(`{title}: {PaidPlay.KIND_TEXT[kind]}`),
+		price,
+		plain(PaidPlay.TEST_NOTE),
 	}
 end
 

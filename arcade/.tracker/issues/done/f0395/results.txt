@@ -1,0 +1,159 @@
+arcade/.tracker/issues/active/f0395/acceptance/client.spec.luau
+	a play's lines: every line label is rich text and shows the line as sent, the struck price marked
+	a revive's lines and escaped text: every line label is rich text, the entities kept as sent
+arcade/.tracker/issues/active/f0395/acceptance/docs.spec.luau
+	the Prices bullet names a revive's price, nothing struck
+	the TestPurchase bullet says its lines are rich text, a play's price line struck
+arcade/.tracker/issues/active/f0395/acceptance/lines.spec.luau
+	a play's price line strikes the badge's struck price, then the price and the sale
+	a play's price line is built from the prices it is given
+	a revive's price line is the revive's own price, with nothing struck
+	every text in a line shows as it is: &, < and > become entities, the play's <s> is the only markup
+	Prices is one frozen table: 5 R$ struck, 1 R$, SALE, and the revive's 1 R$, the charge
+arcade/tests/acceptance/f0201/client.spec.luau
+	opened by the server it shows the lines with BUY and CANCEL; nothing shows before
+	a tap on BUY sends confirm and closes; a tap on CANCEL sends cancel and closes
+	while it is open Return, KeypadEnter and ButtonA buy on the press; the release adds nothing
+	while it is open Backspace and ButtonB cancel on the press; the release adds nothing
+	its keys are bound only while it is open, above the place's own: outside it they pass on and send nothing
+	centred in the middle half, inside the safe insets, above the place's screens, kept across respawns
+	a second open replaces the first: one screen, one binding
+	a malformed open shows nothing; lines that are not text are dropped
+	started twice it listens once: one open, one screen
+	start returns at once and waits for the server's remote in its own thread
+	isOpen says whether the screen is open: false before, true while open, false after each answer
+arcade/tests/acceptance/f0201/config.spec.luau
+	the mode is live only for exactly 'live' with both ids; 'live' with an id missing is closed; else test
+	each mode has its own store: test credits never reach a live record; closed keeps the live one
+	configure reads each title's ids: whole positive numbers only, per title, and maps them to title and kind
+	an id two products share belongs to neither, and its titles are closed
+	a known product maps in every mode, so a receipt that was charged is always recognised
+	a catalog name is lowercase letters and appears once
+	the shipped catalog: four titles, their stores and attributes; Pickman keeps f0145's names
+	the badge text is one config table: 5 R$ struck through, on sale for 1 R$, which is the charge
+	the test screen's lines: the title and product, the badge, and that nothing is charged
+	the test screen's keys: Return, KeypadEnter, ButtonA buy; Backspace, ButtonB cancel; nothing else
+arcade/tests/acceptance/f0201/paidplay.spec.luau
+	the constants: a rolling hour, 1 R$, 50 receipts kept, live is exactly 'live'
+	a stored record is read defensively: nil or broken fields are a new player's
+	the stored shape is f0145's: revives stored as continues, exactly four fields, read back as they were
+	the first start is free and records its instant; the next is due a full hour later, not a second sooner
+	a clock behind the recorded free start waits; an instant that is not whole never grants
+	with no free start due a held play is used, one at a time; with none the answer is buy and nothing changes
+	a free start due is used before a held play
+	nothing mutates the record it is given
+	a receipt is granted once: the same id again grants nothing; each kind adds its own credit
+	only the latest RECEIPTS_KEPT receipt ids are kept, oldest dropped first
+	a refund is its own credit: each one counts, and none takes a receipt slot
+	a held revive is used once; with none held nothing changes
+	the status says whether a free start is due, when the next is, and the credits held
+	an arrival plays when charged or when the claim failed; a buy plays only with the portal's pass
+arcade/tests/acceptance/f0201/place.spec.luau
+	PaidPlay is a Logic feature, Prices and TestPurchase shared modules, in ReplicatedStorage.Arcade
+	Wallet, Receipts and Catalog are server-only modules in ServerStorage.Arcade, not in ReplicatedStorage
+	PaidPlay is a leaf: it requires nothing
+	nothing in ReplicatedStorage.Arcade requires a server module
+	the library's architecture declares PaidPlay and Receipts in every place, and PaidPlay as a leaf
+arcade/tests/acceptance/f0201/receipts.spec.luau
+	a receipt is granted once: PurchaseGranted both times, one credit, and the place hears one grant
+	every title's receipt is granted in any place, into its own record, by user id
+	a buyer not on this server is granted all the same, and nothing is handed to the place
+	an unknown product, a missing purchase id or a failed write answers NotProcessedYet and grants nothing
+	PurchaseGranted is answered only after the write: a held write holds the answer
+	a receipt another server granted during this write counts once and is not handed on as new
+	the transform's last call decides whether the grant is new
+	a real receipt in test mode is kept in the live record, and not handed to a place that reads the test one
+	a closed title's receipt is still granted: it was charged
+	ask in live mode prompts the title's own product; nothing else opens
+	ask in closed mode opens nothing and answers false
+	ask in test mode opens the test screen with its lines and never prompts Roblox
+	a test confirm grants into the test store under a test id; the screen closes bought, then the place hears it
+	each test confirm is its own purchase: two screens bought, two credits
+	a test confirm whose write fails closes the screen not bought and grants nothing
+	a cancel closes the screen not bought; a confirm after it, or with no screen open, grants nothing
+	an answer that is neither confirm nor cancel is ignored and the screen stays open
+	one test screen per player at a time: a second ask opens nothing; another player's confirm grants nothing
+	a confirm in live mode grants nothing: no test screen is ever open there
+	a player who leaves with a test screen open: their next join's confirm grants nothing
+	a grant whose player left during its write is not handed to the place
+	Roblox's purchase screen closing tells the place, bought or not, for a known product only
+	Receipts starts once per server: the second start does nothing; ask before start is an error
+	a revive bought on this server is usable at once: the grant refreshes the record seen
+	a test revive bought is usable at once: the test grant refreshes the record seen
+	a revive given back is usable again: the refund refreshes the record seen
+	a play bought shows in the next read at once, with no new store read
+	in test mode a real receipt leaves the record seen alone: the next read still shows the test record
+	the place's adapters hear one client message: one connection to the test screen's answer, no invoke
+	nothing a teleport carries is read: no Receipts path reads the join data
+arcade/tests/acceptance/f0201/wallet.spec.luau
+	a first arrival is free, recorded in test mode's own store; live mode writes the live one
+	each title keeps its own record: a free start in one leaves another's due
+	within the hour a held play is used; with none the arrival is buy, goes back and writes nothing
+	the arrival is charged once per join: a later call answers the same; a new join claims again
+	a second arrival during the first's write waits for it: one write, the same answer
+	an arrival whose write fails plays and charges nothing; one not back within WAIT_SECONDS plays
+	a live DataStore that cannot be opened: the arrival plays, a read is down, nothing throws
+	the portal's pass lets a buy arrival play, and is taken on every arrival, whatever its start
+	a pass is the title's own: another title's pass does not let a buy arrival play
+	a buy arrival whose pass map cannot be read plays (the user, 2026-10-31: 'Let all of them play')
+	TeleportData is never trusted: a join claiming a paid play is a buy arrival
+	the transform decides: another server's free start just before this write makes this one use a held play
+	the transform's last call decides: a first call on an outdated value does not count
+	a held revive is used once and counted for the run; with none held known, no write is made
+	one revive write per player and title at a time: a use during a use's write answers nil, one write
+	revive writes are bounded over time: none within USE_SECONDS of the last; one after it
+	a revive use whose store fails answers nil and counts nothing
+	the run's revive count is kept after the player leaves, and starts again at their next arrival
+	a refund is one more credit of its kind, outside the receipts
+	a read reads the mode's store; within READ_SECONDS of the last record seen it answers from it
+	a read during a read for the same player is busy: one read, and the second answers nil
+	a read not back within WAIT_SECONDS is down, and stays busy until it ends
+	a read that ends after the player left keeps nothing: their next join reads again
+	a read whose store fails is down, and reads stay down with no store call for RETRY_SECONDS
+	a title not in the catalog is an error, not a silent free start
+	the mode is read once from ServerScriptService: PaidPlay and each title's two ids
+	a record Wallet writes is f0145's shape: free, plays, continues and receipts, nothing else
+	each title has its own read: two titles read within READ_SECONDS each answer their own record
+	a read of one title under way leaves another title's read free
+	a revive used in one title does not start another title's USE_SECONDS
+	a pass read not back within WAIT_SECONDS counts as a pass; its late answer still removes the entry
+	a slow pass read with no pass there still plays, and the arrival ends within its limit
+	in test mode a test store that cannot be opened has a stand-in: arrivals, test purchases and revives work
+	in live mode an unopenable store has no stand-in: a receipt is not processed and the arrival claims nothing
+	a pass is written only after a read that answered down, once per such answer
+	a written revive refund takes one off the run's count, never below 0; a failed one or a play refund does not
+	calls for a player who already left claim, read, use and pass nothing; a refund is still written
+	a departed run's count is dropped KEEP_SECONDS after the leave, and a later leave restarts that span
+	nothing a teleport carries is read: no Wallet call reads the join data
+arcade/tests/place/wallet-order.spec.luau
+	a read served before a revive grant and answered after it does not hide the revive
+	a revive granted while the arrival waits on its pass read is usable at once
+	two writes answered out of the order they were applied leave no stale record seen
+	with nothing overlapping, a revive none is known to hold makes no write
+	after a down answer, a busy answer takes the pass away
+	after a down answer, a good answer from the record seen takes the pass away
+	during an outage a client asking again and again writes its pass once per RETRY_SECONDS
+arcade/tests/unit/PaidPlay/paidplay.spec.luau
+	a new player's first start is free and records the instant
+	the next free start is due exactly FREE_SECONDS after the last, not a second sooner
+	a clock behind the recorded start waits, and a non-whole or broken instant never grants
+	within the hour a held play is used, one per start, and then the answer is buy
+	a free start due is taken before a held play, which stays held
+	no function changes the record it is given
+	a receipt grants one credit of its kind, once per id; an empty id grants nothing
+	the ledger keeps the latest RECEIPTS_KEPT ids, dropping the oldest first
+	each refund is one more credit and never touches the ledger
+	a held revive is used once; with none held nothing changes
+	a stored value is read defensively and round-trips through f0145's shape
+	the status names a free start due, or the instant the next one is, and the credits held
+	an arrival plays when charged or when the claim failed; a buy goes back unless it holds a pass
+	the mode is live only for exactly 'live' with both ids, closed with one missing, else test
+	test mode keeps its own store; live and closed keep the live one
+	configure reads whole positive ids per title and maps each product to its title and kind
+	an id two products share belongs to neither, so both titles are closed in live mode
+	products map in test mode too, so a charged receipt is always recognised
+	a catalog name is lowercase letters and appears once
+	testLines strikes a play's struck price, then the price and the sale
+	testLines gives a revive its own price, nothing struck
+	testLines escapes every &, < and > in every text
+	the test screen's keys: three buy, two cancel, any other none
