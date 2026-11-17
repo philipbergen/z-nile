@@ -1,0 +1,43 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-17 15:27	1 spec	0	0	test			0.822	0.570		0.822	tokens,ai
+2026-11-17 15:27	1 spec	0	0	test			17.101	13.600		17.101	tokens,ai
+2026-11-17 15:27	1 spec	0	0	test			1.037	0.680		1.037	tokens,ai
+2026-11-17 15:28	3 specs	0	0	test			21.039	27.380		21.039	tokens,ai
+2026-11-17 15:28	1 spec	0	0	test			1.037	0.590		1.037	tokens,ai
+2026-11-17 15:28	1 spec	0	0	test			15.265	13.440		15.265	tokens,ai
+2026-11-17 15:28	1 spec	0	0	test			0.820	0.580		0.820	tokens,ai
+2026-11-17 15:29	3 specs	0	0	test			20.775	26.840		20.775	tokens,ai
+2026-11-17 15:29	c0138: a compaction restarts an item only when its map renames the id	101	9	build							tokens,wall,cpu,ai
+2026-11-17 15:29	2 specs	0	0	test			15.003	13.320		15.003	tokens,ai
+2026-11-17 15:29	2 specs	0	0	test			16.063	14.310		16.063	tokens,ai
+2026-11-17 15:29	2 specs	0	0	test			15.023	13.230		15.023	tokens,ai
+2026-11-17 15:30	2 specs	0	0	test			14.657	13.360		14.657	tokens,ai
+2026-11-17 15:30	2 specs	0	0	test			15.219	13.790		15.219	tokens,ai
+2026-11-17 15:30	2 specs	0	0	test			14.375	13.120		14.375	tokens,ai
+2026-11-17 15:30	2 specs	0	0	test			15.799	14.440		15.799	tokens,ai
+2026-11-17 15:31	2 specs	0	0	test			15.240	13.810		15.240	tokens,ai
+2026-11-17 15:31	2 specs	0	0	test			14.843	13.310		14.843	tokens,ai
+2026-11-17 15:31	2 specs	0	0	test			15.259	13.630		15.259	tokens,ai
+2026-11-17 15:31	2 specs	0	0	test			15.239	13.490		15.239	tokens,ai
+2026-11-17 15:32	2 specs	0	0	test			15.449	13.810		15.449	tokens,ai
+2026-11-17 15:32	2 specs	0	0	test			14.430	12.690		14.430	tokens,ai
+2026-11-17 15:32	2 specs	0	0	test			15.067	13.470		15.067	tokens,ai
+2026-11-17 15:32	2 specs	0	0	test			16.061	14.180		16.061	tokens,ai
+2026-11-17 15:33	2 specs	0	0	test			15.292	13.610		15.292	tokens,ai
+2026-11-17 15:33	2 specs	0	0	test			14.797	13.050		14.797	tokens,ai
+2026-11-17 15:33	2 specs	0	0	test			18.497	16.320		18.497	tokens,ai
+2026-11-17 15:34	2 specs	0	0	test			16.294	14.330		16.294	tokens,ai
+2026-11-17 15:34	2 specs	0	0	test			15.865	14.060		15.865	tokens,ai
+2026-11-17 15:34	2 specs	0	0	test			16.065	14.130		16.065	tokens,ai
+2026-11-17 15:34	2 specs	0	0	test			14.268	12.890		14.268	tokens,ai
+2026-11-17 15:35	2 specs	0	0	test			15.183	13.580		15.183	tokens,ai
+2026-11-17 15:35	2 specs	0	0	test			15.253	13.510		15.253	tokens,ai
+2026-11-17 15:35	2 specs	0	0	test			16.339	13.680		16.339	tokens,ai
+2026-11-17 15:35	2 specs	0	0	test			17.163	14.130		17.163	tokens,ai
+2026-11-17 15:35	1 run	0	0	other			405.047	359.470			tokens,ai
+2026-11-17 15:36	1 spec	0	0	test			1.038	0.630		1.038	tokens,ai
+2026-11-17 15:36	1 spec	0	0	test			15.646	13.710		15.646	tokens,ai
+2026-11-17 15:36	1 spec	0	0	test			1.022	0.590		1.022	tokens,ai
+2026-11-17 15:37	3 specs	0	0	test			22.880	27.160		22.880	tokens,ai
+2026-11-17 15:37	99 specs	0	0	test			44.009	137.460		44.009	tokens,ai
+2026-11-17 15:37	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
