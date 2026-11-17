@@ -78,26 +78,35 @@ return t.spec("c0175 the documents name the six CLIs", function(it)
 		function()
 			local rules = skill("zz-rules")
 			at(rules, "the bare names `agy models` lists", "zz-rules")
-			at(rules, "Opus tops out at `high`", "zz-rules")
+			at(rules, "argon tops out at `high`", "zz-rules")
+			at(rules, "`gemini-4-hydrogen`", "zz-rules")
+			at(rules, "`agy-hydrogen`", "zz-rules")
+			absent(rules, "Opus through agy passes", "zz-rules")
 			at(rules, "the spend row records the lowered one", "zz-rules")
 			at(rules, "`opencode-<provider>-<model>`", "zz-rules")
-			at(rules, "each provider its own model line in `[families]`", "zz-rules")
-			at(rules, "none passes a review kind: opencode authors, and runs a stream review", "zz-rules")
+			at(rules, "an opencode model's family is its own model's, whoever carries it", "zz-rules")
+			at(rules, "is in no other review role", "zz-rules")
+			absent(rules, "none passes a review kind", "zz-rules")
 		end
 	)
 
 	it("AC11: zz-review says who may review through agy, kimi and opencode", function()
 		local review = skill("zz-review")
 		at(review, "**Through agy, kimi and opencode** (c0175).", "zz-review")
-		at(review, "Through `agy` only Opus is a review model", "zz-review")
-		at(review, "Through `kimi` the ids starting `kimi-code-k3` are review models", "zz-review")
-		at(review, "An `opencode` model (`opencode-<provider>-<model>`) is never a review model", "zz-review")
-		-- the review-kind paragraph is c0306's and stays as it is
+		at(review, "Any model may run any review, whatever CLI carries it", "zz-review")
+		at(review, "`agy` carries `gemini-4-argon`", "zz-review")
+		at(review, "an `xhigh` review through agy runs, and is recorded, at `high`", "zz-review")
+		at(review, "`gemini-4-hydrogen` (implementation)", "zz-review")
+		at(review, "it is in no other review role", "zz-review")
+		at(review, "`opencode-xai-grok-4.7` is in the grok line", "zz-review")
 		at(
 			review,
-			"an id starting `claude-opus-`, `claude-fable-` or `kimi-code-k3`, or starting `grok-` at effort `xhigh`",
+			"c0175 adds Kimi K2.8 Preview (`kimi-code-kimi-for-coding`) between grok-4.6 and composer",
 			"zz-review"
 		)
+		-- c0306's review kinds are gone (c0251): no sentence says only Opus may review through agy
+		absent(review, "only Opus is a review model", "zz-review")
+		absent(review, "is never a review model", "zz-review")
 	end)
 
 	it("AC11: zz-test and z-work name the new CLIs where they name the others", function()
@@ -130,9 +139,15 @@ return t.spec("c0175 the documents name the six CLIs", function(it)
 	it("AC11: the root .models.toml's comments explain the new CLIs", function()
 		local file = read(".models.toml")
 		at(file, "[fallback.agy]", ".models.toml")
-		at(file, "an effort it does not offer for the", ".models.toml")
-		at(file, "it never passes a review kind (c0306), so no review role names it", ".models.toml")
-		at(file, "opencode's models are recorded as opencode-<provider>-<model>", ".models.toml")
+		at(file, "An effort the model does not offer (argon tops out at high)", ".models.toml")
+		at(file, '"agy default should be its own argon/hydrogen"', ".models.toml")
+		at(file, "it is in no other review role (user, 2026-11-16)", ".models.toml")
+		at(
+			file,
+			"opencode records its models as opencode-<provider>-<model>; family.of cuts that down",
+			".models.toml"
+		)
+		at(file, "Kimi K2.8 Preview", ".models.toml")
 		absent(file, "reachable once opencode is added", ".models.toml")
 	end)
 	it(
