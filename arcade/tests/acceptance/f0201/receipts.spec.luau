@@ -615,10 +615,8 @@ return t.spec("f0201 Receipts on a stub engine", function(it)
 		t.expect(#w.prompts).toBe(0)
 		t.expect(#w.sent).toBe(1)
 		t.expect(w.sent[1].player).toBe(p)
-		local expected: { any } = {
-			"open",
-			{ "INVADERS: REVIVE: 3 NEW LIVES", "5 R$ 1 R$ SALE", "TEST PURCHASE: NOTHING IS CHARGED" },
-		}
+		-- the lines are the library's for the title and kind (c0397): config.spec pins them, f0395 changes the price line
+		local expected: { any } = { "open", PaidPlay.testLines("INVADERS", "revive", Prices) }
 		t.expect(w.sent[1].args).toEqual(expected)
 		t.expect(w.folder("ArcadePaidPlay")).toBeTruthy()
 		t.expect(w.remote("TestPurchase")).toBeTruthy()
