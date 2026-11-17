@@ -275,7 +275,7 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
 			t.expect(has(tree, `{ROOT}/issues/active/f0030/f0030.md`)).toBe(true)
 			t.expect(has(tree, `{ROOT}/issues/f0030/`)).toBe(false)
 			t.expect(has(tree, `{ROOT}/rafts/R0020/`)).toBe(false)
-			t.expect(onOrigin(`{ROOT}/rafts/active/R0020/R0020.md`))
+			t.expect((string.gsub(onOrigin(`{ROOT}/rafts/active/R0020/R0020.md`) or "", "%s+$", "")))
 				.toBe(git(wtR, { "show", `{base}:{ROOT}/rafts/active/R0020/R0020.md` }))
 			-- the worktree reads R0020 as active, with its folders really there
 			t.expect(git(wtR, { "branch", "--show-current" })).toBe("R0020/1/f0030")
@@ -291,6 +291,7 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
 				`{ROOT}/rafts/active/R0020/final-review-001.md`,
 				"# Final Review 001\n\nVerdict: approve\n"
 			)
+			write(wtR, `{ROOT}/rafts/active/R0020/review-001.md`, "# Review 001\n\nVerdict: approve\n")
 			layerWork(wtR, "feature", "f0030")
 			-- its check needs src/base.luau, which only D's second layer has
 			t.expect(tr(wtR, { "finish", "f0030" }).ok).toBe(true)
@@ -323,6 +324,8 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
 		function()
 			setup()
 			t.expect(built).toBe(true)
+			-- readying R0020 moved main, so the base raft is restacked before it is sealed
+			zn(wtD, { "restack", "R0010" })
 			seal.trace(wtD, "R0010")
 			zn(wtD, { "done", "R0010" })
 			t.expect(onOrigin(`{ROOT}/rafts/done/R0010/R0010.md`) ~= nil).toBe(true)
