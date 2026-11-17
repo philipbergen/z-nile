@@ -99,3 +99,19 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-17 15:26	11 specs	0	0	test			1.017	1.440		1.017	tokens,ai
 2026-11-17 15:26	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
 2026-11-17 15:27	R0127: trace and final refute name the finish commit	0	0	code-review							tokens,wall,cpu,ai
+2026-11-17 15:27	affected	0	0	test			7.424	59.010		7.424	tokens,ai
+2026-11-17 15:27	affected	0	0	test			4.312	9.760		4.312	tokens,ai
+2026-11-17 15:27	1 spec	0	0	test			0.833	0.630		0.833	tokens,ai
+2026-11-17 15:27	1 spec	0	0	test			0.829	0.620		0.829	tokens,ai
+2026-11-17 15:27	1 spec	0	0	test			1.024	0.640		1.024	tokens,ai
+2026-11-17 15:27	2 specs	0	0	test			1.026	0.740		1.026	tokens,ai
+2026-11-17 15:27	1 spec	0	0	test			1.025	0.640		1.025	tokens,ai
+2026-11-17 15:28	1 spec	0	0	test			0.830	0.610		0.830	tokens,ai
+2026-11-17 15:28	1 spec	0	0	test			1.020	0.660		1.020	tokens,ai
+2026-11-17 15:28	1 spec	0	0	test			0.813	0.570		0.813	tokens,ai
+2026-11-17 15:28	2 specs	0	0	test			1.018	0.690		1.018	tokens,ai
+2026-11-17 22:07	1 spec	0	0	test			1.025	0.540		1.025	tokens,ai
+2026-11-17 22:07	1 spec	0	0	test			0.817	0.560		0.817	tokens,ai
+2026-11-17 22:07	1 spec	0	0	test			0.821	0.550		0.821	tokens,ai
+2026-11-17 22:07	2 specs	0	0	test			1.020	0.650		1.020	tokens,ai
+2026-11-17 22:07	R0127: trace names the restacked finish commit	0	0	deliver							tokens,wall,cpu,ai
