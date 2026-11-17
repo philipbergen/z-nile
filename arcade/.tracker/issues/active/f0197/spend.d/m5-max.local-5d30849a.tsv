@@ -74,3 +74,16 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-17 00:35	20 specs	0	0	test			1.022	1.990		1.022	tokens,ai
 2026-11-17 00:35	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
 2026-11-17 00:35	R0121: trace names the finish commit	0	0	deliver							tokens,wall,cpu,ai
+2026-11-17 00:36	affected	0	0	test			4.332	10.020		4.332	tokens,ai
+2026-11-17 00:36	2 specs	0	0	test			1.034	0.680		1.034	tokens,ai
+2026-11-17 00:36	2 specs	0	0	test			1.026	0.670		1.026	tokens,ai
+2026-11-17 00:36	1 spec	0	0	test			0.831	0.550		0.831	tokens,ai
+2026-11-17 00:36	3 specs	0	0	test			1.017	0.780		1.017	tokens,ai
+2026-11-17 00:36	8 specs	0	0	test			0.827	1.060		0.827	tokens,ai
+2026-11-17 00:36	1 spec	0	0	test			0.829	0.610		0.829	tokens,ai
+2026-11-17 14:35	2 specs	0	0	test			1.013	0.770		1.013	tokens,ai
+2026-11-17 14:35	2 specs	0	0	test			1.020	0.730		1.020	tokens,ai
+2026-11-17 14:35	1 spec	0	0	test			1.012	0.630		1.012	tokens,ai
+2026-11-17 14:35	3 specs	0	0	test			1.218	0.820		1.218	tokens,ai
+2026-11-17 14:35	8 specs	0	0	test			1.219	1.210		1.219	tokens,ai
+2026-11-17 14:35	R0121: trace names the restacked finish commit	0	0	deliver							tokens,wall,cpu,ai
