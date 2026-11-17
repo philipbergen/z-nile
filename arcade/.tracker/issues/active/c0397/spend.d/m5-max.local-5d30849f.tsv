@@ -1,0 +1,84 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-17 14:39	1 spec	0	0	test			1.035	0.760		1.035	tokens,ai
+2026-11-17 14:39	1 spec	0	0	test			1.037	0.800		1.037	tokens,ai
+2026-11-17 14:40	1 spec	0	0	test			1.041	0.800		1.041	tokens,ai
+2026-11-17 14:40	1 spec	0	0	test			1.245	0.820		1.245	tokens,ai
+2026-11-17 14:40	1 spec	0	0	test			1.227	0.750		1.227	tokens,ai
+2026-11-17 14:40	1 spec	0	0	test			1.038	0.770		1.038	tokens,ai
+2026-11-17 14:40	1 spec	0	0	test			1.032	0.700		1.032	tokens,ai
+2026-11-17 14:40	1 spec	0	0	test			1.026	0.650		1.026	tokens,ai
+2026-11-17 14:40	1 spec	0	0	test			1.235	0.720		1.235	tokens,ai
+2026-11-17 14:40	1 spec	0	0	test			1.038	0.730		1.038	tokens,ai
+2026-11-17 14:40	1 spec	0	0	test			1.030	0.720		1.030	tokens,ai
+2026-11-17 14:40	1 spec	0	0	test			1.035	0.750		1.035	tokens,ai
+2026-11-17 14:40	1 spec	0	0	test			1.035	0.680		1.035	tokens,ai
+2026-11-17 14:40	1 spec	0	0	test			1.032	0.750		1.032	tokens,ai
+2026-11-17 14:40	affected	0	0	test			5.774	10.330		5.774	tokens,ai
+2026-11-17 14:40	affected	0	0	test			5.969	10.570		5.969	tokens,ai
+2026-11-17 14:40	c0397: narrow f0201's three test screen cases	15	10	build							tokens,wall,cpu,ai
+2026-11-17 14:40	1 spec	0	0	test			1.037	0.660		1.037	tokens,ai
+2026-11-17 14:40	1 spec	0	0	test			1.028	0.690		1.028	tokens,ai
+2026-11-17 14:41	1 spec	0	0	test			1.038	0.710		1.038	tokens,ai
+2026-11-17 14:41	1 spec	0	0	test			1.038	0.640		1.038	tokens,ai
+2026-11-17 14:41	1 spec	0	0	test			1.029	0.640		1.029	tokens,ai
+2026-11-17 14:41	1 spec	0	0	test			0.823	0.620		0.823	tokens,ai
+2026-11-17 14:41	1 spec	0	0	test			1.026	0.650		1.026	tokens,ai
+2026-11-17 14:41	2 specs	0	0	test			1.021	0.810		1.021	tokens,ai
+2026-11-17 14:41	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-17 14:41	affected	0	0	test			5.766	10.500		5.766	tokens,ai
+2026-11-17 14:41	1 spec	0	0	test			0.825	0.630		0.825	tokens,ai
+2026-11-17 14:41	1 spec	0	0	test			1.015	0.630		1.015	tokens,ai
+2026-11-17 14:41	1 spec	0	0	test			1.030	0.670		1.030	tokens,ai
+2026-11-17 14:41	1 spec	0	0	test			1.029	0.660		1.029	tokens,ai
+2026-11-17 14:41	1 spec	0	0	test			1.024	0.660		1.024	tokens,ai
+2026-11-17 14:41	1 spec	0	0	test			1.030	0.630		1.030	tokens,ai
+2026-11-17 14:41	1 spec	0	0	test			1.047	0.680		1.047	tokens,ai
+2026-11-17 14:41	1 spec	0	0	test			1.029	0.660		1.029	tokens,ai
+2026-11-17 14:41	1 spec	0	0	test			1.017	0.660		1.017	tokens,ai
+2026-11-17 14:42	1 spec	0	0	test			0.820	0.590		0.820	tokens,ai
+2026-11-17 14:42	1 spec	0	0	test			1.021	0.630		1.021	tokens,ai
+2026-11-17 14:42	1 spec	0	0	test			1.024	0.640		1.024	tokens,ai
+2026-11-17 14:42	1 spec	0	0	test			1.034	0.650		1.034	tokens,ai
+2026-11-17 14:42	1 spec	0	0	test			1.022	0.640		1.022	tokens,ai
+2026-11-17 14:42	1 spec	0	0	test			1.031	0.610		1.031	tokens,ai
+2026-11-17 14:42	1 spec	0	0	test			1.023	0.620		1.023	tokens,ai
+2026-11-17 14:42	affected	0	0	test			4.337	8.920		4.337	tokens,ai
+2026-11-17 14:42	1 spec	0	0	test			0.832	0.570		0.832	tokens,ai
+2026-11-17 14:42	1 spec	0	0	test			0.809	0.590		0.809	tokens,ai
+2026-11-17 14:42	1 spec	0	0	test			0.834	0.630		0.834	tokens,ai
+2026-11-17 14:42	1 spec	0	0	test			1.030	0.660		1.030	tokens,ai
+2026-11-17 14:42	1 spec	0	0	test			1.237	0.640		1.237	tokens,ai
+2026-11-17 14:42	1 spec	0	0	test			1.239	0.640		1.239	tokens,ai
+2026-11-17 14:42	1 spec	0	0	test			1.027	0.610		1.027	tokens,ai
+2026-11-17 14:42	1 spec	0	0	test			0.818	0.600		0.818	tokens,ai
+2026-11-17 14:43	affected	0	0	test			4.142	9.040		4.142	tokens,ai
+2026-11-17 14:43	R0126: review-001	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-17 14:43	R0126: verification log	0	0	deliver							tokens,wall,cpu,ai
+2026-11-17 14:45	1 spec	0	0	test			1.032	0.800		1.032	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.232	0.870		1.232	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.226	0.920		1.226	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.228	0.950		1.228	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.240	0.840		1.240	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.435	0.880		1.435	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.246	0.900		1.246	tokens,ai
+2026-11-17 14:45	affected	0	0	test			6.979	11.740		6.979	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.020	0.650		1.020	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.033	0.670		1.033	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.245	0.670		1.245	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.023	0.730		1.023	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.023	0.650		1.023	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			0.837	0.610		0.837	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.031	0.600		1.031	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			0.825	0.590		0.825	tokens,ai
+2026-11-17 14:47	R0126: final review 001 and trace	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-17 14:47	R0126: harvest	2	0	deliver							tokens,wall,cpu,ai
+2026-11-17 14:48	R0126: harvest the trace ordering	11	0	deliver							tokens,wall,cpu,ai
+2026-11-17 14:48	1 spec	0	0	test			1.454	1.120		1.454	tokens,ai
+2026-11-17 14:48	1 spec	0	0	test			1.450	1.000		1.450	tokens,ai
+2026-11-17 14:48	1 spec	0	0	test			1.648	1.280		1.648	tokens,ai
+2026-11-17 14:48	1 spec	0	0	test			1.649	1.250		1.649	tokens,ai
+2026-11-17 14:48	1 spec	0	0	test			1.638	1.050		1.638	tokens,ai
+2026-11-17 14:48	1 spec	0	0	test			1.850	0.960		1.850	tokens,ai
+2026-11-17 14:48	1 spec	0	0	test			2.263	1.190		2.263	tokens,ai
+2026-11-17 14:48	2 specs	0	0	test			1.647	1.360		1.647	tokens,ai
+2026-11-17 14:48	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
