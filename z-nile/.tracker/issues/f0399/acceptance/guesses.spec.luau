@@ -103,6 +103,23 @@ return t.spec("f0399: guesses and what covers them", function(it)
 		end
 	)
 
+	it("extends accepts added guesses and refuses a removed, changed or unreadable one", function()
+		local g1 = "# guesses\n- G1 (design, 2026-11-16): o Chose: c Why: w\n"
+		local g2 = guesses.append(g1, "build", "2026-11-17", "o2", "c2", "w2") :: string
+		t.expect(guesses.extends(nil, nil)).toBe(true)
+		t.expect(guesses.extends(nil, g1)).toBe(true)
+		t.expect(guesses.extends(g1, g1)).toBe(true)
+		t.expect(guesses.extends(g1, g2)).toBe(true)
+		t.expect(guesses.extends(g2, g1)).toBe(false)
+		t.expect(guesses.extends(g1, nil)).toBe(false)
+		t.expect(guesses.extends(g1, "")).toBe(false)
+		t.expect(guesses.extends(g1, "# guesses\n- G1 (design, 2026-11-16): o Chose: other Why: w\n"))
+			.toBe(false)
+		t.expect(guesses.extends(g1, "# guesses\n- G1 (build, 2026-11-16): o Chose: c Why: w\n")).toBe(false)
+		t.expect(guesses.extends(g1, "not a guesses file\n")).toBe(false)
+		t.expect(guesses.extends(nil, "not a guesses file\n")).toBe(false)
+	end)
+
 	it("the contract has a guesses part only when guesses.md has text", function()
 		local specs = { ["hold.spec.luau"] = "return 1\n" }
 		local plain = contract.build(DOC, "check\n", specs) :: contract.Parts

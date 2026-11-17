@@ -1,5 +1,6 @@
 --!strict
--- f0399 AC13, AC14: a raft readied `--on` a raft that has not landed. Real git in a fixture under .cache (a bare origin
+-- f0399 AC13, AC14: a raft readied `--on` a raft that has not landed (its ready commit records On:, `start` builds a base
+-- commit on the base's top layer, restack and done put it on main). Real git in a fixture under .cache (a bare origin
 -- whose path contains github.com, a worktree per raft and a `gh` stub that keeps each pull request's base).
 --   R0010 (D) holds two chores: c0010 and c0020, which adds src/base.luau.
 --   R0020 (R) holds the feature f0030, which depends on c0020 and whose check needs src/base.luau.
@@ -94,6 +95,7 @@ local log = ""
 local env: { [string]: string } = {}
 local wtD, wtR = "", ""
 local built, onBase, laidOut = false, false, false
+local DOC20 = raftDoc("R0020", "feature", "f0030")
 
 local function tr(dir: string, args: { string }): fixture.Result
 	return trackerfix.tr(f, dir, args, env)
@@ -169,6 +171,14 @@ local function sealAgain(dir: string, raftId: string)
 	pcall(seal.trace, dir, raftId)
 end
 
+local function readyBody(raft: string): string
+	return git(f.origin, { "log", "-1", "--format=%B", `--grep=^tracker: ready {raft} `, "main" })
+end
+
+local function withoutStatus(doc: string): string
+	return (string.gsub(doc, "\nstatus: [^\n]*", ""))
+end
+
 return t.spec("f0399: a raft built on a raft that has not landed", function(it)
 	it(
 		"ready --on refuses a base that is not active, has an unfinished layer, does not hold every unmet dependency, or holds none",
@@ -183,8 +193,20 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
 			t.expect(inactive.ok).toBe(false)
 			t.expect(has(say(inactive), "--on R0010: R0010 is not an active raft")).toBe(true)
 
-			-- D is active with its first layer finished and its second not started
+			-- D is active and has no layer yet: nothing in R0040 depends on it, and f0040 depends on c0090 too
 			zn(f.main, { "ready", "R0010" })
+			local none = tr(f.main, { "ready", "R0040", "--on", "R0010" })
+			t.expect(none.ok).toBe(false)
+			t.expect(has(say(none), "--on R0010: nothing in R0040 depends on R0010")).toBe(true)
+			local partial = tr(f.main, { "ready", "R0030", "--on", "R0010" })
+			t.expect(partial.ok).toBe(false)
+			t.expect(has(say(partial), "f0040 depends on c0090, which is not done and not in R0010"))
+				.toBe(true)
+			local open = tr(f.main, { "ready", "R0020", "--on", "R0010" })
+			t.expect(open.ok).toBe(false)
+			t.expect(has(say(open), "R0010's layer for c0010 is not finished")).toBe(true)
+
+			-- every layer of D is built and finished
 			wtD = zn(f.main, { "worktree", "R0010" })
 			zn(wtD, { "start", "R0010" })
 			write(
@@ -194,49 +216,74 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
 			)
 			layerWork(wtD, "alpha", "c0010")
 			zn(wtD, { "finish", "c0010" })
-			local open = tr(f.main, { "ready", "R0020", "--on", "R0010" })
-			t.expect(open.ok).toBe(false)
-			t.expect(has(say(open), "is not finished")).toBe(true)
-
-			-- every layer of D is finished
+			local half = tr(f.main, { "ready", "R0020", "--on", "R0010" })
+			t.expect(half.ok).toBe(false)
+			t.expect(has(say(half), "R0010's layer for c0020 is not finished")).toBe(true)
 			zn(wtD, { "start", "R0010" })
 			layerWork(wtD, "base", "c0020")
 			zn(wtD, { "finish", "c0020" })
 			laidOut = true
-			local partial = tr(f.main, { "ready", "R0030", "--on", "R0010" })
-			t.expect(partial.ok).toBe(false)
-			t.expect(has(say(partial), "which is not done and not in")).toBe(true)
-			local none = tr(f.main, { "ready", "R0040", "--on", "R0010" })
-			t.expect(none.ok).toBe(false)
-			t.expect(has(say(none), "nothing in")).toBe(true)
 		end
 	)
 
-	it("ready --on readies the raft and writes on: and lands: approved", function()
+	it("ready --on readies the raft and records On: and Lands: approved in its ready commit", function()
 		setup()
 		t.expect(laidOut).toBe(true)
 		local r = tr(f.main, { "ready", "R0020", "--on", "R0010" })
 		t.expect(has(expectOk(r, "ready R0020 --on R0010"), "readied R0020")).toBe(true)
-		local doc = onOrigin(`{ROOT}/rafts/active/R0020/R0020.md`) or ""
-		t.expect(has(doc, "\non: R0010\n")).toBe(true)
-		t.expect(has(doc, "\nlands: approved\n")).toBe(true)
+		local body = readyBody("R0020")
+		t.expect(has(body, "On: R0010")).toBe(true)
+		t.expect(has(body, "Lands: approved")).toBe(true)
+		t.expect(withoutStatus(onOrigin(`{ROOT}/rafts/active/R0020/R0020.md`) or ""))
+			.toBe(withoutStatus(DOC20))
 		t.expect(onOrigin(`{ROOT}/issues/active/f0030/f0030.md`) ~= nil).toBe(true)
+		-- plain ready records no On:
+		t.expect(has(readyBody("R0010"), "On:")).toBe(false)
 	end)
 
 	it(
-		"start cuts the first layer from the base's top layer, with its pull request based on that branch, and stack says built on",
+		"start builds the base commit on the base's top layer with the raft's own folders as on main, cuts the first layer from it as an active raft, and stack says built on",
 		function()
 			setup()
-			t.expect(onOrigin(`{ROOT}/rafts/active/R0020/R0020.md`) ~= nil).toBe(true)
+			t.expect(has(readyBody("R0020"), "On: R0010")).toBe(true)
 			wtR = zn(f.main, { "worktree", "R0020" })
-			local started = tr(wtR, { "start", "R0020" })
-			expectOk(started, "start R0020 (on R0010)")
+			expectOk(tr(wtR, { "start", "R0020" }), "start R0020 (on R0010)")
 			onBase = true
 			git(wtR, { "fetch", "-q", "origin" })
 			local top = git(wtR, { "rev-parse", "origin/R0010/2/c0020" })
+			local base = git(wtR, { "rev-parse", "origin/R0020/base" })
+			t.expect(git(wtR, { "log", "-1", "--format=%s", base })).toBe("tracker: base R0020 on R0010")
+			t.expect(git(wtR, { "rev-parse", `{base}^` })).toBe(top)
+			-- the base commit changes only R0020's folder and f0030's folder, at both state paths
+			local own = {
+				`{ROOT}/rafts/R0020/`,
+				`{ROOT}/rafts/active/R0020/`,
+				`{ROOT}/issues/f0030/`,
+				`{ROOT}/issues/active/f0030/`,
+			}
+			local changed = string.split(git(wtR, { "diff", "--name-only", top, base }), "\n")
+			t.expect(#changed > 0 and changed[1] ~= "").toBe(true)
+			for _, path in changed do
+				local inside = false
+				for _, prefix in own do
+					inside = inside or string.sub(path, 1, #prefix) == prefix
+				end
+				t.expect(inside).toBe(true)
+			end
+			local tree = git(wtR, { "ls-tree", "-r", "--name-only", base })
+			t.expect(has(tree, `{ROOT}/rafts/active/R0020/R0020.md`)).toBe(true)
+			t.expect(has(tree, `{ROOT}/issues/active/f0030/f0030.md`)).toBe(true)
+			t.expect(has(tree, `{ROOT}/issues/f0030/`)).toBe(false)
+			t.expect(has(tree, `{ROOT}/rafts/R0020/`)).toBe(false)
+			t.expect(onOrigin(`{ROOT}/rafts/active/R0020/R0020.md`))
+				.toBe(git(wtR, { "show", `{base}:{ROOT}/rafts/active/R0020/R0020.md` }))
+			-- the worktree reads R0020 as active, with its folders really there
 			t.expect(git(wtR, { "branch", "--show-current" })).toBe("R0020/1/f0030")
-			t.expect(fixture.exec(wtR, "git", { "merge-base", "--is-ancestor", top, "HEAD" }).ok).toBe(true)
-			t.expect(has(fs.readFile(log), "--base R0010/2/c0020 --head R0020/1/f0030")).toBe(true)
+			t.expect(fixture.exec(wtR, "git", { "merge-base", "--is-ancestor", base, "HEAD" }).ok).toBe(true)
+			t.expect(fs.isFile(`{wtR}/{ROOT}/rafts/active/R0020/R0020.md`)).toBe(true)
+			t.expect(fs.isFile(`{wtR}/{ROOT}/issues/active/f0030/f0030.md`)).toBe(true)
+			t.expect(fs.isDir(`{wtR}/{ROOT}/issues/f0030`)).toBe(false)
+			t.expect(has(fs.readFile(log), "--base R0020/base --head R0020/1/f0030")).toBe(true)
 			t.expect(has(zn(wtR, { "stack", "R0020" }), "built on R0010 (R0010/2/c0020)")).toBe(true)
 
 			write(
@@ -247,6 +294,7 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
 			layerWork(wtR, "feature", "f0030")
 			-- its check needs src/base.luau, which only D's second layer has
 			t.expect(tr(wtR, { "finish", "f0030" }).ok).toBe(true)
+			t.expect(git(wtR, { "rev-parse", "HEAD^" })).toBe(base)
 			built = true
 		end
 	)
@@ -271,7 +319,7 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
 	end)
 
 	it(
-		"after the base lands restack puts the raft on main with only its own commits and done lands it",
+		"after the base lands restack puts the raft on main with only its own commits and no backlog copy, and done lands it",
 		function()
 			setup()
 			t.expect(built).toBe(true)
@@ -280,8 +328,7 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
 			t.expect(onOrigin(`{ROOT}/rafts/done/R0010/R0010.md`) ~= nil).toBe(true)
 
 			git(wtR, { "push", "-q", "origin", "R0020/1/f0030" })
-			local restacked = tr(wtR, { "restack", "R0020" })
-			expectOk(restacked, "restack R0020")
+			expectOk(tr(wtR, { "restack", "R0020" }), "restack R0020")
 			git(wtR, { "fetch", "-q", "origin" })
 			local layer = "origin/R0020/1/f0030"
 			t.expect(fixture.exec(wtR, "git", { "merge-base", "--is-ancestor", "origin/main", layer }).ok)
@@ -291,12 +338,19 @@ return t.spec("f0399: a raft built on a raft that has not landed", function(it)
 			for _, subject in subjects do
 				t.expect(string.match(subject, "^c0010") == nil and string.match(subject, "^c0020") == nil)
 					.toBe(true)
-				t.expect(string.match(subject, "^R0010") == nil).toBe(true)
+				t.expect(
+					string.match(subject, "^R0010") == nil and string.match(subject, "^tracker: base") == nil
+				)
+					.toBe(true)
 				if string.sub(subject, 1, 7) == "f0030: " then
 					own += 1
 				end
 			end
 			t.expect(own).toBe(1)
+			local tree = git(wtR, { "ls-tree", "-r", "--name-only", layer })
+			t.expect(has(tree, `{ROOT}/issues/f0030/`)).toBe(false)
+			t.expect(has(tree, `{ROOT}/rafts/R0020/`)).toBe(false)
+			t.expect(has(tree, `{ROOT}/issues/active/f0030/f0030.md`)).toBe(true)
 			t.expect(has(fs.readFile(log), "pr edit 21 --base main")).toBe(true)
 
 			git(wtR, { "reset", "-q", "--hard", layer })

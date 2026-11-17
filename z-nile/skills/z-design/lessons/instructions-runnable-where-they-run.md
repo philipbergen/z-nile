@@ -29,3 +29,5 @@ Whose operation it is (c0263 design review 013 F1): a stop message in a helper t
 **Note** (c0226 design review 001, the reviewer's candidate): an inline shell recipe an agent is told to type runs in the agent's shell, which is the user's (zsh here), not bash. `for v in $(compgen -e …)` fails there with `compgen not found` and silently loops over nothing. Ask: does every inline recipe in a step or experiment run under the shell it was written for (`bash -c '…'`, or a script with a bash shebang)?
 
 - f0208 design review 001 F5: OC1 asked for the purchase screen "on a later visit", but nothing in the portal uses a free start and the game place that does was not built yet, so a playtest always found the free start due. The step now claims it with a server command-bar call (`Wallet.arrive`) first.
+
+**Also:** f0399 design review 001 F10 (2026-11-16): "the person runs `./zn approve <id>` in the raft's worktree" left out which layer the worktree is on and who pushes, and the specs pushed by hand. Say the branch, the tree's state and what reaches origin for every command the design hands to a person.

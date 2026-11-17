@@ -93,8 +93,21 @@ local function built(id: string, over: { [string]: any }?): work.RaftFact
 	return r
 end
 
-local function decide(rafts: { work.RaftFact }, issues: { work.IssueFact }?, asked: string?): work.Decision
-	return work.decide({ asked = asked, author = ADA, rafts = rafts, issues = issues })
+-- a session that can be named, as Claude Code's and Kimi's are
+local function decide(
+	rafts: { work.RaftFact },
+	issues: { work.IssueFact }?,
+	asked: string?,
+	carriers: { [string]: work.Carrier }?
+): work.Decision
+	return work.decide({
+		asked = asked,
+		author = ADA,
+		session = "S1",
+		carriers = carriers,
+		rafts = rafts,
+		issues = issues,
+	})
 end
 
 return t.spec("f0399: z-work picks every ticket's next step", function(it)
@@ -128,16 +141,51 @@ return t.spec("f0399: z-work picks every ticket's next step", function(it)
 		t.expect(decide({ built("R0051"), built("R0050") }, {}).raft).toBe("R0050")
 	end)
 
-	it("a held raft is taken only when its next action is done, and only this author's", function()
-		local building = built("R0050", { finalReview = "none", traceOk = false })
-		local others = built("R0049", { holder = "Bo <bo@example>" })
-		local d = decide({ building, others }, { issue("c0020") })
-		t.expect(d.ticket).toBe("c0020")
-		t.expect(d.action).toBe("draft")
-	end)
+	it(
+		"it resumes this author's held raft that no live session carries, after one that only has to land and before a raft to ready",
+		function()
+			local building = built("R0030", { finalReview = "none", traceOk = false })
+			local land = built("R0050")
+			local ready = raft({ id = "R0020" })
+			local d1 = decide({ ready, building, land }, {})
+			t.expect(d1.raft).toBe("R0050")
+			t.expect(d1.action).toBe("done")
+			local d2 = decide({ ready, building }, {})
+			t.expect(d2.raft).toBe("R0030")
+			t.expect(d2.action).toBe("final-review")
+			t.expect(has(d2.why, "Resuming R0030: you hold it and no live session carries it.")).toBe(true)
+			-- a held raft that waits, or was released, is not a resume
+			local waits = built("R0031", { unapproved = { "c0010 (no approval)" } })
+			t.expect(decide({ ready, waits }, {}).raft).toBe("R0020")
+		end
+	)
 
 	it(
-		"it never picks a held design, an unchallenged idea, an unsized issue, a closed one, an added issue or a member",
+		"a held raft is not resumed when another session carries it, the session cannot be named, or another person holds it, and a stale carrier frees it",
+		function()
+			local building = built("R0030", { finalReview = "none", traceOk = false })
+			local land = built("R0050")
+			local next = issue("c0020")
+			local live = { R0030 = { session = "S2", age = 60 }, R0050 = { session = "S2", age = 60 } }
+			local d = decide({ building, land }, { next }, nil, live)
+			t.expect(d.ticket).toBe("c0020")
+			-- every unnamed pick still says what this person holds
+			t.expect(has(d.why, "you hold R0030, R0050: name one to resume it.")).toBe(true)
+			local mine = { R0030 = { session = "S1", age = 60 } }
+			t.expect(decide({ building }, { next }, nil, mine).raft).toBe("R0030")
+			local stale = { R0030 = { session = "S2", age = work.STALE + 1 } }
+			t.expect(decide({ building }, { next }, nil, stale).raft).toBe("R0030")
+			local edge = { R0030 = { session = "S2", age = work.STALE } }
+			t.expect(decide({ building }, { next }, nil, edge).ticket).toBe("c0020")
+			local unnamed = work.decide({ author = ADA, rafts = { building, land }, issues = { next } })
+			t.expect(unnamed.ticket).toBe("c0020")
+			local others = built("R0049", { holder = "Bo <bo@example>" })
+			t.expect(decide({ others }, { next }).ticket).toBe("c0020")
+		end
+	)
+
+	it(
+		"it never picks a held design of another checkout, an unchallenged idea, a closed issue, an added issue or a member",
 		function()
 			local none = decide({}, {
 				issue("c0001", { status = "preparing" }),
@@ -145,22 +193,75 @@ return t.spec("f0399: z-work picks every ticket's next step", function(it)
 					"c0002",
 					{ draftBlock = "no idea-review-001.md (the idea was not challenged): ./zn idea c0002" }
 				),
-				prepared("c0003", { sized = false }),
+				issue("c0003", { status = "preparing", mine = true }),
 				issue("c0004", { status = "closed" }),
 				prepared("c0005", { added = true }),
 				prepared("c0006", { raft = "R0099" }),
-			})
+			}, nil, { c0003 = { session = "S2", age = 60 } })
 			t.expect(none.action).toBe("none")
 			t.expect(none.ticket).toBe("")
 			t.expect(has(none.why, "c0001: is being designed (preparing): name it to resume")).toBe(true)
 			t.expect(has(none.why, "c0002: its idea needs the person (no idea-review-001.md")).toBe(true)
-			t.expect(has(none.why, "c0003: has no size:")).toBe(true)
+			-- its prep worktree is here, but another live session carries it
+			t.expect(has(none.why, "c0003: is being designed (preparing): name it to resume")).toBe(true)
 			t.expect(has(none.why, "c0004")).toBe(false)
 			t.expect(has(none.why, "c0005")).toBe(false)
 			t.expect(has(none.why, "c0006")).toBe(false)
 			t.expect(has(work.say(none), "nothing to do - ")).toBe(true)
 		end
 	)
+
+	it(
+		"fix is offered for a raft ready refuses for a repairable reason and for a prepared issue with no size, and never for a dependency, questions or a changed approval",
+		function()
+			local stale = raft({
+				id = "R0040",
+				block = "R0040's coherence review predates its record: run a new raft-mode round (z-raft, zz-review); never edit a review that is already written",
+			})
+			local d = decide({ stale }, { prepared("c0030"), issue("c0020") })
+			t.expect(d.raft).toBe("R0040")
+			t.expect(d.action).toBe("fix")
+			t.expect(has(d.why, "ready refuses R0040: R0040's coherence review predates its record"))
+				.toBe(true)
+			t.expect(has(work.say(d), "R0040: fix - ")).toBe(true)
+			-- a raft ready accepts comes first
+			t.expect(decide({ stale, raft({ id = "R0041", block = "" }) }, {}).action).toBe("ready")
+			-- not repairable by the worker: the person approves again, answers questions.md, or the dependency lands
+			local drifted = raft({
+				id = "R0042",
+				block = "c0010's contract changed since approval: design. Run ./zn approve c0010 again, then ./zn approve c0010 --publish.",
+			})
+			local asked = raft({ id = "R0043", questions = true, block = "R0043 has questions.md" })
+			local waitsOn = raft({
+				id = "R0044",
+				depsMet = false,
+				block = "c0010 depends on c0009, which is active on origin/main: it must be done first",
+			})
+			local none = decide({ drifted, asked, waitsOn }, {})
+			t.expect(none.action).toBe("none")
+			-- an unsized prepared issue: after an issue that can be rafted, before a draft
+			local unsized = prepared("c0031", { sized = false })
+			t.expect(decide({}, { unsized, prepared("c0035"), issue("c0020") }).ticket).toBe("c0035")
+			local f = decide({}, { unsized, issue("c0020") })
+			t.expect(f.ticket).toBe("c0031")
+			t.expect(f.action).toBe("fix")
+			t.expect(has(f.why, "c0031 is prepared with no size:")).toBe(true)
+		end
+	)
+
+	it("a design whose prep worktree is in this checkout is resumed before a new draft", function()
+		local mine = issue("c0025", { status = "preparing", mine = true })
+		local fresh = issue("c0020")
+		local d = decide({}, { fresh, mine })
+		t.expect(d.ticket).toBe("c0025")
+		t.expect(d.action).toBe("draft")
+		t.expect(has(d.why, "c0025 is being designed and its prep worktree is here: resume it")).toBe(true)
+		-- a prepared issue is further along
+		t.expect(decide({}, { fresh, mine, prepared("c0030") }).ticket).toBe("c0030")
+		-- another live session carries it
+		t.expect(decide({}, { fresh, mine }, nil, { c0025 = { session = "S2", age = 60 } }).ticket)
+			.toBe("c0020")
+	end)
 
 	it("a ticket with an unmet dependency is picked only when no ticket without one has a pick", function()
 		-- c0030 is prepared but depends on c0020, which is new: the capture's own example
@@ -199,6 +300,17 @@ return t.spec("f0399: z-work picks every ticket's next step", function(it)
 		t.expect(d2.ticket).toBe("c0033")
 		t.expect(d2.action).toBe("draft")
 		t.expect(has(d2.why, "It depends on c0021, not landed")).toBe(true)
+		-- a closed dependency never lands: the person has to change depends_on
+		local closed = issue("c0040", { status = "closed" })
+		local onClosed = prepared("c0041", { deps = { "c0040" } })
+		local stuck = decide({}, { onClosed, closed })
+		t.expect(stuck.action).toBe("none")
+		t.expect(
+			has(
+				stuck.why,
+				"c0041: depends on c0040, which is closed (won't do): its depends_on needs the person"
+			)
+		).toBe(true)
 	end)
 
 	it(
@@ -359,11 +471,14 @@ return t.spec("f0399: z-work picks every ticket's next step", function(it)
 		local input: work.Input = {
 			author = ADA,
 			rafts = {},
-			issues = { issue("c0001", { status = "preparing" }), prepared("c0003", { sized = false }) },
+			issues = {
+				issue("c0001", { status = "preparing" }),
+				issue("c0003", { draftBlock = "open to the human (F1)" }),
+			},
 		}
 		local text = work.report(input, work.decide(input))
 		t.expect(has(text, "nothing to do - no claimable raft\n")).toBe(true)
 		t.expect(has(text, "\nc0001: is being designed (preparing): name it to resume")).toBe(true)
-		t.expect(has(text, "\nc0003: has no size:")).toBe(true)
+		t.expect(has(text, "\nc0003: its idea needs the person (open to the human (F1))")).toBe(true)
 	end)
 end)
