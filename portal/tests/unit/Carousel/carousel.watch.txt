@@ -1,0 +1,9 @@
+portal/default.project.json
+portal/src/client/CarouselView.luau
+portal/src/client/Main.client.luau
+portal/src/server/Cards.luau
+portal/src/server/Main.server.luau
+portal/src/shared/Games.luau
+portal/src/shared/Logic/Card/init.luau
+portal/src/shared/Logic/Carousel/init.luau
+portal/tests/inputs.tsv

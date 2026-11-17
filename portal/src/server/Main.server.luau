@@ -1,2 +1,3 @@
 --!strict
 -- portal's server entry (c0184 scaffold): boots the server adapters as the features arrive.
+require("./Cards").start()
