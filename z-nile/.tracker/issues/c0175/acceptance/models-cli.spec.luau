@@ -115,19 +115,26 @@ return t.spec("c0175 agy and opencode in .models.toml", function(it)
 		end
 	)
 
-	it("AC2: effortFor lowers agy's effort to the highest the model offers: Opus tops out at high", function()
-		t.expect(M.effortFor("agy", "claude-opus-5-5", "xhigh")).toBe("high")
-		t.expect(M.effortFor("agy", "claude-opus-5-5", "max")).toBe("high")
-		t.expect(M.effortFor("agy", "claude-opus-5-5", "high")).toBe("high")
-		t.expect(M.effortFor("agy", "claude-opus-5-5", "medium")).toBe("medium")
-		t.expect(M.effortFor("agy", "claude-sonnet-5-5", "xhigh")).toBe("high")
-		t.expect(M.effortFor("agy", "gemini-4-hydrogen", "xhigh")).toBe("xhigh")
-		t.expect(M.effortFor("agy", "gemini-4-hydrogen", "max")).toBe("xhigh")
-		t.expect(M.effortFor("agy", "gemini-4-argon", "xhigh")).toBe("high")
-		t.expect(M.effortFor("agy", "gemini-3.8-flash", "xhigh")).toBe("high")
-		t.expect(M.effortFor("agy", "gpt-oss-120b", "xhigh")).toBe("medium")
-		t.expect(M.effortFor("agy", "gpt-oss-120b", "low")).toBe("medium")
-	end)
+	it(
+		"AC2: effortFor lowers agy's effort to the highest the model offers: argon tops out at high, hydrogen at xhigh",
+		function()
+			t.expect(M.effortFor("agy", "claude-opus-5-5", "xhigh")).toBe("high")
+			t.expect(M.effortFor("agy", "claude-opus-5-5", "max")).toBe("high")
+			t.expect(M.effortFor("agy", "claude-opus-5-5", "high")).toBe("high")
+			t.expect(M.effortFor("agy", "claude-opus-5-5", "medium")).toBe("medium")
+			t.expect(M.effortFor("agy", "claude-sonnet-5-5", "xhigh")).toBe("high")
+			t.expect(M.effortFor("agy", "gemini-4-hydrogen", "xhigh")).toBe("xhigh")
+			t.expect(M.effortFor("agy", "gemini-4-hydrogen", "max")).toBe("xhigh")
+			t.expect(M.effortFor("agy", "gemini-4-argon", "xhigh")).toBe("high")
+			t.expect(M.effortFor("agy", "gemini-4-argon", "max")).toBe("high")
+			t.expect(M.effortFor("agy", "gemini-4-argon", "high")).toBe("high")
+			t.expect(M.effortFor("agy", "gemini-4-argon", "low")).toBe("low")
+			t.expect(M.effortFor("agy", "gemini-4-hydrogen", "high")).toBe("high")
+			t.expect(M.effortFor("agy", "gemini-3.8-flash", "xhigh")).toBe("high")
+			t.expect(M.effortFor("agy", "gpt-oss-120b", "xhigh")).toBe("medium")
+			t.expect(M.effortFor("agy", "gpt-oss-120b", "low")).toBe("medium")
+		end
+	)
 
 	it(
 		"AC2: effortFor gives a model that offers none no effort, and leaves other CLIs and unknown models alone",
@@ -147,29 +154,31 @@ return t.spec("c0175 agy and opencode in .models.toml", function(it)
 		"AC2: a try on agy carries the lowered effort, so the spend row's model id records what ran",
 		function()
 			local text = table.concat({
-				ROLE,
-				'[fallback.agy]\nmodel = "claude-opus-5-5"\nruntime = "agy-cli"\n',
+				'[roles.design]\nmodel = "claude-opus-5-5"\ncli = "claude"\nruntime = "claude-cli"\nrank = 4\nmax_tokens = 5000\neffort = "xhigh"\nfallbacks = ["agy", "agy-hydrogen", "opencode"]\n',
+				'[fallback.agy]\nmodel = "gemini-4-argon"\nruntime = "agy-cli"\n',
 				'[fallback.opencode]\nmodel = "opencode-deepseek-deepseek-v4-pro"\nruntime = "opencode-cli"\n',
+				'[member.agy-hydrogen]\ncli = "agy"\nmodel = "gemini-4-hydrogen"\nruntime = "agy-cli"\n',
 				'[roles.design-challenge]\nmodel = "claude-opus-5-5"\ncli = "claude"\nruntime = "claude-cli"\nrank = 4\nmax_tokens = 5000\neffort = "xhigh"\npool = ["flash"]\nfallbacks = ["agy"]\n',
 				'[member.flash]\ncli = "agy"\nmodel = "gemini-3.8-flash"\nruntime = "agy-cli"\n',
 			}, "\n")
 			local layers = { layer(text) }
 			local tries = M.tries(M.resolve(layers, "z-design"))
-			t.expect(#tries).toBe(3)
+			t.expect(#tries).toBe(4)
 			t.expect(tries[1].cli).toBe("claude")
 			t.expect(M.id(tries[1])).toBe("claude-opus-5-5-xhigh") -- claude takes xhigh as it is
 			t.expect(tries[2].cli).toBe("agy")
 			t.expect(tries[2].effort).toBe("high")
-			t.expect(M.id(tries[2])).toBe("claude-opus-5-5-high")
-			t.expect(tries[3].cli).toBe("opencode")
-			t.expect(M.id(tries[3])).toBe("opencode-deepseek-deepseek-v4-pro-xhigh")
+			t.expect(M.id(tries[2])).toBe("gemini-4-argon-high") -- argon tops out at high: an xhigh stage runs and is recorded at high
+			t.expect(M.id(tries[3])).toBe("gemini-4-hydrogen-xhigh") -- hydrogen offers xhigh
+			t.expect(tries[4].cli).toBe("opencode")
+			t.expect(M.id(tries[4])).toBe("opencode-deepseek-deepseek-v4-pro-xhigh")
 			-- a pool member on agy is lowered the same way
 			local review = M.tries(M.resolve(layers, "zz-review", "design"))
 			t.expect(#review).toBe(3)
 			t.expect(review[2].cli).toBe("agy")
 			t.expect(review[2].model).toBe("gemini-3.8-flash")
 			t.expect(M.id(review[2])).toBe("gemini-3.8-flash-high")
-			t.expect(M.id(review[3])).toBe("claude-opus-5-5-high")
+			t.expect(M.id(review[3])).toBe("gemini-4-argon-high")
 		end
 	)
 
@@ -180,6 +189,41 @@ return t.spec("c0175 agy and opencode in .models.toml", function(it)
 		local r = M.resolve({ l }, "z-design")
 		t.expect(M.id(r.specs.agy)).toBe("claude-opus-5-5-high")
 	end)
+	it(
+		"AC1: a role's fallbacks may name a member of its file, tried at its place; a name that is neither a CLI nor a member is refused",
+		function()
+			local base = table.concat({
+				'[fallback.kimi]\nmodel = "kimi-code-k3.1-pro"\nruntime = "kimi-cli"\n',
+				'[fallback.agy]\nmodel = "gemini-4-argon"\nruntime = "agy-cli"\n',
+				'[member.agy-hydrogen]\ncli = "agy"\nmodel = "gemini-4-hydrogen"\nruntime = "agy-cli"\n',
+			}, "\n")
+			local function role(list: string): string
+				return `[roles.design]\nmodel = "claude-opus-5-5"\ncli = "claude"\nruntime = "claude-cli"\nrank = 4\nmax_tokens = 5000\neffort = "high"\nfallbacks = {list}\n`
+			end
+			local l = layer(role('["kimi", "agy-hydrogen"]') .. base)
+			local tries = M.tries(M.resolve({ l }, "z-design"))
+			t.expect(#tries).toBe(3)
+			t.expect(tries[2].cli).toBe("kimi") -- the member keeps its place after kimi
+			t.expect(tries[3].cli).toBe("agy")
+			t.expect(tries[3].model).toBe("gemini-4-hydrogen")
+			t.expect(tries[3].member).toBe("agy-hydrogen")
+			local e = errorOf(function()
+				layer(role('["kimi", "nosuch"]') .. base)
+			end)
+			t.expect(has(e, "nosuch")).toBe(true)
+			t.expect(has(e, "not a supported CLI")).toBe(true)
+			local twice = errorOf(function()
+				layer(role('["agy-hydrogen", "agy-hydrogen"]') .. base)
+			end)
+			t.expect(has(twice, "twice")).toBe(true)
+			-- a member of another file is not seen at parse: the name must be a member of the file that lists it
+			local other = errorOf(function()
+				layer(role('["agy-hydrogen"]'))
+			end)
+			t.expect(has(other, "not a supported CLI")).toBe(true)
+		end
+	)
+
 	it(
 		"AC1: an opencode id with an escaped / : or @ in its model parses, so every model opencode reaches can be named",
 		function()
