@@ -40,6 +40,8 @@ return t.spec("c0252 the texts say the dispatcher lands a green stack", function
 					"up to `merge_retries` reruns (default 2: three runs) of one repeated failure",
 					"a failed read is never counted",
 					"An unruled high finding or approval drift blocks at once",
+					"is neither a rerun nor a block: the dispatcher runs one extra review round on a frontier model itself (`./zn dispatch zz-review <R-id> --mode final --frontier`",
+					"once per top tip; while no frontier model has quota it waits (exit 4), and if the round ran and the floor is still unmet it blocks under `needs-decision`",
 					"which recommends `retry`, or `approve` when a person must rule",
 					"`./zn block` writes `block-request` and a copy of the note in the state folder and stops",
 					"lands the green layers below the Layer with `./zn done --through` (waiting at the gate while their CI runs)",

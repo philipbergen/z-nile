@@ -1,9 +1,40 @@
 diff --git a/.models.toml b/.models.toml
-index 51aeee342..7d5b94318 100644
+index 51aeee342..94dfa5340 100644
 --- a/.models.toml
 +++ b/.models.toml
-@@ -24,9 +24,12 @@ grok = ["grok-"]
+@@ -4,15 +4,16 @@
+ # that CLI needs). A member is a named extra model of a CLI (several models may run on one CLI). A try is the
+ # role's rank, cap and effort on that model. Nothing defaults.
+ # max_tokens counts input + cache writes + output (cache reads are left out); the step is killed when it passes it.
+-# A role's tries are its own model, the members its `pool` lists (in that order), then its `fallbacks`. Pool members and
+-# rotation are for review steps: a step that authors on the same role (z-raft on `raft`) tries the role's model, then its fallbacks.
++# A role's tries are its own model, the members its `pool` lists (in that order), then its `fallbacks`.
+ # A role with rotate = true is ordered by family (the picker, reviewpool.luau): a review goes first to a model line that
+ # differs from the one that wrote the text and from the previous round's reviewer (tier 1), then to one that
+ # differs from the writer only (tier 2), and last to the writer's own line, the exact model that wrote it at the very
+-# end (tier 3: the flagged fallback, which never blocks the chain). `author` names the role whose first choice stands in
+-# for the writer when no spend row records it; no try is dropped for it.
++# end (tier 3: the fallback, recorded as a `Fallback:` line in the review file for the stats; it never blocks the chain).
++# The writer of a design or a raft is the `designed-by` line of its document, the writer of the code is the spend rows;
++# the tool assumes no writer. Any model may run any review: the one quality rule is the [review] frontier floor below.
+ # [families] maps a model line to its id prefixes (the longest prefix wins): add a line when a CLI brings new ids.
+-# design-challenge names no author: the table gives it the same model as design. Raft-mode review uses the raft role.
++# design-challenge names no author: the table gives it the same model as design. Raft-mode review has a role of its own,
++# raft-review; `raft` is only the role that writes a raft.
+ 
+ [families]
+ opus = ["claude-opus-"]
+@@ -22,11 +23,21 @@ haiku = ["claude-haiku-"]
+ kimi = ["kimi-"]
+ grok = ["grok-"]
  deepseek = ["deepseek-"] # reachable once opencode is added as a CLI
++composer = ["composer-"]
++
++# The frontier floor (user, 2026-11-16): every landing (`./zn done`, `done --through`, the dispatcher's landing) needs at
++# least one code or final review of the landed code by one of these models. An entry is a model id, or <id>@<effort> when
++# the review must have run at that effort. The list is yours to edit; a closer file replaces it whole.
++[review]
++frontier = ["claude-opus-5-5", "claude-fable-5-2", "kimi-code-k3.1-pro", "grok-4.7@xhigh", "gemini-4-argon"]
  
  [dispatch]
 -# the merge gates the dispatcher passes itself when the PR is green and mergeable; the run's PR is always a human's.
@@ -17,11 +48,83 @@ index 51aeee342..7d5b94318 100644
  # a step that prints nothing for this long is killed (a CLI never waits for quota)
  stall_seconds = 300
  # the same limit while a tool call runs (a full gate is quiet for minutes)
+@@ -56,17 +67,27 @@ cli = "claude"
+ model = "claude-fable-5-2"
+ runtime = "claude-cli"
+ 
+-[member.opus]
+-cli = "claude"
+-model = "claude-opus-5-5"
+-runtime = "claude-cli"
+-
+-# the cheap second model of a stream review (a Haiku-written layer is reviewed by Sonnet)
++# the stream-review list (user, 2026-11-16): Haiku (the role's own model), then these members in the order the role lists them
+ [member.sonnet]
+ cli = "claude"
+ model = "claude-sonnet-5-5"
+ runtime = "claude-cli"
+ 
++[member.grok46]
++cli = "grok"
++model = "grok-4.6"
++runtime = "grok-cli"
++
++# kimi r2.8 belongs here, between grok-4.6 and composer: no CLI lists a model of that name (kimi lists kimi-for-coding, k3,
++# k3-256k, k3.1-pro and k3.1-pro-highspeed; agent lists kimi-k2.7-code and kimi-k3-low|high|max), so it is not seeded.
++
++[member.composer]
++cli = "agent"
++model = "composer-2.5"
++runtime = "cursor-cli"
++max_calls = 200
++max_minutes = 240
++
+ [roles.idea]
+ model = "claude-fable-5-2"
+ cli = "claude"
+@@ -114,6 +135,16 @@ runtime = "claude-cli"
+ rank = 3
+ max_tokens = 3000000
+ effort = "high"
++fallbacks = ["kimi", "grok", "agent"]
++
++# reviewing a raft (the coherence review), apart from writing one (user, 2026-11-16)
++[roles.raft-review]
++model = "claude-opus-5-5"
++cli = "claude"
++runtime = "claude-cli"
++rank = 3
++max_tokens = 3000000
++effort = "high"
+ rotate = true
+ pool = ["fable"]
+ fallbacks = ["kimi", "grok", "agent"]
+@@ -147,11 +178,10 @@ rank = 4
+ max_tokens = 2000000
+ effort = "xhigh"
+ rotate = true
+-pool = ["opus"]
+ fallbacks = ["kimi", "grok", "agent"]
+ 
+-# the one cheap review: a stream review of a layer, on a model line other than the Sonnet that writes the code. Its second
+-# model is the cheap Sonnet member (kimi and grok are not cheap); opencode (DeepSeek) joins as a fallback once it is a CLI.
++# the one cheap review: a stream review of a layer. The list (user, 2026-11-16) is Haiku, then Sonnet, then grok-4.6, then
++# composer (kimi r2.8 has no id yet, see the members above); a model line other than the layer writer's goes first.
+ [roles.stream-review]
+ model = "claude-haiku-5-5"
+ cli = "claude"
+@@ -160,5 +190,5 @@ rank = 2
+ max_tokens = 1000000
+ effort = "medium"
+ rotate = true
+-pool = ["sonnet"]
++pool = ["sonnet", "grok46", "composer"]
+ fallbacks = []
 diff --git a/z-nile/README.md b/z-nile/README.md
-index 2071c89d8..cbf08ba13 100644
+index 2071c89d8..fc268ea04 100644
 --- a/z-nile/README.md
 +++ b/z-nile/README.md
-@@ -101,7 +101,7 @@ A worker claims an item by landing the status change on `origin/main`, as `statu
+@@ -101,19 +101,19 @@ A worker claims an item by landing the status change on `origin/main`, as `statu
  - A takeover discards the old worker's worktree, and a numbered copy recovers its work: the old worker's work is kept, and a numbered copy of it continues the work. *designed* (c0277)
  
  ### Autonomous delivery
@@ -29,7 +132,24 @@ index 2071c89d8..cbf08ba13 100644
 +Unless something blocks, once a person has approved its design, an item is rafted, executed, code-reviewed, full-force reviewed, tested and landed with no human in the loop. Rigor does not drop: tests first, sequestered `check.sh`, the full gate once at the merge, and a merge only when the stack is green and regression-free. This replaces c0117's "stops at a merge" gate: the stack lands through `./zn done`, with the dispatcher's credential, after its own checks. *exists* (c0252)
  
  ### Models per command and activity
- `.models.toml` names a real model for each stage in its `[roles.*]` table: `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `code-review`, `stream-review` and `final-review`, each with its CLI, rank, token cap and effort and a fallback list, and spend records the model. No level has a name. *exists*
+-`.models.toml` names a real model for each stage in its `[roles.*]` table: `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `code-review`, `stream-review` and `final-review`, each with its CLI, rank, token cap and effort and a fallback list, and spend records the model. No level has a name. *exists*
+-- Every review runs on an expensive role: `idea-challenge`, `design-challenge`, `code-review`, `final-review`, and `raft` for a raft's review, except a stream review, which runs on the cheap `stream-review` role. Which model of the role reviews is the picker's, away from the model that wrote the text (below). The cheaper `implementation` role builds and the `idea` role drafts. *exists*
+-- A command refuses a design review or a final review recorded off its role's kind of model. *designed* (c0306)
++`.models.toml` names a real model for each stage in its `[roles.*]` table: `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `raft-review`, `implementation`, `code-review`, `stream-review` and `final-review`, each with its CLI, rank, token cap and effort and a fallback list, and spend records the model. No level has a name. *exists*
++- Every review runs on an expensive role: `idea-challenge`, `design-challenge`, `code-review`, `final-review`, and `raft-review` for a raft's review, except a stream review, which runs on the cheap `stream-review` role. Which model of the role reviews is the picker's, away from the model that wrote the text (below). The cheaper `implementation` role builds and the `idea` role drafts. *exists*
++- Any model may run any review. The one quality rule is the frontier floor: every landing needs a code or final review of the landed code by a model on the `[review] frontier` list of `.models.toml`, and `./zn done` refuses a landing without one. *exists* (c0251, replacing c0306's list of review models)
+ - The cheapest do the waiting: the dispatcher no longer stops at a gate just to wait, and polls it on the cheapest model of the CLI, so no expensive model waits on a gate. *captured* (c0305)
+ - Metrics show the cost per model, from the real model on each spend row. *captured* (c0307)
+ 
+ ### Reviews by different models
+-- A reviewer should run on a different model family than the author, and successive rounds rotate. `.models.toml` names a review pool and its model lines (`[families]`); the dispatcher takes the first member whose family differs from the author's and the previous reviewer's. *exists* (c0251); a role's `author` only stands in for the writer when no spend row records it, and drops nothing. *exists*
++- A reviewer should run on a different model family than the author, and successive rounds rotate. `.models.toml` names a review pool and its model lines (`[families]`); the dispatcher takes the first member whose family differs from the author's and the previous reviewer's. *exists* (c0251); a design's or raft's writer is its document's `designed-by` line, the code's the build rows, and no author is assumed. *exists*
+ - Same-family review (Opus reviewing Opus) is fine, but it is the fallback and never the only choice: it runs only when no different-family CLI can (out of tokens or quota, CLI missing). It never blocks the chain.
+-- Every review records its model and whether it was a fallback. The board flags fallback reviews so you can ask for a cross-model re-review when tokens return. Every finding is still harvested into a skill's lessons.
++- Every review records its model and whether it was a fallback. The review file keeps a `Fallback:` line for the stats; nothing flags it. Every finding is still harvested into a skill's lessons.
+ 
+ ### The full-force review
+ Once per raft, on the finished stack, a final review checks that each ticket's design covers its idea and that the implementation delivers the design. `./zn trace <R-id>` prints a table with one row per claim of the Problem, Solution and acceptance criteria; the reviewer on the `final-review` role cites the design section, the test and the code for each, `./zn trace <R-id> --check` verifies it, `final-review-NNN.md` ends in a verdict, `approve` or `changes`, and `./zn done` refuses a stack without it. *exists*
 @@ -165,7 +165,7 @@ Workers run with a bot credential that can push branches and open PRs but cannot
  | `rank`, `./zn rank`, `./zn next`, lost first | c0249 | captured |
  | `blocked`, `escalation.md`, `./zn resolve` | c0250 | exists |
@@ -40,7 +160,7 @@ index 2071c89d8..cbf08ba13 100644
  | workers on several hosts, worker identity in spend | c0254 | captured |
  | the z-nile app in Omarchy: order, lost items, drag and drop | c0257 | captured |
 diff --git a/z-nile/engine/dispatch.luau b/z-nile/engine/dispatch.luau
-index b16452c7d..007acd504 100644
+index b16452c7d..c59e3eb18 100644
 --- a/z-nile/engine/dispatch.luau
 +++ b/z-nile/engine/dispatch.luau
 @@ -13,7 +13,7 @@ export type Step = {
@@ -52,7 +172,7 @@ index b16452c7d..007acd504 100644
  }
  
  -- Every z-nile skill and every script the chain runs, classified. Ready, stop, recombine and recording spend need
-@@ -32,6 +32,12 @@ dispatch.STEPS = {
+@@ -32,6 +32,15 @@ dispatch.STEPS = {
  	["release"] = { kind = "script", argv = { "release", "{id}" }, where = "worktree" },
  	["spend"] = { kind = "script", argv = { "spend", "{id}" }, where = "worktree" },
  	["zz-stats"] = { kind = "script", argv = { "metrics" }, where = "main" },
@@ -60,12 +180,15 @@ index b16452c7d..007acd504 100644
 +	-- worktree and with its own environment: no model, no agent credential
 +	["z-land"] = { kind = "script", argv = { "done", "{id}" }, where = "run" },
 +	["z-block"] = { kind = "script", argv = { "block", "{id}" }, where = "run" },
++	-- c0252 + c0251: the extra frontier review round's file is committed on the layer and pushed with the dispatcher's own
++	-- credential (the reviewer, an agent CLI, only wrote it); the round itself is `zz-review --frontier`, a model step
++	["z-commit"] = { kind = "script", argv = { "commit" }, where = "run" },
 +	-- c0252: the clean-clone full gate on the bind's tree and, for a game, `scripts/cicd`, before the landing
 +	["z-gate"] = { kind = "script", argv = { "land-gate", "{id}" }, where = "run" },
  } :: { [string]: Step }
  -- Skills read inside a step, never run as one.
  dispatch.READ_INSIDE = {
-@@ -129,6 +135,7 @@ export type PromptInput = {
+@@ -129,6 +138,7 @@ export type PromptInput = {
  	through: string?, -- zz-review final mode: the layers of this landing end at this issue (c0248)
  	perLanding: boolean?, -- zz-review final mode: the raft has a final review and a trace per landing (c0248)
  	itemDoc: string?, -- the item's document, where a review's `## Open to the human` goes
@@ -73,7 +196,7 @@ index b16452c7d..007acd504 100644
  }
  
  -- c0250: what a step does when a decision needs the user. A capture has no item yet, so z-ticket keeps c0256's local
-@@ -191,9 +198,19 @@ function dispatch.prompt(p: PromptInput): string
+@@ -191,9 +201,19 @@ function dispatch.prompt(p: PromptInput): string
  		"Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.",
  		`Work only in \`{p.worktree}\`: it is your working directory. Never edit the main checkout.`,
  		askText(p),
@@ -94,7 +217,7 @@ index b16452c7d..007acd504 100644
  	if p.exchange and #p.exchange > 0 then
  		local files = table.concat(p.exchange :: { string }, ", ")
  		local format =
-@@ -272,9 +289,31 @@ export type Facts = {
+@@ -272,9 +292,33 @@ export type Facts = {
  	uncovered: { string }, -- `./zn lessons --uncovered <id>` in the step's worktree, after a review step
  	autoMerge: { string },
  	description: string?, -- `dispatch new`'s words
@@ -106,9 +229,10 @@ index b16452c7d..007acd504 100644
 +	blockRequest: { reason: string, layer: string?, tip: string? }?, -- a dispatched `./zn block` left it in the run state (G1)
 +}
 +export type LandFacts = {
-+	action: "land" | "wait" | "redo" | "block",
++	action: "land" | "wait" | "redo" | "block" | "review",
 +	through: string?, -- the layer the landing stops at (nil: the whole stack)
 +	tip: string?, -- the published tip of the top layer bound: what the bind must be
++	branch: string?, -- the top layer's branch (land-check's `top`): where a frontier round's review is committed
 +	lines: { string }, -- one line per problem
 +	problems: { any }, -- the landcheck.Problems, for the escalation note
 +	reason: string?, -- block: the escalation reason
@@ -118,17 +242,55 @@ index b16452c7d..007acd504 100644
  }
  export type Action = {
 -	kind: "step" | "merge" | "stop",
-+	kind: "step" | "merge" | "stop" | "land" | "block",
-+	through: string?, -- kind land: the layer to land through
-+	tip: string?, -- kind land: the top layer's tip the bind must carry
++	kind: "step" | "merge" | "stop" | "land" | "block" | "review",
++	through: string?, -- kind land or review: the layer the landing stops at
++	tip: string?, -- kind land: the top layer's tip the bind must carry; kind review: the tip the round is for
 +	reason: string?, -- kind block: the escalation reason
 +	layer: string?, -- kind block: the Layer
++	branch: string?, -- kind review: the top layer's branch the round's files are committed on
 +	redo: boolean?, -- kind step z-run after a failed landing check: counts as a try
  	step: string?, -- kind step: the step to run
  	target: string?, -- the item it runs on
  	gate: string?, -- kind merge or a gate stop: "prep", "raft" or "run"
-@@ -361,7 +400,7 @@ end
+@@ -287,7 +331,8 @@ export type Action = {
+ -- the most actions one chain run takes before it stops
+ dispatch.MAX_ACTIONS = 30
  
+-dispatch.EXIT = { done = 0, failure = 1, user = 3, gate = 4, tripwire = 5 }
++-- wait (c0251): a frontier review (`--frontier`) found every frontier model out of quota or not installed; try again later
++dispatch.EXIT = { done = 0, failure = 1, user = 3, gate = 4, tripwire = 5, wait = 6 }
+ 
+ local REVIEW_STEPS = { ["z-design"] = true, ["z-raft"] = true, ["z-run"] = true, ["zz-review"] = true }
+ 
+@@ -359,9 +404,34 @@ local function gate(f: Facts, name: string, pr: Pr): Action
+ 	return { kind = "stop", code = dispatch.EXIT.gate, gate = name, pr = pr.number, why = why }
+ end
+ 
++-- c0252 + c0251: the landing's open problem is the frontier floor (`no-frontier-review`; a block or a redo problem
++-- outranks it, a wait does not) and no worker or person has to rule: the dispatcher runs one extra review round on a frontier model (`./zn dispatch zz-review <id> --mode
++-- final --frontier`, with `--through` for the layers below a block), then looks again. Like the landing itself, the round
++-- is left to a person when `run` is not in dispatch.auto_merge. The round's quota wait is the chain's: exit 4.
++local function reviewAction(f: Facts, l: LandFacts): Action
++	if not table.find(f.autoMerge, "run") then
++		return {
++			kind = "stop",
++			code = dispatch.EXIT.gate,
++			gate = "run",
++			why = `the landing of {f.id} needs a frontier review and dispatch.auto_merge leaves the landing to a human (./zn dispatch zz-review {f.id} --mode final --frontier{if l.through
++				then ` --through {l.through}`
++				else ""}, then ./zn dispatch {f.id}): {table.concat(l.lines, "; ")}`,
++		}
++	end
++	return {
++		kind = "review",
++		target = f.id,
++		through = l.through,
++		tip = l.tip,
++		branch = l.branch,
++		why = table.concat(l.lines, "; "),
++	}
++end
++
  -- The next thing the chain does for the item. Stops first: questions.md, a failed step, a review step that left an
  -- unharvested finding. Then by state: capture, design, the prep gate, raft-plan, z-raft, the rafting gate, ready,
 --- run, the run's gate (always a human's), done.
@@ -136,7 +298,7 @@ index b16452c7d..007acd504 100644
  function dispatch.next(f: Facts): Action
  	if f.status == "blocked" then
  		return stop(
-@@ -417,7 +456,14 @@ function dispatch.next(f: Facts): Action
+@@ -417,7 +487,14 @@ function dispatch.next(f: Facts): Action
  		return stop(dispatch.EXIT.failure, `raft-plan put {f.id} in no raft (see its skip line)`)
  	elseif done == "z-ready" and f.kind == "raft" and f.where == "backlog" then
  		return stop(dispatch.EXIT.failure, `z-ready ended but {f.id} is not active on origin/main`)
@@ -152,7 +314,7 @@ index b16452c7d..007acd504 100644
  		return stop(
  			dispatch.EXIT.failure,
  			`z-run ended but {f.id}'s PR is still a draft: ./zn done did not run`
-@@ -469,10 +515,75 @@ function dispatch.next(f: Facts): Action
+@@ -469,10 +546,81 @@ function dispatch.next(f: Facts): Action
  		end
  		return stop(dispatch.EXIT.failure, `{f.id} is {f.status} in the backlog: z-raft prepares it first`)
  	end
@@ -175,6 +337,10 @@ index b16452c7d..007acd504 100644
 +					"; "
 +				)}`,
 +			}
++		end
++		if l and l.action == "review" then
++			-- the prefix below the block needs the frontier floor too (c0251): one extra round, then it lands
++			return reviewAction(f, l)
 +		end
 +		if l and l.action == "land" and l.through then
 +			if not table.find(f.autoMerge, "run") then
@@ -209,6 +375,8 @@ index b16452c7d..007acd504 100644
 +				}
 +			end
 +			return { kind = "land", target = f.id, through = l.through, tip = l.tip }
++		elseif l.action == "review" then
++			return reviewAction(f, l)
 +		elseif l.action == "wait" then
 +			return {
 +				kind = "stop",
@@ -230,19 +398,36 @@ index b16452c7d..007acd504 100644
  	return { kind = "step", step = "z-run", target = f.id }
  end
  
+@@ -496,11 +644,7 @@ function dispatch.describe(plan: reviewpool.Plan): { string }
+ 				.. (if spec.maxCalls then ` max_calls={spec.maxCalls}` else "")
+ 				.. (if spec.maxMinutes then ` max_minutes={spec.maxMinutes}` else "")
+ 				.. (if spec.member then ` member={spec.member}` else "")
+-				.. ` tier={p.tier} family={p.family or "none"} fallback={if reviewpool.fallbackReason(
+-						p,
+-						plan.provenance,
+-						plan.via
+-					)
++				.. ` tier={p.tier} family={p.family or "none"} fallback={if reviewpool.fallbackReason(p)
+ 					then "yes"
+ 					else "no"}`
+ 		)
 diff --git a/z-nile/engine/dispatcher.luau b/z-nile/engine/dispatcher.luau
-index 0427bc5a8..f3604cd15 100644
+index 0427bc5a8..3fab1606a 100644
 --- a/z-nile/engine/dispatcher.luau
 +++ b/z-nile/engine/dispatcher.luau
-@@ -25,6 +25,7 @@ local dispatch = require("./dispatch")
+@@ -24,9 +24,10 @@ local cred = require("./credential")
+ local dispatch = require("./dispatch")
  local escalation = require("./escalation")
  local exchange = require("./exchange")
++local frontier = require("./frontier")
  local fs = require("@lune/fs")
 +local landcheck = require("./landcheck")
  local layergit = require("./layergit")
- local ledger = require("./ledger")
+-local ledger = require("./ledger")
  local models = require("./models")
-@@ -102,6 +103,11 @@ export type State = {
+ local modelstep = require("./modelstep")
+ local openlist = require("./openlist")
+@@ -102,6 +103,15 @@ export type State = {
  	detail: string?,
  	follows: string?, -- the raft an issue's chain moved on to
  	merged: { number }, -- the PRs the dispatcher merged
@@ -251,10 +436,14 @@ index 0427bc5a8..f3604cd15 100644
 +	landRuns: number?, -- c0252: all reruns of this raft, the hard bound under models.MERGE_RERUN_CAP
 +	gate: { tip: string, red: string? }?, -- c0252: `land-gate`'s last answer, for one top tip
 +	gateOk: string?, -- c0252: the top tip whose clean-clone full gate passed
++	-- c0252 + c0251: the extra frontier round ran for this landing (`through` "" for the whole stack) at top tip `from`;
++	-- `after` is the tip the next land-check read once the round's review was pushed. One round per top tip: a review
++	-- problem still open at either tip is a block, never a second round (landcheck.afterRound). A landing or a block clears it.
++	frontierRan: { through: string, from: string, after: string? }?,
  	pushed: { string }, -- the commits its publish broker pushed to main
  	pushes: { Push }, -- every push it asked for, recorded before the push is made (c0256): which issues it made
  	history: { Attempt },
-@@ -382,6 +388,20 @@ local function zn(dir: string, args: { string }, quiet: boolean?): (boolean, str
+@@ -382,6 +392,20 @@ local function zn(dir: string, args: { string }, quiet: boolean?): (boolean, str
  	return r.ok, trim(r.stdout), trim(r.stderr)
  end
  
@@ -275,7 +464,160 @@ index 0427bc5a8..f3604cd15 100644
  local function git(dir: string, args: { string }): (boolean, string)
  	local r = process.exec("git", args, { cwd = dir })
  	return r.ok, trim(r.stdout)
-@@ -1350,6 +1370,7 @@ function dispatcher.modelStep(
+@@ -1048,22 +1072,31 @@ local function reviewDirs(id: string): { string }
+ 	return out
+ end
+ 
++-- c0251: the folders whose code and final reviews are the landed code's: the item's own and its members'.
++local function floorDirs(id: string): { string }
++	local dirs = { store.get(id).dir }
++	for _, d in reviewDirs(id) do
++		if not table.find(dirs, d) then
++			table.insert(dirs, d)
++		end
++	end
++	return dirs
++end
++
+ -- c0251: the one plan of a model step: the tries in the order to run them, with each one's tier. `resolved` is the step's
+--- role (given, or resolved here). A role without `rotate` runs in the toml order, all tier 1 (as before c0251). A role
+--- with it is ordered by reviewpool.order over the writers of the mode's last step (authorread; `authorOpt` or ZN_MODEL
+--- is the live author) and the previous round's reviewers (a stream review and an idea review have none).
++-- role (given, or resolved here). A role without `rotate` runs in the toml order, all tier 1. A role with it is ordered by
++-- reviewpool.order over the recorded writers and the previous round's reviewers (a stream review and an idea review have
++-- none). The writers of a design review or a raft review are the `designed-by` line of the issue's or the raft's document
++-- (a document without one is refused: user, 2026-11-16); the writers of the others are the spend rows of the mode's last
++-- step. The tool assumes no author: with none recorded every try is tier 1 and none is a fallback.
+ function dispatcher.plan(
+ 	step: string,
+ 	id: string,
+ 	project: string?,
+ 	mode: string?,
+-	authorOpt: string?,
+ 	given: models.Resolved?,
+ 	layersGiven: { models.Layer }?
+ ): reviewpool.Plan
+-	if authorOpt ~= nil and authorOpt ~= "" and not ledger.isModel(authorOpt) then
+-		error(`--author takes one model id (letters, digits, '.', '_' and '-'), not {authorOpt}`, 0)
+-	end
+ 	local resolved = given or dispatcher.resolve(step, id, project, mode)
+ 	local tries = models.tries(resolved)
+ 	local families = resolved.families or {}
+@@ -1087,25 +1120,27 @@ function dispatcher.plan(
+ 	end
+ 	local item = store.get(id)
+ 	local layers = layersGiven or walk(item.dir)
+-	-- the live author: `--author`, else ZN_MODEL; "" (an interactive stamp with neither typed) reads only ZN_MODEL. It is the
+-	-- writer of the step the mode reads (the last: build for code, stream and final), whatever the rows say; with none, the
+-	-- spend rows, then the role's first choice (provenance `assumed`)
+-	local live = if authorOpt ~= nil and authorOpt ~= "" then authorOpt else process.env.ZN_MODEL
+ 	local dirs = reviewDirs(id)
+-	local a = authorread.read(reviewMode, dirs, layers, nil, resolved.authorModel)
+-	local steps = authorship.STEPS[reviewMode]
+-	local last = steps[#steps]
+ 	local authors: { string } = {}
+-	local provenance, via = a.provenance, a.via
+-	if live ~= nil and live ~= "" then
+-		authors = { models.modelOf(live, models.knownModels(layers)) }
+-		provenance, via = "recorded", "live"
++	local provenance, via = "unknown", ""
++	if reviewMode == "design" or reviewMode == "raft" then
++		authors = require("./designedby").of(fs.readFile(item.doc))
++		if #authors == 0 then
++			error(require("./designedby").refusal(id, item.doc), 0)
++		end
++		provenance, via = "recorded", "designed-by"
+ 	else
++		local a = authorread.read(reviewMode, dirs, layers, nil, nil, false)
++		local steps = authorship.STEPS[reviewMode]
++		local last = steps[#steps]
+ 		for _, w in a.writers do
+ 			if w.step == last and not table.find(authors, w.model) then
+ 				table.insert(authors, w.model)
+ 			end
+ 		end
++		if #authors > 0 then
++			provenance, via = "recorded", "row"
++		end
+ 	end
+ 	local priors: { string } = {}
+ 	if reviewMode ~= "stream" and reviewMode ~= "idea" then
+@@ -1198,6 +1233,24 @@ function dispatcher.finishCapture(ctx: Ctx, st: State, stateDir: string, target:
+ 	return nil
+ end
+ 
++-- c0251 (user, 2026-11-16): a design review or raft review started inside a dispatched authoring step (ZN_DISPATCH, with the
++-- attempt's own ZN_MODEL, c0325) records that model in the document's `designed-by` line before it is planned: the tool
++-- writes the line under dispatch. An interactive session has neither, and its lead writes the line.
++function dispatcher.recordDesigner(step: string, id: string, mode: string?)
++	if step ~= "zz-review" or (mode ~= "design" and mode ~= "raft") then
++		return
++	end
++	local live = process.env.ZN_MODEL
++	if process.env.ZN_DISPATCH ~= "1" or live == nil or live == "" then
++		return
++	end
++	local doc = store.get(id).doc
++	local updated = require("./designedby").add(fs.readFile(doc), live)
++	if updated and updated ~= fs.readFile(doc) then
++		fs.writeFile(doc, updated)
++	end
++end
++
+ function dispatcher.modelStep(
+ 	ctx: Ctx,
+ 	st: State,
+@@ -1208,13 +1261,37 @@ function dispatcher.modelStep(
+ 	local mode = opts["--mode"] and opts["--mode"][1]
+ 	local project = opts["--project"] and opts["--project"][1]
+ 	local resolved = dispatcher.resolve(step, id, project, mode)
+-	local plan = dispatcher.plan(step, id, project, mode, opts["--author"] and opts["--author"][1], resolved)
++	dispatcher.recordDesigner(step, id, mode)
++	local plan = dispatcher.plan(step, id, project, mode, resolved)
+ 	local picked: { [models.Spec]: reviewpool.Pick } = {}
+ 	local tries: { models.Spec } = {}
++	-- c0251: `--frontier` is the extra round of the frontier floor: only a try the [review] frontier list names runs it
++	local floorList: { string } = {}
++	if opts["--frontier"] then
++		floorList = models.frontier(walk(store.get(id).dir))
++	end
+ 	for _, pick in plan.picks do
++		if opts["--frontier"] and not frontier.listed(pick.spec.model, pick.spec.effort, floorList) then
++			continue
++		end
+ 		picked[pick.spec] = pick
+ 		table.insert(tries, pick.spec)
+ 	end
++	if opts["--frontier"] then
++		if #tries == 0 then
++			error(
++				`--frontier: no try of the {models.roleFor(step, mode) or "?"} role is on the [review] frontier list`,
++				0
++			)
++		end
++		local met = require("./reviewfiles").frontierVerdict(floorDirs(id), floorList)
++		if met.met then
++			error(
++				`--frontier: the frontier floor is met for {id}: an extra round is for a landing with no frontier review`,
++				0
++			)
++		end
++	end
+ 	local stateDir = st.dir
+ 	local pushesBefore = #st.pushes -- this step's own pushes are the ones after it
+ 	local cwd: string
+@@ -1222,6 +1299,10 @@ function dispatcher.modelStep(
+ 		-- the author's worktree: the checkout ./zn ran in (zn passes ZN_TOP, and ZN_CWD relative to it, since c0114)
+ 		local topDir = process.env.ZN_TOP
+ 		cwd = if topDir and topDir ~= "" then topDir else process.cwd
++		-- c0252: the chain's extra frontier round names the raft's worktree itself (it is not run from inside it)
++		if opts["--in"] and opts["--in"][1] then
++			cwd = opts["--in"][1]
++		end
+ 		if trim(cwd) == trim(ctx.mainRoot()) then
+ 			error("zz-review runs in its author's worktree, not the main checkout", 0)
+ 		end
+@@ -1350,6 +1431,7 @@ function dispatcher.modelStep(
  		exchangeLastStep = exLastStep,
  		parentExchange = parentNames,
  		parentStateDir = parentDir,
@@ -283,7 +625,101 @@ index 0427bc5a8..f3604cd15 100644
  	})
  	local attempts: { Attempt } = {}
  	local function refused(spec: models.Spec, why: string)
-@@ -1965,14 +1986,35 @@ function dispatcher.modelStep(
+@@ -1432,29 +1514,7 @@ function dispatcher.modelStep(
+ 	if land then
+ 		pcall(fs.removeFile, landing) -- a stale one from an earlier run is never this run's review
+ 	end
+-	-- c0306 (F6): in a marked item a review step (every mode but stream) starts no try the rule would refuse, and fails at
+-	-- once when none is left
+-	local onlyReviewModels = land ~= nil
+-		and mode ~= "stream"
+-		and require("./reviewfiles").markedFolder(`{cwd}/{(land :: Landing).dir}`)
+-	if onlyReviewModels then
+-		local left = 0
+-		for _, spec in tries do
+-			if reviewmodel.ok(spec.model, spec.effort) then
+-				left += 1
+-			end
+-		end
+-		if left == 0 then
+-			local role = models.roleFor(step :: string, mode) or "?"
+-			refused(tries[1], `no try of role {role} is a review model`)
+-			tries = {}
+-		end
+-	end
+ 	for _, spec in tries do
+-		if onlyReviewModels and not reviewmodel.ok(spec.model, spec.effort) then
+-			skipped(spec, `{spec.model} at effort {spec.effort or "none"} is not a review model: skipped`)
+-			continue
+-		end
+ 		local adapter = adapters.get(spec.runtime)
+ 		local argv = adapter.argv({
+ 			prompt = prompt,
+@@ -1597,9 +1657,7 @@ function dispatcher.modelStep(
+ 		print(`dispatch: {step} on {spec.cli}: {outcomeNow} ({detail}), {result.tokens} tokens`)
+ 		outcome = outcomeNow
+ 		-- c0251: a try of the writers' own line is a fallback: the file records why, and the board flags it
+-		local reason = if picked[spec]
+-			then reviewpool.fallbackReason(picked[spec], plan.provenance, plan.via)
+-			else nil
++		local reason = if picked[spec] then reviewpool.fallbackReason(picked[spec]) else nil
+ 		filedBy = { model = spec.model, effort = spec.effort, fallback = reason }
+ 		if reason and outcomeNow == "ok" then
+ 			stdio.ewrite(`dispatch: fallback review: {reason}\n`)
+@@ -1615,6 +1673,21 @@ function dispatcher.modelStep(
+ 			break
+ 		end
+ 	end
++	-- c0251: a frontier review that no frontier model could run (quota or a missing CLI everywhere) waits; it is not a failure
++	if opts["--frontier"] and outcome ~= "ok" and #attempts > 0 then
++		local all = true
++		for _, a in attempts do
++			if a.outcome ~= "quota" and a.outcome ~= "missing" then
++				all = false
++			end
++		end
++		if all then
++			outcome = "waiting"
++			stdio.ewrite(
++				"dispatch: frontier review waiting: every frontier model is out of quota or not installed\n"
++			)
++		end
++	end
+ 	-- when every CLI of the order was tried and none could run, say why for each kind (review 006 F5)
+ 	local onQuota, notInstalled = {}, {}
+ 	for _, a in attempts do
+@@ -1797,9 +1870,10 @@ function dispatcher.modelStep(
+ 				local newest = `{cwd}/{l.dir}/{l.prefix}{string.format("%03d", last)}.md`
+ 				if fs.isFile(newest) then
+ 					local text = fs.readFile(newest)
+-					-- c0251: a round that carries Fallback: is superseded in any item and any mode (the cross-model re-review);
+-					-- c0306: a refused round only in a marked item, never a stream review's
+-					supersedes = reviewmodel.fallbackOf(text) ~= nil
++					-- c0251: the extra round of the frontier floor (`--frontier`, checked to be unmet before the first try)
++					-- may follow any round; c0306: a round that records no model is superseded in a marked item, never a
++					-- stream review's
++					supersedes = opts["--frontier"] ~= nil
+ 						or (
+ 							not streamDir
+ 							and require("./reviewfiles").markedFolder(`{cwd}/{l.dir}`)
+@@ -1834,6 +1908,16 @@ function dispatcher.modelStep(
+ 					end
+ 				end
+ 				local round = stack.nextRound(onMain, here)
++				if supersedes and table.find(here, round) ~= nil then
++					-- c0251's extra round of the frontier floor (c0252 runs it): a second review of this landing, at the next
++					-- number, with a trace of its own that the reviewer fills from the same skeleton; the landing's round is
++					-- then this one (stack.nextRound takes the highest local number), and `done` reads trace-NNN for it
++					local top = 0
++					for _, n in here do
++						top = math.max(top, n)
++					end
++					round = top + 1
++				end
+ 				refuse = table.find(here, round) ~= nil
+ 				last = if refuse then round else round - 1
+ 			end
+@@ -1965,14 +2049,35 @@ function dispatcher.modelStep(
  end
  
  -- Runs a script step: `./zn <command>` in the main checkout or the step's worktree, never a model.
@@ -323,7 +759,7 @@ index 0427bc5a8..f3604cd15 100644
  	local outcome = if r.ok then "ok" else "failed"
  	st.step, st.cli, st.runtime, st.model, st.worktree, st.outcome = step, nil, nil, nil, dir, outcome
  	st.detail = if r.ok then "done" else `exit {r.code}`
-@@ -1987,7 +2029,7 @@ function dispatcher.scriptStep(ctx: Ctx, st: State, step: string, id: string, ex
+@@ -1987,7 +2092,7 @@ function dispatcher.scriptStep(ctx: Ctx, st: State, step: string, id: string, ex
  		minutes = 0,
  	})
  	save(st)
@@ -332,7 +768,7 @@ index 0427bc5a8..f3604cd15 100644
  end
  
  -- `gh pr view`'s JSON as the chain's Pr, or nil.
-@@ -2420,6 +2462,134 @@ function dispatcher.backstop(
+@@ -2420,6 +2525,147 @@ function dispatcher.backstop(
  end
  
  -- What the chain sees of `id` now.
@@ -377,7 +813,9 @@ index 0427bc5a8..f3604cd15 100644
 +	if not layered then
 +		return false, nil, req
 +	end
-+	local ran = last ~= nil and (last.step == "z-run" or last.step == "z-gate") and last.outcome == "ok"
++	local ran = last ~= nil
++		and (last.step == "z-run" or last.step == "z-gate" or last.step == "zz-review")
++		and last.outcome == "ok"
 +	if not ran and not req then
 +		return true, nil, nil
 +	end
@@ -440,6 +878,16 @@ index 0427bc5a8..f3604cd15 100644
 +			table.insert(ps, p)
 +		end
 +	end
++	-- the extra round of the frontier floor runs once per top tip (and once per landing scope): the tip the next read
++	-- shows after the round is the one its own push made, so it counts as the same tip
++	local fr = st.frontierRan
++	if fr and fr.through == (through or "") then
++		if fr.after == nil and tip ~= fr.from then
++			fr.after = tip
++			save(st)
++		end
++		ps = landcheck.afterRound(ps, tip == fr.from or tip == fr.after)
++	end
 +	local item = store.find(id)
 +	local layers = if item then walk(item.dir) else {}
 +	local cap = models.mergeRetries(layers)
@@ -454,6 +902,7 @@ index 0427bc5a8..f3604cd15 100644
 +			action = verdict.action,
 +			through = through,
 +			tip = if tip ~= "" then tip else nil,
++			branch = if type(jj.top) == "string" and jj.top ~= "" then jj.top else nil,
 +			lines = landcheck.lines(ps),
 +			problems = ps,
 +			reason = verdict.reason,
@@ -467,7 +916,7 @@ index 0427bc5a8..f3604cd15 100644
  function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?): dispatch.Facts
  	local o = if id ~= "" then ctx.origin(id) else nil
  	local kind = if not o then "none" elseif store.isRaftId(id) then "raft" else "issue"
-@@ -2466,13 +2636,21 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
+@@ -2466,13 +2712,21 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
  		end
  	end
  	local pr: dispatch.Pr? = nil
@@ -490,7 +939,7 @@ index 0427bc5a8..f3604cd15 100644
  			branch = `{id}-{front.slug or ""}`
  		end
  		if branch then
-@@ -2515,6 +2693,9 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
+@@ -2515,6 +2769,9 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
  		uncovered = uncovered,
  		autoMerge = settings.autoMerge,
  		description = description,
@@ -500,10 +949,14 @@ index 0427bc5a8..f3604cd15 100644
  	}
  end
  
-@@ -2523,6 +2704,10 @@ local function describeAction(a: dispatch.Action): string
+@@ -2523,6 +2780,14 @@ local function describeAction(a: dispatch.Action): string
  		return `next: {a.step} {a.target or ""}`
  	elseif a.kind == "merge" then
  		return `next: merge the {a.gate} PR #{a.pr}`
++	elseif a.kind == "review" then
++		return `next: extra frontier review round on {a.target}{if a.through
++			then ` through {a.through}`
++			else ""}: {a.why or ""}`
 +	elseif a.kind == "land" then
 +		return `next: land {a.target}{if a.through then ` through {a.through}` else ""}`
 +	elseif a.kind == "block" then
@@ -511,7 +964,7 @@ index 0427bc5a8..f3604cd15 100644
  	end
  	return `stop: {a.why}`
  end
-@@ -2599,6 +2784,91 @@ function dispatcher.afterMerge(ctx: Ctx, number: number, pr: dispatch.Pr?, id: s
+@@ -2599,6 +2864,91 @@ function dispatcher.afterMerge(ctx: Ctx, number: number, pr: dispatch.Pr?, id: s
  	return nil
  end
  
@@ -603,7 +1056,7 @@ index 0427bc5a8..f3604cd15 100644
  -- The chain on `id` (or a new issue from `description`), until a gate, questions.md, a failure or done.
  function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, given: State?): number
  	local description: string? = opts["--description"] and opts["--description"][1]
-@@ -2674,6 +2944,130 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } },
+@@ -2674,6 +3024,220 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } },
  				print(`stop: {moved}`)
  				return dispatch.EXIT.tripwire
  			end
@@ -672,10 +1125,100 @@ index 0427bc5a8..f3604cd15 100644
 +			end
 +			-- a worker's land request for this raft (it asked for exactly this landing) is spent
 +			pcall(fs.removeFile, `{ctx.mainRoot()}/{landcheck.LAND_REQUESTS}/{id}`)
-+			st.landTries, st.landSig, st.gateOk, st.gate = 0, nil, nil, nil
++			st.landTries, st.landSig, st.gateOk, st.gate, st.frontierRan = 0, nil, nil, nil, nil
 +			save(st)
 +			zn(ctx.mainRoot(), { "sync" }, true)
 +			zn(ctx.mainRoot(), { "watch-kick" }, true)
++		elseif action.kind == "review" then
++			-- c0251's extra round, run by the dispatcher in the raft's own worktree and recorded before it starts, so a
++			-- round that ends in any way is never started twice for the same top tip
++			local wt = worktree(ctx, id)
++			local ro: { [string]: { string } } = {
++				["--mode"] = { "final" },
++				["--frontier"] = { "1" },
++				["--in"] = { wt },
++			}
++			if action.through then
++				ro["--through"] = { action.through :: string }
++			end
++			-- a landing's review and trace are committed on its top layer (a prefix's is not the Layer the worker is on)
++			if action.branch then
++				local okS, switched = git(wt, { "switch", "--quiet", action.branch :: string })
++				local atTip = okS and trim(select(2, git(wt, { "rev-parse", "HEAD" }))) == action.tip
++				if not atTip then
++					print(
++						`stop: the extra frontier round for {id} needs the worktree on {action.branch} at {action.tip}: {switched}`
++					)
++					return dispatch.EXIT.failure
++				end
++			end
++			st.frontierRan = { through = action.through or "", from = action.tip or "" }
++			save(st)
++			print(`dispatch: extra frontier review round on {id}: {action.why or ""}`)
++			local okR, ended = pcall(dispatcher.modelStep, ctx, st, "zz-review", id, ro)
++			if not okR then
++				-- the round could not start (no listed model among the role's tries, or the floor was met meanwhile)
++				st.frontierRan = nil
++				save(st)
++				print(`stop: the extra frontier round for {id} did not start: {ended}`)
++				return dispatch.EXIT.failure
++			end
++			if ended == "waiting" or st.outcome == "waiting" then
++				-- no frontier model has quota (or an installed CLI): a wait like CI, and the round runs again later
++				st.frontierRan = nil
++				st.outcome = "ok" -- a wait is not a failed step: the next run reads the landing, not "zz-review ended waiting"
++				st.detail = "frontier review waiting"
++				save(st)
++				print(
++					`stop: waiting to land {id}: no frontier model has quota; the extra review round runs again at the next pass`
++				)
++				return dispatch.EXIT.gate
++			end
++			if st.outcome ~= "ok" then
++				st.frontierRan = nil
++				save(st)
++				print(`stop: the extra frontier round for {id} ended {st.outcome}: ./zn dispatch retry {id}`)
++				return dispatch.EXIT.failure
++			end
++			-- the review the round placed is committed on the layer and pushed with the dispatcher's own credential, the
++			-- record being the file's own stamp (the dispatcher stamped it), exactly the `record:` line the step printed
++			local okG, status = git(wt, { "status", "--porcelain", "--untracked-files=all" })
++			local filed: string? = nil
++			if okG then
++				for line in string.gmatch(status .. "\n", "([^\n]*)\n") do
++					local path = string.match(line, "^%?%? (.+final%-review%-%d+%.md)$")
++					if path then
++						filed = path
++					end
++				end
++			end
++			if not filed then
++				st.frontierRan = nil
++				save(st)
++				print(
++					`stop: the extra frontier round for {id} filed no final review: ./zn dispatch retry {id}`
++				)
++				return dispatch.EXIT.failure
++			end
++			local reviewModel, reviewEffort = reviewmodel.read(fs.readFile(`{wt}/{filed}`))
++			local name = string.match(filed :: string, "([^/]+)%.md$") or "final-review"
++			local commitArgs: { string } =
++				{ "-m", `{id}: {name}`, "--phase", "code-review", "--model", reviewModel or "" }
++			if reviewEffort then
++				table.insert(commitArgs, "--effort")
++				table.insert(commitArgs, reviewEffort)
++			end
++			local committed = dispatcher.scriptStep(ctx, st, "z-commit", id, commitArgs)
++			if committed ~= "ok" then
++				st.frontierRan = nil
++				save(st)
++				print(`stop: committing {name} failed: ./zn dispatch retry {id}`)
++				return dispatch.EXIT.failure
++			end
++			-- the commit moved the layer's tip: the verdict is read again at the next pass
++			st.step, st.outcome, st.detail = "zz-review", "ok", `{name} committed`
++			save(st)
++			zn(ctx.mainRoot(), { "sync" }, true)
 +		elseif action.kind == "block" then
 +			local wt = worktree(ctx, id)
 +			local item = ctx.origin(id)
@@ -728,13 +1271,13 @@ index 0427bc5a8..f3604cd15 100644
 +			end
 +			pcall(fs.removeFile, reqFile)
 +			pcall(fs.removeFile, `{st.dir}/block-note.md`)
-+			st.landTries, st.landSig, st.gateOk, st.gate = 0, nil, nil, nil
++			st.landTries, st.landSig, st.gateOk, st.gate, st.frontierRan = 0, nil, nil, nil, nil
 +			save(st)
 +			zn(ctx.mainRoot(), { "sync" }, true)
  		elseif action.step == "follow" then
  			st.follows = action.target
  			save(st)
-@@ -2694,10 +3088,25 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } },
+@@ -2694,10 +3258,25 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } },
  			local step = action.step :: string
  			local target = action.target or ""
  			local kind = dispatch.step(step).kind
@@ -760,18 +1303,38 @@ index 0427bc5a8..f3604cd15 100644
  				if step == "z-raft" then
  					o2["--for"] = { id }
  				end
+@@ -3165,7 +3744,7 @@ function dispatcher.oneStep(
+ 		if s.kind == "script" then
+ 			print(`run={table.concat(dispatch.scriptArgv(step, id), " ")}`)
+ 		else
+-			local plan = dispatcher.plan(step, id, nil, mode, opts["--author"] and opts["--author"][1])
++			local plan = dispatcher.plan(step, id, nil, mode)
+ 			for _, line in dispatch.describe(plan) do
+ 				print(line)
+ 			end
+@@ -3220,6 +3799,9 @@ function dispatcher.oneStep(
+ 		if outcome == "tripwire" then
+ 			return dispatch.EXIT.tripwire
+ 		end
++		if outcome == "waiting" then
++			return dispatch.EXIT.wait
++		end
+ 		return if outcome == "ok" then 0 else dispatch.EXIT.failure
+ 	end
+ 	if given then
 diff --git a/z-nile/engine/landcheck.luau b/z-nile/engine/landcheck.luau
 new file mode 100644
-index 000000000..2feb04d47
+index 000000000..01088e3d1
 --- /dev/null
 +++ b/z-nile/engine/landcheck.luau
-@@ -0,0 +1,495 @@
+@@ -0,0 +1,559 @@
 +--!strict
 +-- c0252: the checks before a raft's stack (or its green prefix) lands, as one pure function over what the edge read
 +-- (landread.luau, `./zn land-check`): each failed check is a named problem, and the chain acts on the strictest kind.
 +-- `./zn done` and the dispatcher both call it, so a manual landing and the dispatcher's agree (one lander, Q5).
 +-- Pure (zz-arch): texts and numbers in, problems and verdicts out; nothing is read, run or written here.
 +local escalation = require("./escalation")
++local frontier = require("./frontier")
 +
 +local landcheck = {}
 +
@@ -780,8 +1343,11 @@ index 000000000..2feb04d47
 +-- redo: a worker can fix it (a layer not complete, a review not answered, a stale trace, a red check, a head that is not
 +--   the tip): the chain runs the worker again, and after `cap` repeats of the same failure the raft blocks.
 +-- block: only a person can decide (an unruled high finding, approval drift, a closed pull request): escalate at once.
++-- review (c0251's frontier floor, `no-frontier-review`): nobody rewrites code and nobody escalates; the chain runs one
++--   extra review round on a frontier model (`./zn dispatch zz-review <R-id> --mode final --frontier`, once per top tip),
++--   then looks again. While no frontier model has quota that round is a wait (exit 4 at the gate).
 +-- Anything else is read as a wait: the unguarded action (land) follows only an explicit "no problem" (zz-arch rule 7).
-+export type Kind = "wait" | "redo" | "block"
++export type Kind = "wait" | "redo" | "block" | "review"
 +export type Problem = {
 +	code: string,
 +	kind: Kind,
@@ -811,6 +1377,7 @@ index 000000000..2feb04d47
 +	traceProblems: { string }, -- `./zn trace --check`'s lines
 +	approvalDrift: string?, -- approval.refusal's text
 +	verdictMissing: boolean,
++	frontier: frontier.Verdict, -- c0251's floor over the landing's code and final reviews (reviewfiles.frontierVerdict)
 +	codePaths: { string }, -- paths the bind changes that are not tracker state (landread.codePaths: trackerstate's rule)
 +	gameRoots: { string }, -- project homes whose game code needs the cicd publish (zz-rules Merging 3)
 +	cicd: boolean, -- ~/.config/pickman/cicd.toml exists
@@ -941,6 +1508,27 @@ index 000000000..2feb04d47
 +	end
 +	if i.approvalDrift then
 +		add(problem("approval-drift", "block", i.approvalDrift, "needs-decision", nil))
++	end
++	if not i.frontier.met then
++		-- c0251 owns the function, the code and the words; this module only gives it a kind (review: neither a worker's
++		-- rerun nor a block). The prefix of the code is cut: `lines` prints it once.
++		local why = i.frontier.problem or "no review of the landed code ran on a frontier model"
++		local cut = `{frontier.CODE}: `
++		if string.sub(why, 1, #cut) == cut then
++			why = string.sub(why, #cut + 1)
++		end
++		local round = `./zn dispatch zz-review {i.raft} --mode final --frontier{if i.through
++			then ` --through {i.through}`
++			else ""}`
++		add(
++			problem(
++				frontier.CODE,
++				"review",
++				`{why}; the dispatcher runs one extra review round on a frontier model ({round}) before it lands`,
++				"needs-decision",
++				nil
++			)
++		)
 +	end
 +	local own = landcheck.selfGating(i.codePaths)
 +	if own then
@@ -1073,29 +1661,34 @@ index 000000000..2feb04d47
 +end
 +
 +export type Verdict = {
-+	action: "land" | "wait" | "redo" | "block",
++	action: "land" | "wait" | "redo" | "block" | "review",
 +	problems: { Problem },
 +	reason: string?, -- block: the escalation reason
 +	layer: string?, -- block: the Layer
 +}
 +
-+local KINDS = { wait = true, redo = true, block = true }
++local KINDS = { wait = true, redo = true, block = true, review = true }
 +
 +-- What the chain does: land only when nothing failed; block at once on a block problem; run the worker again on a redo
 +-- problem until `cap` repeats of the same failure are spent, then block; otherwise wait. A kind this module does not
 +-- know is a wait. A redo outranks a wait (waiting on CI for a stack the worker must change is pointless), and a wait
-+-- never blocks.
++-- never blocks. A review outranks a wait and yields to a redo: the round files a review and pushes it, which moves the
++-- head and so restarts CI (waiting first would wait on a head about to change), and a worker that is about to change
++-- the code is not worth a review of the old code.
 +function landcheck.classify(ps: { Problem }, tries: number, cap: number): Verdict
 +	if #ps == 0 then
 +		return { action = "land", problems = ps }
 +	end
 +	local firstBlock: Problem? = nil
 +	local firstRedo: Problem? = nil
++	local firstReview: Problem? = nil
 +	for _, p in ps do
 +		if p.kind == "block" and not firstBlock then
 +			firstBlock = p
 +		elseif p.kind == "redo" and not firstRedo then
 +			firstRedo = p
++		elseif p.kind == "review" and not firstReview then
++			firstReview = p
 +		end
 +	end
 +	if firstBlock then
@@ -1107,7 +1700,35 @@ index 000000000..2feb04d47
 +		end
 +		return { action = "redo", problems = ps }
 +	end
++	if firstReview then
++		return { action = "review", problems = ps }
++	end
 +	return { action = "wait", problems = ps }
++end
++
++-- The extra round of the frontier floor runs once per top tip. `ran` says it already ran for this landing at this tip
++-- (the dispatcher's state: before or after the review it filed); a review problem that is still there after it is a
++-- block under `needs-decision` (the review the round filed does not meet the floor: its recorded model or effort is not
++-- on the list, or its record is unreadable), never a second round and never a wait that would look the same for ever.
++function landcheck.afterRound(ps: { Problem }, ran: boolean): { Problem }
++	if not ran then
++		return ps
++	end
++	local out: { Problem } = {}
++	for _, p in ps do
++		if p.code == frontier.CODE and p.kind == "review" then
++			table.insert(out, {
++				code = p.code,
++				kind = "block",
++				text = `the extra round ran and the floor is still unmet: {p.text}`,
++				reason = "needs-decision",
++				layer = p.layer,
++			})
++		else
++			table.insert(out, p)
++		end
++	end
++	return out
 +end
 +
 +-- Whether a problem row (from `./zn land-check`) names a kind this module knows; the dispatcher turns any other row
@@ -1160,10 +1781,13 @@ index 000000000..2feb04d47
 +function landcheck.escalation(ps: { Problem }, raft: string, layer: string?, tries: number): string
 +	local lines: { string } = {}
 +	local capped = false
++	local floorRan = false
 +	for _, p in ps do
 +		table.insert(lines, `- {p.code}: {p.text}`)
 +		if p.kind == "redo" then
 +			capped = true
++		elseif p.code == frontier.CODE and p.kind == "block" then
++			floorRan = true
 +		end
 +	end
 +	local recommend = landcheck.recommended(ps)
@@ -1172,13 +1796,15 @@ index 000000000..2feb04d47
 +	end
 +	local body = {
 +		"## Question",
-+		`The dispatcher would not land {raft}{if layer then ` (layer {layer})` else ""}: {if capped
-+			then `the same check failed after {tries} repeat(s) of the worker`
++		`The dispatcher would not land {raft}{if layer then ` (layer {layer})` else ""}: {if floorRan
++			then "the frontier floor is still unmet after the one extra review round it ran on a frontier model"
++			elseif capped then `the same check failed after {tries} repeat(s) of the worker`
 +			else "a check can only be decided by a person"}. What should it do?`,
 +		"",
 +		"## What was tried",
-+		`The dispatcher ran landcheck over {raft}'s published layers, their pull request and the tracker state. {if capped
-+			then `It ran the worker again {tries} time(s) for that failure and it stayed.`
++		`The dispatcher ran landcheck over {raft}'s published layers, their pull request and the tracker state. {if floorRan
++			then `It ran ./zn dispatch zz-review {raft} --mode final --frontier once for this tip and the floor did not clear.`
++			elseif capped then `It ran the worker again {tries} time(s) for that failure and it stayed.`
 +			else "It stopped at the first problem that is not a worker's to fix."}`,
 +		"",
 +		"## Open findings or error",
@@ -1353,22 +1979,115 @@ index 000000000..c810c1671
 +
 +return landread
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 4e3ca77e4..c4cacc6ac 100644
+index 4e3ca77e4..09c362dc2 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
-@@ -125,6 +125,11 @@ usage: ./zn <command> ...
+@@ -106,11 +106,10 @@ usage: ./zn <command> ...
+   stack <R-id>                                  print the layers, from git (read-only)
+   trace <R-id> [--through <issue>] [--check]    print the final review's traceability table skeleton, or verify trace.md
+   focus <issue-id>                              attribute following commits to this issue
+-  commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>] [--author <id>]
++  commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>]
+                                                 (--phase build records the model that wrote the layer: --model, or ZN_MODEL under dispatch; a marked item refuses none)
+                                                 stage all, record spend, commit, push. --time and --tokens are ignored
+-                                                (--author is the lead's own model: the writer a code-review's Fallback: line is derived against)
+-  spend <id> --phase capture|prep|design-review|deliver [--begin] [--model <id>] [--author <id>] [--note <text>]
++  spend <id> --phase capture|prep|design-review|deliver [--begin] [--model <id>] [--note <text>]
+                                                 mark a stage; the tool writes the measured row. --time and --tokens are ignored
+                                                 (--phase capture|prep records the model that wrote the work: --model, or ZN_MODEL under dispatch; a marked item refuses none)
+   record --id <id> --phase <phase> [--report <file>] [--wall <s>] [--cpu <s>] [--ai <s>] [--tokens <n>]
+@@ -121,10 +120,15 @@ usage: ./zn <command> ...
+                                                 ready, run), stopping at a merge gate, questions.md or a failure
+   dispatch new "<description>" [--project <name>] [--dry-run]
+                                                 capture a new issue (z-ticket) and run its chain
+-  dispatch <step> <id> [--mode design|code|raft] [--dry-run]
++  dispatch <step> <id> [--mode design|code|raft] [--dry-run] [--frontier]
                                                  run one step: a model step on .models.toml's CLIs, a script step itself
    dispatch stop|retry|status <id>               stop a running step (its process group), rerun the failed step, show it; retry takes --answer "<text>" | --answer-file <path>, and --forget-exchange sets a damaged exchange aside
    dispatch vet                                  the user's: take main as vetted after a tripwire stop (the watermark)
 +  land-check <R-id> [--through <issue> | --below <issue>] [--json]
-+                                                the checks before a landing, read-only (the dispatcher's and done's): one line per problem, exit 1 when any (c0252)
++                                                the checks before a landing, read-only (the dispatcher's and done's): one line per problem (kind wait, redo, block or review: review is the frontier floor's extra round), exit 1 when any (c0252)
 +  land-gate <R-id> [--through <issue>]
 +                                                the dispatcher's gate for a stack that changes a game: a clean clone, the bind's tree, `check.sh --full`, then the cicd run (exit 0 passes, 4 waits, 1 red)
 +  lander [<R-id>]                               land the land requests that workers holding the agent's credential left, with your own credential (refused in such a session)
    done <R-id> [--through <issue>]               land the stack, or its layers up to <issue>: one --no-ff merge onto main, one binding commit (refuses an unfinished or incomplete layer)
    watch-bootstrap                               write every spec's watch file from the commit that added it (once)
    watch-kick                                    start watch-net after a landing and return at once (log: .cache/watch-net.log)
-@@ -5187,6 +5192,10 @@ local function traceProblems(
+@@ -906,6 +910,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
+ 			or a == "--session-end"
+ 			or a == "--begin"
+ 			or a == "--sessions"
++			or a == "--frontier"
+ 		then
+ 			opts[a] = { "true" }
+ 		elseif string.sub(a, 1, 1) == "-" then
+@@ -4663,12 +4668,19 @@ end
+ -- c0251: the reason an interactive review on `model` is a fallback, from the pool's plan for the item `id` and the review
+ -- `mode` (design, raft, code, final); nil when it is not one, and nil when no plan can be built (no rotating role, no
+ -- .models.toml on main, an unknown item). The lead types no reason: the tool derives it.
+-local function interactiveFallback(id: string, mode: string, model: string, author: string?): string?
++local function interactiveFallback(id: string, mode: string, model: string): string?
+ 	local dispatcher = require("./dispatcher")
++	-- user, 2026-11-16: a design review or raft review of a document with no designed-by line is refused
++	if mode == "design" or mode == "raft" then
++		local item = store.find(id)
++		if item and #require("./designedby").of(fs.readFile(item.doc)) == 0 then
++			fail(require("./designedby").refusal(id, item.doc))
++		end
++	end
+ 	-- the plan of `./zn dispatch zz-review --dry-run`: the pinned walk of main. Without an origin (an offline checkout) the
+ 	-- checkout's own .models.toml files stand in, and the reason says so.
+ 	local ok, plan = pcall(function()
+-		return dispatcher.plan("zz-review", id, nil, mode, author or "")
++		return dispatcher.plan("zz-review", id, nil, mode)
+ 	end)
+ 	if not ok then
+ 		ok, plan = pcall(function()
+@@ -4678,7 +4690,6 @@ local function interactiveFallback(id: string, mode: string, model: string, auth
+ 				id,
+ 				nil,
+ 				mode,
+-				author or "",
+ 				models.resolve(layers, "zz-review", mode),
+ 				layers
+ 			)
+@@ -4690,18 +4701,6 @@ local function interactiveFallback(id: string, mode: string, model: string, auth
+ 	return require("./reviewpool").interactiveReason(plan :: any, model)
+ end
+ 
+--- c0251: `--author <model id>` of spend and commit: the lead's own model, the live author of the text under review.
+-local function authorOption(what: string, opts: { [string]: { string } }): string?
+-	local raw = opts["--author"]
+-	if not raw then
+-		return nil
+-	end
+-	if #raw > 1 or not ledger.isModel(raw[1]) then
+-		fail(`{what} --author takes one model id (letters, digits, '.', '_' and '-')`)
+-	end
+-	return raw[1]
+-end
+-
+ -- The issues a commit is attributed to: the ones named, else the focus, else the raft's members.
+ local function commitIssues(raft: store.Item, issueIds: { string }): ({ store.Item }, string)
+ 	local issues: { store.Item } = {}
+@@ -4871,7 +4870,6 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
+ 	end
+ 	-- c0306: the review files this commit carries are stamped with --model under --phase code-review, and refused in a
+ 	-- marked item without it (under any other phase, at all)
+-	local authorOpt = authorOption("commit", opts)
+ 	local refused = require("./reviewfiles").commitReviews(
+ 		phase,
+ 		model,
+@@ -4887,7 +4885,7 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
+ 			if not folder or not mode or not string.match(folder, "^[fdcR]%d%d%d%d$") then
+ 				return nil
+ 			end
+-			return interactiveFallback(folder, mode :: string, model :: string, authorOpt)
++			return interactiveFallback(folder, mode :: string, model :: string)
+ 		end
+ 	)
+ 	if refused then
+@@ -5187,6 +5185,10 @@ local function traceProblems(
  		if firstPos > 1 then
  			baseTip = layergit.baseFor(have, landedAt, firstPos) or baseTip
  		end
@@ -1379,7 +2098,7 @@ index 4e3ca77e4..c4cacc6ac 100644
  		issues = scopedIssues
  		layers = scopedLayers
  	end
-@@ -5356,6 +5365,495 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
+@@ -5356,6 +5358,506 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
  	traceProblems(raft, true, through)
  end
  
@@ -1540,6 +2259,16 @@ index 4e3ca77e4..c4cacc6ac 100644
 +			)
 +		end
 +	end
++	-- c0251's frontier floor over the folders this landing covers: the raft's and each bound member's (the same call
++	-- `done` makes; land-check and the chain name the problem, c0251's refusal in `done` stays the person's)
++	local floorDirs: { string } = { raft.dir }
++	for _, m in store.members(raft.id) do
++		if table.find(bindIds, m.id) then
++			table.insert(floorDirs, m.dir)
++		end
++	end
++	local floor =
++		require("./reviewfiles").frontierVerdict(floorDirs, models.frontier(models.walk(".", raft.dir)))
 +	-- where the cicd publish's configuration is (a guarded check run can name another file: G13)
 +	local cicdFile = (if checking() then process.env.ZN_CICD_TOML else nil)
 +		or `{process.env.HOME or ""}/.config/pickman/cicd.toml`
@@ -1556,6 +2285,7 @@ index 4e3ca77e4..c4cacc6ac 100644
 +		traceProblems = traceLines,
 +		approvalDrift = drift,
 +		verdictMissing = noVerdict,
++		frontier = floor,
 +		codePaths = codePaths,
 +		unreadable = unreadable,
 +		gameRoots = gameRoots,
@@ -1875,7 +2605,7 @@ index 4e3ca77e4..c4cacc6ac 100644
  function cmd.done(pos: { string }, opts: { [string]: { string } })
  	refuseListMode()
  	for k in opts do
-@@ -5367,6 +5865,10 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
+@@ -5367,6 +5869,10 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
  	if through == "" then
  		fail("usage: done <R-id> [--through <issue>] (--through needs an issue id)")
  	end
@@ -1886,7 +2616,30 @@ index 4e3ca77e4..c4cacc6ac 100644
  	local raft = store.get(pos[1] or fail("usage: done <R-id> [--through <issue>]"))
  	if raft.kind ~= "raft" or raft.state ~= "active" then
  		fail(`{raft.id} must be an active raft`)
-@@ -5515,6 +6017,9 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
+@@ -5470,6 +5976,22 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
+ 			fail(off)
+ 		end
+ 	end
++	-- c0251 (user, 2026-11-16): every landing needs a review of the landed code by a frontier model
++	do
++		local dirs = { raft.dir }
++		for _, m in store.members(raft.id) do
++			if table.find(bindIds :: { string }, m.id) then
++				table.insert(dirs, m.dir)
++			end
++		end
++		local floor =
++			require("./reviewfiles").frontierVerdict(dirs, models.frontier(models.walk(".", raft.dir)))
++		if not floor.met then
++			fail(
++				`{raft.id}: {floor.problem}. Run ./zn dispatch zz-review {raft.id} --mode final --frontier (or a fresh subagent on one of the listed models) and commit it with ./zn commit --phase code-review --model <id>`
++			)
++		end
++	end
+ 	local bindEnv: { [string]: string } = {}
+ 	for k, v in process.env do
+ 		if type(v) == "string" and k ~= "ZN_BIND_EARLY" then
+@@ -5515,6 +6037,9 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
  		end
  		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
  		local onto = layergit.baseFor(haveAt, landedAt, i)
@@ -1896,7 +2649,7 @@ index 4e3ca77e4..c4cacc6ac 100644
  		if not onto or not sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok then
  			fail(
  				`{layer.name} is not {if onto == layergit.mainTip()
-@@ -5536,6 +6041,43 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
+@@ -5536,6 +6061,45 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
  	if #traceFindings > 0 then
  		fail(`{raft.id} trace --check failed:\n{table.concat(traceFindings, "\n")}`)
  	end
@@ -1910,6 +2663,8 @@ index 4e3ca77e4..c4cacc6ac 100644
 +		local landcheck = require("./landcheck")
 +		local input = H.landInput(raft, through, nil, true)
 +		if input then
++			-- (c0251's floor, `no-frontier-review`, was refused above by c0251's own check, which runs first: a landing
++			-- that gets here has it met, so this check never names it a second time)
 +			local own = { ["self-gating"] = true, ["cicd-missing"] = true }
 +			local github = onGitHub()
 +			local refusals: { landcheck.Problem } = {}
@@ -1940,7 +2695,7 @@ index 4e3ca77e4..c4cacc6ac 100644
  	local layerBranch = sh.git({ "branch", "--show-current" })
  	local baseRef = if layergit.shaOf("origin/main")
  		then "origin/main"
-@@ -6827,6 +7369,31 @@ function cmd.block(pos: { string }, opts: { [string]: { string } }?)
+@@ -6827,6 +7391,31 @@ function cmd.block(pos: { string }, opts: { [string]: { string } }?)
  			end
  		end
  	end
@@ -1972,7 +2727,32 @@ index 4e3ca77e4..c4cacc6ac 100644
  	local when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string
  	local stamped = esc.lib.stamp(noteText, {
  		item = id,
-@@ -9364,6 +9931,8 @@ local READ_ONLY: { [string]: boolean } = {
+@@ -7906,12 +8495,7 @@ function cmd.spend(pos: { string }, opts: { [string]: { string } })
+ 			`{dir}/{reviewFile}.md`,
+ 			model :: string,
+ 			require("./reviewfiles").effortOption(opts, model),
+-			interactiveFallback(
+-				id,
+-				if raftItem then "raft" else "design",
+-				model :: string,
+-				authorOption("spend", opts)
+-			)
++			interactiveFallback(id, if raftItem then "raft" else "design", model :: string)
+ 		)
+ 		if why then
+ 			fail(why)
+@@ -8393,9 +8977,7 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
+ 	-- c0251: the challenge records its model, and why when it was a fallback (c0306 judges no idea review)
+ 	local reviewText = idea.reviewText(findings, verdict or "revise")
+ 	if challenger then
+-		local reason = if picked[challenger]
+-			then reviewpool.fallbackReason(picked[challenger], "recorded", "draft")
+-			else nil
++		local reason = if picked[challenger] then reviewpool.fallbackReason(picked[challenger]) else nil
+ 		local stamped =
+ 			require("./reviewmodel").stamp(reviewText, challenger.model, challenger.effort, reason)
+ 		reviewText = stamped or reviewText
+@@ -9364,6 +9946,8 @@ local READ_ONLY: { [string]: boolean } = {
  	workstreams = true,
  	["promote-check"] = true,
  	stack = true,
@@ -1982,7 +2762,7 @@ index 4e3ca77e4..c4cacc6ac 100644
  	trace = true,
  }
 diff --git a/z-nile/engine/models.luau b/z-nile/engine/models.luau
-index c78450a83..8aa721cef 100644
+index c78450a83..b3bcd4ca4 100644
 --- a/z-nile/engine/models.luau
 +++ b/z-nile/engine/models.luau
 @@ -42,7 +42,8 @@
@@ -2007,7 +2787,33 @@ index c78450a83..8aa721cef 100644
  models.STALL_SECONDS = 300
  -- the stall limit while a tool call runs (a full gate is quiet for minutes)
  models.TOOL_SECONDS = 900
-@@ -170,7 +172,7 @@ function models.parse(text: string, path: string): Layer
+@@ -108,6 +110,7 @@ export type Layer = {
+ 	fallbacks: { [string]: { [string]: any } },
+ 	members: { [string]: { [string]: any } },
+ 	families: family.Families,
++	frontier: { string }?, -- c0251: [review] frontier = [...]; nil when the file does not set it
+ }
+ -- A skill resolved on one walk: the tries in order (`pool`), the per-CLI view of them (`order`: the CLIs in the order of
+ -- their first try; `specs`: each CLI's first try), and the settings.
+@@ -151,8 +154,15 @@ function models.parse(text: string, path: string): Layer
+ 	if not ok then
+ 		error(`{path}: {firstLine(decoded)}`, 0)
+ 	end
+-	local layer: Layer =
+-		{ path = path, settings = {}, roles = {}, fallbacks = {}, members = {}, families = {} }
++	local layer: Layer = {
++		path = path,
++		settings = {},
++		roles = {},
++		fallbacks = {},
++		members = {},
++		families = {},
++		frontier = nil,
++	}
+ 	for key, value in decoded :: { [string]: any } do
+ 		if key == "order" then
+ 			error(`{path}: order is gone; a role names its cli, then its fallbacks`, 0)
+@@ -170,7 +180,7 @@ function models.parse(text: string, path: string): Layer
  							error(
  								`{path}: dispatch.auto_merge names {tostring(g)}: the dispatcher may merge only {list(
  									models.GATES
@@ -2016,7 +2822,7 @@ index c78450a83..8aa721cef 100644
  								0
  							)
  						end
-@@ -181,6 +183,11 @@ function models.parse(text: string, path: string): Layer
+@@ -181,6 +191,11 @@ function models.parse(text: string, path: string): Layer
  						error(`{path}: dispatch.{k} is a whole number of seconds, at least 1`, 0)
  					end
  					layer.settings[if k == "stall_seconds" then "stallSeconds" else "toolSeconds"] = v
@@ -2028,7 +2834,7 @@ index c78450a83..8aa721cef 100644
  				elseif k == "quota_cap_hours" then
  					if not count(v) then
  						error(`{path}: dispatch.quota_cap_hours is a whole number of hours, at least 1`, 0)
-@@ -188,7 +195,7 @@ function models.parse(text: string, path: string): Layer
+@@ -188,11 +203,39 @@ function models.parse(text: string, path: string): Layer
  					layer.settings.quotaCapHours = v
  				else
  					error(
@@ -2037,7 +2843,48 @@ index c78450a83..8aa721cef 100644
  						0
  					)
  				end
-@@ -422,6 +429,21 @@ function models.settings(layers: { Layer }): Settings
+ 			end
++		elseif key == "review" then
++			-- c0251: the frontier floor's list. Each entry is a model id, or `<model id>@<effort>` when the review must also have
++			-- run at that effort.
++			if type(value) ~= "table" then
++				error(`{path}: [review] is a table (frontier = [model ids])`, 0)
++			end
++			for k, v in value do
++				if k ~= "frontier" then
++					error(`{path}: review.{k} is not a setting (frontier)`, 0)
++				end
++				if type(v) ~= "table" or #(v :: { any }) == 0 then
++					error(`{path}: review.frontier is a non-empty list of model ids`, 0)
++				end
++				local out: { string } = {}
++				for _, e in v :: { any } do
++					if type(e) ~= "string" or string.match(e, "^[%w%._%-]+@?[%w]*$") == nil then
++						error(
++							`{path}: review.frontier lists {tostring(e)}: a model id, or <model id>@<effort>`,
++							0
++						)
++					end
++					if table.find(out, e) then
++						error(`{path}: review.frontier lists {e} twice`, 0)
++					end
++					table.insert(out, e)
++				end
++				layer.frontier = out
++			end
+ 		elseif key == "families" then
+ 			if type(value) ~= "table" then
+ 				error(`{path}: [families] is a table of family = [id prefixes]`, 0)
+@@ -373,7 +416,7 @@ function models.parse(text: string, path: string): Layer
+ 			end
+ 		else
+ 			error(
+-				`{path}: [{key}] is not read (the file has roles, fallback, member, families and dispatch; skill tables are gone)`,
++				`{path}: [{key}] is not read (the file has roles, fallback, member, families, review and dispatch; skill tables are gone)`,
+ 				0
+ 			)
+ 		end
+@@ -422,6 +465,21 @@ function models.settings(layers: { Layer }): Settings
  	return s
  end
  
@@ -2059,10 +2906,111 @@ index c78450a83..8aa721cef 100644
  -- c0250: the cap, in whole hours, on how long every CLI may stay out of quota before c0253's worker blocks the raft
  -- with `quota`; nil when no layer sets it.
  function models.quotaCapHours(layers: { Layer }): number?
+@@ -467,9 +525,8 @@ function models.roleFor(skill: string, mode: string?): string?
+ 		elseif mode == "final" then
+ 			return "final-review"
+ 		elseif mode == "raft" then
+-			-- The raft and a review of it are both Opus in the owner's table, as design and
+-			-- design-challenge are; the picker (reviewpool) rotates the review away from the writer.
+-			return "raft"
++			-- c0251 (user, 2026-11-16): writing a raft (`raft`) and reviewing one (`raft-review`) are two roles
++			return "raft-review"
+ 		elseif mode == "stream" then
+ 			-- c0251: a stream review is the one cheap review, on a role of its own
+ 			return "stream-review"
+@@ -564,6 +621,17 @@ local function needsCallCap(spec: Spec, path: string, label: string)
+ 	end
+ end
+ 
++-- c0251: the frontier list of a walk: the closest file that sets it replaces the list whole. Empty when none sets it.
++function models.frontier(layers: { Layer }): { string }
++	local out: { string } = {}
++	for _, layer in layers do
++		if layer.frontier then
++			out = table.clone(layer.frontier)
++		end
++	end
++	return out
++end
++
+ -- c0251: the family table of a walk: a closer file replaces only the family keys it sets.
+ function models.families(layers: { Layer }): family.Families
+ 	local out: family.Families = {}
+@@ -579,7 +647,7 @@ end
+ -- members in the order listed, then the `fallbacks` CLIs in order. `order` and `specs` are the per-CLI view of them
+ -- (the CLIs in the order of their first try, and each CLI's first try). `author` names another role whose first choice
+ -- stands in for the model that wrote the text (authorship): no try is dropped for it.
+-function models.resolveRole(layers: { Layer }, role: string, authoring: boolean?): Resolved
++function models.resolveRole(layers: { Layer }, role: string): Resolved
+ 	if #layers == 0 then
+ 		error(`no {models.FILE} on the walk: nothing defaults (add one at the repository root)`, 0)
+ 	end
+@@ -626,10 +694,7 @@ function models.resolveRole(layers: { Layer }, role: string, authoring: boolean?
+ 		end
+ 		table.insert(pool, spec)
+ 	end
+-	-- c0251: pool members and rotation are for review steps; an authoring step of the same role (z-raft on `raft`) is tried as
+-	-- before, the role's model and then its fallbacks
+-	local reviewing = authoring ~= true
+-	for _, name in if reviewing then (fields.pool or {}) else {} do
++	for _, name in fields.pool or {} do
+ 		local m = members[name]
+ 		if not m then
+ 			error(`{where}: {role}: pool names {name}, which has no [member.{name}] on the walk`, 0)
+@@ -667,7 +732,7 @@ function models.resolveRole(layers: { Layer }, role: string, authoring: boolean?
+ 		authorModel = models.id(author.specs[author.order[1]])
+ 	end
+ 	local families = models.families(layers)
+-	if fields.rotate == true and reviewing then
++	if fields.rotate == true then
+ 		for _, spec in pool do
+ 			if family.of(spec.model, families) == nil then
+ 				error(
+@@ -685,7 +750,7 @@ function models.resolveRole(layers: { Layer }, role: string, authoring: boolean?
+ 		settings = models.settings(layers),
+ 		authorModel = authorModel,
+ 		fromRoles = true,
+-		rotate = fields.rotate == true and reviewing,
++		rotate = fields.rotate == true,
+ 		families = families,
+ 	}
+ end
+@@ -697,8 +762,7 @@ function models.resolve(layers: { Layer }, skill: string, mode: string?): Resolv
+ 	if not role then
+ 		error(`{skill} is not a model step`, 0)
+ 	end
+-	-- a review step (zz-review, the idea challenge) uses the role's pool and rotation; every other step authors
+-	return models.resolveRole(layers, role, skill ~= "zz-review" and skill ~= "idea-challenge")
++	return models.resolveRole(layers, role)
+ end
+ 
+ -- The more powerful of the specs, whole: the higher rank, then the larger max_tokens; a tie keeps the first.
 diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
-index a21d33917..121e73f7f 100644
+index a21d33917..f570863e1 100644
 --- a/z-nile/skills/z-design/SKILL.md
 +++ b/z-nile/skills/z-design/SKILL.md
+@@ -57,10 +57,10 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
+ - **Dry-run the promotion**: `./zn promote-check <id>`. The only acceptable failures before implementation are requires of modules the issue will create.
+ 
+ ## 5. Adversarial design review (required)
+-One clean reviewer, one round. The designer answers every finding once, fixed or refuted, in one revision. There is no second reviewer round. The one exception: a review the review-model rule refuses, or one flagged `Fallback:`, is superseded by a new round at the next number (zz-review).
++One clean reviewer, one round. The designer answers every finding once, fixed or refuted, in one revision. There is no second reviewer round. The one exception: the extra round of the frontier floor, run at a landing that has no review by a frontier model (zz-review).
+ 
+ 1. Search with `./zn lessons <terms>` when you are about to do something a lesson might cover. Mark the issue `design: reviewed` once the author considers the draft complete. Use `tracker` frontmatter edits.
+-2. Start a **clean** reviewer, with none of your context: a fresh subagent, given the `zz-review` skill (design mode), the issue's path, and read access to the repo. It writes `design-review-001.md` in the issue's folder (an older item may already hold `design-review-NNN.md` files; they still parse, and this review is the next number only when the folder has none). A dispatched reviewer writes `review.md` in its state folder instead, and the dispatcher places it there; a second review of the same kind is refused. Run the reviewer on the **design-challenge role** `.models.toml` names, on the model line the picker chooses away from the one that wrote the design (zz-review, Who reviews): `./zn dispatch zz-review <id> --mode design` starts it on that role and records its spend row itself (a headless run always uses it); in an interactive session run `./zn dispatch zz-review <id> --mode design --dry-run --author <your model id>` and start the reviewer subagent on the `pick:` model (or run the review with `--author <your model id>`), and don't substitute another role's model. As soon as a subagent reviewer returns, `./zn spend <id> --phase design-review --note design-review-NNN` (the tool measures the span; do not pass `--time` or `--tokens`), adding `--model <the reviewer's model id>`, `--effort <level>` and `--author <your model id>`: the call is refused without `--model`, and a typed `--model` wins over the session's own.
++2. Start a **clean** reviewer, with none of your context: a fresh subagent, given the `zz-review` skill (design mode), the issue's path, and read access to the repo. It writes `design-review-001.md` in the issue's folder (an older item may already hold `design-review-NNN.md` files; they still parse, and this review is the next number only when the folder has none). A dispatched reviewer writes `review.md` in its state folder instead, and the dispatcher places it there; a second review of the same kind is refused. Before the review, the issue's front matter must carry `designed-by: <the model id that wrote the design>` (a list, `[a, b]`, once another model revised it): under dispatch the tool writes it from the authoring attempt's model, in an interactive session you write it. A design review of a document without the line is refused. Run the reviewer on the **design-challenge role** `.models.toml` names, on the model line the picker chooses away from the one that wrote the design (zz-review, Who reviews): `./zn dispatch zz-review <id> --mode design` starts it on that role and records its spend row itself (a headless run always uses it); in an interactive session run `./zn dispatch zz-review <id> --mode design --dry-run` and start the reviewer subagent on the `pick:` model (or run the review with the same command without `--dry-run`), and don't substitute another role's model. As soon as a subagent reviewer returns, `./zn spend <id> --phase design-review --note design-review-NNN` (the tool measures the span; do not pass `--time` or `--tokens`), adding `--model <the reviewer's model id>` and `--effort <level>`: the call is refused without `--model`, and a typed `--model` wins over the session's own.
+ 3. Answer every finding once. Before editing, run the **consequence step** on your own fix: what new rules, state, edge cases or user decisions does it bring? Add their Rules and mutants rows and spec cases in the same change, and put any decisions to the user now, all at once.
+    - Fix it in the documents, specs or `check.sh`.
+    - Or rebut it in `design-refute-NNN.md` (`- F2: refuted: <evidence>` or `- F2: fixed: <what>; consequences: <handled how, or none>`). Once the round is answered, `./zn spend <id> --phase design-review --note design-refute-NNN` (the tool measures the span; do not pass `--time` or `--tokens`).
+@@ -70,7 +70,7 @@ One clean reviewer, one round. The designer answers every finding once, fixed or
+ 5. **Confirm the harvest**: first harvest anything `./zn lessons --uncovered <id>` still lists (reviews written before lessons existed, or a review that slipped), as step 3 says. Then `./zn lessons --uncovered <id>` and `./zn lessons --check` must both pass. Then **check the scope**: compare the issue's document with `./zn capture <id>` (**Scope is what was captured**, above). Its title, Problem and Solution ideas may only have gained detail and decision lines, and every captured outcome has a Design and an acceptance criterion. Anything else goes to the user before `design: ready`.
+    When the open list is empty or ruled, set `design: ready` on the issue, **then run `./zn status <id> prepared`** (carried: it edits the local document, and refuses unless the issue is `design: ready` and `preparing` on `origin/main`, and unless the open list still has an unruled bullet), and only then make the prep commit (`status` needs an origin: with `PICKMAN_PUBLISH=0` or no origin, edit the `status:` line by hand to `prepared-<three words>` instead). Without it the issue keeps its `preparing` stamp and z-raft can't group it. Leave `raft:` empty: z-raft writes it. Stop and ask the human to run `./zn approve <id>` in a terminal in this worktree. Do not run it yourself.
+ 
+-**Review models.** Every review but a stream review runs on a review model: an id starting `claude-opus-`, `claude-fable-` or `kimi-code-k3`, or starting `grok-` at effort `xhigh`. The tool records the model in the review file as `Model: <id>` and `Effort: <level>` within its first 12 lines: the dispatcher stamps a review it files, and for an interactive review the lead types the reviewer's model id (`claude-opus-5-5`, never the alias `opus`) on `./zn spend <id> --phase design-review --note design-review-NNN --model <id> --effort <level>` (a design or coherence review) or `./zn commit -m "<id>: review-NNN" --phase code-review --model <id> --effort <level>` (a code or final review); `--effort` defaults to `CLAUDE_EFFORT` for a `claude-` id only, and a `grok-` id needs it typed. The reviewer never writes them, and a review is recorded once: a refused review is superseded by a new round. An item marked `reviews: judged` (written by the tool at an issue's claim and when a raft is made) is judged on the newest round of each kind and refused: `./zn status <id> prepared` judges the newest design review, `./zn ready <R-id>` and `./zn work next` the raft's newest coherence review and each member's newest design review, and `./zn done <R-id>` the newest `review-NNN.md` and the newest `final-review-NNN.md` of the raft and its members (a stream review is never judged), each refused when it is off the review models or records none; a later round on a review model clears it, and the dispatcher files a new round at the next number only then. In a marked item `./zn spend --phase design-review --note design-review-NNN` is refused without `--model` (a refute note, or none, records as today and stamps nothing), `./zn commit` refuses an unstamped review file without `--model` under `--phase code-review`, and with any other phase at all, and a review step starts no try the rule would refuse. An unmarked item is exempt: it records and commits as before, and stamps when given `--model`.
++**Review records and the frontier floor.** Any model may run any review: there is no list of review models. The tool records the model in the review file as `Model: <id>` and `Effort: <level>` within its first 12 lines: the dispatcher stamps a review it files, and for an interactive review the lead types the reviewer's model id (`claude-opus-5-5`, never the alias `opus`) on `./zn spend <id> --phase design-review --note design-review-NNN --model <id> --effort <level>` (a design or coherence review) or `./zn commit -m "<id>: review-NNN" --phase code-review --model <id> --effort <level>` (a code or final review); `--effort` defaults to `CLAUDE_EFFORT` for a `claude-` id only. The reviewer never writes them, and a review is recorded once. An item marked `reviews: judged` (written by the tool at an issue's claim and when a raft is made) refuses an unstamped review file: `./zn spend --phase design-review --note design-review-NNN` is refused without `--model`, and `./zn commit` refuses a new review file without `--model` under `--phase code-review`, and with any other phase at all; an unmarked item is exempt. The one quality rule is the **frontier floor**: every landing (`./zn done`, `./zn done --through` and the dispatcher's, which runs `done`) needs at least one code or final review of the landed code by a model on the `[review] frontier` list of `.models.toml`, and `./zn done` refuses a landing with none, naming `no-frontier-review`. The way out is one extra round on a frontier model, `./zn dispatch zz-review <R-id> --mode final --frontier` (the dispatcher runs it itself before a landing; a person may instead start a fresh subagent on a listed model and commit its review with `./zn commit --phase code-review --model <id>`): it takes the next number, runs only a frontier model, waits (exit 6) while none has quota, and is the one second round of a kind the tool allows. A design review or raft review of a document with no `designed-by: <model id>` front-matter line is refused (zz-review, Who reviews).
+ 
+ **Author record.** The model that wrote a text is recorded where the item travels: `./zn spend <id> --phase capture|prep` and `./zn commit` (phase `build`) take `--model <your model id>` (the id `.models.toml` names, no effort), or `ZN_MODEL`, which the dispatcher sets to each attempt's model. A typed `--model` wins, and a reviewer's row never takes `ZN_MODEL`. A marked item (`reviews: judged`) refuses a `capture`, `prep` or `build` record with no model, naming `--model`. A raft's prep row carries the note `raft-prep` (z-raft passes `--note raft-prep`), and every other prep row is a design's. A review reads the writers from these rows by mode: idea, design, raft or build.
+ 
 @@ -86,7 +86,7 @@ One clean reviewer, one round. The designer answers every finding once, fixed or
  - **Next step**: `/z-raft` (it groups prepared issues), then `/z-ready <R-id>`.
  
@@ -2073,9 +3021,22 @@ index a21d33917..121e73f7f 100644
  ## Lessons
  Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
 diff --git a/z-nile/skills/z-raft/SKILL.md b/z-nile/skills/z-raft/SKILL.md
-index 168ed1f62..5144b83e6 100644
+index 168ed1f62..19e8b9583 100644
 --- a/z-nile/skills/z-raft/SKILL.md
 +++ b/z-nile/skills/z-raft/SKILL.md
+@@ -38,10 +38,10 @@ In each raft document this branch changes (`R<NNNN>.md`):
+ Then set the raft's `design: ready`. z-raft sets a raft's `design:`; z-design sets an issue's.
+ 
+ ## 4. Coherence review (a raft of several issues)
+-A raft that groups two or more issues gets one short, raft-only coherence review before it is prepared, always for features that share a surface, whenever this rafting changed its record (a raft that only retired an orphan, kept the rest of a partial recombine, or unfolded members needs none). Start a clean reviewer with the zz-review skill in **raft mode** on the **raft role** `.models.toml` names (as z-design step 5.2 says: `./zn dispatch zz-review <R-id> --mode raft`). The picker chooses the model line away from the one that wrote the raft (zz-review, Who reviews), so a raft Opus wrote is reviewed first by Fable, and the Opus is the flagged fallback; z-raft's own authoring step on the `raft` role is not a review, and tries that role's model and then its fallbacks. It writes `design-review-NNN.md` in the raft's folder. A dispatched reviewer writes `review.md` in its state folder instead, and the dispatcher places it there. Answer every finding once, in the raft document or in `design-refute-NNN.md`, and harvest it into the raft's `harvest.md` (z-design step 5.3), then `./zn lessons --uncovered <R-id>` and `./zn lessons --check`. A finding whose fix needs a member's own design to change takes that member out of the raft instead (`./zn unfold <R-id> <id>`) and sends it back to z-design; this skill never edits a member's design. An unruled `## Open to the human` in the raft document is a block with reason `review-exhausted` (the Headless paragraph below says how). One challenge of this record, then the human (z-design, The design review, step 4, in the raft document): anything you refute, or any high you could not close, goes under `## Open to the human`. There is no second reviewer, except that a coherence review the review-model rule refuses, or one flagged `Fallback:`, is superseded by a new round at the next number (zz-review). A later fold that changes the grouped record is a new record and needs its own one review; an `unfold` alone needs none. The reviewer quotes the record it read (`Grouped: [...]`), a review file is never edited after it is written, and the carried move and `ready` refuse a raft of several issues whose reviews quote no record covering the current one.
++A raft that groups two or more issues gets one short, raft-only coherence review before it is prepared, always for features that share a surface, whenever this rafting changed its record (a raft that only retired an orphan, kept the rest of a partial recombine, or unfolded members needs none). Start a clean reviewer with the zz-review skill in **raft mode** on the **raft role** `.models.toml` names (as z-design step 5.2 says: `./zn dispatch zz-review <R-id> --mode raft`). The role is `raft-review`; `raft` is the role that writes a raft. The raft document carries `designed-by: <the model id that wrote it>` (under dispatch the tool writes it, interactively you do; a list once another model revised it), and a coherence review of a raft without the line is refused. The picker chooses the model line away from the one that wrote the raft (zz-review, Who reviews), so a raft Opus wrote is reviewed first by Fable. It writes `design-review-NNN.md` in the raft's folder. A dispatched reviewer writes `review.md` in its state folder instead, and the dispatcher places it there. Answer every finding once, in the raft document or in `design-refute-NNN.md`, and harvest it into the raft's `harvest.md` (z-design step 5.3), then `./zn lessons --uncovered <R-id>` and `./zn lessons --check`. A finding whose fix needs a member's own design to change takes that member out of the raft instead (`./zn unfold <R-id> <id>`) and sends it back to z-design; this skill never edits a member's design. An unruled `## Open to the human` in the raft document is a block with reason `review-exhausted` (the Headless paragraph below says how). One challenge of this record, then the human (z-design, The design review, step 4, in the raft document): anything you refute, or any high you could not close, goes under `## Open to the human`. There is no second reviewer, except the extra round of the frontier floor at a landing (zz-review). A later fold that changes the grouped record is a new record and needs its own one review; an `unfold` alone needs none. The reviewer quotes the record it read (`Grouped: [...]`), a review file is never edited after it is written, and the carried move and `ready` refuse a raft of several issues whose reviews quote no record covering the current one.
+ As soon as a subagent reviewer returns, `./zn spend <R-id> --phase design-review --note design-review-NNN --model <the reviewer's model id> --effort <level>` (it shares the row among the members this branch gives the raft; a review started with `./zn dispatch zz-review` records its own row). Mark your own answering span with `./zn spend <R-id> --phase design-review --begin` when you start and `./zn spend <R-id> --phase design-review` when you stop. Do not pass `--time` or `--tokens`.
+ 
+-**Review models.** Every review but a stream review runs on a review model: an id starting `claude-opus-`, `claude-fable-` or `kimi-code-k3`, or starting `grok-` at effort `xhigh`. The tool records the model in the review file as `Model: <id>` and `Effort: <level>` within its first 12 lines: the dispatcher stamps a review it files, and for an interactive review the lead types the reviewer's model id (`claude-opus-5-5`, never the alias `opus`) on `./zn spend <id> --phase design-review --note design-review-NNN --model <id> --effort <level>` (a design or coherence review) or `./zn commit -m "<id>: review-NNN" --phase code-review --model <id> --effort <level>` (a code or final review); `--effort` defaults to `CLAUDE_EFFORT` for a `claude-` id only, and a `grok-` id needs it typed. The reviewer never writes them, and a review is recorded once: a refused review is superseded by a new round. An item marked `reviews: judged` (written by the tool at an issue's claim and when a raft is made) is judged on the newest round of each kind and refused: `./zn status <id> prepared` judges the newest design review, `./zn ready <R-id>` and `./zn work next` the raft's newest coherence review and each member's newest design review, and `./zn done <R-id>` the newest `review-NNN.md` and the newest `final-review-NNN.md` of the raft and its members (a stream review is never judged), each refused when it is off the review models or records none; a later round on a review model clears it, and the dispatcher files a new round at the next number only then. In a marked item `./zn spend --phase design-review --note design-review-NNN` is refused without `--model` (a refute note, or none, records as today and stamps nothing), `./zn commit` refuses an unstamped review file without `--model` under `--phase code-review`, and with any other phase at all, and a review step starts no try the rule would refuse. An unmarked item is exempt: it records and commits as before, and stamps when given `--model`.
++**Review records and the frontier floor.** Any model may run any review: there is no list of review models. The tool records the model in the review file as `Model: <id>` and `Effort: <level>` within its first 12 lines: the dispatcher stamps a review it files, and for an interactive review the lead types the reviewer's model id (`claude-opus-5-5`, never the alias `opus`) on `./zn spend <id> --phase design-review --note design-review-NNN --model <id> --effort <level>` (a design or coherence review) or `./zn commit -m "<id>: review-NNN" --phase code-review --model <id> --effort <level>` (a code or final review); `--effort` defaults to `CLAUDE_EFFORT` for a `claude-` id only. The reviewer never writes them, and a review is recorded once. An item marked `reviews: judged` (written by the tool at an issue's claim and when a raft is made) refuses an unstamped review file: `./zn spend --phase design-review --note design-review-NNN` is refused without `--model`, and `./zn commit` refuses a new review file without `--model` under `--phase code-review`, and with any other phase at all; an unmarked item is exempt. The one quality rule is the **frontier floor**: every landing (`./zn done`, `./zn done --through` and the dispatcher's, which runs `done`) needs at least one code or final review of the landed code by a model on the `[review] frontier` list of `.models.toml`, and `./zn done` refuses a landing with none, naming `no-frontier-review`. The way out is one extra round on a frontier model, `./zn dispatch zz-review <R-id> --mode final --frontier` (the dispatcher runs it itself before a landing; a person may instead start a fresh subagent on a listed model and commit its review with `./zn commit --phase code-review --model <id>`): it takes the next number, runs only a frontier model, waits (exit 6) while none has quota, and is the one second round of a kind the tool allows. A design review or raft review of a document with no `designed-by: <model id>` front-matter line is refused (zz-review, Who reviews).
+ 
+ **Author record.** The model that wrote a text is recorded where the item travels: `./zn spend <id> --phase capture|prep` and `./zn commit` (phase `build`) take `--model <your model id>` (the id `.models.toml` names, no effort), or `ZN_MODEL`, which the dispatcher sets to each attempt's model. A typed `--model` wins, and a reviewer's row never takes `ZN_MODEL`. A marked item (`reviews: judged`) refuses a `capture`, `prep` or `build` record with no model, naming `--model`. A raft's prep row carries the note `raft-prep` (z-raft passes `--note raft-prep`), and every other prep row is a design's. A review reads the writers from these rows by mode: idea, design, raft or build.
+ When the rafting PR is open, record who wrote the raft: `./zn spend <R-id> --phase prep --note raft-prep --model <your model id>` (it writes a row with the subject `raft-prep` into each member; a member's own design row has the subject `prep`).
 @@ -59,7 +59,7 @@ For each raft, `./zn status <R-id> prepared`: it is carried by the PR (it publis
  The rafts and their members, the plan's skips, the coherence findings and what changed because of them, and the next step: `/z-ready <R-id>`.
  
@@ -2112,10 +3073,37 @@ index 164f3a2a3..2cfc7f7e5 100644
  ## Lessons
  Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
 diff --git a/z-nile/skills/zz-execute/SKILL.md b/z-nile/skills/zz-execute/SKILL.md
-index 83ff104f3..63b052812 100644
+index 83ff104f3..67d15edbb 100644
 --- a/z-nile/skills/zz-execute/SKILL.md
 +++ b/z-nile/skills/zz-execute/SKILL.md
-@@ -91,7 +91,7 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
+@@ -69,9 +69,10 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
+    - the raft and issue documents and `check.sh` files;
+    - read access to the repo.
+    In Claude Code, that's a fresh subagent. For other agents, use a new session or context that receives only those inputs.
+-   Run the reviewer on the **code-review role** `.models.toml` names, on the model line the picker chooses away from the one that wrote the code (zz-review, Who reviews). `./zn dispatch zz-review <R-id> --mode code` starts it on that role and prints the `./zn commit … --phase code-review --model <id>` line for step 3 (a headless run always uses it). In an interactive session, run `./zn dispatch zz-review <R-id> --mode code --dry-run --author <your model id>` and start the reviewer subagent on the `pick:` model (or run the review with `--author <your model id>`); `./zn commit --phase code-review --model <id> --author <your model id>` stamps `Fallback:` itself when the model that ran is the writer's line, or the pick was not a Claude model and another ran. Say which model reviewed in the review PR comment. Tell a subagent reviewer to write only `review-NNN.md`: no commits, pushes, PR comments or stray files (a dispatched one writes `review.md` in its state folder, and the dispatcher places it as `review-NNN.md`).
++   Run the reviewer on the **code-review role** `.models.toml` names, on the model line the picker chooses away from the one that wrote the code (zz-review, Who reviews). `./zn dispatch zz-review <R-id> --mode code` starts it on that role and prints the `./zn commit … --phase code-review --model <id>` line for step 3 (a headless run always uses it). In an interactive session, run `./zn dispatch zz-review <R-id> --mode code --dry-run` and start the reviewer subagent on the `pick:` model (or run the review with the same command without `--dry-run`); `./zn commit --phase code-review --model <id>` stamps `Fallback:` itself when the model that ran is the writer's line, or the pick was not a Claude model and another ran. Say which model reviewed in the review PR comment. Tell a subagent reviewer to write only `review-NNN.md`: no commits, pushes, PR comments or stray files (a dispatched one writes `review.md` in its state folder, and the dispatcher places it as `review-NNN.md`).
+ 3. The reviewer writes `review-NNN.md` in the issue's folder (starting at 001; the tool stamps it), including a ruling on every Judged criterion. **When the reviewer finishes**, you commit it on the layer: `./zn commit -m "c0010: review-NNN" --phase code-review --model <reviewer model> --effort <level>` (this pushes; the model comes from the one `record:` line `./zn dispatch zz-review` printed. Do not pass `--time` or `--tokens`). Then comment with the verdict and the finding count by severity, listing each `F<n> [severity] <claim>`. A dispatched review that fails with "the reviewer wrote no review" still prints its `record:` line: commit that line alone (the commit is its spend row), then rerun the review, which is still the same round.
+-   **Review models.** Every review but a stream review runs on a review model: an id starting `claude-opus-`, `claude-fable-` or `kimi-code-k3`, or starting `grok-` at effort `xhigh`. The tool records the model in the review file as `Model: <id>` and `Effort: <level>` within its first 12 lines: the dispatcher stamps a review it files, and for an interactive review the lead types the reviewer's model id (`claude-opus-5-5`, never the alias `opus`) on `./zn spend <id> --phase design-review --note design-review-NNN --model <id> --effort <level>` (a design or coherence review) or `./zn commit -m "<id>: review-NNN" --phase code-review --model <id> --effort <level>` (a code or final review); `--effort` defaults to `CLAUDE_EFFORT` for a `claude-` id only, and a `grok-` id needs it typed. The reviewer never writes them, and a review is recorded once: a refused review is superseded by a new round. An item marked `reviews: judged` (written by the tool at an issue's claim and when a raft is made) is judged on the newest round of each kind and refused: `./zn status <id> prepared` judges the newest design review, `./zn ready <R-id>` and `./zn work next` the raft's newest coherence review and each member's newest design review, and `./zn done <R-id>` the newest `review-NNN.md` and the newest `final-review-NNN.md` of the raft and its members (a stream review is never judged), each refused when it is off the review models or records none; a later round on a review model clears it, and the dispatcher files a new round at the next number only then. In a marked item `./zn spend --phase design-review --note design-review-NNN` is refused without `--model` (a refute note, or none, records as today and stamps nothing), `./zn commit` refuses an unstamped review file without `--model` under `--phase code-review`, and with any other phase at all, and a review step starts no try the rule would refuse. An unmarked item is exempt: it records and commits as before, and stamps when given `--model`.
++   **Review records and the frontier floor.** Any model may run any review: there is no list of review models. The tool records the model in the review file as `Model: <id>` and `Effort: <level>` within its first 12 lines: the dispatcher stamps a review it files, and for an interactive review the lead types the reviewer's model id (`claude-opus-5-5`, never the alias `opus`) on `./zn spend <id> --phase design-review --note design-review-NNN --model <id> --effort <level>` (a design or coherence review) or `./zn commit -m "<id>: review-NNN" --phase code-review --model <id> --effort <level>` (a code or final review); `--effort` defaults to `CLAUDE_EFFORT` for a `claude-` id only. The reviewer never writes them, and a review is recorded once. An item marked `reviews: judged` (written by the tool at an issue's claim and when a raft is made) refuses an unstamped review file: `./zn spend --phase design-review --note design-review-NNN` is refused without `--model`, and `./zn commit` refuses a new review file without `--model` under `--phase code-review`, and with any other phase at all; an unmarked item is exempt. The one quality rule is the **frontier floor**: every landing (`./zn done`, `./zn done --through` and the dispatcher's, which runs `done`) needs at least one code or final review of the landed code by a model on the `[review] frontier` list of `.models.toml`, and `./zn done` refuses a landing with none, naming `no-frontier-review`. The way out is one extra round on a frontier model, `./zn dispatch zz-review <R-id> --mode final --frontier` (the dispatcher runs it itself before a landing; a person may instead start a fresh subagent on a listed model and commit its review with `./zn commit --phase code-review --model <id>`): it takes the next number, runs only a frontier model, waits (exit 6) while none has quota, and is the one second round of a kind the tool allows. A design review or raft review of a document with no `designed-by: <model id>` front-matter line is refused (zz-review, Who reviews).
++
+    **Author record.** The model that wrote a text is recorded where the item travels: `./zn spend <id> --phase capture|prep` and `./zn commit` (phase `build`) take `--model <your model id>` (the id `.models.toml` names, no effort), or `ZN_MODEL`, which the dispatcher sets to each attempt's model. A typed `--model` wins, and a reviewer's row never takes `ZN_MODEL`. A marked item (`reviews: judged`) refuses a `capture`, `prep` or `build` record with no model, naming `--model`. A raft's prep row carries the note `raft-prep` (z-raft passes `--note raft-prep`), and every other prep row is a design's. A review reads the writers from these rows by mode: idea, design, raft or build.
+ 4. **If the verdict is `approve` with no findings, go to Phase 5**: there is no refute file, and the verdict comment is the record. Otherwise respond in `refute-NNN.md`, with one line per finding:
+    - `- F3: fixed <short sha>: <what changed>; consequences: <what the fix could break or open, and how you checked it, or none>`, or
+@@ -79,19 +80,19 @@ The PR is the visible record of the work. Push and post a PR comment (`gh pr com
+    - `- F3: deferred <id>: <why>`, only for a medium or low finding (a high cannot be deferred).
+    Only refute when you can show the reviewer is wrong: a test, a spec, or the design text. Everything else gets fixed. Before each fix, take it one step further, as z-design's consequence step does; `./zn done` refuses a fixed answer without `consequences:`.
+ 5. Commit each fix as you make it (pushed by `./zn commit --phase code-review`). **Harvest the round** as z-design step 5.3 does: one entry per finding of `review-NNN.md` in the raft's `harvest.md` (any lesson, design ones included; a new one is usually `when: build` or `both`), then `./zn lessons --uncovered R0010` and `./zn lessons --check`. Then commit the refute file, the ledger and the lessons the same way. Post a comment `Review NNN addressed`, pasting the refute file's lines.
+-6. **Then the human.** There is no second reviewer, except that a round the review-model rule refuses, or one flagged `Fallback:`, is superseded by a new round at the next number (zz-review). After this one revision, anything you refuted, any high finding you could not close (not answered `fixed`), and any Judged criterion ruled fail, goes in the issue document under `## Open to the human` (a final review's, in the raft document), one bullet each: `- F2: <the finding>. Answer: <your answer>. Decision: <what the human must decide>` (a failed Judged criterion uses its `JC<n>` id). The raft can be `done` when that list is empty or every bullet carries `Ruled (user, YYYY-MM-DD): <their decision>`. Do not guess a ruling: under `./zn dispatch`, or when no one is there to rule, the list is a block (To escalate, step 5): copy the bullets verbatim under `## Open findings or error`, run `./zn block <R-id> review-exhausted`, and after the user's `./zn resolve` run `./zn rulings <id>`. A medium or low finding you fixed, or deferred to a backlog issue (`- F<n>: deferred <id>: <why>`; `./zn done` accepts that only for a medium or low finding), does not go on the list. Quote every deferred line in the PR comment. Then continue to Phase 5.
++6. **Then the human.** There is no second reviewer, except the extra round of the frontier floor (Phase 5 step 3, zz-review). After this one revision, anything you refuted, any high finding you could not close (not answered `fixed`), and any Judged criterion ruled fail, goes in the issue document under `## Open to the human` (a final review's, in the raft document), one bullet each: `- F2: <the finding>. Answer: <your answer>. Decision: <what the human must decide>` (a failed Judged criterion uses its `JC<n>` id). The raft can be `done` when that list is empty or every bullet carries `Ruled (user, YYYY-MM-DD): <their decision>`. Do not guess a ruling: under `./zn dispatch`, or when no one is there to rule, the list is a block (To escalate, step 5): copy the bullets verbatim under `## Open findings or error`, run `./zn block <R-id> review-exhausted`, and after the user's `./zn resolve` run `./zn rulings <id>`. A medium or low finding you fixed, or deferred to a backlog issue (`- F<n>: deferred <id>: <why>`; `./zn done` accepts that only for a medium or low finding), does not go on the list. Quote every deferred line in the PR comment. Then continue to Phase 5.
+ 
+ ## Phase 5: Done
+ 1. Append each issue's final Verification log entry and fill in the raft's "Addressed during execution". Commit with `./zn commit --phase deliver`.
+ 2. If `main` moved, `./zn restack <R-id>` (renumber colliding IDs, rerun `z-nile/check.sh --affected`, commit with `./zn commit --phase deliver`), so the stack is on that main before `done`.
+-3. **Final review (idea = design = test = code)**, once per bind: after the last layer the bind lands is finished and restacked, print the trace skeleton with `./zn trace <R-id>` (`./zn trace <R-id> --through <issue>` for a shorter bind), and run the final review once on those layers (`./zn dispatch zz-review <R-id> --mode final`, or a fresh subagent on the review model of the CLI in final mode) given the skeleton, the tickets' documents and `git diff origin/main...HEAD`. The reviewer fills `<raft-dir>/trace-NNN.md` and writes `final-review-NNN.md` (NNN is one more than the highest final review on `origin/main`: each landing has its own) with a verdict and findings. Answer any findings once in `final-refute-NNN.md` (if a fix changes a layer, `./zn finish` and `./zn restack <R-id>`, and update `trace-NNN.md` for the new top-layer commit; anything still open goes under `## Open to the human`). Verify `./zn trace <R-id> [--through <issue>] --check` passes and commit `trace-NNN.md` and the final review files with `./zn commit --phase code-review --model <reviewer model>`.
++3. **Final review (idea = design = test = code)**, once per bind: after the last layer the bind lands is finished and restacked, print the trace skeleton with `./zn trace <R-id>` (`./zn trace <R-id> --through <issue>` for a shorter bind), and run the final review once on those layers (`./zn dispatch zz-review <R-id> --mode final`, or a fresh subagent on the `pick:` model of its `--dry-run`; if no code or final review of the landing ran on a model of the `[review] frontier` list, run one more round with `--frontier` before `done`, or `done` refuses with `no-frontier-review`) given the skeleton, the tickets' documents and `git diff origin/main...HEAD`. The reviewer fills `<raft-dir>/trace-NNN.md` and writes `final-review-NNN.md` (NNN is one more than the highest final review on `origin/main`: each landing has its own) with a verdict and findings. Answer any findings once in `final-refute-NNN.md` (if a fix changes a layer, `./zn finish` and `./zn restack <R-id>`, and update `trace-NNN.md` for the new top-layer commit; anything still open goes under `## Open to the human`). Verify `./zn trace <R-id> [--through <issue>] --check` passes and commit `trace-NNN.md` and the final review files with `./zn commit --phase code-review --model <reviewer model>`.
+ 4. **Confirm the harvest**: first harvest anything `./zn lessons --uncovered R0010` still lists, as Phase 4 step 5 says. That includes the design reviews of a raft prepped before lessons existed, which are harvested here by you. Then `./zn lessons --uncovered R0010` and `./zn lessons --check` must pass. Commit with `./zn commit --phase deliver`.
+ 5. `./zn done R0010` lands the stack. It refuses a checkout that is not the published top-layer commit, an unfinished or unstacked layer, a changed contract, a failing or stale `./zn trace <R-id> --check`, and a final review with no `Verdict:` line or whose verdict is not `approve` while an open finding has no human ruling in `## Open to the human`. The binding commit records the final review's `Verdict:` line and `Trace: <raft-dir>/trace-NNN.md`, the file of this landing. The human runs `./zn approve <id>` again when the contract changed, then `./zn done`.
+ 6. Run the final review and `./zn done` once per landing. When a layer is blocked, the green layers below it land now: `./zn done R0010 --through <issue>` lands only the layers up to that issue's, after its own final review (`final-review-NNN.md`) and trace (`trace-NNN.md`) over exactly those layers. It moves only those tickets to `done/`, and the raft stays in `active/` until its last layer lands. The raft's `check.sh` runs for the landing's members (`ZN_BIND_MEMBERS`), and its `RC1` and later lines run at the last landing. After an early landing run `./zn restack R0010`: the lowest layer left is based on `main`, and its review stays current by its patch. The layer after them resumes once the blocker is resolved.
  7. Post a PR comment `Ready to merge at <short sha>` (no final report yet).
  
  ## Phase 6: Merge and clean up
@@ -2125,25 +3113,49 @@ index 83ff104f3..63b052812 100644
  2. After the merge and before the final report, `./zn spend R0010 --phase deliver`. Do not pass `--time` or `--tokens`.
  3. Write the final report (below), with the merge commit sha. Post it as a comment on the merged PR (`gh pr comment <pr> --body-file -`) *before* cleanup, since cleanup removes your worktree.
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index 601e5f7ca..e5ed0b52f 100644
+index 601e5f7ca..17e8bfac9 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
-@@ -104,6 +104,9 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
- | spend | `./zn spend <id> --phase capture, prep, design-review or deliver [--begin] [--note <text>] [--model <id>] [--effort <level>]` (`--phase capture|prep` records the model that wrote the work: `--model`, else `ZN_MODEL`, else the measured one, and a marked item refuses none; `--phase design-review --note design-review-NNN` needs `--model` and stamps that review file, with a derived `Fallback:` line when it was the writer's line (`--author <the lead's model id>` names the writer a row does not yet record); a typed `--model` wins over the session's measured one) | marks the stage. `--begin` appends the start to the checkout's measure buffer and does not commit. The next call reads the CLI transcripts for that span, folds this ticket's buffer lines into `spend.d/<writer>.tsv`, and commits that file on the current branch; it pushes nothing. A call with no start writes the row with `unmeasured` where the tool could not read a session. `--time` and `--tokens` are ignored. Refuses in the main checkout (run it in the worktree, `./zn worktree <id>`), and refuses an item that is already active |
+@@ -72,7 +72,7 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ - **Paths**: `<root>/rafts/retired/<ID>` is a raft `recombine` retired (its review history, never an item to work); `<root>/{issues,rafts}/<ID>` is backlog (`<root>` is the item's project root, `<name>/.tracker` for a project of `z-nile/projects.toml`, such as `pickman/.tracker` or `z-nile/.tracker`), `…/active/<ID>` is in progress, and `…/done/<ID>` is finished. On `main`, `active/` holds the rafts that `ready` has handed out (and their issues), not only the branch you are on: the current raft is the active raft whose branch is the current branch.
+ - **The design field**: frontmatter `design:` moves `draft` → `reviewed` → `ready`; `z-design` sets an issue's and `z-raft` a raft's.
+ - **The review mark**: frontmatter `reviews: judged` is written by the tool, never by hand: `./zn status <id> preparing` writes it into an issue that has no design review yet, and `new raft` into every raft it makes. Nothing removes it, and `publish` accepts it only in those two commits. A marked item's reviews are judged by the commands; an unmarked item is exempt.
+-- **Review models.** Every review but a stream review runs on a review model: an id starting `claude-opus-`, `claude-fable-` or `kimi-code-k3`, or starting `grok-` at effort `xhigh`. The tool records the model in the review file as `Model: <id>` and `Effort: <level>` within its first 12 lines: the dispatcher stamps a review it files, and for an interactive review the lead types the reviewer's model id (`claude-opus-5-5`, never the alias `opus`) on `./zn spend <id> --phase design-review --note design-review-NNN --model <id> --effort <level>` (a design or coherence review) or `./zn commit -m "<id>: review-NNN" --phase code-review --model <id> --effort <level>` (a code or final review); `--effort` defaults to `CLAUDE_EFFORT` for a `claude-` id only, and a `grok-` id needs it typed. The reviewer never writes them, and a review is recorded once: a refused review is superseded by a new round. An item marked `reviews: judged` (written by the tool at an issue's claim and when a raft is made) is judged on the newest round of each kind and refused: `./zn status <id> prepared` judges the newest design review, `./zn ready <R-id>` and `./zn work next` the raft's newest coherence review and each member's newest design review, and `./zn done <R-id>` the newest `review-NNN.md` and the newest `final-review-NNN.md` of the raft and its members (a stream review is never judged), each refused when it is off the review models or records none; a later round on a review model clears it, and the dispatcher files a new round at the next number only then. In a marked item `./zn spend --phase design-review --note design-review-NNN` is refused without `--model` (a refute note, or none, records as today and stamps nothing), `./zn commit` refuses an unstamped review file without `--model` under `--phase code-review`, and with any other phase at all, and a review step starts no try the rule would refuse. An unmarked item is exempt: it records and commits as before, and stamps when given `--model`.
++- **Review records and the frontier floor.** Any model may run any review: there is no list of review models. The tool records the model in the review file as `Model: <id>` and `Effort: <level>` within its first 12 lines: the dispatcher stamps a review it files, and for an interactive review the lead types the reviewer's model id (`claude-opus-5-5`, never the alias `opus`) on `./zn spend <id> --phase design-review --note design-review-NNN --model <id> --effort <level>` (a design or coherence review) or `./zn commit -m "<id>: review-NNN" --phase code-review --model <id> --effort <level>` (a code or final review); `--effort` defaults to `CLAUDE_EFFORT` for a `claude-` id only. The reviewer never writes them, and a review is recorded once. An item marked `reviews: judged` (written by the tool at an issue's claim and when a raft is made) refuses an unstamped review file: `./zn spend --phase design-review --note design-review-NNN` is refused without `--model`, and `./zn commit` refuses a new review file without `--model` under `--phase code-review`, and with any other phase at all; an unmarked item is exempt. The one quality rule is the **frontier floor**: every landing (`./zn done`, `./zn done --through` and the dispatcher's, which runs `done`) needs at least one code or final review of the landed code by a model on the `[review] frontier` list of `.models.toml`, and `./zn done` refuses a landing with none, naming `no-frontier-review`. The way out is one extra round on a frontier model, `./zn dispatch zz-review <R-id> --mode final --frontier` (the dispatcher runs it itself before a landing; a person may instead start a fresh subagent on a listed model and commit its review with `./zn commit --phase code-review --model <id>`): it takes the next number, runs only a frontier model, waits (exit 6) while none has quota, and is the one second round of a kind the tool allows. A design review or raft review of a document with no `designed-by: <model id>` front-matter line is refused (zz-review, Who reviews).
+ - **Author record.** The model that wrote a text is recorded where the item travels: `./zn spend <id> --phase capture|prep` and `./zn commit` (phase `build`) take `--model <your model id>` (the id `.models.toml` names, no effort), or `ZN_MODEL`, which the dispatcher sets to each attempt's model. A typed `--model` wins, and a reviewer's row never takes `ZN_MODEL`. A marked item (`reviews: judged`) refuses a `capture`, `prep` or `build` record with no model, naming `--model`. A raft's prep row carries the note `raft-prep` (z-raft passes `--note raft-prep`), and every other prep row is a design's. A review reads the writers from these rows by mode: idea, design, raft or build.
+ - **Everything worked is a raft.** A raft has exactly one type (feature, defect or chore), and every member issue must match it. z-design stops at a prepared issue with no raft; z-raft makes every raft, in its rafting worktree, and gives `single: true` only to a raft of one `solo` or over-cap issue (nothing is folded into it); `./zn ready <issue>` refuses a raftless issue, and `prompt` takes only a raft id.
+ - **One layer per ticket.** A raft is a stack. `R0010/1/c0010` is position 1, issue c0010, based on main; the next layer is based on the one below. Each layer is one branch, one commit (`./zn finish <issue>`) and one pull request. `./zn restack <R-id>` rebases the layers above a change. A layer is complete when it is finished, green and reviewed: its newest `review-NNN.md` in its issue's folder is settled and current for the layer's finish commit or its patch. A raft readied with `layers: reviewed` (the marker `./zn ready` writes) follows these rules; an older raft keeps one `trace.md` and one landing. `./zn done` lands the stack with one `--no-ff` merge. Each layer's pull request body names the raft's Theme and Order and the stack; `start`, `finish`, `restack` and `done` rewrite it, and a failed edit only warns.
+@@ -100,10 +100,13 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
+ | resolve | `./zn resolve <id> <decision> [--answer <text> \| --answer-file <path>] [--said <text>] [--title <text>] [--rule <Fn>=<ruling>]` | the human's, in any checkout; refused while `ZN_DISPATCH` or `ZN_HEADLESS` is set, and by the session the note's `Session:` names. An agent runs it only when the user's message in this conversation tells it to. In an agent session `--said "<the user's message>"` is required and recorded quoted as the user's word. One tracker commit, `tracker: <id> resolve <decision>`: appends `## Resolution` to `escalation.md`, removes `blocked:`, moves the status (`retry`, `approve`, `amend-design`, `split` and `abort`: a preparing issue or draft raft goes to `new`, a raft that was running to `prepared`), appends the `unblocked` row to `provenance.md`, and keeps `rank:`. `approve` writes `Decided with the user (<date>), resolve approve: "<answer>"` in the Problem (in an agent session the user's `--said` words and `(the option: <answer>)`; of the Layer member for a raft, whose `grouped:` entry and coherence reviews' `Grouped:` lines `resolve` re-records, so an approve on a raft vouches for the change without a new raft-mode round, and which `ready` then refuses until the user's own `./zn approve`); a `review-exhausted` resolve needs one `--rule <Fn>="<ruling>"` per id of the note's `Open:` line, records them in `## Resolution`, and `./zn rulings <id>` writes them as `Ruled (user, <date>)` lines in the step's worktree; on a draft raft `approve` and `amend-design` act as `retry` and `split` is refused; a raft left with no unlanded member goes to `done/` (a member landed) or `retired/`; `amend-design` and `split` take the Layer member out of the raft back to `new` with `design: draft`, and `split` makes a new backlog issue titled by `--title` and adds a `Scope decision` line; `abort` leaves a raft `prepared` as `stop` does and prints the parked branches and PRs to close |
+ | prune | `./zn worktree-prune` | removes the worktree and branch of every raft that is in `done/` on `origin/main` (any merge strategy); keeps the rest, never forces, and lists named worktrees |
+ | focus | `./zn focus f0010` | the following commits are attributed to that issue |
+-| commit | `./zn commit -m "msg" [--issue f0010]... [--phase build|code-review|deliver] [--model <id>] [--effort <level>]` (`--phase build` records the model that wrote the layer: `--model`, else `ZN_MODEL`, and a marked item refuses none; `--phase code-review` stamps each new review file with `--model` and `--effort`, and a `Fallback:` line it derives itself against `--author <the lead's model id>` (else `ZN_MODEL`, else the rows) when the model is the writer's line or a non-Claude pick was not the one run (no flag to type), and refuses a new review file without `--model`) | `git add -A`, then folds this checkout's measure buffer into `spend.d/<writer>.tsv` (one appended line per row; `./zn run` rows of one stage become one `other` row) together with the commit's line counts, and the raft's summary, **in the same commit**. A line for another ticket stays until that ticket is committed. A buffer nobody folds is dropped after 14 days, or when that checkout's `.cache` is deleted. Adds `Issue:` trailers and pushes. In the folder of the issue whose layer you are on, a new `review-NNN.md` or `refute-NNN.md` is stamped with `Commit:` and `Patch:` from the layer's finish commit, and refused on a layer that is not finished. `--phase` defaults to build; capture, prep and design-review use `./zn spend`. `--time` and `--tokens` are ignored: cost is measured |
+-| spend | `./zn spend <id> --phase capture, prep, design-review or deliver [--begin] [--note <text>] [--model <id>] [--effort <level>]` (`--phase capture|prep` records the model that wrote the work: `--model`, else `ZN_MODEL`, else the measured one, and a marked item refuses none; `--phase design-review --note design-review-NNN` needs `--model` and stamps that review file, with a derived `Fallback:` line when it was the writer's line (`--author <the lead's model id>` names the writer a row does not yet record); a typed `--model` wins over the session's measured one) | marks the stage. `--begin` appends the start to the checkout's measure buffer and does not commit. The next call reads the CLI transcripts for that span, folds this ticket's buffer lines into `spend.d/<writer>.tsv`, and commits that file on the current branch; it pushes nothing. A call with no start writes the row with `unmeasured` where the tool could not read a session. `--time` and `--tokens` are ignored. Refuses in the main checkout (run it in the worktree, `./zn worktree <id>`), and refuses an item that is already active |
++| commit | `./zn commit -m "msg" [--issue f0010]... [--phase build|code-review|deliver] [--model <id>] [--effort <level>]` (`--phase build` records the model that wrote the layer: `--model`, else `ZN_MODEL`, and a marked item refuses none; `--phase code-review` stamps each new review file with `--model` and `--effort`, and a `Fallback:` line it derives itself when the model is the writer's line or a non-Claude pick was not the one run (no flag to type), and refuses a new review file without `--model`) | `git add -A`, then folds this checkout's measure buffer into `spend.d/<writer>.tsv` (one appended line per row; `./zn run` rows of one stage become one `other` row) together with the commit's line counts, and the raft's summary, **in the same commit**. A line for another ticket stays until that ticket is committed. A buffer nobody folds is dropped after 14 days, or when that checkout's `.cache` is deleted. Adds `Issue:` trailers and pushes. In the folder of the issue whose layer you are on, a new `review-NNN.md` or `refute-NNN.md` is stamped with `Commit:` and `Patch:` from the layer's finish commit, and refused on a layer that is not finished. `--phase` defaults to build; capture, prep and design-review use `./zn spend`. `--time` and `--tokens` are ignored: cost is measured |
++| spend | `./zn spend <id> --phase capture, prep, design-review or deliver [--begin] [--note <text>] [--model <id>] [--effort <level>]` (`--phase capture|prep` records the model that wrote the work: `--model`, else `ZN_MODEL`, else the measured one, and a marked item refuses none; `--phase design-review --note design-review-NNN` needs `--model` and stamps that review file, with a derived `Fallback:` line when it was the writer's line (the design's or raft's `designed-by` line; the review is refused without one); a typed `--model` wins over the session's measured one) | marks the stage. `--begin` appends the start to the checkout's measure buffer and does not commit. The next call reads the CLI transcripts for that span, folds this ticket's buffer lines into `spend.d/<writer>.tsv`, and commits that file on the current branch; it pushes nothing. A call with no start writes the row with `unmeasured` where the tool could not read a session. `--time` and `--tokens` are ignored. Refuses in the main checkout (run it in the worktree, `./zn worktree <id>`), and refuses an item that is already active |
  | trace | `./zn trace <R-id> [--through <issue>] [--check]` | read-only. Without `--check`, derives every ticket's claims (`<id>:P<n>`, `<id>:S<n>` from `./zn capture <id>` (none for a ticket captured with only the template under `## Solution`, which is not refused), and `<id>:AC<n>` from `## Acceptance criteria`; a missing captured `## Problem`, a missing `## Acceptance criteria` (read from the ticket's document at the commit) or a Solution of text with no outcome (only a fence) fails naming the ticket and section; a captured section whose first read, which ends at a `Decided with the user`, `**Scope decision` or `(Added in prep` line, finds no outcome is read again with those lines as text) and every changed source file of the stack, and prints the skeleton of `<raft-dir>/trace.md` pinned to the top layer's finished commit. With `--check`, verifies `<raft-dir>/trace.md` against the top layer's commit: every derived claim is a row and no unknown claim appears; every `file:line` exists at that commit and is of the right kind for its column (`design` in the ticket's doc or `not met: "<ruling>"` quoted from `## Open to the human`, `test` in a spec or `check.sh` of that ticket that ran green in the ticket's `<issue-dir>/results.txt` at that commit with an exact case match, `code` in a source file the stack changed or `none` when the stack changed no source file); every changed source file appears under `## Source files` naming valid claims and no unchanged file appears; and the table is not stale (`trace.md` and `final-review-NNN.md` are committed on the top layer after its finish commit touching only the raft's and tickets' tracker files, `Commit:` names the top layer's finish commit, and nothing is added after the table or rewritten). Each failure names the row and the cell, and exits 1 |
- | done | `./zn done R0010` | requires `./zn trace R0010 --check` to pass for the commit it lands and the final review (`final-review-NNN.md`; `review-NNN.md` is for the per-layer code review only and cannot stand in) to be resolved (verdict `approve`, or every open finding — each finding answered `fixed <sha>: <what>; consequences: <what the fix could break, and how that was checked, or none>`, `refuted`, or, for a medium or low finding and only as zz-execute Phase 4 step 7 allows, `deferred <id>: <why>` naming a backlog issue — ruled by the human in `## Open to the human`) and the raft's `check.sh` to pass. Refuses a member whose approval no longer matches the contract (the design sections, the acceptance specs and `check.sh`); a member with no approval is not sent back. Refuses a layer that is not complete, the top one included (finished, green and reviewed: its newest `review-NNN.md` in its issue's folder is settled and names the layer's finish commit or patch). `./zn done R0010 --through <issue>` lands only the layers not yet landed up to that issue's layer, with its own `final-review-NNN.md` and `trace-NNN.md` (NNN is one more than the highest final review on `origin/main`); it promotes and moves only those members to `done/`, keeps the raft in `active/` until its last layer lands, and retargets those layers' pull requests and the next layer's to `main`. It runs the raft's `check.sh` with `ZN_BIND_MEMBERS` set to the landing's ids, and `ZN_BIND_EARLY=1` while layers stay unlanded: `./zn members` and `promote-check` then cover those members, and `RC1` and up are skipped until the last landing. A layer whose issue is in `done/` on `origin/main` is landed: `./zn stack` shows it as `landed`, `start` never reopens it, `done` skips it, and `restack` puts the lowest unlanded layer on `main`. The checkout must be the published top-layer commit; a lower layer or a top layer behind origin is refused, naming the layer and both shas. Refuses a layer that is not finished, not stacked on the one below, or whose contract changed. Refuses when `./zn trace R0010 --check` fails (missing, failing or stale `trace.md`) or when `final-review-NNN.md` is missing or has no `Verdict:` line. Refuses a layer that is not complete (finished, green and reviewed: its newest `review-NNN.md` in its issue's folder is settled and names the layer's finish commit), the top one included. `./zn done R0010 --through <issue>` lands only the layers not yet landed up to that issue's layer, after its own final review (`final-review-NNN.md`, not one of an earlier bind) and `./zn trace R0010 --through <issue> --check` over exactly those layers; it promotes and moves only those members to `done/`, keeps the raft in `active/` until its last layer lands, and retargets those layers' pull requests and the next layer's to `main`. A layer whose issue is in `done/` is landed: `./zn stack` shows it as `landed`, `start` never reopens it and `done` skips it. Merges that commit with `--no-ff`, promotes acceptance specs, moves the items to `done/`, runs the affected gate (`z-nile/check.sh --affected`) on that tree. A failing gate rolls the tree back by itself. Inside a spec run it skips the gate, says so, and checks only the promoted specs, and commits one binding commit (`<raft>: bind <id>, <id>`, the final review's `Verdict: <word>`, and `Trace: <done-raft-dir>/trace.md`). Then `gh pr view <n> --json baseRefName -q .baseRefName` and `gh pr edit <n> --base main` for each layer, and `git push origin HEAD:refs/heads/main`. A failing gate or a failed retarget rolls back and does not push. A failed push puts each pull request's base back and rolls the tree back. |
-+| land-check | `./zn land-check R0010 [--through <issue> \| --below <issue>] [--json]` | read-only. The checks before a landing, which the dispatcher and a person's `done` both make: one `code (kind): text` line per problem (kind `wait`, `redo` or `block`), exit 1 when any, exit 2 for a raft with no layer branches (an old single-branch raft keeps its pull request and a human's merge). Run by the dispatcher as `./zn -C <worktree> land-check`, with the base's engine. |
+-| done | `./zn done R0010` | requires `./zn trace R0010 --check` to pass for the commit it lands and the final review (`final-review-NNN.md`; `review-NNN.md` is for the per-layer code review only and cannot stand in) to be resolved (verdict `approve`, or every open finding — each finding answered `fixed <sha>: <what>; consequences: <what the fix could break, and how that was checked, or none>`, `refuted`, or, for a medium or low finding and only as zz-execute Phase 4 step 7 allows, `deferred <id>: <why>` naming a backlog issue — ruled by the human in `## Open to the human`) and the raft's `check.sh` to pass. Refuses a member whose approval no longer matches the contract (the design sections, the acceptance specs and `check.sh`); a member with no approval is not sent back. Refuses a layer that is not complete, the top one included (finished, green and reviewed: its newest `review-NNN.md` in its issue's folder is settled and names the layer's finish commit or patch). `./zn done R0010 --through <issue>` lands only the layers not yet landed up to that issue's layer, with its own `final-review-NNN.md` and `trace-NNN.md` (NNN is one more than the highest final review on `origin/main`); it promotes and moves only those members to `done/`, keeps the raft in `active/` until its last layer lands, and retargets those layers' pull requests and the next layer's to `main`. It runs the raft's `check.sh` with `ZN_BIND_MEMBERS` set to the landing's ids, and `ZN_BIND_EARLY=1` while layers stay unlanded: `./zn members` and `promote-check` then cover those members, and `RC1` and up are skipped until the last landing. A layer whose issue is in `done/` on `origin/main` is landed: `./zn stack` shows it as `landed`, `start` never reopens it, `done` skips it, and `restack` puts the lowest unlanded layer on `main`. The checkout must be the published top-layer commit; a lower layer or a top layer behind origin is refused, naming the layer and both shas. Refuses a layer that is not finished, not stacked on the one below, or whose contract changed. Refuses when `./zn trace R0010 --check` fails (missing, failing or stale `trace.md`) or when `final-review-NNN.md` is missing or has no `Verdict:` line. Refuses a layer that is not complete (finished, green and reviewed: its newest `review-NNN.md` in its issue's folder is settled and names the layer's finish commit), the top one included. `./zn done R0010 --through <issue>` lands only the layers not yet landed up to that issue's layer, after its own final review (`final-review-NNN.md`, not one of an earlier bind) and `./zn trace R0010 --through <issue> --check` over exactly those layers; it promotes and moves only those members to `done/`, keeps the raft in `active/` until its last layer lands, and retargets those layers' pull requests and the next layer's to `main`. A layer whose issue is in `done/` is landed: `./zn stack` shows it as `landed`, `start` never reopens it and `done` skips it. Merges that commit with `--no-ff`, promotes acceptance specs, moves the items to `done/`, runs the affected gate (`z-nile/check.sh --affected`) on that tree. A failing gate rolls the tree back by itself. Inside a spec run it skips the gate, says so, and checks only the promoted specs, and commits one binding commit (`<raft>: bind <id>, <id>`, the final review's `Verdict: <word>`, and `Trace: <done-raft-dir>/trace.md`). Then `gh pr view <n> --json baseRefName -q .baseRefName` and `gh pr edit <n> --base main` for each layer, and `git push origin HEAD:refs/heads/main`. A failing gate or a failed retarget rolls back and does not push. A failed push puts each pull request's base back and rolls the tree back. |
++| done | `./zn done R0010` | requires `./zn trace R0010 --check` to pass for the commit it lands and the final review (`final-review-NNN.md`; `review-NNN.md` is for the per-layer code review only and cannot stand in) to be resolved (verdict `approve`, or every open finding — each finding answered `fixed <sha>: <what>; consequences: <what the fix could break, and how that was checked, or none>`, `refuted`, or, for a medium or low finding and only as zz-execute Phase 4 step 7 allows, `deferred <id>: <why>` naming a backlog issue — ruled by the human in `## Open to the human`) and the raft's `check.sh` to pass. Refuses a member whose approval no longer matches the contract (the design sections, the acceptance specs and `check.sh`); a member with no approval is not sent back. Refuses a layer that is not complete, the top one included (finished, green and reviewed: its newest `review-NNN.md` in its issue's folder is settled and names the layer's finish commit or patch). `./zn done R0010 --through <issue>` lands only the layers not yet landed up to that issue's layer, with its own `final-review-NNN.md` and `trace-NNN.md` (NNN is one more than the highest final review on `origin/main`); it promotes and moves only those members to `done/`, keeps the raft in `active/` until its last layer lands, and retargets those layers' pull requests and the next layer's to `main`. It runs the raft's `check.sh` with `ZN_BIND_MEMBERS` set to the landing's ids, and `ZN_BIND_EARLY=1` while layers stay unlanded: `./zn members` and `promote-check` then cover those members, and `RC1` and up are skipped until the last landing. A layer whose issue is in `done/` on `origin/main` is landed: `./zn stack` shows it as `landed`, `start` never reopens it, `done` skips it, and `restack` puts the lowest unlanded layer on `main`. The checkout must be the published top-layer commit; a lower layer or a top layer behind origin is refused, naming the layer and both shas. Refuses a layer that is not finished, not stacked on the one below, or whose contract changed. Refuses when `./zn trace R0010 --check` fails (missing, failing or stale `trace.md`) or when `final-review-NNN.md` is missing or has no `Verdict:` line. Refuses a layer that is not complete (finished, green and reviewed: its newest `review-NNN.md` in its issue's folder is settled and names the layer's finish commit), the top one included. `./zn done R0010 --through <issue>` lands only the layers not yet landed up to that issue's layer, after its own final review (`final-review-NNN.md`, not one of an earlier bind) and `./zn trace R0010 --through <issue> --check` over exactly those layers; it promotes and moves only those members to `done/`, keeps the raft in `active/` until its last layer lands, and retargets those layers' pull requests and the next layer's to `main`. A layer whose issue is in `done/` is landed: `./zn stack` shows it as `landed`, `start` never reopens it and `done` skips it. Merges that commit with `--no-ff`, promotes acceptance specs, moves the items to `done/`, refuses a landing with no code or final review by a model on the `[review] frontier` list (`no-frontier-review`; the way out is one extra round, `./zn dispatch zz-review <R-id> --mode final --frontier`), runs the affected gate (`z-nile/check.sh --affected`) on that tree. A failing gate rolls the tree back by itself. Inside a spec run it skips the gate, says so, and checks only the promoted specs, and commits one binding commit (`<raft>: bind <id>, <id>`, the final review's `Verdict: <word>`, and `Trace: <done-raft-dir>/trace.md`). Then `gh pr view <n> --json baseRefName -q .baseRefName` and `gh pr edit <n> --base main` for each layer, and `git push origin HEAD:refs/heads/main`. A failing gate or a failed retarget rolls back and does not push. A failed push puts each pull request's base back and rolls the tree back. |
++| land-check | `./zn land-check R0010 [--through <issue> \| --below <issue>] [--json]` | read-only. The checks before a landing, which the dispatcher and a person's `done` both make: one `code (kind): text` line per problem (kind `wait`, `redo`, `block` or `review`: `review` is c0251's `no-frontier-review`, which the dispatcher clears by one extra review round on a frontier model), exit 1 when any, exit 2 for a raft with no layer branches (an old single-branch raft keeps its pull request and a human's merge). Run by the dispatcher as `./zn -C <worktree> land-check`, with the base's engine. |
 +| land-gate | `./zn land-gate R0010 [--through <issue>]` | the dispatcher's gate for a stack that changes a game: a clean clone outside the checkout, origin's main with the top layer merged, `z-nile/check.sh --full` there, then `lune run scripts/cicd` (Merging 2 and 3). Exit 0 passes, 4 waits (no `cicd.toml`, a lease held, the publish failed), 1 is red. A tooling-only stack passes at once: `done`'s affected gate is its merge gate. |
 +| lander | `./zn lander [R0010]` | lands the land requests that workers holding the agent's credential left (`.cache/land-requests/<R-id>` in the main checkout, written by their `done`), with your own credential: the request's layer tip must still be the layer's published tip, every check passes, a game is gated by `land-gate`, then `done`, all through `./zn -C <worktree>` (the base's engine). Refused in a session that holds the agent's credential. |
  
  ## Landing a change
  One procedure for every change: a raft, a capture, a prep or an edit.
-@@ -191,7 +194,7 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
+@@ -184,14 +187,14 @@ Rows are only ever appended. A row has nine columns: when, commit, +lines, -line
+ - **What the guards are** (the user's "Keep same user, accept detection", 2026-10-21). Unattended agents run as the user's own OS user. Every guard below (the wrapper, the broker, the tripwire and the merge gates) detects honest mistakes and casual misbehaviour; none is a security boundary against a determined agent, which can read the user's credentials, rewrite the repository's configuration between runs, or merge with the user's token. Known limits are said where each guard is.
+ - **Steps.** Model steps: `z-ticket`, `z-design`, `z-raft`, `z-run` and `zz-review` (modes `design`, `raft`, `code`, `stream`). Script steps, which the dispatcher runs itself and never starts a model for: `z-ready` (`./zn ready`), `z-stop` (`./zn stop`), `raft-plan --apply`, `recombine`, `fold`, `release`, `spend` and `zz-stats` (`./zn metrics`). `zz-rules`, `zz-arch`, `zz-test`, `zz-execute` (the protocol z-work follows) and a project's skills are read inside a step and are never one. `z-work` is a person's session and is never a dispatch step. Any other name is an error.
+ - **`.models.toml`.** At the repository root, and optionally closer to the work (a project's home, an issue's folder). It stacks like `.gitignore`: a closer file replaces only the keys it sets (each `[dispatch]` setting, each field of each `[roles.<name>]`, each field of each `[fallback.<cli>]`). the supported CLIs are `claude`, `grok` and `agent` (Cursor), and `kimi`, and a table naming any other is an error. A role has `model`, `cli`, `runtime`, `rank` and `max_tokens` (and optionally `effort` and `fallbacks`), and an `agent` role or fallback also `max_calls` and `max_minutes`: Cursor's `agent` reports no running token count, so its step stops after `max_calls` model calls (distinct `model_call_id`s, and each turn that carries none) and the spend row takes the result's real total; a stream with three turns in a row and no `model_call_id`, or a line it doesn't know, stops as `cap-unknown` (fail closed); calls are not tokens, so the user tunes it, and an `agent` role or fallback without it is an error, never unlimited (the user's "Cap model calls, record real total"); a call count can miss calls, so the step also stops (`cap`) after `max_minutes` of wall time; the runtime belongs to its CLI: `claude-cli`, `grok-cli` and `cursor-cli`, and `kimi-cli` (the remote runtimes are c0142's). Nothing defaults: a role no file names, a missing field, or no file at all is an error naming it. A step about one issue walks to that issue's folder; a step about a raft walks to each member's and takes, per CLI, the stronger spec whole (higher `rank`, then larger `max_tokens`), in the raft's own walk's try list; z-ticket walks to the project's home. The `[dispatch]` settings (`auto_merge`, `stall_seconds`, `tool_seconds`) come from the item's own walk; an unset or unreadable `auto_merge` is none. Every file is read as committed on `main` (fetched once per run), never from the working tree: an uncommitted `.models.toml` on the walk is an error, so a new one takes effect once its PR has merged. A `.models.toml` is never tracker state: it changes only by a reviewed PR that a human merges (the broker and the gates refuse it; a step that wants an item-level spec asks in `questions.md`).
+-- **Roles.** Each role names the stage: `model`, `cli`, `runtime`, `rank`, `max_tokens`, `effort` and `fallbacks` (CLI names, in order). A fallback names the model: `[fallback.<cli>]` has `model`, `runtime`, and for `agent` `max_calls` and `max_minutes`. A fallback try uses the role's rank, cap and effort. `rank`, `max_tokens` and `effort` on a fallback are refused when the file is loaded, and so are `order` and a `[<skill>.<cli>]` table. A role's `pool` lists `[member.<name>]` models (cli, model, runtime), tried after the role's own model and before its fallbacks, so several models may run on one CLI. A role with `rotate = true` is ordered by the picker (`reviewpool`): tier 1 differs in model line (`[families]`, a prefix table) from the author and the previous round, tier 2 from the author only, tier 3 is the author's line, the flagged fallback, its exact model last; no try is dropped for the author and the chain never stops on it. `author` only names the role whose first choice stands in for the writer when no row records it. A role, fallback or member that names an unknown model or CLI fails when the file is loaded. The roles are `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `code-review`, `stream-review` and `final-review`. `./zn idea` is the idea stage: its calls go through the same supervised model step as `./zn dispatch`.
++- **Roles.** Each role names the stage: `model`, `cli`, `runtime`, `rank`, `max_tokens`, `effort` and `fallbacks` (CLI names, in order). A fallback names the model: `[fallback.<cli>]` has `model`, `runtime`, and for `agent` `max_calls` and `max_minutes`. A fallback try uses the role's rank, cap and effort. `rank`, `max_tokens` and `effort` on a fallback are refused when the file is loaded, and so are `order` and a `[<skill>.<cli>]` table. A role's `pool` lists `[member.<name>]` models (cli, model, runtime), tried after the role's own model and before its fallbacks, so several models may run on one CLI. A role with `rotate = true` is ordered by the picker (`reviewpool`): tier 1 differs in model line (`[families]`, a prefix table) from the author and the previous round, tier 2 from the author only, tier 3 is the author's line, the recorded fallback, its exact model last; no try is dropped for the author and the chain never stops on it. The author is recorded (`designed-by` for a design or raft, the build rows for code), never assumed. A `[review]` table's `frontier = [...]` lists the models whose review the frontier floor needs (`<id>` or `<id>@<effort>`); a closer file replaces the list whole. A role, fallback or member that names an unknown model or CLI fails when the file is loaded. The roles are `idea`, `idea-challenge`, `design`, `design-challenge`, `raft`, `implementation`, `raft-review`, `code-review`, `stream-review` and `final-review`. `./zn idea` is the idea stage: its calls go through the same supervised model step as `./zn dispatch`.
+ - **The agent credential** (the user's "Bot token, no bypass"). A model step runs with the agent's own GitHub token (a fine-grained token or a GitHub App's, read from `$ZN_AGENT_TOKEN_FILE`, else `~/.config/zn/agent-token`, else the keychain item `zn-dispatch-agent`); without one no CLI starts. It can push branches and open pull requests and can't merge, bypass `main`'s protection or write protection or rulesets. The step's `GH_TOKEN` and `GITHUB_TOKEN` are that token, gh reads an empty configuration folder of the step's own, and git's credential helpers answer with that token only. Not enforceable: the agent runs as the user, so a process that goes looking can still read the user's own credentials (the keychain, `~/.config/gh`); only a separate OS user would stop that, and the tripwire during a run and the server's protection of `main` are what catch its use.
+ - **Tracker state** has one definition (`z-nile/engine/trackerstate.luau`), which the wrapper, the broker, the tripwire and the merge gates all use: git's raw diff with renames off (`diff-tree -r --raw --no-renames`), every path under a project root's folder (with the slash) or exactly `z-nile/next`, plain (ASCII, no empty, `.`, `..` or `.git` component), only regular files (no symlink, no submodule), no `.gitattributes`, `.gitmodules` or `.models.toml` in any case, no added path that differs only in case from another; and each item's sequestered files (its `check.sh` and `acceptance/`, in that exact case) judged per item: the same set, each unchanged or, when the item's folder moved, as `paths.rewrite` writes it for that move; only a new item adds them.
+ - **Tracker state from inside a step.** `./zn`'s pushes to `main` (`publish`, `land`) from inside a step go to the publish broker of the dispatcher that runs the step (a folder of that run's own, `ZN_PUBLISH_BROKER`, its requests bound by a run token): it pushes them with the user's credential, to origin's URL as the run pinned it at its start, only as a fast-forward of a freshly fetched `main`, never forced, and only when every commit is tracker state against its parent (as the tripwire judges it during a run). Nothing else in a step is meant to push to `main`.
  - **Running a model step.** In the step's worktree (`prep-<slug>`, `raft-<id>`, the raft's own, `capture-zn-<n>`; a review in its author's), with a prompt that names the skill's file and pastes nothing. Search with `./zn lessons <terms>` when you are about to do something a lesson might cover. A supervisor starts the CLI in a process group of its own and holds a lifeline from the dispatcher: when the dispatcher dies, however it died, the group dies with it. The dispatcher kills the group when the running token count passes `max_tokens`, or for `agent` its call count passes `max_calls` or its wall time `max_minutes` (outcome `cap`), when the step prints nothing for `stall_seconds` (`tool_seconds` while a tool call runs) (`stalled`, or `quota` when the CLI's own last words were a wait for quota: a CLI never waits for quota, and the model's words never count), or on `./zn dispatch stop <id>` (`stopped`). A nested step (a review its author waits on as one shell command) writes a heartbeat in its parent's state folder while its CLI prints, and the parent counts a fresh beat as output; claude's maximum for one shell command (`BASH_MAX_TIMEOUT_MS`) is raised to two hours in its step's environment, its default left as it is, and the author passes a two-hour timeout on its review command alone. The nested runner beats once a second while it is alive and within its own limits, not only while its CLI prints, so a beat means "alive and within my limits". It moves to the next model when the call fails, the CLI is missing, or the quota is gone. Quota is only the CLI's own signals (claude's rejected rate-limit event, an error result or line, stderr); a missing CLI is skipped and named on stderr. A stall, a cap or a stop ends the step. A challenge whose only remaining model is the one that wrote the text stops and says so. The count is input + cache writes + output, cache reads left out, for every CLI.
  - **The tripwire** (the user's "Keep same user, accept detection"). A run accepts `main` as it is when the process starts. No file under the home directory, and no copy of one in `state.json`, decides whether a dispatch may start: a fresh clone, a second machine and a cleaned home folder all start. During that process, before every step and after every step, every commit of `main` since the commit the process started from must be tracker state (as above) or a pull request's merge into `main` on GitHub. After a step, origin's configuration (`remote.origin.*`, `url.*`) must be as the run pinned it, the main checkout's tracked and untracked files unchanged, its HEAD moved only forward along `main`. Anything else stops the chain (exit 5, outcome `tripwire`), with the step's spend still recorded, until the user looks and runs `./zn dispatch retry <id>` (nothing else clears that item's stop; the stop after a gate merge is the same, recorded as the attempt `merge-check`). When the commits another run added are tracker state, another run's advance is never a trip. A layer branch is pushed with `--force-with-lease`, so a rewritten branch refuses the push. **Known limits:** this detects a push during the run after the fact, and never prevents one; a push that lands after that step's tripwire, or between runs, is not seen here (a ticket lands only through its pull request, and the broker, the wrapper and `publish` refuse a non-fast-forward of `main`); a merge made with the user's credential (stolen or not) is a pull request's merge and passes. They are the user's, by rule.
  - **Spend.** The dispatcher writes each step's measured row (wall, CPU, the adapter's token count, model id) itself: a row in `spend.d/<writer>.tsv` on the `zn-dispatch` branch while the item is in the backlog, a reviewer's row under its review file's name (`design-review-NNN`), a code or stream review's as the `./zn commit … --phase code-review --model <id>` line it prints for the author (the measured row is appended to the author's measure buffer, and that commit folds it), and a run's as pending in `state.json` until the merge, when the next `./zn dispatch <R-id>` writes it as `deliver`. Nobody passes `--time` or `--tokens`. A gate, a spec run and `./zn run` only append to `.cache/measure.tsv`. `./zn commit`, `./zn spend`, `./zn done` and `./zn land` fold the lines for the tickets they commit. A buffer that is never folded (the main checkout, a branch with no ticket) is dropped after 14 days, or when that checkout's `.cache` is deleted.
 -- **The chain.** `./zn dispatch <id>` (or `new "<description>"`) reads the item's state on `origin/main` after every step and never a model's prose: a new issue goes to z-design; its prep PR is the `prep` gate; a prepared raftless issue gets `raft-plan --apply` in `raft-<id>`, then z-raft; the rafting PR is the `raft` gate; a prepared raft gets `z-ready`; an active raft gets z-run until its PR leaves draft (`./zn done`), and that PR is the `run` gate, always a human's. Only the dispatcher merges: it passes a `prep` or `raft` gate itself, with the real `gh` and the user's credential, when `auto_merge` names it, the PR is green and mergeable, and its head (fetched from `refs/pull/<n>/head` and equal to the head GitHub reports) is the item's own tracker state by the one function, from its merge base with `main` (a prep PR: the issue's own folder, whose sequestered files it may change, and skill lessons; a rafting PR: each item's change judged by its shape against the base, never by what the PR says: an existing backlog issue only its `raft:` line, between empty and a raft the PR carries; an existing backlog raft any file but its sequestered ones; a new raft its backlog folder, its `check.sh` the rendered template's RC0 lines byte for byte, then only `check "RCn: …"` lines and `finish`; nothing of an active, done or retired item) pinned to the head it checked (`gh pr merge --squash --match-head-commit <head>`, so a push to the branch since voids it); otherwise it stops there (exit 4). A rafting PR also needs, beyond that shape: each carried raft keeps its `<id>.md`; an item that main changed since the PR was cut is refused (rebase first: the merge lands on today's main); the id counter is never carried; and the tracker's own readers accept what the merge would make (`git merge-tree` with today's main must not conflict, `audit` must report no error main's does not, and a carried raft's `issues:` and its members' `raft:` lines must agree). The prep gate is held to the same readers (an issue's `raft:` line must be listed by that raft). GitHub pins no base, so after a gate merge the dispatcher compares the merge commit's first parent with the main it judged, and stops with exit 5 when main moved over an item the PR carries; the merge is not undone, and `vetMain` does not judge it. It stops (exit 3) when a step wrote `questions.md` in its state folder (the user answers in that file and runs `./zn dispatch retry <id>`, which keeps it as `answered-<n>.md`), and (exit 1) when a step failed, was lost, or left a finding `./zn lessons --uncovered <id>` still lists after a review step (z-design, z-raft, z-run, zz-review). `--dry-run` prints the next action and the CLIs it would try, and starts nothing and changes no tracker state (a gate's judgement still exports and removes a scratch tree under `.cache/dispatch/`).
-+- **The chain.** `./zn dispatch <id>` (or `new "<description>"`) reads the item's state on `origin/main` after every step and never a model's prose: a new issue goes to z-design; its prep PR is the `prep` gate; a prepared raftless issue gets `raft-plan --apply` in `raft-<id>`, then z-raft; the rafting PR is the `raft` gate; a prepared raft gets `z-ready`; an active raft gets z-run, and when it ends the dispatcher judges and lands it with the base's engine (the main checkout's, run as `./zn -C <worktree> …`, never the stack's own `zn`): `./zn land-check <R-id>` reads the checks before a landing (every layer built and complete, the final review answered with no unruled high finding, the trace current, approvals unchanged, and the top layer's pull request open with its head the layer tip, a check registered and none failed or running; SKIPPED counts as passed and a draft's UNKNOWN mergeable is not read). Every read that fails (git, the registry, gh, an answer it cannot read) is a wait, never a pass. When it passes and `auto_merge` names `run`, a stack that changes a game is first gated by `./zn land-gate` in a clean clone outside the checkout (`z-nile/check.sh --full` on the tree the bind would make, then `lune run scripts/cicd`, which needs `~/.config/pickman/cicd.toml`), a tooling-only stack by `done`'s affected gate on the merged tree (Merging 2), and then the dispatcher lands it itself with `./zn done` in the raft's worktree with its own environment (the `run` gate). A wait (CI running or not yet registered, GitHub still computing, a failed read, no `cicd.toml` or a held cicd lease for a game, or a stack that changes the gate's own driver: `zn`, `z-nile/check.sh`, `affected.luau`, `specs.luau`, `tests/run.luau` or `z-nile/lib/`, which a person lands) stops at the gate (exit 4). A problem the worker can fix (a layer not built or not complete, a stale trace, a red check or gate, a head that is not the tip) runs z-run again with the problems named in its prompt, up to `merge_retries` reruns (default 2: three runs) of one repeated failure, and then blocks under the problem's reason; a failed read is never counted. An unruled high finding or approval drift blocks at once. The dispatcher files `escalation.md`, which recommends `retry`, or `approve` when a person must rule, and runs `./zn block`. A worker that blocks a raft under `ZN_DISPATCH` only leaves a request (`./zn block` writes `block-request` and a copy of the note in the state folder and stops): the dispatcher lands the green layers below the Layer with `./zn done --through` (waiting at the gate while their CI runs), then restores the note on the Layer's tip and files the block. `./zn done` in a session that holds the agent's credential (`ZN_DISPATCH` or `ZN_HEADLESS`) runs every check, writes a land request (`.cache/land-requests/<R-id>` in the main checkout: the raft, the layer tip, `--through`, the worktree) and stops, waiting for a lander: the dispatcher's landing of that raft, or a person's `./zn lander`, lands it with their own credential through the same base-engine path, refuses a request whose layer tip moved, and removes it; for a person `done` checks every problem above, a wait included, except the dispatcher's own (`self-gating`, `cicd-missing`). A raft with no layer branches keeps its one pull request and a human's merge. The ruleset the user adds must keep an admin bypass for `./zn done`'s direct push of the bind. Only the dispatcher merges: it passes a `prep` or `raft` gate itself, with the real `gh` and the user's credential, when `auto_merge` names it, the PR is green and mergeable, and its head (fetched from `refs/pull/<n>/head` and equal to the head GitHub reports) is the item's own tracker state by the one function, from its merge base with `main` (a prep PR: the issue's own folder, whose sequestered files it may change, and skill lessons; a rafting PR: each item's change judged by its shape against the base, never by what the PR says: an existing backlog issue only its `raft:` line, between empty and a raft the PR carries; an existing backlog raft any file but its sequestered ones; a new raft its backlog folder, its `check.sh` the rendered template's RC0 lines byte for byte, then only `check "RCn: …"` lines and `finish`; nothing of an active, done or retired item) pinned to the head it checked (`gh pr merge --squash --match-head-commit <head>`, so a push to the branch since voids it); otherwise it stops there (exit 4). A rafting PR also needs, beyond that shape: each carried raft keeps its `<id>.md`; an item that main changed since the PR was cut is refused (rebase first: the merge lands on today's main); the id counter is never carried; and the tracker's own readers accept what the merge would make (`git merge-tree` with today's main must not conflict, `audit` must report no error main's does not, and a carried raft's `issues:` and its members' `raft:` lines must agree). The prep gate is held to the same readers (an issue's `raft:` line must be listed by that raft). GitHub pins no base, so after a gate merge the dispatcher compares the merge commit's first parent with the main it judged, and stops with exit 5 when main moved over an item the PR carries; the merge is not undone, and `vetMain` does not judge it. It stops (exit 3) when a step wrote `questions.md` in its state folder (the user answers in that file and runs `./zn dispatch retry <id>`, which keeps it as `answered-<n>.md`), and (exit 1) when a step failed, was lost, or left a finding `./zn lessons --uncovered <id>` still lists after a review step (z-design, z-raft, z-run, zz-review). `--dry-run` prints the next action and the CLIs it would try, and starts nothing and changes no tracker state (a gate's judgement still exports and removes a scratch tree under `.cache/dispatch/`).
++- **The chain.** `./zn dispatch <id>` (or `new "<description>"`) reads the item's state on `origin/main` after every step and never a model's prose: a new issue goes to z-design; its prep PR is the `prep` gate; a prepared raftless issue gets `raft-plan --apply` in `raft-<id>`, then z-raft; the rafting PR is the `raft` gate; a prepared raft gets `z-ready`; an active raft gets z-run, and when it ends the dispatcher judges and lands it with the base's engine (the main checkout's, run as `./zn -C <worktree> …`, never the stack's own `zn`): `./zn land-check <R-id>` reads the checks before a landing (every layer built and complete, the final review answered with no unruled high finding, the trace current, approvals unchanged, and the top layer's pull request open with its head the layer tip, a check registered and none failed or running; SKIPPED counts as passed and a draft's UNKNOWN mergeable is not read). Every read that fails (git, the registry, gh, an answer it cannot read) is a wait, never a pass. When it passes and `auto_merge` names `run`, a stack that changes a game is first gated by `./zn land-gate` in a clean clone outside the checkout (`z-nile/check.sh --full` on the tree the bind would make, then `lune run scripts/cicd`, which needs `~/.config/pickman/cicd.toml`), a tooling-only stack by `done`'s affected gate on the merged tree (Merging 2), and then the dispatcher lands it itself with `./zn done` in the raft's worktree with its own environment (the `run` gate). A wait (CI running or not yet registered, GitHub still computing, a failed read, no `cicd.toml` or a held cicd lease for a game, or a stack that changes the gate's own driver: `zn`, `z-nile/check.sh`, `affected.luau`, `specs.luau`, `tests/run.luau` or `z-nile/lib/`, which a person lands) stops at the gate (exit 4). A problem the worker can fix (a layer not built or not complete, a stale trace, a red check or gate, a head that is not the tip) runs z-run again with the problems named in its prompt, up to `merge_retries` reruns (default 2: three runs) of one repeated failure, and then blocks under the problem's reason; a failed read is never counted. A landing with no code or final review by a model on the `[review] frontier` list (c0251's `no-frontier-review`) is neither a rerun nor a block: the dispatcher runs one extra review round on a frontier model itself (`./zn dispatch zz-review <R-id> --mode final --frontier`, with `--through <issue>` for the layers below a block), commits the review it filed, and looks again, once per top tip; while no frontier model has quota it waits (exit 4), and if the round ran and the floor is still unmet it blocks under `needs-decision`. A person's `./zn done` is refused by c0251's own check, naming the code. An unruled high finding or approval drift blocks at once. The dispatcher files `escalation.md`, which recommends `retry`, or `approve` when a person must rule, and runs `./zn block`. A worker that blocks a raft under `ZN_DISPATCH` only leaves a request (`./zn block` writes `block-request` and a copy of the note in the state folder and stops): the dispatcher lands the green layers below the Layer with `./zn done --through` (waiting at the gate while their CI runs), then restores the note on the Layer's tip and files the block. `./zn done` in a session that holds the agent's credential (`ZN_DISPATCH` or `ZN_HEADLESS`) runs every check, writes a land request (`.cache/land-requests/<R-id>` in the main checkout: the raft, the layer tip, `--through`, the worktree) and stops, waiting for a lander: the dispatcher's landing of that raft, or a person's `./zn lander`, lands it with their own credential through the same base-engine path, refuses a request whose layer tip moved, and removes it; for a person `done` checks every problem above, a wait included, except the dispatcher's own (`self-gating`, `cicd-missing`). A raft with no layer branches keeps its one pull request and a human's merge. The ruleset the user adds must keep an admin bypass for `./zn done`'s direct push of the bind. Only the dispatcher merges: it passes a `prep` or `raft` gate itself, with the real `gh` and the user's credential, when `auto_merge` names it, the PR is green and mergeable, and its head (fetched from `refs/pull/<n>/head` and equal to the head GitHub reports) is the item's own tracker state by the one function, from its merge base with `main` (a prep PR: the issue's own folder, whose sequestered files it may change, and skill lessons; a rafting PR: each item's change judged by its shape against the base, never by what the PR says: an existing backlog issue only its `raft:` line, between empty and a raft the PR carries; an existing backlog raft any file but its sequestered ones; a new raft its backlog folder, its `check.sh` the rendered template's RC0 lines byte for byte, then only `check "RCn: …"` lines and `finish`; nothing of an active, done or retired item) pinned to the head it checked (`gh pr merge --squash --match-head-commit <head>`, so a push to the branch since voids it); otherwise it stops there (exit 4). A rafting PR also needs, beyond that shape: each carried raft keeps its `<id>.md`; an item that main changed since the PR was cut is refused (rebase first: the merge lands on today's main); the id counter is never carried; and the tracker's own readers accept what the merge would make (`git merge-tree` with today's main must not conflict, `audit` must report no error main's does not, and a carried raft's `issues:` and its members' `raft:` lines must agree). The prep gate is held to the same readers (an issue's `raft:` line must be listed by that raft). GitHub pins no base, so after a gate merge the dispatcher compares the merge commit's first parent with the main it judged, and stops with exit 5 when main moved over an item the PR carries; the merge is not undone, and `vetMain` does not judge it. It stops (exit 3) when a step wrote `questions.md` in its state folder (the user answers in that file and runs `./zn dispatch retry <id>`, which keeps it as `answered-<n>.md`), and (exit 1) when a step failed, was lost, or left a finding `./zn lessons --uncovered <id>` still lists after a review step (z-design, z-raft, z-run, zz-review). `--dry-run` prints the next action and the CLIs it would try, and starts nothing and changes no tracker state (a gate's judgement still exports and removes a scratch tree under `.cache/dispatch/`).
  - **Run state.** `.cache/dispatch/<id>/state.json` (the step, CLI, runtime, model, the running group and its lock, worktree, start, tokens, outcome, every attempt, the merges and broker pushes, pending rows), `questions.md`, and a folder `<step>-<mode>-<id>-<n>/` of its own for each step a step dispatched (a review from its author): ignored files in the main checkout. One dispatcher per item at a time (an flock that dies with its holder); a step whose dispatcher died is `lost`, never resumed, until `retry`. `./zn dispatch status <id>` prints every run, `stop <id>` kills each running group only while it is still that run (its supervisor still holds the run's lock; never a group id of 1 or less) and marks any other `lost`, `retry <id>` reruns the failed, stopped or lost step on the same order. The board (c0118) reads it.
  - **The wrapper.** A model step's PATH starts with `z-nile/bin`, a convenience layer over the credential and the tripwire: its `git` decides a push from git's own dry run (aliases, `-c` and refspecs resolved by git) against a private, freshly fetched copy of `main`, refuses anything but tracker state there, and refuses plumbing pushes; its `gh` allows only the skills' commands (no merge, however spelled or aliased) and `gh api` reads and comments. Both are bypassable by an absolute path; the tripwire catches what they miss during the run.
  - **Inside a check.** A spec or `check.sh` that runs `./zn dispatch` may start only a CLI whose real path is under the checkout's `.cache` (a fake); any other is refused before it starts.
@@ -2174,7 +3186,7 @@ index 75ba336c9..e0da72de5 100644
  				"- **Run state.**",
  				"- **The wrapper.**",
 diff --git a/z-nile/tests/acceptance/c0117/models.spec.luau b/z-nile/tests/acceptance/c0117/models.spec.luau
-index 201a92e72..f6948cd75 100644
+index 201a92e72..d40a68234 100644
 --- a/z-nile/tests/acceptance/c0117/models.spec.luau
 +++ b/z-nile/tests/acceptance/c0117/models.spec.luau
 @@ -105,7 +105,7 @@ return t.spec("c0117 .models.toml", function(it)
@@ -2186,6 +3198,16 @@ index 201a92e72..f6948cd75 100644
  				end),
  				"only prep, raft"
  			)).toBe(true)
+@@ -373,7 +373,8 @@ return t.spec("c0117 .models.toml", function(it)
+ 		t.expect(review.specs.grok.effort).toBe("xhigh")
+ 		t.expect(review.specs.grok.maxTokens).toBe(2000000)
+ 		t.expect(review.specs.grok.rank).toBe(4)
+-		t.expect(models.roleFor("zz-review", "raft")).toBe("raft")
++		t.expect(models.roleFor("zz-review", "raft")).toBe("raft-review")
++		t.expect(models.roleFor("z-raft", nil)).toBe("raft")
+ 		t.expect(models.roleFor("zz-review", "design")).toBe("design-challenge")
+ 		t.expect(models.roleFor("zz-review", "stream")).toBe("stream-review")
+ 	end)
 diff --git a/z-nile/tests/lib/cachepaths.luau b/z-nile/tests/lib/cachepaths.luau
 index d5ffb670d..1e60af134 100644
 --- a/z-nile/tests/lib/cachepaths.luau
