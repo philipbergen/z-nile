@@ -1,9 +1,10 @@
 --!strict
 -- Lobby: what the lobby screen shows. Pure view models: the hiscore panel (empty until the boards exist) and
 -- the start button for a travel status.
+local Pay = require("./Pay")
 local Travel = require("./Travel")
 
-export type Row = { rank: number, name: string, score: number, level: number }
+export type Row = { rank: number, name: string, score: number, level: number, lives: number? }
 export type Panel = { title: string, rows: { Row }, empty: string? }
 export type Button = { text: string, enabled: boolean, message: string? }
 
@@ -14,13 +15,17 @@ Lobby.MAX_ROWS = 10
 Lobby.BUTTON_MIN_PX = 44 -- the smallest touch target (design: Mobile)
 Lobby.READ_GAP = 1 -- seconds before the screen asks again after a failed answer; a copy of Hiscores.READ_GAP
 Lobby.MAX_RETRIES = 3 -- failed answers in a row that are asked for again
+Lobby.LIVES_MARK = "♥" -- f0145: before the lives a run spent, after the level
 
 -- The panel for the rows the boards give (nil or none: the empty state). Rows are shown in rank order, at most MAX_ROWS.
 function Lobby.panel(rows: { Row }?): Panel
 	local shown: { Row } = {}
 	local given: { Row } = rows or {}
 	for _, r in given do
-		table.insert(shown, { rank = r.rank, name = r.name, score = r.score, level = r.level })
+		table.insert(
+			shown,
+			{ rank = r.rank, name = r.name, score = r.score, level = r.level, lives = r.lives }
+		)
 	end
 	table.sort(shown, function(a: Row, b: Row): boolean
 		return a.rank < b.rank
@@ -59,6 +64,45 @@ function Lobby.boardPanel(rows: { Row }?, id: string?): Panel
 	return p
 end
 
+-- f0145: the lives a run spent, after the level (" ♥n"); nothing for a row without them (stored before f0145)
+function Lobby.livesText(lives: number?): string
+	if
+		type(lives) ~= "number"
+		or lives ~= lives
+		or lives < 1
+		or lives ~= math.floor(lives)
+		or lives == math.huge
+	then
+		return ""
+	end
+	return ` {Lobby.LIVES_MARK}{string.format("%d", lives)}`
+end
+
+-- f0145: the line under START GAME: a free start due, else the plays held, else the price (or the store
+-- unavailable on a closed server) and the minutes to the next free start; the test note in test mode; nothing
+-- before the server has said anything
+function Lobby.payLine(status: Pay.Status?, mode: string?, now: number): string?
+	if status == nil then
+		return nil
+	end
+	local line: string
+	if status.free then
+		line = "FREE GAME"
+	elseif status.plays > 0 then
+		line = if status.plays == 1 then "1 GAME YOU BOUGHT" else `{status.plays} GAMES YOU BOUGHT`
+	else
+		line = if mode == "closed" then "STORE UNAVAILABLE" else "1 ROBUX A GAME"
+		local at = status.nextFree
+		if at ~= nil and at > now then
+			line ..= `, NEXT FREE GAME IN {math.ceil((at - now) / 60)} MIN`
+		end
+	end
+	if mode ~= "live" and mode ~= "closed" then
+		line ..= " (TEST: NOTHING IS CHARGED)"
+	end
+	return line
+end
+
 -- The panel as text, one row per line. The highlighted rank is one the server sent, marked with "> ".
 function Lobby.lines(p: Panel, highlightRank: number?): string
 	if p.empty then
@@ -67,7 +111,7 @@ function Lobby.lines(p: Panel, highlightRank: number?): string
 	local out: { string } = {}
 	for _, r in p.rows do
 		local mark = if highlightRank ~= nil and r.rank == highlightRank then "> " else ""
-		table.insert(out, `{mark}{r.rank} {r.name} {r.score} {r.level}`)
+		table.insert(out, `{mark}{r.rank} {r.name} {r.score} {r.level}{Lobby.livesText(r.lives)}`)
 	end
 	return table.concat(out, "\n")
 end

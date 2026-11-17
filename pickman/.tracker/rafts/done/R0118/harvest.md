@@ -1,0 +1,7 @@
+- review-001 F1: pickman-arch/tell-the-mode-on-every-path
+- review-001 F2: z-design/send-aways-say-what-studio-does
+- review-001 F3: pickman-arch/purchase-close-before-receipt
+- note f0145's mutation runner hard-coded the backlog path of its specs and ran no baseline, so on the executor's tree every spec failed to load and read as killed (found and fixed in execution, rerun green): z-design/experiments-run-where-the-executor-runs
+- final-review-001 F1: z-design/send-aways-say-what-studio-does
+- final-review-001 F2: pickman-arch/purchase-close-before-receipt
+- final-review-001 F3: zz-review/trace-cells-say-when-vacuous

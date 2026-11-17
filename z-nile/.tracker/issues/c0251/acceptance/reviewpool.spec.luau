@@ -173,7 +173,7 @@ return t.spec("c0251 the review pool picker", function(it)
 			t.expect(names(picks)).toEqual(ROLE_ORDER)
 			t.expect(tiers(picks)).toEqual({ 1, 1, 1, 1, 1 })
 			for _, p in picks do
-				t.expect(pool.fallbackReason(p, "unknown", "none")).toBe(nil)
+				t.expect(pool.fallbackReason(p)).toBe(nil)
 			end
 		end
 		-- an unknown try with an unknown author is tier 1 too (nothing to differ from)

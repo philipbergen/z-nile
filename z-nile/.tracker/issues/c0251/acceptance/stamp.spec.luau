@@ -1,7 +1,7 @@
 --!strict
 -- c0251 AC6 (the pure half): `reviewmodel.stamp` writes `Fallback: <reason>` in the same call as `Model:`, `reviewmodel.fallbackOf`
 -- reads it within 12 lines beside c0248's `Commit:` and `Patch:`, and the reason exists only for a tier 3 pick, names the exact
--- model, and says `assumed` when the author's provenance is not recorded. (The dispatcher's stamping is dispatch-pool.spec's.)
+-- model, and never says `assumed` (the tool assumes no author). (The dispatcher's stamping is dispatch-pool.spec's.)
 local models = require("@znile/engine/models")
 local reviewmodel = require("@znile/engine/reviewmodel")
 local t = require("@tests/lib/t")
@@ -93,9 +93,9 @@ return t.spec("c0251 the Fallback: stamp and its reason", function(it)
 		t.expect(picks[1].tier).toBe(1)
 		t.expect(picks[2].tier).toBe(2)
 		t.expect(picks[3].tier).toBe(3)
-		t.expect(pool.fallbackReason(picks[1], "recorded", "row")).toBe(nil)
-		t.expect(pool.fallbackReason(picks[2], "recorded", "row")).toBe(nil)
-		local reason = pool.fallbackReason(picks[3], "recorded", "row") :: string
+		t.expect(pool.fallbackReason(picks[1])).toBe(nil)
+		t.expect(pool.fallbackReason(picks[2])).toBe(nil)
+		local reason = pool.fallbackReason(picks[3]) :: string
 		t.expect(has(reason, "claude-opus-5-5")).toBe(true)
 		t.expect(has(reason, "assumed")).toBe(false)
 		t.expect(#reason <= 120).toBe(true)
@@ -106,28 +106,27 @@ return t.spec("c0251 the Fallback: stamp and its reason", function(it)
 		local picks = pool.order({ spec("claude", "claude-opus-5-6") }, FAMILIES, { "claude-opus-5-5" }, {})
 		t.expect(picks[1].tier).toBe(3)
 		t.expect(picks[1].exact).toBe(false)
-		local reason = pool.fallbackReason(picks[1], "recorded", "row") :: string
+		local reason = pool.fallbackReason(picks[1]) :: string
 		t.expect(has(reason, "opus")).toBe(true)
 		t.expect(has(reason, "claude-opus-5-6")).toBe(true)
 	end)
 
-	it(
-		"AC6: the reason says assumed or unknown when the author is not recorded, and stays one short line",
-		function()
-			local picks = pool.order(
-				{ spec("claude", "claude-opus-5-5") },
-				FAMILIES,
-				{ "claude-opus-5-5" },
-				{}
-			)
-			local assumed = pool.fallbackReason(picks[1], "assumed", "role") :: string
-			t.expect(has(assumed, "assumed")).toBe(true)
-			t.expect(has(assumed, "role")).toBe(true)
-			t.expect(has(pool.fallbackReason(picks[1], "unknown", "none") :: string, "unknown")).toBe(true)
-			t.expect(has(pool.fallbackReason(picks[1], "recorded", "row") :: string, "assumed")).toBe(false)
-			-- a very long via cannot push the reason past the limit
-			t.expect(#(pool.fallbackReason(picks[1], "assumed", string.rep("v", 400)) :: string) <= 120)
-				.toBe(true)
+	it("AC6: the reason never says the author was assumed, and stays one short line", function()
+		local picks = pool.order(
+			{ spec("claude", "claude-opus-5-5"), spec("claude", "claude-opus-5-5-" .. string.rep("v", 400)) },
+			FAMILIES,
+			{ "claude-opus-5-5" },
+			{}
+		)
+		for _, p in picks do
+			local reason = pool.fallbackReason(p) :: string
+			t.expect(has(reason, "assumed")).toBe(false)
+			t.expect(has(reason, "unknown")).toBe(false)
+			t.expect(#reason <= 120).toBe(true)
+			t.expect((string.find(reason, "\n", 1, true))).toBe(nil)
 		end
-	)
+		-- an unknown author gives no tier 3 at all, so no reason: the tool assumes no author (user, 2026-11-16)
+		local unknown = pool.order({ spec("claude", "claude-opus-5-5") }, FAMILIES, {}, {})
+		t.expect(pool.fallbackReason(unknown[1])).toBe(nil)
+	end)
 end)

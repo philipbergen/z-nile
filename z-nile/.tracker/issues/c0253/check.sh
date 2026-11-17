@@ -99,9 +99,9 @@ ac11() {
 }
 check "AC11: \`.models.toml\` reads \`[work.<cli>] quota_wait_minutes\` per supported CLI, in seconds, the closest file winning, and refuses an unsupported CLI, an unknown key and a value that is not whole minutes, naming it." ac11
 ac12() {
-	fixtureSpec docs --run "AC12: the z-work skill puts the headless session first, starts the supervisor with the person's CLI, and ends a worker session at its raft" "AC12: the README's picture has the worker draft the design and the person approve it, and the worker section says what each way in does" "AC12: zz-rules, zz-test's reaper paragraph and the root rules file agree"
+	fixtureSpec docs --run "AC12: the z-work skill puts the headless session first, starts the supervisor with the person's CLI, loops across rafts for --here, and ends a headless or named-raft session at its raft" "AC12: the README's picture has the worker draft the design and the person approve it, and the worker section says what each way in does" "AC12: zz-rules, zz-test's reaper paragraph and the root rules file agree"
 }
-check "AC12: The z-work skill (the headless session first; the supervisor started with the person's CLI; a \`--here\` or \`/z-run\` session ends at its raft), the README (the workflow picture's design step, the worker section, \`./zn work run\`, the host file, the CPU limit), zz-rules, zz-test's reaper paragraph and the root rules file say what the supervisor does and no longer say what it overtook." ac12
+check "AC12: The z-work skill (the headless session first; the supervisor started with the person's CLI; a \`--here\` session loops across rafts with its context carried over, and a headless or \`/z-run <R-id>\` session ends at its raft), the README (the workflow picture's design step, the worker section, \`./zn work run\`, the host file, the CPU limit), zz-rules, zz-test's reaper paragraph and the root rules file say what the supervisor does and no longer say what it overtook." ac12
 ac13() {
 	runRegression
 }

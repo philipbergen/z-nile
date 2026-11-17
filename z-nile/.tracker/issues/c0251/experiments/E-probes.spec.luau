@@ -1,6 +1,6 @@
 --!strict
--- c0251 prep experiments E1, E2, E5, E6 and E9, run on the prototype (proto-c0251) with `lune run tests/run`. Not an acceptance spec:
--- it is the record of the probes, and is never promoted. Fixture under .cache/c0251-probes (fake CLIs, a worktree of it).
+-- c0251 prep experiments E1, E2, E5, E6 and E9, run on the prototype (proto-c0251-rulings, after the user's rulings of 2026-11-16) with
+-- `lune run tests/run`. Not an acceptance spec: it is the record of the probes, and is never promoted. Fixture under .cache/c0251-probes (fake CLIs, a worktree of it).
 local authorread = require("@znile/engine/authorread")
 local fakecli = require("@tests/lib/fakecli")
 local fixture = require("@tests/lib/fixture")
@@ -36,7 +36,7 @@ cli = "claude"
 model = "claude-fable-5-2"
 runtime = "claude-cli"
 
-[roles.raft]
+[roles.raft-review]
 model = "claude-opus-5-5"
 cli = "claude"
 runtime = "claude-cli"
@@ -63,9 +63,9 @@ local function marked(id: string): string
 	return `---\nid: {id}\ntype: chore\ntitle: {id}\nslug: {id}\nraft: R0100\ndepends_on: []\nemergent: false\ndesign: draft\nreviews: judged\ncreated: 2026-01-01\nstatus: new-quiet-copper-falcon\n---\n\n# {id}\n`
 end
 local RAFT =
-	"---\nid: R0100\ntype: chore\ntitle: demo\nslug: demo\nissues: [c0040]\nreviews: judged\ncreated: 2026-01-01\nstatus: active-a-b-c\n---\n\n# R0100\n"
+	"---\nid: R0100\ntype: chore\ntitle: demo\nslug: demo\nissues: [c0040]\nreviews: judged\ndesigned-by: claude-opus-5-5\ncreated: 2026-01-01\nstatus: active-a-b-c\n---\n\n# R0100\n"
 local DESIGN =
-	"---\nid: c0041\ntype: chore\ntitle: c0041\nslug: c0041\nraft: \ndepends_on: []\nemergent: false\ndesign: draft\nreviews: judged\ncreated: 2026-01-01\nstatus: new-quiet-copper-falcon\n---\n\n# c0041\n"
+	"---\nid: c0041\ntype: chore\ntitle: c0041\nslug: c0041\nraft: \ndepends_on: []\nemergent: false\ndesign: draft\nreviews: judged\ndesigned-by: claude-opus-5-5\ncreated: 2026-01-01\nstatus: new-quiet-copper-falcon\n---\n\n# c0041\n"
 
 local KIMI = table.concat({
 	"#!/bin/sh",
@@ -136,10 +136,10 @@ return t.spec("c0251 prep experiments", function(it)
 	end)
 
 	it(
-		"E1: the tiers compose with c0306's filter: kimi first, grok at high skipped, Opus last, flagged only then",
+		"E1: the tiers compose with any model running: kimi first, grok at high next, Opus last, flagged only then",
 		function()
-			-- raft role at effort high, an Opus author (the raft-prep row), a marked raft: kimi is tier 1, grok is a try the judge
-			-- refuses at high, Opus is the writer's own model. kimi runs and the file is clean.
+			-- raft-review role at effort high, an Opus author (the raft document's designed-by line), a marked raft: kimi is
+			-- tier 1, grok at high is tier 1 too (any model may run any review), Opus is the writer's own model. kimi runs.
 			fakecli.mode(h, "kimi", "ok")
 			local r = znIn({ "dispatch", "zz-review", "R0100", "--mode", "raft" })
 			t.expect(r.ok).toBe(true)
@@ -147,15 +147,21 @@ return t.spec("c0251 prep experiments", function(it)
 			t.expect(has(clean, "Model: kimi-code-k3.1-pro\nEffort: high\n")).toBe(true)
 			t.expect(has(clean, "Fallback:")).toBe(false)
 			fs.removeFile(`{wt}/pickman/.tracker/rafts/R0100/design-review-001.md`)
-			-- kimi refused: grok is skipped by the filter, Opus runs last and the file carries Fallback:
+			-- kimi failing: grok at high runs (no list of review models), and its file is clean
 			fakecli.mode(h, "kimi", "fail")
-			local log0 = #fakecli.log(h)
+			fakecli.mode(h, "grok.zz-review", "script")
 			local second = znIn({ "dispatch", "zz-review", "R0100", "--mode", "raft" })
 			t.expect(second.ok).toBe(true)
+			local grok = fs.readFile(`{wt}/pickman/.tracker/rafts/R0100/design-review-001.md`)
+			t.expect(has(grok, "Model: grok-4.7\nEffort: high\n")).toBe(true)
+			t.expect(has(grok, "Fallback:")).toBe(false)
+			fs.removeFile(`{wt}/pickman/.tracker/rafts/R0100/design-review-001.md`)
+			-- kimi and grok failing: Opus runs last and the file carries Fallback:
+			fakecli.mode(h, "grok.zz-review", "fail")
+			local third = znIn({ "dispatch", "zz-review", "R0100", "--mode", "raft" })
+			t.expect(third.ok).toBe(true)
 			local text = fs.readFile(`{wt}/pickman/.tracker/rafts/R0100/design-review-001.md`)
 			t.expect(has(text, "Model: claude-opus-5-5\nEffort: high\nFallback: ")).toBe(true)
-			t.expect(has(second.stderr, "grok-4.7 at effort high is not a review model: skipped")).toBe(true)
-			t.expect(has(string.sub(fakecli.log(h), log0 + 1), "grok step=")).toBe(false)
 			fs.removeFile(`{wt}/pickman/.tracker/rafts/R0100/design-review-001.md`)
 		end
 	)

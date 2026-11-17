@@ -385,6 +385,59 @@ return t.spec("c0252 land-check, done and a dispatched block", function(it)
 		end
 	)
 
+	it(
+		"AC24: land-check reads c0251's frontier floor from the landing's own folders: a review off the [review] frontier list is the problem no-frontier-review (kind review), a listed one clears it, and done names it once",
+		function()
+			local top = "R0010/2/c0020"
+			pr(top, "MERGEABLE", GREEN)
+			local list = `{wt}/pickman/.tracker/rafts/active/R0010/.models.toml`
+			-- the list is a fixture detail kept out of the tree (done needs a clean one)
+			local exclude = git(wt, { "rev-parse", "--git-path", "info/exclude" })
+			local excludePath = if string.sub(exclude, 1, 1) == "/" then exclude else `{wt}/{exclude}`
+			fs.writeDir(string.match(excludePath, "^(.*)/[^/]+$") :: string)
+			fs.writeFile(
+				excludePath,
+				(if fs.isFile(excludePath) then fs.readFile(excludePath) else "") .. "\n.models.toml\n"
+			)
+			-- the layers' reviews ran on claude-opus-5-5 (seal.layerReview): a list without it is unmet
+			write(
+				wt,
+				"pickman/.tracker/rafts/active/R0010/.models.toml",
+				'[review]\nfrontier = ["claude-fable-5-2"]\n'
+			)
+			local unmet = checked({})
+			t.expect(unmet.code).toBe(1)
+			t.expect(problems(unmet)).toEqual({ "no-frontier-review" })
+			local j: any = serde.decode("json", unmet.stdout)
+			t.expect(j.problems[1].kind).toBe("review")
+			t.expect(j.problems[1].reason).toBe("needs-decision")
+			t.expect(has(j.problems[1].text, "./zn dispatch zz-review R0010 --mode final --frontier"))
+				.toBe(true)
+			local text = zn({ "land-check", "R0010" })
+			t.expect(text.code).toBe(1)
+			t.expect(has(text.stdout, "no-frontier-review (review):")).toBe(true)
+			-- the prefix below the second layer needs the floor too (the verdict the dispatcher reads for a block request)
+			local below = checked({ "--below", "c0020" })
+			local belowCodes = problems(below)
+			t.expect(table.find(belowCodes, "no-frontier-review") ~= nil).toBe(true)
+			t.expect((serde.decode("json", below.stdout) :: any).through).toBe("c0010")
+			t.expect(j.through).toBe("")
+			-- a person's done is refused by c0251's own refusal, which names the code once; c0252's check adds no second line
+			local refused = zn({ "done", "R0010" })
+			t.expect(refused.ok).toBe(false)
+			local said = refused.stdout .. refused.stderr
+			t.expect(has(said, "no-frontier-review")).toBe(true)
+			local _, n = string.gsub(said, "no%-frontier%-review", "")
+			t.expect(n <= 2).toBe(true)
+			t.expect(has(said, "is not ready to land")).toBe(false)
+			-- a list that names the model of the reviews meets the floor
+			fs.writeFile(list, '[review]\nfrontier = ["claude-opus-5-5"]\n')
+			t.expect(problems(checked({}))).toEqual({})
+			-- the file is a fixture detail: the landing below is the raft's own
+			fs.removeFile(list)
+		end
+	)
+
 	it("AC8: with a green top layer done goes on, and lands the bind", function()
 		pr("R0010/2/c0020", "MERGEABLE", GREEN)
 		local landed = must(zn({ "done", "R0010" }), "done")

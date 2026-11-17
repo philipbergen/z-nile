@@ -113,6 +113,18 @@ m("D10", D, "started = heartbeat.stampIn(store.readFront(store.get(id).doc).stat
 m("D11", D, "if verdict.kind == \"block\" then\n							local wt", "if false then\n							local wt", "dispatch")
 m("D12", D, 'supervise.notesPath(store.get(id).dir)', '"notes"', "dispatch")
 
+# round 3 (2026-11-16 rulings): the --here loop across rafts, pinned by docs.spec
+W = "skills/z-work/SKILL.md"
+m("H01", W, "(this session loops across rafts)", "(this session works one raft)", "docs")
+m("H02", W, "then runs `./zn work next` with no raft. A release", "and stops. A release", "docs")
+m("H03", W, "A release adds one to the count you pass as `--released`. ", "", "docs")
+m("H04", W, "Neither a headless session nor a session given a raft takes a second raft", "A worker session never takes a second raft", "docs")
+m("H05", "README.md", "`z-work --here` keeps the person's own session as the worker across rafts", "`z-work --here` keeps the person's own session as the worker for one raft", "docs")
+m("H06", "README.md", "a `z-work --here` session carries its own across rafts", "a `z-work --here` session carries none across rafts", "docs")
+m("H07", "skills/zz-rules/SKILL.md", "`z-work --here` is the session itself taking the next raft and then the next", "`z-work --here` is the session itself taking the next raft", "docs")
+m("H08", W, "your context carries over, but nothing", "context never crosses rafts, and nothing", "docs")
+m("H09", W, "(this session carries the one raft named, then stops)", "(this session loops across rafts too)", "docs")
+
 SPEC = {k: ACC + k + ".spec.luau" for k in ["pure", "loop", "session", "command", "reap", "board", "models", "docs", "dispatch"]}
 
 def run(wt, ids):

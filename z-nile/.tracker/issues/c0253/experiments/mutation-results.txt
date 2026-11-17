@@ -90,3 +90,13 @@ D11 52c0d66e killed dispatch :: AC5: with every CLI out past the cap the raft is
 D12 95ee840f killed dispatch :: AC5: every prompt of a worker session names its skill, the raft and the notes; a resumed o | expected true, got false
 P04 d9d81136 killed reap :: AC10: the launcher shim above the named supervisor (the same command, its parent) is kept  | expected nil, got 1
 P05 f453e325 killed reap :: AC10: the orphaned supervisor the state file names is kept, and a stray orphan beside it i | expected nil, got 1
+# round 3 (2026-11-16 rulings), proto-c0253 3cfdc6aae, experiments/mutate.py H01..H09; each failed on an assertion of docs.spec
+H01 9f05f9d6 killed docs :: AC12: z-work skill | z-work is missing: `z-work --here` (this session loops across rafts)
+H02 bc7c85c8 killed docs :: AC12: z-work skill | missing: then runs `./zn work next` with no raft
+H03 ebf16537 killed docs :: AC12: z-work skill | missing: A release adds one to the count you pass as `--released`
+H04 e175ba40 killed docs :: AC12: z-work skill | missing: Neither a headless session nor a session given a raft takes a second raft
+H05 b40977f0 killed docs :: AC12: README | missing: `z-work --here` keeps the person's own session as the worker across rafts
+H06 abf2f640 killed docs :: AC12: README | missing: a `z-work --here` session carries its own across rafts
+H07 97e3d3e9 killed docs :: AC12: zz-rules/zz-test/root rules | missing: `z-work --here` is the session itself taking the next raft and then the next
+H08 c9137864 killed docs :: AC12: z-work skill | z-work still says: context never crosses rafts
+H09 87816696 killed docs :: AC12: z-work skill | missing: (this session carries the one raft named, then stops)

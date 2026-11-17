@@ -306,4 +306,66 @@ return t.spec("c0252 the chain lands a green stack", function(it)
 			t.expect(has(prompt({}), "running again")).toBe(false)
 		end
 	)
+	-- c0251's frontier floor (user, 2026-11-16): the dispatcher runs one extra review round on a frontier model
+	it(
+		"AC23: a verdict of review runs the extra frontier round (through the layer the verdict names), and stops at the gate when run is left out of auto_merge",
+		function()
+			local whole: any = dispatch.next(facts({
+				land = land("review", {
+					lines = {
+						"no-frontier-review (review): no review of the landed code ran on a frontier model",
+					},
+				}),
+			}))
+			t.expect(whole.kind).toBe("review")
+			t.expect(whole.target).toBe("R0010")
+			t.expect(whole.through).toBe(nil)
+			t.expect(whole.tip).toBe(TIP)
+			local prefix: any = dispatch.next(facts({ land = land("review", { through = "c0010" }) }))
+			t.expect(prefix.kind).toBe("review")
+			t.expect(prefix.through).toBe("c0010")
+			-- the round is the dispatcher's own work toward a landing: with run left out it is a person's, named exactly
+			local off: any = dispatch.next(
+				facts({ land = land("review", { through = "c0010" }), autoMerge = { "prep", "raft" } })
+			)
+			t.expect(off.kind).toBe("stop")
+			t.expect(off.code).toBe(dispatch.EXIT.gate)
+			t.expect(has(off.why, "./zn dispatch zz-review R0010 --mode final --frontier --through c0010"))
+				.toBe(true)
+			t.expect(has(off.why, "auto_merge")).toBe(true)
+		end
+	)
+
+	it(
+		"AC23: a block request whose green layers below lack the frontier review gets the round through the prefix before they land, and before the block is filed",
+		function()
+			local req = { reason = "review-exhausted", layer = "c0020", tip = TIP }
+			local round: any = dispatch.next(facts({
+				blockRequest = req,
+				land = land("review", { through = "c0010" }),
+			}))
+			t.expect(round.kind).toBe("review")
+			t.expect(round.through).toBe("c0010")
+			-- with the floor met the prefix lands as before, and with no verdict the block is filed
+			local landed: any =
+				dispatch.next(facts({ blockRequest = req, land = land("land", { through = "c0010" }) }))
+			t.expect(landed.kind).toBe("land")
+			-- a blocked verdict on the prefix (the round ran, the floor is unmet) is filed, not rerun
+			local filed: any = dispatch.next(facts({
+				blockRequest = req,
+				land = land("block", { through = "c0010", reason = "needs-decision" }),
+			}))
+			t.expect(filed.kind).toBe("block")
+		end
+	)
+
+	it(
+		"AC23: a verdict that blocks the whole stack after the round is filed under needs-decision, never a second round",
+		function()
+			local b: any =
+				dispatch.next(facts({ land = land("block", { reason = "needs-decision", layer = nil }) }))
+			t.expect(b.kind).toBe("block")
+			t.expect(b.reason).toBe("needs-decision")
+		end
+	)
 end)
