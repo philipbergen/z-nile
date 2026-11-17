@@ -18,7 +18,7 @@ Read `pickman/skills/pickman-arch/SKILL.md` first. Its Rules 1 to 8 and Design c
 | `src/shared/` (outside Logic) | ReplicatedStorage.Arcade | shared adapters: types, config tables. ModuleScripts only |
 | `src/server/` | ServerStorage.Arcade | server-only adapters (stores, receipts): ServerStorage never replicates, so no client can read them |
 
-There is no `src/client/`: a client adapter is the game's, because it wires a library feature into the game's own screen.
+There is no `src/client/`: a client adapter is the game's, because it wires a library feature into the game's own screen. The one exception is `src/shared/TestPurchase.luau` (f0201), the test purchase screen every place's client boots: it wires nothing into a game's screen, it stands in for Roblox's own purchase dialog in test mode.
 
 ## Changes to pickman's rules
 1. **A library feature is a leaf.** It knows no game and requires no game's Logic. A game's Logic never requires library Logic either: the feature reaches the game as a parameter (an RNG, a store, a travel status) and the game's adapters wire it in (`arcade/.tracker/architecture.md`, Technical skeleton).
