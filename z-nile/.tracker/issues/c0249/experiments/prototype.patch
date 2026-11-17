@@ -62,7 +62,7 @@ index f28d0ef97..b0ddcb3a2 100644
    })
  }
 diff --git a/z-nile-omarchy/znile.board/README.md b/z-nile-omarchy/znile.board/README.md
-index c9b8156c4..fac5f0237 100644
+index c9b8156c4..228971ab0 100644
 --- a/z-nile-omarchy/znile.board/README.md
 +++ b/z-nile-omarchy/znile.board/README.md
 @@ -2,12 +2,12 @@
@@ -76,7 +76,7 @@ index c9b8156c4..fac5f0237 100644
  - **Click** a card for its details beside it, with the description rendered as markdown. **Double-click**, or **Dive in**, opens a new terminal (tiled as its own panel) in the repo with the chosen AI CLI running interactively, seeded with a discussion-only prompt. Click the open card again, the popup's empty areas, or the expand button for the **big view**, which fills the board so long lines fit; code blocks and diagrams wider than that scroll sideways. Prose uses the sans font and `code` stays monospace. The GitHub button opens the ticket's file on github.com. Arrow and Page keys scroll the description. The **next** command sits in a box: click it to copy the command, then paste it into your CLI.
  - **Choose the AI**: "Open in" in the details, or the agent chip in the header (click to cycle). Only installed CLIs are offered (`agents.sh`); the choice is remembered in `~/.local/state/znile-board/agent`, and it starts on Omarchy's default agent. Agents start in their normal ask-before-acting mode. Kimi and Crush can't take a starting prompt, so it goes to the clipboard to paste.
 -- **Drag** a card within its column to reprioritize. The move only lasts for the session until `rankCommand` is set in `settings.json` (e.g. `./zn rank {id} --before {beforeId}`), which runs in the repo with each value as its own argument.
-+- **Drag** a card within its column to reprioritize. `rankCommand` in `settings.json` (`./zn rank {id} --before {beforeId}` by default) runs in the repo with each value as its own argument and sets the rank on `origin/main`; with it empty, a move only lasts for the session. A card dropped below the unset cards sends an empty `{beforeId}`; `./zn rank` then unsets it, so it sorts among the unset cards by ticket number, and the notice says so. A card dropped among unset cards ranks the unset cards above it (marked `auto`).
++- **Drag** a card within its column to reprioritize. `rankCommand` in `settings.json` (`./zn rank {id} --before {beforeId}` by default) runs in the repo with each value as its own argument and sets the rank on `origin/main`; with it empty, a move only lasts for the session. A card dropped below the unset cards sends an empty `{beforeId}`; `./zn rank` then unsets it, so it sorts among the unset cards by ticket number, and the notice says so. A card dropped among unset cards ranks the unset cards above it (their `ranked` rows in `provenance.md` carry `moved=`, so a raft ignores those ranks).
  - **Keys**: R shows Rafts and T Tickets (Tab switches), N starts a new ticket, `/` searches, Esc clears or closes, F5 or Ctrl+R refreshes. Letters are ignored while typing. Right-click the bar icon to refresh.
  - **New ticket** (button or N): choose the project and the AI, optionally say what it's about, and the big button opens that AI in a new terminal in the repo to capture it with the z-ticket skill.
  
@@ -158,7 +158,7 @@ index e0cbbb3b7..1e9827907 100644
 +  assert.deepEqual(M.sortByPriority(m.issues, ["c0200", "c0100"]).map(i => i.id), ["c0200", "c0100"])
 +})
 diff --git a/z-nile/README.md b/z-nile/README.md
-index f53aabe06..b718df572 100644
+index f53aabe06..f55d8af15 100644
 --- a/z-nile/README.md
 +++ b/z-nile/README.md
 @@ -85,11 +85,11 @@ A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent`
@@ -172,7 +172,7 @@ index f53aabe06..b718df572 100644
 -- The next item is the first in that order whose `depends_on` are all done, which is not blocked, and whose status is claimable. `depends_on` is a hard constraint; `rank` only orders what is free, so the order works around a blocked item without changing any rank.
 -- z-ticket and z-design leave the rank unset, which appends; only a person sets one, with `./zn rank <id> top|after <id>|unset`. z-raft asks for a raft's rank when it makes the raft, and unset is a valid answer: with no one to answer, the rank stays unset. A rank given to a raft is the raft's own; an unset one takes its members' best. The board shows the stack in order.
 +- The next item is the first in that order whose `depends_on` are all done, which is not blocked, and whose status is claimable: a worker carries a raft to merge, rafts the approved issues that are in no raft, and may draft the design of an issue, but a person approves it. `depends_on` is a hard constraint; `rank` only orders what is free, so the order works around a blocked item without changing any rank. `./zn next` prints it (lost work, else a claimable raft, else an approved issue to raft, else an issue to draft).
-+- z-ticket, z-design and z-raft leave the rank unset (unset by default); only a person sets one, with `./zn rank <id> top|last|before <id>|after <id>|<n>|unset` or by dragging a card in the board app. A rank given to a raft is the raft's own; an unset one takes the best rank a person set on one of its members (a rank a move wrote on an item, `rank: 30 auto`, does not count). `./zn list` shows every blocked item first, then lost work, then the rafts and the issues in the stack's order; the board shows the stack in order, with lost work first inside each band.
++- z-ticket, z-design and z-raft leave the rank unset (unset by default); only a person sets one, with `./zn rank <id> top|last|before <id>|after <id>|<n>|unset` or by dragging a card in the board app. A rank given to a raft is the raft's own; an unset one takes the best rank a person set on one of its members (a rank a move wrote on an item, which its `provenance.md` shows by `moved=` in the latest `ranked` row, does not count). `./zn list` stays offline and shows every blocked item first, then the rafts and the issues in the stack's order; `./zn list --lost` also asks the remote for lost work and puts it after the blocked items (lost work first is `./zn next`'s, `./zn lost`'s, `./zn status`'s and the board's); the board shows the stack in order, with lost work first inside each band.
  - The board shows lost, parked and stale claims, lost first. *designed* (c0276)
  - The z-nile app in Omarchy shows the same order, marks lost items, and reorders by drag and drop through `./zn rank`. *captured* (c0257)
  
@@ -212,7 +212,7 @@ index db923ac20..fdeb058d8 100644
  			add("error", "retired-raft", f.path, `{f.id} is in retired/: only a raft is retired`)
  		elseif retired and fs.isFile(doc) and (front(fs.readFile(doc)).retired or "") == "" then
 diff --git a/z-nile/engine/board.luau b/z-nile/engine/board.luau
-index 5527979c5..4d4e13d77 100644
+index 5527979c5..3b28f87b9 100644
 --- a/z-nile/engine/board.luau
 +++ b/z-nile/engine/board.luau
 @@ -7,6 +7,7 @@ local history = require("./history")
@@ -241,22 +241,26 @@ index 5527979c5..4d4e13d77 100644
  	dependents: { string }, -- raft ids whose members depend_on a raftless issue; {} otherwise
  	emergent: boolean,
  	command: string?,
-@@ -858,6 +863,14 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
+@@ -858,6 +863,18 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
  
  	local issues: { Issue } = {}
  	local issueById: { [string]: Issue } = {}
 +	local blockedIds: { [string]: boolean } = {} -- c0249: waits on the person (c0250's stored status)
-+	local autoIds: { [string]: boolean } = {} -- c0249: its rank was written by a move (` auto`)
++	local movedIds: { [string]: boolean } = {} -- c0249: its rank was written by a move (`moved=` in its provenance.md)
 +	for _, list in { rawIssues, rawRafts } do
 +		for _, i in list do
 +			blockedIds[i.id] = rankLib.isBlocked(i.front.status)
-+			autoIds[i.id] = rankLib.isAuto(i.front.rank)
++			-- one record read per item that has a rank
++			local record = `{i.dir}/provenance.md`
++			movedIds[i.id] = (i.front.rank or "") ~= ""
++				and fs.isFile(record)
++				and rankLib.movedBy(fs.readFile(record))
 +		end
 +	end
  	for _, i in rawIssues do
  		local named = i.front.raft
  		local issueType = if TYPES[i.front.type or ""] then i.front.type else ""
-@@ -873,6 +886,8 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
+@@ -873,6 +890,8 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
  			stage = status.effective(i.front, i.state),
  			raft = if named and raftIds[named] then named else nil,
  			dependsOn = listOf(i.front.depends_on),
@@ -265,7 +269,7 @@ index 5527979c5..4d4e13d77 100644
  			dependents = {},
  			emergent = i.front.emergent == "true",
  			body = i.body,
-@@ -945,6 +960,8 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
+@@ -945,6 +964,8 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
  			pseudo = false,
  			issues = memberIds,
  			dependsOn = {},
@@ -274,18 +278,18 @@ index 5527979c5..4d4e13d77 100644
  			dependents = {},
  			blockedBy = {},
  			topLevel = true,
-@@ -969,6 +986,21 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
+@@ -969,6 +990,21 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
  		raftById[r.id] = raft
  	end
  
 +	-- c0249: a raft's rank for the order is its own, else the best (lowest) a person set on one of its members' (a rank a
-+	-- move wrote, ` auto`, does not count: rank.effective's rule)
++	-- move wrote, `moved=` in its provenance.md, does not count: rank.effective's rule)
 +	for _, raft in rafts do
 +		local best = raft.rank
 +		if best == nil and raft.state == "backlog" then
 +			for _, id in raft.issues do
 +				local m = issueById[id].rank
-+				if m ~= nil and not autoIds[id] and (best == nil or m < best) then
++				if m ~= nil and not movedIds[id] and (best == nil or m < best) then
 +					best = m
 +				end
 +			end
@@ -296,7 +300,7 @@ index 5527979c5..4d4e13d77 100644
  	-- dependencies: raft -> raft through member issues, and raft -> raftless issue (blocks, never a raft dependency)
  	local looseDependents: { [string]: { [string]: boolean } } = {}
  	for _, raft in rafts do
-@@ -1035,12 +1067,20 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
+@@ -1035,12 +1071,20 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
  		end
  		table.insert(views.issues[bucket], issue.id)
  	end
@@ -323,7 +327,7 @@ index 5527979c5..4d4e13d77 100644
  
  	local home: { [string]: string } = {}
  	for _, raft in rafts do
-@@ -1088,7 +1128,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
+@@ -1088,7 +1132,7 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
  	-- c0118: columns and bands per project, from each issue's effective status and its raft's branch
  	local columns: { [string]: { [string]: { boardview.Band } } } = {}
  	for _, p in projectList do
@@ -332,7 +336,7 @@ index 5527979c5..4d4e13d77 100644
  		for _, c in boardview.COLUMNS do
  			cards[c] = {}
  		end
-@@ -1097,7 +1137,13 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
+@@ -1097,7 +1141,13 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
  				local raft = if issue.raft then raftById[issue.raft] else nil
  				issue.column = boardview.column(issue.stage, raft ~= nil and raft.launched)
  				issue.age = boardview.age(issue.doneAt, facts.asOf)
@@ -439,23 +443,24 @@ index 1e5a4a653..fd1c83e36 100644
  	return out
  end
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 30870c42f..ee1718095 100644
+index 30870c42f..68dcfe1fb 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
-@@ -68,8 +68,10 @@ usage: ./zn <command> ...
+@@ -68,8 +68,11 @@ usage: ./zn <command> ...
                                                  stop this user's leaked tool processes: orphans, commands past their
                                                  ./zn run deadline, and (at a session end) the session's own
    find <id>                                     print the item's current directory (from where ./zn was run)
 -  list [backlog|active|done] [--project <name>] list items: of --project, of the project whose folder you are
 -                                                in, or of every project at the checkout's root
-+  list [backlog|active|done] [--project <name>] [--no-lost]
++  list [backlog|active|done] [--project <name>] [--lost]
 +                                                list items: of --project, of the project whose folder you are in, or of every
-+                                                project at the checkout's root; blocked items first, then lost work (read from
-+                                                the remote; --no-lost skips it), then the stack in rank order
++                                                project at the checkout's root; offline by default: blocked items first, then the
++                                                stack in rank order (--lost also reads lost work from the remote and puts it
++                                                after the blocked items)
    members <R-id>                                print directories of every issue in the raft (from where ./zn was run)
    busy [<path>...]                              list what holds <path>s (default: every project root and promoted-spec
                                                  folder): rafts active on origin/main, branches and worktrees that
-@@ -98,6 +100,11 @@ usage: ./zn <command> ...
+@@ -98,6 +101,11 @@ usage: ./zn <command> ...
                                                  mark a stage; the tool writes the measured row. --time and --tokens are ignored
    record --id <id> --phase <phase> [--report <file>] [--wall <s>] [--cpu <s>] [--ai <s>] [--tokens <n>]
                                                  write one measured row (the tool's own; not for typed numbers)
@@ -467,15 +472,15 @@ index 30870c42f..ee1718095 100644
    provenance record <id> unblocked|confirmed|ranked [--actor <actor>] [--detail <k=v>]
                                                  append one row to the item's provenance.md on origin/main (c0263)
    dispatch <id> [--dry-run]                     run the chain on an item from its tracker state (ticket, design, raft,
-@@ -857,6 +864,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
+@@ -857,6 +865,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
  			or a == "--watch"
  			or a == "--begin"
  			or a == "--sessions"
-+			or a == "--no-lost"
++			or a == "--lost"
  		then
  			opts[a] = { "true" }
  		elseif string.sub(a, 1, 1) == "-" then
-@@ -1470,6 +1478,31 @@ local function originPaths(): { string }
+@@ -1470,6 +1479,31 @@ local function originPaths(): { string }
  	return paths
  end
  
@@ -507,7 +512,7 @@ index 30870c42f..ee1718095 100644
  local hb = {} -- the heartbeat edge's functions, in one table: main.luau's chunk is near Luau's limit of 200 locals
  -- ---- the work heartbeat (c0265): the one place that reads and writes the heartbeat branches ----
  
-@@ -1847,6 +1880,47 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
+@@ -1847,6 +1881,47 @@ function cmd.beat(pos: { string }, opts: { [string]: { string } })
  	end
  end
  
@@ -555,7 +560,7 @@ index 30870c42f..ee1718095 100644
  function cmd.lost()
  	if guarded(true) then
  		stdio.ewrite("lost: not read in a protected checkout (no remote is read)\n")
-@@ -3406,33 +3480,47 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
+@@ -3406,33 +3481,53 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
  	table.sort(found, function(a, b)
  		return if a.id == b.id then a.path < b.path else a.id < b.id
  	end)
@@ -564,8 +569,9 @@ index 30870c42f..ee1718095 100644
 -			local doc = `{f.path}/{f.id}.md`
 -			if f.kind == kind and idsLib.spaceOf(f.id) == kind and fs.isFile(doc) then
 +	-- c0249: the stack in order, as `rank.listOrder` gives it: every blocked item first (rafts, then issues: c0250's
-+	-- shape), then lost work (the heartbeat's order; read as `./zn lost` reads it, and not read, with a word on stderr, when
-+	-- it cannot be), then the rafts and then the issues, a set rank before an unset one, the ticket number as the tiebreak.
++	-- shape), then, only with --lost, lost work (the heartbeat's order; read as `./zn lost` reads it, and not read, with a word
++	-- on stderr, when it cannot be), then the rafts and then the issues, a set rank before an unset one, the ticket number as
++	-- the tiebreak. Without --lost the command stays offline (decided with the user, 2026-11-16: "Stay offline, fast").
 +	local rankLib = require("./rank")
 +	local roots = store.roots()
 +	local all: { rankLib.Fact } = {}
@@ -575,7 +581,12 @@ index 30870c42f..ee1718095 100644
 +		local doc = `{f.path}/{f.id}.md`
 +		if idsLib.spaceOf(f.id) == f.kind and fs.isFile(doc) then
 +			local fm = store.readFront(doc)
-+			local fact = rankLib.factOf(doc, fm, roots)
++			local recordPath = `{f.path}/provenance.md`
++			-- who set a rank is in the item's record: read it only for an item that has a rank (c0249)
++			local record = if (fm.rank or "") ~= "" and fs.isFile(recordPath)
++				then fs.readFile(recordPath)
++				else nil
++			local fact = rankLib.factOf(doc, fm, roots, record)
 +			if fact then
 +				table.insert(all, fact)
  				-- review 003 F3: a retired raft is shown as retired, never as a live backlog raft no command takes
@@ -610,15 +621,15 @@ index 30870c42f..ee1718095 100644
  			end
  		end
  	end
-+	-- reading lost work asks the remote (a fetch of main and of the heartbeat branches: seconds, not milliseconds);
-+	-- --no-lost skips it, and so does a repository with no origin or PICKMAN_PUBLISH=0
-+	for _, fact in rankLib.listOrder(shownFacts, if opts["--no-lost"] then {} else rk.lost("list"), all) do
++	-- reading lost work asks the remote (a fetch of main and of the heartbeat branches: seconds, not milliseconds), so only
++	-- --lost does; `list` is offline otherwise, and so is a repository with no origin or PICKMAN_PUBLISH=0
++	for _, fact in rankLib.listOrder(shownFacts, if opts["--lost"] then rk.lost("list") else {}, all) do
 +		print(lines[fact])
 +	end
  	local broken = 0
  	for _, p in audit.run(".") do
  		if audit.ITEM_CODES[p.code] then
-@@ -6798,23 +6886,7 @@ end
+@@ -6798,23 +6893,7 @@ end
  function cmd.provenance(positional: { string }, options: { [string]: { string } })
  	-- The live actor of a command that records: --actor, then ZN_ACTOR, then an agent-session hint, then the git name.
  	local function liveActor(opts: { [string]: { string } }?): string
@@ -643,7 +654,7 @@ index 30870c42f..ee1718095 100644
  	end
  
  	-- c0263: `provenance record <id> <event> [--actor A] [--detail k=v]` publishes one row of an item's provenance.md
-@@ -6877,6 +6949,212 @@ function cmd.provenance(positional: { string }, options: { [string]: { string }
+@@ -6877,6 +6956,223 @@ function cmd.provenance(positional: { string }, options: { [string]: { string }
  	recordRow(rest, options)
  end
  
@@ -711,6 +722,7 @@ index 30870c42f..ee1718095 100644
 +		local docs: { [string]: { path: string, text: string } } = {}
 +		local wanted: { string } = {}
 +		local places: { [string]: string } = {}
++		local recordOf: { [string]: string } = {}
 +		for _, p in paths do
 +			local pid, rel = publish.itemPath(p)
 +			if pid and rel == `{pid}.md` then
@@ -727,9 +739,24 @@ index 30870c42f..ee1718095 100644
 +			end
 +		end
 +		local texts = (readMany :: ({ string }) -> { string? })(wanted)
++		-- who set a rank is in the item's provenance.md: read the record of each item that has a rank, in one batch
++		local records: { string } = {}
++		for i, p in wanted do
++			if (frontOf(texts[i] or "").rank or "") ~= "" then
++				local rec = string.gsub(p, "[^/]+$", "provenance.md")
++				recordOf[p] = rec
++				table.insert(records, rec)
++			end
++		end
++		local recordTexts = (readMany :: ({ string }) -> { string? })(records)
++		local recordAt: { [string]: string } = {}
++		for i, rec in records do
++			recordAt[rec] = recordTexts[i] or ""
++		end
 +		for i, p in wanted do
 +			local text = texts[i] or ""
-+			local fact = rank.factOf(p, frontOf(text), roots)
++			local fact =
++				rank.factOf(p, frontOf(text), roots, if recordOf[p] then recordAt[recordOf[p]] else nil)
 +			if fact then
 +				table.insert(facts, fact)
 +				docs[places[p]] = { path = p, text = text }
@@ -754,18 +781,18 @@ index 30870c42f..ee1718095 100644
 +		local out: { publish.Change } = {}
 +		for _, c in planned do
 +			local d = docs[c.id]
-+			local text = rank.withRank(d.text, c.rank, c.auto)
++			local text = rank.withRank(d.text, c.rank)
 +			if not text then
 +				return `{c.id}: {d.path} has no front matter`
 +			end
-+			table.insert(out, { path = d.path, content = text })
++			-- asking for the place a moved-written rank has changes no line: only its row (without `moved=`) is written
++			if text ~= d.text then
++				table.insert(out, { path = d.path, content = text })
++			end
 +			local rec = string.gsub(d.path, "[^/]+$", "provenance.md")
-+			local shownRank = if c.rank == nil
-+				then "unset"
-+				elseif c.auto then `{c.rank} auto`
-+				else tostring(c.rank)
-+			local detail = `rank={shownRank}; was={c.was or "unset"}`
-+			if c.id ~= id then
++			local detail =
++				`rank={if c.rank == nil then "unset" else tostring(c.rank)}; was={c.was or "unset"}`
++			if c.moved then
 +				detail ..= `; moved={id}`
 +			end
 +			local row, rowWhy = provenance.record(read(rec), c.id, "ranked", actor, detail, when)
@@ -801,12 +828,7 @@ index 30870c42f..ee1718095 100644
 +		print(`{id}: unchanged`)
 +	end
 +	for _, c in changes do
-+		print(
-+			`{c.id} rank {if c.rank == nil
-+				then "unset"
-+				elseif c.auto then `{c.rank} auto`
-+				else tostring(c.rank)} (was {c.was or "unset"})`
-+		)
++		print(`{c.id} rank {if c.rank == nil then "unset" else tostring(c.rank)} (was {c.was or "unset"})`)
 +	end
 +	if note then
 +		print(`{id}: {note}`)
@@ -992,10 +1014,10 @@ index b929a66be..303b4da0d 100644
  	for rel in files do
 diff --git a/z-nile/engine/rank.luau b/z-nile/engine/rank.luau
 new file mode 100644
-index 000000000..282e12b36
+index 000000000..b82014148
 --- /dev/null
 +++ b/z-nile/engine/rank.luau
-@@ -0,0 +1,654 @@
+@@ -0,0 +1,676 @@
 +--!strict
 +-- The rank of an issue or a raft (c0249): the `rank:` front-matter line, the order it gives, the move that edits it
 +-- and the pick `./zn next` prints. Pure over texts and facts; main.luau reads origin/main and the checkout and writes.
@@ -1008,6 +1030,7 @@ index 000000000..282e12b36
 +-- `rank.listOrder` is what `./zn list` prints: every blocked item first (rafts, then issues), then lost work, then the rafts
 +-- and then the issues, each in this order (c0250's shape for the blocked part, which its work-board spec pins).
 +-- A rank only orders work that is not started: an item that is not in the backlog counts as unset.
++local provenance = require("./provenance")
 +local publish = require("./publish")
 +local statusLib = require("./status")
 +
@@ -1026,32 +1049,52 @@ index 000000000..282e12b36
 +	members: { string }, -- a raft's member ids
 +	dependsOn: { string }, -- an issue's depends_on ids
 +	root: string, -- the project root that holds it
-+	auto: boolean?, -- the rank was written by a move that renumbered the item, not set by a person (`rank: 30 auto`)
++	moved: boolean?, -- its latest `ranked` row in provenance.md carries `moved=`: a move that renumbered it wrote the rank, a person did not set it
 +	design: string?, -- front `design:` (the rafting pick needs `ready`)
 +	approved: boolean?, -- an approval.md sits beside the document on origin/main (the rafting pick)
 +	ownRank: number?, -- set by rank.stack only: its own rank, while `rank` holds the one the order uses
-+	ownAuto: boolean?, -- set by rank.stack only: whether its own rank is a moved-written one
++	ownMoved: boolean?, -- set by rank.stack only: whether its own rank is a moved-written one
 +}
 +
 +-- The rank a front-matter value gives: (nil, nil) for none (the line is missing or empty), (n, nil), or (nil, why). The
-+-- value is a whole number, plain (a person set it) or followed by ` auto` (a move that renumbered the item wrote it).
++-- value is a bare whole number: who set it is in the item's provenance.md, never in the line (`rank.movedBy`).
 +function rank.parse(value: string?): (number?, string?)
 +	if value == nil or value == "" then
 +		return nil, nil
 +	end
-+	local digits = string.match(value, "^(%d+) auto$") or value
-+	if #digits > 6 or not string.match(digits, "^[1-9]%d*$") then
++	if #value > 6 or not string.match(value, "^[1-9]%d*$") then
 +		return nil,
-+			`rank: {value} is not a whole number from 1 to {rank.MAX} (no sign, no leading zero, no fraction; `
-+				.. "optionally followed by ` auto`); leave it empty or remove the line to unset it"
++			`rank: {value} is not a whole number from 1 to {rank.MAX} (no sign, no leading zero, no fraction); `
++				.. "leave it empty or remove the line to unset it"
 +	end
-+	return tonumber(digits), nil
++	return tonumber(value), nil
 +end
 +
-+-- Whether a front-matter value carries the ` auto` mark (a moved-written rank). A raft takes its members' best rank
-+-- from the plain ones only, so a move that renumbers items never reorders the rafts (Q5, F2 of the design review).
-+function rank.isAuto(value: string?): boolean
-+	return value ~= nil and string.match(value, "^%d+ auto$") ~= nil
++-- Whether a rank was written by a move that renumbered the item rather than set by a person, read from the item's
++-- provenance.md (`text`, nil when there is none): its latest `ranked` row carries a `moved=` field (the move writes the
++-- row of every item it renumbers with `moved=<the item it moved>`). A person-set rank has a latest `ranked` row with no
++-- `moved=`, or no row at all (a hand edit). A raft takes its members' best rank from the person-set ones only, so a move
++-- that renumbers items never reorders the rafts (Q5, F2 of the design review). A record that does not parse counts as
++-- person-set (the audit refuses it).
++function rank.movedBy(text: string?): boolean
++	if text == nil or text == "" then
++		return false
++	end
++	local rows = provenance.parse(text)
++	if not rows then
++		return false
++	end
++	for i = #rows, 1, -1 do
++		if rows[i].event == "ranked" then
++			for part in string.gmatch(rows[i].detail, "[^;]+") do
++				if string.match(part, "^%s*moved=") then
++					return true
++				end
++			end
++			return false
++		end
++	end
++	return false
 +end
 +
 +-- What is wrong with the rank lines of a document, or nil. The front block is read as store.readFront reads it (the
@@ -1079,11 +1122,11 @@ index 000000000..282e12b36
 +	return why
 +end
 +
-+-- The document with its rank set to `value` (a whole number, ` auto` when `auto`) or removed (nil). Every `rank:` line
++-- The document with its rank set to `value` (a whole number) or removed (nil). Every `rank:` line
 +-- goes; a set rank is written once, right after `id:` (at the top of the block when there is none): the line every prep
 +-- branch leaves alone, so a rank published while a prep is open merges without a conflict (`status:` and `design:` are
 +-- the lines a prep edits, and a line beside them conflicts). Nil when there is no front block.
-+function rank.withRank(text: string, value: number?, auto: boolean?): string?
++function rank.withRank(text: string, value: number?): string?
 +	local head, block, rest = string.match(text, "^(%-%-%-\n)(.-\n)(%-%-%-.*)$")
 +	if not head or not block or not rest then
 +		return nil
@@ -1102,7 +1145,7 @@ index 000000000..282e12b36
 +				break
 +			end
 +		end
-+		table.insert(kept, at, if auto then `rank: {value} auto` else `rank: {value}`)
++		table.insert(kept, at, `rank: {value}`)
 +	end
 +	local body = table.concat(kept, "\n")
 +	if #kept > 0 then
@@ -1144,8 +1187,9 @@ index 000000000..282e12b36
 +end
 +
 +-- The fact of one document: `front` is its front matter as a key -> value table (any reader's). The status word is the
-+-- effective one (status.effective), or the stored `blocked`. A done item is its id and state alone.
-+function rank.factOf(path: string, front: { [string]: string }, roots: { string }): Fact?
++-- effective one (status.effective), or the stored `blocked`. A done item is its id and state alone. `record` is the text
++-- of the item's provenance.md, when the caller has read it (it needs it only for an item that has a rank).
++function rank.factOf(path: string, front: { [string]: string }, roots: { string }, record: string?): Fact?
 +	local state, id, root = rank.where(path, roots)
 +	if not state or not id or not root then
 +		return nil
@@ -1182,7 +1226,7 @@ index 000000000..282e12b36
 +		state = state,
 +		status = word,
 +		rank = own,
-+		auto = own ~= nil and rank.isAuto(front.rank),
++		moved = own ~= nil and rank.movedBy(record),
 +		raft = if (front.raft or "") ~= "" then front.raft else nil,
 +		members = ids(front.issues),
 +		dependsOn = ids(front.depends_on),
@@ -1218,7 +1262,7 @@ index 000000000..282e12b36
 +end
 +
 +-- A raft's rank for ordering: its own, else the best (lowest) rank a person set on one of its members (a rank a move
-+-- wrote, ` auto`, does not count: an unrelated move must not reorder the rafts); an issue's is its own. nil: unset.
++-- wrote, `moved=` in its provenance.md, does not count: an unrelated move must not reorder the rafts); an issue's is its own.
 +function rank.effective(f: Fact, byId: { [string]: Fact }): number?
 +	local own = ranked(f)
 +	if own ~= nil or f.kind ~= "raft" then
@@ -1227,7 +1271,7 @@ index 000000000..282e12b36
 +	local best: number? = nil
 +	for _, mid in f.members do
 +		local m = byId[mid]
-+		local r = if m and not m.auto then ranked(m) else nil
++		local r = if m and not m.moved then ranked(m) else nil
 +		if r ~= nil and (best == nil or r < best) then
 +			best = r
 +		end
@@ -1425,7 +1469,7 @@ index 000000000..282e12b36
 +	return out
 +end
 +
-+export type Change = { id: string, rank: number?, was: number?, auto: boolean? } -- auto: a moved-written rank (` auto`)
++export type Change = { id: string, rank: number?, was: number?, moved: boolean? } -- moved: its `ranked` row carries `moved=`
 +
 +-- The facts a move can place: the backlog items of the kind, in the order a rank gives them (no lost, no blocked).
 +function rank.stack(facts: { Fact }, kind: string): { Fact }
@@ -1435,7 +1479,7 @@ index 000000000..282e12b36
 +		if f.kind == kind and f.state == "backlog" then
 +			local c = table.clone(f)
 +			c.ownRank = f.rank
-+			c.ownAuto = f.auto
++			c.ownMoved = f.moved
 +			c.rank = rank.effective(f, byId)
 +			table.insert(mine, c)
 +		end
@@ -1480,9 +1524,10 @@ index 000000000..282e12b36
 +--   "unset"                  no rank
 +-- The moved item is given a plain rank in a gap (its neighbours' ranks 10 apart, so one move edits one file). Dropped
 +-- among or after unset items, it is given a rank with the unset items above it in the stack, in steps of 10 after the
-+-- highest rank there is, and they are marked ` auto` (a person did not set them: a raft's rank ignores them); no rank that
-+-- exists changes. Only when there is no room between two ranked neighbours are the ranked items renumbered 10, 20, 30 ...
-+-- from the top (a person-set rank stays plain, an auto one stays auto). An empty result changes nothing.
++-- highest rank there is, and their `ranked` rows carry `moved=` (a person did not set them: a raft's rank ignores them); no
++-- rank that exists changes. Only when there is no room between two ranked neighbours are the ranked items renumbered 10, 20,
++-- 30 ... from the top, each but the moved one with `moved=` in its row. An empty result changes nothing; asking for the
++-- place a moved-written rank already has changes no line but writes a row without `moved=`, which makes it the person's.
 +function rank.plan(
 +	stack: { Fact },
 +	id: string,
@@ -1503,10 +1548,10 @@ index 000000000..282e12b36
 +		if n < 1 or n > rank.MAX or n ~= math.floor(n) then
 +			return nil, `rank {n} is not a whole number from 1 to {rank.MAX}`
 +		end
-+		if me.ownRank == n and not me.ownAuto then
++		if me.ownRank == n and not me.ownMoved then
 +			return {}, nil
 +		end
-+		return { { id = id, rank = n, was = me.ownRank, auto = false } }, nil
++		return { { id = id, rank = n, was = me.ownRank, moved = false } }, nil
 +	elseif how == "unset" then
 +		return if me.ownRank == nil then {} else { { id = id, rank = nil, was = me.ownRank } }, nil
 +	end
@@ -1548,9 +1593,9 @@ index 000000000..282e12b36
 +	local want = table.clone(others)
 +	table.insert(want, at, id)
 +	if same(want, current) then
-+		-- already there; but asking for the place makes an auto rank the person's own
-+		if me.ownRank ~= nil and me.ownAuto then
-+			return { { id = id, rank = me.ownRank, was = me.ownRank, auto = false } }, nil
++		-- already there; but asking for the place makes a moved-written rank the person's own
++		if me.ownRank ~= nil and me.ownMoved then
++			return { { id = id, rank = me.ownRank, was = me.ownRank, moved = false } }, nil
 +		end
 +		return {}, nil
 +	end
@@ -1590,7 +1635,7 @@ index 000000000..282e12b36
 +				id = want[i],
 +				rank = base + (i - first + 1) * rank.GAP,
 +				was = byId[want[i]].ownRank,
-+				auto = i ~= at,
++				moved = i ~= at,
 +			})
 +		end
 +		local checked = keeps(changes)
@@ -1618,9 +1663,9 @@ index 000000000..282e12b36
 +		end
 +	end
 +	if pick ~= nil and pick >= 1 and pick <= rank.MAX then
-+		local one = keeps({ { id = id, rank = pick, was = me.ownRank, auto = false } })
++		local one = keeps({ { id = id, rank = pick, was = me.ownRank, moved = false } })
 +		if one then
-+			return if me.ownRank == pick and not me.ownAuto then {} else one, nil
++			return if me.ownRank == pick and not me.ownMoved then {} else one, nil
 +		end
 +	end
 +	-- no room: renumber the ranked items from the top, through the moved item
@@ -1637,9 +1682,8 @@ index 000000000..282e12b36
 +	for i = 1, last do
 +		local wid = want[i]
 +		local f = byId[wid]
-+		local plain = wid == id or (f.ownRank ~= nil and not f.ownAuto)
-+		if f.ownRank ~= i * rank.GAP or (wid == id and f.ownAuto) then
-+			table.insert(changes, { id = wid, rank = i * rank.GAP, was = f.ownRank, auto = not plain })
++		if f.ownRank ~= i * rank.GAP or (wid == id and f.ownMoved) then
++			table.insert(changes, { id = wid, rank = i * rank.GAP, was = f.ownRank, moved = wid ~= id })
 +		end
 +	end
 +	local checked = keeps(changes)
@@ -1709,7 +1753,7 @@ index e1260ffe7..c07045d01 100644
  		end
  	end
 diff --git a/z-nile/engine/workread.luau b/z-nile/engine/workread.luau
-index 2e5781387..03e9739a3 100644
+index 2e5781387..39d080c8c 100644
 --- a/z-nile/engine/workread.luau
 +++ b/z-nile/engine/workread.luau
 @@ -8,10 +8,12 @@
@@ -1725,7 +1769,7 @@ index 2e5781387..03e9739a3 100644
  local readycheck = require("./readycheck")
  local sh = require("../lib/sh")
  local stack = require("./stack")
-@@ -311,6 +313,17 @@ local function build(
+@@ -311,6 +313,20 @@ local function build(
  			end
  		end
  	end
@@ -1735,7 +1779,10 @@ index 2e5781387..03e9739a3 100644
 +		for _, mid in issues do
 +			local mf: { [string]: string } = memberFront[mid] or {}
 +			local m = rank.parse(mf.rank)
-+			if m ~= nil and not rank.isAuto(mf.rank) and (best == nil or m < best) then
++			-- a rank a move wrote (`moved=` in the member's provenance.md) does not count: one record read per ranked member
++			local found = byId[mid]
++			local record = if found then docs[(string.gsub(found.path, "[^/]+$", "provenance.md"))] else nil
++			if m ~= nil and not rank.movedBy(record) and (best == nil or m < best) then
 +				best = m
 +			end
 +		end
@@ -1743,7 +1790,7 @@ index 2e5781387..03e9739a3 100644
  	local layers: { work.LayerFact } = if at.state == "active"
  		then layerFacts(id, issues, tips, mainSha)
  		else {}
-@@ -334,6 +347,7 @@ local function build(
+@@ -334,6 +350,7 @@ local function build(
  		trace = trace,
  		traceOk = trace and final == "approved",
  		root = string.match(at.dir, "^(.*%.tracker)/") or "",
@@ -1751,7 +1798,7 @@ index 2e5781387..03e9739a3 100644
  	}
  end
  
-@@ -472,6 +486,64 @@ function workread.held(): string?
+@@ -472,6 +489,85 @@ function workread.held(): string?
  	return string.match(cwd, "/%.worktree/(R%d%d%d%d)$")
  end
  
@@ -1787,6 +1834,27 @@ index 2e5781387..03e9739a3 100644
 +		end
 +	end
 +	local blobs = catBatch(specs)
++	-- who set a rank is in the item's provenance.md (c0249): one more batch, for the backlog items that have a rank
++	local recordSpecs: { string } = {}
++	local recordIndex: { [string]: number } = {}
++	do
++		local k = 0
++		for _, a in at do
++			if a.state == "backlog" then
++				k += 1
++				if (frontText(blobs[k] or "").rank or "") ~= "" then
++					table.insert(
++						recordSpecs,
++						`origin/main:{(string.gsub(a.path, "[^/]+$", "provenance.md"))}`
++					)
++					recordIndex[a.path] = #recordSpecs
++				end
++			elseif a.state ~= "done" then
++				k += 1
++			end
++		end
++	end
++	local recordBlobs = catBatch(recordSpecs)
 +	local n = 0
 +	local reviews: { string } = {}
 +	local pending: { { id: string, doc: string } } = {}
@@ -1796,7 +1864,7 @@ index 2e5781387..03e9739a3 100644
 +			n += 1
 +			text = blobs[n] or ""
 +		end
-+		local fact = rank.factOf(a.path, frontText(text), roots)
++		local fact = rank.factOf(a.path, frontText(text), roots, recordBlobs[recordIndex[a.path] or 0])
 +		if fact then
 +			fact.approved = approvalDirs[string.match(a.path, "^(.*)/[^/]+$") or ""] == true
 +			table.insert(facts, fact)
@@ -1816,6 +1884,33 @@ index 2e5781387..03e9739a3 100644
  function workread.collect(asked: string?): work.Input
  	local rafts: { work.RaftFact } = {}
  	local main = trim(sh.run("git", { "rev-parse", "--verify", "--quiet", "origin/main" }).stdout)
+@@ -645,6 +741,26 @@ function workread.collect(asked: string?): work.Input
+ 			docs[path] = extra[i] or ""
+ 		end
+ 	end
++	-- c0249: who set a rank is in the member's provenance.md; read the record of each backlog issue that has a rank
++	do
++		local recordPaths: { string } = {}
++		for id, at in byId do
++			if store.isIssueId(id) and at.state == "backlog" then
++				local raw = docs[at.path]
++				if raw and (frontText(raw).rank or "") ~= "" then
++					table.insert(recordPaths, (string.gsub(at.path, "[^/]+$", "provenance.md")))
++				end
++			end
++		end
++		local recordSpecs: { string } = {}
++		for _, path in recordPaths do
++			table.insert(recordSpecs, `origin/main:{path}`)
++		end
++		local recordBlobs = catBatch(recordSpecs)
++		for i, path in recordPaths do
++			docs[path] = recordBlobs[i] or ""
++		end
++	end
+ 	local promoted: { [string]: { [string]: string } } = {}
+ 	local reg = projects.load(".")
+ 	local promotePaths: { string } = {}
 diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
 index e620197d4..c93fc5947 100644
 --- a/z-nile/skills/z-design/SKILL.md
@@ -1868,7 +1963,7 @@ index 9deebd6fe..d6f99265e 100644
  ## Lessons
  Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index 93fcee899..4cd503763 100644
+index 93fcee899..12396f656 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -50,9 +50,10 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
@@ -1901,7 +1996,7 @@ index 93fcee899..4cd503763 100644
  - **Claims.** z-design claims one issue with `./zn status <id> preparing` and gives it back with `status <id> new`. The old prep's `new raft` over `new` issues still claims them with the raft's stamp, and `./zn status <R-id> preparing` claims an existing draft raft with its unprepared members. A raft move (`status <R-id> preparing|new`) never restamps a member that is `prepared` on `origin/main`, and refuses a member another raft holds there. `ready` (and a legacy `start`) refuses a raft unless it and its members are `prepared` on `origin/main`; the claim is made by `ready`, not `start`.
  - **Rafting** (z-raft). An issue's raft is its own `raft:` line, edited only in the rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly, and its sync shows the conflict. The published claim (`new raft` over prepared issues, `fold`, `recombine`, `status <R-id> preparing`) stamps the raft only, with a fresh `preparing-…` value; recombine gives its two rafts one value, and that shared stamp is what lets the carried `status <keeper> prepared` take a member whose `raft:` on `origin/main` still names the other raft. The carried move takes a member that is prepared on `origin/main` as it is, refuses one another raft holds there, and takes a `preparing` member only when it carries the raft's own stamp or a claim this checkout made (`status <id> preparing` here); any other `preparing` member is another terminal's live claim and is refused, naming it. z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (z-raft takes it out first with `./zn unfold <R-id> <id>`), and `ready` refuses a raft while a member is `preparing`. A raft's `grouped:` line records a hash of each prepared member's design as z-raft grouped it (its document without `status:` and `raft:`, `check.sh`, `acceptance/`, and its design reviews, refutes and `harvest.md`); the carried move and `ready` refuse a member whose design changed on `origin/main` since (a redesign landed inside the rafting window), a member this rafting grouped with no entry, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering the current one. `compact` and `renumber` re-record every entry that matched before they rewrote its ids, and `remap` does the same. `./zn release <R-id>` is the published give-back. An issue whose `raft:` names a retired or missing raft (audit's `dead-raft` error) is cleared by the command the error names for its state: in the backlog, `./zn unfold <R-id> <id>`, which claims nothing (there is no raft to claim) and rides in the rafting PR; in `active/`, `./zn stop <id>` first (main checkout), which gives that one issue back to the backlog as `stop` gives a member back, and `unfold` after it. An active issue with no `raft:` (`raftless-active`) goes back with `./zn stop <id>` too. A conflict on `raft:` or `depends_on:` (they are adjacent lines) after a sync means rerun z-raft for that issue: take `main`'s line and drop the issue from your raft, or take both edits when it was only `depends_on:`.
  - **A failed start.** `start` runs every local check before it claims. If a step after the claim fails (branch push, `gh pr create`), the local state is consistent: finish by hand (`git push -u origin <branch>`, `gh pr create --draft`), or give **your own** claim back with `status <R-id> prepared` (a raft started the legacy way, still in the backlog; a readied raft is given back only by `./zn stop <R-id>`). The same terminal can re-run `start` if it died before moving anything (it remembers the claim in `.cache/tracker-claim-<R-id>`); another terminal is refused.
-+- **Rank** (c0249). `rank: <whole number>` in an issue's or a raft's front matter orders the backlog: the lowest first, an unset rank (no line, or an empty one) last, equal or unset ranks by ticket number, so the order is always stable. `./zn rank <id> top|last|before <id>|after <id>|<n>|unset` writes it on `origin/main` (gap numbering, 10, 20, 30; a card dropped among unset ones ranks the unset cards above it, marked `rank: 30 auto`, and one dropped below them is unset) and appends a `ranked` row to each changed item's `provenance.md`. A raft's own rank overrides its members'; an unset one takes the best rank a person set on a member (an `auto` rank, written by a move, does not count, so a move never reorders the rafts). z-ticket, z-design and z-raft write no rank; only a person sets one. `./zn next` prints lost work first, then the claimable raft with the best rank, then the best-ranked approved issue that is in no raft (a worker rafts it with `./zn raft-plan --apply`), then, only when no raft is claimable and no issue waits to be rafted, the best-ranked issue a worker may draft; `depends_on` that are not done and a `blocked` status skip an item without changing its rank. `./zn list` shows every blocked item first, then lost work, then the rafts and the issues in this order; the board shows this order, with lost work first inside each band. `./zn audit` rejects a `rank:` that is not a whole number from 1 to 999999, or is written twice.
++- **Rank** (c0249). `rank: <whole number>` in an issue's or a raft's front matter orders the backlog: the lowest first, an unset rank (no line, or an empty one) last, equal or unset ranks by ticket number, so the order is always stable. `./zn rank <id> top|last|before <id>|after <id>|<n>|unset` writes it on `origin/main` (gap numbering, 10, 20, 30; a card dropped among unset ones ranks the unset cards above it, and one dropped below them is unset) and appends a `ranked` row to each changed item's `provenance.md`. A raft's own rank overrides its members'; an unset one takes the best rank a person set on a member (a rank a move wrote, which the latest `ranked` row of the member's `provenance.md` shows by a `moved=` field, does not count, so a move never reorders the rafts; a renumbering writes its `ranked` rows with `moved=`). z-ticket, z-design and z-raft write no rank; only a person sets one. `./zn next` prints lost work first, then the claimable raft with the best rank, then the best-ranked approved issue that is in no raft (a worker rafts it with `./zn raft-plan --apply`), then, only when no raft is claimable and no issue waits to be rafted, the best-ranked issue a worker may draft; `depends_on` that are not done and a `blocked` status skip an item without changing its rank. `./zn list` stays offline and shows every blocked item first, then the rafts and the issues in this order; `./zn list --lost` also asks the remote and puts lost work after the blocked items; the board shows this order, with lost work first inside each band. `./zn audit` rejects a `rank:` that is not a whole number from 1 to 999999, or is written twice.
  - **Heartbeat and lost work.** A claim (`preparing-…`, or `active-…` on a readied raft) is a lease proved by a **heartbeat branch** `refs/heads/hb/<claim stamp>` on origin: one commit with `main`'s tree and tip as parent (so `./zn busy` never sees it), whose subject `hb <stamp> <epoch>` carries the time, replaced by every `./zn beat <id>` with `--force-with-lease` and never a commit on `main`; the commit carries the checkout's own git identity, never a fixture-looking one (the spec runner's tripwire reads a new ref authored `@example.invalid` as a fixture leak). A claim whose newest beat (else its landing time) is older than 900 s (three beats of 300 s) is stale; unless an open pull request or a dispatcher `questions.md` names it (**parked**, shown `[parked]`), it is **lost**. `./zn lost` lists lost claims, the longest silent first (`<id> <state> <minutes>m`), and `./zn status` marks them `[lost <n>m]` and lists them first; a stale claim that could not be confirmed (the pull requests or a beat branch unreadable, or no landing time) is `[stale?]` and never lost; with the beats unreadable the list prints unmarked. A claim made before the heartbeat landed (at or before the commit that added `z-nile/engine/heartbeat.luau`) that has never beaten and would otherwise be stale reads `[no beat]`, never lost, until it beats once; every claim made after is flatlined (lost when silent past the limit). **Take lost work first**, before anything not yet started, whatever its rank. `beat` pushes only `hb/*` branches and changes no tracked file, so it runs in the main checkout too, and never from a protected checkout. `ZN_NOW`, `ZN_BEAT_EVERY` and `ZN_NET_SECONDS` are honoured only inside spec runs. A malformed branch under `hb/` makes every stale claim unknown and is named with its cure (`git push origin :refs/heads/hb/<name>`).
  - **Offline.** `PICKMAN_PUBLISH=0` (or a repository without `origin`) keeps every command local, as it was before. Publishing and every other command that changes a repository first check that git's repository root is the checkout the tracker lives in; read-only commands do not.
  - **Giving back a readied raft.** `status` refuses any item in `active/` on `origin/main` ("<id> is readied (in active/): use ./zn stop <R>"); `./zn stop <R-id>` is the way to give back a readied raft, and it also gives back a raft claimed by the legacy `start`.

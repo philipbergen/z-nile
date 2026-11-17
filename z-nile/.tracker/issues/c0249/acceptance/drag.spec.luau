@@ -119,22 +119,29 @@ return t.spec("c0249 a drag among other people's work", function(it)
 	)
 
 	it(
-		"AC3: a drag among unset items never reorders the rafts: the ranks it writes on their members are auto",
+		"AC3: a drag among unset items never reorders the rafts: the rows it writes for their members carry moved=",
 		function()
 			t.expect(must(h.f.main, { "next" })).toBe("R0301 raft rank unset")
 			local before = fixture.git(h.f.origin, { "rev-parse", "main" })
 			-- c0310 after c0312 ranks c0311 and c0312 (the members, above the drop) and c0310
 			t.expect(must(h.f.main, { "rank", "c0310", "after", "c0312" })).toBe(table.concat({
-				"c0311 rank 10 auto (was unset)",
-				"c0312 rank 20 auto (was unset)",
+				"c0311 rank 10 (was unset)",
+				"c0312 rank 20 (was unset)",
 				"c0310 rank 30 (was unset)",
 			}, "\n"))
 			t.expect(commits(before)).toBe("1")
-			t.expect(rankLine("c0311")).toBe("10 auto")
-			t.expect(rankLine("c0312")).toBe("20 auto")
+			-- the lines are bare integers; who set them is in provenance.md (moved= on the members', none on the moved item's)
+			t.expect(rankLine("c0311")).toBe("10")
+			t.expect(rankLine("c0312")).toBe("20")
 			t.expect(rankLine("c0310")).toBe("30")
+			t.expect(has(onOrigin(`{P}/c0311/provenance.md`), "rank=10; was=unset; moved=c0310 |")).toBe(true)
+			t.expect(has(onOrigin(`{P}/c0312/provenance.md`), "rank=20; was=unset; moved=c0310 |")).toBe(true)
+			t.expect(has(onOrigin(`{P}/c0310/provenance.md`), "rank=30; was=unset |")).toBe(true)
+			t.expect(has(onOrigin(`{P}/c0310/provenance.md`), "moved=")).toBe(false)
 			-- the raft that was first is still first: with every rank counted, R0302 (member c0311, 10) would have jumped it
 			t.expect(must(h.f.main, { "next" })).toBe("R0301 raft rank unset")
+			-- `work next` reads the members' records the same way (workread.collect), so it takes R0301 as well
+			t.expect(has(must(h.f.main, { "work", "next" }), "R0301: ready")).toBe(true)
 			t.expect(has(must(h.f.main, { "list", "backlog" }), "R0301")).toBe(true)
 			local listed = must(h.f.main, { "list", "backlog" })
 			t.expect(string.find(listed, "R0301", 1, true) < string.find(listed, "R0302", 1, true)).toBe(true)
@@ -142,12 +149,26 @@ return t.spec("c0249 a drag among other people's work", function(it)
 	)
 
 	it(
-		"AC3: a rank a person puts on a member moves its raft, and asking for an auto rank's place makes it a person's",
+		"AC3: a rank a person puts on a member moves its raft, and asking for a moved-written rank's place makes it a person's",
 		function()
+			-- c0311 (10, written by the drag) asked for its own place, the top: no line changes, a row without moved= is
+			-- appended, and the rank is now a person's: R0302 (member c0311) follows it
+			local at = fixture.git(h.f.origin, { "rev-parse", "main" })
+			t.expect(must(h.f.main, { "rank", "c0311", "top" })).toBe("c0311 rank 10 (was 10)")
+			t.expect(fixture.git(h.f.origin, { "diff", "--name-only", `{at}..main` }))
+				.toBe(`{P}/c0311/provenance.md`)
+			t.expect(rankLine("c0311")).toBe("10")
+			t.expect(has(onOrigin(`{P}/c0311/provenance.md`), "rank=10; was=10 |")).toBe(true)
+			t.expect(must(h.f.main, { "next" })).toBe("R0302 raft rank 10")
+			t.expect(has(must(h.f.main, { "work", "next" }), "R0302: ready")).toBe(true)
+			-- asking again changes nothing: it is a person's now
+			local again = fixture.git(h.f.origin, { "rev-parse", "main" })
+			t.expect(must(h.f.main, { "rank", "c0311", "top" })).toBe("c0311: unchanged")
+			t.expect(fixture.git(h.f.origin, { "rev-parse", "main" })).toBe(again)
 			must(h.f.main, { "rank", "c0311", "5" })
 			t.expect(rankLine("c0311")).toBe("5")
 			t.expect(must(h.f.main, { "next" })).toBe("R0302 raft rank 5")
-			-- c0312 (auto 20) asked for its own place, the top: now a person's rank, and R0301 follows it
+			-- c0312 (20, written by the drag) asked for the top: now a person's rank, and R0301 follows it
 			t.expect(must(h.f.main, { "rank", "c0312", "top" })).toBe("c0312 rank 2 (was 20)")
 			t.expect(rankLine("c0312")).toBe("2")
 			t.expect(must(h.f.main, { "next" })).toBe("R0301 raft rank 2")

@@ -1,6 +1,6 @@
 import subprocess, sys, json, re, os, shutil
-ROOT='/Users/philipbergen/code/pickman/.worktree/proto-c0249-scratch'
-PREP='/Users/philipbergen/code/pickman/.worktree/prep-issue-rank-order'
+ROOT='/Users/philipbergen/code/pickman/.worktree/proto-c0249-rulings'
+PREP='/Users/philipbergen/code/pickman/.worktree/rev-c0249-rulings'
 E='z-nile/engine/'
 ACC='.tracker/issues/c0249/acceptance/'
 M=[]
@@ -35,7 +35,7 @@ m('L7','a raft is placed in a move by its effective rank',R,'c.rank = rank.effec
 m('W1','work next takes rafts in rank order',E+'work.luau','return rank.less(a.rank, a.id, b.rank, b.id)','return a.id < b.id','rank','AC4: ./zn work next')
 M_=E+'main.luau'
 m('C1','rank writes a ranked row for every changed item',M_,'table.insert(out, { path = rec, content = row })','','command','AC2: rank top')
-m('C2','a neighbour\'s row names the item that moved it',M_,'if c.id ~= id then\n\t\t\t\tdetail ..= `; moved={id}`','if false then\n\t\t\t\tdetail ..= `; moved={id}`','command','AC2: a move among unset')
+m('C2','a neighbour\'s row names the item that moved it',M_,'if c.moved then\n\t\t\t\tdetail ..= `; moved={id}`','if false then\n\t\t\t\tdetail ..= `; moved={id}`','command','AC2: a move among unset')
 m('C4','rank refuses an item that is not in the backlog',M_,'elseif me.state ~= "backlog" then','elseif false then','command','AC2: a refused rank')
 m('C5','an empty --before means last',M_,'if b == "" then "last" else "before"','if b == "" then "top" else "before"','command','AC2: --before with an empty id')
 m('C10','next drafts only issues whose idea was challenged',E+'workread.luau','drafts[p.id] = idea.designRefusal(p.doc, got[i], p.id) == nil','drafts[p.id] = true','command','AC4: with no claimable')
@@ -60,14 +60,12 @@ m('D4','the templates write no rank','z-nile/templates/issue/doc.md','raft: {{RA
 
 m('P6','a set rank is written right after id:',R,'if string.match(line, "^id:") then\n\t\t\t\tat = i + 1','if string.match(line, "^status:") then\n\t\t\t\tat = i','rank','AC1: setting a rank')
 m('P23','next skips a blocked item',R,'elseif f.status == "new" and ctx.mayDraft(f) then','elseif (f.status == "new" or rank.isBlocked(f.status)) and ctx.mayDraft(f) then','rank','AC4: next skips')
-m('Q1','a moved-written rank (auto) parses as its number',R,'local digits = string.match(value, "^(%d+) auto$") or value','local digits = value','rank','AC1: a rank is a whole number')
-m('Q2','the auto mark is read',R,'return value ~= nil and string.match(value, "^%d+ auto$") ~= nil','return false','rank','AC1: a rank is a whole number')
-m('Q3','a raft takes only the ranks a person set on its members',R,'local r = if m and not m.auto then ranked(m) else nil','local r = if m then ranked(m) else nil','rank','AC3: a rank a move wrote')
-m('Q4','the unset items a move ranks are marked auto',R,'auto = i ~= at,','auto = false,','rank','AC3: a rank a move wrote')
+m('Q3','a raft takes only the ranks a person set on its members',R,'local r = if m and not m.moved then ranked(m) else nil','local r = if m then ranked(m) else nil','rank','AC3: a rank a move wrote')
+m('Q4','the rows of the unset items a move ranks carry moved=',R,'moved = i ~= at,','moved = false,','rank','AC3: a rank a move wrote')
 m('Q5','new ranks start after the highest rank there is',R,'base = math.max(base, rankOf(i) or 0)','base = base','rank','AC2: with no gap')
 m('Q6','a drop below the unset items unsets the moved item',R,'if how == "last" and anyUnset then','if false then','rank','AC2: top, last')
-m('Q7','a renumbering keeps a person-set rank plain and an auto one auto',R,'local plain = wid == id or (f.ownRank ~= nil and not f.ownAuto)','local plain = wid == id','rank','AC2: with no gap')
-m('Q8','asking for the place of an auto rank makes it a person\'s',R,'if me.ownRank ~= nil and me.ownAuto then','if false then','rank','AC3: a rank a move wrote')
+m('Q7','a renumbering writes moved= on every row but the moved item\'s',R,'moved = wid ~= id })','moved = false })','rank','AC2: with no gap')
+m('Q8','asking for the place of a moved-written rank makes it a person\'s',R,'if me.ownRank ~= nil and me.ownMoved then','if false then','rank','AC3: a rank a move wrote')
 m('Q9','list shows lost work after the blocked items',R,'local lostList: { string } = lost or {}','local lostList: { string } = {}','rank','AC5: list puts every blocked')
 m('Q10','list shows every blocked item first',R,'table.insert(if rank.isBlocked(f.status) then blocked else rest, f)','table.insert(rest, f)','rank','AC5: list puts every blocked')
 m('Q11','list shows the rafts before the issues',R,'for _, kind in { "raft", "issue" } do','for _, kind in { "issue", "raft" } do','rank','AC5: list puts every blocked')
@@ -77,18 +75,18 @@ m('Q14','a path is an item only under a registered root',R,'if id and rel == `{i
 m('C3','the main checkout is fast-forwarded after a rank',M_,'brought = pullMain()','brought = nil','command','AC2: rank top')
 m('C6','next puts lost work first',M_,'table.insert(out, v.id)','','command','AC4: next puts lost')
 m('C9','the audit rejects a malformed rank',E+'audit.luau','local why = rank.problem(fs.readFile(doc))','local why = nil :: string?','command','AC6')
-m('C12','list reads lost work',M_,'if opts["--no-lost"] then {} else rk.lost("list")','{}','command','AC5: list puts a lost')
-m('C13','list says when it cannot read lost work',M_,'lost work not read ({j.beatsError or j.prsError}); unknown is never lost','lost work ({j.beatsError or j.prsError}); unknown is never lost','command','AC5: list puts a lost')
-m('C14','list is the stack in rank.listOrder',M_,'rankLib.listOrder(shownFacts, if opts["--no-lost"] then {} else rk.lost("list"), all)','rankLib.order(shownFacts, { world = all })','command','AC5')
+m('C12','list --lost reads lost work',M_,'if opts["--lost"] then rk.lost("list") else {}','{}','command','AC5: list stays offline')
+m('C13','list --lost says when it cannot read lost work',M_,'lost work not read ({j.beatsError or j.prsError}); unknown is never lost','lost work ({j.beatsError or j.prsError}); unknown is never lost','command','AC5: list stays offline')
+m('C14','list is the stack in rank.listOrder',M_,'rankLib.listOrder(shownFacts, if opts["--lost"] then rk.lost("list") else {}, all)','rankLib.order(shownFacts, { world = all })','command','AC5')
 m('C15','a drop below the unset items says so',M_,'	if note then\n		print(`{id}: {note}`)\n	end','','command','AC2: --before with an empty id')
 m('C17','the plan is made from the base each publish attempt fetched',M_,'local texts = (readMany :: ({ string }) -> { string? })(wanted)','rk.cache = rk.cache or (readMany :: ({ string }) -> { string? })(wanted)\n\t\tlocal texts = rk.cache','drag','AC2: two drags at once')
 m('C18','next reads origin/main, not this checkout',E+'workread.luau','if state ~= "done" then\n\t\t\t\ttable.insert(specs, `origin/main:{path}`)','if state ~= "done" then\n\t\t\t\ttable.insert(specs, `HEAD:{path}`)','command','AC4: next reads origin')
 m('C19','rank in the main checkout needs a clean main',M_,'if inMain then\n\t\tmainCheckoutGuards("rank")\n\tend','if false then\n\t\tmainCheckoutGuards("rank")\n\tend','command','AC2: a refused rank')
 m('C20','next prints the rafting pick',E+'workread.luau','fact.approved = approvalDirs[string.match(a.path, "^(.*)/[^/]+$") or ""] == true','fact.approved = false','command','AC4: with no claimable raft')
-m('R1','a drag among unset items never reorders the rafts',R,'if m and not m.auto','if m','drag','AC3: a drag among unset')
-m('R2','a person-set member rank moves its raft',E+'workread.luau','if m ~= nil and not rank.isAuto(mf.rank) and','if false and','command','AC3')
+m('R1','a drag among unset items never reorders the rafts',R,'if m and not m.moved','if m','drag','AC3: a drag among unset')
+m('R2','a person-set member rank moves its raft',E+'workread.luau','if m ~= nil and not rank.movedBy(record) and','if false and','command','AC3')
 m('B5','the board views list their items in the stack\'s order',E+'board.luau','stackOrder((views.rafts :: any)[name], raftById :: any)','table.sort((views.rafts :: any)[name])','board','AC5: board.collect')
-m('B6','the board\'s raft rank counts the ranks a person set',E+'board.luau','if m ~= nil and not autoIds[id] and','if m ~= nil and','board','AC5: board.collect')
+m('B6','the board\'s raft rank counts the ranks a person set',E+'board.luau','if m ~= nil and not movedIds[id] and','if m ~= nil and','board','AC5: board.collect')
 m('B7','a blocked item is first in a board view',E+'board.luau','if blockedIds[a] ~= blockedIds[b] then','if false then','board','AC5: board.collect')
 m('H5','the publisher hands a build many files in one read',E+'publish.luau','out[i] = string.sub(text, at, at + n - 1)','out[i] = ""','hash','AC2: the publisher hands')
 m('A4','a saved move drops the session order',O+'Service.qml','        root.orders = ({})\n','','app','AC7')
@@ -96,10 +94,24 @@ m('A6','the app shows the notice of a drop below the unset cards',O+'Service.qml
 m('D5','AGENTS.md lists rank among the commands that move the main checkout','AGENTS.md','(`ready`, `stop`, `rank`, `sync`','(`ready`, `stop`, `sync`','docs','AC8: the agents file')
 m('D6','c0265\'s label is not regressed','z-nile/README.md','even when a person started it without changing its rank. *exists* (c0265)','even when a person started it without changing its rank. *designed* (c0265)','docs','AC8: the README')
 
-m('P2','a rank above 999999 is refused',R,'if #digits > 6 or not string.match(digits, "^[1-9]%d*$") then','if not string.match(digits, "^[1-9]%d*$") then','rank','AC1: a rank is a whole number')
-m('P13','an unset raft takes its members\' best',R,'local r = if m and not m.auto then ranked(m) else nil','local r = nil :: number?','rank','AC3')
+m('P2','a rank above 999999 is refused',R,'if #value > 6 or not string.match(value, "^[1-9]%d*$") then','if not string.match(value, "^[1-9]%d*$") then','rank','AC1: a rank is a whole number')
+m('P13','an unset raft takes its members\' best',R,'local r = if m and not m.moved then ranked(m) else nil','local r = nil :: number?','rank','AC3')
 m('L4','without a gap the ranked items from the top through the moved one are renumbered',R,'last = math.max(last, i)','last = last','rank','AC2: with no gap')
 m('C16','a rank on origin/main is reported as saved when the checkout cannot be fast-forwarded',M_,'stdio.ewrite(\n\t\t\t\t`rank: saved on origin/main, but this checkout could not be brought up to date: {brought}\\n`\n\t\t\t)','fail(`rank: saved on origin/main, but this checkout could not be brought up to date: {brought}`)','drag','AC2: a rank on origin/main')
+m('M1','who set a rank is the latest ranked row, not the first',R,'for i = #rows, 1, -1 do','for i = 1, #rows do','rank','AC1: a document path')
+m('M2','a moved= field in the latest ranked row marks a moved-written rank',R,'if string.match(part, "^%s*moved=") then','if false then','rank','AC1: a document path')
+m('M3','only a ranked row counts',R,'if rows[i].event == "ranked" then','if true then','rank','AC1: a document path')
+m('M4','factOf reads the record handed to it',R,'moved = own ~= nil and rank.movedBy(record),','moved = false,','rank','AC1: a document path')
+m('M5','a rank line carries nothing after the number',R,'if #value > 6 or not string.match(value, "^[1-9]%d*$") then','if #value > 6 or not string.match(value, "^[1-9]%d*") then','rank','AC1: a rank is a whole number')
+m('W2','work next reads the members\' records',E+'workread.luau','if m ~= nil and not rank.movedBy(record) and','if m ~= nil and not rank.movedBy(nil) and','drag','AC3: a drag among unset')
+m('W3','next reads the records of the ranked backlog items',E+'workread.luau','recordBlobs[recordIndex[a.path] or 0]','nil','drag','AC3: a drag among unset')
+m('W4','work next fetches the records of the ranked members',E+'workread.luau','docs[path] = recordBlobs[i] or ""','docs[path] = ""','drag','AC3: a drag among unset')
+m('B8','the board reads the records of the ranked items',E+'board.luau','rankLib.movedBy(fs.readFile(record))','false','board','AC5: board.collect')
+m('C21','list reads the record of an item that has a rank',M_,'local record = if (fm.rank or "") ~= "" and fs.isFile(recordPath) then fs.readFile(recordPath) else nil','local record = nil :: string?','drag','AC3: a drag among unset')
+m('C22','rank reads the record of an item that has a rank',M_,'recordOf[p] = rec\n','','drag','AC3: a rank a person puts')
+m('C23','list is offline unless --lost is given',M_,'if opts["--lost"] then rk.lost("list") else {}','rk.lost("list")','command','AC5: list stays offline')
+m('D7','the usage text names --lost',M_,'list [backlog|active|done] [--project <name>] [--lost]','list [backlog|active|done] [--project <name>] [--no-lost]','docs','AC8: the usage text')
+m('D8','the README says list stays offline','z-nile/README.md','`./zn list` stays offline and shows','`./zn list` shows','docs','AC8: the README')
 only=set(sys.argv[1:])
 json.dump(M, open('/private/tmp/claude-501/-Users-philipbergen-code-pickman/41230970-d794-4c57-af1d-137b4b7bbbef/scratchpad/mutants.json','w'))
 def sync():
