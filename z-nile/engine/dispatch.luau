@@ -347,6 +347,10 @@ function dispatch.next(f: Facts): Action
 		if f.where == "done" then
 			return stop(dispatch.EXIT.done, `{f.id} is done`)
 		end
+		-- c0278: a closed issue's chain is finished, not failed
+		if f.status == "closed" then
+			return stop(dispatch.EXIT.done, `{f.id} is closed (won't do): nothing to run`)
+		end
 		if f.raft ~= "" and (f.where == "active" or f.status == "prepared") then
 			return { kind = "step", step = "follow", target = f.raft }
 		end
