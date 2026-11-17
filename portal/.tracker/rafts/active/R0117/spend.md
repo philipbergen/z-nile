@@ -6,8 +6,8 @@
 | f0206 | feature |  | 5621 | 2 | 0.6 | 0 |
 | f0208 | feature |  | 6119 | 2 | 0.6 | 0 |
 
-**Total:** +16472 / -6 lines, 1.8 agent-minutes, 0 tokens over 660 records
-<!-- totals: added=16472 removed=6 minutes=1.8 records=660 tokens=0 -->
+**Total:** +16472 / -6 lines, 1.8 agent-minutes, 0 tokens over 708 records
+<!-- totals: added=16472 removed=6 minutes=1.8 records=708 tokens=0 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
