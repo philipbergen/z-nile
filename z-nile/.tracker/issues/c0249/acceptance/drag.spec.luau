@@ -195,7 +195,9 @@ return t.spec("c0249 a drag among other people's work", function(it)
 		t.expect(rankLine("c0321")).toBe("10")
 		t.expect(rankLine("c0320")).toBe("20")
 		-- the competitor's document is not lost, only renumbered
-		t.expect(has(onOrigin(`{P}/c0320/provenance.md`), "rank=20; was=1; moved=c0321")).toBe(true)
+		t.expect(has(onOrigin(`{P}/c0320/provenance.md`), "rank=20; was=1; shifted=c0321 |")).toBe(true)
+		-- a rank a person set is shifted, not moved: its record keeps counting it toward its raft
+		t.expect(has(onOrigin(`{P}/c0320/provenance.md`), "moved=")).toBe(false)
 	end)
 
 	it(

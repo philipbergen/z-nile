@@ -51,8 +51,9 @@ function rank.parse(value: string?): (number?, string?)
 end
 
 -- Whether a rank was written by a move that renumbered the item rather than set by a person, read from the item's
--- provenance.md (`text`, nil when there is none): its latest `ranked` row carries a `moved=` field (the move writes the
--- row of every item it renumbers with `moved=<the item it moved>`). A person-set rank has a latest `ranked` row with no
+-- provenance.md (`text`, nil when there is none): its latest `ranked` row carries a `moved=` field (a move writes the
+-- row of every item it ranks that nobody ranked, or that a move ranked, with `moved=<the item it moved>`; a renumbering of a
+-- rank a person set writes `shifted=` instead). A person-set rank has a latest `ranked` row with no
 -- `moved=`, or no row at all (a hand edit). A raft takes its members' best rank from the person-set ones only, so a move
 -- that renumbers items never reorders the rafts (Q5, F2 of the design review). A record that does not parse counts as
 -- person-set (the audit refuses it).
@@ -449,7 +450,9 @@ function rank.listOrder(facts: { Fact }, lost: { string }?, world: { Fact }?): {
 	return out
 end
 
-export type Change = { id: string, rank: number?, was: number?, moved: boolean? } -- moved: its `ranked` row carries `moved=`
+-- moved: its `ranked` row carries `moved=` (a move wrote the rank); shifted: it carries `shifted=` (a renumbering moved a rank a person
+-- set, which keeps counting)
+export type Change = { id: string, rank: number?, was: number?, moved: boolean?, shifted: boolean? }
 
 -- The facts a move can place: the backlog items of the kind, in the order a rank gives them (no lost, no blocked).
 function rank.stack(facts: { Fact }, kind: string): { Fact }
@@ -506,7 +509,8 @@ end
 -- among or after unset items, it is given a rank with the unset items above it in the stack, in steps of 10 after the
 -- highest rank there is, and their `ranked` rows carry `moved=` (a person did not set them: a raft's rank ignores them); no
 -- rank that exists changes. Only when there is no room between two ranked neighbours are the ranked items renumbered 10, 20,
--- 30 ... from the top, each but the moved one with `moved=` in its row. An empty result changes nothing; asking for the
+-- 30 ... from the top; the row of each but the moved one says `shifted=` when a person set that rank (it keeps counting)
+-- and `moved=` when a move wrote it. An empty result changes nothing; asking for the
 -- place a moved-written rank already has changes no line but writes a row without `moved=`, which makes it the person's.
 function rank.plan(
 	stack: { Fact },
@@ -663,7 +667,15 @@ function rank.plan(
 		local wid = want[i]
 		local f = byId[wid]
 		if f.ownRank ~= i * rank.GAP or (wid == id and f.ownMoved) then
-			table.insert(changes, { id = wid, rank = i * rank.GAP, was = f.ownRank, moved = wid ~= id })
+			-- a rank a person set keeps counting however often it is shifted: its row says `shifted=`, not `moved=`
+			local counts = f.ownRank ~= nil and not f.ownMoved
+			table.insert(changes, {
+				id = wid,
+				rank = i * rank.GAP,
+				was = f.ownRank,
+				moved = wid ~= id and not counts,
+				shifted = wid ~= id and counts,
+			})
 		end
 	end
 	local checked = keeps(changes)

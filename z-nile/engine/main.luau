@@ -7092,6 +7092,8 @@ function cmd.rank(pos: { string }, opts: { [string]: { string } })
 				`rank={if c.rank == nil then "unset" else tostring(c.rank)}; was={c.was or "unset"}`
 			if c.moved then
 				detail ..= `; moved={id}`
+			elseif c.shifted then
+				detail ..= `; shifted={id}`
 			end
 			local row, rowWhy = provenance.record(read(rec), c.id, "ranked", actor, detail, when)
 			if not row then
