@@ -316,6 +316,18 @@ do
 		}
 	end
 end
+-- c0122's specs fence a fixture checkout under .cache the way ac.sh and the runner do (one bash process, with
+-- PICKMAN_FENCE_SPECS unset, empty or 1 for that process only) and run real git in it, never in the run's own environment
+local C0122 = renamed.id("c0122")
+for _, name in { "fetch.spec.luau", "refuse.spec.luau" } do
+	ALLOWED[`z-nile/tests/acceptance/{C0122}/{name}`] = {
+		PICKMAN_FENCE_ = "fences a .cache fixture in one bash process and sets or clears PICKMAN_FENCE_SPECS for that process only (c0122)",
+	}
+end
+-- R0068 review-001 F1: the ref guard's --affected selector fences a .cache fixture the same way, in one bash process
+ALLOWED["z-nile/tests/tooling/ref-guard-fetch.spec.luau"] = {
+	PICKMAN_FENCE_ = "fences a .cache fixture in one bash process and sets or clears PICKMAN_FENCE_SPECS for that process only (R0068 review-001 F1)",
+}
 -- c0172: merge.spec quotes the fence variable as a needle in the Merging skill text. It never sets it.
 local C0172 = renamed.id("c0172")
 for _, dir in { "z-nile/tests/acceptance/" .. C0172 } do
