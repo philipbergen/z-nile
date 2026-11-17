@@ -327,3 +327,30 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-17 15:23	1 spec	0	0	test			0.828	0.570		0.828	tokens,ai
 2026-11-17 15:23	1 spec	0	0	test			0.821	0.590		0.821	tokens,ai
 2026-11-17 15:23	R0117: trace repointed after restack	0	0	deliver							tokens,wall,cpu,ai
+2026-11-17 15:23	affected	0	0	test			18.339	70.400		18.339	tokens,ai
+2026-11-17 15:24	affected	0	0	test			26.552	30.070		26.552	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.033	0.650		1.033	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.022	0.660		1.022	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.034	0.680		1.034	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.037	0.670		1.037	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.034	0.700		1.034	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.035	0.710		1.035	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.027	0.690		1.027	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.033	0.660		1.033	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.026	0.650		1.026	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.018	0.610		1.018	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.026	0.590		1.026	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.652	1.260		1.652	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.026	0.610		1.026	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			0.824	0.580		0.824	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			0.818	0.580		0.818	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.026	0.590		1.026	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			0.814	0.570		0.814	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.038	0.630		1.038	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			0.821	0.560		0.821	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			0.830	0.570		0.830	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			0.827	0.550		0.827	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			0.810	0.550		0.810	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			0.835	0.570		0.835	tokens,ai
+2026-11-17 23:00	5 runs	0	0	other			1.026	0.000			tokens,ai
+2026-11-17 23:00	R0117: the user's rulings on code review 001, and f0206's owed Beta observation	0	0	deliver							tokens,wall,cpu,ai
