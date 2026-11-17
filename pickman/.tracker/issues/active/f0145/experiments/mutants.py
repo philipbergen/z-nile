@@ -1,10 +1,21 @@
 #!/usr/bin/env python3
 # f0145's mutation check (z-design step 4): applies each Rules and mutants row's mutant alone to a prototype's pickman/
-# tree, runs the row's acceptance specs from that tree's .tracker/issues/f0145/acceptance, and restores the file.
-# A row is killed when one of its specs fails on an assertion (loaderr counts load failures, which do not count).
+# tree, runs the row's acceptance specs from that tree's f0145 acceptance folder (wherever the item's lifecycle put it:
+# .tracker/issues/f0145, .tracker/issues/active/f0145, or tests/acceptance/f0145 once promoted), and restores the file.
+# A row's verdict is computed, never read off by hand: KILLED when one of its specs fails on an assertion and none
+# fails to load; LOADFAIL when a spec failed to load (that does not count as killed); SURVIVED when every spec
+# passed; NOSUMMARY when the runner printed no summary. Before any row, every spec named by a row is run unmutated
+# and must pass (BASELINE), so a stale path or a red tree cannot read as a kill.
+# The bug this replaces (found in R0118's execution, 2026-11-16): the folder was hard-coded to
+# .tracker/issues/f0145/acceptance, so on a tree where the item had moved every spec failed to load ("0 passed,
+# 1 failed") and the printed line looked like a kill; nothing checked a baseline, and the verdict was left to the reader.
+# A spec entry is a name under the acceptance folder ('adapters'), or a path from pickman/ ending .spec.luau.
 # Usage (run it on a scratch prototype, never on a tree you care about; it rewrites src files and puts them back):
 #   PATH="$HOME/.rokit/bin:$PATH" python3 -I mutants.py <prototype>/pickman [ROW ...]
-import os, re, subprocess, sys
+import os, re, signal, subprocess, sys
+sys.dont_write_bytecode = True  # no __pycache__ beside the experiments
+# ./zn run stops a run with TERM: raise instead, so the finally below puts the mutated file back
+signal.signal(signal.SIGTERM, lambda *_: sys.exit('mutants: stopped (TERM); the mutated file was restored'))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # mutants_early.py beside this file, also under -I
 
 PAY = 'src/shared/Logic/Pay/init.luau'; GAME = 'src/shared/Logic/Game/init.luau'; SES = 'src/shared/Logic/Session/init.luau'
@@ -65,10 +76,14 @@ ROWS = {
  # the resume of 2026-11-15 (f0126 on main, f0148's Sessions.made)
  'Q10': (PAID, [('\t\tif ok then\n\t\t\ttell(player, record)\n\t\tend', '\t\tif ok then\n\t\t\tkept[player] = { at = os.clock(), record = record }\n\t\t\ttell(player, record)\n\t\tend')], ['adapters']),
  'S3': (SES, [('\t\tteleport(s, member, s.tick + 1)\n\t\tresetGhosts(member, "respawn", s.tick + 1)\n',
-               '\t\tteleport(s, member, s.tick + 1)\n\t\tPellets.reset(member.pellets)\n\t\tfreshMaze(s, member)\n\t\tresetGhosts(member, "continue", s.tick + 1)\n')], ['offer']),
+               '\t\tteleport(s, member, s.tick + 1)\n\t\tPellets.reset(member.pellets)\n\t\tfreshMaze(s, member)\n\t\tresetGhosts(member, "continue", s.tick + 1)\n')], ['offer', 'tests/unit/Session/session.spec.luau']),
+ # R0118's execution: the ghosts' "respawn" reset alone, which only the unit case observes (Implementation steps, 2)
+ 'S4': (SES, [('\t\tresetGhosts(member, "respawn", s.tick + 1)\n', '\t\tresetGhosts(member, "continue", s.tick + 1)\n')], ['tests/unit/Session/session.spec.luau']),
  'M1': ('src/server/Main.server.luau', [('Sessions.made(require("./Continues").start(Sessions.session))', 'require("./Continues").start(Sessions.session)')], ['place']),
  'M2': ('src/server/Main.server.luau', [('Sessions.made(require("./Continues").start(Sessions.session)) -- f0145: paid play on arrival, the continue offer\nSessions.start(require("./Submits"))\n',
                'Sessions.start(require("./Submits"))\nSessions.made(require("./Continues").start(Sessions.session))\n')], ['place']),
+ # R0118's execution: the last table row (d0124's list carries the lives), which had no runner id
+ 'T1': (HIS, [('\t\t\t\tlives = Hiscores.lives(e.lives), -- f0145: the list\'s copy keeps the lives spent\n', '')], ['top']),
  'Q9': (CON, [('\t\tif player.Parent == nil then\n\t\t\treturn -- left during the write (design review 003 F5)\n\t\tend\n', '')], ['adapters']),
 }
 try:
@@ -77,30 +92,68 @@ try:
 except ImportError as e:
     print('mutants: no early rows:', e, file=sys.stderr)
 
+def acceptance(root):
+    for rel in ('.tracker/issues/f0145/acceptance', '.tracker/issues/active/f0145/acceptance',
+                '.tracker/issues/done/f0145/acceptance', 'tests/acceptance/f0145'):
+        if os.path.isdir(os.path.join(root, rel)):
+            return rel
+    sys.exit('mutants: no f0145 acceptance folder under ' + root)
+
+def spec_path(acc, spec):
+    return spec if spec.endswith('.spec.luau') else f'{acc}/{spec}.spec.luau'
+
+def run(root, path):
+    r = subprocess.run(['lune', 'run', 'tests/run', '--', path], cwd=root, capture_output=True, text=True, timeout=600)
+    txt = r.stdout + r.stderr
+    m = re.findall(r'(\d+) passed, (\d+) failed, \d+ spec files', txt)
+    loaderr = len(re.findall('could not load spec', txt))
+    if not m:
+        return 'NOSUMMARY', 'no summary', loaderr
+    passed, failed = int(m[-1][0]), int(m[-1][1])
+    verdict = 'LOADFAIL' if loaderr else ('KILLED' if failed > 0 else 'SURVIVED')
+    return verdict, f'{passed} passed, {failed} failed', loaderr
+
 def main():
     root = sys.argv[1]; only = sys.argv[2:]
-    for mid, (f, edits, specs) in ROWS.items():
-        if only and mid not in only:
-            continue
+    acc = acceptance(root)
+    rows = {mid: row for mid, row in ROWS.items() if not only or mid in only}
+    specs_used = sorted({spec_path(acc, s) for (_, _, specs) in rows.values() for s in specs})
+    red = False
+    for path in specs_used:
+        verdict, summary, loaderr = run(root, path)
+        ok = verdict == 'SURVIVED'  # unmutated, every case must pass
+        red = red or not ok
+        print(f'BASELINE {"ok" if ok else "RED"} {path}: {summary}; loaderr {loaderr}', flush=True)
+    if red:
+        sys.exit('mutants: the unmutated tree is not green; no row is judged')
+    tally = {}
+    for mid, (f, edits, specs) in rows.items():
         path = os.path.join(root, f); orig = open(path).read(); s = orig; missing = None
         for a, b in edits:
             if s.count(a) != 1:
                 missing = a; break
             s = s.replace(a, b)
         if missing is not None:
-            print(mid, 'NOT APPLIED', repr(missing[:60]), flush=True); continue
+            print(f'{mid}: NOTAPPLIED {missing[:60]!r}', flush=True); tally['NOTAPPLIED'] = tally.get('NOTAPPLIED', 0) + 1
+            continue
         open(path, 'w').write(s)
         try:
-            out = []
+            out = []; verdicts = []
             for spec in specs:
-                r = subprocess.run(['lune', 'run', 'tests/run', '--', f'.tracker/issues/f0145/acceptance/{spec}.spec.luau'],
-                                   cwd=root, capture_output=True, text=True)
-                txt = r.stdout + r.stderr
-                m = re.findall(r'(\d+ passed, \d+ failed, \d+ spec files)', txt)
-                out.append(f"{spec}=({m[-1] if m else 'NO SUMMARY'}; loaderr {len(re.findall('could not load spec', txt))})")
-            print(f'{mid}: ' + ' '.join(out), flush=True)
+                verdict, summary, loaderr = run(root, spec_path(acc, spec))
+                verdicts.append(verdict)
+                out.append(f'{spec}=({summary}; loaderr {loaderr}; {verdict})')
+            if 'LOADFAIL' in verdicts or 'NOSUMMARY' in verdicts:
+                row = 'LOADFAIL'
+            elif 'KILLED' in verdicts:
+                row = 'KILLED'
+            else:
+                row = 'SURVIVED'
+            tally[row] = tally.get(row, 0) + 1
+            print(f'{mid}: {row} ' + ' '.join(out), flush=True)
         finally:
             open(path, 'w').write(orig)
+    print('TALLY ' + ' '.join(f'{k}={v}' for k, v in sorted(tally.items())), flush=True)
 
 if __name__ == '__main__':
     main()
