@@ -67,6 +67,7 @@ function trail.isDoc(name: string): boolean
 			"^final%-refute%-%d+%.md$",
 			"^idea%-review%-%d+%.md$",
 			"^idea%-refute%-%d+%.md$",
+			"^focused%-review%-%d+%.md$",
 		}
 	do
 		if string.match(name, pattern) then

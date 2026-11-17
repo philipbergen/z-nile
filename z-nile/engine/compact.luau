@@ -43,6 +43,39 @@ local function rewritesIds(path: string, roots: { string }): boolean
 		and (string.match(path, "%.md$") ~= nil or string.match(path, "%.sh$") ~= nil)
 end
 
+-- c0136: a stream review or refute names its issue (stream-review-<issue>-NNN.md) and lives in its raft's folder, so a
+-- text rewrite of the ids changes the id in a harvest entry that names the file but not the file's own name. This
+-- moves those files in `folders` (item folders, at the place they now have) by the same map, in two phases like the
+-- folders. Shared by compact.apply (compact, remap) and renumber.
+function compact.moveStreams(root: string, folders: { string }, map: { [string]: string })
+	local streams: { { from: string, to: string } } = {}
+	for _, dir in folders do
+		if fs.isDir(`{root}/{dir}`) then
+			for _, name in fs.readDir(`{root}/{dir}`) do
+				local kind, id, n = string.match(name, "^stream%-(%a+)%-([fdc]%d%d%d%d)%-(%d%d%d)%.md$")
+				local new = if id then map[id] else nil
+				if (kind == "review" or kind == "refute") and new and new ~= id then
+					table.insert(streams, { from = `{dir}/{name}`, to = `{dir}/stream-{kind}-{new}-{n}.md` })
+				end
+			end
+		end
+	end
+	-- a file git does not track yet (an uncommitted stream review) moves with the plain filesystem call
+	local function mv(from: string, to: string)
+		if process.exec("git", { "ls-files", "--error-unmatch", from }, { cwd = root }).ok then
+			gitIn(root, { "mv", from, to })
+		else
+			fs.move(`{root}/{from}`, `{root}/{to}`)
+		end
+	end
+	for _, m in streams do
+		mv(m.from, `{m.to}.compacting`)
+	end
+	for _, m in streams do
+		mv(`{m.to}.compacting`, m.to)
+	end
+end
+
 -- Renames every item in `found` that the map moves, and every tests/acceptance/<old> folder of every project
 -- (c0120: pickman/tests/acceptance too), then rewrites: ids in the .md and .sh files under every project root, and
 -- tests/acceptance/<id> paths (also as <home>/tests/acceptance/<id>) in every other tracked text file (the templates
@@ -80,6 +113,12 @@ function compact.apply(map: { [string]: string }, found: { audit.Found }, at: st
 			gitIn(root, { "mv", `{d.dir}/{d.old}.md`, `{d.dir}/{d.new}.md` })
 		end
 	end
+	local folders: { string } = {}
+	for _, f in found do
+		local parent = string.match(f.path, "^(.*)/[^/]+$") :: string
+		table.insert(folders, `{parent}/{map[f.id] or f.id}`)
+	end
+	compact.moveStreams(root, folders, map)
 	for path in string.gmatch(gitIn(root, { "ls-files" }), "[^\n]+") do
 		local abs = `{root}/{path}`
 		local template = string.sub(path, 1, #TEMPLATES) == TEMPLATES

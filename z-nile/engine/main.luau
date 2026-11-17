@@ -131,7 +131,7 @@ usage: ./zn <command> ...
   board [--out PATH] [-O]                       write the tracker as one HTML page (default .cache/board.html)
                                                 and open it in the browser; -O only writes it
   lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]
-                                                list skill lessons; also --tags, --check, and --uncovered <id>...
+                                                list skill lessons; also --tags, --check, --check-review <path>, --uncovered <id>... and --unattributed <id>...
   skills [--check]                              link .claude/skills/<name> to every skill folder (z-nile/skills,
                                                 <project>/skills); --check writes nothing and exits 1 on a problem]]
 
@@ -848,6 +848,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--check"
 			or a == "--tags"
 			or a == "--uncovered"
+			or a == "--unattributed"
 			or a == "--apply"
 			or a == "--dry-run"
 			or a == "--quiet"
@@ -3339,6 +3340,14 @@ function cmd.renumber(pos: { string })
 			fs.move(item.dir, dest)
 			fs.move(`{dest}/{old}.md`, `{dest}/{new}.md`)
 		end
+		if not byDir then
+			-- c0136: the stream reviews of this issue, in whichever raft folder holds them, take the new id too
+			local folders: { string } = {}
+			for _, found in audit.scan(".") do
+				table.insert(folders, found.path)
+			end
+			compactLib.moveStreams(".", folders, { [old] = new :: string })
+		end
 		if byDir then
 			rewriteUnder(dest, old, new :: string)
 		else
@@ -5486,7 +5495,7 @@ local function parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
 end
 
 local LESSONS_USAGE = "usage: ./zn lessons [--skill <s>]... [--when design|build] [--tag <t>]... [--full] [<word>...]\n"
-	.. "       ./zn lessons --tags | --check | --uncovered [<id>...]"
+	.. "       ./zn lessons --tags | --check | --check-review <review.md> | --uncovered [<id>...] | --unattributed [<id>...]"
 
 -- `skills [--check]` (c0115): one relative link in .claude/skills per skill folder. --check only reads (the gate
 -- runs it); without it the links are written, so it refuses in the main checkout like every other writer.
@@ -5550,6 +5559,8 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 		["--tags"] = true,
 		["--check"] = true,
 		["--uncovered"] = true,
+		["--unattributed"] = true,
+		["--check-review"] = true,
 	}
 	local n = 0
 	for k, values in opts do
@@ -5564,13 +5575,13 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 		n += 1
 	end
 	local modes = 0
-	for _, k in { "--tags", "--check", "--uncovered" } do
+	for _, k in { "--tags", "--check", "--uncovered", "--unattributed", "--check-review" } do
 		if opts[k] then
 			modes += 1
 		end
 	end
-	if modes > 0 and (n > 1 or (not opts["--uncovered"] and #pos > 0)) then
-		usage("--tags, --check and --uncovered take no other option")
+	if modes > 0 and (n > 1 or (not opts["--uncovered"] and not opts["--unattributed"] and #pos > 0)) then
+		usage("--tags, --check, --check-review, --uncovered and --unattributed take no other option")
 	end
 	local when = opts["--when"] and opts["--when"][1]
 	if opts["--when"] and (#opts["--when"] > 1 or (when ~= "design" and when ~= "build")) then
@@ -5597,7 +5608,27 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 		print(`lessons: {lessonCount} lessons, {entries} harvest entries, ok`)
 		return
 	end
-	if opts["--uncovered"] then
+	if opts["--check-review"] then
+		-- c0136: the step lines of one review file, wherever it is (an interactive reviewer's file, a dispatcher's state
+		-- folder, a stream reviewer's text a lead holds): read-only, before the file is committed and never edited
+		local path = opts["--check-review"][1]
+		if not fs.isFile(path) then
+			usage(`{path}: no such file`)
+		end
+		local stem = string.match(path, "([^/]+)%.md$") or ""
+		local text = fs.readFile(path)
+		local out: { string } = {}
+		for _, p in lessonsLib.checkNewReview(stem, text, tree.skills) do
+			table.insert(out, `{path} {p}`)
+		end
+		if #out > 0 then
+			print(table.concat(out, "\n"))
+			process.exit(1)
+		end
+		print(`{path}: step lines ok`)
+		return
+	end
+	if opts["--uncovered"] or opts["--unattributed"] then
 		local items = tree.items
 		if #pos > 0 then
 			items = {}
@@ -5616,12 +5647,18 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 				end
 			end
 		end
-		local gaps = lessonsLib.uncovered(items)
+		local gaps = if opts["--uncovered"]
+			then lessonsLib.uncovered(items)
+			else lessonsLib.unattributed(items)
 		if #gaps > 0 then
 			print(table.concat(gaps, "\n"))
 			process.exit(1)
 		end
-		print("harvest: every finding is covered")
+		print(
+			if opts["--uncovered"]
+				then "harvest: every finding is covered"
+				else "harvest: every entry names its step"
+		)
 		return
 	end
 	local all = parsedLessons(tree)
