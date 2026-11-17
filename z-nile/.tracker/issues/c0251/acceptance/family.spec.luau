@@ -1,6 +1,6 @@
 --!strict
 -- c0251 AC1 and AC2: `family.of` maps a model id to its model line by the longest matching prefix, and `.models.toml` reads
--- the `[families]` table, a role's `rotate`, and the `stream-review` role. Pure: texts in, results out.
+-- the `[families]` table, a role's `rotate`, and the `stream-review` and `raft-review` roles. Pure: texts in, results out.
 local models = require("@znile/engine/models")
 local t = require("@tests/lib/t")
 
@@ -31,7 +31,7 @@ local ROLE = [[
 model = "kimi-code-k3.1-pro"
 runtime = "kimi-cli"
 
-[roles.raft]
+[roles.raft-review]
 model = "claude-opus-5-5"
 cli = "claude"
 runtime = "claude-cli"
@@ -125,14 +125,14 @@ return t.spec("c0251 families and rotate in .models.toml", function(it)
 
 	it("AC2: rotate takes only a boolean on a role", function()
 		local l = layer(ROLE .. "rotate = true\n")
-		t.expect(l.roles.raft.rotate).toBe(true)
-		t.expect(layer(ROLE .. "rotate = false\n").roles.raft.rotate).toBe(false)
+		t.expect(l.roles["raft-review"].rotate).toBe(true)
+		t.expect(layer(ROLE .. "rotate = false\n").roles["raft-review"].rotate).toBe(false)
 		for _, bad in { 'rotate = "yes"\n', "rotate = 1\n", "rotate = []\n" } do
 			local e = errorOf(function()
 				layer(ROLE .. bad)
 			end)
 			t.expect(has(e, "rotate")).toBe(true)
-			t.expect(has(e, "roles.raft")).toBe(true)
+			t.expect(has(e, "roles.raft-review")).toBe(true)
 		end
 		-- rotate is no key of a fallback
 		t.expect(errorOf(function()
@@ -141,13 +141,15 @@ return t.spec("c0251 families and rotate in .models.toml", function(it)
 	end)
 
 	it(
-		"AC2: roleFor gives stream-review for a stream review, and the other modes keep their roles",
+		"AC2: roleFor gives stream-review for a stream review and raft-review for a raft review, and the other modes keep their roles",
 		function()
 			t.expect(M.roleFor("zz-review", "stream")).toBe("stream-review")
 			t.expect(M.roleFor("zz-review", "code")).toBe("code-review")
 			t.expect(M.roleFor("zz-review", nil)).toBe("code-review")
 			t.expect(M.roleFor("zz-review", "design")).toBe("design-challenge")
-			t.expect(M.roleFor("zz-review", "raft")).toBe("raft")
+			-- user, 2026-11-16: reviewing a raft and writing one are two roles
+			t.expect(M.roleFor("zz-review", "raft")).toBe("raft-review")
+			t.expect(M.roleFor("z-raft", nil)).toBe("raft")
 			t.expect(M.roleFor("zz-review", "final")).toBe("final-review")
 		end
 	)
@@ -157,13 +159,14 @@ return t.spec("c0251 families and rotate in .models.toml", function(it)
 		function()
 			-- loads fine: the check is at resolve, so a fixture with no [families] and no rotate loads as before
 			local plain = layer(ROLE)
-			local r = M.resolve({ plain }, "z-raft")
+			local r = M.resolve({ plain }, "zz-review", "raft")
 			t.expect(#M.tries(r)).toBe(2)
+			t.expect(r.rotate).toBe(false)
 			local rotating = layer(ROLE .. "rotate = true\n")
 			local e = errorOf(function()
 				M.resolve({ rotating }, "zz-review", "raft")
 			end)
-			t.expect(has(e, "raft")).toBe(true)
+			t.expect(has(e, "raft-review")).toBe(true)
 			t.expect(has(e, "claude-opus-5-5")).toBe(true)
 			t.expect(has(e, "[families]")).toBe(true)
 			-- the same role resolves once every model has a family
