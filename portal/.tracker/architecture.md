@@ -12,11 +12,21 @@ The game carousel, the portal's one screen: one card per game, scrolled by key, 
 - `src/server/Cards.luau`: which places are published (Places) and each player's free starts (Wallet), sent to that player on each ask over `ReplicatedStorage.Remotes.Cards`.
 - `src/client/CarouselView.luau`: the screen, its inputs, and the seams the rest of the portal plugs into: `onPlay`, `focused`, `card` (its `Buttons` and `Boards` slots).
 
+### Play buttons (f0208)
+The card's play buttons: PLAY, ARENA on Snake, 2 PLAYERS on Invaders and Asteroids; the purchase, the entitlement and the teleport.
+- `src/shared/Logic/Play` (requires Card): the server's decision from a player's record (go, go on the portal's pass, buy, store unavailable), the client's intents and the server's statuses checked, each card's buttons and note, the keys.
+- `src/shared/Logic/Pairing` (a leaf): the 2 PLAYERS waiting lines of one portal server.
+- `src/shared/Logic/Arena` (a leaf): which shared arena (a reserved server) an ARENA player joins.
+- `src/shared/Modes.luau`: each game's play buttons. A new game is one entry.
+- `src/server/Plays.luau`: the play intents over `ReplicatedStorage.Remotes.Play`, the record check (Wallet), the purchase (Receipts, installed here), the teleport (Travel, Places), the waiting lines and the arenas.
+- `src/server/Invites.luau`: an invited friend reaches the inviter's portal server.
+- `src/client/PlayButtons.luau`: the buttons in each card's `Buttons` slot, their keys, and the invite prompt.
+
 ## Allowed dependencies
 
 One `Consumer -> Provider` per line.
 
 ```deps
-# Carousel and Card are leaves
+# Carousel and Card are leaves; so are Pairing and Arena
 Play -> Card
 ```

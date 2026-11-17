@@ -1,0 +1,309 @@
+arcade/tests/meta/architecture.spec.luau
+	Logic never touches the Roblox engine
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	every Luau file is --!strict
+	every feature has unit specs
+	every require resolves
+	features are only used through their init.luau
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+arcade/tests/meta/fence.spec.luau
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+	every git this run starts refuses ref updates in this repository
+	git finds no repository in .cache, nor in a folder below it that has none
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	on macOS this run can write nothing in the checkout outside .cache
+	specs have no GitHub credentials and push only into fixtures
+	this run is guarded for this checkout
+	when jailed, a spec can't signal the run's top process
+arcade/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+arcade/tests/place/library.spec.luau
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders
+asteroids/tests/meta/architecture.spec.luau
+	every require resolves
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	every Luau file is --!strict
+	Logic never touches the Roblox engine
+	features are only used through their init.luau
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	every feature has unit specs
+asteroids/tests/meta/fence.spec.luau
+	this run is guarded for this checkout
+	git finds no repository in .cache, nor in a folder below it that has none
+	every git this run starts refuses ref updates in this repository
+	on macOS this run can write nothing in the checkout outside .cache
+	when jailed, a spec can't signal the run's top process
+	specs have no GitHub credentials and push only into fixtures
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+asteroids/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+asteroids/tests/place/library.spec.luau
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+invaders/tests/meta/architecture.spec.luau
+	Logic never touches the Roblox engine
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	every Luau file is --!strict
+	every feature has unit specs
+	every require resolves
+	features are only used through their init.luau
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+invaders/tests/meta/fence.spec.luau
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+	every git this run starts refuses ref updates in this repository
+	git finds no repository in .cache, nor in a folder below it that has none
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	on macOS this run can write nothing in the checkout outside .cache
+	specs have no GitHub credentials and push only into fixtures
+	this run is guarded for this checkout
+	when jailed, a spec can't signal the run's top process
+invaders/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+invaders/tests/place/library.spec.luau
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders
+pickman/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+pickman/tests/place/library.spec.luau
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders
+portal/.tracker/issues/active/f0208/acceptance/client.spec.luau
+	2, keypad 2 and X press the front card's second button on the press, and sink it
+	a 2 PLAYERS wait: the card says WAITING with CANCEL and INVITE, which ask the server, by tap or key
+	a card with one button, or none, passes the second-button keys on and sends nothing
+	a failed play's buttons are drawn disabled and send nothing until the server says idle
+	a hidden button, or a card coming soon, sends nothing
+	a note wraps; a button's text does not, its name over its price; under a note, the name alone
+	a status that makes no sense draws the cards as if idle
+	a tap asks the server to play that card's title in that button's mode
+	another player waiting shows on that 2 PLAYERS card; a count that makes no sense is dropped
+	asks the cards' states once, after it listens on both remotes
+	before the server's states nothing plays: taps and the carousel's PLAY send nothing
+	each button says its name over its price, as rich text, and is never gamepad-selectable
+	each card's slot gets PLAY, ARENA on Snake, 2 PLAYERS on Invaders and Asteroids; a card coming soon none
+	no prompt when the player cannot invite, or the check fails
+	one binding, PortalPlay between the default controls and the test screen, of exactly its seven keys
+	start returns at once while the remotes are not there, and works once they are
+	started twice it builds, binds, listens and asks once
+	the buttons and the note sit where Play.slots and Play.noteBox put them
+	the carousel's PLAY (Enter, KeypadEnter, ButtonA) asks to play the card in PLAY's mode, once
+	the player's play is drawn on its card: checking, buying and starting show the note alone
+	the server's invite opens Roblox's invite prompt with the player's id as launch data
+	while the player types in a text box (the chat) the keys pass on and send nothing
+	while the test purchase screen is open nothing is sent: taps, PLAY and keys
+	with no wait, Backspace, B, I and Y pass on and send nothing
+portal/.tracker/issues/active/f0208/acceptance/invites.spec.luau
+	a friend who left before the answer is sent nowhere
+	a joiner who is not the inviter's friend is sent nowhere
+	a withdrawn invite is removed from the map; a map that fails throws nothing
+	an invite is recorded by the inviter's id: this server's job and the title, for 600 s
+	an invite the map cannot take throws nothing
+	an invited friend who lands elsewhere is sent to the inviter's server
+	an inviter already in this server, or launch data naming no one, reads nothing
+	no invite on record, one for this server, or a map that fails sends nowhere
+	starts once
+portal/.tracker/issues/active/f0208/acceptance/pairing.spec.luau
+	a player is never paired with themself
+	a player waits in one line at most: joining another leaves the first
+	a stored record that makes no sense is no arena
+	a third player after a pair waits for the next one
+	an arena opened up to SKEW_SECONDS after now (another server's clock ahead) counts as open; further is not
+	an arena takes players for OPEN_SECONDS after it opened, not a second more
+	an arena takes players until CAP were sent
+	an open arena takes the player: one more sent, the same id and opening
+	leaving takes a player out of their line; leaving with none changes nothing
+	lines are per title: a player waiting on Asteroids is not paired with one on Invaders
+	nothing mutates the queue it is given
+	nothing mutates the record it is given
+	the arenas: 24 players each, open for 600 s, in the PortalArenas map
+	the first player to join a line waits there
+	the second player is paired with the first, in that order, and both leave the line
+	with no arena on record the player opens one with the fresh id
+portal/.tracker/issues/active/f0208/acceptance/place.spec.luau
+	Modes is a shared config module that requires Play, and nothing outside Shared
+	Play, Pairing and Arena are Logic features whose requires stay inside Logic; Play requires Card
+	PlayButtons is in the player's scripts; the client's Main boots it and the test purchase screen
+	Plays and Invites are server adapters; Plays reaches the arcade's Wallet and Receipts
+	ReplicatedStorage.Remotes.Play is a RemoteEvent
+	nothing a client can read requires a server module
+	portal's architecture map declares the play buttons and the edge Play -> Card
+	portal's tests/inputs.tsv declares that this spec reads the architecture map
+	the server's Main boots Plays
+portal/.tracker/issues/active/f0208/acceptance/play.spec.luau
+	Modes: PLAY on every title, ARENA on Snake, 2 PLAYERS on Invaders and Asteroids, frozen
+	a 2 PLAYERS wait shows WAITING FOR A SECOND PLAYER with CANCEL and INVITE FRIEND
+	a card shows one button per mode, each with its label and the price, enabled once the state is known
+	a card whose state is not known shows its buttons disabled, with no price; one not published shows none
+	a card's second button is its second mode
+	a client's play names a title and one of that title's modes
+	a free start due goes at once, in every mode, closed included
+	a held play goes at once, in every mode, closed included
+	a play that could not start, or a closed store, shows its note above the buttons
+	a play's price is FREE when the free start is due, else 5 R$ struck through and 1 R$, from Prices
+	a player's MemoryStore writes: WRITES within WRITE_SPAN seconds, the oldest freeing a place as it ages out
+	a read still busy after CHECK_SECONDS of checking is a slow store: it goes on the pass, in every mode
+	a read that failed goes on the portal's pass, in every mode; a busy read reads again
+	an invite's record holds the inviting server's job and a title
+	an invited friend's launch data names the inviter by a whole positive id, else nothing
+	another player waiting on a 2 PLAYERS card says so; a card without 2 PLAYERS says nothing
+	cancel and invite carry nothing else, whatever the client adds
+	every play text on the front card is at least Card.MIN_TEXT px on every screen
+	spending never changes the list it is given
+	the buttons sit side by side across the slot with a gap: full height, or the bottom half under a note
+	the card's keys are clear of the boards' tab keys (f0206: W, S, Up, Down, ButtonL2, ButtonR2)
+	the card's other keys: 2, keypad 2 and X the second button; Backspace and B cancel; I and Y invite
+	the client reads the server's status field by field, never raising
+	the keys are bound under one action, above the default controls and below the test purchase screen
+	the note takes the whole slot alone, else its top half
+	the phases are the seven a play passes through
+	the player's play of one title leaves every other card as it is
+	the waits and bounds
+	while the player's play of a title is checked, bought or starting, its card shows only the note
+	with no free start due and nothing held the player buys; in closed mode the store is unavailable
+portal/.tracker/issues/active/f0208/acceptance/server.spec.luau
+	2 PLAYERS alone waits on the card, teleports nothing, and every player hears one is waiting
+	ARENA bought teleports to the arena on its grant
+	ARENA joins the shared arena on record: its reserved server, one more sent, kept OPEN_SECONDS
+	CANCEL leaves the line: idle, nobody waiting, and the next player waits instead of going
+	CANCEL or INVITE with no wait does nothing
+	INVITE while waiting records the invite once per wait and tells the client to prompt each time
+	PLAY with a free start due checks the record, then teleports to the title's place at once
+	PLAY with a held play teleports at once; nothing is charged here
+	TeleportInitFailed fails the start
+	a 2 PLAYERS player whose read failed has their pass written, then waits
+	a 2 PLAYERS purchase waits on its grant, then joins the line
+	a bought screen whose receipt is not here within RECEIPT_SECONDS ends the purchase; the late grant is held
+	a busy read is read again BUSY_SECONDS later, with no second read meanwhile
+	a check still busy after CHECK_SECONDS (a slow store) writes the pass, then teleports
+	a client looping 2 PLAYERS, INVITE and CANCEL for a minute causes at most WRITES writes and 61 broadcasts
+	a full or closed arena makes the next ARENA player open a new one
+	a grant of another title, a revive, or one with no purchase open starts nothing; it stays held
+	a later purchase stays open when an earlier purchase's receipt wait ends
+	a pair whose partner leaves before the second try is not tried again; the one left fails
+	a party teleport that errors is tried once more, then fails both; neither is left waiting
+	a player who leaves during the arena write is sent nothing; their rejoin plays at once
+	a player who leaves during the check, or with a purchase open, is told, asked and sent nothing
+	a press from a player who already left reads nothing
+	a purchase screen closed not bought ends the purchase: idle, no teleport, and a later grant starts nothing
+	a purchase screen that cannot open ends in failed
+	a purchase whose screen never reports closing ends BUY_SECONDS after it opened; its grant is then held
+	a read that failed lets the player go in closed mode too
+	a read that failed writes the portal's pass for that title, then teleports
+	a receipt before the screen's close teleports, and the close changes nothing
+	a screen closed bought before its receipt keeps the purchase open; the grant then teleports
+	a second player's 2 PLAYERS on that title sends both in one teleport to a fresh reserved server
+	a start that has not left 15 s after the call fails, told once the heartbeat sees it
+	a teleport that errors fails; a press during Travel's cool-down does nothing, one after it plays again
+	a teleport that raises is tried once more RETRY_SECONDS later, and a second try that works goes
+	a waiting player who leaves leaves the line
+	an arena record that cannot be written fails the start; nothing is sent
+	an arena write not back within WRITE_SECONDS fails the start; its late answer starts nothing
+	an invite is withdrawn when the wait ends: a cancel, a pair, another play or a leave
+	another play while waiting leaves the line first, then checks the new play
+	during the arena write a second grant and every press do nothing: one write, one teleport
+	during the pass write a press does nothing; a pass write not back within WRITE_SECONDS still goes
+	every failure rests the title COOL_SECONDS: a press then is dropped; then the card is idle again
+	in closed mode nothing is sold: store unavailable, no prompt; a free start or a held play still goes
+	installs Receipts once, with a grant and a close handler, and Invites once
+	nothing rides in TeleportData: the call takes the place, the players and options only
+	one play at a time: a press while checking, buying or going starts nothing more
+	players waiting on different titles are not paired
+	statuses go to the player they are about
+	the arena's last transform call decides: another server's arena written meanwhile is joined
+	the destinations are the place-id attributes, read once; an unpublished title plays nothing
+	the free state is PaidPlay's at os.time(): a free start taken under an hour ago is not due
+	the grant starts its own play with no read of the record (a read in flight may still hold the old one)
+	the write budget comes back WRITE_SPAN after the writes
+	what the client sends is checked: an unknown title or a mode the title lacks plays nothing
+	with nothing held it opens the 1 R$ play product of that title, and teleports on its grant
+portal/tests/meta/architecture.spec.luau
+	Logic never touches the Roblox engine
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	every Luau file is --!strict
+	every feature has unit specs
+	every require resolves
+	features are only used through their init.luau
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+portal/tests/meta/fence.spec.luau
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+	every git this run starts refuses ref updates in this repository
+	git finds no repository in .cache, nor in a folder below it that has none
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	on macOS this run can write nothing in the checkout outside .cache
+	specs have no GitHub credentials and push only into fixtures
+	this run is guarded for this checkout
+	when jailed, a spec can't signal the run's top process
+portal/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+portal/tests/place/library.spec.luau
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders
+portal/tests/unit/Arena/arena.spec.luau
+	with no arena open, the first player opens one
+portal/tests/unit/Card/card.spec.luau
+	shows coming soon for a place that is not published
+portal/tests/unit/Carousel/carousel.spec.luau
+	wraps round
+portal/tests/unit/Pairing/pairing.spec.luau
+	the second player in a line is paired with the first
+portal/tests/unit/Play/play.spec.luau
+	a held play goes at once
+snake/tests/meta/architecture.spec.luau
+	Logic never touches the Roblox engine
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	every Luau file is --!strict
+	every feature has unit specs
+	every require resolves
+	features are only used through their init.luau
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+snake/tests/meta/fence.spec.luau
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+	every git this run starts refuses ref updates in this repository
+	git finds no repository in .cache, nor in a folder below it that has none
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	on macOS this run can write nothing in the checkout outside .cache
+	specs have no GitHub credentials and push only into fixtures
+	this run is guarded for this checkout
+	when jailed, a spec can't signal the run's top process
+snake/tests/meta/home.spec.luau
+	has every file and setting of the home scaffold (z-nile/README.md, A project's home)
+snake/tests/place/library.spec.luau
+	every string require in the home's scripts resolves to a ModuleScript in the DataModel
+	holds the library: ReplicatedStorage.Arcade and ServerStorage.Arcade are folders

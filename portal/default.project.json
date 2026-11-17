@@ -10,7 +10,8 @@
       "Arcade": { "$path": "../arcade/src/shared" },
       "Remotes": {
         "$className": "Folder",
-        "Cards": { "$className": "RemoteEvent" }
+        "Cards": { "$className": "RemoteEvent" },
+        "Play": { "$className": "RemoteEvent" }
       }
     },
     "ServerStorage": {

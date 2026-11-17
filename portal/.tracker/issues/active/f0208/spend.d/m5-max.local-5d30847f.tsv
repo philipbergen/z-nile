@@ -1,2 +1,37 @@
 when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-17 14:41	f0205: carousel, cards, games, server and client adapters	3	0	build							tokens,wall,cpu,ai
+2026-11-17 14:43	3 specs	0	0	test			0.829	0.670		0.829	tokens,ai
+2026-11-17 14:43	6 specs	0	0	test			0.824	0.920		0.824	tokens,ai
+2026-11-17 14:43	1 spec	0	0	test			0.830	0.600		0.830	tokens,ai
+2026-11-17 14:43	1 spec	0	0	test			0.819	0.560		0.819	tokens,ai
+2026-11-17 14:43	1 spec	0	0	test			1.027	0.630		1.027	tokens,ai
+2026-11-17 14:43	1 spec	0	0	test			0.822	0.580		0.822	tokens,ai
+2026-11-17 14:43	1 spec	0	0	test			1.034	0.610		1.034	tokens,ai
+2026-11-17 14:43	1 spec	0	0	test			0.811	0.590		0.811	tokens,ai
+2026-11-17 14:43	1 spec	0	0	test			1.025	0.600		1.025	tokens,ai
+2026-11-17 14:43	5 specs	0	0	test			0.821	0.800		0.821	tokens,ai
+2026-11-17 14:43	6 specs	0	0	test			1.027	1.020		1.027	tokens,ai
+2026-11-17 14:43	6 specs	0	0	test			1.038	1.000		1.038	tokens,ai
+2026-11-17 14:43	6 specs	0	0	test			1.234	1.120		1.234	tokens,ai
+2026-11-17 14:43	1 spec	0	0	test			0.825	0.560		0.825	tokens,ai
+2026-11-17 14:44	f0208: play decision, pairing, arenas, plays, invites and play buttons	1173	1	build							tokens,wall,cpu,ai
+2026-11-17 14:45	1 spec	0	0	test			1.029	0.650		1.029	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.023	0.690		1.023	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.030	0.680		1.030	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.033	0.750		1.033	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.025	0.710		1.025	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.031	0.710		1.031	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.231	0.830		1.231	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.237	0.830		1.237	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.443	0.980		1.443	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.236	0.870		1.236	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.655	0.940		1.655	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.234	0.840		1.234	tokens,ai
+2026-11-17 14:45	1 spec	0	0	test			1.243	0.870		1.243	tokens,ai
+2026-11-17 14:45	2 specs	0	0	test			1.444	1.210		1.444	tokens,ai
+2026-11-17 14:45	4 specs	0	0	test			3.912	3.640		3.912	tokens,ai
+2026-11-17 14:45	15 specs	0	0	test			4.084	4.910		4.084	tokens,ai
+2026-11-17 14:45	4 specs	0	0	test			2.907	2.710		2.907	tokens,ai
+2026-11-17 14:45	4 specs	0	0	test			2.641	2.440		2.641	tokens,ai
+2026-11-17 14:45	4 specs	0	0	test			2.486	2.440		2.486	tokens,ai
+2026-11-17 14:45	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
