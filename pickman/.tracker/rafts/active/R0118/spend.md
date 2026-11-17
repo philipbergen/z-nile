@@ -4,8 +4,8 @@
 |---|---|---|---|---|---|---|
 | f0145 | feature |  | 10505 | 137 | 280.0 | 470000 |
 
-**Total:** +10505 / -137 lines, 280.0 agent-minutes, 470000 tokens over 384 records
-<!-- totals: added=10505 removed=137 minutes=280.0 records=384 tokens=470000 -->
+**Total:** +10505 / -137 lines, 280.0 agent-minutes, 470000 tokens over 395 records
+<!-- totals: added=10505 removed=137 minutes=280.0 records=395 tokens=470000 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
