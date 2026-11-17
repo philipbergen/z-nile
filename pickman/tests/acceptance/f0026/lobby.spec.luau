@@ -9,6 +9,23 @@ local boardTitle = (Lobby :: any).boardTitle
 local boardPanel = (Lobby :: any).boardPanel
 local lines = (Lobby :: any).lines
 
+-- c0380: what follows the level changes (f0145's lives, then f0186's revives), so a board's lines are pinned up to
+-- the level: each line of `text` that is the line `want` has there, or starts with it and a space, is cut back to it;
+-- every other line, and the number of lines, stay as they are, so a compare with `want` still shows them.
+local function upToLevel(text: any, want: string): any
+	if type(text) ~= "string" then
+		return text
+	end
+	local got, keep = string.split(text, "\n"), string.split(want, "\n")
+	for i, line in got do
+		local w = keep[i]
+		if w ~= nil and (line == w or string.sub(line, 1, #w + 1) == w .. " ") then
+			got[i] = w
+		end
+	end
+	return table.concat(got, "\n")
+end
+
 local function row(rank: number, name: string, score: number, level: number): any
 	return { rank = rank, name = name, score = score, level = level }
 end
@@ -70,7 +87,7 @@ return t.spec("f0026 lobby boards", function(it)
 			empty = nil,
 			rows = { row(1, "A", 10, 2), row(2, "B", 9, 4) },
 		}, 2)
-		t.expect(text).toBe("1 A 10 2\n> 2 B 9 4")
+		t.expect(upToLevel(text, "1 A 10 2\n> 2 B 9 4")).toBe("1 A 10 2\n> 2 B 9 4")
 		t.expect(lines({ empty = "No scores yet", rows = {} }, nil)).toBe("No scores yet")
 		t.expect(lines({ empty = "No scores yet", rows = {} }, 1)).toBe("No scores yet")
 	end)

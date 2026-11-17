@@ -1,0 +1,19 @@
+# Review 001: R0119 (code mode)
+Inputs: 985220cfa (layer R0119/1/c0380, `git diff origin/main...HEAD` with origin/main at 31e8cc938 after `./zn sync --fetch`); c0380.md, its check.sh, acceptance/narrowed.spec.luau, experiments/prototype.patch, mutants.txt; R0119.md and its check.sh.
+
+No findings.
+
+What I checked:
+- **Design adherence.** The ten spec hunks of the branch diff equal `experiments/prototype.patch` line for line once `index` lines are dropped (the patch hashes to 78cd528c…5cb80, as the Design says). All ten origin/main blobs are the ones step 1 lists. Each of the Design's fifteen per-case edits is in the diff as written: the retitles, the header sentences, case 2's (a)/(b)/(c), case 10's `♥` check, case 12's six exclusions and `{buy}, NEXT FREE GAME IN 42 MIN`, case 13's `{buy} (TEST: NOTHING IS CHARGED)`, the dropped `"lives spent"` and D26 with its comment and header clauses. Nothing under `pickman/src/` or `game-design.md` changes. The verification log records step 0, step 1 and the check before the patch, and states that there was no deviation.
+- **Correctness of the cut.** I ran `upToLevel` in my head. A line is kept only when it equals the wanted line, or equals it followed by a space, so `3` does not match `30`. Extra or missing lines stay in the text and fail the compare. A nil passes through and fails the assertion. I spot-ran two mutants on a shared clone of 985220cfa under the scratchpad, each through `./zn run --time 120`. C8 (" X" after the best line's level) fails d0124/lobby's "the list text …" case. A digit added after every row's level fails f0026/lobby, f0026/endtoend, f0145/lives and f0145/top. Both results match `mutants.txt`.
+- **Checks.** `./zn check c0380`: 2/2 PASS. `./zn check R0119`: 3/3 PASS, promote-check included. `z-nile/check.sh --affected`: format, lint, both type stages and builds pass, 83 passed and 0 failed across 10 spec files, GATE PASSED.
+- **Sequestration.** The diff lists one entry, `A pickman/.tracker/issues/active/c0380/acceptance/watch.txt`, and nothing else under any `check.sh` or `acceptance/`. That file is the one `./zn finish` generates (lesson zz-review/finish-watch-is-generated), not a sequestered edit. This layer changes no source file, so under zz-test's capture rule the watch names what the spec requires: `pickman/tests/lib/t.luau`. That is its whole content.
+- **Readers of the moved digest.** `./zn check c0156` now fails its AC2 (`consumers.luau` still holds the old D26). The script's header says it runs at c0156's `done` only, that the gate never reruns it, and that a later narrowing moves the pin's digest. Nothing else runs c0156's `check.sh`: there is no `find c0156` in any `check.sh`, and `z-nile/check.sh` reruns no finished item's checks. The verification log names this. c0128's guards.spec and titles.spec pass through AC2.
+- **Weak tests.** None of the assertions depends on the clock or randomness. Each narrowed compare still prints the actual line when it fails. Every removed exact pin keeps a negative case, as the C rows show. `narrowed.spec` normalises with its own `exact` rule (ids masked, CRLF to LF, nothing else) rather than `pin.normalise`. That is the exact-text pin lesson zz-test/narrowing-pins-the-whole-file allows (c0150's model), and its joined-comment case proves it.
+- **Repository safety and bounded commands.** The diff adds no script and no command. `narrowed.spec` only reads files. No `check.sh` changes.
+- **Selection.** `narrowed.spec` reads its ten specs as text, but specs never go in a watch file. So a later edit of one of them reaches this spec only at the merge's full gate. The Design's Affected specs section declares this, it matches c0128's golden.spec, and the follow-on preps (c0202, c0198) are bound to recompute digests by the `exact` rule.
+
+## Judged criteria (code mode only)
+c0380 has no Judged criteria (its `### Judged` says None).
+
+Verdict: approve

@@ -14,6 +14,23 @@ local t = require("@tests/lib/t")
 
 local H = Hiscores :: any
 local LOGIC = "@game/ReplicatedStorage/Shared/Logic/"
+
+-- c0380: what follows the level changes (f0145's lives, then f0186's revives), so a board's lines are pinned up to
+-- the level: each line of `text` that is the line `want` has there, or starts with it and a space, is cut back to it;
+-- every other line, and the number of lines, stay as they are, so a compare with `want` still shows them.
+local function upToLevel(text: any, want: string): any
+	if type(text) ~= "string" then
+		return text
+	end
+	local got, keep = string.split(text, "\n"), string.split(want, "\n")
+	for i, line in got do
+		local w = keep[i]
+		if w ~= nil and (line == w or string.sub(line, 1, #w + 1) == w .. " ") then
+			got[i] = w
+		end
+	end
+	return table.concat(got, "\n")
+end
 local FRI = 1792108800
 local JOB = "job-1"
 
@@ -878,13 +895,14 @@ return t.spec("d0124 adapters", function(it)
 			{ rank = 2, name = "Ada", score = 50, level = 2 },
 		}
 		board.OnClientEvent:fire("all", shown, 1, false, { score = 80, level = 3 })
-		t.expect(rows()).toBe("> 1 Ada 80 3\n2 Ada 50 2\nYOUR BEST 80 3")
+		t.expect(upToLevel(rows(), "> 1 Ada 80 3\n2 Ada 50 2\nYOUR BEST 80 3"))
+			.toBe("> 1 Ada 80 3\n2 Ada 50 2\nYOUR BEST 80 3")
 		for _, d in gui:GetDescendants() do
 			if d.ClassName == "TextButton" and d.Text == Lobby.boardTitle("day") then
 				d.Activated:fire()
 			end
 		end
 		board.OnClientEvent:fire("day", shown, nil, false, { score = 80, level = 3 })
-		t.expect(rows()).toBe("1 Ada 80 3\n2 Ada 50 2")
+		t.expect(upToLevel(rows(), "1 Ada 80 3\n2 Ada 50 2")).toBe("1 Ada 80 3\n2 Ada 50 2")
 	end)
 end)

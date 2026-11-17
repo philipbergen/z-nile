@@ -1,6 +1,7 @@
 --!strict
 -- c0128 AC4: no other case changes. Both narrowed files are pinned whole: the file is normalised and its sha256 must
--- equal the digest of the narrowing in R0045/experiments/narrowing.patch applied to origin/main. The normalisation is
+-- equal the digest of the narrowing in R0045/experiments/narrowing.patch applied to origin/main (for D26, f0026's
+-- adapters.spec: R0045's narrowing with c0380's on top, c0380/experiments/prototype.patch). The normalisation is
 -- the shared whole-file pin rule, z-nile/tests/lib/pin.luau (c0156, the rule c0103's narrowed.spec uses too): it masks
 -- item ids (so a compaction cannot break it), makes line endings LF, collapses runs of spaces and tabs within a line,
 -- drops trailing whitespace on a line, a trailing comma before `}` and the text's outer blank lines, and KEEPS every
@@ -11,7 +12,8 @@
 -- joined with the line below it, a deleted assertion) assert `not exactly…` on the file changed in memory, so a pin
 -- whose comparison was weakened turns a mutant case red. Any later change to either file must update its digest here:
 -- run `pin.digest` on the file's text. On a failure, titles.spec and guards.spec say which case moved or which guard
--- went, and a diff against narrowing.patch shows the rest; this file says that nothing else did.
+-- went, and a diff against narrowing.patch (and, for f0026's adapters.spec, c0380's prototype.patch) shows the rest;
+-- this file says that nothing else did.
 local fs = require("@lune/fs")
 local pin = require("@tests/lib/pin")
 local renamed = require("@tests/lib/renamed")
@@ -23,7 +25,9 @@ local F24 = ROOT .. renamed.id("f0024") .. "/adapter.spec.luau"
 local F26 = ROOT .. renamed.id("f0026") .. "/adapters.spec.luau"
 
 local D24 = "7f791c55bab7441df495cc59a1ed1989ff6daa6494e0719e748ef38bd66b992b"
-local D26 = "744eeb0f1d525ee47f52c01dd8cab3c4bcd511fd2edf28919f894712f64cbfc6"
+-- c0380: f0026 adapters pins its three board texts up to the level (f0186 adds the revives after it); D26 is the
+-- digest of that narrowing (c0380 experiments/prototype.patch)
+local D26 = "edfd74c3cd76d3eccd827af745ee6e671262c6f607232fef5a02713b4ef63074"
 
 local function exactly24(text: string): boolean
 	return pin.digest(text) == D24
