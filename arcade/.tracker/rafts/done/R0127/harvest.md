@@ -1,0 +1,4 @@
+- review-001 F1: zz-test/escaping-cases-repeat-every-character
+- note review-001 candidate (the reviewer's report): `--affected` selects no dependent home's place spec for an `arcade/src` change, and the executor's log read "no affected specs" as a pass: zz-test/library-changes-select-no-dependent-place
+- final-review-001 F1: zz-review/not-stacked-is-main-moving
+- note final-review-001 candidate (the reviewer's report): three of f0395's acceptance cases open `it(` on their own line with commas in their names, so the trace matcher could cite them only through their `check "ACn:` lines: zz-review/trace-cells-cite-their-own-proof
