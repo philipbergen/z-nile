@@ -13,6 +13,6 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0128
 
-# check "RC1: <end-to-end statement>" <command>
+check "RC1: the app project's own gate runs its node tests and passes" "$ZN_ROOT/z-nile/check.sh" --project z-nile-omarchy
 
 finish
