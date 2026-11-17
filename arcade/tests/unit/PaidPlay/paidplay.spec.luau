@@ -230,17 +230,38 @@ return t.spec("PaidPlay", function(it)
 		end).toThrow("twice")
 	end)
 
-	it(
-		"the test screen's lines name the title and product, the badge, and that nothing is charged",
-		function()
-			local lines =
-				PaidPlay.testLines("ALPHA", "revive", { struck = "9 X", price = "2 X", sale = "DEAL" })
-			t.expect(lines)
-				.toEqual({ "ALPHA: " .. PaidPlay.KIND_TEXT.revive, "9 X 2 X DEAL", PaidPlay.TEST_NOTE })
-			t.expect(PaidPlay.testLines("ALPHA", "play", { struck = "", price = "", sale = "" })[1])
-				.toBe("ALPHA: " .. PaidPlay.KIND_TEXT.play)
+	-- f0395: the lines are rich text. A play's price line strikes the struck price; a revive's is its own price.
+	local PRICES: PaidPlay.Prices = { struck = "9 X", price = "2 X", sale = "DEAL", revive = "3 Y" }
+
+	it("testLines strikes a play's struck price, then the price and the sale", function()
+		t.expect(PaidPlay.testLines("ALPHA", "play", PRICES)).toEqual({
+			"ALPHA: " .. PaidPlay.KIND_TEXT.play,
+			"<s>9 X</s> 2 X DEAL",
+			PaidPlay.TEST_NOTE,
+		})
+	end)
+
+	it("testLines gives a revive its own price, nothing struck", function()
+		local lines = PaidPlay.testLines("ALPHA", "revive", PRICES)
+		t.expect(lines).toEqual({ "ALPHA: " .. PaidPlay.KIND_TEXT.revive, "3 Y", PaidPlay.TEST_NOTE })
+		for _, line in lines do
+			t.expect((string.find(line, "<s>", 1, true))).toBe(nil)
 		end
-	)
+	end)
+
+	it("testLines escapes every &, < and > in every text", function()
+		-- each character at least twice in each text, so an escaper that replaces only the first one fails
+		local odd: PaidPlay.Prices =
+			{ struck = "<<9&&>>", price = "&&<<2>>", sale = "D>>L<<&&", revive = "&&<<3>>" }
+		t.expect(PaidPlay.testLines("A&&B<<C>>", "play", odd)).toEqual({
+			"A&amp;&amp;B&lt;&lt;C&gt;&gt;: " .. PaidPlay.KIND_TEXT.play,
+			"<s>&lt;&lt;9&amp;&amp;&gt;&gt;</s> &amp;&amp;&lt;&lt;2&gt;&gt; D&gt;&gt;L&lt;&lt;&amp;&amp;",
+			PaidPlay.TEST_NOTE,
+		})
+		t.expect(PaidPlay.testLines("A&&B<<C>>", "revive", odd)[2]).toBe("&amp;&amp;&lt;&lt;3&gt;&gt;")
+		-- "&" first: an entity typed into a text shows as typed
+		t.expect(PaidPlay.testLines("&gt;", "play", PRICES)[1]).toBe("&amp;gt;: " .. PaidPlay.KIND_TEXT.play)
+	end)
 
 	it("the test screen's keys: three buy, two cancel, any other none", function()
 		for _, k in { "Return", "KeypadEnter", "ButtonA" } do
