@@ -1,93 +1,107 @@
-# c0249 mutation check (prep, 2026-11-16): one mutant per Rules row, applied to proto-c0249, the row's spec file run, reverted.
-# outcome KILLED = a case failed on an assertion; the first failing case is shown. P23 was first written as a mutant of an
-# equivalent clause (a blocked item is excluded by its status anyway): it SURVIVED, the clause was removed from the code and
-# the mutant rewritten against the status test; the second form is KILLED.
-P1	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC1: a rank is a whole number from 1 to 999999, and an empty value is unset
-P3	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC6: the audit's check names a malformed, repeated or oddly written rank line, and passes the rest
-P4	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC6: the audit's check names a malformed, repeated or oddly written rank line, and passes the rest
-P5	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC1: setting a rank writes one line right after id, unsetting removes every rank line
-P7	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC1: only the backlog is ranked; an active or done item counts as unset
-P8	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC9: equal or unset ranks fall back to the ticket number, so the order is always stable
-P9	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC9: equal or unset ranks fall back to the ticket number, so the order is always stable
-P10	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC9: equal or unset ranks fall back to the ticket number, so the order is always stable
-P11	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC9: equal or unset ranks fall back to the ticket number, so the order is always stable
-P12	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC3: a raft's own rank overrides its members', and an unset one takes their best
-P14	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC5: blocked items come first when asked, and lost work comes first whatever its rank
-P15	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC5: blocked items come first when asked, and lost work comes first whatever its rank
-P16	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC4: next skips an item that waits on undone work or is blocked, and its rank is left as it is
-P17	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC4: next skips an item that waits on undone work or is blocked, and its rank is left as it is
-P18	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC4: next takes lost work first, whatever its rank, in the order given
-P19	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC4: next in a project's folder takes that project's items only
-P20	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC4: next takes lost work first, whatever its rank, in the order given
-P21	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC4: next takes the claimable raft with the best rank, and an issue only when no raft is claimable
-P22	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC4: next takes the claimable raft with the best rank, and an issue only when no raft is claimable
-L1	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC2: top, last, before and after put one item in a gap, so one move edits one file
-L2	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC2: top, last, before and after put one item in a gap, so one move edits one file
-L3	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC2: a move that lands where the item already is changes nothing
-L5	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC2: set and unset change the one item; a bad number or anchor is refused naming it
-L6	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC2: set and unset change the one item; a bad number or anchor is refused naming it
-L7	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC2: a move among rafts places a raft by its effective rank and gives it a rank of its own
-W1	KILLED	z-nile/engine/work.luau	rank.spec	rank.spec.luau :: AC4: ./zn work next takes rafts in rank order too, an unset rank last and the number as the tiebreak
-C1	KILLED	z-nile/engine/main.luau	command.spec	command.spec.luau :: AC2: rank top, in the main checkout, publishes one commit and fast-forwards the checkout
-C2	KILLED	z-nile/engine/main.luau	command.spec	command.spec.luau :: AC2: a move among unset items ranks the unset ones above it (auto) and changes no rank that exists
-C4	KILLED	z-nile/engine/main.luau	command.spec	command.spec.luau :: AC2: a refused rank names the rule, publishes nothing and leaves the checkout alone
-C5	KILLED	z-nile/engine/main.luau	command.spec	command.spec.luau :: AC2: --before with an empty id drops the card below the unset ones: it is unset, and the notice says so
-C10	KILLED	z-nile/engine/workread.luau	command.spec	command.spec.luau :: AC4: with no claimable raft next rafts an approved issue, then takes an issue to draft, skipping what waits, is blocked or is not ready
-C11	KILLED	z-nile/engine/workread.luau	command.spec	command.spec.luau :: AC3: a raft's own rank overrides its members', and an unset one takes their best
-B1	KILLED	z-nile/engine/boardview.luau	board.spec	board.spec.luau :: AC5: a column's cards are ordered by rank, then ticket number, inside the bands and among them
-B2	KILLED	z-nile/engine/boardview.luau	board.spec	board.spec.luau :: AC5: a column's cards are ordered by rank, then ticket number, inside the bands and among them
-B3	KILLED	z-nile/engine/board.luau	board.spec	board.spec.luau :: AC5: board.collect gives every issue and raft its rank and orders the bands by it
-B4	KILLED	z-nile/engine/boardview.luau	board.spec	board.spec.luau :: AC5: a column's cards are ordered by rank, then ticket number, inside the bands and among them
-H1	KILLED	z-nile/engine/raftplan.luau	hash.spec	hash.spec.luau :: AC10: designHash and recordHash leave the rank line out, and nothing else
-H2	KILLED	z-nile/engine/publish.luau	hash.spec	hash.spec.luau :: AC10: it refuses two rank lines, and a rank change beside any other front-matter change
-H3	KILLED	z-nile/engine/publish.luau	hash.spec	hash.spec.luau :: AC10: it refuses a rank change on an active or a done document, naming the file and the rule
-H4	KILLED	z-nile/engine/publish.luau	hash.spec	hash.spec.luau :: AC10: the publisher takes a rank change on a backlog document, alone or with a status change
-A1	KILLED	z-nile-omarchy/znile.board/Model.js	app.spec	app.spec.luau :: AC7: the shipped command, the rank order, a raft's effective rank, junk ranks and the session order
-A2	KILLED	z-nile-omarchy/znile.board/Model.js	app.spec	app.spec.luau :: AC7: the shipped command, the rank order, a raft's effective rank, junk ranks and the session order
-A3	KILLED	z-nile-omarchy/znile.board/settings.json	app.spec	app.spec.luau :: AC7: the shipped command, the rank order, a raft's effective rank, junk ranks and the session order
-A5	KILLED	z-nile-omarchy/znile.board/Model.js	app.spec	app.spec.luau :: AC7: the shipped command, the rank order, a raft's effective rank, junk ranks and the session order
-D1	KILLED	z-nile/README.md	docs.spec	docs.spec.luau :: AC8: the README's Order section says unset is valid, what claimable means and who sets a rank
-D2	KILLED	z-nile/skills/zz-rules/SKILL.md	docs.spec	docs.spec.luau :: AC8: zz-rules lists both commands where they may run and states the rank rule
-D3	KILLED	z-nile/skills/z-raft/SKILL.md	docs.spec	docs.spec.luau :: AC8: z-ticket, z-design and z-raft say they write no rank, and the templates write none
-D4	KILLED	z-nile/templates/issue/doc.md	docs.spec	docs.spec.luau :: AC8: z-ticket, z-design and z-raft say they write no rank, and the templates write none
-P6	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC1: setting a rank writes one line right after id, unsetting removes every rank line
-P23	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC4: next skips an item that waits on undone work or is blocked, and its rank is left as it is
-Q1	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC1: a rank is a whole number from 1 to 999999, and an empty value is unset
-Q2	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC1: a rank is a whole number from 1 to 999999, and an empty value is unset
-Q3	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC3: a rank a move wrote (auto) does not count towards a raft, so an unrelated move never reorders the rafts
-Q4	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
-Q5	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
-Q6	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC2: top, last, before and after put one item in a gap, so one move edits one file
-Q7	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
-Q8	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC3: a rank a move wrote (auto) does not count towards a raft, so an unrelated move never reorders the rafts
-Q9	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC5: list puts every blocked item first (rafts, then issues), then lost work, then the stack
-Q10	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC5: list puts every blocked item first (rafts, then issues), then lost work, then the stack
-Q11	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC5: list puts every blocked item first (rafts, then issues), then lost work, then the stack
-Q12	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC4: next rafts an approved issue that is in no raft after the claimable rafts and before any draft
-Q13	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC4: next rafts an approved issue that is in no raft after the claimable rafts and before any draft
-Q14	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC1: a document path gives its state, id and root through the registry, and a done item is its id alone
-C3	KILLED	z-nile/engine/main.luau	command.spec	command.spec.luau :: AC2: rank top, in the main checkout, publishes one commit and fast-forwards the checkout
-C6	KILLED	z-nile/engine/main.luau	command.spec	command.spec.luau :: AC5: list puts a lost claim first, after the blocked items, whatever its rank, and says when it cannot read it
-C9	KILLED	z-nile/engine/audit.luau	command.spec	command.spec.luau :: AC6: the audit rejects a malformed rank in any state and names the item and the rule
-C12	KILLED	z-nile/engine/main.luau	command.spec	command.spec.luau :: AC5: list puts a lost claim first, after the blocked items, whatever its rank, and says when it cannot read it
-C13	KILLED	z-nile/engine/main.luau	command.spec	command.spec.luau :: AC5: list puts a lost claim first, after the blocked items, whatever its rank, and says when it cannot read it
-C14	KILLED	z-nile/engine/main.luau	command.spec	command.spec.luau :: AC5: list shows every blocked item first, then the rafts, then the issues, each in the stack's order
-C15	KILLED	z-nile/engine/main.luau	command.spec	command.spec.luau :: AC2: --before with an empty id drops the card below the unset ones: it is unset, and the notice says so
-C17	KILLED	z-nile/engine/main.luau	drag.spec	drag.spec.luau :: AC2: two drags at once: the second plans again from the first's result, in two commits
-C18	KILLED	z-nile/engine/workread.luau	command.spec	command.spec.luau :: AC4: next reads origin/main, not this checkout: a rank published from a worktree is seen at once
-C19	KILLED	z-nile/engine/main.luau	command.spec	command.spec.luau :: AC2: a refused rank names the rule, publishes nothing and leaves the checkout alone
-C20	KILLED	z-nile/engine/workread.luau	command.spec	command.spec.luau :: AC4: with no claimable raft next rafts an approved issue, then takes an issue to draft, skipping what waits, is blocked or is not ready
-R1	KILLED	z-nile/engine/rank.luau	drag.spec	drag.spec.luau :: AC3: a drag among unset items never reorders the rafts: the ranks it writes on their members are auto
-R2	KILLED	z-nile/engine/workread.luau	command.spec	command.spec.luau :: AC3: a raft's own rank overrides its members', and an unset one takes their best
-B5	KILLED	z-nile/engine/board.luau	board.spec	board.spec.luau :: AC5: board.collect gives every issue and raft its rank and orders the bands by it
-B6	KILLED	z-nile/engine/board.luau	board.spec	board.spec.luau :: AC5: board.collect gives every issue and raft its rank and orders the bands by it
-B7	KILLED	z-nile/engine/board.luau	board.spec	board.spec.luau :: AC5: board.collect gives every issue and raft its rank and orders the bands by it
-H5	KILLED	z-nile/engine/publish.luau	hash.spec	hash.spec.luau :: AC2: the publisher hands a build many files of its base in one read, and nil for a file that is not there
-A4	KILLED	z-nile-omarchy/znile.board/Service.qml	app.spec	app.spec.luau :: AC7: the shipped command, the rank order, a raft's effective rank, junk ranks and the session order
-A6	KILLED	z-nile-omarchy/znile.board/Service.qml	app.spec	app.spec.luau :: AC7: the shipped command, the rank order, a raft's effective rank, junk ranks and the session order
-D5	KILLED	AGENTS.md	docs.spec	docs.spec.luau :: AC8: AGENTS.md names rank among the commands that move the main checkout
-D6	KILLED	z-nile/README.md	docs.spec	docs.spec.luau :: AC8: the README's Order section says unset is valid, what claimable means and who sets a rank
-P2	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC1: a rank is a whole number from 1 to 999999, and an empty value is unset
-P13	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC3: a raft's own rank overrides its members', and an unset one takes their best
-L4	KILLED	z-nile/engine/rank.luau	rank.spec	rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
-C16	KILLED	z-nile/engine/main.luau	drag.spec	drag.spec.luau :: AC2: a rank on origin/main is reported as saved when this checkout cannot be fast-forwarded
+# c0249 mutation check, revised for the 2026-11-16 rulings: one mutant per Rules row, applied to proto-c0249-rulings, the row's spec file run, reverted.
+# outcome KILLED = a case failed on an assertion; the first failing case is shown. 104 mutants, all KILLED (no syntax or require error).
+# Dropped with the rulings: Q1 and Q2 (the auto marker in the rank line). Rewritten: P2, P13, Q3, Q4, Q7 (now a move-written rank shifted), Q8, R1, R2, B6, C2, C12, C13, C14. New: S1-S3 (shifted=), M1-M5, W2-W4, B8, C21-C23, D7, D8.
+P1	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC1: a rank is a whole number from 1 to 999999, and an empty value is unset
+P3	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC6: the audit's check names a malformed, repeated or oddly written rank line, and passes the rest
+P4	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC6: the audit's check names a malformed, repeated or oddly written rank line, and passes the rest
+P5	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC1: setting a rank writes one line right after id, unsetting removes every rank line
+P7	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC1: only the backlog is ranked; an active or done item counts as unset
+P8	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC9: equal or unset ranks fall back to the ticket number, so the order is always stable
+P9	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC9: equal or unset ranks fall back to the ticket number, so the order is always stable
+P10	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC9: equal or unset ranks fall back to the ticket number, so the order is always stable
+P11	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC9: equal or unset ranks fall back to the ticket number, so the order is always stable
+P12	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC3: a raft's own rank overrides its members', and an unset one takes their best
+P14	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC5: blocked items come first when asked, and lost work comes first whatever its rank
+P15	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC5: blocked items come first when asked, and lost work comes first whatever its rank
+P16	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC4: next skips an item that waits on undone work or is blocked, and its rank is left as it is
+P17	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC4: next skips an item that waits on undone work or is blocked, and its rank is left as it is
+P18	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC4: next takes lost work first, whatever its rank, in the order given
+P19	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC4: next in a project's folder takes that project's items only
+P20	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC4: next takes lost work first, whatever its rank, in the order given
+P21	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC4: next takes the claimable raft with the best rank, and an issue only when no raft is claimable
+P22	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC4: next takes the claimable raft with the best rank, and an issue only when no raft is claimable
+L1	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC2: top, last, before and after put one item in a gap, so one move edits one file
+L2	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC2: top, last, before and after put one item in a gap, so one move edits one file
+L3	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC2: a move that lands where the item already is changes nothing
+L5	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC2: set and unset change the one item; a bad number or anchor is refused naming it
+L6	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC2: set and unset change the one item; a bad number or anchor is refused naming it
+L7	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC2: a move among rafts places a raft by its effective rank and gives it a rank of its own
+W1	KILLED	z-nile/engine/work.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC4: ./zn work next takes rafts in rank order too, an unset rank last and the number as the tiebreak
+C1	KILLED	z-nile/engine/main.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC2: rank top, in the main checkout, publishes one commit and fast-forwards the checkout
+C2	KILLED	z-nile/engine/main.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC2: a move among unset items ranks the unset ones above it (moved= in their rows) and changes no rank that exists
+C4	KILLED	z-nile/engine/main.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC2: a refused rank names the rule, publishes nothing and leaves the checkout alone
+C5	KILLED	z-nile/engine/main.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC2: --before with an empty id drops the card below the unset ones: it is unset, and the notice says so
+C10	KILLED	z-nile/engine/workread.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC4: with no claimable raft next rafts an approved issue, then takes an issue to draft, skipping what waits, is blocked or is not ready
+C11	KILLED	z-nile/engine/workread.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC3: a raft's own rank overrides its members', and an unset one takes their best
+B1	KILLED	z-nile/engine/boardview.luau	board	.tracker/issues/c0249/acceptance/board.spec.luau :: AC5: a column's cards are ordered by rank, then ticket number, inside the bands and among them
+B2	KILLED	z-nile/engine/boardview.luau	board	.tracker/issues/c0249/acceptance/board.spec.luau :: AC5: a column's cards are ordered by rank, then ticket number, inside the bands and among them
+B3	KILLED	z-nile/engine/board.luau	board	.tracker/issues/c0249/acceptance/board.spec.luau :: AC5: board.collect gives every issue and raft its rank and orders the bands by it
+B4	KILLED	z-nile/engine/boardview.luau	board	.tracker/issues/c0249/acceptance/board.spec.luau :: AC5: a column's cards are ordered by rank, then ticket number, inside the bands and among them
+H1	KILLED	z-nile/engine/raftplan.luau	hash	.tracker/issues/c0249/acceptance/hash.spec.luau :: AC10: designHash and recordHash leave the rank line out, and nothing else
+H2	KILLED	z-nile/engine/publish.luau	hash	.tracker/issues/c0249/acceptance/hash.spec.luau :: AC10: it refuses two rank lines, and a rank change beside any other front-matter change
+H3	KILLED	z-nile/engine/publish.luau	hash	.tracker/issues/c0249/acceptance/hash.spec.luau :: AC10: it refuses a rank change on an active or a done document, naming the file and the rule
+H4	KILLED	z-nile/engine/publish.luau	hash	.tracker/issues/c0249/acceptance/hash.spec.luau :: AC10: the publisher takes a rank change on a backlog document, alone or with a status change
+A1	KILLED	z-nile-omarchy/znile.board/Model.js	app	.tracker/issues/c0249/acceptance/app.spec.luau :: AC7: the shipped command, the rank order, a raft's effective rank, junk ranks and the session order
+A2	KILLED	z-nile-omarchy/znile.board/Model.js	app	.tracker/issues/c0249/acceptance/app.spec.luau :: AC7: the shipped command, the rank order, a raft's effective rank, junk ranks and the session order
+A3	KILLED	z-nile-omarchy/znile.board/settings.json	app	.tracker/issues/c0249/acceptance/app.spec.luau :: AC7: the shipped command, the rank order, a raft's effective rank, junk ranks and the session order
+A5	KILLED	z-nile-omarchy/znile.board/Model.js	app	.tracker/issues/c0249/acceptance/app.spec.luau :: AC7: the shipped command, the rank order, a raft's effective rank, junk ranks and the session order
+D1	KILLED	z-nile/README.md	docs	.tracker/issues/c0249/acceptance/docs.spec.luau :: AC8: the README's Order section says unset is valid, what claimable means and who sets a rank
+D2	KILLED	z-nile/skills/zz-rules/SKILL.md	docs	.tracker/issues/c0249/acceptance/docs.spec.luau :: AC8: zz-rules lists both commands where they may run and states the rank rule
+D3	KILLED	z-nile/skills/z-raft/SKILL.md	docs	.tracker/issues/c0249/acceptance/docs.spec.luau :: AC8: z-ticket, z-design and z-raft say they write no rank, and the templates write none
+D4	KILLED	z-nile/templates/issue/doc.md	docs	.tracker/issues/c0249/acceptance/docs.spec.luau :: AC8: z-ticket, z-design and z-raft say they write no rank, and the templates write none
+P6	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC1: setting a rank writes one line right after id, unsetting removes every rank line
+P23	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC4: next skips an item that waits on undone work or is blocked, and its rank is left as it is
+Q3	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC3: a rank a move wrote (moved= in its record) does not count towards a raft, so an unrelated move never reorders the rafts
+Q4	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
+Q5	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
+Q6	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC2: top, last, before and after put one item in a gap, so one move edits one file
+Q7	KILLED	z-nile/engine/rank.luau	rank	rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
+S1	KILLED	z-nile/engine/rank.luau	rank	rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
+S2	KILLED	z-nile/engine/rank.luau	rank	rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
+S3	KILLED	z-nile/engine/main.luau	drag	drag.spec.luau :: AC2: two drags at once: the second plans again from the first's result, in two commits
+Q8	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC3: a rank a move wrote (moved= in its record) does not count towards a raft, so an unrelated move never reorders the rafts
+Q9	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC5: list puts every blocked item first (rafts, then issues), then lost work, then the stack
+Q10	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC5: list puts every blocked item first (rafts, then issues), then lost work, then the stack
+Q11	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC5: list puts every blocked item first (rafts, then issues), then lost work, then the stack
+Q12	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC4: next rafts an approved issue that is in no raft after the claimable rafts and before any draft
+Q13	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC4: next rafts an approved issue that is in no raft after the claimable rafts and before any draft
+Q14	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC1: a document path gives its state, id and root through the registry, and a done item is its id alone
+C3	KILLED	z-nile/engine/main.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC2: rank top, in the main checkout, publishes one commit and fast-forwards the checkout
+C6	KILLED	z-nile/engine/main.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC5: list stays offline and does not know lost work; list --lost asks the remote, puts a lost claim first after the blocked items whatever it
+C9	KILLED	z-nile/engine/audit.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC6: the audit rejects a malformed rank in any state and names the item and the rule
+C12	KILLED	z-nile/engine/main.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC5: list stays offline and does not know lost work; list --lost asks the remote, puts a lost claim first after the blocked items whatever it
+C13	KILLED	z-nile/engine/main.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC5: list stays offline and does not know lost work; list --lost asks the remote, puts a lost claim first after the blocked items whatever it
+C14	KILLED	z-nile/engine/main.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC5: list shows every blocked item first, then the rafts, then the issues, each in the stack's order
+C15	KILLED	z-nile/engine/main.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC2: --before with an empty id drops the card below the unset ones: it is unset, and the notice says so
+C17	KILLED	z-nile/engine/main.luau	drag	.tracker/issues/c0249/acceptance/drag.spec.luau :: AC2: two drags at once: the second plans again from the first's result, in two commits
+C18	KILLED	z-nile/engine/workread.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC4: next reads origin/main, not this checkout: a rank published from a worktree is seen at once
+C19	KILLED	z-nile/engine/main.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC2: a refused rank names the rule, publishes nothing and leaves the checkout alone
+C20	KILLED	z-nile/engine/workread.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC4: with no claimable raft next rafts an approved issue, then takes an issue to draft, skipping what waits, is blocked or is not ready
+R1	KILLED	z-nile/engine/rank.luau	drag	.tracker/issues/c0249/acceptance/drag.spec.luau :: AC3: a drag among unset items never reorders the rafts: the rows it writes for their members carry moved=
+R2	KILLED	z-nile/engine/workread.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC3: a raft's own rank overrides its members', and an unset one takes their best
+B5	KILLED	z-nile/engine/board.luau	board	.tracker/issues/c0249/acceptance/board.spec.luau :: AC5: board.collect gives every issue and raft its rank and orders the bands by it
+B6	KILLED	z-nile/engine/board.luau	board	.tracker/issues/c0249/acceptance/board.spec.luau :: AC5: board.collect gives every issue and raft its rank and orders the bands by it
+B7	KILLED	z-nile/engine/board.luau	board	.tracker/issues/c0249/acceptance/board.spec.luau :: AC5: board.collect gives every issue and raft its rank and orders the bands by it
+H5	KILLED	z-nile/engine/publish.luau	hash	.tracker/issues/c0249/acceptance/hash.spec.luau :: AC2: the publisher hands a build many files of its base in one read, and nil for a file that is not there
+A4	KILLED	z-nile-omarchy/znile.board/Service.qml	app	.tracker/issues/c0249/acceptance/app.spec.luau :: AC7: the shipped command, the rank order, a raft's effective rank, junk ranks and the session order
+A6	KILLED	z-nile-omarchy/znile.board/Service.qml	app	.tracker/issues/c0249/acceptance/app.spec.luau :: AC7: the shipped command, the rank order, a raft's effective rank, junk ranks and the session order
+D5	KILLED	AGENTS.md	docs	.tracker/issues/c0249/acceptance/docs.spec.luau :: AC8: the agents file names rank among the commands that move the main checkout
+D6	KILLED	z-nile/README.md	docs	.tracker/issues/c0249/acceptance/docs.spec.luau :: AC8: the README's Order section says unset is valid, what claimable means and who sets a rank
+P2	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC1: a rank is a whole number from 1 to 999999, and an empty value is unset
+P13	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC3: a raft's own rank overrides its members', and an unset one takes their best
+L4	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
+C16	KILLED	z-nile/engine/main.luau	drag	.tracker/issues/c0249/acceptance/drag.spec.luau :: AC2: a rank on origin/main is reported as saved when this checkout cannot be fast-forwarded
+M1	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC1: a document path gives its state, id and root through the registry, and a done item is its id alone
+M2	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC1: a document path gives its state, id and root through the registry, and a done item is its id alone
+M3	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC1: a document path gives its state, id and root through the registry, and a done item is its id alone
+M4	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC1: a document path gives its state, id and root through the registry, and a done item is its id alone
+M5	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC1: a rank is a whole number from 1 to 999999, and an empty value is unset
+W2	KILLED	z-nile/engine/workread.luau	drag	.tracker/issues/c0249/acceptance/drag.spec.luau :: AC3: a drag among unset items never reorders the rafts: the rows it writes for their members carry moved=
+W3	KILLED	z-nile/engine/workread.luau	drag	.tracker/issues/c0249/acceptance/drag.spec.luau :: AC3: a drag among unset items never reorders the rafts: the rows it writes for their members carry moved=
+W4	KILLED	z-nile/engine/workread.luau	drag	.tracker/issues/c0249/acceptance/drag.spec.luau :: AC3: a drag among unset items never reorders the rafts: the rows it writes for their members carry moved=
+B8	KILLED	z-nile/engine/board.luau	board	.tracker/issues/c0249/acceptance/board.spec.luau :: AC5: board.collect gives every issue and raft its rank and orders the bands by it
+C21	KILLED	z-nile/engine/main.luau	drag	.tracker/issues/c0249/acceptance/drag.spec.luau :: AC3: a drag among unset items never reorders the rafts: the rows it writes for their members carry moved=
+C22	KILLED	z-nile/engine/main.luau	drag	.tracker/issues/c0249/acceptance/drag.spec.luau :: AC3: a rank a person puts on a member moves its raft, and asking for a moved-written rank's place makes it a person's
+C23	KILLED	z-nile/engine/main.luau	command	.tracker/issues/c0249/acceptance/command.spec.luau :: AC5: list stays offline and does not know lost work; list --lost asks the remote, puts a lost claim first after the blocked items whatever it
+D7	KILLED	z-nile/engine/main.luau	docs	.tracker/issues/c0249/acceptance/docs.spec.luau :: AC8: the usage text lists rank and next
+D8	KILLED	z-nile/README.md	docs	.tracker/issues/c0249/acceptance/docs.spec.luau :: AC8: the README's Order section says unset is valid, what claimable means and who sets a rank

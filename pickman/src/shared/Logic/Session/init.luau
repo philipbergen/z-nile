@@ -825,6 +825,87 @@ function Session.playAgain(s: Session, id: PlayerId): ({ Event }, boolean)
 	return out, ok
 end
 
+-- f0145: switch the continue offer on for a player's run (OFFER_TICKS steps unless given); nothing for an unknown id
+function Session.allowOffer(s: Session, id: PlayerId, ticks: number?)
+	local member = s.members[id]
+	if member then
+		Game.allowOffer(member.play, ticks or Game.OFFER_TICKS)
+	end
+end
+
+-- f0145: whether this player's run is in the continue offer
+function Session.offering(s: Session, id: PlayerId): boolean
+	local member = s.members[id]
+	return member ~= nil and member.play.phase == "offer"
+end
+
+-- f0145: whether the offer's countdown is held (a purchase screen open, or a receipt awaited)
+function Session.holding(s: Session, id: PlayerId): boolean
+	local member = s.members[id]
+	return member ~= nil and member.play.phase == "offer" and member.play.held
+end
+
+-- f0145: hold or release the offer's countdown
+function Session.hold(s: Session, id: PlayerId, on: boolean)
+	local member = s.members[id]
+	if member then
+		Game.hold(member.play, on)
+	end
+end
+
+-- f0145: hold the countdown for a bought continue's receipt, at most Game.RECEIPT_WAIT_TICKS steps
+function Session.awaitReceipt(s: Session, id: PlayerId)
+	local member = s.members[id]
+	if member then
+		Game.awaitReceipt(member.play)
+	end
+end
+
+-- f0145: end the offer at the next step; false outside it
+function Session.decline(s: Session, id: PlayerId): boolean
+	local member = s.members[id]
+	return member ~= nil and Game.decline(member.play)
+end
+
+-- f0145: a continue during the offer: CONTINUE_LIVES new lives and a respawn, exactly as a death's respawn resets
+-- (never Session.step's new-level path: the maze, its holes and marks, the pellets eaten and the level's picks stay;
+-- the ghosts reset as after a death). The Ready "continue" event is returned to the caller.
+function Session.continue(s: Session, id: PlayerId): ({ Event }, boolean)
+	local member = s.members[id]
+	if member == nil then
+		return {}, false
+	end
+	local events, ok = Game.continue(member.play, Game.CONTINUE_LIVES)
+	local out: { Event } = {}
+	for _, e in events do
+		table.insert(out, tagged(id, e))
+	end
+	if ok then
+		teleport(s, member, s.tick + 1)
+		resetGhosts(member, "respawn", s.tick + 1)
+	end
+	return out, ok
+end
+
+-- f0145: the player left the place. The run's offer is switched off and an open one ends at the next step, so the
+-- departed run reaches its GameOver within Hiscores.LEAVE_STEPS. Nothing for a player the session does not know;
+-- the member stays (f0013's Session.leave removes one).
+function Session.depart(s: Session, id: PlayerId)
+	local member = s.members[id]
+	if member then
+		Game.allowOffer(member.play, 0)
+		Game.decline(member.play)
+	end
+end
+
+-- f0145: the run is refused (a player sent back to the lobby): over at once, with no GameOver, so nothing is submitted
+function Session.refuse(s: Session, id: PlayerId)
+	local member = s.members[id]
+	if member then
+		Game.refuse(member.play)
+	end
+end
+
 local function ghostSnapshots(member: Member): { GhostSnapshot }?
 	local set = member.ghosts
 	if set == nil then

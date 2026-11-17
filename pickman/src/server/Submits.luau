@@ -32,7 +32,14 @@ function Submits.step(s: any, events: { any }, here: boolean): boolean
 	local nextState, submission = Hiscores.onStep(h.state, events, here)
 	h.state = nextState
 	if submission then
-		HiscoreStore.submit(h.userId, h.name, submission.score, submission.level, submission.run)
+		HiscoreStore.submit(
+			h.userId,
+			h.name,
+			submission.score,
+			submission.level,
+			submission.run,
+			submission.lives -- f0145: the lives the run spent
+		)
 	end
 	if nextState.drop then
 		held[s] = nil

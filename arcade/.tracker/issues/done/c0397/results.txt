@@ -1,0 +1,42 @@
+arcade/tests/acceptance/f0201/config.spec.luau
+	the mode is live only for exactly 'live' with both ids; 'live' with an id missing is closed; else test
+	each mode has its own store: test credits never reach a live record; closed keeps the live one
+	configure reads each title's ids: whole positive numbers only, per title, and maps them to title and kind
+	an id two products share belongs to neither, and its titles are closed
+	a known product maps in every mode, so a receipt that was charged is always recognised
+	a catalog name is lowercase letters and appears once
+	the shipped catalog: four titles, their stores and attributes; Pickman keeps f0145's names
+	the badge text is one config table: 5 R$ struck through, on sale for 1 R$, which is the charge
+	the test screen's lines: the title and product, the badge, and that nothing is charged
+	the test screen's keys: Return, KeypadEnter, ButtonA buy; Backspace, ButtonB cancel; nothing else
+arcade/tests/acceptance/f0201/receipts.spec.luau
+	a receipt is granted once: PurchaseGranted both times, one credit, and the place hears one grant
+	every title's receipt is granted in any place, into its own record, by user id
+	a buyer not on this server is granted all the same, and nothing is handed to the place
+	an unknown product, a missing purchase id or a failed write answers NotProcessedYet and grants nothing
+	PurchaseGranted is answered only after the write: a held write holds the answer
+	a receipt another server granted during this write counts once and is not handed on as new
+	the transform's last call decides whether the grant is new
+	a real receipt in test mode is kept in the live record, and not handed to a place that reads the test one
+	a closed title's receipt is still granted: it was charged
+	ask in live mode prompts the title's own product; nothing else opens
+	ask in closed mode opens nothing and answers false
+	ask in test mode opens the test screen with its lines and never prompts Roblox
+	a test confirm grants into the test store under a test id; the screen closes bought, then the place hears it
+	each test confirm is its own purchase: two screens bought, two credits
+	a test confirm whose write fails closes the screen not bought and grants nothing
+	a cancel closes the screen not bought; a confirm after it, or with no screen open, grants nothing
+	an answer that is neither confirm nor cancel is ignored and the screen stays open
+	one test screen per player at a time: a second ask opens nothing; another player's confirm grants nothing
+	a confirm in live mode grants nothing: no test screen is ever open there
+	a player who leaves with a test screen open: their next join's confirm grants nothing
+	a grant whose player left during its write is not handed to the place
+	Roblox's purchase screen closing tells the place, bought or not, for a known product only
+	Receipts starts once per server: the second start does nothing; ask before start is an error
+	a revive bought on this server is usable at once: the grant refreshes the record seen
+	a test revive bought is usable at once: the test grant refreshes the record seen
+	a revive given back is usable again: the refund refreshes the record seen
+	a play bought shows in the next read at once, with no new store read
+	in test mode a real receipt leaves the record seen alone: the next read still shows the test record
+	the place's adapters hear one client message: one connection to the test screen's answer, no invoke
+	nothing a teleport carries is read: no Receipts path reads the join data

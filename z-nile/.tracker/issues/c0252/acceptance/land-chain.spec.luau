@@ -49,6 +49,23 @@ local function raft(id: string, issues: { string }, slug: string?): string
 	)}\n`
 end
 
+-- c0251's frontier floor (user, 2026-11-16) for the rafts that test it: a closer .models.toml replaces the list whole and
+-- names the one role the extra round runs on. The layers' final review (seal.layer, unstamped) is off the list.
+local FLOOR: { [string]: boolean } = { R0180 = true, R0190 = true, R0200 = true, R0210 = true }
+local FLOOR_MODELS = [[
+[review]
+frontier = ["claude-fable-5-2"]
+
+[roles.final-review]
+model = "claude-fable-5-2"
+cli = "claude"
+runtime = "claude-cli"
+rank = 3
+max_tokens = 5000
+effort = "high"
+fallbacks = []
+]]
+
 local h: fakecli.Harness
 local function git(dir: string, args: { string }): string
 	return fixture.git(dir, args)
@@ -127,6 +144,14 @@ local function pr(branch: string, checks: string, head: string?)
 		`\{"number":1,"state":"OPEN","isDraft":false,"headRefOid":"{sha}","mergeable":"MERGEABLE","statusCheckRollup":{checks}}`
 	)
 end
+-- the same, but its head is whatever the layer branch's tip is when gh is asked (GitHub follows a push): for the cases in
+-- which the dispatcher itself pushes to the layer (the extra frontier round's review)
+local function prLive(branch: string, checks: string)
+	fs.writeFile(
+		`{h.bin}/prview-{(string.gsub(branch, "/", "_"))}.json`,
+		`\{"number":1,"state":"OPEN","isDraft":false,"headRefOid":"@TIP@","mergeable":"MERGEABLE","statusCheckRollup":{checks}}`
+	)
+end
 local worktrees: { [string]: string } = {}
 -- a layer of `rid` for `iid`: started, one file under `dir` (a tooling path unless a case says otherwise), finished,
 -- reviewed. `doc` is appended to the issue's document before the layer is finished.
@@ -168,6 +193,21 @@ end
 local function stub(id: string): string
 	return `---\nid: {id}\ntype: chore\ntitle: {id}\nslug: {id}\nraft: \ndepends_on: []\nemergent: false\ndesign: draft\ncreated: 2026-01-01\nstatus: new-quiet-copper-falcon\n---\n\n# {id}\n`
 end
+-- the extra round's fake reviewer (a step of its own: `script`): its review in the state folder, and the trace it fills for
+-- the landing (the same claims as the landing's first trace), then whatever `more` does
+local function reviewerScript(rid: string, more: { string }?): string
+	local lines: { string } = {
+		'if [ "$step" = zz-review ]; then',
+		'printf "# Review 001\\n\\nVerdict: approve\\n" > "$ZN_DISPATCH_DIR/review.md"',
+		`cp pickman/.tracker/rafts/active/{rid}/trace-001.md "$ZN_DISPATCH_DIR/trace.md"`,
+	}
+	for _, l in more or {} do
+		table.insert(lines, l)
+	end
+	table.insert(lines, "exit 0")
+	table.insert(lines, "fi")
+	return table.concat(lines, "\n") .. "\n"
+end
 local NO_CICD = ""
 local HAS_CICD = ""
 
@@ -198,11 +238,18 @@ return t.spec("c0252 the chain lands a finished raft", function(it)
 				R0160 = { "c0180" },
 				R0170 = { "c0190" },
 				R0099 = { "c0099" },
+				R0180 = { "c0200" },
+				R0190 = { "c0210" },
+				R0200 = { "c0220" },
+				R0210 = { "c0230", "c0240" },
 			}
 			for rid, ids in rafts do
 				seed[`pickman/.tracker/rafts/{rid}/{rid}.md`] =
 					raft(rid, ids, if rid == "R0099" then "old" else nil)
 				seed[`pickman/.tracker/rafts/{rid}/check.sh`] = CHECK
+				if FLOOR[rid] then
+					seed[`pickman/.tracker/rafts/{rid}/.models.toml`] = FLOOR_MODELS
+				end
 				for _, iid in ids do
 					seed[`pickman/.tracker/issues/{iid}/{iid}.md`] = issue(iid, rid)
 					seed[`pickman/.tracker/issues/{iid}/check.sh`] = CHECK
@@ -218,7 +265,7 @@ return t.spec("c0252 the chain lands a finished raft", function(it)
 					"#!/bin/sh",
 					'echo "realgh $*" >> "$FAKE_DIR/log"',
 					'case "$1 $2" in',
-					`  "pr view") case "$*" in *statusCheckRollup*) b=$(printf "%s" "$3" | tr / _); [ -f "{h.bin}/prview-$b.json" ] && cat "{h.bin}/prview-$b.json" && exit 0; exit 1 ;; esac; echo main; exit 0 ;;`,
+					`  "pr view") case "$*" in *statusCheckRollup*) b=$(printf "%s" "$3" | tr / _); [ -f "{h.bin}/prview-$b.json" ] && sed "s|@TIP@|$(git rev-parse --verify -q "origin/$3")|" "{h.bin}/prview-$b.json" && exit 0; exit 1 ;; esac; echo main; exit 0 ;;`,
 					'  "pr list") case "$*" in *number*) echo 1 ;; esac; exit 0 ;;',
 					'  "pr create") echo https://github.com/x/y/pull/1; exit 0 ;;',
 					'  "pr edit") echo "env GH_TOKEN=$GH_TOKEN ZN_DISPATCH=${ZN_DISPATCH:-} ZN_HEADLESS=${ZN_HEADLESS:-}" >> "$FAKE_DIR/log"; exit 0 ;;',
@@ -407,6 +454,74 @@ return t.spec("c0252 the chain lands a finished raft", function(it)
 			t.expect(has(note, "Should c0050 wait for the library?")).toBe(true)
 			t.expect(has(note, "Open: F1")).toBe(true)
 			t.expect(has(note, "Layer: c0050")).toBe(true)
+			fakecli.mode(h, "claude", "ok")
+		end
+	)
+
+	it(
+		"AC25: the green layers below a requested block get the extra frontier round through the prefix first, then land, then the block is filed with the worker's note",
+		function()
+			layer("R0210", "c0230", "kappa", true)
+			-- Phase 5 for the layers that are green, before the worker went on to c0240: the trace of the landing of c0230
+			-- alone, committed on its layer (a landing has its own trace and final review)
+			seal.trace(worktrees.R0210, "R0210", "c0230", 1)
+			git(worktrees.R0210, { "push", "-q" })
+			layer("R0210", "c0240", "lambda", false)
+			-- the layer's review left an open finding in the issue's document (after the layer was finished: the document is
+			-- part of the approved contract until then)
+			local wt = worktrees.R0210
+			local doc = `{wt}/pickman/.tracker/issues/active/c0240/c0240.md`
+			fs.writeFile(
+				doc,
+				fs.readFile(doc)
+					.. "\n## Open to the human\n- F1: the reader is missing. Answer: none. Decision: take the library or write one\n"
+			)
+			git(wt, { "add", "-A" })
+			git(wt, { "commit", "-qm", "c0240: the open finding" })
+			git(wt, { "push", "-q" })
+			pr("R0210/1/c0230", PENDING)
+			-- the fake worker blocks the raft at layer c0240 the way z-run is told to: the note, committed on its layer
+			-- (a habit of zz-execute), then ./zn block
+			fakecli.mode(h, "claude", "script")
+			fs.writeFile(`{h.fakes}/script.sh`, reviewerScript("R0210") .. table.concat({
+				"mkdir -p pickman/.tracker/rafts/active/R0210",
+				"cat > pickman/.tracker/rafts/active/R0210/escalation.md <<'NOTE'",
+				"## Question",
+				"Should c0240 wait for the library?",
+				"",
+				"## What was tried",
+				"Two drafts.",
+				"",
+				"## Open findings or error",
+				"F1: no reader.",
+				"",
+				"## Options",
+				"- approve: take the library (recommended)",
+				"- retry: one more round",
+				"NOTE",
+				"git add -f pickman/.tracker/rafts/active/R0210/escalation.md",
+				"git -c user.name=worker -c user.email=worker@example.invalid commit -q -m 'c0240: the note'",
+				"git push -q origin R0210/2/c0240",
+				"./zn block R0210 review-exhausted --layer c0240",
+				"",
+			}, "\n"))
+			fakecli.mode(h, "claude.zz-review", "script")
+			prLive("R0210/1/c0230", GREEN)
+			local rounds = count(fakecli.log(h), "claude step=zz-review")
+			local r = dispatchOut("R0210")
+			t.expect(has(r.stdout, "next: extra frontier review round on R0210 through c0230")).toBe(true)
+			t.expect(count(fakecli.log(h), "claude step=zz-review")).toBe(rounds + 1)
+			t.expect(has(fakecli.log(h), "--through c0230")).toBe(true)
+			t.expect(has(r.stdout, "next: land R0210 through c0230")).toBe(true)
+			t.expect(has(mainSubjects(8), "R0210: bind c0230")).toBe(true)
+			t.expect(r.code).toBe(3)
+			t.expect(has(r.stdout, "R0210 is blocked (review-exhausted)")).toBe(true)
+			-- the first layer is in done/, the second waits, blocked, with the worker's own note and the Layer's open id
+			onOrigin("pickman/.tracker/issues/done/c0230/c0230.md")
+			local note = onOrigin("pickman/.tracker/rafts/R0210/escalation.md")
+			t.expect(has(note, "Should c0240 wait for the library?")).toBe(true)
+			t.expect(has(note, "Open: F1")).toBe(true)
+			t.expect(has(note, "Layer: c0240")).toBe(true)
 			fakecli.mode(h, "claude", "ok")
 		end
 	)
@@ -843,6 +958,96 @@ return t.spec("c0252 the chain lands a finished raft", function(it)
 			local late = dispatcher.afterLand(ctx, second)
 			t.expect(late ~= nil).toBe(true)
 			t.expect(has(tostring(late), "beside the bind")).toBe(true)
+		end
+	)
+	it(
+		"AC25: a green stack with no frontier review gets one extra review round on a frontier model, files and commits it with the dispatcher's credential, and lands: the round ran once",
+		function()
+			layer("R0180", "c0200", "eta", true)
+			seal.trace(worktrees.R0180, "R0180")
+			prLive("R0180/1/c0200", GREEN)
+			fakecli.mode(h, "claude", "ok")
+			fakecli.mode(h, "claude.zz-review", "script")
+			fs.writeFile(`{h.fakes}/script.sh`, reviewerScript("R0180"))
+			local rounds = count(fakecli.log(h), "claude step=zz-review")
+			local r = dispatchOut("R0180")
+			t.expect(has(r.stdout, "next: extra frontier review round on R0180")).toBe(true)
+			t.expect(has(r.stdout, "no-frontier-review (review)")).toBe(true)
+			t.expect(count(fakecli.log(h), "claude step=zz-review")).toBe(rounds + 1)
+			-- the next pass reads the floor as met and lands; one bind, the raft done
+			t.expect(r.code).toBe(0)
+			t.expect(has(r.stdout, "next: land R0180")).toBe(true)
+			t.expect(has(mainSubjects(6), "R0180: bind c0200")).toBe(true)
+			local filed = onOrigin("pickman/.tracker/rafts/done/R0180/final-review-002.md")
+			t.expect(has(filed, "Model: claude-fable-5-2")).toBe(true)
+			t.expect(
+				has(
+					git(h.f.main, { "log", "--format=%an %s", "-8", "origin/main" }),
+					"R0180: final-review-002"
+				)
+			)
+				.toBe(true)
+			t.expect(fakecli.state(h, "R0180").frontierRan).toBe(nil) -- cleared by the landing
+		end
+	)
+
+	it(
+		"AC25: while no frontier model has quota the round is a wait: exit 4 at the gate, nothing filed or landed, and the next pass runs the round again",
+		function()
+			layer("R0190", "c0210", "theta", true)
+			seal.trace(worktrees.R0190, "R0190")
+			prLive("R0190/1/c0210", GREEN)
+			fakecli.mode(h, "claude", "ok")
+			fakecli.mode(h, "claude.zz-review", "quota")
+			local before = mainHead()
+			local r = dispatchOut("R0190")
+			t.expect(r.code).toBe(4)
+			t.expect(has(r.stdout, "waiting to land R0190: no frontier model has quota")).toBe(true)
+			t.expect(mainHead()).toBe(before)
+			t.expect(fakecli.state(h, "R0190").frontierRan).toBe(nil) -- a wait is not a round that ran
+			t.expect(fakecli.state(h, "R0190").outcome).toBe("ok")
+			-- quota returns: the next run files the round and lands
+			fakecli.mode(h, "claude.zz-review", "script")
+			fs.writeFile(`{h.fakes}/script.sh`, reviewerScript("R0190"))
+			local again = dispatchOut("R0190")
+			t.expect(again.code).toBe(0)
+			t.expect(landed("R0190")).toBe(true)
+		end
+	)
+
+	it(
+		"AC25: a round that ran and left the floor unmet is not run again: the raft blocks under needs-decision with a note that parses (the list is changed under the round, so the review it files is off it)",
+		function()
+			layer("R0200", "c0220", "iota", true)
+			seal.trace(worktrees.R0200, "R0200")
+			prLive("R0200/1/c0220", GREEN)
+			-- the reviewer files its review and, as a person editing the list meanwhile would, moves the list to another
+			-- model: the review it filed (claude-fable-5-2) is then off the list, and the round has run
+			fakecli.mode(h, "claude", "ok")
+			fakecli.mode(h, "claude.zz-review", "script")
+			fs.writeFile(
+				`{h.fakes}/script.sh`,
+				reviewerScript("R0200", {
+					"printf '[review]\\nfrontier = [\"kimi-code-k3.1-pro\"]\\n' > pickman/.tracker/rafts/active/R0200/.models.toml",
+				})
+			)
+			local rounds = count(fakecli.log(h), "claude step=zz-review")
+			local before = mainHead()
+			local r = dispatchOut("R0200")
+			-- one round, no second: the verdict at the new tip is a block under needs-decision, and the dispatcher files the note
+			t.expect(count(fakecli.log(h), "claude step=zz-review")).toBe(rounds + 1)
+			t.expect(r.code).toBe(3)
+			t.expect(has(r.stdout, "R0200 is blocked (needs-decision)")).toBe(true)
+			t.expect(mainHead() ~= before).toBe(true) -- the review and the block are published; nothing landed
+			t.expect(landed("R0200")).toBe(false)
+			local note = onOrigin("pickman/.tracker/rafts/R0200/escalation.md")
+			local parsed, why = escalation.parse(note)
+			t.expect(why).toBe(nil)
+			t.expect(parsed ~= nil).toBe(true)
+			t.expect(has(note, "- no-frontier-review: the extra round ran and the floor is still unmet"))
+				.toBe(true)
+			t.expect(has(note, "- retry: run the worker again for another round of fixes (recommended)"))
+				.toBe(true)
 		end
 	)
 end)

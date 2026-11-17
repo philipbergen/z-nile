@@ -13,3 +13,6 @@ E5-loopback-provider.opencode-config.json  the OPENCODE_CONFIG_CONTENT that name
 E16-agy-subagent-run.jsonl               agy 1.5.7 asked to call invoke_subagent: subagent steps carry no usage
 E18-opencode-task-run.jsonl              opencode against the loopback provider: a task call runs a child session whose steps never reach stdout
 Other results (stderr and exports) are quoted in the issue's Unknowns & experiments (E5, E6, E15, E17, E18).
+Revision, 2026-11-17 (the user's rulings of 2026-11-16): prototype.patch is rebuilt as the diff of branch proto-c0175-rulings against
+proto-c0251-rulings (c0251's revised prototype), less this issue's folder; its c0251/docs.spec hunk is the Override edit. The kimi alias
+kimi-code/kimi-for-coding (display name K2.8 Preview) was read from ~/.kimi-code/config.toml, no model call (issue E19).

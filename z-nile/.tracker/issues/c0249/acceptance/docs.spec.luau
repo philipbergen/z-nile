@@ -37,8 +37,8 @@ return t.spec("c0249 the documents say what the rank does", function(it)
 					"z-ticket, z-design and z-raft leave the rank unset (unset by default)",
 					"`./zn rank <id> top|last|before <id>|after <id>|<n>|unset`",
 					"dragging a card in the board app",
-					"A rank given to a raft is the raft's own; an unset one takes the best rank a person set on one of its members (a rank a move wrote on an item, `rank: 30 auto`, does not count)",
-					"`./zn list` shows every blocked item first, then lost work, then the rafts and the issues in the stack's order",
+					"A rank given to a raft is the raft's own; an unset one takes the best rank a person set on one of its members (a rank a move wrote on an item, which its `provenance.md` shows by `moved=` in the latest `ranked` row, does not count)",
+					"`./zn list` stays offline and shows every blocked item first, then the rafts and the issues in the stack's order; `./zn list --lost` also asks the remote for lost work and puts it after the blocked items (lost work first is `./zn next`'s, `./zn lost`'s, `./zn status`'s and the board's)",
 					"with lost work first inside each band",
 					"(lost work, else a claimable raft, else an approved issue to raft, else an issue to draft)",
 					"Lost work comes first",
@@ -54,6 +54,9 @@ return t.spec("c0249 the documents say what the rank does", function(it)
 			t.expect(has(order, "Tickets have no order today")).toBe(false)
 			t.expect(has(order, "z-ticket and z-design append by default")).toBe(false)
 			t.expect(has(order, "z-raft asks for a raft's rank")).toBe(false)
+			-- no marker in the line (who set a rank is in provenance.md), and no flag that skips the remote read
+			t.expect(has(order, "`auto`")).toBe(false)
+			t.expect(has(order, "--no-lost")).toBe(false)
 			t.expect(
 				string.find(
 					readme,
@@ -84,7 +87,8 @@ return t.spec("c0249 the documents say what the rank does", function(it)
 				"then the best-ranked approved issue that is in no raft",
 				"`depends_on` that are not done and a `blocked` status skip an item without changing its rank",
 				"appends a `ranked` row to each changed item's `provenance.md`",
-				"`./zn list` shows every blocked item first, then lost work",
+				"`./zn list` stays offline and shows every blocked item first, then the rafts and the issues in this order; `./zn list --lost` also asks the remote and puts lost work after the blocked items",
+				"the latest `ranked` row of the member's `provenance.md` shows by a `moved=` field",
 				"rejects a `rank:` that is not a whole number from 1 to 999999, or is written twice",
 			}
 		do
@@ -92,6 +96,8 @@ return t.spec("c0249 the documents say what the rank does", function(it)
 				error(`zz-rules' Rank bullet lacks: {phrase}`, 0)
 			end
 		end
+		t.expect(has(rank, "`auto`")).toBe(false)
+		t.expect(has(rank, "--no-lost")).toBe(false)
 		t.expect(has(rules, "or its `rank:` line (what `rank` publishes, for a backlog item only)"))
 			.toBe(true)
 		t.expect(has(rules, "`./zn rank <id> top|last|before <id>|after <id>|<n>|unset`, `./zn next`"))
@@ -114,6 +120,9 @@ return t.spec("c0249 the documents say what the rank does", function(it)
 		t.expect(has(main, "\n  rank <id> top|last|before <id>|after <id>|<n>|unset\n")).toBe(true)
 		t.expect(has(main, "\n  next                                          print the next item to take"))
 			.toBe(true)
+		-- list is offline unless asked: --lost reads lost work from the remote, and there is no --no-lost
+		t.expect(has(main, "list [backlog|active|done] [--project <name>] [--lost]")).toBe(true)
+		t.expect(has(main, "--no-lost")).toBe(false)
 	end)
 	it("AC8: the agents file names rank among the commands that move the main checkout", function()
 		local agents = read("AGENTS.md")

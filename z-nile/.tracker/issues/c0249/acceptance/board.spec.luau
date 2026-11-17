@@ -126,9 +126,22 @@ return t.spec("c0249 the board shows the stack in order", function(it)
 			"title: C",
 			"raft: R0002",
 			"design: ready",
-			"rank: 3 auto",
+			"rank: 3",
 			"status: prepared-a-b-c",
 		})
+		-- c0012's rank 3 was written by a move: the latest `ranked` row of its provenance.md carries moved= (a raft ignores it)
+		write(
+			`{G}/issues/c0012/provenance.md`,
+			"# Provenance: c0012\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
+				.. "| 2026-11-16 09:00 | ranked | human:Pat | rank=3; was=unset; moved=c0014 |\n"
+		)
+		-- c0011's rank 20 is a person's: its latest row has no moved= (an older row with one does not count)
+		write(
+			`{G}/issues/c0011/provenance.md`,
+			"# Provenance: c0011\n\n| when | event | actor | detail |\n|---|---|---|---|\n"
+				.. "| 2026-11-16 09:00 | ranked | human:Pat | rank=11; was=unset; moved=c0014 |\n"
+				.. "| 2026-11-16 09:05 | ranked | human:Pat | rank=20; was=11 |\n"
+		)
 		item(
 			`{G}/issues/c0013`,
 			{ "type: chore", "title: D", "design: ready", "rank: 30", "status: prepared-a-b-c" }
@@ -174,11 +187,11 @@ return t.spec("c0249 the board shows the stack in order", function(it)
 		t.expect(byId.c0012.effectiveRank).toBe(3)
 		t.expect(byId.R0001.rank).toBe(nil)
 		t.expect(byId.R0001.effectiveRank).toBe(50) -- its member's
-		t.expect(byId.R0002.effectiveRank).toBe(20) -- its best member's that a person set: c0012's auto 3 does not count
+		t.expect(byId.R0002.effectiveRank).toBe(20) -- its best member's that a person set: c0012's moved-written 3 does not count
 		t.expect(byId.R0003.rank).toBe(5)
 		t.expect(byId.R0003.effectiveRank).toBe(5)
 		-- the raft column: R0002 (20) before the raftless band (best card c0013, 30) before R0001 (50); inside R0002, c0011 first
-		-- (inside R0002 the cards go by their own ranks: c0012 has the auto 3)
+		-- (inside R0002 the cards go by their own ranks: c0012 has the 3)
 		t.expect(show(m.columns.game.raft)).toBe("R0002[c0012,c0011] -[c0013,c0014] R0001[c0010]")
 		-- the Rafts and Issues views list their buckets in the same order, not by id text
 		t.expect(table.concat(m.views.rafts["not"], " ") .. "|" .. table.concat(m.views.rafts.ready, " "))
