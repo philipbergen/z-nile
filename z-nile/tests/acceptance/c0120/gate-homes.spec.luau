@@ -90,6 +90,8 @@ local function stubbed(name: string): string
 			.. 'if [ "$2" = z-nile/roots ] && [ "$4" = --projects ]; then\n'
 			.. '  printf "pickman\\tpickman\\tpickman/.tracker\\nz-nile\\tz-nile\\tz-nile/.tracker\\n"; exit 0\nfi\n'
 			.. 'if [ "$2" = z-nile/affected ]; then exit 0; fi\n'
+			-- c0257 override: the gate asks for the app projects; this fixture has none
+			.. 'if [ "$2" = z-nile/roots ] && [ "$4" = --apps ]; then exit 0; fi\n'
 			.. 'if [ "$2" = z-nile/roots ] && [ "$4" = --luau-dirs ]; then\n'
 			.. '  if [ "$5" = pickman ]; then echo "pickman/src pickman/tests pickman/.tracker"; exit 0; fi\n'
 			.. '  echo "pickman/src pickman/tests pickman/.tracker z-nile scripts z-nile/.tracker"; exit 0\nfi\n'

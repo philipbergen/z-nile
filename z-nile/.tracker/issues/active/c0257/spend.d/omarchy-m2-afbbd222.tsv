@@ -26,3 +26,26 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-17 00:19	1 spec	0	0	test			1.403	1.480		1.403	tokens,ai
 2026-11-17 00:18	1 run	0	0	other			0.201	0.130			tokens,ai
 2026-11-17 00:19	c0257: app kind, app home, node stage, deploy list, docs (E8) and plugin edits	174	22	build							tokens,wall,cpu,ai
+2026-11-17 00:19	suite	0	0	test			0.401	0.280		0.401	tokens,ai
+2026-11-17 00:19	1 spec	0	0	test			0.401	0.810		0.401	tokens,ai
+2026-11-17 00:19	7 specs	0	0	test			0.601	0.760		0.601	tokens,ai
+2026-11-17 00:20	48 specs	0	0	test			27.042	98.520		27.042	tokens,ai
+2026-11-17 00:21	1 spec	0	0	test			1.402	1.520		1.402	tokens,ai
+2026-11-17 00:22	1 spec	0	0	test			1.402	1.580		1.402	tokens,ai
+2026-11-17 00:22	1 spec	0	0	test			1.402	1.590		1.402	tokens,ai
+2026-11-17 00:23	3 specs	0	0	test			5.006	5.780		5.006	tokens,ai
+2026-11-17 00:23	1 spec	0	0	test			0.401	0.250		0.401	tokens,ai
+2026-11-17 00:23	1 spec	0	0	test			0.401	0.290		0.401	tokens,ai
+2026-11-17 00:24	1 spec	0	0	test			0.401	0.290		0.401	tokens,ai
+2026-11-17 00:24	affected	0	0	test			17.629	103.050		17.629	tokens,ai
+2026-11-17 00:24	plan	0	0	test			0.200	0.150		0.200	tokens,ai
+2026-11-17 00:25	1 spec	0	0	test			1.802	1.610		1.802	tokens,ai
+2026-11-17 00:25	1 spec	0	0	test			1.803	1.690		1.803	tokens,ai
+2026-11-17 00:25	1 spec	0	0	test			1.803	1.550		1.803	tokens,ai
+2026-11-17 00:25	1 spec	0	0	test			1.802	1.610		1.802	tokens,ai
+2026-11-17 00:25	1 spec	0	0	test			2.003	1.640		2.003	tokens,ai
+2026-11-17 00:25	affected	0	0	test			8.812	41.450		8.812	tokens,ai
+2026-11-17 00:26	plan	0	0	test			0.201	0.080		0.201	tokens,ai
+2026-11-17 00:26	plan	0	0	test			0.201	0.090		0.201	tokens,ai
+2026-11-17 00:21	1 run	0	0	other			1.002	0.850			tokens,ai
+2026-11-17 00:26	c0257: override c0114/gate-cover and c0120/gate-homes for the app kind; verification log	13	3	build							tokens,wall,cpu,ai
