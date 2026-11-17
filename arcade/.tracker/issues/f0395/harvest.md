@@ -1,0 +1,6 @@
+- design-review-001 F1: zz-test/escaping-cases-repeat-every-character
+- design-review-001 F2: z-design/instructions-runnable-where-they-run, z-design/quote-other-preps-before-promising
+- design-review-001 F3: zz-test/specs-read-sources-through-the-selector
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: z-design/instructions-runnable-where-they-run
+- design-review-001 F6: z-design/spec-design-correspondence

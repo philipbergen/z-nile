@@ -1,0 +1,12 @@
+- design-review-001 F1: z-design/no-open-question-in-a-reviewed-design
+- design-review-001 F2: z-design/finished-overrides-land-before-ready
+- design-review-001 F3: arcade-arch/shared-screens-state-their-input-rule
+- design-review-001 F4: zz-arch/client-triggered-reads-guarded
+- design-review-001 F5: z-design/in-flight-bases-pin-their-source
+- design-review-001 F6: z-design/spec-design-correspondence
+- design-review-001 F7: z-design/spec-design-correspondence
+- design-review-001 F8: z-design/spec-design-correspondence
+- design-review-001 F9: one-off: a Studio playtest cannot teleport between places, so OC steps that cross places go to the Beta experience; recorded in OC1a/OC1b
+- design-review-001 F10: z-design/prep-experiments-run-in-standalone-clones
+- design-review-001 F11: one-off: a lesson cited under the wrong skill; `./zn lessons` lists ids, which the citation now uses
+- note c0202 prep: an assemble script ran stylua inside the issue folder, which found no stylua.toml and formatted at the default width, so the gate's root check failed six specs that passed locally: zz-test/format-tracker-specs-by-path
