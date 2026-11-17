@@ -354,3 +354,26 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-17 15:24	1 spec	0	0	test			0.835	0.570		0.835	tokens,ai
 2026-11-17 23:00	5 runs	0	0	other			1.026	0.000			tokens,ai
 2026-11-17 23:00	R0117: the user's rulings on code review 001, and f0206's owed Beta observation	0	0	deliver							tokens,wall,cpu,ai
+2026-11-17 23:00	1 spec	0	0	test			0.813	0.510		0.813	tokens,ai
+2026-11-17 23:00	1 spec	0	0	test			0.819	0.510		0.819	tokens,ai
+2026-11-17 23:00	1 spec	0	0	test			0.812	0.550		0.812	tokens,ai
+2026-11-17 23:00	1 spec	0	0	test			0.816	0.540		0.816	tokens,ai
+2026-11-17 23:00	1 spec	0	0	test			0.818	0.570		0.818	tokens,ai
+2026-11-17 23:00	1 spec	0	0	test			0.816	0.560		0.816	tokens,ai
+2026-11-17 23:00	1 spec	0	0	test			0.813	0.550		0.813	tokens,ai
+2026-11-17 23:00	1 spec	0	0	test			0.816	0.540		0.816	tokens,ai
+2026-11-17 23:00	1 spec	0	0	test			0.811	0.530		0.811	tokens,ai
+2026-11-17 23:00	1 spec	0	0	test			1.019	0.600		1.019	tokens,ai
+2026-11-17 23:00	1 spec	0	0	test			0.818	0.550		0.818	tokens,ai
+2026-11-17 23:00	1 spec	0	0	test			0.817	0.560		0.817	tokens,ai
+2026-11-17 23:00	1 spec	0	0	test			0.807	0.550		0.807	tokens,ai
+2026-11-17 23:00	1 spec	0	0	test			1.641	0.710		1.641	tokens,ai
+2026-11-17 23:00	1 spec	0	0	test			1.019	0.570		1.019	tokens,ai
+2026-11-17 23:01	1 spec	0	0	test			1.015	0.610		1.015	tokens,ai
+2026-11-17 23:01	1 spec	0	0	test			1.012	0.630		1.012	tokens,ai
+2026-11-17 23:01	1 spec	0	0	test			1.012	0.640		1.012	tokens,ai
+2026-11-17 23:01	1 spec	0	0	test			1.621	1.220		1.621	tokens,ai
+2026-11-17 23:01	1 spec	0	0	test			0.819	0.590		0.819	tokens,ai
+2026-11-17 23:01	1 spec	0	0	test			0.817	0.560		0.817	tokens,ai
+2026-11-17 23:01	1 spec	0	0	test			0.809	0.560		0.809	tokens,ai
+2026-11-17 23:01	R0117: trace names the restacked finish commit	0	0	deliver							tokens,wall,cpu,ai
