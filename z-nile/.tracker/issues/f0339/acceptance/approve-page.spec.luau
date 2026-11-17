@@ -332,22 +332,43 @@ return t.spec("f0339 approve shows the explainer page and asks y/n", function(it
 	end)
 
 	it(
-		"AC2: --publish warns when the page is not on origin/main as it is here, and is silent when it is",
+		"AC2: the one approve warns, before it publishes or pushes, when the page is not on origin/main as it is in the place, and is silent when it is",
 		function()
-			local r = approve("y", nil, `{ID} --publish`)
+			-- c0369: the same command, asked again, finds the approval recorded above and makes it count (here the
+			-- branch is not on origin, so nothing is pushed); the warning comes before that step (re-prep of 2026-11-17)
+			local r, again = approve("y", nil, ID)
+			t.expect(again).toBe("0")
 			t.expect(
 				has(
 					say(r),
 					`warning: {PAGE} is not on origin/main as it is here: push this branch and land it by pull request, or main keeps no page`
 				)
 			).toBe(true)
+			t.expect(has(r.stdout, "[y/N]")).toBe(false) -- nothing new is recorded, so nothing is asked
 
 			local recorded, code = approve("y", nil, SECOND)
 			t.expect(code).toBe("0")
 			t.expect(has(recorded.stdout, `approved {SECOND} {SECOND_HASH}`)).toBe(true)
-			local quiet = approve("y", nil, `{SECOND} --publish`)
-			t.expect(has(say(quiet), "is not on origin/main")).toBe(false)
-			t.expect(has(say(quiet), "zn-exit=")).toBe(true)
+			t.expect(has(say(recorded), "is not on origin/main")).toBe(false)
+			t.expect(has(say(recorded), "zn-exit=")).toBe(true)
+		end
+	)
+
+	it(
+		"AC2: the one approve says nothing about the page before it pushes a branch that is on origin",
+		function()
+			-- the branch reaches origin; a redesign there, with its page, is approved and the branch pushed: the page rides
+			-- with the branch's pull request, so no warning (f0339 design review 002 F1)
+			fixture.git(wt, { "push", "-q", "origin", "HEAD:refs/heads/prep-c0001" })
+			fs.writeFile(`{wt}/{ISSUE}/{ID}.md`, doc(true, "Hash the contract, once more."))
+			commit("a redesign on a branch origin has")
+			local _, hash = explain()
+			fs.writeFile(`{wt}/{PAGE}`, page(hash :: string))
+			commit("its page")
+			local pushed, code = approve("y", nil, ID)
+			t.expect(code).toBe("0")
+			t.expect(has(pushed.stdout, "pushed prep-c0001")).toBe(true)
+			t.expect(has(say(pushed), "is not on origin/main")).toBe(false)
 		end
 	)
 end)

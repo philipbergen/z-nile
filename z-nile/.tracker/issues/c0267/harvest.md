@@ -10,3 +10,4 @@
 - design-review-001 F8: z-design/confirm-overrides-with-a-suite-run
 - design-review-001 F9: z-design/restated-rules-move-together
 - note the reviewer's candidate lesson and the f0339 merge run (a sequestered spec of f0339 finds z-ready's line by words c0267 meant to drop): z-design/quote-other-preps-before-promising
+- design-review-002 F1: z-design/quote-other-preps-before-promising

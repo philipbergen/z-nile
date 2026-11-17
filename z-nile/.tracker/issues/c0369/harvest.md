@@ -22,3 +22,10 @@
 - design-review-002 F11: one-off: the publish callback ignored the file each attempt read and appended to a copy taken before the first attempt
 - design-review-002 F12: z-design/reasoned-rows-claim-testable-reasons
 - design-review-002 F13: zz-test/dry-run-promoted-specs-under-the-guard-scan
+- design-review-003 F1: z-design/quote-other-preps-before-promising
+- design-review-003 F2: z-design/check-every-counts-for-promise
+- design-review-003 F3: z-design/quote-other-preps-before-promising
+- design-review-003 F4: z-design/new-calls-follow-the-stated-fixture
+- design-review-003 F5: z-design/design-the-execution-window
+- design-review-003 F6: one-off: a placed run now writes into a worktree an executor may be restacking; a detached HEAD is refused
+- design-review-003 F7: z-design/restated-rules-move-together

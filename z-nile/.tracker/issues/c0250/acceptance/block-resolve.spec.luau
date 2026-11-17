@@ -15,6 +15,8 @@
 --           R0040 AC7 approve (c0250 the Layer)        R0050 AC7 retry and start   R0060 AC4 second block
 --           R0070 AC4 (detached, no layer started)     R0080 AC7 (c0330 landed, c0335 and c0336 active; retry, ready, start)
 --           R0090 AC6 (c0340 landed, c0345 the Layer: the raft goes to done/)   R0300 AC6 (c0350 the Layer: retired/)
+local approval = require("@znile/engine/approval")
+local contract = require("@znile/engine/contract")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -228,6 +230,41 @@ local function filesOf(commit: string): { string }
 	end
 	table.sort(out)
 	return out
+end
+
+-- c0369 section 5's fixture (re-prep of 2026-11-17): an explainer page of f0339's shape that names the contract
+-- `id` has on origin/main, published there, so the one approve passes before and after f0339 makes it read one
+local function publishPage(id: string)
+	fetch()
+	local dir = `{f.base}/page-{id}`
+	git(f.main, { "worktree", "add", "-q", "--detach", dir, "origin/main" })
+	local itemDir = `{ROOT}/issues/{id}`
+	local parts = approval.collect(dir, {
+		id = id,
+		kind = "issue",
+		state = "backlog",
+		dir = itemDir,
+		doc = `{itemDir}/{id}.md`,
+		slug = "",
+		root = ROOT,
+	})
+	local hash = contract.hash(parts :: contract.Parts)
+	write(
+		dir,
+		`{itemDir}/explainer.html`,
+		`<!doctype html><html><head><meta charset="utf-8"><meta name="zn-contract" content="{hash}"><title>{id}</title></head><body>`
+			.. '<section id="idea"><p>Show the person a page before they say yes.</p></section>'
+			.. '<section id="before"><svg viewBox="0 0 10 10"><rect width="4" height="4"/></svg></section>'
+			.. '<section id="changes"><ul><li><code>z-nile/engine/hold.luau</code>: hold()</li></ul></section>'
+			.. '<section id="after"><svg viewBox="0 0 10 10"><circle r="3"/></svg></section>'
+			.. '<section id="choices"><div class="choice"><ul class="pros"><li>plain</li></ul><ul class="cons"><li>one more file</li></ul></div></section>'
+			.. "</body></html>\n"
+	)
+	git(dir, { "add", "-A" })
+	git(dir, { "commit", "-q", "-m", `explainer page for {id}` })
+	git(dir, { "push", "-q", "origin", "HEAD:main" })
+	git(f.main, { "worktree", "remove", "--force", dir })
+	fetch()
 end
 
 local function docOf(id: string): string
@@ -1413,23 +1450,27 @@ return t.spec("c0250 block and resolve", function(it)
 			fetch()
 			t.expect(head()).toBe(before)
 			t.expect(statusOf(raftOf("R0040"))).toBe("prepared")
-			-- the user approves it in a worktree, in a terminal, and publishes it
-			local wt = `{f.base}/wt-approve`
-			git(f.main, { "worktree", "add", "-q", "-b", "approve-c0250", wt, "origin/main" })
+			-- the user approves it with one command, in a terminal, from the main checkout: c0369 records it in a
+			-- worktree of origin/main of its own and publishes it (the re-prep of 2026-11-17); with c0369 section 5's
+			-- fixture (the page on origin/main, stub openers first on PATH, `yes y |` typing the answer, the exit code
+			-- echoed inside script), so the case holds before and after f0339
+			publishPage("c0250")
+			local stubs = `{f.base}/stubs`
+			fs.writeDir(stubs)
+			for _, name in { "open", "xdg-open" } do
+				write(f.base, `stubs/{name}`, "#!/bin/sh\nexit 0\n")
+				fixture.exec(f.main, "chmod", { "+x", `{stubs}/{name}` })
+			end
+			local approveEnv = envWith()
+			approveEnv.PATH = `{stubs}:{approveEnv.PATH or ""}`
 			local approved = fixture.exec(
-				wt,
-				"script",
-				{ "-q", "/dev/null", "./zn", "approve", "c0250" },
-				{ env = envWith() }
+				f.main,
+				"sh",
+				{ "-c", `yes y | script -q /dev/null sh -c './zn approve c0250; echo "zn-exit=$?"'` },
+				{ env = approveEnv }
 			)
-			t.expect(approved.ok).toBe(true)
-			local published = fixture.exec(
-				wt,
-				"script",
-				{ "-q", "/dev/null", "./zn", "approve", "c0250", "--publish" },
-				{ env = envWith() }
-			)
-			t.expect(published.ok).toBe(true)
+			t.expect(string.match(approved.stdout, "zn%-exit=(%d+)")).toBe("0")
+			t.expect(has(approved.stdout, "published c0250 to origin/main: it counts now")).toBe(true)
 			fetch()
 			local ready = zn(f.main, { "ready", "R0040" })
 			t.expect(say(ready)).toBe(say(ready) .. "") -- keeps the output in the failure message below

@@ -11,3 +11,6 @@
 - design-review-001 F10: z-design/prove-specs-pass-on-a-prototype
 - design-review-001 F11: one-off: the section matcher assumed the id is the tag's first attribute
 - design-review-001 F12: one-off: the probes ran bounded, but the record did not say so
+- design-review-002 F1: z-design/check-every-counts-for-promise
+- design-review-002 F2: z-design/quote-other-preps-before-promising
+- design-review-002 F3: z-design/restated-rules-move-together

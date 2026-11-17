@@ -26,3 +26,4 @@
 - note revision subagent, round 1 (prep, 2026-11-13): zz-test/terminal-fixtures-clear-the-agent-session, zz-test/pin-each-branch-of-a-diff, zz-test/fixtures-ignore-what-the-repo-ignores, z-design/a-new-state-says-what-the-last-outcome-means
 - note revision subagent, round 1, notes on existing lessons (prep, 2026-11-13): zz-arch/escape-names-in-lua-patterns, zz-arch/widened-publish-rules-pin-their-refusals, zz-arch/main-luau-local-limit, z-design/prove-specs-pass-on-a-prototype
 - note mutant re-run (prep, 2026-11-13): zz-test/seed-landed-items-as-main-has-them, zz-arch/widened-publish-rules-pin-their-refusals
+- design-review-002 F1: z-design/new-calls-follow-the-stated-fixture

@@ -20,7 +20,9 @@ check "AC4: the skills and the tooling's refusals state the one command from any
   lune run tests/run -- "$A/docs.spec.luau"
 check "AC5: the approve tooling specs walk the one command through one answering helper and carry the explainer page, the specs that read approve stay green, and the real tree audits and lessons-checks clean" \
   bash -c '"$ZN_ROOT/zn" audit && "$ZN_ROOT/zn" lessons --check && lune run tests/run -- "$1/docs.spec.luau" tests/tooling/approve.spec.luau tests/tooling/approve-publish.spec.luau tests/tooling/readycheck.spec.luau tests/tooling/work.spec.luau' _ "$A"
-check "AC6: c0250, c0267 and f0339 depend on c0369" \
-  bash -c 'for id in c0250 c0267 f0339; do d=$("$ZN_ROOT/zn" find "$id") || exit 1; grep -Eq "^depends_on: \[(.*, )?c0369(, .*)?\]$" "$d/$id.md" || { echo "$id does not depend on c0369" >&2; exit 1; }; done'
+check "AC6: c0250, c0267, f0339 and c0394 depend on c0369, none of their documents, check.sh files or acceptance specs keeps the two-command approve, and c0250's and c0394's approve fixtures carry the explainer page and the typed answer" \
+  bash -c 'for id in c0250 c0267 f0339 c0394; do d=$("$ZN_ROOT/zn" find "$id") || exit 1; grep -Eq "^depends_on: \[(.*, )?c0369(, .*)?\]$" "$d/$id.md" || { echo "$id does not depend on c0369" >&2; exit 1; }; if grep -rnF -e "then \`./zn approve <id> --publish\`" -e "./zn approve c0001 --publish" -e "./zn approve {u.id} --publish" -e "&& ./zn approve <id> --publish" -e "\"approve\", \"c0250\", \"--publish\"" -e "{ID} --publish\`)" -e "{SECOND} --publish\`)" -e "local dir = \`{f.base}/approve-{id}\`" "$d/$id.md" "$d/check.sh" "$d/acceptance"; then echo "$id still pins the two-command approve" >&2; exit 1; fi; done; for id in c0250 c0394; do d=$("$ZN_ROOT/zn" find "$id") || exit 1; for needle in "explainer.html" "<meta name=\"zn-contract\" content=\"" "\"open\", \"xdg-open\"" "yes y | script -q /dev/null sh -c"; do grep -rqF -e "$needle" "$d/acceptance" || { echo "$id: its approve fixture lacks $needle" >&2; exit 1; }; done; done'
+check "AC7: for an issue in active/, approve from the main checkout finds its raft's worktree, records there and pushes nothing, and reads no other raft-named worktree" \
+  lune run tests/run -- "$A/approve-raft.spec.luau"
 
 finish

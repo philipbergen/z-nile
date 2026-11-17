@@ -13,3 +13,5 @@
 - design-review-001 F13: z-design/spec-design-correspondence
 - design-review-001 F14: z-design/pins-name-who-reprep-goes-first
 - design-review-001 F15: z-design/restated-rules-move-together
+- design-review-002 F1: z-design/new-calls-follow-the-stated-fixture
+- design-review-002 F2: one-off: a decision line was glued to the bullet above it

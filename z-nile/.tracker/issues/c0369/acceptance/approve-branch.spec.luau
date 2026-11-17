@@ -389,7 +389,7 @@ return t.spec("c0369 one approve from anywhere records and pushes an unmerged de
 		t.expect(
 			has(
 				out,
-				`{ID}: approved on the layer branch {LAYER}: nothing is pushed; it counts for ./zn finish and ./zn done in `
+				`{ID}: approved on the layer branch {LAYER}: nothing is pushed; it counts for ./zn finish in `
 			)
 		).toBe(true)
 		t.expect(tip("R0001")).toBe(`tracker: approve {ID}`)

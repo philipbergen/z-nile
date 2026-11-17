@@ -399,4 +399,28 @@ return t.spec("c0369 one approve from anywhere records and publishes", function(
 		fixture.git(f.main, { "pull", "-q", "origin", "main" })
 		t.expect(fixture.exec(f.main, "./zn", { "approve", ID, "--check" }).ok).toBe(true)
 	end)
+
+	it(
+		"replaces an approval.md on origin/main that does not parse, from the main checkout, in one command",
+		function()
+			trackerfix.elsewhere(f, {
+				[`{ISSUE}/{ID}.md`] = doc("A tenth design."),
+				[PAGE] = page(doc("A tenth design.")),
+				[`{ISSUE}/approval.md`] = "not an approval\n",
+			}, "a tenth design, and an unreadable approval")
+			local commits = count()
+			local out = must(approve(f.main))
+			t.expect(has(out, `{ID}: approving in origin/main`)).toBe(true)
+			t.expect(
+				has(out, `{ID}: origin/main's {ISSUE}/approval.md does not parse: this approval replaces it`)
+			)
+				.toBe(true)
+			t.expect(has(out, `published {ID} to origin/main: it counts now`)).toBe(true)
+			t.expect(count()).toBe(commits + 1)
+			t.expect(rowsOnMain()).toBe(1)
+			t.expect(fs.isDir(scratch)).toBe(false)
+			fixture.git(f.main, { "pull", "-q", "origin", "main" })
+			t.expect(fixture.exec(f.main, "./zn", { "approve", ID, "--check" }).ok).toBe(true)
+		end
+	)
 end)
