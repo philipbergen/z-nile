@@ -1,0 +1,4 @@
+# Answers to final review 001: R0117
+
+- F1: fixed 2a42b398a: restacked the stack onto the current origin/main, reran the members' checks (the restack runs each member's check.sh), repointed trace.md's `Commit:` to the new top-layer finish commit, and reran `./zn trace R0117 --check`; consequences: the cited line numbers hold because no source, spec or issue-document line above the Verification logs changed in the restack (main moved by tracker commits and arcade/tests/acceptance/f0201 specs only); a further move of main before `done` needs the same restack and repoint, which the final report says.
+- F2: fixed 4da14404c: the three Verification log entries and R0117.md's "Addressed during execution" no longer name layer or base shas that a restack replaces; they point at `./zn stack R0117` and trace.md's `Commit:`; consequences: none (one line each, no line count changed, no cited line moved).

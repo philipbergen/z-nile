@@ -6,3 +6,7 @@ tests/meta/fence.spec.luau	*
 tests/meta/architecture.spec.luau	portal/.tracker/architecture.md
 tests/meta/architecture.spec.luau	portal/src/
 tests/meta/architecture.spec.luau	portal/tests/
+tests/acceptance/f0205/place.spec.luau	portal/.tracker/architecture.md
+tests/acceptance/f0208/place.spec.luau	portal/.tracker/architecture.md
+tests/acceptance/f0206/place.spec.luau	portal/.tracker/architecture.md
+tests/acceptance/f0206/place.spec.luau	arcade/.tracker/architecture.md

@@ -7,7 +7,13 @@
     },
     "ReplicatedStorage": {
       "Shared": { "$path": "src/shared" },
-      "Arcade": { "$path": "../arcade/src/shared" }
+      "Arcade": { "$path": "../arcade/src/shared" },
+      "Remotes": {
+        "$className": "Folder",
+        "Cards": { "$className": "RemoteEvent" },
+        "Play": { "$className": "RemoteEvent" },
+        "Boards": { "$className": "RemoteEvent" }
+      }
     },
     "ServerStorage": {
       "Arcade": { "$path": "../arcade/src/server" }
