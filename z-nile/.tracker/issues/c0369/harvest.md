@@ -8,3 +8,17 @@
 - design-review-001 F7: z-design/measure-cost-per-event
 - design-review-001 F8: one-off: the command's own worktree took a name people already use; it now has one `./zn worktree` cannot make
 - design-review-001 F9: z-design/prep-experiments-run-in-standalone-clones
+- note the mutation log of the re-prep went to a generic scratchpad name that another agent of the session also wrote, and the run was lost: z-design/prep-experiments-run-in-standalone-clones
+- design-review-002 F1: z-design/repeat-the-command-in-the-state-it-leaves
+- design-review-002 F2: z-design/every-state-a-placed-command-meets
+- design-review-002 F3: z-design/open-bullets-use-finding-ids, z-design/never-narrow-captured-scope
+- design-review-002 F4: z-design/quote-other-preps-before-promising
+- design-review-002 F5: zz-arch/pushes-name-the-branches-they-may-create
+- design-review-002 F6: z-design/rerun-skipped-checks-after-edits
+- design-review-002 F7: z-design/confirm-overrides-with-a-suite-run
+- design-review-002 F8: zz-test/no-vacuous-pass
+- design-review-002 F9: one-off: one fixture spec served four criteria and ran four times; it is split by fixture so each check runs its own file once
+- design-review-002 F10: zz-arch/pushes-name-the-branches-they-may-create
+- design-review-002 F11: one-off: the publish callback ignored the file each attempt read and appended to a copy taken before the first attempt
+- design-review-002 F12: z-design/reasoned-rows-claim-testable-reasons
+- design-review-002 F13: zz-test/dry-run-promoted-specs-under-the-guard-scan

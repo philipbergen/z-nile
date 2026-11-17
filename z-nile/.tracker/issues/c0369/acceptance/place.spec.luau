@@ -185,4 +185,23 @@ return t.spec("c0369 the place an approval is recorded in", function(it)
 		prep.base = "now"
 		t.expect(approveplace.choose(ID, ready, { prep }, false)).toEqual(HELD)
 	end)
+
+	it(
+		"never approves main's older design behind a prep's own pushed design, asked again or retried",
+		function()
+			local pushed: approveplace.Choice =
+				{ kind = "pushed", path = nil, name = ".worktree/prep-hold", record = false }
+			local modes = { false, true }
+			-- main holds an older design, ready and unapproved, or one whose approval holds
+			for _, main in
+				{ copy(true, "none", "old"), copy(true, "changed", "old"), copy(true, "holds", "old") }
+			do
+				local prep = seen("prep", copy(true, "holds", "new"), "old")
+				prep.pushed = true
+				for _, publishOnly in modes do
+					t.expect(approveplace.choose(ID, main, { prep }, publishOnly)).toEqual(pushed)
+				end
+			end
+		end
+	)
 end)

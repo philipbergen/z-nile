@@ -1,9 +1,14 @@
 --!strict
--- c0369 AC2-AC5: one `./zn approve <id>`, run from the main checkout or any worktree, finds the design, records the
--- approval there and makes it count: published to origin/main when the design is merged, pushed on its branch when
--- it is not. A failed publish or push leaves the record and names `./zn approve <id> --publish`, which finds it too.
--- The fixtures are .cache/c0369-approve-main and .cache/c0369-approve-branch. Approving goes through `script`, which
--- allocates a terminal; the spec process itself has none.
+-- c0369 AC2: one `./zn approve <id>` of a design merged to origin/main, run from the main checkout or any worktree,
+-- records the approval in a detached worktree of origin/main it makes and removes, and publishes it in the same
+-- command; the refusals come first; a failed publish or publishing off keeps the record and names
+-- `./zn approve <id> --publish`, which finds it from anywhere. The fixture is .cache/c0369-approve-main.
+-- Approving goes through `script`, which allocates a terminal; the spec process itself has none, and the exit code is
+-- echoed inside `script`, whose own code is not ./zn's. Every ready design carries an explainer page that names its
+-- contract, the opener is a stub first on PATH and `yes y |` answers at the terminal, so every case passes with or
+-- without f0339's page check and y/n question in approve (c0368's outcome, carried here). Every command gets a
+-- person's terminal: the agent markers and session ids cleared (zz-test lesson terminal-fixtures-clear-the-agent-session).
+local contract = require("@znile/engine/contract")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -11,7 +16,6 @@ local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
 local MAIN_NAME = "c0369-approve-main"
-local BRANCH_NAME = "c0369-approve-branch"
 local ID = "c0001"
 local SLUG = "hold"
 local ROOT = "z-nile/.tracker"
@@ -26,6 +30,18 @@ local SPEC = "--!strict\n"
 	.. "\t\tt.expect(true).toBe(true)\n"
 	.. "\tend)\n"
 	.. "end)\n"
+local TERMINAL: { [string]: string } = {
+	ZN_DISPATCH = "",
+	ZN_HEADLESS = "",
+	CLAUDECODE = "",
+	AI_AGENT = "",
+	CURSOR_AGENT = "",
+	GROK_SESSION_ID = "",
+	CLAUDE_CODE_SESSION_ID = "",
+	KIMI_SESSION_ID = "",
+	KIMI_CODE_SESSION_ID = "",
+}
+local PAGE = `{ISSUE}/explainer.html`
 local REJECT = "#!/bin/sh\necho 'the fixture origin refuses this push' >&2\nexit 1\n"
 
 local function doc(design: string, ready: boolean?): string
@@ -33,6 +49,17 @@ local function doc(design: string, ready: boolean?): string
 			== false
 		then "draft"
 		else "ready"}\ncreated: 2026-11-10\nstatus: preparing-quiet-copper-falcon\n---\n\n# {ID}\n\n## Problem\nThe gate cannot see an approval.\n\n## Solution\nRecord a hash.\n\n## Design\n{design}\n\n## Acceptance criteria\nThe hash is checked.\n\n## Test plan\nSpecs cover the gates.\n`
+end
+-- an explainer page of f0339's shape that names the contract of the document `text`
+local function page(text: string): string
+	local hash = contract.hash((contract.build(text, CHECK, { ["hold.spec.luau"] = SPEC })) :: contract.Parts)
+	return `<!doctype html><html><head><meta charset="utf-8"><meta name="zn-contract" content="{hash}"><title>{ID}</title></head><body>`
+		.. '<section id="idea"><p>Show the person a page before they say yes.</p></section>'
+		.. '<section id="before"><svg viewBox="0 0 10 10"><rect width="4" height="4"/></svg></section>'
+		.. '<section id="changes"><ul><li><code>z-nile/engine/hold.luau</code>: hold()</li></ul></section>'
+		.. '<section id="after"><svg viewBox="0 0 10 10"><circle r="3"/></svg></section>'
+		.. '<section id="choices"><div class="choice"><ul class="pros"><li>plain</li></ul><ul class="cons"><li>one more file</li></ul></div></section>'
+		.. "</body></html>\n"
 end
 local function has(text: string, needle: string): boolean
 	return string.find(text, needle, 1, true) ~= nil
@@ -47,19 +74,31 @@ local function seed(): { [string]: string }
 		[`{ISSUE}/acceptance/hold.spec.luau`] = SPEC,
 	}
 end
--- `./zn approve c0001 <extra>` in `cwd`, with a terminal on stdin
+-- the folder of stub openers, first on PATH for every approve (set by each fixture's first case)
+local stubs = ""
+local function stubOpeners(base: string, repo: string)
+	stubs = `{base}/stubs`
+	fs.writeDir(stubs)
+	for _, name in { "open", "xdg-open" } do
+		fs.writeFile(`{stubs}/{name}`, "#!/bin/sh\nexit 0\n")
+		fixture.exec(repo, "chmod", { "+x", `{stubs}/{name}` })
+	end
+end
+-- `./zn approve c0001 <extra>` in `cwd`, with a terminal on stdin that answers y
 local function approve(cwd: string, extra: { string }?, env: { [string]: string }?): fixture.Result
-	local merged: { [string]: string } = { PATH = process.env.PATH or "", HOME = process.env.HOME or "" }
+	local merged = table.clone(TERMINAL)
+	merged.PATH = `{stubs}:{process.env.PATH or ""}`
+	merged.HOME = process.env.HOME or ""
 	local given: { [string]: string } = env or {}
 	for k, v in given do
 		merged[k] = v
 	end
-	local args = { "-q", "/dev/null", "./zn", "approve", ID }
 	local more: { string } = extra or {}
-	for _, a in more do
-		table.insert(args, a)
-	end
-	return fixture.exec(cwd, "script", args, { env = merged })
+	local line =
+		`yes y | script -q /dev/null sh -c './zn approve {ID} {table.concat(more, " ")}; echo "zn-exit=$?"'`
+	local r = fixture.exec(cwd, "sh", { "-c", line }, { env = merged })
+	local code = string.match(r.stdout, "zn%-exit=(%d+)")
+	return { ok = code == "0", code = tonumber(code or "1") or 1, stdout = r.stdout, stderr = r.stderr }
 end
 local function must(r: fixture.Result): string
 	if not r.ok then
@@ -107,7 +146,11 @@ return t.spec("c0369 one approve from anywhere records and publishes", function(
 		return tonumber(fixture.git(f.origin, { "rev-list", "--count", "main" })) :: number
 	end
 	local function redesign(text: string)
-		trackerfix.elsewhere(f, { [`{ISSUE}/{ID}.md`] = doc(text) }, `design: {text}`)
+		trackerfix.elsewhere(
+			f,
+			{ [`{ISSUE}/{ID}.md`] = doc(text), [PAGE] = page(doc(text)) },
+			`design: {text}`
+		)
 	end
 	local function rowsOnMain(): number
 		return lines(onMain(`{ISSUE}/approval.md`)) - 2 -- less the title and the header
@@ -118,6 +161,7 @@ return t.spec("c0369 one approve from anywhere records and publishes", function(
 		scratch = `{f.main}/.worktree/.approve-{ID}`
 		other = `{f.main}/.worktree/other-work`
 		persons = `{f.main}/.worktree/approve-{ID}`
+		stubOpeners(f.base, f.main)
 		redesign("Hash the contract.")
 		fixture.git(f.main, { "pull", "-q", "origin", "main" })
 		fixture.git(f.main, { "worktree", "add", "-q", "-b", "other-work", other, "HEAD" })
@@ -127,23 +171,34 @@ return t.spec("c0369 one approve from anywhere records and publishes", function(
 	it("keeps every refusal before it makes anything, whatever ZN_APPROVE_IN says", function()
 		local commits = count()
 		local head = fixture.git(f.main, { "rev-parse", "HEAD" })
-		local piped = fixture.exec(f.main, "./zn", { "approve", ID })
-		t.expect(piped.ok).toBe(false)
-		t.expect(has(say(piped), "approve is refused without a terminal on stdin")).toBe(true)
 		local placed: { { [string]: string } } = { {}, { ZN_APPROVE_IN = f.main } }
 		for _, extra in placed do
-			local agent: { [string]: string } = { CLAUDECODE = "1" }
+			-- without a terminal the zn wrapper refuses
+			local piped = fixture.exec(f.main, "./zn", { "approve", ID }, { env = extra })
+			t.expect(piped.ok).toBe(false)
+			t.expect(has(say(piped), "approve is refused without a terminal on stdin")).toBe(true)
 			local dispatched: { [string]: string } = { ZN_DISPATCH = "1" }
 			for k, v in extra do
-				agent[k] = v
 				dispatched[k] = v
 			end
-			local a = approve(f.main, nil, agent)
-			t.expect(a.ok).toBe(false)
-			t.expect(has(say(a), "approve is refused in an agent session, terminal or not")).toBe(true)
 			local d = approve(f.main, nil, dispatched)
 			t.expect(d.ok).toBe(false)
 			t.expect(has(say(d), "ZN_DISPATCH is set")).toBe(true)
+			-- the engine started past the wrapper, with a terminal, refuses before placement too
+			local env = table.clone(TERMINAL)
+			env.PATH = process.env.PATH or ""
+			env.HOME = process.env.HOME or ""
+			for k, v in dispatched do
+				env[k] = v
+			end
+			local engine = fixture.exec(
+				f.main,
+				"script",
+				{ "-q", "/dev/null", "lune", "run", "z-nile/engine/main", "--", "approve", ID },
+				{ env = env }
+			)
+			-- (script's own exit code is not the engine's: the text is the evidence)
+			t.expect(has(say(engine), "approve is refused while ZN_DISPATCH is set")).toBe(true)
 		end
 		-- a placed run never records in the main checkout
 		local inMain = approve(f.main, nil, { ZN_APPROVE_IN = f.main })
@@ -181,14 +236,8 @@ return t.spec("c0369 one approve from anywhere records and publishes", function(
 			t.expect(before(out, `approved {ID} `, `published {ID} to origin/main: it counts now`)).toBe(true)
 			t.expect(count()).toBe(commits + 1)
 			t.expect(fixture.git(f.origin, { "show", "--name-only", "--format=%s", "main" }))
-				.toBe(`tracker: approve {ID}\n\n{ISSUE}/approval.md\n{ISSUE}/provenance.md`)
+				.toBe(`tracker: approve {ID}\n\n{ISSUE}/approval.md`)
 			t.expect(has(onMain(`{ISSUE}/approval.md`), `\t{MAIN_NAME}\t{hash}\t`)).toBe(true)
-			t.expect(
-				has(
-					onMain(`{ISSUE}/provenance.md`),
-					` | approved | human:{MAIN_NAME} | design={string.sub(hash :: string, 1, 12)} |`
-				)
-			).toBe(true)
 			-- nothing was committed in the main checkout or in any other worktree, and the command's own is gone
 			t.expect(fixture.git(f.main, { "log", "--format=%s", `{head}..HEAD`, "--", ISSUE })).toBe("")
 			t.expect(fixture.git(f.main, { "status", "--porcelain", "--", ROOT })).toBe("")
@@ -231,6 +280,7 @@ return t.spec("c0369 one approve from anywhere records and publishes", function(
 		t.expect(has(say(off), "but it does not count yet: publishing is off")).toBe(true)
 		t.expect(has(say(off), `Retry: ./zn approve {ID} --publish`)).toBe(true)
 		t.expect(count()).toBe(commits)
+		t.expect(fs.isDir(scratch)).toBe(true) -- the command's worktree is kept after a failure
 		t.expect(fixture.git(scratch, { "log", "-1", "--format=%s" })).toBe(`tracker: approve {ID}`)
 		local kept = fs.readFile(`{scratch}/{ISSUE}/approval.md`)
 		-- the plain command, asked again, publishes what was recorded and records nothing new
@@ -260,6 +310,7 @@ return t.spec("c0369 one approve from anywhere records and publishes", function(
 			t.expect(has(say(failed), `Retry: ./zn approve {ID} --publish`)).toBe(true)
 			t.expect(count()).toBe(commits)
 			-- the record stays, committed, in the command's worktree
+			t.expect(fs.isDir(scratch)).toBe(true) -- the command's worktree is kept after a failure
 			t.expect(fixture.git(scratch, { "log", "-1", "--format=%s" })).toBe(`tracker: approve {ID}`)
 			local kept = fs.readFile(`{scratch}/{ISSUE}/approval.md`)
 			t.expect(lines(kept)).toBe(6)
@@ -282,6 +333,7 @@ return t.spec("c0369 one approve from anywhere records and publishes", function(
 			local failed = approve(f.main)
 			refuse(f.origin, false)
 			t.expect(failed.ok).toBe(false)
+			t.expect(fs.isDir(scratch)).toBe(true) -- the command's worktree is kept after a failure
 			t.expect(fixture.git(scratch, { "log", "-1", "--format=%s" })).toBe(`tracker: approve {ID}`)
 			redesign("A sixth design.")
 			-- the retry has nothing: the record is of a design that is nobody's now
@@ -327,11 +379,13 @@ return t.spec("c0369 one approve from anywhere records and publishes", function(
 		fixture.git(f.main, { "fetch", "-q", "origin" })
 		local prep = `{f.main}/.worktree/prep-{SLUG}`
 		fixture.git(f.main, { "worktree", "add", "-q", "-b", `prep-{SLUG}`, prep, "origin/main" })
-		fixture.git(prep, { "rm", "-q", `{ISSUE}/approval.md`, `{ISSUE}/provenance.md` })
+		fixture.git(prep, { "rm", "-q", `{ISSUE}/approval.md` })
 		fs.writeFile(`{prep}/{ISSUE}/{ID}.md`, doc("A ninth design."))
+		fs.writeFile(`{prep}/{PAGE}`, page(doc("A ninth design.")))
 		fixture.git(prep, { "add", "-A" })
 		fixture.git(prep, { "commit", "-q", "-m", "prep: a ninth design, with no rows" })
 		must(approve(f.main))
+		t.expect(fs.isFile(`{prep}/{ISSUE}/approval.md`)).toBe(true) -- recorded in the prep worktree
 		t.expect(lines(fs.readFile(`{prep}/{ISSUE}/approval.md`))).toBe(3)
 		redesign("A ninth design.")
 		local earlier = onMain(`{ISSUE}/approval.md`)
@@ -344,148 +398,5 @@ return t.spec("c0369 one approve from anywhere records and publishes", function(
 		t.expect(string.sub(now, 1, #earlier)).toBe(earlier)
 		fixture.git(f.main, { "pull", "-q", "origin", "main" })
 		t.expect(fixture.exec(f.main, "./zn", { "approve", ID, "--check" }).ok).toBe(true)
-	end)
-
-	local g: trackerfix.Fixture
-	local PREP = `prep-{SLUG}`
-	local function wt(name: string): string
-		return `{g.main}/.worktree/{name}`
-	end
-	local function design(name: string, text: string)
-		fs.writeFile(`{wt(name)}/{ISSUE}/{ID}.md`, doc(text))
-		fixture.git(wt(name), { "add", "-A" })
-		fixture.git(wt(name), { "commit", "-q", "-m", `prep: {text}` })
-	end
-	local function tip(name: string): string
-		return fixture.git(wt(name), { "log", "-1", "--format=%s" })
-	end
-	local function headOf(name: string): string
-		return fixture.git(wt(name), { "rev-parse", "HEAD" })
-	end
-	local function onOrigin(name: string): string?
-		local r = fixture.exec(g.origin, "git", { "rev-parse", "-q", "--verify", `refs/heads/{name}` })
-		return if r.ok then (string.gsub(r.stdout, "%s+$", "")) else nil
-	end
-	local function mainOf(): string
-		return fixture.git(g.origin, { "rev-parse", "main" })
-	end
-
-	it(
-		"from the main checkout records an unmerged design in its prep worktree and pushes the branch",
-		function()
-			g = trackerfix.new(BRANCH_NAME, seed())
-			fixture.git(g.main, { "worktree", "add", "-q", "-b", PREP, wt(PREP), "origin/main" })
-			design(PREP, "Hash the contract.")
-			-- a prototype of the same issue: a ready design of its own that nobody is asked to approve
-			fixture.git(
-				g.main,
-				{ "worktree", "add", "-q", "-b", "proto-hold", wt("proto-hold"), "origin/main" }
-			)
-			design("proto-hold", "A prototype's copy.")
-			local mainBefore = mainOf()
-			local head = fixture.git(g.main, { "rev-parse", "HEAD" })
-			local out = must(approve(g.main))
-			t.expect(before(out, `{ID}: approving in .worktree/{PREP}`, `approved {ID} `)).toBe(true)
-			t.expect(has(out, `pushed {PREP}: the approval counts when its pull request merges`)).toBe(true)
-			t.expect(fixture.git(wt(PREP), { "show", "--name-only", "--format=%s", "HEAD" }))
-				.toBe(`tracker: approve {ID}\n\n{ISSUE}/approval.md\n{ISSUE}/provenance.md`)
-			t.expect(onOrigin(PREP)).toBe(headOf(PREP))
-			-- a draft on main takes nothing, even though its text hashes the same; no checkout but the prep's changed
-			t.expect(mainOf()).toBe(mainBefore)
-			t.expect(fixture.git(g.main, { "rev-parse", "HEAD" })).toBe(head)
-			t.expect(tip("proto-hold")).toBe("prep: A prototype's copy.")
-			t.expect(onOrigin("proto-hold")).toBe(nil)
-			t.expect(fs.isDir(`{g.main}/.worktree/.approve-{ID}`)).toBe(false)
-			-- asked again, it says where the approval waits and changes nothing
-			local again = must(approve(g.main))
-			t.expect(
-				has(again, `{ID} is approved in .worktree/{PREP}: it counts when its pull request merges`)
-			)
-				.toBe(true)
-			t.expect(tip(PREP)).toBe(`tracker: approve {ID}`)
-			t.expect(tip("proto-hold")).toBe("prep: A prototype's copy.")
-		end
-	)
-
-	it("takes another worktree only when it is run inside it", function()
-		local out = must(approve(wt("proto-hold")))
-		t.expect(has(out, "pushed proto-hold: the approval counts when its pull request merges")).toBe(true)
-		t.expect(tip("proto-hold")).toBe(`tracker: approve {ID}`)
-		t.expect(onOrigin("proto-hold")).toBe(headOf("proto-hold"))
-	end)
-
-	it("keeps the record when the push fails, and --publish from the main checkout pushes it", function()
-		design(PREP, "A second design.")
-		refuse(g.origin, true)
-		local failed = approve(g.main)
-		refuse(g.origin, false)
-		t.expect(failed.ok).toBe(false)
-		t.expect(has(say(failed), "but it does not count yet: ")).toBe(true)
-		t.expect(has(say(failed), `.worktree/{PREP}`)).toBe(true)
-		t.expect(has(say(failed), `Retry: ./zn approve {ID} --publish`)).toBe(true)
-		t.expect(tip(PREP)).toBe(`tracker: approve {ID}`)
-		t.expect(onOrigin(PREP) == headOf(PREP)).toBe(false)
-		local out = must(approve(g.main, { "--publish" }))
-		t.expect(has(out, `pushed {PREP}: the approval counts when its pull request merges`)).toBe(true)
-		t.expect(onOrigin(PREP)).toBe(headOf(PREP))
-		-- one row for the second design, not two
-		t.expect(lines(fs.readFile(`{wt(PREP)}/{ISSUE}/approval.md`))).toBe(4)
-	end)
-
-	it("approves a redesign in its prep worktree while main still holds the approved older design", function()
-		-- the prep's pull request merges: main holds its design and its approvals
-		fixture.git(wt(PREP), { "push", "-q", "origin", "HEAD:main" })
-		design(PREP, "A third design.")
-		local mainBefore = mainOf()
-		local out = must(approve(g.main))
-		t.expect(has(out, `{ID}: approving in .worktree/{PREP}`)).toBe(true)
-		t.expect(has(out, `pushed {PREP}: the approval counts when its pull request merges`)).toBe(true)
-		t.expect(lines(fs.readFile(`{wt(PREP)}/{ISSUE}/approval.md`))).toBe(5)
-		t.expect(mainOf()).toBe(mainBefore)
-	end)
-
-	it(
-		"publishes the approval a prep holds when its design reached main without it, and records no second one",
-		function()
-			-- the pull request is squashed onto main from before the approval: the design is there, its approval is not
-			trackerfix.elsewhere(g, { [`{ISSUE}/{ID}.md`] = doc("A third design.") }, "squash of the prep")
-			local held = fs.readFile(`{wt(PREP)}/{ISSUE}/approval.md`)
-			local head = headOf(PREP)
-			local commits = tonumber(fixture.git(g.origin, { "rev-list", "--count", "main" })) :: number
-			local out = must(approve(g.main))
-			t.expect(has(out, `{ID}: publishing from .worktree/{PREP}`)).toBe(true)
-			t.expect(has(out, `approved {ID} `)).toBe(false)
-			t.expect(has(out, `published {ID} to origin/main: it counts now`)).toBe(true)
-			t.expect(tonumber(fixture.git(g.origin, { "rev-list", "--count", "main" }))).toBe(commits + 1)
-			t.expect(fixture.git(g.origin, { "show", `main:{ISSUE}/approval.md` }))
-				.toBe((string.gsub(held, "%s+$", "")))
-			t.expect(headOf(PREP)).toBe(head)
-			local again = must(approve(g.main))
-			t.expect(has(again, `{ID} is already approved on origin/main`)).toBe(true)
-		end
-	)
-
-	it("does not take a prep worktree left behind after its design merged and main moved on", function()
-		trackerfix.elsewhere(g, { [`{ISSUE}/{ID}.md`] = doc("The design after it.") }, "a later design")
-		local head = headOf(PREP)
-		local pushed = onOrigin(PREP)
-		local commits = tonumber(fixture.git(g.origin, { "rev-list", "--count", "main" })) :: number
-		local out = must(approve(g.main))
-		t.expect(has(out, `{ID}: approving in origin/main`)).toBe(true)
-		t.expect(has(out, `published {ID} to origin/main: it counts now`)).toBe(true)
-		t.expect(tonumber(fixture.git(g.origin, { "rev-list", "--count", "main" }))).toBe(commits + 1)
-		t.expect(headOf(PREP)).toBe(head)
-		t.expect(onOrigin(PREP)).toBe(pushed)
-		-- the same for a prep that was never approved in its own worktree: its design merged, was approved on main,
-		-- and main moved on again
-		design(PREP, "A fifth design.")
-		trackerfix.elsewhere(g, { [`{ISSUE}/{ID}.md`] = doc("A fifth design.") }, "squash of the prep, again")
-		must(approve(g.main))
-		trackerfix.elsewhere(g, { [`{ISSUE}/{ID}.md`] = doc("A sixth design.") }, "and a later one")
-		local left = headOf(PREP)
-		local later = must(approve(g.main))
-		t.expect(has(later, `{ID}: approving in origin/main`)).toBe(true)
-		t.expect(has(later, `published {ID} to origin/main: it counts now`)).toBe(true)
-		t.expect(headOf(PREP)).toBe(left)
 	end)
 end)
