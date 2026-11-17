@@ -4,8 +4,8 @@
 |---|---|---|---|---|---|---|
 | c0380 | chore |  | 1080 | 43 | 0.0 | 68095 |
 
-**Total:** +1080 / -43 lines, 0.0 agent-minutes, 68095 tokens over 308 records
-<!-- totals: added=1080 removed=43 minutes=0.0 records=308 tokens=68095 -->
+**Total:** +1080 / -43 lines, 0.0 agent-minutes, 68095 tokens over 335 records
+<!-- totals: added=1080 removed=43 minutes=0.0 records=335 tokens=68095 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
