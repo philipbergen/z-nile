@@ -213,27 +213,29 @@ return t.spec("c0249 rank, next and list", function(it)
 	)
 
 	it(
-		"AC2: a move among unset items ranks the unset ones above it (auto) and changes no rank that exists",
+		"AC2: a move among unset items ranks the unset ones above it (moved= in their rows) and changes no rank that exists",
 		function()
 			local before = tip()
 			-- the ranked items are c0014 5, c0012 10, c0013 20, c0015 30, c0021 40; c0010 is the first unset one
 			local out = must(h.f.main, { "rank", "c0017", "--before", "c0011" })
-			t.expect(out).toBe("c0010 rank 50 auto (was unset)\nc0017 rank 60 (was unset)")
+			t.expect(out).toBe("c0010 rank 50 (was unset)\nc0017 rank 60 (was unset)")
 			t.expect(changedFiles(before)).toBe(
 				"issues/c0010/c0010.md\nissues/c0010/provenance.md\nissues/c0017/c0017.md\nissues/c0017/provenance.md"
 			)
 			t.expect(fixture.git(h.f.origin, { "rev-list", "--count", `{before}..main` })).toBe("1")
-			-- the moved item's rank is plain and its row has no mover; the neighbour's is marked and names the item that moved it
+			-- both lines are bare integers; the moved item's row has no mover, the neighbour's names the item that moved it
 			t.expect(has(onOrigin(`{P}/c0017/c0017.md`), "\nid: c0017\nrank: 60\ntype:")).toBe(true)
-			t.expect(has(onOrigin(`{P}/c0010/c0010.md`), "\nid: c0010\nrank: 50 auto\ntype:")).toBe(true)
+			t.expect(has(onOrigin(`{P}/c0010/c0010.md`), "\nid: c0010\nrank: 50\ntype:")).toBe(true)
+			t.expect(has(onOrigin(`{P}/c0010/c0010.md`), " auto")).toBe(false)
 			t.expect(has(onOrigin(`{P}/c0017/provenance.md`), `| ranked | {ME} | rank=60; was=unset |`))
 				.toBe(true)
 			t.expect(
 				has(
 					onOrigin(`{P}/c0010/provenance.md`),
-					`| ranked | {ME} | rank=50 auto; was=unset; moved=c0017 |`
+					`| ranked | {ME} | rank=50; was=unset; moved=c0017 |`
 				)
-			).toBe(true)
+			)
+				.toBe(true)
 			-- no rank that exists changed: c0014 still has its one row
 			t.expect(rankOf("c0014")).toBe("5")
 			t.expect(rankOf("c0021")).toBe("40")
@@ -348,7 +350,7 @@ return t.spec("c0249 rank, next and list", function(it)
 	)
 
 	it(
-		"AC5: list puts a lost claim first, after the blocked items, whatever its rank, and says when it cannot read it",
+		"AC5: list stays offline and does not know lost work; list --lost asks the remote, puts a lost claim first after the blocked items whatever its rank, and says when it cannot read it",
 		function()
 			-- c0013 is claimed and never beats
 			must(wt, { "sync" })
@@ -358,14 +360,27 @@ return t.spec("c0249 rank, next and list", function(it)
 			local fresh = order(must(h.f.main, { "list", "backlog" }, { ZN_NOW = tostring(T0 + 60) }))
 			t.expect(fresh[1]).toBe("c0030")
 			t.expect(fresh[2]).toBe("R0202")
-			-- stale, with no pull request naming it: lost, so it is first among the unblocked items
-			local late = order(must(h.f.main, { "list", "backlog" }, { ZN_NOW = tostring(LATE) }))
+			-- stale, with no pull request naming it: lost. `list` stays offline (decided with the user, 2026-11-16) and does not
+			-- know it: the stack is as in rank order and nothing is said on stderr, even when the remote could not be read
+			fs.writeFile(`{h.fakes}/ghfail`, "1")
+			local offline = zn(h.f.main, { "list", "backlog" }, { ZN_NOW = tostring(LATE) })
+			t.expect(offline.ok).toBe(true)
+			t.expect(order(offline.stdout)[1]).toBe("c0030")
+			t.expect(order(offline.stdout)[2]).toBe("R0202")
+			t.expect(has(offline.stderr, "lost work")).toBe(false)
+			fs.removeFile(`{h.fakes}/ghfail`)
+			-- --lost asks the remote: the lost claim is first among the unblocked items
+			local late = order(must(h.f.main, { "list", "backlog", "--lost" }, { ZN_NOW = tostring(LATE) }))
 			t.expect(late[1]).toBe("c0030")
 			t.expect(late[2]).toBe("c0013")
 			t.expect(late[3]).toBe("R0202")
+			-- fresh, --lost leaves it in its place
+			local freshLost =
+				order(must(h.f.main, { "list", "backlog", "--lost" }, { ZN_NOW = tostring(T0 + 60) }))
+			t.expect(freshLost[2]).toBe("R0202")
 			-- the heartbeats or the pull requests cannot be read: it is not lost, and stderr says why
 			fs.writeFile(`{h.fakes}/ghfail`, "1")
-			local r = zn(h.f.main, { "list", "backlog" }, { ZN_NOW = tostring(LATE) })
+			local r = zn(h.f.main, { "list", "backlog", "--lost" }, { ZN_NOW = tostring(LATE) })
 			t.expect(r.ok).toBe(true)
 			t.expect(has(r.stderr, "list: lost work not read (")).toBe(true)
 			t.expect(order(r.stdout)[2]).toBe("R0202")
@@ -447,7 +462,7 @@ return t.spec("c0249 rank, next and list", function(it)
 			[`{P}/c0041/c0041.md`] = (string.gsub(doc("c0041"), "\nstatus:", "\nrank: 5\nrank: 6\nstatus:")),
 			[`{P}/c0042/c0042.md`] = (string.gsub(doc("c0042"), "\nstatus:", "\n rank: 5\nstatus:")),
 			[`{P}/c0043/c0043.md`] = doc("c0043", { rank = "30" }),
-			[`{P}/c0044/c0044.md`] = doc("c0044", { rank = "30 auto" }),
+			[`{P}/c0044/c0044.md`] = doc("c0044", { rank = "30 auto" }), -- no marker in the line: who set a rank is in provenance.md
 			[`{P}/c0045/c0045.md`] = doc("c0045", { rank = "30 AUTO" }),
 			[`{P}/done/c0099/c0099.md`] = doc("c0099", { rank = "abc", status = "done-quiet-copper-falcon" }),
 			[`{P}/done/c0099/check.sh`] = CHECK,
@@ -460,6 +475,7 @@ return t.spec("c0249 rank, next and list", function(it)
 			.toBe(true)
 		t.expect(has(said, "c0041: rank: is written 2 times")).toBe(true)
 		t.expect(has(said, "c0042:  rank: 5: write the rank as `rank: <whole number>`")).toBe(true)
+		t.expect(has(said, "c0044: rank: 30 auto is not a whole number")).toBe(true)
 		t.expect(has(said, "c0045: rank: 30 AUTO is not a whole number")).toBe(true)
 		-- a done item's leftover line is still checked
 		t.expect(
@@ -467,6 +483,5 @@ return t.spec("c0249 rank, next and list", function(it)
 		)
 			.toBe(true)
 		t.expect(has(said, "c0043")).toBe(false)
-		t.expect(has(said, "c0044")).toBe(false)
 	end)
 end)
