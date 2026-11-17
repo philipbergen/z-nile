@@ -72,6 +72,16 @@ if [[ -f z-nile/roots.luau ]]; then
 else
   registry=$'pickman\t.\ttracker'
 fi
+# The app projects (c0257): homes with no Luau. The gate runs their node tests and none of the Luau stages over them.
+apps=()
+if [[ -f z-nile/roots.luau ]]; then
+  while IFS= read -r a; do [[ -n $a ]] && apps+=("$a"); done < <(lune run z-nile/roots -- --apps) ||
+    { echo "check.sh: z-nile/projects.toml does not parse (lune run z-nile/roots -- --apps)" >&2; exit 1; }
+fi
+is_app() { local a; for a in ${apps[@]+"${apps[@]}"}; do [[ $a == "$1" ]] && return 0; done; return 1; }
+node_tests() { # node_tests <home>: an app's node test files, sorted, one per line
+  find "$1" -mindepth 3 -maxdepth 3 -path "$1/*/tests/*.test.mjs" -type f | LC_ALL=C sort
+}
 names=() homes=() roots=()
 while IFS=$'\t' read -r n h r; do
   [[ -n $n ]] || continue
@@ -128,6 +138,7 @@ places=() # "<home>|<project file>"
 srcs=()   # "<home>"
 for i in "${!names[@]}"; do
   picked "${names[$i]}" || continue
+  is_app "${names[$i]}" && continue
   h=${homes[$i]} p=$(prefix "${homes[$i]}")
   if [[ $h == . || -d ${p}src ]]; then
     for d in "${p}tests" "${p}scripts"; do [[ -d $d ]] && LUNE_DIRS+=("$d"); done
@@ -168,6 +179,10 @@ if [[ -n $plan ]]; then
   { [[ $mode == full ]] || picked z-nile; } && [[ -d z-nile/skills ]] && printf 'skills: %s\n' .claude/skills
   for i in "${!names[@]}"; do
     picked "${names[$i]}" || continue
+    if is_app "${names[$i]}"; then
+      printf 'node: %s\n' "$(node_tests "${homes[$i]}" | tr '\n' ' ' | sed 's/ $//')"
+      continue
+    fi
     [[ -d $(prefix "${homes[$i]}")tests ]] && printf 'specs: %s, from %s\n' "${names[$i]}" "${homes[$i]}"
   done
   exit 0
@@ -287,6 +302,15 @@ for i in "${!names[@]}"; do
     picked "${names[$i]}" || continue
   fi
   n=${names[$i]} h=${homes[$i]}
+  if is_app "$n"; then
+    picked "$n" || continue
+    stage "node ($mode): $n"
+    tests=()
+    while IFS= read -r f; do tests+=("$f"); done < <(node_tests "$h")
+    [[ ${#tests[@]} -gt 0 ]] || { echo "check.sh: app $n has no */tests/*.test.mjs" >&2; exit 1; }
+    node --test "${tests[@]}" || exit 1
+    continue
+  fi
   [[ -d $(prefix "$h")tests ]] || { stage "tests ($mode): $n has no tests/"; continue; }
   stage "tests ($mode): $n"
   if [[ $mode == full ]]; then

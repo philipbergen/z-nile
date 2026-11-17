@@ -10,7 +10,9 @@ local serde = require("@lune/serde")
 local projects = {}
 
 export type Project = { name: string, root: string, home: string }
-export type Registry = { projects: { Project }, retired: { string } }
+-- `apps` (c0257): the names of the projects of kind "app", in registry order: a home with no Luau, whose gate runs its
+-- node tests. Optional in the type, so a registry built by hand (a fixture) needs none; `parse` always sets it.
+export type Registry = { projects: { Project }, retired: { string }, apps: { string }? }
 
 projects.FILE = "z-nile/projects.toml"
 -- The one root a tree had before c0114. A tree or a commit with no registry has exactly this root.
@@ -57,18 +59,25 @@ function projects.parse(text: string): (Registry?, string?)
 	local out: { Project } = {}
 	local names: { [string]: boolean } = {}
 	local roots: { [string]: boolean } = {}
+	local apps: { string } = {}
 	for i, p in list do
 		if type(p) ~= "table" then
 			return nil, `{projects.FILE}: project {i} is not a table`
 		end
 		for k in p do
-			if k ~= "name" and k ~= "root" then
+			if k ~= "name" and k ~= "root" and k ~= "kind" then
 				return nil, `{projects.FILE}: project {i} has an unknown key {k}`
 			end
 		end
 		local name, root = p.name, p.root
 		if type(name) ~= "string" or not nameOk(name) then
 			return nil, `{projects.FILE}: project {i} needs a name of lowercase words joined by hyphens`
+		end
+		if p.kind ~= nil and (p.kind ~= "app" or name == "z-nile") then
+			return nil, `{projects.FILE}: {name}'s kind must be "app" (z-nile has none)`
+		end
+		if p.kind == "app" then
+			table.insert(apps, name)
 		end
 		if type(root) ~= "string" or not (root == projects.LEGACY or root == `{name}/.tracker`) then
 			return nil, `{projects.FILE}: {name}'s root must be "{name}/.tracker" or "{projects.LEGACY}"`
@@ -103,7 +112,7 @@ function projects.parse(text: string): (Registry?, string?)
 			table.insert(retired, r)
 		end
 	end
-	return { projects = out, retired = retired }, nil
+	return { projects = out, retired = retired, apps = apps }, nil
 end
 
 -- The current roots, in registry order.

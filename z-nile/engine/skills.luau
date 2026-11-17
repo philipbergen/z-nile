@@ -92,7 +92,17 @@ function skills.plan(found: { Found }): ({ Skill }, { string })
 					`{dir}: a z-nile skill is named z-… (the pipeline) or zz-… (inside a step)`
 				)
 				continue
-			elseif f.folder.project ~= skills.ZNILE and zn then
+			elseif
+				f.folder.project ~= skills.ZNILE
+				and zn
+				-- a project whose own name starts z- (c0257: z-nile-omarchy) names its skills <project>-…; a project
+				-- named z or zz still may not take z-nile's prefixes
+				and not (
+					starts(e.name, f.folder.project .. "-")
+					and f.folder.project ~= "z"
+					and f.folder.project ~= "zz"
+				)
+			then
 				table.insert(
 					problems,
 					`{dir}: the z- and zz- prefixes are z-nile's; a {f.folder.project} skill is named {f.folder.project}-…`

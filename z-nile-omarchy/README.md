@@ -16,4 +16,4 @@ omarchy restart shell   # the plugin stays loaded, so code changes need a restar
 
 Set the repo path in `znile.board/settings.json` (default `~/code/pickman`). The app needs lune (`z-nile/setup.sh --tools`) and, for PR chips, a signed-in `gh`.
 
-Tests: `node --test z-nile-omarchy/znile.board/tests/`
+Tests: `node --test z-nile-omarchy/znile.board/tests/model.test.mjs`

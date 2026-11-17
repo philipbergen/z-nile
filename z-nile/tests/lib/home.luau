@@ -15,7 +15,7 @@ local home = {}
 -- required, because c0120 keeps a z-nile engine change from selecting any other project's specs, and each home runs
 -- this rule from its own folder.
 export type Project = { name: string, root: string, home: string }
-export type Registry = { projects: { Project } }
+export type Registry = { projects: { Project }, apps: { string }? }
 
 -- The `name:` of a SKILL.md's frontmatter, or nil (the reader of skill folders is engine/skills.luau, which the engine's
 -- own specs run; a name that differs from the folder's is also refused by `./zn skills --check`).
@@ -175,6 +175,20 @@ function home.problems(top: string, reg: Registry, only: string?): ({ string }, 
 			fs.isFile(`{top}/{h}/check.sh`) and not process.exec("test", { "-x", `{top}/{h}/check.sh` }).ok
 		then
 			bad(h, "check.sh is not executable")
+		end
+		-- an app's home (c0257) has no Luau: its gate, its root's folders and its two skills, nothing more
+		if table.find(reg.apps or {}, p.name) then
+			for _, d in { "issues", "rafts" } do
+				if not fs.isDir(`{top}/{p.root}/{d}`) then
+					bad(h, `missing {string.sub(p.root, #h + 2)}/{d}/`)
+				end
+			end
+			for _, kind in { "arch", "test" } do
+				if not fs.isFile(`{top}/{h}/skills/{p.name}-{kind}/SKILL.md`) then
+					bad(h, `missing skills/{p.name}-{kind}/SKILL.md`)
+				end
+			end
+			continue
 		end
 		-- the aliases and the root's formatter and linter configuration
 		local luaurc = read(`{top}/{h}/.luaurc`)

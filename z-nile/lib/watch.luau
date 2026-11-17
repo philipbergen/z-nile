@@ -95,7 +95,11 @@ function watch.forSuite(spec: string, paths: { string }): { string }
 	for _, p in paths do
 		local home = string.match(p, "^([^/]+)/") or ""
 		local keep = if tooling
-			then home == "" or home == "z-nile" or home == "scripts" or string.sub(p, 1, 8) == ".github/"
+			then home == "" or home == "z-nile" or home == "z-nile-omarchy" or home == "scripts" or string.sub(
+				p,
+				1,
+				8
+			) == ".github/"
 			else GAME_HOME[home] == true
 		if keep then
 			table.insert(out, p)

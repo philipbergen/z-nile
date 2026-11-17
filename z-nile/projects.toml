@@ -36,3 +36,8 @@ root = "invaders/.tracker"
 [[project]]
 name = "asteroids"
 root = "asteroids/.tracker"
+
+[[project]]
+name = "z-nile-omarchy"
+root = "z-nile-omarchy/.tracker"
+kind = "app"

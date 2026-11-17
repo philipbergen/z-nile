@@ -3,6 +3,7 @@
 -- scripts, ac.sh and the stop hook take every root and home from here, so a new project needs no edit to them.
 --   lune run z-nile/roots                             -- every current root, one per line
 --   lune run z-nile/roots -- --projects               -- name, home and root per project, tab-separated (c0120)
+--   lune run z-nile/roots -- --apps                   -- the app projects' names, one per line (c0257)
 --   lune run z-nile/roots -- --luau-dirs [<name>...]  -- the format and lint stages' folders, space-separated: each
 --                                                       named project's (every project's without a name)
 -- A registry that does not parse is an error (exit 1): the gate never guesses its folders.
@@ -27,6 +28,12 @@ if args[1] == "--projects" then
 	for _, p in registry.projects do
 		print(`{p.name}\t{p.home}\t{p.root}`)
 	end
+elseif args[1] == "--apps" then
+	-- the app projects (c0257), one per line: homes with no Luau, whose gate runs their node tests
+	local apps: { string } = registry.apps or {}
+	for _, name in apps do
+		print(name)
+	end
 elseif args[1] == "--luau-dirs" then
 	-- A project's folders (c0120): a game's home's src/, tests/ and scripts/; the tooling's (a home with no src/,
 	-- z-nile/) whole home, its engine and libraries with its tests; for z-nile also the root's scripts/, c0114's shims,
@@ -49,11 +56,13 @@ elseif args[1] == "--luau-dirs" then
 	for _, p in registry.projects do
 		if #args < 2 or wanted[p.name] then
 			local prefix = if p.home == "." then "" else p.home .. "/"
-			if p.home == "." or fs.isDir(prefix .. "src") then
+			local apps: { string } = registry.apps or {}
+			-- an app's home has no Luau (c0257): only its root is read
+			if table.find(apps, p.name) == nil and (p.home == "." or fs.isDir(prefix .. "src")) then
 				for _, d in { "src", "tests", "scripts" } do
 					add(prefix .. d)
 				end
-			else
+			elseif table.find(apps, p.name) == nil then
 				add(p.home)
 			end
 			if p.home == "." then
