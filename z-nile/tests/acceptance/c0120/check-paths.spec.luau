@@ -27,6 +27,10 @@ local RESTAMPED: { [string]: string } = {
 	-- layout) is re-prepped after c0120, restamped `preparing` on main
 	["f989acf181d949b6ca4e8a189f0034d2475ab321"] = "R0044",
 	["3145713efb3b956619a8db297ea3fc8157db6a28"] = "d0124",
+	-- ruled by the user, 2026-11-16 (R0115): "Ignore the scanner I am fixing that on a different raft": c0394's AC13
+	-- names AGENTS.md inside a single-quoted case name, which the scan reads as a path; exempt by its exact content
+	-- until the scanner fix lands (it may drop this line)
+	["741322491128c5b42676e50b6f2b86f9e3b20bd4"] = "c0394",
 }
 local function blob(text: string): string
 	return serde.hash("sha1", `blob {#text}\0{text}`)

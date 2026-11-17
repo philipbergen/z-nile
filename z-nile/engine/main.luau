@@ -7,6 +7,7 @@ local boardview = require("./boardview")
 local brokerLib = require("./broker")
 local buffer = require("./buffer")
 local claimsLib = require("./claims")
+local closing = require("./closing")
 local compactLib = require("./compact")
 local contract = require("./contract")
 local costrow = require("./costrow")
@@ -61,6 +62,8 @@ usage: ./zn <command> ...
                                                 prepared (design ready) or new (z-raft)
   raft-plan [--apply]                           print z-raft's plan for every prepared, raftless issue (--apply runs it)
   status [<id>] [<to>]                          list statuses on origin/main, show one, or move one (new|preparing|prepared; ready claims active)
+  close <issue> --reason "<why>" [--carry]      close an issue as won't do: publish its closed status and wont_do: reason
+                                                (--carry: edit this tree only, landed by the branch's pull request)
   sync [--fetch]                                bring origin/main into this checkout (--fetch: update origin/main only)
   land [-m <message>]                           in a capture worktree: merge origin/main, run the gate, push the capture to main
   stamp <state>                                 print a fresh status stamp (diagnostics)
@@ -70,7 +73,8 @@ usage: ./zn <command> ...
                                                 stop this user's leaked tool processes: orphans, commands past their
                                                 ./zn run deadline, and (at a session end) the session's own
   find <id>                                     print the item's current directory (from where ./zn was run)
-  list [backlog|active|done] [--project <name>] list items: of --project, of the project whose folder you are
+  list [backlog|active|done|closed] [--project <name>]
+                                                list items: of --project, of the project whose folder you are
                                                 in, or of every project at the checkout's root
   members <R-id>                                print directories of every issue in the raft (from where ./zn was run)
   busy [<path>...]                              list what holds <path>s (default: every project root and promoted-spec
@@ -851,6 +855,7 @@ local function flags(args: { string }): ({ string }, { [string]: { string } })
 			or a == "--session-end"
 			or a == "--begin"
 			or a == "--sessions"
+			or a == "--carry"
 		then
 			opts[a] = { "true" }
 		elseif string.sub(a, 1, 1) == "-" then
@@ -1538,6 +1543,10 @@ local function setStatus(id: string, to: string)
 				return `{t} is readied (in active/): use ./zn stop {if raftId ~= "" then raftId else "<R-id>"}`
 			end
 			local cur = statusLib.effective(tf, stateOfPath(tp))
+			-- c0278: closed (won't do) is final; checked after the active/ refusal, before every other
+			if cur == "closed" then
+				return `{t} is closed (won't do): nothing moves a closed issue`
+			end
 			if t ~= id and carried and store.isRaftId(id) then
 				originHashes[t] =
 					raftplan.recordHash(t, treeFolderFiles(paths, read, string.sub(tp, 1, #tp - #t - 4)))
@@ -1716,7 +1725,11 @@ function cmd.status(pos: { string })
 			local fid, file = string.match(p, "/([fdcR]%d%d%d%d)/([^/]+)$")
 			if fid and file == `{fid}.md` and publish.allowed(p, roots) and stateOfPath(p) ~= "done" then
 				local front = frontOf(sh.git({ "show", `origin/main:{p}` }))
-				print(`{fid} {statusLib.effective(front, stateOfPath(p))} {front.title or ""}`)
+				local st = statusLib.effective(front, stateOfPath(p))
+				-- c0278: a closed issue is finished, like a done one
+				if st ~= "closed" then
+					print(`{fid} {st} {front.title or ""}`)
+				end
 			end
 		end
 		return
@@ -1737,12 +1750,140 @@ function cmd.status(pos: { string })
 	if not statusLib.parse(to) then
 		fail(`unknown status {to} (new, preparing, prepared, active, done)`)
 	end
+	if to == "closed" then
+		fail(`only ./zn close closes an issue: ./zn close {id} --reason "<why>"`)
+	end
 	if to == "active" then
 		fail(
 			"only ./zn start or ./zn ready claims active: it checks the tree, the designs and the dependencies first"
 		)
 	end
 	setStatus(id, to)
+end
+
+-- c0278: a dependent of `id` is a live item document (backlog or active, not closed) whose depends_on holds `id`.
+local function isLiveDependent(path: string, text: string, id: string): boolean
+	local pid, rel = publish.itemPath(path)
+	if not pid or pid == id or rel ~= `{pid}.md` or stateOfPath(path) == "done" then
+		return false
+	end
+	if string.find(path, "/rafts/retired/", 1, true) then
+		return false
+	end
+	local front = frontOf(text)
+	if closing.isClosed(front) then
+		return false
+	end
+	return table.find(store.idList(front.depends_on), id) ~= nil
+end
+
+-- `close <issue> --reason "<why>" [--carry]` (c0278): closes an issue as won't do. Published: one tracker-only commit
+-- on origin/main that stamps its status: closed-… and appends wont_do: <why>, judged on that tree; the working tree is
+-- not touched. Carried: the same edit written in this tree, judged on it, and nothing published; the branch's pull
+-- request lands it. The folder stays where it is, so find, capture, lessons and spend read it as before.
+function cmd.close(pos: { string }, opts: { [string]: { string } })
+	local id = pos[1]
+	if not id or pos[2] then
+		fail(`usage: ./zn close <issue> --reason "<why>" [--carry]`)
+	end
+	local reasonArg = opts["--reason"] and opts["--reason"][1]
+	local bad = closing.checkReason(reasonArg)
+	if bad then
+		fail(bad)
+	end
+	local reason = sh.trim(reasonArg :: string)
+	local carry = opts["--carry"] ~= nil
+	refuseInMainCheckout("close")
+	local kind = if store.isRaftId(id) then "raft" else "issue"
+	if carry then
+		-- carried mode refuses a stale tree too (Design section 2, Where; R0115 review 001 F3)
+		refuseStale()
+		local item = store.find(id)
+		local facts: closing.Facts =
+			{ id = id, kind = kind, where = "none", status = "", raft = "", dependents = {} }
+		if item then
+			local text = fs.readFile(item.doc)
+			local front = frontOf(text)
+			facts.where = item.state
+			facts.status = statusLib.effective(front, item.state)
+			facts.raft = front.raft or ""
+			for _, k in { "issue", "raft" } :: { store.Kind } do
+				for _, other in store.all(k) do
+					if other.state ~= "done" and isLiveDependent(other.doc, fs.readFile(other.doc), id) then
+						table.insert(facts.dependents, other.id)
+					end
+				end
+			end
+			table.sort(facts.dependents)
+		end
+		local refused = closing.refusal(facts, "this tree")
+		if refused then
+			fail(refused)
+		end
+		local doc = (item :: store.Item).doc
+		local edited = closing.edit(fs.readFile(doc), reason, stamp("closed"))
+		if not edited then
+			fail(`{doc} has no frontmatter`)
+		end
+		fs.writeFile(doc, edited :: string)
+		print(`closed {id} in this tree (carried): commit it; it lands with this branch's pull request`)
+		return
+	end
+	if not publishing() then
+		fail(
+			`close needs an origin remote (PICKMAN_PUBLISH=0 disables it): ./zn close {id} --reason "<why>" --carry closes it in this tree`
+		)
+	end
+	refuseStale()
+	local r = published(publish.commit(".", function(paths, read, roots, _counter, base)
+		local path = docPath(paths, id)
+		local text = path and read(path)
+		local facts: closing.Facts =
+			{ id = id, kind = kind, where = "none", status = "", raft = "", dependents = {} }
+		if path and text then
+			local front = frontOf(text)
+			facts.where = stateOfPath(path)
+			facts.status = statusLib.effective(front, facts.where)
+			facts.raft = front.raft or ""
+			-- one grep over the fetched base as a prefilter (E4), each hit confirmed by its depends_on list
+			local args = { "grep", "-l", "-w", "-e", id, "--and", "-e", "^depends_on:", base, "--" }
+			for _, root in roots do
+				table.insert(args, `{root}/issues/`)
+				table.insert(args, `{root}/rafts/`)
+			end
+			local hits, grepErr = closing.grepHits(sh.run("git", args))
+			if not hits then
+				return grepErr :: string
+			end
+			for _, hit in hits do
+				local p = string.sub(hit, #base + 2)
+				local dtext = read(p)
+				local dep = publish.itemPath(p)
+				if
+					dtext
+					and dep
+					and isLiveDependent(p, dtext, id)
+					and not table.find(facts.dependents, dep)
+				then
+					table.insert(facts.dependents, dep)
+				end
+			end
+			table.sort(facts.dependents)
+		end
+		local refused = closing.refusal(facts, "origin/main")
+		if refused then
+			return refused
+		end
+		local edited = closing.edit(text :: string, reason, stamp("closed"))
+		if not edited then
+			return `{path} has no frontmatter`
+		end
+		return { { path = path :: string, content = edited :: string } }
+	end, `tracker: close {id} won't do\n\nReason: {reason}`))
+	if not r.ok then
+		fail(`close: {r.reason}`)
+	end
+	print(`closed {id} on origin/main ({r.sha}): {reason}`)
 end
 
 -- c0116 (z-raft): an issue's raft is its own `raft:` line, written in a worktree and carried by the rafting PR, so two
@@ -1777,6 +1918,9 @@ local function refuseUnraftable(issue: store.Item, raft: store.Item)
 	local st = statusLib.effective(frontOf(fs.readFile(issue.doc)), issue.state)
 	if issue.state ~= "backlog" then
 		fail(`{issue.id} is {st} in {issue.dir}: a raft takes backlog issues only`)
+	end
+	if st == "closed" then
+		fail(`{issue.id} is closed (won't do): nothing moves a closed issue`)
 	end
 	if st ~= "prepared" or front.design ~= "ready" then
 		fail(
@@ -2379,6 +2523,27 @@ local function captureScope(diff: string, base: string): string?
 		if was.status ~= now.status then
 			return `not a capture change: {path} changes its status line (./zn status moves it)`
 		end
+		-- c0278: after every existing refusal, a closed issue's document is never published again, and a capture never
+		-- adds a closed issue to a depends_on (one definition of closed: closing.closedDoc)
+		if closing.closedDoc(theirs.stdout) then
+			return `not a capture change: {path} is closed (won't do): its document is never published again`
+		end
+		local before = store.idList(was.depends_on)
+		for _, dep in store.idList(now.depends_on) do
+			if not table.find(before, dep) and store.isIssueId(dep) then
+				for _, r in roots do
+					local depDoc = `{r}/issues/{dep}/{dep}.md`
+					local listed = sh.run("git", { "ls-tree", base, "--", depDoc })
+					local shown = if listed.ok and sh.trim(listed.stdout) ~= ""
+						then sh.run("git", { "show", `{base}:{depDoc}` })
+						else nil
+					local refusedDep = closing.addedDependency(path, dep, depDoc, listed, shown)
+					if refusedDep then
+						return refusedDep
+					end
+				end
+			end
+		end
 	end
 	for _, entry in spends do
 		if not captured[entry.id] then
@@ -2953,8 +3118,12 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 				local state = if string.find(f.path .. "/", "/rafts/retired/", 1, true)
 					then "retired"
 					else stateOfPath(f.path .. "/")
-				if not pos[1] or pos[1] == state then
-					local fm = store.readFront(doc)
+				-- c0278: a closed issue is shown as closed, and only when asked for (list closed)
+				local fm = store.readFront(doc)
+				if kind == "issue" and state == "backlog" and closing.isClosed(fm) then
+					state = "closed"
+				end
+				if (not pos[1] and state ~= "closed") or pos[1] == state then
 					local ftype = if kind == "issue"
 						then store.TYPES[string.sub(f.id, 1, 1)]
 						else (fm.type or "?")
@@ -2967,6 +3136,9 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 							fm.raft or "",
 							fm.title or fm.slug or ""
 						)
+							.. (
+								if state == "closed" then `  (won't do: {closing.reasonOf(fm) or ""})` else ""
+							)
 					)
 				end
 			end
@@ -6792,6 +6964,9 @@ function cmd.idea(pos: { string }, opts: { [string]: { string } })
 		fail(`idea: {id} is not an issue in this checkout`)
 	end
 	local here = item :: store.Item
+	if closing.isClosed(store.readFront(here.doc)) then
+		fail(`idea: {id} is closed (won't do): nothing to write`)
+	end
 	local doc = fs.readFile(here.doc)
 	local rough = if opts["--text"] and opts["--text"][1] then opts["--text"][1] else doc
 	local layers = models.walk(".", here.dir)

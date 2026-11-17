@@ -107,8 +107,10 @@ return t.spec("c0278 docs", function(it)
 				string.match(main, "local READ_ONLY: { %[string%]: boolean } = {(.-)\n}") :: string
 			t.expect(readOnly ~= nil).toBe(true)
 			t.expect(says(readOnly, "close")).toBe(false)
-			local allowed =
-				string.match(rules(), "The complete list of commands that may run there:([^\n]+)") :: string
+			local allowed = string.match(
+				rules(),
+				"The complete list of commands that may run there:\n(.-)\n   The tracker enforces"
+			) :: string
 			t.expect(allowed ~= nil).toBe(true)
 			t.expect(says(allowed, "`close`")).toBe(false)
 			-- --carry is a flag that takes no value

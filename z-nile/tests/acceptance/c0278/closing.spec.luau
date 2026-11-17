@@ -168,9 +168,9 @@ return t.spec("c0278 closing rules", function(it)
 			refuses((string.gsub(good, "wont_do: moot\n", "wont_do: moot\nwont_do: again\n", 1)))
 			refuses((string.gsub(good, "wont_do: moot\n", "wont_do: \n", 1)))
 			refuses((string.gsub(good, "wont_do: moot\n", "wont_do:   \n", 1)))
-			refuses((string.gsub(good, STAMP, "prepared-quiet-copper-falcon", 1)))
-			refuses((string.gsub(good, STAMP, "closed", 1)))
-			refuses((string.gsub(good, STAMP, "new-amber-otter-lynx", 1)))
+			refuses((string.gsub(good, "closed%-quiet%-copper%-falcon", "prepared-quiet-copper-falcon", 1)))
+			refuses((string.gsub(good, "closed%-quiet%-copper%-falcon", "closed", 1)))
+			refuses((string.gsub(good, "closed%-quiet%-copper%-falcon", "new-amber-otter-lynx", 1)))
 			-- wont_do placed first rather than last
 			refuses(
 				(

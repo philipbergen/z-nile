@@ -1,6 +1,7 @@
 --!strict
 -- Whole-tree tracker audit: every problem, never just the first. Reads the tree with plain directory listings, so a
 -- malformed tree (which store.find refuses) can still be described. See c0880.
+local closing = require("./closing")
 local fs = require("@lune/fs")
 local ids = require("./ids")
 local process = require("@lune/process")
@@ -279,6 +280,88 @@ function audit.run(root: string): { Problem }
 						"raft-spans-projects",
 						r.path,
 						`{id} is in {m.top}, not {r.top}: a raft lives in its members' project`
+					)
+				end
+			end
+		end
+	end
+	-- c0278: a close that ./zn close did not make, or a closed issue something still holds. One rule for what counts as
+	-- closed (closing.isClosed, closing.reasonOf over audit's own front, which reads malformed trees).
+	local function where(path: string): string
+		return if string.find(path, "/retired/", 1, true)
+			then "retired"
+			elseif string.find(path, "/done/", 1, true) then "done"
+			elseif string.find(path, "/active/", 1, true) then "active"
+			else "backlog"
+	end
+	local closedIds: { [string]: boolean } = {}
+	for key, it in first do
+		local kind, id = string.match(key, "^(%a+):(.+)$")
+		local isClosed = closing.isClosed(it.fm)
+		local carries = it.fm[closing.KEY] ~= nil
+		if kind == "issue" then
+			if isClosed then
+				closedIds[id :: string] = true
+			end
+			if (carries and not isClosed) or (isClosed and closing.reasonOf(it.fm) == nil) then
+				add(
+					"error",
+					"closed-mismatch",
+					it.path,
+					`{id}: wont_do: and a closed status go together, and only ./zn close writes them: restore both lines from origin/main, or close it with ./zn close {id} --reason "<why>"`
+				)
+			end
+		end
+		if (isClosed or carries) and (kind == "raft" or where(it.path) ~= "backlog") then
+			add(
+				"error",
+				"closed-not-backlog",
+				it.path,
+				`{id} is closed outside the backlog: only a backlog issue is closed; restore its document by pull request`
+			)
+		end
+	end
+	local inRaft: { [string]: boolean } = {}
+	local function heldBy(id: string, raft: string)
+		if inRaft[id .. ">" .. raft] then
+			return
+		end
+		inRaft[id .. ">" .. raft] = true
+		local it = first["issue:" .. id]
+		add(
+			"error",
+			"closed-in-raft",
+			if it then it.path else id,
+			`{id} is closed but {raft} holds it: empty its raft: line and drop it from {raft}'s issues: by pull request`
+		)
+	end
+	local keys: { string } = {}
+	for key in first do
+		table.insert(keys, key)
+	end
+	table.sort(keys)
+	for _, key in keys do
+		local it = first[key]
+		local kind, id = string.match(key, "^(%a+):(.+)$")
+		local state = where(it.path)
+		if kind == "issue" and closedIds[id :: string] and (it.fm.raft or "") ~= "" then
+			heldBy(id :: string, it.fm.raft :: string)
+		end
+		if kind == "raft" and state ~= "done" and state ~= "retired" then
+			for member in string.gmatch(it.fm.issues or "", "[fdc]%d%d%d%d") do
+				if closedIds[member] then
+					heldBy(member, id :: string)
+				end
+			end
+		end
+		if (state == "backlog" or state == "active") and not closing.isClosed(it.fm) then
+			for dep in string.gmatch(it.fm.depends_on or "", "[fdc]%d%d%d%d") do
+				if closedIds[dep] then
+					add(
+						"error",
+						"closed-dependency",
+						it.path,
+						`{id} depends on {dep}, which is closed (won't do): drop {dep} from {id}'s depends_on by pull request`
 					)
 				end
 			end
