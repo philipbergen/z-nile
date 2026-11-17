@@ -18,6 +18,23 @@ local Lobby = LobbyModule :: any -- READ_GAP and boardTitle are this raft's addi
 local LOGIC = "@game/ReplicatedStorage/Shared/Logic/"
 local FRI = 1792108800
 
+-- c0380: what follows the level changes (f0145's lives, then f0186's revives), so a board's lines are pinned up to
+-- the level: each line of `text` that is the line `want` has there, or starts with it and a space, is cut back to it;
+-- every other line, and the number of lines, stay as they are, so a compare with `want` still shows them.
+local function upToLevel(text: any, want: string): any
+	if type(text) ~= "string" then
+		return text
+	end
+	local got, keep = string.split(text, "\n"), string.split(want, "\n")
+	for i, line in got do
+		local w = keep[i]
+		if w ~= nil and (line == w or string.sub(line, 1, #w + 1) == w .. " ") then
+			got[i] = w
+		end
+	end
+	return table.concat(got, "\n")
+end
+
 local function stripped(path: string): string
 	return string.gsub(fs.readFile(path), "%-%-[^\n]*", "")
 end
@@ -797,7 +814,8 @@ return t.spec("f0026 adapter boundaries", function(it)
 				2,
 				false
 			)
-			t.expect(v.find("Rows").Text).toBe("1 Bea 80 3\n> 2 Ada 50 2")
+			t.expect(upToLevel(v.find("Rows").Text, "1 Bea 80 3\n> 2 Ada 50 2"))
+				.toBe("1 Bea 80 3\n> 2 Ada 50 2")
 			v.tick(10)
 			t.expect(#v.asks()).toBe(1)
 			t.expect(#v.remotes.StartGame.toServer).toBe(0)
@@ -873,7 +891,7 @@ return t.spec("f0026 adapter boundaries", function(it)
 		board.OnClientEvent:fire("day", rowsOf({ rank = 1, name = "Old", score = 1, level = 1 }), nil, false)
 		board.OnClientEvent:fire("all", {}, nil, true)
 		t.expect(v.find("Title").Text).toBe("THIS WEEK")
-		t.expect(v.find("Rows").Text).toBe("1 Di 9 2")
+		t.expect(upToLevel(v.find("Rows").Text, "1 Di 9 2")).toBe("1 Di 9 2")
 		v.tick(10)
 		t.expect(#v.asks()).toBe(3)
 	end)
@@ -911,7 +929,7 @@ return t.spec("f0026 adapter boundaries", function(it)
 			false
 		)
 		t.expect(v.find("Title").Text).toBe("TODAY")
-		t.expect(v.find("Rows").Text).toBe("1 Cy 5 1")
+		t.expect(upToLevel(v.find("Rows").Text, "1 Cy 5 1")).toBe("1 Cy 5 1")
 		week.Activated:fire()
 		all.Activated:fire()
 		t.expect(v.asks()).toEqual({ { "all" }, { "day" }, { "week" }, { "all" } })
