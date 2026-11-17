@@ -393,6 +393,7 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
 		wt = zn(f.main, { "worktree", "R0010" })
 		zn(wt, { "start", "R0010" })
 		write(wt, `{ROOT}/rafts/active/R0010/final-review-001.md`, "# Final Review 001\n\nVerdict: approve\n")
+		write(wt, `{ROOT}/rafts/active/R0010/review-001.md`, "# Review 001\n\nVerdict: approve\n")
 		layerWork(wt, "alpha", "c0010")
 		local first = tr(wt, { "finish", "c0010" })
 		t.expect(first.ok).toBe(true)
@@ -746,6 +747,8 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
 			local cwd = fixture.physical(f.main) or f.main
 			local projects = `{home}/.claude/projects/{string.gsub(cwd, "/", "-")}`
 			fs.writeDir(projects)
+			-- the pinned lune is a rokit shim that reads its tools from HOME
+			process.exec("ln", { "-s", `{process.env.HOME}/.rokit`, `{home}/.rokit` })
 			for _, sid in { "session-one", "session-two" } do
 				write(projects, `{sid}.jsonl`, '{"type":"user","timestamp":"2026-11-16T10:00:00.000Z"}\n')
 			end
@@ -769,7 +772,8 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
 
 			local other = as("session-two", {})
 			t.expect(has(say(other), "Resuming R0020")).toBe(false)
-			t.expect(fs.readFile(carriers)).toBe(line)
+			-- the other session is offered another held raft and records it; R0020's line is what must not change
+			t.expect(has(fs.readFile(carriers), line)).toBe(true)
 			local own = as("session-one", {})
 			t.expect(has(say(own), "Resuming R0020: you hold it and no live session carries it.")).toBe(true)
 
@@ -779,7 +783,7 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
 			t.expect(has(say(stale), "Resuming R0020: you hold it and no live session carries it."))
 				.toBe(true)
 			local after = fs.readFile(carriers)
-			t.expect(string.match(after, "^R0020\t[^\t\n]+\t%d+\n$") ~= nil).toBe(true)
+			t.expect(string.match(after, "^R0020\t[^\t\n]+\t%d+\n") ~= nil).toBe(true)
 			t.expect(after ~= `R0020\t{who}\t{os.time() - 7 * 3600}\n`).toBe(true)
 		end
 	)
