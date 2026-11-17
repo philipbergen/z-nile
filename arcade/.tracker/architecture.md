@@ -76,10 +76,14 @@ The cost model every game shares (f0145's, per game: one free start per rolling 
 - `src/shared/TestPurchase.luau`: the test purchase screen, a client adapter module every place's client boots. It is the one client adapter in the library: it wires nothing into a game's screen, it stands in for Roblox's own purchase dialog in test mode. A place's own handlers of Return, KeypadEnter, ButtonA, Backspace, ButtonB and taps act through ContextActionService bindings below priority 3000, or skip processed input, or check `TestPurchase.isOpen()`; a device tracker is exempt.
 - Roblox's `ServerScriptService` attributes set by the publisher: `PaidPlay` (`"live"` for live mode) and each catalog entry's two product ids.
 
+### Travel and Places (f0199)
+- `src/shared/Logic/Travel` (the leaf, the copied rules): pickman's Travel, byte for byte (the teleport request, its timeout, cool-down and place-id check), so every place teleports by the same rules. Until c0200 switches pickman and deletes its copy, a change to either copy is made to both.
+- `src/shared/Places.luau` (the place list and the attribute read, the one place in the library that names the experience's places; `src/server/Catalog.luau` names the games' paid-play entries): `Places.read(read)` reads `PortalPlaceId`, `PickmanPlaceId`, `SnakePlaceId`, `InvadersPlaceId` and `AsteroidsPlaceId` through the read a place's adapter passes in, each value through `Travel.destination`; a place that is not published is absent from the answer.
+
 ## Allowed dependencies
 
 One `Consumer -> Provider` per line.
 
 ```deps
-# no features yet
+# PaidPlay and Travel are leaves
 ```
