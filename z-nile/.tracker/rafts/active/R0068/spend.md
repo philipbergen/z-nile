@@ -7,8 +7,8 @@
 | c0138 | chore |  | 843 | 10 | 450.3 | 1024843 |
 | c0156 | chore |  | 1854 | 91 | 422.9 | 919255 |
 
-**Total:** +7200 / -185 lines, 1663.8 agent-minutes, 2773786 tokens over 476 records
-<!-- totals: added=7200 removed=185 minutes=1663.8 records=476 tokens=2773786 -->
+**Total:** +7200 / -185 lines, 1663.8 agent-minutes, 2773786 tokens over 495 records
+<!-- totals: added=7200 removed=185 minutes=1663.8 records=495 tokens=2773786 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
