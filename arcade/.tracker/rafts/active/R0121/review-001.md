@@ -1,0 +1,37 @@
+# Review 001: R0121 (code mode)
+Inputs: 7f8fa856b7b74924e9e20fdd68fd0881574b5272 (R0121/1/f0197), `git diff origin/main...HEAD` against origin/main 0f5b49026 after `./zn sync --fetch`; f0197.md, f0197/check.sh, f0197/acceptance/*, f0197/experiments/prototype.patch; R0121.md and its check.sh; pickman's `src/shared/Logic/Hiscores/init.luau`, `src/server/HiscoreStore.luau`, `src/lobby/server/Boards.luau`, `tests/unit/Hiscores/*`; f0206.md (the consumer of `serve`).
+
+What I ran and checked:
+- `z-nile/check.sh --affected`: GATE PASSED (arcade: 194 passed, 0 failed, 19 spec files; the other homes select nothing).
+- `./zn check f0197`: 5/5 criteria pass.
+- Sequestration: `git diff --find-renames=100% --name-status origin/main...HEAD -- '*/.tracker/**/check.sh' '*/.tracker/**/acceptance/**'` lists only `A arcade/.tracker/issues/active/f0197/acceptance/watch.txt`, the watch file `./zn finish` writes from this layer's three source files (zz-test, Capture; lesson zz-review/finish-watch-is-generated). No spec or check.sh changed.
+- The stop rule: `git rev-parse HEAD:<path>` and `origin/main:<path>` for pickman's three files are 3a22e902, 8694fb2c and d82c001b, the blobs the prototype was proven on. No file under `pickman/` changes.
+- The source and unit-spec hunks of the diff are byte-identical to `experiments/prototype.patch` (only the generated watch files differ), as the Verification log says.
+- `diff` of pickman's Hiscores against the copy: every change is one the Design lists (names/prefix, `storeTarget(names, ...)`, the three constants removed, revives in `Attempt`/`Companion`/`Row`/`TopRun`/`Best`/`Submission`/`StepEvent`, `valid`'s bound, `commit`, `revivesOf` at every stored reader (`rows`, `ordered`, both `bestRun` branches, `best`), `boardRows`, `topRows`, the `window` parameter of `leave`/`onStep`, the GameOver contract comment). `qualifies`, `rows`' sort, `before` and `validRun` read no revives, so revives never rank, replace or invalidate a list entry. The unit specs differ from pickman's only by `revives = 0` and `Hiscores.LEAVE_STEPS`.
+- `Boards.luau` against pickman's two adapters: `submit` is `HiscoreStore.submit` with revives, the handle's names and the refused-run warning (a refused run still writes nothing: `drive` skips the boards, `topRun` gives nil and `driveTop` answers unknown, so no listener call); `serve` is lobby `Boards.start` without the remote's creation, with per-handle keys, bests and one `PlayerRemoving` connection; the page reader is shared and opens the ordered store inside each try, as the Design says. Requires only `@game/ReplicatedStorage/Arcade/Logic/Hiscores`; no local named `game`; nothing decides outside Hiscores. Server authority holds: a client sends only a board id, bounded by `Hiscores.boardId`, and replies carry no user id.
+- Repository safety and bounded commands: the diff adds no script, `check.sh` or process; the three unit specs are pure. I ran no probe.
+
+### F1 [low] The copy's comments still name a constant it removed and pickman's lobby
+Where: `arcade/src/shared/Logic/Hiscores/init.luau:702`, `:83`, `:833`
+Evidence: `:702` "One key of Hiscores.TOP_STORE holds the N best runs of all players": `Hiscores.TOP_STORE` no longer exists in this module (the Design removes it; `names(prefix).top` replaces it, and the header at `:5` says so). `:83` "the board size: the lobby panel's cap" and `:833` "The lobby's rows of a stored list" describe pickman's lobby, while the function at `:833` now serves every title's all-time board (the `lobbyRows` rename to `boardRows` was made; these two were not).
+Critique: a reader of the library, or the c0198 executor who diffs the two copies, is pointed at a constant that is not there and at a place that is not the library's consumer. The tempting fix is to edit `:702` alone.
+Consequences: none beyond the three lines; `tests/meta/architecture.spec` reads comments only for engine words, so no spec pins this text.
+Recommendation: at `:702` say "One key of a title's top store (`names(prefix).top`)"; at `:83` "the board size a client is sent"; at `:833` "A title's all-time rows from its stored list". Grep the copy for `TOP_STORE`, `ORDERED_STORE`, `COMPANION_STORE` and `lobby` afterwards: nothing should remain except a sentence that says the code came from pickman.
+Lesson: z-design/restated-rules-move-together
+
+### F2 [low] `serve` on a shared handle is safe only when called once with one remote
+Where: `arcade/src/server/Boards.luau:244-317`, with `:322-332` (one handle per prefix, shared by every caller in a place)
+Evidence: `keys` (and so each board key's `waiters`) belongs to the handle, but `reply` closes over the `remote` of the `serve` call whose handler ran the read. Call `serve(a)` and `serve(b)` on the same handle: a request on `b` that arrives while a request on `a` is reading goes into the shared `state.waiters` (`:310-311`), and when the read ends the `a` handler answers every waiter on `a` (`:303-307`), so the `b` asker hears nothing on `b`. Call `serve(a)` twice: both handlers fire for each request; the second finds `inflight` and adds the same player to `waiters` again, so the player is answered twice, against "every request is answered once". `Boards.open` deliberately hands every caller in a place the same handle, which invites a second caller. Today's consumers are safe: f0206's `BoardRelay` serves each title once on a relay of its own, and c0198 will serve pickman's lobby once, so this reaches no player.
+Critique: the hazard is unstated in the `Game` type's `serve` comment, so the first place that serves one title from two modules (or restarts its boot) gets lost or doubled answers with green specs. The tempting fix is a comment only.
+Consequences: making `serve` idempotent per remote needs a per-handle set of served remotes; supporting several remotes needs each waiter stored with its remote (`{ player, remote }`) and `reply` taking the remote. Either way the sequestered specs are unchanged (they serve once), so the case goes in a unit spec under `arcade/tests/unit/` (not in the acceptance folder).
+Recommendation: the smallest change that holds is to make a second `serve` on a handle with the same remote a no-op and with a different remote an error (`Boards: <ordered name> is already served`). State that in the `serve` comment and add a unit case: `serve(r)` twice and one request gives one `FireClient`; `serve(r2)` after `serve(r)` errors. If the author would rather leave the code as it is, at least write the once-only rule in the `serve` comment, which f0206 already follows.
+
+## Judged criteria
+f0197 has no Judged criteria ("### Judged: None."), so there is nothing to rule on.
+
+## Candidate lesson (for the lead to harvest)
+- Rule: a library adapter that hands every caller in a place one shared handle (open per key, memoized) must make each of its wiring methods (`serve`, `start`, a connect) safe to call twice or refuse the second call, and its per-request state (waiters, in-flight reads) must not assume one caller's channel.
+- Why: R0121 review 001 F2: `Boards.open(prefix)` returns one handle per prefix by design, but `serve(remote)` keeps waiters per handle and answers them on the remote of whichever call ran the read, so a second `serve` loses or doubles answers.
+- Check: for each method of a shared handle that connects to an event or a remote, what happens when two callers call it, with the same argument and with different ones, and is there a case for it?
+
+Verdict: approve
