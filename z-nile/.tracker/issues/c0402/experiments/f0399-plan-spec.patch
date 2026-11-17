@@ -1,0 +1,30 @@
+--- a/z-nile/tests/acceptance/f0399/plan.spec.luau
++++ b/z-nile/tests/acceptance/f0399/plan.spec.luau
+@@ -71,20 +71,20 @@
+ 	end)
+ 
+ 	it("the cap never splits a chore from what it depends on, and still splits what is free", function()
+-		local a = cand("c0010", { size = 900 })
+-		local b = cand("c0011", { size = 900, deps = { "c0010" } })
+-		local free = cand("c0012", { size = 900 })
++		local a = cand("c0010", { size = 1600 })
++		local b = cand("c0011", { size = 1600, deps = { "c0010" } })
++		local free = cand("c0012", { size = 1600 })
+ 		local ops = raftplan.plan({ a, b, free }, {})
+ 		t.expect((opOf(ops, "c0011") :: raftplan.Op).issues).toEqual({ "c0010", "c0011" })
+ 		t.expect((opOf(ops, "c0012") :: raftplan.Op).issues).toEqual({ "c0012" })
+-		-- no dependency: 900 + 900 passes the cap of 1,500, so two rafts, as before
+-		local two = raftplan.plan({ a, cand("c0011", { size = 900 }) }, {})
++		-- no dependency: 1,600 + 1,600 passes the cap of 3,000, so two rafts, as before
++		local two = raftplan.plan({ a, cand("c0011", { size = 1600 }) }, {})
+ 		t.expect(#two).toBe(2)
+ 	end)
+ 
+ 	it("a dependent with a lower id than its dependency still joins it", function()
+-		local late = cand("c0020", { size = 900 })
+-		local early = cand("c0010", { size = 900, deps = { "c0020" } })
++		local late = cand("c0020", { size = 1600 })
++		local early = cand("c0010", { size = 1600, deps = { "c0020" } })
+ 		local ops = raftplan.plan({ early, late }, {})
+ 		t.expect(#ops).toBe(1)
+ 		t.expect(ops[1].issues).toEqual({ "c0020", "c0010" })

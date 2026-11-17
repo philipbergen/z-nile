@@ -1,0 +1,5 @@
+- design-review-001 F1: z-design/new-rules-migrate-existing-work
+- design-review-001 F2: z-design/quote-other-preps-before-promising
+- design-review-001 F3: z-design/new-rules-migrate-existing-work
+- design-review-001 F4: z-design/spec-design-correspondence
+- design-review-001 F5: one-off: a Guess line that named one alternative where three existed; the Guess rule already says to state the choices

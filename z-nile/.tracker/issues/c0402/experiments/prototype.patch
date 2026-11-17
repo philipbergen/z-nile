@@ -1,0 +1,119 @@
+diff --git a/z-nile/engine/raftplan.luau b/z-nile/engine/raftplan.luau
+index b929a66be..323f365c3 100644
+--- a/z-nile/engine/raftplan.luau
++++ b/z-nile/engine/raftplan.luau
+@@ -43,7 +43,7 @@ export type Op = {
+ }
+ export type Skip = { id: string, reason: string }
+ 
+-raftplan.CAP = 1500
++raftplan.CAP = 3000
+ local TYPE_ORDER = { feature = 1, defect = 2, chore = 3 }
+ 
+ -- Two paths overlap when they are equal or one is a parent directory of the other, by whole components.
+diff --git a/z-nile/skills/z-design/SKILL.md b/z-nile/skills/z-design/SKILL.md
+index ebb2ffaa5..7123ab969 100644
+--- a/z-nile/skills/z-design/SKILL.md
++++ b/z-nile/skills/z-design/SKILL.md
+@@ -43,7 +43,7 @@ First read the checklist for the issue's type, `checklists/<feature|defect|chore
+   - **Observed**: minimal Studio steps.
+   Push hard to turn Judged and Observed criteria into measurable proxies (see the zz-test skill).
+ - **Implementation steps**: small, ordered, and each one verifiable.
+-- **Size and solo** (frontmatter, for z-raft): `size: <n>`, your estimate of the changed lines the executor will count (code, skills and docs; the acceptance specs, `check.sh` and experiments you write here are prep's and not counted). z-raft sums them against its cap of about 1,500 lines, and an issue over it is a raft by itself, never split. `solo: true` only when a recorded user decision says the issue lands as its own raft (a `Decided with the user` line such as "the work lands as sequenced rafts"); z-raft never folds a solo issue with others.
++- **Size and solo** (frontmatter, for z-raft): `size: <n>`, your estimate of the changed lines the executor will count (code, skills and docs; the acceptance specs, `check.sh` and experiments you write here are prep's and not counted). z-raft sums them against its cap of about 3,000 lines, and an issue over it is a raft by itself, never split. `solo: true` only when a recorded user decision says the issue lands as its own raft (a `Decided with the user` line such as "the work lands as sequenced rafts"); z-raft never folds a solo issue with others.
+ 
+ ## 4. Write the executable acceptance
+ - **Issue checks**: `check.sh` for each issue, with one `check "ACn: …"` per Checked criterion.
+diff --git a/z-nile/skills/z-design/lessons/size-is-re-estimated-when-scope-grows.md b/z-nile/skills/z-design/lessons/size-is-re-estimated-when-scope-grows.md
+index 16914f195..6325e4c2d 100644
+--- a/z-nile/skills/z-design/lessons/size-is-re-estimated-when-scope-grows.md
++++ b/z-nile/skills/z-design/lessons/size-is-re-estimated-when-scope-grows.md
+@@ -2,9 +2,9 @@
+ title: Re-estimate size when scope grows; split before review, not after
+ when: design
+ tags: [size, scope, process]
+-check: Was the issue's `size:` re-estimated from the real design (or from a prototype's diff) each time its scope, design or specs grew, and if it is over the raft cap of about 1,500 changed lines, or its specs have tripled since the first estimate, did a split go to the user before the first review round?
++check: Was the issue's `size:` re-estimated from the real design (or from a prototype's diff) each time its scope, design or specs grew, and if it is over the raft cap of about 3,000 changed lines, or its specs have tripled since the first estimate, did a split go to the user before the first review round?
+ ---
+-`size:` is z-raft's input: it sums the sizes against its cap of about 1,500 lines. An estimate written in round 1 and never touched again lies once the design grows, and an issue that has outgrown the cap is cheaper to split before review than after it.
++`size:` is z-raft's input: it sums the sizes against its cap of about 3,000 lines. An estimate written in round 1 and never touched again lies once the design grows, and an issue that has outgrown the cap is cheaper to split before review than after it.
+ 
+ **Why:** c0265 (z-nile) carried `size: 640` from round 1 to round 18 while its Design grew from one storage choice to six interlocking mechanisms (lease, verdicts, automatic beats, ownership memory, board verdicts, discarded worktrees) and its specs tripled to about 2,300 lines. Every fix in one mechanism opened an edge in another, and 18 rounds (3.5 M tokens) did not converge. The user split it into five issues in one raft, delivered a layer at a time (2026-11-08).
+ 
+diff --git a/z-nile/skills/z-raft/SKILL.md b/z-nile/skills/z-raft/SKILL.md
+index c56ffc9de..141dd12b0 100644
+--- a/z-nile/skills/z-raft/SKILL.md
++++ b/z-nile/skills/z-raft/SKILL.md
+@@ -15,7 +15,7 @@ Work in a rafting worktree: `cd "$(./zn worktree raft-<slug>)"` (any short slug,
+   - one type per raft and one project per raft; a raft that is not prepared in the backlog (new, being prepared, active or done) is never pulled in, and a `single: true` raft never takes another issue;
+   - defects fold into one open prepared defect raft (the lowest id that still fits), and chores fold the same way;
+   - features group only when they share a surface: a Touched path of one overlaps a Touched path of another (or of an open feature raft's member), taken as connected groups; an issue with no Touched modules shares nothing;
+-  - a raft that would pass about 1,500 changed lines (the sum of its members' `size:`) starts another; an issue estimated over that is a raft by itself and is never split;
++  - a raft that would pass about 3,000 changed lines (the sum of its members' `size:`) starts another; an issue estimated over that is a raft by itself and is never split;
+   - an open raft with a member that has no `size:` takes nothing, because the cap can't be kept: the plan prints `skip <R-id>: <member> has no size:, …` and opens another raft instead (with an argument you may still `fold` into it);
+   - a `solo: true` issue is always a raft by itself (it records a user decision, such as sequenced rafts), and nothing is ever folded into a raft that holds one;
+   - an issue with no `size:` is skipped and named: send it back to z-design.
+diff --git a/z-nile/tests/acceptance/c0116/docs.spec.luau b/z-nile/tests/acceptance/c0116/docs.spec.luau
+index ea0d1082f..fe5ab335b 100644
+--- a/z-nile/tests/acceptance/c0116/docs.spec.luau
++++ b/z-nile/tests/acceptance/c0116/docs.spec.luau
+@@ -86,7 +86,7 @@ return t.spec("c0116 the docs split rafting out of design", function(it)
+ 			at(s, "an issue with no Touched modules shares nothing", w)
+ 			at(
+ 				s,
+-				"a raft that would pass about 1,500 changed lines (the sum of its members' `size:`) starts another",
++				"a raft that would pass about 3,000 changed lines (the sum of its members' `size:`) starts another",
+ 				w
+ 			)
+ 			at(s, "an issue estimated over that is a raft by itself and is never split", w)
+diff --git a/z-nile/tests/acceptance/c0116/plan.spec.luau b/z-nile/tests/acceptance/c0116/plan.spec.luau
+index 1ac9c68b6..5e50c343d 100644
+--- a/z-nile/tests/acceptance/c0116/plan.spec.luau
++++ b/z-nile/tests/acceptance/c0116/plan.spec.luau
+@@ -2,7 +2,7 @@
+ -- c0116 AC3: z-raft's no-argument policy, raftplan.plan (pure). One type and one project per raft; only prepared
+ -- backlog rafts that are not single take more; defects fold into the lowest open prepared defect raft that fits, chores
+ -- the same; features group only by a shared surface (overlapping Touched paths, as connected groups; none shares
+--- nothing); the size cap of 1,500 changed lines starts another raft; an over-cap or solo issue is a raft by itself; an
++-- nothing); the size cap of 3,000 changed lines starts another raft; an over-cap or solo issue is a raft by itself; an
+ -- issue with no size: is skipped and named; the same backlog in any order gives the same plan.
+ local raftplan = require("@znile/engine/raftplan")
+ local t = require("@tests/lib/t")
+@@ -83,27 +83,28 @@ return t.spec("c0116 raftplan.plan: z-raft's policy with no argument", function(
+ 
+ 	it("folds into the lowest open raft that still fits, and starts another raft past the cap", function()
+ 		local issues = {
+-			issue("d0090", 1000, { raft = "R0010" }),
+-			issue("d0001", 400),
+-			issue("d0002", 600),
+-			issue("d0003", 1000),
+-			issue("d0004", 100),
++			issue("d0090", 2000, { raft = "R0010" }),
++			issue("d0001", 800),
++			issue("d0002", 1200),
++			issue("d0003", 2000),
++			issue("d0004", 200),
+ 		}
+ 		local rafts = { raft("R0020", "defect", {}), raft("R0010", "defect", { "d0090" }) }
+-		-- R0010 holds 1000: d0001 (400) fits; d0002 (600) only fits R0020; d0003 (1000) fits neither; d0004 tops R0010 up to 1500
++		-- R0010 holds 2000: d0001 (800) fits; d0002 (1200) only fits R0020; d0003 (2000) fits neither; d0004 tops R0010 up to 3000
+ 		t.expect(lines(issues, rafts)).toEqual({
+ 			"fold R0010 d0001,d0004",
+ 			"fold R0020 d0002",
+ 			"new defect d0003",
+ 		})
+ 		-- exactly at the cap still fits
+-		t.expect(lines({ issue("c0001", 1000), issue("c0002", 500) })).toEqual({ "new chore c0001,c0002" })
+-		t.expect(lines({ issue("c0001", 1000), issue("c0002", 501) }))
++		t.expect(lines({ issue("c0001", 2000), issue("c0002", 1000) })).toEqual({ "new chore c0001,c0002" })
++		t.expect(lines({ issue("c0001", 2000), issue("c0002", 1001) }))
+ 			.toEqual({ "new chore c0001", "new chore c0002" })
+ 	end)
+ 
+ 	it("makes an over-cap issue a raft by itself, never split, and a smaller cap is honoured", function()
+-		t.expect(lines({ issue("c0001", 2400), issue("c0002", 100) }))
++		t.expect(raftplan.CAP).toBe(3000)
++		t.expect(lines({ issue("c0001", 4800), issue("c0002", 100) }))
+ 			.toEqual({ "new chore c0001 single", "new chore c0002" })
+ 		t.expect(lines({ issue("c0001", 300), issue("c0002", 300) }, {}, 500))
+ 			.toEqual({ "new chore c0001", "new chore c0002" })
