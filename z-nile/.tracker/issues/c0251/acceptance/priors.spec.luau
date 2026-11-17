@@ -1,6 +1,6 @@
 --!strict
 -- c0251 AC4: the previous round's reviewers are the stamped reviews of the highest lifecycle rank up to the kind being written
--- (design, coherence, code, final), then the highest round number at that rank; a refused or flagged round counts, an
+-- (design, coherence, code, final), then the highest round number at that rank; a round on any model counts, one that records a Fallback: too, an
 -- unstamped file is skipped, each folder's newest round counts (round numbers are never compared across folders), and unmarked items count too. Folders under .cache.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -100,21 +100,24 @@ return t.spec("c0251 the previous round's reviewers", function(it)
 		t.expect(F.priors({ { kind = "code", dir = dir } }, CODE)).toEqual({ "kimi-code-k3.1-pro" })
 	end)
 
-	it("AC4: a refused round counts (an off-model record), and so does a flagged one", function()
-		local cheap = folder("c0105", { ["review-001.md"] = stamped("claude-sonnet-5-5", "high") })
-		t.expect(F.priors({ { kind = "code", dir = cheap } }, CODE)).toEqual({ "claude-sonnet-5-5" })
-		local flagged = folder("c0106", {
-			["design-review-001.md"] = stamped(
-				"claude-opus-5-5",
-				"xhigh",
-				"Fallback: the exact model ran it\n"
-			),
-		})
-		t.expect(F.priors({ { kind = "design", dir = flagged } }, DESIGN)).toEqual({ "claude-opus-5-5" })
-		-- a round that records an empty Model: line is no record
-		local empty = folder("c0107", { ["review-001.md"] = "Model:\n# Review\n" })
-		t.expect(F.priors({ { kind = "code", dir = empty } }, CODE)).toEqual({})
-	end)
+	it(
+		"AC4: a round on any model counts, a cheap one included, and so does one that records a Fallback:",
+		function()
+			local cheap = folder("c0105", { ["review-001.md"] = stamped("claude-sonnet-5-5", "high") })
+			t.expect(F.priors({ { kind = "code", dir = cheap } }, CODE)).toEqual({ "claude-sonnet-5-5" })
+			local flagged = folder("c0106", {
+				["design-review-001.md"] = stamped(
+					"claude-opus-5-5",
+					"xhigh",
+					"Fallback: the exact model ran it\n"
+				),
+			})
+			t.expect(F.priors({ { kind = "design", dir = flagged } }, DESIGN)).toEqual({ "claude-opus-5-5" })
+			-- a round that records an empty Model: line is no record
+			local empty = folder("c0107", { ["review-001.md"] = "Model:\n# Review\n" })
+			t.expect(F.priors({ { kind = "code", dir = empty } }, CODE)).toEqual({})
+		end
+	)
 
 	it("AC4: unstamped files are skipped and the next stamped one is the previous round", function()
 		local dir = folder("c0108", {
