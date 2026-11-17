@@ -530,7 +530,10 @@ function workread.facts(): ({ rank.Fact }, { [string]: boolean })
 			if a.state == "backlog" then
 				k += 1
 				if (frontText(blobs[k] or "").rank or "") ~= "" then
-					table.insert(recordSpecs, `origin/main:{(string.gsub(a.path, "[^/]+$", "provenance.md"))}`)
+					table.insert(
+						recordSpecs,
+						`origin/main:{(string.gsub(a.path, "[^/]+$", "provenance.md"))}`
+					)
 					recordIndex[a.path] = #recordSpecs
 				end
 			elseif a.state ~= "done" then

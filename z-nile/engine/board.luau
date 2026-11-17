@@ -870,7 +870,9 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			blockedIds[i.id] = rankLib.isBlocked(i.front.status)
 			-- one record read per item that has a rank
 			local record = `{i.dir}/provenance.md`
-			movedIds[i.id] = (i.front.rank or "") ~= "" and fs.isFile(record) and rankLib.movedBy(fs.readFile(record))
+			movedIds[i.id] = (i.front.rank or "") ~= ""
+				and fs.isFile(record)
+				and rankLib.movedBy(fs.readFile(record))
 		end
 	end
 	for _, i in rawIssues do

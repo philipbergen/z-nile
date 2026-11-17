@@ -3496,7 +3496,9 @@ function cmd.list(pos: { string }, opts: { [string]: { string } })
 			local fm = store.readFront(doc)
 			local recordPath = `{f.path}/provenance.md`
 			-- who set a rank is in the item's record: read it only for an item that has a rank (c0249)
-			local record = if (fm.rank or "") ~= "" and fs.isFile(recordPath) then fs.readFile(recordPath) else nil
+			local record = if (fm.rank or "") ~= "" and fs.isFile(recordPath)
+				then fs.readFile(recordPath)
+				else nil
 			local fact = rankLib.factOf(doc, fm, roots, record)
 			if fact then
 				table.insert(all, fact)
@@ -7051,7 +7053,8 @@ function cmd.rank(pos: { string }, opts: { [string]: { string } })
 		end
 		for i, p in wanted do
 			local text = texts[i] or ""
-			local fact = rank.factOf(p, frontOf(text), roots, if recordOf[p] then recordAt[recordOf[p]] else nil)
+			local fact =
+				rank.factOf(p, frontOf(text), roots, if recordOf[p] then recordAt[recordOf[p]] else nil)
 			if fact then
 				table.insert(facts, fact)
 				docs[places[p]] = { path = p, text = text }
@@ -7085,7 +7088,8 @@ function cmd.rank(pos: { string }, opts: { [string]: { string } })
 				table.insert(out, { path = d.path, content = text })
 			end
 			local rec = string.gsub(d.path, "[^/]+$", "provenance.md")
-			local detail = `rank={if c.rank == nil then "unset" else tostring(c.rank)}; was={c.was or "unset"}`
+			local detail =
+				`rank={if c.rank == nil then "unset" else tostring(c.rank)}; was={c.was or "unset"}`
 			if c.moved then
 				detail ..= `; moved={id}`
 			end
@@ -7122,9 +7126,7 @@ function cmd.rank(pos: { string }, opts: { [string]: { string } })
 		print(`{id}: unchanged`)
 	end
 	for _, c in changes do
-		print(
-			`{c.id} rank {if c.rank == nil then "unset" else tostring(c.rank)} (was {c.was or "unset"})`
-		)
+		print(`{c.id} rank {if c.rank == nil then "unset" else tostring(c.rank)} (was {c.was or "unset"})`)
 	end
 	if note then
 		print(`{id}: {note}`)

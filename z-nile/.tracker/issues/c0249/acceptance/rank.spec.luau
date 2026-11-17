@@ -3,9 +3,9 @@
 -- what the audit says about it; the order (a set rank before an unset one, the lower first, the ticket number as the
 -- tiebreak, a raft before an issue, lost work and blocked items when asked); a raft's own rank over its members' best;
 -- the move (a gap, or a renumbering from the top when there is none); and the pick `./zn next` prints.
+local provenance = require("@znile/engine/provenance")
 local rank = require("@znile/engine/rank")
 local t = require("@tests/lib/t")
-local provenance = require("@znile/engine/provenance")
 local work = require("@znile/engine/work")
 
 local function fact(id: string, over: { [string]: any }?): rank.Fact
@@ -188,7 +188,12 @@ return t.spec("c0249 the rank's pure rules", function(it)
 			-- who set the rank is read from the item's provenance.md, handed in as its text: a latest `ranked` row with
 			-- `moved=` makes it a moved-written rank, and the line itself stays the bare number
 			local function row(detail: string, when: string?): provenance.Row
-				return { when = when or "2026-11-16 09:00", event = "ranked", actor = "human:Pat", detail = detail }
+				return {
+					when = when or "2026-11-16 09:00",
+					event = "ranked",
+					actor = "human:Pat",
+					detail = detail,
+				}
 			end
 			local function record(rows: { provenance.Row }): string
 				return provenance.render("c0010", rows)
@@ -207,21 +212,21 @@ return t.spec("c0249 the rank's pure rules", function(it)
 			t.expect(rank.movedBy(movedRecord)).toBe(true)
 			t.expect(rank.movedBy(record({ row("rank=40; was=unset") }))).toBe(false)
 			-- the latest `ranked` row decides: a person re-ranking it after a move makes it the person's, and the reverse
-			t.expect(
-				rank.movedBy(record({
-					row("rank=40; was=unset; moved=c0020", "2026-11-16 09:00"),
-					row("rank=40; was=40", "2026-11-16 09:05"),
-				}))
-			).toBe(false)
-			t.expect(
-				rank.movedBy(record({
-					row("rank=10; was=unset", "2026-11-16 09:00"),
-					row("rank=20; was=10; moved=c0030", "2026-11-16 09:05"),
-				}))
-			).toBe(true)
+			t.expect(rank.movedBy(record({
+				row("rank=40; was=unset; moved=c0020", "2026-11-16 09:00"),
+				row("rank=40; was=40", "2026-11-16 09:05"),
+			}))).toBe(false)
+			t.expect(rank.movedBy(record({
+				row("rank=10; was=unset", "2026-11-16 09:00"),
+				row("rank=20; was=10; moved=c0030", "2026-11-16 09:05"),
+			}))).toBe(true)
 			-- other events and other rows do not count; no record, an empty one or a hand edit with no row is a person's
-			local approved: provenance.Row =
-				{ when = "2026-11-16 09:10", event = "confirmed", actor = "human:Pat", detail = "moved=c0030" }
+			local approved: provenance.Row = {
+				when = "2026-11-16 09:10",
+				event = "confirmed",
+				actor = "human:Pat",
+				detail = "moved=c0030",
+			}
 			t.expect(rank.movedBy(record({ row("rank=10; was=unset"), approved }))).toBe(false)
 			t.expect(rank.movedBy(record({ approved }))).toBe(false)
 			t.expect(rank.movedBy(nil)).toBe(false)
@@ -699,27 +704,30 @@ return t.spec("c0249 the rank's pure rules", function(it)
 		end
 	)
 
-	it("AC1: a move writes the rows of the unset items it ranks with moved=, and the moved item's without", function()
-		local bare = { fact("c0001"), fact("c0002"), fact("c0003"), fact("c0004") }
-		local changes = rank.plan(rank.stack(bare, "issue"), "c0003", "top")
-		t.expect(shown(changes)).toBe("c0003>10")
-		local some, _ = rank.plan(rank.stack(bare, "issue"), "c0004", "before", "c0003")
-		t.expect(shown(some)).toBe("c0001>10~ c0002>20~ c0004>30")
-		-- the third result of a drop below the unset items says what happened
-		local ranked = { fact("c0001", { rank = 10 }), fact("c0002"), fact("c0003") }
-		local last, why, note = rank.plan(rank.stack(ranked, "issue"), "c0001", "last")
-		t.expect(shown(last)).toBe("c0001>unset")
-		t.expect(why).toBe(nil)
-		t.expect(note ~= nil and string.find(note, "dropped below the unset items", 1, true) ~= nil)
-			.toBe(true)
-		local _, _, plainNote = rank.plan(rank.stack(ranked, "issue"), "c0002", "after", "c0003")
-		t.expect(plainNote).toBe(nil)
-		-- with every item ranked, last goes after the last one and says nothing
-		local allRanked = { fact("c0001", { rank = 10 }), fact("c0002", { rank = 20 }) }
-		local end_, _, endNote = rank.plan(rank.stack(allRanked, "issue"), "c0001", "last")
-		t.expect(shown(end_)).toBe("c0001>30")
-		t.expect(endNote).toBe(nil)
-	end)
+	it(
+		"AC1: a move writes the rows of the unset items it ranks with moved=, and the moved item's without",
+		function()
+			local bare = { fact("c0001"), fact("c0002"), fact("c0003"), fact("c0004") }
+			local changes = rank.plan(rank.stack(bare, "issue"), "c0003", "top")
+			t.expect(shown(changes)).toBe("c0003>10")
+			local some, _ = rank.plan(rank.stack(bare, "issue"), "c0004", "before", "c0003")
+			t.expect(shown(some)).toBe("c0001>10~ c0002>20~ c0004>30")
+			-- the third result of a drop below the unset items says what happened
+			local ranked = { fact("c0001", { rank = 10 }), fact("c0002"), fact("c0003") }
+			local last, why, note = rank.plan(rank.stack(ranked, "issue"), "c0001", "last")
+			t.expect(shown(last)).toBe("c0001>unset")
+			t.expect(why).toBe(nil)
+			t.expect(note ~= nil and string.find(note, "dropped below the unset items", 1, true) ~= nil)
+				.toBe(true)
+			local _, _, plainNote = rank.plan(rank.stack(ranked, "issue"), "c0002", "after", "c0003")
+			t.expect(plainNote).toBe(nil)
+			-- with every item ranked, last goes after the last one and says nothing
+			local allRanked = { fact("c0001", { rank = 10 }), fact("c0002", { rank = 20 }) }
+			local end_, _, endNote = rank.plan(rank.stack(allRanked, "issue"), "c0001", "last")
+			t.expect(shown(end_)).toBe("c0001>30")
+			t.expect(endNote).toBe(nil)
+		end
+	)
 
 	it(
 		"AC4: next rafts an approved issue that is in no raft after the claimable rafts and before any draft",

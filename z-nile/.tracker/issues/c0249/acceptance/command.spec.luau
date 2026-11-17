@@ -234,7 +234,8 @@ return t.spec("c0249 rank, next and list", function(it)
 					onOrigin(`{P}/c0010/provenance.md`),
 					`| ranked | {ME} | rank=50; was=unset; moved=c0017 |`
 				)
-			).toBe(true)
+			)
+				.toBe(true)
 			-- no rank that exists changed: c0014 still has its one row
 			t.expect(rankOf("c0014")).toBe("5")
 			t.expect(rankOf("c0021")).toBe("40")
@@ -374,7 +375,8 @@ return t.spec("c0249 rank, next and list", function(it)
 			t.expect(late[2]).toBe("c0013")
 			t.expect(late[3]).toBe("R0202")
 			-- fresh, --lost leaves it in its place
-			local freshLost = order(must(h.f.main, { "list", "backlog", "--lost" }, { ZN_NOW = tostring(T0 + 60) }))
+			local freshLost =
+				order(must(h.f.main, { "list", "backlog", "--lost" }, { ZN_NOW = tostring(T0 + 60) }))
 			t.expect(freshLost[2]).toBe("R0202")
 			-- the heartbeats or the pull requests cannot be read: it is not lost, and stderr says why
 			fs.writeFile(`{h.fakes}/ghfail`, "1")
