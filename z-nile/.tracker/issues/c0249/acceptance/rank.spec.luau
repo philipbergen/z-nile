@@ -40,7 +40,7 @@ local function shown(changes: { rank.Change }?): string
 	local out: { string } = {}
 	local list: { rank.Change } = changes or {}
 	for _, c in list do
-		table.insert(out, `{c.id}>{c.rank or "unset"}{if c.moved then "~" else ""}`) -- ~ marks a row written with moved=
+		table.insert(out, `{c.id}>{c.rank or "unset"}{if c.moved then "~" elseif c.shifted then "^" else ""}`) -- ~: moved=, ^: shifted=
 	end
 	return table.concat(out, " ")
 end
@@ -394,10 +394,10 @@ return t.spec("c0249 the rank's pure rules", function(it)
 				fact("c0003", { rank = 12 }),
 				fact("c0004"),
 			}
-			t.expect(plan(tight, "issue", "c0004", "after", "c0001")).toBe("c0004>20 c0002>30~ c0003>40~")
+			t.expect(plan(tight, "issue", "c0004", "after", "c0001")).toBe("c0004>20 c0002>30^ c0003>40^")
 			-- equal ranks are a tie by number; an item cannot go between them
 			local tie = { fact("c0001", { rank = 10 }), fact("c0002", { rank = 10 }), fact("c0003") }
-			t.expect(plan(tie, "issue", "c0003", "after", "c0001")).toBe("c0003>20 c0002>30~")
+			t.expect(plan(tie, "issue", "c0003", "after", "c0001")).toBe("c0003>20 c0002>30^")
 			-- nothing is ranked: moving c0004 before c0002 ranks c0001 and c0004 and leaves the rest unset
 			local bare = { fact("c0001"), fact("c0002"), fact("c0003"), fact("c0004") }
 			t.expect(plan(bare, "issue", "c0004", "before", "c0002")).toBe("c0001>10~ c0004>20")
@@ -415,17 +415,33 @@ return t.spec("c0249 the rank's pure rules", function(it)
 			}
 			t.expect(plan(some, "issue", "c0005", "after", "c0003")).toBe("c0003>60~ c0005>70")
 			t.expect(plan(some, "issue", "c0005", "before", "c0003")).toBe("c0005>60")
-			-- every item a renumbering shifts gets a row with moved= (the moved item's row has none), whoever set its rank
+			-- every item a renumbering shifts gets a row (the moved item's has none): shifted= when a person set its rank (it keeps
+			-- counting, however often it is shifted), moved= when a move wrote it
 			local marked = {
 				fact("c0001", { rank = 10 }),
 				fact("c0002", { rank = 11, moved = true }),
 				fact("c0003", { rank = 12 }),
 				fact("c0004"),
 			}
-			t.expect(plan(marked, "issue", "c0004", "after", "c0001")).toBe("c0004>20 c0002>30~ c0003>40~")
+			t.expect(plan(marked, "issue", "c0004", "after", "c0001")).toBe("c0004>20 c0002>30~ c0003>40^")
+			-- a rank a person set keeps counting toward its raft after a renumbering shifts it (its row says shifted=)
+			local held = {
+				fact("R0001", { status = "prepared", members = { "c0002" } }),
+				fact("c0001", { rank = 10 }),
+				fact("c0002", { rank = 11, raft = "R0001" }),
+				fact("c0003", { rank = 12 }),
+				fact("c0004"),
+			}
+			local shifts = rank.plan(rank.stack(held, "issue"), "c0004", "after", "c0001")
+			t.expect(shown(shifts)).toBe("c0004>20 c0002>30^ c0003>40^")
+			local afterShift: { [string]: rank.Fact } = {}
+			for _, f in applied(held, shifts) do
+				afterShift[f.id] = f
+			end
+			t.expect(rank.effective(afterShift.R0001, afterShift)).toBe(30)
 			-- rank 1 has no room above it
 			local floor = { fact("c0001", { rank = 1 }), fact("c0002") }
-			t.expect(plan(floor, "issue", "c0002", "top")).toBe("c0002>10 c0001>20~")
+			t.expect(plan(floor, "issue", "c0002", "top")).toBe("c0002>10 c0001>20^")
 		end
 	)
 

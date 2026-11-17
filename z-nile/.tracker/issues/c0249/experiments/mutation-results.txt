@@ -1,6 +1,6 @@
 # c0249 mutation check, revised for the 2026-11-16 rulings: one mutant per Rules row, applied to proto-c0249-rulings, the row's spec file run, reverted.
-# outcome KILLED = a case failed on an assertion; the first failing case is shown. 101 mutants, all KILLED (no syntax or require error).
-# Dropped with the rulings: Q1 and Q2 (the auto marker in the rank line). Rewritten: P2, P13, Q3, Q4, Q7, Q8, R1, R2, B6, C2, C12, C13, C14. New: M1-M5, W2-W4, B8, C21-C23, D7, D8.
+# outcome KILLED = a case failed on an assertion; the first failing case is shown. 104 mutants, all KILLED (no syntax or require error).
+# Dropped with the rulings: Q1 and Q2 (the auto marker in the rank line). Rewritten: P2, P13, Q3, Q4, Q7 (now a move-written rank shifted), Q8, R1, R2, B6, C2, C12, C13, C14. New: S1-S3 (shifted=), M1-M5, W2-W4, B8, C21-C23, D7, D8.
 P1	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC1: a rank is a whole number from 1 to 999999, and an empty value is unset
 P3	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC6: the audit's check names a malformed, repeated or oddly written rank line, and passes the rest
 P4	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC6: the audit's check names a malformed, repeated or oddly written rank line, and passes the rest
@@ -55,7 +55,10 @@ Q3	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spe
 Q4	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
 Q5	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
 Q6	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC2: top, last, before and after put one item in a gap, so one move edits one file
-Q7	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
+Q7	KILLED	z-nile/engine/rank.luau	rank	rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
+S1	KILLED	z-nile/engine/rank.luau	rank	rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
+S2	KILLED	z-nile/engine/rank.luau	rank	rank.spec.luau :: AC2: with no gap, or among unset items, the items from the top through the moved one are renumbered 10, 20, 30
+S3	KILLED	z-nile/engine/main.luau	drag	drag.spec.luau :: AC2: two drags at once: the second plans again from the first's result, in two commits
 Q8	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC3: a rank a move wrote (moved= in its record) does not count towards a raft, so an unrelated move never reorders the rafts
 Q9	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC5: list puts every blocked item first (rafts, then issues), then lost work, then the stack
 Q10	KILLED	z-nile/engine/rank.luau	rank	.tracker/issues/c0249/acceptance/rank.spec.luau :: AC5: list puts every blocked item first (rafts, then issues), then lost work, then the stack

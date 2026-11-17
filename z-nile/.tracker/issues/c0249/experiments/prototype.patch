@@ -443,7 +443,7 @@ index 1e5a4a653..fd1c83e36 100644
  	return out
  end
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 30870c42f..68dcfe1fb 100644
+index 30870c42f..9e8164260 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -68,8 +68,11 @@ usage: ./zn <command> ...
@@ -654,7 +654,7 @@ index 30870c42f..68dcfe1fb 100644
  	end
  
  	-- c0263: `provenance record <id> <event> [--actor A] [--detail k=v]` publishes one row of an item's provenance.md
-@@ -6877,6 +6956,223 @@ function cmd.provenance(positional: { string }, options: { [string]: { string }
+@@ -6877,6 +6956,225 @@ function cmd.provenance(positional: { string }, options: { [string]: { string }
  	recordRow(rest, options)
  end
  
@@ -794,6 +794,8 @@ index 30870c42f..68dcfe1fb 100644
 +				`rank={if c.rank == nil then "unset" else tostring(c.rank)}; was={c.was or "unset"}`
 +			if c.moved then
 +				detail ..= `; moved={id}`
++			elseif c.shifted then
++				detail ..= `; shifted={id}`
 +			end
 +			local row, rowWhy = provenance.record(read(rec), c.id, "ranked", actor, detail, when)
 +			if not row then
@@ -1014,10 +1016,10 @@ index b929a66be..303b4da0d 100644
  	for rel in files do
 diff --git a/z-nile/engine/rank.luau b/z-nile/engine/rank.luau
 new file mode 100644
-index 000000000..b82014148
+index 000000000..b7ea818de
 --- /dev/null
 +++ b/z-nile/engine/rank.luau
-@@ -0,0 +1,676 @@
+@@ -0,0 +1,688 @@
 +--!strict
 +-- The rank of an issue or a raft (c0249): the `rank:` front-matter line, the order it gives, the move that edits it
 +-- and the pick `./zn next` prints. Pure over texts and facts; main.luau reads origin/main and the checkout and writes.
@@ -1071,8 +1073,9 @@ index 000000000..b82014148
 +end
 +
 +-- Whether a rank was written by a move that renumbered the item rather than set by a person, read from the item's
-+-- provenance.md (`text`, nil when there is none): its latest `ranked` row carries a `moved=` field (the move writes the
-+-- row of every item it renumbers with `moved=<the item it moved>`). A person-set rank has a latest `ranked` row with no
++-- provenance.md (`text`, nil when there is none): its latest `ranked` row carries a `moved=` field (a move writes the
++-- row of every item it ranks that nobody ranked, or that a move ranked, with `moved=<the item it moved>`; a renumbering of a
++-- rank a person set writes `shifted=` instead). A person-set rank has a latest `ranked` row with no
 +-- `moved=`, or no row at all (a hand edit). A raft takes its members' best rank from the person-set ones only, so a move
 +-- that renumbers items never reorders the rafts (Q5, F2 of the design review). A record that does not parse counts as
 +-- person-set (the audit refuses it).
@@ -1469,7 +1472,9 @@ index 000000000..b82014148
 +	return out
 +end
 +
-+export type Change = { id: string, rank: number?, was: number?, moved: boolean? } -- moved: its `ranked` row carries `moved=`
++-- moved: its `ranked` row carries `moved=` (a move wrote the rank); shifted: it carries `shifted=` (a renumbering moved a rank a person
++-- set, which keeps counting)
++export type Change = { id: string, rank: number?, was: number?, moved: boolean?, shifted: boolean? }
 +
 +-- The facts a move can place: the backlog items of the kind, in the order a rank gives them (no lost, no blocked).
 +function rank.stack(facts: { Fact }, kind: string): { Fact }
@@ -1526,7 +1531,8 @@ index 000000000..b82014148
 +-- among or after unset items, it is given a rank with the unset items above it in the stack, in steps of 10 after the
 +-- highest rank there is, and their `ranked` rows carry `moved=` (a person did not set them: a raft's rank ignores them); no
 +-- rank that exists changes. Only when there is no room between two ranked neighbours are the ranked items renumbered 10, 20,
-+-- 30 ... from the top, each but the moved one with `moved=` in its row. An empty result changes nothing; asking for the
++-- 30 ... from the top; the row of each but the moved one says `shifted=` when a person set that rank (it keeps counting)
++-- and `moved=` when a move wrote it. An empty result changes nothing; asking for the
 +-- place a moved-written rank already has changes no line but writes a row without `moved=`, which makes it the person's.
 +function rank.plan(
 +	stack: { Fact },
@@ -1683,7 +1689,15 @@ index 000000000..b82014148
 +		local wid = want[i]
 +		local f = byId[wid]
 +		if f.ownRank ~= i * rank.GAP or (wid == id and f.ownMoved) then
-+			table.insert(changes, { id = wid, rank = i * rank.GAP, was = f.ownRank, moved = wid ~= id })
++			-- a rank a person set keeps counting however often it is shifted: its row says `shifted=`, not `moved=`
++			local counts = f.ownRank ~= nil and not f.ownMoved
++			table.insert(changes, {
++				id = wid,
++				rank = i * rank.GAP,
++				was = f.ownRank,
++				moved = wid ~= id and not counts,
++				shifted = wid ~= id and counts,
++			})
 +		end
 +	end
 +	local checked = keeps(changes)
@@ -1963,7 +1977,7 @@ index 9deebd6fe..d6f99265e 100644
  ## Lessons
  Search with `./zn lessons <terms>` when you are about to do something a lesson might cover.
 diff --git a/z-nile/skills/zz-rules/SKILL.md b/z-nile/skills/zz-rules/SKILL.md
-index 93fcee899..12396f656 100644
+index 93fcee899..5e99ad355 100644
 --- a/z-nile/skills/zz-rules/SKILL.md
 +++ b/z-nile/skills/zz-rules/SKILL.md
 @@ -50,9 +50,10 @@ Every change is made in its own git worktree under `<repo>/.worktree/` and lands
@@ -1996,7 +2010,7 @@ index 93fcee899..12396f656 100644
  - **Claims.** z-design claims one issue with `./zn status <id> preparing` and gives it back with `status <id> new`. The old prep's `new raft` over `new` issues still claims them with the raft's stamp, and `./zn status <R-id> preparing` claims an existing draft raft with its unprepared members. A raft move (`status <R-id> preparing|new`) never restamps a member that is `prepared` on `origin/main`, and refuses a member another raft holds there. `ready` (and a legacy `start`) refuses a raft unless it and its members are `prepared` on `origin/main`; the claim is made by `ready`, not `start`.
  - **Rafting** (z-raft). An issue's raft is its own `raft:` line, edited only in the rafting PR: two PRs that raft one issue edit that one line, so the second cannot merge cleanly, and its sync shows the conflict. The published claim (`new raft` over prepared issues, `fold`, `recombine`, `status <R-id> preparing`) stamps the raft only, with a fresh `preparing-…` value; recombine gives its two rafts one value, and that shared stamp is what lets the carried `status <keeper> prepared` take a member whose `raft:` on `origin/main` still names the other raft. The carried move takes a member that is prepared on `origin/main` as it is, refuses one another raft holds there, and takes a `preparing` member only when it carries the raft's own stamp or a claim this checkout made (`status <id> preparing` here); any other `preparing` member is another terminal's live claim and is refused, naming it. z-design's `status <id> preparing` refuses an issue whose `raft:` names a raft on `origin/main` (z-raft takes it out first with `./zn unfold <R-id> <id>`), and `ready` refuses a raft while a member is `preparing`. A raft's `grouped:` line records a hash of each prepared member's design as z-raft grouped it (its document without `status:` and `raft:`, `check.sh`, `acceptance/`, and its design reviews, refutes and `harvest.md`); the carried move and `ready` refuse a member whose design changed on `origin/main` since (a redesign landed inside the rafting window), a member this rafting grouped with no entry, and a raft of several issues whose coherence reviews quote no `Grouped:` record covering the current one. `compact` and `renumber` re-record every entry that matched before they rewrote its ids, and `remap` does the same. `./zn release <R-id>` is the published give-back. An issue whose `raft:` names a retired or missing raft (audit's `dead-raft` error) is cleared by the command the error names for its state: in the backlog, `./zn unfold <R-id> <id>`, which claims nothing (there is no raft to claim) and rides in the rafting PR; in `active/`, `./zn stop <id>` first (main checkout), which gives that one issue back to the backlog as `stop` gives a member back, and `unfold` after it. An active issue with no `raft:` (`raftless-active`) goes back with `./zn stop <id>` too. A conflict on `raft:` or `depends_on:` (they are adjacent lines) after a sync means rerun z-raft for that issue: take `main`'s line and drop the issue from your raft, or take both edits when it was only `depends_on:`.
  - **A failed start.** `start` runs every local check before it claims. If a step after the claim fails (branch push, `gh pr create`), the local state is consistent: finish by hand (`git push -u origin <branch>`, `gh pr create --draft`), or give **your own** claim back with `status <R-id> prepared` (a raft started the legacy way, still in the backlog; a readied raft is given back only by `./zn stop <R-id>`). The same terminal can re-run `start` if it died before moving anything (it remembers the claim in `.cache/tracker-claim-<R-id>`); another terminal is refused.
-+- **Rank** (c0249). `rank: <whole number>` in an issue's or a raft's front matter orders the backlog: the lowest first, an unset rank (no line, or an empty one) last, equal or unset ranks by ticket number, so the order is always stable. `./zn rank <id> top|last|before <id>|after <id>|<n>|unset` writes it on `origin/main` (gap numbering, 10, 20, 30; a card dropped among unset ones ranks the unset cards above it, and one dropped below them is unset) and appends a `ranked` row to each changed item's `provenance.md`. A raft's own rank overrides its members'; an unset one takes the best rank a person set on a member (a rank a move wrote, which the latest `ranked` row of the member's `provenance.md` shows by a `moved=` field, does not count, so a move never reorders the rafts; a renumbering writes its `ranked` rows with `moved=`). z-ticket, z-design and z-raft write no rank; only a person sets one. `./zn next` prints lost work first, then the claimable raft with the best rank, then the best-ranked approved issue that is in no raft (a worker rafts it with `./zn raft-plan --apply`), then, only when no raft is claimable and no issue waits to be rafted, the best-ranked issue a worker may draft; `depends_on` that are not done and a `blocked` status skip an item without changing its rank. `./zn list` stays offline and shows every blocked item first, then the rafts and the issues in this order; `./zn list --lost` also asks the remote and puts lost work after the blocked items; the board shows this order, with lost work first inside each band. `./zn audit` rejects a `rank:` that is not a whole number from 1 to 999999, or is written twice.
++- **Rank** (c0249). `rank: <whole number>` in an issue's or a raft's front matter orders the backlog: the lowest first, an unset rank (no line, or an empty one) last, equal or unset ranks by ticket number, so the order is always stable. `./zn rank <id> top|last|before <id>|after <id>|<n>|unset` writes it on `origin/main` (gap numbering, 10, 20, 30; a card dropped among unset ones ranks the unset cards above it, and one dropped below them is unset) and appends a `ranked` row to each changed item's `provenance.md`. A raft's own rank overrides its members'; an unset one takes the best rank a person set on a member (a rank a move wrote, which the latest `ranked` row of the member's `provenance.md` shows by a `moved=` field, does not count, so a move never reorders the rafts; a renumbering keeps a person's rank counting and records the shift as `shifted=`). z-ticket, z-design and z-raft write no rank; only a person sets one. `./zn next` prints lost work first, then the claimable raft with the best rank, then the best-ranked approved issue that is in no raft (a worker rafts it with `./zn raft-plan --apply`), then, only when no raft is claimable and no issue waits to be rafted, the best-ranked issue a worker may draft; `depends_on` that are not done and a `blocked` status skip an item without changing its rank. `./zn list` stays offline and shows every blocked item first, then the rafts and the issues in this order; `./zn list --lost` also asks the remote and puts lost work after the blocked items; the board shows this order, with lost work first inside each band. `./zn audit` rejects a `rank:` that is not a whole number from 1 to 999999, or is written twice.
  - **Heartbeat and lost work.** A claim (`preparing-…`, or `active-…` on a readied raft) is a lease proved by a **heartbeat branch** `refs/heads/hb/<claim stamp>` on origin: one commit with `main`'s tree and tip as parent (so `./zn busy` never sees it), whose subject `hb <stamp> <epoch>` carries the time, replaced by every `./zn beat <id>` with `--force-with-lease` and never a commit on `main`; the commit carries the checkout's own git identity, never a fixture-looking one (the spec runner's tripwire reads a new ref authored `@example.invalid` as a fixture leak). A claim whose newest beat (else its landing time) is older than 900 s (three beats of 300 s) is stale; unless an open pull request or a dispatcher `questions.md` names it (**parked**, shown `[parked]`), it is **lost**. `./zn lost` lists lost claims, the longest silent first (`<id> <state> <minutes>m`), and `./zn status` marks them `[lost <n>m]` and lists them first; a stale claim that could not be confirmed (the pull requests or a beat branch unreadable, or no landing time) is `[stale?]` and never lost; with the beats unreadable the list prints unmarked. A claim made before the heartbeat landed (at or before the commit that added `z-nile/engine/heartbeat.luau`) that has never beaten and would otherwise be stale reads `[no beat]`, never lost, until it beats once; every claim made after is flatlined (lost when silent past the limit). **Take lost work first**, before anything not yet started, whatever its rank. `beat` pushes only `hb/*` branches and changes no tracked file, so it runs in the main checkout too, and never from a protected checkout. `ZN_NOW`, `ZN_BEAT_EVERY` and `ZN_NET_SECONDS` are honoured only inside spec runs. A malformed branch under `hb/` makes every stale claim unknown and is named with its cure (`git push origin :refs/heads/hb/<name>`).
  - **Offline.** `PICKMAN_PUBLISH=0` (or a repository without `origin`) keeps every command local, as it was before. Publishing and every other command that changes a repository first check that git's repository root is the checkout the tracker lives in; read-only commands do not.
  - **Giving back a readied raft.** `status` refuses any item in `active/` on `origin/main` ("<id> is readied (in active/): use ./zn stop <R>"); `./zn stop <R-id>` is the way to give back a readied raft, and it also gives back a raft claimed by the legacy `start`.
