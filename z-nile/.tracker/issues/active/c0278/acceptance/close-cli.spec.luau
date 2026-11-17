@@ -257,7 +257,7 @@ return t.spec("c0278 ./zn close", function(it)
 			t.expect(string.match(stamp, "^closed%-%a+%-%a+%-%a+$") ~= nil).toBe(true)
 			t.expect(after).toBe(closedAs(before, stamp, REASON))
 			-- nothing staged or committed: only the document changed
-			t.expect(fixture.git(W2, { "status", "--porcelain" })).toBe(` M {doc}`)
+			t.expect(fixture.git(W2, { "status", "--porcelain" })).toBe(`M {doc}`)
 			t.expect(trOk(W2, { "list", "closed" }) ~= "").toBe(true)
 			-- offline works for --carry
 			local r = tr(W3, { "close", "c0590", "--carry", "--reason", REASON }, { PICKMAN_PUBLISH = "0" })

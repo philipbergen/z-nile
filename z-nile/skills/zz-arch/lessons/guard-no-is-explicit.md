@@ -20,3 +20,5 @@ A helper that finishes or aborts a git operation first checks that it started it
 A guard's position in an if-chain is a rule (c0263 design review 013 F3): when two guards can match one state (a hand merge inside a rebase), the design says which wins and a case holds both at once; the refusal of another operation in progress comes first.
 
 **Note (R0072 review 002 F3):** a field whose only explicit "no" is `false` refuses `true` at run time, not only in the type. A cast accepts a wider boolean. Ask: does `sweep = true` produce the same problem as a missing sweep, and does `sweep = false` with a reason produce none?
+
+**Note (R0115 review 001 F2):** a git lookup's exit code is the explicit "no". `git grep` exits 1 for no match and 128 for an error, and both print nothing, so reading only stdout turns every failure into "no dependents". Likewise a failed `ls-tree` or `show` skipped as "not there" lets a closed dependency through. Check: does this guard read the exit code, and does any code other than the documented "no match" refuse?

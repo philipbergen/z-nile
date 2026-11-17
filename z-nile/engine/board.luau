@@ -2,6 +2,7 @@
 -- The tracker board: reads the tracker tree into a model and renders it as one self-contained HTML page.
 local boardview = require("./boardview")
 local chart = require("./chart")
+local closing = require("./closing")
 local fs = require("@lune/fs")
 local history = require("./history")
 local ledger = require("./ledger")
@@ -823,8 +824,11 @@ function board.collect(root: string?, checkout: string?, given: Facts?): Model
 			table.insert(rawRafts, r)
 		end
 		for _, i in scan(src.base, "issues") do
-			projectOf[i.id] = src.name
-			table.insert(rawIssues, i)
+			-- c0278: a closed issue (won't do) is dropped before cards, bands, dependencies, Stats and charts
+			if not closing.isClosed(i.front) then
+				projectOf[i.id] = src.name
+				table.insert(rawIssues, i)
+			end
 		end
 		for _, r in retiredOf(src.base) do
 			table.insert(retired, r)
