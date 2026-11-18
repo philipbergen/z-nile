@@ -1,16 +1,16 @@
 diff --git a/pickman/.tracker/architecture.md b/pickman/.tracker/architecture.md
-index d0d9a7f23..a1911e1a1 100644
+index c485a76d4..ba1ad6c9b 100644
 --- a/pickman/.tracker/architecture.md
 +++ b/pickman/.tracker/architecture.md
-@@ -20,7 +20,6 @@ This file changes only through a `ticket-prep` design, never during execution un
+@@ -21,7 +21,6 @@ This file changes only through a `ticket-prep` design, never during execution un
  | Pad | The gamepad: its buttons mapped to the keys' actions, the left stick folded into turn intents one a push, the right stick's look rate in View.look's units, and which input types are gamepads (f0146) |
  | Best | A player's best level reached and the start level chosen in the lobby: the stored record's shape and its reading, the levels a run may start on, the claim, the lobby's level picker and its keys; the store is the adapters' (f0148) |
  | Picks | Risky wall picks: which walls can be marked, the three marked walls and their seeded roll, the wall a player beside one would pick, how long a pick takes, the six boons and their even roll; the pick intent (f0126) |
 -| Pay | Paid play: one player's record (a free start per rolling hour, plays and continues held, the receipts granted), the mode (live, test, closed) and its store, the start's claim, the arrival's verdict, receipts granted once, a continue used or refunded; the store and the purchases are the adapters' (f0145) |
  | Travel | Whether a player may be sent to another place now: one request at a time, a timeout, a cool-down after a failure, and validation of the configured destination place id (R0024, f0061) |
- | Lobby | What the lobby screen shows, engine-free: the hiscore panel model (empty until the boards exist) and the start button for a travel status (R0024, f0061) |
- | Hiscores | Period keys, the qualify rule, ranking and the top-N read of the all-time, daily and weekly boards. The store is a parameter; no other feature is required (R0011, f0024) |
-@@ -30,6 +29,8 @@ This file changes only through a `ticket-prep` design, never during execution un
+ | Lobby | What the lobby screen shows, engine-free: the hiscore panel model (empty until the boards exist) and the start button for a travel status (R0024, f0061); every row's and the best line's revive count ("REVIVES n") and the price of a play on sale, struck through as rich text (f0186) |
+ | Hiscores | Period keys, the qualify rule, ranking and the top-N read of the all-time, daily and weekly boards. The store is a parameter; no other feature is required (R0011, f0024); the revives a run used, read, stored and carried with its rows, list entries and best, never ranking them (f0186) |
+@@ -31,6 +30,8 @@ This file changes only through a `ticket-prep` design, never during execution un
  | Touch | Touch zones and a pure fold over begin, move and end: one finger per zone, a straight-line swipe into one existing turn intent, look deltas in pixels, a snap hit (R0012, f0027, f0028, f0029); the fire and hop buttons, placed in Roblox's jump corner from `Hud.jumpButtons` (R0051, f0110); the PICK button beside f0110's FIRE and JUMP, its zone and effect (f0126) |
  | View | First-person presentation math, engine-free: world scale, wall geometry, heading yaw, snapshot interpolation, turn smoothing, free look, key map (R0004, f0014); pellet placement and pulse (R0015, f0030); the lowered walls and the ghost body (R0035, f0101), the ghost colours and the beam's end (f0100, f0102), the new keys, the arrow look and the shot's aim (f0104); the pick key and its wire string, the marked walls' runs, the frame's maze with its holes and the walls key (f0126) |
  
@@ -19,7 +19,7 @@ index d0d9a7f23..a1911e1a1 100644
  Hiscores has no row in the deps block. It takes the store as a parameter. Session, Lobby and Flow do not require it; the server and lobby adapters call it (R0011).
  
  ## Allowed dependencies
-@@ -49,7 +50,6 @@ Ghosts -> Maze
+@@ -50,7 +51,6 @@ Ghosts -> Maze
  Ghosts -> Movement
  Hud -> Levels
  Hud -> Session
@@ -28,14 +28,14 @@ index d0d9a7f23..a1911e1a1 100644
  Movement -> Maze
  Pad -> Movement
 diff --git a/pickman/.tracker/game-design.md b/pickman/.tracker/game-design.md
-index 102c21881..71b76a2c2 100644
+index e692b63fd..b8eff2201 100644
 --- a/pickman/.tracker/game-design.md
 +++ b/pickman/.tracker/game-design.md
-@@ -123,6 +123,7 @@ The user's words: "Unless in playtest (it will show the screen and accept contro
+@@ -131,6 +131,7 @@ The user's words: "Unless in playtest (it will show the screen and accept contro
  - In test mode (everything but a server configured live with both product ids: Studio and the Beta included) the screens show and take their controls exactly as live and **nothing is charged**: our own test screen says so (G1). A server configured live with a product id missing or bad sells nothing and grants nothing free; free games and held credits still work ("Refuse paid play").
- - A store that cannot be read or written lets the player in: a player the lobby let in on a failed read plays that game free; while the pass map cannot be read every arrival with nothing to pay with plays free ("Let them play free", "Let all of them play"). Any other arrival with nothing to pay with is sent back to the lobby (G10).
+ - A store that cannot be read or written lets the player in: a player the lobby let in on a failed read plays that game free; while the pass map cannot be read every arrival with nothing to pay with plays free ("Let them play free", "Let all of them play"). Any other arrival with nothing to pay with is sent back to the lobby (G10), except a Studio play, which cannot teleport and plays (decided with the user, 2026-11-16: "Play in Studio only"; Beta and live keep G10).
  - The keys (G12): Return, KeypadEnter or ButtonA CONTINUE or BUY; Backspace or ButtonB END GAME or CANCEL; touch taps the buttons.
-+- **On the arcade's paid play (c0202)**: Pickman is the arcade library's title `pickman` (`arcade/.tracker/architecture.md`, PaidPlay and Receipts): the same records (the `PaidPlay` and `PaidPlayTest` stores), products and rules, with no copy of its own; the test purchase screen is the library's. The game place takes whatever the player holds on arrival, whoever sold it: a free game due, a game bought in the lobby or on the portal's Pickman card, or the pass of a lobby or portal that could not read the player's record, so a player who paid or took the free game on the portal plays at once; any other arrival with nothing to pay with is sent back to the start place.
++- **On the arcade's paid play (c0202)**: Pickman is the arcade library's title `pickman` (`arcade/.tracker/architecture.md`, PaidPlay and Receipts): the same records (the `PaidPlay` and `PaidPlayTest` stores), products and rules, with no copy of its own; the test purchase screen is the library's. The game place takes whatever the player holds on arrival, whoever sold it: a free game due, a game bought in the lobby or on the portal's Pickman card, or the pass of a lobby or portal that could not read the player's record, so a player who paid or took the free game on the portal plays at once; any other arrival with nothing to pay with is sent back to the start place, but a Studio play still plays (Pickman's own exception, which the library does not make: decided with the user, 2026-11-17, "Keep it in pickman").
  
  ## Open decisions
  - **The blaster's drop chance** (f0100): a number for `Blaster.DROP_PERCENT` (50 until then), after a Beta playtest.
@@ -324,16 +324,17 @@ index 3c3ef0107..675f3bb4e 100644
  
  return Paid
 diff --git a/pickman/src/server/Continues.luau b/pickman/src/server/Continues.luau
-index b58028ee7..83d3a70c9 100644
+index 892bb5c6d..50cc0a557 100644
 --- a/pickman/src/server/Continues.luau
 +++ b/pickman/src/server/Continues.luau
-@@ -1,46 +1,64 @@
+@@ -1,38 +1,55 @@
  --!strict
 --- Game place server adapter (f0145): paid play on arrival and the continue offer. Main hands the arrival this returns
 --- to Sessions.made (f0148), which tells it each new session once it exists, of a player still here.
 --- On arrival it charges the start once (a free start due, else a held play), takes the lobby's pass and decides with
---- Pay.arrive: a charge, or a write that failed, plays with the continue offer on; a "buy" plays only with the pass,
---- else its run is refused and the player sent back to the lobby (kicked when that fails).
+--- Pay.arrive: a charge, or a write that failed, plays with the continue offer on; a "buy" plays only with the pass
+--- (a Studio play counts as holding it: the user's ruling of 2026-11-16, "Play in Studio only"), else its run is
+--- refused and the player sent back to the lobby (kicked when that fails).
 --- During the offer, "ask" uses a held continue at once, else holds the countdown and asks for a purchase; "decline"
 --- ends it. One continue in flight per player; its write holds the countdown, so an ask in time is judged at the ask;
 --- a continue that cannot be used after its write (the player left, declined, or the offer ended) is given back.
@@ -347,15 +348,18 @@ index b58028ee7..83d3a70c9 100644
 +-- library's (Wallet, Receipts), installed here once.
 +-- On arrival the library's Wallet.arrive charges the start once (a free start due, else a held play, whoever sold it:
 +-- the lobby or the portal) and takes the pass (the lobby's or the portal's, `pickman/<user id>`): a charge, a claim
-+-- that failed, or a pass plays with the continue offer on; anything else has its run refused and the player sent
-+-- back to LobbyPlaceId (kicked when that fails).
++-- that failed, or a pass plays with the continue offer on, and so does a Studio play (the user's ruling of
++-- 2026-11-16, "Play in Studio only", kept in pickman: 2026-11-17); anything else has its run refused and the player
++-- sent back to LobbyPlaceId (kicked when that fails).
 +-- During the offer, "ask" uses a held revive at once (Wallet.useRevive), else holds the countdown and opens the revive
 +-- product (Receipts.ask); "decline" ends it. One continue in flight per player; its write holds the countdown, so an
 +-- ask in time is judged at the ask; a revive that cannot be used after its write (the player left, declined, or the
-+-- offer ended) is given back (Wallet.refund). A revive granted during the offer is used at once; one the library
-+-- could not use yet (its USE_SECONDS since the last use) is tried once more when that span ends.
++-- offer ended) is given back (Wallet.refund). A revive granted during the offer is used at once. A test confirm whose
++-- revive was not used releases the countdown at once (R0118 final review 001 F2); live, the receipt wait holds it, and
++-- a use the library could not make then is tried once more after its USE_SECONDS.
  local Players = game:GetService("Players")
 +local ReplicatedStorage = game:GetService("ReplicatedStorage")
+ local RunService = game:GetService("RunService")
  local ServerScriptService = game:GetService("ServerScriptService")
  local TeleportService = game:GetService("TeleportService")
  
@@ -388,6 +392,19 @@ index b58028ee7..83d3a70c9 100644
 +	return made
 +end
 +
+ -- Whether this server is a Studio play. Ruled by the user (2026-11-16) on R0118 code review 001 F2, (b) "Play in Studio
+--- only": a Studio play, which cannot teleport to the lobby, counts as holding the lobby's pass, so a developer's play
+--- of the game place is never sent back. The read is guarded: an error, or no IsStudio at all, is not Studio, and G10
+--- holds everywhere else.
++-- only", and kept in pickman when it moved onto the library (2026-11-17, "Keep it in pickman"): a Studio play, which
++-- cannot teleport to the lobby, plays, so a developer's play of the game place is never sent back. The read is
++-- guarded: an error, or no IsStudio at all, is not Studio, and G10 holds everywhere else.
+ local function inStudio(): boolean
+ 	local ok, studio = pcall(function(): any
+ 		return (RunService :: any):IsStudio()
+@@ -41,22 +58,29 @@ local function inStudio(): boolean
+ end
+ 
  function Continues.start(session: (Player) -> Session.Session?): (Player, Session.Session) -> ()
 -	local continueRemote = Purchases.remote("Continue")
 -	local purchase = Purchases.remote("Purchase")
@@ -401,10 +418,20 @@ index b58028ee7..83d3a70c9 100644
 -	local known: { [Player]: number } = {} -- the continues held, as this server last read or wrote them
 -	local asked: { [Player]: number } = {} -- os.clock() of the last ask that wrote
  
--	local function tell(player: Player, record: Pay.Record)
--		if player.Parent ~= nil then
--			status:FireClient(player, Purchases.mode(), Pay.status(record, os.time()))
-+	-- what the player holds, from the record this server last wrote (Wallet answers it without a store call)
+-	-- The mode and what the player holds, on PayStatus. Told on every path that lets the player play, with no status
+-	-- when the record is unknown (a failed write), so a live client never keeps its "nothing is charged" default
+-	-- (R0118 code review 001 F1), and after every record this server writes or hears.
+-	local function tell(player: Player, record: Pay.Record?)
++	-- The mode, and what the player holds, on PayStatus (R0118 code review 001 F1): the mode is told on every path that
++	-- lets the player play, so a live client never keeps its "nothing is charged" default, with no status when the
++	-- record is unknown (a claim that failed: nothing is read), and what they hold after every record this server
++	-- writes or hears, from the record the library saw (a store read only when it saw none).
++	local function tellMode(player: Player)
+ 		if player.Parent ~= nil then
+-			status:FireClient(player, Purchases.mode(), if record then Pay.status(record, os.time()) else nil)
++			status:FireClient(player, Wallet.mode(Continues.TITLE), nil)
++		end
++	end
 +	local function tell(player: Player)
 +		if player.Parent == nil then
 +			return
@@ -415,7 +442,7 @@ index b58028ee7..83d3a70c9 100644
  		end
  	end
  
-@@ -50,7 +68,7 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
+@@ -66,7 +90,7 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
  		end
  	end
  
@@ -424,7 +451,7 @@ index b58028ee7..83d3a70c9 100644
  	local function back(player: Player, s: Session.Session)
  		sentBack[player] = true
  		Session.refuse(s, tostring(player.UserId))
-@@ -68,21 +86,15 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
+@@ -84,20 +108,18 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
  	end
  
  	local function arrive(player: Player, s: Session.Session)
@@ -432,7 +459,7 @@ index b58028ee7..83d3a70c9 100644
 -			local start, nextR = Pay.start(r, os.time())
 -			return nextR, start
 -		end)
-+		local verdict, start = Wallet.arrive(player, Continues.TITLE)
++		local verdict, start = Wallet.arrive(player, Continues.TITLE) -- the pass is taken on every arrival, Studio's too
  		if player.Parent == nil then
 -			return -- left during the write (design review 003 F5)
 +			return -- left during the claim (f0145 design review 003 F5)
@@ -440,31 +467,35 @@ index b58028ee7..83d3a70c9 100644
 -		if record then
 -			known[player] = record.continues
 -		end
--		local passed = Purchases.takePass(player.UserId)
--		if Pay.arrive(if record then how else nil, passed) == "play" then
+-		local passed = Purchases.takePass(player.UserId) -- taken on every arrival, Studio's too
+-		if Pay.arrive(if record then how else nil, passed or inStudio()) == "play" then
 +		-- the literal union widens across a require (f0201 E6): compared as a string
-+		if (verdict :: string) == "play" then
++		if (verdict :: string) == "play" or inStudio() then
  			Session.allowOffer(s, tostring(player.UserId))
--			if record then
--				tell(player, record)
+-			tell(player, record)
 +			if start ~= nil then
 +				tell(player)
- 			end
++			else
++				tellMode(player) -- the claim failed (G10): the mode, nothing read
++			end
  		else
  			back(player, s)
-@@ -97,8 +109,9 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
+ 		end
+@@ -111,8 +133,11 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
  		end
  	end
  
 -	-- Use one held continue for the player's offer: "busy" while one is in flight, "none" when nothing was used,
 -	-- "continued", or "refunded" when one was used but could not be applied.
-+	-- Use one held revive for the player's offer: "busy" while one is in flight, "none" when none is held, "unknown"
-+	-- when the library could not tell (a use within its USE_SECONDS, the store failing), "continued", or "refunded"
-+	-- when one was used but could not be applied.
++	-- Use one held revive for the player's offer: "none" outside the offer, "busy" while one is in flight, "empty" when
++	-- none is held (known from the record seen, or from a write that found none), "unknown" when the library could not
++	-- tell (a use within its USE_SECONDS, the store failing), "continued", or "refunded" when one was used but could not
++	-- be applied. A continue and a give-back are told here, after the run's state changes; "empty" is told by the
++	-- caller, after what it does next (design review 002 F3: a tell may read the store).
  	local function useOne(player: Player): string
  		local s = session(player)
  		local id = tostring(player.UserId)
-@@ -111,31 +124,19 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
+@@ -125,36 +150,19 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
  		local flight: Flight = { held = not Session.holding(s, id), declined = false }
  		flying[player] = flight
  		if flight.held then
@@ -489,6 +520,7 @@ index b58028ee7..83d3a70c9 100644
 +			tell(player)
  			return "continued"
  		end
+-		local latest = record
 -		if used then
 -			-- given back: one more continue, outside the receipts (design review 003 F4)
 -			local given = Purchases.update(player.UserId, function(r: Pay.Record): (Pay.Record, any)
@@ -496,22 +528,27 @@ index b58028ee7..83d3a70c9 100644
 -			end)
 -			if given then
 -				known[player] = given.continues
+-				latest = given
 -			end
+-		end
+-		if latest then
+-			tell(player, latest) -- what is held now: none found, or the continue given back
 +		if used == true then
 +			-- given back: one more revive, outside the receipts (f0145 review 003 F4)
 +			Wallet.refund(player, Continues.TITLE, "revive")
  		end
  		if flight.held and here then
  			Session.hold(s, id, false)
-@@ -143,25 +144,20 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
+@@ -162,25 +170,24 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
  		if flight.declined then
  			Session.decline(s, id)
  		end
 -		return if used then "refunded" else "none"
 +		if used == true then
++			tell(player) -- the revive given back, told last
 +			return "refunded"
 +		end
-+		return if used == false then "none" else "unknown"
++		return if used == false then "empty" else "unknown"
  	end
  
  	local function ask(player: Player, s: Session.Session, id: string)
@@ -535,54 +572,69 @@ index b58028ee7..83d3a70c9 100644
 +		if Session.offering(s, id) and Receipts.ask(player, Continues.TITLE, "revive") then
  			Session.hold(s, id, true)
 -			Purchases.ask(player, "continue")
++		end
++		if result == "empty" then
++			tell(player) -- none held, told after the screen opened
  		end
  	end
  
-@@ -186,46 +182,38 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
+@@ -205,54 +212,53 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
  		end
  	end)
  
 -	-- a grant this server heard: what it knew is stale; during the offer the continue is used at once
-+	-- a revive granted for a player here: during the offer it is used at once, and once more after the library's
-+	-- USE_SECONDS when it could not tell then
- 	local function heard(player: Player)
+-	-- what useOne did with it: "busy", "none", "continued" or "refunded"
+-	local function heard(player: Player, record: Pay.Record): string
 -		known[player] = nil -- a grant reached this server: what it last knew is stale
--		useOne(player)
+-		tell(player, record) -- the line shows the continue held, also outside the offer (R0118 code review 001 F1)
+-		return useOne(player)
 -	end
 -
--	Purchases.start(function(player: Player?, _userId: number, product: Pay.Product, _record: Pay.Record)
+-	Purchases.start(function(player: Player?, _userId: number, product: Pay.Product, record: Pay.Record)
 -		if player and product == "continue" then
--			heard(player)
-+		if useOne(player) == "unknown" then
+-			heard(player, record)
+-		end
+-	end)
+-
+-	purchase.OnServerEvent:Connect(function(player: Player, answer: any)
+-		if answer == "confirm" then
+-			local record, fresh, took = Purchases.testGrant(player, "continue", Purchases.guid())
+-			-- The screen this server opened answered, and its continue was not applied: its grant was not written
+-			-- (R0118 code review 001 F3), or it was written and the continue's own write then failed (R0118 final
+-			-- review 001 F2; the continue stays held for the next ask). Nothing more will end the hold the ask set,
+-			-- so the countdown runs again, as a cancel does. A flight under way ("busy") ends its own hold, and a
+-			-- confirm with no screen open takes nothing and leaves any other hold (a flight's, a receipt's).
+-			local done = if record and fresh then heard(player, record) else "none"
+-			if took and done == "none" then
+-				release(player)
+-			end
+-		elseif answer == "cancel" then
+-			if Purchases.cancel(player) then
++	-- A revive granted for a player here: the line shows it, also outside the offer (R0118 code review 001 F1), and
++	-- during the offer it is used at once. In test mode the grant is the confirm's own answer, so a use that did not
++	-- continue the run releases the countdown at once (R0118 final review 001 F2; the revive stays held for the next
++	-- ask). Live, the receipt wait holds the countdown, and a use the library could not make then is tried once more
++	-- after its USE_SECONDS.
++	local function heard(player: Player)
++		tell(player)
++		local result = useOne(player)
++		if Wallet.mode(Continues.TITLE) == "test" then
++			if result == "none" or result == "empty" or result == "unknown" then
+ 				release(player)
+ 			end
++		elseif result == "unknown" then
 +			task.delay(Wallet.USE_SECONDS, function()
-+				if player.Parent ~= nil then
-+					useOne(player)
++				if player.Parent ~= nil and useOne(player) == "empty" then
++					tell(player)
 +				end
 +			end)
  		end
 -	end)
++		if result == "empty" then
++			tell(player)
++		end
 +	end
  
--	purchase.OnServerEvent:Connect(function(player: Player, answer: any)
--		if answer == "confirm" then
--			local record, fresh = Purchases.testGrant(player, "continue", Purchases.guid())
--			if record and fresh then
-+	Receipts.start({
-+		granted = function(player: Player, name: string, kind: PaidPlay.Kind)
-+			if name == Continues.TITLE and kind == "revive" then
- 				heard(player)
- 			end
--		elseif answer == "cancel" then
--			if Purchases.cancel(player) then
--				release(player)
-+		end,
-+		closed = function(player: Player, name: string, kind: PaidPlay.Kind, bought: boolean)
-+			if name ~= Continues.TITLE or kind ~= "revive" then
-+				return
- 			end
--		end
--	end)
--
 -	MarketplaceService.PromptProductPurchaseFinished:Connect(
 -		function(userId: number, productId: number, bought: boolean)
 -			local player = Players:GetPlayerByUserId(userId)
@@ -594,10 +646,23 @@ index b58028ee7..83d3a70c9 100644
 -					else
 -						release(player)
 -					end
++	Receipts.start({
++		granted = function(player: Player, name: string, kind: PaidPlay.Kind)
++			if name == Continues.TITLE and kind == "revive" then
++				heard(player)
++			end
++		end,
++		-- a purchase screen of Pickman's revive closed: not bought (a cancel, Roblox's screen closed, or a test confirm
++		-- whose grant was not written: R0118 code review 001 F3) the countdown runs again; bought, it waits for the
++		-- receipt (Roblox does not order the close and the receipt; a test confirm's grant follows at once)
++		closed = function(player: Player, name: string, kind: PaidPlay.Kind, bought: boolean)
++			if name ~= Continues.TITLE or kind ~= "revive" then
++				return
++			end
 +			local s = session(player)
 +			if s and Session.offering(s, tostring(player.UserId)) then
 +				if bought then
-+					Session.awaitReceipt(s, tostring(player.UserId)) -- Roblox does not order the close and the receipt
++					Session.awaitReceipt(s, tostring(player.UserId))
 +				else
 +					release(player)
  				end
@@ -609,7 +674,7 @@ index b58028ee7..83d3a70c9 100644
  
  	TeleportService.TeleportInitFailed:Connect(function(player: Player)
  		kick(player)
-@@ -234,8 +222,6 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
+@@ -261,8 +267,6 @@ function Continues.start(session: (Player) -> Session.Session?): (Player, Sessio
  	Players.PlayerRemoving:Connect(function(player: Player)
  		charged[player] = nil
  		sentBack[player] = nil
@@ -843,10 +908,10 @@ index 2cef7a771..000000000
 -return Pay
 diff --git a/pickman/src/shared/Purchases.luau b/pickman/src/shared/Purchases.luau
 deleted file mode 100644
-index 7a3200c63..000000000
+index 99bb400e6..000000000
 --- a/pickman/src/shared/Purchases.luau
 +++ /dev/null
-@@ -1,191 +0,0 @@
+@@ -1,198 +0,0 @@
 ---!strict
 --- Shared server adapter (f0145): the paid-play plumbing both places' servers use. Required only by server scripts
 --- (no client requires it: the store and the purchases are the server's). The mode and the product ids are attributes
@@ -933,13 +998,20 @@ index 7a3200c63..000000000
 -end
 -
 --- A test screen's confirmation: in test mode only, and only for the screen this server opened for that player and
---- product (forgotten on a confirm, a cancel or a leave); granted under a fresh test id.
--function Purchases.testGrant(player: Player, product: Pay.Product, guid: string): (Pay.Record?, boolean)
+--- product (forgotten on a confirm, a cancel or a leave); granted under a fresh test id. The third answer says
+--- whether this confirm took an open screen, so a caller can tell a failed write (true, record nil) from a confirm
+--- with no screen (false).
+-function Purchases.testGrant(
+-	player: Player,
+-	product: Pay.Product,
+-	guid: string
+-): (Pay.Record?, boolean, boolean)
 -	if Purchases.mode() ~= "test" or pending[player] ~= product then
--		return nil, false
+-		return nil, false, false
 -	end
 -	pending[player] = nil
--	return Purchases.grant(player.UserId, product, "test:" .. guid)
+-	local record, fresh = Purchases.grant(player.UserId, product, "test:" .. guid)
+-	return record, fresh, true
 -end
 -
 --- The player's test screen closed without buying; true when one was open.
@@ -1174,6 +1246,54 @@ index 4b915cb02..000000000
 -end
 -
 -return TestPurchase
+diff --git a/pickman/tests/unit/Flow/flow.watch.txt b/pickman/tests/unit/Flow/flow.watch.txt
+index 1b0ad65e4..d24ff8ce8 100644
+--- a/pickman/tests/unit/Flow/flow.watch.txt
++++ b/pickman/tests/unit/Flow/flow.watch.txt
+@@ -53,7 +53,6 @@ pickman/src/shared/Logic/Session/init.luau
+ pickman/src/shared/Logic/Touch/init.luau
+ pickman/src/shared/Logic/Travel/init.luau
+ pickman/src/shared/Logic/View/init.luau
+-pickman/src/shared/TestPurchase.luau
+ pickman/stylua.toml
+ pickman/tests/contract/.gitkeep
+ pickman/tests/fixtures/sim/walker.luau
+diff --git a/pickman/tests/unit/Game/game.watch.txt b/pickman/tests/unit/Game/game.watch.txt
+index 8dcab0d3f..e68d1db46 100644
+--- a/pickman/tests/unit/Game/game.watch.txt
++++ b/pickman/tests/unit/Game/game.watch.txt
+@@ -58,7 +58,6 @@ pickman/src/shared/Logic/Session/init.luau
+ pickman/src/shared/Logic/Touch/init.luau
+ pickman/src/shared/Logic/Travel/init.luau
+ pickman/src/shared/Logic/View/init.luau
+-pickman/src/shared/TestPurchase.luau
+ pickman/stylua.toml
+ pickman/tests/contract/.gitkeep
+ pickman/tests/fixtures/sim/walker.luau
+diff --git a/pickman/tests/unit/Hiscores/hiscores.watch.txt b/pickman/tests/unit/Hiscores/hiscores.watch.txt
+index 1b0ad65e4..d24ff8ce8 100644
+--- a/pickman/tests/unit/Hiscores/hiscores.watch.txt
++++ b/pickman/tests/unit/Hiscores/hiscores.watch.txt
+@@ -53,7 +53,6 @@ pickman/src/shared/Logic/Session/init.luau
+ pickman/src/shared/Logic/Touch/init.luau
+ pickman/src/shared/Logic/Travel/init.luau
+ pickman/src/shared/Logic/View/init.luau
+-pickman/src/shared/TestPurchase.luau
+ pickman/stylua.toml
+ pickman/tests/contract/.gitkeep
+ pickman/tests/fixtures/sim/walker.luau
+diff --git a/pickman/tests/unit/Lobby/boards.watch.txt b/pickman/tests/unit/Lobby/boards.watch.txt
+index 1b0ad65e4..d24ff8ce8 100644
+--- a/pickman/tests/unit/Lobby/boards.watch.txt
++++ b/pickman/tests/unit/Lobby/boards.watch.txt
+@@ -53,7 +53,6 @@ pickman/src/shared/Logic/Session/init.luau
+ pickman/src/shared/Logic/Touch/init.luau
+ pickman/src/shared/Logic/Travel/init.luau
+ pickman/src/shared/Logic/View/init.luau
+-pickman/src/shared/TestPurchase.luau
+ pickman/stylua.toml
+ pickman/tests/contract/.gitkeep
+ pickman/tests/fixtures/sim/walker.luau
 diff --git a/pickman/tests/unit/Pay/pay.spec.luau b/pickman/tests/unit/Pay/pay.spec.luau
 deleted file mode 100644
 index 9fddd2d44..000000000
@@ -1220,8 +1340,46 @@ index 9fddd2d44..000000000
 -end)
 diff --git a/pickman/tests/unit/Pay/pay.watch.txt b/pickman/tests/unit/Pay/pay.watch.txt
 deleted file mode 100644
-index df137d14f..000000000
+index 043680ac1..000000000
 --- a/pickman/tests/unit/Pay/pay.watch.txt
 +++ /dev/null
-@@ -1 +0,0 @@
+@@ -1,20 +0,0 @@
+-pickman/src/client/Main.client.luau
+-pickman/src/client/OfferView.luau
+-pickman/src/lobby/client/Main.client.luau
+-pickman/src/lobby/client/PayView.luau
+-pickman/src/lobby/server/Main.server.luau
+-pickman/src/lobby/server/Paid.luau
+-pickman/src/lobby/server/Starts.luau
+-pickman/src/server/Continues.luau
+-pickman/src/server/HiscoreStore.luau
+-pickman/src/server/Main.server.luau
+-pickman/src/server/Sessions.luau
+-pickman/src/server/Submits.luau
+-pickman/src/shared/Logic/Flow/init.luau
+-pickman/src/shared/Logic/Game/init.luau
+-pickman/src/shared/Logic/Hiscores/init.luau
+-pickman/src/shared/Logic/Lobby/init.luau
 -pickman/src/shared/Logic/Pay/init.luau
+-pickman/src/shared/Logic/Session/init.luau
+-pickman/src/shared/Purchases.luau
+-pickman/src/shared/TestPurchase.luau
+diff --git a/pickman/tests/unit/Session/session.watch.txt b/pickman/tests/unit/Session/session.watch.txt
+index 332d229d5..4f26fe232 100644
+--- a/pickman/tests/unit/Session/session.watch.txt
++++ b/pickman/tests/unit/Session/session.watch.txt
+@@ -51,14 +51,11 @@ pickman/src/shared/Logic/Lobby/init.luau
+ pickman/src/shared/Logic/Maze/Layouts.luau
+ pickman/src/shared/Logic/Maze/init.luau
+ pickman/src/shared/Logic/Movement/init.luau
+-pickman/src/shared/Logic/Pay/init.luau
+ pickman/src/shared/Logic/Pellets/init.luau
+ pickman/src/shared/Logic/Session/init.luau
+ pickman/src/shared/Logic/Touch/init.luau
+ pickman/src/shared/Logic/Travel/init.luau
+ pickman/src/shared/Logic/View/init.luau
+-pickman/src/shared/Purchases.luau
+-pickman/src/shared/TestPurchase.luau
+ pickman/stylua.toml
+ pickman/tests/contract/.gitkeep
+ pickman/tests/fixtures/sim/walker.luau

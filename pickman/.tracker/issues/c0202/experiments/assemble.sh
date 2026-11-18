@@ -38,4 +38,13 @@ header() {
 		"mode, and every record the new build writes has exactly f0145's four fields."
 	cat experiments/stub.part experiments/lobby.part experiments/arrive.part experiments/offer.part experiments/records-cases.part
 } >acceptance/records.spec.luau
+{
+	header "c0202 AC9: what main's paid play landed with after this issue was first designed, kept through the switch" \
+		"(R0118 code review 001 F1 to F3, final review 001 F2, and the user's \"Play in Studio only\"), on the same stub" \
+		"engine: R0118's tests/place/paid-play-status.spec cases, moved onto the library. The game place tells the mode" \
+		"on every path that lets a player play (no status after a failed claim) and what the player holds after every" \
+		"record it writes or hears; a test confirm whose grant or revive write fails releases the countdown at once; a" \
+		"confirm with no screen open leaves every other hold; a Studio play with nothing to pay with plays."
+	cat experiments/stub.part experiments/arrive.part experiments/offer.part experiments/status-cases.part
+} >acceptance/status.spec.luau
 (cd "$(git rev-parse --show-toplevel)" && stylua "$OLDPWD"/acceptance/*.spec.luau) # the repository's stylua.toml

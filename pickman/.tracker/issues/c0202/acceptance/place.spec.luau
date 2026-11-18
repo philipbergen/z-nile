@@ -124,7 +124,7 @@ return t.spec("c0202 Pickman's paid play is the arcade library's", function(it)
 	end)
 
 	it(
-		"architecture.md no longer declares Pay; game-design.md states the arcade's paid play and the arrival",
+		"architecture.md no longer declares Pay; game-design.md states the arcade's paid play, the arrival and the Studio play",
 		function()
 			local arch = fs.readFile(".tracker/architecture.md")
 			local deps = "\n" .. (string.match(arch, "```deps\n(.-)```") or "")
@@ -143,17 +143,24 @@ return t.spec("c0202 Pickman's paid play is the arcade library's", function(it)
 				end
 			end
 			local design = fs.readFile(".tracker/game-design.md")
+			-- the bullet this issue adds, alone: f0145's bullets already name a Studio play
+			local bullet = string.match(design, "\n%- %*%*On the arcade's paid play %(c0202%)%*%*[^\n]*")
+			if bullet == nil then
+				error("game-design.md lacks: **On the arcade's paid play (c0202)**")
+			end
 			for _, phrase in
 				{
-					"**On the arcade's paid play (c0202)**",
 					"`PaidPlay` and `PaidPlayTest`",
 					"the test purchase screen is the library's",
 					"the portal's Pickman card",
 					"plays at once",
+					"sent back to the start place",
+					"a Studio play still plays",
+					"Keep it in pickman",
 				}
 			do
-				if not has(design, phrase) then
-					error(`game-design.md lacks: {phrase}`)
+				if not has(bullet, phrase) then
+					error(`game-design.md's c0202 bullet lacks: {phrase}`)
 				end
 			end
 		end

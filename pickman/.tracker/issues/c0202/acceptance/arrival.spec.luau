@@ -102,6 +102,7 @@ local function world(mode: any?, shared: any?): any
 	w.hold = { update = false, get = false }
 	w.fail = { update = false, get = false, passGet = false, teleport = false }
 	w.writes, w.reads = 0, 0
+	w.onUpdate = nil :: (() -> ())?
 	w.clock = 0
 	w.now = NOW
 	w.prompts = {} :: { { player: any, id: number } }
@@ -188,6 +189,11 @@ local function world(mode: any?, shared: any?): any
 				return {
 					UpdateAsync = function(_: any, key: string, fn: (any) -> any): any
 						w.writes += 1
+						local during = w.onUpdate -- runs once, at the start of the next write (before it is held)
+						if during then
+							w.onUpdate = nil
+							during()
+						end
 						hold("update")
 						if w.fail.update then
 							error("store down", 0)
@@ -266,7 +272,7 @@ local function world(mode: any?, shared: any?): any
 			end,
 			TeleportInitFailed = initFailed,
 		},
-		RunService = { Heartbeat = signal() },
+		RunService = { Heartbeat = signal() } :: any, -- no IsStudio: not Studio (status.spec's cases set one)
 	}
 	local loaded: { [string]: any } = {}
 	local env: { [string]: any } = {}
@@ -379,6 +385,9 @@ local function world(mode: any?, shared: any?): any
 		removing.fire(p)
 	end
 	w.removing = removing
+	w.service = function(name: string): any -- a stub service, which a case may change
+		return assert(services[name], `service {name}`)
+	end
 	w.wallet = function(): any
 		return load("Wallet", WALLET)
 	end
@@ -567,16 +576,22 @@ return t.spec("c0202 Pickman's game place takes the arcade's entitlement on arri
 		t.expect(#paying.w.kicks).toBe(0)
 	end)
 
-	it("an arrival whose claim fails plays, with the offer on, and charges nothing", function()
-		local a = arrive("live", function(w: any)
-			w.fail.update = true
-		end)
-		t.expect(played(a)).toBe(true)
-		t.expect(a.w.record(STORE, 7)).toBe(nil)
-		t.expect(#a.w.teleports).toBe(0)
-		t.expect(a.w.reads).toBe(0) -- nothing is known, so nothing is told: no read to tell it
-		t.expect(#a.w.sentOn("PayStatus", a.p)).toBe(0)
-	end)
+	it(
+		"an arrival whose claim fails plays, with the offer on, charges nothing and tells the mode alone",
+		function()
+			local a = arrive("live", function(w: any)
+				w.fail.update = true
+			end)
+			t.expect(played(a)).toBe(true)
+			t.expect(a.w.record(STORE, 7)).toBe(nil)
+			t.expect(#a.w.teleports).toBe(0)
+			t.expect(a.w.reads).toBe(0) -- nothing is known, and nothing is read to tell it
+			local told = a.w.sentOn("PayStatus", a.p)
+			t.expect(#told).toBe(1) -- the mode, so a live client drops its test wording (R0118 code review 001 F1)
+			t.expect(told[1][1]).toBe("live")
+			t.expect(told[1][2]).toBe(nil)
+		end
+	)
 
 	it("a player who leaves during the claim is neither sent back, teleported nor kicked", function()
 		local a = arrive("live", function(w: any)

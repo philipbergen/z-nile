@@ -1,8 +1,10 @@
+# c0202 re-prep after design review 002, 2026-11-17 (PST): mutants.py on .worktree/proto-c0202-landed at e984e85ad (cut from origin/main 1c840bc5b), 65 mutants, each alone with its row's spec
 M1 arrival :: took the free game on the portal: killed
 M2 arrival :: no pass the run is refused: killed
 M3 arrival :: whose claim fails plays: killed
 M4 arrival :: leaves during the claim: killed
 M5 arrival :: whose claim fails plays: killed
+M52 arrival :: whose claim fails plays: killed
 M6 arrival :: tells the player what they hold: killed
 M7 arrival :: no pass the run is refused: killed
 M8 arrival :: teleport errors: killed
@@ -42,10 +44,24 @@ M41 place :: both places map the library: killed
 M42 place :: pickman keeps no copy: killed
 M43 place :: architecture.md no longer declares Pay: killed
 M44 records :: every record the new build writes: killed
-M45 clients :: do nothing while the library's screen is open: killed
 M46 lobby :: granted while the read on joining is under way: killed
 M47 lobby :: a press after the library's READ_SECONDS: killed
 M48 place :: architecture.md no longer declares Pay: killed
 M49 lobby :: a play's test screen strikes the list price: killed
 M50 offer :: a revive's test screen strikes nothing: killed
 M51 offer :: a revive's test screen strikes nothing: killed
+M53 status :: a closed arrival whose claim fails tells closed: killed
+M54 status :: receipt heard outside the offer tells: killed
+M55 status :: write that finds none held tells none held: killed
+M56 status :: given back after its write tells: killed
+M57 status :: granted confirm whose revive write fails: killed
+M58 status :: granted confirm whose revive write fails: killed
+M64 status :: in Studio an arrival still claims: killed
+M65 status :: whose give-back fails ends the run: killed
+M59 offer :: used once the library's span allows it: killed
+M60 status :: in Studio an arrival with nothing to pay plays: killed
+M61 status :: outside Studio an arrival: killed
+M62 status :: or one that errors: killed
+M63 status :: confirm whose grant write fails releases: killed
+M45 clients :: do nothing while the library's screen is open: killed
+# M21 and M23 survive as equivalents (E2)

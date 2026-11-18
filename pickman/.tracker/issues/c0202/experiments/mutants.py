@@ -2,7 +2,8 @@
 # c0202's mutation check (prep only): applies each mutant to a throwaway clone of the prototype, runs its row's spec,
 # and records whether the named case fails on an assertion (killed), passes (SURVIVED), or the spec does not load
 # (NO RUN). It never writes the tree it is given: it refuses any root that is not a .worktree/proto-* checkout, and
-# refuses to run when a base patch the prototype was built from has moved (design review 001 F5, F10).
+# refuses to run when the library it was built on has moved or the prototype is not on the pinned main (design
+# review 001 F5, F10; re-prep E6).
 # Run: ./zn run --time 1800 -- python3 -I <this file> <prototype root> [mutant ids...]
 import hashlib
 import os
@@ -14,18 +15,19 @@ PROTO = os.path.realpath(sys.argv[1])
 if "/.worktree/proto-" not in PROTO + "/":
     sys.exit(f"refused: {PROTO} is not a .worktree/proto-* checkout")
 
-# the patches the prototype's base was built from (E1), as committed in it; a moved one means a re-prep
+# Every dependency is on main now (re-prep, 2026-11-17): the prototype is cut from origin/main 1c840bc5b, and the
+# library files this issue calls are pinned as they landed (f0201, R0110's review fixes, f0395); a moved one, or a
+# prototype not on that base, means a re-prep (E6).
+BASE = "1c840bc5b06ff65e22c5bbf3989e5f0a5c0556d2"
+if subprocess.run(["git", "-C", PROTO, "merge-base", "--is-ancestor", BASE, "HEAD"]).returncode != 0:
+    sys.exit(f"refused: {PROTO} is not cut from {BASE}")
 BASES = {
-    "pickman/.tracker/issues/done/f0145/experiments/deps.patch": "78e94ea9bee17366ce97afb1ccd7362edbe89a91c12011c1a5da8f885c664cff",
-    "pickman/.tracker/issues/done/f0145/experiments/prototype.patch": "a46e2258db2c32496bc88149387cb129ceb7517ac74d00f71aff870f98dac90b",
-    "pickman/.tracker/issues/done/f0186/experiments/prototype.patch": "f588be80b42dbb88043383be1819b4ca676461c4c3434c204295c25672a3f791",
-    "arcade/.tracker/issues/f0201/experiments/prototype.patch": "f99bd914ff800cfc3403ab4000109951694ebebaa2b6d8381d7b8879d6afce7b",
-    "z-nile/.tracker/issues/active/c0156/experiments/prototype.patch": "ed053dfdd1b177bd0cce96f90f4b61ac5b11392a1b36b63e65e6a854536e2f6c",
-    "pickman/.tracker/issues/done/c0380/experiments/prototype.patch": "78cd528c26754809a3c224b032cb5fc3a08ebec60ad64496a8fbf1a392cb5c80",
-    # f0395 has no prototype yet: these are the three library files after its emulation (experiments/f0395-emulation.patch)
-    "arcade/src/shared/Logic/PaidPlay/init.luau": "fc9d6e00314e28f4a3e1533a6b351b2086b20f0d49a0e7cadd4ecf0056a16007",
-    "arcade/src/shared/Prices.luau": "8da7dc8c0c3f9ea7c7f0c11443045da26338077f4d743f737c512979aac1e4d7",
-    "arcade/src/shared/TestPurchase.luau": "51221e07a65ed1b9f05755bfd20047db4330927937c51a0ae53262ff0bb9c65e",
+    "arcade/src/server/Wallet.luau": "83b7234931061c97206975a2482eab249d6a6b68deb5ed682a7349f6077a1057",
+    "arcade/src/server/Receipts.luau": "4c55adb157a51d19c2705d0436edfbd00115b342550bdedb08fc771393ba1e4c",
+    "arcade/src/server/Catalog.luau": "d3dd1e9855f318153a7d4d090c02b814833d5cdaf60c381c2576b6550e578f81",
+    "arcade/src/shared/Logic/PaidPlay/init.luau": "9fcad5063ea2120b9dbbe2b754bd2b0a53b3722b1af345f1c54b05bed6ae09e7",
+    "arcade/src/shared/Prices.luau": "d9e822c9b4f400e2f9a6ffe8d6cee587aed651bdd22cfdb0f7c4fbff45ea1a98",
+    "arcade/src/shared/TestPurchase.luau": "da3b7dc842895c7d54c9ba1724c448f8b63023da0338a08111db61939416d97b",
 }
 for rel, want in BASES.items():
     got = hashlib.sha256(open(os.path.join(PROTO, rel), "rb").read()).hexdigest()
@@ -45,10 +47,11 @@ LOBBY = "pickman/src/shared/Logic/Lobby/init.luau"
 # id, file, old text, new text, spec, a substring of the case that must fail
 M = [
     ("M1", CONT, 'Continues.TITLE = "pickman"', 'Continues.TITLE = "snake"', "arrival", "took the free game on the portal"),
-    ("M2", CONT, 'if (verdict :: string) == "play" then', "if true then", "arrival", "no pass the run is refused"),
-    ("M3", CONT, 'if (verdict :: string) == "play" then', 'if (verdict :: string) == "play" and start ~= nil then', "arrival", "whose claim fails plays"),
+    ("M2", CONT, 'if (verdict :: string) == "play" or inStudio() then', "if true then", "arrival", "no pass the run is refused"),
+    ("M3", CONT, 'if (verdict :: string) == "play" or inStudio() then', 'if ((verdict :: string) == "play" and start ~= nil) or inStudio() then', "arrival", "whose claim fails plays"),
     ("M4", CONT, "\t\tif player.Parent == nil then\n\t\t\treturn -- left during the claim", "\t\tif false then\n\t\t\treturn -- left during the claim", "arrival", "leaves during the claim"),
-    ("M5", CONT, "\t\t\tif start ~= nil then\n\t\t\t\ttell(player)", "\t\t\tif true then\n\t\t\t\ttell(player)", "arrival", "whose claim fails plays"),
+    ("M5", CONT, "\t\t\t\ttellMode(player) -- the claim failed", "\t\t\t\ttell(player) -- the claim failed", "arrival", "whose claim fails plays"),
+    ("M52", CONT, "\t\t\t\ttellMode(player) -- the claim failed", "\t\t\t\t-- the claim failed", "arrival", "whose claim fails plays"),
     ("M6", CONT, "PaidPlay.status(record, os.time()))", "record)", "arrival", "tells the player what they hold"),
     ("M7", CONT, "\t\ttask.delay(Continues.BACK_SECONDS, kick, player)", "", "arrival", "no pass the run is refused"),
     ("M8", CONT, "\t\tif not ok then\n\t\t\tkick(player)", "\t\tif not ok then\n\t\t\t--", "arrival", "teleport errors"),
@@ -65,7 +68,7 @@ M = [
     ("M19", CONT, '\t\t\tWallet.refund(player, Continues.TITLE, "revive")', "", "offer", "a decline during a revive's write"),
     ("M20", CONT, "\t\t\tif flight then\n\t\t\t\tflight.declined = true\n\t\t\telse", "\t\t\tif false then\n\t\t\telse", "offer", "a decline during a revive's write"),
     ("M21", CONT, "\t\tif flying[player] then\n\t\t\treturn \"busy\"\n\t\tend", "", "offer", "a second ask while a revive's write"),
-    ("M22", CONT, "\t\tif useOne(player) == \"unknown\" then", "\t\tif useOne(player) == \"never\" then", "offer", "used once the library's span allows it"),
+    ("M22", CONT, '\t\telseif result == "unknown" then', '\t\telseif result == "never" then', "offer", "used once the library's span allows it"),
     ("M23", CONT, "local here = player.Parent ~= nil and session(player) == s", "local here = session(player) == s", "offer", "leaves during a revive's write"),
     ("M24", CONT, "and not Session.holding(s, id) -- a screen is open", "-- a screen is open", "offer", "prompts Pickman's revive product"),
     ("M25", PAID, "if now.free or now.plays > 0 then", "if now.free then", "lobby", "a play held goes"),
@@ -91,9 +94,23 @@ M = [
     ("M46", PAID, "\tif bought[player] then\n\t\tbought[player] = nil -- the play just granted goes, whatever a read under way would say\n\t\treturn true\n\tend\n", "", "lobby", "granted while the read on joining is under way"),
     ("M47", PAID, "\ttell(player, record)\n\tlocal now = PaidPlay.status", "\tlocal now = PaidPlay.status", "lobby", "a press after the library's READ_SECONDS"),
     ("M48", "pickman/.tracker/architecture.md", "Paid play is the arcade library's", "Paid play is pickman's", "place", "architecture.md no longer declares Pay"),
-    ("M49", "arcade/src/shared/Logic/PaidPlay/init.luau", "then `<s>{prices.struck}</s> {prices.price} {prices.sale}`", "then `{prices.struck} {prices.price} {prices.sale}`", "lobby", "a play's test screen strikes the list price"),
-    ("M50", "arcade/src/shared/Logic/PaidPlay/init.luau", "else prices.revive or prices.price,", "else `<s>{prices.struck}</s> {prices.price} {prices.sale}`,", "offer", "a revive's test screen strikes nothing"),
-    ("M51", "arcade/src/shared/Logic/PaidPlay/init.luau", "else prices.revive or prices.price,", "else `{prices.struck} {prices.price} {prices.sale}`,", "offer", "a revive's test screen strikes nothing"),
+    ("M49", "arcade/src/shared/Logic/PaidPlay/init.luau", "then `<s>{plain(prices.struck)}</s> {plain(prices.price)} {plain(prices.sale)}`", "then `{plain(prices.struck)} {plain(prices.price)} {plain(prices.sale)}`", "lobby", "a play's test screen strikes the list price"),
+    ("M50", "arcade/src/shared/Logic/PaidPlay/init.luau", "else plain(prices.revive)", "else `<s>{plain(prices.struck)}</s> {plain(prices.price)} {plain(prices.sale)}`", "offer", "a revive's test screen strikes nothing"),
+    ("M51", "arcade/src/shared/Logic/PaidPlay/init.luau", "else plain(prices.revive)", "else `{plain(prices.struck)} {plain(prices.price)} {plain(prices.sale)}`", "offer", "a revive's test screen strikes nothing"),
+    # re-prep (2026-11-17): main's landed behaviour kept through the switch (status.spec)
+    ("M53", CONT, "\t\t\tstatus:FireClient(player, Wallet.mode(Continues.TITLE), nil)", '\t\t\tstatus:FireClient(player, "live", nil)', "status", "a closed arrival whose claim fails tells closed"),
+    ("M54", CONT, "\t\ttell(player)\n\t\tlocal result = useOne(player)", "\t\tlocal result = useOne(player)", "status", "receipt heard outside the offer tells"),
+    ("M55", CONT, '\t\tif result == "empty" then\n\t\t\ttell(player) -- none held, told after the screen opened', '\t\tif false then\n\t\t\ttell(player) -- none held, told after the screen opened', "status", "write that finds none held tells none held"),
+    ("M56", CONT, "\t\t\ttell(player) -- the revive given back, told last\n", "", "status", "given back after its write tells"),
+    ("M57", CONT, '\t\t\tif result == "none" or result == "empty" or result == "unknown" then\n\t\t\t\trelease(player)', "\t\t\tif false then\n\t\t\t\trelease(player)", "status", "granted confirm whose revive write fails"),
+    ("M58", CONT, '\t\t\tif result == "none" or result == "empty" or result == "unknown" then\n\t\t\t\trelease(player)', '\t\t\tif result == "none" or result == "empty" then\n\t\t\t\trelease(player)', "status", "granted confirm whose revive write fails"),
+    ("M64", CONT, "\t\tlocal verdict, start = Wallet.arrive(player, Continues.TITLE)", "\t\tif inStudio() then\n\t\t\tSession.allowOffer(s, tostring(player.UserId))\n\t\t\ttellMode(player)\n\t\t\treturn\n\t\tend\n\t\tlocal verdict, start = Wallet.arrive(player, Continues.TITLE)", "status", "in Studio an arrival still claims"),
+    ("M65", CONT, "\t\tif flight.held and here then\n\t\t\tSession.hold(s, id, false)\n\t\tend\n\t\tif flight.declined then\n\t\t\tSession.decline(s, id)\n\t\tend\n\t\tif used == true then\n\t\t\ttell(player) -- the revive given back, told last\n", "\t\tif used == true then\n\t\t\ttell(player)\n\t\tend\n\t\tif flight.held and here then\n\t\t\tSession.hold(s, id, false)\n\t\tend\n\t\tif flight.declined then\n\t\t\tSession.decline(s, id)\n\t\tend\n\t\tif used == true then\n", "status", "whose give-back fails ends the run"),
+    ("M59", CONT, 'if Wallet.mode(Continues.TITLE) == "test" then\n\t\t\tif result', "if true then\n\t\t\tif result", "offer", "used once the library's span allows it"),
+    ("M60", CONT, 'if (verdict :: string) == "play" or inStudio() then', 'if (verdict :: string) == "play" then', "status", "in Studio an arrival with nothing to pay plays"),
+    ("M61", CONT, "\treturn ok and studio == true", "\treturn ok", "status", "outside Studio an arrival"),
+    ("M62", CONT, "\treturn ok and studio == true", "\treturn studio ~= false", "status", "or one that errors"),
+    ("M63", CONT, "\t\t\t\telse\n\t\t\t\t\trelease(player)\n\t\t\t\tend", "\t\t\t\tend", "status", "confirm whose grant write fails releases"),
     ("M45", OFFER, "\t\tif up and not TestPurchase.isOpen() then\n\t\t\tsend(\"decline\")", "\t\tif up then\n\t\t\tsend(\"decline\")", "clients", "do nothing while the library's screen is open"),
 ]
 
