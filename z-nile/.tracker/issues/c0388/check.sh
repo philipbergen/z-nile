@@ -18,8 +18,10 @@ check "AC2: the folders c0042's cli spec counts come from every registered root,
 # reads inputs.tsv today (lib/context.luau:52), so this pins the convention, not a cache
 check "AC3: the spec's input and watch lists name what it now reads (the registry, the closing and store modules, the helper)" bash -c '
 	grep -qxF -e "tests/acceptance/c0042/cli.spec.luau	z-nile/projects.toml" tests/inputs.tsv &&
-	for p in z-nile/engine/closing.luau z-nile/engine/store.luau z-nile/tests/acceptance/c0042/ondisk.luau z-nile/projects.toml; do
-		grep -qxF -e "$p" tests/acceptance/c0042/watch.txt || { echo "watch.txt lacks $p"; exit 1; }
+	# home-relative words, the home added in the pattern: a finished check.sh must name no path that c0120/finished
+	# reads as stale from the home (R0133 design review 001 F1)
+	for p in engine/closing.luau engine/store.luau tests/acceptance/c0042/ondisk.luau projects.toml; do
+		grep -qxF -e "z-nile/$p" tests/acceptance/c0042/watch.txt || { echo "watch.txt lacks the line for $p"; exit 1; }
 	done'
 
 finish
