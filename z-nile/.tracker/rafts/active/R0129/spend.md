@@ -4,8 +4,8 @@
 |---|---|---|---|---|---|---|
 | f0399 | feature |  | 5430 | 160 | 0.0 | 81071 |
 
-**Total:** +5430 / -160 lines, 0.0 agent-minutes, 81071 tokens over 364 records
-<!-- totals: added=5430 removed=160 minutes=0.0 records=364 tokens=81071 -->
+**Total:** +5430 / -160 lines, 0.0 agent-minutes, 81071 tokens over 379 records
+<!-- totals: added=5430 removed=160 minutes=0.0 records=379 tokens=81071 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
