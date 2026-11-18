@@ -1,0 +1,112 @@
+diff --git a/z-nile/tests/acceptance/c0042/cli.spec.luau b/z-nile/tests/acceptance/c0042/cli.spec.luau
+index bc667af88..f1436d5a0 100644
+--- a/z-nile/tests/acceptance/c0042/cli.spec.luau
++++ b/z-nile/tests/acceptance/c0042/cli.spec.luau
+@@ -6,6 +6,7 @@ local board = require("@scripts/tracker/board")
+ -- c0120 override: the spec runs from its project's home after the move
+ local engine = require("@tests/lib/engine")
+ local fs = require("@lune/fs")
++local ondisk = require("./ondisk")
+ local process = require("@lune/process")
+ local t = require("@tests/lib/t")
+ 
+@@ -61,44 +62,12 @@ return t.spec("c0400 tracker.sh board", function(it)
+ 		for _ in m.issues do
+ 			issues += 1
+ 		end
+-		local onDisk = 0
+-		-- c0120 override: pickman's files live in pickman/ (its home)
+-		-- c0114 override: the board reads every project root (c0120: pickman's root is pickman/.tracker)
+-		for _, base in
+-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-			{
+-				"pickman/.tracker/rafts",
+-				"pickman/.tracker/rafts/active",
+-				"pickman/.tracker/rafts/done",
+-				"z-nile/.tracker/rafts",
+-				"z-nile/.tracker/rafts/active",
+-				"z-nile/.tracker/rafts/done",
+-			}
+-		do
+-			for _, name in fs.readDir(`{TOP}/{base}`) do -- c0120 override: read from the checkout's top
+-				if string.match(name, "^R%d%d%d%d$") then
+-					onDisk += 1
+-				end
+-			end
+-		end
+-		t.expect(rafts).toBe(onDisk)
++		-- c0388 override: the folders come from every registered root (ondisk.luau reads the registry), not a hand list
++		local found = ondisk.items(TOP)
++		t.expect(rafts).toBe(#found.rafts)
+ 		-- every issue directory has a place on the page
+-		for _, base in
+-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
+-			{
+-				"pickman/.tracker/issues",
+-				"pickman/.tracker/issues/active",
+-				"pickman/.tracker/issues/done",
+-				"z-nile/.tracker/issues",
+-				"z-nile/.tracker/issues/active",
+-				"z-nile/.tracker/issues/done",
+-			}
+-		do
+-			for _, name in fs.readDir(`{TOP}/{base}`) do -- c0120 override: read from the checkout's top
+-				if string.match(name, "^[fdc]%d%d%d%d$") then
+-					t.expect(m.home[name] ~= nil).toBe(true)
+-				end
+-			end
++		for _, id in found.issues do
++			t.expect(m.home[id] ~= nil).toBe(true)
+ 		end
+ 		for id in m.home do
+ 			t.expect(string.match(id, "^[fdcR]%d%d%d%d$") ~= nil).toBe(true)
+diff --git a/z-nile/tests/acceptance/c0042/ondisk.luau b/z-nile/tests/acceptance/c0042/ondisk.luau
+new file mode 100644
+index 000000000..77fbb3c33
+--- /dev/null
++++ b/z-nile/tests/acceptance/c0042/ondisk.luau
+@@ -0,0 +1,44 @@
++--!strict
++-- c0388: the raft and issue folders a checkout holds, for c0042's cli spec, which compares them with the board page.
++-- The roots come from the registry (`z-nile/projects.toml` under `top`), never from a list written here: the spec's
++-- hand list of two roots went stale when arcade's root got its first raft (R0110). Each registered root's backlog,
++-- `active/` and `done/` are read; a folder a root does not have yet is skipped. A retired root holds no items, and
++-- `rafts/retired/` is history the page does not show: neither is read.
++local fs = require("@lune/fs")
++local projects = require("@znile/engine/projects")
++
++local ondisk = {}
++
++export type Items = { rafts: { string }, issues: { string } }
++
++local STATES = { "", "/active", "/done" }
++
++-- the ids of the folders named like a raft (`R0010`) and like an issue (`f0010`, `d0010`, `c0010`); the order is
++-- not part of the contract
++function ondisk.items(top: string): Items
++	local out: Items = { rafts = {}, issues = {} }
++	local reg = projects.load(top, true)
++	for _, root in projects.roots(reg) do
++		for _, state in STATES do
++			local rafts = `{top}/{root}/rafts{state}`
++			if fs.isDir(rafts) then
++				for _, name in fs.readDir(rafts) do
++					if string.match(name, "^R%d%d%d%d$") then
++						table.insert(out.rafts, name)
++					end
++				end
++			end
++			local issues = `{top}/{root}/issues{state}`
++			if fs.isDir(issues) then
++				for _, name in fs.readDir(issues) do
++					if string.match(name, "^[fdc]%d%d%d%d$") then
++						table.insert(out.issues, name)
++					end
++				end
++			end
++		end
++	end
++	return out
++end
++
++return ondisk
