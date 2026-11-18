@@ -1,0 +1,2 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-18 06:19	d0410: finish captures no deleted path (spec first, then the filter in watchcmd.capture)	152	1	build							tokens,wall,cpu,ai

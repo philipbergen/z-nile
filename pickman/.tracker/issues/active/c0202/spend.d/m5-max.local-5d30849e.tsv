@@ -1,0 +1,126 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-18 06:06	1 spec	0	0	test			1.416	0.880		1.416	tokens,ai
+2026-11-18 06:06	1 spec	0	0	test			1.222	0.900		1.222	tokens,ai
+2026-11-18 06:06	1 spec	0	0	test			1.423	0.930		1.423	tokens,ai
+2026-11-18 06:06	1 spec	0	0	test			1.214	0.910		1.214	tokens,ai
+2026-11-18 06:06	1 spec	0	0	test			1.428	0.890		1.428	tokens,ai
+2026-11-18 06:06	1 spec	0	0	test			1.417	1.000		1.417	tokens,ai
+2026-11-18 06:06	15 specs	0	0	test			1.627	2.580		1.627	tokens,ai
+2026-11-18 06:06	1 spec	0	0	test			1.628	1.150		1.628	tokens,ai
+2026-11-18 06:06	1 spec	0	0	test			1.218	0.920		1.218	tokens,ai
+2026-11-18 06:06	1 spec	0	0	test			1.221	0.860		1.221	tokens,ai
+2026-11-18 06:06	1 spec	0	0	test			1.214	0.850		1.214	tokens,ai
+2026-11-18 06:06	1 spec	0	0	test			1.222	0.920		1.222	tokens,ai
+2026-11-18 06:06	1 spec	0	0	test			1.427	0.980		1.427	tokens,ai
+2026-11-18 06:06	1 spec	0	0	test			1.224	0.920		1.224	tokens,ai
+2026-11-18 06:06	1 spec	0	0	test			1.424	0.950		1.424	tokens,ai
+2026-11-18 06:06	15 specs	0	0	test			1.620	2.640		1.620	tokens,ai
+2026-11-18 06:06	1 spec	0	0	test			1.619	1.140		1.619	tokens,ai
+2026-11-18 06:07	1 spec	0	0	test			1.219	0.910		1.219	tokens,ai
+2026-11-18 06:07	1 spec	0	0	test			1.632	1.130		1.632	tokens,ai
+2026-11-18 06:08	suite	0	0	test			1.220	0.960		1.220	tokens,ai
+2026-11-18 06:08	15 specs	0	0	test			1.627	2.550		1.627	tokens,ai
+2026-11-18 06:08	c0202: tests first: the overrides of f0145's, f0186's and c0380's promoted specs, paid-play-status removed (its cases are AC9's status.spec)	99	2244	build							tokens,wall,cpu,ai
+2026-11-18 06:08	1 spec	0	0	test			1.419	0.930		1.419	tokens,ai
+2026-11-18 06:08	1 spec	0	0	test			1.217	0.920		1.217	tokens,ai
+2026-11-18 06:08	1 spec	0	0	test			1.222	0.940		1.222	tokens,ai
+2026-11-18 06:08	1 spec	0	0	test			1.213	0.920		1.213	tokens,ai
+2026-11-18 06:08	1 spec	0	0	test			1.220	0.900		1.220	tokens,ai
+2026-11-18 06:08	1 spec	0	0	test			1.218	0.870		1.218	tokens,ai
+2026-11-18 06:08	15 specs	0	0	test			1.410	2.560		1.410	tokens,ai
+2026-11-18 06:08	1 spec	0	0	test			1.624	1.100		1.624	tokens,ai
+2026-11-18 06:08	1 spec	0	0	test			1.423	1.050		1.423	tokens,ai
+2026-11-18 06:08	c0202: switch pickman to the arcade library's paid play (Continues, Paid, OfferView, PayView, Lobby on Wallet and Receipts; pickman's copy deleted; documents)	222	760	build							tokens,wall,cpu,ai
+2026-11-18 06:09	affected	0	0	test			23.102	66.900		23.102	tokens,ai
+2026-11-18 06:09	affected	0	0	test			20.471	65.700		20.471	tokens,ai
+2026-11-18 06:09	static	0	0	test			3.861	18.480		3.861	tokens,ai
+2026-11-18 06:10	1 spec	0	0	test			1.422	0.930		1.422	tokens,ai
+2026-11-18 06:10	1 spec	0	0	test			1.220	0.930		1.220	tokens,ai
+2026-11-18 06:11	1 spec	0	0	test			1.220	0.940		1.220	tokens,ai
+2026-11-18 06:11	1 spec	0	0	test			1.425	0.930		1.425	tokens,ai
+2026-11-18 06:11	1 spec	0	0	test			1.221	0.920		1.221	tokens,ai
+2026-11-18 06:11	1 spec	0	0	test			1.427	0.950		1.427	tokens,ai
+2026-11-18 06:11	15 specs	0	0	test			1.422	2.500		1.422	tokens,ai
+2026-11-18 06:11	1 spec	0	0	test			1.621	1.180		1.621	tokens,ai
+2026-11-18 06:11	1 spec	0	0	test			1.219	0.910		1.219	tokens,ai
+2026-11-18 06:11	255 specs	0	0	test			6.485	39.070		6.485	tokens,ai
+2026-11-18 06:12	1 spec	0	0	test			1.017	0.660		1.017	tokens,ai
+2026-11-18 06:12	1 spec	0	0	test			1.013	0.680		1.013	tokens,ai
+2026-11-18 06:12	1 spec	0	0	test			1.011	0.690		1.011	tokens,ai
+2026-11-18 06:12	1 spec	0	0	test			1.019	0.700		1.019	tokens,ai
+2026-11-18 06:12	1 spec	0	0	test			1.013	0.660		1.013	tokens,ai
+2026-11-18 06:12	1 spec	0	0	test			1.015	0.630		1.015	tokens,ai
+2026-11-18 06:12	15 specs	0	0	test			1.217	2.060		1.217	tokens,ai
+2026-11-18 06:12	1 spec	0	0	test			1.011	0.770		1.011	tokens,ai
+2026-11-18 06:12	1 spec	0	0	test			1.213	0.650		1.213	tokens,ai
+2026-11-18 06:12	255 specs	0	0	test			5.291	34.040		5.291	tokens,ai
+2026-11-18 06:16	1 spec	0	0	test			11.165	9.950		11.165	tokens,ai
+2026-11-18 06:16	1 spec	0	0	test			10.580	9.470		10.580	tokens,ai
+2026-11-18 06:17	2 specs	0	0	test			74.103	79.200		74.103	tokens,ai
+2026-11-18 06:19	1 spec	0	0	test			43.983	31.720		43.983	tokens,ai
+2026-11-18 06:21	affected	0	0	test			135.720	273.920		135.720	tokens,ai
+2026-11-18 06:24	affected	0	0	test			143.621	284.040		143.621	tokens,ai
+2026-11-18 06:24	1 spec	0	0	test			2.639	1.710		2.639	tokens,ai
+2026-11-18 06:24	1 spec	0	0	test			2.643	1.710		2.643	tokens,ai
+2026-11-18 06:24	1 spec	0	0	test			2.849	1.620		2.849	tokens,ai
+2026-11-18 06:24	1 spec	0	0	test			2.639	1.720		2.639	tokens,ai
+2026-11-18 06:24	1 spec	0	0	test			2.639	1.620		2.639	tokens,ai
+2026-11-18 06:25	1 spec	0	0	test			2.845	1.670		2.845	tokens,ai
+2026-11-18 06:25	15 specs	0	0	test			2.854	3.110		2.854	tokens,ai
+2026-11-18 06:25	1 spec	0	0	test			3.260	1.840		3.260	tokens,ai
+2026-11-18 06:25	1 spec	0	0	test			2.641	1.540		2.641	tokens,ai
+2026-11-18 06:25	255 specs	0	0	test			13.988	40.510		13.988	tokens,ai
+2026-11-18 06:27	12 specs	0	0	test			104.014	176.920		104.014	tokens,ai
+2026-11-18 06:27	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 06:28	1 spec	0	0	test			3.037	1.400		3.037	tokens,ai
+2026-11-18 06:28	1 spec	0	0	test			2.638	1.450		2.638	tokens,ai
+2026-11-18 06:28	1 spec	0	0	test			2.849	1.400		2.849	tokens,ai
+2026-11-18 06:28	1 spec	0	0	test			2.842	1.280		2.842	tokens,ai
+2026-11-18 06:28	1 spec	0	0	test			2.843	1.280		2.843	tokens,ai
+2026-11-18 06:28	1 spec	0	0	test			2.637	1.260		2.637	tokens,ai
+2026-11-18 06:28	15 specs	0	0	test			3.670	3.050		3.670	tokens,ai
+2026-11-18 06:28	1 spec	0	0	test			4.260	1.790		4.260	tokens,ai
+2026-11-18 06:28	1 spec	0	0	test			2.435	1.340		2.435	tokens,ai
+2026-11-18 06:32	affected	0	0	test			156.925	296.340		156.925	tokens,ai
+2026-11-18 06:33	1 spec	0	0	test			62.058	48.380		62.058	tokens,ai
+2026-11-18 06:33	1 spec	0	0	test			3.079	1.500		3.079	tokens,ai
+2026-11-18 06:33	1 spec	0	0	test			3.100	1.500		3.100	tokens,ai
+2026-11-18 06:33	1 spec	0	0	test			2.870	1.510		2.870	tokens,ai
+2026-11-18 06:33	1 spec	0	0	test			2.663	1.620		2.663	tokens,ai
+2026-11-18 06:33	1 spec	0	0	test			2.465	1.500		2.465	tokens,ai
+2026-11-18 06:33	1 spec	0	0	test			2.656	1.480		2.656	tokens,ai
+2026-11-18 06:33	15 specs	0	0	test			2.878	2.840		2.878	tokens,ai
+2026-11-18 06:33	1 spec	0	0	test			3.492	1.740		3.492	tokens,ai
+2026-11-18 06:34	1 spec	0	0	test			2.682	1.380		2.682	tokens,ai
+2026-11-18 06:34	1 spec	0	0	test			2.478	1.260		2.478	tokens,ai
+2026-11-18 06:37	R0125: review-001	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-18 06:38	1 spec	0	0	test			1.636	1.220		1.636	tokens,ai
+2026-11-18 06:39	1 spec	0	0	test			2.037	1.230		2.037	tokens,ai
+2026-11-18 06:39	1 spec	0	0	test			1.841	1.280		1.841	tokens,ai
+2026-11-18 06:39	1 spec	0	0	test			1.833	1.250		1.833	tokens,ai
+2026-11-18 06:39	1 spec	0	0	test			1.851	1.450		1.851	tokens,ai
+2026-11-18 06:39	1 spec	0	0	test			2.055	1.450		2.055	tokens,ai
+2026-11-18 06:39	1 spec	0	0	test			2.056	1.490		2.056	tokens,ai
+2026-11-18 06:39	1 spec	0	0	test			1.848	1.340		1.848	tokens,ai
+2026-11-18 06:39	1 spec	0	0	test			1.845	1.380		1.845	tokens,ai
+2026-11-18 06:39	1 spec	0	0	test			1.634	1.200		1.634	tokens,ai
+2026-11-18 06:40	1 spec	0	0	test			1.644	1.160		1.644	tokens,ai
+2026-11-18 06:40	15 specs	0	0	test			2.247	3.080		2.247	tokens,ai
+2026-11-18 06:40	1 spec	0	0	test			2.271	1.820		2.271	tokens,ai
+2026-11-18 06:40	1 spec	0	0	test			2.062	1.690		2.062	tokens,ai
+2026-11-18 06:40	1 spec	0	0	test			2.071	1.550		2.071	tokens,ai
+2026-11-18 06:41	R0125: review-001 harvest and lessons	39	0	code-review							tokens,wall,cpu,ai
+2026-11-18 06:42	R0125: refute-001	0	0	code-review							tokens,wall,cpu,ai
+2026-11-18 06:43	affected	0	0	test			91.986	244.570		91.986	tokens,ai
+2026-11-18 06:44	1 spec	0	0	test			2.501	1.700		2.501	tokens,ai
+2026-11-18 06:44	1 spec	0	0	test			3.102	1.770		3.102	tokens,ai
+2026-11-18 06:44	1 spec	0	0	test			2.681	1.750		2.681	tokens,ai
+2026-11-18 06:44	1 spec	0	0	test			3.120	1.880		3.120	tokens,ai
+2026-11-18 06:44	1 spec	0	0	test			2.473	1.140		2.473	tokens,ai
+2026-11-18 06:44	1 spec	0	0	test			2.866	1.110		2.866	tokens,ai
+2026-11-18 06:44	15 specs	0	0	test			3.278	2.990		3.278	tokens,ai
+2026-11-18 06:44	1 spec	0	0	test			3.056	1.730		3.056	tokens,ai
+2026-11-18 06:44	1 spec	0	0	test			2.462	1.350		2.462	tokens,ai
+2026-11-18 06:45	256 specs	0	0	test			11.049	41.320		11.049	tokens,ai
+2026-11-18 06:45	12 specs	0	0	test			46.529	97.070		46.529	tokens,ai
+2026-11-18 06:45	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai

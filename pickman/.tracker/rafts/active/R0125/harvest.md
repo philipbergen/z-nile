@@ -1,0 +1,6 @@
+- review-001 F1 (erred z-design, upstream zz-review): z-design/spec-design-correspondence
+- note review-001 F1 the recheck after the write covers every answer of the write (erred zz-arch): zz-arch/spends-recheck-after-the-write
+- review-001 F2 (erred zz-test): zz-test/fixture-files-have-their-own-text
+- note ./zn finish c0202 failed twice: finish's watch capture wrote watch files beside deleted specs and listed deleted sources, fixed as d0410 (erred zz-arch): zz-arch/captured-paths-still-exist
+- note c0202's prototype never ran ./zn finish, so the finish defect on deletions surfaced only at execution (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- note restack read the worker commit "c0202: verification log" at the unfinished layer's tip as the finish commit and stopped on a conflict (erred zz-execute): zz-execute/worker-commits-do-not-look-finished

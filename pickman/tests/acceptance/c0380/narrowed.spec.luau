@@ -55,12 +55,14 @@ local PINS: { { path: string, sha: string, cuts: number } } = {
 	},
 	{
 		path = "tests/acceptance/f0145/views.spec.luau",
-		sha = "c3dd409a1f2e42b3e235287ede1559ad652c9aff7059bc3da679ee5e0bda1a37",
+		-- c0202: every Lobby.payLine call passes the arcade library's Prices
+		sha = "7783e4a23124e5524dfc66d5a44c3367dec3c440a4a79f0eb28954a7078dc99c",
 		cuts = 0,
 	},
 	{
 		path = "tests/acceptance/f0145/place.spec.luau",
-		sha = "f66efcf08fb129b3c2a5cff0ffde724909f5994bc336c2943276dc6b70955ff9",
+		-- c0202: architecture.md's Pay row and Lobby -> Pay are no longer pinned (paid play is the library's)
+		sha = "44eb0b2df25b2bff04208d154a42255ba1c51a8bb0b42f5912afa4a594d6673c",
 		cuts = 0,
 	},
 	-- c0128's whole-file pin of f0026's adapters.spec, whose digest moved with the narrowing

@@ -1,0 +1,2235 @@
+pickman/.tracker/issues/active/c0202/acceptance/arrival.spec.luau
+	a game bought on the portal's Pickman card plays at once: its receipt is the held play, used once
+	a player sent back whose teleport errors, has no start place, or fails to start is kicked
+	a player who leaves during the claim is neither sent back, teleported nor kicked
+	a player who took the free game on the portal plays at once: the arrival claims it in Pickman's record
+	an arrival whose claim fails plays, with the offer on, charges nothing and tells the mode alone
+	in test mode the arrival claims in Pickman's test store; a live record is untouched
+	the arrival tells the player what they hold on PayStatus, in the library's status
+	the game place installs the library's receipts: any title's receipt is granted into its own record
+	the portal's pass lets a player with nothing to pay with play that one game, once
+	with nothing to pay with and no pass the run is refused and the player sent back to the start place
+pickman/.tracker/issues/active/c0202/acceptance/clients.spec.luau
+	CONTINUE and END GAME send ask and decline, and do nothing while the library's screen is open
+	OfferView boots the library's test screen, once
+	PayView draws the line from the library's status and Prices, as rich text, and boots the library's screen
+	the lobby's line from the library's status says what it said before
+	the offer's keys ask and decline on the press during the offer, and pass on outside it
+	the offer's price line reads the revives held from the library's status
+	the price of a play is the library's Prices as rich text, and Lobby keeps no price table
+pickman/.tracker/issues/active/c0202/acceptance/lobby.spec.luau
+	a closed server sells nothing and says so; a free start still goes
+	a free start due goes at once and the lobby charges nothing; it says so on PayStatus
+	a play bought in the lobby starts at once: a receipt live, a confirm on the test screen
+	a play held goes; with none, live prompts Pickman's play product and test opens the library's screen
+	a play receipt granted while the read on joining is under way starts the game once
+	a play's test screen strikes the list price (f0395)
+	a player joining is told what they hold
+	a press after the library's READ_SECONDS reads the record again and tells what it says now
+	a press while the player's read is under way is dropped; the next answers from that read: one read
+	a read that answers down lets the player go and leaves the library's pass, which the arrival takes
+	presses while the test screen is open open no second screen and start nothing
+	the lobby installs the library's receipts once; a revive bought for later is kept, nothing starts
+pickman/.tracker/issues/active/c0202/acceptance/offer.spec.luau
+	Roblox's screen closed without buying lets the countdown run; closed bought, it waits for the receipt
+	a closed server sells no revive and holds nothing; a revive held is still used
+	a decline during a revive's write gives the revive back and ends the run at the next step
+	a play bought during the offer is held for a later game and revives nothing
+	a player who leaves during a revive's write keeps the revive and the run ends
+	a revive bought just after a use that found none is used once the library's span allows it
+	a revive granted after its offer ended is held for the next one
+	a revive held is used at once: three new lives, and the record holds one less
+	a revive's test screen strikes nothing and shows no list price: its price line is not a play's (f0395)
+	a second ask while a revive's write is under way is dropped: one write, one continue
+	with none held, live mode holds the countdown and prompts Pickman's revive product; a receipt continues
+	with none held, test mode opens the library's test screen for Pickman's revive; BUY continues, CANCEL releases
+pickman/.tracker/issues/active/c0202/acceptance/place.spec.luau
+	architecture.md no longer declares Pay; game-design.md states the arcade's paid play, the arrival and the Studio play
+	both clients boot the library's test screen
+	both places map the library: its Logic and test screen shared, its Wallet and Receipts server-only
+	pickman keeps no copy: its Pay, Purchases and TestPurchase are gone and nothing names them
+	the servers wire the library's Wallet and Receipts and start Receipts; Pickman is the title pickman
+pickman/.tracker/issues/active/c0202/acceptance/records.spec.luau
+	a free start f0145's build recorded keeps its hour on the new build
+	a receipt f0145's build granted is not granted again when Roblox retries it on the new build
+	a record f0145's build wrote is the library's: its held play starts a run and its continue revives it
+	every record the new build writes is f0145's four fields, so a server still on f0145 reads it
+	test credits f0145's build granted are used in test mode, and never in live mode
+pickman/.tracker/issues/active/c0202/acceptance/status.spec.luau
+	a closed arrival whose claim fails tells closed
+	a confirm with no screen open leaves a bought revive's receipt awaited
+	a confirm with no screen open leaves a revive's write holding the countdown
+	a decline during a revive's write whose give-back fails ends the run while the tell's read is under way
+	a live arrival whose claim fails still tells the mode, with no status, before any offer
+	a revive given back after its write tells the revive held
+	a revive receipt heard outside the offer tells the revive held
+	a revive's write that finds none held tells none held
+	in Studio an arrival still claims a free game due or a held play, takes its pass, and is told
+	in Studio an arrival with nothing to pay plays with the offer on and is not sent back
+	outside Studio an arrival with nothing to pay with is still sent back (G10)
+	test: a confirm heard during a revive's write leaves that flight's hold
+	test: a confirm whose grant write fails releases the countdown; a later ask opens the screen
+	test: a granted confirm whose revive write fails releases the hold at once; an ask uses it
+	with no IsStudio, or one that errors, the arrival is sent back as outside Studio
+pickman/tests/acceptance/c0002/affected-place.spec.luau
+	a default.project.json change selects place specs
+	a src change selects place specs but not unrelated unit specs
+	an unrelated change does not select place specs
+	exposes the place library path
+	selects by dependency on the place library, not by directory
+pickman/tests/acceptance/c0002/place-rules.spec.luau
+	ReplicatedStorage.Shared contains no Script or LocalScript
+	every script in the place starts with --!strict
+	every string require in src resolves to a ModuleScript in the DataModel
+	lists scripts only from the three script roots, including both Main scripts
+pickman/tests/acceptance/c0002/resolve-require.spec.luau
+	../ climbs one level per segment
+	./ resolves siblings (children of the script's Parent)
+	@self resolves the script's own children
+	a missing segment resolves to nil
+	a target that is not a ModuleScript resolves to nil
+	aliases are not valid in Roblox source and resolve to nil
+	extracts string-literal require specs from source
+pickman/tests/acceptance/c0003/execute.spec.luau
+	a cancelled task is not ok
+	a completed task with no results is still ok, with an empty list
+	a created task without a path is an error
+	a failed task is reported with its message, not as success
+	an HTTP failure creating or polling is an error with the status, never a result
+	creates a task on the published version with the script as JSON, then polls it
+	gives up after the timeout, not ok, saying what state it was in
+	the API key never appears in an error
+	waits while the task is queued or processing, pausing between polls
+pickman/tests/acceptance/c0003/pipeline.spec.luau
+	SETUP.md names the key scope the runtime tests need, and how to run them
+	the testing skill lists the runtime tier and how to run it
+pickman/tests/acceptance/c0003/runner-e2e.spec.luau
+	all scripts passing: exit 0 and a report
+	one script that doesn't pass fails the command, names it, and the others still run
+	the version is part of the request: a different one is not found
+	with no files it runs everything under tests/runtime
+pickman/tests/acceptance/c0003/runner.spec.luau
+	a badly configured id fails before anything is sent, and the key is not printed
+	needs a version number: usage and exit 2 without one, or with one that isn't a whole number >= 1
+	not configured: says so with a warning and succeeds
+pickman/tests/acceptance/c0003/scripts.spec.luau
+	every script is strict, requires nothing, and ends by returning PASS
+	the structure check asserts what the place must contain
+	there is at least the structure check
+pickman/tests/acceptance/c0003/suite.spec.luau
+	an empty list passes nothing and fails nothing
+	anything else is a failure that names the script: other values, no value, errors, cancellations
+	one failure does not stop the others, and the counts add up
+	passes a script only when it returns PASS
+pickman/tests/acceptance/c0010/bench.spec.luau
+	64 worlds for 60 seconds at 30 Hz stays within the harness budget
+	steps every world once per tick, interleaved, seeded from seed upward
+pickman/tests/acceptance/c0010/determinism.spec.luau
+	assertDeterministic also compares events
+	assertDeterministic compares the full length of both runs
+	assertDeterministic names the first tick whose state diverged
+	assertDeterministic passes a seeded model and returns its trace
+	different seeds produce different traces
+	each run receives fresh copies of the scripted intents
+	two runs with the same seed produce identical traces
+pickman/tests/acceptance/c0010/expect.spec.luau
+	a failed expectation names the tick, the label, the field and both values
+	a failed table-valued field shows both values as compact JSON
+	a function expectation gets a copy: mutating it leaves the trace intact
+	a function expectation receives the state at its tick
+	a partial table expectation ignores fields it does not name
+	a table-valued field must match completely: partial matching is top-level only
+	an error inside a function expectation is a failure at its tick
+	an error inside step is reported with the step's tick
+	an expectation after an early stop fails as never reached
+	expectations at the stop tick are checked before the run stops
+	record = false still checks expectations, and its replay has no states
+	stopWhen ends the run early and reports it
+	stopWhen receives the new time and that step's events
+	table-valued fields are compared deeply, not by reference
+	the run stops at the first failing tick
+	time 0 expectations check the initial state
+pickman/tests/acceptance/c0010/misuse.spec.luau
+	a script item must be exactly one of intent or expect
+	an expectation at the last tick is allowed
+	an expectation beyond the last tick could never be checked
+	an intent at or beyond the last tick would never be delivered
+	events must carry a string kind
+	script times must be integers from 0
+	seed must be an integer
+	ticks must be a positive integer
+pickman/tests/acceptance/c0010/replay.spec.luau
+	a failure at time 0 can be replayed: the trace holds only the initial state
+	a failure writes a replay file under .cache/sim and names it in the message
+	an observation that is not JSON-safe still reports the real failure
+	different seeds write different replay files
+	replaying a step error re-runs the failing step with its intents and re-raises
+	sim.replay re-runs the model rather than reading the file back
+	sim.replay refuses a replay recorded for another model
+	sim.replay reproduces the recorded states and events
+pickman/tests/acceptance/c0010/script.spec.luau
+	converts between seconds and ticks at the model's tick rate
+	delivers each intent to the step of its tick, in script order
+	lists consecutive seeds
+	record = false keeps only the final state
+	records snapshots, not live references
+	sim.state rejects times that were not recorded
+	stamps events with the time they became visible
+	time t is the state after t steps; state 0 is the initial state
+pickman/tests/acceptance/c0015/config.spec.luau
+	a base override is accepted only for a loopback address, so the key can't be sent elsewhere
+	is nil when any of the three is missing or empty
+	reads the key and both ids
+	refuses ids that are not plain digits, so nothing odd reaches a URL
+	the error does not repeat the key
+pickman/tests/acceptance/c0015/deploy-cli.spec.luau
+	a missing id alone is also 'not configured'
+	an id that is not digits fails, and says which
+	not configured: says so with a warning and succeeds, without building or sending
+	when the build fails it fails, reports it, and never reaches the API
+pickman/tests/acceptance/c0015/deploy-e2e.spec.luau
+	a 200 without a version fails and writes nothing
+	a base that is not loopback is refused before anything is built or sent
+	a refusal fails the command, shows the status and body, and reports no version
+	builds the place and publishes it with the right request, then reports the version
+	without GITHUB_OUTPUT it still prints the version and writes no file
+pickman/tests/acceptance/c0015/docs.spec.luau
+	documents the tools-only setup mode and how to publish by hand
+	names the secret, the two variables and the key's publish scope
+	says what triggers a publish, that a missing setting skips, and that forks get no secret
+pickman/tests/acceptance/c0015/publish.spec.luau
+	a 200 without a version number is a failure, not a version
+	any other failure is final: no retry, and the status and body are reported
+	gives up after exactly 5 attempts of busy
+	posts the place to the versions endpoint, as published, with the key in x-api-key
+	retries 'Roblox busy' (HTTP 409) with a pause, and succeeds when it clears
+	the API key is never in an error message
+	the default base is Roblox's API host
+	the pause between retries defaults to 60 seconds
+	the request body for the JSON endpoints is real JSON (sanity for the serde the library uses)
+pickman/tests/acceptance/c0015/tools.spec.luau
+	has a tools-only mode that exits before the gate
+	installs the tools before it can stop
+	refuses an argument it doesn't know instead of silently running the whole gate
+	still runs the gate when called without the flag, after the tools and type definitions
+pickman/tests/acceptance/c0015/workflow.spec.luau
+	can't hold the shared lock for hours: the job has a timeout of at most 30 minutes
+	comments the published version after the deploy, in place
+	installs the tools without a Roblox secret, before it deploys
+	keeps the workflow read-only and gives write on pull requests only to the deploy job
+	names the secret only in the env of the deploy step
+	never lets a `${{ }}` expression or untrusted PR text into a command line
+	the first four steps have exactly the keys designed, and the deploy runs from pickman/
+	the workflow lists pushes to main, pull requests and manual dispatch, and nothing runs on pull_request_target
+pickman/tests/acceptance/c0041/graph-build.spec.luau
+	build records @game edges and reports unresolved @game requires
+	resolve and build without roots use graph.gameRoots(), looked up at call time
+	resolve delegates @game specs to the given roots
+	resolve still handles relative specs and .luaurc aliases as before
+pickman/tests/acceptance/c0041/graph-game.spec.luau
+	ignores specs that are not @game
+	lists every $path node as an instance path and a repo path
+	matches mapped instance paths on segment boundaries only
+	orders roots by instance path length, longest first
+	reads default.project.json when no project is given
+	rejects malformed paths
+	resolves modules and init directories under a mapped instance
+	returns nil for missing modules, unmapped instances and scripts
+	the longest mapped node owns its subtree, with no fallback to a shorter one
+pickman/tests/acceptance/c0041/place-game.spec.luau
+	other aliases still resolve to nil
+	rejects malformed @game paths
+	resolves from the root of the tree, whatever the requiring script's depth
+	returns nil for missing instances and non-modules
+	works on the Rojo-built place
+pickman/tests/acceptance/c0041/src-aliases.spec.luau
+	allows relative paths, @self/ and @game/ReplicatedStorage/
+	rejects other aliases and other @game roots
+	srcAliasViolations scans a directory's real requires, in either quote style
+	tests/meta applies it to src
+pickman/tests/acceptance/c0051/bounds.spec.luau
+	a zero budget means the first transient answer is final
+	caps the transient pause time of one execute: the next transient answer is then final
+	counts attempts per request: a long run survives MAX_ATTEMPTS-1 failures at every step
+	gives up on a creation that stays transient after exactly MAX_ATTEMPTS requests
+	gives up on a poll that stays transient after exactly MAX_ATTEMPTS requests
+	the cap is per execute: a second execute on the same config gets a fresh one
+	the default cap is 60 seconds of transient pauses per execute
+pickman/tests/acceptance/c0051/classify.spec.luau
+	classifies 429 and every 5xx as transient, and nothing else
+	retries the statuses at the edges of 5xx, and not the ones just outside
+pickman/tests/acceptance/c0051/final.spec.luau
+	never retries a task failure that is not transient
+	publish never retries a 4xx other than 409 and 429
+pickman/tests/acceptance/c0051/key.spec.luau
+	a retry that ends in failure never leaks the API key
+pickman/tests/acceptance/c0051/pauses.spec.luau
+	creation pauses transientSeconds, 5 by default, independent of the 409 retrySeconds
+	poll retries pause transientSeconds, and the poll interval stays its own
+	transient pauses do not use up the timeout for the task itself
+pickman/tests/acceptance/c0051/publish.spec.luau
+	409 and transient failures share one budget of MAX_ATTEMPTS, not one each
+	409 still pauses retrySeconds (60 by default) and a transient failure in between pauses 5
+	429 is retried like a 5xx
+	a permanent transient failure makes exactly MAX_ATTEMPTS calls and reports the status
+	a transient failure then success publishes, pausing transientSeconds
+	publish has no total pause cap beyond MAX_ATTEMPTS: four 409 waits of retrySeconds still happen
+pickman/tests/acceptance/c0051/retry.spec.luau
+	retries a transient failure creating the task, then goes on to poll
+	retries a transient failure polling the task, and polls the same task again
+	runSuite retries inside a script, so a blip does not fail it, and a dead service still does
+pickman/tests/acceptance/c0063/narrowed.spec.luau
+	all four specs are still there, and f0031's check.sh still runs each of them
+	no spec pins the play-again surface any more
+	the adapter spec keeps a thin server: any playAgain call is the sender's own, and no phase is read
+	the overlay spec keeps its cases and their assertions, narrowed to the fields that stay
+	the place spec keeps the client wiring, with the cursor wired to some overlay field
+	the whole run still shows the results at game over, and they stay up
+pickman/tests/acceptance/c0064/deploy.spec.luau
+	a bad game place id fails before anything is built or sent, naming it, never the key
+	a lobby that does not build stops everything before anything is published
+	a missing lobby project stops everything before anything is published
+	a refused game publish fails before the lobby is sent, and reports no version
+	a refused lobby publish fails, says the game was published, and writes no version
+	publishes the game to its place, then the lobby, told the game's id, to the start place
+	without the game place's id: the game to the start place as before, a warning, and no lobby
+pickman/tests/acceptance/c0064/docs.spec.luau
+	says that without the variable the game still publishes to the start place and the lobby is not live
+	the Beta section names the game place's variable, both projects and which place gets which
+	the owner's one-time steps are a numbered list: create the place, set the variable, check the key
+	the testing skill's runtime tier names the lobby's scripts
+pickman/tests/acceptance/c0064/plan.spec.luau
+	a bad start place id still fails as before, naming its variable
+	a game place id that is not a place id fails, naming the variable
+	a game place that is the start place fails: the lobby would overwrite the game
+	names the game place's variable
+	never changes the environment it reads
+	not configured is nil, whatever the game place's variable says
+	target finds a place in the plan, and nil for one it does not publish
+	the lobby is told exactly the id it is given, as a number, up to 2^53-1
+	with the game place's id: the game to it first, then the lobby to the start place, told the id
+	without the game place's id: only the game, to the start place, as before, with a notice
+pickman/tests/acceptance/c0064/project.spec.luau
+	a large place id survives the copy exactly
+	adds ServerScriptService and its attributes when the project has none
+	makes every relative $path absolute against the project's folder, and leaves absolute ones
+	text that is not a Rojo project fails
+	the real game place, copied with no attributes and built elsewhere, is the same place
+	the real lobby, copied with the game's id and built elsewhere, differs only in GamePlaceId
+	writes the attributes beside the ones ServerScriptService has, and changes nothing else
+pickman/tests/acceptance/c0064/runtime.spec.luau
+	--lobby needs a version: usage and exit 2
+	a bad game place id fails before anything is sent, naming it
+	every lobby script passes in the lobby the deploy builds
+	the lobby structure check fails in a lobby whose GamePlaceId was never set
+	the lobby structure check fails in the game place, and the game's fails in the lobby
+	the lobby structure check fails when GamePlaceId is not a whole place id
+	the lobby structure check fails when a lobby remote or script is missing
+	the lobby structure check fails when characters load in the lobby
+	the lobby structure check fails when the game's server scripts are in the lobby
+	the lobby structure check fails without the StartGame remote
+	there is a lobby structure check, and every lobby script is strict, requires nothing and returns PASS
+	with --lobby and given files: those run in the start place, and pass
+	with --lobby: the lobby's scripts run in the start place, by default all of tests/runtime/lobby
+	with two places: the game's scripts run in the game place, by default all of tests/runtime
+	without the game place's id, --lobby has no lobby to test: a warning, success, nothing sent
+	without the game place's id: the game's scripts run in the start place, as before
+pickman/tests/acceptance/c0064/workflow.spec.luau
+	the comment step is present and gets no Roblox setting
+	the deploy gets the game place's variable beside the three it had, and nothing else
+	the secret is named once, in the deploy step's env
+pickman/tests/acceptance/c0103/narrowed.spec.luau
+	a deleted assertion is not the narrowed spec, and another line ending is
+	a line joined onto the comment line above it is not the narrowed spec
+	the spec is exactly the narrowed one: W, A, S and D, unbound keys, the shape of the map
+	the spec is still there, and f0014's check.sh still runs it
+pickman/tests/acceptance/c0106/narrow-adapter.spec.luau
+	adapter.spec accepts f0029's final line, with the nested bandTop() call
+	adapter.spec accepts today's three-argument radarBox line, so main stays green before f0029
+	adapter.spec is exactly today's file outside the narrowed radarBox assertion
+	adapter.spec keeps its four cases, in order
+	adapter.spec rejects a block that is not first in the render step
+	adapter.spec rejects a block whose box is not the local the Position line reads
+	adapter.spec rejects a missing, altered or detached radar.Position line
+	adapter.spec rejects a radarBox that takes other first arguments or another size
+	adapter.spec still counts exactly one radar.Position and one local view
+	the adapter fingerprint ignores tracker ids, so a compaction does not move it
+pickman/tests/acceptance/c0106/narrow-radar.spec.luau
+	radar.spec accepts f0029's layout: the same five numbers plus the safe-area fields
+	radar.spec accepts today's layout, so main stays green before f0029
+	radar.spec is exactly today's file outside the narrowed layout assertion
+	radar.spec keeps its seven cases, in order
+	radar.spec still fails when any one of the five layout numbers changes
+	radar.spec still fails when one of the five numbers is missing
+	the radar fingerprint ignores tracker ids, so a compaction does not move it
+pickman/tests/acceptance/c0129/onagain.spec.luau
+	AC2: Hiscores.onAgain stays: an accepted play again is the next run
+pickman/tests/acceptance/c0129/submits.spec.luau
+	AC1: Submits exports exactly ready, step, pending and close
+	AC1: no server source defines or calls an again hook: .again(, :again(, .again = or ["again"]
+	AC1: the Submits source never calls Hiscores.onAgain
+pickman/tests/acceptance/c0380/narrowed.spec.luau
+	a line joined onto the comment above it changes the pinned text
+	every board text is compared up to the level, and nothing f0186 removes is pinned
+	tests/acceptance/c0128/golden.spec.luau is exactly the narrowed file
+	tests/acceptance/d0124/adapters.spec.luau is exactly the narrowed file
+	tests/acceptance/d0124/lobby.spec.luau is exactly the narrowed file
+	tests/acceptance/f0026/adapters.spec.luau is exactly the narrowed file
+	tests/acceptance/f0026/endtoend.spec.luau is exactly the narrowed file
+	tests/acceptance/f0026/lobby.spec.luau is exactly the narrowed file
+	tests/acceptance/f0145/lives.spec.luau is exactly the narrowed file
+	tests/acceptance/f0145/place.spec.luau is exactly the narrowed file
+	tests/acceptance/f0145/top.spec.luau is exactly the narrowed file
+	tests/acceptance/f0145/views.spec.luau is exactly the narrowed file
+	the ten specs are still there, and their items' check.sh files still run them
+pickman/tests/acceptance/d0105/adapter.spec.luau
+	it still draws the radar Awareness computes
+	places the radar from the current screen size on every render step, before the snapshot guard
+	the chat stays on: no core-gui or text-chat switch
+	the old top-right corner is gone
+pickman/tests/acceptance/d0105/radar.spec.luau
+	a zero, negative or non-finite size is an empty square on that same corner
+	its right edge matches the margin, and its bottom is one margin above the power bar
+	layout's numbers are unchanged, so the bar and the labels stay where f0019 put them
+	on a 1280 by 720 screen the 120-pixel radar sits at x 1144, y 555
+	on a 1920 by 1080 screen it sits at x 1780, y 904
+	on a 480 by 320 screen it sits at x 353, y 180
+	the 120-pixel radar is inside the screen, in the right half, and clear of the bar, the lives and the level
+pickman/tests/acceptance/d0124/adapters.spec.luau
+	FlowView shows a heard miss and a heard place on the game-over overlay
+	LobbyView adds the best line under the all-time panel only
+	Ranks sends the place, or the miss, to a player still in the game
+	a best read that ends after the player left is dropped, and a rejoin reads again
+	a best that cannot be read again is no best: the stale one is not kept
+	a best that cannot be read is no best, and the board still answers
+	a best written by a build without the list joins the list on anyone's next run
+	a first run with no list starts it from the stored bests, the player's older best included
+	a list that cannot be read is a failed all-time read, not the per-player board
+	a list that cannot be written says nothing, and the per-player boards are still written
+	a player's best is read at most once per CACHE_TTL, and again after they leave
+	a run whose ordered write fails is listed at its own score by the next run
+	a run's entry is keyed by the user, the server's clock, the run counter and the job id
+	after an all-time answer, the same player's day and week answers still carry no best
+	day and week answers are the per-player boards and carry no best
+	no list and a per-player board that cannot be read: no list is made, nothing is said
+	one player's two runs in a row, the second lower, are places 1 and 2 and the lobby lists both
+	requests while a player's best is being read do not read it again, and each is answered
+	runs of several players fill the list in order, cut to ten, and a later lower run is missed
+	the all-time answer is the stored list with the asker's own best
+	the per-player all-time row a run writes names that run and its instant
+	the per-player boards are written before the list, and a first run that is a new best is listed once
+	the place heard is the run's place on the list, not the player's per-player rank
+	while a stale best is read again, requests are answered with the best held before
+	with no list stored, the all-time answer is the per-player board, as before
+pickman/tests/acceptance/d0124/drivetop.spec.luau
+	a best merged from a half-written row is listed once, at the run's own score
+	a best stored without the list (an older build) joins an existing list on the next run
+	a failed write is retried after 0.25 and 0.5 s, and three failures say nothing
+	a lower second run of the same player stands second
+	a run already on the list (a retry that landed) keeps its place and is not written again
+	a run below a full list is known to have missed it, and nothing is written
+	a run that is the player's new best is listed once
+	a transform run again says the place of its last call, not an earlier one
+	a transform that first saw no list and then a list writes and says the place
+	a zero read or write budget skips the write, still waits, and says nothing
+	an existing list takes the run even when the bests could not be read
+	another server merged this run's best before its own write: the run is listed once
+	no entry, or one that is not a valid run, writes nothing and says nothing
+	no list and no bests (the board could not be read): no list is made and nothing is said
+	the write applies to what the store holds when it runs, so another server's run is kept
+	with no list and no stored best, the run alone is the list
+	with no list yet, the stored bests start it and the run takes its place among them
+pickman/tests/acceptance/d0124/flow.spec.luau
+	a broken top changes nothing
+	a miss for a closed run, a run too far ahead or a run not yet over is not kept
+	a miss for the next run does not hide the rank of the run whose overlay is up
+	a miss heard while its overlay is up shows, and only while it is up
+	a run shows one line: a later rank replaces a miss and a later miss replaces a rank
+	a whole top of 1 or more is a missed line, and anything else is none
+	an early miss waits for its overlay and shows on its edge
+	the next run's overlay never shows the previous run's miss
+	the rank line stays the place
+pickman/tests/acceptance/d0124/lobby.spec.luau
+	an empty all-time board still shows the viewer's best under its message
+	no best, or a broken one, is no line
+	the best line starts with the score and the level, on the all-time board only
+	the list text is the panel's lines, then the best line
+pickman/tests/acceptance/d0124/top.spec.luau
+	a best is its companion row whole: its score, never the page's
+	a best that names no run is an older run with the id best:<userId>:<score>:<level>
+	a best whose row names its run is that run: its id, its instant and its own score
+	a better listed run of the player does not hide an older best
+	a held best is read again only when nothing is held, or a finished read is stale
+	a player's best is the score and level of their all-time row, or nil
+	a raised best joins beside the player's older best entry, and a merged best is listed once
+	a read stays fresh for less than the time to live, and never from the future
+	a run cut from the list does not come back as its best ahead of the earlier runs it ties
+	a run whose id is already listed is not added again: its place is where it stands
+	a run's entry carries the cleaned name, the score, the level and the instant
+	a run's id is user, instant, run counter and server, and no server is an empty part
+	addRun is mergeRun with no bests
+	addRun never changes the list it is given
+	an attempt valid refuses, or a broken instant or run, has no entry
+	an older unlisted best that a later run ties is listed ahead of it
+	broken or repeated stored entries are dropped, not ranked
+	merging adds every best, and the run takes its place among them
+	one player's two runs both stand, the higher first: places 1 and 2
+	order is score, then level, then the earlier run, then the id
+	the list is cut to N, and a run below the tenth has no place and changes nothing
+	the list lives in its own store, scope and key
+	the lobby's rows of a list are ranked 1..N in order, and nothing stored is nil
+	the per-player row a run writes names that run, and the board's rows carry it
+	the run's own best names the run, so it is listed once
+pickman/tests/acceptance/f0011/classic.spec.luau
+	has 240 pellets and 4 power pellets in the corners
+	has no dead ends: every player tile has at least two exits
+	has the spawn below the house, a two-tile door and an 18-tile house
+	is the default layout and is 28 x 31
+	matches the designed map tile for tile
+	wraps through one tunnel on row 14, both ways
+pickman/tests/acceptance/f0011/conventions.spec.luau
+	left and right are quarter turns, opposite is a half turn
+	lists headings clockwise from north
+	north is up the text (-y) and east is right (+x)
+pickman/tests/acceptance/f0011/parse.spec.luau
+	a parsed maze is read-only
+	exits lists passable headings in N, E, S, W order, per agent
+	isJunction means more than two exits for that agent
+	kind follows the character at column x, row y
+	kind outside the grid is an error, not a wall
+	layout returns a built-in maze, the same one on every call
+	neighbor steps one tile and wraps at the edges
+	passable depends on the agent: doors and the house are ghost-only
+	reports size, spawn and id
+	tiles lists every tile of a kind in row-major order
+pickman/tests/acceptance/f0011/validate.spec.luau
+	accepts the smallest valid mazes, including a wrapping corridor
+	rejects a ghost-only tile that ghosts cannot reach
+	rejects a spawn with no exit for the player
+	rejects a walkable tile the player cannot reach from the spawn
+	rejects an empty maze
+	rejects an open edge: a walkable edge tile with a wall opposite
+	rejects an unknown character with its coordinates
+	rejects rows of unequal width, naming the row
+	requires exactly one spawn
+pickman/tests/acceptance/f0012/back.spec.luau
+	clears a buffered turn
+	clears a buffered turn when reversing at a tile centre
+	restarts a player stopped at a wall, heading the other way
+	reverses at a tile centre
+	reverses mid-tile in the same step, from the current position
+	reverses the current heading literally, even right after a turn (arcade rule)
+pickman/tests/acceptance/f0012/buffer.spec.luau
+	Forward clears the buffered turn, so the junction is passed straight
+	a turn pressed while passing through a junction centre is taken there
+	a turn stays pending for exactly turnBufferTicks steps, counting the one it arrives in
+	applies several intents in one tick in order
+	keeps only the latest Left or Right
+	passes a junction without the exit and turns at the first one with it
+	pressing the same turn again restarts its window
+	turns relative to the current heading: Left from east is north
+pickman/tests/acceptance/f0012/config.spec.luau
+	recognises exactly the four intents
+	rejects a speed that is not a whole number of units in 1..UNITS
+	rejects a turn buffer shorter than one step or fractional
+	spawned states are independent
+	spawns at the maze's spawn tile, facing west by default, moving if west is open
+	the default config is valid
+pickman/tests/acceptance/f0012/corners.spec.luau
+	carries the step's remaining distance around the corner
+	ignores a buffered turn whose exit does not exist at the corner
+	stops at a corner when no turn is buffered
+	takes a buffered turn at the corner without stopping
+pickman/tests/acceptance/f0012/grace.spec.luau
+	a Left one tick after the junction centre cuts the corner there
+	a Right one tick after the junction centre cuts the corner there
+	a grace turn also clears an older buffered turn
+	a grace turn uses up the press: it does not also fire at a later corner
+	a late press stays missed after the player passes further centres without that exit
+	a missed press also clears an older buffered turn
+	a missed turn is discarded, not saved for a later junction with that exit
+	a press nearer the next junction with that exit is buffered for it
+	a turn right after Back at a centre is buffered, not a grace turn
+	after Back mid-tile, a press is not missed for a junction never passed that way
+	after turning at a centre, a press for a turn that centre had is buffered, not missed
+	grace applies only after going straight through the centre, not after turning there
+	leaving the spawn is not going straight through it: no grace or miss there
+	the grace is one tick at any speed, not up to the half tile
+	two ticks late is not a grace turn
+	with adjacent junctions, a press no nearer the passed one is kept for the next
+	without that exit at the centre just passed, the press is buffered as usual
+pickman/tests/acceptance/f0012/invariants.spec.luau
+	seed 10: centreline, speed, tile entry and determinism
+	seed 11: centreline, speed, tile entry and determinism
+	seed 12: centreline, speed, tile entry and determinism
+	seed 13: centreline, speed, tile entry and determinism
+	seed 14: centreline, speed, tile entry and determinism
+	seed 15: centreline, speed, tile entry and determinism
+	seed 16: centreline, speed, tile entry and determinism
+	seed 17: centreline, speed, tile entry and determinism
+	seed 18: centreline, speed, tile entry and determinism
+	seed 19: centreline, speed, tile entry and determinism
+	seed 1: centreline, speed, tile entry and determinism
+	seed 20: centreline, speed, tile entry and determinism
+	seed 2: centreline, speed, tile entry and determinism
+	seed 3: centreline, speed, tile entry and determinism
+	seed 4: centreline, speed, tile entry and determinism
+	seed 5: centreline, speed, tile entry and determinism
+	seed 6: centreline, speed, tile entry and determinism
+	seed 7: centreline, speed, tile entry and determinism
+	seed 8: centreline, speed, tile entry and determinism
+	seed 9: centreline, speed, tile entry and determinism
+pickman/tests/acceptance/f0012/stopped.spec.luau
+	Forward does not restart a stopped player
+	a turn toward a wall leaves the player stopped and facing the same way
+	a turn whose exit exists applies in the step it arrives and restarts movement
+	the latest of several intents in one tick decides the turn
+pickman/tests/acceptance/f0012/straight.spec.luau
+	carries the remainder past tile centres when speed does not divide a tile
+	enters a tile when crossing the half-tile boundary, once per tile
+	moves speed/UNITS tiles per tick along the corridor centreline
+	occupied is the tile containing the player's centre point
+	stops at the centre of the last tile before a wall
+	uses 120 sub-tile units per tile
+pickman/tests/acceptance/f0012/tunnels.spec.luau
+	Back on the tunnel seam keeps the player in place, modulo the maze width
+	the ghost door stops the player like a wall
+	wraps through a horizontal tunnel and keeps going
+	wraps through a vertical tunnel
+pickman/tests/acceptance/f0013/bench.spec.luau
+	50 players x 60 s of play (1,800 ticks) steps in under 4 s
+	the benchmark player is actually moving most of the time
+pickman/tests/acceptance/f0013/clock.spec.luau
+	caps a long frame at maxSteps and drops the backlog
+	defaults to 30 Hz and at most 5 steps per frame
+	gives 30 ticks per second at 60, 30, 50 and 144 frames per second
+	gives 30 ticks per second over uneven frames
+	honours a custom rate and cap
+	ignores zero, negative and NaN frame times
+pickman/tests/acceptance/f0013/intents.spec.luau
+	Back twice in one tick cancels out
+	accepts the four intents
+	queued intents apply in the next step, in submission order
+	rate-limits each player per tick and resets after the step
+	rejected intents have no effect
+	rejects anything else as an invalid intent
+	rejects intents for a player who has not joined
+	the default limit is 4 per player per tick
+pickman/tests/acceptance/f0013/lifecycle.spec.luau
+	a player can rejoin after leaving and starts over at the spawn
+	joins players at the spawn and lists them sorted by id
+	leave removes a player; leaving twice or an unknown id is harmless
+	players in one session move independently
+	refuses to join the same id twice
+	sessions do not share state
+	starts at tick 0 with no players
+	validates its config
+pickman/tests/acceptance/f0013/place.spec.luau
+	does not spawn characters automatically
+	has the Ready, Intent and Snapshot RemoteEvents in ReplicatedStorage.Remotes
+	sessions start on the client's Ready signal, not on PlayerAdded
+	the Sessions adapter uses the Session and Maze features
+	the server Main requires the Sessions adapter module
+pickman/tests/acceptance/f0013/snapshot.spec.luau
+	has exactly the v1 fields
+	is a fresh table: changing it does not change the session
+	jumpTick is the tick of the latest position discontinuity (a2: tunnel jumps)
+	round-trips through JSON unchanged
+pickman/tests/acceptance/f0013/tick.spec.luau
+	an intent submitted before step k shows at time k + 1
+	is deterministic per seed
+	reports movement events with the player's id, stamped with the time they become visible
+	runs at 30 ticks per second
+	the snapshot at time t has tick = t
+pickman/tests/acceptance/f0014/interpolate.spec.luau
+	clamps alpha to 0..1 and treats NaN as 1
+	does not slide across the maze after a tunnel jump between the two snapshots
+	interpolates across a gap of several ticks, and ignores an out-of-order earlier snapshot
+	interpolates linearly by alpha
+	shows the latest snapshot when there is no earlier one
+pickman/tests/acceptance/f0014/keys.spec.luau
+	every mapped action is a name, and W, A, S and D map to movement intents
+	maps W, A, S and D to the movement intents
+	other keys do nothing
+pickman/tests/acceptance/f0014/look.spec.luau
+	a quarter turn at turnRate takes TURN_SECONDS, within one frame
+	approachYaw steps toward the target by at most maxDelta
+	approachYaw takes the shorter way around and stays in (-pi, pi]
+	look yaw is unlimited but kept in (-pi, pi]
+	pitch is clamped to MAX_PITCH, which stays short of straight up or down
+	snap recentres the look on the heading
+	the mouse turns the view: right and down are negative yaw and pitch
+pickman/tests/acceptance/f0014/place.spec.luau
+	each client adapter uses the View feature
+	the client Main requires MazeView, Camera and Controls
+	the client Main signals Ready to the server
+pickman/tests/acceptance/f0014/pose.spec.luau
+	a heading's yaw looks along its delta: +x is world +X, +y is world +Z
+	has a sensible world scale
+	maps tile coordinates to world X and Z in studs, tile centres on whole tiles
+pickman/tests/acceptance/f0014/walls.spec.luau
+	adds no margin to a maze without tunnels
+	bounds is the rendered tile range: the margin applies only on wrapping axes
+	covers the classic maze with maximal runs, repeated 12 tiles beyond the tunnel edges
+	honours an explicit margin and applies it only to the wrapping axis
+	merging keeps the part count well under the wall-tile count
+	never covers doors, the house or corridors
+pickman/tests/acceptance/f0016/eating.spec.luau
+	a pellet is never eaten twice: going back over eaten tiles scores nothing
+	a power pellet is worth 50 and is reported as one
+	each player eats their own pellets: two players in one session don't share them
+	eating is deterministic per seed
+	events name the player who ate
+	the player eats each pellet the tick it enters the tile, 10 points each
+	the score is 10 a pellet and shows in the frame
+	the spawn tile has no pellet, and entering an empty tile scores nothing
+pickman/tests/acceptance/f0016/level.spec.luau
+	a kill during the level-clear pause does nothing: the level still advances
+	eating on level 2 pauses for 17 units, not 15
+	eating the last pellet reports LevelCleared and starts the level-clear pause
+	every pellet is back on the new level, and eating them scores again
+	lives carry over to the next level: a life lost on level 1 is still lost on level 2
+	play again after gameover puts every pellet back and starts over from level 1
+	the level-clear pause and the respawn reset the player; a death keeps the eaten pellets
+	the new level runs at the new level's speed: 34 units a tick on level 2
+	the player stands still during the pause, and the next level starts at the spawn
+	with no pauses a cleared level rolls straight on
+pickman/tests/acceptance/f0016/pellets.spec.luau
+	a tile outside the maze is an error, not another tile
+	eating a tile with nothing on it changes nothing
+	eating returns the kind and removes the pellet, and a pellet is never eaten twice
+	holds a pellet on every pellet and power tile of the maze, and none elsewhere
+	points are 10 and 50, and eating stops the player for 1 and 3 frames of the arcade's 60 fps
+	reset puts every pellet back
+	stallUnits is the distance the pause costs at the player's speed
+	the classic maze has 240 pellets and 4 power pellets
+	tiles lists what is left in row-major order, optionally of one kind
+	two Pellets of the same maze are independent
+pickman/tests/acceptance/f0016/slowdown.spec.luau
+	a new level starts with nothing owed: the first step covers the full level speed
+	a new run starts with nothing owed, even when the last life was lost owing a pause
+	a pause still owed when the player dies is forgotten: the next attempt starts at full speed
+	a power pellet stops the player for 45 units: one whole tick and half of the next
+	each pellet costs the same, so eating along a corridor comes a little later each time
+	no pause is owed before anything is eaten, and none is carried past the end
+	the pause for a pellet is 15 units: the tick after eating covers half a step
+	the pause only slows the player: score and pellets are the same
+	the slowdown is on in GAME_CONFIG and off in the default config
+	without the slowdown the player walks at a steady 30 units a tick
+pickman/tests/acceptance/f0017/full-run.spec.luau
+	plays ready, eats, clears, gets harder, loses lives, ends and starts again
+	the same run twice gives the same frames
+pickman/tests/acceptance/f0017/power.spec.luau
+	a death or a cleared level ends the period without a PowerEnded event
+	a dot eaten while frightened costs 17 units, the pause at the frightened speed
+	a power pellet is worth 50 points, like the arcade's
+	a power pellet outside play does nothing: no event and no period
+	a second power pellet restarts the period: it does not add to what is left
+	eating a power pellet reports PowerStarted with the level's frightened time in ticks
+	it ends after exactly that many ticks, with a PowerEnded event
+	level 18's single second runs out after exactly 30 ticks
+	the frightened period is deterministic per seed
+	the frightened time shows in the frame and runs down one tick at a time
+	the period is the level's: 150 ticks on level 2, 30 on level 9, none from level 17
+	the period only runs down while the run is in play
+	the player runs at the frightened speed while the period lasts: 34 units a tick, not 30
+	with no frightened time (levels 17, 19, 20, 21 on) a zero-length PowerStarted is reported and no PowerEnded follows
+pickman/tests/acceptance/f0018/adapter.spec.luau
+	creates sessions with Session.GAME_CONFIG as the config argument
+	sends Session.frame to the client, not the bare snapshot
+	still starts a session only when the client signals Ready
+pickman/tests/acceptance/f0018/config.spec.luau
+	GAME_CONFIG is the classic rules and starts with the ready countdown
+	a config without a play record means no pauses, however the rest is set
+	a play config whose tick rate is not the session's is refused: the frightened time would be rescaled
+	bad rules are refused when a player joins
+	level speeds scale the base speed, so the base may not be so fast that a later level would cross two tiles
+	the default config has no pauses: the run is in play from the start
+pickman/tests/acceptance/f0018/flow.spec.luau
+	Kill only works while the run is in play
+	a client cannot kill its own player: no intent string reaches Session.kill
+	a death freezes the player, then the next attempt starts at the spawn with a fresh countdown
+	every phase follows the state machine exactly, for any seed
+	intents sent during the countdown are discarded, not remembered
+	play again starts a fresh run, but only at gameover
+	the player waits through the ready countdown, then walks
+	the respawn is a teleport: the snapshot's jumpTick marks it
+	three deaths end the run
+	with no pauses (the default config) the player plays from tick 0 and a death is instant
+pickman/tests/acceptance/f0018/frame.spec.luau
+	an unknown player is an error, as for snapshot
+	carries every field of the snapshot unchanged, plus a play record
+	is a fresh table: changing it does not change the session
+	is plain data that round-trips through JSON
+	later issues may add fields: the contract is that these ones exist, with these types
+	the play record follows the run: dying, then a new attempt
+	the play record has the phase, level, score, lives, timer and frightened time
+	the v1 snapshot is unchanged: exactly its four fields, version 1
+pickman/tests/acceptance/f0018/game.spec.luau
+	a death costs a life and pauses for dyingTicks, then a new attempt starts
+	a death or a clear during the level-clear pause or after game over does nothing
+	a new run starts in ready, with level 1, score 0, full lives and the ready countdown
+	an extra life is earned by jumping past 10,000 too
+	clearing the maze pauses, then the next level starts with a Ready for it
+	losing the last life ends the run with a GameOver carrying score and level
+	only a run in play can lose a life or clear a level
+	playAgain starts a fresh run, but only after gameover
+	ready lasts exactly readyTicks steps, then play starts with a Playing event
+	rejects rules that make no sense
+	the classic rules: 3 lives, an extra life at 10,000, pauses of 2, 1.5 and 2 seconds at 30 Hz
+	the score adds up, and the first time it reaches 10,000 it earns one extra life
+	with extraLifeScore 0 there is never an extra life
+	with no pauses a death respawns on the next step and the run never waits in ready
+	with no ready pause, the run starts in play
+pickman/tests/acceptance/f0018/levels.spec.luau
+	every level after the last uses the last row
+	frightenedTicks converts seconds to ticks at the given rate
+	has a row for each of the 21 levels, exactly as the classic table says
+	playerSpeed scales the base speed by the level's factor, rounding half up
+	playerSpeed while frightened uses the frightened factor: 34, 36, 38 and 34 at 30 units
+	rejects a level that is not a whole number of at least 1
+	the table is read-only
+pickman/tests/acceptance/f0019/hud.spec.luau
+	a level with no frightened time shows no power, whatever the counter says
+	follows the record it is given: every field changes with it
+	leaves the record unchanged
+	power is measured against the current level's frightened time
+	power is the share of the level's frightened time still to run
+	power never exceeds 1
+	shows the level as LEVEL n
+	shows the lives left, the one in play included
+	shows the score as plain digits
+pickman/tests/acceptance/f0019/layout.spec.luau
+	a phone, a laptop and a desktop get growing text
+	a zero, negative, NaN or infinite viewport side counts as 0: the minimum, not an error
+	every size is a whole number of pixels
+	life icons are at least as big as the minimum text
+	portrait and landscape of one screen get the same text size
+	text stays within the limits on any screen
+	the power bar and its margins fit the width, and the bar is at least 4 pixels tall
+	the text limits are 14 and 40 pixels
+	the top band (text plus a margin above and below) is at most 15% of the height
+pickman/tests/acceptance/f0019/place.spec.luau
+	HudView lays out again when the viewport changes size
+	HudView sends nothing to the server
+	HudView uses the Hud feature: Hud.model for the content, Hud.layout for the sizes
+	Main passes each frame's play record to HudView.show
+	the client Main requires the HudView module
+pickman/tests/acceptance/f0020/exits.spec.luau
+	breaks ties in the order up, left, down, right
+	keeps out of the door and the house unless told it may enter
+	may not go up on a no-up junction, but may elsewhere
+	measures in a straight line, not in blocks
+	never turns back unless it is a dead end
+	takes the exit that is closest to the target in a straight line
+pickman/tests/acceptance/f0020/targets.spec.luau
+	Blinky targets the player's tile
+	Clyde targets the player when more than 8 tiles away, and his corner at 8 or closer
+	Inky doubles the vector from Blinky to the tile 2 ahead of the player
+	Pinky targets 4 tiles ahead of the player, whichever way the player faces
+	each ghost scatters to its own corner outside the maze; a maze without ghost data is refused
+	names the four ghosts in a fixed order
+	the classic maze has four no-up junctions, all of them open to the north; other mazes have none
+pickman/tests/acceptance/f0020/walking.spec.luau
+	a hunting ghost never stands on a wall, in the door or the house, and never reverses by itself
+	decides exactly once at every centre, however the speed divides the tile
+	the same decisions give the same walk
+	walks the given number of units along its rails and reports the tiles it enters
+	wraps through a tunnel and says so
+pickman/tests/acceptance/f0021/frightened.spec.luau
+	a blue ghost in a tunnel moves at the tunnel speed, which is slower than the frightened speed
+	a frightened ghost moves at the frightened speed, a hunting one faster, and either is slower in a tunnel
+	a power pellet turns every ghost blue, resets the eaten chain, and starts the countdown
+	a power pellet where the level has no frightened time still turns the ghosts back, but not blue
+	a second power pellet starts the countdown over, and eyes are not made blue again
+	frightened ghosts turn back once at the next centre, then move at random without turning back
+	frightened mode ends after exactly the level's ticks and says so
+	no ghost turns back when the blue time ends: a power pellet reverses them, its end does not
+	random movement is seeded: the same seed walks the same way, another seed does not
+	the ghosts blink for the last `flashes` flashes of 14 ticks of the countdown, not before
+	the speeds follow the level and the tuning factor
+	the timetable clock stops while the ghosts are blue, and runs on afterwards
+	while blinking the flash alternates blue and white every 7 ticks, starting blue, and is false at any other time
+pickman/tests/acceptance/f0021/levels.spec.luau
+	eyes run at twice level 1's player speed, whatever the level or the tuning
+	ghost speeds are the table's shares of the arcade maximum, relative to level 1's player (80%)
+	ghostSpeed is whole units per tick from level 1's player speed
+	no ghost can cover a whole tile in one tick on any level
+	the existing player columns and frightened times are untouched
+	the scatter/chase timetable is Table A.2 in ticks, ending in a chase that never stops
+	the tuning factor scales hunting and frightened speeds, never goes below 1 unit, and defaults to the classic 1
+pickman/tests/acceptance/f0021/schedule.spec.luau
+	a new level or a reset starts the timetable again at scatter
+	every active ghost turns back at its next tile centre when the mode changes, and not before
+	follows level 1's timetable: scatter 7, chase 20, scatter 7, chase 20, scatter 5, chase 20, scatter 5, then chase for good
+	hunting ghosts head for their scatter corner in scatter and for the chase target in chase
+	never reverses by itself while the mode stays the same
+	starts in scatter and changes mode exactly when each phase of the level's timetable ends
+	uses the timetable of the level it is told, and level 5's starts with 5 s of scatter
+pickman/tests/acceptance/f0022/eyes.spec.luau
+	a ghost eaten before its turn-back leaves the house heading west and does not turn back by itself
+	a ghost leaves through the door and is active, outside, at the tile above it
+	a ghost on its way out walks only on house, door and open tiles, never through a wall
+	a ghost still in the house when the power starts leaves blue, and a ghost eaten and revived does not
+	a ghost that is eaten turns to eyes, goes home through the door and comes out again, not blue
+	a ghost that leaves the house blue moves at the frightened speed, one that leaves normal at the hunting speed
+	an eaten ghost's eyes run at twice level 1's player speed and ignore a power pellet
+	eyes run at the eyes' speed even in a tunnel, which slows every other ghost
+pickman/tests/acceptance/f0022/release.spec.luau
+	Blinky starts active above the door; the other three start waiting inside the house
+	a death keeps the personal counters
+	a ghost waiting in the house does not move
+	a limit of 0 releases the ghost at the first step, without any pellet
+	a new level or a new run clears the counters and the global mode
+	after a death the house counts with one global counter: Pinky at 7 pellets, Inky at 17, Clyde at 32
+	level 1 releases Pinky at once, Inky after 30 pellets and Clyde after 60 more, counting only for the ghost next in line
+	level 2 releases Inky straight after Pinky and Clyde after 50 pellets; level 3 and later release all three at once
+	the Levels table holds the personal limits and the idle timer
+	the door and the house are for ghosts only: the player cannot enter either
+	with no pellet eaten for 4 s (3 s from level 5) the next ghost in line leaves, and a pellet restarts the wait
+pickman/tests/acceptance/f0023/contacts.spec.luau
+	a frightened ghost is eaten instead; blue and normal ghosts at once give both contacts
+	a ghost half way through the wrap meets a player on the other side of the edge
+	a ghost that was eaten and has come back kills while the others are still blue and are eaten
+	a new power pellet starts the chain at 200 again
+	a normal ghost on the player's tile kills
+	an eaten ghost is eyes at once: no longer frightened and no longer a danger
+	eating pays 200, 400, 800, then 1600 for every further ghost of the same power period
+	eyes, and ghosts still in the house, never touch the player
+	passing on the same side without touching, or following one tile behind, is no meeting
+	swapping tiles within one tick is a meeting, even though they never share a tile
+pickman/tests/acceptance/f0023/idle-player.spec.luau
+	is caught 8 to 20 seconds of game time after play starts, on every one of 20 seeds, by a named ghost
+	the same seed tells the same story twice
+pickman/tests/acceptance/f0023/session-ghosts.spec.luau
+	a blue ghost met on the very tick the power ends is a normal ghost again: the life is lost
+	a blue ghost on the player is eaten for 200, the next for 400, and the score and the ghost follow
+	a ghost and the player pass each other across the tunnel's edge and are a meeting
+	a ghost and the player that swap tiles within one tick, through real movement, are a meeting
+	a new run starts everything over: the ghosts at their starts and the timetable at scatter
+	a normal ghost and a blue one at the same moment: the life is lost and nothing is eaten
+	a normal ghost arriving on the player takes a life, names itself, and the run starts dying
+	a power pellet eaten on the tile where a normal ghost arrives makes it a blue ghost that is eaten
+	a power pellet turns the ghosts blue, and their blue time ends the very tick the run's power does
+	a snapshot of a ghost-less session is exactly what it was before
+	each ghost's jump tick is recorded: a tunnel wrap now, every ghost at a reset
+	events about a ghost carry its name, and the house's first release is announced
+	every pellet the player eats counts for the house: the ghost next in line counts them
+	nothing moves while the player is dying, and after the pause everything is home: the player at the spawn, the ghosts at their starts, the pellets as they were
+	the ghosts are on in GAME_CONFIG and off in the default config, and a maze without ghost data has none
+	the ghosts stand still through the ready pause and begin when the run is in play
+	the last pellet clears the level even when a ghost arrives on the same tick
+	two blue ghosts met in one tick are eaten in the order of the ghosts, 200 then 400
+pickman/tests/acceptance/f0024/adapter.spec.luau
+	a lower submit rewrites neither the row nor the ordered key
+	a page size of 10 that the store rejects is tried once at 50, cut to N, and the rank still comes
+	a submit is pending from the call until its drive ends, also when the drive fails
+	each update is preceded by the read and write budgets of its own store
+	no rank is heard when the board cannot be read, and the write still happens
+	stores are the shared names scoped by period, budgets are the modern request types
+	the adapter calls the pure drive, the modern budgets, and no environment prefix or dedupe
+	the feature is one init module and it does not touch the engine or the clock
+	the ordered write is drive's max: a higher value already stored stays
+	two submits for one user id and run both drive, and the better one is stored
+pickman/tests/acceptance/f0024/drive.spec.luau
+	a budget below the cost is refused and the remainder stays
+	a companion read that fails on the page gives no rank, rather than a better one
+	a failed read is retried, and a row that does not qualify is not rewritten or retried
+	a first-try success writes every board, waits nothing, and ranks
+	a lower score commits nothing, and a better score copies a new row
+	a retried ordered write keeps a higher value another drive stored, and does not recommit
+	a write budget of zero skips the update even when the read budget is open
+	a zero list budget still reads the top and can rank
+	a zero ordered read budget skips only the ordered update, and the companion is still written
+	a zero read budget never updates, still waits, and still calls top
+	an ordered key every retry missed is repaired by the next attempt, even one that does not qualify
+	one board's failure does not stop the others, and an invalid attempt writes nothing
+	overlapping drives keep 5000: the loser's transform sees the live row, not the snapshot get returned
+	the default delays are 0, 0.25 and 0.5, and a cap holds
+pickman/tests/acceptance/f0024/period.spec.luau
+	a UTC midnight stays on that UTC date, including late the same day
+	a week can start in the previous month, and a leap day keeps its date
+	all-time has no period, and day and week scopes do not collide
+	dates are zero-padded, and a non-finite instant is refused
+	the epoch day is 1970-01-01 and the second before it is 1969-12-31
+	the week key is the Monday of that UTC week, not the Sunday
+pickman/tests/acceptance/f0024/replace.spec.luau
+	a higher level at the same score replaces the row and its name
+	a missing row qualifies, a lower score does not, and an equal score needs a higher level
+	a score of 0 is a score, and a fraction, a bad id or a huge score is not
+	an equal or lower submit leaves the stored row, including its name
+	an invalid attempt writes nothing
+	the stored name is trimmed, stripped of controls, cut to 20, and never blank
+pickman/tests/acceptance/f0024/rows.spec.luau
+	a companion that cannot be read makes the whole board unknown, and an absent one is skipped
+	a companion whose user id is not the key is skipped, and a period key still matches
+	a short, unsorted page is not padded, and the page score wins
+	an equal score and level orders the user id as a string, so 10 comes before 2
+	an equal score keeps the higher level when the ordered page is one row
+	eleven real scores keep the best ten, and the best is first
+	lobby rows drop the user id and keep rank, name, score and level
+pickman/tests/acceptance/f0024/store.spec.luau
+	N matches the lobby panel and is not raised
+	a rejected scope falls back to a global name with no beta or prod prefix
+	scopes do not share a row, and one user is one row
+	the fake's page is what scorePage makes of the packed values it holds
+	the ordered page field is value, unpacked to the score, and a rejected page size is tried once at 50
+pickman/tests/acceptance/f0025/leave.spec.luau
+	a closing server is held while a run or a drive is pending, and never past the close wait
+	forty-four steps away is still in the server, and the next GameOver submits and drops
+	the first step away counts, coming back clears it, and a scoreless GameOver drops
+	the window is the classic dying pause
+pickman/tests/acceptance/f0025/run.spec.luau
+	a missing score or a different kind does not submit
+	a successful play again is a new run, and a failed one is the same state
+	once records the run on a copy and refuses the same run
+	the submission uses the state run, never a run carried on the event
+	two GameOver events in one step submit the first only
+	two fresh runs for one player both submit run 1: the dedupe dies with the run state
+pickman/tests/acceptance/f0025/sessions.spec.luau
+	Ready makes one session per player and tells the runs once, with that session and player
+	Sessions requires only Maze and Session, the modules f0065's fake engine serves it
+	Submits binds one close handler, which returns at once when no run is held and no drive is in flight
+	a GameOver while parked submits and lets the run go
+	a GameOver while the player is here submits once, with the captured id and name, and stays live
+	a departed run with no GameOver is stepped through the 45-step pause and not on the 46th frame
+	a departed session is parked: stepped with here = false and never sent, until the runs say stop
+	a frame that grants no step steps nobody and sends nothing, and the clock still carries it
+	a long frame catches up at most the clock's cap of steps
+	a parked session is stepped once per step Session.advance grants, not once per Heartbeat
+	a player still in the game stays live whatever the runs answer
+	a rejoin is a new run: the parked run and the new one both submit run 1
+	closing gives up at the close wait when a drive never finishes
+	closing waits for a parked run to reach its GameOver and for that drive, while the server keeps stepping
+	each step Session.advance grants steps every live session once, with the events it returned
+	once the player's Parent is nil, frames are not sent to them and the runs hear here = false
+	play again tells the runs only when Logic accepts it
+	started with no runs, as f0065 boots it, a departed session is forgotten at once
+	the clock, the frame and the config stay as the promoted pins have them
+	the server's Main starts Sessions with Submits as its runs
+pickman/tests/acceptance/f0026/adapters.spec.luau
+	Boards creates Board under Remotes and ignores anything but all, day or week
+	Boards opens the ordered and the companion store under their own names and the board's scope
+	FlowView keeps an empty FireServer and hears Rank without waiting for it
+	Ranks creates Rank in code and sends a rank only to a player still in the game
+	Starts never opens a store, the lobby Main boots Boards after it, and Boards only reads
+	a companion row that cannot be read fails the read: no short board is answered as healthy or cached
+	a failed answer asks for all once more after READ_GAP, and a healthy one never does
+	a failed day or week answer asks again for that board
+	a failed read still answers once, with failed = true and the rows it had, or none
+	a healthy empty board is an answer, not a failure
+	a page of 50 after the size-10 fallback is cut to the top N before any companion is read
+	a request that arrives while the read is under way does not read again, and each gets one answer
+	a retry or a late answer for a board the player left neither asks nor draws
+	a tap starts the failure count over, so a failed answer after the retries stopped is retried
+	a waiter who left before the read returned gets no answer, and Boards keeps no per-player state
+	all, day and week are buttons of at least the touch size that ask for only their board
+	an error anywhere in the read, opening the store included, is a failed read and the board is not wedged
+	during an outage a client asking every second costs three reads of the board in ten seconds
+	failed answers in a row ask again after 1, 2 and 4 s, then stop, and a healthy answer starts over
+	one player asking all and then day in the same second gets both boards, healthy
+	the game server starts Ranks before Sessions
+	the lobby screen asks for all once at start and draws the answer, marking the rank it was sent
+	the lobby screen requires only Lobby and Travel, the modules f0061's fake engine serves it
+	the place files do not gain a Board or Rank remote
+	without a Board remote the lobby asks nothing and keeps the empty panel
+pickman/tests/acceptance/f0026/endtoend.spec.luau
+	the all-time panel and the day board show the qualified row
+	the same run submits once, and the rank line is that run's all-time place
+pickman/tests/acceptance/f0026/flow.spec.luau
+	a rank heard while its overlay is up shows, and a rejected rank changes nothing
+	a whole rank of 1 or more is a line, and Flow does not cap it
+	an early rank waits for its overlay, and a late rank for a closed run is not kept
+	the edge into game over sets the rank from the pending slot or to nothing, never keeps the old one
+	the game-over detail stays the score and level
+	the next run's rank wins even when the closed run's packet arrives after it
+	the run count moves only on the edge into game over
+pickman/tests/acceptance/f0026/lobby.spec.luau
+	a client score does not switch the board
+	all-time keeps the hiscores title, and day and week name themselves
+	the client asks again after 1, 2 and 4 s of failed answers in a row, and not a fourth time
+	the highlight is a rank, not the first row, and an empty panel keeps its message
+	the panel constants and the empty cap stay
+pickman/tests/acceptance/f0026/read.spec.luau
+	a board whose read keeps failing is read again only after 2, 4, 8 and at most CACHE_TTL seconds
+	a fresh cache is returned, the boundary refetches, and a failed read waits before the next
+	an empty board is cached, and a clock that is not a number or runs backwards does not fetch
+	an in-flight read does not fetch or move anything, and a cleared flag reads
+	only all, day and week are board ids
+	the cache key is the period, so the day rolls and all-time does not
+pickman/tests/acceptance/f0027/place.spec.luau
+	Controls reads the None area per event: its screen width and converted point are what Touch.track gets
+	Controls tracks UserInputService touches and does not turn the default thumbstick on
+	the Touch feature requires View and is not an engine module
+	the keyboard path is unchanged: the action map, the high-priority bind, and the Intent remote
+pickman/tests/acceptance/f0027/screen.spec.luau
+	a converted tap on the drawn button is snap; the raw position is not
+	a non-finite origin component counts as 0 on that axis only
+	a turn swipe is the same converted or not (only differences count)
+	an area with a zero origin, or none at all, leaves the point as it is
+	subtracts the None area's top-left: a finger at screen (550, 320) reports (491, 262)
+	the half split is on the screen's middle: a finger at screen x 430 looks, at 420 turns
+	the half split uses the screen width: screen x 400 turns at 851 and would look at ViewportSize's 733
+	the screen size is the None area's size; the device-safe ViewportSize is only the fallback
+pickman/tests/acceptance/f0027/swipe.spec.luau
+	accepts 29 and 60 degrees and the tangent boundary, and rejects 31, 45 and just outside
+	includes a 48 px axis swipe and rejects one just under, a short drag, and a non-finite delta
+	maps the screen axes through the key map: left, right, down, up
+	pins the swipe at 48 px and 30 degrees, and the four intents stay exactly those
+	the same deltas always classify the same way
+pickman/tests/acceptance/f0027/track.spec.luau
+	a move and an end leave the input finger unchanged and return a new table
+	a snap rectangle wins, including on the left half, and its far edges are outside
+	a turn and a look finger can be down together, and a turn move is not a look
+	does not mutate the state it was given
+	emits one intent on finger-up from the straight line, not from the path and not from a move
+	ignores a repeated begin, an unknown phase, and a move or end for a finger that never began
+	ignores a second finger in a zone that is already down, and a look finger never turns
+	locks the zone at begin, so a later width or a later x cannot reclassify the finger
+	splits the viewport at x < width/2, and a bad width has no turn half
+	two tracks of one begin state return the same look delta
+pickman/tests/acceptance/f0028/hit.spec.luau
+	a finger that begins inside the button is snap, even on the right half, and only on begin
+	a look finger that slides onto the button stays a look, and releasing it does not turn
+	a second snap begin adds nothing to the returned state
+	the button's minimum corner is inside and the far edges follow the half
+pickman/tests/acceptance/f0028/look.spec.luau
+	a large look delta clamps pitch at MAX_PITCH and keeps yaw in (-pi, pi]
+	each move is the step from the previous point, not from the finger-down point
+pickman/tests/acceptance/f0028/place.spec.luau
+	Main passes Camera.snap and then Camera.lookBy into Controls
+	the mouse delta reaches View.look only when no touch is holding the mouse and this frame has not looked
+pickman/tests/acceptance/f0029/button.spec.luau
+	a narrow safe width stays in the bottom band and overlaps lives
+	pins the HUD blocks on the notched phone and the wide desktop
+	sample buttons sit left of the power bar, each side 44, and a point in one is the snap zone
+	the minimum touch target is 44 px
+	the side is the larger of 44 and the icon, never the icon alone when the icon is smaller
+pickman/tests/acceptance/f0029/jump.spec.luau
+	DangerHud passes UserInputService.TouchEnabled as the touch argument, still once per render step
+	a 320 px tall landscape screen under a 58 px top bar: the radar clears LEVEL, and the clamp wins
+	bandTop is how far the core-UI area's top sits below the device area's, never negative
+	on a screen too short for that, the radar stops below the top text band
+	on a touch screen the radar sits one margin above the higher jump button, same right edge
+	portrait and landscape samples: the radar, the power bar and the snap button miss both jump buttons
+	the jump buttons are Roblox's two touch jump placements, small up to a 500 px side
+	the jump buttons are measured in the touch GUI's frame below the band top
+	without the touch argument, or with false, the radar is d0105's box, whatever the band top
+pickman/tests/acceptance/f0029/layout.spec.luau
+	a left inset shrinks the bar to the safe width and does not shrink the text
+	a negative, NaN or infinite inset component counts as 0, and a finite one applies
+	a top inset moves the safe origin without changing the text or the bar
+	a zero, negative, NaN or infinite viewport side still counts as 0
+	an all-zero inset matches the two-argument layout and reports the full viewport
+	safeInset reads the device cutout from the None area against the core area
+	text follows the full viewport, not the safe area
+	two arguments still return today's numbers
+pickman/tests/acceptance/f0029/phone.spec.luau
+	1920x1080 with no inset is still today's HUD, and a notched phone moves only the safe rect
+	a left-half swipe is one existing intent, a diagonal is not, and a right-half drag clamps pitch
+	the phone's snap button is a 44 px snap zone and not a turn
+pickman/tests/acceptance/f0029/place.spec.luau
+	HudView lays out the full screen from the None area, with ViewportSize only as the fallback
+	HudView reads the device cutout, lays out in viewport pixels, and does not let the engine inset it again
+	Main gives Controls the snap rectangle from HudView
+	the PickmanHud step itself reads both inset areas and the screen size; nothing reads them elsewhere
+	the snap control is a non-active frame placed by Touch.snapRect, and the HUD still sends nothing
+pickman/tests/acceptance/f0030/frame.spec.luau
+	a classic frame's pellets are 41 characters, whatever has been eaten
+	a death keeps the eaten pellets gone
+	a new player's frame has every pellet
+	each player's frame shows their own pellets
+	playing again brings every pellet back in the very next frame
+	the frame after a PelletEaten event shows that pellet gone, and only that one
+	the frame with pellets still round-trips through JSON, and the v1 snapshot has no pellets
+	the next level's frame has every pellet back
+pickman/tests/acceptance/f0030/place.spec.luau
+	Main passes each frame's pellets field to PelletView.show
+	PelletView decodes with Pellets.decode, lists slots with Pellets.slots, and places and pulses with View
+	PelletView sends nothing to the server
+	PelletView uses the Pellets and View features
+	the client Main requires the PelletView module
+pickman/tests/acceptance/f0030/placement.spec.luau
+	a NaN or infinite time is full size
+	a pellet never pulses
+	a pellet sits at its tile's centre, at the pellet height, with the pellet diameter
+	a power pellet at its smallest spans at least half a degree down the longest corridor
+	a power pellet is at least 2.5 times a pellet's diameter
+	a power pellet pulses between pulseMin and full size, one cycle per pulseSeconds
+	a power pellet uses the power diameter at the same height
+	both kinds clear the floor and the ceiling of the walls, centred below the eye line, inside one tile
+	the position depends on the tile, not only the kind
+	the pulse is smooth: a quarter cycle is halfway
+pickman/tests/acceptance/f0030/wire.spec.luau
+	a full classic maze encodes as forty '_' and a 'P' (bits 0-3 of the last character)
+	an empty maze of pellets is all zero bits, still the full length
+	bits follow the slot order across character boundaries
+	decode after a reset shows every pellet back
+	decode gives, per slot, whether the pellet is still there
+	decode refuses a character outside the alphabet
+	decode refuses a code of the wrong length
+	decode refuses a set bit past the last slot
+	eating slot 1 clears bit 0 of the first character
+	slots are the layout's pellet and power tiles, row-major, with their kind
+	slots describe the layout, not what is left
+	slots returns a fresh list: changing it changes nothing
+	the classic maze has 244 slots, 4 of them power pellets
+	uses only base64url characters, ceil(slots / 6) of them
+pickman/tests/acceptance/f0031/adapter.spec.luau
+	Sessions leaves the decision to Logic: it never looks at the phase
+	a handler that plays again takes only the sending player, and uses it for both the session and the id
+	any Session.playAgain call in Sessions is for the sending player's own id, and nothing the client sent
+	the place keeps its Ready, Intent and Snapshot RemoteEvents
+pickman/tests/acceptance/f0031/overlay.spec.luau
+	a classic level-clear pause flashes five times, six ticks each
+	a ready pause shows READY! over the level, with no fade or flash
+	dying shows no banner
+	game over shows GAME OVER with the final score and level, fully faded
+	leaves the record unchanged
+	only the level-clear pause flashes
+	play shows nothing over the maze
+	the constants: fade up to 0.6, walls flash in runs of 6 ticks
+	the fade deepens through the dying pause, from none to FADE_MAX
+	the fade follows the rules' dying pause, not a fixed one
+	the level-clear pause has no banner or fade
+	the walls are lit when (timer // FLASH_TICKS) is odd in the level-clear pause
+	with no dying pause a dying frame is fully faded, not an error
+pickman/tests/acceptance/f0031/place.spec.luau
+	Camera no longer locks the mouse unconditionally: the lock depends on the cursor
+	FlowView sends the request with no arguments: the server knows who asked
+	FlowView uses the Flow feature and sends a request to the server
+	Main computes Flow.overlay with the server's rules, Session.GAME_CONFIG
+	Main hands the overlay to FlowView.show, MazeView.flash and Camera.setCursor
+	Main starts every adapter before it signals Ready, so no frame meets an unbuilt view
+	MazeView can light its walls and Camera can free the mouse
+	the client Main requires the FlowView module
+	the cursor flag frees the mouse and shows the icon, never the other way round
+pickman/tests/acceptance/f0031/presentation-run.spec.luau
+	a play-again request outside game over changes nothing on screen
+	shows the countdown, the score, the flash, the next level, the deaths, game over and a new run
+pickman/tests/acceptance/f0032/adapters.spec.luau
+	GhostView is a ModuleScript beside the other client modules
+	blends through View.interpolateGhosts with View.alpha of the real time since the snapshot arrived, nothing else
+	it decides nothing about the game: no Ghosts module, no scores, no remotes
+	it requires the shared Logic only through the ReplicatedStorage alias, and no ServerScriptService
+	only snapshots that are newer move it forward, as the camera does
+	the client entry point gives every snapshot to the ghost view and starts it
+pickman/tests/acceptance/f0032/frame.spec.luau
+	a ghost that wraps through a tunnel, and every ghost after a reset, carry the tick of the jump
+	a position is continuous: the tile plus the progress toward the next, in tile units
+	a session without ghosts replicates exactly what it did before: no ghosts field anywhere
+	carries the four ghosts in Ghosts.NAMES order with exactly the documented fields
+	starts with Blinky outside above the door and the others where the house keeps them
+	the flash is true only on the white half of a blinking cycle
+	the frame carries the same ghosts beside the play record, and everything is plain data
+	the look follows the ghost: normal, frightened, blinking at the end, eyes once eaten
+pickman/tests/acceptance/f0032/interpolate.spec.luau
+	a snapshot without ghosts gives none, and a changed ghost list is not blended by position
+	blends each ghost between the two snapshots by alpha
+	clamps alpha to 0..1 and treats a missing alpha as arrived
+	does not blend across a jump: a ghost that wrapped through a tunnel or was reset is shown where it is
+	takes the look, the flash and the heading from the latest snapshot
+	with no previous snapshot, or one that is not older, shows the latest as it is
+pickman/tests/acceptance/f0033/adapters.spec.luau
+	DangerHud is a ModuleScript beside the other client modules
+	it decides nothing about the game and sends nothing to the server
+	it does none of the geometry itself: no angles, no path search, no distances
+	it draws what Awareness computes: the radar and the indicators
+	it passes the camera's field of view and the screen's aspect to Awareness.indicators
+	the camera hands its pose over without a second interpolation
+	the client entry point gives the HUD every snapshot and the camera's pose, and starts it
+pickman/tests/acceptance/f0033/awareness.spec.luau
+	a ghost across the tunnel wrap shows by the short way round, on the tunnel row only
+	a ghost ahead through the wrap cannot be seen, so it gets an arrow pointing ahead
+	a ghost behind or to the side gets an indicator; one inside the field of view gets none
+	a ghost behind the player through the tunnel wrap gets an arrow pointing behind
+	a ghost coming down a column behind the player into the tunnel is indicated, behind
+	a ghost one row off the tunnel is on the radar by the short way when the player is in the tunnel
+	a narrower screen shows less: on a portrait aspect the same 54 degrees is off screen
+	an edge point lies on the screen border, straight up for ahead and straight down for behind
+	an indicator grows and brightens, strictly, the closer its ghost gets, within its bounds
+	eyes are never indicated, and a ghost far along the maze is not either, however close it looks
+	four ghosts are worked out in well under a millisecond a frame
+	ghost blips are offsets from the player in the same turned frame, within the radius only, with their look
+	lists the nearest ghost first, keeps each ghost's place and look, and does not touch its input
+	off the left and right edges the radar draws nothing: only the tunnel row continues, and it holds no walls
+	options replace the defaults: a longer reach and other bounds
+	the arrow does not flicker as a chasing ghost crosses the edge of the map: positions are not wrapped, tiles are
+	the arrow does not flicker as the player crosses the edge either, eastwards or westwards
+	the arrow follows the path, not the ghost's row: a ghost one row off the tunnel is reached across the wrap too
+	the bearing is exact across the edge: the fractions of both positions count, not just the tiles
+	the bearing is the angle from where the camera looks, positive to the left
+	the defaults are the documented ones
+	the distance is tiles along the maze, not in a straight line
+	the field of view is the camera's: vertical 80 degrees on a 16:9 screen is about 112 degrees across
+	the ghost's own fraction counts: the bearing is exact for a ghost between tiles, off the tunnel and through the wrap
+	the radar does not wrap vertically: nothing from the far side of the maze appears near an edge
+	the radar has the walls around the player and the ghosts within reach, turned so up is where the camera looks
+	the walls move with the player: the radar is centred on where the player is, not on their tile
+pickman/tests/acceptance/f0054/adapters.spec.luau
+	neither adapter uses the tick rate for pacing anywhere
+	the client's blend is View.alpha of the elapsed real time, never the tick rate
+	the server's clock is created with Session.STEP_RATE
+pickman/tests/acceptance/f0054/docs.spec.luau
+	never states a bare real-time number for what is in game time: 7.5 tiles/s, 0.8 s and the 2 s pause carry 'game'
+	records that turn smoothing and mouse look stay in real time as the author's choice, with the input latency
+	says all the document's durations and speeds are game time
+	says level 1 is 3.75 tiles/s in real time, at half speed
+	says the rules still count 30 ticks per game second and the server steps 15 times a real second
+pickman/tests/acceptance/f0054/speed.spec.luau
+	a plain newClock() is still 30 steps a second: the tick-pinned specs and tools are unchanged
+	the client's blend between snapshots advances over 1/15 s: View.alpha is elapsed times the step rate
+	the clock at the step rate yields 15 steps a real second at any frame rate
+	the level-1 player covers 3.75 tiles in one real second, not 7.5
+	the turn buffer lasts 1.6 real seconds: 24 ticks at 15 steps a second
+	ticks per game second stay 30, and the game runs at half speed: 15 steps per real second
+pickman/tests/acceptance/f0061/lobby-adapters.spec.luau
+	a call abandoned after the cap reports nothing to the newer request: no third call while the second is in the engine
+	a call that never returns is given up on after the 60 s cap
+	a destination given as digits is accepted
+	a failed call tells the player, and the cool-down ends on screen by itself, once
+	a joining player is told the lobby's state once
+	a player already in the lobby when the server starts hears the state within a second
+	a player who leaves and comes back is told the state again, even if it is the same as before
+	a player who leaves is forgotten, players are separate
+	a report that arrives after the player left sends nothing, and a player who comes back hears the state again
+	a teleport nobody answers frees the player after 15 s and the cool-down
+	a teleport that returns after a long wait still gets its 15 s: the answer is reported with the time it came
+	an abandoned call that returns at last does not shorten the newer request's wait
+	an engine call that has not returned keeps the player waiting: no second call while it is in the engine
+	an init failure for a player who is not going changes nothing on screen
+	an init failure from the engine is a failure too
+	five presses while a teleport is under way reach the engine once, with the destination and the player
+	no place id is written into the server's code
+	pressing the button sends the start request with no arguments, once per press
+	the adapters reach the instances the built lobby has: its remotes by their names, however they are looked up
+	the client decides nothing and leaves the mouse free: no teleport, no clock, no lock
+	the client draws the panel's empty state and a live button at the start
+	the client redraws the button for every status the server sends
+	the destination is read from the attribute the built lobby carries, under its name
+	the lobby's screen is on the player's PlayerGui: a black backdrop over the whole screen holds the title, the panel and the button
+	the start button is at least 44 px tall
+	what the client sends with the request is ignored
+	with no destination (no attribute, 0, text that is not an id) nothing reaches the engine
+pickman/tests/acceptance/f0061/lobby-place.spec.luau
+	every require in the lobby's scripts resolves in the built place, and they wire up as designed
+	its remotes are StartGame and Status, and none of the game's
+	the destination is a number attribute on ServerScriptService, 0 (not set up) as checked in
+	the game place is untouched: no lobby scripts, remotes or attribute
+	the lobby spawns no characters
+	the lobby's own scripts are there, and none of the game's adapters
+	the shared Logic is in the lobby, and holds only ModuleScripts
+pickman/tests/acceptance/f0061/lobby-run.spec.luau
+	a lobby with no destination never starts anything: the button is unavailable
+	a teleport nobody answers frees the player after the timeout and the cool-down
+	press, a failed teleport, the wait, press again, and the player is taken away
+	two players do not get in each other's way
+pickman/tests/acceptance/f0061/lobby-tooling.spec.luau
+	a change to lobby.project.json selects the place specs, like a change to default.project.json
+	place.load builds the lobby project apart from the game's, and builds each once
+	place.scripts lists the lobby's scripts too
+	the gate builds the lobby project too
+pickman/tests/acceptance/f0061/lobby.spec.luau
+	after a failure the button is not live and says to try again
+	the constants
+	the panel leaves the caller's rows alone
+	the panel shows at most 10 rows, the best ranks, whatever order they come in
+	the start button is live when a destination is set and nothing is under way
+	while a teleport is under way the button says so and is not live
+	with no destination the button is unavailable whatever the status
+	with no rows the panel is the empty state
+	with rows the panel shows them in rank order and no empty message
+pickman/tests/acceptance/f0061/travel.spec.luau
+	a destination is a whole place id from 1 up, as a number or as digits
+	a failure nobody asked for changes nothing
+	a go comes with a ticket that names the request; the other answers have none
+	a late failure changes nothing: it does not extend a cool-down or cool down a newer request
+	a player who leaves is forgotten
+	a report for an older request changes nothing: the newer one keeps its own wait
+	a report with no ticket (the engine's init failure carries none) applies to the current request
+	a reported failure cools down for 3 s from the report, then the player may go again
+	an answer for a player who is not going changes nothing
+	an answer that comes late never pushes the timeout past the cap
+	an idle player may go, and is then busy: one request at a time
+	anything else is not a destination: 0, negatives, fractions, NaN, too large, text, other types
+	once the engine call has returned, nothing happening for 15 s is a failure
+	players are separate
+	takes its times from the config it is given
+	the defaults: 15 s after the engine call returns, 3 s of cool-down, a 60 s cap on a call that never returns
+	while the engine call has not returned the player stays going, past 15 s, up to the 60 s cap
+pickman/tests/acceptance/f0065/client.spec.luau
+	Return and KeypadEnter send one request each at game over, other keys and key-up nothing
+	a tap that is not live sends nothing, even if the button is hit
+	binds the continue keys without an on-screen touch button: a tap anywhere is the touch way
+	draws the results and the prompt the overlay gives
+	has no report before the server sends one, then keeps the latest LobbyStatus
+	hears reports only on LobbyStatus
+	shows the tap target only while a tap asks, and a tap then sends one request
+pickman/tests/acceptance/f0065/over.spec.luau
+	is false again once a new run starts
+	is false during a level clear and the dying pause
+	is false through ready, play and dying, and true once the run is over
+	is per player, and false for a player the session does not know
+pickman/tests/acceptance/f0065/place.spec.luau
+	FlowView sends ToLobby with no arguments, on a tap or Flow's continue keys, and hears LobbyStatus
+	Main asks Flow with the server's latest report and frees the mouse by the overlay
+	Returns uses Travel, and Sessions.isOver asks Logic
+	no other client script talks to the way back
+	the Beta runtime structure check asserts the new remotes and the attribute, not PlayAgain
+	the lobby's id is a number attribute LobbyPlaceId on ServerScriptService, 0 as checked in
+	the remotes are Ready, Intent, Snapshot, ToLobby and LobbyStatus, and PlayAgain is gone
+	the server no longer starts a new run on request
+	the server's Main starts Returns with Sessions.isOver
+pickman/tests/acceptance/f0065/results.spec.luau
+	Return and KeypadEnter are the continue keys, and no movement key is one
+	a ready pause and play show exactly what they did, with no prompt
+	after a failed trip the prompt says to try again, and a tap waits for the cool-down
+	before the server has reported anything, game over offers the way back
+	game over shows the results, the way back and a free mouse, and a tap asks
+	leaves the record and the report unchanged
+	no prompt mentions playing again
+	only game over has a prompt, asks on a tap or frees the mouse, whatever the server reported
+	the constants: the prompts, and Return and KeypadEnter continue
+	while the trip is under way the results stay, the prompt says so, and a tap does not ask again
+	with no lobby set up the prompt says so in every trip phase, and a tap never asks
+pickman/tests/acceptance/f0065/returns.spec.luau
+	a call abandoned after the cap reports nothing to the newer request: no third call while the second runs
+	a failed call tells the player, cools down for 3 s, and then the player may try again
+	a joining player is told the trip's state once
+	a lobby id given as digits is accepted
+	a player who leaves and comes back is told the state again, even if it is the same as before
+	a player who leaves is forgotten and told nothing more; players are separate
+	a player who leaves while a trip is under way and comes back may ask again at once
+	a request while the run is not over does nothing
+	a trip nobody answers frees the player after 15 s
+	an abandoned call that returns at last does not shorten the newer request's wait
+	an init failure from the engine is a failure too
+	every report goes on LobbyStatus and nothing on any other remote, through a whole trip
+	no place id is written into the server's code
+	once the run is over, five requests reach the engine once, with the lobby's id and the player
+	only the sender goes, and only its own run counts
+	the lobby's id is read from the attribute the built game place carries, 0 as checked in
+	what the client sends with the request is ignored
+	whether the run is over is asked at the time of each request
+	with no lobby set up (no attribute, 0, text that is not an id) nothing reaches the engine
+pickman/tests/acceptance/f0065/run.spec.luau
+	results, a tap, a failed trip, the wait, a second tap and the trip
+	with no lobby set up the results say so and nothing reaches the engine
+pickman/tests/acceptance/f0065/sessions.spec.luau
+	Sessions.isOver is false with no session, false in play, and true once the player's own run is over
+	a player who leaves has no run any more
+	a request in play goes nowhere; once the run is over one request reaches the engine for that player
+pickman/tests/acceptance/f0100/blaster.spec.luau
+	a door stops it, and the house beyond a door is out of reach
+	a drop says whether a shot was gained, and a drop while three are held is lost
+	a reset empties the blaster
+	a seed rolls the same drops every time, and different seeds roll differently
+	a shot's line starts on the player's tile and runs to the last open tile before a wall
+	a target beyond a wall is out of reach, even on the same row
+	a wrapping row carries it round once, without coming back to the player's tile
+	about half of the rolls drop, for every seed tried
+	an empty list is a miss, and the line is a fresh list each time
+	an inactive target neither is hit nor stops the shot
+	holds at most three shots and drops one on half the eaten ghosts
+	on one tile the lowest index is hit
+	spending takes one shot, and nothing when there is none
+	the four fire intents name a heading, and nothing else does
+	the nearest active target on the line is hit, by its index
+	the roll is made even when full: what drops does not depend on what is held
+pickman/tests/acceptance/f0100/drops.spec.luau
+	a ghost eaten on contact that rolls a drop gives a shot, with a ShotGained event
+	a ghost that is shot rolls no drop
+	a new run starts with none
+	every frame carries the count as a number, plain data for replication
+	no more than three are held: a drop at three is lost
+	one that rolls no drop gives nothing
+	shots outlive a cleared level
+	shots outlive a death
+	the session's drops are its seed's Blaster rolls, eat after eat
+pickman/tests/acceptance/f0100/hud.spec.luau
+	a beam ends at the far edge of the last open tile before the wall
+	a door stops the beam before it
+	a wrapping row ends the beam at the maze's edge
+	follows the lives: one more life moves the bars one icon and a margin along
+	half an icon and half a margin round half up
+	no shots, no bars; a count that is not a whole number counts down to one
+	one bar per shot, after the last life and a margin, half an icon wide and half a margin apart
+	starts from the player's continuous position, off the centre line's cross axis
+pickman/tests/acceptance/f0100/place.spec.luau
+	Blaster is a Logic feature in the place
+	HudView draws the shots with Hud.shotIcons and has a shots entry point
+	Main hands each frame's shots to the HUD and the frame to the beam
+	the beam is a client module that draws the server's shot, from View.beamEnd, and decides nothing
+	the remotes are the game place's five: a shot rides the Intent remote
+	the server adapter is untouched by the blaster: it hands every intent to Session.submit
+pickman/tests/acceptance/f0100/shots.spec.luau
+	a blue ghost that is shot is eaten on the same chain as one eaten on contact
+	a fire counts toward the per-tick limit, and only one is taken a tick
+	a fire in a pause is ignored and spends nothing, and is not kept for when play starts
+	a fire the server drops leaves the frame's shot alone: none held, a pause, a second fire in a tick
+	a miss spends the shot and scores nothing
+	a moving player shoots from the tile it holds before this step's move, not after it
+	a session without ghosts takes no shot and spends nothing
+	a shot eats the nearest active ghost on the line for the chain's points, and costs one shot
+	a shot ghost comes back by the house like an eaten one, and is dangerous again
+	a wall stops the shot: a ghost beyond it on the same row is safe
+	accepts the four fire intents beside the movement intents, and still nothing else
+	eyes on the line are passed through, and the active ghost behind them is hit
+	only the first fire of a tick is taken, and the shot applies once
+	shots in a row climb the chain: 200, then 400, then 800
+	the chain restarts when the power runs out, so the next shot pays 200
+	the frame names the latest shot the server took, by its step's tick and heading
+	the shot is taken before anyone moves: a ghost on the player's own tile is eaten, not a killer
+	with no shot held, a fire does nothing
+pickman/tests/acceptance/f0101/airborne.spec.luau
+	Session.kill after step 2 of a hop keeps it until the respawn
+	Session.kill after the step after take-off forgets the hop, so the pause does not play the arc
+	Session.kill right after take-off forgets the hop, so the pause does not play the arc
+	a blue ghost met while airborne is passed over, not eaten; on the ground it is eaten
+	a catch on the landing step keeps the hop until the respawn
+	a hop and a shot in one tick both happen, and each counts toward the limit
+	a hop counts toward the per-tick limit, and only one is taken a tick
+	a shot taken while airborne still eats the ghost on the line
+	a take-off catch forgets only that player's hop
+	accepts "Hop" beside the other intents, and still not "Jump" or any other spelling
+	an active ghost on the player catches them, except in the 2nd to the 11th step of a hop
+	each player has their own hop
+	in play a hop starts this step: a Hopped event, and the frame says the tick
+	leaving play before step 2 of a hop forgets it, so the pause does not play the arc
+	outside play a hop does nothing, and is not kept for later
+	pellets passed over while airborne are not eaten and stay; the player still moves along the rail
+	running head-on into a ghost: a hop 2 to 9 steps before the meeting carries the player over it
+	the ghosts move on exactly as without the hop
+	the last life, caught on take-off, is game over with no hop and no respawn
+	the last pellet, eaten the step after take-off, forgets the hop for the level-clear pause
+	the next hop starts no sooner than Hop.TICKS + Hop.COOLDOWN steps after the last
+pickman/tests/acceptance/f0101/heights.spec.luau
+	Hop.CLEARANCE is the studs from the standing eye up to the wall top
+	a ghost stands over the walls, the standing eye is below their top, and a jump's top is above both
+	every pellet is drawn below the eye and the walls
+	the walls are 9 studs tall, the ghosts 10 by 6, the eye 4
+pickman/tests/acceptance/f0101/jump.spec.luau
+	a step is airborne when the eye is over the wall tops for most of the time the camera shows it
+	a step that is not finite never starts a hop; a last start that is not finite does not block one
+	airborne is the eye over the wall tops in the middle of the step: steps 2 to 11 of the hop, 0.67 s
+	has the designed numbers: up 14 studs and down again in 0.8 s, then at least 0.5 s before the next
+	it is a parabola: symmetric, and three quarters up a quarter of the way through
+	it rises and then falls between steps too, never below the ground or above the top
+	no hop, before it starts, after it lands, or at a time that is not finite: 0
+	no new hop while one is up, or before the cool-down after it lands has passed
+	the eye is at the top, Hop.RISE up, half way through, and on the ground at both ends
+	the first hop may always start
+	the tick the camera shows is the snapshots' blend, clamped like View.interpolate's
+pickman/tests/acceptance/f0101/place.spec.luau
+	Camera keeps the server's hop and starts none of its own
+	GhostView sizes a ghost's body from View.GHOST
+	Main hands every frame's hopped to the camera
+	MazeView raises walls and doors to View.SCALE's wall height
+	the eye is the standing height plus Hop.rise at the tick being shown, in the camera's one CFrame
+pickman/tests/acceptance/f0101/sight.spec.luau
+	at the top of a jump, at least 80% of them show their top two studs over the walls
+	most ghosts within ten tiles are hidden behind walls from the standing eye
+	standing, almost no hidden ghost shows any of itself over the lowered walls (at most 0.1%)
+pickman/tests/acceptance/f0102/box.spec.luau
+	a full-size glow is 12% of the smaller side
+	it grows with the glow's size
+	it is centred on its edge point, then moved in to be whole on the screen
+	nonsense in gives an empty box on the screen, never NaN
+	on every screen and in every place, it is whole on the screen and clear of the middle
+pickman/tests/acceptance/f0102/colors.spec.luau
+	a name without a colour is white, and every answer is a fresh table
+	each ghost has its own colour while normal, flash or not
+	frightened is blue for everyone, and blinking flashes white
+pickman/tests/acceptance/f0102/glows.spec.luau
+	a tie in distance goes to the earlier ghost, whatever order the list is in
+	each glow carries its nearest ghost's name and flash, so its colour needs no lookup
+	each glow carries its sector's bearing for the screen's aspect
+	end to end: four ghosts around a player light the places they are in
+	eyes never glow, and a ghost too far along the maze does not either
+	one glow per sector with a ghost, in sector order
+	the field of view still decides which are in view, with the camera's numbers
+	the nearest ghost in a sector lights it: its look, size, brightness and index
+	with inView, a ghost ahead in view is listed and says so; one behind says it is not
+	without the option nothing changes: a ghost in view gets no indicator, one out of view says so
+pickman/tests/acceptance/f0102/place.spec.luau
+	DangerHud colours nothing by position
+	DangerHud lists every close ghost, in view or not, with the camera's numbers
+	it draws the danger directions Awareness computes: the edge glows, or f0158's ring
+	the HUD still does no geometry itself
+	the arrows are gone
+	the danger directions have their own screen, under the radar, the Flow overlay and the HUD
+	the ghost bodies take their colours from View.ghostColor too, with no table of their own
+pickman/tests/acceptance/f0102/sectors.spec.luau
+	a bearing goes to the nearest sector, just either side of a boundary
+	a bearing that is not finite is ahead
+	a sector's bearing is in (-pi, pi], and an aspect that is not a positive number counts as square
+	each sector's bearing lands on its place: edge middles and the four corners, on any screen
+	exactly between two, the edge sector wins over the corner
+	the middle of each eighth is that sector
+	there are eight
+pickman/tests/acceptance/f0104/aim.spec.luau
+	a look exactly half way goes the way of travel, ahead or behind
+	a look that is not a number aims ahead
+	held arrows win over the look, even while the look is still turning to them
+	the arrows aim ahead, left, right and behind of the heading
+	the pitch never matters, and a look past a whole turn counts from where it points
+	two arrows together aim ahead or behind: the way of travel wins the tie
+	with no arrow held, the look's yaw is rounded to the nearest heading
+pickman/tests/acceptance/f0104/hunt.spec.luau
+	eat a ghost, get a shot, look right with an arrow, press E, and the ghost there is eaten
+pickman/tests/acceptance/f0104/keys.spec.luau
+	maps the ten keys, and may map more
+	other keys do nothing, the old drop and fire keys included
+	the arrows and Space no longer move or snap; only W A S D are movement intents
+	the map is frozen
+pickman/tests/acceptance/f0104/look.spec.luau
+	a frame time that is not a positive number moves nothing
+	a held arrow turns the look to it at the camera's turn rate: a quarter turn in TURN_SECONDS
+	any other look input takes over a spring (a mouse move or a touch drag), from wherever it put the look
+	behind is the shorter way round, and up-and-left is 45 degrees
+	let go, the look springs back to the heading at the same rate, and stops springing there
+	other actions leave the arrows alone, and the result is a fresh table
+	pressing an arrow drops the mouse's look: the pitch levels at the same rate
+	pressing and letting go of an arrow sets and clears just that arrow
+	the steer it returns is a fresh table, and what it was given is untouched
+	where the arrows look, in quarter turns from the heading
+	while an arrow is held, any other look input is ignored: it turns from last frame's look
+	without arrows or a spring, the look is whatever the mouse made it
+pickman/tests/acceptance/f0104/place.spec.luau
+	Camera looks with View.steer and aims with View.aim, and has the arrows' entry point
+	Controls binds every key of View.KEYS through View.action, at high priority
+	E sends the shot as Blaster.intent of the aim, on the one Intent remote, with no wire strings of its own
+	Main hands the camera's arrows and aim to Controls.keys, before Ready
+	Space sends f0101's Hop.INTENT on the Intent remote, and never the string Jump
+	it hears a key going up and a cancelled input, and tracks the arrows with View.press
+	the arrow look stays on the client: Camera sends nothing
+	the camera's part comes in through Controls.keys: arrows and aim
+	the touch side keeps what it builds on: Controls.start(onSnap) and Camera.snap
+pickman/tests/acceptance/f0126/adapters.spec.luau
+	Controls adds no require for the pick: its wire string comes through View (stub loaders stay valid)
+	F sends View.PICK_INTENT (Picks.INTENT) on the Intent remote, and no wire string of its own
+	Main rebuilds the walls from the frame's maze and marks when View.wallsKey changes
+	MazeView builds the marked walls as walls of their own (their colours and flash: views.spec)
+	Session never moves the player or aims a shot in the session's shared maze, only in the member's
+	the HUD shows the pick and the boon with Hud.pickProgress and Hud.boonBanner, from Main's frame
+	the camera lifts the eye by the hop at its own length, given by Main from each frame
+	the radar and the beam see the frame's maze, holes open
+pickman/tests/acceptance/f0126/boons.spec.luau
+	a banked faster pick is kept over a death and a new level, and dropped by a new run
+	a blaster shot: one more shot held, every time
+	a faster pick: the next pick takes half the time, and spends the boon: the one after takes the whole time
+	a ghost pill: the level's frightened time starts, as from a power pellet
+	a long ghost pill: twice the level's frightened time
+	a pick while the ghosts are blue still lasts a hunting ghost's ten tiles
+	a shot boon with three shots held gains nothing and says nothing
+	a shot granted while three are held is wasted
+	a wasted fast pick keeps the faster pick for the next one
+	after a long hop the next waits the cool-down after its own landing
+	each boon is about as likely as the next, over many runs
+	longer jumps last until the maze is fresh: a new run hops at the normal length
+	longer jumps: kept over a death, ended by a new level
+	longer jumps: the next hop is a long one, airborne 15 steps instead of 10
+	no pick starts in the air of a long hop
+	pellets back brings back the eaten power pellets too, and feeds no pellets to the ghost house
+	pellets back: every eaten pellet and power pellet is there again
+	the frame's last boon is kept over a death and a new level, and gone in a new run
+	the pill's time is announced as a power period, for the ghosts to turn blue
+	the session's airborne rule follows the long hop: pellets passed late in it are not eaten
+pickman/tests/acceptance/f0126/classic.spec.luau
+	a ghost pill turns the ghosts blue in the step the wall comes down
+	always shows three marked walls, each one that can be picked
+	one seed plays the same picks twice
+	the pick lasts ten paces of the member's own ghosts, their tuning included (f0125's slower ghosts)
+pickman/tests/acceptance/f0126/closed.spec.luau
+	after a death the holes stay open to the ghosts: one walks into a hole dug before the death
+	nobody walks a wall: after a new run with holes closed, no ghost and not the player stands on a wall
+pickman/tests/acceptance/f0126/controls.spec.luau
+	F and Y going down each send the pick once; going up sends nothing
+	FIRE, JUMP and the rest of the screen never send the pick
+	HudView draws the PICK button at Touch.buttons' pick rectangle, gold, captioned PICK, on touch only
+	HudView places the PICK button by the layout's inset, and again when the screen turns
+	a finger going down on the PICK button sends the pick, once a tap
+	the keyboard's F and the controller's Y are bound to the pick
+	without a pick rectangle in the buttons, that place is the look half as before
+pickman/tests/acceptance/f0126/eaten.spec.luau
+	a blue ghost met while picking is eaten, and the pick goes on
+pickman/tests/acceptance/f0126/ghosts.spec.luau
+	a ghost that reaches a picking player catches them, and the pick is wasted
+	the ghosts walk into the holes
+	the ghosts walk on while the player picks
+pickman/tests/acceptance/f0126/maze.spec.luau
+	Maze.open makes one wall empty in a copy: same id, size and spawn, the original untouched
+	Maze.open refuses a tile that is not a wall, and a wall on the edge
+	Maze.opened opens every tile in turn, and with none it is the maze itself
+pickman/tests/acceptance/f0126/parts.spec.luau
+	F is the pick key; the other keys are as they were
+	Game.power with a factor lengthens the period; without one it is the level's
+	Ghosts.useMaze swaps in a copy of the maze, and refuses another layout
+	Hud.boonBanner names the latest boon for two real seconds from the step it came in
+	Hud.pickProgress is the share of the pick done at the shown tick, nil without a pick
+	Movement.halt refuses a player between centres
+	Movement.halt stops a player on a centre, with no buffered turn left and the run restarted
+	Movement.nextCentre is 0 and the player's tile on a centre, else the distance to the tile ahead
+	Movement.resume sets a halted player going when the way ahead is open, and not into a wall
+	View.frameMaze is the layout with the frame's holes open, and the layout itself with none
+	View.wallColor: the flash wins, then a marked wall's gold, then the edible green, else blue
+	View.walls without marks is the same runs as before; with marks each marked wall is a run of its own
+	View.wallsKey changes exactly when the holes or the marks change
+	a ghost walks into a hole when it is the way to its target
+	a hop's length: the default is Hop.TICKS, as before
+	a length that is not a whole number of steps counts as Hop.TICKS
+	a long hop rises as high, lasts Hop.LONG_TICKS, is airborne 15 steps and cools down after landing
+	a marked wall in a column the tunnel margin repeats is gold in its copy too
+	every boon has a banner of its own
+	the marks' gold stands at least 30 (CIE76) from every ghost and ghost look, and from the walls' blue and green
+	the pick's bar and the boon's banner sit in the safe area, clear of every other HUD block and the radar
+	the runs with marks cover exactly the same wall tiles, each once
+	the step's maze replaces the set's: a later step with the plain maze closes the hole again
+pickman/tests/acceptance/f0126/pick.spec.luau
+	Forward during the pick sets the player going again, though Forward never restarts a stopped player
+	a Pick holds no place in the per-tick intent limit: accepted after a full tick, and costing none
+	a Pick pressed during a pick is ignored: once it finishes the player walks on past the next mark
+	a death during the pick wastes it; the holes already open and the marks stay
+	a finished pick opens the wall, marks another and grants the boon in the frame
+	a fresh run shows three marked walls, no holes, no pick and no boon
+	a hop during the pick wastes it, and the player goes on
+	a key in the step the pick finishes does not waste it
+	a movement key during the pick wastes it: no wall opens, and the player goes
+	a movement key in the step the player would stop wins: no pick starts that step, the key acts
+	a new level marks walls of the fresh maze, not of the one with holes, and new ones
+	a new level starts from a fresh maze: no holes and new marks
+	a new run rolls new marks on the fresh maze
+	a new run starts from a fresh maze: no holes and new marks
+	a repeat Pick restarts the request's time
+	a request in a pause is forgotten
+	a request lapses exactly: a mark first in reach on its 24th step is picked, on its 25th it is not
+	a request lasts as long as a buffered turn, and then lapses
+	a request with no marked wall on the way does nothing
+	accepts Pick on the Intent remote, and a repeat in one tick too
+	after the pick the player goes on along the corridor by itself
+	firing during the pick does not waste it
+	no pick starts while a hop is under way, from take-off to landing
+	the hole is open to walk into: a turn at the pick's centre takes the player into it
+	the player stands for the whole pick, and the wall opens exactly PICK_TICKS steps after it began
+	the player stops on the first centre beside a marked wall and the pick starts there
+	whatever sets the step's speed, the player stops exactly on the marked wall's centre
+pickman/tests/acceptance/f0126/picks.spec.luau
+	a fast pick takes half of that, rounded up, and never less than a step
+	a new set of picks has no marks until it is reset on a maze, then exactly three
+	a pick lasts as long as a hunting ghost takes to walk ten tiles, rounded up
+	a seed marks the same walls every time, and different seeds mark different ones
+	a seed rolls the same boons every time; another seed rolls others
+	a tile that is not a wall cannot
+	a wall on the outer edge cannot, even beside a walkable tile
+	a wall with no walkable neighbour cannot (only diagonal ones do not count)
+	an interior wall next to a walkable tile can be picked
+	every boon comes up, each about one time in six
+	lists exactly the six boons, in a fixed order
+	mark tops the marks back up to three and returns what it added
+	marks only as many as there are candidates
+	no wall touching a door or a house tile, corners included, can be picked
+	reset rolls new marks and keeps the banked fast picks
+	the candidates are every pickable wall not yet marked, row-major
+	the classic maze has 342 walls that can be picked
+	the marks spread over the whole maze, not one corner
+	the tuning is the user's: three marked, ten paces, six boons, a long pill of twice the time
+	the wall picked from a tile is the marked one beside it: ahead, then left, right, behind
+	the wire string is exactly Pick
+pickman/tests/acceptance/f0126/touch.spec.luau
+	Touch.buttons carries the pick button beside f0110's three, which stay as they are
+	Touch.pickRect is the fire button's size, one margin left of it, level with it
+	a finger going down on it is the pick zone; without a pick rectangle that place is a half as before
+	a tap on it emits one pick, on the finger going down, and nothing on its move or lift
+	it is at least 44 px, inside the safe area, and clear of every HUD block, both radars and the pick's own bar and banner
+	the snap control, FIRE and JUMP win over PICK where they overlap
+pickman/tests/acceptance/f0126/views.spec.luau
+	HudView places the bar and the banner again when the screen turns or its insets move
+	HudView puts the pick bar and the banner at Hud.pickBox and Hud.boonBox of its layout, inset included
+	HudView shows the bar filled as far as the pick has gone, and the banner's words, only while they last
+	Main hands the radar the frame's maze, the camera the hop's length, and the HUD the pick and the boon
+	Main rebuilds the walls once per change of the holes or the marks, from the frame's maze
+	Main rebuilds the walls when only the marks change too (a new level with no pick yet)
+	Main turns the walls and the radar green while the ghosts are edible, and blue again after, every frame
+	MazeView gives each marked run a gold MarkedWall part, and every other run a Wall
+	MazeView leaves the holes open and keeps the rest of the model when it rebuilds the walls
+	MazeView's flash lights the marked walls with the rest, and gives them back their gold
+	while the ghosts are edible the walls are green and the marked walls stay gold, rebuilt or not
+pickman/tests/acceptance/f0145/clients.spec.luau
+	CONTINUE and END GAME show only during the offer and send ask and decline
+	outside the offer the keys pass on and send nothing
+	while the offer is up, Return, KeypadEnter and ButtonA ask, Backspace and ButtonB decline, on the press
+pickman/tests/acceptance/f0145/lives.spec.luau
+	Hiscores.lives keeps a whole count of at least one and nothing else
+	a broken lives value is stored and read as nothing, never as a count
+	a game over's lives go into the run's submission
+	a stored row keeps the attempt's lives, and the rows read back carry them
+	the lobby's panel keeps each row's rank, name, score and level first, and no lives mark for a row without lives
+pickman/tests/acceptance/f0145/offer.spec.luau
+	a bought continue's receipt is awaited for RECEIPT_WAIT_TICKS at most; a continue in that wait works
+	a continue gives three new lives and a respawn; the score, level and extra-life flag stay; lives lost go on
+	a continue outside the offer does nothing; a bad offer length changes nothing
+	a decline ends the offer at the next step, with the game over
+	a held offer does not count down; released, it does again
+	a refused run is over at once and never yields a GameOver event
+	departing and refusing do nothing for a player the session does not know; f0013's leave still removes
+	in a session without the offer the last life is the game over, at once
+	in a session: the offer keeps the run alive, a continue respawns at the start with the pellets eaten kept
+	leaving ends the run: in the last dying pause the offer never opens; in a held offer it ends next step
+	the offer's numbers: 150 steps (10 s of real time), three lives a continue; off by default
+	with the offer on, the last life opens it for OFFER_TICKS steps; its end is the game over
+	without the offer the last life ends the run as before, and the game over carries the lives lost
+pickman/tests/acceptance/f0145/place.spec.luau
+	game-design.md states the paid play; architecture.md declares Pay and Lobby -> Pay
+	no client script requires Purchases; both places keep their remote lists
+	the game server hands Continues to Sessions.made before Sessions starts; the client boots OfferView and shows it each frame
+	the lobby server puts Paid in front of Starts; the lobby client boots PayView after LobbyView
+pickman/tests/acceptance/f0145/runs.spec.luau
+	HiscoreStore's real source writes a submit's lives into the stored row
+	a player who leaves in a held offer (a purchase screen open) is submitted once
+	a player who leaves in an open offer is submitted once, with the lives lost
+	a player who leaves in the last dying pause is submitted once, with the lives lost
+pickman/tests/acceptance/f0145/top.spec.luau
+	a per-player best merged into the list keeps its row's lives; a broken value is none
+	a run's entry on the list carries its lives; the lobby's rows read from the list keep its order
+pickman/tests/acceptance/f0145/views.spec.luau
+	a closed server's lobby line says the store is unavailable, free and held as ever
+	in test mode the lobby's line says nothing is charged
+	the lobby's line: free, else what is held, else the price and the minutes to the next free start
+	the offer's overlay: CONTINUE?, the results, three new lives and the seconds left; the buttons, no tap
+	the price under the buttons: a continue held, else 1 Robux; test mode and no report say nothing is charged
+	the seconds left are real seconds, rounded up, and never below zero
+pickman/tests/acceptance/f0148/adapters.spec.luau
+	Sessions hands every step's events to each listener, the run's own Ready with its starting level included
+	Sessions makes each session on the level Sessions.starts gives, and on level 1 without one
+	Sessions tells Sessions.made of each new session once it exists; a player who left during the wait gets none
+	a failing store starts the run on level 1; one that never answers does after Bests.WAIT seconds
+	a place that cannot open the store still boots and plays: no picker, level 1, no error
+	a run reaching a new level raises its player's stored best; a death or a lower level changes nothing
+	a second Ready while the first waits for the start makes no second session
+	each place's Main hands the hooks over: the store adapter starts first, then the hooks, then what uses them
+	the game place claims each arriving player's chosen start once and clears it
+	the game place claims the players already in the server when it starts
+	the lobby puts each arriving player's stored best on the player, and a fresh player's 1
+	the lobby reads players already in when it starts, and sets nothing when the store fails
+	the lobby stores the chosen level, bounded by the stored best; a failing store is no error
+	the lobby's write waits at most Bests.CHOOSE_WAIT seconds, so a silent store never holds the teleport
+pickman/tests/acceptance/f0148/best.spec.luau
+	a run may start on a whole level from 1 to the best, and on nothing else
+	a stored value reads back as a record of whole levels, and anything else as a fresh one
+	on a keyboard Left steps lower and Right higher; no other key steps
+	raising the best writes only when it rises
+	reaching a level raises the best, never lowers it, and keeps the choice
+	the arrows step one level within 1..best, starting from the best
+	the game place claims the choice once: an allowed one, else level 1; the choice is cleared
+	the lobby's choice is kept when allowed; a press with no level, or one not allowed, is level 1
+	the picker shows once there is a choice, starts on the best, and its arrows say which way is open
+	the store and the attribute have one name each, shared by the lobby and the game place
+pickman/tests/acceptance/f0148/docs.spec.luau
+	has a Start on any level section with each of the user's decisions and the prep's choices
+	the rows it changes say so
+pickman/tests/acceptance/f0148/lobby.spec.luau
+	LobbyPicker binds Left and Right above the camera; they step the level and are sunk only when they do
+	LobbyPicker starts on the best; ◀ steps lower, ▶ higher, within 1..best; only the open way is live
+	LobbyPicker tells LobbyView of every change: a step, a key and a new best
+	LobbyPicker's arrows are hidden while the best is 1 or unknown, and show once it is 2 or more
+	LobbyPicker's arrows sit either side of START, touch-sized, selectable for a controller
+	LobbyView keeps the status's text with a picker: STARTING... while going, START LEVEL n again when idle
+	LobbyView shows the picker's level on START and sends it; a hidden picker sends nothing
+	LobbyView without a picker is as before
+	START says which level it starts when the picker gives one, and is as before without
+	a press that Travel lets go hands the player and the requested level to the store hook, before the teleport
+	a press that does not go keeps its level for the next press that does, which may carry none
+	presses Travel refuses (one under way) reach neither the hook nor the engine; a press with no level passes nil
+	the teleport waits for the store hook in the press's own thread: none while the hook yields
+	with no destination nothing is chosen and nothing teleports
+pickman/tests/acceptance/f0148/session.spec.luau
+	a new run after game over starts on the same level again
+	a session joined with a start is on that level from its first frame; without one, on level 1
+	a start that is not a whole level of 1 or more is refused
+	every point is worth the starting level's multiple from the first pellet
+	the extra life comes at 10,000 x the starting level
+	the ghosts start on the starting level
+	the player runs the starting level's ramped speed from the first step
+pickman/tests/acceptance/f0186/boards.spec.luau
+	a revive count reads REVIVES n, and none (or junk) reads REVIVES 0
+	every row ends with its revives after the level; a row without them shows none; lives are not shown
+	the viewer's best line shows the best's revives, on the all-time board only
+	what a board read gives the lobby shows the stored revives, the top-10 list's included
+pickman/tests/acceptance/f0186/count.spec.luau
+	a continue outside the offer counts nothing, before the run ends or after
+	a new run starts with none again
+	a player who departs after a continue ends the run with that revive counted
+	a run starts with none; each continue the offer takes counts one
+	a session's game over and frames carry the revives; the frame shows none as nothing
+	every game over carries the run's revives, 0 for a run without one
+pickman/tests/acceptance/f0186/docs.spec.luau
+	architecture.md declares Flow -> Lobby
+	game-design.md's paid play says revives, a free game per game and the sale price; lives spent is gone
+	pickman's paid-play records stay in pickman's own stores, keyed by user id
+pickman/tests/acceptance/f0186/gameover.spec.luau
+	RevivesView draws the line at the game over and hides it in every other phase
+	the client's Main boots RevivesView and shows it every frame with the frame's play
+	the game over's overlay is unchanged: the results line stays the score and the level
+	the revives line: REVIVES n at the game over, REVIVES 0 for none, nothing in any other phase
+pickman/tests/acceptance/f0186/price.spec.luau
+	the continue's price is not a play's: no struck price under the offer's buttons
+	the lobby draws its pay line as rich text
+	the lobby's free, held and closed lines are as they were
+	the lobby's line shows that price wherever it showed the price of a play
+	the price of a play: 5 R$ struck through, on sale for 1 R$
+pickman/tests/acceptance/f0186/rows.spec.luau
+	Hiscores.revives keeps a whole count from 1 to 2^53 - 1 and nothing else
+	a broken stored or sent count reads as none, and never stops a row being stored or read
+	a game over's revives go into the run's submission; none is nil
+	a player's best carries its row's revives; a best without them is as it was
+	a row that replaces another carries its own run's revives, not the stored row's
+	a stored row keeps the attempt's revives, and the rows read back carry them
+	revives never make a row replace another, and never rank the boards
+	the top-10 list carries each run's revives through every path, and they never order it
+pickman/tests/acceptance/f0186/submit.spec.luau
+	HiscoreStore's real source writes a submit's revives into every stored row and the list entry
+	Submits hands HiscoreStore the run's revives after the lives; none is nil
+	a player who leaves after a continue is submitted once, with that revive
+pickman/tests/meta/architecture.spec.luau
+	Logic never touches the Roblox engine
+	Logic requires resolve inside the home: an arcade feature reaches Logic as a parameter
+	cross-feature requires are declared in .tracker/architecture.md
+	declared feature dependencies have no cycle
+	every Luau file is --!strict
+	every feature has unit specs
+	every require resolves
+	features are only used through their init.luau
+	helper specs sit in tests/helper/<helper>/ and load only their helper, t and their fixtures; unit specs load no other helper
+	specs reach the shared place harness only through the home's tests/lib/place
+	src has no dynamic requires
+	src requires: ./, ../, @self/, @game/ReplicatedStorage/ (and ServerStorage/ on a server)
+pickman/tests/meta/fence.spec.luau
+	every allow-list key names a file, or an unfinished item's spec where done will promote it
+	every caller of the fence outside fence.sh takes its folders from pickman_fence_all
+	every fixture commits as <name>@example.invalid
+	every git this run starts refuses ref updates in this repository
+	git finds no repository in .cache, nor in a folder below it that has none
+	no spec, check.sh or script switches a guard off or points git elsewhere
+	on macOS this run can write nothing in the checkout outside .cache
+	specs have no GitHub credentials and push only into fixtures
+	this run is guarded for this checkout
+	when jailed, a spec can't signal the run's top process
+pickman/tests/place/bests-open.spec.luau
+	a level reached asks once, and a store that cannot be opened is no error and is asked again next time
+	a step with no level reached never asks for the store, however many steps there are
+pickman/tests/place/decline-during-revive.spec.luau
+	live: a decline during a write that fails opens no prompt, and the run ends
+	live: a decline during a write that finds none held opens no prompt, and the run ends
+	test: a decline during a write that fails opens no test screen, and the run ends
+	test: a decline during a write that finds none held opens no test screen, and the run ends
+pickman/tests/place/flow-rank-prompt.spec.luau
+	a rank heard before game over waits, then shows with the prompt
+	a rank heard during game over shows in its own line, under the results and above the prompt
+	a trip report changes the prompt and the tap, and the rank line stays
+pickman/tests/place/hud-shots.spec.luau
+	bars that arrive before the first layout are placed by it
+	draws one bar per shot after the lives shown, at Hud.shotIcons' boxes
+	follows the screen: a new size re-lays the frame and the bars on the next render
+	re-lays the bars when the lives change, and when the shots change
+pickman/tests/place/resolver.spec.luau
+	.. is only valid as leading ../ segments
+	a spec with no path after its prefix is nil
+	empty and . segments are nil
+pickman/tests/place/revives-view.spec.luau
+	its ScreenGui is Revives, kept across respawns, drawn over the inset, above Flow's fade
+	its one label is Arcade, yellow, scaled, at (0.2, 0.64) of size (0.6, 0.05), empty and hidden
+pickman/tests/place/structure.spec.luau
+	Client.Main is a LocalScript
+	Server.Main is a Script
+	Shared.Logic exists
+pickman/tests/place/touch-adapters.spec.luau
+	Camera.holdMouse also skips the mouse delta of the frame in which a finger went down or up
+	Controls binds exactly the keys of View.KEYS and Pad.BUTTONS, and sinks every one but the pad's continue
+	Controls drops every finger when the window loses focus, so the zone is free again
+	Controls fires a swipe's intent and looks by dx then dy
+	Controls fires the aimed shot on E, and nothing with no aim or no camera
+	Controls hit-tests the called snap rectangle, even on the look half
+	Controls holds an arrow from down to up, and a cancelled input lets it go
+	Controls reports held only on a change, while any physical touch is down
+	Controls sends W A S D as movement intents on the key going down only
+	Controls sends the hop intent on Space going down, and Space no longer snaps
+	HudView shows the snap frame only on a touch screen
+pickman/tests/scenario/harness.spec.luau
+	is deterministic across seeds
+	stops early once the wall is hit
+	walks right, bumps the wall and stops
+pickman/tests/scenario/session-walk.spec.luau
+	stops at (6,23) after seven tiles, then turns north on request
+pickman/tests/unit/Awareness/awareness.spec.luau
+	a point straight ahead has bearing 0
+	no ghosts give no indicators and no blips
+	size and brightness follow the distance along the maze, not the straight line
+	the radar's default radius is the documented one
+pickman/tests/unit/Best/best.spec.luau
+	claims an allowed choice once, else level 1
+	decodes a stored record, and anything else as a fresh one
+	raises the best and never lowers it
+pickman/tests/unit/Blaster/blaster.spec.luau
+	a seed that is not a number's whole value still gives a working generator
+	the intents table is frozen
+pickman/tests/unit/Boost/boost.spec.luau
+	knows its intent, exactly
+	pairs two taps inside the window once
+	raises the speed by the factor, rounded, within the cap
+	reports ready, boosting and cooling
+	runs TICKS steps from its start, then cools down COOLDOWN steps
+	widens the view over a boost and not outside it
+pickman/tests/unit/Flow/flow.spec.luau
+	every phase gets a fresh overlay with all its always-present fields
+	half way through a classic dying pause the fade is half of FADE_MAX
+	the continue keys and the prompts can't be changed
+	the revives line is the game over's only, and reads the play's count
+pickman/tests/unit/Flow/rank.spec.luau
+	a rank with a fraction or a huge value is not a line
+	a second early packet for the same next run replaces the first
+	no edge returns the same view in either state
+pickman/tests/unit/Game/game.spec.luau
+	a one-life run ends at the first death
+	a power pellet starts the level's frightened period and it runs out
+	a run can start on a later level
+	adding score leaves the run's phase alone
+	deaths and a decline count no revive; the game over after a decline carries the continues taken
+	points are multiplied by the level with a ramp and left alone without
+	the extra life is the threshold times the run's start level, and a new run starts there
+pickman/tests/unit/Ghosts/ghosts.spec.luau
+	a ghost that leaves the house comes out heading west
+	a set that is not frightened looks normal and does not flash
+	a walker occupies the nearer centre and its position is the tile plus the progress
+	the classic maze has four ghosts in the documented order
+	the occupied tiles of a set are always inside the grid, also half way through a wrap
+	the same seed gives the same wandering, a second set is independent of the first
+	the tunnel tiles are the six at each edge of the row that wraps, and nowhere else
+pickman/tests/unit/Hiscores/hiscores.spec.luau
+	a name is cut by characters, not bytes, and a non-string is the placeholder
+	a run without revives stores and reads back no revives field, and the largest count is kept
+	a submit that qualifies on one board only writes that board
+	a zero budget is never spent and a positive one is reduced
+	rankOf finds a user id and nothing else
+	the week key never moves forward within a UTC week and rolls on Monday
+pickman/tests/unit/Hiscores/read.spec.luau
+	a fetch is called once for a stale cache and its rows are cached
+	no fetch function keeps everything as it was
+	the failure wait doubles from the gap and never passes the ttl
+pickman/tests/unit/Hiscores/run.spec.luau
+	a closing server waits only while something is pending and the wait has not run out
+	a later scored GameOver in the same events is submitted when the first had no score
+	a player who stays keeps a zero wait and never drops
+	once refuses a fraction and a negative run, and leaves the table alone
+	the 45th step away drops, and the play-again state keeps the wait
+pickman/tests/unit/Hop/hop.spec.luau
+	is airborne only above the clearance
+	knows its intent
+	lands back on the ground and waits the cool-down
+pickman/tests/unit/Hud/hud.spec.luau
+	caps the power bar at 400 px
+	lays out a 1280x720 screen with 32 px text
+	models a fresh run
+	the model shows picks out of the goal only when the frame has them
+	the picks box is the row under the score block, left-aligned and its size
+pickman/tests/unit/Levels/levels.spec.luau
+	a ramp is refused unless picks, top, first and step are usable
+	a ramped row is level 1's with the speeds ramped, made once and frozen
+	level 1 is the base speed and 6 s of frightened time
+	levels past the table use the last row
+	the ramp factor is first x step^(min(level, top) - 1)
+	the timetable is worked out once per level and tick rate, and is frozen
+	without a ramp the ghost rate is the whole-unit speed, with one the exact rate
+pickman/tests/unit/Lobby/boards.spec.luau
+	a highlighted rank that is not on the panel marks nothing
+	a large revive count is written out whole, never in exponent form
+	the retry wait doubles from READ_GAP and ends after MAX_RETRIES
+	two rows that share a rank are both marked
+pickman/tests/unit/Lobby/layout.spec.luau
+	the board buttons clear START GAME, the title and the list on 1920x1080, all on screen
+	the board buttons clear START GAME, the title and the list on 844x390, all on screen
+pickman/tests/unit/Lobby/lobby.spec.luau
+	rows that share a rank are all shown
+pickman/tests/unit/Maze/maze.spec.luau
+	a vertical tunnel reports its exits across the edge
+	kind rejects fractional tiles
+	neighbor returns a fresh table on every call
+	parse rejects non-string rows
+	tiles of a kind that is absent is an empty list
+pickman/tests/unit/Movement/movement.spec.luau
+	Back just past the seam, crossing it again in the same step, reports no jump
+	Back twice in one step next to the seam reports no jump
+	a spawn facing a wall is stopped and stays put
+	lists the four intents
+	step reports no events while cruising inside a tile
+	the config and intent tables are frozen
+	the default config is level 1: 7.5 tiles/s at 30 Hz, a 0.8 s turn buffer
+pickman/tests/unit/Pellets/pellets.spec.luau
+	counts what a maze holds and what is left
+	decode refuses a code for another maze size
+	encode and decode round-trip what is left
+	lists the tiles that are left
+	slots list the layout's pellets in row-major order
+pickman/tests/unit/Session/session.spec.luau
+	a continue resets the ghost house as after a death, not as a new level
+	a new player's frame carries every pellet of the classic maze
+	a pellet eaten on a step that is still paying a pause owes its own pause at the full speed
+	a player who leaves gets no more events
+	each session's ghosts are seeded from the session's seed
+	has the designed defaults
+	players no longer lists someone who left
+	step returns each player's events in player id order
+	the frame's revives follow each continue the session grants, nil before the first
+pickman/tests/unit/Touch/touch.spec.luau
+	Touch.buttons is the snap, fire and hop rectangles, as fresh tables
+	Touch.zone checks snap, then fire, then hop, then the halves
+	a begin leaves Touch.empty() as it was
+	places the snap button left of the bar, on a wide and on a narrow safe width
+	splits the screen in half
+	the fire button is level with the hop button where it clears the snap control, raised where it does not
+	the fire button is the hop button's size, one margin to its left
+	turns an axis swipe and drops a diagonal
+pickman/tests/unit/Travel/travel.spec.luau
+	a timed-out request cools down from the moment the timeout is seen
+	digits beyond the largest place id are not a destination, even where tonumber rounds them
+pickman/tests/unit/View/view.spec.luau
+	approachYaw with maxDelta 0 stays put
+	has the designed scale
+	places a pellet at its tile's world centre at the pellet height
+	pulses only power pellets, from full size down to pulseMin and back
+	the key map is frozen
+	walls on a vertical-only tunnel repeat rows, not columns
+pickman/tests/unit/smoke.spec.luau
+	compares values
+	detects throws
+z-nile/tests/acceptance/c0172/cicd.spec.luau
+	content-md5 is the base64 of the md5
+	the lease store is not a hiscore store
+	a live lease held by someone else is busy, and an expired one can be taken
+	the reservation round-trips and does not use a hiscore name
+	the config accepts the two place keys and refuses a mix-up
+	the child environment drops inherited Roblox settings
+	the root place id is the last segment of rootPlace
+	the token file is mode 600
+	a missing config exits non-zero and does not skip
+	a place that is the experience start place is refused before any publish
+	places.cicd_game as the experience start place is refused before any publish
+	a lease the key cannot read stops the command before it publishes
+	a live lease held by someone else stops the command before it publishes
+	release refuses a live lease whose token is not ours
+	release clears an expired lease without the token
+	status names the holder and not the token or the key
+	publishes the file's places, not the inherited universe, and runs both suites
+	a versioned tombstone is replaced and the command still publishes
+	a versionless tombstone is re-read once and then replaced
+	a failed publish releases the lease and exits non-zero
+	a failed runtime suite releases the lease and exits non-zero
+z-nile/tests/acceptance/c0172/deploy.spec.luau
+	the only workflow file is deploy.yml
+	the gate workflow, the board workflow and ci-verify are absent
+	one job, deploy, with no needs and no gate
+	no step runs the gate, the runtime tests or a raft's acceptance specs
+	the publish step carries the four Roblox settings
+	a draft or a fork does not deploy, and neither does a push or a dispatch
+	the version comment runs only for a pull request
+	one publish at a time, and a running one is not cancelled
+z-nile/tests/acceptance/c0172/merge.spec.luau
+	merging is the local full gate and does not read Actions
+	the testing skill's gate is local
+	the architecture table does not list a CI dispatch
+	SETUP says verification is local
+	the gate's own comment does not say CI runs it
+	the design lesson does not send a prep to Actions
+	zz-execute names the local full gate in a clean clone
+	the worktree paragraph names that clone as the final check
+	the merging close refuses a missing local full gate
+	a main move reruns the local full gate
+	a new raft's check says the merger's full gate covers the other project
+	the testing skill says GitHub Actions does not run the specs
+	the worktree rule names the clone as its one exception
+	the final check removes origin and fences the real repository
+	the skills do not wait for green CI
+	the board cell says -O only writes the page, as the specs do
+	a merge runs the local cicd command and the runtime tier is not run by CI
+z-nile/tests/acceptance/c0172/narrowed.spec.luau
+	each narrowed spec is exactly the narrowed text
+z-nile/tests/acceptance/c0246/paths.spec.luau
+	AC1: graph.unreadable names every $path that is not a string or an optional string
+	AC1: the tree node (instance "") and nested nodes are read, sorted by instance
+	AC1: the order is by instance path, not the walk's (a parent-first walk cannot give it)
+	AC1: a node named with a $ that Rojo does not reserve is reported, the six it reserves are not
+	AC2: graph.mappings and graph.gameRoots still skip them, and keep the readable ones
+	AC3: the rule reports each, with the file, the node and what the value is
+	AC3: a file whose only $path is unreadable is not also reported as mapping no $path
+	AC5: a project file Rojo loads from a mapped folder is a nested project, at any depth and in any casing
+	AC5: a project file reached through a link that stays in the home is a nested project; one outside is not read
+	AC5: a link loop is a build Rojo refuses, so it reads no file and the rule neither crashes nor reports it
+	AC3: a project file that decodes to a number, a boolean or null is still reported, not a crash
+	AC6: a project Rojo loads through syncRules is judged by what it reads, a file without the rule is not
+	AC5: a library folder sits at its node wherever a link or a syncRules project puts it
+	AC5: the inside test is exact: a sibling of the home and the library's other folders are outside
+	AC6: a rojo that cannot be run is reported, not read as a refusal
+	AC4: the README states the rule
+z-nile/tests/acceptance/c0278/close-cli.spec.luau
+	sets up new, prepared, preparing, rafted, depended-on, done and active issues, a raft and a worktree
+	close publishes one tracker-only commit that changes only the document's status and adds wont_do
+	the closed issue keeps its folder: find, capture, status, spend.md and its review files are where they were
+	the commit's subject and Reason line carry the id and the reason
+	a prepared raftless issue is closed too
+	close refuses without a reason, with a blank or multi-line reason, a raft id, an unknown id, a done, an active, a closed, a preparing, a rafted and a depended-on issue, each naming its way out, and publishes nothing
+	close refuses in the main checkout and, without --carry, without an origin
+	close --carry edits only this tree's document, the same bytes but the stamp, and publishes nothing
+	close --carry refuses as the published close does, judged on this tree
+	close counts only live item documents as dependents: an active dependent holds it; a closed dependent and a review file's depends_on line do not
+	land refuses a capture that edits a closed issue's document or adds it to a depends_on, and lands one that adds a live id
+	cleans up
+z-nile/tests/acceptance/c0278/closing.spec.luau
+	checkReason refuses nil, empty, blank and multi-line reasons and takes one line
+	refusal checks raft, none, done, active, closed, preparing, raft, dependents in that order
+	refusal takes new and raftless prepared
+	edit sets the stamp and appends wont_do as the last frontmatter key, keeping every other byte
+	isClosed and reasonOf read the status and the trimmed wont_do
+	status parses a closed stamp and no move enters or leaves closed
+	guard accepts exactly a close
+	guard refuses an extra edit, a second wont_do, an empty or multi-line reason, a non-closed stamp, a missing status change, and a document already closed or carrying wont_do
+	closedDoc is true for a closed status or a wont_do line
+z-nile/tests/acceptance/c0278/docs.spec.luau
+	zz-rules' Statuses, Published or carried, direct-push and Paths bullets name closed
+	zz-rules' commands table has a close row and Other commands lists close and list closed
+	zz-rules' land sentences say a capture never edits a closed issue or adds one to a depends_on
+	usage names close and list closed, and close is neither read-only nor allowed in the main checkout
+z-nile/tests/acceptance/c0278/readers.spec.luau
+	sets up issues, a raft, a rafting and a design worktree, and closes two issues
+	list leaves a closed issue out, list backlog too, and list closed shows it with its reason
+	list's other rows are unchanged by a close
+	the bare status listing leaves it out and status <id> prints closed
+	the board's data has no card for it and raft-plan does not offer it
+	status moves refuse a closed issue, and status <id> closed names ./zn close
+	idea, fold and new raft refuse a closed issue
+	dispatch.next stops a closed issue as finished
+	watch-net's open-defect test ignores a closed defect and keeps done/ and retired/ closed
+	watch-net files a new slow-tier-red defect when the open one is closed, and says already open when it is not
+	audit reports closed-mismatch, closed-not-backlog, closed-in-raft and closed-dependency, each with its fix, and nothing for a proper close
+	the publish guard refuses a status-only edit of a closed document and a wont_do line without the closed status
+	publish.commit refuses to move a closed issue's folder, as never published again
+	cleans up
+z-nile/tests/tooling/closing-guards.spec.luau
+	F1: an existing document's status-only edit to closed-… without wont_do is refused
+	F1: an exact close and a plain status edit of an existing document are accepted
+	F1: a closed existing document is never published again
+	F1: a move never produces a closed document, with or without wont_do
+	final F1: close's document reaches dispatch.next as closed and stops it
+	F2: git grep's no-match is no dependents, its failure refuses
+	F2: a capture's added depends_on refuses when git can't read the dependency
+z-nile/tests/tooling/finish-deleted.spec.luau
+	a layer that deletes a spec writes no watch file for it and does not make its folder again
+	a layer that deletes a source lists it in neither the ticket's watch.txt nor a changed spec's
+	a layer with no deletion captures what it always did
+z-nile/tests/tooling/watch.spec.luau
+	parses a sorted list and refuses a broken one
+	leaves out tracker files, docs, skills, lessons, specs and watch files
+	keeps a tooling spec on tooling paths and a game spec on game and library paths
+	names a spec with no watch file and an empty watch file
+	selects the spec that watches a path, the spec a change edits, and no other
+	a source commit that names two issues shares the raft's list; a start commit does not
+	rewrites a renamed path and drops a deleted one
+	reads a failing spec path out of a suite log

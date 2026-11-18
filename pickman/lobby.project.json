@@ -7,11 +7,15 @@
     },
     "ReplicatedStorage": {
       "Shared": { "$path": "src/shared" },
+      "Arcade": { "$path": "../arcade/src/shared" },
       "Remotes": {
         "$className": "Folder",
         "StartGame": { "$className": "RemoteEvent" },
         "Status": { "$className": "RemoteEvent" }
       }
+    },
+    "ServerStorage": {
+      "Arcade": { "$path": "../arcade/src/server" }
     },
     "ServerScriptService": {
       "$attributes": { "GamePlaceId": 0 },

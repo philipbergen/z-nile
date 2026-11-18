@@ -3,13 +3,15 @@
 -- END GAME show (with the price line under them), and Return, KeypadEnter or ButtonA ask while Backspace or ButtonB
 -- decline, on the key going down; the key is sunk. At any other time the keys pass on (FlowView's Return still
 -- returns to the lobby at the game over): OfferView binds after FlowView, so it is asked first. It also boots the
--- test purchase screen. The server decides everything: the answers are only asks.
+-- arcade library's test purchase screen (c0202), which takes the same keys above every binding of the place while it
+-- is open; the buttons, which may lie under it, do nothing while it is open. The server decides everything: the
+-- answers are only asks.
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Flow = require("@game/ReplicatedStorage/Shared/Logic/Flow")
-local TestPurchase = require("@game/ReplicatedStorage/Shared/TestPurchase")
+local TestPurchase = require("@game/ReplicatedStorage/Arcade/TestPurchase")
 
 local OfferView = {}
 
@@ -61,12 +63,12 @@ function OfferView.start()
 	buttons, price = row, line
 
 	yes.Activated:Connect(function()
-		if up then
+		if up and not TestPurchase.isOpen() then
 			send("ask")
 		end
 	end)
 	no.Activated:Connect(function()
-		if up then
+		if up and not TestPurchase.isOpen() then
 			send("decline")
 		end
 	end)
@@ -99,9 +101,8 @@ function OfferView.start()
 		ask = remotes:WaitForChild("Continue") :: RemoteEvent
 		local status = remotes:WaitForChild("PayStatus") :: RemoteEvent
 		status.OnClientEvent:Connect(function(mode: any, said: any)
-			local held = if type(said) == "table" and type(said.continues) == "number"
-				then said.continues
-				else 0
+			-- the library's PaidPlay.Status (c0202): the revives held
+			local held = if type(said) == "table" and type(said.revives) == "number" then said.revives else 0
 			report = { mode = if type(mode) == "string" then mode else nil, held = held }
 			if price then
 				price.Text = Flow.offerPrice(report)

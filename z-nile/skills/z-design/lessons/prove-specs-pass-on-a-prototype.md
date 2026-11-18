@@ -63,3 +63,5 @@ f0145 prep, resumed 2026-11-15 after a pause for f0148: its prototype lived only
 - one case compared a trimmed text (read through `fixture.git`) with an untrimmed one. Read both sides through the same helper.
 - one case landed a raft after `main` had moved without the `./zn restack` that `done` asks for. A fixture that drives a whole sequence runs every command the engine would ask for in it.
 A row marked `reasoned` because the case is slow to set up is where the flaws were. The prototype already existed; running the two files on it took minutes.
+
+**Note** (R0125, 2026-11-17, d0410): c0202's prototype ran every spec and the gates but never `./zn finish`, and finish could not finish a layer that deletes files (its watch capture wrote watch files for the deleted specs). The executor found it at finish, after the build. When the change deletes files, or does anything else the pipeline's own commands handle specially, run `./zn finish` on the prototype's layer too (a scratch raft in a fixture, or a dry run on the prototype branch).

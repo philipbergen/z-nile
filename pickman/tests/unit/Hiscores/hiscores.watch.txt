@@ -53,7 +53,6 @@ pickman/src/shared/Logic/Session/init.luau
 pickman/src/shared/Logic/Touch/init.luau
 pickman/src/shared/Logic/Travel/init.luau
 pickman/src/shared/Logic/View/init.luau
-pickman/src/shared/TestPurchase.luau
 pickman/stylua.toml
 pickman/tests/contract/.gitkeep
 pickman/tests/fixtures/sim/walker.luau

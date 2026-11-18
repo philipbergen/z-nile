@@ -21,7 +21,6 @@ This file changes only through a `ticket-prep` design, never during execution un
 | Pad | The gamepad: its buttons mapped to the keys' actions, the left stick folded into turn intents one a push, the right stick's look rate in View.look's units, and which input types are gamepads (f0146) |
 | Best | A player's best level reached and the start level chosen in the lobby: the stored record's shape and its reading, the levels a run may start on, the claim, the lobby's level picker and its keys; the store is the adapters' (f0148) |
 | Picks | Risky wall picks: which walls can be marked, the three marked walls and their seeded roll, the wall a player beside one would pick, how long a pick takes, the six boons and their even roll; the pick intent (f0126) |
-| Pay | Paid play: one player's record (a free start per rolling hour, plays and continues held, the receipts granted), the mode (live, test, closed) and its store, the start's claim, the arrival's verdict, receipts granted once, a continue used or refunded; the store and the purchases are the adapters' (f0145) |
 | Travel | Whether a player may be sent to another place now: one request at a time, a timeout, a cool-down after a failure, and validation of the configured destination place id (R0024, f0061) |
 | Lobby | What the lobby screen shows, engine-free: the hiscore panel model (empty until the boards exist) and the start button for a travel status (R0024, f0061); every row's and the best line's revive count ("REVIVES n") and the price of a play on sale, struck through as rich text (f0186) |
 | Hiscores | Period keys, the qualify rule, ranking and the top-N read of the all-time, daily and weekly boards. The store is a parameter; no other feature is required (R0011, f0024); the revives a run used, read, stored and carried with its rows, list entries and best, never ranking them (f0186) |
@@ -30,6 +29,8 @@ This file changes only through a `ticket-prep` design, never during execution un
 | Flow | The overlay of each run phase: READY!, the dying fade, the level-clear flash, GAME OVER with the results and the way back to the lobby (R0015, f0031; R0034, f0065); the game over's revives line, in Lobby's words (f0186) |
 | Touch | Touch zones and a pure fold over begin, move and end: one finger per zone, a straight-line swipe into one existing turn intent, look deltas in pixels, a snap hit (R0012, f0027, f0028, f0029); the fire and hop buttons, placed in Roblox's jump corner from `Hud.jumpButtons` (R0051, f0110); the PICK button beside f0110's FIRE and JUMP, its zone and effect (f0126) |
 | View | First-person presentation math, engine-free: world scale, wall geometry, heading yaw, snapshot interpolation, turn smoothing, free look, key map (R0004, f0014); pellet placement and pulse (R0015, f0030); the lowered walls and the ghost body (R0035, f0101), the ghost colours and the beam's end (f0100, f0102), the new keys, the arrow look and the shot's aim (f0104); the pick key and its wire string, the marked walls' runs, the frame's maze with its holes and the walls key (f0126) |
+
+Paid play is the arcade library's (`arcade/.tracker/architecture.md`, PaidPlay and Receipts, f0201), since c0202: Pickman's adapters (the game place's `Continues`, the lobby's `Paid`) wire its `Wallet` and `Receipts` in as the title `pickman`, and pickman's Logic takes what it needs as parameters (`Lobby.payLine`'s status and price words); no feature here requires it.
 
 Hiscores has no row in the deps block. It takes the store as a parameter. Session, Lobby and Flow do not require it; the server and lobby adapters call it (R0011).
 
@@ -50,7 +51,6 @@ Ghosts -> Maze
 Ghosts -> Movement
 Hud -> Levels
 Hud -> Session
-Lobby -> Pay
 Lobby -> Travel
 Movement -> Maze
 Pad -> Movement

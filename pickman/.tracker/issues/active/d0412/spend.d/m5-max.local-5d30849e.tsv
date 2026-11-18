@@ -1,0 +1,2 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-18 06:40	d0412: a decline during a revive's write that used none is applied, and no purchase screen opens (R0125 review 001 F1)	558	4	code-review							tokens,wall,cpu,ai

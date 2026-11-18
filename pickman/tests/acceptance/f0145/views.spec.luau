@@ -6,10 +6,12 @@
 -- GAME: a free start due, else the plays held, else the price and the minutes to the next free start, with the test
 -- note in test mode; nothing before the server has said anything. Narrowed by c0380: f0186 shows the price of a game
 -- on sale, so the price is pinned only as a line of its own (none of the others, no test note in live mode), with the
--- minutes to the next free start and the test note after it as before.
+-- minutes to the next free start and the test note after it as before. Narrowed by c0202: the price words are the
+-- arcade library's Prices, which every Lobby.payLine call passes in.
 local Flow = require("@logic/Flow")
 local Game = require("@logic/Game")
 local Lobby = require("@logic/Lobby")
+local Prices = require("@arcade/Prices")
 local Session = require("@logic/Session")
 local t = require("@tests/lib/t")
 
@@ -71,14 +73,16 @@ return t.spec("f0145 the offer and the price on screen", function(it)
 	it(
 		"the lobby's line: free, else what is held, else the price and the minutes to the next free start",
 		function()
-			t.expect(Lobby.payLine(nil, "live", NOW)).toBe(nil)
-			t.expect(Lobby.payLine({ free = true, plays = 0, continues = 0 }, "live", NOW)).toBe("FREE GAME")
-			t.expect(Lobby.payLine({ free = true, plays = 2, continues = 0 }, "live", NOW)).toBe("FREE GAME") -- used first
-			t.expect(Lobby.payLine({ free = false, plays = 1, continues = 0 }, "live", NOW))
+			t.expect(Lobby.payLine(nil, "live", NOW, Prices)).toBe(nil)
+			t.expect(Lobby.payLine({ free = true, plays = 0, continues = 0 }, "live", NOW, Prices))
+				.toBe("FREE GAME")
+			t.expect(Lobby.payLine({ free = true, plays = 2, continues = 0 }, "live", NOW, Prices))
+				.toBe("FREE GAME") -- used first
+			t.expect(Lobby.payLine({ free = false, plays = 1, continues = 0 }, "live", NOW, Prices))
 				.toBe("1 GAME YOU BOUGHT")
-			t.expect(Lobby.payLine({ free = false, plays = 3, continues = 0 }, "live", NOW))
+			t.expect(Lobby.payLine({ free = false, plays = 3, continues = 0 }, "live", NOW, Prices))
 				.toBe("3 GAMES YOU BOUGHT")
-			local buy = Lobby.payLine({ free = false, plays = 0, continues = 0 }, "live", NOW) or ""
+			local buy = Lobby.payLine({ free = false, plays = 0, continues = 0 }, "live", NOW, Prices) or ""
 			t.expect(buy ~= "").toBe(true)
 			for _, other in { "FREE GAME", "1 GAME YOU BOUGHT", "3 GAMES YOU BOUGHT", "STORE UNAVAILABLE" } do
 				t.expect(string.find(buy, other, 1, true) == nil).toBe(true)
@@ -89,7 +93,8 @@ return t.spec("f0145 the offer and the price on screen", function(it)
 				Lobby.payLine(
 					{ free = false, nextFree = NOW + 41 * 60 + 5, plays = 0, continues = 0 },
 					"live",
-					NOW
+					NOW,
+					Prices
 				)
 			).toBe(`{buy}, NEXT FREE GAME IN 42 MIN`)
 		end
@@ -98,20 +103,25 @@ return t.spec("f0145 the offer and the price on screen", function(it)
 	it("a closed server's lobby line says the store is unavailable, free and held as ever", function()
 		-- decided with the user, 2026-10-26: "Refuse paid play"
 		t.expect(
-			Lobby.payLine({ free = false, nextFree = NOW + 60, plays = 0, continues = 0 }, "closed", NOW)
-		)
-			.toBe("STORE UNAVAILABLE, NEXT FREE GAME IN 1 MIN")
-		t.expect(Lobby.payLine({ free = true, plays = 0, continues = 0 }, "closed", NOW)).toBe("FREE GAME")
-		t.expect(Lobby.payLine({ free = false, plays = 1, continues = 0 }, "closed", NOW))
+			Lobby.payLine(
+				{ free = false, nextFree = NOW + 60, plays = 0, continues = 0 },
+				"closed",
+				NOW,
+				Prices
+			)
+		).toBe("STORE UNAVAILABLE, NEXT FREE GAME IN 1 MIN")
+		t.expect(Lobby.payLine({ free = true, plays = 0, continues = 0 }, "closed", NOW, Prices))
+			.toBe("FREE GAME")
+		t.expect(Lobby.payLine({ free = false, plays = 1, continues = 0 }, "closed", NOW, Prices))
 			.toBe("1 GAME YOU BOUGHT")
 	end)
 
 	it("in test mode the lobby's line says nothing is charged", function()
-		t.expect(Lobby.payLine({ free = true, plays = 0, continues = 0 }, "test", NOW))
+		t.expect(Lobby.payLine({ free = true, plays = 0, continues = 0 }, "test", NOW, Prices))
 			.toBe("FREE GAME (TEST: NOTHING IS CHARGED)")
-		local buy = Lobby.payLine({ free = false, plays = 0, continues = 0 }, "live", NOW) or ""
+		local buy = Lobby.payLine({ free = false, plays = 0, continues = 0 }, "live", NOW, Prices) or ""
 		t.expect(buy ~= "").toBe(true)
-		t.expect(Lobby.payLine({ free = false, plays = 0, continues = 0 }, nil, NOW))
+		t.expect(Lobby.payLine({ free = false, plays = 0, continues = 0 }, nil, NOW, Prices))
 			.toBe(`{buy} (TEST: NOTHING IS CHARGED)`)
 	end)
 end)

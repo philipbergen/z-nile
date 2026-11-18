@@ -1,7 +1,6 @@
 --!strict
 -- Lobby: what the lobby screen shows. Pure view models: the hiscore panel (empty until the boards exist) and
 -- the start button for a travel status.
-local Pay = require("./Pay")
 local Travel = require("./Travel")
 
 -- `revives`: the paid revives the run used (f0186), nil is none; `lives`: f0145's lives spent, which the rows the
@@ -10,6 +9,10 @@ export type Row =
 	{ rank: number, name: string, score: number, level: number, lives: number?, revives: number? }
 export type Panel = { title: string, rows: { Row }, empty: string? }
 export type Button = { text: string, enabled: boolean, message: string? }
+-- c0202: what the server says of a player's paid play (the arcade library's PaidPlay.Status, read by its fields)
+export type PayStatus = { free: boolean, nextFree: number?, plays: number }
+-- c0202: the price words (the arcade library's Prices table, which the adapter passes in)
+export type Price = { struck: string, price: string, sale: string }
 
 local Lobby = {}
 Lobby.TITLE = "HISCORES"
@@ -19,8 +22,6 @@ Lobby.BUTTON_MIN_PX = 44 -- the smallest touch target (design: Mobile)
 Lobby.READ_GAP = 1 -- seconds before the screen asks again after a failed answer; a copy of Hiscores.READ_GAP
 Lobby.MAX_RETRIES = 3 -- failed answers in a row that are asked for again
 Lobby.REVIVES = "REVIVES" -- the word before a run's revive count, on every board and at the end of a run (f0186)
--- how the price of a play is shown (f0186): the list price struck through, then the price charged, on sale
-Lobby.PRICE = table.freeze({ struck = "5 R$", price = "1 R$", sale = "SALE" })
 
 -- The panel for the rows the boards give (nil or none: the empty state). Rows are shown in rank order, at most MAX_ROWS.
 function Lobby.panel(rows: { Row }?): Panel
@@ -83,14 +84,15 @@ function Lobby.revivesText(n: any): string
 end
 
 -- The price of a play as rich text (f0186): the list price struck through, the price charged and the sale word.
-function Lobby.salePrice(): string
-	return `<s>{Lobby.PRICE.struck}</s> {Lobby.PRICE.price} {Lobby.PRICE.sale}`
+-- c0202: the words are the arcade library's Prices, passed in by the adapter
+function Lobby.salePrice(prices: Price): string
+	return `<s>{prices.struck}</s> {prices.price} {prices.sale}`
 end
 
 -- f0145: the line under START GAME: a free start due, else the plays held, else the price (or the store
 -- unavailable on a closed server) and the minutes to the next free start; the test note in test mode; nothing
 -- before the server has said anything
-function Lobby.payLine(status: Pay.Status?, mode: string?, now: number): string?
+function Lobby.payLine(status: PayStatus?, mode: string?, now: number, prices: Price): string?
 	if status == nil then
 		return nil
 	end
@@ -100,7 +102,7 @@ function Lobby.payLine(status: Pay.Status?, mode: string?, now: number): string?
 	elseif status.plays > 0 then
 		line = if status.plays == 1 then "1 GAME YOU BOUGHT" else `{status.plays} GAMES YOU BOUGHT`
 	else
-		line = if mode == "closed" then "STORE UNAVAILABLE" else `A GAME: {Lobby.salePrice()}`
+		line = if mode == "closed" then "STORE UNAVAILABLE" else `A GAME: {Lobby.salePrice(prices)}`
 		local at = status.nextFree
 		if at ~= nil and at > now then
 			line ..= `, NEXT FREE GAME IN {math.ceil((at - now) / 60)} MIN`

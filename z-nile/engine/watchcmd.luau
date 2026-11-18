@@ -101,7 +101,15 @@ end
 -- that this diff adds or edits keeps the union of its existing watch and this layer's sources,
 -- and only the paths that belong to its own suite. A layer that changes no source file falls back
 -- to what the spec requires. An empty list is never written. Stages the files so the finish commit picks them up.
-function watchcmd.capture(member: Member, changed: { string })
+-- A path the diff names that is no longer a file (the layer deleted it) is not captured (d0410): a deleted spec
+-- gets no watch file, and a deleted source is in no list, which watch-check would refuse.
+function watchcmd.capture(member: Member, all: { string })
+	local changed: { string } = {}
+	for _, path in all do
+		if fs.isFile(path) then
+			table.insert(changed, path)
+		end
+	end
 	local sources = watch.sourceOf(changed)
 	local function kept(spec: string, paths: { string }): { string }
 		local filtered = watch.forSuite(spec, paths)
