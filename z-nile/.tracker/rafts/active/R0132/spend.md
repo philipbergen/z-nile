@@ -4,8 +4,8 @@
 |---|---|---|---|---|---|---|
 | d0413 | defect |  | 256 | 17 | 0.0 | 72388 |
 
-**Total:** +256 / -17 lines, 0.0 agent-minutes, 72388 tokens over 71 records
-<!-- totals: added=256 removed=17 minutes=0.0 records=71 tokens=72388 -->
+**Total:** +256 / -17 lines, 0.0 agent-minutes, 72388 tokens over 76 records
+<!-- totals: added=256 removed=17 minutes=0.0 records=76 tokens=72388 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
