@@ -42,7 +42,13 @@ local function promoted(item: store.Item): { [string]: string }
 end
 
 -- The first reason ready would refuse this raft, from the working tree. Nil when it would accept.
-function readyfacts.reason(raft: store.Item, members: { store.Item }): string?
+-- `requireApproval` is ready's rule under ./zn dispatch; `onMembers` the members of the raft `--on` names (f0399).
+function readyfacts.reason(
+	raft: store.Item,
+	members: { store.Item },
+	requireApproval: boolean?,
+	onMembers: { string }?
+): string?
 	local front = store.readFront(raft.doc)
 	local isMember: { [string]: boolean } = {}
 	for _, m in members do
@@ -52,7 +58,7 @@ function readyfacts.reason(raft: store.Item, members: { store.Item }): string?
 	for _, m in members do
 		local mf = store.readFront(m.doc)
 		local files = walk(m.dir, function(rel: string): boolean
-			return raftplan.isDesignFile(rel, m.id) or rel == "approval.md"
+			return raftplan.isDesignFile(rel, m.id) or rel == "approval.md" or rel == "guesses.md"
 		end)
 		table.insert(built, {
 			id = m.id,
@@ -90,6 +96,8 @@ function readyfacts.reason(raft: store.Item, members: { store.Item }): string?
 		members = built,
 		files = files,
 		loaded = true,
+		requireApproval = requireApproval,
+		onMembers = onMembers,
 	})
 	return why
 end

@@ -5,6 +5,7 @@
 
 local contract = require("./contract")
 local fs = require("@lune/fs")
+local guesses = require("./guesses")
 local projects = require("./projects")
 local store = require("./store")
 
@@ -68,11 +69,39 @@ function approval.collect(root: string, item: store.Item): (contract.Parts?, { s
 		local dest = projects.promotedDir(projects.load(base), item.root, item.id)
 		walk(root, dest, "", specs, paths)
 	end
-	local parts, err = contract.build(doc, check, specs)
+	local guessRel = `{item.dir}/{guesses.FILE}`
+	local guessPath = rooted(root, guessRel)
+	local guessText: string? = nil
+	if fs.isFile(guessPath) then
+		guessText = fs.readFile(guessPath)
+		table.insert(paths, guessRel)
+		local _, problem = guesses.parse(guessText :: string)
+		if problem then
+			return nil, paths, `{guessRel}: {problem}`
+		end
+	end
+	local parts, err = contract.build(doc, check, specs, guessText)
 	if not parts then
 		return nil, paths, err
 	end
 	return parts, paths, nil
+end
+
+-- Why an approval does not hold, in the short form `done`, `finish` and `work next` print (f0399): "no approval",
+-- "changed: <parts>" or the problem; nil when it holds.
+function approval.shortOf(parts: contract.Parts, approvalText: string?): string?
+	if not approvalText then
+		return "no approval"
+	end
+	local rows, perr = contract.parse(approvalText)
+	if not rows then
+		return `approval.md does not parse: {perr}`
+	end
+	local changed = contract.changed(rows[#rows], parts)
+	if #changed == 0 then
+		return nil
+	end
+	return `changed: {table.concat(changed, ", ")}`
 end
 
 function approval.file(item: store.Item): string

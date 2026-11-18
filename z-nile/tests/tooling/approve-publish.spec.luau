@@ -40,8 +40,9 @@ return t.spec("approve publishes onto origin/main", function(it)
 		if not before.ok then
 			error(said)
 		end
-		t.expect(has(said, "R0001: ready")).toBe(false)
-		t.expect(has(said, `./zn approve {ID} --publish`)).toBe(true)
+		-- f0399: the raft is offered before its approval (done asks for it); the publish below still
+		-- carries the approval to origin/main
+		t.expect(has(said, "R0001: ready")).toBe(true)
 
 		local wt = `{f.base}/wt`
 		fixture.git(f.main, { "worktree", "add", "-q", "-b", "prep-c0001", wt, "HEAD" })

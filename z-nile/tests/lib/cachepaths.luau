@@ -163,6 +163,10 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		['return if at then string.sub(here, 1, at + 7) else here .. ".cache/"'] = "the same prefix; nothing is written",
 		["`refusing to start {argv[1]}: inside a check run only a CLI under this checkout's .cache may start (found {bin})`"] = "a message",
 	},
+	["z-nile/engine/workread.luau"] = {
+		["return `{mainCheckout}/.cache/work/carriers.tsv`"] = "f0399: who last asked work next for each item, in the main checkout; gitignored, one small file rewritten whole by work next",
+		["fs.writeDir(`{mainCheckout}/.cache/work`)"] = "the folder of that file",
+	},
 	["z-nile/engine/costrow.luau"] = {
 		["local path = `{root}/.cache/measure.tsv`"] = "the checkout's measure buffer; gitignored, appended by a gate, a spec run or ./zn run, and folded into a ticket only by commit, spend, done or land",
 	},

@@ -81,6 +81,15 @@ One clean reviewer, one round. The designer answers every finding once, fixed or
   - anything left for Observed.
 - **Next step**: `/z-raft` (it groups prepared issues), then `/z-ready <R-id>`.
 
+## Guess mode
+A `draft` from `./zn work next`, or the user's say-so, turns guess mode on (z-work skill, Guess mode). Not under `./zn dispatch`.
+- Every question this skill tells you to ask the user becomes `./zn guess <id> --step design` plus a **Guess (prep) G<n>** mark in the document, at the sentence it decides.
+- An open-list bullet (step 5.4) gets a `Guessed (agent, YYYY-MM-DD): G<n>` line. Step 5.4's "do not guess a ruling" keeps its meaning outside guess mode.
+- Step 5.5: do not stop for `./zn approve`. The person reads `./zn guesses <id>` and approves before the work lands.
+- Step 6: merge your own green prep pull request. The user started the worker, as they do the dispatcher.
+- The report lists every guess.
+- A question guess mode may not answer (a scope cut) is written as an open bullet in the document and published by a tracker pull request. Then give the claim back (`./zn status <id> new`): the claim gate keeps the issue from being picked again until the person rules.
+
 ## Headless (under `./zn dispatch`)
 When `ZN_DISPATCH=1` is set you run headless and unattended, with the agent's own GitHub credential, and nobody answers a question. Never decide what you would ask the user, and never guess a ruling. A scope change or a missing credential: write the questions to `$ZN_DISPATCH_DIR/questions.md`, one `## Q<n>` heading per question with the options and what each costs, and stop. The dispatcher stops the chain there until the user answers and runs `./zn dispatch retry <id>`. A refutation or an unclosed high is written under `## Open to the human` in the item's document and you stop without ruling on it: the dispatcher stops the chain on that unruled list until the user rules in the document and runs `./zn dispatch retry <id>`. `./zn land`, `status`, `spend` and every other `./zn` command that publishes tracker state are allowed: the dispatcher pushes that tracker state to `main` for you. Never `git push` to `main` and never merge a pull request: the dispatcher merges at its gates, your credential can't, and `z-nile/bin/git` and `gh` refuse. Record your spend as this skill says. Do not pass `--time` or `--tokens`: the dispatcher records the session's wall, CPU, tokens and model. Start every review with `./zn dispatch zz-review <id> --mode <design|raft|code|stream>` (zz-rules skill, Dispatch), and give that one command a two-hour timeout (in Claude Code, the Bash tool's `timeout` of 7200000 ms): a review takes minutes, and the dispatcher keeps it alive by its heartbeat.
 

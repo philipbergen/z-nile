@@ -1,6 +1,15 @@
 z-nile/engine/approval.luau
 z-nile/engine/contract.luau
+z-nile/engine/guesses.luau
+z-nile/engine/layergit.luau
+z-nile/engine/main.luau
 z-nile/engine/openlist.luau
 z-nile/engine/raftplan.luau
 z-nile/engine/readycheck.luau
+z-nile/engine/readyfacts.luau
+z-nile/engine/sessionread.luau
 z-nile/engine/store.luau
+z-nile/engine/trace.luau
+z-nile/engine/work.luau
+z-nile/engine/workread.luau
+z-nile/tests/lib/cachepaths.luau
