@@ -7,7 +7,7 @@ local ledger = {}
 
 ledger.PHASES = { "capture", "prep", "design-review", "build", "code-review", "deliver" }
 -- Measured rows also use these. They are not part of the lifecycle list the board and the old reports walk.
-ledger.EXTRA = { "test", "other" }
+ledger.EXTRA = { "test", "other", "idea", "idea-challenge" }
 local IS: { [string]: boolean } = {}
 for _, p in ledger.PHASES do
 	IS[p] = true
