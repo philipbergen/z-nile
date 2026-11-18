@@ -19,7 +19,7 @@ check "AC2: c0116/retired.spec is unedited against its merge base with origin's 
   set -e
   tip=$(git -C "$1" ls-remote origin refs/heads/main | cut -f1)
   mb=$(git -C "$1" merge-base HEAD "$tip")
-  git -C "$1" diff --quiet "$mb" -- z-nile/tests/acceptance/c0116/retired.spec.luau
+  git diff --quiet "$mb" -- tests/acceptance/c0116/retired.spec.luau # from the home (z-nile/), where ac.sh runs checks
 ' _ "$ZN_ROOT"
 
 finish
