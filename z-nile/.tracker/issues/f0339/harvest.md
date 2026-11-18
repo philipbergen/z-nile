@@ -1,16 +1,16 @@
 # Harvest: f0339
-- design-review-001 F1: zz-test/terminal-fixtures-clear-the-agent-session
-- design-review-001 F2: z-design/order-of-effects-in-one-stream, z-design/spec-design-correspondence
-- design-review-001 F3: z-design/quote-other-preps-before-promising
-- design-review-001 F4: zz-arch/main-luau-local-limit
-- design-review-001 F5: z-design/deny-rules-list-every-channel
-- design-review-001 F6: z-design/templates-mark-their-placeholders
-- design-review-001 F7: z-design/restated-rules-move-together, z-design/new-rules-migrate-existing-work
-- design-review-001 F8: z-design/one-file-two-write-channels
-- design-review-001 F9: z-design/spec-design-correspondence
-- design-review-001 F10: z-design/prove-specs-pass-on-a-prototype
-- design-review-001 F11: one-off: the section matcher assumed the id is the tag's first attribute
-- design-review-001 F12: one-off: the probes ran bounded, but the record did not say so
-- design-review-002 F1: z-design/check-every-counts-for-promise
-- design-review-002 F2: z-design/quote-other-preps-before-promising
-- design-review-002 F3: z-design/restated-rules-move-together
+- design-review-001 F1 (erred zz-test): zz-test/terminal-fixtures-clear-the-agent-session
+- design-review-001 F2 (erred z-design): z-design/order-of-effects-in-one-stream, z-design/spec-design-correspondence
+- design-review-001 F3 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-001 F4 (erred zz-arch): zz-arch/main-luau-local-limit
+- design-review-001 F5 (erred z-design): z-design/deny-rules-list-every-channel
+- design-review-001 F6 (erred z-design): z-design/templates-mark-their-placeholders
+- design-review-001 F7 (erred z-design): z-design/restated-rules-move-together, z-design/new-rules-migrate-existing-work
+- design-review-001 F8 (erred z-design): z-design/one-file-two-write-channels
+- design-review-001 F9 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F10 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F11 (erred z-design): one-off: the section matcher assumed the id is the tag's first attribute
+- design-review-001 F12 (erred z-design): one-off: the probes ran bounded, but the record did not say so
+- design-review-002 F1 (erred z-design): z-design/check-every-counts-for-promise
+- design-review-002 F2 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-002 F3 (erred z-design): z-design/restated-rules-move-together

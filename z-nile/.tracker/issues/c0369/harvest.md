@@ -1,31 +1,31 @@
 # Harvest: c0369
-- design-review-001 F1: z-design/new-rules-migrate-existing-work
-- design-review-001 F2: z-design/new-rules-migrate-existing-work
-- design-review-001 F3: z-design/quote-other-preps-before-promising
-- design-review-001 F4: z-design/never-narrow-captured-scope
-- design-review-001 F5: one-off: the off switch was honoured on the push and not on the publish this design added to the plain command
-- design-review-001 F6: zz-test/guard-needs-its-own-case
-- design-review-001 F7: z-design/measure-cost-per-event
-- design-review-001 F8: one-off: the command's own worktree took a name people already use; it now has one `./zn worktree` cannot make
-- design-review-001 F9: z-design/prep-experiments-run-in-standalone-clones
-- note the mutation log of the re-prep went to a generic scratchpad name that another agent of the session also wrote, and the run was lost: z-design/prep-experiments-run-in-standalone-clones
-- design-review-002 F1: z-design/repeat-the-command-in-the-state-it-leaves
-- design-review-002 F2: z-design/every-state-a-placed-command-meets
-- design-review-002 F3: z-design/open-bullets-use-finding-ids, z-design/never-narrow-captured-scope
-- design-review-002 F4: z-design/quote-other-preps-before-promising
-- design-review-002 F5: zz-arch/pushes-name-the-branches-they-may-create
-- design-review-002 F6: z-design/rerun-skipped-checks-after-edits
-- design-review-002 F7: z-design/confirm-overrides-with-a-suite-run
-- design-review-002 F8: zz-test/no-vacuous-pass
-- design-review-002 F9: one-off: one fixture spec served four criteria and ran four times; it is split by fixture so each check runs its own file once
-- design-review-002 F10: zz-arch/pushes-name-the-branches-they-may-create
-- design-review-002 F11: one-off: the publish callback ignored the file each attempt read and appended to a copy taken before the first attempt
-- design-review-002 F12: z-design/reasoned-rows-claim-testable-reasons
-- design-review-002 F13: zz-test/dry-run-promoted-specs-under-the-guard-scan
-- design-review-003 F1: z-design/quote-other-preps-before-promising
-- design-review-003 F2: z-design/check-every-counts-for-promise
-- design-review-003 F3: z-design/quote-other-preps-before-promising
-- design-review-003 F4: z-design/new-calls-follow-the-stated-fixture
-- design-review-003 F5: z-design/design-the-execution-window
-- design-review-003 F6: one-off: a placed run now writes into a worktree an executor may be restacking; a detached HEAD is refused
-- design-review-003 F7: z-design/restated-rules-move-together
+- design-review-001 F1 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-001 F2 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-001 F3 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-001 F4 (erred z-design): z-design/never-narrow-captured-scope
+- design-review-001 F5 (erred z-design): one-off: the off switch was honoured on the push and not on the publish this design added to the plain command
+- design-review-001 F6 (erred zz-test): zz-test/guard-needs-its-own-case
+- design-review-001 F7 (erred z-design): z-design/measure-cost-per-event
+- design-review-001 F8 (erred z-design): one-off: the command's own worktree took a name people already use; it now has one `./zn worktree` cannot make
+- design-review-001 F9 (erred z-design): z-design/prep-experiments-run-in-standalone-clones
+- note the mutation log of the re-prep went to a generic scratchpad name that another agent of the session also wrote, and the run was lost (erred z-design): z-design/prep-experiments-run-in-standalone-clones
+- design-review-002 F1 (erred z-design): z-design/repeat-the-command-in-the-state-it-leaves
+- design-review-002 F2 (erred z-design): z-design/every-state-a-placed-command-meets
+- design-review-002 F3 (erred z-design): z-design/open-bullets-use-finding-ids, z-design/never-narrow-captured-scope
+- design-review-002 F4 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-002 F5 (erred zz-arch): zz-arch/pushes-name-the-branches-they-may-create
+- design-review-002 F6 (erred z-design): z-design/rerun-skipped-checks-after-edits
+- design-review-002 F7 (erred z-design): z-design/confirm-overrides-with-a-suite-run
+- design-review-002 F8 (erred zz-test): zz-test/no-vacuous-pass
+- design-review-002 F9 (erred z-design): one-off: one fixture spec served four criteria and ran four times; it is split by fixture so each check runs its own file once
+- design-review-002 F10 (erred zz-arch): zz-arch/pushes-name-the-branches-they-may-create
+- design-review-002 F11 (erred z-design): one-off: the publish callback ignored the file each attempt read and appended to a copy taken before the first attempt
+- design-review-002 F12 (erred z-design): z-design/reasoned-rows-claim-testable-reasons
+- design-review-002 F13 (erred zz-test): zz-test/dry-run-promoted-specs-under-the-guard-scan
+- design-review-003 F1 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-003 F2 (erred z-design): z-design/check-every-counts-for-promise
+- design-review-003 F3 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-003 F4 (erred z-design): z-design/new-calls-follow-the-stated-fixture
+- design-review-003 F5 (erred z-design): z-design/design-the-execution-window
+- design-review-003 F6 (erred z-design): one-off: a placed run now writes into a worktree an executor may be restacking; a detached HEAD is refused
+- design-review-003 F7 (erred z-design): z-design/restated-rules-move-together

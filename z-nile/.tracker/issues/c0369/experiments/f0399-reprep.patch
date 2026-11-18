@@ -1,5 +1,5 @@
 diff --git a/acceptance/land.spec.luau b/acceptance/land.spec.luau
-index a4e9b3a..5766a9b 100644
+index 7012ff2..90d22af 100644
 --- a/acceptance/land.spec.luau
 +++ b/acceptance/land.spec.luau
 @@ -315,13 +315,14 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
@@ -21,7 +21,7 @@ index a4e9b3a..5766a9b 100644
  		local file = onOrigin(`{ROOT}/issues/c0050/approval.md`) or ""
  		t.expect(file ~= "").toBe(true)
  		t.expect(has(file, "guesses=")).toBe(true)
-@@ -479,13 +480,19 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
+@@ -480,13 +481,19 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
  			local below = human(wt, { "approve", "c0010" })
  			git(wt, { "switch", "-q", top })
  			t.expect(below.ok).toBe(false)
@@ -43,7 +43,7 @@ index a4e9b3a..5766a9b 100644
  			end
  			approvedAll = true
  			git(wt, { "fetch", "-q", "origin" })
-@@ -493,10 +500,13 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
+@@ -494,10 +501,13 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
  			for _, id in { "c0010", "c0020", "c0025" } do
  				t.expect(has(pushed, `tracker: approve {id}`)).toBe(true)
  			end
@@ -60,7 +60,7 @@ index a4e9b3a..5766a9b 100644
  			local stack = zn(f.other, { "stack", "R0010" })
  			t.expect(has(stack, "1 R0010/1/c0010 c0010 finished")).toBe(true)
 diff --git a/f0399.md b/f0399.md
-index 3d80813..6e15695 100644
+index 7932aea..c21eb6a 100644
 --- a/f0399.md
 +++ b/f0399.md
 @@ -4,7 +4,7 @@ type: feature
@@ -104,7 +104,7 @@ index 3d80813..6e15695 100644
  - `done`, `implement`, `finish`, `restack`, `review`, `trace`, `final-review`, `release`, `end`: unchanged, except that the review line's `Do not guess a ruling.` becomes `Do not guess a ruling under ./zn dispatch; otherwise answer an open ruling with a recorded guess (./zn guess).`
  
  `work.forRaft(r)` gives `wait` where it gives `done` today when `r.unapproved` is not empty, or when `r.on` names a raft that has not landed. A raft whose record has no `lands` never has `unapproved` filled, so it goes to `done` as today.
-@@ -577,7 +579,7 @@ Guesses (each waits for the user's approval of this design):
+@@ -584,7 +586,7 @@ Guesses (each waits for the user's approval of this design):
  - G3: guesses live in one file per issue, `guesses.md`, written by `./zn guess`, and the approval's hash covers it, so the engine (not the worker's memory) makes a new guess wait for approval. The other choice, guesses as marked sentences in the Design, cannot be told apart from an edit and gives the person no one list.
  - G4: approval moves from `ready` to `done`, for rafts readied from now on outside the dispatcher (their ready commit says `Lands: approved`). Evidence: the capture ("does not land until the human approves it"). Rafts readied earlier keep today's rule, because six active rafts have no approvals and nothing asked for them.
  - G5: one unapproved member holds its whole raft. Landing the approved layers below it needs c0248's part landing, which is not built.
@@ -113,7 +113,7 @@ index 3d80813..6e15695 100644
  - G7: the idea stays the person's. An issue whose idea was not challenged, or has an unruled line, is not picked. Evidence: the user's scope decision of 2026-11-08, "humans interact (plan mode) over the idea". Five issues are in that state today.
  - G8: a review's open bullet (a refuted finding, an unclosed high) is answered in guess mode by a `Guessed (agent, …)` line that names a recorded guess, and the person's approval is the ruling on it.
  - G9: a guess never drops or shrinks a captured outcome, and never stands in for a missing credential. Those still stop the ticket (an issue gets an open bullet and is given back; a raft gets `questions.md`). Evidence: the user's standing rule that only they change scope.
-@@ -680,7 +682,7 @@ Overrides: none
+@@ -688,7 +690,7 @@ Overrides: none
  | a material change after approval waits | land.spec :: a design edited on the layer after its approval… | `done` reads the approval from `origin/main` only | reasoned |
  | a pushed guess cannot be removed | land.spec :: a pushed guess that is removed… | `finish` and `done` do not compare with the pushed file | reasoned |
  | an active issue is approved on the top layer, and the approval is pushed | land.spec :: approve for an active issue runs only on the top layer… | it commits on a lower layer (the stack breaks); or does not push (`done` never sees it) | reasoned |
