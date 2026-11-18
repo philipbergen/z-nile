@@ -1,0 +1,39 @@
+== prototype
+10 passed, 0 failed, 1 spec files
+== M1 ledger lists idea but not idea-challenge
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: ledger lists idea and idea-challenge, and still rejects any other phase
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: metrics <issue> and metrics <raft> list the idea stages
+8 passed, 2 failed, 1 spec files
+== M2 ledger lists neither (the lazy rows still keep metrics alive)
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: ledger lists idea and idea-challenge, and still rejects any other phase
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: the phase table reports the idea rows' minutes and tokens under their own phases
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: a phase nothing lists is shown under its own name, after the listed ones
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: the raft's row counts the idea minutes and tokens in its totals
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: metrics <issue> and metrics <raft> list the idea stages
+5 passed, 5 failed, 1 spec files
+== M3 metrics does not make a row for an unlisted phase (the crash)
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: metrics finishes on a tracker that holds idea rows
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: the phase table reports the idea rows' minutes and tokens under their own phases
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: a phase nothing lists is shown under its own name, after the listed ones
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: the raft's row counts the idea minutes and tokens in its totals
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: the rounds and lessons tables after the phase table are printed
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: metrics <issue> and metrics <raft> list the idea stages
+4 passed, 6 failed, 1 spec files
+== M4 unlisted phases are not printed
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: a phase nothing lists is shown under its own name, after the listed ones
+9 passed, 1 failed, 1 spec files
+== M5 only test and other are hidden when zero
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: a tracker with no idea row prints no idea line in the phase table
+9 passed, 1 failed, 1 spec files
+== M6 the raft row indexes an unlisted phase unguarded
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: metrics finishes on a tracker that holds idea rows
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: the raft's row counts the idea minutes and tokens in its totals
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: the rounds and lessons tables after the phase table are printed
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: metrics <issue> and metrics <raft> list the idea stages
+6 passed, 4 failed, 1 spec files
+== M7 the raft row leaves unlisted and extra phases out of its total
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: the raft's row counts the idea minutes and tokens in its totals
+9 passed, 1 failed, 1 spec files
+== M8 every extra phase is printed even when zero
+FAIL .tracker/issues/d0406/acceptance/idea-phases.spec.luau :: a tracker with no idea row prints no idea line in the phase table
+9 passed, 1 failed, 1 spec files

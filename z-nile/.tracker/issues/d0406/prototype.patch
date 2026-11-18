@@ -1,0 +1,58 @@
+diff --git a/z-nile/engine/ledger.luau b/z-nile/engine/ledger.luau
+index 3c225f8b9..b226d30e0 100644
+--- a/z-nile/engine/ledger.luau
++++ b/z-nile/engine/ledger.luau
+@@ -7,7 +7,7 @@ local ledger = {}
+ 
+ ledger.PHASES = { "capture", "prep", "design-review", "build", "code-review", "deliver" }
+ -- Measured rows also use these. They are not part of the lifecycle list the board and the old reports walk.
+-ledger.EXTRA = { "test", "other" }
++ledger.EXTRA = { "test", "other", "idea", "idea-challenge" }
+ local IS: { [string]: boolean } = {}
+ for _, p in ledger.PHASES do
+ 	IS[p] = true
+diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
+index 3d950de78..b4395baf7 100644
+--- a/z-nile/engine/main.luau
++++ b/z-nile/engine/main.luau
+@@ -7728,9 +7728,15 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
+ 		phaseMin[p] = { feature = 0, defect = 0, chore = 0 }
+ 		phaseTok[p] = 0
+ 	end
++	local unlisted: { string } = {}
+ 	for _, r in rows do
+ 		for _, row in r.rows do
+ 			local tenths = math.floor(row.minutes * 10 + 0.5)
++			if not phaseMin[row.phase] then
++				phaseMin[row.phase] = { feature = 0, defect = 0, chore = 0 }
++				phaseTok[row.phase] = 0
++				table.insert(unlisted, row.phase)
++			end
+ 			phaseMin[row.phase][r.type] += tenths
+ 			phaseTok[row.phase] += row.tokens or 0
+ 		end
+@@ -7741,10 +7747,14 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
+ 	for _, p in ledger.EXTRA do
+ 		table.insert(phaseOrder, p)
+ 	end
++	table.sort(unlisted)
++	for _, p in unlisted do
++		table.insert(phaseOrder, p)
++	end
+ 	for _, p in phaseOrder do
+ 		local m = phaseMin[p]
+ 		local all = m.feature + m.defect + m.chore
+-		if (p == "test" or p == "other") and all == 0 and phaseTok[p] == 0 then
++		if not table.find(ledger.PHASES, p) and all == 0 and phaseTok[p] == 0 then
+ 			continue
+ 		end
+ 		print(
+@@ -7789,7 +7799,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
+ 		for _, r in byRaft[rid] do
+ 			for _, row in r.rows do
+ 				local n = math.floor(row.minutes * 10 + 0.5)
+-				tenths[row.phase] += n
++				tenths[row.phase] = (tenths[row.phase] or 0) + n
+ 				allTenths += n
+ 				tokens += row.tokens or 0
+ 			end
