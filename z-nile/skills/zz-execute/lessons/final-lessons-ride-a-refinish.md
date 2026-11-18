@@ -9,3 +9,5 @@ check: Does any commit after the top layer's finish touch a file outside the raf
 **Why:** R0126: the final reviewer's candidate lesson was harvested as a note on `zz-review/trace-cells-cite-their-own-proof` after `trace.md` and `final-review-001.md` were committed, and `./zn trace R0126 --check` went stale. R0110 had the same need and folded its lesson files into the top layer's re-finished commit.
 
 **How to apply:** write the lesson and the `harvest.md` line, commit them, run `./zn finish <top issue>` again (it squashes the layer, the review files and the trace with it, into one finish commit), then set `trace.md`'s `Commit:` to the new finish sha, commit only that, rerun `./zn trace <R> --check`, and push with `--force-with-lease`. A review file or refute committed after that needs no re-finish.
+
+**Note (R0131, 2026-11-17):** the raft's own `harvest.md` is not on that list either: answering a final review with only a `harvest.md` line (no lesson file; a one-off) after `trace.md` made `./zn trace R0131 --check` stale ("touches non-tracker file …/harvest.md after finish"). Ask: does the final review's answer add a harvest line? Then it rides the re-finish too.
