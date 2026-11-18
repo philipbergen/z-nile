@@ -13,6 +13,5 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0135
 
-# check "RC1: <end-to-end statement>" <command>
 
 finish
