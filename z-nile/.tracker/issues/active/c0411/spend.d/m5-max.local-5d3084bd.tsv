@@ -1,0 +1,22 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-18 07:37	c0411: the rounds case lists rafts from every registered root	10	16	build							tokens,wall,cpu,ai
+2026-11-18 07:37	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 07:44	R0133: review-001	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-18 07:44	R0133: harvest review-001	0	0	code-review							tokens,wall,cpu,ai
+2026-11-18 07:44	R0133: refute-001	0	0	code-review							tokens,wall,cpu,ai
+2026-11-18 07:45	suite	0	0	test			5.769	5.210		5.769	tokens,ai
+2026-11-18 07:45	suite	0	0	test			5.561	4.960		5.561	tokens,ai
+2026-11-18 07:51	2 runs	0	0	other			0.421	0.060			tokens,ai
+2026-11-18 07:51	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 07:51	R0133: trace skeleton	0	0	deliver							tokens,wall,cpu,ai
+2026-11-18 07:52	R0133: trace skeleton	0	0	deliver							tokens,wall,cpu,ai
+2026-11-18 07:58	R0133: final-review-001 (changes), trace as filled, F2 open to the human	3	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-18 07:59	R0133: the lesson reaches design too	0	0	code-review							tokens,wall,cpu,ai
+2026-11-18 15:23	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 15:30	R0133: final-review-002 (approve), trace corrected	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-18 15:30	R0133: final-refute-002, harvest, the lesson's note on approvals	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-18 15:30	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 15:31	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 15:31	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 15:32	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 15:32	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai

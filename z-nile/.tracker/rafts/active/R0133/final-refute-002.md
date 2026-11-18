@@ -1,0 +1,4 @@
+# Final refute 002
+
+- F1: fixed: the top finish commit holds the raft's records, with only trace repointing commits above it; final-refute-001's sentence is corrected by this line (the file itself is the record of round one and stays); consequences: none, records only.
+- F2: fixed: nothing of d0297 is changed from this raft; the lesson gains the rule that such a ruling names who re-records the approval, and the user is told the two hashes (`done/d0297/approval.md` records `check.sh=e9d42eb7…`, the file after pull request #634 hashes `edad56e5…`) in the report and on the pull request, to decide whether to re-record it now or when a landing meets it; consequences: a later landing whose diff touches d0297's folder is refused by `approvedDrift` until the approval is re-recorded; R0133's and R0134's diffs do not touch it.
