@@ -16,6 +16,7 @@ local MazeView = require("./MazeView")
 local OfferView = require("./OfferView")
 local Pads = require("./Pads")
 local PelletView = require("./PelletView")
+local RevivesView = require("./RevivesView")
 local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
 local Sticks = require("./Sticks")
 local View = require("@game/ReplicatedStorage/Shared/Logic/View")
@@ -65,6 +66,7 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
 	local overlay = Flow.overlay(frame.play, RULES, FlowView.trip())
 	FlowView.show(overlay)
 	OfferView.show(overlay) -- f0145: the continue offer's buttons and keys
+	RevivesView.show(frame.play) -- f0186: the revives the run used, at the game over
 	if model and overlay.flash ~= lit then
 		lit = overlay.flash
 		MazeView.flash(model, overlay.flash)
@@ -92,6 +94,7 @@ Sticks.start(Pads.stick)
 HudView.start()
 FlowView.start()
 OfferView.start() -- after FlowView, so its keys are asked first (f0145)
+RevivesView.start()
 
 -- listening now: tell the server, so its first snapshot reaches a client that can show it
 ready:FireServer()

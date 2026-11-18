@@ -8,6 +8,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Flow = require("@game/ReplicatedStorage/Shared/Logic/Flow")
+local Lobby = require("@game/ReplicatedStorage/Shared/Logic/Lobby")
 
 local TestPurchase = {}
 TestPurchase.NOTE = "TEST PURCHASE: NOTHING IS CHARGED"
@@ -53,6 +54,7 @@ function TestPurchase.start()
 	label.Size = UDim2.fromScale(1, 0.6)
 	label.TextColor3 = Color3.fromRGB(255, 255, 255)
 	label.TextScaled = true
+	label.RichText = true -- f0186: a play's price is struck through
 	label.Parent = panel
 	local buy = Instance.new("TextButton")
 	buy.Name = "BUY"
@@ -117,7 +119,9 @@ function TestPurchase.start()
 			if words == nil then
 				return
 			end
-			label.Text = `{words}\n{Flow.OFFER.price}\n{TestPurchase.NOTE}`
+			-- f0186: a play's price shows on sale (Lobby.salePrice); a continue's is the offer's own
+			local price = if product == "play" then Lobby.salePrice() else Flow.OFFER.price
+			label.Text = `{words}\n{price}\n{TestPurchase.NOTE}`
 			gui.Enabled = true
 		end)
 	end)

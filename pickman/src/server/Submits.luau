@@ -38,7 +38,8 @@ function Submits.step(s: any, events: { any }, here: boolean): boolean
 			submission.score,
 			submission.level,
 			submission.run,
-			submission.lives -- f0145: the lives the run spent
+			submission.lives, -- f0145: the lives the run spent
+			submission.revives -- f0186: the paid revives it used, nil for none
 		)
 	end
 	if nextState.drop then

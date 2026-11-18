@@ -15,6 +15,7 @@ export type Attempt = {
 	run: string?,
 	at: number?,
 	lives: number?,
+	revives: number?, -- f0186: the paid revives (continues) the run used; nil is none
 }
 export type Companion = {
 	name: string,
@@ -24,6 +25,7 @@ export type Companion = {
 	run: string?,
 	at: number?,
 	lives: number?, -- f0145: the lives the run spent
+	revives: number?, -- f0186: the paid revives the run used; nil for none and for a row stored before f0186
 }
 export type Row = {
 	rank: number,
@@ -35,6 +37,7 @@ export type Row = {
 	at: number?,
 	runScore: number?, -- the companion's own score: the score of the run the row names (the page score can lag it)
 	lives: number?, -- f0145: the lives the run spent; nil for a row stored before them
+	revives: number?, -- f0186: the paid revives the run used; nil for none
 }
 export type PageEntry = { key: string, score: number }
 export type Page = { PageEntry }
@@ -55,8 +58,8 @@ export type Retry = { attempts: number, base: number, cap: number }
 -- rows: the all-time board read after the write
 export type DriveResult = { wrote: { [string]: boolean }, rank: number?, rows: { Row }? }
 export type RunState = { run: number, done: { [number]: boolean }, waited: number, drop: boolean }
-export type Submission = { score: number, level: number, run: number, lives: number? }
-export type StepEvent = { kind: string, score: number?, level: number?, lives: number? }
+export type Submission = { score: number, level: number, run: number, lives: number?, revives: number? }
+export type StepEvent = { kind: string, score: number?, level: number?, lives: number?, revives: number? }
 export type CacheEntry = { at: number, rows: { Row } }
 export type Failure = { at: number, count: number } -- consecutive failed reads of one board key
 export type TopRun = {
@@ -67,10 +70,11 @@ export type TopRun = {
 	level: number,
 	at: number,
 	lives: number?,
+	revives: number?,
 }
 export type TopIo = { update: (transform: ({ TopRun }?) -> { TopRun }?) -> (any, string?) }
 export type TopResult = { known: boolean, place: number?, missed: number? }
-export type Best = { score: number, level: number }
+export type Best = { score: number, level: number, revives: number? }
 
 local Hiscores = {}
 
@@ -215,6 +219,15 @@ function Hiscores.lives(x: any): number?
 	return if whole(x) and x >= 1 then x else nil
 end
 
+-- f0186: a run's revives as kept and shown: a whole count from 1 to 2^53 - 1, else nil (none). Every reader of a
+-- stored or sent count goes through it, so a junk value reads as none.
+function Hiscores.revives(x: any): number?
+	if whole(x) and x >= 1 and x <= MAX_INTEGER then
+		return x
+	end
+	return nil
+end
+
 -- A row is replaced only by a strictly higher score, or the same score at a strictly higher level.
 function Hiscores.qualifies(stored: Companion?, attempt: Attempt): boolean
 	if not Hiscores.valid(attempt) then
@@ -240,6 +253,7 @@ function Hiscores.commit(stored: Companion?, attempt: Attempt): Companion?
 		run = if named then attempt.run else nil,
 		at = if named then attempt.at else nil,
 		lives = Hiscores.lives(attempt.lives),
+		revives = Hiscores.revives(attempt.revives),
 	}
 end
 
@@ -355,6 +369,7 @@ function Hiscores.rows(pages: { Page }, lookup: (string) -> (Companion?, string?
 						then companion.score
 						else nil,
 					lives = Hiscores.lives(companion.lives),
+					revives = Hiscores.revives(companion.revives),
 				})
 			end
 		end
@@ -385,15 +400,26 @@ function Hiscores.rankOf(rows: { Row }, userId: string): number?
 	return nil
 end
 
-function Hiscores.lobbyRows(
-	rows: { Row }
-): { { rank: number, name: string, score: number, level: number, lives: number? } }
+function Hiscores.lobbyRows(rows: { Row }): {
+	{
+		rank: number,
+		name: string,
+		score: number,
+		level: number,
+		lives: number?,
+		revives: number?,
+	}
+}
 	local out = {}
 	for _, row in rows do
-		table.insert(
-			out,
-			{ rank = row.rank, name = row.name, score = row.score, level = row.level, lives = row.lives }
-		)
+		table.insert(out, {
+			rank = row.rank,
+			name = row.name,
+			score = row.score,
+			level = row.level,
+			lives = row.lives,
+			revives = row.revives,
+		})
 	end
 	return out
 end
@@ -597,6 +623,7 @@ function Hiscores.onStep(state: RunState, events: { StepEvent }, here: boolean):
 					level = event.level,
 					run = state.run,
 					lives = Hiscores.lives(event.lives),
+					revives = Hiscores.revives(event.revives),
 				}
 			end
 		end
@@ -686,6 +713,7 @@ function Hiscores.topRun(attempt: Attempt, unix: number, run: number, server: st
 		level = attempt.level,
 		at = unix,
 		lives = spent,
+		revives = Hiscores.revives(attempt.revives),
 	}
 end
 
@@ -727,6 +755,7 @@ local function ordered(list: any): { TopRun }
 				level = e.level,
 				at = e.at,
 				lives = Hiscores.lives(e.lives), -- f0145: the list's copy keeps the lives spent
+				revives = Hiscores.revives(e.revives), -- f0186: and the revives
 			})
 		end
 	end
@@ -755,6 +784,7 @@ function Hiscores.bestRun(row: Row): TopRun?
 			level = row.level,
 			at = row.at :: number,
 			lives = Hiscores.lives(row.lives),
+			revives = Hiscores.revives(row.revives),
 		}
 	end
 	return {
@@ -765,6 +795,7 @@ function Hiscores.bestRun(row: Row): TopRun?
 		level = row.level,
 		at = 0,
 		lives = Hiscores.lives(row.lives),
+		revives = Hiscores.revives(row.revives),
 	}
 end
 
@@ -802,10 +833,15 @@ function Hiscores.topRows(list: any): { Row }?
 	end
 	local out: { Row } = {}
 	for i, e in ordered(list) do
-		table.insert(
-			out,
-			{ rank = i, name = e.name, userId = e.userId, score = e.score, level = e.level, lives = e.lives }
-		)
+		table.insert(out, {
+			rank = i,
+			name = e.name,
+			userId = e.userId,
+			score = e.score,
+			level = e.level,
+			lives = e.lives,
+			revives = e.revives,
+		})
 	end
 	return out
 end
@@ -875,7 +911,7 @@ function Hiscores.best(companion: any): Best?
 	if not whole(companion.level) or companion.level < 1 then
 		return nil
 	end
-	return { score = companion.score, level = companion.level }
+	return { score = companion.score, level = companion.level, revives = Hiscores.revives(companion.revives) }
 end
 
 -- Whether a player's held best must be read again: nothing held, or a finished read that is no longer fresh. A

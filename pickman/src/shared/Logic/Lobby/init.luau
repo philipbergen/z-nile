@@ -4,7 +4,10 @@
 local Pay = require("./Pay")
 local Travel = require("./Travel")
 
-export type Row = { rank: number, name: string, score: number, level: number, lives: number? }
+-- `revives`: the paid revives the run used (f0186), nil is none; `lives`: f0145's lives spent, which the rows the
+-- server sends still carry but no board shows since f0186
+export type Row =
+	{ rank: number, name: string, score: number, level: number, lives: number?, revives: number? }
 export type Panel = { title: string, rows: { Row }, empty: string? }
 export type Button = { text: string, enabled: boolean, message: string? }
 
@@ -15,7 +18,9 @@ Lobby.MAX_ROWS = 10
 Lobby.BUTTON_MIN_PX = 44 -- the smallest touch target (design: Mobile)
 Lobby.READ_GAP = 1 -- seconds before the screen asks again after a failed answer; a copy of Hiscores.READ_GAP
 Lobby.MAX_RETRIES = 3 -- failed answers in a row that are asked for again
-Lobby.LIVES_MARK = "♥" -- f0145: before the lives a run spent, after the level
+Lobby.REVIVES = "REVIVES" -- the word before a run's revive count, on every board and at the end of a run (f0186)
+-- how the price of a play is shown (f0186): the list price struck through, then the price charged, on sale
+Lobby.PRICE = table.freeze({ struck = "5 R$", price = "1 R$", sale = "SALE" })
 
 -- The panel for the rows the boards give (nil or none: the empty state). Rows are shown in rank order, at most MAX_ROWS.
 function Lobby.panel(rows: { Row }?): Panel
@@ -24,7 +29,7 @@ function Lobby.panel(rows: { Row }?): Panel
 	for _, r in given do
 		table.insert(
 			shown,
-			{ rank = r.rank, name = r.name, score = r.score, level = r.level, lives = r.lives }
+			{ rank = r.rank, name = r.name, score = r.score, level = r.level, revives = r.revives }
 		)
 	end
 	table.sort(shown, function(a: Row, b: Row): boolean
@@ -64,18 +69,22 @@ function Lobby.boardPanel(rows: { Row }?, id: string?): Panel
 	return p
 end
 
--- f0145: the lives a run spent, after the level (" ♥n"); nothing for a row without them (stored before f0145)
-function Lobby.livesText(lives: number?): string
-	if
-		type(lives) ~= "number"
-		or lives ~= lives
-		or lives < 1
-		or lives ~= math.floor(lives)
-		or lives == math.huge
-	then
-		return ""
-	end
-	return ` {Lobby.LIVES_MARK}{string.format("%d", lives)}`
+-- A run's revive count as the boards and the end of a run show it: "REVIVES n", and "REVIVES 0" for none, which is
+-- also what a row stored before f0186 (no count) or a count that is not a whole number of at least one shows.
+function Lobby.revivesText(n: any): string
+	local count = if type(n) == "number"
+			and n == n
+			and n == math.floor(n)
+			and n >= 1
+			and n <= 2 ^ 53 - 1
+		then n
+		else 0
+	return `{Lobby.REVIVES} {string.format("%d", count)}`
+end
+
+-- The price of a play as rich text (f0186): the list price struck through, the price charged and the sale word.
+function Lobby.salePrice(): string
+	return `<s>{Lobby.PRICE.struck}</s> {Lobby.PRICE.price} {Lobby.PRICE.sale}`
 end
 
 -- f0145: the line under START GAME: a free start due, else the plays held, else the price (or the store
@@ -91,7 +100,7 @@ function Lobby.payLine(status: Pay.Status?, mode: string?, now: number): string?
 	elseif status.plays > 0 then
 		line = if status.plays == 1 then "1 GAME YOU BOUGHT" else `{status.plays} GAMES YOU BOUGHT`
 	else
-		line = if mode == "closed" then "STORE UNAVAILABLE" else "1 ROBUX A GAME"
+		line = if mode == "closed" then "STORE UNAVAILABLE" else `A GAME: {Lobby.salePrice()}`
 		local at = status.nextFree
 		if at ~= nil and at > now then
 			line ..= `, NEXT FREE GAME IN {math.ceil((at - now) / 60)} MIN`
@@ -111,7 +120,7 @@ function Lobby.lines(p: Panel, highlightRank: number?): string
 	local out: { string } = {}
 	for _, r in p.rows do
 		local mark = if highlightRank ~= nil and r.rank == highlightRank then "> " else ""
-		table.insert(out, `{mark}{r.rank} {r.name} {r.score} {r.level}{Lobby.livesText(r.lives)}`)
+		table.insert(out, `{mark}{r.rank} {r.name} {r.score} {r.level} {Lobby.revivesText(r.revives)}`)
 	end
 	return table.concat(out, "\n")
 end
@@ -128,7 +137,9 @@ function Lobby.bestLine(best: any, id: string?): string?
 	if type(level) ~= "number" or level < 1 or level ~= math.floor(level) or level == math.huge then
 		return nil
 	end
-	return `YOUR BEST {string.format("%d", score)} {string.format("%d", level)}`
+	return `YOUR BEST {string.format("%d", score)} {string.format("%d", level)} {Lobby.revivesText(
+		best.revives
+	)}`
 end
 
 -- The whole list text: the panel's lines, then the viewer's best line when there is one.
