@@ -1,0 +1,6 @@
+- design-review-001 F1 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F2 (erred z-design): z-design/run-examples-through-the-reader
+- design-review-001 F3 (erred z-design, upstream zz-review): one-off: the Problem's numbers came from the idea review's own suggested wording and went stale as the tracker grew; prep adds the measured detail
+- design-review-001 F4 (erred z-design): one-off: the claimed slow-tier cache does not exist; the Design now states the real mechanism
+- note design-review-001 F4 the inputs row has no gate effect, as this lesson says (erred zz-test): zz-test/specs-read-sources-through-the-selector
+- design-review-001 F5 (erred z-design): z-design/prep-experiments-run-in-standalone-clones
