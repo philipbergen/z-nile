@@ -100,34 +100,40 @@ local function depsFirst(issues: { Issue }): { Issue }
 		listed[i.id] = true
 	end
 	local out: { Issue } = {}
-	local placed: { [string]: boolean } = {}
-	while #out < #issues do
-		local took = false
-		for _, i in issues do
-			if placed[i.id] then
+	-- an entry is taken by its place in the list and an id is met once any entry that carries it is taken, so a list
+	-- that repeats an id still ends with every entry in `out` once (d0413)
+	local taken: { [number]: boolean } = {}
+	local met: { [string]: boolean } = {}
+	-- one entry is taken on each pass, so #issues passes take them all
+	for _ = 1, #issues do
+		local pick: number? = nil
+		for at, i in issues do
+			if taken[at] then
 				continue
 			end
 			local free = true
 			for _, d in (i.deps or {}) :: { string } do
-				if listed[d] and not placed[d] and d ~= i.id then
+				if listed[d] and not met[d] and d ~= i.id then
 					free = false
 				end
 			end
 			if free then
-				table.insert(out, i)
-				placed[i.id] = true
-				took = true
+				pick = at
 				break
 			end
 		end
-		if not took then -- a ring: the lowest id left goes next
-			for _, i in issues do
-				if not placed[i.id] then
-					table.insert(out, i)
-					placed[i.id] = true
+		if not pick then -- a ring: the lowest id left goes next
+			for at in issues do
+				if not taken[at] then
+					pick = at
 					break
 				end
 			end
+		end
+		if pick then
+			table.insert(out, issues[pick])
+			taken[pick] = true
+			met[issues[pick].id] = true
 		end
 	end
 	return out
