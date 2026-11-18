@@ -69,6 +69,64 @@ local function git(args: { string }): string
 	return fixture.git(FX, args)
 end
 
+-- c0374: the bytes of `text` inside single quotes, as `mask[line][column]` (a line and column are the scanner's: lines
+-- split at "\n", columns are bytes in the line). rewrites.literals reads a word in single-quoted text as a path
+-- (it tracks only double quotes), though a finished check passes such text to its own helpers (`vocabulary`, `cases`)
+-- and to `bash -c`. The walk keeps a stack of quoting contexts, so `'"'"'`, an escaped quote, a comment and the quotes
+-- inside `$( )` are read as the shell reads them; it returns nil when the text ends inside a quote or a `$(`, and the
+-- caller then fails closed. One `for` over the bytes, so it always ends.
+local function singleQuoted(text: string): { [number]: { [number]: boolean } }?
+	local mask: { [number]: { [number]: boolean } } = {}
+	local stack: { string } = { "normal" } -- "normal", "double", "single", or "paren" (a `$(`, closed by `)`)
+	local line, col, skip, comment = 1, 0, false, false
+	local prev = "\n"
+	for i = 1, #text do
+		local c = string.sub(text, i, i)
+		col += 1
+		if c == "\n" then
+			line += 1
+			col = 0
+			comment = false
+			skip = false
+		elseif skip then
+			skip = false
+		elseif not comment then -- a comment runs to the end of its line
+			local top = stack[#stack]
+			if top == "single" then
+				if c == "'" then
+					table.remove(stack)
+				else
+					mask[line] = mask[line] or {}
+					mask[line][col] = true
+				end
+			elseif c == "\\" then
+				skip = true
+			elseif c == "'" then
+				if top ~= "double" then
+					table.insert(stack, "single")
+				end
+			elseif c == '"' then
+				if top == "double" then
+					table.remove(stack)
+				else
+					table.insert(stack, "double")
+				end
+			elseif c == "(" and prev == "$" then
+				table.insert(stack, "paren")
+			elseif c == ")" and top == "paren" then
+				table.remove(stack)
+			elseif c == "#" and top ~= "double" and string.find(prev, "^[%s;|&(]$") then
+				comment = true
+			end
+		end
+		prev = c
+	end
+	if #stack ~= 1 then
+		return nil
+	end
+	return mask
+end
+
 return t.spec("c0120 finished check.sh files still name paths that resolve from their home", function(it)
 	it("rewrites a finished check.sh's moved paths from its home, and nothing else", function()
 		if fs.isDir(FX) then
@@ -991,9 +1049,26 @@ return t.spec("c0120 finished check.sh files still name paths that resolve from 
 							if string.match(id, "^[fdcR]%d%d%d%d$") and fs.isFile(`{TOP}/{file}`) then
 								read += 1
 								local home = projects.homeOf(reg, file)
-								for _, l in rewrites.literals(fs.readFile(`{TOP}/{file}`)) do
+								local text = fs.readFile(`{TOP}/{file}`)
+								local single = singleQuoted(text)
+								if not single then
+									table.insert(
+										bad,
+										`{file}: its quotes do not balance, so single-quoted text is unknown`
+									)
+								end
+								for _, l in rewrites.literals(text) do
 									local from = if l.dir == "" then home else `{home}/{l.dir}`
-									if not world.now(`{from}/{l.path}`) and world.before(l.dir .. l.path) then
+									-- c0374: a file named alone (`./zn`) inside single quotes is a message, a case's name or
+									-- the script of a `bash -c`, as the scanner already reads it inside double quotes
+									local message = single ~= nil
+										and not string.find(l.path, "/", 1, true)
+										and (single[l.line] or {})[l.first] == true
+									if
+										not message
+										and not world.now(`{from}/{l.path}`)
+										and world.before(l.dir .. l.path)
+									then
 										table.insert(bad, `{file}: {l.word} (from {home})`)
 									end
 								end
