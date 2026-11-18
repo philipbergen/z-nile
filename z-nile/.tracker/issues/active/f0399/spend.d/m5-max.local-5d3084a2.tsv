@@ -191,3 +191,26 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-18 01:18	162 specs	0	0	test			93.556	384.400		93.556	tokens,ai
 2026-11-18 01:18	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
 2026-11-18 01:18	R0129: trace names the finished commit	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-18 01:21	affected	0	0	test			156.051	516.530		156.051	tokens,ai
+2026-11-18 01:21	1 spec	0	0	test			1.439	0.920		1.439	tokens,ai
+2026-11-18 01:21	1 spec	0	0	test			1.434	0.900		1.434	tokens,ai
+2026-11-18 01:22	1 spec	0	0	test			65.785	52.050		65.785	tokens,ai
+2026-11-18 01:22	1 spec	0	0	test			1.236	0.820		1.236	tokens,ai
+2026-11-18 01:23	1 spec	0	0	test			27.996	24.570		27.996	tokens,ai
+2026-11-18 01:23	1 spec	0	0	test			1.436	0.930		1.436	tokens,ai
+2026-11-18 01:23	1 spec	0	0	test			1.447	1.090		1.447	tokens,ai
+2026-11-18 01:25	affected	0	0	test			147.234	490.220		147.234	tokens,ai
+2026-11-18 01:25	1 spec	0	0	test			2.045	1.440		2.045	tokens,ai
+2026-11-18 01:25	1 spec	0	0	test			2.266	1.430		2.266	tokens,ai
+2026-11-18 01:26	1 spec	0	0	test			67.875	53.260		67.875	tokens,ai
+2026-11-18 01:26	1 spec	0	0	test			1.224	0.860		1.224	tokens,ai
+2026-11-18 01:27	1 spec	0	0	test			25.564	22.260		25.564	tokens,ai
+2026-11-18 01:27	1 spec	0	0	test			1.248	0.860		1.248	tokens,ai
+2026-11-18 01:27	1 spec	0	0	test			1.427	1.010		1.427	tokens,ai
+2026-11-18 01:27	1 spec	0	0	test			1.227	0.920		1.227	tokens,ai
+2026-11-18 01:27	1 spec	0	0	test			1.242	0.930		1.242	tokens,ai
+2026-11-18 01:28	1 spec	0	0	test			61.282	48.270		61.282	tokens,ai
+2026-11-18 01:28	1 spec	0	0	test			1.241	0.810		1.241	tokens,ai
+2026-11-18 01:29	1 spec	0	0	test			27.581	24.210		27.581	tokens,ai
+2026-11-18 01:29	1 spec	0	0	test			1.238	0.830		1.238	tokens,ai
+2026-11-18 01:29	R0129: trace names the restacked commit	0	0	deliver							tokens,wall,cpu,ai
