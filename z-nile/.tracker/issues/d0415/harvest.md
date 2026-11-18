@@ -1,0 +1,8 @@
+- design-review-001 F1 (erred z-design): z-design/every-recorded-row-has-a-path-to-main
+- design-review-001 F2 (erred z-design): z-design/agents-quote-the-users-words
+- design-review-001 F3 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F4 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-001 F5 (erred z-design, upstream z-ticket): z-design/count-rules-check-every-mode
+- design-review-001 F6 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F7 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F8 (erred z-design): z-design/spec-design-correspondence

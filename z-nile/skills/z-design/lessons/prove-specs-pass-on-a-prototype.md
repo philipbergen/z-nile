@@ -63,3 +63,5 @@ f0145 prep, resumed 2026-11-15 after a pause for f0148: its prototype lived only
 - one case compared a trimmed text (read through `fixture.git`) with an untrimmed one. Read both sides through the same helper.
 - one case landed a raft after `main` had moved without the `./zn restack` that `done` asks for. A fixture that drives a whole sequence runs every command the engine would ask for in it.
 A row marked `reasoned` because the case is slow to set up is where the flaws were. The prototype already existed; running the two files on it took minutes.
+
+**Note (d0415 design review 001 F6):** the prototype's proof is the item's own check and the promoted specs of the area it changes (the dispatcher's, the ready check's), run on the prototype and recorded before the review; an `Overrides: none` line is unproven without it.
