@@ -135,7 +135,8 @@ return t.spec("c0388 the folders c0042's cli spec counts come from every registe
 		-- the issue half: the loop over the module's issues, the page lookup, and the assertion on what is missing
 		t.expect(string.find(text, "for _, id in found.issues do", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(text, "if m.home[id] == nil then", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(text, 't.expect(table.concat(missing, " ")).toBe("")', 1, true) ~= nil).toBe(true)
+		t.expect(string.find(text, 't.expect(table.concat(missing, " ")).toBe("")', 1, true) ~= nil)
+			.toBe(true)
 		t.expect((string.find(text, ".tracker/", 1, true))).toBe(nil)
 		t.expect((string.find(text, "fs.readDir", 1, true))).toBe(nil)
 	end)
