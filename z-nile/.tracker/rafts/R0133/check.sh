@@ -3,6 +3,7 @@
 # Runs the raft's project gate, every member issue's check.sh, then raft-level end-to-end checks.
 # ac.sh runs this from the raft's project home (pickman/, z-nile/); $ZN_ROOT is the repository root. The project's gate
 # proves that project alone; a game pull request's merger runs `z-nile/check.sh --full`, which covers the others (c0120).
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" # before ac.sh changes the directory
 source "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/z-nile/lib/ac.sh"
 
 check "RC0: project gate passes (affected)" "$ZN_ROOT/z-nile/check.sh" --project z-nile --affected
@@ -13,6 +14,9 @@ done
 
 check "RC0: acceptance specs will survive promotion into tests/" "$ZN_ROOT/zn" promote-check R0133
 
-# check "RC1: <end-to-end statement>" <command>
+# c0374's spec reads every finished check.sh, so each member's own check.sh must pass its rule before done moves it
+check "RC1: no member's check.sh names a path c0120's finished rule reports once it is in done/" \
+	lune run "$HERE/finished-rule.luau"
+
 
 finish

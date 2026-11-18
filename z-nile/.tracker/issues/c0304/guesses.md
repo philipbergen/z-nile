@@ -1,0 +1,2 @@
+# guesses
+- G1 (raft, 2026-11-18): The fixed rafting policy would fold this chore into a large unrelated chore raft (R0062, R0093 or R0108) Chose: It is rafted with the other three stale-spec fixes of main's slow tier, as R0133 Why: The four change only promoted specs that are red on main, share no file, and should land together and soon; the open chore rafts hold unrelated work of several hundred lines
