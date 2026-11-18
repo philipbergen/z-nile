@@ -1,0 +1,132 @@
+z-nile/tests/acceptance/c0172/cicd.spec.luau
+	content-md5 is the base64 of the md5
+	the lease store is not a hiscore store
+	a live lease held by someone else is busy, and an expired one can be taken
+	the reservation round-trips and does not use a hiscore name
+	the config accepts the two place keys and refuses a mix-up
+	the child environment drops inherited Roblox settings
+	the root place id is the last segment of rootPlace
+	the token file is mode 600
+	a missing config exits non-zero and does not skip
+	a place that is the experience start place is refused before any publish
+	places.cicd_game as the experience start place is refused before any publish
+	a lease the key cannot read stops the command before it publishes
+	a live lease held by someone else stops the command before it publishes
+	release refuses a live lease whose token is not ours
+	release clears an expired lease without the token
+	status names the holder and not the token or the key
+	publishes the file's places, not the inherited universe, and runs both suites
+	a versioned tombstone is replaced and the command still publishes
+	a versionless tombstone is re-read once and then replaced
+	a failed publish releases the lease and exits non-zero
+	a failed runtime suite releases the lease and exits non-zero
+z-nile/tests/acceptance/c0172/deploy.spec.luau
+	the only workflow file is deploy.yml
+	the gate workflow, the board workflow and ci-verify are absent
+	one job, deploy, with no needs and no gate
+	no step runs the gate, the runtime tests or a raft's acceptance specs
+	the publish step carries the four Roblox settings
+	a draft or a fork does not deploy, and neither does a push or a dispatch
+	the version comment runs only for a pull request
+	one publish at a time, and a running one is not cancelled
+z-nile/tests/acceptance/c0172/merge.spec.luau
+	merging is the local full gate and does not read Actions
+	the testing skill's gate is local
+	the architecture table does not list a CI dispatch
+	SETUP says verification is local
+	the gate's own comment does not say CI runs it
+	the design lesson does not send a prep to Actions
+	zz-execute names the local full gate in a clean clone
+	the worktree paragraph names that clone as the final check
+	the merging close refuses a missing local full gate
+	a main move reruns the local full gate
+	a new raft's check says the merger's full gate covers the other project
+	the testing skill says GitHub Actions does not run the specs
+	the worktree rule names the clone as its one exception
+	the final check removes origin and fences the real repository
+	the skills do not wait for green CI
+	the board cell says -O only writes the page, as the specs do
+	a merge runs the local cicd command and the runtime tier is not run by CI
+z-nile/tests/acceptance/c0172/narrowed.spec.luau
+	each narrowed spec is exactly the narrowed text
+z-nile/tests/acceptance/c0246/paths.spec.luau
+	AC1: graph.unreadable names every $path that is not a string or an optional string
+	AC1: the tree node (instance "") and nested nodes are read, sorted by instance
+	AC1: the order is by instance path, not the walk's (a parent-first walk cannot give it)
+	AC1: a node named with a $ that Rojo does not reserve is reported, the six it reserves are not
+	AC2: graph.mappings and graph.gameRoots still skip them, and keep the readable ones
+	AC3: the rule reports each, with the file, the node and what the value is
+	AC3: a file whose only $path is unreadable is not also reported as mapping no $path
+	AC5: a project file Rojo loads from a mapped folder is a nested project, at any depth and in any casing
+	AC5: a project file reached through a link that stays in the home is a nested project; one outside is not read
+	AC5: a link loop is a build Rojo refuses, so it reads no file and the rule neither crashes nor reports it
+	AC3: a project file that decodes to a number, a boolean or null is still reported, not a crash
+	AC6: a project Rojo loads through syncRules is judged by what it reads, a file without the rule is not
+	AC5: a library folder sits at its node wherever a link or a syncRules project puts it
+	AC5: the inside test is exact: a sibling of the home and the library's other folders are outside
+	AC6: a rojo that cannot be run is reported, not read as a refusal
+	AC4: the README states the rule
+z-nile/tests/acceptance/c0278/close-cli.spec.luau
+	sets up new, prepared, preparing, rafted, depended-on, done and active issues, a raft and a worktree
+	close publishes one tracker-only commit that changes only the document's status and adds wont_do
+	the closed issue keeps its folder: find, capture, status, spend.md and its review files are where they were
+	the commit's subject and Reason line carry the id and the reason
+	a prepared raftless issue is closed too
+	close refuses without a reason, with a blank or multi-line reason, a raft id, an unknown id, a done, an active, a closed, a preparing, a rafted and a depended-on issue, each naming its way out, and publishes nothing
+	close refuses in the main checkout and, without --carry, without an origin
+	close --carry edits only this tree's document, the same bytes but the stamp, and publishes nothing
+	close --carry refuses as the published close does, judged on this tree
+	close counts only live item documents as dependents: an active dependent holds it; a closed dependent and a review file's depends_on line do not
+	land refuses a capture that edits a closed issue's document or adds it to a depends_on, and lands one that adds a live id
+	cleans up
+z-nile/tests/acceptance/c0278/closing.spec.luau
+	checkReason refuses nil, empty, blank and multi-line reasons and takes one line
+	refusal checks raft, none, done, active, closed, preparing, raft, dependents in that order
+	refusal takes new and raftless prepared
+	edit sets the stamp and appends wont_do as the last frontmatter key, keeping every other byte
+	isClosed and reasonOf read the status and the trimmed wont_do
+	status parses a closed stamp and no move enters or leaves closed
+	guard accepts exactly a close
+	guard refuses an extra edit, a second wont_do, an empty or multi-line reason, a non-closed stamp, a missing status change, and a document already closed or carrying wont_do
+	closedDoc is true for a closed status or a wont_do line
+z-nile/tests/acceptance/c0278/docs.spec.luau
+	zz-rules' Statuses, Published or carried, direct-push and Paths bullets name closed
+	zz-rules' commands table has a close row and Other commands lists close and list closed
+	zz-rules' land sentences say a capture never edits a closed issue or adds one to a depends_on
+	usage names close and list closed, and close is neither read-only nor allowed in the main checkout
+z-nile/tests/acceptance/c0278/readers.spec.luau
+	sets up issues, a raft, a rafting and a design worktree, and closes two issues
+	list leaves a closed issue out, list backlog too, and list closed shows it with its reason
+	list's other rows are unchanged by a close
+	the bare status listing leaves it out and status <id> prints closed
+	the board's data has no card for it and raft-plan does not offer it
+	status moves refuse a closed issue, and status <id> closed names ./zn close
+	idea, fold and new raft refuse a closed issue
+	dispatch.next stops a closed issue as finished
+	watch-net's open-defect test ignores a closed defect and keeps done/ and retired/ closed
+	watch-net files a new slow-tier-red defect when the open one is closed, and says already open when it is not
+	audit reports closed-mismatch, closed-not-backlog, closed-in-raft and closed-dependency, each with its fix, and nothing for a proper close
+	the publish guard refuses a status-only edit of a closed document and a wont_do line without the closed status
+	publish.commit refuses to move a closed issue's folder, as never published again
+	cleans up
+z-nile/tests/tooling/closing-guards.spec.luau
+	F1: an existing document's status-only edit to closed-… without wont_do is refused
+	F1: an exact close and a plain status edit of an existing document are accepted
+	F1: a closed existing document is never published again
+	F1: a move never produces a closed document, with or without wont_do
+	final F1: close's document reaches dispatch.next as closed and stops it
+	F2: git grep's no-match is no dependents, its failure refuses
+	F2: a capture's added depends_on refuses when git can't read the dependency
+z-nile/tests/tooling/finish-deleted.spec.luau
+	a layer that deletes a spec writes no watch file for it and does not make its folder again
+	a layer that deletes a source lists it in neither the ticket's watch.txt nor a changed spec's
+	a layer with no deletion captures what it always did
+z-nile/tests/tooling/watch.spec.luau
+	parses a sorted list and refuses a broken one
+	leaves out tracker files, docs, skills, lessons, specs and watch files
+	keeps a tooling spec on tooling paths and a game spec on game and library paths
+	names a spec with no watch file and an empty watch file
+	selects the spec that watches a path, the spec a change edits, and no other
+	a source commit that names two issues shares the raft's list; a start commit does not
+	rewrites a renamed path and drops a deleted one
+	reads a failing spec path out of a suite log
