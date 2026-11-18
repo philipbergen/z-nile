@@ -35,9 +35,10 @@ check "AC6: the rounds and lessons tables, the board and the summary readers fin
 	all "the rounds and lessons tables after the phase table are printed" \
 	"the board is written from the same tracker" \
 	"the readers a raft's spend summary uses return and total the idea rows"
-# A slow-tier spec, run once here on purpose (4 s measured, 2026-11-17): it is the spec the defect turned red on main
-# and no gate runs it (lesson zz-test/check-sh-never-runs-the-slow-tier, c0302's note). retired.spec (110 s) is not.
-check "AC7: c0043/rounds.spec passes on the real tracker (4 s)" \
-	lune run tests/run -- tests/acceptance/c0043/rounds.spec.luau
+# Two slow-tier specs, run once here on purpose, in one runner call: rounds.spec (4 s) and retired.spec (110 s
+# alone, up to 290 s on a busy machine; measured 2026-11-17). They are the specs this defect turned red on main, the
+# capture names both, and no gate runs them (lesson zz-test/check-sh-never-runs-the-slow-tier, c0302's note).
+check "AC7: c0043/rounds.spec and c0116/retired.spec pass (2 to 5 min)" \
+	lune run tests/run -- tests/acceptance/c0043/rounds.spec.luau tests/acceptance/c0116/retired.spec.luau
 
 finish
