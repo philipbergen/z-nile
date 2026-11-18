@@ -88,7 +88,10 @@ usage: ./zn <command> ...
   remap                                         bring a branch from before a compaction onto the new ids
   migrate                                       rename legacy-named documents to <ID>.md (adds slug: to the frontmatter)
   approve <issue-id> [--check|--publish]       record the human's approval, check it, or publish it to origin/main
-  ready <R-id|issue-id>                         claim the raft, move it to active/ on origin/main, write <root>/rafts/active/<R>/prompt.md
+  guess <issue-id> --step design|raft|build --open <text> --chose <text> --why <text>
+                                                record one guess in the issue's guesses.md (commits nothing)
+  guesses <issue-id|R-id> [--check]             print each issue's guesses and its approval state (--check: do they parse)
+  ready <R-id|issue-id> [--on <R-id>]           claim the raft, move it to active/ on origin/main, write <root>/rafts/active/<R>/prompt.md
   stop <R-id>                                   give back a readied or started raft: move it out of active/ on origin/main, remove its prompt
   stop <issue>                                  give back one active issue whose raft is retired, missing or empty
   start <R-id>                                  open the next layer: branch R0010/1/c0010, claim commit, draft PR on the layer below
@@ -121,8 +124,9 @@ usage: ./zn <command> ...
   workstreams <R-id>                            plan parallel workstreams (waves) for a raft
   promote-check <R-id|issue-id>                 dry-run: would promoted acceptance specs pass type check + meta?
   prompt <R-id> [--path]                        print a readied raft's prompt.md (--path: its path)
-  work [<R-id>]                                 print the z-work skill (the worker a person starts). With a raft id, that raft.
-  work next [--released <n>] [<R-id>]           the one next action. No raft: the next claimable one in this folder's project, or any project from the checkout root
+  work [<R-id>|<issue-id>]                      print the z-work skill (the worker a person starts). With an id, that raft or issue.
+  work next [--released <n>] [<R-id>|<issue-id>]
+                                                the one next action. Nothing named: the next step of any ticket in this folder's project, or any project from the checkout root
   work queue                                    one line per raft in that same set that work next will not take, the first reason
   work status                                   who holds which raft in that same set, which layer, since when
   capture <id>                                  print the item's document as captured (read-only)
@@ -830,33 +834,38 @@ local function localNumber(space: string, legacy: () -> number): number
 	return legacy()
 end
 
-local function flags(args: { string }): ({ string }, { [string]: { string } })
+-- `valued` names switches that take a value for this command (`guess --open <text>`), whatever they are elsewhere.
+local function flags(args: { string }, valued: { [string]: boolean }?): ({ string }, { [string]: { string } })
 	local pos: { string } = {}
 	local opts: { [string]: { string } } = {}
 	local i = 1
 	while i <= #args do
 		local a = args[i]
+		local takesValue = valued ~= nil and valued[a] == true
 		if
-			a == "--single"
-			or a == "--path"
-			or a == "--include-active"
-			or a == "--open"
-			or a == "--fetch"
-			or a == "--force"
-			or a == "-O"
-			or a == "--full"
-			or a == "--check"
-			or a == "--tags"
-			or a == "--uncovered"
-			or a == "--unattributed"
-			or a == "--apply"
-			or a == "--dry-run"
-			or a == "--quiet"
-			or a == "--auto"
-			or a == "--session-end"
-			or a == "--begin"
-			or a == "--sessions"
-			or a == "--carry"
+			not takesValue
+			and (
+				a == "--single"
+				or a == "--path"
+				or a == "--include-active"
+				or a == "--open"
+				or a == "--fetch"
+				or a == "--force"
+				or a == "-O"
+				or a == "--full"
+				or a == "--check"
+				or a == "--tags"
+				or a == "--uncovered"
+				or a == "--unattributed"
+				or a == "--apply"
+				or a == "--dry-run"
+				or a == "--quiet"
+				or a == "--auto"
+				or a == "--session-end"
+				or a == "--begin"
+				or a == "--sessions"
+				or a == "--carry"
+			)
 		then
 			opts[a] = { "true" }
 		elseif string.sub(a, 1, 1) == "-" then
@@ -1490,6 +1499,88 @@ local function latestRound(dir: string, prefix: string): number
 end
 
 -- What the one design review still leaves for the human, or nil when there is no review or the list is ruled.
+-- f0399: a Guessed line in this item's document that names no recorded guess. A raft's line that names only a
+-- guess means its first member's.
+-- f0399's helpers share one table: the main chunk is near its limit of locals.
+local f0399 = { lib = require("./guesses") }
+function f0399.guessedGap(item: store.Item): string?
+	local own = item.id
+	if item.kind == "raft" then
+		local first = layergit.orderedMembers(item)[1]
+		own = if first then first.id else ""
+	end
+	return require("./readycheck").guessedProblem(
+		item.id,
+		fs.readFile(item.doc),
+		own,
+		function(id: string): string?
+			local found = if store.isIssueId(id) then store.find(id) else nil
+			local path = if found then `{found.dir}/{f0399.lib.FILE}` else ""
+			return if path ~= "" and fs.isFile(path) then fs.readFile(path) else nil
+		end
+	)
+end
+
+-- f0399: a guess is only ever added. The refusal when this tree's guesses.md for `issue` no longer holds a guess
+-- as `ref` has it (origin/main at any state's path, or a pushed layer branch at this path).
+function f0399.guessesKept(issue: store.Item, refs: { string }): string?
+	local path = `{issue.dir}/{f0399.lib.FILE}`
+	local now = if fs.isFile(path) then fs.readFile(path) else nil
+	for _, ref in refs do
+		local places = { path }
+		for _, state in { "backlog", "active", "done" } :: { store.State } do
+			local at = `{store.dirFor("issue", state, issue.id, issue.root)}/{f0399.lib.FILE}`
+			if not table.find(places, at) then
+				table.insert(places, at)
+			end
+		end
+		for _, at in places do
+			local was = sh.run("git", { "show", `{ref}:{at}` })
+			if was.ok and not f0399.lib.extends(was.stdout, now) then
+				local old: { any } = f0399.lib.parse(was.stdout) or {}
+				local new: { any } = (if now then f0399.lib.parse(now) else nil) or {}
+				local lost = if old[1] then old[1].id else "G1"
+				for i, g in old do
+					local n = new[i]
+					if
+						not n
+						or n.step ~= g.step
+						or n.when ~= g.when
+						or n.open ~= g.open
+						or n.chose ~= g.chose
+						or n.why ~= g.why
+					then
+						lost = g.id
+						break
+					end
+				end
+				return `{issue.id}: guesses.md no longer holds {lost} as it was pushed: a guess is never removed or changed (add a new one that names it)`
+			end
+		end
+	end
+	return nil
+end
+
+-- f0399: why `item`'s approval does not hold in this tree ("no approval", "changed: <parts>"), or nil. A contract
+-- that cannot be read fails the command.
+function f0399.approvalGap(item: store.Item): string?
+	local found, err = approval.verdict(".", item)
+	if not found then
+		fail(`{item.id}: {err}`)
+	end
+	local verdict = found :: approval.Verdict
+	if verdict.state == "holds" then
+		return nil
+	end
+	if verdict.state == "none" then
+		return "no approval"
+	end
+	if verdict.state == "bad" then
+		fail(`{item.id}: {approval.file(item)} does not parse: {verdict.err}`)
+	end
+	return `changed: {table.concat(verdict.changed, ", ")}`
+end
+
 local function designOpen(item: store.Item): string?
 	local n = latestRound(item.dir, "design-review")
 	if n == 0 then
@@ -1608,6 +1699,10 @@ local function setStatus(id: string, to: string)
 				local gap = designOpen(localItem)
 				if gap then
 					return `{t}: {gap}`
+				end
+				local unnamed = f0399.guessedGap(localItem)
+				if unnamed then
+					return unnamed
 				end
 			end
 			if
@@ -3760,6 +3855,14 @@ function cmd.start(pos: { string })
 				fail(`{raft.id} is not readied on origin/main: run ./zn ready {raft.id} in the main checkout`)
 			end
 		end
+		-- f0399: a raft readied --on an unlanded raft is cut from its base commit, not from main
+		if layergit.readyRecord(raft.id).on and #layergit.layersOf(raft.id) == 0 then
+			refuseInMainCheckout("start")
+			if hasOrigin() then
+				sh.run("git", { "fetch", "--quiet", "origin" })
+			end
+			layergit.buildBase(raft)
+		end
 		local issue, _, branch, startAt, prBase = layergit.startLayer(raft)
 		if startAt ~= "" then
 			refuseInMainCheckout("start")
@@ -3923,8 +4026,12 @@ function cmd.finish(pos: { string })
 		sh.git({ "fetch", "--quiet", "origin" })
 	end
 	local raft = store.get(layer.raft)
+	local dropped = f0399.guessesKept(issue, { "origin/main", `origin/{branch}` })
+	if dropped then
+		fail(dropped)
+	end
 	local issues = layergit.orderedMembers(raft)
-	local base = layergit.mainTip()
+	local base = (layergit.raftBase(raft.id))
 	if layer.position > 1 then
 		local below = issues[layer.position - 1]
 		if not below then
@@ -3941,10 +4048,22 @@ function cmd.finish(pos: { string })
 	if not sh.run("git", { "merge-base", "--is-ancestor", base, "HEAD" }).ok then
 		fail(`{branch} is not based on the layer below: ./zn restack {raft.id}`)
 	end
-	local onMain = sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{approval.file(issue)}` }).ok
-	local drift = approval.refusal(".", issue, onMain)
-	if drift then
-		fail(drift)
+	-- f0399: a raft readied with `Lands: approved` is built before it is approved: finish goes on and says so,
+	-- and done asks. Any other raft keeps the rule it was readied under.
+	if layergit.readyRecord(raft.id).lands then
+		local gap = f0399.approvalGap(issue)
+		if gap then
+			print(
+				`note: {id} is not approved ({gap}): {raft.id} will wait for ./zn approve {id} before it lands`
+			)
+		end
+	else
+		local onMain =
+			sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{approval.file(issue)}` }).ok
+		local drift = approval.refusal(".", issue, onMain)
+		if drift then
+			fail(drift)
+		end
 	end
 	if not runCheck(issue) then
 		fail(`{id} check.sh failed; not finished`)
@@ -4073,10 +4192,15 @@ function cmd.restack(pos: { string })
 		fail(`{raft.id} has no layers`)
 	end
 	local back = sh.git({ "branch", "--show-current" })
-	local below = layergit.mainTip()
+	-- f0399: a raft built on an unlanded raft follows that raft's top layer (its base commit is rebuilt when the
+	-- layer moved); once that raft is done its base is main, and layer 1's pull request is retargeted there
+	layergit.buildBase(raft)
+	local raftBaseTip, raftBasePr = layergit.raftBase(raft.id)
+	local wasOn = layergit.readyRecord(raft.id).on ~= nil
+	local below = raftBaseTip
 	local moved = false
 	for _, layer in layers do
-		local onto = if layer.position == 1 then layergit.mainTip() else below
+		local onto = if layer.position == 1 then raftBaseTip else below
 		local tip = layergit.layerTip(layer) or fail(`{layer.name} has no tip`)
 		if stack.alreadyStacked(sh.run("git", { "merge-base", "--is-ancestor", onto, tip }).ok) then
 			below = tip
@@ -4147,6 +4271,28 @@ function cmd.restack(pos: { string })
 		end
 		below = sh.git({ "rev-parse", "HEAD" })
 		moved = true
+		if layer.position == 1 and wasOn and raftBasePr == "main" and hasOrigin() then
+			local listed = sh.run("gh", {
+				"pr",
+				"list",
+				"--head",
+				layer.name,
+				"--state",
+				"open",
+				"--json",
+				"number",
+				"-q",
+				".[0].number",
+			})
+			local number = if listed.ok then sh.trim(listed.stdout) else ""
+			if number ~= "" and number ~= "null" then
+				if not sh.run("gh", { "pr", "edit", number, "--base", "main" }).ok then
+					stdio.ewrite(
+						`warning: could not retarget the pull request for {layer.name} to main: gh pr edit {number} --base main\n`
+					)
+				end
+			end
+		end
 	end
 	if back ~= "" and sh.git({ "branch", "--show-current" }) ~= back then
 		sh.git({ "switch", "--quiet", back })
@@ -4177,6 +4323,14 @@ function cmd.stack(pos: { string })
 		have[layer.position] = layer
 	end
 	local below = layergit.shaOf("origin/main") or layergit.shaOf("main") or ""
+	local builtOn = ""
+	local baseTip, basePr = layergit.raftBase(raftId)
+	if basePr ~= "main" then
+		below = baseTip
+		local on = layergit.readyRecord(raftId).on :: string
+		local onLayers = layergit.layersOf(on)
+		builtOn = `built on {on} ({if #onLayers > 0 then onLayers[#onLayers].name else "no layer"})\n`
+	end
 	local rows: { stack.Row } = {}
 	for i, issue in issues do
 		local name = stack.branch(raftId, i, issue.id)
@@ -4197,7 +4351,7 @@ function cmd.stack(pos: { string })
 		end
 		table.insert(rows, { position = i, name = name, issue = issue.id, state = state, sha = sha })
 	end
-	print(stack.render(raftId, rows))
+	print(builtOn .. stack.render(raftId, rows))
 end
 
 -- The backticked paths on the bulleted lines of an issue's "### Touched modules" section, or nil when
@@ -4373,6 +4527,7 @@ cmd["raft-plan"] = function(pos: { string }, opts: { [string]: { string } })
 			size = raftplan.parseSize(front.size),
 			solo = front.solo == "true",
 			touched = touchedModules(it),
+			deps = store.idList(front.depends_on),
 		})
 	end
 	local rafts: { raftplan.Raft } = {}
@@ -5048,7 +5203,7 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 		if #layers ~= #issues then
 			fail(`{raft.id} has {#layers} layer(s) for {#issues} issue(s)`)
 		end
-		local baseTip = layergit.mainTip()
+		local baseTip = (layergit.raftBase(raft.id))
 		local onto = baseTip
 		local topFinishSha = ""
 		local topTip = ""
@@ -5095,7 +5250,7 @@ local function traceProblems(raft: store.Item, printSkeletonOnly: boolean?): { s
 		return { `no {tracePath}: run ./zn trace {raft.id} and fill the table` }
 	end
 
-	local baseTip = layergit.mainTip()
+	local baseTip = (layergit.raftBase(raft.id))
 	local onto = baseTip
 	local layerHistories: { trace.LayerHistory } = {}
 	for _, layer in layers do
@@ -5209,6 +5364,14 @@ function cmd.done(pos: { string })
 	if #layers == 0 then
 		fail(`{raft.id} has no layers: ./zn start {raft.id}`)
 	end
+	-- f0399: right after the fetch, as the Design says and land.spec pins (a guess removed in a commit not yet
+	-- pushed is named as that, before the tree is compared with the published top layer)
+	for _, m in issues do
+		local dropped = f0399.guessesKept(m, { "origin/main", `origin/{layers[#layers].name}` })
+		if dropped then
+			fail(dropped)
+		end
+	end
 	-- The commit that will be merged is the published top layer. The working tree has to be that
 	-- commit before any check reads it: a lower layer, or a top layer behind origin, is a different tree.
 	local topLayer = layers[#layers]
@@ -5228,13 +5391,40 @@ function cmd.done(pos: { string })
 	if not runCheck(raft) then
 		fail(`{raft.id} check.sh failed; not done`)
 	end
-	for _, m in store.members(raft.id) do
-		-- An approval `ready` published stays required: deleting approval.md on the branch is not a way
-		-- past the check. An item readied before approval has none on origin/main and is left alone.
-		local onMain = sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{approval.file(m)}` }).ok
-		local drift = approval.refusal(".", m, onMain)
-		if drift then
-			fail(drift)
+	local unnamedGuess = f0399.guessedGap(raft)
+	if unnamedGuess then
+		fail(unnamedGuess)
+	end
+	for _, m in issues do
+		local memberGuess = f0399.guessedGap(m)
+		if memberGuess then
+			fail(memberGuess)
+		end
+	end
+	if layergit.readyRecord(raft.id).lands then
+		-- f0399: nothing lands without an approval that holds in the tree being landed; the whole raft waits
+		local waiting: { string } = {}
+		for _, m in issues do
+			local gap = f0399.approvalGap(m)
+			if gap then
+				table.insert(waiting, `{m.id} ({gap})`)
+			end
+		end
+		if #waiting > 0 then
+			fail(
+				`{raft.id} waits for approval: {table.concat(waiting, ", ")}. The person runs ./zn approve <id> in this worktree; ./zn guesses {raft.id} lists what to review.`
+			)
+		end
+	else
+		for _, m in store.members(raft.id) do
+			-- An approval `ready` published stays required: deleting approval.md on the branch is not a way
+			-- past the check. An item readied before approval has none on origin/main and is left alone.
+			local onMain =
+				sh.run("git", { "cat-file", "-e", `refs/remotes/origin/main:{approval.file(m)}` }).ok
+			local drift = approval.refusal(".", m, onMain)
+			if drift then
+				fail(drift)
+			end
 		end
 	end
 	local verdict = layergit.reviewVerdict(raft)
@@ -5244,7 +5434,13 @@ function cmd.done(pos: { string })
 	if #layers ~= #issues then
 		fail(`{raft.id} has {#layers} layer(s) for {#issues} issue(s)`)
 	end
-	local onto = layergit.mainTip()
+	local onto, ontoPr = layergit.raftBase(raft.id)
+	if ontoPr ~= "main" then
+		local on = layergit.readyRecord(raft.id).on :: string
+		fail(
+			`{raft.id} is built on {on}, which has not landed: ./zn done {on} first, then ./zn restack {raft.id}`
+		)
+	end
 	for i, layer in layers do
 		if layer.position ~= i or layer.issue ~= issues[i].id then
 			fail(`{raft.id} layer {i} is {layer.name}, expected {issues[i].id}`)
@@ -5947,6 +6143,25 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	if item.kind ~= "issue" then
 		fail(`approve takes an issue ({id} is a {item.kind})`)
 	end
+	-- f0399: an active issue is approved on its raft's top layer, and the approval lands with the raft
+	local landsWith: string? = nil
+	local topBranch = ""
+	if item.state == "active" and not onlyCheck then
+		landsWith = store.readFront(item.doc).raft or ""
+		if opts["--publish"] then
+			fail(`{id} is active in {landsWith}: its approval lands with the raft`)
+		end
+		local layers = layergit.layersOf(landsWith :: string)
+		topBranch = if #layers > 0 then layers[#layers].name else `{landsWith}'s top layer`
+		if
+			sh.git({ "branch", "--show-current" }) ~= topBranch
+			or sh.git({ "status", "--porcelain" }) ~= ""
+		then
+			fail(
+				`{id} is active in {landsWith}: run ./zn approve {id} on {topBranch} (cd "$(./zn worktree {landsWith})")`
+			)
+		end
+	end
 	if opts["--publish"] then
 		local path = approval.file(item)
 		if not fs.isFile(path) then
@@ -6004,7 +6219,7 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 			end
 		end
 		local specs = readycheck.specs(folder, promoted)
-		local parts, err = contract.build(doc :: string, check, specs)
+		local parts, err = contract.build(doc :: string, check, specs, folder[f0399.lib.FILE])
 		if not parts then
 			fail(`{id}: {err}`)
 		end
@@ -6052,11 +6267,28 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	if front.design ~= "ready" then
 		fail(`{id} is not design: ready`)
 	end
-	local pending = openlist.pending(fs.readFile(item.doc))
+	-- f0399: a Guessed bullet is not waiting: approving is the person's ruling on every guess the hash covers
+	local pending = openlist.waiting(fs.readFile(item.doc))
 	if #pending > 0 then
 		fail(
 			`{id} has an unruled open-list bullet ({table.concat(pending, ", ")}): rule each under ## Open to the human, then ./zn approve {id}`
 		)
+	end
+	local unnamed = f0399.guessedGap(item)
+	if unnamed then
+		fail(unnamed)
+	end
+	if hasOrigin() then
+		sh.run("git", { "fetch", "--quiet", "origin" })
+	end
+	local kept = { "origin/main" }
+	local onBranch = sh.git({ "branch", "--show-current" })
+	if onBranch ~= "" then
+		table.insert(kept, `origin/{onBranch}`)
+	end
+	local dropped = f0399.guessesKept(item, kept)
+	if dropped then
+		fail(dropped)
 	end
 	local check = `{item.dir}/check.sh`
 	if not fs.isFile(check) then
@@ -6087,14 +6319,197 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	local rows = contract.parse(text :: string)
 	local hash = if rows then rows[#rows].hash else ""
 	print(`approved {id} {hash}`)
+	if landsWith then
+		local pushed = sh.run("git", { "push", "--quiet", "origin", "HEAD" })
+		if not pushed.ok then
+			fail(
+				`{id}: the approval is committed, but pushing {topBranch} failed: {sh.trim(pushed.stderr)}. From this worktree run: git push origin HEAD`
+			)
+		end
+		print(`It lands with {landsWith}: pushed to {topBranch}, nothing to publish.`)
+		return
+	end
 	print(`Publish it to origin/main from this worktree: ./zn approve {id} --publish`)
+end
+
+-- `guess <issue-id> --step design|raft|build --open <text> --chose <text> --why <text>` (f0399): one more line in
+-- the issue's guesses.md in this worktree. It commits nothing: the guess rides with the work it belongs to.
+function cmd.guess(pos: { string }, opts: { [string]: { string } })
+	local usage = "usage: guess <issue-id> --step design|raft|build --open <text> --chose <text> --why <text>"
+	for k in opts do
+		if k ~= "--step" and k ~= "--open" and k ~= "--chose" and k ~= "--why" then
+			fail(`{usage} (unknown option {k})`)
+		end
+	end
+	if #pos ~= 1 then
+		fail(usage)
+	end
+	refuseInMainCheckout("guess")
+	local id = pos[1]
+	local item = if store.isIssueId(id) then store.find(id) else nil
+	if not item then
+		fail(`{id} is not an issue in this checkout`)
+	end
+	local issue = item :: store.Item
+	if issue.state == "done" then
+		fail(`{id} is done: nothing left to guess`)
+	end
+	local function value(name: string): string
+		local got = opts[name]
+		return if got then got[#got] else ""
+	end
+	local path = `{issue.dir}/{f0399.lib.FILE}`
+	local was = if fs.isFile(path) then fs.readFile(path) else nil
+	local day = os.date("!%Y-%m-%d") :: string
+	local text, problem =
+		f0399.lib.append(was, value("--step"), day, value("--open"), value("--chose"), value("--why"))
+	if not text then
+		fail(`guess: {problem}`)
+	end
+	sh.writeReplacing(path, text :: string)
+	local list = f0399.lib.parse(text :: string) :: { any }
+	print(`{list[#list].id} recorded for {id}: commit it with your work`)
+end
+
+-- `guesses <issue-id|R-id> [--check]` (f0399, read-only): each issue's guesses as written, under a head line with
+-- its approval state in this checkout. `--check` only says whether every guesses.md parses.
+function cmd.guesses(pos: { string }, opts: { [string]: { string } })
+	for k in opts do
+		if k ~= "--check" then
+			fail(`usage: guesses <issue-id|R-id> [--check] (unknown option {k})`)
+		end
+	end
+	if #pos ~= 1 then
+		fail("usage: guesses <issue-id|R-id> [--check]")
+	end
+	local target = store.get(pos[1])
+	local issues: { store.Item } = if target.kind == "raft"
+		then layergit.orderedMembers(target)
+		else { target }
+	local bad = false
+	for _, issue in issues do
+		local path = `{issue.dir}/{f0399.lib.FILE}`
+		local text = if fs.isFile(path) then fs.readFile(path) else nil
+		local list, problem = {} :: { any }, nil :: string?
+		if text then
+			local parsed, perr = f0399.lib.parse(text)
+			list, problem = parsed or {}, perr
+		end
+		if opts["--check"] then
+			if problem then
+				stdio.ewrite(`{path}: {problem}\n`)
+				bad = true
+			end
+			continue
+		end
+		local state = "not approved"
+		if problem then
+			state = `unreadable ({problem})`
+		else
+			local found = approval.verdict(".", issue)
+			if found and found.state == "holds" then
+				state = "approved"
+			elseif found and found.state == "changed" then
+				state = `changed since approval ({table.concat(found.changed, ", ")})`
+			end
+		end
+		print(`{issue.id}: {#list} guesses, {state}`)
+		if text and not problem then
+			for line in string.gmatch(text, "[^\n]+") do
+				if string.sub(line, 1, 2) == "- " then
+					print(line)
+				end
+			end
+		end
+	end
+	if bad then
+		process.exit(1)
+	end
+end
+
+-- f0399, `ready <R> --on <D>`: the members of the active raft D that R may be built on, or the refusal.
+function f0399.readyOnMembers(raft: store.Item, members: { store.Item }, onId: string): { string }
+	local base = store.find(onId)
+	if
+		not base
+		or base.state ~= "active"
+		or statusLib.effective(store.readFront(base.doc), base.state) ~= "active"
+	then
+		fail(`--on {onId}: {onId} is not an active raft`)
+	end
+	local baseIssues = layergit.orderedMembers(base :: store.Item)
+	local inBase: { [string]: boolean } = {}
+	for _, b in baseIssues do
+		inBase[b.id] = true
+	end
+	local isMember: { [string]: boolean } = {}
+	for _, m in members do
+		isMember[m.id] = true
+	end
+	local any = false
+	local stray: string? = nil
+	for _, m in members do
+		for _, dep in store.idList(store.readFront(m.doc).depends_on) do
+			if isMember[dep] then
+				continue
+			end
+			if inBase[dep] then
+				any = true
+			else
+				local found = store.find(dep)
+				if not (found and found.state == "done") and not stray then
+					stray =
+						`--on {onId}: {m.id} depends on {dep}, which is not done and not in {onId} (a raft is built on one raft)`
+				end
+			end
+		end
+	end
+	if not any then
+		fail(`--on {onId}: nothing in {raft.id} depends on {onId}`)
+	end
+	if stray then
+		fail(stray)
+	end
+	if hasOrigin() then
+		sh.run("git", { "fetch", "--quiet", "origin" })
+	end
+	local have: { [number]: stack.Layer } = {}
+	for _, layer in layergit.layersOf(onId) do
+		have[layer.position] = layer
+	end
+	local below = layergit.raftBase(onId)
+	local ids: { string } = {}
+	for i, b in baseIssues do
+		local layer = have[i]
+		if not layer or layer.issue ~= b.id or not layergit.layerFinished(layer, below) then
+			fail(
+				`--on {onId}: {onId}'s layer for {b.id} is not finished: {raft.id} can be built on {onId} once every layer of {onId} is finished`
+			)
+		end
+		below = layergit.layerTip(layer) or below
+		table.insert(ids, b.id)
+	end
+	return ids
 end
 
 -- `ready <R-id|issue-id>`: claims a prepared raft, moves it and its members to active/ on origin/main (one tracker-only
 -- commit, check.sh paths rewritten), pulls the main checkout and writes the ignored prompt.md. On a raft that is
 -- already active it only regenerates the prompt.
-function cmd.ready(pos: { string })
-	local target = store.get(pos[1] or fail("usage: ready <R-id|issue-id>"))
+function cmd.ready(pos: { string }, opts: { [string]: { string } })
+	for k in opts do
+		if k ~= "--on" then
+			fail(`usage: ready <R-id|issue-id> [--on <R-id>] (unknown option {k})`)
+		end
+	end
+	local dispatched = (process.env.ZN_DISPATCH or "") ~= ""
+	local onId: string? = if opts["--on"] then opts["--on"][1] else nil
+	if onId and dispatched then
+		fail("--on is not for ./zn dispatch")
+	end
+	if onId and not store.isRaftId(onId) then
+		fail("usage: ready <R-id|issue-id> [--on <R-id>]")
+	end
+	local target = store.get(pos[1] or fail("usage: ready <R-id|issue-id> [--on <R-id>]"))
 	local raft = target
 	if target.kind == "issue" then
 		local raftId = store.readFront(target.doc).raft
@@ -6122,9 +6537,21 @@ function cmd.ready(pos: { string })
 	if not reissue then
 		-- The same check work next uses, on the tree just pulled. The publish below calls it again on the
 		-- snapshot, so a redesign that lands between the two is still refused. Neither call here is work next.
-		local refused = require("./readyfacts").reason(raft, members)
+		local onMembers: { string }? = nil
+		if onId then
+			onMembers = f0399.readyOnMembers(raft, members, onId)
+		end
+		local refused = require("./readyfacts").reason(raft, members, dispatched, onMembers)
 		if refused then
 			fail(refused)
+		end
+		-- f0399: how it was readied is recorded where no worktree can edit it, the ready commit's trailers
+		local trailers = ""
+		if not dispatched then
+			trailers = "\n\nLands: approved"
+			if onId then
+				trailers ..= `\nOn: {onId}`
+			end
 		end
 		local all = { raft.id }
 		for _, id in ids do
@@ -6134,7 +6561,7 @@ function cmd.ready(pos: { string })
 			all,
 			"active",
 			claimStamp(),
-			`tracker: ready {raft.id} {store.readFront(raft.doc).title or raft.slug}`,
+			`tracker: ready {raft.id} {store.readFront(raft.doc).title or raft.slug}{trailers}`,
 			function(id: string, cur: string): string?
 				if not statusLib.canMove(cur, "active") then
 					return `{id} is {cur} on origin/main, not prepared`
@@ -7966,7 +8393,7 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 	for k in opts do
 		if k ~= "--released" then
 			fail(
-				`usage: work [<R-id>] | next [--released <n>] [<R-id>] | queue | status (unknown option {k})`
+				`usage: work [<R-id>|<issue-id>] | next [--released <n>] [<R-id>|<issue-id>] | queue | status (unknown option {k})`
 			)
 		end
 	end
@@ -8003,7 +8430,9 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		if hasOrigin() then
 			sh.git({ "fetch", "--quiet", "origin", "main" })
 		end
-		for _, line in workLib.skipped(workLib.kept(workread.collect(nil).rafts, scopeOf())) do
+		local queued = workread.collect(nil)
+		queued.scope = scopeOf()
+		for _, line in workLib.queue(queued) do
 			print(line)
 		end
 		return
@@ -8027,8 +8456,11 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 	end
 	if sub == "next" then
 		local asked = pos[2]
-		if #pos > 2 or (asked and not string.match(asked, "^R%d%d%d%d$")) then
-			fail("usage: ./zn work next [--released <n>] [<R-id>]")
+		if
+			#pos > 2
+			or (asked and not (string.match(asked, "^R%d%d%d%d$") or string.match(asked, "^[fdc]%d%d%d%d$")))
+		then
+			fail("usage: ./zn work next [--released <n>] [<R-id>|<issue-id>]")
 		end
 		if hasOrigin() then
 			sh.git({ "fetch", "--quiet", "origin", "main" })
@@ -8036,11 +8468,30 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 		local input = workread.collect(asked)
 		input.scope = scopeOf()
 		input.released = released
-		print(workLib.report(input, workLib.decide(input)))
+		local decision = workLib.decide(input)
+		-- f0399: who carries what, so another session of this person does not resume it unnamed
+		local session = input.session or ""
+		if session ~= "" then
+			local checkout = workread.mainCheckout()
+			local item = if decision.raft ~= "" then decision.raft else decision.ticket
+			local idle = decision.action == "end" or decision.action == "wait" or decision.action == "none"
+			if asked then
+				workread.carry(checkout, if item ~= "" then item else asked, if idle then nil else session)
+			elseif item ~= "" and not idle and decision.action ~= "release" then
+				workread.carry(checkout, item, session)
+			end
+		end
+		print(workLib.report(input, decision))
 		return
 	end
-	if opts["--released"] or (sub and not string.match(sub, "^R%d%d%d%d$")) or #pos > 1 then
-		fail("usage: ./zn work [<R-id>] | next [--released <n>] [<R-id>] | queue | status")
+	if
+		opts["--released"]
+		or (sub and not (string.match(sub, "^R%d%d%d%d$") or string.match(sub, "^[fdc]%d%d%d%d$")))
+		or #pos > 1
+	then
+		fail(
+			"usage: ./zn work [<R-id>|<issue-id>] | next [--released <n>] [<R-id>|<issue-id>] | queue | status"
+		)
 	end
 	local path = "z-nile/skills/z-work/SKILL.md"
 	if not fs.isFile(path) then
@@ -8048,7 +8499,8 @@ function cmd.work(pos: { string }, opts: { [string]: { string } })
 	end
 	stdio.write(skillBody(fs.readFile(path)))
 	if sub then
-		print(`This session's raft is {sub}. Pass it to every ./zn work next.`)
+		local what = if string.match(sub, "^R") then "raft" else "issue"
+		print(`This session's {what} is {sub}. Pass it to every ./zn work next.`)
 	end
 end
 
@@ -8077,12 +8529,13 @@ local READ_ONLY: { [string]: boolean } = {
 	stack = true,
 	stamp = true,
 	trace = true,
+	guesses = true,
 }
 if not READ_ONLY[name :: string] then
 	guardRepoRoot()
 end
 local rest = table.move(args, 2, #args, 1, {})
-local pos, opts = flags(rest)
+local pos, opts = flags(rest, if name == "guess" then { ["--open"] = true } else nil)
 local ok, err = pcall(handler, pos, opts)
 if not ok then
 	fail(`tracker {name}: {err}`)

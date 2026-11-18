@@ -158,7 +158,10 @@ return t.spec("c0250 blocked rafts, the board and the cap", function(it)
 			t.expect(final).toBe(true)
 			local prepared = readycheck.reason(readyRaft({}))
 			t.expect(has(prepared or "", "is blocked")).toBe(false)
-			t.expect(has(prepared or "", "./zn approve c0001 --publish")).toBe(true)
+			-- c0369: one command, from anywhere (the re-prep of 2026-11-17)
+			t.expect(has(prepared or "", "./zn approve c0001 in a terminal, from anywhere in the checkout"))
+				.toBe(true)
+			t.expect(has(prepared or "", "--publish")).toBe(false)
 			-- a raft that is active is still refused as "only a prepared raft is readied"
 			t.expect(
 				has(

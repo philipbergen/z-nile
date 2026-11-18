@@ -111,7 +111,12 @@ return t.spec("human approval freezes the contract", function(it)
 	it("records the hash, and ready and done refuse the part that changed", function()
 		fs.writeFile(`{wt}/{ISSUE}/{ID}.md`, doc("ready"))
 		publish("design ready, no approval yet")
-		local early = zn(f.main, { "ready", RAFT })
+		-- f0399: a missing approval stops ready only under ./zn dispatch; outside it done asks (readycheck.spec)
+		local early = zn(
+			f.main,
+			{ "ready", RAFT },
+			{ ZN_DISPATCH = "1", PATH = process.env.PATH or "", HOME = process.env.HOME or "" }
+		)
 		t.expect(early.ok).toBe(false)
 		t.expect(has(say(early), "one-time step for an item prepared before approval")).toBe(true)
 		t.expect(has(say(early), ID)).toBe(true)
@@ -222,7 +227,8 @@ return t.spec("human approval freezes the contract", function(it)
 		fixture.git(layer, { "push", "-q" })
 		local dropped = zn(layer, { "done", RAFT })
 		t.expect(dropped.ok).toBe(false)
-		t.expect(has(say(dropped), `{ID} has no approval`)).toBe(true)
+		-- f0399: done names every member that waits, with why
+		t.expect(has(say(dropped), `waits for approval: {ID} (no approval)`)).toBe(true)
 
 		fs.writeFile(`{f.main}/{active}/acceptance/hold.spec.luau`, flipped)
 		fs.writeFile(

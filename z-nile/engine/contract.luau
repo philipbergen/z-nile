@@ -112,7 +112,10 @@ local function rank(name: string): number
 	if name == "check.sh" then
 		return 1
 	end
-	return 2
+	if name == "guesses" then
+		return 2
+	end
+	return 3
 end
 
 local function byName(a: string, b: string): boolean
@@ -133,16 +136,31 @@ function contract.order(parts: Parts): { string }
 end
 
 -- `specs` maps a path relative to the acceptance directory to the file's bytes.
-function contract.build(doc: string, check: string, specs: { [string]: string }): (Parts?, string?)
+-- `guesses` is the issue's guesses.md (f0399): a part only when it has text, so older approvals keep their hash.
+function contract.build(
+	doc: string,
+	check: string,
+	specs: { [string]: string },
+	guesses: string?
+): (Parts?, string?)
 	local parts: Parts = {
 		design = contract.designText(doc),
 		["check.sh"] = contract.canonCheck(check),
 	}
 	for name, text in specs do
-		if name == "" or name == "design" or name == "check.sh" or string.match(name, "[=;\r\n]") then
+		if
+			name == ""
+			or name == "design"
+			or name == "check.sh"
+			or name == "guesses"
+			or string.match(name, "[=;\r\n]")
+		then
 			return nil, `a spec path cannot be hashed: "{name}"`
 		end
 		parts[name] = contract.normalize(text)
+	end
+	if guesses and contract.normalize(guesses) ~= "" then
+		parts.guesses = contract.normalize(guesses)
 	end
 	return parts, nil
 end

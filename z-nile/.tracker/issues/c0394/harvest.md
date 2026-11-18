@@ -1,15 +1,17 @@
-- design-review-001 F1: z-design/prove-specs-pass-on-a-prototype
-- design-review-001 F2: z-design/prove-specs-pass-on-a-prototype
-- design-review-001 F3: z-design/instructions-runnable-where-they-run
-- design-review-001 F4: one-off: a product choice the user ruled on ("In front by default"), not a repeatable design defect
-- design-review-001 F5: z-design/confirm-overrides-with-a-suite-run
-- design-review-001 F6: z-design/quote-other-preps-before-promising
-- design-review-001 F7: z-design/prove-specs-pass-on-a-prototype
-- design-review-001 F8: z-design/instructions-runnable-where-they-run
-- design-review-001 F9: z-design/confirm-overrides-with-a-suite-run
-- design-review-001 F10: z-design/instructions-runnable-where-they-run
-- design-review-001 F11: z-design/spec-design-correspondence
-- design-review-001 F12: z-design/spec-design-correspondence
-- design-review-001 F13: z-design/spec-design-correspondence
-- design-review-001 F14: z-design/pins-name-who-reprep-goes-first
-- design-review-001 F15: z-design/restated-rules-move-together
+- design-review-001 F1 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F2 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F3 (erred z-design): z-design/instructions-runnable-where-they-run
+- design-review-001 F4 (erred none): one-off: a product choice the user ruled on ("In front by default"), not a repeatable design defect
+- design-review-001 F5 (erred z-design): z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F6 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-001 F7 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F8 (erred z-design): z-design/instructions-runnable-where-they-run
+- design-review-001 F9 (erred z-design): z-design/confirm-overrides-with-a-suite-run
+- design-review-001 F10 (erred z-design): z-design/instructions-runnable-where-they-run
+- design-review-001 F11 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F12 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F13 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F14 (erred z-design): z-design/pins-name-who-reprep-goes-first
+- design-review-001 F15 (erred z-design): z-design/restated-rules-move-together
+- design-review-002 F1 (erred z-design): z-design/new-calls-follow-the-stated-fixture
+- design-review-002 F2 (erred z-design): one-off: a decision line was glued to the bullet above it

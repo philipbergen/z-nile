@@ -1,0 +1,17 @@
+- design-review-001 F1 (erred z-design): z-design/new-refusals-reach-every-caller
+- design-review-001 F2 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F3 (erred z-design): z-design/the-ruled-cannot-write-the-switch
+- design-review-001 F4 (erred z-design): z-design/new-front-matter-lines-meet-every-hash
+- design-review-001 F5 (erred z-design): z-design/quote-other-preps-before-promising
+- design-review-001 F6 (erred z-design): z-design/never-narrow-captured-scope
+- design-review-001 F7 (erred z-design): z-design/never-narrow-captured-scope
+- design-review-001 F8 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F9 (erred z-design): z-design/new-refusals-reach-every-caller
+- design-review-001 F10 (erred z-design): z-design/instructions-runnable-where-they-run
+- design-review-001 F11 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F12 (erred z-design): z-design/the-ruled-cannot-write-the-switch
+- design-review-001 F13 (erred z-design): z-design/new-refusals-reach-every-caller
+- design-review-001 F14 (erred z-design): one-off: a reason line for one rare state (a dependency on a closed issue), no rule behind it
+- design-review-001 F15 (erred z-design): z-design/size-is-re-estimated-when-scope-grows
+- note the writer of the real-git specs found that "start works unchanged" was false (start read the raft as backlog), only by writing the spec (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- note R0129's executor stopped on five sequestered cases prep had not run (S1, ruled back to design 2026-11-17) (erred z-design): z-design/prove-specs-pass-on-a-prototype

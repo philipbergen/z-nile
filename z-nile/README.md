@@ -80,6 +80,7 @@ A worker is an AI CLI running `z-work`: `kimi`, `agy`, `claude`, `grok`, `agent`
 - It keeps one context for the whole raft, so what it learned on one ticket carries to the next.
 - A worker clears its context and picks up the next raft whenever a raft ends: when the raft is merged, or when it is blocked and the worker lets it go. No context carries from one raft to the next.
 - It lets go of a raft only when the raft is blocked.
+- With no raft named, the worker also designs and rafts, on recorded guesses (`./zn guess`): every choice it makes for the person is written down for them to read (`./zn guesses <R-id>`), and nothing unapproved lands. It never guesses under `./zn dispatch`, an idea's open line, or a scope cut.
 - When no raft is claimable the worker waits, polling `origin/main` from a plain `./zn` loop with no model running, and it may draft the design of a confirmed idea, which stops at a person's `./zn approve`.
 - The worker itself runs on a cheap model: it never orchestrates on an expensive one, and its waiting (for a gate, CI or a review it handed to an expensive model) runs on the cheapest model.
 - A CLI that cannot read skills gets the same instructions from a `./zn` command.

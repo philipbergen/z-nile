@@ -109,6 +109,67 @@ function openlist.pending(doc: string): { string }
 	return pending
 end
 
+local GUESSED = "Guessed %(agent, %d%d%d%d%-%d%d%-%d%d%):%s*(.-)%s*$"
+
+-- f0399: the Guessed lines of bullets that have no Ruled line. `issue` is nil when the line names only a guess
+-- (the document's own issue). A Guessed line that names no guess gives guess "".
+function openlist.guessed(doc: string): { { id: string, issue: string?, guess: string } }
+	local section = sectionOf(doc, "Open to the human")
+	local out: { { id: string, issue: string?, guess: string } } = {}
+	if not section then
+		return out
+	end
+	local unruled: { [string]: boolean } = {}
+	for _, id in openlist.pending(doc) do
+		unruled[id] = true
+	end
+	local current: string? = nil
+	for line in string.gmatch(section .. "\n", "(.-)\n") do
+		local id = string.match(line, "^%- (F%d+):") or string.match(line, "^%- (JC%d+):")
+		if id then
+			current = id
+		end
+		local said = string.match(line, GUESSED)
+		if current and said and unruled[current :: string] then
+			local issue, guess = string.match(said, "^([fdc]%d%d%d%d) (G%d+)$")
+			if not issue then
+				guess = string.match(said, "^(G%d+)$")
+			end
+			table.insert(out, { id = current :: string, issue = issue, guess = guess or "" })
+		end
+	end
+	return out
+end
+
+-- The words after the colon of bullet `id`'s Guessed line, as written (for a refusal that quotes them).
+function openlist.guessedWords(doc: string, id: string): string
+	local section = sectionOf(doc, "Open to the human") or ""
+	local current: string? = nil
+	for line in string.gmatch(section .. "\n", "(.-)\n") do
+		current = string.match(line, "^%- (F%d+):") or string.match(line, "^%- (JC%d+):") or current
+		local said = string.match(line, GUESSED)
+		if current == id and said then
+			return said
+		end
+	end
+	return ""
+end
+
+-- f0399: bullets with neither a Ruled line nor a Guessed line.
+function openlist.waiting(doc: string): { string }
+	local answered: { [string]: boolean } = {}
+	for _, g in openlist.guessed(doc) do
+		answered[g.id] = true
+	end
+	local out = {}
+	for _, id in openlist.pending(doc) do
+		if not answered[id] then
+			table.insert(out, id)
+		end
+	end
+	return out
+end
+
 -- nil when every id that needs the human is ruled in the document. Otherwise the refusal, naming the ids.
 function openlist.problem(review: string, refute: string, doc: string): string?
 	local need = openlist.needsHuman(review, refute)
@@ -124,7 +185,7 @@ function openlist.problem(review: string, refute: string, doc: string): string?
 		have[id] = true
 	end
 	local unruled: { [string]: boolean } = {}
-	for _, id in openlist.pending(doc) do
+	for _, id in openlist.waiting(doc) do
 		unruled[id] = true
 	end
 	local missing = {}

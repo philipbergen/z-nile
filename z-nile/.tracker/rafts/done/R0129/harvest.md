@@ -1,0 +1,14 @@
+- note five sequestered cases of f0399's real-git specs could not pass for any implementation, because prep never ran those two files on its prototype (S1) (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- review-001 F1 (erred zz-execute, upstream z-design): zz-execute/a-pure-case-does-not-prove-the-command
+- review-001 F2 (erred zz-execute, upstream z-design): z-design/guards-name-slow-tier-specs
+- review-001 F3 (erred zz-execute): zz-execute/a-pure-case-does-not-prove-the-command
+- review-001 F4 (erred none): one-off: refuted, the approved land.spec pins the order the finding wants changed
+- review-001 F5 (erred zz-execute): one-off: one folder-name spelling of one outside tool
+- review-001 F6 (erred zz-execute): one-off: one pick's line missed a prefix every other pick gets
+- review-001 F7 (erred zz-execute): one-off: one path missing from one list in AGENTS.md
+- note the spec writer's first draft of a pick case wrapped its assertion in `if action == …`, which passes when the pick goes elsewhere (erred zz-execute): zz-execute/a-pure-case-does-not-prove-the-command
+- final-review-001 F1 (erred none): one-off: main moved during the review, a restack
+- final-review-001 F2 (erred z-design, upstream zz-review): z-design/place-a-new-state-in-every-ordered-list
+- final-review-001 F3 (erred z-design): one-off: one criterion's sentence lists two actions in the other order
+- final-review-001 F4 (erred z-design): one-off: the Design says any issue's folder and the finding asks for members only
+- final-review-001 F5 (erred zz-execute): one-off: log entries appended at the end of the file fell under the last heading

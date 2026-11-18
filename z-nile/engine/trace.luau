@@ -457,8 +457,22 @@ function trace.deriveClaims(issues: { IssueDoc }): ({ Claim }, { string })
 	return out, errors
 end
 
+-- f0399 (E3): the person's approval and a recorded guess are committed on the top layer after its finish, and
+-- after the table too (the raft waits for approval once the trace passes). Neither is design, test or code.
+local function isApprovalFile(path: string): boolean
+	for _, file in { "approval%.md", "guesses%.md" } do
+		if
+			string.match(path, `/issues/active/[fdc]%d%d%d%d/{file}$`)
+			or string.match(path, `/issues/[fdc]%d%d%d%d/{file}$`)
+		then
+			return true
+		end
+	end
+	return false
+end
+
 local function isTrackerFileOf(path: string, raftId: string, raftDir: string, issues: { IssueDoc }): boolean
-	if string.find(path, "/spend%.d/", 1, false) ~= nil then
+	if string.find(path, "/spend%.d/", 1, false) ~= nil or isApprovalFile(path) then
 		return true
 	end
 	local raftPrefix = raftDir .. "/"
@@ -485,7 +499,7 @@ local function isTrackerFileOf(path: string, raftId: string, raftDir: string, is
 end
 
 local function isAllowedAfterTrace(path: string, raftId: string, raftDir: string): boolean
-	if string.find(path, "/spend%.d/", 1, false) ~= nil then
+	if string.find(path, "/spend%.d/", 1, false) ~= nil or isApprovalFile(path) then
 		return true
 	end
 	local raftPrefix = raftDir .. "/"

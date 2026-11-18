@@ -85,6 +85,134 @@ function layergit.mainTip(): string
 	return fail("no main branch")
 end
 
+export type ReadyRecord = { lands: boolean, on: string? }
+
+-- f0399: how a raft was readied, from the trailers of its newest ready commit on origin/main's first-parent
+-- history. A raft started the legacy way, stopped since, or readied before trailers existed has none. Nothing in a
+-- worktree is read, so no edit on a layer changes the answer.
+function layergit.readyRecord(raftId: string): ReadyRecord
+	local ref = if layergit.shaOf("origin/main")
+		then "origin/main"
+		elseif layergit.shaOf("main") then "main"
+		else nil
+	if not ref then
+		return { lands = false }
+	end
+	local found = sh.run("git", {
+		"log",
+		"--first-parent",
+		"-1",
+		"-E",
+		`--grep=^tracker: (ready|stop) {raftId} `,
+		`--grep=^tracker: start {raftId}`,
+		"--format=%B",
+		ref,
+	})
+	if not found.ok then
+		return { lands = false }
+	end
+	local subject = string.match(found.stdout, "^([^\n]*)") or ""
+	if string.sub(subject, 1, #`tracker: ready {raftId} `) ~= `tracker: ready {raftId} ` then
+		return { lands = false }
+	end
+	local record: ReadyRecord = { lands = false }
+	for line in string.gmatch(found.stdout .. "\n", "([^\n]*)\n") do
+		if line == "Lands: approved" then
+			record.lands = true
+		end
+		local on = string.match(line, "^On: (R%d%d%d%d)$")
+		if on then
+			record.on = on
+		end
+	end
+	return record
+end
+
+-- f0399: what a raft's lowest layer sits on, as the tip and the pull-request base. A raft readied `--on <D>` sits
+-- on its base commit (the branch <R>/base) until D is done on origin/main; every other raft sits on main.
+function layergit.raftBase(raftId: string): (string, string)
+	local on = layergit.readyRecord(raftId).on
+	if not on then
+		return layergit.mainTip(), "main"
+	end
+	for _, root in store.roots() do
+		local doc = `{store.dirFor("raft", "done", on, root)}/{on}.md`
+		if sh.run("git", { "cat-file", "-e", `origin/main:{doc}` }).ok then
+			return layergit.mainTip(), "main"
+		end
+	end
+	local name = `{raftId}/base`
+	local tip = layergit.shaOf(`origin/{name}`) or layergit.shaOf(name)
+	if not tip then
+		return layergit.mainTip(), "main"
+	end
+	return tip, name
+end
+
+-- f0399: the base commit of a raft readied `--on <D>`, on the branch <R>/base: D's top layer tip as its parent,
+-- and a tree that differs from it only in R's own tracker folders, which are as on origin/main (R is active there;
+-- D's layers were cut before that). Built in this worktree, which must be clean, and pushed. Nil when the raft is
+-- not built on another, or that raft has landed. It is current while its parent is D's top layer tip.
+function layergit.buildBase(raft: store.Item): string?
+	local on = layergit.readyRecord(raft.id).on
+	local _, prBase = layergit.raftBase(raft.id)
+	local name = `{raft.id}/base`
+	if not on then
+		return nil
+	end
+	local layers = layergit.layersOf(on)
+	if #layers == 0 then
+		-- no layer of the base raft is left: it landed and its branches are gone
+		return nil
+	end
+	local top = layers[#layers]
+	local tip = layergit.layerTip(top) or fail(`{top.name} has no tip`)
+	local have = layergit.shaOf(`origin/{name}`) or layergit.shaOf(name)
+	if have and prBase ~= name then
+		return nil -- the base raft is done: the raft sits on main now
+	end
+	if have and layergit.shaOf(`{have}^`) == tip then
+		return have
+	end
+	local items: { store.Item } = { raft }
+	for _, m in layergit.orderedMembers(raft) do
+		table.insert(items, m)
+	end
+	local mainRef = if layergit.shaOf("origin/main") then "origin/main" else "main"
+	local branch = sh.trim(sh.git({ "branch", "--show-current" }))
+	local back = if branch ~= "" then branch else sh.trim(sh.git({ "rev-parse", "HEAD" }))
+	sh.git({ "switch", "--quiet", "--detach", tip })
+	for _, item in items do
+		for _, state in { "backlog", "active", "done" } :: { store.State } do
+			local dir = store.dirFor(item.kind, state, item.id, item.root)
+			if sh.run("git", { "ls-files", "--error-unmatch", "--", dir }).ok then
+				sh.git({ "rm", "-r", "--quiet", "--", dir })
+			end
+		end
+		sh.git({ "checkout", mainRef, "--", item.dir })
+	end
+	sh.git({ "commit", "--quiet", "--allow-empty", "-m", `tracker: base {raft.id} on {on}` })
+	local sha = sh.trim(sh.git({ "rev-parse", "HEAD" }))
+	if branch ~= "" then
+		sh.git({ "switch", "--quiet", back })
+	else
+		sh.git({ "switch", "--quiet", "--detach", back })
+	end
+	sh.git({ "branch", "--force", name, sha })
+	if hasOrigin() then
+		local remote = layergit.shaOf(`origin/{name}`)
+		sh.git({
+			"push",
+			"--quiet",
+			if remote then `--force-with-lease=refs/heads/{name}:{remote}` else "--force-with-lease",
+			"origin",
+			`refs/heads/{name}:refs/heads/{name}`,
+		})
+		sh.run("git", { "fetch", "--quiet", "origin", name })
+	end
+	return sha
+end
+
 function layergit.layersOf(raftId: string): { stack.Layer }
 	local listed =
 		sh.run("git", { "for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin" })
@@ -130,6 +258,15 @@ function layergit.isPostFinishPath(path: string, raftId: string): boolean
 			or string.match(name, "^refute%-%d+%.md$") ~= nil
 			or string.match(name, "^final%-review%-%d+%.md$") ~= nil
 			or string.match(name, "^final%-refute%-%d+%.md$") ~= nil
+		then
+			return true
+		end
+	end
+	-- f0399: the person's approval, and a guess recorded while answering a review, leave a layer finished
+	for _, file in { "approval%.md", "guesses%.md" } do
+		if
+			string.match(path, `/issues/active/[fdc]%d%d%d%d/{file}$`)
+			or string.match(path, `/issues/[fdc]%d%d%d%d/{file}$`)
 		then
 			return true
 		end
@@ -242,7 +379,7 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
 	for _, layer in layergit.layersOf(raft.id) do
 		have[layer.position] = layer
 	end
-	local baseTip = layergit.mainTip()
+	local baseTip, basePr = layergit.raftBase(raft.id)
 	local current = stack.parse(sh.git({ "branch", "--show-current" }))
 	if current and current.raft == raft.id and have[current.position] then
 		local below = if current.position == 1
@@ -251,7 +388,7 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
 		if below and not layergit.layerFinished(current, below) then
 			local issue = store.get(current.issue)
 			local prBase = if current.position == 1
-				then "main"
+				then basePr
 				else stack.branch(raft.id, current.position - 1, issues[current.position - 1].id)
 			return issue, current.position, current.name, "", prBase
 		end
@@ -275,6 +412,9 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
 					stack.branch(raft.id, i, issue.id),
 					if layergit.shaOf(`origin/{below.name}`) then `origin/{below.name}` else below.name,
 					below.name
+			end
+			if basePr ~= "main" then
+				return issue, 1, stack.branch(raft.id, 1, issue.id), baseTip, basePr
 			end
 			return issue,
 				1,
