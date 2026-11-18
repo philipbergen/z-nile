@@ -12,3 +12,4 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-18 07:51	R0133: trace skeleton	0	0	deliver							tokens,wall,cpu,ai
 2026-11-18 07:52	R0133: trace skeleton	0	0	deliver							tokens,wall,cpu,ai
 2026-11-18 07:58	R0133: final-review-001 (changes), trace as filled, F2 open to the human	3	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-18 07:59	R0133: the lesson reaches design too	0	0	code-review							tokens,wall,cpu,ai

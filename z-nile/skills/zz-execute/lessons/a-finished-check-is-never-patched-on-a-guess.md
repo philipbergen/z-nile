@@ -1,6 +1,6 @@
 ---
 title: A finished check is never patched on a guess
-when: build
+when: both
 tags: [sequestration, check-sh, emergent, guesses]
 check: Does this layer change any `check.sh` or acceptance file outside the raft's own members (a finished item's, another raft's), and if so whose decision on record allows it: a user's ruling, or only your own guess?
 ---
