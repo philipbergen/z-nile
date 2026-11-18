@@ -1,0 +1,2 @@
+# guesses
+- G1 (build, 2026-11-18): d0297's finished check.sh makes c0120/finished red and stops R0133; a finished check.sh is otherwise never edited Chose: One word of its failure message on line 23 is changed (z-nile/affected.luau becomes affected.luau), as an emergent chore inside R0133 Why: The spec is right by its rule; widening c0374's approved rule to skip echo text would hide real stale paths; the message changes nothing the check tests
