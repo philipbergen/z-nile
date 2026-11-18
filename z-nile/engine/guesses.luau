@@ -40,8 +40,11 @@ function guesses.parse(text: string): ({ Guess }?, string?)
 	for line in string.gmatch(norm .. "\n", "(.-)\n") do
 		table.insert(lines, line)
 	end
-	while #lines > 0 and lines[#lines] == "" do
-		table.remove(lines)
+	for at = #lines, 1, -1 do
+		if lines[at] ~= "" then
+			break
+		end
+		lines[at] = nil
 	end
 	if lines[1] ~= HEADER then
 		return nil, `the first line must be "{HEADER}"`

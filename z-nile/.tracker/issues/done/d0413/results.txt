@@ -1,0 +1,127 @@
+z-nile/.tracker/issues/active/d0413/acceptance/loops.spec.luau
+	the loop scan finds no problem in guesses.luau or raftplan.luau
+	guesses.parse ignores trailing empty lines, however many and however they end
+	the planner keeps its dependency order, lowest id first among the free
+	a ring takes the lowest id left, then goes on in dependency order
+	a list that repeats an id is planned, every entry once, instead of never returning
+z-nile/tests/acceptance/c0116/docs.spec.luau
+	z-design designs one issue, claims it alone, keeps its reviews on it, and makes no raft
+	z-raft holds the policy, the lock, the commands, the raft's design and the coherence review
+	zz-rules states the lock, the commands in every list, and who sets design:
+	zz-review, zz-stats, z-ready, the README, AGENTS.md and the usage move with it
+z-nile/tests/acceptance/c0116/plan.spec.luau
+	folds defects into the one open prepared defect raft, chores likewise, never mixing types
+	never folds into a raft that is not prepared in the backlog, or is single, and opens a new one instead
+	folds into the lowest open raft that still fits, and starts another raft past the cap
+	makes an over-cap issue a raft by itself, never split, and a smaller cap is honoured
+	keeps solo issues alone: three solo chores make three single rafts, and none is folded
+	skips and names an issue with no size, and plans the rest
+	never crosses projects
+	groups features only by a shared surface, as connected groups, and none shares nothing
+	folds a feature into an open feature raft whose member shares its surface
+	plans only prepared, raftless backlog issues with a ready design
+	gives the same plan for the same backlog in any order
+	reads size: as a positive whole number of lines
+	never folds into an open raft with a member that has no size:, and says so
+	hashes a member's design without its status: and raft: lines, and changes with anything else
+	reads and writes the grouped: record, refusing a malformed entry and an id twice
+	records a member over its design files: document, check.sh, acceptance specs, reviews and harvest
+	builds the commands with each new raft's project, and refuses the plan if a root has no project
+z-nile/tests/acceptance/c0116/promote.spec.luau
+	sets up a clone with two prepared z-nile issues, one spec each
+	copies the issue's one spec, checks it, and removes the copy
+	fails on an issue spec that breaks the type check, and still removes the copy
+z-nile/tests/acceptance/f0399/docs.spec.luau
+	z-work has Guess mode, the new actions, and no rule against guessing a human decision
+	z-design and z-raft have Guess mode before Headless
+	z-ready, zz-execute and zz-review say where approval is asked and that guesses are read
+	zz-rules lists guess and guesses, the ready commit's trailers and where approval is checked
+	AGENTS.md and the README say the worker designs and rafts on recorded guesses
+	the four Headless sections are identical and still forbid guessing a ruling
+z-nile/tests/acceptance/f0399/guesses.spec.luau
+	append numbers from G1 and parse reads back what was written
+	append refuses an unknown step, an empty field, a line break and a mark in a field
+	parse refuses a missing header, a gap in the numbers, an unknown step and a line that is not a guess
+	extends accepts added guesses and refuses a removed, changed or unreadable one
+	the contract has a guesses part only when guesses.md has text
+	an approval made before a guess no longer holds after it, and the changed part is guesses
+	a spec named guesses cannot be hashed
+	a Guessed bullet is not waiting and is still pending
+	guessed reads the guess and the issue a Guessed line names, and skips a ruled bullet
+z-nile/tests/acceptance/f0399/land.spec.luau
+	guess writes guesses.md, numbers the next one, commits nothing, and refuses the main checkout, a bad step and an empty field
+	guesses prints each member's guesses with its approval state, and --check fails on a malformed file
+	approve --publish publishes an approval of a backlog issue that has guesses
+	ready accepts a raft with an unapproved member and records Lands: approved in its ready commit, leaving the raft document as it was
+	ready under ZN_DISPATCH refuses a member with no approval and records nothing
+	ready refuses an approved member whose design changed and accepts one whose guesses alone changed
+	finish on a lands raft goes on and names the unapproved member
+	done on a lands raft lands nothing and names every member whose approval does not hold
+	a design edited on the layer after its approval makes done wait, naming design
+	a pushed guess that is removed is refused by finish and done
+	approve for an active issue runs only on the top layer and pushes it, the layer is still finished, and a later guess makes done wait again, naming guesses
+	done lands the raft once every approval holds, with approval.md and guesses.md in done/
+	a raft whose ready commit has no Lands: trailer finishes and lands by today's approval rule
+	a Guessed bullet passes status prepared, ready and approve, and still stops status preparing
+	a Guessed line naming no guess, or one that does not exist, is refused by status prepared and by ready
+	work next reads the issue facts: draft for a challenged issue, rafting for a prepared one, and wait for a built raft that is not approved
+	work next records the session that carries an item, and an unnamed call from another session does not resume it
+	the usage text lists guess, guesses, ready --on and the issue id for work
+z-nile/tests/acceptance/f0399/on.spec.luau
+	ready --on refuses a base that is not active, has an unfinished layer, does not hold every unmet dependency, or holds none
+	ready --on readies the raft and records On: and Lands: approved in its ready commit
+	start builds the base commit on the base's top layer with the raft's own folders as on main, cuts the first layer from it as an active raft, and stack says built on
+	done refuses while the base has not landed
+	after the base lands restack puts the raft on main with only its own commits and no backlog copy, and done lands it
+z-nile/tests/acceptance/f0399/pick.spec.luau
+	with nothing unmet it lands a held approved raft, then readies, then rafts, then drafts
+	the lowest id wins inside one kind of pick
+	it resumes this author's held raft that no live session carries, after one that only has to land and before a raft to ready
+	a held raft is not resumed when another session carries it, the session cannot be named, or another person holds it, and a stale carrier frees it
+	it never picks a held design of another checkout, an unchallenged idea, a closed issue, an added issue or a member
+	fix is offered for a raft ready refuses for a repairable reason and for a prepared issue with no size, and never for a dependency, questions or a changed approval
+	a design whose prep worktree is in this checkout is resumed before a new draft
+	a ticket with an unmet dependency is picked only when no ticket without one has a pick
+	tier 2 rafts or drafts a ticket only when every unmet dependency is designed
+	tier 2 readies a raft on the one active raft that holds its dependencies, once every layer there is finished
+	wait names each unapproved member once the gates have passed, and is not offered as a pick
+	an approved raft built on an unlanded raft waits for it, and lands once it has landed
+	a raft without lands goes to done as before, whatever its approvals
+	an issue can be named: draft, a held design to resume, rafting, or its raft's action
+	a project's folder sees only its own issues
+	with no issue facts every pick is today's
+	the report lists the issues that were not picked under the head line
+z-nile/tests/acceptance/f0399/plan.spec.luau
+	two features with no shared surface share a raft when one depends on the other
+	a feature folds into the open raft that holds what it depends on
+	the cap never splits a chore from what it depends on, and still splits what is free
+	a dependent with a lower id than its dependency still joins it
+	another type, another project and a solo issue stay in their own rafts
+	a dependency that is not a candidate changes nothing
+z-nile/tests/tooling/raft-plan-deps.spec.luau
+	puts an issue in the raft of its dependency when their modules do not overlap
+	leaves the plan as it was when the dependency is done
+z-nile/tests/tooling/readycheck.spec.luau
+	refuses questions, a held raft, and a missing approval
+	outside dispatch an approved member may gain a guess, and no other part may change (f0399)
+	a Guessed line must name a recorded guess, and --on takes the base raft's members as done (f0399)
+	accepts a member whose approval still holds
+	proceeds exactly when reason and the publish-tree record are both nil
+z-nile/tests/tooling/tracker-guarded.spec.luau
+	READ_ONLY is exactly the read-only set
+	ready, stop, land and prompt are not read-only
+z-nile/tests/tooling/work.spec.luau
+	takes the lowest claimable raft, and says why there is nothing
+	builds a start-only layer, then finishes, and does not land early
+	does not resume a held raft unless it was named, and a named raft ends
+	lands one raft, skips an unapproved one, lands the next, and stops
+	stops after two blocked releases, and a named raft still ends on its own
+	offers this project's raft from its folder, and any project from the root
+	prints the last lines of a running step's trail
+	counts a Kimi wire of this checkout only, and a Claude message id once
+	agrees with dispatch.next on the shared facts, and not on an active raft's action
+	names a tool call in the trail instead of the stream JSON
+	keeps the 'you hold' note on an unnamed resume or landing of a held raft
+	resumes a held raft built on an unlanded raft only after every pick with nothing unmet
+	names Claude Code's project folders for a checkout, strict spelling first
+	pins the z-work skill's count of releases
