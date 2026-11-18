@@ -77,3 +77,7 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-18 07:22	166 specs	0	0	test			87.231	364.080		87.231	tokens,ai
 2026-11-18 07:22	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
 2026-11-18 07:22	R0131: trace on the re-finished commit	0	0	deliver							tokens,wall,cpu,ai
+2026-11-18 07:22	1 spec	0	0	test			1.039	0.780		1.039	tokens,ai
+2026-11-18 07:23	1 spec	0	0	test			4.741	4.060		4.741	tokens,ai
+2026-11-18 07:23	1 spec	0	0	test			6.966	6.260		6.966	tokens,ai
+2026-11-18 07:23	R0131: trace on the restacked finish	0	0	deliver							tokens,wall,cpu,ai
