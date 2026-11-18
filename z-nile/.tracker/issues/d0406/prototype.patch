@@ -12,7 +12,7 @@ index 3c225f8b9..b226d30e0 100644
  for _, p in ledger.PHASES do
  	IS[p] = true
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 3d950de78..b4395baf7 100644
+index 3d950de78..52ef026da 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -7728,9 +7728,15 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
@@ -56,3 +56,21 @@ index 3d950de78..b4395baf7 100644
  				allTenths += n
  				tokens += row.tokens or 0
  			end
+@@ -7900,6 +7910,17 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
+ 			for _, p in ledger.EXTRA do
+ 				table.insert(stageOrder, p)
+ 			end
++			-- a phase no list holds is a stage too, after the listed ones (d0406)
++			local unlistedStages: { string } = {}
++			for _, row in parsed do
++				if not table.find(stageOrder, row.phase) and not table.find(unlistedStages, row.phase) then
++					table.insert(unlistedStages, row.phase)
++				end
++			end
++			table.sort(unlistedStages)
++			for _, p in unlistedStages do
++				table.insert(stageOrder, p)
++			end
+ 			for _, p in stageOrder do
+ 				local group: { ledger.Row } = {}
+ 				for _, row in parsed do

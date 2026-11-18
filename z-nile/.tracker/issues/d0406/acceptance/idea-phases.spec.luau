@@ -8,6 +8,7 @@
 local costrow = require("@znile/engine/costrow")
 local fs = require("@lune/fs")
 local ledger = require("@znile/engine/ledger")
+local spend = require("@znile/engine/spend")
 local t = require("@tests/lib/t")
 local trackerfix = require("@tests/lib/trackerfix")
 
@@ -67,6 +68,9 @@ local SEED: { [string]: string } = {
 	[`{DONE}/d0020/d0020.md`] = issue("d0020", "defect", ""),
 	[`{DONE}/d0020/spend.d/host-00000001.tsv`] = tsv({
 		"2026-01-01 11:00\td0020 ok\t0\t0\tmystery\t7\tm-a\t1.000\t1.000\t\t\t",
+		-- a second unlisted phase that sorts before the first, and one with no tokens and no minutes
+		"2026-01-01 11:01\td0020 ok\t0\t0\talpha\t3\tm-a\t1.000\t1.000\t\t\t",
+		"2026-01-01 11:02\td0020 ok\t0\t0\tzeta\t\tm-a\t1.000\t1.000\t\t\ttokens",
 	}),
 }
 
@@ -125,7 +129,12 @@ return t.spec("d0406 idea spend rows", function(it)
 		t.expect(has(phases, "| mystery | 0.0 | 0.0 | 0.0 | 0.0 | 12 |")).toBe(true)
 		local challenge = string.find(phases, "| idea-challenge |", 1, true) :: number
 		local mystery = string.find(phases, "| mystery |", 1, true) :: number
-		t.expect(challenge < mystery).toBe(true)
+		-- unlisted phases are in name order among themselves
+		t.expect(has(phases, "| alpha | 0.0 | 0.0 | 0.0 | 0.0 | 3 |")).toBe(true)
+		local alpha = string.find(phases, "| alpha |", 1, true) :: number
+		t.expect(challenge < alpha and alpha < mystery).toBe(true)
+		-- like test and other, an unlisted phase with no minutes and no tokens has no line
+		t.expect(has(phases, "| zeta |")).toBe(false)
 	end)
 
 	it("the raft's row counts the idea minutes and tokens in its totals", function()
@@ -153,8 +162,17 @@ return t.spec("d0406 idea spend rows", function(it)
 			t.expect(has(stages, "| idea | 2.5 | 13.000 | 2.000 | 361 |")).toBe(true)
 			t.expect(has(stages, "| idea-challenge | 0.0 | 20.000 | 2.000 | 300 |")).toBe(true)
 		end
+		-- an issue's unlisted phases are stages too, after the listed ones, in name order (a stage with rows is shown
+		-- whatever its tokens)
 		local r = trackerfix.tr(fx, fx.main, { "metrics", "d0020" })
 		t.expect(r.code).toBe(0)
+		local stages = tableAt(r.stdout, "Stages for d0020.")
+		local alpha = string.find(stages, "| alpha | 0.0 | 1.000 | 1.000 | 3 |", 1, true)
+		local mystery = string.find(stages, "| mystery | 0.0 | 1.000 | 1.000 | 7 |", 1, true)
+		local zeta = string.find(stages, "| zeta | 0.0 | 1.000 | 1.000 |", 1, true)
+		t.expect(alpha ~= nil and mystery ~= nil and zeta ~= nil).toBe(true)
+		t.expect((alpha :: number) < (mystery :: number) and (mystery :: number) < (zeta :: number))
+			.toBe(true)
 	end)
 
 	it("the board is written from the same tracker", function()
@@ -164,6 +182,8 @@ return t.spec("d0406 idea spend rows", function(it)
 		local page = fs.readFile(`{fx.main}/.cache/board-d0406.html`)
 		t.expect(has(page, "c0010")).toBe(true)
 		t.expect(has(page, "R0010")).toBe(true)
+		-- the board lists the spend files it could not read; c0010's spend.md holds an idea row
+		t.expect(has(page, "does not parse")).toBe(false)
 	end)
 
 	it("the readers a raft's spend summary uses return and total the idea rows", function()
@@ -176,6 +196,11 @@ return t.spec("d0406 idea spend rows", function(it)
 		t.expect(by["idea-challenge"].tokens).toBe(300)
 		t.expect(by.capture.records).toBe(0)
 		t.expect(ledger.sum(rows).tokens).toBe(655)
+		-- the typed file, which the summary's totals read: its idea row parses (2.5 of the 6.5 minutes, 11 tokens)
+		local typed = spend.readTotals(`{fx.main}/{DONE}/c0010`)
+		t.expect(typed.records).toBe(2)
+		t.expect(typed.minutes).toBe(6.5)
+		t.expect(typed.tokens).toBe(11)
 	end)
 
 	it("a tracker with no idea row prints no idea line in the phase table", function()
