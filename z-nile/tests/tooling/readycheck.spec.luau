@@ -75,9 +75,81 @@ return t.spec("ready would accept it", function(it)
 		local held = raft({ where = "active", status = "active" })
 		t.expect(string.find(readycheck.reason(held) or "", "only a prepared raft", 1, true) ~= nil)
 			.toBe(true)
-		local bare = readycheck.reason(raft({}))
+		-- f0399: under ./zn dispatch every member needs an approval; outside it, done asks, not ready
+		local bare = readycheck.reason(raft({ requireApproval = true }))
 		t.expect(string.find(bare or "", "./zn approve c0001 --publish", 1, true) ~= nil).toBe(true)
+		t.expect((readycheck.reason(raft({})))).toBe(nil)
 	end)
+
+	it(
+		"outside dispatch an approved member may gain a guess, and no other part may change (f0399)",
+		function()
+			local built = contract.build(DOC, CHECK, {}) :: contract.Parts
+			local text = contract.render({
+				{
+					when = "2026-11-13T00:00:00Z",
+					who = "Ada",
+					hash = contract.hash(built),
+					parts = contract.partHashes(built),
+				},
+			})
+			local guessed = member(text)
+			guessed.files["guesses.md"] =
+				"# guesses\n- G1 (design, 2026-11-16): Open. Chose: Two. Why: Because.\n"
+			t.expect((readycheck.reason(raft({ members = { guessed } })))).toBe(nil)
+			local strict = readycheck.reason(raft({ members = { guessed }, requireApproval = true }))
+			t.expect(string.find(strict or "", "contract changed since approval: guesses", 1, true) ~= nil)
+				.toBe(true)
+			local edited = member(text)
+			edited.doc = (string.gsub(DOC, "\nD\n", "\nchanged\n"))
+			local why = readycheck.reason(raft({ members = { edited } }))
+			t.expect(string.find(why or "", "contract changed since approval", 1, true) ~= nil).toBe(true)
+			local broken = member(nil)
+			broken.files["guesses.md"] = "# guesses\n- G2 (design, 2026-11-16): Skips. Chose: x. Why: y.\n"
+			t.expect(
+				string.find(readycheck.reason(raft({ members = { broken } })) or "", "guesses.md", 1, true)
+					~= nil
+			).toBe(true)
+		end
+	)
+
+	it(
+		"a Guessed line must name a recorded guess, and --on takes the base raft's members as done (f0399)",
+		function()
+			local open =
+				"\n## Open to the human\n- F1: the finding. Answer: none. Decision: which?\n  Guessed (agent, 2026-11-16): G1\n"
+			local problem = readycheck.guessedProblem(
+				"c0001",
+				DOC .. open,
+				"c0001",
+				function(_id: string): string?
+					return nil
+				end
+			)
+			t.expect(problem)
+				.toBe("c0001: F1's Guessed line names c0001 G1, which is not in c0001's guesses.md")
+			local fine = readycheck.guessedProblem(
+				"c0001",
+				DOC .. open,
+				"c0001",
+				function(_id: string): string?
+					return "# guesses\n- G1 (design, 2026-11-16): Open. Chose: Two. Why: Because.\n"
+				end
+			)
+			t.expect(fine).toBe(nil)
+			local waiting = member(nil)
+			waiting.deps = { { id = "c0099", state = "active" } }
+			t.expect(
+				string.find(
+					readycheck.reason(raft({ members = { waiting } })) or "",
+					"must be done first",
+					1,
+					true
+				) ~= nil
+			).toBe(true)
+			t.expect((readycheck.reason(raft({ members = { waiting }, onMembers = { "c0099" } })))).toBe(nil)
+		end
+	)
 
 	it("accepts a member whose approval still holds", function()
 		local parts = contract.build(DOC, CHECK, {})
@@ -203,6 +275,12 @@ return t.spec("ready would accept it", function(it)
 				if proceeds(whole({ member(nil) }, nil, nil, {})) then "proceeds" else "refuses",
 			},
 			{
+				"unapproved under dispatch",
+				if proceeds(whole({ member(nil) }, nil, nil, { requireApproval = true }))
+					then "proceeds"
+					else "refuses",
+			},
+			{
 				"approval changed",
 				if proceeds(whole({ changed }, groupedOf({ a }), nil, {})) then "proceeds" else "refuses",
 			},
@@ -237,7 +315,8 @@ return t.spec("ready would accept it", function(it)
 		}
 		local expect = {
 			approved = "proceeds",
-			unapproved = "refuses",
+			unapproved = "proceeds", -- f0399: done asks for the approval, not ready
+			["unapproved under dispatch"] = "refuses",
 			["approval changed"] = "refuses",
 			["folded with its review"] = "proceeds",
 			["member redesigned since grouping"] = "refuses",

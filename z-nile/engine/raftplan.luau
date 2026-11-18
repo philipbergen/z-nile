@@ -22,6 +22,7 @@ export type Issue = {
 	size: number?, -- the designer's estimate of changed lines; nil when missing or not a number
 	solo: boolean,
 	touched: { string }?,
+	deps: { string }?, -- depends_on (f0399): an issue goes into the raft of what it depends on
 }
 export type Raft = {
 	id: string,
@@ -88,27 +89,80 @@ local function byId<T>(list: { T }, key: (T) -> string): { T }
 	return out
 end
 
-type Bin = { op: Op, size: number }
+type Bin = { op: Op, size: number, holds: { [string]: boolean } }
 
 -- Fills `bins` (existing rafts first, lowest id first, then the plan's own new rafts in the order made) with each
 -- issue, opening a new bin when none fits under the cap.
-local function fill(issues: { Issue }, bins: { Bin }, ops: { Op }, cap: number, kind: string, root: string)
+-- f0399: an issue after the listed issues it depends on, lowest id first among the free.
+local function depsFirst(issues: { Issue }): { Issue }
+	local listed: { [string]: boolean } = {}
 	for _, i in issues do
+		listed[i.id] = true
+	end
+	local out: { Issue } = {}
+	local placed: { [string]: boolean } = {}
+	while #out < #issues do
+		local took = false
+		for _, i in issues do
+			if placed[i.id] then
+				continue
+			end
+			local free = true
+			for _, d in (i.deps or {}) :: { string } do
+				if listed[d] and not placed[d] and d ~= i.id then
+					free = false
+				end
+			end
+			if free then
+				table.insert(out, i)
+				placed[i.id] = true
+				took = true
+				break
+			end
+		end
+		if not took then -- a ring: the lowest id left goes next
+			for _, i in issues do
+				if not placed[i.id] then
+					table.insert(out, i)
+					placed[i.id] = true
+					break
+				end
+			end
+		end
+	end
+	return out
+end
+
+-- Fills `bins` (existing rafts first, lowest id first, then the plan's own new rafts in the order made) with each
+-- issue, opening a new bin when none fits under the cap. An issue that depends on an issue a bin holds goes into
+-- that bin whatever the cap (f0399).
+local function fill(issues: { Issue }, bins: { Bin }, ops: { Op }, cap: number, kind: string, root: string)
+	for _, i in depsFirst(issues) do
 		local size = i.size :: number
 		local placed = false
 		for _, b in bins do
-			if b.size + size <= cap then
+			for _, d in (i.deps or {}) :: { string } do
+				if b.holds[d] and not placed then
+					table.insert(b.op.issues, i.id)
+					b.holds[i.id] = true
+					b.size += size
+					placed = true
+				end
+			end
+		end
+		for _, b in bins do
+			if not placed and b.size + size <= cap then
 				table.insert(b.op.issues, i.id)
+				b.holds[i.id] = true
 				b.size += size
 				placed = true
-				break
 			end
 		end
 		if not placed then
 			local op: Op =
 				{ kind = "new", raft = nil, type = kind, root = root, issues = { i.id }, single = false }
 			table.insert(ops, op)
-			table.insert(bins, { op = op, size = size })
+			table.insert(bins, { op = op, size = size, holds = { [i.id] = true } })
 		end
 	end
 end
@@ -194,6 +248,13 @@ function raftplan.plan(issues: { Issue }, rafts: { Raft }, cap: number?): ({ Op 
 			table.insert(open[key], {
 				op = { kind = "fold", raft = r.id, type = r.type, root = r.root, issues = {}, single = false },
 				size = size,
+				holds = (function(): { [string]: boolean }
+					local h: { [string]: boolean } = {}
+					for _, m in r.members do
+						h[m] = true
+					end
+					return h
+				end)(),
 			})
 			table.insert(openRafts[key], r)
 		end
@@ -252,6 +313,32 @@ function raftplan.plan(issues: { Issue }, rafts: { Raft }, cap: number?): ({ Op 
 							hit = true
 						end
 					end
+				end
+				-- f0399: a dependency joins two candidates, or a candidate and the open raft that holds it
+				local function names(k: number): { [string]: boolean }
+					local ids: { [string]: boolean } = {}
+					if k <= #list then
+						ids[list[k].id] = true
+					else
+						for _, m in rlist[k - #list].members do
+							ids[m] = true
+						end
+					end
+					return ids
+				end
+				local function dependsOn(k: number, other: { [string]: boolean }): boolean
+					if k > #list then
+						return false
+					end
+					for _, d in (list[k].deps or {}) :: { string } do
+						if other[d] then
+							return true
+						end
+					end
+					return false
+				end
+				if dependsOn(a, names(b)) or dependsOn(b, names(a)) then
+					hit = true
 				end
 				if hit then
 					parent[find(a)] = find(b)

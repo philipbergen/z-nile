@@ -261,7 +261,8 @@ return t.spec("a raft lands as a stack of layers", function(it)
 		git(wtBad, { "push", "-q" })
 		local drifted = trackerfix.tr(f, wtBad, { "done", "R0030" }, env)
 		t.expect(drifted.ok).toBe(false)
-		t.expect(has(drifted.stderr, "contract changed")).toBe(true)
+		-- f0399: a raft ./zn ready handed out is judged at done, which names the member and the changed part
+		t.expect(has(drifted.stderr, "waits for approval: c0040 (changed: design)")).toBe(true)
 	end)
 
 	it("done lands two ticket commits and one binding commit, and a one-ticket raft the same way", function()

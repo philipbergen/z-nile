@@ -354,4 +354,93 @@ return t.spec("z-work's next action", function(it)
 		)
 		t.expect(acc.live).toBe(16)
 	end)
+
+	it("keeps the 'you hold' note on an unnamed resume or landing of a held raft", function()
+		local author = "Ada <ada@example>"
+		local function held(id: string, layers: { work.LayerFact }): work.RaftFact
+			return raft({ id = id, where = "active", status = "active", holder = author, layers = layers })
+		end
+		local function pick(rafts: { work.RaftFact }): work.Decision
+			return work.decide({ author = author, session = "s1", carriers = {}, rafts = rafts })
+		end
+		local building = held("R0071", { layer(1, "c0010", 1, true, false) })
+		local landing = held("R0072", { layer(1, "c0010", 3, false, true) })
+		local resumed = pick({ building, landing })
+		local prefix = "Resuming R0071: you hold it and no live session carries it. "
+		t.expect(resumed.raft).toBe("R0071")
+		t.expect(string.sub(resumed.why, 1, #prefix)).toBe(prefix)
+		t.expect(string.find(resumed.why, "you hold R0072: name one to resume it. ", 1, true) ~= nil)
+			.toBe(true)
+		local alone = pick({ building })
+		t.expect(alone.raft).toBe("R0071")
+		t.expect(string.sub(alone.why, 1, #prefix)).toBe(prefix)
+		t.expect(string.find(alone.why, "you hold", #prefix, true) == nil).toBe(true)
+		local ready = held("R0073", { layer(1, "c0010", 3, false, true) })
+		ready.codeReview = "resolved"
+		ready.finalReview = "approved"
+		ready.stacked = true
+		ready.trace = true
+		ready.traceOk = true
+		local toLand = pick({ ready, held("R0074", { layer(1, "c0010", 1, true, false) }) })
+		local note = "you hold R0074: name one to resume it. "
+		t.expect(toLand.action).toBe("done")
+		t.expect(string.sub(toLand.why, 1, #note)).toBe(note)
+	end)
+
+	it("resumes a held raft built on an unlanded raft only after every pick with nothing unmet", function()
+		local author = "Ada <ada@example>"
+		local function pick(rafts: { work.RaftFact }): work.Decision
+			return work.decide({ author = author, session = "s1", carriers = {}, rafts = rafts })
+		end
+		local function onBase(landed: boolean): work.RaftFact
+			return raft({
+				id = "R0030",
+				where = "active",
+				status = "active",
+				holder = author,
+				layers = { layer(1, "c0010", 1, true, false) },
+				on = "R0005",
+				onLanded = landed,
+			})
+		end
+		local fresh = raft({ id = "R0040" })
+		t.expect(work.forRaft(fresh).action).toBe("ready")
+		-- the tier wins: a raft ready accepts comes before the held raft whose base has not landed
+		local first = pick({ onBase(false), fresh })
+		t.expect(first.raft).toBe("R0040")
+		t.expect(first.action).toBe("ready")
+		-- with nothing else to do it is resumed
+		local alone = pick({ onBase(false) })
+		t.expect(alone.raft).toBe("R0030")
+		t.expect(string.sub(alone.why, 1, 15)).toBe("Resuming R0030:")
+		-- once the base has landed nothing is unmet, and the held raft comes first again
+		local landed = pick({ onBase(true), fresh })
+		t.expect(landed.raft).toBe("R0030")
+	end)
+
+	it("names Claude Code's project folders for a checkout, strict spelling first", function()
+		local dirs = sessionread.claudeDirs("/a/b/.worktree/x")
+		local function tail(path: string): string
+			return string.match(path, "/%.claude/projects/(.*)$") :: string
+		end
+		t.expect(#dirs).toBe(2)
+		t.expect(tail(dirs[1])).toBe("-a-b--worktree-x")
+		t.expect(tail(dirs[2])).toBe("-a-b-.worktree-x")
+		local plain = sessionread.claudeDirs("/a/b/x")
+		t.expect(#plain).toBe(1)
+		t.expect(tail(plain[1])).toBe("-a-b-x")
+	end)
+
+	it("pins the z-work skill's count of releases", function()
+		local top = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+		local text = fs.readFile(`{top}/z-nile/skills/z-work/SKILL.md`)
+		t.expect(
+			string.find(
+				text,
+				"A `draft` you give back (`./zn status <id> new`) and a `fix` that changed nothing each add one to that count",
+				1,
+				true
+			) ~= nil
+		).toBe(true)
+	end)
 end)

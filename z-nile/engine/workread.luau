@@ -7,12 +7,16 @@
 -- take minutes because it built a fact for every raft, done ones included, and each of those ran
 -- `git for-each-ref`, `git show` per file and `git log --grep` over all of main. `work status`
 -- is that same function, so a later call only looked faster once the page cache was warm.
+local approval = require("./approval")
+local contract = require("./contract")
 local fs = require("@lune/fs")
+local idea = require("./idea")
 local layergit = require("./layergit")
 local process = require("@lune/process")
 local projects = require("./projects")
 local raftplan = require("./raftplan")
 local readycheck = require("./readycheck")
+local sessionread = require("./sessionread")
 local sh = require("../lib/sh")
 local stack = require("./stack")
 local statusLib = require("./status")
@@ -243,22 +247,33 @@ local function stacked(
 	return true
 end
 
-local function holdersOf(): { [string]: { who: string, when: string } }
-	local out: { [string]: { who: string, when: string } } = {}
+type Holder = { who: string, when: string, lands: boolean, on: string? }
+
+-- The newest ready commit of each raft: who holds it, since when, and its trailers (f0399: `Lands: approved`,
+-- `On: <R>`), from the one log.
+local function holdersOf(): { [string]: Holder }
+	local out: { [string]: Holder } = {}
 	local r = sh.run("git", {
 		"log",
 		"origin/main",
-		"--format=%s%x09%an <%ae>%x09%cI",
+		"--format=%x1e%s%x09%an <%ae>%x09%cI%x0a%b",
 		"--grep=^tracker: ready",
 	})
 	if not r.ok then
 		return out
 	end
-	for line in string.gmatch(r.stdout .. "\n", "([^\n]*)\n") do
+	for record in string.gmatch(r.stdout, "\30([^\30]*)") do
+		local line = string.match(record, "^([^\n]*)") or ""
 		local subject, who, when = string.match(line, "^(.-)\t(.-)\t(.+)$")
 		local id = if subject then string.match(subject, "^tracker: ready (R%d%d%d%d)") else nil
 		if id and who and when and not out[id] then
-			out[id] = { who = who, when = when }
+			local body = "\n" .. record .. "\n"
+			out[id] = {
+				who = who,
+				when = when,
+				lands = string.find(body, "\nLands: approved\n", 1, true) ~= nil,
+				on = string.match(body, "\nOn: (R%d%d%d%d)\n"),
+			}
 		end
 	end
 	return out
@@ -271,7 +286,7 @@ local function build(
 	byId: { [string]: At },
 	docs: { [string]: string },
 	sides: { [string]: string },
-	holder: { who: string, when: string }?,
+	holder: Holder?,
 	tips: { [number]: Tip },
 	mainSha: string
 ): work.RaftFact
@@ -297,6 +312,7 @@ local function build(
 	end
 	local ready = front.design == "ready"
 	local deps = true
+	local outside: { string } = {}
 	for _, mid in issues do
 		local mf: { [string]: string } = memberFront[mid] or {}
 		if mf.design ~= "ready" then
@@ -304,6 +320,9 @@ local function build(
 		end
 		for _, dep in store.idList(mf.depends_on) do
 			if not memberIds[dep] then
+				if not table.find(outside, dep) then
+					table.insert(outside, dep)
+				end
 				local depAt = byId[dep]
 				if not depAt or depAt.state ~= "done" then
 					deps = false
@@ -334,6 +353,12 @@ local function build(
 		trace = trace,
 		traceOk = trace and final == "approved",
 		root = string.match(at.dir, "^(.*%.tracker)/") or "",
+		lands = if holder then holder.lands else false,
+		on = if holder then holder.on else nil,
+		onLanded = if holder and holder.on
+			then byId[holder.on] ~= nil and byId[holder.on].state == "done"
+			else nil,
+		outside = outside,
 	}
 end
 
@@ -377,7 +402,8 @@ local function blockFor(
 	byId: { [string]: At },
 	docs: { [string]: string },
 	under: { [string]: { string } },
-	promoted: { [string]: { [string]: string } }
+	promoted: { [string]: { [string]: string } },
+	onMembers: { string }?
 ): string
 	local front = frontText(text)
 	local status = statusLib.effective(front, at.state)
@@ -415,7 +441,7 @@ local function blockFor(
 		local mf: { [string]: string } = if raw and raw ~= "" then frontText(raw) else {}
 		local folder = if mat
 			then filesUnder(mat.dir, under, docs, mid, function(rel: string, issue: string): boolean
-				return raftplan.isDesignFile(rel, issue) or rel == "approval.md"
+				return raftplan.isDesignFile(rel, issue) or rel == "approval.md" or rel == "guesses.md"
 			end)
 			else {}
 		local specs = readycheck.specs(folder, if mat then promoted[mat.dir] or {} else {})
@@ -454,12 +480,131 @@ local function blockFor(
 		members = members,
 		files = raftFiles,
 		loaded = true,
+		onMembers = onMembers,
 	})
 	if why then
 		return why
 	end
 	-- The same record the carried move judges, on origin/main's tracked files. Not the working tree.
 	return readycheck.record(id, front.grouped, members, raftFiles) or ""
+end
+
+-- f0399: "<id> (<why>)" for each member whose approval does not hold in the top layer's tree.
+local function unapprovedOf(fact: work.RaftFact, tips: { [number]: Tip }, reg: projects.Registry): { string }
+	local top: Tip? = nil
+	for _, tip in tips do
+		if not top or tip.position > (top :: Tip).position then
+			top = tip
+		end
+	end
+	local out: { string } = {}
+	if not top then
+		return out
+	end
+	local sha = (top :: Tip).sha
+	for _, mid in fact.issues do
+		local dir = `{fact.root}/issues/active/{mid}`
+		local home = string.match(fact.root, "^(.*)/.tracker$") or "."
+		local dest = projects.promotedDir(reg, home, mid)
+		local listed = sh.run("git", { "ls-tree", "-r", "--name-only", sha, "--", dir, dest })
+		local paths: { string } = {}
+		if listed.ok then
+			for path in string.gmatch(listed.stdout .. "\n", "([^\n]*)\n") do
+				if path ~= "" then
+					table.insert(paths, path)
+				end
+			end
+		end
+		local specs: { string } = {}
+		for _, path in paths do
+			table.insert(specs, `{sha}:{path}`)
+		end
+		local blobs = catBatch(specs)
+		local folder: { [string]: string } = {}
+		local promoted: { [string]: string } = {}
+		for i, path in paths do
+			if string.sub(path, 1, #dir + 1) == dir .. "/" then
+				folder[string.sub(path, #dir + 2)] = blobs[i] or ""
+			elseif string.match(path, "%.spec%.luau$") then
+				promoted[string.sub(path, #dest + 2)] = blobs[i] or ""
+			end
+		end
+		local why: string? = nil
+		local parts, err = contract.build(
+			folder[`{mid}.md`] or "",
+			folder["check.sh"] or "",
+			readycheck.specs(folder, promoted),
+			folder["guesses.md"]
+		)
+		if not parts then
+			why = err
+		else
+			why = approval.shortOf(parts, folder["approval.md"])
+		end
+		if why then
+			table.insert(out, `{mid} ({why})`)
+		end
+	end
+	return out
+end
+
+-- The main checkout (the first worktree), or "" when git cannot say.
+function workread.mainCheckout(): string
+	local listed = sh.run("git", { "worktree", "list", "--porcelain" })
+	return if listed.ok then string.match(listed.stdout, "^worktree ([^\n]+)") or "" else ""
+end
+
+function workread.carriersPath(mainCheckout: string): string
+	return `{mainCheckout}/.cache/work/carriers.tsv`
+end
+
+-- f0399: who last asked `work next` for each item, and how many seconds ago. One line `<id>\t<session>\t<epoch>`.
+function workread.carriers(mainCheckout: string): { [string]: work.Carrier }
+	local out: { [string]: work.Carrier } = {}
+	local path = workread.carriersPath(mainCheckout)
+	if mainCheckout == "" or not fs.isFile(path) then
+		return out
+	end
+	local now = os.time()
+	for line in string.gmatch(fs.readFile(path), "[^\n]+") do
+		local id, session, at = string.match(line, "^([^\t]+)\t([^\t]+)\t(%d+)$")
+		if id and session and at then
+			out[id] = { session = session, age = now - (tonumber(at) :: number) }
+		end
+	end
+	return out
+end
+
+-- Writes `id`'s line for `session` (now), or removes it when `session` is nil. Other lines stay, sorted by id.
+function workread.carry(mainCheckout: string, id: string, session: string?)
+	if mainCheckout == "" then
+		return
+	end
+	local path = workread.carriersPath(mainCheckout)
+	local rows: { [string]: string } = {}
+	if fs.isFile(path) then
+		for line in string.gmatch(fs.readFile(path), "[^\n]+") do
+			local was = string.match(line, "^([^\t]+)\t[^\t]+\t%d+$")
+			if was then
+				rows[was] = line
+			end
+		end
+	end
+	if session == nil and rows[id] == nil then
+		return
+	end
+	rows[id] = if session then `{id}\t{session}\t{os.time()}` else nil :: any
+	local ids: { string } = {}
+	for was in rows do
+		table.insert(ids, was)
+	end
+	table.sort(ids)
+	local lines: { string } = {}
+	for _, was in ids do
+		table.insert(lines, rows[was])
+	end
+	fs.writeDir(`{mainCheckout}/.cache/work`)
+	fs.writeFile(path, if #lines == 0 then "" else table.concat(lines, "\n") .. "\n")
 end
 
 function workread.held(): string?
@@ -628,10 +773,36 @@ function workread.collect(asked: string?): work.Input
 				local rel = string.sub(path, #dir + 2)
 				local base = string.match(dir, "([fdcR]%d%d%d%d)$")
 				if
-					base and (raftplan.isDesignFile(rel, base) or rel == "approval.md" or rel == "check.sh")
+					base
+					and (
+						raftplan.isDesignFile(rel, base)
+						or rel == "approval.md"
+						or rel == "guesses.md"
+						or rel == "check.sh"
+					)
 				then
 					table.insert(more, path)
 				end
+			end
+		end
+	end
+	-- f0399: the idea review of each new issue in no raft, for z-design's claim gate
+	local inTree: { [string]: boolean } = {}
+	for _, path in names do
+		inTree[path] = true
+	end
+	for id, at in byId do
+		if store.isIssueId(id) and at.state == "backlog" then
+			local body = docs[at.path] or ""
+			local front = frontText(body)
+			local review = `{at.dir}/idea-review-001.md`
+			if
+				statusLib.effective(front, at.state) == "new"
+				and (front.raft or "") == ""
+				and inTree[review]
+				and not docs[review]
+			then
+				table.insert(more, review)
 			end
 		end
 	end
@@ -703,6 +874,7 @@ function workread.collect(asked: string?): work.Input
 		promoted[dir] = bag
 	end
 	local holders = holdersOf()
+	local ats: { [string]: At } = {}
 	for id, at in keep do
 		local text = docs[at.path]
 		if text and text ~= "" then
@@ -729,14 +901,86 @@ function workread.collect(asked: string?): work.Input
 					end
 				end
 			end
-			local fact = build(id, at, text, byId, docs, sides, holders[id], activeTips[id] or {}, main)
+			-- f0399: a raft built on an unlanded raft sits on its base commit, not on main
+			local base = main
+			local holder = holders[id]
+			if at.state == "active" and holder and holder.on then
+				local onAt = byId[holder.on]
+				if not (onAt and onAt.state == "done") then
+					for _, row in refs do
+						if row.ref == `{id}/base` or (row.ref == `origin/{id}/base` and base == main) then
+							base = row.sha
+						end
+					end
+				end
+			end
+			local fact = build(id, at, text, byId, docs, sides, holder, activeTips[id] or {}, base)
 			if at.state ~= "done" then
 				fact.block = blockFor(id, at, text, byId, docs, under, promoted)
 			end
 			table.insert(rafts, fact)
+			ats[id] = at
 		end
 	end
-	return { asked = asked, held = workread.held(), author = workread.author(), rafts = rafts }
+	local mainCheckout = workread.mainCheckout()
+	local issues: { work.IssueFact } = {}
+	for id, at in byId do
+		local body = if store.isIssueId(id) and at.state ~= "done" then docs[at.path] else nil
+		if body and body ~= "" then
+			local front = frontText(body)
+			local status = statusLib.effective(front, at.state)
+			local raftId = front.raft or ""
+			local block = ""
+			if status == "new" and raftId == "" then
+				block = idea.designRefusal(body, docs[`{at.dir}/idea-review-001.md`], id) or ""
+			end
+			table.insert(issues, {
+				id = id,
+				root = string.match(at.dir, "^(.*%.tracker)/") or "",
+				status = status,
+				raft = raftId,
+				designReady = front.design == "ready",
+				sized = raftplan.parseSize(front.size) ~= nil,
+				deps = store.idList(front.depends_on),
+				draftBlock = block,
+				added = front.waits ~= nil,
+				mine = status == "preparing" and mainCheckout ~= "" and fs.isDir(
+					`{mainCheckout}/.worktree/prep-{front.slug or ""}`
+				),
+			})
+		end
+	end
+	table.sort(issues, function(a, b)
+		return a.id < b.id
+	end)
+	for _, fact in rafts do
+		local at = ats[fact.id]
+		-- what ready --on would say: only for a prepared backlog raft that waits on issues outside it
+		if at and fact.where == "backlog" and fact.status == "prepared" and not fact.depsMet then
+			local on = work.baseFor(fact, rafts, issues)
+			if on then
+				for _, other in rafts do
+					if other.id == on then
+						fact.blockOn =
+							blockFor(fact.id, at, docs[at.path], byId, docs, under, promoted, other.issues)
+					end
+				end
+			end
+		end
+		-- whose approval does not hold in the tree that would land: read only once the final review is approved
+		if at and fact.where == "active" and fact.lands and fact.finalReview == "approved" then
+			fact.unapproved = unapprovedOf(fact, activeTips[fact.id] or {}, reg)
+		end
+	end
+	return {
+		asked = asked,
+		held = workread.held(),
+		author = workread.author(),
+		rafts = rafts,
+		issues = issues,
+		session = sessionread.id(),
+		carriers = workread.carriers(mainCheckout),
+	}
 end
 
 return workread
