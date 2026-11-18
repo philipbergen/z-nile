@@ -1,0 +1,78 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-18 06:13	1 spec	0	0	test			1.830	1.490		1.830	tokens,ai
+2026-11-18 06:13	1 spec	0	0	test			23.740	22.280		23.740	tokens,ai
+2026-11-18 06:14	1 spec	0	0	test			12.262	10.900		12.262	tokens,ai
+2026-11-18 06:14	d0297: selector never selects sequestered specs; finish passes --own-acceptance	106	9	build							tokens,wall,cpu,ai
+2026-11-18 06:14	4 specs	0	0	test			1.648	1.450		1.648	tokens,ai
+2026-11-18 06:16	affected	0	0	test			136.442	388.280		136.442	tokens,ai
+2026-11-18 06:31	97 specs	0	0	test			889.185	4509.960		889.185	tokens,ai
+2026-11-18 06:32	1 spec	0	0	test			73.703	58.640		73.703	tokens,ai
+2026-11-18 06:43	97 specs	0	0	test			615.910	3753.570		615.910	tokens,ai
+2026-11-18 06:44	1 spec	0	0	test			35.330	29.330		35.330	tokens,ai
+2026-11-18 06:45	static	0	0	test			59.058	79.780		59.058	tokens,ai
+2026-11-18 06:43	4 runs	0	0	other			2396.416	12775.090			tokens,ai
+2026-11-18 06:46	R0131: lesson on restacking an unfinished layer	11	0	build							tokens,wall,cpu,ai
+2026-11-18 06:47	1 spec	0	0	test			1.237	0.820		1.237	tokens,ai
+2026-11-18 06:47	1 spec	0	0	test			4.562	3.850		4.562	tokens,ai
+2026-11-18 06:47	1 spec	0	0	test			7.649	6.670		7.649	tokens,ai
+2026-11-18 06:47	1 spec	0	0	test			1.242	0.810		1.242	tokens,ai
+2026-11-18 06:47	1 spec	0	0	test			5.146	4.330		5.146	tokens,ai
+2026-11-18 06:47	1 spec	0	0	test			11.781	9.150		11.781	tokens,ai
+2026-11-18 06:49	166 specs	0	0	test			111.593	525.720		111.593	tokens,ai
+2026-11-18 06:49	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 06:50	1 spec	0	0	test			1.224	0.860		1.224	tokens,ai
+2026-11-18 06:50	1 spec	0	0	test			5.170	3.930		5.170	tokens,ai
+2026-11-18 06:50	1 spec	0	0	test			7.008	6.090		7.008	tokens,ai
+2026-11-18 06:52	affected	0	0	test			124.468	417.670		124.468	tokens,ai
+2026-11-18 06:52	1 spec	0	0	test			1.227	0.960		1.227	tokens,ai
+2026-11-18 06:52	1 spec	0	0	test			4.719	4.130		4.719	tokens,ai
+2026-11-18 06:52	1 spec	0	0	test			8.009	7.030		8.009	tokens,ai
+2026-11-18 06:52	1 spec	0	0	test			1.438	1.040		1.438	tokens,ai
+2026-11-18 06:55	affected	0	0	test			147.912	499.030		147.912	tokens,ai
+2026-11-18 06:57	1 spec	0	0	test			1.869	1.330		1.869	tokens,ai
+2026-11-18 06:57	1 spec	0	0	test			10.515	8.890		10.515	tokens,ai
+2026-11-18 06:57	1 spec	0	0	test			18.609	17.110		18.609	tokens,ai
+2026-11-18 07:03	affected	0	0	test			318.037	810.190		318.037	tokens,ai
+2026-11-18 07:03	2 runs	0	0	other			160.887	0.200			tokens,ai
+2026-11-18 07:04	R0131: review-001	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-18 07:05	1 spec	0	0	test			1.228	0.810		1.228	tokens,ai
+2026-11-18 07:05	1 spec	0	0	test			1.236	0.810		1.236	tokens,ai
+2026-11-18 07:05	R0131: review-001 F1: the callers scan reads a comment marker only outside a string literal	66	6	code-review							tokens,wall,cpu,ai
+2026-11-18 07:05	R0131: refute-001, harvest and lessons	2	0	code-review							tokens,wall,cpu,ai
+2026-11-18 07:05	1 spec	0	0	test			1.228	0.900		1.228	tokens,ai
+2026-11-18 07:06	1 spec	0	0	test			4.738	3.980		4.738	tokens,ai
+2026-11-18 07:06	1 spec	0	0	test			7.447	6.560		7.447	tokens,ai
+2026-11-18 07:06	1 spec	0	0	test			1.229	0.820		1.229	tokens,ai
+2026-11-18 07:06	1 spec	0	0	test			4.552	3.940		4.552	tokens,ai
+2026-11-18 07:06	1 spec	0	0	test			7.629	6.740		7.629	tokens,ai
+2026-11-18 07:08	166 specs	0	0	test			100.282	382.780		100.282	tokens,ai
+2026-11-18 07:08	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 07:08	1 spec	0	0	test			1.251	0.820		1.251	tokens,ai
+2026-11-18 07:08	1 spec	0	0	test			4.937	3.860		4.937	tokens,ai
+2026-11-18 07:08	1 spec	0	0	test			7.002	6.210		7.002	tokens,ai
+2026-11-18 07:08	1 spec	0	0	test			1.237	0.820		1.237	tokens,ai
+2026-11-18 07:08	1 spec	0	0	test			4.363	3.800		4.363	tokens,ai
+2026-11-18 07:09	1 spec	0	0	test			8.492	6.740		8.492	tokens,ai
+2026-11-18 07:09	R0131: final verification log	0	0	deliver							tokens,wall,cpu,ai
+2026-11-18 07:11	1 spec	0	0	test			3.309	1.340		3.309	tokens,ai
+2026-11-18 07:11	1 spec	0	0	test			6.981	5.590		6.981	tokens,ai
+2026-11-18 07:11	1 spec	0	0	test			14.285	11.400		14.285	tokens,ai
+2026-11-18 07:11	4 specs	0	0	test			1.425	1.270		1.425	tokens,ai
+2026-11-18 07:14	2 specs	0	0	test			6.406	4.540		6.406	tokens,ai
+2026-11-18 07:18	affected	0	0	test			131.878	445.930		131.878	tokens,ai
+2026-11-18 07:18	1 spec	0	0	test			1.441	1.000		1.441	tokens,ai
+2026-11-18 07:18	1 spec	0	0	test			5.334	4.590		5.334	tokens,ai
+2026-11-18 07:18	1 spec	0	0	test			8.447	7.470		8.447	tokens,ai
+2026-11-18 07:18	1 spec	0	0	test			1.427	1.050		1.427	tokens,ai
+2026-11-18 07:15	3 runs	0	0	other			4.109	3.780			tokens,ai
+2026-11-18 07:19	R0131: final-review-001 and trace	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-18 07:19	1 spec	0	0	test			1.245	0.800		1.245	tokens,ai
+2026-11-18 07:20	1 spec	0	0	test			8.057	5.460		8.057	tokens,ai
+2026-11-18 07:20	1 spec	0	0	test			8.869	7.740		8.869	tokens,ai
+2026-11-18 07:20	R0131: final-refute-001, trace on the restacked finish	0	0	code-review							tokens,wall,cpu,ai
+2026-11-18 07:20	R0131: lesson note on harvest after the trace	2	0	deliver							tokens,wall,cpu,ai
+2026-11-18 07:20	1 spec	0	0	test			1.242	0.830		1.242	tokens,ai
+2026-11-18 07:21	1 spec	0	0	test			6.852	4.510		6.852	tokens,ai
+2026-11-18 07:21	1 spec	0	0	test			7.213	6.430		7.213	tokens,ai
+2026-11-18 07:22	166 specs	0	0	test			87.231	364.080		87.231	tokens,ai
+2026-11-18 07:22	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai

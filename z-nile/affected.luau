@@ -6,11 +6,16 @@
 --   ... --project <name>                         -- that project's specs only, relative to its home
 --   ... --static                                 -- print the projects whose static stages the change affects
 --                                                -- ("ALL", or one name per line), not the specs
+--   ... --own-acceptance                         -- also the layer's own sequestered acceptance specs (./zn finish
+--                                                -- only: it records them in results.txt; the gate never passes it)
 -- Prints one spec path per line (repo-relative; home-relative with --project). Prints nothing when no watch
 -- file names a changed path. Never prints "ALL": a full run is --full, not a fallback.
 -- On a layer branch (R0010/1/c0010), a change that includes a source file selects that ticket's
--- acceptance specs when the ticket has no watch file yet, and only when one of its watch files names
--- the path once the watches exist. On an old raft branch (R####-…), a source change selects that raft's.
+-- promoted acceptance specs (tests/acceptance/<id>/) when the ticket has no watch file yet, and only when one of its
+-- watch files names the path once the watches exist. On an old raft branch (R####-…), a source change selects that
+-- raft's members' promoted ones. A sequestered spec (under a project root: an item's acceptance/ or proofs/) is
+-- printed only with --own-acceptance, and then only the current layer's ticket's (every member's on an old raft
+-- branch) (d0297): the gate never runs one.
 
 local changes = require("./lib/changed")
 local context = require("./lib/context")
@@ -26,6 +31,7 @@ local watch = require("./lib/watch")
 local base: string? = nil
 local only: string? = nil
 local staticOnly = false
+local ownAcceptance = false
 local explicit: { string } = {}
 local i = 1
 while i <= #process.args do
@@ -35,6 +41,8 @@ while i <= #process.args do
 		i += 1
 	elseif a == "--static" then
 		staticOnly = true
+	elseif a == "--own-acceptance" then
+		ownAcceptance = true
 	elseif a == "--project" then
 		only = process.args[i + 1]
 		i += 1
@@ -159,6 +167,9 @@ if built == nil then
 end
 local ctx = built :: sel.Context
 ctx.current = currentSpecs(files)
+if ownAcceptance then
+	ctx.own = ctx.current
+end
 local result = sel.affected(ctx, files, only)
 -- A deleted spec is a changed path, and the pure selector still names it. There is nothing to run.
 local homePrefix = ""

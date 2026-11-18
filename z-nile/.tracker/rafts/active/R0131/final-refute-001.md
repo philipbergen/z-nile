@@ -1,0 +1,3 @@
+# Final refute 001: R0131
+
+- F1: fixed 9a243006c: `./zn restack R0131` put the layer on today's main (962cf7472, past 53e59feac) and `trace.md`'s `Commit:` now names the new d0297 finish commit 9a243006c2624ddb9f7b4cecaa716e7084b037e9; no row changed, as the review said: the commits main gained are tracker documents and a prep's files, none of the cited paths; consequences: the restack reran d0297's `check.sh` (4/4) on the new base; if main moves again before `./zn done`, the same stale line returns and the remedy is the same restack and `Commit:` update; `./zn trace R0131 --check` was run after this commit (result in the PR comment).

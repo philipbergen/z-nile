@@ -4082,7 +4082,7 @@ function cmd.finish(pos: { string })
 		-- repository root is not a project's home, so it refuses every spec.
 		local reg = projects.load(".")
 		for _, project in reg.projects do
-			local argv = { "run", "z-nile/affected", "--", "--project", project.name }
+			local argv = { "run", "z-nile/affected", "--", "--project", project.name, "--own-acceptance" }
 			for _, path in paths do
 				table.insert(argv, path)
 			end

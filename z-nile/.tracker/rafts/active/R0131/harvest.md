@@ -1,0 +1,4 @@
+- note restack of the unfinished layer R0131/1/d0297 replayed only its tip commit `d0297: verification log` and stopped on a conflict, because `stack.rebaseUpstream` reads a tip with an `<issue>: ` subject as the finish commit (erred zz-execute): zz-execute/unfinished-layer-tip-is-not-the-finish
+- review-001 F1 (erred zz-test, upstream z-design): zz-test/source-text-pins-read-the-code
+- final-review-001 F1 (erred none): one-off: origin/main gained a tracker-only commit after the finish, so the layer was not stacked; restacked and Commit: updated, as zz-review/not-stacked-is-main-moving says
+- note the final review's harvest line alone (no lesson file) made trace.md stale after the finish, because `harvest.md` is not a file trace accepts after it; re-finished as the lesson says (erred zz-execute): zz-execute/final-lessons-ride-a-refinish
