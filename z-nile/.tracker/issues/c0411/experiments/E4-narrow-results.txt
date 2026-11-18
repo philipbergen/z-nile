@@ -1,0 +1,53 @@
+== N0 the prototype
+z-nile/tests/acceptance/c0043/rounds.spec.luau: the base 234d4dd3 with exactly the two c0411 hunks
+narrow rc=0
+== N1 the retired folder left out
+z-nile/tests/acceptance/c0043/rounds.spec.luau: differs from its merge base 234d4dd3 with exactly the two c0411 hunks, first at line 131:
+  expected: 			for _, folder in { "rafts", "rafts/active", "rafts/done", "rafts/retired" } do
+  found:    			for _, folder in { "rafts", "rafts/active", "rafts/done" } do
+narrow rc=1
+== N2 a hand-written root list
+z-nile/tests/acceptance/c0043/rounds.spec.luau: differs from its merge base 234d4dd3 with exactly the two c0411 hunks, first at line 130:
+  expected: 		for _, root in projects.roots(projects.load(TOP)) do
+  found:    		for _, root in { "pickman/.tracker", "z-nile/.tracker" } do
+narrow rc=1
+== N3 the final assertion dropped
+z-nile/tests/acceptance/c0043/rounds.spec.luau: differs from its merge base 234d4dd3 with exactly the two c0411 hunks, first at line 144:
+  expected: 		t.expect(ids).toEqual(want)
+  found:    	end)
+narrow rc=1
+== N4 --[[ around the assertion
+z-nile/tests/acceptance/c0043/rounds.spec.luau: differs from its merge base 234d4dd3 with exactly the two c0411 hunks, first at line 144:
+  expected: 		t.expect(ids).toEqual(want)
+  found:    		--[[ t.expect(ids).toEqual(want) ]]
+narrow rc=1
+== N5 do return end after want
+z-nile/tests/acceptance/c0043/rounds.spec.luau: differs from its merge base 234d4dd3 with exactly the two c0411 hunks, first at line 144:
+  expected: 		t.expect(ids).toEqual(want)
+  found:    		do return end
+narrow rc=1
+== N6 want rebound to ids
+z-nile/tests/acceptance/c0043/rounds.spec.luau: differs from its merge base 234d4dd3 with exactly the two c0411 hunks, first at line 144:
+  expected: 		t.expect(ids).toEqual(want)
+  found:    		want = ids
+narrow rc=1
+== N7 another case loses an assertion
+z-nile/tests/acceptance/c0043/rounds.spec.luau: differs from its merge base 234d4dd3 with exactly the two c0411 hunks, first at line 109:
+  expected: 		t.expect(by[r70][4]).toBe("second-order") -- its first design review used the new format
+  found:    	end)
+narrow rc=1
+== N8 sort dropped from want
+z-nile/tests/acceptance/c0043/rounds.spec.luau: differs from its merge base 234d4dd3 with exactly the two c0411 hunks, first at line 143:
+  expected: 		table.sort(want)
+  found:    		t.expect(ids).toEqual(want)
+narrow rc=1
+== N9 override comment reworded
+z-nile/tests/acceptance/c0043/rounds.spec.luau: differs from its merge base 234d4dd3 with exactly the two c0411 hunks, first at line 127:
+  expected: 		-- c0411 override: rafts live under every registered project's root (z-nile/projects.toml), in the four folders
+  found:    		-- c0411 override: rafts sit under every registered project's root (z-nile/projects.toml), in the four folders
+narrow rc=1
+== N10 allRoots instead of roots
+z-nile/tests/acceptance/c0043/rounds.spec.luau: differs from its merge base 234d4dd3 with exactly the two c0411 hunks, first at line 130:
+  expected: 		for _, root in projects.roots(projects.load(TOP)) do
+  found:    		for _, root in projects.allRoots(projects.load(TOP)) do
+narrow rc=1
