@@ -124,3 +124,4 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-18 06:45	256 specs	0	0	test			11.049	41.320		11.049	tokens,ai
 2026-11-18 06:45	12 specs	0	0	test			46.529	97.070		46.529	tokens,ai
 2026-11-18 06:45	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 06:46	R0125: final verification log entries	0	0	deliver							tokens,wall,cpu,ai
