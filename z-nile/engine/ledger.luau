@@ -464,4 +464,84 @@ function ledger.appendOnly(old: string?, new: string, id: string): string?
 	return nil
 end
 
+-- One issue's share of a tool commit: its lines, typed minutes, how it was attributed, and typed tokens (spend.Share).
+export type Share = {
+	id: string,
+	added: number,
+	removed: number,
+	minutes: number,
+	how: string,
+	tokens: number?,
+}
+
+-- What a session reading gives a row: summed tokens, AI seconds and a model (sessions.Read has these fields).
+export type Reading = { tokens: number?, ai: number?, model: string? }
+
+-- The measured rows one tool commit records, one per share that gets a row, in the shares' order. Every subject is
+-- the first line of the commit's message and nothing else: a reading's note is never part of a subject (c0322).
+-- The session's reading belongs to the commit, not to each share, so it goes on the first row only, with
+-- `readingFlags` as that row's unmeasured cells; every other row is bare (`tokens,wall,cpu,ai` unmeasured), or a
+-- raft's bind commit would count the session's tokens once per member. A model the caller names wins over the
+-- reading's, on every row.
+function ledger.commitRows(
+	message: string,
+	when: string,
+	phase: string,
+	shares: { Share },
+	model: string?,
+	reading: Reading?,
+	readingFlags: string
+): { Row }
+	local subject = string.match(message, "^[^\n]*") or message
+	local rows: { Row } = {}
+	for i, share in shares do
+		local mine = if i == 1 then reading else nil
+		table.insert(rows, {
+			when = when,
+			subject = subject,
+			added = share.added,
+			removed = share.removed,
+			minutes = 0,
+			how = "measured",
+			phase = phase,
+			tokens = if mine then mine.tokens else nil,
+			model = model or (if mine then mine.model else nil),
+			ai = if mine then mine.ai else nil,
+			unmeasured = if mine then readingFlags else "tokens,wall,cpu,ai",
+		})
+	end
+	return rows
+end
+
+-- The trailer lines of a tool commit, after its message: one `Issue:` line per share that got a row (its lines, its
+-- minutes, the phase unless it is build, the row's tokens or else the share's, the row's model), then, when the
+-- session's note is given and not empty, one `Session: <note>` line. That line is the note's one stored copy: it
+-- names what each CLI measured, and it is kept with the commit it measured, never in a row's subject (c0322).
+function ledger.commitTrailers(phase: string, shares: { Share }, rows: { Row }, note: string?): { string }
+	if #rows ~= #shares then
+		error(`commitTrailers: {#rows} rows for {#shares} shares; each share needs exactly its own row`)
+	end
+	local lines: { string } = {}
+	for i, share in shares do
+		local row = rows[i]
+		local line =
+			string.format("Issue: %s +%d/-%d %.1fm", share.id, share.added, share.removed, share.minutes)
+		if phase ~= "build" then
+			line ..= " " .. phase
+		end
+		local shown = row.tokens or share.tokens
+		if shown ~= nil then
+			line ..= ` {shown} tokens`
+		end
+		if row.model then
+			line ..= ` {row.model}`
+		end
+		table.insert(lines, line)
+	end
+	if note ~= nil and note ~= "" then
+		table.insert(lines, `Session: {note}`)
+	end
+	return lines
+end
+
 return ledger

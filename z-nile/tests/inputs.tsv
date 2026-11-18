@@ -304,3 +304,5 @@ tests/meta/bound-every-probe.spec.luau	z-nile/tests/acceptance/c0191/docs.spec.l
 tests/meta/bound-every-probe.spec.luau	z-nile/lib/bounded.pl
 tests/meta/bound-every-probe.spec.luau	scripts/hooks/pre-bash.sh
 tests/meta/bound-every-probe.spec.luau	z-nile/engine/reap.luau
+tests/acceptance/c0322/wiring.spec.luau	z-nile/engine/main.luau
+tests/acceptance/c0322/expectation.spec.luau	z-nile/tests/acceptance/c0084/commit-phase.spec.luau
