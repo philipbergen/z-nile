@@ -1,0 +1,2 @@
+z-nile/tests/acceptance/c0042/ondisk.luau
+z-nile/tests/inputs.tsv

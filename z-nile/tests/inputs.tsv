@@ -26,6 +26,7 @@ tests/acceptance/c0042/cli.spec.luau	snake/.tracker/issues/
 tests/acceptance/c0042/cli.spec.luau	snake/.tracker/rafts/
 tests/acceptance/c0042/cli.spec.luau	z-nile/.tracker/issues/
 tests/acceptance/c0042/cli.spec.luau	z-nile/.tracker/rafts/
+tests/acceptance/c0042/cli.spec.luau	z-nile/projects.toml
 tests/acceptance/c0043/rounds.spec.luau	pickman/.tracker/issues/
 tests/acceptance/c0043/rounds.spec.luau	pickman/.tracker/rafts/
 tests/acceptance/c0043/rounds.spec.luau	z-nile/.tracker/issues/

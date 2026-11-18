@@ -6,6 +6,7 @@ local board = require("@scripts/tracker/board")
 -- c0120 override: the spec runs from its project's home after the move
 local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
+local ondisk = require("./ondisk")
 local process = require("@lune/process")
 local t = require("@tests/lib/t")
 
@@ -61,45 +62,17 @@ return t.spec("c0400 tracker.sh board", function(it)
 		for _ in m.issues do
 			issues += 1
 		end
-		local onDisk = 0
-		-- c0120 override: pickman's files live in pickman/ (its home)
-		-- c0114 override: the board reads every project root (c0120: pickman's root is pickman/.tracker)
-		for _, base in
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-			{
-				"pickman/.tracker/rafts",
-				"pickman/.tracker/rafts/active",
-				"pickman/.tracker/rafts/done",
-				"z-nile/.tracker/rafts",
-				"z-nile/.tracker/rafts/active",
-				"z-nile/.tracker/rafts/done",
-			}
-		do
-			for _, name in fs.readDir(`{TOP}/{base}`) do -- c0120 override: read from the checkout's top
-				if string.match(name, "^R%d%d%d%d$") then
-					onDisk += 1
-				end
-			end
-		end
-		t.expect(rafts).toBe(onDisk)
+		-- c0388 override: the folders come from every registered root (ondisk.luau reads the registry), not a hand list
+		local found = ondisk.items(TOP)
+		t.expect(rafts).toBe(#found.rafts)
 		-- every issue directory has a place on the page
-		for _, base in
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-			{
-				"pickman/.tracker/issues",
-				"pickman/.tracker/issues/active",
-				"pickman/.tracker/issues/done",
-				"z-nile/.tracker/issues",
-				"z-nile/.tracker/issues/active",
-				"z-nile/.tracker/issues/done",
-			}
-		do
-			for _, name in fs.readDir(`{TOP}/{base}`) do -- c0120 override: read from the checkout's top
-				if string.match(name, "^[fdc]%d%d%d%d$") then
-					t.expect(m.home[name] ~= nil).toBe(true)
-				end
+		local missing = {}
+		for _, id in found.issues do
+			if m.home[id] == nil then
+				table.insert(missing, id)
 			end
 		end
+		t.expect(table.concat(missing, " ")).toBe("")
 		for id in m.home do
 			t.expect(string.match(id, "^[fdcR]%d%d%d%d$") ~= nil).toBe(true)
 		end
