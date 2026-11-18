@@ -98,3 +98,4 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-18 15:47	affected	0	0	test			111.422	504.380		111.422	tokens,ai
 2026-11-18 15:44	4 runs	0	0	other			60.202	212.850			tokens,ai
 2026-11-18 15:48	R0113: review-002 (approve, no findings)	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-18 15:48	R0113: trace skeleton	0	0	deliver							tokens,wall,cpu,ai
