@@ -77,7 +77,7 @@ M = [
     ('approve: a layer branch is not pushed', MAIN, 'local layer = stack.parse(name)\n\t\t\tif layer then', 'local layer = stack.parse(name)\n\t\t\tif false then', (AB, ARF)),
     ('approve: an active issue is recorded on a lower layer', MAIN, 'if not topLayer or branch ~= topName then', 'if not topLayer then', ARF),
     ('approve: an active issue is recorded on a dirty tree', MAIN, 'if not status.ok or sh.trim(status.stdout) ~= "" then', 'if false then', ARF),
-    ('approve: an active issue is published to origin/main', MAIN, 'if item.state == "active" then\n\t\t\tpushBranch()', 'if false then\n\t\t\tpushBranch()', ARF),
+    ('approve: an active issue is published to origin/main', MAIN, 'if item.state == "active" then\n\t\t\tlocal raftId = store.readFront(item.doc).raft or ""', 'if false then\n\t\t\tlocal raftId = store.readFront(item.doc).raft or ""', ARF),
     ('place: an active issue is placed like a backlog one', PLACE, 'if main and main.active then', 'if false then', (PL, ARF)),
     ('place: an active issue with no raft worktree is recorded on origin/main', PLACE, '\t\tif main.state == "holds" then\n\t\t\treturn { kind = "approved", path = nil, name = "origin/main", record = false }, nil\n\t\tend\n\t\treturn nil,', '\t\tif true then\n\t\t\treturn { kind = "main", path = nil, name = "origin/main", record = true }, nil\n\t\tend\n\t\treturn nil,', PL),
     ('layergit: approval.md is not a post-finish path', LAYERGIT, 'for _, file in { "approval%.md", "guesses%.md" } do', 'for _, file in { "guesses%.md" } do', ARF),
@@ -104,7 +104,8 @@ M = [
     ("docs: work next's wait names the raft's worktree", WORK, 'from anywhere in the checkout ({table.concat(', 'in its worktree ({table.concat(', DC),
     ("docs: done's wait names this worktree", MAIN, 'The person runs ./zn approve <id> in a terminal, from anywhere in the checkout;', 'The person runs ./zn approve <id> in this worktree;', DC),
     ("docs: zz-execute sends the person to the raft's worktree", EXEC, "from anywhere in the checkout (it records in the raft's worktree, on its top layer, and pushes that layer)", "in the raft's worktree, on its top layer", DC),
-    ('approve: an active --publish publishes to origin/main (the narrowed land.spec case)', MAIN, 'if item.state == "active" then\n\t\t\tpushBranch()', 'if false then\n\t\t\tpushBranch()', ARF),
+    ('land: an active issue is published to origin/main (f0399 land.spec, narrowed)', MAIN, 'if item.state == "active" then\n\t\t\tlocal raftId = store.readFront(item.doc).raft or ""', 'if false then\n\t\t\tlocal raftId = store.readFront(item.doc).raft or ""', LAND),
+    ("approve: an active issue's retry pushes the checked-out branch", MAIN, 'if onHere.ok then\n\t\t\t\tlocal pushed =', 'if onHere.ok then\n\t\t\t\tpushBranch()\n\t\t\t\tdo\n\t\t\t\t\treturn\n\t\t\t\tend\n\t\t\t\tlocal pushed =', ARF),
 ]
 
 restore = None  # (path, text) of the file a mutant is in

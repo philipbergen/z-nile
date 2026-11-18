@@ -1,6 +1,6 @@
 --!strict
--- c0369 AC6: every text that restates where and how a design is approved says the one command from anywhere, and
--- none still sends the person to a worktree or to a second command. AC7's text half: the approve tooling specs walk
+-- c0369 AC4: every text that restates where and how a design is approved says the one command from anywhere, and
+-- none still sends the person to a worktree or to a second command. AC5's text half: the approve tooling specs walk
 -- the one command and answer the explainer page (c0368's outcome, carried by c0369).
 local fs = require("@lune/fs")
 local process = require("@lune/process")

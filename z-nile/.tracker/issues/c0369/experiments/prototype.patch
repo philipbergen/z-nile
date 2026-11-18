@@ -466,7 +466,7 @@ index 000000000..7c8b05716
 +
 +return approveplace
 diff --git a/z-nile/engine/main.luau b/z-nile/engine/main.luau
-index 3d950de78..6440a8ccc 100644
+index 3d950de78..76b847488 100644
 --- a/z-nile/engine/main.luau
 +++ b/z-nile/engine/main.luau
 @@ -5412,7 +5412,7 @@ function cmd.done(pos: { string })
@@ -492,7 +492,7 @@ index 3d950de78..6440a8ccc 100644
  function cmd.approve(pos: { string }, opts: { [string]: { string } })
  	for k in opts do
  		if k ~= "--check" and k ~= "--publish" then
-@@ -6128,44 +6131,162 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
+@@ -6128,44 +6131,187 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
  		local dispatched = process.env.ZN_DISPATCH
  		if dispatched and dispatched ~= "" then
  			fail(
@@ -660,6 +660,36 @@ index 3d950de78..6440a8ccc 100644
 +			print(`pushed {name}: the approval counts when its pull request merges`)
 +		end
  		local path = approval.file(item)
++		-- an issue in active/ is approved on its raft's top layer and lands with the raft: never published to main. The
++		-- top layer is pushed by its own name, whatever the raft's worktree has checked out (c0369 design review 004 F1)
++		if item.state == "active" then
++			local raftId = store.readFront(item.doc).raft or ""
++			local layers = layergit.layersOf(raftId)
++			local topLayer = layers[#layers]
++			if not topLayer then
++				fail(`{id} is active in {raftId}, which has no layer: nothing to push`)
++			end
++			local name = (topLayer :: stack.Layer).name
++			local onHere = sh.run("git", { "rev-parse", "-q", "--verify", `refs/heads/{name}` })
++			local ref = if onHere.ok then `refs/heads/{name}` else `refs/remotes/origin/{name}`
++			if not sh.run("git", { "cat-file", "-e", `{ref}:{path}` }).ok then
++				fail(`{id} has no approval on {name}. Run ./zn approve {id} first.`)
++			end
++			if not publishing() then
++				notYet("publishing is off (PICKMAN_PUBLISH=0, or inside a check)")
++			end
++			-- never forced: a top layer that moved on origin refuses, and the record stays for the retry; a top layer
++			-- that is only on origin is already pushed
++			if onHere.ok then
++				local pushed =
++					sh.run("git", { "push", "-q", "origin", `refs/heads/{name}:refs/heads/{name}` })
++				if not pushed.ok then
++					notYet(`git push origin {name} failed: {sh.trim(pushed.stderr)}`)
++				end
++			end
++			print(`It lands with {raftId}: pushed to {name}, nothing to publish.`)
++			return
++		end
  		if not fs.isFile(path) then
 -			fail(`{id} has no approval in this worktree. Run ./zn approve {id} first.`)
 +			fail(`{id} has no approval in {where}. Run ./zn approve {id} first.`)
@@ -668,15 +698,10 @@ index 3d950de78..6440a8ccc 100644
 +		-- the worktree that holds it is kept for the retry
 +		if not publishing() then
 +			notYet("publishing is off (PICKMAN_PUBLISH=0, or inside a check)")
-+		end
-+		-- an issue in active/ is approved on its raft's top layer and lands with the raft: never published to main
-+		if item.state == "active" then
-+			pushBranch()
-+			return
  		end
  		local localText = fs.readFile(path)
  		local function show(rel: string): string?
-@@ -6173,8 +6294,10 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
+@@ -6173,8 +6319,10 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
  			return if got.ok then got.stdout else nil
  		end
  		local doc = show(item.doc)
@@ -689,7 +714,7 @@ index 3d950de78..6440a8ccc 100644
  		end
  		local checkRel = `{item.dir}/check.sh`
  		local check = show(checkRel) or ""
-@@ -6225,21 +6348,49 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
+@@ -6225,21 +6373,49 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
  		end
  		local problem = approval.reasonOf(id, path, parts :: contract.Parts, localText, true)
  		if problem then
@@ -746,7 +771,7 @@ index 3d950de78..6440a8ccc 100644
  		return
  	end
  	if onlyCheck then
-@@ -6307,6 +6458,49 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
+@@ -6307,6 +6483,49 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
  	if dirty then
  		fail(`{id}: commit the contract first ({dirty}), then ./zn approve {id}`)
  	end
@@ -796,7 +821,7 @@ index 3d950de78..6440a8ccc 100644
  	local when = os.date("!%Y-%m-%dT%H:%M:%SZ") :: string
  	local text, aerr = approval.append(".", item, who, when)
  	if not text then
-@@ -6318,18 +6512,10 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
+@@ -6318,18 +6537,10 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
  	sh.git({ "commit", "-q", "-m", `tracker: approve {id}`, "--", path })
  	local rows = contract.parse(text :: string)
  	local hash = if rows then rows[#rows].hash else ""

@@ -29,3 +29,7 @@
 - design-review-003 F5 (erred z-design): z-design/design-the-execution-window
 - design-review-003 F6 (erred z-design): one-off: a placed run now writes into a worktree an executor may be restacking; a detached HEAD is refused
 - design-review-003 F7 (erred z-design): z-design/restated-rules-move-together
+- design-review-004 F1 (erred z-design): z-design/repeat-the-command-in-the-state-it-leaves
+- design-review-004 F2 (erred z-design): z-design/restated-rules-move-together
+- design-review-004 F3 (erred z-design): z-design/mutant-ids-match-the-runner
+- note a mutant-list edit was lost because the whole shell call that held it was refused by the bounded-command hook, and the runner was then used without rereading the file (erred z-design): z-design/experiment-records-what-the-script-prints
