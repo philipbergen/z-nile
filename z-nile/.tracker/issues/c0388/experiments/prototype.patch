@@ -1,5 +1,5 @@
 diff --git a/z-nile/tests/acceptance/c0042/cli.spec.luau b/z-nile/tests/acceptance/c0042/cli.spec.luau
-index bc667af88..f1436d5a0 100644
+index bc667af88..05495ef6b 100644
 --- a/z-nile/tests/acceptance/c0042/cli.spec.luau
 +++ b/z-nile/tests/acceptance/c0042/cli.spec.luau
 @@ -6,6 +6,7 @@ local board = require("@scripts/tracker/board")
@@ -10,7 +10,7 @@ index bc667af88..f1436d5a0 100644
  local process = require("@lune/process")
  local t = require("@tests/lib/t")
  
-@@ -61,44 +62,12 @@ return t.spec("c0400 tracker.sh board", function(it)
+@@ -61,45 +62,17 @@ return t.spec("c0400 tracker.sh board", function(it)
  		for _ in m.issues do
  			issues += 1
  		end
@@ -54,25 +54,30 @@ index bc667af88..f1436d5a0 100644
 -				if string.match(name, "^[fdc]%d%d%d%d$") then
 -					t.expect(m.home[name] ~= nil).toBe(true)
 -				end
--			end
++		local missing = {}
 +		for _, id in found.issues do
-+			t.expect(m.home[id] ~= nil).toBe(true)
++			if m.home[id] == nil then
++				table.insert(missing, id)
+ 			end
  		end
++		t.expect(table.concat(missing, " ")).toBe("")
  		for id in m.home do
  			t.expect(string.match(id, "^[fdcR]%d%d%d%d$") ~= nil).toBe(true)
+ 		end
 diff --git a/z-nile/tests/acceptance/c0042/ondisk.luau b/z-nile/tests/acceptance/c0042/ondisk.luau
 new file mode 100644
-index 000000000..6ab7c1160
+index 000000000..8606c22e7
 --- /dev/null
 +++ b/z-nile/tests/acceptance/c0042/ondisk.luau
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,53 @@
 +--!strict
 +-- c0388: the raft and issue folders a checkout holds, for c0042's cli spec, which compares them with the board page.
 +-- The roots come from the registry (`z-nile/projects.toml` under `top`), never from a list written here: the spec's
 +-- hand list of two roots went stale when arcade's root got its first raft (R0110). Each registered root's backlog,
 +-- `active/` and `done/` are read; a folder a root does not have yet is skipped. A retired root holds no items, and
 +-- `rafts/retired/` is history the page does not show: neither is read. A closed issue (won't do, c0278) keeps its
-+-- folder but the page drops it, so it is not listed either; a folder with no document is listed (the page shows it).
++-- folder but the page drops it, so it is not listed either. A folder with no document is still listed: the page drops it (it adds a folder only with its
++-- document), so the case goes red on it as on a broken item or a leftover, which is the point (c0388 G3).
 +local closing = require("@znile/engine/closing")
 +local fs = require("@lune/fs")
 +local projects = require("@znile/engine/projects")
@@ -84,8 +89,8 @@ index 000000000..6ab7c1160
 +
 +local STATES = { "", "/active", "/done" }
 +
-+-- the ids of the folders named like a raft (`R0010`) and like an issue (`f0010`, `d0010`, `c0010`) that the page
-+-- shows; the order is not part of the contract
++-- the ids of the folders named like a raft (`R0010`) and like an issue (`f0010`, `d0010`, `c0010`), a closed issue
++-- left out; the order is not part of the contract
 +local function shown(dir: string, id: string): boolean
 +	local doc = `{dir}/{id}/{id}.md`
 +	return not (fs.isFile(doc) and closing.isClosed(store.readFront(doc)))

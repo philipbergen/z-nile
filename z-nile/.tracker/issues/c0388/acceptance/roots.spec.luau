@@ -44,7 +44,7 @@ local function build(names: { string })
 	dir("pickman/.tracker/issues/x0004")
 	dir("pickman/.tracker/issues/c00050")
 	-- a closed issue (won't do) keeps its folder and the page drops it (c0278); an open one has a document; a folder
-	-- with no document at all is listed
+	-- with no document at all is still listed, raft or issue (c0388 G3: the case then goes red on it, as it should)
 	dir("pickman/.tracker/issues/c0011")
 	fs.writeFile(
 		`{FX}/pickman/.tracker/issues/c0011/c0011.md`,
@@ -132,6 +132,10 @@ return t.spec("c0388 the folders c0042's cli spec counts come from every registe
 		t.expect(string.find(text, 'quire("./ond' .. 'isk")', 1, true) ~= nil).toBe(true)
 		t.expect(string.find(text, "ondisk.items(TOP)", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(text, "t.expect(rafts).toBe(#found.rafts)", 1, true) ~= nil).toBe(true)
+		-- the issue half: the loop over the module's issues, the page lookup, and the assertion on what is missing
+		t.expect(string.find(text, "for _, id in found.issues do", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(text, "if m.home[id] == nil then", 1, true) ~= nil).toBe(true)
+		t.expect(string.find(text, 't.expect(table.concat(missing, " ")).toBe("")', 1, true) ~= nil).toBe(true)
 		t.expect((string.find(text, ".tracker/", 1, true))).toBe(nil)
 		t.expect((string.find(text, "fs.readDir", 1, true))).toBe(nil)
 	end)
