@@ -1,0 +1,2 @@
+# Final refute 001: R0116
+- F1: deferred c0387: after this landing an edit that puts the literal back into c0371's spec selects neither `env-fixture.spec.luau` nor a fence spec on an affected gate, because the spec's generated `watch.txt` does not name the file it reads. c0386's design names this hole and leaves it to c0387 ("fence scan watch misses new specs"), which exists for it; nothing in this raft may edit a generated watch file. Low.

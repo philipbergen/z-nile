@@ -12,7 +12,16 @@ local Travel = require("@game/ReplicatedStorage/Shared/Logic/Travel")
 
 local Starts = {}
 
-function Starts.start()
+-- f0148: stores the player's chosen start level before the teleport (it may yield); nil stores nothing. Read at each
+-- press, so it may be set before or after `start` (f0145's gate is `start`'s own argument).
+local choose: ((Player, any) -> ())? = nil
+function Starts.choosing(fn: (Player, any) -> ())
+	choose = fn
+end
+
+-- `allow` (f0145's paid-play gate, optional) is asked before a request goes, while the player's travel is idle; it
+-- may yield. Returns the press function, for a press the server makes (a game bought in the lobby).
+function Starts.start(allow: ((Player) -> boolean)?): (Player) -> ()
 	local remotes = ReplicatedStorage:WaitForChild("Remotes")
 	local startGame = remotes:WaitForChild("StartGame") :: RemoteEvent
 	local status = remotes:WaitForChild("Status") :: RemoteEvent
@@ -37,15 +46,31 @@ function Starts.start()
 		push(player, Travel.status(travel, tostring(player.UserId), os.clock()))
 	end
 
-	startGame.OnServerEvent:Connect(function(player: Player)
+	-- f0148: the level of a press that did not go, kept for the next press that does (a server-side press, such as
+	-- f0145's after a purchase, carries no level of its own)
+	local held: { [Player]: any } = {}
+
+	local function press(player: Player, requested: any)
 		local id = tostring(player.UserId)
+		if requested ~= nil then
+			held[player] = requested
+		end
 		if destination == nil then
 			push(player, "idle")
+			return
+		end
+		if allow and Travel.status(travel, id, os.clock()) == "idle" and not allow(player) then
 			return
 		end
 		local answer, ticket = Travel.request(travel, id, os.clock())
 		if answer == "go" then
 			push(player, "going")
+			local level = held[player]
+			held[player] = nil
+			local store = choose
+			if store then
+				store(player, level)
+			end
 			local ok = pcall(TeleportService.TeleportAsync, TeleportService, destination, { player })
 			if ok then
 				Travel.answered(travel, id, os.clock(), ticket)
@@ -54,7 +79,8 @@ function Starts.start()
 				sync(player)
 			end
 		end
-	end)
+	end
+	startGame.OnServerEvent:Connect(press)
 
 	TeleportService.TeleportInitFailed:Connect(function(player: Player)
 		Travel.failed(travel, tostring(player.UserId), os.clock())
@@ -66,6 +92,7 @@ function Starts.start()
 	end)
 	Players.PlayerRemoving:Connect(function(player: Player)
 		Travel.left(travel, tostring(player.UserId))
+		held[player] = nil
 		shown[player] = nil
 	end)
 
@@ -80,6 +107,9 @@ function Starts.start()
 			end
 		end
 	end)
+	return function(player: Player)
+		press(player, nil)
+	end
 end
 
 return Starts

@@ -1,1 +1,0 @@
-- note the 2026-11-11 worker idea interview (capture 0e91b4d7) gave c0257's rankCommand wiring to c0249 with the edge c0249 -> c0257, leaving c0257's captured "orders tickets and rafts by the order c0249 defines" with no owner able to build it (c0249's idea review round 1, F5; the capture of c0294) (erred z-ticket): z-ticket/moved-part-rewrites-the-owner

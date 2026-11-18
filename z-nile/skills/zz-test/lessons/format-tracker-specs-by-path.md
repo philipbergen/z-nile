@@ -2,7 +2,7 @@
 title: Format sequestered specs by their path
 when: both
 tags: [stylua, format, sequestration, specs]
-check: Was every sequestered spec formatted with `stylua <root>/.tracker/issues/<id>` (its own path, again until `stylua --check` is clean right before the mutants and the slow run), not with `stylua .` from the project home, which skips dot-folders?
+check: Was every sequestered spec formatted with `stylua <root>/.tracker/issues/<id>` (its own path, again until `stylua --check` is clean right before the mutants and the slow run), not with `stylua .` from the project home, which skips dot-folders, and was it run from the checkout's root (or with `--config-path`), since stylua run inside the issue folder finds no `stylua.toml` and formats at its default width?
 ---
 `stylua .` walks the project home but skips dot-folders, so it never touches `.tracker/`. The gate formats and checks `.tracker` only by explicit path, so an unformatted sequestered spec passes a local `stylua .` and fails the gate.
 
@@ -13,3 +13,6 @@ check: Was every sequestered spec formatted with `stylua <root>/.tracker/issues/
 **Note (c0306's prep, 2026-11-14):** one pass is not always enough. stylua's wrapping of a long `it(` call is not idempotent, so the first pass left a diff. The format stage then failed and aborted a `--slow` run after a batch of mutants had already run on the unformatted file. Run `stylua --check` on the spec folder right before the mutation check and the slow run, and format again until it is clean.
 
 **Note (c0325's prep, 2026-11-15):** running `stylua .` from inside the issue folder silently reformats the specs with another config (the spec hashes changed). Run it from `z-nile/` only. `check.sh --slow` runs the format, lint and type stages before any spec, so one stylua or selene error in an issue folder hides every slow result.
+
+**Also:** c0202's prep: an assemble script ran `stylua acceptance/*.spec.luau` from inside the issue folder. Stylua found no `stylua.toml` there and formatted at its default width, so `stylua --check` from the same folder passed while the gate (from the root, 110 columns) failed six specs. Run it from the root: `(cd "$(git rev-parse --show-toplevel)" && stylua <path>)`.
+**Note** (c0249 prep, 2026-11-16): run `stylua` from a folder that holds `stylua.toml` (the repository root or `z-nile/`), passing the spec path. Started from inside the issue folder, it does not search the parent folders, formats with its defaults, and rewrites the specs differently on every run.

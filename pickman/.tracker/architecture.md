@@ -17,15 +17,17 @@ This file changes only through a `ticket-prep` design, never during execution un
 | Awareness | How the player senses ghosts they cannot see, engine-free: the radar around the player and the edge indicators that grow and brighten as a ghost nears along the maze (R0010, f0033); the eight edge glows, their sectors and boxes (R0035, f0102) |
 | Blaster | The ghost blaster's shots: the seeded drop when a ghost is eaten, at most three held, the fire intents, and which active ghost a shot along the grid hits (R0035, f0100); a shot granted outright, the blaster boon (f0126) |
 | Hop | The spy hop counted in steps: when a hop may start, the eye's rise through it, and the airborne window over the wall tops in which no ghost meets the player and no pellet is eaten; the hop intent (R0035, f0101); a hop of a given length, the long hop of the jumps boon (f0126) |
+| Boost | The speed boost escape counted in steps: when a boost may start, which steps are boosted, the boosted step's speed capped at a tile, the HUD's status, the double-tap fold over real seconds and the camera's widening; the boost intent (f0143) |
 | Pad | The gamepad: its buttons mapped to the keys' actions, the left stick folded into turn intents one a push, the right stick's look rate in View.look's units, and which input types are gamepads (f0146) |
 | Best | A player's best level reached and the start level chosen in the lobby: the stored record's shape and its reading, the levels a run may start on, the claim, the lobby's level picker and its keys; the store is the adapters' (f0148) |
 | Picks | Risky wall picks: which walls can be marked, the three marked walls and their seeded roll, the wall a player beside one would pick, how long a pick takes, the six boons and their even roll; the pick intent (f0126) |
+| Pay | Paid play: one player's record (a free start per rolling hour, plays and continues held, the receipts granted), the mode (live, test, closed) and its store, the start's claim, the arrival's verdict, receipts granted once, a continue used or refunded; the store and the purchases are the adapters' (f0145) |
 | Travel | Whether a player may be sent to another place now: one request at a time, a timeout, a cool-down after a failure, and validation of the configured destination place id (R0024, f0061) |
-| Lobby | What the lobby screen shows, engine-free: the hiscore panel model (empty until the boards exist) and the start button for a travel status (R0024, f0061) |
-| Hiscores | Period keys, the qualify rule, ranking and the top-N read of the all-time, daily and weekly boards. The store is a parameter; no other feature is required (R0011, f0024) |
+| Lobby | What the lobby screen shows, engine-free: the hiscore panel model (empty until the boards exist) and the start button for a travel status (R0024, f0061); every row's and the best line's revive count ("REVIVES n") and the price of a play on sale, struck through as rich text (f0186) |
+| Hiscores | Period keys, the qualify rule, ranking and the top-N read of the all-time, daily and weekly boards. The store is a parameter; no other feature is required (R0011, f0024); the revives a run used, read, stored and carried with its rows, list entries and best, never ranking them (f0186) |
 | Session | One maze instance: players, validated and rate-limited intents, fixed-tick stepping, versioned snapshots, the server's fixed-step clock (R0004, f0013); fire intents, shots and drops (R0035, f0100); the hop intent and the airborne player (R0035, f0101); the pick intent, a pick stood and wasted, the picked holes in each member's maze, the boons granted, and the walls, pick and boon in the frame (f0126) |
-| Hud | What the heads-up display shows and how big: score, level, lives, power share; viewport layout, including an optional safe-area inset (R0015, f0019; R0012, f0029); the shot bars after the lives (R0035, f0100); the pick's progress and the boon banner, and where they go (f0126) |
-| Flow | The overlay of each run phase: READY!, the dying fade, the level-clear flash, GAME OVER with the results and the way back to the lobby (R0015, f0031; R0034, f0065) |
+| Hud | What the heads-up display shows and how big: score, level, lives, power share; viewport layout, including an optional safe-area inset (R0015, f0019; R0012, f0029); the shot bars after the lives (R0035, f0100); the pick's progress and the boon banner, and where they go (f0126); the boost's chevron after the shot bars (f0143) |
+| Flow | The overlay of each run phase: READY!, the dying fade, the level-clear flash, GAME OVER with the results and the way back to the lobby (R0015, f0031; R0034, f0065); the game over's revives line, in Lobby's words (f0186) |
 | Touch | Touch zones and a pure fold over begin, move and end: one finger per zone, a straight-line swipe into one existing turn intent, look deltas in pixels, a snap hit (R0012, f0027, f0028, f0029); the fire and hop buttons, placed in Roblox's jump corner from `Hud.jumpButtons` (R0051, f0110); the PICK button beside f0110's FIRE and JUMP, its zone and effect (f0126) |
 | View | First-person presentation math, engine-free: world scale, wall geometry, heading yaw, snapshot interpolation, turn smoothing, free look, key map (R0004, f0014); pellet placement and pulse (R0015, f0030); the lowered walls and the ghost body (R0035, f0101), the ghost colours and the beam's end (f0100, f0102), the new keys, the arrow look and the shot's aim (f0104); the pick key and its wire string, the marked walls' runs, the frame's maze with its holes and the walls key (f0126) |
 
@@ -48,6 +50,7 @@ Ghosts -> Maze
 Ghosts -> Movement
 Hud -> Levels
 Hud -> Session
+Lobby -> Pay
 Lobby -> Travel
 Movement -> Maze
 Pad -> Movement
@@ -56,6 +59,7 @@ Pellets -> Maze
 Picks -> Maze
 Picks -> Movement
 Session -> Blaster
+Session -> Boost
 Session -> Game
 Session -> Hop
 Session -> Ghosts

@@ -1,0 +1,35 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-16 05:35	1 spec	0	0	test			0.811	0.500		0.811	tokens,ai
+2026-11-16 05:35	1 spec	0	0	test			0.813	0.510		0.813	tokens,ai
+2026-11-16 05:35	1 spec	0	0	test			0.819	0.520		0.819	tokens,ai
+2026-11-16 05:35	1 spec	0	0	test			0.814	0.530		0.814	tokens,ai
+2026-11-16 05:35	1 spec	0	0	test			1.221	0.620		1.221	tokens,ai
+2026-11-16 05:35	1 spec	0	0	test			1.016	0.620		1.016	tokens,ai
+2026-11-16 05:35	suite	0	0	test			1.012	0.810		1.012	tokens,ai
+2026-11-16 05:35	1 spec	0	0	test			1.421	1.020		1.421	tokens,ai
+2026-11-16 05:51	1 spec	0	0	test			1.424	1.080		1.424	tokens,ai
+2026-11-16 05:51	1 spec	0	0	test			1.419	0.940		1.419	tokens,ai
+2026-11-16 05:51	1 spec	0	0	test			1.414	0.920		1.414	tokens,ai
+2026-11-16 05:51	1 spec	0	0	test			1.217	0.800		1.217	tokens,ai
+2026-11-16 05:51	1 spec	0	0	test			1.224	0.810		1.224	tokens,ai
+2026-11-16 05:51	1 spec	0	0	test			1.220	0.830		1.220	tokens,ai
+2026-11-16 05:51	2 specs	0	0	test			1.218	0.870		1.218	tokens,ai
+2026-11-16 05:51	1 spec	0	0	test			1.219	0.960		1.219	tokens,ai
+2026-11-16 05:51	1 spec	0	0	test			1.224	0.890		1.224	tokens,ai
+2026-11-16 05:52	1 spec	0	0	test			2.235	1.420		2.235	tokens,ai
+2026-11-16 05:52	affected	0	0	test			4.275	20.180		4.275	tokens,ai
+2026-11-16 06:12	2 specs	0	0	test			1.832	2.210		1.832	tokens,ai
+2026-11-16 06:04	3 runs	0	0	other			7.532	21.940			tokens,ai
+2026-11-16 06:16	design-review-001	0	0	design-review							tokens,ai
+2026-11-16 06:25	1 spec	0	0	test			1.224	0.690		1.224	tokens,ai
+2026-11-16 06:25	1 spec	0	0	test			0.824	0.610		0.824	tokens,ai
+2026-11-16 06:25	1 spec	0	0	test			1.042	0.620		1.042	tokens,ai
+2026-11-16 06:25	1 spec	0	0	test			1.037	0.690		1.037	tokens,ai
+2026-11-16 06:25	1 spec	0	0	test			1.047	0.670		1.047	tokens,ai
+2026-11-16 06:25	1 spec	0	0	test			1.034	0.670		1.034	tokens,ai
+2026-11-16 06:25	15 specs	0	0	test			1.032	1.620		1.032	tokens,ai
+2026-11-16 06:25	1 spec	0	0	test			1.238	0.880		1.238	tokens,ai
+2026-11-16 06:26	design-refute-001	0	0	design-review							tokens,ai
+2026-11-16 21:20	1 spec	0	0	test			1.021	0.700		1.021	tokens,ai
+2026-11-16 21:20	1 spec	0	0	test			1.023	0.710		1.023	tokens,ai
+2026-11-16 21:20	prep	7670	1	prep							tokens,ai

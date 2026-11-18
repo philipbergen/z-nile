@@ -3,6 +3,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BlastView = require("./BlastView")
+local Boost = require("@game/ReplicatedStorage/Shared/Logic/Boost")
 local Camera = require("./Camera")
 local Controls = require("./Controls")
 local DangerHud = require("./DangerHud")
@@ -12,8 +13,10 @@ local GhostView = require("./GhostView")
 local HudView = require("./HudView")
 local Maze = require("@game/ReplicatedStorage/Shared/Logic/Maze")
 local MazeView = require("./MazeView")
+local OfferView = require("./OfferView")
 local Pads = require("./Pads")
 local PelletView = require("./PelletView")
+local RevivesView = require("./RevivesView")
 local Session = require("@game/ReplicatedStorage/Shared/Logic/Session")
 local Sticks = require("./Sticks")
 local View = require("@game/ReplicatedStorage/Shared/Logic/View")
@@ -51,15 +54,19 @@ snapshots.OnClientEvent:Connect(function(frame: Session.Frame)
 	Camera.push(frame)
 	Camera.hopped(frame.hopped)
 	Camera.hopTicks(frame.hopTicks)
+	Camera.boosted(frame.boosted)
 	local snap: Session.Snapshot = frame -- a frame carries everything a snapshot does
 	GhostView.push(snap)
 	DangerHud.push(snap, View.frameMaze(frame))
 	HudView.show(frame.play)
 	HudView.shots(frame.shots)
+	HudView.boost(Boost.status(frame.boosted, frame.tick))
 	HudView.pick(frame.pick, frame.boon, frame.tick)
 	BlastView.push(frame)
 	local overlay = Flow.overlay(frame.play, RULES, FlowView.trip())
 	FlowView.show(overlay)
+	OfferView.show(overlay) -- f0145: the continue offer's buttons and keys
+	RevivesView.show(frame.play) -- f0186: the revives the run used, at the game over
 	if model and overlay.flash ~= lit then
 		lit = overlay.flash
 		MazeView.flash(model, overlay.flash)
@@ -86,6 +93,8 @@ PelletView.start()
 Sticks.start(Pads.stick)
 HudView.start()
 FlowView.start()
+OfferView.start() -- after FlowView, so its keys are asked first (f0145)
+RevivesView.start()
 
 -- listening now: tell the server, so its first snapshot reaches a client that can show it
 ready:FireServer()

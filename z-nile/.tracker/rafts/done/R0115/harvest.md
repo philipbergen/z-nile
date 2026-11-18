@@ -1,0 +1,6 @@
+- note c0278 AC2 could not pass: closing.spec lines 171-173 replaced the hyphenated stamp with string.gsub unescaped, a no-op, so the case asked guard to refuse the close line 149 requires it to accept; the user ruled the 3-line escape in this layer (2026-11-16): zz-test/plain-find-for-literals, z-design/prove-specs-pass-on-a-prototype
+- note c0278 AC10 and AC5 could not pass: docs.spec matched a multi-line list on one line, and close-cli.spec expected the untrimmed output of fixture.git, which trims; the user ruled both one-line fixes (2026-11-16): z-design/prove-specs-pass-on-a-prototype, zz-test/helpers-that-trim-change-expected-strings
+- review-001 F1: zz-arch/a-new-state-has-one-door
+- review-001 F2: zz-arch/guard-no-is-explicit
+- review-001 F3: one-off: the design already applied refuseStale to both modes and the carried branch returned early; the promoted c0081 spec pins it before every publish.commit, and the carry branch now calls it too; no new rule
+- final-review-001 F1: zz-test/seed-every-enumerated-case

@@ -1,0 +1,2 @@
+- design-review-001 F1: z-design/confirmations-bind-what-they-confirm
+- design-review-001 F2: z-design/quote-other-preps-before-promising

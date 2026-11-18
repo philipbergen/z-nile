@@ -18,6 +18,31 @@ export type Runs = {
 local Sessions = {}
 
 local sessions: { [Player]: Session.Session } = {}
+local startOf: ((Player) -> number)? = nil -- f0148: the level a player's run starts on; nil starts on 1
+local listeners: { (events: { Session.Event }) -> () } = {} -- f0148: hear every step's events
+
+-- f0148: the start level of each new session (it may yield while the store answers). Set before `start`.
+function Sessions.starts(fn: (Player) -> number)
+	startOf = fn
+end
+
+local made: { (player: Player, s: Session.Session) -> () } = {} -- f0148: told when a session is made
+
+-- f0148: a function told each new session and its player, once made (after the start's wait: a Ready's own effect
+-- may come later than the next resume, so code that needs the session listens here, not with task.defer).
+function Sessions.made(fn: (player: Player, s: Session.Session) -> ())
+	table.insert(made, fn)
+end
+
+-- f0148: a listener that hears every step's events, of every session, parked ones too.
+function Sessions.listen(fn: (events: { Session.Event }) -> ())
+	table.insert(listeners, fn)
+end
+
+-- f0145: this player's session on this server, nil for none (Continues looks it up for later events)
+function Sessions.session(player: Player): Session.Session?
+	return sessions[player]
+end
 
 -- Whether this player's run is over, as Logic says; a player with no session has no run.
 function Sessions.isOver(player: Player): boolean
@@ -37,11 +62,18 @@ function Sessions.start(runs: Runs?)
 	-- the client is listening for snapshots once it signals Ready; a repeat signal is ignored
 	ready.OnServerEvent:Connect(function(player: Player)
 		if sessions[player] == nil then
+			local start = if startOf then startOf(player) else nil
+			if sessions[player] ~= nil or player.Parent == nil then
+				return -- a repeat Ready made it while this one waited, or the player left
+			end
 			local s = Session.new(Maze.layout(Maze.DEFAULT), player.UserId, Session.GAME_CONFIG)
-			Session.join(s, tostring(player.UserId))
+			Session.join(s, tostring(player.UserId), start)
 			sessions[player] = s
 			if runs then
 				runs.ready(s, player)
+			end
+			for _, fn in made do
+				fn(player, s)
 			end
 		end
 	end)
@@ -56,6 +88,10 @@ function Sessions.start(runs: Runs?)
 	Players.PlayerRemoving:Connect(function(player: Player)
 		local s = sessions[player]
 		sessions[player] = nil
+		if s then
+			-- f0145: the run's continue offer ends, so a departed run reaches its game over within LEAVE_STEPS
+			Session.depart(s, tostring(player.UserId))
+		end
 		if s and runs then
 			table.insert(parked, s)
 		end
@@ -65,6 +101,9 @@ function Sessions.start(runs: Runs?)
 		for _ = 1, Session.advance(clock, dt) do
 			for player, s in sessions do
 				local events = Session.step(s)
+				for _, fn in listeners do
+					fn(events)
+				end
 				local here = player.Parent ~= nil
 				if runs then
 					runs.step(s, events, here)
@@ -77,7 +116,11 @@ function Sessions.start(runs: Runs?)
 				-- a departed session steps on, unseen, until the runs let it go
 				local kept: { Session.Session } = {}
 				for _, s in parked do
-					if runs.step(s, Session.step(s), false) then
+					local events = Session.step(s)
+					for _, fn in listeners do
+						fn(events)
+					end
+					if runs.step(s, events, false) then
 						table.insert(kept, s)
 					end
 				end

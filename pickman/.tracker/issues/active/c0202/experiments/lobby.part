@@ -1,0 +1,22 @@
+local lobbyPlace = place.load("lobby.project.json")
+local LOBBY_PAID = sourceAt(lobbyPlace, { "ServerScriptService", "Lobby", "Paid" })
+local LOBBY_STARTS = sourceAt(lobbyPlace, { "ServerScriptService", "Lobby", "Starts" })
+
+-- the lobby: Paid in front of Starts, as the lobby's Main boots them
+local function lobby(mode: any?, shared: any?, setup: ((any) -> ())?): any
+	local w = world(mode, shared)
+	if setup then
+		setup(w)
+	end
+	local paid = w.load("Paid", LOBBY_PAID)
+	local starts = w.load("Starts", LOBBY_STARTS)
+	paid.start(starts.start(paid.allow))
+	return w
+end
+
+local function press(w: any, p: any)
+	resume(coroutine.create(function()
+		w.remote("StartGame").OnServerEvent.fire(p)
+	end))
+end
+

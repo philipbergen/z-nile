@@ -1,0 +1,25 @@
+--!strict
+-- E3 (c0249): what a drag costs on today's tracker, at the inputs the shipped app sends. Reads origin/main's facts with
+-- workread.facts (the reader `./zn next` uses), takes the stack of backlog issues in order, and asks rank.plan for the
+-- moves, writing nothing. Every item is unset today, so these are the first drags a person makes.
+-- Run from a checkout that has the prototype (proto-c0249), with this file copied to a scratch file under z-nile/ named
+-- e3.luau, as
+--   ./zn run --time 120 -- lune run z-nile/e3
+local rank = require("./engine/rank")
+local workread = require("./engine/workread")
+
+local facts = workread.facts()
+local stack = rank.stack(facts, "issue")
+local n = #stack
+print(`facts {#facts}, backlog issues {n}, backlog rafts {#rank.stack(facts, "raft")}`)
+local function show(label: string, id: string, how: string, arg: string?)
+	local changes, why, note = rank.plan(stack, id, how, arg)
+	print(label, if changes then `{#changes} change(s)` else `refused: {why}`, if note then "(notice)" else "")
+end
+show("the app's drop at the end of a column: card 10 last", stack[10].id, "last")
+show("the app's drop at the end of a column: card 150 last", stack[150].id, "last")
+show("a drop in the middle: card 150 before card 120", stack[150].id, "before", stack[120].id)
+show("a drop near the top: card 5 before card 2", stack[5].id, "before", stack[2].id)
+show("card 5 to the top", stack[5].id, "top")
+show("card 5 after card 10", stack[5].id, "after", stack[10].id)
+show("the last card before the first", stack[n].id, "before", stack[1].id)

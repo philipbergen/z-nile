@@ -1,0 +1,67 @@
+# c0202 re-prep after design review 002, 2026-11-17 (PST): mutants.py on .worktree/proto-c0202-landed at e984e85ad (cut from origin/main 1c840bc5b), 65 mutants, each alone with its row's spec
+M1 arrival :: took the free game on the portal: killed
+M2 arrival :: no pass the run is refused: killed
+M3 arrival :: whose claim fails plays: killed
+M4 arrival :: leaves during the claim: killed
+M5 arrival :: whose claim fails plays: killed
+M52 arrival :: whose claim fails plays: killed
+M6 arrival :: tells the player what they hold: killed
+M7 arrival :: no pass the run is refused: killed
+M8 arrival :: teleport errors: killed
+M9 arrival :: teleport errors: killed
+M10 arrival :: bought on the portal: killed
+M11 offer :: a revive held is used at once: killed
+M12 offer :: a revive held is used at once: killed
+M13 offer :: prompts Pickman's revive product: killed
+M14 offer :: closed server sells no revive: killed
+M15 offer :: closed bought, it waits: killed
+M16 offer :: closed without buying lets the countdown run: killed
+M17 offer :: closed without buying lets the countdown run: killed
+M18 offer :: a play bought during the offer: killed
+M19 offer :: a decline during a revive's write: killed
+M20 offer :: a decline during a revive's write: killed
+M21 offer :: a second ask while a revive's write: SURVIVED
+M22 offer :: used once the library's span allows it: killed
+M23 offer :: leaves during a revive's write: SURVIVED
+M24 offer :: prompts Pickman's revive product: killed
+M25 lobby :: a play held goes: killed
+M26 lobby :: a play held goes: killed
+M27 lobby :: a play bought in the lobby starts at once: killed
+M28 lobby :: a revive bought for later is kept: killed
+M29 lobby :: a read that answers down: killed
+M30 lobby :: a read that answers down: killed
+M31 lobby :: a press while the player's read is under way: killed
+M32 lobby :: a player joining is told: killed
+M33 lobby :: a play held goes: killed
+M34 clients :: reads the revives held: killed
+M35 clients :: do nothing while the library's screen is open: killed
+M36 clients :: OfferView boots the library's test screen: killed
+M37 clients :: PayView draws the line: killed
+M38 clients :: PayView draws the line: killed
+M39 clients :: the price of a play is the library's Prices: killed
+M40 clients :: Lobby keeps no price table: killed
+M41 place :: both places map the library: killed
+M42 place :: pickman keeps no copy: killed
+M43 place :: architecture.md no longer declares Pay: killed
+M44 records :: every record the new build writes: killed
+M46 lobby :: granted while the read on joining is under way: killed
+M47 lobby :: a press after the library's READ_SECONDS: killed
+M48 place :: architecture.md no longer declares Pay: killed
+M49 lobby :: a play's test screen strikes the list price: killed
+M50 offer :: a revive's test screen strikes nothing: killed
+M51 offer :: a revive's test screen strikes nothing: killed
+M53 status :: a closed arrival whose claim fails tells closed: killed
+M54 status :: receipt heard outside the offer tells: killed
+M55 status :: write that finds none held tells none held: killed
+M56 status :: given back after its write tells: killed
+M57 status :: granted confirm whose revive write fails: killed
+M58 status :: granted confirm whose revive write fails: killed
+M64 status :: in Studio an arrival still claims: killed
+M65 status :: whose give-back fails ends the run: killed
+M59 offer :: used once the library's span allows it: killed
+M60 status :: in Studio an arrival with nothing to pay plays: killed
+M61 status :: outside Studio an arrival: killed
+M62 status :: or one that errors: killed
+M63 status :: confirm whose grant write fails releases: killed
+M45 clients :: do nothing while the library's screen is open: killed
+# M21 and M23 survive as equivalents (E2)

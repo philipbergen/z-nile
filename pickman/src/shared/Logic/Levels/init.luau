@@ -96,10 +96,81 @@ local Levels = {}
 Levels.ROWS = table.freeze(ROWS)
 Levels.COUNT = #ROWS
 
--- Levels past COUNT use the last row.
-function Levels.row(level: number): Row
+-- Levels by picked walls (f0147): a level ends after `picks` finished wall picks; every level has level 1's
+-- rules but its speeds, which are level 1's times `first` times `step` for each level after the first, up to
+-- `top`; later levels keep `top`'s speeds.
+export type Ramp = { picks: number, first: number, step: number, top: number }
+Levels.RAMP = table.freeze({ picks = 10, first = 0.7, step = 1.05, top = 34 }) :: Ramp
+Levels.MAX_TOP = 1000 -- a ramp's top is at most this: Session.new checks every level up to it
+
+local function checkLevel(level: number)
 	if type(level) ~= "number" or level ~= level or level ~= math.floor(level) or level < 1 then
 		error(`levels: level must be a whole number >= 1, got {level}`, 0)
+	end
+end
+
+-- Refuses a ramp whose fields are not usable.
+function Levels.validateRamp(r: Ramp)
+	local function whole(v: any): boolean
+		return type(v) == "number" and v == v and v == math.floor(v) and v >= 1 and v < math.huge
+	end
+	local function positive(v: any): boolean
+		return type(v) == "number" and v == v and v > 0 and v < math.huge
+	end
+	if not whole(r.picks) then
+		error(`levels: ramp.picks must be a whole number >= 1, got {r.picks}`, 0)
+	end
+	if not whole(r.top) or r.top > Levels.MAX_TOP then
+		error(`levels: ramp.top must be a whole number in 1..{Levels.MAX_TOP}, got {r.top}`, 0)
+	end
+	if not positive(r.first) then
+		error(`levels: ramp.first must be a positive finite number, got {r.first}`, 0)
+	end
+	if not positive(r.step) or r.step < 1 then
+		error(`levels: ramp.step must be a finite number >= 1, got {r.step}`, 0)
+	end
+end
+
+-- The ramp's speed factor on `level`, relative to level 1's classic speeds.
+function Levels.rampFactor(r: Ramp, level: number): number
+	checkLevel(level)
+	return r.first * r.step ^ (math.min(level, r.top) - 1)
+end
+
+-- one frozen row per ramp and level, made on first use
+local ramped: { [Ramp]: { [number]: Row } } = setmetatable({}, { __mode = "k" }) :: any
+
+local function rampRow(r: Ramp, level: number): Row
+	local n = math.min(level, r.top)
+	local rows = ramped[r]
+	if rows == nil then
+		rows = {}
+		ramped[r] = rows
+	end
+	local found = rows[n]
+	if found then
+		return found
+	end
+	local f = Levels.rampFactor(r, n)
+	local one = ROWS[1]
+	local copy = table.clone(one)
+	copy.speedFactor = one.speedFactor * f
+	copy.frightSpeedFactor = one.frightSpeedFactor * f
+	copy.ghost = table.freeze({
+		speedFactor = one.ghost.speedFactor * f,
+		tunnelFactor = one.ghost.tunnelFactor * f,
+		frightFactor = one.ghost.frightFactor * f,
+	})
+	table.freeze(copy)
+	rows[n] = copy
+	return copy
+end
+
+-- Levels past COUNT use the last row. With a ramp, every level is level 1's row with the ramp's speeds.
+function Levels.row(level: number, ramp: Ramp?): Row
+	checkLevel(level)
+	if ramp then
+		return rampRow(ramp, level)
 	end
 	return ROWS[math.min(level, Levels.COUNT)]
 end
@@ -110,13 +181,13 @@ end
 
 -- Units per tick for the player on `level`, from level 1's base speed. `frightened` picks the column
 -- for the time a power pellet is active.
-function Levels.playerSpeed(baseSpeed: number, level: number, frightened: boolean?): number
-	local r = Levels.row(level)
+function Levels.playerSpeed(baseSpeed: number, level: number, frightened: boolean?, ramp: Ramp?): number
+	local r = Levels.row(level, ramp)
 	return round(baseSpeed * (if frightened then r.frightSpeedFactor else r.speedFactor))
 end
 
-function Levels.frightenedTicks(level: number, tickRate: number): number
-	return round(Levels.row(level).frightenedSeconds * tickRate)
+function Levels.frightenedTicks(level: number, tickRate: number, ramp: Ramp?): number
+	return round(Levels.row(level, ramp).frightenedSeconds * tickRate)
 end
 
 -- The user's "slower ghosts" factor (R0100): 1 is the classic tables. It scales the speeds of hunting and
@@ -126,12 +197,37 @@ Levels.EYES_FACTOR = 2 -- eyes run at this many times level 1's player speed
 
 export type GhostSpeed = "normal" | "tunnel" | "frightened" | "eyes"
 
+-- Units per tick a ghost covers on average (f0147). With a ramp the tunnel and frightened ghosts keep the ramp's exact
+-- speed (a fraction the ghost carries from step to step, Ghosts); every other speed is Levels.ghostSpeed's whole units.
+function Levels.ghostRate(
+	baseSpeed: number,
+	level: number,
+	kind: GhostSpeed,
+	tuning: number?,
+	ramp: Ramp?
+): number
+	if ramp == nil or kind == "normal" or kind == "eyes" then
+		return Levels.ghostSpeed(baseSpeed, level, kind, tuning, ramp)
+	end
+	local g = Levels.row(level, ramp).ghost
+	local factor = if kind == "tunnel" then g.tunnelFactor else g.frightFactor
+	return math.max(1, baseSpeed * factor * (tuning or Levels.GHOST_TUNING))
+end
+
 -- Units per tick for a ghost on `level`; `tuning` defaults to Levels.GHOST_TUNING. At least 1.
-function Levels.ghostSpeed(baseSpeed: number, level: number, kind: GhostSpeed, tuning: number?): number
-	local g = Levels.row(level).ghost
+-- With a ramp the eyes follow it too (f0147); the caller keeps them within a tile a tick.
+function Levels.ghostSpeed(
+	baseSpeed: number,
+	level: number,
+	kind: GhostSpeed,
+	tuning: number?,
+	ramp: Ramp?
+): number
+	local g = Levels.row(level, ramp).ghost
 	local k = tuning or Levels.GHOST_TUNING
 	if kind == "eyes" then
-		return round(baseSpeed * Levels.EYES_FACTOR)
+		local f = if ramp then Levels.rampFactor(ramp, level) else 1
+		return round(baseSpeed * Levels.EYES_FACTOR * f)
 	end
 	local factor = if kind == "normal"
 		then g.speedFactor
@@ -143,9 +239,9 @@ end
 -- Phase lengths in ticks (scatter, chase, scatter, ...); the chase after the last one lasts forever. Computed once
 -- per level and tick rate: the step asks for it every tick, and the returned table is frozen.
 local schedules: { [string]: { number } } = {}
-function Levels.schedule(level: number, tickRate: number): { number }
-	local levelRow = Levels.row(level) -- refuses a level that is not a whole number >= 1
-	local key = `{math.min(level, Levels.COUNT)}/{tickRate}`
+function Levels.schedule(level: number, tickRate: number, ramp: Ramp?): { number }
+	local levelRow = Levels.row(level, ramp) -- refuses a level that is not a whole number >= 1
+	local key = `{if ramp then 1 else math.min(level, Levels.COUNT)}/{tickRate}`
 	local found = schedules[key]
 	if found then
 		return found

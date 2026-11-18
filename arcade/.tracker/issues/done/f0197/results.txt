@@ -1,0 +1,216 @@
+arcade/.tracker/issues/active/f0197/acceptance/boards.spec.luau
+	AC4: open names a title's stores from its prefix, one handle per prefix, and a bad prefix errors
+	AC4: a title's run is written to its own stores only: every board, the list, and none of pickman's
+	AC4: every row and the run's list entry record the revives the run used
+	AC4: a submit is pending until its write ends, per title, and the listener hears the run's place
+	AC4: serve answers all with the list's rows and revives, the rank, and the asker's best with revives
+	AC4: serve answers day and week with the per-player rows and their revives, and no best
+	AC4: rows and list entries stored before f0197 (pickman's, with no revives) answer revives 0
+	AC4: serve ignores any id but all, day or week, and a failed read answers once, failed
+	AC4: a list that cannot be read is a failed all-time answer
+	AC4: a board read is shared for CACHE_TTL, and two titles never share a read or a row
+	AC4: a player's best is forgotten when they leave, and read again when they ask
+	AC4: each title's listener hears only its own runs
+	AC4: a run outside the figures' ranges is refused with a warning and writes nothing
+arcade/.tracker/issues/active/f0197/acceptance/drive.spec.luau
+	the default delays are 0, 0.25 and 0.5, and a cap holds
+	a budget below the cost is refused and the remainder stays
+	a lower score commits nothing, and a better score copies a new row
+	a first-try success writes every board, waits nothing, and ranks
+	a zero read budget never updates, still waits, and still calls top
+	a write budget of zero skips the update even when the read budget is open
+	a zero ordered read budget skips only the ordered update, and the companion is still written
+	a zero list budget still reads the top and can rank
+	a failed read is retried, and a row that does not qualify is not rewritten or retried
+	one board's failure does not stop the others, and an invalid attempt writes nothing
+	overlapping drives keep 5000: the loser's transform sees the live row, not the snapshot get returned
+	a retried ordered write keeps a higher value another drive stored, and does not recommit
+	an ordered key every retry missed is repaired by the next attempt, even one that does not qualify
+	a companion read that fails on the page gives no rank, rather than a better one
+arcade/.tracker/issues/active/f0197/acceptance/drivetop.spec.luau
+	with no list yet, the stored bests start it and the run takes its place among them
+	with no list and no stored best, the run alone is the list
+	a run that is the player's new best is listed once
+	a best stored without the list (an older build) joins an existing list on the next run
+	another server merged this run's best before its own write: the run is listed once
+	a best merged from a half-written row is listed once, at the run's own score
+	a lower second run of the same player stands second
+	a run below a full list is known to have missed it, and nothing is written
+	a run already on the list (a retry that landed) keeps its place and is not written again
+	the write applies to what the store holds when it runs, so another server's run is kept
+	a transform run again says the place of its last call, not an earlier one
+	a transform that first saw no list and then a list writes and says the place
+	a failed write is retried after 0.25 and 0.5 s, and three failures say nothing
+	no list and no bests (the board could not be read): no list is made and nothing is said
+	an existing list takes the run even when the bests could not be read
+	a zero read or write budget skips the write, still waits, and says nothing
+	no entry, or one that is not a valid run, writes nothing and says nothing
+arcade/.tracker/issues/active/f0197/acceptance/games.spec.luau
+	AC3: HiscoreGames gives every title a prefix of its own, and pickman's is ""
+	AC3: each title's progress figure is named: Pickman's level, Snake's map, Invaders' and Asteroids' wave
+	AC3: the progress figure is stored with the row as its level, whatever the title
+arcade/.tracker/issues/active/f0197/acceptance/leave.spec.luau
+	the window is the classic dying pause
+	forty-four steps away is still in the server, and the next GameOver submits and drops
+	the first step away counts, coming back clears it, and a scoreless GameOver drops
+	a closing server is held while a run or a drive is pending, and never past the close wait
+	AC5: leave honours the window it is given, not pickman's
+	AC5: onStep drops a departed run at the window it is given
+arcade/.tracker/issues/active/f0197/acceptance/names.spec.luau
+	AC1: the prefix "" names pickman's stores as they are today
+	AC1: another prefix names three stores of its own, none of them pickman's
+	AC1: a prefix is "" or a capital, then letters and digits, at most PREFIX_MAX; anything else errors
+	AC1: the names are frozen, so no caller can point a title at another's stores
+	AC1: a board's store target is the title's store, scoped by period, or its global name
+arcade/.tracker/issues/active/f0197/acceptance/period.spec.luau
+	the epoch day is 1970-01-01 and the second before it is 1969-12-31
+	a UTC midnight stays on that UTC date, including late the same day
+	the week key is the Monday of that UTC week, not the Sunday
+	a week can start in the previous month, and a leap day keeps its date
+	dates are zero-padded, and a non-finite instant is refused
+	all-time has no period, and day and week scopes do not collide
+arcade/.tracker/issues/active/f0197/acceptance/read.spec.luau
+	only all, day and week are board ids
+	the cache key is the period, so the day rolls and all-time does not
+	a fresh cache is returned, the boundary refetches, and a failed read waits before the next
+	an empty board is cached, and a clock that is not a number or runs backwards does not fetch
+	an in-flight read does not fetch or move anything, and a cleared flag reads
+	a board whose read keeps failing is read again only after 2, 4, 8 and at most CACHE_TTL seconds
+arcade/.tracker/issues/active/f0197/acceptance/replace.spec.luau
+	a missing row qualifies, a lower score does not, and an equal score needs a higher level
+	a score of 0 is a score, and a fraction, a bad id or a huge score is not
+	the stored name is trimmed, stripped of controls, cut to 20, and never blank
+	an equal or lower submit leaves the stored row, including its name
+	a higher level at the same score replaces the row and its name
+	an invalid attempt writes nothing
+arcade/.tracker/issues/active/f0197/acceptance/revives.spec.luau
+	AC2: a committed row records the run's revives, and a run that names none records 0
+	AC2: revives that are not a whole number from 0 make the attempt invalid, and nothing is written
+	AC2: revives never replace a row: the same score and level with fewer revives keeps the stored row
+	AC2: every board the fake writes keeps the run's revives, and its rows show them
+	AC2: a row read shows its stored revives, and one stored without them (or with junk) shows 0
+	AC2: revives never rank: rows of equal score and level keep their order whatever their revives
+	AC2: the rows a client is sent carry the revives and still no user id
+	AC2: a run's list entry carries its revives, and the list keeps them through a merge
+	AC2: a stored list entry without revives (written before f0197) shows 0, and revives never order the list
+	AC2: a stored list entry with junk revives reads 0, through the list and through a merge
+	AC2: a per-player best merged into the list brings the row's revives, whether or not it names its run
+	AC2: a player's best carries the revives of their all-time row, 0 when it has none
+	AC2: a run's submission carries the game over's revives, and one that names none is 0
+	AC2: drive writes the revives to every board through the store's own transforms
+arcade/.tracker/issues/active/f0197/acceptance/rows.spec.luau
+	eleven real scores keep the best ten, and the best is first
+	a short, unsorted page is not padded, and the page score wins
+	an equal score keeps the higher level when the ordered page is one row
+	an equal score and level orders the user id as a string, so 10 comes before 2
+	a companion whose user id is not the key is skipped, and a period key still matches
+	board rows drop the user id and keep rank, name, score, level and revives
+	a companion that cannot be read makes the whole board unknown, and an absent one is skipped
+arcade/.tracker/issues/active/f0197/acceptance/run.spec.luau
+	once records the run on a copy and refuses the same run
+	the submission uses the state run, never a run carried on the event
+	two GameOver events in one step submit the first only
+	a missing score or a different kind does not submit
+	two fresh runs for one player both submit run 1: the dedupe dies with the run state
+	a successful play again is a new run, and a failed one is the same state
+arcade/.tracker/issues/active/f0197/acceptance/serve.spec.luau
+	AC4: serve ignores anything but all, day or week, and reads nothing for it
+	AC4: a title with no list yet answers the all-time board with its per-player board
+	AC4: a failed read still answers once, failed, with the rows it had or none, and waits to read again
+	AC4: a request that arrives while the read is under way does not read again, and each gets one answer
+	AC4: during an outage a client asking every second costs three reads of the board in ten seconds
+	AC4: an error anywhere in the read, opening the store included, is a failed read and not a wedge
+	AC4: a companion row that cannot be read fails the read: no short board is answered as healthy
+	AC4: a waiter who left before the read returned gets no answer, and nothing outlives the visitor
+	AC4: one player asking all and then day in the same second gets both boards, healthy
+	AC4: the board read opens the ordered and the companion store under the title's names and the scope
+	AC4: a page of 50 after the size-10 fallback is cut to the top N before any companion is read
+	AC4: a healthy empty board is an answer, not a failure
+	AC4: the all-time answer lists both runs of one player, each with its revives
+	AC4: the all-time answer is the stored list with the asker's own best
+	AC4: with no list stored, the all-time answer is the per-player board, as before
+	AC4: a list that cannot be read is a failed all-time read, not the per-player board
+	AC4: day and week answers are the per-player boards and carry no best
+	AC4: after an all-time answer, the same player's day and week answers still carry no best
+	AC4: a player's best is read at most once per CACHE_TTL, and again after they leave
+	AC4: requests while a player's best is being read do not read it again, and each is answered
+	AC4: while a stale best is read again, requests are answered with the best held before
+	AC4: a best read that ends after the player left is dropped, and a rejoin reads again
+	AC4: a best read that ends once the player's Parent is empty is not kept for anyone
+	AC4: a best that cannot be read again is no best: the stale one is not kept
+	AC4: a best that cannot be read is no best, and the board still answers
+	AC4: one title's failed read does not fail another title's board
+arcade/.tracker/issues/active/f0197/acceptance/store.spec.luau
+	N is 10, as pickman's lobby panel, and the prefix "" names pickman's stores
+	scopes do not share a row, and one user is one row
+	the ordered page field is value, unpacked to the score, and a rejected page size is tried once at 50
+	the fake's page is what scorePage makes of the packed values it holds
+	a rejected scope falls back to a global name with no beta or prod prefix
+arcade/.tracker/issues/active/f0197/acceptance/top.spec.luau
+	the list lives in its own store, scope and key
+	a run's id is user, instant, run counter and server, and no server is an empty part
+	a run's entry carries the cleaned name, the score, the level and the instant
+	an attempt valid refuses, or a broken instant or run, has no entry
+	one player's two runs both stand, the higher first: places 1 and 2
+	order is score, then level, then the earlier run, then the id
+	the list is cut to N, and a run below the tenth has no place and changes nothing
+	a run whose id is already listed is not added again: its place is where it stands
+	addRun never changes the list it is given
+	broken or repeated stored entries are dropped, not ranked
+	a best that names no run is an older run with the id best:<userId>:<score>:<level>
+	a best whose row names its run is that run: its id, its instant and its own score
+	a best is its companion row whole: its score, never the page's
+	merging adds every best, and the run takes its place among them
+	the run's own best names the run, so it is listed once
+	an older unlisted best that a later run ties is listed ahead of it
+	a better listed run of the player does not hide an older best
+	a raised best joins beside the player's older best entry, and a merged best is listed once
+	addRun is mergeRun with no bests
+	the per-player row a run writes names that run, and the board's rows carry it
+	a run cut from the list does not come back as its best ahead of the earlier runs it ties
+	the lobby's rows of a list are ranked 1..N in order, and nothing stored is nil
+	a player's best is the score and level of their all-time row, or nil
+	a held best is read again only when nothing is held, or a finished read is stale
+	a read stays fresh for less than the time to live, and never from the future
+arcade/.tracker/issues/active/f0197/acceptance/write.spec.luau
+	AC4: two submits for one user id and run both drive, and the better one is stored
+	AC4: the ordered write is the max: a higher value already stored stays
+	AC4: a lower submit rewrites neither the row nor the ordered key
+	AC4: a title's stores are its own names scoped by period, and budgets are the modern types
+	AC4: each update is preceded by the read and write budgets of its own store
+	AC4: a submit is pending from the call until its drive ends, also when the drive fails
+	AC4: a submit whose write cannot start is not left pending, and warns once
+	AC4: a page size of 10 that the store rejects is tried once at 50, cut to N, and the rank comes
+	AC4: no rank is heard when the board cannot be read, and the write still happens
+	AC4: a run with no progress or a bad revives count writes nothing, warns, and is not pending
+	AC4: one player's two runs in a row, the second lower, are places 1 and 2 and both are listed
+	AC4: runs of several players fill the list in order, cut to ten, and a later lower run is missed
+	AC4: a first run with no list starts it from the stored bests, the player's older best included
+	AC4: the per-player boards are written before the list, and a first run that is a new best is listed once
+	AC4: a best written by a build without the list joins the list on anyone's next run
+	AC4: the per-player all-time row a run writes names that run and its instant
+	AC4: a run whose ordered write fails is listed at its own score by the next run
+	AC4: a run's entry is keyed by the user, the server's clock, the run counter and the job id
+	AC4: the place heard is the run's place on the list, not the player's per-player rank
+	AC4: a list that cannot be written says nothing, and the per-player boards are still written
+	AC4: no list and a per-player board that cannot be read: no list is made, nothing is said
+	AC4: a run is written to its own title's stores only, and a title's pending is its own
+arcade/tests/unit/Boards/serve.spec.luau
+	serving a title twice on the same remote answers each request once
+	serving a title on a second remote is an error, and another title may use that remote
+arcade/tests/unit/Hiscores/hiscores.spec.luau
+	the week key never moves forward within a UTC week and rolls on Monday
+	a name is cut by characters, not bytes, and a non-string is the placeholder
+	rankOf finds a user id and nothing else
+	a submit that qualifies on one board only writes that board
+	a zero budget is never spent and a positive one is reduced
+arcade/tests/unit/Hiscores/read.spec.luau
+	the failure wait doubles from the gap and never passes the ttl
+	a fetch is called once for a stale cache and its rows are cached
+	no fetch function keeps everything as it was
+arcade/tests/unit/Hiscores/run.spec.luau
+	once refuses a fraction and a negative run, and leaves the table alone
+	a later scored GameOver in the same events is submitted when the first had no score
+	a player who stays keeps a zero wait and never drops
+	the 45th step away drops, and the play-again state keeps the wait
+	a closing server waits only while something is pending and the wait has not run out

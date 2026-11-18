@@ -9,3 +9,5 @@ A per-tick average over a long run hides a call that happens once a second: 0.8 
 **Why:** f0211 design review 001 F5: E2 reported 0.8 ms per 1/30 s tick for a 24-snake arena; one brute-force respawn (`World.safest`) cost 45 to 104 ms there. The redesign (two distance fields, O(side²)) brought it to 2.6 ms, measured per call in E7.
 
 **How to apply:** for each event-driven call, an experiment times one call at the largest size and latest map with a pass line (under a few ms in Lune), and names how many can coincide in a tick; the Scalability section quotes those numbers beside the average.
+
+**Note** (c0249 design review 001 F5): measure a guess's cost at the input the shipped caller actually sends most, not at hand-picked cases. c0249's E3 timed three chosen moves, while the Omarchy app's drop at the end of a column sends `last`, which ranked all 194 backlog issues and wrote 388 files in one commit. Ask: for each caller that ships with the design (an app hook, a loop), which input does it send, and did an experiment measure that one?

@@ -1,0 +1,150 @@
+intended (with f0205's specs): ok (green)
+P1 a free start is not enough                                    killed
+P2 closed mode refuses a free start                              killed
+P3 a failed read buys                                            killed
+P4 a busy read goes on the pass                                  killed
+P32 a long busy never goes                                       killed
+P33 a failed play's buttons enabled                              killed
+P34 a refused write counted                                      killed
+P35 the span one write too long                                  killed
+P36 spending changes its input                                   killed
+P37 a boards key taken                                           killed
+P5 only live mode sells                                          killed
+P6 any mode for any title                                        killed
+P7 cancel keeps what the client sent                             killed
+P9 any phase read                                                killed
+P10 the price not struck                                         killed
+P11 the price says SALE                                          killed
+P12 an unpublished card shows buttons                            killed
+P13 enabled before the state is known                            killed
+P14 no INVITE on the waiting card                                killed
+P15 checking shows the buttons                                   killed
+P16 another title's play drawn on every card                     killed
+P17 a waiting count on every card                                killed
+P18 no gap                                                       killed
+P19 the note ignored                                             killed
+P27 the price kept under a note                                  killed
+P28 INVITE A FRIEND                                              killed
+P29 the note always the top half                                 killed
+P30 a wide gap                                                   killed
+P20 Return is a card key too                                     killed
+P21 bound at the test screen's priority                          killed
+P31 bound at the default controls' priority                      killed
+P22 the first mode is the second button                          killed
+P23 any number is an inviter                                     killed
+P24 an invite with no job                                        killed
+P25 Snake's second button is 2 PLAYERS                           killed
+P26 a title's modes not frozen                                   killed
+Q1 the pair in the wrong order                                   killed
+Q2 joining keeps the other lines and pairs with oneself          killed
+Q3 leaving does nothing                                          killed
+Q4 the input mutated                                             killed
+A1 a full arena still takes one                                  killed
+A2 the open span inclusive                                       killed
+A3 an opening far in the future is open                          killed
+A7 no skew tolerated                                             killed
+A4 a fraction of a count is a count                              killed
+A5 a join sends no one                                           killed
+A6 a cap of 25                                                   killed
+S1 the free state ignored                                        killed
+S2 the status at os.clock()                                      killed
+S3 no pass on a failed read                                      killed
+S4 the pass after the teleport                                   killed
+S5 a buy goes                                                    killed
+S6 any title's grant starts the play                             killed
+S7 a grant with no purchase open starts it                       killed
+S8 a close not bought keeps buying                               killed
+S9 every close ends the purchase                                 killed
+S10 no receipt wait's end                                        killed
+S11 a busy read goes at once                                     killed
+S12 the time checked not passed on                               killed
+S40 no write budget                                              killed
+S41 one budget for the whole server                              killed
+S42 the counts sent on every change                              killed
+S43 the counts never sent                                        killed
+S44 no withdraw on a cancel                                      killed
+S45 no withdraw on a pair                                        killed
+S46 not going before the arena write                             killed
+S47 no time limit on the arena write                             killed
+S48 no time limit on the pass write                              killed
+S49 the receipt wait ends a later purchase                       killed
+S50 no bound on a purchase never closed                          killed
+S51 no rest after a failure outside Travel                       killed
+S52 a failure never clears                                       killed
+S53 no second try                                                killed
+S54 a second try without a partner                               killed
+S56 the grant reads the record again                             killed
+S55 Travel not told of a leave                                   killed
+S13 the attributes read on every press                           killed
+S14 an unpublished title read                                    killed
+S15 a press while checking starts another                        killed
+S16 no rest after a failed teleport                              killed
+S17 TeleportInitFailed ignored                                   killed
+S18 no timeout sweep                                             killed
+S19 a player who left during the check still asked to buy        killed
+S20 data rides along                                             killed
+S21 statuses to everyone                                         killed
+S22 a new arena for every player                                 killed
+S23 the first transform call decides                             killed
+S24 an unwritten arena still goes                                killed
+S25 the arena record never expires                               killed
+S26 a pair in two teleports                                      killed
+S27 a pair to a public server                                    killed
+S28 every pair of a title to one server                          killed
+S29 CANCEL ignored                                               killed
+S30 a leaver stays in the line                                   killed
+S31 the count not told when the lines change                     killed
+S32 an invite recorded on every press                            killed
+S33 an invite with no wait                                       killed
+S34 started twice installs twice                                 killed
+S35 a joiner not told who waits                                  killed
+S36 a play while waiting stays in the line                       killed
+S37 a failed teleport not told                                   killed
+S38 the purchase of the wrong kind                               killed
+S39 the arena keyed by mode                                      killed
+I1 no friend check                                               killed
+I2 an invite for this server followed                            killed
+I3 the inviter here still looked up                              killed
+I4 an invite with no expiry                                      killed
+I5 the friend sent to any server                                 killed
+I6 a friend who left still sent                                  killed
+I8 the withdrawal unguarded                                      killed
+I9 the withdrawal removes nothing                                killed
+I7 the invite write unguarded                                    killed
+V1 gamepad-selectable                                            killed
+V2 no rich text                                                  killed
+V3 sent while the test screen is open                            killed
+V4 keys on the release too                                       killed
+V5 every key sunk                                                killed
+V6 the carousel's PLAY whatever the card                         killed
+V7 a disabled button sends                                       killed
+V8 cancel keys with no wait                                      killed
+V9 no ask of the cards' states                                   killed
+V10 the ask before listening                                     killed
+V11 no invite check                                              killed
+V12 no launch data                                               killed
+V13 the status not drawn                                         killed
+V15 started twice builds twice                                   killed
+V16 start waits for the remotes                                  killed
+V18 the note does not wrap                                       killed
+V19 a button wraps                                               killed
+V20 the note's box ignored                                       killed
+V21 the buttons' height ignored                                  killed
+V17 keys while typing                                            killed
+L1 Play requires outside Logic                                   killed
+L2 Modes without Play                                            killed
+L3 the server's Main does not boot Plays                         killed
+L4 the client's Main does not boot the test screen               killed
+L5 no Play remote                                                killed
+L6 the edge not in the map                                       killed
+L7 the client reaches the Wallet                                 killed
+L8 the test screen booted after the buttons                      killed
+L9 the map not declared as the spec's input                      killed
+M1 Logic says game                                               killed
+CV1 the server's Main boots a further adapter                    ok (green)
+CV2 the client's Main boots a further adapter                    ok (green)
+CV3 the status gains a field                                     ok (green)
+CV4 the server requires one more arcade module                   ok (green)
+CV5 the buttons require a sibling adapter                        ok (green)
+CV6 the waiting counts carry another field                       ok (green)
+142 mutants, 6 correct variants, 0 not as intended

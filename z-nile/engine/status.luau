@@ -3,6 +3,7 @@
 local status = {}
 
 -- `done` is never set by hand: an item is done when it sits in done/ (tracker.sh done moves it).
+-- `closed` (won't do, c0278) is set only by `./zn close`, and nothing leaves it: no move here enters or leaves it.
 local ALLOWED: { [string]: boolean } = {
 	["new>preparing"] = true,
 	["preparing>prepared"] = true,
@@ -12,7 +13,7 @@ local ALLOWED: { [string]: boolean } = {
 	["active>prepared"] = true,
 }
 local NAMES: { [string]: boolean } =
-	{ new = true, preparing = true, prepared = true, active = true, done = true }
+	{ new = true, preparing = true, prepared = true, active = true, done = true, closed = true }
 local WORDS = {
 	"raging",
 	"pink",

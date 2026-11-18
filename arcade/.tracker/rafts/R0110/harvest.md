@@ -1,5 +1,0 @@
-- design-review-001 F1: z-raft/conditional-step-follows-the-condition, z-raft/order-reasons-survive-workstreams
-- design-review-001 F2: z-raft/theme-quotes-are-copied
-- design-review-001 F3: z-raft/interface-names-every-writer, z-raft/cross-raft-order-written-in-both
-- design-review-001 F4: z-raft/run-sequestered-specs-on-all-prototypes-together
-- design-review-001 F5: z-raft/interface-names-every-writer

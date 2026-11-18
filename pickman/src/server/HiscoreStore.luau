@@ -100,18 +100,29 @@ local top: Hiscores.TopIo = {
 	end,
 }
 
--- Write a finished run. Returns at once; `listen` hears the run's place on the top-N list once the write is done.
-function HiscoreStore.submit(userId: string, name: string, score: number, level: number, run: number)
+-- Write a finished run (f0145: with the lives it spent, nil from an older caller; f0186: and the paid revives it
+-- used, nil for none). Returns at once; `listen` hears the run's place on the top-N list once the write is done.
+function HiscoreStore.submit(
+	userId: string,
+	name: string,
+	score: number,
+	level: number,
+	run: number,
+	lives: number?,
+	revives: number?
+)
 	pending += 1
 	local ok, err = pcall(task.spawn, function()
 		local fine, failure = pcall(function()
 			local now = os.time()
-			local entry = Hiscores.topRun(
-				{ name = name, userId = userId, level = level, score = score },
-				now,
-				run,
-				(game :: any).JobId
-			)
+			local entry = Hiscores.topRun({
+				name = name,
+				userId = userId,
+				level = level,
+				score = score,
+				lives = lives,
+				revives = revives,
+			}, now, run, (game :: any).JobId)
 			-- the per-player rows this run writes name it, so a server that merges this best first uses the run's id
 			local attempt = {
 				name = name,
@@ -120,6 +131,8 @@ function HiscoreStore.submit(userId: string, name: string, score: number, level:
 				score = score,
 				run = if entry then entry.id else nil,
 				at = if entry then entry.at else nil,
+				lives = lives,
+				revives = revives,
 			}
 			local result = Hiscores.drive(io, attempt, now, Hiscores.RETRY)
 			local placed = Hiscores.driveTop(top, io, entry, result.rows, Hiscores.RETRY)

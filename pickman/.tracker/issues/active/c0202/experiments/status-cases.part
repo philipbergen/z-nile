@@ -1,0 +1,273 @@
+
+local function holding(a: any): boolean
+	return Session.holding(a.s, "7")
+end
+
+local function timer(a: any): number
+	return Session.frame(a.s, "7").play.timer
+end
+
+-- the last PayStatus the player was told: the mode and the status (nil when the record is unknown)
+local function lastStatus(a: any): (any, any)
+	local told = a.w.sentOn("PayStatus", a.p)
+	assert(#told > 0, "nothing told on PayStatus")
+	local args = told[#told]
+	return args[1], args[2]
+end
+
+local function noFree(w: any, store: string, revives: number?)
+	w.seed(store, 7, { free = NOW - 60, plays = 1, continues = revives or 0, receipts = {} })
+end
+
+-- an arrival with nothing to pay with (the hour's free game used, nothing held, no pass), where teleports fail as in
+-- Studio; `isStudio` is RunService.IsStudio, or none at all
+local function nothingToPay(isStudio: any): any
+	return arrive("test", function(w: any)
+		w.seed(TEST_STORE, 7, { free = NOW - 600, plays = 0, continues = 0, receipts = {} })
+		w.fail.teleport = true
+		if isStudio ~= nil then
+			w.service("RunService").IsStudio = isStudio
+		end
+	end)
+end
+
+return t.spec("c0202 what main's paid play landed with, kept on the library (R0118's fixes, the Studio play)", function(it)
+	it("a live arrival whose claim fails still tells the mode, with no status, before any offer", function()
+		local a = arrive("live", function(w: any)
+			w.fail.update = true
+		end)
+		t.expect(a.s.members["7"].play.offer).toBe(Game.OFFER_TICKS) -- it plays (G10)
+		local mode, status = lastStatus(a)
+		t.expect(mode).toBe("live")
+		t.expect(status).toBe(nil)
+	end)
+
+	it("a closed arrival whose claim fails tells closed", function()
+		local a = arrive("live", function(w: any)
+			w.attributes.ContinueProductId = nil -- live with an id missing: closed ("Refuse paid play")
+			w.fail.update = true
+		end)
+		local mode, status = lastStatus(a)
+		t.expect(mode).toBe("closed")
+		t.expect(status).toBe(nil)
+	end)
+
+	it("a revive receipt heard outside the offer tells the revive held", function()
+		local a = arrive("live")
+		local before = #a.w.sentOn("PayStatus", a.p)
+		t.expect(Session.offering(a.s, "7")).toBe(false)
+		t.expect(a.w.receipt(7, REVIVE_ID, "C9")).toBe("ProductPurchaseDecision.PurchaseGranted")
+		t.expect(#a.w.sentOn("PayStatus", a.p) > before).toBe(true)
+		local mode, status = lastStatus(a)
+		t.expect(mode).toBe("live")
+		t.expect(status.revives).toBe(1)
+	end)
+
+	it("a revive's write that finds none held tells none held", function()
+		local a = offer("live", function(w: any)
+			w.fail.update = true -- the arrival's claim fails: what the player holds is not known
+		end)
+		a.w.fail.update = false
+		a.w.seed(STORE, 7, { free = NOW, plays = 0, continues = 0, receipts = {} })
+		local before, writes = #a.w.sentOn("PayStatus", a.p), a.w.writes
+		sendContinue(a, "ask")
+		t.expect(a.w.writes > writes).toBe(true) -- the ask wrote: nothing was known
+		t.expect(#a.w.prompts).toBe(1) -- none held: the purchase screen
+		t.expect(#a.w.sentOn("PayStatus", a.p) > before).toBe(true)
+		local _, status = lastStatus(a)
+		t.expect(status.revives).toBe(0)
+	end)
+
+	it("a revive given back after its write tells the revive held", function()
+		local a = offer("live", function(w: any)
+			noFree(w, STORE, 1)
+		end)
+		a.w.hold.update = true
+		sendContinue(a, "ask")
+		sendContinue(a, "decline") -- the player declines while the revive's write yields
+		local before = #a.w.sentOn("PayStatus", a.p)
+		a.w.release()
+		t.expect(stored(a.w, STORE, 7).revives).toBe(1) -- given back
+		t.expect(#a.w.sentOn("PayStatus", a.p) > before).toBe(true) -- told after the give-back, not only on arrival
+		local _, status = lastStatus(a)
+		t.expect(status.revives).toBe(1)
+	end)
+
+	it("test: a confirm whose grant write fails releases the countdown; a later ask opens the screen", function()
+		local a = offer("test")
+		sendContinue(a, "ask")
+		t.expect(#a.w.sentOn("TestPurchase", a.p)).toBe(1)
+		t.expect(holding(a)).toBe(true)
+		a.w.fail.update = true
+		local before = timer(a)
+		a.w.answer(a.p, "confirm")
+		t.expect(holding(a)).toBe(false)
+		Session.step(a.s)
+		t.expect(timer(a) < before).toBe(true)
+		t.expect(Session.offering(a.s, "7")).toBe(true)
+		a.w.fail.update = false
+		a.w.advance(10)
+		sendContinue(a, "ask")
+		t.expect(#a.w.sentOn("TestPurchase", a.p)).toBe(2)
+		t.expect(holding(a)).toBe(true)
+	end)
+
+	-- R0118 final review 001 F2
+	it("test: a granted confirm whose revive write fails releases the hold at once; an ask uses it", function()
+		local a = offer("test")
+		sendContinue(a, "ask")
+		t.expect(holding(a)).toBe(true)
+		a.w.onUpdate = function() -- the grant's write goes through; the revive's write after it fails
+			a.w.onUpdate = function()
+				a.w.fail.update = true
+			end
+		end
+		local before = timer(a)
+		a.w.answer(a.p, "confirm")
+		a.w.fail.update = false
+		t.expect(stored(a.w, TEST_STORE, 7).revives).toBe(1) -- granted, held
+		t.expect(holding(a)).toBe(false) -- at once, not after the receipt wait
+		Session.step(a.s)
+		t.expect(timer(a) < before).toBe(true)
+		a.w.advance(10)
+		sendContinue(a, "ask")
+		t.expect(Session.offering(a.s, "7")).toBe(false)
+		t.expect(lives(a)).toBe(Game.CONTINUE_LIVES)
+		t.expect(stored(a.w, TEST_STORE, 7).revives).toBe(0)
+	end)
+
+	it("test: a confirm heard during a revive's write leaves that flight's hold", function()
+		local a = offer("test")
+		sendContinue(a, "ask") -- none held: the test screen, the countdown held
+		t.expect(#a.w.sentOn("TestPurchase", a.p)).toBe(1)
+		a.w.onUpdate = function() -- the confirm's grant; the next write is the flight it starts, held
+			a.w.onUpdate = function()
+				a.w.hold.update = true
+			end
+		end
+		a.w.answer(a.p, "confirm")
+		a.w.answer(a.p, "confirm") -- heard during that flight: no screen is open
+		t.expect(holding(a)).toBe(true) -- the flight's end decides, not the confirm
+		a.w.release()
+		t.expect(Session.offering(a.s, "7")).toBe(false) -- the flight continued the run
+		t.expect(lives(a)).toBe(Game.CONTINUE_LIVES)
+		t.expect(stored(a.w, TEST_STORE, 7).revives).toBe(0) -- one revive bought, one used
+	end)
+
+	it("a confirm with no screen open leaves a revive's write holding the countdown", function()
+		local a = offer("test", function(w: any)
+			noFree(w, TEST_STORE, 1)
+		end)
+		local during: boolean? = nil
+		a.w.onUpdate = function()
+			a.w.fail.update = true -- the confirm's own write, if it made one, would fail
+			a.w.answer(a.p, "confirm")
+			during = holding(a)
+			a.w.fail.update = false
+		end
+		sendContinue(a, "ask")
+		t.expect(during).toBe(true)
+		t.expect(lives(a)).toBe(Game.CONTINUE_LIVES) -- the flight's revive went on
+	end)
+
+	it("a confirm with no screen open leaves a bought revive's receipt awaited", function()
+		local a = offer("live", function(w: any)
+			noFree(w, STORE)
+		end)
+		sendContinue(a, "ask")
+		a.w.finished(7, REVIVE_ID, true) -- bought, the receipt not here yet
+		t.expect(holding(a)).toBe(true)
+		a.w.answer(a.p, "confirm")
+		t.expect(holding(a)).toBe(true)
+		local before = timer(a)
+		Session.step(a.s)
+		t.expect(timer(a)).toBe(before)
+	end)
+
+	-- R0118 code review 001 F2, ruled by the user (2026-11-16): (b) "Play in Studio only", kept in pickman's Continues
+	-- (2026-11-17, "Keep it in pickman"). An arrival with nothing to pay with and no pass plays when
+	-- RunService:IsStudio() is true; anywhere else (false, an error, or no IsStudio at all, as the stub has) it is sent
+	-- back as G10 says.
+	it("in Studio an arrival with nothing to pay plays with the offer on and is not sent back", function()
+		local a = nothingToPay(function(): boolean
+			return true
+		end)
+		t.expect(Session.isOver(a.s, "7")).toBe(false)
+		t.expect(a.s.members["7"].play.offer).toBe(Game.OFFER_TICKS)
+		t.expect(#a.w.teleports).toBe(0)
+		t.expect(#a.w.kicks).toBe(0)
+		t.expect(stored(a.w, TEST_STORE, 7).free).toBe(NOW - 600) -- nothing charged, no free game taken
+	end)
+
+	-- design review 002 F1: Studio is read only after the library's arrival, so a Studio play still claims what it holds
+	it("in Studio an arrival still claims a free game due or a held play, takes its pass, and is told", function()
+		local function studio(seed: any?, pass: boolean): any
+			return arrive("test", function(w: any)
+				if seed then
+					w.seed(TEST_STORE, 7, seed)
+				end
+				if pass then
+					w.passes["pickman/7"] = true
+				end
+				w.service("RunService").IsStudio = function(): boolean
+					return true
+				end
+			end)
+		end
+		local due = studio(nil, false) -- no record: the free game is due
+		t.expect(stored(due.w, TEST_STORE, 7).free).toBe(NOW)
+		local _, dueStatus = lastStatus(due)
+		t.expect(dueStatus ~= nil and dueStatus.free == false).toBe(true)
+		local held = studio({ free = NOW - 600, plays = 2, continues = 0, receipts = {} }, false)
+		t.expect(stored(held.w, TEST_STORE, 7).plays).toBe(1)
+		local _, heldStatus = lastStatus(held)
+		t.expect(heldStatus ~= nil and heldStatus.plays == 1).toBe(true)
+		local passed = studio({ free = NOW - 600, plays = 0, continues = 0, receipts = {} }, true)
+		t.expect(passed.w.passes["pickman/7"]).toBe(nil) -- taken, as on every arrival
+		local _, passStatus = lastStatus(passed)
+		t.expect(passStatus ~= nil).toBe(true)
+		t.expect(#passed.w.teleports).toBe(0)
+	end)
+
+	-- design review 002 F3: the tell after a use reads the store when the library forgot the record seen, so it comes
+	-- after the hold's release and the decline
+	it("a decline during a revive's write whose give-back fails ends the run while the tell's read is under way", function()
+		local a = offer("live", function(w: any)
+			noFree(w, STORE, 1)
+		end)
+		a.w.hold.update = true
+		sendContinue(a, "ask")
+		sendContinue(a, "decline") -- noted during the flight
+		a.w.onUpdate = function() -- the give-back's write, after the use's, fails: the record seen is forgotten
+			a.w.fail.update = true
+		end
+		a.w.hold.get = true -- the tell's read of the store, which follows, does not come back
+		local reads = a.w.reads
+		a.w.release()
+		t.expect(a.w.reads > reads).toBe(true) -- the tell is reading
+		Session.step(a.s)
+		t.expect(Session.isOver(a.s, "7")).toBe(true) -- the decline did not wait for it
+	end)
+
+	it("outside Studio an arrival with nothing to pay with is still sent back (G10)", function()
+		local a = nothingToPay(function(): boolean
+			return false
+		end)
+		t.expect(Session.isOver(a.s, "7")).toBe(true)
+		t.expect(#a.w.teleports).toBe(1)
+		t.expect(#a.w.kicks).toBe(1) -- its teleport failed
+	end)
+
+	it("with no IsStudio, or one that errors, the arrival is sent back as outside Studio", function()
+		local erroring = function(): boolean
+			error("not here", 0)
+		end
+		local variants: { any } = { "absent", erroring } -- no IsStudio on the stub, or one that errors
+		for _, isStudio in variants do
+			local a = nothingToPay(if isStudio == "absent" then nil else isStudio)
+			t.expect(Session.isOver(a.s, "7")).toBe(true)
+			t.expect(#a.w.teleports).toBe(1)
+			t.expect(#a.w.kicks).toBe(1)
+		end
+	end)
+end)

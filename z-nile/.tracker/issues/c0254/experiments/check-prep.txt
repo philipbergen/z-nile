@@ -1,0 +1,123 @@
+
+=== c0254 check.sh
+FAIL  AC1: In worker mode the claim is the push and a rejected claim means taking the next raft, at every point of the race window: the dispatcher reads the pick on `origin/main` before any step and ends the run with exit 6 (`taken`) when a draft is no longer new or ours, a raft is no longer prepared in the backlog or ours, or a rafting issue is listed by a raft that is not ours; a worker owns a claim by the stamp its claim step recorded, never by the run state's history; it claims an issue with its own `claim` step before any model starts (and takes a lost pick over by `claim`, or `z-stop` then `z-ready`); a failed claim step is judged on `origin/main` as ours (the claim landed: adopted, the chain goes on), lost (exit 6, no failed step in the run state, no worktree or branch left on the losing host) or a failure; two hosts rafting one issue meet at the lease and the second is refused; a model's own `./zn status <id> preparing` after the dispatcher's claim is an idempotent success; and the supervisor counts a lost race, asks `./zn next` again at once (waiting one idle period only when the same item is lost twice with nothing between), does not count it as an item taken and clears a held raft that turns out taken.
+      	/Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/race.spec:14: in function </Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/race.spec:1>
+      stack traceback:
+      	[C]: in ?
+      	__mlua_async_poll:28: in function <__mlua_async_poll:1>
+      	__mlua_require:22: in function <__mlua_require:1>
+      	[C]: in function 'pcall'
+      	/Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/tests/run:487: in function </Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/tests/run:1>
+      
+      0 passed, 1 failed, 1 spec files
+      did not pass: AC1: the claim is the push: host A wins, host B is refused and publishes nothing (or another case of race.spec failed: the record is written only for a green run, so read its FAIL lines)
+      bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+      FAIL .tracker/issues/c0254/acceptance/chain.spec.luau :: AC1: an issue host A claimed first ends host B's run with exit 6 before any step, starting no session
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/chain.spec:106: expected true, got false
+      FAIL .tracker/issues/c0254/acceptance/chain.spec.luau :: AC1: a plain dispatch of the same item is as it was: a failure, not the taken exit
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/chain.spec:121: expected true, got false
+      FAIL .tracker/issues/c0254/acceptance/chain.spec.luau :: AC1: a raft host A readied first ends host B's run with exit 6, and no session runs on it
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/chain.spec:131: expected 6, got 1
+      FAIL .tracker/issues/c0254/acceptance/chain.spec.luau :: AC1: a race lost between the pick and the claim step ends the run `taken` and leaves nothing on the losing host
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/chain.spec:152: expected 6, got 1
+      FAIL .tracker/issues/c0254/acceptance/chain.spec.luau :: AC4, AC5: the claim step runs as the worker that follows it, the model's own claim passes, and the rows carry the step's CLI
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/chain.spec:173: expected true, got false
+      FAIL .tracker/issues/c0254/acceptance/chain.spec.luau :: AC3: a push the session's own commit was refused under a taken claim ends the run with exit 7, naming it
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/chain.spec:212: expected 7, got 1
+      1 passed, 6 failed, 1 spec files
+      did not pass: AC1: a plain dispatch of the same item is as it was: a failure, not the taken exit (or another case of chain.spec failed: the record is written only for a green run, so read its FAIL lines)
+FAIL  AC2: The lost worker's worktree is not reused by another host and the lost worker cannot move the taker's work: a worktree is local to its clone and a taker builds its own from the pushed branch (a stale local branch is brought forward to origin, a diverged one is refused and nothing local is discarded); a worker whose claim was taken over or has ended, and a checkout that holds no claim on an item under a live one (a numbered copy included), never pushes, finishes or restacks a layer or prep branch; the refusal is c0274's own words and tells the worker to stop, never to continue on the taker's branch; and the taker's pushed commit survives the lost worker's `finish` and `restack`.
+      did not pass: AC2, AC3: a worker whose claim was taken over or ended never pushes the branch (or another case of pure.spec failed: the record is written only for a green run, so read its FAIL lines)
+      did not pass: AC2: a lost worker is told c0274's own words and to stop, never to continue on the taker's branch (or another case of pick.spec failed: the record is written only for a green run, so read its FAIL lines)
+      did not pass: AC2: host B's stale worktree, made by its lost claim step, is brought forward to host A's push, not discarded (or another case of race.spec failed: the record is written only for a green run, so read its FAIL lines)
+      bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+      FAIL .tracker/issues/c0254/acceptance/layer.spec.luau :: AC3: a layer commit is pushed to its own branch, and main does not move
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/layer.spec:58: expected 0, got 1
+      FAIL .tracker/issues/c0254/acceptance/layer.spec.luau :: sets up host B as the taker: a new stamp on origin, and B's worktree on the pushed layer
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/layer.spec:70: git worktree add --track -b R0010/1/c0030 /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.cache/c0254-layer/other/.worktree/R0010 origin/R0010/1/c0030 in /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.cache/c0254-layer/other failed (128): fatal: invalid reference: origin/R0010/1/c0030
+      
+      FAIL .tracker/issues/c0254/acceptance/layer.spec.luau :: AC2, AC3: host A's next commit stands, is refused with c0274's words, exits 7, and origin keeps the taker's tip
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/layer.spec:85: expected 7, got 1
+      FAIL .tracker/issues/c0254/acceptance/layer.spec.luau :: AC2: host A's finish and restack are refused before they touch anything, and the taker's commit survives
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/layer.spec:107: expected true, got false
+      FAIL .tracker/issues/c0254/acceptance/layer.spec.luau :: AC2: a numbered copy of the lost worktree remembers no claim and does not push the taken layer either
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/layer.spec:123: git worktree add --detach /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.cache/c0254-layer/main/.worktree/R0010-1 origin/R0010/1/c0030 in /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.cache/c0254-layer/main failed (128): fatal: invalid reference: origin/R0010/1/c0030
+      
+      1 passed, 5 failed, 1 spec files
+      did not pass: AC2, AC3: host A's next commit stands, is refused with c0274's words, exits 7, and origin keeps the taker's tip (or another case of layer.spec failed: the record is written only for a green run, so read its FAIL lines)
+FAIL  AC3: Every commit is pushed, for layers and preps alike: after each `./zn commit` on a layer branch or in a `prep-<slug>` worktree the branch is pushed to its own name (whatever `push.default` and the upstream say, and never `main`) and the first push sets its upstream; the per-commit read of origin's copy never refreshes the ref `finish` and `restack` lease against; nothing is pushed for a taken or ended claim, for a checkout that holds none, over commits origin has and the worktree lacks, or when that cannot be counted; any other branch keeps today's rule; the commit always stands, and the exit says what happened to the push (7 refused under a claim, 8 failed; under dispatch a refusal is also written to `.cache/push-refused` and stops the run naming it).
+      did not pass: AC3: every commit on a layer or prep branch is pushed, a first push sets the upstream (or another case of pure.spec failed: the record is written only for a green run, so read its FAIL lines)
+      did not pass: AC3: the exit codes of a push are distinct from every dispatch code the supervisor reads as moved (or another case of pick.spec failed: the record is written only for a green run, so read its FAIL lines)
+      did not pass: AC3: a push that fails exits 8 after the commit, says so, and the next commit pushes both (or another case of race.spec failed: the record is written only for a green run, so read its FAIL lines)
+      did not pass: AC3: a layer commit is pushed to its own branch, and main does not move (or another case of layer.spec failed: the record is written only for a green run, so read its FAIL lines)
+      did not pass: AC3: a push the session's own commit was refused under a taken claim ends the run with exit 7, naming it (or another case of chain.spec failed: the record is written only for a green run, so read its FAIL lines)
+FAIL  AC4: Spend rows record host, CLI and model, taken from the step and not from the process that folds the row: a row carries this machine's host and the CLI of the attempt that spent it (a dispatched step's own, a code-review row's reviewer included), and the environment names the CLI only for the authoring phases; a worker's claim runs as the worker whose session follows it (its CLI and model in the claim's trailer); an old spend file with the old header still reads and takes new rows without changing the old ones; and a dispatched run started inside another CLI's session still records the step's CLI.
+      did not pass: AC4: a worker's identity is its host, CLI and model (or another case of pure.spec failed: the record is written only for a green run, so read its FAIL lines)
+      did not pass: AC4: a code review's record line carries the reviewer's own CLI next to its model (or another case of pick.spec failed: the record is written only for a green run, so read its FAIL lines)
+      did not pass: AC4, AC5: the claim step runs as the worker that follows it, the model's own claim passes, and the rows carry the step's CLI (or another case of chain.spec failed: the record is written only for a green run, so read its FAIL lines)
+      bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+      FAIL .tracker/issues/c0254/acceptance/spend.spec.luau :: AC4: a row with a host and a CLI is written with two more cells and reads back whole
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/spend.spec:67: expected nil, got "when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured"
+      FAIL .tracker/issues/c0254/acceptance/spend.spec.luau :: AC4: a file with the old header still reads, and takes new rows without losing their host and CLI
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/spend.spec:89: expected "h2", got nil
+      FAIL .tracker/issues/c0254/acceptance/spend.spec.luau :: AC4: the fold stamps every row it writes with this host and the step's CLI, next to its model
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/spend.spec:115: expected "grok", got nil
+      FAIL .tracker/issues/c0254/acceptance/spend.spec.luau :: AC4: a row that already says its host and CLI keeps them
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/spend.spec:139: expected "elsewhere", got nil
+      FAIL .tracker/issues/c0254/acceptance/spend.spec.luau :: AC4: with no CLI named and no marker the CLI cell says unknown, never a guess
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/spend.spec:161: expected "unknown", got nil
+      FAIL .tracker/issues/c0254/acceptance/spend.spec.luau :: AC4: a line a dispatched step wrote carries that step's CLI through the buffer and into the row
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/spend.spec:183: expected 15, got 14
+      FAIL .tracker/issues/c0254/acceptance/spend.spec.luau :: AC4: the environment names the CLI only for the authoring phases, never for a reviewer's row
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/spend.spec:216: expected "claude", got nil
+      0 passed, 7 failed, 1 spec files
+      did not pass: AC4: a row with a host and a CLI is written with two more cells and reads back whole (or another case of spend.spec failed: the record is written only for a green run, so read its FAIL lines)
+FAIL  AC5: The board shows which worker holds what: every claim commit (an issue's, a raft's, a rafting `new raft`, `fold`, `unfold`, `recombine`, `status` and `ready`) carries a `Worker: <id> <stamp> host=<h> cli=<c> model=<m> attempt=<token>` trailer for each item it stamps, and the board's card and `./zn work status` name the worker of the newest trailer that carries the item's current stamp; a claim taken over names the new worker, and a stamp no trailer carries has no holder.
+      did not pass: AC5: the Worker trailer round-trips and reads the newest holder of the item's current stamp (or another case of pure.spec failed: the record is written only for a green run, so read its FAIL lines)
+      did not pass: AC5: a trailer may carry the attempt token, and the newest one for a stamp is found (or another case of pick.spec failed: the record is written only for a green run, so read its FAIL lines)
+      did not pass: AC5: the claim commit says who made it, with the attempt, and the board reads it back (or another case of race.spec failed: the record is written only for a green run, so read its FAIL lines)
+      did not pass: AC4, AC5: the claim step runs as the worker that follows it, the model's own claim passes, and the rows carry the step's CLI (or another case of chain.spec failed: the record is written only for a green run, so read its FAIL lines)
+FAIL  AC6: The docs say it: the README's claim paragraph follows the raft claim ("a lost race means taking the next raft") and says a `preparing` claim is a worker drafting the design for a person to approve, and names the exits, the pushes, the trailer, the spend cells, the leftover and where who-holds-what shows; the phrases and the label place the done c0264's `check.sh` pins stay; zz-rules names the `claim` step and the several-hosts rules; z-design commits at named checkpoints and skips the claim the dispatcher made; the old wording is gone.
+      bounded: the caller's CPU limit of 1800 s is lower than --cpu 3600: it stays
+      FAIL .tracker/issues/c0254/acceptance/docs.spec.luau :: AC6: the claim paragraph follows the raft claim and says what a preparing claim is
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/docs.spec:28: README still says: a lost race means taking the next item
+      FAIL .tracker/issues/c0254/acceptance/docs.spec.luau :: AC6: the paragraph names the pushes, the exits, the trailer, the spend cells, the leftover and where who-holds-what shows
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/docs.spec:39: README is missing: pushes its layer branch after every commit, and a prep branch too
+      FAIL .tracker/issues/c0254/acceptance/docs.spec.luau :: AC6: the done c0264's pins hold: its phrase, its label place, and the capability row
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/docs.spec:58: README is missing: *exists* (c0254) (the claim itself *exists*)
+      FAIL .tracker/issues/c0254/acceptance/docs.spec.luau :: AC6: zz-rules says a prep commit is pushed, names the claim step, and states the several-hosts rules
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/docs.spec:66: zz-rules is missing: and in an issue's prep worktree (`prep-<slug>`
+      FAIL .tracker/issues/c0254/acceptance/docs.spec.luau :: AC6: z-design commits as it goes at named checkpoints, and skips the claim a worker's dispatcher made
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0254/acceptance/docs.spec:84: z-design is missing: **Commit as you go** with `./zn commit -m "tracker: prep c0010 <what>"`
+      0 passed, 5 failed, 1 spec files
+      did not pass: AC6: the claim paragraph follows the raft claim and says what a preparing claim is (or another case of docs.spec failed: the record is written only for a green run, so read its FAIL lines)
+FAIL  AC7: Q5's leftover on the lost host: `./zn sync` marks a layer or prep worktree whose claim another host took over (or that ended) as discarded, with no copy; it is kept while the taker's claim lives and when it holds uncommitted files or commits no origin ref has (and listed), and removed once the work has ended and nothing is left to recover; a host's own claims are never marked.
+      did not pass: AC2, AC7: staleMember is c0277's rule: a worktree is stale when a claim it remembers is over and none is still its own (or another case of pick.spec failed: the record is written only for a green run, so read its FAIL lines)
+      did not pass: AC7: a discarded worktree is kept while the taker's claim lives, and listed (or another case of race.spec failed: the record is written only for a green run, so read its FAIL lines)
+FAIL  AC8: The specs this change stands on still pass: c0253's acceptance specs (the supervisor, the dispatcher's worker mode, the board row, the loop), run in whichever place they are, and the tracker, board, spend, work, dispatch and measurement specs that read the files it touches.
+           No such file or directory (os error 2)
+      stack traceback:
+      	[C]: in ?
+      	__mlua_async_poll:28: in function <__mlua_async_poll:1>
+      	/Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0253/acceptance/command.spec:149: in function </Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0253/acceptance/command.spec:148>
+      	[C]: in function 'xpcall'
+      	/Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/tests/run:501: in function </Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/tests/run:1>
+      FAIL .tracker/issues/c0253/acceptance/command.spec.luau :: AC10: a second supervisor in one clone is refused while the first holds the lock
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0253/acceptance/command.spec:169: expected true, got false
+      FAIL .tracker/issues/c0253/acceptance/command.spec.luau :: AC9: .models.toml is read from origin/main, never from the working tree
+           /Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0253/acceptance/command.spec:186: expected true, got false
+      FAIL .tracker/issues/c0253/acceptance/command.spec.luau :: AC2: a run that finds the previous run's held raft in the state file dispatches it before it asks next
+           No such file or directory (os error 2)
+      stack traceback:
+      	[C]: in ?
+      	__mlua_async_poll:28: in function <__mlua_async_poll:1>
+      	/Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0253/acceptance/command.spec:208: in function </Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/.tracker/issues/c0253/acceptance/command.spec:207>
+      	[C]: in function 'xpcall'
+      	/Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/tests/run:501: in function </Users/philipbergen/code/pickman/.worktree/prep-cross-host-workers/z-nile/tests/run:1>
+      FAIL .tracker/issues/c0253/acceptance/command.spec.luau: 3 passed, 11 failed
+      PASS tests/tooling/start-pr-reuse.spec.luau: 3 passed, 0 failed
+      PASS tests/tooling/stack-land.spec.luau: 6 passed, 0 failed
+      PASS tests/tooling/dispatch-guards.spec.luau: 6 passed, 0 failed
+      slowest: tests/tooling/dispatch-guards.spec.luau 104.6s, tests/tooling/stack-land.spec.luau 32.4s, tests/tooling/start-pr-reuse.spec.luau 14.4s
+      68 passed, 29 failed, 20 spec files
+---- 0/8 criteria passed

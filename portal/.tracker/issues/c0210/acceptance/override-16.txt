@@ -1,0 +1,118 @@
+--!strict
+-- ID AC3: each promoted spec this issue narrows is pinned whole. The digest is SHA-256 of the exact text
+-- with item ids masked and CRLF made LF. No other whitespace is tolerated: a newline ends a line comment, and
+-- spaces inside a string are part of what a string.find asserts.
+local fs = require("@lune/fs")
+local process = require("@lune/process")
+local renamed = require("@tests/lib/renamed")
+local serde = require("@lune/serde")
+local t = require("@tests/lib/t")
+
+local TOP = (string.gsub(process.exec("git", { "rev-parse", "--show-toplevel" }).stdout, "%s+$", ""))
+
+local function exact(rel: string): string
+	local text = string.gsub(fs.readFile(`{TOP}/{rel}`), "\r\n", "\n")
+	text = string.gsub(text, "%f[%w_][fdcR]%d+%f[^%w_]", "ID")
+	return text
+end
+
+-- project, the item id the file was filed under, the file name, the digest of the narrowed text
+-- ID override: ID's ci and docs, ID's and ID's workflow specs changed with the deploy's move to portal/;
+-- their digests are of the texts ID left
+local PINNED = {
+	{
+		"z-nile",
+		"ID",
+		"ci-workflow.spec.luau",
+		"623dc492a354457644dc074f59e01a9c8d03c11e685120054fa0ab16d1b79666",
+	},
+	{
+		"z-nile",
+		"ID",
+		"board-docs.spec.luau",
+		"bf36490d668bce63cf9996961582cb87c77da8437762d059f2bece0d27655251",
+	},
+	{
+		"z-nile",
+		"ID",
+		"board-workflow.spec.luau",
+		"ba99d371d772d32d1b9afc6ddebe47c0f5ade8c7535bb372e96a41fb5113c181",
+	},
+	{
+		"z-nile",
+		"ID",
+		"open.spec.luau",
+		"5cb202e2b16fbdfb63585208c596caa82883952726c70fc883c67275639f1db3",
+	},
+	{
+		"z-nile",
+		"ID",
+		"fence.spec.luau",
+		"9be55ce26f03978bf0fe475497317c7204ea8eb2048cdd810eb58c24dab66465",
+	},
+	{
+		"z-nile",
+		"ID",
+		"board-stats.spec.luau",
+		"3b9025758da801a150aeb69f440372731a1b6930956992cd0d8ffad11d9c57fc",
+	},
+	{
+		"z-nile",
+		"ID",
+		"keep.spec.luau",
+		"9711d49620ba326c5c850f955eef8463704cf6409d214eae13162fec0f9a8972",
+	},
+	{
+		"z-nile",
+		"ID",
+		"gate-cover.spec.luau",
+		"8deecb4ae59a74abfe5062f8fed7d1b8c4cd127286793088aca6eb89bb64bcfc",
+	},
+	{
+		"z-nile",
+		"ID",
+		"layout.spec.luau",
+		"5bb6e547200f9b07cd8df0a45e8cd4219e7d570933f3d5c2325a97b2f620c0d4",
+	},
+	{ "z-nile", "ID", "ci.spec.luau", "f4df95f1fe03ec59a2aac7c29831eac213ea056c577f589b419954ac0b0ab387" },
+	{
+		"z-nile",
+		"ID",
+		"docs.spec.luau",
+		"503f4c5de0d64149e043fb62b7595bd6e5889938db14ef8a905c75065c29b4ac",
+	},
+	{
+		"pickman",
+		"ID",
+		"pipeline.spec.luau",
+		"9cd8f9c28e2beb6312e06c9d85469cc1afa7272e33e4c86dfbfde3caf9736e76",
+	},
+	{
+		"pickman",
+		"ID",
+		"docs.spec.luau",
+		"7a1c3047d499dccf4b80603e136691012e15422531940cb97216a4c79f04a225",
+	},
+	{
+		"pickman",
+		"ID",
+		"workflow.spec.luau",
+		"9af99f4153aed9734c77330e4730f41f609c1986058e2d35df5489120e57c50d",
+	},
+	{
+		"pickman",
+		"ID",
+		"workflow.spec.luau",
+		"9d4608147dbc279d1a0fa3005b4438e2f24b942153c3354dcb2950bf5f0613fe",
+	},
+}
+
+return t.spec("ID narrowed specs pinned whole", function(it)
+	it("each narrowed spec is exactly the narrowed text", function()
+		for _, row in PINNED do
+			local rel = `{row[1]}/tests/acceptance/{renamed.id(row[2])}/{row[3]}`
+			t.expect(fs.isFile(`{TOP}/{rel}`)).toBe(true)
+			t.expect(serde.hash("sha256", exact(rel))).toBe(row[4])
+		end
+	end)
+end)

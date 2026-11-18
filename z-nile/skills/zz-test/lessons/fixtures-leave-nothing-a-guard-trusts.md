@@ -3,6 +3,7 @@ title: A fixture removes every folder a guard would trust, passed or failed
 when: both
 tags: [specs, fixtures, guards]
 check: Does this spec create a folder whose name or place a guard treats as the run's own (a stub, bin or guard folder, a registry), and is it removed after every case (a `pcall`, the teardown, then the error) with a last case that asserts it is gone?
+from: c0123 design review 008 F3 (c0123 withdrawn 2026-11-16)
 ---
 A guard that believes "the run's own" folders cannot tell a live run's from one a spec left standing. A spec that builds such a folder under a checkout's `.cache` and never removes it hands every later launcher a trusted directory.
 

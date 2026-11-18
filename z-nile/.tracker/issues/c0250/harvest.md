@@ -1,28 +1,33 @@
 # Harvest: c0250
 
-- note prototype subagent candidates (prep, 2026-11-13): zz-test/specs-type-check-without-the-code, zz-test/stub-gh-with-state, zz-arch/main-luau-local-limit, zz-arch/checks-inside-the-publish-build, zz-test/implied-conditions-make-equivalent-mutants, zz-test/check-sh-never-runs-the-slow-tier
-- note research subagent candidates (prep, 2026-11-13): z-design/re-rules-edit-the-idea, z-design/name-commands-as-their-owner-spells-them
-- design-review-001 F1: z-design/old-stops-join-the-new-one
-- design-review-001 F2: zz-arch/a-command-on-a-part-acts-on-the-whole
-- design-review-001 F3: z-design/one-reading-per-value
-- design-review-001 F4: z-design/rewrites-keep-rafted-records
-- design-review-001 F5: z-design/agents-quote-the-users-words
-- design-review-001 F6: zz-arch/a-tripwire-stops-every-publish
-- design-review-001 F7: z-design/instructions-runnable-where-they-run
-- design-review-001 F8: zz-test/seed-every-enumerated-case
-- design-review-001 F9: zz-arch/widened-publish-rules-pin-their-refusals
-- design-review-001 F10: zz-arch/retired-signals-fail-loud
-- design-review-001 F11: z-design/prove-specs-pass-on-a-prototype
-- design-review-001 F12: z-design/agents-quote-the-users-words
-- design-review-001 F13: zz-test/seed-every-enumerated-case
-- design-review-001 F14: z-design/prove-specs-pass-on-a-prototype
-- design-review-001 F15: zz-rules/audit-what-new-refuses
-- design-review-001 F16: z-design/instructions-runnable-where-they-run
-- design-review-001 F17: z-design/one-reading-per-value
-- design-review-001 F18: one-off: a note shape check (a resolved note re-filed), covered by the new AC3 case
-- design-review-001 F19: z-design/spec-design-correspondence
-- design-review-001 F20: z-design/new-rules-migrate-existing-work
-- design-review-001 F21: z-design/design-the-execution-window
-- note revision subagent, round 1 (prep, 2026-11-13): zz-test/terminal-fixtures-clear-the-agent-session, zz-test/pin-each-branch-of-a-diff, zz-test/fixtures-ignore-what-the-repo-ignores, z-design/a-new-state-says-what-the-last-outcome-means
-- note revision subagent, round 1, notes on existing lessons (prep, 2026-11-13): zz-arch/escape-names-in-lua-patterns, zz-arch/widened-publish-rules-pin-their-refusals, zz-arch/main-luau-local-limit, z-design/prove-specs-pass-on-a-prototype
-- note mutant re-run (prep, 2026-11-13): zz-test/seed-landed-items-as-main-has-them, zz-arch/widened-publish-rules-pin-their-refusals
+- note prototype subagent candidates (prep, 2026-11-13) (erred zz-test): zz-test/specs-type-check-without-the-code, zz-test/stub-gh-with-state, zz-test/implied-conditions-make-equivalent-mutants, zz-test/check-sh-never-runs-the-slow-tier
+- note prototype subagent candidates (prep, 2026-11-13) (erred zz-arch): zz-arch/main-luau-local-limit, zz-arch/checks-inside-the-publish-build
+- note research subagent candidates (prep, 2026-11-13) (erred z-design): z-design/re-rules-edit-the-idea, z-design/name-commands-as-their-owner-spells-them
+- design-review-001 F1 (erred z-design): z-design/old-stops-join-the-new-one
+- design-review-001 F2 (erred zz-arch): zz-arch/a-command-on-a-part-acts-on-the-whole
+- design-review-001 F3 (erred z-design): z-design/one-reading-per-value
+- design-review-001 F4 (erred z-design): z-design/rewrites-keep-rafted-records
+- design-review-001 F5 (erred z-design): z-design/agents-quote-the-users-words
+- design-review-001 F6 (erred zz-arch): zz-arch/a-tripwire-stops-every-publish
+- design-review-001 F7 (erred z-design): z-design/instructions-runnable-where-they-run
+- design-review-001 F8 (erred zz-test): zz-test/seed-every-enumerated-case
+- design-review-001 F9 (erred zz-arch): zz-arch/widened-publish-rules-pin-their-refusals
+- design-review-001 F10 (erred zz-arch): zz-arch/retired-signals-fail-loud
+- design-review-001 F11 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F12 (erred z-design): z-design/agents-quote-the-users-words
+- design-review-001 F13 (erred zz-test): zz-test/seed-every-enumerated-case
+- design-review-001 F14 (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- design-review-001 F15 (erred zz-rules): zz-rules/audit-what-new-refuses
+- design-review-001 F16 (erred z-design): z-design/instructions-runnable-where-they-run
+- design-review-001 F17 (erred z-design): z-design/one-reading-per-value
+- design-review-001 F18 (erred z-design): one-off: a note shape check (a resolved note re-filed), covered by the new AC3 case
+- design-review-001 F19 (erred z-design): z-design/spec-design-correspondence
+- design-review-001 F20 (erred z-design): z-design/new-rules-migrate-existing-work
+- design-review-001 F21 (erred z-design): z-design/design-the-execution-window
+- note revision subagent, round 1 (prep, 2026-11-13) (erred zz-test): zz-test/terminal-fixtures-clear-the-agent-session, zz-test/pin-each-branch-of-a-diff, zz-test/fixtures-ignore-what-the-repo-ignores
+- note revision subagent, round 1 (prep, 2026-11-13) (erred z-design): z-design/a-new-state-says-what-the-last-outcome-means
+- note revision subagent, round 1, notes on existing lessons (prep, 2026-11-13) (erred zz-arch): zz-arch/escape-names-in-lua-patterns, zz-arch/widened-publish-rules-pin-their-refusals, zz-arch/main-luau-local-limit
+- note revision subagent, round 1, notes on existing lessons (prep, 2026-11-13) (erred z-design): z-design/prove-specs-pass-on-a-prototype
+- note mutant re-run (prep, 2026-11-13) (erred zz-test): zz-test/seed-landed-items-as-main-has-them
+- note mutant re-run (prep, 2026-11-13) (erred zz-arch): zz-arch/widened-publish-rules-pin-their-refusals
+- design-review-002 F1 (erred z-design): z-design/new-calls-follow-the-stated-fixture

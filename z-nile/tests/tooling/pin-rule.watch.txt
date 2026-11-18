@@ -1,0 +1,2 @@
+z-nile/tests/lib/pin.luau
+z-nile/tests/lib/t.luau

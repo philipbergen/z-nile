@@ -1,0 +1,93 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-15 23:51	c0122: ref guard wording, fence.sh header, repo-fence allowance	0	1	build							tokens,wall,cpu,ai
+2026-11-17 15:19	1 spec	0	0	test			1.023	0.640		1.023	tokens,ai
+2026-11-17 15:19	1 spec	0	0	test			0.819	0.580		0.819	tokens,ai
+2026-11-17 15:19	1 spec	0	0	test			6.588	5.830		6.588	tokens,ai
+2026-11-17 15:19	1 spec	0	0	test			0.820	0.560		0.820	tokens,ai
+2026-11-17 15:19	1 spec	0	0	test			1.023	0.560		1.023	tokens,ai
+2026-11-17 15:19	1 spec	0	0	test			0.815	0.550		0.815	tokens,ai
+2026-11-17 15:19	1 spec	0	0	test			8.867	7.970		8.867	tokens,ai
+2026-11-17 15:19	1 spec	0	0	test			0.823	0.560		0.823	tokens,ai
+2026-11-17 15:19	1 spec	0	0	test			4.768	4.030		4.768	tokens,ai
+2026-11-17 15:20	c0136: harvest lines name the step that erred; stream and focused reviews are sources	669	40	build							tokens,wall,cpu,ai
+2026-11-17 15:23	2 runs	0	0	other			174.281	124.290			tokens,ai
+2026-11-17 15:24	affected	0	0	test			49.141	254.630		49.141	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.027	0.600		1.027	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.030	0.610		1.030	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			6.768	5.960		6.768	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.020	0.620		1.020	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			0.832	0.590		0.832	tokens,ai
+2026-11-17 15:24	1 spec	0	0	test			1.038	0.630		1.038	tokens,ai
+2026-11-17 15:25	1 spec	0	0	test			9.243	8.350		9.243	tokens,ai
+2026-11-17 15:25	1 spec	0	0	test			1.022	0.590		1.022	tokens,ai
+2026-11-17 15:25	1 spec	0	0	test			4.922	4.220		4.922	tokens,ai
+2026-11-17 15:25	146 specs	0	0	test			40.967	163.920		40.967	tokens,ai
+2026-11-17 15:25	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-17 15:26	1 spec	0	0	test			2.058	1.600		2.058	tokens,ai
+2026-11-17 15:26	1 spec	0	0	test			2.680	2.180		2.680	tokens,ai
+2026-11-17 15:26	1 spec	0	0	test			1.023	0.620		1.023	tokens,ai
+2026-11-17 15:26	3 specs	0	0	test			2.269	2.150		2.269	tokens,ai
+2026-11-17 15:26	1 spec	0	0	test			1.023	0.610		1.023	tokens,ai
+2026-11-17 15:26	1 spec	0	0	test			1.022	0.640		1.022	tokens,ai
+2026-11-17 15:26	1 spec	0	0	test			7.386	6.530		7.386	tokens,ai
+2026-11-17 15:26	1 spec	0	0	test			0.819	0.580		0.819	tokens,ai
+2026-11-17 15:26	1 spec	0	0	test			0.840	0.560		0.840	tokens,ai
+2026-11-17 15:26	1 spec	0	0	test			0.827	0.570		0.827	tokens,ai
+2026-11-17 15:27	1 spec	0	0	test			9.042	8.120		9.042	tokens,ai
+2026-11-17 15:27	1 spec	0	0	test			1.034	0.610		1.034	tokens,ai
+2026-11-17 15:27	1 spec	0	0	test			4.942	4.300		4.942	tokens,ai
+2026-11-17 16:02	c0136: memoised step lines, stream review owner, reviewer prompt names --check-review (review-001 F3-F5)	42	8	code-review							tokens,wall,cpu,ai
+2026-11-17 16:02	1 spec	0	0	test			0.823	0.590		0.823	tokens,ai
+2026-11-17 16:02	1 spec	0	0	test			1.030	0.600		1.030	tokens,ai
+2026-11-17 16:02	1 spec	0	0	test			6.614	5.800		6.614	tokens,ai
+2026-11-17 16:02	1 spec	0	0	test			0.839	0.590		0.839	tokens,ai
+2026-11-17 16:02	1 spec	0	0	test			0.833	0.590		0.833	tokens,ai
+2026-11-17 16:02	1 spec	0	0	test			1.027	0.600		1.027	tokens,ai
+2026-11-17 16:02	1 spec	0	0	test			9.234	8.100		9.234	tokens,ai
+2026-11-17 16:02	1 spec	0	0	test			0.839	0.590		0.839	tokens,ai
+2026-11-17 16:02	1 spec	0	0	test			4.731	4.000		4.731	tokens,ai
+2026-11-17 16:03	150 specs	0	0	test			38.802	201.790		38.802	tokens,ai
+2026-11-17 16:03	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-17 16:04	1 spec	0	0	test			1.032	0.610		1.032	tokens,ai
+2026-11-17 16:04	1 spec	0	0	test			15.241	13.360		15.241	tokens,ai
+2026-11-17 16:04	1 spec	0	0	test			0.821	0.590		0.821	tokens,ai
+2026-11-17 16:04	3 specs	0	0	test			19.780	25.120		19.780	tokens,ai
+2026-11-17 16:05	1 spec	0	0	test			1.031	0.570		1.031	tokens,ai
+2026-11-17 16:05	1 spec	0	0	test			0.838	0.570		0.838	tokens,ai
+2026-11-17 16:05	1 spec	0	0	test			0.826	0.570		0.826	tokens,ai
+2026-11-17 16:05	1 spec	0	0	test			0.809	0.580		0.809	tokens,ai
+2026-11-17 16:05	1 spec	0	0	test			0.816	0.570		0.816	tokens,ai
+2026-11-17 16:05	1 spec	0	0	test			0.820	0.570		0.820	tokens,ai
+2026-11-17 16:05	1 spec	0	0	test			0.815	0.570		0.815	tokens,ai
+2026-11-17 16:05	1 spec	0	0	test			0.810	0.580		0.810	tokens,ai
+2026-11-17 16:05	1 run	0	0	other			0.211	0.000			tokens,ai
+2026-11-17 16:27	c0136: the role bullets' note form names its step (final-review-001 F2)	26	26	code-review							tokens,wall,cpu,ai
+2026-11-17 16:27	1 spec	0	0	test			0.831	0.570		0.831	tokens,ai
+2026-11-17 16:27	1 spec	0	0	test			0.819	0.580		0.819	tokens,ai
+2026-11-17 16:27	1 spec	0	0	test			6.203	5.480		6.203	tokens,ai
+2026-11-17 16:27	1 spec	0	0	test			0.825	0.580		0.825	tokens,ai
+2026-11-17 16:27	1 spec	0	0	test			0.822	0.580		0.822	tokens,ai
+2026-11-17 16:27	1 spec	0	0	test			0.832	0.570		0.832	tokens,ai
+2026-11-17 16:27	1 spec	0	0	test			8.854	8.070		8.854	tokens,ai
+2026-11-17 16:27	1 spec	0	0	test			1.029	0.660		1.029	tokens,ai
+2026-11-17 16:27	1 spec	0	0	test			4.941	4.270		4.941	tokens,ai
+2026-11-17 16:27	1 spec	0	0	test			1.032	0.620		1.032	tokens,ai
+2026-11-17 16:27	1 spec	0	0	test			1.038	0.650		1.038	tokens,ai
+2026-11-17 16:28	1 spec	0	0	test			6.797	5.980		6.797	tokens,ai
+2026-11-17 16:28	1 spec	0	0	test			1.029	0.620		1.029	tokens,ai
+2026-11-17 16:28	1 spec	0	0	test			1.037	0.640		1.037	tokens,ai
+2026-11-17 16:28	1 spec	0	0	test			1.030	0.630		1.030	tokens,ai
+2026-11-17 16:28	1 spec	0	0	test			9.432	8.370		9.432	tokens,ai
+2026-11-17 16:28	1 spec	0	0	test			1.037	0.630		1.037	tokens,ai
+2026-11-17 16:28	1 spec	0	0	test			4.933	4.260		4.933	tokens,ai
+2026-11-17 16:29	150 specs	0	0	test			45.606	197.490		45.606	tokens,ai
+2026-11-17 16:29	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-17 16:29	1 spec	0	0	test			1.047	0.650		1.047	tokens,ai
+2026-11-17 16:29	1 spec	0	0	test			16.032	13.910		16.032	tokens,ai
+2026-11-17 16:29	1 spec	0	0	test			1.023	0.620		1.023	tokens,ai
+2026-11-17 16:30	3 specs	0	0	test			20.768	26.200		20.768	tokens,ai
+2026-11-17 16:30	1 spec	0	0	test			1.025	0.590		1.025	tokens,ai
+2026-11-17 16:30	1 spec	0	0	test			0.832	0.590		0.832	tokens,ai
+2026-11-17 16:30	1 spec	0	0	test			0.823	0.590		0.823	tokens,ai
+2026-11-17 16:30	1 run	0	0	other			0.204	0.000			tokens,ai
+2026-11-17 23:12	R0068: bind c0122, c0136, c0138, c0156	768	53	deliver							tokens,wall,cpu,ai

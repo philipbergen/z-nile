@@ -51,4 +51,20 @@ return t.spec("Hiscores extras", function(it)
 		t.expect(spent).toBe(true)
 		t.expect(rest).toBe(0)
 	end)
+
+	it(
+		"a run without revives stores and reads back no revives field, and the largest count is kept",
+		function()
+			local row = Hiscores.commit(nil, { name = "A", userId = "1", score = 10, level = 1, revives = 0 })
+			t.expect(row ~= nil).toBe(true)
+			t.expect((row :: any).revives).toBe(nil)
+			local store = Hiscores.fake()
+			Hiscores.submit(store, { name = "A", userId = "1", score = 10, level = 1 }, FRI)
+			local rows = Hiscores.top(store, "all", FRI)
+			t.expect(#rows).toBe(1)
+			t.expect(rows[1].revives).toBe(nil)
+			t.expect(Hiscores.revives(2 ^ 53 - 1)).toBe(2 ^ 53 - 1)
+			t.expect(Hiscores.revives(2 ^ 53)).toBe(nil)
+		end
+	)
 end)

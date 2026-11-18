@@ -122,6 +122,11 @@ export type PromptInput = {
 
 -- The prompt of a model step. It names the skill's file, which every CLI reads itself; no skill text,
 -- architecture map or other issue is pasted (the user's "Name the files in the prompt").
+-- c0136 (R0068 review-001 F5): every dispatched reviewer checks its own step lines before it ends, wherever its file is
+local function checkReview(stateDir: string): string
+	return `Before you end, run \`./zn lessons --check-review {stateDir}/review.md\` and fix every problem it names.`
+end
+
 function dispatch.prompt(p: PromptInput): string
 	local what: string
 	if p.step == "z-ticket" then
@@ -135,16 +140,20 @@ function dispatch.prompt(p: PromptInput): string
 		-- a dispatched run has no caller to return text to: the reviewer writes review.md in its own state folder and
 		-- the dispatcher numbers it into the raft's folder (design review 008 F1). One round: there is no later one.
 		what =
-			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in stream mode. This is the one round. Read the stream's diff and run its checks in \`{p.streamWorktree or `.worktree/ws-{p.id}`}\` (read only there). Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into the raft's folder as \`stream-review-{p.id}-001.md\`.`
+			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in stream mode. This is the one round. Read the stream's diff and run its checks in \`{p.streamWorktree or `.worktree/ws-{p.id}`}\` (read only there). Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into the raft's folder as \`stream-review-{p.id}-001.md\`. {checkReview(
+				p.stateDir
+			)}`
 	elseif p.step == "zz-review" and p.mode == "final" then
 		what =
-			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`.`
+			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`. {checkReview(
+				p.stateDir
+			)}`
 	elseif p.step == "zz-review" then
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as that mode's file ({if p.mode
 					== "code"
 				then "`review-NNN.md`"
-				else "`design-review-NNN.md`"}).`
+				else "`design-review-NNN.md`"}). {checkReview(p.stateDir)}`
 	else
 		what = `Read \`{p.skillPath}\` and follow it for {p.id}.`
 	end
@@ -346,6 +355,10 @@ function dispatch.next(f: Facts): Action
 	if f.kind == "issue" then
 		if f.where == "done" then
 			return stop(dispatch.EXIT.done, `{f.id} is done`)
+		end
+		-- c0278: a closed issue's chain is finished, not failed
+		if f.status == "closed" then
+			return stop(dispatch.EXIT.done, `{f.id} is closed (won't do): nothing to run`)
 		end
 		if f.raft ~= "" and (f.where == "active" or f.status == "prepared") then
 			return { kind = "step", step = "follow", target = f.raft }

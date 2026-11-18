@@ -2,6 +2,7 @@
 -- Pushes a tracker-only commit to origin/main with git plumbing (mktree, no index). Never touches the caller's working
 -- tree, index, HEAD or branch. See c0510.
 local broker = require("./broker")
+local closing = require("./closing")
 local ids = require("./ids")
 local ledger = require("./ledger")
 local pathsLib = require("./paths")
@@ -15,12 +16,14 @@ export type Change = { path: string, content: string, mode: string?, from: strin
 export type Result = { ok: boolean, sha: string?, reason: string? }
 -- `roots`: origin/main's project roots (its z-nile/projects.toml), the only roots this publish may write under;
 -- `counter`: origin/main's live id counter, z-nile/next, or tracker/next while origin/main has no registry (c0114's
--- execution window: the branch has moved the counter, origin has not yet)
+-- execution window: the branch has moved the counter, origin has not yet); `base`: the origin/main sha every read
+-- names, so a build that greps the tree (close's dependents, c0278) sees the same one
 export type Build = (
 	paths: { string },
 	read: (string) -> string?,
 	roots: { string },
-	counter: string
+	counter: string,
+	base: string
 ) -> { Change } | string
 
 local function isIssue(id: string): boolean
@@ -127,7 +130,8 @@ local function itemDir(path: string, rel: string): string
 end
 
 -- The document with its single `status:` frontmatter line removed, or nil when it has no well-formed
--- frontmatter. A published edit of an existing document may differ from origin's only in that line.
+-- frontmatter. A published edit of an existing document may differ from origin's only in that line, or be exactly a
+-- close (`closing.guard`, c0278).
 local function withoutStatus(text: string): string?
 	local head, block, rest = string.match(text, "^(%-%-%-\n)(.-\n)(%-%-%-\n.*)$")
 	if not head or not block or not rest then
@@ -142,6 +146,45 @@ local function withoutStatus(text: string): string?
 		return nil
 	end
 	return head .. kept .. rest
+end
+
+-- Why a published edit of an existing item document `existing` into `content` refuses, or nil. A closed document is
+-- never published again; new content that is closed (or carries wont_do) is only ever exactly one close, as
+-- closing.guard recomputes it, so a status-only edit can't stamp `closed-…` without its reason (R0115 review 001 F1);
+-- anything else changes only the status: line.
+function publish.existingEdit(id: string, existing: string, content: string): string?
+	if closing.closedDoc(existing) then
+		return `{id} is closed on origin/main: a closed issue's document is never published again`
+	end
+	if closing.closedDoc(content) then
+		local why = closing.guard(existing, content)
+		if why then
+			return `a published change to an existing document may only edit its status: line (or be one close: ./zn close): {why}`
+		end
+		return nil
+	end
+	local before, after = withoutStatus(existing), withoutStatus(content)
+	if not before or not after or before ~= after then
+		return "a published change to an existing document may only edit its status: line (or be one close: ./zn close)"
+	end
+	return nil
+end
+
+-- Why a moved item document (`old` on origin/main, `content` at its new path) refuses, or nil: a closed issue never
+-- moves, a move never closes one (only ./zn close does, in place: R0115 review 001 F1), and a move changes only the
+-- status: line.
+function publish.movedEdit(id: string, old: string, content: string): string?
+	if closing.closedDoc(old) then
+		return `{id} is closed on origin/main: a closed issue's document is never published again`
+	end
+	if closing.closedDoc(content) then
+		return `{id}: a move never closes an issue (./zn close closes it where it is)`
+	end
+	local before, after = withoutStatus(old), withoutStatus(content)
+	if not before or not after or before ~= after then
+		return "a moved document may only change its status: line"
+	end
+	return nil
 end
 
 local function git(
@@ -302,9 +345,9 @@ local function validateMoves(
 		end
 		local want = old
 		if rel == `{id}.md` then
-			local before, after = withoutStatus(old), withoutStatus(c.content)
-			if not before or not after or before ~= after then
-				return sources, `{c.path}: a moved document may only change its status: line`
+			local why = publish.movedEdit(id :: string, old, c.content)
+			if why then
+				return sources, `{c.path}: {why}`
 			end
 			want = c.content
 		elseif rel == "check.sh" then
@@ -404,7 +447,7 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 				end
 			end
 		end
-		local out = build(paths, buildRead, roots, counter)
+		local out = build(paths, buildRead, roots, counter, base)
 		if type(out) == "string" then
 			return fail(out)
 		end
@@ -475,11 +518,10 @@ function publish.commit(cwd: string, build: Build, message: string | () -> strin
 				continue
 			end
 			if existing then
-				local before, after = withoutStatus(existing), withoutStatus(c.content)
-				if not before or not after or before ~= after then
-					return fail(
-						`{c.path}: a published change to an existing document may only edit its status: line`
-					)
+				-- c0278: a closed document is never published again, a status-only edit included
+				local editWhy = publish.existingEdit(publish.itemPath(c.path) or c.path, existing, c.content)
+				if editWhy then
+					return fail(`{c.path}: {editWhy}`)
 				end
 			end
 		end

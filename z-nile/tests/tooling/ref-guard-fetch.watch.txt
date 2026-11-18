@@ -1,0 +1,4 @@
+z-nile/lib/fence.sh
+z-nile/lib/git-hooks/reference-transaction
+z-nile/tests/lib/clone.luau
+z-nile/tests/lib/fixture.luau

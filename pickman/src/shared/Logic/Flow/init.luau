@@ -2,6 +2,7 @@
 -- Flow: what the screen shows over the maze in each phase of a run, engine-free. The client draws it;
 -- only the server moves a run from phase to phase, and only the server sends a player back to the lobby.
 local Game = require("./Game")
+local Lobby = require("./Lobby")
 local Session = require("./Session")
 local Travel = require("./Travel")
 
@@ -16,7 +17,11 @@ export type Overlay = {
 	prompt: string?, -- under the results: what a tap does now, or why it does nothing
 	tap: boolean, -- a tap, a click or a continue key asks the server for the lobby now
 	cursor: boolean, -- the mouse is free and shown
+	offer: boolean?, -- f0145: the continue offer is up (CONTINUE and END GAME show)
 }
+
+-- f0145: what the server last said about a continue: the mode and the continues the player holds
+export type OfferReport = { mode: string?, held: number }
 
 export type RankView = {
 	over: number, -- runs ended so far: the run whose overlay is up, or was last up
@@ -37,6 +42,19 @@ Flow.PROMPT = table.freeze({
 	cooling = "Could not return. Try again in a moment.",
 	unset = "The lobby is not set up yet.",
 })
+-- f0145: the continue offer's words, and its keys and controller buttons (keyboard, console and touch: G12)
+Flow.OFFER = table.freeze({
+	buy = "CONTINUE",
+	no = "END GAME",
+	price = "1 ROBUX",
+	held = "YOU HOLD A CONTINUE",
+	test = "1 ROBUX (TEST: NOTHING IS CHARGED)",
+	closed = "STORE UNAVAILABLE",
+})
+Flow.OFFER_KEYS = table.freeze({
+	ask = { "Return", "KeypadEnter", "ButtonA" },
+	decline = { "Backspace", "ButtonB" },
+})
 -- before the server has said anything: the request may go, and the server answers with the truth
 Flow.NO_REPORT = table.freeze({ phase = "idle", configured = true } :: Trip)
 
@@ -45,6 +63,42 @@ local function prompt(trip: Trip): string
 		return Flow.PROMPT.unset
 	end
 	return Flow.PROMPT[trip.phase]
+end
+
+-- f0145: the offer's steps left as whole seconds of real time, rounded up; never below zero
+function Flow.offerSeconds(timer: number): number
+	if timer ~= timer or timer <= 0 then
+		return 0
+	end
+	return math.ceil(timer / Session.STEP_RATE)
+end
+
+-- f0145: the line under the offer's buttons: a continue held, else the price; in test mode (or before the server
+-- has said anything) that nothing is charged; on a closed server that the store is unavailable
+function Flow.offerPrice(report: OfferReport?): string
+	if report == nil then
+		return Flow.OFFER.test
+	end
+	local o = report :: OfferReport
+	if o.held > 0 then
+		return Flow.OFFER.held
+	end
+	if o.mode == "closed" then
+		return Flow.OFFER.closed
+	elseif o.mode == "live" then
+		return Flow.OFFER.price
+	end
+	return Flow.OFFER.test
+end
+
+-- f0145: what a key or controller button does during the offer: "ask", "decline" or nothing
+function Flow.offerKey(name: string): ("ask" | "decline")?
+	if table.find(Flow.OFFER_KEYS.ask, name) then
+		return "ask"
+	elseif table.find(Flow.OFFER_KEYS.decline, name) then
+		return "decline"
+	end
+	return nil
 end
 
 function Flow.overlay(play: Session.PlayFrame, rules: Game.Config, trip: Trip?): Overlay
@@ -67,6 +121,17 @@ function Flow.overlay(play: Session.PlayFrame, rules: Game.Config, trip: Trip?):
 		return { fade = fade, flash = false, tap = false, cursor = false }
 	elseif phase == "levelclear" then
 		return { fade = 0, flash = (play.timer // Flow.FLASH_TICKS) % 2 == 1, tap = false, cursor = false }
+	elseif phase == "offer" then
+		return {
+			banner = "CONTINUE?",
+			detail = `SCORE {string.format("%d", play.score)}   LEVEL {play.level}`,
+			fade = Flow.FADE_MAX,
+			flash = false,
+			prompt = `{Game.CONTINUE_LIVES} NEW LIVES   {Flow.offerSeconds(play.timer)}`,
+			tap = false,
+			cursor = true,
+			offer = true,
+		}
 	elseif phase == "gameover" then
 		local now = trip or Flow.NO_REPORT
 		return {
@@ -80,6 +145,15 @@ function Flow.overlay(play: Session.PlayFrame, rules: Game.Config, trip: Trip?):
 		}
 	end
 	return { fade = 0, flash = false, tap = false, cursor = false }
+end
+
+-- The revives line of the GAME OVER overlay (f0186): the continues the run used, "REVIVES 0" for none; nil in every
+-- other phase. FlowView's lines and the overlay stay as they were: the client's RevivesView draws this one.
+function Flow.revivesLine(play: Session.PlayFrame): string?
+	if play.phase ~= "gameover" then
+		return nil
+	end
+	return Lobby.revivesText(play.revives)
 end
 
 -- The extra line at the end of a run for an all-time rank the server sent. Flow does not know the board size.
