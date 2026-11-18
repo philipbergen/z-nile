@@ -203,10 +203,14 @@ return t.spec("c0267: which issues wait for a person's approval", function(it)
 			return text ~= nil and string.sub(text :: string, 1, #start) == start
 		end
 		local none = approval.reasonOf("c0001", file, parts, nil, true)
+		-- c0369's one command, from anywhere (re-prep of 2026-11-17)
 		t.expect(
-			head(none, "c0001 has no approval: run ./zn approve c0001, then ./zn approve c0001 --publish")
-		)
-			.toBe(true)
+			head(
+				none,
+				"c0001 has no approval: run ./zn approve c0001 in a terminal, from anywhere in the checkout"
+			)
+		).toBe(true)
+		t.expect(string.find(none or "", "--publish", 1, true) == nil).toBe(true)
 		-- the dispatched path drafts, merges and rafts before approval: no "one-time step" for a legacy item
 		t.expect(string.find(none or "", "one-time step", 1, true) == nil).toBe(true)
 		t.expect(approval.reasonOf("c0001", file, parts, approvalOf(doc), true)).toBe(nil)

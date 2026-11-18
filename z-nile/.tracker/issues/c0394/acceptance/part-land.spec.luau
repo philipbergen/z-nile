@@ -16,6 +16,7 @@
 -- main these cases fail at the first command only c0248 or c0394 has; each tool command c0394 adds is first run as the
 -- tool should run it, and when the tool does not yet make an added issue, the setup makes the same state by hand so the
 -- later cases fail only for their own rule.
+local contract = require("@znile/engine/contract")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -343,26 +344,48 @@ local function designOnMain(id: string)
 	front = string.gsub(front, "design: %a+", "design: ready", 1)
 	local body =
 		`\n# {id}\n\n## Problem\nA finding.\n\n## Solution\nFix it.\n\n## Design\nGuess (prep) G1: the small way.\n\n## Acceptance criteria\n- AC1: it is fixed\n\n## Test plan\nThe check.\n`
+	-- with c0369 section 5's explainer page of f0339's shape, naming this contract (re-prep of 2026-11-17)
+	local hash = contract.hash((contract.build(front .. body, CHECK, {})) :: contract.Parts)
 	trackerfix.elsewhere(f, {
 		[docPath] = front .. body,
 		[`{ROOT}/issues/active/{id}/check.sh`] = CHECK,
 		[`{ROOT}/issues/active/{id}/acceptance/.gitkeep`] = "",
+		[`{ROOT}/issues/active/{id}/explainer.html`] = `<!doctype html><html><head><meta charset="utf-8"><meta name="zn-contract" content="{hash}"><title>{id}</title></head><body>`
+			.. '<section id="idea"><p>Show the person a page before they say yes.</p></section>'
+			.. '<section id="before"><svg viewBox="0 0 10 10"><rect width="4" height="4"/></svg></section>'
+			.. '<section id="changes"><ul><li><code>z-nile/engine/hold.luau</code>: hold()</li></ul></section>'
+			.. '<section id="after"><svg viewBox="0 0 10 10"><circle r="3"/></svg></section>'
+			.. '<section id="choices"><div class="choice"><ul class="pros"><li>plain</li></ul><ul class="cons"><li>one more file</li></ul></div></section>'
+			.. "</body></html>\n",
 	}, `design {id}`)
 end
 
--- The user approves an issue that is on origin/main, in a worktree of its own, and publishes the approval.
+-- The user approves an issue that is on origin/main with one command from the main checkout: c0369 records it in a
+-- worktree of origin/main of its own and publishes it (the re-prep of 2026-11-17).
+-- With c0369 section 5's fixture: stub openers first on PATH, and `yes y |` types the answer f0339 asks for (the exit
+-- code is echoed inside script), so the helper holds before and after f0339.
 local function approveOnMain(id: string)
 	git(f.main, { "fetch", "-q", "origin" })
-	local dir = `{f.base}/approve-{id}`
-	git(f.main, { "worktree", "add", "-q", "-b", `approve-{id}`, dir, "origin/main" })
-	local r = human(dir, { "approve", id })
-	if not r.ok then
+	local stubs = `{f.base}/stubs`
+	if not fs.isDir(stubs) then
+		fs.writeDir(stubs)
+		for _, name in { "open", "xdg-open" } do
+			fs.writeFile(`{stubs}/{name}`, "#!/bin/sh\nexit 0\n")
+			fixture.exec(f.main, "chmod", { "+x", `{stubs}/{name}` })
+		end
+	end
+	local r = fixture.exec(
+		f.main,
+		"sh",
+		{ "-c", `yes y | script -q /dev/null sh -c './zn approve {id}; echo "zn-exit=$?"'` },
+		{ env = { PATH = `{stubs}:{env.PATH}`, HOME = process.env.HOME or "" } }
+	)
+	if
+		string.match(r.stdout, "zn%-exit=(%d+)") ~= "0"
+		or not has(r.stdout, `published {id} to origin/main: it counts now`)
+	then
 		error(`approve {id} failed: {say(r)}`, 0)
 	end
-	if git(dir, { "status", "--porcelain" }) ~= "" then
-		commitAll(dir, `tracker: approve {id}`)
-	end
-	git(dir, { "push", "-q", "origin", "HEAD:main" })
 end
 
 return t.spec(

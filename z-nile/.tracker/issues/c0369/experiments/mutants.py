@@ -1,6 +1,6 @@
 """Mutation check for c0369: MUT_WT=<a throwaway copy of the prototype> python3 mutants.py ["<mutant id>" ...]
 
-MUT_WT is required: a worktree or clone of proto-c0369 that holds this issue's specs in
+MUT_WT is required: a worktree or clone of proto-c0369-main (origin/main with this change, no c0283) that holds this issue's specs in
 z-nile/.tracker/issues/c0369/acceptance and nothing worth keeping. Each entry replaces one text there, runs the row's
 spec and restores the file (also when the run is stopped by a signal). A mutant is killed when the run fails; the
 output line says on what. An entry whose text is not found exactly once, or that survives, exits non-zero.
@@ -13,9 +13,14 @@ import sys
 P = os.environ.get('MUT_WT', '')
 Z = P + '/z-nile'
 A = '.tracker/issues/c0369/acceptance/'
-PL, AR, DC = A + 'place.spec.luau', A + 'approve.spec.luau', A + 'docs.spec.luau'
+PL, DC = A + 'place.spec.luau', A + 'docs.spec.luau'
+AM, AB = A + 'approve-main.spec.luau', A + 'approve-branch.spec.luau'
+AR = (AM, AB)  # an engine mutant runs both fixture specs
+ARF = A + 'approve-raft.spec.luau'
 PLACE, MAIN, APPROVAL = 'engine/approveplace.luau', 'engine/main.luau', 'engine/approval.luau'
-RULES, DESIGN, AGENTS = 'skills/zz-rules/SKILL.md', 'skills/z-design/SKILL.md', '../AGENTS.md'
+RULES, DESIGN, READY = 'skills/zz-rules/SKILL.md', 'skills/z-design/SKILL.md', 'skills/z-ready/SKILL.md'
+LAYERGIT = 'engine/layergit.luau'
+TOOL_AP, TOOL_PUB = 'tests/tooling/approve.spec.luau', 'tests/tooling/approve-publish.spec.luau'
 TO_MAIN = 'if not publishOnly and main and main.ready and main.state ~= "holds" then'
 M = [
     ("place: a worktree that holds main's own design is taken", PLACE, 'if main and main.ready and main.hash == hash then', 'if false then', PL),
@@ -23,7 +28,7 @@ M = [
     ('place: a prep that already merged is taken', PLACE, 'return w.base ~= hash and not w.landed', 'return w.base ~= hash', PL),
     ('place: a draft in a worktree is taken', PLACE, 'if not w.copy.ready or hash == nil then', 'if hash == nil then', PL),
     ("place: main's unapproved design wins over a worktree's own", PLACE, 'if not publishOnly and #waiting > 0 then', 'if not publishOnly and #waiting > 0 and not (main and main.ready) then', PL),
-    ('place: the prep wins over the worktree the command runs in', PLACE, '\t\tif w.here then\n', '\t\tif false then\n', PL),
+    ('place: the prep wins over the worktree the command runs in', PLACE, 'return if w.here then 3 elseif w.prep then 2', 'return if w.here then 1 elseif w.prep then 2', PL),
     ('place: an approved worktree is approved again', PLACE, 'if mine and w.copy.state ~= "holds" then', 'if mine then', PL),
     ('place: --publish records a new approval in a worktree', PLACE, 'if not publishOnly and #waiting > 0 then', 'if #waiting > 0 then', PL),
     ("place: --publish records a new approval of main's design", PLACE, TO_MAIN, 'if main and main.ready and main.state ~= "holds" then', PL),
@@ -46,22 +51,49 @@ M = [
     ('approve: publishing off is ignored', MAIN, '\t\tif not publishing() then\n\t\t\tnotYet(', '\t\tif false then\n\t\t\tnotYet(', AR),
     ('approve: ZN_APPROVE_IN skips the refusals', MAIN, '\tlocal onlyCheck = opts["--check"] ~= nil\n\tif not onlyCheck then', '\tlocal onlyCheck = opts["--check"] ~= nil\n\tif not onlyCheck and (process.env.ZN_APPROVE_IN or "") == "" then', AR),
     ('approve: a placed run records in the main checkout', MAIN, '\t\trefuseInMainCheckout("approve")\n', '\t\tlocal _ = refuseInMainCheckout\n', AR),
-    ("approve: the worktree's whole approval.md replaces main's", MAIN, 'local changes = { { path = path, content = publishText } }', 'local changes = { { path = path, content = localText } }', AR),
+    ("approve: the worktree's whole approval.md replaces main's", MAIN, 'return { { path = path, content = contract.render(rows) } }', 'return { { path = path, content = localText } }', AR),
     ('approve: the place is not said', MAIN, '"approving in" else "publishing from"', '"" else ""', AR),
     ('load: the history of main is not read', PLACE, 'w.landed = held(path, (string.gsub(base, "%s+$", "")), id, copy.hash :: string)', 'w.landed = false', AR),
     ('load: the merge-base is not read', PLACE, 'w.base = if at and at.ready then at.hash else nil', 'w.base = nil', AR),
     ("load: a draft at the merge-base counts as main's design", PLACE, 'w.base = if at and at.ready then at.hash else nil', 'w.base = if at then at.hash else nil', AR),
     ('load: a pushed branch is not seen', PLACE, 'w.pushed = theirs ~= nil and theirs == git(path, { "rev-parse", "HEAD" })', 'w.pushed = false', AR),
-    ('load: every worktree is read', PLACE, 'if i > 1 and (prep or path == here or path == scratch) and fs.isDir(path) then', 'if i > 1 and fs.isDir(path) then', AR),
+    ('load: every worktree is read', PLACE, 'if i > 1 and (prep or raft or path == here or path == scratch) and fs.isDir(path) then', 'if i > 1 and fs.isDir(path) then', AR),
     ('load: the prep branch is not looked for', PLACE, 'local prep = slug ~= "" and tree.branch == `prep-{slug}`', 'local prep = false', AR),
+    ("place: main's older design is approved behind a pushed prep", PLACE, '\tif #pushed > 0 then\n\t\tlocal name', '\tif false then\n\t\tlocal name', (PL, AB)),
+    ('approve: a branch with no remote is pushed', MAIN, 'if name ~= `prep-{item.slug}` and not known.ok then', 'if false then', AB),
+    ('approve: a moved branch is force-pushed', MAIN, 'local pushed = sh.run("git", { "push", "-q", "origin", `HEAD:refs/heads/{name}` })', 'local pushed = sh.run("git", { "push", "-q", "--force", "origin", `HEAD:refs/heads/{name}` })', AB),
+    ('approve: any ZN_APPROVE_IN skips placement', MAIN, 'process.env.ZN_APPROVE_IN ~= top then', '(process.env.ZN_APPROVE_IN or "") == "" then', AB),
+    ('approve: the older-design note is dropped', MAIN, '"; origin/main\'s older design stays unapproved: that pull request replaces it"', '""', AB),
+    ('docs: zz-rules forgets the push rule', RULES, 'Only the prep branch, or a branch already on origin, is pushed, and never forced', 'Every branch is pushed', DC),
+    ('docs: the approve tooling spec approves through an unanswered terminal', TOOL_AP, 'local again = approve(nil)', 'local again = fixture.exec(wt, "script", { "-q", "/dev/null", "./zn", "approve", ID }, { env = {} })', DC),
+    ('load: the raft worktree is not looked for', PLACE, 'local raft = raftName ~= "" and path == `{trees[1].path}/.worktree/{raftName}`', 'local raft = false', ARF),
+    ('load: the raft worktree is read for an issue that is not active', PLACE, 'local raftName = if main and main.active and main.raft then main.raft else ""', 'local raftName = if main and main.raft then main.raft else ""', ARF),
+    ('load: any worktree named like a raft is read', PLACE, 'local raft = raftName ~= "" and path == `{trees[1].path}/.worktree/{raftName}`', 'local raft = raftName ~= "" and string.match(path, "/%.worktree/R%d+$") ~= nil', ARF),
+    ('atRev: an issue in active/ is not seen as active', PLACE, 'string.find(d.dir, "/issues/active/", 1, true) ~= nil', 'false', ARF),
+    ('docs: zz-rules forgets the raft worktree', RULES, "its one place is its raft's worktree (`.worktree/<R-id>`)", "its one place is every worktree", DC),
+    ('approve: an unparseable approval.md on main blocks the approval', MAIN, '\t\tand not contract.parse(fs.readFile(current))\n', '\t\tand false\n', AM),
+    ('approve: a placed run records on no branch', MAIN, 'if process.env.ZN_APPROVE_IN == top and where ~= "a worktree of origin/main" then', 'if false then', ARF),
+    ('approve: a layer branch is not pushed', MAIN, 'local layer = stack.parse(name)\n\t\t\tif layer then', 'local layer = stack.parse(name)\n\t\t\tif false then', (AB, ARF)),
+    ('approve: an active issue is recorded on a lower layer', MAIN, 'if not top or branch ~= top.name then', 'if not top then', ARF),
+    ('approve: an active issue is recorded on a dirty tree', MAIN, 'if not status.ok or sh.trim(status.stdout) ~= "" then', 'if false then', ARF),
+    ('approve: an active issue is published to origin/main', MAIN, 'if item.state == "active" then\n\t\t\tpushBranch()', 'if false then\n\t\t\tpushBranch()', ARF),
+    ('place: an active issue is placed like a backlog one', PLACE, 'if main and main.active then', 'if false then', (PL, ARF)),
+    ('place: an active issue with no raft worktree is recorded on origin/main', PLACE, '\t\tif main.state == "holds" then\n\t\t\treturn { kind = "approved", path = nil, name = "origin/main", record = false }, nil\n\t\tend\n\t\treturn nil,', '\t\tif true then\n\t\t\treturn { kind = "main", path = nil, name = "origin/main", record = true }, nil\n\t\tend\n\t\treturn nil,', PL),
+    ('layergit: approval.md is not a post-finish path', LAYERGIT, 'string.match(path, "/issues/active/[fdc]%d%d%d%d/approval%.md$")', 'false', ARF),
+    ('docs: zz-rules forgets the top-layer rule', RULES, "it records only when that worktree is on the raft's top layer with a clean tree", 'it records there', DC),
+    ('load: the raft worktree is judged by its checkout, not the top layer', PLACE, 'local copy = if topRef', 'local copy = if false', ARF),
     ('docs: zz-rules still sends the person to a worktree', RULES, '| one command, with a terminal on stdin,', '| in the worktree where the design is, with a terminal on stdin,', DC),
     ('docs: zz-rules forgets the main checkout is never written', RULES, 'the main checkout is never written', 'the main checkout is rarely written', DC),
     ('docs: zz-rules forgets which worktrees are read', RULES, 'No other worktree is read, so a prototype or a copy is approved only by running the command inside it', 'Every worktree is read', DC),
     ('docs: zz-rules forgets the retry', RULES, '`./zn approve <id> --publish` retries it from anywhere', '`./zn approve <id> --publish` retries it', DC),
     ('docs: z-design still says this worktree', DESIGN, 'in a terminal of their own, from anywhere in the checkout: it finds this worktree, records the approval and pushes the branch', 'in a terminal of their own in this worktree', DC),
-    ('docs: AGENTS.md still says the prep worktree', AGENTS, 'run in their own terminal, from anywhere in the checkout (it finds the design, records the approval and publishes it); it is refused', 'run in their own terminal in the prep worktree; it is refused', DC),
+    ('docs: z-ready still says the prep worktree', READY, 'run by the human in a terminal, from anywhere in the checkout', 'run by the human in the prep worktree', DC),
+    ('docs: the changed-contract refusal still names two commands', APPROVAL, 'Run ./zn approve {id} again.`', 'Run ./zn approve {id} again, then ./zn approve {id} --publish.`', DC),
+    ('docs: the publish tooling spec carries no explainer page', TOOL_PUB, '[`{ISSUE}/explainer.html`] = page(doc()),', '', DC),
+    ('docs: the approve tooling spec types no answer', TOOL_AP, 'local line = `yes y | script -q /dev/null sh -c', 'local line = `script -q /dev/null sh -c', DC),
+    ('docs: the publish tooling spec walks two commands', TOOL_PUB, 'published {ID} to origin/main: it counts now', 'published', DC),
     ('docs: ready still names two commands', APPROVAL, 'run ./zn approve {id} in a terminal, from anywhere in the checkout. This is', 'run ./zn approve {id}, then ./zn approve {id} --publish, from the worktree that holds the design. This is', DC),
-    ('docs: a refusal tells the person to go into a worktree', PLACE, 'Run ./zn approve {id}.`', 'Run ./zn approve {id} inside the one you mean.`', DC),
+    ('docs: a refusal tells the person to go into a worktree', PLACE, 'run ./zn worktree {raftName}, then ./zn approve {id}`', 'cd into a worktree of {raftName}, then ./zn approve {id} inside the one you mean`', (DC, PL)),
 ]
 
 restore = None  # (path, text) of the file a mutant is in
@@ -102,7 +134,8 @@ def main() -> int:
         restore = (path, text)
         open(path, 'w').write(text.replace(old, new))
         try:
-            r = subprocess.run(['lune', 'run', 'tests/run', '--', spec], cwd=Z, capture_output=True, text=True, timeout=900)
+            specs = list(spec) if isinstance(spec, tuple) else [spec]
+            r = subprocess.run(['lune', 'run', 'tests/run', '--'] + specs, cwd=Z, capture_output=True, text=True, timeout=1500)
             out = r.stdout + r.stderr
         finally:
             put_back()
