@@ -5382,7 +5382,7 @@ function cmd.done(pos: { string })
 		end
 		if #waiting > 0 then
 			fail(
-				`{raft.id} waits for approval: {table.concat(waiting, ", ")}. The person runs ./zn approve <id> in this worktree; ./zn guesses {raft.id} lists what to review.`
+				`{raft.id} waits for approval: {table.concat(waiting, ", ")}. The person runs ./zn approve <id> in a terminal, from anywhere in the checkout; ./zn guesses {raft.id} lists what to review.`
 			)
 		end
 	else
@@ -6081,8 +6081,11 @@ local function contractDirty(paths: { string }): string?
 	return line
 end
 
--- `approve <issue-id>` records the contract hash in the issue's approval.md and commits only that file.
--- `--check` reads: it says whether the latest row still matches, and which part changed.
+-- `approve <issue-id>` records the contract hash in the issue's approval.md and makes it count in the same command
+-- (c0369): it finds the place (the worktree of the issue's prep branch, the worktree it runs in, or origin/main through
+-- a detached worktree of its own), records there, and publishes approval.md to origin/main or pushes the branch.
+-- `--publish` only retries a recorded approval. `--check` reads: it says whether the latest row still matches, and
+-- which part changed.
 function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	for k in opts do
 		if k ~= "--check" and k ~= "--publish" then
@@ -6098,44 +6101,192 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 		local dispatched = process.env.ZN_DISPATCH
 		if dispatched and dispatched ~= "" then
 			fail(
-				`{id}: approve is refused while ZN_DISPATCH is set. Run ./zn approve {id} yourself, in a terminal, in this worktree.`
+				`{id}: approve is refused while ZN_DISPATCH is set. Run ./zn approve {id} yourself, in a terminal.`
 			)
 		end
 		if not stdinIsTerminal() then
-			local where = sh.git({ "rev-parse", "--show-toplevel" })
 			fail(
-				`{id}: approve is refused without a terminal on stdin. Run ./zn approve {id} yourself, in a terminal, in this worktree ({where}).`
+				`{id}: approve is refused without a terminal on stdin. Run ./zn approve {id} yourself, in a terminal.`
 			)
 		end
+	end
+	-- c0369 review 001 F3: a raft id is refused for what it is before placement, which looks only for issues and would
+	-- otherwise say there is nothing to approve; the shape is enough, since a prep's design is unknown to this checkout
+	if string.match(id, "^R%d+$") then
+		fail(`approve takes an issue ({id} is a raft)`)
+	end
+	-- c0369: the command finds the design itself. It acts in the worktree of the issue's prep branch (prep-<slug>) or the
+	-- worktree it runs in, when that holds a design of its own, or, for a design that is on origin/main, in a detached
+	-- worktree of origin/main it makes and removes. ZN_APPROVE_IN names the checkout a placed run acts in; it skips
+	-- placement only: every refusal above has already run in this process, and the main checkout is still refused.
+	local top = sh.git({ "rev-parse", "--show-toplevel" })
+	local publishOnly = opts["--publish"] ~= nil
+	if not onlyCheck and hasOrigin() and process.env.ZN_APPROVE_IN ~= top then
+		sh.run("git", { "fetch", "-q", "origin", "main" })
+		local places = require("./approveplace")
+		local trees = worktrees()
+		local root = trees[1].path
+		-- a name ./zn worktree cannot make, so no person's worktree is ever in the way
+		local scratch = `{root}/.worktree/.approve-{id}`
+		local detached = false
+		local listed = false
+		for _, w in trees do
+			if w.path == scratch then
+				listed, detached = true, w.branch == nil
+			end
+		end
+		local mainCopy, seen = places.load(id, top, scratch, trees)
+		local choice, refusal = places.choose(id, mainCopy, seen, publishOnly)
+		if not choice then
+			fail(refusal :: string)
+		end
+		local chosen = choice :: places.Choice
+		if chosen.kind == "approved" then
+			print(`{id} is already approved on origin/main`)
+			return
+		end
+		if chosen.kind == "pushed" then
+			-- an issue in active/: its approval is on the raft's pushed top layer and lands with the raft
+			if mainCopy and mainCopy.active then
+				print(`{id} is approved in {chosen.name}: it lands with {mainCopy.raft or "its raft"}`)
+				return
+			end
+			local older = if mainCopy
+					and mainCopy.ready
+					and mainCopy.state ~= "holds"
+				then "; origin/main's older design stays unapproved: that pull request replaces it"
+				else ""
+			print(`{id} is approved in {chosen.name}: it counts when its pull request merges{older}`)
+			return
+		end
+		local target = chosen.path or scratch
+		if chosen.kind == "main" then
+			local sha = sh.git({ "rev-parse", "origin/main" })
+			if not listed then
+				if fs.isDir(scratch) or fs.isFile(scratch) then
+					fail(
+						`{id}: {scratch} is in the way and is not a worktree: remove it, then ./zn approve {id}`
+					)
+				end
+				sh.git({ "worktree", "add", "-q", "--detach", scratch, sha })
+				detached = true
+			else
+				local dirty = sh.run("git", { "-C", scratch, "status", "--porcelain" })
+				if not detached or not dirty.ok or sh.trim(dirty.stdout) ~= "" then
+					fail(
+						`{id}: {scratch} is in the way (a worktree on a branch, or with changes): remove it, then ./zn approve {id}`
+					)
+				end
+				sh.git({ "-C", scratch, "checkout", "-q", "--detach", sha })
+			end
+		end
+		print(`{id}: {if chosen.record then "approving in" else "publishing from"} {chosen.name}`)
+		if target ~= top then
+			local args = { "run", `{top}/z-nile/engine/main`, "--", "approve", id }
+			if not chosen.record then
+				table.insert(args, "--publish")
+			end
+			local ran = process.exec("lune", args, {
+				cwd = target,
+				env = { ZN_TOP = target, ZN_CWD = "", ZN_APPROVE_IN = target },
+				stdio = "inherit",
+			})
+			if ran.ok and target == scratch and detached then
+				sh.run("git", { "worktree", "remove", scratch })
+			end
+			process.exit(ran.code)
+		end
+		publishOnly = not chosen.record
+	end
+	if not onlyCheck then
 		refuseInMainCheckout("approve")
 	end
 	local item = store.get(id)
 	if item.kind ~= "issue" then
 		fail(`approve takes an issue ({id} is a {item.kind})`)
 	end
-	-- f0399: an active issue is approved on its raft's top layer, and the approval lands with the raft
-	local landsWith: string? = nil
-	local topBranch = ""
-	if item.state == "active" and not onlyCheck then
-		landsWith = store.readFront(item.doc).raft or ""
-		if opts["--publish"] then
-			fail(`{id} is active in {landsWith}: its approval lands with the raft`)
-		end
-		local layers = layergit.layersOf(landsWith :: string)
-		topBranch = if #layers > 0 then layers[#layers].name else `{landsWith}'s top layer`
-		if
-			sh.git({ "branch", "--show-current" }) ~= topBranch
-			or sh.git({ "status", "--porcelain" }) ~= ""
-		then
+	local where = if process.env.ZN_APPROVE_IN == top
+			and string.match(top, "/%.worktree/%.approve%-[^/]+$")
+		then "a worktree of origin/main"
+		else top
+	-- Makes a recorded approval count: published to origin/main when the design there is the one approved, otherwise
+	-- pushed on its branch, where the prep pull request carries it.
+	local function count()
+		local function notYet(reason: string)
 			fail(
-				`{id} is active in {landsWith}: run ./zn approve {id} on {topBranch} (cd "$(./zn worktree {landsWith})")`
+				`{id}: approved in {where}, but it does not count yet: {reason}. Retry: ./zn approve {id} --publish`
 			)
 		end
-	end
-	if opts["--publish"] then
+		local function pushBranch()
+			local branch = sh.run("git", { "symbolic-ref", "--short", "-q", "HEAD" })
+			if not branch.ok or sh.trim(branch.stdout) == "" then
+				notYet(`{top} is on no branch, so there is nothing to push`)
+			end
+			local name = sh.trim(branch.stdout)
+			-- a raft's layer branch: pushed (never forced), so the layer stays finished for ./zn done (approval.md is a
+			-- post-finish path) and the approval lands with the raft (the user's ruling of 2026-11-17, f0399's rule)
+			local layer = stack.parse(name)
+			if layer then
+				local layerPush = sh.run("git", { "push", "-q", "origin", `HEAD:refs/heads/{name}` })
+				if not layerPush.ok then
+					notYet(`git push origin {name} failed: {sh.trim(layerPush.stderr)}`)
+				end
+				print(`It lands with {layer.raft}: pushed to {name}, nothing to publish.`)
+				return
+			end
+			-- only the prep branch, or a branch already on origin, is pushed: no branch is created on origin for a prototype
+			local known = sh.run("git", { "rev-parse", "-q", "--verify", `refs/remotes/origin/{name}` })
+			if name ~= `prep-{item.slug}` and not known.ok then
+				print(
+					`{id}: approved in {where}; {name} is not on origin, so nothing is pushed: it counts when this design reaches origin/main`
+				)
+				return
+			end
+			-- never forced: a branch that moved on origin refuses, and the record stays for the retry
+			local pushed = sh.run("git", { "push", "-q", "origin", `HEAD:refs/heads/{name}` })
+			if not pushed.ok then
+				notYet(`git push origin {name} failed: {sh.trim(pushed.stderr)}`)
+			end
+			print(`pushed {name}: the approval counts when its pull request merges`)
+		end
 		local path = approval.file(item)
+		-- an issue in active/ is approved on its raft's top layer and lands with the raft: never published to main. The
+		-- top layer is pushed by its own name, whatever the raft's worktree has checked out (c0369 design review 004 F1)
+		if item.state == "active" then
+			local raftId = store.readFront(item.doc).raft or ""
+			local layers = layergit.layersOf(raftId)
+			local topLayer = layers[#layers]
+			if not topLayer then
+				fail(`{id} is active in {raftId}, which has no layer: nothing to push`)
+			end
+			local name = (topLayer :: stack.Layer).name
+			local onHere = sh.run("git", { "rev-parse", "-q", "--verify", `refs/heads/{name}` })
+			local ref = if onHere.ok then `refs/heads/{name}` else `refs/remotes/origin/{name}`
+			if not sh.run("git", { "cat-file", "-e", `{ref}:{path}` }).ok then
+				fail(`{id} has no approval on {name}. Run ./zn approve {id} first.`)
+			end
+			if not publishing() then
+				notYet("publishing is off (PICKMAN_PUBLISH=0, or inside a check)")
+			end
+			-- never forced: a top layer that moved on origin refuses, and the record stays for the retry; a top layer
+			-- that is only on origin is already pushed
+			if onHere.ok then
+				local pushed =
+					sh.run("git", { "push", "-q", "origin", `refs/heads/{name}:refs/heads/{name}` })
+				if not pushed.ok then
+					notYet(`git push origin {name} failed: {sh.trim(pushed.stderr)}`)
+				end
+			end
+			print(`It lands with {raftId}: pushed to {name}, nothing to publish.`)
+			return
+		end
 		if not fs.isFile(path) then
-			fail(`{id} has no approval in this worktree. Run ./zn approve {id} first.`)
+			fail(`{id} has no approval in {where}. Run ./zn approve {id} first.`)
+		end
+		-- with publishing off nothing leaves this machine: the record stays, and the command says so and fails, so
+		-- the worktree that holds it is kept for the retry
+		if not publishing() then
+			notYet("publishing is off (PICKMAN_PUBLISH=0, or inside a check)")
 		end
 		local localText = fs.readFile(path)
 		local function show(rel: string): string?
@@ -6143,8 +6294,10 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 			return if got.ok then got.stdout else nil
 		end
 		local doc = show(item.doc)
-		if not doc then
-			fail(`{id} is not on origin/main. From this worktree run: git push origin HEAD`)
+		-- a draft on origin/main is not the design that was approved, whatever its text
+		if not doc or frontOf(doc).design ~= "ready" then
+			pushBranch()
+			return
 		end
 		local checkRel = `{item.dir}/check.sh`
 		local check = show(checkRel) or ""
@@ -6195,21 +6348,49 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 		end
 		local problem = approval.reasonOf(id, path, parts :: contract.Parts, localText, true)
 		if problem then
-			fail(`{problem} From this worktree run: git push origin HEAD`)
+			-- the approval is not of main's design: it is of this branch's own, which its pull request carries
+			local mine = approval.refusal(".", item, true)
+			if mine then
+				fail(mine)
+			end
+			pushBranch()
+			return
 		end
-		local onMain = show(path)
-		if onMain == localText then
+		-- origin/main's file with this approval's row appended, never the worktree's file: a row main has is never lost
+		local mineRows = contract.parse(localText) or {}
+		local newest = mineRows[#mineRows]
+		-- the same row already last on main: a retry of a publish that landed
+		local function landed(text: string?): boolean
+			local rows: { contract.Row } = (if text then contract.parse(text) else nil) or {}
+			local last = rows[#rows]
+			return newest ~= nil
+				and last ~= nil
+				and last.when == newest.when
+				and last.who == newest.who
+				and last.hash == newest.hash
+		end
+		if not newest or landed(show(path)) then
 			print(`{id} is already approved on origin/main`)
 			return
 		end
 		refuseStale()
-		local result = published(publish.commit(".", function(_paths, _read, _roots, _counter)
-			return { { path = path, content = localText } }
+		-- built from origin/main's file as each attempt reads it, so a row another machine appended meanwhile is kept
+		local result = published(publish.commit(".", function(_paths, read, _roots, _counter)
+			local current = read(path)
+			if landed(current) then
+				return {}
+			end
+			local rows: { contract.Row } = (if current then contract.parse(current) else nil) or {}
+			table.insert(rows, newest :: contract.Row)
+			return { { path = path, content = contract.render(rows) } }
 		end, `tracker: approve {id}`))
 		if not result.ok then
-			fail(`{id}: {result.reason}. From this worktree run: ./zn approve {id} --publish`)
+			notYet(result.reason or "the publish failed")
 		end
-		print(`published {id} to origin/main`)
+		print(`published {id} to origin/main: it counts now`)
+	end
+	if publishOnly then
+		count()
 		return
 	end
 	if onlyCheck then
@@ -6277,6 +6458,51 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	if dirty then
 		fail(`{id}: commit the contract first ({dirty}), then ./zn approve {id}`)
 	end
+	-- c0369 review 003 F6: a run never records on a detached HEAD (a rebase in progress, an executor's restack) in
+	-- someone's worktree, whether it was placed there or acts where it was run (review 001 F1: the in-process run took
+	-- no such check and recorded a commit nothing could push); the command's own worktree of origin/main is detached by
+	-- design, and a repository with no origin records in place as before
+	if hasOrigin() and where ~= "a worktree of origin/main" then
+		local branch = sh.run("git", { "symbolic-ref", "--short", "-q", "HEAD" })
+		if not branch.ok or sh.trim(branch.stdout) == "" then
+			fail(
+				`{id}: {top} is on no branch (a rebase or another operation may be in progress): nothing recorded`
+			)
+		end
+	end
+	-- an issue in active/ is recorded only on its raft's top layer with a clean tree (the user's ruling of 2026-11-17,
+	-- f0399's rule); the refusal names the branch, never a directory
+	if item.state == "active" then
+		local raftId = front.raft or ""
+		local layers = layergit.layersOf(raftId)
+		local topLayer = layers[#layers]
+		local topName = if topLayer then topLayer.name else `{raftId}'s top layer`
+		local on = sh.run("git", { "symbolic-ref", "--short", "-q", "HEAD" })
+		local branch = if on.ok then sh.trim(on.stdout) else ""
+		local onName = if branch ~= "" then branch else "no branch"
+		if not topLayer or branch ~= topName then
+			fail(
+				`{id} is active in {raftId}: run ./zn approve {id} on {topName}, its top layer; the raft's worktree is on {onName}`
+			)
+		end
+		local status = sh.run("git", { "status", "--porcelain" })
+		if not status.ok or sh.trim(status.stdout) ~= "" then
+			fail(
+				`{id} is active in {raftId}: {where} has uncommitted changes; commit them, then ./zn approve {id}`
+			)
+		end
+	end
+	-- c0369 review 003 F3: origin/main's approval.md that does not parse is replaced in the command's own worktree of
+	-- origin/main (its rows cannot be read, so none is lost); anywhere else it is still refused
+	local current = approval.file(item)
+	if
+		where == "a worktree of origin/main"
+		and fs.isFile(current)
+		and not contract.parse(fs.readFile(current))
+	then
+		print(`{id}: origin/main's {current} does not parse: this approval replaces it`)
+		fs.removeFile(current)
+	end
 	local when = os.date("!%Y-%m-%dT%H:%M:%SZ") :: string
 	local text, aerr = approval.append(".", item, who, when)
 	if not text then
@@ -6288,18 +6514,10 @@ function cmd.approve(pos: { string }, opts: { [string]: { string } })
 	sh.git({ "commit", "-q", "-m", `tracker: approve {id}`, "--", path })
 	local rows = contract.parse(text :: string)
 	local hash = if rows then rows[#rows].hash else ""
-	print(`approved {id} {hash}`)
-	if landsWith then
-		local pushed = sh.run("git", { "push", "--quiet", "origin", "HEAD" })
-		if not pushed.ok then
-			fail(
-				`{id}: the approval is committed, but pushing {topBranch} failed: {sh.trim(pushed.stderr)}. From this worktree run: git push origin HEAD`
-			)
-		end
-		print(`It lands with {landsWith}: pushed to {topBranch}, nothing to publish.`)
-		return
+	print(`approved {id} {hash} in {where}`)
+	if hasOrigin() then
+		count()
 	end
-	print(`Publish it to origin/main from this worktree: ./zn approve {id} --publish`)
 end
 
 -- `guess <issue-id> --step design|raft|build --open <text> --chose <text> --why <text>` (f0399): one more line in

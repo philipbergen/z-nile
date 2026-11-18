@@ -1,7 +1,8 @@
 --!strict
 -- Writes a matching approval.md beside a prepared issue in a fixture, so `./zn ready` can succeed.
--- `./zn approve` refuses in the fixture's main checkout and without a terminal, and the engine never
--- approves by itself. The caller commits the files (a seed commit, or its own). This writes nothing
+-- `./zn approve <id>` is one command, run by a person in a terminal from anywhere in the checkout: it finds where the
+-- design is, records there and makes the approval count (c0369). It never records in the fixture's main checkout,
+-- refuses without a terminal, and the engine never approves by itself. The caller commits the files (a seed commit, or its own). This writes nothing
 -- for an issue that is not design: ready, has an unruled open-list bullet, or has no check.sh.
 
 local approval = require("@znile/engine/approval")

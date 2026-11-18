@@ -494,10 +494,12 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
 			for _, id in { "c0010", "c0020", "c0025" } do
 				t.expect(has(pushed, `tracker: approve {id}`)).toBe(true)
 			end
+			-- narrowed by c0369 (its Overrides line): --publish is the retry of the layer's push and is not refused; an
+			-- active issue's approval is still never published to origin/main
+			local mainBefore = git(f.origin, { "rev-parse", "main" })
 			local published = human(wt, { "approve", "c0010", "--publish" })
-			t.expect(published.ok).toBe(false)
-			t.expect(has(say(published), "c0010 is active in R0010: its approval lands with the raft"))
-				.toBe(true)
+			t.expect(has(say(published), "published c0010")).toBe(false)
+			t.expect(git(f.origin, { "rev-parse", "main" })).toBe(mainBefore)
 			git(f.other, { "fetch", "-q", "origin" })
 			local stack = zn(f.other, { "stack", "R0010" })
 			t.expect(has(stack, "1 R0010/1/c0010 c0010 finished")).toBe(true)

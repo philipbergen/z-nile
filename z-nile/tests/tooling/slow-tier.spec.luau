@@ -31,7 +31,7 @@ local function present(path: string): boolean
 end
 
 return t.spec("the measured slow-tier manifest", function(it)
-	it("names 101 existing z-nile specs with their recorded seconds", function()
+	it("names 104 existing z-nile specs with their recorded seconds", function()
 		local tiers = slow.load(root)
 		local count = 0
 		for path, seconds in tiers do
@@ -40,7 +40,7 @@ return t.spec("the measured slow-tier manifest", function(it)
 			t.expect(present(path)).toBe(true)
 			t.expect(seconds > 0).toBe(true)
 		end
-		t.expect(count).toBe(101)
+		t.expect(count).toBe(104)
 	end)
 
 	it("has at least the 25 slowest recorded specs", function()

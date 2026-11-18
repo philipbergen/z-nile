@@ -382,7 +382,7 @@ function work.forRaft(r: RaftFact): Decision
 		return of(
 			r,
 			"wait",
-			`{r.id} waits for the person: ./zn approve {table.concat(ids, ", ")} in its worktree ({table.concat(
+			`{r.id} waits for the person: ./zn approve {table.concat(ids, ", ")} from anywhere in the checkout ({table.concat(
 				r.unapproved :: { string },
 				", "
 			)}); ./zn guesses {r.id} lists what to review. Tell the person, then ask again with no raft.`,
