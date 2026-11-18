@@ -62,7 +62,7 @@ return t.spec("c0369 the texts", function(it)
 			.toEqual({})
 	end)
 
-	it("z-design and z-ready send the person to one command, from anywhere", function()
+	it("z-design, z-ready and zz-execute send the person to one command, from anywhere", function()
 		t.expect(lacks("z-nile/skills/z-design/SKILL.md", {
 			"in a terminal of their own, from anywhere in the checkout: it finds this worktree, records the approval and pushes the branch",
 		})).toEqual({})
@@ -72,6 +72,10 @@ return t.spec("c0369 the texts", function(it)
 		})).toEqual({})
 		t.expect(holds("z-nile/skills/z-ready/SKILL.md", { "run by the human in the prep worktree" }))
 			.toEqual({})
+		-- zz-execute's wait (f0399's text): the person approves from anywhere, and the approval is recorded on the top layer
+		t.expect(lacks("z-nile/skills/zz-execute/SKILL.md", {
+			"runs `./zn approve <id>` for each member, from anywhere in the checkout (it records in the raft's worktree, on its top layer, and pushes that layer)",
+		})).toEqual({})
 	end)
 
 	it(
@@ -86,10 +90,22 @@ return t.spec("c0369 the texts", function(it)
 				"From this worktree run: git push origin HEAD",
 				"inside the one you mean",
 				"has no approval in this worktree",
+				"./zn approve <id> in this worktree", -- done's wait for approval (f0399)
+				'(cd "$(./zn worktree', -- f0399's refusal of a layer below the top
+				"its approval lands with the raft", -- f0399's refusal of --publish for an issue in active/
 			}
 			t.expect(holds("z-nile/engine/approval.luau", gone)).toEqual({})
 			t.expect(holds("z-nile/engine/main.luau", gone)).toEqual({})
 			t.expect(holds("zn", gone)).toEqual({})
+			t.expect(holds("z-nile/engine/work.luau", gone)).toEqual({})
+			-- work next's wait (f0399) named the raft's worktree
+			t.expect(holds("z-nile/engine/work.luau", { "in its worktree (" })).toEqual({})
+			t.expect(lacks("z-nile/engine/work.luau", {
+				'./zn approve {table.concat(ids, ", ")} from anywhere in the checkout (',
+			})).toEqual({})
+			t.expect(lacks("z-nile/engine/main.luau", {
+				"The person runs ./zn approve <id> in a terminal, from anywhere in the checkout;",
+			})).toEqual({})
 			t.expect(holds("z-nile/engine/approveplace.luau", gone)).toEqual({})
 			t.expect(holds("z-nile/tests/lib/seal.luau", { "refuses in the fixture's main checkout" }))
 				.toEqual({})

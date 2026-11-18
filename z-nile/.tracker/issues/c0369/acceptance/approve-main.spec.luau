@@ -51,8 +51,9 @@ local function doc(design: string, ready: boolean?): string
 		else "ready"}\ncreated: 2026-11-10\nstatus: preparing-quiet-copper-falcon\n---\n\n# {ID}\n\n## Problem\nThe gate cannot see an approval.\n\n## Solution\nRecord a hash.\n\n## Design\n{design}\n\n## Acceptance criteria\nThe hash is checked.\n\n## Test plan\nSpecs cover the gates.\n`
 end
 -- an explainer page of f0339's shape that names the contract of the document `text`
-local function page(text: string): string
-	local hash = contract.hash((contract.build(text, CHECK, { ["hold.spec.luau"] = SPEC })) :: contract.Parts)
+local function page(text: string, guesses: string?): string
+	local hash =
+		contract.hash((contract.build(text, CHECK, { ["hold.spec.luau"] = SPEC }, guesses)) :: contract.Parts)
 	return `<!doctype html><html><head><meta charset="utf-8"><meta name="zn-contract" content="{hash}"><title>{ID}</title></head><body>`
 		.. '<section id="idea"><p>Show the person a page before they say yes.</p></section>'
 		.. '<section id="before"><svg viewBox="0 0 10 10"><rect width="4" height="4"/></svg></section>'
@@ -421,6 +422,28 @@ return t.spec("c0369 one approve from anywhere records and publishes", function(
 			t.expect(fs.isDir(scratch)).toBe(false)
 			fixture.git(f.main, { "pull", "-q", "origin", "main" })
 			t.expect(fixture.exec(f.main, "./zn", { "approve", ID, "--check" }).ok).toBe(true)
+		end
+	)
+
+	it(
+		"counts guesses.md as part of main's design: a guess merged since the approval is approved again, then once only",
+		function()
+			local GUESSES = "# guesses\n- G1 (design, 2026-11-17): Which file. Chose: Two. Why: One list.\n"
+			trackerfix.elsewhere(f, {
+				[`{ISSUE}/guesses.md`] = GUESSES,
+				[PAGE] = page(doc("A tenth design."), GUESSES),
+			}, "a guess merged since the approval")
+			local commits = count()
+			local out = must(approve(f.main))
+			t.expect(has(out, `{ID}: approving in origin/main`)).toBe(true)
+			t.expect(has(out, `published {ID} to origin/main: it counts now`)).toBe(true)
+			t.expect(has(onMain(`{ISSUE}/approval.md`), "guesses=")).toBe(true)
+			t.expect(count()).toBe(commits + 1)
+			-- asked again, the approval that names guesses.md holds for main's design: nothing is recorded twice
+			local again = must(approve(f.main))
+			t.expect(has(again, `{ID} is already approved on origin/main`)).toBe(true)
+			t.expect(count()).toBe(commits + 1)
+			t.expect(fs.isDir(scratch)).toBe(false)
 		end
 	)
 end)

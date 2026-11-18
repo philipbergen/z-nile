@@ -1,10 +1,10 @@
 """Mutation check for c0369: MUT_WT=<a throwaway copy of the prototype> python3 mutants.py ["<mutant id>" ...]
 
-MUT_WT is required: a worktree or clone of proto-c0369-main (origin/main with this change, no c0283) that holds this issue's specs in
+MUT_WT is required: a worktree or clone of proto-c0369-landed (origin/main after f0399 landed, with this change, no c0283) that holds this issue's specs in
 z-nile/.tracker/issues/c0369/acceptance and nothing worth keeping. Each entry replaces one text there, runs the row's
 spec and restores the file (also when the run is stopped by a signal). A mutant is killed when the run fails; the
 output line says on what. An entry whose text is not found exactly once, or that survives, exits non-zero.
-Run it bounded: MUT_WT=... ./zn run --time 3500 -- python3 <this file>"""
+Run it bounded: MUT_WT=... [MUT_SHARD=k/n] ./zn run --time 3500 -- python3 <this file>"""
 import os
 import signal
 import subprocess
@@ -19,7 +19,8 @@ AR = (AM, AB)  # an engine mutant runs both fixture specs
 ARF = A + 'approve-raft.spec.luau'
 PLACE, MAIN, APPROVAL = 'engine/approveplace.luau', 'engine/main.luau', 'engine/approval.luau'
 RULES, DESIGN, READY = 'skills/zz-rules/SKILL.md', 'skills/z-design/SKILL.md', 'skills/z-ready/SKILL.md'
-LAYERGIT = 'engine/layergit.luau'
+LAYERGIT, WORK, EXEC = 'engine/layergit.luau', 'engine/work.luau', 'skills/zz-execute/SKILL.md'
+LAND = 'tests/acceptance/f0399/land.spec.luau'  # narrowed by this issue's Overrides line
 TOOL_AP, TOOL_PUB = 'tests/tooling/approve.spec.luau', 'tests/tooling/approve-publish.spec.luau'
 TO_MAIN = 'if not publishOnly and main and main.ready and main.state ~= "holds" then'
 M = [
@@ -74,12 +75,12 @@ M = [
     ('approve: an unparseable approval.md on main blocks the approval', MAIN, '\t\tand not contract.parse(fs.readFile(current))\n', '\t\tand false\n', AM),
     ('approve: a placed run records on no branch', MAIN, 'if process.env.ZN_APPROVE_IN == top and where ~= "a worktree of origin/main" then', 'if false then', ARF),
     ('approve: a layer branch is not pushed', MAIN, 'local layer = stack.parse(name)\n\t\t\tif layer then', 'local layer = stack.parse(name)\n\t\t\tif false then', (AB, ARF)),
-    ('approve: an active issue is recorded on a lower layer', MAIN, 'if not top or branch ~= top.name then', 'if not top then', ARF),
+    ('approve: an active issue is recorded on a lower layer', MAIN, 'if not topLayer or branch ~= topName then', 'if not topLayer then', ARF),
     ('approve: an active issue is recorded on a dirty tree', MAIN, 'if not status.ok or sh.trim(status.stdout) ~= "" then', 'if false then', ARF),
     ('approve: an active issue is published to origin/main', MAIN, 'if item.state == "active" then\n\t\t\tpushBranch()', 'if false then\n\t\t\tpushBranch()', ARF),
     ('place: an active issue is placed like a backlog one', PLACE, 'if main and main.active then', 'if false then', (PL, ARF)),
     ('place: an active issue with no raft worktree is recorded on origin/main', PLACE, '\t\tif main.state == "holds" then\n\t\t\treturn { kind = "approved", path = nil, name = "origin/main", record = false }, nil\n\t\tend\n\t\treturn nil,', '\t\tif true then\n\t\t\treturn { kind = "main", path = nil, name = "origin/main", record = true }, nil\n\t\tend\n\t\treturn nil,', PL),
-    ('layergit: approval.md is not a post-finish path', LAYERGIT, 'string.match(path, "/issues/active/[fdc]%d%d%d%d/approval%.md$")', 'false', ARF),
+    ('layergit: approval.md is not a post-finish path', LAYERGIT, 'for _, file in { "approval%.md", "guesses%.md" } do', 'for _, file in { "guesses%.md" } do', ARF),
     ('docs: zz-rules forgets the top-layer rule', RULES, "it records only when that worktree is on the raft's top layer with a clean tree", 'it records there', DC),
     ('load: the raft worktree is judged by its checkout, not the top layer', PLACE, 'local copy = if topRef', 'local copy = if false', ARF),
     ('docs: zz-rules still sends the person to a worktree', RULES, '| one command, with a terminal on stdin,', '| in the worktree where the design is, with a terminal on stdin,', DC),
@@ -94,6 +95,16 @@ M = [
     ('docs: the publish tooling spec walks two commands', TOOL_PUB, 'published {ID} to origin/main: it counts now', 'published', DC),
     ('docs: ready still names two commands', APPROVAL, 'run ./zn approve {id} in a terminal, from anywhere in the checkout. This is', 'run ./zn approve {id}, then ./zn approve {id} --publish, from the worktree that holds the design. This is', DC),
     ('docs: a refusal tells the person to go into a worktree', PLACE, 'run ./zn worktree {raftName}, then ./zn approve {id}`', 'cd into a worktree of {raftName}, then ./zn approve {id} inside the one you mean`', (DC, PL)),
+    # the re-prep on landed f0399 (2026-11-17)
+    ('atRev: guesses.md is not hashed', PLACE, '\t\t\t\treadycheck.specs(folder, promoted),\n\t\t\t\tfolder[guesses.FILE]\n', '\t\t\t\treadycheck.specs(folder, promoted)\n', AM),
+    ('approve: a pushed active approval is said to wait for a pull request', MAIN, 'if mainCopy and mainCopy.active then', 'if false then', ARF),
+    ('approve: --publish is refused for an issue in active/', MAIN, 'print(`{id} is approved in {chosen.name}: it lands with {mainCopy.raft or "its raft"}`)', 'fail(`{id} is active in {mainCopy.raft}: its approval lands with the raft`)', ARF),
+    ('approve: the layer push prints the prep line', MAIN, 'print(`It lands with {layer.raft}: pushed to {name}, nothing to publish.`)', 'print(`pushed {name}: the approval counts when its pull request merges`)', (AB, ARF)),
+    ('approve: the lower-layer refusal sends the person to cd', MAIN, "its top layer; the raft's worktree is on {onName}`", 'its top layer (cd "$(./zn worktree {raftId})")`', ARF),
+    ("docs: work next's wait names the raft's worktree", WORK, 'from anywhere in the checkout ({table.concat(', 'in its worktree ({table.concat(', DC),
+    ("docs: done's wait names this worktree", MAIN, 'The person runs ./zn approve <id> in a terminal, from anywhere in the checkout;', 'The person runs ./zn approve <id> in this worktree;', DC),
+    ("docs: zz-execute sends the person to the raft's worktree", EXEC, "from anywhere in the checkout (it records in the raft's worktree, on its top layer, and pushes that layer)", "in the raft's worktree, on its top layer", DC),
+    ('approve: an active --publish publishes to origin/main (the narrowed land.spec case)', MAIN, 'if item.state == "active" then\n\t\t\tpushBranch()', 'if false then\n\t\t\tpushBranch()', ARF),
 ]
 
 restore = None  # (path, text) of the file a mutant is in
@@ -121,9 +132,14 @@ def main() -> int:
     for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(sig, stopped)
     wanted = sys.argv[1:]
+    # MUT_SHARD=k/n runs every n-th entry from the k-th (1-based), so n copies can run side by side
+    shard = os.environ.get('MUT_SHARD', '1/1').split('/')
+    k, n = int(shard[0]), int(shard[1])
     bad = 0
-    for name, rel, old, new, spec in M:
+    for i, (name, rel, old, new, spec) in enumerate(M):
         if wanted and name not in wanted:
+            continue
+        if i % n != k - 1:
             continue
         path = os.path.normpath(Z + '/' + rel)
         text = open(path).read()
