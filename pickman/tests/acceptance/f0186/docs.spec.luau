@@ -5,7 +5,10 @@
 -- play shows as 5 R$ struck through, on sale for 1 R$; the Hiscores entries name the revives. architecture.md declares
 -- Flow -> Lobby (Flow's revives line uses Lobby's words). Pickman's paid-play records stay in pickman's own stores,
 -- the names the arcade library's catalog gives pickman (f0201), so no other title's play spends its free hour.
+local PaidPlay = require("@arcade/Logic/PaidPlay")
 local fs = require("@lune/fs")
+local luau = require("@lune/luau")
+local place = require("@tests/lib/place")
 local t = require("@tests/lib/t")
 
 local function has(src: string, needle: string): boolean
@@ -56,11 +59,21 @@ return t.spec("f0186 the documents and pickman's own free game", function(it)
 	end)
 
 	it("pickman's paid-play records stay in pickman's own stores, keyed by user id", function()
-		local Pay = require("@logic/Pay") -- f0145's: required here, so the other cases run on a tree without it
-		t.expect(Pay.STORE).toBe("PaidPlay")
-		t.expect(Pay.TEST_STORE).toBe("PaidPlayTest")
-		t.expect(Pay.store("live")).toBe("PaidPlay")
-		t.expect(Pay.store("closed")).toBe("PaidPlay")
-		t.expect(Pay.store("test")).toBe("PaidPlayTest")
+		-- c0202: Pickman's records are the arcade library's catalog entry "pickman" (the place builds the catalog as
+		-- ServerStorage.Arcade.Catalog), read through the library's PaidPlay.store
+		local catalog =
+			place.load():FindFirstChild("ServerStorage"):FindFirstChild("Arcade"):FindFirstChild("Catalog")
+		local entry: any = nil
+		for _, e in luau.load(catalog.Source, { debugName = "Catalog" })() do
+			if e.name == "pickman" then
+				entry = e
+			end
+		end
+		t.expect(entry ~= nil).toBe(true)
+		t.expect(entry.store).toBe("PaidPlay")
+		t.expect(entry.testStore).toBe("PaidPlayTest")
+		t.expect(PaidPlay.store(entry, "live")).toBe("PaidPlay")
+		t.expect(PaidPlay.store(entry, "closed")).toBe("PaidPlay")
+		t.expect(PaidPlay.store(entry, "test")).toBe("PaidPlayTest")
 	end)
 end)

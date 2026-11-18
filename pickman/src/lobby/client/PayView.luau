@@ -1,13 +1,14 @@
 --!strict
 -- Lobby client adapter (f0145): the line under START GAME saying what a game costs (Lobby.payLine, from what the
 -- server says on PayStatus), redrawn every 30 s so the minutes to the next free game count down; and the test
--- purchase screen. LobbyView is unchanged: this view only adds its own line.
+-- purchase screen (the arcade library's, c0202). LobbyView is unchanged: this view only adds its own line. The price
+-- words are the library's Prices.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Lobby = require("@game/ReplicatedStorage/Shared/Logic/Lobby")
-local Pay = require("@game/ReplicatedStorage/Shared/Logic/Pay")
-local TestPurchase = require("@game/ReplicatedStorage/Shared/TestPurchase")
+local Prices = require("@game/ReplicatedStorage/Arcade/Prices")
+local TestPurchase = require("@game/ReplicatedStorage/Arcade/TestPurchase")
 
 local PayView = {}
 PayView.REDRAW_SECONDS = 30
@@ -30,16 +31,16 @@ function PayView.start()
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	TestPurchase.start()
 
-	local status: Pay.Status? = nil
+	local status: Lobby.PayStatus? = nil
 	local mode: string? = nil
 	local function draw()
-		line.Text = Lobby.payLine(status, mode, os.time()) or ""
+		line.Text = Lobby.payLine(status, mode, os.time(), Prices) or ""
 	end
 	task.spawn(function()
 		local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("PayStatus") :: RemoteEvent
 		remote.OnClientEvent:Connect(function(said: any, now: any)
 			mode = if type(said) == "string" then said else nil
-			status = if type(now) == "table" then now :: Pay.Status else nil
+			status = if type(now) == "table" then now :: Lobby.PayStatus else nil
 			draw()
 		end)
 	end)

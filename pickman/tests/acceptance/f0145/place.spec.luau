@@ -5,7 +5,8 @@
 -- (`Paid.start(Starts.start(Paid.allow))`, with Starts an inline require or a local bound to it, as f0148's pins of
 -- the same Main accept); the lobby client's Main boots PayView after LobbyView. No client script requires Purchases
 -- (the store and the purchases are the server's). The remotes are made at run time, so the place files' remote lists
--- stay as they are. game-design.md states the paid play; architecture.md declares Pay, Lobby -> Pay, and the Pay row.
+-- stay as they are. game-design.md states the paid play (architecture.md's Pay row and Lobby -> Pay are gone since
+-- c0202 moved paid play into the arcade library; c0202's own place.spec pins that).
 -- Source pins read with comments removed; what they leave to the adapters' running cases (AC5) and to OC1 and OC2:
 -- everything the adapters do.
 local fs = require("@lune/fs")
@@ -106,9 +107,5 @@ return t.spec("f0145 the places and the documents", function(it)
 				error(`game-design.md lacks: {phrase}`)
 			end
 		end
-		local arch = fs.readFile(".tracker/architecture.md")
-		local deps = "\n" .. (string.match(arch, "```deps\n(.-)```") or "")
-		t.expect(has(deps, "\nLobby -> Pay\n")).toBe(true)
-		t.expect(has(arch, "\n| Pay |")).toBe(true)
 	end)
 end)

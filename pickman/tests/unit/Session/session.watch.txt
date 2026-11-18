@@ -51,14 +51,11 @@ pickman/src/shared/Logic/Lobby/init.luau
 pickman/src/shared/Logic/Maze/Layouts.luau
 pickman/src/shared/Logic/Maze/init.luau
 pickman/src/shared/Logic/Movement/init.luau
-pickman/src/shared/Logic/Pay/init.luau
 pickman/src/shared/Logic/Pellets/init.luau
 pickman/src/shared/Logic/Session/init.luau
 pickman/src/shared/Logic/Touch/init.luau
 pickman/src/shared/Logic/Travel/init.luau
 pickman/src/shared/Logic/View/init.luau
-pickman/src/shared/Purchases.luau
-pickman/src/shared/TestPurchase.luau
 pickman/stylua.toml
 pickman/tests/contract/.gitkeep
 pickman/tests/fixtures/sim/walker.luau
