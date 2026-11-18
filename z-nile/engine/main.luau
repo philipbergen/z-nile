@@ -4769,14 +4769,12 @@ local function recordAndCommit(
 	-- AI time and tokens are unmeasured here (a commit did not run the process it would time).
 	local minutes = explicitMinutes or 0
 	local shares = spend.attribute(issues, spend.stagedStats(isDone), minutes, how, tokens)
-	local trailers: { string } = {}
 	local foldHomes: { [string]: string } = {}
 	local extraRows: { [string]: { ledger.Row } } = {}
-	local keptAny = false
-	local gaveReading = false
 	if reading then
 		print(`session: {reading.note}`)
 	end
+	local kept: { spend.Share } = {}
 	for _, share in shares do
 		-- The ticket is folded whether or not this commit adds a line-count row. A build share that moved no
 		-- lines is still not given a row of its own.
@@ -4790,57 +4788,29 @@ local function recordAndCommit(
 		then
 			continue
 		end
-		keptAny = true
-		local subject = string.match(message, "^[^\n]*") or message
-		local rowTokens: number? = nil
-		local rowModel = model
-		local rowAi: number? = nil
-		local rowFlags = "tokens,wall,cpu,ai"
-		if reading and not gaveReading then
-			gaveReading = true
-			if reading.note ~= "" then
-				subject ..= " " .. reading.note
-			end
-			rowTokens = reading.tokens
-			rowAi = reading.ai
-			if reading.model and not rowModel then
-				rowModel = reading.model
-			end
-			rowFlags = sessionread.flags(reading)
-		end
-		local row: ledger.Row = {
-			when = os.date("!%Y-%m-%d %H:%M", os.time()) :: string,
-			subject = subject,
-			added = share.added,
-			removed = share.removed,
-			minutes = 0,
-			how = "measured",
-			phase = phase :: string,
-			tokens = rowTokens,
-			model = rowModel,
-			ai = rowAi,
-			unmeasured = rowFlags,
-		}
+		table.insert(kept, share)
+	end
+	local keptAny = #kept > 0
+	-- one call builds every row of the commit: the plain subject, and the session's reading on the first row only
+	local rows = ledger.commitRows(
+		message,
+		os.date("!%Y-%m-%d %H:%M", os.time()) :: string,
+		phase :: string,
+		kept,
+		model,
+		reading,
+		if reading then sessionread.flags(reading) else ""
+	)
+	for i, share in kept do
 		local list = extraRows[share.id]
 		if not list then
 			list = {}
 			extraRows[share.id] = list
 		end
-		table.insert(list, row)
-		local trailer =
-			string.format("Issue: %s +%d/-%d %.1fm", share.id, share.added, share.removed, share.minutes)
-		if phase ~= "build" then
-			trailer ..= " " .. (phase :: string)
-		end
-		local shownTokens = rowTokens or share.tokens
-		if shownTokens ~= nil then
-			trailer ..= ` {shownTokens} tokens`
-		end
-		if rowModel then
-			trailer ..= ` {rowModel}`
-		end
-		table.insert(trailers, trailer)
+		table.insert(list, rows[i])
 	end
+	-- the session's note is kept with the commit it measured, as its last trailer: its one stored copy
+	local trailers = ledger.commitTrailers(phase :: string, kept, rows, if reading then reading.note else nil)
 	local top = sh.git({ "rev-parse", "--show-toplevel" })
 	local planned = costrow.plan(top, foldHomes, extraRows, false)
 	local folded = costrow.writeFiles(planned)

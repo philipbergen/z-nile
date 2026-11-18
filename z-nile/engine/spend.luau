@@ -15,14 +15,7 @@ local spend = {}
 
 spend.IDLE_CAP_MINUTES = 45
 
-export type Share = {
-	id: string,
-	added: number,
-	removed: number,
-	minutes: number,
-	how: string,
-	tokens: number?,
-}
+export type Share = ledger.Share
 export type Totals = { added: number, removed: number, minutes: number, records: number, tokens: number }
 
 type FileStat = { path: string, added: number, removed: number }
