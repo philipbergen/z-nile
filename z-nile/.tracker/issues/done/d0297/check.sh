@@ -20,7 +20,7 @@ check "AC4: zz-test says the selector never selects a sequestered spec and that 
   g "\`./zn finish\` alone passes \`--own-acceptance\`" "$S"
   # the usage block, not the parse code: a `--   ... --flag  -- what it does` line, as every usage line is
   grep -qE "^--[[:space:]]+\.\.\. --own-acceptance[[:space:]]+--[[:space:]]+[^[:space:]]" "$ZN_ROOT/z-nile/affected.luau" ||
-    { echo "z-nile/affected.luau has no usage line for --own-acceptance" >&2; exit 1; }
+    { echo "affected.luau has no usage line for --own-acceptance" >&2; exit 1; }
 '
 
 finish
