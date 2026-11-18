@@ -5,6 +5,9 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-18 07:34	c0304: the two stale workstreams cases set up what #296 makes	8	2	build							tokens,wall,cpu,ai
 2026-11-18 07:34	2 specs	0	0	test			18.544	17.430		18.544	tokens,ai
 2026-11-18 07:34	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 07:35	suite	0	0	test			6.599	5.440		6.599	tokens,ai
+2026-11-18 07:36	1 spec	0	0	test			105.125	94.730		105.125	tokens,ai
+2026-11-18 07:36	1 run	0	0	other			0.211	0.010			tokens,ai
 2026-11-18 07:50	2 specs	0	0	test			15.824	14.730		15.824	tokens,ai
 2026-11-18 07:50	2 specs	0	0	test			15.680	14.540		15.680	tokens,ai
 2026-11-18 07:50	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
