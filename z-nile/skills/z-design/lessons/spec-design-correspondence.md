@@ -43,3 +43,7 @@ c0273 design review 001 F4: the Design said a `default.project.jsonc` builds int
 - f0208 design review 001 F4: the tenth Guess said a failure's note clears after Travel's 3 s cool-down, but nothing cleared it and failures outside Travel had no cool-down; the user would have ruled on text that was not built. The Guess is now the rule the server implements (a 3 s rest, then idle), with its cases.
 
 **Also:** f0399 design review 001 F8 and F11 (2026-11-16): the capture named "material change" beside "guess", and only the guess had a rule and a case; and the pure spec pinned fields and functions (`blockOn`, `onLanded`, `work.baseFor`) that only the prototype defined. After prototyping, copy the prototype's exported types and signatures into the Design, and give each captured noun its own row.
+
+**Note (d0415 design review 001 F8):** a Design sentence about order or a message ("no credential is read", "a raft with no members fails with a reason") is checked against the prototype's code line by line before the review; a sentence the prototype does not do is fixed or dropped.
+
+**Note (d0415 design review 001 F3, F7):** a fixture in which origin/main and the author's worktree list the same raft members cannot tell "the members of the checkout the step ran in" from "the members origin has": make the two differ, so the wrong source fails. And "N is one past the highest" and "N is the count plus one" agree until a file is removed: give a numbering rule a case where the files present are not 1..k.
