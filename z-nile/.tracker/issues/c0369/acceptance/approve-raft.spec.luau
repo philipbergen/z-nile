@@ -69,12 +69,23 @@ local function say(r: fixture.Result): string
 	return r.stderr .. r.stdout
 end
 local stubs = ""
--- `./zn approve <id>` in `cwd`, with a terminal on stdin that answers y
-local function approve(cwd: string, id: string): fixture.Result
+-- `./zn approve <id> <extra>` in `cwd`, with a terminal on stdin that answers y
+local function approve(
+	cwd: string,
+	id: string,
+	extra: { string }?,
+	env: { [string]: string }?
+): fixture.Result
 	local merged = table.clone(TERMINAL)
 	merged.PATH = `{stubs}:{process.env.PATH or ""}`
 	merged.HOME = process.env.HOME or ""
-	local line = `yes y | script -q /dev/null sh -c './zn approve {id}; echo "zn-exit=$?"'`
+	local given: { [string]: string } = env or {}
+	for k, v in given do
+		merged[k] = v
+	end
+	local more: { string } = extra or {}
+	local line =
+		`yes y | script -q /dev/null sh -c './zn approve {id} {table.concat(more, " ")}; echo "zn-exit=$?"'`
 	local r = fixture.exec(cwd, "sh", { "-c", line }, { env = merged })
 	local code = string.match(r.stdout, "zn%-exit=(%d+)")
 	return { ok = code == "0", code = tonumber(code or "1") or 1, stdout = r.stdout, stderr = r.stderr }
@@ -184,7 +195,7 @@ return t.spec("c0369 approve finds an active issue's raft worktree", function(it
 			local mainBefore = mainOf()
 			local out = must(approve(f.main, "c0001"))
 			t.expect(has(out, "c0001: approving in .worktree/R0001")).toBe(true)
-			t.expect(has(out, "pushed R0001/1/c0001: the approval lands with R0001")).toBe(true)
+			t.expect(has(out, "It lands with R0001: pushed to R0001/1/c0001, nothing to publish.")).toBe(true)
 			t.expect(tip("R0001")).toBe("tracker: approve c0001")
 			t.expect(onOrigin("R0001/1/c0001")).toBe(fixture.git(wt("R0001"), { "rev-parse", "HEAD" }))
 			t.expect(tip("R0002")).toBe("layer: A change on another raft.")
@@ -194,9 +205,17 @@ return t.spec("c0369 approve finds an active issue's raft worktree", function(it
 			-- asked again, it records nothing new: the approval waits on the pushed layer
 			local rows = lines(fs.readFile(`{wt("R0001")}/{ACTIVE}/approval.md`))
 			local again = must(approve(f.main, "c0001"))
-			t.expect(has(again, "c0001 is approved in .worktree/R0001")).toBe(true)
+			t.expect(has(again, "c0001 is approved in .worktree/R0001: it lands with R0001")).toBe(true)
 			t.expect(lines(fs.readFile(`{wt("R0001")}/{ACTIVE}/approval.md`))).toBe(rows)
 			t.expect(tip("R0001")).toBe("tracker: approve c0001")
+			t.expect(mainOf()).toBe(mainBefore)
+			-- --publish is the retry, never refused for an issue in active/: with the layer pushed it has nothing to do
+			local pushedTip = onOrigin("R0001/1/c0001")
+			local retried = must(approve(f.main, "c0001", { "--publish" }))
+			t.expect(has(retried, "c0001 is approved in .worktree/R0001: it lands with R0001")).toBe(true)
+			t.expect(has(retried, "published")).toBe(false)
+			t.expect(onOrigin("R0001/1/c0001")).toBe(pushedTip)
+			t.expect(lines(fs.readFile(`{wt("R0001")}/{ACTIVE}/approval.md`))).toBe(rows)
 			t.expect(mainOf()).toBe(mainBefore)
 		end
 	)
@@ -207,7 +226,7 @@ return t.spec("c0369 approve finds an active issue's raft worktree", function(it
 			local mainBefore = mainOf()
 			local out = must(approve(f.main, "c0003"))
 			t.expect(has(out, "c0003: approving in .worktree/R0001")).toBe(true)
-			t.expect(has(out, "pushed R0001/1/c0001: the approval lands with R0001")).toBe(true)
+			t.expect(has(out, "It lands with R0001: pushed to R0001/1/c0001, nothing to publish.")).toBe(true)
 			t.expect(has(out, "published")).toBe(false)
 			t.expect(mainOf()).toBe(mainBefore)
 			t.expect(fs.isDir(wt(".approve-c0003"))).toBe(false)
@@ -240,11 +259,10 @@ return t.spec("c0369 approve finds an active issue's raft worktree", function(it
 		t.expect(
 			has(
 				say(refused),
-				"c0001 is active in R0001: approve records on its top layer, R0001/2/c0001, and "
+				"c0001 is active in R0001: run ./zn approve c0001 on R0001/2/c0001, its top layer; "
 			)
-		)
-			.toBe(true)
-		t.expect(has(say(refused), " is on R0001/1/c0001")).toBe(true)
+		).toBe(true)
+		t.expect(has(say(refused), "the raft's worktree is on R0001/1/c0001")).toBe(true)
 		t.expect(has(say(refused), "cd ")).toBe(false)
 		t.expect(tip("R0001")).toBe("tracker: approve c0003") -- nothing recorded on the layer below
 		fixture.git(wt("R0001"), { "reset", "-q", "--hard", "R0001/2/c0001" })
@@ -282,4 +300,45 @@ return t.spec("c0369 approve finds an active issue's raft worktree", function(it
 		t.expect(tip("R0001")).toBe("layer: mid-restack")
 		t.expect(mainOf()).toBe(mainBefore)
 	end)
+
+	it(
+		"retries an unpushed approval by pushing the top layer by name, whatever layer the raft's worktree is on",
+		function()
+			-- layer 1 as origin has it, and a new top layer with a change of c0001's design
+			fixture.git(wt("R0001"), { "checkout", "-q", "-B", "R0001/1/c0001", "origin/R0001/1/c0001" })
+			fixture.git(wt("R0001"), { "checkout", "-q", "-b", "R0001/2/c0001" })
+			for rel, body in issueFiles(ACTIVE, "c0001", "A change on the top layer.", "R0001") do
+				fs.writeFile(`{wt("R0001")}/{rel}`, body)
+			end
+			fixture.git(wt("R0001"), { "add", "-A" })
+			fixture.git(wt("R0001"), { "commit", "-q", "-m", "layer: a change on the top layer" })
+			local lower = onOrigin("R0001/1/c0001")
+			local mainBefore = mainOf()
+			-- recorded on the top layer with publishing off: nothing leaves the machine, and the retry is named
+			local off = approve(f.main, "c0001", nil, { PICKMAN_PUBLISH = "0" })
+			t.expect(off.ok).toBe(false)
+			t.expect(has(say(off), "but it does not count yet")).toBe(true)
+			t.expect(has(say(off), "Retry: ./zn approve c0001 --publish")).toBe(true)
+			t.expect(tip("R0001")).toBe("tracker: approve c0001")
+			t.expect(onOrigin("R0001/2/c0001")).toBe(nil)
+			local rows = lines(fixture.git(f.main, { "show", `R0001/2/c0001:{ACTIVE}/approval.md` }))
+			-- the raft's worktree goes back to the layer below (an executor's fix before a restack)
+			fixture.git(wt("R0001"), { "checkout", "-q", "R0001/1/c0001" })
+			local out = must(approve(f.main, "c0001"))
+			t.expect(has(out, "It lands with R0001: pushed to R0001/2/c0001, nothing to publish.")).toBe(true)
+			t.expect(onOrigin("R0001/2/c0001")).toBe(fixture.git(f.main, { "rev-parse", "R0001/2/c0001" }))
+			t.expect(onOrigin("R0001/1/c0001")).toBe(lower)
+			t.expect(lines(fixture.git(f.main, { "show", `R0001/2/c0001:{ACTIVE}/approval.md` }))).toBe(rows)
+			t.expect(mainOf()).toBe(mainBefore)
+			-- asked again, and with --publish: it waits on the pushed top layer, nothing recorded or pushed
+			for _, extra in { {}, { "--publish" } } do
+				local again = must(approve(f.main, "c0001", extra))
+				t.expect(has(again, "c0001 is approved in .worktree/R0001: it lands with R0001")).toBe(true)
+			end
+			t.expect(fixture.git(f.main, { "log", "-1", "--format=%s", "R0001/2/c0001" }))
+				.toBe("tracker: approve c0001")
+			t.expect(onOrigin("R0001/2/c0001")).toBe(fixture.git(f.main, { "rev-parse", "R0001/2/c0001" }))
+			t.expect(mainOf()).toBe(mainBefore)
+		end
+	)
 end)

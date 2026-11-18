@@ -2,7 +2,7 @@
 title: Rules table ids are the mutation runner's ids
 when: design
 tags: [mutants, records, review]
-check: Does every Rules and mutants row's id run that row's mutant when passed to the mutation runner (`mutants.py <id>`), and does every runner entry have a row And does each runner entry apply the mutant its row describes, not a different wrong change that the same case also kills?
+check: Does every Rules and mutants row's id run that row's mutant when passed to the mutation runner (`mutants.py <id>`), and does every runner entry have a row And does each runner entry apply the mutant its row describes, not a different wrong change that the same case also kills? And does a row that claims `run` for another item's spec (a narrowed promoted case) have an entry that runs that spec, with no entry duplicating another entry's mutant?
 ---
 A reviewer checks a `run` row by rerunning its mutant. When the table numbers rows one way and the runner names mutants another, the rerun picks the wrong mutant (or none), and a survivor can hide behind a row that looks killed.
 

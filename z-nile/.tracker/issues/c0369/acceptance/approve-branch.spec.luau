@@ -386,7 +386,7 @@ return t.spec("c0369 one approve from anywhere records and pushes an unmerged de
 		design("R0001", "A change on the layer.")
 		local mainBefore = mainOf()
 		local out = must(approve(wt("R0001")))
-		t.expect(has(out, `pushed {LAYER}: the approval lands with R0001`)).toBe(true)
+		t.expect(has(out, `It lands with R0001: pushed to {LAYER}, nothing to publish.`)).toBe(true)
 		t.expect(tip("R0001")).toBe(`tracker: approve {ID}`)
 		t.expect(onOrigin(LAYER)).toBe(headOf("R0001"))
 		t.expect(mainOf()).toBe(mainBefore)

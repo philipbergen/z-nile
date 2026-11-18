@@ -2,7 +2,7 @@
 title: A command that chooses by precedence is specced again in the state its first run leaves
 when: design
 tags: [precedence, idempotence, specs]
-check: For each place a precedence-choosing command can act in, does a case run it a second time in the state the first run left (for every pair of candidates that can coexist), and does that second run act on nothing new?
+check: For each place a precedence-choosing command can act in, does a case run it a second time in the state the first run left (for every pair of candidates that can coexist), and does that second run act on nothing new? And when the second run acts on a branch (a push, a retry), does it act on the branch the placement judged, by its name, rather than on whatever the checkout has checked out by then, with a case that moves the checkout between the two runs?
 ---
 A rule that picks one of several candidates in order (a worktree, origin/main, a retry) is usually specced once per candidate, each from a clean state. The first run changes the state: it records, pushes or publishes, and the candidate it took moves to another list. The second run then meets a combination no case built.
 
