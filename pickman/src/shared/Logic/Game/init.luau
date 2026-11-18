@@ -23,6 +23,7 @@ export type Event = {
 	score: number?,
 	ticks: number?,
 	reason: string?,
+	revives: number?, -- GameOver: the continues the run used (f0186)
 }
 export type Game = {
 	config: Config,
@@ -39,6 +40,7 @@ export type Game = {
 	offer: number, -- f0145: the continue offer's length in steps for this run; 0 is no offer
 	held: boolean, -- f0145: the offer's countdown is held (a purchase screen is open, or a receipt awaited)
 	waiting: number, -- f0145: steps left to wait for a bought continue's receipt
+	revives: number, -- f0186: continues the run used, one for each Game.continue that gave lives; GameOver carries it
 }
 
 local Game = {}
@@ -118,6 +120,7 @@ function Game.new(config: Config?, ramp: Levels.Ramp?, start: number?): Game
 		offer = 0,
 		held = false,
 		waiting = 0,
+		revives = 0,
 	}
 	ready(g)
 	return g
@@ -179,7 +182,7 @@ function Game.playAgain(g: Game): ({ Event }, boolean)
 		return {}, false
 	end
 	g.level, g.score, g.lives, g.frightened, g.extraLifeGiven = g.start, 0, g.config.lives, 0, false
-	g.lost, g.held, g.waiting = 0, false, 0
+	g.lost, g.held, g.waiting, g.revives = 0, false, 0, 0
 	ready(g)
 	return { { kind = "Ready", reason = "again", level = g.level } }, true
 end
@@ -225,6 +228,7 @@ function Game.continue(g: Game, lives: number): ({ Event }, boolean)
 		return {}, false
 	end
 	g.lives, g.held, g.waiting = lives, false, 0
+	g.revives += 1
 	ready(g)
 	return { { kind = "Ready", reason = "continue", level = g.level } }, true
 end
@@ -262,7 +266,9 @@ function Game.step(g: Game): { Event }
 				return { { kind = "Offer", ticks = g.offer } }
 			end
 			g.phase, g.timer = "gameover", 0
-			return { { kind = "GameOver", score = g.score, level = g.level, lives = g.lost } }
+			return {
+				{ kind = "GameOver", score = g.score, level = g.level, lives = g.lost, revives = g.revives },
+			}
 		end
 	elseif phase == "offer" then
 		if g.waiting > 0 then
@@ -274,7 +280,15 @@ function Game.step(g: Game): { Event }
 			g.timer -= 1
 			if g.timer <= 0 then
 				g.phase, g.timer = "gameover", 0
-				return { { kind = "GameOver", score = g.score, level = g.level, lives = g.lost } }
+				return {
+					{
+						kind = "GameOver",
+						score = g.score,
+						level = g.level,
+						lives = g.lost,
+						revives = g.revives,
+					},
+				}
 			end
 		end
 	elseif phase == "levelclear" then

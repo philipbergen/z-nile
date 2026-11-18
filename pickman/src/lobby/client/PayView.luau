@@ -24,6 +24,7 @@ function PayView.start()
 	line.Size = UDim2.fromScale(0.8, 0.06)
 	line.TextColor3 = Color3.fromRGB(255, 255, 255)
 	line.TextScaled = true
+	line.RichText = true -- f0186: the price of a play is struck through (Lobby.salePrice)
 	line.Text = ""
 	line.Parent = gui
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")

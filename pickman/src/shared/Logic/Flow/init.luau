@@ -2,6 +2,7 @@
 -- Flow: what the screen shows over the maze in each phase of a run, engine-free. The client draws it;
 -- only the server moves a run from phase to phase, and only the server sends a player back to the lobby.
 local Game = require("./Game")
+local Lobby = require("./Lobby")
 local Session = require("./Session")
 local Travel = require("./Travel")
 
@@ -144,6 +145,15 @@ function Flow.overlay(play: Session.PlayFrame, rules: Game.Config, trip: Trip?):
 		}
 	end
 	return { fade = 0, flash = false, tap = false, cursor = false }
+end
+
+-- The revives line of the GAME OVER overlay (f0186): the continues the run used, "REVIVES 0" for none; nil in every
+-- other phase. FlowView's lines and the overlay stay as they were: the client's RevivesView draws this one.
+function Flow.revivesLine(play: Session.PlayFrame): string?
+	if play.phase ~= "gameover" then
+		return nil
+	end
+	return Lobby.revivesText(play.revives)
 end
 
 -- The extra line at the end of a run for an all-time rank the server sent. Flow does not know the board size.

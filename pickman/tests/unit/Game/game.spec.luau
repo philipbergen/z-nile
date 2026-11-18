@@ -82,4 +82,37 @@ return t.spec("Game extras", function(it)
 			Game.new(nil, nil, 1.5)
 		end).toThrow("start")
 	end)
+
+	it(
+		"deaths and a decline count no revive; the game over after a decline carries the continues taken",
+		function()
+			local g = Game.new(Game.IMMEDIATE_CONFIG)
+			Game.allowOffer(g, 50)
+			local function toOffer()
+				for _ = 1, 100 do
+					if g.phase == "offer" then
+						return
+					end
+					if g.phase == "playing" then
+						Game.died(g)
+					end
+					Game.step(g)
+				end
+				error("never reached the offer")
+			end
+			for n = 1, 2 do
+				toOffer()
+				t.expect(g.revives).toBe(n - 1)
+				local _, given = Game.continue(g, Game.CONTINUE_LIVES)
+				t.expect(given).toBe(true)
+				t.expect(g.revives).toBe(n)
+			end
+			toOffer()
+			t.expect(Game.decline(g)).toBe(true)
+			t.expect(g.revives).toBe(2)
+			local events = Game.step(g)
+			t.expect(events[1].kind).toBe("GameOver")
+			t.expect(events[1].revives).toBe(2)
+		end
+	)
 end)
