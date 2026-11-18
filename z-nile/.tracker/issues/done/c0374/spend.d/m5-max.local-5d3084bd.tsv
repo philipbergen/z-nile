@@ -1,0 +1,18 @@
+when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
+2026-11-18 07:36	c0374: the finished scan reads a bare name in single quotes as text	77	2	build							tokens,wall,cpu,ai
+2026-11-18 07:37	suite	0	0	test			6.784	5.590		6.784	tokens,ai
+2026-11-18 07:37	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 07:44	R0133: review-001	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-18 07:44	R0133: harvest review-001	0	0	code-review							tokens,wall,cpu,ai
+2026-11-18 07:44	R0133: refute-001	0	0	code-review							tokens,wall,cpu,ai
+2026-11-18 07:45	suite	0	0	test			5.986	5.350		5.986	tokens,ai
+2026-11-18 07:51	suite	0	0	test			5.191	4.640		5.191	tokens,ai
+2026-11-18 07:51	1 run	0	0	other			0.211	0.030			tokens,ai
+2026-11-18 07:51	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-18 07:51	R0133: trace skeleton	0	0	deliver							tokens,wall,cpu,ai
+2026-11-18 07:52	R0133: trace skeleton	0	0	deliver							tokens,wall,cpu,ai
+2026-11-18 07:58	R0133: final-review-001 (changes), trace as filled, F2 open to the human	3	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-18 07:59	R0133: the lesson reaches design too	0	0	code-review							tokens,wall,cpu,ai
+2026-11-18 15:30	R0133: final-review-002 (approve), trace corrected	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-18 15:30	R0133: final-refute-002, harvest, the lesson's note on approvals	1	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-18 16:01	R0133: bind c0304, c0374, c0411	4	0	deliver							tokens,wall,cpu,ai

@@ -4,6 +4,7 @@
 local engine = require("@tests/lib/engine")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local projects = require("@znile/engine/projects")
 local renamed = require("@tests/lib/renamed")
 local t = require("@tests/lib/t")
 
@@ -123,22 +124,15 @@ return t.spec("c0410 review rounds in metrics", function(it)
 			table.insert(ids, r[1])
 		end
 		local want = {}
-		-- c0120 override: pickman's files live in pickman/ (its home)
-		-- c0114 override: rafts live under every project root (c0120: pickman's root is pickman/.tracker)
-		for _, base in
-			-- c0120 override: pickman's items live in pickman/.tracker (the fixtures' final layout)
-			{
-				"pickman/.tracker/rafts",
-				"pickman/.tracker/rafts/active",
-				"pickman/.tracker/rafts/done",
-				"z-nile/.tracker/rafts",
-				"z-nile/.tracker/rafts/active",
-				"z-nile/.tracker/rafts/done",
-				-- c0116 override: a raft recombine retired keeps its folder, and its rounds, in rafts/retired/
-				"pickman/.tracker/rafts/retired",
-				"z-nile/.tracker/rafts/retired",
-			}
-		do
+		-- c0411 override: rafts live under every registered project's root (z-nile/projects.toml), in the four folders
+		-- a raft can stand in, so a new project or raft needs no edit here
+		local bases: { string } = {}
+		for _, root in projects.roots(projects.load(TOP)) do
+			for _, folder in { "rafts", "rafts/active", "rafts/done", "rafts/retired" } do
+				table.insert(bases, `{root}/{folder}`)
+			end
+		end
+		for _, base in bases do
 			local names: { string } = if fs.isDir(`{TOP}/{base}`) then fs.readDir(`{TOP}/{base}`) else {} -- c0120 override: the roots are at the checkout's top
 			for _, name in names do
 				if string.match(name, "^R%d%d%d%d$") then
