@@ -102,6 +102,7 @@ local function world(mode: any?, shared: any?): any
 	w.hold = { update = false, get = false }
 	w.fail = { update = false, get = false, passGet = false, teleport = false }
 	w.writes, w.reads = 0, 0
+	w.onUpdate = nil :: (() -> ())?
 	w.clock = 0
 	w.now = NOW
 	w.prompts = {} :: { { player: any, id: number } }
@@ -188,6 +189,11 @@ local function world(mode: any?, shared: any?): any
 				return {
 					UpdateAsync = function(_: any, key: string, fn: (any) -> any): any
 						w.writes += 1
+						local during = w.onUpdate -- runs once, at the start of the next write (before it is held)
+						if during then
+							w.onUpdate = nil
+							during()
+						end
 						hold("update")
 						if w.fail.update then
 							error("store down", 0)
@@ -266,7 +272,7 @@ local function world(mode: any?, shared: any?): any
 			end,
 			TeleportInitFailed = initFailed,
 		},
-		RunService = { Heartbeat = signal() },
+		RunService = { Heartbeat = signal() } :: any, -- no IsStudio: not Studio (status.spec's cases set one)
 	}
 	local loaded: { [string]: any } = {}
 	local env: { [string]: any } = {}
@@ -379,6 +385,9 @@ local function world(mode: any?, shared: any?): any
 		removing.fire(p)
 	end
 	w.removing = removing
+	w.service = function(name: string): any -- a stub service, which a case may change
+		return assert(services[name], `service {name}`)
+	end
 	w.wallet = function(): any
 		return load("Wallet", WALLET)
 	end
