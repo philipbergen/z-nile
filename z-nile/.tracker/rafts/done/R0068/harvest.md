@@ -1,0 +1,14 @@
+- design-review-001 F1 (erred z-raft): z-raft/plan-the-switch-over
+- design-review-001 F2 (erred z-raft): z-raft/plan-the-switch-over
+- design-review-001 F3 (erred z-raft): z-raft/plan-the-switch-over
+- design-review-001 F4 (erred z-raft): z-raft/member-handshakes-reach-the-order
+- design-review-001 F5 (erred z-raft): z-raft/grouping-cost-checks-every-wait
+- design-review-001 F6 (erred z-raft): z-raft/order-reasons-survive-workstreams
+- design-review-001 F7 (erred z-raft): one-off: the Theme's decision list was written from the members' captures, not from their Problem sections; zz-review item 7 already asks whether the Theme quotes the decisions
+- review-001 F1 (erred z-design): z-design/pinned-subjects-name-their-selector
+- review-001 F2 (erred zz-execute, upstream z-design): zz-execute/close-a-vanished-selection
+- review-001 F3 (erred zz-execute, upstream z-design): one-off: the prototype re-parsed each review per entry and the design's Scalability sentence did not describe it; the zz-test Speed rule (watch a command's time, optimise it in your Touched modules) already covers it, and the memo is in
+- review-001 F4 (erred zz-execute): zz-execute/run-every-hand-merged-hunk
+- review-001 F5 (erred zz-execute): zz-execute/answer-whichever-lands-second
+- final-review-001 F1 (erred zz-execute): zz-execute/a-spec-comment-names-what-its-mutants-kill
+- final-review-001 F2 (erred z-design): z-design/restated-rules-move-together

@@ -14,3 +14,4 @@
 - design-review-001 F14: one-off: a reason line for one rare state (a dependency on a closed issue), no rule behind it
 - design-review-001 F15: z-design/size-is-re-estimated-when-scope-grows
 - note the writer of the real-git specs found that "start works unchanged" was false (start read the raft as backlog), only by writing the spec: z-design/prove-specs-pass-on-a-prototype
+- note R0129's executor stopped on five sequestered cases prep had not run (S1, ruled back to design 2026-11-17): z-design/prove-specs-pass-on-a-prototype

@@ -1,0 +1,93 @@
+pickman/tests/acceptance/c0128/golden.spec.luau
+	f0024 adapter is exactly the narrowed file
+	f0024: a line joined onto the comment above it, or a deleted assertion, is not the narrowed file
+	the review's two joins in f0026 adapters, or a deleted assertion, are not the narrowed file
+	the pins and the joins do not depend on the files' line endings
+	f0026 adapters is exactly the narrowed file
+pickman/tests/acceptance/d0124/adapters.spec.luau
+	one player's two runs in a row, the second lower, are places 1 and 2 and the lobby lists both
+	runs of several players fill the list in order, cut to ten, and a later lower run is missed
+	a first run with no list starts it from the stored bests, the player's older best included
+	the per-player boards are written before the list, and a first run that is a new best is listed once
+	a best written by a build without the list joins the list on anyone's next run
+	the per-player all-time row a run writes names that run and its instant
+	a run whose ordered write fails is listed at its own score by the next run
+	a run's entry is keyed by the user, the server's clock, the run counter and the job id
+	the place heard is the run's place on the list, not the player's per-player rank
+	a list that cannot be written says nothing, and the per-player boards are still written
+	no list and a per-player board that cannot be read: no list is made, nothing is said
+	the all-time answer is the stored list with the asker's own best
+	with no list stored, the all-time answer is the per-player board, as before
+	a list that cannot be read is a failed all-time read, not the per-player board
+	day and week answers are the per-player boards and carry no best
+	after an all-time answer, the same player's day and week answers still carry no best
+	a player's best is read at most once per CACHE_TTL, and again after they leave
+	requests while a player's best is being read do not read it again, and each is answered
+	while a stale best is read again, requests are answered with the best held before
+	a best read that ends after the player left is dropped, and a rejoin reads again
+	a best that cannot be read again is no best: the stale one is not kept
+	a best that cannot be read is no best, and the board still answers
+	Ranks sends the place, or the miss, to a player still in the game
+	FlowView shows a heard miss and a heard place on the game-over overlay
+	LobbyView adds the best line under the all-time panel only
+pickman/tests/acceptance/d0124/lobby.spec.luau
+	the best line starts with the score and the level, on the all-time board only
+	no best, or a broken one, is no line
+	the list text is the panel's lines, then the best line
+	an empty all-time board still shows the viewer's best under its message
+pickman/tests/acceptance/f0026/adapters.spec.luau
+	the place files do not gain a Board or Rank remote
+	Starts never opens a store, the lobby Main boots Boards after it, and Boards only reads
+	Boards creates Board under Remotes and ignores anything but all, day or week
+	a failed read still answers once, with failed = true and the rows it had, or none
+	a request that arrives while the read is under way does not read again, and each gets one answer
+	during an outage a client asking every second costs three reads of the board in ten seconds
+	an error anywhere in the read, opening the store included, is a failed read and the board is not wedged
+	a companion row that cannot be read fails the read: no short board is answered as healthy or cached
+	a waiter who left before the read returned gets no answer, and Boards keeps no per-player state
+	one player asking all and then day in the same second gets both boards, healthy
+	Boards opens the ordered and the companion store under their own names and the board's scope
+	a page of 50 after the size-10 fallback is cut to the top N before any companion is read
+	a healthy empty board is an answer, not a failure
+	the lobby screen asks for all once at start and draws the answer, marking the rank it was sent
+	failed answers in a row ask again after 1, 2 and 4 s, then stop, and a healthy answer starts over
+	a tap starts the failure count over, so a failed answer after the retries stopped is retried
+	a failed day or week answer asks again for that board
+	a retry or a late answer for a board the player left neither asks nor draws
+	a failed answer asks for all once more after READ_GAP, and a healthy one never does
+	all, day and week are buttons of at least the touch size that ask for only their board
+	the lobby screen requires only Lobby and Travel, the modules f0061's fake engine serves it
+	without a Board remote the lobby asks nothing and keeps the empty panel
+	FlowView keeps an empty FireServer and hears Rank without waiting for it
+	Ranks creates Rank in code and sends a rank only to a player still in the game
+	the game server starts Ranks before Sessions
+pickman/tests/acceptance/f0026/endtoend.spec.luau
+	the all-time panel and the day board show the qualified row
+	the same run submits once, and the rank line is that run's all-time place
+pickman/tests/acceptance/f0026/lobby.spec.luau
+	the panel constants and the empty cap stay
+	a client score does not switch the board
+	all-time keeps the hiscores title, and day and week name themselves
+	the highlight is a rank, not the first row, and an empty panel keeps its message
+	the client asks again after 1, 2 and 4 s of failed answers in a row, and not a fourth time
+pickman/tests/acceptance/f0145/lives.spec.luau
+	Hiscores.lives keeps a whole count of at least one and nothing else
+	a game over's lives go into the run's submission
+	a stored row keeps the attempt's lives, and the rows read back carry them
+	a broken lives value is stored and read as nothing, never as a count
+	the lobby's panel keeps each row's rank, name, score and level first, and no lives mark for a row without lives
+pickman/tests/acceptance/f0145/place.spec.luau
+	the game server hands Continues to Sessions.made before Sessions starts; the client boots OfferView and shows it each frame
+	the lobby server puts Paid in front of Starts; the lobby client boots PayView after LobbyView
+	no client script requires Purchases; both places keep their remote lists
+	game-design.md states the paid play; architecture.md declares Pay and Lobby -> Pay
+pickman/tests/acceptance/f0145/top.spec.luau
+	a run's entry on the list carries its lives; the lobby's rows read from the list keep its order
+	a per-player best merged into the list keeps its row's lives; a broken value is none
+pickman/tests/acceptance/f0145/views.spec.luau
+	the offer's overlay: CONTINUE?, the results, three new lives and the seconds left; the buttons, no tap
+	the seconds left are real seconds, rounded up, and never below zero
+	the price under the buttons: a continue held, else 1 Robux; test mode and no report say nothing is charged
+	the lobby's line: free, else what is held, else the price and the minutes to the next free start
+	a closed server's lobby line says the store is unavailable, free and held as ever
+	in test mode the lobby's line says nothing is charged

@@ -114,4 +114,31 @@ return t.spec("Session extras", function(it)
 		t.expect(house.global).toBe(0)
 		t.expect(house.personal.pinky).toBe(5)
 	end)
+
+	it("the frame's revives follow each continue the session grants, nil before the first", function()
+		local corridor = Maze.parse({ "#######", "#..P..#", "#######" }, "corridor")
+		local s = Session.new(corridor, 1, Session.GAME_CONFIG)
+		Session.join(s, "p")
+		Session.allowOffer(s, "p")
+		local function toOffer()
+			for _ = 1, 2000 do
+				local phase = Session.frame(s, "p").play.phase
+				if phase == "offer" then
+					return
+				end
+				if phase == "playing" then
+					Session.kill(s, "p")
+				end
+				Session.step(s)
+			end
+			error("never reached the offer")
+		end
+		for n = 1, 2 do
+			toOffer()
+			t.expect(Session.frame(s, "p").play.revives).toBe(if n == 1 then nil else n - 1)
+			local _, given = Session.continue(s, "p")
+			t.expect(given).toBe(true)
+			t.expect(Session.frame(s, "p").play.revives).toBe(n)
+		end
+	end)
 end)

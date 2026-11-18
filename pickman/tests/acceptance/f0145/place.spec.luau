@@ -99,7 +99,6 @@ return t.spec("f0145 the places and the documents", function(it)
 				"one free game per hour",
 				"1 Robux",
 				"three new lives",
-				"lives spent",
 				"nothing is charged",
 			}
 		do

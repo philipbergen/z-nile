@@ -19,9 +19,11 @@ pickman/src/client/HudView.luau
 pickman/src/client/Main.client.luau
 pickman/src/client/MazeView.luau
 pickman/src/client/PelletView.luau
+pickman/src/client/RevivesView.luau
 pickman/src/lobby/client/LobbyPicker.luau
 pickman/src/lobby/client/LobbyView.luau
 pickman/src/lobby/client/Main.client.luau
+pickman/src/lobby/client/PayView.luau
 pickman/src/lobby/server/Bests.luau
 pickman/src/lobby/server/Boards.luau
 pickman/src/lobby/server/Main.server.luau
@@ -56,6 +58,7 @@ pickman/src/shared/Logic/Session/init.luau
 pickman/src/shared/Logic/Touch/init.luau
 pickman/src/shared/Logic/Travel/init.luau
 pickman/src/shared/Logic/View/init.luau
+pickman/src/shared/TestPurchase.luau
 pickman/stylua.toml
 pickman/tests/contract/.gitkeep
 pickman/tests/fixtures/sim/walker.luau

@@ -1,0 +1,11 @@
+- design-review-001 F1: z-raft/raft-checks-live-where-the-engine-guards-them, z-raft/joints-are-guarded-by-promoted-specs
+- design-review-001 F2: z-design/design-the-execution-window, zz-test/promoted-specs-pin-rules-not-sets
+- design-review-001 F3: z-raft/rc-lines-pass-the-raft-check-judge
+- note the first RC2 spec ran the client Main in a coroutine, and a Lune require inside it yielded, so the boot stopped silently and every case failed on a missing binding: pickman-test/load-modules-before-a-boot-thread
+- design-review-002 F1: z-raft/joints-are-guarded-by-promoted-specs
+- design-review-002 F2: z-design/design-the-execution-window
+- review-001 F1: zz-execute/recheck-library-claims-on-the-landed-code, zz-execute/refute-claims-appear-in-the-diff
+- review-001 F2: zz-test/specs-read-sources-through-the-selector
+- final-review-001 F1: zz-review/not-stacked-is-main-moving
+- final-review-001 F2: z-design/rules-keyed-to-a-sha
+- note the final review's lessons and harvest are outside what may follow trace.md, so the top layer was re-finished and trace.md repointed: zz-execute/final-lessons-ride-a-refinish, zz-review/trace-cells-cite-their-own-proof

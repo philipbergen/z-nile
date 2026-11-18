@@ -1,0 +1,1 @@
+- note final review 001 candidate: a chore's own text-reading acceptance spec is not in its results.txt, so the trace cites its check "ACn: line instead (erred zz-review): zz-review/trace-cells-cite-their-own-proof

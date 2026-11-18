@@ -88,6 +88,7 @@ export type PlayFrame = {
 	power: number?, -- ticks of a power pellet's period on this level, under the session's rules (f0147)
 	picks: number?, -- with a ramp: the wall picks finished on this level (f0147)
 	picksGoal: number?, -- with a ramp: the picks that end a level
+	revives: number?, -- continues the run used; nil while none (f0186)
 }
 export type Frame = {
 	v: number,
@@ -128,6 +129,7 @@ export type Event = {
 	item: string?,
 	ghost: Ghosts.Name?,
 	heading: Maze.Heading?,
+	revives: number?, -- GameOver: the continues the run used (f0186)
 }
 export type Clock = { rate: number, maxSteps: number, acc: number }
 
@@ -426,6 +428,7 @@ local function tagged(id: PlayerId, e: Game.Event): Event
 		score = e.score,
 		ticks = e.ticks,
 		reason = e.reason,
+		revives = e.revives,
 	}
 end
 
@@ -979,6 +982,7 @@ function Session.frame(s: Session, id: PlayerId): Frame
 			power = Levels.frightenedTicks(play.level, Session.TICK_RATE, s.config.ramp),
 			picks = if s.config.ramp then s.members[id].levelPicks else nil,
 			picksGoal = if s.config.ramp then s.config.ramp.picks else nil,
+			revives = if play.revives > 0 then play.revives else nil,
 		},
 		pellets = Pellets.encode(s.members[id].pellets),
 		shots = s.members[id].blaster.shots,

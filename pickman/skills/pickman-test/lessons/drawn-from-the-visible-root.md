@@ -10,4 +10,6 @@ A stub engine that records every `Instance.new` makes it easy to look a frame up
 
 R0051 design review 002 F1 then found the fix had pinned ten of the Design's properties and left out two from the same sentence (the caption's centring and font).
 
+R0120 code review 001 F1: f0186's sequestered gameover spec pinned RevivesView's height and DisplayOrder only, not the font, colour, TextScaled, x position, width, IgnoreGuiInset or ResetOnSpawn of the Design's same sentence; a place spec pinned the rest during execution.
+
 **How to apply:** give the stub a fixed PlayerGui, find the one ScreenGui the adapter names under it, and walk its children. Walk the Design's sentence about the look property by property and pin each one (colour, transparency, corner, caption name, font, alignment, text, size and outline), and run the mutants "unparented", "second ScreenGui", "transparent" and "wrong colour" against a prototype.
