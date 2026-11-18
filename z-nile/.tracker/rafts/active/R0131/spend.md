@@ -4,8 +4,8 @@
 |---|---|---|---|---|---|---|
 | d0297 | defect |  | 970 | 16 | 0.0 | 0 |
 
-**Total:** +970 / -16 lines, 0.0 agent-minutes, 0 tokens over 120 records
-<!-- totals: added=970 removed=16 minutes=0.0 records=120 tokens=0 -->
+**Total:** +970 / -16 lines, 0.0 agent-minutes, 0 tokens over 129 records
+<!-- totals: added=970 removed=16 minutes=0.0 records=129 tokens=0 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
