@@ -62,18 +62,21 @@ index bc667af88..f1436d5a0 100644
  			t.expect(string.match(id, "^[fdcR]%d%d%d%d$") ~= nil).toBe(true)
 diff --git a/z-nile/tests/acceptance/c0042/ondisk.luau b/z-nile/tests/acceptance/c0042/ondisk.luau
 new file mode 100644
-index 000000000..77fbb3c33
+index 000000000..6ab7c1160
 --- /dev/null
 +++ b/z-nile/tests/acceptance/c0042/ondisk.luau
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,52 @@
 +--!strict
 +-- c0388: the raft and issue folders a checkout holds, for c0042's cli spec, which compares them with the board page.
 +-- The roots come from the registry (`z-nile/projects.toml` under `top`), never from a list written here: the spec's
 +-- hand list of two roots went stale when arcade's root got its first raft (R0110). Each registered root's backlog,
 +-- `active/` and `done/` are read; a folder a root does not have yet is skipped. A retired root holds no items, and
-+-- `rafts/retired/` is history the page does not show: neither is read.
++-- `rafts/retired/` is history the page does not show: neither is read. A closed issue (won't do, c0278) keeps its
++-- folder but the page drops it, so it is not listed either; a folder with no document is listed (the page shows it).
++local closing = require("@znile/engine/closing")
 +local fs = require("@lune/fs")
 +local projects = require("@znile/engine/projects")
++local store = require("@znile/engine/store")
 +
 +local ondisk = {}
 +
@@ -81,8 +84,13 @@ index 000000000..77fbb3c33
 +
 +local STATES = { "", "/active", "/done" }
 +
-+-- the ids of the folders named like a raft (`R0010`) and like an issue (`f0010`, `d0010`, `c0010`); the order is
-+-- not part of the contract
++-- the ids of the folders named like a raft (`R0010`) and like an issue (`f0010`, `d0010`, `c0010`) that the page
++-- shows; the order is not part of the contract
++local function shown(dir: string, id: string): boolean
++	local doc = `{dir}/{id}/{id}.md`
++	return not (fs.isFile(doc) and closing.isClosed(store.readFront(doc)))
++end
++
 +function ondisk.items(top: string): Items
 +	local out: Items = { rafts = {}, issues = {} }
 +	local reg = projects.load(top, true)
@@ -99,7 +107,7 @@ index 000000000..77fbb3c33
 +			local issues = `{top}/{root}/issues{state}`
 +			if fs.isDir(issues) then
 +				for _, name in fs.readDir(issues) do
-+					if string.match(name, "^[fdc]%d%d%d%d$") then
++					if string.match(name, "^[fdc]%d%d%d%d$") and shown(issues, name) then
 +						table.insert(out.issues, name)
 +					end
 +				end
@@ -110,3 +118,41 @@ index 000000000..77fbb3c33
 +end
 +
 +return ondisk
+diff --git a/z-nile/tests/acceptance/c0042/watch.txt b/z-nile/tests/acceptance/c0042/watch.txt
+index 4cb78000f..d8a029e20 100644
+--- a/z-nile/tests/acceptance/c0042/watch.txt
++++ b/z-nile/tests/acceptance/c0042/watch.txt
+@@ -6,11 +6,13 @@ z-nile/affected.luau
+ z-nile/check.sh
+ z-nile/engine/audit.luau
+ z-nile/engine/board.luau
++z-nile/engine/closing.luau
+ z-nile/engine/compact.luau
+ z-nile/engine/ids.luau
+ z-nile/engine/main.luau
+ z-nile/engine/projects.luau
+ z-nile/engine/spend.luau
++z-nile/engine/store.luau
+ z-nile/lib/ac.sh
+ z-nile/lib/fence.sh
+ z-nile/lib/graph.luau
+@@ -23,6 +25,7 @@ z-nile/selene.toml
+ z-nile/stylua.toml
+ z-nile/templates/issue/check.sh
+ z-nile/templates/raft/check.sh
++z-nile/tests/acceptance/c0042/ondisk.luau
+ z-nile/tests/acceptance/c0114/finished.luau
+ z-nile/tests/acceptance/c0114/rewrites.luau
+ z-nile/tests/acceptance/c0120/finished.luau
+diff --git a/z-nile/tests/inputs.tsv b/z-nile/tests/inputs.tsv
+index c3025fb63..961a2a84e 100644
+--- a/z-nile/tests/inputs.tsv
++++ b/z-nile/tests/inputs.tsv
+@@ -26,6 +26,7 @@ tests/acceptance/c0042/cli.spec.luau	snake/.tracker/issues/
+ tests/acceptance/c0042/cli.spec.luau	snake/.tracker/rafts/
+ tests/acceptance/c0042/cli.spec.luau	z-nile/.tracker/issues/
+ tests/acceptance/c0042/cli.spec.luau	z-nile/.tracker/rafts/
++tests/acceptance/c0042/cli.spec.luau	z-nile/projects.toml
+ tests/acceptance/c0043/rounds.spec.luau	pickman/.tracker/issues/
+ tests/acceptance/c0043/rounds.spec.luau	pickman/.tracker/rafts/
+ tests/acceptance/c0043/rounds.spec.luau	z-nile/.tracker/issues/

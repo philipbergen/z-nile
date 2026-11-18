@@ -43,6 +43,18 @@ local function build(names: { string })
 	dir("pickman/.tracker/issues/done/c0003")
 	dir("pickman/.tracker/issues/x0004")
 	dir("pickman/.tracker/issues/c00050")
+	-- a closed issue (won't do) keeps its folder and the page drops it (c0278); an open one has a document; a folder
+	-- with no document at all is listed
+	dir("pickman/.tracker/issues/c0011")
+	fs.writeFile(
+		`{FX}/pickman/.tracker/issues/c0011/c0011.md`,
+		"---\nid: c0011\nstatus: closed-one-two-three\nwont_do: moot\n---\n"
+	)
+	dir("pickman/.tracker/issues/active/d0012")
+	fs.writeFile(
+		`{FX}/pickman/.tracker/issues/active/d0012/d0012.md`,
+		"---\nid: d0012\nstatus: preparing-one-two-three\n---\n"
+	)
 	fs.writeFile(`{FX}/pickman/.tracker/issues/README.md`, "not an item\n")
 	-- z-nile: a backlog only
 	dir("z-nile/.tracker/rafts/R0004")
@@ -70,7 +82,16 @@ return t.spec("c0388 the folders c0042's cli spec counts come from every registe
 		build({ "pickman", "z-nile", "arcade" })
 		local found = ondisk.items(FX)
 		t.expect(sorted(found.rafts)).toEqual({ "R0001", "R0002", "R0003", "R0004", "R0005" })
-		t.expect(sorted(found.issues)).toEqual({ "c0003", "c0005", "d0002", "f0001" })
+		t.expect(sorted(found.issues)).toEqual({ "c0003", "c0005", "d0002", "d0012", "f0001" })
+		fs.removeDir(FX)
+	end)
+
+	it("leaves out a closed issue and keeps an open one and one with no document", function()
+		build({ "pickman", "z-nile", "arcade" })
+		local found = ondisk.items(FX)
+		t.expect(table.find(found.issues, "c0011")).toBe(nil)
+		t.expect(table.find(found.issues, "d0012") ~= nil).toBe(true)
+		t.expect(table.find(found.issues, "f0001") ~= nil).toBe(true)
 		fs.removeDir(FX)
 	end)
 
@@ -94,7 +115,7 @@ return t.spec("c0388 the folders c0042's cli spec counts come from every registe
 		)
 		local after = ondisk.items(FX)
 		t.expect(sorted(after.rafts)).toEqual({ "R0001", "R0002", "R0003", "R0004", "R0005", "R0006" })
-		t.expect(sorted(after.issues)).toEqual({ "c0003", "c0005", "d0002", "f0001", "f0006" })
+		t.expect(sorted(after.issues)).toEqual({ "c0003", "c0005", "d0002", "d0012", "f0001", "f0006" })
 		fs.removeDir(FX)
 	end)
 
@@ -108,10 +129,10 @@ return t.spec("c0388 the folders c0042's cli spec counts come from every registe
 
 	it("c0042's cli spec takes its folders from the module and names no tracker root itself", function()
 		local text = fs.readFile("tests/acceptance/c0042/cli.spec.luau")
-		t.expect(string.find(text, 'require("./ondisk")', 1, true) ~= nil).toBe(true)
+		t.expect(string.find(text, 'quire("./ond' .. 'isk")', 1, true) ~= nil).toBe(true)
 		t.expect(string.find(text, "ondisk.items(TOP)", 1, true) ~= nil).toBe(true)
 		t.expect(string.find(text, "t.expect(rafts).toBe(#found.rafts)", 1, true) ~= nil).toBe(true)
-		t.expect(string.find(text, ".tracker/", 1, true)).toBe(nil)
-		t.expect(string.find(text, "fs.readDir", 1, true)).toBe(nil)
+		t.expect((string.find(text, ".tracker/", 1, true))).toBe(nil)
+		t.expect((string.find(text, "fs.readDir", 1, true))).toBe(nil)
 	end)
 end)

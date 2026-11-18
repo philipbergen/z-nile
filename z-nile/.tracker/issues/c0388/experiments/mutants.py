@@ -20,6 +20,8 @@ MUTANTS = [
     ("M9 any letter is an issue", MOD, '"^[fdc]%d%d%d%d$"', '"^%a%d%d%d%d$"'),
     ("M10 an issue id of any length", MOD, '"^[fdc]%d%d%d%d$"', '"^[fdc]%d%d%d%d"'),
     ("M11 a missing registry falls back to an empty one", MOD, "local reg = projects.load(top, true)", 'local okReg, loaded = pcall(projects.load, top, true)\n\tlocal reg: projects.Registry = if okReg then loaded else { projects = {}, retired = {} }'),
+    ("M15 a closed issue is listed", MOD, "and shown(issues, name)", ""),
+    ("M16 an issue with no document is dropped", MOD, "return not (fs.isFile(doc) and closing.isClosed(store.readFront(doc)))", "return fs.isFile(doc) and not closing.isClosed(store.readFront(doc))"),
     ("M12 the spec keeps a hand list beside the module", CLI, "local found = ondisk.items(TOP)", 'local found = ondisk.items(TOP)\n\t\tlocal _hand = { "pickman/.tracker/rafts" }'),
     ("M13 the spec counts without the module", CLI, "t.expect(rafts).toBe(#found.rafts)", "t.expect(rafts).toBe(rafts)"),
     ("M14 every folder under a root's parent is a root", MOD, "for _, root in projects.roots(reg) do", 'for _, root in { "pickman/.tracker", "z-nile/.tracker", "arcade/.tracker", "snake/.tracker", "unregistered/.tracker" } do'),
