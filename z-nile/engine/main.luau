@@ -7698,9 +7698,15 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 		phaseMin[p] = { feature = 0, defect = 0, chore = 0 }
 		phaseTok[p] = 0
 	end
+	local unlisted: { string } = {}
 	for _, r in rows do
 		for _, row in r.rows do
 			local tenths = math.floor(row.minutes * 10 + 0.5)
+			if not phaseMin[row.phase] then
+				phaseMin[row.phase] = { feature = 0, defect = 0, chore = 0 }
+				phaseTok[row.phase] = 0
+				table.insert(unlisted, row.phase)
+			end
 			phaseMin[row.phase][r.type] += tenths
 			phaseTok[row.phase] += row.tokens or 0
 		end
@@ -7711,10 +7717,14 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 	for _, p in ledger.EXTRA do
 		table.insert(phaseOrder, p)
 	end
+	table.sort(unlisted)
+	for _, p in unlisted do
+		table.insert(phaseOrder, p)
+	end
 	for _, p in phaseOrder do
 		local m = phaseMin[p]
 		local all = m.feature + m.defect + m.chore
-		if (p == "test" or p == "other") and all == 0 and phaseTok[p] == 0 then
+		if not table.find(ledger.PHASES, p) and all == 0 and phaseTok[p] == 0 then
 			continue
 		end
 		print(
@@ -7759,7 +7769,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 		for _, r in byRaft[rid] do
 			for _, row in r.rows do
 				local n = math.floor(row.minutes * 10 + 0.5)
-				tenths[row.phase] += n
+				tenths[row.phase] = (tenths[row.phase] or 0) + n
 				allTenths += n
 				tokens += row.tokens or 0
 			end
@@ -7868,6 +7878,17 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 			)
 			local stageOrder = table.clone(ledger.PHASES)
 			for _, p in ledger.EXTRA do
+				table.insert(stageOrder, p)
+			end
+			-- a phase no list holds is a stage too, after the listed ones (d0406)
+			local unlistedStages: { string } = {}
+			for _, row in parsed do
+				if not table.find(stageOrder, row.phase) and not table.find(unlistedStages, row.phase) then
+					table.insert(unlistedStages, row.phase)
+				end
+			end
+			table.sort(unlistedStages)
+			for _, p in unlistedStages do
 				table.insert(stageOrder, p)
 			end
 			for _, p in stageOrder do
