@@ -253,7 +253,8 @@ return t.spec("c0248 the documents say it", function(it)
 		-- layer of R0093 and quotes the ruling; which other members it names is the grouping's (z-raft's), not pinned here
 		local placed = false
 		for line in string.gmatch(read(README), "[^\n]+") do
-			local at = string.find(line, " are layers of R0093", 1, true) or string.find(line, " is a layer of R0093", 1, true)
+			local at = string.find(line, " are layers of R0093", 1, true)
+				or string.find(line, " is a layer of R0093", 1, true)
 			if at and string.find(string.sub(line, 1, at), "c0248", 1, true) then
 				placed = true
 				t.expect(string.find(line, '"go wwith 1 first then"', 1, true) ~= nil).toBe(true)
