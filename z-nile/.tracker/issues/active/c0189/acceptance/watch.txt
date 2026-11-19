@@ -1,0 +1,7 @@
+z-nile/check.sh
+z-nile/engine/hooks.luau
+z-nile/engine/main.luau
+z-nile/lib/replace-file.pl
+z-nile/lib/repo-hooks/reference-transaction
+z-nile/lib/sh.luau
+z-nile/setup.sh

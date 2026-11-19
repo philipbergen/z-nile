@@ -13,7 +13,7 @@ These rules are for the tooling: z-nile's files, which belong to no game. A proj
 | `zn` | the command, at the repository root: it runs `z-nile/engine/main` |
 | `z-nile/engine/` | the tracker engine. `main.luau` is the CLI: it parses arguments and does the git, file and process work. Every other module is one concern (`store`, `publish`, `projects`, `lessons`, `skills`, `trail`, …) |
 | `z-nile/lib/bounded.pl`, `z-nile/lib/cpu.sh`, `z-nile/engine/reap.luau`, `z-nile/engine/boundcmd.luau`, `z-nile/guard-bash.luau` | the bounded runner, the reaper's rules, the hook's rules and its entry |
-| `z-nile/lib/` | what the gate, the runner and the engine share: `ac.sh` (every `check.sh`), `fence.sh` and `git-hooks/` (the repository guards), `par.sh`, `sh.luau`, `graph.luau`, `changed.luau` |
+| `z-nile/lib/` | what the gate, the runner and the engine share: `ac.sh` (every `check.sh`), `fence.sh` and `git-hooks/` (the repository guards of a check run), `repo-hooks/` (the hook installed in the real repository by `./zn hooks`), `par.sh`, `sh.luau`, `graph.luau`, `changed.luau` |
 | `z-nile/skills/` | z-nile's skills: the pipeline (`z-…`) and the skills called from inside a step (`zz-…`), linked into `.claude/skills/` by `./zn skills` |
 | `z-nile/templates/` | the item, raft and prompt templates |
 | `z-nile/projects.toml` | the project registry: each project's name and root (its home is the folder holding the root) |

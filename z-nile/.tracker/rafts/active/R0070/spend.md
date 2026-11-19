@@ -2,17 +2,17 @@
 
 | issue | type | emergent | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|---|---|
-| c0189 | chore |  | 3558 | 68 | 408.0 | 1438356 |
+| c0189 | chore |  | 4056 | 91 | 408.0 | 1438356 |
 | c0194 | chore |  | 5549 | 133 | 531.0 | 1228856 |
 
-**Total:** +9107 / -201 lines, 939.0 agent-minutes, 2667212 tokens over 237 records
-<!-- totals: added=9107 removed=201 minutes=939.0 records=237 tokens=2667212 -->
+**Total:** +9605 / -224 lines, 939.0 agent-minutes, 2667212 tokens over 345 records
+<!-- totals: added=9605 removed=224 minutes=939.0 records=345 tokens=2667212 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
 | capture | 0 | 0 | 37.0 | 0 |
 | prep | 7353 | 56 | 300.0 | 0 |
 | design-review | 0 | 0 | 602.0 | 2667212 |
-| build | 1743 | 145 | 0.0 | 0 |
-| code-review | 11 | 0 | 0.0 | 0 |
+| build | 2208 | 163 | 0.0 | 0 |
+| code-review | 44 | 5 | 0.0 | 0 |
 | deliver | 0 | 0 | 0.0 | 0 |
