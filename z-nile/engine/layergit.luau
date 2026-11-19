@@ -636,7 +636,7 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
 		local below = baseFor(current.position)
 		if below and not layergit.layerFinished(current, below) then
 			local issue = store.get(current.issue)
-			local prBase = if current.position == 1 or landedBelow(current.position)
+			local prBase = if current.position == 1
 				then basePr
 				elseif landedAt[current.position - 1] then "main"
 				else stack.branch(raft.id, current.position - 1, issues[current.position - 1].id)
@@ -684,11 +684,11 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
 					below.name
 			end
 			if basePr ~= "main" then
-				return issue, i, stack.branch(raft.id, i, issue.id), baseTip, basePr
+				return issue, 1, stack.branch(raft.id, 1, issue.id), baseTip, basePr
 			end
 			return issue,
-				i,
-				stack.branch(raft.id, i, issue.id),
+				1,
+				stack.branch(raft.id, 1, issue.id),
 				if layergit.shaOf("origin/main")
 					then "origin/main"
 					elseif layergit.shaOf("main") then "main"

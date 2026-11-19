@@ -194,6 +194,9 @@ function work.oneReason(r: RaftFact): string?
 	if work.claimable(r) or r.where == "done" then
 		return nil
 	end
+	if r.blocked ~= nil then
+		return `is blocked ({r.blocked}): a human resolves it with ./zn resolve`
+	end
 	if r.block ~= nil and r.block ~= "" then
 		return r.block
 	end

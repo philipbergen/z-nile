@@ -72,7 +72,7 @@ The author's harvest line copies both and the lesson is filed under one of them 
 
 **Think one step further.** A finding isn't finished at "here's the fix". Say what new rule, state, edge case or user decision the fix brings, and how it interacts with existing rules, and make the Recommendation cover it, including its spec cases, so the one revision can close it. There is no second reviewer round.
 
-A reviewer never blocks the item itself, and a reviewer that needs the user says so in its review: the author runs `./zn block <id> <reason>` (zz-execute, To escalate).
+A reviewer never blocks the item itself, and a reviewer that needs the user says so in its review: the author runs `./zn block <id> <reason>` (a readied raft: `--layer <issue>`, the layer whose ticket needs the decision) (zz-execute, To escalate).
 
 **Never prescribe a cut.** Scope belongs to the user. A Recommendation never makes an outcome the issue's Problem asks for smaller, later or optional. When narrowing is the only fix you can see, the Recommendation starts `escalate to the user:` and lists the options, including what keeping the full scope would cost.
 

@@ -42,6 +42,7 @@ local trackerstate = require("./trackerstate")
 local dispatcher = {}
 
 export type OriginItem = {
+	id: string?, -- c0250: set for the raft `listedBy` returns
 	path: string,
 	front: { [string]: string },
 	state: string,
@@ -55,6 +56,7 @@ export type Ctx = {
 	onGitHub: () -> boolean,
 	checking: () -> boolean, -- inside a guarded run (a spec or a check.sh): only a CLI under .cache may start
 	origin: (id: string) -> OriginItem?,
+	listedBy: (id: string) -> OriginItem?, -- c0250: the raft on origin/main that lists this issue in `issues:` (never one in done/)
 	prView: (branch: string) -> string?, -- `gh pr view <branch> --json …`'s output, or nil
 	prMerged: (sha: string) -> boolean, -- `sha` is a pull request's merge commit on GitHub
 }
@@ -104,8 +106,9 @@ export type State = {
 	pending: { Row },
 	sealed: { [string]: string }?, -- the sha256 of each exchange file the dispatcher wrote (c0256)
 	answering: string?, -- the sha256 of the questions.md an answer was written for, until it is set aside
-	noteQ: string?, -- c0250: the sha256 of the escalation note (without its resolution) whose question is in the exchange
-	carried: string?, -- c0250: the sha256 of the last note whose resolution this run put into the exchange
+	blockQuestion: string?, -- c0250: the sha256 of escalation.question(note) when the note's question is copied into the exchange
+	carried: string?, -- c0250: the blob sha256 of the last resolved note whose resolution this run carried
+	rerunCarried: boolean?, -- c0250: the carry wrote an answer; only the first model step after it reads the re-run form
 }
 
 local HOME = ".cache/dispatch"
@@ -313,19 +316,38 @@ local function noteHash(text: string): string
 	return serde.hash("sha256", (string.gsub(base, "%s+$", "")))
 end
 
+-- c0250: the item that holds `id` blocked on origin/main: the item itself, or a blocked raft that lists it (a draft
+-- raft is never the chain's id: the chain runs on an issue). Returns it and the id the human resolves.
+local function blocker(ctx: Ctx, id: string): (OriginItem?, string)
+	if id == "" or id == "new" then
+		return nil, id
+	end
+	local o = ctx.origin(id)
+	if o and o.status == "blocked" then
+		return o, id
+	end
+	if store.isIssueId(id) and not (o and o.state == "done") then
+		local r = ctx.listedBy(id)
+		if r and r.status == "blocked" then
+			return r, (r.id or "")
+		end
+	end
+	return nil, id
+end
+
 -- c0250: an item a step blocked puts its note's question into the exchange as that step's question, once, and records
 -- which question in the exchange is the note's; nil, or why not.
 local function exchangeBlock(ctx: Ctx, st: State, step: string, target: string): string?
 	if target == "" then
 		return nil
 	end
-	local o = ctx.origin(target)
-	if not o or o.status ~= "blocked" or not o.note then
+	local o, holder = blocker(ctx, target)
+	if not o or not o.note then
 		return nil
 	end
 	local note, why = escalation.parse(o.note :: string)
 	if not note then
-		return `{target}'s escalation.md does not parse: {why}`
+		return `{holder}'s escalation.md does not parse: {why}`
 	end
 	local entries, readWhy = exchangeRead(st)
 	if entries == nil then
@@ -339,30 +361,41 @@ local function exchangeBlock(ctx: Ctx, st: State, step: string, target: string):
 	if added then
 		return added
 	end
-	st.noteQ = noteHash(o.note :: string)
+	st.blockQuestion = serde.hash("sha256", escalation.question(note :: escalation.Note))
 	save(st)
 	return nil
 end
 
--- c0250: the resolved note of `id` on origin/main whose resolution this run has not carried yet, and its hash; nil
--- when the item is not resolved, still blocked, or the run carried that note already.
-local function uncarried(ctx: Ctx, st: State, id: string): (escalation.Note?, string?)
+-- c0250: the resolved note of `id` on origin/main (or of the raft that lists it) whose resolution this run has not
+-- carried yet, its hash, and the id of the item that holds it; nil when none is resolved, one is still blocked, or the
+-- run carried that note already.
+local function uncarried(ctx: Ctx, st: State, id: string): (escalation.Note?, string?, string?)
 	if id == "" or id == "new" then
-		return nil, nil
+		return nil, nil, nil
 	end
 	local o = ctx.origin(id)
-	if not o or not o.note or o.status == "blocked" then
-		return nil, nil
+	local candidates: { OriginItem } = {}
+	if o then
+		table.insert(candidates, o)
 	end
-	local note = escalation.parse(o.note :: string)
-	if not note or not note.resolution then
-		return nil, nil
+	if store.isIssueId(id) and not (o and o.state == "done") then
+		local r = ctx.listedBy(id)
+		if r then
+			table.insert(candidates, r)
+		end
 	end
-	local sha = noteHash(o.note :: string)
-	if st.carried == sha then
-		return nil, nil
+	for _, c in candidates do
+		if c.note and c.status ~= "blocked" then
+			local note = escalation.parse(c.note :: string)
+			if note and note.resolution then
+				local sha = noteHash(c.note :: string)
+				if st.carried ~= sha then
+					return note :: escalation.Note, sha, if c == o then id else (c.id or "")
+				end
+			end
+		end
 	end
-	return note :: escalation.Note, sha
+	return nil, nil, nil
 end
 
 -- c0250: wherever a run resumes an item whose note holds a resolution this run has not carried (`./zn dispatch <id>`,
@@ -370,40 +403,65 @@ end
 -- questions.md set aside unread; the note's question joins the exchange when it is not there (a host that never saw
 -- the block); the resolution is the answer. nil, or why not; the second result says a resolution was carried.
 local function carryResolution(ctx: Ctx, st: State, id: string, step: string): (string?, boolean)
-	local note, sha = uncarried(ctx, st, id)
+	local note, sha, holder = uncarried(ctx, st, id)
 	if not note then
+		return nil, false
+	end
+	-- an abort is never carried: the human stopped it, and the item's next step starts fresh
+	if ((note :: escalation.Note).resolution :: escalation.Resolution).decision == "abort" then
+		st.carried, st.blockQuestion = sha, nil
+		save(st)
 		return nil, false
 	end
 	local entries, readWhy = exchangeRead(st)
 	if entries == nil then
 		return readWhy, false
 	end
+	local question = escalation.question(note :: escalation.Note)
 	local tail = entries[#entries]
-	local ours = tail ~= nil and tail.kind == "question" and st.noteQ == sha
+	local ours = tail ~= nil
+		and tail.kind == "question"
+		and st.blockQuestion == serde.hash("sha256", question)
 	if tail and tail.kind == "question" and not ours then
-		local closed = exchangeAdd(st, "answer", exchange.WITHDRAWN)
+		local q = `{st.dir}/questions.md`
+		local waiting = fs.isFile(q) and not isLink(q)
+		if waiting then
+			st.answering = serde.hash("sha256", fs.readFile(q))
+		end
+		local closed = exchangeAdd(st, "answer", escalation.SUPERSEDED)
 		if closed then
 			return closed, false
 		end
-		local q = `{st.dir}/questions.md`
 		if fs.isFile(q) or isLink(q) then
 			local name = freeName(st.dir, "questions-refused-", ".md", true)
 			fs.move(q, name)
 			st.answering = nil
-			print(`dispatch: the question waiting in {q} was set aside unread as {name}: the resolution of {id} answers it`)
+			print(
+				`dispatch: the question waiting in {q} was set aside unread as {name}: the resolution of {holder} answers it`
+			)
 		end
 	end
 	if not ours then
-		local why = exchangeAdd(st, "question", escalation.question(note :: escalation.Note), step)
+		local resumes = dispatch.resumeStep({
+			kind = if store.isRaftId(id) then "raft" else "issue",
+			blockedBy = if holder ~= id then holder else nil,
+			resolvedBy = if holder ~= id then holder else nil,
+		} :: any)
+		local why = exchangeAdd(st, "question", question, resumes)
 		if why then
 			return why, false
 		end
 	end
-	local why = exchangeAdd(st, "answer", escalation.answerText((note :: escalation.Note).resolution :: escalation.Resolution))
+	local why = exchangeAdd(
+		st,
+		"answer",
+		escalation.answerText((note :: escalation.Note).resolution :: escalation.Resolution)
+	)
 	if why then
 		return why, false
 	end
-	st.carried, st.noteQ = sha, nil
+	st.carried, st.blockQuestion, st.rerunCarried = sha, nil, true
+	st.outcome, st.detail = nil, nil
 	save(st)
 	return nil, true
 end
@@ -1465,13 +1523,11 @@ function dispatcher.modelStep(
 		finalMarked = layergit.marked(raft)
 		itemDoc = raft.doc
 	end
-	local carriedNow = false
 	if id ~= "" and id ~= "new" then
-		local carryWhy, carried = carryResolution(ctx, st, id, step)
+		local carryWhy = carryResolution(ctx, st, id, step)
 		if carryWhy then
 			error(`the exchange of this run cannot take the resolution of {id}: {carryWhy}`, 0)
 		end
-		carriedNow = carried
 	end
 	local exEntries, exWhy = exchangeRead(st)
 	if exEntries == nil then
@@ -1501,10 +1557,21 @@ function dispatcher.modelStep(
 	local exLast = exEntries[#exEntries]
 	local exNoReply = exLast ~= nil
 		and exLast.kind == "answer"
-		and (exLast.body == exchange.NO_REPLY or exLast.body == exchange.WITHDRAWN)
+		and (
+			exLast.body == exchange.NO_REPLY
+			or exLast.body == exchange.WITHDRAWN
+			or exLast.body == escalation.SUPERSEDED
+		)
 	local exUnknown = exLast ~= nil and exLast.kind == "answer" and exLast.body == exchange.UNKNOWN_REPLY
 	-- a resolution carried now was put into the exchange as this step's question and answer (c0250)
-	local exLastStep = if carriedNow then step elseif st.history[#st.history] then st.history[#st.history].step else nil
+	local exLastStep = if st.rerunCarried
+		then exAsker
+		elseif st.history[#st.history] then st.history[#st.history].step
+		else nil
+	if st.rerunCarried then
+		st.rerunCarried = nil -- only the first model step after the carry reads the re-run form
+		save(st)
+	end
 	-- a nested step also reads the exchange of the run that started it (read only, through the same reader and its seal)
 	local parentNames: { string }? = nil
 	local parentDir = process.env.ZN_DISPATCH_DIR
@@ -1878,14 +1945,29 @@ function dispatcher.modelStep(
 	local exAfter, exAfterWhy = exchangeRead(st)
 	if exAfter == nil then
 		exProblem = `the step changed the exchange or left it unreadable: {exAfterWhy}`
-	elseif nested and id ~= "" and (fs.isFile(`{stateDir}/questions.md`) or isLink(`{stateDir}/questions.md`)) then
+	elseif
+		nested
+		and id ~= ""
+		and (fs.isFile(`{stateDir}/questions.md`) or isLink(`{stateDir}/questions.md`))
+	then
 		-- c0250: a nested step never asks; its author blocks the item. The file is set aside unread below.
-		exProblem = `this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md in {id}'s folder and runs ./zn block {id} <reason> (the file is set aside as questions-refused-N.md, unread)`
+		local ownerItem = ctx.origin(id)
+		local nestedRaft = if ownerItem
+				and ownerItem.state == "active"
+				and (ownerItem.front.raft or "") ~= ""
+			then ownerItem.front.raft
+			else nil
+		exProblem =
+			`this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md in {id}'s folder and runs {dispatch.blockCommand(
+				id,
+				nestedRaft,
+				"<reason>"
+			)} (the file is set aside as questions-refused-N.md, unread)`
 	elseif not (zAsked and #zMade > 0) then -- a z-ticket that made an issue and asked fails below: its question is no message
 		local blockedHere = false
 		if id ~= "" and id ~= "new" then
-			local o = ctx.origin(id)
-			blockedHere = o ~= nil and o.status == "blocked" and o.note ~= nil
+			local o = blocker(ctx, id)
+			blockedHere = o ~= nil and o.note ~= nil
 		end
 		if blockedHere then
 			-- c0250: the block is the step's question; a questions.md it also left is set aside unread
@@ -1894,7 +1976,9 @@ function dispatcher.modelStep(
 			if not why and (fs.isFile(qf) or isLink(qf)) then
 				local name = freeName(stateDir, "questions-refused-", ".md", true)
 				fs.move(qf, name)
-				print(`dispatch: {step} blocked {id} and also left questions.md: set aside unread as {name} (the block is its question)`)
+				print(
+					`dispatch: {step} blocked {id} and also left questions.md: set aside unread as {name} (the block is its question)`
+				)
 			end
 			if why then
 				exProblem = `the exchange cannot take the step's question: {why}`
@@ -2634,6 +2718,8 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 			end
 		end
 	end
+	local blockedO, blockedHolder = blocker(ctx, id)
+	local _, _, resolvedHolder = uncarried(ctx, st, id)
 	return {
 		folder = folder,
 		root = root,
@@ -2649,7 +2735,9 @@ function dispatcher.facts(ctx: Ctx, st: State, id: string, description: string?)
 		-- c0250: a question on an item is its block (escalation.md); questions.md is a capture's alone
 		-- c0256's local file; a resolution this run has not carried yet answers it (c0250), so it does not stop the chain
 		questions = fs.isFile(`{st.dir}/questions.md`) and (uncarried(ctx, st, id)) == nil,
-		blocked = if o and o.status == "blocked" then (front.blocked or "") else nil,
+		blocked = if blockedO then (blockedO.front.blocked or "") else nil,
+		blockedBy = if blockedO and blockedHolder ~= id then blockedHolder else nil,
+		resolvedBy = if resolvedHolder and resolvedHolder ~= id then resolvedHolder else nil,
 		openHuman = openHuman,
 		last = last,
 		uncovered = uncovered,
@@ -2976,9 +3064,9 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 		-- c0250: a blocked item waits for ./zn resolve, whatever flag is given; once resolved, the resolution answers
 		local resolvedNote: escalation.Note? = nil
 		if id ~= "new" then
-			local blockedItem = ctx.origin(id)
-			if blockedItem and blockedItem.status == "blocked" then
-				return refuse(`{id} is blocked: ./zn resolve {id} <decision> first`)
+			local blockedItem, blockedId = blocker(ctx, id)
+			if blockedItem then
+				return refuse(`{blockedId} is blocked: ./zn resolve {blockedId} <decision> first`)
 			end
 			resolvedNote = (uncarried(ctx, st, id))
 			if resolvedNote and answer then
@@ -3330,9 +3418,16 @@ function dispatcher.oneStep(
 	local function body(st: State): number
 		if s.kind == "model" and id ~= "" and id ~= "new" then
 			-- c0250: no step starts on a blocked item
-			local o = ctx.origin(id)
-			if o and o.status == "blocked" then
-				print(`{id} is blocked ({o.front.blocked or "no reason"}): ./zn resolve {id} <decision>`)
+			local o, holder = blocker(ctx, id)
+			if o then
+				local reason = o.front.blocked or "no reason"
+				if holder == id then
+					print(`{id} is blocked ({reason}): ./zn resolve {id} <decision>`)
+				else
+					print(
+						`{id} waits on {holder}, which is blocked ({reason}): ./zn resolve {holder} <decision>`
+					)
+				end
 				return dispatch.EXIT.user
 			end
 		end
@@ -3346,16 +3441,25 @@ function dispatcher.oneStep(
 		local outcome = if s.kind == "script"
 			then dispatcher.scriptStep(ctx, st, step, id)
 			else dispatcher.modelStep(ctx, st, step, id, opts)
-		local blockedNow = if s.kind == "model" and id ~= "" and id ~= "new" and not nested then ctx.origin(id) else nil
-		if blockedNow and blockedNow.status == "blocked" then
-			print(`stop: {id} is blocked ({blockedNow.front.blocked or "no reason"}): ./zn resolve {id} <decision>`)
+		local blockedNow, blockedHolder = nil, id
+		if s.kind == "model" and id ~= "" and id ~= "new" and not nested then
+			blockedNow, blockedHolder = blocker(ctx, id)
+		end
+		if blockedNow then
+			print(
+				`stop: {blockedHolder} is blocked ({blockedNow.front.blocked or "no reason"}): ./zn resolve {blockedHolder} <decision>`
+			)
 			return dispatch.EXIT.user
 		end
 		if fs.isFile(`{st.dir}/questions.md`) then
 			if nested then
 				-- a step the dispatcher started for another step cannot ask the user itself: its author asks for it
 				print(
-					`stop: this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md in {id}'s folder and runs ./zn block {id} <reason> (the item is blocked, not this step); the answer reaches the author when the user resolves it`
+					`stop: this step needs the user, and only the step that started it can ask: say so in your review, and your author writes escalation.md in {id}'s folder and runs {dispatch.blockCommand(
+						id,
+						nil,
+						"<reason>"
+					)} (the item is blocked, not this step); the answer reaches the author when the user resolves it`
 				)
 			else
 				print(

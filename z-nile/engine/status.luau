@@ -17,8 +17,15 @@ local ALLOWED: { [string]: boolean } = {
 	["blocked>new"] = true,
 	["blocked>prepared"] = true,
 }
-local NAMES: { [string]: boolean } =
-	{ new = true, preparing = true, prepared = true, active = true, blocked = true, done = true, closed = true }
+local NAMES: { [string]: boolean } = {
+	new = true,
+	preparing = true,
+	prepared = true,
+	active = true,
+	blocked = true,
+	done = true,
+	closed = true,
+}
 local WORDS = {
 	"raging",
 	"pink",

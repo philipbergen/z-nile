@@ -743,7 +743,7 @@ local function moveOnOrigin(
 				-- c0248: a raft readied from now on has its layers reviewed one by one
 				if marker and store.isRaftId(fid) then
 					text = withFront(text, "layers", "reviewed")
-	end
+				end
 				if tweak then
 					text = tweak(fid, text)
 				end
@@ -7266,6 +7266,9 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 					treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4))
 				)
 			end,
+			nil,
+			nil,
+			nil,
 			true -- c0248: a raft readied from now on carries `layers: reviewed`
 		)
 		if not r.ok then
@@ -7453,7 +7456,7 @@ end
 function H.actorOf(): (string, boolean)
 	local ident = sh.run("git", { "var", "GIT_AUTHOR_IDENT" })
 	local name = if ident.ok then string.match(ident.stdout, "^(.-) <") else nil
-	local hint = provenance.hint({
+	local hint = H.provenance.hint({
 		CLAUDECODE = process.env.CLAUDECODE,
 		AI_AGENT = process.env.AI_AGENT,
 		CURSOR_AGENT = process.env.CURSOR_AGENT,
@@ -7461,7 +7464,7 @@ function H.actorOf(): (string, boolean)
 		ZN_DISPATCH = process.env.ZN_DISPATCH,
 		CLAUDE_EFFORT = process.env.CLAUDE_EFFORT,
 	})
-	local actor, why = provenance.resolve(nil, process.env.ZN_ACTOR, hint, name)
+	local actor, why = H.provenance.resolve(nil, process.env.ZN_ACTOR, hint, name)
 	if not actor then
 		fail(why or "not an actor")
 	end
@@ -7613,6 +7616,10 @@ function cmd.block(pos: { string }, opts: { [string]: { string } }?)
 				fail(`--layer {want}: {why}; the Layer is one of {table.concat(candidates, ", ")}`)
 			end
 			layer = want
+		elseif #candidates >= 2 then
+			fail(
+				`{id} has {table.concat(candidates, ", ")} still in active/: name the blocked layer: --layer <issue>`
+			)
 		else
 			layer = candidates[1]
 		end
@@ -8160,7 +8167,7 @@ function cmd.resolve(pos: { string }, opts: { [string]: { string } })
 		local resolvedNote = H.esc.resolution(noteText, resolutionOf)
 		local rec = `{dir}/provenance.md`
 		local detail = `decision={decision}{if agent then ` said="{said}"` else ""}`
-		local recorded, recWhy = provenance.record(read(rec), id, "unblocked", actor, detail, when)
+		local recorded, recWhy = H.provenance.record(read(rec), id, "unblocked", actor, detail, when)
 		if not recorded then
 			return recWhy or "not a record"
 		end
@@ -9689,16 +9696,7 @@ end
 
 -- `dispatch …` (c0117): the dispatcher, dispatcher.luau, with the tracker's readers of origin/main.
 function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
-	local function origin(id: string): dispatcherLib.OriginItem?
-		if not hasOrigin() then
-			return nil
-		end
-		sh.run("git", { "fetch", "-q", "origin", "main" })
-		local readTree, files = originTree()
-		local path = if readTree then docPath(files, id) else nil
-		if not path then
-			return nil
-		end
+	local function itemAt(path: string): dispatcherLib.OriginItem?
 		local shown = sh.run("git", { "show", `origin/main:{path}` })
 		if not shown.ok then
 			return nil
@@ -9707,7 +9705,7 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
 		local state = stateOfPath(path)
 		local noteShown = sh.run("git", {
 			"show",
-			`origin/main:{(string.gsub(path :: string, "[^/]+$", "escalation.md"))}`,
+			`origin/main:{(string.gsub(path, "[^/]+$", "escalation.md"))}`,
 		})
 		return {
 			path = path,
@@ -9716,6 +9714,37 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
 			status = statusLib.effective(front, state),
 			note = if noteShown.ok then noteShown.stdout else nil,
 		}
+	end
+	local function origin(id: string): dispatcherLib.OriginItem?
+		if not hasOrigin() then
+			return nil
+		end
+		sh.run("git", { "fetch", "-q", "origin", "main" })
+		local readTree, files = originTree()
+		local path = if readTree then docPath(files, id) else nil
+		return if path then itemAt(path) else nil
+	end
+	-- c0250: the raft on origin/main that lists an issue in `issues:` (the read raft-plan and fold make), never a raft in
+	-- done/: the chain runs on an issue, and a draft raft is blocked or resolved on its behalf
+	local function listedBy(id: string): dispatcherLib.OriginItem?
+		if not hasOrigin() then
+			return nil
+		end
+		local readTree, files = originTree()
+		if not readTree then
+			return nil
+		end
+		for _, p in files do
+			local fid, rel = publish.itemPath(p)
+			if fid and rel == `{fid}.md` and store.isRaftId(fid) and stateOfPath(p) ~= "done" then
+				local item = itemAt(p)
+				if item and table.find(store.idList(item.front.issues), id) then
+					item.id = fid
+					return item
+				end
+			end
+		end
+		return nil
 	end
 	-- --answer-file is the caller's path: read from where ./zn was run, and named in full in a refusal
 	local answerFile = opts["--answer-file"]
@@ -9732,6 +9761,7 @@ function cmd.dispatch(pos: { string }, opts: { [string]: { string } })
 		onGitHub = onGitHub,
 		checking = checking,
 		origin = origin,
+		listedBy = listedBy,
 		-- a PR's state for the chain's gates (c0117): only on a GitHub origin, through the real gh
 		-- a pull request's merge commit (c0117: a commit on main that is vetted without being tracker state)
 		prMerged = function(sha: string): boolean

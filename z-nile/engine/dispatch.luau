@@ -224,6 +224,28 @@ export type PromptInput = {
 	parentStateDir: string?,
 }
 
+-- c0250 (design review 006 F3): the command a stop or a prompt names to block an item. An issue in an active raft is
+-- blocked through its raft, naming the layer; a raft id names the layer as a placeholder.
+function dispatch.blockCommand(id: string, raft: string?, reason: string): string
+	if raft and raft ~= "" then
+		return `./zn block {raft} {reason} --layer {id}`
+	elseif string.match(id, "^R%d+$") then
+		return `./zn block {id} {reason} --layer <issue>`
+	end
+	return `./zn block {id} {reason}`
+end
+
+-- c0250 (design review 006 F2): the model step an item resumes with, which asks a carried question: z-run for a raft,
+-- z-raft for an issue a raft blocked or resolved, z-design for any other issue.
+function dispatch.resumeStep(f: Facts): string
+	if f.kind == "raft" then
+		return "z-run"
+	elseif f.blockedBy or f.resolvedBy then
+		return "z-raft"
+	end
+	return "z-design"
+end
+
 -- c0250: what a step does when a decision needs the user. A capture has no item yet, so z-ticket keeps c0256's local
 -- questions.md; a step on an item files an escalation note and blocks the item, which every host and the board see.
 local function askText(p: PromptInput): string
@@ -234,7 +256,7 @@ local function askText(p: PromptInput): string
 	elseif p.step == "zz-review" then
 		return `Nobody will answer a question. A review never blocks the item: when a decision needs the user, say so in your review, and the item's author blocks it. {open}`
 	end
-	return `Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`escalation.md\` in {p.id}'s folder (\`## Question\`, \`## What was tried\`, \`## Open findings or error\` and \`## Options\`, each option a bullet that starts with one of amend-design, approve, split, retry or abort and exactly one ending (recommended)) and run \`./zn block {p.id} <review-exhausted|design-gap|needs-decision|red-gate|quota|tripwire>\`, then stop. Under ./zn dispatch, do not run \`./zn done\`: the dispatcher lands the layers below (c0252). A review that leaves a refutation or an unclosed high is review-exhausted: write \`## Open to the human\` in the item's document (one bullet per finding: \`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>\`), copy those bullets verbatim under \`## Open findings or error\` in \`escalation.md\`, run \`./zn block {p.id} review-exhausted\`, and never rule on them yourself. After the user resolves it, run \`./zn rulings {p.id}\` before you go on.`
+	return `Nobody will answer a question. When a decision needs the user (a scope change, a missing credential), write \`escalation.md\` in {p.id}'s folder (\`## Question\`, \`## What was tried\`, \`## Open findings or error\` and \`## Options\`, each option a bullet that starts with one of amend-design, approve, split, retry or abort and exactly one ending (recommended)) and run \`./zn block {p.id} <review-exhausted|design-gap|needs-decision|red-gate|quota|tripwire>\` (a readied raft: \`--layer <issue>\`, the layer whose ticket needs the decision), then stop. Under ./zn dispatch, do not run \`./zn done\`: the dispatcher lands the layers below (c0252). A review that leaves a refutation or an unclosed high is review-exhausted: write \`## Open to the human\` in the item's document (one bullet per finding: \`- F2: <finding>. Answer: <your answer>. Decision: <what the human must decide>\`), copy those bullets verbatim under \`## Open findings or error\` in \`escalation.md\`, run \`./zn block {p.id} review-exhausted\` (a readied raft: \`--layer <issue>\`, the layer whose ticket needs the decision), and never rule on them yourself. After the user resolves it, run \`./zn rulings {p.id}\` before you go on.`
 end
 
 -- The prompt of a model step. It names the skill's file, which every CLI reads itself; no skill text,
@@ -375,7 +397,9 @@ export type Facts = {
 	localRaft: string, -- the raft: line in the rafting worktree, when the dispatcher rafted it ("" when none)
 	pr: Pr?, -- the PR of the step that holds the item now (prep, rafting or run)
 	questions: boolean, -- the run state holds questions.md
-	blocked: string?, -- c0250: the reason when the item is blocked on origin/main (its escalation.md names the question)
+	blocked: string?, -- c0250: the reason when the item, or the raft that lists it, is blocked on origin/main
+	blockedBy: string?, -- c0250: the blocked raft that lists this issue (blocked is that raft's reason)
+	resolvedBy: string?, -- c0250: a raft, not blocked, that lists this issue and holds a resolution this run has not carried
 	openHuman: { string }, -- unruled ids under ## Open to the human in the step's worktree document
 	last: { step: string, outcome: string }?, -- the last step's outcome in the run state
 	uncovered: { string }, -- `./zn lessons --uncovered <id>` in the step's worktree, after a review step
@@ -472,6 +496,12 @@ end
 -- unharvested finding. Then by state: capture, design, the prep gate, raft-plan, z-raft, the rafting gate, ready,
 -- run, the run's gate (always a human's), done.
 function dispatch.next(f: Facts): Action
+	if f.blockedBy then
+		return stop(
+			dispatch.EXIT.user,
+			`{f.id} waits on {f.blockedBy}, which is blocked ({f.blocked or "no reason"}): ./zn resolve {f.blockedBy} <decision>`
+		)
+	end
 	if f.status == "blocked" then
 		return stop(
 			dispatch.EXIT.user,
@@ -489,7 +519,11 @@ function dispatch.next(f: Facts): Action
 	if #f.openHuman > 0 then
 		return stop(
 			dispatch.EXIT.user,
-			`needs the user: {f.id} has {table.concat(f.openHuman, ", ")} under ## Open to the human with no ruling; write escalation.md with them under ## Open findings or error and run ./zn block {f.id} review-exhausted (the user rules with ./zn resolve {f.id} <decision> --rule <Fn>=\"<ruling>\", then ./zn rulings {f.id})`
+			`needs the user: {f.id} has {table.concat(f.openHuman, ", ")} under ## Open to the human with no ruling; write escalation.md with them under ## Open findings or error and run {dispatch.blockCommand(
+				f.id,
+				if f.kind == "issue" and f.where == "active" and f.raft ~= "" then f.raft else nil,
+				"review-exhausted"
+			)} (the user rules with ./zn resolve {f.id} <decision> --rule <Fn>=\"<ruling>\", then ./zn rulings {f.id})`
 		)
 	end
 	if f.last and f.last.outcome == "tripwire" and f.last.step == "merge-check" then

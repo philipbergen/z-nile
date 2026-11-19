@@ -286,7 +286,9 @@ function publish.movedEdit(id: string, old: string, content: string, escalation:
 	end
 	local before, after = withoutStatus(old, escalation), withoutStatus(content, escalation)
 	if not before or not after or before ~= after then
-		return `a moved document may only change its status: line{if escalation then ", blocked: and design:" else ""}`
+		return `a moved document may only change its status: line{if escalation
+			then ", blocked: and design:"
+			else ""}`
 	end
 	return nil
 end
@@ -823,7 +825,8 @@ function publish.commit(
 			end
 			if existing then
 				-- c0278: a closed document is never published again, a status-only edit included
-				local editWhy = publish.existingEdit(publish.itemPath(c.path) or c.path, existing, c.content, escalation)
+				local editWhy =
+					publish.existingEdit(publish.itemPath(c.path) or c.path, existing, c.content, escalation)
 				if editWhy then
 					return fail(`{c.path}: {editWhy}`)
 				end

@@ -57,6 +57,8 @@ local openlist = require("./openlist")
 
 local escalation = {}
 
+-- the answer the dispatcher writes to a c0256 question the block superseded
+escalation.SUPERSEDED = "(no reply: the item was blocked, and its resolution answers in the next message)"
 escalation.REASONS = { "review-exhausted", "design-gap", "needs-decision", "red-gate", "quota", "tripwire" }
 escalation.DECISIONS = { "amend-design", "approve", "split", "retry", "abort" }
 
