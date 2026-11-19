@@ -1,0 +1,11 @@
+- review-001 F1 (erred z-design, upstream zz-review): z-design/every-recorded-row-has-a-path-to-main
+- review-001 F2 (erred zz-execute, upstream z-design): zz-execute/resolve-items-in-the-steps-own-checkout
+- review-001 F3 (erred zz-execute, upstream z-design): zz-execute/buffer-nothing-until-every-target-is-located
+- review-001 F4 (erred zz-arch, upstream z-design): zz-arch/moved-records-join-under-the-owners-lock, zz-arch/writers-under-cache-replace-links
+- review-001 F5 (erred zz-execute, upstream z-design): one-off: a missing pcall around one read; the unfiled branch it feeds already existed
+- review-001 F6 (erred z-design): z-design/restated-rules-move-together
+- final-review-001 F1 (erred z-design, upstream zz-review): z-design/every-recorded-row-has-a-path-to-main
+- final-review-001 F2 (erred zz-execute): one-off: a fixed answer claimed a case could not be built without trying it; this report's candidate lesson is not filed (the reviewer proposes one for zz-execute)
+- final-review-001 F3 (erred none): one-off: main moved during the review; zz-review/not-stacked-is-main-moving already covers it
+- final-review-001 F4 (erred z-design, upstream zz-review): z-design/checks-pass-in-a-dispatched-step
+- final-review-001 F5 (erred z-design): z-design/restated-rules-move-together

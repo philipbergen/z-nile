@@ -34,7 +34,7 @@ approve
 - Design mode: `design-review-NNN.md`, in the issue's folder (z-design reviews one issue); in raft mode, in the raft's folder. `./zn metrics` counts both and rolls an issue's rounds up to its raft through `raft:`.
 - Code mode: `review-NNN.md`, in the raft directory.
 - Final mode: `final-review-NNN.md`, in the raft directory, alongside `trace.md`.
-- The file is `001` when the folder has none of that name. A second review of the same kind is refused. An older item's higher numbers still parse and still count in `./zn metrics`.
+- The file is `001` when the folder has none of that name. A second review of the same kind is refused, before any reviewer starts; in raft mode the rule is one review per `grouped:` record (a refold that changes the record files the next number, a record a review already quotes is refused). An older item's higher numbers still parse and still count in `./zn metrics`.
 - Under `./zn dispatch`, in every mode, write your review to `$ZN_DISPATCH_DIR/review.md` (your own state folder) and nothing else: the dispatcher numbers it with the mode's file name and moves it into the mode's folder, and a step that wrote no review fails. The names above and in Visible record are the interactive path's, where you write the file yourself.
 - Focused mode: the reviewer returns the markdown and the lead writes `focused-review-NNN.md` (folder: zz-rules skill, Items). A stream review is filed by the dispatcher as `stream-review-<issue>-NNN.md` in the raft's folder (Stream mode).
 

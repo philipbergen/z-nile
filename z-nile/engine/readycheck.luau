@@ -102,29 +102,6 @@ local function regrouped(map: { [string]: string }, now: { [string]: string? }):
 	return out
 end
 
-local function reviewCovers(files: { [string]: string }, map: { [string]: string }): boolean
-	if next(map) == nil then
-		return true
-	end
-	for name, text in files do
-		if string.match(name, "^design%-review%-%d+%.md$") then
-			for quoted in string.gmatch("\n" .. text, "\nGrouped: (%[[^\n]*%])") do
-				local q = raftplan.parseGrouped(quoted)
-				local all = true
-				for id, h in map do
-					if q[id] ~= h then
-						all = false
-					end
-				end
-				if all then
-					return true
-				end
-			end
-		end
-	end
-	return false
-end
-
 -- The grouping record and, when the raft has more than one member, the coherence review that quotes it.
 function readycheck.record(
 	id: string,
@@ -144,7 +121,7 @@ function readycheck.record(
 	if #redesigned > 0 then
 		return `{id}: {table.concat(redesigned, ", ")} changed on origin/main since {id} grouped it: z-raft drops it (./zn unfold {id} <id>) or folds it again with a new coherence review`
 	end
-	if #members > 1 and not reviewCovers(reviewFiles, map) then
+	if #members > 1 and not raftplan.reviewCovers(reviewFiles, map) then
 		return `{id}'s coherence review predates its record: run a new raft-mode round (z-raft, zz-review); never edit a review that is already written`
 	end
 	return nil
