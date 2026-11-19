@@ -402,7 +402,7 @@ end
 -- `retry`, a one-step run): a c0256 question still waiting from before the block is closed with no reply and its
 -- questions.md set aside unread; the note's question joins the exchange when it is not there (a host that never saw
 -- the block); the resolution is the answer. nil, or why not; the second result says a resolution was carried.
-local function carryResolution(ctx: Ctx, st: State, id: string, step: string): (string?, boolean)
+local function carryResolution(ctx: Ctx, st: State, id: string): (string?, boolean)
 	local note, sha, holder = uncarried(ctx, st, id)
 	if not note then
 		return nil, false
@@ -1524,7 +1524,7 @@ function dispatcher.modelStep(
 		itemDoc = raft.doc
 	end
 	if id ~= "" and id ~= "new" then
-		local carryWhy = carryResolution(ctx, st, id, step)
+		local carryWhy = carryResolution(ctx, st, id)
 		if carryWhy then
 			error(`the exchange of this run cannot take the resolution of {id}: {carryWhy}`, 0)
 		end
