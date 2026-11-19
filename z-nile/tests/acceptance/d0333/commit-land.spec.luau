@@ -231,6 +231,8 @@ return t.spec("d0333 a raft lands with ./zn commit after finish", function(it)
 		finishSha = git(wt, { "rev-parse", "HEAD" })
 		t.expect(git(wt, { "log", "-1", "--format=%s" })).toBe("c0010: alpha module")
 		t.expect(has(znOk({ "trace", "R0010" }), `Commit: {finishSha}`)).toBe(true)
+		-- c0248: the layer's approved review, committed after the finish (a review file leaves the layer finished)
+		require("@tests/lib/seal").layerReview(wt, "c0010")
 	end)
 
 	it(
@@ -253,10 +255,10 @@ return t.spec("d0333 a raft lands with ./zn commit after finish", function(it)
 	it(
 		"AC3: the trace table committed with ./zn commit leaves the layer finished and the table current",
 		function()
-			write(wt, `{RAFT}/trace.md`, table1(finishSha))
+			write(wt, `{RAFT}/trace-001.md`, table1(finishSha))
 			local out = znOk({ "commit", "-m", "R0010: trace", "--phase", "deliver", "--time", "1" })
 			t.expect(has(out, "committed: R0010: trace")).toBe(true)
-			t.expect(has(changed(), `{RAFT}/trace.md`)).toBe(true)
+			t.expect(has(changed(), `{RAFT}/trace-001.md`)).toBe(true)
 			-- the commit carries what made the layer unfinished before d0333, and its spend row
 			t.expect(has(changed(), `{RAFT}/spend.md`)).toBe(true)
 			t.expect(has(changed(), "/spend.d/")).toBe(true)
@@ -313,8 +315,9 @@ return t.spec("d0333 a raft lands with ./zn commit after finish", function(it)
 				"R0010: final-review-001",
 				"R0010: trace",
 				"R0010: verification log",
+				"tracker: review c0010",
 			}, "\n"))
-			t.expect(git(wt, { "rev-parse", "HEAD~4" })).toBe(finishSha)
+			t.expect(git(wt, { "rev-parse", "HEAD~5" })).toBe(finishSha)
 		end
 	)
 
@@ -343,16 +346,17 @@ return t.spec("d0333 a raft lands with ./zn commit after finish", function(it)
 	it("AC4: ./zn done lands that stack", function()
 		local out = znOk({ "done", "R0010" })
 		t.expect(has(out, "landed R0010")).toBe(true)
-		t.expect(git(f.main, { "log", "-6", "--format=%s", "origin/main" })).toBe(table.concat({
+		t.expect(git(f.main, { "log", "-7", "--format=%s", "origin/main" })).toBe(table.concat({
 			"R0010: bind c0010",
 			"R0010: final-refute-001",
 			"R0010: final-review-001",
 			"R0010: trace",
 			"R0010: verification log",
+			"tracker: review c0010",
 			"c0010: alpha module",
 		}, "\n"))
 		-- the finish commit made before the four commits is the one that landed: no second finish
-		t.expect(has(git(f.main, { "log", "-8", "--format=%H", "origin/main" }), finishSha)).toBe(true)
+		t.expect(has(git(f.main, { "log", "-9", "--format=%H", "origin/main" }), finishSha)).toBe(true)
 		-- the commits' rows are in the landed issue's ledger
 		local rows = git(f.main, {
 			"grep",

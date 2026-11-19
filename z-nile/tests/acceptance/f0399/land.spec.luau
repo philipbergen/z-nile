@@ -338,7 +338,8 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
 			t.expect(has(readyBody("R0010"), "Lands: approved")).toBe(true)
 			t.expect(has(readyBody("R0010"), "On:")).toBe(false)
 			local doc = onOrigin(`{ROOT}/rafts/active/R0010/R0010.md`) or ""
-			t.expect(withoutStatus(doc)).toBe(withoutStatus(DOC10))
+			-- c0248: ready also marks the raft `layers: reviewed`
+			t.expect(withoutStatus((string.gsub(doc, "\nlayers: reviewed\n", "\n")))).toBe(withoutStatus(DOC10))
 			t.expect(onOrigin(`{ROOT}/issues/active/c0020/c0020.md`) ~= nil).toBe(true)
 			t.expect(onOrigin(`{ROOT}/issues/active/c0020/approval.md`)).toBe(nil)
 			t.expect(onOrigin(`{ROOT}/issues/active/c0010/approval.md`) ~= nil).toBe(true)
@@ -398,6 +399,7 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
 		local first = tr(wt, { "finish", "c0010" })
 		t.expect(first.ok).toBe(true)
 		t.expect(has(say(first), "note: c0010")).toBe(false)
+		seal.layerReview(wt, "c0010") -- c0248: a layer is reviewed before the next starts
 		zn(wt, { "start", "R0010" })
 		layerWork(wt, "beta", "c0020")
 		local second = tr(wt, { "finish", "c0020" })
@@ -407,6 +409,7 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
 		t.expect(has(out, "note: c0020 is not approved (no approval)")).toBe(true)
 		t.expect(has(out, "will wait for ./zn approve c0020")).toBe(true)
 		t.expect(git(wt, { "log", "-1", "--format=%s" })).toBe("c0020: c0020 title")
+		seal.layerReview(wt, "c0020")
 		-- the third member's design is edited on its layer before it is finished
 		zn(wt, { "start", "R0010" })
 		local doc = `{wt}/{ROOT}/issues/active/c0025/c0025.md`
@@ -415,6 +418,7 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
 		local third = tr(wt, { "finish", "c0025" })
 		built = built and third.ok
 		t.expect(has(say(third), "note: c0025 is not approved (changed: design)")).toBe(true)
+		seal.layerReview(wt, "c0025")
 	end)
 
 	it("done on a lands raft lands nothing and names every member whose approval does not hold", function()
@@ -502,9 +506,9 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
 			t.expect(git(f.origin, { "rev-parse", "main" })).toBe(mainBefore)
 			git(f.other, { "fetch", "-q", "origin" })
 			local stack = zn(f.other, { "stack", "R0010" })
-			t.expect(has(stack, "1 R0010/1/c0010 c0010 finished")).toBe(true)
-			t.expect(has(stack, "2 R0010/2/c0020 c0020 finished")).toBe(true)
-			t.expect(has(stack, "3 R0010/3/c0025 c0025 finished")).toBe(true)
+			t.expect(has(stack, "1 R0010/1/c0010 c0010 complete")).toBe(true)
+			t.expect(has(stack, "2 R0010/2/c0020 c0020 complete")).toBe(true)
+			t.expect(has(stack, "3 R0010/3/c0025 c0025 complete")).toBe(true)
 
 			expectOk(
 				tr(wt, guessArgs("c0010", "build", "Late choice.", "Found while reviewing.")),
@@ -557,6 +561,7 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
 			)
 			layerWork(wt8, "delta", "c0060")
 			zn(wt8, { "finish", "c0060" })
+			seal.layerReview(wt8, "c0060")
 			zn(wt8, { "start", "R0040" })
 			local doc = `{wt8}/{ROOT}/issues/active/c0070/c0070.md`
 			local text = fs.readFile(doc)
@@ -568,6 +573,7 @@ return t.spec("f0399: guesses, approval at the landing, and the picks for an iss
 			fs.writeFile(doc, text)
 			layerWork(wt8, "epsilon", "c0070")
 			zn(wt8, { "finish", "c0070" })
+			seal.layerReview(wt8, "c0070")
 			seal.trace(wt8, "R0040")
 			local landed = zn(wt8, { "done", "R0040" })
 			t.expect(has(landed, "landed R0040")).toBe(true)
