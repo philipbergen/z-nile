@@ -13,7 +13,13 @@ local store = require("./store")
 local costrow = {}
 
 export type PlannedFile = { path: string, text: string, previous: string? }
-export type Planned = { files: { PlannedFile }, bufferText: string, bufferPrevious: string? }
+export type Planned = {
+	files: { PlannedFile },
+	bufferText: string,
+	bufferPrevious: string?,
+	-- the rows this fold took from the buffer, by ticket, without the caller's extra rows (d0331)
+	rows: { [string]: { ledger.Row } },
+}
 
 function costrow.report(text: string): (number?, number?)
 	local wall = tonumber(string.match(text, "wall=([%d%.%-]+)"))
@@ -106,6 +112,10 @@ function costrow.plan(
 	end
 	local folded = buffer.fold(lines, ids, branch, head, DateTime.now().unixTimestampMillis, takeBegins)
 	local byId: { [string]: { ledger.Row } } = folded.rows
+	local took: { [string]: { ledger.Row } } = {}
+	for id, list in byId do
+		took[id] = table.clone(list)
+	end
 	if extra then
 		for id, more in extra do
 			local list = byId[id]
@@ -131,7 +141,12 @@ function costrow.plan(
 	table.sort(files, function(a: PlannedFile, b: PlannedFile): boolean
 		return a.path < b.path
 	end)
-	return { files = files, bufferText = buffer.renderLines(folded.kept), bufferPrevious = previous }
+	return {
+		files = files,
+		bufferText = buffer.renderLines(folded.kept),
+		bufferPrevious = previous,
+		rows = took,
+	}
 end
 
 local function parentOf(path: string): string

@@ -3,7 +3,9 @@
 --
 -- Contract, which the Python port reads as these bytes:
 --   branch:   R0010/1/c0010
---             raft / 1-based position, unpadded / issue. The first layer's base is main.
+--             raft / 1-based position, unpadded / issue. The first layer's base is main: the merge base of
+--             its tip and main's tip (d0331). Main gaining commits after that changes nothing for finish,
+--             start, stack, trace or done; only restack moves the layer onto main's tip.
 --   claim:    a commit whose subject is not "<issue>: <title>" (tracker: start …, or any worker commit)
 --   finish:   ./zn finish <issue-id>
 --             one commit, subject "<issue>: <title>" (tab and newline in the title become a space)
@@ -25,6 +27,9 @@
 --             gh pr view <n> --json baseRefName -q .baseRefName, then gh pr edit <n> --base main,
 --             then git push origin HEAD:refs/heads/main. A failed push runs
 --             gh pr edit <n> --base <the base just read> so the pull request is left where it was.
+--             The merge is onto main's tip as fetched. A push rejected because main gained commits since is
+--             tried again from the merge (the gate included), at most DONE_ATTEMPTS times (d0331); a push that
+--             reported failure and reached origin has landed.
 
 local stack = {}
 
@@ -84,6 +89,59 @@ function stack.oldShapeMessage(raftId: string, branch: string): string
 end
 
 -- Once git has said whether the lower tip is an ancestor of this layer, the layer needs no rebase.
+-- done after main moved (d0331). It merges onto the main it fetched; these are its only refusals for main's sake.
+stack.DONE_ATTEMPTS = 9
+
+function stack.doneConflict(layerName: string, raftId: string, detail: string): string
+	return `{layerName} does not merge onto main: ./zn restack {raftId}, resolve the conflict, then done again\n{detail}`
+end
+
+function stack.restackHint(raftId: string): string
+	return `. If main moved under the stack: ./zn restack {raftId}`
+end
+
+-- What done does when its push of the binding commit is rejected and did not reach origin: "failed" (main did not
+-- move: the rejection has another cause), "lost" (main moved and a pull request base could not be put back, so a
+-- person has to), "again" (main moved and an attempt is left), or "moved" (main moved on the last attempt).
+function stack.doneRetry(mainMoved: boolean, attempt: number, basesRestored: boolean): string
+	if not mainMoved then
+		return "failed"
+	end
+	if not basesRestored then
+		return "lost"
+	end
+	if attempt < stack.DONE_ATTEMPTS then
+		return "again"
+	end
+	return "moved"
+end
+
+function stack.doneLost(raftId: string, fixes: { string }): string
+	return `main gained commits during the gate, and a pull request base could not be put back (rolled back). Put it back with: {table.concat(
+		fixes,
+		"; "
+	)}. Then run ./zn done {raftId} again`
+end
+
+function stack.donePushLanded(raftId: string): string
+	return `the push of {raftId}'s binding commit reported a failure, and origin's main holds it: it landed`
+end
+
+function stack.doneAgain(raftId: string, attempt: number): string
+	return `main gained commits during the gate: merging {raftId} onto the new main and running the gate again (attempt {attempt} of {stack.DONE_ATTEMPTS})`
+end
+
+function stack.doneMoved(raftId: string): string
+	return `main gained commits during each of {stack.DONE_ATTEMPTS} attempts (rolled back): run ./zn done {raftId} again`
+end
+
+function stack.restackUnpushed(raftId: string, layers: { string }, detail: string): string
+	return `restack stopped: the push of {layers[1] or "?"} was rejected; not pushed: {table.concat(
+		layers,
+		", "
+	)}. Run ./zn restack {raftId} again\n{detail}`
+end
+
 function stack.alreadyStacked(lowerIsAncestor: boolean): boolean
 	return lowerIsAncestor
 end

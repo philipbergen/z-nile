@@ -213,6 +213,16 @@ function layergit.buildBase(raft: store.Item): string?
 	return sha
 end
 
+-- The commit layer 1 is judged against (d0331): where `tip` left main, not main's newest commit. Main gaining
+-- commits after that is no reason to refuse or to restack; only `restack` moves a layer onto main's tip.
+-- With no shared commit it is main's tip, so every caller's own check still refuses.
+function layergit.mainFork(tip: string, main: string?): string
+	local onto = main or layergit.mainTip()
+	local r = sh.run("git", { "merge-base", onto, tip })
+	local sha = if r.ok then sh.trim(r.stdout) else ""
+	return if sha == "" then onto else sha
+end
+
 function layergit.layersOf(raftId: string): { stack.Layer }
 	local listed =
 		sh.run("git", { "for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin" })
@@ -380,6 +390,12 @@ function layergit.startLayer(raft: store.Item): (store.Item, number, string, str
 		have[layer.position] = layer
 	end
 	local baseTip, basePr = layergit.raftBase(raft.id)
+	if basePr == "main" and have[1] then
+		local first = layergit.layerTip(have[1] :: stack.Layer)
+		if first then
+			baseTip = layergit.mainFork(first, baseTip)
+		end
+	end
 	local current = stack.parse(sh.git({ "branch", "--show-current" }))
 	if current and current.raft == raft.id and have[current.position] then
 		local below = if current.position == 1
