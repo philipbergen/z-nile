@@ -4,8 +4,8 @@
 |---|---|---|---|---|---|---|
 | d0415 | defect |  | 2085 | 133 | 0.0 | 97924 |
 
-**Total:** +2085 / -133 lines, 0.0 agent-minutes, 97924 tokens over 77 records
-<!-- totals: added=2085 removed=133 minutes=0.0 records=77 tokens=97924 -->
+**Total:** +2085 / -133 lines, 0.0 agent-minutes, 97924 tokens over 84 records
+<!-- totals: added=2085 removed=133 minutes=0.0 records=84 tokens=97924 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
