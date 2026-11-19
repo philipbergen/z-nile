@@ -1106,31 +1106,6 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
 	end
 end
 
--- c0116 (review 003 F2): whether a coherence review in the raft's folder quotes a `Grouped:` record that covers the
--- current one: every current entry with the same hash (an unfold only drops entries, so it needs no new review).
-local function reviewCovers(files: { [string]: string }, map: { [string]: string }): boolean
-	if next(map) == nil then
-		return true
-	end
-	for name, text in files do
-		if string.match(name, "^design%-review%-%d+%.md$") then
-			for quoted in string.gmatch("\n" .. text, "\nGrouped: (%[[^\n]*%])") do
-				local q = raftplan.parseGrouped(quoted)
-				local all = true
-				for id, h in map do
-					if q[id] ~= h then
-						all = false
-					end
-				end
-				if all then
-					return true
-				end
-			end
-		end
-	end
-	return false
-end
-
 local cmd = {}
 
 function cmd.new(pos: { string }, opts: { [string]: { string } })
@@ -1759,7 +1734,7 @@ local function setStatus(id: string, to: string)
 		if carried and store.isRaftId(id) and #targets > 2 then
 			local raftItem = store.get(id)
 			local map = raftplan.parseGrouped(store.readFront(raftItem.doc).grouped)
-			if not reviewCovers(gitFolderFiles(raftItem.dir), map) then
+			if not raftplan.reviewCovers(gitFolderFiles(raftItem.dir), map) then
 				local ids: { string } = {}
 				for mid in map do
 					table.insert(ids, mid)
@@ -8239,6 +8214,20 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 	print(`  by lines added:  {pct(d.added, f.added)}`)
 	print(`  by issues:       {pct(d.count, f.count)}`)
 	print(`  by agent time:   {pct(d.minutes, f.minutes)}`)
+	-- d0415: spend a dispatcher run could not put on a ledger, kept on this machine (outside every total above)
+	local found, root = pcall(mainRoot) -- outside a repository there is no dispatcher home
+	local unrecorded: { string } = {}
+	if found then
+		unrecorded = dispatcherLib.pendingReport(dispatcherLib.homeAt(root :: string), nil, nil)
+	end
+	if #unrecorded > 0 then
+		print(
+			"\nUnrecorded dispatcher spend (this machine only, not yet on a ledger and in no total above; `./zn dispatch status <id>` says what becomes of each)."
+		)
+		for _, line in unrecorded do
+			print(`  {line}`)
+		end
+	end
 end
 
 function cmd.board(pos: { string }, opts: { [string]: { string } })

@@ -3,6 +3,7 @@
 -- and the chain: from an item's tracker state, the next step, merge or stop. dispatcher.luau reads the state, runs the
 -- steps and records their spend; it never reads a model's prose to decide.
 local models = require("./models")
+local raftplan = require("./raftplan")
 local serde = require("@lune/serde")
 
 local dispatch = {}
@@ -105,6 +106,78 @@ function dispatch.phaseOf(name: string, mode: string?): string
 		return dispatch.REVIEW_MODES[mode or "design"].phase
 	end
 	return dispatch.step(name).phase or "build"
+end
+
+export type FilingInput = {
+	mode: string?, -- zz-review's mode
+	dir: string, -- the folder the review lands in (repository-relative, for the messages)
+	prefix: string, -- `design-review-`, `review-`, `final-review-` or `stream-review-<id>-`
+	raftId: string, -- the item the review is for (a raft's, in raft mode)
+	reviews: { [string]: string }, -- file name -> text of the folder's files that start with `prefix`
+	grouped: string?, -- raft mode: the raft document's `grouped:` value
+}
+export type Filing = { number: number?, refusal: string? } -- the round to file, or why not
+
+-- Where a dispatched review is filed, or why it is refused (d0415), from the folder's state alone, so the dispatcher
+-- asks it before it starts a reviewer and again when the review is ready. Every mode but raft files one round and
+-- refuses a second. Raft mode files one review per `grouped:` record: the next number when no review in the folder
+-- quotes the current record, a refusal when one does. A raft with no record is one round, like the others.
+function dispatch.filing(p: FilingInput): Filing
+	local last = 0
+	for name in p.reviews do
+		local n = tonumber(string.match(string.sub(name, #p.prefix + 1), "^(%d+)%.md$"))
+		if string.sub(name, 1, #p.prefix) == p.prefix and n and n > last then
+			last = n
+		end
+	end
+	if p.mode == "raft" then
+		local map, problem = raftplan.parseGrouped(p.grouped)
+		if problem then
+			return { refusal = `{p.raftId}: {problem}: fix it before a review runs` }
+		end
+		if next(map) ~= nil then
+			local covering = raftplan.coveringReview(p.reviews, map)
+			if covering then
+				return {
+					refusal = `{p.dir} already has {covering}, which quotes {p.raftId}'s current grouped: record: one review per record, then the author answers it; there is no second round of it`,
+				}
+			end
+			return { number = last + 1 }
+		end
+	end
+	if last >= 1 then
+		return {
+			refusal = `{p.dir} already has {p.prefix}{string.format("%03d", last)}.md: one round, then the author answers it; there is no second round`,
+		}
+	end
+	return { number = 1 }
+end
+
+-- Whether a pending spend row can be written now, from where its item stands on origin/main (d0415): a run's `deliver`
+-- row once its raft is done, any other row while its item is in the backlog. `state` is nil when origin does not list it.
+-- A raft's row is shared among its members, so one that names none (recorded before d0415) is never written.
+function dispatch.rowWritable(id: string, phase: string, state: string?, hasMembers: boolean): boolean
+	if state == nil or (string.sub(id, 1, 1) == "R" and not hasMembers) then
+		return false
+	end
+	return if phase == "deliver" then state == "done" else state == "backlog"
+end
+
+-- What a person is told about a pending row: when it is written, or that it never is and what to do about it.
+function dispatch.pendingFate(id: string, phase: string, state: string?, hasMembers: boolean): string
+	if dispatch.rowWritable(id, phase, state, hasMembers) then
+		return `written by the next run of {id}`
+	elseif string.sub(id, 1, 1) == "R" and not hasMembers then
+		return `never written: {id}'s row was recorded before d0415 and names no members (or its document was not in the step's worktree)`
+	elseif state == nil then
+		return `never written while origin/main does not list {id}`
+	elseif phase == "deliver" and state ~= "done" then
+		return `written once {id} is done on origin/main: a deliver row waits for done`
+	end
+	return `never written: {id} is {state} on origin/main, and a {phase} row waits for {if phase
+			== "deliver"
+		then "done"
+		else "backlog"}`
 end
 
 export type PromptInput = {

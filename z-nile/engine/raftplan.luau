@@ -519,4 +519,40 @@ function raftplan.renderGrouped(map: { [string]: string }): string
 	return `[{table.concat(parts, ", ")}]`
 end
 
+-- The design review in `reviews` (file name -> text, the folder's `design-review-NNN.md` files) whose `Grouped: [...]`
+-- line covers `map`: every current entry quoted with the same hash (an unfold only drops entries, so it needs no new
+-- review). The first such name in name order, or nil. An empty `map` is covered by none (d0415).
+function raftplan.coveringReview(reviews: { [string]: string }, map: { [string]: string }): string?
+	if next(map) == nil then
+		return nil
+	end
+	local names: { string } = {}
+	for name in reviews do
+		if string.match(name, "^design%-review%-%d+%.md$") then
+			table.insert(names, name)
+		end
+	end
+	table.sort(names)
+	for _, name in names do
+		for quoted in string.gmatch("\n" .. reviews[name], "\nGrouped: (%[[^\n]*%])") do
+			local q = raftplan.parseGrouped(quoted)
+			local all = true
+			for id, h in map do
+				if q[id] ~= h then
+					all = false
+				end
+			end
+			if all then
+				return name
+			end
+		end
+	end
+	return nil
+end
+
+-- Whether the raft's coherence reviews cover the record `map`; a raft with no record needs none.
+function raftplan.reviewCovers(reviews: { [string]: string }, map: { [string]: string }): boolean
+	return next(map) == nil or raftplan.coveringReview(reviews, map) ~= nil
+end
+
 return raftplan

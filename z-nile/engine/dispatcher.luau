@@ -68,6 +68,7 @@ export type Row = {
 	note: string,
 	wall: number?,
 	cpu: number?,
+	members: { string }?, -- a raft's row: the members of the raft as the step's own worktree held it (d0415)
 }
 export type State = {
 	id: string,
@@ -104,7 +105,12 @@ local function trim(s: string): string
 end
 
 function dispatcher.home(ctx: Ctx): string
-	return `{ctx.mainRoot()}/{HOME}`
+	return dispatcher.homeAt(ctx.mainRoot())
+end
+
+-- The dispatcher's state folder under a main checkout's root.
+function dispatcher.homeAt(root: string): string
+	return `{root}/{HOME}`
 end
 
 local function dirOf(ctx: Ctx, id: string): string
@@ -405,7 +411,34 @@ local function rowLine(root: string, row: Row): buffer.Line
 	}
 end
 
--- Folds the measured row into the dispatcher's branch and commits that file alone.
+-- One pending row as a line `./zn dispatch status` and the failure message print (d0415).
+function dispatcher.pendingLine(row: Row): string
+	return `{row.id} {row.phase} {row.tokens} tokens, {row.minutes} min, {row.model}, note "{row.note}"`
+end
+
+-- The rows a measured row becomes. A raft has no ledger of its own: its row is shared among its members the way
+-- `./zn spend <R-id>` shares it (d0415), the lowest id holding the measure and each other member a row with none.
+-- Any other id keeps its row. `members` is the raft's member ids, read from its document in the worktree.
+function dispatcher.memberRows(row: Row, members: { string }): { Row }
+	if string.sub(row.id, 1, 1) ~= "R" or #members == 0 then
+		return { row }
+	end
+	local ids = table.clone(members)
+	table.sort(ids)
+	local rows: { Row } = {}
+	for i, id in ids do
+		local r = table.clone(row)
+		r.id = id
+		r.members = nil
+		if i > 1 then
+			r.tokens, r.wall, r.cpu, r.minutes = 0, nil, nil, 0
+		end
+		table.insert(rows, r)
+	end
+	return rows
+end
+
+-- Folds the measured row into the dispatcher's branch and commits those files alone.
 local function publishMeasured(ctx: Ctx, row: Row): (boolean, string, string)
 	local wt = worktree(ctx, "zn-dispatch")
 	zn(wt, { "sync" }, true)
@@ -413,37 +446,71 @@ local function publishMeasured(ctx: Ctx, row: Row): (boolean, string, string)
 	if not dir then
 		return false, "", `no folder for {row.id}`
 	end
-	if not costrow.append(wt, rowLine(wt, row)) then
-		return false, "", "could not buffer the row"
+	local members: { string } = row.members or {}
+	if string.sub(row.id, 1, 1) == "R" then
+		if #members == 0 then
+			return false, "", `{row.id} lists no members`
+		end
 	end
+	local rows = dispatcher.memberRows(row, members)
+	-- every member is located before anything is buffered (code review 001 F3): a refusal leaves no line behind
 	local homes: { [string]: string } = {}
-	homes[row.id] = dir
+	for _, r in rows do
+		local home = costrow.locate(wt, r.id)
+		if not home then
+			return false, "", `no folder for {r.id}`
+		end
+		homes[r.id] = home
+	end
+	local bufferPath = costrow.bufferFile(wt)
+	local bufferAfter = ""
+	local bufferBefore = if fs.isFile(bufferPath) then fs.readFile(bufferPath) else ""
+	-- a failure after the lines were buffered takes exactly those lines back, and keeps what others appended since
+	local function unbuffer()
+		if not fs.isFile(bufferPath) then
+			return
+		end
+		local current = fs.readFile(bufferPath)
+		if string.sub(current, 1, #bufferAfter) == bufferAfter then
+			local text = bufferBefore .. string.sub(current, #bufferAfter + 1)
+			if text == "" then
+				fs.removeFile(bufferPath)
+			else
+				fs.writeFile(bufferPath, text)
+			end
+		end
+	end
+	for _, r in rows do
+		if not costrow.append(wt, rowLine(wt, r)) then
+			bufferAfter = if fs.isFile(bufferPath) then fs.readFile(bufferPath) else ""
+			unbuffer()
+			return false, "", "could not buffer the row"
+		end
+	end
+	bufferAfter = if fs.isFile(bufferPath) then fs.readFile(bufferPath) else ""
 	local planned = costrow.plan(wt, homes, nil, false)
 	local paths = costrow.writeFiles(planned)
 	if #paths == 0 then
+		costrow.restore(planned)
+		unbuffer()
 		return false, "", "no row"
 	end
-	local out = paths[1]
-	local added = git(wt, { "add", "--", out })
+	local added = git(wt, { "add", "--", table.unpack(paths) })
 	if not added then
 		costrow.restore(planned)
-		return false, out, "could not stage the row"
+		unbuffer()
+		return false, paths[1], "could not stage the row"
 	end
-	local committed, cerr = git(wt, {
-		"commit",
-		"-q",
-		"--only",
-		"-m",
-		`tracker: spend {row.id} {row.phase}`,
-		"--",
-		out,
-	})
+	local args = { "commit", "-q", "--only", "-m", `tracker: spend {row.id} {row.phase}`, "--" }
+	table.move(paths, 1, #paths, #args + 1, args)
+	local committed, cerr = git(wt, args)
 	if not committed then
 		costrow.restore(planned)
-		return false, out, cerr
+		unbuffer()
+		return false, paths[1], cerr
 	end
 	costrow.writeBuffer(wt, planned)
-	return true, out, ""
+	return true, paths[1], ""
 end
 
 local function record(
@@ -510,6 +577,17 @@ local function record(
 		end
 		return
 	end
+	local raftMembers: { string }? = nil
+	if string.sub(id, 1, 1) == "R" then
+		-- the members the step's own worktree gives the raft (a refold the rafting PR has not merged yet included)
+		-- resolved in the step's own checkout, never through the process's (code review 001 F2)
+		local home = costrow.locate(cwd, id)
+		local doc = if home then `{home}/{id}.md` else ""
+		if doc ~= "" and fs.isFile(doc) then
+			local list = store.idList(store.readFront(doc).issues)
+			raftMembers = if #list > 0 then list else nil
+		end
+	end
 	for _, a in attempts do
 		if a.tokens > 0 then
 			local row: Row = {
@@ -521,9 +599,21 @@ local function record(
 				note = note,
 				wall = a.wall,
 				cpu = a.cpu,
+				members = raftMembers,
 			}
 			local origin = ctx.origin(id)
-			if phase == "deliver" or (origin and origin.state ~= "backlog") then
+			if phase == "deliver" then
+				table.insert(st.pending, row)
+			elseif origin and origin.state ~= "backlog" then
+				-- a row no run will write while the item is outside the backlog is said so now (final review 001 F1)
+				stdio.ewrite(
+					`dispatch: UNRECORDED spend: {dispatcher.pendingLine(row)} ({dispatch.pendingFate(
+						id,
+						phase,
+						origin.state,
+						row.members ~= nil
+					)}); ./zn dispatch status {id} lists it\n`
+				)
 				table.insert(st.pending, row)
 			else
 				local ok, out, err = publishMeasured(ctx, row)
@@ -533,6 +623,9 @@ local function record(
 					stdio.ewrite(
 						`dispatch: could not record {id}'s {phase} row ({err}{out}): kept as pending\n`
 					)
+					stdio.ewrite(
+						`dispatch: UNRECORDED spend: {dispatcher.pendingLine(row)}; ./zn dispatch status {id} lists it\n`
+					)
 					table.insert(st.pending, row)
 				end
 			end
@@ -541,19 +634,15 @@ local function record(
 end
 
 -- Writes the pending rows whose item may now take them (a done raft takes its run's row as deliver).
-local function flush(ctx: Ctx, st: State)
-	-- every pending row its item may take now (code review 001 F6): a run's `deliver` row once the raft is done, any
-	-- other row while its item is in the backlog (a row `record` couldn't publish); a row that fails again is kept and
-	-- reported, never dropped silently
+-- Writes the rows of `rows` whose item may take them now; returns the ones kept (a row that fails again is kept and
+-- reported, never dropped silently).
+local function flushRows(ctx: Ctx, rows: { Row }): { Row }
 	local keep: { Row } = {}
-	for _, row in st.pending do
+	for _, row in rows do
 		local origin = ctx.origin(row.id)
-		local ready = origin
-			and (
-				(row.phase == "deliver" and origin.state == "done")
-				or (row.phase ~= "deliver" and origin.state == "backlog")
-			)
-		if ready then
+		if
+			dispatch.rowWritable(row.id, row.phase, if origin then origin.state else nil, row.members ~= nil)
+		then
 			local ok, out, err = publishMeasured(ctx, row)
 			if ok then
 				print(`spend: {row.id} {row.phase} {row.tokens} tokens {row.model} (pending, now written)`)
@@ -567,26 +656,119 @@ local function flush(ctx: Ctx, st: State)
 			table.insert(keep, row)
 		end
 	end
-	st.pending = keep
+	return keep
 end
 
--- Every dispatched review lands through the dispatcher (design review 008 F1, 009 F1: one mechanism, no folder
--- scan): its reviewer writes `review.md` in its own state folder, and the dispatcher numbers it into the mode's folder.
--- The highest round in `dir` of the files named `<prefix>NNN.md` (a plain prefix match, so another issue's or another
--- mode's file never counts), and that file's name.
-local function lastRound(dir: string, prefix: string): (number, string?)
-	local best, name = 0, nil :: string?
-	if fs.isDir(dir) then
-		for _, f in fs.readDir(dir) do
-			if string.sub(f, 1, #prefix) == prefix then
-				local n = tonumber(string.match(string.sub(f, #prefix + 1), "^(%d+)%.md$"))
-				if n and n > best then
-					best, name = n, f
+-- Every state folder under `dir` (the item's own and the nested runs of its steps), each with its state. A reader at the
+-- edge: nested review runs keep their rows in folders of their own (`<step>-<mode>-<id>-<n>`, d0415).
+local function isLink(path: string): boolean
+	return process.exec("test", { "-L", path }).ok
+end
+
+-- `top` is true for the dispatcher's home itself: a gate judgement's scratch tree (`judge-*`) is no item's folder. A
+-- link is never entered (a step can plant one in its own state folder) and a folder that vanishes mid-walk is skipped.
+local function statesUnder(dir: string, top: boolean?): { State }
+	local out: { State } = {}
+	if fs.isDir(dir) and not isLink(dir) then
+		if fs.isFile(`{dir}/state.json`) then
+			local ok, loaded = pcall(loadAt, "", dir)
+			if ok then
+				table.insert(out, loaded)
+			end
+		end
+		local listed, names = pcall(fs.readDir, dir)
+		if listed then
+			for _, name in names do
+				local skipped = name == "gh"
+					or name == "broker"
+					or (top == true and string.find(name, "^judge") ~= nil)
+				if not skipped and fs.isDir(`{dir}/{name}`) then
+					for _, st in statesUnder(`{dir}/{name}`) do
+						table.insert(out, st)
+					end
 				end
 			end
 		end
 	end
-	return best, name
+	return out
+end
+
+local function flush(ctx: Ctx, st: State)
+	-- every pending row its item may take now (code review 001 F6): see dispatch.rowWritable
+	st.pending = flushRows(ctx, st.pending)
+	-- d0415: rows a nested run of this item's steps (a review its author started) could not record, in folders no
+	-- `dispatch status <id>` read before. A run that is still going keeps its own rows.
+	-- Only nested runs are rewritten (another item's own state is its run's, under its lock), and only when a row
+	-- was written (code review 001 F4).
+	local home = dispatcher.home(ctx)
+	for _, other in statesUnder(home, true) do
+		local isNested = other.dir ~= st.dir and string.match(string.sub(other.dir, #home + 2), "/") ~= nil
+		if isNested and other.outcome ~= "running" and #other.pending > 0 then
+			local mine: { Row } = {}
+			local rest: { Row } = {}
+			for _, row in other.pending do
+				table.insert(if row.id == st.id then mine else rest, row)
+			end
+			if #mine > 0 then
+				local kept = flushRows(ctx, mine)
+				if #kept < #mine then
+					other.pending = table.move(kept, 1, #kept, #rest + 1, rest)
+					save(other)
+				end
+			end
+		end
+	end
+end
+
+-- The lines `./zn dispatch status` and `./zn metrics` print for the pending rows under the dispatcher's home: one per
+-- row (of `id` only, when given), saying what happens to it and where it is kept.
+function dispatcher.pendingReport(home: string, id: string?, stateOf: ((string) -> string?)?): { string }
+	local lines: { string } = {}
+	for _, st in statesUnder(home, true) do
+		for _, row in st.pending do
+			if id == nil or row.id == id then
+				local fate = if stateOf
+					then ` ({dispatch.pendingFate(row.id, row.phase, stateOf(row.id), row.members ~= nil)})`
+					else ""
+				table.insert(
+					lines,
+					`unrecorded spend{fate}: {dispatcher.pendingLine(row)} [{st.dir}/state.json]`
+				)
+			end
+		end
+	end
+	table.sort(lines)
+	return lines
+end
+
+-- Every dispatched review lands through the dispatcher (design review 008 F1, 009 F1: one mechanism, no folder
+-- scan): its reviewer writes `review.md` in its own state folder, and the dispatcher numbers it into the mode's folder.
+-- The files of `dir` whose names start with `prefix` (a plain prefix match, so another issue's or another mode's file
+-- never counts), as name -> text: what dispatch.filing numbers the next review from.
+local function reviewsIn(dir: string, prefix: string): { [string]: string }
+	local out: { [string]: string } = {}
+	if fs.isDir(dir) then
+		for _, f in fs.readDir(dir) do
+			if string.sub(f, 1, #prefix) == prefix and fs.isFile(`{dir}/{f}`) then
+				out[f] = fs.readFile(`{dir}/{f}`)
+			end
+		end
+	end
+	return out
+end
+
+-- The N of the next `review-unfiled-N.md` in a state folder: one past the highest there, so no file is overwritten.
+local function nextUnfiled(dir: string): number
+	local best = 0
+	if fs.isDir(dir) then
+		for _, f in fs.readDir(dir) do
+			local n = tonumber(string.match(f, "^review%-unfiled%-(%d+)%.md$"))
+			if n and n > best then
+				best = n
+			end
+		end
+	end
+	return best + 1
 end
 
 -- What this dispatcher pinned at its start, held in memory for this process (review 003 F2, F3): origin's fetch and
@@ -902,6 +1084,40 @@ function dispatcher.modelStep(
 	if land then
 		pcall(fs.removeFile, landing) -- a stale one from an earlier run is never this run's review
 	end
+	-- d0415: a refusal the folder's state decides is made now, before any reviewer starts and spends a token
+	local function filingNow(l: Landing): dispatch.Filing
+		local grouped: string? = nil
+		if mode == "raft" then
+			local raft = store.get(id)
+			grouped = store.readFront(`{cwd}/{raft.doc}`).grouped
+		end
+		return dispatch.filing({
+			mode = mode,
+			dir = l.dir,
+			prefix = l.prefix,
+			raftId = id,
+			reviews = reviewsIn(`{cwd}/{l.dir}`, l.prefix),
+			grouped = grouped,
+		})
+	end
+	if land then
+		local refusal = filingNow(land :: Landing).refusal
+		if refusal then
+			outcome = "failed"
+			table.insert(attempts, {
+				step = step :: string,
+				cli = "",
+				runtime = "",
+				model = "",
+				outcome = "failed",
+				detail = refusal,
+				tokens = 0,
+				minutes = 0,
+			})
+			stdio.ewrite(`dispatch: {refusal}\n`)
+			tries = {}
+		end
+	end
 	for _, spec in tries do
 		local adapter = adapters.get(spec.runtime)
 		local argv = adapter.argv({
@@ -1109,29 +1325,44 @@ function dispatcher.modelStep(
 	if land and outcome == "ok" then
 		local l = land :: Landing
 		if fs.isFile(landing) then
-			local last = lastRound(`{cwd}/{l.dir}`, l.prefix)
-			if last >= 1 then
-				-- one round. Historical files stay where they are; a new one is not added.
+			local readOk, filed = pcall(filingNow, l)
+			local filing: dispatch.Filing = if readOk
+				then filed
+				else { refusal = `{l.dir} could not be read ({tostring(filed)})` }
+			local unfiled = filing.refusal
+			local name = if filing.number
+				then string.format("%s%03d.md", l.prefix, filing.number :: number)
+				else ""
+			if not unfiled then
+				-- d0415: a move that fails keeps the review too
+				local moved, why = pcall(fs.move, landing, `{cwd}/{l.dir}/{name}`)
+				if moved then
+					reviewNote = string.format("%s%03d", l.note, filing.number :: number)
+					print(`dispatch: the review is {l.dir}/{name}`)
+				else
+					unfiled = `{l.dir}/{name} could not be written ({tostring(why)})`
+				end
+			end
+			if unfiled then
+				-- d0415: a review that cannot be filed is kept in the state folder under a number no run reuses
+				local kept = `{stateDir}/review-unfiled-{nextUnfiled(stateDir)}.md`
+				local keptOk = pcall(fs.move, landing, kept)
 				outcome = "failed"
-				pcall(fs.removeFile, landing)
 				local why: Attempt = {
 					step = step :: string,
 					cli = "",
 					runtime = "",
 					model = "",
 					outcome = "failed",
-					detail = `{l.dir} already has {l.prefix}{string.format("%03d", last)}.md: one round, then the author answers it; there is no second round`,
+					detail = if keptOk
+						then `{unfiled}; the review is kept at {kept}`
+						else `{unfiled}; the review could not be kept: it stays at {landing}`,
 					tokens = 0,
 					minutes = 0,
 				}
 				table.insert(attempts, why)
 				table.insert(st.history, why)
 				stdio.ewrite(`dispatch: {why.detail}\n`)
-			else
-				local name = string.format("%s%03d.md", l.prefix, last + 1)
-				fs.move(landing, `{cwd}/{l.dir}/{name}`)
-				reviewNote = string.format("%s%03d", l.note, last + 1)
-				print(`dispatch: the review is {l.dir}/{name}`)
 			end
 		else
 			outcome = "failed"
@@ -1864,6 +2095,8 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 				return dispatch.EXIT.tripwire
 			end
 		elseif action.step == "follow" then
+			-- the rows this item's steps kept for a raft still in the backlog (z-raft's prep row) are written now
+			flush(ctx, st)
 			st.follows = action.target
 			save(st)
 			unlock(st.dir)
@@ -1875,6 +2108,10 @@ function dispatcher.chain(ctx: Ctx, id: string, opts: { [string]: { string } }, 
 				return dispatch.EXIT.failure
 			end
 			nextState.mode = "chain"
+			-- rows kept for the raft while it is in the backlog (a coherence review's, z-raft's prep) are written
+			-- before z-ready moves it out of the backlog (code review 001 F1)
+			flush(ctx, nextState)
+			save(nextState)
 			for _, a in st.history do
 				table.insert(nextState.history, a)
 			end
@@ -1987,6 +2224,13 @@ function mainInner(ctx: Ctx, pos: { string }, opts: { [string]: { string } }): n
 				print(line)
 			end
 			print(serde.encode("json", st, true))
+		end
+		local function stateOf(rowId: string): string?
+			local origin = ctx.origin(rowId)
+			return if origin then origin.state else nil
+		end
+		for _, line in dispatcher.pendingReport(dispatcher.home(ctx), id, stateOf) do
+			print(line)
 		end
 		return 0
 	elseif first == "stop" then
