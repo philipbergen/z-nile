@@ -5095,7 +5095,8 @@ local function reviewProblem(raft: store.Item): string?
 	local num = string.format("%03d", latest)
 	local reviewPath = `{raft.dir}/{reviewPrefix}-{num}.md`
 	local refutePath = `{raft.dir}/{refutePrefix}-{num}.md`
-	return require("./completion").reviewProblem(
+	local completion = require("./completion") -- inside: main.luau is at its local limit
+	return completion.reviewProblem(
 		if latest > 0 then fs.readFile(reviewPath) else nil,
 		if fs.isFile(refutePath) then fs.readFile(refutePath) else nil,
 		if fs.isFile(raft.doc) then fs.readFile(raft.doc) else "",
@@ -7072,7 +7073,8 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 					built,
 					treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4))
 				)
-			end
+			end,
+			true -- c0248: a raft readied from now on carries `layers: reviewed`
 		)
 		if not r.ok then
 			fail(`ready: {r.reason}`)
