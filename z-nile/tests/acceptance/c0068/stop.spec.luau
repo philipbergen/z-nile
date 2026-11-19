@@ -137,7 +137,8 @@ local function snapshot(): { [string]: string }
 	return out
 end
 local function withoutStatus(text: string): string
-	return (string.gsub(text, "\nstatus: [^\n]*", "\nstatus: X"))
+	-- c0248: ready marks a raft `layers: reviewed`, and a stopped raft keeps the marker
+	return (string.gsub(string.gsub(text, "\nstatus: [^\n]*", "\nstatus: X"), "\nlayers: reviewed", ""))
 end
 
 return t.spec("tracker stop", function(it)
@@ -340,20 +341,22 @@ return t.spec("tracker stop", function(it)
 		t.expect(tip()).toBe(before)
 	end)
 
-	it("stop refuses a raft with a member already in done/", function()
-		-- a broken state, made by hand: c0020 finished while its raft is still readied
-		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
-		git(main, { "mv", "pickman/.tracker/issues/active/c0020", "pickman/.tracker/issues/done/c0020" })
-		git(main, { "commit", "-q", "-m", "c0020 done by hand" })
-		git(main, { "push", "-q", "origin", "HEAD:main" })
-		local before = tip()
-		local r = tr(main, { "stop", "R0010" })
-		t.expect(r.ok).toBe(false)
-		t.expect(has(r.stderr, "c0020")).toBe(true)
-		t.expect(tip()).toBe(before)
-		git(main, { "revert", "--no-edit", "HEAD" })
-		git(main, { "push", "-q", "origin", "HEAD:main" })
-	end)
+	-- c0248: a member that landed with an earlier bind stays in done/; stop gives back the rest (it was a refusal)
+	it(
+		"stop of a raft with a member already in done/ leaves that member there and gives back the rest",
+		function()
+			-- a partly landed raft, made by hand: c0020 finished while its raft is still readied
+			-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
+			git(main, { "mv", "pickman/.tracker/issues/active/c0020", "pickman/.tracker/issues/done/c0020" })
+			git(main, { "commit", "-q", "-m", "c0020 done by hand" })
+			git(main, { "push", "-q", "origin", "HEAD:main" })
+			local r = tr(main, { "stop", "R0010" })
+			t.expect(r.ok).toBe(true)
+			t.expect(onOrigin("pickman/.tracker/issues/done/c0020/c0020.md") ~= nil).toBe(true)
+			t.expect(onOrigin("pickman/.tracker/issues/c0010/c0010.md") ~= nil).toBe(true)
+			t.expect(onOrigin("pickman/.tracker/rafts/R0010/R0010.md") ~= nil).toBe(true)
+		end
+	)
 
 	it("stop gives back a raft claimed by the legacy start, without moving it", function()
 		local legacy = trOk(main, { "worktree", "R0030" })

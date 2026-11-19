@@ -158,8 +158,13 @@ end
 
 -- Writes a filled trace.md and final-review-001.md for a finished raft stack in `dir` and commits
 -- them on the top layer after its finish commit (never amending the finish commit).
-function seal.trace(dir: string, raftId: string)
-	local skelRes = fixture.exec(dir, "bash", { "scripts/tracker.sh", "trace", raftId })
+function seal.trace(dir: string, raftId: string, through: string?, round: number?)
+	local skelArgs = { "scripts/tracker.sh", "trace", raftId }
+	if through then
+		table.insert(skelArgs, "--through")
+		table.insert(skelArgs, through)
+	end
+	local skelRes = fixture.exec(dir, "bash", skelArgs)
 	if not skelRes.ok then
 		error(`seal.trace {raftId} failed: {skelRes.stderr}{skelRes.stdout}`, 2)
 	end
@@ -224,10 +229,29 @@ function seal.trace(dir: string, raftId: string)
 		table.insert(lines, `| {srow.file} | {firstClaim} |`)
 	end
 	table.insert(lines, "")
-	local traceRel = `{raftDir}/trace.md`
+	-- c0248: a raft readied with `layers: reviewed` has a final review and a trace per landing, numbered one past the
+	-- last on origin/main; an older raft keeps final-review-001.md and trace.md
+	local raftDoc = fs.readFile(`{dir}/{raftDir}/{raftId}.md`)
+	local marked = string.find(raftDoc, "\nlayers: reviewed\n", 1, true) ~= nil
+	local n = round or 1
+	if marked and not round then
+		local top, topLocal = 0, 0
+		for _, name in fs.readDir(`{dir}/{raftDir}`) do
+			local k = tonumber((string.match(name, "^final%-review%-(%d+)%.md$")))
+			if k then
+				if fixture.exec(dir, "git", { "cat-file", "-e", `origin/main:{raftDir}/{name}` }).ok then
+					top = math.max(top, k)
+				end
+				topLocal = math.max(topLocal, k)
+			end
+		end
+		n = if topLocal > top then topLocal else top + 1
+	end
+	local num = string.format("%03d", n)
+	local traceRel = if marked then `{raftDir}/trace-{num}.md` else `{raftDir}/trace.md`
 	fs.writeFile(`{dir}/{traceRel}`, table.concat(lines, "\n"))
-	local finalRevRel = `{raftDir}/final-review-001.md`
-	local finalRefRel = `{raftDir}/final-refute-001.md`
+	local finalRevRel = `{raftDir}/final-review-{num}.md`
+	local finalRefRel = `{raftDir}/final-refute-{num}.md`
 	local layerRevRel = `{raftDir}/review-001.md`
 	local layerRefRel = `{raftDir}/refute-001.md`
 	if fs.isFile(`{dir}/{layerRevRel}`) then
@@ -238,7 +262,7 @@ function seal.trace(dir: string, raftId: string)
 			fs.removeFile(`{dir}/{finalRefRel}`)
 		end
 	elseif not fs.isFile(`{dir}/{finalRevRel}`) then
-		fs.writeFile(`{dir}/{finalRevRel}`, "# Final Review 001\n\nVerdict: approve\n")
+		fs.writeFile(`{dir}/{finalRevRel}`, `# Final Review {num}\n\nVerdict: approve\n`)
 	end
 	local commitEnv: { [string]: string }? = nil
 	if not fixture.exec(dir, "git", { "config", "user.email" }).ok then
@@ -250,13 +274,54 @@ function seal.trace(dir: string, raftId: string)
 		}
 	end
 	fixture.git(dir, { "add", "-A", raftDir }, { env = commitEnv })
-	fixture.git(dir, { "commit", "-q", "-m", `{raftId}: final-review-001` }, { env = commitEnv })
+	fixture.git(dir, { "commit", "-q", "-m", `{raftId}: final-review-{num}` }, { env = commitEnv })
 	if fixture.exec(dir, "git", { "remote", "get-url", "origin" }).ok then
 		local branch = fixture.git(dir, { "branch", "--show-current" })
 		if
 			branch ~= "" and fixture.exec(dir, "git", { "rev-parse", "--verify", "-q", `origin/{branch}` }).ok
 		then
 			fixture.git(dir, { "push", "-q", "origin", branch })
+		end
+	end
+end
+
+-- c0248: commits an approved layer review in `issueId`'s folder on the layer `dir` is on, naming that layer's finish
+-- commit, and pushes the layer when it is on origin. `./zn start` opens the
+-- next layer, and `./zn done` binds the layer, only once its review is settled.
+function seal.layerReview(dir: string, issueId: string)
+	local found = fixture.exec(dir, "bash", { "scripts/tracker.sh", "find", issueId })
+	if not found.ok then
+		error(`seal.layerReview find {issueId} failed: {found.stderr}`, 2)
+	end
+	local issueDir = (string.gsub(found.stdout, "%s+$", ""))
+	-- the layer's finish commit: the newest commit titled "<issue>: ..." (a review commit is "tracker: review <issue>")
+	local sha = ""
+	for line in string.gmatch(fixture.git(dir, { "log", "--format=%H%x09%s", "-60" }) .. "\n", "([^\n]*)\n") do
+		local commit, subject = string.match(line, "^(%x+)\t(.*)$")
+		if commit and subject and string.sub(subject, 1, #issueId + 2) == `{issueId}: ` then
+			sha = commit
+			break
+		end
+	end
+	if sha == "" then
+		error(`seal.layerReview: no finish commit for {issueId} in {dir}`, 2)
+	end
+	fs.writeFile(`{dir}/{issueDir}/review-001.md`, `# Review 001\n\nCommit: {sha}\nVerdict: approve\n`)
+	local commitEnv: { [string]: string }? = nil
+	if not fixture.exec(dir, "git", { "config", "user.email" }).ok then
+		commitEnv = {
+			GIT_AUTHOR_NAME = "fixture",
+			GIT_AUTHOR_EMAIL = "fixture@example.invalid",
+			GIT_COMMITTER_NAME = "fixture",
+			GIT_COMMITTER_EMAIL = "fixture@example.invalid",
+		}
+	end
+	fixture.git(dir, { "add", "-A", issueDir }, { env = commitEnv })
+	fixture.git(dir, { "commit", "-q", "-m", `tracker: review {issueId}` }, { env = commitEnv })
+	if fixture.exec(dir, "git", { "remote", "get-url", "origin" }).ok then
+		local branch = fixture.git(dir, { "branch", "--show-current" })
+		if branch ~= "" then
+			fixture.git(dir, { "push", "-q", "origin", branch }, { env = commitEnv })
 		end
 	end
 end

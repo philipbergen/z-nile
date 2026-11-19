@@ -5,6 +5,7 @@
 local models = require("./models")
 local raftplan = require("./raftplan")
 local serde = require("@lune/serde")
+local stack = require("./stack")
 
 local dispatch = {}
 
@@ -115,6 +116,10 @@ export type FilingInput = {
 	raftId: string, -- the item the review is for (a raft's, in raft mode)
 	reviews: { [string]: string }, -- file name -> text of the folder's files that start with `prefix`
 	grouped: string?, -- raft mode: the raft document's `grouped:` value
+	-- c0248: a final review per landing (a raft readied with `layers: reviewed`): the round numbers of `prefix` in the
+	-- folder on origin/main. With it the round is `stack.nextRound(onMain, local)`, and only a review of that round
+	-- already in the folder (this landing's) refuses: an earlier landing's review never does.
+	onMain: { number }?,
 }
 export type Filing = { number: number?, refusal: string? } -- the round to file, or why not
 
@@ -129,6 +134,22 @@ function dispatch.filing(p: FilingInput): Filing
 		if string.sub(name, 1, #p.prefix) == p.prefix and n and n > last then
 			last = n
 		end
+	end
+	if p.onMain then
+		local here: { number } = {}
+		for name in p.reviews do
+			local n = tonumber(string.match(string.sub(name, #p.prefix + 1), "^(%d+)%.md$"))
+			if string.sub(name, 1, #p.prefix) == p.prefix and n then
+				table.insert(here, n)
+			end
+		end
+		local round = stack.nextRound(p.onMain, here)
+		if table.find(here, round) then
+			return {
+				refusal = `{p.dir} already has {p.prefix}{string.format("%03d", round)}.md for this landing: one final review per landing, then the author answers it`,
+			}
+		end
+		return { number = round }
 	end
 	if p.mode == "raft" then
 		local map, problem = raftplan.parseGrouped(p.grouped)
@@ -191,6 +212,9 @@ export type PromptInput = {
 	streamWorktree: string?, -- zz-review in stream mode: the stream's worktree (ws-<issue>), read only
 	description: string?, -- z-ticket: the user's words
 	project: string?, -- z-ticket: the project to capture into
+	through: string?, -- zz-review final mode: the layers of this landing end at this issue (c0248)
+	perLanding: boolean?, -- zz-review final mode: the raft has a final review and a trace per landing (c0248)
+	itemDoc: string?, -- the item's document, where a review's `## Open to the human` goes
 }
 
 -- The prompt of a model step. It names the skill's file, which every CLI reads itself; no skill text,
@@ -217,10 +241,23 @@ function dispatch.prompt(p: PromptInput): string
 				p.stateDir
 			)}`
 	elseif p.step == "zz-review" and p.mode == "final" then
+		local scope = if p.through then ` --through {p.through}` else ""
+		if p.perLanding then
+			what =
+				`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode, for the layers of this landing only. Run \`./zn trace {p.id}{scope}\`, fill its table, and write the filled table to \`{p.stateDir}/trace.md\` and your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers them and moves them into the raft's folder as \`final-review-NNN.md\` and \`trace-NNN.md\` (the same NNN, one more than the last landing's). Findings you leave for the human go under \`## Open to the human\` in the raft document{if p.itemDoc
+					then ` (\`{p.itemDoc}\`)`
+					else ""}. {checkReview(p.stateDir)}`
+		else
+			what =
+				`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`. {checkReview(
+					p.stateDir
+				)}`
+		end
+	elseif p.step == "zz-review" and p.mode == "code" then
 		what =
-			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in final mode. The skeleton is already committed as \`trace.md\`. Fill it, then verify with \`./zn trace {p.id} --check\`: a stale line names a commit that came after the table. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as \`final-review-NNN.md\`. {checkReview(
-				p.stateDir
-			)}`
+			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in code mode: the diff of {p.id}'s layer. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it, stamps it with the layer's \`Commit:\` and \`Patch:\`, and moves it into {p.id}'s folder as \`review-NNN.md\`. A finding that must wait for the human goes under \`## Open to the human\` in the issue's document{if p.itemDoc
+				then ` (\`{p.itemDoc}\`)`
+				else ""}, not the raft's. {checkReview(p.stateDir)}`
 	elseif p.step == "zz-review" then
 		what =
 			`Read \`{p.skillPath}\` and act as the clean adversarial reviewer of {p.id} in {p.mode or "design"} mode. Write your review to \`{p.stateDir}/review.md\` and nothing else: the dispatcher numbers it and moves it into place as that mode's file ({if p.mode

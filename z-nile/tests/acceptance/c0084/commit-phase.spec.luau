@@ -272,10 +272,12 @@ return t.spec("tracker commit phases", function(it)
 
 	it("done records its own commit as deliver, and the raft summary shows each phase", function()
 		must(tr({ "finish", a }), "finish a")
+		seal.layerReview(dir, a) -- c0248: a layer is complete before the next starts or done binds it
 		must(tr({ "start", raft }), "start the next layer")
 		write("notes/layer-b.txt", "b\n")
 		must(tr({ "commit", "-m", "layer b", "--time", "1" }), "commit b")
 		must(tr({ "finish", b }), "finish b")
+		seal.layerReview(dir, b) -- c0248: a layer is complete before the next starts or done binds it
 		seal.trace(dir, raft)
 		must(tr({ "done", raft }), "done")
 		-- c0120 override: pickman's items live under pickman/.tracker (the fixtures' layout)
