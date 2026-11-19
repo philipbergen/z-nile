@@ -141,3 +141,12 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-18 16:39	183 specs	0	0	test			211.863	1104.580		211.863	tokens,ai
 2026-11-18 16:39	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
 2026-11-18 16:40	R0130: trace names the finished commit after the final review's fixes	0	0	code-review		claude-opus-5-5					tokens,wall,cpu,ai
+2026-11-18 16:41	static	0	0	test			6.515	84.900		6.515	tokens,ai
+2026-11-19 05:14	1 spec	0	0	test			2.237	1.390		2.237	tokens,ai
+2026-11-19 05:15	1 spec	0	0	test			74.542	113.000		74.542	tokens,ai
+2026-11-19 05:16	1 spec	0	0	test			62.597	99.230		62.597	tokens,ai
+2026-11-19 05:16	1 spec	0	0	test			3.091	1.390		3.091	tokens,ai
+2026-11-19 05:18	5 specs	0	0	test			67.115	117.890		67.115	tokens,ai
+2026-11-19 05:19	1 spec	0	0	test			106.925	85.380		106.925	tokens,ai
+2026-11-19 05:20	1 spec	0	0	test			36.761	54.740		36.761	tokens,ai
+2026-11-19 05:20	R0130: trace names the restacked finish commit	0	0	deliver							tokens,wall,cpu,ai
