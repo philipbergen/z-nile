@@ -54,8 +54,17 @@ engine.REGISTRY = table.concat({
 }, "\n")
 -- The fixtures' project roots (engine.REGISTRY's), and the shared counter (c0114).
 engine.ROOTS = { "pickman/.tracker", "z-nile/.tracker" }
--- Every root a clone of the repository may hold items in: the fixtures' and the retired one (c0120).
-engine.CLONE_ROOTS = { "tracker", "z-nile/.tracker", "pickman/.tracker" }
+-- Every root a clone of the repository may hold items in: the fixtures', the retired one (c0120) and the arcade's projects' (c0183).
+engine.CLONE_ROOTS = {
+	"tracker",
+	"z-nile/.tracker",
+	"pickman/.tracker",
+	"arcade/.tracker",
+	"portal/.tracker",
+	"snake/.tracker",
+	"invaders/.tracker",
+	"asteroids/.tracker",
+}
 engine.COUNTER = "z-nile/next"
 -- The skills folders engine.copy brings, with their lessons (the user's G7): the one list engine.copy, clearLessons
 -- and c0115's G7 case read. A project's skills folder (pickman/skills) is not in it; a spec that needs one seeds it.

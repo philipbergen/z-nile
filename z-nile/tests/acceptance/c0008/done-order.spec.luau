@@ -90,8 +90,10 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 				"z-nile/projects.toml",
 				-- the base aliases (a missing base config fails the type check of the promoted specs)
 				".luaurc",
+				"pickman/.luaurc", -- pickman's aliases (@logic, @tests): the type check of its unit specs resolves them here
 				-- the promoted-spec run from pickman/ (done, promote-check): its runner and the shared runner it requires
 				"pickman/tests/run.luau",
+				"pickman/tests/lib/", -- @tests/lib/t, which the unit specs the type check reads require
 				-- pickman's meta spec, which done runs on the promoted tree with its fence spec (z-nile/tests/tooling is not in the overlay)
 				"pickman/tests/meta/",
 				"z-nile/tests/run.luau",
@@ -106,6 +108,9 @@ return t.spec("c0070 done marks the PR ready before the final push", function(it
 				-- done/ folders git keeps when a reset empties them (git mv does not create its destination folder)
 				"pickman/.tracker/issues/done/.gitkeep",
 				"pickman/.tracker/rafts/done/.gitkeep",
+				-- the state folders ./zn start moves the raft and its issue into (git mv needs the destination's folder)
+				"pickman/.tracker/issues/active/.gitkeep",
+				"pickman/.tracker/rafts/active/.gitkeep",
 				-- the item folders the spec creates and ./zn moves (start, done): a plain `git add -A` and `git mv` need them in the sparse set
 				"pickman/.tracker/issues/f0010/",
 				"pickman/.tracker/rafts/R0010/",

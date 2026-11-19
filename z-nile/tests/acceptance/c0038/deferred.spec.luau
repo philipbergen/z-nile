@@ -88,6 +88,11 @@ return t.spec("c0360 done accepts deferred answers", function(it)
 			paths = {
 				-- ./zn commit runs `git add -A` on each root, which refuses a root with nothing of it in the clone
 				"z-nile/.tracker/issues/active/.gitkeep",
+				-- the state folders ./zn start and done move the items into (git mv needs the destination's folder)
+				"pickman/.tracker/issues/active/.gitkeep",
+				"pickman/.tracker/issues/done/.gitkeep",
+				"pickman/.tracker/rafts/active/.gitkeep",
+				"pickman/.tracker/rafts/done/.gitkeep",
 				-- the item folders the spec creates and ./zn moves (start, done): a plain `git add -A` and `git mv` need them in the sparse set
 				"pickman/.tracker/issues/f0010/",
 				"pickman/.tracker/rafts/R0010/",

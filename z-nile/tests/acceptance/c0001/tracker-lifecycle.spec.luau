@@ -81,7 +81,9 @@ return t.spec("tracker lifecycle", function(it)
 				"pickman/tests/meta/", -- meta specs `done` runs beside the promoted one
 				"pickman/tests/unit/", -- meta spec 'every feature has unit specs' lists tests/unit/<feature>
 				"pickman/src/", -- meta specs scan the sources; fakeengine requires @logic
+				"arcade/src/", -- pickman's sources require @game/ReplicatedStorage/Arcade/... and ServerStorage/Arcade/..., which the meta specs resolve here (c0185)
 				"pickman/default.project.json", -- meta spec resolves @game requires through it
+				"pickman/lobby.project.json", -- ... and tells which src folders are a server's (ServerStorage requires are allowed there)
 				"pickman/.tracker/architecture.md", -- meta spec reads the declared feature dependencies
 				"pickman/.tracker/issues/active/.gitkeep", -- engine.empty rewrites it; `done`'s rollback resets the tree and must not drop the folder
 				"pickman/.tracker/issues/done/.gitkeep", -- same, for issues/done (git mv target of `done`)

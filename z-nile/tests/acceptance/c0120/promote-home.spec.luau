@@ -87,6 +87,13 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 		clone.isolated(root, work, {
 			tooling = true, -- c0178: the overlay below writes tooling that a reset (done's rollback) must not delete
 			paths = {
+				-- the overlay below writes these (the promoted-spec run from pickman/ needs them); a reset (done's rollback) deletes what is outside the sparse set
+				".luaurc",
+				"pickman/.luaurc",
+				"pickman/scripts/",
+				"pickman/tests/run.luau",
+				"pickman/tests/lib/",
+				"pickman/tests/meta/",
 				-- pickman's architecture meta spec scans every Logic feature, its unit specs and the declared dependencies
 				"pickman/src/shared/Logic/",
 				"pickman/tests/unit/",
@@ -95,6 +102,11 @@ return t.spec("c0120 done promotes into the item's home", function(it)
 				"z-nile/tests/tooling/repo-fence.spec.luau",
 				-- ./zn commit runs `git add -A` on each root, which refuses a root with nothing of it in the clone
 				"z-nile/.tracker/issues/active/.gitkeep",
+				-- the state folders of pickman's tracker, written below: a reset must keep them (git mv does not create its destination folder)
+				"pickman/.tracker/issues/active/.gitkeep",
+				"pickman/.tracker/issues/done/.gitkeep",
+				"pickman/.tracker/rafts/active/.gitkeep",
+				"pickman/.tracker/rafts/done/.gitkeep",
 				-- the item folders the spec creates and ./zn moves (start, done): a plain `git add -A` and `git mv` need them in the sparse set
 				"pickman/.tracker/issues/f0010/",
 				"pickman/.tracker/rafts/R0010/",
