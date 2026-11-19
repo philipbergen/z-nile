@@ -14,3 +14,6 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-19 05:12	R0078: final-review-001 fixes and harvest	0	0	code-review							tokens,wall,cpu,ai
 2026-11-19 05:12	R0078: final-refute-001	0	0	code-review							tokens,wall,cpu,ai
 2026-11-19 05:12	R0078: trace repointed to the re-finished top layer	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
+2026-11-19 05:16	full	0	0	test			176.551	842.480		176.551	tokens,ai
+2026-11-19 05:16	1 spec	0	0	test			2.255	1.560		2.255	tokens,ai
+2026-11-19 05:16	R0078: trace repointed after restack	0	0	code-review		claude-fable-5-2					tokens,wall,cpu,ai
