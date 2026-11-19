@@ -10,3 +10,5 @@ The dispatcher and `./zn ready` read only bullets under that heading; a placehol
 **Why:** R0100 design review 001 F3: Risks said the z-work gap was "flagged for the user in Open to the human", and the section held `@@OPEN@@`.
 
 **How to apply:** for each "the user decides" sentence write one bullet in the form `- F<n>: <ruled answer>`; if nothing is left open, say so in prose and write no bullet.
+
+**Note (R0093 design review 002 F1):** an open point is a bullet only when its id is `F<n>` or `JC<n>` (`openlist.pending`); `- O1:` bullets are invisible. And nothing reads a raft's own open list before `ready`: neither `./zn status <R> prepared`, `./zn ready` nor `./zn work next`. A raft whose open bullets say it must not be built is held only by not landing its rafting PR (or not readying it) until they are ruled; say so in the report.

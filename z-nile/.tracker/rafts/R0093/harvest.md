@@ -1,16 +1,34 @@
-- design-review-001 F1: z-raft/order-names-members-once
-- design-review-001 F2: z-raft/stacked-members-cannot-override-each-other
-- design-review-001 F3: z-raft/stacked-members-cannot-override-each-other
-- design-review-001 F4: z-raft/stacked-members-cannot-override-each-other
-- design-review-001 F5: z-raft/stacked-members-cannot-override-each-other
-- design-review-001 F6: one-off: a user ruling on another issue (d0331) sends c0248 back to design
-- design-review-001 F7: one-off: earlier packaging rulings ("Keep one raft") that the new stacking decision did not name
-- design-review-001 F8: z-raft/stacked-members-cannot-override-each-other
-- design-review-001 F9: z-raft/stacked-members-cannot-override-each-other
-- design-review-001 F10: one-off: the leak needs c0262's final review, which is not in the raft of c0256 and c0247
-- design-review-001 F11: one-off: the 200-local limit breaks at c0248's layer, which is not in this raft
-- design-review-001 F12: one-off: leftover layer branches of a stopped build hold stack positions; recorded as step 0
-- design-review-001 F13: z-raft/run-sequestered-specs-on-all-prototypes-together
-- design-review-001 F14: z-raft/copied-raft-text-is-reverified
-- design-review-001 F15: z-raft/grouping-cost-checks-every-wait
-- design-review-001 F16: z-raft/copied-raft-text-is-reverified
+- design-review-001 F1 (erred z-raft): z-raft/order-names-members-once
+- design-review-001 F2 (erred z-raft): z-raft/stacked-members-cannot-override-each-other
+- design-review-001 F3 (erred z-raft): z-raft/stacked-members-cannot-override-each-other
+- design-review-001 F4 (erred z-raft): z-raft/stacked-members-cannot-override-each-other
+- design-review-001 F5 (erred z-raft): z-raft/stacked-members-cannot-override-each-other
+- design-review-001 F6 (erred z-raft): one-off: a user ruling on another issue (d0331) sends c0248 back to design
+- design-review-001 F7 (erred z-raft): one-off: earlier packaging rulings ("Keep one raft") that the new stacking decision did not name
+- design-review-001 F8 (erred z-raft): z-raft/stacked-members-cannot-override-each-other
+- design-review-001 F9 (erred z-raft): z-raft/stacked-members-cannot-override-each-other
+- design-review-001 F10 (erred z-raft): one-off: the leak needs c0262's final review, which is not in the raft of c0256 and c0247
+- design-review-001 F11 (erred z-raft): one-off: the 200-local limit breaks at c0248's layer, which is not in this raft
+- design-review-001 F12 (erred z-raft): one-off: leftover layer branches of a stopped build hold stack positions; recorded as step 0
+- design-review-001 F13 (erred z-raft): z-raft/run-sequestered-specs-on-all-prototypes-together
+- design-review-001 F14 (erred z-raft): z-raft/copied-raft-text-is-reverified
+- design-review-001 F15 (erred z-raft): z-raft/grouping-cost-checks-every-wait
+- design-review-001 F16 (erred z-raft): z-raft/copied-raft-text-is-reverified
+- design-review-002 F1 (erred z-raft): z-raft/escalations-are-bullets
+- design-review-002 F2 (erred z-raft): z-raft/stacked-members-cannot-override-each-other, z-raft/regroup-carries-earlier-coherence-findings
+- design-review-002 F3 (erred z-raft): z-raft/stacked-members-cannot-override-each-other, z-raft/regroup-carries-earlier-coherence-findings
+- design-review-002 F4 (erred z-raft): z-raft/stacked-members-cannot-override-each-other, z-raft/regroup-carries-earlier-coherence-findings
+- design-review-002 F5 (erred z-raft): z-raft/merged-text-read-against-captures, z-raft/stacked-members-cannot-override-each-other
+- design-review-002 F6 (erred z-raft): z-raft/fold-reads-what-other-rafts-say-of-the-member
+- design-review-002 F7 (erred z-raft): z-raft/fold-reads-what-other-rafts-say-of-the-member
+- design-review-002 F8 (erred z-raft): z-raft/regroup-carries-earlier-coherence-findings, z-raft/interface-names-every-writer
+- design-review-002 F9 (erred z-raft): z-raft/regroup-carries-earlier-coherence-findings
+- design-review-002 F10 (erred z-raft): one-off: a prompt exception the raft document can state for one layer, escalated as if it needed a member's redesign
+- design-review-002 F11 (erred z-raft): z-raft/cross-raft-wait-bites-at-the-first-red-layer
+- design-review-002 F12 (erred z-raft): z-raft/run-sequestered-specs-on-all-prototypes-together, z-raft/pre-ready-results-go-in-the-raft-document
+- design-review-002 F13 (erred z-raft): z-raft/copied-raft-text-is-reverified
+- note design-review-002 F13 the local count copied from a lesson was the wrong measure (erred zz-arch): zz-arch/main-luau-local-limit
+- design-review-002 F14 (erred z-raft): z-raft/theme-quotes-are-copied, z-raft/copied-raft-text-is-reverified
+- design-review-002 F15 (erred z-raft): z-raft/theme-quotes-are-copied
+- design-review-002 F16 (erred z-raft): z-raft/grouping-cost-checks-every-wait
+- note fold ran before recombine, so recombine refused the claimed keeper and the claim was released and redone; one orphan (R0108) stays for a later rafting (erred z-raft): z-raft/recombine-before-fold
