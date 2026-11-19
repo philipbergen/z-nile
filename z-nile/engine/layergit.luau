@@ -805,6 +805,12 @@ end
 -- c0248: a new review-NNN.md or refute-NNN.md in the folder of the issue whose layer this branch is gets the tool's
 -- stamp (`Commit:` the layer's finish commit, `Patch:` its patch id), so the file vouches for exactly what it reviewed.
 -- An unfinished layer refuses it. Only a raft readied with layers: reviewed has the rule.
+-- c0248: stamps the layer's new review and refute files in its issue folder with the finish commit and its patch id.
+-- Every file is checked before any is written. A stamp already on a new file is kept only when it is true (its
+-- Commit:'s patch id is its Patch:, as the dispatcher or a retried commit wrote it), and such a file needs no Inputs:
+-- check; any other stamp is refused. An unstamped new review must name on its Inputs: line the finish, or a commit with
+-- its patch. A committed file keeps its stamp (a correction of its text is committed), is never deleted or renamed,
+-- and one deleted by plain git comes back only as restored.
 function layergit.stampLayerReviews()
 	local layer = stack.parse(sh.git({ "branch", "--show-current" }))
 	if not layer then
@@ -814,12 +820,7 @@ function layergit.stampLayerReviews()
 	if not raft or not layergit.marked(raft) then
 		return
 	end
-	local status = sh.git({ "status", "--porcelain", "--untracked-files=all" })
-	for line in string.gmatch(status .. "\n", "([^\n]*)\n") do
-		local path = string.match(line, "^%?%? (.+)$")
-		if not path then
-			continue
-		end
+	local function ownRound(path: string): string?
 		local owner, name = string.match(path, "/issues/active/([fdc]%d%d%d%d)/([^/]+)$")
 		if owner == nil then
 			owner, name = string.match(path, "/issues/([fdc]%d%d%d%d)/([^/]+)$")
@@ -832,11 +833,117 @@ function layergit.stampLayerReviews()
 				or string.match(name, "^refute%-%d+%.md$") ~= nil
 			)
 		then
-			local sha, patch, why = layergit.finishStamp(raft, layer)
-			if not sha or not patch or patch == "" then
-				fail(`{name}: {why or "the layer's patch id cannot be read"}`)
+			return name
+		end
+		return nil
+	end
+	local planned: { { path: string, text: string, name: string } } = {}
+	-- raw output: a trimmed one loses the leading space of the first line's status code
+	local status = sh.run("git", { "status", "--porcelain", "--untracked-files=all" }).stdout
+	for line in string.gmatch(status .. "\n", "([^\n]*)\n") do
+		local entry = string.match(line, "^.. (.+)$")
+		if not entry then
+			continue
+		end
+		-- a rename lists `old -> new`: the old path is a deletion of a round, the new one a new file
+		local paths: { string } = {}
+		local from, to = string.match(entry, "^(.-) %-> (.+)$")
+		if from and to then
+			table.insert(paths, from)
+			table.insert(paths, to)
+		else
+			table.insert(paths, entry)
+		end
+		for _, path in paths do
+			local name = ownRound(path)
+			if not name then
+				continue
 			end
-			fs.writeFile(path, completion.stamp(fs.readFile(path), sha :: string, patch :: string))
+			local before = sh.run("git", { "show", `HEAD:{path}` })
+			if not fs.isFile(path) then
+				if before.ok then
+					fail(
+						`{name} is committed: a review round is never deleted or renamed; answer it, or review again`
+					)
+				end
+				continue
+			end
+			local text = fs.readFile(path)
+			-- a round the layer's history had and HEAD lacks was deleted by hand: only its restore (the very text the
+			-- deleting commit removed) is committed; a new file of that number is refused, naming the restore
+			local had = sh.run("git", { "log", "-1", "--format=%H", "HEAD", "--", path })
+			local deletedBy = if had.ok then sh.trim(had.stdout) else ""
+			if not before.ok and deletedBy ~= "" then
+				local removed = sh.run("git", { "show", `{deletedBy}^:{path}` })
+				if removed.ok and removed.stdout == text then
+					continue
+				end
+				fail(
+					`{name} was committed and deleted: restore it with git checkout {string.sub(
+						deletedBy,
+						1,
+						12
+					)}^ -- {path}`
+				)
+			end
+			if before.ok then
+				local c0, p0 = completion.stampsOf(before.stdout)
+				local c1, p1 = completion.stampsOf(text)
+				if c0 ~= c1 or p0 ~= p1 then
+					fail(
+						`{name} is committed: its Commit: and Patch: are the tool's and never change; answer it, or review again`
+					)
+				end
+			else
+				table.insert(planned, { path = path, text = text, name = name })
+			end
+		end
+	end
+	if #planned == 0 then
+		return
+	end
+	local sha, patch, why = layergit.finishStamp(raft, layer)
+	if not sha or not patch or patch == "" then
+		fail(`{planned[1].name}: {why or "the layer's patch id cannot be read"}`)
+	end
+	for _, p in planned do
+		-- a stamp already on a new file is a tool's (the dispatcher's, or a retried commit's) only when it is true: its
+		-- Commit: is a commit whose patch id is its Patch:. Such a file is committed as it is; completion then judges it
+		-- current (the finish's patch, a clean restack included) or a stale round to answer. Anything else is refused.
+		local c, pid = completion.stampsOf(p.text)
+		if c ~= nil or pid ~= nil then
+			local full = if c then layergit.shaOf(c :: string) else nil
+			if not full or not pid or layergit.patchId(full :: string) ~= pid then
+				fail(
+					`{p.name} carries a Commit: or Patch: line that is no commit's own stamp: the tool stamps it; remove the line`
+				)
+			end
+		end
+		local ownStamp = c ~= nil and pid ~= nil
+		if string.match(p.name, "^review%-") and not ownStamp then
+			-- the review vouches for the commit it read: a commit its Inputs: line names is the finish, or has its patch
+			local named = false
+			for _, read in completion.reviewedShas(p.text) do
+				if string.sub(sha :: string, 1, #read) == read then
+					named = true
+				else
+					local full = layergit.shaOf(read)
+					named = full ~= nil and layergit.patchId(full :: string) == patch
+				end
+				if named then
+					break
+				end
+			end
+			if not named then
+				fail(
+					`{p.name} names no commit on its Inputs: line that is the layer's finish {sha} or has its change: commit the review before re-finishing, or review again`
+				)
+			end
+		end
+	end
+	for _, p in planned do
+		if not completion.hasStamp(p.text) then
+			fs.writeFile(p.path, completion.stamp(p.text, sha :: string, patch :: string))
 		end
 	end
 end

@@ -1129,6 +1129,29 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
 		return out
 	end
 	local before = byId()
+	-- d0298: every issue whose approval held before the rewrite, judged from what git tracks
+	local reg = projects.load(root)
+	local function approvalView(id: string, dir: string): ({ [string]: string }, contract.Parts?)
+		local files = gitFolderFiles(dir, true)
+		local itemRoot = projects.rootOf(string.sub(dir, #root + 2), projects.roots(reg))
+		local promoted = if itemRoot
+			then gitFolderFiles(`{root}/{projects.promotedDir(reg, itemRoot, id)}`, true)
+			else {}
+		local parts = approval.partsOf(id, files, promoted)
+		return files, parts
+	end
+	local approved: { [string]: string } = {} -- id -> approval.standing before the rewrite
+	for id, dir in before do
+		if store.isIssueId(id) then
+			local files, parts = approvalView(id, dir)
+			if files["approval.md"] and parts then
+				local standing = approval.standing(files["approval.md"], parts)
+				if standing ~= "stale" then
+					approved[id] = standing
+				end
+			end
+		end
+	end
 	local kept: { { raft: string, id: string, hash: string } } = {}
 	for rid, dir in before do
 		local doc = `{dir}/{rid}.md`
@@ -1144,6 +1167,19 @@ local function keepRecords(root: string, idMap: { [string]: string }, rewrite: (
 	end
 	rewrite()
 	local after = byId()
+	for id, standing in approved do
+		local nid = idMap[id] or id
+		local dir = after[nid]
+		if dir and fs.isFile(`{dir}/approval.md`) then
+			local _, parts = approvalView(nid, dir)
+			if parts then
+				local text = approval.reseal(fs.readFile(`{dir}/approval.md`), parts, standing)
+				if text then
+					fs.writeFile(`{dir}/approval.md`, text)
+				end
+			end
+		end
+	end
 	for _, k in kept do
 		local rid, mid = idMap[k.raft] or k.raft, idMap[k.id] or k.id
 		local rdir, mdir = after[rid], after[mid]
@@ -3252,7 +3288,7 @@ end
 -- The project `list` shows (c0114): --project's, else the one whose folder holds the directory ./zn was run from;
 -- nil (every project) at the checkout's root or in a folder no project holds. Decided with the user (2026-10-21):
 -- "list shows all projects": only the commands that create an item, and so must choose its project, refuse there; reading needs none.
-local function listedRoot(opts: { [string]: { string } }): string?
+function H.listedRoot(opts: { [string]: { string } }): string?
 	if opts["--project"] then
 		return projectRoot(opts, "list")
 	end
@@ -3261,7 +3297,7 @@ local function listedRoot(opts: { [string]: { string } }): string?
 end
 
 function cmd.list(pos: { string }, opts: { [string]: { string } })
-	local only = listedRoot(opts)
+	local only = H.listedRoot(opts)
 	local found = audit.scan(".")
 	if only then
 		local kept = {}
@@ -4336,17 +4372,20 @@ end
 -- rebased (restack) or merged onto main (done). In a rebase or merge stopped on conflicts, a conflict in that file
 -- alone takes main's side (`--ours` in both) and the next record regenerates it from the rows. True when it resolved
 -- every unmerged path; false, touching nothing, when any other path conflicts or none does.
-function H.takeDerivedSpend(): boolean
+function H.takeDerivedSpend(alsoSettled: ((string) -> boolean)?): boolean
 	local unmerged = sh.trim(sh.run("git", { "diff", "--name-only", "--diff-filter=U" }).stdout)
 	if unmerged == "" then
 		return false
 	end
+	local spendPaths: { string } = {}
 	for path in string.gmatch(unmerged, "[^\n]+") do
-		if not string.match(path, "/rafts/[^/]+/R%d%d%d%d/spend%.md$") then
+		if string.match(path, "/rafts/[^/]+/R%d%d%d%d/spend%.md$") then
+			table.insert(spendPaths, path)
+		elseif not (alsoSettled and alsoSettled(path)) then
 			return false
 		end
 	end
-	for path in string.gmatch(unmerged, "[^\n]+") do
+	for _, path in spendPaths do
 		sh.git({ "checkout", "--ours", "--", path })
 		sh.git({ "add", "--", path })
 	end
@@ -5147,7 +5186,6 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 	if not message or message == "" then
 		fail("usage: commit -m <msg> [--issue <id>]... [--phase build|code-review|deliver] [--model <id>]")
 	end
-	layergit.stampLayerReviews()
 	-- phase and tokens are checked before anything is staged
 	local phase = "build"
 	if opts["--phase"] then
@@ -5162,6 +5200,9 @@ function cmd.commit(_pos: { string }, opts: { [string]: { string } })
 		stdio.ewrite("commit: --time and --tokens are ignored; cost is measured\n")
 	end
 	local model = modelOption("commit", opts)
+	-- c0248: the layer's new review and refute files are stamped once every argument is checked; a file the tool
+	-- stamped for a commit that then failed carries the tool's own stamp, which the same command accepts again
+	layergit.stampLayerReviews()
 	recordAndCommit(H.activeRaft(), message, opts["--issue"] or {}, nil, nil, phase, nil, model)
 end
 
@@ -5177,7 +5218,7 @@ local function inHome(home: string, rel: string): string
 end
 
 -- Where a member's acceptance specs are promoted to: its project's tests/acceptance/<id> (c0120).
-local function promotedDir(m: store.Item): string
+function H.promotedDir(m: store.Item): string
 	return projects.promotedDir(projects.load(), m.root, m.id)
 end
 
@@ -5194,7 +5235,7 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
 	local copied: { string } = {}
 	for _, m in promotedItems(raft) do
 		local acc = `{m.dir}/acceptance`
-		local dest = promotedDir(m)
+		local dest = H.promotedDir(m)
 		if fs.isDir(acc) and not fs.isDir(dest) then
 			fs.writeDir(dest)
 			for _, name in fs.readDir(acc) do
@@ -5208,7 +5249,7 @@ local function withPromotedCopies(raft: store.Item, check: ({ string }) -> boole
 	local pok, result = pcall(check, copied)
 	local ok = pok and result == true
 	for _, m in promotedItems(raft) do
-		local dest = promotedDir(m)
+		local dest = H.promotedDir(m)
 		if fs.isDir(dest) and not sh.run("git", { "ls-files", "--error-unmatch", dest }).ok then
 			fs.removeDir(dest)
 		end
@@ -5280,7 +5321,7 @@ function H.backlogIssue(id: string): boolean
 	return item ~= nil and item.kind == "issue" and item.state == "backlog"
 end
 
-local function reviewProblem(raft: store.Item): string?
+function H.reviewProblem(raft: store.Item): string?
 	local reviewPrefix, refutePrefix, latest = layergit.latestReview(raft)
 	local num = string.format("%03d", latest)
 	local reviewPath = `{raft.dir}/{reviewPrefix}-{num}.md`
@@ -5299,7 +5340,7 @@ local function reviewProblem(raft: store.Item): string?
 	)
 end
 
-local function traceProblems(
+function H.traceProblems(
 	raft: store.Item,
 	printSkeletonOnly: boolean?,
 	through: string?,
@@ -5613,7 +5654,7 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
 			local onMain, here = layergit.rounds(raft, "trace")
 			traceName = string.format("trace-%03d.md", stack.nextRound(onMain, here))
 		end
-		local findings = traceProblems(raft, nil, through, traceName)
+		local findings = H.traceProblems(raft, nil, through, traceName)
 		if #findings > 0 then
 			stdio.ewrite(table.concat(findings, "\n") .. "\n")
 			process.exit(1)
@@ -5621,7 +5662,7 @@ function cmd.trace(pos: { string }, opts: { [string]: { string } })
 		print(`ok: {raft.id}`)
 		return
 	end
-	traceProblems(raft, true, through)
+	H.traceProblems(raft, true, through)
 end
 
 function cmd.done(pos: { string }, opts: { [string]: { string } })
@@ -5731,7 +5772,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 			)
 		end
 	end
-	local problem = reviewProblem(raft)
+	local problem = H.reviewProblem(raft)
 	if problem then
 		fail(problem)
 	end
@@ -5833,7 +5874,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 		end
 	end
 	local traceName = if marked then string.format("trace-%03d.md", round) else "trace.md"
-	local traceFindings = traceProblems(raft, nil, through, traceName)
+	local traceFindings = H.traceProblems(raft, nil, through, traceName)
 	if #traceFindings > 0 then
 		fail(`{raft.id} trace --check failed:\n{table.concat(traceFindings, "\n")}`)
 	end
@@ -5868,7 +5909,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 			end
 			local acc = `{m.dir}/acceptance`
 			if fs.isDir(acc) and #fs.readDir(acc) > 0 then
-				local dest = promotedDir(m)
+				local dest = H.promotedDir(m)
 				fs.writeDir(string.match(dest, "^(.*)/[^/]+$") :: string)
 				sh.git({ "mv", acc, dest })
 				for _, name in fs.readDir(dest) do
@@ -6115,7 +6156,7 @@ function cmd.done(pos: { string }, opts: { [string]: { string } })
 end
 
 -- The parsed lessons of a loaded tree; a lesson that fails to parse is left out and named on stderr.
-local function parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
+function H.parsedLessons(tree: lessonsLib.Tree): { lessonsLib.Lesson }
 	local ids = {}
 	for id in tree.lessons do
 		table.insert(ids, id)
@@ -6300,7 +6341,7 @@ function cmd.lessons(pos: { string }, opts: { [string]: { string } })
 		)
 		return
 	end
-	local all = parsedLessons(tree)
+	local all = H.parsedLessons(tree)
 	if opts["--tags"] then
 		local counts: { [string]: number } = {}
 		for _, l in all do
@@ -6370,7 +6411,7 @@ end
 
 -- The SKILL.md files a raft's prompt names (c0115, c0184): skills.inlined over the skills found. The prompt
 -- gives the path and when to read it; it pastes none of the text.
-local function namedSkills(project: string?): { string }
+function H.namedSkills(project: string?): { string }
 	return skillsLib.inlined((skillsLib.plan((skillsLib.load(".")))), project)
 end
 
@@ -6427,7 +6468,7 @@ local function renderPrompt(raft: store.Item): string
 	end
 	local project = projectOfRoot(raft.root)
 	local skills = {}
-	for _, path in namedSkills(project) do
+	for _, path in H.namedSkills(project) do
 		table.insert(skills, skillLine(path))
 	end
 	local plan, _, planError = workstreamPlan(raft)
@@ -7201,8 +7242,60 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 		end
 	end
 	if not reissue then
-		-- The same check work next uses, on the tree just pulled. The publish below calls it again on the
-		-- snapshot, so a redesign that lands between the two is still refused. Neither call here is work next.
+		-- d0298: the grouped: record (and its review) is judged before any member's approval, from origin/main (the
+		-- tree just pulled), so a member redesigned since grouping is named with both record hashes, what z-raft must
+		-- redo, instead of being refused as a stale approval. The carried move below judges it again on the tree it
+		-- publishes.
+		local function recordRefusal(paths: { string }, read: (string) -> string?): string?
+			local readycheck = require("./readycheck")
+			local rp = docPath(paths, raft.id)
+			local rt = rp and read(rp)
+			if not rp or not rt then
+				return `{raft.id} is not on origin/main`
+			end
+			local built: { readycheck.Member } = {}
+			for _, m in members do
+				local mp = docPath(paths, m.id)
+				if mp then
+					table.insert(built, {
+						id = m.id,
+						design = "",
+						doc = "",
+						deps = {},
+						files = treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4)),
+						specs = {},
+						approval = nil,
+						approvalFile = "",
+					})
+				end
+			end
+			return readycheck.record(
+				raft.id,
+				frontOf(rt).grouped,
+				built,
+				treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4))
+			)
+		end
+		if raft.state == "backlog" and st == "prepared" then
+			local listed = sh.run("git", { "ls-tree", "-r", "--name-only", "origin/main" })
+			if not listed.ok then
+				fail("ready: cannot list origin/main")
+			end
+			local onOrigin: { string } = {}
+			for p in string.gmatch(listed.stdout, "[^\n]+") do
+				table.insert(onOrigin, p)
+			end
+			local early = recordRefusal(onOrigin, function(p: string): string?
+				local shown = sh.run("git", { "show", `origin/main:{p}` })
+				return if shown.ok then shown.stdout else nil
+			end)
+			if early then
+				fail(`ready: {early}`)
+			end
+		end
+		-- The checks work next makes on origin/main (readycheck.reason; work next judges the record first too, in
+		-- workread.blockFor), on the tree just pulled. The publish below judges the record again on the snapshot, so a
+		-- redesign that lands between the two is still refused. Neither call here is work next.
 		local onMembers: { string }? = nil
 		if onId then
 			onMembers = f0399.readyOnMembers(raft, members, onId)
@@ -7236,36 +7329,7 @@ function cmd.ready(pos: { string }, opts: { [string]: { string } })
 			end,
 			-- c0116 (review 002 F1, 004 F1): a member redesigned since z-raft grouped it is never handed out under the
 			-- old review; read from the tree being published, so a redesign landing after the pull is seen too
-			function(paths, read): string?
-				local readycheck = require("./readycheck")
-				local rp = docPath(paths, raft.id)
-				local rt = rp and read(rp)
-				if not rp or not rt then
-					return `{raft.id} is not on origin/main`
-				end
-				local built: { readycheck.Member } = {}
-				for _, m in members do
-					local mp = docPath(paths, m.id)
-					if mp then
-						table.insert(built, {
-							id = m.id,
-							design = "",
-							doc = "",
-							deps = {},
-							files = treeFolderFiles(paths, read, string.sub(mp, 1, #mp - #m.id - 4)),
-							specs = {},
-							approval = nil,
-							approvalFile = "",
-						})
-					end
-				end
-				return readycheck.record(
-					raft.id,
-					frontOf(rt).grouped,
-					built,
-					treeFolderFiles(paths, read, string.sub(rp, 1, #rp - #raft.id - 4))
-				)
-			end,
+			recordRefusal,
 			nil,
 			nil,
 			nil,
@@ -8335,7 +8399,7 @@ local function readBatch(paths: { string })
 	end
 end
 
-local function originBlobs(id: string): { string }?
+function H.originBlobs(id: string): { string }?
 	if not originChecked then
 		originChecked = true
 		-- the same pair guardRepoRoot uses: process.cwd keeps a trailing slash, so it never
@@ -8377,7 +8441,7 @@ end
 
 -- The longer of the working-tree ledger and origin/main's, when one is a prefix of the other.
 -- nil means the issue is skipped. A checkout with no origin/main keeps the local read.
-local function ledgerRows(issue: store.Item): { ledger.Row }?
+function H.ledgerRows(issue: store.Item): { ledger.Row }?
 	local function attach(rows: { ledger.Row }?): { ledger.Row }?
 		if not rows then
 			return nil
@@ -8400,7 +8464,7 @@ local function ledgerRows(issue: store.Item): { ledger.Row }?
 			localErr = err
 		end
 	end
-	local blobs = originBlobs(issue.id)
+	local blobs = H.originBlobs(issue.id)
 	if not blobs then
 		if localErr then
 			stdio.ewrite(`metrics: {path} does not parse ({localErr}); skipped\n`)
@@ -8919,7 +8983,7 @@ local function retiredRafts(): { { id: string, dir: string, doc: string } }
 	return out
 end
 
-local function metricsLessons()
+function H.metricsLessons()
 	local tree = lessonsLib.load(".")
 	local all: { lessonsLib.Lesson } = {}
 	for id, text in tree.lessons do
@@ -9254,7 +9318,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 			return cachedRows[issue.id]
 		end
 		seenRows[issue.id] = true
-		local parsed = ledgerRows(issue)
+		local parsed = H.ledgerRows(issue)
 		cachedRows[issue.id] = parsed
 		return parsed
 	end
@@ -9644,7 +9708,7 @@ function cmd.metrics(pos: { string }, opts: { [string]: { string } })
 			print(string.format("| %s | %d | %d | %.2f |", r.id, size, changed, changed / size))
 		end
 	end
-	metricsLessons()
+	H.metricsLessons()
 	print("\nRework = defect / (defect + feature). Target: under 20%.")
 	print("Rework counts every phase, capture to deliver.")
 	print(`  by lines added:  {pct(d.added, f.added)}`)

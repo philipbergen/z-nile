@@ -1644,6 +1644,7 @@ function dispatcher.modelStep(
 	local brokerToken = if serving
 		then string.lower(trim(process.exec("uuidgen", {}).stdout))
 		else (process.env.ZN_PUBLISH_TOKEN or "")
+	-- a variable added here goes on fence.STEP_VARS (unset for every spec run) or fence.STEP_HANDLED (d0298)
 	local env: { [string]: string } = {
 		PATH = `{repo}/z-nile/bin:{basePath}`,
 		ZN_DISPATCH = "1",
@@ -1712,14 +1713,51 @@ function dispatcher.modelStep(
 			end
 			onMain = found
 		end
+		local reviews = reviewsIn(`{cwd}/{l.dir}`, l.prefix)
+		local current: boolean? = nil
+		local unanswered: string? = nil
+		if mode == "code" and stampSha and stampPatch then
+			-- c0248: is the newest round of this layer current for its finish? (a fix since makes it not)
+			local newest = 0
+			for name in reviews do
+				local k = tonumber((string.match(name, "^review%-(%d+)%.md$")))
+				if k and k > newest then
+					newest = k
+				end
+			end
+			if newest > 0 then
+				local num = string.format("%03d", newest)
+				local refutePath = `{cwd}/{l.dir}/refute-{num}.md`
+				local refuteText = if fs.isFile(refutePath) then fs.readFile(refutePath) else nil
+				current = completion.current(reviews[`review-{num}.md`], refuteText, stampSha, stampPatch)
+				-- the round's answers, by the rule done and start apply, against the issue document's open list
+				unanswered = completion.reviewProblem(
+					reviews[`review-{num}.md`],
+					refuteText,
+					if itemDoc and fs.isFile(`{cwd}/{itemDoc}`) then fs.readFile(`{cwd}/{itemDoc}`) else "",
+					{
+						kind = "layer",
+						reviewName = `review-{num}.md`,
+						refuteName = `refute-{num}.md`,
+						-- the same deferral rule start and done apply: a deferred answer names a backlog issue
+						backlog = function(bid: string): boolean
+							local item = store.find(bid)
+							return item ~= nil and item.kind == "issue" and item.state == "backlog"
+						end,
+					}
+				)
+			end
+		end
 		return dispatch.filing({
 			mode = mode,
 			dir = l.dir,
 			prefix = l.prefix,
 			raftId = id,
-			reviews = reviewsIn(`{cwd}/{l.dir}`, l.prefix),
+			reviews = reviews,
 			grouped = grouped,
 			onMain = onMain,
+			current = current,
+			unanswered = unanswered,
 		})
 	end
 	if land then
@@ -2097,6 +2135,10 @@ function dispatcher.modelStep(
 			local traceFrom = `{stateDir}/trace.md`
 			if not unfiled and l.perLanding and not fs.isFile(traceFrom) then
 				unfiled = `the reviewer wrote no trace ({traceFrom})`
+			end
+			if not unfiled and stampSha and completion.hasStamp(fs.readFile(landing)) then
+				unfiled =
+					"the review carries a Commit: or Patch: line: the dispatcher stamps it, a reviewer never does"
 			end
 			if not unfiled then
 				-- d0415: a move that fails keeps the review too

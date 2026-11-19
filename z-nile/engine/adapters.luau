@@ -423,6 +423,7 @@ adapters.CLAUDE_SETTINGS = '{"sandbox":{"enabled":false}}'
 -- (`./zn dispatch zz-review …`), and reviews here take up to 29 minutes. Only the maximum is raised, to two hours (G22);
 -- the default (120 s) stays, so a hung command is still a two-minute tool error the model recovers from, and the
 -- headless section tells the author to pass a two-hour timeout on its review command alone. E15 measures the rest.
+-- A variable added here goes on fence.STEP_VARS (unset for every spec run) or fence.STEP_HANDLED (d0298).
 adapters.STEP_ENV = {
 	["claude-cli"] = { BASH_MAX_TIMEOUT_MS = "7200000" },
 } :: { [string]: { [string]: string } }

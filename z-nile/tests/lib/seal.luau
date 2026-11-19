@@ -306,7 +306,14 @@ function seal.layerReview(dir: string, issueId: string)
 	if sha == "" then
 		error(`seal.layerReview: no finish commit for {issueId} in {dir}`, 2)
 	end
-	fs.writeFile(`{dir}/{issueDir}/review-001.md`, `# Review 001\n\nCommit: {sha}\nVerdict: approve\n`)
+	-- with the patch id too, so a clean restack of the layer keeps the review current (c0248's rule 3)
+	local shown =
+		fixture.exec(dir, "bash", { "-c", `git show --format= --no-color {sha} | git patch-id --stable` })
+	local patch = if shown.ok then (string.match(shown.stdout, "^(%x+)") or "") else ""
+	fs.writeFile(
+		`{dir}/{issueDir}/review-001.md`,
+		`# Review 001\n\nCommit: {sha}\n{if patch ~= "" then `Patch: {patch}\n` else ""}Verdict: approve\n`
+	)
 	local commitEnv: { [string]: string }? = nil
 	if not fixture.exec(dir, "git", { "config", "user.email" }).ok then
 		commitEnv = {

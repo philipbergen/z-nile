@@ -120,6 +120,12 @@ export type FilingInput = {
 	-- folder on origin/main. With it the round is `stack.nextRound(onMain, local)`, and only a review of that round
 	-- already in the folder (this landing's) refuses: an earlier landing's review never does.
 	onMain: { number }?,
+	-- c0248: a code review in a marked layer's issue folder: whether the folder's newest round is current for the
+	-- layer's finish (`completion.current`); false files the next round, nil and true keep one round per folder
+	current: boolean?,
+	-- c0248: why the folder's newest round is not answered yet (`completion.reviewProblem`), or nil; a next round is
+	-- filed only for an answered round that is not current
+	unanswered: string?,
 }
 export type Filing = { number: number?, refusal: string? } -- the round to file, or why not
 
@@ -165,6 +171,14 @@ function dispatch.filing(p: FilingInput): Filing
 			end
 			return { number = last + 1 }
 		end
+	end
+	if last >= 1 and p.current == false and p.unanswered then
+		return {
+			refusal = `{p.dir}/{p.prefix}{string.format("%03d", last)}.md is not settled ({p.unanswered}): answer it in its refute, or have the human rule its bullet in the issue document's open list, before another round`,
+		}
+	end
+	if last >= 1 and p.current == false then
+		return { number = last + 1 } -- the layer's change since that round was reviewed: the next round reviews it
 	end
 	if last >= 1 then
 		return {

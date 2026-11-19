@@ -1,0 +1,5 @@
+# Refute 001
+
+- F1: fixed bfa7979b7: `approval.reseal`'s comment names the one state that answers differently after a rewrite (the later guess removed again: the row reads stale where it would have held); the behaviour is kept because it refuses and never accepts, and f0399's `guessesKept` refuses a removed guess anyway; consequences: none in code; the exact-hash alternative would break `carry.spec`'s sequestered assertion and was not taken.
+- F2: fixed bfa7979b7: the early record refusal is `fail(\`ready: {early}\`)`, the spelling the carried move prints; consequences: the message gains the prefix; `ready-order` 6 of 6, `c0116/claims` 21 of 21, `c0116/compact-record` 5 of 5 and `c0067/ready` 19 of 19 pass with it.
+- F3: fixed bfa7979b7: `approval.partsOf`'s comment names its two twins (`readycheck.reason` and workread's approval loop) and that a change to what a contract reads changes all three; the three are not merged here: that needs `Member` to carry its promoted files, a change outside this defect; consequences: three builders of the same parts remain and agree today, pinned by `readycheck.spec`, `work.spec` and `carry.spec`.

@@ -9,6 +9,7 @@
 --   R0020 AC5 (start, top layer, main moves, full bind)  R0030 AC7 (refusals)
 --   R0060 AC6 (the rendered raft template)               R0070 AC11 (a raft readied without the marker)
 --   R0080 AC5 (a restack that changes the patch)         R0090 AC9 (stop and ready after an early landing)
+local approval = require("@znile/engine/approval")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -186,10 +187,11 @@ local function nextNumber(dir: string, issueId: string): string
 	return string.format("%03d", top + 1)
 end
 
--- A layer's review as the reviewer writes it (no stamp), committed by the tool, which stamps it. Returns the file.
+-- A layer's review as the reviewer writes it (no stamp; its Inputs: line names the commit it read, the layer's
+-- finish), committed by the tool, which stamps it. Returns the file.
 local function review(dir: string, issueId: string): string
 	local path = `{issueDir(dir, issueId)}/review-{nextNumber(dir, issueId)}.md`
-	write(dir, path, "# Review\n\nVerdict: approve\n")
+	write(dir, path, `# Review\nInputs: {finishSha(dir, issueId)}\n\nVerdict: approve\n`)
 	zn(dir, { "commit", "-m", `tracker: review {issueId}` })
 	return path
 end
@@ -408,7 +410,33 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			bodyAfterFinish1 = body("11")
 			-- finished: the tool stamps the commit the layer is at and its patch id, and commits the file
 			local sha = finishSha(wt, "c0010")
+			-- a review must name the commit it read: none, or an older one with another change, is refused
 			write(wt, path, "# Review\n\nVerdict: approve\n")
+			local unnamed = znTry(wt, { "commit", "-m", "tracker: review c0010" })
+			t.expect(unnamed.ok).toBe(false)
+			t.expect(has(unnamed.stderr, "names no commit on its Inputs: line that is the layer's finish"))
+				.toBe(true)
+			write(wt, path, `# Review\nInputs: {OLDER}\n\nVerdict: approve\n`)
+			local older = znTry(wt, { "commit", "-m", "tracker: review c0010" })
+			t.expect(older.ok).toBe(false)
+			t.expect(has(older.stderr, "commit the review before re-finishing, or review again")).toBe(true)
+			-- a commit with the finish's change counts (a clean restack between the review and its commit), and the line
+			-- may name more than one commit (`git diff <below>...<finish>`): one of them must be the finish or its change
+			local twin = git(
+				wt,
+				{ "commit-tree", `{sha}^\{tree\}`, "-p", `{sha}^`, "-m", "the same change, another commit" }
+			)
+			t.expect(twin ~= sha).toBe(true)
+			t.expect(patchOf(wt, twin)).toBe(patchOf(wt, sha))
+			write(
+				wt,
+				path,
+				`# Review\nInputs: git diff {OLDER}...{string.sub(twin, 1, 9)}\n\nVerdict: approve\n`
+			)
+			-- the arguments are checked before anything is stamped: a refused call leaves the file as written
+			local badPhase = znTry(wt, { "commit", "-m", "tracker: review c0010", "--phase", "prep" })
+			t.expect(badPhase.ok).toBe(false)
+			t.expect(has(fs.readFile(`{wt}/{path}`), "Commit:")).toBe(false)
 			zn(wt, { "commit", "-m", "tracker: review c0010" })
 			local head = head12(`{wt}/{path}`)
 			t.expect(has(head, `Commit: {sha}\n`)).toBe(true)
@@ -416,17 +444,94 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			t.expect(has(head, "Verdict: approve")).toBe(true)
 			t.expect(git(wt, { "log", "-1", "--format=%s" })).toBe("tracker: review c0010")
 			t.expect(git(wt, { "status", "--porcelain" })).toBe("")
-			-- a file that already carries a stamp keeps it
+			-- a committed round's stamp is the tool's and never changes: an edited stamp is refused
+			write(wt, path, (string.gsub(fs.readFile(`{wt}/{path}`), `Commit: {sha}`, `Commit: {OLDER}`)))
+			local edited = znTry(wt, { "commit", "-m", "tracker: edit c0010's review" })
+			t.expect(edited.ok).toBe(false)
+			t.expect(
+				has(
+					edited.stderr,
+					"review-001.md is committed: its Commit: and Patch: are the tool's and never change"
+				)
+			).toBe(true)
+			git(wt, { "checkout", "--", path })
+			-- nor is a committed round deleted (its finding would vanish behind a fresh round of the same number)
+			fs.removeFile(`{wt}/{path}`)
+			local deleted = znTry(wt, { "commit", "-m", "tracker: drop c0010's review" })
+			t.expect(deleted.ok).toBe(false)
+			t.expect(
+				has(deleted.stderr, "review-001.md is committed: a review round is never deleted or renamed")
+			)
+				.toBe(true)
+			git(wt, { "checkout", "--", path })
+			-- nor renamed: a staged rename's old path is a deletion of the round
+			local renamed = `{issueDir(wt, "c0010")}/old-review-001.md`
+			git(wt, { "mv", path, renamed })
+			local moved = znTry(wt, { "commit", "-m", "tracker: rename c0010's review" })
+			t.expect(moved.ok).toBe(false)
+			t.expect(
+				has(moved.stderr, "review-001.md is committed: a review round is never deleted or renamed")
+			)
+				.toBe(true)
+			git(wt, { "mv", renamed, path })
+			t.expect(git(wt, { "status", "--porcelain" })).toBe("")
+			-- a round deleted with plain git comes back only as it was: a fresh file of its number is refused, naming
+			-- the restore, and the restore is committed
+			local kept = fs.readFile(`{wt}/{path}`)
+			local beforeDelete = git(wt, { "rev-parse", "HEAD" })
+			git(wt, { "rm", "-q", path })
+			git(wt, { "commit", "-qm", "c0010's review deleted by hand" })
+			local deleteSha = git(wt, { "rev-parse", "HEAD" })
+			write(wt, path, `# Review\nInputs: {sha}\n\nVerdict: approve\n`)
+			local fresh = znTry(wt, { "commit", "-m", "tracker: review c0010 again" })
+			t.expect(fresh.ok).toBe(false)
+			t.expect(
+				has(fresh.stderr, `restore it with git checkout {string.sub(deleteSha, 1, 12)}^ -- {path}`)
+			)
+				.toBe(true)
+			git(wt, { "checkout", `{deleteSha}^`, "--", path })
+			t.expect(fs.readFile(`{wt}/{path}`)).toBe(kept)
+			zn(wt, { "commit", "-m", "tracker: review c0010 restored" })
+			git(wt, { "reset", "-q", "--hard", beforeDelete })
+			git(wt, { "push", "-q", "--force-with-lease", "origin", "R0010/1/c0010" })
+			-- a stamp already on a new round is committed as it is when it is a commit's own (the dispatcher's, from
+			-- before a clean restack): Commit: a commit with the finish's change, Patch: that patch; else it is refused
+			local round2 = `{issueDir(wt, "c0010")}/review-002.md`
+			write(wt, round2, `# Review\n\nCommit: {twin}\nPatch: {OTHER_PATCH}\nVerdict: approve\n`)
+			local mismatched = znTry(wt, { "commit", "-m", "tracker: review c0010, round 2" })
+			t.expect(mismatched.ok).toBe(false)
+			t.expect(has(mismatched.stderr, "is no commit's own stamp")).toBe(true)
+			write(wt, round2, `# Review\n\nCommit: {twin}\nPatch: {patchOf(wt, twin)}\nVerdict: approve\n`)
+			zn(wt, { "commit", "-m", "tracker: review c0010, round 2" })
+			t.expect(has(fs.readFile(`{wt}/{round2}`), `Commit: {twin}\n`)).toBe(true)
+			t.expect(has(stackText(wt, "R0010"), "1 R0010/1/c0010 c0010 complete")).toBe(true)
+			git(wt, { "reset", "-q", "--hard", beforeDelete })
+			git(wt, { "push", "-q", "--force-with-lease", "origin", "R0010/1/c0010" })
+			-- a file that already carries a stamp is refused: the tool stamps, an author never does
+			local refutePath = `{issueDir(wt, "c0010")}/refute-001.md`
+			write(wt, refutePath, `# Refute\n\nCommit: {OLDER}\nPatch: {OTHER_PATCH}\n`)
+			local handStamped = znTry(wt, { "commit", "-m", "tracker: refute c0010" })
+			t.expect(handStamped.ok).toBe(false)
+			t.expect(
+				has(handStamped.stderr, "carries a Commit: or Patch: line that is no commit's own stamp")
+			)
+				.toBe(true)
+			-- a commit that fails after the tool stamped its files runs again: the tool's own stamp is accepted
+			write(wt, refutePath, "# Refute\n\n- F1: refuted: there is no F1\n")
+			local failed = znTry(wt, { "commit", "-m", "tracker: refute c0010", "--issue", "c9999" })
+			t.expect(failed.ok).toBe(false)
+			t.expect(has(fs.readFile(`{wt}/{refutePath}`), `Commit: {sha}`)).toBe(true)
+			zn(wt, { "commit", "-m", "tracker: refute c0010" })
+			-- a committed refute may be corrected (its stamp kept): the answer is the author's
 			write(
 				wt,
-				`{issueDir(wt, "c0010")}/refute-001.md`,
-				`# Refute\n\nCommit: {OLDER}\nPatch: {OTHER_PATCH}\n`
+				refutePath,
+				(string.gsub(fs.readFile(`{wt}/{refutePath}`), "there is no F1", "there is still no F1"))
 			)
-			zn(wt, { "commit", "-m", "tracker: refute c0010" })
-			t.expect(has(fs.readFile(`{wt}/{issueDir(wt, "c0010")}/refute-001.md`), `Commit: {OLDER}\n`))
-				.toBe(true)
-			git(wt, { "reset", "-q", "--hard", "HEAD~1" })
+			zn(wt, { "commit", "-m", "tracker: refute c0010, corrected" })
+			git(wt, { "reset", "-q", "--hard", "HEAD~2" })
 			git(wt, { "push", "-q", "--force-with-lease", "origin", "R0010/1/c0010" })
+			t.expect(git(wt, { "status", "--porcelain" })).toBe("")
 		end
 	)
 
@@ -919,6 +1024,25 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			git(wt, { "switch", "-q", "R0060/3/c0160" })
 			fs.writeFile(`{wt}/.cache/c0160-ok`, "") -- restack runs the layer's check.sh
 			zn(wt, { "restack", "R0060" })
+			-- the last landing lands c0160, so its changed design needs the person's approval again (it rides on c0160's
+			-- layer, after its finish, as ./zn approve records it); the landing below it did not wait for it
+			local c0160Dir = issueDir(wt, "c0160")
+			local item: any = {
+				id = "c0160",
+				kind = "issue",
+				state = "active",
+				dir = c0160Dir,
+				doc = `{c0160Dir}/c0160.md`,
+				slug = "c0160",
+				root = "pickman/.tracker",
+			}
+			local approved =
+				approval.append(wt, item, "Fixture <fixture@example.invalid>", "2026-11-19T00:00:00Z")
+			t.expect(approved ~= nil).toBe(true)
+			fs.writeFile(`{wt}/{approval.file(item)}`, approved :: string)
+			git(wt, { "add", "-A", c0160Dir })
+			git(wt, { "commit", "-qm", "c0160: approved again" })
+			git(wt, { "push", "-q" })
 			sealBind(wt, "R0060")
 			fs.removeFile(`{wt}/.cache/c0160-ok`)
 			local before = git(f.main, { "rev-parse", "origin/main" })

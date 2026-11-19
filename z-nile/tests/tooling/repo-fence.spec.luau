@@ -151,6 +151,12 @@ local ALLOWED: { [string]: { [string]: string } } = {
 		GH_CONFIG_DIR = "an empty gh configuration folder of the step's own",
 		["credential."] = "resets git's credential helpers to the agent's token only",
 	},
+	-- d0298: the spec that proves a spec run carries none of a dispatched step's environment reads the gh configuration
+	-- folder a spec run gets, and lists the step's variables from the agent's credential module; it sets neither
+	["z-nile/tests/acceptance/d0298/stepenv.spec.luau"] = {
+		GH_CONFIG_DIR = "reads a spec run's gh configuration folder to prove it is fence.sh's empty one",
+		["credential."] = "calls and reads credential.agentEnv to list a dispatched step's variables",
+	},
 	-- c0117: the fake CLIs log the step's gh configuration folder, to prove the agent's credential replaced the user's
 	["z-nile/tests/lib/fakecli.luau"] = {
 		GH_CONFIG_DIR = "logged by a fake CLI to prove the step's own, empty gh configuration",

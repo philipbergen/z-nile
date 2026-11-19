@@ -471,6 +471,10 @@ loops.ALLOWED = {
 			why = "the common-prefix walk: i grows by 1 every pass and the lists are finite",
 		},
 		{
+			loop = "while not rebasing.ok and H.takeDerivedSpend() do",
+			why = "c0248: each pass settles a stop whose only conflicts are raft spend.md files and continues the rebase, which replays one more commit of a finite range; a stop with any other conflict ends it",
+		},
+		{
 			loop = "while #remaining > 0 do",
 			why = "each pass removes one id from remaining, or returns on a cycle",
 		},
