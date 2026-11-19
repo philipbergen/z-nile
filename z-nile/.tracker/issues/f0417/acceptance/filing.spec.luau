@@ -141,60 +141,90 @@ return t.spec("f0417: the dispatcher files rounds", function(it)
 		t.expect(has(ended.refusal, "the loop ended")).toBe(true)
 	end)
 
-	it("the dispatcher's input: the stage for a marked design item or a Rounds raft's code review, else none", function()
-		local reviews, refutes = folder("design-review-", "design-refute-", 1)
-		local marked = "---\nid: c0001\nrounds: on\n---\n\n# c0001\n\n## Loops\n- Loop (tool, 2026-11-20): a new design loop from design-review-001\n"
-		local unmarked = "---\nid: c0001\n---\n\n# c0001\n"
-		local base = { mode = "design", dir = "d", prefix = "design-review-", raftId = "c0001", reviews = reviews, refutes = refutes }
-		local function with(over: { [string]: any }): any
-			local p = table.clone(base) :: any
-			for k, v in over do
-				p[k] = v
+	it(
+		"the dispatcher's input: the stage for a marked design item or a Rounds raft's code review, else none",
+		function()
+			local reviews, refutes = folder("design-review-", "design-refute-", 1)
+			local marked =
+				"---\nid: c0001\nrounds: on\n---\n\n# c0001\n\n## Loops\n- Loop (tool, 2026-11-20): a new design loop from design-review-001\n"
+			local unmarked = "---\nid: c0001\n---\n\n# c0001\n"
+			local base = {
+				mode = "design",
+				dir = "d",
+				prefix = "design-review-",
+				raftId = "c0001",
+				reviews = reviews,
+				refutes = refutes,
+			}
+			local function with(over: { [string]: any }): any
+				local p = table.clone(base) :: any
+				for k, v in over do
+					p[k] = v
+				end
+				return p
 			end
-			return p
+			local m = dispatch.filingFor(with({ doc = marked }))
+			t.expect(m.stage).toBe("design")
+			t.expect((m.window :: any).from).toBe(1)
+			t.expect(dispatch.filing(m).number).toBe(2)
+			local u = dispatch.filingFor(with({ doc = unmarked }))
+			t.expect(u.stage).toBe(nil)
+			t.expect(has(dispatch.filing(u).refusal, "there is no second round")).toBe(true)
+			local code = dispatch.filingFor(
+				with({ mode = "code", prefix = "review-", doc = unmarked, readyRounds = true })
+			)
+			t.expect(code.stage).toBe("code")
+			local codeOld = dispatch.filingFor(
+				with({ mode = "code", prefix = "review-", doc = marked, readyRounds = false })
+			)
+			t.expect(codeOld.stage).toBe(nil) -- a raft readied without the trailer keeps one review
+			local raft = dispatch.filingFor(with({ mode = "raft", doc = marked }))
+			t.expect(raft.stage).toBe(nil)
+			-- a rebuilt layer: its approving round reviewed an older patch, so the next round is filed, not refused
+			local codeReviews = { ["review-001.md"] = design("approve") }
+			local stale = dispatch.filingFor(with({
+				mode = "code",
+				prefix = "review-",
+				reviews = codeReviews,
+				refutes = {},
+				doc = unmarked,
+				readyRounds = true,
+				stale = { ["review-001.md"] = true },
+			}))
+			t.expect(dispatch.filing(stale).number).toBe(2)
+			local fresh = dispatch.filingFor(with({
+				mode = "code",
+				prefix = "review-",
+				reviews = codeReviews,
+				refutes = {},
+				doc = unmarked,
+				readyRounds = true,
+			}))
+			t.expect(has(dispatch.filing(fresh).refusal, "the loop ended")).toBe(true)
+			-- the person's extra round, written by resolve retry in the layer's issue document, reaches the dispatcher
+			local r9, f9 = folder("review-", "refute-", 9)
+			local granted =
+				"---\nid: c0010\n---\n\n# c0010\n\n## Loops\n- Loop (Ada, 2026-11-20): one more code round past review-009\n"
+			local capped = dispatch.filingFor(with({
+				mode = "code",
+				prefix = "review-",
+				reviews = r9,
+				refutes = f9,
+				doc = unmarked,
+				readyRounds = true,
+			}))
+			t.expect(dispatch.filing(capped).number).toBe(nil)
+			local more = dispatch.filingFor(with({
+				mode = "code",
+				prefix = "review-",
+				reviews = r9,
+				refutes = f9,
+				doc = granted,
+				readyRounds = true,
+			}))
+			t.expect(dispatch.filing(more).number).toBe(10)
 		end
-		local m = dispatch.filingFor(with({ doc = marked }))
-		t.expect(m.stage).toBe("design")
-		t.expect((m.window :: any).from).toBe(1)
-		t.expect(dispatch.filing(m).number).toBe(2)
-		local u = dispatch.filingFor(with({ doc = unmarked }))
-		t.expect(u.stage).toBe(nil)
-		t.expect(has(dispatch.filing(u).refusal, "there is no second round")).toBe(true)
-		local code = dispatch.filingFor(with({ mode = "code", prefix = "review-", doc = unmarked, readyRounds = true }))
-		t.expect(code.stage).toBe("code")
-		local codeOld = dispatch.filingFor(with({ mode = "code", prefix = "review-", doc = marked, readyRounds = false }))
-		t.expect(codeOld.stage).toBe(nil) -- a raft readied without the trailer keeps one review
-		local raft = dispatch.filingFor(with({ mode = "raft", doc = marked }))
-		t.expect(raft.stage).toBe(nil)
-		-- a rebuilt layer: its approving round reviewed an older patch, so the next round is filed, not refused
-		local codeReviews = { ["review-001.md"] = design("approve") }
-		local stale = dispatch.filingFor(with({
-			mode = "code",
-			prefix = "review-",
-			reviews = codeReviews,
-			refutes = {},
-			doc = unmarked,
-			readyRounds = true,
-			stale = { ["review-001.md"] = true },
-		}))
-		t.expect(dispatch.filing(stale).number).toBe(2)
-		local fresh = dispatch.filingFor(with({
-			mode = "code",
-			prefix = "review-",
-			reviews = codeReviews,
-			refutes = {},
-			doc = unmarked,
-			readyRounds = true,
-		}))
-		t.expect(has(dispatch.filing(fresh).refusal, "the loop ended")).toBe(true)
-		-- the person's extra round, written by resolve retry in the layer's issue document, reaches the dispatcher
-		local r9, f9 = folder("review-", "refute-", 9)
-		local granted = "---\nid: c0010\n---\n\n# c0010\n\n## Loops\n- Loop (Ada, 2026-11-20): one more code round past review-009\n"
-		local capped = dispatch.filingFor(with({ mode = "code", prefix = "review-", reviews = r9, refutes = f9, doc = unmarked, readyRounds = true }))
-		t.expect(dispatch.filing(capped).number).toBe(nil)
-		local more = dispatch.filingFor(with({ mode = "code", prefix = "review-", reviews = r9, refutes = f9, doc = granted, readyRounds = true }))
-		t.expect(dispatch.filing(more).number).toBe(10)
-	end)
+	)
 
 	it("the prompt of a marked round names its number, the cap and the earlier rounds", function()
 		local p = dispatch.prompt({

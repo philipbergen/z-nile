@@ -250,8 +250,12 @@ return t.spec("f0417: the round rule", function(it)
 		t.expect(w.extra).toBe(2) -- past 004 counts (at from), past 002 lies below the window
 		t.expect(rounds.window(doc, "code").extra).toBe(1)
 		t.expect(rounds.window(doc, "idea").from).toBe(1)
-		t.expect(rounds.window("## Problem\nDecided with the user (2026-11-20): a new design loop from design-review-009\n", "design").from)
-			.toBe(1)
+		t.expect(
+			rounds.window(
+				"## Problem\nDecided with the user (2026-11-20): a new design loop from design-review-009\n",
+				"design"
+			).from
+		).toBe(1)
 		-- rounds 4..12 are nine; with two extra the loop goes on to 14
 		local list = answeredDesign(12)
 		local s = rounds.state("design", list, w)
@@ -261,36 +265,55 @@ return t.spec("f0417: the round rule", function(it)
 		t.expect(s.next).toBe(13)
 	end)
 
-	it("an ask waits for the person until the Interview answers it; the idea gate asks every open line ruled", function()
-		local function withRound(text: string, q: number): string
-			return (string.gsub(text, "\n\n## Findings", `\nRound: ask 1, interview {q}, idea abc123\n\n## Findings`, 1))
+	it(
+		"an ask waits for the person until the Interview answers it; the idea gate asks every open line ruled",
+		function()
+			local function withRound(text: string, q: number): string
+				return (
+					string.gsub(
+						text,
+						"\n\n## Findings",
+						`\nRound: ask 1, interview {q}, idea abc123\n\n## Findings`,
+						1
+					)
+				)
+			end
+			local askOnly = rounds.read("idea", 1, withRound(idea("revise", { "ask: which board?" }), 1), nil)
+			t.expect(askOnly.findings[1].ask).toBe(true)
+			t.expect(askOnly.interview).toBe(1)
+			local oneQ =
+				"## Interview\n### Q1\nwhat?\nA: this.\n\n## Open to the human\n- F1: ask: which board?\n"
+			local waits = rounds.state("idea", { askOnly }, NONE, oneQ)
+			t.expect(waits.kind).toBe("person")
+			t.expect(has(rounds.filing("idea", { askOnly }, NONE, oneQ).refusal, "asks the person"))
+				.toBe(true)
+			local twoQ =
+				"## Interview\n### Q1\nwhat?\nA: this.\n### Q2\nwhich board?\nA: the main one.\n\n## Open to the human\n- F1: ask: which board?\n"
+			local goes = rounds.state("idea", { askOnly }, NONE, twoQ)
+			t.expect(goes.kind).toBe("next")
+			t.expect(goes.next).toBe(2)
+			-- a mixed round answered for its other finding goes on
+			local mixed = rounds.read(
+				"idea",
+				1,
+				withRound(idea("revise", { "too big.", "ask: which board?" }), 1),
+				"# Idea refute\n\n- F1: revised\n"
+			)
+			t.expect(rounds.state("idea", { mixed }, NONE, oneQ).kind).toBe("next")
+			-- an ended loop passes the gate only once c0260's open list is ruled; a Guessed line is not enough
+			local clean = rounds.read("idea", 2, idea("approve"), nil)
+			t.expect(rounds.state("idea", { mixed, clean }, NONE, oneQ).kind).toBe("ended")
+			t.expect(has(rounds.gate("idea", { mixed, clean }, NONE, oneQ), "F1")).toBe(true)
+			t.expect(
+				rounds.gate("idea", { mixed, clean }, NONE, oneQ .. "  Guessed (agent, 2026-11-20): G1\n")
+					~= nil
+			).toBe(true)
+			t.expect(
+				rounds.gate("idea", { mixed, clean }, NONE, oneQ .. "  Ruled (user, 2026-11-20): main.\n")
+			)
+				.toBe(nil)
 		end
-		local askOnly = rounds.read("idea", 1, withRound(idea("revise", { "ask: which board?" }), 1), nil)
-		t.expect(askOnly.findings[1].ask).toBe(true)
-		t.expect(askOnly.interview).toBe(1)
-		local oneQ = "## Interview\n### Q1\nwhat?\nA: this.\n\n## Open to the human\n- F1: ask: which board?\n"
-		local waits = rounds.state("idea", { askOnly }, NONE, oneQ)
-		t.expect(waits.kind).toBe("person")
-		t.expect(has(rounds.filing("idea", { askOnly }, NONE, oneQ).refusal, "asks the person")).toBe(true)
-		local twoQ = "## Interview\n### Q1\nwhat?\nA: this.\n### Q2\nwhich board?\nA: the main one.\n\n## Open to the human\n- F1: ask: which board?\n"
-		local goes = rounds.state("idea", { askOnly }, NONE, twoQ)
-		t.expect(goes.kind).toBe("next")
-		t.expect(goes.next).toBe(2)
-		-- a mixed round answered for its other finding goes on
-		local mixed = rounds.read(
-			"idea",
-			1,
-			withRound(idea("revise", { "too big.", "ask: which board?" }), 1),
-			"# Idea refute\n\n- F1: revised\n"
-		)
-		t.expect(rounds.state("idea", { mixed }, NONE, oneQ).kind).toBe("next")
-		-- an ended loop passes the gate only once c0260's open list is ruled; a Guessed line is not enough
-		local clean = rounds.read("idea", 2, idea("approve"), nil)
-		t.expect(rounds.state("idea", { mixed, clean }, NONE, oneQ).kind).toBe("ended")
-		t.expect(has(rounds.gate("idea", { mixed, clean }, NONE, oneQ), "F1")).toBe(true)
-		t.expect(rounds.gate("idea", { mixed, clean }, NONE, oneQ .. "  Guessed (agent, 2026-11-20): G1\n") ~= nil).toBe(true)
-		t.expect(rounds.gate("idea", { mixed, clean }, NONE, oneQ .. "  Ruled (user, 2026-11-20): main.\n")).toBe(nil)
-	end)
+	)
 
 	it("a stale round at the cap waits for the person", function()
 		local list = answeredDesign(8)
@@ -304,13 +327,22 @@ return t.spec("f0417: the round rule", function(it)
 	end)
 
 	it("a Loops line counts only when origin holds it, or it is the new ask's new idea loop", function()
-		local base = "---\nid: c0001\nrounds: on\n---\n\n## Ask (verbatim)\n### Message 2026-11-18\nx\n\n## Loops\n- Loop (Ada, 2026-11-19): one more design round past design-review-009\n- Loop (tool, 2026-11-19): a new design loop from design-review-010\n"
+		local base =
+			"---\nid: c0001\nrounds: on\n---\n\n## Ask (verbatim)\n### Message 2026-11-18\nx\n\n## Loops\n- Loop (Ada, 2026-11-19): one more design round past design-review-009\n- Loop (tool, 2026-11-19): a new design loop from design-review-010\n"
 		local highest = { idea = 2, design = 9, code = 0 }
 		t.expect(rounds.loopsProblem(base, base, highest, false)).toBe(nil) -- the claim published its own line with the claim
 		local granted = base .. "- Loop (agent, 2026-11-20): one more design round past design-review-010\n"
-		t.expect(has(rounds.loopsProblem(base, granted, highest, false), "one more design round past design-review-010")).toBe(true)
+		t.expect(
+			has(
+				rounds.loopsProblem(base, granted, highest, false),
+				"one more design round past design-review-010"
+			)
+		).toBe(true)
 		local moved = base .. "- Loop (tool, 2026-11-20): a new design loop from design-review-011\n"
-		t.expect(has(rounds.loopsProblem(base, moved, highest, false), "a new design loop from design-review-011")).toBe(true)
+		t.expect(
+			has(rounds.loopsProblem(base, moved, highest, false), "a new design loop from design-review-011")
+		)
+			.toBe(true)
 		local newIdea = base .. "- Loop (Ada, 2026-11-20): a new idea loop from idea-review-003\n"
 		t.expect(rounds.loopsProblem(base, newIdea, highest, true)).toBe(nil)
 		t.expect(rounds.loopsProblem(base, newIdea, highest, false) ~= nil).toBe(true)
@@ -318,50 +350,89 @@ return t.spec("f0417: the round rule", function(it)
 		t.expect(rounds.loopsProblem(base, oldIdea, highest, true) ~= nil).toBe(true) -- only from the next number
 		t.expect(rounds.loopsProblem(nil, granted, highest, false) ~= nil).toBe(true)
 		-- a line origin holds that the branch's copy dropped (or never synced) is refused too: sync first
-		local dropped = (string.gsub(base, "%- Loop %(tool, 2026%-11%-19%): a new design loop from design%-review%-010\n", ""))
+		local dropped = (
+			string.gsub(
+				base,
+				"%- Loop %(tool, 2026%-11%-19%): a new design loop from design%-review%-010\n",
+				""
+			)
+		)
 		local why = rounds.loopsProblem(base, dropped, highest, false)
 		t.expect(has(why, "a new design loop from design-review-010")).toBe(true)
 		t.expect(has(why, "./zn sync")).toBe(true)
 	end)
 
-	it("a loop may restart exactly when its gate passes (ended, or a cap ruled or guessed), or the claim adopts an older reviewed issue", function()
-		local doc = "## Open to the human\nnone\n"
-		local ended = answeredDesign(1)
-		table.insert(ended, rounds.read("design", 2, review("approve"), nil))
-		t.expect(rounds.restartable(ended, NONE, doc, false)).toBe(true)
-		t.expect(rounds.restartable(answeredDesign(3), NONE, doc, false)).toBe(false) -- mid-loop
-		local capped = answeredDesign(8)
-		table.insert(capped, rounds.read("design", 9, review("changes", { { "F1", "high" } }), "- F1: fixed: x; consequences: none\n"))
-		local bullet = "## Open to the human\n- F1: (design-review-009 F1) a high. Answer: fixed. Decision: accept?\n"
-		t.expect(rounds.restartable(capped, NONE, bullet, false)).toBe(false) -- an unruled cap is the person's
-		-- a cap closed by Guessed lines passes the gate, so a redesign of it must start a new loop too
-		t.expect(rounds.restartable(capped, NONE, bullet .. "  Guessed (agent, 2026-11-20): G4\n", false)).toBe(true)
-		t.expect(rounds.restartable(capped, NONE, bullet .. "  Ruled (user, 2026-11-20): accepted.\n", false)).toBe(true)
-		-- an older issue adopted by this claim, with one-round-era reviews in its folder
-		t.expect(rounds.restartable(answeredDesign(7), NONE, doc, true)).toBe(true)
-		t.expect(rounds.restartable({}, NONE, doc, true)).toBe(false) -- nothing to restart
-	end)
-
-	it("an idea approval whose only findings are asks waits for the answer, then takes the next round", function()
-		local function withRound(text: string, q: number): string
-			return (string.gsub(text, "\n\n## Findings", `\nRound: ask 1, interview {q}, idea abc123\n\n## Findings`, 1))
+	it(
+		"a loop may restart exactly when its gate passes (ended, or a cap ruled or guessed), or the claim adopts an older reviewed issue",
+		function()
+			local doc = "## Open to the human\nnone\n"
+			local ended = answeredDesign(1)
+			table.insert(ended, rounds.read("design", 2, review("approve"), nil))
+			t.expect(rounds.restartable(ended, NONE, doc, false)).toBe(true)
+			t.expect(rounds.restartable(answeredDesign(3), NONE, doc, false)).toBe(false) -- mid-loop
+			local capped = answeredDesign(8)
+			table.insert(
+				capped,
+				rounds.read(
+					"design",
+					9,
+					review("changes", { { "F1", "high" } }),
+					"- F1: fixed: x; consequences: none\n"
+				)
+			)
+			local bullet =
+				"## Open to the human\n- F1: (design-review-009 F1) a high. Answer: fixed. Decision: accept?\n"
+			t.expect(rounds.restartable(capped, NONE, bullet, false)).toBe(false) -- an unruled cap is the person's
+			-- a cap closed by Guessed lines passes the gate, so a redesign of it must start a new loop too
+			t.expect(rounds.restartable(capped, NONE, bullet .. "  Guessed (agent, 2026-11-20): G4\n", false))
+				.toBe(true)
+			t.expect(
+				rounds.restartable(capped, NONE, bullet .. "  Ruled (user, 2026-11-20): accepted.\n", false)
+			)
+				.toBe(true)
+			-- an older issue adopted by this claim, with one-round-era reviews in its folder
+			t.expect(rounds.restartable(answeredDesign(7), NONE, doc, true)).toBe(true)
+			t.expect(rounds.restartable({}, NONE, doc, true)).toBe(false) -- nothing to restart
 		end
-		local r = rounds.read("idea", 1, withRound(idea("approve", { "ask: which board?" }), 1), nil)
-		local oneQ = "## Interview\n### Q1\nwhat?\n"
-		t.expect(rounds.state("idea", { r }, NONE, oneQ).kind).toBe("person")
-		local twoQ = "## Interview\n### Q1\nwhat?\n### Q2\nwhich board?\nA: main.\n"
-		t.expect(rounds.state("idea", { r }, NONE, twoQ).kind).toBe("next") -- the answer is challenged, never taken as ended
-	end)
+	)
+
+	it(
+		"an idea approval whose only findings are asks waits for the answer, then takes the next round",
+		function()
+			local function withRound(text: string, q: number): string
+				return (
+					string.gsub(
+						text,
+						"\n\n## Findings",
+						`\nRound: ask 1, interview {q}, idea abc123\n\n## Findings`,
+						1
+					)
+				)
+			end
+			local r = rounds.read("idea", 1, withRound(idea("approve", { "ask: which board?" }), 1), nil)
+			local oneQ = "## Interview\n### Q1\nwhat?\n"
+			t.expect(rounds.state("idea", { r }, NONE, oneQ).kind).toBe("person")
+			local twoQ = "## Interview\n### Q1\nwhat?\n### Q2\nwhich board?\nA: main.\n"
+			t.expect(rounds.state("idea", { r }, NONE, twoQ).kind).toBe("next") -- the answer is challenged, never taken as ended
+		end
+	)
 
 	it("a ruled stale bullet answers the stale entry at the cap", function()
 		local list = answeredDesign(8)
 		local last = rounds.read("code", 9, review("approve"), nil)
 		last.current = false
 		table.insert(list, last)
-		local bullet = "## Open to the human\n- F1: (review-009 stale) round 9 reviewed an older patch. Answer: rebuilt. Decision: review again?\n"
+		local bullet =
+			"## Open to the human\n- F1: (review-009 stale) round 9 reviewed an older patch. Answer: rebuilt. Decision: review again?\n"
 		t.expect(rounds.gate("code", list, NONE, bullet) ~= nil).toBe(true)
-		t.expect(rounds.gate("code", list, NONE, bullet .. "  Ruled (user, 2026-11-20): the rebuild only renamed a helper.\n"))
-			.toBe(nil)
+		t.expect(
+			rounds.gate(
+				"code",
+				list,
+				NONE,
+				bullet .. "  Ruled (user, 2026-11-20): the rebuild only renamed a helper.\n"
+			)
+		).toBe(nil)
 	end)
 
 	it("a code round that reviewed an older patch is followed by the next, even when it approved", function()

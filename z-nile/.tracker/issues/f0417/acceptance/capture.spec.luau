@@ -15,9 +15,11 @@ local function any(list: { string }, needle: string): boolean
 	return false
 end
 
-local REVIEW = "# Idea review 002\nRound: ask 1, interview 1, idea abc123\n\n## Findings\n- F1: none\n\n## Verdict\napprove\n"
+local REVIEW =
+	"# Idea review 002\nRound: ask 1, interview 1, idea abc123\n\n## Findings\n- F1: none\n\n## Verdict\napprove\n"
 local REVIEWS = { ["idea-review-001.md"] = REVIEW, ["idea-review-002.md"] = REVIEW }
-local GUESS = "Unconfirmed (guess mode, 2026-11-20) after round 2: carried by z-work; the person's ./zn approve confirms it"
+local GUESS =
+	"Unconfirmed (guess mode, 2026-11-20) after round 2: carried by z-work; the person's ./zn approve confirms it"
 
 local function doc(marked: boolean, confirmation: string): string
 	return "---\nid: c0002\ncapture: required\nidea: challenged\n"
@@ -36,35 +38,54 @@ return t.spec("f0417: c0260's record check and the guess-mode Confirmation", fun
 		t.expect(any(problems, "onfirm")).toBe(false) -- no Confirmation problem of any kind
 	end)
 
-	it("a change of the record drops the guess-mode line as it drops a Confirmed line, so it never goes stale or doubles", function()
-		local dropped = capturecheck.dropConfirmed(doc(true, GUESS))
-		t.expect((string.find(dropped, "guess mode", 1, true))).toBe(nil)
-		local both = capturecheck.dropConfirmed(doc(true, GUESS .. '\nConfirmed (Ada, 2026-11-21) after round 2: "yes"'))
-		t.expect((string.find(both, "guess mode", 1, true))).toBe(nil)
-		t.expect((string.find(both, "Confirmed (Ada", 1, true))).toBe(nil)
-		-- an unattended line stays, as c0260 lands it
-		local unattended = "Unconfirmed (unattended, 2026-11-20) after round 2: nobody was asked"
-		t.expect(string.find(capturecheck.dropConfirmed(doc(true, unattended)), "unattended", 1, true) ~= nil).toBe(true)
-	end)
+	it(
+		"a change of the record drops the guess-mode line as it drops a Confirmed line, so it never goes stale or doubles",
+		function()
+			local dropped = capturecheck.dropConfirmed(doc(true, GUESS))
+			t.expect((string.find(dropped, "guess mode", 1, true))).toBe(nil)
+			local both = capturecheck.dropConfirmed(
+				doc(true, GUESS .. '\nConfirmed (Ada, 2026-11-21) after round 2: "yes"')
+			)
+			t.expect((string.find(both, "guess mode", 1, true))).toBe(nil)
+			t.expect((string.find(both, "Confirmed (Ada", 1, true))).toBe(nil)
+			-- an unattended line stays, as c0260 lands it
+			local unattended = "Unconfirmed (unattended, 2026-11-20) after round 2: nobody was asked"
+			t.expect(
+				string.find(capturecheck.dropConfirmed(doc(true, unattended)), "unattended", 1, true) ~= nil
+			)
+				.toBe(true)
+		end
+	)
 
 	it("an unmarked issue keeps c0260's rule, and the line keeps its round binding and its place", function()
 		t.expect(any(capturecheck.check(doc(false, GUESS), REVIEWS), "Unconfirmed is only ever")).toBe(true)
 		local stale = (string.gsub(GUESS, "after round 2", "after round 1"))
-		t.expect(any(capturecheck.check(doc(true, stale), REVIEWS), "Confirmation follows round 1")).toBe(true)
+		t.expect(any(capturecheck.check(doc(true, stale), REVIEWS), "Confirmation follows round 1"))
+			.toBe(true)
 		-- the person's Confirmed line may follow it; it may not follow the Confirmed line
 		local confirmed = 'Confirmed (Ada, 2026-11-21) after round 2: "yes"'
 		local after = capturecheck.check(doc(true, GUESS .. "\n" .. confirmed), REVIEWS)
 		t.expect(any(after, "Unconfirmed is only ever")).toBe(false)
 		t.expect(any(after, "an Unconfirmed line comes first")).toBe(false)
-		t.expect(any(capturecheck.check(doc(true, confirmed .. "\n" .. GUESS), REVIEWS), "comes first")).toBe(true)
+		t.expect(any(capturecheck.check(doc(true, confirmed .. "\n" .. GUESS), REVIEWS), "comes first"))
+			.toBe(true)
 	end)
 
-	it("c0260's other rules stand on a marked issue: two Confirmed lines refused, the unattended line accepted", function()
-		local confirmed = 'Confirmed (Ada, 2026-11-21) after round 2: "yes"'
-		t.expect(any(capturecheck.check(doc(true, confirmed .. "\n" .. confirmed), REVIEWS), "Confirmation holds one line")).toBe(true)
-		local unattended = "Unconfirmed (unattended, 2026-11-20) after round 2: nobody was asked"
-		t.expect(any(capturecheck.check(doc(true, unattended), REVIEWS), "Unconfirmed is only ever")).toBe(false)
-	end)
+	it(
+		"c0260's other rules stand on a marked issue: two Confirmed lines refused, the unattended line accepted",
+		function()
+			local confirmed = 'Confirmed (Ada, 2026-11-21) after round 2: "yes"'
+			t.expect(
+				any(
+					capturecheck.check(doc(true, confirmed .. "\n" .. confirmed), REVIEWS),
+					"Confirmation holds one line"
+				)
+			).toBe(true)
+			local unattended = "Unconfirmed (unattended, 2026-11-20) after round 2: nobody was asked"
+			t.expect(any(capturecheck.check(doc(true, unattended), REVIEWS), "Unconfirmed is only ever"))
+				.toBe(false)
+		end
+	)
 
 	it("a record change may drop a marked issue's guess-mode line, as it drops a Confirmed line", function()
 		local old = doc(true, GUESS)

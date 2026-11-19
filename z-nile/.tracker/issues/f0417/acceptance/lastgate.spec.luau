@@ -66,36 +66,40 @@ return t.spec("f0417: the last gate and the routes back", function(it)
 		t.expect(prob(member({ marked = false, state = "none" }, { "approved", "judged" }))).toBe(nil)
 	end)
 
-	it("a refusal's route: idea and design amend the design, build retries, each with its new-loop line", function()
-		local i = lastgate.route("idea", "idea-review-003", "2026-11-20", "Ada") :: lastgate.Route
-		t.expect(i.decision).toBe("amend-design")
-		t.expect(i.idea).toBe(true)
-		t.expect(i.line).toBe("- Loop (Ada, 2026-11-20): a new idea loop from idea-review-003")
-		local d = lastgate.route("design", "design-review-010", "2026-11-20", "Ada") :: lastgate.Route
-		t.expect(d.decision).toBe("amend-design")
-		t.expect(d.idea).toBe(false)
-		t.expect(d.line).toBe("- Loop (Ada, 2026-11-20): a new design loop from design-review-010")
-		local b = lastgate.route("build", "review-004", "2026-11-20", "Ada") :: lastgate.Route
-		t.expect(b.decision).toBe("retry")
-		t.expect(b.line).toBe("- Loop (Ada, 2026-11-20): a new code loop from review-004")
-		local none, why = lastgate.route("deploy", "x-001", "2026-11-20", "Ada")
-		t.expect(none).toBe(nil)
-		t.expect(has(why, "idea|design|build")).toBe(true)
-		-- the last review's off-course verdicts all go through the blocked state: a design gap blocks design-gap,
-		-- an implementation gap needs-decision recommending retry, a second verdict needs-decision
-		local dg = lastgate.offCourse("redo-design", { "design" }) :: lastgate.Block
-		t.expect(dg.reason).toBe("design-gap")
-		t.expect(dg.recommend).toBe("amend-design")
-		local impl = lastgate.offCourse("redo-layer", { "implementation" }) :: lastgate.Block
-		t.expect(impl.reason).toBe("needs-decision")
-		t.expect(impl.recommend).toBe("retry")
-		local twiceImpl = lastgate.offCourse("blocked", { "implementation" }) :: lastgate.Block
-		t.expect(twiceImpl.reason).toBe("needs-decision")
-		t.expect(twiceImpl.recommend).toBe("retry")
-		local twiceDesign = lastgate.offCourse("blocked", { "implementation", "design" }) :: lastgate.Block
-		t.expect(twiceDesign.recommend).toBe("amend-design")
-		t.expect(lastgate.offCourse("on-course", {})).toBe(nil)
-	end)
+	it(
+		"a refusal's route: idea and design amend the design, build retries, each with its new-loop line",
+		function()
+			local i = lastgate.route("idea", "idea-review-003", "2026-11-20", "Ada") :: lastgate.Route
+			t.expect(i.decision).toBe("amend-design")
+			t.expect(i.idea).toBe(true)
+			t.expect(i.line).toBe("- Loop (Ada, 2026-11-20): a new idea loop from idea-review-003")
+			local d = lastgate.route("design", "design-review-010", "2026-11-20", "Ada") :: lastgate.Route
+			t.expect(d.decision).toBe("amend-design")
+			t.expect(d.idea).toBe(false)
+			t.expect(d.line).toBe("- Loop (Ada, 2026-11-20): a new design loop from design-review-010")
+			local b = lastgate.route("build", "review-004", "2026-11-20", "Ada") :: lastgate.Route
+			t.expect(b.decision).toBe("retry")
+			t.expect(b.line).toBe("- Loop (Ada, 2026-11-20): a new code loop from review-004")
+			local none, why = lastgate.route("deploy", "x-001", "2026-11-20", "Ada")
+			t.expect(none).toBe(nil)
+			t.expect(has(why, "idea|design|build")).toBe(true)
+			-- the last review's off-course verdicts all go through the blocked state: a design gap blocks design-gap,
+			-- an implementation gap needs-decision recommending retry, a second verdict needs-decision
+			local dg = lastgate.offCourse("redo-design", { "design" }) :: lastgate.Block
+			t.expect(dg.reason).toBe("design-gap")
+			t.expect(dg.recommend).toBe("amend-design")
+			local impl = lastgate.offCourse("redo-layer", { "implementation" }) :: lastgate.Block
+			t.expect(impl.reason).toBe("needs-decision")
+			t.expect(impl.recommend).toBe("retry")
+			local twiceImpl = lastgate.offCourse("blocked", { "implementation" }) :: lastgate.Block
+			t.expect(twiceImpl.reason).toBe("needs-decision")
+			t.expect(twiceImpl.recommend).toBe("retry")
+			local twiceDesign =
+				lastgate.offCourse("blocked", { "implementation", "design" }) :: lastgate.Block
+			t.expect(twiceDesign.recommend).toBe("amend-design")
+			t.expect(lastgate.offCourse("on-course", {})).toBe(nil)
+		end
+	)
 
 	it("refuse plans by the issue's state: a block and its resolve, or a refusal naming the way", function()
 		local function plan(over: { [string]: any }): (any, string?)
@@ -118,7 +122,8 @@ return t.spec("f0417: the last gate and the routes back", function(it)
 		local active = plan({}) :: any
 		t.expect(active.block.reason).toBe("needs-decision")
 		t.expect(active.resolve.decision).toBe("amend-design")
-		t.expect(active.resolve.line).toBe("- Loop (Ada, 2026-11-20): a new design loop from design-review-005")
+		t.expect(active.resolve.line)
+			.toBe("- Loop (Ada, 2026-11-20): a new design loop from design-review-005")
 		t.expect(has(active.question, "Not what I asked.")).toBe(true)
 		local build = plan({ to = "build" }) :: any
 		t.expect(build.resolve.decision).toBe("retry")

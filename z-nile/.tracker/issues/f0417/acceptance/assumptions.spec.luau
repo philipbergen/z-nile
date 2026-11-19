@@ -18,7 +18,8 @@ return t.spec("f0417: the assumption record", function(it)
 		t.expect(one).toBe(
 			"# assumptions\n- A1 (design, 2026-11-18): Ten calls fit the two-hour timeout. Because: Each call takes minutes. Unproven: A run stopped by the timeout.\n"
 		)
-		local two = assumptions.append(one, "build", "2026-11-19", "Git sorts names.", "Its docs.", "A fixture.")
+		local two =
+			assumptions.append(one, "build", "2026-11-19", "Git sorts names.", "Its docs.", "A fixture.")
 		local list = assumptions.parse(two :: string) :: { assumptions.Assumption }
 		t.expect(#list).toBe(2)
 		t.expect(list[2].id).toBe("A2")
@@ -46,7 +47,8 @@ return t.spec("f0417: the assumption record", function(it)
 		t.expect(line ~= nil).toBe(true)
 		local _, date = assumptions.append(nil, "design", "18 Nov", "a", "b", "c")
 		t.expect(date ~= nil).toBe(true)
-		local gap = "# assumptions\n- A1 (design, 2026-11-18): a Because: b Unproven: c\n- A3 (design, 2026-11-18): a Because: b Unproven: c\n"
+		local gap =
+			"# assumptions\n- A1 (design, 2026-11-18): a Because: b Unproven: c\n- A3 (design, 2026-11-18): a Because: b Unproven: c\n"
 		local none, why = assumptions.parse(gap)
 		t.expect(none).toBe(nil)
 		t.expect(string.find(why or "", "A3", 1, true) ~= nil).toBe(true)

@@ -30,7 +30,14 @@ local function issue(id: string, over: { [string]: any }?): work.IssueFact
 end
 
 local function layer(position: number, id: string): work.LayerFact
-	return { position = position, issue = id, name = `R/{position}/{id}`, commits = 1, onlyStart = false, finished = true }
+	return {
+		position = position,
+		issue = id,
+		name = `R/{position}/{id}`,
+		commits = 1,
+		onlyStart = false,
+		finished = true,
+	}
 end
 
 -- an active raft whose every other gate has passed, its code review left to the loop
@@ -135,13 +142,21 @@ return t.spec("f0417: work next runs the idea stage and the code loop", function
 		t.expect(has(nxt.why, "Run code review round 3 of 9 for c0010")).toBe(true)
 		t.expect(has(nxt.why, "new clean reviewer")).toBe(true)
 		t.expect(has(nxt.why, "fix delta")).toBe(true)
-		local capped =
-			decide({ with(state("cap", { count = 9, last = 9, human = { "review-009 F1" } }), "review-009 F1 is not ruled") }, {}, "R0010")
+		local capped = decide({
+			with(
+				state("cap", { count = 9, last = 9, human = { "review-009 F1" } }),
+				"review-009 F1 is not ruled"
+			),
+		}, {}, "R0010")
 		t.expect(capped.action).toBe("review")
 		t.expect(has(capped.why, "review-009 F1")).toBe(true)
 		t.expect(has(capped.why, "./zn block R0010 review-exhausted --layer c0010")).toBe(true)
 		t.expect(has(capped.why, "./zn guess c0010 --step build")).toBe(true)
-		local settled = decide({ with(state("cap", { count = 9, last = 9, human = { "review-009 F1" } }), "") }, {}, "R0010")
+		local settled = decide(
+			{ with(state("cap", { count = 9, last = 9, human = { "review-009 F1" } }), "") },
+			{},
+			"R0010"
+		)
 		t.expect(settled.action).toBe("done")
 		local ended = decide({ with(state("ended", { count = 3, last = 3 }), "") }, {}, "R0010")
 		t.expect(ended.action).toBe("done")

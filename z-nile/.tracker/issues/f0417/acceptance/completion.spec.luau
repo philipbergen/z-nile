@@ -10,7 +10,8 @@ local function has(text: string?, needle: string): boolean
 	return string.find(text or "", needle, 1, true) ~= nil
 end
 
-local REVIEW = "# Review 001: c0010 (code mode)\nInputs: x\n\n### F1 [medium] a claim\nWhere: x\nErred: zz-execute\nUpstream: none\n\nVerdict: changes\n"
+local REVIEW =
+	"# Review 001: c0010 (code mode)\nInputs: x\n\n### F1 [medium] a claim\nWhere: x\nErred: zz-execute\nUpstream: none\n\nVerdict: changes\n"
 local REFUTE = "# Refute 001\n\n- F1: fixed abc1234: done; consequences: none\n"
 local HIGH = (string.gsub(REVIEW, "%[medium%]", "[high]"))
 

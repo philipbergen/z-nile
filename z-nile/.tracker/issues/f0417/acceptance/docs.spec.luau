@@ -51,7 +51,11 @@ return t.spec("f0417: the skills say the loops", function(it)
 		at(s5, "`one more design round past design-review-NNN`", w)
 		at(s5, "`review-exhausted`", w)
 		at(s5, "**The loop ends**", w)
-		at(skill("z-design"), "A `guess mode` line is not asked about: z-work carries it, and the person's `./zn approve` confirms it.", "z-design")
+		at(
+			skill("z-design"),
+			"A `guess mode` line is not asked about: z-work carries it, and the person's `./zn approve` confirms it.",
+			"z-design"
+		)
 		absent(s5, "There is no second reviewer round.", w)
 		absent(s5, "One clean reviewer, one round", w)
 		absent(s5, "restarts the count", w)
@@ -113,7 +117,11 @@ return t.spec("f0417: the skills say the loops", function(it)
 	it("zz-rules: assume, assumptions, refuse, and the approve row's parts", function()
 		local s = skill("zz-rules")
 		local w = "zz-rules"
-		at(s, "| assume | `./zn assume <issue-id> --step idea|design|raft|build --what <text> --because <text> --unproven <text>` |", w)
+		at(
+			s,
+			"| assume | `./zn assume <issue-id> --step idea|design|raft|build --what <text> --because <text> --unproven <text>` |",
+			w
+		)
 		at(s, "| assumptions | `./zn assumptions <issue-id|R-id> [--check]` |", w)
 		at(s, "| refuse | `./zn refuse <issue-id> --to idea|design|build --why <text>` |", w)
 		at(s, "<ID>/assumptions.md", w)

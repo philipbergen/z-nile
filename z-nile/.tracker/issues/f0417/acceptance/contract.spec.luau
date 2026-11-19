@@ -43,7 +43,7 @@ t
 ]]
 
 local SPECS = { ["x.spec.luau"] = "return 1\n" }
-local CHECK = "check \"AC1: x\" true\n"
+local CHECK = 'check "AC1: x" true\n'
 local GUESSES = "# guesses\n- G1 (design, 2026-11-18): a Chose: b Why: c\n"
 local ASSUME = "# assumptions\n- A1 (design, 2026-11-18): a Because: b Unproven: c\n"
 local FILES = {
@@ -60,8 +60,10 @@ end
 return t.spec("f0417: the idea and the assumptions in the contract", function(it)
 	it("the idea and the assumptions are parts of their own, after guesses", function()
 		local idea = contract.ideaText(DOC, FILES)
-		local parts = contract.build(DOC, CHECK, SPECS, GUESSES, { idea = idea, assumptions = ASSUME }) :: contract.Parts
-		t.expect(names(parts)).toEqual({ "design", "check.sh", "guesses", "idea", "assumptions", "x.spec.luau" })
+		local parts =
+			contract.build(DOC, CHECK, SPECS, GUESSES, { idea = idea, assumptions = ASSUME }) :: contract.Parts
+		t.expect(names(parts))
+			.toEqual({ "design", "check.sh", "guesses", "idea", "assumptions", "x.spec.luau" })
 		t.expect(parts.assumptions).toBe(contract.normalize(ASSUME))
 		t.expect(parts.idea).toBe(contract.normalize(idea))
 	end)
@@ -69,7 +71,8 @@ return t.spec("f0417: the idea and the assumptions in the contract", function(it
 	it("an approval recorded before keeps its hash", function()
 		local before = contract.build(DOC, CHECK, SPECS, GUESSES) :: contract.Parts
 		local same = contract.build(DOC, CHECK, SPECS, GUESSES, nil) :: contract.Parts
-		local empty = contract.build(DOC, CHECK, SPECS, GUESSES, { idea = "", assumptions = "  \n" }) :: contract.Parts
+		local empty =
+			contract.build(DOC, CHECK, SPECS, GUESSES, { idea = "", assumptions = "  \n" }) :: contract.Parts
 		local none = contract.build(DOC, CHECK, SPECS, GUESSES, {}) :: contract.Parts
 		t.expect(contract.hash(same)).toBe(contract.hash(before))
 		t.expect(contract.hash(empty)).toBe(contract.hash(before))
@@ -78,21 +81,25 @@ return t.spec("f0417: the idea and the assumptions in the contract", function(it
 		t.expect(empty.assumptions).toBe(nil)
 	end)
 
-	it("ideaText holds the ask, the interview, the non-goals and every idea review and refute, in order", function()
-		local text = contract.ideaText(DOC, FILES)
-		local function at(needle: string): number
-			return string.find(text, needle, 1, true) or error(`ideaText is missing: {needle}`)
+	it(
+		"ideaText holds the ask, the interview, the non-goals and every idea review and refute, in order",
+		function()
+			local text = contract.ideaText(DOC, FILES)
+			local function at(needle: string): number
+				return string.find(text, needle, 1, true) or error(`ideaText is missing: {needle}`)
+			end
+			local ng, ask, iv = at("- n."), at("make it louder"), at("which ghost?")
+			t.expect(at("Unconfirmed (guess mode, 2026-11-18)") > iv).toBe(true)
+			local r1, f1, r2 =
+				at("## idea-refute-001.md"), at("## idea-review-001.md"), at("## idea-review-002.md")
+			t.expect(ng < ask and ask < iv and iv < r1).toBe(true)
+			t.expect(r1 < f1 and f1 < r2).toBe(true) -- name order: refute-001, review-001, review-002
+			t.expect(string.find(text, "too big.", 1, true) ~= nil).toBe(true)
+			t.expect((string.find(text, "not an idea file", 1, true))).toBe(nil)
+			t.expect((string.find(text, "## Problem", 1, true))).toBe(nil) -- already in the design part
+			t.expect(contract.ideaText("## Problem\np\n", {})).toBe("")
 		end
-		local ng, ask, iv = at("- n."), at("make it louder"), at("which ghost?")
-		t.expect(at("Unconfirmed (guess mode, 2026-11-18)") > iv).toBe(true)
-		local r1, f1, r2 = at("## idea-refute-001.md"), at("## idea-review-001.md"), at("## idea-review-002.md")
-		t.expect(ng < ask and ask < iv and iv < r1).toBe(true)
-		t.expect(r1 < f1 and f1 < r2).toBe(true) -- name order: refute-001, review-001, review-002
-		t.expect(string.find(text, "too big.", 1, true) ~= nil).toBe(true)
-		t.expect((string.find(text, "not an idea file", 1, true))).toBe(nil)
-		t.expect((string.find(text, "## Problem", 1, true))).toBe(nil) -- already in the design part
-		t.expect(contract.ideaText("## Problem\np\n", {})).toBe("")
-	end)
+	)
 
 	it("a changed idea review or assumption changes its part only", function()
 		local base = contract.build(DOC, CHECK, SPECS, GUESSES, {
@@ -120,23 +127,27 @@ return t.spec("f0417: the idea and the assumptions in the contract", function(it
 		t.expect(contract.changed(row, changedA)).toEqual({ "assumptions" })
 	end)
 
-	it("more decides the extra parts: the idea only for a marked issue, the assumptions whenever written", function()
-		local files = table.clone(FILES)
-		files["assumptions.md"] = ASSUME
-		local m = contract.more(DOC, files)
-		t.expect(m.idea).toBe(contract.ideaText(DOC, files))
-		t.expect(m.assumptions).toBe(ASSUME)
-		local unmarked = (string.gsub(DOC, "rounds: on\n", ""))
-		local u = contract.more(unmarked, files)
-		t.expect(u.idea).toBe(nil)
-		t.expect(u.assumptions).toBe(ASSUME)
-		local bare = contract.more(DOC, {})
-		t.expect(bare.assumptions).toBe(nil)
-		-- an unmarked issue's contract with its idea files present hashes as before
-		local before = contract.build(unmarked, CHECK, SPECS, GUESSES) :: contract.Parts
-		local now = contract.build(unmarked, CHECK, SPECS, GUESSES, contract.more(unmarked, FILES)) :: contract.Parts
-		t.expect(contract.hash(now)).toBe(contract.hash(before))
-	end)
+	it(
+		"more decides the extra parts: the idea only for a marked issue, the assumptions whenever written",
+		function()
+			local files = table.clone(FILES)
+			files["assumptions.md"] = ASSUME
+			local m = contract.more(DOC, files)
+			t.expect(m.idea).toBe(contract.ideaText(DOC, files))
+			t.expect(m.assumptions).toBe(ASSUME)
+			local unmarked = (string.gsub(DOC, "rounds: on\n", ""))
+			local u = contract.more(unmarked, files)
+			t.expect(u.idea).toBe(nil)
+			t.expect(u.assumptions).toBe(ASSUME)
+			local bare = contract.more(DOC, {})
+			t.expect(bare.assumptions).toBe(nil)
+			-- an unmarked issue's contract with its idea files present hashes as before
+			local before = contract.build(unmarked, CHECK, SPECS, GUESSES) :: contract.Parts
+			local now =
+				contract.build(unmarked, CHECK, SPECS, GUESSES, contract.more(unmarked, FILES)) :: contract.Parts
+			t.expect(contract.hash(now)).toBe(contract.hash(before))
+		end
+	)
 
 	it("idea and assumptions are not spec names", function()
 		for _, name in { "idea", "assumptions" } do
