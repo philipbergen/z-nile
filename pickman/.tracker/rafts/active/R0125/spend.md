@@ -6,8 +6,8 @@
 | d0410 | defect | yes | 304 | 2 | 0.0 | 0 |
 | d0412 | defect | yes | 603 | 4 | 0.0 | 0 |
 
-**Total:** +11393 / -6204 lines, 0.6 agent-minutes, 0 tokens over 361 records
-<!-- totals: added=11393 removed=6204 minutes=0.6 records=361 tokens=0 -->
+**Total:** +11393 / -6204 lines, 0.6 agent-minutes, 0 tokens over 373 records
+<!-- totals: added=11393 removed=6204 minutes=0.6 records=373 tokens=0 -->
 
 | phase | +lines | -lines | minutes | tokens |
 |---|---|---|---|---|
