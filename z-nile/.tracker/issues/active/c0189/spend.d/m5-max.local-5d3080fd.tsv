@@ -184,3 +184,4 @@ when	subject	added	removed	phase	tokens	model	wall	cpu	ai	test	unmeasured
 2026-11-19 22:59	9 specs	0	0	test			3.249	5.850		3.249	tokens,ai
 2026-11-19 23:02	187 specs	0	0	test			154.313	680.960		154.313	tokens,ai
 2026-11-19 23:02	finish claude unmeasured; grok unmeasured; agent unmeasured; kimi unmeasured	0	0	build							tokens,wall,cpu,ai
+2026-11-19 23:03	R0070: trace.md for the new top-layer commit	0	0	code-review		claude-fable-5-2-xhigh					tokens,wall,cpu,ai
