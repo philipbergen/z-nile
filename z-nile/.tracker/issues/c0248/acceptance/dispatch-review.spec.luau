@@ -270,8 +270,18 @@ return t.spec(
 					"sleep 1; printf '# Review\\n\\n### F1 [medium] a thing\\nThe text.\\n\\nVerdict: changes\\n' > \"$ZN_DISPATCH_DIR/review.md\"\n"
 				)
 				must(znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" }), "round 3")
-				commitFolder("tracker: review c0010, round 3")
+				-- the layer is fixed and re-finished before the dispatched round is committed: its stamp (the finish the
+				-- reviewer was given) is true but old, so it is committed as it is and the round is stale, not lost
+				local round3 = `{folder("c0010")}/review-003.md`
+				local dispatched = fs.readFile(round3)
+				local stampedSha = string.match(dispatched, "Commit: (%x+)") :: string
+				fs.removeFile(round3)
 				fixAgain("c0010-fix3")
+				t.expect(finishSha("c0010") ~= stampedSha).toBe(true)
+				fs.writeFile(round3, dispatched)
+				commitFolder("tracker: review c0010, round 3")
+				t.expect(has(fs.readFile(round3), `Commit: {stampedSha}`)).toBe(true)
+				t.expect(has(must(znIn(wt, { "stack", "R0010" }), "stack"), "c0010 complete")).toBe(false)
 				reviewer(false)
 				local unsettled = znIn(wt, { "dispatch", "zz-review", "c0010", "--mode", "code" })
 				t.expect(unsettled.ok).toBe(false)

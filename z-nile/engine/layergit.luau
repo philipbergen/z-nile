@@ -806,11 +806,11 @@ end
 -- stamp (`Commit:` the layer's finish commit, `Patch:` its patch id), so the file vouches for exactly what it reviewed.
 -- An unfinished layer refuses it. Only a raft readied with layers: reviewed has the rule.
 -- c0248: stamps the layer's new review and refute files in its issue folder with the finish commit and its patch id.
--- Every file is checked before any is written. A new file (not in HEAD) may carry no stamp but the tool's own for the
--- finish (`Commit:` and `Patch:` exactly as the tool writes them, so a command run again after a failed commit goes
--- on); a new review must name on its `Inputs:` line the finish, or a commit with its patch. A committed file may be
--- corrected (a refute's answer, a typo), but its stamp is never changed: a stale review is answered or reviewed again,
--- never re-stamped.
+-- Every file is checked before any is written. A stamp already on a new file is kept only when it is true (its
+-- Commit:'s patch id is its Patch:, as the dispatcher or a retried commit wrote it), and such a file needs no Inputs:
+-- check; any other stamp is refused. An unstamped new review must name on its Inputs: line the finish, or a commit with
+-- its patch. A committed file keeps its stamp (a correction of its text is committed), is never deleted or renamed,
+-- and one deleted by plain git comes back only as restored.
 function layergit.stampLayerReviews()
 	local layer = stack.parse(sh.git({ "branch", "--show-current" }))
 	if not layer then
@@ -883,7 +883,7 @@ function layergit.stampLayerReviews()
 						deletedBy,
 						1,
 						12
-					)}^ -- {path}, or review again as the next round`
+					)}^ -- {path}`
 				)
 			end
 			if before.ok then

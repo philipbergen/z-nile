@@ -502,11 +502,9 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			local handStamped = znTry(wt, { "commit", "-m", "tracker: refute c0010" })
 			t.expect(handStamped.ok).toBe(false)
 			t.expect(
-				has(
-					handStamped.stderr,
-					"carries a Commit: or Patch: line that is no commit's own stamp"
-				)
-			).toBe(true)
+				has(handStamped.stderr, "carries a Commit: or Patch: line that is no commit's own stamp")
+			)
+				.toBe(true)
 			-- a commit that fails after the tool stamped its files runs again: the tool's own stamp is accepted
 			write(wt, refutePath, "# Refute\n\n- F1: refuted: there is no F1\n")
 			local failed = znTry(wt, { "commit", "-m", "tracker: refute c0010", "--issue", "c9999" })
