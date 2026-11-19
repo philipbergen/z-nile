@@ -214,7 +214,7 @@ return t.spec("c0248 the documents say it", function(it)
 		-- the owner's grouping of 2026-11-19 replaced "Keep one raft" (R-vision) for c0248 and c0250
 		says(
 			README,
-			'c0248 and c0250 are layers of R0093, with the chores f0417 builds on (the owner\'s grouping, 2026-11-19, "go wwith 1 first then", which replaced "Keep one raft" for them).'
+			"c0248 and c0250 are layers of R0093, with the chores f0417 builds on (the owner's grouping, 2026-11-19, \"go wwith 1 first then\", which replaced \"Keep one raft\" for them)."
 		)
 		says(README, "c0249 and c0251 to c0254 are rafted on their own rulings")
 		unsays(README, "c0248 to c0254 are one raft")

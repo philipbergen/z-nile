@@ -100,13 +100,14 @@ return t.spec("c0248 work next carries one complete layer at a time", function(i
 			local f = work.forRaft(r)
 			t.expect(f.action).toBe("final-review")
 			t.expect(has(f.why, "trace-002.md")).toBe(true)
-			-- a landed layer with no review is never sent back to review
+			-- a landed layer is skipped whatever its fact says: one whose branch is gone may read as unfinished, and it
+			-- is never sent back to implement, finish or review
 			local landedOnly = raft({
 				marked = true,
 				traceName = "trace-002.md",
 				layers = {
-					layer(1, "c0010", { landed = true, commits = 0 }),
-					layer(2, "c0020", { landed = true, commits = 0 }),
+					layer(1, "c0010", { landed = true, commits = 0, finished = false }),
+					layer(2, "c0020", { landed = true, commits = 0, finished = false }),
 					layer(3, "c0030", { reviewReason = "c0030 is not complete: no review-001.md" }),
 				},
 			})

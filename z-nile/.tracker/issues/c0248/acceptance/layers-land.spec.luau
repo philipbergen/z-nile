@@ -227,6 +227,14 @@ local function sealBind(dir: string, raftId: string, through: string?)
 			topLocal = math.max(topLocal, k)
 		end
 	end
+	-- a layer that was never rebased onto main may not hold an earlier landing's files: origin/main does
+	local onMain = fixture.exec(dir, "git", { "ls-tree", "--name-only", "origin/main", `{raftDir}/` })
+	for line in string.gmatch(onMain.stdout .. "\n", "([^\n]*)\n") do
+		local k = tonumber((string.match(line, "/final%-review%-(%d+)%.md$")))
+		if k then
+			top = math.max(top, k)
+		end
+	end
 	local num = string.format("%03d", if topLocal > top then topLocal else top + 1)
 	local issueDirs: { [string]: string } = {}
 	local checkLines: { [string]: number } = {}
