@@ -9,6 +9,7 @@
 --   R0020 AC5 (start, top layer, main moves, full bind)  R0030 AC7 (refusals)
 --   R0060 AC6 (the rendered raft template)               R0070 AC11 (a raft readied without the marker)
 --   R0080 AC5 (a restack that changes the patch)         R0090 AC9 (stop and ready after an early landing)
+local approval = require("@znile/engine/approval")
 local fixture = require("@tests/lib/fixture")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -919,6 +920,25 @@ return t.spec("c0248 layers are complete before the next, and land as one bind o
 			git(wt, { "switch", "-q", "R0060/3/c0160" })
 			fs.writeFile(`{wt}/.cache/c0160-ok`, "") -- restack runs the layer's check.sh
 			zn(wt, { "restack", "R0060" })
+			-- the last landing lands c0160, so its changed design needs the person's approval again (it rides on c0160's
+			-- layer, after its finish, as ./zn approve records it); the landing below it did not wait for it
+			local c0160Dir = issueDir(wt, "c0160")
+			local item: any = {
+				id = "c0160",
+				kind = "issue",
+				state = "active",
+				dir = c0160Dir,
+				doc = `{c0160Dir}/c0160.md`,
+				slug = "c0160",
+				root = "pickman/.tracker",
+			}
+			local approved =
+				approval.append(wt, item, "Fixture <fixture@example.invalid>", "2026-11-19T00:00:00Z")
+			t.expect(approved ~= nil).toBe(true)
+			fs.writeFile(`{wt}/{approval.file(item)}`, approved :: string)
+			git(wt, { "add", "-A", c0160Dir })
+			git(wt, { "commit", "-qm", "c0160: approved again" })
+			git(wt, { "push", "-q" })
 			sealBind(wt, "R0060")
 			fs.removeFile(`{wt}/.cache/c0160-ok`)
 			local before = git(f.main, { "rev-parse", "origin/main" })

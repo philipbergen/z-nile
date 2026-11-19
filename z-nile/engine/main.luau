@@ -4355,10 +4355,8 @@ function cmd.restack(pos: { string })
 		-- item record (c0263's union); spend.md first, then the records, then the rebase goes on. Anything else stops.
 		local stoppedWhy = ""
 		while not rebasing.ok do
-			if not H.takeDerivedSpend(mergerecords.isRecord) then
-				stoppedWhy = "a conflict that is neither a raft's spend.md nor an item record"
-				break
-			end
+			-- a stop of other paths is left to settleRebaseStop, which refuses it naming the path
+			H.takeDerivedSpend(mergerecords.isRecord)
 			if sh.trim(sh.run("git", { "diff", "--name-only", "--diff-filter=U" }).stdout) ~= "" then
 				local settled, reason = mergerecords.settleRebaseStop()
 				if not settled then

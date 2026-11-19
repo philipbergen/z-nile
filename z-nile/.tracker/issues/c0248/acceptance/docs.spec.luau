@@ -93,6 +93,11 @@ return t.spec("c0248 the documents say it", function(it)
 				"The lowest layer left is judged against its fork with `main`, like layer 1, so it needs no restack, and its review stays current."
 			)
 			unsays(EXECUTE, "After an early landing run `./zn restack R0010`")
+			-- step 3 is the one a worker follows: its names are the landing's on a marked raft, after d0331's pinned clause
+			says(
+				EXECUTE,
+				"after the last layer is finished, and the layers above any fixed layer are restacked, print the trace skeleton with `./zn trace <R-id>` and commit that skeleton as `trace.md` with `./zn commit`. On a raft readied with `layers: reviewed`, every name in this step is the landing's: the skeleton is `./zn trace <R-id> [--through <issue>]` over the layers this landing binds, committed as `trace-NNN.md`, and the reviewer writes `final-review-NNN.md` (answered in `final-refute-NNN.md`), where NNN is one more than the highest final review on `origin/main`."
+			)
 			-- a raft readied before the marker (R0093 itself) lands whole (R0093 review 002 F9)
 			says(
 				EXECUTE,
@@ -148,6 +153,16 @@ return t.spec("c0248 the documents say it", function(it)
 				"- Final mode: `final-review-NNN.md`, in the raft directory, alongside `trace-NNN.md`, once per landing (NNN is one more than the highest final review on `origin/main`); a raft readied before layers were reviewed one by one keeps one `trace.md`."
 			)
 			unsays(REVIEW, "- Code mode: `review-NNN.md`, in the raft directory.\n")
+			-- Final mode keeps d0331's clause and adds the landing
+			says(
+				REVIEW,
+				"Run once per raft on the finished stack, with the layers above any fixed layer restacked, and on a raft readied with `layers: reviewed` once per landing, over the layers that landing binds (`final-review-NNN.md` with `trace-NNN.md`),"
+			)
+			-- zz-rules: c0248's sentence follows d0331's, which stays whole
+			says(
+				RULES,
+				"and `./zn done` merges the stack onto the newest `main` itself. A layer is complete when it is finished, green and reviewed:"
+			)
 			-- z-work (which /z-run follows), the prompt template and the raft template
 			says(
 				WORK,
@@ -214,8 +229,9 @@ return t.spec("c0248 the documents say it", function(it)
 		-- the owner's grouping of 2026-11-19 replaced "Keep one raft" (R-vision) for c0248 and c0250
 		says(
 			README,
-			'c0248 and c0250 are layers of R0093, with the chores f0417 builds on (the owner\'s grouping, 2026-11-19, "go wwith 1 first then", which replaced "Keep one raft" for them).'
+			'c0248, c0250, c0260 and c0262 are layers of R0093, with the chores f0417 builds on (the owner\'s grouping, 2026-11-19, "go wwith 1 first then", which replaced "Keep one raft" for c0248 and c0250, and c0262\'s wait for R-vision).'
 		)
+		unsays(README, "The other worker tickets (c0262,")
 		says(README, "c0249 and c0251 to c0254 are rafted on their own rulings")
 		unsays(README, "c0248 to c0254 are one raft")
 		unsays(README, "c0248 to c0254 stay one raft")
