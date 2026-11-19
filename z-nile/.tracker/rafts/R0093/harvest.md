@@ -32,3 +32,7 @@
 - design-review-002 F15 (erred z-raft): z-raft/theme-quotes-are-copied
 - design-review-002 F16 (erred z-raft): z-raft/grouping-cost-checks-every-wait
 - note fold ran before recombine, so recombine refused the claimed keeper and the claim was released and redone; one orphan (R0108) stays for a later rafting (erred z-raft): z-raft/recombine-before-fold
+- design-review-003 F1 (erred z-raft): z-raft/regroup-carries-earlier-coherence-findings, z-raft/escalations-are-bullets
+- design-review-003 F2 (erred zz-review): zz-review/run-the-evidence-you-cite
+- note design-review-003 F2 the lead copied review 002's unrun evidence into the Risks and a lesson note (erred z-raft): z-raft/escalations-are-bullets
+- note status R0093 prepared passed in the rafting branch with review 003's F1 unanswered and no bullet: its designOpen reads origin/main's copy of the raft folder, so the hold is at ready and work next only (erred z-raft): z-raft/escalations-are-bullets
